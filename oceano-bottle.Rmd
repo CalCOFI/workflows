@@ -1,0 +1,48 @@
+---
+title: "Oceanographic Bottle Database"
+author: "Ben Best"
+date: "1/24/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Read Bottle Data
+
+```{r}
+if (!require("librarian")){
+  install.packages("librarian")
+  library(librarian)
+}
+librarian::shelf(
+  dplyr, glue, here, readr, skimr, stringr)
+
+# define paths
+dir_data <- switch(
+  Sys.info()["nodename"],
+  `ben-mbpro` = "/Users/bbest/My Drive (ben@ecoquants.com)/projects/calcofi/data")
+  # TODO: get Erin's Google Drive path and "nodename")
+
+bottle_csv <- file.path(dir_data, "/oceanographic-data/bottle-database/CalCOFI_Database_194903-202001_csv_22Sep2021/194903-202001_Bottle.csv")
+cast_csv <- file.path(dir_data, "/oceanographic-data/bottle-database/CalCOFI_Database_194903-202001_csv_22Sep2021/194903-202001_Cast.csv")
+
+d_bottle <- read_csv(bottle_csv, skip=1, col_names = F)
+names(d_bottle) <- str_split(
+  readLines(bottle_csv, n=1), ",")[[1]] %>% 
+  str_replace("\xb5", "µ")
+d_cast   <- read_csv(cast_csv)
+
+d <- d_cast %>% 
+  left_join(
+    d_bottle,
+    by = "Cst_Cnt")
+
+# d_cast
+skim(d_cast)
+
+# d_bottle
+skim(d_bottle)
+```
+
