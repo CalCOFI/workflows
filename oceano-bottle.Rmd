@@ -3,51 +3,48 @@ title: "Oceanographic Bottle Database"
 author: "Ben Best"
 date: "1/24/2022"
 output: html_document
+editor_options: 
+  chunk_output_type: console
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## Packages & data
+## Read Oceano Bottle data
 
 ```{r}
+# packages
 if (!require("librarian")){
   install.packages("librarian")
   library(librarian)
 }
 librarian::shelf(
-  dplyr, glue, gstat, here, readr, sf, skimr, stars, stringr)
-```
+  dplyr, glue, gstat, here, mapview, readr, 
+  rmapshaper, sf, skimr, stars, stringr)
 
-### read DEM raster data for idw/kriging
-
-```{r}
-# cinms_dem_data <- switch(
-#    Sys.info()["nodename"],
-#   `Cristinas-MacBook-Pro.local` = "/Users/cdobbelaere/Documents/CINMS_dem")
-# cinms_dem1 <- file.path(cinms_dem_data, "/ChannelIslands_Topobathy_DEM_v1_46.TIF")
-# cinms_dem2 <- file.path(cinms_dem_data, "/ChannelIslands_Topobathy_DEM_v1_47.TIF")
-```
-
-### read Oceano Bottle data
-
-```{r}
+# paths
 dir_data <- switch(
   Sys.info()["nodename"],
   `ben-mbpro` = "/Users/bbest/My Drive (ben@ecoquants.com)/projects/calcofi/data",
   `Cristinas-MacBook-Pro.local` = "/Volumes/GoogleDrive/.shortcut-targets-by-id/13pWB5x59WSBR0mr9jJjkx7rri9hlUsMv/calcofi/data")
   # TODO: get Erin's Google Drive path and "nodename")
-
 bottle_csv <- file.path(dir_data, "/oceanographic-data/bottle-database/CalCOFI_Database_194903-202001_csv_22Sep2021/194903-202001_Bottle.csv")
 cast_csv <- file.path(dir_data, "/oceanographic-data/bottle-database/CalCOFI_Database_194903-202001_csv_22Sep2021/194903-202001_Cast.csv")
+calcofi_geo <- here("data/calcofi_oceano-bottle-stations_convex-hull.geojson")
 
+# check paths
+stopifnot(dir.exists(dir_data))
+stopifnot(any(file.exists(bottle_csv,cast_csv)))
+
+# read data
 d_bottle <- read_csv(bottle_csv, skip=1, col_names = F)
 names(d_bottle) <- str_split(
   readLines(bottle_csv, n=1), ",")[[1]] %>% 
   str_replace("\xb5", "µ")
 d_cast   <- read_csv(cast_csv)
 
+# join data
 d <- d_cast %>% 
   left_join(
     d_bottle %>% select(-Sta_ID),
@@ -76,27 +73,39 @@ sanctuaries_geo <- "https://github.com/noaa-onms/onmsR/raw/12a87dfd4b90f2e3009cc
 cinms_ply <- sf::st_read(sanctuaries_geo) %>%
   dplyr::filter(nms == "CINMS")
 
-# get AOI geom points as WKT
+# get AOI geom points as WKT for later use with API
 cinms_txt <- sf::st_as_text(cinms_ply$geometry)
-aoi <- cinms_txt
-```
+#cinms_txt
 
+mapview(cinms_ply)
+```
 
 ## Generate summary stats by station ID (as points)
 
 ```{r}
 # for summary, want to group by Sta_Code because each data point has a diff Sta_ID
-
-pnts_station <- d %>% group_by(sta_id = Sta_ID) %>% 
+pts <- d %>% 
+  filter(
+    !is.na(Lat_Dec),
+    !is.na(Lon_Dec)) %>% 
+  group_by(
+    Sta_ID) %>%
   summarize(
-    date     = Date,
-    lat      = Lat_Dec, 
-    lon      = Lon_Dec, 
-    depth_m  = Depthm,
-    temp_c   = T_degC,
-    sta_code = Sta_Code) %>%
-  ungroup() %>% 
-  st_as_sf(coords = c("lon", "lat"), remove = F)
+    lon      = mean(Lon_Dec),
+    lat      = mean(Lat_Dec)) %>%
+  st_as_sf(
+    coords = c("lon", "lat"), crs=4326, remove = F)
+mapview(pts)
+
+# Make CalCOFI Study Area
+hull <- st_convex_hull(st_union(pts)) %>% 
+  st_buffer(0.1) %>%  # ~10 km
+  ms_simplify(keep = 0.05) 
+mapview(pts) +
+  mapview(hull)
+
+# write to geojson
+st_write(hull, calcofi_geo)
 
 # summarize temp data by station code 
 summ_pnts_station <- pnts_station %>% 
