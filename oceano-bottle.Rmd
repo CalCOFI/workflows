@@ -20,8 +20,8 @@ if (!require("librarian")){
   library(librarian)
 }
 librarian::shelf(
-  dplyr, glue, gstat, here, mapview, readr, 
-  rmapshaper, sf, skimr, stars, stringr)
+  dplyr, glue, gstat, here, mapview, purrr, readr, 
+  rmapshaper, sf, skimr, stars, stringr, tidyr)
 
 # paths
 dir_data <- switch(
@@ -32,6 +32,8 @@ dir_data <- switch(
 bottle_csv <- file.path(dir_data, "/oceanographic-data/bottle-database/CalCOFI_Database_194903-202001_csv_22Sep2021/194903-202001_Bottle.csv")
 cast_csv <- file.path(dir_data, "/oceanographic-data/bottle-database/CalCOFI_Database_194903-202001_csv_22Sep2021/194903-202001_Cast.csv")
 calcofi_geo <- here("data/calcofi_oceano-bottle-stations_convex-hull.geojson")
+calcofi_offshore_geo <- here("data/calcofi_oceano-bottle-stations_convex-hull_offshore.geojson")
+calcofi_nearshore_geo <- here("data/calcofi_oceano-bottle-stations_convex-hull_nearshore.geojson")
 
 # check paths
 stopifnot(dir.exists(dir_data))
@@ -94,18 +96,40 @@ pts <- d %>%
     lon      = mean(Lon_Dec),
     lat      = mean(Lat_Dec)) %>%
   st_as_sf(
-    coords = c("lon", "lat"), crs=4326, remove = F)
-mapview(pts)
+    coords = c("lon", "lat"), crs=4326, remove = F) %>% 
+  separate(
+    Sta_ID, c("Sta_ID_Line", "Sta_ID_Station"), 
+    sep=" ", remove=F) %>% 
+  mutate(
+    Sta_ID_Line    = as.double(Sta_ID_Line),
+    Sta_ID_Station = as.double(Sta_ID_Station),
+    offshore       = ifelse(Sta_ID_Station > 60, T, F))
+mapview(pts, zcol="offshore")
+table(pts$offshore)
 
-# Make CalCOFI Study Area
-hull <- st_convex_hull(st_union(pts)) %>% 
+# Make CalCOFI total study areas ----
+make_hull <- function(x){
+  st_union(x) %>% 
+  st_convex_hull() %>% 
   st_buffer(0.1) %>%  # ~10 km
-  ms_simplify(keep = 0.05) 
-mapview(pts) +
-  mapview(hull)
+  ms_simplify(keep = 0.05) }
 
-# write to geojson
+hull <- pts %>% 
+  make_hull()
 st_write(hull, calcofi_geo)
+mapview(hull)
+
+hull_nearshore <- pts %>% 
+  filter(!offshore) %>% 
+  make_hull()
+st_write(hull_nearshore, calcofi_nearshore_geo)
+mapview(hull_nearshore)
+
+hull_offshore <- pts %>% 
+  filter(offshore) %>% 
+  make_hull()
+st_write(hull_offshore, calcofi_offshore_geo)
+mapview(hull_offshore)
 
 # summarize temp data by station code 
 summ_pnts_station <- pnts_station %>% 
