@@ -9,7 +9,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## Read Bottle Data
+## Packages & data
 
 ```{r}
 if (!require("librarian")){
@@ -17,12 +17,26 @@ if (!require("librarian")){
   library(librarian)
 }
 librarian::shelf(
-  dplyr, glue, here, readr, skimr, stringr)
+  dplyr, glue, gstat, here, readr, sf, skimr, stars, stringr)
+```
 
-# define paths
+### read DEM raster data for idw/kriging
+
+```{r}
+# cinms_dem_data <- switch(
+#    Sys.info()["nodename"],
+#   `Cristinas-MacBook-Pro.local` = "/Users/cdobbelaere/Documents/CINMS_dem")
+# cinms_dem1 <- file.path(cinms_dem_data, "/ChannelIslands_Topobathy_DEM_v1_46.TIF")
+# cinms_dem2 <- file.path(cinms_dem_data, "/ChannelIslands_Topobathy_DEM_v1_47.TIF")
+```
+
+### read Oceano Bottle data
+
+```{r}
 dir_data <- switch(
   Sys.info()["nodename"],
-  `ben-mbpro` = "/Users/bbest/My Drive (ben@ecoquants.com)/projects/calcofi/data")
+  `ben-mbpro` = "/Users/bbest/My Drive (ben@ecoquants.com)/projects/calcofi/data",
+  `Cristinas-MacBook-Pro.local` = "/Volumes/GoogleDrive/.shortcut-targets-by-id/13pWB5x59WSBR0mr9jJjkx7rri9hlUsMv/calcofi/data")
   # TODO: get Erin's Google Drive path and "nodename")
 
 bottle_csv <- file.path(dir_data, "/oceanographic-data/bottle-database/CalCOFI_Database_194903-202001_csv_22Sep2021/194903-202001_Bottle.csv")
@@ -36,13 +50,209 @@ d_cast   <- read_csv(cast_csv)
 
 d <- d_cast %>% 
   left_join(
-    d_bottle,
-    by = "Cst_Cnt")
+    d_bottle %>% select(-Sta_ID),
+    by = "Cst_Cnt") %>% 
+  mutate(Date = lubridate::as_date(Date, format = "%m/%d/%Y"))
+```
 
+## Exploratory summary of bottle data
+
+```{r}
 # d_cast
 skim(d_cast)
+```
 
+```{r}
 # d_bottle
 skim(d_bottle)
 ```
 
+## Get CINMS AOI
+
+```{r}
+# get example AOI (Channel Islands NMS)
+sanctuaries_geo <- "https://github.com/noaa-onms/onmsR/raw/12a87dfd4b90f2e3009ccb4913315fb2df7afddc/data-raw/sanctuaries.geojson"
+
+cinms_ply <- sf::st_read(sanctuaries_geo) %>%
+  dplyr::filter(nms == "CINMS")
+
+# get AOI geom points as WKT
+cinms_txt <- sf::st_as_text(cinms_ply$geometry)
+aoi <- cinms_txt
+```
+
+
+## Generate summary stats by station ID (as points)
+
+```{r}
+# for summary, want to group by Sta_Code because each data point has a diff Sta_ID
+
+pnts_station <- d %>% group_by(sta_id = Sta_ID) %>% 
+  summarize(
+    date     = Date,
+    lat      = Lat_Dec, 
+    lon      = Lon_Dec, 
+    depth_m  = Depthm,
+    temp_c   = T_degC,
+    sta_code = Sta_Code) %>%
+  ungroup() %>% 
+  st_as_sf(coords = c("lon", "lat"), remove = F)
+
+# summarize temp data by station code 
+summ_pnts_station <- pnts_station %>% 
+  group_by(sta_code) %>%
+  na.omit() %>% 
+  summarize(
+    aoi          = aoi,
+    date_start   = min(date),
+    date_end     = max(date),
+    # date_step    = ,
+    depth_m_min  = min(depth_m),
+    depth_m_max  = max(depth_m),
+    temp_c_mean  = mean(temp_c),
+    temp_c_min   = min(temp_c),
+    temp_c_max   = max(temp_c),
+    temp_c_stdev = sd(temp_c),
+    temp_c_hi90  = quantile(temp_c, .9),
+    temp_c_lo10  = quantile(temp_c, .1)) 
+    
+# intersect with AOI
+
+
+
+
+    
+  
+
+
+
+
+
+# station_data_T <- d %>% group_by(Sta_Code) %>%
+#   select(Date, Depthm, T_degC) %>% drop_na() %>% 
+#   summarize(
+#     date_start   = min(Date),
+#     date_end     = max(Date),
+#     depth_m_min  = min(Depthm),
+#     depth_m_max  = max(Depthm),
+#     T_degC_mean  = mean(T_degC),
+#     T_degC_min   = min(T_degC),
+#     T_degC_max   = max(T_degC),
+#     T_degC_stdev = sd(T_degC),
+#     T_degC_hi90  = quantile(T_degC, .9),
+#     T_degC_lo10  = quantile(T_degC, .1)
+#   )
+```
+
+## Interpolate (idw/kriging) for maps
+
+### Map by station ID
+
+```{r}
+# group by station ID
+d_station <- d %>% group_by(Sta_ID) %>% 
+  summarize(lat = Lat_Dec, lon = Lon_Dec, depth_m = Depthm, sta_code = Sta_Code)
+```
+
+### [Example](https://geobgu.xyz/r-2020/spatial-interpolation-of-point-data.html)
+
+```{r}
+d_aoi <- st_as_sf(d_station, coords = c("lat", "lon"), crs = 32636)
+```
+
+# get [DEM raster](https://earthexplorer.usgs.gov/)
+
+```{r}
+# get raster data (from `cinms_dem`)
+dem1 <- read_stars(cinms_dem1)
+dem2 <- read_stars(cinms_dem2) 
+dem  <- st_mosaic(dem1, dem2) 
+names(dem) <- "depth_m_dem"
+
+# depth <- st_join(d_aoi, st_as_sf(dem)) # `Error: vector memory exhausted (limit reached?)`
+# depth <- depth[!is.na(dem$depth), ]
+
+# TEST: IDW interpolation
+# define model
+mod <- gstat(data = d_aoi, formula = depth_m ~ 1)
+
+# interpolate 
+z <- predict(mod, dem)
+
+```
+
+
+## Summarize by AOI
+
+### Extract points by AOI
+
+```{r}
+
+```
+
+### Summary stats on station data as points 
+
+# TODO: summarize OCEAN TEMP, OXYGEN (HYPOXIA), ZOOPLANKTON, ICHTHYOPLANKTON for each station ID
+
+```{r}
+# filter data corresponding to AOI 
+station_data <- d %>% group_by(Sta_ID) %>%
+  select(Sta_Code, Date, Depthm, T_degC) %>% drop_na() %>% 
+  summarize(
+    date_start = min(Date),
+    date_end = max(Date),
+    depth_min = min(Depthm),
+    depth_max = max(Depthm),
+    T_mean = mean(T_degC),
+    T_min = min(T_degC),
+    T_max = max(T_degC),
+    T_stdev = sd(T_degC),
+    T_hi90 = quantile(T_degC, .9),
+    T_lo10 = quantile(T_degC, .1)
+  )
+
+# flat temp data by station code
+station_data_T <- d %>% group_by(Sta_Code) %>%
+  mutate(Date = lubridate::as_date(Date, format = "%m/%d/%Y")) %>% 
+  select(Date, Depthm, T_degC) %>% drop_na() %>% 
+  summarize(
+    date_start   = min(Date),
+    date_end     = max(Date),
+    depth_m_min  = min(Depthm),
+    depth_m_max  = max(Depthm),
+    T_degC_mean  = mean(T_degC),
+    T_degC_min   = min(T_degC),
+    T_degC_max   = max(T_degC),
+    T_degC_stdev = sd(T_degC),
+    T_degC_hi90  = quantile(T_degC, .9),
+    T_degC_lo10  = quantile(T_degC, .1)
+  )
+
+# flat salinity data by station code
+station_data_sal <- d %>% group_by(Sta_Code) %>%
+  mutate(Date = lubridate::as_date(Date, format = "%m/%d/%Y")) %>% 
+  select(Date, Depthm, Salnty) %>% drop_na() %>% 
+  summarize(
+    date_start   = min(Date),
+    date_end     = max(Date),
+    depth_m_min  = min(Depthm),
+    depth_m_max  = max(Depthm),
+    Salnty_mean  = mean(Salnty),
+    Salnty_min   = min(Salnty),
+    Salnty_max   = max(Salnty),
+    Salnty_stdev = sd(Salnty),
+    Salnty_hi90  = quantile(Salnty, .9),
+    Salnty_lo10  = quantile(Salnty, .1)
+  )
+
+```
+
+
+
+## Interpolate points to surface with `idw()` or `krige()`
+
+## Extract from surface
+
+## Create `read_bottle()` in `calcofi4r`
+
+## Visualize initial variables
