@@ -36,8 +36,8 @@ dir_data <- switch(
   # TODO: get Erin's Google Drive path and "nodename")
 bottle_csv <- file.path(dir_data, "/oceanographic-data/bottle-database/CalCOFI_Database_194903-202001_csv_22Sep2021/194903-202001_Bottle.csv")
 cast_csv <- file.path(dir_data, "/oceanographic-data/bottle-database/CalCOFI_Database_194903-202001_csv_22Sep2021/194903-202001_Cast.csv")
-calcofi_geo <- here("data/calcofi_oceano-bottle-stations_convex-hull.geojson")
-calcofi_offshore_geo <- here("data/calcofi_oceano-bottle-stations_convex-hull_offshore.geojson")
+calcofi_geo           <- here("data/calcofi_oceano-bottle-stations_convex-hull.geojson")
+calcofi_offshore_geo  <- here("data/calcofi_oceano-bottle-stations_convex-hull_offshore.geojson")
 calcofi_nearshore_geo <- here("data/calcofi_oceano-bottle-stations_convex-hull_nearshore.geojson")
 
 # check paths
@@ -127,8 +127,8 @@ make_hull <- function(x){
   ms_simplify(keep = 0.05) }
 
 hull_geos <- c(calcofi_geo, calcofi_nearshore_geo, calcofi_offshore_geo)
-if (any(!file.exists(hull_geos))){
 
+if (any(!file.exists(hull_geos))){
   hull <- pts %>% 
     make_hull()
   st_write(hull, calcofi_geo)
@@ -148,6 +148,24 @@ if (any(!file.exists(hull_geos))){
 }
 ```
 
+## Variable lookup
+    [1] variable name as seen in the data
+    [2] variable display title
+    [3] y-axis label
+
+```{r}
+# variable lookup
+var_lookup_tbl <- tribble(
+  ~var,        ~var_title,                   ~var_label,
+  "T_degC",    "Sea Surface Temperature",    "Temperature (ºC)",
+  "Salnty",    "Salinity",                   "Salinity (Practical Salinity Scale)") 
+var_lookup <- var_lookup_tbl %>%
+  split(seq(nrow(.))) %>% 
+  lapply(as.list)
+names(var_lookup) <- var_lookup_tbl$var
+```
+
+
 ## Get latest variable for AOI
 
 ```{r}
@@ -161,7 +179,11 @@ pts_aoi <- pts %>%
   
 mapview(aoi) +
   mapview(pts_aoi)
+```
 
+##  Get daily data (fxn)
+
+```{r}
 get_oceano_var_daily_aoi <- function(var, aoi, depth_min=0, depth_max=10){
 
   # find stations in aoi
@@ -187,42 +209,146 @@ get_oceano_var_daily_aoi <- function(var, aoi, depth_min=0, depth_max=10){
       var_q90 = quantile(.data[[var]], 0.90, na.rm = T),
       var_max = max(.data[[var]], na.rm = T),
       var_sd  = sd(.data[[var]], na.rm = T))
+  
+  attr(d_aoi_daily, "labels") <- eval(parse(text = glue("var_lookup${var}")))
+  
+  d_aoi_daily
 }
+```
 
-v <- get_oceano_var_daily_aoi("T_degC", cinms_ply, 0, 10)
-datatable(v)
+## `update_date` [function](https://github.com/tidyverse/lubridate/issues/239#issuecomment-73107327)
+
+```{r}
+update_date <- function(x, unit = c("second", "minute", "hour", "day", "week", "month", "quarter", "year", "decade")) {
+  unit <- match.arg(unit)
+  switch(unit,
+    second  = update(x, seconds = floor(second(x))),
+    minute  = update(x, seconds = 0),
+    hour    = update(x, minutes = 0, seconds = 0),
+    day     = update(x, hours   = 0, minutes = 0, seconds = 0),
+    week    = update(x, wdays   = 1, hours = 0,   minutes = 0, seconds = 0),
+    month   = update(x, mdays   = 1, hours = 0,   minutes = 0, seconds = 0),
+    quarter = update(x, months  = ceiling(month(x)/3) * 3 - 2, mdays   = 1),
+    year    = update(x, ydays   = 1,  hours = 0,  minutes = 0, seconds = 0),
+    decade  = update(
+      x, years = (year(x) - year(x) %% 10), 
+      ydays = 1, hours = 0, minutes = 0, seconds = 0)
+  )
+}
+```
+
+
+## Get data grouped by `date_step`: general fxn
+
+```{r}
+# choices for `date_step`: "day", "week", month", "quarter", "year", "decade"
+get_oceano_var_aoi <- function(
+  var, aoi, 
+  date_step = c("year", "day", "week", "month", "quarter", "decade"), 
+  depth_min = 0, depth_max = 10){
+  # TODO: case for if (!date_step %in% c("day", "week", "month", "year"))
+  # if (date_step == "quarter") {
+  # } else if (date_step == "decade") {
+  # }
+  
+  # find stations in aoi
+  pts_aoi <- pts %>% 
+    mutate(
+      x = st_intersects(pts, aoi) %>% as.logical()) %>% 
+    filter(x)
+  
+  d_aoi <- d %>% 
+    filter(Sta_ID %in% pts_aoi$Sta_ID)
+  
+  d_aoi_summ <- d_aoi %>% 
+    filter(
+      !is.na(.data[[var]]),
+      Depthm >= depth_min,
+      Depthm < depth_max) %>% 
+    mutate(Date_Step = update_date(Date, unit = date_step)) %>% 
+    group_by(Date_Step) %>% 
+    summarize(
+      var_n   = n(),
+      var_min = min(.data[[var]], na.rm = T),
+      var_q10 = quantile(.data[[var]], probs = 0.10, na.rm = T),
+      var_avg = mean(.data[[var]], na.rm = T),
+      var_q90 = quantile(.data[[var]], 0.90, na.rm = T),
+      var_max = max(.data[[var]], na.rm = T),
+      var_sd  = sd(.data[[var]], na.rm = T)) %>% 
+    rename(Date = Date_Step)
+
+  attr(d_aoi_summ, "labels")    <- eval(parse(text = glue("var_lookup${var}")))
+  attr(d_aoi_summ, "date_step") <- date_step
+  attr(d_aoi_summ, "date_msg")  <- glue("This dataset was summarized by {date_step}.")
+  
+  d_aoi_summ
+}
 ```
 
 ### Plot time series
 
-```{r}
-# TODO: make this a function for any variable, 
-#         with a schema to apply for labels and colors
-# see: [plot_metric_timeseries()](https://github.com/noaa-onms/onmsR/blob/2e438a9bdff8ee90b8fc811aafae4520c26049ab/R/spatial.R#L16-L49)
+TODO: 
+[x] make this a function for any variable, with a schema to apply for:
+    [x] labels
+    [ ] colors: STILL NEED TO CHANGE COLOR as a fxn of var
+[x] Get time series of variable at given step (eg annual) within AOI
 
-x <- v %>% select(
-  Date, 
-  `10% quantile` = var_q10,
-  `average`      = var_avg,
-  `90% quantile` = var_q90)
-y <- xts::xts(x = x %>% select(-Date), order.by = x %>% pull(Date))
-
-dygraph(
-  y,
-  main = "Sea Surface Temperature",
-  xlab = "Date", ylab = "Temperature (°C)") %>% # ...) %>%
-  dySeries(
-    c("10% quantile", "average", "90% quantile"), 
-    label = "Temperature (°C)", color = "Red") %>%
-  dyRangeSelector(fillColor = " #FFFFFF", strokeColor = "#FFFFFF")
-```
-
-
-## Get time series of variable at given step (eg annual) within AOI
+see: [plot_metric_timeseries()](https://github.com/noaa-onms/onmsR/blob/2e438a9bdff8ee90b8fc811aafae4520c26049ab/R/spatial.R#L16-L49)
 
 ```{r}
+plot_timeseries <- function(d) {
+  # get_title <- purrr::attr_getter("labels$var_title")
+  # get_var   <- purrr::attr_getter("labels$var_label")
+  
+  x <- d %>% select(
+    Date, 
+    `10% quantile` = var_q10,
+    `Average`      = var_avg,
+    `90% quantile` = var_q90)
+  var_attrs <- tibble(
+    # title = get_title(d),
+    # var   = get_var(d))
+    title = attributes(d)$labels$var_title,
+    var   = attributes(d)$labels$var_label)
+    # title = attributes(d)$title,
+    # var   = attributes(d)$var)
+  xts::xts(x = x %>% select(-Date), order.by = x %>% pull(Date)) %>% 
+    dygraph(
+      main = var_attrs$title,
+      xlab = "Date", ylab = var_attrs$var) %>% # ...) %>%
+    dySeries(
+      c("10% quantile", "Average", "90% quantile"), 
+      label = var_attrs$var, color = "Red") %>%
+    dyRangeSelector(fillColor = "#FFFFFF", strokeColor = "#FFFFFF")
+}
+```
+
+### Example plots
+
+```{r}
+# SST
+v <- get_oceano_var_daily_aoi("T_degC", cinms_ply, 0, 10)
+v <- get_oceano_var_aoi("T_degC", cinms_ply, "year", 0, 2000)
+attributes(v)
+plot_timeseries(v)
+
+# OXYGEN (HYPOXIA)
+d %>% select(O2ml_L, O2Sat, `Oxy_µmol/Kg`) %>% drop_na() %>% nrow()
+# need to find O2 data
+
+# SALINITY
+s <- get_oceano_var_daily_aoi("Salnty", cinms_ply, 0, 2000) # ex. depth range
+s <- get_oceano_var_aoi("Salnty", cinms_ply, "year", 0, 4000)
+plot_timeseries(s)
+
+
+# ZOOPLANKTON
+
+
+# ICHTHYOPLANKTON
 
 ```
+
 
 ## Get raster of variable for latest within AOI
 
@@ -254,8 +380,6 @@ d_aoi_daily <- d_aoi %>%
   arrange(desc(Date))
 d_aoi_daily
 ```
-
-Wierd: only ~one station per day.
 
 ### Let's look without AOI
 
@@ -307,17 +431,24 @@ w <- get_oceano_var_cruise_raster(
   cruise_id = "2020-01-05-C-33RL",
   var       = "T_degC", 
   depth_min = 0,
-  depth_max = 10)
+  depth_max = 10) 
 
 mapview(w)
+
+get_oceano_var_cruise_raster(
+  cruise_id = "2020-01-05-C-33RL",
+  var       = "Salnty", 
+  depth_min = 0,
+  depth_max = 20) %>% 
+  mapview()
 ```
 
 ## TODO
 
 summarize:
 
-- [ ] OCEAN TEMP: `T_degC`
-- [ ] salinity: `Salnty`
+- [x] OCEAN TEMP: `T_degC`
+- [x] salinity: `Salnty`
 - [ ] OXYGEN (HYPOXIA)
 - [ ] ZOOPLANKTON
 - [ ] ICHTHYOPLANKTON for each station ID
