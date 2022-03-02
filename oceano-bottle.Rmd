@@ -24,7 +24,7 @@ if (!require("librarian")){
   library(librarian)
 }
 librarian::shelf(
-  dplyr, DT, dygraphs, glue, gstat, here, lubridate, mapview, purrr, readr, 
+  dplyr, DT, dygraphs, glue,googlesheets4, gstat, here, lubridate, mapview, purrr, readr, 
   raster, rmapshaper, sf, skimr, stars, stringr, tidyr)
 select <- dplyr::select
 
@@ -34,6 +34,15 @@ dir_data <- switch(
   `ben-mbpro` = "/Users/bbest/My Drive (ben@ecoquants.com)/projects/calcofi/data",
   `Cristinas-MacBook-Pro.local` = "/Volumes/GoogleDrive/.shortcut-targets-by-id/13pWB5x59WSBR0mr9jJjkx7rri9hlUsMv/calcofi/data")
   # TODO: get Erin's Google Drive path and "nodename")
+
+# read var_lookup gsheet
+var_lookup_tbl <- googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/1ghM30pIdcsun7XWzLRKh4EilUplN60YdHayfiilPFwE/edit#gid=0") 
+var_lookup <- var_lookup_tbl %>%
+  split(seq(nrow(.))) %>% 
+  lapply(as.list)
+names(var_lookup) <- var_lookup_tbl$var
+
+# get data file paths from gdrive
 bottle_csv <- file.path(dir_data, "/oceanographic-data/bottle-database/CalCOFI_Database_194903-202001_csv_22Sep2021/194903-202001_Bottle.csv")
 cast_csv <- file.path(dir_data, "/oceanographic-data/bottle-database/CalCOFI_Database_194903-202001_csv_22Sep2021/194903-202001_Cast.csv")
 DIC_csv  <- file.path(dir_data, "/DIC/CalCOFI_DICs_200901-201507_28June2018.csv")
@@ -46,12 +55,23 @@ stopifnot(dir.exists(dir_data))
 stopifnot(any(file.exists(bottle_csv,cast_csv)))
 
 # read data
+d_cast   <- read_csv(cast_csv) %>% 
+  separate(
+    Sta_ID, c("Sta_ID_Line", "Sta_ID_Station"), 
+    sep=" ", remove=F) %>% 
+  mutate(
+    Sta_ID_Line    = as.double(Sta_ID_Line),
+    Sta_ID_Station = as.double(Sta_ID_Station))
+
 d_bottle <- read_csv(bottle_csv, skip=1, col_names = F)
 names(d_bottle) <- str_split(
   readLines(bottle_csv, n=1), ",")[[1]] %>% 
   str_replace("\xb5", "µ")
-d_cast   <- read_csv(cast_csv)
-d_DIC    <- read.csv(DIC_csv, fileEncoding="latin1") 
+
+d_DIC <- read_csv(DIC_csv, skip=1, col_names = F)
+names(d_DIC) <- str_split(
+  readLines(DIC_csv, n=1), ",")[[1]] %>% 
+  str_replace("\xb5", "µ") 
 # %>% 
 #   separate(
 #     `Line Sta_ID`, c("Sta_ID_Line", "Sta_ID_Station"), 
@@ -61,25 +81,20 @@ d_DIC    <- read.csv(DIC_csv, fileEncoding="latin1")
 #     Sta_ID_Station = as.double(Sta_ID_Station),
 #     offshore       = ifelse(Sta_ID_Station > 60, T, F)) 
 
+# Join data
 
 # for now... ideally would join with all the data but this causes some issues with shared variables that have different values
-DIC <- d_cast %>% 
-  left_join(
-    d_DIC %>% 
-      select(-Line.Sta_ID) %>% 
-      rename(
-        Depthm = Depth.m.,
-        Btl_Cnt = Bottle_Index,
-        Bottle_O2_ml_L = `Bottle.O2.ml_L.`,
-        Bottle_O2_µmol_kg = `Bottle.O2..æmol.Kg.`),
-    by = c("Cst_Cnt" = "ID")) %>% 
-  mutate(Date = lubridate::as_date(Date, format = "%m/%d/%Y"))
-
-# join data
 d <- d_cast %>% 
   left_join(
     d_bottle %>% select(-Sta_ID),
     by = "Cst_Cnt") %>% 
+  mutate(Date = lubridate::as_date(Date, format = "%m/%d/%Y")) 
+
+DIC <- d_cast %>% 
+  left_join(
+    d_DIC %>% 
+      select(-`Line Sta_ID`),
+    by = c("Cst_Cnt" = "ID")) %>% 
   mutate(Date = lubridate::as_date(Date, format = "%m/%d/%Y"))
 ```
 
@@ -113,7 +128,7 @@ cinms_ply <- sf::st_read(sanctuaries_geo) %>%
 cinms_txt <- sf::st_as_text(cinms_ply$geometry)
 #cinms_txt
 
-mapview(cinms_ply)
+mapview(cinms_ply) # weird...ply is no longer showing up...
 ```
 
 ## Get Station IDs as points
@@ -127,17 +142,14 @@ pts <- d %>%
   group_by(
     Sta_ID) %>%
   summarize(
-    lon      = mean(Lon_Dec),
-    lat      = mean(Lat_Dec)) %>%
+    lon            = mean(Lon_Dec),
+    lat            = mean(Lat_Dec),
+    Sta_ID_Line    = mean(Sta_ID_Line),
+    Sta_ID_Station = mean(Sta_ID_Station)) %>%
   st_as_sf(
     coords = c("lon", "lat"), crs=4326, remove = F) %>% 
-  separate(
-    Sta_ID, c("Sta_ID_Line", "Sta_ID_Station"), 
-    sep=" ", remove=F) %>% 
   mutate(
-    Sta_ID_Line    = as.double(Sta_ID_Line),
-    Sta_ID_Station = as.double(Sta_ID_Station),
-    offshore       = ifelse(Sta_ID_Station > 60, T, F))
+    offshore = ifelse(Sta_ID_Station > 60, T, F))
 
 mapview(pts, zcol="offshore")
 table(pts$offshore)
@@ -186,16 +198,16 @@ if (any(!file.exists(hull_geos))){
 ## TODO: Make google sheet and read into R
 
 ```{r}
-# variable lookup
-var_lookup_tbl <- tribble(
-  ~var,              ~var_title,                   ~var_label,                             ~data_source,
-  "T_degC",          "Sea Surface Temperature",    "Temperature (ºC)",                     "d",
-  "Salnty",          "Salinity",                   "Salinity (Practical Salinity Scale)",  "d",
-  "Bottle_O2_ml_L",  "Oxygen Content",             "Oxygen (mL/L)",                        "DIC")
-var_lookup <- var_lookup_tbl %>%
-  split(seq(nrow(.))) %>% 
-  lapply(as.list)
-names(var_lookup) <- var_lookup_tbl$var
+# # variable lookup
+# var_lookup_tbl <- tribble(
+#   ~var,              ~var_title,                   ~var_label,                             ~data_source,
+#   "T_degC",          "Sea Surface Temperature",    "Temperature (ºC)",                     "d",
+#   "Salnty",          "Salinity",                   "Salinity (Practical Salinity Scale)",  "d",
+#   "Bottle_O2_ml_L",  "Oxygen Content",             "Oxygen (mL/L)",                        "DIC")
+# var_lookup <- var_lookup_tbl %>%
+#   split(seq(nrow(.))) %>% 
+#   lapply(as.list)
+# names(var_lookup) <- var_lookup_tbl$var
 ```
 
 
