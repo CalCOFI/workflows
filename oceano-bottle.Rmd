@@ -45,6 +45,8 @@ names(var_lookup) <- var_lookup_tbl$var
 # get data file paths from gdrive
 bottle_csv <- file.path(dir_data, "/oceanographic-data/bottle-database/CalCOFI_Database_194903-202001_csv_22Sep2021/194903-202001_Bottle.csv")
 cast_csv <- file.path(dir_data, "/oceanographic-data/bottle-database/CalCOFI_Database_194903-202001_csv_22Sep2021/194903-202001_Cast.csv")
+bottle_cast_rds <- file.path(dir_data, "/oceanographic-data/bottle-database/bottle_cast.rds")
+
 DIC_csv  <- file.path(dir_data, "/DIC/CalCOFI_DICs_200901-201507_28June2018.csv")
 calcofi_geo           <- here("data/calcofi_oceano-bottle-stations_convex-hull.geojson")
 calcofi_offshore_geo  <- here("data/calcofi_oceano-bottle-stations_convex-hull_offshore.geojson")
@@ -97,6 +99,7 @@ DIC <- d_cast %>%
       rename(Depthm = `Depth(m)`),
     by = c("Cst_Cnt" = "ID")) %>% 
   mutate(Date = lubridate::as_date(Date, format = "%m/%d/%Y"))
+saveRDS(d, bottle_cast_rds)
 ```
 
 ## Exploratory summary of bottle data
