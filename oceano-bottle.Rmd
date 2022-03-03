@@ -27,7 +27,7 @@ librarian::shelf(
   dplyr, DT, dygraphs, glue,googlesheets4, gstat, here, lubridate, mapview, purrr, readr, 
   raster, rmapshaper, sf, skimr, stars, stringr, tidyr)
 select <- dplyr::select
-
+mapviewOptions(fgb = FALSE)
 # paths
 dir_data <- switch(
   Sys.info()["nodename"],
@@ -71,7 +71,7 @@ names(d_bottle) <- str_split(
 d_DIC <- read_csv(DIC_csv, skip=1, col_names = F)
 names(d_DIC) <- str_split(
   readLines(DIC_csv, n=1), ",")[[1]] %>% 
-  str_replace("\xb5", "µ") 
+  str_replace("\xb5", "µ")
 # %>% 
 #   separate(
 #     `Line Sta_ID`, c("Sta_ID_Line", "Sta_ID_Station"), 
@@ -93,7 +93,8 @@ d <- d_cast %>%
 DIC <- d_cast %>% 
   left_join(
     d_DIC %>% 
-      select(-`Line Sta_ID`),
+      select(-`Line Sta_ID`) %>% 
+      rename(Depthm = `Depth(m)`),
     by = c("Cst_Cnt" = "ID")) %>% 
   mutate(Date = lubridate::as_date(Date, format = "%m/%d/%Y"))
 ```
@@ -128,15 +129,16 @@ cinms_ply <- sf::st_read(sanctuaries_geo) %>%
 cinms_txt <- sf::st_as_text(cinms_ply$geometry)
 #cinms_txt
 
-mapview(cinms_ply) # weird...ply is no longer showing up...
+mapview(cinms_ply) 
 ```
 
 ## Get Station IDs as points
 
 ```{r}
 # for summary, want to group by Sta_Code because each data point has a diff Sta_ID
-pts <- d %>% 
-  filter(
+get_pts <- function(data) {
+  data %>% 
+    filter(
     !is.na(Lat_Dec),
     !is.na(Lon_Dec)) %>% 
   group_by(
@@ -150,9 +152,29 @@ pts <- d %>%
     coords = c("lon", "lat"), crs=4326, remove = F) %>% 
   mutate(
     offshore = ifelse(Sta_ID_Station > 60, T, F))
+}
 
-mapview(pts, zcol="offshore")
-table(pts$offshore)
+# pts <- d %>% 
+#   filter(
+#     !is.na(Lat_Dec),
+#     !is.na(Lon_Dec)) %>% 
+#   group_by(
+#     Sta_ID) %>%
+#   summarize(
+#     lon            = mean(Lon_Dec),
+#     lat            = mean(Lat_Dec),
+#     Sta_ID_Line    = mean(Sta_ID_Line),
+#     Sta_ID_Station = mean(Sta_ID_Station)) %>%
+#   st_as_sf(
+#     coords = c("lon", "lat"), crs=4326, remove = F) %>% 
+#   mutate(
+#     offshore = ifelse(Sta_ID_Station > 60, T, F))
+
+get_pts(d) %>% mapview(zcol="offshore")
+get_pts(DIC) %>% mapview(zcol="offshore")
+
+# pts %>% mapview(zcol="offshore")
+# table(pts$offshore)
 ```
 
 ## Make CalCOFI total study areas
@@ -195,7 +217,7 @@ if (any(!file.exists(hull_geos))){
     [2] variable display title
     [3] y-axis label
     
-## TODO: Make google sheet and read into R
+## [x] TODO: Make google sheet and read into R
 
 ```{r}
 # # variable lookup
@@ -216,14 +238,14 @@ if (any(!file.exists(hull_geos))){
 ```{r}
 aoi = cinms_ply
 
-# find stations in aoi
-pts_aoi <- pts %>% 
-  mutate(
-    x = st_intersects(pts, aoi) %>% as.logical()) %>% 
-  filter(x)
-  
-mapview(aoi) +
-  mapview(pts_aoi)
+# # find stations in aoi
+# pts_aoi <- pts %>% 
+#   mutate(
+#     x = st_intersects(pts, aoi) %>% as.logical()) %>% 
+#   filter(x)
+#   
+# mapview(aoi) +
+#   mapview(pts_aoi)
 ```
 
 ##  Get daily data (fxn)
@@ -291,32 +313,34 @@ get_oceano_var_aoi <- function(
   var, aoi, 
   date_step = c("year", "day", "week", "month", "quarter", "decade"), 
   depth_min = 0, depth_max = 10){
-  # TODO: case for if (!date_step %in% c("day", "week", "month", "year"))
-  # if (date_step == "quarter") {
-  # } else if (date_step == "decade") {
-  # }
   
   # test values
-  # var = "Bottle_O2_ml_L"; aoi = cinms_ply; date_step = "year"; depth_min = 0; depth_max = 10
+  # var = "Bottle O2(ml_L)"; aoi = cinms_ply; date_step = "year"; depth_min = 0; depth_max = 10
   # var = "Salnty"; aoi = cinms_ply; date_step = "year"; depth_min = 0; depth_max = 1000
+  
+  d <- eval(parse(text = glue("var_lookup$`{var}`$data_source_name"))) %>% 
+    as.name() %>% eval()
+  
+  pts <- get_pts(d)
   
   # find stations in aoi
   pts_aoi <- pts %>% 
     mutate(
       x = st_intersects(pts, aoi) %>% as.logical()) %>% 
     filter(x)
-  
-  # d <- eval(as.name(eval(parse(text = glue("var_lookup${var}$data_source")))))
     
   d_aoi <- d %>% 
     filter(Sta_ID %in% pts_aoi$Sta_ID)
   
   d_aoi_summ <- d_aoi %>% 
-    filter(!is.na(.data[[var]])) %>% 
-    # {if (any(!is.na(.data[[Depthm]]))) filter(Depthm >= depth_min, Depthm < depth_max)} %>% 
-    filter(
-      Depthm >= depth_min,Depthm < depth_max) %>% 
-    mutate(Date_Step = update_date(Date, unit = date_step)) %>% 
+    filter(!is.na(.data[[var]]))
+  
+  if (any(!is.na(.data[[Depthm]]))) {
+    d_aoi_summ <- d_aoi_summ %>% 
+      filter(Depthm >= depth_min, Depthm < depth_max)
+  }
+  d_aoi_summ <- d_aoi_summ %>% 
+    mutate(Date_Step = update_date(Date, unit=date_step)) %>% 
     group_by(Date_Step) %>% 
     summarize(
       var_n   = n(),
