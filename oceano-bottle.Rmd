@@ -46,8 +46,8 @@ names(var_lookup) <- var_lookup_tbl$var
 bottle_csv <- file.path(dir_data, "/oceanographic-data/bottle-database/CalCOFI_Database_194903-202001_csv_22Sep2021/194903-202001_Bottle.csv")
 cast_csv <- file.path(dir_data, "/oceanographic-data/bottle-database/CalCOFI_Database_194903-202001_csv_22Sep2021/194903-202001_Cast.csv")
 bottle_cast_rds <- file.path(dir_data, "/oceanographic-data/bottle-database/bottle_cast.rds")
-
 DIC_csv  <- file.path(dir_data, "/DIC/CalCOFI_DICs_200901-201507_28June2018.csv")
+
 calcofi_geo           <- here("data/calcofi_oceano-bottle-stations_convex-hull.geojson")
 calcofi_offshore_geo  <- here("data/calcofi_oceano-bottle-stations_convex-hull_offshore.geojson")
 calcofi_nearshore_geo <- here("data/calcofi_oceano-bottle-stations_convex-hull_nearshore.geojson")
@@ -86,20 +86,20 @@ names(d_DIC) <- str_split(
 # Join data
 
 # for now... ideally would join with all the data but this causes some issues with shared variables that have different values
-d <- d_cast %>% 
+bottle_cast <- d_cast %>% 
   left_join(
     d_bottle %>% select(-Sta_ID),
     by = "Cst_Cnt") %>% 
   mutate(Date = lubridate::as_date(Date, format = "%m/%d/%Y")) 
 
-DIC <- d_cast %>% 
+DIC_cast <- d_cast %>% 
   left_join(
     d_DIC %>% 
       select(-`Line Sta_ID`) %>% 
       rename(Depthm = `Depth(m)`),
     by = c("Cst_Cnt" = "ID")) %>% 
   mutate(Date = lubridate::as_date(Date, format = "%m/%d/%Y"))
-saveRDS(d, bottle_cast_rds)
+saveRDS(bottle_cast, bottle_cast_rds)
 ```
 
 ## Exploratory summary of bottle data
@@ -133,9 +133,14 @@ cinms_txt <- sf::st_as_text(cinms_ply$geometry)
 #cinms_txt
 
 mapview(cinms_ply) 
+
+# get aoi
+aoi = cinms_ply
 ```
 
-## Get Station IDs as points
+# Functions
+
+### Get Station IDs as points
 
 ```{r}
 # for summary, want to group by Sta_Code because each data point has a diff Sta_ID
@@ -157,30 +162,15 @@ get_pts <- function(data) {
     offshore = ifelse(Sta_ID_Station > 60, T, F))
 }
 
-# pts <- d %>% 
-#   filter(
-#     !is.na(Lat_Dec),
-#     !is.na(Lon_Dec)) %>% 
-#   group_by(
-#     Sta_ID) %>%
-#   summarize(
-#     lon            = mean(Lon_Dec),
-#     lat            = mean(Lat_Dec),
-#     Sta_ID_Line    = mean(Sta_ID_Line),
-#     Sta_ID_Station = mean(Sta_ID_Station)) %>%
-#   st_as_sf(
-#     coords = c("lon", "lat"), crs=4326, remove = F) %>% 
-#   mutate(
-#     offshore = ifelse(Sta_ID_Station > 60, T, F))
 
-get_pts(d) %>% mapview(zcol="offshore")
-get_pts(DIC) %>% mapview(zcol="offshore")
+get_pts(bottle_cast) %>% mapview(zcol="offshore")
+get_pts(DIC_cast) %>% mapview(zcol="offshore")
 
 # pts %>% mapview(zcol="offshore")
 # table(pts$offshore)
 ```
 
-## Make CalCOFI total study areas
+### Make CalCOFI total study areas
 
 Per guidance from Erin:
 
@@ -215,78 +205,20 @@ if (any(!file.exists(hull_geos))){
 }
 ```
 
-## Variable lookup
-    [1] variable name as seen in the data
-    [2] variable display title
-    [3] y-axis label
-    
-## [x] TODO: Make google sheet and read into R
-
-```{r}
-# # variable lookup
-# var_lookup_tbl <- tribble(
-#   ~var,              ~var_title,                   ~var_label,                             ~data_source,
-#   "T_degC",          "Sea Surface Temperature",    "Temperature (ºC)",                     "d",
-#   "Salnty",          "Salinity",                   "Salinity (Practical Salinity Scale)",  "d",
-#   "Bottle_O2_ml_L",  "Oxygen Content",             "Oxygen (mL/L)",                        "DIC")
-# var_lookup <- var_lookup_tbl %>%
-#   split(seq(nrow(.))) %>% 
-#   lapply(as.list)
-# names(var_lookup) <- var_lookup_tbl$var
-```
-
-
 ## Get latest variable for AOI
 
 ```{r}
-aoi = cinms_ply
-
 # # find stations in aoi
 # pts_aoi <- pts %>% 
 #   mutate(
 #     x = st_intersects(pts, aoi) %>% as.logical()) %>% 
 #   filter(x)
-#   
+
 # mapview(aoi) +
 #   mapview(pts_aoi)
 ```
 
-##  Get daily data (fxn)
-
-```{r}
-# get_oceano_var_daily_aoi <- function(var, aoi, depth_min=0, depth_max=10){
-# 
-#   # find stations in aoi
-#   pts_aoi <- pts %>% 
-#     mutate(
-#       x = st_intersects(pts, aoi) %>% as.logical()) %>% 
-#     filter(x)
-#   
-#   d_aoi <- d %>% 
-#     filter(Sta_ID %in% pts_aoi$Sta_ID)
-#   
-#   d_aoi_daily <- d_aoi %>% 
-#     filter(
-#       !is.na(.data[[var]]),
-#       Depthm >= depth_min,
-#       Depthm < depth_max) %>% 
-#     group_by(Date) %>% 
-#     summarize(
-#       var_n   = n(),
-#       var_min = min(.data[[var]], na.rm = T),
-#       var_q10 = quantile(.data[[var]], probs = 0.10, na.rm = T),
-#       var_avg = mean(.data[[var]], na.rm = T),
-#       var_q90 = quantile(.data[[var]], 0.90, na.rm = T),
-#       var_max = max(.data[[var]], na.rm = T),
-#       var_sd  = sd(.data[[var]], na.rm = T))
-#   
-#   attr(d_aoi_daily, "labels") <- eval(parse(text = glue("var_lookup${var}")))
-#   
-#   d_aoi_daily
-# }
-```
-
-## `update_date` [function](https://github.com/tidyverse/lubridate/issues/239#issuecomment-73107327)
+### [Update dates](https://github.com/tidyverse/lubridate/issues/239#issuecomment-73107327) for summarizing by `date_step`
 
 ```{r}
 update_date <- function(x, unit = c("second", "minute", "hour", "day", "week", "month", "quarter", "year", "decade")) {
@@ -308,7 +240,7 @@ update_date <- function(x, unit = c("second", "minute", "hour", "day", "week", "
 ```
 
 
-## Get data grouped by `date_step`: general fxn
+### Summarize data by `date_step` in preparation for timeseries plot
 
 ```{r}
 # choices for `date_step`: "day", "week", month", "quarter", "year", "decade"
@@ -318,7 +250,7 @@ get_oceano_var_aoi <- function(
   depth_min = 0, depth_max = 10){
   
   # test values
-  # var = "Bottle O2(ml_L)"; aoi = cinms_ply; date_step = "year"; depth_min = 0; depth_max = 10
+  # var = "Bottle O2(ml_L)"; aoi = cinms_ply; date_step = "year"; depth_min = 0; depth_max = 4000
   # var = "Salnty"; aoi = cinms_ply; date_step = "year"; depth_min = 0; depth_max = 1000
   
   d <- eval(parse(text = glue("var_lookup$`{var}`$data_source_name"))) %>% 
@@ -331,19 +263,29 @@ get_oceano_var_aoi <- function(
     mutate(
       x = st_intersects(pts, aoi) %>% as.logical()) %>% 
     filter(x)
-    
-  d_aoi <- d %>% 
-    filter(Sta_ID %in% pts_aoi$Sta_ID)
   
-  d_aoi_summ <- d_aoi %>% 
-    filter(!is.na(.data[[var]]))
+  # d_var <- d %>% filter(!is.na(eval(parse(text = glue("d$`{var}`")))))
   
+  d_summ     <- d %>% filter(!is.na(.data[[var]]))
+  d_aoi_summ <- d_summ %>% filter(Sta_ID %in% pts_aoi$Sta_ID)
+
+  # d_test <- d %>% filter(!is.na(`Bottle O2(ml_L)`))
+  # d_test_aoi <- d_test %>% filter(Sta_ID %in% pts_aoi$Sta_ID)
+  
+  # d_aoi_summ <- d_aoi %>% 
+  #   filter(!is.na(.data[[var]]))
+  
+  empty_data_for_var <- ifelse(nrow(d_aoi_summ) == 0, TRUE, FALSE)
+  
+  if (empty_data_for_var) {
+    d_aoi_summ <- d_summ
+  }
   if (any(!is.na(.data[[Depthm]]))) {
     d_aoi_summ <- d_aoi_summ %>% 
       filter(Depthm >= depth_min, Depthm < depth_max)
   }
   d_aoi_summ <- d_aoi_summ %>% 
-    mutate(Date_Step = update_date(Date, unit=date_step)) %>% 
+    mutate(Date_Step = update_date(Date, unit = date_step)) %>% 
     group_by(Date_Step) %>% 
     summarize(
       var_n   = n(),
@@ -355,41 +297,32 @@ get_oceano_var_aoi <- function(
       var_sd  = sd(.data[[var]], na.rm = T)) %>% 
     rename(Date = Date_Step)
 
-  attr(d_aoi_summ, "labels")    <- eval(parse(text = glue("var_lookup${var}")))
+  attr(d_aoi_summ, "labels")    <- eval(parse(text = glue("var_lookup$`{var}`")))
   attr(d_aoi_summ, "date_step") <- date_step
   attr(d_aoi_summ, "date_msg")  <- glue("This dataset was summarized by {date_step}.")
+  attr(d_aoi_summ, "aoi") <- ifelse(
+    empty_data_for_var, 
+    glue("No data were found for {var} in this area of interest. Summaries were conducted across all existing data points."),
+    glue("Data for {var} in selected area of interest")
+  )
   
   d_aoi_summ
 }
 ```
 
 ### Plot time series
-
-TODO: 
-[x] make this a function for any variable, with a schema to apply for:
-    [x] labels
-    [ ] colors: STILL NEED TO CHANGE COLOR as a fxn of var
-[x] Get time series of variable at given step (eg annual) within AOI
-
 see: [plot_metric_timeseries()](https://github.com/noaa-onms/onmsR/blob/2e438a9bdff8ee90b8fc811aafae4520c26049ab/R/spatial.R#L16-L49)
 
 ```{r}
 plot_timeseries <- function(d) {
-  # get_title <- purrr::attr_getter("labels$var_title")
-  # get_var   <- purrr::attr_getter("labels$var_label")
-  
   x <- d %>% select(
     Date, 
     `10% quantile` = var_q10,
     `Average`      = var_avg,
     `90% quantile` = var_q90)
   var_attrs <- tibble(
-    # title = get_title(d),
-    # var   = get_var(d))
     title = attributes(d)$labels$var_title,
     var   = attributes(d)$labels$var_label)
-    # title = attributes(d)$title,
-    # var   = attributes(d)$var)
   xts::xts(x = x %>% select(-Date), order.by = x %>% pull(Date)) %>% 
     dygraph(
       main = var_attrs$title,
@@ -401,75 +334,27 @@ plot_timeseries <- function(d) {
 }
 ```
 
-### Example plots
-
-```{r}
-# SST
-# v <- get_oceano_var_daily_aoi("T_degC", cinms_ply, 0, 10)
-v <- get_oceano_var_aoi("T_degC", cinms_ply, "year", 0, 20)
-# attributes(v)
-plot_timeseries(v)
-
-# OXYGEN (HYPOXIA) - from d_DIC
-# o <- get_oceano_var_aoi("Bottle_O2_ml_L", cinms_ply, "year", 0, 10)
-# plot_timeseries(o)
-
-
-# SALINITY
-# s <- get_oceano_var_daily_aoi("Salnty", cinms_ply, 0, 2000) # ex. depth range
-s <- get_oceano_var_aoi("Salnty", cinms_ply, "year", 0, 4000)
-plot_timeseries(s)
-
-
-# ZOOPLANKTON
-
-
-# ICHTHYOPLANKTON
-
-```
-
-
-## Get raster of variable for latest within AOI
-
-```{r}
-var       = "T_degC"
-aoi       = cinms_ply
-depth_min = 0
-depth_max = 10
-
-# find stations in aoi
-pts_aoi <- pts %>% 
-  mutate(
-    x = st_intersects(pts, aoi) %>% as.logical()) %>% 
-  filter(x)
-
-d_aoi <- d %>% 
-  filter(Sta_ID %in% pts_aoi$Sta_ID)
-
-d_aoi_daily <- d_aoi %>% 
-  filter(
-    !is.na(.data[[var]]),
-    Depthm >= depth_min,
-    Depthm < depth_max) %>% 
-  group_by(Date, Sta_ID) %>% 
-  summarize(
-    var_n   = n(),
-    var_avg = mean(.data[[var]], na.rm = T), 
-    .groups = "drop") %>% 
-  arrange(desc(Date))
-d_aoi_daily
-```
-
-### Let's look without AOI
+### Get IDW raster without AOI (based on Cruise_ID)
 
 ```{r}
 get_oceano_var_cruise_raster <- function(cruise_id, var, depth_min, depth_max){
-  d_daily <- d %>% 
+  # test values
+  # cruise_id = "2020-01-05-C-33RL"; var = "T_degC"; depth_min = 0; depth_max = 10
+  # cruise_id = "1949-03-01-C-31CR"; var = "Bottle O2(ml_L)"; depth_min = 0; depth_max = 1000
+  
+  d <- eval(parse(text = glue("var_lookup$`{var}`$data_source_name"))) %>% 
+    as.name() %>% eval()
+  
+  d_var <- d %>% 
     filter(
       !is.na(.data[[var]]),
       Depthm >= !!depth_min,
-      Depthm < !!depth_max,
-      Cruise_ID == !!cruise_id) %>% 
+      Depthm < !!depth_max)
+  
+  cruise_id_choices <- unique(d_var$Cruise_ID) # Cruise_ID values with data for var
+  
+  d_daily <- d_var %>% 
+    filter(Cruise_ID == cruise_id) %>% 
     group_by(Cruise_ID, Date, Sta_ID) %>% 
     summarize(
       var_n   = n(),
@@ -477,6 +362,14 @@ get_oceano_var_cruise_raster <- function(cruise_id, var, depth_min, depth_max){
       .groups = "drop") %>% 
     arrange(desc(Date), Cruise_ID)
   d_daily
+  
+  pts <- get_pts(d)
+  
+  # find stations in aoi
+  pts_aoi <- pts %>% 
+    mutate(
+      x = st_intersects(pts, aoi) %>% as.logical()) %>% 
+    filter(x)
   
   p <- pts %>% 
     left_join(
@@ -498,22 +391,78 @@ get_oceano_var_cruise_raster <- function(cruise_id, var, depth_min, depth_max){
   idw <- interpolate(z, gs)
   w <- mask(idw, z)
   
-  w_tif <- here("data/_test_idw.tif")
+  w_tif <- here(glue("data/idw_{var}_{cruise_id}_{depth_min}_{depth_max}"))
+  # w_tif <- here("data/_test_idw.tif")
   raster::writeRaster(w, w_tif, overwrite=T)
   w <- raster(w_tif) %>% readAll()
   unlink(w_tif)
   
   w
 }
+```
 
-w <- get_oceano_var_cruise_raster(
+# Example timeseries plots
+
+### TEMPERATURE
+
+```{r}
+get_oceano_var_aoi("T_degC", cinms_ply, "year", 0, 20) %>% 
+  plot_timeseries()
+```
+
+### SALINITY
+
+```{r}
+get_oceano_var_aoi("Salnty", cinms_ply, "year", 0, 4000) %>% 
+  plot_timeseries()
+```
+
+### OXYGEN (HYPOXIA)
+
+```{r}
+get_oceano_var_aoi("Bottle O2(ml_L)", cinms_ply, "week", 0, 4000) %>% 
+  plot_timeseries()
+
+get_oceano_var_aoi("Bottle O2 (µmol/Kg)", cinms_ply, "week", 0, 4000) %>% 
+  plot_timeseries()
+```
+
+### DIC
+
+```{r}
+get_oceano_var_aoi("DIC1", cinms_ply, "week", 0, 4000) %>% 
+  plot_timeseries()
+```
+
+### pH (OA)
+
+#### [ ] TODO: find pH data for OA measurements
+
+```{r}
+# need to find pH data:
+DIC_cast %>% filter(!is.na(pH1 | pH2)) %>% nrow()
+bottle_cast %>% filter(!is.na(pH1 | pH2)) %>% nrow()
+# get_oceano_var_aoi("pH1", cinms_ply, "week", 0, 4000) %>% 
+#   plot_timeseries()
+```
+
+
+# Example IDW rasters of variables for latest (not within AOI)
+
+### TEMPERATURE
+
+```{r}
+get_oceano_var_cruise_raster(
   cruise_id = "2020-01-05-C-33RL",
   var       = "T_degC", 
   depth_min = 0,
-  depth_max = 10) 
+  depth_max = 10) %>% 
+  mapview()
+```
 
-mapview(w)
+### SALINITY
 
+```{r}
 get_oceano_var_cruise_raster(
   cruise_id = "2020-01-05-C-33RL",
   var       = "Salnty", 
@@ -522,14 +471,73 @@ get_oceano_var_cruise_raster(
   mapview()
 ```
 
+### OXYGEN
+
+```{r}
+get_oceano_var_cruise_raster(
+  cruise_id = "1949-03-01-C-31CR",
+  var       = "Bottle O2(ml_L)", 
+  depth_min = 0,
+  depth_max = 8000) %>% 
+  mapview()
+```
+
+### DIC
+
+```{r}
+get_oceano_var_cruise_raster(
+  cruise_id = "1949-03-01-C-31CR",
+  var       = "DIC1", 
+  depth_min = 0,
+  depth_max = 8000) %>% 
+  mapview()
+```
+
+# OLD
+
+## Get raster of variable for latest within AOI
+
+```{r}
+# test variables
+var = "T_degC"; aoi = cinms_ply; depth_min = 0; depth_max = 100
+
+d <- eval(parse(text = glue("var_lookup$`{var}`$data_source_name"))) %>% 
+  as.name() %>% eval()
+
+pts <- get_pts(d)
+
+# find stations in aoi
+pts_aoi <- pts %>%
+  mutate(
+    x = st_intersects(pts, aoi) %>% as.logical()) %>%
+  filter(x)
+
+d_aoi <- d %>%
+  filter(Sta_ID %in% pts_aoi$Sta_ID)
+
+d_aoi_daily <- d_aoi %>%
+  filter(
+    !is.na(.data[[var]]),
+    Depthm >= depth_min,
+    Depthm < depth_max) %>%
+  group_by(Date, Sta_ID) %>%
+  summarize(
+    var_n   = n(),
+    var_avg = mean(.data[[var]], na.rm = T),
+    .groups = "drop") %>%
+  arrange(desc(Date))
+d_aoi_daily
+```
+
 ## TODO
 
 summarize:
 
 - [x] OCEAN TEMP: `T_degC`
 - [x] salinity: `Salnty`
-- [ ] OXYGEN (HYPOXIA)
-- [ ] ZOOPLANKTON
+- [x] OXYGEN (HYPOXIA): `Bottle O2(ml_L)`, `Bottle O2 (µmol/Kg)`
+- [ ] DIC: 
+- [ ] ZOOPLANKTON,
 - [ ] ICHTHYOPLANKTON for each station ID
 
 - Create `read_bottle()` in `calcofi4r`
