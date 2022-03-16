@@ -15,8 +15,7 @@ editor_options:
 knitr::opts_chunk$set(echo = TRUE, warning = F, message = F)
 ```
 
-## Read Oceano Bottle data
-
+## Packages & setup
 ```{r}
 # packages
 if (!require("librarian")){
@@ -35,14 +34,49 @@ dir_data <- switch(
   `Cristinas-MacBook-Pro.local` = "/Volumes/GoogleDrive/.shortcut-targets-by-id/13pWB5x59WSBR0mr9jJjkx7rri9hlUsMv/calcofi/data",
   `Bens-MacBook-Air.local` = "/Volumes/GoogleDrive/My Drive/projects/calcofi/data")
   # TODO: get Erin's Google Drive path and "nodename")
+```
 
-# read var_lookup gsheet
+## Read dataset keys from gdrive
+```{r}
+bottle_key_csv <- file.path(dir_data, "/dataset_keys/bottle_field_descriptions.csv")
+cast_key_csv   <- file.path(dir_data, "/dataset_keys/cast_field_descriptions.csv")
+
+key_cast   <- read_csv(cast_key_csv)
+
+key_bottle <- googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/18c6eSGRf0bSdraDocjn3-j1rUIxN2WKqxsEnPQCR6rA/edit#gid=2046976359") %>% 
+  na_if("n.a.") %>% 
+  mutate(
+    dataset    = "bottle_cast",
+    source_url = source_url[1])
+
+
+key_DIC <- googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/1SGfGMJUhiYZKIh746p5pGn7cD0cOcTA3g_imAnvyz88/edit#gid=0") %>% 
+  na_if("n.a.") %>% 
+  mutate(
+    dataset    = "DIC_cast",
+    source_url = source_url[1])
+
+data_key <- bind_rows(key_bottle, key_DIC) %>% 
+  select(dataset, field_name, title, description_abbv, everything())
+
+
+# convert to var_lookup
+var_lookup_key_tbl <- data_key %>% 
+  filter(!is.na(description_abbv)) 
+var_lookup_key <- var_lookup_key_tbl %>% 
+  split(seq(nrow(.))) %>% 
+  lapply(as.list)
+names(var_lookup_key) <- var_lookup_key_tbl$field_name
+
 var_lookup_tbl <- googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/1ghM30pIdcsun7XWzLRKh4EilUplN60YdHayfiilPFwE/edit#gid=0") 
 var_lookup <- var_lookup_tbl %>%
   split(seq(nrow(.))) %>% 
   lapply(as.list)
 names(var_lookup) <- var_lookup_tbl$var
+```
 
+## Read Oceano Bottle data from gdrive
+```{r}
 # get data file paths from gdrive
 bottle_csv <- file.path(dir_data, "/oceanographic-data/bottle-database/CalCOFI_Database_194903-202001_csv_22Sep2021/194903-202001_Bottle.csv")
 cast_csv <- file.path(dir_data, "/oceanographic-data/bottle-database/CalCOFI_Database_194903-202001_csv_22Sep2021/194903-202001_Cast.csv")
@@ -88,7 +122,7 @@ table(is.na(d_bottle[,'Oxy_µmol/Kg']))
 #  FALSE   TRUE 
 # 685061 204439
 
-d_DIC <- read_csv(DIC_csv, skip=1, col_names = F)
+d_DIC <- read_csv(DIC_csv, skip=1, col_names = F, guess_max = 1000000)
 names(d_DIC) <- str_split(
   readLines(DIC_csv, n=1), ",")[[1]] %>% 
   str_replace("\xb5", "µ")
@@ -119,6 +153,45 @@ DIC_cast <- d_cast %>%
   mutate(Date = lubridate::as_date(Date, format = "%m/%d/%Y"))
 saveRDS(bottle_cast, bottle_cast_rds)
 ```
+
+## Read whales, seabirds, turtles data from gdrive
+
+### [Bird Mammal Census](https://oceaninformatics.ucsd.edu/datazoo/catalogs/ccelter/datasets/255)
+
+```{r}
+bird_mamm_csv <- file.path(dir_data, "/whales-seabirds-turtles/bird-mammal-census/CalCOFI_bird-mammal-census_observations.csv")
+transects_csv <- file.path(dir_data, "/whales-seabirds-turtles/bird-mammal-census/CalCOFI_bird-mammal-census_transects.csv")
+key_bird_mamm_beh_csv <- file.path(dir_data, "/whales-seabirds-turtles/bird-mammal-census/CalCOFI_bird-mammal-census_behaviorcodes.csv")
+key_bird_mamm_sp_csv <- file.path(dir_data, "/whales-seabirds-turtles/bird-mammal-census/CalCOFI_bird-mammal-census_allspecieslist.csv")
+
+key_bird_mamm_beh <- read_csv(key_bird_mamm_beh_csv) 
+key_bird_mamm_sp  <- read_csv(key_bird_mamm_sp_csv) 
+
+
+# bird & mammal counts from CalCOFI cruises
+d_bird_mamm <- read_csv(bird_mamm_csv, guess_max = 1000000)
+
+# log of transect datetimes & locations from CalCOFI cruises
+d_transects <- read_csv(transects_csv, guess_max = 1000000)
+
+bird_mamm_transects <- d_bird_mamm %>% 
+  left_join(
+    d_transects, 
+    by = "GIS key") %>% 
+  left_join(
+    key_bird_mamm_beh %>% 
+      select(Behavior, Behavior_Description = Description), 
+    by = "Behavior") %>%
+  left_join(
+    key_bird_mamm_sp %>% 
+      mutate(across(
+        c("Bird", "LargeBird", "Fish", "Mammal", "Include", "Unidentified"), 
+        as.logical)), 
+    by = "Species")
+
+
+```
+
 
 ## Exploratory summary of bottle data
 
@@ -438,6 +511,9 @@ get_oceano_var_aoi("Salnty", cinms_ply, "year", 0, 4000) %>%
 ### OXYGEN (HYPOXIA)
 
 ```{r}
+get_oceano_var_aoi("O2Sat", cinms_ply, "year", 0, 100) %>% 
+  plot_timeseries()
+
 get_oceano_var_aoi("Bottle O2(ml_L)", cinms_ply, "week", 0, 4000) %>% 
   plot_timeseries()
 
