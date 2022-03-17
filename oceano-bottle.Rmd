@@ -154,6 +154,18 @@ DIC_cast <- d_cast %>%
 saveRDS(bottle_cast, bottle_cast_rds)
 ```
 
+## Create stations dataset
+
+```{r}
+stations <- bottle_cast %>% 
+  select(Sta_ID, Sta_ID_Line, Sta_ID_Station, Sta_Code) %>% 
+  bind_rows(
+    DIC_cast %>% 
+      select(Sta_ID, Sta_ID_Line, Sta_ID_Station, Sta_Code)) %>% 
+  distinct()
+```
+
+
 ## Read whales, seabirds, turtles data from gdrive
 
 ### [Bird Mammal Census](https://oceaninformatics.ucsd.edu/datazoo/catalogs/ccelter/datasets/255)
@@ -191,7 +203,6 @@ bird_mamm_transects <- d_bird_mamm %>%
 
 
 ```
-
 
 ## Exploratory summary of bottle data
 
