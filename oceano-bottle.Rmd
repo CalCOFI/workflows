@@ -38,8 +38,8 @@ dir_data <- switch(
 
 ## Read dataset keys from gdrive
 ```{r}
-bottle_key_csv <- file.path(dir_data, "/dataset_keys/bottle_field_descriptions.csv")
-cast_key_csv   <- file.path(dir_data, "/dataset_keys/cast_field_descriptions.csv")
+# bottle_key_csv <- file.path(dir_data, "/dataset_keys/bottle_field_descriptions.csv")
+cast_key_csv   <- file.path(dir_data, "/_dataset-keys/cast_field_descriptions.csv")
 
 key_cast   <- read_csv(cast_key_csv)
 
@@ -50,29 +50,23 @@ key_bottle <- googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/
     source_url = source_url[1])
 
 
-key_DIC <- googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/1SGfGMJUhiYZKIh746p5pGn7cD0cOcTA3g_imAnvyz88/edit#gid=0") %>% 
+key_dic <- googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/1SGfGMJUhiYZKIh746p5pGn7cD0cOcTA3g_imAnvyz88/edit#gid=0") %>% 
   na_if("n.a.") %>% 
   mutate(
-    dataset    = "DIC_cast",
+    dataset    = "dic_cast",
     source_url = source_url[1])
 
-data_key <- bind_rows(key_bottle, key_DIC) %>% 
+data_key <- bind_rows(key_bottle, key_dic) %>% 
   select(dataset, field_name, title, description_abbv, everything())
 
 
 # convert to var_lookup
 var_lookup_key_tbl <- data_key %>% 
   filter(!is.na(description_abbv)) 
-var_lookup_key <- var_lookup_key_tbl %>% 
+var_lookup <- var_lookup_key_tbl %>% 
   split(seq(nrow(.))) %>% 
   lapply(as.list)
-names(var_lookup_key) <- var_lookup_key_tbl$field_name
-
-var_lookup_tbl <- googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/1ghM30pIdcsun7XWzLRKh4EilUplN60YdHayfiilPFwE/edit#gid=0") 
-var_lookup <- var_lookup_tbl %>%
-  split(seq(nrow(.))) %>% 
-  lapply(as.list)
-names(var_lookup) <- var_lookup_tbl$var
+names(var_lookup) <- var_lookup_key_tbl$field_name
 ```
 
 ## Read Oceano Bottle data from gdrive
@@ -81,7 +75,7 @@ names(var_lookup) <- var_lookup_tbl$var
 bottle_csv <- file.path(dir_data, "/oceanographic-data/bottle-database/CalCOFI_Database_194903-202001_csv_22Sep2021/194903-202001_Bottle.csv")
 cast_csv <- file.path(dir_data, "/oceanographic-data/bottle-database/CalCOFI_Database_194903-202001_csv_22Sep2021/194903-202001_Cast.csv")
 bottle_cast_rds <- file.path(dir_data, "/oceanographic-data/bottle-database/bottle_cast.rds")
-DIC_csv  <- file.path(dir_data, "/DIC/CalCOFI_DICs_200901-201507_28June2018.csv")
+dic_csv  <- file.path(dir_data, "/dic/CalCOFI_dics_200901-201507_28June2018.csv")
 
 calcofi_geo           <- here("data/calcofi_oceano-bottle-stations_convex-hull.geojson")
 calcofi_offshore_geo  <- here("data/calcofi_oceano-bottle-stations_convex-hull_offshore.geojson")
@@ -101,7 +95,6 @@ d_cast   <- read_csv(cast_csv) %>%
     Sta_ID_Station = as.double(Sta_ID_Station))
 
 d_bottle <- read_csv(bottle_csv, skip=1, col_names = F, guess_max = 1000000)
-#d_bottle_problems() <- problems()
 names(d_bottle) <- str_split(
   readLines(bottle_csv, n=1), ",")[[1]] %>% 
   str_replace("\xb5", "µ")
@@ -122,86 +115,59 @@ table(is.na(d_bottle[,'Oxy_µmol/Kg']))
 #  FALSE   TRUE 
 # 685061 204439
 
-d_DIC <- read_csv(DIC_csv, skip=1, col_names = F, guess_max = 1000000)
-names(d_DIC) <- str_split(
-  readLines(DIC_csv, n=1), ",")[[1]] %>% 
+d_dic <- read_csv(dic_csv, skip=1, col_names = F, guess_max = 1000000)
+names(d_dic) <- str_split(
+  readLines(dic_csv, n=1), ",")[[1]] %>% 
   str_replace("\xb5", "µ")
-# %>% 
-#   separate(
-#     `Line Sta_ID`, c("Sta_ID_Line", "Sta_ID_Station"), 
-#     sep=" ", remove=F) %>% 
-#   mutate(
-#     Sta_ID_Line    = as.double(Sta_ID_Line),
-#     Sta_ID_Station = as.double(Sta_ID_Station),
-#     offshore       = ifelse(Sta_ID_Station > 60, T, F)) 
 
-# Join data
 
-# for now... ideally would join with all the data but this causes some issues with shared variables that have different values
 bottle_cast <- d_cast %>% 
-  left_join(
+  right_join(
     d_bottle %>% select(-Sta_ID),
     by = "Cst_Cnt") %>% 
   mutate(Date = lubridate::as_date(Date, format = "%m/%d/%Y")) 
 
-DIC_cast <- d_cast %>% 
-  left_join(
-    d_DIC %>% 
+dic_cast <- d_cast %>% 
+  right_join(
+    d_dic %>% 
       select(-`Line Sta_ID`) %>% 
       rename(Depthm = `Depth(m)`),
     by = c("Cst_Cnt" = "ID")) %>% 
   mutate(Date = lubridate::as_date(Date, format = "%m/%d/%Y"))
+
+# check if keys' field names are equal to names(d_bottle) and names(d_dic)
+setequal(
+  data_key %>% filter(dataset == "bottle_cast") %>% pull(field_name),
+  names(d_bottle)) # TRUE
+setequal(
+  data_key %>% filter(dataset == "dic_cast") %>% pull(field_name),
+  names(d_dic)) # TRUE
+
 saveRDS(bottle_cast, bottle_cast_rds)
 ```
 
-## Create stations dataset
+## Create `stations` dataset
 
 ```{r}
-stations <- bottle_cast %>% 
-  select(Sta_ID, Sta_ID_Line, Sta_ID_Station, Sta_Code) %>% 
-  bind_rows(
-    DIC_cast %>% 
-      select(Sta_ID, Sta_ID_Line, Sta_ID_Station, Sta_Code)) %>% 
-  distinct()
-```
-
-
-## Read whales, seabirds, turtles data from gdrive
-
-### [Bird Mammal Census](https://oceaninformatics.ucsd.edu/datazoo/catalogs/ccelter/datasets/255)
-
-```{r}
-bird_mamm_csv <- file.path(dir_data, "/whales-seabirds-turtles/bird-mammal-census/CalCOFI_bird-mammal-census_observations.csv")
-transects_csv <- file.path(dir_data, "/whales-seabirds-turtles/bird-mammal-census/CalCOFI_bird-mammal-census_transects.csv")
-key_bird_mamm_beh_csv <- file.path(dir_data, "/whales-seabirds-turtles/bird-mammal-census/CalCOFI_bird-mammal-census_behaviorcodes.csv")
-key_bird_mamm_sp_csv <- file.path(dir_data, "/whales-seabirds-turtles/bird-mammal-census/CalCOFI_bird-mammal-census_allspecieslist.csv")
-
-key_bird_mamm_beh <- read_csv(key_bird_mamm_beh_csv) 
-key_bird_mamm_sp  <- read_csv(key_bird_mamm_sp_csv) 
-
-
-# bird & mammal counts from CalCOFI cruises
-d_bird_mamm <- read_csv(bird_mamm_csv, guess_max = 1000000)
-
-# log of transect datetimes & locations from CalCOFI cruises
-d_transects <- read_csv(transects_csv, guess_max = 1000000)
-
-bird_mamm_transects <- d_bird_mamm %>% 
-  left_join(
-    d_transects, 
-    by = "GIS key") %>% 
-  left_join(
-    key_bird_mamm_beh %>% 
-      select(Behavior, Behavior_Description = Description), 
-    by = "Behavior") %>%
-  left_join(
-    key_bird_mamm_sp %>% 
-      mutate(across(
-        c("Bird", "LargeBird", "Fish", "Mammal", "Include", "Unidentified"), 
-        as.logical)), 
-    by = "Species")
-
-
+# filter out stations that are present in the data
+stations <- bind_rows(bottle_cast, dic_cast) %>% 
+  filter(
+    !is.na(Lat_Dec), 
+    !is.na(Lon_Dec)) %>% 
+  select(Sta_ID, Sta_ID_Line, Sta_ID_Station, Sta_Code, Lat_Dec, Lon_Dec) %>% 
+  distinct() %>% 
+  group_by(Sta_ID) %>% 
+  summarize(
+    Lon            = mean(Lon_Dec),
+    Lat            = mean(Lat_Dec),
+    Sta_ID_Line    = mean(Sta_ID_Line),
+    Sta_ID_Station = mean(Sta_ID_Station)) %>% 
+  st_as_sf(
+    coords = c("Lon", "Lat"), 
+    crs    = 4326, 
+    remove = F) %>% 
+  mutate(
+    offshore = ifelse(Sta_ID_Station > 60, T, F))
 ```
 
 ## Exploratory summary of bottle data
@@ -217,8 +183,8 @@ skim(d_bottle)
 ```
 
 ```{r}
-# d_DIC
-skim(d_DIC)
+# d_dic
+skim(d_dic)
 ```
 
 ## Get CINMS AOI
@@ -242,31 +208,33 @@ aoi = cinms_ply
 
 # Functions
 
-### Get Station IDs as points
+### Get Station IDs as points (see `stations` dataset above)
 
 ```{r}
 # for summary, want to group by Sta_Code because each data point has a diff Sta_ID
-get_pts <- function(data) {
-  data %>% 
-    filter(
-    !is.na(Lat_Dec),
-    !is.na(Lon_Dec)) %>% 
-  group_by(
-    Sta_ID) %>%
-  summarize(
-    lon            = mean(Lon_Dec),
-    lat            = mean(Lat_Dec),
-    Sta_ID_Line    = mean(Sta_ID_Line),
-    Sta_ID_Station = mean(Sta_ID_Station)) %>%
-  st_as_sf(
-    coords = c("lon", "lat"), crs=4326, remove = F) %>% 
-  mutate(
-    offshore = ifelse(Sta_ID_Station > 60, T, F))
-}
+# get_pts <- function(data) {
+#   data %>% 
+#     filter(
+#     !is.na(Lat_Dec),
+#     !is.na(Lon_Dec)) %>% 
+#   group_by(
+#     Sta_ID) %>%
+#   summarize(
+#     lon            = mean(Lon_Dec),
+#     lat            = mean(Lat_Dec),
+#     Sta_ID_Line    = mean(Sta_ID_Line),
+#     Sta_ID_Station = mean(Sta_ID_Station)) %>%
+#   st_as_sf(
+#     coords = c("lon", "lat"), crs=4326, remove = F) %>% 
+#   mutate(
+#     offshore = ifelse(Sta_ID_Station > 60, T, F))
+# }
 
 
-get_pts(bottle_cast) %>% mapview(zcol="offshore")
-get_pts(DIC_cast) %>% mapview(zcol="offshore")
+stations %>% mapview(zcol = "offshore")
+
+# get_pts(bottle_cast) %>% mapview(zcol="offshore")
+# get_pts(dic_cast) %>% mapview(zcol="offshore")
 
 # pts %>% mapview(zcol="offshore")
 # table(pts$offshore)
@@ -352,13 +320,14 @@ get_oceano_var_aoi <- function(
   depth_min = 0, depth_max = 10){
   
   # test values
-  # var = "Bottle O2(ml_L)"; aoi = cinms_ply; date_step = "year"; depth_min = 0; depth_max = 4000
+  # var = "Bottle O2 (ml_L)"; aoi = cinms_ply; date_step = "year"; depth_min = 0; depth_max = 4000
   # var = "Salnty"; aoi = cinms_ply; date_step = "year"; depth_min = 0; depth_max = 1000
   
-  d <- eval(parse(text = glue("var_lookup$`{var}`$data_source_name"))) %>% 
+  d <- eval(parse(text = glue("var_lookup$`{var}`$dataset"))) %>% 
     as.name() %>% eval()
   
-  pts <- get_pts(d)
+  # pts <- get_pts(d)
+  pts <- stations
   
   # find stations in aoi
   pts_aoi <- pts %>% 
@@ -423,8 +392,8 @@ plot_timeseries <- function(d) {
     `Average`      = var_avg,
     `90% quantile` = var_q90)
   var_attrs <- tibble(
-    title = attributes(d)$labels$var_title,
-    var   = attributes(d)$labels$var_label)
+    title = attributes(d)$labels$title,
+    var   = attributes(d)$labels$description_abbv)
   xts::xts(x = x %>% select(-Date), order.by = x %>% pull(Date)) %>% 
     dygraph(
       main = var_attrs$title,
@@ -465,7 +434,8 @@ get_oceano_var_cruise_raster <- function(cruise_id, var, depth_min, depth_max){
     arrange(desc(Date), Cruise_ID)
   d_daily
   
-  pts <- get_pts(d)
+  pts <- stations
+  # pts <- get_pts(d)
   
   # find stations in aoi
   pts_aoi <- pts %>% 
@@ -522,20 +492,20 @@ get_oceano_var_aoi("Salnty", cinms_ply, "year", 0, 4000) %>%
 ### OXYGEN (HYPOXIA)
 
 ```{r}
-get_oceano_var_aoi("O2Sat", cinms_ply, "year", 0, 100) %>% 
+get_oceano_var_aoi("O2Sat", cinms_ply, "year", 0, 2000) %>% 
   plot_timeseries()
 
+# only contains data for 1949-1950
 get_oceano_var_aoi("Bottle O2(ml_L)", cinms_ply, "week", 0, 4000) %>% 
   plot_timeseries()
-
 get_oceano_var_aoi("Bottle O2 (µmol/Kg)", cinms_ply, "week", 0, 4000) %>% 
   plot_timeseries()
 ```
 
-### DIC
+### dic
 
 ```{r}
-get_oceano_var_aoi("DIC1", cinms_ply, "week", 0, 4000) %>% 
+get_oceano_var_aoi("DIC1", cinms_ply, "month", 0, 4000) %>% 
   plot_timeseries()
 ```
 
@@ -545,7 +515,7 @@ get_oceano_var_aoi("DIC1", cinms_ply, "week", 0, 4000) %>%
 
 ```{r}
 # need to find pH data:
-DIC_cast %>% filter(!is.na(pH1 | pH2)) %>% nrow()
+dic_cast %>% filter(!is.na(pH1 | pH2)) %>% nrow()
 bottle_cast %>% filter(!is.na(pH1 | pH2)) %>% nrow()
 # get_oceano_var_aoi("pH1", cinms_ply, "week", 0, 4000) %>% 
 #   plot_timeseries()
@@ -587,16 +557,56 @@ get_oceano_var_cruise_raster(
   mapview()
 ```
 
-### DIC
+### dic
 
 ```{r}
 get_oceano_var_cruise_raster(
   cruise_id = "1949-03-01-C-31CR",
-  var       = "DIC1", 
+  var       = "dic1", 
   depth_min = 0,
   depth_max = 8000) %>% 
   mapview()
 ```
+
+
+# BIOLOGICAL DATA
+
+## Read whales, seabirds, turtles data from gdrive
+
+### [Bird Mammal Census](https://oceaninformatics.ucsd.edu/datazoo/catalogs/ccelter/datasets/255)
+
+```{r}
+bird_mamm_csv <- file.path(dir_data, "/whales-seabirds-turtles/bird-mammal-census/CalCOFI_bird-mammal-census_observations.csv")
+transects_csv <- file.path(dir_data, "/whales-seabirds-turtles/bird-mammal-census/CalCOFI_bird-mammal-census_transects.csv")
+key_bird_mamm_beh_csv <- file.path(dir_data, "/whales-seabirds-turtles/bird-mammal-census/CalCOFI_bird-mammal-census_behaviorcodes.csv")
+key_bird_mamm_sp_csv <- file.path(dir_data, "/whales-seabirds-turtles/bird-mammal-census/CalCOFI_bird-mammal-census_allspecieslist.csv")
+
+key_bird_mamm_beh <- read_csv(key_bird_mamm_beh_csv) 
+key_bird_mamm_sp  <- read_csv(key_bird_mamm_sp_csv) 
+
+
+# bird & mammal counts from CalCOFI cruises
+d_bird_mamm <- read_csv(bird_mamm_csv, guess_max = 1000000)
+
+# log of transect datetimes & locations from CalCOFI cruises
+d_transects <- read_csv(transects_csv, guess_max = 1000000)
+
+bird_mamm_census <- d_bird_mamm %>% 
+  left_join(
+    d_transects, 
+    by = "GIS key") %>% 
+  left_join(
+    key_bird_mamm_beh %>% 
+      select(Behavior, Behavior_Description = Description), 
+    by = "Behavior") %>%
+  left_join(
+    key_bird_mamm_sp %>% 
+      mutate(across(
+        c("Bird", "LargeBird", "Fish", "Mammal", "Include", "Unidentified"), 
+        as.logical)), 
+    by = "Species")
+```
+
 
 # OLD
 
@@ -641,7 +651,7 @@ summarize:
 - [x] OCEAN TEMP: `T_degC`
 - [x] salinity: `Salnty`
 - [x] OXYGEN (HYPOXIA): `Bottle O2(ml_L)`, `Bottle O2 (µmol/Kg)`
-- [ ] DIC: 
+- [ ] dic: 
 - [ ] ZOOPLANKTON,
 - [ ] ICHTHYOPLANKTON for each station ID
 
