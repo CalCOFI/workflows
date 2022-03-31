@@ -569,45 +569,6 @@ get_oceano_var_cruise_raster(
 ```
 
 
-# BIOLOGICAL DATA
-
-## Read whales, seabirds, turtles data from gdrive
-
-### [Bird Mammal Census](https://oceaninformatics.ucsd.edu/datazoo/catalogs/ccelter/datasets/255)
-
-```{r}
-bird_mamm_csv <- file.path(dir_data, "/whales-seabirds-turtles/bird-mammal-census/CalCOFI_bird-mammal-census_observations.csv")
-transects_csv <- file.path(dir_data, "/whales-seabirds-turtles/bird-mammal-census/CalCOFI_bird-mammal-census_transects.csv")
-key_bird_mamm_beh_csv <- file.path(dir_data, "/whales-seabirds-turtles/bird-mammal-census/CalCOFI_bird-mammal-census_behaviorcodes.csv")
-key_bird_mamm_sp_csv <- file.path(dir_data, "/whales-seabirds-turtles/bird-mammal-census/CalCOFI_bird-mammal-census_allspecieslist.csv")
-
-key_bird_mamm_beh <- read_csv(key_bird_mamm_beh_csv) 
-key_bird_mamm_sp  <- read_csv(key_bird_mamm_sp_csv) 
-
-
-# bird & mammal counts from CalCOFI cruises
-d_bird_mamm <- read_csv(bird_mamm_csv, guess_max = 1000000)
-
-# log of transect datetimes & locations from CalCOFI cruises
-d_transects <- read_csv(transects_csv, guess_max = 1000000)
-
-bird_mamm_census <- d_bird_mamm %>% 
-  left_join(
-    d_transects, 
-    by = "GIS key") %>% 
-  left_join(
-    key_bird_mamm_beh %>% 
-      select(Behavior, Behavior_Description = Description), 
-    by = "Behavior") %>%
-  left_join(
-    key_bird_mamm_sp %>% 
-      mutate(across(
-        c("Bird", "LargeBird", "Fish", "Mammal", "Include", "Unidentified"), 
-        as.logical)), 
-    by = "Species")
-```
-
-
 # OLD
 
 ## Get raster of variable for latest within AOI
