@@ -27,9 +27,18 @@ librarian::shelf(
   raster, rmapshaper, sf, skimr, stars, stringr, tidyr)
 select <- dplyr::select
 mapviewOptions(fgb = FALSE)
+
+# paths
+dir_data <- switch(
+  Sys.info()["nodename"],
+  `Bens-MacBook-Pro.local` = "/Users/bbest/My Drive/projects/calcofi/data",
+  `Cristinas-MacBook-Pro.local` = "/Volumes/GoogleDrive/.shortcut-targets-by-id/13pWB5x59WSBR0mr9jJjkx7rri9hlUsMv/calcofi/data",
+  `Bens-MacBook-Air.local` = "/Volumes/GoogleDrive/My Drive/projects/calcofi/data")
+  # TODO: get Erin's Google Drive path and "nodename")
 ```
 
 ## Read [Bird Mammal Census](https://oceaninformatics.ucsd.edu/datazoo/catalogs/ccelter/datasets/255) datasets from gdrive
+
 ```{r}
 # bird & mammal counts from CalCOFI cruises
 bird_mamm_csv <- file.path(dir_data, "/whales-seabirds-turtles/bird-mammal-census/CalCOFI_bird-mammal-census_observations.csv")
@@ -62,6 +71,7 @@ codes_bird_mamm_sp  <- read_csv(codes_bird_mamm_sp_csv)
 ## Filter by AOI and plot over time or by group (bar plot)
 
 ### Get aoi
+
 ```{r}
 # get example AOI (Channel Islands NMS)
 sanctuaries_geo <- "https://github.com/noaa-onms/onmsR/raw/12a87dfd4b90f2e3009ccb4913315fb2df7afddc/data-raw/sanctuaries.geojson"
@@ -79,6 +89,7 @@ aoi = cinms_ply
 
 ```{r}
 # GET TRANSECTS AS POINTS
+# TODO: make transect lines from Longitude Start and Stop
 transects <- d_transects %>% 
   sf::st_as_sf(coords = c("Longitude Mid (º)", "Latitude Mid (º)"), crs = 4326) %>% 
   distinct()
@@ -101,8 +112,12 @@ bird_mamm_census <- d_bird_mamm %>%
 aoi = cinms_ply  
 
 pts <- transects
-mapview(transects)
+# mapview(transects) # NOTE: this is prohibitively large to render to html (> 100 MB html)
+```
 
+![Note: This figure is a static screenshot from the interactive map, which is prohibitively large to host on Github.](./figures/bird-mammal_transects_map-screenshot.png)
+
+```{r}
 pts %>% mutate(x = st_intersects(pts, aoi))
   
 # find transects within aoi
@@ -110,6 +125,8 @@ pts_aoi <- pts %>%
   mutate(
     x = st_intersects(pts, aoi) %>% as.logical()) %>% 
   filter(x)
+
+mapview(pts_aoi, color = "yellow", add=T)
 
 # test summary
 bird_mamm_summ <- bird_mamm_census %>% 
@@ -119,12 +136,33 @@ bird_mamm_summ <- bird_mamm_census %>%
   summarize(n_Species = n_distinct(Species))
 
 library(plotly)
-plot_ly(bird_mamm_summ, x = ~Season, y = ~n_Species, type = "bar", title = "Number of unique species per season")
+plot_ly(
+  bird_mamm_summ, 
+  x = ~Season, y = ~n_Species, type = "bar", 
+  title = "Number of unique species per season")
 ```
 
+## Next Steps
 
+- After selecting transects for AOI, show me the presence of a species observed over time?
+  - What times was there observation? How much
+  - How many observations of the species?
+  - Sightings per unit effort (SPUE)
+    - What's a "unit of effort"? Perhaps a transect, or better yet length of transect, eg 10 km or unit time of observation.
 
-```{r}
+See Santora, J. A., and W. J. Sydeman. 2015. [Persistence of hotspots and variability of seabird species richness and abundance in the southern California Current](http://dx.doi.org/10.1890/ES14-00434.1). Ecosphere 6(11):214:
+
+> Integrating seabirdobservations with station data requires a grid-based approach to resolve spatially explicit timeseries that account for survey effort over time. Allshipboard tracklines, indexed by 3 km intervals(Yen et al. 2006; Fig. 1), was linked to a GIS, as wehave done for other studies in the CCE (Santoraet al. 2011a, b, 2012a, b). The extent of theshipboard trackline (total survey effort) andCalCOFI sampling stations determined the ex-tent and size of grid cells. This was accomplishedusing the create fishnet command in ArcView toproject the individual 3km sampling points ontoa grid with cells size of 0.78 3 0.78 (;4500 km2).The size of cells was chosen to account for totaltrackline effort (Fig. 1) and to reflect the layout ofthe CalCOFI hydrographic and biological sam-pling stations (Fig. 1) in order to permit futureintegration with those data sets. The grid processresolved the location of consistently sampledcells during 1987–2012 with 45 and 48 cells inspring and summer, respectively (Fig. 1). 
+> 
+> (17) (PDF) Persistence of hotspots and variability of seabird species richness and abundance in the southern California Current. Available from: https://www.researchgate.net/publication/283799672_Persistence_of_hotspots_and_variability_of_seabird_species_richness_and_abundance_in_the_southern_California_Current [accessed Mar 31 2022].
+>
+> We standardized sampling effort by assessingthe number of times the ship visited a cell and theamount of survey effort collected within that cell,relative to all cells in a given season over theentire length of the time series (Santora and Veit2013). To determine a threshold to use as a cutoff, we calculated the mean 6 SD of cell visitsand effort per season, then omitted all effort lessthan 1 SD below the mean. 
+>
+> (17) (PDF) Persistence of hotspots and variability of seabird species richness and abundance in the southern California Current. Available from: https://www.researchgate.net/publication/283799672_Persistence_of_hotspots_and_variability_of_seabird_species_richness_and_abundance_in_the_southern_California_Current [accessed Mar 31 2022].
+
+## OLD...
+
+```{r, eval=F}
 pts <- stations
 pts_aoi <- pts %>% 
   mutate(x = st_intersects(pts, aoi) %>% as.logical()) %>% 
@@ -138,7 +176,8 @@ test_data <- bird_mamm_census %>%
 
 
 ### Filter by aoi
-```{r}
+
+```{r, eval=F}
 # choices for `date_step`: "day", "week", month", "quarter", "year", "decade"
 # get_oceano_var_aoi <- function(
 #   var, aoi, 
