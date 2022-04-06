@@ -86,14 +86,50 @@ cinms_txt <- sf::st_as_text(cinms_ply$geometry)
 aoi = cinms_ply
 ```
 
-
 ```{r}
 # GET TRANSECTS AS POINTS
-# TODO: make transect lines from Longitude Start and Stop
 transects <- d_transects %>% 
   sf::st_as_sf(coords = c("Longitude Mid (º)", "Latitude Mid (º)"), crs = 4326) %>% 
   distinct()
 
+# [ ] TODO: make TRANSECT LINES from Lat/Lon Start and Stop
+
+get_linestring <- function(d){
+  start    <- tibble(lon = d$lon_start, lat = d$lat_start)
+  stop     <- tibble(lon = d$lon_stop,  lat = d$lat_stop)
+  lines_sf <- vector("list", nrow(d))
+  for (i in seq_along(lines_sf)) {
+    lines_sf[[i]] <- st_linestring(as.matrix(rbind(start[i,], stop[i,])))
+  }
+  st_sfc(lines_sf, crs = "+proj=longlat +datum=WGS84")
+}
+
+transect_sfc <- d_transects %>% 
+  drop_na() %>% 
+  group_by(`Transect number`) %>% 
+  summarize(
+    lat_start = mean(`Latitude Start (º)`),
+    lon_start = mean(`Longitude Start (º)`),
+    lat_stop  = mean(`Latitude Stop (º)`),
+    lon_stop  = mean(`Longitude Stop (º)`),
+    lat_mid   = mean(`Latitude Mid (º)`),
+    lon_mid   = mean(`Longitude Mid (º)`)) %>% 
+  get_linestring()
+# map of all transects
+mapview(transect_sfc)
+
+# map of all transects within example AOI
+transect_sf <- st_sfc(transect_sfc)
+tibble(transect_sf) %>% 
+  mutate(
+    x = st_intersects(transect_sf, aoi) %>% as.logical()) %>% 
+  filter(x) %>% 
+  pull(transect_sf) %>% 
+  mapview(color = "yellow", add=T)
+```
+
+
+```{r}
 bird_mamm_census <- d_bird_mamm %>% 
   left_join(
     d_transects, 
@@ -108,23 +144,22 @@ bird_mamm_census <- d_bird_mamm %>%
         c("Bird", "LargeBird", "Fish", "Mammal", "Include", "Unidentified"), 
         as.logical)), 
     by = "Species")
+ 
 
-aoi = cinms_ply  
-
-pts <- transects
 # mapview(transects) # NOTE: this is prohibitively large to render to html (> 100 MB html)
 ```
 
 ![Note: This figure is a static screenshot from the interactive map, which is prohibitively large to host on Github.](./figures/bird-mammal_transects_map-screenshot.png)
 
 ```{r}
+pts <- transects
 pts %>% mutate(x = st_intersects(pts, aoi))
-  
+ 
 # find transects within aoi
 pts_aoi <- pts %>% 
   mutate(
     x = st_intersects(pts, aoi) %>% as.logical()) %>% 
-  filter(x)
+  filter(x) %>% mapview()
 
 mapview(pts_aoi, color = "yellow", add=T)
 
