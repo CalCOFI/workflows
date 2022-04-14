@@ -1,0 +1,62 @@
+---
+title: "load_sanctuaries"
+output: html_document
+date: '2022-04-14'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Sanctuaries
+
+* [Sanctuaries with spatial information — sanctuaries • onmsR](https://noaa-onms.github.io/onmsR/reference/sanctuaries.html)
+
+```{r}
+librarian::shelf(
+  calcofi/calcofi4r, DBI, dplyr, glue, here, mapview, RPostgres, sf)
+# devtools::load_all("/share/github/calcofi4r")
+
+# source: https://github.com/noaa-onms/onmsR/blob/master/data/sanctuaries.rda
+sanctuaries_rda <- "/share/data/ONMS-Sanctuaries/sanctuaries.rda"
+
+load(file=sanctuaries_rda)
+mapview(sanctuaries)
+```
+
+
+## Sanctuaries intersecting CalCOFI
+
+```{r}
+mapview(stations)
+```
+
+```{r}
+hull <- st_convex_hull(st_union(stations))
+mapview(hull)
+```
+
+```{r}
+sanctuaries <- st_set_crs(sanctuaries, 4326)
+hull <- st_set_crs(hull, 4326)
+x <- st_intersects(sanctuaries, hull, sparse = F)[,1]
+sanctuaries <- sanctuaries[x,]
+mapview(sanctuaries)
+```
+
+## Load into Database
+
+```{r}
+con <- DBI::dbConnect(
+  RPostgres::Postgres(),
+  dbname   = "gis",
+  host     = "postgis",
+  port     = 5432,
+  user     = "admin",
+  password = readLines("/share/.db_pass"))
+# DBI::dbListTables(con)
+sanctuaries %>% 
+  select(-spatial) %>% 
+  write_sf(con, "aoi_fed_sanctuaries")
+```
+
