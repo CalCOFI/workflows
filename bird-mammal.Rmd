@@ -27,7 +27,11 @@ librarian::shelf(
   raster, rmapshaper, sf, skimr, stars, stringr, tidyr)
 select <- dplyr::select
 mapviewOptions(fgb = FALSE)
+```
 
+# TODO: access gdrive data from server
+
+```{r}
 # paths
 dir_data <- switch(
   Sys.info()["nodename"],
@@ -91,19 +95,270 @@ aoi = cinms_ply
 transects <- d_transects %>% 
   sf::st_as_sf(coords = c("Longitude Mid (º)", "Latitude Mid (º)"), crs = 4326) %>% 
   distinct()
+```
 
-# [ ] TODO: make TRANSECT LINES from Lat/Lon Start and Stop
+
+```{r}
+# TODO: 
+# [X] make TRANSECT LINES from Lat/Lon Start and Stop
+# [ ] create LINE SEGMENTS b/w individual transect lines. Separate each part of line segement w/ a field to represent EFFORT.
+
+
+# GET TRANSECTS AS INDIVIDUAL LINES
+# for each Date + Cruise:
+# (from fxn below)
+test<- d_list[[1]] %>% 
+    # group_by(Date, Cruise) %>%
+    mutate(
+      lat_start = mean(`Latitude Start (º)`),
+      lon_start = mean(`Longitude Start (º)`),
+      lat_stop  = mean(`Latitude Stop (º)`),
+      lon_stop  = mean(`Longitude Stop (º)`)) %>% 
+    select(
+      Cruise, `Transect number`, Date, 
+      lat_start, lon_start, lat_stop, lon_stop) %>% 
+    mutate(effort = TRUE) %>% 
+    distinct() 
+  
+infer_segments <- function(d) {
+  
+  get_date <- function(date) { # for date in date_list
+    date %>% as.character() %>% as.Date("%Y-%m-%d")
+  }
+  
+  # d <- d_cruise_date
+  cruise         <- list()
+  transect_start <- list()
+  transect_stop  <- list()
+  date_start     <- list()
+  date_stop      <- list()
+  lat_start      <- list()
+  lon_start      <- list()
+  lat_stop       <- list()
+  lon_stop       <- list()
+
+  for (i in 1:nrow(d)) { 
+    if (i < nrow(d)) {
+      cruise[i]         <- d$Cruise[i]
+      transect_start[i] <- d$`Transect number`[i]
+      transect_stop[i]  <- d$`Transect number`[i+1]
+      date_start[i]     <- as.character(d$Date[i]) 
+      date_stop[i]      <- as.character(d$Date[i+1])
+      lat_start[i]      <- d$lat_stop[i]
+      lon_start[i]      <- d$lon_stop[i]
+      lat_stop[i]       <- d$lat_start[i+1]
+      lon_stop[i]       <- d$lon_start[i+1]
+    }
+  }
+  
+  date_start <- map(date_start, get_date) 
+  date_stop  <- map(date_stop, get_date)
+  
+  tibble(
+    cruise         = unlist(cruise),
+    transect_start = unlist(transect_start),
+    transect_stop  = unlist(transect_stop),
+    date_start     = date_start %>% reduce(c),
+    date_stop      = date_stop %>% reduce(c),
+    lat_start      = unlist(lat_start),
+    lon_start      = unlist(lon_start),
+    lat_stop       = unlist(lat_stop),
+    lon_stop       = unlist(lon_stop),
+    effort         = FALSE) %>%
+    mutate(
+      date         = NA,
+      transect     = (transect_start + transect_stop)/2,
+      lat_mid      = (lat_start + lat_stop)/2,
+      lon_mid      = (lon_start + lon_stop)/2) %>% 
+    select(
+      cruise, transect, transect_start, transect_stop, 
+      date, date_start, date_stop, 
+      lat_start, lon_start, lat_stop, lon_stop, lat_mid,lon_mid, effort)
+}
+
+# d %>% infer_segments()
+# date_cruise_choices <- segments %>% 
+#   group_by(Date, Cruise) %>% 
+#   select(Date, Cruise) %>% 
+#   distinct() %>% 
+#   ungroup()
+# 
+# d <- segments %>% 
+#   filter(
+#     Date   == date_cruise_choices$Date[10], 
+#     Cruise == date_cruise_choices$Cruise[10]) 
+
+# i = 106; date = date_cruise_choices$Date[i]; cruise <- date_cruise_choices$Cruise[i]
+  
+segments <- d_transects %>%
+  drop_na() %>%
+  group_by(`Transect number`)
+
+d_list <- segments %>% 
+  split(segments$Cruise, segments$Date)
+
+update_lines <- function(d_cruise_date){ # data split by CRUISE & DATE
+  # d_cruise_date <- d_list[[3]]
+  d_cruise_date <- d_cruise_date %>% 
+    # group_by(Date, Cruise) %>%
+    # mutate(
+    #   lat_start = mean(`Latitude Start (º)`),
+    #   lon_start = mean(`Longitude Start (º)`),
+    #   lat_stop  = mean(`Latitude Stop (º)`),
+    #   lon_stop  = mean(`Longitude Stop (º)`)) %>% 
+    mutate(
+      transect_start = `Transect number`,
+      transect_stop  = `Transect number`,
+      date_start = Date,
+      date_stop  = Date,
+      lat_start  = mean(`Latitude Start (º)`),
+      lon_start  = mean(`Longitude Start (º)`),
+      lat_stop   = mean(`Latitude Stop (º)`),
+      lon_stop   = mean(`Longitude Stop (º)`),
+      lat_mid    = mean(`Latitude Mid (º)`),
+      lon_mid    = mean(`Longitude Mid (º)`)) %>%
+    select(
+      Cruise, 
+      `Transect number`, transect_start, transect_stop, 
+      Date, date_start, date_stop,
+      lat_start, lon_start, lat_stop, lon_stop, lat_mid, lon_mid) %>% 
+    mutate(effort = TRUE) %>% 
+    distinct() 
+  
+  d_cruise_date %>% 
+    infer_segments() %>% 
+    ungroup() %>% 
+    bind_rows(
+      d_cruise_date %>% 
+        rename(
+          cruise   = Cruise,
+          transect = `Transect number`,
+          date     = Date))
+}
 
 get_linestring <- function(d){
+  # d <- head(all_segments)
   start    <- tibble(lon = d$lon_start, lat = d$lat_start)
   stop     <- tibble(lon = d$lon_stop,  lat = d$lat_stop)
   lines_sf <- vector("list", nrow(d))
   for (i in seq_along(lines_sf)) {
     lines_sf[[i]] <- st_linestring(as.matrix(rbind(start[i,], stop[i,])))
   }
-  st_sfc(lines_sf, crs = "+proj=longlat +datum=WGS84")
+  st_sfc(lines_sf, crs = "+proj=longlat +datum=WGS84") %>% 
+    st_as_sf() %>% 
+    bind_cols(d)
+    # mutate(effort = d$effort)
 }
+```
 
+```{r}
+all_segments <- map(d_list, update_lines) %>% 
+  bind_rows() 
+
+all_segments_linestring <- all_segments %>% 
+  get_linestring() %>% 
+  st_as_sf()
+```
+
+
+```{r}
+# unique combinations of year + cruise
+year_cruise_choices <- all_segments %>% 
+  mutate(year = year(date_start)) %>% 
+  select(year, cruise) %>% 
+  distinct()
+```
+
+# EXAMPLE PLOTS: filtered by different parameters
+```{r}
+# year == 200, cruise number color-coded
+all_segments_linestring %>% 
+  filter(year(date_start) == "2000") %>% 
+  mapview(add=T, zcol="cruise")
+```
+
+
+```{r}
+# specific cruise number, effort color-coded
+all_segments_linestring %>% 
+  filter(cruise == "CAC1987_05") %>% 
+  mapview(add=T, zcol="effort")
+```
+
+
+```{r}
+# transect ==2, effort color-coded
+all_segments_linestring %>% 
+  filter(transect == 2) %>% 
+  mapview(add=T, zcol="effort")
+```
+
+
+```{r}
+# filtered by cruise + year combination, effort color-coded
+all_segments_linestring %>% 
+  filter(
+    year(date_start) == year_cruise_choices$year[1],
+    cruise == year_cruise_choices$cruise[3]) %>% 
+  mapview(add=T, zcol="effort")
+```
+
+
+```{r}
+all_segments_linestring %>% 
+  filter(
+    year(date_start) == year_cruise_choices$year[1],
+    cruise == year_cruise_choices$cruise[3]) %>% 
+  mapview(add=T, zcol="effort")
+```
+
+
+```{r}
+all_segments_linestring %>% 
+  filter(year(date_start) == "2000") %>% 
+  # pull(cruise) %>% unique()
+  filter(cruise == "CAC2000_04") %>% 
+  mapview(add=T, zcol="effort")
+```
+
+
+```{r}
+# EXAMPLES: filtered by combination of `Date` + `Cruise`
+d_list[[2]] %>% 
+  update_lines %>% 
+  get_linestring() %>%  
+  st_as_sf() %>% 
+  mapview(zcol="effort")
+```
+
+
+```{r}
+d_list[[17]] %>% 
+  update_lines %>% 
+  get_linestring() %>%  
+  st_as_sf() %>% 
+  mapview(zcol="effort")
+```
+
+
+```{r}
+d_list[[40]] %>% 
+  update_lines %>% 
+  get_linestring() %>%  
+  st_as_sf() %>% 
+  mapview(zcol="effort")
+```
+
+
+```{r}
+d_list[[82]] %>% 
+  update_lines %>% 
+  get_linestring() %>%  
+  st_as_sf() %>% 
+  mapview(zcol="effort")
+```
+
+```{r}
 transect_sfc <- d_transects %>% 
   drop_na() %>% 
   group_by(`Transect number`) %>% 
@@ -117,7 +372,10 @@ transect_sfc <- d_transects %>%
   get_linestring()
 # map of all transects
 mapview(transect_sfc)
+```
 
+
+```{r}
 # map of all transects within example AOI
 transect_sf <- st_sfc(transect_sfc)
 tibble(transect_sf) %>% 
@@ -198,96 +456,86 @@ See Santora, J. A., and W. J. Sydeman. 2015. [Persistence of hotspots and variab
 ## OLD...
 
 ```{r, eval=F}
-pts <- stations
-pts_aoi <- pts %>% 
-  mutate(x = st_intersects(pts, aoi) %>% as.logical()) %>% 
-  filter(x)
-
-
-
-test_data <- bird_mamm_census %>% 
-  
-```
-
-
-### Filter by aoi
-
-```{r, eval=F}
-# choices for `date_step`: "day", "week", month", "quarter", "year", "decade"
-# get_oceano_var_aoi <- function(
-#   var, aoi, 
-#   date_step = c("year", "day", "week", "month", "quarter", "decade"), 
-#   depth_min = 0, depth_max = 10){
-  
-  # test values
-  # var = "Bottle O2 (ml_L)"; aoi = cinms_ply; date_step = "year"; depth_min = 0; depth_max = 4000
-  # var = "Salnty"; aoi = cinms_ply; date_step = "year"; depth_min = 0; depth_max = 1000
-
-  
-  d <- bird_mamm_census
-  
-  locations <- bird_mamm_census %>% 
-    select()
-
-
-  pts <- stations
-  
-  # find stations in aoi
-  pts_aoi <- pts %>% 
-    mutate(
-      x = st_intersects(pts, aoi) %>% as.logical()) %>% 
-    filter(x)
-
-  d_summ_1 <- d %>% 
-    st_in
-    
-    
-  
-  
-  
-  
-  d_summ     <- d %>% filter(!is.na(.data[[var]]))
-  d_aoi_summ <- d_summ %>% filter(Sta_ID %in% pts_aoi$Sta_ID)
-
-  # d_test <- d %>% filter(!is.na(`Bottle O2(ml_L)`))
-  # d_test_aoi <- d_test %>% filter(Sta_ID %in% pts_aoi$Sta_ID)
-  
-  # d_aoi_summ <- d_aoi %>% 
-  #   filter(!is.na(.data[[var]]))
-  
-  empty_data_for_var <- ifelse(nrow(d_aoi_summ) == 0, TRUE, FALSE)
-  
-  if (empty_data_for_var) {
-    d_aoi_summ <- d_summ
-  }
-  if (any(!is.na(.data[[Depthm]]))) {
-    d_aoi_summ <- d_aoi_summ %>% 
-      filter(Depthm >= depth_min, Depthm < depth_max)
-  }
-  d_aoi_summ <- d_aoi_summ %>% 
-    mutate(Date_Step = update_date(Date, unit = date_step)) %>% 
-    group_by(Date_Step) %>% 
-    summarize(
-      var_n   = n(),
-      var_min = min(.data[[var]], na.rm = T),
-      var_q10 = quantile(.data[[var]], probs = 0.10, na.rm = T),
-      var_avg = mean(.data[[var]], na.rm = T),
-      var_q90 = quantile(.data[[var]], 0.90, na.rm = T),
-      var_max = max(.data[[var]], na.rm = T),
-      var_sd  = sd(.data[[var]], na.rm = T)) %>% 
-    rename(Date = Date_Step)
-
-  attr(d_aoi_summ, "labels")    <- eval(parse(text = glue("var_lookup$`{var}`")))
-  attr(d_aoi_summ, "date_step") <- date_step
-  attr(d_aoi_summ, "date_msg")  <- glue("This dataset was summarized by {date_step}.")
-  attr(d_aoi_summ, "aoi") <- ifelse(
-    empty_data_for_var, 
-    glue("No data were found for {var} in this area of interest. Summaries were conducted across all existing data points."),
-    glue("Data for {var} in selected area of interest")
-  )
-  
-  d_aoi_summ
-}
+# pts <- stations
+# pts_aoi <- pts %>% 
+#   mutate(x = st_intersects(pts, aoi) %>% as.logical()) %>% 
+#   filter(x)
+#   
+# ```
+# 
+# 
+# ### Filter by aoi
+# 
+# ```{r, eval=F}
+# # choices for `date_step`: "day", "week", month", "quarter", "year", "decade"
+# # get_oceano_var_aoi <- function(
+# #   var, aoi, 
+# #   date_step = c("year", "day", "week", "month", "quarter", "decade"), 
+# #   depth_min = 0, depth_max = 10){
+#   
+#   # test values
+#   # var = "Bottle O2 (ml_L)"; aoi = cinms_ply; date_step = "year"; depth_min = 0; depth_max = 4000
+#   # var = "Salnty"; aoi = cinms_ply; date_step = "year"; depth_min = 0; depth_max = 1000
+# 
+#   
+#   d <- bird_mamm_census
+#   
+#   locations <- bird_mamm_census %>% 
+#     select()
+# 
+# 
+#   pts <- stations
+#   
+#   # find stations in aoi
+#   pts_aoi <- pts %>% 
+#     mutate(
+#       x = st_intersects(pts, aoi) %>% as.logical()) %>% 
+#     filter(x)
+#   
+#   
+#   
+#   d_summ     <- d %>% filter(!is.na(.data[[var]]))
+#   d_aoi_summ <- d_summ %>% filter(Sta_ID %in% pts_aoi$Sta_ID)
+# 
+#   # d_test <- d %>% filter(!is.na(`Bottle O2(ml_L)`))
+#   # d_test_aoi <- d_test %>% filter(Sta_ID %in% pts_aoi$Sta_ID)
+#   
+#   # d_aoi_summ <- d_aoi %>% 
+#   #   filter(!is.na(.data[[var]]))
+#   
+#   empty_data_for_var <- ifelse(nrow(d_aoi_summ) == 0, TRUE, FALSE)
+#   
+#   if (empty_data_for_var) {
+#     d_aoi_summ <- d_summ
+#   }
+#   if (any(!is.na(.data[[Depthm]]))) {
+#     d_aoi_summ <- d_aoi_summ %>% 
+#       filter(Depthm >= depth_min, Depthm < depth_max)
+#   }
+#   d_aoi_summ <- d_aoi_summ %>% 
+#     mutate(Date_Step = update_date(Date, unit = date_step)) %>% 
+#     group_by(Date_Step) %>% 
+#     summarize(
+#       var_n   = n(),
+#       var_min = min(.data[[var]], na.rm = T),
+#       var_q10 = quantile(.data[[var]], probs = 0.10, na.rm = T),
+#       var_avg = mean(.data[[var]], na.rm = T),
+#       var_q90 = quantile(.data[[var]], 0.90, na.rm = T),
+#       var_max = max(.data[[var]], na.rm = T),
+#       var_sd  = sd(.data[[var]], na.rm = T)) %>% 
+#     rename(Date = Date_Step)
+# 
+#   attr(d_aoi_summ, "labels")    <- eval(parse(text = glue("var_lookup$`{var}`")))
+#   attr(d_aoi_summ, "date_step") <- date_step
+#   attr(d_aoi_summ, "date_msg")  <- glue("This dataset was summarized by {date_step}.")
+#   attr(d_aoi_summ, "aoi") <- ifelse(
+#     empty_data_for_var, 
+#     glue("No data were found for {var} in this area of interest. Summaries were conducted across all existing data points."),
+#     glue("Data for {var} in selected area of interest")
+#   )
+#   
+#   d_aoi_summ
+# }
 ```
 
 
