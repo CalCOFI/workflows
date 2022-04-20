@@ -38,7 +38,7 @@ mapview(hull)
 
 ```{r}
 sanctuaries <- st_set_crs(sanctuaries, 4326)
-hull <- st_set_crs(hull, 4326)
+hull        <- st_set_crs(hull, 4326)
 x <- st_intersects(sanctuaries, hull, sparse = F)[,1]
 sanctuaries <- sanctuaries[x,]
 mapview(sanctuaries)
@@ -55,8 +55,13 @@ con <- DBI::dbConnect(
   user     = "admin",
   password = readLines("/share/.db_pass"))
 # DBI::dbListTables(con)
+
 sanctuaries %>% 
   select(-spatial) %>% 
   write_sf(con, "aoi_fed_sanctuaries")
+
+# check read from db to spatial features
+sanctuaries <- sf::read_sf(con, "aoi_fed_sanctuaries")
+sanctuaries
 ```
 
