@@ -1,0 +1,245 @@
+---
+title: "Load Oceanographic Bottle & Cast Data"
+author: "Ben Best"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: show
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = F, message = F)
+```
+
+## Packages & setup
+
+Assume `~/.db_pass` exists.
+
+```{r}
+source(here::here("libs/db.R"))
+```
+
+
+## Load into Database
+
+Initial copy from `CalCOFI/calcofi4r:data-raw/`[`bottle.R`](https://github.com/CalCOFI/calcofi4r/blob/bc8427670fb474390326a054bda9c10cf6de1831/data-raw/bottle.R).
+
+```{r}
+librarian::shelf(
+  dplyr, DT, dygraphs, glue, gstat, here, lubridate, mapview, purrr, readr,
+  raster, rmapshaper, sf, skimr, stars, stringr, tidyr)
+select <- dplyr::select
+options(readr.show_col_types = F)
+
+# paths ----
+source(here("data-raw/_common.R"))
+
+# Gdrive source paths
+bottle_csv      <- file.path(dir_data, "/oceanographic-data/bottle-database/CalCOFI_Database_194903-202001_csv_22Sep2021/194903-202001_Bottle.csv")
+cast_csv        <- file.path(dir_data, "/oceanographic-data/bottle-database/CalCOFI_Database_194903-202001_csv_22Sep2021/194903-202001_Cast.csv")
+bottle_cast_rds <- file.path(dir_data, "/oceanographic-data/bottle-database/bottle_cast.rds")
+DIC_csv         <- file.path(dir_data, "/DIC/CalCOFI_DICs_200901-201507_28June2018.csv")
+
+# calcofi4r destination paths
+calcofi_geo           <- here("data/calcofi_oceano-bottle-stations_convex-hull.geojson")
+calcofi_offshore_geo  <- here("data/calcofi_oceano-bottle-stations_convex-hull_offshore.geojson")
+calcofi_nearshore_geo <- here("data/calcofi_oceano-bottle-stations_convex-hull_nearshore.geojson")
+
+# check paths
+stopifnot(dir.exists(dir_data))
+stopifnot(any(file.exists(bottle_csv,cast_csv)))
+
+# read csv sources ----
+d_bottle <- read_csv(bottle_csv, skip=1, col_names = F, guess_max = 1000000)
+#d_bottle_problems() <- problems()
+names(d_bottle) <- str_split(
+  readLines(bottle_csv, n=1), ",")[[1]] %>%
+  str_replace("\xb5", "µ")
+
+d_cast  <- read_csv(cast_csv)
+
+d_DIC <- read_csv(DIC_csv, skip=1, col_names = F, guess_max = 1000000)
+names(d_DIC) <- str_split(
+  readLines(DIC_csv, n=1), ",")[[1]] %>%
+  str_replace("\xb5", "µ")
+# d_DIC %>% head() %>% View()
+d_DIC <- d_DIC %>%
+  rename("Sta_ID"="Line Sta_ID")
+
+# stations ----
+stations <- d_cast %>%
+  select(Lon_Dec, Lat_Dec, Sta_ID) %>%
+  filter(
+    !is.na(Lon_Dec),
+    !is.na(Lat_Dec)) %>%
+  group_by(
+    Sta_ID) %>%
+  summarize(
+    lon            = mean(Lon_Dec),
+    lat            = mean(Lat_Dec),
+    lon_sd         = sd(Lon_Dec),
+    lat_sd         = sd(Lat_Dec)) %>%
+  separate(
+    Sta_ID, c("Sta_ID_line", "Sta_ID_station"), sep=" ", remove=F, convert=T) %>%
+  mutate(
+    offshore = ifelse(Sta_ID_station > 60, T, F)) %>%
+  st_as_sf(
+    coords = c("lon", "lat"), crs=4326, remove = F)
+#usethis::use_data(stations, overwrite = TRUE)
+
+stations$Sta_ID
+lonlat_to_stationid <- function(lon, lat){
+  proj <- "/Users/bbest/homebrew/bin/proj" # on Ben's MacBookPro
+  system(glue("echo {lon} {lat} | {proj} +proj=calcofi +epsg=4326"), intern=T) %>%
+    stringr::str_replace("\t", " ")
+}
+stationid_to_lonlat <- function(stationid){
+  proj <- "/Users/bbest/homebrew/bin/proj" # on Ben's MacBookPro
+  # https://proj.org/apps/proj.html
+  system(glue("echo {stationid} | {proj} +proj=calcofi +epsg=4326  -I -f '%.4f'"), intern=T) %>%
+    stringr::str_replace("\t", " ")
+}
+
+stationid_to_lonlat(stations$Sta_ID[1])
+stations <- stations %>%
+  mutate(
+    lonlat_proj = map_chr(Sta_ID, stationid_to_lonlat)) %>%
+  separate(lonlat_proj, c("lon_proj", "lat_proj"), sep=" ", convert = T)
+
+    lon_proj    = map_dbl(lonlat_proj, function(x) str_sp)
+  )
+
+m <- st_distance(stations, stations)
+m <- units::drop_units(m)
+m[lower.tri(m, diag=T)] <- NA
+which(m == 0, arr.ind = T)
+#       row  col
+# [1,]  616  617
+# [2,]  616  618
+# [3,]  617  618
+# [4,]  631  632
+# ...
+# [30,] 2147 2149
+# [31,] 2148 2149
+# [32,] 2107 2168
+# [33,] 2334 2335
+stations[c(616,617),]
+#   Sta_ID      Sta_ID_line Sta_ID_station   lon   lat lon_sd lat_sd offshore         geometry
+#   <chr>             <dbl>          <dbl> <dbl> <dbl>  <dbl>  <dbl> <lgl>         <POINT [°]>
+# 1 071.0 085.5          71           85.5 -124.  34.9      0      0 TRUE     (-124.0667 34.9)
+# 2 071.0 085.7          71           85.7 -124.  34.9      0      0 TRUE     (-124.0667 34.9)
+lonlat_to_stationid(-124.0667, 34.9)
+# [1] "70.77 85.48"
+stationid_to_lonlat("071.0 085.5")
+# [1] "-124.0384 34.8588"
+stationid_to_lonlat("071.0 085.7")
+# [1] "-124.0524 34.8522"
+
+stations_cce <- read_tsv(cce_stations_txt, skip = 2) %>%
+  select(lon = LonDec, lat = LatDec) %>%
+  st_as_sf(
+    coords = c("lon", "lat"), crs=4326, remove = F) %>%
+  mutate(
+    line_sta = map2_chr(lon, lat, function(x, y){
+      system(glue("echo {x} {y} | {proj} +proj=calcofi +epsg=4326"), intern=T) }),
+    line = map_dbl(line_sta, function(x)
+
+
+m[]
+m[1,1]
+v <- m[lower.tri(m)] %>% as.vector()
+
+range(v)
+
+library(ggplot2)
+ggplot(stations, aes(x = lon_sd)) +
+  geom_histogram(aes(y = ..density..)) +
+  geom_density()
+
+# bottle ----
+bottle <- d_cast %>%
+  left_join(
+    d_bottle %>% select(-Sta_ID),
+    by = "Cst_Cnt") %>%
+  mutate(Date = lubridate::as_date(Date, format = "%m/%d/%Y"))
+#saveRDS(d, bottle_cast_rds)
+usethis::use_data(bottle, overwrite = TRUE)
+
+# dic ----
+# for now... ideally would join with all the data but this causes some issues with shared variables that have different values
+dic <- d_cast %>%
+  left_join(
+    d_DIC %>%
+      select(-Line.Sta_ID) %>%
+      rename(
+        Depthm = Depth.m.,
+        Btl_Cnt = Bottle_Index,
+        Bottle_O2_ml_L = `Bottle.O2.ml_L.`,
+        Bottle_O2_µmol_kg = `Bottle.O2..æmol.Kg.`),
+    by = c("Cst_Cnt" = "ID")) %>%
+  mutate(Date = lubridate::as_date(Date, format = "%m/%d/%Y"))
+
+
+
+
+
+usethis::use_data(dic, overwrite = TRUE)
+
+
+
+# for summary, want to group by Sta_Code because each data point has a diff Sta_ID
+get_pts <- function(data) {
+  data %>%
+    filter(
+      !is.na(Lat_Dec),
+      !is.na(Lon_Dec)) %>%
+    group_by(
+      Sta_ID) %>%
+    summarize(
+      lon            = mean(Lon_Dec),
+      lat            = mean(Lat_Dec),
+      Sta_ID_line    = mean(Sta_ID_line),
+      Sta_ID_station = mean(Sta_ID_station)) %>%
+    st_as_sf(
+      coords = c("lon", "lat"), crs=4326, remove = F) %>%
+    mutate(
+      offshore = ifelse(Sta_ID_station > 60, T, F))
+}
+
+
+get_pts(bottle_cast) %>% mapview(zcol="offshore")
+get_pts(DIC_cast) %>% mapview(zcol="offshore")
+
+# keys ----
+
+# downloaded CSV from CalCOFI website and added extra columns for plotting
+key_bottle <- googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/18c6eSGRf0bSdraDocjn3-j1rUIxN2WKqxsEnPQCR6rA/edit#gid=2046976359") %>%
+  na_if("n.a.") %>%
+  mutate(
+    dataset    = "bottle_cast",
+    source_url = source_url[1])
+
+
+key_dic <- googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/1SGfGMJUhiYZKIh746p5pGn7cD0cOcTA3g_imAnvyz88/edit#gid=0") %>%
+  na_if("n.a.") %>%
+  mutate(
+    dataset    = "DIC_cast",
+    source_url = source_url[1])
+
+data_key <- bind_rows(key_bottle, key_DIC) %>%
+  select(dataset, field_name, title, description_abbv, everything())
+
+
+# convert to var_lookup
+var_lookup_key_tbl <- data_key %>%
+  filter(!is.na(description_abbv))
+var_lookup_key <- var_lookup_key_tbl %>%
+  split(seq(nrow(.))) %>%
+  lapply(as.list)
+names(var_lookup_key) <- var_lookup_key_tbl$field_name
+```
+
