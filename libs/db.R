@@ -1,3 +1,4 @@
+# packages ----
 if (!require("librarian")){
   install.packages("librarian")
   library(librarian)
@@ -5,16 +6,24 @@ if (!require("librarian")){
 librarian::shelf(
   DBI, dbplyr, dplyr, here, RPostgres)
 
-pass_txt <- "~/.db_pass"
+# paths ----
+dir_gdrive <- switch(
+  Sys.info()["nodename"],
+  `Bens-MacBook-Pro.local`      =
+    "/Users/bbest/My Drive/projects/calcofi",
+  `Cristinas-MacBook-Pro.local` =
+    "/Volumes/GoogleDrive/.shortcut-targets-by-id/13pWB5x59WSBR0mr9jJjkx7rri9hlUsMv/calcofi")
+stopifnot(dir.exists(dir_gdrive))
 
-stopifnot(file.exists(pass_txt))
+# database connect ----
+db_pass_txt <- "~/.calcofi_db_pass.txt"
+stopifnot(file.exists(db_pass_txt))
 
 con <- DBI::dbConnect(
   RPostgres::Postgres(),
   dbname   = "gis",
-  host     = "postgis",
+  host     = "db.calcofi.io",
   port     = 5432,
   user     = "admin",
-  password = readLines(pass_txt))
-
+  password = readLines(db_pass_txt))
 
