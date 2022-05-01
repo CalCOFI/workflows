@@ -11,7 +11,6 @@
 
 <meta name="author" content="Ben Best" />
 
-<meta name="date" content="2022-04-30" />
 
 <title>Load plot_labels from Google Sheet</title>
 
@@ -1599,7 +1598,7 @@ div.tocify {
 <h1 class="title toc-ignore">Load <code>plot_labels</code> from Google
 Sheet</h1>
 <h4 class="author">Ben Best</h4>
-<h4 class="date">2022-04-30</h4>
+<h4 class="date">2022-04-30 14:06:13</h4>
 
 </div>
 
@@ -1613,7 +1612,7 @@ plot_labels - Google Sheets</a></li>
 <pre class="r"><code># packages
 source(here::here(&quot;libs/db.R&quot;)) # defines variables: con, dir_gdrive
 librarian::shelf(
-  googlesheets4, knitr)
+  googlesheets4, knitr, purrr)
 
 # google sheet
 gsheet &lt;- &quot;https://docs.google.com/spreadsheets/d/1ghM30pIdcsun7XWzLRKh4EilUplN60YdHayfiilPFwE/edit&quot;
@@ -1624,72 +1623,104 @@ gs4_deauth()
 # read data
 d &lt;- read_sheet(gsheet)
 
+# check that variables are globally unique
+stopifnot(d$variable %&gt;% duplicated() %&gt;% sum() == 0)
+
+# check that table.variable exists in the database
+d &lt;- d %&gt;% 
+  mutate(
+    exists = map2_lgl(
+      table, variable, function(tbl, var){
+        flds &lt;- dbListFields(con, tbl) %&gt;% sort()
+        var %in% flds }))
+stopifnot(all(d$exists))
+
 # write to database
-dbWriteTable(con, &quot;plot_labels&quot;, d, overwrite=T)
+d %&gt;% 
+  select(-exists) %&gt;% 
+  dbWriteTable(con, &quot;plot_labels&quot;, ., overwrite=T)
 
 # show table
 kable(d)</code></pre>
 <table>
 <colgroup>
+<col width="11%" />
+<col width="13%" />
 <col width="16%" />
-<col width="20%" />
-<col width="27%" />
-<col width="36%" />
+<col width="22%" />
+<col width="30%" />
+<col width="5%" />
 </colgroup>
 <thead>
 <tr class="header">
+<th align="left">category</th>
 <th align="left">table</th>
 <th align="left">variable</th>
 <th align="left">plot_title</th>
 <th align="left">plot_label</th>
+<th align="left">exists</th>
 </tr>
 </thead>
 <tbody>
 <tr class="odd">
+<td align="left">Oceanographic</td>
 <td align="left">cast_bottle</td>
 <td align="left">T_degC</td>
 <td align="left">Sea Surface Temperature</td>
 <td align="left">Temperature (ºC)</td>
+<td align="left">TRUE</td>
 </tr>
 <tr class="even">
+<td align="left">Oceanographic</td>
 <td align="left">cast_bottle</td>
 <td align="left">Salnty</td>
 <td align="left">Salinity</td>
 <td align="left">Salinity (practical salinity scale)</td>
+<td align="left">TRUE</td>
 </tr>
 <tr class="odd">
+<td align="left">Oceanographic</td>
 <td align="left">cast_bottle_dic</td>
 <td align="left">Bottle O2(ml_L)</td>
 <td align="left">Oxygen Content</td>
 <td align="left">Oxygen (mL/L)</td>
+<td align="left">TRUE</td>
 </tr>
 <tr class="even">
+<td align="left">Oceanographic</td>
 <td align="left">cast_bottle_dic</td>
 <td align="left">Bottle O2 (µmol/Kg)</td>
 <td align="left">Oxygen Content</td>
 <td align="left">Oxygen (µmol/kg)</td>
+<td align="left">TRUE</td>
 </tr>
 <tr class="odd">
+<td align="left">Oceanographic</td>
 <td align="left">cast_bottle_dic</td>
 <td align="left">DIC1</td>
 <td align="left">Dissolved Inorganic Carbon</td>
 <td align="left">DIC (µmol/Kg)</td>
+<td align="left">TRUE</td>
 </tr>
 <tr class="even">
+<td align="left">Oceanographic</td>
 <td align="left">cast_bottle_dic</td>
 <td align="left">DIC2</td>
 <td align="left">Dissolved Inorganic Carbon</td>
 <td align="left">DIC (µmol/Kg) on a replicate sample</td>
+<td align="left">TRUE</td>
 </tr>
 <tr class="odd">
+<td align="left">Oceanographic</td>
 <td align="left">cast_bottle</td>
 <td align="left">O2Sat</td>
 <td align="left">Oxygen Saturation</td>
 <td align="left">Oxygen percent saturation</td>
+<td align="left">TRUE</td>
 </tr>
 </tbody>
 </table>
-<p>Time for the chunk <code>plot_labels</code> to run: 4.497 seconds</p>
+<p>Time for the chunk <code>plot_labels</code> to run: 5.506 seconds</p>
 </div>
 
 

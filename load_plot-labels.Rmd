@@ -1,7 +1,7 @@
 ---
 title: "Load `plot_labels` from Google Sheet"
 author: "Ben Best"
-date: "`r Sys.Date()`"
+date: "`r Sys.time()`"
 output: 
   html_document:
     toc: true
@@ -25,7 +25,7 @@ knitr::opts_chunk$set(
 # packages
 source(here::here("libs/db.R")) # defines variables: con, dir_gdrive
 librarian::shelf(
-  googlesheets4, knitr)
+  googlesheets4, knitr, purrr)
 
 # google sheet
 gsheet <- "https://docs.google.com/spreadsheets/d/1ghM30pIdcsun7XWzLRKh4EilUplN60YdHayfiilPFwE/edit"
@@ -36,8 +36,22 @@ gs4_deauth()
 # read data
 d <- read_sheet(gsheet)
 
+# check that variables are globally unique
+stopifnot(d$variable %>% duplicated() %>% sum() == 0)
+
+# check that table.variable exists in the database
+d <- d %>% 
+  mutate(
+    exists = map2_lgl(
+      table, variable, function(tbl, var){
+        flds <- dbListFields(con, tbl) %>% sort()
+        var %in% flds }))
+stopifnot(all(d$exists))
+
 # write to database
-dbWriteTable(con, "plot_labels", d, overwrite=T)
+d %>% 
+  select(-exists) %>% 
+  dbWriteTable(con, "plot_labels", ., overwrite=T)
 
 # show table
 kable(d)
