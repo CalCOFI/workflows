@@ -1,7 +1,7 @@
 ---
-title: "Load Oceanographic Bottle & Cast Data, Plus DIC & Stations"
+title: "Load Oceanographic Data"
 author: "Ben Best"
-date: "`r Sys.Date()`"
+date: "`r Sys.time()`"
 output: 
   html_document:
     toc: true
@@ -17,12 +17,13 @@ knitr::opts_chunk$set(
   echo = TRUE, warning = F, message = F, time_chunk = TRUE)
 ```
 
-## Packages & setup
+## Load libraries
 
 ```{r packages}
 source(here::here("libs/db.R")) # defines variables: con, dir_gdrive
 librarian::shelf(
-  glue, mapview, purrr, readr, readxl, sf, skimr, stringr, tidyr)
+  DT, glue, janitor, mapview, purrr, readr, readxl, 
+  sf, skimr, stringr, tidyr)
 options(readr.show_col_types = F)
 mapviewOptions(fgb = FALSE)
 
@@ -47,9 +48,9 @@ stationid_to_lonlat <- function(stationid){
 # "1.0 168.0"
 ```
 
-## Load into Database
+## Read input tables
 
-Initial copy from `CalCOFI/calcofi4r:data-raw/`[`bottle.R`](https://github.com/CalCOFI/calcofi4r/blob/bc8427670fb474390326a054bda9c10cf6de1831/data-raw/bottle.R).
+Initially copied from `CalCOFI/calcofi4r:data-raw/`[`bottle.R`](https://github.com/CalCOFI/calcofi4r/blob/bc8427670fb474390326a054bda9c10cf6de1831/data-raw/bottle.R).
 
 ```{r paths}
 # paths ----
@@ -185,26 +186,37 @@ stations %>%
 # column order ----
 stations <- stations %>%
   select(
-    Sta_ID, Sta_ID_line, Sta_ID_station,
+    sta_id = Sta_ID, 
+    sta_id_line = Sta_ID_line, sta_id_station = Sta_ID_station,
     lon, lat,
     offshore,
-    is_cast, is_cce, is_ccelter, is_sccoos) %>% 
+    is_cce, is_ccelter, is_sccoos) %>% 
   rename(geom = geometry)
 
+# write to database
 st_write(stations, con, "stations")
 # to get to show as layer in tile.calcofi.io
-DBI::dbSendQuery(con, "SELECT UpdateGeometrySRID('stations', 'geom', 4326);")
+dbSendQuery(con, "SELECT UpdateGeometrySRID('stations', 'geom', 4326);")
+dbSendQuery(con, "CREATE INDEX IF NOT EXISTS stations_geom_idx ON stations USING GIST (geom);")
+dbSendQuery(con, "CREATE INDEX IF NOT EXISTS stations_staid_idx ON stations (sta_id)")
 
+# show map of stations
 mapview(stations)
+
+# show table summary
 stations %>% 
   st_drop_geometry() %>% 
   skim()
 ```
 
-## `cast`
+## `ctdcast`
 
-```{r cast}
-stopifnot(length(setdiff(unique(d_cast$Sta_ID), stations$Sta_ID)) == 0)
+Note that [`cast`](https://www.postgresql.org/docs/14/sql-expressions.html#SQL-SYNTAX-TYPE-CASTS) is a reserved word in SQL for a function to convert data types, so we're calling this table `ctdcast` instead of `cast`.
+
+Writing queries to the database is also much easier if we don't have to wrap field names in quotes. This means that all field names have to be lower case and not use any spaces, dashes or special characters. Thankfully `janitor::`[`make_clean_names()`](https://www.rdocumentation.org/packages/janitor/versions/2.1.0/topics/make_clean_names) can handle this for us. We'll just also keep track of the original column names in a separate table `column_names`.
+
+```{r ctdcast}
+stopifnot(length(setdiff(unique(d_cast$Sta_ID), stations$sta_id)) == 0)
 
 d_cast <- d_cast %>% 
   mutate(
@@ -213,40 +225,96 @@ d_cast <- d_cast %>%
     coords = c("Lon_Dec", "Lat_Dec"), crs=4326, remove = F) %>%
   rename(geom = geometry)
 
-st_write(d_cast, con, "cast")
+# rename columns
+cols_orig       <- names(d_cast)
+cols            <- make_clean_names(cols_orig)
+names(d_cast) <- cols
+d_cols <- tibble(
+  table       = "ctdcast",
+  column_orig = cols_orig,
+  column      = cols)
+
+# write spatial points to database
+st_write(d_cast, con, "ctdcast")
 # to get to show as layer in tile.calcofi.io
-dbSendQuery(con, "SELECT UpdateGeometrySRID('cast', 'geom', 4326);")
+dbSendQuery(con, "SELECT UpdateGeometrySRID('ctdcast', 'geom', 4326);")
+dbSendQuery(con, "CREATE INDEX IF NOT EXISTS ctdcast_geom_idx ON ctdcast USING GIST (geom);")
+dbSendQuery(con, "CREATE INDEX IF NOT EXISTS ctdcast_staid_idx ON ctdcast (sta_id)")
+dbSendQuery(con, "CREATE INDEX IF NOT EXISTS ctdcast_cstcnt_idx ON ctdcast (cst_cnt)")
+
+# show table summary
 d_cast %>% 
   st_drop_geometry() %>% 
   skim()
 ```
 
-## `cast_bottle`
+## `ctdcast_bottle`
 
-```{r cast_bottle}
-dbWriteTable(con, "cast_bottle", d_bottle, overwrite=T)
+```{r ctdcast_bottle}
+# rename columns
+cols_orig       <- names(d_bottle)
+cols            <- make_clean_names(cols_orig)
+names(d_bottle) <- cols
+d_cols <- bind_rows(
+  d_cols,
+  tibble(
+    table       = "ctdcast_bottle",
+    column_orig = cols_orig,
+    column      = cols))
+
+# write table to database
+dbWriteTable(con, "ctdcast_bottle", d_bottle, overwrite=T)
+dbSendQuery(con, "CREATE INDEX IF NOT EXISTS ctdcastbottle_staid_idx  ON ctdcast_bottle (sta_id)")
+dbSendQuery(con, "CREATE INDEX IF NOT EXISTS ctdcastbottle_cstcnt_idx ON ctdcast_bottle (cst_cnt)")
+dbSendQuery(con, "CREATE INDEX IF NOT EXISTS ctdcastbottle_btlcnt_idx ON ctdcast_bottle (btl_cnt)")
+
+# show table summary
 skim(d_bottle)
 ```
 
-## `cast_bottle_dic`
+## `ctdcast_bottle_dic`
 
-```{r cast_bottle_dic}
-# ensure bottle.Btl_Cnt is unique in 
-stopifnot(d_bottle$Btl_Cnt %>% duplicated() %>% sum() == 0)
+```{r ctdcast_bottle_dic}
+# ensure bottle.btl_cnt is unique in 
+stopifnot(d_bottle$btl_cnt %>% duplicated() %>% sum() == 0)
+
+# rename columns
+cols_orig       <- names(d_DIC)
+cols            <- make_clean_names(cols_orig)
+cols[which(cols_orig == "Cast_Index")]   <- "cst_cnt"
+cols[which(cols_orig == "Bottle_Index")] <- "btl_cnt"
+names(d_DIC) <- cols
+d_cols <- bind_rows(
+  d_cols,
+  tibble(
+    table       = "ctdcast_bottle_dic",
+    column_orig = cols_orig,
+    column      = cols))
 
 # ensure uniquely matchable to cast_bottle
 x <- anti_join(
   d_DIC,
   d_bottle, 
-  by=c(
-    "Bottle_Index" = "Btl_Cnt"))
+  by="btl_cnt")
 stopifnot(nrow(x) == 0)
 
-d_DIC <- d_DIC %>% 
-  rename(
-    Cst_Cnt = Cast_Index,
-    Btl_Cnt = Bottle_Index)
+# write table to database
+dbWriteTable(con, "ctdcast_bottle_dic", d_DIC, overwrite=T)
+dbSendQuery(con, "CREATE INDEX IF NOT EXISTS ctdcastbottledic_staid_idx  ON ctdcast_bottle_dic (sta_id)")
+dbSendQuery(con, "CREATE INDEX IF NOT EXISTS ctdcastbottledic_cstcnt_idx ON ctdcast_bottle_dic (cst_cnt)")
+dbSendQuery(con, "CREATE INDEX IF NOT EXISTS ctdcastbottledic_btlcnt_idx ON ctdcast_bottle_dic (btl_cnt)")
 
-dbWriteTable(con, "cast_bottle_dic", d_DIC, overwrite=T)
+# show table summary
 skim(d_DIC)
 ```
+
+## `columns_renamed`
+
+```{r columns_renamed}
+# write table to database
+dbWriteTable(con, "columns_renamed", d_cols, overwrite=T)
+
+# show table
+datatable(d_cols)
+```
+

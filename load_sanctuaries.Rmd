@@ -1,11 +1,20 @@
 ---
-title: "load_sanctuaries"
-output: html_document
-date: '2022-04-14'
+title: "Load Sanctuaries"
+author: "Ben Best"
+date: "`r Sys.time()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: show
+editor_options: 
+  chunk_output_type: console
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+source(here::here("libs/rmd.R")) # defines function: time_it
+knitr::opts_chunk$set(
+  echo = TRUE, warning = F, message = F, time_chunk = TRUE)
 ```
 
 ## Sanctuaries
@@ -13,21 +22,24 @@ knitr::opts_chunk$set(echo = TRUE)
 * [Sanctuaries with spatial information — sanctuaries • onmsR](https://noaa-onms.github.io/onmsR/reference/sanctuaries.html)
 
 ```{r}
+source(here::here("libs/db.R")) # defines variables: con, dir_gdrive
 librarian::shelf(
-  calcofi/calcofi4r, DBI, dplyr, glue, here, mapview, RPostgres, sf)
-# devtools::load_all("/share/github/calcofi4r")
+  glue, here, mapview, sf)
+mapviewOptions(fgb = FALSE)
 
 # source: https://github.com/noaa-onms/onmsR/blob/master/data/sanctuaries.rda
-sanctuaries_rda <- "/share/data/ONMS-Sanctuaries/sanctuaries.rda"
+# sanctuaries_rda <- "/share/data/ONMS-Sanctuaries/sanctuaries.rda"
+sanctuaries_rda <- "~/Github/noaa-onms/onmsR/data/sanctuaries.rda"
 
 load(file=sanctuaries_rda)
+sanctuaries <- sanctuaries %>% select(-spatial)
 mapview(sanctuaries)
 ```
-
 
 ## Sanctuaries intersecting CalCOFI
 
 ```{r}
+stations <- st_read(con, "stations")
 mapview(stations)
 ```
 
@@ -47,21 +59,11 @@ mapview(sanctuaries)
 ## Load into Database
 
 ```{r}
-con <- DBI::dbConnect(
-  RPostgres::Postgres(),
-  dbname   = "gis",
-  host     = "postgis",
-  port     = 5432,
-  user     = "admin",
-  password = readLines("/share/.db_pass"))
-# DBI::dbListTables(con)
-
-sanctuaries %>% 
-  select(-spatial) %>% 
-  write_sf(con, "aoi_fed_sanctuaries")
+st_write(sanctuaries, con, "aoi_fed_sanctuaries", delete_layer=T)
+dbSendQuery(con, "CREATE INDEX IF NOT EXISTS aoifedsanctuaries_geom_idx ON aoi_fed_sanctuaries USING GIST (geom);")
 
 # check read from db to spatial features
-sanctuaries <- sf::read_sf(con, "aoi_fed_sanctuaries")
+sanctuaries <- sf::st_read(con, "aoi_fed_sanctuaries")
 sanctuaries
 ```
 
