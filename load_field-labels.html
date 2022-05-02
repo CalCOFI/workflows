@@ -12,7 +12,7 @@
 <meta name="author" content="Ben Best" />
 
 
-<title>Load plot_labels from Google Sheet</title>
+<title>Load field_labels from Google Sheet</title>
 
 <script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
 // be compatible with the behavior of Pandoc < 2.8).
@@ -1595,19 +1595,19 @@ div.tocify {
 
 
 
-<h1 class="title toc-ignore">Load <code>plot_labels</code> from Google
+<h1 class="title toc-ignore">Load <code>field_labels</code> from Google
 Sheet</h1>
 <h4 class="author">Ben Best</h4>
-<h4 class="date">2022-04-30 14:06:13</h4>
+<h4 class="date">2022-05-01 17:45:59</h4>
 
 </div>
 
 
-<div id="load-google-sheet-into-plot_labels" class="section level2">
-<h2>Load Google Sheet into <code>plot_labels</code></h2>
+<div id="load-google-sheet-into-field_labels" class="section level2">
+<h2>Load Google Sheet into <code>field_labels</code></h2>
 <ul>
-<li>Google Sheet: <a href="https://docs.google.com/spreadsheets/d/1ghM30pIdcsun7XWzLRKh4EilUplN60YdHayfiilPFwE/edit?pli=1#gid=0">CalCOFI
-plot_labels - Google Sheets</a></li>
+<li>Google Sheet: <a href="https://docs.google.com/spreadsheets/d/1ghM30pIdcsun7XWzLRKh4EilUplN60YdHayfiilPFwE/edit?pli=1#gid=0">field_labels
+| calcofi - Google Sheets</a></li>
 </ul>
 <pre class="r"><code># packages
 source(here::here(&quot;libs/db.R&quot;)) # defines variables: con, dir_gdrive
@@ -1624,38 +1624,39 @@ gs4_deauth()
 d &lt;- read_sheet(gsheet)
 
 # check that variables are globally unique
-stopifnot(d$variable %&gt;% duplicated() %&gt;% sum() == 0)
+stopifnot(d$table_field %&gt;% duplicated() %&gt;% sum() == 0)
 
 # check that table.variable exists in the database
 d &lt;- d %&gt;% 
   mutate(
-    exists = map2_lgl(
-      table, variable, function(tbl, var){
-        flds &lt;- dbListFields(con, tbl) %&gt;% sort()
-        var %in% flds }))
+    exists = map_lgl(
+      table_field, function(tbl_fld){
+        # tbl_fld = &quot;ctdcast_bottle.t_deg_c&quot;
+        x &lt;- strsplit(tbl_fld, &quot;.&quot;, fixed=T)[[1]]
+        tbl &lt;- x[1]
+        fld &lt;- x[2]
+        fld %in% dbListFields(con, tbl) }))
 stopifnot(all(d$exists))
 
 # write to database
 d %&gt;% 
   select(-exists) %&gt;% 
-  dbWriteTable(con, &quot;plot_labels&quot;, ., overwrite=T)
+  dbWriteTable(con, &quot;field_labels&quot;, ., overwrite=T)
 
 # show table
 kable(d)</code></pre>
 <table>
 <colgroup>
 <col width="11%" />
-<col width="13%" />
-<col width="16%" />
-<col width="22%" />
 <col width="30%" />
+<col width="22%" />
+<col width="29%" />
 <col width="5%" />
 </colgroup>
 <thead>
 <tr class="header">
 <th align="left">category</th>
-<th align="left">table</th>
-<th align="left">variable</th>
+<th align="left">table_field</th>
 <th align="left">plot_title</th>
 <th align="left">plot_label</th>
 <th align="left">exists</th>
@@ -1664,63 +1665,57 @@ kable(d)</code></pre>
 <tbody>
 <tr class="odd">
 <td align="left">Oceanographic</td>
-<td align="left">cast_bottle</td>
-<td align="left">T_degC</td>
+<td align="left">ctdcast_bottle.t_deg_c</td>
 <td align="left">Sea Surface Temperature</td>
 <td align="left">Temperature (ºC)</td>
 <td align="left">TRUE</td>
 </tr>
 <tr class="even">
 <td align="left">Oceanographic</td>
-<td align="left">cast_bottle</td>
-<td align="left">Salnty</td>
+<td align="left">ctdcast_bottle.salnty</td>
 <td align="left">Salinity</td>
 <td align="left">Salinity (practical salinity scale)</td>
 <td align="left">TRUE</td>
 </tr>
 <tr class="odd">
 <td align="left">Oceanographic</td>
-<td align="left">cast_bottle_dic</td>
-<td align="left">Bottle O2(ml_L)</td>
+<td align="left">ctdcast_bottle_dic.bottle_o2_ml_l</td>
 <td align="left">Oxygen Content</td>
 <td align="left">Oxygen (mL/L)</td>
 <td align="left">TRUE</td>
 </tr>
 <tr class="even">
 <td align="left">Oceanographic</td>
-<td align="left">cast_bottle_dic</td>
-<td align="left">Bottle O2 (µmol/Kg)</td>
+<td align="left">ctdcast_bottle_dic.bottle_o2_mmol_kg</td>
 <td align="left">Oxygen Content</td>
 <td align="left">Oxygen (µmol/kg)</td>
 <td align="left">TRUE</td>
 </tr>
 <tr class="odd">
 <td align="left">Oceanographic</td>
-<td align="left">cast_bottle_dic</td>
-<td align="left">DIC1</td>
+<td align="left">ctdcast_bottle_dic.dic1</td>
 <td align="left">Dissolved Inorganic Carbon</td>
 <td align="left">DIC (µmol/Kg)</td>
 <td align="left">TRUE</td>
 </tr>
 <tr class="even">
 <td align="left">Oceanographic</td>
-<td align="left">cast_bottle_dic</td>
-<td align="left">DIC2</td>
+<td align="left">ctdcast_bottle_dic.dic2</td>
 <td align="left">Dissolved Inorganic Carbon</td>
 <td align="left">DIC (µmol/Kg) on a replicate sample</td>
 <td align="left">TRUE</td>
 </tr>
 <tr class="odd">
 <td align="left">Oceanographic</td>
-<td align="left">cast_bottle</td>
-<td align="left">O2Sat</td>
+<td align="left">ctdcast_bottle.o2sat</td>
 <td align="left">Oxygen Saturation</td>
 <td align="left">Oxygen percent saturation</td>
 <td align="left">TRUE</td>
 </tr>
 </tbody>
 </table>
-<p>Time for the chunk <code>plot_labels</code> to run: 5.506 seconds</p>
+<p>Time for the chunk <code>field_labels</code> to run: 5.146
+seconds</p>
 </div>
 
 

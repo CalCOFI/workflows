@@ -1,5 +1,5 @@
 ---
-title: "Load `plot_labels` from Google Sheet"
+title: "Load `field_labels` from Google Sheet"
 author: "Ben Best"
 date: "`r Sys.time()`"
 output: 
@@ -17,11 +17,11 @@ knitr::opts_chunk$set(
   echo = TRUE, warning = F, message = F, time_chunk = TRUE)
 ```
 
-## Load Google Sheet into `plot_labels`
+## Load Google Sheet into `field_labels`
 
-* Google Sheet: [CalCOFI plot_labels - Google Sheets](https://docs.google.com/spreadsheets/d/1ghM30pIdcsun7XWzLRKh4EilUplN60YdHayfiilPFwE/edit?pli=1#gid=0)
+* Google Sheet: [field_labels | calcofi - Google Sheets](https://docs.google.com/spreadsheets/d/1ghM30pIdcsun7XWzLRKh4EilUplN60YdHayfiilPFwE/edit?pli=1#gid=0)
 
-```{r plot_labels}
+```{r field_labels}
 # packages
 source(here::here("libs/db.R")) # defines variables: con, dir_gdrive
 librarian::shelf(
@@ -37,21 +37,24 @@ gs4_deauth()
 d <- read_sheet(gsheet)
 
 # check that variables are globally unique
-stopifnot(d$variable %>% duplicated() %>% sum() == 0)
+stopifnot(d$table_field %>% duplicated() %>% sum() == 0)
 
 # check that table.variable exists in the database
 d <- d %>% 
   mutate(
-    exists = map2_lgl(
-      table, variable, function(tbl, var){
-        flds <- dbListFields(con, tbl) %>% sort()
-        var %in% flds }))
+    exists = map_lgl(
+      table_field, function(tbl_fld){
+        # tbl_fld = "ctdcast_bottle.t_deg_c"
+        x <- strsplit(tbl_fld, ".", fixed=T)[[1]]
+        tbl <- x[1]
+        fld <- x[2]
+        fld %in% dbListFields(con, tbl) }))
 stopifnot(all(d$exists))
 
 # write to database
 d %>% 
   select(-exists) %>% 
-  dbWriteTable(con, "plot_labels", ., overwrite=T)
+  dbWriteTable(con, "field_labels", ., overwrite=T)
 
 # show table
 kable(d)

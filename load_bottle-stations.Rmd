@@ -22,7 +22,7 @@ knitr::opts_chunk$set(
 ```{r packages}
 source(here::here("libs/db.R")) # defines variables: con, dir_gdrive
 librarian::shelf(
-  DT, glue, janitor, mapview, purrr, readr, readxl, 
+  DT, glue, janitor, lubridate, mapview, purrr, readr, readxl, 
   sf, skimr, stringr, tidyr)
 options(readr.show_col_types = F)
 mapviewOptions(fgb = FALSE)
@@ -118,7 +118,7 @@ stations <- d_cast %>%
 # stations$Sta_ID
 # mapview(stations)
 
-# + CCE column ----
+# + CCE field ----
 stations_cce <- read_tsv(stations_cce_txt, skip = 2) %>%
   mutate(
     is_cce = TRUE,
@@ -130,7 +130,7 @@ stations <- stations %>%
       select(Sta_ID, is_cce),
     by = "Sta_ID")
 
-# + CCE-LTER column ----
+# + CCE-LTER field ----
 stations_ccelter <- read_excel(stations_ccelter_xls) %>%
   mutate(
     is_ccelter = TRUE,
@@ -148,7 +148,7 @@ stations <- stations %>%
       select(Sta_ID, is_ccelter),
     by = "Sta_ID")
 
-# + SCCOOS column ----
+# + SCCOOS field ----
 stations_sccoos <- read_tsv(stations_sccoos_txt) %>%
   mutate(
     is_sccoos = TRUE,
@@ -183,7 +183,7 @@ stations %>%
 #   TRUE    104    9
 # So: only 9 stations in SCCOS, none of which are in CCE
 
-# column order ----
+# field order ----
 stations <- stations %>%
   select(
     sta_id = Sta_ID, 
@@ -213,26 +213,35 @@ stations %>%
 
 Note that [`cast`](https://www.postgresql.org/docs/14/sql-expressions.html#SQL-SYNTAX-TYPE-CASTS) is a reserved word in SQL for a function to convert data types, so we're calling this table `ctdcast` instead of `cast`.
 
-Writing queries to the database is also much easier if we don't have to wrap field names in quotes. This means that all field names have to be lower case and not use any spaces, dashes or special characters. Thankfully `janitor::`[`make_clean_names()`](https://www.rdocumentation.org/packages/janitor/versions/2.1.0/topics/make_clean_names) can handle this for us. We'll just also keep track of the original column names in a separate table `column_names`.
+Writing queries to the database is also much easier if we don't have to wrap field names in quotes. This means that all field names have to be lower case and not use any spaces, dashes or special characters. Thankfully `janitor::`[`make_clean_names()`](https://www.rdocumentation.org/packages/janitor/versions/2.1.0/topics/make_clean_names) can handle this for us. We'll just also keep track of the original field names in a separate table `fields_renamed`.
 
 ```{r ctdcast}
 stopifnot(length(setdiff(unique(d_cast$Sta_ID), stations$sta_id)) == 0)
 
 d_cast <- d_cast %>% 
   mutate(
-    Date = lubridate::as_date(Date, format = "%m/%d/%Y")) %>%
+    datetime = map2_chr(Date, Time, function(f_date, f_time){
+      s_time <- ifelse(
+        is.na(f_time), 
+        "00:00:00",
+        str_split(f_time, " ")[[1]][2])
+      glue("{f_date} {s_time}") }) %>% 
+      as_datetime(
+        format = "%m/%d/%Y %H:%M:%S",
+        tz = "America/Los_Angeles"), # TODO: confirm PST and not UTC timezone
+    Date = as_date(Date, format = "%m/%d/%Y")) %>% 
   st_as_sf(
     coords = c("Lon_Dec", "Lat_Dec"), crs=4326, remove = F) %>%
   rename(geom = geometry)
 
-# rename columns
-cols_orig       <- names(d_cast)
-cols            <- make_clean_names(cols_orig)
-names(d_cast) <- cols
-d_cols <- tibble(
-  table       = "ctdcast",
-  column_orig = cols_orig,
-  column      = cols)
+# rename fields
+flds_orig       <- names(d_cast)
+flds            <- make_clean_names(flds_orig)
+names(d_cast) <- flds
+d_flds <- tibble(
+  table      = "ctdcast",
+  field_orig = flds_orig,
+  field      = flds)
 
 # write spatial points to database
 st_write(d_cast, con, "ctdcast")
@@ -241,6 +250,9 @@ dbSendQuery(con, "SELECT UpdateGeometrySRID('ctdcast', 'geom', 4326);")
 dbSendQuery(con, "CREATE INDEX IF NOT EXISTS ctdcast_geom_idx ON ctdcast USING GIST (geom);")
 dbSendQuery(con, "CREATE INDEX IF NOT EXISTS ctdcast_staid_idx ON ctdcast (sta_id)")
 dbSendQuery(con, "CREATE INDEX IF NOT EXISTS ctdcast_cstcnt_idx ON ctdcast (cst_cnt)")
+dbSendQuery(con, "CREATE INDEX IF NOT EXISTS ctdcast_date_idx ON ctdcast (date)")
+dbSendQuery(con, "CREATE INDEX IF NOT EXISTS ctdcast_datetime_idx ON ctdcast (datetime)")
+dbSendQuery(con, "CREATE INDEX IF NOT EXISTS ctdcast_datetime_idx ON ctdcast (datetime)")
 
 # show table summary
 d_cast %>% 
@@ -251,16 +263,16 @@ d_cast %>%
 ## `ctdcast_bottle`
 
 ```{r ctdcast_bottle}
-# rename columns
-cols_orig       <- names(d_bottle)
-cols            <- make_clean_names(cols_orig)
-names(d_bottle) <- cols
-d_cols <- bind_rows(
-  d_cols,
+# rename fields
+flds_orig       <- names(d_bottle)
+flds            <- make_clean_names(flds_orig)
+names(d_bottle) <- flds
+d_flds <- bind_rows(
+  d_flds,
   tibble(
-    table       = "ctdcast_bottle",
-    column_orig = cols_orig,
-    column      = cols))
+    table      = "ctdcast_bottle",
+    field_orig = flds_orig,
+    field      = flds))
 
 # write table to database
 dbWriteTable(con, "ctdcast_bottle", d_bottle, overwrite=T)
@@ -278,18 +290,18 @@ skim(d_bottle)
 # ensure bottle.btl_cnt is unique in 
 stopifnot(d_bottle$btl_cnt %>% duplicated() %>% sum() == 0)
 
-# rename columns
-cols_orig       <- names(d_DIC)
-cols            <- make_clean_names(cols_orig)
-cols[which(cols_orig == "Cast_Index")]   <- "cst_cnt"
-cols[which(cols_orig == "Bottle_Index")] <- "btl_cnt"
-names(d_DIC) <- cols
-d_cols <- bind_rows(
-  d_cols,
+# rename fields
+flds_orig       <- names(d_DIC)
+flds            <- make_clean_names(flds_orig)
+flds[which(flds_orig == "Cast_Index")]   <- "cst_cnt"
+flds[which(flds_orig == "Bottle_Index")] <- "btl_cnt"
+names(d_DIC) <- flds
+d_flds <- bind_rows(
+  d_flds,
   tibble(
     table       = "ctdcast_bottle_dic",
-    column_orig = cols_orig,
-    column      = cols))
+    field_orig = flds_orig,
+    field      = flds))
 
 # ensure uniquely matchable to cast_bottle
 x <- anti_join(
@@ -308,13 +320,13 @@ dbSendQuery(con, "CREATE INDEX IF NOT EXISTS ctdcastbottledic_btlcnt_idx ON ctdc
 skim(d_DIC)
 ```
 
-## `columns_renamed`
+## `fields_renamed`
 
-```{r columns_renamed}
+```{r fields_renamed}
 # write table to database
-dbWriteTable(con, "columns_renamed", d_cols, overwrite=T)
+dbWriteTable(con, "fields_renamed", d_flds, overwrite=T)
 
 # show table
-datatable(d_cols)
+datatable(d_flds)
 ```
 
