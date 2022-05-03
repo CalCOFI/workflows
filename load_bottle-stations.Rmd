@@ -112,7 +112,7 @@ stations <- d_cast %>%
   separate(
     Sta_ID, c("Sta_ID_line", "Sta_ID_station"), sep=" ", remove=F, convert=T) %>%
   mutate(
-    offshore = ifelse(Sta_ID_station > 60, T, F)) %>%
+    is_offshore = ifelse(Sta_ID_station > 60, T, F)) %>%
   st_as_sf(
     coords = c("lon", "lat"), crs=4326, remove = F)
 # stations$Sta_ID
@@ -189,7 +189,7 @@ stations <- stations %>%
     sta_id = Sta_ID, 
     sta_id_line = Sta_ID_line, sta_id_station = Sta_ID_station,
     lon, lat,
-    offshore,
+    is_offshore,
     is_cce, is_ccelter, is_sccoos) %>% 
   rename(geom = geometry)
 
@@ -266,6 +266,7 @@ d_cast %>%
 # rename fields
 flds_orig       <- names(d_bottle)
 flds            <- make_clean_names(flds_orig)
+flds[which(flds_orig == "Depthm")] <- "depth_m"
 names(d_bottle) <- flds
 d_flds <- bind_rows(
   d_flds,
