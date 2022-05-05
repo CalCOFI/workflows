@@ -1,0 +1,73 @@
+---
+title: "Load World Database of Protected Areas (WDPA)"
+author: "Ben Best"
+date: "`r Sys.time()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: show
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+source(here::here("libs/rmd.R")) # defines function: time_it
+knitr::opts_chunk$set(
+  echo = TRUE, warning = F, message = F, time_chunk = TRUE)
+```
+
+## WDPA
+
+Using to fetch and clean:
+
+* [`wdpar`](https://prioritizr.github.io/wdpar/articles/wdpar.html): R interface to the World Database on Protected Areas (WDPA)
+
+
+```{r}
+source(here::here("libs/db.R")) # defines variables: con, dir_gdrive
+librarian::shelf(
+  glue, here, mapview, sf, wdpar)
+mapviewOptions(fgb = FALSE)
+
+wdpa_raw <- wdpa_fetch(
+  "global", download_dir = here("data/wdpa"))
+
+# clean Malta data
+wdpa <- wdpa_clean(wdpa_raw)
+```
+
+## WDPA intersecting CalCOFI
+
+```{r}
+stations <- st_read(con, "stations")
+mapview(stations)
+```
+
+```{r}
+hull <- st_convex_hull(st_union(stations))
+mapview(hull)
+```
+
+```{r}
+sanctuaries <- st_set_crs(sanctuaries, 4326)
+hull        <- st_set_crs(hull, 4326)
+x <- st_intersects(sanctuaries, hull, sparse = F)[,1]
+sanctuaries <- sanctuaries[x,]
+mapview(sanctuaries)
+```
+
+## Load into Database
+
+```{r}
+st_write(sanctuaries, con, "aoi_fed_sanctuaries", delete_layer=T)
+# add spatial index
+dbSendQuery(con, "CREATE INDEX IF NOT EXISTS aoifedsanctuaries_geom_idx ON aoi_fed_sanctuaries USING GIST (geom);")
+# set geographic projection for showing up at tile.calcofi.io
+dbSendQuery(con, "SELECT UpdateGeometrySRID('aoi_fed_sanctuaries','geom',4326);")
+
+# check read from db to spatial features
+sanctuaries <- sf::st_read(con, "aoi_fed_sanctuaries")
+sanctuaries
+```
+
