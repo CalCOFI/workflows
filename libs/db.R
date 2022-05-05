@@ -9,7 +9,7 @@ librarian::shelf(
 # paths ----
 dir_gdrive <- switch(
   Sys.info()["nodename"],
-  `Bens-MacBook-Pro.local`      =
+  `bens-mbp.lan`      =  # Bens-MacBook-Pro.local
     "/Users/bbest/My Drive/projects/calcofi",
   `Cristinas-MacBook-Pro.local` =
     "/Volumes/GoogleDrive/.shortcut-targets-by-id/13pWB5x59WSBR0mr9jJjkx7rri9hlUsMv/calcofi")
