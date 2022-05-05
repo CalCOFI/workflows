@@ -66,7 +66,10 @@ mapview(sanctuaries)
 
 ```{r}
 st_write(sanctuaries, con, "aoi_fed_sanctuaries", delete_layer=T)
+# add spatial index
 dbSendQuery(con, "CREATE INDEX IF NOT EXISTS aoifedsanctuaries_geom_idx ON aoi_fed_sanctuaries USING GIST (geom);")
+# set geographic projection for showing up at tile.calcofi.io
+dbSendQuery(con, "SELECT UpdateGeometrySRID('aoi_fed_sanctuaries','geom',4326);")
 
 # check read from db to spatial features
 sanctuaries <- sf::st_read(con, "aoi_fed_sanctuaries")

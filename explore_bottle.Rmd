@@ -606,6 +606,22 @@ d_aoi_daily <- d_aoi %>%
 d_aoi_daily
 ```
 
+## test API
+
+```{r}
+library(raster)
+
+raster_url <- "http://127.0.0.1:8825/raster?variable=ctdcast_bottle.t_deg_c&cruise_id=2020-01-05-C-33RL&depth_m_max=100"
+tmp_tif <- tempfile(fileext=".tif")
+
+download.file(raster_url, tmp_tif)
+
+r <- raster(tmp_tif)
+plot(r)
+```
+
+
+
 ## TODO
 
 summarize:
