@@ -1,0 +1,747 @@
+---
+title: "load_larvae"
+author: "Ben Best"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: show
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+See original analysis recreating Andrew Thompson's figures for Channel Islands:
+
+- [calcofi.github.io/larvae-cinms](https://calcofi.github.io/larvae-cinms/)
+
+## Setup
+
+Libraries, paths and custom functions.
+
+```{r libraries & paths}
+librarian::shelf(
+  curl, dplyr, fs, glue, here, janitor, lubridate, mapview, purrr, 
+  readr, rerddap, rlang, sf, stringr,
+  DT, ggplot2, plotly, scales, tidyr)
+here = here::here
+source(here("libs/db.R")) # con
+options(readr.show_col_types = F)
+
+q_calcofi        <- "CalCOFI Larvae Counts, Scientific Names"
+dir_data         <- here("data/larvae") 
+dir_cache        <- glue("{dir_data}/erddap_cache") 
+lrvcntSBtoSC_csv <- glue("{dir_cache}/erdCalCOFIlrvcntSBtoSC.csv")
+stns_cinms_csv   <- glue("{dir_data}/stns_cinms.csv")
+plys_cinms_geo   <- glue("{dir_data}/plys_cinms.geojson")
+yr_min           <- 1978
+spp_csv          <- here("{dir_data}/spp.csv")
+spp_grps_csv     <- here("{dir_data}/spp_grps.csv")
+redo_grp_ply_csv <- F
+```
+
+
+## Extract data from ERDDAP
+
+- [ERDDAP (coastwatch) - Search: calcofi](https://coastwatch.pfeg.noaa.gov/erddap/search/index.html?page=1&itemsPerPage=1000&searchFor=calcofi): 49 matching datasets
+  - [ERDDAP (upwell) - Search: calcofi](https://upwell.pfeg.noaa.gov/erddap/search/index.html?page=1&itemsPerPage=1000&searchFor=calcofi): **68 matching datasets**
+  - [ERDDAP - Search: calcofi](https://oceanview.pfeg.noaa.gov/erddap/search/index.html?page=1&itemsPerPage=1000&searchFor=calcofi): **70 matching datasets**
+  - [ERDDAP - Search: CalCOFI+Larvae+Counts](https://coastwatch.pfeg.noaa.gov/erddap/search/index.html?page=1&itemsPerPage=1000&searchFor=CalCOFI+Larvae+Counts): CalCOFI Larvae Counts
+- R package [rerddap](https://github.com/ropensci/rerddap)
+  - [Using rerddap](https://cran.r-project.org/web/packages/rerddap/vignettes/Using_rerddap.html)
+  - [Environmental drivers of small pelagic fish](https://rmendels.github.io/pices2017.nb.html)
+  
+
+
+```{r erddap download, eval=F}
+dir_create(dir_cache)
+# q <- "cruise,ship,ship_code,order_occupied,tow_type,net_type,tow_number,net_location,standard_haul_factor,volume_sampled,percent_sorted,sample_quality,latitude,longitude,line,station,time,scientific_name,common_name,itis_tsn,calcofi_species_code,larvae_count,larvae_10m2,larvae_1000m3&time>=2020-01-11T00:00:00Z&time<=2020-01-18T04:57:00Z" %>% 
+
+# default: https://upwell.pfeg.noaa.gov/erddap
+Sys.setenv(RERDDAP_DEFAULT_URL = "https://coastwatch.pfeg.noaa.gov/erddap")
+
+d2 <- ed_search(
+  query = q_calcofi, which = "tabledap") %>%  
+  .$info
+
+d <- ed_search(
+  query = q_calcofi, which = "tabledap") %>%  
+  .$info %>% 
+  arrange(dataset_id) %>% 
+  select(dataset_id) %>% 
+  mutate(
+    # d_url = glue("https://coastwatch.pfeg.noaa.gov/erddap/tabledap/{dataset_id}.csvp?{q}"),
+    d_url = glue("https://coastwatch.pfeg.noaa.gov/erddap/tabledap/{dataset_id}.csvp"),
+    d_csv = glue("{dir_cache}/{dataset_id}.csv"))
+# View(d)
+
+verbose = T
+msg <- function(txt){
+  text <- glue("  SKIP (file exists)")
+  if (verbose)
+    message(text)
+  cat(text, file = glue("{dir_cache}/_log.txt"))
+}
+
+for (i in 1:nrow(d)){ # i=5
+  
+  # TODO: 20: erdCalCOFIlrvcntNBtoOL
+  x <- slice(d, i)
+  
+  message(glue("\n{i} of {nrow(d)}: {x$dataset_id} - {Sys.time()}\n  {x$d_url}", .trim = F))
+  
+  if (file.exists(x$d_csv)){
+    message("  SKIP (file exists)")
+    next
+  }
+  
+  time <- tabledap(x$dataset_id, fields = c("time")) %>% pull(time) %>% sort()
+  #sum(duplicated(time))
+  
+  # page through chunks of 2M records
+  i_beg = 1; k <- 1
+  while(i_beg < length(time)){
+    
+    time_beg <- time[i_beg]
+    i_end    <- i_beg + min(2000000-1, length(time) - i_beg)
+    time_end <- time[i_end]
+    k_q      <- glue("&time>={time_beg}&time<={time_end}") %>% utils::URLencode()
+    url      <- glue("{x$d_url}?{k_q}")
+    csv      <- glue("{path_ext_remove(x$d_csv)}_{k}.csv")
+    
+    message(glue(
+      "  chunk {k}\n    {i_beg} to {i_end}; {time_beg} to {time_end}", .trim=F))
+    
+    if (file.exists(csv)){
+      message("  SKIP CHUNK (file exists)")
+    } else {
+      res <- try(curl_download(url, csv, quiet = F)) # handle = new_handle()
+      
+      if ("try-error" %in% class(res)){
+        message(glue("  ERROR: {res}", .trim = F))
+        next
+      }
+      
+      message("  SUCCESS!")
+    }
+    i_beg <- i_end + which.min(time[i_end:length(time)] != time[i_end])
+    k <- k + 1
+  }
+}
+# ~4.4 min ea * 31 datasets = 136.9 min
+
+dir_info(dir_cache) %>% 
+  mutate(
+    file = basename(path),
+    size = format(size)) %>% 
+  select(file, size) %>% 
+  datatable()
+```
+
+## Check fields
+
+```{r check fields, eval=F}
+d <- tibble(
+  csv = list.files(dir_cache, "\\.csv$", full.names = T)) %>% 
+  mutate(
+    df = map(csv, function(csv){
+      read_csv(csv, n_max=1000)}),
+    flds = map(df, function(df){
+      tibble(
+        fld = names(df)) %>% 
+        mutate(
+          type = map_chr(fld, function(fld){ 
+            class(df[[fld]]) %>% paste(collapse=", ") }) ) }))
+d %>% 
+  mutate(
+    csv = basename(csv),
+    sfx = str_replace(csv, "erdCalCOFIlrvcnt(.*)_[1|2]\\.csv", "\\1")) %>% 
+  unnest(flds) %>% 
+  mutate(
+    fld_type = glue("{fld} ({type})"),
+    one = 1) %>% 
+  select(sfx, fld_type, one) %>% 
+  distinct() %>% 
+  pivot_wider(names_from=fld_type, values_from = one) %>%
+  write_csv(here("data/larvae_flds.csv"))
+```
+
+Confirmed that all fields are exactly the same.
+
+## Rename fields
+
+```{r rename fields}
+csvs = list.files(dir_cache, "\\.csv$", full.names = T)
+d1 <- read_csv(csvs[1])
+flds_rnmd <- tibble(
+  tbl = "larvae",
+  field_orig = names(d1),
+  field = names(d1) %>% 
+    str_replace("( \\(.*\\))", "") %>% 
+    make_clean_names())
+names(d1) <- flds_rnmd$field
+dbSendQuery(con, "DELETE FROM fields_renamed WHERE tbl = 'larvae'")
+dbAppendTable(con, "fields_renamed", flds_rnmd)
+datatable(flds_rnmd)
+```
+
+## Load into database
+
+```{r load into db}
+dbWriteTable(con, "larvae", d1, overwrite=T)
+
+csv2db <- function(csv){
+  d <- read_csv(csv)
+  names(d) <- names(d1) %>% 
+    str_replace("( \\(.*\\))", "") %>% 
+    make_clean_names()
+  dbAppendTable(con, "larvae", d)
+}
+
+for (i in 4:length(csvs)){ # i = 4
+  csv <- csvs[i]
+  message(glue("{i} of {length(csvs)}: {basename(csv)} - {Sys.time()}"))
+  csv2db(csv)
+}
+```
+
+Above would take ~ 7 hours, so used Cyberduck SFTP to transfer CSV files onto server and ran the following from rstudio.calcofi.io:
+
+```sql
+COPY sample_table_name
+FROM 'C:\sampledb\sample_data.csv' 
+DELIMITER ',' 
+CSV HEADER;
+```
+
+
+## OLD...
+
+### Prep Spatial filter
+
+```{r}
+stns <- tabledap('erdCalCOFIstns') %>% 
+  arrange(cruise, ship_code, order_occupied)
+
+p_cinms <- get_nms_ply("cinms")
+
+ymd_min = ymd(glue("{yr_min}-01-01"))
+
+#info("erdCalCOFIlrvcntSBtoSC")
+#flds <- c("calcofi_species_code", "station", "line", "longitude", "latitude", "net_location")
+#d_lrvcntSBtoSC <- tabledap("erdCalCOFIlrvcntSBtoSC", fields=flds) #%>% 
+#tic()
+
+if (!file.exists(stns_cinms_csv)){
+  
+  tbl_stns_cinms <- read_csv(lrvcntSBtoSC_csv)
+
+  tbl_stns_cinms <- tbl_stns_cinms %>% 
+    as_tibble() %>% 
+    mutate(
+      stn_cruise_ship_order = glue("{cruise}-{ship_code}-{order_occupied}"),
+      lon   = as.numeric(longitude), # rng: -179.82, -77.23
+      lat   = as.numeric(latitude),  # rng:    0.01,  51.09
+      dtime = as_datetime(time),
+      line_station = glue("{line} {station}")) %>% 
+    select(-longitude, -latitude, -time) %>% 
+    filter(
+      dtime        >= ymd_min,          # n: 2,416,384 -> 1,501,280
+      # select only starboard samples from the bongo nets
+      net_location == "starboard") %>%  # n: 2,416,384 -> 1,792,640
+    arrange(cruise, ship_code, order_occupied) #  x 25
+  
+  # core stations
+  linestation_core = c(
+    "76.7 49", "76.7 51", "76.7 55", "76.7 60","76.7 70","76.7 80","76.7 90", "76.7 100","80 51",
+    "80 55","80 60","80 70","80 80", "80 90","80 100",
+    "81.8 46.9","83.3 40.6", "83.3 42", "83.3 51", "83.3 55", "83.3 60","83.3 70","83.3 80", "83.3 90", "83.3 100","83.3 110",
+    "86.7 33", "86.7 35", "86.7 40", "86.7 45", "86.7 50", "86.7 55","86.7 60","86.7 70", "86.7 80", "86.7 90", "86.7 100", "86.7 110",
+    "90 28", "90 30", "90 35","90 37", "90 45", "90 53", "90 60", "90 70", "90 80", "90 90", "90 100", "90 110", "90 120",
+    "93.3 26.7", "93.3 28", "93.3 30", "93.3 35", "93.3 40","93.3 45", "93.3 50","93.3 60","93.3 70", "93.3 80", "93.3 90", "93.3 100","93.3 110","93.3 120")
+  
+  # CINMS stations
+  linestation_cinms = c(
+    "76.7 49", "76.7 51", "76.7 55", "76.7 60","80 51", "80 55", 
+    "80 60","81.8 46.9","83.3 40.6", "83.3 42", "83.3 51", "83.3 55", "83.3 60",
+    "86.7 33", "86.7 35", "86.7 40", "86.7 45", "86.7 50", "86.7 55","86.7 60","90 28", "90 30", "90 35",
+    "90 37", "90 45", "90 53","90 60", "93.3 26.7", "93.3 28", "93.3 30", "93.3 35", "93.3 40",
+    "93.3 45", "93.3 50","93.3 60")
+  
+  # SB stations
+  linestation_sb <- c("80 55","80 51","81.8 46.9","83.3 55","83.3 51","83.3 42","83.3 40.6")
+  
+  tbl_stns_cinms <- tbl_stns_cinms %>% 
+    mutate(
+      is_core  = line_station %in% linestation_core,
+      is_cinms = line_station %in% linestation_cinms,
+      is_sb    = line_station %in% linestation_sb)
+  # View(tbl_stns_cinms)
+  
+  write_csv(tbl_stns_cinms, stns_cinms_csv)
+} 
+
+tbl_stns_cinms <- read_csv(stns_cinms_csv)
+pts_stns <- tbl_stns_cinms %>% 
+    filter(is_core) %>% 
+    group_by(stn_cruise_ship_order) %>% 
+    summarise(
+      lon          = mean(lon),
+      lat          = mean(lat),
+      line_station = first(line_station),
+      is_core      = first(is_core),
+      is_cinms     = first(is_cinms),
+      is_sb        = first(is_sb)) %>% 
+    st_as_sf(coords=c("lon", "lat"), crs=4326, remove=F)
+
+if (!file.exists(plys_cinms_geo)){
+  
+  ply_cinms <- pts_stns %>% 
+    filter(is_cinms) %>% 
+    st_union() %>% st_convex_hull()
+  
+  ply_core <- pts_stns %>% 
+    filter(is_core) %>% 
+    st_union() %>% st_convex_hull()
+  
+  ply_sb <- pts_stns %>% 
+    filter(is_sb) %>% 
+    st_union() %>% st_convex_hull()
+  
+  plys <- tibble(
+    ply_code = c("CINMS", "SoCal Shelf", "SoCal"),
+    geometry = c(ply_sb, ply_cinms, ply_core)) %>% 
+    st_as_sf()
+  write_sf(plys, plys_cinms_geo, delete_dsn=T)
+  
+}
+plys <- read_sf(plys_cinms_geo)
+
+mapviewOptions(
+  basemaps = c("Esri.OceanBasemap", "Stamen.TonerLite"))
+
+mapview(plys) + 
+  pts_stns
+
+stns_shelf <- filter(pts_stns, is_cinms)
+plys_shelf <- filter(plys, ply_code != "SoCal")
+mapview(plys_shelf) +
+  stns_shelf
+```
+
+### Prep Temporal filter
+
+Started every month. Now sample 4x/yr, ie once per season. Choose stations based on most spatially complete cruise within a season = most stations sampled. Long-term compare years: choose one season, eg Spring, avg w/in ea yr & ea season. NoData for given year if missing season.
+
+```{r}
+#eurl() # https://upwell.pfeg.noaa.gov/erddap/
+Sys.setenv(RERDDAP_DEFAULT_URL = "https://coastwatch.pfeg.noaa.gov/erddap/")
+#eurl() # https://coastwatch.pfeg.noaa.gov/erddap/
+#servers()
+
+stns <- tabledap("erdCalCOFIstns")
+
+stns <- stns %>% 
+  mutate(
+    cruise_yr = str_sub(cruise, end=4) %>% as.integer(),
+    cruise_mo = str_sub(cruise, start = 5, end=6) %>% as.integer(),
+    time  = as.Date(time),
+    lon   = as.numeric(longitude),
+    lat   = as.numeric(latitude)) %>% 
+  st_as_sf(coords=c("lon", "lat"), crs=4326, remove=F)
+
+# all stations
+stns %>% 
+  group_by(cruise_yr, cruise_mo) %>% 
+  summarize(
+    n = n()) %>% 
+  ggplot(aes(cruise_yr, cruise_mo, size = n)) +
+  geom_point()
+
+# SoCal Shelf
+#plot(stns['cruise'])
+ply <- read_sf(plys_cinms_geo) %>% 
+  filter(ply_code == "SoCal Shelf")
+# mapview(ply)
+
+# stations in SoCal Shelf
+stns_ply <- stns %>% 
+  filter(st_intersects(stns, ply, sparse = F)) #%>% 
+  #plot()
+
+stns_ply_smry <- stns_ply %>% 
+  group_by(cruise, cruise_yr, cruise_mo) %>% 
+  summarize(
+    n_stns = n())
+# stns_ply_smry %>% 
+#   st_drop_geometry() %>% View()
+
+table(stns_ply_smry$cruise_mo)
+#  1  2  3  4  5  6  7  8  9 10 11 12 
+# 46 31 30 51 26 19 43 25 16 37 23 17
+
+stns_ply_smry %>% 
+  filter(
+    cruise_mo %in% c(3,4,5)) %>% 
+  arrange(cruise_yr, desc(n_stns)) %>% 
+  group_by(cruise_yr) %>% 
+  summarize(
+    cruise = first(cruise),
+    n_stns = first(n_stns),
+    month  = first(cruise_mo)) %>% 
+  st_drop_geometry() #%>% 
+  #View()
+```
+
+
+### Prep Taxa filter
+
+```{r}
+if (!file.exists(spp_csv)){
+  csvs    <- list.files(dir_cache, "erdCalCOFIlrvcnt.*\\.csv")
+  
+  tbl_spp <- csvs %>%
+    map(function(x)
+      glue("{dir_cache}/{x}") %>% 
+        read_csv() %>% 
+        group_by(
+          scientific_name, common_name, itis_tsn, calcofi_species_code) %>% 
+        summarize(
+          n    = n(),
+          path = x)) %>% 
+    reduce(rbind)
+  
+  tbl_spp <- tbl_spp %>% 
+    filter(!is.na(scientific_name)) %>% 
+    group_by(
+      scientific_name, common_name, itis_tsn, calcofi_species_code) %>% 
+    summarize(
+      n     = sum(n, na.rm = T),
+      paths = paste(path, collapse = "|"))
+  
+  write_csv(tbl_spp, spp_csv)
+}
+spp <- read_csv(spp_csv)
+
+table(is.na(spp$scientific_name))
+table(is.na(spp$common_name))
+
+datatable(spp)
+```
+
+#### Assign species to taxonomic groups manually
+
+In `data/spp_grps.csv`:
+
+```{r}
+read_csv(spp_grps_csv) %>% 
+  datatable()
+```
+
+### Generate time series csv's by taxa and spatial
+
+```{r}
+# taxonomic filter by groups
+spp      <- read_csv(spp_csv)
+spp_grps <- read_csv(spp_grps_csv)
+grps     <- sort(unique(spp_grps$group))
+
+# spatial filter by polygons
+plys <- read_sf(plys_cinms_geo) %>% 
+  filter(!ply_code %in% c("SoCal"))
+
+# iterate over taxonomic groups
+for (i in 1:length(grps)){ # i = 1; 
+  
+  grp <- grps[i]
+  
+  grp_sci <- spp_grps %>% 
+    filter(group == !!grp) %>% 
+    pull(scientific_name)
+  spp_grp <- spp %>% 
+    filter(scientific_name %in% grp_sci)
+  grp_csvs <- spp_grp %>% 
+    pull(paths) %>% str_split("\\|") %>% unlist() %>% unique()
+  message(glue("
+  {grp} [{i} of {length(grps)} grps]:
+    scientific_names: {paste(grp_sci, collapse=', ')}
+    csvs: {paste(grp_csvs, collapse=', ')}"))
+  
+  grp_ply_csvs <- here(glue("data/{grp}_{plys$ply_code}.csv"))
+  if (all(file.exists(grp_ply_csvs)) & !redo_grp_ply_csv){
+    message(glue("  All grp_ply_csvs already exist, skipping", trim = F))
+    next
+  }
+  
+  d <- grp_csvs %>%
+    map(function(x)
+      glue("{dir_cache}/{x}") %>% 
+        read_csv() %>% 
+        mutate(
+          stn_cruise_ship_order = glue("{cruise}-{ship_code}-{order_occupied}"),
+          lon                   = as.numeric(longitude),
+          lat                   = as.numeric(latitude),
+          dtime                 = as_datetime(time),
+          line_station          = glue("{line} {station}")) %>% 
+        select(-longitude, -latitude, -time) %>% 
+        filter(
+          # !is.na(larvae_count),
+          # !is.na(volume_sampled),
+          scientific_name %in% !! grp_sci,
+          dtime            >=  ymd_min,         
+          net_location     ==  "starboard")) %>% 
+    reduce(rbind) %>% 
+    mutate(
+      larvae_count   = as.numeric(larvae_count),
+      volume_sampled = as.numeric(volume_sampled)) %>% 
+    filter(
+      !is.na(larvae_count),
+      !is.na(volume_sampled))%>% 
+    mutate(
+        larvae_count_per_volume_sampled = larvae_count / volume_sampled) %>% 
+    st_as_sf(coords=c("lon", "lat"), crs=4326, remove=F) %>% 
+    st_join(plys) %>% 
+    filter(!is.na(ply_code))
+  
+  # iterate over spatial polygons
+  for (j in 1:nrow(plys)){ # j = 1
+    
+    ply_code <- slice(plys, j) %>% pull(ply_code)
+    grp_ply_csv <- here(glue("data/{grp}_{ply_code}.csv"))
+    message(glue("
+      {grp} - {ply_code} [{j} of {nrow(plys)} ply_codes]
+        csv: {grp_ply_csv}"))
+    
+    d_j <- d %>% 
+      filter(ply_code == !!ply_code) %>% 
+      st_drop_geometry() %>% 
+      filter(!is.na(larvae_count_per_volume_sampled)) %>% 
+      group_by(year = floor_date(dtime, "year")) %>% 
+      summarize(
+        avg_larvae_count_per_volume_sampled = mean(larvae_count_per_volume_sampled)) %>% 
+      mutate(
+        spp_grp  = !!grp,
+        ply_code = !!ply_code)
+    
+    write_csv(d_j, grp_ply_csv)
+  }
+}
+```
+
+## Output interactive plots
+
+### Abundance time series by taxa & region
+
+```{r, results="asis"}
+calcofi_plot <- function(csv, x_fld, y_fld, x_lab, y_lab, yrs_recent=5, interactive=T, title=NULL, y_trans=NULL){
+  # csv     = here("data/Anchovy_CINMS.csv")
+  # x_fld   = "year"
+  # y_fld   = "avg_larvae_count_per_volume_sampled"
+  # y_trans = "log(y + 1)"
+  # x_lab   = "Year" 
+  # y_lab   = "ln(mean abundance + 1)"
+  # title   =  "Anchovy - CINMS Region"
+  # yrs_recent = 5; interactive=T
+  
+  library(dplyr)
+
+  d <- readr::read_csv(csv)
+  
+  if (nrow(d) == 0) return(NULL)
+  
+  flds <- list(x = sym(x_fld), y = sym(y_fld))
+  d <- select(d, !!!flds)
+  
+  if (!is.null(y_trans))
+    d <- mutate(d, y = !! rlang::parse_expr(y_trans))
+
+  z <- filter(d, x < max(x) - years(yrs_recent))
+  y_avg <- mean(z$y)
+  y_sd  <- sd(z$y)
+  y_r   <- expand_range(range(d$y), mul=0.05)
+  
+  g <- ggplot(d, aes(x = x, y = y)) + 
+    annotate(
+      "rect",
+      xmin = max(d$x) - years(yrs_recent), xmax = max(d$x) + months(6),
+      ymin = y_r[1], ymax = y_r[2],
+      fill  = "lightblue", alpha=0.5) +
+    geom_line() + 
+    geom_point() + 
+    geom_hline(
+      yintercept = c(y_avg + y_sd, y_avg,  y_avg - y_sd), 
+      linetype   = c("solid", "dashed", "solid"),
+      color       = "darkblue") + 
+    coord_cartesian(
+      xlim = c(
+        min(d$x) - months(6),
+        max(d$x) + months(6)), expand = F) + 
+    theme_light() +
+    labs(
+      x     = x_lab,
+      y     = y_lab,
+      title = title)
+  
+  if (interactive){
+    p <- plotly::ggplotly(g)
+    print(htmltools::tagList(p))
+  } else {
+    print(g)
+  }
+}
+
+# iterate over taxonomic groups
+for (i in 1:length(grps)){ # i = 1
+  
+  grp <- grps[i]
+  
+  # iterate over spatial polygons
+  for (j in 1:nrow(plys)){ # j = 1
+    
+    ply_code <- plys$ply_code[j]
+    
+    cat(glue("\n\n\n#### {grp} in {ply_code} Region\n\n", trim=F))
+    
+    calcofi_plot(
+      csv     = here(glue("data/{grp}_{ply_code}.csv")),
+      x_fld   = "year",
+      y_fld   = "avg_larvae_count_per_volume_sampled",
+      y_trans = "log(y + 1)",
+      x_lab   = "Year",
+      y_lab   = "ln(mean abundance + 1)",
+      title   =  glue("{grp} - {ply_code} Region"))
+  }
+}
+```
+
+```{r}
+library(htmltools)
+library(htmlwidgets)
+
+# attach the Dependencies
+# since the do not get included with renderTags(...)$html
+output <- list()
+output[[1]] <- qplot(Petal.Width, Sepal.Length, data = iris, color = Species) %>% ggplotly() %>% as.widget()
+
+deps <- lapply(
+  Filter(function(x){inherits(x,"htmlwidget")}, output),
+  function(hw){
+    renderTags(hw)$dependencies
+  }
+)
+
+attachDependencies(
+  tagList(),
+  unlist(deps,recursive=FALSE)
+)
+```
+
+## Questions to complete
+
+- **Code for figures** to creating standard IEA time series plots? How do you do this already (eg ggplot2 in R, or Matlab/Python/etc) with green mean +/- sd, most recent 5 years, and filled segments above/below standad deviation (sd)?
+- **Temporal**
+  - `time` >= 1978 ok?
+  - **Overall Mean +/- SD**. Is the overall mean for the entire time series or historical up to the last 5 years? Should we archive previous years of plots given the different mean +/- sd these would produce?
+- **Other Filters**
+  - Select only starboard samples from the bongo nets: `net_location` == "starboard"? Assume yes.
+  - Should we limit by `cruise_shipcode`? If so, what's the criteria for future years?
+  - Any other criteria of concern that we're missing?
+- **Spatial**
+  - Do "SoCal Shelf" and "CINMS" areas in * [Prep Spatial filter](https://marinebon.org/calcofi-analysis/#prep_spatial_filter) look correct?
+  - Is it OK to include all station data within these areas or were there other reasons for explicitly outlining each station?
+- **Taxonomy**
+  See [`spp.csv`](https://github.com/marinebon/calcofi-analysis/blob/master/data/spp.csv) for all species found across [ERDDAP datasets - Search: CalCOFI Larvae Counts, Scientific Names](https://coastwatch.pfeg.noaa.gov/erddap/search/index.html?page=1&itemsPerPage=1000&searchFor=CalCOFI+Larvae+Counts%2C+Scientific+Names), and [`spp_grps.csv`](https://github.com/marinebon/calcofi-analysis/blob/master/data/spp_grps.csv) for species matched to taxonomic group for CINMS Condition Report.
+  - ☑ Is **Anchovy** one or all of `common_name` = "Anchoveta", "Anchovies", "Buccaneer anchovy", "Northern anchovy"?
+  - ☐ **Market Squid** _Doryteuthis opalescens_ not found in  `spp.csv` so where is this data based on [ERDDAP datasets - Search: CalCOFI](https://coastwatch.pfeg.noaa.gov/erddap/search/index.html?page=1&itemsPerPage=1000&searchFor=calcofi)?
+  - **Cool-water associated ichthyoplankton** [@mcclatchieInfluencePacificEquatorial2016]:
+    - ☑ Mexican lampfish (_Triphoturus mexicanus_)
+    - ☑ lightfishes (mainly _Vinciguerria lucetia_)
+      - Panama lightfish (_Vinciguerria lucetia_) 
+      - ok to also include?...
+      - Lightfishes (_Phosichthyidae_)
+      - Oceanic lightfish (_Vinciguerria nimbaria_)
+      - Highseas lightfish (_Vinciguerria poweriae_)
+      - Bigeye lightfish (_Woodsia nonsuchae_)
+      - Bulldog lightfish (_Ichthyococcus irregularis_)
+    - ☑ snubnose blacksmelt (_Bathylagoides wesethi_)
+    - ☑ Diogenes lanternfish (_Diogenichthys laternatus_)
+    - ☑ fangtooth lanternfish (_Ceratoscopelus townsendi_), and 
+      - Dogtooth lampfish	(_Ceratoscopelus townsendi_)
+    - ☑ bigfin lanternfish (_Symbolophorus californiensis_)."
+      - California lanternfish	(_Symbolophorus californiensis_)
+  - **Warm-water associated ichthyoplankton (larval fishes)**:
+    - ☑ northern lampfish (_Stenobrachius leucopsarus_)
+    - ☑ California smoothtongue (_Leuroglossus stilbius_)
+    - ☑ eared black-smelt (_Lipolagus ochotensis_)
+      - Popeye blacksmelt	(_Lipolagus ochotensis_)
+    - ☑ blue lanternfish (_Tarletonbeania crenularis_), and 
+    - ☑ California flashlightfish (_Protomyctophum crockeri_)
+  - ☐ **Small Plankton** species per [Figure App.F.12.18]( https://marinebon.org/calcofi-analysis/#appf1218_small_plankton_volume_in_cinmssocal)? See **Metrics** / **Volume** below.
+  - [Figure App.F.12.19 key forage groups in CINMS/SoCal](https://marinebon.org/calcofi-analysis/#appf1219_key_forage_groups_in_cinmssocal)
+    - **Hake**: despite using following taxa, don't seem to have any data?
+      - Hakes	(_Merlucciidae_)
+      - Dwarf hake (_Merluccius_)
+      - Pacific hake or whiting	(_Merluccius productus_)
+    - **Rockfish**
+      + Rockfishes (_Sebastes_)
+      + Aurora rockfish (_Sebastes aurora_)
+      + Splitnose rockfish (_Sebastes diploproa_)
+      + Shortbelly rockfish (_Sebastes jordani_)
+      + Cow rockfish (cowcod) (_Sebastes levis_)
+      + Mexican rockfish (_Sebastes macdonaldi_)
+      + Blackgill rockfish (_Sebastes melanostomus_)
+      + Stripetail rockfish (_Sebastes saxicola_)
+    - **Sanddab**
+      + Sanddabs (_Citharichthys_)
+      + Gulf sanddab (_Citharichthys fragilis_)
+      + Mimic sanddab (_Citharichthys gordae_)
+      + Small sanddab (_Citharichthys platophrys_)
+      + Pacific sanddab (_Citharichthys sordidus_)
+      + Speckled sanddab (_Citharichthys stigmaeus_)
+      + Longfin sanddab (_Citharichthys xanthostigma_)
+    - **Myctophids**
+      + Family: Lanternfishes (_Myctophidae_)
+      + many Myctoph*:
+        + Golden lanternfish (_Myctophum aurolaternatum_)
+        + Lanternfishes (_Myctophidae_)
+        + NA (_Myctophiformes_)
+        + NA (_Myctophum asperum_)
+        + NA (_Myctophum lychnobium_)
+        + NA (_Myctophum obtusirostre_)
+        + NA (_Myctophum selenops_)
+        + NA (_Myctophum spinosum_)
+        + NA (_Myctophum_)
+        + NA (_Protomyctophum_)
+        + Northern flashlightfish (_Protomyctophum thompsoni_)
+        + Pearly lanternfish (_Myctophum nitidulum_)
+      + many Lanternfishes:
+        + Bermuda lanternfish (_Hygophum hygomii_)
+        + Blue lanternfish (_Tarletonbeania crenularis_)
+        + California lanternfish (_Symbolophorus californiensis_)
+        + Diogenes lanternfish (_Diogenichthys laternatus_)
+        + Dwarf lanternfish (_Loweina rara_)
+        + Evermann's lanternfish (_Symbolophorus evermanni_)
+        + Golden lanternfish (_Myctophum aurolaternatum_)
+        + Lanternfish (_Notoscopelus caudispinosus_)
+        + Lanternfishes (_Myctophidae_)
+        + Longfin lanternfish (_Diogenichthys atlanticus_)
+        + Panama lanternfish (_Benthosema panamense_)
+        + Roundnose lanternfish (_Centrobranchus nigroocellatus_)
+        + Pearly lanternfish (_Myctophum nitidulum_)
+        + Slender lanternfish (_Hygophum reinhardtii_)
+        + Slendertail lanternfish (_Gonichthys tenuiculus_)
+        + Spinycheek lanternfish (_Benthosema fibulatum_)
+        + Thickhead lanternfish (_Hygophum atratum_)
+
+- **Metrics**  
+  - **Abundance**. For y-axis of "ln(mean abundance+1)" is 'abundance' actually 'concentration', ie `mean(larvae_count / volume_sampled)` grouped by year, to account for varying effort and volumes?
+    - So not using fields `larvae_10m2` (1% NAs) or `larvae_1000m3` (100% NAs)? 
+    - Units of `larvae_count / volume_sampled` presumed to be $n/m^3$, per [metadata](https://coastwatch.pfeg.noaa.gov/erddap/info/erdCalCOFIlrvcntSBtoSC/index.html)
+  - **Mean Species Richness** + **Mean Simpson Diversity** for ichthyoplankton [Figure S.LR.15.3](https://marinebon.org/calcofi-analysis/#slr153_coolwarm-water_icthyoplankton,_spp_richnessdiversity):
+    - Are these two plots using the combined species (and not genus, eg Lightfishes _Phosichthyidae_) for warm- and cool-water icthyoplankton species, per caption "The average species richness (left) and species diversity (right) in each net sample is shown for the entire time series"?
+    - For calculating "Mean Simpson Diversity" are you using vegan::[diversity](https://www.rdocumentation.org/packages/vegan/versions/2.4-2/topics/diversity) like so: `diversity(x, index = "invsimpson")`, given caption "Gini-Simpson diversity (1-λ form) is a measure of the equitability of species in a sample."
+    - **Volume** per **Small Plankton Volume** in [Figure App.F.12.18]( https://marinebon.org/calcofi-analysis/#appf1218_small_plankton_volume_in_cinmssocal): is this from [erdCalCOFItows]( https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFItows.html) and should I use `small_plankton_volume` ($ml/1000 m^3$) and not `sorted_plankton_volume` or `total_plankton_volume` per  [metadata](https://coastwatch.pfeg.noaa.gov/erddap/info/erdCalCOFItows/index.html)?
