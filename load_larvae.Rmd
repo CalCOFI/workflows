@@ -202,7 +202,7 @@ csv2db <- function(csv){
   dbAppendTable(con, "larvae", d)
 }
 
-for (i in 4:length(csvs)){ # i = 4
+for (i in 2:length(csvs)){ # i = 4
   csv <- csvs[i]
   message(glue("{i} of {length(csvs)}: {basename(csv)} - {Sys.time()}"))
   csv2db(csv)
@@ -210,6 +210,23 @@ for (i in 4:length(csvs)){ # i = 4
 ```
 
 Above would take ~ 7 hours, so used Cyberduck SFTP to transfer CSV files onto server and ran the following from rstudio.calcofi.io:
+
+```{r}
+csvs <- list.files("/share/data/larvae", "csv$", full.names = T)
+
+DBI::
+for (i in 1:length(csvs)){ # i=2
+  csv <- csvs[i]
+  message(glue("csv {i} of {length(csvs)}: {basename(csv)} - {Sys.time()}"))
+  dbSendQuery(
+    con,
+    glue("
+      COPY larvae 
+      FROM '{csv}'
+      DELIMITER ',' 
+      CSV HEADER;")) # 2000035 + 835164
+}
+```
 
 ```sql
 COPY sample_table_name
