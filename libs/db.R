@@ -28,3 +28,5 @@ con <- DBI::dbConnect(
   port     = 5432,
   user     = "admin",
   password = readLines(db_pass_txt))
+
+
