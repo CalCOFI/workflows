@@ -9,7 +9,9 @@ librarian::shelf(
 # paths ----
 dir_gdrive <- switch(
   Sys.info()["nodename"],
-  `bens-mbp.lan`      =  # Bens-MacBook-Pro.local
+  `bens-mbp.lan` =
+    "/Users/bbest/My Drive/projects/calcofi",
+  `Bens-MacBook-Pro.local` =
     "/Users/bbest/My Drive/projects/calcofi",
   `Cristinas-MacBook-Pro.local` =
     "/Volumes/GoogleDrive/.shortcut-targets-by-id/13pWB5x59WSBR0mr9jJjkx7rri9hlUsMv/calcofi")
@@ -26,4 +28,3 @@ con <- DBI::dbConnect(
   port     = 5432,
   user     = "admin",
   password = readLines(db_pass_txt))
-
