@@ -45,11 +45,14 @@ stations <- st_read(con, "stations")
 hull <- st_convex_hull(st_union(stations))
 
 x <- st_intersects(dumps, hull, sparse = F)[,1]
-dumps <- dumps[x,]
-mapview(
-  dumps)
+dumps_ply <- dumps[x,]
 
-dumps %>% 
+dumps_pts <- st_centroid(dumps_ply)
+
+mapview(dumps_ply) +
+  mapview(dumps_pts)
+
+dumps_ply %>% 
   st_drop_geometry() %>% 
   datatable()
 ```
