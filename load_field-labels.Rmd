@@ -41,19 +41,32 @@ stopifnot(d$table_field %>% duplicated() %>% sum() == 0)
 
 # check that table.variable exists in the database
 d <- d %>% 
+  # filter(active) %>% 
   mutate(
-    exists = map_lgl(
+    tbl_exists = map_lgl(
       table_field, function(tbl_fld){
         # tbl_fld = "ctdcast_bottle.t_deg_c"
         x <- strsplit(tbl_fld, ".", fixed=T)[[1]]
         tbl <- x[1]
         fld <- x[2]
+        tbl %in% dbListTables(con, tbl) }),
+    fld_exists = map_lgl(
+      table_field, function(tbl_fld){
+        # tbl_fld = "ctdcast_bottle.t_deg_c"
+        x <- strsplit(tbl_fld, ".", fixed=T)[[1]]
+        tbl <- x[1]
+        fld <- x[2]
+        if (!tbl %in% dbListTables(con, tbl))
+          return(FALSE)
         fld %in% dbListFields(con, tbl) }))
-stopifnot(all(d$exists))
+d %>% 
+  filter(active) %>% 
+  pull(fld_exists) %>% 
+  stopifnot(all(.))
 
 # write to database
 d %>% 
-  select(-exists) %>% 
+  select(-tbl_exists, -fld_exists) %>% 
   dbWriteTable(con, "field_labels", ., overwrite=T)
 
 # show table
