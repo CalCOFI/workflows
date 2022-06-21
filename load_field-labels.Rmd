@@ -36,6 +36,8 @@ gs4_deauth()
 # read data
 d <- read_sheet(gsheet)
 
+write_csv(d, here("data/field_labels.csv"))
+
 # check that variables are globally unique
 stopifnot(d$table_field %>% duplicated() %>% sum() == 0)
 
