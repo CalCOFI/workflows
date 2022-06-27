@@ -2,13 +2,8 @@ source(here::here("libs/db.R")) # defines variables: con, dir_gdrive
 
 q <- function(sql){ dbSendQuery(con, sql) }
 
-# 2022-06-19: + ctd_casts.geom for API timeseries/ to run spatial intersections
-q("ALTER TABLE ctd_casts ADD COLUMN geom geometry(Point, 4326)")
-q("UPDATE ctd_casts SET geom = ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)")
-
-# 2022-06-19: + stations.geom for oceano app
-q("ALTER TABLE stations ADD COLUMN geom geometry(Point, 4326)")
-q("UPDATE stations SET geom = ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)")
+# 2022-06-27: ctd_bottles.cst_cnt -> cast_count to match ctd_casts.*
+q("ALTER TABLE ctd_bottles RENAME COLUMN cst_cnt TO cast_count")
 
 # 2022-06-20: rename *species_codes* tables
 q("ALTER TABLE species_codes RENAME TO species_codes_old")
@@ -38,4 +33,12 @@ read_csv("data/field_labels.csv") %>%
 # 2022-06-20: + stations.date for API /timeseries
 q("ALTER TABLE tows ADD COLUMN date DATE")
 q("UPDATE tows SET date = DATE(datetime)")
+
+# 2022-06-19: + ctd_casts.geom for API timeseries/ to run spatial intersections
+q("ALTER TABLE ctd_casts ADD COLUMN geom geometry(Point, 4326)")
+q("UPDATE ctd_casts SET geom = ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)")
+
+# 2022-06-19: + stations.geom for oceano app
+q("ALTER TABLE stations ADD COLUMN geom geometry(Point, 4326)")
+q("UPDATE stations SET geom = ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)")
 
