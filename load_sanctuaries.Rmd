@@ -35,7 +35,7 @@ mapviewOptions(fgb = FALSE)
 
 # source: https://github.com/noaa-onms/onmsR/blob/master/data/sanctuaries.rda
 # sanctuaries_rda <- "/share/data/ONMS-Sanctuaries/sanctuaries.rda"
-sanctuaries_rda <- "~/Github/noaa-onms/onmsR/data/sanctuaries.rda"
+sanctuaries_rda <- "~/github/noaa-onms/onmsR/data/sanctuaries.rda"
 
 load(file=sanctuaries_rda)
 sanctuaries <- sanctuaries %>% select(-spatial)
@@ -45,12 +45,18 @@ mapview(sanctuaries)
 ## Sanctuaries intersecting CalCOFI
 
 ```{r}
-stations <- st_read(con, "stations")
+stations <- st_read(                    # n =  6,343 
+  con, 
+  query = "
+    SELECT DISTINCT ON (sta_id)
+      line || ' ' || station AS sta_id, line, station, longitude, latitude, geom
+    FROM stations")
 mapview(stations)
 ```
 
 ```{r}
 hull <- st_convex_hull(st_union(stations))
+st_write(hull, con, "stations_hull", delete_layer=T)
 mapview(hull)
 ```
 
@@ -67,7 +73,7 @@ mapview(sanctuaries)
 ```{r}
 st_write(sanctuaries, con, "aoi_fed_sanctuaries", delete_layer=T)
 # add spatial index
-dbSendQuery(con, "CREATE INDEX IF NOT EXISTS aoifedsanctuaries_geom_idx ON aoi_fed_sanctuaries USING GIST (geom);")
+dbSendQuery(con, "CREATE INDEX IF NOT EXISTS aoi_fed_sanctuaries_geom_idx ON aoi_fed_sanctuaries USING GIST (geom);")
 # set geographic projection for showing up at tile.calcofi.io
 dbSendQuery(con, "SELECT UpdateGeometrySRID('aoi_fed_sanctuaries','geom',4326);")
 
