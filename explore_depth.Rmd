@@ -54,7 +54,7 @@ casts <- tbl(con, "ctd_casts") %>%
       as.integer()) %>% 
   st_as_sf(
     coords = c("longitude", "latitude"),
-    crs = 4326)
+    crs = 4326, remove = F)
 
 mapview(casts, zcol="sta_line")
 # mapview(casts, zcol="sta_offshore")
@@ -88,10 +88,8 @@ d <- casts %>%
   inner_join(
     bottles,
     by="cast_count") %>% 
-  st_drop_geometry()
-
-d <- d %>% 
-  select(sta_offshore, sta_line, depthm, t_degc) %>% 
+  st_drop_geometry() %>% 
+  # select(sta_offshore, sta_line, depthm, t_degc) %>% 
   arrange(sta_offshore, sta_line, depthm)
 datatable(d)
 ```
@@ -202,8 +200,6 @@ ggplot(griddf, aes(x, y, z = z)) +
 - [cmocean](https://cran.r-project.org/web/packages/cmocean/vignettes/cmocean.html): beautiful colormaps for oceanography
 
 ```{r}
-table(d$sta_offshore)
-
 g <- with(
   d, 
   interp::interp(
@@ -222,6 +218,7 @@ cmocean_pal = "thermal"
 p <- ggplot(gd, aes(x, y, z = z)) +
   geom_contour_filled(bins=nbins) +
   coord_cartesian(expand = F) +
+  scale_x_reverse() + 
   scale_y_reverse() + 
   labs(
     x     = "Offshore [id]", 
@@ -242,6 +239,102 @@ p +
     size = 0.2)
 ```
 
+## `marmap`: add bathymetry
+
+```{r}
+library(marmap)
+
+b <- with(
+  d,
+  getNOAA.bathy(
+    lon1 = min(longitude),
+    lon2 = max(longitude),
+    lat1 = min(latitude),
+    lat2 = max(latitude),
+    resolution=4))
+
+# create color palettes
+blues <- c("lightsteelblue4","lightsteelblue3","lightsteelblue2","lightsteelblue1")
+greys <- c(grey(0.6),grey(0.93),grey(0.99))
+
+plot(b, image = TRUE, land = TRUE, lwd = 0.03, bpal = list(c(0, max(b), greys), c(min(b), 0, blues)))
+# Add coastline
+plot(b, n = 1, lwd = 0.4, add = TRUE)
+
+summary(b)
+
+
+dr <- d %>% 
+  filter(
+    sta_offshore %in% c(max(sta_offshore), min(sta_offshore))) %>% 
+  group_by(sta_offshore) %>% 
+  summarize(
+    lon = first(longitude),
+    lat = first(latitude))
+
+# Latitudinal  range:   36.58 to   37.82 ( 36.58 N to  37.82 N)
+# Longitudinal range: -125.8  to -123.1  (125.8  W to 123.1  W)
+
+dr
+
+trsect <- get.transect(
+    b,
+    x1 = min(as.numeric(dimnames(b)[[1]])),
+    x2 = max(as.numeric(dimnames(b)[[1]])),
+    y1 = min(as.numeric(dimnames(b)[[2]])),
+    y2 = max(as.numeric(dimnames(b)[[2]])),
+    distance = T)
+trsect
+
+plotProfile(trsect)
+```
+
+
+## `calcofi4r::plot_transect()`
+
+```{r, eval=F}
+
+plot_transect <- function(x, y, z){
+  g <- with(
+  d, 
+  interp::interp(
+    sta_offshore, depthm, t_degc))
+
+gd <- subset(
+  data.frame(
+    x = rep(g$x, nrow(g$z)),
+    y = rep(g$y, each = ncol(g$z)),
+    z = as.numeric(g$z)),
+  !is.na(z))
+
+nbins = 8
+cmocean_pal = "thermal"
+
+p <- ggplot(gd, aes(x, y, z = z)) +
+  geom_contour_filled(bins=nbins) +
+  coord_cartesian(expand = F) +
+  scale_x_reverse() + 
+  scale_y_reverse() + 
+  labs(
+    x     = "Offshore [id]", 
+    y     = "Depth [m]",
+    fill = "Temperature [C]") +
+  scale_fill_manual(values = cmocean(cmocean_pal)(nbins)) +
+  theme_bw()
+p
+
+# add points
+p +
+  geom_point(
+    data = d %>%
+      rename(
+        x = sta_offshore,
+        y = depthm,
+        z = t_degc),
+    size = 0.2)
+}
+
+```
 
 
 
