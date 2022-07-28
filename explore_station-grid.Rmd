@@ -127,6 +127,7 @@ sudo apt-get install proj-bin
 which proj
 ```
 
+## f() with proj-bin
 
 Define functions:
 
@@ -276,4 +277,210 @@ land_l <- ne_countries(scale = "large", returnclass = "sf") %>%
 sta_d.10.4_vpigl <- st_difference(sta_d.10.4_vpig, land_l)
 mapview(sta_d.10.4_vpigl, alpha.regions = 0.5) +
   mapview(sta_d.10.4, zcol="y", cex=2)
+```
+
+## NEW: `sf::st_crs("+proj=calcofi")`
+
+```{r}
+st_crs("+proj=calcofi")
+
+# 80.00 60.00 -> -121.15 34.15   
+pt_cc <- tribble(
+  ~alongshore, ~offshore,
+  80.00, 60.00) %>% 
+  st_as_sf(
+    coords = c("alongshore", "offshore"), 
+    crs = st_crs("+proj=calcofi"))
+pt_cc # 80 60
+
+pt_gcs <- pt_cc %>% 
+  st_transform(4326) # -121.15 34.15
+
+pt_gcs %>% 
+  st_transform(st_crs("+proj=calcofi")) # 80, 60
+
+# freq of alongshore
+y <- stations %>% 
+  group_by(sta_id_line) %>% 
+  summarize(n = n())
+
+y %>% st_drop_geometry() %>% datatable()
+  
+
+y %>% st_drop_geometry() %>% arrange(desc(n)) %>% head()
+# 1        90      82
+# 2        93.3    65
+# 3       100      53
+# 4       120      53
+# 5        83.3    47
+# 6       110      47
+
+dbListFields(con, "ctd_casts")
+
+lns <- tbl(con, "ctd_casts") %>% 
+  group_by(stline) %>% 
+  summarize(cnt = n()) %>% 
+  arrange(desc(cnt)) %>% 
+  collect()
+View(lns)
+lns10 <- head(lns, n=10)
+
+lns10
+#  1   90      4222
+#  2   93.3    3611
+#  3   86.7    2609
+#  4   83.3    2387
+#  5   80      2233
+#  6   76.7    1629
+#  7  100      1243
+#  8  120      1216
+#  9  110      1084
+# 10   70      1025
+lns10 <- lns10 %>% pull(stline)
+
+
+seq(90, 93.3, by=0.3)
+lnsv <- seq(min(lns10), max(lns10), by=0.3)
+sum(lns10 %in% lnsv) # 2
+
+lnsv2 <- c(
+  seq(90, max(lns10), by=0.3),
+  seq(90, min(lns10), by=-0.3)[-1]) %>% 
+  sort()
+sum(lns10 %in% lnsv2) # 4
+
+hist(stations$sta_id_line)
+
+sta <- tbl(con, "ctd_casts") %>% 
+  group_by(ststa) %>% 
+  summarize(cnt = n()) %>% 
+  arrange(desc(cnt)) %>% 
+  collect() # %>% 
+  # head(n=10)
+
+View(sta)
+
+sta_odd <- sta %>% 
+  mutate(
+    mod5 = ststa %% 5) %>% 
+  filter(mod5 != 0)
+
+# ∆ 0.3, 10 (alongshore, offshore); ctr: 90, 60
+
+sta_cc <- stations %>% 
+  st_transform(st_crs("+proj=calcofi"))
+
+makegrid()
+
+yx <- st_coordinates(sta_cc)
+
+# alongshore
+min(yx[,1])
+max(yx[,1])
+# offshore
+min(yx[,2])
+max(yx[,2])
+
+
+# ∆ 3.3, 10 (alongshore, offshore); ctr: 90, 60
+cy <- 90
+cx <- 60
+dy <- 3.3
+dx <- 10
+vy <- c(
+  seq(cy, max(yx[,1]), by = dy),
+  seq(cy, min(yx[,1]), by = -1*dy)[-1]) %>% 
+  sort()
+vx <- c(
+  seq(cx, max(yx[,2]), by = dx),
+  seq(cx, min(yx[,2]), by = -1*dx)[-1]) %>% 
+  sort()
+g <- expand_grid(
+  y = vy,
+  x = vx) %>% 
+  mutate(
+    geom = map2(x, y, function(x, y){
+      dx2 <- dx/2
+      dy2 <- dy/2
+      
+      # y = 90; x = 60
+      p <- tribble(
+        ~y, ~x, 
+        y - dy2, x - dx2,      # lower left
+        y + dy2, x + dx2) %>%  # upper right
+        st_as_sf(
+          coords = c("y", "x"), 
+          crs    = st_crs("+proj=calcofi")) %>% 
+        st_bbox() %>% 
+        st_as_sfc() %>% 
+        st_transform(4326) %>% 
+        .[[1]]
+    })) %>% 
+  st_as_sf()
+    
+# g_0 <- g 
+mapview(g)
+
+shelf(leaflet)
+
+gc <- g %>% 
+  filter(
+    y <= cy + dy*5,
+    y >= cy - dy*5,
+    x <= cx + dx*5,
+    x >= cx - dx*5)
+
+leaflet() %>% 
+  addProviderTiles(providers$Esri.OceanBasemap) %>% 
+  addPolygons(data = gc)
+
+
+r <- terra::rast(
+  xmin = min(vy), xmax = max(vy), 
+  ymin = min(vx), ymax = max(vx), 
+  ncols = length(vy), nrows = length(vx),
+  nlyrs = 1, vals = NA,
+  crs = "+proj=calcofi")
+```
+
+```{sql connection=con}
+create extension postgis_raster;
+CREATE TABLE test_rast(rid serial primary key, rast raster);
+INSERT INTO test_rast(rid, rast)
+ VALUES(3, ST_MakeEmptyRaster(100, 100, 0.0005, 0.0005, 1, 1, 0, 0, 4326) );
+ -- Add another band of type 8 bit unsigned integer with pixels initialized to 200
+UPDATE test_rast
+  SET rast = ST_AddBand(rast,'8BUI'::text, 200)
+  WHERE rid = 1;
+  
+  
+```
+
+```{r}
+shelf("rpostgis")
+
+pgPostGIS(con)
+pgListGeom(con, geog = TRUE)
+pgListRast(con)
+
+r <- pgGetRast(con, "test_rast")
+
+r
+
+
+(crs_cc <- CRS("+proj=calcofi"))
+pgSRID(con, crs_cc, create.srid = TRUE)
+# No matches were found in spatial_ref_sys. New SRID created (880001)
+
+
+
+tbl(con, "ctd_casts") %>% 
+  group_by(longitude, latitude)
+
+# ∆ 0.1, 5 (alongshore, offshore); ctr: 90, 60
+
+# ∆ 0.1, 1 (alongshore, offshore); ctr: 90, 60
+
+
+
 ```
