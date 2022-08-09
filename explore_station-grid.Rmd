@@ -701,9 +701,9 @@ r <- raster(
   resolution = c(dx, dy),
   crs = crs)
 r_sta <- rasterize(stations_crs, r, fun="count")
-plot(r_sta)
+plot(r_sta[1])
 leaflet() %>% 
   addProviderTiles(providers$Esri.OceanBasemap) %>% 
-  addRasterImage(r_sta, project = F)
+  addRasterImage(r_sta[1], project = F)
 mapview(r_sta, method)
 ```
