@@ -1,7 +1,5 @@
 source(here::here("libs/db.R")) # defines variables: con, dir_gdrive
 
-q <- function(sql){ dbSendQuery(con, sql) }
-
 # 2022-06-27: ctd_bottles.cst_cnt -> cast_count to match ctd_casts.*
 q("ALTER TABLE ctd_bottles RENAME COLUMN cst_cnt TO cast_count")
 
