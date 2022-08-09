@@ -369,9 +369,6 @@ sta_odd <- sta %>%
 
 sta_cc <- stations %>% 
   st_transform(st_crs("+proj=calcofi"))
-
-makegrid()
-
 yx <- st_coordinates(sta_cc)
 
 # alongshore
@@ -380,7 +377,6 @@ max(yx[,1])
 # offshore
 min(yx[,2])
 max(yx[,2])
-
 
 # ∆ 3.3, 10 (alongshore, offshore); ctr: 90, 60
 cy <- 90
@@ -395,6 +391,8 @@ vx <- c(
   seq(cx, max(yx[,2]), by = dx),
   seq(cx, min(yx[,2]), by = -1*dx)[-1]) %>% 
   sort()
+
+
 g <- expand_grid(
   y = vy,
   x = vx) %>% 
@@ -423,6 +421,10 @@ mapview(g)
 
 shelf(leaflet)
 
+leaflet() %>% 
+  addProviderTiles(providers$Esri.OceanBasemap) %>% 
+  addPolygons(data=g)
+
 gc <- g %>% 
   filter(
     y <= cy + dy*5,
@@ -443,44 +445,265 @@ r <- terra::rast(
   crs = "+proj=calcofi")
 ```
 
-```{sql connection=con}
-create extension postgis_raster;
-CREATE TABLE test_rast(rid serial primary key, rast raster);
-INSERT INTO test_rast(rid, rast)
- VALUES(3, ST_MakeEmptyRaster(100, 100, 0.0005, 0.0005, 1, 1, 0, 0, 4326) );
- -- Add another band of type 8 bit unsigned integer with pixels initialized to 200
-UPDATE test_rast
-  SET rast = ST_AddBand(rast,'8BUI'::text, 200)
-  WHERE rid = 1;
-  
-  
-```
+### init `postgis_raster` w/ `proj=calcofi` SRID 880001
 
 ```{r}
-shelf("rpostgis")
+shelf(rgdal, rpostgis)
+
+q("CREATE EXTENSION postgis_raster;")
+
+crs_cc <- sp::CRS("+proj=calcofi")
+pgSRID(con, crs_cc, create.srid = TRUE)
+# No matches were found in spatial_ref_sys. New SRID created (880001)
 
 pgPostGIS(con)
 pgListGeom(con, geog = TRUE)
 pgListRast(con)
+```
+
+### `test_rast`
+
+```{r}
+q("CREATE TABLE test_rast(rid serial primary key, rast raster);")
+q("
+INSERT INTO test_rast(rid, rast) 
+  VALUES(1, ST_MakeEmptyRaster(100, 100, 0.0005, 0.0005, 1, 1, 0, 0, 4326) );
+")
+# Add another band of type 8 bit unsigned integer with pixels initialized to 200
+q(" 
+UPDATE test_rast
+  SET rast = ST_AddBand(rast,'8BUI'::text, 200)
+  WHERE rid = 1;")
+# once done populating table, create spatial index on raster column
+q("CREATE INDEX test_rast_convexhull_idx ON test_rast USING gist( ST_ConvexHull(rast) );")
+
+pgListRast(con)
 
 r <- pgGetRast(con, "test_rast")
-
 r
+```
+
+### `grd_a` in calcofi projection
+
+```{r}
+sta_cc <- stations %>% 
+  st_transform(st_crs("+proj=calcofi"))
+yx <- st_coordinates(sta_cc)
+
+# alongshore
+min(yx[,1])
+max(yx[,1])
+# offshore
+min(yx[,2])
+max(yx[,2])
+
+# ∆ 3.3, 10 (alongshore, offshore); ctr: 90, 60
+cy <- 90
+cx <- 60
+dy <- 3.3
+dx <- 10
+vy <- c(
+  seq(cy, max(yx[,1]), by = dy),
+  seq(cy, min(yx[,1]), by = -1*dy)[-1]) %>% 
+  sort()
+vx <- c(
+  seq(cx, max(yx[,2]), by = dx),
+  seq(cx, min(yx[,2]), by = -1*dx)[-1]) %>% 
+  sort()
+
+max(vx)
+
+# ST_MakeEmptyRaster(integer width, integer height, float8 upperleftx, float8 upperlefty, float8 scalex, float8 scaley, float8 skewx, float8 skewy, integer srid=unknown)
+# ST_MakeEmptyRaster(3.3 width, 10 height, {max(vx)} upperleftx, {max(vy)} upperlefty, 1, 1, 0, 0, 880001)
+
+q("DROP TABLE IF EXISTS grd_a;")
+q("CREATE TABLE grd_a(rid serial primary key, rast raster);")
+q(glue("
+INSERT INTO grd_a(rid, rast) 
+  VALUES(
+    1, 
+    ST_MakeEmptyRaster(
+      width:={length(vy)}, 
+      height:={length(vx)}, 
+      upperleftx:={min(vy)}, 
+      upperlefty:={max(vx)}, 
+      scalex:=dy, 
+      scaley:=dx, 
+      skewx:=0, 
+      skewy:=0, 
+      srid:=880001) );
+"))
+# Add another band of type 8 bit unsigned integer with pixels initialized to 200
+q(" 
+UPDATE grd_a
+  SET rast = ST_AddBand(rast,'8BUI'::text, 0)
+  WHERE rid = 1;")
+
+# once done populating table, create spatial index on raster column
+q("CREATE INDEX test_rast_convexhull_idx ON test_rast USING gist( ST_ConvexHull(rast) );")
+
+pgListRast(con)
+
+r_cc <- pgGetRast(con, "grd_a")
+r_cc
+
+ext_gcs <- raster::projectExtent(r_cc, crs = sp::CRS(leaflet:::epsg4326))
+ext_gcs
+
+mapview(st_bbox(ext_gcs))
+ext_mer <- raster::projectExtent(r_cc, crs = sp::CRS(leaflet:::epsg3857))
+
+raster::projectRaster(4326)
 
 
-(crs_cc <- CRS("+proj=calcofi"))
-pgSRID(con, crs_cc, create.srid = TRUE)
-# No matches were found in spatial_ref_sys. New SRID created (880001)
+
+r_gcs <- r_cc %>% 
+  terra::project(4326)
+
+shelf(leaflet)
+
+r_mer <-leaflet::projectRasterForLeaflet(r_cc)
+
+  st_transform(leaflet:::epsg3857)
+```
 
 
 
-tbl(con, "ctd_casts") %>% 
-  group_by(longitude, latitude)
+### `grd_mer` in web mercator projection
 
-# ∆ 0.1, 5 (alongshore, offshore); ctr: 90, 60
+```{r}
+crs_mer <- 3857
+sta_mer <- stations %>% 
+  st_transform(crs_mer)
+xy <- st_coordinates(sta_mer)
+apply(xy, 2, range)
+#              X       Y
+# [1,] -17050244 1968402
+# [2,] -11925222 6097048
 
-# ∆ 0.1, 1 (alongshore, offshore); ctr: 90, 60
+# 1 km square grid 
+# grd = "grd_mer"; rid = 1
+# dx <- 1000
+# dy <- 1000
+
+# 100 km square grid 
+grd = "r_mer100km"; rid = 1
+dx <- 1000*100
+dy <- 1000*100
+
+# passing through ctr: -13440906, 3736349
+cx <- mean(xy[,1]) # -13440906
+cy <- mean(xy[,2]) #   3736349
+vx <- c(
+  seq(cx, max(xy[,1]), by = dy),
+  seq(cx, min(xy[,1]), by = -1*dy)[-1]) %>% 
+  sort()
+vy <- c(
+  seq(cy, max(xy[,2]), by = dx),
+  seq(cy, min(xy[,2]), by = -1*dx)[-1]) %>% 
+  sort()
+crs = crs_mer
+# ST_MakeEmptyRaster(integer width, integer height, float8 upperleftx, float8 upperlefty, float8 scalex, float8 scaley, float8 skewx, float8 skewy, integer srid=unknown)
+# ST_MakeEmptyRaster(3.3 width, 10 height, {max(vx)} upperleftx, {max(vy)} upperlefty, 1, 1, 0, 0, 880001)
+q(glue("DROP TABLE IF EXISTS {grd};"))
+q(glue("CREATE TABLE {grd}(rid serial primary key, rast raster);"))
+q(glue("
+INSERT INTO {grd} (rid, rast) 
+  VALUES(
+    {rid}, 
+    ST_MakeEmptyRaster(
+      width:={length(vx)}, 
+      height:={length(vy)}, 
+      upperleftx:={min(vx)}, 
+      upperlefty:={max(vy)}, 
+      scalex:={dx}, 
+      scaley:={dy}, 
+      skewx:=0, 
+      skewy:=0, 
+      srid:={crs}) );
+"))
+# Add another band of type 8 bit unsigned integer with pixels initialized to 200
+q(glue(" 
+UPDATE {grd}
+  SET rast = ST_AddBand(rast,'8BUI'::text, 0)
+  WHERE rid = {rid};"))
+
+# once done populating table, create spatial index on raster column
+q(glue("CREATE INDEX {grd}_convexhull_idx ON {grd} USING gist( ST_ConvexHull(rast) );"))
+
+pgListRast(con)
+
+shelf(raster)
+r <- pgGetRast(con, grd)
+v <- values(r)
+v <- c(1, v[2:(length(v) - 1)], 10)
+values(r) <- v
+mapview(r)
+raster::crs(r_mer)
+# Deprecated Proj.4 representation:
+#  +proj=merc +a=6378137 +b=6378137 +lat_ts=0 +lon_0=0 +x_0=0 +y_0=0 +k=1 +units=m
+#  +nadgrids=@null +wktext +no_defs 
+sp::CRS(leaflet:::epsg3857)
+# Deprecated Proj.4 representation:
+#  +proj=merc +a=6378137 +b=6378137 +lat_ts=0 +lon_0=0 +x_0=0
+#  +y_0=0 +k=1 +units=m +nadgrids=@null +wktext +no_defs
+r_cc
+
+ext_gcs <- raster::projectExtent(r_cc, crs = sp::CRS(leaflet:::epsg4326))
+ext_gcs
+
+mapview(st_bbox(ext_gcs))
+ext_mer <- raster::projectExtent(r_cc, crs = sp::CRS(leaflet:::epsg3857))
+
+raster::projectRaster(4326)
 
 
 
+r_gcs <- r_cc %>% 
+  terra::project(4326)
+
+shelf(leaflet)
+
+r_mer <-leaflet::projectRasterForLeaflet(r_cc)
+
+  st_transform(leaflet:::epsg3857)
+```
+
+
+## rasters in R 
+
+```{r}
+# gcs
+b <- st_bbox(stations)
+r_gcs <- raster(
+  xmn = b$xmin, xmx = b$xmax, 
+  ymn = b$ymin, ymx = b$ymax,
+  resolution = c(1,1),
+  crs = 4326)
+r_sta_gcs <- rasterize(stations, r_gcs, fun="count")
+
+mapview(r_sta_gcs)
+```
+
+```{r}
+
+crs = 3857    # web mercator 
+dx = 1000*100 # 100 km width
+dy = 1000*100 # 100 km height
+
+stations_crs <- stations %>% 
+  st_transform(crs)
+b <- stations_crs %>% 
+  st_bbox()
+r <- raster(
+  xmn = b$xmin, xmx = b$xmax, 
+  ymn = b$ymin, ymx = b$ymax,
+  resolution = c(dx, dy),
+  crs = crs)
+r_sta <- rasterize(stations_crs, r, fun="count")
+plot(r_sta)
+leaflet() %>% 
+  addProviderTiles(providers$Esri.OceanBasemap) %>% 
+  addRasterImage(r_sta, project = F)
+mapview(r_sta, method)
 ```
