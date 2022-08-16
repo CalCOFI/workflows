@@ -685,51 +685,32 @@ r_sta_gcs <- rasterize(stations, r_gcs, fun="count")
 mapview(r_sta_gcs)
 ```
 
-## make `sta_mer_*km`
+## cluster marker
 
 ```{r}
-resolutions_km = c(1, 10, 20, 30, 50, 100)
-overwrite = F
-
-stations_mer <- stations %>% 
-  st_transform(3857) # web mercator 
-b <- stations_mer %>% 
-  st_bbox()
-
-for (res_km in resolutions_km){
-  r_tif <- glue("/share/data/raster/sta_mer_{res_km}km.tif")
-  if (!file.exists(r_tif) | overwrite){
-    
-    message(glue("creating {basename(r_tif)}"))
-    r_tmpl <- raster(
-      xmn = b$xmin, xmx = b$xmax, 
-      ymn = b$ymin, ymx = b$ymax,
-      resolution = res_km * 1000,
-      crs = 3857)
-    r <- rasterize(stations_mer, r_tmpl, fun="count")
-    writeRaster(r, r_tif)
-  }
-}
-
-r_1km   <- raster(glue("/share/data/raster/sta_mer_1km.tif"))
-r_10km  <- raster(glue("/share/data/raster/sta_mer_10km.tif"))
-r_20km  <- raster(glue("/share/data/raster/sta_mer_20km.tif"))
-r_30km  <- raster(glue("/share/data/raster/sta_mer_30km.tif"))
-r_50km  <- raster(glue("/share/data/raster/sta_mer_50km.tif"))
-r_100km <- raster(glue("/share/data/raster/sta_mer_100km.tif"))
-
-librarian::shelf(leaflet)
 leaflet() %>% 
   addProviderTiles(providers$Esri.OceanBasemap, group="Ocean") %>% 
   addProviderTiles(providers$Stamen.Toner, group="B&W") %>% 
-  addRasterImage(r_1km  , project=F, group="1km") %>% 
-  addRasterImage(r_10km , project=F, group="10km") %>% 
-  addRasterImage(r_20km , project=F, group="20km") %>% 
-  addRasterImage(r_30km , project=F, group="30km") %>% 
-  addRasterImage(r_50km , project=F, group="50km") %>% 
-  addRasterImage(r_100km, project=F, group="100km") %>% 
-  addLayersControl(
-    baseGroups    = c("Ocean", "B&W"),
-    overlayGroups = c("1km","10km","20km","30km","50km","100km"),
-    options       = layersControlOptions(collapsed = FALSE))
+  #addRasterImage(r_1km  , project=F, group="1km") %>% 
+  addMarkers(
+    data  = stations,
+    popup =~as.character(sta_id),
+    group = "stations",
+    clusterOptions = markerClusterOptions(
+      removeOutsideVisibleBounds = F),
+    labelOptions = labelOptions(
+      noHide = F,
+      direction = 'auto'))
+
+leaflet() %>% 
+  addProviderTiles(providers$Esri.OceanBasemap, group="Ocean") %>% 
+  addProviderTiles(providers$Stamen.Toner, group="B&W") %>% 
+  #addRasterImage(r_1km  , project=F, group="1km") %>% 
+  addCircleMarkers(
+    data  = stations,
+    radius = 4,
+    popup =~as.character(sta_id),
+    group = "stations")
+
 ```
+
