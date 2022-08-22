@@ -1303,6 +1303,8 @@ window.initializeCodeFolding = function(show) {
   // select all R code blocks
   var rCodeBlocks = $('pre.r, pre.python, pre.bash, pre.sql, pre.cpp, pre.stan, pre.julia, pre.foldable');
   rCodeBlocks.each(function() {
+    // skip if the block has fold-none class
+    if ($(this).hasClass('fold-none')) return;
 
     // create a collapsable div to wrap the code in
     var div = $('<div class="collapse r-code-collapse"></div>');
@@ -1598,7 +1600,7 @@ div.tocify {
 <h1 class="title toc-ignore">Load <code>field_labels</code> from Google
 Sheet</h1>
 <h4 class="author">Ben Best</h4>
-<h4 class="date">2022-05-05 13:03:40</h4>
+<h4 class="date">2022-08-22 16:42:58</h4>
 
 </div>
 
@@ -1610,9 +1612,9 @@ Sheet</h1>
 | calcofi - Google Sheets</a></li>
 </ul>
 <pre class="r"><code># packages
-source(here::here(&quot;libs/db.R&quot;)) # defines variables: con, dir_gdrive
+source(here::here(&quot;../apps/libs/db.R&quot;)) # defines variables: con, dir_gdrive
 librarian::shelf(
-  googlesheets4, knitr, purrr)
+  googlesheets4, knitr, purrr, readr)
 
 # google sheet
 gsheet &lt;- &quot;https://docs.google.com/spreadsheets/d/1ghM30pIdcsun7XWzLRKh4EilUplN60YdHayfiilPFwE/edit&quot;
@@ -1623,107 +1625,160 @@ gs4_deauth()
 # read data
 d &lt;- read_sheet(gsheet)
 
+write_csv(d, here(&quot;data/field_labels.csv&quot;))
+
 # check that variables are globally unique
 stopifnot(d$table_field %&gt;% duplicated() %&gt;% sum() == 0)
 
 # check that table.variable exists in the database
 d &lt;- d %&gt;% 
+  # filter(active) %&gt;% 
   mutate(
-    exists = map_lgl(
+    tbl_exists = map_lgl(
       table_field, function(tbl_fld){
         # tbl_fld = &quot;ctdcast_bottle.t_deg_c&quot;
         x &lt;- strsplit(tbl_fld, &quot;.&quot;, fixed=T)[[1]]
         tbl &lt;- x[1]
         fld &lt;- x[2]
+        tbl %in% dbListTables(con, tbl) }),
+    fld_exists = map_lgl(
+      table_field, function(tbl_fld){
+        # tbl_fld = &quot;ctdcast_bottle.t_deg_c&quot;
+        x &lt;- strsplit(tbl_fld, &quot;.&quot;, fixed=T)[[1]]
+        tbl &lt;- x[1]
+        fld &lt;- x[2]
+        if (!tbl %in% dbListTables(con, tbl))
+          return(FALSE)
         fld %in% dbListFields(con, tbl) }))
-stopifnot(all(d$exists))
+d %&gt;% 
+  filter(active) %&gt;% 
+  pull(fld_exists) %&gt;% 
+  stopifnot(all(.))
 
 # write to database
 d %&gt;% 
-  select(-exists) %&gt;% 
+  select(-tbl_exists, -fld_exists) %&gt;% 
   dbWriteTable(con, &quot;field_labels&quot;, ., overwrite=T)
 
 # show table
 kable(d)</code></pre>
 <table>
 <colgroup>
-<col width="10%" />
-<col width="28%" />
-<col width="20%" />
-<col width="27%" />
+<col width="4%" />
 <col width="8%" />
-<col width="5%" />
+<col width="20%" />
+<col width="16%" />
+<col width="21%" />
+<col width="6%" />
+<col width="8%" />
+<col width="6%" />
+<col width="6%" />
 </colgroup>
 <thead>
 <tr class="header">
+<th align="left">active</th>
 <th align="left">category</th>
 <th align="left">table_field</th>
 <th align="left">plot_title</th>
 <th align="left">plot_label</th>
 <th align="left">plot_color</th>
-<th align="left">exists</th>
+<th align="left">color_palette</th>
+<th align="left">tbl_exists</th>
+<th align="left">fld_exists</th>
 </tr>
 </thead>
 <tbody>
 <tr class="odd">
+<td align="left">TRUE</td>
 <td align="left">Oceanographic</td>
-<td align="left">ctdcast_bottle.t_deg_c</td>
-<td align="left">Sea Surface Temperature</td>
-<td align="left">Temperature (ºC)</td>
+<td align="left">ctd_bottles.t_degc</td>
+<td align="left">Temperature</td>
+<td align="left">Temperature (C)</td>
 <td align="left">red</td>
+<td align="left">Reds</td>
+<td align="left">TRUE</td>
 <td align="left">TRUE</td>
 </tr>
 <tr class="even">
+<td align="left">TRUE</td>
 <td align="left">Oceanographic</td>
-<td align="left">ctdcast_bottle.salnty</td>
+<td align="left">ctd_bottles.salinity</td>
 <td align="left">Salinity</td>
 <td align="left">Salinity (practical salinity scale)</td>
-<td align="left">gray</td>
+<td align="left">purple</td>
+<td align="left">Purples</td>
+<td align="left">TRUE</td>
 <td align="left">TRUE</td>
 </tr>
 <tr class="odd">
+<td align="left">FALSE</td>
 <td align="left">Oceanographic</td>
-<td align="left">ctdcast_bottle_dic.bottle_o2_ml_l</td>
+<td align="left">ctd_bottles_dic.bottle_o2_ml_l</td>
 <td align="left">Oxygen Content</td>
 <td align="left">Oxygen (mL/L)</td>
 <td align="left">blue</td>
-<td align="left">TRUE</td>
+<td align="left">NA</td>
+<td align="left">FALSE</td>
+<td align="left">FALSE</td>
 </tr>
 <tr class="even">
+<td align="left">FALSE</td>
 <td align="left">Oceanographic</td>
-<td align="left">ctdcast_bottle_dic.bottle_o2_mmol_kg</td>
+<td align="left">ctd_bottles_dic.bottle_o2_mmol_kg</td>
 <td align="left">Oxygen Content</td>
 <td align="left">Oxygen (µmol/kg)</td>
 <td align="left">blue</td>
-<td align="left">TRUE</td>
+<td align="left">NA</td>
+<td align="left">FALSE</td>
+<td align="left">FALSE</td>
 </tr>
 <tr class="odd">
+<td align="left">FALSE</td>
 <td align="left">Oceanographic</td>
-<td align="left">ctdcast_bottle_dic.dic1</td>
+<td align="left">ctd_bottles_dic.dic1</td>
 <td align="left">Dissolved Inorganic Carbon</td>
 <td align="left">DIC (µmol/Kg)</td>
 <td align="left">brown</td>
-<td align="left">TRUE</td>
+<td align="left">YlOrBr</td>
+<td align="left">FALSE</td>
+<td align="left">FALSE</td>
 </tr>
 <tr class="even">
+<td align="left">FALSE</td>
 <td align="left">Oceanographic</td>
-<td align="left">ctdcast_bottle_dic.dic2</td>
+<td align="left">ctd_bottles_dic.dic2</td>
 <td align="left">Dissolved Inorganic Carbon</td>
 <td align="left">DIC (µmol/Kg) on a replicate sample</td>
 <td align="left">brown</td>
-<td align="left">TRUE</td>
+<td align="left">YlOrBr</td>
+<td align="left">FALSE</td>
+<td align="left">FALSE</td>
 </tr>
 <tr class="odd">
+<td align="left">TRUE</td>
 <td align="left">Oceanographic</td>
-<td align="left">ctdcast_bottle.o2sat</td>
+<td align="left">ctd_bottles.o2sat</td>
 <td align="left">Oxygen Saturation</td>
 <td align="left">Oxygen percent saturation</td>
 <td align="left">blue</td>
+<td align="left">Blues</td>
+<td align="left">TRUE</td>
+<td align="left">TRUE</td>
+</tr>
+<tr class="even">
+<td align="left">FALSE</td>
+<td align="left">Oceanographic</td>
+<td align="left">larvae_counts.count</td>
+<td align="left">Larvae</td>
+<td align="left"># Larvae / Liter</td>
+<td align="left">green</td>
+<td align="left">Greens</td>
+<td align="left">TRUE</td>
 <td align="left">TRUE</td>
 </tr>
 </tbody>
 </table>
-<p>Time for the chunk <code>field_labels</code> to run: 5.207
+<p>Time for the chunk <code>field_labels</code> to run: 13.64
 seconds</p>
 </div>
 
