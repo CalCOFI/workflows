@@ -444,6 +444,7 @@ r <- terra::rast(
   nlyrs = 1, vals = NA,
   crs = "+proj=calcofi")
 ```
+"
 
 ### init `postgis_raster` w/ `proj=calcofi` SRID 880001
 
@@ -685,7 +686,27 @@ r_sta_gcs <- rasterize(stations, r_gcs, fun="count")
 mapview(r_sta_gcs)
 ```
 
+## make `grd_mer_*km`
+
 ```{r}
+resolutions_km = c(1, 10, 100)
+
+stations_mer <- stations %>% 
+  st_transform(3857) # web mercator 
+b <- stations_crs %>% 
+  st_bbox()
+
+for (res_m in resolutions_km * 1000){
+  r_tmpl <- raster(
+    xmn = b$xmin, xmx = b$xmax, 
+    ymn = b$ymin, ymx = b$ymax,
+    resolution = res_m,
+    crs = 3857)
+  r_sta <- rasterize(stations_crs, r_tmpl, fun="count")
+  
+}
+
+shelf(leaflet, raster)
 
 crs = 3857    # web mercator 
 dx = 1000*100 # 100 km width
@@ -701,9 +722,62 @@ r <- raster(
   resolution = c(dx, dy),
   crs = crs)
 r_sta <- rasterize(stations_crs, r, fun="count")
-plot(r_sta[1])
+
+plot(raster(r_sta, "ID"))
 leaflet() %>% 
   addProviderTiles(providers$Esri.OceanBasemap) %>% 
-  addRasterImage(r_sta[1], project = F)
-mapview(r_sta, method)
+  addRasterImage(raster(r_sta, "ID"), project = F)
+#mapview(r_sta)
 ```
+
+```{r}
+shelf(rpostgis)
+
+system.time({
+  pgWriteRast(con, "r_sta_cnt", r_sta, overwrite = T)
+}) # 12.219 secs
+
+system.time({
+  writeRaster(r_sta, "data/r_sta_cnt.tif", overwrite = T)
+}) # 0.033 secs # 9.7 KB
+
+system.time({
+  r_db <- pgGetRast(con, "r_sta_cnt")
+}) # 9.446 secs
+
+d <- dbGetQuery(con, "SELECT * FROM r_sta_cnt")
+names(d)
+d$rid
+
+r_db_tiff <- dbGetQuery(con, "
+  SELECT ST_AsTIFF(ST_Union(rast), 'LZW') as tiff
+  FROM r_sta_cnt
+  WHERE rid=1")
+# Error: Failed to fetch row: 
+#   ERROR:  
+#     rt_raster_to_gdal: Could not load the output GDAL driver
+#   CONTEXT:
+#     PL/pgSQL function st_astiff(raster,text[],integer)
+
+# try raw
+r_db <- dbGetQuery(con, "
+  SELECT rast
+  FROM r_sta_cnt
+  WHERE rid=1")
+r_db_x <- raster(r_db$rast)
+plot(r_db$rast)
+
+# try using raw code from rpostgis::pgGetRast()
+info <- dbGetQuery(conn, glue("
+  select 
+    st_xmax(st_envelope(rast)) as xmx,\n              st_xmin(st_envelope(rast)) as xmn,\n              st_ymax(st_envelope(rast)) as ymx,\n              st_ymin(st_envelope(rast)) as ymn,\n              st_width(rast) as cols,\n              st_height(rast) as rows\n              from\n              (select st_union(", 
+                aq[1], rastque, ",", aq[2], aq[3], b, ") rast from ", 
+                nameque, " ", clauses, ") as a;"))
+            vals <- dbGetQuery(conn, paste0("select\n            unnest(st_dumpvalues(rast, 1)) as vals \n            from\n            (select st_union(", 
+                aq[1], rastque, ",", aq[2], aq[3], b, ") rast from ", 
+                nameque, " ", clauses, ") as a;"))$vals
+            rout <- raster::raster(nrows = info$rows, ncols = info$cols, 
+                xmn = info$xmn, xmx = info$xmx, ymn = info$ymn, 
+                ymx = info$ymx, crs = sp::CRS(p4s), val = vals)
+```
+
