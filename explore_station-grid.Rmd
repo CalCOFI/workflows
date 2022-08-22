@@ -689,21 +689,26 @@ mapview(r_sta_gcs)
 ## make `grd_mer_*km`
 
 ```{r}
-resolutions_km = c(1, 10, 100)
+librarian::shelf(
+  calcofi/calcofi4r,
+  glue, raster, sf, st)
+
+resolutions_km = c(5, 20, 50)
 
 stations_mer <- stations %>% 
   st_transform(3857) # web mercator 
-b <- stations_crs %>% 
+b <- stations_mer %>% 
   st_bbox()
 
-for (res_m in resolutions_km * 1000){
+for (res_km in resolutions_km){ # res_km = resolutions_km[2]
   r_tmpl <- raster(
     xmn = b$xmin, xmx = b$xmax, 
     ymn = b$ymin, ymx = b$ymax,
-    resolution = res_m,
+    resolution = res_km * 1000,
     crs = 3857)
-  r_sta <- rasterize(stations_crs, r_tmpl, fun="count")
-  
+  r_sta <- rasterize(stations_mer, field = 1, r_tmpl, fun="count")
+  # plot(r_sta)
+  writeRaster(r_sta, glue("data/r_sta-cnt_{res_km}km-mer.tif"), overwrite = T)
 }
 ```
 
