@@ -1,10 +1,12 @@
-source(here::here("libs/db.R")) # defines variables: con, dir_gdrive
+librarian::shelf(
+  here, readr)
+source(here("../apps/libs/db.R")) # defines variables: con, dir_gdrive
 
 # 2022-06-27: ctd_bottles.cst_cnt -> cast_count to match ctd_casts.*
 q("ALTER TABLE ctd_bottles RENAME COLUMN cst_cnt TO cast_count")
 
 # 2022-06-20: rename *species_codes* tables
-q("ALTER TABLE species_codes RENAME TO species_codes_old")
+#q("ALTER TABLE species_codes RENAME TO species_codes_old")
 q("ALTER TABLE new_species_codes RENAME TO species_codes")
 
 # 2022-06-20: + `species_groups` table
