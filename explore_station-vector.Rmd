@@ -15,6 +15,7 @@ editor_options:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+## setup
 
 Setup gcloud and ssh tunneled to database per 
 https://github.com/CalCOFI/server#ssh-tunnel-connection-to-postgis-db.
@@ -22,9 +23,14 @@ https://github.com/CalCOFI/server#ssh-tunnel-connection-to-postgis-db.
 ```{r}
 librarian::shelf(
   calcofi/calcofi4r, 
-  here, leaflet, sf)
+  DT, here, leaflet, mapview, readr, sf, stringr)
 source(here("../apps/libs/db.R"))
+options(readr.show_col_types = F)
+```
 
+## stations - calcofi4r
+
+```{r}
 table(calcofi4r::stations$is_cce)     # 113
 table(calcofi4r::stations$is_ccelter) # 66
 table(calcofi4r::stations$is_sccoos)  # 9
@@ -40,8 +46,6 @@ sta_n <- tbl(con, "ctd_casts") %>%
   left_join(
     calcofi4r::stations,
     by = "sta_id")
-
-sta_n
 
 n_min_cce <- sta_n %>% 
   filter(is_cce) %>% 
@@ -70,11 +74,98 @@ leaflet() %>%
     data = sta_nmin %>% 
       filter(cat == "ccelter"))
 
- mapview(sta_nmin, zcol = "n")
-  View()
+sta_nmin$n <- as.numeric(sta_nmin$n)
+mapview(sta_nmin, zcol = "n")
 
 sta_n %>% 
   filter(is_sccoos & !is_ccelter)
+```
 
+
+## stations - Station Positions
+
+Source: [Station Positions – CalCOFI](https://calcofi.org/sampling-info/station-positions/)
+
+- **75** Station Pattern: _**Summer**_ and _**Fall**_ surveys (~16 days at sea) since 1984
+- 104 or **113** Station Pattern: _**Winter**_ and _**Spring**_ surveys (~23 days at sea) 
+  - 113 stations have occasionally been occupied (25+ days at sea) by sampling every 20 nautical miles on line 66.7 off Monterey, CA (part of the MBARI ‘SECRET’ time-series)
+
+
+```{r, eval=FALSE}
+sta_ord_csv <- "./data/station-positions/CalCOFIStationOrder.csv"
+d_sta_ord <- read_csv(sta_ord_csv)
+
+# ran once
+# dbWriteTable(con, "stations_order", d_sta_ord)
+
+datatable(d_sta_ord)
+```
+
+
+```{r}
+d_ctd_casts_10 <- tbl(con, "ctd_casts") %>% 
+  slice_min(10) %>% 
+  collect()
+names(d_ctd_casts_10) %>% str_subset("sta|line")
+# "stline"  "rptline"  "acline"    
+# "ststa"   "rptsta"   "acsta"
+# which station and line to use?
+#  - st*  ?
+#  - rpt* reported?
+#  - ac*  actual?
+# tbl(con, "ctd_casts") %>% 
+#   # filter(stline != rptline) %>% 
+#   filter(stline != acline) %>% 
+#   group_by(stline) %>% 
+#   summarize(n = n()) %>% 
+#   collect()
+
+tbl(con, "stations_order") %>% 
+  anti_join(
+    tbl(con, "ctd_casts"),
+    by = c(
+#       "LINE" = "stline", 
+#       "STA"  = "ststa")) %>% 
+#   select(LINE, STA)
+# #    LINE   STA
+# #   <dbl> <dbl>
+# # 1  73.3   100
+# # 2  63.3   100
+      "LINE" = "rptline", 
+      "STA"  = "rptsta")) %>% 
+  select(LINE, STA) # 0
+# ok, so going with rptline, rptsta
+
+pts_sta <- tbl(con, "stations_order") %>% 
+  left_join(
+    tbl(con, "ctd_casts"),
+    by = c(
+      "LINE" = "rptline", 
+      "STA"  = "rptsta")) %>% 
+  rename(
+    sta_line = LINE, 
+    sta_sta  = STA,
+    lon      = `LON (DEC)`,
+    lat      = `LAT (DEC)`,
+    order    = `ORDER OCC`) %>% 
+  group_by(sta_line, sta_sta, lon, lat) %>% 
+  summarize(
+    n        = n(),
+    date_min = min(date, na.rm=T),
+    date_max = max(date, na.rm=T), 
+    .groups = "drop") %>% 
+  collect() %>% 
+  st_as_sf(
+    coords = c("lon", "lat"),
+    crs = 4326)
+
+# how many ctd_casts missing?
+# tbl(con, "ctd_casts") %>% count() %>% pull(n)  #   35,376
+# sum(pts_sta$n)                                 # - 17,852 = 17,524
+
+pts_sta$n <- as.numeric(pts_sta$n)
+mapView(pts_sta["n"])
+mapView(pts_sta, cex = "n")
+mapView(pts_sta, cex = "n", zcol = "n")
 ```
 
