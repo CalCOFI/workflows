@@ -23,7 +23,7 @@ https://github.com/CalCOFI/server#ssh-tunnel-connection-to-postgis-db.
 ```{r}
 librarian::shelf(
   calcofi/calcofi4r, 
-  DT, here, leaflet, mapview, readr, sf, stringr)
+  DT, here, janitor, leaflet, mapview, purrr, readr, sf, stringr, tidyr)
 source(here("../apps/libs/db.R"))
 options(readr.show_col_types = F)
 ```
@@ -122,6 +122,18 @@ names(d_ctd_casts_10) %>% str_subset("sta|line")
 #   summarize(n = n()) %>% 
 #   collect()
 
+# tbl(con, "ctd_casts") %>% 
+#   group_by(quarter) %>% 
+#   summarize(n = n()) %>% 
+#   arrange(desc(n)) %>% 
+#   collect()
+#   quarter       n
+#     <int> <int64>
+# 1       1    9933
+# 2       2    9660
+# 3       3    8706
+# 4       4    7077
+
 tbl(con, "stations_order") %>% 
   anti_join(
     tbl(con, "ctd_casts"),
@@ -137,6 +149,63 @@ tbl(con, "stations_order") %>%
       "STA"  = "rptsta")) %>% 
   select(LINE, STA) # 0
 # ok, so going with rptline, rptsta
+
+tbl(con, "stations_order") %>% 
+  group_by(`STA TYPE`) %>% 
+  summarize(n = n()) %>% 
+  arrange(desc(n)) %>% 
+  collect()
+
+tbl(con, "stations_order") %>% 
+  left_join(
+    tbl(con, "ctd_casts"),
+    by = c(
+      "LINE" = "rptline", 
+      "STA"  = "rptsta")) %>% 
+  group_by(LINE, STA, `STA TYPE`, quarter) %>% 
+  summarize(
+    n = n(),
+    .groups = "drop") %>% 
+  collect() %>% 
+  arrange(`STA TYPE`, LINE, STA) %>% 
+  pivot_wider(
+    names_from = quarter,
+    values_from = n) %>% 
+  mutate(
+    core = (LINE >= 76.7 & LINE <= 93.3)) %>% 
+  write_csv("data/stations_order_n.csv")
+
+tbl(con, "stations_order") %>% 
+  left_join(
+    tbl(con, "ctd_casts"),
+    by = c(
+      "LINE" = "rptline", 
+      "STA"  = "rptsta")) %>% 
+  filter(quarter %in% 3:4) %>% 
+  group_by(LINE, STA) %>% 
+  summarize(
+    n = n(),
+    .groups = "drop") %>% 
+  arrange(desc(n)) %>%
+  collect() %>% 
+  write_csv("data/stations_order_n_sum-fal.csv")
+
+tbl(con, "stations_order") %>%
+  left_join(
+    tbl(con, "ctd_casts"),
+    by = c(
+      "LINE" = "rptline", 
+      "STA"  = "rptsta")) %>% 
+  filter(quarter %in% 1:2) %>% 
+  group_by(LINE, STA) %>% 
+  summarize(
+    n = n(),
+    .groups = "drop") %>% 
+  arrange(desc(n)) %>%
+  collect() %>% 
+  write_csv("data/stations_order_n_win-spr.csv")
+
+
 
 pts_sta <- tbl(con, "stations_order") %>% 
   left_join(
@@ -169,5 +238,460 @@ pts_sta$n <- as.numeric(pts_sta$n)
 mapView(pts_sta["n"])
 mapView(pts_sta, cex = "n")
 mapView(pts_sta, cex = "n", zcol = "n")
+```
+
+## mgcv::gam() & isobands()
+
+
+* [Bathymetric maps and interpolation with R | datainwater](https://www.datainwater.com/post/lake_bathymetry/)
+* [Bathymetry & Lake Volume Estimation using R | Fish & Whistle](https://dewey.dunnington.ca/post/2019/bathymetry-lake-volume-estimation-using-r/)
+
+```{r}
+shelf(
+  interp, isoband, fields, mgcv, purrr,
+  rnaturalearth, ropensci/rnaturalearthhires, 
+  scales, stringr, terra, tibble)
+# library(raster);library(sf);library(tidyverse);library(fields);library(readxl);library(interp);library(leaflet)
+
+d_v <- tbl(con, "stations_order") %>% 
+  left_join(
+    tbl(con, "ctd_casts"),
+    by = c(
+      "LINE" = "rptline", 
+      "STA"  = "rptsta")) %>% 
+  left_join(
+    tbl(con, "ctd_bottles"),
+    by="cast_count") %>% 
+  group_by(lon = longitude, lat = latitude) %>% 
+  summarize(
+    v = mean(t_degc, na.rm=T),
+    .groups = "drop") %>% 
+  collect()
+write_csv(d_v, "data/demo_sta-extended_temp.csv")
+
+# %>% 
+#   filter(
+#     !is.na(v))
+
+p_v <- st_as_sf(
+  d_v, 
+  coords = c("lon", "lat"), crs = 4326, remove = T)
+
+h <- st_convex_hull(st_union(p_v))
+ca <- rnaturalearthhires::states10 %>% 
+  st_as_sf() %>% 
+  filter(
+    name == "California")
+h <- st_difference(h, ca)
+write_sf(h, "data/demo_area_extended.geojson")
+
+f <- mgcv::gam(
+  t_degc_avg ~ s(lon, lat, k = 60), 
+  data = d_v, method = "REML")
+
+g <- st_make_grid(
+  p_v, cellsize = c(0.1, 0.1), what = "centers") %>%
+  st_as_sf() %>%
+  cbind(., st_coordinates(.)) %>% 
+  rename(lon = X, lat = Y) %>% 
+  mutate(
+    in_h = st_intersects(h, ., sparse = F)[1,])
+g$t_degc_avg <- predict(
+  f, newdata = g, type = "response")
+
+m <- g %>% 
+  st_drop_geometry() %>%
+  select(-in_h) %>% 
+  pivot_wider(
+    names_from = lon, values_from = t_degc_avg) %>% 
+  column_to_rownames("lat") %>% 
+  as.matrix()
+dim(m)
+
+v <- g %>% 
+  filter(in_h) %>% 
+  pull(t_degc_avg)
+# r <- rast(g %>% select(t_degc_avg))
+range(v, na.rm = T)
+brks <- extended_breaks(5)(v)
+brks <- c(brks[1]-diff(brks)[1], brks)
+b <- isobands(
+  dimnames(m)[[2]], dimnames(m)[[1]], m, 
+  brks[-1], brks[-length(brks)]) # , levels_low, levels_high)
+
+b_d <- tibble(
+  geom = iso_to_sfg(b),
+  name = names(geom),
+  v_lo = str_split(name, ':', simplify=T)[,1] %>% as.numeric(),
+  v_hi = str_split(name, ':', simplify=T)[,2] %>% as.numeric(),
+  v = map2_dbl(v_lo, v_hi, mean)) %>% 
+  st_as_sf(crs=4326)
+# mapView(b_d)
+b_d <- st_intersection(b_d, h)
+
+b_d
+
+# mapView(b_d, zcol = "v_lo")
+mapView(b_d, zcol = "v", layer.name = "t_degc")
+
+```
+
+### test function in calcofi4r
+
+```{r}
+path_calcofi4r <- "~/Github/CalCOFI/calcofi4r"
+# devtools::install_local(path_calcofi4r)
+librarian::shelf(
+  # CalCOFI/calcofi4r, 
+  readr, sf)
+# devtools::load_all(path_calcofi4r)
+
+ply_v <- map_contours(df, ply)
+ply_v
+
+ply_v %>% 
+  rowwise() %>% 
+  mutate(
+    v2 = mean(c(v_lo, v_hi)))
+
+ply_v %>% 
+  st_drop_geometry()
+
+data(package="calcofi4r")
+```
+
+
+## Voronoi Grid of Effort
+
+
+
+```{r}
+
+rng_lin <- tbl(con, "stations_order") %>% 
+  filter(STA <= 60) %>% 
+  pull(LINE) %>% 
+  c(93.7) %>%
+  range() # 60.0 93.4
+rng_pos <- tbl(con, "stations_order") %>% 
+  filter(STA <= 60) %>% 
+  pull(STA) %>% 
+  c(25) %>% 
+  range() # 26.4 60.0
+
+g <- expand_grid(
+  lin = c(
+    57.7, 
+    map(seq(60, 100, 10), function(x){
+      cumsum(c(x, 3.3, 3.4)) })) %>% unlist(),
+  pos = seq(15, 65, 5)) %>% 
+  st_as_sf(
+    coords = c("lin", "pos"), remove = F,
+    crs = st_crs("+proj=calcofi"))
+# mapView(g)
+
+v_pos5 <- st_voronoi(st_union(st_geometry(g))) %>%
+  st_collection_extract(type = "POLYGON") %>%
+  st_sf() %>% 
+  st_make_valid() %>% 
+  st_join(g) %>% 
+  filter(
+    lin <= rng_lin[2],
+    lin >= rng_lin[1],
+    pos < 60,
+    pos >= rng_pos[1]) %>% 
+  mutate(
+    dpos = 5)
+# mapView(v_pos5)
+
+g <- expand_grid(
+  lin = c(
+    map(seq(50, 100, 10), function(x){
+      cumsum(c(x, 3.3, 3.4)) })) %>% unlist(),
+  pos = seq(50, 130, 10)) %>% 
+  st_as_sf(
+    coords = c("lin", "pos"), remove = F,
+    crs = st_crs("+proj=calcofi"))
+# mapView(g)
+
+v_pos10 <- st_voronoi(st_union(st_geometry(g))) %>%
+  st_collection_extract(type = "POLYGON") %>%
+  st_sf() %>% 
+  st_make_valid() %>% 
+  st_join(g) %>% 
+  filter(
+    lin >= 60 & lin <= 93.3,
+    pos >= 60 & pos <= 120,
+    ifelse(
+      lin < 83.3,
+      pos <= 100,
+      T),
+    ifelse(
+      lin %in% c(83.3, 86.7),
+      pos <= 110,
+      T)) %>% 
+  mutate(
+    dpos = 10)
+# mapView(v_pos10)
+
+lnd <- rnaturalearth::ne_countries(
+  country =c(
+    "United States of America", "Mexico", "Canada"),
+  scale = 10, returnclass = "sf") %>% 
+  st_union()
+
+# h0 <- h
+h <- st_read(
+  con, 
+  query = 
+    "SELECT 
+       ST_ConvexHull(ST_COLLECT(geom)) 
+     FROM ctd_casts") %>% 
+  st_difference(lnd) %>% 
+  st_make_valid()
+# mapView(h)
+
+hp <- st_bbox(h) %>% 
+  st_as_sfc() %>% 
+  st_coordinates() %>% 
+  as.data.frame() %>% 
+  st_as_sf(
+    coords = c("X", "Y"),
+    crs = 4326)
+# hp
+
+hb <- hp %>% 
+  st_transform(st_crs("+proj=calcofi")) %>% 
+  st_bbox()
+
+g <- expand_grid(
+  lin = c(
+    seq(60, hb["xmax"] + 10,  10), 
+    seq(60, hb["xmin"] - 10, -10)) %>% 
+    unique(),
+  pos = c(
+    seq(100, hb["ymax"]+ 20,  20), 
+    seq(100, hb["ymin"]- 20, -20)) %>% 
+    unique()) %>% 
+  st_as_sf(
+    coords = c("lin", "pos"), remove = F,
+    crs = st_crs("+proj=calcofi"))
+# mapView(g)
+
+v_pos20 <- st_voronoi(st_union(st_geometry(g))) %>%
+  st_collection_extract(type = "POLYGON") %>%
+  st_sf() %>% 
+  st_make_valid() %>% 
+  st_join(g) %>% 
+  filter(
+    lin < hb["xmax"],
+    lin > hb["xmin"],
+    pos < hb["ymax"],
+    pos > hb["ymin"]) %>% 
+  mutate(
+    dpos = 20)
+
+v_pos20 <- v_pos20 %>% 
+  filter(
+    st_intersects(
+      v_pos20,
+      h %>% st_transform(st_crs("+proj=calcofi")),
+      sparse = F)[,1])
+
+v_pos10 <- st_difference(
+  v_pos10, st_union(v_pos5))
+  
+V <- v_pos20 %>% 
+  st_difference(
+    st_union(
+      st_union(v_pos10), 
+      st_union(v_pos5))) %>% 
+  bind_rows(v_pos10) %>% 
+  bind_rows(v_pos5)
+
+V <- V %>% 
+  filter(
+    st_intersects(
+      V,
+      h %>% st_transform(st_crs("+proj=calcofi")),
+      sparse = F)[,1])
+# mapView(V)
+
+u <- V %>% 
+  filter(
+    (dpos == 20 & lin == 60 & pos == 120) |
+    (dpos == 20 & lin == 60 & pos == 100)) %>% 
+  st_union() %>% 
+  st_as_sf() %>% 
+  rename(geometry = x) %>% 
+  mutate(
+    dpos = 20,
+    lin  = 60,
+    pos  = 110)
+V <- st_difference(V, st_geometry(u)) %>% 
+  bind_rows(u)
+
+u <- V %>% 
+  filter(
+    (dpos == 20 & lin == 70 & pos == 120) |
+    (dpos == 20 & lin == 70 & pos == 100)) %>% 
+  st_union() %>% 
+  st_as_sf() %>% 
+  rename(geometry = x) %>% 
+  mutate(
+    dpos = 20,
+    lin  = 70,
+    pos  = 110)
+V <- st_difference(V, st_geometry(u)) %>% 
+  bind_rows(u)
+
+u <- V %>% 
+  filter(
+    (dpos == 20 & lin == 80 & pos == 120) |
+    (dpos == 20 & lin == 80 & pos == 100)) %>% 
+  st_union() %>% 
+  st_as_sf() %>% 
+  rename(geometry = x) %>% 
+  mutate(
+    dpos = 20,
+    lin  = 80,
+    pos  = 110)
+V <- st_difference(V, st_geometry(u)) %>% 
+  bind_rows(u)
+
+u <- V %>% 
+  filter(
+    (dpos == 20 & lin == 50 & pos == 80) |
+    (dpos == 20 & lin == 60 & pos == 80)) %>% 
+  st_union() %>% 
+  st_as_sf() %>% 
+  rename(geometry = x) %>% 
+  mutate(
+    dpos = 20,
+    lin  = 55,
+    pos  = 80)
+V <- st_difference(V, st_geometry(u)) %>% 
+  bind_rows(u)
+
+u <- V %>% 
+  filter(
+    (dpos == 20 & lin == 50 & pos == 60) |
+    (dpos == 20 & lin == 60 & pos == 60)) %>% 
+  st_union() %>% 
+  st_as_sf() %>% 
+  rename(geometry = x) %>% 
+  mutate(
+    dpos = 20,
+    lin  = 55,
+    pos  = 60)
+V <- st_difference(V, st_geometry(u)) %>% 
+  bind_rows(u)
+
+u <- V %>% 
+  filter(
+    (dpos == 20 & lin == 50 & pos == 40) |
+    (dpos == 20 & lin == 60 & pos == 40)) %>% 
+  st_union() %>% 
+  st_as_sf() %>% 
+  rename(geometry = x) %>% 
+  mutate(
+    dpos = 20,
+    lin  = 55,
+    pos  = 40)
+V <- st_difference(V, st_geometry(u)) %>% 
+  bind_rows(u)
+# mapView(V)
+
+V <- st_difference(
+  V, st_transform(lnd, st_crs("+proj=calcofi")))
+# mapView(V)
+
+V_ctr <- V %>% 
+  mutate(
+    geometry = st_centroid(
+      geometry, of_largest_polygon = T))
+
+st_write(
+  V %>% st_transform(4326), con, "effort_grid", 
+  layer_options = c(
+    "OVERWRITE=yes", "LAUNDER=true"))
+
+st_write(
+  V_ctr %>% st_transform(4326), con, "effort_ctrs", 
+  layer_options = c(
+    "OVERWRITE=yes", "LAUNDER=true"))
+
+
+g <- st_read(con, "effort_grid")
+mapView(g)
+
+p <- st_read(con, "effort_ctrs")
+mapView(p)
+
+mapView(g) + 
+  mapView(p)
+```
+
+
+## summarize by new grid
+
+```{r}
+system.time({
+  x <- dbGetQuery(
+    con, 
+    "SELECT count(*) AS n, g.sta_key 
+     FROM effort_grid g 
+     JOIN ctd_casts c 
+       ON ST_Intersects(g.geom, c.geom) 
+     GROUP BY g.sta_key;")
+}) # 6.026 6.058 
+
+g <- st_read(con, "effort_grid") %>% 
+  left_join(
+    tibble(x) %>% 
+      mutate(n = as.integer(n)), 
+    by = "sta_key")
+
+g10 <- g %>% 
+  filter(n > 10)
+h10 <- st_convex_hull(st_union(g10))
+mapView(h10)
+
+
+g10 <- g %>% 
+  filter(
+    st_intersects(g, h10, sparse = F)[,1])
+
+mapView(g10, zcol = "n")
+
+library(mapedit)
+
+# manually draw effort grid boundary
+y_geo <- "data/effort-grid_boundary-manual-drawn.geojson"
+if (!file.exists(egb_geo)){
+  m <- mapView(g10, zcol = "n")
+  y <-  drawFeatures(m)
+  write_sf(y, y_geo)
+}
+y <- read_sf(y_geo)
+
+  mapview(g10, zcol = "n") +
+  mapview(y)
+
+gy <- g %>% 
+  filter(
+    st_intersects(g, y, sparse = F)[,1])
+
+gy <- gy %>% 
+  mutate(
+    n_log10 = log10(n))
+mapview(gy, zcol = "n_log10")
+
+gy %>% 
+  filter(!is.na(n)) %>% 
+  select(sta_key) %>% 
+  st_drop_geometry() %>% 
+  write_csv("data/effort-grid_sta-keys.csv")
+  mapview()
+
 ```
 
