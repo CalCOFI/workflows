@@ -1,0 +1,55 @@
+---
+title: "Database Views"
+author: "Ben Best"
+date: "2022-12-06"
+date-modified: today
+---
+
+## Overview
+
+These databaase views make common queries easier by consolidating related tables. A regular `VIEW` is executed every time it's called whereas a `MATERIALIZED VIEW` is cached and instantly available like a table.
+
+By generating these views with this Quarto document, you'll see when it was last rendered with the "MODIFIED" date stamp and any other diagnostic information can be displayed as a versioned record in Github.
+
+## `view_ctd_casts`
+
+```{r}
+# load latest dev version of calcofi4r from parent folder
+devtools::load_all(here::here("../calcofi4r"))
+
+# get database connection (con)
+con <- cc_db_connect()
+
+# list tables in db
+dbListTables(con)
+
+# preview tables used for input
+tbl(con, "ctd_casts")
+
+# preview tables used for input
+tbl(con, "effort_grid")
+
+# create view
+dbSendQuery(
+  con, 
+  "DROP MATERIALIZED VIEW IF EXISTS view_ctd_casts")
+dbSendQuery(
+  con,
+  "CREATE MATERIALIZED VIEW view_ctd_casts AS
+  SELECT 
+    c.*,  
+    g.sta_shore AS grid_shore, sta_pattern AS grid_pattern, sta_key AS grid_key, 
+    g.sta_lin AS grid_lin, g.sta_pos AS grid_pos
+  FROM ctd_casts AS c
+  JOIN effort_grid AS g
+  ON ST_Contains(g.geom, c.geom)")
+
+tbl(con, "view_ctd_casts")
+create_index(con, "view_ctd_casts", "cast_count", is_unique=T)
+create_index(con, "view_ctd_casts", "geom", is_geom=T)
+create_index(con, "view_ctd_casts", "quarter")
+create_index(con, "view_ctd_casts", "date")
+create_index(con, "view_ctd_casts", "grid_pattern")
+create_index(con, "view_ctd_casts", "grid_shore")
+```
+
