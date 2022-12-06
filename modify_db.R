@@ -2,6 +2,8 @@ librarian::shelf(
   here, readr)
 source(here("../apps/libs/db.R")) # defines variables: con, dir_gdrive
 
+# 2022-10-10: + ctd_bottles.
+
 # 2022-06-27: ctd_bottles.cst_cnt -> cast_count to match ctd_casts.*
 q("ALTER TABLE ctd_bottles RENAME COLUMN cst_cnt TO cast_count")
 
