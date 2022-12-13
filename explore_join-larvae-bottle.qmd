@@ -1,5 +1,5 @@
 ---
-title: "Join Bottle & Larval Data"
+title: "Join Larval and Bottle Data"
 format: 
   html:
     toc: true
@@ -100,26 +100,6 @@ weighted.mean(x$t_degc, x$diff_hrs)
 ## Get Space & Time for Larval Data
 
 ```{r}
-# try with *_new tables:
-tbl(con, "larvae_counts") %>%   # tbl_fields("larvae_counts")
-# cruise, ship, orderocc, towtype, townum, netloc: spccode, count
-  left_join(
-    tbl(con, "cruises"),        # tbl_fields("cruises")
-    # cruise, ship: cruiseid
-    by = c("cruise", "ship")) %>% 
-  left_join(
-    tbl(con, "stations_new"),   # tbl_fields("stations_new")
-    # cruiseid, orderocc: stationid, latitude, longitude, line, station
-    by = c("cruiseid", "orderocc")) %>% 
-  left_join(
-    tbl(con, "tows_new"),       # tbl_fields("tows_new")
-    # stationid, towtype, townumber: towid, starttime
-    by = c("stationid", "towtype", "townum" = "townumber")) %>%
-  filter(!is.na(starttime), !is.na(longitude)) %>% 
-  arrange(desc(starttime))
-# yikes, no rows!
-
-# try with old:
 d_larvae <- tbl(
   con, "larvae_counts") %>%  # tbl_fields("larvae_counts")
   # cruise, ship, orderocc, towtype, townum, netloc: spccode, count
@@ -155,7 +135,8 @@ d_larvae_miss_stations <- tbl(
 d_larvae_miss_stations %>% 
   write_csv("data/larvae-count_cruise-ship_missing-in_stations.csv")
 d_larvae_miss_stations %>% 
-  datatable()
+  datatable(
+    caption = "The cruise and ship values from the larvae_counts table without a match in the stations table.")
 
 # show cruise-ship in larvae_counts missing tows with datetime
 d_larvae_miss_tows <- tbl(
@@ -173,7 +154,8 @@ d_larvae_miss_tows <- tbl(
 d_larvae_miss_tows %>% 
   write_csv("data/larvae-count_cruise-ship_missing-in_tows.csv")
 d_larvae_miss_tows %>% 
-  datatable()
+  datatable(
+    caption = "The cruise and ship values from the larvae_counts table without a match in the tows table.")
 
 # get larvae with valid space and time attribution
 d_larvae_st <- d_larvae %>% 
@@ -195,6 +177,11 @@ We're clearly mismatching something since the most recent date for the ERDDAP su
 
 - [ERDDAP - CalCOFI Larvae Counts, Scientific Names A to AM - Data Access Form](https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFIlrvcntAtoAM.html)
 
+Here are some of the files output above highlighting larvae_count data without expected matches:
+
+* [larvae-count\_cruise-ship\_missing-in\_stations.csv](https://github.com/CalCOFI/scripts/blob/main/data/larvae-count_cruise-ship_missing-in_stations.csv)
+* [larvae-count\_cruise-ship\_missing-in\_tows.csv](https://github.com/CalCOFI/scripts/blob/main/data/larvae-count_cruise-ship_missing-in_tows.csv)
+* [larvae-count\_missing-location-or-date.csv](https://github.com/CalCOFI/scripts/blob/main/data/larvae-count_missing-location-or-date.csv)
 
 ## Get Space & Time for Larval Data with `*_new` Tables -- no results
 
