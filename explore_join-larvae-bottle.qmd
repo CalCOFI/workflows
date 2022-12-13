@@ -1,0 +1,238 @@
+---
+title: "Join Larval and Bottle Data"
+format: 
+  html:
+    toc: true
+    number-sections: true
+editor_options: 
+  chunk_output_type: console
+---
+
+## Load packages and Connect to Database
+
+With [`cc_db_connect()`](https://calcofi.io/calcofi4r/reference/cc_db_connect.html), note that you must either be running this from the CalCOFI server or have a tunnelled SSH connection with a user account on the server.
+
+```{r}
+#| warning: false
+
+if (!require("librarian"))
+  install.packages("librarian")
+# use librarian::shelf() to load packages, installing if needed
+librarian::shelf(
+  calcofi/calcofi4r,
+  dplyr, DBI, DT, glue, readr, sf, skimr,
+  quiet = T)
+
+tbl_head <- function(tbl, n=10){
+  dbGetQuery(
+    con, 
+    glue("SELECT * FROM {tbl} LIMIT {n}")) %>% 
+  datatable()
+}
+tbl_fields <- function(tbl){
+  dbListFields(con, tbl) %>% paste(collapse=", ")
+}
+
+con <- cc_db_connect()
+```
+
+## Get Nearest Bottle Data
+
+```{r}
+# create function to form query and return results
+get_nearest_bottle <- function(
+    fld,
+    datetime, max_hrs,
+    lon, lat, max_kms,
+    depth_min, depth_max,
+    verbose = FALSE){
+  
+  sql <- glue(
+    "SELECT 
+      b.{fld},
+      c.datetime, c.longitude, c.latitude,
+      b.depthm,
+      ST_Distance(c.geom, ST_GeomFromText('POINT({lon} {lat})', 4326)::GEOGRAPHY)/1000
+        AS diff_kms,
+      EXTRACT(EPOCH FROM c.datetime - '{datetime}'::TIMESTAMP)/3600
+        AS diff_hrs
+    FROM ctd_bottles AS b
+    LEFT JOIN
+      ctd_casts AS c USING (cast_count)
+    WHERE
+      ST_DWithin(
+        c.geom::GEOGRAPHY,
+        ST_GeomFromText('POINT({lon} {lat})', 4326)::GEOGRAPHY,
+        {max_kms} * 1000) AND
+      c.datetime <= ('{datetime}'::TIMESTAMP + INTERVAL '{max_hrs} HOUR') AND
+      c.datetime >= ('{datetime}'::TIMESTAMP - INTERVAL '{max_hrs} HOUR') AND
+    depthm <= {depth_max} AND
+    depthm >= {depth_min}")
+  
+  if (verbose)
+    message(sql)
+  
+  dbGetQuery(con, sql) %>% 
+    tibble()
+}
+
+# run with "most recent" larval data attributable in space and time
+x <- get_nearest_bottle(
+  fld       = "t_degc",
+  datetime  = "1999-12-06 20:32:00 UTC", 
+  max_hrs   = 800,
+  lon       = -117.8483,
+  lat       =  29.11833, 
+  max_kms   = 1000,
+  depth_min = 0,
+  depth_max = 20,
+  verbose   = TRUE)
+datatable(x)
+
+# render temperature using simple mean
+mean(x$t_degc)
+# compare weighted means using seperation difference in space (kilometers)...
+weighted.mean(x$t_degc, x$diff_kms)
+# ... or time (hours)
+weighted.mean(x$t_degc, x$diff_hrs)
+```
+
+## Get Space & Time for Larval Data
+
+```{r}
+d_larvae <- tbl(
+  con, "larvae_counts") %>%  # tbl_fields("larvae_counts")
+  # cruise, ship, orderocc, towtype, townum, netloc: spccode, count
+  left_join(
+    tbl(con, "stations"),    # tbl_fields("stations")    
+    # cruise, ship, orderocc: longitude, latitude, line, station, geom
+    by = c("cruise", "ship", "orderocc")) %>% 
+  left_join(
+    tbl(con, "tows"),        # tbl_fields("tows")    
+    # cruise, ship, orderocc, towtype, townum, netloc: shf, volsampled, percsorted, datetime, date
+    by = c("cruise", "ship", "orderocc", "towtype", "townum", "netloc")) %>% 
+  arrange(desc(date), desc(datetime)) %>% 
+  # show_query() # uncomment to show SQL
+  collect()
+d_larvae_miss <- d_larvae %>% 
+  filter(is.na(date) | is.na(longitude)) 
+d_larvae_miss %>% 
+  write_csv("data/larvae-count_missing-location-or-date.csv")
+nrow(d_larvae_miss) # 90,131 without attributable date or location
+
+# show cruise-ship in larvae_counts missing stations with location
+d_larvae_miss_stations <- tbl(
+  con, "larvae_counts") %>%
+  anti_join(
+    tbl(con, "stations"),
+    by = c("cruise", "ship", "orderocc")) %>% 
+  group_by(cruise, ship) %>% 
+  summarize(
+    n_orderocc = n(),
+    .groups = "drop") %>% 
+  # show_query() # uncomment to show SQL
+  collect()
+d_larvae_miss_stations %>% 
+  write_csv("data/larvae-count_cruise-ship_missing-in_stations.csv")
+d_larvae_miss_stations %>% 
+  datatable(
+    caption = "The cruise and ship values from the larvae_counts table without a match in the stations table.")
+
+# show cruise-ship in larvae_counts missing tows with datetime
+d_larvae_miss_tows <- tbl(
+  con, "larvae_counts") %>%
+  anti_join(
+    tbl(con, "tows"),        # tbl_fields("tows")    
+    # cruise, ship, orderocc, towtype, townum, netloc: shf, volsampled, percsorted, datetime, date
+    by = c("cruise", "ship", "orderocc", "towtype", "townum", "netloc")) %>% 
+  group_by(cruise, ship) %>% 
+  summarize(
+    n_orderocc = n(),
+    .groups = "drop") %>% 
+  # show_query() # uncomment to show SQL
+  collect()
+d_larvae_miss_tows %>% 
+  write_csv("data/larvae-count_cruise-ship_missing-in_tows.csv")
+d_larvae_miss_tows %>% 
+  datatable(
+    caption = "The cruise and ship values from the larvae_counts table without a match in the tows table.")
+
+# get larvae with valid space and time attribution
+d_larvae_st <- d_larvae %>% 
+  filter(
+    !is.na(date),
+    !is.na(longitude)) 
+nrow(d_larvae_st) # 307,365 rows with valid space and time attribution
+d_larvae_st1 <- d_larvae_st %>% 
+  slice(1) %>% 
+  select(-geom)
+d_larvae_st1 %>% 
+  datatable()
+```
+
+So the most recent larval data with attributable space and time is:
+- `r d_larvae_st1$datetime` (longitude: `r d_larvae_st1$longitude`; latitude: `r d_larvae_st1$latitude`)
+
+We're clearly mismatching something since the most recent date for the ERDDAP subset is `2020-01-18T04:57:00Z`:
+
+- [ERDDAP - CalCOFI Larvae Counts, Scientific Names A to AM - Data Access Form](https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFIlrvcntAtoAM.html)
+
+Here are some of the files output above highlighting larvae_count data without expected matches:
+
+* [larvae-count\_cruise-ship\_missing-in\_stations.csv](https://github.com/CalCOFI/scripts/blob/main/data/larvae-count_cruise-ship_missing-in_stations.csv)
+* [larvae-count\_cruise-ship\_missing-in\_tows.csv](https://github.com/CalCOFI/scripts/blob/main/data/larvae-count_cruise-ship_missing-in_tows.csv)
+* [larvae-count\_missing-location-or-date.csv](https://github.com/CalCOFI/scripts/blob/main/data/larvae-count_missing-location-or-date.csv)
+
+## Get Space & Time for Larval Data with `*_new` Tables -- no results
+
+```{r}
+# try with *_new tables:
+tbl(con, "larvae_counts") %>%   # tbl_fields("larvae_counts")
+# cruise, ship, orderocc, towtype, townum, netloc: spccode, count
+  left_join(
+    tbl(con, "cruises"),        # tbl_fields("cruises")
+    # cruise, ship: cruiseid
+    by = c("cruise", "ship")) %>% 
+  left_join(
+    tbl(con, "stations_new"),   # tbl_fields("stations_new")
+    # cruiseid, orderocc: stationid, latitude, longitude, line, station
+    by = c("cruiseid", "orderocc")) %>% 
+  left_join(
+    tbl(con, "tows_new"),       # tbl_fields("tows_new")
+    # stationid, towtype, townumber: towid, starttime
+    by = c("stationid", "towtype", "townum" = "townumber")) %>%
+  filter(!is.na(starttime), !is.na(longitude)) %>% 
+  arrange(desc(starttime))
+# yikes, no rows!
+```
+
+## Added `ctd_casts.datetime`
+
+```{r}
+# add a single field with datetime to make querying easier
+dbSendQuery(
+  con,
+  "ALTER TABLE ctd_casts ADD COLUMN IF NOT EXISTS datetime TIMESTAMP")
+dbSendQuery(
+  con,
+  "UPDATE ctd_casts 
+  SET datetime = (date::text || ' ' || time::text || ' America/Los_Angeles')::timestamp")
+```
+
+
+## Show Tables
+
+```{r}
+# show all tables
+dbListTables(con)
+
+tbl_head("ctd_casts")
+tbl_head("ctd_bottles")
+tbl_head("larvae_counts")
+tbl_head("tows")
+tbl_head("tows_new")
+tbl_head("tow_types")
+tbl_head("stations")
+tbl_head("stations_new")
+```
+
