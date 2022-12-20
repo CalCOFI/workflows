@@ -207,6 +207,62 @@ tbl(con, "larvae_counts") %>%   # tbl_fields("larvae_counts")
 # yikes, no rows!
 ```
 
+
+## Get Space & Time for Larval Data with `*_new` Tables, with Marina's latest
+
+Marina:
+
+> I’ve uploaded some new tables into Postgres, containing the updated data that Ed had sent me earlier.  Some tables are meant to replace existing ones, and have names ending with _new (e.g. larvae_counts_new, scrippscasts_new).  There are also tables called ships, cruises and nets.  The hierarchy is:
+> 
+> cruise -> station -> tow -> net -> eggs/larvae
+> 
+> The species_codes_new table has some entries missing in the taxon_rank column, I’ll fill them in ASAP.
+
+Questions:
+- [ ] How does `scrippscasts_new` fit into above scheme (cruise -> station -> tow -> net -> eggs/larvae)?
+
+```{r}
+# cruise -> station -> tow -> net -> eggs/larvae
+d <- tbl(con, "cruises") %>%        # tbl_fields("cruises")
+  # cruiseid, cruise, ship
+  left_join(
+    tbl(con, "stations_new"),       # tbl_fields("stations_new")
+    # cruiseid: stationid, orderocc, latitude, longitude, line, station
+    by = "cruiseid") %>% 
+  left_join(
+    tbl(con, "tows_new"),           # tbl_fields("tows_new")
+    # stationid: towid, towtype, townumber, starttime
+    by = "stationid") %>%
+  left_join(
+    tbl(con, "nets"),               # tbl_fields("nets")
+    # towid: netid, netside, shf, volsampled, propsorted
+    by = "towid") %>%
+  left_join(
+    tbl(con, "larvae_counts_new"),  # tbl_fields("larvae_counts_new")
+    # netid: spccode, tally
+    by = "netid") %>% 
+  left_join(
+    tbl(con, "species_codes_new"),  # tbl_fields("species_codes_new")
+    # spccode: id, scientific_name, itis_tsn, common_name, taxon_rank
+    by = "spccode") %>% 
+  arrange(desc(starttime)) %>% 
+  # show_query()
+  collect()
+
+# nrow(d)   # 398,142
+d_l <- d %>% 
+  filter(
+    !is.na(tally),
+    !is.na(latitude), !is.na(longitude),
+    !is.na(starttime))
+# nrow(d_l) # 365,213
+
+# look at first 1,000 records
+d_l %>% 
+  head(1000) %>% 
+  datatable()
+```
+
 ## Added `ctd_casts.datetime`
 
 ```{r}
