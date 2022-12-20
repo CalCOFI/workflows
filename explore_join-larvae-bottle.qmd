@@ -47,6 +47,8 @@ get_nearest_bottle <- function(
     depth_min, depth_max,
     verbose = FALSE){
   
+  message(glue("{datetime}: {lon}, {lat}"))
+  
   sql <- glue(
     "SELECT 
       b.{fld},
@@ -304,6 +306,104 @@ d_l %>%
   head(1000) %>% 
   datatable()
 ```
+
+## Run `get_nearest_bottle()` on one record
+
+```{r}
+# dbGetQuery(con, "SELECT MAX(datetime) FROM ctd_casts")
+# 2020-01-26 01:51:16
+
+d_l1 <- d_l %>% 
+  filter(as.Date(starttime) < as.Date("2020-01-26")) %>% 
+  slice(1)
+# str(d_l1)
+# tibble [1 × 25] (S3: tbl_df/tbl/data.frame)
+#  $ cruiseid       : int 683
+#  $ cruise         : chr "202001"
+#  $ ship           : chr "RL"
+#  $ stationid      : int 60417
+#  $ orderocc       : int 103
+#  $ latitude       : num 36.9
+#  $ longitude      : num -125
+#  $ line           : num 60
+#  $ station        : num 80
+#  $ towid          : int 75794
+#  $ towtype        : chr "CB"
+#  $ townumber      : int 1
+#  $ starttime      : POSIXct[1:1], format: "2020-01-25 21:01:00"
+#  $ netid          : int 88135
+#  $ netside        : chr "S"
+#  $ shf            : num 4.43
+#  $ volsampled     : num 478
+#  $ propsorted     : num 0.5
+#  $ spccode        : int 288
+#  $ tally          : int 1
+#  $ id             : int 148
+#  $ scientific_name: chr "Protomyctophum crockeri"
+#  $ itis_tsn       : chr "162685"
+#  $ common_name    : chr "California flashlightfish                    "
+#  $ taxon_rank     : chr "Species"
+
+# run with "most recent" larval data attributable in space and time
+x <- get_nearest_bottle(
+  fld       = "t_degc",
+  datetime  = d_l1$starttime, 
+  max_hrs   = 2,
+  lon       = d_l1$longitude,
+  lat       = d_l1$latitude, 
+  max_kms   = 10,
+  depth_min = 0,
+  depth_max = 20,
+  verbose   = F)
+x
+datatable(x)
+
+# render temperature using simple mean
+mean(x$t_degc)
+# compare weighted means using seperation difference in space (kilometers)...
+weighted.mean(x$t_degc, x$diff_kms)
+# ... or time (hours)
+weighted.mean(x$t_degc, x$diff_hrs)
+```
+
+## Run `get_nearest_bottle()` on many records using `purrr`
+
+* [R for Data Science (2e) - 25  Hierarchical data](https://r4ds.hadley.nz/rectangling.html#introduction)
+
+- R menu Help > Cheat Sheets > List manipulation with `purrr`
+
+```{r}
+librarian::shelf(
+  purrr)
+
+d10 <- d_l %>% 
+  filter(as.Date(starttime) < as.Date("2020-01-26")) %>% 
+  slice(1:10) %>% 
+  mutate(
+    temp_data = pmap(
+      list(starttime, longitude, latitude),
+      function(starttime, longitude, latitude, ...){
+        get_nearest_bottle(
+          fld       = "t_degc",
+          datetime  = starttime, 
+          max_hrs   = 2,
+          lon       = longitude,
+          lat       = latitude, 
+          max_kms   = 10,
+          depth_min = 0,
+          depth_max = 20) } ),
+    temp_nrow = map_int(temp_data, nrow),
+    temp_avg  = map_dbl(
+      temp_data, 
+      function(x){
+        y <- x %>% 
+          filter(depthm == 0)
+        weighted.mean(y$t_degc, y$diff_kms) } ) )
+d10 %>% 
+  select(1:7, towid, netid, starttime, temp_nrow, temp_avg) %>% 
+  datatable()
+```
+
 
 ## Added `ctd_casts.datetime`
 
