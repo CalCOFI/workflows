@@ -171,6 +171,48 @@ d_larvae_st1 %>%
   datatable()
 ```
 
+
+
+Yes, above is a bad merge. Compare lines 104-116 to below which returns 397,496 records, all with times and geoms.
+BUT let's get my updated data structure on here so that we don't have to join by composite primary keys with six fields. I think that will make this much shorter and less error prone. 
+```{r}
+dbGetQuery(con,
+   '
+    select * from larvae_counts
+    left join tows on larvae_counts.cruise=tows.cruise and
+        larvae_counts.ship=tows.ship and
+        larvae_counts.orderocc=tows.orderocc and
+        larvae_counts.towtype=tows.towtype and
+        larvae_counts.townum=tows.townum and
+        larvae_counts.netloc=tows.netloc
+    left join stations on tows.cruise=stations.cruise and
+        tows.ship=stations.ship and
+        tows.orderocc=stations.orderocc
+    ')
+
+# check
+dbGetQuery(con,
+   '
+    select count(*) from
+    (select * from larvae_counts
+    left join tows on larvae_counts.cruise=tows.cruise and
+        larvae_counts.ship=tows.ship and
+        larvae_counts.orderocc=tows.orderocc and
+        larvae_counts.towtype=tows.towtype and
+        larvae_counts.townum=tows.townum and
+        larvae_counts.netloc=tows.netloc
+    left join stations on tows.cruise=stations.cruise and
+        tows.ship=stations.ship and
+        tows.orderocc=stations.orderocc
+    where datetime=null or geom=null) A
+    ')
+
+```
+
+
+
+
+
 So the most recent larval data with attributable space and time is:
 - `r d_larvae_st1$datetime` (longitude: `r d_larvae_st1$longitude`; latitude: `r d_larvae_st1$latitude`)
 
