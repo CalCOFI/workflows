@@ -36,7 +36,7 @@ tbl_fields <- function(tbl){
 con <- cc_db_connect()
 ```
 
-## Get Nearest Bottle Data
+## Create function `get_nearest_bottle()`
 
 ```{r}
 # create function to form query and return results
@@ -48,7 +48,7 @@ get_nearest_bottle <- function(
     verbose = FALSE){
   
   message(glue("{datetime}: {lon}, {lat}"))
-  
+
   sql <- glue(
     "SELECT 
       b.{fld},
@@ -99,162 +99,22 @@ weighted.mean(x$t_degc, x$diff_kms)
 weighted.mean(x$t_degc, x$diff_hrs)
 ```
 
-## Get Space & Time for Larval Data
+#### Added `ctd_casts.datetime`
 
 ```{r}
-d_larvae <- tbl(
-  con, "larvae_counts") %>%  # tbl_fields("larvae_counts")
-  # cruise, ship, orderocc, towtype, townum, netloc: spccode, count
-  left_join(
-    tbl(con, "stations"),    # tbl_fields("stations")    
-    # cruise, ship, orderocc: longitude, latitude, line, station, geom
-    by = c("cruise", "ship", "orderocc")) %>% 
-  left_join(
-    tbl(con, "tows"),        # tbl_fields("tows")    
-    # cruise, ship, orderocc, towtype, townum, netloc: shf, volsampled, percsorted, datetime, date
-    by = c("cruise", "ship", "orderocc", "towtype", "townum", "netloc")) %>% 
-  arrange(desc(date), desc(datetime)) %>% 
-  # show_query() # uncomment to show SQL
-  collect()
-# nrow(d_larvae) # 397,496
-d_larvae_miss <- d_larvae %>% 
-  filter(is.na(date) | is.na(longitude)) 
-d_larvae_miss %>% 
-  write_csv("data/larvae-count_missing-location-or-date.csv")
-nrow(d_larvae_miss) # 90,131 without attributable date or location
-
-# show cruise-ship in larvae_counts missing stations with location
-d_larvae_miss_stations <- tbl(
-  con, "larvae_counts") %>%
-  anti_join(
-    tbl(con, "stations"),
-    by = c("cruise", "ship", "orderocc")) %>% 
-  group_by(cruise, ship) %>% 
-  summarize(
-    n_orderocc = n(),
-    .groups = "drop") %>% 
-  # show_query() # uncomment to show SQL
-  collect()
-d_larvae_miss_stations %>% 
-  write_csv("data/larvae-count_cruise-ship_missing-in_stations.csv")
-d_larvae_miss_stations %>% 
-  datatable(
-    caption = "The cruise and ship values from the larvae_counts table without a match in the stations table.")
-
-# show cruise-ship in larvae_counts missing tows with datetime
-d_larvae_miss_tows <- tbl(
-  con, "larvae_counts") %>%
-  anti_join(
-    tbl(con, "tows"),        # tbl_fields("tows")    
-    # cruise, ship, orderocc, towtype, townum, netloc: shf, volsampled, percsorted, datetime, date
-    by = c("cruise", "ship", "orderocc", "towtype", "townum", "netloc")) %>% 
-  group_by(cruise, ship) %>% 
-  summarize(
-    n_orderocc = n(),
-    .groups = "drop") %>% 
-  # show_query() # uncomment to show SQL
-  collect()
-d_larvae_miss_tows %>% 
-  write_csv("data/larvae-count_cruise-ship_missing-in_tows.csv")
-d_larvae_miss_tows %>% 
-  datatable(
-    caption = "The cruise and ship values from the larvae_counts table without a match in the tows table.")
-
-# get larvae with valid space and time attribution
-d_larvae_st <- d_larvae %>% 
-  filter(
-    !is.na(date),
-    !is.na(longitude)) 
-nrow(d_larvae_st) # 307,365 rows with valid space and time attribution
-d_larvae_st1 <- d_larvae_st %>% 
-  slice(1) %>% 
-  select(-geom)
-d_larvae_st1 %>% 
-  datatable()
+# add a single field with datetime to make querying easier
+dbSendQuery(
+  con,
+  "ALTER TABLE ctd_casts ADD COLUMN IF NOT EXISTS datetime TIMESTAMP")
+dbSendQuery(
+  con,
+  "UPDATE ctd_casts 
+  SET datetime = (date::text || ' ' || time::text || ' America/Los_Angeles')::timestamp")
 ```
 
+## Get Space & Time for Larval Data 
 
-
-Yes, above is a bad merge. Compare lines 104-116 to below which returns 397,496 records, all with times and geoms.
-BUT let's get my updated data structure on here so that we don't have to join by composite primary keys with six fields. I think that will make this much shorter and less error prone. 
-```{r}
-dbGetQuery(con,
-   '
-    select * from larvae_counts
-    left join tows on larvae_counts.cruise=tows.cruise and
-        larvae_counts.ship=tows.ship and
-        larvae_counts.orderocc=tows.orderocc and
-        larvae_counts.towtype=tows.towtype and
-        larvae_counts.townum=tows.townum and
-        larvae_counts.netloc=tows.netloc
-    left join stations on tows.cruise=stations.cruise and
-        tows.ship=stations.ship and
-        tows.orderocc=stations.orderocc
-    ')
-
-# check
-dbGetQuery(con,
-   '
-    select count(*) from
-    (select * from larvae_counts
-    left join tows on larvae_counts.cruise=tows.cruise and
-        larvae_counts.ship=tows.ship and
-        larvae_counts.orderocc=tows.orderocc and
-        larvae_counts.towtype=tows.towtype and
-        larvae_counts.townum=tows.townum and
-        larvae_counts.netloc=tows.netloc
-    left join stations on tows.cruise=stations.cruise and
-        tows.ship=stations.ship and
-        tows.orderocc=stations.orderocc
-    where datetime=null or geom=null) A
-    ')
-
-```
-
-
-
-
-
-So the most recent larval data with attributable space and time is:
-- `r d_larvae_st1$datetime` (longitude: `r d_larvae_st1$longitude`; latitude: `r d_larvae_st1$latitude`)
-
-We're clearly mismatching something since the most recent date for the ERDDAP subset is `2020-01-18T04:57:00Z`:
-
-- [ERDDAP - CalCOFI Larvae Counts, Scientific Names A to AM - Data Access Form](https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFIlrvcntAtoAM.html)
-
-Here are some of the files output above highlighting larvae_count data without expected matches:
-
-* [larvae-count\_cruise-ship\_missing-in\_stations.csv](https://github.com/CalCOFI/scripts/blob/main/data/larvae-count_cruise-ship_missing-in_stations.csv)
-* [larvae-count\_cruise-ship\_missing-in\_tows.csv](https://github.com/CalCOFI/scripts/blob/main/data/larvae-count_cruise-ship_missing-in_tows.csv)
-* [larvae-count\_missing-location-or-date.csv](https://github.com/CalCOFI/scripts/blob/main/data/larvae-count_missing-location-or-date.csv)
-
-## Get Space & Time for Larval Data with `*_new` Tables -- no results
-
-```{r}
-# try with *_new tables:
-tbl(con, "larvae_counts") %>%   # tbl_fields("larvae_counts")
-# cruise, ship, orderocc, towtype, townum, netloc: spccode, count
-  left_join(
-    tbl(con, "cruises"),        # tbl_fields("cruises")
-    # cruise, ship: cruiseid
-    by = c("cruise", "ship")) %>% 
-  left_join(
-    tbl(con, "stations_new"),   # tbl_fields("stations_new")
-    # cruiseid, orderocc: stationid, latitude, longitude, line, station
-    by = c("cruiseid", "orderocc")) %>% 
-  left_join(
-    tbl(con, "tows_new"),       # tbl_fields("tows_new")
-    # stationid, towtype, townumber: towid, starttime
-    by = c("stationid", "towtype", "townum" = "townumber")) %>%
-  filter(!is.na(starttime), !is.na(longitude)) %>% 
-  arrange(desc(starttime))
-# yikes, no rows!
-```
-
-
-## Get Space & Time for Larval Data with `*_new` Tables, with Marina's latest
-
-Marina:
+Use `*_new` tables from Marina:
 
 > I’ve uploaded some new tables into Postgres, containing the updated data that Ed had sent me earlier.  Some tables are meant to replace existing ones, and have names ending with _new (e.g. larvae_counts_new, scrippscasts_new).  There are also tables called ships, cruises and nets.  The hierarchy is:
 > 
@@ -306,6 +166,7 @@ d_l %>%
   head(1000) %>% 
   datatable()
 ```
+
 
 ## Run `get_nearest_bottle()` on one record
 
@@ -405,33 +266,216 @@ d10 %>%
 ```
 
 
-## Added `ctd_casts.datetime`
-
-```{r}
-# add a single field with datetime to make querying easier
-dbSendQuery(
-  con,
-  "ALTER TABLE ctd_casts ADD COLUMN IF NOT EXISTS datetime TIMESTAMP")
-dbSendQuery(
-  con,
-  "UPDATE ctd_casts 
-  SET datetime = (date::text || ' ' || time::text || ' America/Los_Angeles')::timestamp")
-```
-
-
 ## Show Tables
 
 ```{r}
 # show all tables
 dbListTables(con)
+```
 
+### Environmental Tables
+
+`ctd_casts` -[`cast_count`]-> `ctd_bottles`
+
+#### `ctd_casts`
+
+```{r}
 tbl_head("ctd_casts")
+```
+
+#### `ctd_bottles`
+
+```{r}
 tbl_head("ctd_bottles")
-tbl_head("larvae_counts")
-tbl_head("tows")
-tbl_head("tows_new")
-tbl_head("tow_types")
-tbl_head("stations")
+```
+
+### Larval Tables
+
+`cruises` -[`cruiseid`]-> `stations_new` -[`stationid`]-> `tows_new` -[`towid`]-> `nets` -[`netid`]-> `larvae_counts_new` -[`spccode`]-> `species_codes_new`
+
+#### `cruises`
+
+```{r}
+tbl_head("cruises")
+```
+
+#### `stations_new`
+
+```{r}
 tbl_head("stations_new")
 ```
+
+#### `tows_new`
+
+```{r}
+tbl_head("tows_new")
+```
+
+#### `nets`
+
+```{r}
+tbl_head("nets")
+```
+
+#### `larvae_counts_new`
+
+```{r}
+tbl_head("larvae_counts_new")
+```
+
+#### `species_codes_new`
+
+```{r}
+tbl_head("species_codes_new")
+```
+
+
+## OLD: Get Space & Time for Larval Data
+
+```{r}
+d_larvae <- tbl(
+  con, "larvae_counts") %>%  # tbl_fields("larvae_counts")
+  # cruise, ship, orderocc, towtype, townum, netloc: spccode, count
+  left_join(
+    tbl(con, "stations"),    # tbl_fields("stations")    
+    # cruise, ship, orderocc: longitude, latitude, line, station, geom
+    by = c("cruise", "ship", "orderocc")) %>% 
+  left_join(
+    tbl(con, "tows"),        # tbl_fields("tows")    
+    # cruise, ship, orderocc, towtype, townum, netloc: shf, volsampled, percsorted, datetime, date
+    by = c("cruise", "ship", "orderocc", "towtype", "townum", "netloc")) %>% 
+  arrange(desc(date), desc(datetime)) %>% 
+  # show_query() # uncomment to show SQL
+  collect()
+# nrow(d_larvae) # 397,496
+d_larvae_miss <- d_larvae %>% 
+  filter(is.na(date) | is.na(longitude)) 
+d_larvae_miss %>% 
+  write_csv("data/larvae-count_missing-location-or-date.csv")
+nrow(d_larvae_miss) # 90,131 without attributable date or location
+
+# show cruise-ship in larvae_counts missing stations with location
+d_larvae_miss_stations <- tbl(
+  con, "larvae_counts") %>%
+  anti_join(
+    tbl(con, "stations"),
+    by = c("cruise", "ship", "orderocc")) %>% 
+  group_by(cruise, ship) %>% 
+  summarize(
+    n_orderocc = n(),
+    .groups = "drop") %>% 
+  # show_query() # uncomment to show SQL
+  collect()
+d_larvae_miss_stations %>% 
+  write_csv("data/larvae-count_cruise-ship_missing-in_stations.csv")
+d_larvae_miss_stations %>% 
+  datatable(
+    caption = "The cruise and ship values from the larvae_counts table without a match in the stations table.")
+
+# show cruise-ship in larvae_counts missing tows with datetime
+d_larvae_miss_tows <- tbl(
+  con, "larvae_counts") %>%
+  anti_join(
+    tbl(con, "tows"),        # tbl_fields("tows")    
+    # cruise, ship, orderocc, towtype, townum, netloc: shf, volsampled, percsorted, datetime, date
+    by = c("cruise", "ship", "orderocc", "towtype", "townum", "netloc")) %>% 
+  group_by(cruise, ship) %>% 
+  summarize(
+    n_orderocc = n(),
+    .groups = "drop") %>% 
+  # show_query() # uncomment to show SQL
+  collect()
+d_larvae_miss_tows %>% 
+  write_csv("data/larvae-count_cruise-ship_missing-in_tows.csv")
+d_larvae_miss_tows %>% 
+  datatable(
+    caption = "The cruise and ship values from the larvae_counts table without a match in the tows table.")
+
+# get larvae with valid space and time attribution
+d_larvae_st <- d_larvae %>% 
+  filter(
+    !is.na(date),
+    !is.na(longitude)) 
+nrow(d_larvae_st) # 307,365 rows with valid space and time attribution
+d_larvae_st1 <- d_larvae_st %>% 
+  slice(1) %>% 
+  select(-geom)
+d_larvae_st1 %>% 
+  datatable()
+```
+
+Yes, above is a bad merge. Compare lines 104-116 to below which returns 397,496 records, all with times and geoms.
+BUT let's get my updated data structure on here so that we don't have to join by composite primary keys with six fields. I think that will make this much shorter and less error prone. 
+
+```{r}
+dbGetQuery(con,
+   '
+    select * from larvae_counts
+    left join tows on larvae_counts.cruise=tows.cruise and
+        larvae_counts.ship=tows.ship and
+        larvae_counts.orderocc=tows.orderocc and
+        larvae_counts.towtype=tows.towtype and
+        larvae_counts.townum=tows.townum and
+        larvae_counts.netloc=tows.netloc
+    left join stations on tows.cruise=stations.cruise and
+        tows.ship=stations.ship and
+        tows.orderocc=stations.orderocc
+    ')
+
+# check
+dbGetQuery(con,
+   '
+    select count(*) from
+    (select * from larvae_counts
+    left join tows on larvae_counts.cruise=tows.cruise and
+        larvae_counts.ship=tows.ship and
+        larvae_counts.orderocc=tows.orderocc and
+        larvae_counts.towtype=tows.towtype and
+        larvae_counts.townum=tows.townum and
+        larvae_counts.netloc=tows.netloc
+    left join stations on tows.cruise=stations.cruise and
+        tows.ship=stations.ship and
+        tows.orderocc=stations.orderocc
+    where datetime=null or geom=null) A
+    ')
+```
+
+So the most recent larval data with attributable space and time is:
+- `r d_larvae_st1$datetime` (longitude: `r d_larvae_st1$longitude`; latitude: `r d_larvae_st1$latitude`)
+
+We're clearly mismatching something since the most recent date for the ERDDAP subset is `2020-01-18T04:57:00Z`:
+
+- [ERDDAP - CalCOFI Larvae Counts, Scientific Names A to AM - Data Access Form](https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFIlrvcntAtoAM.html)
+
+Here are some of the files output above highlighting larvae_count data without expected matches:
+
+* [larvae-count\_cruise-ship\_missing-in\_stations.csv](https://github.com/CalCOFI/scripts/blob/main/data/larvae-count_cruise-ship_missing-in_stations.csv)
+* [larvae-count\_cruise-ship\_missing-in\_tows.csv](https://github.com/CalCOFI/scripts/blob/main/data/larvae-count_cruise-ship_missing-in_tows.csv)
+* [larvae-count\_missing-location-or-date.csv](https://github.com/CalCOFI/scripts/blob/main/data/larvae-count_missing-location-or-date.csv)
+
+#### Get Space & Time for Larval Data with `*_new` Tables -- no results
+
+```{r}
+# try with *_new tables:
+tbl(con, "larvae_counts") %>%   # tbl_fields("larvae_counts")
+# cruise, ship, orderocc, towtype, townum, netloc: spccode, count
+  left_join(
+    tbl(con, "cruises"),        # tbl_fields("cruises")
+    # cruise, ship: cruiseid
+    by = c("cruise", "ship")) %>% 
+  left_join(
+    tbl(con, "stations_new"),   # tbl_fields("stations_new")
+    # cruiseid, orderocc: stationid, latitude, longitude, line, station
+    by = c("cruiseid", "orderocc")) %>% 
+  left_join(
+    tbl(con, "tows_new"),       # tbl_fields("tows_new")
+    # stationid, towtype, townumber: towid, starttime
+    by = c("stationid", "towtype", "townum" = "townumber")) %>%
+  filter(!is.na(starttime), !is.na(longitude)) %>% 
+  arrange(desc(starttime))
+# yikes, no rows!
+```
+
+
+
 
