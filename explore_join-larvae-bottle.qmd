@@ -3,6 +3,7 @@ title: "Join Larval and Bottle Data"
 format: 
   html:
     toc: true
+    toc-depth: 3
     number-sections: true
 editor_options: 
   chunk_output_type: console
@@ -20,7 +21,7 @@ if (!require("librarian"))
 # use librarian::shelf() to load packages, installing if needed
 librarian::shelf(
   calcofi/calcofi4r,
-  dplyr, DBI, DT, glue, readr, sf, skimr,
+  dplyr, DBI, DT, glue, here, readr, sf, skimr, tidyr,
   quiet = T)
 
 tbl_head <- function(tbl, n=10){
@@ -69,7 +70,8 @@ get_nearest_bottle <- function(
       c.datetime <= ('{datetime}'::TIMESTAMP + INTERVAL '{max_hrs} HOUR') AND
       c.datetime >= ('{datetime}'::TIMESTAMP - INTERVAL '{max_hrs} HOUR') AND
     depthm <= {depth_max} AND
-    depthm >= {depth_min}")
+    depthm >= {depth_min} AND
+    {fld} IS NOT NULL")
   
   if (verbose)
     message(sql)
@@ -77,7 +79,11 @@ get_nearest_bottle <- function(
   dbGetQuery(con, sql) %>% 
     tibble()
 }
+```
 
+#### Test function
+
+```{r}
 # run with "most recent" larval data attributable in space and time
 x <- get_nearest_bottle(
   fld       = "t_degc",
@@ -111,6 +117,104 @@ dbSendQuery(
   "UPDATE ctd_casts 
   SET datetime = (date::text || ' ' || time::text || ' America/Los_Angeles')::timestamp")
 ```
+
+## Erica's data
+
+For each unique larval tow (based on cruise, time, latitude, longitude) in the attached larvae table, within 5 km and 2 hours of each tow, extract corresponding bottle data for T_degC, Salnty, STheta, O2ml_L, PO4uM, and ChlorA using the following three different data aggregations:
+
+1) Surface oceanographic data only.  
+2) A weighted average (based on distance to point) of oceanographic data down to 20m.
+3) A weighted average (based on distance to point) of oceanographic data down to 60m.
+
+
+### Get all temperature data records
+
+```{r}
+larvae_csv     <- here("data/para_larvae.csv")
+tdegc_data_csv <- here("data/para_larvae_TdegC_data.csv")
+tdegc_smry_csv <- here("data/para_larvae_TdegC_summary.csv")
+
+d_l <- read_csv(larvae_csv)
+d_l
+nrow(d_l) # 10,728
+
+if (!file.exists(tdegc_data_csv)){
+  system.time({
+    d <- d_l %>% 
+      select(starttime = time, lon = longitude, lat = latitude) %>% 
+      mutate(
+        data = pmap(
+          list(starttime, lon, lat),
+          function(starttime, lon, lat, ...){
+            get_nearest_bottle(
+              fld       = "t_degc",
+              datetime  = starttime, 
+              max_hrs   = 2,
+              lon       = lon,
+              lat       = lat, 
+              max_kms   = 5,
+              depth_min = 0,
+              depth_max = 60) } ) )
+  }) # 3527.387 sec; 58.8 min
+  
+  D <- d %>% 
+    unnest(data) %>% 
+    filter(!is.na(t_degc))
+  nrow(D) # 50,865
+  write_csv(D, tdegc_data_csv) # 5.7 MB
+}
+```
+
+Result:
+
+- [``r basename(tdegc_data_csv)``](https://github.com/CalCOFI/scripts/blob/main/data/`r basename(tdegc_data_csv)`)
+
+### Summarize temperature data
+
+```{r}
+D <- read_csv(tdegc_data_csv)
+nrow(D) # 50,865
+D
+
+wt_avg <- function(x, fld = t_degc, filt_cond = NULL, fld_wt = NULL){
+  y <- x 
+  if (!missing(filt_cond))
+    y <- filter(.data = y, {{filt_cond}})
+  if (nrow(y) == 0)
+    return(NA)
+  if (missing(fld_wt) | nrow(y) == 1)
+    pull(y, {{fld_wt}} ) %>% 
+      mean(na.rm = T) %>% 
+      return()
+  y %>% 
+    summarize(
+      v = weighted.mean({{fld}}, {{fld_wt}})) %>% 
+    pull(v)
+}
+
+if (!file.exists(tdegc_data_csv)){
+  d <- D %>% 
+    group_by(starttime, lon, lat) %>% 
+    nest()
+  
+  d <- d %>% 
+    mutate(
+      temp_nrow            = map_int(data, nrow),
+      temp_avg_deptheq0    = map_dbl(data, wt_avg, t_degc, depthm ==  0, diff_kms),
+      temp_avg_depthlteq20 = map_dbl(data, wt_avg, t_degc, depthm <= 20, diff_kms),
+      temp_avg_depthlteq60 = map_dbl(data, wt_avg, t_degc, depthm <= 60, diff_kms))
+  
+  write_csv(d, tdegc_smry_csv) # 0.4 MB
+}
+d <- read_csv(tdegc_smry_csv)
+d
+nrow(d) # 5,891
+```
+
+
+Result:
+
+- [``r basename(tdegc_smry_csv)``](https://github.com/CalCOFI/scripts/blob/main/data/`r basename(tdegc_smry_csv)`)
 
 ## Get Space & Time for Larval Data 
 
