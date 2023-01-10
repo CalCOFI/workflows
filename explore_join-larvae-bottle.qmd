@@ -21,8 +21,9 @@ if (!require("librarian"))
 # use librarian::shelf() to load packages, installing if needed
 librarian::shelf(
   calcofi/calcofi4r,
-  dplyr, DBI, DT, glue, here, readr, sf, skimr, tidyr,
+  dplyr, DBI, DT, glue, here, readr, sf, skimr, tibble, tidyr,
   quiet = T)
+options(readr.show_col_types = F)
 
 tbl_head <- function(tbl, n=10){
   dbGetQuery(
@@ -134,13 +135,14 @@ larvae_csv     <- here("data/para_larvae.csv")
 tdegc_data_csv <- here("data/para_larvae_TdegC_data.csv")
 tdegc_smry_csv <- here("data/para_larvae_TdegC_summary.csv")
 
+redo <- F
 d_l <- read_csv(larvae_csv)
 d_l
 nrow(d_l) # 10,728
 
-if (!file.exists(tdegc_data_csv)){
+if (!file.exists(tdegc_data_csv) | redo){
   system.time({
-    d <- d_l %>% 
+    D <- d_l %>% 
       select(starttime = time, lon = longitude, lat = latitude) %>% 
       mutate(
         data = pmap(
@@ -149,18 +151,23 @@ if (!file.exists(tdegc_data_csv)){
             get_nearest_bottle(
               fld       = "t_degc",
               datetime  = starttime, 
-              max_hrs   = 2,
+              max_hrs   = 4,  # 2,
               lon       = lon,
               lat       = lat, 
-              max_kms   = 5,
+              max_kms   = 10, # 5,
               depth_min = 0,
-              depth_max = 60) } ) )
+              depth_max = 60) } ),
+        nrow = map_int(data, nrow) ) %>% 
+      rowid_to_column("rowid")
   }) # 3527.387 sec; 58.8 min
+  # table(D$nrow > 0)
+  #  FALSE   TRUE 
+  #  4,578  6,150
   
-  D <- d %>% 
-    unnest(data) %>% 
-    filter(!is.na(t_degc))
-  nrow(D) # 50,865
+  D <- D %>% 
+  unnest(data) %>% 
+  filter(!is.na(t_degc))
+  nrow(D) # 55,730 # 50,865
   write_csv(D, tdegc_data_csv) # 5.7 MB
 }
 ```
@@ -173,7 +180,7 @@ Result:
 
 ```{r}
 D <- read_csv(tdegc_data_csv)
-nrow(D) # 50,865
+nrow(D) # 55,730 # 50,865
 D
 
 wt_avg <- function(x, fld = t_degc, filt_cond = NULL, fld_wt = NULL){
@@ -192,7 +199,7 @@ wt_avg <- function(x, fld = t_degc, filt_cond = NULL, fld_wt = NULL){
     pull(v)
 }
 
-if (!file.exists(tdegc_data_csv)){
+if (!file.exists(tdegc_data_csv) | redo){
   d <- D %>% 
     group_by(starttime, lon, lat) %>% 
     nest()
@@ -207,8 +214,8 @@ if (!file.exists(tdegc_data_csv)){
   write_csv(d, tdegc_smry_csv) # 0.4 MB
 }
 d <- read_csv(tdegc_smry_csv)
-d
 nrow(d) # 5,891
+d
 ```
 
 
