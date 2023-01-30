@@ -1,0 +1,287 @@
+---
+title: "Explore PostGIS ST_Contour()"
+format: html
+editor_options: 
+  chunk_output_type: console
+execute:
+  warning: false
+---
+
+```{r}
+# packages
+if (!require("librarian")){
+  install.packages("librarian")
+  library(librarian)
+}
+librarian::shelf(
+  calcofi/calcofi4r, 
+  # marmap,
+  cmocean, dplyr, DT, glue, here, interp,
+  mapview, plotly, proj4, purrr, rpostgis, sf, skimr, tidyr)
+mapviewOptions(fgb = F)
+source(here("../apps/libs/db.R"))
+```
+
+## get points
+
+```{r}
+pts <- st_read(
+  con, query="
+  SELECT 
+    AVG(t_degc) AS t_degc, 
+    COUNT(*) AS n_obs, 
+    geom
+  FROM ctd_casts 
+    JOIN ctd_bottles USING (cast_count)
+  WHERE 
+    depthm <= 20  AND 
+    DATE_PART('year'   , date) = 2020  AND
+    DATE_PART('quarter', date) = 1
+  GROUP BY geom")
+table(pts$n_obs)
+#  4  5  6  7  8 
+# 39 39 14  4  7
+
+mapView(pts, zcol="t_degc")
+```
+
+## interpolate to raster
+
+### output to tif (not eval)
+
+```{r}
+#| eval: false
+
+# sent below into DBeaver
+dbSendQuery(
+  con, "
+SET postgis.gdal_enabled_drivers = 'ENABLE_ALL';
+DROP TABLE IF EXISTS tmp_out;
+CREATE TABLE tmp_out AS
+WITH 
+pts AS (
+  SELECT 
+    ST_SetSRID(
+      ST_MakePoint(
+        ST_X(geom),
+        ST_Y(geom),
+        AVG(t_degc)),
+      4326) AS geom
+  FROM ctd_casts 
+    JOIN ctd_bottles USING (cast_count)
+  WHERE 
+    depthm <= 20  AND 
+    DATE_PART('year'   , date) = 2020  AND
+    DATE_PART('quarter', date) = 1
+  GROUP BY geom ),
+rst_idw AS (
+  SELECT ST_InterpolateRaster(
+    (SELECT ST_Multi(ST_Union(geom)) FROM pts),
+    'invdist:smoothing:2.0',
+    ST_AddBand(
+      (SELECT rast FROM grd_gcs WHERE name = 'grd_gcs_1dd'), 
+      '32BF')) AS rast )
+SELECT lo_from_bytea(
+  0,
+  ST_AsGDALRaster(
+    ST_Union(rast), 
+    'GTiff',  
+    ARRAY['COMPRESS=DEFLATE', 'PREDICTOR=2', 'PZLEVEL=9'])) AS loid
+FROM rst_idw;
+SELECT lo_export(loid, '/share/db_tif/myraster.tiff') from tmp_out;")
+
+# delete export
+q("SELECT lo_unlink(loid) FROM tmp_out;")
+
+# exported!
+r <- rast("/share/db_tif/myraster.tiff") |> 
+  flip()
+plot(r)
+# not right dims
+```
+
+### calculate flexible raster based on points (not eval)
+
+```{r}
+#| eval: false
+
+# now trying to create raster table ----
+# https://www.crunchydata.com/blog/waiting-for-postgis-3.2-st_interpolateraster
+dbSendQuery(
+  con, "
+SET postgis.gdal_enabled_drivers = 'ENABLE_ALL';
+DROP TABLE IF EXISTS idw_rast;
+CREATE TABLE idw_rast AS
+WITH 
+pts AS (
+  SELECT 
+    ST_SetSRID(
+      ST_MakePoint(
+        ST_X(geom),
+        ST_Y(geom),
+        AVG(t_degc) ),
+      4326) AS geom
+  FROM ctd_casts 
+    JOIN ctd_bottles USING (cast_count)
+  WHERE 
+    depthm <= 20  AND 
+    DATE_PART('year'   , date) = 2020  AND
+    DATE_PART('quarter', date) = 1
+  GROUP BY geom ),
+inputs AS (
+  SELECT
+    0.1::float8 AS pixelsize,
+    'invdist:power:5.5:smoothing:2.0' AS algorithm,
+    ST_Collect(geom) AS geom,
+    ST_Expand(ST_Collect(geom), 0.5) AS ext
+  FROM pts
+),
+-- Calculate output raster geometry
+-- Use the expanded extent to take in areas beyond the limit of the
+-- temperature stations
+sizes AS (
+  SELECT
+    ceil((ST_XMax(ext) - ST_XMin(ext))/pixelsize)::integer AS width,
+    ceil((ST_YMax(ext) - ST_YMin(ext))/pixelsize)::integer AS height,
+    ST_XMin(ext) AS upperleftx,
+    ST_YMax(ext) AS upperlefty
+  FROM inputs
+)
+-- Feed it all into interpolation
+SELECT 1 AS rid,
+  ST_InterpolateRaster(
+    geom,
+    algorithm,
+    ST_SetSRID(
+      ST_AddBand(
+        ST_MakeEmptyRaster(
+          width, height, upperleftx, upperlefty, pixelsize), 
+        '16BSI'), 
+      ST_SRID(geom))) AS rast
+FROM sizes, inputs;
+")
+```
+
+### calculate contours
+
+```{r}
+cntr_lns <- st_read(
+  con,
+  query = "
+    SELECT (
+      ST_Contour(
+        rast, 1,
+        fixed_levels => ARRAY[12,13,14,15,16,17,18] )).*
+      FROM idw_rast WHERE rid = 1")
+
+cntr_plys <- st_read(
+  con, 
+  query = "
+  WITH
+  lns AS (
+    SELECT (
+      ST_Contour(
+        rast, 1, 
+        fixed_levels => ARRAY[12,13,14,15,16,17,18] )).*
+      FROM idw_rast WHERE rid = 1),
+  closed_lns AS (
+    SELECT 
+      ST_Union(geom) AS geom 
+    FROM 
+      (SELECT geom FROM lns 
+       UNION ALL 
+       SELECT ST_SetSRID(ST_Boundary(ST_Expand(ST_Extent(geom), -1e-10)), 4326) 
+       FROM lns) sq)
+  SELECT
+    poly_id, 
+    min(polys.geom)::geometry AS geom, 
+    min(value)  AS val_min, 
+    max(value)  AS val_max
+  FROM
+    (SELECT row_number() OVER () AS poly_id, geom FROM
+        (SELECT 
+           (ST_Dump(ST_Polygonize(geom))).geom
+         FROM closed_lns) dump
+    ) polys
+  INNER JOIN lns ON ST_Intersects(polys.geom, lns.geom)
+  GROUP BY poly_id")
+```
+
+### calculate contours
+
+```{r}
+# pgListRast(con)
+r <- pgGetRast(con, "idw_rast")
+
+mapView(r) +
+  mapView(pts, zcol = "t_degc") + 
+  mapView(cntr_lns, zcol = "value") +
+  mapView(cntr_plys, zcol = "val_min")
+```
+
+* [Calculating mean value of polygon from raster in PostGIS? - Geographic Information Systems Stack Exchange](https://gis.stackexchange.com/questions/155974/calculating-mean-value-of-polygon-from-raster-in-postgis)
+
+## Old
+
+### `grd_gcs_01dd` (not using)
+
+```{r}
+#| eval: false
+
+cc_u <- calcofi4r::cc_grid_zones %>% 
+  st_union()
+# mapView(cc_u)
+bb <- sf::st_bbox(cc_u)
+#       xmin       ymin       xmax       ymax 
+# -135.23008   18.42757 -105.77692   49.23891
+# bb[['xmin']]
+bb[c("xmin","xmax")]
+
+# 1 dd square grid 
+crs <- 4326
+tbl <- "grd_gcs"
+row_name <- "grd_gcs_1dd"
+rid <- 1
+dx <- 1
+dy <- 1
+
+# passing through ctr: 
+(cx <- mean(bb[c("xmin","xmax")])) # -120.5035
+(cy <- mean(bb[c("ymin","ymax")])) #   33.83324
+vx <- c(
+  seq(cx, bb[['xmax']], by = dy),
+  seq(cx, bb[['xmin']], by = -1*dy)[-1]) %>% 
+  sort()
+vy <- c(
+  seq(cy, bb[['ymax']], by = dx),
+  seq(cy, bb[['ymin']], by = -1*dx)[-1]) %>% 
+  sort()
+# ST_MakeEmptyRaster(integer width, integer height, float8 upperleftx, float8 upperlefty, float8 scalex, float8 scaley, float8 skewx, float8 skewy, integer srid=unknown)
+# ST_MakeEmptyRaster(3.3 width, 10 height, {max(vx)} upperleftx, {max(vy)} upperlefty, 1, 1, 0, 0, 880001)
+q(glue("DROP TABLE IF EXISTS {tbl};"))
+q(glue("CREATE TABLE {tbl}(rid serial primary key, name text, rast raster);"))
+q(glue("
+INSERT INTO {tbl} (name, rast) 
+  VALUES(
+    '{row_name}',
+    ST_MakeEmptyRaster(
+      width:={length(vx)}, 
+      height:={length(vy)}, 
+      upperleftx:={min(vx)}, 
+      upperlefty:={max(vy)}, 
+      scalex:={dx}, 
+      scaley:={dy}, 
+      skewx:=0, 
+      skewy:=0, 
+      srid:={crs}) );
+"))
+# Add another band of type 8 bit unsigned integer with pixels initialized to 200
+# q(glue(" 
+# UPDATE {tbl}
+#   SET rast = ST_AddBand(rast,'8BUI'::text, 0)
+#   WHERE name = '{row_name}';"))
+
+# once done populating table, create spatial index on raster column
+q(glue("CREATE INDEX {tbl}_convexhull_idx ON {tbl} USING gist( ST_ConvexHull(rast) );"))
+```
+
