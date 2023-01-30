@@ -17,6 +17,7 @@ librarian::shelf(
   calcofi/calcofi4r, 
   # marmap,
   cmocean, dplyr, DT, glue, here, interp,
+  leaflet.extras,
   mapview, plotly, proj4, purrr, rpostgis, sf, skimr, tidyr)
 mapviewOptions(fgb = F)
 source(here("../apps/libs/db.R"))
@@ -207,16 +208,19 @@ cntr_plys <- st_read(
   GROUP BY poly_id")
 ```
 
-### calculate contours
+### show contours
 
 ```{r}
 # pgListRast(con)
 r <- pgGetRast(con, "idw_rast")
 
-mapView(r) +
+m <- mapView(r) +
   mapView(pts, zcol = "t_degc") + 
   mapView(cntr_lns, zcol = "value") +
   mapView(cntr_plys, zcol = "val_min")
+
+m@map |> 
+  addFullscreenControl()
 ```
 
 * [Calculating mean value of polygon from raster in PostGIS? - Geographic Information Systems Stack Exchange](https://gis.stackexchange.com/questions/155974/calculating-mean-value-of-polygon-from-raster-in-postgis)
