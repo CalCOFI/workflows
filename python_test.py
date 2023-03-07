@@ -13,11 +13,11 @@ import psycopg2
 # import statsmodels
 
 # set variables
-db_pass_txt = '/Users/bbest/My Drive/private/calcofi_password.txt'
 dbname      = 'gis'
 host        = 'localhost' 
 port        = 5432
 user        = 'admin'
+db_pass_txt = '/Users/bbest/My Drive/private/calcofi_password.txt'
 
 # read database password
 with open(db_pass_txt, 'r') as f:
