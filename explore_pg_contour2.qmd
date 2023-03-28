@@ -1,0 +1,275 @@
+---
+title: "Explore PostGIS ST_Contour()"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: true
+editor_options: 
+  chunk_output_type: console
+execute:
+  warning: false
+---
+
+
+## defaults
+
+```{r}
+librarian::shelf(
+  glue, here, leaflet, lubridate, mapview)
+
+dir_apps <- here("../apps_dev-demo")
+source(glue("{dir_apps}/libs/db.R"))
+source(glue("{dir_apps}/libs/functions.R"))
+
+ctdcast_dates <- dbGetQuery(
+  con, "SELECT MIN(date) min, MAX(date) max FROM ctd_casts")
+
+contour_args <- list(
+  variable      = "ctd_bottles.t_degc",
+  value         = "avg",
+  aoi_pattern   = c("standard", "extended"),
+  aoi_shore     = c("nearshore", "offshore"),
+  date_beg      = as.Date(today() - dyears(5)),
+  date_end      = ctdcast_dates$max,
+  date_qrtr     = c(1, 2),
+  depth_m_min   = 0,            
+  depth_m_max   = 515,                 
+  n_bins        = 7)
+
+inputs <- do.call(
+  get_contour,
+  c(contour_args, list(
+    return_type   = "inputs")))
+st_bbox(inputs$ext)
+inputs |> 
+  st_drop_geometry() |> 
+  select(-ext)
+
+sizes <- do.call(
+  get_contour,
+  c(contour_args, list(
+    return_type   = "sizes")))
+sizes
+```
+
+## points
+
+```{r}
+p <- do.call(
+  get_contour,
+  c(contour_args, list(
+    return_type   = "points")))
+
+pal <- colorNumeric("Spectral", p$z)
+
+map_base(base_opacity=0.1) |>
+  addCircleMarkers(
+    data   = p,
+    radius = 5, fillOpacity = 0.2,
+    stroke = T, weight = 1, opacity = 0.8,
+    color  = ~pal(z))
+```
+
+* [Interpolation algorithms - gdal_grid — GDAL documentation](https://gdal.org/programs/gdal_grid.html#interpolation-algorithms)
+
+## `invdist`
+
+```{r}
+interp_rast("invdist")
+```
+
+## `invdist` tweaked
+
+```{r}
+interp_rast("invdist:power=1.5:smoothing=0.2")
+```
+
+## `invdistnn`
+
+```{r}
+interp_rast("invdistnn")
+```
+
+## `invdistnn` tweaked
+
+```{r}
+alg <- "invdistnn:power=1.3:smoothing=0.2:radius=2.0:max_points=8"
+r <- do.call(
+  get_contour,
+  c(contour_args, list(
+    idw_algorithm = alg,
+    return_type   = "raster")))
+interp_rast(alg)
+```
+
+TODO:
+
+- bootstrap sample and minimize error
+
+## `polygons`
+
+```{r}
+l <- do.call(
+  get_contour,
+  c(contour_args, list(
+    idw_algorithm = alg,
+    return_type   = "lines")))
+
+mapView(k)
+```
+
+```{r}
+k <- do.call(
+  get_contour,
+  c(contour_args, list(
+    idw_algorithm = alg,
+    return_type   = "polygons")))
+
+
+a <- do.call(
+  get_contour,
+  c(contour_args, list(
+    idw_algorithm = alg,
+    return_type   = "aoi")))
+
+cl <- do.call(
+  get_contour,
+  c(contour_args, list(
+    idw_algorithm = alg,
+    return_type   = "closed_lines")))
+
+source(glue("{dir_apps}/libs/functions.R"))
+k <- do.call(
+  get_contour,
+  c(contour_args, list(
+    idw_algorithm = alg,
+    rast_redo     = T, # TODO: get polys
+    return_type   = "polygons")))
+
+mapView(k, zcol = "val_ctr")
+
+qbrks <- attr(k, "breaks") |> pull(value) |> sort() |> unique()
+qpal <- colorBin("Spectral", bins = qbrks, reverse = T)
+
+mapView(r)
+
+map_base() |> 
+  clearGroup("contours") |> 
+  clearControls() |> 
+  addPolygons(
+    data = k, fillOpacity = 0.5, 
+    weight = 0.5, opacity = 0.7,
+    color = ~qpal(val_ctr), group = "contours") |> 
+  addLegend(
+    pal = qpal, values = k$val_ctr, opacity = 1, 
+    title = 'contour', group = "contours") |> 
+  addLayersControl(
+    baseGroups = c("OceanBase", "OceanLabels"),
+    overlayGroups = c("aoi", "contours"),
+    options = layersControlOptions(collapsed = T))
+
+
+k |> 
+  st_drop_geometry() |> 
+  View()
+
+k_na <- k |> 
+  # filter(is.na(val_avg)) |> 
+  filter(poly_id == 72) |> 
+  slice(1)
+mapView(k, zcol = "val_avg") + 
+  mapView(k_na, col.regions="red")
+
+st_centroid(k_na$geom) |> st_coordinates() |> as.numeric()
+   
+
+b698cc34
+
+SELECT ST_Value(rast, 1, foo.pt_geom) as val
+FROM z_idw z CROSS JOIN (SELECT ST_SetSRID(ST_Point(-119.92052, 34.25617), 4326) As pt_geom) As foo
+WHERE z.args_hash = 'b698cc34';
+
+ST_Value()
+
+k <- k |> 
+  mutate(
+    area_km2 = st_area(geom) |> units::set_units("km^2") |> as.numeric()) |> 
+  arrange(desc(area_km2), val_avg)
+
+k |> 
+  st_drop_geometry() |> 
+  View()
+
+librarian::shelf(
+  units)
+
+k$area_km2[1:3] 
+
+
+
+k |> 
+  filter()
+
+k |> 
+  st_drop_geometry() |> 
+  View()
+
+r0 <- r
+r <- do.call(
+  get_contour,
+  c(contour_args, list(
+    idw_algorithm = alg,
+    return_type   = "raster",
+    rast_redo     = T)))
+mapView(r)
+
+k
+
+l_max <- l |> 
+  filter(value == max(l$value))
+mapView(a, color="black", col.regions="yellow") + 
+  mapView(k) +
+  mapView(r) + 
+  mapView(l) + 
+  mapView(cl) + 
+  mapView(l_max, color="red")
+
+k
+
+map_rpk(r, p, k)
+```
+
+
+## `average`
+
+```{r}
+inputs <- do.call(
+  get_contour,
+  c(contour_args, list(
+    return_type   = "inputs",
+    idw_algorithm = "average:radius:10.0")))
+
+source(glue("{dir_apps}/libs/functions.R"))
+sql <- do.call(
+  get_contour,
+  c(contour_args, list(
+    return_type   = "sql",
+    idw_algorithm = "average:radius:10.0")))
+#cat(sql)
+
+interp_rast("average:radius:0.1")
+```
+
+## `nearest`
+
+```{r}
+interp_rast("nearest")
+```
+
+## `linear`
+
+```{r}
+interp_rast("linear")
+```
+
