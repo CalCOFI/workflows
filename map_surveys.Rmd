@@ -1,0 +1,45 @@
+---
+title: "map_surveys"
+author: "Ben Best"
+date: "11/16/2021"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+librarian::shelf(
+  dplyr, here, leaflet, lubridate, rgdal, sf)
+
+gdb <- here("data/obis_seamap_dataset_507_gdb_36682/obis_seamap_dataset_507.gdb")
+
+lyrs <- ogrListLayers(gdb)
+lyrs
+lyr_pts <- lyrs[1]
+lyr_lns <- lyrs[2]
+
+pts <- read_sf(gdb, lyr_pts)
+pts            # 70,705 features and 20 fields
+summary(pts)   # 1987-05-02 to 2006-11-04
+
+lns <- read_sf(gdb, lyr_lns)
+lns            # 49,213 features and 15 fields
+summary(lns)   # 1987-05-02 to 2006-11-04
+
+yr = 2006
+pts_yr <- pts %>% 
+  filter(year(date_time) == yr)
+lns_yr <- lns %>% 
+  filter(year(datetime_begin) == yr)
+
+#plot(lns_yr[[1]])
+leaflet(lns_yr) %>% 
+  addProviderTiles(providers$Esri.OceanBasemap) %>% 
+  addPolylines() # %>% 
+  #addCircleMarkers(data = pts_yr)
+```
+

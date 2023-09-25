@@ -1,0 +1,44 @@
+---
+title: "test pg_rest"
+format: html
+---
+
+## Quarto
+
+Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+
+## Running Code
+
+When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+
+```{r}
+librarian::shelf(glue, httr2, readr, tidyjson)
+
+url <- "https://rest.calcofi.io/net2cruise"
+
+url_params <- glue("{url}?netid=gt.18149&netid=lt.18155")
+csv <- glue("data/pg_rest_test.csv")
+
+url_params |> 
+  request() |> 
+  req_perform() |> 
+  resp_body_json() |> 
+  spread_all() |> 
+  write_csv(csv)
+
+req_perform(req)
+
+jsonlite::read_json(url)
+
+netid=eq.18149
+
+```
+
+You can add options to executable code like this 
+
+```{r}
+#| echo: false
+2 * 2
+```
+
+The `echo: false` option disables the printing of code (only output is displayed).
