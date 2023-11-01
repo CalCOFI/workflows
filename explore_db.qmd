@@ -1,0 +1,66 @@
+---
+title: "explore_db"
+---
+
+## Species
+
+While working on [+ larvae into oceano app · Issue #23 · CalCOFI/apps](https://github.com/CalCOFI/apps/issues/23), noticing some funkiness with `species_codes` and `species_codes_new` tables.
+
+```{r}
+#| code-fold: true
+
+librarian::shelf(
+  calcofi/calcofi4r,
+  dplyr, DT, glue, here, 
+  quiet = T)
+
+source(here("../apps_dev/libs/db.R")) # con: database connection 
+```
+
+### `species_codes`
+
+```{r}
+d_spp <- tbl(con, "species_codes") |> 
+  collect()
+dim(d_spp)
+table(d_spp$taxon_rank, useNA="ifany")
+```
+
+### `species_codes_new`
+
+```{r}
+d_spp_new <- tbl(con, "species_codes_new") |> 
+  collect()
+dim(d_spp_new)
+table(d_spp_new$taxon_rank, useNA="ifany")
+```
+
+### `species_codes` vs `species_codes_new`
+
+```{r}
+d_spp |> 
+  left_join(d_spp_new, by="scientific_name") |>
+  filter(is.na(taxon_rank.x) | is.na(taxon_rank.y)) |> 
+  # names() |> paste(collapse=', ') |> cat()
+  select(
+    scientific_name, 
+    id.x, id.y, 
+    spccode.x, spccode.y, 
+    itis_tsn.x, itis_tsn.y, 
+    common_name.x, common_name.y,
+    taxon_rank.x, taxon_rank.y) |> 
+  datatable()
+```
+
+## Questions
+
+- Why `is.na(taxon_rank)` (n=34) in `species_codes_new` but not `species_codes`?
+- What is `taxon_rank == 'None'`?
+
+## Rename suggestions
+
+- Drop `species_codes_new` since missing `taxon_rank` for 34 rows that are populated in `species_codes`
+- Rename `species_codes` to `species`
+- Drop field `id` <int>, since confusing with `spccode` <int>
+- Rename field `spccode` to `sp_id` since <int>
+
