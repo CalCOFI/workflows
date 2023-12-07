@@ -1,11 +1,9 @@
-# scripts
-helper scripts in R for common workflows
+# workflows
+scripts to explore and load data into the database
 
-## html
+## notebooks
 
-These web pages (\*.html) are typically rendered from Rmarkdown (\*.Rmd) or Quarto markdown (\*.qmd) :
-
-<!-- Jekyll rendering: https://marineenergy.github.io/apps/ -->
+<!-- Jekyll rendering -->
 {% for file in site.static_files %}
   {% if file.extname == '.html' %}
 * [{{ file.basename }}]({{ site.baseurl }}{{ file.path }})
@@ -14,4 +12,6 @@ These web pages (\*.html) are typically rendered from Rmarkdown (\*.Rmd) or Quar
 
 ## source
 
-See https://github.com/CalCOFI/scripts
+These notebook web pages (\*.html) are typically rendered from Rmarkdown (\*.Rmd) or Quarto markdown (\*.qmd) source files:
+
+- [github.com/CalCOFI/workflows](https://github.com/CalCOFI/workflows)
