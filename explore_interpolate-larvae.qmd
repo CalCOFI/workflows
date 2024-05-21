@@ -12,7 +12,8 @@ editor_options:
 
 ## CalCOFI Larvae
 
-Borrowing from rules described by Andrew Thompson: CalCOFI Analysis for CINMS/MBNMS infographics ([calcofi.io/larvae-cinms](https://calcofi.io/larvae-cinms)).
+Constraints described by Andrew Thompson in CalCOFI Analysis for CINMS/MBNMS infographics ([calcofi.io/larvae-cinms](https://calcofi.io/larvae-cinms)):
+
 - select only starboard samples from the bongo nets\
   `net2cruise.netside = 'S'` (Port is usually ethanol sample vs formalin)
 - select a minimum date\
@@ -20,25 +21,28 @@ Borrowing from rules described by Andrew Thompson: CalCOFI Analysis for CINMS/MB
   diff't gear type, like oblique tow. internal table for
 
 Questions:
+
 - Should we limit (or have option) to filter by `linestation_core`?
+
 - Should we limit (or have option) to limit by towtype?
   ```r
-  tbl(con, "net2cruise") |> pull(towtype) |> table()`
+  tbl(con, "net2cruise") |> pull(towtype) |> table()
   ```
-  ```   
+  ```
        C1     CB     CV     MT     PV 
    28,640 18,819  6,402 12,757 12,065
   ```
   See `tow_types` table:
-  - CB: standard bongo tow
-  - C1: previously used ringnet
+  
+    - CB: standard bongo tow starting 1978-01-01
+    - C1: previously used ringnet
   
 ### Species Groups
 
 ```{r larvae}
 librarian::shelf(
   calcofi/calcofi4r,
-  dplyr, DT, dygraphs, glue, here, mapview, purrr, sf, tidyr,
+  dplyr, DT, dygraphs, glue, here, mapview, purrr, readr, sf, tidyr,
   quiet = T)
 
 source(here("../apps_dev/libs/db.R")) # con: database connection 
@@ -52,128 +56,98 @@ tbl(con, "species_groups") |>
 
 ### Anchovy by Year-Month
 
-```{r }
+```{r larvae-anchovy-ym}
 spp_group <- "Anchovy"
+ym        <- "2005-04"
 
-d <- tbl(con, "net2cruise") |> # colnames() |> paste(collapse=", ") 
-  # netid, cruise_id, cruise_ymd, ship, line, stationid, station, latitude, longitude, orderocc, gebco_depth, netside, townumber, towtype, volsampled, shf, propsorted, starttime, geom
-  filter(
-    netside    == "S",
-    # cruise_ymd >= "19780101",
-    # DEBUG
-    cruise_ymd >= "20010101",
-    cruise_ymd <= "20100101") |>  # select only starboard samples from the bongo nets
-  # TODO: filter by `linestation_core`?
+monthly_csv <- here(glue("data/larvae_{spp_group}-ym.csv"))
+ym_geo      <- here(glue("data/larvae_{spp_group}-{ym}.geojson"))
+
+if (any(!file.exists(c(monthly_csv, ym_geo)))){
+  d <- tbl(con, "net2cruise") |> # colnames() |> paste(collapse=", ") 
+    # netid, cruise_id, cruise_ymd, ship, line, stationid, station, latitude, longitude, orderocc, gebco_depth, netside, townumber, towtype, volsampled, shf, propsorted, starttime, geom
+    filter(
+      netside    == "S",
+      cruise_ymd >= "19780101") |> 
     left_join(
       tbl(con, "larvae_species"),
       # netid, spccode, scientific_name, common_name, larvaecount, itis_tsn
       by="netid") |>
     left_join(
       tbl(con, "species_groups") |> 
-      # spp_group, spccode
+        # spp_group, spccode
         filter(spp_group == !!spp_group), 
       by="spccode") |> 
-  select(
-    netid, longitude, latitude, starttime, volsampled,             # net2cruise
-    spccode, scientific_name, common_name, larvaecount, itis_tsn,  # larvae_species
-    spp_group) |>                                                  # species_groups
-  arrange(starttime) |> 
-  collect()
-  # filter(
-  #     as.integer(cruise_ymd) >= cruiseymd_min,
-  #     as.integer(cruise_ymd) <= cruiseymd_max)
+    select(
+      netid, longitude, latitude, starttime, volsampled,             # net2cruise
+      spccode, scientific_name, common_name, larvaecount, itis_tsn,  # larvae_species
+      spp_group) |>                                                  # species_groups
+    arrange(starttime) |> 
+    collect() |> # 27,721 × 6 <-  145,724 × 11 
+    group_by(
+      netid, longitude, latitude, starttime, volsampled) |>
+    nest() |> 
+    mutate(
+      larvaecount = map_int(data, \(x){
+        x |> 
+          filter(
+            !is.na(spp_group)) |> 
+          summarize(
+            n = sum(larvaecount, na.rm = T)) |> 
+          pull(n) } ) )
 
-d_g <- d |> # 27,721 × 6 <-  145,724 × 11 
-  group_by(
-    netid, longitude, latitude, starttime, volsampled) |>
-  nest() |> 
-  mutate(
-    larvaecount = map_int(data, \(x){
-      x |> 
-        filter(
-          !is.na(spp_group)) |> 
-        summarize(
-          n = sum(larvaecount, na.rm = T)) |> 
-        pull(n) }) )
-
-# d_g |>
-#   mutate(larvaecount_nonzero = larvaecount != 0) |>
-#   pull(larvaecount_nonzero) |> 
-#   table()
-# larvaecount_nonzero:
-#    FALSE   TRUE 
-#   20,322  7,399
-
-# d_g |> 
-#   mutate(
-#     ym = as.integer(format(starttime, "%Y%m"))) |>
-#   group_by(ym) |> 
-#   summarize(
-#     larvaecount = sum(larvaecount)) |> 
-#   arrange(desc(larvaecount))
-# # A tibble: 319 × 2
-#        ym larvaecount
-#     <int>       <int>
-#  1 198104       40321
-#  2 198601       27377
-#  3 198703       17819
-#  4 202204       15781 
-#  5 198102       14520
-#  6 197802       13288
-#  7 197803       12545
-#  8 199003       12088
-#  9 198303       12079
-# 10 200504       10391 <-
-
-d_gm <- d_g |> 
-  select(-data) |> 
-  mutate(
-    ym_chr = format(starttime, "%Y-%m"),
-    ym     = glue("{ym_chr}-01") |> as.Date()) |>
-  group_by(ym) |> 
-  summarize(
-    larvaecount = sum(larvaecount))
-# TODO: as per unit volume
+  d_monthly <- d |> 
+    select(-data) |> 
+    mutate(
+      ym_chr = format(starttime, "%Y-%m"),
+      ym     = glue("{ym_chr}-01") |> as.Date()) |>
+    group_by(ym) |> 
+    summarize(
+      vol = first(volsampled),
+      n   = sum(larvaecount)) |> 
+    mutate(
+      n_log10         = log10(n + 0.001),
+      n_per_vol       = n / vol,
+      n_per_vol_log10 = log10(n_per_vol + 0.0001))
+  write_csv(d_monthly, monthly_csv)
   
-d_gm |> 
+  pts_ym <- d |>  # 99 × 7 <- 27,721 × 7
+    filter(
+      format(starttime, "%Y-%m") == "2005-04") |> 
+    select(-data) |>
+    rename(
+      n   = larvaecount,
+      vol = volsampled) |> 
+    mutate(
+      n_log10         = log10(n + 0.001),
+      n_per_vol       = n / vol,
+      n_per_vol_log10 = log10(n_per_vol + 0.0001)) |>
+    sf::st_as_sf(
+      coords = c("longitude", "latitude"), 
+      crs    = 4326,
+      remove = F)
+  write_sf(pts_ym, ym_geo, delete_dsn = T)
+}
+
+d_monthly <- read_csv(monthly_csv, show_col_types = F)
+
+d_monthly |> 
+  select(ym, n_per_vol) |> 
   arrange(ym) |> 
   dygraph(
     x = "ym", 
-    y = "larvaecount",
+    y = "n_per_vol",
     main = glue("Larvae Counts by Month for {spp_group}"))
 ```
 
 ### Map of Anchovy Larvae on 2005-04
 
-```{r}
-d_m <- d_g |> # 99 × 7 <- 27,721 × 7
-  filter(
-    # format(starttime, "%Y-%m") == "2022-04")
-    format(starttime, "%Y-%m") == "2005-04")
-# table(d_m$larvaecount != 0)
-# FALSE  TRUE 
-#    88   106
-# hist(log(d_m$larvaecount))
-# hist(log10(d_m$larvaecount))
-
-p_m <- d_m |> 
-  select(-data) |>
-  mutate(
-    # larvaecount_log   = log(larvaecount + 0.1),
-    larvaecount_log10 = log10(larvaecount + 0.1)) |>
-    # larvaecount_log   = log(larvaecount),
-    # larvaecount_log10 = log10(larvaecount)) |>
-  sf::st_as_sf(
-    coords = c("longitude", "latitude"), 
-    crs    = 4326,
-    remove = F)
-# table(p_m$larvaecount)
-# table(p_m$larvaecount_log)
-# table(p_m$larvaecount_log10)
+```{r anchovy-map-2005-04}
+pts_ym <- read_sf(ym_geo)
 
 mapView(
-  p_m, 
-  zcol        = "larvaecount_log10", 
+  pts_ym, 
+  zcol        = "n_per_vol_log10", 
   col.regions = rev(RColorBrewer::brewer.pal(11,"Spectral")))
 ```
 
@@ -188,7 +162,7 @@ mapView(
 
 The Web Map Tile Service (WMTS) allows for interactive map rendering by `variable`, `time` and `depth`. It does not include the raw data values, so is ony for visualization.
 
-The [WMTS `GetCapabilities`](https://wmts.marine.copernicus.eu/teroWmts/GLOBAL_MULTIYEAR_PHY_001_030?request=GetCapabilities) gets parsed to collect available variables, depths (`elevation`) and dates (`time`) for the given `product_id/dataset_id/variable` (`r glue("{product_id}/{dataset_id}")`).
+The [WMTS `GetCapabilities`](https://wmts.marine.copernicus.eu/teroWmts/GLOBAL_MULTIYEAR_PHY_001_030?request=GetCapabilities) gets parsed to collect available variables, depths (`elevation`) and dates (`time`) for the given `product_id/dataset_id/variable`.
 
 See:
 
@@ -200,9 +174,7 @@ See:
 
 Using the CLI.
 
-```{r}
-#| label: cm-setup
-
+```{r cm-setup}
 librarian::shelf(
   glue, httr2, leaflet, lubridate, xml2)
 
@@ -221,9 +193,8 @@ dataset_id = "cmems_mod_glo_phy_my_0.083deg_P1M-m" # P1M: monthly
 # myint: MY interim (MYINT) 
 # nrt:   NRT (Near Real Time)
 
-variable   = "thetao"
-# date       = as.Date("2022-04-01") |> as.POSIXct()
-date       = as.Date("2005-04-01") |> as.POSIXct()
+variable = "thetao"
+date     = as.Date("2005-04-01") |> as.POSIXct()
 ```
 
 - `product_id`:  `r product_id`
@@ -238,18 +209,9 @@ librarian::shelf(
 
 cm   = "/opt/homebrew/Caskroom/mambaforge/base/envs/copernicusmarine/bin/copernicusmarine"
 user = "bbest1"
-pass = readLines("~/My Drive/private/data.marine.copernicus.eu_bbest1-password.txt")
-
-# Product and dataset IDs
-productId = "cmems_mod_nws_phy_anfc_0.027deg-3D_P1D-m"
-
-# Ocean Variable(s)
-var = "thetao"
-
-cm      = "/opt/homebrew/Caskroom/mambaforge/base/envs/copernicusmarine/bin/copernicusmarine"
-user    = "bbest1"
-pass    = readLines("~/My Drive/private/data.marine.copernicus.eu_bbest1-password.txt")
-verbose = T
+# pass = readLines("~/My Drive/private/data.marine.copernicus.eu_bbest1-password.txt")
+pass = "temporary"
+verbose = F
 
 # CalCOFI bounding box
 b <- st_union(cc_grid_zones) |> st_bbox()
@@ -262,7 +224,7 @@ cmd <- glue("{cm} describe --include-datasets -c {dataset_id}")
 if (!file.exists(m_json))
   system(cmd, intern = TRUE) |> writeLines(m_json)
 m_o <- read_json(m_json)
-listviewer::jsonedit(m_o)
+# listviewer::jsonedit(m_o)
 
 get_coord = function(o, v){
   if (!v %in% names(o))
@@ -357,19 +319,9 @@ depth <- depths[length(depths)] * -1
 # output filename
 nc <- here(glue("data/copernicusmarine/{dataset_id}__{variable}__{date}.nc"))
 
-cmd <- glue("{cm} --help subset") 
-cmd <- glue("{cm} -h subset") 
-cmd <- glue("{cm} --version") 
-# copernicusmarine, version 1.1.1
 # https://help.marine.copernicus.eu/en/articles/7970514-copernicus-marine-toolbox-installation
 # mamba update --name copernicusmarine copernicusmarine --yes
 # copernicusmarine, version 1.2.2
-
-# dataset_version <- "202311"
-# dataset_part    <- "timeseries" # or "geoseries"
-#   --dataset-version {dataset_version} \\
-#   --dataset-part    {dataset_part} \\
-
 cmd <- glue("
   {cm} subset -i {dataset_id} \\
   -x {b$xmin} -X {b$xmax}     \\
@@ -385,7 +337,7 @@ if (verbose)
 if (!file.exists(nc))
   system(cmd, intern = TRUE)
 
-r      <- rast(nc)
+r <- rast(nc)
 # dimensions  : 369, 353, 1  (nrow, ncol, nlyr)
 # resolution  : 0.08333334, 0.08333334  (x, y)
 # extent      : -135.2083, -105.7917, 18.45833, 49.20833  (xmin, xmax, ymin, ymax)
@@ -398,6 +350,8 @@ plet(r_3857, tiles = "Esri.WorldImagery")
 
 ## Interpolate larvae on Copernicus grid 
 
+### IDW(x,y)
+
 ```{r cm-larvae-idw}
 # basename(nc) # cmems_mod_glo_phy_my_0.083deg_P1M-m__thetao__2022-04-01.nc"
 
@@ -405,74 +359,74 @@ r_cm <- rast(nc)
 
 r_idw <- terra::interpIDW(
   x = r_cm, 
-  y = p_m |> terra::vect(),
-  "larvaecount_log10",
+  y = pts_ym |> terra::vect(),
+  "n_per_vol_log10",
   # borrow from defaults in [calcofi4r:: pts_to_rast_idw()](https://github.com/CalCOFI/calcofi4r/blob/5e9508565a78785f8b374c3b8b5e2c4cdf559ed0/R/analyze.R#L236C5-L236C100)
   radius = 1.5, power = 1.3, smooth = 0.2,
   maxPoints = Inf, minPoints = 1, near = F, fill = NA) |> 
   mask(r_cm)
-names(r_idw)     <- "larvaecount_log10_idw"
+names(r_idw)     <- "n_per_vol_log10_idw"
 # time(r_idw) # "2005-04-01 UTC"
 varnames(r_idw)  <- ""
 longnames(r_idw) <- ""
 # units(r_idw) ""
 # plot(r_idw)
   
-p_mi <- r_idw |> 
-  terra::extract(p_m, method = "simple", bind = T) |> 
+pts_ymi <- r_idw |> 
+  terra::extract(pts_ym, method = "simple", bind = T) |> 
   st_as_sf() |> 
   mutate(
-    dif_idw = larvaecount_log10 - larvaecount_log10_idw)
+    dif_idw = n_per_vol_log10 - n_per_vol_log10_idw)
 
-# p_mi$dif_idw |> summary()
+# pts_ymi$dif_idw |> summary()
 #     Min.  1st Qu.   Median     Mean  3rd Qu.     Max.     NA's 
 # -2.24324 -0.28024  0.00000  0.01276  0.38674  1.76034        6 
 
-d_mi <- p_mi |> 
+d_mi <- pts_ymi |> 
   st_drop_geometry() |>
-  filter(!is.na(larvaecount_log10_idw))
+  filter(!is.na(n_per_vol_log10_idw))
 
 rmse_idw <- with(
   d_mi,
   sqrt( 
-    sum((larvaecount_log10_idw - larvaecount_log10)^2) /
+    sum((n_per_vol_log10_idw - n_per_vol_log10)^2) /
       nrow(d_mi) ) )
 # [1] 0.7824212
 
 mapView(
   r_idw, 
-  zcol        = "larvaecount_log10_idw", 
+  zcol        = "n_per_vol_log10_idw", 
   col.regions = rev(RColorBrewer::brewer.pal(11,"Spectral"))) + 
 mapView(
-  p_mi, 
-  zcol        = "larvaecount_log10", 
+  pts_ymi, 
+  zcol        = "n_per_vol_log10", 
   col.regions = rev(RColorBrewer::brewer.pal(11,"Spectral"))) +
 mapView(
-  p_mi, 
+  pts_ymi, 
   zcol        = "dif_idw", 
   col.regions = rev(RColorBrewer::brewer.pal(11,"Spectral"))) 
 ```
 
-Root Mean Square Error: `r mse_idw`
+Root Mean Square Error: `r rmse_idw`
 
-### GAM: x, y
+### GAM(x, y)
 
 ```{r cm-larvae-gam-xy}
 librarian::shelf(mgcv)
 
 # fit GAM
 mdl_xy <- mgcv::gam(
-  larvaecount_log10 ~ s(longitude, latitude, k = 60),
-  data   = p_mi |> st_drop_geometry() |> 
-    select(larvaecount_log10, longitude, latitude), 
+  n_per_vol_log10 ~ s(longitude, latitude, k = 60),
+  data   = pts_ymi |> st_drop_geometry() |> 
+    select(n_per_vol_log10, longitude, latitude), 
   method = "GCV.Cp", # method = "REML",
   family = gaussian())
-summary(mdl_xy)
+# summary(mdl_xy)
 # Family: gaussian 
 # Link function: identity 
 # 
 # Formula:
-# larvaecount_log10 ~ s(longitude, latitude, k = 60)
+# n_per_vol_log10 ~ s(longitude, latitude, k = 60)
 # 
 # Parametric coefficients:
 #             Estimate Std. Error t value Pr(>|t|)    
@@ -496,17 +450,17 @@ p_idw <- r_idw |>
     longitude = sf::st_coordinates(geometry)[,1],
     latitude  = sf::st_coordinates(geometry)[,2])
 
-# range(p_idw$larvaecount_log10_idw)
+# range(p_idw$n_per_vol_log10_idw)
 # [1] -1.000000  2.413467
 
 # predict with GAM
-p_idw$larvaecount_log10_xy <- predict.gam(
+p_idw$n_per_vol_log10_xy <- predict.gam(
   mdl_xy, 
   newdata = p_idw |> 
     st_drop_geometry() |> 
     select(longitude, latitude), 
   type = "response") # link") # "response")
-range(p_idw$larvaecount_log10_xy)
+# range(p_idw$n_per_vol_log10_xy) # -4.334638  0.183662
 
 r_xy <- rasterize(
   p_idw |> 
@@ -514,72 +468,72 @@ r_xy <- rasterize(
     select(longitude, latitude) |>
     as.matrix(),
   r_idw, 
-  values = p_idw$larvaecount_log10_xy)
-range(values(r_xy, na.rm=T))
+  values = p_idw$n_per_vol_log10_xy)
+# range(values(r_xy, na.rm=T)) # -4.334638  0.183662
 # plot(r_xy)
-names(r_xy)     <- "larvaecount_log10_xy"
+names(r_xy)     <- "n_per_vol_log10_xy"
 
-p_mix <- r_xy |> 
-  terra::extract(p_mi, method = "simple", bind = T) |> 
+pts_ymix <- r_xy |> 
+  terra::extract(pts_ymi, method = "simple", bind = T) |> 
   st_as_sf() |> 
   mutate(
-    dif_xy = larvaecount_log10 - larvaecount_log10_xy)
+    dif_xy = n_per_vol_log10 - n_per_vol_log10_xy)
 
-# p_mix$dif_xy |> summary()
+# pts_ymix$dif_xy |> summary()
 #      Min.   1st Qu.    Median      Mean   3rd Qu.      Max.      NA's 
 # -2.259856 -0.326382 -0.000841  0.024003  0.401710  2.446836         6 
 
-d_mix <- p_mix |> 
+d_mix <- pts_ymix |> 
   st_drop_geometry() |>
-  filter(!is.na(larvaecount_log10_idw))
+  filter(!is.na(n_per_vol_log10_idw))
 
 rmse_xy <- with(
   d_mix,
   sqrt( 
-    sum((larvaecount_log10_xy - larvaecount_log10)^2) /
+    sum((n_per_vol_log10_xy - n_per_vol_log10)^2) /
       nrow(d_mix) ) )
 # [1] 0.8445961
 
 mapView(
   r_xy, 
-  zcol        = "larvaecount_log10_xy", 
+  zcol        = "n_per_vol_log10_xy", 
   col.regions = rev(RColorBrewer::brewer.pal(11,"Spectral"))) + 
 mapView(
-  p_mix, 
-  zcol        = "larvaecount_log10", 
+  pts_ymix, 
+  zcol        = "n_per_vol_log10", 
   col.regions = rev(RColorBrewer::brewer.pal(11,"Spectral"))) +
 mapView(
-  p_mix, 
+  pts_ymix, 
   zcol        = "dif_xy", 
   col.regions = rev(RColorBrewer::brewer.pal(11,"Spectral"))) 
 ```
 
 Root Mean Square Error: `r rmse_xy`
 
-### GAM: x, y, temperature
+### GAM(x, y, temperature)
 
 ```{r cm-larvae-gam-xyt}
 librarian::shelf(mgcv)
 
 names(r_cm) <- "thetao"
 
-p_mixt <- r_cm |> 
-  terra::extract(p_mix, method = "simple", bind = T) |> 
+pts_ymixt <- r_cm |> 
+  terra::extract(pts_ymix, method = "simple", bind = T) |> 
   st_as_sf()
 
 # fit GAM
 mdl_xyt <- mgcv::gam(
-  larvaecount_log10 ~ s(longitude, latitude, k = 60) + s(thetao),
-  data   = p_mixt |> st_drop_geometry() |> 
-    select(larvaecount_log10, longitude, latitude, thetao), 
+  n_per_vol_log10 ~ s(longitude, latitude, k = 60) + s(thetao),
+  data   = pts_ymixt |> st_drop_geometry() |> 
+    select(n_per_vol_log10, longitude, latitude, thetao), 
   method = "GCV.Cp", # method = "REML",
   family = gaussian())
-summary(mdl_xyt)
+# summary(mdl_xyt)
 # Family: gaussian 
 # Link function: identity 
 # 
 # Formula:
-# larvaecount_log10 ~ s(longitude, latitude, k = 60) + s(thetao)
+# n_per_vol_log10 ~ s(longitude, latitude, k = 60) + s(thetao)
 # 
 # Parametric coefficients:
 #             Estimate Std. Error t value Pr(>|t|)    
@@ -606,17 +560,17 @@ p_cm <- r_cm |>
     longitude = sf::st_coordinates(geometry)[,1],
     latitude  = sf::st_coordinates(geometry)[,2])
 
-# range(p_idw$larvaecount_log10_idw)
+# range(p_idw$n_per_vol_log10_idw)
 # [1] -1.000000  2.413467
 
 # predict with GAM
-p_cm$larvaecount_log10_xyt <- predict.gam(
+p_cm$n_per_vol_log10_xyt <- predict.gam(
   mdl_xyt, 
   newdata = p_cm |> 
     st_drop_geometry() |> 
     select(longitude, latitude, thetao), 
   type = "response") # link") # "response")
-range(p_cm$larvaecount_log10_xyt)
+# range(p_cm$n_per_vol_log10_xyt) # -5.369945  1.165597
 
 r_xyt <- rasterize(
   p_cm |> 
@@ -624,45 +578,44 @@ r_xyt <- rasterize(
     select(longitude, latitude) |>
     as.matrix(),
   r_idw, 
-  values = p_cm$larvaecount_log10_xyt)
-range(values(r_xyt, na.rm=T))
+  values = p_cm$n_per_vol_log10_xyt)
+# range(values(r_xyt, na.rm=T)) # -5.369945  1.165597
 # plot(r_xy)
-names(r_xyt)     <- "larvaecount_log10_xyt"
+names(r_xyt)     <- "n_per_vol_log10_xyt"
 
-p_mixt <- r_xyt |> 
-  terra::extract(p_mixt, method = "simple", bind = T) |> 
+pts_ymixt <- r_xyt |> 
+  terra::extract(pts_ymixt, method = "simple", bind = T) |> 
   st_as_sf() |> 
   mutate(
-    dif_xyt = larvaecount_log10 - larvaecount_log10_xyt)
+    dif_xyt = n_per_vol_log10 - n_per_vol_log10_xyt)
 
-
-
-p_mixt$dif_xyt |> summary()
+# pts_ymixt$dif_xyt |> summary()
 #      Min.   1st Qu.    Median      Mean   3rd Qu.      Max.      NA's 
-# -2.403050 -0.347458  0.003876  0.001680  0.394274  2.457923         6 
-
-d_mixt <- p_mixt |> 
+# -3.596383 -0.429587 -0.003567  0.002183  0.587119  2.562442         6
+     
+     
+d_mixt <- pts_ymixt |> 
   st_drop_geometry() |>
-  filter(!is.na(larvaecount_log10_idw))
+  filter(!is.na(n_per_vol_log10_idw))
 
 rmse_xyt <- with(
   d_mixt,
   sqrt( 
-    sum((larvaecount_log10_xyt - larvaecount_log10)^2) /
+    sum((n_per_vol_log10_xyt - n_per_vol_log10)^2) /
       nrow(d_mixt) ) )
 # rmse_xyt
 # [1] 0.8054934
 
 mapView(
   r_xyt, 
-  zcol        = "larvaecount_log10_xyt", 
+  zcol        = "n_per_vol_log10_xyt", 
   col.regions = rev(RColorBrewer::brewer.pal(11,"Spectral"))) + 
 mapView(
-  p_mixt, 
-  zcol        = "larvaecount_log10", 
+  pts_ymixt, 
+  zcol        = "n_per_vol_log10", 
   col.regions = rev(RColorBrewer::brewer.pal(11,"Spectral"))) +
 mapView(
-  p_mixt, 
+  pts_ymixt, 
   zcol        = "dif_xyt", 
   col.regions = rev(RColorBrewer::brewer.pal(11,"Spectral"))) 
 ```
