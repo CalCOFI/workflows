@@ -1,0 +1,214 @@
+---
+title: "Clean-up Database"
+editor_options: 
+  chunk_output_type: console
+---
+
+**Goal**: Systematically evaluate and clean-up the database, including renaming tables and columns, and documenting relationships, per naming conventions being established in [CalCOFI/docs: Database](
+https://calcofi.io/docs/db.html).
+
+```{r}
+#| label: "db con"
+
+source(here::here("../apps_dev/libs/db.R")) # con: database connection 
+
+librarian::shelf(
+  calcofi/calcofi4r,
+  dm, DT, glue, purrr, stringr, tidyr)
+```
+
+## Transitionary Tables
+
+Let's evaluate tables that are in transition, i.e. containing in the table name: "old", "new", "backup", "temp", "temp", or "test".
+
+```{r}
+d_tbls <- tibble(
+  table = dbListTables(con)) |> 
+  mutate(
+    subset = case_when(
+      str_detect(table, "old")      ~ "old",
+      str_detect(table, "new")      ~ "new",
+      str_detect(table, "backup")   ~ "backup",
+      str_detect(table, "temp|tmp") ~ "temp",
+      str_detect(table, "test")     ~ "test",
+      TRUE ~ "base")) |> 
+  arrange(subset, table)
+table(d_tbls$subset)
+
+d_tbls |> 
+  filter(subset != "base")
+
+tbls_other <- d_tbls |> 
+  filter(subset != "base") |> 
+  pull(table)
+cc_db_catalog(tbls_other)
+```
+
+- `TODO:` Evaluate these tables and decide what to do with them, i.e. rename or drop.
+
+## Base Tables
+
+```{r}
+tbls_base <- d_tbls |> 
+  filter(subset == "base") |> 
+  pull(table)
+tibble(
+  table = tbls_base)
+
+cc_db_catalog(tables = tbls_base)
+```
+
+### Proposed renames
+
+- Generalize from "species" to "taxa" (or "taxon" singular), since not all species_codes are at taxonomic level of species.
+
+- Follow conventions at [calcofi.io/docs: Database](https://calcofi.io/docs/db.html).
+
+- See [CalCOFI/workflows: `modify_db.R`](https://github.com/CalCOFI/workflows/blob/main/modify_db.R) for previous SQL commands, including renames, and dates.
+
+- `TODO:` Consider other changes and how to document. For instance, perhaps track changes in the `pg_dump` of only data definition language (DDL) for the whole database (i.e., `CREATE TABLE` SQL statements), and see `git diff`erences over time.
+
+    ```bash
+    pg_dump -U user_name -h host database -s -t table_or_view_names -f table_or_view_names.sql
+    ```
+
+```{r}
+#| label: "TODO renames"
+#| eval: false
+
+# TODO: species_codes -> taxa
+q("ALTER TABLE species_codes RENAME TO taxa")
+# TODO: species.spccode -> sp_key
+q("ALTER TABLE taxa RENAME COLUMN spccode TO taxa_key")
+```
+
+## Relationships (`dm` R package)
+
+-   [document database: entity-relationship diagram, comments, etc. · Issue #2 · CalCOFI/docs](https://github.com/CalCOFI/docs/issues/2)
+
+-   [Relational Data Models • dm](https://dm.cynkra.com/)
+    -   [Cheat sheet • dm](https://dm.cynkra.com/articles/cheatsheet.html)
+    -   [Introduction to relational data models • dm](https://krlmlr.github.io/dm/articles/howto-dm-theory.html)
+
+### Relationships, `"keys_only"`
+
+```{r}
+con_dm <- dm_from_con(
+  con, 
+  table_names = tbls_base,
+  learn_keys  = T)
+con_dm
+
+dm_draw(con_dm, view_type = "keys_only")
+```
+
+### Relationships, `"all"`
+
+This is too much.
+
+```{r}
+# TODO: make SVG zoomable
+dm_draw(con_dm, view_type = "all")
+```
+
+### Show existing unique keys across tables
+
+```{r}
+dm_get_all_uks(con_dm)
+```
+
+### Identify candidate keys
+
+```{r}
+# candidate primary keys
+dm_enum_pk_candidates(con_dm, "species_codes")
+
+# candidate foreign keys
+try(
+  dm_enum_fk_candidates(con_dm, "species_codes", "species_groups"))
+```
+
+### Run Shiny app
+
+```{r}
+#| eval: false
+
+# install.packages("DiagrammeRsvg")
+dm_gui(dm = con_dm)
+```
+
+![The `dm::dm_gui()` Shiny app after clicking on two tables. Haven't tried editing relationships yet.](figures/update-db_dm-shiny-app.png)
+
+```{r}
+#| label: "TODO relationships"
+#| eval: false
+#| echo: false
+
+# Add primary keys:
+dm_add_pk(con_dm, table = "species_codes", columns = "spccode")
+```
+
+```{r}
+#| label: "alternative reactable()"
+#| eval: false
+#| echo: false
+
+htmltools::browsable(
+    tagList(
+      div(
+        div(tags$label("Filter Type", `for` = "tbl-filter")),
+        tags$select(
+          id = "tbl-filter",
+          onchange = "Reactable.setFilter('dbcatalog', 'table_type', this.value)",
+          tags$option("All", value = ""),
+          lapply(unique(d_t$table_type), tags$option)
+        )
+      ),
+      tags$hr("aria-hidden" = "true"),
+  reactable(
+    d_t,
+    elementId = "dbcatalog",
+    # groupBy = c("table_type"),
+    searchable = T,
+    columns = list(
+      table = colDef(
+        html = TRUE,
+        # Show table description under table name
+        cell = function(value, index) {
+          descrip <- d_t$table_description[index]
+          # browser()
+          ifelse(!is.na(descrip),
+            div(
+              div(style = "font-weight: 600", value),
+              div(style = "font-size: 0.75rem", HTML(descrip))) |> 
+              as.character(),
+            div(style = "font-weight: 600", value) |> 
+              as.character() ) } ),
+      table_description = colDef(show = FALSE),
+      table_type        = colDef(show = FALSE) ),
+    details = function(index) {
+      d_c_t <- d_c[d_c$table == d_t$table[index], ]
+      htmltools::div(
+        style = "padding: 1rem",
+        reactable(
+          d_c_t, 
+          columns = list(
+            table              = colDef(show = FALSE),
+            column_description = colDef(show = FALSE),
+            column             = colDef(
+              html = TRUE,
+              cell = function(value, index) {
+                descrip <- d_c_t$column_description[index]
+                # browser()
+                ifelse(
+                  !is.na(descrip),
+                  div(
+                    div(style = "font-weight: 600", value),
+                    div(style = "font-size: 0.75rem", HTML(descrip))) |> 
+                    as.character(),
+                  div(style = "font-weight: 600", value) |> 
+                    as.character() ) } ) ),
+          outlined = TRUE ) ) } ) ) )
+```
+
+
