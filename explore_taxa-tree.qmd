@@ -1,0 +1,368 @@
+---
+title: "Explore Taxonomic Tree"
+editor: visual
+editor_options: 
+  chunk_output_type: console
+---
+
+## Prep taxa with `taxadb`
+
+-   [Tutorial for taxadb • taxadb](https://docs.ropensci.org/taxadb/articles/intro.html)
+    *   [Name Providers and schema used in taxadb • taxadb](https://docs.ropensci.org/taxadb/articles/data-sources.html)
+
+```{r}
+librarian::shelf(
+  DBI, dplyr, glue, here, ritis, taxadb)
+
+source(here("../apps_dev/libs/db.R")) # con: database connection 
+
+d_s <- tbl(con, "species_codes") |> 
+  collect() |> 
+  filter(
+    itis_tsn != "NA") |>  # TODO: rm from DB
+  mutate(
+    taxonID = glue("ITIS:{itis_tsn}") )  # 1,209 × 7
+
+d_s |> 
+  filter(taxonID == "ITIS:668632")
+
+taxadb::tl_import(
+  provider = "itis",
+  schema   = "dwc")  # Darwin Core
+
+d_i <- taxa_tbl("itis") |>
+  collect()   # 899,937 × 15
+
+d_s_i <- d_s |> 
+  distinct(taxonID, .keep_all = T) |>
+  left_join(
+    d_i,
+    by   = "taxonID")  # 1,199 × 21
+
+d_s_i |> 
+  filter(taxonID != acceptedNameUsageID) |> 
+  select(id, spccode, taxonID, scientific_name, acceptedNameUsageID)
+# # A tibble: 40 × 6
+#       id spccode taxonID     scientific_name           scientificName            acceptedNameUsageID
+#    <int>   <int> <glue>      <chr>                     <chr>                     <chr>              
+#  1    33      46 ITIS:633906 Pellisolus eubranchus     Pellisolus eubranchus     ITIS:623655        
+#  2    52      67 ITIS:182855 Bathylagus nigrigenys     Bathylagus nigrigenys     ITIS:623379        
+#  3    56      71 ITIS:162092 Bathylagus wesethi        Bathylagus wesethi        ITIS:623380        
+#  4    57      72 ITIS:162097 Bathylagus stilbius       Bathylagus stilbius       ITIS:162096        
+#  5    80      97 ITIS:162205 Yarella blackfordi        Yarella blackfordi        ITIS:622360        
+#  6   154     193 ITIS:645284 Cheilopogon dorsomaculata Cheilopogon dorsomaculata ITIS:645237        
+#  7   234     304 ITIS:649728 Triphoturus oculeum       Triphoturus oculeum       ITIS:162766        
+#  8   257     330 ITIS:162520 Omosudidae                Omosudidae                ITIS:162523        
+#  9   258     331 ITIS:162522 Omosudis lowei            Omosudis lowei            ITIS:644694        
+# 10   280     353 ITIS:161304 Facciolella gilberti      Facciolella gilberti      ITIS:635857
+# https://www.itis.gov/servlet/SingleRpt/SingleRpt?search_topic=TSN&search_value=633906#null
+
+# TODO: update to acceptedNameUsageID
+
+ritis::common_names(633906)
+ritis::common_names(tsn = 623655)
+
+taxize::get_wormsid(taxon.names, rows=1, marine_only=FALSE)
+
+```
+
+### pq_ltree
+
+- [PostgreSQL: Documentation: 16: F.23. ltree — hierarchical tree-like data type](https://www.postgresql.org/docs/current/ltree.html)
+
+```{r}
+librarian::shelf(
+  tidyr)
+
+d <- tbl(con, "taxa_hierarchy") |> 
+  # select(id, path) |> 
+  collect()
+max(d$id) # 1124
+d$id[[1]]
+d$path[[1]]
+
+d_p <- dbGetQuery(
+  con, 
+  "SELECT DISTINCT 'ITIS:' || string_to_table(ltree2text(path), '.') AS \"taxonID\" FROM taxa_hierarchy") |>
+  tibble() |> 
+  left_join(
+    d_i,
+    by   = "taxonID") |> 
+  mutate(
+    taxon_sel = glue("{taxonRank}: {scientificName} ({taxonID})"))  # 1,199 × 21
+    # 1,199 × 21
+d_p$taxon_sel
+
+d_p |> 
+  filter(taxonID != acceptedNameUsageID)
+# A tibble: 31 × 15
+# TODO: fix to acceptedNameUsageID
+
+
+
+table(d_p$taxonomicStatus)
+# accepted  synonym 
+#     1683       31
+d_p |> 
+  filter(taxonomicStatus == "synonym") |> 
+  select(taxonID, scientificName, taxonRank, acceptedNameUsageID, update_date)
+# # A tibble: 31 × 5
+#    taxonID     scientificName            taxonRank acceptedNameUsageID update_date
+#    <chr>       <chr>                     <chr>     <chr>               <chr>      
+#  1 ITIS:668632 Scopelosaurus smithi      species   ITIS:162569         2005-05-03 
+#  2 ITIS:622491 Sigmops gracile           species   ITIS:622490         2005-02-22 
+#  3 ITIS:162205 Yarella blackfordi        species   ITIS:622360         2005-02-22 
+#  4 ITIS:616592 Monolene asaedai          species   ITIS:1007802        2016-07-28 
+#  5 ITIS:162092 Bathylagus wesethi        species   ITIS:623380         2004-01-22 
+#  6 ITIS:161304 Facciolella gilberti      species   ITIS:635857         2005-05-03 
+#  7 ITIS:162097 Bathylagus stilbius       species   ITIS:162096         2004-01-22 
+#  8 ITIS:646452 Canthidermis maculatus    species   ITIS:173169         2017-08-28 
+#  9 ITIS:165341 Coryphaenoides pectoralis species   ITIS:165427         2005-10-04 
+# 10 ITIS:645284 Cheilopogon dorsomaculata species   ITIS:645237         2004-09-21
+
+sum(is.na(d_p$scientificName))
+# 1,713 × 1
+  
+  select m.*, gs.posn, substring(m.message, gs.posn, 15) as split_message 
+    from messages m
+         cross join lateral generate_series(1, length(message), 15) gs(posn);
+  
+
+tbl(con, "taxa_hierarchy") |> 
+  mutate(
+    path_txt = ltree2text
+  )
+  select(path) |> 
+  collect()
+
+dbSendStatement(con, "INSERT INTO taxa_hierarchy (id, path) VALUES (9999,'202423.914154.914156.158852.331030.914179.161061.161105.161693.161694.161699.553173.572640.161837.161847')")
+
+d <- tbl(con, "taxa_hierarchy") |> 
+  filter(id == 9999) |>
+  select(id, path) |> 
+  collect()
+dbSendStatement(con, "CREATE INDEX path_idx_btree ON taxa_hierarchy USING BTREE (path);")
+dbSendStatement(con, "DELETE FROM taxa_hierarchy WHERE id = 9999;")
+  
+dbGetQuery(con, "SELECT * FROM taxa_hierarchy WHERE path ~ '*.161837.*'")
+dbGetQuery(con, "SELECT * FROM taxa_hierarchy WHERE path ~ '*.161847.*'")
+dbGetQuery(con, "SELECT * FROM taxa_hierarchy WHERE path ~ '*.16184.*'")
+dbGetQuery(con, "SELECT * FROM taxa_hierarchy WHERE path <@ '*.161699.*'")
+   tbl(con, "taxa_hierarchy") |> 
+     filter()
+  161847
+
+tbl(con, "taxa_hierarchy") # |> collect() |> nrow()  # 1,125
+#       id parent tsn    scientific_name          taxon_rank lsid                                      path                                       
+#    <int> <chr>  <chr>  <chr>                    <chr>      <chr>                                     <pq_ltree>                                 
+#  1     0 161837 161847 Anchoa compressa         Species    urn:lsid:marinespecies.org:taxname:275512 202423.914154.914156.158852.331030.914179.…
+#  2     1 161860 161862 Cetengraulis mysticetus  Species    urn:lsid:marinespecies.org:taxname:280092 202423.914154.914156.158852.331030.914179.…
+#  3     2 162303 162308 Alepocephalus            Genus      urn:lsid:marinespecies.org:taxname:125868 202423.914154.914156.158852.331030.914179.…
+#  4     3 162308 162316 Alepocephalus tenebrosus Species    urn:lsid:marinespecies.org:taxname:272849 202423.914154.914156.158852.331030.914179.…
+#  5     4 162099 162102 Dolichopteryx            Genus      urn:lsid:marinespecies.org:taxname:125895 202423.914154.914156.158852.331030.914179.…
+#  6     5 162057 162061 Argentina                Genus      urn:lsid:marinespecies.org:taxname:125885 202423.914154.914156.158852.331030.914179.…
+#  7     6 162061 162068 Argentina sialis         Species    urn:lsid:marinespecies.org:taxname:272897 202423.914154.914156.158852.331030.914179.…
+#  8     7 162058 162059 Nansenia candida         Species    urn:lsid:marinespecies.org:taxname:272926 202423.914154.914156.158852.331030.914179.…
+#  9     8 162058 623630 Nansenia crassa          Species    urn:lsid:marinespecies.org:taxname:272927 202423.914154.914156.158852.331030.914179.…
+# 10     9 162080 162081 Bathylagus               Genus      urn:lsid:marinespecies.org:taxname:125888 202423.914154.914156.158852.331030.914179.…
+
+
+tbl(con, "taxa_hierarchy")
+
+```
+
+
+### Remove duplicate "hybrid" species
+
+```{r}
+dupe_taxonID <- d_s_i |> 
+  filter(duplicated(taxonID)) |> 
+  pull(taxonID) |> 
+  unique()
+
+d_s_i |> 
+  select(-id, -common_name, -itis_tsn) |> 
+  filter(
+    taxonID %in% dupe_taxonID)
+# A tibble: 2 × 18
+#   spccode scientific_name taxon_rank taxonID scientificName taxonRank acceptedNameUsageID taxonomicStatus update_date kingdom
+#     <int> <chr>           <chr>      <glue>  <chr>          <chr>     <chr>               <chr>           <chr>       <chr>  
+# 1     963 Inopsetta isch… Species    ITIS:6… Inopsetta isc… species   ITIS:172893         synonym         2016-07-28  Animal…
+# 2     963 Inopsetta isch… Species    ITIS:6… Inopsetta isc… species   ITIS:172921         synonym         2016-07-28  Animal…
+# # ℹ 8 more variables: phylum <chr>, class <chr>, order <chr>, family <chr>, genus <chr>, specificEpithet <chr>,
+# #   infraspecificEpithet <chr>, vernacularName <chr>
+
+d_s_i <- d_s_i |> 
+  filter(!duplicated(taxonID))  # 1,198 × 21
+```
+
+- [ITIS - Report: Inopsetta ischyra](https://www.itis.gov/servlet/SingleRpt/SingleRpt?search_topic=TSN&search_value=621021#null): a "hybrid" species
+  > Comments: Inopsetta ischyra (Jordan and Gilbert, 1880) is a apparently a hybrid of Platichthys stellatus (Pallas, 1788) and Parophrys vetulus Girard, 1854. According to Mecklenburg, Mecklenburg and Thorsteinson, 2002, "Current rules of nomenclature..., however, do not allow binomens for hybrids. If the form ever is shown to be a distinct species, the binomen Inopsetta ischyra (Jordan and Gilbert, 1880) might apply"
+  - [ITIS - Report: Platichthys stellatus](https://www.itis.gov/servlet/SingleRpt/SingleRpt?search_topic=TSN&search_value=172893#null)
+  - [ITIS - Report: Parophrys vetulus](https://www.itis.gov/servlet/SingleRpt/SingleRpt?search_topic=TSN&search_value=172921#null)
+
+## Add any missing intermediary taxa for tree building
+
+
+```{r}
+#| echo: false
+#| eval: false
+
+names(d_s_i) |> paste(collapse = "` > `")
+```
+
+- `kingdom` > `phylum` > `class` > `order` > `family` > `genus` > `specificEpithet`
+
+```{r}
+d_s_i <- d_s_i |> 
+  mutate(
+    # remove extra white space, and make NA if blank
+    across(where(is.character), ~ na_if(trim(.), "") ) )
+
+# TODO: DROP species_codes.id, since have spccode; RENAME species_codes.spccode to sp_code
+
+d_s_i |> 
+  select(taxon_rank, kingdom) |>
+  table(useNA = "ifany")
+#             kingdom
+# taxon_rank   Animalia <NA>
+#   Class             0    2
+#   Family            0  148
+#   Genus             0  258
+#   Infraclass        0    1
+#   Kingdom           0    1
+#   None              3    2
+#   Order             0   15
+#   Phylum            0    2
+#   Species         741    1
+#   Subfamily         0   17
+#   Suborder          0    5
+#   Subphylum         0    1
+#   Subspecies        0    1
+
+higher_taxa <- c("kingdom", "phylum", "class", "order", "family", "genus", "specificEpithet")
+# for (x in higher_taxa){
+# }
+```
+
+
+## Prep with `taxize`
+
+```{r}
+librarian::shelf(
+  readr, stringr, taxize)
+
+ids <- d_s_i |> 
+  filter(taxonID != "ITIS:NA") |>
+  pull(taxonID) |> 
+  unique() |> 
+  str_replace("ITIS:", "") |> 
+  as.integer() 
+# length(ids)  # 1,197
+
+d_s_i$kingdom |> table(useNA = "ifany")
+# Animalia     <NA> 
+#      745      453
+
+system.time({
+  d_c <- classification(ids, return_id = TRUE, db = "itis")
+}) # 6.8, 16.7 min
+d_c_w <- cbind(d_c) |> tibble()  # wide
+d_c_l <- rbind(d_c) |> tibble()  # long: 15,790 × 4
+
+table(d_c_w$kingdom, useNA = "ifany")
+d_c_w |> 
+  filter(is.na(kingdom)) |> 
+  View()
+
+d_c_l_d <- d_c_l |>
+  distinct(name, rank, id) # distinct: 1,748 × 3
+
+d_c_l_d |> 
+  group_by(rank) |> 
+  summarize(n = n()) |> 
+  arrange(desc(n))
+# # A tibble: 23 × 2
+#    rank            n
+#    <chr>       <int>
+#  1 species       746
+#  2 genus         535
+#  3 family        209
+#  4 subfamily      77
+#  5 suborder       57
+#  6 order          37
+#  7 superorder     14
+#  8 tribe          13
+#  9 subgenus       12
+# 10 superfamily    12
+
+# names(d_c_w) |> 
+#   str_subset("_id", negate = T) |> 
+#   setdiff("query") |> 
+#   paste(collapse = " > ")
+# kingdom > subkingdom > infrakingdom > phylum > subphylum > infraphylum > superclass > class > superorder > order > family > genus > species > suborder > subfamily > tribe > subclass > superfamily > subspecies > subgenus > superphylum > infraorder > infraclass
+# manually corrected:
+# kingdom > subkingdom > infrakingdom > superphylum > phylum > subphylum > infraphylum > superclass > class > subclass > infraclass > superorder > order > suborder > infraorder > superfamily > family > subfamily > tribe > genus > subgenus > species > subspecies
+
+flds_x <- intersect(
+  names(d_c_w),
+  names(d_s_i))
+# flds_x |> paste(collapse = " > ")
+setdiff(
+  names(d_s_i),
+  names(d_c_w))
+
+d_c_w <- d_c_w |> 
+  mutate(
+    taxonID = glue("ITIS:{query}")) |> 
+  select(-query)
+
+d_s_i <- d_s_i |>
+  select(-all_of(flds_x)) |>
+  left_join(
+    d_c_w,
+    by = "taxonID")
+# View(d_s_i)  # 1,197 × 61
+
+write_csv(d_s_i, here("data/taxa-tree.csv"))
+
+# TODO: common names
+# r <- itis_getrecord(161119)
+# r[["commonNameList"]][["commonNames"]] |> tibble() |> filter(language == "English")
+
+```
+
+...
+
+### Get lowest common taxon for root of tree
+
+- [Retrieve the lowest common taxon and rank for a given taxon name or ID — lowest_common • taxize](https://docs.ropensci.org/taxize/reference/lowest_common.html)
+
+## Render tree
+
+```{r}
+librarian::shelf(
+  shinyTree)
+
+
+tr <- dfToTree(
+  d_s_i |> 
+    arrange(kingdom, phylum, class, order, family, genus, specificEpithet, infraspecificEpithet) |>
+    View()
+  ),
+  hierarchy = c(
+    "kingdom", "phylum", "class", "order", "family", "genus", "specificEpithet",
+    "scientificName"))
+d_s_i
+
+
+tr <- shinyWidgets::create_tree(
+  d_s_i,
+  levels    = c(
+    "kingdom", "phylum", "class", "order", "family", "genus", "specificEpithet", "scientificName"),
+  levels_id = c(
+    "kingdom", "phylum", "class", "order", "family", "genus", "specificEpithet", "taxonID"))
+
+
+```
+
