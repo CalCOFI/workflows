@@ -1,0 +1,127 @@
+---
+title: "Scrape Google Dataset Search"
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+librarian::shelf(
+  dplyr, DT, glue, here, lubridate, purrr, readr, rvest, stringr)
+options(readr.show_col_types = F)
+
+ds_csv <- here("data/gdatasets/gdatasets.csv")
+dir.create(dirname(ds_csv), showWarnings = F)
+
+q <- "calcofi"
+u <- glue("https://datasetsearch.research.google.com/search?src=0&query={q}")
+# browseURL(u)
+```
+
+Search for `r q` on Google Dataset Search:
+
+- `r u`
+
+```{r}
+sess <- read_html_live(u)
+
+n_ds <- 0
+get_n_ds <- function() length(sess$html_elements(".VAt4 > li > div[data-docid]"))
+while (get_n_ds() > n_ds){
+  message(glue("n_ds = {n_ds}"))
+  n_ds <- get_n_ds()
+  sess$scroll_into_view(glue(".VAt4 > li:nth-child({n_ds})"))
+  Sys.sleep(1)
+}
+n_ds # 72, then 69
+
+get_ds <- function(li){
+  
+  # browser()
+  # li = 69; 
+  docid = sess$html_elements(glue(".VAt4 > li:nth-child({li}) > div")) |> 
+      html_attr("data-docid")
+  # x <- read_html(u_doc) |> 
+  sess$click(glue(".VAt4 > li:nth-child({li})")) 
+  x <- sess$html_elements(".hTmcCe")
+  
+  y <- tibble(
+    docid = docid,
+    url   = glue("https://datasetsearch.research.google.com/search?docid={docid}"),
+    title = x |> 
+      html_element(xpath = "//h1[contains(@class, 'SAyv5')]/span/text()") |> 
+      html_text(),
+    more_versions = x |> 
+      html_element(".GcPeUb") |> 
+      html_attr("href"),
+    # TODO: iterate over more versions URL
+    related_article = x |> 
+      html_element(".VcqiVe") |> 
+      html_attr("href"),
+    # TODO: 4 scholarly articles cite this dataset (View in Google Scholar) 
+    #  https://datasetsearch.research.google.com/search?src=0&query=calcofi&docid=L2cvMTFranA1cHhzbA%3D%3D
+    explore_at = x |> 
+      html_elements(
+        xpath = "//div[contains(text(),'Explore at:')]//a") |> 
+      html_attr("href") |> 
+      list(),
+    explore_at_n = length(unlist(explore_at)),
+    download_formats = x |> 
+      html_elements(".Zo5qib") |> 
+      html_text() |> 
+      list(),
+    download_formats_n = length(unlist(download_formats)),
+    dataset_updated = x |> 
+      html_element(
+        xpath = "//div[contains(text(),'Dataset updated')]/following-sibling::span") |> 
+      html_text() |> 
+      as_date(format = "%B %d, %Y"),
+    dataset_provided_by = x |> 
+      html_element(
+        xpath = "//div[contains(text(),'Dataset provided by')]/following-sibling::span") |> 
+      html_text(),
+    time_period_covered = x |> 
+      html_element(
+        xpath = "//div[contains(text(),'Time period covered')]/following-sibling::span") |> 
+      html_text(), # TODO: as.integer() for single year?
+    area_covered = x |> 
+      html_element(
+        xpath = "//div[contains(text(),'Area covered')]/following-sibling::c-wiz/div") |> 
+      html_attr("data-geojson-string"),
+    authors = x |> 
+      html_element(
+        xpath = "//div[contains(text(),'Authors')]/following-sibling::span") |> 
+      html_text() |> 
+      str_trim(),
+    description = x |> 
+      html_element(
+        xpath = "//div[contains(text(),'Description')]/following-sibling::div") |> 
+      html_text() |> 
+      str_trim())
+  if (nrow(y) != 1)
+    browser()
+  y
+}
+
+d <- tibble(
+  li = 1:n_ds) |> 
+  mutate(
+    map(li, get_ds) |> 
+      list_rbind())
+# TODO: fix warnings
+# There were 4 warnings in `mutate()`.
+# The first warning was:
+# ℹ In argument: `list_rbind(map(li, get_ds))`.
+# Caused by warning:
+# !  1 failed to parse.
+
+d |> 
+  mutate(
+    explore_at       = map_chr(explore_at, ~paste(.x, collapse = "; ")),
+    download_formats = map_chr(download_formats, ~paste(.x, collapse = "; "))) |> 
+  write_csv(ds_csv)
+
+
+read_csv(ds_csv) |> 
+  DT::datatable()
+```
+
