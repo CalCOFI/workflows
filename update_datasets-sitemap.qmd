@@ -39,6 +39,7 @@ options(readr.show_col_types = F)
 d_gs      <- "https://docs.google.com/spreadsheets/d/1uhviF2ecfOqGaSbC_JE8B5jPRqqjMaFc9TNCK_m297c/edit?gid=1271784325#gid=1271784325"
 d_csv     <- here("datasets/repo_links.csv")
 ds_csv    <- here("datasets/repo_datasets.csv")
+dss_csv   <- here("datasets/repo_datasets_summary.csv")
 sm_xml    <- here("datasets/sitemap.xml")
 ck_status <- F
 
@@ -141,7 +142,7 @@ d |>
 - Repositories require login:
   * [ZooDB](`r filter(d, repo == "ZooDB") |> pull(link)`)
   * [ZooScan](`r filter(d, repo == "ZooScan") |> pull(link)`)
-- TODO: 
+- <a name="todo"></a>TODO: 
   * [ ] add datasets from other repositories
   * [ ] extract JSON-LD from dataset links (see [CalCOFI/workflows#24](https://github.com/CalCOFI/workflows/issues/24))
   * [ ] update `lastmod` to dataset's last modified date
@@ -182,7 +183,16 @@ datasets|>
 
 ```{r}
 # tabulate datasets per repo ----
-table(datasets$repo)
+dss <- datasets |> 
+  count(repo, name = "n_datasets")
+
+write_csv(dss, dss_csv)
+
+dss |> 
+  datatable(
+    options = list(
+      dom = "t",
+      pageLength = nrow(d)))
 ```
 
 ## Write sitemap.xml
