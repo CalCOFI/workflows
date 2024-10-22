@@ -1,0 +1,191 @@
+---
+title: "Generate a datasets sitemap.xml for ODIS crawling"
+editor: visual
+editor_options: 
+  chunk_output_type: console
+format:
+  html:
+    code-fold: true
+    # number-offset:
+---
+
+**Goal**: Generate `datasets/sitemap.xml` with datasets  already in authoritative repositories with JSON-LD content for ODIS crawling.
+
+- Tracking in Github issue(s): 
+  * [register datasets with ODIS (using JSON-LD) · Issue #24 · CalCOFI/workflows](https://github.com/CalCOFI/workflows/issues/24)
+- Techniques:
+  * Use RESTful based APIs directly where possible. Avoid web scraping since most brittle to website changes. Avoid custom R packages (e.g., [`rerddap`](https://docs.ropensci.org/rerddap/) or [`rdataone`](https://github.com/DataONEorg/rdataone) for EDI) since have more R package dependencies, may be out of date and add unnecessary complexity.
+  * Store CSV tables of repositories and datasets gleaned as snapshot in Github along with this report output as html.
+
+## Read GoogleSheet of Repositories
+
+```{r}
+librarian::shelf(
+  curl, dplyr, DT, here, httr2, glue, googlesheets4, janitor, knitr, purrr, 
+  readr, stringr, tidyr)
+options(readr.show_col_types = F)
+
+d_gs      <- "https://docs.google.com/spreadsheets/d/1uhviF2ecfOqGaSbC_JE8B5jPRqqjMaFc9TNCK_m297c/edit?gid=1271784325#gid=1271784325"
+d_csv     <- here("datasets/repo_links.csv")
+ds_csv    <- here("datasets/repo_datasets.csv")
+sm_xml    <- here("datasets/sitemap.xml")
+ck_status <- F
+
+dir.create(dirname(d_csv), showWarnings = F)
+
+gs4_deauth()
+read_sheet(d_gs) |> 
+  write_csv(d_csv)
+
+d <- read_csv(d_csv) |> 
+  clean_names() |> # for now, simply translates to lower case
+  mutate(
+    to_ds = map_chr(
+      link, 
+      \(link){
+        case_when(
+          str_detect(link, "erddap")        ~ "erddap_ds(link)",
+          str_detect(link, "edirepository") ~ "edi_ds(link)",
+          .default = NA) } ) )
+
+if (ck_status){
+  d <- d |> 
+    mutate(
+      status = map_chr(
+        link, 
+        \(x){
+          request(x) |> 
+            req_perform() |> 
+            resp_status_desc() } ) )
+}
+
+d |> 
+  select(repo, link) |> 
+  write_csv(d_csv)
+
+d |> 
+  mutate(
+    link   = glue("<a href='{link}' target='_blank'>{link}</a>")) |>
+  datatable(
+    escape = F,
+    options = list(
+      dom = "ft",
+      pageLength = nrow(d)))
+```
+
+- source: [Living program document: CalCOFI Data Inventory\_updated Oct2024 - Google Sheets](`r d_gs`)
+
+## Issues
+
+- `repo`: "ER**R**DAP" -> "ER**D**DAP"
+- requires login:
+  * [ZooDB](`r filter(d, repo == "ZooDB") |> pull(link)`)
+  * [ZooScan](`r filter(d, repo == "ZooScan") |> pull(link)`)
+
+## Fetch Datasets functions per repository type
+
+Always return a data frame with columns:
+
+- `title`: title of dataset
+- `url`: url to dataset
+
+And attach the original data frame as an attribute `datasets`.
+
+```{r}
+erddap_ds <- function(link){
+  # link = d$link[3]
+  
+  x <- link |> 
+    str_replace(fixed("index.html"), fixed("index.csv")) |> 
+    read_csv() |> 
+    filter(
+      Accessible == "public") |> 
+    mutate(
+      pfx = dplyr::if_else(
+        !is.na(tabledap),
+        tabledap,
+        griddap),
+      url = glue("{pfx}.html"))
+  
+  ds <- x |> 
+    select(
+      title = Title, url)
+  attr(ds, "datasets") <- x
+  ds
+}
+
+edi_ds <- function(link){
+  # link = d$link[2]
+  # browser()
+  
+  u <- url_parse(link)
+  u$path  <- str_replace(u$path, "simpleSearch", "downloadSearch")
+  u$query <- list(
+    q = paste(names(u$query), u$query, sep = "=", collapse = "&"))
+  #     curl_escape(httr2:::query_build(u$query)))
+  
+  x <- read_csv(url_build(u)) |> 
+    mutate(
+      url = glue("https://portal.edirepository.org/nis/mapbrowse?packageid={packageid}"))
+  
+  ds <- x |> 
+    select(title, url)
+  attr(ds, "datasets") <- x
+  ds
+}
+
+datasets <- d |> 
+  filter(!is.na(to_ds)) |> # View()
+  mutate(
+    ds = map2(
+      to_ds, link,
+      \(to_ds, link){
+        eval(parse(text = to_ds)) } ) ) |> 
+  unnest(ds)
+
+datasets |> 
+  write_csv(ds_csv)
+
+datasets|> 
+  mutate(
+    dataset = glue("<a href='{url}' target='_blank'>{title}</a>")) |>
+  select(repo, dataset) |> 
+  datatable(escape = F)
+```
+
+## Write sitemap.xml
+
+- [Build and Submit a Sitemap | Google Search Documentation](https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap)
+- [Protocol | sitemaps.org](https://www.sitemaps.org/protocol.html)\
+  * `loc`: dataset url
+  * `lastmod`: today's date; TODO: change to dataset last modified date
+  * `changefreq`: skipping; valid values: always, hourly, daily, weekly, monthly, yearly, never
+  * `priority`: skipping; valid values: 0 to 1, e.g. 0.8
+  
+
+```{r}
+datasets <- read_csv(ds_csv)
+
+sm_bdy <- datasets |>
+  glue_data(
+    "<url>
+      <loc>{url}</loc>
+      <lastmod>{Sys.Date()}</lastmod>
+    </url>") |> 
+  paste(collapse = "\n")
+
+write_lines(
+  list(
+    glue('
+      <?xml version="1.0" encoding="UTF-8"?>
+        <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'), 
+    sm_bdy, 
+    '</urlset>'), 
+  path = sm_xml)
+```
+
+[`https://calcofi.io/workflows/datasets/sitemap.xml`](https://calcofi.io/workflows/datasets/sitemap.xml):
+
+```xml
+{{< include datasets/sitemap.xml >}}
+```
