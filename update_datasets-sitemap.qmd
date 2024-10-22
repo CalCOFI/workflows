@@ -6,7 +6,6 @@ editor_options:
 format:
   html:
     code-fold: true
-    # number-offset:
 ---
 
 **Goal**: Generate `datasets/sitemap.xml` with datasets  already in authoritative repositories with JSON-LD content for ODIS crawling.
@@ -20,12 +19,14 @@ format:
 ## Read GoogleSheet of repos
 
 Columns from original GoogleSheet:
+
 - `repo`: repository name
 - `link`: url to repository
 
 Extra columns added by this script:
+
 - `to_ds`: custom function to fetch datasets from repository
-- `status`: check if repository is accessible (`OK`) or not (`Not Found`); optionally set with `ck_status <- T`
+- `status`: check if repository is accessible (`OK`) or not (`Not Found`); optionally set in code with `ck_status <- T`
 
 ```{r}
 # libraries ----
@@ -99,7 +100,8 @@ d <- read_csv(d_csv) |>
         case_when(
           str_detect(link, "erddap")        ~ "erddap_ds(link)",
           str_detect(link, "edirepository") ~ "edi_ds(link)",
-          .default = NA) } ) )
+          .default = NA) } ) ) |> 
+  relocate(to_ds, .after = repo)
 
 if (ck_status){
   d <- d |> 
@@ -114,7 +116,7 @@ if (ck_status){
 
 # write repos to csv ----
 d |> 
-  select(repo, link) |> 
+  select(repo, to_ds, link) |> 
   write_csv(d_csv)
 
 # show repos ----
@@ -125,7 +127,10 @@ d |>
     escape = F,
     options = list(
       dom = "ft",
-      pageLength = nrow(d)))
+      pageLength = nrow(d))) |> 
+  formatStyle(
+    "to_ds",
+    `font-family` = 'monospace')
 ```
 
 - source: [Living program document: CalCOFI Data Inventory\_updated Oct2024 - Google Sheets](`r d_gs`)
@@ -136,7 +141,10 @@ d |>
 - Repositories require login:
   * [ZooDB](`r filter(d, repo == "ZooDB") |> pull(link)`)
   * [ZooScan](`r filter(d, repo == "ZooScan") |> pull(link)`)
-- TODO: other repositories
+- TODO: 
+  * [ ] add datasets from other repositories
+  * [ ] extract JSON-LD from dataset links (see [CalCOFI/workflows#24](https://github.com/CalCOFI/workflows/issues/24))
+  * [ ] update `lastmod` to dataset's last modified date
 
 ## Fetch datasets per repo
 
