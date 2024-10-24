@@ -8,25 +8,25 @@ format:
     code-fold: true
 ---
 
-**Goal**: Generate `datasets/sitemap.xml` with datasets  already in authoritative repositories with JSON-LD content for ODIS crawling.
+**Goal**: Generate `datasets/sitemap.xml` with datasets already in authoritative repositories with JSON-LD content for ODIS crawling.
 
-- Tracking in Github issue(s): 
-  * [register datasets with ODIS (using JSON-LD) · Issue #24 · CalCOFI/workflows](https://github.com/CalCOFI/workflows/issues/24)
-- Techniques:
-  * Use RESTful based APIs directly where possible. Avoid web scraping since most brittle to website changes. Avoid custom R packages (e.g., [`rerddap`](https://docs.ropensci.org/rerddap/) or [`rdataone`](https://github.com/DataONEorg/rdataone) for EDI) since have more R package dependencies, may be out of date and add unnecessary complexity.
-  * Store CSV tables of repositories and datasets gleaned as snapshot in Github along with this report output as html.
+-   Tracking in Github issue(s):
+    -   [register datasets with ODIS (using JSON-LD) · Issue #24 · CalCOFI/workflows](https://github.com/CalCOFI/workflows/issues/24)
+-   Techniques:
+    -   Use RESTful based APIs directly where possible. Avoid web scraping since most brittle to website changes. Avoid custom R packages (e.g., [`rerddap`](https://docs.ropensci.org/rerddap/) or [`rdataone`](https://github.com/DataONEorg/rdataone) for EDI) since have more R package dependencies, may be out of date and add unnecessary complexity.
+    -   Store CSV tables of repositories and datasets gleaned as snapshot in Github along with this report output as html.
 
 ## Read GoogleSheet of repos
 
 Columns from original GoogleSheet:
 
-- `repo`: repository name
-- `link`: url to repository
+-   `repo`: repository name
+-   `link`: url to repository
 
 Extra columns added by this script:
 
-- `to_ds`: custom function to fetch datasets from repository
-- `status`: check if repository is accessible (`OK`) or not (`Not Found`); optionally set in code with `ck_status <- T`
+-   `to_ds`: custom function to fetch datasets from repository
+-   `status`: check if repository is accessible (`OK`) or not (`Not Found`); optionally set in code with `ck_status <- T`
 
 ```{r}
 # libraries ----
@@ -134,25 +134,32 @@ d |>
     `font-family` = 'monospace')
 ```
 
-- source: [Living program document: CalCOFI Data Inventory\_updated Oct2024 - Google Sheets](`r d_gs`)
+-   source: [Living program document: CalCOFI Data Inventory_updated Oct2024 - Google Sheets](%60r%20d_gs%60)
 
 ## Issues
 
-- GoogleSheet typo under `repo`: "ER**R**DAP" -> "ER**D**DAP"
-- Repositories require login:
-  * [ZooDB](`r filter(d, repo == "ZooDB") |> pull(link)`)
-  * [ZooScan](`r filter(d, repo == "ZooScan") |> pull(link)`)
-- <a name="todo"></a>TODO: 
-  * [ ] add datasets from other repositories
-  * [ ] extract JSON-LD from dataset links (see [CalCOFI/workflows#24](https://github.com/CalCOFI/workflows/issues/24))
-  * [ ] update `lastmod` to dataset's last modified date
+-   GoogleSheet typo under `repo`: "ER**R**DAP" -\> "ER**D**DAP"
+-   Repositories require login:
+    -   [ZooDB](`r filter(d, repo == "ZooDB") |> pull(link)`)
+    -   [ZooScan](`r filter(d, repo == "ZooScan") |> pull(link)`)
+-   <a name="todo"></a>TODO:
+    -   [ ] Add datasets from other repositories
+
+    -   [ ] Extract JSON-LD from dataset links (see [CalCOFI/workflows#24](https://github.com/CalCOFI/workflows/issues/24))
+
+    -   [ ] Update `lastmod` to dataset's last modified date
+
+    -   [ ] Create an ODISCat entry
+
+        > (and point to the sitemap there). See steps at [book.odis.org/gettingStarted.html](https://book.odis.org/gettingStarted.html). We'll be driving the connection through that entry (to find your sitemap etc).\
+        > -- \@jmckenna, per [iodepo/odis-arch#461](https://github.com/iodepo/odis-arch/issues/461#issuecomment-2429931617)
 
 ## Fetch datasets per repo
 
 Always return a data frame with columns:
 
-- `title`: title of dataset
-- `url`: url to dataset
+-   `title`: title of dataset
+-   `url`: url to dataset
 
 And attach the original data frame as an attribute `datasets`.
 
@@ -197,14 +204,14 @@ dss |>
 
 ## Write sitemap.xml
 
-- [Build and Submit a Sitemap | Google Search Documentation](https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap)
-- [Protocol | sitemaps.org](https://www.sitemaps.org/protocol.html)\
-  * `loc`: dataset link
-  * `lastmod`: today's date\
-     TODO: change to dataset's last modified date
-  * `changefreq`: SKIP; valid values: always, hourly, daily, weekly, monthly, yearly, never
-  * `priority`: SKIP; valid values: 0 to 1, e.g. 0.8
-  
+-   [Build and Submit a Sitemap \| Google Search Documentation](https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap)
+-   [Protocol \| sitemaps.org](https://www.sitemaps.org/protocol.html)\
+    -   `loc`: dataset link
+    -   `lastmod`: today's date\
+        TODO: change to dataset's last modified date
+    -   `changefreq`: SKIP; valid values: always, hourly, daily, weekly, monthly, yearly, never
+    -   `priority`: SKIP; valid values: 0 to 1, e.g. 0.8
+
 ```{r}
 # write sitemap.xml ----
 datasets <- read_csv(ds_csv)
@@ -227,12 +234,12 @@ write_lines(
   path = sm_xml)
 ```
 
-**Datasets** `sitemap.xml`: 
+**Datasets** `sitemap.xml`:
 
-- [`calcofi.io/workflows/datasets/sitemap.xml`](https://calcofi.io/workflows/datasets/sitemap.xml)
+-   [`calcofi.io/workflows/datasets/sitemap.xml`](https://calcofi.io/workflows/datasets/sitemap.xml)
 
 Contents of `sitemap.xml`:
 
-```xml
+``` xml
 {{< include datasets/sitemap.xml >}}
 ```
