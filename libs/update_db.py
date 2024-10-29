@@ -1,3 +1,21 @@
+# Update the database from local csv files in the /share/data/data_uploads folder
+#
+# Example run:
+#   cd /share/github/workflows   # ensure it can read the .env in the same folder for connecting to the database
+#   /usr/bin/python3 libs/update_db.py eggs.csv egg_uuids_tmp
+#
+# Debug with [ipdb](https://hasil-sharma.github.io/2017-05-13-python-ipdb/):
+#   /usr/bin/python3 -m ipdb libs/update_db.py eggs.csv egg_uuids_tmp
+#
+# Example output:
+#   ['netid', 'sppcode', 'tally']
+#   ['netid', 'sppcode', 'tally']
+#   Fields match, updating table...
+#   Clear data from table
+#   Write new data
+#   All done!
+
+# import ipdb
 import numpy as np
 import pandas as pd
 from collections import Counter
@@ -7,6 +25,8 @@ from sqlalchemy import text
 import os
 import requests
 from dotenv import load_dotenv
+import psycopg2
+# /usr/bin/pip3 install ipdb numpy pandas psycopg2 python-dotenv requests sqlalchemy 
 
 load_dotenv()  # take environment variables from .env file in root directory of repo
 dbpass = os.getenv("dbpass") 
@@ -17,7 +37,8 @@ basepath = '/share/data/'
 dirpath=f'{basepath}data_uploads'
 
 def get_dbconnection():
-    engine = create_engine("postgresql+psycopg2://admin:%s@localhost/gis" % quote_plus(dbpass))
+    #engine = create_engine("postgresql+psycopg2://admin:%s@localhost/gis" % quote_plus(dbpass))
+    engine = create_engine("postgresql+psycopg2://admin:%s@postgis:5432/gis" % quote_plus(dbpass))
     dbConnection = engine.connect()
     return dbConnection
 
@@ -60,7 +81,6 @@ def update_table(tablename, filename):
     data_df.columns = table_fields
     print(table_fields)
 
-
     with get_dbconnection() as conn:
         sql = f"SELECT table_schema, table_name, column_name, data_type FROM INFORMATION_SCHEMA.COLUMNS WHERE table_schema = 'public' AND table_name = '{tablename}'"
         db_df = pd.read_sql(sql, conn)
@@ -95,7 +115,9 @@ def update_table(tablename, filename):
             sql=text(f"TRUNCATE TABLE {tablename};")
             conn.execution_options(autocommit=True).execute(sql)
             print('Write new data')
+            # ipdb.set_trace() # DEBUG: 
             rcount=data_df.to_sql(name=tablename,con=conn, if_exists='append', index=False, chunksize=500)
+            conn.commit()
             if('geom' in db_fields):
                 # Recalculate geometry column
                 print('Table has geometry column, recalculating values...')
@@ -107,6 +129,6 @@ def update_table(tablename, filename):
 if __name__ == "__main__":
     import sys
     csvfile = sys.argv[1]
-    table = sys.argv[2]
+    table   = sys.argv[2]
 
     update_table(table, csvfile)
