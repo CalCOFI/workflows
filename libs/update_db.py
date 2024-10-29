@@ -8,7 +8,7 @@ import os
 import requests
 from dotenv import load_dotenv
 
-load_dotenv()  # take environment variables from .env.
+load_dotenv()  # take environment variables from .env file in root directory of repo
 dbpass = os.getenv("dbpass") 
 
 #basepath='/Users/marinafrants/Documents/CalCOFI/'
