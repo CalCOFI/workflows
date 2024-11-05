@@ -210,7 +210,7 @@ dss |>
     -   `loc`: dataset link
     -   `lastmod`: today's date\
         TODO: change to dataset's last modified date
-    -   `changefreq`: SKIP; valid values: always, hourly, daily, weekly, monthly, yearly, never
+    -   `changefreq`: weekly; valid values: always, hourly, daily, weekly, monthly, yearly, never
     -   `priority`: SKIP; valid values: 0 to 1, e.g. 0.8
 
 ```{r}
@@ -222,6 +222,7 @@ sm_body <- datasets |>
     "<url>
       <loc>{url}</loc>
       <lastmod>{Sys.Date()}</lastmod>
+      <changefreq>weekly</changefreq>
     </url>") |> 
   paste(collapse = "\n")
 
@@ -247,7 +248,30 @@ Contents of `sitemap.xml`:
 
 ## Create an ODISCat entry
 
-### Spatial Coverage using `calcofi4r`
+### NEW: Spatial Coverage using `ctd_casts.geom`
+
+We'll get the spatial extent for the entirety of the CalCOFI CTD casts going back to 1949.
+
+``` sql
+SELECT
+  MIN(date) AS date_min,
+  MAX(date) AS date_max,
+  ST_Extent(geom) AS bbox
+FROM ctd_casts
+```
+
+|            |            |                                                  |
+|------------|------------|--------------------------------------------------|
+| date_min   | date_max   | bbox                                             |
+| 1949-02-28 | 2020-01-26 | BOX(-164.083333 18.416666,-105.966666 47.916666) |
+
+Looking at JSON-LD in source of page [California Cooperative Oceanic Fisheries Investigations (CalCOFI)Database \| InPort](https://www.fisheries.noaa.gov/inport/item/20691), it wants minY minX maxY maxX, so for `Spatial coverage` using:
+
+```
+"box": "18.4 -164.1 47.9 -106.0"
+```
+
+### OLD: Spatial Coverage using `calcofi4r`
 
 Per example under [Essential Ocean Variables — The Ocean InfoHub Project and the development of the ODIS-architecture](https://book.odis.org/thematics/variables/index.html#references):
 
@@ -269,7 +293,7 @@ Per example under [Essential Ocean Variables — The Ocean InfoHub Project and t
 
 #### CalCOFI zones
 
-Let's use the CalCOFI zones described in the  [`calcofi4r`](https://calcofi.io/calcofi4r/articles/calcofi4r.html) R package to construct the study envelope for the `spatialCoverage` term.
+Let's use the CalCOFI zones described in the [`calcofi4r`](https://calcofi.io/calcofi4r/articles/calcofi4r.html) R package to construct the study envelope for the `spatialCoverage` term.
 
 ```{r}
 librarian::shelf(
@@ -297,7 +321,7 @@ lmap(cc_ply)
 
 #### Remove holes
 
-```{r}  
+```{r}
 # remove holes and cast to simple polygon
 cc_ply <- st_multipolygon(lapply(cc_ply, function(x) x[1])) |> 
   st_sfc(crs = 4326) |> 
@@ -311,7 +335,7 @@ Number of characters: `r st_as_text(cc_ply, digits=4) |> nchar()`
 
 To reduce number of characters in text string.
 
-```{r} 
+```{r}
 cc_ply <- cc_ply |> 
   st_simplify(preserveTopology = T, dTolerance = 10*1000) |> # simplify by 10 km
   st_cast("POLYGON") |>  
@@ -332,11 +356,13 @@ Number of characters: `r nchar(cc_txt)`
 Transform to "schema.org expects lat long (Y X) coordinate order", versus the default "X Y" order for well-known text (WKT) (and every other geospatial standard, including GeoJSON).
 
 Original:
+
 ```{r}
 cc_txt
 ```
 
 Converted:
+
 ```{r}
 cc_txt = cc_txt |>
   # Swap coordinates
@@ -374,12 +400,13 @@ sc
 
 Added record here:
 
-- [catalogue.odis.org/view/3318](https://catalogue.odis.org/view/3318)
-  - print: [CalCOFI on ODIS record 3318.pdf](./datasets/CalCOFI on ODIS record 3318.pdf)
+-   [catalogue.odis.org/view/3318](https://catalogue.odis.org/view/3318)
+    -   print: [CalCOFI on ODIS record 3318.pdf](./datasets/CalCOFI%20on%20ODIS%20record%203318.pdf)
 
 screenshot...
 
-![](./datasets/CalCOFI on ODIS record 3318.png)
+![](./datasets/CalCOFI%20on%20ODIS%20record%203318.png)
+
 ## Parse JSON-LD from dataset links
 
 ```{r}
@@ -439,5 +466,3 @@ read_csv(dsi_csv) |>
   deframe() |> 
   jsonedit()
 ```
-
-
