@@ -39,6 +39,7 @@ options(readr.show_col_types = F)
 d_gs      <- "https://docs.google.com/spreadsheets/d/1uhviF2ecfOqGaSbC_JE8B5jPRqqjMaFc9TNCK_m297c/edit?gid=1271784325#gid=1271784325"
 d_csv     <- here("datasets/repo_links.csv")
 ds_csv    <- here("datasets/repo_datasets.csv")
+dsi_csv   <- here("datasets/repo_datasets_info.csv")
 dss_csv   <- here("datasets/repo_datasets_summary.csv")
 sm_xml    <- here("datasets/sitemap.xml")
 ck_status <- F
@@ -379,6 +380,64 @@ Added record here:
 screenshot...
 
 ![](./datasets/CalCOFI on ODIS record 3318.png)
+## Parse JSON-LD from dataset links
 
+```{r}
+# Load required libraries
+librarian::shelf(
+  dplyr, httr2, jsonlite, listviewer, readr, rvest, dplyr, purrr, tibble, tidyr, yaml)
+redo_dsi = F
+
+# Define the function to extract and flatten JSON-LD data
+extract_jsonld <- function(url) {
+  # url <- d$url[1]
+  
+  # Fetch the web page using httr2
+  response <- request(url) %>%
+    req_perform()
+  
+  # Check if the request was successful
+  if (response$status_code == 200) {
+    page_content <- response %>%
+      resp_body_string()
+  } else {
+    warning(paste("Failed to retrieve the web page:", url))
+    return(NULL)
+  }
+  
+  # Parse the HTML content and find the script tag with type="application/ld+json"
+  script_node <- page_content |> 
+    read_html() |> 
+    html_node(
+      xpath = "//script[@type='application/ld+json']")
+  
+  if (is.na(script_node)) {
+    warning(paste("No JSON-LD found in the page:", url))
+    return(NULL)
+  }
+  
+  # Extract the JSON-LD content
+  html_text(script_node) |> 
+    fromJSON() |> 
+    as.yaml()
+}
+
+if (!file.exists(dsi_csv) | redo_dsi){
+  d <- read_csv(ds_csv) |> 
+    select(url) |> 
+    mutate(
+      jsonld_yaml = map_chr(url, extract_jsonld)) 
+  
+  write_csv(d, dsi_csv)
+}
+
+# show outputs
+read_csv(dsi_csv) |> 
+  mutate(
+    jsonld = map(jsonld_yaml, yaml::yaml.load)) |> 
+  select(-jsonld_yaml) |>
+  deframe() |> 
+  jsonedit()
+```
 
 
