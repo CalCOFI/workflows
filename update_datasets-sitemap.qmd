@@ -140,8 +140,8 @@ d |>
 
 -   GoogleSheet typo under `repo`: "ER**R**DAP" -\> "ER**D**DAP"
 -   Repositories require login:
-    -   [ZooDB](`r filter(d, repo == "ZooDB") |> pull(link)`)
-    -   [ZooScan](`r filter(d, repo == "ZooScan") |> pull(link)`)
+    -   [ZooDB](%60r%20filter(d,%20repo%20==%20%22ZooDB%22)%20%7C%3E%20pull(link)%60)
+    -   [ZooScan](%60r%20filter(d,%20repo%20==%20%22ZooScan%22)%20%7C%3E%20pull(link)%60)
 -   <a name="todo"></a>TODO:
     -   [ ] Add datasets from other repositories
 
@@ -149,7 +149,7 @@ d |>
 
     -   [ ] Update `lastmod` to dataset's last modified date
 
-    -   [ ] Create an ODISCat entry
+    -   [x] Create an ODISCat entry
 
         > (and point to the sitemap there). See steps at [book.odis.org/gettingStarted.html](https://book.odis.org/gettingStarted.html). We'll be driving the connection through that entry (to find your sitemap etc).\
         > -- \@jmckenna, per [iodepo/odis-arch#461](https://github.com/iodepo/odis-arch/issues/461#issuecomment-2429931617)
@@ -243,3 +243,142 @@ Contents of `sitemap.xml`:
 ``` xml
 {{< include datasets/sitemap.xml >}}
 ```
+
+## Create an ODISCat entry
+
+### Spatial Coverage using `calcofi4r`
+
+Per example under [Essential Ocean Variables — The Ocean InfoHub Project and the development of the ODIS-architecture](https://book.odis.org/thematics/variables/index.html#references):
+
+``` json
+"spatialCoverage": {
+        "@type": "Place",
+        "geo": {
+            "@type": "GeoShape",
+            "description": "schema.org expects lat long (Y X) coordinate order",
+            "polygon": "10.161667 142.014,18.033833 142.014,18.033833 147.997833,10.161667 147.997833,10.161667 142.014"
+        },
+        "additionalProperty": {
+            "@type": "PropertyValue",
+            "propertyID": "https://dbpedia.org/page/Spatial_reference_system",
+            "value": "https://www.w3.org/2003/01/geo/wgs84_pos"
+        }
+    }
+```
+
+#### CalCOFI zones
+
+Let's use the CalCOFI zones described in the  [`calcofi4r`](https://calcofi.io/calcofi4r/articles/calcofi4r.html) R package to construct the study envelope for the `spatialCoverage` term.
+
+```{r}
+librarian::shelf(
+  calcofi/calcofi4r, dplyr, glue, leaflet, mapview, rmapshaper, sf)
+
+mapview(cc_grid_zones, zcol="zone_key") +
+  mapview(cc_grid_ctrs, cex = 1)
+```
+
+#### Dissolve zones
+
+```{r}
+# dissolve zones into a single polygon
+cc_ply <- cc_grid_zones |> 
+  st_union()
+
+# mapview() not working on cc_ply, so switching to leaflet()
+lmap <- function(ply){
+  leaflet(ply) |> 
+  addProviderTiles(providers$Esri.OceanBasemap) |> 
+  addPolygons()
+}
+lmap(cc_ply)
+```
+
+#### Remove holes
+
+```{r}  
+# remove holes and cast to simple polygon
+cc_ply <- st_multipolygon(lapply(cc_ply, function(x) x[1])) |> 
+  st_sfc(crs = 4326) |> 
+  st_cast("POLYGON")
+lmap(cc_ply)
+```
+
+Number of characters: `r st_as_text(cc_ply, digits=4) |> nchar()`
+
+#### Simplify
+
+To reduce number of characters in text string.
+
+```{r} 
+cc_ply <- cc_ply |> 
+  st_simplify(preserveTopology = T, dTolerance = 10*1000) |> # simplify by 10 km
+  st_cast("POLYGON") |>  
+  st_as_sf() |> 
+  slice(1)
+
+cc_txt <- cc_ply |> 
+  st_geometry() |> 
+  st_as_text(digits=4)
+
+lmap(cc_ply)
+```
+
+Number of characters: `r nchar(cc_txt)`
+
+#### Transform text
+
+Transform to "schema.org expects lat long (Y X) coordinate order", versus the default "X Y" order for well-known text (WKT) (and every other geospatial standard, including GeoJSON).
+
+Original:
+```{r}
+cc_txt
+```
+
+Converted:
+```{r}
+cc_txt = cc_txt |>
+  # Swap coordinates
+  gsub("([-0-9.]+)\\s+([-0-9.]+)", "\\2 \\1", x = _) |>
+  # Remove space after comma
+  gsub(",\\s",",", x = _) |>
+  # Remove outer MULTIPOLYGON (( and ))
+  gsub("POLYGON \\(\\((.*)\\)\\)", "\\1", x = _)
+# nchar(cc_txt) # 2,476
+cc_txt
+```
+
+#### Enter `polygon` into `spatialCoverage`
+
+```{r}
+sc <- glue(
+  '{
+      "@type": "Place",
+      "geo": {
+          "@type": "GeoShape",
+          "description": "schema.org expects lat long (Y X) coordinate order",
+          "polygon": "{{cc_txt}}"
+      },
+      "additionalProperty": {
+          "@type": "PropertyValue",
+          "propertyID": "https://dbpedia.org/page/Spatial_reference_system",
+          "value": "https://www.w3.org/2003/01/geo/wgs84_pos"
+   }',
+  .open  = "{{",
+  .close = "}}")
+sc
+```
+
+### Add ODIS record `3318`
+
+Added record here:
+
+- [catalogue.odis.org/view/3318](https://catalogue.odis.org/view/3318)
+  - print: [CalCOFI on ODIS record 3318.pdf](./datasets/CalCOFI on ODIS record 3318.pdf)
+
+screenshot...
+
+![](./datasets/CalCOFI on ODIS record 3318.png)
+
+
+
