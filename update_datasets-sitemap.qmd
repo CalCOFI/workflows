@@ -55,10 +55,10 @@ erddap_ds <- function(link){
     mutate(
       pfx = dplyr::if_else(
         !is.na(tabledap),
-        tabledap,
-        griddap),
+        tabledap |> str_replace("tabledap", "info"),
+        griddap  |> str_replace("griddap",  "info")),
       url = glue("{pfx}/index.html"))
-  
+
   ds <- x |> 
     select(
       title = Title, url)
