@@ -1,24 +1,3 @@
-# Update the database from local csv files in the /share/data/data_uploads folder
-#
-# Example run:
-#   cd /share/github/workflows   # ensure it can read the .env in the same folder for connecting to the database
-#   /usr/bin/python3 libs/update_db.py eggs.csv egg_uuids_tmp
-#
-# Debug with [ipdb](https://hasil-sharma.github.io/2017-05-13-python-ipdb/):
-#   /usr/bin/python3 -m ipdb libs/update_db.py eggs.csv egg_uuids_tmp
-#
-# Example output:
-#   ['netid', 'sppcode', 'tally']
-#   ['netid', 'sppcode', 'tally']
-#   Fields match, updating table...
-#   Clear data from table
-#   Write new data
-#   All done!
-
-# import ipdb
-import smtplib
-from email.mime.text import MIMEText
-from datetime import datetime
 import numpy as np
 import pandas as pd
 from collections import Counter
@@ -27,26 +6,15 @@ from sqlalchemy.engine import create_engine
 from sqlalchemy import text
 import os
 import requests
-from dotenv import load_dotenv
-import psycopg2
-# /usr/bin/pip3 install ipdb numpy pandas psycopg2 python-dotenv requests sqlalchemy 
 
-load_dotenv()  # take environment variables from .env file in root directory of repo
-dbpass = os.getenv("dbpass") 
-
-localrun=False # Set to true if running locally
-if localrun:
-    basepath='/Users/marinafrants/Documents/CalCOFI/'
-    dirpath=f'{basepath}DBqueryTables/' #directory where the csv files are read from
-else:
-    basepath = '/share/data/'
-    dirpath=f'{basepath}data_uploads'
+#basepath='/Users/marinafrants/Documents/CalCOFI/'
+#dirpath=f'{basepath}DBqueryTables/' #directory where the csv files are read from
+basepath = '/share/data/'
+dirpath=f'{basepath}data_uploads'
 
 def get_dbconnection():
-    if localrun:
-        engine = create_engine("postgresql+psycopg2://admin:%s@localhost/gis" % quote_plus(dbpass))
-    else:
-        engine = create_engine("postgresql+psycopg2://admin:%s@postgis:5432/gis" % quote_plus(dbpass))
+    dbpass='***REMOVED***'
+    engine = create_engine("postgresql+psycopg2://admin:%s@localhost/gis" % quote_plus(dbpass))
     dbConnection = engine.connect()
     return dbConnection
 
@@ -84,10 +52,11 @@ def update_table(tablename, filename):
     '''filename: name of .csv file containing the new data
        clear the data currently in table and replace with new values from file'''
     fpath=os.path.join(dirpath,filename)
-    data_df = pd.read_csv(fpath, encoding='utf-8')
+    data_df = pd.read_csv(fpath)
     table_fields = [s.lower() for s in data_df.columns.tolist()]
     data_df.columns = table_fields
     print(table_fields)
+
 
     with get_dbconnection() as conn:
         sql = f"SELECT table_schema, table_name, column_name, data_type FROM INFORMATION_SCHEMA.COLUMNS WHERE table_schema = 'public' AND table_name = '{tablename}'"
@@ -117,42 +86,24 @@ def update_table(tablename, filename):
             print('Table fields mismatch -- update failed')
             print(f'Database columns are: {db_fields}')
             print(f'Table columns are: {table_fields}')
-            return False
         else:
             print('Fields match, updating table...')
             print('Clear data from table')
-            #sql=text(f"TRUNCATE TABLE {tablename};")
-            #conn.execution_options(autocommit=True).execute(sql)
+            sql=text(f"TRUNCATE TABLE {tablename};")
+            conn.execution_options(autocommit=True).execute(sql)
             print('Write new data')
-            # ipdb.set_trace() # DEBUG: 
-            #rcount=data_df.to_sql(name=tablename,con=conn, if_exists='append', index=False, chunksize=500)
-            #conn.commit()
+            rcount=data_df.to_sql(name=tablename,con=conn, if_exists='append', index=False, chunksize=500)
             if('geom' in db_fields):
                 # Recalculate geometry column
                 print('Table has geometry column, recalculating values...')
                 sql=(f"UPDATE {tablename}  SET geom = ST_SetSRID(ST_MakePoint(longitude, latitude), 4326);")
                 conn.execution_options(autocommit=True).execute(sql)
             print('All done!')
-            return True
+
 
 if __name__ == "__main__":
     import sys
     csvfile = sys.argv[1]
-    table   = sys.argv[2]
+    table = sys.argv[2]
 
-    retcode=update_table(table, csvfile)
-    fpath = os.path.join(dirpath, csvfile)
-    bufile = csvfile[:-4] + datetime.today().strftime('%Y%m%d') + '.csv'
-    if retcode:
-        # Rename file to include date and move to backup directory
-        bupath=os.path.join(dirpath,'backups',bufile)
-        print(f'Success! Moving {fpath} to {bupath}')
-        os.replace(fpath, bupath)
-
-    else:
-        #Rename file to include date and move to backup directory
-        errpath=os.path.join(dirpath,'errors',bufile)
-        print(f'Failure! Moving {fpath} to {errpath}')
-        os.replace(fpath, errpath)
-
-
+    update_table(table, csvfile)
