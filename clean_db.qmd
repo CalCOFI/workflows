@@ -51,16 +51,64 @@ cc_db_catalog(tbls_other)
 ```{r}
 tbls_base <- d_tbls |> 
   filter(subset == "base") |> 
-  pull(table)
+  pull(table) %>% 
+  c(., "species_codes_new") |> 
+  sort()
 tibble(
   table = tbls_base)
 
 cc_db_catalog(tables = tbls_base)
 ```
 
+### taxonomic 
+
+Let's evaluate tables that are taxonomic in nature, including "species", "taxa".
+
+```{r}
+#| label: tbls_taxonomic
+
+d_tbls <- tibble(
+  table = dbListTables(con)) |> 
+  mutate(
+    subset = case_when(
+      str_detect(table, "species") ~ "species",
+      str_detect(table, "taxa")    ~ "taxa")) |>
+  filter(
+    !is.na(subset)) |> 
+  arrange(subset, table) |> 
+  relocate(subset)
+datatable(d_tbls)
+  
+cc_db_catalog(d_tbls$table)
+```
+
+### \*\_uuids
+
+Let's look at redundancy of tables labeled with "uuids".
+
+```{r}
+#| label: tbls_uuid
+
+tbls_uuids <- str_subset(dbListTables(con), "uuids")
+tbls_pfx <- str_replace(tbls_uuids, "(.*)_uuids.*", "\\1")
+
+d_tbls <- tibble(
+  table = dbListTables(con)) |> 
+  mutate(
+    subset = case_when(
+      table %in% tbls_uuids ~ "uuids",
+      table %in% tbls_pfx   ~ "prefix")) |>
+  filter(
+    !is.na(subset)) |> 
+  arrange(table, subset)
+datatable(d_tbls)
+  
+cc_db_catalog(d_tbls$table)
+```
+
 ### Proposed renames
 
-- Generalize from "species" to "taxa" (or "taxon" singular), since not all species_codes are at taxonomic level of species.
+- Generalize from "species" to "taxa" (or "taxon" singular), since not all species_codes are at taxonomic level of species. OR operate from understanding that species could refer to other taxon ranks.
 
 - Follow conventions at [calcofi.io/docs: Database](https://calcofi.io/docs/db.html).
 
@@ -121,11 +169,11 @@ dm_get_all_uks(con_dm)
 
 ```{r}
 # candidate primary keys
-dm_enum_pk_candidates(con_dm, "species_codes")
+dm_enum_pk_candidates(con_dm, "species_codes_new")
 
 # candidate foreign keys
 try(
-  dm_enum_fk_candidates(con_dm, "species_codes", "species_groups"))
+  dm_enum_fk_candidates(con_dm, "species_codes_new", "species_groups"))
 ```
 
 ### Run Shiny app
