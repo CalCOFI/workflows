@@ -8,30 +8,39 @@ editor_options:
 format:
   html:
     code-fold: true  
+editor: 
+  markdown: 
+    wrap: 72
 ---
 
-## Overview {-}
+## Overview {.unnumbered}
 
-**Goal**: Generate the database from source files with workflow scripts to make
-updating easier and provenance fully transparent. This allows us to:
+**Goal**: Generate the database from source files with workflow scripts
+to make updating easier and provenance fully transparent. This allows us
+to:
 
-- Rename tables and column names, control data types and use Unicode encoding 
-for a consistent database ingestion strategy, per Database naming conventions in [Database – CalCOFI.io Docs](https://calcofi.io/docs/db.html).
+-   Rename tables and column names, control data types and use Unicode
+    encoding for a consistent database ingestion strategy, per Database
+    naming conventions in [Database – CalCOFI.io
+    Docs](https://calcofi.io/docs/db.html).
 
-- Differentiate between raw and derived or updated tables and columns. For 
-instance, the taxonomy for any given species can change over time, such as
-lumping or splitting of a given taxa, and by taxonomic authority (e.g., WoRMS, 
-ITIS or GBIF). These taxonomic identifiers and the full taxonomic hierarchy 
-should get regularly updated regardless of source observational data, and can
-either be updated in the table directly or joined one-to-one with a seperate
-table in a materialized view (so as not to slow down queries with a regular view).
+-   Differentiate between raw and derived or updated tables and columns.
+    For instance, the taxonomy for any given species can change over
+    time, such as lumping or splitting of a given taxa, and by taxonomic
+    authority (e.g., WoRMS, ITIS or GBIF). These taxonomic identifiers
+    and the full taxonomic hierarchy should get regularly updated
+    regardless of source observational data, and can either be updated
+    in the table directly or joined one-to-one with a seperate table in
+    a materialized view (so as not to slow down queries with a regular
+    view).
 
-This workflow processes NOAA CalCOFI database CSV files and updates the PostgreSQL database. The workflow:
+This workflow processes NOAA CalCOFI database CSV files and updates the
+PostgreSQL database. The workflow:
 
-1. Reads CSV files from source directory
-2. Compares with lookup tables for field descriptions
-3. Initializes or updates database tables
-4. Generates summary statistics
+1.  Reads CSV files from source directory
+2.  Compares with lookup tables for field descriptions
+3.  Initializes or updates database tables
+4.  Generates summary statistics
 
 ```{mermaid}
 %%| label: overview
@@ -122,6 +131,9 @@ if (!file.exists(flds_rn_csv)){
     mutate(
       fld_new  = make_clean_names(fld),
       order    = 1:n(),
+      comment  = "",
+      notes    = "",
+      mutation = "",
       type_new = map2_chr(tbl, fld, \(x, y){
         
         v <- d |> 
@@ -168,7 +180,8 @@ if (!file.exists(flds_rn_csv)){
       tbl_old   = tbl,   tbl_new = tbl,
       fld_old   = fld,   fld_new,
       order_old = order, order_new = order,
-      type_old  = type,  type_new) |> 
+      type_old  = type,  type_new,
+      comment, notes, mutation) |> 
     write_csv(flds_rn_csv)
   
   stop(glue(
@@ -457,7 +470,15 @@ dbDisconnect(con)
 
 ## TODO
 
-- [ ] Check all `type_new` are valid for db connection.
-- [ ] Check that all `flds_in` are in `flds_rn`.
-- [ ] Extract comments from documentation at [Data > Data Formats | CalCOFI.org](https://calcofi.com/index.php?option=com_content&view=category&id=73&Itemid=993)
-
+-   [ ] Add **indexes**.
+-   [ ] Add **relationships** between primary keys.
+-   [ ] Add **points** between `sites`
+-   [ ] Add **segments** between `sites`.
+-   [ ] Check all `type_new` are valid for db connection.
+-   [ ] Check that all `flds_in` are in `flds_rn`.
+-   [ ] Insert table and field SQL `COMMENT`s into database, using
+    `comment` field + `workflow_md` (markdown with name and link) +
+    source with tbl.fld
+-   [ ] Review documentation for more comment descriptions at [Data \>
+    Data Formats \|
+    CalCOFI.org](https://calcofi.com/index.php?option=com_content&view=category&id=73&Itemid=993)
