@@ -760,19 +760,24 @@ dm_from_con(
 #| label: mk_site_seg
 
 site_seg <- tbl(con_dev, "site") |> 
-  select(cruise_uuid, site_uuid, lon = longitude, lat = latitude) |> 
+  select(cruise_uuid, orderocc, site_uuid, lon = longitude, lat = latitude) |> 
   left_join(
     tbl(con_dev, "tow") |> 
       select(site_uuid, time_start),
-    by = "site_uuid") |> 
+    by = "site_uuid") |>
+  arrange(cruise_uuid, orderocc) |> 
   group_by(
-    site_uuid, cruise_uuid, lon, lat) |> 
+    cruise_uuid, orderocc, site_uuid, lon, lat) |> 
   summarize(
-    time_beg = min(time_start),
-    time_end = max(time_start),
+    time_beg = min(time_start, na.rm = T),
+    time_end = max(time_start, na.rm = T),
     .groups = "drop") |> 
-  arrange(cruise_uuid, time_beg) |> 
   collect() |> 
+# table(is.na(site_seg$time_beg))
+#   FALSE   TRUE 
+#  57,935  3,285
+site_seg <- site_seg |>   
+  arrange(cruise_uuid, orderocc, time_beg) |> 
   group_by(cruise_uuid) |> 
   mutate(
     site_uuid_beg = lag(site_uuid),
@@ -855,25 +860,40 @@ dm_from_con(
   dm_set_colors(green = site_seg) |>
   dm_draw(view_type = "all")
 
-d_cruise <- tbl(con_dev, "cruise") |> 
-  collect() |> 
+site_seg <- st_read(con_dev, "site_seg") |> 
   mutate(
-    ym_ship = glue("{format(date_ym, '%Y-%m')}:{ship_key}"))
-  
-site_seg |> 
-  left_join(
-    d_cruise,
-    by = "cruise_uuid") |> 
-  mapView(zcol = "ym_ship")
+    year = year(time_beg))
+
+mapView(site_seg, zcol = "year")
 ```
 
 ## Report
 
 ```{r}
-#| label: mk_site_seg
+#| label: show_latest
 
+dm_from_con(
+  con_dev, 
+  table_names = dbListTables(con_dev_only),
+  # table_names = c("site_seg", "site", "cruise"),
+  learn_keys  = T) |> 
+  dm_set_colors(lightgreen = c(site_seg, grid)) |>
+  dm_draw(view_type = "all")
 
+d_eff <- tbl(con_dev, "site_seg") |> 
+  mutate(
+    year = year(time_beg)) |> 
+  group_by(year) |> 
+  summarize(
+    time_hr   = sum(time_hr, na.rm = T),
+    length_km = sum(length_km, na.rm = T)) |> 
+  collect()
+
+sum(d_eff$time_hr, na.rm = T)    # 302,516 hours; 12,604 days; 34.5 years
+sum(d_eff$length_km, na.rm = T)  # 3,672,794 km
 ```
+
+
 
 ## Cleanup
 
