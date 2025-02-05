@@ -52,7 +52,8 @@ PostgreSQL database. The workflow:
 #| label: setup
 
 librarian::shelf(
-  DBI, DT, glue, here, janitor, lubridate, purrr, readr, rlang, tibble, tidyr, uuid,
+  DBI, dm, DT, glue, here, janitor, lubridate, purrr, readr, rlang, 
+  tibble, tidyr, uuid,
   quiet = T)
 options(readr.show_col_types = F)
 
@@ -331,12 +332,12 @@ d <- d |>
 ## Load Tables into Database
 
 ```{r}
-#| label: db-operations
+#| label: load_tbls_to_db
 
 schema    <- "dev"
 overwrite <- T
 
-tbl_to_db <- function(tbl){ # tbl = "eggs" # tbl = "ship"
+tbl_to_db <- function(tbl){ # tbl = "egg" # tbl = "ship"
   message(glue("{schema}.{tbl}  ~ {Sys.time()}" ))
 
   # Check if table exists
@@ -400,63 +401,478 @@ tbl_stats |>
   datatable(rownames = FALSE, filter = "top")
 ```
 
-## Data Quality Checks
+## Create Indexes, Relationships
 
 ```{r}
-#| label: quality-checks
-#| eval: false
+#| label: dm_tbls
 
-# Perform basic data quality checks
-check_data_quality <- function(table_name) {
-  # Get row count
-  row_count <- dbGetQuery(
-    con, 
-    sprintf("SELECT COUNT(*) as count FROM %s", table_name)
-  )$count
-  
-  # Get null counts per column
-  null_counts <- dbGetQuery(
-    con,
-    sprintf("
-      SELECT column_name, 
-             COUNT(*) - COUNT(column_value) as null_count,
-             ROUND(100.0 * (COUNT(*) - COUNT(column_value)) / COUNT(*), 2) as null_percentage
-      FROM %s
-      CROSS JOIN LATERAL (
-        SELECT json_object_keys(to_json(%s)) as column_name
-      ) cols
-      CROSS JOIN LATERAL (
-        SELECT %s.%I as column_value
-      ) vals
-      GROUP BY column_name
-      HAVING COUNT(*) - COUNT(column_value) > 0
-      ORDER BY null_count DESC",
-      table_name, table_name, table_name, column_name
-    )
-  )
-  
-  return(list(
-    row_count = row_count,
-    null_analysis = null_counts
-  ))
+# source(here("../apps_dev/libs/db.R"))
+
+tbls_dev <- dbListTables(con_dev) |> sort()
+
+dm_dev <- dm_from_con(
+  con_dev, 
+  table_names = tbls_dev,
+  learn_keys  = T)
+dm_draw(dm_dev, view_type = "all")
+```
+
+### Show existing unique keys across tables
+
+```{r}
+#| label: show_keys
+
+dm_get_all_uks(dm_dev)
+```
+
+### Add candidate keys, automatically
+
+```{r}
+#| label: mk_keys_auto
+
+# Function to get primary key constraints for a table
+tbl_pkeys <- function(con, tbl) {
+  dbGetQuery(con, glue("
+    SELECT a.attname as column_name
+    FROM pg_index i
+    JOIN pg_attribute a ON a.attrelid = i.indrelid
+    AND a.attnum = ANY(i.indkey)
+    WHERE i.indrelid = '{tbl}'::regclass
+    AND i.indisprimary;
+  "))$column_name
 }
 
-# Run quality checks for each table
-quality_results <- map(names(processed_data), check_data_quality)
-names(quality_results) <- names(processed_data)
+d_pk <- tibble(
+  tbl = tbls_dev) |> 
+  mutate(
+    d        = map(tbl, \(x) eval(bquote(dm_enum_pk_candidates(dm_dev, .(x)))) ),
+    n        = map_int(d, \(x) x |> filter(candidate == T) |> nrow()),
+    flds     = map_chr(d, \(x){
+      x |> filter(candidate == T) |> pull(columns) |> 
+        unlist() |> paste(collapse = "; ") }),
+    fld      = map_chr(d, \(x){
+      y <- x |> filter(candidate == T) |> pull(columns) |> 
+        unlist()
+      if (length(y) == 0)
+        return(NA)
+      if (length(y) > 1)
+        return(y[1])
+      y }),
+    add_pkey = map2_lgl(tbl, fld, \(tbl, fld){
+      if (is.na(fld))
+        return(F)
+      # tbl <- "cruise"; fld = "cruise_uuid"
+      pkey_exists <- tbl_pkeys(con_dev, "cruise") |> length() > 0
+      if (pkey_exists)
+        return(F)
+      dbExecute(con_dev, glue("ALTER TABLE {tbl} ADD PRIMARY KEY ({fld})"))
+      return(T) }) ) |> 
+  select(-d)
+    
+d_pk |> 
+  datatable()
+```
 
-# Display quality check results
-for (name in names(quality_results)) {
-  cat(sprintf("\nQuality Check Results for %s:\n", name))
-  cat(sprintf("Total Rows: %d\n", quality_results[[name]]$row_count))
-  
-  if (nrow(quality_results[[name]]$null_analysis) > 0) {
-    cat("Columns with NULL values:\n")
-    print(quality_results[[name]]$null_analysis)
-  } else {
-    cat("No NULL values found\n")
-  }
+### Add primary keys, manually
+
+Noticing egg and larva missing pkey.
+
+```{r}
+#| label: mk_keys_manual
+
+dbExecute(con_dev, "ALTER TABLE egg ADD PRIMARY KEY (net_uuid, sp_id)")
+dbExecute(con_dev, "ALTER TABLE larva ADD PRIMARY KEY (net_uuid, sp_id)")
+
+tibble(
+  tbl = tbls_dev) |> 
+  mutate(
+    pkeys = map_chr(tbl, \(x) tbl_pkeys(x, con = con_dev) |> paste(collapse = ", "))) |> 
+  datatable()
+```
+
+### Add other indexes
+
+That are not already the first field of a primary key.
+
+```{r}
+#| label: mk_idx
+
+d_idx <- tibble(
+  tbl = tbls_dev) |>
+  mutate(
+    fld   = map(tbl, ~dbListFields(.x, conn = con_dev)),
+    pkeys = map(tbl, ~tbl_pkeys(.x, con = con_dev))) |> 
+  unnest(fld) |>
+  mutate(
+    is_pkey  = map2_lgl(fld, pkeys, `%in%`),
+    is_pkey1 = map2_lgl(fld, pkeys, \(fld, pkeys) fld == pkeys[1]),
+    is_id    = map_lgl(fld, ~str_detect(.x, "_(id|uuid|tsn)$")),
+    idx_todo = !is_pkey1 & is_id,
+    mk_idx   = pmap_lgl(list(tbl, fld, idx_todo), \(tbl, fld, idx_todo){
+      if (idx_todo){
+        q <- glue("CREATE INDEX IF NOT EXISTS idx_{tbl}_{fld} ON {tbl} ({fld})")
+        # message(q)
+        dbExecute(con_dev, q)
+        return(T)
+      }
+      return(F)
+    }))
+
+d_idx |> 
+  select(-pkeys) |> 
+  datatable()
+```
+
+### Add foreign keys
+
+egg.net_uuid -> net.net_uuid .tow_uuid -> tow.tow_uuid .site_uuid -> site.site_uuid .cruise_uuid -> cruise.cruise_uuid .ship_key -> ship.ship_key
+
+```{r}
+#| label: dm_fk
+
+dm_dev <- dm_from_con(
+  con_dev, 
+  table_names = tbls_dev,
+  learn_keys  = T)
+dm_draw(dm_dev, view_type = "all")
+
+dm_dev_fk <- dm_dev |> 
+  dm_add_fk(egg, net_uuid, net) |> 
+  dm_add_fk(larva, net_uuid, net) |> 
+  dm_add_fk(net, tow_uuid, tow) |> 
+  dm_add_fk(tow, site_uuid, site) |> 
+  dm_add_fk(site, cruise_uuid, cruise) |> 
+  dm_add_fk(cruise, ship_key, ship) |> 
+  dm_add_fk(tow, tow_type_key, tow_type) |> 
+  dm_add_fk(egg, sp_id, species) |> 
+  dm_add_fk(larva, sp_id, species) 
+dm_draw(dm_dev_fk, view_type = "all")
+```
+
+```{r}
+#| label: sql_fk
+
+add_fkey <- function(tbl_m, fld_m, tbl_1, fld_1 = fld_m, schema = "dev"){
+  q <- glue(
+    "ALTER TABLE {schema}.{tbl_m} ADD FOREIGN KEY ({fld_m}) 
+    REFERENCES {schema}.{tbl_1} ({fld_1})")
+  dbExecute(con_dev, q)
 }
+
+add_fkey("egg", "net_uuid", "net")
+add_fkey("larva", "net_uuid", "net") 
+add_fkey("net", "tow_uuid", "tow") 
+add_fkey("tow", "site_uuid", "site")
+add_fkey("site", "cruise_uuid", "cruise")
+add_fkey("cruise", "ship_key", "ship")
+add_fkey("tow", "tow_type_key", "tow_type")
+add_fkey("egg", "sp_id", "species")
+add_fkey("larva", "sp_id", "species")
+
+dm_dev <- dm_from_con(
+  con_dev, 
+  table_names = tbls_dev,
+  learn_keys  = T)
+dm_draw(dm_dev, view_type = "all")
+```
+
+```
+Error: Failed to fetch row : ERROR:  insert or update on table "larva" violates foreign key constraint "larva_sp_id_fkey"
+DETAIL:  Key (sp_id)=(3023) is not present in table "species".
+```
+
+```{r}
+#| label: sp_missing
+
+sp_missing_csv <- here(
+    "data/ingest/noaa-calcofi-db/larvae-species_not-in-species.csv")
+
+d_sp_missing <- tbl(con_dev, "larva") |> 
+  anti_join(
+    tbl(con_dev, "species"),
+    by = "sp_id") |> 
+  group_by(sp_id) |> 
+  summarize(
+    n_rows = n()) |> 
+  left_join(
+    dm_dev |>
+      dm_select_tbl(larva, net, tow, site) |> 
+      dm_flatten_to_tbl(.start = larva, .recursive = TRUE) |> 
+      select(sp_id, tally, time_start, line, station, cruise_uuid) |> 
+      group_by(sp_id) |> 
+      summarize(
+        sum_tally  = sum(tally),
+        date_beg   = min(as.Date(time_start)),
+        date_end   = max(as.Date(time_start)),
+        # ship_names = str_flatten(distinct(name), collapse = "; ")), 
+        n_cruises = n_distinct(cruise_uuid)), 
+    by = "sp_id") |> 
+  collect()
+
+write_csv(d_sp_missing, sp_missing_csv)
+
+datatable(d_sp_missing)
+```
+
+
+```{r}
+#| label: delete_larva_sp_missing
+
+dbExecute(con_dev, glue(
+  "DELETE FROM larva WHERE sp_id IN ({paste(d_sp_missing$sp_id, collapse = ',')})"))
+add_fkey("larva", "sp_id", "species")
+
+dm_dev <- dm_from_con(
+  con_dev, 
+  table_names = tbls_dev,
+  learn_keys  = T)
+dm_draw(dm_dev, view_type = "all")
+```
+
+## Add Spatial
+
+### Add `site.geom`
+
+```{r}
+#| label: mk_site_pts
+
+# source(here("../apps_dev/libs/db.R"))
+# dbGetQuery(con_dev, "SELECT postgis_full_version()")
+
+dbExecute(con_dev, "ALTER TABLE dev.site ADD COLUMN geom geometry(Point, 4326)")
+dbExecute(con_dev, "UPDATE dev.site SET geom = ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)") # 61,220 rows
+```
+
+### Fix calcofi4r `grid`
+
+Problems with [calcofi4r::`cc_grid`](https://calcofi.io/calcofi4r/articles/calcofi4r.html):
+
+- uses old station (line, position) vs newer site (line, station)
+- `sta_lin`, `sta_pos`: integer, so drops necessary decimal that is found in `sta_key`
+- `sta_lin == 90, sta_pos == 120` repeats for:
+  * `sta_pattern` == 'historical' (`sta_dpos` == 20); and 
+  * `sta_pattern` == 'standard'   (`sta_dpos` == 10)
+
+```{r}
+#| label: mk_grid_v2
+
+librarian::shelf(
+  calcofi4r, dplyr, mapview, sf, tidyr, units)
+
+cc_grid_v2 <- calcofi4r::cc_grid |> 
+  select(sta_key, shore = sta_shore, pattern = sta_pattern, spacing = sta_dpos) |>
+  separate_wider_delim(
+    sta_key, ",", names = c("line", "station"), cols_remove = F) |> 
+  mutate(
+    line    = as.double(line),
+    station = as.double(station),
+    grid_key = ifelse(
+      pattern == "historical", 
+      glue("st{station}-ln{line}_hist"),
+      glue("st{station}-ln{line}")),
+    zone = glue("{shore}-{pattern}")) |> 
+  relocate(grid_key, station) |> 
+  st_as_sf() |> 
+  mutate(
+    area_km2 = st_area(geom) |>
+      set_units(km^2) |>
+      as.numeric())
+
+cc_grid_ctrs_v2 <- calcofi4r::cc_grid_ctrs |> 
+  select(sta_key, pattern = sta_pattern) |> 
+  left_join(
+    cc_grid_v2 |> 
+      st_drop_geometry(),
+    by = c("sta_key", "pattern")) |> 
+  select(-sta_key) |> 
+  relocate(grid_key)
+  
+cc_grid_v2 <- cc_grid_v2 |> 
+  select(-sta_key)
+
+cc_grid_v2 |> 
+  st_drop_geometry() |> 
+  datatable()
+
+mapview(cc_grid_v2, zcol="zone") +
+  mapview(cc_grid_ctrs_v2, cex = 1)
+```
+
+```{r}
+#| label: grid_to_db
+
+grid <- cc_grid_v2 |> 
+  as.data.frame() |> 
+  left_join(
+    cc_grid_ctrs_v2 |> 
+      as.data.frame() |> 
+      select(grid_key, geom_ctr = geom),
+    by = "grid_key") |> 
+  st_as_sf(sf_column_name = "geom")
+
+grid |> 
+  st_write(con_dev, "grid")
+dbExecute(con_dev, glue(
+  "CREATE INDEX IF NOT EXISTS idx_grid_geom ON grid USING gist(geom);"))
+dbExecute(con_dev, "ALTER TABLE grid ADD PRIMARY KEY (grid_key)")
+```
+
+### Update `site.grid_key`
+
+```{r}
+#| label: update_site_from_grid
+
+dbExecute(con_dev, "ALTER TABLE site ADD COLUMN grid_key text")
+
+dbExecute(con_dev, "
+  UPDATE site
+  SET
+    grid_key = g.grid_key
+  FROM (
+    SELECT s.site_uuid, g.grid_key
+    FROM site s
+    INNER JOIN grid g ON ST_Intersects(s.geom, g.geom)) g
+  WHERE site.site_uuid = g.site_uuid") # 59,136
+
+# tbl(con_dev, "site") |>
+#   mutate(is_in_grd = !is.na(grid_key)) |>
+#   pull(is_in_grd) |>
+#   table()
+#  FALSE    TRUE 
+#  2,084  59,136
+
+dbExecute(con_dev, glue(
+  "CREATE INDEX IF NOT EXISTS idx_site_geom_key ON grid (grid_key);"))
+add_fkey("site", "grid_key", "grid")
+
+dm_from_con(
+  con_dev, 
+  # table_names = dbListTables(con_dev_only),
+  table_names = c("site", "grid"),
+  learn_keys  = T) |> 
+  dm_set_colors(green = grid) |>
+  dm_draw(view_type = "all")
+```
+
+### Add `site_seg`: segments from site
+
+```{r}
+#| label: mk_site_seg
+
+site_seg <- tbl(con_dev, "site") |> 
+  select(cruise_uuid, site_uuid, lon = longitude, lat = latitude) |> 
+  left_join(
+    tbl(con_dev, "tow") |> 
+      select(site_uuid, time_start),
+    by = "site_uuid") |> 
+  group_by(
+    site_uuid, cruise_uuid, lon, lat) |> 
+  summarize(
+    time_beg = min(time_start),
+    time_end = max(time_start),
+    .groups = "drop") |> 
+  arrange(cruise_uuid, time_beg) |> 
+  collect() |> 
+  group_by(cruise_uuid) |> 
+  mutate(
+    site_uuid_beg = lag(site_uuid),
+    lon_beg       = lag(lon),
+    lat_beg       = lag(lat),
+    time_beg      = lag(time_beg)) |> 
+  ungroup() |> 
+  filter(!is.na(lon_beg), !is.na(lat_beg)) |> 
+  mutate(
+    m    = pmap(
+      list(lon_beg, lat_beg, lon, lat), 
+      \(x1, y1, x2, y2){
+        matrix(c(x1, y1, x2, y2), nrow = 2, byrow = T) }),
+    geom = map(m, st_linestring)) |> 
+  select(
+    cruise_uuid,
+    site_uuid_beg, 
+    site_uuid_end = site_uuid, 
+    lon_beg, 
+    lat_beg,
+    lon_end = lon, 
+    lat_end = lat,
+    time_beg, 
+    time_end, 
+    geom) |> 
+  st_as_sf(
+    sf_column_name = "geom", 
+    crs = 4326) |> 
+  mutate(
+    time_hr   = as.numeric(difftime(time_end, time_beg, units = "hours")),
+    length_km = st_length(geom) |>
+      set_units(km) |>
+      as.numeric(),
+    km_per_hr = length_km / time_hr)
+
+# TODO: check that time_end of previous segment is time_beg of next
+
+# TODO: investigate too slow, too fast
+# site_seg |> 
+#   mutate(
+#     km_per_hr_flag = ifelse(
+#       km_per_hr < 0.01,
+#       "lt0.01",
+#       ifelse(
+#         km_per_hr > 30,
+#         "gt30",
+#         NA))) |> 
+#   pull(km_per_hr_flag) |> 
+#   table()
+#   gt30 lt0.01 
+#    928      9
+
+fld_types <- tibble(
+  lst = lapply(site_seg, class)) |> 
+  mutate(
+    fld    = names(lst),
+    type_r = map_chr(lst, pluck, 1),
+    type   = map2_chr(fld, type_r, \(fld, type_r){
+      case_when(
+        str_detect(fld, "uuid") ~ "uuid",
+        fld    == "geom"        ~ "geometry",
+        type_r == "POSIXct"     ~ "timestamp",
+        type_r == "character"   ~ "varchar",
+        .default = "numeric") })) |> 
+  select(fld, type) |> 
+  deframe()
+st_write(site_seg, con_dev, "site_seg", field.types = fld_types)
+dbExecute(con_dev, "CREATE INDEX IF NOT EXISTS idx_site_seg_geom ON grid USING gist(geom)")
+dbExecute(con_dev, "ALTER TABLE site_seg ADD PRIMARY KEY (site_uuid_beg)")
+dbExecute(con_dev, 'CREATE EXTENSION IF NOT EXISTS "uuid-ossp"')
+add_fkey("site_seg", "site_uuid_beg", "site", "site_uuid")
+add_fkey("site_seg", "site_uuid_end", "site", "site_uuid")
+add_fkey("site_seg", "cruise_uuid", "cruise")
+
+dm_from_con(
+  con_dev, 
+  # table_names = dbListTables(con_dev_only),
+  table_names = c("site_seg", "site", "cruise"),
+  learn_keys  = T) |> 
+  dm_set_colors(green = site_seg) |>
+  dm_draw(view_type = "all")
+
+d_cruise <- tbl(con_dev, "cruise") |> 
+  collect() |> 
+  mutate(
+    ym_ship = glue("{format(date_ym, '%Y-%m')}:{ship_key}"))
+  
+site_seg |> 
+  left_join(
+    d_cruise,
+    by = "cruise_uuid") |> 
+  mapView(zcol = "ym_ship")
+```
+
+## Report
+
+```{r}
+#| label: mk_site_seg
+
+
 ```
 
 ## Cleanup
