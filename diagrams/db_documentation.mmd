@@ -1,0 +1,60 @@
+flowchart TB
+    %% Sources
+    gd[(Google Drive\nsource *.csv)] --> iw
+
+    %% Renamed to ingest workflow with new flow
+    iw["workflows: ingest_{dataset}.qmd"] -->|"auto-generated"| dd
+    dd["`data definitions
+         workflows: /ingest/{dataset}/
+         - tbls_rename.csv
+         - flds_rename.csv`"]
+    dd -->|"manual edit"| iw
+
+    %% Database tables from ingest workflow
+    iw --> db[(database)]
+
+    %% Comments as JSON metadata with left-aligned bullets
+    subgraph comments["SQL COMMENTS (JSON)"]
+        direction TB
+        tbl["`per table
+              - description
+              - source (linked)
+              - source_created (datetime)
+              - workflow (linked)
+              - workflow_ingested (datetime)`"]
+        fld["`per field
+              - description
+              - units (SI)`"]
+    end
+
+    comments -.- db
+
+    %% API and consumption with clickable links
+    db  --> api["API endpoint\n/db_tables"]
+    api --> catalog["R function\ncalcofi4r::cc_db_catalog()"]
+    db  --> eml["`workflows: publish\_{dataset}\_{portal}.qmd
+                  with {portal}s:
+                    - erddap
+                    - edi
+                    - obis
+                    - ncei`"]
+
+    %% Clickable links
+    click api "https://api.calcofi.io/db_tables" "API endpoint"
+    click catalog "https://calcofi.io/calcofi4r/reference/cc_db_catalog.html" "R package function"
+
+    %% Styling with improved contrast
+    classDef source fill:#f9f9f9,stroke:#000,stroke-width:2px,color:#000
+    classDef process fill:#a3e0f2,stroke:#000,stroke-width:2px,color:#000
+    classDef eml fill:#F0FDF4,stroke:#22C55E,stroke-width:2px,color:#000,text-align:left
+    classDef data fill:#ffbe75,stroke:#000,stroke-width:2px,color:#000
+    classDef api fill:#9ad294,stroke:#000,stroke-width:2px,color:#000
+    classDef meta fill:#c9a6db,stroke:#000,stroke-width:2px,color:#000,text-align:left
+
+    class gd source
+    class dd,comments,tbl,fld meta
+    class iw process
+    class db data
+    class api,catalog api
+    class tbl,fld li
+    class eml eml
