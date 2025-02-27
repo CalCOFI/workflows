@@ -1,46 +1,63 @@
 flowchart TB
     %% Sources
-    gd[(Google Drive\nsource *.csv)] --> iw
+    gd[("`<b>Source Data</b>
+          Google Drive:
+          calcofi/data/{dataset}/*.csv`")] --> iw
 
     %% Renamed to ingest workflow with new flow
-    iw["workflows: ingest_{dataset}.qmd"] -->|"auto-generated"| dd
-    dd["`data definitions
-         workflows: /ingest/{dataset}/
-         - tbls_rename.csv
-         - flds_rename.csv`"]
+    iw["<b>Ingest Workflow</b>
+        workflows: ingest_{dataset}.qmd"] -->|"auto-generated"| dd
+    dd["<b>Data Definitions</b>
+        workflows: /ingest/{dataset}/:
+        <ul>
+          <li>tbls_rename.csv</li>
+          <li>flds_rename.csv</li>
+        </ul>"]
     dd -->|"manual edit"| iw
 
     %% Database tables from ingest workflow
-    iw --> db[(database)]
+    iw --> db[("<b>Database</b>")]
 
     %% Comments as JSON metadata with left-aligned bullets
-    subgraph comments["SQL COMMENTS (JSON)"]
+    subgraph comments["<b>Database Comments</b>
+                       (stored as text in JSON format to differentiate elements)"]
         direction TB
-        tbl["`per table
-              - description
-              - source (linked)
-              - source_created (datetime)
-              - workflow (linked)
-              - workflow_ingested (datetime)`"]
-        fld["`per field
-              - description
-              - units (SI)`"]
+        h["hideme"]:::hidden
+        h~~~tbl
+        h~~~fld
+        tbl["per <em>Table</em>:
+            <ul>
+              <li>description</li>
+              <li>source (<em>linked</em>)</li>
+              <li>source_created (<em>datetime</em>)</li>
+              <li>workflow (<em>linked</em>)</li>
+              <li>workflow_ingested (<em>datetime</em>)</li>
+            </ul>"]
+        fld["per <em>Field</em>:
+            <ul>
+              <li>description</li>
+              <li>units (SI)`</li>
+            </ul>"]
     end
 
     comments -.- db
 
     %% API and consumption with clickable links
-    db  --> api["API endpoint\n/db_tables"]
-    api --> catalog["R function\ncalcofi4r::cc_db_catalog()"]
-    db  --> eml["`workflows: publish\_{dataset}\_{portal}.qmd
-                  with {portal}s:
-                    - erddap
-                    - edi
-                    - obis
-                    - ncei`"]
+    db  --> api["<b>API Endpoint</b>\n/db_tables"]
+    api --> catalog["<b>R Function</b>\ncalcofi4r::cc_db_catalog()"]
+    db  --> eml["<b>Publish Workflow</b>
+      workflows: publish_{dataset}_{portal}.qmd
+      with {portal}s:
+      <ul>
+        <li>erddap</li>
+        <li>edi</li>
+        <li>obis</li>
+        <li>ncei</li>
+      </ul>"]
 
     %% Clickable links
-    click api "https://api.calcofi.io/db_tables" "API endpoint"
+    click gd "https://drive.google.com/drive/folders/1xxdWa4mWkmfkJUQsHxERTp9eBBXBMbV7" "calcofi folder - Google Drive"
+    click api "https://api.calcofi.io/db_tables" "API endpoint</b>"
     click catalog "https://calcofi.io/calcofi4r/reference/cc_db_catalog.html" "R package function"
 
     %% Styling with improved contrast
@@ -50,6 +67,7 @@ flowchart TB
     classDef data fill:#ffbe75,stroke:#000,stroke-width:2px,color:#000
     classDef api fill:#9ad294,stroke:#000,stroke-width:2px,color:#000
     classDef meta fill:#c9a6db,stroke:#000,stroke-width:2px,color:#000,text-align:left
+    classDef hidden display: none;
 
     class gd source
     class dd,comments,tbl,fld meta
