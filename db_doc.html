@@ -109,47 +109,64 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <div>
 <pre class="mermaid mermaid-js" data-label="fig-db_doc">flowchart TB
     %% Sources
-    gd[(Google Drive\nsource *.csv)] --&gt; iw
+    gd[("`&lt;b&gt;Source Data&lt;/b&gt;
+          Google Drive:
+          calcofi/data/{dataset}/*.csv`")] --&gt; iw
 
     %% Renamed to ingest workflow with new flow
-    iw["workflows: ingest_{dataset}.qmd"] --&gt;|"auto-generated"| dd
-    dd["`data definitions
-         workflows: /ingest/{dataset}/
-         - tbls_rename.csv
-         - flds_rename.csv`"]
+    iw["&lt;b&gt;Ingest Workflow&lt;/b&gt;
+        workflows: ingest_{dataset}.qmd"] --&gt;|"auto-generated"| dd
+    dd["&lt;b&gt;Data Definitions&lt;/b&gt;
+        workflows: /ingest/{dataset}/:
+        &lt;ul&gt;
+          &lt;li&gt;tbls_rename.csv&lt;/li&gt;
+          &lt;li&gt;flds_rename.csv&lt;/li&gt;
+        &lt;/ul&gt;"]
     dd --&gt;|"manual edit"| iw
 
     %% Database tables from ingest workflow
-    iw --&gt; db[(database)]
+    iw --&gt; db[("&lt;b&gt;Database&lt;/b&gt;")]
 
     %% Comments as JSON metadata with left-aligned bullets
-    subgraph comments["SQL COMMENTS (JSON)"]
+    subgraph comments["&lt;b&gt;Database Comments&lt;/b&gt;
+                       (stored as text in JSON format to differentiate elements)"]
         direction TB
-        tbl["`per table
-              - description
-              - source (linked)
-              - source_created (datetime)
-              - workflow (linked)
-              - workflow_ingested (datetime)`"]
-        fld["`per field
-              - description
-              - units (SI)`"]
+        h["hideme"]:::hidden
+        h~~~tbl
+        h~~~fld
+        tbl["per &lt;em&gt;Table&lt;/em&gt;:
+            &lt;ul&gt;
+              &lt;li&gt;description&lt;/li&gt;
+              &lt;li&gt;source (&lt;em&gt;linked&lt;/em&gt;)&lt;/li&gt;
+              &lt;li&gt;source_created (&lt;em&gt;datetime&lt;/em&gt;)&lt;/li&gt;
+              &lt;li&gt;workflow (&lt;em&gt;linked&lt;/em&gt;)&lt;/li&gt;
+              &lt;li&gt;workflow_ingested (&lt;em&gt;datetime&lt;/em&gt;)&lt;/li&gt;
+            &lt;/ul&gt;"]
+        fld["per &lt;em&gt;Field&lt;/em&gt;:
+            &lt;ul&gt;
+              &lt;li&gt;description&lt;/li&gt;
+              &lt;li&gt;units (SI)`&lt;/li&gt;
+            &lt;/ul&gt;"]
     end
 
     comments -.- db
 
     %% API and consumption with clickable links
-    db  --&gt; api["API endpoint\n/db_tables"]
-    api --&gt; catalog["R function\ncalcofi4r::cc_db_catalog()"]
-    db  --&gt; eml["`workflows: publish\_{dataset}\_{portal}.qmd
-                  with {portal}s:
-                    - erddap
-                    - edi
-                    - obis
-                    - ncei`"]
+    db  --&gt; api["&lt;b&gt;API Endpoint&lt;/b&gt;\n/db_tables"]
+    api --&gt; catalog["&lt;b&gt;R Function&lt;/b&gt;\ncalcofi4r::cc_db_catalog()"]
+    db  --&gt; eml["&lt;b&gt;Publish Workflow&lt;/b&gt;
+      workflows: publish_{dataset}_{portal}.qmd
+      with {portal}s:
+      &lt;ul&gt;
+        &lt;li&gt;erddap&lt;/li&gt;
+        &lt;li&gt;edi&lt;/li&gt;
+        &lt;li&gt;obis&lt;/li&gt;
+        &lt;li&gt;ncei&lt;/li&gt;
+      &lt;/ul&gt;"]
 
     %% Clickable links
-    click api "https://api.calcofi.io/db_tables" "API endpoint"
+    click gd "https://drive.google.com/drive/folders/1xxdWa4mWkmfkJUQsHxERTp9eBBXBMbV7" "calcofi folder - Google Drive"
+    click api "https://api.calcofi.io/db_tables" "API endpoint&lt;/b&gt;"
     click catalog "https://calcofi.io/calcofi4r/reference/cc_db_catalog.html" "R package function"
 
     %% Styling with improved contrast
@@ -159,6 +176,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
     classDef data fill:#ffbe75,stroke:#000,stroke-width:2px,color:#000
     classDef api fill:#9ad294,stroke:#000,stroke-width:2px,color:#000
     classDef meta fill:#c9a6db,stroke:#000,stroke-width:2px,color:#000,text-align:left
+    classDef hidden display: none;
 
     class gd source
     class dd,comments,tbl,fld meta
