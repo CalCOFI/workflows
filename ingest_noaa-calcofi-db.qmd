@@ -82,8 +82,8 @@ And at the field level:
 #| label: setup
 
 librarian::shelf(
-  DBI, dm, DT, glue, googledrive, here, janitor, jsonlite, lubridate, purrr, 
-  readr, rlang, tibble, tidyr, uuid,
+  DBI, dm, DT, fs, glue, googledrive, here, janitor, jsonlite, knitr, lubridate, 
+  purrr, readr, rlang, tibble, tidyr, uuid,
   quiet = T)
 options(readr.show_col_types = F)
 
@@ -91,19 +91,27 @@ options(readr.show_col_types = F)
 source(here("../apps_dev/libs/db.R"))
 
 # define paths ---
-workflow     = "ingest_noaa-calcofi-db"
-workflow_url = "https://calcofi.io/workflows/ingest_noaa-calcofi-db.html"
+
+# get path of this quarto document with knitr
+qmd_path  <- ifelse(
+  rstudioapi::isAvailable(), 
+  rstudioapi::getActiveDocumentContext()$path,
+  knitr::current_input(dir = TRUE)) |> 
+  path_real()
+workflow_qmd  <- str_replace(qmd_path, glue("{here()}/"), "")
+workflow      <- path_ext_remove(workflow_qmd)
+workflow_url  <- glue("https://calcofi.io/workflows/{workflow}.html")
 # dataset with external data folder
 dir_data <- "/Users/bbest/My Drive/projects/calcofi/data"
 gdir_data <- "https://drive.google.com/drive/u/0/folders/13A9yDJCdV0M-lrMLqurzIb3G3ozknr9O" # noaa-calcofi-db - Google Drive
 dataset  <- "noaa-calcofi-db"
 dir_csv  <- glue("{dir_data}/{dataset}")
 # input tables (version controlled)
-tbls_in_csv <- here(glue("data/ingest/{dataset}/tbls_in.csv"))
-flds_in_csv <- here(glue("data/ingest/{dataset}/flds_in.csv"))
+tbls_in_csv <- here(glue("data/ingest/{dataset}/tbls_raw.csv"))
+flds_in_csv <- here(glue("data/ingest/{dataset}/flds_raw.csv"))
 # rename tables (version controlled)
-tbls_rn_csv <- here(glue("data/ingest/{dataset}/tbls_rename.csv"))
-flds_rn_csv <- here(glue("data/ingest/{dataset}/flds_rename.csv"))
+tbls_rn_csv <- here(glue("data/ingest/{dataset}/tbls_redefine.csv"))
+flds_rn_csv <- here(glue("data/ingest/{dataset}/flds_redefine.csv"))
 ```
 
 ```{r}
@@ -450,7 +458,7 @@ tbl_to_db <- function(tbl){ # tbl = "egg" # tbl = "ship"
     # devtools::install_local(here("../calcofi4r"))
     # calcofi4r::cc_db_catalog(tables = "larva")
     
-    tbl(con_dev, "pg_description")
+    # tbl(con_dev, "pg_description")
     # dbGetQuery(con, "SELECT * FROM pg_description WHERE objsubid = 0")
     
   } else {

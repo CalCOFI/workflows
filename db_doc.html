@@ -101,35 +101,58 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </header>
 
 
-<div class="cell" data-file="diagrams/db_documentation.mmd" data-layout-align="default">
+<div class="cell" data-file="diagrams/db_doc.mmd" data-layout-align="default">
 <div class="cell-output-display">
 <div id="fig-db_doc" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-db_doc-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 <div>
 <pre class="mermaid mermaid-js" data-label="fig-db_doc">flowchart TB
-    %% Sources
+    %% Node definitions
     gd[("`&lt;b&gt;Source Data&lt;/b&gt;
           Google Drive:
-          calcofi/data/{dataset}/*.csv`")] --&gt; iw
+          calcofi/data/{dataset}/*.csv`")]
 
-    %% Renamed to ingest workflow with new flow
     iw["&lt;b&gt;Ingest Workflow&lt;/b&gt;
-        workflows: ingest_{dataset}.qmd"] --&gt;|"auto-generated"| dd
+        workflows: ingest_{dataset}.qmd"]
+
     dd["&lt;b&gt;Data Definitions&lt;/b&gt;
         workflows: /ingest/{dataset}/:
         &lt;ul&gt;
-          &lt;li&gt;tbls_rename.csv&lt;/li&gt;
-          &lt;li&gt;flds_rename.csv&lt;/li&gt;
+          &lt;li&gt;tbls_redefine.csv&lt;/li&gt;
+          &lt;li&gt;flds_redefine.csv&lt;/li&gt;
         &lt;/ul&gt;"]
-    dd --&gt;|"manual edit"| iw
 
-    %% Database tables from ingest workflow
-    iw --&gt; db[("&lt;b&gt;Database&lt;/b&gt;")]
+    db[("&lt;b&gt;Database&lt;/b&gt;")]
 
-    %% Comments as JSON metadata with left-aligned bullets
+    api["&lt;b&gt;API Endpoint&lt;/b&gt;\n/db_tables"]
+
+    catalog["&lt;b&gt;R Function&lt;/b&gt;\ncalcofi4r::cc_db_catalog()"]
+
+    eml["&lt;b&gt;Publish Workflow&lt;/b&gt;
+      workflows: publish_{dataset}_{portal}.qmd
+      with {portal}s:
+      &lt;ul&gt;
+        &lt;li&gt;erddap&lt;/li&gt;
+        &lt;li&gt;edi&lt;/li&gt;
+        &lt;li&gt;obis&lt;/li&gt;
+        &lt;li&gt;ncei&lt;/li&gt;
+      &lt;/ul&gt;"]
+
+    %% Edge definitions
+    gd --&gt; iw
+    iw --&gt;|"1. auto-generated"| dd
+    dd --&gt;|"2. manual edit"| iw
+    iw --&gt;|"3. data"| db
+    iw --&gt; comments
+    comments --&gt;|"4. metadata"| db
+    db --&gt; api
+    api --&gt; catalog
+    db --&gt; eml
+
+    %% Comments subgraph with internal nodes
     subgraph comments["&lt;b&gt;Database Comments&lt;/b&gt;
-                       (stored as text in JSON format to differentiate elements)"]
+              (stored as text in JSON format to differentiate elements)"]
         direction TB
         h["hideme"]:::hidden
         h~~~tbl
@@ -148,21 +171,6 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
               &lt;li&gt;units (SI)`&lt;/li&gt;
             &lt;/ul&gt;"]
     end
-
-    comments -.- db
-
-    %% API and consumption with clickable links
-    db  --&gt; api["&lt;b&gt;API Endpoint&lt;/b&gt;\n/db_tables"]
-    api --&gt; catalog["&lt;b&gt;R Function&lt;/b&gt;\ncalcofi4r::cc_db_catalog()"]
-    db  --&gt; eml["&lt;b&gt;Publish Workflow&lt;/b&gt;
-      workflows: publish_{dataset}_{portal}.qmd
-      with {portal}s:
-      &lt;ul&gt;
-        &lt;li&gt;erddap&lt;/li&gt;
-        &lt;li&gt;edi&lt;/li&gt;
-        &lt;li&gt;obis&lt;/li&gt;
-        &lt;li&gt;ncei&lt;/li&gt;
-      &lt;/ul&gt;"]
 
     %% Clickable links
     click gd "https://drive.google.com/drive/folders/1xxdWa4mWkmfkJUQsHxERTp9eBBXBMbV7" "calcofi folder - Google Drive"
@@ -195,7 +203,7 @@ Figure&nbsp;1: Database documentation scheme.
 </div>
 </div>
 </div>
-<p>Google Drive *.csv files get ingested with a <strong>workflow</strong> per <strong>dataset</strong> (in Github repository <a href="https://github.com/calcofi/workflows">calcofi/workflows</a> as a Quarto document). Data definition CSV files (<code>tbls_rename.csv</code> , <code>flds_rename.csv</code>) are auto-generated (if missing) and manually updated to rename and describe tables and fields. After injecting the data for each of the tables, extra metadata is added to the <code>COMMENT</code>s of each table as JSON elements (links in markdown), including at the <strong><em>table</em></strong> level:</p>
+<p>Google Drive *.csv files get ingested with a <strong>workflow</strong> per <strong>dataset</strong> (in Github repository <a href="https://github.com/calcofi/workflows">calcofi/workflows</a> as a Quarto document). Data definition CSV files (<code>tbls_redefine.csv</code> , <code>flds_redefine.csv</code>) are auto-generated (if missing) and manually updated to rename and describe tables and fields. After injecting the data for each of the tables, extra metadata is added to the <code>COMMENT</code>s of each table as JSON elements (links in markdown), including at the <strong><em>table</em></strong> level:</p>
 <ul>
 <li><strong>description</strong>: general description describing contents and how each row is unique</li>
 <li><strong>source</strong>: CSV (linked to Google Drive source as markdown)</li>
@@ -694,10 +702,10 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
 <span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="in">```{mermaid}</span></span>
 <span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="in">%%| label: fig-db_doc</span></span>
 <span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="in">%%| fig-cap: "Database documentation scheme."</span></span>
-<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="in">%%| file: diagrams/db_documentation.mmd</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="in">%%| file: diagrams/db_doc.mmd</span></span>
 <span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
 <span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>Google Drive <span class="sc">\*</span>.csv files get ingested with a **workflow** per **dataset** (in Github repository [calcofi/workflows](https://github.com/calcofi/workflows) as a Quarto document). Data definition CSV files (`tbls_rename.csv` , `flds_rename.csv`) are auto-generated (if missing) and manually updated to rename and describe tables and fields. After injecting the data for each of the tables, extra metadata is added to the `COMMENT`s of each table as JSON elements (links in markdown), including at the ***table*** level:</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>Google Drive <span class="sc">\*</span>.csv files get ingested with a **workflow** per **dataset** (in Github repository [calcofi/workflows](https://github.com/calcofi/workflows) as a Quarto document). Data definition CSV files (`tbls_redefine.csv` , `flds_redefine.csv`) are auto-generated (if missing) and manually updated to rename and describe tables and fields. After injecting the data for each of the tables, extra metadata is added to the `COMMENT`s of each table as JSON elements (links in markdown), including at the ***table*** level:</span>
 <span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>**description**: general description describing contents and how each row is unique</span>
 <span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>**source**: CSV (linked to Google Drive source as markdown)</span>
