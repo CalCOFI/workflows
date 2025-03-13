@@ -1,17 +1,25 @@
 ---
-title: "ingest_coastwatch.pfeg.noaa.gov-erdCalCOFIlrvsiz"
+title: "CalCOFI NOAA Fish Larvae Sizes on ERDDAP"
 editor: visual
 editor_options: 
   chunk_output_type: console
 ---
 
-# CalCOFI NOAA Fish Larvae Sizes on ERDDAP
-
 ## Data
 
-**Goal**: Read in the "CalCOFI NOAA Fish Larvae Sizes" dataset from ERDDAP and write to Google Drive `calcofi/data/{provider}/{dataset}`.
+**Goal**: Read in the "CalCOFI NOAA Fish Larvae Sizes" dataset from ERDDAP with the following:
 
-- [ERDDAP - CalCOFI NOAA Fish Larvae Sizes - Data Access Form](https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFIlrvsiz.html)
+- erddap: [coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFIlrvsiz.html](https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFIlrvsiz.html)\
+  ERDDAP - CalCOFI NOAA Fish Larvae Sizes - Data Access Form
+  - `{provider}`: `coastwatch.pfeg.noaa.gov`
+  - `{dataset}`: `erdCalCOFIlrvsiz`
+- workflow: `ingest_{provider}_{dataset}.qmd`
+- data: Google Drive `calcofi/data/{provider}/{dataset}`
+  - data: `{dataset}.csv`
+  - metadata: `{dataset}_info.csv`
+- database definitions: `ingest/{provider}/{dataset}`
+  - tables: `tbls_redefine.csv`
+  - columns: `flds_redefine.csv`
 
 ```{r}
 librarian::shelf(
