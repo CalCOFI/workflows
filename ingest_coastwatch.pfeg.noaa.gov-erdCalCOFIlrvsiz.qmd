@@ -1,0 +1,57 @@
+---
+title: "ingest_coastwatch.pfeg.noaa.gov-erdCalCOFIlrvsiz"
+editor: visual
+---
+
+# CalCOFI NOAA Fish Larvae Sizes on ERDDAP
+
+## Read and write the tabledap dataset
+
+**Goal**: Read in the NOAA CalCOFI Fish Larvae Sizes dataset from ERDDAP and write to Google Drive `calcofi/data/{dataset}`.
+
+- [erdCalCOFIlrvsiz.html](https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFIlrvsiz.html)
+
+```{r}
+librarian::shelf(
+  DT, glue, here, readr, rerddap, stringr, tibble)
+
+# variables
+dir_data     <- "/Users/bbest/Library/CloudStorage/GoogleDrive-ben@ecoquants.com/My Drive/projects/calcofi/data" 
+# TODO: change data to {provider}/{dataset}
+dir_provider <- "coastwatch.pfeg.noaa.gov"
+ds_url       <- "https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFIlrvsiz.html"
+
+# extract ERDDAP url and dataset ID from the dataset URL
+ed_pattern  <- "(https://.*)/tabledap/([A-Za-z0-9]+)\\.html"
+ed_url      <- str_replace(ds_url, ed_pattern, "\\1") # "erdCalCOFIlrvsiz"
+ed_id       <- str_replace(ds_url, ed_pattern, "\\2") # "https://coastwatch.pfeg.noaa.gov/erddap"
+dir_dataset <- glue("{dir_data}/{dir_provider}")
+d_csv       <- glue("{dir_dataset}/{ed_id}.csv")
+
+if (!dir.exists(dir_dataset))
+  dir.create(dir_dataset)
+
+ed_info <- info(ed_id, url = ed_url)
+ed_info
+```
+
+```{r}
+if (!file.exists(d_csv)){
+  d <- tabledap(ed_info)
+  write_csv(d, d_csv)
+} else {
+  d <- read_csv(d_csv)
+}
+dim(d)
+
+head(d) |> 
+  datatable()
+```
+
+## TODO: Extract metadata from the dataset
+
+- [ERDDAP - Information about CalCOFI NOAA Fish Larvae Sizes, from NOAA SWFSC](https://coastwatch.pfeg.noaa.gov/erddap/info/erdCalCOFIlrvsiz/index.html)
+
+```{r}
+ed_info$alldata
+```
