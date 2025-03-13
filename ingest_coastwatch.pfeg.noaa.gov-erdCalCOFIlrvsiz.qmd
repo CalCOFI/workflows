@@ -1,23 +1,24 @@
 ---
 title: "ingest_coastwatch.pfeg.noaa.gov-erdCalCOFIlrvsiz"
 editor: visual
+editor_options: 
+  chunk_output_type: console
 ---
 
 # CalCOFI NOAA Fish Larvae Sizes on ERDDAP
 
-## Read and write the tabledap dataset
+## Data
 
-**Goal**: Read in the NOAA CalCOFI Fish Larvae Sizes dataset from ERDDAP and write to Google Drive `calcofi/data/{dataset}`.
+**Goal**: Read in the "CalCOFI NOAA Fish Larvae Sizes" dataset from ERDDAP and write to Google Drive `calcofi/data/{provider}/{dataset}`.
 
-- [erdCalCOFIlrvsiz.html](https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFIlrvsiz.html)
+- [ERDDAP - CalCOFI NOAA Fish Larvae Sizes - Data Access Form](https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFIlrvsiz.html)
 
 ```{r}
 librarian::shelf(
-  DT, glue, here, readr, rerddap, stringr, tibble)
+  dplyr, DT, glue, here, readr, rerddap, stringr, tibble)
 
 # variables
 dir_data     <- "/Users/bbest/Library/CloudStorage/GoogleDrive-ben@ecoquants.com/My Drive/projects/calcofi/data" 
-# TODO: change data to {provider}/{dataset}
 dir_provider <- "coastwatch.pfeg.noaa.gov"
 ds_url       <- "https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFIlrvsiz.html"
 
@@ -27,15 +28,13 @@ ed_url      <- str_replace(ds_url, ed_pattern, "\\1") # "erdCalCOFIlrvsiz"
 ed_id       <- str_replace(ds_url, ed_pattern, "\\2") # "https://coastwatch.pfeg.noaa.gov/erddap"
 dir_dataset <- glue("{dir_data}/{dir_provider}")
 d_csv       <- glue("{dir_dataset}/{ed_id}.csv")
+m_csv       <- glue("{dir_dataset}/{ed_id}_info.csv")
 
 if (!dir.exists(dir_dataset))
   dir.create(dir_dataset)
 
 ed_info <- info(ed_id, url = ed_url)
-ed_info
-```
 
-```{r}
 if (!file.exists(d_csv)){
   d <- tabledap(ed_info)
   write_csv(d, d_csv)
@@ -48,14 +47,35 @@ head(d) |>
   datatable()
 ```
 
-Output CSV in Google Drive: 
-
-[calcofi](https://drive.google.com/drive/folders/13pWB5x59WSBR0mr9jJjkx7rri9hlUsMv) / [data](https://drive.google.com/drive/folders/1xxdWa4mWkmfkJUQsHxERTp9eBBXBMbV7) / [coastwatch.pfeg.noaa.gov](https://drive.google.com/drive/folders/1PDzCCpdSD4aBwpa7AZv2FNO1-pZg_WwP) / [**erdCalCOFIlrvsiz.csv**](https://drive.google.com/file/d/1YkWJK8aUlDuP2hm5BszR4a82hzAogr0G/view?usp=drive_link)
-
-## TODO: Extract metadata from the dataset
+## Metadata
 
 - [ERDDAP - Information about CalCOFI NOAA Fish Larvae Sizes, from NOAA SWFSC](https://coastwatch.pfeg.noaa.gov/erddap/info/erdCalCOFIlrvsiz/index.html)
 
 ```{r}
-ed_info$alldata
+if (!file.exists(m_csv)){
+  d_m <- ed_info$alldata |> 
+    bind_rows() |> 
+    tibble()
+  write_csv(d_m, m_csv)
+} else {
+  d_m <- read_csv(m_csv)
+}
+
+d_m |> 
+  datatable()
 ```
+
+## Google Drive
+
+Output CSVs in Google Drive: 
+
+[calcofi](https://drive.google.com/drive/folders/13pWB5x59WSBR0mr9jJjkx7rri9hlUsMv) / [data](https://drive.google.com/drive/folders/1xxdWa4mWkmfkJUQsHxERTp9eBBXBMbV7) / [coastwatch.pfeg.noaa.gov](https://drive.google.com/drive/folders/1PDzCCpdSD4aBwpa7AZv2FNO1-pZg_WwP) / 
+
+- data: [**erdCalCOFIlrvsiz.csv**](https://drive.google.com/file/d/1YkWJK8aUlDuP2hm5BszR4a82hzAogr0G/view?usp=drive_link)
+- metadata: [**erdCalCOFIlrvsiz_info.csv**](https://drive.google.com/open?id=1GVgoMWbmC7iL0ULqDwFimCLCd3cs61N2&usp=drive_fs)
+
+## TODO: load into database
+
+See:
+
+- [5.3 Ingest datasets with documentation - Database – CalCOFI.io Docs](https://calcofi.io/docs/db.html#ingest-datasets-with-documentation)
