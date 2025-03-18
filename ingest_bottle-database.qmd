@@ -17,6 +17,7 @@ editor:
 
 Source: [Bottle Database | CalCOFI.org](https://calcofi.org/data/oceanographic-data/bottle-database/)
 
+- <https://calcofi.org/downloads/database/CalCOFI_Database_194903-202105_csv_16October2023.zip>
 
 **Goal**: Ingest bottle database from source files, while:
 
@@ -102,29 +103,33 @@ stopifnot(tbl(con_dev, "ship") |>  filter(is.na(ship_nodc)) |> collect() |> nrow
 #| label: cast.ship_nodc missing in ship
 
 d_cast <- read_csv(cast_csv) |> 
-  clean_names()
+  clean_names() |> 
+  mutate(
+    date = strptime(date, format = "%m/%d/%Y"))
 
 d_cast_ship_miss <- d_cast |>
-  select(ship_name, ship_nodc = ship_code) |> 
+  select(ship_name, ship_nodc = ship_code, date) |> 
   group_by(ship_name, ship_nodc) |> 
   summarize(
     n_casts = n(),
+    date_min = min(date),
+    date_max = max(date),
     .groups = "drop") |> 
   anti_join(
     tbl(con_dev, "ship") |> 
       collect(),
     by = "ship_nodc")
-#   ship_name             ship_nodc n_casts
-#   <chr>                 <chr>       <int>
-# 1 ARGO                  31AR            4
-# 2 DAVID PHILLIP DOLPHIN 33DP           34
-# 3 RV BELL M SHIMADA     325S          670
-# 4 RV BELL M. SHIMADA    325S           67
-# 5 RV DAVID STARR JORDAN 03JD            1
-# 6 RV OCEAN STARR        31OS          213
-# 7 RV REUBEN LASKER      33RL          464
-# 8 RV SALLY RIDE         33SR          514
-# 9 WESTWIND              32WC           11
+#   ship_name             ship_nodc n_casts date_min            date_max           
+#   <chr>                 <chr>       <int> <dttm>              <dttm>             
+# 1 ARGO                  31AR            4 1962-01-11 00:00:00 1962-01-17 00:00:00
+# 2 DAVID PHILLIP DOLPHIN 33DP           34 1973-05-23 00:00:00 1973-05-27 00:00:00
+# 3 RV BELL M SHIMADA     325S          670 2010-09-24 00:00:00 2021-05-13 00:00:00
+# 4 RV BELL M. SHIMADA    325S           67 2011-04-09 00:00:00 2011-04-26 00:00:00
+# 5 RV DAVID STARR JORDAN 03JD            1 1996-05-01 00:00:00 1996-05-01 00:00:00
+# 6 RV OCEAN STARR        31OS          213 2012-07-03 00:00:00 2016-07-26 00:00:00
+# 7 RV REUBEN LASKER      33RL          464 2016-01-07 00:00:00 2021-02-03 00:00:00
+# 8 RV SALLY RIDE         33SR          514 2016-11-06 00:00:00 2020-10-24 00:00:00
+# 9 WESTWIND              32WC           11 1983-04-06 00:00:00 1983-04-07 00:00:00
 d_cast_ship_miss
 ```
   
