@@ -1,7 +1,10 @@
 # workflows
-scripts to explore and load data into the database
+
+scripts to explore and load data into the CalCOFI database
 
 ## notebooks
+
+These web pages (\*.html) are typically rendered from Quarto or R markdown (\*.qmd, \*.Rmd) source files:
 
 <!-- Jekyll rendering -->
 {% for file in site.static_files %}
@@ -15,3 +18,4 @@ scripts to explore and load data into the database
 These notebook web pages (\*.html) are typically rendered from Rmarkdown (\*.Rmd) or Quarto markdown (\*.qmd) source files:
 
 - [github.com/CalCOFI/workflows](https://github.com/CalCOFI/workflows)
+
