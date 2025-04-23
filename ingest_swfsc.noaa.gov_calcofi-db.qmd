@@ -53,271 +53,81 @@ See also [5.3 Ingest datasets with documentation – Database – CalCOFI.io Doc
 ```{r}
 #| label: setup
 
+# devtools::install_local(here::here("../calcofi4db"), force = T)
+# devtools::load_all(here::here("../calcofi4db"))
 librarian::shelf(
-  DBI, dm, DT, fs, glue, gargle, googledrive, here, janitor, jsonlite, 
+  calcofi4db, DBI, dm, dplyr, DT, fs, glue, gargle, googledrive, here, janitor, jsonlite, 
   knitr, lubridate, purrr, readr, rlang, tibble, tidyr, uuid,
   quiet = T)
 options(readr.show_col_types = F)
 
-# Source database connection
-source(here("../apps_dev/libs/db.R"))
+# get database connection
+con <- get_db_con(c("dev", "dev_ref"))
 
 # define paths ---
 dataset  <- "calcofi-db"
 provider <- "swfsc.noaa.gov"
 
-workflow      <- glue("ingest_{provider}_{dataset}")
-workflow_qmd  <- glue("{workflow}.qmd")
-workflow_url  <- glue("https://calcofi.io/workflows/{workflow}.html")
+# data directory with CSV files
+# dir_data <- "/Users/bbest/My Drive/projects/calcofi/data"
+# same data folder as Google Drive URL
+# gdir_data <- "https://drive.google.com/drive/u/0/folders/13A9yDJCdV0M-lrMLqurzIb3G3ozknr9O"
 
-# get path of this quarto document with knitr
-qmd_path  <- ifelse(
-  rstudioapi::isAvailable(), 
-  rstudioapi::getActiveDocumentContext()$path,
-  knitr::current_input(dir = TRUE)) |> 
-  path_real()
-stopifnot(str_detect(qmd_path, glue("ingest_{provider}_{dataset}\\.qmd")))
+# Load data using calcofi4db package
+d <- read_csv_files(provider, dataset)
 
-# dataset with external data folder
-dir_data <- "/Users/bbest/My Drive/projects/calcofi/data"
-# noaa-calcofi-db - Google Drive
-gdir_data <- "https://drive.google.com/drive/u/0/folders/13A9yDJCdV0M-lrMLqurzIb3G3ozknr9O" 
-
-dir_csv    <- glue("{dir_data}/{provider}/{dataset}")
-dir_ingest <- here(glue("ingest/{provider}/{dataset}/tbls_raw.csv"))
-# input tables (version controlled)
-tbls_in_csv <- here(glue("ingest/{provider}/{dataset}/tbls_raw.csv"))
-flds_in_csv <- here(glue("ingest/{provider}/{dataset}/flds_raw.csv"))
-# rename tables (version controlled)
-tbls_rn_csv <- here(glue("ingest/{provider}/{dataset}/tbls_redefine.csv"))
-flds_rn_csv <- here(glue("ingest/{provider}/{dataset}/flds_redefine.csv"))
+# Extract variables from data_info for backward compatibility
+# workflow_info <- data_info$workflow_info
+# workflow      <- workflow_info$workflow
+# workflow_qmd  <- workflow_info$workflow_qmd
+# workflow_url  <- workflow_info$workflow_url
+# 
+# dir_csv <- data_info$paths$dir_csv
+# dir_ingest <- dirname(data_info$paths$dir_ingest)
+# tbls_in_csv <- data_info$paths$tbls_in_csv
+# flds_in_csv <- data_info$paths$flds_in_csv
+# tbls_rn_csv <- data_info$paths$tbls_rn_csv
+# flds_rn_csv <- data_info$paths$flds_rn_csv
+# 
+# d_gdir_data <- data_info$d_gdir_data
+# d_tbls_rn <- data_info$d_tbls_rn
+# d_flds_rn <- data_info$d_flds_rn
+# d <- data_info$csv_metadata$data
 ```
 
 ```{r}
 #| label: google-drive_csv-list
-
-googledrive::drive_auth(
-  email  = "ben@ecoquants.com", 
-  scopes = "drive")
-# OAuth access credentials cached in ~/Library/Caches/gargle
-
-d_gdir_data <- drive_ls(gdir_data) |> 
-  mutate(
-    web_view_link = map_chr(drive_resource, \(x) x$webViewLink),
-    created_time  = map_chr(drive_resource, \(x) x$createdTime) |> 
-      as_datetime()) |> 
-  filter(
-    str_detect(name, "\\.csv$"))
-
-d_gdir_data |>
-  mutate(
-    csv = glue("<a href='{web_view_link}' target='_blank'>{name}</a>") ) |>
-  select(csv, created_time) |>
-  datatable(escape = F, caption = "CSV files to ingest.") |> 
-  formatDate(~created_time, "toLocaleString")
+show_googledrive_files(d)
 ```
 
 ## Read CSV Files
 
 ```{r}
-#| label: read_csvs
+#| label: tbls_in
 
-# read data, extract field headers
-d <- tibble(
-  csv = list.files(
-    dir_csv, pattern = "\\.csv$", full.names = TRUE)) |> 
-  mutate(
-    tbl  = tools::file_path_sans_ext(basename(csv)),
-    data = map(csv, read_csv),
-    nrow = map_int(data, nrow),
-    ncol = map_int(data, ncol),
-    flds = map2(tbl, data, \(tbl, data){
-      tibble(
-        fld  = names(data),
-        type = map_chr(fld, \(fld) class(data[[fld]])[1] )) })) |> 
-  relocate(tbl)
-
-if (!dir.exists(dirname(tbls_in_csv)))
-  dir.create(dirname(tbls_in_csv), recursive = T)
-
-d_tbls_in <- d |> 
-  select(tbl, nrow, ncol)
-write_csv(d_tbls_in, tbls_in_csv)
-
-d_flds_in <- d |> 
-  select(tbl, flds) |> 
-  unnest(flds) 
-write_csv(d_flds_in, flds_in_csv)
-
-datatable(d_tbls_in, caption = "Tables to ingest.")
+d$csv$tables |> 
+  datatable(caption = "Tables to ingest.")
 ```
 
 ```{r}
-#| label: dt_flds_in
+#| label: flds_in
 
-datatable(d_flds_in, caption = "Fields to ingest.")
+d$csv$fields |> 
+  datatable(caption = "Fields to ingest.")
 ```
 
-## Show table and field renames
+## Show tables and fields redefined
 
 ```{r}
-#| label: create_or_read_flds_rn_csv
+#| label: tbls_rd
 
-if (!file.exists(flds_rn_csv)){
-  d_tbls_in |> 
-    select(
-      tbl_old = tbl, 
-      tbl_new = tbl) |> 
-    mutate(
-      tbl_description = "") |> 
-    write_csv(tbls_rn_csv)
-
-  d_flds_in |> 
-    group_by(tbl) |> 
-    mutate(
-      fld_new          = make_clean_names(fld),
-      order            = 1:n(),
-      fld_description  = "",
-      notes            = "",
-      mutation         = "",
-      type_new         = map2_chr(tbl, fld, \(x, y){
-        
-        v <- d |> 
-          filter(
-            tbl == x) |> 
-          pull(data) |> 
-          pluck(1) |> 
-          pull(y)
-        
-        cl <- class(v)[1]
-        
-        if (cl == "character"){
-          if (all(!is.na(as.UUID(v))))
-            return("uuid")
-        } else {
-          return("varchar")
-        }
-        
-        # integer
-        if (cl == "numeric" && all(v%%1==0)){
-          # https://www.postgresql.org/docs/current/datatype-numeric.html
-          if (
-            min(v) >= -32768 & 
-            max(v) <= 32767)
-            return("smallint")
-          if (
-            min(v) >= -2147483648 & 
-            max(v) <= 2147483647)
-            return("integer")
-          if (
-            min(v) >= -9223372036854775808 & 
-            max(v) <= 9223372036854775807)
-            return("bigint")
-        }
-        
-        if (cl == "POSIXct")
-          return("timestamp")
-        if (cl == "Date")
-          return("date")
-        
-        return(cl)
-        })) |> 
-    select(
-      tbl_old   = tbl,   tbl_new = tbl,
-      fld_old   = fld,   fld_new,
-      order_old = order, order_new = order,
-      type_old  = type,  type_new,
-      fld_description, notes, mutation) |> 
-    write_csv(flds_rn_csv)
-  
-  stop(glue(
-    "Please update the table and field rename tables before proceeding:
-      {tbls_rn_csv}
-      {flds_rn_csv}"))
-}
-
-d_tbls_rn <- read_csv(tbls_rn_csv)
-d_flds_rn <- read_csv(flds_rn_csv)
-
-d_tbls_rn |>
-  mutate(
-    is_equal = tbl_old == tbl_new) |> 
-  datatable(
-    caption = "Tables to rename.",
-    options = list(
-      columnDefs = list(list(
-        targets = "is_equal", visible = F)))) |> 
-  formatStyle(
-    "tbl_new",
-    backgroundColor = styleEqual(
-      c(T,F), 
-      c("lightgray","lightgreen")),
-    valueColumns    = "is_equal")
+show_tables_rename(d)
 ```
 
 ```{r}
-#| label: dt_flds_rn
+#| label: flds_rd
 
-d_flds_rn |>
-  mutate(
-    tbl_is_equal   = tbl_old   == tbl_new,
-    fld_is_equal   = fld_old   == fld_new,
-    type_is_equal  = type_old  == type_new,
-    order_is_equal = order_old == order_new,
-    tbl = ifelse(
-      tbl_is_equal,
-      tbl_old,
-      glue("{tbl_old} → {tbl_new}")),
-    fld = ifelse(
-      fld_is_equal,
-      fld_old,
-      glue("{fld_old} → {fld_new}")),
-    type = ifelse(
-      type_is_equal,
-      type_old,
-      glue("{type_old} → {type_new}")),
-    order = ifelse(
-      order_is_equal,
-      order_old,
-      glue("{order_old} → {order_new}"))) |> 
-  select(
-    -tbl_old,   -tbl_new,
-    -fld_old,   -fld_new,
-    -type_old,  -type_new,
-    -order_old, -order_new) |> 
-  relocate(tbl, fld, type, order) |> 
-  datatable(
-    caption = "Fields to rename.",
-    rownames = F,
-    options = list(
-      colReorder = T,
-      rowGroup = list(dataSrc = 0),
-      pageLength = 50,
-      columnDefs = list(list(
-        targets = c(
-          "tbl",
-          "tbl_is_equal", "fld_is_equal", 
-          "type_is_equal", "order_is_equal"), 
-        visible = F))),
-    extensions = c("ColReorder", "RowGroup", "Responsive")) |> 
-  formatStyle(
-    "fld",
-    backgroundColor = styleEqual(
-      c(T, F), 
-      c("lightgray","lightgreen")),
-    valueColumns    = "fld_is_equal") |> 
-  formatStyle(
-    "type",
-    backgroundColor = styleEqual(
-      c(T, F), 
-      c("lightgray","lightgreen")),
-    valueColumns    = "type_is_equal") |> 
-  formatStyle(
-    "order",
-    backgroundColor = styleEqual(
-      c(T, F), 
-      c("lightgray","lightgreen")),
-    valueColumns    = "order_is_equal")
+show_fields_rename(d)
 ```
 
 ## Apply remappings to data
@@ -325,53 +135,11 @@ d_flds_rn |>
 ```{r}
 #| label: make_data_new
 
-d0 <- d
-mutate_table <- function(tbl, data) {
-  # message(glue("Processing table: {tbl}"))
-  
-  d_f <- d_flds_rn |>
-    filter(tbl_old == tbl)
-  
-  # rename fields ----
-  f_rn <- d_f |>
-    select(fld_old, fld_new) |> 
-    deframe()
-  
-  y <- rename_with(data, ~ f_rn[.x])
-  
-  # mutate fields ----
-  d_m <- d_f |> 
-    select(fld_new, mutation) |> 
-    filter(!is.na(mutation))
-  
-  for (i in seq_len(nrow(d_m))) {
-    fld <- d_m$fld_new[i]
-    mx  <- d_m$mutation[i]
-    
-    # message(glue("mutating {tbl}.{fld}: `{mx}`"))
-    fld_sym <- rlang::sym(fld)
-    mx_expr <- rlang::parse_expr(mx)
-    
-    y <- y |>
-      mutate(!!fld_sym := eval(mx_expr, envir = y))
-  }
-  
-  # order fields ----
-  flds_ordered <- d_f |>
-    arrange(order_new) |> 
-    pull(fld_new)
-  y <- y |>
-    relocate(all_of(flds_ordered))
+# Use calcofi4db to transform data
+transformed_data <- transform_data(d)
 
-  return(y)
-}
-
-d <- d |>
-  left_join(
-    d_tbls_rn,
-    by = c("tbl" = "tbl_old")) |> 
-  mutate(
-    data_new = map2(tbl, data, mutate_table))
+# For backward compatibility
+d <- transformed_data
 ```
 
 ## Load Tables into Database
@@ -382,97 +150,54 @@ d <- d |>
 schema    <- "dev"
 overwrite <- T
 
-tbl_to_db <- function(tbl){ # tbl = "egg" # tbl = "ship"
-  message(glue("{schema}.{tbl}  ~ {Sys.time()}" ))
+# Use calcofi4db to ingest tables and generate metadata
+# First, check for changes
+changes <- detect_csv_changes(
+  con = con,
+  schema = schema,
+  transformed_data = transformed_data,
+  d_flds_rn = d_flds_rn
+)
 
-  # Check if table exists
-  tbl_exists <- dbExistsTable(
-    con, Id(schema = schema, table = tbl))
-  
-  if (!tbl_exists | overwrite) {
-    
-    message("  loading table into database")
-    
-    d_tbl <- d |> 
-      filter(tbl_new == !!tbl) |> 
-      pull(data_new) |> 
-      pluck(1)
-    
-    v_fld_types <- d_flds_rn |> 
-      filter(tbl_new == !!tbl) |> 
-      arrange(order_new) |> 
-      select(fld_new, type_new) |> 
-      deframe()
-  
-    # dbWriteTable(
-    #   con, 
-    #   Id(schema = schema, table = tbl), 
-    #   d_tbl, 
-    #   field.types = v_fld_types, 
-    #   append      = F,
-    #   overwrite   = T)
-    
-    # comment to table ----
-    #   with JSON elements (in markdown) of dtime ingested, source, and workflow
-    tbl_description <- d |> 
-      filter(tbl_new == !!tbl) |>
-      pull(tbl_description)
-    csv <- d |> 
-      filter(tbl_new == !!tbl) |> 
-      pull(csv) |> 
-      basename()
-    csv_url <- d_gdir_data |> 
-      filter(name == csv) |> 
-      pull(web_view_link)
-    csv_created <- d_gdir_data |> 
-      filter(name == csv) |> 
-      pull(created_time)
-    dbExecute(
-      con, 
-      glue(
-        'COMMENT ON TABLE {schema}.{tbl} IS \'{{
-          "description":       "{tbl_description}",
-          "source":            "[{csv}]({csv_url})",
-          "source_created":    "{csv_created}",
-          "workflow":          "[{workflow}]({workflow_url})"},
-          "workflow_ingested": "{Sys.time()}" }}\'' ))
-    
-    # get comments on table
-    # devtools::install_local(here("../calcofi4r"))
-    # calcofi4r::cc_db_catalog(tables = "larva")
-    
-    # tbl(con_dev, "pg_description")
-    # dbGetQuery(con, "SELECT * FROM pg_description WHERE objsubid = 0")
-    
-  } else {
-    
-    message("  exists, skipping")
-    
-    # # Get existing data
-    # existing_data <- dbGetQuery(
-    #   con, sprintf("SELECT * FROM %s LIMIT 1", table_name))
-    # 
-    # # Compare schemas
-    # new_cols <- setdiff(names(data), names(existing_data))
-    # if (length(new_cols) > 0) {
-    #   cat(sprintf("New columns found in %s: %s\n", table_name, paste(new_cols, collapse = ", ")))
-    # }
-    # 
-    # # Update data - this is a simple example, you might want more sophisticated merge logic
-    # dbWriteTable(con, table_name, data, overwrite = TRUE)
-  }
-  
-  # Return summary stats
-  return(tibble(
-    tbl = tbl,
-    nrow = nrow(d_tbl),
-    ncol = ncol(d_tbl),
-    dtime_ingested = Sys.time()))
+# Display changes
+if (length(changes$new_tables) > 0) {
+  message("New tables to be added:")
+  message(paste(" -", changes$new_tables, collapse = "\n"))
 }
 
-# Process each table
-tbl_stats <- map(d$tbl_new, tbl_to_db) |> 
-  bind_rows()
+if (length(changes$field_changes) > 0) {
+  message("\nTables with field changes:")
+  for (tbl in names(changes$field_changes)) {
+    message(glue(" - {tbl}:"))
+    if (length(changes$field_changes[[tbl]]$added) > 0) {
+      message(glue("   Added: {paste(changes$field_changes[[tbl]]$added, collapse = ', ')}"))
+    }
+    if (length(changes$field_changes[[tbl]]$removed) > 0) {
+      message(glue("   Removed: {paste(changes$field_changes[[tbl]]$removed, collapse = ', ')}"))
+    }
+  }
+}
+
+if (length(changes$type_changes) > 0) {
+  message("\nTables with type changes:")
+  for (tbl in names(changes$type_changes)) {
+    message(glue(" - {tbl}:"))
+    for (fld in names(changes$type_changes[[tbl]])) {
+      message(glue("   {fld}: {changes$type_changes[[tbl]][[fld]]$from} -> {changes$type_changes[[tbl]][[fld]]$to}"))
+    }
+  }
+}
+
+# Ingest data to database
+tbl_stats <- ingest_csv_to_db(
+  con = con,
+  schema = schema,
+  transformed_data = transformed_data,
+  d_flds_rn = d_flds_rn,
+  d_gdir_data = d_gdir_data,
+  workflow_info = workflow_info,
+  overwrite = overwrite
+)
 
 # Display summary statistics
 tbl_stats |> 
