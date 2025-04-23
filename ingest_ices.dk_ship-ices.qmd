@@ -1,0 +1,205 @@
+---
+title: "Ingest ICES Ship Codes"
+editor_options: 
+  chunk_output_type: console
+---
+
+While ingesting data, we have encountered issues with consistent lookups for ship codes. This notebook is for fetching the latest ICES ship codes from:
+
+- [ICES Reference Codes - RECO](https://vocab.ices.dk/?ref=315)\
+  SHIPC SeaDataNet Ship and Platform Codes
+
+The ship codes are actually fetched using:
+
+- [Swagger UI](https://vocab.ices.dk/services/api/swagger/index.html)\
+  ICES API
+
+```{r}
+#| label: setup
+
+librarian::shelf(
+  DBI, dplyr, DT, glue, here, htmltools, httr2, janitor, purrr, readr, rvest)
+options(readr.show_col_types = F)
+
+# get db connection
+source(here("../apps_dev/libs/db.R")) # defines variables: con, dir_gdrive
+```
+
+## `ices`: ICES ship codes from ICES
+
+```{r}
+#| label: ships_ices
+
+fetch_ship_ices <- function(
+  ices_api            = "https://vocab.ices.dk/services/api",
+  ices_ship_code_type = "7f9a91e1-fb57-464a-8eb0-697e4b0235b5"){
+  # api: [Swagger UI](https://vocab.ices.dk/services/api/swagger/index.html)
+  # ship codes: [ICES Reference Codes - RECO](https://vocab.ices.dk/?ref=315): SHIPC SeaDataNet Ship and Platform Codes
+  
+  d <- httr2::request(ices_api) |> 
+    httr2::req_url_path_append("Code", ices_ship_code_type) |>
+    httr2::req_perform() |> 
+    httr2::resp_body_string() |> 
+    jsonlite::fromJSON() |>
+    tibble::as_tibble() |> 
+    janitor::clean_names()
+  
+  # show columns with no variation
+  # d |> 
+  #   dplyr::select(where(~ n_distinct(.) == 1)) |> 
+  #   head(1) |> 
+  #   glimpse()
+  # $ long_description <chr> "When searching for platforms, find better overview here: https://data.ices.dk/Reports/ShipC.aspx"
+  # $ code_type_id     <int> 315
+  # $ code_type_guid   <chr> "7f9a91e1-fb57-464a-8eb0-697e4b0235b5"
+  
+  d |> 
+    # drop columns with no variation
+    dplyr::select(where(~ n_distinct(.) > 1)) |>  
+    # add links for ship html web page and details of all relations in json
+    mutate(
+      ship_html    = glue("https://vocab.ices.dk/?codeguid={guid}"),
+      details_json = glue("{ices_api}/CodeDetail/{ices_ship_code_type}/{guid}"))
+}
+
+# fetch ICES ship codes from ICES API
+d_ship_ices <- fetch_ship_ices()
+
+# write to version controlled (git) data folder 
+write_csv(d_ship_ices, here("data/ship_ices.csv"))
+
+# write to database
+dbWriteTable(
+  con_dev_only, 
+  Id(schema = "dev_ref", table = "ship_ices"), # use as a reference table in dev process
+  d_ship_ices, overwrite = T)
+
+# show table
+tbl(con_dev_only, "ship_ices") |> 
+  collect() |> 
+  mutate(
+    ship_html    = glue("<a href='{ship_html}'>{key}.html</a>"),
+    details_json = glue("<a href='{details_json}'>{key}.json</a>")) |>
+  datatable(escape = F)
+```
+
+## OLD...
+
+The ship lookups below have been superseded by ICES above as the authoritative source for ship codes.
+
+```{r}
+#| label: setup_old
+
+# stop evaluation in subsequent R chunks since OLD
+# knitr::opts_chunk$set(eval = F)
+
+ships_nerc_url <- "https://vocab.nerc.ac.uk/collection/C17/current/"
+ships_nerc_csv <- here("data/ships_nerc.csv")
+ships_nodc_url <- "https://www.nodc.noaa.gov/OC5/WOD/CODES/s_3_platform.html"
+ships_nodc_csv <- here("data/ships_nodc.csv")
+ships_cc_url   <- "https://www.calcofi.info/index.php/field-work/calcofi-ships/unols-ship-codes"
+ships_cc_csv   <-  here("data/ships_calcofi.csv")
+
+redo <- F
+```
+
+
+1.  `nerc`: [ICES Platform Codes \| NERC Vocabulary Server](https://vocab.nerc.ac.uk/collection/C17/current/)
+2.  `nodc`: [s_3_platform \| NODC World Ocean Database: code tables](https://www.nodc.noaa.gov/OC5/WOD/CODES/s_3_platform.html) https://www.nodc.noaa.gov/OC5/WOD/CODES/s_3_platform.html
+3.  `cc`: [UNOLS Ship Codes \| CalCOFI Information Archive](https://www.calcofi.info/index.php/field-work/calcofi-ships/unols-ship-codes)
+
+### `nerc`: ICES ship codes from NERC
+
+```{r}
+#| label: ships_nerc
+
+if (!file.exists(ships_nerc_csv) | redo){
+  
+  read_html(ships_nerc_url) |> 
+    html_element("#vocsort")  |> 
+    html_table(header = T) |> 
+    clean_names() |> 
+    # names()
+    select(ship_nodc = id, p = preferred_label) |> 
+    mutate(
+      ship_name = str_replace(p, "(.*) \\(.*\\)", "\\1"),
+      remarks   = map_chr(p, \(p){
+        if (!str_detect(p, "\\(")) return(NA)
+        str_replace(p, "(.*) \\((.*)\\)", "\\2") }),
+      source_url = ships_nodc_url) |> 
+    select(ship_nodc, ship_name, remarks, source_url) |> 
+    write_csv(ships_nodc_csv)
+}
+
+d_ships_nodc <- read_csv(ships_nodc_csv)
+d_ships_nodc |> 
+  mutate(
+    source_url = glue("<a href='{source_url}'>{basename(source_url)}</a>")) |>
+  datatable(escape = F)
+```
+
+### `nodc`: World Ocean Database ship codes from NODC
+
+```{r}
+#| label: ships_nodc
+
+if (!file.exists(ships_nodc_csv) | redo){
+  
+  d <- read_html(ships_nodc_url) |> 
+    html_node("table")  |> 
+    html_table(header = T) |> 
+    clean_names() |> 
+    select(ship_nodc = nodc_code, p = platform_name) |> 
+    tibble()
+  
+  d |> 
+    mutate(
+      ship_name = str_replace(p, "(.*) \\(.*\\)", "\\1"),
+      remarks   = map_chr(p, \(p){
+        if (!str_detect(p, "\\("))
+          return(NA)
+        str_replace(p, "(.*) \\((.*)\\)", "\\2") }),
+      source_url = ships_nodc_url) |> 
+    select(ship_nodc, ship_name, remarks, source_url) |> 
+    write_csv(ships_nodc_csv)
+}
+
+d_ships_nodc <- read_csv(ships_nodc_csv)
+d_ships_nodc |> 
+  mutate(
+    source_url = glue("<a href='{source_url}'>{basename(source_url)}</a>")) |>
+  datatable(escape = F)
+```
+
+### `cc`: UNOLS ship codes from CalCOFI Archives
+
+```{r}
+#| label: ships_cc
+
+if (!file.exists(ships_cc_csv) | redo){
+  
+  tibble(
+    url = read_html(ships_cc_url) |> 
+      html_nodes("table a") |> 
+      html_attr("href") |> 
+      keep(~ grepl("/unols-ship-codes/\\d+-", .x)) |>   # Filter valid ship code links
+      map_chr(~ paste0("https://www.calcofi.info", .x))) |> 
+    mutate(
+      data = map(
+        url, \(url){
+          read_html(url) |> 
+            html_node("table") |>
+            html_table(header = T) })) |> 
+    unnest(data) |> 
+    clean_names() |> 
+    select(ship_nodc = ship_code, ship_name = ship, remarks, source_url = url) |> 
+    mutate(
+      remarks = na_if(remarks, "")) |> 
+    write_csv(ships_cc_csv)
+}
+d_ships_cc <- read_csv(ships_cc_csv)
+d_ships_cc |> 
+  mutate(
+    source_url = glue("<a href='{source_url}'>{basename(source_url)}</a>")) |>
+  datatable(escape = F)
+```
