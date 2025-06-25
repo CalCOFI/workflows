@@ -15,32 +15,37 @@ Goals:
 ```{r}
 librarian::shelf(
   calcofi/calcofi4db, 
-  DBI, dm, dplyr, DT, fs, glue, gargle, googledrive, here, janitor, jsonlite, 
-  knitr, lubridate, purrr, readr, rlang, tibble, tidyr, uuid,
+  DBI, dplyr, DT, duckdb, fs, glue, here, tibble, tidyr,
   quiet = T)
 options(readr.show_col_types = F)
 
+# set up paths
+is_server <-  Sys.info()[["sysname"]] == "Linux"
+dir_data  <- ifelse(
+  is_server,
+  "/share/data",
+  "~/My Drive/projects/calcofi/data")
+dk_db     <- glue("{dir_data}/swfsc.noaa.gov/calcofi.duckdb")
+
 # get database connection
-con <- get_db_con(c("dev", "dev_ref"))
+con_pg <- get_db_con(c("dev"))
+con_dk <- dbConnect(duckdb(), dbdir = dk_db, read_only = F)
 
-# define paths ---
-dataset  <- "calcofi-db"
-provider <- "swfsc.noaa.gov"
-
-# data directory with CSV files
-# dir_data <- "/Users/bbest/My Drive/projects/calcofi/data"
-# same data folder as Google Drive URL
-# gdir_data <- "https://drive.google.com/drive/u/0/folders/13A9yDJCdV0M-lrMLqurzIb3G3ozknr9O"
-
-# Load data using calcofi4db package
-d <- read_csv_files(provider, dataset)
+tbls = dbListTables(con_pg)
+#  [1] "cruise"   "egg"      "grid"     "larva"    "net"      "ship"     "site"     "site_seg"
+#  [9] "species"  "tow"      "tow_type"
+for (tbl in tbls){
+  if (!(dbExistsTable(con_dk, tbl)))
+    dbReadTable(con_pg, tbl) %>% 
+      dbWriteTable(con_dk, tbl, .)
+}
 ```
 
-You can add options to executable code like this
 
-```{r}
-#| echo: false
-2 * 2
+## Close Connection
+
+```{r cleanup}
+dbDisconnect(con_dk, shutdown = T); duckdb_shutdown(duckdb()); rm(con_dk)
 ```
 
-The `echo: false` option disables the printing of code (only output is displayed).
+
