@@ -1,0 +1,46 @@
+---
+title: "explore_duckdb"
+editor: visual
+---
+
+## Overview
+
+Goals:
+
+- [ ] Write database tables to duckdb
+
+- [ ] Upload to S3 bucket publicly available online
+- [ ] View tables
+
+```{r}
+librarian::shelf(
+  calcofi/calcofi4db, 
+  DBI, dm, dplyr, DT, fs, glue, gargle, googledrive, here, janitor, jsonlite, 
+  knitr, lubridate, purrr, readr, rlang, tibble, tidyr, uuid,
+  quiet = T)
+options(readr.show_col_types = F)
+
+# get database connection
+con <- get_db_con(c("dev", "dev_ref"))
+
+# define paths ---
+dataset  <- "calcofi-db"
+provider <- "swfsc.noaa.gov"
+
+# data directory with CSV files
+# dir_data <- "/Users/bbest/My Drive/projects/calcofi/data"
+# same data folder as Google Drive URL
+# gdir_data <- "https://drive.google.com/drive/u/0/folders/13A9yDJCdV0M-lrMLqurzIb3G3ozknr9O"
+
+# Load data using calcofi4db package
+d <- read_csv_files(provider, dataset)
+```
+
+You can add options to executable code like this
+
+```{r}
+#| echo: false
+2 * 2
+```
+
+The `echo: false` option disables the printing of code (only output is displayed).
