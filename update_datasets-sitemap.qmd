@@ -86,11 +86,51 @@ edi_ds <- function(link){
   ds
 }
 
+# individual dataset functions (not yet used) ----
+erddap_ds_indiv <- function(link){
+  # link = "https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFIzoovol.html"
+  # link = "https://coastwatch.pfeg.noaa.gov/erddap/info/erdCalCOFIzoovol/index.html"
+  
+  title <- link |> 
+    str_replace("tabledap/([^.]+)\\.html", "info/\\1/index.csv") |>
+    str_replace("info/([^/]+)/index\\.html", "info/\\1/index.csv") |> 
+    read_csv() |> 
+    filter(
+      `Attribute Name` == "title") |>
+    pull(Value)
+
+  tibble(
+    title = title, 
+    url   = link)
+}
+
+edi_ds_indiv <- function(link){
+  # link = "https://portal.edirepository.org/nis/mapbrowse?packageid=knb-lter-cce.188.4"
+  # link = "https://portal.edirepository.org/nis/mapbrowse?scope=knb-lter-cce&identifier=313"
+  # link = "https://portal.edirepository.org/nis/mapbrowse?scope=knb-lter-cce&identifier=104&revision=12"
+
+  u <- url_parse(link)
+  # trim revision to return latest packageid
+  if (length(u$query) == 1 && names(u$query) == "packageid"){
+    id <- u$query |> str_replace("\\.[0-9]+$", "")
+  } else if (all(c("scope", "identifier") %in% names(u$query))){
+    id <- paste(u$query$scope, u$query$identifier, sep = ".")
+  } else {
+    stop("Unsupported link format for EDI repository")
+  }
+  res <- search_data_packages(query = glue("q=id:{id}&fl=packageid,title"))
+  stopifnot(nrow(res) == 1)
+  
+  tibble(
+    title = res$title,
+    url   = glue("https://portal.edirepository.org/nis/mapbrowse?packageid={res$packageid}"))
+}
+
 # read googlesheet repos ----
 dir.create(dirname(d_csv), showWarnings = F)
 
 gs4_deauth()
-read_sheet(d_gs) |> 
+read_sheet(d_gs, "CalCOFI data repositories") |> 
   write_csv(d_csv)
 
 d <- read_csv(d_csv) |> 
@@ -234,6 +274,16 @@ write_lines(
     sm_body, 
     '</urlset>'), 
   path = sm_xml)
+
+# copy entire datasets folder to _output
+dir_from <- here("datasets")
+dir_to   <- here("_output")
+dir.create(dir_to, recursive = T, showWarnings = F)
+file.copy(
+  from      = dir_from, 
+  to        = dir_to, 
+  recursive = T, 
+  overwrite = T)
 ```
 
 **Datasets** `sitemap.xml`:
