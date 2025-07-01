@@ -55,14 +55,16 @@ See also [5.3 Ingest datasets with documentation – Database – CalCOFI.io Doc
 
 # devtools::install_local(here::here("../calcofi4db"), force = T)
 # devtools::load_all(here::here("../calcofi4db"))
+# options(error=NULL)
 librarian::shelf(
-  calcofi4db, DBI, dm, dplyr, DT, fs, glue, gargle, googledrive, here, janitor, jsonlite, 
-  knitr, lubridate, purrr, readr, rlang, tibble, tidyr, uuid,
+  calcofi4db, DBI, dm, dplyr, DT, fs, glue, gargle, googledrive, here, janitor,
+  jsonlite, knitr, lubridate, purrr, readr, rlang, tibble, tidyr, uuid,
   quiet = T)
 options(readr.show_col_types = F)
 
 # get database connection
-con <- get_db_con(c("dev", "dev_ref"))
+con     <- get_db_con(c("dev", "dev_ref"))
+con_dev <- get_db_con(c("dev"))
 
 # define paths ---
 dataset  <- "calcofi-db"
@@ -95,24 +97,44 @@ d <- read_csv_files(provider, dataset)
 # d <- data_info$csv_metadata$data
 ```
 
+### Check for any mismatched tables and fields
+
+```{r}
+#| label: check_mismatched_tables_fields
+
+# detect changes between csv files and redefinitions
+changes <- detect_csv_changes(d)
+
+# print summary statistics
+print_csv_change_stats(changes, verbose = TRUE)
+
+# display interactive table of changes
+if (nrow(changes$summary) > 0) {
+  display_csv_changes(changes, format = "DT", title = "CSV vs Redefinition Mismatches")
+}
+```
+
+
+### Show CSV Files on Google Drive
+
 ```{r}
 #| label: google-drive_csv-list
 show_googledrive_files(d)
 ```
 
-## Read CSV Files
+### Show CSV Tables and Fields to Ingest
 
 ```{r}
 #| label: tbls_in
 
-d$csv$tables |> 
+d$d_csv$tables |> 
   datatable(caption = "Tables to ingest.")
 ```
 
 ```{r}
 #| label: flds_in
 
-d$csv$fields |> 
+d$d_csv$fields |> 
   datatable(caption = "Fields to ingest.")
 ```
 
@@ -121,13 +143,13 @@ d$csv$fields |>
 ```{r}
 #| label: tbls_rd
 
-show_tables_rename(d)
+show_tables_redefine(d)
 ```
 
 ```{r}
 #| label: flds_rd
 
-show_fields_rename(d)
+show_fields_redefine(d)
 ```
 
 ## Apply remappings to data
@@ -151,13 +173,13 @@ schema    <- "dev"
 overwrite <- T
 
 # Use calcofi4db to ingest tables and generate metadata
-# First, check for changes
-changes <- detect_csv_changes(
-  con = con,
-  schema = schema,
-  transformed_data = transformed_data,
-  d_flds_rn = d_flds_rn
-)
+# First, check for changes (this is now done above)
+# changes <- detect_csv_changes(
+#   con = con,
+#   schema = schema,
+#   transformed_data = transformed_data,
+#   d_flds_rd = d$d_flds_rd
+# )
 
 # Display changes
 if (length(changes$new_tables) > 0) {
@@ -193,9 +215,9 @@ tbl_stats <- ingest_csv_to_db(
   con = con,
   schema = schema,
   transformed_data = transformed_data,
-  d_flds_rn = d_flds_rn,
-  d_gdir_data = d_gdir_data,
-  workflow_info = workflow_info,
+  d_flds_rd = d$d_flds_rd,
+  d_gdir_data = d$d_gdata,
+  workflow_info = d$workflow_info,
   overwrite = overwrite
 )
 
