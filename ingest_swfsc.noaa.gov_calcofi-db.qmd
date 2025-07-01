@@ -114,6 +114,78 @@ if (nrow(changes$summary) > 0) {
 }
 ```
 
+```{r}
+#| label: data_integrity_checkpoint
+#| output: asis
+
+# check if there are any mismatches that need to be resolved
+if (nrow(changes$summary) > 0) {
+  # disable evaluation of remaining chunks
+  knitr::opts_chunk$set(eval = FALSE)
+  
+  # output markdown warning
+  cat(glue("
+    
+    ## ⚠️ Data Integrity Check Failed
+    
+    ### Workflow Halted
+    
+    Mismatches have been detected between the CSV files and redefinition metadata. 
+    These must be resolved before proceeding with database ingestion to ensure data integrity.
+    
+    ### Required Actions
+    
+    Please review the changes detected above and update the following redefinition files:
+    
+    - **Tables redefinition**: `{d$paths$tbls_rd_csv}`
+    - **Fields redefinition**: `{d$paths$flds_rd_csv}`
+    
+    ### Common Resolutions
+    
+    1. **New tables/fields in CSV**: Add them to the appropriate redefinition file
+    2. **Removed tables/fields from CSV**: Remove obsolete entries from redefinition files
+    3. **Type mismatches**: Update field types in redefinition files to match CSV data types
+    4. **Field name changes**: Update `fld_old` entries to match current CSV field names
+    
+    ### Next Steps
+    
+    After updating the redefinition files, re-run this workflow. The remaining code chunks 
+    have been disabled and will not execute until all mismatches are resolved.
+    
+    ---
+    
+    *Note: The remainder of this document contains code that will not be executed due to 
+    data integrity issues.*
+    "))
+} else {
+  # no mismatches found - enable evaluation and show success message
+  knitr::opts_chunk$set(eval = TRUE)
+  
+  cat(glue("
+    
+    ## ✅ Data Integrity Check Passed
+    
+    ### All Systems Go
+    
+    No mismatches were found between the CSV files and redefinition metadata. 
+    The data structures are properly aligned and ready for database ingestion.
+    
+    ### Proceeding with Workflow
+    
+    The workflow will now continue with the following steps:
+    
+    1. Display CSV file metadata from Google Drive
+    2. Show tables and fields to be ingested
+    3. Apply data transformations based on redefinitions
+    4. Load transformed data into the database
+    5. Create indexes and relationships
+    6. Add spatial data and generate reports
+    
+    ---
+    
+    "))
+}
+```
 
 ### Show CSV Files on Google Drive
 
