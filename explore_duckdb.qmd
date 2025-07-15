@@ -64,21 +64,22 @@ for (tbl in tbls){
 
 ```{r}
 dbExecute(con_dk, "INSTALL h3 FROM community; LOAD h3;")
+# test: dbGetQuery(con_dk, "SELECT to_hex(h3_latlng_to_cell(37.7887987, -122.3931578, 10)) AS h3_res10;") # 4
 
-d_site <- tbl(con_dk, "site") |> 
-  collect()
+for (res in 1:10){
+  fld <- glue("hex_h3_res{res}")
+  
+  dbExecute(con_dk, glue(
+    "ALTER TABLE site ADD COLUMN IF NOT EXISTS {fld} BIGINT;"))
+  
+  dbExecute(con_dk, glue(
+    "UPDATE site SET {fld} = h3_latlng_to_cell(latitude, longitude, {res});"))
+}
 
-# dbGetQuery(con_dk, "SELECT to_hex(h3_latlng_to_cell(37.7887987, -122.3931578, 10)) AS h3_res10;") # 4
-
-# add h3_res10 column to site table
-dbExecute(con_dk, "ALTER TABLE site ADD COLUMN h3_res10 BIGINT;")
+# tbl(con_dk, "site")
 
 # update h3_res10 column with h3 index
-dbExecute(con_dk, "
-  UPDATE site
-  SET h3_res10 = h3_latlng_to_cell(latitude, longitude, 10);")
 # 61,220 rows affected
-
 ```
 
 ## Close Connection
