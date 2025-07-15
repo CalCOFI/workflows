@@ -1,16 +1,19 @@
 ---
 title: "explore_duckdb"
 editor: visual
+editor_options: 
+  chunk_output_type: console
 ---
 
 ## Overview
 
 Goals:
 
-- [ ] Write database tables to duckdb
+-   [ ] Write database tables to duckdb
 
-- [ ] Upload to S3 bucket publicly available online
-- [ ] View tables
+-   [ ] Upload to S3 bucket publicly available online
+
+-   [ ] View tables
 
 ```{r}
 librarian::shelf(
@@ -28,12 +31,21 @@ dir_data  <- ifelse(
 dk_db     <- glue("{dir_data}/swfsc.noaa.gov/calcofi.duckdb")
 
 # get database connection
-con_pg <- get_db_con(c("dev"))
 con_dk <- dbConnect(duckdb(), dbdir = dk_db, read_only = F)
+# dbListTables(con_dk)
+```
+
+## Load Data from PostgreSQL
+
+```{r pg_to_duckdb}
+#| eval: false
+
+con_pg <- get_db_con(c("dev"))
 
 tbls = dbListTables(con_pg)
 #  [1] "cruise"   "egg"      "grid"     "larva"    "net"      "ship"     "site"     "site_seg"
 #  [9] "species"  "tow"      "tow_type"
+
 for (tbl in tbls){
   if (!(dbExistsTable(con_dk, tbl)))
     dbReadTable(con_pg, tbl) %>% 
@@ -41,11 +53,36 @@ for (tbl in tbls){
 }
 ```
 
+## Add H3 reference
+
+-   [h3 – DuckDB Community Extensions](https://duckdb.org/community_extensions/extensions/h3.html)
+-   [Tables of Cell Statistics Across Resolutions \| H3](https://h3geo.org/docs/core-library/restable/)
+-   [Terminology](https://h3geo.org/docs/library/terminology/)
+    -   `H3Index`: an unsigned 64-bit integer representing any H3 object (hexagon, pentagon, directed edge ...); often represented as a 15-character (or 16-character) hexadecimal string, like '8928308280fffff'
+-   h3 res 9: sqrt(105332.513): \~324.5 m width
+-   h3 res 10: sqrt( 15047.502): \~122.7 m width
+
+```{r}
+dbExecute(con_dk, "INSTALL h3 FROM community; LOAD h3;")
+
+d_site <- tbl(con_dk, "site") |> 
+  collect()
+
+# dbGetQuery(con_dk, "SELECT to_hex(h3_latlng_to_cell(37.7887987, -122.3931578, 10)) AS h3_res10;") # 4
+
+# add h3_res10 column to site table
+dbExecute(con_dk, "ALTER TABLE site ADD COLUMN h3_res10 BIGINT;")
+
+# update h3_res10 column with h3 index
+dbExecute(con_dk, "
+  UPDATE site
+  SET h3_res10 = h3_latlng_to_cell(latitude, longitude, 10);")
+# 61,220 rows affected
+
+```
 
 ## Close Connection
 
 ```{r cleanup}
 dbDisconnect(con_dk, shutdown = T); duckdb_shutdown(duckdb()); rm(con_dk)
 ```
-
-
