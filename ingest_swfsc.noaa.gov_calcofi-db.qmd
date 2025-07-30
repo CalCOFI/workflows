@@ -54,7 +54,7 @@ See also [5.3 Ingest datasets with documentation – Database – CalCOFI.io Doc
 #| label: setup
 
 # devtools::install_local(here::here("../calcofi4db"), force = T)
-# devtools::load_all(here::here("../calcofi4db"))
+devtools::load_all(here::here("../calcofi4db"))
 # options(error=NULL)
 librarian::shelf(
   calcofi4db, DBI, dm, dplyr, DT, fs, glue, gargle, googledrive, here, janitor,
@@ -77,6 +77,18 @@ provider <- "swfsc.noaa.gov"
 
 # Load data using calcofi4db package
 d <- read_csv_files(provider, dataset)
+
+# tbl = "tow"
+# x <- d$d_csv$data |> 
+#   filter(tbl == !!tbl) |> 
+#   pull(data) |> 
+#   pluck(1)
+# x
+# table(x$stationid...7, useNA = "ifany")
+
+# New names:
+# • `stationid` -> `stationid...1`
+# • `stationid` -> `stationid...7`
 
 # Extract variables from data_info for backward compatibility
 # workflow_info <- data_info$workflow_info
@@ -231,9 +243,6 @@ show_fields_redefine(d)
 
 # Use calcofi4db to transform data
 transformed_data <- transform_data(d)
-
-# For backward compatibility
-d <- transformed_data
 ```
 
 ## Load Tables into Database
@@ -244,54 +253,17 @@ d <- transformed_data
 schema    <- "dev"
 overwrite <- T
 
-# Use calcofi4db to ingest tables and generate metadata
-# First, check for changes (this is now done above)
-# changes <- detect_csv_changes(
-#   con = con,
-#   schema = schema,
-#   transformed_data = transformed_data,
-#   d_flds_rd = d$d_flds_rd
-# )
-
-# Display changes
-if (length(changes$new_tables) > 0) {
-  message("New tables to be added:")
-  message(paste(" -", changes$new_tables, collapse = "\n"))
-}
-
-if (length(changes$field_changes) > 0) {
-  message("\nTables with field changes:")
-  for (tbl in names(changes$field_changes)) {
-    message(glue(" - {tbl}:"))
-    if (length(changes$field_changes[[tbl]]$added) > 0) {
-      message(glue("   Added: {paste(changes$field_changes[[tbl]]$added, collapse = ', ')}"))
-    }
-    if (length(changes$field_changes[[tbl]]$removed) > 0) {
-      message(glue("   Removed: {paste(changes$field_changes[[tbl]]$removed, collapse = ', ')}"))
-    }
-  }
-}
-
-if (length(changes$type_changes) > 0) {
-  message("\nTables with type changes:")
-  for (tbl in names(changes$type_changes)) {
-    message(glue(" - {tbl}:"))
-    for (fld in names(changes$type_changes[[tbl]])) {
-      message(glue("   {fld}: {changes$type_changes[[tbl]][[fld]]$from} -> {changes$type_changes[[tbl]][[fld]]$to}"))
-    }
-  }
-}
+# devtools::load_all(here::here("../calcofi4db"))
 
 # Ingest data to database
 tbl_stats <- ingest_csv_to_db(
-  con = con,
-  schema = schema,
+  con              = con,
+  schema           = schema,
   transformed_data = transformed_data,
-  d_flds_rd = d$d_flds_rd,
-  d_gdir_data = d$d_gdata,
-  workflow_info = d$workflow_info,
-  overwrite = overwrite
-)
+  d_flds_rd        = d$d_flds_rd,
+  d_gdir_data      = d$d_gdata,
+  workflow_info    = d$workflow_info,
+  overwrite        = overwrite)
 
 # Display summary statistics
 tbl_stats |> 
@@ -310,7 +282,7 @@ TODO:
 
 # source(here("../apps_dev/libs/db.R"))
 
-tbls_dev <- dbListTables(con_dev) |> sort()
+tbls_dev <- dbListTables(con_dev) |> sort() |> setdiff(c("grid", "site_seg"))
 
 dm_dev <- dm_from_con(
   con_dev, 
@@ -382,8 +354,17 @@ Noticing egg and larva missing pkey.
 ```{r}
 #| label: mk_keys_manual
 
-dbExecute(con_dev, "ALTER TABLE egg ADD PRIMARY KEY (net_uuid, sp_id)")
-dbExecute(con_dev, "ALTER TABLE larva ADD PRIMARY KEY (net_uuid, sp_id)")
+dbExecute(con_dev, "ALTER TABLE egg ADD PRIMARY KEY (net_uuid, species_id)")
+dbExecute(con_dev, "ALTER TABLE eggstage ADD PRIMARY KEY (net_uuid, species_id, stage)")
+dbExecute(con_dev, "ALTER TABLE larva ADD PRIMARY KEY (net_uuid, species_id)")
+dbExecute(con_dev, "ALTER TABLE larvastage ADD PRIMARY KEY (net_uuid, species_id, stage)")
+dbExecute(con_dev, "ALTER TABLE larvasize ADD PRIMARY KEY (net_uuid, species_id, length_mm)")
+dbExecute(con_dev, "ALTER TABLE net ADD PRIMARY KEY (net_uuid)")
+dbExecute(con_dev, "ALTER TABLE species ADD PRIMARY KEY (species_id)")
+dbExecute(con_dev, "ALTER TABLE tow ADD PRIMARY KEY (tow_uuid)")
+dbExecute(con_dev, "ALTER TABLE tow_type ADD PRIMARY KEY (tow_type_key)")
+dbExecute(con_dev, "ALTER TABLE site ADD PRIMARY KEY (site_uuid)")
+dbExecute(con_dev, "ALTER TABLE ship ADD PRIMARY KEY (ship_key)")
 
 tibble(
   tbl = tbls_dev) |> 
@@ -398,6 +379,7 @@ That are not already the first field of a primary key.
 
 ```{r}
 #| label: mk_idx
+#| eval: false
 
 d_idx <- tibble(
   tbl = tbls_dev) |>
@@ -442,14 +424,21 @@ dm_draw(dm_dev, view_type = "all")
 
 dm_dev_fk <- dm_dev |> 
   dm_add_fk(egg, net_uuid, net) |> 
+  dm_add_fk(egg, species_id, species) |> 
+  dm_add_fk(eggstage, net_uuid, net) |> 
+  dm_add_fk(eggstage, species_id, species) |> 
   dm_add_fk(larva, net_uuid, net) |> 
+  dm_add_fk(larva, species_id, species) |> 
+  dm_add_fk(larvasize, net_uuid, net) |> 
+  dm_add_fk(larvasize, species_id, species) |> 
+  dm_add_fk(larvastage, net_uuid, net) |> 
+  dm_add_fk(larvastage, species_id, species) |> 
   dm_add_fk(net, tow_uuid, tow) |> 
   dm_add_fk(tow, site_uuid, site) |> 
   dm_add_fk(site, cruise_uuid, cruise) |> 
   dm_add_fk(cruise, ship_key, ship) |> 
-  dm_add_fk(tow, tow_type_key, tow_type) |> 
-  dm_add_fk(egg, sp_id, species) |> 
-  dm_add_fk(larva, sp_id, species) 
+  dm_add_fk(tow, tow_type_key, tow_type)
+  
 dm_draw(dm_dev_fk, view_type = "all")
 ```
 
@@ -464,14 +453,62 @@ add_fkey <- function(tbl_m, fld_m, tbl_1, fld_1 = fld_m, schema = "dev"){
 }
 
 add_fkey("egg", "net_uuid", "net")
+
+# add_fkey("egg", "species_id", "species")
+# ERROR: Key (species_id)=(641) is not present in table "species"
+spp_ids <- tbl(con_dev, "species") |> arrange(species_id) |> pull(species_id)
+# tbl_egg <- tbl(con_dev, "egg") |> collect() # 93,065 × 3
+# egg_notsp <- tbl(con_dev, "egg") |> 
+#   filter(!species_id %in% spp_ids) |> 
+#   collect()
+#    net_uuid                             species_id tally
+#    <chr>                                <int> <int>
+#  1 369e33f2-02eb-ef11-a09e-2cea7fa0979c   641     3
+#  2 77a233f2-02eb-ef11-a09e-2cea7fa0979c   641     3
+#  3 78a233f2-02eb-ef11-a09e-2cea7fa0979c   641     2
+#  4 79a233f2-02eb-ef11-a09e-2cea7fa0979c   641     1
+#  5 7aa233f2-02eb-ef11-a09e-2cea7fa0979c   641     5
+#  6 7ea233f2-02eb-ef11-a09e-2cea7fa0979c   641    90
+#  7 7fa233f2-02eb-ef11-a09e-2cea7fa0979c   641    13
+#  8 80a233f2-02eb-ef11-a09e-2cea7fa0979c   641     2
+#  9 82a233f2-02eb-ef11-a09e-2cea7fa0979c   641     2
+# 10 83a233f2-02eb-ef11-a09e-2cea7fa0979c   641     2
+dbExecute(con_dev, glue(
+  "DELETE FROM egg WHERE species_id NOT IN ({paste(spp_ids, collapse=',')})")) # 10
+add_fkey("egg", "species_id", "species")
+
+add_fkey("eggstage", "net_uuid", "net")
+add_fkey("eggstage", "species_id", "species")
 add_fkey("larva", "net_uuid", "net") 
+
+# add_fkey("larva", "species_id", "species")
+# ERROR: Key (species_id)=(3023) is not present in table "species"
+# TODO ----
+dbExecute(con_dev, glue(
+  "DELETE FROM larva WHERE species_id NOT IN ({paste(spp_ids, collapse=',')})")) # 27,524
+add_fkey("larva", "species_id", "species")
+
+add_fkey("larvasize", "net_uuid", "net") 
+
+# add_fkey("larvasize", "species_id", "species")
+# ERROR: Key (species_id)=(3023) is not present in table "species"
+dbExecute(con_dev, glue(
+  "DELETE FROM larvasize WHERE species_id NOT IN ({paste(spp_ids, collapse=',')})")) # 2
+add_fkey("larvasize", "species_id", "species")
+
+add_fkey("larvastage", "net_uuid", "net") 
+
+# add_fkey("larvastage", "species_id", "species")
+# ERROR: Key (species_id)=(3023) is not present in table "species"
+dbExecute(con_dev, glue(
+  "DELETE FROM larvastage WHERE species_id NOT IN ({paste(spp_ids, collapse=',')})")) # 9,500
+add_fkey("larvastage", "species_id", "species")
+
 add_fkey("net", "tow_uuid", "tow") 
 add_fkey("tow", "site_uuid", "site")
+add_fkey("tow", "tow_type_key", "tow_type")
 add_fkey("site", "cruise_uuid", "cruise")
 add_fkey("cruise", "ship_key", "ship")
-add_fkey("tow", "tow_type_key", "tow_type")
-add_fkey("egg", "sp_id", "species")
-add_fkey("larva", "sp_id", "species")
 
 dm_dev <- dm_from_con(
   con_dev, 
@@ -481,8 +518,8 @@ dm_draw(dm_dev, view_type = "all")
 ```
 
 ```         
-Error: Failed to fetch row : ERROR:  insert or update on table "larva" violates foreign key constraint "larva_sp_id_fkey"
-DETAIL:  Key (sp_id)=(3023) is not present in table "species".
+Error: Failed to fetch row : ERROR:  insert or update on table "larva" violates foreign key constraint "larva_species_id_fkey"
+DETAIL:  Key (species_id)=(3023) is not present in table "species".
 ```
 
 ```{r}
@@ -494,23 +531,23 @@ sp_missing_csv <- here(
 d_sp_missing <- tbl(con_dev, "larva") |> 
   anti_join(
     tbl(con_dev, "species"),
-    by = "sp_id") |> 
-  group_by(sp_id) |> 
+    by = "species_id") |> 
+  group_by(species_id) |> 
   summarize(
     n_rows = n()) |> 
   left_join(
     dm_dev |>
       dm_select_tbl(larva, net, tow, site) |> 
       dm_flatten_to_tbl(.start = larva, .recursive = TRUE) |> 
-      select(sp_id, tally, time_start, line, station, cruise_uuid) |> 
-      group_by(sp_id) |> 
+      select(species_id, tally, time_start, line, station, cruise_uuid) |> 
+      group_by(species_id) |> 
       summarize(
         sum_tally  = sum(tally),
         date_beg   = min(as.Date(time_start)),
         date_end   = max(as.Date(time_start)),
         # ship_names = str_flatten(distinct(name), collapse = "; ")), 
         n_cruises = n_distinct(cruise_uuid)), 
-    by = "sp_id") |> 
+    by = "species_id") |> 
   collect()
 
 write_csv(d_sp_missing, sp_missing_csv)
@@ -522,8 +559,8 @@ datatable(d_sp_missing)
 #| label: delete_larva_sp_missing
 
 dbExecute(con_dev, glue(
-  "DELETE FROM larva WHERE sp_id IN ({paste(d_sp_missing$sp_id, collapse = ',')})"))
-add_fkey("larva", "sp_id", "species")
+  "DELETE FROM larva WHERE species_id IN ({paste(d_sp_missing$species_id, collapse = ',')})"))
+add_fkey("larva", "species_id", "species")
 
 dm_dev <- dm_from_con(
   con_dev, 
