@@ -1,0 +1,318 @@
+---
+title: "Scrape CalCOFI CTD Data"
+format: html
+editor: visual
+---
+
+## Claude Prompt
+
+Create a new Quarto markdown notebook scrape_ctd.qmd to scrape the web page https://calcofi.org/data/oceanographic-data/ctd-cast-files/ for all \*.zip downloads, download them into dir_dl = \`\~/My Drive/projects/calcofi/data/calcofi.org/ctd-cast\`, unzip them and ingest them all into \`glue("{dir_dl}/calcofi-ctd.duckdb")\`. Ingest only the most recent subset of data into a single table "ctd" preferring final \> preliminary \> raw.
+
+I've created [scrape_ctd.qmd](vscode-webview://0042iqghqqg52sqbn9ukcpa3f8535ed794sfcheq3j7ibdsp33n3/scrape_ctd.qmd) with the following features:
+
+### Key Features
+
+1.  **Web Scraping**: Scrapes <https://calcofi.org/data/oceanographic-data/ctd-cast-files/> for all .zip download links
+
+2.  **Smart Classification**: Automatically classifies files as:
+
+    -   `final` (highest priority)
+
+    -   `preliminary` (medium priority)
+
+    -   `raw` (lowest priority)
+
+    -   `bottle_preliminary` and `other`
+
+3.  **Download & Unzip**: Downloads all zip files to `~/My Drive/projects/calcofi/data/calcofi.org/ctd-cast` and extracts them (with skip logic for already-downloaded files)
+
+4.  **Priority-based Ingestion**:
+
+    -   Finds all extracted CTD data files (.cnv, .csv, .txt)
+
+    -   Groups by cruise identifier
+
+    -   Selects only the highest priority version (final \> preliminary \> raw)
+
+5.  **DuckDB Storage**: Ingests the prioritized data into a single `ctd` table in `calcofi-ctd.duckdb` with metadata columns:
+
+    -   `cruise_id`
+
+    -   `data_type`
+
+    -   `source_file`
+
+### Usage
+
+To run the notebook:
+
+```         
+quarto::quarto_render("scrape_ctd.qmd")
+```
+
+### Notes
+
+-   The file format detection assumes CSV-like files with headers. You may need to adjust the `read_ctd_file()` function based on the actual CTD file formats (.cnv files might have special formatting)
+
+-   The notebook includes progress messages and error handling
+
+-   Downloads can be resumed (already-downloaded files are skipped)
+
+-   The priority system ensures you only get the best available version of each dataset
+
+## Setup
+
+```{r setup}
+librarian::shelf(
+  dplyr, DBI, duckdb, fs, glue, here, httr, purrr, readr,
+  rvest, stringr, tibble, tidyr, zip,
+  quiet = T)
+
+# set download directory
+dir_dl <- "~/My Drive/projects/calcofi/data/calcofi.org/ctd-cast/download"
+dir_dl <- path_expand(dir_dl)
+
+# create directory if it doesn't exist
+dir_create(dir_dl, recurse = TRUE)
+
+# database path
+db_path <- glue("{dir_dl}/calcofi-ctd.duckdb")
+```
+
+## Scrape CTD Download Links
+
+```{r scrape-links}
+url <- "https://calcofi.org/data/oceanographic-data/ctd-cast-files/"
+
+# read the web page
+page <- read_html(url)
+
+# extract all .zip download links
+zip_links <- page |>
+  html_nodes("a[href$='.zip']") |>
+  html_attr("href") |>
+  tibble(url = _) |>
+  mutate(
+    # ensure full URLs
+    url = if_else(
+      str_starts(url, "http"),
+      url,
+      paste0("https://calcofi.org", url)),
+    # extract filename
+    filename = basename(url),
+    # extract year from URL path
+    year = str_extract(url, "/(\\d{4})/", group = 1),
+    # classify data type based on filename patterns
+    data_type = case_when(
+      str_detect(filename, "CTDFinal")       ~ "final",
+      str_detect(filename, "CTDPrelim")      ~ "preliminary",
+      str_detect(filename, "CTDCast")        ~ "raw",
+      str_detect(filename, "BottlePrelim")   ~ "bottle_preliminary",
+      TRUE                                   ~ "other"),
+    # extract cruise identifier
+    cruise_id = str_extract(filename, "^[^_]+"))
+
+# show summary
+zip_links |>
+  count(data_type, sort = TRUE)
+
+# preview
+zip_links |>
+  head(10)
+```
+
+## Download and Unzip Files
+
+```{r download-unzip}
+# function to download and unzip a file
+download_and_unzip <- function(url, dest_dir, filename, unzip = F) {
+  dest_file <- file.path(dest_dir, filename)
+
+  # skip if already downloaded
+  if (file_exists(dest_file)) {
+    message(glue("Already exists: {filename}"))
+    return(TRUE)
+  }
+
+  tryCatch({
+    # download file
+    message(glue("Downloading: {filename}"))
+    GET(url, write_disk(dest_file, overwrite = TRUE))
+
+    # unzip
+    if (unzip){
+      message(glue("Unzipping: {filename}"))
+      unzip(dest_file, exdir = dest_dir)
+    }
+
+    return(TRUE)
+  }, error = function(e) {
+    message(glue("Error with {filename}: {e$message}"))
+    return(FALSE)
+  })
+}
+
+# download all files (this may take a while!)
+zip_links |>
+  pwalk(function(url, filename, ...) {
+    download_and_unzip(url, dir_dl, filename)
+  })
+
+message("Download and extraction complete!")
+```
+
+-   2025-Jul:
+
+    -   Preliminary CTD 1m-Binned\
+        [20-2507SR_CTD**Prelim**.zip](https://calcofi.org/downloads/2025/20-2507SR_CTDPrelim.zip)\
+        **Preliminary CTD 1m-Binned**: Raw CTD sensor data that have gone through SBE Data Processing, and obvious bad sensor readings have been flagged during initial QAQC. Bottle data has not yet been merged with the CTD data. CTD Salinity, Oxygen, Fluorescence, and Nitrate profiles have not been corrected to the bottle data. Cruise corrected Nitrate sensor data (EstNO3_CruiseCorr) has been converted from raw voltage using a sensor calibration done before each cruise, but not yet corrected using CTD vs. Bottle regressions. 
+
+-   2021-Jul:
+
+    -   ~~Prodo Cast~~ Raw CTD Data\
+        [20-2107SR_CTD**Cast**.zip](https://calcofi.org/downloads/2021/20-2107SR_CTDCast.zip)
+
+    -   Preliminary CTD & Bottle 1m-Binned\
+        [20-2107SR_CTD**Prelim**.zip](https://calcofi.org/downloads/2021/20-2107SR_CTDPrelim.zip)\
+        **Preliminary CTD & Bottle 1m-Binned**: Preliminary CTD sensor data that have been merged with QAQC’ed bottle data. CTD Salinity, Oxygen, Fluorescence, and Nitrate profiles have been corrected using CTD vs. bottle regressions. 
+
+-   2021-May:
+
+    -   Raw CTD Data\
+        [20-2105SH_CTD**Cast**.zip](https://calcofi.org/downloads/2021/20-2105SH_CTDCast.zip)\
+        **Raw CTD Data**: Data files (.xmlcon, .hex, .bl, .nav, .prn, .mrk, .hdr) directly from SBE Software ([Sea-Bird Scientific](https://www.seabird.com/)) with no processing or corrections applied.
+
+    -   Final 1m-Binned\
+        [20-2105SH_CTD**FinalQC**.zip](https://calcofi.org/downloads/2021/20-2105SH_CTDFinalQC.zip)\
+        **Final 1m-Binned**: CTD data that have passed through the CalCOFI quality control process. After standard Seasoft-processing (Sea-Bird Scientific’s data-processing suite) tuned for our SBE 911plus CTD, the .asc files are processed by SIO-CalCOFI in-house software (BtlVsCTD). Averaged (4-sec or 1-meter bin-averaged) CTD sensor data are matched with corresponding bottle data, then **cruise-corrected** and **station-corrected**. Zipped file includes: metadata and .asc, .hdr, .btl, and upcast & downcast .csvs (“u” and “d”; by station and concatenated).
+
+        -   **Cruise-corrected CTD data**: CTD sensor data that are corrected using regression coefficients derived from 4-sec average sensor data vs bottle data comparisons for the entire cruise**,** meaning all casts with bottle samples (n=\~1400; fliers omitted; column labels ‘\_CruiseCorr’).
+
+        -   **Station-corrected CTD data**: CTD sensor data that are corrected using regression coefficients generated dynamically for each cast, 1m bin-averaged sensor data vs bottle data (n=\~20; fliers omitted; column labels ‘\_StaCorr’).
+
+            -   Since sensor behavior may vary from station to station, station-corrected CTD sensor data for salinity, oxygen, estimated nitrate, and estimated chlorophyll-a are considered the best, particularly for estimated nitrate.
+
+-   1992-Feb:
+
+    -   Prodo Cast\
+        [19-9202JD_CTD**CastProdoStas**.zip](https://calcofi.org/downloads/1992/19-9202JD_CTDCastProdoStas.zip)\
+        **Test Cast/Prodo Cast**: The Seabird 911plus CTD was first tested in Mar 1990 (9003JD) but is still under development. CTD data from Mar 1990 – 1991 were occasional system & feasibility tests (“**test casts**“). As confidence in data quality improved, the CTD-Rosette began being used for daily primary productivity sample collection casts (“**prodo casts**“) in 1992 (6 depths from one station per day).
+
+-   1990-Mar:
+
+    -   Test Cast\
+        [19-9003JD_CTD**Test**.zip](https://calcofi.org/downloads/1990/19-9003JD_CTDTest.zip)
+
+## Find and Prioritize CTD Data Files
+
+```{r find-files}
+# find all extracted CTD data files (typically .cnv or .csv files)
+all_files <- dir_ls(dir_dl, recurse = TRUE, regexp = "\\.(cnv|csv|txt)$")
+
+# create file inventory
+file_inventory <- tibble(path = all_files) |>
+  mutate(
+    filename     = basename(path),
+    parent_zip   = str_extract(path, "[^/]+\\.zip"),
+    # classify data type from parent zip or path
+    data_type = case_when(
+      str_detect(path, "Final")       ~ "final",
+      str_detect(path, "Prelim")      ~ "preliminary",
+      str_detect(path, "Cast|Raw")    ~ "raw",
+      TRUE                            ~ "other"),
+    # extract cruise/station identifiers from filename
+    cruise_id = str_extract(filename, "^[^_\\.]+"),
+    # prioritize: final=1, preliminary=2, raw=3
+    priority = case_when(
+      data_type == "final"        ~ 1,
+      data_type == "preliminary"  ~ 2,
+      data_type == "raw"          ~ 3,
+      TRUE                        ~ 4))
+
+# keep only highest priority version of each cruise/station
+files_to_ingest <- file_inventory |>
+  filter(data_type %in% c("final", "preliminary", "raw")) |>
+  arrange(cruise_id, priority) |>
+  group_by(cruise_id) |>
+  slice(1) |>
+  ungroup()
+
+# summary
+files_to_ingest |>
+  count(data_type, sort = TRUE)
+
+# preview
+files_to_ingest |>
+  select(filename, data_type, priority) |>
+  head(20)
+```
+
+## Ingest into DuckDB
+
+```{r ingest-duckdb}
+# connect to DuckDB
+con <- dbConnect(duckdb::duckdb(), dbdir = db_path)
+
+# function to read and standardize CTD file
+read_ctd_file <- function(file_path, cruise_id, data_type) {
+  tryCatch({
+    # read file (adjust based on actual file format)
+    # assuming CSV-like format with headers
+    df <- read_csv(
+      file_path,
+      col_types = cols(.default = col_character()),
+      show_col_types = FALSE)
+
+    # add metadata columns
+    df |>
+      mutate(
+        cruise_id  = cruise_id,
+        data_type  = data_type,
+        source_file = basename(file_path))
+  }, error = function(e) {
+    message(glue("Error reading {basename(file_path)}: {e$message}"))
+    return(NULL)
+  })
+}
+
+# read and combine all files
+ctd_data <- files_to_ingest |>
+  pmap_dfr(function(path, cruise_id, data_type, ...) {
+    message(glue("Reading: {basename(path)}"))
+    read_ctd_file(path, cruise_id, data_type)
+  })
+
+# write to DuckDB
+if (!is.null(ctd_data) && nrow(ctd_data) > 0) {
+  dbWriteTable(con, "ctd", ctd_data, overwrite = TRUE)
+
+  message(glue("Ingested {nrow(ctd_data)} rows into DuckDB table 'ctd'"))
+
+  # show summary statistics
+  tbl(con, "ctd") |>
+    count(data_type) |>
+    collect()
+} else {
+  message("No data to ingest")
+}
+
+# disconnect
+dbDisconnect(con, shutdown = TRUE)
+```
+
+## Summary
+
+```{r summary}
+# reconnect to show final table structure
+con <- dbConnect(duckdb::duckdb(), dbdir = db_path)
+
+# table info
+dbListTables(con)
+
+# preview data
+tbl(con, "ctd") |>
+  head(100) |>
+  collect()
+
+dbDisconnect(con, shutdown = TRUE)
+```
