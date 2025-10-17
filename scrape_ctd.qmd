@@ -1,161 +1,171 @@
 ---
-title: "Scrape CalCOFI CTD Data"
+title: "Scrape & Ingest CalCOFI CTD Data into DuckDB"
 format: html
 editor: visual
 ---
 
-## Claude Prompt
+## Overview
 
-Create a new Quarto markdown notebook scrape_ctd.qmd to scrape the web page https://calcofi.org/data/oceanographic-data/ctd-cast-files/ for all \*.zip downloads, download them into dir_dl = \`\~/My Drive/projects/calcofi/data/calcofi.org/ctd-cast\`, unzip them and ingest them all into \`glue("{dir_dl}/calcofi-ctd.duckdb")\`. Ingest only the most recent subset of data into a single table "ctd" preferring final \> preliminary \> raw.
-
-I've created [scrape_ctd.qmd](vscode-webview://0042iqghqqg52sqbn9ukcpa3f8535ed794sfcheq3j7ibdsp33n3/scrape_ctd.qmd) with the following features:
+This notebook scrapes CalCOFI CTD data from <https://calcofi.org/data/oceanographic-data/ctd-cast-files/>, downloads only **final** and **preliminary** CTD files, and ingests them into a DuckDB database.
 
 ### Key Features
 
-1.  **Web Scraping**: Scrapes <https://calcofi.org/data/oceanographic-data/ctd-cast-files/> for all .zip download links
+1.  **Web Scraping**: Scrapes for all CTD .zip download links
 
-2.  **Smart Classification**: Automatically classifies files as:
+2.  **Smart Filtering**:
 
-    -   `final` (highest priority)
+    -   Downloads all .zip files for archival completeness
+    -   Only unzips `final` (e.g., 20-2105SH_CTDFinalQC.zip) and `preliminary` (e.g., 20-2507SR_CTDPrelim.zip) files
+    -   Skips unzipping raw/cast/test files to save disk space
 
-    -   `preliminary` (medium priority)
+3.  **Download & Unzip**: Downloads all zip files to `~/My Drive/projects/calcofi/data/calcofi.org/ctd-cast/download` but only extracts final and preliminary data
 
-    -   `raw` (lowest priority)
+4.  **Priority-based Selection**:
 
-    -   `bottle_preliminary` and `other`
+    -   For each cruise (identified by yy-yymm + ship code), selects final if available
+    -   Falls back to preliminary if final not available for that cruise
+    -   Completely excludes raw/test/prodo cast files
 
-3.  **Download & Unzip**: Downloads all zip files to `~/My Drive/projects/calcofi/data/calcofi.org/ctd-cast` and extracts them (with skip logic for already-downloaded files)
+5.  **Union Strategy**:
 
-4.  **Priority-based Ingestion**:
+    -   Merges upcast (U) and downcast (D) CSV files into single "ctd" table
+    -   Adds `stage` flag: "F" for final, "P" for preliminary
+    -   Adds `cast_dir` flag: "U" for upcast, "D" for downcast
 
-    -   Finds all extracted CTD data files (.cnv, .csv, .txt)
+6.  **Data Standardization**:
 
-    -   Groups by cruise identifier
-
-    -   Selects only the highest priority version (final \> preliminary \> raw)
-
-5.  **DuckDB Storage**: Ingests the prioritized data into a single `ctd` table in `calcofi-ctd.duckdb` with metadata columns:
-
-    -   `cruise_id`
-
-    -   `data_type`
-
-    -   `source_file`
+    -   Converts all column names to `lower_snake_case` using `janitor::clean_names()`
+    -   Creates spatial index on `lat_dec` and `lon_dec` fields
+    -   Preserves `cruise_id` and `source_file` metadata
 
 ### Usage
 
 To run the notebook:
 
-```         
+``` r
 quarto::quarto_render("scrape_ctd.qmd")
 ```
 
 ### Notes
 
--   The file format detection assumes CSV-like files with headers. You may need to adjust the `read_ctd_file()` function based on the actual CTD file formats (.cnv files might have special formatting)
-
--   The notebook includes progress messages and error handling
-
+-   All .zip files are downloaded for archival purposes, but only final/prelim are unzipped
+-   Only processes CSV files from final (`db-csvs/*.csv`) and preliminary directories
 -   Downloads can be resumed (already-downloaded files are skipped)
-
--   The priority system ensures you only get the best available version of each dataset
+-   Both upcast (U) and downcast (D) profiles are included in the database
+-   The priority system ensures you only get final data when available, otherwise preliminary
+-   Spatial index enables efficient geographic queries on lat_dec and lon_dec
 
 ## Setup
 
 ```{r setup}
 librarian::shelf(
-  dplyr, DBI, duckdb, fs, glue, here, httr, purrr, readr,
-  rvest, stringr, tibble, tidyr, zip,
+  dplyr, DBI, DT, duckdb, fs, glue, here, httr, janitor, lubridate, purrr, readr, rvest, sf, stringr, tibble, tidyr, zip,
   quiet = T)
 
-# set download directory
-dir_dl <- "~/My Drive/projects/calcofi/data/calcofi.org/ctd-cast/download"
-dir_dl <- path_expand(dir_dl)
+# variables
+url     <- "https://calcofi.org/data/oceanographic-data/ctd-cast-files/"
+dir_dl  <- "~/My Drive/projects/calcofi/data/calcofi.org/ctd-cast/download"
+dir_dl  <- path_expand(dir_dl)
+db_path <- glue("{dir_dl}/calcofi-ctd.duckdb")
+db_redo <- T  # set to TRUE to re-download and re-ingest
 
 # create directory if it doesn't exist
 dir_create(dir_dl, recurse = TRUE)
 
-# database path
-db_path <- glue("{dir_dl}/calcofi-ctd.duckdb")
+# delete if exixsts (for fresh run)
+if (file_exists(db_path) & db_redo)
+  file_delete(db_path)
+
+# setup duckdb with spatial extension
+# dbDisconnect(con, shutdown = TRUE)
+con <- dbConnect(duckdb::duckdb(), dbdir = db_path)
+dbExecute(con, "INSTALL spatial;")
+dbExecute(con, "LOAD spatial;")
 ```
 
 ## Scrape CTD Download Links
 
 ```{r scrape-links}
-url <- "https://calcofi.org/data/oceanographic-data/ctd-cast-files/"
-
-# read the web page
-page <- read_html(url)
-
-# extract all .zip download links
-zip_links <- page |>
+# read web page, extract all .zip download links
+d_zips <- read_html(url) |>
   html_nodes("a[href$='.zip']") |>
   html_attr("href") |>
-  tibble(url = _) |>
+  tibble(url = _) |> 
   mutate(
     # ensure full URLs
-    url = if_else(
+    url       = if_else(
       str_starts(url, "http"),
       url,
       paste0("https://calcofi.org", url)),
-    # extract filename
-    filename = basename(url),
+    # extract file_zip
+    file_zip  = basename(url),
     # extract year from URL path
-    year = str_extract(url, "/(\\d{4})/", group = 1),
-    # classify data type based on filename patterns
-    data_type = case_when(
-      str_detect(filename, "CTDFinal")       ~ "final",
-      str_detect(filename, "CTDPrelim")      ~ "preliminary",
-      str_detect(filename, "CTDCast")        ~ "raw",
-      str_detect(filename, "BottlePrelim")   ~ "bottle_preliminary",
-      TRUE                                   ~ "other"),
-    # extract cruise identifier
-    cruise_id = str_extract(filename, "^[^_]+"))
+    year      = str_extract(url, "/(\\d{4})/", group = 1) |> as.integer(),
+    # extract month from URL path
+    month     = str_extract(url, "-\\d{2}(\\d{2})", group = 1) |> as.integer(),
+    # extract cruise identifier (yymm + ship code)
+    cruise_id = str_extract(file_zip, "\\d{2}-(\\d{4}[A-Z]{2})", group = 1), # TODO: NHJD ship code in 20-0404NHJD_CTDFinalQC
+    # classify data type based on file_zip patterns
+    zip_type = case_when(
+      str_detect(file_zip, "CTDFinal")         ~ "final",
+      str_detect(file_zip, "CTDPrelim")        ~ "preliminary",
+      str_detect(file_zip, "CTDCast|CTD_Cast") ~ "raw",
+      str_detect(file_zip, "CTDTest")          ~ "test",
+      TRUE                                     ~ "unknown"))
 
-# show summary
-zip_links |>
-  count(data_type, sort = TRUE)
+# stop if other detected
+if (any(d_zips$zip_type == "unknown")) {
+  stop("Unknown data_type detected in file_zips")
+}
 
-# preview
-zip_links |>
-  head(10)
+# show summary (all files)
+d_zips |> 
+  mutate(
+    file_zip = glue("<a href={url}>{file_zip}</a>")) |> 
+  select(-url) |>
+  datatable(
+    caption = "All zip files to download",
+    escape  = F)
 ```
 
 ## Download and Unzip Files
 
 ```{r download-unzip}
-# function to download and unzip a file
-download_and_unzip <- function(url, dest_dir, filename, unzip = F) {
-  dest_file <- file.path(dest_dir, filename)
+# function to download and optionally unzip a file
+download_and_unzip <- function(url, dest_dir, zip_type, unzip = TRUE) {
+  file_zip  <- basename(url)
+  dest_file <- file.path(dest_dir, file_zip)
+  dir_unzip <- file.path(dest_dir, str_remove(file_zip, "\\.zip$"))
 
   # skip if already downloaded
   if (file_exists(dest_file)) {
-    message(glue("Already exists: {filename}"))
-    return(TRUE)
+    message(glue("Already exists: {file_zip}"))
+  } else {
+    message(glue("Downloading: {file_zip}"))
+    download.file(url, dest_file, mode = "wb")
   }
 
-  tryCatch({
-    # download file
-    message(glue("Downloading: {filename}"))
-    GET(url, write_disk(dest_file, overwrite = TRUE))
+  # skip if already unzipped
+  if (unzip && dir_exists(dir_unzip)) {
+    message(glue("Already unzipped: {file_zip}"))
+  } else {
+    # only unzip if final or preliminary (case-insensitive)
+    if (zip_type %in% c("final", "preliminary")) {
+      message(glue("Unzipping: {file_zip}"))
 
-    # unzip
-    if (unzip){
-      message(glue("Unzipping: {filename}"))
-      unzip(dest_file, exdir = dest_dir)
+      dir_create(dir_unzip, recurse = TRUE)
+
+      unzip(dest_file, exdir = dir_unzip)
+    } else if (unzip) {
+      message(glue("Skipping unzip (not final/preliminary): {file_zip}"))
     }
-
-    return(TRUE)
-  }, error = function(e) {
-    message(glue("Error with {filename}: {e$message}"))
-    return(FALSE)
-  })
+  }
 }
 
-# download all files (this may take a while!)
+# download all files, but only unzip final and preliminary
 zip_links |>
-  pwalk(function(url, filename, ...) {
-    download_and_unzip(url, dir_dl, filename)
+  pwalk(function(url, file_zip, zip_type, ...) {
+    download_and_unzip(url, dir_dl, zip_type, unzip = TRUE)
   })
 
 message("Download and extraction complete!")
@@ -206,95 +216,257 @@ message("Download and extraction complete!")
 ## Find and Prioritize CTD Data Files
 
 ```{r find-files}
-# find all extracted CTD data files (typically .cnv or .csv files)
-all_files <- dir_ls(dir_dl, recurse = TRUE, regexp = "\\.(cnv|csv|txt)$")
-
 # create file inventory
-file_inventory <- tibble(path = all_files) |>
+d_csv <- tibble(
+  path = dir_ls(dir_dl, recurse = TRUE, regexp = "\\.csv$")) |>
   mutate(
-    filename     = basename(path),
-    parent_zip   = str_extract(path, "[^/]+\\.zip"),
-    # classify data type from parent zip or path
-    data_type = case_when(
-      str_detect(path, "Final")       ~ "final",
-      str_detect(path, "Prelim")      ~ "preliminary",
-      str_detect(path, "Cast|Raw")    ~ "raw",
-      TRUE                            ~ "other"),
-    # extract cruise/station identifiers from filename
-    cruise_id = str_extract(filename, "^[^_\\.]+"),
-    # prioritize: final=1, preliminary=2, raw=3
-    priority = case_when(
+    file_csv   = basename(path),
+    path_unzip = str_replace(path, glue("{dir_dl}/"), ""),
+    # get first directory in path_unzip
+    dir_unzip  = str_extract(path_unzip, "^[^/]+"),
+    cruise_id  = str_extract(path_unzip, "\\d{2}-(\\d{4}[A-Z]{2})_.*", group = 1),
+    # classify data type from parent directory
+    data_type  = case_when(
+                              str_detect(path_unzip, "Final.*db[_|-]csv")               ~ "final",
+                              str_detect(path_unzip, "Prelim.*db[_|-]csv")              ~ "preliminary",
+      # TODO: note these strange exceptions
+      cruise_id == "2507SR" & str_detect(path_unzip, "Prelim.*csv")                     ~ "preliminary", 
+      cruise_id == "2111SR" & str_detect(path_unzip, "Prelim.*csvs-plots.*2111SR.*csv") ~ "preliminary", 
+      .default = NA_character_),
+    # detect cast direction from file_csv (U=upcast, D=downcast)
+    cast_dir   = case_when(
+      str_detect(file_csv, regex("U\\.csv$", ignore_case = T)) ~ "U",
+      str_detect(file_csv, regex("D\\.csv$", ignore_case = T)) ~ "D"),
+    # prioritize: final=1, preliminary=2
+    priority   = case_when(
       data_type == "final"        ~ 1,
       data_type == "preliminary"  ~ 2,
-      data_type == "raw"          ~ 3,
-      TRUE                        ~ 4))
+      TRUE                        ~ 3)) |> 
+  relocate(cruise_id, path_unzip) |> 
+  arrange(cruise_id, path_unzip)
 
-# keep only highest priority version of each cruise/station
-files_to_ingest <- file_inventory |>
-  filter(data_type %in% c("final", "preliminary", "raw")) |>
-  arrange(cruise_id, priority) |>
+# keep only final and preliminary files
+d_csv <- d_csv |>
+  filter(data_type %in% c("final", "preliminary"))
+
+# for each cruise, keep only final if available, otherwise preliminary
+d_priority <- d_csv |>
   group_by(cruise_id) |>
-  slice(1) |>
-  ungroup()
+  summarize(
+    best_priority = min(priority), 
+    .groups = "drop")
+
+  # filter(cruise_id == "0404JD")
+
+d_csv <- d_csv |>
+  inner_join(d_priority, by = "cruise_id") |>
+  filter(priority == best_priority) |>
+  select(-best_priority)
+
+# TODO: cruises_csv_notzip: "0404JD"
+cruises_csv_notzip <- setdiff(unique(d_csv$cruise_id), unique(d_zips$cruise_id)) |> sort()
+# TODO: cruises_zip_notcsv: find workable form of raw data
+cruises_zip_notcsv <- setdiff(unique(d_zips$cruise_id), unique(d_csv$cruise_id)) |> sort()
+#  [1] "0001NH" "0004JD" "0007NH" "0010NH" "0101JD" "0104JD" "0107NH" "0110NH" "0201JD" "0204JD" "0207NH"
+# [12] "0211NH" "0304RR" "1203NH" 
+# [15] "9003JD" "9011NH" "9101JD" "9103JD" "9108JD" "9110NH" "9202JD" "9204JD"
+# [23] "9207NH" "9210NH" "9301JD" "9304JD" "9308NH" "9310NH" "9401JD" "9403JD" "9408NH" "9410NH" "9501JD"
+# [34] "9504NH" "9507JD" "9510NH" "9602JD" "9604JD" "9608NH" "9610RR" "9702JD" "9704NH" "9707JD" "9709NH"
+# [45] "9712SP" "9803SP" "9805SP" "9808SP" "9809NH" "9810SP" "9811SP" "9812SP" "9901RR" "9904JD" "9908NH"
+# [56] "9910NH"
+# TODO: plot(ctdDecimate(ctdTrim(read.ctd("stn123.cnv")))) per [oce](https://dankelley.github.io/oce/articles/B_ctd.html#raw-data)
+
+# librarian::shelf(oce, quiet = T)
+# dir_raw <- "/Users/bbest/Library/CloudStorage/GoogleDrive-ben@ecoquants.com/My Drive/projects/calcofi/data/calcofi.org/ctd-cast/download/19-9003JD_CTDTest"
+# raw_9003JD_dat <- '/STA3-2.DAT'
+# d_ctd <- read.ctd(dir_ls(dir_raw)) |> plot(ctdDecimate(ctdTrim(.)))
+
+# if (length(missing_cruises) > 0) {
+#   warning(glue("Warning: Missing cruises with no final/preliminary files: {paste(missing_cruises, collapse = ', ')}"))
+#   # 0404JD
+# }
 
 # summary
-files_to_ingest |>
-  count(data_type, sort = TRUE)
-
-# preview
-files_to_ingest |>
-  select(filename, data_type, priority) |>
-  head(20)
+files_to_ingest |> 
+  select(-path) |> 
+  relocate(cruise_id, path_unzip) |> 
+  arrange(cruise_id, path_unzip) |>
+  datatable(, caption = "Files to Ingest")
 ```
 
-## Ingest into DuckDB
+## Read and Standardize CTD Files
 
-```{r ingest-duckdb}
-# connect to DuckDB
-con <- dbConnect(duckdb::duckdb(), dbdir = db_path)
-
+```{r read-files}
 # function to read and standardize CTD file
-read_ctd_file <- function(file_path, cruise_id, data_type) {
+read_ctd_file <- function(file_path, cruise_id, data_type, cast_dir) {
   tryCatch({
-    # read file (adjust based on actual file format)
-    # assuming CSV-like format with headers
+    # read CSV file
     df <- read_csv(
       file_path,
-      col_types = cols(.default = col_character()),
-      show_col_types = FALSE)
+      guess_max      = Inf,
+      show_col_types = F)
 
-    # add metadata columns
-    df |>
-      mutate(
-        cruise_id  = cruise_id,
-        data_type  = data_type,
-        source_file = basename(file_path))
+    # convert column names to snake_case
+    df <- df |> clean_names()
+
+    # add metadata columns and ensure event_num is character for consistency
+    # df |>
+    #   mutate(
+    #     cruise_id   = cruise_id,
+    #     stage       = if_else(data_type == "final", "F", "P"),
+    #     cast_dir    = cast_dir,
+    #     source_file = basename(file_path))
   }, error = function(e) {
     message(glue("Error reading {basename(file_path)}: {e$message}"))
     return(NULL)
   })
 }
 
-# read and combine all files
+# read and combine all files (both upcast and downcast)
 ctd_data <- files_to_ingest |>
-  pmap_dfr(function(path, cruise_id, data_type, ...) {
+  mutate(
+    data = pmap(function(path, cruise_id, data_type, cast_dir, ...) {
     message(glue("Reading: {basename(path)}"))
-    read_ctd_file(path, cruise_id, data_type)
+    read_ctd_file(path, cruise_id, data_type, cast_dir)
   })
 
+# add nrows per file to ctd_data
+d_fread <- tibble(
+  file_csv = basename(names(ctd_data))) |> 
+  mutate(
+    nrows = map_int(ctd_data, ~ if (is.null(.x)) 0 else nrow(.x))) %>%
+  bind_rows(tibble(
+    file_csv = "_TOTAL_",
+    nrows    = sum(.$nrows) ) ) |> 
+  arrange(desc(file_csv))
+  
+# TODO: fix duplicates
+# Reading: 20-0701JD_CTDBTL_001-084D.csv
+# Reading: 20-0701JD_CTDBTL_001-084IDnoQC.csv
+# Reading: 20-0701JD_CTDBTL_001-084IUnoQC.csv
+# Reading: 20-0701JD_CTDBTL_001-084U.csv
+
+d_fread |> 
+  datatable(
+    caption = "Number of rows read per file") |> 
+  # big marks for thousands
+  formatCurrency("nrows", currency = "", digits = 0, mark = ",")
+```
+
+## Transform Data
+
+```{r transform-data}
+ctd_bound <- ctd_data |>
+  # convert any mismatched types to character
+  # ! Can't combine `..1$event_num` <double>     and `..59$event_num` <character>.
+  # ! Can't combine `..1$ord_occ` <character>    and `..69$ord_occ` <double>.
+  # ! Can't combine `..1$ox_bu_m` <double>       and `..95$ox_bu_m` <character>.
+  # ! Can't combine `..1$line` <character>       and `..113$line` <double>.
+  # ! Can't combine `..1$sta` <character>        and `..113$sta` <double>.
+  # ! Can't combine `..1$salt_ave_corr` <double> and `..160$salt_ave_corr` <character>.
+  # TODO: sort fixes for named files, eg event_num 59:
+  #   names(ctd_data)[59] # 20-0701JD_CTDFinalQC/db_csvs/20-0701JD_CTDBTL_001-084D.csv
+  map(~ .x |> mutate(across(c(
+    event_num, ord_occ, ox_bu_m, line, sta, salt_ave_corr, phaeo, salt1_corr, salt2_corr),
+    # TODO: fix these columns to proper types, since probably supposed to be numeric
+    as.character))) |>
+  list_rbind() #
+# nrow(ctd_bound) # 4,448,219
+
+# TODO: drop cruise_id or replace with study?
+# ctd_bound$study |> table(useNA = "ifany")
+# ctd_bound$cruise_id |> table(useNA = "ifany")
+# ctd_bound |> 
+#   filter(!is.na(cruise_id)) |>
+#   mutate(
+#     is_study = cruise_id == study) |> 
+#   pull(is_study) |> 
+#   table(useNA = "ifany")
+#   FALSE    TRUE 
+#   31426 4307011
+
+# format date ----
+# apply formats depending on pattern
+ctd_bound <- ctd_bound |> 
+  mutate(
+    date_time_utc = trim(date_time_utc),
+    dtime_utc = NA, # _POSIXct_,
+    dtime_utc = if_else(
+      str_detect(date_time_utc, "^\\d{2}-[A-Z][a-z]{2}-\\d{4} \\d{2}:\\d{2}:\\d{2}$"), # eg "23-Jan-1998 17:50:44"
+      dmy_hms(date_time_utc, tz = "UTC"),
+      dtime_utc),
+    dtime_utc = if_else(
+      str_detect(date_time_utc, "^\\d{2}/\\d{2}/\\d{4} \\d{2}:\\d{2}$"),               # eg "01/16/2015 17:12"
+      mdy_hm(date_time_utc, tz= "UTC"),
+      dtime_utc)) |> 
+  relocate(dtime_utc, .before = date_time_utc) |> 
+  select(-date_time_utc, -date_time_pst) |> 
+  arrange(dtime_utc, depth)
+stopifnot(all(!is.na(ctd_bound$dtime_utc)))
+
+# fill in missing lon,lat from line,sta ----
+ctd_bound <- ctd_bound |>
+  mutate(
+    lon_dec = if_else(
+      is.na(lon_dec) & !is.na(line) & !is.na(sta),
+      as.numeric(sf_project(
+        from  = "+proj=calcofi",
+        to    = "+proj=longlat +datum=WGS84",
+        pts   = cbind(x = as.numeric(line), y = as.numeric(sta)) )[,1]),
+      lon_dec),
+    lat_dec = if_else(
+      is.na(lat_dec) & !is.na(line) & !is.na(sta),
+      as.numeric(sf_project(
+        from  = "+proj=calcofi",
+        to    = "+proj=longlat +datum=WGS84",
+        pts   = cbind(x = as.numeric(line), y = as.numeric(sta)) )[,2]),
+      lat_dec) )
+
+# show first and last 100 rows
+ctd_bound |> 
+  slice(c(1:10, (n()-9):n())) |>
+  datatable(caption = glue(
+    "First and last 10 rows of combined CTD data (nrows={format(nrow(ctd_bound), big.mark = ',')})"))
+```
+
+## TODO: Check for duplicates
+
+```{r check-dupes}
+# TODO: look for duplicates by dtime_utc, depth
+d_dupes <- ctd_bound |> 
+  group_by(dtime_utc, depth) |>
+  summarize(n = n(), .groups = "drop") |>
+  filter(n > 1) |>
+  arrange(desc(n))  #  547,247 x 3
+
+# get number of distinct dtime_utc, depth
+n_distinct_dtime_depth <- ctd_bound |> 
+  select(dtime_utc, depth) |>
+  n_distinct()      # 3,900,792
+
+d_dupes |> 
+  slice(c(1:10, (n()-9):n())) |>
+  datatable(caption = glue(
+    "First and last 10 rows of duplicates by dtime_utc, depth (nrows = {format(nrow(d_dupes), big.mark = ',')}; n_distinct_dtime_depth = {format(n_distinct_dtime_depth, big.mark = ',')})"))
+```
+
+## Ingest into DuckDB
+```{r ingest-duckdb}
 # write to DuckDB
-if (!is.null(ctd_data) && nrow(ctd_data) > 0) {
-  dbWriteTable(con, "ctd", ctd_data, overwrite = TRUE)
+dbWriteTable(con, "ctd", ctd_bound, overwrite = TRUE)
 
-  message(glue("Ingested {nrow(ctd_data)} rows into DuckDB table 'ctd'"))
+message(glue("Ingested {nrow(ctd_bound)} rows into DuckDB table 'ctd'"))
 
-  # show summary statistics
-  tbl(con, "ctd") |>
-    count(data_type) |>
-    collect()
-} else {
-  message("No data to ingest")
-}
+# write point_geom as geometry column
+message(glue("Adding spatially indexed column point_geom from lon_dec and lat_dec..."))
+dbExecute(con, "ALTER TABLE ctd ADD COLUMN point_geom GEOMETRY;")
+dbExecute(con, "UPDATE ctd SET point_geom = ST_Point(lon_dec, lat_dec);")
+dbExecute(con, "CREATE INDEX idx_ctd_point_geom ON ctd USING RTREE(point_geom);")
+
+# show summary statistics
+tbl(con, "ctd") |>
+  count(stage, cast_dir) |>
+  collect()
 
 # disconnect
 dbDisconnect(con, shutdown = TRUE)
@@ -304,15 +476,148 @@ dbDisconnect(con, shutdown = TRUE)
 
 ```{r summary}
 # reconnect to show final table structure
-con <- dbConnect(duckdb::duckdb(), dbdir = db_path)
+con <- dbConnect(duckdb::duckdb(), dbdir = db_path, read_only = T)
 
 # table info
 dbListTables(con)
 
-# preview data
+# show column names
 tbl(con, "ctd") |>
-  head(100) |>
+  head(1) |>
+  collect() |>
+  colnames()
+
+# summary by stage and cast direction
+tbl(con, "ctd") |>
+  count(stage, cast_dir) |>
   collect()
 
+# preview data
+tbl(con, "ctd") |>
+  select(cruise_id, stage, cast_dir, lat_dec, lon_dec) |>
+  head(20) |>
+  collect()
+
+dbDisconnect(con, shutdown = TRUE)
+```
+
+## Interactive Gantt Chart
+
+```{r gantt-chart}
+librarian::shelf(plotly, quiet = T)
+
+# reconnect to database
+con <- dbConnect(duckdb::duckdb(), dbdir = db_path, read_only = T)
+
+# tbl(con, "ctd") |> 
+#   summarize(n = n())
+# 210,507
+
+tbl(con, "ctd") |> 
+  filter(study == "2301RL") |>
+  distinct(study) |> 
+  pull(study) |> 
+  sort()
+20-2401RL_CTDBTL_017-033U.csv
+
+# tbl(con, "ctd") |> 
+#   pull(study) |>
+#   table(useNA = "ifany")
+#  9802JD   9804JD 
+#  59,005  151,502
+
+# get cruise date spans by study and stage
+cruise_spans <- tbl(con, "ctd") |>
+  group_by(study, stage) |>
+  summarize(
+    begin_date = min(dtime_utc, na.rm = TRUE),
+    end_date   = max(dtime_utc, na.rm = TRUE),
+    .groups    = "drop") |>
+  collect() |>
+  filter(!is.na(begin_date), !is.na(end_date)) |>
+  mutate(
+    year        = year(begin_date),
+    begin_jday  = yday(begin_date),
+    end_jday    = yday(end_date),
+    stage_label = if_else(stage == "F", "Final", "Preliminary"),
+    # create hover text
+    hover_text = glue(
+      "Cruise: {study}<br>",
+      "Stage: {stage_label}<br>",
+      "Begin: {format(begin_date, '%Y-%m-%d')}<br>",
+      "End: {format(end_date, '%Y-%m-%d')}<br>",
+      "Duration: {as.numeric(difftime(end_date, begin_date, units = 'days'))} days")) |>
+  arrange(begin_date)
+
+# create color mapping
+colors <- c("Final" = "#23d355ff", "Preliminary" = "#A23B72")
+
+# create interactive gantt chart
+p <- plot_ly()
+
+# add traces for each cruise
+for (i in 1:nrow(cruise_spans)) {
+  row <- cruise_spans[i, ]
+
+  p <- p |>
+    add_trace(
+      type = "scatter",
+      mode = "lines",
+      x = c(row$begin_jday, row$end_jday),
+      y = c(row$year, row$year),
+      line = list(
+        color = colors[row$stage_label],
+        width = 8),
+      text = row$hover_text,
+      hoverinfo = "text",
+      showlegend = FALSE,
+      legendgroup = row$stage_label)
+}
+
+# add legend traces
+p <- p |>
+  add_trace(
+    type = "scatter",
+    mode = "lines",
+    x = c(NA, NA),
+    y = c(NA, NA),
+    line = list(color = colors["Final"], width = 8),
+    name = "Final",
+    showlegend = TRUE) |>
+  add_trace(
+    type = "scatter",
+    mode = "lines",
+    x = c(NA, NA),
+    y = c(NA, NA),
+    line = list(color = colors["Preliminary"], width = 8),
+    name = "Preliminary",
+    showlegend = TRUE)
+
+# customize layout
+p <- p |>
+  layout(
+    title = "CalCOFI CTD Cruise Timeline",
+    xaxis = list(
+      title = "Day of Year",
+      range = c(1, 365),
+      dtick = 30,
+      tickangle = 0),
+    yaxis = list(
+      title = "Year",
+      autorange = "reversed",
+      dtick = 1),
+    hovermode = "closest",
+    plot_bgcolor = "#f8f9fa",
+    paper_bgcolor = "white",
+    legend = list(
+      x = 1.02,
+      y = 1,
+      xanchor = "left",
+      yanchor = "top"))
+
+# display chart
+p
+
+# disconnect
 dbDisconnect(con, shutdown = TRUE)
 ```
