@@ -400,7 +400,7 @@ ctd_bound <- ctd_bound |>
       mdy_hm(date_time_utc, tz= "UTC"),
       dtime_utc)) |> 
   relocate(dtime_utc, .before = date_time_utc) |> 
-  select(-date_time_utc, -date_time_pst) |> 
+  # select(-date_time_utc, -date_time_pst) |> 
   arrange(dtime_utc, depth)
 stopifnot(all(!is.na(ctd_bound$dtime_utc)))
 
@@ -429,7 +429,47 @@ ctd_bound |>
     "First and last 10 rows of combined CTD data (nrows={format(nrow(ctd_bound), big.mark = ',')})"))
 ```
 
-## TODO: Check for duplicates
+## TODO
+
+### Process raw data
+
+into usable form:
+
+-   [Fathom software \| Sea-Bird Scientific](https://software.seabird.com/)
+
+References:
+
+-   [CTD Data \| CalCOFI archives](https://newdata.calcofi.com/index.php/ctd-data)
+
+    > **Cast Files**. Files are created by SeaBird's Seasave program during each CalCOFI station. These data are unaltered and may contain errors (e.g., incorrect header information) or be incomplete due to system failure during collection. Two or more files may be available for a single station in the latter case. Each cruise will have a single cast data file. This file is a compressed .zip containing .zip files for each cast of the cruise, yymm_CTDCast.zip and yymm_llllssss\_###.zip respectively. Each station .zip should contain the following: .bl, .con, .hdr, .hex, .mrk, and .prn files.
+
+::: {.callout-note collapse="true"}
+#### CalCOFI CTD System
+
+-   A Sea-Bird Electronics 911plus V2 CTD collects vertical profile data at every CalCOFI station.
+-   In addition to being a dual TCO (temperature, conductivity, and oxygen) system, the CTD also interfaces with a transmissometer, fluorometer, PAR/SPAR meters, altimeter, nitrate, and pH sensor.
+-   Connected to a shipboard data-acquisition computer through an electronically-conductive winch wire, sensor data are collected and displayed real-time using Seasave V7.
+-   The CTD is normally lowered to terminal depth of 515 m, bottom-depth permitting, but is routinely deployed within meters from the seafloor at nearshore SCCOOS and basin stations.
+-   To ensure high resolution sampling in areas with significant hydrological and biological gradients a speed of \~30 m/min is used for the first 100 m then \~60 m/min to depth without stopping.
+-   During retrieval, the CTD is paused for at least 20 seconds at target bottle depths to adequately flush each 10 liter sample bottle prior to closure. Seawater samples are analyzed onboard (e.g., salinity, oxygen, nutrients, chl) and are used to correct measured CTD values.
+:::
+
+-   Mahmoud & Mas (2022) [Standard Operating Procedure: CTD data pre-processing](https://repository.oceanbestpractices.org/handle/11329/2081). *Ocean Best Practices*
+
+<!-- -->
+
+-   
+
+```         
+@article{mohamed2022standard,
+  title={Standard Operating Procedure: CTD data pre-processing.},
+  author={Mohamed Mahmoud, Mohamed and Munoz Mas, Cristian},
+  year={2022},
+  publisher={Institut Mauritanien De Recherches Oc{\'e}anographiques Et De P{\^e}ches (IMROP)}
+}
+```
+
+### Check for duplicates
 
 ```{r check-dupes}
 # TODO: look for duplicates by dtime_utc, depth
@@ -451,6 +491,7 @@ d_dupes |>
 ```
 
 ## Ingest into DuckDB
+
 ```{r ingest-duckdb}
 # write to DuckDB
 dbWriteTable(con, "ctd", ctd_bound, overwrite = TRUE)
