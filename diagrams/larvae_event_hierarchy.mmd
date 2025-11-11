@@ -1,0 +1,35 @@
+graph TD
+    A[Cruise Event] -->|parentEventID| B[Site Event]
+    B -->|parentEventID| C[Tow Event]
+    C -->|parentEventID| D[Net Sample Event]
+    D -->|eventID| E[Occurrence Records]
+    D -->|eventID| F[MeasurementOrFact - Environmental]
+    E -->|occurrenceID| G[MeasurementOrFact - Size]
+    
+    A:::cruise
+    B:::site
+    C:::tow
+    D:::net
+    E:::occurrence
+    F:::measurement
+    G:::measurement
+    
+    classDef cruise fill:#e1f5ff,stroke:#0066cc,stroke-width:2px
+    classDef site fill:#fff4e1,stroke:#ff9900,stroke-width:2px
+    classDef tow fill:#ffe1f5,stroke:#cc0066,stroke-width:2px
+    classDef net fill:#e1ffe1,stroke:#00cc66,stroke-width:2px
+    classDef occurrence fill:#f0e1ff,stroke:#6600cc,stroke-width:2px
+    classDef measurement fill:#ffe1e1,stroke:#cc0000,stroke-width:2px
+    
+    subgraph Event Core
+        A
+        B
+        C
+        D
+    end
+    
+    subgraph Extensions
+        E
+        F
+        G
+    end

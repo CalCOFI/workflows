@@ -10,14 +10,19 @@ editor_options:
 - Use the existing CalCOFI database schema and connection.
 - Ensure compliance with DarwinCore standards, including event hierarchy and extensions.
 
+
 ### References
 
 DarwinCore:
 
 - [The OBIS Manual](https://manual.obis.org/)
+  - [7.2 ExtendedMeasurementOrFact Extension (eMoF) | The OBIS Manual](https://manual.obis.org/data_format.html#extendedmeasurementorfact-extension-emof)
+  ![](https://manual.obis.org/images/EventCoreSchema.png)
+  - [20.2 IPT: Integrated Publishing Toolkit | The OBIS Manual](https://manual.obis.org/ipt)
 - [Darwin Core Quick Reference Guide](https://dwc.tdwg.org/terms/)
 - [Guide for publishing biological survey and monitoring data to GBIF](https://docs.gbif.org/guide-publishing-survey-data/en/)
 - [Survey and Monitoring Data Quick-Start Guide: A how-to for updating a Darwin Core dataset using the Humboldt Extension](https://docs.gbif.org/survey-monitoring-quick-start/en/)
+- [Best Practices in Publishing Sampling-event data - planned additions and notes for revision :: GBIF IPT User Manual](https://ipt.gbif.org/manual/en/ipt/latest/best-practices-sampling-event-planned-additions)
 
 CalCOFI:
 
@@ -26,7 +31,9 @@ CalCOFI:
     - [CalCOFI info](https://oceanview.pfeg.noaa.gov/CalCOFI/calcofi_info.html)
   - [EDI: CALCOFI fish larvae at 66 standard stations, 1966 - ongoing](https://portal.edirepository.org/nis/mapbrowse?scope=edi&identifier=109&revision=4)
 
-```{r setup}
+```{r}
+#| label: setup
+
 # TODO:
 # commit
 # - [x] use lazy loading of tbl, so skip `|> collect()`
@@ -35,12 +42,20 @@ CalCOFI:
 # - [x] use UUID, ie drop prefix `urn:uuid:` for eventID, occurrenceID, measurementID
 # - [ ] Consider merging larva, larvastage, and larvasize into one occurrence table, since all sharing net_uuid, species_id
 
-
 librarian::shelf(
   CalCOFI/calcofi4db, 
-  DBI, dm, dplyr, DT, glue, here, lubridate, purrr, tibble, tidyr,
+  DBI, dm, dplyr, DT, EML, glue, here, lubridate, purrr, readr, tibble, tidyr, uuid,
   quiet = T)
 options(readr.show_col_types = F)
+
+# Dataset metadata - PROMPTS FOR REQUIRED INFORMATION
+dataset_title    <- "CalCOFI Fish Larvae Tows" # Prompt: Enter dataset title
+dataset_abstract <- "Fish larvae counts and standardized counts for eggs captured in CalCOFI icthyoplankton nets (primarily vertical [Calvet or Pairovet], oblique [bongo or ring nets], and surface tows [Manta nets]) . Surface tows are normally standardized to count per 1,000 m3 strained. Oblique tows are normally standardized to count per 10 m2 of surface sampled."
+dataset_keywords <- c(
+  "atmosphere", "biology", "biosphere", "calcofi", "earth science", "environment", "latitude", "longitude", "ocean", "time") # GCMD Science Keywords (source: https://catalog.data.gov/dataset/calcofi-larvae-counts-positive-tows)
+# dataset_uuid <- UUIDgenerate() # Or use existing dataset UUID
+
+dir_out <- here("data/darwincore/larvae")
 
 # get database connection
 schema <- "dev"
@@ -49,7 +64,8 @@ con    <- get_db_con(schema)
 
 ## Show Database Tables
 
-```{r fig-dm_tbls}
+```{r}
+#| label: fig-dm_tbls
 #| fig-cap: "Entity relationship diagram (ERD) of the CalCOFI database. Created using the data models `dm` R package function [`dm_draw()`](https://krlmlr.github.io/dm/reference/dm_draw.html)."
 
 # exclude experimental tables
@@ -71,40 +87,349 @@ dm_draw(dm, view_type = "all")
 %%| file: diagrams/calcofi_erd.mmd
 ```
 
+## Evaluate Merging Egg and Larva Stage Tables
+
+### Egg Stages
+
+```{r}
+#| label: egg_stage.stage
+
+tbl(con, "egg_stage") |> 
+  group_by(stage) |> 
+  summarize(n = n()) |> 
+  collect() |> 
+  arrange(stage)
+
+#    stage       n
+#    <int> <int64>
+#  1     1     346
+#  2     2    1684
+#  3     3    1703
+#  4     4    1279
+#  5     5    1685
+#  6     6    2693
+#  7     7    1995
+#  8     8    1644
+#  9     9    2247
+# 10    10    2156
+# 11    11    1746
+# 12    12     727
+# 13    13      41
+# 14    14       6
+# 15    15      16
+# TODO: ask Ed Weber what stages 12 through 15 mean?
+```
+
+[ERDDAP - Information about CalCOFI NOAA Fish Egg Stages, from NOAA SWFSC](https://coastwatch.pfeg.noaa.gov/erddap/info/erdCalCOFIeggstg/index.html#:~:text=NC_GLOBAL-,summary,-String):
+
+  > Egg morphological developmental stage for eggs of selected species captured in CalCOFI icthyoplankton nets. Sequential developmental stages are described by Moser and Ahlstrom (1985; see the info url references section). -- 
+
+https://oceanview.pfeg.noaa.gov/CalCOFI/calcofi_info.html:
+
+  > - Moser, H. G. and E. H. Ahlstrom. 1985. Staging anchovy eggs. An egg production method for estimating spawning biomass of pelagic fish: implication to the northern anchovy (Engraulis mordax). P. 37-41 in R. Lasker, ed. U.S. Dep. Commer. Tech. Rep. NMFS 36.  ([PDF](https://repository.library.noaa.gov/view/noaa/5695/noaa_5695_DS1.pdf))
+
+#### Stage I
+
+Cell division has not yet begun. In intact eggs the cytoplasm of the
+single cell appears as a clear hemisphere at one pole, easily dif-
+ferentiated from the yolk mass which is divided into granules. The
+cytoplasm may be displaced to other locations around the periphery
+of the yolk mass, but there is usually some accumulation at one pole,
+which allows the stage to be identified.
+
+#### Stage II
+
+This begins with the division of the single cell into two cells or
+blastomeres. The division is first noticeable when a furrow develops
+in the middle of the cytoplasmic cap. Small bubble-like structures
+(probably artifacts) are often visible along the furrow and help iden-
+tify it. The next cleavage plane is at right angles to the first, and
+subsequent synchronous divisions in both meridional and latitudinal
+planes produce a hemispherical mound of cells, termed the blasto-
+disc. After the 5th or 6th division, the blastodisc has a berry-like
+appearance, the so-called "mulberry stage," and with subsequent
+divisions the blastomeres become increasingly smaller and more
+difficult to distinguish individually. During a certain phase of the
+early divisions the blastomeres are about the same size as the yolk
+granules. Ifthe blastodisc and yolk mass become disrupted during
+collection or preservation, the blastomeres may become distributed
+among the yolk granules. They may be distinguished from one
+another since they have different refractive indices and the
+blastomeres appear darker when viewed with transmitted light.
+
+#### Stage III
+
+Ahlstrom (1943) defined this stage in sardine eggs as beginning with
+the appearance of the segmentation cavity. The segmentation cavity
+of teleost eggs is the space formed between the blastodisc and the
+yolk mass during late cleavage. In most anchovy eggs in our collec-
+tions the blastodisc is shrunken and somewhat cup-shaped and con-
+sequently the segmentation cavity, which is a delicate structure, is
+obliterated. We have found it preferable to define the beginning of
+Stage ill on the basis of the appearance of the blastoderm, i.e., when
+it has the appearance of tissue rather than of a collection of individual
+cells. This stage marks the beginning of gastrulation. The margin
+of the blastodisc becomes slightly thickened and is termed the germ
+ring. At one region of the germ ring the thickening extends inward
+to form the embryonic shield, which defines the future axis of the
+embryo. Gastrulation proceeds by further proliferation and downward
+movement of cells in the region of the germ ring by a process known
+as epiboly. Simultaneously, proliferation and inward migration (em-
+boly) of cells from the margin of the embryonic shield produce the
+organ-forming cell layers of the primordial embryo. At the end of
+Stage III the germ ring is one-third down the yolk mass and the
+bilateral nature of the primordial embryo is apparent.
+
+#### Stage IV
+
+At the beginning of this stage the germ ring has enclosed one-third
+of the yolk mass and the embryo is beginning to form along the
+median region of the embryonic shield. At the end of this stage,
+defined by the germ ring enveloping two-thirds of the yolk, the head
+region of the embryo is becoming apparent.
+
+#### Stage V
+
+This stage begins with the germ ring two-thirds down the yolk and
+ends with the closure of the blastopore and the complete enclosure
+of the yolk by the cellular sheath of the embryo. The stage is charac-
+terized by rapid differentiation resulting in the formation of several
+somites in the midregion of the embryonic axis, development of the
+notochord which can be seen from a dorsal viewpoint, and differ-
+entiation of the optic vesicles from the brain.
+
+#### Stage VI
+
+This stage begins with the closure of the blastopore and ends when
+the tail starts to separate from the yolk mass. The embryonic sheath
+of cells is extremely thin and, in some samples, it may be difficult
+to determine the point of blastopore closure. In these cases the event
+can be estimated from the position of the caudal terminus of the
+embryonic axis, since it grows toward the pole with the edge of the
+cellular sheath. Initially the caudal region lies flat against the polar
+region of the yolk, then gradually thickens and becomes more round-
+ed at the tip until it is clearly separate from the yolk. During this
+stage the somites are apparent along the entire body axis (except
+at the caudal portion), the lens primordium appears in the eye, and
+the regions of the brain begin to differentiate.
+
+#### Stage VII
+
+At the beginning of this stage the tip of the tail free from the yolk
+is broadly rounded, then begins to narrow as it elongates. The noto-
+chord extends almost to the tip and the finfold is just becoming visi-
+ble. At the end of this stage the length of the free tail is one-half
+the length of the head. For this purpose, head length is considered
+the distance from the tip of the snout to the back of the cerebellum
+(see Fig. 2H). Relative tail length is the criterion for each remain-
+ing stage.
+
+#### Stage VIII
+
+This stage begins when the free tail length is l:,reater than one-half
+the head length and ends when tail length equals head length. The
+tail becomes pointed during this stage and begins to bend away from
+the axis of the body, to the right or left side. The curvature of the
+tail generally increases with development, but is subject to individual
+variability (Fig. 2). Judgement is required in compensating for curva-
+ture in estimating relative tail length; however, accuracy and preci-
+sion increase rapidly with practice.
+
+#### Stage IX
+
+This stage begins with the tail extending one-quarter the length of
+the yolk sac and ends when it reaches one-half the yolk sac length.
+The gut is now apparent along the ventral surface of the tail, and
+its terminal section passes through the fin fold which is now con-
+siderably wider than in the previous stage. The pectoral fin buds
+appear as lateral thickenings as do the otic vesicles.
+
+#### Stage X
+
+This stage starts when the tail is one-half the length of the yolk sac
+and ends when it reaches three-quarters of the yolk sac length.
+
+#### Stage XI
+
+This is the final stage before hatching and is defined by a tail length
+greater than three-quarters of the length of the yolk sac.
+
+### Larva Stages
+
+```{r}
+#| label: larva_stage.stage
+
+tbl(con, "larva_stage") |> 
+  group_by(stage) |> 
+  summarize(n = n()) |> 
+  collect()
+# 1 FLEX    18882
+# 2 POST    22446
+# 3 PREF    56913
+# 4 YOLK     5384
+# 5 TRNS     1754
+```
+
+- [ERDDAP - Information about CalCOFI NOAA Fish Larvae Stages, from NOAA SWFSC](https://coastwatch.pfeg.noaa.gov/erddap/info/erdCalCOFIlrvstg/index.html#:~:text=NC_GLOBAL-,summary,-String):
+
+  > Developmental stages (yolk sac, preflexion, flexion, postflexion, or transformation) of selected fish larvae captured in CalCOFI icthyoplankton nets.
+
+### dwc:lifeStage
+
+- [dwc:lifeStage (n_concepts: 39) Darwin Core List of Terms - Darwin Core](https://dwc.tdwg.org/list/#dwc_lifeStage)
+
+- [LifeStage | GBIF Registry Vocabulary](https://registry.gbif.org/vocabulary/LifeStage) (n_concepts: 39)
+  > A vocabulary to capture the broad stages that an organism passes through during its life cycle. This vocabulary was assembled based on the observed terms commonly used by the open data community, including those from citizen scientists.
+
+  - [**Egg**](https://registry.gbif.org/vocabulary/LifeStage/concept/Egg) (n_children: 0)
+    > The egg is the organic vessel containing the zygote in which an embryo develops until it can survive on its own, at which point the animal hatches
+
+  - [**Larva**](https://registry.gbif.org/vocabulary/LifeStage/concept/Larva) (n_children: 11)
+    > A larva is a distinct juvenile form many animals undergo before metamorphosis into adults. Larvae often have different body structures from the adult form, and may also have different habitats and feeding behaviors.
+
+### other dataset: ICES Eggs and larvae | OBIS
+
+- [ICES Eggs and larvae | OBIS](https://obis.org/dataset/66fe7e4b-ddcc-44aa-8378-c7c7482c2844)
+- [Eggs and larvae | ICES](https://www.ices.dk/data/data-portals/Pages/Eggs-and-larvae.aspx)
+
+- [Vocabularies/ LifeStage / concepts | GBIF Registry](https://registry.gbif.org/vocabulary/LifeStage/concepts)
+- [BODC parameter semantic model biological entity development stage terms | NERC Vocabulary Server](https://vocab.nerc.ac.uk/collection/S11/current/)
+
+- [Frequently Asked Questions About Ichthyoplankton | NOAA Fisheries](https://www.fisheries.noaa.gov/west-coast/science-data/frequently-asked-questions-about-ichthyoplankton)
+
+- [Zooplankton taxonomy-related abundance per unit volume of the water column | NVS](https://vocab.nerc.ac.uk/collection/P02/current/ZATX/)
+
+- [14 Controlled vocabulary for eMoF | The OBIS Manual](https://manual.obis.org/vocabulary.html)
+  - [MoF viewer](https://mof.obis.org/)
+
+- [NVS](https://vocab.nerc.ac.uk/collection/P01/current/Z830M00T/)
+
+### Lifestage	S11 - BODC Parameter Semantic Model Life Cycle Stages
+
+https://github.com/nvs-vocabs/S11
+
+A controlled vocabulary for terms used in the BODC parameter semantic model to specify the development stage (life cycle stage) of a biological entity
+
+Terms and mappings available from: http://vocab.nerc.ac.uk/collection/S11/current/
+
+Search interface: https://www.bodc.ac.uk/resources/vocabularies/vocabulary_search/S11/
+
+#### Request for new terms and ways to contribute
+
+- Request for new S11 terms can be made using this [form](https://docs.google.com/forms/d/e/1FAIpQLSe-ZTKJZmNT5FmyPRFsPsNt2hpB_gb6MAmm7Zp-7GSMpn5NFA/viewform?usp=pp_url&entry.1396013310=S11)
+
+Reporting errors or suggestions for improving content can be submitted as [regular issues](https://github.com/nvs-vocabs/S11/issues/new) in this repository or emailed to vocab.services-at-bodc.ac.uk.
+
+## Prompt Claude to merge egg and larva tables
+
+PROMPT (plan mode): Help me figure out a strategy for sensibly merging egg, egg_stage, larva, larva_stage into a DarwinCore archive that accounts for total count (ie `tally`), stage (combining egg and larva `stage`), and size (`length_mm`) by `net_uuid`. Also incorporate recommended vocabularies, per:
+- https://manual.obis.org/vocabulary.html
+- https://ipt.gbif.org/manual/en/ipt/latest/best-practices-sampling-event-data
+
+Claude’s Plan: Strategy for Merging Egg/Larva Data into DarwinCore Archive
+
+### Current State Analysis
+
+Your existing implementation creates **separate occurrence records** for each stage:
+
+- `egg` → lifeStage: "egg"
+- `egg_stage` → lifeStage: "egg_1", "egg_2", etc.
+- `larva` → lifeStage: "larva"
+- `larva_stage` → lifeStage: "larva_FLEX", "larva_POST", etc.
+- `larva_size` → lifeStage: "larva" (size in remarks)
+
+This creates 5 separate occurrence records for a single species in one net sample.
+
+### Recommended Strategy: Consolidated Occurrence with eMoF Extension
+
+Following OBIS/GBIF best practices, I recommend **consolidating to fewer occurrences** and using the **ExtendedMeasurementOrFact (eMoF)** extension for detailed measurements:
+
+**Approach: Two occurrences per species per net_uuid**
+
+- **One "egg" occurrence** (if eggs present)
+- **One "larva" occurrence** (if larvae present)
+
+**Implementation Details:**
+
+**1. Occurrence Extension:**
+
+- `occurrenceID`: UUID per life stage (egg or larva)
+- `eventID: Links to net_uuid
+- `lifeStage: Use S11 vocabulary terms:
+  - `"egg" → http://vocab.nerc.ac.uk/collection/S11/current/S1110/
+  - "larva" → http://vocab.nerc.ac.uk/collection/S11/current/S1133/
+- `organismQuantity`: **TOTAL count** (sum across all stages/sizes)
+- `organismQuantityType`: "individuals"
+
+**2. MeasurementOrFact Extension for Stage Details:**
+
+- `occurrenceID`: Links to parent occurrence
+- `measurementType`: "life stage abundance"
+- `measurementTypeID`: P01 code for abundance by life stage
+- `measurementValue`: tally for specific stage
+- `measurementValueID`: S11 code for specific stage (e.g., "FLEX", "POST", "egg stage 5")
+- `measurementUnit`: "individuals"
+- `measurementUnitID`: P06 code
+
+**3. MeasurementOrFact Extension for Size:**
+
+- `occurrenceID`: Links to larva occurrence
+- `measurementType`: "body length"
+- `measurementTypeID`: P01 code for body length (search P01 for appropriate term)
+- `measurementValue`: length_mm value
+- `measurementUnit`: "millimeters"
+- `measurementUnitID`: http://vocab.nerc.ac.uk/collection/P06/current/UXMM/
+- `measurementRemarks`: Include tally if multiple individuals at same length
+
+**Key Changes Required:**
+
+1. **Aggregate totals** by net_uuid + species_id + major life stage (egg vs larva)
+1. **Map stage vocabularies** to S11 terms (needs vocabulary mapping table)
+1. **Expand eMoF records** for each stage detail instead of separate occurrences
+1. **Add vocabulary URIs** for measurementTypeID, measurementValueID, measurementUnitID
+1. **Update meta.xml** to properly define eMoF extension relationships
+
+**Benefits:**
+
+✓ Follows OBIS/GBIF best practices
+✓ Uses standardized vocabularies (S11, P01, P06)
+✓ Reduces occurrence record count by ~5x
+✓ Preserves all granular stage and size information
+✓ Better separates taxonomy (occurrence) from measurements (eMoF)
+✓ Makes data more queryable and comparable across datasets
+
+**Questions to Resolve:**
+
+1. Should we create separate occurrences for egg vs larva, or merge into one occurrence per species?
+1. How should we map egg stages (1-15) and larva stages (YOLK, PREF, FLEX, POST, TRNS) to S11 vocabulary?
+1. For larva_size records with the same length_mm but different tallies - should we sum them or keep separate eMoF records?
+
 ## Prompt Claude to Generate DarwinCore
 
 PROMPT: Using the ERD above, create a Quarto document with chunks of R code and tidyverse style use of the database connection object `con` to generate a DarwinCore package using the `species.worms_id` (aka WoRMS AphiaID) to populate the species identifiers. Combine biological observation where possible, otherwise compose as seperate datasets, given the different biological observations: egg, eggstage, larva, larvasize, larvastage. Generate DarwinCore with as much of the extended information (i.e.,  `event`, `occurrence`, and `measurementOrFact` ) as possible.
 Compose Ecological Metadata Language (EML) metadata for the DarwinCore package, including the `dataset` and `creator` elements. Include prompts where more
 information is needed.
 
-```{r stop_eval}
+```{r}
+#| label: stop_eval
 # knitr::opts_chunk$set(eval = F)
-```
-
-```{r setup}
-#| label: load-packages
-librarian::shelf(
-  DBI, EML, here, lubridate, tidyverse, uuid)
-
-# Assuming database connection is already established as 'con'
-# con <- dbConnect(...) 
 ```
 
 ## Data Extraction from Database
 
 First, let's extract all necessary tables from the database:
 
-```{r extract-data}
+```{r}
 #| label: extract-tables
 
 # Get simple lazy table references
-tbl_ship       <- tbl(con, "ship")
-tbl_cruise     <- tbl(con, "cruise")
-tbl_site       <- tbl(con, "site")
-tbl_tow        <- tbl(con, "tow")
-tbl_tow_type   <- tbl(con, "tow_type")
-tbl_net        <- tbl(con, "net")
-tbl_species    <- tbl(con, "species")
+tbl_ship        <- tbl(con, "ship")
+tbl_cruise      <- tbl(con, "cruise")
+tbl_site        <- tbl(con, "site")
+tbl_tow         <- tbl(con, "tow")
+tbl_tow_type    <- tbl(con, "tow_type")
+tbl_net         <- tbl(con, "net")
+tbl_species     <- tbl(con, "species")
 # biological observation tables
 tbl_egg         <- tbl(con, "egg")
 tbl_egg_stage   <- tbl(con, "egg_stage")
@@ -122,13 +447,15 @@ DarwinCore uses an event-based model. We'll create a hierarchical event structur
     - tow
       - net
 
-```{r fig-larvae_hierarchy}
-# TODO: create mermaid diagram of fig-larvae_hierarchy
+```{mermaid}
+%%| label: fig-larvae_event_hierarchy
+%%| fig-cap: "Event hierarchy for CalCOFI larvae data in DarwinCore Archive format with Extended Measurement or Fact."
+%%| file: diagrams/larvae_event_hierarchy.mmd
 ```
 
 Per [3.3.2. Simple nested datasets with Project-level information – Guide for publishing biological survey and monitoring data to GBIF](https://docs.gbif.org/guide-publishing-survey-data/en/#simple-nested-datasets-with-project-level-information)
 
-```{r create-events}
+```{r}
 #| label: build-event-hierarchy
 
 # Build complete event hierarchy
@@ -226,13 +553,12 @@ q_tow_events <- q_events |>
     eventID          = tow_uuid,
     parentEventID    = site_uuid,
     eventDate        = sql(flds_to_iso8601("time_start")),
-    eventTime        = sql(flds_to_iso8601("time_start", output = "time")),
     eventRemarks     = paste("Tow", tow_number, "-", tow_type_description),
     eventType        = "tow",
     samplingProtocol = paste(tow_type_key, ":", tow_type_description)) |> 
   select(
     eventID, parentEventID, eventType,
-    eventDate, eventTime, 
+    eventDate,
     samplingProtocol, eventRemarks)
 
 # Net level events (sampling events)
@@ -243,7 +569,6 @@ q_net_events_allflds <- q_events |>
   mutate(
     eventID          = net_uuid,
     parentEventID    = tow_uuid,
-    # TODO: glue to paste
     eventRemarks     = paste(
       "Net sample from side", side, "; only", prop_sorted, "proportion sorted of",
       vol_sampled_m3, "cubic meters sampled"),
@@ -264,14 +589,24 @@ dataset_id <- paste0(
   "_larvae.", format(Sys.Date(), "%Y-%m-%d"))
 # "calcofi_db.1.1.0_larvae.2025-10-09"
 
-q_event_core <- union_all(
-  q_cruise_events,
-  q_site_events,
-  q_tow_events, 
+q_event_core <- list(
+  q_cruise_events |> 
+    mutate(
+      parentEventID   = sql("NULL::uuid"),
+      sampleSizeValue = sql("NULL::numeric"),
+      sampleSizeUnit  = NA_character_),
+  q_site_events |> 
+    mutate(
+      sampleSizeValue = sql("NULL::numeric"),
+      sampleSizeUnit  = NA_character_),
+  q_tow_events |> 
+    mutate(
+      sampleSizeValue = sql("NULL::numeric"),
+      sampleSizeUnit  = NA_character_),
   q_net_events) |> 
-  # Add required DwC fields
+    reduce(union_all) |> 
   mutate(
-    basisOfRecord                 = "HumanObservation",
+    # basisOfRecord                 = "HumanObservation",
     geodeticDatum                 = "WGS84",
     coordinateUncertaintyInMeters = 1000, # TODO: adjust based on accuracy of GPS/Loran/dead-reckoning over time
     countryCode                   = "US",
@@ -284,7 +619,7 @@ q_event_core <- union_all(
 
 Now let's combine all biological observations into occurrence records:
 
-```{r create-occurrences}
+```{r}
 #| label: build-occurrences
 
 # Function to standardize biological observations
@@ -310,7 +645,8 @@ create_occurrences <- function(obs_data, obs_type, has_stage = FALSE, has_size =
         obs_type == "larva" ~ "larva",
         TRUE ~ NA_character_),
       # associatedTaxa       = common_name
-      preparations         = paste0(obs_type, " sample"))
+      preparations         = paste0(obs_type, " sample"),
+      basisOfRecord        = "HumanObservation",)
   
   # Add stage information if present
   if (has_stage)
@@ -339,17 +675,19 @@ q_larvastage_occurrences <- create_occurrences(tbl_larva_stage, "larva", has_sta
 q_larvasize_occurrences  <- create_occurrences(tbl_larva_size,  "larva", has_size  = T)
 
 # Combine all occurrences
-q_occurrence_extension <- union_all(
+q_occurrence_extension <- list(
   q_egg_occurrences,
   q_eggstage_occurrences,
   q_larva_occurrences,
   q_larvastage_occurrences,
   q_larvasize_occurrences) |>
+    reduce(union_all) |> 
   select(
     occurrenceID, eventID, 
     scientificName, scientificNameID, # taxonID, 
     kingdom, occurrenceStatus, organismQuantity, organismQuantityType,
-    lifeStage, preparations, occurrenceRemarks) |>  #, associatedTaxa)
+    lifeStage, preparations, occurrenceRemarks,
+    basisOfRecord) |>  #, associatedTaxa)
   # Add additional required/recommended fields
   mutate(
     # TODO: identifiedBy, dateIdentified,identificationReferences
@@ -363,7 +701,7 @@ q_occurrence_extension <- union_all(
 
 Extract all measurements and environmental data:
 
-```{r create-measurements}
+```{r}
 #| label: build-measurements
 
 # Environmental measurements from net samples <-> eventID
@@ -422,60 +760,180 @@ d_measurementorfact_extension <- bind_rows(
 
 ## Write DarwinCore Archive Files
 
-```{r write-dwc-files}
+```{r}
 #| label: export-dwc
 
 # Create output directory
-dir_out <- here("data/darwincore/larvae")
 dir.create(dir_out, showWarnings = F)
 
 # Write core and extension files
-write_csv(q_event_core |> collect(), file.path(dir_out, "event.csv"))
+write_csv(q_event_core           |> collect(), file.path(dir_out, "event.csv"))
 write_csv(q_occurrence_extension |> collect(), file.path(dir_out, "occurrence.csv"))
-write_csv(d_measurementorfact_extension, file.path(dir_out, "measurementorfact.csv"))
+write_csv(d_measurementorfact_extension,       file.path(dir_out, "measurementorfact.csv"))
+```
 
-# Create meta.xml for DwC-A
-meta_xml <- '<?xml version="1.0" encoding="UTF-8"?>
+## Create meta.xml programmatically by cross-walking CSV fields to DwC terms
+
+```{r}
+#| label: create-meta-xml
+
+# Define DarwinCore term mappings for each file type
+dwc_terms <- list(
+  event = list(
+    rowType = "http://rs.tdwg.org/dwc/terms/Event",
+    idField = "eventID",
+    terms   = c(
+      eventID                       = "http://rs.tdwg.org/dwc/terms/eventID",
+      parentEventID                 = "http://rs.tdwg.org/dwc/terms/parentEventID",
+      eventType                     = "http://rs.tdwg.org/dwc/terms/eventType",
+      eventDate                     = "http://rs.tdwg.org/dwc/terms/eventDate",
+      eventTime                     = "http://rs.tdwg.org/dwc/terms/eventTime",
+      samplingProtocol              = "http://rs.tdwg.org/dwc/terms/samplingProtocol",
+      sampleSizeValue               = "http://rs.tdwg.org/dwc/terms/sampleSizeValue",
+      sampleSizeUnit                = "http://rs.tdwg.org/dwc/terms/sampleSizeUnit",
+      eventRemarks                  = "http://rs.tdwg.org/dwc/terms/eventRemarks",
+      habitat                       = "http://rs.tdwg.org/dwc/terms/habitat",
+      decimalLatitude               = "http://rs.tdwg.org/dwc/terms/decimalLatitude",
+      decimalLongitude              = "http://rs.tdwg.org/dwc/terms/decimalLongitude",
+      geodeticDatum                 = "http://rs.tdwg.org/dwc/terms/geodeticDatum",
+      coordinateUncertaintyInMeters = "http://rs.tdwg.org/dwc/terms/coordinateUncertaintyInMeters",
+      locationID                    = "http://rs.tdwg.org/dwc/terms/locationID",
+      countryCode                   = "http://rs.tdwg.org/dwc/terms/countryCode",
+      waterBody                     = "http://rs.tdwg.org/dwc/terms/waterBody",
+      datasetID                     = "http://rs.tdwg.org/dwc/terms/datasetID"
+      # basisOfRecord                 = "http://rs.tdwg.org/dwc/terms/basisOfRecord" 
+      )),
+  occurrence = list(
+    rowType     = "http://rs.tdwg.org/dwc/terms/Occurrence",
+    idField     = "occurrenceID",
+    coreIdField = "eventID",
+    terms       = c(
+      occurrenceID         = "http://rs.tdwg.org/dwc/terms/occurrenceID",
+      eventID              = "http://rs.tdwg.org/dwc/terms/eventID",
+      scientificName       = "http://rs.tdwg.org/dwc/terms/scientificName",
+      scientificNameID     = "http://rs.tdwg.org/dwc/terms/scientificNameID",
+      kingdom              = "http://rs.tdwg.org/dwc/terms/kingdom",
+      occurrenceStatus     = "http://rs.tdwg.org/dwc/terms/occurrenceStatus",
+      organismQuantity     = "http://rs.tdwg.org/dwc/terms/organismQuantity",
+      organismQuantityType = "http://rs.tdwg.org/dwc/terms/organismQuantityType",
+      lifeStage            = "http://rs.tdwg.org/dwc/terms/lifeStage",
+      preparations         = "http://rs.tdwg.org/dwc/terms/preparations",
+      occurrenceRemarks    = "http://rs.tdwg.org/dwc/terms/occurrenceRemarks",
+      modified             = "http://purl.org/dc/terms/modified" )),
+  measurementorfact = list(
+    rowType     = "http://rs.tdwg.org/dwc/terms/MeasurementOrFact",
+    idField     = "measurementID",
+    coreIdField = c("eventID", "occurrenceID"),  # Can link to either
+    terms       = c(
+      measurementID      = "http://rs.tdwg.org/dwc/terms/measurementID",
+      eventID            = "http://rs.tdwg.org/dwc/terms/eventID",
+      occurrenceID       = "http://rs.tdwg.org/dwc/terms/occurrenceID",
+      measurementType    = "http://rs.tdwg.org/dwc/terms/measurementType",
+      measurementValue   = "http://rs.tdwg.org/dwc/terms/measurementValue",
+      measurementUnit    = "http://rs.tdwg.org/dwc/terms/measurementUnit",
+      measurementMethod  = "http://rs.tdwg.org/dwc/terms/measurementMethod",
+      measurementRemarks = "http://rs.tdwg.org/dwc/terms/measurementRemarks" )))
+
+# Function to create field elements for meta.xml
+create_field_elements <- function(csv_file, term_map) {
+  # Read column names from CSV
+  col_names <- names(read_csv(csv_file, n_max = 0, show_col_types = FALSE))
+  
+  # Map columns to DwC terms
+  field_elements <- map_chr(seq_along(col_names), function(i) {
+    col <- col_names[i]
+    term <- term_map$terms[[col]]
+    
+    if (!is.null(term)) {
+      glue::glue('    <field index="{i-1}" term="{term}"/>')
+    } else {
+      # Field exists in CSV but not in DwC mapping - skip or warn
+      message("Warning: Column '", col, "' in ", csv_file, " has no DwC mapping and will be skipped in meta.xml.")
+    }
+  })
+  
+  # Remove NULL entries and combine
+  field_elements <- compact(field_elements)
+  paste(field_elements, collapse = "\n")
+}
+
+# Function to determine coreID index
+get_coreid_index <- function(csv_file, coreid_field) {
+  col_names <- names(read_csv(csv_file, n_max = 0, show_col_types = FALSE))
+  
+  # Handle multiple possible coreID fields (eventID or occurrenceID)
+  if (length(coreid_field) > 1) {
+    # Find which one exists in the CSV
+    coreid_field <- intersect(coreid_field, col_names)[1]
+  }
+  
+  which(col_names == coreid_field) - 1  # 0-indexed
+}
+
+# Generate meta.xml content
+generate_meta_xml <- function(dir_out) {
+  # Core (Event)
+  event_file <- file.path(dir_out, "event.csv")
+  event_fields <- create_field_elements(event_file, dwc_terms$event)
+  event_id_idx <- which(names(read_csv(event_file, n_max = 0, show_col_types = FALSE)) == 
+                          dwc_terms$event$idField) - 1
+  
+  # Extension: Occurrence
+  occ_file <- file.path(dir_out, "occurrence.csv")
+  occ_fields <- create_field_elements(occ_file, dwc_terms$occurrence)
+  occ_coreid_idx <- get_coreid_index(occ_file, dwc_terms$occurrence$coreIdField)
+  
+  # Extension: MeasurementOrFact
+  mof_file <- file.path(dir_out, "measurementorfact.csv")
+  mof_fields <- create_field_elements(mof_file, dwc_terms$measurementorfact)
+  mof_coreid_idx <- get_coreid_index(mof_file, dwc_terms$measurementorfact$coreIdField)
+  
+  # Build complete meta.xml
+  meta_xml <- glue::glue('<?xml version="1.0" encoding="UTF-8"?>
 <archive xmlns="http://rs.tdwg.org/dwc/text/" 
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
          xsi:schemaLocation="http://rs.tdwg.org/dwc/text/ http://rs.tdwg.org/dwc/text/tdwg_dwc_text.xsd">
   <core encoding="UTF-8" fieldsTerminatedBy="," linesTerminatedBy="\\n" 
-        fieldsEnclosedBy=\'"\' ignoreHeaderLines="1" rowType="http://rs.tdwg.org/dwc/terms/Event">
+        fieldsEnclosedBy=\'"\' ignoreHeaderLines="1" rowType="{dwc_terms$event$rowType}">
     <files>
       <location>event.csv</location>
     </files>
-    <id index="0" />
+    <id index="{event_id_idx}" />
+{event_fields}
   </core>
   <extension encoding="UTF-8" fieldsTerminatedBy="," linesTerminatedBy="\\n" 
-             fieldsEnclosedBy=\'"\' ignoreHeaderLines="1" rowType="http://rs.tdwg.org/dwc/terms/Occurrence">
+             fieldsEnclosedBy=\'"\' ignoreHeaderLines="1" rowType="{dwc_terms$occurrence$rowType}">
     <files>
       <location>occurrence.csv</location>
     </files>
-    <coreid index="1" />
+    <coreid index="{occ_coreid_idx}" />
+{occ_fields}
   </extension>
   <extension encoding="UTF-8" fieldsTerminatedBy="," linesTerminatedBy="\\n" 
-             fieldsEnclosedBy=\'"\' ignoreHeaderLines="1" rowType="http://rs.tdwg.org/dwc/terms/MeasurementOrFact">
+             fieldsEnclosedBy=\'"\' ignoreHeaderLines="1" rowType="{dwc_terms$measurementorfact$rowType}">
     <files>
       <location>measurementorfact.csv</location>
     </files>
-    <coreid index="1" />
+    <coreid index="{mof_coreid_idx}" />
+{mof_fields}
   </extension>
-</archive>'
+</archive>')
+  
+  return(meta_xml)
+}
 
+# Generate and write meta.xml
+meta_xml <- generate_meta_xml(dir_out)
 writeLines(meta_xml, file.path(dir_out, "meta.xml"))
+
+cat("Generated meta.xml with field mappings:\n")
+cat(meta_xml)
 ```
 
 ## Create EML Metadata
 
-```{r create-eml}
+```{r}
 #| label: build-eml
-
-# Dataset metadata - PROMPTS FOR REQUIRED INFORMATION
-dataset_title    <- "CalCOFI Fish Larvae Tows" # Prompt: Enter dataset title
-dataset_abstract <- "Fish larvae counts and standardized counts for eggs captured in CalCOFI icthyoplankton nets (primarily vertical [Calvet or Pairovet], oblique [bongo or ring nets], and surface tows [Manta nets]) . Surface tows are normally standardized to count per 1,000 m3 strained. Oblique tows are normally standardized to count per 10 m2 of surface sampled."
-dataset_keywords <- c(
-  "atmosphere", "biology", "biosphere", "calcofi", "earth science", "environment", "latitude", "longitude", "ocean", "time") # GCMD Science Keywords (source: https://catalog.data.gov/dataset/calcofi-larvae-counts-positive-tows)
-# dataset_uuid <- UUIDgenerate() # Or use existing dataset UUID
 
 # Geographic coverage
 geo_coverage <- tbl_site |>
@@ -561,7 +1019,7 @@ write_eml(my_eml, file.path(dir_out, "eml.xml"))
 
 ## Data Quality Checks
 
-```{r quality-checks}
+```{r}
 #| label: check-data-quality
 
 # Check for missing WoRMS IDs
@@ -610,7 +1068,7 @@ glue("
 
 ## Package Creation
 
-```{r create-package}
+```{r}
 #| label: create-dwc-archive
 
 # Create DwC-A zip file
@@ -619,10 +1077,22 @@ zip(zip_file,
     files = file.path(
       dir_out, c(
         "event.csv", "occurrence.csv", 
-        "measurementorfact.csv", "meta.xml", "eml.xml")))
+        "measurementorfact.csv", "meta.xml", "eml.xml")),
+      flags = "-j") # exclude parent folders
 
 cat("\nDarwin Core Archive created:", zip_file, "\n")
 ```
+
+## History of loading into IPT
+
+![Messages from loading into IPT as "Sampling evet" on 2025-11-10](./figures/ipt-load-messages_2025-11-10.png)
+
+> - Skipped mapped term http://rs.tdwg.org/dwc/terms/occurrencelD, which is unknown to extension http://rs.tdwg.org/dwc/terms/MeasurementOrFact
+> - Skipped mapped term http://rs.tdwg.org/dwc/terms/eventID, which is unknown to extension http://rs.tdwg.org/dwc/terms/MeasurementOrFact
+
+- 🤔 But `EventID` (vs `eventID`?) clearly is supposed to link `measurementorfact` to `event` to `occurrence`, per [Example: Brackish water invertebrates survey -- Best Practices in Publishing Sampling-event data :: GBIF IPT User Manual](https://ipt.gbif.org/manual/en/ipt/latest/best-practices-sampling-event-data#brackish-water-invertebrates-survey).
+- TODO: try renaming `eventID` to `EventID` in all 3 files and re-uploading to IPT.
+
 
 ## Questions
 
