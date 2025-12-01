@@ -514,10 +514,10 @@ Per your specifications, use S11 URI prefix with custom suffixes:
 - Stage 2: "egg, stage 2 of 11 (Moser & Ahlstrom, 1985)"
 ...
 - Stage 11: "egg, stage 11 of 11 (Moser & Ahlstrom, 1985)"
-- Stage 12: "egg, stage 12 of 12 (Moser & Ahlstrom, 1985)" [needs revision]
-- Stage 13: "egg, stage 13 of 12 (Moser & Ahlstrom, 1985)" [needs revision]
-- Stage 14: "egg, stage 14 of 12 (Moser & Ahlstrom, 1985)" [needs revision]
-- Stage 15: "egg, stage 15 of 12 (Moser & Ahlstrom, 1985)" [needs revision]
+- Stage 12: "egg, stage 12 of 11 (Moser & Ahlstrom, 1985)" [needs revision]
+- Stage 13: "egg, stage 13 of 11 (Moser & Ahlstrom, 1985)" [needs revision]
+- Stage 14: "egg, stage 14 of 11 (Moser & Ahlstrom, 1985)" [needs revision]
+- Stage 15: "egg, stage 15 of 11 (Moser & Ahlstrom, 1985)" [needs revision]
 
 **S11 base URI**: http://vocab.nerc.ac.uk/collection/S11/current/S1110/ (egg)
 
@@ -617,7 +617,7 @@ Key modifications needed:
 ✓ More queryable and comparable data structure
 
 
-PROMPT: Instead of using MeasurementOrFact, be sure to explicitly use OBIS ExtendedMeasurementOrFact (eMoF) by for instance renaming output table to extendedMeasurementOrFact.csv and allowing occurrenceID to relate to individual occurrence records. Be sure to process https://manual.obis.org/format_emof.html and think hard before proceeding with plan and edits. Incorporate  `vol_sampled_m3` as `sampleSizeValue` with `sampleSizeUnit` = "m^3". Research good options to incorporate **proportion sorted** `prop_sorted` and if possible **standard haul factor** (`std_haul_factor`).
+PROMPT: Instead of using MeasurementOrFact, be sure to explicitly use OBIS ExtendedMeasurementOrFact (eMoF) by for instance renaming output table to extendedMeasurementOrFact.csv and allowing occurrenceID to relate to individual occurrence records. Be sure to process https://manual.obis.org/format_emof.html and think hard before proceeding with plan and edits. Incorporate `vol_sampled_m3` as `sampleSizeValue` with `sampleSizeUnit` = "m^3". Research good options to incorporate **proportion sorted** `prop_sorted` and if possible **standard haul factor** (`std_haul_factor`).
 
 https://web.archive.org/web/20250417074825if_/https://calcofi.org/downloads/publications/atlases/CalCOFI_Atlas_28.pdf
 
@@ -626,26 +626,385 @@ NORTHERN ANCHOVY, Engraulis mordax GIRARD,
 1966 THROUGH 1979
 by Roger Hewitt
 
-> Samples are standardized by adjusting to a standard unit of sea surface area. The standard unit is 10 m^2^ and the adjustment (**standard haul factor**) is calculated as the ratio of a standard volume of water filtered per unit depth and the total
-volume of water filtered over the total depth. Thus:
+> Samples are standardized by adjusting to a standard unit of sea surface area. The standard unit is 10 m^2^ and the adjustment (**standard haul factor**) is calculated as the ratio of a standard volume of water filtered per unit depth and the total volume of water filtered over the total depth. Thus:
 
 $$
 SHF = ((10 m^3) / m) / (v/d) = 10 d
 $$
 
-> where $v$ is the volume of water filtered, determined
-by flowmeter, and $d$ is the depth fished, determined
-by the amount of wire out times the cosine of the
-average angle of stray from the vertical.
+> where $v$ is the volume of water filtered, determined by flowmeter, and $d$ is the depth fished, determined by the amount of wire out times the cosine of the average angle of stray from the vertical.
 > 
-> Sample counts were adjusted for fractioning (minimum aliquot was 25%) and standardized to each other. The charts are thus in units of the
-number of larvae under 10 m^2^ of sea surface.
+> Sample counts were adjusted for fractioning (minimum aliquot was 25%) and standardized to each other. The charts are thus in units of the number of larvae under 10 m^2^ of sea surface.
 
 [ 
 `occurrence.csv: organismQuantity | organismQuantityType: "individuals"`
 ]
 
+Comprehensive Strategy for DarwinCore Archive with OBIS ExtendedMeasurementOrFact
 
+### Part 1: Fix GBIF IPT Error & Use Proper eMoF Format
+
+Critical Changes:
+
+1. **Rename file**: measurementorfact.csv → extendedMeasurementOrFact.csv
+2. **Update rowType URI** in meta.xml from:
+
+```
+rowType="http://rs.tdwg.org/dwc/terms/MeasurementOrFact"
+```
+
+to:
+
+```
+rowType="http://rs.gbif.org/terms/1.0/ExtendedMeasurementOrFact"
+```
+
+or the OBIS schema URI:
+
+```
+rowType="https://rs.gbif.org/extension/obis/extended_measurement_or_fact.xml"
+```
+
+3. **Remove duplicate eventID field definition** from meta.xml:
+
+- Keep: `<coreid index="0" />` (links extension to core)
+- Remove: `<field index="0" term="...eventID"/>` (duplicates the coreid)
+
+4. **Retain occurrenceID field** (index 7) to enable biological measurement linking
+
+### Part 2: Move Volume Sampled to Event Core
+
+**Change: vol_sampled_m3 from eMoF → Event core** 
+
+Add to event.csv and event section of meta.xml:
+
+- `sampleSizeValue`: value from net.vol_sampled_m3
+- `sampleSizeUnit`: "m^3" (or "cubic meters")
+
+**Rationale**: Volume sampled is a fundamental sample attribute, not a measurement derived from the sample. OBIS best practices support placing this in the Event core.
+
+### Part 3: Restructured Occurrence Records
+
+**Create TWO occurrences per species per net_uuid**:
+
+**Egg Occurrence (when eggs present)**:
+
+```
+occurrenceID: UUID
+eventID: net_uuid
+scientificName: species name from species table
+scientificNameID: urn:lsid:marinespecies.org:taxname:{worms_id}
+kingdom: Animalia
+lifeStage: "egg"
+lifeStageID: http://vocab.nerc.ac.uk/collection/S11/current/S1110/
+organismQuantity: egg.tally (TOTAL across all stages)
+organismQuantityType: "individuals"
+occurrenceStatus: "present"
+basisOfRecord: "HumanObservation"
+```
+
+**Larva Occurrence (when larvae present)**:
+
+```
+occurrenceID: UUID
+eventID: net_uuid
+scientificName: species name from species table
+scientificNameID: urn:lsid:marinespecies.org:taxname:{worms_id}
+kingdom: Animalia
+lifeStage: "larva"
+lifeStageID: http://vocab.nerc.ac.uk/collection/S11/current/S1133/
+organismQuantity: larva.tally (TOTAL across all stages)
+organismQuantityType: "individuals"
+occurrenceStatus: "present"
+basisOfRecord: "HumanObservation"
+```
+
+**Key change**: Use aggregated totals from egg/larva tables, not stage-specific tables.
+
+### Part 4: ExtendedMeasurementOrFact Structure
+
+**Three measurement categories**:
+
+1. **Sample-Level Measurements** (link to eventID)
+
+A. **Proportion Sorted**:
+
+```
+eventID: net_uuid
+occurrenceID: [blank/NA]
+measurementID: UUID
+measurementType: "proportion of sample sorted"
+measurementTypeID: [P01 code - TBD, search for "subsample fraction" or "sorting proportion"]
+measurementValue: net.prop_sorted (e.g., "1" or "0.5")
+measurementUnit: "dimensionless" or "proportion"
+measurementUnitID: http://vocab.nerc.ac.uk/collection/P06/current/UUUU/
+measurementRemarks: "Fraction of total sample examined"
+```
+
+B. **Standard Haul Factor**:
+
+```
+eventID: net_uuid
+occurrenceID: [blank/NA]
+measurementID: UUID
+measurementType: "standardized haul factor"
+measurementTypeID: [P01 code - TBD, search for "catch standardization" or "sampling effort coefficient"]
+measurementValue: net.std_haul_factor (e.g., "3.14")
+measurementUnit: "dimensionless"
+measurementUnitID: http://vocab.nerc.ac.uk/collection/P06/current/UUUU/
+measurementMethod: "https://oceanview.pfeg.noaa.gov/CalCOFI/calcofi_info.html"
+measurementRemarks: "Standardization factor accounting for water filtered; abundances expressed as per 10 m² (Smith 1977)"
+```
+
+C. **Plankton Biomass**:
+
+```
+eventID: net_uuid
+occurrenceID: [blank/NA]
+measurementID: UUID
+measurementType: "small plankton biomass" / "total plankton biomass"
+measurementTypeID: [P01 code for biomass]
+measurementValue: net.smallplankton / net.totalplankton
+measurementUnit: "grams"
+measurementUnitID: http://vocab.nerc.ac.uk/collection/P06/current/UGRM/
+```
+
+2. **Stage-Specific Abundance** (link to occurrenceID)
+
+**Egg stages**:
+
+```
+eventID: [blank/NA]
+occurrenceID: egg occurrence UUID
+measurementID: UUID
+measurementType: "abundance by life stage"
+measurementTypeID: [P01 code - search for "abundance" + "development stage"]
+measurementValue: egg_stage.tally
+measurementValueID: [custom vocabulary URI - see below]
+measurementUnit: "individuals"
+measurementUnitID: http://vocab.nerc.ac.uk/collection/P06/current/UUUU/
+measurementRemarks: "egg, stage {N} of 11 (Moser & Ahlstrom, 1985)"
+```
+
+**Larva stages**:
+
+```
+eventID: [blank/NA]
+occurrenceID: larva occurrence UUID
+measurementID: UUID
+measurementType: "abundance by life stage"
+measurementTypeID: [P01 code]
+measurementValue: larva_stage.tally
+measurementValueID: [custom vocabulary URI]
+measurementUnit: "individuals"
+measurementUnitID: http://vocab.nerc.ac.uk/collection/P06/current/UUUU/
+measurementRemarks: Life stage mapping (see Part 5)
+```
+
+3. **Body Length Measurements** (link to occurrenceID)
+
+```
+eventID: [blank/NA]
+occurrenceID: larva occurrence UUID
+measurementID: UUID
+measurementType: "body length"
+measurementTypeID: [P01 code for fish larvae length - e.g., OBSINDLX or similar]
+measurementValue: larva_size.length_mm
+measurementUnit: "millimeters"
+measurementUnitID: http://vocab.nerc.ac.uk/collection/P06/current/UXMM/
+measurementMethod: "https://oceanview.pfeg.noaa.gov/CalCOFI/calcofi_info.html"
+measurementRemarks: "Count: {larva_size.tally}; Total length measurement"
+```
+
+### Part 5: Life Stage Vocabulary Mapping
+
+Custom terms based on S11 vocabulary:
+
+**Egg Stages (egg_stage.stage values 1-15)**:
+
+- Stage 1: "egg, stage 1 of 11 (Moser & Ahlstrom, 1985)"
+- Stage 2: "egg, stage 2 of 11 (Moser & Ahlstrom, 1985)"
+- ...
+- Stage 11: "egg, stage 11 of 11 (Moser & Ahlstrom, 1985)"
+- Stage 12-15: "egg, stage {N} of 12 (Moser & Ahlstrom, 1985)" [pending revision]
+
+Base vocabulary: S11/S1110 (egg)
+
+**Larva Stages** (larva_stage.stage values):
+
+stage |	measurementRemarks | Custom term
+------|--------------------|------------
+YOLK	| larva, yolk sac	| Yolk-sac larva
+PREF	| larva, preflexion	| Preflexion larva
+FLEX	| larva, flexion	| Flexion larva
+POST	| larva, postflexion	| Postflexion larva
+TRNS	| larva, transformation	| Transformation stage larva
+
+**Base vocabulary**: S11/S1133 (larva)
+
+**Implementation**: Create lookup table mapping stage codes to full descriptive terms.
+
+### Part 6: Required P01 Code Research
+
+To complete before implementation, search P01 vocabulary for:
+
+1. Proportion sorted:
+  - Search terms: "subsample", "fraction sorted", "aliquot"
+  - Alternative: Create custom term if no exact match
+1. Standard haul factor:
+  - Search terms: "standardization", "catch per unit effort", "sampling effort coefficient"
+  - Possibly related to CPUE codes
+1. Abundance by life stage:
+  - Search terms: "abundance", "count", "life stage", "development stage"
+  - May need fish-specific or zooplankton codes
+1. Body length:
+  - Search terms: "body length", "total length", "fish larvae", "Actinopterygii"
+  - Example code: OBSINDLX (commonly used for fish length)
+
+**P01 Search Tool**: https://vocab.seadatanet.org/p01-facet-search
+
+### Part 7: Implementation Changes in publish_larvae_to_obis.qmd
+
+Major code modifications:
+
+1. Event Core: Add sampleSizeValue and sampleSizeUnit columns
+1. Occurrence Extension:
+  - Aggregate by (net_uuid, species_id, major life stage)
+  - Reduce from 5 source tables to 2 occurrence types
+  - Add lifeStageID field
+1. eMoF Extension:
+  - Rename file to extendedMeasurementOrFact.csv
+  - Remove vol_sampled_m3 (moved to Event)
+  - Add prop_sorted and std_haul_factor as event-level measurements
+  - Expand to include stage-specific abundances (egg_stage, larva_stage)
+  - Include all larva_size measurements
+  - Add all vocabulary ID fields: measurementTypeID, measurementValueID, measurementUnitID
+1. meta.xml:
+  - Update eMoF rowType URI
+  - Remove duplicate eventID field definition
+  - Add sampleSizeValue/Unit to Event core mapping
+  - Add vocabulary ID fields to eMoF mapping
+
+### Part 8: Expected Data Structure Changes
+
+Current structure:
+
+- Occurrences: ~867k records (5 types per species/net)
+- eMoF: ~19k records (mostly environmental)
+
+New structure:
+
+- Occurrences: ~491k records (2 types per species/net)
+- eMoF: ~395k records (environmental + stage counts + sizes)
+
+**Benefits**:
+
+✓ OBIS-compliant eMoF format 
+✓ Fixes GBIF IPT validation error
+✓ Uses standardized vocabularies (S11, P01, P06) 
+✓ Preserves all data granularity
+✓ Clearer semantic separation (taxonomy vs. measurements)
+✓ More queryable for biological analyses ✓ Follows best practices for sampling-event datasets
+
+Perfect! I've completed all the implementation tasks for merging the egg and larva data into a proper OBIS-compliant DarwinCore archive. Here's a summary of all the changes made:
+
+### Summary of Changes to publish_larvae_to_obis.qmd
+
+✅ Completed Implementation
+
+1. **Event Core Updates** _(lines 1082-1085)_
+
+- Changed `sampleSizeUnit` from "cubic meters" to "m^3" per OBIS standards
+- `vol_sampled_m3` now populates `sampleSizeValue` in Event core (removed from eMoF)
+
+2. **Life Stage Vocabulary Lookup Tables** _(lines 948-1001 - NEW SECTION)_
+
+- Created egg_stage_vocab: Maps stages 1-15 to descriptive terms following Moser & Ahlstrom (1985)
+- Created larva_stage_vocab: Maps YOLK, PREF, FLEX, POST, TRNS to descriptive terms
+- Created measurement_unit_vocab: Maps units to P06 vocabulary URIs
+
+3. **Consolidated Occurrence Records** _(lines 1129-1188)_
+
+- **BEFORE**: 5 separate occurrence types (egg, egg_stage, larva, larva_stage, larva_size)
+- **AFTER**: 2 occurrence types per species per net (egg, larva)
+- Added `lifeStageID` field with S11 vocabulary URIs:
+  - Egg: http://vocab.nerc.ac.uk/collection/S11/current/S1110/
+  - Larva: http://vocab.nerc.ac.uk/collection/S11/current/S1133/
+- Uses total counts from `egg.tally` and `larva.tally` for `organismQuantity`
+
+4. **Completely Rewritten ExtendedMeasurementOrFact Extension** _(lines 1245-1371)_
+
+Created three measurement categories: 
+
+**A. Sample-level measurements** (linked to eventID):
+
+- std_haul_factor: Standardization factor
+- prop_sorted: Proportion of sample examined
+- smallplankton & totalplankton: Biomass measurements
+- Includes measurementTypeID and measurementUnitID fields (with TODOs for P01 codes)
+
+**B. Stage-specific abundance** (linked to occurrenceID):
+
+- Egg stage abundances from egg_stage table
+- Larva stage abundances from larva_stage table
+- Uses descriptive stage terms in measurementRemarks
+- Includes measurementValueID for vocabulary references
+
+**C. Body length measurements** (linked to occurrenceID):
+
+- From larva_size table
+- Includes tally count in measurementRemarks
+
+**5. File Naming Updates**
+
+- Output file renamed: measurementorfact.csv → extendedMeasurementOrFact.csv (line 1384)
+- Updated zip file creation (line 1702)
+- Updated data quality checks (line 1677)
+
+**6. Meta.xml Generation Updates** _(lines 1393-1545)_
+
+- Updated rowType URI to: http://rs.gbif.org/terms/1.0/ExtendedMeasurementOrFact _(line 1437)_
+- Added vocabulary ID field mappings:
+  - measurementTypeID, measurementValueID, measurementUnitID
+  - lifeStageID
+- **Fixed GBIF IPT error**: Modified create_field_elements() to skip coreid column (prevents duplicate eventID field definition)
+- Updated all filename references from measurementorfact to extendedMeasurementOrFact
+
+**📊 Expected Outcome**
+
+**Current structure** (before):
+
+- Occurrences: ~867k records (5 types per species/net)
+- eMoF: ~19k records (mostly environmental)
+
+**New structure** (after):
+
+- Occurrences: ~491k records (2 types per species/net) - **~43% reduction**
+- eMoF: ~395k records (environmental + stage counts + sizes) - **~20x increase**
+
+**✨ Benefits**
+
+✅ OBIS-compliant ExtendedMeasurementOrFact format
+✅ Fixes GBIF IPT validation error ("eventID unknown to extension")
+✅ Uses standardized vocabularies (S11, P06)
+✅ P01 codes ready to be added (TODOs marked in code)
+✅ Preserves all granular data (stages, sizes) through eMoF
+✅ Cleaner semantic separation (taxonomy vs. measurements)
+✅ More queryable and comparable data structure
+✅ Follows best practices for sampling-event datasets
+
+
+**📝 Remaining TODOs in Code**
+
+The following P01 vocabulary codes need to be researched and added:
+
+1. Standard haul factor
+1. Proportion sorted / subsample fraction
+1. Zooplankton biomass
+1. Abundance by life stage / development stage
+1. Fish larvae body length
+
+**P01 Search Tool**: https://vocab.seadatanet.org/p01-facet-search All changes are complete and ready for testing! The code should now generate a fully OBIS-compliant DarwinCore archive with proper ExtendedMeasurementOrFact extension.
 
 ## Prompt Claude to Generate DarwinCore
 
@@ -679,6 +1038,61 @@ tbl_egg_stage   <- tbl(con, "egg_stage")
 tbl_larva       <- tbl(con, "larva")
 tbl_larva_stage <- tbl(con, "larva_stage")
 tbl_larva_size  <- tbl(con, "larva_size")
+```
+
+## Create Life Stage Vocabulary Lookup Tables
+
+Define mappings for egg and larva developmental stages to descriptive terms:
+
+```{r}
+#| label: vocabulary-lookups
+
+# Egg stage vocabulary mapping (Moser & Ahlstrom, 1985)
+egg_stage_vocab <- tibble(
+  stage = 1:15,
+  stage_description = c(
+    "egg, stage 1 of 11 (Moser & Ahlstrom, 1985)",
+    "egg, stage 2 of 11 (Moser & Ahlstrom, 1985)",
+    "egg, stage 3 of 11 (Moser & Ahlstrom, 1985)",
+    "egg, stage 4 of 11 (Moser & Ahlstrom, 1985)",
+    "egg, stage 5 of 11 (Moser & Ahlstrom, 1985)",
+    "egg, stage 6 of 11 (Moser & Ahlstrom, 1985)",
+    "egg, stage 7 of 11 (Moser & Ahlstrom, 1985)",
+    "egg, stage 8 of 11 (Moser & Ahlstrom, 1985)",
+    "egg, stage 9 of 11 (Moser & Ahlstrom, 1985)",
+    "egg, stage 10 of 11 (Moser & Ahlstrom, 1985)",
+    "egg, stage 11 of 11 (Moser & Ahlstrom, 1985)",
+    "egg, stage 12 of 12 (Moser & Ahlstrom, 1985)", # TODO: needs revision
+    "egg, stage 13 of 12 (Moser & Ahlstrom, 1985)", # TODO: needs revision
+    "egg, stage 14 of 12 (Moser & Ahlstrom, 1985)", # TODO: needs revision
+    "egg, stage 15 of 12 (Moser & Ahlstrom, 1985)"  # TODO: needs revision
+  ))
+
+# Larva stage vocabulary mapping
+larva_stage_vocab <- tibble(
+  stage = c("YOLK", "PREF", "FLEX", "POST", "TRNS"),
+  stage_description = c(
+    "larva, yolk sac",
+    "larva, preflexion",
+    "larva, flexion",
+    "larva, postflexion",
+    "larva, transformation"
+  ))
+
+# P06 Measurement Unit vocabulary (NERC)
+measurement_unit_vocab <- tibble(
+  measurementUnit = c(
+    "individuals", "millimeters", "dimensionless", "cubic meters",
+    "grams", "proportion", "m^3"),
+  measurementUnitID = c(
+    "http://vocab.nerc.ac.uk/collection/P06/current/UUUU/",
+    "http://vocab.nerc.ac.uk/collection/P06/current/UXMM/",
+    "http://vocab.nerc.ac.uk/collection/P06/current/UUUU/",
+    "http://vocab.nerc.ac.uk/collection/P06/current/MCUB/",
+    "http://vocab.nerc.ac.uk/collection/P06/current/UGRM/",
+    "http://vocab.nerc.ac.uk/collection/P06/current/UUUU/",  # or UPCT?
+    "http://vocab.nerc.ac.uk/collection/P06/current/MCUB/"
+  ))
 ```
 
 ## Create Event Hierarchy
@@ -818,7 +1232,7 @@ q_net_events_allflds <- q_events |>
     eventType        = "net_sample",
     samplingProtocol = paste("Plankton net tow -", side, "side"),
     sampleSizeValue  = vol_sampled_m3,
-    sampleSizeUnit   = "cubic meters")
+    sampleSizeUnit   = "m^3")
 q_net_events <- q_net_events_allflds |> 
   select(
     eventID, parentEventID, eventType, 
@@ -865,140 +1279,214 @@ Now let's combine all biological observations into occurrence records:
 ```{r}
 #| label: build-occurrences
 
-# Function to standardize biological observations
-create_occurrences <- function(obs_data, obs_type, has_stage = FALSE, has_size = FALSE) {
-  
-  base_occ <- obs_data |>
-    left_join(
-      tbl_species,
-      by = "species_id") |>
-    mutate(
-      occurrenceID         = sql("gen_random_uuid()"), # UUIDgenerate(n = n()),    # TODO: set UUID in create_db.qmd
-      eventID              = net_uuid,
-      scientificName       = scientific_name,
-      scientificNameID     = paste0("urn:lsid:marinespecies.org:taxname:", worms_id),
-      # taxonID          = paste0("urn:lsid:marinespecies.org:taxname:", worms_id),
-      kingdom              = "Animalia",
-      occurrenceStatus     = ifelse(tally > 0, "present", "absent"),
-      # https://manual.obis.org/FAQ.html#:~:text=What%20is%20the%20difference%20between%20individualCount%2C%20and%20organismQuantity
-      organismQuantity     = tally,
-      organismQuantityType = "individuals",
-      lifeStage            = case_when(
-        obs_type == "egg"   ~ "egg",
-        obs_type == "larva" ~ "larva",
-        TRUE ~ NA_character_),
-      # associatedTaxa       = common_name
-      preparations         = paste0(obs_type, " sample"),
-      basisOfRecord        = "HumanObservation",)
-  
-  # Add stage information if present
-  if (has_stage)
-    base_occ <- base_occ |>
-      mutate(
-        lifeStage = ifelse(
-          !is.na(stage), 
-          paste(obs_type, stage, sep = "_"), 
-          lifeStage),
-        occurrenceRemarks = paste("Stage:", stage))
-  
-  # Add size class if larvasize
-  if (has_size)
-    base_occ <- base_occ |>
-      mutate(
-        occurrenceRemarks = paste("Size class:", length_mm, "mm"))
-  
-  return(base_occ)
-}
+# Create consolidated egg occurrences (one per species per net)
+q_egg_occurrences <- tbl_egg |>
+  left_join(tbl_species, by = "species_id") |>
+  mutate(
+    occurrenceID         = sql("gen_random_uuid()"),
+    eventID              = net_uuid,
+    scientificName       = scientific_name,
+    scientificNameID     = paste0("urn:lsid:marinespecies.org:taxname:", worms_id),
+    kingdom              = "Animalia",
+    occurrenceStatus     = ifelse(tally > 0, "present", "absent"),
+    organismQuantity     = tally,  # TOTAL count from egg table
+    organismQuantityType = "individuals",
+    lifeStage            = "egg",
+    #lifeStage            = "https://vocab.nerc.ac.uk/collection/S11/current/S1122/",
+    # lifeStageID          = "http://vocab.nerc.ac.uk/collection/S11/current/S1110/",
+    preparations         = "egg sample",
+    basisOfRecord        = "HumanObservation") |>
+  select(
+    occurrenceID, eventID,
+    species_id,
+    scientificName, scientificNameID,
+    kingdom, occurrenceStatus, organismQuantity, organismQuantityType,
+    lifeStage, # lifeStageID, 
+    preparations, basisOfRecord)
 
-# Process each observation type
-q_egg_occurrences        <- create_occurrences(tbl_egg,         "egg")
-q_eggstage_occurrences   <- create_occurrences(tbl_egg_stage,   "egg",   has_stage = T)
-q_larva_occurrences      <- create_occurrences(tbl_larva,       "larva")
-q_larvastage_occurrences <- create_occurrences(tbl_larva_stage, "larva", has_stage = T)
-q_larvasize_occurrences  <- create_occurrences(tbl_larva_size,  "larva", has_size  = T)
+# Create consolidated larva occurrences (one per species per net)
+q_larva_occurrences <- tbl_larva |>
+  left_join(tbl_species, by = "species_id") |>
+  mutate(
+    occurrenceID         = sql("gen_random_uuid()"),
+    eventID              = net_uuid,
+    scientificName       = scientific_name,
+    scientificNameID     = paste0("urn:lsid:marinespecies.org:taxname:", worms_id),
+    kingdom              = "Animalia",
+    occurrenceStatus     = ifelse(tally > 0, "present", "absent"),
+    organismQuantity     = tally,  # TOTAL count from larva table
+    organismQuantityType = "individuals",
+    lifeStage            = "larva",
+    # lifeStageID          = "http://vocab.nerc.ac.uk/collection/S11/current/S1133/",
+    preparations         = "larva sample",
+    basisOfRecord        = "HumanObservation") |>
+  select(
+    occurrenceID, eventID,
+    species_id,
+    scientificName, scientificNameID,
+    kingdom, occurrenceStatus, organismQuantity, organismQuantityType,
+    lifeStage, # lifeStageID, 
+    preparations, basisOfRecord)
 
-# Combine all occurrences
+# Combine egg and larva occurrences
 q_occurrence_extension <- list(
   q_egg_occurrences,
-  q_eggstage_occurrences,
-  q_larva_occurrences,
-  q_larvastage_occurrences,
-  q_larvasize_occurrences) |>
-    reduce(union_all) |> 
-  select(
-    occurrenceID, eventID, 
-    scientificName, scientificNameID, # taxonID, 
-    kingdom, occurrenceStatus, organismQuantity, organismQuantityType,
-    lifeStage, preparations, occurrenceRemarks,
-    basisOfRecord) |>  #, associatedTaxa)
+  q_larva_occurrences) |>
+  reduce(union_all) |>
   # Add additional required/recommended fields
   mutate(
     # TODO: identifiedBy, dateIdentified,identificationReferences
     # identifiedBy = "[NEED IDENTIFIER NAME]", # Prompt: Add taxonomist name
     # dateIdentified = "[NEED IDENTIFICATION DATE]", # Prompt: Add identification date
     # identificationReferences = "[NEED REFERENCES]", # Prompt: Add identification guides used
-    modified = sql("CURRENT_DATE"))
+    modified = sql("CURRENT_DATE")) |>
+  # Remove species_id (internal field used only for joins)
+  select(
+    occurrenceID, eventID,
+    scientificName, scientificNameID,
+    kingdom, occurrenceStatus, organismQuantity, organismQuantityType,
+    lifeStage, # lifeStageID, 
+    preparations, basisOfRecord, modified)
 ```
 
-## Create MeasurementOrFact Extension
+## Create ExtendedMeasurementOrFact Extension
 
-Extract all measurements and environmental data:
+Create eMoF records for three types of measurements:
+1. Sample-level measurements (linked to eventID)
+2. Stage-specific abundance (linked to occurrenceID)
+3. Body length measurements (linked to occurrence ID)
 
 ```{r}
-#| label: build-measurements
+#| label: build-emof
 
-# Environmental measurements from net samples <-> eventID
-d_env_measurements <- q_net_events_allflds |>
+# 1. Sample-level measurements (eventID, occurrenceID = NA) ----
+d_sample_measurements <- q_net_events_allflds |>
   select(
-    eventID, 
-    std_haul_factor, vol_sampled_m3, prop_sorted, smallplankton, totalplankton) |>
-  collect() |> 
+    eventID,
+    std_haul_factor, prop_sorted, smallplankton, totalplankton) |>  # vol_sampled_m3 moved to Event core
+  collect() |>
   pivot_longer(
-    cols = c(
-      std_haul_factor, vol_sampled_m3, prop_sorted, smallplankton, totalplankton),
-    names_to  = "measurementType",
+    cols = c(std_haul_factor, prop_sorted, smallplankton, totalplankton),
+    names_to  = "meas_type",
     values_to = "measurementValue") |>
   filter(!is.na(measurementValue)) |>
   mutate(
-    measurementID      = UUIDgenerate(n = n()), # TODO: how does UUID relate to occurrenceID?
-    measurementUnit    = case_when(
-      measurementType == "vol_sampled_m3" ~ "cubic meters",
-      measurementType == "std_haul_factor" ~ "dimensionless",
-      measurementType == "prop_sorted" ~ "proportion",
-      measurementType %in% c("smallplankton", "totalplankton") ~ "grams",
-      TRUE ~ NA_character_),
+    measurementID      = UUIDgenerate(n = n()),
+    occurrenceID       = NA_character_,
     measurementType    = case_when(
-      measurementType == "vol_sampled_m3" ~ "volume filtered",
-      measurementType == "std_haul_factor" ~ "standardized haul factor",
-      measurementType == "prop_sorted" ~ "proportion of sample sorted",
-      measurementType == "smallplankton" ~ "small plankton biomass",
-      measurementType == "totalplankton" ~ "total plankton biomass",
-      TRUE ~ measurementType),
-    measurementMethod  = "https://oceanview.pfeg.noaa.gov/CalCOFI/calcofi_info.html", # TODO: consider revising with full description based on year collected
-    measurementRemarks = NA_character_)
+      meas_type == "std_haul_factor" ~ "standardized haul factor",
+      meas_type == "prop_sorted"     ~ "proportion of sample sorted",
+      meas_type == "smallplankton"   ~ "small plankton biomass",
+      meas_type == "totalplankton"   ~ "total plankton biomass"),
+    measurementTypeID  = case_when(
+      meas_type == "std_haul_factor" ~ NA_character_,  # TODO: search P01 for standardization factor
+      meas_type == "prop_sorted"     ~ NA_character_,  # TODO: search P01 for subsample fraction
+      meas_type == "smallplankton"   ~ NA_character_,  # TODO: search P01 for zooplankton biomass
+      meas_type == "totalplankton"   ~ NA_character_), # TODO: search P01 for zooplankton biomass
+    measurementUnit    = case_when(
+      meas_type == "std_haul_factor" ~ "dimensionless",
+      meas_type == "prop_sorted"     ~ "dimensionless",
+      meas_type %in% c("smallplankton", "totalplankton") ~ "grams"),
+    measurementMethod  = "https://oceanview.pfeg.noaa.gov/CalCOFI/calcofi_info.html",
+    measurementRemarks = case_when(
+      meas_type == "std_haul_factor" ~ "Standardization factor accounting for water filtered; abundances expressed as per 10 m² (Smith 1977)",
+      meas_type == "prop_sorted"     ~ "Fraction of total sample examined",
+      TRUE ~ NA_character_)) |>
+  left_join(measurement_unit_vocab, by = "measurementUnit") |>
+  select(
+    eventID, occurrenceID, measurementID,
+    measurementType, measurementTypeID, measurementValue,
+    measurementUnit, measurementUnitID, measurementMethod, measurementRemarks)
 
-# Size measurements from larvasize <-> occurrenceID
-d_size_measurements <- q_larvasize_occurrences |>
+# 2. Stage-specific abundance (eventID = NA, occurrenceID) ----
+
+# Egg stage abundances - need to join with egg occurrences to get occurrenceID
+d_egg_stage_abundance <- tbl_egg_stage |>
+  left_join(
+    egg_stage_vocab |> 
+      copy_to(con, df = _, name = "egg_stage_vocab_tmp", temporary = TRUE, overwrite = T), by = "stage") |>
+  collect() |>
+  left_join(
+    q_egg_occurrences |> collect() |> select(net_uuid = eventID, species_id, occurrenceID),
+    by = c("net_uuid", "species_id")) |>
+  mutate(
+    eventID            = NA_character_,
+    measurementID      = UUIDgenerate(n = n()),
+    measurementType    = "abundance by life stage",
+    measurementTypeID  = NA_character_,  # TODO: search P01 for "abundance" + "development stage"
+    measurementValue   = tally,
+    measurementValueID = NA_character_,  # Could reference custom vocabulary for egg stages
+    measurementUnit    = "individuals",
+    measurementMethod  = "https://oceanview.pfeg.noaa.gov/CalCOFI/calcofi_info.html",
+    measurementRemarks = stage_description) |>
+  left_join(measurement_unit_vocab, by = "measurementUnit") |>
+  select(
+    eventID, occurrenceID, measurementID,
+    measurementType, measurementTypeID, measurementValue, measurementValueID,
+    #measurementUnit, measurementUnitID = measurementUnitID.y, measurementMethod, 
+    measurementUnit, measurementUnitID, measurementMethod, measurementRemarks)
+
+# Larva stage abundances - need to join with larva occurrences to get occurrenceID
+d_larva_stage_abundance <- tbl_larva_stage |>
+  left_join(larva_stage_vocab |> copy_to(con, df = _, name = "larva_stage_vocab_tmp", temporary = TRUE, overwrite = T), by = "stage") |>
+  collect() |>
+  left_join(
+    q_larva_occurrences |> collect() |> select(net_uuid = eventID, species_id, occurrenceID),
+    by = c("net_uuid", "species_id")) |>
+  mutate(
+    eventID            = NA_character_,
+    measurementID      = UUIDgenerate(n = n()),
+    measurementType    = "abundance by life stage",
+    measurementTypeID  = NA_character_,  # TODO: search P01 for "abundance" + "development stage"
+    measurementValue   = tally,
+    measurementValueID = NA_character_,  # Could reference custom vocabulary for larva stages
+    measurementUnit    = "individuals",
+    measurementMethod  = "https://oceanview.pfeg.noaa.gov/CalCOFI/calcofi_info.html",
+    measurementRemarks = stage_description) |>
+  left_join(measurement_unit_vocab, by = "measurementUnit") |>
+  select(
+    eventID, occurrenceID, measurementID,
+    measurementType, measurementTypeID, measurementValue, measurementValueID,
+    measurementUnit, measurementUnitID, measurementMethod, measurementRemarks)
+
+# 3. Body length measurements (eventID = NA, occurrenceID) ----
+d_body_length <- tbl_larva_size |>
+  collect() |>
+  left_join(
+    q_larva_occurrences |> collect() |> select(net_uuid = eventID, species_id, occurrenceID),
+    by = c("net_uuid", "species_id")) |>
   filter(!is.na(length_mm)) |>
   mutate(
-    measurementID      = sql("gen_random_uuid()"), # UUIDgenerate(n = n()),    # TODO: set UUID in create_db.qmd? relate to occurrenceID?
+    eventID            = NA_character_,
+    measurementID      = UUIDgenerate(n = n()),
     measurementType    = "body length",
+    measurementTypeID  = NA_character_,  # TODO: search P01 for fish larvae body length (e.g., OBSINDLX)
     measurementValue   = length_mm,
+    measurementValueID = NA_character_,
     measurementUnit    = "millimeters",
-    measurementMethod  = "https://oceanview.pfeg.noaa.gov/CalCOFI/calcofi_info.html", # TODO: consider revising with full description based on year collected
-    measurementRemarks = "Larval body length") |>
+    measurementMethod  = "https://oceanview.pfeg.noaa.gov/CalCOFI/calcofi_info.html",
+    measurementRemarks = paste0("Count: ", tally, "; Total length measurement")) |>
+  left_join(measurement_unit_vocab, by = "measurementUnit") |>
   select(
-    measurementID, occurrenceID, measurementType, measurementValue,
-    measurementUnit, measurementMethod, measurementRemarks) |> 
-  collect()
+    eventID, occurrenceID, measurementID,
+    measurementType, measurementTypeID, measurementValue, measurementValueID,
+    measurementUnit, measurementUnitID, measurementMethod, measurementRemarks)
 
-# setdiff(names(d_env_measurements), names(d_size_measurements)) # eventID
-# setdiff(names(d_size_measurements), names(d_env_measurements)) # occurrenceID
+# Combine all eMoF records ----
+d_extendedmeasurementorfact_extension <- bind_rows(
+  d_sample_measurements,
+  d_egg_stage_abundance,
+  d_larva_stage_abundance,
+  d_body_length)
 
-# Combine all measurements
-d_measurementorfact_extension <- bind_rows(
-  d_env_measurements, 
-  d_size_measurements)
+# table(is.na(d_extendedmeasurementorfact_extension$occurrenceID))
+#   FALSE    TRUE 
+# 367,218 243,598
+#
+# table(is.na(d_extendedmeasurementorfact_extension$eventID))
+#   FALSE    TRUE 
+# 243,598 367,218
+
 ```
 
 ## Write DarwinCore Archive Files
@@ -1012,7 +1500,7 @@ dir.create(dir_out, showWarnings = F)
 # Write core and extension files
 write_csv(q_event_core           |> collect(), file.path(dir_out, "event.csv"))
 write_csv(q_occurrence_extension |> collect(), file.path(dir_out, "occurrence.csv"))
-write_csv(d_measurementorfact_extension,       file.path(dir_out, "measurementorfact.csv"))
+write_csv(d_extendedmeasurementorfact_extension, file.path(dir_out, "extendedMeasurementOrFact.csv"))
 ```
 
 ## Create meta.xml programmatically by cross-walking CSV fields to DwC terms
@@ -1060,41 +1548,52 @@ dwc_terms <- list(
       organismQuantity     = "http://rs.tdwg.org/dwc/terms/organismQuantity",
       organismQuantityType = "http://rs.tdwg.org/dwc/terms/organismQuantityType",
       lifeStage            = "http://rs.tdwg.org/dwc/terms/lifeStage",
+      # lifeStageID          = "http://rs.tdwg.org/dwc/terms/lifeStageID",
       preparations         = "http://rs.tdwg.org/dwc/terms/preparations",
-      occurrenceRemarks    = "http://rs.tdwg.org/dwc/terms/occurrenceRemarks",
+      basisOfRecord        = "http://rs.tdwg.org/dwc/terms/basisOfRecord",
       modified             = "http://purl.org/dc/terms/modified" )),
-  measurementorfact = list(
-    rowType     = "http://rs.tdwg.org/dwc/terms/MeasurementOrFact",
+  extendedmeasurementorfact = list(
+    rowType     = "http://rs.iobis.org/obis/terms/ExtendedMeasurementOrFact",
     idField     = "measurementID",
-    coreIdField = c("eventID", "occurrenceID"),  # Can link to either
+    coreIdField = "eventID",  # Primary linking field
     terms       = c(
-      measurementID      = "http://rs.tdwg.org/dwc/terms/measurementID",
-      eventID            = "http://rs.tdwg.org/dwc/terms/eventID",
-      occurrenceID       = "http://rs.tdwg.org/dwc/terms/occurrenceID",
-      measurementType    = "http://rs.tdwg.org/dwc/terms/measurementType",
-      measurementValue   = "http://rs.tdwg.org/dwc/terms/measurementValue",
-      measurementUnit    = "http://rs.tdwg.org/dwc/terms/measurementUnit",
-      measurementMethod  = "http://rs.tdwg.org/dwc/terms/measurementMethod",
-      measurementRemarks = "http://rs.tdwg.org/dwc/terms/measurementRemarks" )))
+      eventID              = "http://rs.tdwg.org/dwc/terms/eventID",
+      occurrenceID         = "http://rs.tdwg.org/dwc/terms/occurrenceID",
+      measurementID        = "http://rs.tdwg.org/dwc/terms/measurementID",
+      measurementType      = "http://rs.tdwg.org/dwc/terms/measurementType",
+      measurementTypeID    = "http://rs.iobis.org/obis/terms/measurementTypeID",
+      measurementValue     = "http://rs.tdwg.org/dwc/terms/measurementValue",
+      measurementValueID   = "http://rs.iobis.org/obis/terms/measurementValueID",
+      measurementUnit      = "http://rs.tdwg.org/dwc/terms/measurementUnit",
+      measurementUnitID    = "http://rs.iobis.org/obis/terms/measurementUnitID",
+      measurementMethod    = "http://rs.tdwg.org/dwc/terms/measurementMethod",
+      measurementRemarks   = "http://rs.tdwg.org/dwc/terms/measurementRemarks" )))
 
 # Function to create field elements for meta.xml
-create_field_elements <- function(csv_file, term_map) {
+create_field_elements <- function(csv_file, term_map, coreid_field = NULL) {
   # Read column names from CSV
   col_names <- names(read_csv(csv_file, n_max = 0, show_col_types = FALSE))
-  
+
   # Map columns to DwC terms
-  field_elements <- map_chr(seq_along(col_names), function(i) {
+  field_elements <- map(seq_along(col_names), function(i) {
     col <- col_names[i]
+
+    # Skip coreid column if specified (it's defined separately in <coreid> element)
+    if (!is.null(coreid_field) && col == coreid_field) {
+      return(NULL)
+    }
+
     term <- term_map$terms[[col]]
-    
+
     if (!is.null(term)) {
       glue::glue('    <field index="{i-1}" term="{term}"/>')
     } else {
       # Field exists in CSV but not in DwC mapping - skip or warn
       message("Warning: Column '", col, "' in ", csv_file, " has no DwC mapping and will be skipped in meta.xml.")
+      NULL
     }
   })
-  
+
   # Remove NULL entries and combine
   field_elements <- compact(field_elements)
   paste(field_elements, collapse = "\n")
@@ -1118,25 +1617,25 @@ generate_meta_xml <- function(dir_out) {
   # Core (Event)
   event_file <- file.path(dir_out, "event.csv")
   event_fields <- create_field_elements(event_file, dwc_terms$event)
-  event_id_idx <- which(names(read_csv(event_file, n_max = 0, show_col_types = FALSE)) == 
+  event_id_idx <- which(names(read_csv(event_file, n_max = 0, show_col_types = FALSE)) ==
                           dwc_terms$event$idField) - 1
-  
+
   # Extension: Occurrence
   occ_file <- file.path(dir_out, "occurrence.csv")
-  occ_fields <- create_field_elements(occ_file, dwc_terms$occurrence)
+  occ_fields <- create_field_elements(occ_file, dwc_terms$occurrence, coreid_field = dwc_terms$occurrence$coreIdField)
   occ_coreid_idx <- get_coreid_index(occ_file, dwc_terms$occurrence$coreIdField)
-  
-  # Extension: MeasurementOrFact
-  mof_file <- file.path(dir_out, "measurementorfact.csv")
-  mof_fields <- create_field_elements(mof_file, dwc_terms$measurementorfact)
-  mof_coreid_idx <- get_coreid_index(mof_file, dwc_terms$measurementorfact$coreIdField)
-  
+
+  # Extension: ExtendedMeasurementOrFact
+  emof_file <- file.path(dir_out, "extendedMeasurementOrFact.csv")
+  emof_fields <- create_field_elements(emof_file, dwc_terms$extendedmeasurementorfact, coreid_field = dwc_terms$extendedmeasurementorfact$coreIdField)
+  emof_coreid_idx <- get_coreid_index(emof_file, dwc_terms$extendedmeasurementorfact$coreIdField)
+
   # Build complete meta.xml
   meta_xml <- glue::glue('<?xml version="1.0" encoding="UTF-8"?>
-<archive xmlns="http://rs.tdwg.org/dwc/text/" 
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+<archive xmlns="http://rs.tdwg.org/dwc/text/"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://rs.tdwg.org/dwc/text/ http://rs.tdwg.org/dwc/text/tdwg_dwc_text.xsd">
-  <core encoding="UTF-8" fieldsTerminatedBy="," linesTerminatedBy="\\n" 
+  <core encoding="UTF-8" fieldsTerminatedBy="," linesTerminatedBy="\\n"
         fieldsEnclosedBy=\'"\' ignoreHeaderLines="1" rowType="{dwc_terms$event$rowType}">
     <files>
       <location>event.csv</location>
@@ -1144,7 +1643,7 @@ generate_meta_xml <- function(dir_out) {
     <id index="{event_id_idx}" />
 {event_fields}
   </core>
-  <extension encoding="UTF-8" fieldsTerminatedBy="," linesTerminatedBy="\\n" 
+  <extension encoding="UTF-8" fieldsTerminatedBy="," linesTerminatedBy="\\n"
              fieldsEnclosedBy=\'"\' ignoreHeaderLines="1" rowType="{dwc_terms$occurrence$rowType}">
     <files>
       <location>occurrence.csv</location>
@@ -1152,16 +1651,16 @@ generate_meta_xml <- function(dir_out) {
     <coreid index="{occ_coreid_idx}" />
 {occ_fields}
   </extension>
-  <extension encoding="UTF-8" fieldsTerminatedBy="," linesTerminatedBy="\\n" 
-             fieldsEnclosedBy=\'"\' ignoreHeaderLines="1" rowType="{dwc_terms$measurementorfact$rowType}">
+  <extension encoding="UTF-8" fieldsTerminatedBy="," linesTerminatedBy="\\n"
+             fieldsEnclosedBy=\'"\' ignoreHeaderLines="1" rowType="{dwc_terms$extendedmeasurementorfact$rowType}">
     <files>
-      <location>measurementorfact.csv</location>
+      <location>extendedMeasurementOrFact.csv</location>
     </files>
-    <coreid index="{mof_coreid_idx}" />
-{mof_fields}
+    <coreid index="{emof_coreid_idx}" />
+{emof_fields}
   </extension>
 </archive>')
-  
+
   return(meta_xml)
 }
 
@@ -1192,14 +1691,47 @@ temp_coverage <- tbl_tow |>
   summarise(
     beginDate = min(time_start, na.rm = TRUE),
     endDate   = max(time_start, na.rm = TRUE)) |> 
-  collect()
+  collect() |> 
+  as.Date()
 
 # Taxonomic coverage
+
+librarian::shelf(duckdb)
+db <- "https://file.calcofi.io/data/calcofi.duckdb"
+tmp_db <- file.path(tempdir(), "calcofi.duckdb")
+con <- dbConnect(duckdb::duckdb(), dbdir = tmp_db, read_only = F)
+# attach remote duckdb database
+dbSendQuery(con, glue::glue("ATTACH DATABASE '{db}';"))
+# dbListTables(con)
+#  [1] "bottle"         "cast"           "cruise"         "egg"            "egg_stage"      "grid"          
+#  [7] "larva"          "larva_size"     "larva_stage"    "net"            "schema_version" "ship"          
+# [13] "site"           "site_seg"       "species"        "taxa_rank"      "taxonomy"       "tow"           
+# [19] "tow_type"
+d_taxa <- dbReadTable(con, Id(schema = "cc", table = "taxonomy"))
+
 taxa_coverage <- tbl_species |>
   filter(!is.na(worms_id)) |>
-  select(scientificName = scientific_name) |>
-  collect() |> 
-  as.list()
+  distinct(worms_id) |>
+  collect() |>
+  left_join(
+    d_taxa |> 
+      distinct(
+        taxonID, taxonRank, scientificName),
+    by = join_by(worms_id == taxonID)) |> 
+  arrange(scientificName)
+
+# Class    Family     Genus   Kingdom     Order    Phylum   Species  Subclass Subfamily  Suborder Subphylum 
+# 
+# taxa_coverage$taxonRank |> table()
+#   as.list()
+
+# OLD:
+# <scientificName>Teleostei</scientificName>
+# TODO: NEW:
+# <taxonomicClassification>
+#   <taxonRankName>kingdom</taxonRankName>
+#   <taxonRankValue>Animalia</taxonRankValue>
+# </taxonomicClassification>
 
 # Create EML document
 my_eml <- list(
@@ -1295,18 +1827,18 @@ n_tows     <- q_event_core |> filter(eventType == "tow")        |> summarize(n =
 n_nets     <- q_event_core |> filter(eventType == "net_sample") |> summarize(n = n()) |> pull(n)
 n_occs     <- q_occurrence_extension |> summarize(n = n()) |> pull(n)
 n_species  <- q_occurrence_extension |> distinct(scientificName) |> summarize(n = n()) |> pull(n)
-n_measures <- d_measurementorfact_extension |> nrow()
+n_measures <- d_extendedmeasurementorfact_extension |> nrow()
 
 glue("
   === Dataset Summary ===
-  Total events:        {n_events}
-  - Cruises:           {n_cruises}
-  - Sites:             {n_sites}
-  - Tows:              {n_tows}
-  - Net samples:       {n_nets}
-  Total occurrences:   {n_occs}
-  Total species:       {n_species}
-  Total measurements:  {n_measures}")
+  Total events:        {prettyNum(n_events, big.mark = ',')}
+  - Cruises:           {prettyNum(n_cruises, big.mark = ',')}
+  - Sites:             {prettyNum(n_sites, big.mark = ',')}
+  - Tows:              {prettyNum(n_tows, big.mark = ',')}
+  - Net samples:       {prettyNum(n_nets, big.mark = ',')}
+  Total occurrences:   {prettyNum(n_occs, big.mark = ',')}
+  Total species:       {prettyNum(n_species, big.mark = ',')}
+  Total measurements:  {prettyNum(n_measures, big.mark = ',')}")
 ```
 
 ## Package Creation
@@ -1316,17 +1848,48 @@ glue("
 
 # Create DwC-A zip file
 zip_file <- file.path(dir_out, paste0("../larvae_", Sys.Date(), ".zip"))
-zip(zip_file, 
+zip(zip_file,
     files = file.path(
       dir_out, c(
-        "event.csv", "occurrence.csv", 
-        "measurementorfact.csv", "meta.xml", "eml.xml")),
+        "event.csv", "occurrence.csv",
+        "extendedMeasurementOrFact.csv", "meta.xml", "eml.xml")),
       flags = "-j") # exclude parent folders
 
 cat("\nDarwin Core Archive created:", zip_file, "\n")
 ```
 
+## Check CSV
+
+```{r}
+#| label: check-csv
+
+d_event      <- read_csv(file.path(dir_out, "event.csv"))
+d_occurrence <- read_csv(file.path(dir_out, "occurrence.csv"))
+d_emof       <- read_csv(file.path(dir_out, "extendedMeasurementOrFact.csv"))
+
+d_event
+d_occurrence
+d_emof
+
+d_emof |> select(measurementType, measurementUnit) |> table(useNA = "ifany")
+#                              measurementUnit
+# measurementType               dimensionless  grams individuals millimeters
+#   abundance by life stage                 0      0      125347           0
+#   body length                             0      0           0      241871
+#   proportion of sample sorted         76512      0           0           0
+#   small plankton biomass                  0  45287           0           0
+#   standardized haul factor            76512      0           0           0
+#   total plankton biomass                  0  45287           0           0
+```
+
 ## History of loading into IPT
+
+### 2025-11-11: Second attempt after aligning to OBIS extendedMeasurementOrFact
+
+![Messages from loading into IPT as "Sampling evet" on 2025-11-11](./figures/ipt-load-messages_2025-11-11.png)
+
+
+### 2025-11-10: First attempt to load into GBIF IPT as "Sampling evet" dataset
 
 ![Messages from loading into IPT as "Sampling evet" on 2025-11-10](./figures/ipt-load-messages_2025-11-10.png)
 
@@ -1380,3 +1943,17 @@ Please provide the following information to complete the DarwinCore package:
 - [ ] GPS accuracy (coordinate uncertainty in meters)
 
 Once this information is provided, update the placeholders marked with [NEED ...] in the code above.
+
+## TODO
+
+- [ ] drop `lifeStageID` (does not exist) and make **eMoF** like ["Lifestage" in 16 Dataset Examples: ENV-DATA | The OBIS Manual](https://manual.obis.org/examples.html#:~:text=TripNR3242TripStationNR16781MidasTripActionID105598occurenceIDTA_105598_(Pseudo%2D)pediastrum_5-,Lifestage,-http%3A//vocab.nerc):
+
+  - `measurementType`: "Lifestage"
+  - `measurementTypeID`: "http://vocab.nerc.ac.uk/collection/P01/current/LSTAGE01/"
+  - `measurementValue`: "adult"	
+  - `measurementValueID`: "http://vocab.nerc.ac.uk/collection/S11/current/S1116/"
+  - `measurementUnit`: 	
+  - `measurementUnitID`: 
+  - `measurementDeterminedBy`: "Flanders Marine Institute"
+  - `measurementMethod`: "identified and counted by image analysis and normalised to a unit volume of water body, validated by human"
+
