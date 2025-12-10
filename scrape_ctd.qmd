@@ -100,8 +100,8 @@ if (file_exists(db_path) & db_redo) {
 }
 
 # setup duckdb with spatial extension
-# dbDisconnect(con, shutdown = TRUE)
-con <- dbConnect(duckdb::duckdb(), dbdir = db_path)
+# dbDisconnect(con, shutdown = TRUE); duckdb_shutdown(duckdb()); rm(con)
+con <- dbConnect(duckdb::duckdb(read_only = F), dbdir = db_path)
 dbExecute(con, "INSTALL spatial;")
 dbExecute(con, "LOAD spatial;")
 ```
@@ -148,7 +148,7 @@ d_zips <- read_html(url) |>
 
 # stop if other detected
 if (any(d_zips$zip_type == "unknown")) {
-  stop("Unknown data_type detected in file_zips")
+  stop("Unknown zip_type detected in file_zips")
 }
 
 # show summary (all files)
@@ -270,7 +270,7 @@ d_csv <- tibble(
       group = 1
     ),
     # classify data type from parent directory
-    data_type = case_when(
+    data_stage = case_when(
       str_detect(path_unzip, "Final.*db[_|-]csv") ~ "final",
       str_detect(path_unzip, "Prelim.*db[_|-]csv") ~ "preliminary",
       # TODO: note these strange exceptions
@@ -290,15 +290,15 @@ d_csv <- tibble(
     ),
     # prioritize: final=1, preliminary=2
     priority = case_when(
-      data_type == "final" ~ 1,
-      data_type == "preliminary" ~ 2,
+      data_stage == "final" ~ 1,
+      data_stage == "preliminary" ~ 2,
       TRUE ~ 3
     )
   ) |>
   relocate(cruise_id, path_unzip) |>
   arrange(cruise_id, path_unzip) |>
   # keep only final and preliminary files
-  filter(data_type %in% c("final", "preliminary"))
+  filter(data_stage %in% c("final", "preliminary"))
 
 # for each cruise, keep only final if available, otherwise preliminary
 d_priority <- d_csv |>
@@ -363,10 +363,8 @@ d_csv <- d_csv |>
     data = map2(path, seq_along(path), \(path, idx) {
       message(glue("Reading {idx}/{nrow(d_csv)}: {basename(path)}"))
 
-      # TODO: detect repeat header rows and skip them
-      # eg line 69 of
-      path = '/Users/bbest/Library/CloudStorage/GoogleDrive-ben@ecoquants.com/My Drive/projects/calcofi/data/calcofi.org/ctd-cast/download/20-0711NH_CTDFinalQC/db-csvs/20-0711_CTDBTL_001-067Dno001b.csv'
-      idx = 1
+      # detect repeat header rows and skip them
+      # eg line 69 of '20-0711NH_CTDFinalQC/db-csvs/20-0711_CTDBTL_001-067Dno001b.csv'
 
       # Read all lines to detect repeat headers
       all_lines <- read_lines(path)
@@ -643,7 +641,7 @@ d_bind <- d_bind |>
         date_time_utc, # eg "23-Jan-1998 17:50:44"  "3-JAN-1998 17:50:44"
         "^\\d{1,2}-[A-z]{3}-\\d{4} \\d{1,2}:\\d{1,2}:\\d{1,2}$"
       ),
-      dmy_hms(date_time_utc, tz = "UTC"),
+      suppressWarnings(dmy_hms(date_time_utc, tz = "UTC")),
       dtime_utc
     ),
     dtime_utc = if_else(
@@ -651,25 +649,13 @@ d_bind <- d_bind |>
         date_time_utc, # eg "01/01/2015 17:12", "1/01/2015 17:12", "1/1/2015 17:12"
         "^\\d{1,2}/\\d{1,2}/\\d{4} \\d{1,2}:\\d{1,2}$"
       ),
-      mdy_hm(date_time_utc, tz = "UTC"),
+      suppressWarnings(mdy_hm(date_time_utc, tz = "UTC")),
       dtime_utc
     )
   ) |>
   relocate(dtime_utc, .before = date_time_utc) |>
   # select(-date_time_utc, -date_time_pst) |>
   arrange(dtime_utc, depth)
-
-sum(is.na(d_bind$dtime_utc)) # 7,219
-
-d_bind |> filter(is.na(dtime_utc)) |> select(date_time_utc, source_file)
-#   date_time_utc source_file
-#   <chr>         <chr>
-# 1 Date_Time_UTC 20-0711NH_CTDFinalQC/db-csvs/20-0711_CTDBTL_001-067Dno001b.csv
-
-d_bind |>
-  filter(is.na(dtime_utc)) |>
-  select(cruise_id, source_file, date_time_utc) |>
-  View()
 
 stopifnot(all(!is.na(d_bind$dtime_utc)))
 
@@ -697,11 +683,11 @@ d_bind <- d_bind |>
   )
 
 # show first and last 100 rows
-ctd_bound |>
+d_bind |>
   slice(c(1:10, (n() - 9):n())) |>
   datatable(
     caption = glue(
-      "First and last 10 rows of combined CTD data (nrows={format(nrow(ctd_bound), big.mark = ',')})"
+      "First and last 10 rows of combined CTD data (nrows: {format(nrow(d_bind), big.mark = ',')})"
     )
   )
 ```
@@ -748,18 +734,20 @@ References:
 
 ### Check for duplicates
 
-```{r check-dupes}
+```{r}
+#| label: check-dupes
+
 # TODO: look for duplicates by dtime_utc, depth
-d_dupes <- ctd_bound |>
+d_dupes <- d_bind |>
   group_by(dtime_utc, depth) |>
   summarize(n = n(), .groups = "drop") |>
   filter(n > 1) |>
-  arrange(desc(n)) #  547,247 x 3
+  arrange(desc(n)) #  761,429 × 3
 
 # get number of distinct dtime_utc, depth
-n_distinct_dtime_depth <- ctd_bound |>
+n_distinct_dtime_depth <- d_bind |>
   select(dtime_utc, depth) |>
-  n_distinct() # 3,900,792
+  n_distinct() # 5,994,226
 
 d_dupes |>
   slice(c(1:10, (n() - 9):n())) |>
@@ -772,11 +760,13 @@ d_dupes |>
 
 ## Ingest into DuckDB
 
-```{r ingest-duckdb}
-# write to DuckDB
-dbWriteTable(con, "ctd", ctd_bound, overwrite = TRUE)
+```{r}
+#| label: ingest-duckdb
 
-message(glue("Ingested {nrow(ctd_bound)} rows into DuckDB table 'ctd'"))
+# write to DuckDB
+dbWriteTable(con, "ctd", d_bind, overwrite = T)
+
+message(glue("Ingested {nrow(d_bind)} rows into DuckDB table 'ctd'"))
 
 # write point_geom as geometry column
 message(glue(
@@ -789,18 +779,15 @@ dbExecute(
   "CREATE INDEX idx_ctd_point_geom ON ctd USING RTREE(point_geom);"
 )
 
-# show summary statistics
-tbl(con, "ctd") |>
-  count(stage, cast_dir) |>
-  collect()
-
 # disconnect
 dbDisconnect(con, shutdown = TRUE)
 ```
 
 ## Summary
 
-```{r summary}
+```{r}
+#| label: summary-duckdb
+
 # reconnect to show final table structure
 con <- dbConnect(duckdb::duckdb(), dbdir = db_path, read_only = T)
 
@@ -815,12 +802,13 @@ tbl(con, "ctd") |>
 
 # summary by stage and cast direction
 tbl(con, "ctd") |>
-  count(stage, cast_dir) |>
+  count(data_stage, cast_dir) |>
   collect()
+# TODO: why 136,054 rows of cast_dir NA (with final)?
 
 # preview data
 tbl(con, "ctd") |>
-  select(cruise_id, stage, cast_dir, lat_dec, lon_dec) |>
+  # select(cruise_id, stage, cast_dir, lat_dec, lon_dec) |>
   head(20) |>
   collect()
 
@@ -829,7 +817,9 @@ dbDisconnect(con, shutdown = TRUE)
 
 ## Interactive Gantt Chart
 
-```{r gantt-chart}
+```{r}
+#| label: gantt-chart
+
 librarian::shelf(plotly, quiet = T)
 
 # reconnect to database
@@ -839,14 +829,14 @@ con <- dbConnect(duckdb::duckdb(), dbdir = db_path, read_only = T)
 #   summarize(n = n())
 # 210,507
 
-tbl(con, "ctd") |>
-  filter(study == "2301RL") |>
-  distinct(study) |>
-  pull(study) |>
-  sort()
-20 - 2401
-RL_CTDBTL_017 - 033
-U.csv
+# tbl(con, "ctd") |>
+#   filter(study == "2301RL") |>
+#   distinct(study) |>
+#   pull(study) |>
+#   sort()
+# 20 - 2401
+# RL_CTDBTL_017 - 033
+# U.csv
 
 # tbl(con, "ctd") |>
 #   pull(study) |>
@@ -854,39 +844,59 @@ U.csv
 #  9802JD   9804JD
 #  59,005  151,502
 
-# get cruise date spans by study and stage
+# get cruise date spans by cruise and stage
 cruise_spans <- tbl(con, "ctd") |>
-  group_by(study, stage) |>
+  # rename(data_stage = data_type) |> # DEBUG
+  group_by(cruise_id, data_stage) |>
   summarize(
-    begin_date = min(dtime_utc, na.rm = TRUE),
-    end_date = max(dtime_utc, na.rm = TRUE),
+    beg_date = min(dtime_utc, na.rm = TRUE) |> as.Date(),
+    end_date = max(dtime_utc, na.rm = TRUE) |> as.Date(),
     .groups = "drop"
   ) |>
   collect() |>
-  filter(!is.na(begin_date), !is.na(end_date)) |>
+  filter(!is.na(beg_date), !is.na(end_date))
+
+# Split multi-year cruises into separate rows
+cruise_spans <- cruise_spans |>
+  rowwise() |>
   mutate(
-    year = year(begin_date),
-    begin_jday = yday(begin_date),
-    end_jday = yday(end_date),
-    stage_label = if_else(stage == "F", "Final", "Preliminary"),
-    # create hover text
+    years_spanned = list(year(beg_date):year(end_date))
+  ) |>
+  unnest(years_spanned) |>
+  mutate(
+    # Adjust dates for each year segment
+    year = years_spanned,
+    adj_beg_date = if_else(
+      years_spanned == year(beg_date),
+      beg_date,
+      as.Date(paste0(years_spanned, "-01-01"))
+    ),
+    adj_end_date = if_else(
+      years_spanned == year(end_date),
+      end_date,
+      as.Date(paste0(years_spanned, "-12-31"))
+    ),
+    begin_jday = yday(adj_beg_date),
+    end_jday = yday(adj_end_date),
+    stage_label = data_stage,
     hover_text = glue(
-      "Cruise: {study}<br>",
-      "Stage: {stage_label}<br>",
-      "Begin: {format(begin_date, '%Y-%m-%d')}<br>",
+      "Cruise: {cruise_id}<br>",
+      "Stage: {data_stage}<br>",
+      "Begin: {format(beg_date, '%Y-%m-%d')}<br>",
       "End: {format(end_date, '%Y-%m-%d')}<br>",
-      "Duration: {as.numeric(difftime(end_date, begin_date, units = 'days'))} days"
+      "Duration: {as.numeric(difftime(end_date, beg_date, units = 'days'))} days"
     )
   ) |>
-  arrange(begin_date)
+  ungroup() |>
+  arrange(adj_beg_date)
 
 # create color mapping
-colors <- c("Final" = "#23d355ff", "Preliminary" = "#A23B72")
+colors <- c("final" = "#23d355ff", "preliminary" = "#A23B72")
 
 # create interactive gantt chart
 p <- plot_ly()
 
-# add traces for each cruise
+# add traces for each cruise segment
 for (i in 1:nrow(cruise_spans)) {
   row <- cruise_spans[i, ]
 
@@ -914,7 +924,7 @@ p <- p |>
     mode = "lines",
     x = c(NA, NA),
     y = c(NA, NA),
-    line = list(color = colors["Final"], width = 8),
+    line = list(color = colors["final"], width = 8),
     name = "Final",
     showlegend = TRUE
   ) |>
@@ -923,7 +933,7 @@ p <- p |>
     mode = "lines",
     x = c(NA, NA),
     y = c(NA, NA),
-    line = list(color = colors["Preliminary"], width = 8),
+    line = list(color = colors["preliminary"], width = 8),
     name = "Preliminary",
     showlegend = TRUE
   )
@@ -958,5 +968,5 @@ p <- p |>
 p
 
 # disconnect
-dbDisconnect(con, shutdown = TRUE)
+dbDisconnect(con, shutdown = TRUE) # get cruise date spans by cruise and stage
 ```
