@@ -43,23 +43,46 @@ CalCOFI:
 # - [ ] Consider merging larva, larvastage, and larvasize into one occurrence table, since all sharing net_uuid, species_id
 
 librarian::shelf(
-  CalCOFI/calcofi4db, 
-  DBI, dm, dplyr, DT, EML, glue, here, lubridate, purrr, readr, tibble, tidyr, uuid,
-  quiet = T)
+  CalCOFI / calcofi4db,
+  DBI,
+  dm,
+  dplyr,
+  DT,
+  EML,
+  glue,
+  here,
+  lubridate,
+  purrr,
+  readr,
+  tibble,
+  tidyr,
+  uuid,
+  quiet = T
+)
 options(readr.show_col_types = F)
 
 # Dataset metadata - PROMPTS FOR REQUIRED INFORMATION
-dataset_title    <- "CalCOFI Fish Larvae Tows" # Prompt: Enter dataset title
+dataset_title <- "CalCOFI Fish Larvae Tows" # Prompt: Enter dataset title
 dataset_abstract <- "Fish larvae counts and standardized counts for eggs captured in CalCOFI icthyoplankton nets (primarily vertical [Calvet or Pairovet], oblique [bongo or ring nets], and surface tows [Manta nets]) . Surface tows are normally standardized to count per 1,000 m3 strained. Oblique tows are normally standardized to count per 10 m2 of surface sampled."
 dataset_keywords <- c(
-  "atmosphere", "biology", "biosphere", "calcofi", "earth science", "environment", "latitude", "longitude", "ocean", "time") # GCMD Science Keywords (source: https://catalog.data.gov/dataset/calcofi-larvae-counts-positive-tows)
+  "atmosphere",
+  "biology",
+  "biosphere",
+  "calcofi",
+  "earth science",
+  "environment",
+  "latitude",
+  "longitude",
+  "ocean",
+  "time"
+) # GCMD Science Keywords (source: https://catalog.data.gov/dataset/calcofi-larvae-counts-positive-tows)
 # dataset_uuid <- UUIDgenerate() # Or use existing dataset UUID
 
 dir_out <- here("data/darwincore/larvae")
 
 # get database connection
 schema <- "dev"
-con    <- get_db_con(schema)
+con <- get_db_con(schema)
 ```
 
 ## Show Database Tables
@@ -69,15 +92,14 @@ con    <- get_db_con(schema)
 #| fig-cap: "Entity relationship diagram (ERD) of the CalCOFI database. Created using the data models `dm` R package function [`dm_draw()`](https://krlmlr.github.io/dm/reference/dm_draw.html)."
 
 # exclude experimental tables
-tbls <- dbListTables(con) |> 
-  sort() |> 
+tbls <- dbListTables(con) |>
+  sort() |>
   setdiff(
-    c("schema_version",
-      "grid", "site_seg",
-      "bottle", "cast"))
+    c("schema_version", "grid", "site_seg", "bottle", "cast")
+  )
 
 # learn relations from database and draw
-dm <- dm_from_con(con, schema = schema, table_names = tbls, learn_keys  = T)
+dm <- dm_from_con(con, schema = schema, table_names = tbls, learn_keys = T)
 dm_draw(dm, view_type = "all")
 ```
 
@@ -94,10 +116,10 @@ dm_draw(dm, view_type = "all")
 ```{r}
 #| label: egg_stage.stage
 
-tbl(con, "egg_stage") |> 
-  group_by(stage) |> 
-  summarize(n = n()) |> 
-  collect() |> 
+tbl(con, "egg_stage") |>
+  group_by(stage) |>
+  summarize(n = n()) |>
+  collect() |>
   arrange(stage)
 
 #    stage       n
@@ -259,9 +281,9 @@ greater than three-quarters of the length of the yolk sac.
 ```{r}
 #| label: larva_stage.stage
 
-tbl(con, "larva_stage") |> 
-  group_by(stage) |> 
-  summarize(n = n()) |> 
+tbl(con, "larva_stage") |>
+  group_by(stage) |>
+  summarize(n = n()) |>
   collect()
 # 1 FLEX    18882
 # 2 POST    22446
@@ -309,7 +331,7 @@ tbl(con, "larva_stage") |>
 
 ### Lifestage	S11 - BODC Parameter Semantic Model Life Cycle Stages
 
-https://github.com/nvs-vocabs/S11
+https://github.com/nvs-vocszxrabs/S11
 
 A controlled vocabulary for terms used in the BODC parameter semantic model to specify the development stage (life cycle stage) of a biological entity
 
@@ -826,7 +848,7 @@ Custom terms based on S11 vocabulary:
 - Stage 2: "egg, stage 2 of 11 (Moser & Ahlstrom, 1985)"
 - ...
 - Stage 11: "egg, stage 11 of 11 (Moser & Ahlstrom, 1985)"
-- Stage 12-15: "egg, stage {N} of 12 (Moser & Ahlstrom, 1985)" [pending revision]
+- Stage 12-15: "egg, stage {N} of 11 (Moser & Ahlstrom, 1985)" [pending revision]
 
 Base vocabulary: S11/S1110 (egg)
 
@@ -1025,19 +1047,19 @@ First, let's extract all necessary tables from the database:
 #| label: extract-tables
 
 # Get simple lazy table references
-tbl_ship        <- tbl(con, "ship")
-tbl_cruise      <- tbl(con, "cruise")
-tbl_site        <- tbl(con, "site")
-tbl_tow         <- tbl(con, "tow")
-tbl_tow_type    <- tbl(con, "tow_type")
-tbl_net         <- tbl(con, "net")
-tbl_species     <- tbl(con, "species")
+tbl_ship <- tbl(con, "ship")
+tbl_cruise <- tbl(con, "cruise")
+tbl_site <- tbl(con, "site")
+tbl_tow <- tbl(con, "tow")
+tbl_tow_type <- tbl(con, "tow_type")
+tbl_net <- tbl(con, "net")
+tbl_species <- tbl(con, "species")
 # biological observation tables
-tbl_egg         <- tbl(con, "egg")
-tbl_egg_stage   <- tbl(con, "egg_stage")
-tbl_larva       <- tbl(con, "larva")
+tbl_egg <- tbl(con, "egg")
+tbl_egg_stage <- tbl(con, "egg_stage")
+tbl_larva <- tbl(con, "larva")
 tbl_larva_stage <- tbl(con, "larva_stage")
-tbl_larva_size  <- tbl(con, "larva_size")
+tbl_larva_size <- tbl(con, "larva_size")
 ```
 
 ## Create Life Stage Vocabulary Lookup Tables
@@ -1062,11 +1084,12 @@ egg_stage_vocab <- tibble(
     "egg, stage 9 of 11 (Moser & Ahlstrom, 1985)",
     "egg, stage 10 of 11 (Moser & Ahlstrom, 1985)",
     "egg, stage 11 of 11 (Moser & Ahlstrom, 1985)",
-    "egg, stage 12 of 12 (Moser & Ahlstrom, 1985)", # TODO: needs revision
-    "egg, stage 13 of 12 (Moser & Ahlstrom, 1985)", # TODO: needs revision
-    "egg, stage 14 of 12 (Moser & Ahlstrom, 1985)", # TODO: needs revision
-    "egg, stage 15 of 12 (Moser & Ahlstrom, 1985)"  # TODO: needs revision
-  ))
+    "egg, stage 12 of 11 (Moser & Ahlstrom, 1985)", # TODO: needs revision
+    "egg, stage 13 of 11 (Moser & Ahlstrom, 1985)", # TODO: needs revision
+    "egg, stage 14 of 11 (Moser & Ahlstrom, 1985)", # TODO: needs revision
+    "egg, stage 15 of 11 (Moser & Ahlstrom, 1985)" # TODO: needs revision
+  )
+)
 
 # Larva stage vocabulary mapping
 larva_stage_vocab <- tibble(
@@ -1077,22 +1100,30 @@ larva_stage_vocab <- tibble(
     "larva, flexion",
     "larva, postflexion",
     "larva, transformation"
-  ))
+  )
+)
 
 # P06 Measurement Unit vocabulary (NERC)
 measurement_unit_vocab <- tibble(
   measurementUnit = c(
-    "individuals", "millimeters", "dimensionless", "cubic meters",
-    "grams", "proportion", "m^3"),
+    "individuals",
+    "millimeters",
+    "dimensionless",
+    "cubic meters",
+    "grams",
+    "proportion",
+    "m^3"
+  ),
   measurementUnitID = c(
     "http://vocab.nerc.ac.uk/collection/P06/current/UUUU/",
     "http://vocab.nerc.ac.uk/collection/P06/current/UXMM/",
     "http://vocab.nerc.ac.uk/collection/P06/current/UUUU/",
     "http://vocab.nerc.ac.uk/collection/P06/current/MCUB/",
     "http://vocab.nerc.ac.uk/collection/P06/current/UGRM/",
-    "http://vocab.nerc.ac.uk/collection/P06/current/UUUU/",  # or UPCT?
+    "http://vocab.nerc.ac.uk/collection/P06/current/UUUU/", # or UPCT?
     "http://vocab.nerc.ac.uk/collection/P06/current/MCUB/"
-  ))
+  )
+)
 ```
 
 ## Create Event Hierarchy
@@ -1116,38 +1147,46 @@ Per [3.3.2. Simple nested datasets with Project-level information – Guide for 
 #| label: build-event-hierarchy
 
 # Build complete event hierarchy
-q_events <- tbl_net |> 
-  left_join(tbl_tow,      by = "tow_uuid") |>
+q_events <- tbl_net |>
+  left_join(tbl_tow, by = "tow_uuid") |>
   left_join(tbl_tow_type, by = "tow_type_key") |>
-  left_join(tbl_site,     by = "site_uuid") |>
-  left_join(tbl_cruise,   by = "cruise_uuid") |>
-  left_join(tbl_ship,     by = "ship_key")
+  left_join(tbl_site, by = "site_uuid") |>
+  left_join(tbl_cruise, by = "cruise_uuid") |>
+  left_join(tbl_ship, by = "ship_key")
 
 # Create event core at different levels ----
 
-flds_to_iso8601 <-  function(flds, output = "datetime") {
+flds_to_iso8601 <- function(flds, output = "datetime") {
   # helper function to convert date/time fields to ISO 8601 format
   # per https://dwc.tdwg.org/terms/ eventDate: add 2007-03-01T13:00:00Z/2008-05-11T15:30:00Z (some time within the interval beginning 1 March 2007 at 1pm UTC and before 11 May 2008 at 3:30pm UTC)
-  
-  stopifnot(length(flds) %in% c(1,2))
+
+  stopifnot(length(flds) %in% c(1, 2))
   stopifnot(output %in% c("datetime", "time"))
-  
-  if (length(flds) == 1 & output == "datetime")
-      s <- glue::glue(
-        "to_char({flds}, 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"')")
-  if (length(flds) == 2 & output == "datetime")
-      s <- glue::glue(
-        "to_char({flds[1]}, 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') || '/' || 
-         to_char({flds[2]}, 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"')")
-  
-  if (length(flds) == 1 & output == "time")
+
+  if (length(flds) == 1 & output == "datetime") {
     s <- glue::glue(
-      "to_char({flds}, 'HH24:MI:SS\"Z\"')")
-  if (length(flds) == 2 & output == "time")
+      "to_char({flds}, 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"')"
+    )
+  }
+  if (length(flds) == 2 & output == "datetime") {
+    s <- glue::glue(
+      "to_char({flds[1]}, 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') || '/' || 
+         to_char({flds[2]}, 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"')"
+    )
+  }
+
+  if (length(flds) == 1 & output == "time") {
+    s <- glue::glue(
+      "to_char({flds}, 'HH24:MI:SS\"Z\"')"
+    )
+  }
+  if (length(flds) == 2 & output == "time") {
     s <- glue::glue(
       "to_char({flds[1]}, 'HH24:MI:SS\"Z\"') || '/' || 
-       to_char({flds[2]}, 'HH24:MI:SS\"Z\"')")
-  
+       to_char({flds[2]}, 'HH24:MI:SS\"Z\"')"
+    )
+  }
+
   as.character(s)
 }
 
@@ -1159,116 +1198,177 @@ q_cruise_event_date <- q_events |>
   summarize(
     dtime_min = min(time_start, na.rm = T),
     dtime_max = max(time_start, na.rm = T),
-    .groups = "drop") |>
+    .groups = "drop"
+  ) |>
   mutate(
-    eventDate = sql(flds_to_iso8601(c("dtime_min", "dtime_max"))) ) |> 
+    eventDate = sql(flds_to_iso8601(c("dtime_min", "dtime_max")))
+  ) |>
   select(cruise_uuid, eventDate)
-    
+
 q_cruise_events <- q_events |>
   distinct(cruise_uuid, ship_name, ship_nodc, date_ym) |>
   mutate(
-    eventID          = cruise_uuid,
+    eventID = cruise_uuid,
     # parentEventID  = NA, # no parent for cruise level; NA generated with union_all
-    eventRemarks     = paste("Cruise on", ship_name),
+    eventRemarks = paste("Cruise on", ship_name),
     samplingProtocol = "Marine plankton survey cruise",
-    sampleSizeValue  = NA_real_,
-    sampleSizeUnit   = NA_character_,
-    habitat          = "marine",
-    eventType        = "cruise") |>
+    sampleSizeValue = NA_real_,
+    sampleSizeUnit = NA_character_,
+    habitat = "marine",
+    eventType = "cruise"
+  ) |>
   left_join(
     q_cruise_event_date,
-    by = "cruise_uuid") |> 
+    by = "cruise_uuid"
+  ) |>
   select(
-    eventID, # parentEventID, 
-    eventType, 
-    eventDate, samplingProtocol, eventRemarks, habitat)
+    eventID, # parentEventID,
+    eventType,
+    eventDate,
+    samplingProtocol,
+    eventRemarks,
+    habitat
+  )
 
 # Site level events
 q_site_events <- q_events |>
-  distinct(site_uuid, cruise_uuid, longitude, latitude, line, station, orderocc) |>
+  distinct(
+    site_uuid,
+    cruise_uuid,
+    longitude,
+    latitude,
+    line,
+    station,
+    orderocc
+  ) |>
   mutate(
-    eventID          = site_uuid,
-    parentEventID    = cruise_uuid,
-    decimalLatitude  = latitude,
+    eventID = site_uuid,
+    parentEventID = cruise_uuid,
+    decimalLatitude = latitude,
     decimalLongitude = longitude,
-    eventRemarks     = paste("CalCOFI station", station, "on line", line),
+    eventRemarks = paste("CalCOFI station", station, "on line", line),
     # per https://proj.org/en/stable/operations/projections/calcofi.html
-    locationID       = paste0(line, "_", station),
-    eventType        = "site",
-    samplingProtocol = "Marine plankton survey station") |> 
+    locationID = paste0(line, "_", station),
+    eventType = "site",
+    samplingProtocol = "Marine plankton survey station"
+  ) |>
   select(
-    eventID, parentEventID, eventType, 
-    samplingProtocol, eventRemarks, decimalLatitude, decimalLongitude, locationID)
+    eventID,
+    parentEventID,
+    eventType,
+    samplingProtocol,
+    eventRemarks,
+    decimalLatitude,
+    decimalLongitude,
+    locationID
+  )
 
 # Tow level events
 q_tow_events <- q_events |>
   distinct(
-    tow_uuid, site_uuid, 
-    tow_number, tow_type_key, tow_type_description = description, 
-    time_start) |>
+    tow_uuid,
+    site_uuid,
+    tow_number,
+    tow_type_key,
+    tow_type_description = description,
+    time_start
+  ) |>
   mutate(
-    eventID          = tow_uuid,
-    parentEventID    = site_uuid,
-    eventDate        = sql(flds_to_iso8601("time_start")),
-    eventRemarks     = paste("Tow", tow_number, "-", tow_type_description),
-    eventType        = "tow",
-    samplingProtocol = paste(tow_type_key, ":", tow_type_description)) |> 
+    eventID = tow_uuid,
+    parentEventID = site_uuid,
+    eventDate = sql(flds_to_iso8601("time_start")),
+    eventRemarks = paste("Tow", tow_number, "-", tow_type_description),
+    eventType = "tow",
+    samplingProtocol = paste(tow_type_key, ":", tow_type_description)
+  ) |>
   select(
-    eventID, parentEventID, eventType,
+    eventID,
+    parentEventID,
+    eventType,
     eventDate,
-    samplingProtocol, eventRemarks)
+    samplingProtocol,
+    eventRemarks
+  )
 
 # Net level events (sampling events)
 q_net_events_allflds <- q_events |>
   distinct(
-    net_uuid, tow_uuid, side, std_haul_factor, vol_sampled_m3, 
-    prop_sorted, smallplankton, totalplankton) |>
+    net_uuid,
+    tow_uuid,
+    side,
+    std_haul_factor,
+    vol_sampled_m3,
+    prop_sorted,
+    smallplankton,
+    totalplankton
+  ) |>
   mutate(
-    eventID          = net_uuid,
-    parentEventID    = tow_uuid,
-    eventRemarks     = paste(
-      "Net sample from side", side, "; only", prop_sorted, "proportion sorted of",
-      vol_sampled_m3, "cubic meters sampled"),
-    eventType        = "net_sample",
+    eventID = net_uuid,
+    parentEventID = tow_uuid,
+    eventRemarks = paste(
+      "Net sample from side",
+      side,
+      "; only",
+      prop_sorted,
+      "proportion sorted of",
+      vol_sampled_m3,
+      "cubic meters sampled"
+    ),
+    eventType = "net_sample",
     samplingProtocol = paste("Plankton net tow -", side, "side"),
-    sampleSizeValue  = vol_sampled_m3,
-    sampleSizeUnit   = "m^3")
-q_net_events <- q_net_events_allflds |> 
+    sampleSizeValue = vol_sampled_m3,
+    sampleSizeUnit = "m^3"
+  )
+q_net_events <- q_net_events_allflds |>
   select(
-    eventID, parentEventID, eventType, 
-    samplingProtocol, eventRemarks, sampleSizeValue, sampleSizeUnit)
+    eventID,
+    parentEventID,
+    eventType,
+    samplingProtocol,
+    eventRemarks,
+    sampleSizeValue,
+    sampleSizeUnit
+  )
 
 # Combine all event levels
 db_version <- tbl(con, "schema_version") |> pull(version)
 dataset_id <- paste0(
-  # "https://github.com/CalCOFI/calcofi4db/releases/tag/v", 
-  "calcofi_db.", db_version,
-  "_larvae.", format(Sys.Date(), "%Y-%m-%d"))
+  # "https://github.com/CalCOFI/calcofi4db/releases/tag/v",
+  "calcofi_db.",
+  db_version,
+  "_larvae.",
+  format(Sys.Date(), "%Y-%m-%d")
+)
 # "calcofi_db.1.1.0_larvae.2025-10-09"
 
 q_event_core <- list(
-  q_cruise_events |> 
+  q_cruise_events |>
     mutate(
-      parentEventID   = sql("NULL::uuid"),
+      parentEventID = sql("NULL::uuid"),
       sampleSizeValue = sql("NULL::numeric"),
-      sampleSizeUnit  = NA_character_),
-  q_site_events |> 
-    mutate(
-      sampleSizeValue = sql("NULL::numeric"),
-      sampleSizeUnit  = NA_character_),
-  q_tow_events |> 
+      sampleSizeUnit = NA_character_
+    ),
+  q_site_events |>
     mutate(
       sampleSizeValue = sql("NULL::numeric"),
-      sampleSizeUnit  = NA_character_),
-  q_net_events) |> 
-    reduce(union_all) |> 
+      sampleSizeUnit = NA_character_
+    ),
+  q_tow_events |>
+    mutate(
+      sampleSizeValue = sql("NULL::numeric"),
+      sampleSizeUnit = NA_character_
+    ),
+  q_net_events
+) |>
+  reduce(union_all) |>
   mutate(
     # basisOfRecord                 = "HumanObservation",
-    geodeticDatum                 = "WGS84",
+    geodeticDatum = "WGS84",
     coordinateUncertaintyInMeters = 1000, # TODO: adjust based on accuracy of GPS/Loran/dead-reckoning over time
-    countryCode                   = "US",
-    waterBody                     = "California Current",  # LME: http://marineregions.org/mrgid/8549
-    datasetID                     = dataset_id)
+    countryCode = "US",
+    waterBody = "California Current", # LME: http://marineregions.org/mrgid/8549
+    datasetID = dataset_id
+  )
 # TODO: datasetID: permalink to this qmd in calcofi4db release?
 ```
 
@@ -1283,55 +1383,72 @@ Now let's combine all biological observations into occurrence records:
 q_egg_occurrences <- tbl_egg |>
   left_join(tbl_species, by = "species_id") |>
   mutate(
-    occurrenceID         = sql("gen_random_uuid()"),
-    eventID              = net_uuid,
-    scientificName       = scientific_name,
-    scientificNameID     = paste0("urn:lsid:marinespecies.org:taxname:", worms_id),
-    kingdom              = "Animalia",
-    occurrenceStatus     = ifelse(tally > 0, "present", "absent"),
-    organismQuantity     = tally,  # TOTAL count from egg table
+    occurrenceID = sql("gen_random_uuid()"),
+    eventID = net_uuid,
+    scientificName = scientific_name,
+    scientificNameID = paste0("urn:lsid:marinespecies.org:taxname:", worms_id),
+    kingdom = "Animalia",
+    occurrenceStatus = ifelse(tally > 0, "present", "absent"),
+    organismQuantity = tally, # TOTAL count from egg table
     organismQuantityType = "individuals",
-    lifeStage            = "egg",
+    lifeStage = "egg",
     #lifeStage            = "https://vocab.nerc.ac.uk/collection/S11/current/S1122/",
     # lifeStageID          = "http://vocab.nerc.ac.uk/collection/S11/current/S1110/",
-    preparations         = "egg sample",
-    basisOfRecord        = "HumanObservation") |>
+    preparations = "egg sample",
+    basisOfRecord = "HumanObservation"
+  ) |>
   select(
-    occurrenceID, eventID,
+    occurrenceID,
+    eventID,
     species_id,
-    scientificName, scientificNameID,
-    kingdom, occurrenceStatus, organismQuantity, organismQuantityType,
-    lifeStage, # lifeStageID, 
-    preparations, basisOfRecord)
+    scientificName,
+    scientificNameID,
+    kingdom,
+    occurrenceStatus,
+    organismQuantity,
+    organismQuantityType,
+    lifeStage, # lifeStageID,
+    preparations,
+    basisOfRecord
+  )
 
 # Create consolidated larva occurrences (one per species per net)
 q_larva_occurrences <- tbl_larva |>
   left_join(tbl_species, by = "species_id") |>
   mutate(
-    occurrenceID         = sql("gen_random_uuid()"),
-    eventID              = net_uuid,
-    scientificName       = scientific_name,
-    scientificNameID     = paste0("urn:lsid:marinespecies.org:taxname:", worms_id),
-    kingdom              = "Animalia",
-    occurrenceStatus     = ifelse(tally > 0, "present", "absent"),
-    organismQuantity     = tally,  # TOTAL count from larva table
+    occurrenceID = sql("gen_random_uuid()"),
+    eventID = net_uuid,
+    scientificName = scientific_name,
+    scientificNameID = paste0("urn:lsid:marinespecies.org:taxname:", worms_id),
+    kingdom = "Animalia",
+    occurrenceStatus = ifelse(tally > 0, "present", "absent"),
+    organismQuantity = tally, # TOTAL count from larva table
     organismQuantityType = "individuals",
-    lifeStage            = "larva",
+    lifeStage = "larva",
     # lifeStageID          = "http://vocab.nerc.ac.uk/collection/S11/current/S1133/",
-    preparations         = "larva sample",
-    basisOfRecord        = "HumanObservation") |>
+    preparations = "larva sample",
+    basisOfRecord = "HumanObservation"
+  ) |>
   select(
-    occurrenceID, eventID,
+    occurrenceID,
+    eventID,
     species_id,
-    scientificName, scientificNameID,
-    kingdom, occurrenceStatus, organismQuantity, organismQuantityType,
-    lifeStage, # lifeStageID, 
-    preparations, basisOfRecord)
+    scientificName,
+    scientificNameID,
+    kingdom,
+    occurrenceStatus,
+    organismQuantity,
+    organismQuantityType,
+    lifeStage, # lifeStageID,
+    preparations,
+    basisOfRecord
+  )
 
 # Combine egg and larva occurrences
 q_occurrence_extension <- list(
   q_egg_occurrences,
-  q_larva_occurrences) |>
+  q_larva_occurrences
+) |>
   reduce(union_all) |>
   # Add additional required/recommended fields
   mutate(
@@ -1339,14 +1456,23 @@ q_occurrence_extension <- list(
     # identifiedBy = "[NEED IDENTIFIER NAME]", # Prompt: Add taxonomist name
     # dateIdentified = "[NEED IDENTIFICATION DATE]", # Prompt: Add identification date
     # identificationReferences = "[NEED REFERENCES]", # Prompt: Add identification guides used
-    modified = sql("CURRENT_DATE")) |>
+    modified = sql("CURRENT_DATE")
+  ) |>
   # Remove species_id (internal field used only for joins)
   select(
-    occurrenceID, eventID,
-    scientificName, scientificNameID,
-    kingdom, occurrenceStatus, organismQuantity, organismQuantityType,
-    lifeStage, # lifeStageID, 
-    preparations, basisOfRecord, modified)
+    occurrenceID,
+    eventID,
+    scientificName,
+    scientificNameID,
+    kingdom,
+    occurrenceStatus,
+    organismQuantity,
+    organismQuantityType,
+    lifeStage, # lifeStageID,
+    preparations,
+    basisOfRecord,
+    modified
+  )
 ```
 
 ## Create ExtendedMeasurementOrFact Extension
@@ -1363,128 +1489,205 @@ Create eMoF records for three types of measurements:
 d_sample_measurements <- q_net_events_allflds |>
   select(
     eventID,
-    std_haul_factor, prop_sorted, smallplankton, totalplankton) |>  # vol_sampled_m3 moved to Event core
+    std_haul_factor,
+    prop_sorted,
+    smallplankton,
+    totalplankton
+  ) |> # vol_sampled_m3 moved to Event core
   collect() |>
   pivot_longer(
     cols = c(std_haul_factor, prop_sorted, smallplankton, totalplankton),
-    names_to  = "meas_type",
-    values_to = "measurementValue") |>
+    names_to = "meas_type",
+    values_to = "measurementValue"
+  ) |>
   filter(!is.na(measurementValue)) |>
   mutate(
-    measurementID      = UUIDgenerate(n = n()),
-    occurrenceID       = NA_character_,
-    measurementType    = case_when(
+    measurementID = UUIDgenerate(n = n()),
+    occurrenceID = NA_character_,
+    measurementType = case_when(
       meas_type == "std_haul_factor" ~ "standardized haul factor",
-      meas_type == "prop_sorted"     ~ "proportion of sample sorted",
-      meas_type == "smallplankton"   ~ "small plankton biomass",
-      meas_type == "totalplankton"   ~ "total plankton biomass"),
-    measurementTypeID  = case_when(
-      meas_type == "std_haul_factor" ~ NA_character_,  # TODO: search P01 for standardization factor
-      meas_type == "prop_sorted"     ~ NA_character_,  # TODO: search P01 for subsample fraction
-      meas_type == "smallplankton"   ~ NA_character_,  # TODO: search P01 for zooplankton biomass
-      meas_type == "totalplankton"   ~ NA_character_), # TODO: search P01 for zooplankton biomass
-    measurementUnit    = case_when(
+      meas_type == "prop_sorted" ~ "proportion of sample sorted",
+      meas_type == "smallplankton" ~ "small plankton biomass",
+      meas_type == "totalplankton" ~ "total plankton biomass"
+    ),
+    measurementTypeID = case_when(
+      meas_type == "std_haul_factor" ~ NA_character_, # TODO: search P01 for standardization factor
+      meas_type == "prop_sorted" ~ NA_character_, # TODO: search P01 for subsample fraction
+      meas_type == "smallplankton" ~ NA_character_, # TODO: search P01 for zooplankton biomass
+      meas_type == "totalplankton" ~ NA_character_
+    ), # TODO: search P01 for zooplankton biomass
+    measurementUnit = case_when(
       meas_type == "std_haul_factor" ~ "dimensionless",
-      meas_type == "prop_sorted"     ~ "dimensionless",
-      meas_type %in% c("smallplankton", "totalplankton") ~ "grams"),
-    measurementMethod  = "https://oceanview.pfeg.noaa.gov/CalCOFI/calcofi_info.html",
+      meas_type == "prop_sorted" ~ "dimensionless",
+      meas_type %in% c("smallplankton", "totalplankton") ~ "grams"
+    ),
+    measurementMethod = "https://oceanview.pfeg.noaa.gov/CalCOFI/calcofi_info.html",
     measurementRemarks = case_when(
-      meas_type == "std_haul_factor" ~ "Standardization factor accounting for water filtered; abundances expressed as per 10 m² (Smith 1977)",
-      meas_type == "prop_sorted"     ~ "Fraction of total sample examined",
-      TRUE ~ NA_character_)) |>
+      meas_type ==
+        "std_haul_factor" ~ "Standardization factor accounting for water filtered; abundances expressed as per 10 m² (Smith 1977)",
+      meas_type == "prop_sorted" ~ "Fraction of total sample examined",
+      TRUE ~ NA_character_
+    )
+  ) |>
   left_join(measurement_unit_vocab, by = "measurementUnit") |>
   select(
-    eventID, occurrenceID, measurementID,
-    measurementType, measurementTypeID, measurementValue,
-    measurementUnit, measurementUnitID, measurementMethod, measurementRemarks)
+    eventID,
+    occurrenceID,
+    measurementID,
+    measurementType,
+    measurementTypeID,
+    measurementValue,
+    measurementUnit,
+    measurementUnitID,
+    measurementMethod,
+    measurementRemarks
+  )
 
 # 2. Stage-specific abundance (eventID = NA, occurrenceID) ----
 
 # Egg stage abundances - need to join with egg occurrences to get occurrenceID
 d_egg_stage_abundance <- tbl_egg_stage |>
   left_join(
-    egg_stage_vocab |> 
-      copy_to(con, df = _, name = "egg_stage_vocab_tmp", temporary = TRUE, overwrite = T), by = "stage") |>
+    egg_stage_vocab |>
+      copy_to(
+        con,
+        df = _,
+        name = "egg_stage_vocab_tmp",
+        temporary = TRUE,
+        overwrite = T
+      ),
+    by = "stage"
+  ) |>
   collect() |>
   left_join(
-    q_egg_occurrences |> collect() |> select(net_uuid = eventID, species_id, occurrenceID),
-    by = c("net_uuid", "species_id")) |>
+    q_egg_occurrences |>
+      collect() |>
+      select(net_uuid = eventID, species_id, occurrenceID),
+    by = c("net_uuid", "species_id")
+  ) |>
   mutate(
-    eventID            = NA_character_,
-    measurementID      = UUIDgenerate(n = n()),
-    measurementType    = "abundance by life stage",
-    measurementTypeID  = NA_character_,  # TODO: search P01 for "abundance" + "development stage"
-    measurementValue   = tally,
-    measurementValueID = NA_character_,  # Could reference custom vocabulary for egg stages
-    measurementUnit    = "individuals",
-    measurementMethod  = "https://oceanview.pfeg.noaa.gov/CalCOFI/calcofi_info.html",
-    measurementRemarks = stage_description) |>
+    eventID = NA_character_,
+    measurementID = UUIDgenerate(n = n()),
+    measurementType = "abundance by life stage",
+    measurementTypeID = NA_character_, # TODO: search P01 for "abundance" + "development stage"
+    measurementValue = tally,
+    measurementValueID = NA_character_, # Could reference custom vocabulary for egg stages
+    measurementUnit = "individuals",
+    measurementMethod = "https://oceanview.pfeg.noaa.gov/CalCOFI/calcofi_info.html",
+    measurementRemarks = stage_description
+  ) |>
   left_join(measurement_unit_vocab, by = "measurementUnit") |>
   select(
-    eventID, occurrenceID, measurementID,
-    measurementType, measurementTypeID, measurementValue, measurementValueID,
-    #measurementUnit, measurementUnitID = measurementUnitID.y, measurementMethod, 
-    measurementUnit, measurementUnitID, measurementMethod, measurementRemarks)
+    eventID,
+    occurrenceID,
+    measurementID,
+    measurementType,
+    measurementTypeID,
+    measurementValue,
+    measurementValueID,
+    #measurementUnit, measurementUnitID = measurementUnitID.y, measurementMethod,
+    measurementUnit,
+    measurementUnitID,
+    measurementMethod,
+    measurementRemarks
+  )
 
 # Larva stage abundances - need to join with larva occurrences to get occurrenceID
 d_larva_stage_abundance <- tbl_larva_stage |>
-  left_join(larva_stage_vocab |> copy_to(con, df = _, name = "larva_stage_vocab_tmp", temporary = TRUE, overwrite = T), by = "stage") |>
+  left_join(
+    larva_stage_vocab |>
+      copy_to(
+        con,
+        df = _,
+        name = "larva_stage_vocab_tmp",
+        temporary = TRUE,
+        overwrite = T
+      ),
+    by = "stage"
+  ) |>
   collect() |>
   left_join(
-    q_larva_occurrences |> collect() |> select(net_uuid = eventID, species_id, occurrenceID),
-    by = c("net_uuid", "species_id")) |>
+    q_larva_occurrences |>
+      collect() |>
+      select(net_uuid = eventID, species_id, occurrenceID),
+    by = c("net_uuid", "species_id")
+  ) |>
   mutate(
-    eventID            = NA_character_,
-    measurementID      = UUIDgenerate(n = n()),
-    measurementType    = "abundance by life stage",
-    measurementTypeID  = NA_character_,  # TODO: search P01 for "abundance" + "development stage"
-    measurementValue   = tally,
-    measurementValueID = NA_character_,  # Could reference custom vocabulary for larva stages
-    measurementUnit    = "individuals",
-    measurementMethod  = "https://oceanview.pfeg.noaa.gov/CalCOFI/calcofi_info.html",
-    measurementRemarks = stage_description) |>
+    eventID = NA_character_,
+    measurementID = UUIDgenerate(n = n()),
+    measurementType = "abundance by life stage",
+    measurementTypeID = NA_character_, # TODO: search P01 for "abundance" + "development stage"
+    measurementValue = tally,
+    measurementValueID = NA_character_, # Could reference custom vocabulary for larva stages
+    measurementUnit = "individuals",
+    measurementMethod = "https://oceanview.pfeg.noaa.gov/CalCOFI/calcofi_info.html",
+    measurementRemarks = stage_description
+  ) |>
   left_join(measurement_unit_vocab, by = "measurementUnit") |>
   select(
-    eventID, occurrenceID, measurementID,
-    measurementType, measurementTypeID, measurementValue, measurementValueID,
-    measurementUnit, measurementUnitID, measurementMethod, measurementRemarks)
+    eventID,
+    occurrenceID,
+    measurementID,
+    measurementType,
+    measurementTypeID,
+    measurementValue,
+    measurementValueID,
+    measurementUnit,
+    measurementUnitID,
+    measurementMethod,
+    measurementRemarks
+  )
 
 # 3. Body length measurements (eventID = NA, occurrenceID) ----
 d_body_length <- tbl_larva_size |>
   collect() |>
   left_join(
-    q_larva_occurrences |> collect() |> select(net_uuid = eventID, species_id, occurrenceID),
-    by = c("net_uuid", "species_id")) |>
+    q_larva_occurrences |>
+      collect() |>
+      select(net_uuid = eventID, species_id, occurrenceID),
+    by = c("net_uuid", "species_id")
+  ) |>
   filter(!is.na(length_mm)) |>
   mutate(
-    eventID            = NA_character_,
-    measurementID      = UUIDgenerate(n = n()),
-    measurementType    = "body length",
-    measurementTypeID  = NA_character_,  # TODO: search P01 for fish larvae body length (e.g., OBSINDLX)
-    measurementValue   = length_mm,
+    eventID = NA_character_,
+    measurementID = UUIDgenerate(n = n()),
+    measurementType = "body length",
+    measurementTypeID = NA_character_, # TODO: search P01 for fish larvae body length (e.g., OBSINDLX)
+    measurementValue = length_mm,
     measurementValueID = NA_character_,
-    measurementUnit    = "millimeters",
-    measurementMethod  = "https://oceanview.pfeg.noaa.gov/CalCOFI/calcofi_info.html",
-    measurementRemarks = paste0("Count: ", tally, "; Total length measurement")) |>
+    measurementUnit = "millimeters",
+    measurementMethod = "https://oceanview.pfeg.noaa.gov/CalCOFI/calcofi_info.html",
+    measurementRemarks = paste0("Count: ", tally, "; Total length measurement")
+  ) |>
   left_join(measurement_unit_vocab, by = "measurementUnit") |>
   select(
-    eventID, occurrenceID, measurementID,
-    measurementType, measurementTypeID, measurementValue, measurementValueID,
-    measurementUnit, measurementUnitID, measurementMethod, measurementRemarks)
+    eventID,
+    occurrenceID,
+    measurementID,
+    measurementType,
+    measurementTypeID,
+    measurementValue,
+    measurementValueID,
+    measurementUnit,
+    measurementUnitID,
+    measurementMethod,
+    measurementRemarks
+  )
 
 # Combine all eMoF records ----
 d_extendedmeasurementorfact_extension <- bind_rows(
   d_sample_measurements,
   d_egg_stage_abundance,
   d_larva_stage_abundance,
-  d_body_length)
+  d_body_length
+)
 
 # table(is.na(d_extendedmeasurementorfact_extension$occurrenceID))
-#   FALSE    TRUE 
+#   FALSE    TRUE
 # 367,218 243,598
 #
 # table(is.na(d_extendedmeasurementorfact_extension$eventID))
-#   FALSE    TRUE 
+#   FALSE    TRUE
 # 243,598 367,218
 
 ```
@@ -1498,9 +1701,15 @@ d_extendedmeasurementorfact_extension <- bind_rows(
 dir.create(dir_out, showWarnings = F)
 
 # Write core and extension files
-write_csv(q_event_core           |> collect(), file.path(dir_out, "event.csv"))
-write_csv(q_occurrence_extension |> collect(), file.path(dir_out, "occurrence.csv"))
-write_csv(d_extendedmeasurementorfact_extension, file.path(dir_out, "extendedMeasurementOrFact.csv"))
+write_csv(q_event_core |> collect(), file.path(dir_out, "event.csv"))
+write_csv(
+  q_occurrence_extension |> collect(),
+  file.path(dir_out, "occurrence.csv")
+)
+write_csv(
+  d_extendedmeasurementorfact_extension,
+  file.path(dir_out, "extendedMeasurementOrFact.csv")
+)
 ```
 
 ## Create meta.xml programmatically by cross-walking CSV fields to DwC terms
@@ -1513,61 +1722,67 @@ dwc_terms <- list(
   event = list(
     rowType = "http://rs.tdwg.org/dwc/terms/Event",
     idField = "eventID",
-    terms   = c(
-      eventID                       = "http://rs.tdwg.org/dwc/terms/eventID",
-      parentEventID                 = "http://rs.tdwg.org/dwc/terms/parentEventID",
-      eventType                     = "http://rs.tdwg.org/dwc/terms/eventType",
-      eventDate                     = "http://rs.tdwg.org/dwc/terms/eventDate",
-      eventTime                     = "http://rs.tdwg.org/dwc/terms/eventTime",
-      samplingProtocol              = "http://rs.tdwg.org/dwc/terms/samplingProtocol",
-      sampleSizeValue               = "http://rs.tdwg.org/dwc/terms/sampleSizeValue",
-      sampleSizeUnit                = "http://rs.tdwg.org/dwc/terms/sampleSizeUnit",
-      eventRemarks                  = "http://rs.tdwg.org/dwc/terms/eventRemarks",
-      habitat                       = "http://rs.tdwg.org/dwc/terms/habitat",
-      decimalLatitude               = "http://rs.tdwg.org/dwc/terms/decimalLatitude",
-      decimalLongitude              = "http://rs.tdwg.org/dwc/terms/decimalLongitude",
-      geodeticDatum                 = "http://rs.tdwg.org/dwc/terms/geodeticDatum",
+    terms = c(
+      eventID = "http://rs.tdwg.org/dwc/terms/eventID",
+      parentEventID = "http://rs.tdwg.org/dwc/terms/parentEventID",
+      eventType = "http://rs.tdwg.org/dwc/terms/eventType",
+      eventDate = "http://rs.tdwg.org/dwc/terms/eventDate",
+      eventTime = "http://rs.tdwg.org/dwc/terms/eventTime",
+      samplingProtocol = "http://rs.tdwg.org/dwc/terms/samplingProtocol",
+      sampleSizeValue = "http://rs.tdwg.org/dwc/terms/sampleSizeValue",
+      sampleSizeUnit = "http://rs.tdwg.org/dwc/terms/sampleSizeUnit",
+      eventRemarks = "http://rs.tdwg.org/dwc/terms/eventRemarks",
+      habitat = "http://rs.tdwg.org/dwc/terms/habitat",
+      decimalLatitude = "http://rs.tdwg.org/dwc/terms/decimalLatitude",
+      decimalLongitude = "http://rs.tdwg.org/dwc/terms/decimalLongitude",
+      geodeticDatum = "http://rs.tdwg.org/dwc/terms/geodeticDatum",
       coordinateUncertaintyInMeters = "http://rs.tdwg.org/dwc/terms/coordinateUncertaintyInMeters",
-      locationID                    = "http://rs.tdwg.org/dwc/terms/locationID",
-      countryCode                   = "http://rs.tdwg.org/dwc/terms/countryCode",
-      waterBody                     = "http://rs.tdwg.org/dwc/terms/waterBody",
-      datasetID                     = "http://rs.tdwg.org/dwc/terms/datasetID"
-      # basisOfRecord                 = "http://rs.tdwg.org/dwc/terms/basisOfRecord" 
-      )),
+      locationID = "http://rs.tdwg.org/dwc/terms/locationID",
+      countryCode = "http://rs.tdwg.org/dwc/terms/countryCode",
+      waterBody = "http://rs.tdwg.org/dwc/terms/waterBody",
+      datasetID = "http://rs.tdwg.org/dwc/terms/datasetID"
+      # basisOfRecord                 = "http://rs.tdwg.org/dwc/terms/basisOfRecord"
+    )
+  ),
   occurrence = list(
-    rowType     = "http://rs.tdwg.org/dwc/terms/Occurrence",
-    idField     = "occurrenceID",
+    rowType = "http://rs.tdwg.org/dwc/terms/Occurrence",
+    idField = "occurrenceID",
     coreIdField = "eventID",
-    terms       = c(
-      occurrenceID         = "http://rs.tdwg.org/dwc/terms/occurrenceID",
-      eventID              = "http://rs.tdwg.org/dwc/terms/eventID",
-      scientificName       = "http://rs.tdwg.org/dwc/terms/scientificName",
-      scientificNameID     = "http://rs.tdwg.org/dwc/terms/scientificNameID",
-      kingdom              = "http://rs.tdwg.org/dwc/terms/kingdom",
-      occurrenceStatus     = "http://rs.tdwg.org/dwc/terms/occurrenceStatus",
-      organismQuantity     = "http://rs.tdwg.org/dwc/terms/organismQuantity",
+    terms = c(
+      occurrenceID = "http://rs.tdwg.org/dwc/terms/occurrenceID",
+      eventID = "http://rs.tdwg.org/dwc/terms/eventID",
+      scientificName = "http://rs.tdwg.org/dwc/terms/scientificName",
+      scientificNameID = "http://rs.tdwg.org/dwc/terms/scientificNameID",
+      kingdom = "http://rs.tdwg.org/dwc/terms/kingdom",
+      occurrenceStatus = "http://rs.tdwg.org/dwc/terms/occurrenceStatus",
+      organismQuantity = "http://rs.tdwg.org/dwc/terms/organismQuantity",
       organismQuantityType = "http://rs.tdwg.org/dwc/terms/organismQuantityType",
-      lifeStage            = "http://rs.tdwg.org/dwc/terms/lifeStage",
+      lifeStage = "http://rs.tdwg.org/dwc/terms/lifeStage",
       # lifeStageID          = "http://rs.tdwg.org/dwc/terms/lifeStageID",
-      preparations         = "http://rs.tdwg.org/dwc/terms/preparations",
-      basisOfRecord        = "http://rs.tdwg.org/dwc/terms/basisOfRecord",
-      modified             = "http://purl.org/dc/terms/modified" )),
+      preparations = "http://rs.tdwg.org/dwc/terms/preparations",
+      basisOfRecord = "http://rs.tdwg.org/dwc/terms/basisOfRecord",
+      modified = "http://purl.org/dc/terms/modified"
+    )
+  ),
   extendedmeasurementorfact = list(
-    rowType     = "http://rs.iobis.org/obis/terms/ExtendedMeasurementOrFact",
-    idField     = "measurementID",
-    coreIdField = "eventID",  # Primary linking field
-    terms       = c(
-      eventID              = "http://rs.tdwg.org/dwc/terms/eventID",
-      occurrenceID         = "http://rs.tdwg.org/dwc/terms/occurrenceID",
-      measurementID        = "http://rs.tdwg.org/dwc/terms/measurementID",
-      measurementType      = "http://rs.tdwg.org/dwc/terms/measurementType",
-      measurementTypeID    = "http://rs.iobis.org/obis/terms/measurementTypeID",
-      measurementValue     = "http://rs.tdwg.org/dwc/terms/measurementValue",
-      measurementValueID   = "http://rs.iobis.org/obis/terms/measurementValueID",
-      measurementUnit      = "http://rs.tdwg.org/dwc/terms/measurementUnit",
-      measurementUnitID    = "http://rs.iobis.org/obis/terms/measurementUnitID",
-      measurementMethod    = "http://rs.tdwg.org/dwc/terms/measurementMethod",
-      measurementRemarks   = "http://rs.tdwg.org/dwc/terms/measurementRemarks" )))
+    rowType = "http://rs.iobis.org/obis/terms/ExtendedMeasurementOrFact",
+    idField = "measurementID",
+    coreIdField = "eventID", # Primary linking field
+    terms = c(
+      eventID = "http://rs.tdwg.org/dwc/terms/eventID",
+      occurrenceID = "http://rs.tdwg.org/dwc/terms/occurrenceID",
+      measurementID = "http://rs.tdwg.org/dwc/terms/measurementID",
+      measurementType = "http://rs.tdwg.org/dwc/terms/measurementType",
+      measurementTypeID = "http://rs.iobis.org/obis/terms/measurementTypeID",
+      measurementValue = "http://rs.tdwg.org/dwc/terms/measurementValue",
+      measurementValueID = "http://rs.iobis.org/obis/terms/measurementValueID",
+      measurementUnit = "http://rs.tdwg.org/dwc/terms/measurementUnit",
+      measurementUnitID = "http://rs.iobis.org/obis/terms/measurementUnitID",
+      measurementMethod = "http://rs.tdwg.org/dwc/terms/measurementMethod",
+      measurementRemarks = "http://rs.tdwg.org/dwc/terms/measurementRemarks"
+    )
+  )
+)
 
 # Function to create field elements for meta.xml
 create_field_elements <- function(csv_file, term_map, coreid_field = NULL) {
@@ -1589,7 +1804,13 @@ create_field_elements <- function(csv_file, term_map, coreid_field = NULL) {
       glue::glue('    <field index="{i-1}" term="{term}"/>')
     } else {
       # Field exists in CSV but not in DwC mapping - skip or warn
-      message("Warning: Column '", col, "' in ", csv_file, " has no DwC mapping and will be skipped in meta.xml.")
+      message(
+        "Warning: Column '",
+        col,
+        "' in ",
+        csv_file,
+        " has no DwC mapping and will be skipped in meta.xml."
+      )
       NULL
     }
   })
@@ -1602,14 +1823,14 @@ create_field_elements <- function(csv_file, term_map, coreid_field = NULL) {
 # Function to determine coreID index
 get_coreid_index <- function(csv_file, coreid_field) {
   col_names <- names(read_csv(csv_file, n_max = 0, show_col_types = FALSE))
-  
+
   # Handle multiple possible coreID fields (eventID or occurrenceID)
   if (length(coreid_field) > 1) {
     # Find which one exists in the CSV
     coreid_field <- intersect(coreid_field, col_names)[1]
   }
-  
-  which(col_names == coreid_field) - 1  # 0-indexed
+
+  which(col_names == coreid_field) - 1 # 0-indexed
 }
 
 # Generate meta.xml content
@@ -1617,21 +1838,36 @@ generate_meta_xml <- function(dir_out) {
   # Core (Event)
   event_file <- file.path(dir_out, "event.csv")
   event_fields <- create_field_elements(event_file, dwc_terms$event)
-  event_id_idx <- which(names(read_csv(event_file, n_max = 0, show_col_types = FALSE)) ==
-                          dwc_terms$event$idField) - 1
+  event_id_idx <- which(
+    names(read_csv(event_file, n_max = 0, show_col_types = FALSE)) ==
+      dwc_terms$event$idField
+  ) -
+    1
 
   # Extension: Occurrence
   occ_file <- file.path(dir_out, "occurrence.csv")
-  occ_fields <- create_field_elements(occ_file, dwc_terms$occurrence, coreid_field = dwc_terms$occurrence$coreIdField)
+  occ_fields <- create_field_elements(
+    occ_file,
+    dwc_terms$occurrence,
+    coreid_field = dwc_terms$occurrence$coreIdField
+  )
   occ_coreid_idx <- get_coreid_index(occ_file, dwc_terms$occurrence$coreIdField)
 
   # Extension: ExtendedMeasurementOrFact
   emof_file <- file.path(dir_out, "extendedMeasurementOrFact.csv")
-  emof_fields <- create_field_elements(emof_file, dwc_terms$extendedmeasurementorfact, coreid_field = dwc_terms$extendedmeasurementorfact$coreIdField)
-  emof_coreid_idx <- get_coreid_index(emof_file, dwc_terms$extendedmeasurementorfact$coreIdField)
+  emof_fields <- create_field_elements(
+    emof_file,
+    dwc_terms$extendedmeasurementorfact,
+    coreid_field = dwc_terms$extendedmeasurementorfact$coreIdField
+  )
+  emof_coreid_idx <- get_coreid_index(
+    emof_file,
+    dwc_terms$extendedmeasurementorfact$coreIdField
+  )
 
   # Build complete meta.xml
-  meta_xml <- glue::glue('<?xml version="1.0" encoding="UTF-8"?>
+  meta_xml <- glue::glue(
+    '<?xml version="1.0" encoding="UTF-8"?>
 <archive xmlns="http://rs.tdwg.org/dwc/text/"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://rs.tdwg.org/dwc/text/ http://rs.tdwg.org/dwc/text/tdwg_dwc_text.xsd">
@@ -1659,7 +1895,8 @@ generate_meta_xml <- function(dir_out) {
     <coreid index="{emof_coreid_idx}" />
 {emof_fields}
   </extension>
-</archive>')
+</archive>'
+  )
 
   return(meta_xml)
 }
@@ -1680,18 +1917,20 @@ cat(meta_xml)
 # Geographic coverage
 geo_coverage <- tbl_site |>
   summarise(
-    westBoundingCoordinate  = min(longitude, na.rm = T),
-    eastBoundingCoordinate  = max(longitude, na.rm = T),
-    northBoundingCoordinate = max(latitude,  na.rm = T),
-    southBoundingCoordinate = min(latitude,  na.rm = T)) |> 
+    westBoundingCoordinate = min(longitude, na.rm = T),
+    eastBoundingCoordinate = max(longitude, na.rm = T),
+    northBoundingCoordinate = max(latitude, na.rm = T),
+    southBoundingCoordinate = min(latitude, na.rm = T)
+  ) |>
   collect()
 
 # Temporal coverage
 temp_coverage <- tbl_tow |>
   summarise(
     beginDate = min(time_start, na.rm = TRUE),
-    endDate   = max(time_start, na.rm = TRUE)) |> 
-  collect() |> 
+    endDate = max(time_start, na.rm = TRUE)
+  ) |>
+  collect() |>
   as.Date()
 
 # Taxonomic coverage
@@ -1703,9 +1942,9 @@ con <- dbConnect(duckdb::duckdb(), dbdir = tmp_db, read_only = F)
 # attach remote duckdb database
 dbSendQuery(con, glue::glue("ATTACH DATABASE '{db}';"))
 # dbListTables(con)
-#  [1] "bottle"         "cast"           "cruise"         "egg"            "egg_stage"      "grid"          
-#  [7] "larva"          "larva_size"     "larva_stage"    "net"            "schema_version" "ship"          
-# [13] "site"           "site_seg"       "species"        "taxa_rank"      "taxonomy"       "tow"           
+#  [1] "bottle"         "cast"           "cruise"         "egg"            "egg_stage"      "grid"
+#  [7] "larva"          "larva_size"     "larva_stage"    "net"            "schema_version" "ship"
+# [13] "site"           "site_seg"       "species"        "taxa_rank"      "taxonomy"       "tow"
 # [19] "tow_type"
 d_taxa <- dbReadTable(con, Id(schema = "cc", table = "taxonomy"))
 
@@ -1714,14 +1953,18 @@ taxa_coverage <- tbl_species |>
   distinct(worms_id) |>
   collect() |>
   left_join(
-    d_taxa |> 
+    d_taxa |>
       distinct(
-        taxonID, taxonRank, scientificName),
-    by = join_by(worms_id == taxonID)) |> 
+        taxonID,
+        taxonRank,
+        scientificName
+      ),
+    by = join_by(worms_id == taxonID)
+  ) |>
   arrange(scientificName)
 
-# Class    Family     Genus   Kingdom     Order    Phylum   Species  Subclass Subfamily  Suborder Subphylum 
-# 
+# Class    Family     Genus   Kingdom     Order    Phylum   Species  Subclass Subfamily  Suborder Subphylum
+#
 # taxa_coverage$taxonRank |> table()
 #   as.list()
 
@@ -1729,64 +1972,90 @@ taxa_coverage <- tbl_species |>
 # <scientificName>Teleostei</scientificName>
 # TODO: NEW:
 # <taxonomicClassification>
-#   <taxonRankName>kingdom</taxonRankName>
-#   <taxonRankValue>Animalia</taxonRankValue>
+#   <taxonRankName>division</taxonRankName>
+#   <taxonRankValue>Teleostei</taxonRankValue>
 # </taxonomicClassification>
 
 # Create EML document
 my_eml <- list(
   packageId = dataset_id,
-  system    = "calcofi_db.{version}_{dataset}.{render-date}",
+  system = "calcofi_db.{version}_{dataset}.{render-date}",
   dataset = list(
-    title   = dataset_title,
+    title = dataset_title,
     creator = list(
       individualName = list(
         givenName = "Ed",
-        surName   = "Weber"),
-    organizationName      = "NOAA SWFSC",
-    electronicMailAddress = "ed.weber@noaa.gov",
+        surName = "Weber"
+      ),
+      organizationName = "NOAA SWFSC",
+      electronicMailAddress = "ed.weber@noaa.gov",
       userId = list(
         directory = "https://orcid.org/",
-        userId = "0000-0002-0942-434X") ),
+        userId = "0000-0002-0942-434X"
+      )
+    ),
     abstract = dataset_abstract,
     keywordSet = list(
-      keyword          = dataset_keywords,
-      keywordThesaurus = "GCMD Science Keywords"),
+      keyword = dataset_keywords,
+      keywordThesaurus = "GCMD Science Keywords"
+    ),
     coverage = list(
       geographicCoverage = list(
         geographicDescription = "California Current Large Marine Ecoregion",
-        boundingCoordinates   = geo_coverage),
+        boundingCoordinates = geo_coverage
+      ),
       temporalCoverage = list(
         rangeOfDates = list(
-          beginDate = list(calendarDate = as.character(temp_coverage$beginDate)),
-          endDate   = list(calendarDate = as.character(temp_coverage$endDate)) )),
+          beginDate = list(
+            calendarDate = as.character(temp_coverage$beginDate)
+          ),
+          endDate = list(calendarDate = as.character(temp_coverage$endDate))
+        )
+      ),
       taxonomicCoverage = list(
         generalTaxonomicCoverage = "Marine ichthyoplankton and fish eggs",
-        taxonomicClassification = taxa_coverage )),
+        taxonomicClassification = taxa_coverage
+      )
+    ),
     contact = list(
       individualName = list(
         givenName = "Ed",
-        surName   = "Weber"),
-      electronicMailAddress = "ed.weber@noaa.gov"),
+        surName = "Weber"
+      ),
+      electronicMailAddress = "ed.weber@noaa.gov"
+    ),
     methods = list(
       methodStep = list(
         description = list(
-          para = "[SAMPLING METHODS DESCRIPTION]" )), # TODO: sampling methods
+          para = "[SAMPLING METHODS DESCRIPTION]"
+        )
+      ), # TODO: sampling methods
       sampling = list(
         studyExtent = list(
           description = list(
-            para = "[STUDY EXTENT DESCRIPTION]")),    # TODO: study extent
+            para = "[STUDY EXTENT DESCRIPTION]"
+          )
+        ), # TODO: study extent
         samplingDescription = list(
-          para = "[SAMPLING DESCRIPTION]" ))),        # TODO: sampling
+          para = "[SAMPLING DESCRIPTION]"
+        )
+      )
+    ), # TODO: sampling
     project = list(
-      title = dataset_title,                          # TODO: project title?
+      title = dataset_title, # TODO: project title?
       personnel = list(
         individualName = list(
-          givenName = "Ed",                           # TODO: PI?
-          surName   = "Weber" ),
-        role = "Principal Investigator"),
+          givenName = "Ed", # TODO: PI?
+          surName = "Weber"
+        ),
+        role = "Principal Investigator"
+      ),
       funding = list(
-        para = "[FUNDING INFORMATION]" ))))          # TODO: Funding
+        para = "[FUNDING INFORMATION]"
+      )
+    )
+  )
+) # TODO: Funding
 
 # Write EML
 write_eml(my_eml, file.path(dir_out, "eml.xml"))
@@ -1800,36 +2069,61 @@ write_eml(my_eml, file.path(dir_out, "eml.xml"))
 # Check for missing WoRMS IDs
 d_missing_worms <- tbl_species |>
   filter(is.na(worms_id)) |>
-  select(species_id, scientific_name) |> 
+  select(species_id, scientific_name) |>
   collect()
 
-if(nrow(d_missing_worms) > 0) {
+if (nrow(d_missing_worms) > 0) {
   cat("WARNING: The following species are missing WoRMS IDs:\n")
   print(d_missing_worms)
-  cat("\nPlease add WoRMS AphiaIDs for these species before finalizing the dataset.\n")
+  cat(
+    "\nPlease add WoRMS AphiaIDs for these species before finalizing the dataset.\n"
+  )
 }
 
 # Check for orphan records
 d_orphan_occurrences <- q_occurrence_extension |>
-  anti_join(q_event_core, by = "eventID") |> 
+  anti_join(q_event_core, by = "eventID") |>
   collect()
 
-if(nrow(d_orphan_occurrences) > 0) {
-  cat("\nWARNING: Found", nrow(d_orphan_occurrences), "occurrence records without matching events.\n")
+if (nrow(d_orphan_occurrences) > 0) {
+  cat(
+    "\nWARNING: Found",
+    nrow(d_orphan_occurrences),
+    "occurrence records without matching events.\n"
+  )
 }
 
 # Summary statistics
-n_events   <- q_event_core |> summarize(n = n()) |> pull(n)
-n_events   <- q_event_core |> filter(eventType == "net_sample") |> summarize(n = n()) |> pull(n)
-n_cruises  <- q_event_core |> filter(eventType == "cruise")     |> summarize(n = n()) |> pull(n)
-n_sites    <- q_event_core |> filter(eventType == "site")       |> summarize(n = n()) |> pull(n)
-n_tows     <- q_event_core |> filter(eventType == "tow")        |> summarize(n = n()) |> pull(n)
-n_nets     <- q_event_core |> filter(eventType == "net_sample") |> summarize(n = n()) |> pull(n)
-n_occs     <- q_occurrence_extension |> summarize(n = n()) |> pull(n)
-n_species  <- q_occurrence_extension |> distinct(scientificName) |> summarize(n = n()) |> pull(n)
+n_events <- q_event_core |> summarize(n = n()) |> pull(n)
+n_events <- q_event_core |>
+  filter(eventType == "net_sample") |>
+  summarize(n = n()) |>
+  pull(n)
+n_cruises <- q_event_core |>
+  filter(eventType == "cruise") |>
+  summarize(n = n()) |>
+  pull(n)
+n_sites <- q_event_core |>
+  filter(eventType == "site") |>
+  summarize(n = n()) |>
+  pull(n)
+n_tows <- q_event_core |>
+  filter(eventType == "tow") |>
+  summarize(n = n()) |>
+  pull(n)
+n_nets <- q_event_core |>
+  filter(eventType == "net_sample") |>
+  summarize(n = n()) |>
+  pull(n)
+n_occs <- q_occurrence_extension |> summarize(n = n()) |> pull(n)
+n_species <- q_occurrence_extension |>
+  distinct(scientificName) |>
+  summarize(n = n()) |>
+  pull(n)
 n_measures <- d_extendedmeasurementorfact_extension |> nrow()
 
-glue("
+glue(
+  "
   === Dataset Summary ===
   Total events:        {prettyNum(n_events, big.mark = ',')}
   - Cruises:           {prettyNum(n_cruises, big.mark = ',')}
@@ -1838,7 +2132,8 @@ glue("
   - Net samples:       {prettyNum(n_nets, big.mark = ',')}
   Total occurrences:   {prettyNum(n_occs, big.mark = ',')}
   Total species:       {prettyNum(n_species, big.mark = ',')}
-  Total measurements:  {prettyNum(n_measures, big.mark = ',')}")
+  Total measurements:  {prettyNum(n_measures, big.mark = ',')}"
+)
 ```
 
 ## Package Creation
@@ -1848,12 +2143,20 @@ glue("
 
 # Create DwC-A zip file
 zip_file <- file.path(dir_out, paste0("../larvae_", Sys.Date(), ".zip"))
-zip(zip_file,
-    files = file.path(
-      dir_out, c(
-        "event.csv", "occurrence.csv",
-        "extendedMeasurementOrFact.csv", "meta.xml", "eml.xml")),
-      flags = "-j") # exclude parent folders
+zip(
+  zip_file,
+  files = file.path(
+    dir_out,
+    c(
+      "event.csv",
+      "occurrence.csv",
+      "extendedMeasurementOrFact.csv",
+      "meta.xml",
+      "eml.xml"
+    )
+  ),
+  flags = "-j"
+) # exclude parent folders
 
 cat("\nDarwin Core Archive created:", zip_file, "\n")
 ```
@@ -1863,9 +2166,9 @@ cat("\nDarwin Core Archive created:", zip_file, "\n")
 ```{r}
 #| label: check-csv
 
-d_event      <- read_csv(file.path(dir_out, "event.csv"))
+d_event <- read_csv(file.path(dir_out, "event.csv"))
 d_occurrence <- read_csv(file.path(dir_out, "occurrence.csv"))
-d_emof       <- read_csv(file.path(dir_out, "extendedMeasurementOrFact.csv"))
+d_emof <- read_csv(file.path(dir_out, "extendedMeasurementOrFact.csv"))
 
 d_event
 d_occurrence
