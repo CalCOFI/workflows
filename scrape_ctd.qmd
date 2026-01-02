@@ -1,9 +1,5 @@
 ---
 title: "Scrape & Ingest CalCOFI CTD Data into DuckDB"
-format: html
-editor: visual
-editor_options: 
-  chunk_output_type: console
 ---
 
 ## Overview
@@ -20,7 +16,7 @@ This notebook scrapes CalCOFI CTD data from <https://calcofi.org/data/oceanograp
     -   Only unzips `final` (e.g., 20-2105SH_CTDFinalQC.zip) and `preliminary` (e.g., 20-2507SR_CTDPrelim.zip) files
     -   Skips unzipping raw/cast/test files to save disk space
 
-3.  **Download & Unzip**: Downloads all zip files to `~/My Drive/projects/calcofi/data/calcofi.org/ctd-cast/download` but only extracts final and preliminary data
+3.  **Download & Unzip**: Downloads all zip files to `~/My Drive/projects/calcofi/data/calcofi.org/ctd-cast/download` ([calcofi/data](https://drive.google.com/drive/u/0/folders/1xxdWa4mWkmfkJUQsHxERTp9eBBXBMbV7)) but only extracts final and preliminary data
 
 4.  **Priority-based Selection**:
 
@@ -44,9 +40,9 @@ This notebook scrapes CalCOFI CTD data from <https://calcofi.org/data/oceanograp
 
 To run the notebook:
 
-``` r
-quarto::quarto_render("scrape_ctd.qmd")
-```
+- R: `quarto::quarto_render("scrape_ctd.qmd")`
+
+- Terminal: `quarto render scrape_ctd.qmd`
 
 ### Notes
 
@@ -63,6 +59,7 @@ quarto::quarto_render("scrape_ctd.qmd")
 #| label: setup
 
 librarian::shelf(
+  "CalCOFI/calcofi4r",
   dplyr,
   DBI,
   DT,
@@ -70,9 +67,13 @@ librarian::shelf(
   fs,
   glue,
   here,
+  htmltools,
   httr,
   janitor,
+  litedown,
   lubridate,
+  mapview,
+  plotly,
   purrr,
   readr,
   rvest,
@@ -84,10 +85,40 @@ librarian::shelf(
   quiet = T
 )
 
+# helper functions
+dt <- function(d, fname, n_page = 10, ...) {
+  # d <- data.frame(x = 1:9)
+  lengths <- c(5, 10, 25, 50, 100, 1000)
+  lengths <- c(lengths[lengths < nrow(d)], nrow(d)) |> unique()
+
+  DT::datatable(
+    d,
+    extensions = 'Buttons',
+    options = list(
+      dom = 'Blfrtpi',
+      buttons = list(
+        list(
+          extend = 'csv',
+          filename = fname
+        )
+      ),
+      pageLength = min(n_page, nrow(d)),
+      lengthMenu = lengths,
+      scrollX = T
+    ),
+    filter = 'top',
+    # rownames = FALSE,
+    ...
+  )
+}
+
 # variables
 url <- "https://calcofi.org/data/oceanographic-data/ctd-cast-files/"
 dir_dl <- "~/My Drive/projects/calcofi/data/calcofi.org/ctd-cast/download"
 dir_dl <- path_expand(dir_dl)
+bind_prelonlat_rds <- glue("{dir_dl}/bind_pre-lon-lat-clean.rds")
+pts_filt_rds <- glue("{dir_dl}/pts_filt.rds")
+ctd_pq <- glue("{dir_dl}/ctd.parquet")
 db_path <- glue("{dir_dl}/calcofi-ctd.duckdb")
 db_redo <- T # set to TRUE to re-download and re-ingest
 
@@ -101,10 +132,12 @@ if (file_exists(db_path) & db_redo) {
 
 # setup duckdb with spatial extension
 # dbDisconnect(con, shutdown = TRUE); duckdb_shutdown(duckdb()); rm(con)
-con <- dbConnect(duckdb::duckdb(read_only = F), dbdir = db_path)
+con <- dbConnect(duckdb::duckdb(read_only = F), dbdir = db_path) # dbListTables(con)
 dbExecute(con, "INSTALL spatial;")
 dbExecute(con, "LOAD spatial;")
 ```
+
+- `url`: <`r url`>
 
 ## Scrape CTD Download Links
 
@@ -157,8 +190,9 @@ d_zips |>
     file_zip = glue("<a href={url}>{file_zip}</a>")
   ) |>
   select(-url) |>
-  datatable(
+  dt(
     caption = "All zip files to download",
+    fname = "ctd_zip_files",
     escape = F
   )
 ```
@@ -207,48 +241,6 @@ d_zips |>
 
 message("Download and extraction complete!")
 ```
-
--   2025-Jul:
-
-    -   Preliminary CTD 1m-Binned\
-        [20-2507SR_CTD**Prelim**.zip](https://calcofi.org/downloads/2025/20-2507SR_CTDPrelim.zip)\
-        **Preliminary CTD 1m-Binned**: Raw CTD sensor data that have gone through SBE Data Processing, and obvious bad sensor readings have been flagged during initial QAQC. Bottle data has not yet been merged with the CTD data. CTD Salinity, Oxygen, Fluorescence, and Nitrate profiles have not been corrected to the bottle data. Cruise corrected Nitrate sensor data (EstNO3_CruiseCorr) has been converted from raw voltage using a sensor calibration done before each cruise, but not yet corrected using CTD vs. Bottle regressions. 
-
--   2021-Jul:
-
-    -   ~~Prodo Cast~~ Raw CTD Data\
-        [20-2107SR_CTD**Cast**.zip](https://calcofi.org/downloads/2021/20-2107SR_CTDCast.zip)
-
-    -   Preliminary CTD & Bottle 1m-Binned\
-        [20-2107SR_CTD**Prelim**.zip](https://calcofi.org/downloads/2021/20-2107SR_CTDPrelim.zip)\
-        **Preliminary CTD & Bottle 1m-Binned**: Preliminary CTD sensor data that have been merged with QAQC’ed bottle data. CTD Salinity, Oxygen, Fluorescence, and Nitrate profiles have been corrected using CTD vs. bottle regressions. 
-
--   2021-May:
-
-    -   Raw CTD Data\
-        [20-2105SH_CTD**Cast**.zip](https://calcofi.org/downloads/2021/20-2105SH_CTDCast.zip)\
-        **Raw CTD Data**: Data files (.xmlcon, .hex, .bl, .nav, .prn, .mrk, .hdr) directly from SBE Software ([Sea-Bird Scientific](https://www.seabird.com/)) with no processing or corrections applied.
-
-    -   Final 1m-Binned\
-        [20-2105SH_CTD**FinalQC**.zip](https://calcofi.org/downloads/2021/20-2105SH_CTDFinalQC.zip)\
-        **Final 1m-Binned**: CTD data that have passed through the CalCOFI quality control process. After standard Seasoft-processing (Sea-Bird Scientific’s data-processing suite) tuned for our SBE 911plus CTD, the .asc files are processed by SIO-CalCOFI in-house software (BtlVsCTD). Averaged (4-sec or 1-meter bin-averaged) CTD sensor data are matched with corresponding bottle data, then **cruise-corrected** and **station-corrected**. Zipped file includes: metadata and .asc, .hdr, .btl, and upcast & downcast .csvs (“u” and “d”; by station and concatenated).
-
-        -   **Cruise-corrected CTD data**: CTD sensor data that are corrected using regression coefficients derived from 4-sec average sensor data vs bottle data comparisons for the entire cruise, meaning all casts with bottle samples (n=\~1400; fliers omitted; column labels ‘\_CruiseCorr’).
-
-        -   **Station-corrected CTD data**: CTD sensor data that are corrected using regression coefficients generated dynamically for each cast, 1m bin-averaged sensor data vs bottle data (n=\~20; fliers omitted; column labels ‘\_StaCorr’).
-
-            -   Since sensor behavior may vary from station to station, station-corrected CTD sensor data for salinity, oxygen, estimated nitrate, and estimated chlorophyll-a are considered the best, particularly for estimated nitrate.
-
--   1992-Feb:
-
-    -   Prodo Cast\
-        [19-9202JD_CTD**CastProdoStas**.zip](https://calcofi.org/downloads/1992/19-9202JD_CTDCastProdoStas.zip)\
-        **Test Cast/Prodo Cast**: The Seabird 911plus CTD was first tested in Mar 1990 (9003JD) but is still under development. CTD data from Mar 1990 – 1991 were occasional system & feasibility tests (“**test casts**“). As confidence in data quality improved, the CTD-Rosette began being used for daily primary productivity sample collection casts (“**prodo casts**“) in 1992 (6 depths from one station per day).
-
--   1990-Mar:
-
-    -   Test Cast\
-        [19-9003JD_CTD**Test**.zip](https://calcofi.org/downloads/1990/19-9003JD_CTDTest.zip)
 
 ## Find and Prioritize CTD Data Files
 
@@ -345,13 +337,18 @@ cruises_zip_notcsv <- setdiff(
 
 # summary
 d_csv |>
-  select(-path) |>
+  select(-any_of(c("path", "data", "col_empties", "col_types"))) |>
   relocate(cruise_id, path_unzip) |>
   arrange(cruise_id, path_unzip) |>
-  datatable(, caption = "Files to Ingest")
+  dt(
+    caption = "Files to Ingest",
+    fname = "ctd_files_to_ingest"
+  )
 ```
 
 ## Read and Standardize CTD Files
+
+- Remove repeat header rows that can occur within files, eg line 69 of '20-0711NH_CTDFinalQC/db-csvs/20-0711_CTDBTL_001-067Dno001b.csv'
 
 ```{r}
 #| label: read_csv
@@ -402,14 +399,15 @@ d_csv <- d_csv |>
 d_csv |>
   arrange(cruise_id, file_csv) |>
   select(cruise_id, file_csv, nrows) |>
-  datatable(
-    caption = "Number of rows read per file"
+  dt(
+    caption = "Number of rows read per file",
+    fname = "ctd_rows_per_file"
   ) |>
   # big marks for thousands
   formatCurrency("nrows", currency = "", digits = 0, mark = ",")
 ```
 
-## Transform Data
+## Transform Data : Detect and Correct Column Type Mismatches
 
 ```{r}
 #| label: d_bind
@@ -521,9 +519,9 @@ if (nrow(d_mismatches) > 0) {
       .groups = "drop"
     ) |>
     arrange(desc(total_nas)) |>
-    datatable(
+    dt(
       caption = "Type mismatches by column",
-      options = list(pageLength = 20)
+      fname = "ctd_type_mismatches_by_column"
     ) |>
     formatCurrency(
       c("n_files", "total_nas"),
@@ -549,10 +547,10 @@ if (nrow(d_mismatches) > 0) {
       .groups = "drop"
     ) |>
     arrange(desc(total_nas), path_csv) |>
-    datatable(
+    dt(
       caption = "Type mismatches by file",
-      escape = FALSE,
-      options = list(pageLength = 20)
+      fname = "ctd_type_mismatches_by_file",
+      escape = FALSE
     ) |>
     formatCurrency(
       c("n_columns", "total_nas"),
@@ -572,8 +570,9 @@ d_bind |>
     cruise_id != study
   ) |>
   distinct(study, cruise_id, path_unzip) |>
-  datatable(
-    caption = "Mismatch between study and cruise_id"
+  dt(
+    caption = "Mismatch between study and cruise_id",
+    fname = "ctd_study_cruise_mismatch"
   )
 #   study  cruise_id path_unzip
 #   <chr>  <chr>     <chr>
@@ -624,21 +623,37 @@ d_bind <- d_bind |>
       ord_occ
     )
   )
-
 # is.na(d_bind$event_num) |> table()
 #     FALSE       TRUE
 # 3,927,815  2,881,340
 # TODO: figure out missing ord_occ
+```
 
-# format date ----
+## Format Date-Time Column
+
+```{r}
+#| label: format_datetime
+
 # apply formats depending on pattern
 d_bind <- d_bind |>
   mutate(
     date_time_utc = trim(date_time_utc),
+    date_time_format = case_when(
+      str_detect(
+        date_time_utc, # eg "25-Jan-1998 13:01:20"
+        "^\\d{1,2}-[A-z]{3}-\\d{4} \\d{1,2}:\\d{1,2}:\\d{1,2}$"
+      ) ~ "dmy_hms",
+      str_detect(
+        date_time_utc, # eg "01/25/1998 13:01", "1/25/1998 13:1"
+        "^\\d{1,2}/\\d{1,2}/\\d{4} \\d{1,2}:\\d{1,2}$"
+      ) ~ "mdy_hm",
+      TRUE ~ "unknown"
+    ),
     dtime_utc = NA, # _POSIXct_, # 163,181 | 6,596,130 failed to parse.
+    # TODO: add summary of datetime formats by dataset be
     dtime_utc = if_else(
       str_detect(
-        date_time_utc, # eg "23-Jan-1998 17:50:44"  "3-JAN-1998 17:50:44"
+        date_time_utc, # eg "25-Jan-1998 13:01:20"
         "^\\d{1,2}-[A-z]{3}-\\d{4} \\d{1,2}:\\d{1,2}:\\d{1,2}$"
       ),
       suppressWarnings(dmy_hms(date_time_utc, tz = "UTC")),
@@ -646,127 +661,416 @@ d_bind <- d_bind |>
     ),
     dtime_utc = if_else(
       str_detect(
-        date_time_utc, # eg "01/01/2015 17:12", "1/01/2015 17:12", "1/1/2015 17:12"
+        date_time_utc, # eg "01/25/1998 13:01", "1/25/1998 13:1"
         "^\\d{1,2}/\\d{1,2}/\\d{4} \\d{1,2}:\\d{1,2}$"
       ),
       suppressWarnings(mdy_hm(date_time_utc, tz = "UTC")),
       dtime_utc
     )
   ) |>
-  relocate(dtime_utc, .before = date_time_utc) |>
+  relocate(date_time_format, dtime_utc, .after = date_time_utc) |>
   # select(-date_time_utc, -date_time_pst) |>
   arrange(dtime_utc, depth)
 
 stopifnot(all(!is.na(d_bind$dtime_utc)))
 
-# fill in missing lon,lat from line,sta ----
-d_bind <- d_bind |>
+write_rds(d_bind, bind_prelonlat_rds, compress = "gz")
+file_info(bind_prelonlat_rds) |> pull(size) # 657M
+
+d_bind |>
+  group_by(
+    cruise_id,
+    source_file,
+    date_time_format,
+  ) |>
+  summarize(
+    n_records = n(),
+    dtime_utc_min = min(dtime_utc),
+    dtime_utc_max = max(dtime_utc),
+    .groups = "drop"
+  ) |>
+  arrange(cruise_id, source_file, date_time_format) |>
+  # pivot date_time_format wider
+  pivot_wider(
+    names_from = date_time_format,
+    values_from = n_records,
+    values_fill = NA_real_
+  ) |>
+  relocate(dmy_hms, mdy_hm, .after = cruise_id) |>
+  dt(
+    caption = "Date-Time formats detected by cruise_id and source_file",
+    fname = "ctd_datetime_formats"
+  ) |>
+  formatDate(c("dtime_utc_min", "dtime_utc_max"), method = "toLocaleString")
+```
+
+## Assign Pseudo-NA values to Longitude and Latitude and Fill Missing Coordinates from Line/Station
+
+```{r}
+#| label: fill_lonlat
+
+d_bind <- read_rds(bind_prelonlat_rds)
+
+# summary(d_bind_cr$lon_dec)
+#   Min. 1st Qu.  Median    Mean 3rd Qu.    Max.
+#  -124.3  -122.5  -120.9  -114.1  -119.0     0.0
+
+# d_bind_cr |>
+#   filter(lon_dec > -100) |>
+#   pull(lon_dec) |>
+#   unique() |>
+#   print() # -9.99e-29
+
+# d_bind_cr |>
+#   filter(lon_dec == -99) |>
+#   select(cruise_id, source_file, line, sta, lon_dec, lat_dec)
+
+pseudoNA_values <- c(-9.99e-29, -99)
+
+d_bind_sp <- d_bind |>
   mutate(
+    is_lnsta_pseudoNA = ifelse(
+      as.numeric(line) == 0 & as.numeric(sta) == 0,
+      TRUE,
+      FALSE
+    ),
+    is_lon_pseudoNA = map_lgl(lon_dec, ~ some(pseudoNA_values, near, .x)),
+    is_lat_pseudoNA = map_lgl(lat_dec, ~ some(pseudoNA_values, near, .x)),
     lon_dec = if_else(
-      is.na(lon_dec) & !is.na(line) & !is.na(sta),
+      is_lon_pseudoNA | is_lat_pseudoNA,
+      NA_real_,
+      lon_dec
+    ),
+    lat_dec = if_else(
+      is_lon_pseudoNA | is_lat_pseudoNA,
+      NA_real_,
+      lat_dec
+    ),
+    lon_lnst = if_else(
+      !is.na(line) & !is.na(sta) & !is_lnsta_pseudoNA,
       as.numeric(sf_project(
         from = "+proj=calcofi",
         to = "+proj=longlat +datum=WGS84",
         pts = cbind(x = as.numeric(line), y = as.numeric(sta))
       )[, 1]),
-      lon_dec
+      NA_real_
     ),
-    lat_dec = if_else(
-      is.na(lat_dec) & !is.na(line) & !is.na(sta),
+    lat_lnst = if_else(
+      !is.na(line) & !is.na(sta) & !is_lnsta_pseudoNA,
       as.numeric(sf_project(
         from = "+proj=calcofi",
         to = "+proj=longlat +datum=WGS84",
         pts = cbind(x = as.numeric(line), y = as.numeric(sta))
       )[, 2]),
-      lat_dec
-    )
+      NA_real_
+    ),
+    lon_dec = if_else(is.na(lon_dec), lon_lnst, lon_dec),
+    lat_dec = if_else(is.na(lat_dec), lat_lnst, lat_dec)
   )
+
+stopifnot(sum(is.na(d_bind_sp$lon_dec)) == 0)
+stopifnot(sum(is.na(d_bind_sp$lat_dec)) == 0)
+
+d_bind_sp |>
+  filter(
+    is_lon_pseudoNA | is_lat_pseudoNA
+  ) |>
+  group_by(cruise_id) |>
+  summarize(
+    n_lon_pseudoNA = sum(is_lon_pseudoNA),
+    n_lat_pseudoNA = sum(is_lat_pseudoNA)
+  ) |>
+  dt(
+    caption = glue(
+      "Cruises with pseudo-NAs ({paste(pseudoNA_values, collapse = ',')}) explicitly set to NA before applying longitude and latitude converted from line, station coordinates (except where line & station are 0, which is also treated as a pseudo-NA)."
+    ),
+    fname = "ctd_cruises_pseudoNA_lonlat"
+  ) |>
+  formatCurrency(
+    c("n_lon_pseudoNA", "n_lat_pseudoNA"),
+    currency = "",
+    digits = 0,
+    mark = ","
+  )
+```
+
+## View Cruise with Excess Distance Points
+
+```{r}
+#| label: pts_distance_from_lnst
+
+max_dist_dec_lnst_km <- 10
+
+pts <- d_bind_sp |>
+  st_as_sf(coords = c("lon_dec", "lat_dec"), remove = F, crs = 4326) |>
+  mutate(
+    geom_lnst = purrr::map2(lon_lnst, lat_lnst, \(x, y) st_point(c(x, y))) |>
+      st_sfc(crs = 4326),
+    dist_dec_lnst_km = st_distance(geometry, geom_lnst, by_element = T) |>
+      units::set_units(km) |>
+      units::drop_units(),
+    is_dist_dec_lnst_within_max = dist_dec_lnst_km <= max_dist_dec_lnst_km,
+  ) |>
+  st_join(
+    calcofi4r::cc_grid |>
+      select(grid_site = sta_key),
+    join = st_intersects
+  )
+st_agr(pts) <- "constant"
+
+# visualize a cruise with points exceeding max distance
+badcr_id <- "1507OC"
+pts_badcr <- pts |>
+  filter(cruise_id == badcr_id)
+
+bb_badcr <- st_bbox(pts_badcr) |>
+  st_as_sfc()
+
+mapView(bb_badcr) +
+  mapView(
+    pts_badcr |>
+      filter(is_dist_dec_lnst_within_max) |>
+      slice_sample(n = 1000) |> # samples up to 1000 per cruise
+      bind_rows(
+        pts_badcr |>
+          filter(!is_dist_dec_lnst_within_max)
+      ) |>
+      select(
+        cruise_id,
+        dtime_utc,
+        lon_dec,
+        lat_dec,
+        sta_id,
+        line,
+        sta,
+        dist_dec_lnst_km,
+        is_dist_dec_lnst_within_max
+      ),
+    layer.name = glue(
+      "Cruise {badcr_id}<br>
+       distance (km) <br>
+       lon/lat to line/station"
+    ),
+    # zcol = "cruise_id",
+    zcol = "dist_dec_lnst_km",
+    cex = 5,
+    alpha = 0.5
+  )
+```
+
+## Filter Points by Distance from Line/Station Locations
+
+```{r}
+#| label: filter_pts
+
+# generate a table by cruise_id for n_all, n_within_max, n_exceeding_max, and pct_exceeding_max
+d_pts_cruise_filt_smry <- pts |>
+  st_drop_geometry() |>
+  group_by(cruise_id) |>
+  # filter groups without any points exceeding max distance
+  filter(
+    any(!is_dist_dec_lnst_within_max)
+  ) |>
+  summarize(
+    n_all = n(),
+    n_outside_grid = sum(is.na(grid_site)),
+    pct_outside_grid = n_outside_grid / n_all,
+    n_gt_cutoff = sum(!is_dist_dec_lnst_within_max, na.rm = T),
+    avg_dist_gt_cutoff_km = if_else(
+      n_gt_cutoff > 0,
+      mean(dist_dec_lnst_km[!is_dist_dec_lnst_within_max], na.rm = T),
+      NA_real_
+    ),
+    # min_dist_gt_cutoff_km = if_else(
+    #   n_gt_cutoff > 0,
+    #   min(dist_dec_lnst_km[!is_dist_dec_lnst_within_max], na.rm = T),
+    #   NA_real_
+    # ),
+    # max_dist_gt_cutoff_km = if_else(
+    #   n_gt_cutoff > 0,
+    #   max(dist_dec_lnst_km[!is_dist_dec_lnst_within_max], na.rm = T),
+    #   NA_real_
+    # ),
+    pct_gt_cutoff = n_gt_cutoff / n_all,
+    n_rm = sum(!is_dist_dec_lnst_within_max | is.na(grid_site), na.rm = T),
+    pct_rm = n_rm / n_all,
+    .groups = "drop"
+  ) |>
+  filter(n_rm > 0) |>
+  arrange(desc(pct_rm))
+
+d_pts_cruise_filt_smry |> head() |> names()
+
+# OLD: swap points exceeding max distance ----
+# pts_swap <- pts |>
+#   # for points exceeding max distance, swap lon/lat with line/station lon/lat and update geometry to geom_lnst
+#   mutate(
+#     lon_dec = if_else(
+#       !is_dist_dec_lnst_within_max,
+#       lon_lnst,
+#       lon_dec
+#     ),
+#     lat_dec = if_else(
+#       !is_dist_dec_lnst_within_max,
+#       lat_lnst,
+#       lat_dec
+#     ),
+#     geometry = if_else(
+#       !is_dist_dec_lnst_within_max,
+#       geom_lnst,
+#       geometry
+#     )
+#   )
+
+# filter points ----
+pts_filt <- pts |>
+  filter(
+    is_dist_dec_lnst_within_max,
+    !is.na(grid_site)
+  )
+
+# write_rds(pts_filt, pts_filt_rds, compress = "gz")
+# file_info(pts_filt_rds) |> pull(size) # 684M
+
+# show cruises that had points exceeding max distance
+d_pts_cruise_filt_smry |>
+  dt(
+    caption = HTML(mark(
+      text = glue(
+        "Cruises with rows filtered out that fell outside the CalCOFI grid (`n_outside_grid`) given by [`calcofi4r::cc_grid`](https://calcofi.io/calcofi4r/articles/calcofi4r.html#grid-by-zone) or exceeded a {max_dist_dec_lnst_km} km cutoff from line/station coordinates (`n_gt_cutoff`), sorted by percentage of rows removed (`pct_rm`)."
+      )
+    )),
+    escape = F,
+    fname = "ctd_cruises_distance_from_lnst"
+  ) |>
+  formatCurrency(
+    c(
+      "n_all",
+      "n_gt_cutoff",
+      "avg_dist_gt_cutoff_km",
+      "n_outside_grid",
+      "n_rm"
+      # "min_dist_gt_cutoff_km",
+      # "max_dist_gt_cutoff_km",
+    ),
+    currency = "",
+    digits = 0,
+    mark = ","
+  ) |>
+  formatPercentage(
+    c(
+      "pct_gt_cutoff",
+      "pct_outside_grid",
+      "pct_rm"
+    ),
+    digits = 2
+  )
+
+```
+
+## View Filtered Points
+
+```{r}
+#| label: view_pts_filt
+
+# pts_filt <- read_rds(pts_filt_rds)
+
+# st_bbox(pts_swap)
+#       xmin       ymin       xmax       ymax
+# -126.52170   29.80726 -115.67477   50.00641
+# st_bbox(pts_filt)
+#       xmin       ymin       xmax       ymax
+# -126.48430   29.80726 -117.27340   37.85147
+
+bb_cr <- st_bbox(pts_filt) |>
+  st_as_sfc()
+
+mapView(bb_cr) +
+  mapView(
+    pts_filt |>
+      group_by(cruise_id) |>
+      slice_sample(n = 100) |> # samples up to 1000 per cruise
+      ungroup() |>
+      select(
+        cruise_id,
+        lon_dec,
+        lat_dec,
+        sta_id,
+        line,
+        sta,
+        dist_dec_lnst_km,
+        dtime_utc
+      ),
+    zcol = "cruise_id",
+    # zcol = "dist_dec_lnst",
+    cex = 5,
+    alpha = 0.5
+  )
+```
+
+```{r}
+#| label: show_pts_filt_attr
 
 # show first and last 100 rows
-d_bind |>
+pts_filt |>
+  st_drop_geometry() |>
+  select(-geom_lnst) |>
   slice(c(1:10, (n() - 9):n())) |>
-  datatable(
+  dt(
     caption = glue(
-      "First and last 10 rows of combined CTD data (nrows: {format(nrow(d_bind), big.mark = ',')})"
-    )
+      "First and last 10 rows of filter CTD points data (nrows: {format(nrow(pts_filt), big.mark = ',')})"
+    ),
+    fname = "ctd_filtered_points_sample20"
   )
 ```
 
-## TODO
-
-### Process raw data
-
-into usable form:
-
--   [Fathom software \| Sea-Bird Scientific](https://software.seabird.com/)
-
-References:
-
--   [CTD Data \| CalCOFI archives](https://newdata.calcofi.com/index.php/ctd-data)
-
-    > **Cast Files**. Files are created by SeaBird's Seasave program during each CalCOFI station. These data are unaltered and may contain errors (e.g., incorrect header information) or be incomplete due to system failure during collection. Two or more files may be available for a single station in the latter case. Each cruise will have a single cast data file. This file is a compressed .zip containing .zip files for each cast of the cruise, yymm_CTDCast.zip and yymm_llllssss\_###.zip respectively. Each station .zip should contain the following: .bl, .con, .hdr, .hex, .mrk, and .prn files.
-
-::: {.callout-note collapse="true"}
-#### CalCOFI CTD System
-
--   A Sea-Bird Electronics 911plus V2 CTD collects vertical profile data at every CalCOFI station.
--   In addition to being a dual TCO (temperature, conductivity, and oxygen) system, the CTD also interfaces with a transmissometer, fluorometer, PAR/SPAR meters, altimeter, nitrate, and pH sensor.
--   Connected to a shipboard data-acquisition computer through an electronically-conductive winch wire, sensor data are collected and displayed real-time using Seasave V7.
--   The CTD is normally lowered to terminal depth of 515 m, bottom-depth permitting, but is routinely deployed within meters from the seafloor at nearshore SCCOOS and basin stations.
--   To ensure high resolution sampling in areas with significant hydrological and biological gradients a speed of \~30 m/min is used for the first 100 m then \~60 m/min to depth without stopping.
--   During retrieval, the CTD is paused for at least 20 seconds at target bottle depths to adequately flush each 10 liter sample bottle prior to closure. Seawater samples are analyzed onboard (e.g., salinity, oxygen, nutrients, chl) and are used to correct measured CTD values.
-:::
-
--   Mahmoud & Mas (2022) [Standard Operating Procedure: CTD data pre-processing](https://repository.oceanbestpractices.org/handle/11329/2081). *Ocean Best Practices*
-
-<!-- -->
-
--   
-
-```         
-@article{mohamed2022standard,
-  title={Standard Operating Procedure: CTD data pre-processing.},
-  author={Mohamed Mahmoud, Mohamed and Munoz Mas, Cristian},
-  year={2022},
-  publisher={Institut Mauritanien De Recherches Oc{\'e}anographiques Et De P{\^e}ches (IMROP)}
-}
-```
-
-### Check for duplicates
+### Check for duplicates by datetime and depth
 
 ```{r}
 #| label: check-dupes
 
 # TODO: look for duplicates by dtime_utc, depth
-d_dupes <- d_bind |>
+d_dupes <- pts_filt |>
+  st_drop_geometry() |>
+  select(dtime_utc, depth) |>
   group_by(dtime_utc, depth) |>
   summarize(n = n(), .groups = "drop") |>
   filter(n > 1) |>
-  arrange(desc(n)) #  761,429 × 3
+  arrange(desc(n)) #  741,840 × 3
 
 # get number of distinct dtime_utc, depth
-n_distinct_dtime_depth <- d_bind |>
+n_distinct_dtime_depth <- pts_filt |>
+  st_drop_geometry() |>
   select(dtime_utc, depth) |>
-  n_distinct() # 5,994,226
+  n_distinct() # 5,931,948
 
 d_dupes |>
   slice(c(1:10, (n() - 9):n())) |>
-  datatable(
+  dt(
     caption = glue(
       "First and last 10 rows of duplicates by dtime_utc, depth (nrows = {format(nrow(d_dupes), big.mark = ',')}; n_distinct_dtime_depth = {format(n_distinct_dtime_depth, big.mark = ',')})"
-    )
+    ),
+    fname = "ctd_duplicates_by_datetime_depth_n20"
   )
 ```
 
-## Ingest into DuckDB
+## Ingest into DuckDB, Write to `ctd.parquet`
 
 ```{r}
 #| label: ingest-duckdb
 
-# write to DuckDB
-dbWriteTable(con, "ctd", d_bind, overwrite = T)
+# TODO: pts_filt → parquet
 
-message(glue("Ingested {nrow(d_bind)} rows into DuckDB table 'ctd'"))
+# write to parquet
+d_pts_filt <- pts_filt |>
+  select(-geom_lnst) |>
+  st_drop_geometry()
+
+dbWriteTable(con, "ctd", d_pts_filt, overwrite = T)
+# dbListTables(con)
+
+message(glue("Ingested {nrow(d_pts_filt)} rows into DuckDB table 'ctd'"))
+# old: 6,813,712; new: 6,727,991
 
 # write point_geom as geometry column
 message(glue(
@@ -779,40 +1083,169 @@ dbExecute(
   "CREATE INDEX idx_ctd_point_geom ON ctd USING RTREE(point_geom);"
 )
 
+# TODO: write ctd as parquet
+message(glue(
+  "Writing DuckDB table 'ctd' to Parquet at {ctd_pq}..."
+))
+
+dbExecute(
+  con,
+  glue::glue(
+    "COPY ctd TO '{ctd_pq}' (FORMAT 'parquet', COMPRESSION zstd, OVERWRITE_OR_IGNORE);"
+  )
+)
+# PARTITION_BY (cruise_id)
+# READ: 'orders/*/*/*.parquet', hive_partitioning = true
+
+# TODO: add key-value metadata
+# # KV_METADATA {
+#         number: 'Answer to life, universe, and everything',
+#         is_even: 'not ''odd''' -- single quotes in values must be escaped
+#     }
+
+# SELECT * FROM read_parquet('test.parq')
+
 # disconnect
 dbDisconnect(con, shutdown = TRUE)
+rm(con)
 ```
 
-## Summary
+## Check `ctd.parquet` for spatial functionality in DuckDB
 
 ```{r}
-#| label: summary-duckdb
+#| label: check-parquet
 
-# reconnect to show final table structure
-con <- dbConnect(duckdb::duckdb(), dbdir = db_path, read_only = T)
+# Create new database connection
+con <- dbConnect(duckdb::duckdb()) # dbListTables(con)
 
-# table info
-dbListTables(con)
+# Load spatial extension
+dbExecute(con, "INSTALL spatial;")
+dbExecute(con, "LOAD spatial;")
 
-# show column names
-tbl(con, "ctd") |>
-  head(1) |>
-  collect() |>
-  colnames()
+# Read parquet file into DuckDB
+message(glue("Reading parquet file from {ctd_pq}..."))
+dbExecute(
+  con,
+  glue("CREATE VIEW ctd AS SELECT * FROM read_parquet('{ctd_pq}');")
+)
 
-# summary by stage and cast direction
-tbl(con, "ctd") |>
-  count(data_stage, cast_dir) |>
-  collect()
-# TODO: why 136,054 rows of cast_dir NA (with final)?
+# Verify table structure and row count
+row_count <- dbGetQuery(con, "SELECT COUNT(*) as n FROM ctd")$n
+message(glue("Reading {row_count} rows from parquet"))
 
-# preview data
-tbl(con, "ctd") |>
-  # select(cruise_id, stage, cast_dir, lat_dec, lon_dec) |>
-  head(20) |>
-  collect()
+# Check column names and types
+cols <- dbGetQuery(con, "DESCRIBE ctd;")
+print(cols)
 
-dbDisconnect(con, shutdown = TRUE)
+# Test 1: Verify geometry column exists and is valid
+message("\n=== Testing geometry column ===")
+geom_test <- dbGetQuery(
+  con,
+  "
+  SELECT 
+    COUNT(*) as total_rows,
+    COUNT(point_geom) as non_null_geoms,
+    COUNT(CASE WHEN ST_IsValid(point_geom) THEN 1 END) as valid_geoms
+  FROM ctd;
+"
+)
+print(geom_test)
+
+# Test 2: Get spatial extent for all rows
+message("\n=== Getting spatial extent ===")
+extent <- dbGetQuery(
+  con,
+  "
+  SELECT 
+    MIN(ST_X(point_geom)) as min_lon,
+    MAX(ST_X(point_geom)) as max_lon,
+    MIN(ST_Y(point_geom)) as min_lat,
+    MAX(ST_Y(point_geom)) as max_lat,
+    COUNT(*) as total_points
+  FROM ctd;
+"
+)
+print(extent)
+
+# Test 3: Sample some geometries and extract coordinates
+message("\n=== Sampling geometries ===")
+sample_geoms <- dbGetQuery(
+  con,
+  "
+  SELECT 
+    ST_X(point_geom) as lon,
+    ST_Y(point_geom) as lat,
+    ST_AsText(point_geom) as wkt
+  FROM ctd
+  LIMIT 5;
+"
+)
+print(sample_geoms)
+
+# Test 4: Spatial query - find points within a bounding box
+# (adjust coordinates to match your data extent)
+message("\n=== Testing spatial filter ===")
+bbox_query <- dbGetQuery(
+  con,
+  "
+  SELECT COUNT(*) as points_in_bbox
+  FROM ctd
+  WHERE ST_Within(
+    point_geom,
+    ST_MakeEnvelope(-125.0, 32.0, -117.0, 35.0)
+  );
+"
+)
+print(bbox_query)
+
+# Test 5: Distance calculation - find points near a location
+# (adjust reference point coordinates as needed)
+message("\n=== Testing distance calculation ===")
+distance_test <- dbGetQuery(
+  con,
+  "
+  SELECT 
+    ST_X(point_geom) as lon,
+    ST_Y(point_geom) as lat,
+    ST_Distance_Sphere(
+      point_geom,
+      ST_Point(-120.0, 34.0)::GEOMETRY
+    ) as distance_m
+  FROM ctd
+  ORDER BY distance_m
+  LIMIT 5;
+"
+)
+print(distance_test)
+
+# Test 6: Verify spatial index exists (if recreating)
+message("\n=== Checking indexes ===")
+indexes <- dbGetQuery(
+  con,
+  "
+  SELECT * FROM duckdb_indexes() 
+  WHERE table_name = 'ctd';
+"
+)
+print(indexes)
+
+# Optional: Recreate spatial index if needed
+# dbExecute(con, "DROP INDEX IF EXISTS idx_ctd_point_geom;")
+# dbExecute(con, "CREATE INDEX idx_ctd_point_geom ON ctd USING RTREE(point_geom);")
+
+# Test 7: Read into R as sf object
+message("\n=== Reading as sf object ===")
+sf_ctd <- st_read(
+  con,
+  query = "SELECT * EXCLUDE (point_geom), ST_AsWKB(point_geom) AS geom FROM ctd USING SAMPLE 50;",
+  geometry_column = "geom"
+) |>
+  st_set_crs(4326)
+mapView(sf_ctd)
+print(sf_ctd)
+
+# Cleanup
+# dbDisconnect(con, shutdown = TRUE)
 ```
 
 ## Interactive Gantt Chart
@@ -820,10 +1253,8 @@ dbDisconnect(con, shutdown = TRUE)
 ```{r}
 #| label: gantt-chart
 
-librarian::shelf(plotly, quiet = T)
-
 # reconnect to database
-con <- dbConnect(duckdb::duckdb(), dbdir = db_path, read_only = T)
+# con <- dbConnect(duckdb::duckdb(), dbdir = db_path, read_only = T)
 
 # tbl(con, "ctd") |>
 #   summarize(n = n())
@@ -970,3 +1401,83 @@ p
 # disconnect
 dbDisconnect(con, shutdown = TRUE) # get cruise date spans by cruise and stage
 ```
+
+## Notes (old)
+
+### Process raw data
+
+into usable form:
+
+-   [Fathom software \| Sea-Bird Scientific](https://software.seabird.com/)
+
+References:
+
+-   [CTD Data \| CalCOFI archives](https://newdata.calcofi.com/index.php/ctd-data)
+
+    > **Cast Files**. Files are created by SeaBird's Seasave program during each CalCOFI station. These data are unaltered and may contain errors (e.g., incorrect header information) or be incomplete due to system failure during collection. Two or more files may be available for a single station in the latter case. Each cruise will have a single cast data file. This file is a compressed .zip containing .zip files for each cast of the cruise, yymm_CTDCast.zip and yymm_llllssss\_###.zip respectively. Each station .zip should contain the following: .bl, .con, .hdr, .hex, .mrk, and .prn files.
+
+::: {.callout-note collapse="true"}
+#### CalCOFI CTD System
+
+-   A Sea-Bird Electronics 911plus V2 CTD collects vertical profile data at every CalCOFI station.
+-   In addition to being a dual TCO (temperature, conductivity, and oxygen) system, the CTD also interfaces with a transmissometer, fluorometer, PAR/SPAR meters, altimeter, nitrate, and pH sensor.
+-   Connected to a shipboard data-acquisition computer through an electronically-conductive winch wire, sensor data are collected and displayed real-time using Seasave V7.
+-   The CTD is normally lowered to terminal depth of 515 m, bottom-depth permitting, but is routinely deployed within meters from the seafloor at nearshore SCCOOS and basin stations.
+-   To ensure high resolution sampling in areas with significant hydrological and biological gradients a speed of \~30 m/min is used for the first 100 m then \~60 m/min to depth without stopping.
+-   During retrieval, the CTD is paused for at least 20 seconds at target bottle depths to adequately flush each 10 liter sample bottle prior to closure. Seawater samples are analyzed onboard (e.g., salinity, oxygen, nutrients, chl) and are used to correct measured CTD values.
+:::
+
+-   Mahmoud & Mas (2022) [Standard Operating Procedure: CTD data pre-processing](https://repository.oceanbestpractices.org/handle/11329/2081). *Ocean Best Practices*
+
+```         
+@article{mohamed2022standard,
+  title={Standard Operating Procedure: CTD data pre-processing.},
+  author={Mohamed Mahmoud, Mohamed and Munoz Mas, Cristian},
+  year={2022},
+  publisher={Institut Mauritanien De Recherches Oc{\'e}anographiques Et De P{\^e}ches (IMROP)}
+}
+```
+
+### Evaluate different zip files
+
+-   2025-Jul:
+
+    -   Preliminary CTD 1m-Binned\
+        [20-2507SR_CTD**Prelim**.zip](https://calcofi.org/downloads/2025/20-2507SR_CTDPrelim.zip)\
+        **Preliminary CTD 1m-Binned**: Raw CTD sensor data that have gone through SBE Data Processing, and obvious bad sensor readings have been flagged during initial QAQC. Bottle data has not yet been merged with the CTD data. CTD Salinity, Oxygen, Fluorescence, and Nitrate profiles have not been corrected to the bottle data. Cruise corrected Nitrate sensor data (EstNO3_CruiseCorr) has been converted from raw voltage using a sensor calibration done before each cruise, but not yet corrected using CTD vs. Bottle regressions. 
+
+-   2021-Jul:
+
+    -   ~~Prodo Cast~~ Raw CTD Data\
+        [20-2107SR_CTD**Cast**.zip](https://calcofi.org/downloads/2021/20-2107SR_CTDCast.zip)
+
+    -   Preliminary CTD & Bottle 1m-Binned\
+        [20-2107SR_CTD**Prelim**.zip](https://calcofi.org/downloads/2021/20-2107SR_CTDPrelim.zip)\
+        **Preliminary CTD & Bottle 1m-Binned**: Preliminary CTD sensor data that have been merged with QAQC’ed bottle data. CTD Salinity, Oxygen, Fluorescence, and Nitrate profiles have been corrected using CTD vs. bottle regressions. 
+
+-   2021-May:
+
+    -   Raw CTD Data\
+        [20-2105SH_CTD**Cast**.zip](https://calcofi.org/downloads/2021/20-2105SH_CTDCast.zip)\
+        **Raw CTD Data**: Data files (.xmlcon, .hex, .bl, .nav, .prn, .mrk, .hdr) directly from SBE Software ([Sea-Bird Scientific](https://www.seabird.com/)) with no processing or corrections applied.
+
+    -   Final 1m-Binned\
+        [20-2105SH_CTD**FinalQC**.zip](https://calcofi.org/downloads/2021/20-2105SH_CTDFinalQC.zip)\
+        **Final 1m-Binned**: CTD data that have passed through the CalCOFI quality control process. After standard Seasoft-processing (Sea-Bird Scientific’s data-processing suite) tuned for our SBE 911plus CTD, the .asc files are processed by SIO-CalCOFI in-house software (BtlVsCTD). Averaged (4-sec or 1-meter bin-averaged) CTD sensor data are matched with corresponding bottle data, then **cruise-corrected** and **station-corrected**. Zipped file includes: metadata and .asc, .hdr, .btl, and upcast & downcast .csvs (“u” and “d”; by station and concatenated).
+
+        -   **Cruise-corrected CTD data**: CTD sensor data that are corrected using regression coefficients derived from 4-sec average sensor data vs bottle data comparisons for the entire cruise, meaning all casts with bottle samples (n=\~1400; fliers omitted; column labels ‘\_CruiseCorr’).
+
+        -   **Station-corrected CTD data**: CTD sensor data that are corrected using regression coefficients generated dynamically for each cast, 1m bin-averaged sensor data vs bottle data (n=\~20; fliers omitted; column labels ‘\_StaCorr’).
+
+            -   Since sensor behavior may vary from station to station, station-corrected CTD sensor data for salinity, oxygen, estimated nitrate, and estimated chlorophyll-a are considered the best, particularly for estimated nitrate.
+
+-   1992-Feb:
+
+    -   Prodo Cast\
+        [19-9202JD_CTD**CastProdoStas**.zip](https://calcofi.org/downloads/1992/19-9202JD_CTDCastProdoStas.zip)\
+        **Test Cast/Prodo Cast**: The Seabird 911plus CTD was first tested in Mar 1990 (9003JD) but is still under development. CTD data from Mar 1990 – 1991 were occasional system & feasibility tests (“**test casts**“). As confidence in data quality improved, the CTD-Rosette began being used for daily primary productivity sample collection casts (“**prodo casts**“) in 1992 (6 depths from one station per day).
+
+-   1990-Mar:
+
+    -   Test Cast\
+        [19-9003JD_CTD**Test**.zip](https://calcofi.org/downloads/1990/19-9003JD_CTDTest.zip)
