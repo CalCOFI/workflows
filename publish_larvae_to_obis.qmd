@@ -1,34 +1,15 @@
 ---
 title: "Publish Larvae to OBIS"
-editor_options: 
+editor_options:
   chunk_output_type: console
 ---
 
-## Goals
+This workflow converts CalCOFI ichthyoplankton (fish eggs and larvae) data to an OBIS-compliant DarwinCore Archive for publication. The archive follows the Event Core structure with Occurrence and ExtendedMeasurementOrFact (eMoF) extensions.
 
-- Create a DarwinCore Archive (DwC-A) for CalCOFI ichthyoplankton (fish eggs and larvae) data to publish to OBIS.
-- Use the existing CalCOFI database schema and connection.
-- Ensure compliance with DarwinCore standards, including event hierarchy and extensions.
-
-### References
-
-DarwinCore:
-
-- [The OBIS Manual](https://manual.obis.org/)
-  - [7.2 ExtendedMeasurementOrFact Extension (eMoF) | The OBIS Manual](https://manual.obis.org/data_format.html#extendedmeasurementorfact-extension-emof)
-  ![](https://manual.obis.org/images/EventCoreSchema.png)
-  - [20.2 IPT: Integrated Publishing Toolkit | The OBIS Manual](https://manual.obis.org/ipt)
-- [Darwin Core Quick Reference Guide](https://dwc.tdwg.org/terms/)
-- [Guide for publishing biological survey and monitoring data to GBIF](https://docs.gbif.org/guide-publishing-survey-data/en/)
-- [Survey and Monitoring Data Quick-Start Guide: A how-to for updating a Darwin Core dataset using the Humboldt Extension](https://docs.gbif.org/survey-monitoring-quick-start/en/)
-- [Best Practices in Publishing Sampling-event data - planned additions and notes for revision :: GBIF IPT User Manual](https://ipt.gbif.org/manual/en/ipt/latest/best-practices-sampling-event-planned-additions)
-
-CalCOFI:
-
-- [CalCOFI.org: Fish Eggs & Larvae ](https://calcofi.org/data/marine-ecosystem-data/fish-eggs-larvae/)
-  - [ERDDAP: CoastWatch - Search 'CalCOFI'](https://coastwatch.pfeg.noaa.gov/erddap/search/index.html?page=1&itemsPerPage=1000&searchFor=CalCOFI)
-    - [CalCOFI info](https://oceanview.pfeg.noaa.gov/CalCOFI/calcofi_info.html)
-  - [EDI: CALCOFI fish larvae at 66 standard stations, 1966 - ongoing](https://portal.edirepository.org/nis/mapbrowse?scope=edi&identifier=109&revision=4)
+**References**: 
+- [OBIS Manual](https://manual.obis.org/)
+- [DarwinCore Terms](https://dwc.tdwg.org/terms/)
+- [CalCOFI Fish Eggs & Larvae](https://calcofi.org/data/marine-ecosystem-data/fish-eggs-larvae/)
 
 ```{r}
 #| label: setup
@@ -85,11 +66,13 @@ schema <- "dev"
 con <- get_db_con(schema)
 ```
 
-## Show Database Tables
+## Database Schema
+
+The CalCOFI database organizes ichthyoplankton data hierarchically: cruises contain sites, sites contain tows, and tows contain net samples. Biological observations (eggs, larvae) link to net samples via `net_uuid`.
 
 ```{r}
 #| label: fig-dm_tbls
-#| fig-cap: "Entity relationship diagram (ERD) of the CalCOFI database. Created using the data models `dm` R package function [`dm_draw()`](https://krlmlr.github.io/dm/reference/dm_draw.html)."
+#| fig-cap: "Entity relationship diagram (ERD) of the CalCOFI database."
 
 # exclude experimental tables
 tbls <- dbListTables(con) |>
@@ -109,46 +92,12 @@ dm_draw(dm, view_type = "all")
 %%| file: diagrams/calcofi_erd.mmd
 ```
 
-## Evaluate Merging Egg and Larva Stage Tables
+## Life Stage Reference
 
-### Egg Stages
+Egg development stages follow [Moser & Ahlstrom (1985)](https://repository.library.noaa.gov/view/noaa/5695/noaa_5695_DS1.pdf). Larva stages include: yolk sac, preflexion, flexion, postflexion, and transformation.
 
-```{r}
-#| label: egg_stage.stage
-
-tbl(con, "egg_stage") |>
-  group_by(stage) |>
-  summarize(n = n()) |>
-  collect() |>
-  arrange(stage)
-
-#    stage       n
-#    <int> <int64>
-#  1     1     346
-#  2     2    1684
-#  3     3    1703
-#  4     4    1279
-#  5     5    1685
-#  6     6    2693
-#  7     7    1995
-#  8     8    1644
-#  9     9    2247
-# 10    10    2156
-# 11    11    1746
-# 12    12     727
-# 13    13      41
-# 14    14       6
-# 15    15      16
-# TODO: ask Ed Weber what stages 12 through 15 mean?
-```
-
-[ERDDAP - Information about CalCOFI NOAA Fish Egg Stages, from NOAA SWFSC](https://coastwatch.pfeg.noaa.gov/erddap/info/erdCalCOFIeggstg/index.html#:~:text=NC_GLOBAL-,summary,-String):
-
-  > Egg morphological developmental stage for eggs of selected species captured in CalCOFI icthyoplankton nets. Sequential developmental stages are described by Moser and Ahlstrom (1985; see the info url references section). -- 
-
-https://oceanview.pfeg.noaa.gov/CalCOFI/calcofi_info.html:
-
-  > - Moser, H. G. and E. H. Ahlstrom. 1985. Staging anchovy eggs. An egg production method for estimating spawning biomass of pelagic fish: implication to the northern anchovy (Engraulis mordax). P. 37-41 in R. Lasker, ed. U.S. Dep. Commer. Tech. Rep. NMFS 36.  ([PDF](https://repository.library.noaa.gov/view/noaa/5695/noaa_5695_DS1.pdf))
+::: {.callout-note collapse="true"}
+## Egg Stage Descriptions (Moser & Ahlstrom, 1985)
 
 #### Stage I
 
@@ -275,772 +224,29 @@ and ends when it reaches three-quarters of the yolk sac length.
 
 This is the final stage before hatching and is defined by a tail length
 greater than three-quarters of the length of the yolk sac.
+:::
 
-### Larva Stages
+::: {.callout-note collapse="true"}
+## Larva Stage Descriptions
 
-```{r}
-#| label: larva_stage.stage
+Developmental stages of fish larvae captured in CalCOFI ichthyoplankton nets:
 
-tbl(con, "larva_stage") |>
-  group_by(stage) |>
-  summarize(n = n()) |>
-  collect()
-# 1 FLEX    18882
-# 2 POST    22446
-# 3 PREF    56913
-# 4 YOLK     5384
-# 5 TRNS     1754
-```
+- **YOLK**: Yolk-sac larva - newly hatched, still absorbing yolk
+- **PREF**: Preflexion larva - notochord straight, before flexion
+- **FLEX**: Flexion larva - notochord flexing upward
+- **POST**: Postflexion larva - notochord flexion complete
+- **TRNS**: Transformation stage - transitioning to juvenile
+:::
 
-- [ERDDAP - Information about CalCOFI NOAA Fish Larvae Stages, from NOAA SWFSC](https://coastwatch.pfeg.noaa.gov/erddap/info/erdCalCOFIlrvstg/index.html#:~:text=NC_GLOBAL-,summary,-String):
+## Conversion Design Decisions
 
-  > Developmental stages (yolk sac, preflexion, flexion, postflexion, or transformation) of selected fish larvae captured in CalCOFI icthyoplankton nets.
+Key design decisions for converting CalCOFI ichthyoplankton data to DarwinCore:
 
-### dwc:lifeStage
-
-- [dwc:lifeStage (n_concepts: 39) Darwin Core List of Terms - Darwin Core](https://dwc.tdwg.org/list/#dwc_lifeStage)
-
-- [LifeStage | GBIF Registry Vocabulary](https://registry.gbif.org/vocabulary/LifeStage) (n_concepts: 39)
-  > A vocabulary to capture the broad stages that an organism passes through during its life cycle. This vocabulary was assembled based on the observed terms commonly used by the open data community, including those from citizen scientists.
-
-  - [**Egg**](https://registry.gbif.org/vocabulary/LifeStage/concept/Egg) (n_children: 0)
-    > The egg is the organic vessel containing the zygote in which an embryo develops until it can survive on its own, at which point the animal hatches
-
-  - [**Larva**](https://registry.gbif.org/vocabulary/LifeStage/concept/Larva) (n_children: 11)
-    > A larva is a distinct juvenile form many animals undergo before metamorphosis into adults. Larvae often have different body structures from the adult form, and may also have different habitats and feeding behaviors.
-
-### other dataset: ICES Eggs and larvae | OBIS
-
-- [ICES Eggs and larvae | OBIS](https://obis.org/dataset/66fe7e4b-ddcc-44aa-8378-c7c7482c2844)
-- [Eggs and larvae | ICES](https://www.ices.dk/data/data-portals/Pages/Eggs-and-larvae.aspx)
-
-- [Vocabularies/ LifeStage / concepts | GBIF Registry](https://registry.gbif.org/vocabulary/LifeStage/concepts)
-- [BODC parameter semantic model biological entity development stage terms | NERC Vocabulary Server](https://vocab.nerc.ac.uk/collection/S11/current/)
-
-- [Frequently Asked Questions About Ichthyoplankton | NOAA Fisheries](https://www.fisheries.noaa.gov/west-coast/science-data/frequently-asked-questions-about-ichthyoplankton)
-
-- [Zooplankton taxonomy-related abundance per unit volume of the water column | NVS](https://vocab.nerc.ac.uk/collection/P02/current/ZATX/)
-
-- [14 Controlled vocabulary for eMoF | The OBIS Manual](https://manual.obis.org/vocabulary.html)
-  - [MoF viewer](https://mof.obis.org/)
-
-- [P01 concept: Abundance of Fish (WoRMS 11676) [Stage: egg] per unit volume of the water body by optical microscopy | NVS](https://vocab.nerc.ac.uk/collection/P01/current/Z830M00T/)
-  - [Pisces (11676; unaccepted Superclass) | WoRMS](https://www.marinespecies.org/aphia.php?p=taxdetails&id=11676)
-
-![VThe P01 wheel, demonstrating how P01 elements are represented by other NVS collections | Vocabulary - OBIS Manual](https://manual.obis.org/images/P01_wheel.png)
-
-### Lifestage	S11 - BODC Parameter Semantic Model Life Cycle Stages
-
-https://github.com/nvs-vocszxrabs/S11
-
-A controlled vocabulary for terms used in the BODC parameter semantic model to specify the development stage (life cycle stage) of a biological entity
-
-Terms and mappings available from: http://vocab.nerc.ac.uk/collection/S11/current/
-
-Search interface: https://www.bodc.ac.uk/resources/vocabularies/vocabulary_search/S11/
-
-#### Request for new terms and ways to contribute
-
-- Request for new S11 terms can be made using this [form](https://docs.google.com/forms/d/e/1FAIpQLSe-ZTKJZmNT5FmyPRFsPsNt2hpB_gb6MAmm7Zp-7GSMpn5NFA/viewform?usp=pp_url&entry.1396013310=S11)
-
-Reporting errors or suggestions for improving content can be submitted as [regular issues](https://github.com/nvs-vocabs/S11/issues/new) in this repository or emailed to vocab.services-at-bodc.ac.uk.
-
-## Prompt Claude to merge egg and larva tables
-
-PROMPT (plan mode): Help me figure out a strategy for sensibly merging egg, egg_stage, larva, larva_stage into a DarwinCore archive that accounts for total count (ie `tally`), stage (combining egg and larva `stage`), and size (`length_mm`) by `net_uuid`. Also incorporate recommended vocabularies, per:
-- https://manual.obis.org/vocabulary.html
-- https://ipt.gbif.org/manual/en/ipt/latest/best-practices-sampling-event-data
-
-Claude’s Plan: Strategy for Merging Egg/Larva Data into DarwinCore Archive
-
-### Current State Analysis
-
-Your existing implementation creates **separate occurrence records** for each stage:
-
-- `egg` → lifeStage: "egg"
-- `egg_stage` → lifeStage: "egg_1", "egg_2", etc.
-- `larva` → lifeStage: "larva"
-- `larva_stage` → lifeStage: "larva_FLEX", "larva_POST", etc.
-- `larva_size` → lifeStage: "larva" (size in remarks)
-
-This creates 5 separate occurrence records for a single species in one net sample.
-
-### Recommended Strategy: Consolidated Occurrence with eMoF Extension
-
-Following OBIS/GBIF best practices, I recommend **consolidating to fewer occurrences** and using the **ExtendedMeasurementOrFact (eMoF)** extension for detailed measurements:
-
-**Approach: Two occurrences per species per net_uuid**
-
-- **One "egg" occurrence** (if eggs present)
-- **One "larva" occurrence** (if larvae present)
-
-**Implementation Details:**
-
-**1. Occurrence Extension:**
-
-- `occurrenceID`: UUID per life stage (egg or larva)
-- `eventID: Links to net_uuid
-- `lifeStage: Use S11 vocabulary terms:
-  - `"egg" → http://vocab.nerc.ac.uk/collection/S11/current/S1110/
-  - "larva" → http://vocab.nerc.ac.uk/collection/S11/current/S1133/
-- `organismQuantity`: **TOTAL count** (sum across all stages/sizes)
-- `organismQuantityType`: "individuals"
-
-**2. MeasurementOrFact Extension for Stage Details:**
-
-- `occurrenceID`: Links to parent occurrence
-- `measurementType`: "life stage abundance"
-- `measurementTypeID`: P01 code for abundance by life stage
-- `measurementValue`: tally for specific stage
-- `measurementValueID`: S11 code for specific stage (e.g., "FLEX", "POST", "egg stage 5")
-- `measurementUnit`: "individuals"
-- `measurementUnitID`: P06 code
-
-**3. MeasurementOrFact Extension for Size:**
-
-- `occurrenceID`: Links to larva occurrence
-- `measurementType`: "body length"
-- `measurementTypeID`: P01 code for body length (search P01 for appropriate term)
-- `measurementValue`: length_mm value
-- `measurementUnit`: "millimeters"
-- `measurementUnitID`: http://vocab.nerc.ac.uk/collection/P06/current/UXMM/
-- `measurementRemarks`: Include tally if multiple individuals at same length
-
-**Key Changes Required:**
-
-1. **Aggregate totals** by net_uuid + species_id + major life stage (egg vs larva)
-1. **Map stage vocabularies** to S11 terms (needs vocabulary mapping table)
-1. **Expand eMoF records** for each stage detail instead of separate occurrences
-1. **Add vocabulary URIs** for measurementTypeID, measurementValueID, measurementUnitID
-1. **Update meta.xml** to properly define eMoF extension relationships
-
-**Benefits:**
-
-- ✓ Follows OBIS/GBIF best practices
-- ✓ Uses standardized vocabularies (S11, P01, P06)
-- ✓ Reduces occurrence record count by ~5x
-- ✓ Preserves all granular stage and size information
-- ✓ Better separates taxonomy (occurrence) from measurements (eMoF)
-- ✓ Makes data more queryable and comparable across datasets
-
-**Questions to Resolve:**
-
-1. Should we create separate occurrences for egg vs larva, or merge into one occurrence per species?
-
-Answer: Yes, keep separate occurrences for egg and larva.
-
-2. How should we map egg stages (1-15) and larva stages (YOLK, PREF, FLEX, POST, TRNS) to S11 vocabulary?
-Map egg stages to S11 terms for egg development stages (if available) or create custom mappings. Map larva stages to corresponding S11 terms.
-
-Answer: Use S11 terms as prefix, ie "egg" or "larva", and custom suffixes:
-
-- Egg stages: "egg, stage 1 of 11 (Moser & Ahlstrom, 1985)", "egg, stage 2 of 11 (Moser & Ahlstrom, 1985)", ..., "egg, stage 12 of 12 (Moser & Ahlstrom, 1985)", ..., "egg, stage 15 of 12 (Moser & Ahlstrom, 1985)" (admittedly stages 12 to 15 are unclear and will need revision later)
-
-- Larva stages: "larva, yolk sac"; "larva, preflexion", "larva, flexion"; "larva, postflexion"; or "larva, transformation"
-
-3. For larva_size records with the same length_mm but different tallies - should we sum them or keep separate eMoF records?
-
-Always use the `larva.tally` and `egg.tally` as the overall count for the occurrence record. For `larva_size`, create separate eMoF records for each unique length_mm with its corresponding tally.
-
-4. Also help debug GBIF IPT response from loading the existing dataset package as zip generated by @publish_larvae_to_obis.qmd as a "Sampling event" in DarwinCore: "Skipped mapped term http://rs.tdwg.org/dwc/terms/eventID, which is unknown to extension http://rs.tdwg.org/dwc/terms/MeasurementOrFact". I thought that eventID was required in both core and extension, but given the [Example: Brackish water invertebrates survey -- Best Practices in Publishing Sampling-event data :: GBIF IPT User Manual](https://ipt.gbif.org/manual/en/ipt/latest/best-practices-sampling-event-data#brackish-water-invertebrates-survey) perhaps it should be called "EventID" instead of "eventID"?
-
-Comprehensive Strategy for DarwinCore Archive Implementation
-
-### Part 1: Fix Current GBIF IPT Error
-
-Problem Identified: The `meta.xml:54-55` incorrectly defines eventID as BOTH:
-
-- `<coreid index="0" />` (line 54) - the linking column
-- `<field index="0" term="...eventID"/>` (line 55) - a data field
-
-**Solution**: Remove line 55 from meta.xml. The coreid column should NOT be duplicated as a field definition. The corrected MeasurementOrFact extension should be:
-
-```xml
-<extension ... rowType="http://rs.tdwg.org/dwc/terms/MeasurementOrFact">
-  <coreid index="0" />
-  <!-- Remove: <field index="0" term="...eventID"/> -->
-  <field index="1" term="http://rs.tdwg.org/dwc/terms/measurementType"/>
-  <field index="2" term="http://rs.tdwg.org/dwc/terms/measurementValue"/>
-  ...
-  <field index="7" term="http://rs.tdwg.org/dwc/terms/occurrenceID"/>
-</extension>
-```
-Note: eventID (column 0) remains as coreid; occurrenceID (column 7) stays as a regular field for biological measurements.
-
-### Part 2: Revised Data Structure for Egg/Larva Merging
-
-Based on your specifications:
-
-**Occurrence Extension Structure**
-
-**One occurrence per major life stage per species per net_uuid:**
-
-1. **Egg occurrence** (if eggs present):
-
-- `occurrenceID`: UUID
-- `eventID`: net_uuid
-- `scientificName`: species name
-- `lifeStage`: "egg" (with S11 URI)
-- `organismQuantity`: **egg.tally** (total across all stages)
-- `organismQuantityType`: "individuals"
-
-2. **Larva occurrence** (if larvae present):
-
-- `occurrenceID`: UUID
-- `eventID`: net_uuid
-- `scientificName`: species name
-- `lifeStage`: "larva" (with S11 URI)
-- `organismQuantity`: larva.tally (total across all stages)
-- `organismQuantityType`: "individuals"
-
-**MeasurementOrFact Extension Structure**
-
-**Three types of measurements:**
-
-**1. Environmental measurements** (link to eventID):
-
-- `eventID`: net_uuid
-- `occurrenceID`: NA
-- Measurements: std_haul_factor, vol_sampled_m3, prop_sorted, smallplankton, totalplankton
-
-**2. Stage-specific counts** (link to occurrenceID):
-
-- `eventID`: NA
-- `occurrenceID`: links to egg or larva occurrence
-- `measurementType`: "abundance by life stage"
-- `measurementTypeID`: P01 code (TBD - search P01 for appropriate term)
-- `measurementValue`: tally for specific stage
-- `measurementValueID`: Custom life stage term (see vocabulary mapping below)
-- `measurementUnit`: "individuals"
-- `measurementUnitID`: http://vocab.nerc.ac.uk/collection/P06/current/UUUU/
-
-
-**3. Size measurements**2 (link to occurrenceID):
-
-- `eventID`: NA
-- `occurrenceID`: links to larva occurrence
-- `measurementType`: "body length"
-- `measurementTypeID`: P01 code for body length
-- `measurementValue`: length_mm
-- `measurementUnit`: "millimeters"
-- `measurementUnitID`: http://vocab.nerc.ac.uk/collection/P06/current/UXMM/
-- `measurementRemarks`: Include tally value
-
-### Part 3: Life Stage Vocabulary Mapping
-
-Per your specifications, use S11 URI prefix with custom suffixes:
-
-**Egg Stages (from egg_stage table)**:
-
-- Stage 1: "egg, stage 1 of 11 (Moser & Ahlstrom, 1985)"
-- Stage 2: "egg, stage 2 of 11 (Moser & Ahlstrom, 1985)"
-...
-- Stage 11: "egg, stage 11 of 11 (Moser & Ahlstrom, 1985)"
-- Stage 12: "egg, stage 12 of 11 (Moser & Ahlstrom, 1985)" [needs revision]
-- Stage 13: "egg, stage 13 of 11 (Moser & Ahlstrom, 1985)" [needs revision]
-- Stage 14: "egg, stage 14 of 11 (Moser & Ahlstrom, 1985)" [needs revision]
-- Stage 15: "egg, stage 15 of 11 (Moser & Ahlstrom, 1985)" [needs revision]
-
-**S11 base URI**: http://vocab.nerc.ac.uk/collection/S11/current/S1110/ (egg)
-
-**Larva Stages (from larva_stage table)**:
-
-- YOLK: "larva, yolk sac"
-- PREF: "larva, preflexion"
-- FLEX: "larva, flexion"
-- POST: "larva, postflexion"
-- TRNS: "larva, transformation"
-
-**S11 base URI**: http://vocab.nerc.ac.uk/collection/S11/current/S1133/ (larva)
-
-### Part 4: Data Aggregation Logic
-
-SQL aggregation strategy:
-
-1. **Create egg occurrences**:
-
-```sql
-SELECT 
-  net_uuid,
-  species_id,
-  SUM(tally) as total_tally  -- sum from egg table
-FROM egg
-GROUP BY net_uuid, species_id
-```
-
-2. **Create larva occurrences**:
-
-```sql
-SELECT 
-  net_uuid,
-  species_id,
-  SUM(tally) as total_tally  -- sum from larva table
-FROM larva
-GROUP BY net_uuid, species_id
-```
-
-3. **Create stage-specific eMoF records**:
-
-- Join egg_stage → egg occurrence
-- Join larva_stage → larva occurrence
-- Each stage row becomes one eMoF measurement
-
-4. **Create size eMoF records**:
-
-- Join larva_size → larva occurrence
-- Each unique length_mm becomes one eMoF measurement
-- Include tally in measurementRemarks
-
-### Part 5: Required Vocabulary URIs
-
-To add to the implementation:
-
-1. lifeStage URIs:
-
-- Egg: http://vocab.nerc.ac.uk/collection/S11/current/S1110/
-- Larva: http://vocab.nerc.ac.uk/collection/S11/current/S1133/
-
-2. **measurementTypeID** (P01 codes to research):
-
-- Abundance by life stage: [search P01 collection]
-- Body length: [search P01 collection for fish larvae length]
-
-3. **measurementUnitID**:
-
-- Individuals: http://vocab.nerc.ac.uk/collection/P06/current/UUUU/
-- Millimeters: http://vocab.nerc.ac.uk/collection/P06/current/UXMM/
-- Dimensionless: http://vocab.nerc.ac.uk/collection/P06/current/UUUU/
-- Cubic meters: http://vocab.nerc.ac.uk/collection/P06/current/MCUB/
-- Grams: http://vocab.nerc.ac.uk/collection/P06/current/UGRM/
-- Proportion: http://vocab.nerc.ac.uk/collection/P06/current/UPCT/ (or dimensionless)
-
-### Part 6: Implementation Changes in publish_larvae_to_obis.qmd
-
-Key modifications needed:
-
-1. **Aggregate occurrence data** from 5 tables → 2 types (egg, larva)
-1. **Update lifeStage field** to use only "egg" or "larva" (not stage-specific)
-1. **Expand eMoF records** to include stage-specific counts
-1. **Add vocabulary URI fields**: lifeStageID, measurementTypeID, measurementValueID, measurementUnitID
-1. **Fix meta.xml** by removing duplicate eventID field definition
-1. **Create stage vocabulary lookup table** for mapping numeric/text stages to descriptive terms
-
-### Expected Outcome
-
-- **Occurrence reduction**: From ~867k occurrence records → ~491k occurrence records (combining 5 tables into 2 life stages)
-
-- **eMoF expansion**: From ~19k eMoF records → ~395k eMoF records (adding stage and size details) 
-
-### Benefits:
-
-- ✓ Follows OBIS/GBIF best practices
-- ✓ Fixes GBIF IPT validation error
-- ✓ Uses standardized vocabularies (S11, P01, P06)
-- ✓ Preserves all granular data through eMoF
-- ✓ Cleaner separation of taxonomy and measurements
-- ✓ More queryable and comparable data structure
-
-PROMPT: Instead of using MeasurementOrFact, be sure to explicitly use OBIS ExtendedMeasurementOrFact (eMoF) by for instance renaming output table to extendedMeasurementOrFact.csv and allowing occurrenceID to relate to individual occurrence records. Be sure to process https://manual.obis.org/format_emof.html and think hard before proceeding with plan and edits. Incorporate `vol_sampled_m3` as `sampleSizeValue` with `sampleSizeUnit` = "m^3". Research good options to incorporate **proportion sorted** `prop_sorted` and if possible **standard haul factor** (`std_haul_factor`).
-
-https://web.archive.org/web/20250417074825if_/https://calcofi.org/downloads/publications/atlases/CalCOFI_Atlas_28.pdf
-
-DISTRIBUTIONAL ATLAS OF FISH LARVAE IN THE CALIFORNIA CURRENT REGION:
-NORTHERN ANCHOVY, Engraulis mordax GIRARD,
-1966 THROUGH 1979
-by Roger Hewitt
-
-> Samples are standardized by adjusting to a standard unit of sea surface area. The standard unit is 10 m^2^ and the adjustment (**standard haul factor**) is calculated as the ratio of a standard volume of water filtered per unit depth and the total volume of water filtered over the total depth. Thus:
-
-$$
-SHF = ((10 m^3) / m) / (v/d) = 10 d
-$$
-
-> where $v$ is the volume of water filtered, determined by flowmeter, and $d$ is the depth fished, determined by the amount of wire out times the cosine of the average angle of stray from the vertical.
-> 
-> Sample counts were adjusted for fractioning (minimum aliquot was 25%) and standardized to each other. The charts are thus in units of the number of larvae under 10 m^2^ of sea surface.
-
-[ 
-`occurrence.csv: organismQuantity | organismQuantityType: "individuals"`
-]
-
-Comprehensive Strategy for DarwinCore Archive with OBIS ExtendedMeasurementOrFact
-
-### Part 1: Fix GBIF IPT Error & Use Proper eMoF Format
-
-Critical Changes:
-
-1. **Rename file**: measurementorfact.csv → extendedMeasurementOrFact.csv
-2. **Update rowType URI** in meta.xml from:
-
-```
-rowType="http://rs.tdwg.org/dwc/terms/MeasurementOrFact"
-```
-
-to:
-
-```
-rowType="http://rs.gbif.org/terms/1.0/ExtendedMeasurementOrFact"
-```
-
-or the OBIS schema URI:
-
-```
-rowType="https://rs.gbif.org/extension/obis/extended_measurement_or_fact.xml"
-```
-
-3. **Remove duplicate eventID field definition** from meta.xml:
-
-- Keep: `<coreid index="0" />` (links extension to core)
-- Remove: `<field index="0" term="...eventID"/>` (duplicates the coreid)
-
-4. **Retain occurrenceID field** (index 7) to enable biological measurement linking
-
-### Part 2: Move Volume Sampled to Event Core
-
-**Change: vol_sampled_m3 from eMoF → Event core** 
-
-Add to event.csv and event section of meta.xml:
-
-- `sampleSizeValue`: value from net.vol_sampled_m3
-- `sampleSizeUnit`: "m^3" (or "cubic meters")
-
-**Rationale**: Volume sampled is a fundamental sample attribute, not a measurement derived from the sample. OBIS best practices support placing this in the Event core.
-
-### Part 3: Restructured Occurrence Records
-
-**Create TWO occurrences per species per net_uuid**:
-
-**Egg Occurrence (when eggs present)**:
-
-```
-occurrenceID: UUID
-eventID: net_uuid
-scientificName: species name from species table
-scientificNameID: urn:lsid:marinespecies.org:taxname:{worms_id}
-kingdom: Animalia
-lifeStage: "egg"
-lifeStageID: http://vocab.nerc.ac.uk/collection/S11/current/S1110/
-organismQuantity: egg.tally (TOTAL across all stages)
-organismQuantityType: "individuals"
-occurrenceStatus: "present"
-basisOfRecord: "HumanObservation"
-```
-
-**Larva Occurrence (when larvae present)**:
-
-```
-occurrenceID: UUID
-eventID: net_uuid
-scientificName: species name from species table
-scientificNameID: urn:lsid:marinespecies.org:taxname:{worms_id}
-kingdom: Animalia
-lifeStage: "larva"
-lifeStageID: http://vocab.nerc.ac.uk/collection/S11/current/S1133/
-organismQuantity: larva.tally (TOTAL across all stages)
-organismQuantityType: "individuals"
-occurrenceStatus: "present"
-basisOfRecord: "HumanObservation"
-```
-
-**Key change**: Use aggregated totals from egg/larva tables, not stage-specific tables.
-
-### Part 4: ExtendedMeasurementOrFact Structure
-
-**Three measurement categories**:
-
-1. **Sample-Level Measurements** (link to eventID)
-
-A. **Proportion Sorted**:
-
-```
-eventID: net_uuid
-occurrenceID: [blank/NA]
-measurementID: UUID
-measurementType: "proportion of sample sorted"
-measurementTypeID: [P01 code - TBD, search for "subsample fraction" or "sorting proportion"]
-measurementValue: net.prop_sorted (e.g., "1" or "0.5")
-measurementUnit: "dimensionless" or "proportion"
-measurementUnitID: http://vocab.nerc.ac.uk/collection/P06/current/UUUU/
-measurementRemarks: "Fraction of total sample examined"
-```
-
-B. **Standard Haul Factor**:
-
-```
-eventID: net_uuid
-occurrenceID: [blank/NA]
-measurementID: UUID
-measurementType: "standardized haul factor"
-measurementTypeID: [P01 code - TBD, search for "catch standardization" or "sampling effort coefficient"]
-measurementValue: net.std_haul_factor (e.g., "3.14")
-measurementUnit: "dimensionless"
-measurementUnitID: http://vocab.nerc.ac.uk/collection/P06/current/UUUU/
-measurementMethod: "https://oceanview.pfeg.noaa.gov/CalCOFI/calcofi_info.html"
-measurementRemarks: "Standardization factor accounting for water filtered; abundances expressed as per 10 m² (Smith 1977)"
-```
-
-C. **Plankton Biomass**:
-
-```
-eventID: net_uuid
-occurrenceID: [blank/NA]
-measurementID: UUID
-measurementType: "small plankton biomass" / "total plankton biomass"
-measurementTypeID: [P01 code for biomass]
-measurementValue: net.smallplankton / net.totalplankton
-measurementUnit: "grams"
-measurementUnitID: http://vocab.nerc.ac.uk/collection/P06/current/UGRM/
-```
-
-2. **Stage-Specific Abundance** (link to occurrenceID)
-
-**Egg stages**:
-
-```
-eventID: [blank/NA]
-occurrenceID: egg occurrence UUID
-measurementID: UUID
-measurementType: "abundance by life stage"
-measurementTypeID: [P01 code - search for "abundance" + "development stage"]
-measurementValue: egg_stage.tally
-measurementValueID: [custom vocabulary URI - see below]
-measurementUnit: "individuals"
-measurementUnitID: http://vocab.nerc.ac.uk/collection/P06/current/UUUU/
-measurementRemarks: "egg, stage {N} of 11 (Moser & Ahlstrom, 1985)"
-```
-
-**Larva stages**:
-
-```
-eventID: [blank/NA]
-occurrenceID: larva occurrence UUID
-measurementID: UUID
-measurementType: "abundance by life stage"
-measurementTypeID: [P01 code]
-measurementValue: larva_stage.tally
-measurementValueID: [custom vocabulary URI]
-measurementUnit: "individuals"
-measurementUnitID: http://vocab.nerc.ac.uk/collection/P06/current/UUUU/
-measurementRemarks: Life stage mapping (see Part 5)
-```
-
-3. **Body Length Measurements** (link to occurrenceID)
-
-```
-eventID: [blank/NA]
-occurrenceID: larva occurrence UUID
-measurementID: UUID
-measurementType: "body length"
-measurementTypeID: [P01 code for fish larvae length - e.g., OBSINDLX or similar]
-measurementValue: larva_size.length_mm
-measurementUnit: "millimeters"
-measurementUnitID: http://vocab.nerc.ac.uk/collection/P06/current/UXMM/
-measurementMethod: "https://oceanview.pfeg.noaa.gov/CalCOFI/calcofi_info.html"
-measurementRemarks: "Count: {larva_size.tally}; Total length measurement"
-```
-
-### Part 5: Life Stage Vocabulary Mapping
-
-Custom terms based on S11 vocabulary:
-
-**Egg Stages (egg_stage.stage values 1-15)**:
-
-- Stage 1: "egg, stage 1 of 11 (Moser & Ahlstrom, 1985)"
-- Stage 2: "egg, stage 2 of 11 (Moser & Ahlstrom, 1985)"
-- ...
-- Stage 11: "egg, stage 11 of 11 (Moser & Ahlstrom, 1985)"
-- Stage 12-15: "egg, stage {N} of 11 (Moser & Ahlstrom, 1985)" [pending revision]
-
-Base vocabulary: S11/S1110 (egg)
-
-**Larva Stages** (larva_stage.stage values):
-
-stage |	measurementRemarks | Custom term
-------|--------------------|------------
-YOLK	| larva, yolk sac	| Yolk-sac larva
-PREF	| larva, preflexion	| Preflexion larva
-FLEX	| larva, flexion	| Flexion larva
-POST	| larva, postflexion	| Postflexion larva
-TRNS	| larva, transformation	| Transformation stage larva
-
-**Base vocabulary**: S11/S1133 (larva)
-
-**Implementation**: Create lookup table mapping stage codes to full descriptive terms.
-
-### Part 6: Required P01 Code Research
-
-To complete before implementation, search P01 vocabulary for:
-
-1. Proportion sorted:
-  - Search terms: "subsample", "fraction sorted", "aliquot"
-  - Alternative: Create custom term if no exact match
-1. Standard haul factor:
-  - Search terms: "standardization", "catch per unit effort", "sampling effort coefficient"
-  - Possibly related to CPUE codes
-1. Abundance by life stage:
-  - Search terms: "abundance", "count", "life stage", "development stage"
-  - May need fish-specific or zooplankton codes
-1. Body length:
-  - Search terms: "body length", "total length", "fish larvae", "Actinopterygii"
-  - Example code: OBSINDLX (commonly used for fish length)
-
-**P01 Search Tool**: https://vocab.seadatanet.org/p01-facet-search
-
-### Part 7: Implementation Changes in publish_larvae_to_obis.qmd
-
-Major code modifications:
-
-1. Event Core: Add sampleSizeValue and sampleSizeUnit columns
-1. Occurrence Extension:
-  - Aggregate by (net_uuid, species_id, major life stage)
-  - Reduce from 5 source tables to 2 occurrence types
-  - Add lifeStageID field
-1. eMoF Extension:
-  - Rename file to extendedMeasurementOrFact.csv
-  - Remove vol_sampled_m3 (moved to Event)
-  - Add prop_sorted and std_haul_factor as event-level measurements
-  - Expand to include stage-specific abundances (egg_stage, larva_stage)
-  - Include all larva_size measurements
-  - Add all vocabulary ID fields: measurementTypeID, measurementValueID, measurementUnitID
-1. meta.xml:
-  - Update eMoF rowType URI
-  - Remove duplicate eventID field definition
-  - Add sampleSizeValue/Unit to Event core mapping
-  - Add vocabulary ID fields to eMoF mapping
-
-### Part 8: Expected Data Structure Changes
-
-Current structure:
-
-- Occurrences: ~867k records (5 types per species/net)
-- eMoF: ~19k records (mostly environmental)
-
-New structure:
-
-- Occurrences: ~491k records (2 types per species/net)
-- eMoF: ~395k records (environmental + stage counts + sizes)
-
-**Benefits**:
-
-- ✓ OBIS-compliant eMoF format 
-- ✓ Fixes GBIF IPT validation error
-- ✓ Uses standardized vocabularies (S11, P01, P06) 
-- ✓ Preserves all data granularity
-- ✓ Clearer semantic separation (taxonomy vs. measurements)
-- ✓ More queryable for biological analyses ✓ Follows best practices for sampling-event datasets
-
-Perfect! I've completed all the implementation tasks for merging the egg and larva data into a proper OBIS-compliant DarwinCore archive. Here's a summary of all the changes made:
-
-### Summary of Changes to publish_larvae_to_obis.qmd
-
-✅ Completed Implementation
-
-1. **Event Core Updates** _(lines 1082-1085)_
-
-- Changed `sampleSizeUnit` from "cubic meters" to "m^3" per OBIS standards
-- `vol_sampled_m3` now populates `sampleSizeValue` in Event core (removed from eMoF)
-
-2. **Life Stage Vocabulary Lookup Tables** _(lines 948-1001 - NEW SECTION)_
-
-- Created egg_stage_vocab: Maps stages 1-15 to descriptive terms following Moser & Ahlstrom (1985)
-- Created larva_stage_vocab: Maps YOLK, PREF, FLEX, POST, TRNS to descriptive terms
-- Created measurement_unit_vocab: Maps units to P06 vocabulary URIs
-
-3. **Consolidated Occurrence Records** _(lines 1129-1188)_
-
-- **BEFORE**: 5 separate occurrence types (egg, egg_stage, larva, larva_stage, larva_size)
-- **AFTER**: 2 occurrence types per species per net (egg, larva)
-- Added `lifeStageID` field with S11 vocabulary URIs:
-  - Egg: http://vocab.nerc.ac.uk/collection/S11/current/S1110/
-  - Larva: http://vocab.nerc.ac.uk/collection/S11/current/S1133/
-- Uses total counts from `egg.tally` and `larva.tally` for `organismQuantity`
-
-4. **Completely Rewritten ExtendedMeasurementOrFact Extension** _(lines 1245-1371)_
-
-Created three measurement categories: 
-
-**A. Sample-level measurements** (linked to eventID):
-
-- std_haul_factor: Standardization factor
-- prop_sorted: Proportion of sample examined
-- smallplankton & totalplankton: Biomass measurements
-- Includes measurementTypeID and measurementUnitID fields (with TODOs for P01 codes)
-
-**B. Stage-specific abundance** (linked to occurrenceID):
-
-- Egg stage abundances from egg_stage table
-- Larva stage abundances from larva_stage table
-- Uses descriptive stage terms in measurementRemarks
-- Includes measurementValueID for vocabulary references
-
-**C. Body length measurements** (linked to occurrenceID):
-
-- From larva_size table
-- Includes tally count in measurementRemarks
-
-**5. File Naming Updates**
-
-- Output file renamed: measurementorfact.csv → extendedMeasurementOrFact.csv (line 1384)
-- Updated zip file creation (line 1702)
-- Updated data quality checks (line 1677)
-
-**6. Meta.xml Generation Updates** _(lines 1393-1545)_
-
-- Updated rowType URI to: http://rs.gbif.org/terms/1.0/ExtendedMeasurementOrFact _(line 1437)_
-- Added vocabulary ID field mappings:
-  - measurementTypeID, measurementValueID, measurementUnitID
-  - lifeStageID
-- **Fixed GBIF IPT error**: Modified create_field_elements() to skip coreid column (prevents duplicate eventID field definition)
-- Updated all filename references from measurementorfact to extendedMeasurementOrFact
-
-**📊 Expected Outcome**
-
-**Current structure** (before):
-
-- Occurrences: ~867k records (5 types per species/net)
-- eMoF: ~19k records (mostly environmental)
-
-**New structure** (after):
-
-- Occurrences: ~491k records (2 types per species/net) - **~43% reduction**
-- eMoF: ~395k records (environmental + stage counts + sizes) - **~20x increase**
-
-**✨ Benefits**
-
-- ✅ OBIS-compliant ExtendedMeasurementOrFact format
-- ✅ Fixes GBIF IPT validation error ("eventID unknown to extension")
-- ✅ Uses standardized vocabularies (S11, P06)
-- ✅ P01 codes ready to be added (TODOs marked in code)
-- ✅ Preserves all granular data (stages, sizes) through eMoF
-- ✅ Cleaner semantic separation (taxonomy vs. measurements)
-- ✅ More queryable and comparable data structure
-- ✅ Follows best practices for sampling-event datasets
-
-
-**📝 Remaining TODOs in Code**
-
-The following P01 vocabulary codes need to be researched and added:
-
-1. Standard haul factor
-1. Proportion sorted / subsample fraction
-1. Zooplankton biomass
-1. Abundance by life stage / development stage
-1. Fish larvae body length
-
-**P01 Search Tool**: https://vocab.seadatanet.org/p01-facet-search 
-
-All changes are complete and ready for testing! The code should now generate a fully OBIS-compliant DarwinCore archive with proper ExtendedMeasurementOrFact extension.
-
-## Prompt Claude to Generate DarwinCore
-
-PROMPT: Using the ERD above, create a Quarto document with chunks of R code and tidyverse style use of the database connection object `con` to generate a DarwinCore package using the `species.worms_id` (aka WoRMS AphiaID) to populate the species identifiers. Combine biological observation where possible, otherwise compose as seperate datasets, given the different biological observations: egg, eggstage, larva, larvasize, larvastage. Generate DarwinCore with as much of the extended information (i.e.,  `event`, `occurrence`, and `measurementOrFact` ) as possible.
-Compose Ecological Metadata Language (EML) metadata for the DarwinCore package, including the `dataset` and `creator` elements. Include prompts where more
-information is needed.
-
-```{r}
-#| label: stop_eval
-# knitr::opts_chunk$set(eval = F)
-```
+1. **Event hierarchy**: cruise → site → tow → net (following OBIS sampling-event model)
+2. **Occurrence consolidation**: One occurrence per life stage (egg or larva) per species per net sample, rather than separate occurrences for each developmental stage
+3. **ExtendedMeasurementOrFact (eMoF)**: Stage-specific counts, body lengths, and sample-level measurements linked via `occurrenceID` or `eventID`
+4. **Vocabulary mappings**: S11 for life stages, P06 for units, custom descriptive terms for CalCOFI-specific developmental stages
+5. **Sample size**: `vol_sampled_m3` stored as `sampleSizeValue` in Event core (not in eMoF)
 
 ## Data Extraction from Database
 
@@ -1698,6 +904,8 @@ d_extendedmeasurementorfact_extension <- bind_rows(
 
 ## Write DarwinCore Archive Files
 
+Export the event core and extension files (occurrence, eMoF) as CSV files:
+
 ```{r}
 #| label: export-dwc
 
@@ -1717,6 +925,8 @@ write_csv(
 ```
 
 ## Create meta.xml programmatically by cross-walking CSV fields to DwC terms
+
+Generate `meta.xml` by mapping CSV column names to DarwinCore term URIs:
 
 ```{r}
 #| label: create-meta-xml
@@ -1915,6 +1125,8 @@ cat(meta_xml)
 
 ## Create EML Metadata
 
+Build EML (Ecological Metadata Language) document with geographic, temporal, and taxonomic coverage:
+
 ```{r}
 #| label: build-eml
 
@@ -2109,6 +1321,8 @@ write_eml(my_eml, eml_xml)
 
 ## Data Quality Checks
 
+Validate data quality: check for missing WoRMS IDs, orphan records, and output summary statistics:
+
 ```{r}
 #| label: check-data-quality
 
@@ -2184,6 +1398,8 @@ glue(
 
 ## Package Creation
 
+Create the final DarwinCore Archive as a zip file containing all CSV files, meta.xml, and eml.xml:
+
 ```{r}
 #| label: create-dwc-archive
 
@@ -2209,6 +1425,8 @@ cat("\nDarwin Core Archive created:", zip_file, "\n")
 
 ## Check CSV
 
+Verify the exported CSV files and inspect measurement types and units:
+
 ```{r}
 #| label: check-csv
 
@@ -2231,26 +1449,7 @@ d_emof <- read_csv(glue("{dir_out}/extendedMeasurementOrFact.csv"))
 #   total plankton biomass                  0  45287           0           0
 ```
 
-## History of loading into IPT
-
-### 2025-11-11: Second attempt after aligning to OBIS extendedMeasurementOrFact
-
-![Messages from loading into IPT as "Sampling evet" on 2025-11-11](./figures/ipt-load-messages_2025-11-11.png)
-
-
-### 2025-11-10: First attempt to load into GBIF IPT as "Sampling evet" dataset
-
-![Messages from loading into IPT as "Sampling evet" on 2025-11-10](./figures/ipt-load-messages_2025-11-10.png)
-
-> - Skipped mapped term http://rs.tdwg.org/dwc/terms/occurrencelD, which is unknown to extension http://rs.tdwg.org/dwc/terms/MeasurementOrFact
-> - Skipped mapped term http://rs.tdwg.org/dwc/terms/eventID, which is unknown to extension http://rs.tdwg.org/dwc/terms/MeasurementOrFact
-
-- 🤔 But `EventID` (vs `eventID`?) clearly is supposed to link `measurementorfact` to `event` to `occurrence`, per [Example: Brackish water invertebrates survey -- Best Practices in Publishing Sampling-event data :: GBIF IPT User Manual](https://ipt.gbif.org/manual/en/ipt/latest/best-practices-sampling-event-data#brackish-water-invertebrates-survey).
-- TODO: try renaming `eventID` to `EventID` in all 3 files and re-uploading to IPT.
-  - Prompt: Help debug GBIF IPT response to loading a Sampling event DarwinCore dataset package from zip generated by @publish_larvae_to_obis.qmd: "Skipped mapped term http://rs.tdwg.org/dwc/terms/eventID, which is unknown to extension http://rs.tdwg.org/dwc/terms/MeasurementOrFact"
-
-
-## Questions for Ed
+## To confirm: dataset metadata
 
 Please confirm the following seem reasonable to you:
 
