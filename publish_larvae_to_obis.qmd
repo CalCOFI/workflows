@@ -10,7 +10,6 @@ editor_options:
 - Use the existing CalCOFI database schema and connection.
 - Ensure compliance with DarwinCore standards, including event hierarchy and extensions.
 
-
 ### References
 
 DarwinCore:
@@ -34,14 +33,6 @@ CalCOFI:
 ```{r}
 #| label: setup
 
-# TODO:
-# commit
-# - [x] use lazy loading of tbl, so skip `|> collect()`
-# - [x] %>% to |>
-# - [x] invert events hierarchy: net -> tow (-> tow_type) -> site -> cruise -> ship
-# - [x] use UUID, ie drop prefix `urn:uuid:` for eventID, occurrenceID, measurementID
-# - [ ] Consider merging larva, larvastage, and larvasize into one occurrence table, since all sharing net_uuid, species_id
-
 librarian::shelf(
   CalCOFI / calcofi4db,
   DBI,
@@ -61,9 +52,9 @@ librarian::shelf(
 )
 options(readr.show_col_types = F)
 
-# Dataset metadata - PROMPTS FOR REQUIRED INFORMATION
-dataset_title <- "CalCOFI Fish Larvae Tows" # Prompt: Enter dataset title
-dataset_abstract <- "Fish larvae counts and standardized counts for eggs captured in CalCOFI icthyoplankton nets (primarily vertical [Calvet or Pairovet], oblique [bongo or ring nets], and surface tows [Manta nets]) . Surface tows are normally standardized to count per 1,000 m3 strained. Oblique tows are normally standardized to count per 10 m2 of surface sampled."
+# Dataset metadata
+dataset_title <- "CalCOFI Fish Larvae Tows"
+dataset_abstract <- "Fish larvae counts and standardized counts for eggs captured in CalCOFI icthyoplankton nets (primarily vertical [Calvet or Pairovet], oblique [bongo or ring nets], and surface tows [Manta nets]). Surface tows are normally standardized to count per 1,000 m^3 strained. Oblique tows are normally standardized to count per 10 m^2 of surface sampled."
 dataset_keywords <- c(
   "atmosphere",
   "biology",
@@ -77,6 +68,15 @@ dataset_keywords <- c(
   "time"
 ) # GCMD Science Keywords (source: https://catalog.data.gov/dataset/calcofi-larvae-counts-positive-tows)
 # dataset_uuid <- UUIDgenerate() # Or use existing dataset UUID
+country_code <- "US"
+water_body <- "California Current" # LME: http://marineregions.org/mrgid/8549
+dataset_id <- glue(
+  "calcofi.io_workflow_larvae_to_obis_{format(Sys.Date(), '%Y-%m-%d')}"
+)
+sampling_methods_description <- "Standard CalCOFI ichthyoplankton tows. The standard oblique tow uses a bongo net (71 cm diameter, 0.505 mm mesh) or 1-m ring net (prior to 1978) retrieved at a constant wire angle (45 degrees) from 210 m depth to surface. Surface tows use a Manta net; vertical tows use CalVET/Pairovet nets. Flowmeters measure volume filtered. Samples are preserved in 5% formalin. In the lab, fish eggs and larvae are sorted, identified to lowest taxon possible, enumerated, and measured."
+study_extent_description <- "The study covers the California Current ecosystem, primarily off Southern California (standard lines 77-93) but historically extending from the border of Canada to the tip of Baja California. The time series for this dataset generally begins in 1951 and continues to the present, with quarterly cruises."
+sampling_description <- "Samples are collected at fixed stations along the CalCOFI grid. Oblique tows are standardized to counts per 10 m^2 of sea surface. Surface tows are standardized to counts per 1,000 m^3. Data includes raw counts (tallies) and standardized abundances."
+funding_information <- "CalCOFI is a partnership between the NOAA National Marine Fisheries Service (NMFS), Scripps Institution of Oceanography (SIO), and California Department of Fish and Wildlife (CDFW)."
 
 dir_out <- here("data/darwincore/larvae")
 
@@ -416,12 +416,12 @@ Following OBIS/GBIF best practices, I recommend **consolidating to fewer occurre
 
 **Benefits:**
 
-✓ Follows OBIS/GBIF best practices
-✓ Uses standardized vocabularies (S11, P01, P06)
-✓ Reduces occurrence record count by ~5x
-✓ Preserves all granular stage and size information
-✓ Better separates taxonomy (occurrence) from measurements (eMoF)
-✓ Makes data more queryable and comparable across datasets
+- ✓ Follows OBIS/GBIF best practices
+- ✓ Uses standardized vocabularies (S11, P01, P06)
+- ✓ Reduces occurrence record count by ~5x
+- ✓ Preserves all granular stage and size information
+- ✓ Better separates taxonomy (occurrence) from measurements (eMoF)
+- ✓ Makes data more queryable and comparable across datasets
 
 **Questions to Resolve:**
 
@@ -629,15 +629,16 @@ Key modifications needed:
 
 - **Occurrence reduction**: From ~867k occurrence records → ~491k occurrence records (combining 5 tables into 2 life stages)
 
-- **eMoF expansion**: From ~19k eMoF records → ~395k eMoF records (adding stage and size details) Benefits:
+- **eMoF expansion**: From ~19k eMoF records → ~395k eMoF records (adding stage and size details) 
 
-✓ Follows OBIS/GBIF best practices
-✓ Fixes GBIF IPT validation error
-✓ Uses standardized vocabularies (S11, P01, P06)
-✓ Preserves all granular data through eMoF
-✓ Cleaner separation of taxonomy and measurements
-✓ More queryable and comparable data structure
+### Benefits:
 
+- ✓ Follows OBIS/GBIF best practices
+- ✓ Fixes GBIF IPT validation error
+- ✓ Uses standardized vocabularies (S11, P01, P06)
+- ✓ Preserves all granular data through eMoF
+- ✓ Cleaner separation of taxonomy and measurements
+- ✓ More queryable and comparable data structure
 
 PROMPT: Instead of using MeasurementOrFact, be sure to explicitly use OBIS ExtendedMeasurementOrFact (eMoF) by for instance renaming output table to extendedMeasurementOrFact.csv and allowing occurrenceID to relate to individual occurrence records. Be sure to process https://manual.obis.org/format_emof.html and think hard before proceeding with plan and edits. Incorporate `vol_sampled_m3` as `sampleSizeValue` with `sampleSizeUnit` = "m^3". Research good options to incorporate **proportion sorted** `prop_sorted` and if possible **standard haul factor** (`std_haul_factor`).
 
@@ -921,12 +922,12 @@ New structure:
 
 **Benefits**:
 
-✓ OBIS-compliant eMoF format 
-✓ Fixes GBIF IPT validation error
-✓ Uses standardized vocabularies (S11, P01, P06) 
-✓ Preserves all data granularity
-✓ Clearer semantic separation (taxonomy vs. measurements)
-✓ More queryable for biological analyses ✓ Follows best practices for sampling-event datasets
+- ✓ OBIS-compliant eMoF format 
+- ✓ Fixes GBIF IPT validation error
+- ✓ Uses standardized vocabularies (S11, P01, P06) 
+- ✓ Preserves all data granularity
+- ✓ Clearer semantic separation (taxonomy vs. measurements)
+- ✓ More queryable for biological analyses ✓ Follows best practices for sampling-event datasets
 
 Perfect! I've completed all the implementation tasks for merging the egg and larva data into a proper OBIS-compliant DarwinCore archive. Here's a summary of all the changes made:
 
@@ -1006,14 +1007,14 @@ Created three measurement categories:
 
 **✨ Benefits**
 
-✅ OBIS-compliant ExtendedMeasurementOrFact format
-✅ Fixes GBIF IPT validation error ("eventID unknown to extension")
-✅ Uses standardized vocabularies (S11, P06)
-✅ P01 codes ready to be added (TODOs marked in code)
-✅ Preserves all granular data (stages, sizes) through eMoF
-✅ Cleaner semantic separation (taxonomy vs. measurements)
-✅ More queryable and comparable data structure
-✅ Follows best practices for sampling-event datasets
+- ✅ OBIS-compliant ExtendedMeasurementOrFact format
+- ✅ Fixes GBIF IPT validation error ("eventID unknown to extension")
+- ✅ Uses standardized vocabularies (S11, P06)
+- ✅ P01 codes ready to be added (TODOs marked in code)
+- ✅ Preserves all granular data (stages, sizes) through eMoF
+- ✅ Cleaner semantic separation (taxonomy vs. measurements)
+- ✅ More queryable and comparable data structure
+- ✅ Follows best practices for sampling-event datasets
 
 
 **📝 Remaining TODOs in Code**
@@ -1026,7 +1027,9 @@ The following P01 vocabulary codes need to be researched and added:
 1. Abundance by life stage / development stage
 1. Fish larvae body length
 
-**P01 Search Tool**: https://vocab.seadatanet.org/p01-facet-search All changes are complete and ready for testing! The code should now generate a fully OBIS-compliant DarwinCore archive with proper ExtendedMeasurementOrFact extension.
+**P01 Search Tool**: https://vocab.seadatanet.org/p01-facet-search 
+
+All changes are complete and ready for testing! The code should now generate a fully OBIS-compliant DarwinCore archive with proper ExtendedMeasurementOrFact extension.
 
 ## Prompt Claude to Generate DarwinCore
 
@@ -1332,13 +1335,13 @@ q_net_events <- q_net_events_allflds |>
 
 # Combine all event levels
 db_version <- tbl(con, "schema_version") |> pull(version)
-dataset_id <- paste0(
-  # "https://github.com/CalCOFI/calcofi4db/releases/tag/v",
-  "calcofi_db.",
-  db_version,
-  "_larvae.",
-  format(Sys.Date(), "%Y-%m-%d")
-)
+# dataset_id <- paste0(
+#   # "https://github.com/CalCOFI/calcofi4db/releases/tag/v",
+#   "calcofi_db.",
+#   db_version,
+#   "_larvae.",
+#   format(Sys.Date(), "%Y-%m-%d")
+# )
 # "calcofi_db.1.1.0_larvae.2025-10-09"
 
 q_event_core <- list(
@@ -1365,8 +1368,8 @@ q_event_core <- list(
     # basisOfRecord                 = "HumanObservation",
     geodeticDatum = "WGS84",
     coordinateUncertaintyInMeters = 1000, # TODO: adjust based on accuracy of GPS/Loran/dead-reckoning over time
-    countryCode = "US",
-    waterBody = "California Current", # LME: http://marineregions.org/mrgid/8549
+    countryCode = country_code, # country_code <- "US"
+    waterBody = water_body,
     datasetID = dataset_id
   )
 # TODO: datasetID: permalink to this qmd in calcofi4db release?
@@ -1478,6 +1481,7 @@ q_occurrence_extension <- list(
 ## Create ExtendedMeasurementOrFact Extension
 
 Create eMoF records for three types of measurements:
+
 1. Sample-level measurements (linked to eventID)
 2. Stage-specific abundance (linked to occurrenceID)
 3. Body length measurements (linked to occurrence ID)
@@ -1931,26 +1935,35 @@ temp_coverage <- tbl_tow |>
     endDate = max(time_start, na.rm = TRUE)
   ) |>
   collect() |>
-  as.Date()
+  pivot_longer(
+    cols = everything(),
+    names_to = "name",
+    values_to = "value"
+  ) |>
+  mutate(
+    value = as.Date(value)
+  ) |>
+  deframe() |>
+  as.list()
 
 # Taxonomic coverage
 
 librarian::shelf(duckdb)
 db <- "https://file.calcofi.io/data/calcofi.duckdb"
 tmp_db <- file.path(tempdir(), "calcofi.duckdb")
-con <- dbConnect(duckdb::duckdb(), dbdir = tmp_db, read_only = F)
+con_dk <- dbConnect(duckdb::duckdb(), dbdir = tmp_db, read_only = F)
 # attach remote duckdb database
-dbSendQuery(con, glue::glue("ATTACH DATABASE '{db}';"))
+dbSendQuery(con_dk, glue::glue("ATTACH DATABASE '{db}' AS cc;"))
 # dbListTables(con)
 #  [1] "bottle"         "cast"           "cruise"         "egg"            "egg_stage"      "grid"
 #  [7] "larva"          "larva_size"     "larva_stage"    "net"            "schema_version" "ship"
 # [13] "site"           "site_seg"       "species"        "taxa_rank"      "taxonomy"       "tow"
 # [19] "tow_type"
-d_taxa <- dbReadTable(con, Id(schema = "cc", table = "taxonomy"))
+d_taxa <- dbReadTable(con_dk, Id(schema = "cc", table = "taxonomy"))
 
 taxa_coverage <- tbl_species |>
   filter(!is.na(worms_id)) |>
-  distinct(worms_id) |>
+  distinct(species_id, worms_id, common_name) |>
   collect() |>
   left_join(
     d_taxa |>
@@ -1961,25 +1974,43 @@ taxa_coverage <- tbl_species |>
       ),
     by = join_by(worms_id == taxonID)
   ) |>
-  arrange(scientificName)
+  # De-duplicate in case multiple local species map to same WoRMS ID
+  group_by(worms_id, taxonRank, scientificName) |>
+  summarize(
+    species_id = first(species_id),
+    common_name = paste(unique(na.omit(common_name)), collapse = ", "),
+    .groups = "drop"
+  ) |>
+  arrange(species_id) |>
+  pmap(function(
+    species_id,
+    taxonRank,
+    scientificName,
+    common_name,
+    worms_id,
+    ...
+  ) {
+    item <- list(
+      id = glue("calcofi_species_{species_id}"),
+      taxonRankName = taxonRank,
+      taxonRankValue = scientificName,
+      taxonId = list(
+        provider = "https://www.marinespecies.org",
+        as.character(worms_id)
+      )
+    )
 
-# Class    Family     Genus   Kingdom     Order    Phylum   Species  Subclass Subfamily  Suborder Subphylum
-#
-# taxa_coverage$taxonRank |> table()
-#   as.list()
+    if (!is.na(common_name) && common_name != "") {
+      item$commonName <- common_name
+    }
 
-# OLD:
-# <scientificName>Teleostei</scientificName>
-# TODO: NEW:
-# <taxonomicClassification>
-#   <taxonRankName>division</taxonRankName>
-#   <taxonRankValue>Teleostei</taxonRankValue>
-# </taxonomicClassification>
+    return(item)
+  })
 
 # Create EML document
 my_eml <- list(
   packageId = dataset_id,
-  system = "calcofi_db.{version}_{dataset}.{render-date}",
+  system = "calcofi.io",
   dataset = list(
     title = dataset_title,
     creator = list(
@@ -2027,17 +2058,17 @@ my_eml <- list(
     methods = list(
       methodStep = list(
         description = list(
-          para = "[SAMPLING METHODS DESCRIPTION]"
+          para = sampling_methods_description
         )
       ), # TODO: sampling methods
       sampling = list(
         studyExtent = list(
           description = list(
-            para = "[STUDY EXTENT DESCRIPTION]"
+            para = study_extent_description
           )
         ), # TODO: study extent
         samplingDescription = list(
-          para = "[SAMPLING DESCRIPTION]"
+          para = sampling_description
         )
       )
     ), # TODO: sampling
@@ -2051,14 +2082,29 @@ my_eml <- list(
         role = "Principal Investigator"
       ),
       funding = list(
-        para = "[FUNDING INFORMATION]"
+        para = funding_information
       )
     )
   )
-) # TODO: Funding
+)
+
+eml_xml <- glue("{dir_out}/eml.xml")
+
+# my_eml <- EML::read_eml(eml_xml)
+
+# Validate EML before writing
+validation_result <- eml_validate(my_eml)
+if (!validation_result) {
+  cat("EML validation errors:\n")
+  print(attr(validation_result, "errors"))
+  stop()
+} else {
+  cat("EML is valid!\n")
+}
 
 # Write EML
-write_eml(my_eml, file.path(dir_out, "eml.xml"))
+write_eml(my_eml, eml_xml)
+# browseURL(eml_xml)
 ```
 
 ## Data Quality Checks
@@ -2166,15 +2212,15 @@ cat("\nDarwin Core Archive created:", zip_file, "\n")
 ```{r}
 #| label: check-csv
 
-d_event <- read_csv(file.path(dir_out, "event.csv"))
-d_occurrence <- read_csv(file.path(dir_out, "occurrence.csv"))
-d_emof <- read_csv(file.path(dir_out, "extendedMeasurementOrFact.csv"))
+d_event <- read_csv(glue("{dir_out}/event.csv"))
+d_occurrence <- read_csv(glue("{dir_out}/occurrence.csv"))
+d_emof <- read_csv(glue("{dir_out}/extendedMeasurementOrFact.csv"))
 
-d_event
-d_occurrence
-d_emof
+# d_event
+# d_occurrence
+# d_emof
 
-d_emof |> select(measurementType, measurementUnit) |> table(useNA = "ifany")
+# d_emof |> select(measurementType, measurementUnit) |> table(useNA = "ifany")
 #                              measurementUnit
 # measurementType               dimensionless  grams individuals millimeters
 #   abundance by life stage                 0      0      125347           0
@@ -2204,23 +2250,47 @@ d_emof |> select(measurementType, measurementUnit) |> table(useNA = "ifany")
   - Prompt: Help debug GBIF IPT response to loading a Sampling event DarwinCore dataset package from zip generated by @publish_larvae_to_obis.qmd: "Skipped mapped term http://rs.tdwg.org/dwc/terms/eventID, which is unknown to extension http://rs.tdwg.org/dwc/terms/MeasurementOrFact"
 
 
-## Questions
+## Questions for Ed
 
-- `datasetID`: 
-  https://manual.obis.org/examples.html -> datasetID: https://marineinfo.org/id/dataset/6403
+Please confirm the following seem reasonable to you:
 
-## Required Information Prompts
+- [ ] Dataset ID \
+  `dataset_id`: `r dataset_id` \
+  See: <https://manual.obis.org/examples.html> -> `datasetID`: <https://marineinfo.org/id/dataset/6403>
 
-Please provide the following information to complete the DarwinCore package:
+- [ ] Dataset title \
+  `dataset_title`: `r dataset_title`\
 
-### Dataset Information
-- [ ] Dataset title
-- [ ] Dataset abstract (200-500 words describing the dataset)
-- [ ] Keywords (3-5 relevant keywords)
-- [ ] Country code (ISO 3166-1 alpha-2)
-- [ ] Water body name
+- [ ] Dataset abstract (200-500 words describing the dataset) \
+  `dataset_abstract`: `r dataset_abstract`
+
+- [ ] Keywords (3-5 relevant keywords) \
+  `dataset_keywords`: `r dataset_keywords`\
+
+- [ ] Country code (ISO 3166-1 alpha-2) \
+  `country_code`: `r country_code`\
+
+- [ ] Water body name \
+  `water_body`: `r water_body`\
+
+- [ ] Sampling Methods Description\
+  `sampling_methods_description`: `r sampling_methods_description`\
+
+- [ ] Study Extent Description \
+  `study_extent_description`: `r study_extent_description`\
+
+- [ ] Sampling Description \
+  `sampling_description`: `r sampling_description`\
+
+- [ ] Funding Information \
+  `funding_information`: `r funding_information`\
+
+
+<!-- 
+## Other Checklist Items
 
 ### Personnel Information
+
 - [ ] Dataset creator name and ORCID
 - [ ] Creator organization
 - [ ] Creator email
@@ -2228,6 +2298,7 @@ Please provide the following information to complete the DarwinCore package:
 - [ ] Principal investigator name
 
 ### Project Information
+
 - [ ] Project title
 - [ ] Funding information (agency and grant numbers)
 
@@ -2245,11 +2316,9 @@ Please provide the following information to complete the DarwinCore package:
 - [ ] Geographic description of the study area
 - [ ] GPS accuracy (coordinate uncertainty in meters)
 
-Once this information is provided, update the placeholders marked with [NEED ...] in the code above.
+## Done
 
-## TODO
-
-- [ ] drop `lifeStageID` (does not exist) and make **eMoF** like ["Lifestage" in 16 Dataset Examples: ENV-DATA | The OBIS Manual](https://manual.obis.org/examples.html#:~:text=TripNR3242TripStationNR16781MidasTripActionID105598occurenceIDTA_105598_(Pseudo%2D)pediastrum_5-,Lifestage,-http%3A//vocab.nerc):
+- [x] drop `lifeStageID` (does not exist) and make **eMoF** like ["Lifestage" in 16 Dataset Examples: ENV-DATA | The OBIS Manual](https://manual.obis.org/examples.html#:~:text=TripNR3242TripStationNR16781MidasTripActionID105598occurenceIDTA_105598_(Pseudo%2D)pediastrum_5-,Lifestage,-http%3A//vocab.nerc):
 
   - `measurementType`: "Lifestage"
   - `measurementTypeID`: "http://vocab.nerc.ac.uk/collection/P01/current/LSTAGE01/"
@@ -2259,4 +2328,4 @@ Once this information is provided, update the placeholders marked with [NEED ...
   - `measurementUnitID`: 
   - `measurementDeterminedBy`: "Flanders Marine Institute"
   - `measurementMethod`: "identified and counted by image analysis and normalised to a unit volume of water body, validated by human"
-
+-->
