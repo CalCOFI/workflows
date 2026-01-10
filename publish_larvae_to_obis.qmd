@@ -6,10 +6,7 @@ editor_options:
 
 This workflow converts CalCOFI ichthyoplankton (fish eggs and larvae) data to an OBIS-compliant DarwinCore Archive for publication. The archive follows the Event Core structure with Occurrence and ExtendedMeasurementOrFact (eMoF) extensions.
 
-**References**: 
-- [OBIS Manual](https://manual.obis.org/)
-- [DarwinCore Terms](https://dwc.tdwg.org/terms/)
-- [CalCOFI Fish Eggs & Larvae](https://calcofi.org/data/marine-ecosystem-data/fish-eggs-larvae/)
+**References**: [CalCOFI Fish Eggs & Larvae](https://calcofi.org/data/marine-ecosystem-data/fish-eggs-larvae/) | [erdCalCOFIlrvcnt | CoastWatch ERDDAP](https://coastwatch.pfeg.noaa.gov/erddap/info/erdCalCOFIlrvcnt/index.html) | [OBIS Manual](https://manual.obis.org/) | [DarwinCore Terms](https://dwc.tdwg.org/terms/)
 
 ```{r}
 #| label: setup
@@ -20,22 +17,25 @@ librarian::shelf(
   dm,
   dplyr,
   DT,
+  duckdb,
   EML,
   glue,
   here,
   lubridate,
   purrr,
+  stringr,
   readr,
   tibble,
   tidyr,
   uuid,
+  xml2,
   quiet = T
 )
 options(readr.show_col_types = F)
 
 # Dataset metadata
 dataset_title <- "CalCOFI Fish Larvae Tows"
-dataset_abstract <- "Fish larvae counts and standardized counts for eggs captured in CalCOFI icthyoplankton nets (primarily vertical [Calvet or Pairovet], oblique [bongo or ring nets], and surface tows [Manta nets]). Surface tows are normally standardized to count per 1,000 m^3 strained. Oblique tows are normally standardized to count per 10 m^2 of surface sampled."
+dataset_abstract <- "Fish larvae counts and standardized counts for eggs captured in CalCOFI ichthyoplankton nets (primarily vertical [Calvet or Pairovet], oblique [bongo or ring nets], and surface tows [Manta nets]). Surface tows are normally standardized to count per 1,000 m^3 strained. Oblique tows are normally standardized to count per 10 m^2 of surface sampled."
 dataset_keywords <- c(
   "atmosphere",
   "biology",
@@ -51,13 +51,31 @@ dataset_keywords <- c(
 # dataset_uuid <- UUIDgenerate() # Or use existing dataset UUID
 country_code <- "US"
 water_body <- "California Current" # LME: http://marineregions.org/mrgid/8549
+
 dataset_id <- glue(
   "calcofi.io_workflow_larvae_to_obis_{format(Sys.Date(), '%Y-%m-%d')}"
 )
+
 sampling_methods_description <- "Standard CalCOFI ichthyoplankton tows. The standard oblique tow uses a bongo net (71 cm diameter, 0.505 mm mesh) or 1-m ring net (prior to 1978) retrieved at a constant wire angle (45 degrees) from 210 m depth to surface. Surface tows use a Manta net; vertical tows use CalVET/Pairovet nets. Flowmeters measure volume filtered. Samples are preserved in 5% formalin. In the lab, fish eggs and larvae are sorted, identified to lowest taxon possible, enumerated, and measured."
+
 study_extent_description <- "The study covers the California Current ecosystem, primarily off Southern California (standard lines 77-93) but historically extending from the border of Canada to the tip of Baja California. The time series for this dataset generally begins in 1951 and continues to the present, with quarterly cruises."
+
 sampling_description <- "Samples are collected at fixed stations along the CalCOFI grid. Oblique tows are standardized to counts per 10 m^2 of sea surface. Surface tows are standardized to counts per 1,000 m^3. Data includes raw counts (tallies) and standardized abundances."
+
 funding_information <- "CalCOFI is a partnership between the NOAA National Marine Fisheries Service (NMFS), Scripps Institution of Oceanography (SIO), and California Department of Fish and Wildlife (CDFW)."
+
+rights <- "The data may be used and redistributed for free but is not intended for legal use, since it may contain inaccuracies. Neither the data Contributor, ERD, NOAA, nor the United States Government, nor any of their employees or contractors, makes any warranty, express or implied, including warranties of merchantability and fitness for a particular purpose, or assumes any legal liability for the accuracy, completeness, or usefulness, of this information."
+# source: [erdCalCOFIlrvcnt | CoastWatch ERDDAP](https://coastwatch.pfeg.noaa.gov/erddap/info/erdCalCOFIlrvcnt/index.html)
+
+license <- "To the extent possible under law, the publisher has waived all rights to these data and has dedicated them to the Public Domain (CC0 1.0). Users may copy, modify, distribute and use the work, including for commercial purposes, without restriction."
+# source: [erdCalCOFIlrvcnt | CoastWatch ERDDAP](https://coastwatch.pfeg.noaa.gov/erddap/info/erdCalCOFIlrvcnt/index.html)
+license_xml <- c(
+  "Public Domain (CC0 1.0)" = '<ulink url="http://creativecommons.org/publicdomain/zero/1.0/legalcode"><citetitle>Public Domain (CC0 1.0)</citetitle></ulink>'
+)
+
+intellectual_rights <- list(
+  para = paste(rights, license, collapse = " ")
+)
 
 dir_out <- here("data/darwincore/larvae")
 
@@ -293,10 +311,10 @@ egg_stage_vocab <- tibble(
     "egg, stage 9 of 11 (Moser & Ahlstrom, 1985)",
     "egg, stage 10 of 11 (Moser & Ahlstrom, 1985)",
     "egg, stage 11 of 11 (Moser & Ahlstrom, 1985)",
-    "egg, stage 12 of 11 (Moser & Ahlstrom, 1985)", # TODO: needs revision
-    "egg, stage 13 of 11 (Moser & Ahlstrom, 1985)", # TODO: needs revision
-    "egg, stage 14 of 11 (Moser & Ahlstrom, 1985)", # TODO: needs revision
-    "egg, stage 15 of 11 (Moser & Ahlstrom, 1985)" # TODO: needs revision
+    "egg, stage 12 of 11 (Moser & Ahlstrom, 1985)", # TODO: stage 12 to 15 of 11 remove?
+    "egg, stage 13 of 11 (Moser & Ahlstrom, 1985)",
+    "egg, stage 14 of 11 (Moser & Ahlstrom, 1985)",
+    "egg, stage 15 of 11 (Moser & Ahlstrom, 1985)"
   )
 )
 
@@ -373,24 +391,24 @@ flds_to_iso8601 <- function(flds, output = "datetime") {
   stopifnot(output %in% c("datetime", "time"))
 
   if (length(flds) == 1 & output == "datetime") {
-    s <- glue::glue(
+    s <- glue(
       "to_char({flds}, 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"')"
     )
   }
   if (length(flds) == 2 & output == "datetime") {
-    s <- glue::glue(
+    s <- glue(
       "to_char({flds[1]}, 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') || '/' || 
          to_char({flds[2]}, 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"')"
     )
   }
 
   if (length(flds) == 1 & output == "time") {
-    s <- glue::glue(
+    s <- glue(
       "to_char({flds}, 'HH24:MI:SS\"Z\"')"
     )
   }
   if (length(flds) == 2 & output == "time") {
-    s <- glue::glue(
+    s <- glue(
       "to_char({flds[1]}, 'HH24:MI:SS\"Z\"') || '/' || 
        to_char({flds[2]}, 'HH24:MI:SS\"Z\"')"
     )
@@ -1015,7 +1033,7 @@ create_field_elements <- function(csv_file, term_map, coreid_field = NULL) {
     term <- term_map$terms[[col]]
 
     if (!is.null(term)) {
-      glue::glue('    <field index="{i-1}" term="{term}"/>')
+      glue('    <field index="{i-1}" term="{term}"/>')
     } else {
       # Field exists in CSV but not in DwC mapping - skip or warn
       message(
@@ -1080,7 +1098,7 @@ generate_meta_xml <- function(dir_out) {
   )
 
   # Build complete meta.xml
-  meta_xml <- glue::glue(
+  meta_xml <- glue(
     '<?xml version="1.0" encoding="UTF-8"?>
 <archive xmlns="http://rs.tdwg.org/dwc/text/"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -1160,12 +1178,13 @@ temp_coverage <- tbl_tow |>
 
 # Taxonomic coverage
 
-librarian::shelf(duckdb)
 db <- "https://file.calcofi.io/data/calcofi.duckdb"
 tmp_db <- file.path(tempdir(), "calcofi.duckdb")
-con_dk <- dbConnect(duckdb::duckdb(), dbdir = tmp_db, read_only = F)
-# attach remote duckdb database
-dbSendQuery(con_dk, glue::glue("ATTACH DATABASE '{db}' AS cc;"))
+con_dk <- dbConnect(duckdb(), dbdir = tmp_db, read_only = F)
+# attach remote duckdb database, but first detect if already attached
+if (!"taxonomy" %in% dbListTables(con_dk)) {
+  dbSendQuery(con_dk, glue("ATTACH DATABASE '{db}' AS cc;"))
+}
 # dbListTables(con)
 #  [1] "bottle"         "cast"           "cruise"         "egg"            "egg_stage"      "grid"
 #  [7] "larva"          "larva_size"     "larva_stage"    "net"            "schema_version" "ship"
@@ -1173,10 +1192,37 @@ dbSendQuery(con_dk, glue::glue("ATTACH DATABASE '{db}' AS cc;"))
 # [19] "tow_type"
 d_taxa <- dbReadTable(con_dk, Id(schema = "cc", table = "taxonomy"))
 
+# WoRMS superseded identifiers for some CalCOFI taxa, otherwise missing in d_taxa so no scientificName found (EML fails validation)
+d_worms_superseded = tribble(
+  ~sci_old             , ~worms_old , ~sci_new                , ~worms_new ,
+  "Serraninae"         ,     151756 , "Serranidae"            ,     125561 ,
+  "Anthiadinae"        ,    1061345 , "Anthiadidae"           ,    1758484 ,
+  "Epinephelinae"      ,     151758 , "Epinephelidae"         ,    1776907 ,
+  "Paranthias colonus" ,     282083 , "Cephalopholis colonus" ,    1750630
+)
+
 taxa_coverage <- tbl_species |>
+  mutate(
+    worms_id = case_when(
+      is.na(worms_id) | worms_id == 0 ~ NA_integer_,
+      TRUE ~ worms_id
+    )
+  ) |>
+  collect() |>
+  # replace worms_id with updated WoRMS IDs where applicable
+  left_join(
+    d_worms_superseded |> select(worms_old, worms_new),
+    by = join_by(worms_id == worms_old)
+  ) |>
+  mutate(
+    worms_id = case_when(
+      !is.na(worms_new) ~ worms_new,
+      TRUE ~ worms_id
+    )
+  ) |>
+  select(-worms_new) |>
   filter(!is.na(worms_id)) |>
   distinct(species_id, worms_id, common_name) |>
-  collect() |>
   left_join(
     d_taxa |>
       distinct(
@@ -1219,12 +1265,43 @@ taxa_coverage <- tbl_species |>
     return(item)
   })
 
+# Metadata validation result: Invalid
+#  Basic Metadata  Edit
+# eml.intellectualRights.license: Data Licence is required.
+#  Taxonomic Coverage  Edit
+# eml.taxonomicCoverages[0].taxonKeywords[340].scientificName: Scientific Name is required.
+# eml.taxonomicCoverages[0].taxonKeywords[345].scientificName: Scientific Name is required.
+# eml.taxonomicCoverages[0].taxonKeywords[348].scientificName: Scientific Name is required.
+# eml.taxonomicCoverages[0].taxonKeywords[363].scientificName: Scientific Name is required.
+
+# find taxa_coverage items with missing scientificName
+missing_taxa <- keep(taxa_coverage, ~ is.na(.x$taxonRankValue))
+missing_sp_ids <- map_chr(missing_taxa, "id") |>
+  str_replace("calcofi_species_", "") |>
+  as.integer()
+missing_sp <- tbl_species |>
+  filter(species_id %in% missing_sp_ids)
+#   species_id scientific_name    itis_id worms_id common_name
+#        <int> <chr>                <int>    <int> <chr>
+# 1        430 Serraninae          643089   151756 NA
+# 2        435 Anthiinae           167675  1061345 NA
+# 3        438 Grammistini         643093   151758 Soapfishes
+# 4        453 Paranthias colonus  551113   282083 Pacific creolefish
+if (length(missing_taxa) > 0) {
+  cat("WARNING: The following taxa are missing scientific names:\n")
+  print(missing_taxa)
+  cat(
+    "\nPlease add scientific names for these taxa before finalizing the dataset.\n"
+  )
+}
+
 # Create EML document
 my_eml <- list(
   packageId = dataset_id,
   system = "calcofi.io",
   dataset = list(
     title = dataset_title,
+    intellectualRights = intellectual_rights,
     creator = list(
       individualName = list(
         givenName = "Ed",
@@ -1272,26 +1349,26 @@ my_eml <- list(
         description = list(
           para = sampling_methods_description
         )
-      ), # TODO: sampling methods
+      ),
       sampling = list(
         studyExtent = list(
           description = list(
             para = study_extent_description
           )
-        ), # TODO: study extent
+        ),
         samplingDescription = list(
           para = sampling_description
         )
       )
-    ), # TODO: sampling
+    ),
     project = list(
-      title = dataset_title, # TODO: project title?
+      title = dataset_title,
       personnel = list(
         individualName = list(
-          givenName = "Ed", # TODO: PI?
+          givenName = "Ed",
           surName = "Weber"
         ),
-        role = "Principal Investigator"
+        role = "Data Manager"
       ),
       funding = list(
         para = funding_information
@@ -1302,10 +1379,15 @@ my_eml <- list(
 
 eml_xml <- glue("{dir_out}/eml.xml")
 
-# my_eml <- EML::read_eml(eml_xml)
+# Write EML
+write_eml(my_eml, eml_xml)
 
-# Validate EML before writing
-validation_result <- eml_validate(my_eml)
+# replace license placeholder with actual license xml
+readLines(eml_xml) |>
+  str_replace(fixed(names(license_xml)), license_xml) |>
+  writeLines(eml_xml)
+
+validation_result <- eml_validate(eml_xml)
 if (!validation_result) {
   cat("EML validation errors:\n")
   print(attr(validation_result, "errors"))
@@ -1313,10 +1395,6 @@ if (!validation_result) {
 } else {
   cat("EML is valid!\n")
 }
-
-# Write EML
-write_eml(my_eml, eml_xml)
-# browseURL(eml_xml)
 ```
 
 ## Data Quality Checks
@@ -1449,41 +1527,46 @@ d_emof <- read_csv(glue("{dir_out}/extendedMeasurementOrFact.csv"))
 #   total plankton biomass                  0  45287           0           0
 ```
 
-## To confirm: dataset metadata
+## Dataset metadata
 
-Please confirm the following seem reasonable to you:
+- **Dataset ID** \
+  `r dataset_id` \
+  _(This points to this workflow. See other <https://manual.obis.org/examples.html>, e.g. `datasetID`: <https://marineinfo.org/id/dataset/6403>)_\
 
-- [ ] Dataset ID \
-  `dataset_id`: `r dataset_id` \
-  See: <https://manual.obis.org/examples.html> -> `datasetID`: <https://marineinfo.org/id/dataset/6403>
+- **Dataset title** \
+  `r dataset_title`\
 
-- [ ] Dataset title \
-  `dataset_title`: `r dataset_title`\
+- **Dataset abstract** \
+  _(200-500 words describing the dataset)_\
+  `r dataset_abstract` \
+  _(Source: [erdCalCOFIlrvcnt | CoastWatch ERDDAP](https://coastwatch.pfeg.noaa.gov/erddap/info/erdCalCOFIlrvcnt/index.html))_
 
-- [ ] Dataset abstract (200-500 words describing the dataset) \
-  `dataset_abstract`: `r dataset_abstract`
+- **Keywords** \
+  _(3-5 relevant keywords)_ \
+  `r dataset_keywords`\
 
-- [ ] Keywords (3-5 relevant keywords) \
-  `dataset_keywords`: `r dataset_keywords`\
+- **Country code** \
+  _(ISO 3166-1 alpha-2)_ \
+  `r country_code`\
 
-- [ ] Country code (ISO 3166-1 alpha-2) \
-  `country_code`: `r country_code`\
+- **Water body name** \
+  `r water_body`\
 
-- [ ] Water body name \
-  `water_body`: `r water_body`\
+- **Sampling Methods Description**\
+  `r sampling_methods_description`\
 
-- [ ] Sampling Methods Description\
-  `sampling_methods_description`: `r sampling_methods_description`\
+- **Study Extent Description** \
+  `r study_extent_description`\
 
-- [ ] Study Extent Description \
-  `study_extent_description`: `r study_extent_description`\
+- **Sampling Description** \
+  `r sampling_description`\
 
-- [ ] Sampling Description \
-  `sampling_description`: `r sampling_description`\
+- **Funding Information** \
+  `r funding_information`\
 
-- [ ] Funding Information \
-  `funding_information`: `r funding_information`\
-
+- **Intellectual Rights** \
+  `r intellectual_rights`\
+  _(Sources: [erdCalCOFIlrvcnt | CoastWatch ERDDAP](https://coastwatch.pfeg.noaa.gov/erddap/info/erdCalCOFIlrvcnt/index.html); [Applying a License to a Dataset | GBIF IPT User Manual](https://ipt.gbif.org/manual/en/ipt/latest/applying-license#supplementary-information))_
 
 <!-- 
 ## Other Checklist Items
