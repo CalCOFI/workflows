@@ -22,6 +22,7 @@ librarian::shelf(
   glue,
   here,
   lubridate,
+  iobis/obistools,
   purrr,
   stringr,
   readr,
@@ -1508,9 +1509,42 @@ Verify the exported CSV files and inspect measurement types and units:
 ```{r}
 #| label: check-csv
 
-d_event <- read_csv(glue("{dir_out}/event.csv"))
+d_event      <- read_csv(glue("{dir_out}/event.csv"))
 d_occurrence <- read_csv(glue("{dir_out}/occurrence.csv"))
-d_emof <- read_csv(glue("{dir_out}/extendedMeasurementOrFact.csv"))
+d_emof       <- read_csv(glue("{dir_out}/extendedMeasurementOrFact.csv"))
+
+check_fields(d_occurrence)
+#   level field            row   message                                   
+#   <chr> <chr>            <lgl> <chr>                                     
+# 1 error eventDate        NA    Required field eventDate is missing       
+# 2 error decimalLongitude NA    Required field decimalLongitude is missing
+# 3 error decimalLatitude  NA    Required field decimalLatitude is missing 
+check_eventids(d_event)
+# A tibble: 0 × 0
+check_extension_eventids(d_event, d_occurrence)
+# A tibble: 0 × 0
+
+d_event_flat <- flatten_event(d_event)
+d_event_flat |> names() |> paste(collapse = ", ")
+# eventID, eventType, eventDate, samplingProtocol, eventRemarks, habitat, parentEventID, sampleSizeValue, sampleSizeUnit, decimalLatitude, decimalLongitude, locationID, geodeticDatum, coordinateUncertaintyInMeters, countryCode, waterBody, datasetID
+
+d_occurrence_flat_event <- flatten_occurrence(d_event, d_occurrence)
+
+check_fields(d_occurrence_flat_event)
+# A tibble: 0 × 0
+
+check_eventdate(d_event |> select(eventDate))
+# # A tibble: 134,426 × 4
+#    level   row field     message                                      
+#    <chr> <int> <chr>     <chr>                                        
+#  1 error   677 eventDate eventDate NA does not seem to be a valid date
+#  2 error   678 eventDate eventDate NA does not seem to be a valid date
+#  3 error   679 eventDate eventDate NA does not seem to be a valid date
+#  4 error   680 eventDate eventDate NA does not seem to be a valid date
+
+# Create tree structure
+tree <- treeStructure(d_event, d_occurrence, d_emof)
+exportTree(tree, "tree.html")
 
 # d_event
 # d_occurrence
