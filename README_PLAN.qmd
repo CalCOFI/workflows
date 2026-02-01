@@ -1,0 +1,980 @@
+---
+title: "CalCOFI Data Workflow Plan"
+format:
+  html:
+    # toc: true              # md to exclude: {.unnumbered .unlisted}
+    # toc-depth: 4
+    # toc-expand: 2
+    number-sections: false # true  # md to exclude: {.unnumbered}
+    code-fold: false # true
+    code-tools: false # true
+    embed-resources: true # false
+---
+
+> This document outlines a comprehensive strategy for managing and versioning CalCOFI data files, building an integrated database, and publishing datasets to external portals.
+
+## Executive Summary
+
+This plan modernizes the CalCOFI data workflow architecture to:
+1. Version raw data files in Google Cloud Storage (GCS)
+2. Use DuckDB + Parquet as the primary integrated database format
+3. Leverage `targets` for workflow dependency management
+4. Use R packages (`calcofi4r`, `calcofi4db`) for reusable functions
+5. Maintain reproducible pipelines from raw data to published datasets
+
+---
+
+## 1. Current State Analysis
+
+### 1.1 Existing Infrastructure
+
+| Component | Current State | Location |
+|-----------|--------------|----------|
+| **Workflows** | Individual Quarto notebooks | `/workflows/` |
+| **Database** | PostgreSQL with dev/prod schemas | api.calcofi.io |
+| **R Packages** | `calcofi4r` (user), `calcofi4db` (admin) | GitHub |
+| **Data Sources** | CSV files on Google Drive | `~/My Drive/projects/calcofi/data` |
+| **Documentation** | Quarto site | `/docs/` |
+
+### 1.2 Key Workflow Files
+
+| Workflow | Purpose | Status |
+|----------|---------|--------|
+| `ingest_calcofi.org_bottle-database.qmd` | Ingest bottle/cast data | Partial |
+| `ingest_swfsc.noaa.gov_calcofi-db.qmd` | Ingest NOAA ichthyoplankton data | Active |
+| `publish_larvae_to_obis.qmd` | Publish larvae to OBIS | Active (needs bottle data) |
+
+### 1.3 Identified Gaps
+
+1. **No dependency management**: Workflows run independently without declared dependencies
+2. **No file versioning**: Source files updated in place without version history
+3. **PostgreSQL overhead**: Requires server maintenance and API infrastructure
+4. **Disconnected workflows**: No systematic connection between ingest and publish steps
+5. **Manual sequencing**: Users must know to run bottle ingestion before larvae ingestion
+
+---
+
+## 2. File Versioning Strategy
+
+### 2.1 The Two-World Problem
+
+CalCOFI data originates from multiple sources managed by different individuals:
+
+- **Rasmus**: Bottle/cast data, CTD profiles
+- **Ed**: Ichthyoplankton (larvae, eggs) data
+- **Nastassia**: eDNA data
+- **Linsey**: Zooplankton samples
+
+These dataset managers need a simple interface (Google Drive) to deposit and organize files, while the data engineering side needs version control, immutability, and reproducibility.
+
+### 2.2 Google Drive: The Human Interface
+
+#### Folder Structure
+```
+calcofi/data/                              # Shared Google Drive folder
+├── calcofi.org/
+│   └── bottle-database/
+│       ├── bottle.csv                     # Current version
+│       ├── cast.csv
+│       └── field_descriptions.csv
+├── swfsc.noaa.gov/
+│   └── calcofi-db/
+│       ├── cruise.csv
+│       ├── egg.csv
+│       ├── larva.csv
+│       ├── net.csv
+│       ├── ship.csv
+│       ├── site.csv
+│       ├── species.csv
+│       └── tow.csv
+├── coastwatch.pfeg.noaa.gov/
+│   └── erdCalCOFIlrvsiz/
+│       └── larvae_size.csv
+└── _archive/                              # Manual archive (optional)
+    └── 2025-01-15_bottle.csv              # User-created backup
+```
+
+#### Google Drive Naming Conventions
+
+- **Folders**: `{provider}/{dataset}/` (lowercase, hyphen-separated)
+- **Files**: Original source names, no date prefixes required
+- **Updates**: Dataset managers simply overwrite existing files
+- **No versioning in Drive**: Google Drive does not maintain file history for CSVs
+
+#### Dataset Manager Workflow
+
+1. Prepare updated CSV file locally
+2. Upload to appropriate folder in Google Drive (overwriting existing)
+3. Optionally notify data team of significant changes
+4. **No date prefixes needed** - versioning happens automatically via rclone
+
+### 2.3 Google Cloud Storage: The Versioned Data Lake
+
+#### Bucket Structure
+
+```
+gs://calcofi-files/                        # Versioned source files
+├── current/                               # Mirror of Google Drive (latest state)
+│   ├── calcofi.org/
+│   │   └── bottle-database/
+│   │       ├── bottle.csv
+│   │       └── cast.csv
+│   └── swfsc.noaa.gov/
+│       └── calcofi-db/
+│           ├── cruise.csv
+│           ├── egg.csv
+│           └── ...
+├── archive/                               # Timestamped versions of changed files
+│   ├── 2026-01-15_120000/                # YYYY-MM-DD_HHMMSS
+│   │   └── calcofi.org/
+│   │       └── bottle-database/
+│   │           └── bottle.csv            # Previous version before update
+│   ├── 2026-01-20_120000/
+│   │   └── swfsc.noaa.gov/
+│   │       └── calcofi-db/
+│   │           └── larva.csv
+│   └── ...
+└── manifests/                             # Version metadata
+    ├── manifest_2026-01-15.json
+    ├── manifest_2026-01-20.json
+    └── manifest_latest.json → manifest_2026-01-20.json
+
+gs://calcofi-db/                           # Integrated database
+├── parquet/                               # Transformed tables
+│   ├── bottle.parquet
+│   ├── cast.parquet
+│   ├── larvae.parquet
+│   └── ...
+├── duckdb/                                # DuckDB database files
+│   └── calcofi.duckdb
+└── ducklake/                              # DuckLake catalog
+    └── catalog.json
+```
+
+#### GCS Naming Conventions
+
+- **current/**: Exact mirror of Google Drive structure
+- **archive/{YYYY-MM-DD_HHMMSS}/**: Timestamp when file was superseded
+- **manifests/manifest_{YYYY-MM-DD}.json**: Daily snapshot metadata
+
+### 2.4 Rclone Sync: Capturing Daily Changes
+
+#### Installation
+
+**macOS:**
+
+```bash
+brew install rclone
+```
+
+**Linux (Ubuntu/Debian):**
+
+```bash
+curl https://rclone.org/install.sh | sudo bash
+```
+
+#### Configuration
+
+Run `rclone config` and create two remotes:
+
+**Remote 1: Google Drive (`gdrive`)**
+
+```
+n) New remote
+name> gdrive
+Storage> drive
+client_id>                        # leave blank
+client_secret>                    # leave blank
+scope> 1                          # Full access (or 2 for read-only)
+service_account_file>             # leave blank for OAuth, or path to JSON key
+Edit advanced config> n
+Use auto config> y                # opens browser (use 'n' on headless server)
+Configure this as a Shared Drive> n
+```
+
+<!---
+Ben's laptop output on 2026-02-01:
+
+Configuration complete.
+Options:
+- type: drive
+- scope: drive
+- token: {"access_token":"...","expiry":"2026-02-01T01:40:32.653983-06:00","expires_in":3599}
+- team_drive: 
+Keep this "gdrive-ecoquants" remote?
+y) Yes this is OK (default)
+e) Edit this remote
+d) Delete this remote
+y/e/d> y
+
+Current remotes:
+
+Name                 Type
+====                 ====
+gcs-calcofi          google cloud storage
+gdrive-ecoquants     drive
+-->
+
+
+**Remote 2: Google Cloud Storage (`gcs`)**
+
+```
+n) New remote
+name> gcs
+Storage> google cloud storage
+client_id>                        # leave blank
+client_secret>                    # leave blank
+project_number> ucsd-sio-calcofi
+service_account_file>             # leave blank for OAuth, or path to JSON key
+Edit advanced config> n
+Use auto config> y                # opens browser (use 'n' on headless server)
+```
+
+<!--
+Ben's laptop output on 2026-02-01:
+
+Use web browser to automatically authenticate rclone with remote?
+ * Say Y if the machine running rclone has a web browser you can use
+ * Say N if running rclone on a (remote) machine without web browser access
+If not sure try Y. If Y failed, try N.
+
+y) Yes (default)
+n) No
+y/n> 
+
+2026/02/01 00:29:35 NOTICE: Make sure your Redirect URL is set to "http://127.0.0.1:53682/" in your custom config.
+2026/02/01 00:29:35 NOTICE: If your browser doesn't open automatically go to the following link: http://127.0.0.1:53682/auth?state=paZTK8N-GsB5j3kJDEq5SA
+2026/02/01 00:29:35 NOTICE: Log in and authorize rclone for access
+2026/02/01 00:29:35 NOTICE: Waiting for code...
+2026/02/01 00:29:48 NOTICE: Got code
+Configuration complete.
+Options:
+- type: google cloud storage
+- project_number: ucsd-sio-calcofi
+- object_acl: publicRead
+- bucket_acl: publicRead
+- bucket_policy_only: true
+- token: {"access_token":"...","expiry":"2026-02-01T01:29:48.100866-06:00","expires_in":3599}
+Keep this "gcs-calcofi" remote?
+y) Yes this is OK (default)
+e) Edit this remote
+d) Delete this remote
+y/e/d> y
+
+Current remotes:
+
+Name                 Type
+====                 ====
+gcs-calcofi          google cloud storage
+gdrive               drive
+-->
+
+#### Headless Server Setup
+
+For Linux servers without a browser, use `rclone authorize` on a local machine:
+
+```bash
+# on local machine with browser
+rclone authorize "drive"
+# copy the token output
+
+# on server, during rclone config
+Use auto config> n
+# paste the token when prompted
+```
+
+Similarly for GCS:
+
+```bash
+# on local machine
+rclone authorize "google cloud storage"
+```
+
+#### Service Account (Optional)
+
+For automated/scheduled syncs, use a GCP service account instead of OAuth:
+
+1. Create service account in GCP Console → IAM → Service Accounts
+2. Grant roles: `Storage Object Admin` for `calcofi-files` and `calcofi-db` buckets
+3. Download JSON key file to secure location (e.g., `/etc/rclone/calcofi-sa.json`)
+4. In `rclone config`, provide path to JSON key instead of using OAuth
+
+#### Verify Configuration
+
+```bash
+# test Google Drive access
+rclone lsd gdrive:projects/calcofi/data      # OR
+rclone lsd gdrive-ecoquants:projects/calcofi/data
+
+# test GCS access
+rclone ls gcs:calcofi-files --max-depth 1    # OR
+rclone ls gcs-calcofi:calcofi-files --max-depth 1
+
+# test sync (dry-run first!)
+rclone sync gdrive:calcofi/data gcs:calcofi-files/current --dry-run -v
+rclone sync gdrive-ecoquants:projects/calcofi/data gcs-calcofi:calcofi-files --dry-run -v
+```
+
+#### How It Works
+
+```bash
+#!/bin/bash
+# sync_gdrive_to_gcs.sh - Run daily via cron
+
+TIMESTAMP=$(date +%Y-%m-%d_%H%M%S)
+LOG_FILE="/var/log/rclone/sync_${TIMESTAMP}.log"
+
+# Sync with backup-dir to preserve previous versions
+rclone sync gdrive:calcofi/data gs://calcofi-files/current \
+  --backup-dir gs://calcofi-files/archive/${TIMESTAMP} \
+  --checksum \
+  --drive-export-formats csv \
+  --log-file ${LOG_FILE} \
+  --log-level INFO
+
+# Generate manifest of current state
+rclone lsjson gs://calcofi-files/current --recursive \
+  > /tmp/manifest_${TIMESTAMP}.json
+
+# Upload manifest
+rclone copy /tmp/manifest_${TIMESTAMP}.json gs://calcofi-files/manifests/
+rclone copyto /tmp/manifest_${TIMESTAMP}.json gs://calcofi-files/manifests/manifest_latest.json
+```
+
+#### Key Behaviors
+
+| Scenario | Google Drive Action | Rclone Behavior | Result in GCS |
+|----------|--------------------|-----------------|----|
+| New file | User uploads `new.csv` | `rclone sync` copies file | `current/new.csv` created |
+| Updated file | User overwrites `bottle.csv` | Old version moved to `archive/` | `current/bottle.csv` updated, `archive/{timestamp}/bottle.csv` preserved |
+| Deleted file | User deletes `old.csv` | Old version moved to `archive/` | Removed from `current/`, preserved in `archive/` |
+| Renamed file | User renames `a.csv` → `b.csv` | Treated as delete + create | `a.csv` archived, `b.csv` created |
+| No changes | Nothing | `--checksum` skips identical files | No archive entry created |
+
+#### The `--backup-dir` Magic
+
+The `--backup-dir` flag is the key to versioning:
+
+- Before overwriting any file in `current/`, rclone first moves the existing version to `archive/{timestamp}/`
+- Only **changed** files appear in each archive folder
+- If no files changed, the archive folder for that day is empty (or not created)
+- This creates a sparse archive that only stores deltas
+
+### 2.5 Manifest Files
+
+Each manifest captures the complete state of the data lake at a point in time:
+
+```json
+{
+  "generated_at": "2026-01-20T12:00:00Z",
+  "sync_timestamp": "2026-01-20_120000",
+  "files": [
+    {
+      "path": "calcofi.org/bottle-database/bottle.csv",
+      "size": 45234567,
+      "mod_time": "2026-01-20T10:30:00Z",
+      "md5": "abc123def456...",
+      "gcs_url": "gs://calcofi-files/current/calcofi.org/bottle-database/bottle.csv"
+    },
+    {
+      "path": "swfsc.noaa.gov/calcofi-db/larva.csv",
+      "size": 12345678,
+      "mod_time": "2026-01-15T08:00:00Z",
+      "md5": "def789ghi012...",
+      "gcs_url": "gs://calcofi-files/current/swfsc.noaa.gov/calcofi-db/larva.csv"
+    }
+  ],
+  "archive_entries": [
+    {
+      "original_path": "calcofi.org/bottle-database/bottle.csv",
+      "archive_path": "archive/2026-01-20_120000/calcofi.org/bottle-database/bottle.csv",
+      "reason": "updated",
+      "previous_md5": "xyz789..."
+    }
+  ]
+}
+```
+
+### 2.6 Reconstructing Historical State
+
+To recreate the data lake as it existed on a specific date:
+
+```r
+# R function to get historical file
+get_historical_file <- function(path, date) {
+  # Find the manifest for that date
+  manifest <- read_json(glue("gs://calcofi-files/manifests/manifest_{date}.json"))
+
+  # Get the file info
+
+  file_info <- manifest$files |> filter(path == !!path)
+
+  # If file existed on that date, return its URL
+  if (nrow(file_info) > 0) {
+    return(file_info$gcs_url)
+  }
+
+  # Otherwise, search archive for closest prior version
+  # ...
+}
+```
+
+### 2.7 Automation Schedule
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ Daily Sync Schedule (UTC)                                        │
+├─────────────────────────────────────────────────────────────────┤
+│ 00:00 - rclone sync runs                                        │
+│       - Changed files archived with timestamp                    │
+│       - Current folder updated to match Drive                    │
+│       - Manifest generated                                       │
+│                                                                   │
+│ 00:15 - targets pipeline triggered (if changes detected)        │
+│       - CSV → Parquet transformation                             │
+│       - DuckDB database update                                   │
+│       - DuckLake catalog update                                  │
+│                                                                   │
+│ 00:30 - Notification sent (if errors)                           │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 3. Proposed Architecture
+
+### 3.1 Data Flow Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    DATA CONTRIBUTOR LAYER                        │
+│                                                                   │
+│   Google Drive (calcofi/data/)                                   │
+│   ├── calcofi.org/bottle-database/*.csv                          │
+│   ├── swfsc.noaa.gov/calcofi-db/*.csv                           │
+│   └── coastwatch.pfeg.noaa.gov/erdCalCOFIlrvsiz/*.csv           │
+└───────────────────────────┬─────────────────────────────────────┘
+                            │
+                            ▼ rclone sync --backup-dir
+┌─────────────────────────────────────────────────────────────────┐
+│                    VERSIONED DATA LAKE (GCS)                     │
+│   GCP Project: ucsd-sio-calcofi                                  │
+│                                                                   │
+│   gs://calcofi-files/      # Versioned source files              │
+│   ├── current/             # Mirror of Google Drive              │
+│   ├── archive/             # Timestamped backups (YYYY-MM-DD)    │
+│   └── manifests/           # Version control metadata            │
+└───────────────────────────┬─────────────────────────────────────┘
+                            │
+                            ▼ targets pipeline (CSV → Parquet)
+┌─────────────────────────────────────────────────────────────────┐
+│                    INTEGRATED DATABASE                           │
+│                                                                   │
+│   gs://calcofi-db/         # Database storage                    │
+│   ├── parquet/             # Transformed Parquet tables          │
+│   ├── duckdb/calcofi.duckdb                                      │
+│   ├── ducklake/            # DuckLake catalog (time travel)      │
+│   └── tiles/               # PMTiles for vector maps             │
+└───────────────────────────┬─────────────────────────────────────┘
+                            │
+                            ▼ publish workflows
+┌─────────────────────────────────────────────────────────────────┐
+│                    PUBLISHING LAYER                              │
+│                                                                   │
+│   ├── OBIS (DarwinCore Archive)                                  │
+│   ├── EDI (EML + data files)                                     │
+│   ├── ERDDAP (NetCDF/CSV)                                        │
+│   └── ODIS (schema.org JSON-LD)                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 3.2 Technology Stack
+
+| Layer | Technology | Purpose | Replaces |
+|-------|------------|---------|----------|
+| **Storage** | | | |
+| | `gs://calcofi-files` | Versioned source CSV files | Google Drive only |
+| | `gs://calcofi-db` | Parquet, DuckDB, PMTiles | - |
+| **Sync** | rclone | Drive → GCS with `--backup-dir` | Manual copying |
+| **Format** | Apache Parquet | Efficient columnar storage | CSV |
+| **Compute** | DuckDB | Serverless SQL queries | PostgreSQL (gradual) |
+| **Versioning** | DuckLake + manifests | Time travel, version control | None |
+| **Orchestration** | `targets` | Dependency management, caching | Manual sequencing |
+| **Tiles** | PMTiles + tippecanoe | Cloud-native vector tiles | pg_tileserv |
+| **Mapping** | mapgl | Modern WebGL maps in Shiny | leaflet + pg_tileserv |
+| **Functions** | `calcofi4r`, `calcofi4db` | Reusable R code | Ad-hoc scripts |
+
+**GCP Project**: `ucsd-sio-calcofi`
+
+---
+
+## 4. R Package Strategy
+
+### 4.1 Package Roles
+
+#### `calcofi4db` - Database Administration Tools
+**Target users**: Data managers, workflow developers
+
+```
+calcofi4db/R/
+├── cloud.R        # GCS operations (@concept cloud)
+├── read.R         # CSV/Parquet reading (@concept read)
+├── transform.R    # Data transformation (@concept transform)
+├── ingest.R       # Database loading (@concept ingest)
+├── parquet.R      # Parquet operations (@concept parquet)   [NEW]
+├── duckdb.R       # DuckDB operations (@concept duckdb)     [NEW]
+├── version.R      # Schema versioning (@concept version)
+├── check.R        # Data validation (@concept check)
+└── viz.R          # Diagram generation (@concept viz)
+```
+
+#### `calcofi4r` - User-Facing Tools
+**Target users**: Researchers, analysts, app developers
+
+```
+calcofi4r/R/
+├── read.R         # Data retrieval (@concept read)
+├── database.R     # Database connection (@concept database)
+├── analyze.R      # Statistical analysis (@concept analyze)
+├── visualize.R    # Plotting and mapping (@concept visualize)
+└── functions.R    # Helper functions (@concept utils)
+```
+
+### 4.2 Function Reuse Across Contexts
+
+| Context | Package | Example Usage |
+|---------|---------|---------------|
+| Ingestion workflows | `calcofi4db` | `read_csv_files()`, `ingest_csv_to_db()` |
+| Publishing workflows | `calcofi4db` | `get_db_con()`, `create_db_manifest()` |
+| Shiny apps | `calcofi4r` | `cc_get_db()`, `cc_plot_timeseries()` |
+| Analysis scripts | `calcofi4r` | `cc_read_bottle()`, `cc_analyze_trend()` |
+| API endpoints | `calcofi4r` | `cc_query_db()`, `cc_get_variables()` |
+
+### 4.3 New Functions to Implement
+
+#### In `calcofi4db`:
+
+```r
+# R/cloud.R - GCS operations
+get_gcs_file(bucket, path, local_path = NULL)
+put_gcs_file(local_path, bucket, path)
+sync_gdrive_to_gcs(gdrive_path, gcs_bucket, backup = TRUE)
+list_gcs_versions(bucket, path)
+
+# R/parquet.R - Parquet operations
+csv_to_parquet(csv_path, schema_def = NULL)
+read_parquet_table(path, con = NULL)
+write_parquet_table(data, path, partitions = NULL)
+add_parquet_metadata(path, metadata_list)
+
+# R/duckdb.R - DuckDB operations
+get_duckdb_con(path = ":memory:", read_only = FALSE)
+create_duckdb_views(con, manifest)
+attach_ducklake(con, catalog_path)
+set_duckdb_comments(con, table, comments)
+```
+
+#### In `calcofi4r`:
+
+```r
+# R/database.R - DuckDB access (replacing PostgreSQL)
+cc_get_db(version = "latest", local_cache = TRUE)
+cc_db_version()
+cc_time_travel(date_or_version)
+cc_list_tables()
+cc_db_catalog(table = NULL)
+```
+
+---
+
+## 5. Workflow Dependency Management with `targets`
+
+### 5.1 Pipeline Definition
+
+Create `workflows/_targets.R`:
+
+```r
+library(targets)
+library(tarchetypes)
+
+tar_option_set(
+  packages = c("calcofi4db", "duckdb", "dplyr", "arrow"),
+  format = "qs"  # Fast serialization
+)
+
+# Define pipeline
+list(
+  # ─── Raw Data from GCS ─────────────────────────────────────────
+  tar_target(
+    raw_bottle,
+    get_gcs_file("gs://calcofi-datalake/raw/calcofi.org/bottle-database/bottle.csv")
+  ),
+  tar_target(
+    raw_cast,
+    get_gcs_file("gs://calcofi-datalake/raw/calcofi.org/bottle-database/cast.csv")
+  ),
+  tar_target(
+    raw_larvae,
+    get_gcs_file("gs://calcofi-datalake/raw/swfsc.noaa.gov/calcofi-db/larvae.csv")
+  ),
+
+  # ─── Transform to Parquet ──────────────────────────────────────
+  tar_target(
+    pqt_bottle,
+    csv_to_parquet(raw_bottle, output = "parquet/bottle.parquet")
+  ),
+  tar_target(
+    pqt_cast,
+    csv_to_parquet(raw_cast, output = "parquet/cast.parquet")
+  ),
+  tar_target(
+    pqt_larvae,
+    csv_to_parquet(raw_larvae, output = "parquet/larvae.parquet")
+  ),
+
+  # ─── Create Integrated DuckDB ──────────────────────────────────
+  tar_target(
+    db_manifest,
+    create_db_manifest(
+      tables = list(pqt_bottle, pqt_cast, pqt_larvae),
+      version = format(Sys.Date(), "%Y.%m.%d")
+    )
+  ),
+  tar_target(
+    duckdb_file,
+    create_duckdb_from_manifest(db_manifest)
+  ),
+
+  # ─── Publish Datasets ──────────────────────────────────────────
+  tar_target(
+    obis_archive,
+    create_obis_archive(duckdb_file, include_bottle = TRUE)
+  )
+)
+```
+
+### 5.2 Workflow Lifecycle
+
+```
+Development Cycle:
+1. Explore data    → explore_*.qmd (ad-hoc, not in pipeline)
+2. Design ingest   → ingest_*.qmd (develop transformation logic)
+3. Add to targets  → _targets.R (formalize as target)
+4. Run pipeline    → tar_make() (execute with caching)
+5. Publish         → publish_*.qmd (uses targets outputs)
+
+Update Cycle:
+1. New data arrives → Google Drive
+2. Sync to GCS      → rclone (scheduled or manual)
+3. Run pipeline     → tar_make() (only recomputes changed targets)
+4. Republish        → Automatic via target dependencies
+```
+
+### 5.3 Dependency Graph
+
+```
+raw_bottle ──┬──► pqt_bottle ──┐
+             │                 │
+raw_cast ────┴──► pqt_cast ────┼──► db_manifest ──► duckdb_file ──► obis_archive
+                               │
+raw_larvae ─────► pqt_larvae ──┘
+```
+
+---
+
+## 6. Documentation Updates
+
+### 6.1 Recommended Changes to `docs/`
+
+#### `docs/db.qmd` - Database Documentation
+
+**Current**: PostgreSQL-focused with naming conventions and ingestion strategy
+
+**Proposed changes**:
+
+- Add section on DuckDB as primary database
+- Document Parquet file organization
+- Explain DuckLake versioning and time travel
+- Keep naming conventions (snake_case, *_id, *_uuid suffixes)
+- Update "Integrated database ingestion strategy" for targets pipeline
+
+#### `docs/api.qmd` - API Documentation
+
+**Current**: REST API endpoints for PostgreSQL queries
+
+**Proposed changes**:
+
+- Note that REST API may be deprecated for most use cases
+- Document direct DuckDB access via `calcofi4r::cc_get_db()`
+- Keep API for web apps that cannot use DuckDB directly
+- Consider lightweight API using DuckDB backend if needed
+
+#### `docs/portals.qmd` - Portal Documentation
+
+**Current**: Good overview of EDI, NCEI, OBIS, ERDDAP
+
+**Proposed changes**:
+
+- Update data flow diagram to show DuckDB → Portals
+- Add section on automated publishing via targets pipeline
+- Document versioning strategy for portal submissions
+
+### 6.2 Where Documentation Should Live
+
+| Content | Location | Rationale |
+|---------|----------|-----------|
+| Database schema | `docs/db.qmd` | User-facing documentation |
+| Workflow development | `workflows/README.md` | Developer guide |
+| Package functions | `calcofi4r/`, `calcofi4db/` | pkgdown reference |
+| Data dictionary | `calcofi4db/inst/` | Versioned with code |
+| Architecture decisions | `docs/` or `workflows/_docs/` | Long-term reference |
+
+---
+
+## 7. Implementation Priority
+
+### Phase 1: Foundation (Immediate)
+
+**Goal**: Establish cloud infrastructure and helper functions
+
+1. **Set up GCS bucket**
+   - Create `gs://calcofi-datalake/` with appropriate permissions
+   - Configure service account for rclone access
+   - Document rclone configuration
+
+2. **Add cloud functions to `calcofi4db`**
+   - Create `R/cloud.R` with `get_gcs_file()`, `put_gcs_file()`
+   - Create `R/parquet.R` with `csv_to_parquet()`
+   - Create `R/duckdb.R` with `get_duckdb_con()`, `create_duckdb_views()`
+
+3. **Initial sync**
+   - Sync existing Google Drive data to GCS
+   - Verify file integrity and accessibility
+
+### Phase 2: Pipeline (Weeks 3-6)
+
+**Goal**: Implement targets pipeline for priority datasets
+
+1. **Create `workflows/_targets.R`**
+   - Define targets for bottle and larvae data
+   - Establish Parquet transformation pipeline
+   - Create integrated DuckDB
+
+2. **Migrate ingestion workflows**
+   - Convert `ingest_calcofi.org_bottle-database.qmd` to target
+   - Convert `ingest_swfsc.noaa.gov_calcofi-db.qmd` to target
+
+3. **Update publish workflow**
+   - Modify `publish_larvae_to_obis.qmd` to read from DuckDB
+   - Add bottle data to EMoF extension
+
+### Phase 3: Versioning (Weeks 7-10)
+
+**Goal**: Implement DuckLake for database versioning
+
+1. **Set up DuckLake catalog**
+   - Configure DuckLake pointing to GCS
+   - Enable time travel queries
+   - Create Git-tracked manifest
+
+2. **Update `calcofi4r`**
+   - Replace PostgreSQL connection with DuckDB
+   - Add `cc_time_travel()` function
+   - Update documentation
+
+### Phase 4: Documentation & Polish (Weeks 11-12)
+
+**Goal**: Complete documentation and evaluate API
+
+1. **Update docs/**
+   - Revise `db.qmd` for DuckDB
+   - Evaluate API necessity
+   - Update portal documentation
+
+2. **Clean up workflows/**
+   - Consolidate README.md with essentials
+   - Archive deprecated exploration notebooks
+   - Document workflow development process
+
+---
+
+## 8. Verification Plan
+
+### 8.1 End-to-End Test
+
+```r
+# 1. Sync test data
+system("rclone sync gdrive:calcofi/data/test gs://calcofi-datalake/raw/test")
+
+# 2. Run targets pipeline
+targets::tar_make()
+
+# 3. Verify database
+con <- calcofi4db::get_duckdb_con("calcofi.duckdb")
+DBI::dbListTables(con)
+DBI::dbGetQuery(con, "SELECT COUNT(*) FROM larvae")
+
+# 4. Verify OBIS archive
+obistools::check_fields(read_csv("data/darwincore/larvae/occurrence.csv"))
+```
+
+### 8.2 Integration Tests
+
+- [ ] GCS upload/download roundtrip
+- [ ] Parquet schema preservation
+- [ ] DuckDB query performance vs PostgreSQL
+- [ ] OBIS archive validation
+- [ ] Time travel query accuracy
+
+---
+
+## 9. Migration Strategy: PostgreSQL → DuckDB
+
+### 9.1 Current PostgreSQL Dependencies
+
+Based on `server/docker-compose.yml`, the following services depend on PostgreSQL:
+
+| Service | Purpose | Migration Path |
+|---------|---------|----------------|
+| `postgis` | Spatial database | Keep for vector tiles (short-term) |
+| `pg_tileserv` | Vector tile server | Replace with PMTiles |
+| `pg_rest` | REST API (PostgREST) | Keep for web apps, add DuckDB option |
+| `plumber` | R API | Update to use DuckDB |
+| `pgadmin` | Database admin | Deprecate once migrated |
+
+### 9.2 Vector Tiles: pg_tileserv → PMTiles
+
+The current architecture uses `pg_tileserv` to serve vector tiles from PostGIS for Shiny mapping apps. The migration path:
+
+#### Current Flow
+```
+PostGIS (geometries) → pg_tileserv → Leaflet/Mapbox in Shiny
+```
+
+#### Target Flow
+```
+GeoParquet/GeoJSON → tippecanoe → PMTiles → mapgl::add_pmtiles_source()
+```
+
+#### Implementation Steps
+
+1. **Generate PMTiles from PostGIS**
+   ```bash
+   # Export geometries from PostGIS
+   ogr2ogr -f GeoJSON stations.geojson \
+     PG:"host=postgis user=admin dbname=gis" \
+     -sql "SELECT * FROM stations"
+
+   # Convert to PMTiles using tippecanoe
+   tippecanoe -o stations.pmtiles \
+     --minimum-zoom=0 --maximum-zoom=14 \
+     --layer=stations \
+     stations.geojson
+
+   # Upload to GCS
+   gsutil cp stations.pmtiles gs://calcofi-files/tiles/
+   ```
+
+2. **Update Shiny Apps**
+   ```r
+   # Old: pg_tileserv
+   leaflet() |>
+     addTiles() |>
+     addMapboxGL(
+       style = list(
+         sources = list(
+           stations = list(
+             type = "vector",
+             tiles = list("https://tile.calcofi.io/public.stations/{z}/{x}/{y}.pbf")
+           )
+         )
+       )
+     )
+
+   # New: PMTiles with mapgl
+   library(mapgl)
+   mapboxgl() |>
+     add_pmtiles_source(
+       id = "stations",
+       url = "https://storage.googleapis.com/calcofi-files/tiles/stations.pmtiles"
+     ) |>
+     add_layer(
+       id = "stations-layer",
+       type = "circle",
+       source = "stations",
+       source_layer = "stations"
+     )
+   ```
+
+3. **Add PMTiles generation to targets pipeline**
+   ```r
+   # In _targets.R
+   tar_target(
+     pmtiles_stations,
+     create_pmtiles(
+       geom_source = duckdb_file,
+       query = "SELECT * FROM stations",
+       output = "tiles/stations.pmtiles"
+     )
+   )
+   ```
+
+### 9.3 Migration Roadmap
+
+| Phase | Timeline | Actions |
+|-------|----------|---------|
+| **Phase 1** | Now | Add DuckDB as primary data access; keep PostgreSQL |
+| **Phase 2** | +2 months | Generate PMTiles for all spatial layers |
+| **Phase 3** | +4 months | Update Shiny apps to use mapgl + PMTiles |
+| **Phase 4** | +6 months | Deprecate pg_tileserv, reduce PostgreSQL to backup |
+| **Phase 5** | +12 months | Fully deprecate PostgreSQL (if no dependencies remain) |
+
+---
+
+## 10. Resolved Questions
+
+Based on clarifications received:
+
+1. **GCS Project**: Use existing project `ucsd-sio-calcofi`
+   - Existing bucket `calcofi-db` → DuckLake/database files
+   - New bucket `calcofi-files` → Versioned source files
+
+2. **API Strategy**: Keep PostgreSQL + API for now with migration roadmap
+   - pg_tileserv needed for current Shiny apps
+   - Migrate to PMTiles over time using tippecanoe + mapgl
+
+3. **Priority Data**: Larvae + Bottle datasets for proof-of-concept
+
+4. **Bottle in OBIS**: Include as EMoF extension in larvae dataset
+
+## 11. Remaining Questions
+
+1. **DuckLake vs MotherDuck**: Self-hosted DuckLake catalog or use MotherDuck service?
+2. **Automation**: GitHub Actions vs server cron for scheduled rclone syncs?
+3. **PMTiles hosting**: Serve from GCS directly or via CDN?
+
+---
+
+## Appendix: Key References
+
+### Documentation
+
+- [Versioned Data Lake Strategy](workflows/_docs/2026-01-02%20Versioned%20Data%20Lake%20Strategy.md)
+- [Data Management Action Plan](workflows/_docs/2026-01-27%20updated%20working%20draft_Data_Management_Action_Plan_CalCOFI.md)
+- [Data Pipeline Timeline](workflows/_docs/2026-01-31%20Data%20Pipeline%20Timeline%20.md)
+
+### Technologies
+
+- [targets R package](https://books.ropensci.org/targets/)
+- [DuckDB](https://duckdb.org/)
+- [DuckLake](https://ducklake.select/)
+- [Apache Parquet](https://parquet.apache.org/)
+- [rclone](https://rclone.org/)
+- [googleCloudStorageR](https://code.markedmondson.me/googleCloudStorageR/)
+  - [Data lakes and big data analytics - Google Cloud Storage](https://cloud.google.com/storage#data-lakes-and-big-data-analytics)
+
+### CalCOFI Resources
+
+- [calcofi.io/docs](https://calcofi.io/docs)
+- [calcofi.io/calcofi4r](https://calcofi.io/calcofi4r)
+- [calcofi.io/calcofi4db](https://calcofi.io/calcofi4db)
