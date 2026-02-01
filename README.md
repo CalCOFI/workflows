@@ -6,8 +6,68 @@ scripts to explore and load data into the CalCOFI database
 
 See rendered notebooks at <https://calcofi.github.io/workflows/>.
 
-## TODO
+## data pipeline
 
-### strategy: csv to parquet to duckdb
+The CalCOFI data workflow uses the `targets` R package for dependency management and reproducibility.
 
-PROMPT: Help me develop a comprehensive strategy of reproducibly producing a duckdb database from parquet files in a Google Cloud Storage bucket that draws from the @workflows (especially @scrape_ctd.qmd and @ingest_swfsc.noaa.gov_calcofi-db.qmd) without repeating like in @create_db.qmd with strategy in @db.qmd and principles like using rclone and Google Drive sourcing from [Versioned Data Lake Strategy - Google Docs](https://docs.google.com/document/d/1O7CeNEyPBfQgo77zR-0QI1WHS2lzyb7Z3yGbLv9RP5Q/edit?tab=t.0).
+### quick start
+
+```r
+# from the workflows/ directory
+setwd("workflows")
+
+# run the full pipeline
+targets::tar_make()
+
+# visualize the dependency graph
+targets::tar_visnetwork()
+
+# check which targets are outdated
+targets::tar_outdated()
+```
+
+### pipeline architecture
+
+```
+Google Drive → rclone → GCS (calcofi-files) → targets → Parquet → DuckDB
+                              ↓
+                         archive/ (versioned)
+```
+
+**Key files:**
+- `_targets.R` - pipeline definition
+- `scripts/sync_gdrive_to_gcs.sh` - rclone sync with versioning
+- `scripts/run_pipeline.R` - pipeline runner script
+
+**GCS buckets:**
+- `gs://calcofi-files/` - versioned source CSV files
+- `gs://calcofi-db/` - Parquet files and DuckDB database
+
+### rclone setup
+
+1. install rclone: `brew install rclone`
+2. configure remotes: `rclone config`
+   - `gdrive`: Google Drive (readonly scope)
+   - `gcs`: Google Cloud Storage (project: ucsd-sio-calcofi)
+3. run sync: `./scripts/sync_gdrive_to_gcs.sh`
+
+### R package functions
+
+The `calcofi4db` package provides helper functions:
+
+```r
+# cloud operations
+get_gcs_file("gs://calcofi-files/current/file.csv")
+put_gcs_file("local.csv", "gs://calcofi-files/current/file.csv")
+list_gcs_versions("path/to/file.csv")
+
+# parquet operations
+csv_to_parquet("data.csv", "output.parquet")
+read_parquet_table("data.parquet")
+
+# duckdb operations
+con <- get_duckdb_con("calcofi.duckdb")
+create_duckdb_from_parquet(parquet_files, "calcofi.duckdb")
+```
+
+See the full implementation plan at [README_PLAN.md](README_PLAN.md).
