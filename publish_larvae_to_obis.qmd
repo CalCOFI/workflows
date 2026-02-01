@@ -4,6 +4,14 @@ editor_options:
   chunk_output_type: console
 ---
 
+## TODO
+
+- [ ] drop life stages, esp egg, without reference
+- [ ] add bottle, DIC to EMoF
+- [ ] 
+
+## Overview
+
 This workflow converts CalCOFI ichthyoplankton (fish eggs and larvae) data to an OBIS-compliant DarwinCore Archive for publication. The archive follows the Event Core structure with Occurrence and ExtendedMeasurementOrFact (eMoF) extensions.
 
 **References**: [CalCOFI Fish Eggs & Larvae](https://calcofi.org/data/marine-ecosystem-data/fish-eggs-larvae/) | [erdCalCOFIlrvcnt | CoastWatch ERDDAP](https://coastwatch.pfeg.noaa.gov/erddap/info/erdCalCOFIlrvcnt/index.html) | [OBIS Manual](https://manual.obis.org/) | [DarwinCore Terms](https://dwc.tdwg.org/terms/)
@@ -81,7 +89,7 @@ intellectual_rights <- list(
 dir_out <- here("data/darwincore/larvae")
 
 # get database connection
-schema <- "dev"
+schema <- c("dev", "public")
 con <- get_db_con(schema)
 ```
 
@@ -275,8 +283,25 @@ First, let's extract all necessary tables from the database:
 #| label: extract-tables
 
 # Get simple lazy table references
-tbl_ship <- tbl(con, "ship")
-tbl_cruise <- tbl(con, "cruise")
+tbl_ship <- tbl(con, "ship") |> 
+  mutate(
+    ship_nodc = case_when(
+      # TODO: change NA ship_nodc in database
+      ship_name == "BOLD HORIZON" ~ "39C2", 
+      TRUE ~ ship_nodc ))
+tbl_cruise <- tbl(con, "cruise") |> 
+  mutate(
+    cruise_key = sql("to_char(date_ym, 'YYYYMM') || ship_key"))
+cruise_keys <- tbl_cruise |> 
+  pull(cruise_key)
+stopifnot(all(!duplicated(cruise_keys)))
+# cruise_id [YYYYMMSK] similar to EXPOCODE:
+# https://en.wikipedia.org/wiki/Expocode
+# EXPOCODE, or the "expedition code", is a unique alphanumeric identifier defined by the National Oceanographic Data Center (NODC) of the US. The code defines a standard nomenclature for cruise labels of research vessels and intends to avoid confusion in oceanographic data management.
+# format: NODCYYYYMMDD where:
+# NODC is NOAA's National Oceanographic Data Center's 4-character research vessel identifier, consisting of country and ship code
+# YYYYMMDD is the GMT date when the cruise left port.
+
 tbl_site <- tbl(con, "site")
 tbl_tow <- tbl(con, "tow")
 tbl_tow_type <- tbl(con, "tow_type")
@@ -356,12 +381,7 @@ measurement_unit_vocab <- tibble(
 
 ## Create Event Hierarchy
 
-DarwinCore uses an event-based model. We'll create a hierarchical event structure:
-
-- cruise
-  - site
-    - tow
-      - net
+DarwinCore uses an event-based model. We'll use the same hierarchical event structure in the database (and map to DarwinCore required occurrence terms) as follows:
 
 ```{mermaid}
 %%| label: fig-larvae_event_hierarchy
@@ -371,18 +391,72 @@ DarwinCore uses an event-based model. We'll create a hierarchical event structur
 
 Per [3.3.2. Simple nested datasets with Project-level information – Guide for publishing biological survey and monitoring data to GBIF](https://docs.gbif.org/guide-publishing-survey-data/en/#simple-nested-datasets-with-project-level-information)
 
+**Original** full event hierarchy:
+
+- `cruise`
+  - `site` (`longitude` -> `decimalLongitude`; `latitude` -> `decimalLatitude`)
+    - `tow` (`time_start` -> `eventDate`)
+      - `net`
+      
+The original event hierarchy proved problematic publishing through the IPT because of event inheritance issues with `NA` values.
+
+**New** collapsed event hierarchy:
+
+- `cruise`:
+  - `eventID`: `cruise_key`
+  - `eventType`: "cruise"
+  - `footprintWKT`: `bbox(site.longitude, site.latitude)`
+  - `eventDate`: `min(tow.time_start)/max(tow.time_start)`
+
+- `cruise_site_tow_net`:
+  - `eventID`: `net_uuid`
+  - `parentEventID`: `cruise_key`
+  - `eventType`: "cruise_site_tow_net"
+  - `decimalLongitude`: `site.longitude`
+  - `decimalLatitude`: `site.latitude`
+  - `eventDate`: `tow.time_start`
+
+
 ```{r}
 #| label: build-event-hierarchy
 
-# Build complete event hierarchy
+# TODO: fix event inheritance
+# - events.csv
+#   - [ ] cruise: eventDate to range a la "2006-01-17/2006-03-03"
+#     - [ ] footprintWKT: POLYGON(30 -69, 30 -32, 147 -32, 147 -69)
+#   - [ ] site: decimalLongitude, decimalLatitude
+# - emof.csv
+# 
+# d_event |> 
+#   group_by(eventType) |>
+#   summarize(across(
+#     c(eventDate, decimalLongitude, decimalLatitude),
+#     list(isna = ~sum(is.na(.x)), isnotna = ~sum(!is.na(.x))) )) |> 
+#   pivot_longer(
+#     cols = -eventType,
+#     names_to = c("field", "na_status"),
+#     names_pattern = "(.+)_(isna|isnotna)",
+#     values_to = "n") |> 
+#   filter(n > 0) |> 
+#   mutate(na_status = na_if(na_status, "isna")) |> 
+#   pivot_wider(names_from = field, values_from = na_status)
+# 
+#   eventType      n eventDate decimalLongitude decimalLatitude
+#   <chr>      <int> <chr>     <chr>            <chr>          
+# 1 cruise       676 isnotna   NA               NA             
+# 3 site       57914 NA        isnotna          isnotna        
+# 4 tow        75434 isnotna   NA               NA
+# 2 net_sample 76512 NA        NA               NA             
+#
+# cruise > site (lon, lat) > tow (date) > net
+
+# q_events ----
 q_events <- tbl_net |>
   left_join(tbl_tow, by = "tow_uuid") |>
   left_join(tbl_tow_type, by = "tow_type_key") |>
   left_join(tbl_site, by = "site_uuid") |>
   left_join(tbl_cruise, by = "cruise_uuid") |>
   left_join(tbl_ship, by = "ship_key")
-
-# Create event core at different levels ----
 
 flds_to_iso8601 <- function(flds, output = "datetime") {
   # helper function to convert date/time fields to ISO 8601 format
@@ -418,78 +492,31 @@ flds_to_iso8601 <- function(flds, output = "datetime") {
   as.character(s)
 }
 
-# * Cruise level events ----
-
-# get min/max datetimes for cruises
-q_cruise_event_date <- q_events |>
-  group_by(cruise_uuid) |>
+# q_cruise ----
+q_cruise <- q_events |>
+  group_by(cruise_key, ship_name, ship_nodc) |>
   summarize(
-    dtime_min = min(time_start, na.rm = T),
-    dtime_max = max(time_start, na.rm = T),
-    .groups = "drop"
-  ) |>
+    dtime_min    = min(time_start, na.rm = T),
+    dtime_max    = max(time_start, na.rm = T),
+    footprintWKT = sql("ST_AsText(ST_Extent(geom))"),
+    .groups = "drop") |>
   mutate(
-    eventDate = sql(flds_to_iso8601(c("dtime_min", "dtime_max")))
-  ) |>
-  select(cruise_uuid, eventDate)
-
-q_cruise_events <- q_events |>
-  distinct(cruise_uuid, ship_name, ship_nodc, date_ym) |>
-  mutate(
-    eventID = cruise_uuid,
-    # parentEventID  = NA, # no parent for cruise level; NA generated with union_all
-    eventRemarks = paste("Cruise on", ship_name),
+    eventType       = "cruise",
+    eventDate       = sql(flds_to_iso8601(c("dtime_min", "dtime_max"))),
+    eventRemarks    = paste(
+      "Cruise on", ship_name, "(NODC:", ship_nodc, ") from ", dtime_min, " to ", dtime_max),
     samplingProtocol = "Marine plankton survey cruise",
-    sampleSizeValue = NA_real_,
-    sampleSizeUnit = NA_character_,
-    habitat = "marine",
-    eventType = "cruise"
-  ) |>
-  left_join(
-    q_cruise_event_date,
-    by = "cruise_uuid"
-  ) |>
+    # sampleSizeValue = NA_real_,
+    # sampleSizeUnit = NA_character_,
+    habitat = "marine") |>
   select(
-    eventID, # parentEventID,
+    eventID = cruise_key,
     eventType,
     eventDate,
+    footprintWKT,
     samplingProtocol,
-    eventRemarks,
-    habitat
-  )
-
-# Site level events
-q_site_events <- q_events |>
-  distinct(
-    site_uuid,
-    cruise_uuid,
-    longitude,
-    latitude,
-    line,
-    station,
-    orderocc
-  ) |>
-  mutate(
-    eventID = site_uuid,
-    parentEventID = cruise_uuid,
-    decimalLatitude = latitude,
-    decimalLongitude = longitude,
-    eventRemarks = paste("CalCOFI station", station, "on line", line),
-    # per https://proj.org/en/stable/operations/projections/calcofi.html
-    locationID = paste0(line, "_", station),
-    eventType = "site",
-    samplingProtocol = "Marine plankton survey station"
-  ) |>
-  select(
-    eventID,
-    parentEventID,
-    eventType,
-    samplingProtocol,
-    eventRemarks,
-    decimalLatitude,
-    decimalLongitude,
-    locationID
-  )
+    habitat,
+    eventRemarks)
 
 # Tow level events
 q_tow_events <- q_events |>
@@ -558,6 +585,70 @@ q_net_events <- q_net_events_allflds |>
     sampleSizeUnit
   )
 
+# q_cruise_site_tow_net ----
+q_cruise_site_tow_net <- q_events |> 
+  distinct(
+    # * site ----
+    cruise_uuid,
+    cruise_key,
+    longitude,
+    latitude,
+    line,
+    station,
+    # orderocc
+    # * tow ----
+    tow_uuid,
+    tow_number,
+    tow_type_key,
+    tow_type_description = description,
+    time_start,
+    # * net ----
+    net_uuid,
+    side,
+    std_haul_factor,
+    vol_sampled_m3,
+    prop_sorted,
+    smallplankton,
+    totalplankton) |>
+  mutate(
+    eventID          = net_uuid,
+    parentEventID    = cruise_key,
+    eventType        = "cruise_site_tow_net_sample",
+    eventDate        = sql(flds_to_iso8601("time_start")),
+    decimalLatitude  = latitude,
+    decimalLongitude = longitude,
+    locationID       = paste0(line, "_", station),
+    samplingProtocol = paste(
+      "Marine plankton net tow using ", tow_type_description, "(", tow_type_key, ") on ", 
+      side, "side, standardized by a standard haul factor of: ", std_haul_factor),
+    sampleSizeValue  = vol_sampled_m3,
+    sampleSizeUnit   = "m^3",
+    eventRemarks     = paste0(
+      "Site: station ", station, " on line ", line, ". ",
+      "Tow: ", tow_number, " with type: ", tow_type_description, "(", tow_type_key, ").",
+      "Net: sample from ", side, " side; only", prop_sorted, " proportion sorted of ", vol_sampled_m3, " cubic meters sampled.") ) |>
+  select(
+    eventID,
+    parentEventID,
+    eventType,
+    eventDate,
+    decimalLatitude,
+    decimalLongitude,
+    locationID,
+    samplingProtocol,
+    sampleSizeValue,
+    sampleSizeUnit,
+    eventRemarks)
+
+d_cruise_site_tow_net <- q_cruise_site_tow_net |> 
+  collect()
+stopifnot(all(!duplicated(d_cruise_site_tow_net$eventID)))
+
+
+# DEBUG ----
+d_cruise_site_tow_net |> head() |> View()
+# TODO: fix location_id rounding
+
 # Combine all event levels
 db_version <- tbl(con, "schema_version") |> pull(version)
 # dataset_id <- paste0(
@@ -597,6 +688,19 @@ q_event_core <- list(
     waterBody = water_body,
     datasetID = dataset_id
   )
+
+# q_event_core |> pull(eventType) |> table()
+# cruise net_sample       site        tow 
+#    676      76512      57914      75434
+q_event_core |> 
+  # filter(eventType = "net_sample")
+  # filter(eventType == "cruise") |> 
+  filter(eventType == "net_sample") |> 
+  # mutate(eventDate_isna = is.na(eventDate)) |>
+  # pull(eventDate_isna) |> 
+  pull(eventDate) |> 
+  table(useNA = "ifany")
+
 # TODO: datasetID: permalink to this qmd in calcofi4db release?
 ```
 
@@ -932,15 +1036,21 @@ Export the event core and extension files (occurrence, eMoF) as CSV files:
 dir.create(dir_out, showWarnings = F)
 
 # Write core and extension files
-write_csv(q_event_core |> collect(), file.path(dir_out, "event.csv"))
-write_csv(
-  q_occurrence_extension |> collect(),
-  file.path(dir_out, "occurrence.csv")
-)
-write_csv(
-  d_extendedmeasurementorfact_extension,
-  file.path(dir_out, "extendedMeasurementOrFact.csv")
-)
+q_event_core |> 
+  collect() |> 
+  write_csv(
+    file.path(dir_out, "event.csv"), 
+    na = "")
+q_occurrence_extension |> 
+  collect() |> 
+  write_csv(
+    file.path(dir_out, "occurrence.csv"), 
+    na = "")
+d_extendedmeasurementorfact_extension |> 
+  collect() |> 
+  write_csv(
+    file.path(dir_out, "extendedMeasurementOrFact.csv"), 
+    na = "")
 ```
 
 ## Create meta.xml programmatically by cross-walking CSV fields to DwC terms
@@ -1502,49 +1612,119 @@ zip(
 cat("\nDarwin Core Archive created:", zip_file, "\n")
 ```
 
-## Check CSV
+```{r}
+#| label: DEBUG_stop_eval
+
+knitr::opts_chunk$set(eval = FALSE)
+```
+
+
+## Check CSV files with `obistools`
 
 Verify the exported CSV files and inspect measurement types and units:
 
 ```{r}
-#| label: check-csv
+#| label: obistools-check-csv
 
-d_event      <- read_csv(glue("{dir_out}/event.csv"))
+# read CSVs, exclude na = "NA"
+
+# OLD:
+d_event      <- read_csv(glue("{dir_out}/event.csv")) 
 d_occurrence <- read_csv(glue("{dir_out}/occurrence.csv"))
 d_emof       <- read_csv(glue("{dir_out}/extendedMeasurementOrFact.csv"))
+# NEW:
+# d_event      <- read_csv(glue("{dir_out}/event.csv"), na = "") 
+# d_occurrence <- read_csv(glue("{dir_out}/occurrence.csv"), na = "")
+# d_emof       <- read_csv(glue("{dir_out}/extendedMeasurementOrFact.csv"), na = "")
 
-check_fields(d_occurrence)
-#   level field            row   message                                   
-#   <chr> <chr>            <lgl> <chr>                                     
-# 1 error eventDate        NA    Required field eventDate is missing       
-# 2 error decimalLongitude NA    Required field decimalLongitude is missing
-# 3 error decimalLatitude  NA    Required field decimalLatitude is missing 
-check_eventids(d_event)
-# A tibble: 0 × 0
-check_extension_eventids(d_event, d_occurrence)
+# flds_occ_in_event <- c("eventDate", "decimalLongitude", "decimalLatitude")
+# check_fields(d_occurrence) |> 
+#   filter(!field %in% flds_occ_in_event)
 # A tibble: 0 × 0
 
 d_event_flat <- flatten_event(d_event)
-d_event_flat |> names() |> paste(collapse = ", ")
+
+d_event |> 
+  group_by(eventType) |>
+  summarize(
+    isna_eventDate           = sum(is.na(eventDate)),
+    isnotna_eventDate        = sum(!is.na(eventDate)),
+    isna_decimalLongitude    = sum(is.na(decimalLongitude)),
+    isnotna_decimalLongitude = sum(!is.na(decimalLongitude)),
+    isna_decimalLatitude     = sum(is.na(decimalLatitude)),
+    isnotna_decimalLatitude  = sum(!is.na(decimalLatitude))) |> 
+  pivot_longer(
+    cols = -eventType,
+    names_to = "field",
+    values_to = "n") |> 
+  filter(n > 0) |> 
+  separate(
+    field,
+    into = c("na_status", "field"),
+    sep = "_",
+    extra = "merge") |> 
+  mutate(
+    na_status = na_if(na_status, "isna")) |> 
+  pivot_wider(
+    names_from = field,
+    values_from = na_status)
+  
+
+
+d_occurrence |> 
+  left_join(
+    d_event,
+    by = "eventID") |>
+  pull(eventType) |>
+  table(useNA = "ifany")
+# net_sample
+
+d_emof |> 
+  left_join(
+    d_event,
+    by = "eventID") |>
+  group_by(eventType,measurementType) |> 
+  summarize(n = n())
+#   eventType  measurementType                  n
+#   <chr>      <chr>                        <int>
+# 1 net_sample proportion of sample sorted  76512
+# 2 net_sample small plankton biomass       45287
+# 3 net_sample standardized haul factor     76512
+# 4 net_sample total plankton biomass       45287
+# 5 NA         abundance by life stage     125347
+# 6 NA         body length                 241871
+
+check_eventids(d_event)
+
+check_extension_eventids(d_event, d_occurrence)
+
+# d_event_flat <- flatten_event(d_event)
+# d_event_flat |> names() |> paste(collapse = ", ")
 # eventID, eventType, eventDate, samplingProtocol, eventRemarks, habitat, parentEventID, sampleSizeValue, sampleSizeUnit, decimalLatitude, decimalLongitude, locationID, geodeticDatum, coordinateUncertaintyInMeters, countryCode, waterBody, datasetID
+
+d_oe <- d_occurrence |> 
+  left_join(
+    d_event |> select(eventID, eventDate, decimalLongitude, decimalLatitude),
+    by = "eventID")
+  
+d_oe |> 
+  slice(1:3) |> 
+  View()
 
 d_occurrence_flat_event <- flatten_occurrence(d_event, d_occurrence)
 
 check_fields(d_occurrence_flat_event)
-# A tibble: 0 × 0
 
-check_eventdate(d_event |> select(eventDate))
-# # A tibble: 134,426 × 4
-#    level   row field     message                                      
-#    <chr> <int> <chr>     <chr>                                        
-#  1 error   677 eventDate eventDate NA does not seem to be a valid date
-#  2 error   678 eventDate eventDate NA does not seem to be a valid date
-#  3 error   679 eventDate eventDate NA does not seem to be a valid date
-#  4 error   680 eventDate eventDate NA does not seem to be a valid date
+check_eventdate(d_occurrence_flat_event |> select(eventDate))
+
+d_occurrence_flat_event |> 
+  slice(1:3) |> 
+  View()
+
 
 # Create tree structure
-tree <- treeStructure(d_event, d_occurrence, d_emof)
-exportTree(tree, "tree.html")
+# tree <- treeStructure(d_event, d_occurrence, d_emof)
+# exportTree(tree, "tree.html")
 
 # d_event
 # d_occurrence
