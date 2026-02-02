@@ -14,11 +14,36 @@ format:
 }
 </style>
 
+<!--
+PROMPT to Claude 2026-01-31:
+
+Help me write a new a data workflow plan to manage and version raw data files, an integrated database and workflows to ingest raw data in and publish datasets out.
+
+-   Use documents in the @workflows/_docs folder as suggestions for technologies (with technological preference where in conflict given to the more recent files as given by their date prefix filename).
+
+-   We already have a server on the Google Cloud platform, so thinking of using Google Cloud Storage buckets and a new service account for managing that (rather than AWS S3).
+
+-   We already have workflows in @workflows, but there are not yet dependencies built between them. Nor is the sequence anywhere stated. For instance, to build the integrated database thus far requires running first @workflows/ingest_calcofi.org_bottle-database.qmd, then @workflows/ingest_calcofi.org_bottle-database.qmd (once completed). How can these be better organized and developed as a dataset is initially explored, then ingested, then updated?
+
+-   Consider using R package `targets` to manage dependencies between files and workflows, and `pins` for sharing and versioning files.
+
+-   Review and suggest revisions to the existing documentation under @docs/, especially on Database, API and Portals. Could the API and Postgres database be superceded by use of parquet files and DuckDB?
+
+-   Describe relevance, strategy and purpose of R packages @calcofi4r and @calcofi4db.
+
+-   How can we systematically reuse documented functions in R libraries across workflows, apps, database access, etc?
+
+-   For now, write this to @workflows/README_PLAN.md. Eventually, a more succinct version will probably be folded into @workflows/README.md, but also looking for suggestions, such as perhaps more appropriate in the R libraries @calcofi4r or @calcofi4db and/or @docs.
+
+-   Be sure to include a systematic plan for implementation, including what should be refactored first. Prioritize producing a tidy, clean version of the integrated database with ingestion from: @workflows/ingest_calcofi.org_bottle-database.qmd, @workflows/ingest_calcofi.org_bottle-database.qmd; and output to @workflows/publish_larvae_to_obis.qmdpublish_larvae_to_obis.qmd (which does not yet include the bottle data). Then get this example to work from storing source files in a versioned cloud storage bucket, to referencing these files in the ingest scripts (perhaps with helper functions to get latest cloud version file, given state of Google Drive), producing and uploading parquet files to cloud storage, registering new versions with a DuckLake, and producing helper functions to get latest (or past) versions of the database as relational duckdb with metadata as COMMENTS and foreign keys registered.
+-->
+
 > This document outlines a comprehensive strategy for managing and versioning CalCOFI data files, building an integrated database, and publishing datasets to external portals.
 
 ## Executive Summary
 
 This plan modernizes the CalCOFI data workflow architecture to:
+
 1. Version raw data files in Google Cloud Storage (GCS)
 2. Use DuckDB + Parquet as the primary integrated database format
 3. Leverage `targets` for workflow dependency management
