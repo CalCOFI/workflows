@@ -40,6 +40,185 @@ Help me write a new a data workflow plan to manage and version raw data files, a
 
 > This document outlines a comprehensive strategy for managing and versioning CalCOFI data files, building an integrated database, and publishing datasets to external portals.
 
+## Overview for Data Managers & Scientists {#sec-overview}
+
+This section provides a high-level view of the CalCOFI data system. **You don't need to understand all the technical details**—just the four main components and how they connect.
+
+### The Big Picture
+
+```{mermaid}
+%%| label: fig-overview
+%%| fig-cap: "CalCOFI Data System Overview"
+
+flowchart TB
+    subgraph drive["📁 THE DRIVE"]
+        direction LR
+        gd_pub["data-public/<br/>Bottle, Larvae, CTD..."]
+        gd_priv["data-private/<br/>eDNA, Zooplankton..."]
+    end
+
+    subgraph archive["🗄️ THE ARCHIVE"]
+        direction LR
+        sync["_sync/<br/>(working copy)"]
+        hist["archive/<br/>(snapshots)"]
+    end
+
+    subgraph workflows["⚙️ THE WORKFLOWS"]
+        direction LR
+        ingest["Ingest<br/>(CSV → DB)"]
+        publish["Publish<br/>(DB → Portals)"]
+    end
+
+    subgraph database["🗃️ THE DATABASE"]
+        direction LR
+        working["Working<br/>(internal)"]
+        frozen["Frozen<br/>(public releases)"]
+    end
+
+    subgraph outputs["🌐 OUTPUTS"]
+        direction LR
+        obis["OBIS"]
+        apps["Shiny Apps"]
+        api["API / R pkg"]
+    end
+
+    drive -->|"daily sync"| archive
+    archive -->|"read files"| workflows
+    workflows -->|"transform"| database
+    database -->|"publish"| outputs
+
+    style drive fill:#e8f4e8,stroke:#2e7d32
+    style archive fill:#e3f2fd,stroke:#1565c0
+    style workflows fill:#fff3e0,stroke:#ef6c00
+    style database fill:#f3e5f5,stroke:#7b1fa2
+    style outputs fill:#fce4ec,stroke:#c2185b
+```
+
+### Four Key Components
+
+::: {.callout-note collapse="false"}
+## 📁 The Drive
+
+**What**: The shared Google Drive folder where you upload your data files.
+
+**Location**: `My Drive/projects/calcofi/data-public/` (or `data-private/`)
+
+**Who uses it**: Dataset managers (Rasmus, Ed, Nastassia, Linsey, etc.)
+
+**How to use it**:
+
+1. Create a folder for your data: `{provider}/{dataset}/` (e.g., `swfsc.noaa.gov/calcofi-db/`)
+2. Inside, organize files into `raw/` (original data) and `derived/` (processed data)
+3. Simply upload or overwrite files—versioning happens automatically
+4. No special naming required (no date prefixes needed)
+
+**Example structure**:
+```
+data-public/
+├── calcofi.org/
+│   └── bottle-database/
+│       ├── raw/
+│       │   └── bottle_export_2026-01-15.csv
+│       └── derived/
+│           └── bottle_cleaned.csv
+├── swfsc.noaa.gov/
+│   └── calcofi-db/
+│       ├── raw/
+│       │   ├── larva.csv
+│       │   └── cruise.csv
+│       └── derived/
+```
+:::
+
+::: {.callout-note collapse="false"}
+## 🗄️ The Archive
+
+**What**: A versioned backup of all Drive files in the cloud[^datalake].
+
+**Location**: Google Cloud Storage buckets (`gs://calcofi-files-public/` and `gs://calcofi-files-private/`)
+
+**Who uses it**: Automated systems (you don't need to interact with it directly)
+
+**What it does**:
+
+- **Daily sync**: Copies all files from the Drive to the Archive
+- **Snapshots**: Creates timestamped copies so we can always go back in time
+- **Never loses data**: Even if you delete a file from Drive, it's preserved in the Archive
+
+**Why it matters**: Scientists can reproduce analyses using the exact data from any past date.
+
+[^datalake]: Technical term: This is a "versioned data lake" built on Google Cloud Storage with rclone synchronization.
+:::
+
+::: {.callout-note collapse="false"}
+## ⚙️ The Workflows
+
+**What**: Automated scripts that process data from the Archive into the Database.
+
+**Location**: `/workflows/` folder (Quarto notebooks and R scripts)
+
+**Who uses it**: Data engineers and developers
+
+**Two types of workflows**:
+
+1. **Ingest workflows** (`ingest_*.qmd`): Read CSV files → Clean/transform → Load into Database
+2. **Publish workflows** (`publish_*.qmd`): Read from Database → Format for portals → Upload to OBIS, EDI, etc.
+
+**Key feature**: Dependencies are managed automatically—if source data changes, all downstream steps re-run.
+:::
+
+::: {.callout-note collapse="false"}
+## 🗃️ The Database
+
+**What**: The integrated CalCOFI database combining all datasets into related tables.
+
+**Format**: DuckDB[^duckdb] with Parquet files (modern, fast, serverless)
+
+**Two versions**:
+
+| Version | Purpose | Access | Features |
+|---------|---------|--------|----------|
+| **Working Database** | Internal processing | Workflows only | Full provenance tracking, UUIDs, source file references, time travel |
+| **Frozen Database** | Public releases | Apps, API, R package | Clean tables, versioned releases (v2026.02, v2026.03...), optimized for queries |
+
+**Why two versions?** The Working Database tracks every detail for reproducibility. The Frozen Database provides clean, stable snapshots for users who just want the data.
+
+[^duckdb]: [DuckDB](https://duckdb.org/) is a fast, in-process database that can query Parquet files directly from cloud storage without downloading them.
+:::
+
+### How Data Flows
+
+```{mermaid}
+%%| label: fig-data-flow-simple
+%%| fig-cap: "Simplified Data Flow"
+
+flowchart TB
+    subgraph you["<b>👤 YOU (Dataset Manager)</b>"]
+        upload["Upload CSV to Drive"]
+    end
+
+    subgraph auto["<b>🤖 AUTOMATED (Daily)</b>"]
+        sync["Sync to Archive"]
+        snapshot["Create snapshot"]
+        transform["Run workflows"]
+    end
+
+    subgraph result["<b>📊 RESULT</b>"]
+        db["Updated Database"]
+        portals["Published to Portals"]
+    end
+
+    upload --> sync --> snapshot --> transform --> db --> portals
+
+    style you fill:#e8f4e8,stroke:#2e7d32
+    style auto fill:#fff3e0,stroke:#ef6c00
+    style result fill:#f3e5f5,stroke:#7b1fa2
+```
+
+**Your role as a dataset manager**: Upload files to the Drive. Everything else happens automatically.
+
+---
+
 ## Executive Summary
 
 This plan modernizes the CalCOFI data workflow architecture to:
@@ -97,53 +276,78 @@ These dataset managers need a simple interface (Google Drive) to deposit and org
 
 ### Google Drive: The Human Interface
 
+This is "**The Drive**" from @sec-overview. Dataset managers upload files here; everything else is automatic.
+
 #### Folder Structure
+
+**Recommended organization**: `{provider}/{dataset}/raw/` and `{provider}/{dataset}/derived/`
+
 ```
 calcofi/data-public/                       # Shared Google Drive folder (public data)
 ├── calcofi.org/
 │   └── bottle-database/
-│       ├── bottle.csv                     # Current version
-│       ├── cast.csv
-│       └── field_descriptions.csv
+│       ├── raw/                           # Original exports from source system
+│       │   └── bottle_export_2026-01.csv
+│       └── derived/                       # Cleaned/processed versions
+│           ├── bottle.csv
+│           ├── cast.csv
+│           └── field_descriptions.csv
 ├── swfsc.noaa.gov/
 │   └── calcofi-db/
-│       ├── cruise.csv
-│       ├── egg.csv
-│       ├── larva.csv
-│       ├── net.csv
-│       ├── ship.csv
-│       ├── site.csv
-│       ├── species.csv
-│       └── tow.csv
+│       ├── raw/                           # Original NOAA database exports
+│       │   └── calcofi_db_dump_2026-01.sql
+│       └── derived/                       # Extracted CSV tables
+│           ├── cruise.csv
+│           ├── egg.csv
+│           ├── larva.csv
+│           ├── net.csv
+│           ├── ship.csv
+│           ├── site.csv
+│           ├── species.csv
+│           └── tow.csv
 ├── coastwatch.pfeg.noaa.gov/
 │   └── erdCalCOFIlrvsiz/
-│       └── larvae_size.csv
+│       └── derived/
+│           └── larvae_size.csv
 └── _archive/                              # Manual archive (optional)
     └── 2025-01-15_bottle.csv              # User-created backup
 
 calcofi/data-private/                      # Private/sensitive data (restricted access)
 ├── edna/                                  # eDNA samples (Nastassia)
-│   └── ...
+│   ├── raw/
+│   └── derived/
 ├── zooplankton/                           # Zooplankton samples (Linsey)
-│   └── ...
+│   ├── raw/
+│   └── derived/
 └── _archive/                              # Manual archive (optional)
 ```
 
 #### Google Drive Naming Conventions
 
-- **Folders**: `{provider}/{dataset}/` (lowercase, hyphen-separated)
+- **Top-level folders**: `{provider}/` - the organization providing the data (e.g., `swfsc.noaa.gov`)
+- **Dataset folders**: `{dataset}/` - specific dataset name (e.g., `calcofi-db`)
+- **Subfolders** (recommended):
+  - `raw/` - Original data as received from source (database dumps, original CSVs)
+  - `derived/` - Processed/cleaned versions ready for ingestion
 - **Files**: Original source names, no date prefixes required
-- **Updates**: Dataset managers simply overwrite existing files
+- **Updates**: Simply overwrite existing files
 - **No versioning in Drive**: Google Drive does not maintain file history for CSVs
 
 #### Dataset Manager Workflow
 
-1. Prepare updated CSV file locally
-2. Upload to appropriate folder in Google Drive (overwriting existing)
-3. Optionally notify data team of significant changes
-4. **No date prefixes needed** - versioning happens automatically via rclone
+1. Create folder structure: `{provider}/{dataset}/raw/` and `{provider}/{dataset}/derived/`
+2. Upload original data to `raw/` (preserve original format)
+3. Upload processed/cleaned data to `derived/` (CSV format preferred)
+4. Simply overwrite files when updating—versioning happens automatically in the Archive
+5. Optionally notify data team of significant changes
+
+**See @sec-overview for the big picture of how your data flows through the system.**
 
 ### Google Cloud Storage: The Versioned Data Lake
+
+This is "**The Archive**" from @sec-overview[^datalake-detail]. It automatically captures versioned snapshots of all files from the Drive.
+
+[^datalake-detail]: Technical terms: This is a "versioned data lake" implemented with Google Cloud Storage buckets and rclone synchronization with timestamped archive snapshots.
 
 #### Bucket Structure
 
@@ -572,13 +776,201 @@ flowchart TB
 | **Sync** | rclone | Drive → GCS with archive snapshots | Manual copying |
 | **Format** | Apache Parquet | Efficient columnar storage | CSV |
 | **Compute** | DuckDB | Serverless SQL queries | PostgreSQL (gradual) |
-| **Versioning** | DuckLake + manifests | Time travel, version control | None |
+| **Database** | | | |
+| | Working DuckLake | Internal DB with provenance, time travel | PostgreSQL |
+| | [Frozen DuckLake](https://ducklake.select/2025/10/24/frozen-ducklake/) | Public versioned releases (v2026.02, etc.) | PostgreSQL snapshots |
 | **Orchestration** | `targets` | Dependency management, caching | Manual sequencing |
 | **Tiles** | PMTiles + tippecanoe | Cloud-native vector tiles | pg_tileserv |
 | **Mapping** | mapgl | Modern WebGL maps in Shiny | leaflet + pg_tileserv |
 | **Functions** | `calcofi4r`, `calcofi4db` | Reusable R code | Ad-hoc scripts |
 
 **GCP Project**: `ucsd-sio-calcofi`
+
+---
+
+## Database Architecture: Working vs Frozen DuckLake {#sec-database}
+
+The CalCOFI integrated database uses [DuckLake](https://ducklake.select/), a lakehouse catalog that provides version control for data tables. We maintain **two distinct databases** to serve different needs:
+
+### The Two-Database Strategy
+
+```{mermaid}
+%%| label: fig-ducklake-architecture
+%%| fig-cap: "Working vs Frozen DuckLake Architecture"
+
+flowchart TB
+    subgraph archive["📁 Archive (GCS)"]
+        csv["CSV source files"]
+    end
+
+    subgraph working["<b>🔧 WORKING DUCKLAKE</b><br/><i>gs://calcofi-db/ducklake/working/</i>"]
+        direction TB
+        w_tables["Tables with provenance columns:<br/>• _source_file<br/>• _source_row<br/>• _source_uuid<br/>• _ingested_at"]
+        w_history["Full edit history<br/>(time travel enabled)"]
+        w_access["Access: Workflows only"]
+    end
+
+    subgraph frozen["<b>❄️ FROZEN DUCKLAKE</b><br/><i>gs://calcofi-db/ducklake/releases/</i>"]
+        direction TB
+        f_versions["Versioned releases:<br/>• v2026.02<br/>• v2026.03<br/>• v2026.04"]
+        f_clean["Clean tables<br/>(no provenance columns)"]
+        f_access["Access: Public<br/>Apps, API, R package"]
+    end
+
+    subgraph outputs["🌐 Public Access"]
+        apps["Shiny Apps"]
+        api["REST API"]
+        rpkg["calcofi4r"]
+        direct["Direct Parquet reads"]
+    end
+
+    csv -->|"ingest workflows"| working
+    working -->|"freeze release"| frozen
+    frozen --> outputs
+
+    style archive fill:#e3f2fd,stroke:#1565c0
+    style working fill:#fff3e0,stroke:#ef6c00
+    style frozen fill:#e8f4e8,stroke:#2e7d32
+    style outputs fill:#fce4ec,stroke:#c2185b
+```
+
+### Working DuckLake (Internal)
+
+The Working DuckLake is the **internal, mutable database** used by workflows. It prioritizes:
+
+- **Full provenance tracking**: Every row knows where it came from
+- **Time travel**: Query the database as it existed at any past point
+- **Frequent updates**: Can be modified whenever new data arrives
+
+**Schema features**:
+
+| Column | Type | Purpose |
+|--------|------|---------|
+| `_source_file` | VARCHAR | Path to original CSV file in Archive |
+| `_source_row` | INTEGER | Row number in source file |
+| `_source_uuid` | UUID | Original record ID (e.g., from NOAA database) |
+| `_ingested_at` | TIMESTAMP | When this row was added/updated |
+
+**Example query with provenance**:
+```sql
+-- Find all larvae records from a specific source file
+SELECT scientific_name, count, _source_file, _source_row
+FROM larvae
+WHERE _source_file LIKE '%swfsc.noaa.gov/calcofi-db/larva.csv'
+  AND cruise_id = '202301CC';
+```
+
+**Time travel query**:
+```sql
+-- Query larvae table as it existed on January 15th
+SELECT * FROM larvae
+AT TIMESTAMP '2026-01-15 00:00:00';
+```
+
+### Frozen DuckLake (Public Releases) {#sec-frozen}
+
+The Frozen DuckLake provides **stable, versioned snapshots** for external users. Based on the [Frozen DuckLake](https://ducklake.select/2025/10/24/frozen-ducklake/) pattern:
+
+**Key characteristics**:
+
+- **Immutable**: Once released, a version never changes
+- **Clean schema**: No internal provenance columns (cleaner for users)
+- **Semantic versioning**: `v{YYYY}.{MM}` format (e.g., `v2026.02`)
+- **Public access**: Anyone can query via HTTP/Parquet
+
+**Release process**:
+
+```{mermaid}
+%%| label: fig-freeze-process
+%%| fig-cap: "Freezing a Release"
+
+flowchart LR
+    working["Working DuckLake"]
+    validate["Validate data quality"]
+    strip["Remove provenance columns"]
+    version["Tag version (v2026.02)"]
+    upload["Upload to releases/"]
+    announce["Announce release"]
+
+    working --> validate --> strip --> version --> upload --> announce
+
+    style working fill:#fff3e0,stroke:#ef6c00
+    style validate fill:#fff9c4,stroke:#f9a825
+    style strip fill:#fff9c4,stroke:#f9a825
+    style version fill:#fff9c4,stroke:#f9a825
+    style upload fill:#e8f4e8,stroke:#2e7d32
+    style announce fill:#e8f4e8,stroke:#2e7d32
+```
+
+**Frozen release structure**:
+```
+gs://calcofi-db/ducklake/releases/
+├── v2026.02/
+│   ├── catalog.json          # DuckLake catalog
+│   ├── parquet/
+│   │   ├── bottle.parquet
+│   │   ├── cast.parquet
+│   │   ├── larvae.parquet
+│   │   └── ...
+│   └── RELEASE_NOTES.md
+├── v2026.03/
+│   └── ...
+└── latest -> v2026.03        # Symlink to latest
+```
+
+### Accessing Frozen Releases
+
+**From R (using calcofi4r)**:
+```r
+library(calcofi4r)
+
+# Get latest release (default)
+con <- cc_get_db()
+
+# Get specific version
+con <- cc_get_db(version = "v2026.02")
+
+# List available versions
+cc_list_versions()
+#> [1] "v2026.02" "v2026.03" "v2026.04"
+```
+
+**Direct Parquet access (no R required)**:
+```python
+import duckdb
+
+# Query directly from GCS (no download needed)
+con = duckdb.connect()
+con.execute("""
+    SELECT * FROM read_parquet(
+        'https://storage.googleapis.com/calcofi-db/ducklake/releases/latest/parquet/larvae.parquet'
+    )
+    LIMIT 10
+""")
+```
+
+**From any HTTP client**:
+```bash
+# Download parquet file directly
+curl -O https://storage.googleapis.com/calcofi-db/ducklake/releases/v2026.02/parquet/larvae.parquet
+```
+
+### Release Schedule
+
+| Frequency | Trigger | Example |
+|-----------|---------|---------|
+| **Monthly** | Regular data updates | v2026.02, v2026.03 |
+| **Ad-hoc** | Major dataset additions | v2026.02.1 (patch) |
+| **Annual** | Year-end comprehensive release | v2026.12 |
+
+**Release checklist**:
+
+- [ ] All ingest workflows pass
+- [ ] Data quality checks pass (no nulls in required fields, valid ranges)
+- [ ] Foreign key relationships valid
+- [ ] Row counts within expected range
+- [ ] Release notes document changes
+- [ ] Announce to users
 
 ---
 
@@ -646,17 +1038,43 @@ get_duckdb_con(path = ":memory:", read_only = FALSE)
 create_duckdb_views(con, manifest)
 attach_ducklake(con, catalog_path)
 set_duckdb_comments(con, table, comments)
+
+# R/ducklake.R - DuckLake catalog operations [NEW]
+get_working_ducklake()           # connect to internal Working DuckLake
+ingest_to_working(data, table, source_file, source_uuid_col = NULL)
+add_provenance_columns(data, source_file, source_row_start = 1)
+
+# R/freeze.R - Frozen release operations [NEW]
+freeze_release(version, release_notes = NULL)
+  # 1. Validate data quality
+
+  # 2. Strip provenance columns (_source_*, _ingested_at)
+  # 3. Export to parquet files
+  # 4. Create DuckLake catalog
+  # 5. Upload to releases/{version}/
+validate_for_release(con)        # run all quality checks before freeze
+list_frozen_releases()           # list available frozen versions
+compare_releases(v1, v2)         # diff two releases
 ```
 
 #### In `calcofi4r`:
-
 ```r
-# R/database.R - DuckDB access (replacing PostgreSQL)
+# R/database.R - Frozen DuckLake access (user-facing)
 cc_get_db(version = "latest", local_cache = TRUE)
-cc_db_version()
-cc_time_travel(date_or_version)
-cc_list_tables()
-cc_db_catalog(table = NULL)
+  # Connect to frozen release (never Working DuckLake)
+cc_list_versions()               # list available frozen releases
+cc_db_info(version = "latest")   # release date, row counts, notes
+cc_release_notes(version)        # view release notes for a version
+
+# R/read.R - Convenience functions for common tables
+cc_read_bottle(version = "latest", ...)
+cc_read_larvae(version = "latest", ...)
+cc_read_cast(version = "latest", ...)
+
+# R/query.R - Query helpers
+cc_query(sql, version = "latest")
+cc_list_tables(version = "latest")
+cc_describe_table(table, version = "latest")
 ```
 
 ---
@@ -886,26 +1304,57 @@ flowchart LR
    - Modify `publish_larvae_to_obis.qmd` to read from DuckDB
    - Add bottle data to EMoF extension
 
-### Phase 3: Versioning (Weeks 7-10)
+### Phase 3: Working DuckLake (Weeks 7-10)
 
-**Goal**: Implement DuckLake for database versioning
+**Goal**: Implement Working DuckLake with provenance tracking
 
-1. **Set up DuckLake catalog**
-   - Configure DuckLake pointing to GCS
+1. **Set up Working DuckLake catalog**
+   - Configure DuckLake at `gs://calcofi-db/ducklake/working/`
    - Enable time travel queries
-   - Create Git-tracked manifest
+   - Create Git-tracked catalog manifest
 
-2. **Update `calcofi4r`**
-   - Replace PostgreSQL connection with DuckDB
-   - Add `cc_time_travel()` function
-   - Update documentation
+2. **Add provenance columns to ingest workflows**
+   - `_source_file`: Path to source CSV in Archive
+   - `_source_row`: Row number in source file
+   - `_source_uuid`: Original record UUID (if available)
+   - `_ingested_at`: Ingestion timestamp
 
-### Phase 4: Documentation & Polish (Weeks 11-12)
+3. **Implement `calcofi4db` DuckLake functions**
+   - `get_working_ducklake()`: Connect to internal database
+   - `ingest_to_working()`: Ingest with provenance
+   - `add_provenance_columns()`: Helper for provenance
+
+### Phase 4: Frozen DuckLake (Weeks 11-14)
+
+**Goal**: Implement [Frozen DuckLake](https://ducklake.select/2025/10/24/frozen-ducklake/) for public releases
+
+1. **Create freeze workflow**
+   - `validate_for_release()`: Data quality checks
+   - `freeze_release()`: Create immutable release
+   - Strip provenance columns for clean public schema
+   - Generate release notes
+
+2. **Set up release structure**
+   - `gs://calcofi-db/ducklake/releases/v2026.02/`
+   - Parquet files + DuckLake catalog
+   - `latest` symlink to current release
+
+3. **Update `calcofi4r` for frozen access**
+   - `cc_get_db(version = "latest")`: Default to frozen releases
+   - `cc_list_versions()`: List available releases
+   - `cc_release_notes()`: View release notes
+
+4. **First public release: v2026.02**
+   - Bottle + Cast + Larvae tables
+   - Announce to users
+
+### Phase 5: Documentation & Polish (Weeks 15-16)
 
 **Goal**: Complete documentation and evaluate API
 
 1. **Update docs/**
-   - Revise `db.qmd` for DuckDB
+   - Revise `db.qmd` for DuckDB/DuckLake
+   - Document Working vs Frozen databases
    - Evaluate API necessity
    - Update portal documentation
 
@@ -913,6 +1362,7 @@ flowchart LR
    - Consolidate README.md with essentials
    - Archive deprecated exploration notebooks
    - Document workflow development process
+   - Create "Getting Started" guide for data managers
 
 ---
 
@@ -1112,16 +1562,31 @@ Based on clarifications received:
 
 ### Technologies
 
-- [targets R package](https://books.ropensci.org/targets/)
-- [DuckDB](https://duckdb.org/)
-- [DuckLake](https://ducklake.select/)
-- [Apache Parquet](https://parquet.apache.org/)
-- [rclone](https://rclone.org/)
-- [googleCloudStorageR](https://code.markedmondson.me/googleCloudStorageR/)
-  - [Data lakes and big data analytics - Google Cloud Storage](https://cloud.google.com/storage#data-lakes-and-big-data-analytics)
+**Database & Analytics**:
+
+- [DuckDB](https://duckdb.org/) - Fast in-process analytical database
+- [DuckLake](https://ducklake.select/) - Lakehouse catalog for DuckDB
+  - [Frozen DuckLake](https://ducklake.select/2025/10/24/frozen-ducklake/) - Immutable versioned releases
+- [Apache Parquet](https://parquet.apache.org/) - Columnar storage format
+
+**Workflow & Orchestration**:
+
+- [targets R package](https://books.ropensci.org/targets/) - Pipeline dependency management
+
+**Cloud Storage**:
+
+- [rclone](https://rclone.org/) - Cloud storage sync tool
+- [googleCloudStorageR](https://code.markedmondson.me/googleCloudStorageR/) - R interface to GCS
+- [Data lakes and big data analytics - Google Cloud Storage](https://cloud.google.com/storage#data-lakes-and-big-data-analytics)
+
+**Vector Tiles**:
+
+- [PMTiles](https://protomaps.com/docs/pmtiles) - Cloud-native vector tile format
+- [tippecanoe](https://github.com/felt/tippecanoe) - Build vector tilesets
+- [mapgl R package](https://walker-data.com/mapgl/) - Modern WebGL maps in R/Shiny
 
 ### CalCOFI Resources
 
-- [calcofi.io/docs](https://calcofi.io/docs)
-- [calcofi.io/calcofi4r](https://calcofi.io/calcofi4r)
-- [calcofi.io/calcofi4db](https://calcofi.io/calcofi4db)
+- [calcofi.io/docs](https://calcofi.io/docs) - CalCOFI documentation site
+- [calcofi.io/calcofi4r](https://calcofi.io/calcofi4r) - User-facing R package
+- [calcofi.io/calcofi4db](https://calcofi.io/calcofi4db) - Database admin R package
