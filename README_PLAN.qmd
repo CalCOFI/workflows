@@ -61,7 +61,7 @@ This plan modernizes the CalCOFI data workflow architecture to:
 | **Workflows** | Individual Quarto notebooks | `/workflows/` |
 | **Database** | PostgreSQL with dev/prod schemas | api.calcofi.io |
 | **R Packages** | `calcofi4r` (user), `calcofi4db` (admin) | GitHub |
-| **Data Sources** | CSV files on Google Drive | `~/My Drive/projects/calcofi/data` |
+| **Data Sources** | CSV files on Google Drive | `~/My Drive/projects/calcofi/data-public` |
 | **Documentation** | Quarto site | `/docs/` |
 
 ### Key Workflow Files
@@ -99,7 +99,7 @@ These dataset managers need a simple interface (Google Drive) to deposit and org
 
 #### Folder Structure
 ```
-calcofi/data/                              # Shared Google Drive folder
+calcofi/data-public/                       # Shared Google Drive folder (public data)
 ├── calcofi.org/
 │   └── bottle-database/
 │       ├── bottle.csv                     # Current version
@@ -120,6 +120,13 @@ calcofi/data/                              # Shared Google Drive folder
 │       └── larvae_size.csv
 └── _archive/                              # Manual archive (optional)
     └── 2025-01-15_bottle.csv              # User-created backup
+
+calcofi/data-private/                      # Private/sensitive data (restricted access)
+├── edna/                                  # eDNA samples (Nastassia)
+│   └── ...
+├── zooplankton/                           # Zooplankton samples (Linsey)
+│   └── ...
+└── _archive/                              # Manual archive (optional)
 ```
 
 #### Google Drive Naming Conventions
@@ -141,8 +148,8 @@ calcofi/data/                              # Shared Google Drive folder
 #### Bucket Structure
 
 ```
-gs://calcofi-files/                        # Versioned source files
-├── current/                               # Mirror of Google Drive (latest state)
+gs://calcofi-files-public/                 # Versioned public source files
+├── _sync/                                 # Working directory (rclone syncs here)
 │   ├── calcofi.org/
 │   │   └── bottle-database/
 │   │       ├── bottle.csv
@@ -152,20 +159,27 @@ gs://calcofi-files/                        # Versioned source files
 │           ├── cruise.csv
 │           ├── egg.csv
 │           └── ...
-├── archive/                               # Timestamped versions of changed files
-│   ├── 2026-01-15_120000/                # YYYY-MM-DD_HHMMSS
+├── archive/                               # Timestamped immutable snapshots
+│   ├── 2026-02-02_121557/                # YYYY-MM-DD_HHMMSS
 │   │   └── calcofi.org/
 │   │       └── bottle-database/
-│   │           └── bottle.csv            # Previous version before update
-│   ├── 2026-01-20_120000/
+│   │           └── bottle.csv            # Snapshot at that time
+│   ├── 2026-02-15_120000/
 │   │   └── swfsc.noaa.gov/
 │   │       └── calcofi-db/
 │   │           └── larva.csv
 │   └── ...
 └── manifests/                             # Version metadata
-    ├── manifest_2026-01-15.json
-    ├── manifest_2026-01-20.json
-    └── manifest_latest.json → manifest_2026-01-20.json
+    ├── manifest_2026-02-02_121557.json
+    ├── manifest_2026-02-15_120000.json
+    └── manifest_latest.json              # Points to latest archive
+
+gs://calcofi-files-private/                # Versioned private source files
+├── _sync/                                 # Working directory (rclone syncs here)
+│   ├── edna/
+│   └── zooplankton/
+├── archive/                               # Timestamped immutable snapshots
+└── manifests/
 
 gs://calcofi-db/                           # Integrated database
 ├── parquet/                               # Transformed tables
@@ -181,9 +195,10 @@ gs://calcofi-db/                           # Integrated database
 
 #### GCS Naming Conventions
 
-- **current/**: Exact mirror of Google Drive structure
-- **archive/{YYYY-MM-DD_HHMMSS}/**: Timestamp when file was superseded
-- **manifests/manifest_{YYYY-MM-DD}.json**: Daily snapshot metadata
+- **_sync/**: Working directory, exact mirror of Google Drive structure (rclone syncs here)
+- **archive/{YYYY-MM-DD_HHMMSS}/**: Immutable snapshot of complete data at that timestamp
+- **manifests/manifest_{YYYY-MM-DD_HHMMSS}.json**: Snapshot metadata
+- **manifests/manifest_latest.json**: Points to latest archive snapshot
 
 ### Rclone Sync: Capturing Daily Changes
 
@@ -323,7 +338,7 @@ rclone authorize "google cloud storage"
 For automated/scheduled syncs, use a GCP service account instead of OAuth:
 
 1. Create service account in GCP Console → IAM → Service Accounts
-2. Grant roles: `Storage Object Admin` for `calcofi-files` and `calcofi-db` buckets
+2. Grant roles: `Storage Object Admin` for `calcofi-files-public`, `calcofi-files-private`, and `calcofi-db` buckets
 3. Download JSON key file to secure location (e.g., `/etc/rclone/calcofi-sa.json`)
 4. In `rclone config`, provide path to JSON key instead of using OAuth
 
@@ -331,16 +346,16 @@ For automated/scheduled syncs, use a GCP service account instead of OAuth:
 
 ```bash
 # test Google Drive access
-rclone lsd gdrive:projects/calcofi/data      # OR
-rclone lsd gdrive-ecoquants:projects/calcofi/data
+rclone lsd gdrive:projects/calcofi/data-public      # OR
+rclone lsd gdrive-ecoquants:projects/calcofi/data-public
 
 # test GCS access
-rclone ls gcs:calcofi-files --max-depth 1    # OR
-rclone ls gcs-calcofi:calcofi-files --max-depth 1
+rclone ls gcs:calcofi-files-public --max-depth 1    # OR
+rclone ls gcs-calcofi:calcofi-files-public --max-depth 1
 
 # test sync (dry-run first!)
-rclone sync gdrive:calcofi/data gcs:calcofi-files/current --dry-run -v
-rclone sync gdrive-ecoquants:projects/calcofi/data gcs-calcofi:calcofi-files --dry-run -v
+rclone sync gdrive:calcofi/data-public gcs:calcofi-files-public/_sync --dry-run -v
+rclone sync gdrive-ecoquants:projects/calcofi/data-public gcs-calcofi:calcofi-files-public/_sync --dry-run -v
 ```
 
 #### How It Works
@@ -352,74 +367,85 @@ rclone sync gdrive-ecoquants:projects/calcofi/data gcs-calcofi:calcofi-files --d
 TIMESTAMP=$(date +%Y-%m-%d_%H%M%S)
 LOG_FILE="/var/log/rclone/sync_${TIMESTAMP}.log"
 
-# Sync with backup-dir to preserve previous versions
-rclone sync gdrive:calcofi/data gs://calcofi-files/current \
-  --backup-dir gs://calcofi-files/archive/${TIMESTAMP} \
+# --- PUBLIC DATA ---
+# Step 1: Sync Google Drive to _sync/ working directory
+rclone sync gdrive:calcofi/data-public gs://calcofi-files-public/_sync \
   --checksum \
   --drive-export-formats csv \
   --log-file ${LOG_FILE} \
   --log-level INFO
 
-# Generate manifest of current state
-rclone lsjson gs://calcofi-files/current --recursive \
-  > /tmp/manifest_${TIMESTAMP}.json
+# Step 2: Create immutable archive snapshot
+rclone copy gs://calcofi-files-public/_sync gs://calcofi-files-public/archive/${TIMESTAMP}
 
-# Upload manifest
-rclone copy /tmp/manifest_${TIMESTAMP}.json gs://calcofi-files/manifests/
-rclone copyto /tmp/manifest_${TIMESTAMP}.json gs://calcofi-files/manifests/manifest_latest.json
+# Step 3: Generate and upload manifest
+rclone lsjson gs://calcofi-files-public/archive/${TIMESTAMP} --recursive \
+  > /tmp/manifest_${TIMESTAMP}.json
+rclone copy /tmp/manifest_${TIMESTAMP}.json gs://calcofi-files-public/manifests/
+rclone copyto /tmp/manifest_${TIMESTAMP}.json gs://calcofi-files-public/manifests/manifest_latest.json
+
+# --- PRIVATE DATA ---
+# Repeat for private bucket (separate log file)
+rclone sync gdrive:calcofi/data-private gs://calcofi-files-private/_sync \
+  --checksum \
+  --drive-export-formats csv \
+  --log-file ${LOG_FILE%.log}_private.log \
+  --log-level INFO
+
+rclone copy gs://calcofi-files-private/_sync gs://calcofi-files-private/archive/${TIMESTAMP}
 ```
 
 #### Key Behaviors
 
 | Scenario | Google Drive Action | Rclone Behavior | Result in GCS |
 |----------|--------------------|-----------------|----|
-| New file | User uploads `new.csv` | `rclone sync` copies file | `current/new.csv` created |
-| Updated file | User overwrites `bottle.csv` | Old version moved to `archive/` | `current/bottle.csv` updated, `archive/{timestamp}/bottle.csv` preserved |
-| Deleted file | User deletes `old.csv` | Old version moved to `archive/` | Removed from `current/`, preserved in `archive/` |
-| Renamed file | User renames `a.csv` → `b.csv` | Treated as delete + create | `a.csv` archived, `b.csv` created |
-| No changes | Nothing | `--checksum` skips identical files | No archive entry created |
+| New file | User uploads `new.csv` | `rclone sync` copies to `_sync/` | `_sync/new.csv` created, next archive includes it |
+| Updated file | User overwrites `bottle.csv` | `rclone sync` updates `_sync/` | `_sync/bottle.csv` updated, archive snapshots preserve history |
+| Deleted file | User deletes `old.csv` | `rclone sync` removes from `_sync/` | Removed from `_sync/`, preserved in prior archives |
+| Renamed file | User renames `a.csv` → `b.csv` | Treated as delete + create | `a.csv` gone from `_sync/`, `b.csv` created |
+| No changes | Nothing | `--checksum` skips identical files | No new sync needed |
 
-#### The `--backup-dir` Magic
+#### The Two-Step Archive Strategy
 
-The `--backup-dir` flag is the key to versioning:
+The archiving approach uses two steps for reliability:
 
-- Before overwriting any file in `current/`, rclone first moves the existing version to `archive/{timestamp}/`
-- Only **changed** files appear in each archive folder
-- If no files changed, the archive folder for that day is empty (or not created)
-- This creates a sparse archive that only stores deltas
+1. **Sync to `_sync/`**: rclone syncs Google Drive to the `_sync/` working directory
+2. **Copy to `archive/{timestamp}/`**: Create an immutable snapshot of the current state
+
+Benefits:
+- **Immutable archives**: Each archive folder is a complete snapshot, not just deltas
+- **Reproducibility**: Any archive folder contains everything needed to recreate that state
+- **No data loss**: If sync fails, previous archives remain intact
+- **Public access**: `calcofi-files-public` bucket has public read access for easy data sharing
 
 ### Manifest Files
 
-Each manifest captures the complete state of the data lake at a point in time:
+Each manifest captures the complete state of the archive at a point in time:
 
 ```json
 {
-  "generated_at": "2026-01-20T12:00:00Z",
-  "sync_timestamp": "2026-01-20_120000",
+  "generated_at": "2026-02-02T12:15:57Z",
+  "archive_timestamp": "2026-02-02_121557",
+  "bucket": "gs://calcofi-files-public",
+  "archive_path": "archive/2026-02-02_121557",
   "files": [
     {
-      "path": "calcofi.org/bottle-database/bottle.csv",
-      "size": 45234567,
-      "mod_time": "2026-01-20T10:30:00Z",
-      "md5": "abc123def456...",
-      "gcs_url": "gs://calcofi-files/current/calcofi.org/bottle-database/bottle.csv"
+      "Path": "calcofi.org/bottle-database/bottle.csv",
+      "Size": 45234567,
+      "ModTime": "2026-02-02T10:30:00Z",
+      "MimeType": "text/csv",
+      "gcs_url": "gs://calcofi-files-public/archive/2026-02-02_121557/calcofi.org/bottle-database/bottle.csv"
     },
     {
-      "path": "swfsc.noaa.gov/calcofi-db/larva.csv",
-      "size": 12345678,
-      "mod_time": "2026-01-15T08:00:00Z",
-      "md5": "def789ghi012...",
-      "gcs_url": "gs://calcofi-files/current/swfsc.noaa.gov/calcofi-db/larva.csv"
+      "Path": "swfsc.noaa.gov/calcofi-db/larva.csv",
+      "Size": 12345678,
+      "ModTime": "2026-02-01T08:00:00Z",
+      "MimeType": "text/csv",
+      "gcs_url": "gs://calcofi-files-public/archive/2026-02-02_121557/swfsc.noaa.gov/calcofi-db/larva.csv"
     }
   ],
-  "archive_entries": [
-    {
-      "original_path": "calcofi.org/bottle-database/bottle.csv",
-      "archive_path": "archive/2026-01-20_120000/calcofi.org/bottle-database/bottle.csv",
-      "reason": "updated",
-      "previous_md5": "xyz789..."
-    }
-  ]
+  "total_files": 112457,
+  "total_size_bytes": 35987654321
 }
 ```
 
@@ -428,22 +454,24 @@ Each manifest captures the complete state of the data lake at a point in time:
 To recreate the data lake as it existed on a specific date:
 
 ```r
-# R function to get historical file
-get_historical_file <- function(path, date) {
-  # Find the manifest for that date
-  manifest <- read_json(glue("gs://calcofi-files/manifests/manifest_{date}.json"))
-
-  # Get the file info
-
-  file_info <- manifest$files |> filter(path == !!path)
-
-  # If file existed on that date, return its URL
-  if (nrow(file_info) > 0) {
-    return(file_info$gcs_url)
+# R function to get file from a specific archive snapshot
+get_archived_file <- function(path, timestamp = "latest", bucket = "calcofi-files-public") {
+  # Get manifest for that timestamp
+  if (timestamp == "latest") {
+    manifest_url <- glue("gs://{bucket}/manifests/manifest_latest.json")
+  } else {
+    manifest_url <- glue("gs://{bucket}/manifests/manifest_{timestamp}.json")
   }
 
-  # Otherwise, search archive for closest prior version
-  # ...
+  manifest <- jsonlite::read_json(manifest_url)
+
+  # Construct the archive URL
+  archive_url <- glue("gs://{bucket}/archive/{manifest$archive_timestamp}/{path}")
+
+  # Or use public HTTPS URL for direct access
+  https_url <- glue("https://storage.googleapis.com/{bucket}/archive/{manifest$archive_timestamp}/{path}")
+
+  return(https_url)
 }
 ```
 
@@ -483,23 +511,29 @@ gantt
 
 flowchart TB
     subgraph contributors["DATA CONTRIBUTOR LAYER"]
-        gdrive["Google Drive<br/>(calcofi/data/)"]
+        gdrive_pub["Google Drive<br/>(calcofi/data-public/)"]
+        gdrive_priv["Google Drive<br/>(calcofi/data-private/)"]
         csv1["calcofi.org/bottle-database/*.csv"]
         csv2["swfsc.noaa.gov/calcofi-db/*.csv"]
         csv3["coastwatch.pfeg.noaa.gov/*.csv"]
-        gdrive --- csv1
-        gdrive --- csv2
-        gdrive --- csv3
+        csv4["edna/, zooplankton/"]
+        gdrive_pub --- csv1
+        gdrive_pub --- csv2
+        gdrive_pub --- csv3
+        gdrive_priv --- csv4
     end
 
     subgraph gcs["VERSIONED DATA LAKE (GCS)<br/>Project: ucsd-sio-calcofi"]
-        bucket1["gs://calcofi-files/"]
-        current["current/"]
-        archive["archive/"]
-        manifests["manifests/"]
-        bucket1 --- current
-        bucket1 --- archive
-        bucket1 --- manifests
+        bucket_pub["gs://calcofi-files-public/"]
+        bucket_priv["gs://calcofi-files-private/"]
+        sync_pub["_sync/"]
+        archive_pub["archive/"]
+        manifests_pub["manifests/"]
+        bucket_pub --- sync_pub
+        bucket_pub --- archive_pub
+        bucket_pub --- manifests_pub
+        bucket_priv --- sync_priv["_sync/"]
+        bucket_priv --- archive_priv["archive/"]
     end
 
     subgraph db["INTEGRATED DATABASE"]
@@ -521,7 +555,8 @@ flowchart TB
         odis["ODIS<br/>(schema.org JSON-LD)"]
     end
 
-    contributors -->|"rclone sync<br/>--backup-dir"| gcs
+    gdrive_pub -->|"rclone sync"| bucket_pub
+    gdrive_priv -->|"rclone sync"| bucket_priv
     gcs -->|"targets pipeline<br/>(CSV → Parquet)"| db
     db -->|"publish workflows"| publish
 ```
@@ -531,9 +566,10 @@ flowchart TB
 | Layer | Technology | Purpose | Replaces |
 |-------|------------|---------|----------|
 | **Storage** | | | |
-| | `gs://calcofi-files` | Versioned source CSV files | Google Drive only |
+| | `gs://calcofi-files-public` | Versioned public source CSV files | Google Drive only |
+| | `gs://calcofi-files-private` | Versioned private/sensitive files | Google Drive only |
 | | `gs://calcofi-db` | Parquet, DuckDB, PMTiles | - |
-| **Sync** | rclone | Drive → GCS with `--backup-dir` | Manual copying |
+| **Sync** | rclone | Drive → GCS with archive snapshots | Manual copying |
 | **Format** | Apache Parquet | Efficient columnar storage | CSV |
 | **Compute** | DuckDB | Serverless SQL queries | PostgreSQL (gradual) |
 | **Versioning** | DuckLake + manifests | Time travel, version control | None |
@@ -642,18 +678,18 @@ tar_option_set(
 
 # Define pipeline
 list(
-  # ─── Raw Data from GCS ─────────────────────────────────────────
+  # ─── Raw Data from GCS (public bucket, latest archive) ─────────
   tar_target(
     raw_bottle,
-    get_gcs_file("gs://calcofi-datalake/raw/calcofi.org/bottle-database/bottle.csv")
+    get_gcs_file("gs://calcofi-files-public", "calcofi.org/bottle-database/bottle.csv")
   ),
   tar_target(
     raw_cast,
-    get_gcs_file("gs://calcofi-datalake/raw/calcofi.org/bottle-database/cast.csv")
+    get_gcs_file("gs://calcofi-files-public", "calcofi.org/bottle-database/cast.csv")
   ),
   tar_target(
     raw_larvae,
-    get_gcs_file("gs://calcofi-datalake/raw/swfsc.noaa.gov/calcofi-db/larvae.csv")
+    get_gcs_file("gs://calcofi-files-public", "swfsc.noaa.gov/calcofi-db/larva.csv")
   ),
 
   # ─── Transform to Parquet ──────────────────────────────────────
@@ -813,23 +849,25 @@ flowchart LR
 
 ## Implementation Priority
 
-### Phase 1: Foundation (Immediate)
+### Phase 1: Foundation ✅ COMPLETE (2026-02-02)
 
 **Goal**: Establish cloud infrastructure and helper functions
 
-1. **Set up GCS bucket**
-   - Create `gs://calcofi-datalake/` with appropriate permissions
-   - Configure service account for rclone access
-   - Document rclone configuration
+1. **Set up GCS buckets** ✅
+   - Created `gs://calcofi-files-public/` with public read access
+   - Created `gs://calcofi-files-private/` with restricted access
+   - Configured rclone access via OAuth
 
-2. **Add cloud functions to `calcofi4db`**
-   - Create `R/cloud.R` with `get_gcs_file()`, `put_gcs_file()`
-   - Create `R/parquet.R` with `csv_to_parquet()`
-   - Create `R/duckdb.R` with `get_duckdb_con()`, `create_duckdb_views()`
+2. **Add cloud functions to `calcofi4db`** ✅
+   - Created `R/cloud.R` with `get_gcs_file()`, `put_gcs_file()`
+   - Created `R/parquet.R` with `csv_to_parquet()`
+   - Created `R/duckdb.R` with `get_duckdb_con()`, `create_duckdb_views()`
 
-3. **Initial sync**
-   - Sync existing Google Drive data to GCS
-   - Verify file integrity and accessibility
+3. **Initial sync** ✅
+   - Synced Google Drive `data-public/` to `gs://calcofi-files-public/_sync/`
+   - Created initial archive snapshot: `archive/2026-02-02_121557/`
+   - Generated manifest: `manifests/manifest_2026-02-02_121557.json`
+   - Total: 112,457 files (33.5 GiB)
 
 ### Phase 2: Pipeline (Weeks 3-6)
 
@@ -883,18 +921,22 @@ flowchart LR
 ### End-to-End Test
 
 ```r
-# 1. Sync test data
-system("rclone sync gdrive:calcofi/data/test gs://calcofi-datalake/raw/test")
+# 1. Sync test data from Google Drive to GCS
+system("rclone sync gdrive:calcofi/data-public gs://calcofi-files-public/_sync")
 
-# 2. Run targets pipeline
+# 2. Create archive snapshot
+timestamp <- format(Sys.time(), "%Y-%m-%d_%H%M%S")
+system(glue::glue("rclone copy gs://calcofi-files-public/_sync gs://calcofi-files-public/archive/{timestamp}"))
+
+# 3. Run targets pipeline
 targets::tar_make()
 
-# 3. Verify database
+# 4. Verify database
 con <- calcofi4db::get_duckdb_con("calcofi.duckdb")
 DBI::dbListTables(con)
 DBI::dbGetQuery(con, "SELECT COUNT(*) FROM larvae")
 
-# 4. Verify OBIS archive
+# 5. Verify OBIS archive
 obistools::check_fields(read_csv("data/darwincore/larvae/occurrence.csv"))
 ```
 
@@ -967,7 +1009,7 @@ flowchart LR
      stations.geojson
 
    # Upload to GCS
-   gsutil cp stations.pmtiles gs://calcofi-files/tiles/
+   gsutil cp stations.pmtiles gs://calcofi-db/tiles/
    ```
 
 2. **Update Shiny Apps**
@@ -991,7 +1033,7 @@ flowchart LR
    mapboxgl() |>
      add_pmtiles_source(
        id = "stations",
-       url = "https://storage.googleapis.com/calcofi-files/tiles/stations.pmtiles"
+       url = "https://storage.googleapis.com/calcofi-db/tiles/stations.pmtiles"
      ) |>
      add_layer(
        id = "stations-layer",
@@ -1032,15 +1074,25 @@ Based on clarifications received:
 
 1. **GCS Project**: Use existing project `ucsd-sio-calcofi`
    - Existing bucket `calcofi-db` → DuckLake/database files
-   - New bucket `calcofi-files` → Versioned source files
+   - New bucket `calcofi-files-public` → Versioned public source files (public read access)
+   - New bucket `calcofi-files-private` → Versioned private/sensitive files (restricted access)
 
-2. **API Strategy**: Keep PostgreSQL + API for now with migration roadmap
+2. **Google Drive Structure** (implemented 2026-02-02):
+   - `calcofi/data-public/` → Public datasets (bottle, larvae, etc.)
+   - `calcofi/data-private/` → Private/sensitive data (eDNA, zooplankton samples)
+
+3. **GCS Folder Structure** (implemented 2026-02-02):
+   - `_sync/` → Working directory (rclone syncs here, mutable)
+   - `archive/{timestamp}/` → Immutable snapshots (complete copies, not deltas)
+   - `manifests/` → JSON metadata files with `manifest_latest.json` pointer
+
+4. **API Strategy**: Keep PostgreSQL + API for now with migration roadmap
    - pg_tileserv needed for current Shiny apps
    - Migrate to PMTiles over time using tippecanoe + mapgl
 
-3. **Priority Data**: Larvae + Bottle datasets for proof-of-concept
+5. **Priority Data**: Larvae + Bottle datasets for proof-of-concept
 
-4. **Bottle in OBIS**: Include as EMoF extension in larvae dataset
+6. **Bottle in OBIS**: Include as EMoF extension in larvae dataset
 
 ## Remaining Questions
 
