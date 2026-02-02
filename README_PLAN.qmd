@@ -9,8 +9,15 @@ format:
     embed-resources: true
 ---
 <style>
-.mermaid-js rect{
-  fill: lightyellow!important;
+/* flowchart boxes */
+.mermaid-js .flowchart-link { stroke: #333!important; }
+
+/* gantt chart: make task text visible */
+.mermaid-js .taskText,
+.mermaid-js .taskTextOutsideRight,
+.mermaid-js .taskTextOutsideLeft,
+.mermaid-js [class^="taskText"] {
+  fill: #333!important;
 }
 </style>
 
@@ -193,17 +200,17 @@ data-public/
 %%| fig-cap: "Simplified Data Flow"
 
 flowchart TB
-    subgraph you["<b>👤 YOU (Dataset Manager)</b>"]
+    subgraph you["👤 YOU"]
         upload["Upload CSV to Drive"]
     end
 
-    subgraph auto["<b>🤖 AUTOMATED (Daily)</b>"]
+    subgraph auto["🤖 AUTOMATED"]
         sync["Sync to Archive"]
         snapshot["Create snapshot"]
         transform["Run workflows"]
     end
 
-    subgraph result["<b>📊 RESULT</b>"]
+    subgraph result["📊 RESULT"]
         db["Updated Database"]
         portals["Published to Portals"]
     end
@@ -685,23 +692,40 @@ get_archived_file <- function(path, timestamp = "latest", bucket = "calcofi-file
 %%| label: fig-schedule
 %%| fig-cap: "Daily Sync Schedule (UTC)"
 
+%%---
+%%displayMode: compact
+%%---
+
+%%{init: {'theme': 'default', 'themeVariables': { 'textColor': '##333'}}}%%
+
 gantt
     title Daily Sync Schedule (UTC)
     dateFormat HH:mm
     axisFormat %H:%M
 
     section Sync
-    rclone sync & archive     :a1, 00:00, 15m
-    Generate manifest         :a2, after a1, 5m
+    rclone           :a1, 00:00, 10m
+    archive          :a2, after a1, 5m
+    manifest         :a3, after a2, 5m
 
     section Pipeline
-    targets pipeline          :b1, 00:15, 15m
-    CSV → Parquet            :b2, after b1, 5m
-    DuckDB update            :b3, after b2, 5m
+    targets          :b1, after a3, 10m
+    parquet          :b2, after b1, 5m
+    duckdb           :b3, after b2, 5m
 
     section Notify
-    Send notifications        :c1, 00:30, 5m
+    notify           :c1, after b3, 5m
 ```
+
+The daily automation runs at midnight UTC and completes in under an hour:
+
+1. **Sync** phase: `rclone` copies new/changed files from Google Drive to the `_sync/` folder in GCS, then creates an immutable `archive/` snapshot and generates a manifest file documenting the state.
+
+2. **Pipeline** phase: The `targets` pipeline detects which source files changed and re-runs only the affected steps—transforming CSVs to Parquet format and updating the DuckDB database.
+
+3. **Notify** phase: Sends notifications (email/Slack) summarizing what changed and any errors encountered.
+
+If no files changed in Google Drive, the pipeline completes quickly with minimal processing.
 
 ---
 
@@ -714,55 +738,40 @@ gantt
 %%| fig-cap: "CalCOFI Data Flow Architecture"
 
 flowchart TB
-    subgraph contributors["DATA CONTRIBUTOR LAYER"]
-        gdrive_pub["Google Drive<br/>(calcofi/data-public/)"]
-        gdrive_priv["Google Drive<br/>(calcofi/data-private/)"]
-        csv1["calcofi.org/bottle-database/*.csv"]
-        csv2["swfsc.noaa.gov/calcofi-db/*.csv"]
-        csv3["coastwatch.pfeg.noaa.gov/*.csv"]
-        csv4["edna/, zooplankton/"]
-        gdrive_pub --- csv1
-        gdrive_pub --- csv2
-        gdrive_pub --- csv3
-        gdrive_priv --- csv4
+    subgraph drive["📁 THE DRIVE"]
+        direction LR
+        gdrive_pub["data-public/"]
+        gdrive_priv["data-private/"]
     end
 
-    subgraph gcs["VERSIONED DATA LAKE (GCS)<br/>Project: ucsd-sio-calcofi"]
-        bucket_pub["gs://calcofi-files-public/"]
-        bucket_priv["gs://calcofi-files-private/"]
-        sync_pub["_sync/"]
-        archive_pub["archive/"]
-        manifests_pub["manifests/"]
-        bucket_pub --- sync_pub
-        bucket_pub --- archive_pub
-        bucket_pub --- manifests_pub
-        bucket_priv --- sync_priv["_sync/"]
-        bucket_priv --- archive_priv["archive/"]
+    subgraph archive["🗄️ THE ARCHIVE"]
+        direction LR
+        bucket_pub["calcofi-files-public"]
+        bucket_priv["calcofi-files-private"]
     end
 
-    subgraph db["INTEGRATED DATABASE"]
-        bucket2["gs://calcofi-db/"]
-        parquet["parquet/"]
-        duckdb["duckdb/calcofi.duckdb"]
-        ducklake["ducklake/"]
-        tiles["tiles/*.pmtiles"]
-        bucket2 --- parquet
-        bucket2 --- duckdb
-        bucket2 --- ducklake
-        bucket2 --- tiles
+    subgraph database["🗃️ THE DATABASE"]
+        direction LR
+        working["Working DuckLake"]
+        frozen["Frozen Releases"]
     end
 
-    subgraph publish["PUBLISHING LAYER"]
-        obis["OBIS<br/>(DarwinCore Archive)"]
-        edi["EDI<br/>(EML + data files)"]
-        erddap["ERDDAP<br/>(NetCDF/CSV)"]
-        odis["ODIS<br/>(schema.org JSON-LD)"]
+    subgraph outputs["🌐 OUTPUTS"]
+        direction LR
+        obis["OBIS"]
+        edi["EDI"]
+        erddap["ERDDAP"]
+        apps["Apps/API"]
     end
 
-    gdrive_pub -->|"rclone sync"| bucket_pub
-    gdrive_priv -->|"rclone sync"| bucket_priv
-    gcs -->|"targets pipeline<br/>(CSV → Parquet)"| db
-    db -->|"publish workflows"| publish
+    drive -->|"rclone sync"| archive
+    archive -->|"targets pipeline"| database
+    database -->|"publish workflows"| outputs
+
+    style drive fill:#e8f4e8,stroke:#2e7d32
+    style archive fill:#e3f2fd,stroke:#1565c0
+    style database fill:#f3e5f5,stroke:#7b1fa2
+    style outputs fill:#fce4ec,stroke:#c2185b
 ```
 
 ### Technology Stack
@@ -799,29 +808,29 @@ The CalCOFI integrated database uses [DuckLake](https://ducklake.select/), a lak
 %%| fig-cap: "Working vs Frozen DuckLake Architecture"
 
 flowchart TB
-    subgraph archive["📁 Archive (GCS)"]
+    subgraph archive["📁 Archive"]
         csv["CSV source files"]
     end
 
-    subgraph working["<b>🔧 WORKING DUCKLAKE</b><br/><i>gs://calcofi-db/ducklake/working/</i>"]
-        direction TB
-        w_tables["Tables with provenance columns:<br/>• _source_file<br/>• _source_row<br/>• _source_uuid<br/>• _ingested_at"]
-        w_history["Full edit history<br/>(time travel enabled)"]
-        w_access["Access: Workflows only"]
+    subgraph working["🔧 WORKING DUCKLAKE"]
+        direction LR
+        w_tables["Provenance columns"]
+        w_history["Time travel"]
+        w_access["Internal only"]
     end
 
-    subgraph frozen["<b>❄️ FROZEN DUCKLAKE</b><br/><i>gs://calcofi-db/ducklake/releases/</i>"]
-        direction TB
-        f_versions["Versioned releases:<br/>• v2026.02<br/>• v2026.03<br/>• v2026.04"]
-        f_clean["Clean tables<br/>(no provenance columns)"]
-        f_access["Access: Public<br/>Apps, API, R package"]
+    subgraph frozen["❄️ FROZEN DUCKLAKE"]
+        direction LR
+        f_versions["v2026.02, v2026.03..."]
+        f_clean["Clean tables"]
+        f_access["Public access"]
     end
 
     subgraph outputs["🌐 Public Access"]
+        direction LR
         apps["Shiny Apps"]
         api["REST API"]
         rpkg["calcofi4r"]
-        direct["Direct Parquet reads"]
     end
 
     csv -->|"ingest workflows"| working
@@ -1154,24 +1163,27 @@ list(
 flowchart TB
     subgraph dev["Development Cycle"]
         direction LR
-        d1["1. Explore data<br/><code>explore_*.qmd</code>"]
-        d2["2. Design ingest<br/><code>ingest_*.qmd</code>"]
-        d3["3. Add to targets<br/><code>_targets.R</code>"]
-        d4["4. Run pipeline<br/><code>tar_make()</code>"]
-        d5["5. Publish<br/><code>publish_*.qmd</code>"]
+        d1["1\. Explore"]
+        d2["2\. Ingest"]
+        d3["3\. Targets"]
+        d4["4\. Run"]
+        d5["5\. Publish"]
         d1 --> d2 --> d3 --> d4 --> d5
     end
 
     subgraph update["Update Cycle"]
         direction LR
-        u1["1. New data<br/>Google Drive"]
-        u2["2. Sync to GCS<br/>rclone"]
-        u3["3. Run pipeline<br/><code>tar_make()</code>"]
-        u4["4. Republish<br/>automatic"]
+        u1["1\. New data"]
+        u2["2\. Sync"]
+        u3["3\. Run"]
+        u4["4\. Republish"]
         u1 --> u2 --> u3 --> u4
     end
 
     dev -.->|"formalized"| update
+
+    style dev fill:#fff3e0,stroke:#ef6c00
+    style update fill:#e8f4e8,stroke:#2e7d32
 ```
 
 ### Dependency Graph
@@ -1181,24 +1193,24 @@ flowchart TB
 %%| fig-cap: "targets Pipeline Dependency Graph"
 
 flowchart LR
-    subgraph raw["Raw CSV"]
+    subgraph raw["📁 Raw CSV"]
         raw_bottle
         raw_cast
         raw_larvae
     end
 
-    subgraph parquet["Parquet"]
+    subgraph parquet["⚙️ Parquet"]
         pqt_bottle
         pqt_cast
         pqt_larvae
     end
 
-    subgraph database["Database"]
+    subgraph database["🗃️ Database"]
         db_manifest
         duckdb_file
     end
 
-    subgraph publish["Publish"]
+    subgraph publish["🌐 Publish"]
         obis_archive
     end
 
@@ -1212,6 +1224,11 @@ flowchart LR
 
     db_manifest --> duckdb_file
     duckdb_file --> obis_archive
+
+    style raw fill:#e3f2fd,stroke:#1565c0
+    style parquet fill:#fff3e0,stroke:#ef6c00
+    style database fill:#f3e5f5,stroke:#7b1fa2
+    style publish fill:#fce4ec,stroke:#c2185b
 ```
 
 ---
@@ -1423,24 +1440,27 @@ The current architecture uses `pg_tileserv` to serve vector tiles from PostGIS f
 %%| fig-cap: "Vector Tiles Migration Path"
 
 flowchart LR
-    subgraph current["Current Flow"]
+    subgraph current["Current Flow (PostgreSQL)"]
         direction LR
-        pg["PostGIS<br/>(geometries)"]
+        pg["PostGIS"]
         ts["pg_tileserv"]
-        lf["Leaflet/Mapbox<br/>in Shiny"]
+        lf["Leaflet"]
         pg --> ts --> lf
     end
 
-    subgraph target["Target Flow"]
+    subgraph target["Target Flow (Cloud-native)"]
         direction LR
-        geo["GeoParquet/<br/>GeoJSON"]
+        geo["GeoParquet"]
         tc["tippecanoe"]
         pm["PMTiles"]
-        mg["mapgl::<br/>add_pmtiles_source()"]
+        mg["mapgl"]
         geo --> tc --> pm --> mg
     end
 
     current -.->|"migrate"| target
+
+    style current fill:#ffebee,stroke:#c62828
+    style target fill:#e8f4e8,stroke:#2e7d32
 ```
 
 #### Implementation Steps
