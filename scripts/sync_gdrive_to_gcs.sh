@@ -22,12 +22,16 @@ set -euo pipefail
 GDRIVE_REMOTE="gdrive-ecoquants"
 GDRIVE_PATH="projects/calcofi/data"
 
+# GCS_REMOTE="gcs"                  # default remote name
+GCS_REMOTE="gcs-calcofi"            # your configured remote name
 GCS_BUCKET="calcofi-files"
-GCS_CURRENT="gs://${GCS_BUCKET}/current"
 
 TIMESTAMP=$(date +%Y-%m-%d_%H%M%S)
-GCS_ARCHIVE="gs://${GCS_BUCKET}/archive/${TIMESTAMP}"
-GCS_MANIFESTS="gs://${GCS_BUCKET}/manifests"
+
+# rclone uses remote:path format, not gs:// URIs
+GCS_CURRENT="${GCS_REMOTE}:${GCS_BUCKET}/current"
+GCS_ARCHIVE="${GCS_REMOTE}:${GCS_BUCKET}/archive/${TIMESTAMP}"
+GCS_MANIFESTS="${GCS_REMOTE}:${GCS_BUCKET}/manifests"
 
 LOG_DIR="${HOME}/.calcofi/logs"
 LOG_FILE="${LOG_DIR}/sync_${TIMESTAMP}.log"
@@ -87,6 +91,12 @@ if ! rclone listremotes | grep -q "^${GDRIVE_REMOTE}:$"; then
     exit 1
 fi
 
+if ! rclone listremotes | grep -q "^${GCS_REMOTE}:$"; then
+    log "ERROR: rclone remote '${GCS_REMOTE}' not configured"
+    log "Run: rclone config"
+    exit 1
+fi
+
 log "Prerequisites verified"
 
 # ─── sync google drive to gcs ─────────────────────────────────────────────────
@@ -141,10 +151,10 @@ cat > "${MANIFEST_LATEST}" <<EOF
 }
 EOF
 
-# upload manifests
+# upload manifests (using rclone for consistency)
 if [ -z "${DRY_RUN}" ]; then
-    gcloud storage cp "${MANIFEST_LATEST}" "${GCS_MANIFESTS}/manifest_${TIMESTAMP}.json"
-    gcloud storage cp "${MANIFEST_LATEST}" "${GCS_MANIFESTS}/manifest_latest.json"
+    rclone copyto "${MANIFEST_LATEST}" "${GCS_MANIFESTS}/manifest_${TIMESTAMP}.json"
+    rclone copyto "${MANIFEST_LATEST}" "${GCS_MANIFESTS}/manifest_latest.json"
     log "Manifests uploaded to ${GCS_MANIFESTS}"
 else
     log "DRY RUN: Would upload manifests to ${GCS_MANIFESTS}"
