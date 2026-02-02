@@ -15,26 +15,39 @@ tar_option_set(
   retrieval = "worker")
 
 # configuration ----
-GCS_BUCKET_FILES <- "calcofi-files"
 GCS_BUCKET_DB    <- "calcofi-db"
-DIR_DATA         <- "~/My Drive/projects/calcofi/data"
+DIR_DATA         <- "~/My Drive/projects/calcofi/data-public"
 DIR_PARQUET      <- "parquet"
 DIR_DUCKDB       <- "duckdb"
 
+# data version: pin to specific timestamp for reproducibility
+# use "latest" for development, specific timestamp for production
+DATA_VERSION <- "latest"
+DATA_BUCKET  <- "public"  # "public" or "private"
+
 # helper functions ----
 
-#' Get local CSV path or download from GCS
-get_csv_path <- function(provider, dataset, filename, dir_data = DIR_DATA) {
-  local_path <- file.path(dir_data, provider, dataset, filename)
+#' Get CSV path from immutable archive or local Google Drive
+#'
+#' First checks for local file in Google Drive, then falls back to
+#' the immutable archive in GCS for reproducible data access.
+get_csv_path <- function(
+    provider,
+    dataset,
+    filename,
+    date     = DATA_VERSION,
+    bucket   = DATA_BUCKET,
+    dir_data = DIR_DATA) {
 
+  # try local Google Drive first
+  local_path <- file.path(dir_data, provider, dataset, filename)
   if (file.exists(local_path)) {
     return(local_path)
   }
 
-  # fallback to GCS
-  gcs_path <- glue::glue(
-    "gs://{GCS_BUCKET_FILES}/current/{provider}/{dataset}/{filename}")
-  calcofi4db::get_gcs_file(gcs_path)
+  # fallback to immutable archive in GCS
+  path <- file.path(provider, dataset, filename)
+  calcofi4db::get_calcofi_file(path, date = date, bucket = bucket)
 }
 
 #' Read and clean CSV file
