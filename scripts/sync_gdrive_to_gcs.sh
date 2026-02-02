@@ -2,7 +2,12 @@
 # sync_gdrive_to_gcs.sh
 # syncs calcofi data from google drive to google cloud storage with versioning
 #
-# usage: ./sync_gdrive_to_gcs.sh [--dry-run]
+# usage: ./sync_gdrive_to_gcs.sh [public|private] [--dry-run]
+#
+# arguments:
+#   public   - sync to calcofi-files-public bucket (default)
+#   private  - sync to calcofi-files-private bucket
+#   --dry-run - show what would be done without making changes
 #
 # prerequisites:
 #   - rclone installed and configured with 'gdrive' and 'gcs' remotes
@@ -17,31 +22,26 @@ set -euo pipefail
 
 # ─── configuration ────────────────────────────────────────────────────────────
 
-# GDRIVE_REMOTE="gdrive"
-# GDRIVE_PATH="calcofi/data"
 GDRIVE_REMOTE="gdrive-ecoquants"
-GDRIVE_PATH="projects/calcofi/data"
-
-# GCS_REMOTE="gcs"                  # default remote name
-GCS_REMOTE="gcs-calcofi"            # your configured remote name
-GCS_BUCKET="calcofi-files"
+GCS_REMOTE="gcs-calcofi"
 
 TIMESTAMP=$(date +%Y-%m-%d_%H%M%S)
-
-# rclone uses remote:path format, not gs:// URIs
-GCS_CURRENT="${GCS_REMOTE}:${GCS_BUCKET}/current"
-GCS_ARCHIVE="${GCS_REMOTE}:${GCS_BUCKET}/archive/${TIMESTAMP}"
-GCS_MANIFESTS="${GCS_REMOTE}:${GCS_BUCKET}/manifests"
-
 LOG_DIR="${HOME}/.calcofi/logs"
-LOG_FILE="${LOG_DIR}/sync_${TIMESTAMP}.log"
-
 DRY_RUN=""
+BUCKET_TYPE="public"
 
 # ─── parse arguments ──────────────────────────────────────────────────────────
 
 while [[ $# -gt 0 ]]; do
     case $1 in
+        public)
+            BUCKET_TYPE="public"
+            shift
+            ;;
+        private)
+            BUCKET_TYPE="private"
+            shift
+            ;;
         --dry-run)
             DRY_RUN="--dry-run"
             echo "DRY RUN MODE: No changes will be made"
@@ -49,10 +49,28 @@ while [[ $# -gt 0 ]]; do
             ;;
         *)
             echo "Unknown option: $1"
+            echo "Usage: $0 [public|private] [--dry-run]"
             exit 1
             ;;
     esac
 done
+
+# ─── set paths based on bucket type ──────────────────────────────────────────
+
+if [ "$BUCKET_TYPE" = "public" ]; then
+    GDRIVE_PATH="projects/calcofi/data-public"
+    GCS_BUCKET="calcofi-files-public"
+elif [ "$BUCKET_TYPE" = "private" ]; then
+    GDRIVE_PATH="projects/calcofi/data-private"
+    GCS_BUCKET="calcofi-files-private"
+fi
+
+# rclone uses remote:path format, not gs:// URIs
+GCS_SYNC="${GCS_REMOTE}:${GCS_BUCKET}/_sync"
+GCS_ARCHIVE="${GCS_REMOTE}:${GCS_BUCKET}/archive/${TIMESTAMP}"
+GCS_MANIFESTS="${GCS_REMOTE}:${GCS_BUCKET}/manifests"
+
+LOG_FILE="${LOG_DIR}/sync_${BUCKET_TYPE}_${TIMESTAMP}.log"
 
 # ─── setup ────────────────────────────────────────────────────────────────────
 
@@ -66,9 +84,10 @@ log() {
 log "═══════════════════════════════════════════════════════════════════════════"
 log "CalCOFI Data Sync: Google Drive → Google Cloud Storage"
 log "═══════════════════════════════════════════════════════════════════════════"
+log "Bucket type: ${BUCKET_TYPE}"
 log "Timestamp: ${TIMESTAMP}"
 log "Source: ${GDRIVE_REMOTE}:${GDRIVE_PATH}"
-log "Destination: ${GCS_CURRENT}"
+log "Destination: ${GCS_SYNC}"
 log "Archive: ${GCS_ARCHIVE}"
 
 # ─── check prerequisites ──────────────────────────────────────────────────────
@@ -109,7 +128,7 @@ log "Starting sync..."
 # - drive-export-formats: export google docs as csv
 # - exclude: skip system files and temp files
 
-rclone sync "${GDRIVE_REMOTE}:${GDRIVE_PATH}" "${GCS_CURRENT}" \
+rclone sync "${GDRIVE_REMOTE}:${GDRIVE_PATH}" "${GCS_SYNC}" \
     ${DRY_RUN} \
     --checksum \
     --backup-dir "${GCS_ARCHIVE}" \
@@ -131,6 +150,20 @@ fi
 
 log "Sync completed successfully"
 
+# ─── create archive snapshot ─────────────────────────────────────────────────
+
+log "Creating archive snapshot at ${GCS_ARCHIVE}..."
+
+if [ -z "${DRY_RUN}" ]; then
+    rclone copy "${GCS_SYNC}" "${GCS_ARCHIVE}" \
+        --checksum \
+        --log-file "${LOG_FILE}" \
+        --log-level INFO
+    log "Archive snapshot created"
+else
+    log "DRY RUN: Would create archive snapshot at ${GCS_ARCHIVE}"
+fi
+
 # ─── generate manifest ────────────────────────────────────────────────────────
 
 log "Generating manifest..."
@@ -138,15 +171,16 @@ log "Generating manifest..."
 MANIFEST_FILE="/tmp/manifest_${TIMESTAMP}.json"
 MANIFEST_LATEST="/tmp/manifest_latest.json"
 
-# generate json listing of current files
-rclone lsjson "${GCS_CURRENT}" --recursive > "${MANIFEST_FILE}"
+# generate json listing of synced files
+rclone lsjson "${GCS_SYNC}" --recursive > "${MANIFEST_FILE}"
 
-# add metadata wrapper
+# add metadata wrapper with archive path for immutable references
 cat > "${MANIFEST_LATEST}" <<EOF
 {
   "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
   "sync_timestamp": "${TIMESTAMP}",
   "bucket": "${GCS_BUCKET}",
+  "archive_path": "archive/${TIMESTAMP}",
   "files": $(cat "${MANIFEST_FILE}")
 }
 EOF
@@ -187,9 +221,9 @@ log "Sync Summary"
 log "═══════════════════════════════════════════════════════════════════════════"
 log "Log file: ${LOG_FILE}"
 
-# count files in current
-CURRENT_COUNT=$(rclone lsjson "${GCS_CURRENT}" --recursive 2>/dev/null | jq length || echo "0")
-log "Files in current/: ${CURRENT_COUNT}"
+# count files in _sync
+SYNC_COUNT=$(rclone lsjson "${GCS_SYNC}" --recursive 2>/dev/null | jq length || echo "0")
+log "Files in _sync/: ${SYNC_COUNT}"
 log "Files archived: ${ARCHIVE_COUNT}"
 log "═══════════════════════════════════════════════════════════════════════════"
 
