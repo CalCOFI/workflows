@@ -3,13 +3,13 @@ title: "Ingest NOAA CalCOFI Database"
 execute:
   echo: true
   warning: false
-editor_options: 
+editor_options:
   chunk_output_type: console
 format:
   html:
-    code-fold: true  
-editor: 
-  markdown: 
+    code-fold: true
+editor:
+  markdown:
     wrap: 72
 ---
 
@@ -34,13 +34,15 @@ to:
     a materialized view (so as not to slow down queries with a regular
     view).
 
-This workflow processes NOAA CalCOFI database CSV files and updates the
-PostgreSQL database. The workflow:
+This workflow processes NOAA CalCOFI database CSV files and outputs
+parquet files. The workflow:
 
-1.  Reads CSV files from source directory
-2.  Compares with lookup tables for field descriptions
-3.  Initializes or updates database tables
-4.  Generates summary statistics
+1.  Reads CSV files from source directory (with GCS archive sync)
+2.  Loads into local wrangling DuckDB with transformations
+3.  Restructures primary keys (natural keys + sequential IDs)
+4.  Creates lookup table and consolidates ichthyo tables
+5.  Validates data quality and flags issues
+6.  Exports to parquet files (for later integration into Working DuckLake)
 
 ```{mermaid}
 %%| label: overview
@@ -54,156 +56,73 @@ See also [5.3 Ingest datasets with documentation – Database – CalCOFI.io Doc
 #| label: setup
 
 # devtools::install_local(here::here("../calcofi4db"), force = T)
-# devtools::load_all(here::here("../calcofi4db"))
+devtools::load_all(here::here("../calcofi4db"))
+devtools::load_all(here::here("../calcofi4r"))
 # options(error=NULL)
 librarian::shelf(
-  calcofi4db, DBI, dm, dplyr, DT, fs, glue, gargle, googledrive, here, janitor,
-  jsonlite, knitr, lubridate, purrr, readr, rlang, tibble, tidyr, uuid,
+  CalCOFI/calcofi4db, 
+  CalCOFI/calcofi4r,
+  DBI, dm, dplyr, DT, fs, glue, gargle, googledrive, here, htmltools, janitor,
+  jsonlite, knitr, litedown, lubridate, purrr, readr, rlang, sf, stringr, tibble, tidyr,
+  units, uuid, webshot2,
   quiet = T)
 options(readr.show_col_types = F)
 
-# get database connection
-con     <- get_db_con(c("dev", "dev_ref"))
-con_dev <- get_db_con(c("dev"))
+# define paths
+dataset      <- "calcofi-db"
+provider     <- "swfsc.noaa.gov"
+dataset_name <- "NOAA CalCOFI Database"
+dir_data     <- "~/My Drive/projects/calcofi/data-public"
+overwrite    <- TRUE
+dir_parquet  <- here(glue("data/parquet/{provider}_{dataset}"))
+db_path      <- here(glue("data/wrangling/{provider}_{dataset}.duckdb"))
 
-# define paths ---
-dataset  <- "calcofi-db"
-provider <- "swfsc.noaa.gov"
+if (overwrite){
+  if (file_exists(db_path)) file_delete(db_path)
+  if (dir_exists(dir_parquet)) dir_delete(dir_parquet)
+}
 
-# data directory with CSV files
-# dir_data <- "/Users/bbest/My Drive/projects/calcofi/data"
-# same data folder as Google Drive URL
-# gdir_data <- "https://drive.google.com/drive/u/0/folders/13A9yDJCdV0M-lrMLqurzIb3G3ozknr9O"
+dir_create(dirname(db_path))
+con <- get_duckdb_con(db_path)
+load_duckdb_extension(con, "spatial")
 
-# Load data using calcofi4db package
-d <- read_csv_files(provider, dataset)
+# load data using calcofi4db package
+# - reads from local Google Drive mount
+# - syncs to GCS archive if files changed (creates new timestamped archive)
+# - tracks GCS archive path for provenance
+d <- read_csv_files(
+  provider     = provider,
+  dataset      = dataset,
+  dir_data     = dir_data,
+  sync_archive = TRUE,
+  metadata_dir = here("metadata"))  # workflows/metadata/{provider}/{dataset}/
 
-# tbl = "tow"
-# x <- d$d_csv$data |> 
-#   filter(tbl == !!tbl) |> 
-#   pull(data) |> 
-#   pluck(1)
-# x
-# table(x$stationid...7, useNA = "ifany")
-
-# New names:
-# • `stationid` -> `stationid...1`
-# • `stationid` -> `stationid...7`
-
-# Extract variables from data_info for backward compatibility
-# workflow_info <- data_info$workflow_info
-# workflow      <- workflow_info$workflow
-# workflow_qmd  <- workflow_info$workflow_qmd
-# workflow_url  <- workflow_info$workflow_url
-# 
-# dir_csv <- data_info$paths$dir_csv
-# dir_ingest <- dirname(data_info$paths$dir_ingest)
-# tbls_in_csv <- data_info$paths$tbls_in_csv
-# flds_in_csv <- data_info$paths$flds_in_csv
-# tbls_rn_csv <- data_info$paths$tbls_rn_csv
-# flds_rn_csv <- data_info$paths$flds_rn_csv
-# 
-# d_gdir_data <- data_info$d_gdir_data
-# d_tbls_rn <- data_info$d_tbls_rn
-# d_flds_rn <- data_info$d_flds_rn
-# d <- data_info$csv_metadata$data
+# show source files summary
+message(glue("Loaded {nrow(d$source_files)} tables from {d$paths$dir_csv}"))
+message(glue("Total rows: {sum(d$source_files$nrow)}"))
 ```
 
 ### Check for any mismatched tables and fields
 
 ```{r}
-#| label: check_mismatched_tables_fields
-
-# detect changes between csv files and redefinitions
-changes <- detect_csv_changes(d)
-
-# print summary statistics
-print_csv_change_stats(changes, verbose = TRUE)
-
-# display interactive table of changes
-if (nrow(changes$summary) > 0) {
-  display_csv_changes(changes, format = "DT", title = "CSV vs Redefinition Mismatches")
-}
-```
-
-```{r}
 #| label: data_integrity_checkpoint
 #| output: asis
 
-# check if there are any mismatches that need to be resolved
-if (nrow(changes$summary) > 0) {
-  # disable evaluation of remaining chunks
-  knitr::opts_chunk$set(eval = FALSE)
-  
-  # output markdown warning
-  cat(glue("
-    
-    ## ⚠️ Data Integrity Check Failed
-    
-    ### Workflow Halted
-    
-    Mismatches have been detected between the CSV files and redefinition metadata. 
-    These must be resolved before proceeding with database ingestion to ensure data integrity.
-    
-    ### Required Actions
-    
-    Please review the changes detected above and update the following redefinition files:
-    
-    - **Tables redefinition**: `{d$paths$tbls_rd_csv}`
-    - **Fields redefinition**: `{d$paths$flds_rd_csv}`
-    
-    ### Common Resolutions
-    
-    1. **New tables/fields in CSV**: Add them to the appropriate redefinition file
-    2. **Removed tables/fields from CSV**: Remove obsolete entries from redefinition files
-    3. **Type mismatches**: Update field types in redefinition files to match CSV data types
-    4. **Field name changes**: Update `fld_old` entries to match current CSV field names
-    
-    ### Next Steps
-    
-    After updating the redefinition files, re-run this workflow. The remaining code chunks 
-    have been disabled and will not execute until all mismatches are resolved.
-    
-    ---
-    
-    *Note: The remainder of this document contains code that will not be executed due to 
-    data integrity issues.*
-    "))
-} else {
-  # no mismatches found - enable evaluation and show success message
-  knitr::opts_chunk$set(eval = TRUE)
-  
-  cat(glue("
-    
-    ## ✅ Data Integrity Check Passed
-    
-    ### All Systems Go
-    
-    No mismatches were found between the CSV files and redefinition metadata. 
-    The data structures are properly aligned and ready for database ingestion.
-    
-    ### Proceeding with Workflow
-    
-    The workflow will now continue with the following steps:
-    
-    1. Display CSV file metadata from Google Drive
-    2. Show tables and fields to be ingested
-    3. Apply data transformations based on redefinitions
-    4. Load transformed data into the database
-    5. Create indexes and relationships
-    6. Add spatial data and generate reports
-    
-    ---
-    
-    "))
-}
+# check data integrity - detects mismatches and controls chunk evaluation
+integrity <- check_data_integrity(
+  d            = d,
+  dataset_name = dataset_name,
+  halt_on_fail = TRUE)
+
+# render the pass/fail message
+render_integrity_message(integrity)
 ```
 
-### Show CSV Files on Google Drive
+### Show Source Files
 
 ```{r}
-#| label: google-drive_csv-list
-show_googledrive_files(d)
+#| label: source-files
+show_source_files(d)
 ```
 
 ### Show CSV Tables and Fields to Ingest
@@ -211,14 +130,14 @@ show_googledrive_files(d)
 ```{r}
 #| label: tbls_in
 
-d$d_csv$tables |> 
+d$d_csv$tables |>
   datatable(caption = "Tables to ingest.")
 ```
 
 ```{r}
 #| label: flds_in
 
-d$d_csv$fields |> 
+d$d_csv$fields |>
   datatable(caption = "Fields to ingest.")
 ```
 
@@ -236,337 +155,473 @@ show_tables_redefine(d)
 show_fields_redefine(d)
 ```
 
-## Apply remappings to data
-
-```{r}
-#| label: make_data_new
-
-# Use calcofi4db to transform data
-transformed_data <- transform_data(d)
-```
-
 ## Load Tables into Database
 
 ```{r}
 #| label: load_tbls_to_db
 
-schema    <- "dev"
-overwrite <- T
+# use ingest_dataset() which handles:
+# - transform_data() for applying redefinitions
+# - provenance tracking via gcs_path from read_csv_files()
+# - automatic uuid column detection
+# - ingest_to_working() for each table
+tbl_stats <- ingest_dataset(
+  con     = con,
+  d       = d,
+  mode    = if (overwrite) "replace" else "append",
+  verbose = TRUE)
 
-# devtools::load_all(here::here("../calcofi4db"))
-
-# Ingest data to database
-tbl_stats <- ingest_csv_to_db(
-  con              = con,
-  schema           = schema,
-  transformed_data = transformed_data,
-  d_flds_rd        = d$d_flds_rd,
-  d_gdir_data      = d$d_gdata,
-  workflow_info    = d$workflow_info,
-  overwrite        = overwrite)
-
-# Display summary statistics
-tbl_stats |> 
+tbl_stats |>
   datatable(rownames = FALSE, filter = "top")
 ```
 
-TODO:
+## Restructure Primary Keys
 
--   [ ] add COMMENTS to table with JSON of dtime ingested, source, and
-    workflow
+This section creates natural keys (where appropriate) and assigns sequential integer IDs
+with deterministic sort order for reproducibility.
 
-## Create Indexes, Relationships
+### Create cruise_key (natural key)
+
+The cruise_key is a natural key in format YYMMKK (2-digit year + 2-digit month + ship_key).
+
+```{r}
+#| label: create_cruise_key
+
+# create cruise_key as natural primary key (YYMMKK format)
+create_cruise_key(
+  con,
+  cruise_tbl = "cruise",
+  ship_tbl   = "ship",
+  date_col   = "date_ym")
+
+# verify uniqueness
+cruise_keys <- tbl(con, "cruise") |> pull(cruise_key)
+stopifnot("cruise_key must be unique" = !any(duplicated(cruise_keys)))
+
+# show sample cruise keys
+tbl(con, "cruise") |>
+  select(cruise_uuid, cruise_key, ship_key, date_ym) |>
+  head(10) |>
+  collect() |>
+  datatable(caption = "Sample cruise_key values (YYMMKK format)")
+```
+
+### Propagate cruise_key to child tables
+
+Before assigning sequential IDs, propagate the natural key to child tables that need it for sorting.
+
+```{r}
+#| label: propagate_cruise_key
+
+# propagate cruise_key from cruise to site (via cruise_uuid)
+propagate_natural_key(
+  con        = con,
+  child_tbl  = "site",
+  parent_tbl = "cruise",
+  key_col    = "cruise_key",
+  join_col   = "cruise_uuid")
+
+# verify cruise_key is now in site
+tbl(con, "site") |>
+  select(site_uuid, cruise_uuid, cruise_key, orderocc) |>
+  head(10) |>
+  collect() |>
+  datatable(caption = "Sample site rows with cruise_key")
+```
+
+### Assign sequential integer IDs
+
+For tables without natural keys, assign sequential integers with explicit sort order
+for reproducibility when new data is appended.
+
+```{r}
+#| label: assign_sequential_ids
+
+# site_id: sorted by cruise_key, orderocc
+assign_sequential_ids(
+  con        = con,
+  table_name = "site",
+  id_col     = "site_id",
+  sort_cols  = c("cruise_key", "orderocc"))
+
+# propagate site_id to tow (via site_uuid)
+propagate_natural_key(
+  con        = con,
+  child_tbl  = "tow",
+  parent_tbl = "site",
+  key_col    = "site_id",
+  join_col   = "site_uuid")
+
+# tow_id: sorted by site_id, time_start
+assign_sequential_ids(
+  con        = con,
+  table_name = "tow",
+  id_col     = "tow_id",
+  sort_cols  = c("site_id", "time_start"))
+
+# propagate tow_id to net (via tow_uuid)
+propagate_natural_key(
+  con        = con,
+  child_tbl  = "net",
+  parent_tbl = "tow",
+  key_col    = "tow_id",
+  join_col   = "tow_uuid")
+
+# net_id: sorted by tow_id, side
+assign_sequential_ids(
+  con        = con,
+  table_name = "net",
+  id_col     = "net_id",
+  sort_cols  = c("tow_id", "side"))
+```
+
+## Create Lookup Table
+
+Create unified lookup table from vocabularies for egg stages, larva stages, and tow types.
+
+```{r}
+#| label: create_lookup_table
+
+# egg stage vocabulary (Moser & Ahlstrom, 1985)
+egg_stage_vocab <- tibble(
+  stage_int = 1:11,
+  stage_description = c(
+    "egg, stage 1 of 11 (Moser & Ahlstrom, 1985)",
+    "egg, stage 2 of 11 (Moser & Ahlstrom, 1985)",
+    "egg, stage 3 of 11 (Moser & Ahlstrom, 1985)",
+    "egg, stage 4 of 11 (Moser & Ahlstrom, 1985)",
+    "egg, stage 5 of 11 (Moser & Ahlstrom, 1985)",
+    "egg, stage 6 of 11 (Moser & Ahlstrom, 1985)",
+    "egg, stage 7 of 11 (Moser & Ahlstrom, 1985)",
+    "egg, stage 8 of 11 (Moser & Ahlstrom, 1985)",
+    "egg, stage 9 of 11 (Moser & Ahlstrom, 1985)",
+    "egg, stage 10 of 11 (Moser & Ahlstrom, 1985)",
+    "egg, stage 11 of 11 (Moser & Ahlstrom, 1985)"))
+
+# larva stage vocabulary
+larva_stage_vocab <- tibble(
+  stage_int = 1:5,
+  stage_txt = c("YOLK", "PREF", "FLEX", "POST", "TRNS"),
+  stage_description = c(
+    "larva, yolk sac",
+    "larva, preflexion",
+    "larva, flexion",
+    "larva, postflexion",
+    "larva, transformation"))
+
+# tow type vocabulary (from tow_type table)
+tow_type_vocab <- tbl(con, "tow_type") |>
+  collect() |>
+  mutate(
+    lookup_num = row_number(),
+    lookup_chr = tow_type_key,
+    description = description) |>
+  select(lookup_num, lookup_chr, description)
+
+# create unified lookup table
+create_lookup_table(
+  con               = con,
+  egg_stage_vocab   = egg_stage_vocab,
+  larva_stage_vocab = larva_stage_vocab,
+  tow_type_vocab    = tow_type_vocab)
+
+# show lookup table
+tbl(con, "lookup") |>
+  collect() |>
+  datatable(caption = "Lookup table with vocabularies")
+```
+
+## Consolidate to Tidy Ichthyo Table
+
+Consolidate 5 ichthyoplankton tables (egg, eggstage, larva, larvastage, larvasize) into
+a single tidy table.
+
+```{r}
+#| label: consolidate_ichthyo
+
+message("Consolidating ichthyoplankton tables...")
+
+# consolidate all ichthyo tables (outputs net_uuid, not net_id)
+consolidate_ichthyo_tables(
+  con               = con,
+  output_tbl        = "ichthyo",
+  larva_stage_vocab = larva_stage_vocab)
+
+# convert net_uuid to net_id (join with net table)
+replace_uuid_with_id(
+  con          = con,
+  table_name   = "ichthyo",
+  uuid_col     = "net_uuid",
+  new_id_col   = "net_id",
+  ref_table    = "net",
+  ref_uuid_col = "net_uuid",
+  ref_id_col   = "net_id")
+
+# assign ichthyo_id with deterministic sort order
+assign_sequential_ids(
+  con        = con,
+  table_name = "ichthyo",
+  id_col     = "ichthyo_id",
+  sort_cols  = c("net_id", "species_id", "life_stage", "measurement_type", "measurement_value"))
+
+# show sample rows
+tbl(con, "ichthyo") |>
+  head(20) |>
+  collect() |>
+  datatable(caption = "Sample ichthyo table rows (tidy format)")
+```
+
+```{r}
+#| label: ichthyo_summary
+
+# summarize ichthyo table
+ichthyo_summary <- tbl(con, "ichthyo") |>
+  group_by(life_stage, measurement_type) |>
+  summarize(
+    n_rows    = n(),
+    n_species = n_distinct(species_id),
+    total_tally = sum(tally, na.rm = TRUE),
+    .groups = "drop") |>
+  collect()
+
+ichthyo_summary |>
+  arrange(life_stage, measurement_type) |> 
+  datatable(caption = HTML(mark("The `ichthyo` table summary by life_stage and measurement_type"))) |> 
+  formatCurrency(
+    columns = c("n_rows", "n_species", "total_tally"),
+    currency = "",
+    digits = 0)
+```
+
+## Data Quality Improvements
+
+This section applies data corrections and validates referential integrity.
+
+### Data Corrections
+
+Apply known data corrections identified by data managers.
+
+```{r}
+#| label: apply_corrections
+
+# apply data corrections
+apply_data_corrections(con, verbose = TRUE)
+```
+
+### Validate Referential Integrity
+
+Run validation checks and flag invalid rows for review.
+
+```{r}
+#| label: validate_integrity
+
+# ensure flagged directory exists
+dir_flagged <- here("data/flagged")
+if (!dir.exists(dir_flagged)) {
+  dir.create(dir_flagged, recursive = TRUE)
+}
+
+# validate egg stages (must be 1-11)
+invalid_egg_stages      <- validate_egg_stages(con, "egg_stage", "stage")
+invalid_egg_stages_csv  <- file.path(dir_flagged, "invalid_egg_stages.csv")
+invalid_egg_stages_desc <- "Egg stage values NOT 1 to 11 (ie, not in Moser & Ahlstrom 1985 vocab)"
+if (nrow(invalid_egg_stages) > 0) {
+  flag_invalid_rows(
+    invalid_rows = invalid_egg_stages,
+    output_path  = invalid_egg_stages_csv,
+    description  = invalid_egg_stages_desc)
+}
+show_flagged_file(invalid_egg_stages, invalid_egg_stages_csv, invalid_egg_stages_desc)
+
+# define validation checks
+validations <- list(
+  list(
+    type        = "fk",
+    data_tbl    = "ichthyo",
+    col         = "species_id",
+    ref_tbl     = "species",
+    ref_col     = "species_id",
+    output_file = "orphan_species.csv",
+    description = "Species IDs not found in species table"),
+  list(
+    type        = "fk",
+    data_tbl    = "ichthyo",
+    col         = "net_id",
+    ref_tbl     = "net",
+    ref_col     = "net_id",
+    output_file = "orphan_nets.csv",
+    description = "Net IDs not found in net table"))
+
+# run validations
+validation_results <- validate_dataset(
+  con         = con,
+  validations = validations,
+  output_dir  = dir_flagged)
+
+# show validation summary with GitHub links
+show_validation_results(validation_results)
+```
+
+```{r}
+#| label: delete_flagged
+
+# optionally delete flagged rows (dry run first)
+if (validation_results$total_flagged > 0) {
+  message(glue("Found {validation_results$total_flagged} invalid rows"))
+
+  # dry run to see what would be deleted
+  delete_stats <- delete_flagged_rows(
+    con                = con,
+    validation_results = validation_results,
+    dry_run            = TRUE)
+
+  delete_stats |> datatable(caption = "Rows to be deleted (dry run)")
+
+  # uncomment to actually delete:
+  delete_flagged_rows(con, validation_results, dry_run = FALSE)
+}
+
+# TODO: force species_id to integer from dbl in species_id, ichthyo
+```
+
+### Drop Deprecated Tables and Columns
+
+The source tables have been consolidated into `ichthyo` (tidy format) and `lookup` (vocabularies).
+
+The `*_uuid` columns are being maintained for provenance in `_source_uuid`, so can be droppped.
+
+Drop the deprecated tables and columns before creating the schema diagram.
+
+```{r}
+#| label: drop_deprecated
+
+# tables consolidated into ichthyo
+deprecated_ichthyo <- c("egg", "egg_stage", "larva", "larva_stage", "larva_size")
+
+# tables consolidated into lookup
+deprecated_lookup <- c("tow_type")
+
+# all deprecated tables
+deprecated_tables <- c(deprecated_ichthyo, deprecated_lookup)
+
+# drop each deprecated table
+for (tbl in deprecated_tables) {
+  if (tbl %in% DBI::dbListTables(con)) {
+    DBI::dbExecute(con, glue("DROP TABLE {tbl}"))
+    message(glue("Dropped deprecated table: {tbl}"))
+  }
+}
+
+# drop uuid columns replaced by natural keys or integer IDs
+deprecated_cols <- tribble(
+  ~tbl,      ~col,
+  "cruise",  "cruise_uuid",
+  "site",    "site_uuid",
+  "site",    "cruise_uuid",
+  "tow",     "tow_uuid",
+  "tow",     "site_uuid",
+  "net",     "net_uuid",
+  "net",     "tow_uuid")
+
+for (i in seq_len(nrow(deprecated_cols))) {
+  tbl <- deprecated_cols$tbl[i]
+  col <- deprecated_cols$col[i]
+  existing <- DBI::dbListFields(con, tbl)
+  if (col %in% existing) {
+    DBI::dbExecute(con, glue("ALTER TABLE {tbl} DROP COLUMN {col}"))
+    message(glue("Dropped deprecated column: {tbl}.{col}"))
+  }
+}
+
+message(glue("\nRemaining tables: {paste(sort(DBI::dbListTables(con)), collapse = ', ')}"))
+```
+
+## Schema Documentation
 
 ```{r}
 #| label: dm_tbls
 
-# source(here("../apps_dev/libs/db.R"))
+tbls <- DBI::dbListTables(con) |>
+  sort() # |>
+  # setdiff(c("grid", "segment"))
+  # TODO: add grid, segment to later workflow
 
-tbls_dev <- dbListTables(con_dev) |> sort() |> setdiff(c("grid", "site_seg"))
-
-dm_dev <- dm_from_con(
-  con_dev, 
-  table_names = tbls_dev,
-  learn_keys  = T)
+# dm object for visualization (keys learned from data, not DB constraints)
+dm_dev <- dm_from_con(con, table_names = tbls, learn_keys = FALSE)
 dm_draw(dm_dev, view_type = "all")
 ```
 
-### Show existing unique keys across tables
+### Primary Key Strategy
 
-```{r}
-#| label: show_keys
+**Note:** Indexes are not created on this temporary wrangling DuckDB since the output
+is parquet files. DuckDB uses adaptive indexing automatically, and parquet has its
+own column statistics for query optimization.
 
-dm_get_all_uks(dm_dev)
+| Table | Primary Key | Type |
+|-------|-------------|------|
+| `cruise` | `cruise_key` | Natural key (YYMMKK) |
+| `ship` | `ship_key` | Natural key (2-letter) |
+| `site` | `site_id` | Sequential (sorted by cruise_key, orderocc) |
+| `tow` | `tow_id` | Sequential (sorted by site_id, time_start) |
+| `net` | `net_id` | Sequential (sorted by tow_id, side) |
+| `species` | `species_id` | Natural from source |
+| `ichthyo` | `ichthyo_id` | Sequential (sorted by net_id, species_id, etc.) |
+| `lookup` | `lookup_id` | Sequential (sorted by lookup_type, lookup_num) |
+
+### Foreign Key Relationships
+
+DuckDB doesn't support `ALTER TABLE ADD FOREIGN KEY`. We use the dm package for documentation and visualization only.
+
+**Foreign Key Relationships:**
+
 ```
-
-### Add candidate keys, automatically
-
-```{r}
-#| label: mk_keys_auto
-
-# Function to get primary key constraints for a table
-tbl_pkeys <- function(con, tbl) {
-  dbGetQuery(con, glue("
-    SELECT a.attname as column_name
-    FROM pg_index i
-    JOIN pg_attribute a ON a.attrelid = i.indrelid
-    AND a.attnum = ANY(i.indkey)
-    WHERE i.indrelid = '{tbl}'::regclass
-    AND i.indisprimary;
-  "))$column_name
-}
-
-d_pk <- tibble(
-  tbl = tbls_dev) |> 
-  mutate(
-    d        = map(tbl, \(x) eval(bquote(dm_enum_pk_candidates(dm_dev, .(x)))) ),
-    n        = map_int(d, \(x) x |> filter(candidate == T) |> nrow()),
-    flds     = map_chr(d, \(x){
-      x |> filter(candidate == T) |> pull(columns) |> 
-        unlist() |> paste(collapse = "; ") }),
-    fld      = map_chr(d, \(x){
-      y <- x |> filter(candidate == T) |> pull(columns) |> 
-        unlist()
-      if (length(y) == 0)
-        return(NA)
-      if (length(y) > 1)
-        return(y[1])
-      y }),
-    add_pkey = map2_lgl(tbl, fld, \(tbl, fld){
-      if (is.na(fld))
-        return(F)
-      # tbl <- "cruise"; fld = "cruise_uuid"
-      pkey_exists <- tbl_pkeys(con_dev, "cruise") |> length() > 0
-      if (pkey_exists)
-        return(F)
-      dbExecute(con_dev, glue("ALTER TABLE {tbl} ADD PRIMARY KEY ({fld})"))
-      return(T) }) ) |> 
-  select(-d)
-    
-d_pk |> 
-  datatable()
+ship.ship_key (PK)
+    ↓
+cruise.cruise_key (PK)  ←──  cruise.ship_key (FK)
+    ↓
+site.site_id (PK)       ←──  site.cruise_key (FK)
+    ↓
+tow.tow_id (PK)         ←──  tow.site_id (FK)
+    ↓                        tow.tow_type_key → lookup (lookup_type='tow_type')
+net.net_id (PK)         ←──  net.tow_id (FK)
+    ↓
+ichthyo.ichthyo_id (PK) ←──  ichthyo.net_id (FK)
+                             ichthyo.species_id (FK) → species.species_id
 ```
-
-### Add primary keys, manually
-
-Noticing egg and larva missing pkey.
-
-```{r}
-#| label: mk_keys_manual
-
-dbExecute(con_dev, "ALTER TABLE egg ADD PRIMARY KEY (net_uuid, species_id)")
-dbExecute(con_dev, "ALTER TABLE eggstage ADD PRIMARY KEY (net_uuid, species_id, stage)")
-dbExecute(con_dev, "ALTER TABLE larva ADD PRIMARY KEY (net_uuid, species_id)")
-dbExecute(con_dev, "ALTER TABLE larvastage ADD PRIMARY KEY (net_uuid, species_id, stage)")
-dbExecute(con_dev, "ALTER TABLE larvasize ADD PRIMARY KEY (net_uuid, species_id, length_mm)")
-dbExecute(con_dev, "ALTER TABLE net ADD PRIMARY KEY (net_uuid)")
-dbExecute(con_dev, "ALTER TABLE species ADD PRIMARY KEY (species_id)")
-dbExecute(con_dev, "ALTER TABLE tow ADD PRIMARY KEY (tow_uuid)")
-dbExecute(con_dev, "ALTER TABLE tow_type ADD PRIMARY KEY (tow_type_key)")
-dbExecute(con_dev, "ALTER TABLE site ADD PRIMARY KEY (site_uuid)")
-dbExecute(con_dev, "ALTER TABLE ship ADD PRIMARY KEY (ship_key)")
-
-tibble(
-  tbl = tbls_dev) |> 
-  mutate(
-    pkeys = map_chr(tbl, \(x) tbl_pkeys(x, con = con_dev) |> paste(collapse = ", "))) |> 
-  datatable()
-```
-
-### Add other indexes
-
-That are not already the first field of a primary key.
-
-```{r}
-#| label: mk_idx
-#| eval: false
-
-d_idx <- tibble(
-  tbl = tbls_dev) |>
-  mutate(
-    fld   = map(tbl, ~dbListFields(.x, conn = con_dev)),
-    pkeys = map(tbl, ~tbl_pkeys(.x, con = con_dev))) |> 
-  unnest(fld) |>
-  mutate(
-    is_pkey  = map2_lgl(fld, pkeys, `%in%`),
-    is_pkey1 = map2_lgl(fld, pkeys, \(fld, pkeys) fld == pkeys[1]),
-    is_id    = map_lgl(fld, ~str_detect(.x, "_(id|uuid|tsn)$")),
-    idx_todo = !is_pkey1 & is_id,
-    mk_idx   = pmap_lgl(list(tbl, fld, idx_todo), \(tbl, fld, idx_todo){
-      if (idx_todo){
-        q <- glue("CREATE INDEX IF NOT EXISTS idx_{tbl}_{fld} ON {tbl} ({fld})")
-        # message(q)
-        dbExecute(con_dev, q)
-        return(T)
-      }
-      return(F)
-    }))
-
-d_idx |> 
-  select(-pkeys) |> 
-  datatable()
-```
-
-### Add foreign keys
-
-egg.net_uuid -\> net.net_uuid .tow_uuid -\> tow.tow_uuid .site_uuid -\>
-site.site_uuid .cruise_uuid -\> cruise.cruise_uuid .ship_key -\>
-ship.ship_key
 
 ```{r}
 #| label: dm_fk
 
-dm_dev <- dm_from_con(
-  con_dev, 
-  table_names = tbls_dev,
-  learn_keys  = T)
-dm_draw(dm_dev, view_type = "all")
+# get tables (excluding old ichthyo source tables that are now consolidated)
+tbls <- sort(DBI::dbListTables(con))
 
-dm_dev_fk <- dm_dev |> 
-  dm_add_fk(egg, net_uuid, net) |> 
-  dm_add_fk(egg, species_id, species) |> 
-  dm_add_fk(eggstage, net_uuid, net) |> 
-  dm_add_fk(eggstage, species_id, species) |> 
-  dm_add_fk(larva, net_uuid, net) |> 
-  dm_add_fk(larva, species_id, species) |> 
-  dm_add_fk(larvasize, net_uuid, net) |> 
-  dm_add_fk(larvasize, species_id, species) |> 
-  dm_add_fk(larvastage, net_uuid, net) |> 
-  dm_add_fk(larvastage, species_id, species) |> 
-  dm_add_fk(net, tow_uuid, tow) |> 
-  dm_add_fk(tow, site_uuid, site) |> 
-  dm_add_fk(site, cruise_uuid, cruise) |> 
-  dm_add_fk(cruise, ship_key, ship) |> 
-  dm_add_fk(tow, tow_type_key, tow_type)
-  
-dm_draw(dm_dev_fk, view_type = "all")
-```
+# refresh dm after index creation
+dm_dev <- dm_from_con(con, table_names = tbls, learn_keys = FALSE)
 
-```{r}
-#| label: sql_fk
-
-add_fkey <- function(tbl_m, fld_m, tbl_1, fld_1 = fld_m, schema = "dev"){
-  q <- glue(
-    "ALTER TABLE {schema}.{tbl_m} ADD FOREIGN KEY ({fld_m}) 
-    REFERENCES {schema}.{tbl_1} ({fld_1})")
-  dbExecute(con_dev, q)
+# define relationships in dm (in-memory for visualization only)
+# uses new key structure: natural keys + sequential integer keys
+add_cc_keys <- function(dm){
+  dm |>
+    dm_add_pk(cruise, cruise_key) |>
+    dm_add_pk(ship, ship_key) |>
+    dm_add_pk(site, site_id) |>
+    dm_add_pk(tow, tow_id) |>
+    dm_add_pk(net, net_id) |>
+    dm_add_pk(species, species_id) |>
+    dm_add_pk(ichthyo, ichthyo_id) |>
+    dm_add_pk(lookup, lookup_id) |>
+    dm_add_fk(ichthyo, net_id, net) |>
+    dm_add_fk(ichthyo, species_id, species) |>
+    dm_add_fk(net, tow_id, tow) |>
+    dm_add_fk(tow, site_id, site) |>
+    dm_add_fk(site, cruise_key, cruise) |>
+    dm_add_fk(cruise, ship_key, ship)
 }
 
-add_fkey("egg", "net_uuid", "net")
+dm_dev_fk <- dm_dev |>
+  add_cc_keys()
 
-# add_fkey("egg", "species_id", "species")
-# ERROR: Key (species_id)=(641) is not present in table "species"
-spp_ids <- tbl(con_dev, "species") |> arrange(species_id) |> pull(species_id)
-# tbl_egg <- tbl(con_dev, "egg") |> collect() # 93,065 × 3
-# egg_notsp <- tbl(con_dev, "egg") |> 
-#   filter(!species_id %in% spp_ids) |> 
-#   collect()
-#    net_uuid                             species_id tally
-#    <chr>                                <int> <int>
-#  1 369e33f2-02eb-ef11-a09e-2cea7fa0979c   641     3
-#  2 77a233f2-02eb-ef11-a09e-2cea7fa0979c   641     3
-#  3 78a233f2-02eb-ef11-a09e-2cea7fa0979c   641     2
-#  4 79a233f2-02eb-ef11-a09e-2cea7fa0979c   641     1
-#  5 7aa233f2-02eb-ef11-a09e-2cea7fa0979c   641     5
-#  6 7ea233f2-02eb-ef11-a09e-2cea7fa0979c   641    90
-#  7 7fa233f2-02eb-ef11-a09e-2cea7fa0979c   641    13
-#  8 80a233f2-02eb-ef11-a09e-2cea7fa0979c   641     2
-#  9 82a233f2-02eb-ef11-a09e-2cea7fa0979c   641     2
-# 10 83a233f2-02eb-ef11-a09e-2cea7fa0979c   641     2
-dbExecute(con_dev, glue(
-  "DELETE FROM egg WHERE species_id NOT IN ({paste(spp_ids, collapse=',')})")) # 10
-add_fkey("egg", "species_id", "species")
-
-add_fkey("eggstage", "net_uuid", "net")
-add_fkey("eggstage", "species_id", "species")
-add_fkey("larva", "net_uuid", "net") 
-
-# add_fkey("larva", "species_id", "species")
-# ERROR: Key (species_id)=(3023) is not present in table "species"
-# TODO ----
-dbExecute(con_dev, glue(
-  "DELETE FROM larva WHERE species_id NOT IN ({paste(spp_ids, collapse=',')})")) # 27,524
-add_fkey("larva", "species_id", "species")
-
-add_fkey("larvasize", "net_uuid", "net") 
-
-# add_fkey("larvasize", "species_id", "species")
-# ERROR: Key (species_id)=(3023) is not present in table "species"
-dbExecute(con_dev, glue(
-  "DELETE FROM larvasize WHERE species_id NOT IN ({paste(spp_ids, collapse=',')})")) # 2
-add_fkey("larvasize", "species_id", "species")
-
-add_fkey("larvastage", "net_uuid", "net") 
-
-# add_fkey("larvastage", "species_id", "species")
-# ERROR: Key (species_id)=(3023) is not present in table "species"
-dbExecute(con_dev, glue(
-  "DELETE FROM larvastage WHERE species_id NOT IN ({paste(spp_ids, collapse=',')})")) # 9,500
-add_fkey("larvastage", "species_id", "species")
-
-add_fkey("net", "tow_uuid", "tow") 
-add_fkey("tow", "site_uuid", "site")
-add_fkey("tow", "tow_type_key", "tow_type")
-add_fkey("site", "cruise_uuid", "cruise")
-add_fkey("cruise", "ship_key", "ship")
-
-dm_dev <- dm_from_con(
-  con_dev, 
-  table_names = tbls_dev,
-  learn_keys  = T)
-dm_draw(dm_dev, view_type = "all")
-```
-
-```         
-Error: Failed to fetch row : ERROR:  insert or update on table "larva" violates foreign key constraint "larva_species_id_fkey"
-DETAIL:  Key (species_id)=(3023) is not present in table "species".
-```
-
-```{r}
-#| label: sp_missing
-
-sp_missing_csv <- here(
-    "data/ingest/noaa-calcofi-db/larvae-species_not-in-species.csv")
-
-d_sp_missing <- tbl(con_dev, "larva") |> 
-  anti_join(
-    tbl(con_dev, "species"),
-    by = "species_id") |> 
-  group_by(species_id) |> 
-  summarize(
-    n_rows = n()) |> 
-  left_join(
-    dm_dev |>
-      dm_select_tbl(larva, net, tow, site) |> 
-      dm_flatten_to_tbl(.start = larva, .recursive = TRUE) |> 
-      select(species_id, tally, time_start, line, station, cruise_uuid) |> 
-      group_by(species_id) |> 
-      summarize(
-        sum_tally  = sum(tally),
-        date_beg   = min(as.Date(time_start)),
-        date_end   = max(as.Date(time_start)),
-        # ship_names = str_flatten(distinct(name), collapse = "; ")), 
-        n_cruises = n_distinct(cruise_uuid)), 
-    by = "species_id") |> 
-  collect()
-
-write_csv(d_sp_missing, sp_missing_csv)
-
-datatable(d_sp_missing)
-```
-
-```{r}
-#| label: delete_larva_sp_missing
-
-dbExecute(con_dev, glue(
-  "DELETE FROM larva WHERE species_id IN ({paste(d_sp_missing$species_id, collapse = ',')})"))
-add_fkey("larva", "species_id", "species")
-
-dm_dev <- dm_from_con(
-  con_dev, 
-  table_names = tbls_dev,
-  learn_keys  = T)
-dm_draw(dm_dev, view_type = "all")
+dm_draw(dm_dev_fk, view_type = "all")
 ```
 
 ## Add Spatial
@@ -576,11 +631,12 @@ dm_draw(dm_dev, view_type = "all")
 ```{r}
 #| label: mk_site_pts
 
-# source(here("../apps_dev/libs/db.R"))
-# dbGetQuery(con_dev, "SELECT postgis_full_version()")
-
-dbExecute(con_dev, "ALTER TABLE dev.site ADD COLUMN geom geometry(Point, 4326)")
-dbExecute(con_dev, "UPDATE dev.site SET geom = ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)") # 61,220 rows
+# add geometry column using DuckDB spatial
+# note: DuckDB spatial doesn't track SRID metadata (unlike PostGIS)
+# all geometries assumed WGS84 (EPSG:4326) by convention
+dbExecute(con, "ALTER TABLE site ADD COLUMN IF NOT EXISTS geom GEOMETRY")
+dbExecute(con, "UPDATE site SET geom = ST_Point(longitude, latitude)")
+message("Added geometry column to site table")
 ```
 
 ### Fix calcofi4r `grid`
@@ -589,8 +645,7 @@ Problems with
 [calcofi4r::`cc_grid`](https://calcofi.io/calcofi4r/articles/calcofi4r.html):
 
 -   uses old station (line, position) vs newer site (line, station)
--   `sta_lin`, `sta_pos`: integer, so drops necessary decimal that is
-    found in `sta_key`
+-   `sta_lin`, `sta_pos`: integer, so drops necessary decimal that is found in `sta_key`
 -   `sta_lin == 90, sta_pos == 120` repeats for:
     -   `sta_pattern` == 'historical' (`sta_dpos` == 20); and
     -   `sta_pattern` == 'standard' (`sta_dpos` == 10)
@@ -599,64 +654,81 @@ Problems with
 #| label: mk_grid_v2
 
 librarian::shelf(
-  calcofi4r, dplyr, mapview, sf, tidyr, units)
+  calcofi4r, mapview,
+  quiet = T)
 
-cc_grid_v2 <- calcofi4r::cc_grid |> 
+cc_grid_v2 <- calcofi4r::cc_grid |>
   select(sta_key, shore = sta_shore, pattern = sta_pattern, spacing = sta_dpos) |>
   separate_wider_delim(
-    sta_key, ",", names = c("line", "station"), cols_remove = F) |> 
+    sta_key, ",", names = c("line", "station"), cols_remove = F) |>
   mutate(
-    line    = as.double(line),
-    station = as.double(station),
+    line     = as.double(line),
+    station  = as.double(station),
     grid_key = ifelse(
-      pattern == "historical", 
+      pattern == "historical",
       glue("st{station}-ln{line}_hist"),
       glue("st{station}-ln{line}")),
-    zone = glue("{shore}-{pattern}")) |> 
-  relocate(grid_key, station) |> 
-  st_as_sf() |> 
+    zone     = glue("{shore}-{pattern}")) |>
+  relocate(grid_key, station) |>
+  st_as_sf() |>
   mutate(
     area_km2 = st_area(geom) |>
       set_units(km^2) |>
       as.numeric())
 
-cc_grid_ctrs_v2 <- calcofi4r::cc_grid_ctrs |> 
-  select(sta_key, pattern = sta_pattern) |> 
+cc_grid_ctrs_v2 <- calcofi4r::cc_grid_ctrs |>
+  select(sta_key, pattern = sta_pattern) |>
   left_join(
-    cc_grid_v2 |> 
+    cc_grid_v2 |>
       st_drop_geometry(),
-    by = c("sta_key", "pattern")) |> 
-  select(-sta_key) |> 
+    by = c("sta_key", "pattern")) |>
+  select(-sta_key) |>
   relocate(grid_key)
-  
-cc_grid_v2 <- cc_grid_v2 |> 
+
+cc_grid_v2 <- cc_grid_v2 |>
   select(-sta_key)
 
-cc_grid_v2 |> 
-  st_drop_geometry() |> 
+cc_grid_v2 |>
+  st_drop_geometry() |>
   datatable()
 
-mapview(cc_grid_v2, zcol="zone") +
+mapview(cc_grid_v2, zcol = "zone") +
   mapview(cc_grid_ctrs_v2, cex = 1)
 ```
 
 ```{r}
 #| label: grid_to_db
 
-grid <- cc_grid_v2 |> 
-  as.data.frame() |> 
+grid <- cc_grid_v2 |>
+  as.data.frame() |>
   left_join(
-    cc_grid_ctrs_v2 |> 
-      as.data.frame() |> 
+    cc_grid_ctrs_v2 |>
+      as.data.frame() |>
       select(grid_key, geom_ctr = geom),
-    by = "grid_key") |> 
+    by = "grid_key") |>
   st_as_sf(sf_column_name = "geom")
 
-grid |> 
-  st_write(con_dev, "grid")
-dbExecute(con_dev, glue(
-  "CREATE INDEX IF NOT EXISTS idx_grid_geom ON grid USING gist(geom);"))
-dbExecute(con_dev, "ALTER TABLE grid ADD PRIMARY KEY (grid_key)")
+# convert sf geometry to WKB for DuckDB
+grid_df <- grid |>
+  mutate(
+    geom_wkb     = sf::st_as_binary(geom, hex = TRUE),
+    geom_ctr_wkb = sf::st_as_binary(geom_ctr, hex = TRUE)) |>
+  sf::st_drop_geometry() |>
+  select(-geom_ctr)
+
+# write to DuckDB
+dbWriteTable(con, "grid", grid_df, overwrite = TRUE)
+
+# convert WKB back to geometry
+dbExecute(con, "ALTER TABLE grid ADD COLUMN geom GEOMETRY")
+dbExecute(con, "UPDATE grid SET geom = ST_GeomFromHEXWKB(geom_wkb)")
+dbExecute(con, "ALTER TABLE grid DROP COLUMN geom_wkb")
+
+dbExecute(con, "ALTER TABLE grid ADD COLUMN geom_ctr GEOMETRY")
+dbExecute(con, "UPDATE grid SET geom_ctr = ST_GeomFromHEXWKB(geom_ctr_wkb)")
+dbExecute(con, "ALTER TABLE grid DROP COLUMN geom_ctr_wkb")
+
+message("Grid table created with geometry columns")
 ```
 
 ### Update `site.grid_key`
@@ -664,90 +736,74 @@ dbExecute(con_dev, "ALTER TABLE grid ADD PRIMARY KEY (grid_key)")
 ```{r}
 #| label: update_site_from_grid
 
-dbExecute(con_dev, "ALTER TABLE site ADD COLUMN grid_key text")
+dbExecute(con, "ALTER TABLE site ADD COLUMN IF NOT EXISTS grid_key TEXT")
 
-dbExecute(con_dev, "
-  UPDATE site
-  SET
-    grid_key = g.grid_key
-  FROM (
-    SELECT s.site_uuid, g.grid_key
-    FROM site s
-    INNER JOIN grid g ON ST_Intersects(s.geom, g.geom)) g
-  WHERE site.site_uuid = g.site_uuid") # 59,136
+# spatial join (may be slower than PostGIS without spatial indexes)
+dbExecute(con, "
+  UPDATE site SET grid_key = (
+    SELECT g.grid_key FROM grid g
+    WHERE ST_Intersects(site.geom, g.geom) LIMIT 1)")
 
-# tbl(con_dev, "site") |>
-#   mutate(is_in_grd = !is.na(grid_key)) |>
-#   pull(is_in_grd) |>
-#   table()
-#  FALSE    TRUE 
-#  2,084  59,136
+# check results
+grid_stats <- dbGetQuery(con, "
+  SELECT
+    CASE WHEN grid_key IS NULL THEN 'not_in_grid' ELSE 'in_grid' END as status,
+    COUNT(*) as n
+  FROM site
+  GROUP BY status")
 
-dbExecute(con_dev, glue(
-  "CREATE INDEX IF NOT EXISTS idx_site_geom_key ON grid (grid_key);"))
-add_fkey("site", "grid_key", "grid")
-
-dm_from_con(
-  con_dev, 
-  # table_names = dbListTables(con_dev_only),
-  table_names = c("site", "grid"),
-  learn_keys  = T) |> 
-  dm_set_colors(green = grid) |>
-  dm_draw(view_type = "all")
+grid_stats |> datatable()
 ```
 
-### Add `site_seg`: segments from site
+### Add `segment`: line segments between consecutive sites
 
 ```{r}
-#| label: mk_site_seg
+#| label: mk_segment
 
-site_seg <- tbl(con_dev, "site") |> 
-  select(cruise_uuid, orderocc, site_uuid, lon = longitude, lat = latitude) |> 
+segment <- tbl(con, "site") |>
+  select(cruise_key, orderocc, site_id, lon = longitude, lat = latitude) |>
   left_join(
-    tbl(con_dev, "tow") |> 
-      select(site_uuid, time_start),
-    by = "site_uuid") |>
-  arrange(cruise_uuid, orderocc) |> 
+    tbl(con, "tow") |>
+      select(site_id, time_start),
+    by = "site_id") |>
   group_by(
-    cruise_uuid, orderocc, site_uuid, lon, lat) |> 
+    cruise_key, orderocc, site_id, lon, lat) |>
   summarize(
     time_beg = min(time_start, na.rm = T),
     time_end = max(time_start, na.rm = T),
-    .groups = "drop") |> 
-  collect() |> 
-# table(is.na(site_seg$time_beg))
-#   FALSE   TRUE 
-#  57,935  3,285
-site_seg <- site_seg |>   
-  arrange(cruise_uuid, orderocc, time_beg) |> 
-  group_by(cruise_uuid) |> 
+    .groups = "drop") |>
+  collect()
+
+segment <- segment |>
+  arrange(cruise_key, orderocc, time_beg) |>
+  group_by(cruise_key) |>
   mutate(
-    site_uuid_beg = lag(site_uuid),
+    site_id_beg = lag(site_id),
     lon_beg       = lag(lon),
     lat_beg       = lag(lat),
-    time_beg      = lag(time_beg)) |> 
-  ungroup() |> 
-  filter(!is.na(lon_beg), !is.na(lat_beg)) |> 
+    time_beg      = lag(time_beg)) |>
+  ungroup() |>
+  filter(!is.na(lon_beg), !is.na(lat_beg)) |>
   mutate(
     m    = pmap(
-      list(lon_beg, lat_beg, lon, lat), 
+      list(lon_beg, lat_beg, lon, lat),
       \(x1, y1, x2, y2){
         matrix(c(x1, y1, x2, y2), nrow = 2, byrow = T) }),
-    geom = map(m, st_linestring)) |> 
+    geom = map(m, st_linestring)) |>
   select(
-    cruise_uuid,
-    site_uuid_beg, 
-    site_uuid_end = site_uuid, 
-    lon_beg, 
+    cruise_key,
+    site_id_beg,
+    site_id_end = site_id,
+    lon_beg,
     lat_beg,
-    lon_end = lon, 
+    lon_end = lon,
     lat_end = lat,
-    time_beg, 
-    time_end, 
-    geom) |> 
+    time_beg,
+    time_end,
+    geom) |>
   st_as_sf(
-    sf_column_name = "geom", 
-    crs = 4326) |> 
+    sf_column_name = "geom",
+    crs = 4326) |>
   mutate(
     time_hr   = as.numeric(difftime(time_end, time_beg, units = "hours")),
     length_km = st_length(geom) |>
@@ -755,58 +811,37 @@ site_seg <- site_seg |>
       as.numeric(),
     km_per_hr = length_km / time_hr)
 
-# TODO: check that time_end of previous segment is time_beg of next
+# convert to WKB and write to DuckDB
+segment_df <- segment |>
+  mutate(geom_wkb = sf::st_as_binary(geom, hex = TRUE)) |>
+  sf::st_drop_geometry()
 
-# TODO: investigate too slow, too fast
-# site_seg |> 
-#   mutate(
-#     km_per_hr_flag = ifelse(
-#       km_per_hr < 0.01,
-#       "lt0.01",
-#       ifelse(
-#         km_per_hr > 30,
-#         "gt30",
-#         NA))) |> 
-#   pull(km_per_hr_flag) |> 
-#   table()
-#   gt30 lt0.01 
-#    928      9
+dbWriteTable(con, "segment", segment_df, overwrite = TRUE)
 
-fld_types <- tibble(
-  lst = lapply(site_seg, class)) |> 
-  mutate(
-    fld    = names(lst),
-    type_r = map_chr(lst, pluck, 1),
-    type   = map2_chr(fld, type_r, \(fld, type_r){
-      case_when(
-        str_detect(fld, "uuid") ~ "uuid",
-        fld    == "geom"        ~ "geometry",
-        type_r == "POSIXct"     ~ "timestamp",
-        type_r == "character"   ~ "varchar",
-        .default = "numeric") })) |> 
-  select(fld, type) |> 
-  deframe()
-st_write(site_seg, con_dev, "site_seg", field.types = fld_types)
-dbExecute(con_dev, "CREATE INDEX IF NOT EXISTS idx_site_seg_geom ON grid USING gist(geom)")
-dbExecute(con_dev, "ALTER TABLE site_seg ADD PRIMARY KEY (site_uuid_beg)")
-dbExecute(con_dev, 'CREATE EXTENSION IF NOT EXISTS "uuid-ossp"')
-add_fkey("site_seg", "site_uuid_beg", "site", "site_uuid")
-add_fkey("site_seg", "site_uuid_end", "site", "site_uuid")
-add_fkey("site_seg", "cruise_uuid", "cruise")
+dbExecute(con, "ALTER TABLE segment ADD COLUMN geom GEOMETRY")
+dbExecute(con, "UPDATE segment SET geom = ST_GeomFromHEXWKB(geom_wkb)")
+dbExecute(con, "ALTER TABLE segment DROP COLUMN geom_wkb")
 
-dm_from_con(
-  con_dev, 
-  # table_names = dbListTables(con_dev_only),
-  table_names = c("site_seg", "site", "cruise"),
-  learn_keys  = T) |> 
-  dm_set_colors(green = site_seg) |>
-  dm_draw(view_type = "all")
+# assign segment_id sorted by time_beg
+assign_sequential_ids(
+  con        = con,
+  table_name = "segment",
+  id_col     = "segment_id",
+  sort_cols  = c("time_beg"))
 
-site_seg <- st_read(con_dev, "site_seg") |> 
-  mutate(
-    year = year(time_beg))
+message("Segment table created")
+```
 
-mapView(site_seg, zcol = "year")
+```{r}
+#| label: view_segment
+
+segment_sf <- cc_read_sf(con, "segment") |>
+  mutate(year = year(time_beg))
+
+map_segment_png <- here(glue("figures/{provider}_{dataset}_segment_map.png"))
+m <- mapView(segment_sf, zcol = "year")
+mapshot2(m, file = map_segment_png)
+htmltools::img(src = map_segment_png |> str_replace(here(), "."), width = "600px")
 ```
 
 ## Report
@@ -814,25 +849,85 @@ mapView(site_seg, zcol = "year")
 ```{r}
 #| label: show_latest
 
-dm_from_con(
-  con_dev, 
-  table_names = dbListTables(con_dev_only),
-  # table_names = c("site_seg", "site", "cruise"),
-  learn_keys  = T) |> 
-  dm_set_colors(lightgreen = c(site_seg, grid)) |>
-  dm_draw(view_type = "all")
+all_tbls <- DBI::dbListTables(con)
 
-d_eff <- tbl(con_dev, "site_seg") |> 
+add_cc_spatial_keys <- function(dm){
+  dm |>
+    dm_add_pk(grid, grid_key) |>
+    dm_add_pk(segment, segment_id) |>
+    dm_add_fk(site, grid_key, grid) |> 
+    dm_add_fk(segment, cruise_key, cruise)
+}
+
+dm_final <- dm_from_con(con, table_names = all_tbls, learn_keys = FALSE) |>
+  add_cc_keys() |>
+  add_cc_spatial_keys() |>
+  dm_set_colors(lightgreen = c(segment, grid))
+dm_draw(dm_final, view_type = "all")
+```
+
+```{r}
+#| label: effort_stats
+
+d_eff <- tbl(con, "segment") |>
   mutate(
-    year = year(time_beg)) |> 
-  group_by(year) |> 
+    year = year(time_beg)) |>
+  group_by(year) |>
   summarize(
     time_hr   = sum(time_hr, na.rm = T),
-    length_km = sum(length_km, na.rm = T)) |> 
+    length_km = sum(length_km, na.rm = T)) |>
   collect()
 
-sum(d_eff$time_hr, na.rm = T)    # 302,516 hours; 12,604 days; 34.5 years
-sum(d_eff$length_km, na.rm = T)  # 3,672,794 km
+total_hours <- sum(d_eff$time_hr, na.rm = T)
+total_km    <- sum(d_eff$length_km, na.rm = T)
+
+fmt <- function(x, ...) format(x, big.mark = ",", ...)
+message(glue("Total effort: {fmt(round(total_hours))} hours ({fmt(round(total_hours/24))} days, {fmt(round(total_hours/24/365, 1))} years)"))
+message(glue("Total distance: {fmt(round(total_km))} km"))
+```
+
+## Validate Local Database
+
+Validate data quality in the local wrangling database before exporting to parquet.
+The parquet outputs from this workflow can later be used to update the Working DuckLake.
+
+```{r}
+#| label: validate
+
+# validate data quality
+validation <- validate_for_release(con)
+
+if (validation$passed) {
+  message("Validation passed!")
+  if (nrow(validation$checks) > 0) {
+    validation$checks |>
+      filter(status != "pass") |>
+      datatable(caption = "Validation Warnings")
+  }
+} else {
+  cat("Validation FAILED:\n")
+  cat(paste("-", validation$errors, collapse = "\n"))
+}
+```
+
+## Write Parquet Outputs
+
+Export tables to parquet files for downstream use.
+
+```{r}
+#| label: write_parquet
+
+# write parquet files with manifest
+parquet_stats <- write_parquet_outputs(
+  con              = con,
+  output_dir       = dir_parquet,
+  tables           = dbListTables(con),
+  strip_provenance = F)
+
+parquet_stats |>
+  mutate(file = basename(path)) |>
+  select(-path) |>
+  datatable(caption = "Parquet export statistics")
 ```
 
 ## Cleanup
@@ -840,21 +935,27 @@ sum(d_eff$length_km, na.rm = T)  # 3,672,794 km
 ```{r}
 #| label: cleanup
 
-# Close database connection
-dbDisconnect(con)
+# close local wrangling database connection
+close_duckdb(con)
+message("Local wrangling database connection closed")
+
+# note: parquet outputs are in data/parquet/swfsc.noaa.gov/calcofi-db/
+# these can be used to update the Working DuckLake in a separate workflow
+message(glue("Parquet outputs written to: {dir_parquet}"))
 ```
 
 ## TODO
 
--   [ ] Add **indexes**.
--   [ ] Add **relationships** between primary keys.
--   [ ] Add **points** between `sites`
--   [ ] Add **segments** between `sites`.
--   [ ] Check all `type_new` are valid for db connection.
--   [ ] Check that all `flds_in` are in `flds_rn`.
--   [ ] Insert table and field SQL `COMMENT`s into database, using
-    `comment` field + `workflow_md` (markdown with name and link) +
-    source with tbl.fld
--   [ ] Review documentation for more comment descriptions at [Data \>
-    Data Formats \|
-    CalCOFI.org](https://calcofi.com/index.php?option=com_content&view=category&id=73&Itemid=993)
+- [ ] Insert table and field SQL `COMMENT`s into database, using `comment` field + `workflow_md` (markdown with name and link) + source with tbl.fld
+- [ ] Upload parquet to gs://calcofi-db/ingest/{provider}_{dataset}/
+- [ ] Review documentation for more comment descriptions at [Data \> Data Formats \| CalCOFI.org](https://calcofi.com/index.php?option=com_content&view=category&id=73&Itemid=993)
+
+::: {.callout-caution collapse="true"}
+
+## Session Info
+
+```{r session_info}
+devtools::session_info()
+```
+
+:::
