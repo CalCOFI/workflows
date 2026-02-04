@@ -393,16 +393,60 @@ gs://calcofi-files-private/                # Versioned private source files
 └── manifests/
 
 gs://calcofi-db/                           # Integrated database
-├── parquet/                               # Transformed tables
-│   ├── bottle.parquet
-│   ├── cast.parquet
-│   ├── larvae.parquet
-│   └── ...
-├── duckdb/                                # DuckDB database files
-│   └── calcofi.duckdb
-└── ducklake/                              # DuckLake catalog
-    └── catalog.json
+├── ingest/                                # Per-workflow outputs (intermediate)
+│   ├── swfsc.noaa.gov/
+│   │   └── calcofi-db/
+│   │       ├── parquet/
+│   │       │   ├── cruise.parquet
+│   │       │   ├── ship.parquet
+│   │       │   ├── site.parquet
+│   │       │   └── ...
+│   │       └── manifest.json              # Provenance for this workflow
+│   └── calcofi.org/
+│       └── bottle-database/
+│           ├── parquet/
+│           │   ├── cast.parquet
+│           │   └── bottle.parquet
+│           └── manifest.json
+│
+└── ducklake/                              # DuckLake manages parquet + catalog
+    ├── working/                           # Integrated database (combines ingests)
+    │   ├── catalog/                       # DuckLake catalog metadata
+    │   └── data/                          # Parquet files with provenance columns
+    │       ├── cruise/
+    │       ├── site/
+    │       └── ...
+    └── releases/                          # Frozen public releases
+        ├── v2026.02/
+        │   ├── catalog/
+        │   └── data/                      # Provenance columns stripped
+        └── latest -> v2026.02             # Symlink to current
 ```
+
+### Workflow Metadata
+
+Redefinition files (column/table renaming rules) live in `workflows/metadata/`, NOT in the calcofi4db R package. This decouples workflow-specific metadata from the package code.
+
+```
+workflows/metadata/
+├── swfsc.noaa.gov/
+│   └── calcofi-db/
+│       ├── tbls_redefine.csv              # Table renaming rules
+│       ├── flds_redefine.csv              # Field renaming/typing rules
+│       ├── tbls_raw.csv                   # Auto-generated raw table info
+│       └── flds_raw.csv                   # Auto-generated raw field info
+└── calcofi.org/
+    └── bottle-database/
+        ├── flds_rename.csv
+        └── ship_renames.csv
+```
+
+**Benefits of this structure:**
+
+- Version-controlled alongside workflows (not buried in R package)
+- Easy to edit without rebuilding the package
+- Clear ownership per dataset
+- Allows different projects to use calcofi4db without conflicting metadata
 
 #### GCS Naming Conventions
 
@@ -798,6 +842,88 @@ flowchart TB
 
 ---
 
+## Database Naming Conventions {#sec-naming}
+
+### Table Names
+
+- **Table names are singular** (e.g., `cruise`, `site`, `species`, `lookup` not `cruises`, `sites`, `lookups`)
+- Table names use all lower case with underscores for multi-word names (snake_case)
+
+### Column Names
+
+- Use **snake_case** (lower-case with underscores) for all column names
+- Unique identifiers are suffixed with:
+  - `*_id` for integer keys (sequential or from source)
+  - `*_key` for string/text keys (natural keys)
+  - `*_uuid` for universally unique identifiers (provenance tracking only)
+- Suffix with units where applicable (e.g., `length_mm`, `depth_m`, `temp_degc`)
+
+---
+
+## Primary Key Strategy {#sec-primary-keys}
+
+### General Principle: Natural Keys Over Surrogate Keys
+
+**Prefer natural keys** (meaningful identifiers from the domain) over surrogate keys (arbitrary integers) unless:
+
+- No natural key exists
+- Performance requires integer keys for large tables with frequent joins
+- The natural key is unstable or may change
+
+**Benefits of natural keys:**
+
+- Self-documenting (cruise_key `2401NH` tells you January 2024, New Horizon)
+- No lookup needed to understand relationships
+- Consistent across systems (source data uses same identifiers)
+- Easier debugging and data validation
+
+### Natural Keys (use as PRIMARY KEY)
+
+| Table | Primary Key | Format | Example |
+|-------|-------------|--------|---------|
+| `cruise` | `cruise_key` | TEXT `YYMMKK` | `'2401NH'` |
+| `ship` | `ship_key` | TEXT (2-letter) | `'NH'` |
+| `tow_type` | `tow_type_key` | TEXT | `'CB'` |
+| `species` | `species_id` | INTEGER | `1234` (natural from source) |
+
+### Sequential Integer Keys (with explicit sort order)
+
+For tables without natural keys, use sequential integers **with deterministic sort order** for reproducibility when appending new data:
+
+| Table | Primary Key | Sort Order for ID Assignment |
+|-------|-------------|------------------------------|
+| `site` | `site_id` | `ORDER BY cruise_key, orderocc` |
+| `tow` | `tow_id` | `ORDER BY site_id, time_start` |
+| `net` | `net_id` | `ORDER BY tow_id, side` |
+| `ichthyo` | `ichthyo_id` | `ORDER BY net_id, species_id, life_stage, measurement_type, measurement_value` |
+| `lookup` | `lookup_id` | `ORDER BY lookup_type, lookup_num` |
+
+**Why sort order matters:** When new cruises are added later, rows get appended. Without deterministic ordering, the same data could get different IDs on different runs, breaking reproducibility.
+
+### Foreign Key Relationships
+
+```
+ship.ship_key (PK)
+    ↓
+cruise.cruise_key (PK)  ←──  cruise.ship_key (FK)
+    ↓
+site.site_id (PK)       ←──  site.cruise_key (FK)
+    ↓
+tow.tow_id (PK)         ←──  tow.site_id (FK)
+    ↓                        tow.tow_type_key (FK) → tow_type.tow_type_key
+net.net_id (PK)         ←──  net.tow_id (FK)
+    ↓
+ichthyo.ichthyo_id (PK) ←──  ichthyo.net_id (FK)
+                             ichthyo.species_id (FK) → species.species_id
+```
+
+### UUID Columns
+
+- **Remove** `cruise_uuid`, `site_uuid`, `tow_uuid`, `net_uuid` from output tables
+- **Retain** `_source_uuid` in Working DuckLake for provenance (stripped in frozen release)
+
+---
+
 ## Database Architecture: Working vs Frozen DuckLake {#sec-database}
 
 The CalCOFI integrated database uses [DuckLake](https://ducklake.select/), a lakehouse catalog that provides version control for data tables. We maintain **two distinct databases** to serve different needs:
@@ -997,10 +1123,15 @@ calcofi4db/R/
 ├── read.R         # CSV/Parquet reading (@concept read)
 ├── transform.R    # Data transformation (@concept transform)
 ├── ingest.R       # Database loading (@concept ingest)
-├── parquet.R      # Parquet operations (@concept parquet)   [NEW]
-├── duckdb.R       # DuckDB operations (@concept duckdb)     [NEW]
+├── workflow.R     # Workflow outputs to GCS (@concept workflow) [NEW]
+├── parquet.R      # Parquet operations (@concept parquet)
+├── duckdb.R       # DuckDB operations (@concept duckdb)
+├── ducklake.R     # DuckLake operations (@concept ducklake)
+├── archive.R      # GCS archive sync (@concept archive)
 ├── version.R      # Schema versioning (@concept version)
 ├── check.R        # Data validation (@concept check)
+├── validate.R     # FK/lookup validation functions (@concept validate) [NEW]
+├── wrangle.R      # Local DuckDB wrangling functions (@concept wrangle) [NEW]
 └── viz.R          # Diagram generation (@concept viz)
 ```
 
@@ -1049,10 +1180,27 @@ create_duckdb_views(con, manifest)
 attach_ducklake(con, catalog_path)
 set_duckdb_comments(con, table, comments)
 
-# R/ducklake.R - DuckLake catalog operations [NEW]
+# R/workflow.R - Workflow output functions [NEW]
+write_ingest_outputs(data_info, provider, dataset, gcs_bucket)
+  # 1. Transform data via transform_data()
+  # 2. Write parquet files to gs://calcofi-db/ingest/{provider}/{dataset}/parquet/
+  # 3. Write manifest.json with provenance info
+read_ingest_manifest(provider, dataset, gcs_bucket)
+read_ingest_parquet(provider, dataset, table, gcs_bucket)
+list_ingest_outputs(gcs_bucket)
+integrate_to_working_ducklake(ingests, gcs_bucket, ducklake_path)
+  # Combines ingest outputs into ducklake/working/
+
+# R/ducklake.R - DuckLake catalog operations
 get_working_ducklake()           # connect to internal Working DuckLake
+ingest_dataset(con, d, mode)     # ✓ IMPLEMENTED - high-level dataset ingestion
+  # - calls transform_data() internally
+  # - handles uuid column detection
+  # - tracks provenance via gcs_path
 ingest_to_working(data, table, source_file, source_uuid_col = NULL)
 add_provenance_columns(data, source_file, source_row_start = 1)
+save_working_ducklake(con)       # upload Working DuckLake to GCS
+list_working_tables(con)         # list tables with provenance stats
 
 # R/freeze.R - Frozen release operations [NEW]
 freeze_release(version, release_notes = NULL)
@@ -1104,56 +1252,69 @@ tar_option_set(
   format = "qs"  # Fast serialization
 )
 
+# Config
+DIR_DATA     <- "~/My Drive/projects/calcofi/data-public"
+DIR_METADATA <- "metadata"  # workflows/metadata/
+GCS_BUCKET   <- "calcofi-db"
+
 # Define pipeline
 list(
-  # ─── Raw Data from GCS (public bucket, latest archive) ─────────
+  # ─── Ingest SWFSC NOAA CalCOFI Database ─────────────────────────
   tar_target(
-    raw_bottle,
-    get_gcs_file("gs://calcofi-files-public", "calcofi.org/bottle-database/bottle.csv")
-  ),
-  tar_target(
-    raw_cast,
-    get_gcs_file("gs://calcofi-files-public", "calcofi.org/bottle-database/cast.csv")
-  ),
-  tar_target(
-    raw_larvae,
-    get_gcs_file("gs://calcofi-files-public", "swfsc.noaa.gov/calcofi-db/larva.csv")
-  ),
+    ingest_swfsc,
+    {
+      d <- calcofi4db::read_csv_files(
+        provider     = "swfsc.noaa.gov",
+        dataset      = "calcofi-db",
+        dir_data     = DIR_DATA,
+        metadata_dir = DIR_METADATA)
 
-  # ─── Transform to Parquet ──────────────────────────────────────
-  tar_target(
-    pqt_bottle,
-    csv_to_parquet(raw_bottle, output = "parquet/bottle.parquet")
-  ),
-  tar_target(
-    pqt_cast,
-    csv_to_parquet(raw_cast, output = "parquet/cast.parquet")
-  ),
-  tar_target(
-    pqt_larvae,
-    csv_to_parquet(raw_larvae, output = "parquet/larvae.parquet")
-  ),
+      calcofi4db::write_ingest_outputs(
+        data_info  = d,
+        provider   = "swfsc.noaa.gov",
+        dataset    = "calcofi-db",
+        gcs_bucket = GCS_BUCKET)
+    }),
 
-  # ─── Create Integrated DuckDB ──────────────────────────────────
+  # ─── Ingest CalCOFI.org Bottle Database ─────────────────────────
   tar_target(
-    db_manifest,
-    create_db_manifest(
-      tables = list(pqt_bottle, pqt_cast, pqt_larvae),
-      version = format(Sys.Date(), "%Y.%m.%d")
-    )
-  ),
-  tar_target(
-    duckdb_file,
-    create_duckdb_from_manifest(db_manifest)
-  ),
+    ingest_bottle,
+    {
+      d <- calcofi4db::read_csv_files(
+        provider     = "calcofi.org",
+        dataset      = "bottle-database",
+        dir_data     = DIR_DATA,
+        metadata_dir = DIR_METADATA)
 
-  # ─── Publish Datasets ──────────────────────────────────────────
+      calcofi4db::write_ingest_outputs(
+        data_info  = d,
+        provider   = "calcofi.org",
+        dataset    = "bottle-database",
+        gcs_bucket = GCS_BUCKET)
+    }),
+
+  # ─── Integrate Ingest Outputs into Working DuckLake ──────────────
+  tar_target(
+    working_ducklake,
+    calcofi4db::integrate_to_working_ducklake(
+      ingests       = list(ingest_swfsc, ingest_bottle),
+      gcs_bucket    = GCS_BUCKET,
+      ducklake_path = "ducklake/working")),
+
+  # ─── Publish Datasets ───────────────────────────────────────────
   tar_target(
     obis_archive,
-    create_obis_archive(duckdb_file, include_bottle = TRUE)
-  )
+    create_obis_archive(database, include_bottle = TRUE))
 )
 ```
+
+The key changes in this pipeline:
+
+1. **`metadata_dir` parameter**: Points to `workflows/metadata/` instead of the legacy `calcofi4db/inst/ingest/` path
+2. **`write_ingest_outputs()`**: Writes parquet files + manifest.json to `gs://calcofi-db/ingest/{provider}/{dataset}/`
+3. **`integrate_to_working_ducklake()`**: Combines ingest parquet files into the Working DuckLake at `gs://calcofi-db/ducklake/working/`
+
+**Note:** No separate `database/` folder - the Working DuckLake IS the integrated database. The `releases/` folder will contain frozen snapshots with provenance columns stripped.
 
 ### Workflow Lifecycle
 
@@ -1194,43 +1355,48 @@ flowchart TB
 %%| fig-cap: "targets Pipeline Dependency Graph"
 
 flowchart LR
-    subgraph raw["📁 Raw CSV"]
-        raw_bottle
-        raw_cast
-        raw_larvae
+    subgraph archive["📁 GCS Archive"]
+        archive_swfsc["swfsc.noaa.gov/<br/>calcofi-db"]
+        archive_bottle["calcofi.org/<br/>bottle-database"]
     end
 
-    subgraph parquet["⚙️ Parquet"]
-        pqt_bottle
-        pqt_cast
-        pqt_larvae
+    subgraph ingest["⚙️ Ingest Outputs"]
+        ingest_swfsc["ingest_swfsc<br/>(parquet + manifest)"]
+        ingest_bottle["ingest_bottle<br/>(parquet + manifest)"]
     end
 
-    subgraph database["🗃️ Database"]
-        db_manifest
-        duckdb_file
+    subgraph database["🗃️ Working DuckLake"]
+        integrate["integrate_to_working_ducklake()"]
+        ducklake["ducklake/working/"]
     end
 
     subgraph publish["🌐 Publish"]
         obis_archive
     end
 
-    raw_bottle --> pqt_bottle
-    raw_cast --> pqt_cast
-    raw_larvae --> pqt_larvae
+    archive_swfsc --> ingest_swfsc
+    archive_bottle --> ingest_bottle
 
-    pqt_bottle --> db_manifest
-    pqt_cast --> db_manifest
-    pqt_larvae --> db_manifest
+    ingest_swfsc --> integrate
+    ingest_bottle --> integrate
 
-    db_manifest --> duckdb_file
-    duckdb_file --> obis_archive
+    integrate --> ducklake
+    ducklake --> obis_archive
 
-    style raw fill:#e3f2fd,stroke:#1565c0
-    style parquet fill:#fff3e0,stroke:#ef6c00
+    style archive fill:#e3f2fd,stroke:#1565c0
+    style ingest fill:#fff3e0,stroke:#ef6c00
     style database fill:#f3e5f5,stroke:#7b1fa2
     style publish fill:#fce4ec,stroke:#c2185b
 ```
+
+The key insight is the separation between **ingest outputs** (per-workflow parquet + manifest) and the **final database** (integrated DuckDB). Each ingest workflow:
+
+1. Reads from GCS archive (immutable source files)
+2. Applies transformations via redefinition metadata
+3. Writes parquet files to `gs://calcofi-db/ingest/{provider}/{dataset}/`
+4. Writes `manifest.json` with provenance (archive timestamp, table stats)
+
+The final database step combines all ingest outputs into a unified DuckDB.
 
 ---
 
@@ -1307,18 +1473,24 @@ flowchart LR
 
 ### Phase 2: Pipeline
 
-**Goal**: Implement targets pipeline for priority datasets
+**Goal**: Implement targets pipeline with new architecture
 
-1. **Create `workflows/_targets.R`**
-   - Define targets for bottle and larvae data
-   - Establish Parquet transformation pipeline
-   - Create integrated DuckDB
+1. **Migrate metadata to `workflows/metadata/`**
+   - Create `workflows/metadata/{provider}/{dataset}/` directories
+   - Copy redefinition files from `calcofi4db/inst/ingest/`
+   - Update workflows to use `metadata_dir` parameter
 
-2. **Migrate ingestion workflows**
-   - Convert `ingest_calcofi.org_bottle-database.qmd` to target
-   - Convert `ingest_swfsc.noaa.gov_calcofi-db.qmd` to target
+2. **Create `calcofi4db/R/workflow.R`**
+   - `write_ingest_outputs()`: Write parquet + manifest to GCS
+   - `read_ingest_manifest()`: Read manifest from GCS
+   - `create_database_from_ingests()`: Combine ingest outputs
 
-3. **Update publish workflow**
+3. **Update `workflows/_targets.R`**
+   - Define ingest targets using new functions
+   - Separate ingest outputs from final database
+   - Each ingest writes to `gs://calcofi-db/ingest/{provider}/{dataset}/`
+
+4. **Update publish workflow**
    - Modify `publish_larvae_to_obis.qmd` to read from DuckDB
    - Add bottle data to EMoF extension
 
