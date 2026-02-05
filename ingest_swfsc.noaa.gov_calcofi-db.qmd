@@ -480,8 +480,6 @@ if (validation_results$total_flagged > 0) {
   # uncomment to actually delete:
   delete_flagged_rows(con, validation_results, dry_run = FALSE)
 }
-
-# TODO: force species_id to integer from dbl in species_id, ichthyo
 ```
 
 ### Drop Deprecated Tables and Columns
@@ -541,10 +539,7 @@ message(glue("\nRemaining tables: {paste(sort(DBI::dbListTables(con)), collapse 
 ```{r}
 #| label: dm_tbls
 
-tbls <- DBI::dbListTables(con) |>
-  sort() # |>
-  # setdiff(c("grid", "segment"))
-  # TODO: add grid, segment to later workflow
+tbls <- dbListTables(con) |> sort()
 
 # dm object for visualization (keys learned from data, not DB constraints)
 dm_dev <- dm_from_con(con, table_names = tbls, learn_keys = FALSE)
@@ -835,12 +830,18 @@ message("Segment table created")
 ```{r}
 #| label: view_segment
 
-segment_sf <- cc_read_sf(con, "segment") |>
-  mutate(year = year(time_beg))
-
+# slowish, so use cached figure
 map_segment_png <- here(glue("figures/{provider}_{dataset}_segment_map.png"))
-m <- mapView(segment_sf, zcol = "year")
-mapshot2(m, file = map_segment_png)
+
+if (!file_exists(map_segment_png)) {
+  
+  segment_sf <- cc_read_sf(con, "segment") |>
+    mutate(year = year(time_beg))
+  
+  m <- mapView(segment_sf, zcol = "year")
+  mapshot2(m, file = map_segment_png)
+}
+
 htmltools::img(src = map_segment_png |> str_replace(here(), "."), width = "600px")
 ```
 
@@ -910,6 +911,42 @@ if (validation$passed) {
 }
 ```
 
+## Enforce Column Types
+
+Force integer/smallint types on columns that R's `numeric` mapped to `DOUBLE`
+during `dbWriteTable()`. Uses `flds_redefine.csv` (`type_new`) as the source of
+truth for source-table columns, plus explicit overrides for derived-table columns.
+
+```{r}
+#| label: enforce_types
+
+type_changes <- enforce_column_types(
+  con            = con,
+  d_flds_rd      = d$d_flds_rd,
+  type_overrides = list(
+    ichthyo.ichthyo_id  = "INTEGER",
+    ichthyo.net_id      = "INTEGER",
+    ichthyo.species_id  = "SMALLINT",
+    ichthyo.tally       = "INTEGER",
+    lookup.lookup_id    = "INTEGER",
+    lookup.lookup_num   = "INTEGER",
+    segment.segment_id  = "INTEGER",
+    segment.site_id_beg = "INTEGER",
+    segment.site_id_end = "INTEGER",
+    site.site_id        = "INTEGER",
+    tow.tow_id          = "INTEGER",
+    tow.site_id         = "INTEGER",
+    net.net_id           = "INTEGER",
+    net.tow_id           = "INTEGER"),
+  tables  = dbListTables(con),
+  verbose = TRUE)
+
+if (nrow(type_changes) > 0) {
+  type_changes |>
+    datatable(caption = "Column type changes applied")
+}
+```
+
 ## Write Parquet Outputs
 
 Export tables to parquet files for downstream use.
@@ -930,6 +967,58 @@ parquet_stats |>
   datatable(caption = "Parquet export statistics")
 ```
 
+## Write Metadata
+
+Build `metadata.json` sidecar file documenting all tables and columns in parquet outputs. DuckDB `COMMENT ON` does not propagate to parquet, so this provides the metadata externally.
+
+```{r}
+#| label: write_metadata
+
+metadata_path <- build_metadata_json(
+  con                  = con,
+  d_tbls_rd            = d$d_tbls_rd,
+  d_flds_rd            = d$d_flds_rd,
+  metadata_derived_csv = here("metadata/swfsc.noaa.gov/calcofi-db/metadata_derived.csv"),
+  output_dir           = dir_parquet,
+  tables               = dbListTables(con),
+  set_comments         = TRUE,
+  provider             = provider,
+  dataset              = dataset,
+  workflow_url         = glue("https://calcofi.io/workflows/ingest_swfsc.noaa.gov_calcofi-db.html"))
+
+# show metadata summary
+metadata <- jsonlite::fromJSON(metadata_path)
+tibble(
+  table   = names(metadata$tables),
+  n_cols  = map_int(names(metadata$tables), ~sum(grepl(glue("^{.x}\\."), names(metadata$columns)))),
+  name_long = map_chr(metadata$tables, ~.x$name_long)) |>
+  datatable(caption = "Table metadata summary")
+```
+
+## Upload to GCS
+
+Upload parquet files, manifest, and metadata sidecar to `gs://calcofi-db/ingest/{provider}_{dataset}/`.
+
+```{r}
+#| label: upload_gcs
+
+gcs_ingest_prefix <- glue("ingest/{provider}_{dataset}")
+gcs_bucket        <- "calcofi-db"
+
+# list local files to upload (parquet + json sidecars)
+local_files <- list.files(dir_parquet, full.names = TRUE)
+
+# upload each file
+walk(local_files, function(f) {
+  gcs_path <- glue("gs://{gcs_bucket}/{gcs_ingest_prefix}/{basename(f)}")
+  put_gcs_file(f, gcs_path)
+  message(glue("Uploaded {basename(f)} -> {gcs_path}"))
+})
+
+message(glue(
+  "\nUploaded {length(local_files)} files to gs://{gcs_bucket}/{gcs_ingest_prefix}/"))
+```
+
 ## Cleanup
 
 ```{r}
@@ -939,15 +1028,14 @@ parquet_stats |>
 close_duckdb(con)
 message("Local wrangling database connection closed")
 
-# note: parquet outputs are in data/parquet/swfsc.noaa.gov/calcofi-db/
+# note: parquet outputs are in data/parquet/swfsc.noaa.gov_calcofi-db/
 # these can be used to update the Working DuckLake in a separate workflow
 message(glue("Parquet outputs written to: {dir_parquet}"))
+message(glue("GCS outputs at: gs://{gcs_bucket}/{gcs_ingest_prefix}/"))
 ```
 
 ## TODO
 
-- [ ] Insert table and field SQL `COMMENT`s into database, using `comment` field + `workflow_md` (markdown with name and link) + source with tbl.fld
-- [ ] Upload parquet to gs://calcofi-db/ingest/{provider}_{dataset}/
 - [ ] Review documentation for more comment descriptions at [Data \> Data Formats \| CalCOFI.org](https://calcofi.com/index.php?option=com_content&view=category&id=73&Itemid=993)
 
 ::: {.callout-caution collapse="true"}

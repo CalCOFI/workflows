@@ -394,20 +394,18 @@ gs://calcofi-files-private/                # Versioned private source files
 
 gs://calcofi-db/                           # Integrated database
 ├── ingest/                                # Per-workflow outputs (intermediate)
-│   ├── swfsc.noaa.gov/
-│   │   └── calcofi-db/
-│   │       ├── parquet/
-│   │       │   ├── cruise.parquet
-│   │       │   ├── ship.parquet
-│   │       │   ├── site.parquet
-│   │       │   └── ...
-│   │       └── manifest.json              # Provenance for this workflow
-│   └── calcofi.org/
-│       └── bottle-database/
-│           ├── parquet/
-│           │   ├── cast.parquet
-│           │   └── bottle.parquet
-│           └── manifest.json
+│   ├── swfsc.noaa.gov_calcofi-db/         # Flattened {provider}_{dataset}
+│   │   ├── cruise.parquet
+│   │   ├── ship.parquet
+│   │   ├── site.parquet
+│   │   ├── ...
+│   │   ├── manifest.json                  # Provenance for this workflow
+│   │   └── metadata.json                  # Table & column metadata sidecar
+│   └── calcofi.org_bottle-database/
+│       ├── cast.parquet
+│       ├── bottle.parquet
+│       ├── manifest.json
+│       └── metadata.json
 │
 └── ducklake/                              # DuckLake manages parquet + catalog
     ├── working/                           # Integrated database (combines ingests)
@@ -1183,7 +1181,7 @@ set_duckdb_comments(con, table, comments)
 # R/workflow.R - Workflow output functions [NEW]
 write_ingest_outputs(data_info, provider, dataset, gcs_bucket)
   # 1. Transform data via transform_data()
-  # 2. Write parquet files to gs://calcofi-db/ingest/{provider}/{dataset}/parquet/
+  # 2. Write parquet files to gs://calcofi-db/ingest/{provider}_{dataset}/
   # 3. Write manifest.json with provenance info
 read_ingest_manifest(provider, dataset, gcs_bucket)
 read_ingest_parquet(provider, dataset, table, gcs_bucket)
@@ -1311,7 +1309,7 @@ list(
 The key changes in this pipeline:
 
 1. **`metadata_dir` parameter**: Points to `workflows/metadata/` instead of the legacy `calcofi4db/inst/ingest/` path
-2. **`write_ingest_outputs()`**: Writes parquet files + manifest.json to `gs://calcofi-db/ingest/{provider}/{dataset}/`
+2. **`write_ingest_outputs()`**: Writes parquet files + manifest.json to `gs://calcofi-db/ingest/{provider}_{dataset}/`
 3. **`integrate_to_working_ducklake()`**: Combines ingest parquet files into the Working DuckLake at `gs://calcofi-db/ducklake/working/`
 
 **Note:** No separate `database/` folder - the Working DuckLake IS the integrated database. The `releases/` folder will contain frozen snapshots with provenance columns stripped.
@@ -1393,7 +1391,7 @@ The key insight is the separation between **ingest outputs** (per-workflow parqu
 
 1. Reads from GCS archive (immutable source files)
 2. Applies transformations via redefinition metadata
-3. Writes parquet files to `gs://calcofi-db/ingest/{provider}/{dataset}/`
+3. Writes parquet files to `gs://calcofi-db/ingest/{provider}_{dataset}/`
 4. Writes `manifest.json` with provenance (archive timestamp, table stats)
 
 The final database step combines all ingest outputs into a unified DuckDB.
@@ -1488,7 +1486,7 @@ The final database step combines all ingest outputs into a unified DuckDB.
 3. **Update `workflows/_targets.R`**
    - Define ingest targets using new functions
    - Separate ingest outputs from final database
-   - Each ingest writes to `gs://calcofi-db/ingest/{provider}/{dataset}/`
+   - Each ingest writes to `gs://calcofi-db/ingest/{provider}_{dataset}/`
 
 4. **Update publish workflow**
    - Modify `publish_larvae_to_obis.qmd` to read from DuckDB
