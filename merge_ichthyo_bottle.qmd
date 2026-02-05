@@ -90,11 +90,18 @@ release_version <- format(Sys.Date(), "v%Y.%m")
 
 # local merge database
 db_path   <- here("data/wrangling/merge_ichthyo_bottle.duckdb")
-overwrite <- TRUE
+overwrite <- FALSE  # set TRUE to rebuild from scratch (takes ~1hr for taxonomy APIs)
 if (overwrite && file_exists(db_path)) file_delete(db_path)
 dir_create(dirname(db_path))
 con <- get_duckdb_con(db_path)
 load_duckdb_extension(con, "spatial")
+
+# check if database already has tables (from previous run)
+existing_tables <- DBI::dbListTables(con)
+skip_load <- length(existing_tables) > 0
+if (skip_load) {
+  message(glue("Using existing database with {length(existing_tables)} tables"))
+}
 ```
 
 ## Check Upstream Workflows
@@ -156,41 +163,49 @@ ichthyo_files <- list.files(
 # tables with geometry columns that need WKB conversion
 geom_tables <- c("grid", "site", "segment")
 
-ichthyo_stats <- map_dfr(ichthyo_files, function(pqt_path) {
-  tbl_name <- tools::file_path_sans_ext(basename(pqt_path))
+if (skip_load) {
+  message("Using existing ichthyo tables from database")
+  ichthyo_stats <- map_dfr(ichthyo_files, function(pqt_path) {
+    tbl_name <- tools::file_path_sans_ext(basename(pqt_path))
+    n <- DBI::dbGetQuery(con, glue("SELECT COUNT(*) AS n FROM {tbl_name}"))$n
+    tibble(table = tbl_name, rows = n, source = "ichthyo")
+  })
+} else {
+  ichthyo_stats <- map_dfr(ichthyo_files, function(pqt_path) {
+    tbl_name <- tools::file_path_sans_ext(basename(pqt_path))
 
-  if (tbl_name %in% geom_tables) {
-    # use load_gcs_parquet_to_duckdb for WKB→GEOMETRY conversion
-    # (works with local files too — just creates table from parquet)
-    DBI::dbExecute(con, glue(
-      "CREATE OR REPLACE TABLE {tbl_name} AS
-       SELECT * FROM read_parquet('{pqt_path}')"))
-    # detect and convert WKB BLOB columns
-    blob_cols <- DBI::dbGetQuery(con, glue(
-      "SELECT column_name FROM information_schema.columns
-       WHERE table_name = '{tbl_name}'
-         AND data_type = 'BLOB'
-         AND column_name LIKE '%geom%'"))$column_name
-    for (gc in blob_cols) {
-      tmp_col <- paste0(gc, "_tmp")
+    if (tbl_name %in% geom_tables) {
+      # use load_gcs_parquet_to_duckdb for WKB→GEOMETRY conversion
       DBI::dbExecute(con, glue(
-        'ALTER TABLE {tbl_name} ADD COLUMN {tmp_col} GEOMETRY'))
+        "CREATE OR REPLACE TABLE {tbl_name} AS
+         SELECT * FROM read_parquet('{pqt_path}')"))
+      # detect and convert WKB BLOB columns
+      blob_cols <- DBI::dbGetQuery(con, glue(
+        "SELECT column_name FROM information_schema.columns
+         WHERE table_name = '{tbl_name}'
+           AND data_type = 'BLOB'
+           AND column_name LIKE '%geom%'"))$column_name
+      for (gc in blob_cols) {
+        tmp_col <- paste0(gc, "_tmp")
+        DBI::dbExecute(con, glue(
+          'ALTER TABLE {tbl_name} ADD COLUMN {tmp_col} GEOMETRY'))
+        DBI::dbExecute(con, glue(
+          'UPDATE {tbl_name} SET {tmp_col} = ST_GeomFromWKB({gc})'))
+        DBI::dbExecute(con, glue(
+          'ALTER TABLE {tbl_name} DROP COLUMN {gc}'))
+        DBI::dbExecute(con, glue(
+          'ALTER TABLE {tbl_name} RENAME COLUMN {tmp_col} TO {gc}'))
+      }
+    } else {
       DBI::dbExecute(con, glue(
-        'UPDATE {tbl_name} SET {tmp_col} = ST_GeomFromWKB({gc})'))
-      DBI::dbExecute(con, glue(
-        'ALTER TABLE {tbl_name} DROP COLUMN {gc}'))
-      DBI::dbExecute(con, glue(
-        'ALTER TABLE {tbl_name} RENAME COLUMN {tmp_col} TO {gc}'))
+        "CREATE OR REPLACE TABLE {tbl_name} AS
+         SELECT * FROM read_parquet('{pqt_path}')"))
     }
-  } else {
-    DBI::dbExecute(con, glue(
-      "CREATE OR REPLACE TABLE {tbl_name} AS
-       SELECT * FROM read_parquet('{pqt_path}')"))
-  }
 
-  n <- DBI::dbGetQuery(con, glue("SELECT COUNT(*) AS n FROM {tbl_name}"))$n
-  tibble(table = tbl_name, rows = n, source = "ichthyo")
-})
+    n <- DBI::dbGetQuery(con, glue("SELECT COUNT(*) AS n FROM {tbl_name}"))$n
+    tibble(table = tbl_name, rows = n, source = "ichthyo")
+  })
+}
 
 ichthyo_stats |> datatable(caption = "SWFSC ichthyo tables loaded")
 ```
@@ -209,16 +224,25 @@ bottle_files <- list.files(
 # belt-and-suspenders: skip grid.parquet if it still exists
 bottle_files <- bottle_files[!grepl("grid\\.parquet$", bottle_files)]
 
-bottle_stats <- map_dfr(bottle_files, function(pqt_path) {
-  tbl_name <- tools::file_path_sans_ext(basename(pqt_path))
+if (skip_load) {
+  message("Using existing bottle tables from database")
+  bottle_stats <- map_dfr(bottle_files, function(pqt_path) {
+    tbl_name <- tools::file_path_sans_ext(basename(pqt_path))
+    n <- DBI::dbGetQuery(con, glue("SELECT COUNT(*) AS n FROM {tbl_name}"))$n
+    tibble(table = tbl_name, rows = n, source = "bottle")
+  })
+} else {
+  bottle_stats <- map_dfr(bottle_files, function(pqt_path) {
+    tbl_name <- tools::file_path_sans_ext(basename(pqt_path))
 
-  DBI::dbExecute(con, glue(
-    "CREATE OR REPLACE TABLE {tbl_name} AS
-     SELECT * FROM read_parquet('{pqt_path}')"))
+    DBI::dbExecute(con, glue(
+      "CREATE OR REPLACE TABLE {tbl_name} AS
+       SELECT * FROM read_parquet('{pqt_path}')"))
 
-  n <- DBI::dbGetQuery(con, glue("SELECT COUNT(*) AS n FROM {tbl_name}"))$n
-  tibble(table = tbl_name, rows = n, source = "bottle")
-})
+    n <- DBI::dbGetQuery(con, glue("SELECT COUNT(*) AS n FROM {tbl_name}"))$n
+    tibble(table = tbl_name, rows = n, source = "bottle")
+  })
+}
 
 bottle_stats |> datatable(caption = "Bottle tables loaded")
 ```
@@ -412,27 +436,49 @@ Update species table with WoRMS/ITIS/GBIF identifiers using
 ```{r}
 #| label: standardize_species
 
-# standardize species identifiers
-sp_results <- standardize_species(
-  con           = con,
-  species_tbl   = "species",
-  include_gbif  = TRUE)
+# check if species already standardized (all taxonomy columns exist with data)
+sp_cols <- DBI::dbGetQuery(con,
+  "SELECT column_name FROM information_schema.columns
+   WHERE table_name = 'species'")$column_name
+sp_standardized <- all(c("worms_id", "itis_id", "gbif_id") %in% sp_cols) &&
+  DBI::dbGetQuery(con,
+    "SELECT COUNT(*) AS n FROM species WHERE worms_id IS NOT NULL")$n > 0
+
+if (sp_standardized && !overwrite) {
+  message("Species already standardized, skipping API calls")
+  sp_results <- DBI::dbGetQuery(con,
+    "SELECT species_id, scientific_name, worms_id, itis_id, gbif_id
+     FROM species")
+} else {
+  # standardize species identifiers (slow - makes API calls)
+  sp_results <- standardize_species(
+    con           = con,
+    species_tbl   = "species",
+    include_gbif  = TRUE)
+}
 
 sp_results |>
-  select(species_id, scientific_name, worms_id, itis_id, gbif_id,
-         taxonomic_status, accepted_name) |>
   datatable(caption = "Species standardization results")
 ```
 
 ```{r}
 #| label: build_taxon
 
-# build taxon hierarchy table
-taxon_rows <- build_taxon_table(
-  con          = con,
-  species_tbl  = "species",
-  taxon_tbl    = "taxon",
-  include_itis = TRUE)
+# check if taxon table already exists with data
+taxon_exists <- "taxon" %in% existing_tables &&
+  DBI::dbGetQuery(con, "SELECT COUNT(*) AS n FROM taxon")$n > 0
+
+if (taxon_exists && !overwrite) {
+  message("Taxon table already exists, skipping API calls")
+  taxon_rows <- DBI::dbReadTable(con, "taxon")
+} else {
+  # build taxon hierarchy table (slow - makes API calls)
+  taxon_rows <- build_taxon_table(
+    con          = con,
+    species_tbl  = "species",
+    taxon_tbl    = "taxon",
+    include_itis = TRUE)
+}
 
 # show taxon stats
 if (nrow(taxon_rows) > 0) {
@@ -725,54 +771,44 @@ freeze_stats |>
 #| label: release_notes
 #| results: asis
 
-release_notes <- glue("
-# CalCOFI Database Release {release_version}
+# build release notes using paste() to avoid glue() parsing issues with code blocks
+tables_list <- paste0(
+  "- ", freeze_stats$table, " (",
+  format(freeze_stats$rows, big.mark = ","), " rows)")
 
-**Release Date**: {Sys.Date()}
-
-## Tables Included
-
-{paste('- ', freeze_stats$table, ' (', format(freeze_stats$rows, big.mark = ','), ' rows)', sep = '', collapse = '\n')}
-
-## Total
-
-- **Tables**: {nrow(freeze_stats)}
-- **Total Rows**: {format(sum(freeze_stats$rows), big.mark = ',')}
-- **Total Size**: {round(sum(freeze_stats$file_size) / 1024 / 1024, 1)} MB
-
-## Data Sources
-
-- `ingest_swfsc.noaa.gov_calcofi-db.qmd` — Ichthyo tables (cruise, ship, site, tow, net, species, ichthyo, grid, segment, lookup)
-- `ingest_calcofi.org_bottle-database.qmd` — Bottle/cast tables (casts, bottle, bottle_measurement, cast_condition, measurement_type)
-
-## Cross-Dataset Integration
-
-- **Ship matching**: Reconciled ship codes between bottle casts and swfsc ship reference
-- **Cruise bridge**: Derived cruise_key (YYMMKK) for bottle casts via ship_key + datetime
-- **Taxonomy**: Standardized species with WoRMS AphiaID, ITIS TSN, GBIF backbone key
-- **Taxon hierarchy**: Built taxon + taxa_rank tables from WoRMS/ITIS classification
-
-## Access
-
-Parquet files can be queried directly from GCS:
-
-````r
-library(duckdb)
-con <- dbConnect(duckdb())
-dbExecute(con, \"INSTALL httpfs; LOAD httpfs;\")
-dbGetQuery(con, \"
-  SELECT * FROM read_parquet(
-    'https://storage.googleapis.com/calcofi-db/ducklake/releases/{release_version}/parquet/ichthyo.parquet')
-  LIMIT 10\")
-````
-
-Or use calcofi4r:
-
-````r
-library(calcofi4r)
-con <- cc_get_db(version = '{release_version}')
-````
-")
+release_notes <- paste0(
+  "# CalCOFI Database Release ", release_version, "\n\n",
+  "**Release Date**: ", Sys.Date(), "\n\n",
+  "## Tables Included\n\n",
+  paste(tables_list, collapse = "\n"), "\n\n",
+  "## Total\n\n",
+  "- **Tables**: ", nrow(freeze_stats), "\n",
+  "- **Total Rows**: ", format(sum(freeze_stats$rows), big.mark = ","), "\n",
+  "- **Total Size**: ", round(sum(freeze_stats$file_size) / 1024 / 1024, 1), " MB\n\n",
+  "## Data Sources\n\n",
+  "- `ingest_swfsc.noaa.gov_calcofi-db.qmd` - Ichthyo tables (cruise, ship, site, tow, net, species, ichthyo, grid, segment, lookup)\n",
+  "- `ingest_calcofi.org_bottle-database.qmd` - Bottle/cast tables (casts, bottle, bottle_measurement, cast_condition, measurement_type)\n\n",
+  "## Cross-Dataset Integration\n\n",
+  "- **Ship matching**: Reconciled ship codes between bottle casts and swfsc ship reference\n",
+  "- **Cruise bridge**: Derived cruise_key (YYMMKK) for bottle casts via ship_key + datetime\n",
+  "- **Taxonomy**: Standardized species with WoRMS AphiaID, ITIS TSN, GBIF backbone key\n",
+  "- **Taxon hierarchy**: Built taxon + taxa_rank tables from WoRMS/ITIS classification\n\n",
+  "## Access\n\n",
+  "Parquet files can be queried directly from GCS:\n\n",
+  "```r\n",
+  "library(duckdb)\n",
+  "con <- dbConnect(duckdb())\n",
+  "dbExecute(con, 'INSTALL httpfs; LOAD httpfs;')\n",
+  "dbGetQuery(con, \"\n",
+  "  SELECT * FROM read_parquet(\n",
+  "    'https://storage.googleapis.com/calcofi-db/ducklake/releases/", release_version, "/parquet/ichthyo.parquet')\n",
+  "  LIMIT 10\")\n",
+  "```\n\n",
+  "Or use calcofi4r:\n\n",
+  "```r\n",
+  "library(calcofi4r)\n",
+  "con <- cc_get_db(version = '", release_version, "')\n",
+  "```\n")
 
 writeLines(release_notes, file.path(dir_frozen, "RELEASE_NOTES.md"))
 message(glue("Release notes written to {file.path(dir_frozen, 'RELEASE_NOTES.md')}"))
@@ -785,35 +821,11 @@ cat(release_notes)
 #| label: upload_frozen
 #| eval: false
 
-gcs_release_path <- glue("gs://calcofi-db/ducklake/releases/{release_version}")
-message(glue("Uploading frozen release to {gcs_release_path}..."))
-
-# upload all parquet files
-parquet_files <- list.files(
-  file.path(dir_frozen, "parquet"),
-  pattern = "\\.parquet$",
-  full.names = TRUE)
-
-for (pqt_file in parquet_files) {
-  gcs_path <- glue("{gcs_release_path}/parquet/{basename(pqt_file)}")
-  put_gcs_file(pqt_file, gcs_path)
-}
-
-# upload manifest and release notes
-put_gcs_file(
-  file.path(dir_frozen, "parquet", "manifest.json"),
-  glue("{gcs_release_path}/manifest.json"))
-
-put_gcs_file(
-  file.path(dir_frozen, "RELEASE_NOTES.md"),
-  glue("{gcs_release_path}/RELEASE_NOTES.md"))
-
-# update latest symlink
-put_gcs_file(
-  file.path(dir_frozen, "parquet", "manifest.json"),
-  "gs://calcofi-db/ducklake/releases/latest/manifest.json")
-
-message(glue("Frozen release {release_version} uploaded to GCS"))
+# upload frozen release to GCS (creates catalog.json, updates versions.json and latest.txt)
+upload_frozen_release(
+  release_dir = dir_frozen,
+  version     = release_version,
+  set_latest  = TRUE)
 ```
 
 ## Cleanup
