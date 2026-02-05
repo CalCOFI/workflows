@@ -1,0 +1,54 @@
+table,column,name_long,units,description_md
+cruise,,Cruise,,unique by ship and year-month
+cruise,cruise_key,Cruise Key,,Natural primary key in YYMMKK format (2-digit year + 2-digit month + ship_key)
+site,,Site,,"unique location (longitude, latitude) and time along cruise"
+site,site_id,Site ID,,Sequential integer primary key (sorted by cruise_key and orderocc)
+site,cruise_key,Cruise Key,,Foreign key to cruise table (propagated from cruise via cruise_uuid)
+site,geom,Geometry,,Point geometry (WGS84 EPSG:4326) created from longitude and latitude
+site,grid_key,Grid Key,,Foreign key to grid table (assigned via spatial intersection)
+tow,,Tow,,unique net tows
+tow,tow_id,Tow ID,,Sequential integer primary key (sorted by site_id and time_start)
+tow,site_id,Site ID,,Foreign key to site table (propagated from site via site_uuid)
+net,,Net,,individual net from given tow
+net,net_id,Net ID,,Sequential integer primary key (sorted by tow_id and side)
+net,tow_id,Tow ID,,Foreign key to tow table (propagated from tow via tow_uuid)
+ichthyo,,Ichthyoplankton,,"Consolidated tidy table of ichthyoplankton observations from egg, egg_stage, larva, larva_stage, and larva_size source tables"
+ichthyo,ichthyo_id,Ichthyo ID,,"Sequential integer primary key (sorted by net_id, species_id, life_stage, measurement_type, measurement_value)"
+ichthyo,net_id,Net ID,,Foreign key to net table
+ichthyo,species_id,Species ID,,Foreign key to species table
+ichthyo,life_stage,Life Stage,,"Life stage: 'egg' or 'larva'"
+ichthyo,measurement_type,Measurement Type,,"Type of measurement: 'stage', 'size', or NULL for total count"
+ichthyo,measurement_value,Measurement Value,,Numeric value of measurement (stage number or length in mm)
+ichthyo,tally,Tally,count,Raw count of individuals
+lookup,,Lookup,,"Unified vocabulary lookup table for egg stages, larva stages, and tow types"
+lookup,lookup_id,Lookup ID,,Sequential integer primary key
+lookup,lookup_type,Lookup Type,,"Category: 'egg_stage', 'larva_stage', or 'tow_type'"
+lookup,lookup_num,Lookup Number,,Numeric code for the lookup value
+lookup,lookup_chr,Lookup Character,,"Character code for the lookup value (e.g. YOLK, PREF)"
+lookup,description,Description,,Human-readable description of the lookup value
+grid,,Grid,,CalCOFI survey grid polygons with standard and historical station patterns
+grid,grid_key,Grid Key,,Natural primary key (e.g. st60-ln80 or st60-ln80_hist for historical)
+grid,line,Line,,Alongshore component of CalCOFI coordinate system
+grid,station,Station,,Offshore component of CalCOFI coordinate system
+grid,shore,Shore,,"Shore classification (nearshore, offshore, etc.)"
+grid,pattern,Pattern,,Station pattern: 'standard' or 'historical'
+grid,spacing,Spacing,,Station spacing in nautical miles
+grid,zone,Zone,,Combined shore-pattern zone label
+grid,area_km2,Area,km^2,Grid cell area
+grid,geom,Geometry,,Polygon geometry (WGS84 EPSG:4326) of grid cell
+grid,geom_ctr,Geometry Center,,Point geometry (WGS84 EPSG:4326) of grid cell centroid
+segment,,Segment,,Line segments between consecutive sites along a cruise track
+segment,segment_id,Segment ID,,Sequential integer primary key (sorted by time_beg)
+segment,cruise_key,Cruise Key,,Foreign key to cruise table
+segment,site_id_beg,Site ID Begin,,Site ID at segment start
+segment,site_id_end,Site ID End,,Site ID at segment end
+segment,lon_beg,Longitude Begin,decimal_degrees,Longitude at segment start
+segment,lat_beg,Latitude Begin,decimal_degrees,Latitude at segment start
+segment,lon_end,Longitude End,decimal_degrees,Longitude at segment end
+segment,lat_end,Latitude End,decimal_degrees,Latitude at segment end
+segment,time_beg,Time Begin,,Timestamp at segment start
+segment,time_end,Time End,,Timestamp at segment end
+segment,time_hr,Time Duration,hours,Duration of segment transit
+segment,length_km,Length,km,Distance of segment
+segment,km_per_hr,Speed,km/hr,Average speed during segment transit
+segment,geom,Geometry,,LineString geometry (WGS84 EPSG:4326) of segment
