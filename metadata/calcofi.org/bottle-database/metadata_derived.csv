@@ -1,0 +1,39 @@
+table,column,name_long,units,description_md
+casts,,Casts,,"station-level cast metadata including location and integrated measurements; environmental conditions pivoted to cast_condition"
+casts,datetime_utc,Datetime UTC,,"UTC timestamp consolidated from date + time columns"
+casts,geom,Geometry,,"point geometry (WGS84) from lat_dec and lon_dec"
+casts,grid_key,Grid Key,,"CalCOFI grid cell identifier from spatial join"
+bottle,,Bottle,,"water sample identity and context at specific depths; measurements pivoted to bottle_measurement"
+bottle,depth_qual,Depth Quality,,"pressure/depth quality code (renamed from p_qual)"
+bottle_measurement,,Bottle Measurement,,"long-format measurement values pivoted from bottle table"
+bottle_measurement,bottle_measurement_id,Bottle Measurement ID,,"PK: auto-increment integer assigned via ROW_NUMBER(ORDER BY bottle_id, measurement_type)"
+bottle_measurement,bottle_id,Bottle ID,,"FK to bottle.bottle_id"
+bottle_measurement,measurement_type,Measurement Type,,"measurement type key (FK to measurement_type.measurement_type)"
+bottle_measurement,measurement_value,Measurement Value,,"numeric measurement value"
+bottle_measurement,measurement_prec,Measurement Precision,,"replicate precision (nullable)"
+bottle_measurement,measurement_qual,Measurement Quality,,"quality code (nullable)"
+cast_condition,,Cast Condition,,"long-format environmental/meteorological conditions pivoted from casts table"
+cast_condition,cast_condition_id,Cast Condition ID,,"PK: auto-increment integer assigned via ROW_NUMBER(ORDER BY cast_id, condition_type)"
+cast_condition,cast_id,Cast ID,,"FK to casts.cast_id"
+cast_condition,condition_type,Condition Type,,"condition type key (FK to measurement_type.measurement_type)"
+cast_condition,condition_value,Condition Value,,"numeric condition value"
+measurement_type,,Measurement Type,,"reference table for measurement/condition type codes with units and descriptions"
+measurement_type,measurement_type,Measurement Type,,"PK: measurement or condition type code"
+measurement_type,dataset,Dataset,,"source dataset (bottle cast or ichthyo)"
+measurement_type,description,Description,,"human-readable description"
+measurement_type,units,Units,,"measurement units"
+measurement_type,_source_column,Source Column,,"original column name in wide-format table"
+measurement_type,_source_table,Source Table,,"wide-format DuckDB table the measurement was pivoted from (e.g. bottle, casts, ichthyo)"
+measurement_type,_source_workflow,Source Workflow,,"QMD workflow that produces this measurement type"
+casts_derived,,Casts Derived,,"convenience VIEW that adds back temporal and coordinate columns derivable from casts base table"
+grid,,Grid,,"CalCOFI survey grid polygons and centroids"
+grid,grid_key,Grid Key,,Natural primary key (e.g. st60-ln80 or st60-ln80_hist for historical)
+grid,line,Line,,Alongshore component of CalCOFI coordinate system
+grid,station,Station,,Offshore component of CalCOFI coordinate system
+grid,shore,Shore,,"Shore classification (nearshore, offshore, etc.)"
+grid,pattern,Pattern,,"Station pattern: 'standard' or 'historical'"
+grid,spacing,Spacing,,Station spacing in nautical miles
+grid,zone,Zone,,Combined shore-pattern zone label
+grid,area_km2,Area,km^2,Grid cell area
+grid,geom,Geometry,,Polygon geometry (WGS84 EPSG:4326) of grid cell
+grid,geom_ctr,Geometry Center,,Point geometry (WGS84 EPSG:4326) of grid cell centroid

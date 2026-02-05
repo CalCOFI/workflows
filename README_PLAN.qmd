@@ -913,7 +913,31 @@ net.net_id (PK)         ←──  net.tow_id (FK)
     ↓
 ichthyo.ichthyo_id (PK) ←──  ichthyo.net_id (FK)
                              ichthyo.species_id (FK) → species.species_id
+
+--- Bottle chain (linked via cruise bridge) ---
+
+casts.cast_id (PK)      ←──  casts.cruise_key (FK, nullable) → cruise.cruise_key
+    ↓                        casts.grid_key (FK) → grid.grid_key
+    ↓                        casts.ship_key (FK, nullable) → ship.ship_key
+bottle.bottle_id (PK)   ←──  bottle.cast_id (FK)
+    ↓
+bottle_measurement       ←──  bottle_measurement.bottle_id (FK)
+                             bottle_measurement.measurement_type_id → measurement_type
+
+--- Taxonomy ---
+
+species.species_id (PK)      species.worms_id → taxon (WoRMS authority)
+                             species.itis_id → taxon (ITIS authority)
+taxon.taxonID (PK per authority)
+taxa_rank.taxonRank (PK)
+
+--- Spatial ---
+
+grid.grid_key (PK)      ←──  canonical from swfsc (not in bottle export)
+segment (reference table)
 ```
+
+**Note**: `grid.parquet` is only exported from the swfsc workflow (canonical source). The bottle workflow no longer exports grid.
 
 ### UUID Columns
 
@@ -1121,15 +1145,20 @@ calcofi4db/R/
 ├── read.R         # CSV/Parquet reading (@concept read)
 ├── transform.R    # Data transformation (@concept transform)
 ├── ingest.R       # Database loading (@concept ingest)
-├── workflow.R     # Workflow outputs to GCS (@concept workflow) [NEW]
+├── workflow.R     # Workflow outputs to GCS (@concept workflow)
 ├── parquet.R      # Parquet operations (@concept parquet)
 ├── duckdb.R       # DuckDB operations (@concept duckdb)
 ├── ducklake.R     # DuckLake operations (@concept ducklake)
 ├── archive.R      # GCS archive sync (@concept archive)
 ├── version.R      # Schema versioning (@concept version)
 ├── check.R        # Data validation (@concept check)
-├── validate.R     # FK/lookup validation functions (@concept validate) [NEW]
-├── wrangle.R      # Local DuckDB wrangling functions (@concept wrangle) [NEW]
+├── validate.R     # FK/lookup validation functions (@concept validate)
+├── wrangle.R      # Local DuckDB wrangling functions (@concept wrangle)
+├── ship.R         # Ship fuzzy matching functions (@concept ship) [NEW]
+├── taxonomy.R     # Taxonomy standardization functions (@concept taxonomy) [NEW]
+├── spatial.R      # Spatial operations (@concept spatial)
+├── freeze.R       # Frozen release operations (@concept freeze)
+├── display.R      # Display helpers (@concept display)
 └── viz.R          # Diagram generation (@concept viz)
 ```
 
@@ -1200,17 +1229,26 @@ add_provenance_columns(data, source_file, source_row_start = 1)
 save_working_ducklake(con)       # upload Working DuckLake to GCS
 list_working_tables(con)         # list tables with provenance stats
 
-# R/freeze.R - Frozen release operations [NEW]
+# R/freeze.R - Frozen release operations
 freeze_release(version, release_notes = NULL)
-  # 1. Validate data quality
-
-  # 2. Strip provenance columns (_source_*, _ingested_at)
-  # 3. Export to parquet files
-  # 4. Create DuckLake catalog
-  # 5. Upload to releases/{version}/
 validate_for_release(con)        # run all quality checks before freeze
 list_frozen_releases()           # list available frozen versions
 compare_releases(v1, v2)         # diff two releases
+
+# R/ship.R - Ship code reconciliation [NEW]
+match_ships(unmatched_ships, reference_ships, ship_renames_csv, fetch_ices)
+  # Multi-source fuzzy matching: manual overrides → exact nodc → exact name
+  # → CalCOFI UNOLS → NODC WOD → ICES → word-overlap fuzzy
+fetch_ship_ices(ices_api, ices_ship_code_type)
+  # Fetch ship codes from ICES Reference Codes API
+
+# R/taxonomy.R - Taxonomy standardization [NEW]
+standardize_species(con, species_tbl, include_gbif, batch_size)
+  # Query WoRMS → ITIS → GBIF for each species
+  # Updates species table with worms_id, itis_id, gbif_id
+build_taxon_table(con, species_tbl, taxon_tbl, include_itis, batch_size)
+  # Build taxon hierarchy table from WoRMS/ITIS classification
+  # Also creates taxa_rank lookup table with rank ordering
 ```
 
 #### In `calcofi4r`:
@@ -1221,6 +1259,12 @@ cc_get_db(version = "latest", local_cache = TRUE)
 cc_list_versions()               # list available frozen releases
 cc_db_info(version = "latest")   # release date, row counts, notes
 cc_release_notes(version)        # view release notes for a version
+
+# R/database.R - Derived views [NEW]
+cc_make_view(con, template, view_name, base_table, column_definitions)
+  # Create derived VIEW from template or custom SQL expressions
+  # Templates: "casts_extra" (year, month, quarter, julian_day, lat/lon parts, cruise, db_sta_key)
+cc_list_view_templates()         # list available prebaked templates
 
 # R/read.R - Convenience functions for common tables
 cc_read_bottle(version = "latest", ...)
@@ -1469,72 +1513,74 @@ The final database step combines all ingest outputs into a unified DuckDB.
    - Generated manifest: `manifests/manifest_2026-02-02_121557.json`
    - Total: 112,457 files (33.5 GiB)
 
-### Phase 2: Pipeline
+### Phase 2: Pipeline ✅ COMPLETE (2026-02-05)
 
 **Goal**: Implement targets pipeline with new architecture
 
-1. **Migrate metadata to `workflows/metadata/`**
-   - Create `workflows/metadata/{provider}/{dataset}/` directories
-   - Copy redefinition files from `calcofi4db/inst/ingest/`
-   - Update workflows to use `metadata_dir` parameter
+1. **Migrate metadata to `workflows/metadata/`** ✅
+   - Created `workflows/metadata/{provider}/{dataset}/` directories
+   - Copied redefinition files from `calcofi4db/inst/ingest/`
+   - Updated workflows to use `metadata_dir` parameter
 
-2. **Create `calcofi4db/R/workflow.R`**
+2. **Create `calcofi4db/R/workflow.R`** ✅
    - `write_ingest_outputs()`: Write parquet + manifest to GCS
+   - `write_parquet_outputs()`: Export tables to parquet with manifest
    - `read_ingest_manifest()`: Read manifest from GCS
-   - `create_database_from_ingests()`: Combine ingest outputs
 
-3. **Update `workflows/_targets.R`**
-   - Define ingest targets using new functions
-   - Separate ingest outputs from final database
-   - Each ingest writes to `gs://calcofi-db/ingest/{provider}_{dataset}/`
+3. **Update `workflows/_targets.R`** ✅
+   - Extended with `ingest_swfsc_manifest` + `ingest_bottle_manifest` file targets
+   - Added `merge_manifest` target that renders `merge_ichthyo_bottle.qmd`
+   - Pipeline: CSV→parquet→DuckDB + manifest-based merge
 
-4. **Update publish workflow**
+4. **Cross-dataset integration (new)** ✅
+   - **Ship matching**: `calcofi4db/R/ship.R` with `match_ships()`, `fetch_ship_ices()`
+   - **Cruise bridge**: Derive `cruise_key` (YYMMKK) from bottle casts via ship_key + datetime
+   - **Taxonomy standardization**: `calcofi4db/R/taxonomy.R` with `standardize_species()`, `build_taxon_table()`
+   - **Grid canonical source**: grid.parquet only from swfsc (removed from bottle export)
+
+5. **Update publish workflow** (pending)
    - Modify `publish_larvae_to_obis.qmd` to read from DuckDB
    - Add bottle data to EMoF extension
 
-### Phase 3: Working DuckLake
+### Phase 3: Working DuckLake ✅ COMPLETE (2026-02-05)
 
 **Goal**: Implement Working DuckLake with provenance tracking
 
-1. **Set up Working DuckLake catalog**
-   - Configure DuckLake at `gs://calcofi-db/ducklake/working/`
-   - Enable time travel queries
-   - Create Git-tracked catalog manifest
+1. **Working DuckLake functions implemented** ✅
+   - `get_working_ducklake()`: Connect to Working DuckLake (GCS-backed)
+   - `ingest_to_working()`: Ingest with provenance columns
+   - `add_provenance_columns()`: Helper for `_source_file`, `_source_row`, `_source_uuid`, `_ingested_at`
+   - `save_working_ducklake()`: Upload to GCS
+   - `list_working_tables()`: Table summary with provenance stats
 
-2. **Add provenance columns to ingest workflows**
-   - `_source_file`: Path to source CSV in Archive
-   - `_source_row`: Row number in source file
-   - `_source_uuid`: Original record UUID (if available)
-   - `_ingested_at`: Ingestion timestamp
+2. **Merge workflow loads all tables** ✅
+   - `merge_ichthyo_bottle.qmd` loads 15+ tables from upstream parquet
+   - Modified tables (casts, species, taxon, taxa_rank) exported separately
+   - Manifest references GCS URIs for unchanged upstream tables
 
-3. **Implement `calcofi4db` DuckLake functions**
-   - `get_working_ducklake()`: Connect to internal database
-   - `ingest_to_working()`: Ingest with provenance
-   - `add_provenance_columns()`: Helper for provenance
-
-### Phase 4: Frozen DuckLake
+### Phase 4: Frozen DuckLake ✅ COMPLETE (2026-02-05)
 
 **Goal**: Implement [Frozen DuckLake](https://ducklake.select/2025/10/24/frozen-ducklake/) for public releases
 
-1. **Create freeze workflow**
+1. **Freeze functions implemented** ✅
    - `validate_for_release()`: Data quality checks
-   - `freeze_release()`: Create immutable release
+   - `freeze_release()` / `write_parquet_outputs(strip_provenance=TRUE)`: Create immutable release
    - Strip provenance columns for clean public schema
-   - Generate release notes
+   - Generate release notes with cross-dataset integration summary
 
-2. **Set up release structure**
-   - `gs://calcofi-db/ducklake/releases/v2026.02/`
-   - Parquet files + DuckLake catalog
-   - `latest` symlink to current release
+2. **Release structure** ✅
+   - `gs://calcofi-db/ducklake/releases/{version}/`
+   - Parquet files + manifest + RELEASE_NOTES.md
+   - `latest` pointer to current release
 
-3. **Update `calcofi4r` for frozen access**
+3. **`calcofi4r` frozen access** ✅
    - `cc_get_db(version = "latest")`: Default to frozen releases
    - `cc_list_versions()`: List available releases
    - `cc_release_notes()`: View release notes
+   - `cc_make_view(con, "casts_extra")`: Create derived VIEWs with prebaked templates
+   - `cc_list_view_templates()`: List available templates
 
-4. **First public release: v2026.02**
-   - Bottle + Cast + Larvae tables
-   - Announce to users
+4. **First public release**: v2026.02 (pending GCS upload)
 
 ### Phase 5: Documentation & Polish
 

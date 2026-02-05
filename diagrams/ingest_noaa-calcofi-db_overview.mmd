@@ -1,9 +1,20 @@
 graph TD
-    A[Read CSV Files] --> B[Extract Column Names]
-    B --> C[Compare with Lookups]
-    C --> D[Process Field Descriptions]
-    D --> E{Table Exists?}
-    E -->|Yes| F[Update Table]
-    E -->|No| G[Initialize Table]
-    F --> H[Summary Stats]
-    G --> H
+    A["1\. Read CSV Files<br/>(with GCS archive sync)"] --> B["2\. Load into Wrangling DuckDB<br/>(column renames & type transforms)"]
+    B --> C["3\. Restructure Primary Keys<br/>(natural keys + sequential IDs)"]
+    C --> D["4\. Create Lookup Table &<br/>Consolidate Ichthyo Tables"]
+    D --> E["5\. Validate Data Quality<br/>(corrections, integrity, drop deprecated)"]
+    E --> F["6\. Export Parquet Files<br/>(for Working DuckLake)"]
+
+    A:::source
+    B:::wrangle
+    C:::keys
+    D:::consolidate
+    E:::validate
+    F:::export
+
+    classDef source fill:#e1f5ff,stroke:#0066cc,stroke-width:2px
+    classDef wrangle fill:#fff4e1,stroke:#ff9900,stroke-width:2px
+    classDef keys fill:#ffe1f5,stroke:#cc0066,stroke-width:2px
+    classDef consolidate fill:#e1ffe1,stroke:#00cc66,stroke-width:2px
+    classDef validate fill:#f0e1ff,stroke:#6600cc,stroke-width:2px
+    classDef export fill:#ffe1e1,stroke:#cc0000,stroke-width:2px
