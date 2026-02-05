@@ -293,10 +293,50 @@ list(
   tar_target(
     duckdb_path,
     create_calcofi_duckdb(all_parquet_files),
+    format = "file"),
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # INGEST: Upstream workflow parquet outputs (manifest-based)
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  tar_target(
+    ingest_swfsc_manifest,
+    {
+      path <- here::here(
+        "workflows/data/parquet/swfsc.noaa.gov_calcofi-db/manifest.json")
+      stopifnot(file.exists(path))
+      path
+    },
+    format = "file"),
+
+  tar_target(
+    ingest_bottle_manifest,
+    {
+      path <- here::here(
+        "workflows/data/parquet/calcofi.org_bottle-database/manifest.json")
+      stopifnot(file.exists(path))
+      path
+    },
+    format = "file"),
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # MERGE: Combine ichthyo + bottle → Working DuckLake → Frozen Release
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  tar_target(
+    merge_manifest,
+    {
+      ingest_swfsc_manifest
+      ingest_bottle_manifest
+      quarto::quarto_render(
+        here::here("workflows/merge_ichthyo_bottle.qmd"))
+      here::here(
+        "workflows/data/parquet/merge_ichthyo_bottle/manifest.json")
+    },
     format = "file")
 
   # ═══════════════════════════════════════════════════════════════════════════
-  # TODO: Add OBIS publishing targets in Phase 2
+  # TODO: Add OBIS publishing targets
   # ═══════════════════════════════════════════════════════════════════════════
   # tar_target(
   #   obis_archive,

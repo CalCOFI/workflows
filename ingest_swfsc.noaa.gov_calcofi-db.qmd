@@ -1,19 +1,8 @@
 ---
 title: "Ingest NOAA CalCOFI Database"
-execute:
-  echo: true
-  warning: false
-editor_options:
-  chunk_output_type: console
-format:
-  html:
-    code-fold: true
-editor:
-  markdown:
-    wrap: 72
 ---
 
-## Overview {.unnumbered}
+## Overview
 
 **Goal**: Generate the database from source files with workflow scripts
 to make updating easier and provenance fully transparent. This allows us
@@ -63,10 +52,11 @@ librarian::shelf(
   CalCOFI/calcofi4db, 
   CalCOFI/calcofi4r,
   DBI, dm, dplyr, DT, fs, glue, gargle, googledrive, here, htmltools, janitor,
-  jsonlite, knitr, litedown, lubridate, purrr, readr, rlang, sf, stringr, tibble, tidyr,
-  units, uuid, webshot2,
+  jsonlite, knitr, listviewer, litedown, lubridate, purrr, readr, rlang, sf,
+  stringr, tibble, tidyr, units, uuid, webshot2,
   quiet = T)
 options(readr.show_col_types = F)
+options(DT.options = list(scrollX = TRUE))
 
 # define paths
 dataset      <- "calcofi-db"
@@ -102,7 +92,7 @@ message(glue("Loaded {nrow(d$source_files)} tables from {d$paths$dir_csv}"))
 message(glue("Total rows: {sum(d$source_files$nrow)}"))
 ```
 
-### Check for any mismatched tables and fields
+## Check for any mismatched tables and fields
 
 ```{r}
 #| label: data_integrity_checkpoint
@@ -118,14 +108,14 @@ integrity <- check_data_integrity(
 render_integrity_message(integrity)
 ```
 
-### Show Source Files
+## Show Source Files
 
 ```{r}
 #| label: source-files
 show_source_files(d)
 ```
 
-### Show CSV Tables and Fields to Ingest
+## Show CSV Tables and Fields to Ingest
 
 ```{r}
 #| label: tbls_in
@@ -335,6 +325,62 @@ tbl(con, "lookup") |>
 
 Consolidate 5 ichthyoplankton tables (egg, eggstage, larva, larvastage, larvasize) into
 a single tidy table.
+
+```{mermaid}
+%%| label: consolidate_ichthyo_diagram
+%%| fig-cap: "Consolidate 5 ichthyoplankton tables into a single tidy ichthyo table with lookup."
+erDiagram
+    egg {
+        uuid net_uuid FK
+        int  species_id FK
+        int  tally
+    }
+    egg_stage {
+        uuid net_uuid FK
+        int  species_id FK
+        int  stage
+        int  tally
+    }
+    larva {
+        uuid net_uuid FK
+        int  species_id FK
+        int  tally
+    }
+    larva_stage {
+        uuid net_uuid FK
+        int  species_id FK
+        str  stage
+        int  tally
+    }
+    larva_size {
+        uuid net_uuid FK
+        int  species_id FK
+        dbl  length_mm
+        int  tally
+    }
+    ichthyo {
+        int ichthyo_id PK
+        int net_id FK
+        int species_id FK
+        str life_stage
+        str measurement_type
+        dbl measurement_value
+        int tally
+    }
+    lookup {
+        int lookup_id PK
+        str category
+        int lookup_num
+        str lookup_chr
+        str description
+    }
+    egg ||--|{ ichthyo : "life_stage = egg"
+    egg_stage ||--|{ ichthyo : "life_stage = egg, type = stage"
+    larva ||--|{ ichthyo : "life_stage = larva"
+    larva_stage ||--|{ ichthyo : "life_stage = larva, type = stage"
+    larva_size ||--|{ ichthyo : "life_stage = larva, type = size"
+    ichthyo }o--|| lookup : "measurement_value"
+```
 
 ```{r}
 #| label: consolidate_ichthyo
@@ -629,9 +675,7 @@ dm_draw(dm_dev_fk, view_type = "all")
 # add geometry column using DuckDB spatial
 # note: DuckDB spatial doesn't track SRID metadata (unlike PostGIS)
 # all geometries assumed WGS84 (EPSG:4326) by convention
-dbExecute(con, "ALTER TABLE site ADD COLUMN IF NOT EXISTS geom GEOMETRY")
-dbExecute(con, "UPDATE site SET geom = ST_Point(longitude, latitude)")
-message("Added geometry column to site table")
+add_point_geom(con, "site", lon_col = "longitude", lat_col = "latitude")
 ```
 
 ### Fix calcofi4r `grid`
@@ -731,22 +775,7 @@ message("Grid table created with geometry columns")
 ```{r}
 #| label: update_site_from_grid
 
-dbExecute(con, "ALTER TABLE site ADD COLUMN IF NOT EXISTS grid_key TEXT")
-
-# spatial join (may be slower than PostGIS without spatial indexes)
-dbExecute(con, "
-  UPDATE site SET grid_key = (
-    SELECT g.grid_key FROM grid g
-    WHERE ST_Intersects(site.geom, g.geom) LIMIT 1)")
-
-# check results
-grid_stats <- dbGetQuery(con, "
-  SELECT
-    CASE WHEN grid_key IS NULL THEN 'not_in_grid' ELSE 'in_grid' END as status,
-    COUNT(*) as n
-  FROM site
-  GROUP BY status")
-
+grid_stats <- assign_grid_key(con, "site")
 grid_stats |> datatable()
 ```
 
@@ -947,6 +976,19 @@ if (nrow(type_changes) > 0) {
 }
 ```
 
+## Data Preview
+
+Preview first and last rows of each table before writing parquet outputs.
+
+```{r}
+#| label: preview_tables
+#| results: asis
+
+preview_tables(con, c(
+  "cruise", "ship", "site", "tow", "net",
+  "species", "ichthyo", "lookup", "grid", "segment"))
+```
+
 ## Write Parquet Outputs
 
 Export tables to parquet files for downstream use.
@@ -995,7 +1037,15 @@ tibble(
   datatable(caption = "Table metadata summary")
 ```
 
-## Upload to GCS
+```{r}
+#| label: show_metadata_json
+
+listviewer::jsonedit(
+  jsonlite::fromJSON(metadata_path, simplifyVector = FALSE),
+  mode = "view")
+```
+
+## Upload to GCS Archive
 
 Upload parquet files, manifest, and metadata sidecar to `gs://calcofi-db/ingest/{provider}_{dataset}/`.
 
