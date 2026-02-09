@@ -3,6 +3,7 @@ title: "Explore Scripps PIC Matches with CalCOFI Icthyoplankton"
 execute:
   echo: true
   warning: false
+  message: true
 editor_options:
   chunk_output_type: console
 format:
@@ -287,6 +288,28 @@ Update @workflows/explore_zooplankton.qmd with the following file updates from L
   The xlsx filename stayed the same (just the directory changed). The Overview description was updated to note "22 columns incl. primary keys + UUIDs".
 ```
 
+### Fix messages {.unnumbered}
+
+Why are `message()` statements not outputting to rendered html?                                                                                                 
+```                                                              
+⏺ message() writes to stderr, which knitr captures separately as a "message" output class. In Quarto HTML with code-fold: true, these can be visually collapsed or
+   styled in a way that makes them easy to miss — and some configurations suppress them.                                                                        
+                                                                                                                                                                  
+  The simplest fix: switch to cat() for output you want visible in the rendered HTML. cat() writes to stdout, which always renders as standard console output.
+                                                                                                                                                                  
+  For example, change:                                                             
+  message(glue("Zooplankton PNT records: {format(nrow(d_zoo), big.mark = ',')}"))
+  to:
+  cat(glue("Zooplankton PNT records: {format(nrow(d_zoo), big.mark = ',')}"), "\n")
+
+  Want me to replace all message(glue(...)) calls with cat(glue(...), "\n") throughout the notebook?
+```
+
+yes
+
+```
+⏺ All 28 message() calls replaced with cat(). The output will now render as standard console text in the HTML instead of going to stderr.                         
+```
 
 :::
 
@@ -397,12 +420,18 @@ datatable(
 
 d_zoo <- read_csv(zoo_csv)
 
-message(glue(
-  "Zooplankton PNT records: {format(nrow(d_zoo), big.mark = ',')}"
-))
-message(glue(
-  "Columns: {ncol(d_zoo)}"
-))
+cat(
+  glue(
+    "Zooplankton PNT records: {format(nrow(d_zoo), big.mark = ',')}"
+  ),
+  "\n"
+)
+cat(
+  glue(
+    "Columns: {ncol(d_zoo)}"
+  ),
+  "\n"
+)
 ```
 
 ### Parse datetimes
@@ -429,14 +458,20 @@ d_zoo <- d_zoo |>
   ) |>
   select(-time_str)
 
-message(glue(
-  "Date range: {min(d_zoo$date_sample, na.rm = TRUE)} to ",
-  "{max(d_zoo$date_sample, na.rm = TRUE)}"
-))
-message(glue(
-  "Parsed datetime: {sum(!is.na(d_zoo$datetime_start))} of ",
-  "{nrow(d_zoo)} records"
-))
+cat(
+  glue(
+    "Date range: {min(d_zoo$date_sample, na.rm = TRUE)} to ",
+    "{max(d_zoo$date_sample, na.rm = TRUE)}"
+  ),
+  "\n"
+)
+cat(
+  glue(
+    "Parsed datetime: {sum(!is.na(d_zoo$datetime_start))} of ",
+    "{nrow(d_zoo)} records"
+  ),
+  "\n"
+)
 ```
 
 ### Summary stats
@@ -459,10 +494,13 @@ d_zoo |>
 d_zoo_cc <- d_zoo |>
   filter(Expedition_Type_pnt == "CalCOFI")
 
-message(glue(
-  "CalCOFI subset: {format(nrow(d_zoo_cc), big.mark = ',')} records ",
-  "({round(100 * nrow(d_zoo_cc) / nrow(d_zoo), 1)}% of total)"
-))
+cat(
+  glue(
+    "CalCOFI subset: {format(nrow(d_zoo_cc), big.mark = ',')} records ",
+    "({round(100 * nrow(d_zoo_cc) / nrow(d_zoo), 1)}% of total)"
+  ),
+  "\n"
+)
 ```
 
 ### Attribute tables
@@ -517,9 +555,12 @@ sf_zoo <- d_zoo_cc |>
     crs = 4326
   )
 
-message(glue(
-  "Distinct CalCOFI zoo stations: {nrow(sf_zoo)}"
-))
+cat(
+  glue(
+    "Distinct CalCOFI zoo stations: {nrow(sf_zoo)}"
+  ),
+  "\n"
+)
 
 # use leaflet with clustering for lighter HTML output
 leaflet(sf_zoo) |>
@@ -547,7 +588,7 @@ leaflet(sf_zoo) |>
 
 con <- cc_get_db()
 tbls <- cc_list_tables()
-message(glue("Tables: {paste(tbls, collapse = ', ')}"))
+cat(glue("Tables: {paste(tbls, collapse = ', ')}"), "\n")
 
 # show site schema
 cc_describe_table("site") |>
@@ -588,17 +629,26 @@ d_ich_tows <- tbl(con, "tow") |>
   ) |>
   collect()
 
-message(glue(
-  "Ichthyo tow records: {format(nrow(d_ich_tows), big.mark = ',')}"
-))
-message(glue(
-  "Date range: {min(d_ich_tows$date_ym, na.rm = TRUE)} to ",
-  "{max(d_ich_tows$date_ym, na.rm = TRUE)}"
-))
-message(glue(
-  "Distinct stations (line-station): ",
-  "{d_ich_tows |> distinct(line, station) |> nrow()}"
-))
+cat(
+  glue(
+    "Ichthyo tow records: {format(nrow(d_ich_tows), big.mark = ',')}"
+  ),
+  "\n"
+)
+cat(
+  glue(
+    "Date range: {min(d_ich_tows$date_ym, na.rm = TRUE)} to ",
+    "{max(d_ich_tows$date_ym, na.rm = TRUE)}"
+  ),
+  "\n"
+)
+cat(
+  glue(
+    "Distinct stations (line-station): ",
+    "{d_ich_tows |> distinct(line, station) |> nrow()}"
+  ),
+  "\n"
+)
 ```
 
 ### Inspect ichthyo time_start
@@ -627,9 +677,12 @@ sf_ich <- d_ich_tows |>
     crs = 4326
   )
 
-message(glue(
-  "Distinct ichthyo stations: {nrow(sf_ich)}"
-))
+cat(
+  glue(
+    "Distinct ichthyo stations: {nrow(sf_ich)}"
+  ),
+  "\n"
+)
 
 # use leaflet with clustering for lighter HTML output
 leaflet(sf_ich) |>
@@ -663,11 +716,14 @@ d_zoo_match <- d_zoo_cc |>
   ) |>
   filter(!is.na(line), !is.na(station))
 
-message(glue(
-  "Zoo records with valid line+station: ",
-  "{format(nrow(d_zoo_match), big.mark = ',')} of ",
-  "{format(nrow(d_zoo_cc), big.mark = ',')}"
-))
+cat(
+  glue(
+    "Zoo records with valid line+station: ",
+    "{format(nrow(d_zoo_match), big.mark = ',')} of ",
+    "{format(nrow(d_zoo_cc), big.mark = ',')}"
+  ),
+  "\n"
+)
 
 # inspect expedition code format
 d_zoo_match |>
@@ -729,14 +785,20 @@ n_m1_zoo <- d_zoo_match |>
   ) |>
   nrow()
 
-message(glue(
-  "Match 1 (line + station only):"
-))
-message(glue(
-  "  Zoo records matched: {format(n_m1_zoo, big.mark = ',')} of ",
-  "{format(nrow(d_zoo_match), big.mark = ',')} ",
-  "({round(100 * n_m1_zoo / nrow(d_zoo_match), 1)}%)"
-))
+cat(
+  glue(
+    "Match 1 (line + station only):"
+  ),
+  "\n"
+)
+cat(
+  glue(
+    "  Zoo records matched: {format(n_m1_zoo, big.mark = ',')} of ",
+    "{format(nrow(d_zoo_match), big.mark = ',')} ",
+    "({round(100 * n_m1_zoo / nrow(d_zoo_match), 1)}%)"
+  ),
+  "\n"
+)
 ```
 
 ### Match 2 — line + station + cruise YYMM
@@ -751,14 +813,20 @@ n_m2_zoo <- d_zoo_match |>
   ) |>
   nrow()
 
-message(glue(
-  "Match 2 (line + station + cruise YYMM):"
-))
-message(glue(
-  "  Zoo records matched: {format(n_m2_zoo, big.mark = ',')} of ",
-  "{format(nrow(d_zoo_match), big.mark = ',')} ",
-  "({round(100 * n_m2_zoo / nrow(d_zoo_match), 1)}%)"
-))
+cat(
+  glue(
+    "Match 2 (line + station + cruise YYMM):"
+  ),
+  "\n"
+)
+cat(
+  glue(
+    "  Zoo records matched: {format(n_m2_zoo, big.mark = ',')} of ",
+    "{format(nrow(d_zoo_match), big.mark = ',')} ",
+    "({round(100 * n_m2_zoo / nrow(d_zoo_match), 1)}%)"
+  ),
+  "\n"
+)
 
 # unmatched records
 d_m2_unmatched <- d_zoo_match |>
@@ -767,9 +835,12 @@ d_m2_unmatched <- d_zoo_match |>
     by = c("line", "station", "zoo_ym" = "ich_ym")
   )
 
-message(glue(
-  "  Unmatched: {format(nrow(d_m2_unmatched), big.mark = ',')}"
-))
+cat(
+  glue(
+    "  Unmatched: {format(nrow(d_m2_unmatched), big.mark = ',')}"
+  ),
+  "\n"
+)
 ```
 
 ### Matched by year
@@ -856,9 +927,12 @@ d_zoo_db <- d_zoo_cc |>
   )
 
 dbWriteTable(con_match, "zoo_pnt", d_zoo_db, overwrite = TRUE)
-message(glue(
-  "Registered {format(nrow(d_zoo_db), big.mark = ',')} zoo records"
-))
+cat(
+  glue(
+    "Registered {format(nrow(d_zoo_db), big.mark = ',')} zoo records"
+  ),
+  "\n"
+)
 ```
 
 ### Register ichthyoplankton data
@@ -885,10 +959,13 @@ d_ich_db <- d_ich_tows |>
   )
 
 dbWriteTable(con_match, "ich_tow", d_ich_db, overwrite = TRUE)
-message(glue(
-  "Registered {format(nrow(d_ich_db), big.mark = ',')} ",
-  "ichthyo tow records"
-))
+cat(
+  glue(
+    "Registered {format(nrow(d_ich_db), big.mark = ',')} ",
+    "ichthyo tow records"
+  ),
+  "\n"
+)
 ```
 
 ### Space-time match function
@@ -950,7 +1027,7 @@ sweep_results <- map_dfr(seq_len(nrow(params)), function(i) {
   h <- params$max_hours[i]
   m <- params$max_meters[i]
 
-  message(glue("  Matching: {h}h x {m}m ..."))
+  cat(glue("  Matching: {h}h x {m}m ..."), "\n")
   d <- match_spacetime(con_match, max_hours = h, max_meters = m)
 
   tibble(
@@ -990,18 +1067,27 @@ d_nearest_time <- d_st |>
   slice_min(time_diff_hrs, n = 1, with_ties = FALSE) |>
   ungroup()
 
-message(glue(
-  "Nearest-time matches: ",
-  "{format(nrow(d_nearest_time), big.mark = ',')}"
-))
-message(glue(
-  "  Median dist: ",
-  "{round(median(d_nearest_time$dist_m), 0)} m"
-))
-message(glue(
-  "  Median time diff: ",
-  "{round(median(d_nearest_time$time_diff_hrs), 1)} hrs"
-))
+cat(
+  glue(
+    "Nearest-time matches: ",
+    "{format(nrow(d_nearest_time), big.mark = ',')}"
+  ),
+  "\n"
+)
+cat(
+  glue(
+    "  Median dist: ",
+    "{round(median(d_nearest_time$dist_m), 0)} m"
+  ),
+  "\n"
+)
+cat(
+  glue(
+    "  Median time diff: ",
+    "{round(median(d_nearest_time$time_diff_hrs), 1)} hrs"
+  ),
+  "\n"
+)
 ```
 
 ### Best match: nearest by distance
@@ -1015,18 +1101,27 @@ d_nearest_dist <- d_st |>
   slice_min(dist_m, n = 1, with_ties = FALSE) |>
   ungroup()
 
-message(glue(
-  "Nearest-distance matches: ",
-  "{format(nrow(d_nearest_dist), big.mark = ',')}"
-))
-message(glue(
-  "  Median dist: ",
-  "{round(median(d_nearest_dist$dist_m), 0)} m"
-))
-message(glue(
-  "  Median time diff: ",
-  "{round(median(d_nearest_dist$time_diff_hrs), 1)} hrs"
-))
+cat(
+  glue(
+    "Nearest-distance matches: ",
+    "{format(nrow(d_nearest_dist), big.mark = ',')}"
+  ),
+  "\n"
+)
+cat(
+  glue(
+    "  Median dist: ",
+    "{round(median(d_nearest_dist$dist_m), 0)} m"
+  ),
+  "\n"
+)
+cat(
+  glue(
+    "  Median time diff: ",
+    "{round(median(d_nearest_dist$time_diff_hrs), 1)} hrs"
+  ),
+  "\n"
+)
 ```
 
 ### Map matched pairs
@@ -1127,10 +1222,13 @@ zoo_matched_st <- d_nearest_dist$zoo_row
 d_unmatched_st <- d_zoo_db |>
   filter(!zoo_row %in% zoo_matched_st)
 
-message(glue(
-  "Unmatched by space-time (12h/5km): ",
-  "{format(nrow(d_unmatched_st), big.mark = ',')} zoo records"
-))
+cat(
+  glue(
+    "Unmatched by space-time (12h/5km): ",
+    "{format(nrow(d_unmatched_st), big.mark = ',')} zoo records"
+  ),
+  "\n"
+)
 
 # gap by year for station+cruise method
 d_gap_m2 <- d_m2_unmatched |>
@@ -1184,7 +1282,7 @@ cat(
 #| label: cleanup
 
 dbDisconnect(con_match, shutdown = TRUE)
-message("Match database closed")
+cat("Match database closed\n")
 ```
 
 ::: {.callout-caution collapse="true"}
