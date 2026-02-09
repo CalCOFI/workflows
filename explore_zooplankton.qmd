@@ -1,0 +1,182 @@
+---
+title: "Explore Zooplankton Matches"
+format: html
+---
+
+## PROMPT
+
+```
+# from working directory of ~/Github/CalCOFI, with Claude CODE in plan mode:
+Evaluate the PROMPT and expand the notebook @workflows/explore_zooplankton.qmd
+```
+
+The goal is to explore the SIO / CalCOFI zooplankton data (more at [Zooplankton – CalCOFI](https://calcofi.org/data/marine-ecosystem-data/zooplankton/)) to see where there are matches to the ichthyoplankton data. The data files from the CalCOFI data manager Linsey include:
+
+- plankton_data: @~/My Drive/projects/calcofi/data-public/calcofi.org/zooplankton/SIOPIC_DB_PNTtable_allRecords_9Feb2026.csv
+
+- plankton_metadata: @~/My Drive/projects/calcofi/data-public/calcofi.org/zooplankton/SIOPIC_DB_PNTtable_fieldDetails_9Feb2026.xlsx
+
+And notes from Linsey:
+
+> I included our Parent Net Tow (= pnt suffix you will see in fields) Table with all net tow records and a second "ReadMe" file with field definitions and "tips" for those. 
+> 
+> Our ask is to see where PIC net tow samples are a match to SWF ichthyo. samples potentially utilizing: Expedition, Expedition Code, Station Line, Station Number, Latitude/Longitude polygon?, Net Type, Mesh Size?, Tow Type?, Fixative?, Preservative?
+>
+> I introduced a new field 'Expedition_Type_pnt' and was able to easily integrate term = CalCOFI for all cruises we'd want in this first pass that represent the most formal CalCOFI net tow records. I will have to at some point integrate additional terms e.g. 'NOAA Other' for cruises that have CalCOFI stations sampled for special purposes (e.g. SaKE, CPS surveys, STARR, MERRP, ORCA WHALE Expeditions, etc.) but this would have taken too much time to integrate universally atm.
+>
+> So, I believe it would be good to run this first pass for the records that have the Expedition_Type_pnt = CalCOFI and then the complete record set as second priority. 
+
+Use the database of ichthyoplankton data now available via @calcofi4r/ ie with:
+
+```r
+# remotes::install_github("calcofi/calcofi4r")  # install package (once, and per version)
+library(calcofi4r)  # load the package
+con <- cc_get_db()# connect to latest frozen release
+cc_list_tables() # list available tables
+DBI::dbGetQuery(con, "SELECT COUNT(*) FROM ichthyo") # query with SQL
+```
+
+Reference the space-time windowing in the @int-app/app/ workflow (but with older version of database having different schema). Try different approaches to matching the data, including:
+
+- single nearest cast (by time)
+- single nearest cast (by space)
+
+![Scatterplot showing relating icthyo dataset to bottle environmental dataset with space-time windows from the [CalCOFI integrated app](https://app.calcofi.io/int/).](./figures/int-app_scatterplot.png)
+
+
+### Response
+
+```
+⏺ The plan is complete. I explored:                                            
+  1. The zooplankton CSV (148K records, 20 columns) and Excel metadata                                                                                                                                          
+  2. The calcofi4r database schema (ichthyo → net → tow → site → cruise chain with integer IDs)                                                                                                                 
+  3. The prep_splot() space-time matching reference in int-app/app/functions.R                                                                                                                                  
+  4. The merge_ichthyo_bottle.qmd notebook for style/pattern reference                                                                                                                                          
+                                                                               
+  The plan covers 6 notebook sections: Setup, Zooplankton exploration, Ichthyoplankton exploration, Station-based matching (line + station + cruise), Space-time window matching (adapted from prep_splot()),
+  and a Comparison summary.
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Ready to code?
+                                                                                                                                                                                                                
+ Here is Claude's plan:
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ Plan: Expand workflows/explore_zooplankton.qmd                                
+
+ Context
+
+ The CalCOFI data manager Linsey provided SIO zooplankton (PIC) net tow data (148K records) and wants to find where these match SWFSC ichthyoplankton samples. This notebook will explore both datasets, try
+ multiple matching strategies, and report match rates to guide integration.
+
+ File to modify
+
+ - /Users/bbest/Github/CalCOFI/workflows/explore_zooplankton.qmd
+
+ Key reference files
+
+ - int-app/app/functions.R:716-788 — prep_splot() space-time matching pattern
+ - calcofi4r/R/read.R — cc_get_db(), cc_read_*() convenience functions
+ - workflows/merge_ichthyo_bottle.qmd — notebook style reference (librarian::shelf, datatable, dir_data pattern)
+ - workflows/ingest_swfsc.noaa.gov_calcofi-db.qmd:600-630 — DB schema (cruise_key, site_id, tow_id, net_id)
+
+ Database schema (confirmed)
+
+ cruise (cruise_key PK, ship_key FK, date_ym)
+   → site (site_id PK, cruise_key FK, orderocc, latitude, longitude, line, station)
+     → tow (tow_id PK, site_id FK, tow_type_key, tow_number, time_start)
+       → net (net_id PK, tow_id FK, side, std_haul_factor, vol_sampled_m3, ...)
+         → ichthyo (ichthyo_id PK, net_id FK, species_id FK, tally, ...)
+
+ Zooplankton CSV columns
+
+ EXPEDITION_pnt, EXPED_CODE_pnt, Expedition_Type_pnt, SHIP_pnt, SWFOrder_Occ, STATION_LINE_pnt, STATION_NUMBER_pnt, LAT_DECIMAL_pnt, LONG_DECIMAL_pnt, SAMPLE_DATE_pnt, START_TIME_pnt, END_TIME_pnt,
+ DEPTH_MIN_pnt, DEPTH_MAX_pnt, MAX_MWO_pnt, NET_TYPE_pnt, MESH_SIZE_pnt, TOW_TYPE_pnt, FIXATIVE_pnt, PRESERVATIVE_pnt
+
+ ---
+ Notebook Sections
+
+ 1. Setup
+
+ - librarian::shelf(calcofi/calcofi4r, DBI, dplyr, DT, glue, here, leaflet, lubridate, mapview, purrr, readr, readxl, sf, stringr, tibble, tidyr, quiet = T)
+ - Define file paths using dir_data pattern from merge_ichthyo_bottle.qmd (Linux vs macOS toggle)
+ - Read metadata Excel with readxl::read_excel(), display with DT::datatable()
+
+ 2. Read & Explore Zooplankton Data
+
+ - Read CSV with readr::read_csv()
+ - Parse datetimes: mdy(SAMPLE_DATE_pnt) for date; str_pad(START_TIME_pnt, 4, pad = "0") for time; combine into datetime_start with ymd_hm() and tz = "America/Los_Angeles"
+ - Summary stats: nrow, date range, expedition type breakdown via count() + datatable()
+ - Filter: Expedition_Type_pnt == "CalCOFI" → d_zoo_cc (82K records, first pass per Linsey)
+ - Attribute tables: net types, tow types, mesh sizes, fixatives for CalCOFI subset
+ - Map stations: distinct lat/lon → sf::st_as_sf() → mapview() colored by line
+
+ 3. Read & Explore Ichthyoplankton Data
+
+ - Connect: con <- cc_get_db(); cc_list_tables(); cc_describe_table("site")
+ - Build tow-level flat view via dbplyr:
+ d_ich_tows <- tbl(con, "tow") |>
+   left_join(tbl(con, "site"),   by = "site_id") |>
+   left_join(tbl(con, "cruise"), by = "cruise_key") |>
+   select(tow_id, site_id, cruise_key, ship_key, date_ym,
+          orderocc, latitude, longitude, line, station,
+          tow_type_key, tow_number, time_start) |>
+   collect()
+ - Summary stats: nrow, date range, station count
+ - Map stations: distinct lat/lon → mapview() colored by line
+
+ 4. Match by Station (Line + Station Number)
+
+ - Prepare: Convert STATION_LINE_pnt and STATION_NUMBER_pnt to numeric; inspect EXPED_CODE_pnt format (YYMM vs YYYYMM)
+ - Cruise code reconciliation: cruise_key is YYMMKK format. EXPED_CODE_pnt is YYMM or YYYYMM. Extract YY and MM from both for comparison, or derive a cruise_ym from date_ym
+ - Match 1 — line + station only: inner_join(by = c("line", "station")) → many-to-many (all cruises)
+ - Match 2 — line + station + cruise date: add expedition code matching
+ - Report: match counts, percentage of zoo records matched, unmatched records via anti_join()
+ - Summary by year: count(year) + datatable()
+
+ 5. Match by Space-Time Window
+
+ Adapt the prep_splot() approach from int-app/app/functions.R:
+
+ - Register zoo data in DuckDB: DBI::dbWriteTable(con, "zoo_pnt", d_zoo_db, overwrite = TRUE) after selecting/renaming key columns
+ - Load spatial extension: DBI::dbExecute(con, "INSTALL spatial; LOAD spatial;")
+ - Create ichthyo tow view: SQL view joining tow → site → cruise with lat/lon and time_start
+ - Space-time match function using SQL:
+   - Time window: ich_datetime BETWEEN zoo_datetime - INTERVAL N HOUR AND zoo_datetime + INTERVAL N HOUR
+   - Distance: ST_Distance_Sphere(ST_Point(zoo_lon, zoo_lat), ST_Point(ich_lon, ich_lat)) <= M
+   - Return: both coordinates, time_diff_hrs, dist_m
+ - Parameter sweep: try combinations of 6h/12h/24h × 2km/5km, report match rates in a summary table
+ - Method 1 — nearest by time: group_by(zoo_row) |> slice_min(time_diff_hrs)
+ - Method 2 — nearest by distance: group_by(zoo_row) |> slice_min(dist_m)
+ - Map matched pairs: sf linestrings connecting zoo→ichthyo points, colored by distance
+
+ 6. Comparison & Summary
+
+ - Summary table: all methods side-by-side (station match, station+cruise, space-time variants) with counts and percentages
+ - Gap analysis: zoo records unmatched by any method, by year
+ - Recommendations: which approach gives best coverage, optimal thresholds, next steps (full dataset beyond CalCOFI type)
+
+ ---
+ Technical notes
+
+ - Timezone: Zoo times are PST. Ichthyo time_start needs inspection — may be UTC. Handle explicitly.
+ - Memory: Don't collect full ichthyo table (~830K rows). Work at tow level (~75K) for matching.
+ - DuckDB spatial: Must INSTALL spatial; LOAD spatial; before using ST_Distance_Sphere(). The cc_get_db() connection may be read-only views on GCS parquet — need to handle temp table creation carefully (may
+ need a separate local DuckDB, or use duckdb() in-memory with both datasets registered).
+ - Code style: 2-space indent, |> pipe, snake_case, lowercase comments, librarian::shelf(), datatable() for tables, mapview() for maps.
+
+ Verification
+
+ 1. Render with quarto::quarto_render("workflows/explore_zooplankton.qmd")
+ 2. Check that all sections produce output (tables, maps, match statistics)
+ 3. Verify the space-time matching function returns reasonable match rates
+ 4. Confirm the summary comparison table shows all methods
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+
+ Claude has written up a plan and is ready to execute. Would you like to proceed?
+
+ ❯ 1. Yes, clear context and auto-accept edits (shift+tab)
+   2. Yes, auto-accept edits
+   3. Yes, manually approve edits
+   4. Type here to tell Claude what to change
+```
+
