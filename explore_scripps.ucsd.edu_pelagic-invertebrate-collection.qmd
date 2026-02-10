@@ -15,38 +15,58 @@ editor:
 ---
 
 ::: {.callout-caution collapse="true"}
-
 ## Claude Code Interactions {.unnumbered}
 
-Used [Claude Code by Anthropic](https://claude.com/product/claude-code) from the command line to develop this notebook.
+Used [Claude Code by Anthropic](https://claude.com/product/claude-code)
+from the command line to develop this notebook.
 
-```
+```         
 # from working directory of ~/Github/CalCOFI, with Claude CODE in plan mode sent:
 
 Evaluate the PROMPT and expand the notebook @workflows/explore_zooplankton.qmd
 ```
 
-### PROMPT {.unnumbered}
+### Creation Prompt {.unnumbered}
 
-The goal is to explore the SIO / CalCOFI zooplankton data (more at [Zooplankton – CalCOFI](https://calcofi.org/data/marine-ecosystem-data/zooplankton/)) to see where there are matches to the ichthyoplankton data. The data files from the CalCOFI data manager Linsey include:
+The goal is to explore the SIO / CalCOFI zooplankton data (more at
+[Zooplankton –
+CalCOFI](https://calcofi.org/data/marine-ecosystem-data/zooplankton/))
+to see where there are matches to the ichthyoplankton data. The data
+files from the CalCOFI data manager Linsey include:
 
-- plankton_data: `@~/My Drive/projects/calcofi/data-public/scripps.ucsd.edu/pelagic-invertebrate-collection/SIOPIC_DB_PNTtable_allRecords_wUUID_9Feb2026.csv`
+-   plankton_data:
+    `@~/My Drive/projects/calcofi/data-public/scripps.ucsd.edu/pelagic-invertebrate-collection/SIOPIC_DB_PNTtable_allRecords_wUUID_9Feb2026.csv`
 
-- plankton_metadata: `@~/My Drive/projects/calcofi/data-public/scripps.ucsd.edu/pelagic-invertebrate-collection/SIOPIC_DB_PNTtable_fieldDetails_9Feb2026.xlsx'`
+-   plankton_metadata:
+    `@~/My Drive/projects/calcofi/data-public/scripps.ucsd.edu/pelagic-invertebrate-collection/SIOPIC_DB_PNTtable_fieldDetails_9Feb2026.xlsx'`
 
 And notes from Linsey:
 
-> I included our Parent Net Tow (= pnt suffix you will see in fields) Table with all net tow records and a second "ReadMe" file with field definitions and "tips" for those. 
-> 
-> Our ask is to see where PIC net tow samples are a match to SWF ichthyo. samples potentially utilizing: Expedition, Expedition Code, Station Line, Station Number, Latitude/Longitude polygon?, Net Type, Mesh Size?, Tow Type?, Fixative?, Preservative?
+> I included our Parent Net Tow (= pnt suffix you will see in fields)
+> Table with all net tow records and a second "ReadMe" file with field
+> definitions and "tips" for those.
 >
-> I introduced a new field 'Expedition_Type_pnt' and was able to easily integrate term = CalCOFI for all cruises we'd want in this first pass that represent the most formal CalCOFI net tow records. I will have to at some point integrate additional terms e.g. 'NOAA Other' for cruises that have CalCOFI stations sampled for special purposes (e.g. SaKE, CPS surveys, STARR, MERRP, ORCA WHALE Expeditions, etc.) but this would have taken too much time to integrate universally atm.
+> Our ask is to see where PIC net tow samples are a match to SWF
+> ichthyo. samples potentially utilizing: Expedition, Expedition Code,
+> Station Line, Station Number, Latitude/Longitude polygon?, Net Type,
+> Mesh Size?, Tow Type?, Fixative?, Preservative?
 >
-> So, I believe it would be good to run this first pass for the records that have the Expedition_Type_pnt = CalCOFI and then the complete record set as second priority. 
+> I introduced a new field 'Expedition_Type_pnt' and was able to easily
+> integrate term = CalCOFI for all cruises we'd want in this first pass
+> that represent the most formal CalCOFI net tow records. I will have to
+> at some point integrate additional terms e.g. 'NOAA Other' for cruises
+> that have CalCOFI stations sampled for special purposes (e.g. SaKE,
+> CPS surveys, STARR, MERRP, ORCA WHALE Expeditions, etc.) but this
+> would have taken too much time to integrate universally atm.
+>
+> So, I believe it would be good to run this first pass for the records
+> that have the Expedition_Type_pnt = CalCOFI and then the complete
+> record set as second priority.
 
-Use the database of ichthyoplankton data now available via `@calcofi4r/` ie with:
+Use the database of ichthyoplankton data now available via `@calcofi4r/`
+ie with:
 
-```r
+``` r
 # remotes::install_github("calcofi/calcofi4r")  # install package (once, and per version)
 library(calcofi4r)  # load the package
 con <- cc_get_db()# connect to latest frozen release
@@ -54,17 +74,20 @@ cc_list_tables() # list available tables
 DBI::dbGetQuery(con, "SELECT COUNT(*) FROM ichthyo") # query with SQL
 ```
 
-Reference the space-time windowing in the `@int-app/app/` workflow (but with older version of database having different schema). Try different approaches to matching the data, including:
+Reference the space-time windowing in the `@int-app/app/` workflow (but
+with older version of database having different schema). Try different
+approaches to matching the data, including:
 
-- single nearest cast (by time)
-- single nearest cast (by space)
+-   single nearest cast (by time)
+-   single nearest cast (by space)
 
-![Scatterplot showing relating icthyo dataset to bottle environmental dataset with space-time windows from the [CalCOFI integrated app](https://app.calcofi.io/int/).](./figures/int-app_scatterplot.png)
+![Scatterplot showing relating icthyo dataset to bottle environmental
+dataset with space-time windows from the [CalCOFI integrated
+app](https://app.calcofi.io/int/).](./figures/int-app_scatterplot.png)
 
+#### Response {.unnumbered}
 
-### Response {.unnumbered}
-
-```
+```         
 ⏺ The plan is complete. I explored:                                            
   1. The zooplankton CSV (148K records, 20 columns) and Excel metadata                                                                                                                                          
   2. The calcofi4r database schema (ichthyo → net → tow → site → cruise chain with integer IDs)                                                                                                                 
@@ -200,7 +223,7 @@ Reference the space-time windowing in the `@int-app/app/` workflow (but with old
 
 1
 
-```
+```         
 ⏺ The notebook has been written. Here's a summary of what was implemented in workflows/explore_zooplankton.qmd:                                                                                                                                                                                                  
   6 sections, ~450 lines of R/Quarto code:                                                                                                                        
                                                                                                                                                                   
@@ -221,9 +244,10 @@ Reference the space-time windowing in the `@int-app/app/` workflow (but with old
   - Zoo times treated as PST; ichthyo time_start inspected explicitly
 ```
 
-The pandoc portion of rendering seems stuck. How to fix or explore, inspect running processes? processing file: explore_zooplankton.qmd 
+The pandoc portion of rendering seems stuck. How to fix or explore,
+inspect running processes? processing file: explore_zooplankton.qmd
 
-```
+```         
 
 ⏺ Pandoc is running at 99.6% CPU and has been going for 5+ minutes. This is almost certainly due to the large HTML widgets (multiple mapview maps with many points
    embedded inline). Let me check the intermediate file size.
@@ -267,17 +291,24 @@ The pandoc portion of rendering seems stuck. How to fix or explore, inspect runn
 
 ### Update with files containing UUIDs {.unnumbered}
 
-Update @workflows/explore_zooplankton.qmd with the following file updates from Linsey, which now include the net tow primary keys and UUIDs.
+Update @workflows/explore_zooplankton.qmd with the following file
+updates from Linsey, which now include the net tow primary keys and
+UUIDs.
 
-> I realized my first pass at this I did not incorporate our net tow primary keys nor UUIDs. They are now integrated in the updated files:
+> I realized my first pass at this I did not incorporate our net tow
+> primary keys nor UUIDs. They are now integrated in the updated files:
 
-- plankton_data: `@~/My Drive/projects/calcofi/data-public/scripps.ucsd.edu/pelagic-invertebrate-collection/SIOPIC_DB_PNTtable_allRecords_wUUID_9Feb2026.csv`
+-   plankton_data:
+    `@~/My Drive/projects/calcofi/data-public/scripps.ucsd.edu/pelagic-invertebrate-collection/SIOPIC_DB_PNTtable_allRecords_wUUID_9Feb2026.csv`
 
-- plankton_metadata: `@~/My Drive/projects/calcofi/data-public/scripps.ucsd.edu/pelagic-invertebrate-collection/SIOPIC_DB_PNTtable_fieldDetails_9Feb2026.xlsx`
+-   plankton_metadata:
+    `@~/My Drive/projects/calcofi/data-public/scripps.ucsd.edu/pelagic-invertebrate-collection/SIOPIC_DB_PNTtable_fieldDetails_9Feb2026.xlsx`
 
 (Retain the "Claude Code Interactions" section untouched)
 
-```
+#### Response {.unnumbered}
+
+```         
 ⏺ Done. Three changes made (leaving the "Claude Code Interactions" section untouched):                                                                            
   
   1. dir_data — updated from calcofi.org/zooplankton to scripps.ucsd.edu/pelagic-invertebrate-collection                                                          
@@ -290,8 +321,11 @@ Update @workflows/explore_zooplankton.qmd with the following file updates from L
 
 ### Fix messages {.unnumbered}
 
-Why are `message()` statements not outputting to rendered html?                                                                                                 
-```                                                              
+Why are `message()` statements not outputting to rendered html?
+
+#### Response {.unnumbered}
+
+```         
 ⏺ message() writes to stderr, which knitr captures separately as a "message" output class. In Quarto HTML with code-fold: true, these can be visually collapsed or
    styled in a way that makes them easy to miss — and some configurations suppress them.                                                                        
                                                                                                                                                                   
@@ -307,8 +341,73 @@ Why are `message()` statements not outputting to rendered html?
 
 yes
 
-```
+```         
 ⏺ All 28 message() calls replaced with cat(). The output will now render as standard console text in the HTML instead of going to stderr.                         
+```
+
+### Incorporate feedback from Ed {.unnumbered}
+
+In @explore_scripps.ucsd.edu_pelagic-invertebrate-collection.qmd, incorporate the following feedback from Ed and leave "## Claude Code Interactions" section untouched:
+
+The 91% space-time query is pretty good news. I spotted a couple of
+things that would tighten this up slightly.
+
+1. Our db begins in 1951. We do have some pre-1951 data but things were
+a little bit different and we don't consider them to be part of the
+standard data set. So I suggest we just eliminate those for now as a low
+priority item.
+
+2. I think preservative must be added to all queries, e.g., space +
+time + preservative. This is because you are creating 1:1 matches by
+paired tow, not net/codend. That is, sometimes there is a formalin
+sample from the starboard net and an ethanol sample from the port net,
+both coming from the same tow. So, for example, here are two records
+from a paired tow. I think your sql spatio-temporal query will just
+match the first one in the table. Not sure what glue, etc. are doing. 
+
+|  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|
+|  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+|  | CALCOFI |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| 9807 |  | 9807 |  | CalCOFI |  | NEW HORIZON |  | 76.7 |  | 49 |  | 35.083 |  | -120.78 |  | 7/24/98 |  | 458 |  | 504 |  |  |  | 61 |  | 90 |  | CALBOBL |  | 0.505 |  | OBLIQUE |  | formaldehyde |  | formaldehyde |  | 100768 |  | 90CB05C3-32C9-41BE-8552-5F52C251AFA8 |  |  |
+|  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+|  | CALCOFI 9807 |  | 9807 |  | CalCOFI |  | NEW HORIZON |  | 76.7 |  | 49 |  | 35.083 |  | -120.78 |  | 7/24/98 |  | 458 |  | 504 |  |  |  | 61 |  | 90 |  | CALBOBL |  | 0.505 |  | OBLIQUE |  | ethanol |  | ethanol |  | 107972 |  | 8059E029-2B4D-42DD-99D3-DF55D76E57EF |  |
+|  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+
+
+I'm not sure if I'm restating your suggested next steps in a different
+way but given the good space-time match, shouldn't we start with that
+and play the "one of these things is not like the others" game within
+the spatio-temporal matches that do not match for cruise, line, station
+(e.g., noaa cruise, pic cruise, noaa line, pic line, noaa station, pic
+station)? That would get us to a \>91% match pretty quickly. Then we
+could tackle the problem children. 
+
+Also for the problem children, I could do a quick sanity check in our db
+to screen out anything that we definitely don't have for whatever
+reason.
+
+#### Response {.unnumbered}
+
+```
+⏺ Good — the Claude Code Interactions section is untouched. Here's a summary of all changes made:  
+
+  Changes incorporated from Ed's feedback:                                                                                                              
+  1. Pre-1951 filter (filter_calcofi chunk, line 569-574): Added year >= 1951 filter with comment explaining the ichthyo DB begins in 1951 and pre-1951 
+  data is non-standard.                                 
+  2. Preservative carried through all queries:
+    - Added preservatives summary table in zoo_attributes chunk
+    - Added preserv = PRESERVATIVE_pnt to d_zoo_match for station matching
+    - Added zoo_preserv = PRESERVATIVE_pnt to DuckDB registration in register_zoo
+    - Added z.zoo_preserv plus zoo_line, zoo_stn, zoo_ym, ich_line, ich_stn, ich_ym to the space-time SQL SELECT for downstream diagnostics
+  3. New "Diagnostics" section (between Map matched pairs and Comparison & Summary) with 4 sub-sections:
+    - Classify matches by field agreement — checks which space-time matches also agree on line, station, cruise YYMM
+    - Breakdown of discrepancy types — counts by combination of field agreement
+    - Preservative breakdown — distribution in matched records
+    - Inspect mismatched records — datatable of records where space-time matched but cruise/line/station disagree
+  4. Updated Overview — notes preservative and pre-1951 filter; added "Field diagnostics" as 4th matching strategy
+  5. Updated Recommendations — reframed per Ed's workflow: start with space-time, compare fields within matches, investigate discrepancies, tackle
+  problem children with Ed's DB sanity check, then expand to full dataset
 ```
 
 :::
@@ -317,21 +416,24 @@ yes
 
 **Goal**: Explore the SIO / CalCOFI zooplankton (PIC) net tow data to
 find where records match SWFSC ichthyoplankton samples. More at
-[Zooplankton – CalCOFI](https://calcofi.org/data/marine-ecosystem-data/zooplankton/).
+[Zooplankton –
+CalCOFI](https://calcofi.org/data/marine-ecosystem-data/zooplankton/).
 
 **Data sources**:
 
 -   **Zooplankton**: SIO PIC Parent Net Tow table (148K records, 22
-    columns incl. primary keys + UUIDs) from CalCOFI data manager
-    Linsey
+    columns incl. primary keys + UUIDs) from CalCOFI data manager Linsey
 -   **Ichthyoplankton**: SWFSC database via `calcofi4r::cc_get_db()`
 
-**Matching strategies**:
+**Matching strategies** (preservative carried through all queries to
+distinguish paired tows; pre-1951 records excluded per Ed):
 
 1.  **Station match** — line + station number
 2.  **Station + cruise match** — line + station + expedition code
-3.  **Space-time window** — adapted from `prep_splot()` in the
-    [CalCOFI integrated app](https://app.calcofi.io/int/)
+3.  **Space-time window** — adapted from `prep_splot()` in the [CalCOFI
+    integrated app](https://app.calcofi.io/int/)
+4.  **Field diagnostics** — within space-time matches, compare
+    cruise/line/station to identify discrepancies
 
 **Notes from Linsey**:
 
@@ -491,12 +593,16 @@ d_zoo |>
 ```{r}
 #| label: filter_calcofi
 
+# filter to CalCOFI expeditions, and exclude pre-1951 records since
+# the ichthyo DB begins in 1951 (per Ed: pre-1951 data is non-standard)
 d_zoo_cc <- d_zoo |>
-  filter(Expedition_Type_pnt == "CalCOFI")
+  filter(
+    Expedition_Type_pnt == "CalCOFI",
+    year >= 1951)
 
 cat(
   glue(
-    "CalCOFI subset: {format(nrow(d_zoo_cc), big.mark = ',')} records ",
+    "CalCOFI subset (1951+): {format(nrow(d_zoo_cc), big.mark = ',')} records ",
     "({round(100 * nrow(d_zoo_cc) / nrow(d_zoo), 1)}% of total)"
   ),
   "\n"
@@ -531,6 +637,13 @@ d_zoo_cc |>
   count(FIXATIVE_pnt, name = "n") |>
   arrange(desc(n)) |>
   datatable(caption = "CalCOFI zooplankton fixatives")
+
+# preservatives (important: paired tows can have different preservatives,
+# e.g. formalin starboard + ethanol port from same tow)
+d_zoo_cc |>
+  count(PRESERVATIVE_pnt, name = "n") |>
+  arrange(desc(n)) |>
+  datatable(caption = "CalCOFI zooplankton preservatives")
 ```
 
 ### Map stations
@@ -708,11 +821,12 @@ leaflet(sf_ich) |>
 ```{r}
 #| label: prep_keys
 
-# prepare zoo keys: convert line/station to numeric
+# prepare zoo keys: convert line/station to numeric, carry preservative
 d_zoo_match <- d_zoo_cc |>
   mutate(
-    line = as.numeric(STATION_LINE_pnt),
-    station = as.numeric(STATION_NUMBER_pnt)
+    line       = as.numeric(STATION_LINE_pnt),
+    station    = as.numeric(STATION_NUMBER_pnt),
+    preserv    = PRESERVATIVE_pnt
   ) |>
   filter(!is.na(line), !is.na(station))
 
@@ -909,14 +1023,15 @@ d_zoo_db <- d_zoo_cc |>
     !is.na(datetime_start)
   ) |>
   transmute(
-    zoo_row = row_number(),
-    zoo_pk = ParentNetTowEventID_pk,
-    zoo_uuid = occurenceID_UUID_pnt,
-    zoo_lat = LAT_DECIMAL_pnt,
-    zoo_lon = LONG_DECIMAL_pnt,
-    zoo_dt = datetime_start,
-    zoo_line = as.numeric(STATION_LINE_pnt),
-    zoo_stn = as.numeric(STATION_NUMBER_pnt),
+    zoo_row       = row_number(),
+    zoo_pk        = ParentNetTowEventID_pk,
+    zoo_uuid      = occurenceID_UUID_pnt,
+    zoo_lat       = LAT_DECIMAL_pnt,
+    zoo_lon       = LONG_DECIMAL_pnt,
+    zoo_dt        = datetime_start,
+    zoo_line      = as.numeric(STATION_LINE_pnt),
+    zoo_stn       = as.numeric(STATION_NUMBER_pnt),
+    zoo_preserv   = PRESERVATIVE_pnt,
     zoo_ym = case_when(
       nchar(as.character(EXPED_CODE_pnt)) == 4 ~
         as.character(EXPED_CODE_pnt),
@@ -985,10 +1100,17 @@ match_spacetime <- function(
       z.zoo_lat,
       z.zoo_lon,
       z.zoo_dt,
+      z.zoo_line,
+      z.zoo_stn,
+      z.zoo_ym,
+      z.zoo_preserv,
       i.ich_row,
       i.ich_lat,
       i.ich_lon,
       i.ich_dt,
+      i.ich_line,
+      i.ich_stn,
+      i.ich_ym,
       i.tow_id,
       ABS(
         EPOCH(z.zoo_dt - i.ich_dt)
@@ -1173,6 +1295,122 @@ leaflet(sf_pairs) |>
   )
 ```
 
+## Diagnostics: Field Discrepancies Within Space-Time Matches
+
+Per Ed's suggestion: start with the space-time matches and compare
+cruise, line, station between zoo and ichthyo to find discrepancies
+("one of these things is not like the others"). This gets us to >91%
+quickly, then we can tackle the problem children separately.
+
+### Classify matches by field agreement
+
+```{r}
+#| label: classify_matches
+
+# use nearest-distance matches and check which fields agree
+d_diag <- d_nearest_dist |>
+  mutate(
+    line_match = (zoo_line == ich_line),
+    stn_match  = (zoo_stn  == ich_stn),
+    ym_match   = (zoo_ym   == ich_ym),
+    all_match  = line_match & stn_match & ym_match
+  )
+
+# summary counts
+cat(
+  glue(
+    "Space-time matches (12h/5km nearest-dist): ",
+    "{format(nrow(d_diag), big.mark = ',')}"
+  ),
+  "\n"
+)
+cat(
+  glue(
+    "  All fields agree (line + station + cruise YYMM): ",
+    "{sum(d_diag$all_match, na.rm = TRUE)} ",
+    "({round(100 * sum(d_diag$all_match, na.rm = TRUE) / nrow(d_diag), 1)}%)"
+  ),
+  "\n"
+)
+cat(
+  glue(
+    "  Line mismatch: {sum(!d_diag$line_match, na.rm = TRUE)}"
+  ),
+  "\n"
+)
+cat(
+  glue(
+    "  Station mismatch: {sum(!d_diag$stn_match, na.rm = TRUE)}"
+  ),
+  "\n"
+)
+cat(
+  glue(
+    "  Cruise YYMM mismatch: {sum(!d_diag$ym_match, na.rm = TRUE)}"
+  ),
+  "\n"
+)
+```
+
+### Breakdown of discrepancy types
+
+```{r}
+#| label: discrepancy_types
+
+d_diag |>
+  count(line_match, stn_match, ym_match, name = "n") |>
+  arrange(desc(n)) |>
+  datatable(caption = "Field agreement breakdown within space-time matches")
+```
+
+### Preservative breakdown in matches
+
+```{r}
+#| label: preservative_breakdown
+
+# show preservative distribution in matched zoo records
+d_nearest_dist |>
+  count(zoo_preserv, name = "n") |>
+  arrange(desc(n)) |>
+  datatable(
+    caption = "Preservative distribution in space-time matched zoo records"
+  )
+```
+
+### Inspect mismatched records
+
+```{r}
+#| label: inspect_mismatches
+
+# show records where space-time matched but fields disagree
+d_mismatched <- d_diag |>
+  filter(!all_match) |>
+  select(
+    zoo_row, zoo_line, zoo_stn, zoo_ym, zoo_preserv,
+    ich_row, ich_line, ich_stn, ich_ym,
+    tow_id, dist_m, time_diff_hrs
+  ) |>
+  mutate(
+    dist_m        = round(dist_m, 0),
+    time_diff_hrs = round(time_diff_hrs, 1)
+  )
+
+cat(
+  glue(
+    "Records with field discrepancies: ",
+    "{format(nrow(d_mismatched), big.mark = ',')}"
+  ),
+  "\n"
+)
+
+d_mismatched |>
+  datatable(
+    caption = paste0(
+      "Space-time matches with cruise/line/station discrepancies ",
+      "(zoo vs ichthyo)")
+  )
+```
+
 ## Comparison & Summary
 
 ### Summary table: all methods
@@ -1251,27 +1489,35 @@ cat(
   "
 ### Key findings
 
-- **Station matching** (line + station) gives the broadest coverage
-  but includes cross-cruise matches that may not be meaningful.
-- **Station + cruise YYMM** is the most precise tabular match and
-  should be the primary method for linking records.
-- **Space-time matching** captures records where station codes differ
-  but the tows were physically close in space and time. This is
-  useful for non-standard cruises or slight station numbering
-  differences.
+- **Pre-1951 records excluded** since the ichthyo DB begins in 1951;
+  pre-1951 data is non-standard (low priority to revisit).
+- **Preservative** distinguishes paired tows from the same location/time
+  (e.g. formalin starboard + ethanol port). All queries now carry
+  preservative through to avoid collapsing paired tows.
+- **Space-time matching** (12h/5km) gives the best initial coverage
+  (~91%) and captures records where station codes differ.
+- **Field diagnostics** within space-time matches reveal which records
+  agree on cruise/line/station vs. those with discrepancies.
 
-### Recommended next steps
+### Recommended workflow (per Ed)
 
-1. Use **station + cruise YYMM** as the primary matching key for the
-   CalCOFI subset.
-2. Use **space-time nearest-distance** (12h / 5km) as a supplementary
-   method to catch records missed by station matching.
-3. Expand to the full dataset (all expedition types, not just CalCOFI)
-   as a second priority.
-4. Investigate unmatched records — are they from years where ichthyo
-   data is missing, or from non-standard station patterns?
-5. Consider building a persistent cross-reference table linking
-   zoo_row to tow_id for downstream analysis.
+1. **Start with space-time matches** as the primary approach (~91%
+   coverage).
+2. **Compare fields within matches**: for records that matched
+   spatiotemporally, check which ones also agree on cruise, line,
+   station. These are high-confidence matches.
+3. **Investigate discrepancies**: where space-time matched but
+   cruise/line/station disagree, play 'one of these things is not
+   like the others' (e.g. compare PIC cruise vs NOAA cruise, PIC
+   line vs NOAA line, PIC station vs NOAA station). This should
+   quickly push match rate above 91%.
+4. **Tackle problem children**: Ed can do a sanity check in the NOAA
+   DB to screen out records that definitely don't exist on the
+   ichthyo side, reducing the unmatched pool.
+5. **Expand to full dataset**: once CalCOFI-type matching is solid,
+   extend to all expedition types as second priority.
+6. **Build persistent crosswalk table**: link zoo_pk/zoo_uuid to
+   tow_id for downstream analysis.
 "
 )
 ```
@@ -1286,11 +1532,9 @@ cat("Match database closed\n")
 ```
 
 ::: {.callout-caution collapse="true"}
-
-## Session Info  {.unnumbered}
+## Session Info {.unnumbered}
 
 ```{r session_info}
 devtools::session_info()
 ```
-
 :::
