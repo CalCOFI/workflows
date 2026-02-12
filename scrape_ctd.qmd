@@ -114,12 +114,15 @@ dt <- function(d, fname, n_page = 10, ...) {
 
 # variables
 url <- "https://calcofi.org/data/oceanographic-data/ctd-cast-files/"
-dir_dl <- "~/My Drive/projects/calcofi/data/calcofi.org/ctd-cast/download"
+dir_big <- "~/_big/calcofi.org/ctd-cast"
+dir_dl <- "~/My Drive/projects/calcofi/data-public/calcofi.org/ctd-cast/download"
 dir_dl <- path_expand(dir_dl)
 bind_prelonlat_rds <- glue("{dir_dl}/bind_pre-lon-lat-clean.rds")
 pts_filt_rds <- glue("{dir_dl}/pts_filt.rds")
-ctd_pq <- glue("{dir_dl}/ctd.parquet")
-db_path <- glue("{dir_dl}/calcofi-ctd.duckdb")
+ctd_pq <- glue("{dir_big}/ctd.parquet")
+db_path <- glue("{dir_big}/calcofi-ctd.duckdb")
+# file.exists(c(ctd_pq, db_path))
+
 db_redo <- T # set to TRUE to re-download and re-ingest
 
 # create directory if it doesn't exist
