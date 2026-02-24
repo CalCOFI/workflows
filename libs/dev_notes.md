@@ -9,8 +9,8 @@
     - Join columns use *_id (integers), not *_uuid                                                                                                                  
     - Net's _source_uuid = the original SWFSC UUID (unique per net, good for eventID)                                                                               
     - Ichthyo's _source_uuid = the net's UUID (not unique per ichthyo row, need to mint)
-    - All 35,644 casts already have cruise_key (no filtering needed)    
-
+    - All 35,644 casts already have cruise_key (no filtering needed)
+- Whoah 3.6 GB 
 
 
                                                                                                           
@@ -20,12 +20,9 @@ Let's push these publish outputs to GS like the ingest outputs and not clog up t
 
 But what's a sensible path locally in Google Drive to save and do an actual sync with GS (so not upload anything unless changed)?
 
+⏺ Updated plan
+ Ready to code?  
 
-⏺ Updated plan                                                                                                                                                    
-  ⎿  /plan to preview                                   
-
- Ready to code?                                                                                                                                                   
-                                                                                                                                                                  
  Here is Claude's plan:                                 
 
  Plan: Fix unpushed commit & move DwC-A outputs to GCS  
@@ -43,6 +40,7 @@ But what's a sensible path locally in Google Drive to save and do an actual sync
 
  Since 2d819fd hasn't been pushed, we can safely amend it to remove the large files.
 
+ ```bash
  # add darwincore to gitignore
  echo "darwincore" >> data/.gitignore
 
@@ -57,6 +55,7 @@ But what's a sensible path locally in Google Drive to save and do an actual sync
 
  # clean up loose objects (reclaims ~4 GB)
  git gc --prune=now
+ ```
 
  Files modified:
  - data/.gitignore — add darwincore line
@@ -86,7 +85,7 @@ But what's a sensible path locally in Google Drive to save and do an actual sync
  1. After Step 1: git push succeeds; git status shows clean working tree
  2. After Step 2 (next render): gsutil ls gs://calcofi-db/publish/ichthyo_bottle/ shows the 5 DwC-A files + zip
 
-⏺ Both steps are done. Here's a summary:                                                                                                                          
+⏺ Both steps are done. Here's a summary:
                                                                                                                                                                   
   Step 1 — Fixed unpushed commit:                                                                                                                                 
   - Added darwincore to data/.gitignore                                                                                                                           
@@ -105,6 +104,38 @@ But what's a sensible path locally in Google Drive to save and do an actual sync
 ```bash
 quarto render publish_icthyo-bottle_to_obis.qmd
 ```
+
+something looks amiss. The extendedMeasurementOrFact.csv file looks too big at 3.61 GB vs much smaller parquet files for icthyo and bottle
+
+⏺ Here's the full picture. The eMoF has 46 distinct measurement types, and the bottle measurements fall into several categories:                                  
+                                                          
+  Core QC'd measurements (~4.7M rows):                                                                                                                            
+  - Dissolved oxygen, Temperature, Salinity, Phosphate, Silicate, Nitrate, Nitrite, Chlorophyll-a, Phaeopigment, Ammonia                                          
+                                                                                                                                                                  
+  Pre-QC / "Reported" values (~4.2M rows):                                                                                                                        
+  - Reported oxygen (pre-QC): 691K — overlaps with QC'd DO (1.4M)                                                                                                 
+  - Reported ammonium (pre-QC): 91K — overlaps with QC'd ammonia (90K)                                                                                            
+  - Reported depth from pressure (pre-QC): 895K
+  - Reported potential temperature (pre-QC): 849K
+  - Reported dynamic height: 849K
+  - Reported Specific Volume Anomaly (pre-QC): 843K
+
+  Derived parameters (~1.5M rows):
+  - Potential density (Sigma Theta): 843K
+  - Oxygen percent saturation: 691K
+
+  Weather/met, 14C, light, etc. (~370K rows):
+  - Wind, weather codes, air temps, barometric pressure, 14C assimilation, Secchi, DIC, alkalinity, etc.
+
+  The pre-QC and derived rows alone account for ~5.7M rows (~48%) of the eMoF. Dropping those would cut the CSV roughly in half (~1.7 GB → still large but more
+  reasonable).
+
+  What would you like to do? Options:
+  1. Drop pre-QC values where a QC'd counterpart exists (saves ~780K rows)
+  2. Drop all pre-QC/reported + derived values (saves ~5.7M rows, cuts file ~in half)
+  3. Keep only "core" oceanographic + nutrient measurements (most aggressive trim)
+  4. Leave as-is — the 12M rows are structurally correct, just large
+
 
 ## 2026-02-24.c publish_{larvae_to_obis -> icthyo-bottle}_to_obis.qmd with duckdb and cruise: net_sample.bio | ctd_cast.env
 
