@@ -851,97 +851,120 @@ flowchart TB
 
 - Use **snake_case** (lower-case with underscores) for all column names
 - Unique identifiers are suffixed with:
-  - `*_id` for integer keys (sequential or from source)
-  - `*_key` for string/text keys (natural keys)
-  - `*_uuid` for universally unique identifiers (provenance tracking only)
+  - `*_uuid` for source UUIDs (minted at sea — primary identifiers for SWFSC tables)
+  - `*_id` for integer keys (source counters like `cast_id`, or sequential IDs for derived tables)
+  - `*_key` for string/text keys (natural keys like `cruise_key`, `ship_key`)
 - Suffix with units where applicable (e.g., `length_mm`, `depth_m`, `temp_degc`)
 
 ---
 
 ## Primary Key Strategy {#sec-primary-keys}
 
-### General Principle: Natural Keys Over Surrogate Keys
+### UUID-First Approach (revised 2026-02-24)
 
-**Prefer natural keys** (meaningful identifiers from the domain) over surrogate keys (arbitrary integers) unless:
+**Source UUIDs are the primary unique identifiers** for SWFSC ichthyo tables. These
+UUIDs are minted at sea during data collection and remain stable throughout the entire
+data lifecycle — even when rows are temporarily removed and later re-included for QA/QC
+purposes. Sequential integer IDs would lose this stability because re-sorting or row
+additions change the assignment.
 
-- No natural key exists
-- Performance requires integer keys for large tables with frequent joins
-- The natural key is unstable or may change
+**Exceptions:**
 
-**Benefits of natural keys:**
+- `cruise` uses a natural key (`cruise_key`, YYMMKK) because it has few rows with
+  easily identifiable attributes (ship + year-month). `cruise_uuid` is also retained
+  from source.
+- Bottle tables (`casts`, `bottle`) use source integer counters (`Cst_Cnt`, `Btl_Cnt`)
+  as stable keys from the source system.
+- Derived/pivoted tables without source UUIDs (ichthyo, lookup, segment,
+  bottle_measurement, cast_condition) use sequential integer IDs as convenience
+  identifiers.
 
-- Self-documenting (cruise_key `2401NH` tells you January 2024, New Horizon)
-- No lookup needed to understand relationships
-- Consistent across systems (source data uses same identifiers)
-- Easier debugging and data validation
+### Source UUID Keys (SWFSC ichthyo chain)
 
-### Natural Keys (use as PRIMARY KEY)
+| Table | Primary Key | Type | Notes |
+|-------|-------------|------|-------|
+| `site` | `site_uuid` | UUID | Minted at sea |
+| `tow` | `tow_uuid` | UUID | Minted at sea |
+| `net` | `net_uuid` | UUID | Minted at sea |
+
+### Natural Keys
 
 | Table | Primary Key | Format | Example |
 |-------|-------------|--------|---------|
-| `cruise` | `cruise_key` | TEXT `YYMMKK` | `'2401NH'` |
+| `cruise` | `cruise_key` | TEXT `YYMMKK` | `'2401NH'` (also retains `cruise_uuid`) |
 | `ship` | `ship_key` | TEXT (2-letter) | `'NH'` |
-| `tow_type` | `tow_type_key` | TEXT | `'CB'` |
 | `species` | `species_id` | INTEGER | `1234` (natural from source) |
 
-### Sequential Integer Keys (with explicit sort order)
+### Source Integer Keys (bottle chain)
 
-For tables without natural keys, use sequential integers **with deterministic sort order** for reproducibility when appending new data:
+| Table | Primary Key | Type | Notes |
+|-------|-------------|------|-------|
+| `casts` | `cast_id` | INTEGER | Source counter (`Cst_Cnt`) — stable |
+| `bottle` | `bottle_id` | INTEGER | Source counter (`Btl_Cnt`) — stable |
+
+### Deterministic UUID Keys (derived tables with composite natural key)
+
+| Table | Primary Key | Composite Key |
+|-------|-------------|---------------|
+| `ichthyo` | `ichthyo_uuid` | UUID v5 from `net_uuid, species_id, life_stage, measurement_type, measurement_value` |
+
+### Sequential Integer Keys (derived tables only)
+
+For derived/pivoted tables without source identifiers, sequential integers provide
+a convenience primary key:
 
 | Table | Primary Key | Sort Order for ID Assignment |
 |-------|-------------|------------------------------|
-| `site` | `site_id` | `ORDER BY cruise_key, orderocc` |
-| `tow` | `tow_id` | `ORDER BY site_id, time_start` |
-| `net` | `net_id` | `ORDER BY tow_id, side` |
-| `ichthyo` | `ichthyo_id` | `ORDER BY net_id, species_id, life_stage, measurement_type, measurement_value` |
 | `lookup` | `lookup_id` | `ORDER BY lookup_type, lookup_num` |
-
-**Why sort order matters:** When new cruises are added later, rows get appended. Without deterministic ordering, the same data could get different IDs on different runs, breaking reproducibility.
+| `segment` | `segment_id` | `ORDER BY time_beg` |
+| `bottle_measurement` | `bottle_measurement_id` | `ORDER BY bottle_id, measurement_type` |
+| `cast_condition` | `cast_condition_id` | `ORDER BY cast_id, condition_type` |
 
 ### Foreign Key Relationships
 
 ```
 ship.ship_key (PK)
     ↓
-cruise.cruise_key (PK)  ←──  cruise.ship_key (FK)
+cruise.cruise_key (PK)   ←──  cruise.ship_key (FK)
+    ↓                         cruise.cruise_uuid (unique, from source)
+site.site_uuid (PK)      ←──  site.cruise_uuid (FK → cruise.cruise_uuid)
+    ↓                         site.cruise_key (denormalized, for queries)
+tow.tow_uuid (PK)        ←──  tow.site_uuid (FK → site.site_uuid)
+    ↓                         tow.tow_type_key → lookup (lookup_type='tow_type')
+net.net_uuid (PK)         ←──  net.tow_uuid (FK → tow.tow_uuid)
     ↓
-site.site_id (PK)       ←──  site.cruise_key (FK)
-    ↓
-tow.tow_id (PK)         ←──  tow.site_id (FK)
-    ↓                        tow.tow_type_key (FK) → tow_type.tow_type_key
-net.net_id (PK)         ←──  net.tow_id (FK)
-    ↓
-ichthyo.ichthyo_id (PK) ←──  ichthyo.net_id (FK)
-                             ichthyo.species_id (FK) → species.species_id
+ichthyo.ichthyo_uuid (PK) ←──  ichthyo.net_uuid (FK → net.net_uuid)
+                                ichthyo.species_id (FK) → species.species_id
 
 --- Bottle chain (linked via cruise bridge) ---
 
-casts.cast_id (PK)      ←──  casts.cruise_key (FK, nullable) → cruise.cruise_key
-    ↓                        casts.grid_key (FK) → grid.grid_key
-    ↓                        casts.ship_key (FK, nullable) → ship.ship_key
-bottle.bottle_id (PK)   ←──  bottle.cast_id (FK)
+casts.cast_id (PK)       ←──  casts.cruise_key (FK, nullable) → cruise.cruise_key
+    ↓                         casts.grid_key (FK) → grid.grid_key
+    ↓                         casts.ship_key (FK, nullable) → ship.ship_key
+bottle.bottle_id (PK)    ←──  bottle.cast_id (FK)
     ↓
-bottle_measurement       ←──  bottle_measurement.bottle_id (FK)
-                             bottle_measurement.measurement_type_id → measurement_type
+bottle_measurement        ←──  bottle_measurement.bottle_id (FK)
+                               bottle_measurement.measurement_type → measurement_type
 
 --- Taxonomy ---
 
-species.species_id (PK)      species.worms_id → taxon (WoRMS authority)
-                             species.itis_id → taxon (ITIS authority)
+species.species_id (PK)       species.worms_id → taxon (WoRMS authority)
+                              species.itis_id → taxon (ITIS authority)
 taxon.taxonID (PK per authority)
 taxa_rank.taxonRank (PK)
 
 --- Spatial ---
 
-grid.grid_key (PK)      ←──  canonical from swfsc (not in bottle export)
-segment (reference table)
+grid.grid_key (PK)       ←──  canonical from swfsc (not in bottle export)
+segment.segment_id (PK)  ←──  segment.site_uuid_beg, segment.site_uuid_end
 ```
 
 **Note**: `grid.parquet` is only exported from the swfsc workflow (canonical source). The bottle workflow no longer exports grid.
 
-### UUID Columns
+### UUID Column Handling
 
-- **Remove** `cruise_uuid`, `site_uuid`, `tow_uuid`, `net_uuid` from output tables
+- **Retain** `cruise_uuid`, `site_uuid`, `tow_uuid`, `net_uuid` in all output tables
+  (frozen releases included) — these are the primary unique identifiers
 - **Retain** `_source_uuid` in Working DuckLake for provenance (stripped in frozen release)
 
 ---
@@ -1581,6 +1604,37 @@ The final database step combines all ingest outputs into a unified DuckDB.
    - `cc_list_view_templates()`: List available templates
 
 4. **First public release**: v2026.02 (pending GCS upload)
+
+### Phase 4b: UUID-First PK Revision (2026-02-24)
+
+**Goal**: Revert from sequential `*_id` to source `*_uuid` primary keys per
+discussion with Ed Weber. UUIDs minted at sea remain stable through QA/QC
+cycles; sequential IDs do not.
+
+1. **Updated SWFSC ingest workflow** ✅
+   - Removed `assign_sequential_ids()` for site, tow, net
+   - Removed `propagate_natural_key()` for site_id→tow, tow_id→net
+   - Removed `replace_uuid_with_id()` for ichthyo.net_uuid→net_id
+   - Removed UUID column drops (all `*_uuid` columns retained)
+   - Updated ichthyo FK: `net_uuid` (not `net_id`)
+   - Updated segment: `site_uuid_beg`/`site_uuid_end` (not `site_id_*`)
+   - Updated dm relationships, FK diagrams, metadata_derived.csv
+
+2. **Updated bottle ingest workflow** ✅
+   - Added rationale note: cast_id/bottle_id are stable source counters
+   - bottle_measurement_id/cast_condition_id stay (derived tables)
+
+3. **Updated README_PLAN.qmd** ✅
+   - Rewrote Primary Key Strategy section
+   - Documented UUID-first approach with rationale
+
+4. **Next steps to update DuckLakes**:
+   - Re-render `ingest_swfsc.noaa.gov_calcofi-db.qmd` (rebuilds wrangling DB + parquet)
+   - Re-render `ingest_calcofi.org_bottle-database.qmd` (no structural changes, optional)
+   - Re-render `merge_ichthyo_bottle.qmd` (picks up new parquet schema)
+   - Upload new parquet outputs to GCS
+   - Create new frozen release (v2026.03 or v2026.02.1)
+   - Update `calcofi4r::cc_get_db()` and schema app if needed
 
 ### Phase 5: Documentation & Polish
 

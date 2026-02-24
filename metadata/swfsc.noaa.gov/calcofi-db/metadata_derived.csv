@@ -2,19 +2,12 @@ table,column,name_long,units,description_md
 cruise,,Cruise,,unique by ship and year-month
 cruise,cruise_key,Cruise Key,,Natural primary key in YYMMKK format (2-digit year + 2-digit month + ship_key)
 site,,Site,,"unique location (longitude, latitude) and time along cruise"
-site,site_id,Site ID,,Sequential integer primary key (sorted by cruise_key and orderocc)
-site,cruise_key,Cruise Key,,Foreign key to cruise table (propagated from cruise via cruise_uuid)
+site,cruise_key,Cruise Key,,Denormalized natural key (propagated from cruise via cruise_uuid) for convenience queries
 site,geom,Geometry,,Point geometry (WGS84 EPSG:4326) created from longitude and latitude
 site,grid_key,Grid Key,,Foreign key to grid table (assigned via spatial intersection)
-tow,,Tow,,unique net tows
-tow,tow_id,Tow ID,,Sequential integer primary key (sorted by site_id and time_start)
-tow,site_id,Site ID,,Foreign key to site table (propagated from site via site_uuid)
-net,,Net,,individual net from given tow
-net,net_id,Net ID,,Sequential integer primary key (sorted by tow_id and side)
-net,tow_id,Tow ID,,Foreign key to tow table (propagated from tow via tow_uuid)
 ichthyo,,Ichthyoplankton,,"Consolidated tidy table of ichthyoplankton observations from egg, egg_stage, larva, larva_stage, and larva_size source tables"
-ichthyo,ichthyo_id,Ichthyo ID,,"Sequential integer primary key (sorted by net_id, species_id, life_stage, measurement_type, measurement_value)"
-ichthyo,net_id,Net ID,,Foreign key to net table
+ichthyo,ichthyo_uuid,Ichthyo UUID,,"Deterministic UUID v5 primary key derived from composite natural key (net_uuid, species_id, life_stage, measurement_type, measurement_value)"
+ichthyo,net_uuid,Net UUID,,Foreign key to net table (source UUID)
 ichthyo,species_id,Species ID,,Foreign key to species table
 ichthyo,life_stage,Life Stage,,"Life stage: 'egg' or 'larva'"
 ichthyo,measurement_type,Measurement Type,,"Type of measurement: 'stage', 'size', or NULL for total count"
@@ -40,8 +33,8 @@ grid,geom_ctr,Geometry Center,,Point geometry (WGS84 EPSG:4326) of grid cell cen
 segment,,Segment,,Line segments between consecutive sites along a cruise track
 segment,segment_id,Segment ID,,Sequential integer primary key (sorted by time_beg)
 segment,cruise_key,Cruise Key,,Foreign key to cruise table
-segment,site_id_beg,Site ID Begin,,Site ID at segment start
-segment,site_id_end,Site ID End,,Site ID at segment end
+segment,site_uuid_beg,Site UUID Begin,,Site UUID at segment start
+segment,site_uuid_end,Site UUID End,,Site UUID at segment end
 segment,lon_beg,Longitude Begin,decimal_degrees,Longitude at segment start
 segment,lat_beg,Latitude Begin,decimal_degrees,Latitude at segment start
 segment,lon_end,Longitude End,decimal_degrees,Longitude at segment end

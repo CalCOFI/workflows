@@ -1,6 +1,6 @@
 # CalCOFI Database Release v2026.02
 
-**Release Date**: 2026-02-05
+**Release Date**: 2026-02-24
 
 ## Tables Included
 
@@ -26,7 +26,7 @@
 
 - **Tables**: 17
 - **Total Rows**: 13,410,422
-- **Total Size**: 80.9 MB
+- **Total Size**: 90.7 MB
 
 ## Data Sources
 
