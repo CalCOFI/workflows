@@ -360,7 +360,9 @@ ship_key_stats |> datatable(caption = "ship_key assignment stats")
 ### Step 2: Derive cruise_key
 
 Cruise key format: YYMMKK (2-digit year, 2-digit month, 2-letter ship
-key).
+key). The bottle ingest stores the original `Cruise_ID` as `cruise_key_0`
+(interim), so `cruise_key` is a new column bridging bottle casts to the
+SWFSC `cruise` table.
 
 ```{r}
 #| label: cruise_bridge_cruise_key

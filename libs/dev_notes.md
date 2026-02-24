@@ -1,4 +1,747 @@
 
+## 2026-02-24.? publish_{larvae_to_obis -> icthyo-bottle}_to_obis.qmd
+
+The newly renamed `@publish_icthyo-bottle_to_obis.qmd` currently only has the icthyo data, not the environmental bottle data, and even that is outdated by the latest ingestion workflows: `@ingest_swfsc.noaa.gov_calcofi-db.qmd`, `@ingest_calcofi.org_bottle-database.qmd` and `@merge_ichthyo_bottle.qmd`. Update this workflow to incorporate the bottle data using the latest `*_uuid` columns. Identify the necessity of creating any new unique identifiers. Collapse the data as needed to create viable DarwinCore records (not overly complex with events missing dates or locations). Also reference the `@README_PLAN.qmd` for consistency.
+
+## 2026-02-24.b bottle.cruise_key <-> cruise.key [RESOLVED]
+
+Renamed bottle `Cruise_ID` → `cruise_key_0` (was `cruise_key`) in `flds_redefine.csv` to avoid collision with SWFSC `cruise.cruise_key` (YYMMKK). The `_0` suffix marks it as interim — retained until successfully matched, then discarded. Merge workflow's `ADD COLUMN cruise_key` now genuinely creates a new column.
+
+
+
+## 2026-02-24 revert from int _id to _uuid for icthyo, smarter sync w/ md5 hash checks and mtime filenaming
+
+In the existing workflow `@ingest_swfsc.noaa.gov_calcofi-db.qmd`, I injected new integer identifier columns (`*_id`) based on sort order of differentiating columns and retained the `*_uuid` columns only for the internal DuckLake, not the frozen lake. Some of this was implemented also in `@ingest_calcofi.org_bottle-database.qmd` and `@merge_ichthyo_bottle.qmd`. But since discussions with Ed Weber, it's apparent that we should maintain the `*_uuid` columns as the primary unique row identifier (except for cases of tables with only a few easily identifiable rows, like `cruise.cruise_key`) and not create new `*_id` columns. This is because the `*_uuid` columns are minted at sea and remain unique throughout the lifecycle of the data, such as if potentially removed or re-included for QA/QC purposes, whereas a newly created `*_id` column may lose this consistency. Are there any rows with pivoting and restructuring that still need a unique identifer? Please clean up all these instances and include rationale in workflow. Also evaluate and mention in `@README_PLAN.qmd`. Provide next steps to update the DuckLakes.
+
+⏺ All site_id, tow_id, and net_id references have been removed from the SWFSC workflow. Let me do a final summary of all changes made.
+
+  Here's a summary of all changes made:                                                                                         
+                                                                                                                                
+  Analysis: Which tables still need unique identifiers?                                                                         
+
+  Source tables with UUIDs (reverted to UUID PKs):
+  - site → site_uuid (PK, minted at sea)
+  - tow → tow_uuid (PK, minted at sea)
+  - net → net_uuid (PK, minted at sea)
+  - cruise → cruise_key (natural PK) + cruise_uuid (retained from source)
+
+  Deterministic UUID key (derived table with composite natural key):
+  - ichthyo — consolidated from 5 egg/larva tables. Uses ichthyo_uuid (UUID v5 from net_uuid, species_id,
+  life_stage, measurement_type, measurement_value)
+
+  Derived/pivoted tables that still need generated IDs (no source UUID):
+  - lookup — vocabulary table. Keeps lookup_id
+  - segment — derived from consecutive site pairs. Keeps segment_id
+  - bottle_measurement — pivoted from wide format. Keeps bottle_measurement_id (composite (bottle_id, measurement_type) also
+  enforced unique)
+  - cast_condition — pivoted from wide format. Keeps cast_condition_id (composite (cast_id, condition_type) also enforced
+  unique)
+
+  Files changed
+
+  1. ingest_swfsc.noaa.gov_calcofi-db.qmd — Major rewrite:
+    - Renamed "Restructure Primary Keys" → "Establish Primary Keys" with UUID-first rationale
+    - Removed assign_sequential_ids() for site, tow, net
+    - Removed propagate_natural_key() for site_id→tow, tow_id→net
+    - Removed replace_uuid_with_id() for ichthyo net_uuid→net_id
+    - Removed UUID column drops (all *_uuid columns retained)
+    - Updated ichthyo mermaid diagram, validation checks, dm relationships
+    - Updated segment creation: site_uuid_beg/site_uuid_end instead of site_id_*
+    - Updated enforce_column_types: removed *_id overrides for source tables
+  2. metadata/swfsc.noaa.gov/calcofi-db/metadata_derived.csv — Removed site_id, tow_id, net_id entries; updated
+  ichthyo.net_uuid, segment.site_uuid_beg/end descriptions
+  3. calcofi4db/R/wrangle.R — Updated consolidate_ichthyo_tables() docstring to reflect UUID-first approach
+  4. ingest_calcofi.org_bottle-database.qmd — Added rationale note explaining cast_id/bottle_id are stable source counters, not
+  generated IDs
+  5. README_PLAN.qmd — Major update:
+    - Rewrote Primary Key Strategy section with UUID-first rationale
+    - New subsections: Source UUID Keys, Natural Keys, Source Integer Keys, Sequential Integer Keys
+    - Updated FK relationship diagram
+    - Updated UUID Column Handling (retain, not remove)
+    - Added Phase 4b documenting this revision and next steps
+
+  Next steps to update the DuckLakes
+
+  1. Re-render ingest_swfsc.noaa.gov_calcofi-db.qmd (rebuilds wrangling DB + parquet with UUID PKs)
+  2. Re-render merge_ichthyo_bottle.qmd (picks up new parquet schema)
+  3. Upload new parquet outputs to GCS (gs://calcofi-db/ingest/)
+  4. Create new frozen release (v2026.03 or v2026.02.1)
+  5. Update any downstream consumers (calcofi4r::cc_get_db(), schema app, publish workflows) to reference UUID columns instead
+  of integer IDs
+
+
+`quarto render ingest_swfsc.noaa.gov_calcofi-db.qmd`
+
+  4/77 [setup]                      
+  Copying file:///Users/bbest/My Drive/projects/calcofi/data-public/swfsc.noaa.gov/calcofi-db/cruise.csv to gs://calcofi-files-public/archive/2026-02-24_152952/swfsc.noaa.gov/calcofi-db/cruise.csv
+    
+  ............
+  Copying file:///Users/bbest/My Drive/projects/calcofi/data-public/swfsc.noaa.gov/calcofi-db/eggs.csv to gs://calcofi-files-public/archive/2026-02-24_152952/swfsc.noaa.gov/calcofi-db/eggs.csv
+    
+  .........................
+  Copying file:///Users/bbest/My Drive/projects/calcofi/data-public/swfsc.noaa.gov/calcofi-db/eggstage.csv to gs://calcofi-files-public/archive/2026-02-24_152952/swfsc.noaa.gov/calcofi-db/eggstage.csv
+    
+  ..................
+  Copying file:///Users/bbest/My Drive/projects/calcofi/data-public/swfsc.noaa.gov/calcofi-db/larvae.csv to gs://calcofi-files-public/archive/2026-02-24_152952/swfsc.noaa.gov/calcofi-db/larvae.csv
+
+Shouldn't the gs archive represent the last  
+  modified date of the input file and not today's date-time, which would change every time the notebook is rendered and         
+  create a copy every time? eg `gs://calcofi-files-public/archive/2026-02-24_152952/swfsc.noaa.gov/calcofi-db/cruise.csv` I     
+  don't think has changed since the other most recent version of the file in the GCS
+
+I'm not seeing a quick fix for existing files in GCS.
+
+How should we handle existing GCS archives with render-time timestamps? → Can we add a hash to the files that checks for any content changes, and if  equal (ie passes), assumes no change and local filesystem is correct mtime. If not too slow, would be good to add this as an extra check when assuming same mtime on GCS as file anyways.
+
+Will this cleanup the existing files in GCS or do they need to be removed first?
+
+⏺ Plan updated with the cleanup_duplicate_archives() function. It:                                                                                                
+                                                                                                                                                                  
+  - Compares md5 fingerprints across all archive timestamps for a given provider/dataset                                                                          
+  - Groups archives with identical content and keeps only the earliest timestamp
+  - Defaults to dry_run = TRUE so you can inspect before deleting                                                                                                 
+  - Uses gcloud storage rm -r to remove duplicate archive folders                                                                                                 
+                                                                                                                                                                  
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Ready to code?
+                                                                                                                                                                  
+ Here is Claude's plan:
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ Fix GCS Archive: Mtime-Based Timestamps + MD5 Content Verification
+
+ Context
+
+ When rendering ingest_swfsc.noaa.gov_calcofi-db.qmd, sync_to_gcs_archive() creates a new timestamped archive folder using Sys.time() (render time), e.g.
+ archive/2026-02-24_152952/. Every render creates a new archive copy even when source files are unchanged. The archive timestamp should reflect when the source
+ files actually changed, not when the notebook ran. Additionally, the current size-only comparison can miss content changes or produce false mismatches — md5
+ hashing provides a definitive content check.
+
+ Root Cause
+
+ In calcofi4db/R/archive.R:
+ - Line 291: new_timestamp <- format(Sys.time(), "%Y-%m-%d_%H%M%S") — uses wall-clock time
+ - compare_local_vs_archive() uses size-only comparison — no content verification
+ - get_archive_manifest() drops the md5 column that list_gcs_files() already returns
+
+ Plan
+
+ All changes are in /Users/bbest/Github/CalCOFI/calcofi4db/R/archive.R.
+
+ 1. Add helper: md5_base64_to_hex() (new internal function)
+
+ GCS stores md5Hash as base64; tools::md5sum() returns hex. Add a converter:
+
+ #' Convert base64-encoded md5 to hex string
+ #' @noRd
+ md5_base64_to_hex <- function(b64) {
+   vapply(b64, function(x) {
+     if (is.na(x)) return(NA_character_)
+     raw <- jsonlite::base64_dec(x)
+     paste0(format(as.hexmode(as.integer(raw)), width = 2), collapse = "")
+   }, character(1), USE.NAMES = FALSE)
+ }
+
+ Uses jsonlite::base64_dec() — jsonlite is already in Imports.
+
+ 2. Update get_local_manifest() (lines 121-136)
+
+ Add mtime and md5 columns:
+
+ tibble::tibble(
+   name       = basename(csv_files),
+   size       = file.size(csv_files),
+   mtime      = file.mtime(csv_files),
+   md5        = unname(tools::md5sum(csv_files)),
+   local_path = csv_files)
+
+ tools::md5sum() is built-in and fast (runs in C).
+
+ 3. Update get_archive_manifest() (lines 75-103)
+
+ Keep the md5 column from GCS and convert to hex for comparison:
+
+ files |>
+   dplyr::filter(stringr::str_detect(name, "\\.csv$")) |>
+   dplyr::mutate(
+     filename = basename(name),
+     md5      = md5_base64_to_hex(md5),
+     gcs_path = glue::glue("gs://{gcs_bucket}/{name}")) |>
+   dplyr::select(name = filename, size, md5, gcs_path)
+
+ 4. Update compare_local_vs_archive() (lines 174-213)
+
+ Use md5 as primary comparison, with size as fallback when md5 is unavailable:
+
+ common <- dplyr::inner_join(
+   local_manifest  |> dplyr::select(name, local_size = size, local_md5 = md5),
+   archive_manifest |> dplyr::select(name, archive_size = size, archive_md5 = md5),
+   by = "name")
+
+ changed <- common |>
+   dplyr::filter(
+     # md5 mismatch (definitive when both available)
+     (!is.na(local_md5) & !is.na(archive_md5) & local_md5 != archive_md5) |
+     # size fallback when md5 unavailable
+     (is.na(local_md5) | is.na(archive_md5)) & local_size != archive_size)
+
+ 5. Update sync_to_gcs_archive() (lines 247-324)
+
+ Two key changes:
+
+ a) Use max file mtime as archive timestamp (replaces line 291):
+ max_mtime     <- max(local_manifest$mtime)
+ new_timestamp <- format(max_mtime, "%Y-%m-%d_%H%M%S")
+
+ b) Add early-return when archive at that timestamp already exists (after timestamp derivation):
+ existing <- get_archive_manifest(
+   archive_timestamp = new_timestamp,
+   provider = provider, dataset = dataset,
+   gcs_bucket = gcs_bucket, archive_prefix = archive_prefix)
+
+ if (nrow(existing) > 0) {
+   message(glue::glue(
+     "Archive already exists at {new_timestamp} (file modification date), skipping upload"))
+   return(list(
+     archive_timestamp = new_timestamp,
+     archive_path      = glue::glue(
+       "gs://{gcs_bucket}/{archive_prefix}/{new_timestamp}/{provider}/{dataset}"),
+     created_new       = FALSE,
+     files_uploaded    = 0L))
+ }
+
+ This means:
+ - If files haven't changed → size/md5 comparison catches it early (existing behavior, now more robust)
+ - If files have changed → new archive uses the file's modification timestamp, not render time
+ - If re-rendered with same changed files → mtime-based timestamp matches existing archive, skips upload
+
+ 6. Add cleanup_duplicate_archives() (new exported function)
+
+ Detects and removes content-identical duplicate archives, keeping the earliest timestamp per unique content set. Uses GCS md5 metadata (no downloads needed).
+
+ ```r
+ #' Remove duplicate archives from GCS
+ #'
+ #' Compares md5 hashes across archive timestamps for a given provider/dataset.
+ #' When consecutive archives have identical content, keeps the earliest and
+ #' removes the rest.
+ #'
+ #' @param provider Data provider (e.g., "swfsc.noaa.gov")
+ #' @param dataset Dataset name (e.g., "calcofi-db")
+ #' @param gcs_bucket GCS bucket name
+ #' @param archive_prefix Archive folder prefix
+ #' @param dry_run If TRUE (default), only report what would be removed
+ #'
+ #' @return Tibble of removed (or would-be-removed) archive timestamps
+ #' @export
+ #' @concept archive
+ cleanup_duplicate_archives <- function(
+     provider,
+     dataset,
+     gcs_bucket     = "calcofi-files-public",
+     archive_prefix = "archive",
+     dry_run        = TRUE) {
+
+   # list all archive timestamps
+   all_archives <- list_gcs_files(gcs_bucket, prefix = glue::glue("{archive_prefix}/"))
+   timestamps <- all_archives$name |>
+     stringr::str_extract(glue::glue("{archive_prefix}/([^/]+)/"), group = 1) |>
+     unique() |> na.omit() |> sort()
+
+   if (length(timestamps) < 2) {
+     message("Fewer than 2 archives, nothing to deduplicate")
+     return(tibble::tibble(timestamp = character(), action = character()))
+   }
+
+   # get manifest (with md5) for each timestamp
+   manifests <- purrr::map(timestamps, function(ts) {
+     get_archive_manifest(
+       archive_timestamp = ts,
+       provider = provider, dataset = dataset,
+       gcs_bucket = gcs_bucket, archive_prefix = archive_prefix) |>
+       dplyr::mutate(timestamp = ts)
+   })
+
+   # create content fingerprint per timestamp (sorted md5 hash of all files)
+   fingerprints <- purrr::map_chr(manifests, function(m) {
+     if (nrow(m) == 0 || all(is.na(m$md5))) return(NA_character_)
+     paste(sort(paste(m$name, m$md5)), collapse = "|") |>
+       tools::md5sum_string() # digest of combined fingerprint
+   })
+   # fallback: use digest::digest or simple paste if tools::md5sum_string unavailable
+   # actually use rlang::hash() which is already a dependency
+   fingerprints <- purrr::map_chr(manifests, function(m) {
+     if (nrow(m) == 0 || all(is.na(m$md5))) return(NA_character_)
+     rlang::hash(sort(paste(m$name, m$md5)))
+   })
+
+   # find duplicates: keep first occurrence of each fingerprint
+   fp_df <- tibble::tibble(timestamp = timestamps, fingerprint = fingerprints)
+   dupes <- fp_df |>
+     dplyr::group_by(fingerprint) |>
+     dplyr::filter(!is.na(fingerprint), dplyr::n() > 1) |>
+     dplyr::slice(-1) |>  # keep earliest, mark rest as duplicates
+     dplyr::ungroup()
+
+   if (nrow(dupes) == 0) {
+     message("No duplicate archives found")
+     return(tibble::tibble(timestamp = character(), action = character()))
+   }
+
+   message(glue::glue("Found {nrow(dupes)} duplicate archive(s)"))
+
+   if (dry_run) {
+     message("Dry run — no files deleted. Set dry_run = FALSE to remove.")
+     return(dupes |> dplyr::mutate(action = "would_remove"))
+   }
+
+   # delete duplicate archives
+   for (ts in dupes$timestamp) {
+     prefix <- glue::glue("{archive_prefix}/{ts}/{provider}/{dataset}/")
+     gcs_uri <- glue::glue("gs://{gcs_bucket}/{prefix}")
+     cmd <- glue::glue('gcloud storage rm -r "{gcs_uri}"')
+     message(glue::glue("Removing: {gcs_uri}"))
+     system(cmd, intern = TRUE)
+   }
+
+   dupes |> dplyr::mutate(action = "removed")
+ }
+ ```
+
+ Default is dry_run = TRUE for safety — prints what would be removed without deleting.
+
+ 7. Update roxygen docs
+
+ Update descriptions for get_local_manifest(), get_archive_manifest(), compare_local_vs_archive(), and sync_to_gcs_archive() to document md5 and mtime behavior.
+
+ Files to Modify
+
+ - /Users/bbest/Github/CalCOFI/calcofi4db/R/archive.R — all changes in this single file
+
+ Verification
+
+ 1. devtools::document() in calcofi4db/ to regenerate man pages
+ 2. devtools::load_all() to confirm no regressions
+ 3. Run cleanup_duplicate_archives("swfsc.noaa.gov", "calcofi-db", dry_run = TRUE) to see what would be cleaned up, then dry_run = FALSE to execute
+ 4. Render ingest_swfsc.noaa.gov_calcofi-db.qmd twice — second render should print "Local files match archive..." with no uploads
+
+⏺ All done. Here's a summary of changes made to /Users/bbest/Github/CalCOFI/calcofi4db/R/archive.R:                                                               
+                                                                                                                                                                  
+  1. md5_base64_to_hex() (new internal helper, line 6) — converts GCS base64 md5 to hex for comparison with tools::md5sum()                                       
+  2. get_local_manifest() (line 137) — now returns mtime and md5 columns alongside name, size, local_path                                                         
+  3. get_archive_manifest() (line 87) — retains the md5 column from GCS (converted to hex via md5_base64_to_hex())                                                
+  4. compare_local_vs_archive() (line 195) — uses md5 as primary comparison (definitive when both available), with size as fallback when md5 is NA                
+  5. sync_to_gcs_archive() (line 277) — two key changes:
+    - Uses max(file.mtime()) instead of Sys.time() for archive timestamps                                                                                         
+    - Early-returns when an archive at that mtime-based timestamp already exists                                                                                  
+  6. cleanup_duplicate_archives() (new exported function, line 487) — detects and removes content-identical duplicate archives using GCS md5 metadata. Default    
+  dry_run = TRUE for safety.                                                                                                                                      
+                                                                                                                                                                  
+  devtools::document() and devtools::load_all() both passed cleanly. The new cleanup_duplicate_archives function is exported in the NAMESPACE.     
+
+I'm seeing that `ichthyo.ichthyo_id` is setup as "Sequential (derived table, sorted by net_uuid, species_id, etc.)", but there should be a UUID from all the input tables that is nearly impossible to conflict and should be used/retained.
+
+⏺ Now I have a clear picture of the situation. Let me clarify what you're looking for, since there are a couple of interpretations.                               
+                                                                                                                                                                  
+  Currently, the 5 source tables (egg, egg_stage, larva, larva_stage, larva_size) only have net_uuid as a UUID column — that's a FK to the net table, not unique  
+  per row. The _source_uuid provenance column gets set to net_uuid during ingestion, but it doesn't uniquely identify each row either.                            
+                                                                                                                                                                  
+  The composite natural key (net_uuid, species_id, life_stage, measurement_type, measurement_value) is unique per row in the derived ichthyo table and would      
+  indeed be "nearly impossible to conflict" since net_uuid is a proper UUID.
+                                                                                                                                                                  
+⏺ User answered Claude's questions:                                                                                                                               
+  ⎿  · What approach do you want for the ichthyo primary key? → Generate deterministic UUID
+
+⏺ Updated plan                       
+  ⎿  /plan to preview
+                                                                                                                                                                  
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Ready to code?                                                                                                                                                   
+                                                                                                                                                                  
+ Here is Claude's plan:
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ Replace ichthyo_id (sequential integer) with ichthyo_uuid (deterministic UUID)
+
+ Context
+
+ The ichthyo table consolidates 5 source tables (egg, egg_stage, larva, larva_stage, larva_size) into a single tidy table. Currently it uses ichthyo_id — a
+ sequential integer assigned via ROW_NUMBER() — as its primary key. This is fragile: the ID depends on sort order and changes if rows are added/removed. The
+ composite natural key (net_uuid, species_id, life_stage, measurement_type, measurement_value) uniquely identifies each row and — since net_uuid is itself a UUID
+  minted at sea — is "nearly impossible to conflict." A deterministic UUID v5 hashed from this composite key would be stable across re-ingestion, consistent with
+  the UUID-first pattern used for source tables, and independent of sort order.
+
+ Approach
+
+ Generate ichthyo_uuid as a UUID v5 (RFC 4122 name-based SHA-1 hash) using the uuid package (already in Imports) with a fixed CalCOFI namespace UUID. The input
+ string is the concatenation of the composite key columns. This is done in R (not DuckDB SQL) to stay consistent with the existing consolidate_ichthyo_tables()
+ pattern which collects data into R tibbles.
+
+ Namespace UUID: Use a fixed, project-specific namespace (generated once, hardcoded). For example: "c0f1ca00-ca1c-5000-b000-1c4790000000" (a mnemonic for
+ "CalCOFI CalCOFI ichthyo").
+
+ Input string format: "{net_uuid}|{species_id}|{life_stage}|{measurement_type}|{measurement_value}" with NAs rendered as empty strings, matching the COALESCE
+ pattern from the existing sort logic.
+
+ Files to Modify
+
+ 1. /Users/bbest/Github/CalCOFI/calcofi4db/R/wrangle.R
+
+ a) Add new function assign_deterministic_uuids() (after assign_sequential_ids(), ~line 259)
+
+ ```r
+ #' Assign deterministic UUIDs from composite key columns
+ #'
+ #' Generates UUID v5 (name-based SHA-1) identifiers from a composite key.
+ #' The same key values always produce the same UUID, making IDs stable
+ #' across re-ingestion regardless of row order.
+ #'
+ #' @param con DuckDB connection
+ #' @param table_name Name of table to assign UUIDs to
+ #' @param id_col Name of UUID column to create
+ #' @param key_cols Character vector of columns forming the composite key
+ #' @param namespace_uuid Fixed namespace UUID for deterministic generation
+ #'
+ #' @return Invisibly returns the connection after adding UUID column
+ #' @export
+ #' @concept wrangle
+ #' @importFrom DBI dbGetQuery dbExecute dbWriteTable
+ #' @importFrom glue glue
+ #' @importFrom uuid UUIDgenerate
+ assign_deterministic_uuids <- function(
+     con,
+     table_name,
+     id_col,
+     key_cols,
+     namespace_uuid = "c0f1ca00-ca1c-5000-b000-1c4790000000") {
+
+   # read table into R
+   data <- DBI::dbGetQuery(con, glue::glue("SELECT * FROM {table_name}"))
+
+   # build composite key string per row
+   key_strings <- do.call(paste, c(
+     lapply(key_cols, function(col) {
+       ifelse(is.na(data[[col]]), "", as.character(data[[col]]))
+     }),
+     sep = "|"))
+
+   # generate UUID v5 for each row
+   data[[id_col]] <- vapply(key_strings, function(k) {
+     uuid::UUIDgenerate(use.time = FALSE, output = "string",
+                        name = k, namespace = namespace_uuid)
+   }, character(1), USE.NAMES = FALSE)
+
+   # rewrite table with UUID column first
+   col_order <- c(id_col, setdiff(names(data), id_col))
+   data <- data[, col_order]
+
+   DBI::dbExecute(con, glue::glue("DROP TABLE IF EXISTS {table_name}"))
+   DBI::dbWriteTable(con, table_name, data, overwrite = TRUE)
+
+   n_rows <- nrow(data)
+   n_unique <- length(unique(data[[id_col]]))
+
+   message(glue::glue(
+     "Assigned {id_col} to {n_rows} rows in {table_name} ",
+     "({n_unique} unique UUIDs from: {paste(key_cols, collapse = ', ')})"))
+
+   if (n_unique != n_rows) {
+     warning(glue::glue(
+       "Non-unique UUIDs detected: {n_rows} rows but {n_unique} unique values. ",
+       "Check that key_cols form a true composite key."))
+   }
+
+   invisible(con)
+ }
+ ```
+
+ Note: Need to verify that uuid::UUIDgenerate() supports UUID v5 (name + namespace parameters). If not, we'll use digest::digest(algo = "sha1") to manually
+ construct UUID v5. Will check during implementation and fall back to the digest approach if needed.
+
+ b) Update consolidate_ichthyo_tables() roxygen example (~lines 404-410)
+
+ Change the example from assign_sequential_ids(id_col = "ichthyo_id") to assign_deterministic_uuids(id_col = "ichthyo_uuid", key_cols = ...).
+
+ Update the @details text that says "Use assign_sequential_ids() to add an ichthyo_id convenience column" → "Use assign_deterministic_uuids() to add an
+ ichthyo_uuid primary key column".
+
+ 2. /Users/bbest/Github/CalCOFI/workflows/ingest_swfsc.noaa.gov_calcofi-db.qmd
+
+ a) Mermaid ERD (~line 359): int ichthyo_id PK → uuid ichthyo_uuid PK
+
+ b) Consolidation code block (~lines 394-407): Replace assign_sequential_ids() call:
+
+ ```r 
+ # assign ichthyo_uuid — deterministic UUID v5 from composite natural key
+ assign_deterministic_uuids(
+   con        = con,
+   table_name = "ichthyo",
+   id_col     = "ichthyo_uuid",
+   key_cols   = c(
+     "net_uuid",
+     "species_id",
+     "life_stage",
+     "measurement_type",
+     "measurement_value"))
+ ```
+
+ c) Primary key strategy table (~line 609): Update ichthyo row from ichthyo_id | Sequential to ichthyo_uuid | Deterministic UUID v5 (from net_uuid, species_id,
+ life_stage, measurement_type, measurement_value)
+
+ d) FK diagram (~line 629): ichthyo.ichthyo_id (PK) → ichthyo.ichthyo_uuid (PK)
+
+ e) dm_add_pk (~line 652): dm_add_pk(ichthyo, ichthyo_id) → dm_add_pk(ichthyo, ichthyo_uuid)
+
+ f) Type override (~line 994): ichthyo.ichthyo_id = "INTEGER" → ichthyo.ichthyo_uuid = "UUID"
+
+ 3. /Users/bbest/Github/CalCOFI/workflows/README_PLAN.qmd
+
+ a) (~line 905-916): Move ichthyo from "Sequential Integer Keys" section to a new row under "Source UUID Keys" or its own "Deterministic UUID Keys" subsection.
+
+ b) (~line 931): Update FK diagram: ichthyo.ichthyo_id (PK) → ichthyo.ichthyo_uuid (PK)
+
+ 4. /Users/bbest/Github/CalCOFI/workflows/metadata/swfsc.noaa.gov/calcofi-db/metadata_derived.csv
+
+ Line 9: Change ichthyo,ichthyo_id,Ichthyo ID,,Sequential integer primary key... → ichthyo,ichthyo_uuid,Ichthyo UUID,,Deterministic UUID v5 primary key derived
+ from composite natural key (net_uuid, species_id, life_stage, measurement_type, measurement_value)
+
+ 5. Other documentation (text-only updates)
+
+ - explore_scripps.ucsd.edu_pelagic-invertebrate-collection.qmd (~line 129): ichthyo_id PK → ichthyo_uuid PK
+ - explore_scripps.ucsd.edu_pelagic-invertebrate-collection_2026-02-09.qmd (~line 106): same
+ - libs/dev_notes.md: Update references (many lines, text-only)
+
+ 6. Memory file update
+
+ Update /Users/bbest/.claude/projects/-Users-bbest-Github-CalCOFI-workflows/memory/MEMORY.md to reflect that ichthyo now uses deterministic UUID instead of
+ sequential integer.
+
+ What NOT to modify
+
+ - _output/ HTML files — these are regenerated on render
+ - data/flagged/orphan_species.csv — regenerated on next ingest run
+ - calcofi4db/man/ — regenerated by devtools::document()
+ - assign_sequential_ids() function itself — still used by other tables (lookup, segment, bottle_measurement, cast_condition)
+
+ Verification
+
+ 1. devtools::document() in calcofi4db/ — regenerate man pages
+ 2. devtools::load_all() — confirm no regressions
+ 3. Verify uuid::UUIDgenerate() supports name-based UUID v5 (if not, implement with digest)
+ 4. Re-render ingest_swfsc.noaa.gov_calcofi-db.qmd — ichthyo table should have ichthyo_uuid column with valid UUIDs
+ 5. Verify uniqueness: n_distinct(ichthyo$ichthyo_uuid) == nrow(ichthyo)
+ 6. Verify determinism: re-render and confirm same UUIDs produced
+
+⏺ All changes are complete. Here's a summary of what was done:                                                                                                    
+                                                                                                                                                                  
+  Files modified                                                                                                                                                  
+                                                                                                                                                                  
+  1. calcofi4db/R/wrangle.R                                                                                                                                       
+  - Added assign_deterministic_uuids() function using uuid::UUIDfromName() for UUID v5 generation                                                                 
+  - Updated consolidate_ichthyo_tables() roxygen docs to reference the new function
+  - Updated assign_sequential_ids() example to use lookup instead of ichthyo                                                                                      
+                                                                                                                                                                  
+  2. workflows/ingest_swfsc.noaa.gov_calcofi-db.qmd
+  - Mermaid ERD: int ichthyo_id PK → uuid ichthyo_uuid PK
+  - Consolidation code: replaced assign_sequential_ids() with assign_deterministic_uuids()
+  - Overview text: updated to mention ichthyo uses deterministic UUID v5
+  - PK strategy table: ichthyo_id | Sequential → ichthyo_uuid | Deterministic UUID v5
+  - FK diagram: ichthyo.ichthyo_id (PK) → ichthyo.ichthyo_uuid (PK)
+  - dm_add_pk: ichthyo_id → ichthyo_uuid
+  - Type override: ichthyo.ichthyo_id = "INTEGER" → ichthyo.ichthyo_uuid = "UUID"
+
+  3. workflows/README_PLAN.qmd
+  - Moved ichthyo to new "Deterministic UUID Keys" subsection
+  - Updated FK diagram
+
+  4. workflows/metadata/swfsc.noaa.gov/calcofi-db/metadata_derived.csv
+  - Updated ichthyo row from ichthyo_id to ichthyo_uuid with new description
+
+  5. Documentation files
+  - Both explore_scripps.ucsd.edu_pelagic-invertebrate-collection*.qmd files updated
+  - libs/dev_notes.md updated
+  - Memory file updated
+
+  Verification
+
+  - devtools::document() — generated assign_deterministic_uuids.Rd successfully
+  - devtools::load_all() — passed cleanly
+  - uuid::UUIDfromName() confirmed to produce deterministic, vectorized UUID v5 output
+
+Can we also implement a hash check on the GS parquet upload? For instance, we may want to re-render the notebook for formatting or other reason that results in one or more unchanged parquet files, so shouldn't have to re-upload them. 
+
+⏺ Updated plan                                          
+  ⎿  /plan to preview
+                                                                                                                                                                  
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Ready to code?                                                                                                                                                   
+                                                                                                                                                                  
+ Here is Claude's plan:
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ Add hash-based skip to GCS parquet upload              
+
+ Context
+
+ When the ingest notebook is re-rendered for formatting or documentation changes, the parquet output files may be identical. Currently, put_gcs_file() always
+ uploads every file regardless. The codebase already has a mature MD5-based skip pattern in archive.R (compare_local_vs_archive(), get_local_manifest()) for CSV
+ files — we'll adapt this for parquet uploads.
+
+ Approach
+
+ Add a new sync_parquet_to_gcs() function in calcofi4db/R/cloud.R that:
+ 1. Computes local MD5 hashes via tools::md5sum()
+ 2. Lists existing GCS files with list_gcs_files() (returns MD5 when using googleCloudStorageR, size when using gcloud CLI)
+ 3. Compares local vs remote — skips files whose MD5 matches (with size fallback when MD5 unavailable)
+ 4. Uploads only changed/new files, reports what was skipped
+
+ Then update the QMD workflow to call it instead of the naive walk()/put_gcs_file() loop.
+
+ Files to Modify
+
+ 1. calcofi4db/R/cloud.R — add sync_parquet_to_gcs()
+
+ New exported function (~50 lines), placed after put_gcs_file() (~line 131):
+
+ #' Sync local files to GCS, skipping unchanged files
+ #'
+ #' Compares local files against GCS using MD5 hashes (with file-size
+ #' fallback when MD5 is unavailable from the CLI). Only uploads files
+ #' that are new or changed, skipping identical files.
+ #'
+ #' @param local_dir Directory containing files to upload
+ #' @param gcs_prefix GCS destination prefix (e.g. "ingest/swfsc.noaa.gov_calcofi-db")
+ #' @param bucket GCS bucket name
+ #' @param pattern Regex to filter local files (default: NULL = all files)
+ #' @param verbose Print per-file status messages (default: TRUE)
+ #'
+ #' @return Tibble with columns: file, action (uploaded/skipped), local_md5, gcs_md5
+ #' @export
+ #' @concept cloud
+ sync_to_gcs <- function(
+     local_dir,
+     gcs_prefix,
+     bucket,
+     pattern = NULL,
+     verbose = TRUE) {
+
+   # list local files
+   local_files <- list.files(local_dir, full.names = TRUE, pattern = pattern)
+
+   # build local manifest with MD5
+   local_manifest <- tibble::tibble(
+     name       = basename(local_files),
+     size       = file.size(local_files),
+     md5        = unname(tools::md5sum(local_files)),
+     local_path = local_files)
+
+   # get GCS manifest
+   gcs_manifest <- tryCatch(
+     list_gcs_files(bucket, prefix = paste0(gcs_prefix, "/")),
+     error = function(e) {
+       tibble::tibble(name = character(), size = numeric(), md5 = character())
+     })
+
+   # normalize GCS manifest names to basenames
+   if (nrow(gcs_manifest) > 0) {
+     gcs_manifest <- gcs_manifest |>
+       dplyr::mutate(
+         name = basename(name),
+         md5  = md5_base64_to_hex(md5))   # convert base64 → hex
+   }
+
+   # compare and decide per file
+   results <- purrr::map_dfr(seq_len(nrow(local_manifest)), function(i) {
+     f         <- local_manifest$name[i]
+     local_md5 <- local_manifest$md5[i]
+     local_sz  <- local_manifest$size[i]
+
+     gcs_row <- gcs_manifest[gcs_manifest$name == f, ]
+
+     skip <- FALSE
+     if (nrow(gcs_row) == 1) {
+       gcs_md5 <- gcs_row$md5
+       gcs_sz  <- gcs_row$size
+       # md5 match (definitive); size fallback when md5 unavailable
+       if (!is.na(local_md5) && !is.na(gcs_md5)) {
+         skip <- (local_md5 == gcs_md5)
+       } else {
+         skip <- (local_sz == gcs_sz)
+       }
+     }
+
+     if (skip) {
+       if (verbose) message(glue::glue("  Skipped {f} (unchanged)"))
+       action <- "skipped"
+     } else {
+       gcs_path <- glue::glue("gs://{bucket}/{gcs_prefix}/{f}")
+       put_gcs_file(local_manifest$local_path[i], gcs_path)
+       if (verbose) message(glue::glue("  Uploaded {f}"))
+       action <- "uploaded"
+     }
+
+     tibble::tibble(
+       file      = f,
+       action    = action,
+       local_md5 = local_md5)
+   })
+
+   n_up   <- sum(results$action == "uploaded")
+   n_skip <- sum(results$action == "skipped")
+   message(glue::glue(
+     "Sync complete: {n_up} uploaded, {n_skip} skipped (unchanged)"))
+
+   results
+ }
+
+ Key design decisions:
+ - Reuses existing list_gcs_files() (already handles googleCloudStorageR vs gcloud CLI)
+ - Reuses existing md5_base64_to_hex() for GCS hash conversion
+ - Reuses existing put_gcs_file() for actual upload
+ - MD5 primary, size fallback — same pattern as compare_local_vs_archive()
+ - Generic name sync_to_gcs() — not parquet-specific, works for any directory of files
+
+ 2. workflows/ingest_swfsc.noaa.gov_calcofi-db.qmd — update upload section
+
+ Replace the naive walk()/put_gcs_file() loop (~lines 1114-1121) with:
+
+ # sync to GCS — only uploads new or changed files
+ sync_results <- sync_to_gcs(
+   local_dir  = dir_parquet,
+   gcs_prefix = gcs_ingest_prefix,
+   bucket     = gcs_bucket)
+
+ What NOT to modify
+
+ - put_gcs_file() — still useful as a standalone upload utility
+ - archive.R functions — those are CSV/archive-specific, we build parallel logic in cloud.R
+ - write_parquet_outputs() — its job is to write locally; upload is a separate concern
+
+ Verification
+
+ 1. devtools::document() — regenerate man pages, ensure sync_to_gcs exported
+ 2. devtools::load_all() — confirm no regressions
+ 3. First run: all files uploaded (no prior GCS state to compare)
+ 4. Re-render without data changes: all files skipped (MD5 matches)
+ 5. Modify one table: only that parquet file + manifest.json + metadata.json uploaded
+
+⏺ All done. Here's a summary of the changes:                                                                                                                      
+                                                                                                                                                                  
+  1. calcofi4db/R/cloud.R — added sync_to_gcs()                                                                                                                   
+                                                                                                                                                                  
+  New exported function (~100 lines) inserted after put_gcs_file() that:                                                                                          
+  - Builds a local manifest with tools::md5sum()                                                                                                                  
+  - Fetches the GCS manifest via list_gcs_files() and converts MD5 with md5_base64_to_hex()                                                                       
+  - Compares per-file: MD5 match is definitive, file-size fallback when MD5 unavailable                                                                           
+  - Skips unchanged files, uploads only new/changed ones                                                                                                          
+  - Returns a tibble of results and prints a summary
+
+  2. workflows/ingest_swfsc.noaa.gov_calcofi-db.qmd — simplified upload section
+
+  Replaced the 10-line walk()/put_gcs_file() loop with a single sync_to_gcs() call.
+
+  3. Verified
+
+  - devtools::document() generated sync_to_gcs.Rd and added export(sync_to_gcs) to NAMESPACE
+  - devtools::load_all() confirms the package loads cleanly with the new function available
+
 ## 2026-02-17 apps/schema
 
 Develop an R Shiny app at `@apps/schema` that takes advantage of the functions in the calcofi4r R package (`@calcofi4r/`) to display an interactive Mermaid diagram (mmd) of the integrated database schema and displays the given table (with paging, so subsets) and its table comments as seperate tabs. Ideally come up with a way of selecting multiple tables (eg click to change color and add to selection on/off) to create a joined view (requires tables already related with foreign keys) and filter selection. If the relationships are not already in the default `calcofi4r::cc_get_db()` then create them in the workflows like in `@workflows/merge_icthyo_bottle.qmd` using functions in `@calcofi4db` per the `@workflows/README_PLAN.qmd`.
@@ -9,7 +752,7 @@ Develop an R Shiny app at `@apps/schema` that takes advantage of the functions i
  Here is Claude's plan:
  
  Plan: CalCOFI Schema Explorer Shiny App
-
+ 
  Context
 
  The CalCOFI project needs an interactive schema browser at apps/schema/ that uses the calcofi4r R
@@ -56,6 +799,8 @@ Develop an R Shiny app at `@apps/schema` that takes advantage of the functions i
  Mermaid.js update - copy the v11.4.1 update logic from querychat/global.R:17-32.
 
  FK edges as a tribble (derived from the dm_add_fk calls in the ingest workflows):
+
+ ```r
  fk_edges <- tribble(
    ~parent_table,       ~parent_col,        ~child_table,          ~child_col,
    # ichthyo chain
@@ -77,6 +822,7 @@ Develop an R Shiny app at `@apps/schema` that takes advantage of the functions i
    "cruise",            "cruise_key",       "casts",               "cruise_key",
    "ship",              "ship_key",         "casts",               "ship_key"
  )
+ ```
 
  Table descriptions - curated tribble with descriptions for all 17 tables.
 
@@ -190,6 +936,38 @@ Develop an R Shiny app at `@apps/schema` that takes advantage of the functions i
  5. Tab 3 cross-chain: Select "ichthyo" + "bottle", verify the path goes through net → tow → site →
  cruise → casts → bottle, and a warning about large results appears
 
+⏺ All four files are created:                                                                           
+                                                                                                        
+  apps/schema/                                                                                          
+    global.R       (16 KB) - connection, FK edges, table descriptions, helpers, theme                   
+    ui.R           (5 KB)  - three-tab bslib layout                                                     
+    server.R       (7 KB)  - reactive logic for all three tabs                                          
+    www/styles.css (1 KB)  - minimal custom CSS                                                         
+
+
+  Here's a summary of what was implemented:
+
+  Tab 1: Schema Diagram - Full Mermaid ERD with all tables and FK arrows, clickable table list with row
+  counts, and column definitions panel with descriptions
+
+  Tab 2: Table Explorer - Select any table, set row limit, click Load Data to browse paginated data with
+   top filters; Schema sub-tab shows column metadata
+
+  Tab 3: Joined View - Multi-table checkbox selection, BFS-based Steiner tree algorithm to find the
+  optimal join path, dynamic column filter, generated LEFT JOIN SQL, cross-chain warning when ichthyo +
+  bottle tables are selected, and a subset ERD for selected tables
+
+  Key implementation details:
+  - FK edges derived from ingest_swfsc.noaa.gov_calcofi-db.qmd and
+  ingest_calcofi.org_bottle-database.qmd dm_add_fk calls, including cross-links (cruise → casts, ship →
+  casts) from the merge workflow
+  - Mermaid ERD generated dynamically from information_schema.columns with DuckDB type simplification
+  - Join path algorithm uses iterative BFS on the undirected FK graph to find the minimum spanning
+  subtree connecting selected tables
+  - Patterns (bslib theme, DiagrammeR mermaid.js update, DT styling, cleanup) follow the existing
+  querychat app
+
+  To run: shiny::runApp("apps/schema") from the CalCOFI project root.
 
 ## 2026-02-05b slow merge workflow b/c taxa, ship matching
 
@@ -332,24 +1110,16 @@ Here's a few more considerations:
 
  Also: remove grid from bottle parquet export + preview, add cc_make_view() to calcofi4r, extend _targets.R, and update README_PLAN.qmd.
 
- Files to Modify
- ┌──────────────────────────────────────────────────┬─────────────────────────────────────────────────────┐
- │                       File                       │                       Change                        │
- ├──────────────────────────────────────────────────┼─────────────────────────────────────────────────────┤
- │ workflows/merge_ichthyo_bottle.qmd               │ Rewrite — complete overhaul                         │
- ├──────────────────────────────────────────────────┼─────────────────────────────────────────────────────┤
- │ workflows/ingest_calcofi.org_bottle-database.qmd │ Remove grid from parquet export + preview           │
- ├──────────────────────────────────────────────────┼─────────────────────────────────────────────────────┤
- │ calcofi4db/R/taxonomy.R                          │ New — taxonomy standardization functions            │
- ├──────────────────────────────────────────────────┼─────────────────────────────────────────────────────┤
- │ calcofi4db/R/ship.R                              │ New — ship fuzzy matching functions                 │
- ├──────────────────────────────────────────────────┼─────────────────────────────────────────────────────┤
- │ calcofi4r/R/database.R                           │ Add cc_make_view() + cc_list_view_templates()       │
- ├──────────────────────────────────────────────────┼─────────────────────────────────────────────────────┤
- │ workflows/_targets.R                             │ Extend with bottle + merge targets                  │
- ├──────────────────────────────────────────────────┼─────────────────────────────────────────────────────┤
- │ workflows/README_PLAN.qmd                        │ Update phase statuses, add cruise bridge + taxonomy │
- └──────────────────────────────────────────────────┴─────────────────────────────────────────────────────┘
+ Files to Modify:
+
+ - workflows/merge_ichthyo_bottle.qmd: Rewrite — complete overhaul
+ - workflows/ingest_calcofi.org_bottle-database.qmd │ Remove grid from parquet export + preview           │
+ - calcofi4db/R/taxonomy.R: New — taxonomy standardization functions
+ - calcofi4db/R/ship.R: New — ship fuzzy matching functions
+ - calcofi4r/R/database.R: Add cc_make_view() + cc_list_view_templates()
+ - workflows/_targets.R: Extend with bottle + merge targets
+ - workflows/README_PLAN.qmd: Update phase statuses, add cruise bridge + taxonomy
+ 
  ---
  Change 1: Remove grid from Bottle Workflow
 
@@ -378,6 +1148,7 @@ Here's a few more considerations:
 
  Reconciles ship codes between datasets using multi-source references and word-overlap fuzzy matching. Pattern adapted from workflows/ingest_calcofi.org_bottle-database_0.qmd (lines 117-260).
 
+ ```r
  #' Match ship codes across datasets using multi-source references
  #'
  #' Performs exact matching first (ship_nodc, ship_name), then
@@ -402,6 +1173,7 @@ Here's a few more considerations:
      fetch_ices       = TRUE) {
    # ...
  }
+ ```
 
  Implementation strategy:
 
@@ -422,6 +1194,7 @@ Here's a few more considerations:
 
  Moved/adapted from workflows/ingest_ices.dk_ship-ices.qmd:
 
+ ```r
  #' Fetch ship codes from ICES Reference Codes API
  #' @param ices_api character; ICES API base URL
  #' @param ices_ship_code_type character; GUID for ship code type
@@ -433,6 +1206,7 @@ Here's a few more considerations:
      ices_ship_code_type = "7f9a91e1-fb57-464a-8eb0-697e4b0235b5") {
    # ...
  }
+ ```
 
  ---
  Change 3: New calcofi4db/R/taxonomy.R — Taxonomy Standardization
@@ -443,6 +1217,7 @@ Here's a few more considerations:
 
  Updates species table with latest accepted WoRMS/ITIS/GBIF identifiers using worrms and taxize R packages (replaces pre-downloaded database approach from int-app/taxa_worms.qmd).
 
+ ```r
  #' Standardize species identifiers using WoRMS/ITIS/GBIF APIs
  #'
  #' For each species, queries WoRMS (via worrms package) to get the
@@ -471,6 +1246,7 @@ Here's a few more considerations:
      batch_size    = 50) {
    # ...
  }
+ ```
 
  Implementation strategy:
 
@@ -489,6 +1265,7 @@ Here's a few more considerations:
 
  Builds a taxon table with full taxonomic hierarchy (kingdom → species) for all species, using WoRMS API.
 
+ ```r
  #' Build taxonomic hierarchy table from WoRMS
  #'
  #' For each unique worms_id in the species table, retrieves the full
@@ -511,7 +1288,8 @@ Here's a few more considerations:
      batch_size   = 50) {
    # ...
  }
-
+ ```
+ 
  Implementation strategy:
 
  1. Get unique worms_id values from species table
@@ -576,6 +1354,7 @@ Here's a few more considerations:
 
  Setup
 
+ ```r
  devtools::load_all(here::here("../calcofi4db"))
  librarian::shelf(
    CalCOFI/calcofi4db, DBI, dm, dplyr, DT, fs, glue, here,
@@ -599,6 +1378,7 @@ Here's a few more considerations:
  dir_create(dirname(db_path))
  con <- get_duckdb_con(db_path)
  load_duckdb_extension(con, "spatial")
+ ```
 
  Check Upstream Workflows
 
@@ -623,6 +1403,7 @@ Here's a few more considerations:
 
  Use new match_ships() from calcofi4db/R/ship.R:
 
+ ```r
  # get unmatched ships from casts
  unmatched <- dbGetQuery(con, "
    SELECT DISTINCT c.ship_code, c.ship_name
@@ -642,6 +1423,7 @@ Here's a few more considerations:
    fetch_ices       = TRUE)
 
  ship_matches |> datatable(caption = "Ship matching results")
+ ```
 
  Display match statistics. Flag unmatched ships but proceed — they get ship_key = NULL and cruise_key = NULL.
 
@@ -674,6 +1456,7 @@ Here's a few more considerations:
 
  Use new standardize_species() and build_taxon_table() from calcofi4db/R/taxonomy.R:
 
+ ```r
  # standardize species identifiers
  sp_results <- standardize_species(
    con           = con,
@@ -690,6 +1473,7 @@ Here's a few more considerations:
 
  # also create taxa_rank lookup
  # (rank ordering from int-app/taxa_worms.qmd)
+ ```
 
  Display results: how many species updated, how many new worms_id/itis_id/gbif_id added.
 
@@ -714,6 +1498,7 @@ Here's a few more considerations:
 
  Only export tables that differ from upstream (the key user requirement):
 
+ ```r
  # tables modified by this workflow
  modified_tables <- c(
    "casts",      # added ship_key, cruise_key columns
@@ -753,6 +1538,7 @@ Here's a few more considerations:
 
  write_json(manifest, file.path(dir_pq_merged, "manifest.json"),
    auto_unbox = TRUE, pretty = TRUE)
+ ```
 
  Ingest to Working DuckLake
 
@@ -782,6 +1568,7 @@ Here's a few more considerations:
 
  cc_make_view()
 
+ ```r
  #' Create a derived VIEW in the database
  #'
  #' Creates a SQL VIEW with derived columns on top of base tables.
@@ -814,9 +1601,11 @@ Here's a few more considerations:
      column_definitions = NULL) {
    # resolve template, build SQL, execute CREATE OR REPLACE VIEW
  }
+ ```
 
  cc_list_view_templates()
 
+ ```r
  #' List available view templates
  #' @return Character vector of template names
  #' @export
@@ -824,9 +1613,11 @@ Here's a few more considerations:
  cc_list_view_templates <- function() {
    names(.view_templates)
  }
+ ```
 
  Template definitions (internal):
 
+ ```r
  .view_templates <- list(
    casts_extra = list(
      base_table = "casts",
@@ -845,6 +1636,7 @@ Here's a few more considerations:
        lon_hem     = "CASE WHEN lon_dec >= 0 THEN 'E' ELSE 'W' END",
        cruise      = "STRFTIME(datetime_utc, '%Y%m')",
        db_sta_key  = "REPLACE(REPLACE(sta_key, '.', ''), ' ', '')")))
+ ```
 
  ---
  Change 6: Extend workflows/_targets.R
@@ -859,7 +1651,7 @@ Here's a few more considerations:
 
  Add after the existing duckdb_path target (line 296), before the TODO comment:
 
-   # ═══════════════════════════════════════════════════════════════════════════
+  ```r
    # INGEST: Upstream workflow parquet outputs (manifest-based)
    # ═══════════════════════════════════════════════════════════════════════════
 
@@ -897,6 +1689,7 @@ Here's a few more considerations:
        here::here("workflows/data/parquet/merge_ichthyo_bottle/manifest.json")
      },
      format = "file"),
+  ```
 
  ---
  Change 7: Update workflows/README_PLAN.qmd
@@ -924,8 +1717,8 @@ Here's a few more considerations:
  10. _targets.R: Reference extended pipeline with merge target
 
  ---
- Key Functions Used (from calcofi4db)
- ┌──────────────────────────────┬──────────────┬────────────────────────────────┐
+ Key Functions Used (from calcofi4db):
+ 
  │           Function           │     File     │            Purpose             │
  ├──────────────────────────────┼──────────────┼────────────────────────────────┤
  │ get_duckdb_con()             │ R/duckdb.R   │ Create local merge DuckDB      │
@@ -957,7 +1750,7 @@ Here's a few more considerations:
  │ standardize_species()        │ R/taxonomy.R │ NEW — WoRMS/ITIS/GBIF IDs      │
  ├──────────────────────────────┼──────────────┼────────────────────────────────┤
  │ build_taxon_table()          │ R/taxonomy.R │ NEW — taxonomy hierarchy       │
- └──────────────────────────────┴──────────────┴────────────────────────────────┘
+ 
  ---
  Implementation Order
 
@@ -1070,10 +1863,10 @@ While I like the option `halt_on_fail = F` with `check_data_integrity()` to allo
 Also add mermaid diagrams explaining Pivot Bottle Measuerements and Pivot Cast Conditions to explicitly show old and new table structures.
 
 Consider using listviewer::jsonedit() to show `metadata.json` and `manifest.json`.
-⏺ All done. Here's a summary of all changes made:                                                                                                                                                             
-  ---                                                                                                                                                                                                         
-  Summary of Changes                                                                                                                                                                                          
-                                                                                                                                                                                                              
+
+⏺ All done. Here's a summary of all changes made:
+  Summary of Changes                                    
+                                          
   1. check_data_integrity() fixes (calcofi4db/R/check.R)    
 
   - New type_exceptions parameter: Accepts "all" to ignore all type mismatches, or a character vector of specific "table.field" patterns (e.g., c("casts.time", "bottle.t_qual")). Excepted mismatches are
@@ -1540,6 +2333,7 @@ There seems to be unnecessary redundancy in some of theses casts columns, which 
 
  Add a new QMD chunk "Pivot Bottle Measurements" after "Load Tables into Database". Use SQL UNION ALL to create the long-format table, then DROP the measurement columns from the bottle table:
 
+ ```r
  # define measurement mapping as a tibble
  bottle_meas_map <- tribble(
    ~measurement_type,     ~value_col,      ~prec_col,  ~qual_col,
@@ -1576,6 +2370,7 @@ There seems to be unnecessary redundancy in some of theses casts columns, which 
 
  # rename p_qual to depth_qual
  DBI::dbExecute(con, 'ALTER TABLE bottle RENAME COLUMN p_qual TO depth_qual')
+ ```
 
  Estimated row counts: ~895K bottles x ~15 non-null measurements avg = ~13M rows in bottle_measurement.
 
@@ -1631,6 +2426,7 @@ There seems to be unnecessary redundancy in some of theses casts columns, which 
 
  Same UNION ALL SQL pattern as bottle_measurement, added as a new QMD chunk "Pivot Cast Conditions" after "Pivot Bottle Measurements":
 
+ ```r
  cast_cond_map <- tribble(
    ~condition_type,        ~source_col,
    "wave_direction",       "wave_dir",
@@ -1653,6 +2449,7 @@ There seems to be unnecessary redundancy in some of theses casts columns, which 
  for (col in cast_cond_map$source_col) {
    DBI::dbExecute(con, glue::glue('ALTER TABLE casts DROP COLUMN "{col}"'))
  }
+ ```
 
  Estimated row counts: ~35K casts x ~8 non-null conditions avg = ~280K rows in cast_condition.
 
@@ -1745,17 +2542,17 @@ There seems to be unnecessary redundancy in some of theses casts columns, which 
  combining.
 
  C. Ship FK bridge
- ┌───────────────────────────────┬────────────────────────────────────┬────────────┐
  │        bottle-database        │               swfsc                │   Match    │
  ├───────────────────────────────┼────────────────────────────────────┼────────────┤
  │ casts.ship_code (e.g., 31CR)  │ ship.ship_nodc (e.g., 39C2)        │ NODC codes │
  ├───────────────────────────────┼────────────────────────────────────┼────────────┤
  │ casts.ship_name (e.g., CREST) │ ship.ship_name (e.g., NEW HORIZON) │ Names      │
- └───────────────────────────────┴────────────────────────────────────┴────────────┘
+ 
  FK: casts.ship_code → ship.ship_nodc (validated after integration when both datasets present)
 
  Implementation: Add a soft FK validation chunk using validate_fk_references() from calcofi4db/R/validate.R:
 
+ ```r
  # validate ship FK (when integrated with swfsc data)
  if ("ship" %in% dbListTables(con)) {
    orphans <- validate_fk_references(
@@ -1769,13 +2566,14 @@ There seems to be unnecessary redundancy in some of theses casts columns, which 
      flag_invalid_rows(con, orphans, "data/flagged/ship_orphans.csv")
    }
  }
+ ```
 
  D. Cruise bridge (future TODO)
 
  Bottle cruise = 194903 (YYYYMM) and swfsc cruise_key = 4903CR (YYMMKK). A cruise_key could be derived: substr(cruise, 3, 6) + ship_key_lookup(ship_code). Defer — flag as TODO in QMD.
 
  Existing calcofi4db functions to reuse
- ┌─────────────────────────────────┬─────────────────────────┬───────────────────────────────────────────────────────────────────┐
+ 
  │            Function             │          File           │                       Use in this workflow                        │
  ├─────────────────────────────────┼─────────────────────────┼───────────────────────────────────────────────────────────────────┤
  │ validate_fk_references()        │ calcofi4db/R/validate.R │ Validate bottle_measurement→bottle, cast_condition→casts, ship FK │
@@ -1789,10 +2587,8 @@ There seems to be unnecessary redundancy in some of theses casts columns, which 
  │ build_metadata_json()           │ calcofi4db/R/workflow.R │ Already used; new tables need metadata_derived.csv entries        │
  ├─────────────────────────────────┼─────────────────────────┼───────────────────────────────────────────────────────────────────┤
  │ integrate_to_working_ducklake() │ calcofi4db/R/workflow.R │ Used downstream when combining with swfsc parquet outputs         │
- └─────────────────────────────────┴─────────────────────────┴───────────────────────────────────────────────────────────────────┘
- ---
+
  Files to modify (summary)
- ┌─────────────────────────────────────────────────────────────────────┬──────────────────────────────────────────────────────────────────────────────────────────┐
  │                                File                                 │                                          Action                                          │
  ├─────────────────────────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────┤
  │ workflows/metadata/calcofi.org/bottle-database/flds_redefine.csv    │ Update 12 fld_new values + populate notes column with rename rationale + R_* notes       │
@@ -1802,8 +2598,7 @@ There seems to be unnecessary redundancy in some of theses casts columns, which 
  │ workflows/metadata/calcofi.org/bottle-database/metadata_derived.csv │ Add entries for new tables (bottle_measurement, cast_condition, measurement_type)        │
  ├─────────────────────────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────┤
  │ workflows/ingest_calcofi.org_bottle-database.qmd                    │ Rename refs + add pivot chunks + measurement_type table + FK validation + update dm/docs │
- └─────────────────────────────────────────────────────────────────────┴──────────────────────────────────────────────────────────────────────────────────────────┘
- ---
+
  Verification
 
  1. Rename verification: Run ingest_dataset() — confirm cast_id, bottle_id, sta_key, etc. appear in loaded tables
@@ -1972,13 +2767,13 @@ I noticed that species_id for tables species and icthyo was double, not integer.
 
  ---
  Files to Modify
- ┌────────────────────────────────────────────────┬──────────────────────────────────────────────┐
+ 
  │                      File                      │                    Action                    │
  ├────────────────────────────────────────────────┼──────────────────────────────────────────────┤
  │ calcofi4db/R/wrangle.R                         │ ADD enforce_column_types() function          │
  ├────────────────────────────────────────────────┼──────────────────────────────────────────────┤
  │ workflows/ingest_swfsc.noaa.gov_calcofi-db.qmd │ ADD enforce_types chunk before write_parquet │
- └────────────────────────────────────────────────┴──────────────────────────────────────────────┘
+ 
  ---
  Verification
 
@@ -2134,6 +2929,7 @@ These comments are exposed via the API [db_tables](https://api.calcofi.io/db_tab
  File: workflows/ingest_swfsc.noaa.gov_calcofi-db.qmd
 
  Add new chunk after write_parquet (line ~931), before Cleanup:
+ ```r
 
  #| label: write_metadata
 
@@ -2156,6 +2952,7 @@ These comments are exposed via the API [db_tables](https://api.calcofi.io/db_tab
    n_cols  = map_int(names(metadata$tables), ~sum(grepl(glue("^{.x}\\."), names(metadata$columns)))),
    name_long = map_chr(metadata$tables, ~.x$name_long)) |>
    datatable(caption = "Table metadata summary")
+ ```
 
  Also mark the TODO item at line 949 as done.
 
@@ -2545,21 +3342,29 @@ Fold all this excellent explanatory logic into the @ingest_swfsc.noaa.gov_calcof
  Validation checks before writing parquet
 
  1. Invalid egg stages (12-15 not in vocab):
+
+ ```r
  # flag egg_stage rows where stage > 11
  invalid_egg_stages <- egg_stage |> filter(stage > 11)
  # Output: data/flagged/invalid_egg_stages.csv
+ ```
 
  2. Orphan species_id (not in species table):
+ ```r
  # flag ichthyo rows where species_id not in species
  orphan_species <- ichthyo |> anti_join(species, by = "species_id")
  # Output: data/flagged/orphan_species.csv
+ ```
 
  3. Orphan net_id (not in net table):
+ ```r
  orphan_nets <- ichthyo |> anti_join(net, by = "net_id")
  # Output: data/flagged/orphan_nets.csv
+ ```
 
  Reusable validation functions in calcofi4db/R/validate.R (NEW FILE)
 
+ ```r
  #' Validate foreign key references
  #' @export
  validate_fk_references(data, fk_col, ref_table, ref_col, label = NULL)
@@ -2579,9 +3384,11 @@ Fold all this excellent explanatory logic into the @ingest_swfsc.noaa.gov_calcof
  #' @export
  validate_ichthyo_data(con, output_dir = "data/flagged")
    # Runs all checks, outputs CSVs, returns summary
+ ```
 
  Workflow: validate → flag → delete → proceed
 
+ ```r
  # Run validations
  validation_results <- validate_ichthyo_data(con, output_dir = "data/flagged")
 
@@ -2593,12 +3400,14 @@ Fold all this excellent explanatory logic into the @ingest_swfsc.noaa.gov_calcof
    message(glue("Removing {validation_results$total_flagged} invalid rows"))
    delete_flagged_rows(con, validation_results)
  }
+ ```
 
  ---
  Part 5: Workflow Structure
 
  Updated ingest_swfsc.noaa.gov_calcofi-db.qmd sections:
 
+ ```
  ## Setup
  ## Overview (existing)
  ## Check for mismatched tables and fields (existing)
@@ -2640,10 +3449,11 @@ Fold all this excellent explanatory logic into the @ingest_swfsc.noaa.gov_calcof
    - Write manifest.json
 
  ## Cleanup (existing)
+ ```
 
  ---
- Files to Create/Modify
- ┌────────────────────────────────────────────────────────────────┬────────┬──────────────────────────────────┐
+ Files to Create/Modify:
+
  │                              File                              │ Action │           Description            │
  ├────────────────────────────────────────────────────────────────┼────────┼──────────────────────────────────┤
  │ calcofi4db/R/validate.R                                        │ CREATE │ Reusable validation functions    │
@@ -2653,9 +3463,9 @@ Fold all this excellent explanatory logic into the @ingest_swfsc.noaa.gov_calcof
  │ workflows/ingest_swfsc.noaa.gov_calcofi-db.qmd                 │ MODIFY │ Add new sections per above       │
  ├────────────────────────────────────────────────────────────────┼────────┼──────────────────────────────────┤
  │ workflows/metadata/swfsc.noaa.gov/calcofi-db/flds_redefine.csv │ MODIFY │ Update field mappings            │
- └────────────────────────────────────────────────────────────────┴────────┴──────────────────────────────────┘
+ 
  Existing Code to Reuse
- ┌───────────────────────┬──────────────────────────────────────────┬──────────────────────────┐
+ 
  │       Function        │                   File                   │         Purpose          │
  ├───────────────────────┼──────────────────────────────────────────┼──────────────────────────┤
  │ read_csv_files()      │ calcofi4db/R/read.R:156                  │ Read CSVs with metadata  │
@@ -2669,7 +3479,7 @@ Fold all this excellent explanatory logic into the @ingest_swfsc.noaa.gov_calcof
  │ egg_stage_vocab       │ workflows/publish_larvae_to_obis.qmd:326 │ Egg stage descriptions   │
  ├───────────────────────┼──────────────────────────────────────────┼──────────────────────────┤
  │ larva_stage_vocab     │ workflows/publish_larvae_to_obis.qmd:343 │ Larva stage descriptions │
- └───────────────────────┴──────────────────────────────────────────┴──────────────────────────┘
+ 
  ---
  Verification
 
@@ -2863,19 +3673,25 @@ Also for reproducibility and consistency when appending newer data from cruises 
  Validation checks before writing parquet
 
  1. Invalid egg stages (12-15 not in vocab):
+ ```r
  invalid_egg_stages <- egg_stage |> filter(stage > 11)
  # Output: data/flagged/invalid_egg_stages.csv
+ ```
 
  2. Orphan species_id (not in species table):
+ ```r
  orphan_species <- ichthyo |> anti_join(species, by = "species_id")
  # Output: data/flagged/orphan_species.csv
+ ```
 
  3. Orphan net_id (not in net table):
+ ```r
  orphan_nets <- ichthyo |> anti_join(net, by = "net_id")
  # Output: data/flagged/orphan_nets.csv
+ ```
 
  Reusable validation functions in calcofi4db/R/validate.R (NEW FILE)
-
+ ```r
  #' Validate foreign key references
  #' @export
  validate_fk_references(data, fk_col, ref_table, ref_col, label = NULL)
@@ -2891,6 +3707,7 @@ Also for reproducibility and consistency when appending newer data from cruises 
  #' Run all validations for ichthyo workflow
  #' @export
  validate_ichthyo_data(con, output_dir = "data/flagged")
+ ```
 
  Workflow: validate → flag → delete → proceed
 
@@ -2907,6 +3724,7 @@ Also for reproducibility and consistency when appending newer data from cruises 
 
  Updated ingest_swfsc.noaa.gov_calcofi-db.qmd sections:
 
+ ```
  ## Setup
  ## Overview (existing)
  ## Check for mismatched tables and fields (existing)
@@ -2949,6 +3767,7 @@ Also for reproducibility and consistency when appending newer data from cruises 
    - Write manifest.json
 
  ## Cleanup (existing)
+ ```
 
  ---
  Part 6: Documentation Updates
@@ -2956,7 +3775,8 @@ Also for reproducibility and consistency when appending newer data from cruises 
  Update workflows/README_PLAN.qmd
 
  Add section on primary key strategy:
- ### Primary Key Strategy
+
+ `### Primary Key Strategy
 
  **Prefer natural keys** over surrogate integer keys:
  - `cruise.cruise_key` (YYMMKK) instead of auto-increment integer
@@ -2971,7 +3791,7 @@ Also for reproducibility and consistency when appending newer data from cruises 
  Update docs/db.qmd
 
  Add to "Database naming conventions" section:
- ### Primary key conventions
+ `### Primary key conventions
 
  - **Natural keys preferred**: Use meaningful domain identifiers where stable
    - Example: `cruise_key` = 'YYMMKK' (2401NH = Jan 2024, New Horizon)
@@ -2985,7 +3805,7 @@ Also for reproducibility and consistency when appending newer data from cruises 
 
  ---
  Files to Create/Modify
- ┌────────────────────────────────────────────────┬────────┬──────────────────────────────────┐
+ 
  │                      File                      │ Action │           Description            │
  ├────────────────────────────────────────────────┼────────┼──────────────────────────────────┤
  │ calcofi4db/R/validate.R                        │ CREATE │ Reusable validation functions    │
@@ -2997,9 +3817,9 @@ Also for reproducibility and consistency when appending newer data from cruises 
  │ workflows/README_PLAN.qmd                      │ MODIFY │ Add primary key strategy section │
  ├────────────────────────────────────────────────┼────────┼──────────────────────────────────┤
  │ docs/db.qmd                                    │ MODIFY │ Add primary key conventions      │
- └────────────────────────────────────────────────┴────────┴──────────────────────────────────┘
+ 
  Existing Code to Reuse
- ┌───────────────────────┬──────────────────────────────────────────┬──────────────────────────┐
+ 
  │       Function        │                   File                   │         Purpose          │
  ├───────────────────────┼──────────────────────────────────────────┼──────────────────────────┤
  │ read_csv_files()      │ calcofi4db/R/read.R:156                  │ Read CSVs with metadata  │
@@ -3013,7 +3833,7 @@ Also for reproducibility and consistency when appending newer data from cruises 
  │ egg_stage_vocab       │ workflows/publish_larvae_to_obis.qmd:326 │ Egg stage descriptions   │
  ├───────────────────────┼──────────────────────────────────────────┼──────────────────────────┤
  │ larva_stage_vocab     │ workflows/publish_larvae_to_obis.qmd:343 │ Larva stage descriptions │
- └───────────────────────┴──────────────────────────────────────────┴──────────────────────────┘
+ 
  ---
  Verification
 
@@ -3278,7 +4098,7 @@ PROMPT: Update the @calcofi4db/README.md to reflect the new paradigm
 
 PROMPT: Update the @calcofi4r/README.md to reflect the new paradigm 
 
-### TODO:
+TODO:
 
 - [ ] calcofi4r: devtools::document(), update README.md to re, usethis::use_version(), edit NEWS.md, pkgdown::build_site()
 

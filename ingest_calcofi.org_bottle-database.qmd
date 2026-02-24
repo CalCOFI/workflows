@@ -218,7 +218,8 @@ message(glue("\nTotal casts updated: {n_updated_total}"))
 The column renames in `flds_redefine.csv` follow these db conventions:
 
 - **`*_id`** for integer primary/foreign keys (e.g. `Cst_Cnt` → `cast_id`, `Btl_Cnt` → `bottle_id`)
-- **`*_key`** for varchar natural/composite keys (e.g. `Cast_ID` → `cast_key`, `Cruise_ID` → `cruise_key`, `Sta_ID` → `sta_key`)
+- **`*_key`** for varchar natural/composite keys (e.g. `Cast_ID` → `cast_key`, `Sta_ID` → `sta_key`)
+- Note: `Cruise_ID` → `cruise_key_0` (interim `_0` suffix avoids collision with SWFSC `cruise_key` YYMMKK; discarded after merge)
 - **unit suffixes** for measurements (e.g. `Depthm` → `depth_m`)
 
 ### Ambiguous column pairs
@@ -654,12 +655,19 @@ dm_draw(dm_dev, view_type = "all")
 
 ### Primary Key Strategy
 
+**Note on UUID-first approach**: The SWFSC ichthyo tables use source UUIDs (minted
+at sea) as primary identifiers. The bottle/cast tables are different — they use
+source integer counters (`Cst_Cnt`, `Btl_Cnt`) as natural keys, which are stable
+identifiers from the source system. The pivoted tables (`bottle_measurement`,
+`cast_condition`) have no source identifier and use sequential integer IDs for
+convenience, with composite natural keys enforced as unique.
+
 | Table | Primary Key | Type |
 |-------|-------------|------|
-| `casts` | `cast_id` | Natural key (integer counter from source `Cst_Cnt`) |
-| `bottle` | `bottle_id` | Natural key (integer counter from source `Btl_Cnt`) |
-| `bottle_measurement` | `bottle_measurement_id` | Integer PK via `ROW_NUMBER(ORDER BY bottle_id, measurement_type)`; composite `(bottle_id, measurement_type)` enforced unique |
-| `cast_condition` | `cast_condition_id` | Integer PK via `ROW_NUMBER(ORDER BY cast_id, condition_type)`; composite `(cast_id, condition_type)` enforced unique |
+| `casts` | `cast_id` | Source integer counter (`Cst_Cnt`) — stable source key |
+| `bottle` | `bottle_id` | Source integer counter (`Btl_Cnt`) — stable source key |
+| `bottle_measurement` | `bottle_measurement_id` | Sequential (derived/pivoted table); composite `(bottle_id, measurement_type)` enforced unique |
+| `cast_condition` | `cast_condition_id` | Sequential (derived/pivoted table); composite `(cast_id, condition_type)` enforced unique |
 | `measurement_type` | `measurement_type` | Natural key (type code string) |
 | `grid` | `grid_key` | Natural key |
 
@@ -1048,7 +1056,7 @@ message(glue("GCS outputs at: gs://{gcs_bucket}/{gcs_ingest_prefix}/"))
 - [x] Consolidate casts temporal columns (date+time -> datetime_utc), drop 16 derivable columns, create casts_derived VIEW.
 
 - [ ] Link possible fields to @workflows/ingest_swfsc.noaa.gov_calcofi-db.qmd. Flag mismatches.
-- [ ] Cruise bridge: derive cruise_key from bottle cruise (YYYYMM) + ship_code to match swfsc cruise_key (YYMMKK). Deferred — needs ship_key lookup.
+- [x] Cruise bridge prep: renamed `Cruise_ID` → `cruise_key_0` (was `cruise_key`) to avoid collision with SWFSC `cruise_key` (YYMMKK). Merge workflow adds `cruise_key` as new column derived from `datetime_utc` + `ship_key`.
 - [ ] Validate casts.ship_code -> ship.ship_nodc FK after integration with swfsc data.
 
 - [ ] Review documentation for more comment descriptions at [Data \>
