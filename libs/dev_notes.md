@@ -11,7 +11,102 @@
     - Ichthyo's _source_uuid = the net's UUID (not unique per ichthyo row, need to mint)
     - All 35,644 casts already have cruise_key (no filtering needed)    
 
-## 2026-02-24.c publish_{larvae_to_obis -> icthyo-bottle}_to_obis.qmd
+
+
+                                                                                                          
+## 2026-02-24.d push publish_* to GS
+
+Let's push these publish outputs to GS like the ingest outputs and not clog up the workflows github repo.
+
+But what's a sensible path locally in Google Drive to save and do an actual sync with GS (so not upload anything unless changed)?
+
+
+⏺ Updated plan                                                                                                                                                    
+  ⎿  /plan to preview                                   
+
+ Ready to code?                                                                                                                                                   
+                                                                                                                                                                  
+ Here is Claude's plan:                                 
+
+ Plan: Fix unpushed commit & move DwC-A outputs to GCS  
+
+ Context
+
+ Commit 2d819fd (unpushed, HEAD on main) contains large darwincore files (~3.6 GB eMoF CSV, 396 MB zip) that block pushing. There are also 6 older larvae_*.zip
+ files tracked from previous commits. All darwincore output should be gitignored and synced to GCS instead.
+
+ Branch is 2 commits ahead of origin/main:
+ - b866255 — ichthyo/bottle schema changes (no darwincore files)
+ - 2d819fd — the publish notebook rewrite + large darwincore files
+
+ Step 1: Fix the unpushed commit
+
+ Since 2d819fd hasn't been pushed, we can safely amend it to remove the large files.
+
+ # add darwincore to gitignore
+ echo "darwincore" >> data/.gitignore
+
+ # untrack all darwincore files (keeps them locally)
+ git rm -r --cached data/darwincore/
+
+ # stage the gitignore change
+ git add data/.gitignore
+
+ # amend the unpushed commit to exclude darwincore files
+ git commit --amend --no-edit
+
+ # clean up loose objects (reclaims ~4 GB)
+ git gc --prune=now
+
+ Files modified:
+ - data/.gitignore — add darwincore line
+ - data/darwincore/ — 12 files untracked (6 old larvae_*.zip + 5 ichthyo_bottle/ files + 1 ichthyo_bottle_*.zip)
+
+ After this, git push will work.
+
+ Step 2: Add sync-to-GCS chunk in publish_icthyo-bottle_to_obis.qmd
+
+ Add after the "Package DarwinCore Archive" section, before "Validate with obistools":
+
+ #| label: sync-to-gcs
+
+ gcs_bucket         <- "calcofi-db"
+ gcs_publish_prefix <- "publish/ichthyo_bottle"
+
+ sync_results <- sync_to_gcs(
+   local_dir  = dir_out,
+   gcs_prefix = gcs_publish_prefix,
+   bucket     = gcs_bucket)
+
+ Uses calcofi4db::sync_to_gcs() (calcofi4db/R/cloud.R) — MD5-based comparison, only uploads changed files. Convention: gs://calcofi-db/publish/ichthyo_bottle/
+ mirrors gs://calcofi-db/ingest/{provider}_{dataset}/ but with publish/ prefix.
+
+ Verification
+
+ 1. After Step 1: git push succeeds; git status shows clean working tree
+ 2. After Step 2 (next render): gsutil ls gs://calcofi-db/publish/ichthyo_bottle/ shows the 5 DwC-A files + zip
+
+⏺ Both steps are done. Here's a summary:                                                                                                                          
+                                                                                                                                                                  
+  Step 1 — Fixed unpushed commit:                                                                                                                                 
+  - Added darwincore to data/.gitignore                                                                                                                           
+  - Untracked all 12 darwincore files (6 old larvae_*.zip + 5 ichthyo_bottle/ files + 1 zip)                                                                      
+  - Amended commit 2d819fd → new SHA 1d970e2                                                                                                                      
+  - Ran git gc --prune=now to reclaim space                                                                                                                       
+  - git push succeeded                                                                                                                                            
+
+  Step 2 — Added GCS sync chunk:
+  - Inserted new ## Sync to Google Cloud Storage section with sync-to-gcs chunk at line 1122 of publish_icthyo-bottle_to_obis.qmd
+  - Uses calcofi4db::sync_to_gcs() to upload to gs://calcofi-db/publish/ichthyo_bottle/
+  - Placed between "Package DarwinCore Archive" and "Validate with obistools"
+
+  The notebook edit is uncommitted — would you like me to commit it?
+
+```bash
+quarto render publish_icthyo-bottle_to_obis.qmd
+```
+
+## 2026-02-24.c publish_{larvae_to_obis -> icthyo-bottle}_to_obis.qmd with duckdb and cruise: net_sample.bio | ctd_cast.env
 
 The newly renamed `@publish_icthyo-bottle_to_obis.qmd` currently only has the icthyo data, not the environmental bottle data, and even that is outdated by the latest ingestion workflows: `@ingest_swfsc.noaa.gov_calcofi-db.qmd`, `@ingest_calcofi.org_bottle-database.qmd` and `@merge_ichthyo_bottle.qmd`. Update this workflow to incorporate the bottle data using the latest `*_uuid` columns. Identify the necessity of creating any new unique identifiers. Collapse the data as needed to create viable DarwinCore records (not overly complex with events missing dates or locations). Also reference the `@README_PLAN.qmd` for consistency.
 
