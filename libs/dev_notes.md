@@ -1,13 +1,482 @@
+## TODO:
 
-## 2026-02-24.? publish_{larvae_to_obis -> icthyo-bottle}_to_obis.qmd
+- [ ] push publish files to GS
+- [ ] Upload icthyo-bottle to OBIS after running checks
+
+- check logic of _uuid vs _id in `publish_icthyo-bottle_to_obis.qmd`:
+  ⏺ Now I see the issue — the merged DuckDB uses integer *_id columns (not *_uuid). The original UUIDs are in _source_uuid. Let me fix the entire notebook systematically.       
+  ⏺ Now I understand the full picture. The key differences from the plan:
+    - Join columns use *_id (integers), not *_uuid                                                                                                                  
+    - Net's _source_uuid = the original SWFSC UUID (unique per net, good for eventID)                                                                               
+    - Ichthyo's _source_uuid = the net's UUID (not unique per ichthyo row, need to mint)
+    - All 35,644 casts already have cruise_key (no filtering needed)    
+
+## 2026-02-24.c publish_{larvae_to_obis -> icthyo-bottle}_to_obis.qmd
 
 The newly renamed `@publish_icthyo-bottle_to_obis.qmd` currently only has the icthyo data, not the environmental bottle data, and even that is outdated by the latest ingestion workflows: `@ingest_swfsc.noaa.gov_calcofi-db.qmd`, `@ingest_calcofi.org_bottle-database.qmd` and `@merge_ichthyo_bottle.qmd`. Update this workflow to incorporate the bottle data using the latest `*_uuid` columns. Identify the necessity of creating any new unique identifiers. Collapse the data as needed to create viable DarwinCore records (not overly complex with events missing dates or locations). Also reference the `@README_PLAN.qmd` for consistency.
 
-## 2026-02-24.b bottle.cruise_key <-> cruise.key [RESOLVED]
+The other problem is that the bottle data is not necessarily synchronized in space and time with the occurnence. We have seperately handled this with a query like in @publish_icthyo-bottle_to_obis.qmd, but not sure how that affects this dataset for OBIS?
 
-Renamed bottle `Cruise_ID` → `cruise_key_0` (was `cruise_key`) in `flds_redefine.csv` to avoid collision with SWFSC `cruise.cruise_key` (YYMMKK). The `_0` suffix marks it as interim — retained until successfully matched, then discarded. Merge workflow's `ADD COLUMN cruise_key` now genuinely creates a new column.
+ ☐ Bottle-OBIS                                                                                                                                                                   
+How should bottle/environmental data relate to ichthyo occurrences in the OBIS DarwinCore Archive?
+                                                                                                                                                                  
+ 1. Sibling events under          ┌───────────────────────────────────────────────────┐
+   cruise (Recommended)           │ ```                                               │
+ 2. Attach env data to net        │ cruise (eventID = cruise_key)                     │
+   events                         │ ├── net_sample (eventID = net_uuid)               │
+  3. Separate OBIS datasets       │ │     → occurrences + ichthyo eMoF                │
+  4. Three-level hierarchy        │ ├── ctd_cast  (eventID = cast_uuid)               │
+                                  │ │     → bottle measurement eMoF                   │
+Add CTD cast events as            │ │       (temperature, salinity, O2, nutrients...) │
+siblings of net_sample events     │ ```                                               │
+under the same cruise parent.     │ Shared locationID = "line_station" enables        │
+Both share locationID             │ spatial joining by OBIS consumers.                │
+(line_station) so OBIS users      │                                                   │
+can spatially join.               │ Pro: No false co-location implication             │
+Environmental eMoF linked to      │ Pro: Clean event model                            │
+cast events, biological eMoF      │ Con: Users must self-join env→bio data            │
+to net events. Accurately         │                                                   │
+represents they're separate       └───────────────────────────────────────────────────┘
+sampling events.
+
+⏺ Updated plan                                                                                                                                                    
+  ⎿  /plan to preview                                                                                                                                             
+                                                                                                                                                                  
+ Here is Claude's plan:                                                                                                                                           
+
+ Plan: Update publish_icthyo-bottle_to_obis.qmd with Bottle Data                                                                                                  
+                                                                                                                                                                  
+ Context                                                                                                                                                          
+                                                                                                                                                                  
+ The current publish_icthyo-bottle_to_obis.qmd publishes only ichthyoplankton data to OBIS, using the old PostgreSQL database with separate egg, larva,           
+ egg_stage, larva_stage, larva_size tables. The upstream workflows have since been modernized:                                                                    
+                                                                                                                                                                  
+ - ingest_swfsc.noaa.gov_calcofi-db.qmd → consolidated ichthyo table with *_uuid columns                                                                          
+ - ingest_calcofi.org_bottle-database.qmd → casts, bottle, bottle_measurement, cast_condition                                                                     
+ - merge_ichthyo_bottle.qmd → merged DuckDB with cruise bridge, taxonomy standardization
+
+ This rewrite switches the data source to the merged DuckDB and adds bottle/environmental data as sibling CTD cast events alongside net sample events, sharing
+ locationID for spatial joining.
+
+ Event Hierarchy Design
+
+ cruise (eventID = cruise_key, eventType = "cruise")
+ ├── net_sample     (eventID = net_uuid,  parentEventID = cruise_key)
+ │     → Occurrence records (ichthyo)
+ │     → eMoF: sample-level (std_haul_factor, prop_sorted, plankton biomass)
+ │     → eMoF: stage abundance, body length (linked to occurrenceIDs)
+ ├── ctd_cast       (eventID = cast_uuid, parentEventID = cruise_key)
+ │     → eMoF: bottle measurements (temperature, salinity, O2, nutrients, etc.)
+ │     → eMoF: cast conditions (wave, wind, weather, etc.)
+
+ Both net_sample and ctd_cast share locationID (CalCOFI line_station format) to enable spatial joining by OBIS consumers. This avoids falsely implying bottle
+ measurements were co-located with net tows.
+
+ New Unique Identifiers Needed
 
 
+ │          Identifier          │            Purpose            │                                          Strategy                                          │
+ ├──────────────────────────────┼───────────────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────┤
+ │ cast_uuid                    │ eventID for CTD cast events   │ Deterministic UUID v5 from cast_id using CalCOFI namespace (c0f1ca00-...) — consistent     │
+ │                              │                               │ with ichthyo_uuid approach                                                                 │
+ ├──────────────────────────────┼───────────────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────┤
+ │ bottle eMoF measurementID    │ Unique per bottle_measurement │ Deterministic UUID v5 from "bm:{bottle_measurement_id}"                                    │
+ │                              │  row                          │                                                                                            │
+ ├──────────────────────────────┼───────────────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────┤
+ │ cast_condition eMoF          │ Unique per cast_condition row │ Deterministic UUID v5 from "cc:{cast_condition_id}"                                        │
+ │ measurementID                │                               │                                                                                            │
+ ├──────────────────────────────┼───────────────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────┤
+ │ net-level eMoF measurementID │ Unique per net sample         │ Deterministic UUID v5 from "net:{net_uuid}:{meas_type}"                                    │
+ │                              │ measurement                   │                                                                                            │
+ 
+ 
+ Existing identifiers reused as-is:
+ - cruise_key → cruise eventID
+ - net_uuid → net_sample eventID
+ - ichthyo_uuid (where measurement_type='tally') → occurrenceID
+ - ichthyo_uuid (where measurement_type in 'stage','size') → eMoF measurementID
+
+ Sections of the Updated Notebook
+
+ 1. Setup (~line 1-70)
+
+ Rewrite. Switch from PostgreSQL to merged DuckDB:
+ db_path <- here("data/wrangling/merge_ichthyo_bottle.duckdb")
+ con <- calcofi4db::get_duckdb_con(db_path)
+ Update librarian::shelf() — drop DBI PostgreSQL deps, ensure calcofi4db loaded.
+ Keep dataset metadata but update title to "CalCOFI Ichthyoplankton & Bottle Data".
+
+ 2. Explanatory Narrative (new section)
+
+ New. Add markdown explanation of:
+ - The sibling-event architecture and why bottle data is separate from net data
+ - How locationID enables spatial joining
+ - The cast_uuid minting strategy
+ - Diagram (mermaid) showing event hierarchy with both branches
+
+ 3. Data Extraction (~line 280-316)
+
+ Rewrite. Load from merged DuckDB tables instead of PostgreSQL:
+ - cruise, ship, site, tow, net, ichthyo, species, lookup (ichthyo side)
+ - casts, bottle, bottle_measurement, cast_condition, measurement_type (bottle side)
+ - taxon, taxa_rank (taxonomy)
+
+ 4. Mint cast_uuid (new section)
+
+ New. Use `calcofi4db::assign_deterministic_uuids()` or equivalent R-side UUID v5 generation:
+
+ ```r
+ # mint deterministic UUID v5 from cast_id
+ casts <- casts |> mutate(
+   cast_uuid = uuid::UUIDfromName(
+     CALCOFI_NAMESPACE, paste0("cast:", cast_id)))
+ Only include casts with non-NULL cruise_key (matched to SWFSC cruises).
+ ```
+
+ 5. Build Cruise Events (~line 490-530)
+
+ Adapt. Update column references for new schema. Now aggregates over both net tows AND casts:
+ - eventDate: range from min/max of both tow.time_start and casts.datetime_utc
+ - footprintWKT: bbox from both site lat/lon and casts lat_dec/lon_dec
+ - eventID = cruise_key, eventType = "cruise"
+
+ 6. Build Net Sample Events (~line 584-650)
+
+ Adapt. Same collapsed approach (cruise_site_tow_net_sample → just net_sample):
+ - eventID = net_uuid, parentEventID = cruise_key
+ - eventType = "net_sample"
+ - locationID = CalCOFI {line}_{station} (from site table)
+ - decimalLatitude/Longitude from site
+ - eventDate from tow.time_start
+ - sampleSizeValue/Unit from net.vol_sampled_m3
+
+ 7. Build CTD Cast Events (new section)
+
+ New. One event per cast (filtered to matched cruise_key only):
+ - eventID = cast_uuid (minted in step 4)
+ - parentEventID = cruise_key
+ - eventType = "ctd_cast"
+ - locationID = CalCOFI {rpt_line}_{rpt_sta} (from casts table)
+ - decimalLatitude = lat_dec, decimalLongitude = lon_dec
+ - eventDate from datetime_utc (ISO 8601)
+ - samplingProtocol = "CTD rosette cast"
+ - sampleSizeValue = bottom_depth_m, sampleSizeUnit = "m" (max depth of cast)
+
+ 8. Combine All Events
+
+ Adapt. bind_rows(cruise_events, net_events, cast_events) with consistent DwC columns.
+
+ 9. Build Occurrence Records (~line 700-804)
+
+ Rewrite. From consolidated ichthyo table instead of separate egg/larva tables:
+
+ ```r 
+ occurrences <- ichthyo |>
+   filter(measurement_type == "tally") |>
+   left_join(species, by = "species_id") |>
+   mutate(
+     occurrenceID     = ichthyo_uuid,
+     eventID          = net_uuid,
+     scientificName   = scientific_name,
+     scientificNameID = paste0("urn:lsid:marinespecies.org:taxname:", worms_id),
+     occurrenceStatus = if_else(tally > 0, "present", "absent"),
+     organismQuantity = tally,
+     lifeStage        = life_stage,  # "egg" or "larva"
+     basisOfRecord    = "HumanObservation")
+ ```
+ Note: occurrenceID = ichthyo_uuid — deterministic, stable, and globally unique.
+
+ 10. Build eMoF Records
+
+ Rewrite + New. Five eMoF sub-tables:
+
+ 10a. Net-level sample measurements (existing, adapt)
+
+ From net table: std_haul_factor, prop_sorted, smallplankton, totalplankton.
+ - eventID = net_uuid, occurrenceID = NA
+ - measurementID = UUID v5 from "net:{net_uuid}:{meas_type}"
+
+ 10b. Stage-specific abundance (existing, rewrite)
+
+ From ichthyo WHERE measurement_type = 'stage':
+ - occurrenceID = matching tally row's ichthyo_uuid (join on net_uuid + species_id + life_stage)
+ - measurementID = ichthyo_uuid (the stage row's own UUID)
+ - measurementType = "abundance by life stage"
+ - measurementValue = tally
+ - measurementRemarks = stage description from lookup table
+
+ 10c. Body length (existing, rewrite)
+
+ From ichthyo WHERE measurement_type = 'size':
+ - occurrenceID = matching tally row's ichthyo_uuid
+ - measurementID = ichthyo_uuid (the size row's own UUID)
+ - measurementType = "body length", measurementValue = measurement_value, measurementUnit = "millimeters"
+
+ 10d. Bottle measurements (NEW)
+
+ From bottle_measurement joined to bottle → casts:
+ - eventID = cast_uuid, occurrenceID = NA
+ - measurementID = UUID v5 from "bm:{bottle_measurement_id}"
+ - measurementType from measurement_type.description
+ - measurementValue from bottle_measurement.measurement_value
+ - measurementUnit from measurement_type.units
+ - Include depth_m from bottle table as additional context in measurementRemarks
+ - measurementTypeID, measurementUnitID from NERC P01/P06 vocab (new lookup table)
+
+ 10e. Cast conditions (NEW)
+
+ From cast_condition joined to casts:
+ - eventID = cast_uuid, occurrenceID = NA
+ - measurementID = UUID v5 from "cc:{cast_condition_id}"
+ - measurementType from measurement_type.description
+ - measurementValue from cast_condition.condition_value
+
+ 11. NERC Vocabulary Mapping (new section)
+
+ New. Create a vocabulary lookup tibble mapping measurement_type → NERC P01/P06 URIs for bottle parameters. Key mappings:
+
+ │ measurement_type │ P01 term │   P06 unit    │
+ ├──────────────────┼──────────┼───────────────┤
+ │ temperature      │ TEMPPR01 │ UPAA (degC)   │
+ ├──────────────────┼──────────┼───────────────┤
+ │ salinity         │ PSALST01 │ UGKG (PSS-78) │
+ ├──────────────────┼──────────┼───────────────┤
+ │ oxygen_ml_l      │ DOXYZZXX │ UMLL (ml/L)   │
+ ├──────────────────┼──────────┼───────────────┤
+ │ chlorophyll_a    │ CPHLPR01 │ UGPL (ug/L)   │
+ ├──────────────────┼──────────┼───────────────┤
+ │ phosphate        │ PHOSZZXX │ UPOX (umol/L) │
+ ├──────────────────┼──────────┼───────────────┤
+ │ silicate         │ SLCAZZXX │ UPOX (umol/L) │
+ ├──────────────────┼──────────┼───────────────┤
+ │ nitrite          │ NTRIZZXX │ UPOX (umol/L) │
+ ├──────────────────┼──────────┼───────────────┤
+ │ nitrate          │ NTRAZZXX │ UPOX (umol/L) │
+ ├──────────────────┼──────────┼───────────────┤
+ │ ...              │ ...      │ ...           │
+ 
+ Exact P01 codes to be confirmed during implementation via NERC vocab server.
+
+ 12. DwC Term Mappings & meta.xml (~line 1052-1248)
+
+ Adapt. Update dwc_terms list to include new event fields. The existing generate_meta_xml() approach is reused.
+
+ 13. EML Metadata (~line 1251-1490)
+
+ Adapt. Update:
+ - dataset_title → "CalCOFI Ichthyoplankton Tows & Bottle Hydrography"
+ - dataset_abstract → mention both data types
+ - Geographic/temporal coverage → union of both data sources
+ - Add methods description for CTD/bottle sampling
+ - Contact remains Ed Weber
+
+ 14. Validation & Packaging (~line 1490+)
+
+ Adapt. Same approach:
+ - obistools::check_eventids(), check_extension_eventids()
+ - Write CSVs, meta.xml, eml.xml
+ - Package as .zip DwC-A
+ - Output dir: data/darwincore/ichthyo_bottle/ (new name reflecting combined dataset)
+
+ Files Modified
+
+ │                    File                     │                Action                │
+ ├─────────────────────────────────────────────┼──────────────────────────────────────┤
+ │ workflows/publish_icthyo-bottle_to_obis.qmd │ Major rewrite — all sections updated │
+ 
+ Files Referenced (read-only)
+
+ │                           File                            │                      Purpose                      │
+ ├───────────────────────────────────────────────────────────┼───────────────────────────────────────────────────┤
+ │ workflows/merge_ichthyo_bottle.qmd                        │ Source of merged DuckDB schema                    │
+ ├───────────────────────────────────────────────────────────┼───────────────────────────────────────────────────┤
+ │ workflows/README_PLAN.qmd                                 │ Primary Key Strategy, event hierarchy conventions │
+ ├───────────────────────────────────────────────────────────┼───────────────────────────────────────────────────┤
+ │ metadata/calcofi.org/bottle-database/measurement_type.csv │ Bottle measurement definitions                    │
+ ├───────────────────────────────────────────────────────────┼───────────────────────────────────────────────────┤
+ │ calcofi4db/R/wrangle.R                                    │ assign_deterministic_uuids() pattern              │
+ 
+ 
+ Verification
+
+ 1. Render the notebook: quarto::quarto_render("publish_icthyo-bottle_to_obis.qmd") — must complete without errors
+ 2. Check event hierarchy: All net_sample and ctd_cast events must have valid parentEventID matching a cruise eventID
+ 3. Check occurrences: All occurrences must link to a valid net_sample eventID
+ 4. Check eMoF: All eMoF records must link to either a valid eventID or occurrenceID
+ 5. Validate DwC-A: obistools::check_eventids() and check_extension_eventids() pass
+ 6. Inspect output: Review data/darwincore/ichthyo_bottle/ CSVs for reasonable row counts and no NA eventIDs/occurrenceIDs
+
+
+⏺ The rewrite is complete. Here's a summary of what was done:                                                                                                     
+                                                                                                                                                                  
+  Files Modified                                                                                                                                                  
+                                                                                                                                                                  
+  1. workflows/publish_icthyo-bottle_to_obis.qmd — Complete rewrite (1,186 lines, 22 R chunks)                                                                    
+  2. workflows/diagrams/ichthyo_bottle_event_hierarchy.mmd — New mermaid diagram                                                                                  
+
+  Key Changes
+
+  Data Source
+
+  - Switched from PostgreSQL (get_db_con()) to merged DuckDB (merge_ichthyo_bottle.duckdb, read-only)
+  - Dropped DBI PostgreSQL-specific deps, kept DBI + duckdb
+
+  Event Hierarchy (collapsed sibling architecture)
+
+  - Cruise events — aggregated from union of net tows AND casts (date ranges, bounding boxes)
+  - Net sample events — collapsed from site→tow→net to cruise→net_sample; includes locationID = "{line}_{station}"
+  - CTD cast events (NEW) — one per cast with cast_uuid, linked to cruise via parentEventID
+  - Both net_sample and ctd_cast share locationID for spatial joining
+
+  Identifiers
+
+  - cast_uuid — deterministic UUID v5 from "cast:{cast_id}" using CalCOFI namespace
+  - Bottle eMoF measurementID — UUID v5 from "bm:{bottle_measurement_id}"
+  - Cast condition eMoF measurementID — UUID v5 from "cc:{cast_condition_id}"
+  - Net-level eMoF measurementID — UUID v5 from "net:{net_uuid}:{meas_type}"
+  - Occurrences — ichthyo_uuid (existing, for tally rows where measurement_type IS NULL)
+
+  Occurrence Records
+
+  - Built from consolidated ichthyo table (not separate egg/larva tables)
+  - occurrenceID = ichthyo_uuid (deterministic, stable)
+
+  eMoF (5 sub-tables)
+
+  - 10a Net-level: std_haul_factor, prop_sorted, plankton biomass
+  - 10b Stage abundance: linked to tally occurrence via occurrenceID
+  - 10c Body length: linked to tally occurrence via occurrenceID
+  - 10d Bottle measurements (NEW): temperature, salinity, O2, nutrients, chlorophyll, DIC, etc. with NERC P01/P06 vocab
+  - 10e Cast conditions (NEW): wave, wind, weather, secchi, etc. with NERC P01 vocab
+
+  NERC Vocabulary
+
+  - Full P01 measurementTypeID mappings for all 31 bottle measurement types and 15 cast condition types
+  - P06 measurementUnitID mappings for all units
+
+  Validation
+
+  - Event hierarchy, occurrence, and eMoF linkage checks inline
+  - obistools::check_eventids() and check_extension_eventids() in dedicated validation section
+  - Output directory: data/darwincore/ichthyo_bottle/
+
+
+## 2026-02-24.b bottle.cruise_key <-> cruise.key
+
+In `@ingest_calcofi.org_bottle-database.qmd` `cruise_key` "Cruise identifier [Year]-[Month]-[Day]-C-[Ship Code]" differs from `@ingest_swfsc.noaa.gov_calcofi-db.qmd`: "YYMMKK (2-digit year + 2-digit month + ship_key)". Reconcile these differences by preferring SWFSC.
+
+But renaming cruise_key to cruise_id violates our standard of _id being "unique integer key" per @../docs/db.qmd. How 1about cruise_key_0 to retain for interim until successfully matched (then discarded)?
+
+│ Plan to implement                                                                                                                                              │
+│                                                                                                                                                                │
+│ Reconcile cruise_key: rename bottle column to cruise_key_0                                                                                                     │
+│                                                                                                                                                                │
+│ Context                                                                                                                                                        │
+│                                                                                                                                                                │
+│ Two workflows both produce a column called cruise_key with incompatible formats:                                                                               │
+│ - Bottle ingest: renames source Cruise_ID → cruise_key, keeping format 1949-03-01-C-31CR                                                                       │
+│ - SWFSC ingest: creates cruise_key as YYMMKK (e.g. 4903CR) — the canonical PK                                                                                  │
+│                                                                                                                                                                │
+│ The merge workflow silently overwrites the bottle value because ADD COLUMN IF NOT EXISTS cruise_key is a no-op when the column already exists from the bottle  │
+│ ingest.                                                                                                                                                        │
+│                                                                                                                                                                │
+│ Fix: Rename the bottle column from cruise_key to cruise_key_0. The _0 suffix marks it as an interim/source value to be retained until successfully matched to  │
+│ the canonical SWFSC cruise_key (YYMMKK), then discarded. Per db conventions (docs/db.qmd): _key is for unique string keys, _id is for integers — so            │
+│ cruise_key_0 respects the _key convention.                                                                                                                     │
+│                                                                                                                                                                │
+│ Files to modify                                                                                                                                                │
+│                                                                                                                                                                │
+│ 1. workflows/metadata/calcofi.org/bottle-database/flds_redefine.csv — line 3                                                                                   │
+│                                                                                                                                                                │
+│ Change fld_new from cruise_key to cruise_key_0 and update notes:                                                                                               │
+│                                                                                                                                                                │
+│ # old                                                                                                                                                          │
+│ ...,Cruise_ID,cruise_key,...,*_key convention: varchar identifier (e.g. 1949-03-01-C-31CR),                                                                    │
+│                                                                                                                                                                │
+│ # new                                                                                                                                                          │
+│ ...,Cruise_ID,cruise_key_0,...,interim source cruise identifier (e.g. 1949-03-01-C-31CR); _0 suffix avoids collision with SWFSC cruise.cruise_key (YYMMKK);    │
+│ discard after successful merge,                                                                                                                                │
+│                                                                                                                                                                │
+│ 2. workflows/ingest_calcofi.org_bottle-database.qmd — 2 edits                                                                                                  │
+│                                                                                                                                                                │
+│ Line 221 — update naming rationale:                                                                                                                            │
+│ # old                                                                                                                                                          │
+│ - **`*_key`** for varchar natural/composite keys (e.g. `Cast_ID` → `cast_key`, `Cruise_ID` → `cruise_key`, `Sta_ID` → `sta_key`)                               │
+│                                                                                                                                                                │
+│ # new                                                                                                                                                          │
+│ - **`*_key`** for varchar natural/composite keys (e.g. `Cast_ID` → `cast_key`, `Sta_ID` → `sta_key`)                                                           │
+│ - Note: `Cruise_ID` → `cruise_key_0` (interim `_0` suffix avoids collision with SWFSC `cruise_key` YYMMKK; discarded after merge)                              │
+│                                                                                                                                                                │
+│ Line 1058 — update TODO:                                                                                                                                       │
+│ # old                                                                                                                                                          │
+│ - [ ] Cruise bridge: derive cruise_key from bottle cruise (YYYYMM) + ship_code to match swfsc cruise_key (YYMMKK). Deferred — needs ship_key lookup.           │
+│                                                                                                                                                                │
+│ # new                                                                                                                                                          │
+│ - [x] Cruise bridge prep: renamed `Cruise_ID` → `cruise_key_0` (was `cruise_key`) to avoid collision with SWFSC `cruise_key` (YYMMKK). Merge workflow adds     │
+│ `cruise_key` as new column derived from `datetime_utc` + `ship_key`.                                                                                           │
+│                                                                                                                                                                │
+│ 3. workflows/merge_ichthyo_bottle.qmd — line 360-363                                                                                                           │
+│                                                                                                                                                                │
+│ Update comment to explain the column is genuinely new:                                                                                                         │
+│ # old                                                                                                                                                          │
+│ ### Step 2: Derive cruise_key                                                                                                                                  │
+│                                                                                                                                                                │
+│ Cruise key format: YYMMKK (2-digit year, 2-digit month, 2-letter ship                                                                                          │
+│ key).                                                                                                                                                          │
+│                                                                                                                                                                │
+│ # new                                                                                                                                                          │
+│ ### Step 2: Derive cruise_key                                                                                                                                  │
+│                                                                                                                                                                │
+│ Cruise key format: YYMMKK (2-digit year, 2-digit month, 2-letter ship                                                                                          │
+│ key). The bottle ingest stores the original `Cruise_ID` as `cruise_key_0`                                                                                      │
+│ (interim), so `cruise_key` is a new column bridging bottle casts to the                                                                                        │
+│ SWFSC `cruise` table.                                                                                                                                          │
+│                                                                                                                                                                │
+│ No SQL code changes — ADD COLUMN IF NOT EXISTS + UPDATE stay the same.                                                                                         │
+│                                                                                                                                                                │
+│ 4. workflows/libs/dev_notes.md — lines 6-8                                                                                                                     │
+│                                                                                                                                                                │
+│ Mark resolved:                                                                                                                                                 │
+│ # old                                                                                                                                                          │
+│ ## 2026-02-24.b bottle.cruise_key <-> cruise.key                                                                                                               │
+│                                                                                                                                                                │
+│ In `@ingest_calcofi.org_bottle-database.qmd` `cruise_key` "Cruise identifier [Year]-[Month]-[Day]-C-[Ship Code]" differs from                                  │
+│ `@ingest_swfsc.noaa.gov_calcofi-db.qmd`: ""                                                                                                                    │
+│                                                                                                                                                                │
+│ # new                                                                                                                                                          │
+│ ## 2026-02-24.b bottle.cruise_key <-> cruise.key [RESOLVED]                                                                                                    │
+│                                                                                                                                                                │
+│ Renamed bottle `Cruise_ID` → `cruise_key_0` (was `cruise_key`) in `flds_redefine.csv` to avoid collision with SWFSC `cruise.cruise_key` (YYMMKK). The `_0`     │
+│ suffix marks it as interim — retained until successfully matched, then discarded. Merge workflow's `ADD COLUMN cruise_key` now genuinely creates a new column. │
+│                                                                                                                                                                │
+│ What NOT to modify                                                                                                                                             │
+│                                                                                                                                                                │
+│ - SWFSC ingest — cruise_key stays YYMMKK, unchanged                                                                                                            │
+│ - calcofi4db/R/wrangle.R — create_cruise_key() unchanged                                                                                                       │
+│ - publish_icthyo-bottle_to_obis.qmd — uses SWFSC cruise table, not bottle column                                                                               │
+│ - README_PLAN.qmd — casts.cruise_key (FK) remains correct (added by merge, not bottle)                                                                         │
+│ - Merge SQL code — ADD COLUMN IF NOT EXISTS + UPDATE unchanged; behavior improves automatically                                                                │
+│                                                                                                                                                                │
+│ Verification                                                                                                                                                   │
+│                                                                                                                                                                │
+│ After changes, the data flow is:                                                                                                                               │
+│ 1. Bottle ingest: Cruise_ID → cruise_key_0 (e.g. 1949-03-01-C-31CR). No cruise_key in output.                                                                  │
+│ 2. Merge workflow: ADD COLUMN cruise_key creates a genuinely new column, UPDATE populates YYMMKK values. casts now has both cruise_key_0 (interim source       │
+│ value) and cruise_key (FK to SWFSC cruise).                                                                                                                    │
+│ 3. Confirm by grepping for cruise_key in the bottle parquet output — should only find cruise_key_0, not cruise_key.                                            │
+
+⏺ Good — the only references to cruise_key in the bottle ingest are the updated documentation lines. The actual column rename is driven by flds_redefine.csv,
+  which now maps Cruise_ID → cruise_key_0.                                                                                                                        
+                                                                                                                                                                  
+  All changes are complete:                                                                                                                                       
+                                                                                                                                                                  
+  1. flds_redefine.csv — Cruise_ID now maps to cruise_key_0 with updated notes explaining the interim _0 suffix                                                   
+  2. ingest_calcofi.org_bottle-database.qmd — naming rationale updated (line 221-222) and TODO marked done (line 1058-1059)
+  3. merge_ichthyo_bottle.qmd — Step 2 comment explains that cruise_key is now a genuinely new column since bottle uses cruise_key_0
+  4. libs/dev_notes.md — issue marked [RESOLVED] with resolution summary
+
+  No SQL code changes were needed — ADD COLUMN IF NOT EXISTS cruise_key and the UPDATE in the merge workflow will now work correctly because the bottle ingest no
+  longer creates a cruise_key column.
 
 ## 2026-02-24 revert from int _id to _uuid for icthyo, smarter sync w/ md5 hash checks and mtime filenaming
 
@@ -600,6 +1069,7 @@ Can we also implement a hash check on the GS parquet upload? For instance, we ma
 
  New exported function (~50 lines), placed after put_gcs_file() (~line 131):
 
+ ```r
  #' Sync local files to GCS, skipping unchanged files
  #'
  #' Compares local files against GCS using MD5 hashes (with file-size
@@ -690,6 +1160,7 @@ Can we also implement a hash check on the GS parquet upload? For instance, we ma
 
    results
  }
+ ```
 
  Key design decisions:
  - Reuses existing list_gcs_files() (already handles googleCloudStorageR vs gcloud CLI)
@@ -702,11 +1173,13 @@ Can we also implement a hash check on the GS parquet upload? For instance, we ma
 
  Replace the naive walk()/put_gcs_file() loop (~lines 1114-1121) with:
 
+ ```r
  # sync to GCS — only uploads new or changed files
  sync_results <- sync_to_gcs(
    local_dir  = dir_parquet,
    gcs_prefix = gcs_ingest_prefix,
    bucket     = gcs_bucket)
+ ```
 
  What NOT to modify
 

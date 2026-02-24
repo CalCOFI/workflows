@@ -1,0 +1,39 @@
+graph TD
+    A["Cruise Event<br/>(eventID = cruise_key)"] -->|parentEventID| B["Net Sample Event<br/>(eventID = net_uuid)"]
+    A -->|parentEventID| C["CTD Cast Event<br/>(eventID = cast_uuid)"]
+    B -->|eventID| D[Occurrence Records<br/>ichthyo tally]
+    B -->|eventID| E["eMoF: Net Sample<br/>(std_haul_factor, prop_sorted,<br/>plankton biomass)"]
+    D -->|occurrenceID| F["eMoF: Stage Abundance<br/>& Body Length"]
+    C -->|eventID| G["eMoF: Bottle Measurements<br/>(temperature, salinity,<br/>O2, nutrients, ...)"]
+    C -->|eventID| H["eMoF: Cast Conditions<br/>(wave, wind, weather, ...)"]
+
+    B -.-|locationID| C
+
+    A:::cruise
+    B:::net
+    C:::cast
+    D:::occurrence
+    E:::measurement
+    F:::measurement
+    G:::measurement
+    H:::measurement
+
+    classDef cruise fill:#e1f5ff,stroke:#0066cc,stroke-width:2px
+    classDef net fill:#e1ffe1,stroke:#00cc66,stroke-width:2px
+    classDef cast fill:#fff4e1,stroke:#ff9900,stroke-width:2px
+    classDef occurrence fill:#f0e1ff,stroke:#6600cc,stroke-width:2px
+    classDef measurement fill:#ffe1e1,stroke:#cc0000,stroke-width:2px
+
+    subgraph Event Core
+        A
+        B
+        C
+    end
+
+    subgraph Extensions
+        D
+        E
+        F
+        G
+        H
+    end
