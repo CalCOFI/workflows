@@ -1,19 +1,20 @@
 ---
-title: "Publish Ichthyoplankton & Bottle Data to OBIS"
+title: "Publish Ichthyoplankton to OBIS"
 editor_options:
   chunk_output_type: console
 ---
 
 ## Overview
 
-This workflow converts CalCOFI ichthyoplankton (fish eggs and larvae) and bottle hydrography data to an OBIS-compliant DarwinCore Archive for publication. The archive follows the Event Core structure with Occurrence and ExtendedMeasurementOrFact (eMoF) extensions.
+This workflow converts CalCOFI ichthyoplankton (fish eggs and larvae) data to an OBIS-compliant DarwinCore Archive for publication. The archive follows the Event Core structure with Occurrence and ExtendedMeasurementOrFact (eMoF) extensions.
+
+**Note on bottle data**: CalCOFI bottle hydrography (temperature, salinity, dissolved oxygen, nutrients, chlorophyll, carbon system parameters) is not included in this DarwinCore Archive. These environmental data are already served via [ERDDAP CalCOFI SIO Hydrographic Bottle Data](https://coastwatch.pfeg.noaa.gov/erddap/tabledap/siocalcofiHydroBottle.html).
 
 **Data source**: merged DuckDB from `merge_ichthyo_bottle.qmd`, combining:
 
 - SWFSC ichthyoplankton tables (cruise, ship, site, tow, net, ichthyo, species, lookup)
-- CalCOFI.org bottle tables (casts, bottle, bottle_measurement, cast_condition, measurement_type)
 
-**References**: [CalCOFI Fish Eggs & Larvae](https://calcofi.org/data/marine-ecosystem-data/fish-eggs-larvae/) | [CalCOFI Bottle Database](https://calcofi.org/data/oceanographic-data/bottle-database/) | [OBIS Manual](https://manual.obis.org/) | [DarwinCore Terms](https://dwc.tdwg.org/terms/)
+**References**: [CalCOFI Fish Eggs & Larvae](https://calcofi.org/data/marine-ecosystem-data/fish-eggs-larvae/) | [OBIS Manual](https://manual.obis.org/) | [DarwinCore Terms](https://dwc.tdwg.org/terms/)
 
 ```{r}
 #| label: setup
@@ -45,8 +46,8 @@ options(readr.show_col_types = F)
 CALCOFI_NS <- "c0f1ca00-ca1c-5000-b000-1c4790000000"
 
 # dataset metadata ----
-dataset_title <- "CalCOFI Ichthyoplankton Tows & Bottle Hydrography"
-dataset_abstract <- "Fish larvae and egg counts from CalCOFI ichthyoplankton nets (primarily vertical [Calvet or Pairovet], oblique [bongo or ring nets], and surface tows [Manta nets]) combined with CTD rosette bottle hydrography (temperature, salinity, dissolved oxygen, nutrients, chlorophyll, and carbon system parameters). Oblique tows are normally standardized to count per 10 m^2 of surface sampled. Surface tows are normally standardized to count per 1,000 m^3 strained. Bottle data include depth-resolved measurements from Niskin bottles on CTD casts at CalCOFI grid stations."
+dataset_title <- "CalCOFI Ichthyoplankton Tows"
+dataset_abstract <- "Fish larvae and egg counts from CalCOFI ichthyoplankton nets (primarily vertical [Calvet or Pairovet], oblique [bongo or ring nets], and surface tows [Manta nets]). Oblique tows are normally standardized to count per 10 m^2 of surface sampled. Surface tows are normally standardized to count per 1,000 m^3 strained."
 dataset_keywords <- c(
   "atmosphere",
   "biology",
@@ -54,7 +55,6 @@ dataset_keywords <- c(
   "calcofi",
   "earth science",
   "environment",
-  "hydrography",
   "ichthyoplankton",
   "latitude",
   "longitude",
@@ -66,14 +66,14 @@ country_code <- "US"
 water_body <- "California Current"
 
 dataset_id <- glue(
-  "calcofi.io_workflow_ichthyo-bottle_to_obis_{format(Sys.Date(), '%Y-%m-%d')}"
+  "calcofi.io_workflow_ichthyo_to_obis_{format(Sys.Date(), '%Y-%m-%d')}"
 )
 
-sampling_methods_description <- "Standard CalCOFI ichthyoplankton tows: The standard oblique tow uses a bongo net (71 cm diameter, 0.505 mm mesh) or 1-m ring net (prior to 1978) retrieved at a constant wire angle (45 degrees) from 210 m depth to surface. Surface tows use a Manta net; vertical tows use CalVET/Pairovet nets. Flowmeters measure volume filtered. Samples are preserved in 5% formalin. Fish eggs and larvae are sorted, identified to lowest taxon possible, enumerated, and measured. CTD bottle data: Seawater samples collected using Niskin bottles mounted on a CTD rosette cast to near-bottom depths. Temperature, salinity, and dissolved oxygen are measured by CTD sensors and calibrated against bottle samples. Nutrient concentrations (phosphate, silicate, nitrite, nitrate, ammonia) determined by autoanalyzer. Chlorophyll-a and phaeopigment measured fluorometrically."
+sampling_methods_description <- "Standard CalCOFI ichthyoplankton tows: The standard oblique tow uses a bongo net (71 cm diameter, 0.505 mm mesh) or 1-m ring net (prior to 1978) retrieved at a constant wire angle (45 degrees) from 210 m depth to surface. Surface tows use a Manta net; vertical tows use CalVET/Pairovet nets. Flowmeters measure volume filtered. Samples are preserved in 5% formalin. Fish eggs and larvae are sorted, identified to lowest taxon possible, enumerated, and measured."
 
-study_extent_description <- "The study covers the California Current ecosystem, primarily off Southern California (standard lines 77-93) but historically extending from the border of Canada to the tip of Baja California. The time series for this dataset generally begins in 1949 for bottle data and 1951 for ichthyoplankton, continuing to the present with quarterly cruises."
+study_extent_description <- "The study covers the California Current ecosystem, primarily off Southern California (standard lines 77-93) but historically extending from the border of Canada to the tip of Baja California. The time series for this dataset generally begins in 1951, continuing to the present with quarterly cruises."
 
-sampling_description <- "Samples are collected at fixed stations along the CalCOFI grid. Oblique tows are standardized to counts per 10 m^2 of sea surface. Surface tows are standardized to counts per 1,000 m^3. Bottle hydrography data provide depth-resolved oceanographic context at the same grid stations."
+sampling_description <- "Samples are collected at fixed stations along the CalCOFI grid. Oblique tows are standardized to counts per 10 m^2 of sea surface. Surface tows are standardized to counts per 1,000 m^3."
 
 funding_information <- "CalCOFI is a partnership between the NOAA National Marine Fisheries Service (NMFS), Scripps Institution of Oceanography (SIO), and California Department of Fish and Wildlife (CDFW)."
 
@@ -89,7 +89,7 @@ intellectual_rights <- list(
   para = paste(rights, license, collapse = " ")
 )
 
-dir_out <- here("data/darwincore/ichthyo_bottle")
+dir_out <- here("data/darwincore/ichthyoplankton")
 
 # get merged duckdb connection ----
 db_path <- here("data/wrangling/merge_ichthyo_bottle.duckdb")
@@ -99,21 +99,20 @@ con <- dbConnect(duckdb(), dbdir = db_path, read_only = TRUE)
 
 ## Event Hierarchy Design
 
-The archive uses a **sibling-event architecture**: ichthyoplankton net tows and CTD bottle casts are both children of cruise events, linked spatially via `locationID` (CalCOFI `line_station` format) rather than nested within each other. This avoids falsely implying that bottle measurements were co-located with specific net tows — they happen at the same station but at different times and depths.
+The archive uses a **two-level event hierarchy**: ichthyoplankton net tows are children of cruise events. Each net sample carries its own coordinates and timestamp.
 
 ```{mermaid}
-%%| label: fig-ichthyo_bottle_event_hierarchy
-%%| fig-cap: "Event hierarchy for CalCOFI ichthyoplankton & bottle data in DarwinCore Archive format."
-%%| file: diagrams/ichthyo_bottle_event_hierarchy.mmd
+%%| label: fig-ichthyo_event_hierarchy
+%%| fig-cap: "Event hierarchy for CalCOFI ichthyoplankton data in DarwinCore Archive format."
+%%| file: diagrams/ichthyo_event_hierarchy.mmd
 ```
 
 **Key design decisions**:
 
-1. **Collapsed hierarchy**: cruise → net_sample / ctd_cast (no intermediate site/tow levels) to avoid event inheritance issues with NA values in the IPT
-2. **`locationID`**: both net_sample and ctd_cast events share `locationID = "{line}_{station}"` for spatial joining by OBIS consumers
-3. **`cast_uuid`**: deterministic UUID v5 minted from `cast_id` using the CalCOFI namespace — same approach as `ichthyo_uuid`
-4. **Occurrence consolidation**: one occurrence per life stage (egg or larva) per species per net sample
-5. **eMoF structure**: five sub-tables covering net-level measurements, stage abundance, body length, bottle measurements, and cast conditions
+1. **Collapsed hierarchy**: cruise → net_sample (no intermediate site/tow levels) to avoid event inheritance issues with NA values in the IPT
+2. **`locationID`**: net_sample events use `locationID = "{line}_{station}"` for spatial joining by OBIS consumers
+3. **Occurrence consolidation**: one occurrence per life stage (egg or larva) per species per net sample
+4. **eMoF structure**: three sub-tables covering net-level measurements, stage abundance, and body length
 
 ## Data Extraction
 
@@ -132,13 +131,6 @@ tbl_ichthyo <- tbl(con, "ichthyo")
 tbl_species <- tbl(con, "species")
 tbl_lookup <- tbl(con, "lookup")
 
-# bottle chain ----
-tbl_casts <- tbl(con, "casts")
-tbl_bottle <- tbl(con, "bottle")
-tbl_bottle_meas <- tbl(con, "bottle_measurement")
-tbl_cast_condition <- tbl(con, "cast_condition")
-tbl_measurement_type <- tbl(con, "measurement_type")
-
 # taxonomy ----
 tbl_taxon <- tbl(con, "taxon")
 tbl_taxa_rank <- tbl(con, "taxa_rank")
@@ -154,11 +146,6 @@ for (tname in c(
   "ichthyo",
   "species",
   "lookup",
-  "casts",
-  "bottle",
-  "bottle_measurement",
-  "cast_condition",
-  "measurement_type",
   "taxon",
   "taxa_rank"
 )) {
@@ -173,8 +160,6 @@ The merged DuckDB uses integer `*_id` columns for joins and SWFSC `_source_uuid`
 
 - **Net eventID**: use net's `_source_uuid` (original SWFSC UUID, unique per net)
 - **Ichthyo occurrenceID / measurementID**: mint deterministic UUID v5 from composite key
-- **Cast eventID**: mint deterministic UUID v5 from `cast_id`
-- **Bottle/cast eMoF measurementID**: mint deterministic UUID v5 from integer IDs
 
 ```{r}
 #| label: mint-uuids
@@ -207,18 +192,6 @@ d_ichthyo <- tbl_ichthyo |>
   )
 stopifnot(all(!duplicated(d_ichthyo$ichthyo_uuid)))
 cat(glue("Ichthyo UUIDs: {nrow(d_ichthyo)} (all unique)"), "\n")
-
-# collect casts and mint cast_uuid ----
-d_casts <- tbl_casts |>
-  collect() |>
-  mutate(
-    cast_uuid = UUIDfromName(
-      CALCOFI_NS,
-      paste0("cast:", cast_id)
-    )
-  )
-stopifnot(all(!duplicated(d_casts$cast_uuid)))
-cat(glue("Cast UUIDs: {nrow(d_casts)} (all unique)"), "\n")
 ```
 
 ## Life Stage Vocabulary
@@ -238,26 +211,7 @@ measurement_unit_vocab <- tibble(
     "grams",
     "proportion",
     "m^3",
-    "degC",
-    "PSS-78",
-    "ml/L",
-    "umol/kg",
-    "%",
-    "kg/m3",
-    "ug/L",
-    "umol/L",
-    "mgC/m3/hld",
-    "degrees",
-    "feet",
-    "seconds",
-    "knots",
-    "millibars",
-    "oktas",
-    "meters",
-    "Forel-Ule",
-    "pH",
-    "10^-8 m3/kg",
-    "dyn m"
+    "meters"
   ),
   measurementUnitID = c(
     "http://vocab.nerc.ac.uk/collection/P06/current/UUUU/", # individuals
@@ -267,81 +221,8 @@ measurement_unit_vocab <- tibble(
     "http://vocab.nerc.ac.uk/collection/P06/current/UGRM/", # grams
     "http://vocab.nerc.ac.uk/collection/P06/current/UUUU/", # proportion
     "http://vocab.nerc.ac.uk/collection/P06/current/MCUB/", # m^3
-    "http://vocab.nerc.ac.uk/collection/P06/current/UPAA/", # degC
-    "http://vocab.nerc.ac.uk/collection/P06/current/UGKG/", # PSS-78
-    "http://vocab.nerc.ac.uk/collection/P06/current/UMLL/", # ml/L
-    "http://vocab.nerc.ac.uk/collection/P06/current/UMKG/", # umol/kg
-    "http://vocab.nerc.ac.uk/collection/P06/current/UPCT/", # %
-    "http://vocab.nerc.ac.uk/collection/P06/current/UKGM/", # kg/m3
-    "http://vocab.nerc.ac.uk/collection/P06/current/UGPL/", # ug/L
-    "http://vocab.nerc.ac.uk/collection/P06/current/UPOX/", # umol/L
-    "http://vocab.nerc.ac.uk/collection/P06/current/UUUU/", # mgC/m3/hld (no std P06)
-    "http://vocab.nerc.ac.uk/collection/P06/current/UAAA/", # degrees
-    "http://vocab.nerc.ac.uk/collection/P06/current/UXFT/", # feet
-    "http://vocab.nerc.ac.uk/collection/P06/current/UTBB/", # seconds
-    "http://vocab.nerc.ac.uk/collection/P06/current/UKNT/", # knots
-    "http://vocab.nerc.ac.uk/collection/P06/current/UPML/", # millibars
-    "http://vocab.nerc.ac.uk/collection/P06/current/UUUU/", # oktas (no std P06)
-    "http://vocab.nerc.ac.uk/collection/P06/current/ULAA/", # meters
-    "http://vocab.nerc.ac.uk/collection/P06/current/UUUU/", # Forel-Ule (no std P06)
-    "http://vocab.nerc.ac.uk/collection/P06/current/UUUU/", # pH
-    "http://vocab.nerc.ac.uk/collection/P06/current/UUUU/", # 10^-8 m3/kg
-    "http://vocab.nerc.ac.uk/collection/P06/current/UUUU/"
+    "http://vocab.nerc.ac.uk/collection/P06/current/ULAA/"  # meters
   )
-) # dyn m
-
-# NERC P01 vocabulary for bottle measurement types ----
-bottle_p01_vocab <- tribble(
-  ~measurement_type   , ~measurementTypeID                                         ,
-  "temperature"       , "http://vocab.nerc.ac.uk/collection/P01/current/TEMPPR01/" ,
-  "salinity"          , "http://vocab.nerc.ac.uk/collection/P01/current/PSALST01/" ,
-  "oxygen_ml_l"       , "http://vocab.nerc.ac.uk/collection/P01/current/DOXYZZXX/" ,
-  "oxygen_umol_kg"    , "http://vocab.nerc.ac.uk/collection/P01/current/DLOXYUMK/" ,
-  "oxygen_saturation" , "http://vocab.nerc.ac.uk/collection/P01/current/OXYSSC01/" ,
-  "sigma_theta"       , "http://vocab.nerc.ac.uk/collection/P01/current/SIGTEQ01/" ,
-  "chlorophyll_a"     , "http://vocab.nerc.ac.uk/collection/P01/current/CPHLPR01/" ,
-  "phaeopigment"      , "http://vocab.nerc.ac.uk/collection/P01/current/PHAEFLUO/" ,
-  "phosphate"         , "http://vocab.nerc.ac.uk/collection/P01/current/PHOSZZXX/" ,
-  "silicate"          , "http://vocab.nerc.ac.uk/collection/P01/current/SLCAZZXX/" ,
-  "nitrite"           , "http://vocab.nerc.ac.uk/collection/P01/current/NTRIZZXX/" ,
-  "nitrate"           , "http://vocab.nerc.ac.uk/collection/P01/current/NTRAZZXX/" ,
-  "ammonia"           , "http://vocab.nerc.ac.uk/collection/P01/current/AMOAZZXX/" ,
-  "c14_rep1"          , "http://vocab.nerc.ac.uk/collection/P01/current/OLOCSMP1/" ,
-  "c14_rep2"          , "http://vocab.nerc.ac.uk/collection/P01/current/OLOCSMP1/" ,
-  "c14_dark"          , "http://vocab.nerc.ac.uk/collection/P01/current/OLOCSMP1/" ,
-  "c14_mean"          , "http://vocab.nerc.ac.uk/collection/P01/current/OLOCSMP1/" ,
-  "light_pct"         , "http://vocab.nerc.ac.uk/collection/P01/current/IRRDSV01/" ,
-  "dic_rep1"          , "http://vocab.nerc.ac.uk/collection/P01/current/DICATSWT/" ,
-  "dic_rep2"          , "http://vocab.nerc.ac.uk/collection/P01/current/DICATSWT/" ,
-  "alkalinity_rep1"   , "http://vocab.nerc.ac.uk/collection/P01/current/MDMAP014/" ,
-  "alkalinity_rep2"   , "http://vocab.nerc.ac.uk/collection/P01/current/MDMAP014/" ,
-  "ph_rep1"           , "http://vocab.nerc.ac.uk/collection/P01/current/PHXXZZXX/" ,
-  "ph_rep2"           , "http://vocab.nerc.ac.uk/collection/P01/current/PHXXZZXX/" ,
-  "r_depth"           , "http://vocab.nerc.ac.uk/collection/P01/current/ADEPZZ01/" ,
-  "r_temperature"     , "http://vocab.nerc.ac.uk/collection/P01/current/TEMPPR01/" ,
-  "r_salinity_sva"    , "http://vocab.nerc.ac.uk/collection/P01/current/SVELXXXX/" ,
-  "r_dynamic_height"  , "http://vocab.nerc.ac.uk/collection/P01/current/DYNHTTAU/" ,
-  "r_ammonium"        , "http://vocab.nerc.ac.uk/collection/P01/current/AMOAZZXX/" ,
-  "r_oxygen_umol_kg"  , "http://vocab.nerc.ac.uk/collection/P01/current/DLOXYUMK/"
-)
-
-# NERC P01 vocabulary for cast condition types ----
-cast_p01_vocab <- tribble(
-  ~condition_type       , ~measurementTypeID                                         ,
-  "wave_direction"      , "http://vocab.nerc.ac.uk/collection/P01/current/GWDRZZ01/" ,
-  "wave_height"         , "http://vocab.nerc.ac.uk/collection/P01/current/GAVHZZ01/" ,
-  "wave_period"         , "http://vocab.nerc.ac.uk/collection/P01/current/GAVTZZ01/" ,
-  "wind_direction"      , "http://vocab.nerc.ac.uk/collection/P01/current/EWDAZZ01/" ,
-  "wind_speed"          , "http://vocab.nerc.ac.uk/collection/P01/current/EWSBZZ01/" ,
-  "barometric_pressure" , "http://vocab.nerc.ac.uk/collection/P01/current/CAPAZZ01/" ,
-  "dry_air_temp"        , "http://vocab.nerc.ac.uk/collection/P01/current/CTMPZZ01/" ,
-  "wet_air_temp"        , "http://vocab.nerc.ac.uk/collection/P01/current/CWETZZ01/" ,
-  "weather_code"        , "http://vocab.nerc.ac.uk/collection/P01/current/WMOCWWXX/" ,
-  "cloud_type"          , "http://vocab.nerc.ac.uk/collection/P01/current/WMOCLTXX/" ,
-  "cloud_amount"        , "http://vocab.nerc.ac.uk/collection/P01/current/CLAMAMTS/" ,
-  "visibility"          , "http://vocab.nerc.ac.uk/collection/P01/current/WMOVISXX/" ,
-  "secchi_depth"        , "http://vocab.nerc.ac.uk/collection/P01/current/SECCSDNX/" ,
-  "water_color"         , "http://vocab.nerc.ac.uk/collection/P01/current/CCOLXXXX/"
 )
 ```
 
@@ -349,7 +230,7 @@ cast_p01_vocab <- tribble(
 
 ### Cruise Events
 
-Aggregate over both net tows and casts to build cruise-level events:
+Aggregate over net tows to build cruise-level events:
 
 ```{r}
 #| label: build-cruise-events
@@ -380,36 +261,22 @@ d_net_cruise_summary <- d_net_site |>
     .groups = "drop"
   )
 
-# cast cruise summaries ----
-d_cast_cruise_summary <- d_casts |>
-  group_by(cruise_key) |>
-  summarize(
-    cast_time_min = min(datetime_utc, na.rm = TRUE),
-    cast_time_max = max(datetime_utc, na.rm = TRUE),
-    cast_lon_min = min(lon_dec, na.rm = TRUE),
-    cast_lon_max = max(lon_dec, na.rm = TRUE),
-    cast_lat_min = min(lat_dec, na.rm = TRUE),
-    cast_lat_max = max(lat_dec, na.rm = TRUE),
-    .groups = "drop"
-  )
-
 # combine cruise metadata ----
 d_cruise_events <- tbl_cruise |>
   left_join(tbl_ship, by = "ship_key") |>
   collect() |>
   left_join(d_net_cruise_summary, by = "cruise_key") |>
-  left_join(d_cast_cruise_summary, by = "cruise_key") |>
   mutate(
-    # date range: union of net tows and casts
-    time_min = pmin(net_time_min, cast_time_min, na.rm = TRUE),
-    time_max = pmax(net_time_max, cast_time_max, na.rm = TRUE),
-    # bounding box: union of net sites and cast positions
-    lon_min = pmin(net_lon_min, cast_lon_min, na.rm = TRUE),
-    lon_max = pmax(net_lon_max, cast_lon_max, na.rm = TRUE),
-    lat_min = pmin(net_lat_min, cast_lat_min, na.rm = TRUE),
-    lat_max = pmax(net_lat_max, cast_lat_max, na.rm = TRUE)
+    # date range from net tows
+    time_min = net_time_min,
+    time_max = net_time_max,
+    # bounding box from net sites
+    lon_min = net_lon_min,
+    lon_max = net_lon_max,
+    lat_min = net_lat_min,
+    lat_max = net_lat_max
   ) |>
-  filter(!is.na(time_min) | !is.na(cast_time_min)) |>
+  filter(!is.na(time_min)) |>
   mutate(
     eventID = cruise_key,
     parentEventID = NA_character_,
@@ -497,47 +364,6 @@ stopifnot(all(!duplicated(d_net_events$eventID)))
 cat(glue("Net sample events: {nrow(d_net_events)}"), "\n")
 ```
 
-### CTD Cast Events
-
-One event per cast:
-
-```{r}
-#| label: build-cast-events
-
-d_cast_events <- d_casts |>
-  mutate(
-    eventID = cast_uuid,
-    parentEventID = cruise_key,
-    eventType = "ctd_cast",
-    eventDate = format(datetime_utc, "%Y-%m-%dT%H:%M:%SZ"),
-    decimalLatitude = lat_dec,
-    decimalLongitude = lon_dec,
-    locationID = paste0(rpt_line, "_", rpt_sta),
-    samplingProtocol = "CTD rosette cast",
-    sampleSizeValue = bottom_depth_m,
-    sampleSizeUnit = "m",
-    eventRemarks = glue(
-      "CTD cast at station {rpt_line}_{rpt_sta}, bottom depth {bottom_depth_m} m"
-    )
-  ) |>
-  select(
-    eventID,
-    parentEventID,
-    eventType,
-    eventDate,
-    decimalLatitude,
-    decimalLongitude,
-    locationID,
-    samplingProtocol,
-    sampleSizeValue,
-    sampleSizeUnit,
-    eventRemarks
-  )
-
-stopifnot(all(!duplicated(d_cast_events$eventID)))
-cat(glue("CTD cast events: {nrow(d_cast_events)}"), "\n")
-```
-
 ### Combine All Events
 
 ```{r}
@@ -545,8 +371,7 @@ cat(glue("CTD cast events: {nrow(d_cast_events)}"), "\n")
 
 d_event <- bind_rows(
   d_cruise_events,
-  d_net_events,
-  d_cast_events
+  d_net_events
 ) |>
   mutate(
     geodeticDatum = "WGS84",
@@ -802,111 +627,6 @@ d_emof_length <- d_ichthyo |>
 cat(glue("eMoF body length: {nrow(d_emof_length)}"), "\n")
 ```
 
-### 10d. Bottle measurements
-
-From `bottle_measurement` joined through `bottle` → `casts`:
-
-```{r}
-#| label: emof-bottle
-
-# build cast_id → cast_uuid lookup
-d_cast_uuid_lookup <- d_casts |> select(cast_id, cast_uuid)
-
-# get measurement type descriptions and units
-d_mtype <- tbl_measurement_type |>
-  filter(dataset == "bottle") |>
-  collect()
-
-d_emof_bottle <- tbl_bottle_meas |>
-  left_join(
-    tbl_bottle |> select(bottle_id, cast_id, depth_m),
-    by = "bottle_id"
-  ) |>
-  collect() |>
-  inner_join(d_cast_uuid_lookup, by = "cast_id") |>
-  left_join(
-    d_mtype |> select(measurement_type, description, units),
-    by = "measurement_type"
-  ) |>
-  left_join(bottle_p01_vocab, by = "measurement_type") |>
-  mutate(
-    eventID = cast_uuid,
-    occurrenceID = NA_character_,
-    measurementID = UUIDfromName(
-      CALCOFI_NS,
-      paste0("bm:", bottle_measurement_id)
-    ),
-    measurementType = description,
-    meas_val = measurement_value,
-    measurementUnit = units,
-    measurementMethod = "https://calcofi.org/data/oceanographic-data/bottle-database/",
-    measurementRemarks = paste0("depth_m: ", depth_m)
-  ) |>
-  left_join(measurement_unit_vocab, by = "measurementUnit") |>
-  select(
-    eventID,
-    occurrenceID,
-    measurementID,
-    measurementType,
-    measurementTypeID,
-    measurementValue = meas_val,
-    measurementUnit,
-    measurementUnitID,
-    measurementMethod,
-    measurementRemarks
-  )
-
-cat(glue("eMoF bottle measurements: {nrow(d_emof_bottle)}"), "\n")
-```
-
-### 10e. Cast conditions
-
-From `cast_condition` joined to `casts`:
-
-```{r}
-#| label: emof-cast-conditions
-
-d_emof_cast_cond <- tbl_cast_condition |>
-  collect() |>
-  inner_join(d_cast_uuid_lookup, by = "cast_id") |>
-  left_join(
-    tbl_measurement_type |>
-      filter(dataset == "cast") |>
-      collect() |>
-      select(measurement_type, description, units),
-    by = c("condition_type" = "measurement_type")
-  ) |>
-  left_join(cast_p01_vocab, by = "condition_type") |>
-  mutate(
-    eventID = cast_uuid,
-    occurrenceID = NA_character_,
-    measurementID = UUIDfromName(
-      CALCOFI_NS,
-      paste0("cc:", cast_condition_id)
-    ),
-    measurementType = description,
-    measurementValue = condition_value,
-    measurementUnit = ifelse(is.na(units) | units == "", NA_character_, units),
-    measurementMethod = "https://calcofi.org/data/oceanographic-data/bottle-database/",
-    measurementRemarks = NA_character_
-  ) |>
-  left_join(measurement_unit_vocab, by = "measurementUnit") |>
-  select(
-    eventID,
-    occurrenceID,
-    measurementID,
-    measurementType,
-    measurementTypeID,
-    measurementValue,
-    measurementUnit,
-    measurementUnitID,
-    measurementMethod,
-    measurementRemarks
-  )
-
-cat(glue("eMoF cast conditions: {nrow(d_emof_cast_cond)}"), "\n")
-```
-
 ### Combine All eMoF Records
 
 ```{r}
@@ -915,17 +635,13 @@ cat(glue("eMoF cast conditions: {nrow(d_emof_cast_cond)}"), "\n")
 d_emof <- bind_rows(
   d_emof_net,
   d_emof_stage |> select(-measurementValueID),
-  d_emof_length |> select(-measurementValueID),
-  d_emof_bottle,
-  d_emof_cast_cond
+  d_emof_length |> select(-measurementValueID)
 )
 
 cat("eMoF counts by source:\n")
 cat(glue("  Net-level:       {nrow(d_emof_net)}"), "\n")
 cat(glue("  Stage abundance: {nrow(d_emof_stage)}"), "\n")
 cat(glue("  Body length:     {nrow(d_emof_length)}"), "\n")
-cat(glue("  Bottle meas:     {nrow(d_emof_bottle)}"), "\n")
-cat(glue("  Cast conditions: {nrow(d_emof_cast_cond)}"), "\n")
 cat(glue("  Total:           {nrow(d_emof)}"), "\n")
 
 # verify all eMoF records link to a valid eventID or occurrenceID
@@ -1142,7 +858,7 @@ Build EML document with geographic, temporal, and taxonomic coverage:
 ```{r}
 #| label: build-eml
 
-# geographic coverage: union of net sites and cast positions ----
+# geographic coverage from net sites ----
 geo_net <- tbl_site |>
   summarise(
     lon_min = min(longitude, na.rm = TRUE),
@@ -1152,26 +868,14 @@ geo_net <- tbl_site |>
   ) |>
   collect()
 
-geo_cast <- d_casts |>
-  summarise(
-    lon_min = min(lon_dec, na.rm = TRUE),
-    lon_max = max(lon_dec, na.rm = TRUE),
-    lat_min = min(lat_dec, na.rm = TRUE),
-    lat_max = max(lat_dec, na.rm = TRUE)
-  )
-
 geo_coverage <- tibble(
-  westBoundingCoordinate = min(geo_net$lon_min, geo_cast$lon_min, na.rm = TRUE),
-  eastBoundingCoordinate = max(geo_net$lon_max, geo_cast$lon_max, na.rm = TRUE),
-  southBoundingCoordinate = min(
-    geo_net$lat_min,
-    geo_cast$lat_min,
-    na.rm = TRUE
-  ),
-  northBoundingCoordinate = max(geo_net$lat_max, geo_cast$lat_max, na.rm = TRUE)
+  westBoundingCoordinate  = geo_net$lon_min,
+  eastBoundingCoordinate  = geo_net$lon_max,
+  southBoundingCoordinate = geo_net$lat_min,
+  northBoundingCoordinate = geo_net$lat_max
 )
 
-# temporal coverage: union of tow and cast dates ----
+# temporal coverage from tow dates ----
 temp_net <- tbl_tow |>
   summarise(
     tmin = min(time_start, na.rm = TRUE),
@@ -1179,23 +883,9 @@ temp_net <- tbl_tow |>
   ) |>
   collect()
 
-temp_cast <- d_casts |>
-  summarise(
-    tmin = min(datetime_utc, na.rm = TRUE),
-    tmax = max(datetime_utc, na.rm = TRUE)
-  )
-
 temp_coverage <- list(
-  beginDate = as.character(as.Date(min(
-    temp_net$tmin,
-    temp_cast$tmin,
-    na.rm = TRUE
-  ))),
-  endDate = as.character(as.Date(max(
-    temp_net$tmax,
-    temp_cast$tmax,
-    na.rm = TRUE
-  )))
+  beginDate = as.character(as.Date(temp_net$tmin)),
+  endDate   = as.character(as.Date(temp_net$tmax))
 )
 
 # taxonomic coverage ----
@@ -1350,7 +1040,6 @@ if (nrow(d_missing_worms) > 0) {
 # summary statistics ----
 n_cruises <- d_event |> filter(eventType == "cruise") |> nrow()
 n_nets <- d_event |> filter(eventType == "net_sample") |> nrow()
-n_casts_out <- d_event |> filter(eventType == "ctd_cast") |> nrow()
 n_occs <- nrow(d_occurrence_out)
 n_species <- n_distinct(d_occurrence_out$scientificName)
 n_emof <- nrow(d_emof)
@@ -1361,7 +1050,6 @@ glue(
 Total events:         {prettyNum(nrow(d_event), big.mark = ',')}
   - Cruises:          {prettyNum(n_cruises, big.mark = ',')}
   - Net samples:      {prettyNum(n_nets, big.mark = ',')}
-  - CTD casts:        {prettyNum(n_casts_out, big.mark = ',')}
 Total occurrences:    {prettyNum(n_occs, big.mark = ',')}
 Unique species:       {prettyNum(n_species, big.mark = ',')}
 Total eMoF records:   {prettyNum(n_emof, big.mark = ',')}"
@@ -1377,7 +1065,7 @@ Create the final DwC-A zip file:
 
 zip_file <- file.path(
   dirname(dir_out),
-  paste0("ichthyo_bottle_", Sys.Date(), ".zip")
+  paste0("ichthyoplankton_", Sys.Date(), ".zip")
 )
 
 zip(
@@ -1404,7 +1092,7 @@ cat("\nDarwin Core Archive created:", zip_file, "\n")
 #| label: sync-to-gcs
 
 gcs_bucket <- "calcofi-db"
-gcs_publish_prefix <- "publish/ichthyo_bottle"
+gcs_publish_prefix <- "publish/ichthyoplankton"
 
 sync_results <- sync_to_gcs(
   local_dir = dir_out,
