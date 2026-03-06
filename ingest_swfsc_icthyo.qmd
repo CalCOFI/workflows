@@ -394,15 +394,16 @@ consolidate_ichthyo_tables(
 
 # assign ichthyo_uuid — deterministic UUID v5 from composite natural key
 assign_deterministic_uuids(
-  con        = con,
+  con = con,
   table_name = "ichthyo",
-  id_col     = "ichthyo_uuid",
-  key_cols   = c(
+  id_col = "ichthyo_uuid",
+  key_cols = c(
     "net_uuid",
     "species_id",
     "life_stage",
     "measurement_type",
-    "measurement_value")
+    "measurement_value"
+  )
 )
 
 # show sample rows
@@ -992,11 +993,14 @@ type_changes <- enforce_column_types(
   d_flds_rd = d$d_flds_rd,
   type_overrides = list(
     ichthyo.ichthyo_uuid = "UUID",
-    ichthyo.species_id   = "SMALLINT",
+    ichthyo.net_uuid = "UUID",
+    ichthyo.species_id = "SMALLINT",
     ichthyo.tally = "INTEGER",
     lookup.lookup_id = "INTEGER",
     lookup.lookup_num = "INTEGER",
-    segment.segment_id = "INTEGER"
+    segment.segment_id = "INTEGER",
+    segment.site_uuid_beg = "UUID",
+    segment.site_uuid_end = "UUID"
   ),
   tables = dbListTables(con),
   verbose = TRUE
@@ -1112,9 +1116,10 @@ gcs_bucket <- "calcofi-db"
 
 # sync to GCS — only uploads new or changed files
 sync_results <- sync_to_gcs(
-  local_dir  = dir_parquet,
+  local_dir = dir_parquet,
   gcs_prefix = gcs_ingest_prefix,
-  bucket     = gcs_bucket)
+  bucket = gcs_bucket
+)
 ```
 
 ## Cleanup

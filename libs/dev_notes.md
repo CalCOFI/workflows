@@ -13,7 +13,607 @@
 - Whoah 3.6 GB 
 
 
-                                                                                                          
+
+## 2026-03-04 publish_[icthyo-bottle -> icthyo]_to_obis.qmd: drop bottle from icthyo OBIS
+
+* Which bottle measurement types should be excluded from the OBIS eMoF?
+
+Actually, since consulting with others and noting that these envrionmental bottle data are already being served via ERDDAP at [ERDDAP - CalCOFI SIO Hydrographic Bottle Data - Data Access Form](https://coastwatch.pfeg.noaa.gov/erddap/tabledap/siocalcofiHydroBottle.html), we decided to publish only the ichthyo data. So please rollback inclusion of the bottle data, leaving only a note about this decision.
+
+
+ Here is Claude's plan:
+
+ Plan: Remove bottle data from OBIS publication (ichthyo-only)
+
+ Context
+
+ The extendedMeasurementOrFact.csv is 3.61 GB — 95% from bottle measurements (~11.4M rows). Since bottle hydrography is already served via
+ https://coastwatch.pfeg.noaa.gov/erddap/tabledap/siocalcofiHydroBottle.html, the decision is to publish only ichthyoplankton data to OBIS. This requires
+ removing all bottle-related code from the notebook and renaming it.
+
+ Files to modify
+
+ 1. publish_icthyo-bottle_to_obis.qmd — heavy edits (rename to publish_ichthyo_to_obis.qmd)
+ 2. diagrams/ichthyo_bottle_event_hierarchy.mmd — remove cast branch (rename to ichthyo_event_hierarchy.mmd)
+ 3. _output/publish_icthyo-bottle_to_obis.html + libs dir — delete (stale after rename)
+
+ Step 1: Rename notebook and diagram files
+
+ git mv publish_icthyo-bottle_to_obis.qmd publish_ichthyo_to_obis.qmd
+ git mv diagrams/ichthyo_bottle_event_hierarchy.mmd diagrams/ichthyo_event_hierarchy.mmd
+ git rm _output/publish_icthyo-bottle_to_obis.html
+ git rm -r _output/publish_icthyo-bottle_to_obis_files/
+
+ Step 2: Edit the notebook — section by section
+
+ All line numbers refer to the current file before any edits.
+
+ 2a. Title & Overview (lines 1-16)
+
+ - Line 2: title → "Publish Ichthyoplankton to OBIS"
+ - Line 9: remove "and bottle hydrography" from overview; add a note paragraph:
+
+ Note on bottle data: CalCOFI bottle hydrography (temperature, salinity, dissolved oxygen, nutrients, chlorophyll, carbon system parameters) is not included in
+ this DarwinCore Archive. These environmental data are already served via https://coastwatch.pfeg.noaa.gov/erddap/tabledap/siocalcofiHydroBottle.html.
+ - Line 14: remove bullet about CalCOFI.org bottle tables
+ - Line 16: remove | [CalCOFI Bottle Database](...) link
+
+ 2b. Metadata variables (lines 46-92)
+
+ - dataset_title (line 48): "CalCOFI Ichthyoplankton Tows"
+ - dataset_abstract (line 49): remove "combined with CTD rosette bottle hydrography..." and "Bottle data include..." sentences
+ - dataset_keywords (line 57): remove "hydrography"
+ - sampling_methods_description (line 72): remove "CTD bottle data:..." sentence
+ - study_extent_description (line 74): change "begins in 1949 for bottle data and 1951 for ichthyoplankton" → "begins in 1951"
+ - sampling_description (line 76): remove "Bottle hydrography data provide..." sentence
+ - dir_out (line 92): here("data/darwincore/ichthyoplankton")
+
+ 2c. Event Hierarchy Design (lines 94-116)
+
+ - Line 102: rewrite explanation — remove "and CTD bottle casts" and "linked spatially via locationID" rationale
+ - Line 107: update mermaid diagram reference to new filename
+ - Lines 112-116: simplify design decisions — remove cast-related bullets, change eMoF count from "five" to "three sub-tables"
+
+ 2d. Data Extraction (lines 118-168)
+
+ REMOVE the bottle chain (lines ~135-140):
+
+ ```r
+ # bottle chain ----
+ tbl_casts <- tbl(con, "casts")
+ tbl_bottle <- tbl(con, "bottle")
+ tbl_bottle_meas <- tbl(con, "bottle_measurement")
+ tbl_cast_condition <- tbl(con, "cast_condition")
+ tbl_measurement_type <- tbl(con, "measurement_type")
+ ``` 
+ REMOVE bottle tables from the row-count loop (lines ~157-161): "casts", "bottle", "bottle_measurement", "cast_condition", "measurement_type"
+
+ 2e. UUID Minting (lines 170-221)
+
+ - REMOVE lines 176-177 (cast eventID / bottle eMoF measurementID bullet points)
+ - REMOVE the entire cast UUID minting chunk (lines ~211-221: d_casts mutate with cast_uuid)
+
+ 2f. Vocabulary Lookups (lines 228-345)
+
+ - KEEP measurement_unit_vocab (lines 232-291) — used by ichthyo eMoF too; trim bottle-only units (degC, PSS-78, ml/L, umol/kg, %, kg/m3, ug/L, umol/L,
+ mgC/m3/hld, degrees, feet, seconds, knots, millibars, oktas, Forel-Ule, pH, 10^-8 m3/kg, dyn m) to keep only ichthyo-relevant ones (individuals, millimeters,
+ dimensionless, cubic meters, grams, proportion, m^3, meters)
+ - REMOVE bottle_p01_vocab (lines 293-326)
+ - REMOVE cast_p01_vocab (lines 328-345)
+
+ 2g. Build Cruise Events (lines ~383-420)
+
+ - REMOVE d_cast_cruise_summary chunk (lines ~383-394)
+ - REMOVE left_join(d_cast_cruise_summary, ...) (line ~401)
+ - SIMPLIFY date/bbox from pmin/pmax(net_*, cast_*, ...) to just net_* values (lines ~403-410)
+ - SIMPLIFY filter from !is.na(time_min) | !is.na(cast_time_min) to !is.na(time_min) (line ~412)
+
+ 2h. Build Cast Events section (lines ~500-539)
+
+ REMOVE ENTIRELY — the "### CTD Cast Events" section and its code chunk
+
+ 2i. Combine Events (lines ~541-573)
+
+ REMOVE d_cast_events from bind_rows() (line ~549)
+
+ 2j. eMoF Bottle section (lines ~805-860)
+
+ REMOVE ENTIRELY — "### 10d. Bottle measurements" and its code chunk
+
+ 2k. eMoF Cast Conditions section (lines ~862-908)
+
+ REMOVE ENTIRELY — "### 10e. Cast conditions" and its code chunk
+
+ 2l. Combine eMoF (lines ~910-948)
+
+ - REMOVE d_emof_bottle, and d_emof_cast_cond from bind_rows()
+ - REMOVE their cat() lines from the summary output
+
+ 2m. EML Geographic Coverage (lines ~1145-1172)
+
+ - REMOVE geo_cast summarize (lines ~1155-1161)
+ - SIMPLIFY geo_coverage to use only geo_net bounds (no pmin/pmax with cast)
+
+ 2n. EML Temporal Coverage (lines ~1174-1199)
+
+ - REMOVE temp_cast summarize (lines ~1182-1186)
+ - SIMPLIFY temp_coverage to use only temp_net dates
+
+ 2o. Summary Statistics (lines ~1350-1368)
+
+ - REMOVE n_casts_out count and its line in the summary glue string
+
+ 2p. Zip filename & GCS path (lines ~1380, ~1407)
+
+ - Zip: paste0("ichthyoplankton_", Sys.Date(), ".zip")
+ - GCS: gcs_publish_prefix <- "publish/ichthyoplankton"
+
+ Step 3: Update mermaid diagram
+
+ Simplify diagrams/ichthyo_event_hierarchy.mmd — remove the CTD cast branch (node C), bottle eMoF (G), cast conditions (H), and the locationID dotted link.
+ Remove the cast classDef.
+
+ Step 4: Commit
+
+ Commit all changes with a message describing the bottle data removal decision.
+
+ Verification
+
+ 1. Search the modified notebook for any remaining references to bottle, cast, tbl_casts, d_casts, cast_uuid, bottle_p01, cast_p01, d_emof_bottle,
+ d_emof_cast_cond
+ 2. Render the notebook: quarto::quarto_render("publish_ichthyo_to_obis.qmd") — should produce a much smaller eMoF CSV (~610K rows, ~170 MB)
+ 3. Verify data/darwincore/ichthyoplankton/ contains 5 files (event.csv, occurrence.csv, extendedMeasurementOrFact.csv, meta.xml, eml.xml)
+
+
+⏺ All done. Here's what was committed (4996bca):
+
+  Files renamed:
+  - publish_icthyo-bottle_to_obis.qmd → publish_ichthyo_to_obis.qmd
+  - diagrams/ichthyo_bottle_event_hierarchy.mmd → diagrams/ichthyo_event_hierarchy.mmd
+
+  Files deleted:
+  - _output/publish_icthyo-bottle_to_obis.html + libs directory (17 files)
+
+  Key changes in the notebook:
+  - Title/overview updated to ichthyo-only, with note explaining bottle data is on ERDDAP
+  - Metadata: title, abstract, keywords, sampling methods, study extent, descriptions all trimmed of bottle references
+  - Removed: bottle table loading, cast UUID minting, cast events section, bottle eMoF section, cast conditions eMoF section
+  - Removed: bottle_p01_vocab and cast_p01_vocab; trimmed measurement_unit_vocab to 8 ichthyo-relevant units
+  - Simplified: cruise events use only net tow summaries (no pmin/pmax with cast data)
+  - Simplified: EML geographic/temporal coverage uses only net/tow data
+  - Updated: zip filename, GCS path, output directory, dataset_id
+
+  Diagram simplified to just: Cruise → Net Sample → {Occurrence, eMoF: Net Sample, eMoF: Stage Abundance & Body Length}
+
+  3 remaining bottle/cast references are intentional — the note about ERDDAP and the actual source DuckDB filename (merge_ichthyo_bottle.duckdb).
+
+
+The notebook says:
+
+> The merged DuckDB uses integer `*_id` columns for joins and SWFSC `_source_uuid` for provenance. For OBIS, we need globally unique, stable identifiers:
+> 
+> - **Net eventID**: use net's `_source_uuid` (original SWFSC UUID, unique per net)
+> - **Ichthyo occurrenceID / measurementID**: mint deterministic UUID v5 from composite key
+
+But this should no longer be true, since we recently reverted from integer *_id to *_uuid for consistent identifiers. Please confirm and update accordingly.
+
+⏺ Good findings. The SWFSC tables now use *_uuid as primary keys directly, so the notebook text and code are   
+  outdated. Let me read the current UUID minting section to update both the explanation and the code.
+
+⏺ Done. The changes:                                                                                           
+                                                                                                               
+  - Section header: "Mint Globally Unique Identifiers" → "Collect Tables with Unique Identifiers"              
+  - Explanation: Now correctly states tables use *_uuid as primary keys directly, with no minting needed       
+  - d_net: Just collect() — no more rename(net_uuid = _source_uuid)                                            
+  - d_ichthyo: Just collect() — removed the 15-line UUIDfromName() minting block since ichthyo_uuid already    
+  exists
+  - Joins: tow_id → tow_uuid, site_id → site_uuid, net_id → net_uuid (6 locations)
+
+Please check database again for presence of *_uuid (vs *_id) primary keys now that I freshly rendered:
+
+1. `@ingest_swfsc_icthyo.qmd` (formerly `ingest_swfsc.noaa.gov_calcofi-db.qmd`)
+2. `@ingest_calcofi_bottle.qmd` (formerly `ingest_calcofi.org_bottle-database.qmd`)
+3. `@merge_ichthyo_bottle.qmd`
+
+⏺ The merged DuckDB still uses integer *_id columns (site_id, tow_id, net_id, ichthyo_id) as primary/foreign   
+  keys, with _source_uuid as a separate provenance column. The UUID-first schema from the ingest workflows
+  hasn't carried through to the merge step.                                                                    
+                                                                  
+  So the original notebook code (rename(net_uuid = _source_uuid), joins on net_id, minting ichthyo_uuid) is    
+  correct for this database. The revert was the right call.                                                    
+
+  Do you want to:
+  1. Update merge_ichthyo_bottle.qmd to propagate the *_uuid primary keys from the ingest DuckDBs into the
+  merged DuckDB (so the publish notebook can use them directly), or
+  2. Leave the merged DuckDB as-is and just clean up the git history (squash the bad commit + revert)?
+
+1
+
+│ Plan to implement                                                                                       │
+│                                                                                                         │
+│ Plan: Propagate *_uuid PKs through merge → publish pipeline                                             │
+│                                                                                                         │
+│ Context                                                                                                 │
+│                                                                                                         │
+│ The SWFSC ingest workflow (ingest_swfsc_icthyo.qmd) was recently updated to use *_uuid primary keys     │
+│ (site_uuid, tow_uuid, net_uuid, ichthyo_uuid) instead of integer *_id columns. The upstream parquet     │
+│ files already reflect this:                                                                             │
+│                                                                                                         │
+│ site.parquet:    site_uuid, cruise_uuid, ...                                                            │
+│ tow.parquet:     tow_uuid, site_uuid, ...                                                               │
+│ net.parquet:     net_uuid, tow_uuid, ...                                                                │
+│ ichthyo.parquet: ichthyo_uuid, net_uuid, ...                                                            │
+│                                                                                                         │
+│ But merge_ichthyo_bottle.duckdb still has stale *_id columns because overwrite <- FALSE (line 107)      │
+│ causes the merge workflow to skip reloading when tables already exist. The SELECT * in the merge code   │
+│ already does the right thing — it just needs a fresh DB.                                                │
+│                                                                                                         │
+│ After rebuilding the merged DB, publish_ichthyo_to_obis.qmd needs updating to use the new column names. │
+│                                                                                                         │
+│ Files to modify                                                                                         │
+│                                                                                                         │
+│ 1. publish_ichthyo_to_obis.qmd — update column references from *_id to *_uuid                           │
+│                                                                                                         │
+│ Step 1: Rebuild merged DuckDB                                                                           │
+│                                                                                                         │
+│ Delete the stale DB so the merge re-runs from parquets with *_uuid columns:                             │
+│                                                                                                         │
+│ rm data/wrangling/merge_ichthyo_bottle.duckdb                                                           │
+│                                                                                                         │
+│ Then render merge_ichthyo_bottle.qmd (this takes ~1hr due to taxonomy API calls with overwrite=TRUE,    │
+│ but since the merge code itself is fine and SELECT * preserves columns, simply deleting the DB file and │
+│  re-rendering should work without setting overwrite=TRUE — the skip_load guard at line 117 checks       │
+│ dbListTables(), and an empty DB will trigger a full reload).                                            │
+│                                                                                                         │
+│ quarto::quarto_render("merge_ichthyo_bottle.qmd")                                                       │
+│                                                                                                         │
+│ Step 2: Update publish_ichthyo_to_obis.qmd                                                              │
+│                                                                                                         │
+│ 2a. UUID section text and code (lines 157-195)                                                          │
+│                                                                                                         │
+│ Current (lines 157-162):                                                                                │
+│ ## Mint Globally Unique Identifiers                                                                     │
+│ The merged DuckDB uses integer `*_id` columns for joins...                                              │
+│ - **Net eventID**: use net's `_source_uuid`...                                                          │
+│ - **Ichthyo occurrenceID / measurementID**: mint deterministic UUID v5...                               │
+│                                                                                                         │
+│ New:                                                                                                    │
+│ ## Collect Tables with Unique Identifiers                                                               │
+│ The merged DuckDB uses `*_uuid` columns as primary keys for SWFSC tables                                │
+│ (site, tow, net, ichthyo). These UUIDs are already globally unique and                                  │
+│ stable — `net_uuid` is minted at sea and `ichthyo_uuid` is a deterministic                              │
+│ UUID v5 from the composite natural key — so no additional minting is needed.                            │
+│                                                                                                         │
+│ Current code (lines 164-195):                                                                           │
+│ d_net <- tbl_net |> collect() |> rename(net_uuid = `_source_uuid`)                                      │
+│ ...                                                                                                     │
+│ d_ichthyo <- tbl_ichthyo |> collect() |>                                                                │
+│   left_join(d_net |> select(net_id, net_uuid), by = "net_id") |>                                        │
+│   mutate(ichthyo_uuid = UUIDfromName(...))                                                              │
+│                                                                                                         │
+│ New code:                                                                                               │
+│ d_net <- tbl_net |> collect()                                                                           │
+│ stopifnot(all(!duplicated(d_net$net_uuid)))                                                             │
+│ cat(glue("Net UUIDs: {nrow(d_net)} (all unique)"), "\n")                                                │
+│                                                                                                         │
+│ d_ichthyo <- tbl_ichthyo |> collect()                                                                   │
+│ stopifnot(all(!duplicated(d_ichthyo$ichthyo_uuid)))                                                     │
+│ cat(glue("Ichthyo UUIDs: {nrow(d_ichthyo)} (all unique)"), "\n")                                        │
+│                                                                                                         │
+│ 2b. d_net_site join (lines ~239-249)                                                                    │
+│                                                                                                         │
+│ Current: joins on tow_id, site_id                                                                       │
+│ tbl_tow |> collect() |> select(tow_id, site_id, time_start), by = "tow_id"                              │
+│ tbl_site |> collect() |> select(site_id, cruise_key, ...), by = "site_id"                               │
+│                                                                                                         │
+│ New: joins on tow_uuid, site_uuid                                                                       │
+│ tbl_tow |> collect() |> select(tow_uuid, site_uuid, time_start), by = "tow_uuid"                        │
+│ tbl_site |> collect() |> select(site_uuid, cruise_key, ...), by = "site_uuid"                           │
+│                                                                                                         │
+│ 2c. d_occ_lookup (line ~538)                                                                            │
+│                                                                                                         │
+│ Current: select(net_id, species_id, life_stage, ...)                                                    │
+│ New: select(net_uuid, species_id, life_stage, ...)                                                      │
+│                                                                                                         │
+│ 2d. eMoF joins (lines ~560, ~599)                                                                       │
+│                                                                                                         │
+│ Current: left_join(d_occ_lookup, by = c("net_id", "species_id", "life_stage"))                          │
+│ New: left_join(d_occ_lookup, by = c("net_uuid", "species_id", "life_stage"))                            │
+│                                                                                                         │
+│ Step 3: Clean up git history                                                                            │
+│                                                                                                         │
+│ Squash the bad commit + revert into a single clean commit:                                              │
+│                                                                                                         │
+│ git rebase -i HEAD~2  # squash cd2db61 into ae611cb (both become no-op)                                 │
+│                                                                                                         │
+│ Or simply reset to before the bad commit and recommit:                                                  │
+│                                                                                                         │
+│ git reset --soft HEAD~2  # undo bad commit + revert (net zero changes)                                  │
+│                                                                                                         │
+│ Then commit the new publish notebook changes with the rebuilt DB.                                       │
+│                                                                                                         │
+│ Step 4: Commit                                                                                          │
+│                                                                                                         │
+│ Commit message: "update publish notebook to use *_uuid primary keys from rebuilt merge DB"              │
+│                                                                                                         │
+│ Verification                                                                                            │
+│                                                                                                         │
+│ 1. Confirm merged DB has *_uuid columns: Rscript -e 'DBI::dbGetQuery(con, "SELECT * FROM net LIMIT 0")  │
+│ |> names()'                                                                                             │
+│ 2. Search publish notebook for stale net_id, tow_id, site_id, _source_uuid references                   │
+│ 3. Render publish_ichthyo_to_obis.qmd — should complete without column-not-found errors   
+
+
+⏺ Good — the DB file is gitignored, so deleting it doesn't affect git.
+
+  Here's a summary of what's been done:
+
+  Completed:
+  1. Deleted stale DuckDB (data/wrangling/merge_ichthyo_bottle.duckdb) — the merge workflow will rebuild it
+   from parquets with *_uuid columns
+  2. Updated publish_ichthyo_to_obis.qmd — 6 edits:
+    - Section "Mint Globally Unique Identifiers" → "Collect Tables with Unique Identifiers" (removed UUID
+  minting code, now just collects pre-existing UUIDs)
+    - d_net no longer renames _source_uuid → just uses net_uuid directly
+    - d_ichthyo no longer joins+mints UUIDs → uses ichthyo_uuid directly
+    - d_net_site joins: tow_id/site_id → tow_uuid/site_uuid
+    - d_occ_lookup select: net_id → net_uuid
+    - eMoF joins (stage + length): net_id → net_uuid
+  3. Squashed no-op commit pair (git reset --soft HEAD~2) — removed ae611cb + cd2db61 revert
+
+  Next steps (manual):
+  1. Render merge notebook: quarto::quarto_render("merge_ichthyo_bottle.qmd") — rebuilds DuckDB from
+  parquets (~1hr due to taxonomy APIs)
+  2. Render publish notebook: quarto::quarto_render("publish_ichthyo_to_obis.qmd") — verifies no
+  column-not-found errors
+  3. Commit when ready — the publish notebook changes are unstaged
+
+The standardize_species R chunk in @merge_ichthyo_bottle.qmd takes way too long -- about an hour. Let's use the species database at  @/Users/bbest/_big/msens/derived/spp.duckdb (generated by @/Users/bbest/Github/MarineSensitivity/workflows/ingest_taxon.qmd) to perform a first pass lookup of valid WoRMS species identifiers and names, then resort to `calcofi4db::standardize_species()` for any unmatched.
+
+⏺ Updated plan                                                                                             
+  ⎿  /plan to preview                                                                                      
+                                                                                                           
+───────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Ready to code?                                                                                            
+                                                                                                           
+ Here is Claude's plan:
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ Plan: Speed up taxonomy standardization using local spp.duckdb lookups
+
+ Context
+
+ The standardize_species chunk in merge_ichthyo_bottle.qmd takes ~1 hour because
+ calcofi4db::standardize_species() and calcofi4db::build_taxon_table() make hundreds of API calls to WoRMS
+  (0.5s rate limit per call), ITIS, and GBIF for each of 1,144 species.
+
+ The MarineSensitivity project already maintains a local species database (spp.duckdb, 4.8 GB) with full
+ WoRMS (1.48M rows), ITIS, and GBIF tables loaded from DarwinCore archives. We can use this for instant
+ SQL-based lookups, falling back to API calls only for the rare species not found locally.
+
+ Key facts:
+ - species.parquet already has worms_id populated for all 1,144 species (from SWFSC source) and itis_id
+ column exists
+ - spp.duckdb has worms table (1.48M rows, with parentNameUsageID for hierarchy), itis table, gbif table
+ - The only missing column is gbif_id — this triggers the sp_standardized = FALSE check
+
+ File to modify
+
+ - merge_ichthyo_bottle.qmd — rewrite the standardize_species chunk (lines 535–569) and build_taxon chunk
+ (lines 571–603)
+
+ Step 1: Add spp.duckdb path to setup chunk
+
+ After line 100, add:
+
+```r
+ # MarineSensitivity species DB for local taxonomy lookups
+ spp_db_path <- Sys.getenv(
+   "SPP_DB_PATH",
+   unset = "/Users/bbest/_big/msens/derived/spp.duckdb")
+```
+
+ Step 2: Rewrite standardize_species chunk (lines 535–569)
+
+ Replace the existing chunk with:
+
+ 1. Attach spp.duckdb as read-only
+ 2. Add gbif_id column if missing
+ 3. WoRMS validation: Validate existing worms_id against spp.worms, resolving synonyms via
+ acceptedNameUsageID
+ 4. ITIS lookup: SQL join species.scientific_name → spp.itis.scientificName, resolving via
+ acceptedNameUsageID
+ 5. GBIF lookup: SQL join species.scientific_name → spp.gbif.canonicalName, resolving via
+ acceptedNameUsageID
+ 6. API fallback: For any species still missing worms_id after local lookup, call standardize_species() on
+  just those rows
+ 7. Detach spp.duckdb
+
+ Key SQL patterns:
+
+ -- worms: resolve synonyms on existing worms_id
+ UPDATE species SET worms_id = COALESCE(
+   (SELECT CASE WHEN w.taxonomicStatus = 'accepted' THEN w.taxonID
+           ELSE w.acceptedNameUsageID END
+    FROM spp.worms w WHERE w.taxonID = species.worms_id),
+   species.worms_id)
+
+ -- itis: match by scientific_name
+ UPDATE species SET itis_id = (
+   SELECT COALESCE(i.acceptedNameUsageID, i.taxonID)
+   FROM spp.itis i WHERE i.scientificName = species.scientific_name
+   LIMIT 1)
+ WHERE itis_id IS NULL
+
+ -- gbif: match by canonicalName
+ UPDATE species SET gbif_id = (
+   SELECT COALESCE(CAST(g.acceptedNameUsageID AS INTEGER), g.taxonID)
+   FROM spp.gbif g WHERE g.canonicalName = species.scientific_name
+   LIMIT 1)
+ WHERE gbif_id IS NULL
+
+ Step 3: Rewrite build_taxon chunk (lines 571–603)
+
+ Replace the API-based build_taxon_table() with a recursive CTE that walks parentNameUsageID chains in
+ spp.worms:
+
+ WITH RECURSIVE hierarchy AS (
+   SELECT w.taxonID, w.parentNameUsageID, w.scientificName, w.taxonRank,
+          w.taxonID AS acceptedNameUsageID
+   FROM spp.worms w
+   WHERE w.taxonID IN (SELECT DISTINCT worms_id FROM species WHERE worms_id IS NOT NULL)
+
+   UNION ALL
+
+   SELECT w.taxonID, w.parentNameUsageID, w.scientificName, w.taxonRank,
+          h.acceptedNameUsageID
+   FROM spp.worms w
+   JOIN hierarchy h ON w.taxonID = h.parentNameUsageID
+   WHERE h.parentNameUsageID IS NOT NULL
+ )
+ SELECT DISTINCT 'WoRMS' AS authority, taxonID, acceptedNameUsageID,
+        parentNameUsageID, scientificName, taxonRank,
+        'accepted' AS taxonomicStatus, NULL AS scientificNameAuthorship
+ FROM hierarchy
+
+ Similarly for ITIS hierarchy. Then write the taxon and taxa_rank tables (reuse the same rank ordering
+ from build_taxon_table()).
+
+ The taxa_rank table creation code is copied directly from build_taxon_table() (lines 311–329).
+
+ Step 4: Detach spp.duckdb
+
+ After both chunks complete, detach:
+ dbExecute(con, "DETACH spp")
+
+ Verification
+
+ 1. Render merge_ichthyo_bottle.qmd with overwrite <- TRUE — should complete in minutes, not hours
+ 2. Check species table has worms_id, itis_id, gbif_id populated:
+ dbGetQuery(con, "SELECT COUNT(*) AS n, SUM(worms_id IS NOT NULL) AS n_worms, SUM(itis_id IS NOT NULL) AS
+ n_itis, SUM(gbif_id IS NOT NULL) AS n_gbif FROM species")
+ 3. Check taxon table has WoRMS hierarchy rows with correct parent chains
+ 4. Confirm downstream publish_ichthyo_to_obis.qmd still renders successfully
+
+⏺ All three edits are complete. Here's a summary of the changes to merge_ichthyo_bottle.qmd:
+
+  Step 1 — Setup (line 102): Added spp_db_path variable pointing to the MarineSensitivity species DB,
+  configurable via SPP_DB_PATH env var.
+
+  Step 2 — standardize_species chunk (lines 540–701): Replaced the single standardize_species() API call
+  with:
+  1. Attach spp.duckdb as read-only
+  2. WoRMS validation — resolve synonyms on existing worms_id via spp.worms (CASE on taxonomicStatus)
+  3. WoRMS name match — fill missing worms_id by matching scientific_name against spp.worms.scientificName
+  4. ITIS lookup — SQL join on scientificName, preferring valid status, resolving via acceptedNameUsageID
+  5. GBIF lookup — SQL join on canonicalName, using TRY_CAST for the VARCHAR acceptedNameUsageID
+  6. API fallback — only for species still missing worms_id after local lookups (individual
+  worrms::wm_records_name() calls)
+
+  Step 3 — build_taxon chunk (lines 703–862): Replaced build_taxon_table() API calls with:
+  1. WoRMS hierarchy — recursive CTE walking parentNameUsageID chains from each species' worms_id
+  2. ITIS hierarchy — same recursive CTE pattern for ITIS
+  3. R-side dedup with distinct(authority, taxonID) (matching original function behavior)
+  4. Same taxa_rank lookup table with 42 ranks
+  5. Detach spp.duckdb at the end
+
+  This should reduce taxonomy standardization from ~1 hour to seconds by replacing hundreds of rate-limited API calls with instant SQL joins against the 4.8 GB local species database.
+
+
+Why do none of the eventIDs match?
+```r
+d_event <- read_csv(file.path(dir_out, "event.csv"))
+d_occ <- read_csv(file.path(dir_out, "occurrence.csv"))
+d_emof <- read_csv(file.path(dir_out, "extendedMeasurementOrFact.csv"))
+
+d_occ$eventID %in% d_event$eventID |> 
+  table()
+```
+```
+#  FALSE 
+# 463655 
+```
+
+⏺ The problem: net.net_uuid is stored as DuckDB's native UUID type (renders lowercase when collected to R),
+  while ichthyo.net_uuid is stored as VARCHAR (preserves original uppercase from source). So event.csv gets
+  lowercase eventIDs but occurrence.csv gets uppercase — they never match.                                     
+  
+  The fix: tolower() both net_uuid and ichthyo_uuid right after collect() in the collect-uuids chunk, ensuring 
+  consistent lowercase UUIDs throughout the downstream pipeline.  
+
+Why is ichthyo_uuid showing lowercase but net_uuid showing uppercase in the source?
+```r
+tbl_ichthyo |>
+  select(ichthyo_uuid, net_uuid)
+```
+```
+# Source:   SQL [?? x 2]
+# Database: DuckDB 1.4.4 [root@Darwin 24.6.0:R 4.5.2//Users/bbest/Github/CalCOFI/workflows/data/wrangling/merge_ichthyo_bottle.duckdb]
+   ichthyo_uuid                         net_uuid                            
+   <chr>                                <chr>                               
+ 1 d7d7f5c3-17d2-549c-9470-0008891108e2 EB8733F2-02EB-EF11-A09E-2CEA7FA0979C
+ 2 dfa978d9-2788-5cdb-9dba-aa4755bb021c EB8733F2-02EB-EF11-A09E-2CEA7FA0979C
+ 3 0360608f-cf81-5853-be4b-80cca27a1b23 EC8733F2-02EB-EF11-A09E-2CEA7FA0979C
+```
+
+⏺ Two different sources, two different UUID generation paths:
+
+  - ichthyo_uuid — generated by calcofi4db::assign_deterministic_uuids() using R's uuid package (UUID v5),
+  which produces lowercase hex by convention.
+  - net_uuid in the ichthyo table — a foreign key copied verbatim as VARCHAR from the SWFSC source data,
+  where UUIDs were minted at sea in uppercase (e.g., EB8733F2-...).
+
+  Meanwhile in the net table, net_uuid is stored as DuckDB's native UUID type, which normalizes to
+  lowercase on read. That's why the same value appears as eb8733f2-... from net but EB8733F2-... from
+  ichthyo.
+
+  The real fix should be upstream in the ingest — either cast net_uuid to DuckDB's UUID type in the ichthyo
+   table too, or store it as lowercase VARCHAR. The tolower() in publish is the right downstream workaround
+   for now.
+
+The problem is that both fields should be stored as the same UUID data type in the table (which if I understand correctly is simply a big integer in hexadecimal form) for fastest search and ability to relate as foreign keys in joins. Where in the chain of notebooks (@ingest_swfsc_icthyo.qmd, @ingest_calcofi_bottle.qmd or @merge_ichthyo_bottle.qmd) does this need to get modified closest to the source. Also anytime these tables are first read in by R (as in using a `collect()` or `pull()`), they should probably use the uuid R package to convert to proper data type (with a mutate any ends_with *_uuid).
+
+⏺ Now for the R-side collect() concern — DuckDB's native UUID type already normalizes to lowercase when
+  collected to R (there's no special UUID class in R; they come through as character). Once all columns are
+   native UUID in DuckDB, collect() will produce consistent lowercase strings. No uuid package conversion  
+  is needed.
+                                                                                                           
+  That said, the tolower() calls in publish_ichthyo_to_obis.qmd remain a good defensive measure until the
+  ingest is re-run. Once you re-run ingest_swfsc_icthyo.qmd with overwrite <- TRUE, all *_uuid FK columns
+  will be native UUID type in parquet, and the case mismatch disappears from the entire pipeline.
+
+  Summary:
+
+  - Root cause: ichthyo.net_uuid, segment.site_uuid_beg, and segment.site_uuid_end are FK UUID columns
+  created programmatically during consolidation (not from CSV renames), so they weren't in
+  flds_redefine.csv and were missed by enforce_column_types().
+  - Fix: Added all three to type_overrides in ingest_swfsc_icthyo.qmd (line 994–1001). This is the
+  closest-to-source fix.
+  - R collect() behavior: DuckDB native UUID → R character (lowercase). VARCHAR → R character (preserves
+  original case). Once the upstream fix propagates, no tolower() needed.
+
+Please parse https://cran.r-project.org/web/packages/uuid/refman/uuid.html and impose the original fix requested to force any *_uuid field to a class "UUID": 'S3 class "UUID" represents vector of UUIDs in native form (128-bit). They are typically obtained by calling UUIDgenerate, UUIDparse or as.UUID.'
+
+⏺ Good — as.UUID() stores UUIDs as native 128-bit values, always renders lowercase via as.character(), and
+  comparisons between UUID objects are much faster than string comparisons. Let me update the fix.         
+
+⏺ Here eventID is set from net_uuid (UUID class), and net_ids comes from d_net_events$eventID (also UUID   
+  class via d_net_site). Both sides are UUID class → fast native comparison. Good.
+                                                                                                           
+  The write_csv() at line 657 will call as.character() on UUID objects, producing consistent lowercase     
+  strings in the CSV output.                                                                               
+                                                                                                           
+  Summary of changes:                                                                                      
+
+  1. ingest_swfsc_icthyo.qmd — Added ichthyo.net_uuid, segment.site_uuid_beg, segment.site_uuid_end to
+  type_overrides in enforce_column_types(). This ensures all *_uuid FK columns are stored as native DuckDB
+  UUID type in parquet (the upstream fix).
+  2. publish_ichthyo_to_obis.qmd — Replaced tolower() with mutate(across(ends_with("_uuid"), as.UUID))
+  after every collect() that pulls UUID columns (d_net, d_ichthyo, tbl_tow, tbl_site). This:
+    - Coerces to R's native 128-bit UUID class (from the uuid package)
+    - Guarantees lowercase output via as.character() (used by write_csv())
+    - Gives faster comparisons between UUID vectors (native 128-bit vs string)
+    - Handles both DuckDB UUID type (already lowercase) and VARCHAR (mixed case) gracefully
+
 ## 2026-02-24.d push publish_* to GS
 
 Let's push these publish outputs to GS like the ingest outputs and not clog up the workflows github repo.
@@ -107,6 +707,24 @@ quarto render publish_icthyo-bottle_to_obis.qmd
 
 something looks amiss. The extendedMeasurementOrFact.csv file looks too big at 3.61 GB vs much smaller parquet files for icthyo and bottle
 
+⏺ Great findings. The key takeaway: no filtering is applied — all 30 mapped bottle measurement types are published, including pre-QC and derived values. The join
+  is a left_join (not inner), so everything flows through.
+
+  Here's the row impact of different filtering strategies:
+
+  ┌─────────────────────────────────────────────────────┬──────────────┬────────────────┬───────────────┐
+  │                      Strategy                       │ Rows removed │ Remaining eMoF │ Est. CSV size │
+  ├─────────────────────────────────────────────────────┼──────────────┼────────────────┼───────────────┤
+  │ Drop r_* pre-QC (6 types)                           │ ~3.3M        │ ~8.7M          │ ~2.4 GB       │
+  ├─────────────────────────────────────────────────────┼──────────────┼────────────────┼───────────────┤
+  │ Drop r_* + derived (sigma_theta, oxygen_saturation) │ ~4.8M        │ ~7.2M          │ ~2.0 GB       │
+  ├─────────────────────────────────────────────────────┼──────────────┼────────────────┼───────────────┤
+  │ Also drop weather/met from cast_conditions          │ ~5.0M        │ ~7.0M          │ ~1.9 GB       │
+  ├─────────────────────────────────────────────────────┼──────────────┼────────────────┼───────────────┤
+  │ Keep only core QC'd + nutrients + bio + carbon      │ ~5.7M        │ ~6.3M          │ ~1.7 GB       │
+  └─────────────────────────────────────────────────────┴──────────────┴────────────────┴───────────────┘
+
+
 ⏺ Here's the full picture. The eMoF has 46 distinct measurement types, and the bottle measurements fall into several categories:                                  
                                                           
   Core QC'd measurements (~4.7M rows):                                                                                                                            
@@ -135,6 +753,24 @@ something looks amiss. The extendedMeasurementOrFact.csv file looks too big at 3
   2. Drop all pre-QC/reported + derived values (saves ~5.7M rows, cuts file ~in half)
   3. Keep only "core" oceanographic + nutrient measurements (most aggressive trim)
   4. Leave as-is — the 12M rows are structurally correct, just large
+
+ ☐ eMoF filter 
+
+Which bottle measurement types should be excluded from the OBIS eMoF?
+
+  1. Drop r_* pre-QC only (Recommended)
+     Remove 6 'Reported/pre-QC' types (r_depth, r_temperature, r_salinity_sva, r_dynamic_height, r_ammonium, r_oxygen_umol_kg).
+     Keeps derived params and all QC'd data. Saves ~3.3M rows.
+  2. Drop r_* + derived
+     Also remove sigma_theta and oxygen_saturation (computable from primary measurements). Saves ~4.8M rows.
+  3. Drop r_* + derived + weather/met
+     Additionally remove cast_condition weather observations (wind, clouds, waves, visibility, air temp, barometric pressure).
+     Saves ~5.0M rows.
+  4. Keep all, just accept the size
+     The 12M rows are structurally correct. CSV is inherently verbose — the zip will compress well.
+❯ 5. Actually, since consulting with others and noting that these envrionmental bottle data are already being served via ERDDAP at [ERDDAP - CalCOFI SIO Hydrographic Bottle Data - Data Access Form](https://coastwatch.pfeg.noaa.gov/erddap/tabledap/siocalcofiHydroBottle.html), we decided to publish only the ichthyo data. So please rollback inclusion of the bottle data, leaving only a note about this decision.
+
+
 
 
 ## 2026-02-24.c publish_{larvae_to_obis -> icthyo-bottle}_to_obis.qmd with duckdb and cruise: net_sample.bio | ctd_cast.env
@@ -1340,6 +1976,25 @@ Can we also implement a hash check on the GS parquet upload? For instance, we ma
 
   - devtools::document() generated sync_to_gcs.Rd and added export(sync_to_gcs) to NAMESPACE
   - devtools::load_all() confirms the package loads cleanly with the new function available
+
+Why is "c0f1ca00-ca1c-5000-b000-1c4790000000" used for CalCOFI UUID generation?
+
+⏺ It's a vanity UUID — a hand-crafted hex string designed to be both a valid UUID v5 namespace and a mnemonic for "CalCOFI ichthyo":
+
+  c0f1ca00-ca1c-5000-b000-1c4790000000
+  C0F1CA   CALC 5    B    ICHTY
+  "cofica"  calc      ↑    "ichthy(o)"
+                 version 5
+                 variant (10xx)
+
+  - c0f1ca00 → "COFICA" ≈ CalCOFI-CA
+  - ca1c → "CALC" ≈ CalCOFI
+  - 5 in position 13 → marks it as UUID version 5 (name-based SHA-1)
+  - b in position 17 → correct RFC 4122 variant bits (10xx)
+  - 1c4790000000 → "ICHTY(0)" ≈ ichthyo
+
+  As documented in libs/dev_notes.md:973: "a mnemonic for CalCOFI CalCOFI ichthyo". It was generated once and hardcoded as the project-wide namespace for
+  assign_deterministic_uuids() in calcofi4db/R/wrangle.R:283.
 
 ## 2026-02-17 apps/schema
 

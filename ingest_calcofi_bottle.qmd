@@ -44,27 +44,53 @@ devtools::load_all(here::here("../calcofi4db"))
 devtools::load_all(here::here("../calcofi4r"))
 
 librarian::shelf(
-  CalCOFI/calcofi4db,
-  CalCOFI/calcofi4r,
-  DBI, dm, dplyr, DT, fs, glue, gargle, googledrive, here, htmltools,
-  janitor, jsonlite, knitr, listviewer, litedown, lubridate, mapview,
-  purrr, readr, rlang, sf, stringr, tibble, tidyr, units, webshot2,
-  quiet = T)
+  CalCOFI / calcofi4db,
+  CalCOFI / calcofi4r,
+  DBI,
+  dm,
+  dplyr,
+  DT,
+  fs,
+  glue,
+  gargle,
+  googledrive,
+  here,
+  htmltools,
+  janitor,
+  jsonlite,
+  knitr,
+  listviewer,
+  litedown,
+  lubridate,
+  mapview,
+  purrr,
+  readr,
+  rlang,
+  sf,
+  stringr,
+  tibble,
+  tidyr,
+  units,
+  webshot2,
+  quiet = T
+)
 options(readr.show_col_types = F)
 options(DT.options = list(scrollX = TRUE))
 
 # define paths
-provider     <- "calcofi.org"
-dataset      <- "bottle-database"
+provider <- "calcofi.org"
+dataset <- "bottle-database"
 dataset_name <- "CalCOFI Bottle Database"
-dir_data     <- "~/My Drive/projects/calcofi/data-public"
-subdir       <- "CalCOFI_Database_194903-202105_csv_16October2023"
-overwrite    <- TRUE
-dir_parquet  <- here(glue("data/parquet/{provider}_{dataset}"))
-db_path      <- here(glue("data/wrangling/{provider}_{dataset}.duckdb"))
+dir_data <- "~/My Drive/projects/calcofi/data-public"
+subdir <- "CalCOFI_Database_194903-202105_csv_16October2023"
+overwrite <- TRUE
+dir_parquet <- here(glue("data/parquet/{provider}_{dataset}"))
+db_path <- here(glue("data/wrangling/{provider}_{dataset}.duckdb"))
 
-if (overwrite){
-  if (file_exists(db_path)) file_delete(db_path)
+if (overwrite) {
+  if (file_exists(db_path)) {
+    file_delete(db_path)
+  }
   if (dir_exists(dir_parquet)) dir_delete(dir_parquet)
 }
 
@@ -79,17 +105,21 @@ load_duckdb_extension(con, "spatial")
 dir_dataset <- glue("{dir_data}/{provider}/{dataset}")
 
 d <- read_csv_files(
-  provider           = provider,
-  dataset            = dataset,
-  subdir             = subdir,
-  dir_data           = dir_data,
-  sync_archive       = TRUE,
-  metadata_dir       = here("metadata"),
+  provider = provider,
+  dataset = dataset,
+  subdir = subdir,
+  dir_data = dir_data,
+  sync_archive = TRUE,
+  metadata_dir = here("metadata"),
   field_descriptions = list(
-    "194903-202105_Cast"   = glue(
-      "{dir_dataset}/Cast Field Descriptions.csv"),
+    "194903-202105_Cast" = glue(
+      "{dir_dataset}/Cast Field Descriptions.csv"
+    ),
     "194903-202105_Bottle" = glue(
-      "{dir_dataset}/Bottle Field Descriptions - UTF-8.csv")))
+      "{dir_dataset}/Bottle Field Descriptions - UTF-8.csv"
+    )
+  )
+)
 
 # show source files summary
 message(glue("Loaded {nrow(d$source_files)} tables from {d$paths$dir_csv}"))
@@ -106,9 +136,10 @@ message(glue("Total rows: {sum(d$source_files$nrow)}"))
 # infers types differently (e.g. quality codes as numeric, Time as hms);
 # these are resolved during ingestion via flds_redefine.csv type_new
 integrity <- check_data_integrity(
-  d               = d,
-  dataset_name    = dataset_name,
-  type_exceptions = "all")
+  d = d,
+  dataset_name = dataset_name,
+  type_exceptions = "all"
+)
 ```
 
 ```{r}
@@ -167,10 +198,11 @@ show_fields_redefine(d)
 # - provenance tracking via gcs_path from read_csv_files()
 # - ingest_to_working() for each table
 tbl_stats <- ingest_dataset(
-  con     = con,
-  d       = d,
-  mode    = if (overwrite) "replace" else "append",
-  verbose = TRUE)
+  con = con,
+  d = d,
+  mode = if (overwrite) "replace" else "append",
+  verbose = TRUE
+)
 
 tbl_stats |>
   datatable(rownames = FALSE, filter = "top")
@@ -184,7 +216,8 @@ Apply known ship name/code corrections from `ship_renames.csv`.
 #| label: apply_ship_corrections
 
 ship_renames_csv <- here(
-  "metadata/calcofi.org/bottle-database/ship_renames.csv")
+  "metadata/calcofi.org/bottle-database/ship_renames.csv"
+)
 d_ship_renames <- read_csv(ship_renames_csv)
 
 # apply each correction
@@ -196,16 +229,21 @@ for (i in seq_len(nrow(d_ship_renames))) {
   new_code <- d_ship_renames$csv_code_new[i]
 
   # update where both name and code match old values
-  n_updated <- dbExecute(con, glue_sql(
-    "UPDATE casts
+  n_updated <- dbExecute(
+    con,
+    glue_sql(
+      "UPDATE casts
      SET ship_name = {new_name}, ship_code = {new_code}
      WHERE ship_name = {old_name} AND ship_code = {old_code}",
-    .con = con))
+      .con = con
+    )
+  )
 
   if (n_updated > 0) {
     message(glue(
       "Updated {n_updated} casts: ",
-      "'{old_name}' [{old_code}] -> '{new_name}' [{new_code}]"))
+      "'{old_name}' [{old_code}] -> '{new_name}' [{new_code}]"
+    ))
   }
   n_updated_total <- n_updated_total + n_updated
 }
@@ -250,23 +288,39 @@ and create a `casts_derived` convenience VIEW.
 # date is DATE type (e.g. 1949-03-01), time is INTERVAL (e.g. 09:30:00)
 # adding DATE + INTERVAL yields TIMESTAMP; 324 casts have NULL time
 dbExecute(con, "ALTER TABLE casts ADD COLUMN datetime_utc TIMESTAMP")
-dbExecute(con, "
+dbExecute(
+  con,
+  "
   UPDATE casts SET datetime_utc =
     CASE
       WHEN \"time\" IS NOT NULL
       THEN CAST(\"date\" AS TIMESTAMP) + \"time\"
       ELSE CAST(\"date\" AS TIMESTAMP)
-    END")
+    END"
+)
 message(glue(
-  "Created datetime_utc: {dbGetQuery(con, 'SELECT COUNT(*) FROM casts WHERE datetime_utc IS NOT NULL')[[1]]} non-null values"))
+  "Created datetime_utc: {dbGetQuery(con, 'SELECT COUNT(*) FROM casts WHERE datetime_utc IS NOT NULL')[[1]]} non-null values"
+))
 
 # -- drop derivable columns ----
 cols_to_drop <- c(
-  "year", "month", "quarter", "julian_day", "julian_date",
+  "year",
+  "month",
+  "quarter",
+  "julian_day",
+  "julian_date",
   "time_zone",
-  "lat_deg", "lat_min", "lat_hem",
-  "lon_deg", "lon_min", "lon_hem",
-  "cruise", "cruz_sta", "db_sta_key", "cruz_num")
+  "lat_deg",
+  "lat_min",
+  "lat_hem",
+  "lon_deg",
+  "lon_min",
+  "lon_hem",
+  "cruise",
+  "cruz_sta",
+  "db_sta_key",
+  "cruz_num"
+)
 
 # drop date and time (replaced by datetime_utc)
 cols_to_drop <- c(cols_to_drop, "date", "time")
@@ -276,11 +330,14 @@ n_before <- length(dbListFields(con, "casts"))
 for (col in cols_to_drop) {
   tryCatch(
     dbExecute(con, glue('ALTER TABLE casts DROP COLUMN "{col}"')),
-    error = function(e) warning(glue("could not drop {col}: {e$message}")))
+    error = function(e) warning(glue("could not drop {col}: {e$message}"))
+  )
 }
 
 n_after <- length(dbListFields(con, "casts"))
-message(glue("casts columns: {n_before} -> {n_after} (dropped {n_before - n_after})"))
+message(glue(
+  "casts columns: {n_before} -> {n_after} (dropped {n_before - n_after})"
+))
 ```
 
 ## Pivot Bottle Measurements
@@ -332,50 +389,59 @@ erDiagram
 
 # define measurement mapping: type -> value/prec/qual columns
 bottle_meas_map <- tribble(
-  ~measurement_type,     ~value_col,      ~prec_col,  ~qual_col,
-  "temperature",         "t_deg_c",       "t_prec",   "t_qual",
-  "salinity",            "salnty",        "s_prec",   "s_qual",
-  "oxygen_ml_l",         "o2ml_l",        NA,         "o_qual",
-  "sigma_theta",         "s_theta",       NA,         "s_thtaq",
-  "oxygen_saturation",   "o2sat",         NA,         "o2satq",
-  "oxygen_umol_kg",      "oxy_umol_kg",   NA,         NA,
-  "chlorophyll_a",       "chlor_a",       NA,         "chlqua",
-  "phaeopigment",        "phaeop",        NA,         "phaqua",
-  "phosphate",           "po4u_m",        NA,         "po4q",
-  "silicate",            "si_o3u_m",      NA,         "si_o3qu",
-  "nitrite",             "no2u_m",        NA,         "no2q",
-  "nitrate",             "no3u_m",        NA,         "no3q",
-  "ammonia",             "nh3u_m",        NA,         "nh3q",
-  "c14_rep1",            "c14as1",        "c14a1p",   "c14a1q",
-  "c14_rep2",            "c14as2",        "c14a2p",   "c14a2q",
-  "c14_dark",            "dark_as",       "dark_ap",  "darkaq",
-  "c14_mean",            "mean_as",       "mean_ap",  "mean_aq",
-  "light_pct",           "light_p",       NA,         NA,
-  "r_depth",             "r_depth",       NA,         NA,
-  "r_temperature",       "r_temp",        NA,         NA,
-  "r_salinity_sva",      "r_sal",         NA,         NA,
-  "r_dynamic_height",    "r_dynht",       NA,         NA,
-  "r_ammonium",          "r_nuts",        NA,         NA,
-  "r_oxygen_umol_kg",    "r_oxy_umol_kg", NA,         NA,
-  "dic_rep1",            "dic1",          NA,         "dic_quality_comment",
-  "dic_rep2",            "dic2",          NA,         "dic_quality_comment",
-  "alkalinity_rep1",     "ta1",           NA,         NA,
-  "alkalinity_rep2",     "ta2",           NA,         NA,
-  "ph_rep1",             "p_h1",          NA,         NA,
-  "ph_rep2",             "p_h2",          NA,         NA)
+  ~measurement_type   , ~value_col      , ~prec_col , ~qual_col             ,
+  "temperature"       , "t_deg_c"       , "t_prec"  , "t_qual"              ,
+  "salinity"          , "salnty"        , "s_prec"  , "s_qual"              ,
+  "oxygen_ml_l"       , "o2ml_l"        , NA        , "o_qual"              ,
+  "sigma_theta"       , "s_theta"       , NA        , "s_thtaq"             ,
+  "oxygen_saturation" , "o2sat"         , NA        , "o2satq"              ,
+  "oxygen_umol_kg"    , "oxy_umol_kg"   , NA        , NA                    ,
+  "chlorophyll_a"     , "chlor_a"       , NA        , "chlqua"              ,
+  "phaeopigment"      , "phaeop"        , NA        , "phaqua"              ,
+  "phosphate"         , "po4u_m"        , NA        , "po4q"                ,
+  "silicate"          , "si_o3u_m"      , NA        , "si_o3qu"             ,
+  "nitrite"           , "no2u_m"        , NA        , "no2q"                ,
+  "nitrate"           , "no3u_m"        , NA        , "no3q"                ,
+  "ammonia"           , "nh3u_m"        , NA        , "nh3q"                ,
+  "c14_rep1"          , "c14as1"        , "c14a1p"  , "c14a1q"              ,
+  "c14_rep2"          , "c14as2"        , "c14a2p"  , "c14a2q"              ,
+  "c14_dark"          , "dark_as"       , "dark_ap" , "darkaq"              ,
+  "c14_mean"          , "mean_as"       , "mean_ap" , "mean_aq"             ,
+  "light_pct"         , "light_p"       , NA        , NA                    ,
+  "r_depth"           , "r_depth"       , NA        , NA                    ,
+  "r_temperature"     , "r_temp"        , NA        , NA                    ,
+  "r_salinity_sva"    , "r_sal"         , NA        , NA                    ,
+  "r_dynamic_height"  , "r_dynht"       , NA        , NA                    ,
+  "r_ammonium"        , "r_nuts"        , NA        , NA                    ,
+  "r_oxygen_umol_kg"  , "r_oxy_umol_kg" , NA        , NA                    ,
+  "dic_rep1"          , "dic1"          , NA        , "dic_quality_comment" ,
+  "dic_rep2"          , "dic2"          , NA        , "dic_quality_comment" ,
+  "alkalinity_rep1"   , "ta1"           , NA        , NA                    ,
+  "alkalinity_rep2"   , "ta2"           , NA        , NA                    ,
+  "ph_rep1"           , "p_h1"          , NA        , NA                    ,
+  "ph_rep2"           , "p_h2"          , NA        , NA
+)
 
 # build UNION ALL SQL from mapping
-sql_parts <- purrr::pmap_chr(bottle_meas_map, function(
-    measurement_type, value_col, prec_col, qual_col) {
-  prec_expr <- if (is.na(prec_col)) "NULL" else prec_col
-  qual_expr <- if (is.na(qual_col)) "NULL" else qual_col
-  glue(
-    "SELECT bottle_id, '{measurement_type}' AS measurement_type,
+sql_parts <- purrr::pmap_chr(
+  bottle_meas_map,
+  function(
+    measurement_type,
+    value_col,
+    prec_col,
+    qual_col
+  ) {
+    prec_expr <- if (is.na(prec_col)) "NULL" else prec_col
+    qual_expr <- if (is.na(qual_col)) "NULL" else qual_col
+    glue(
+      "SELECT bottle_id, '{measurement_type}' AS measurement_type,
        CAST({value_col} AS DOUBLE) AS measurement_value,
        CAST({prec_expr} AS DOUBLE) AS measurement_prec,
        CAST({qual_expr} AS VARCHAR) AS measurement_qual
-     FROM bottle WHERE {value_col} IS NOT NULL")
-})
+     FROM bottle WHERE {value_col} IS NOT NULL"
+    )
+  }
+)
 
 sql_create <- glue(
   "CREATE TABLE bottle_measurement AS
@@ -383,31 +449,41 @@ sql_create <- glue(
      AS bottle_measurement_id, *
    FROM (
      {paste(sql_parts, collapse = '\nUNION ALL\n')}
-   ) sub")
+   ) sub"
+)
 dbExecute(con, sql_create)
 
 n_meas <- dbGetQuery(con, "SELECT COUNT(*) FROM bottle_measurement")[[1]]
-n_types <- dbGetQuery(con, "SELECT COUNT(DISTINCT measurement_type) FROM bottle_measurement")[[1]]
-message(glue("bottle_measurement: {format(n_meas, big.mark = ',')} rows, {n_types} measurement types"))
+n_types <- dbGetQuery(
+  con,
+  "SELECT COUNT(DISTINCT measurement_type) FROM bottle_measurement"
+)[[1]]
+message(glue(
+  "bottle_measurement: {format(n_meas, big.mark = ',')} rows, {n_types} measurement types"
+))
 
 # -- drop measurement columns from bottle base table ----
 cols_to_drop <- unique(c(
   bottle_meas_map$value_col,
   na.omit(bottle_meas_map$prec_col),
-  na.omit(bottle_meas_map$qual_col)))
+  na.omit(bottle_meas_map$qual_col)
+))
 
 n_before <- length(dbListFields(con, "bottle"))
 for (col in cols_to_drop) {
   tryCatch(
     dbExecute(con, glue('ALTER TABLE bottle DROP COLUMN "{col}"')),
-    error = function(e) warning(glue("could not drop {col}: {e$message}")))
+    error = function(e) warning(glue("could not drop {col}: {e$message}"))
+  )
 }
 
 # rename p_qual to depth_qual (pressure/depth quality code stays in base table)
 dbExecute(con, 'ALTER TABLE bottle RENAME COLUMN p_qual TO depth_qual')
 
 n_after <- length(dbListFields(con, "bottle"))
-message(glue("bottle columns: {n_before} -> {n_after} (dropped {n_before - n_after})"))
+message(glue(
+  "bottle columns: {n_before} -> {n_after} (dropped {n_before - n_after})"
+))
 ```
 
 ## Pivot Cast Conditions
@@ -461,29 +537,34 @@ erDiagram
 #| label: pivot_cast_conditions
 
 cast_cond_map <- tribble(
-  ~condition_type,        ~source_col,
-  "wave_direction",       "wave_dir",
-  "wave_height",          "wave_ht",
-  "wave_period",          "wave_prd",
-  "wind_direction",       "wind_dir",
-  "wind_speed",           "wind_spd",
-  "barometric_pressure",  "barometer",
-  "dry_air_temp",         "dry_t",
-  "wet_air_temp",         "wet_t",
-  "weather_code",         "wea",
-  "cloud_type",           "cloud_typ",
-  "cloud_amount",         "cloud_amt",
-  "visibility",           "visibility",
-  "secchi_depth",         "secchi",
-  "water_color",          "forel_u")
+  ~condition_type       , ~source_col  ,
+  "wave_direction"      , "wave_dir"   ,
+  "wave_height"         , "wave_ht"    ,
+  "wave_period"         , "wave_prd"   ,
+  "wind_direction"      , "wind_dir"   ,
+  "wind_speed"          , "wind_spd"   ,
+  "barometric_pressure" , "barometer"  ,
+  "dry_air_temp"        , "dry_t"      ,
+  "wet_air_temp"        , "wet_t"      ,
+  "weather_code"        , "wea"        ,
+  "cloud_type"          , "cloud_typ"  ,
+  "cloud_amount"        , "cloud_amt"  ,
+  "visibility"          , "visibility" ,
+  "secchi_depth"        , "secchi"     ,
+  "water_color"         , "forel_u"
+)
 
 # build UNION ALL SQL
-sql_parts <- purrr::pmap_chr(cast_cond_map, function(condition_type, source_col) {
-  glue(
-    "SELECT cast_id, '{condition_type}' AS condition_type,
+sql_parts <- purrr::pmap_chr(
+  cast_cond_map,
+  function(condition_type, source_col) {
+    glue(
+      "SELECT cast_id, '{condition_type}' AS condition_type,
        CAST({source_col} AS DOUBLE) AS condition_value
-     FROM casts WHERE {source_col} IS NOT NULL")
-})
+     FROM casts WHERE {source_col} IS NOT NULL"
+    )
+  }
+)
 
 sql_create <- glue(
   "CREATE TABLE cast_condition AS
@@ -491,22 +572,31 @@ sql_create <- glue(
      AS cast_condition_id, *
    FROM (
      {paste(sql_parts, collapse = '\nUNION ALL\n')}
-   ) sub")
+   ) sub"
+)
 dbExecute(con, sql_create)
 
 n_cond <- dbGetQuery(con, "SELECT COUNT(*) FROM cast_condition")[[1]]
-n_types <- dbGetQuery(con, "SELECT COUNT(DISTINCT condition_type) FROM cast_condition")[[1]]
-message(glue("cast_condition: {format(n_cond, big.mark = ',')} rows, {n_types} condition types"))
+n_types <- dbGetQuery(
+  con,
+  "SELECT COUNT(DISTINCT condition_type) FROM cast_condition"
+)[[1]]
+message(glue(
+  "cast_condition: {format(n_cond, big.mark = ',')} rows, {n_types} condition types"
+))
 
 # -- drop condition columns from casts ----
 n_before <- length(dbListFields(con, "casts"))
 for (col in cast_cond_map$source_col) {
   tryCatch(
     dbExecute(con, glue('ALTER TABLE casts DROP COLUMN "{col}"')),
-    error = function(e) warning(glue("could not drop {col}: {e$message}")))
+    error = function(e) warning(glue("could not drop {col}: {e$message}"))
+  )
 }
 n_after <- length(dbListFields(con, "casts"))
-message(glue("casts columns: {n_before} -> {n_after} (dropped {n_before - n_after})"))
+message(glue(
+  "casts columns: {n_before} -> {n_after} (dropped {n_before - n_after})"
+))
 ```
 
 ## Load Measurement Type Reference
@@ -527,28 +617,43 @@ Merging would create a sparse table with many NULL columns (e.g., `units`/`_sour
 #| label: load_measurement_type
 
 meas_type_csv <- here(
-  "metadata/calcofi.org/bottle-database/measurement_type.csv")
+  "metadata/calcofi.org/bottle-database/measurement_type.csv"
+)
 d_meas_type <- read_csv(meas_type_csv)
 
 dbWriteTable(con, "measurement_type", d_meas_type, overwrite = TRUE)
 
 # validate FK: all bottle_measurement types exist in reference table
-orphan_btl_types <- dbGetQuery(con, "
+orphan_btl_types <- dbGetQuery(
+  con,
+  "
   SELECT DISTINCT measurement_type FROM bottle_measurement
-  WHERE measurement_type NOT IN (SELECT measurement_type FROM measurement_type)")
+  WHERE measurement_type NOT IN (SELECT measurement_type FROM measurement_type)"
+)
 stopifnot(
-  "all bottle_measurement.measurement_type must exist in measurement_type" =
-    nrow(orphan_btl_types) == 0)
+  "all bottle_measurement.measurement_type must exist in measurement_type" = nrow(
+    orphan_btl_types
+  ) ==
+    0
+)
 
 # validate FK: all cast_condition types exist in reference table
-orphan_cond_types <- dbGetQuery(con, "
+orphan_cond_types <- dbGetQuery(
+  con,
+  "
   SELECT DISTINCT condition_type FROM cast_condition
-  WHERE condition_type NOT IN (SELECT measurement_type FROM measurement_type)")
+  WHERE condition_type NOT IN (SELECT measurement_type FROM measurement_type)"
+)
 stopifnot(
-  "all cast_condition.condition_type must exist in measurement_type" =
-    nrow(orphan_cond_types) == 0)
+  "all cast_condition.condition_type must exist in measurement_type" = nrow(
+    orphan_cond_types
+  ) ==
+    0
+)
 
-message(glue("measurement_type: {nrow(d_meas_type)} types loaded, FK checks passed"))
+message(glue(
+  "measurement_type: {nrow(d_meas_type)} types loaded, FK checks passed"
+))
 ```
 
 ## Verify Primary Keys
@@ -566,72 +671,101 @@ message(glue("casts.cast_id: {length(cast_keys)} unique values, 0 duplicates"))
 btl_keys <- tbl(con, "bottle") |> pull(bottle_id)
 n_dup_btl <- sum(duplicated(btl_keys))
 stopifnot("bottle_id must be unique in bottle" = n_dup_btl == 0)
-message(glue("bottle.bottle_id: {length(btl_keys)} unique values, 0 duplicates"))
+message(glue(
+  "bottle.bottle_id: {length(btl_keys)} unique values, 0 duplicates"
+))
 
 # verify FK: bottle.cast_id -> casts.cast_id
 orphan_bottles <- tbl(con, "bottle") |>
   anti_join(
     tbl(con, "casts"),
-    by = "cast_id") |>
+    by = "cast_id"
+  ) |>
   collect()
 stopifnot(
-  "all bottle.cast_id must exist in casts.cast_id" =
-    nrow(orphan_bottles) == 0)
+  "all bottle.cast_id must exist in casts.cast_id" = nrow(orphan_bottles) == 0
+)
 message(glue(
   "FK integrity: all {length(btl_keys)} bottle.cast_id ",
-  "found in casts.cast_id"))
+  "found in casts.cast_id"
+))
 
 # verify bottle_measurement_id uniqueness
-n_dup_bm_id <- dbGetQuery(con, "
+n_dup_bm_id <- dbGetQuery(
+  con,
+  "
   SELECT COUNT(*) FROM (
     SELECT bottle_measurement_id, COUNT(*) AS n
     FROM bottle_measurement
     GROUP BY bottle_measurement_id
-    HAVING COUNT(*) > 1)")[[1]]
+    HAVING COUNT(*) > 1)"
+)[[1]]
 stopifnot("bottle_measurement_id must be unique" = n_dup_bm_id == 0)
 message(glue("bottle_measurement.bottle_measurement_id: unique, 0 duplicates"))
 
 # verify composite PK: bottle_measurement (bottle_id, measurement_type)
-n_dup_meas <- dbGetQuery(con, "
+n_dup_meas <- dbGetQuery(
+  con,
+  "
   SELECT COUNT(*) FROM (
     SELECT bottle_id, measurement_type, COUNT(*) AS n
     FROM bottle_measurement
     GROUP BY bottle_id, measurement_type
-    HAVING COUNT(*) > 1)")[[1]]
-stopifnot("bottle_measurement (bottle_id, measurement_type) must be unique" = n_dup_meas == 0)
+    HAVING COUNT(*) > 1)"
+)[[1]]
+stopifnot(
+  "bottle_measurement (bottle_id, measurement_type) must be unique" = n_dup_meas ==
+    0
+)
 message(glue("bottle_measurement: composite key unique, 0 duplicates"))
 
 # verify FK: bottle_measurement.bottle_id -> bottle.bottle_id
-n_orphan_meas <- dbGetQuery(con, "
+n_orphan_meas <- dbGetQuery(
+  con,
+  "
   SELECT COUNT(DISTINCT bottle_id) FROM bottle_measurement
-  WHERE bottle_id NOT IN (SELECT bottle_id FROM bottle)")[[1]]
-stopifnot("all bottle_measurement.bottle_id must exist in bottle" = n_orphan_meas == 0)
+  WHERE bottle_id NOT IN (SELECT bottle_id FROM bottle)"
+)[[1]]
+stopifnot(
+  "all bottle_measurement.bottle_id must exist in bottle" = n_orphan_meas == 0
+)
 message(glue("bottle_measurement FK: all bottle_ids found in bottle"))
 
 # verify cast_condition_id uniqueness
-n_dup_cc_id <- dbGetQuery(con, "
+n_dup_cc_id <- dbGetQuery(
+  con,
+  "
   SELECT COUNT(*) FROM (
     SELECT cast_condition_id, COUNT(*) AS n
     FROM cast_condition
     GROUP BY cast_condition_id
-    HAVING COUNT(*) > 1)")[[1]]
+    HAVING COUNT(*) > 1)"
+)[[1]]
 stopifnot("cast_condition_id must be unique" = n_dup_cc_id == 0)
 message(glue("cast_condition.cast_condition_id: unique, 0 duplicates"))
 
 # verify composite PK: cast_condition (cast_id, condition_type)
-n_dup_cond <- dbGetQuery(con, "
+n_dup_cond <- dbGetQuery(
+  con,
+  "
   SELECT COUNT(*) FROM (
     SELECT cast_id, condition_type, COUNT(*) AS n
     FROM cast_condition
     GROUP BY cast_id, condition_type
-    HAVING COUNT(*) > 1)")[[1]]
-stopifnot("cast_condition (cast_id, condition_type) must be unique" = n_dup_cond == 0)
+    HAVING COUNT(*) > 1)"
+)[[1]]
+stopifnot(
+  "cast_condition (cast_id, condition_type) must be unique" = n_dup_cond == 0
+)
 message(glue("cast_condition: composite key unique, 0 duplicates"))
 
 # verify FK: cast_condition.cast_id -> casts.cast_id
-n_orphan_cond <- dbGetQuery(con, "
+n_orphan_cond <- dbGetQuery(
+  con,
+  "
   SELECT COUNT(DISTINCT cast_id) FROM cast_condition
-  WHERE cast_id NOT IN (SELECT cast_id FROM casts)")[[1]]
+  WHERE cast_id NOT IN (SELECT cast_id FROM casts)"
+)[[1]]
 stopifnot("all cast_condition.cast_id must exist in casts" = n_orphan_cond == 0)
 message(glue("cast_condition FK: all cast_ids found in casts"))
 ```
@@ -699,7 +833,7 @@ tbls <- db_tables(con)
 dm_dev <- dm_from_con(con, table_names = tbls, learn_keys = FALSE)
 
 # define relationships in dm (in-memory for visualization only)
-add_bottle_keys <- function(dm){
+add_bottle_keys <- function(dm) {
   dm |>
     dm_add_pk(casts, cast_id) |>
     dm_add_pk(bottle, bottle_id) |>
@@ -710,7 +844,12 @@ add_bottle_keys <- function(dm){
     dm_add_fk(bottle_measurement, bottle_id, bottle) |>
     dm_add_fk(bottle_measurement, measurement_type, measurement_type) |>
     dm_add_fk(cast_condition, cast_id, casts) |>
-    dm_add_fk(cast_condition, condition_type, measurement_type, measurement_type)
+    dm_add_fk(
+      cast_condition,
+      condition_type,
+      measurement_type,
+      measurement_type
+    )
 }
 
 dm_dev_fk <- dm_dev |>
@@ -741,9 +880,10 @@ truth — grid is created in `ingest_swfsc.noaa.gov_calcofi-db.qmd`).
 #| label: load_grid
 
 load_gcs_parquet_to_duckdb(
-  con        = con,
-  gcs_path   = "gs://calcofi-db/ingest/swfsc.noaa.gov_calcofi-db/grid.parquet",
-  table_name = "grid")
+  con = con,
+  gcs_path = "gs://calcofi-db/ingest/swfsc.noaa.gov_calcofi-db/grid.parquet",
+  table_name = "grid"
+)
 ```
 
 ### Update `casts.grid_key`
@@ -765,7 +905,9 @@ coordinate columns derivable from the base table.
 #| label: create_casts_derived
 
 dbExecute(con, "DROP VIEW IF EXISTS casts_derived")
-dbExecute(con, "
+dbExecute(
+  con,
+  "
   CREATE VIEW casts_derived AS
   SELECT *,
     EXTRACT(YEAR FROM datetime_utc)::SMALLINT    AS year,
@@ -781,7 +923,8 @@ dbExecute(con, "
     CASE WHEN lon_dec >= 0 THEN 'E' ELSE 'W' END AS lon_hem,
     STRFTIME(datetime_utc, '%Y%m')                AS cruise,
     REPLACE(REPLACE(sta_key, '.', ''), ' ', '')   AS db_sta_key
-  FROM casts")
+  FROM casts"
+)
 message("Created casts_derived VIEW with derived temporal/coordinate columns")
 ```
 
@@ -802,8 +945,9 @@ if (!file_exists(map_casts_png)) {
 }
 
 htmltools::img(
-  src   = map_casts_png |> str_replace(here(), "."),
-  width = "600px")
+  src = map_casts_png |> str_replace(here(), "."),
+  width = "600px"
+)
 ```
 
 ## Report
@@ -813,7 +957,7 @@ htmltools::img(
 
 all_tbls <- db_tables(con)
 
-add_bottle_spatial_keys <- function(dm){
+add_bottle_spatial_keys <- function(dm) {
   dm |>
     dm_add_pk(grid, grid_key) |>
     dm_add_fk(casts, grid_key, grid)
@@ -823,9 +967,10 @@ dm_final <- dm_from_con(con, table_names = all_tbls, learn_keys = FALSE) |>
   add_bottle_keys() |>
   add_bottle_spatial_keys() |>
   dm_set_colors(
-    lightgreen  = grid,
+    lightgreen = grid,
     lightyellow = c(bottle_measurement, cast_condition),
-    lightblue   = measurement_type)
+    lightblue = measurement_type
+  )
 dm_draw(dm_final, view_type = "all")
 ```
 
@@ -833,16 +978,19 @@ dm_draw(dm_final, view_type = "all")
 #| label: summary_stats
 
 # summary statistics
-n_casts   <- tbl(con, "casts") |> tally() |> pull(n)
+n_casts <- tbl(con, "casts") |> tally() |> pull(n)
 n_bottles <- tbl(con, "bottle") |> tally() |> pull(n)
-n_meas    <- dbGetQuery(con, "SELECT COUNT(*) FROM bottle_measurement")[[1]]
-n_cond    <- dbGetQuery(con, "SELECT COUNT(*) FROM cast_condition")[[1]]
+n_meas <- dbGetQuery(con, "SELECT COUNT(*) FROM bottle_measurement")[[1]]
+n_cond <- dbGetQuery(con, "SELECT COUNT(*) FROM cast_condition")[[1]]
 
-year_range <- dbGetQuery(con, "
+year_range <- dbGetQuery(
+  con,
+  "
   SELECT
     EXTRACT(YEAR FROM MIN(datetime_utc))::INTEGER AS yr_min,
     EXTRACT(YEAR FROM MAX(datetime_utc))::INTEGER AS yr_max
-  FROM casts")
+  FROM casts"
+)
 
 fmt <- function(x, ...) format(x, big.mark = ",", ...)
 message(glue("Total casts: {fmt(n_casts)}"))
@@ -888,11 +1036,12 @@ for derived-table columns.
 #| label: enforce_types
 
 type_changes <- enforce_column_types(
-  con            = con,
-  d_flds_rd      = d$d_flds_rd,
+  con = con,
+  d_flds_rd = d$d_flds_rd,
   type_overrides = list(),
-  tables         = db_tables(con),
-  verbose        = TRUE)
+  tables = db_tables(con),
+  verbose = TRUE
+)
 
 if (nrow(type_changes) > 0) {
   type_changes |>
@@ -901,7 +1050,9 @@ if (nrow(type_changes) > 0) {
 
 # recreate casts_derived VIEW after type changes
 dbExecute(con, "DROP VIEW IF EXISTS casts_derived")
-dbExecute(con, "
+dbExecute(
+  con,
+  "
   CREATE VIEW casts_derived AS
   SELECT *,
     EXTRACT(YEAR FROM datetime_utc)::SMALLINT    AS year,
@@ -917,7 +1068,8 @@ dbExecute(con, "
     CASE WHEN lon_dec >= 0 THEN 'E' ELSE 'W' END AS lon_hem,
     STRFTIME(datetime_utc, '%Y%m')                AS cruise,
     REPLACE(REPLACE(sta_key, '.', ''), ' ', '')   AS db_sta_key
-  FROM casts")
+  FROM casts"
+)
 message("Recreated casts_derived VIEW after column type enforcement")
 ```
 
@@ -929,9 +1081,16 @@ Preview first and last rows of each table before writing parquet outputs.
 #| label: preview_tables
 #| results: asis
 
-preview_tables(con, c(
-  "casts", "bottle", "bottle_measurement",
-  "cast_condition", "measurement_type"))  # grid canonical from swfsc
+preview_tables(
+  con,
+  c(
+    "casts",
+    "bottle",
+    "bottle_measurement",
+    "cast_condition",
+    "measurement_type"
+  )
+) # grid canonical from swfsc
 ```
 
 ```{r}
@@ -940,9 +1099,10 @@ preview_tables(con, c(
 # casts_derived is a VIEW, preview separately
 dbGetQuery(con, "SELECT * FROM casts_derived LIMIT 100") |>
   datatable(
-    caption  = "casts_derived — first 100 rows (VIEW)",
+    caption = "casts_derived — first 100 rows (VIEW)",
     rownames = FALSE,
-    filter   = "top")
+    filter = "top"
+  )
 ```
 
 ## Write Parquet Outputs
@@ -954,10 +1114,11 @@ Export tables to parquet files for downstream use.
 
 # write parquet files with manifest
 parquet_stats <- write_parquet_outputs(
-  con              = con,
-  output_dir       = dir_parquet,
-  tables           = setdiff(db_tables(con), "grid"),  # grid canonical from swfsc
-  strip_provenance = F)
+  con = con,
+  output_dir = dir_parquet,
+  tables = setdiff(db_tables(con), "grid"), # grid canonical from swfsc
+  strip_provenance = F
+)
 
 parquet_stats |>
   mutate(file = basename(path)) |>
@@ -975,28 +1136,33 @@ this provides the metadata externally.
 #| label: write_metadata
 
 metadata_path <- build_metadata_json(
-  con                  = con,
-  d_tbls_rd            = d$d_tbls_rd,
-  d_flds_rd            = d$d_flds_rd,
+  con = con,
+  d_tbls_rd = d$d_tbls_rd,
+  d_flds_rd = d$d_flds_rd,
   metadata_derived_csv = here(
-    "metadata/calcofi.org/bottle-database/metadata_derived.csv"),
-  output_dir           = dir_parquet,
-  tables               = db_tables(con),
-  set_comments         = TRUE,
-  provider             = provider,
-  dataset              = dataset,
-  workflow_url         = glue(
+    "metadata/calcofi.org/bottle-database/metadata_derived.csv"
+  ),
+  output_dir = dir_parquet,
+  tables = db_tables(con),
+  set_comments = TRUE,
+  provider = provider,
+  dataset = dataset,
+  workflow_url = glue(
     "https://calcofi.io/workflows/",
-    "ingest_calcofi.org_bottle-database.html"))
+    "ingest_calcofi.org_bottle-database.html"
+  )
+)
 
 # show metadata summary
 metadata <- jsonlite::fromJSON(metadata_path)
 tibble(
-  table   = names(metadata$tables),
-  n_cols  = map_int(
+  table = names(metadata$tables),
+  n_cols = map_int(
     names(metadata$tables),
-    ~sum(grepl(glue("^{.x}\\."), names(metadata$columns)))),
-  name_long = map_chr(metadata$tables, ~.x$name_long)) |>
+    ~ sum(grepl(glue("^{.x}\\."), names(metadata$columns)))
+  ),
+  name_long = map_chr(metadata$tables, ~ .x$name_long)
+) |>
   datatable(caption = "Table metadata summary")
 ```
 
@@ -1005,7 +1171,8 @@ tibble(
 
 listviewer::jsonedit(
   jsonlite::fromJSON(metadata_path, simplifyVector = FALSE),
-  mode = "view")
+  mode = "view"
+)
 ```
 
 ## Upload to GCS Archive
@@ -1017,7 +1184,7 @@ Upload parquet files, manifest, and metadata sidecar to
 #| label: upload_gcs
 
 gcs_ingest_prefix <- glue("ingest/{provider}_{dataset}")
-gcs_bucket        <- "calcofi-db"
+gcs_bucket <- "calcofi-db"
 
 # list local files to upload (parquet + json sidecars)
 local_files <- list.files(dir_parquet, full.names = TRUE)
@@ -1031,7 +1198,8 @@ walk(local_files, function(f) {
 
 message(glue(
   "\nUploaded {length(local_files)} files to ",
-  "gs://{gcs_bucket}/{gcs_ingest_prefix}/"))
+  "gs://{gcs_bucket}/{gcs_ingest_prefix}/"
+))
 ```
 
 ## Cleanup
