@@ -89,7 +89,7 @@ intellectual_rights <- list(
   para = paste(rights, license, collapse = " ")
 )
 
-dir_out <- here("data/darwincore/ichthyoplankton")
+dir_out <- here("data/darwincore/ichthyo")
 
 # get merged duckdb connection ----
 db_path <- here("data/wrangling/merge_ichthyo_bottle.duckdb")
@@ -154,42 +154,29 @@ for (tname in c(
 }
 ```
 
-## Mint Globally Unique Identifiers
+## Collect Tables with Unique Identifiers
 
-The merged DuckDB uses integer `*_id` columns for joins and SWFSC `_source_uuid` for provenance. For OBIS, we need globally unique, stable identifiers:
-
-- **Net eventID**: use net's `_source_uuid` (original SWFSC UUID, unique per net)
-- **Ichthyo occurrenceID / measurementID**: mint deterministic UUID v5 from composite key
+The merged DuckDB uses `*_uuid` columns as primary keys for SWFSC tables
+(site, tow, net, ichthyo). These UUIDs are already globally unique and
+stable — `net_uuid` is minted at sea and `ichthyo_uuid` is a deterministic
+UUID v5 from the composite natural key — so no additional minting is needed.
 
 ```{r}
-#| label: mint-uuids
+#| label: collect-uuids
 
-# collect net table with source UUIDs for eventID ----
-d_net <- tbl_net |> collect() |> rename(net_uuid = `_source_uuid`)
+# collect net table with UUIDs for eventID ----
+# as.UUID() coerces to native 128-bit UUID class (always lowercase,
+# faster comparisons than character strings)
+d_net <- tbl_net |>
+  collect() |>
+  mutate(across(ends_with("_uuid"), as.UUID))
 stopifnot(all(!duplicated(d_net$net_uuid)))
 cat(glue("Net UUIDs: {nrow(d_net)} (all unique)"), "\n")
 
-# collect and mint ichthyo UUIDs ----
+# collect ichthyo table with UUIDs ----
 d_ichthyo <- tbl_ichthyo |>
   collect() |>
-  # join net_uuid for composite key
-  left_join(d_net |> select(net_id, net_uuid), by = "net_id") |>
-  mutate(
-    ichthyo_uuid = UUIDfromName(
-      CALCOFI_NS,
-      paste0(
-        net_uuid,
-        "|",
-        species_id,
-        "|",
-        life_stage,
-        "|",
-        ifelse(is.na(measurement_type), "", measurement_type),
-        "|",
-        ifelse(is.na(measurement_value), "", measurement_value)
-      )
-    )
-  )
+  mutate(across(ends_with("_uuid"), as.UUID))
 stopifnot(all(!duplicated(d_ichthyo$ichthyo_uuid)))
 cat(glue("Ichthyo UUIDs: {nrow(d_ichthyo)} (all unique)"), "\n")
 ```
@@ -221,7 +208,7 @@ measurement_unit_vocab <- tibble(
     "http://vocab.nerc.ac.uk/collection/P06/current/UGRM/", # grams
     "http://vocab.nerc.ac.uk/collection/P06/current/UUUU/", # proportion
     "http://vocab.nerc.ac.uk/collection/P06/current/MCUB/", # m^3
-    "http://vocab.nerc.ac.uk/collection/P06/current/ULAA/"  # meters
+    "http://vocab.nerc.ac.uk/collection/P06/current/ULAA/" # meters
   )
 )
 ```
@@ -238,14 +225,18 @@ Aggregate over net tows to build cruise-level events:
 # collect joined net→tow→site for cruise summaries ----
 d_net_site <- d_net |>
   left_join(
-    tbl_tow |> collect() |> select(tow_id, site_id, time_start),
-    by = "tow_id"
+    tbl_tow |>
+      collect() |>
+      mutate(across(ends_with("_uuid"), as.UUID)) |>
+      select(tow_uuid, site_uuid, time_start),
+    by = "tow_uuid"
   ) |>
   left_join(
     tbl_site |>
       collect() |>
-      select(site_id, cruise_key, longitude, latitude, line, station),
-    by = "site_id"
+      mutate(across(ends_with("_uuid"), as.UUID)) |>
+      select(site_uuid, cruise_key, longitude, latitude, line, station),
+    by = "site_uuid"
   )
 
 # net cruise summaries ----
@@ -326,7 +317,7 @@ Collapsed net_sample events (cruise → net_sample) with coordinates, date, and 
 
 d_net_events <- d_net_site |>
   mutate(
-    eventID = net_uuid,
+    eventID = as.character(net_uuid), # <-- cast to allow cruise_key as another eventID type
     parentEventID = cruise_key,
     eventType = "net_sample",
     eventDate = format(time_start, "%Y-%m-%dT%H:%M:%SZ"),
@@ -411,8 +402,8 @@ d_occurrence <- d_ichthyo |>
     by = "species_id"
   ) |>
   mutate(
-    occurrenceID = ichthyo_uuid,
-    eventID = net_uuid,
+    occurrenceID = as.character(ichthyo_uuid),
+    eventID = as.character(net_uuid),
     scientificName = scientific_name,
     scientificNameID = ifelse(
       !is.na(worms_id) & worms_id > 0,
@@ -535,12 +526,13 @@ From `ichthyo` rows where `measurement_type = 'stage'`, linked to the matching t
 # build lookup: tally occurrenceIDs with their eventID (net_uuid)
 d_occ_lookup <- d_occurrence |>
   select(
-    net_id,
+    net_uuid,
     species_id,
     life_stage,
     occurrenceID = ichthyo_uuid,
     occ_eventID = eventID
-  )
+  ) |>
+  mutate(occurrenceID = as.character(occurrenceID))
 
 # collect lookup descriptions for stages
 d_lookup <- tbl_lookup |>
@@ -557,10 +549,10 @@ d_emof_stage <- d_ichthyo |>
     d_lookup |> select(lookup_type, lookup_num, description),
     by = c("lookup_type", "measurement_value" = "lookup_num")
   ) |>
-  left_join(d_occ_lookup, by = c("net_id", "species_id", "life_stage")) |>
+  left_join(d_occ_lookup, by = c("net_uuid", "species_id", "life_stage")) |>
   mutate(
     eventID = occ_eventID,
-    measurementID = ichthyo_uuid,
+    measurementID = as.character(ichthyo_uuid),
     measurementType = "abundance by life stage",
     measurementTypeID = NA_character_,
     meas_val = tally,
@@ -596,11 +588,11 @@ From `ichthyo` rows where `measurement_type = 'size'`:
 
 d_emof_length <- d_ichthyo |>
   filter(measurement_type == "size") |>
-  left_join(d_occ_lookup, by = c("net_id", "species_id", "life_stage")) |>
+  left_join(d_occ_lookup, by = c("net_uuid", "species_id", "life_stage")) |>
   filter(!is.na(measurement_value)) |>
   mutate(
     eventID = occ_eventID,
-    measurementID = ichthyo_uuid,
+    measurementID = as.character(ichthyo_uuid),
     measurementType = "body length",
     measurementTypeID = NA_character_,
     meas_val = measurement_value,
@@ -869,8 +861,8 @@ geo_net <- tbl_site |>
   collect()
 
 geo_coverage <- tibble(
-  westBoundingCoordinate  = geo_net$lon_min,
-  eastBoundingCoordinate  = geo_net$lon_max,
+  westBoundingCoordinate = geo_net$lon_min,
+  eastBoundingCoordinate = geo_net$lon_max,
   southBoundingCoordinate = geo_net$lat_min,
   northBoundingCoordinate = geo_net$lat_max
 )
@@ -885,7 +877,7 @@ temp_net <- tbl_tow |>
 
 temp_coverage <- list(
   beginDate = as.character(as.Date(temp_net$tmin)),
-  endDate   = as.character(as.Date(temp_net$tmax))
+  endDate = as.character(as.Date(temp_net$tmax))
 )
 
 # taxonomic coverage ----
@@ -1065,7 +1057,7 @@ Create the final DwC-A zip file:
 
 zip_file <- file.path(
   dirname(dir_out),
-  paste0("ichthyoplankton_", Sys.Date(), ".zip")
+  paste0("ichthyo_", Sys.Date(), ".zip")
 )
 
 zip(
@@ -1090,9 +1082,10 @@ cat("\nDarwin Core Archive created:", zip_file, "\n")
 
 ```{r}
 #| label: sync-to-gcs
+#| eval: false
 
 gcs_bucket <- "calcofi-db"
-gcs_publish_prefix <- "publish/ichthyoplankton"
+gcs_publish_prefix <- "publish/ichthyo"
 
 sync_results <- sync_to_gcs(
   local_dir = dir_out,
@@ -1107,13 +1100,16 @@ sync_results <- sync_to_gcs(
 #| label: obistools-validate
 
 # read back the CSVs
-d_event_check <- read_csv(file.path(dir_out, "event.csv"))
-d_occ_check <- read_csv(file.path(dir_out, "occurrence.csv"))
-d_emof_check <- read_csv(file.path(dir_out, "extendedMeasurementOrFact.csv"))
+d_event <- read_csv(file.path(dir_out, "event.csv"))
+d_occ <- read_csv(file.path(dir_out, "occurrence.csv"))
+d_emof <- read_csv(file.path(dir_out, "extendedMeasurementOrFact.csv"))
+
+# occ.eventID in event.eventID
+stopifnot(all(d_occ$eventID %in% d_event$eventID))
 
 # event hierarchy check
 cat("=== Event hierarchy check ===\n")
-event_check <- check_eventids(d_event_check)
+event_check <- check_eventids(d_event)
 if (nrow(event_check) == 0) {
   cat("PASS: all event parent-child relationships valid\n")
 } else {
@@ -1123,7 +1119,7 @@ if (nrow(event_check) == 0) {
 
 # occurrence → event linkage
 cat("\n=== Occurrence-event linkage ===\n")
-occ_check <- check_extension_eventids(d_event_check, d_occ_check)
+occ_check <- check_extension_eventids(d_event, d_occ)
 if (nrow(occ_check) == 0) {
   cat("PASS: all occurrences link to valid events\n")
 } else {
@@ -1133,9 +1129,9 @@ if (nrow(occ_check) == 0) {
 
 # eMoF → event linkage
 cat("\n=== eMoF-event linkage ===\n")
-emof_event_check <- d_emof_check |>
+emof_event_check <- d_emof |>
   filter(!is.na(eventID)) |>
-  filter(!eventID %in% d_event_check$eventID)
+  filter(!eventID %in% d_event$eventID)
 if (nrow(emof_event_check) == 0) {
   cat("PASS: all eMoF eventIDs link to valid events\n")
 } else {
@@ -1143,9 +1139,9 @@ if (nrow(emof_event_check) == 0) {
 }
 
 # eMoF → occurrence linkage
-emof_occ_check <- d_emof_check |>
+emof_occ_check <- d_emof |>
   filter(!is.na(occurrenceID)) |>
-  filter(!occurrenceID %in% d_occ_check$occurrenceID)
+  filter(!occurrenceID %in% d_occ$occurrenceID)
 if (nrow(emof_occ_check) == 0) {
   cat("PASS: all eMoF occurrenceIDs link to valid occurrences\n")
 } else {
@@ -1154,10 +1150,10 @@ if (nrow(emof_occ_check) == 0) {
 
 # summary by event type
 cat("\n=== Events by type ===\n")
-d_event_check |> count(eventType) |> print()
+d_event |> count(eventType) |> print()
 
 cat("\n=== eMoF by measurementType ===\n")
-d_emof_check |> count(measurementType, sort = TRUE) |> print(n = 50)
+d_emof |> count(measurementType, sort = TRUE) |> print(n = 50)
 ```
 
 ## Cleanup
