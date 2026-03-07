@@ -46,8 +46,11 @@ options(readr.show_col_types = F)
 CALCOFI_NS <- "c0f1ca00-ca1c-5000-b000-1c4790000000"
 
 # dataset metadata ----
-dataset_title <- "CalCOFI Ichthyoplankton Tows"
-dataset_abstract <- "Fish larvae and egg counts from CalCOFI ichthyoplankton nets (primarily vertical [Calvet or Pairovet], oblique [bongo or ring nets], and surface tows [Manta nets]). Oblique tows are normally standardized to count per 10 m^2 of surface sampled. Surface tows are normally standardized to count per 1,000 m^3 strained."
+dataset_short_name <- "calcofi_ichthyo"
+dataset_title <- "CalCOFI Fish Larvae & Egg Tows"
+dataset_abstract <- "Fish larvae counts and standardized counts for eggs captured in CalCOFI ichthyoplankton nets (primarily vertical [Calvet or Pairovet], oblique [bongo or ring nets], and surface tows [Manta nets]). Surface tows are normally standardized to count per 1,000 m^3 strained. Oblique tows are normally standardized to count per 10 m^2 of surface sampled."
+dataset_url <- "https://calcofi.org/data/marine-ecosystem-data/fish-eggs-larvae/"
+dataset_logo_url <- "https://calcofi.org/wp-content/uploads/2021/03/cropped-calcofirose_512_favicon.png"
 dataset_keywords <- c(
   "atmosphere",
   "biology",
@@ -58,7 +61,6 @@ dataset_keywords <- c(
   "ichthyoplankton",
   "latitude",
   "longitude",
-  "nutrients",
   "ocean",
   "time"
 )
@@ -66,14 +68,14 @@ country_code <- "US"
 water_body <- "California Current"
 
 dataset_id <- glue(
-  "calcofi.io_workflow_ichthyo_to_obis_{format(Sys.Date(), '%Y-%m-%d')}"
+  "calcofi.io_workflows_ichthyo_to_obis_{format(Sys.Date(), '%Y-%m-%d')}"
 )
 
-sampling_methods_description <- "Standard CalCOFI ichthyoplankton tows: The standard oblique tow uses a bongo net (71 cm diameter, 0.505 mm mesh) or 1-m ring net (prior to 1978) retrieved at a constant wire angle (45 degrees) from 210 m depth to surface. Surface tows use a Manta net; vertical tows use CalVET/Pairovet nets. Flowmeters measure volume filtered. Samples are preserved in 5% formalin. Fish eggs and larvae are sorted, identified to lowest taxon possible, enumerated, and measured."
+sampling_methods_description <- "Standard CalCOFI ichthyoplankton tows. The standard oblique tow uses a bongo net (71 cm diameter, 0.505 mm mesh) or 1-m ring net (prior to 1978) retrieved at a constant wire angle (45 degrees) from 210 m depth to surface. Surface tows use a Manta net; vertical tows use CalVET/Pairovet nets. Flowmeters measure volume filtered. Samples are preserved in 5% formalin. In the lab, fish eggs and larvae are sorted, identified to lowest taxon possible, enumerated, and measured."
 
-study_extent_description <- "The study covers the California Current ecosystem, primarily off Southern California (standard lines 77-93) but historically extending from the border of Canada to the tip of Baja California. The time series for this dataset generally begins in 1951, continuing to the present with quarterly cruises."
+study_extent_description <- "The study covers the California Current ecosystem, primarily off Southern California (standard lines 77-93) but historically extending from the border of Canada to the tip of Baja California. The time series for this dataset generally begins in 1951 and continues to the present, with quarterly cruises."
 
-sampling_description <- "Samples are collected at fixed stations along the CalCOFI grid. Oblique tows are standardized to counts per 10 m^2 of sea surface. Surface tows are standardized to counts per 1,000 m^3."
+sampling_description <- "Samples are collected at fixed stations along the CalCOFI grid. Oblique tows are standardized to counts per 10 m^2 of sea surface. Surface tows are standardized to counts per 1,000 m^3. Data includes raw counts (tallies) and standardized abundances."
 
 funding_information <- "CalCOFI is a partnership between the NOAA National Marine Fisheries Service (NMFS), Scripps Institution of Oceanography (SIO), and California Department of Fish and Wildlife (CDFW)."
 
@@ -933,21 +935,70 @@ my_eml <- list(
   packageId = dataset_id,
   system = "calcofi.io",
   dataset = list(
+    shortName = dataset_short_name,
     title = dataset_title,
-    intellectualRights = intellectual_rights,
     creator = list(
-      individualName = list(givenName = "Ed", surName = "Weber"),
-      organizationName = "NOAA SWFSC",
-      electronicMailAddress = "ed.weber@noaa.gov",
-      userId = list(
-        directory = "https://orcid.org/",
-        userId = "0000-0002-0942-434X"
+      list(
+        individualName = list(
+          salutation = "Dr.",
+          givenName = "Ed",
+          surName = "Weber"
+        ),
+        organizationName = "NOAA SWFSC",
+        electronicMailAddress = "ed.weber@noaa.gov",
+        userId = list(
+          directory = "https://orcid.org/",
+          userId = "0000-0002-0942-434X"
+        )
+      ),
+      list(
+        individualName = list(
+          salutation = "Phd",
+          givenName = "Benjamin",
+          surName = "Best"
+        ),
+        organizationName = "Ocean Metrics LLC",
+        positionName = "Marine Data Scientist",
+        address = list(country = "US"),
+        phone = "+1(805)705-9770",
+        electronicMailAddress = "ben@oceanmetrics.io",
+        userId = list(
+          directory = "https://www.linkedin.com/profile/view?id=",
+          userId = "ben-best"
+        )
       )
     ),
+    pubDate = format(Sys.Date(), "%Y-%m-%d"),
+    language = "eng",
     abstract = dataset_abstract,
     keywordSet = list(
-      keyword = dataset_keywords,
-      keywordThesaurus = "GCMD Science Keywords"
+      list(
+        keyword = dataset_keywords,
+        keywordThesaurus = "GCMD Science Keywords"
+      ),
+      list(
+        keyword = "Samplingevent",
+        keywordThesaurus = "GBIF Dataset Type Vocabulary: http://rs.gbif.org/vocabulary/gbif/dataset_type_2015-07-10.xml"
+      ),
+      list(
+        keyword = "Observation",
+        keywordThesaurus = "GBIF Dataset Subtype Vocabulary: http://rs.gbif.org/vocabulary/gbif/dataset_subtype.xml"
+      )
+    ),
+    intellectualRights = intellectual_rights,
+    licensed = list(
+      licenseName = "Creative Commons Zero v1.0 Universal",
+      url = "https://spdx.org/licenses/CC0-1.0.html",
+      identifier = "CC0-1.0"
+    ),
+    distribution = list(
+      scope = "document",
+      online = list(
+        url = list(
+          `function` = "information",
+          url = dataset_url
+        )
+      )
     ),
     coverage = list(
       geographicCoverage = list(
@@ -965,9 +1016,31 @@ my_eml <- list(
         taxonomicClassification = taxa_coverage
       )
     ),
+    maintenance = list(
+      description = list(para = ""),
+      maintenanceUpdateFrequency = "asNeeded"
+    ),
     contact = list(
-      individualName = list(givenName = "Ed", surName = "Weber"),
-      electronicMailAddress = "ed.weber@noaa.gov"
+      individualName = list(
+        salutation = "Dr.",
+        givenName = "Ed",
+        surName = "Weber"
+      ),
+      organizationName = "NOAA SWFSC",
+      positionName = "Research Fish Biologist",
+      address = list(
+        deliveryPoint = "8901 La Jolla Shores Dr",
+        city = "La Jolla",
+        administrativeArea = "CA",
+        postalCode = "92037",
+        country = "US"
+      ),
+      phone = "(858) 546-5676",
+      electronicMailAddress = "ed.weber@noaa.gov",
+      userId = list(
+        directory = "https://orcid.org/",
+        userId = "0000-0002-0942-434X"
+      )
     ),
     methods = list(
       methodStep = list(
@@ -1000,6 +1073,24 @@ write_eml(my_eml, eml_xml)
 readLines(eml_xml) |>
   str_replace(fixed(names(license_xml)), license_xml) |>
   writeLines(eml_xml)
+
+# inject additionalMetadata with GBIF logo
+doc <- read_xml(eml_xml)
+ns <- xml_ns(doc)
+additional_meta <- read_xml(glue(
+  '
+  <additionalMetadata>
+    <metadata>
+      <gbif>
+        <dateStamp>{format(Sys.time(), "%Y-%m-%dT%H:%M:%S+00:00")}</dateStamp>
+        <hierarchyLevel>dataset</hierarchyLevel>
+        <resourceLogoUrl>{dataset_logo_url}</resourceLogoUrl>
+      </gbif>
+    </metadata>
+  </additionalMetadata>'
+))
+xml_add_child(doc, additional_meta)
+write_xml(doc, eml_xml)
 
 validation_result <- eml_validate(eml_xml)
 if (!validation_result) {

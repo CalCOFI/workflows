@@ -614,6 +614,132 @@ Please parse https://cran.r-project.org/web/packages/uuid/refman/uuid.html and i
     - Gives faster comparisons between UUID vectors (native 128-bit vs string)
     - Handles both DuckDB UUID type (already lowercase) and VARCHAR (mixed case) gracefully
 
+I made some edits in the GBIF IPT to the Metadata for this (older version) of the dataset and downloaded it to @/Users/bbest/Downloads/eml.xml. Can you detect differences with @data/darwincore/ichthyo/eml.xml and update the @publish_ichthyo_to_obis.qmd?
+
+│ Plan to implement                                                                                                                                              │
+│                                                                                                                                                                │
+│ Plan: Sync EML metadata from GBIF IPT edits into publish_ichthyo_to_obis.qmd                                                                                   │
+│                                                                                                                                                                │
+│ Context                                                                                                                                                        │
+│                                                                                                                                                                │
+│ The EML metadata was edited in the GBIF IPT (downloaded to /Users/bbest/Downloads/eml.xml) with important additions: a second creator (Ben Best), shortName,   │
+│ pubDate, language, updated title/abstract, additional keyword sets (GBIF Dataset Type/Subtype), licensed element, distribution URL, maintenance block, richer  │
+│ contact details (address, phone, position), improved methods text, and additionalMetadata with GBIF logo. These changes need to be incorporated into the R     │
+│ code that generates the EML in publish_ichthyo_to_obis.qmd.                                                                                                    │
+│                                                                                                                                                                │
+│ File to modify                                                                                                                                                 │
+│                                                                                                                                                                │
+│ - publish_ichthyo_to_obis.qmd — the setup chunk (metadata variables, lines 48–90) and the build-eml chunk (EML list construction, lines 931–994)               │
+│                                                                                                                                                                │
+│ Changes from IPT (← IPT version, current → code version)                                                                                                       │
+│                                                                                                                                                                │
+│ 1. Title: "CalCOFI Fish Larvae Tows" (IPT) vs "CalCOFI Ichthyoplankton Tows" (code)                                                                            │
+│                                                                                                                                                                │
+│ - Update dataset_title to "CalCOFI Fish Larvae Tows"                                                                                                           │
+│ - Also add dataset_short_name <- "calcofi_ichthyo"                                                                                                             │
+│                                                                                                                                                                │
+│ 2. Second creator (Ben Best) — missing from code                                                                                                               │
+│                                                                                                                                                                │
+│ - Add Ben Best as second creator in the EML creator list                                                                                                       │
+│                                                                                                                                                                │
+│ 3. pubDate and language — missing from code                                                                                                                    │
+│                                                                                                                                                                │
+│ - Add to EML dataset list                                                                                                                                      │
+│                                                                                                                                                                │
+│ 4. Abstract text — slightly different wording                                                                                                                  │
+│                                                                                                                                                                │
+│ - Update dataset_abstract to match IPT: "Fish larvae counts and standardized counts for eggs captured in..."                                                   │
+│                                                                                                                                                                │
+│ 5. Additional keyword sets — missing from code                                                                                                                 │
+│                                                                                                                                                                │
+│ - Add GBIF Dataset Type (Samplingevent) and Subtype (Observation) keyword sets                                                                                 │
+│                                                                                                                                                                │
+│ 6. licensed element — missing from code                                                                                                                        │
+│                                                                                                                                                                │
+│ - Add CC0-1.0 licensed block to EML                                                                                                                            │
+│                                                                                                                                                                │
+│ 7. distribution URL — missing from code                                                                                                                        │
+│                                                                                                                                                                │
+│ - Add https://calcofi.org/data/marine-ecosystem-data/fish-eggs-larvae/                                                                                         │
+│                                                                                                                                                                │
+│ 8. Contact details — IPT has richer info                                                                                                                       │
+│                                                                                                                                                                │
+│ - Add salutation = "Dr.", organizationName, positionName, address (full postal), phone, userId                                                                 │
+│                                                                                                                                                                │
+│ 9. Methods text — minor wording differences                                                                                                                    │
+│                                                                                                                                                                │
+│ - IPT says "In the lab, fish eggs and larvae..." vs code says "Fish eggs and larvae..."                                                                        │
+│ - IPT study extent: "...continues to the present, with quarterly cruises." vs code: "...continuing to the present with quarterly cruises."                     │
+│ - IPT sampling: adds "Data includes raw counts (tallies) and standardized abundances."                                                                         │
+│                                                                                                                                                                │
+│ 10. maintenance block — missing from code                                                                                                                      │
+│                                                                                                                                                                │
+│ - Add maintenance with asNeeded frequency                                                                                                                      │
+│                                                                                                                                                                │
+│ 11. additionalMetadata with GBIF logo — missing from code                                                                                                      │
+│                                                                                                                                                                │
+│ - Add resourceLogoUrl for CalCOFI favicon                                                                                                                      │
+│                                                                                                                                                                │
+│ 12. generalTaxonomicCoverage — IPT says "Marine ichthyoplankton and fish eggs"                                                                                 │
+│                                                                                                                                                                │
+│ - Update from "Marine ichthyoplankton (fish eggs and larvae)"                                                                                                  │
+│                                                                                                                                                                │
+│ 13. Project title — should match dataset_title                                                                                                                 │
+│                                                                                                                                                                │
+│ - Already uses dataset_title, will auto-update                                                                                                                 │
+│                                                                                                                                                                │
+│ Implementation                                                                                                                                                 │
+│                                                                                                                                                                │
+│ Step 1: Update setup chunk metadata variables (lines 48–90)                                                                                                    │
+│                                                                                                                                                                │
+│ dataset_short_name <- "calcofi_ichthyo"                                                                                                                        │
+│ dataset_title <- "CalCOFI Fish Larvae Tows"                                                                                                                    │
+│ dataset_abstract <- "Fish larvae counts and standardized counts for eggs captured in CalCOFI ichthyoplankton nets (primarily vertical [Calvet or Pairovet],    │
+│ oblique [bongo or ring nets], and surface tows [Manta nets]). Surface tows are normally standardized to count per 1,000 m^3 strained. Oblique tows are         │
+│ normally standardized to count per 10 m^2 of surface sampled."                                                                                                 │
+│                                                                                                                                                                │
+│ sampling_methods_description <- "Standard CalCOFI ichthyoplankton tows. The standard oblique tow uses a bongo net (71 cm diameter, 0.505 mm mesh) or 1-m ring  │
+│ net (prior to 1978) retrieved at a constant wire angle (45 degrees) from 210 m depth to surface. Surface tows use a Manta net; vertical tows use               │
+│ CalVET/Pairovet nets. Flowmeters measure volume filtered. Samples are preserved in 5% formalin. In the lab, fish eggs and larvae are sorted, identified to     │
+│ lowest taxon possible, enumerated, and measured."                                                                                                              │
+│                                                                                                                                                                │
+│ study_extent_description <- "The study covers the California Current ecosystem, primarily off Southern California (standard lines 77-93) but historically      │
+│ extending from the border of Canada to the tip of Baja California. The time series for this dataset generally begins in 1951 and continues to the present,     │
+│ with quarterly cruises."                                                                                                                                       │
+│                                                                                                                                                                │
+│ sampling_description <- "Samples are collected at fixed stations along the CalCOFI grid. Oblique tows are standardized to counts per 10 m^2 of sea surface.    │
+│ Surface tows are standardized to counts per 1,000 m^3. Data includes raw counts (tallies) and standardized abundances."                                        │
+│                                                                                                                                                                │
+│ Also add distribution URL and logo:                                                                                                                            │
+│ dataset_url <- "https://calcofi.org/data/marine-ecosystem-data/fish-eggs-larvae/"                                                                              │
+│ dataset_logo_url <- "https://calcofi.org/wp-content/uploads/2021/03/cropped-calcofirose_512_favicon.png"                                                       │
+│                                                                                                                                                                │
+│ Step 2: Update build-eml chunk (lines 931–994)                                                                                                                 │
+│                                                                                                                                                                │
+│ Rewrite my_eml list to include:                                                                                                                                │
+│ - shortName                                                                                                                                                    │
+│ - Two creators (Ed Weber with salutation/org/position, Ben Best with salutation/org/position/address/phone)                                                    │
+│ - pubDate (use Sys.Date())                                                                                                                                     │
+│ - language = "eng"                                                                                                                                             │
+│ - Three keywordSet entries (GCMD, GBIF Type, GBIF Subtype)                                                                                                     │
+│ - licensed element                                                                                                                                             │
+│ - distribution element                                                                                                                                         │
+│ - maintenance element                                                                                                                                          │
+│ - Richer contact (salutation, org, position, full address, phone)                                                                                              │
+│ - Updated generalTaxonomicCoverage text                                                                                                                        │
+│ - additionalMetadata with GBIF logo                                                                                                                            │
+│                                                                                                                                                                │
+│ Step 3: Handle additionalMetadata                                                                                                                              │
+│                                                                                                                                                                │
+│ The R EML package may not directly support additionalMetadata with GBIF-specific elements. After write_eml(), post-process the XML to inject the               │
+│ additionalMetadata block (similar to the existing license_xml replacement pattern).                                                                            │
+│                                                                                                                                                                │
+│ Verification                                                                                                                                                   │
+│                                                                                                                                                                │
+│ 1. Render publish_ichthyo_to_obis.qmd                                                                                                                          │
+│ 2. Run EML::eml_validate() — should pass                                                                                                                       │
+│ 3. Diff the new eml.xml against the IPT version to confirm metadata sections match (taxonomic coverage will differ since it's data-driven)  
+
 ## 2026-02-24.d push publish_* to GS
 
 Let's push these publish outputs to GS like the ingest outputs and not clog up the workflows github repo.
