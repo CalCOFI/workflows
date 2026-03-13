@@ -96,6 +96,10 @@ if (overwrite) {
 
 dir_create(dirname(db_path))
 con <- get_duckdb_con(db_path)
+
+# load unified measurement_type reference (needed for pivot mappings)
+meas_type_csv <- here("metadata/measurement_type.csv")
+d_meas_type   <- read_csv(meas_type_csv)
 load_duckdb_extension(con, "spatial")
 
 # load data using calcofi4db package
@@ -387,40 +391,19 @@ erDiagram
 ```{r}
 #| label: pivot_bottle_measurements
 
-# define measurement mapping: type -> value/prec/qual columns
-bottle_meas_map <- tribble(
-  ~measurement_type   , ~value_col      , ~prec_col , ~qual_col             ,
-  "temperature"       , "t_deg_c"       , "t_prec"  , "t_qual"              ,
-  "salinity"          , "salnty"        , "s_prec"  , "s_qual"              ,
-  "oxygen_ml_l"       , "o2ml_l"        , NA        , "o_qual"              ,
-  "sigma_theta"       , "s_theta"       , NA        , "s_thtaq"             ,
-  "oxygen_saturation" , "o2sat"         , NA        , "o2satq"              ,
-  "oxygen_umol_kg"    , "oxy_umol_kg"   , NA        , NA                    ,
-  "chlorophyll_a"     , "chlor_a"       , NA        , "chlqua"              ,
-  "phaeopigment"      , "phaeop"        , NA        , "phaqua"              ,
-  "phosphate"         , "po4u_m"        , NA        , "po4q"                ,
-  "silicate"          , "si_o3u_m"      , NA        , "si_o3qu"             ,
-  "nitrite"           , "no2u_m"        , NA        , "no2q"                ,
-  "nitrate"           , "no3u_m"        , NA        , "no3q"                ,
-  "ammonia"           , "nh3u_m"        , NA        , "nh3q"                ,
-  "c14_rep1"          , "c14as1"        , "c14a1p"  , "c14a1q"              ,
-  "c14_rep2"          , "c14as2"        , "c14a2p"  , "c14a2q"              ,
-  "c14_dark"          , "dark_as"       , "dark_ap" , "darkaq"              ,
-  "c14_mean"          , "mean_as"       , "mean_ap" , "mean_aq"             ,
-  "light_pct"         , "light_p"       , NA        , NA                    ,
-  "r_depth"           , "r_depth"       , NA        , NA                    ,
-  "r_temperature"     , "r_temp"        , NA        , NA                    ,
-  "r_salinity_sva"    , "r_sal"         , NA        , NA                    ,
-  "r_dynamic_height"  , "r_dynht"       , NA        , NA                    ,
-  "r_ammonium"        , "r_nuts"        , NA        , NA                    ,
-  "r_oxygen_umol_kg"  , "r_oxy_umol_kg" , NA        , NA                    ,
-  "dic_rep1"          , "dic1"          , NA        , "dic_quality_comment" ,
-  "dic_rep2"          , "dic2"          , NA        , "dic_quality_comment" ,
-  "alkalinity_rep1"   , "ta1"           , NA        , NA                    ,
-  "alkalinity_rep2"   , "ta2"           , NA        , NA                    ,
-  "ph_rep1"           , "p_h1"          , NA        , NA                    ,
-  "ph_rep2"           , "p_h2"          , NA        , NA
-)
+# build measurement mapping from unified CSV
+bottle_meas_map <- d_meas_type |>
+  filter(
+    str_detect(`_source_datasets`, "calcofi_bottle"),
+    `_source_table` == "bottle"
+  ) |>
+  select(
+    measurement_type,
+    value_col = `_source_column`,
+    prec_col = `_prec_column`,
+    qual_col = `_qual_column`
+  ) |>
+  mutate(across(c(prec_col, qual_col), ~ na_if(.x, "")))
 
 # build UNION ALL SQL from mapping
 sql_parts <- purrr::pmap_chr(
@@ -536,23 +519,16 @@ erDiagram
 ```{r}
 #| label: pivot_cast_conditions
 
-cast_cond_map <- tribble(
-  ~condition_type       , ~source_col  ,
-  "wave_direction"      , "wave_dir"   ,
-  "wave_height"         , "wave_ht"    ,
-  "wave_period"         , "wave_prd"   ,
-  "wind_direction"      , "wind_dir"   ,
-  "wind_speed"          , "wind_spd"   ,
-  "barometric_pressure" , "barometer"  ,
-  "dry_air_temp"        , "dry_t"      ,
-  "wet_air_temp"        , "wet_t"      ,
-  "weather_code"        , "wea"        ,
-  "cloud_type"          , "cloud_typ"  ,
-  "cloud_amount"        , "cloud_amt"  ,
-  "visibility"          , "visibility" ,
-  "secchi_depth"        , "secchi"     ,
-  "water_color"         , "forel_u"
-)
+# build cast condition mapping from unified CSV
+cast_cond_map <- d_meas_type |>
+  filter(
+    str_detect(`_source_datasets`, "calcofi_bottle"),
+    `_source_table` == "casts"
+  ) |>
+  select(
+    condition_type = measurement_type,
+    source_col = `_source_column`
+  )
 
 # build UNION ALL SQL
 sql_parts <- purrr::pmap_chr(
@@ -616,11 +592,6 @@ Merging would create a sparse table with many NULL columns (e.g., `units`/`_sour
 ```{r}
 #| label: load_measurement_type
 
-meas_type_csv <- here(
-  "metadata/calcofi.org/bottle-database/measurement_type.csv"
-)
-d_meas_type <- read_csv(meas_type_csv)
-
 dbWriteTable(con, "measurement_type", d_meas_type, overwrite = TRUE)
 
 # validate FK: all bottle_measurement types exist in reference table
@@ -654,6 +625,28 @@ stopifnot(
 message(glue(
   "measurement_type: {nrow(d_meas_type)} types loaded, FK checks passed"
 ))
+
+# validate: all measurement_types used by this dataset are registered
+bottle_types_used <- dbGetQuery(
+  con,
+  "SELECT DISTINCT measurement_type FROM bottle_measurement"
+)$measurement_type
+cast_types_used <- dbGetQuery(
+  con,
+  "SELECT DISTINCT condition_type FROM cast_condition"
+)$condition_type
+
+registered <- d_meas_type |>
+  filter(str_detect(`_source_datasets`, "calcofi_bottle")) |>
+  pull(measurement_type)
+
+unregistered <- setdiff(c(bottle_types_used, cast_types_used), registered)
+stopifnot(
+  "all measurement_types used by calcofi_bottle must be registered in _source_datasets" = length(
+    unregistered
+  ) ==
+    0
+)
 ```
 
 ## Verify Primary Keys
@@ -873,17 +866,16 @@ add_point_geom(con, "casts")
 
 ### Load `grid` table
 
-Load grid from the swfsc workflow's GCS parquet output (single source of
-truth — grid is created in `ingest_swfsc.noaa.gov_calcofi-db.qmd`).
+Load grid from the ichthyo workflow's local parquet output (single source of
+truth — grid is created in `ingest_swfsc_ichthyo.qmd`).
 
 ```{r}
 #| label: load_grid
 
-load_gcs_parquet_to_duckdb(
-  con = con,
-  gcs_path = "gs://calcofi-db/ingest/swfsc.noaa.gov_calcofi-db/grid.parquet",
-  table_name = "grid"
-)
+load_prior_tables(
+  con         = con,
+  tables      = "grid",
+  parquet_dir = here("data/parquet/swfsc.noaa.gov_calcofi-db"))
 ```
 
 ### Update `casts.grid_key`
@@ -1200,6 +1192,144 @@ message(glue(
   "\nUploaded {length(local_files)} files to ",
   "gs://{gcs_bucket}/{gcs_ingest_prefix}/"
 ))
+```
+
+## Cross-Dataset Integration
+
+Link bottle casts to SWFSC ship/cruise reference tables via ship matching
+and cruise key derivation. This replaces the separate `merge_ichthyo_bottle.qmd`
+workflow step.
+
+### Load Reference Tables
+
+```{r}
+#| label: load_reference_tables
+
+# load ship and cruise from ichthyo workflow
+load_prior_tables(
+  con         = con,
+  tables      = c("ship", "cruise"),
+  parquet_dir = here("data/parquet/swfsc.noaa.gov_calcofi-db"))
+```
+
+### Ship Matching + Cruise Bridge
+
+```{r}
+#| label: derive_cruise_key
+
+ship_renames_csv <- here("metadata/calcofi.org/bottle-database/ship_renames.csv")
+
+bridge_result <- derive_cruise_key_on_casts(
+  con              = con,
+  ship_renames_csv = ship_renames_csv,
+  fetch_ices       = TRUE)
+
+bridge_result$ship_matches |>
+  datatable(caption = "Ship matching results")
+```
+
+```{r}
+#| label: ship_match_stats
+
+bridge_result$ship_matches |>
+  count(match_type) |>
+  datatable(caption = "Ship match type counts")
+```
+
+```{r}
+#| label: cruise_bridge_stats
+
+bridge_result$cruise_stats |>
+  datatable(caption = "Cruise bridge match statistics")
+```
+
+```{r}
+#| label: unmatched_ships
+
+if (nrow(bridge_result$unmatched_report) > 0) {
+  bridge_result$unmatched_report |>
+    datatable(caption = "Unmatched ship codes (no ship_key)")
+} else {
+  message("All ship codes matched!")
+}
+```
+
+### Cross-Dataset Validation
+
+```{r}
+#| label: cross_validate
+
+# grid_key integrity: casts.grid_key should all be in grid.grid_key
+if ("grid_key" %in% dbListFields(con, "casts") &&
+    "grid_key" %in% dbListFields(con, "grid")) {
+  grid_orphans <- dbGetQuery(con,
+    "SELECT COUNT(*) AS n FROM casts c
+     WHERE c.grid_key IS NOT NULL
+       AND c.grid_key NOT IN (SELECT grid_key FROM grid)")$n
+  message(glue("Grid key orphans in casts: {grid_orphans}"))
+}
+
+# ship PK uniqueness
+ship_dups <- dbGetQuery(con,
+  "SELECT ship_key, COUNT(*) AS n FROM ship
+   GROUP BY ship_key HAVING COUNT(*) > 1")
+if (nrow(ship_dups) > 0) {
+  warning(glue("Duplicate ship_key values: {nrow(ship_dups)}"))
+}
+
+# cruise PK uniqueness
+cruise_dups <- dbGetQuery(con,
+  "SELECT cruise_key, COUNT(*) AS n FROM cruise
+   GROUP BY cruise_key HAVING COUNT(*) > 1")
+if (nrow(cruise_dups) > 0) {
+  warning(glue("Duplicate cruise_key values: {nrow(cruise_dups)}"))
+}
+
+# cruise bridge coverage
+bridge_coverage <- dbGetQuery(con,
+  "SELECT
+    COUNT(*) AS total_casts,
+    SUM(CASE WHEN ship_key IS NOT NULL THEN 1 ELSE 0 END) AS with_ship_key,
+    SUM(CASE WHEN cruise_key IS NOT NULL THEN 1 ELSE 0 END) AS with_cruise_key
+  FROM casts")
+bridge_coverage |> datatable(caption = "Cruise bridge coverage")
+
+message("Cross-dataset validation complete")
+```
+
+### Re-export Casts Parquet
+
+Update casts.parquet with the new ship_key and cruise_key columns.
+
+```{r}
+#| label: rewrite_casts_parquet
+
+# re-export casts parquet (now includes ship_key, cruise_key)
+casts_pqt <- file.path(dir_parquet, "casts.parquet")
+cols <- DBI::dbGetQuery(con, glue(
+  "SELECT column_name FROM information_schema.columns
+   WHERE table_name = 'casts'"))$column_name
+prov_cols   <- c("_source_file", "_source_row", "_source_uuid", "_ingested_at")
+export_cols <- setdiff(cols, prov_cols)
+DBI::dbExecute(con, glue(
+  "COPY (SELECT {paste(export_cols, collapse = ', ')} FROM casts)
+   TO '{casts_pqt}' (FORMAT PARQUET, COMPRESSION 'snappy')"))
+message("Re-exported casts.parquet with ship_key + cruise_key")
+```
+
+## Finalize — Ingest to Working DuckLake
+
+Push all parquet tables to the Working DuckLake with provenance tracking.
+
+```{r}
+#| label: finalize_ingest
+
+wdl_stats <- finalize_ingest(
+  parquet_dir  = dir_parquet,
+  source_label = glue("{provider}_{dataset}"))
+
+wdl_stats |>
+  datatable(caption = "Working DuckLake ingestion stats")
 ```
 
 ## Cleanup

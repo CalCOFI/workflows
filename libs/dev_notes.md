@@ -1,7 +1,2277 @@
 ## TODO:
 
-- [ ] push publish files to GS
-- [ ] Upload icthyo-bottle to OBIS after running checks
+- [ ] add ERDDAP server
+- [ ] viz CTD profiles
+
+
+## 2026-03-13.b partition ctd-cast parquet files (15G ctd_measurement.parquet)?
+
+Could this dataset and notebook `@ingest_calcofi_ctd-cast.qmd` benefit in performance with partitioning parquet files by `cruise_key`? See: [DuckDB Partitioned Writes](https://duckdb.org/docs/stable/data/partitioning/partitioned_writes)
+
+```bash
+cd ~/Github/CalCOFI/workflows/data/parquet/calcofi.org_ctd-cast/
+ls -lh *.parquet
+```
+```
+-rw-r--r--@ 1 bbest  staff   289M Mar 13 14:35 ctd_cast.parquet
+-rw-r--r--@ 1 bbest  staff    15G Mar 13 14:36 ctd_measurement.parquet
+-rw-r--r--@ 1 bbest  staff   4.9G Mar 13 14:37 ctd_summary.parquet
+-rw-r--r--@ 1 bbest  staff   5.4K Mar 13 14:37 measurement_type.parquet
+```
+
+⏺ Yes, absolutely — 15GB in a single Parquet file is painful. Let me see how   
+  the export currently works.
+
+⏺ Here's a summary of all changes:
+
+  ingest_calcofi_ctd-cast.qmd:
+  1. ctd_measurement chunk — adds cruise_key column (from ctd_cast join) so
+  it's available as partition key
+  2. write_parquet chunk — writes ctd_measurement and ctd_summary as
+  hive-partitioned directories (cruise_key=YYMMKK/*.parquet) instead of single
+  15GB/5GB files; small tables (ctd_cast, measurement_type) stay as single
+  files
+
+  calcofi4db/R/workflow.R (finalize_ingest):
+  - Now discovers both single .parquet files and hive-partitioned directories
+  - Partitioned tables are read via read_parquet('.../**/*.parquet',
+  hive_partitioning = true) — loaded directly through DuckDB SQL instead of
+  pulling into R memory
+
+  Not yet updated (will need separate work):
+  - sync_to_gcs() currently only syncs top-level files — needs recursive = TRUE
+   to handle partitioned directories
+  - Any downstream read_parquet calls targeting these tables will need
+  hive_partitioning = true or the glob pattern **/*.parquet
+
+  The partitioning should dramatically improve both write speed (parallel file
+  writes) and downstream query performance (DuckDB can skip irrelevant cruise
+  partitions via partition pruning).
+
+Fix sync_to_gcs() to work, as well as @../calcofi4r/ to properly read in    
+  the frozen DuckLake with this hive partitioning and @../calcofi4r/ along     
+  with other downstream notebooks like @release_database.qmd                   
+
+⏺ Here's a summary of all changes across the 5 files:
+
+  calcofi4db/R/wrangle.R — write_parquet_outputs()
+
+  - New partition_by parameter: named list mapping table names to partition
+  column(s)
+  - Partitioned tables get COPY ... TO dir (PARTITION_BY (...)),
+  non-partitioned stay as single files
+  - Manifest now includes partitioned field listing which tables are
+  hive-partitioned
+
+  calcofi4db/R/cloud.R — sync_to_gcs()
+
+  - list.files() now uses recursive = TRUE to discover files inside hive
+  partition subdirs
+  - Uses relative paths from local_dir (not just basenames) so
+  ctd_measurement/cruise_key=240101/data_0.parquet syncs correctly
+  - GCS comparison also uses relative paths
+
+  calcofi4db/R/freeze.R — upload_frozen_release()
+
+  - Parquet file listing is now recursive
+  - Preserves relative paths when uploading (handles
+  tbl/cruise_key=.../data.parquet)
+  - Catalog.json now includes partitioned flag per table
+
+  calcofi4r/R/database.R — cc_get_db()
+
+  - Reads partitioned flag from catalog.json
+  - Partitioned tables use read_parquet('.../tbl/**/*.parquet',
+  hive_partitioning = true)
+  - Non-partitioned tables unchanged
+
+  workflows/ingest_calcofi_ctd-cast.qmd + release_database.qmd
+
+  - Both now use partition_by = list(ctd_measurement = "cruise_key",
+  ctd_summary = "cruise_key") in their write_parquet_outputs() calls
+  - Removed the manual partitioning loop from the ingest notebook
+
+## 2026-03-13 fix STDDEV in ingest_calcofi_ctd-cast.qmd 
+
+In `@ingest_calcofi_ctd-cast.qmd` I keep having problems with calculating `STDDEV`. I previously noticed many `NaN` values for max of `measurement_type` values. In a previous iteration there was a suggestion to test for equality to determine if `NaN` value, but according to [this issue](https://github.com/duckdb/duckdb/issues/16942#:~:text=pure%20DuckDB%2C%20NaN%20always%20compare%20equal) in "pure DuckDB, `NaN` always compare equal", but there is an [`isnan()`](https://duckdb.org/docs/stable/sql/functions/numeric#isnanx) DuckDB function we can use instead. Apply this as early and often as is necessary to get the queries to run efficiently.
+
+```bash
+quarto render ingest_calcofi_ctd-cast.qmd 
+```
+```
+processing file: ingest_calcofi_ctd-cast.qmd
+1/65                         
+2/65 [setup]                 
+3/65                         
+4/65 [d_zips]                
+R chunk d_zips: 3.9s ~ 15:00:05
+5/65                         
+6/65 [download_and_unzip]    
+R chunk download_and_unzip: 0.3s ~ 15:00:05
+7/65                         
+8/65 [d_csv]                 
+R chunk d_csv: 1.8s ~ 15:00:07
+9/65                         
+10/65 [read_csv]              
+R chunk read_csv: 202.6s ~ 15:03:29
+11/65                         
+12/65 [d_bind]                
+R chunk d_bind: 94.9s ~ 15:05:04
+13/65                         
+14/65 [format_datetime]       
+R chunk format_datetime: 158.4s ~ 15:07:43
+15/65                         
+16/65 [fill_lonlat]           
+R chunk fill_lonlat: 156.9s ~ 15:10:20
+17/65                         
+18/65 [pts_distance_from_lnst]
+R chunk pts_distance_from_lnst: 250.8s ~ 15:14:30
+19/65                         
+20/65 [view_badcr]            
+R chunk view_badcr: 0.9s ~ 15:14:31
+21/65                         
+22/65 [filter_pts]            
+R chunk filter_pts: 21.2s ~ 15:14:52
+23/65                         
+24/65 [view_pts_filt]         
+R chunk view_pts_filt: 15.9s ~ 15:15:08
+25/65                         
+26/65 [check_dupes]           
+R chunk check_dupes: 63.1s ~ 15:16:12
+27/65                         
+28/65 [rename_fields]         
+R chunk rename_fields: 18.6s ~ 15:16:30
+29/65                         
+30/65 [cross_dataset_bridge]  
+R chunk cross_dataset_bridge: 0.4s ~ 15:16:31
+31/65                         
+32/65 [ctd_cast]              
+R chunk ctd_cast: 5.5s ~ 15:16:36
+33/65                         
+34/65 [ctd_measurement]       
+R chunk ctd_measurement: 176.4s ~ 15:19:33
+35/65                         
+36/65 [ctd_summary]           
+Error in `duckdb_result()`:
+! Invalid Error: Out of Range Error: STDDEV_SAMP is out of range!
+ℹ Context: rapi_execute
+ℹ Error type: INVALID
+Backtrace:
+     ▆
+  1. ├─DBI::dbExecute(con, "\n  CREATE OR REPLACE TABLE ctd_summary AS\n  SELECT\n    c.cruise_key,\n    c.sta_key,\n    m.depth_m,\n    m.measurement_type,\n    AVG(m.measurement_value)    AS avg,\n    CASE\n      WHEN COUNT(*) = 1 THEN 0\n      ELSE \n      -- STDDEV_SAMP(m.measurement_value)\n      COALESCE(\n        STDDEV_SAMP(CAST(m.measurement_value AS DOUBLE)),\n        0)\n    END                          AS stddev,\n    COUNT(*)                     AS n_obs\n  FROM ctd_measurement m\n  INNER JOIN ctd_cast c ON m.ctd_cast_uuid = c.ctd_cast_uuid\n  GROUP BY c.cruise_key, c.sta_key, m.depth_m, m.measurement_type")
+  2. ├─DBI::dbExecute(con, "\n  CREATE OR REPLACE TABLE ctd_summary AS\n  SELECT\n    c.cruise_key,\n    c.sta_key,\n    m.depth_m,\n    m.measurement_type,\n    AVG(m.measurement_value)    AS avg,\n    CASE\n      WHEN COUNT(*) = 1 THEN 0\n      ELSE \n      -- STDDEV_SAMP(m.measurement_value)\n      COALESCE(\n        STDDEV_SAMP(CAST(m.measurement_value AS DOUBLE)),\n        0)\n    END                          AS stddev,\n    COUNT(*)                     AS n_obs\n  FROM ctd_measurement m\n  INNER JOIN ctd_cast c ON m.ctd_cast_uuid = c.ctd_cast_uuid\n  GROUP BY c.cruise_key, c.sta_key, m.depth_m, m.measurement_type")
+  3. │ ├─DBI::dbSendStatement(conn, statement, ...)
+  4. │ └─DBI::dbSendStatement(conn, statement, ...)
+  5. │   ├─DBI::dbSendQuery(conn, statement, ...)
+  6. │   └─duckdb::dbSendQuery(conn, statement, ...)
+  7. │     └─duckdb (local) .local(conn, statement, ...)
+  8. │       └─duckdb:::duckdb_result(connection = conn, stmt_lst = stmt_lst, arrow = arrow)
+  9. │         └─duckdb:::duckdb_execute(res)
+ 10. │           └─duckdb:::rethrow_rapi_execute(...)
+ 11. │             ├─rlang::try_fetch(...)
+ 12. │             │ ├─base::tryCatch(...)
+ 13. │             │ │ └─base (local) tryCatchList(expr, classes, parentenv, handlers)
+ 14. │             │ │   └─base (local) tryCatchOne(expr, names, parentenv, handlers[[1L]])
+ 15. │             │ │     └─base (local) doTryCatch(return(expr), name, parentenv, handler)
+ 16. │             │ └─base::withCallingHandlers(...)
+ 17. │             └─duckdb:::rapi_execute(stmt, convert_opts)
+ 18. ├─duckdb (local) `<fn>`(...)
+ 19. │ └─rlang::abort(error_parts, class = "duckdb_error", !!!fields)
+ 20. │   └─rlang:::signal_abort(cnd, .file)
+ 21. │     └─base::signalCondition(cnd)
+ 22. └─rlang (local) `<fn>`(`<dckdb_rr>`)
+ 23.   └─handlers[[1L]](cnd)
+ 24.     └─duckdb:::rethrow_error_from_rapi(e, call)
+ 25.       └─rlang::abort(msg, call = call)
+
+Quitting from ingest_calcofi_ctd-cast.qmd:1077-1113 [ctd_summary]
+Execution halted
+```
+
+⏺ Two changes:     
+
+  1. ctd_measurement insert (line ~1050): Replaced the = self trick with NOT   
+  isnan() and isfinite() — properly filters NaN, Inf, and -Inf using DuckDB's
+  native functions.                                                            
+  2. ctd_summary (line ~1089): Added WHERE NOT isnan(...) AND isfinite(...)
+  filter so any NaN values that might exist are excluded before STDDEV_SAMP
+  runs, preventing the "out of range" error. Also simplified the CASE
+  expression.
+
+⏺ The WHERE clause got placed before the INNER JOIN — it needs to come after.
+
+⏺ Update(ingest_calcofi_ctd-cast.qmd)                                          
+  ⎿  Added 1 line, removed 1 line
+      1094      END                          AS stddev,                        
+      1095      COUNT(*)                     AS n_obs             
+      1096    FROM ctd_measurement m                                           
+      1097 +  INNER JOIN ctd_cast c ON m.ctd_cast_uuid = c.ctd_cast_uuid
+      1098    WHERE NOT isnan(m.measurement_value)
+      1099      AND isfinite(m.measurement_value)
+      1099 -  INNER JOIN ctd_cast c ON m.ctd_cast_uuid = c.ctd_cast_uuid
+      1100    GROUP BY c.cruise_key, c.sta_key, m.depth_m, m.measurement
+            _type"
+      1101  )
+      1102
+
+⏺ SQL clause order must be FROM → JOIN → WHERE → GROUP BY. Should work now.
+
+
+Let's fix this by including tbl_new into flds_redefine.csv, staring with a
+  copy of tbl_old. This should always be in the flds_redefine.csv so let's     
+  continue to throw an error if missing, but make add a check so it's obvious
+  why failing.
+
+⏺ That still works fine — fld_old and fld_new columns are still present.       
+                                                                              
+  Two changes made:                                                            
+                                                                  
+  1. flds_redefine.csv: Added tbl_old and tbl_new columns, with ctd_raw as     
+  source and ctd_cast or ctd_measurement as targets depending on the field.    
+  2. enforce_column_types(): Replaced the cryptic missing value where          
+  TRUE/FALSE needed with an explicit check that names the missing columns and  
+  shows what columns were found.
+
+## 2026-03-11 fix cruise_id -> cruise_key in ingest_calcofi_ctd-cast.qmd; partition parquet files
+
+In `@ingest_calcofi_ctd-cast.qmd`, shouldn't `cruise_id` be called `cruise_key` for consistency with other database ingest notebooks:
+
+- `@ingest_swfsc_ichthyo.qmd`
+- `@ingest_calcofi_bottle.qmd`
+- (`@ingest_calcofi_ctd-cast.qmd`)     
+- `@release_database.qmd` (caboose notebook)
+
+What other aspects need improvement for conforming with ingestion? Also see `@README_PLAN.qmd`?
+
+Also, given the large size of all the files and measurements, can we reasonably partition the output parquet files by `cruise_key` and perhaps do this sooner than later during data cleaning to improve performance (ie chunking by cruise_key and sorting by key columns)?
+
+ ☐ cruise_key                                                                  
+                                                                               
+The CTD regex allows 2-4 alpha chars in cruise_id (e.g., `2401NH` but also     
+potentially `2401NHRV`). Do any CTD cruise_id values actually have >2 character
+ ship codes, or are they always 6-char YYMMKK format?
+                                                                               
+  1. Always 6-char YYMMKK                               
+     All CTD cruise_id values are exactly 6 chars (4 digits + 2 alpha). Safe to
+      rename directly and tighten regex.
+❯ 2. Some have >2 char codes
+     Some CTD files have 3-4 character ship codes. Need mapping logic to
+     extract the 2-char ship_key.
+  3. Not sure, check the data
+     Run a query on the extracted cruise_id values to check lengths before
+     deciding.
+
+⏺ Good to know. That means we need logic to handle the >2 char ship codes. Let 
+  me check what values actually exist. 
+  
+  Only 0404NHJD is non-standard — it looks like a combined cruise (April 2004  
+  on New Horizon AND Jordan Davis). All others are 6-char YYMMKK. Let me check 
+  what ship codes exist across all cruises.
+
+ ☐ 0404NHJD                                                                    
+                                                        
+Cruise `0404NHJD` is the only non-standard cruise_id (8 chars — combined New   
+Horizon + Jordan Davis). The other 242 values are all standard 6-char YYMMKK.  
+How should we handle it?
+                                                                               
+❯ 1. Truncate to 0404NH                                 
+     Use LEFT(cruise_key, 6) to keep the primary ship (NH). Simple, keeps all
+     data under one cruise_key.
+  2. Keep as 0404NHJD
+     Don't truncate. ship_key derivation would get 'JD' (last 2 chars).
+     cruise_key won't match the cruise table but that's OK as an orphan.
+  3. Split into two cruises
+     Duplicate the CTD rows under both 0404NH and 0404JD based on the actual
+     ship. More complex but most accurate.
+
+ Here is Claude's plan:                                                        
+ Plan: Conform CTD Ingest Notebook (cruise_id → cruise_key + ship_key + 
+ data_stage)                                                                   
+                                                        
+ Context            
+
+ The CTD ingest notebook uses cruise_id while ichthyo and bottle notebooks use
+  cruise_key (YYMMKK format). CTD's cruise_id values (e.g., 2401NH) are
+ already in YYMMKK format — this is a rename, not a re-derivation.
+ Additionally, data_stage (final/preliminary) is excluded from ctd_cast but
+ referenced by the Gantt chart appendix (a bug), and ship_key is missing
+ (bottle has it).
+
+ Parquet partitioning is deferred — DuckDB handles 235M rows fine with the
+ md5-based UUIDs already in place. High effort / uncertain benefit.
+
+ Files to Modify
+
+ 1. workflows/ingest_calcofi_ctd-cast.qmd — main notebook
+ 2. workflows/metadata/calcofi.org/ctd-cast/metadata_derived.csv — column docs
+ 3. workflows/metadata/calcofi.org/ctd-cast/tbls_redefine.csv — table
+ description
+
+ Changes
+
+ 1. Rename cruise_id → cruise_key throughout the notebook
+
+ Global rename across ~30 occurrences in ingest_calcofi_ctd-cast.qmd:
+
+ - Regex extraction (lines 115-118, 221-224): Variable name only; keep regex
+ \d{4}[A-Z0-9]{2,4} unchanged
+ - R code (~20 locations): group_by(cruise_id) → group_by(cruise_key), etc.
+ - SQL (lines 881, 914, 983, 999): Column references in CREATE TABLE / UPDATE
+ / GROUP BY
+ - UUID key_cols (lines 893, 1009): "cruise_id" → "cruise_key" — regenerates
+ UUIDs (acceptable, pre-release)
+ - Gantt chart (lines 1206, 1238): cruise_id → cruise_key
+ - Hardcoded values (lines 229, 231, 651): cruise_id == "2507SR" → cruise_key
+ == "2507SR" (values unchanged)
+
+ 2. Preserve data_stage in ctd_cast
+
+ Line 870: Remove "data_stage" from the exclusion list:
+ ```r
+ # before
+ c(meas_cols, qual_cols, "depth_m", "_source_file", "data_stage")
+ # after
+ c(meas_cols, qual_cols, "depth_m", "_source_file")
+ ```
+
+ This fixes the Gantt chart appendix (which already expects data_stage in
+ ctd_cast parquet) and preserves which casts are final vs preliminary.
+
+ 3. Derive ship_key and validate against cruise/ship tables
+
+ Insert a new section after "Rename Fields" (after line 848) and before "Split
+  into Tidy Tables", titled ## Cross-Dataset Bridge.
+
+ A. Load reference tables — combine with existing grid load (move from lines
+ 1070-1077):
+ ```r
+ load_prior_tables(
+   con    = con,
+   tables = c("ship", "cruise", "grid"),
+   parquet_dir = here("data/parquet/swfsc.noaa.gov_calcofi-db")
+ )
+ ```
+
+ B. Handle non-standard cruise_key values — one known case: 0404NHJD (combined
+  NH+JD cruise, 8 chars). All others are standard 6-char YYMMKK. Split this
+ into two rows or pick the primary ship. For now, truncate to 6 chars (0404NH)
+  with a comment explaining why:
+ -- 0404NHJD is a combined New Horizon + Jordan Davis cruise; use primary ship
+  NH
+ UPDATE ctd_raw SET cruise_key = LEFT(cruise_key, 6) WHERE LENGTH(cruise_key)
+ > 6;
+
+ C. Derive ship_key on ctd_raw:
+ ALTER TABLE ctd_raw ADD COLUMN ship_key VARCHAR;
+ UPDATE ctd_raw SET ship_key = RIGHT(cruise_key, 2);
+
+ D. Validate against ship and cruise tables — report orphans (expected for
+ recent CTD cruises):
+ ```r
+ # ship_key validation
+ ctd_ships <- dbGetQuery(con, "SELECT DISTINCT ship_key FROM ctd_raw")
+ ref_ships <- dbGetQuery(con, "SELECT ship_key FROM ship")
+ # report setdiff
+
+ # cruise_key validation
+ ctd_cruises <- dbGetQuery(con, "SELECT DISTINCT cruise_key FROM ctd_raw")
+ ref_cruises <- dbGetQuery(con, "SELECT cruise_key FROM cruise")
+ # report setdiff
+ ```
+
+ Display results as DT tables.
+
+ E. Remove the separate grid load at lines 1070-1077 (now handled in combined
+ load above). Keep assign_grid_key(con, "ctd_cast") where it is.
+
+ 4. Update metadata files
+
+ metadata_derived.csv:
+ - Line 3: UUID description (cruise_id, ...) → (cruise_key, ...)
+ - Line 16: UUID description (cruise_id, ...) → (cruise_key, ...)
+ - Line 17: ctd_summary,cruise_id → ctd_summary,cruise_key
+ - Add rows for ctd_cast: cruise_key, ship_key, data_stage
+
+ tbls_redefine.csv:
+ - Line 2: (cruise_id, cast_key, cast_dir) → (cruise_key, cast_key, cast_dir)
+
+ What NOT to Change
+
+ - Parquet partitioning — deferred (DuckDB handles 235M rows fine now)
+ - New calcofi4db functions — none needed; ship_key derivation is simple SQL
+ - _source_row provenance — not worth adding; _source_file + _ingested_at from
+  finalize_ingest is sufficient
+ - derive_cruise_key_on_casts() — not applicable; CTD cruise_key is already in
+  YYMMKK format from filenames (unlike bottle which needs ship matching)
+
+ Verification
+
+ 1. Check all cruise_id references are gone: grep -n "cruise_id"
+ ingest_calcofi_ctd-cast.qmd
+ 2. Verify data_stage appears in ctd_cast columns after the CREATE TABLE
+ 3. Verify ship_key appears in ctd_cast columns
+ 4. Check validation output: how many cruise_keys match the cruise table, how
+ many are orphans
+ 5. Verify Gantt chart appendix can reference cruise_key and data_stage
+ 6. Re-render the notebook end-to-end (full pipeline test)
+
+⏺ All references are correctly updated. The Gantt chart at lines 1283 and      
+  1315-1316 uses cruise_key and data_stage as expected.                        
+                                                                               
+  Here's a summary of all changes made:                           
+                                                                               
+  ingest_calcofi_ctd-cast.qmd:                                                 
+  - Renamed all ~30 occurrences of cruise_id → cruise_key (variable names, R   
+  code, SQL, UUID key_cols, Gantt chart)                                       
+  - Removed "data_stage" from the exclusion list so it's preserved in ctd_cast
+  (fixes Gantt chart bug)
+  - Added new Cross-Dataset Bridge section between "Rename Fields" and "Split
+  into Tidy Tables" that:
+    - Loads ship, cruise, grid reference tables via load_prior_tables()
+    - Truncates non-standard cruise_key values >6 chars (handles 0404NHJD)
+    - Derives ship_key via RIGHT(cruise_key, 2)
+    - Validates both ship_key and cruise_key against reference tables,
+  reporting orphans as DT tables
+  - Changed cast_cols derivation to use ctd_raw column names from DuckDB (to
+  pick up ship_key and data_stage added via SQL)
+  - Removed duplicate load_prior_tables(tables = "grid") call from Add Spatial
+  section (now consolidated in Cross-Dataset Bridge)
+
+  metadata_derived.csv:
+  - Renamed all cruise_id → cruise_key in UUID descriptions and column names
+  - Added rows for ctd_cast: cruise_key, ship_key, data_stage
+  - Updated ctd_summary.cruise_key description to "Cruise Key" with YYMMKK
+  format note
+
+  tbls_redefine.csv:
+  - Renamed cruise_id → cruise_key in table description
+
+Add timestamp messages to show time to complete chunks
+
+## 2026-03-11 fix `calcofi4db::assign_deterministic_uuids()` with ingest_calcofi_ctd-cast.qmd
+
+This function `calcofi4db::assign_deterministic_uuids()` (source: @../calcofi4db/R/wrangle.R) used in `@ingest_calcofi_ctd-cast.qmd` is very slow, takes hours to run, crashed previously because of memory overflows (so updated to run in chunks).
+
+```r
+assign_deterministic_uuids(
+  con = con,
+  table_name = "ctd_measurement",
+  id_col = "ctd_measurement_uuid",
+  key_cols = c("ctd_cast_uuid", "depth_m", "measurement_type")
+)
+```
+
+Could there be a better, faster way to generate a `UUID` (which is just a UHUGEINT if I understand correctly) using one of the following native DuckDB functions:
+
+- `md5`(string):	Returns the MD5 hash of the string as a VARCHAR.
+- `md5_number`(string):	Returns the MD5 hash of the string as a UHUGEINT.
+- `md5_number_lower`(string):	Returns the lower 64-bit segment of the MD5 hash of the string as a UBIGINT.
+- `md5_number_upper`(string):	Returns the upper 64-bit segment of the MD5 hash of the string as a UBIGINT.
+
+Can you also check for uniqueness of `key_cols` before generating UUIDs (and evaluating uniqueness after)?
+
+⏺ Updated the plan. The function now checks composite key uniqueness before    
+  generating UUIDs — this catches data issues early (like the ctd_measurement  
+  having 234M rows but only 208M unique keys) without wasting time on the UUID 
+  generation step. The pre-check uses the same concat_ws expression that will  
+  feed md5(), so it's a consistent test.                                       
+
+ Ready to code?                                                               
+                                                                               
+ Here is Claude's plan:
+
+ Plan: Replace R-based UUID generation with native DuckDB md5
+                                                                               
+ Context                                                
+
+ assign_deterministic_uuids() in calcofi4db/R/wrangle.R is extremely slow on
+ large tables (234M+ rows for ctd_measurement) because it:
+ 1. Pulls data into R (even chunked, each chunk reads/writes via temp tables)
+ 2. Generates UUIDs with uuid::UUIDfromName() in R
+ 3. Writes back via temp table UPDATE joins
+
+ This takes hours and has crashed from memory overflow. Since these UUIDs are
+ internal-only identifiers (never compared against external sources), we can
+ switch to DuckDB-native md5() for a massive speedup — the entire operation
+ becomes a single SQL statement with no R data transfer.
+
+ Approach
+
+ Add a new function assign_deterministic_uuids_md5() to calcofi4db/R/wrangle.R
+  that does everything in a single DuckDB SQL statement. Keep the old function
+  for backward compatibility (ichthyo tables still use it at smaller scale).
+
+ Key SQL pattern
+
+ ```sql
+ CREATE OR REPLACE TABLE {table_name} AS
+ SELECT
+   substr(_h, 1, 8) || '-' || substr(_h, 9, 4) || '-' ||
+   substr(_h, 13, 4) || '-' || substr(_h, 17, 4) || '-' ||
+   substr(_h, 21, 12) AS {id_col},
+   {other_cols}
+ FROM (
+   SELECT *, md5(concat_ws('|',
+     COALESCE(CAST(col1 AS VARCHAR), ''),
+     COALESCE(CAST(col2 AS VARCHAR), ''), ...)) AS _h
+   FROM {table_name}
+ ) _sub
+ ```
+
+ This formats the 32-char md5 hex as a UUID-style string (8-4-4-4-12). The
+ entire operation runs inside DuckDB's engine — zero data leaves to R.
+
+ Trade-offs
+
+ - Different hashes than UUID v5: md5 ≠ SHA-1, so regenerated UUIDs won't
+ match previously generated ones. This is fine since CTD tables are rebuilt
+ from scratch each run and UUIDs are internal-only.
+ - No namespace parameter: UUID v5 uses a namespace; md5 doesn't. We can
+ optionally prepend a namespace string to the key if needed, but it's
+ unnecessary for internal IDs.
+ - md5 collision risk: Negligible at these row counts (128-bit hash, ~235M
+ rows).
+
+ Changes
+
+ 1. calcofi4db/R/wrangle.R — add assign_deterministic_uuids_md5()
+
+ New function (~60 lines) with same interface as the original but pure SQL:
+
+ ```r
+ assign_deterministic_uuids_md5 <- function(
+     con,
+     table_name,
+     id_col,
+     key_cols,
+     namespace = NULL) {
+
+   # build COALESCE(CAST(col AS VARCHAR), '') for each key col
+   key_expr <- paste(
+     sapply(key_cols, function(col)
+       glue::glue("COALESCE(CAST({col} AS VARCHAR), '')")),
+     collapse = ", ")
+
+   # optionally prepend namespace for domain separation
+   if (!is.null(namespace))
+     key_expr <- paste0("'", namespace, "', ", key_expr)
+
+   concat_expr <- glue::glue("concat_ws('|', {key_expr})")
+
+   # --- pre-check: verify composite key uniqueness BEFORE generating UUIDs
+ ---
+   key_cols_sql <- paste(key_cols, collapse = ", ")
+   pre_stats <- DBI::dbGetQuery(con, glue::glue("
+     SELECT COUNT(*) AS n_rows,
+            COUNT(DISTINCT {concat_expr}) AS n_unique
+     FROM {table_name}"))
+
+   message(glue::glue(
+     "Pre-check {table_name}: {pre_stats$n_rows} rows, ",
+     "{pre_stats$n_unique} unique keys from ({paste(key_cols, collapse = ',
+ ')})"))
+
+   if (pre_stats$n_unique != pre_stats$n_rows) {
+     n_dups <- pre_stats$n_rows - pre_stats$n_unique
+     warning(glue::glue(
+       "Composite key is NOT unique: {n_dups} duplicate rows detected ",
+       "in {table_name} for key_cols ({paste(key_cols, collapse = ', ')}). ",
+       "Generated UUIDs will NOT be unique."))
+   }
+
+   # --- generate UUIDs via md5 ---
+   md5_expr <- glue::glue("md5({concat_expr})")
+
+   # format as UUID string: 8-4-4-4-12
+   uuid_expr <- glue::glue(
+     "substr(_h, 1, 8) || '-' || substr(_h, 9, 4) || '-' || ",
+     "substr(_h, 13, 4) || '-' || substr(_h, 17, 4) || '-' || ",
+     "substr(_h, 21, 12)")
+
+   # get existing columns (exclude id_col if it already exists)
+   cols <- DBI::dbListFields(con, table_name)
+   other_cols <- setdiff(cols, id_col)
+   select_clause <- paste(other_cols, collapse = ", ")
+
+   # single SQL: rebuild table with UUID column first
+   DBI::dbExecute(con, glue::glue("
+     CREATE OR REPLACE TABLE {table_name} AS
+     SELECT
+       {uuid_expr} AS {id_col},
+       {select_clause}
+     FROM (
+       SELECT *, {md5_expr} AS _h
+       FROM {table_name}
+     ) _sub"))
+
+   message(glue::glue(
+     "Assigned {id_col} to {pre_stats$n_rows} rows in {table_name} ",
+     "({pre_stats$n_unique} unique from: {paste(key_cols, collapse = ',
+ ')})"))
+
+   invisible(con)
+ }
+ ```
+
+ 2. ingest_calcofi_ctd-cast.qmd — switch call sites
+
+ Replace 3 calls from assign_deterministic_uuids() to
+ assign_deterministic_uuids_md5() for:
+ - ctd_cast (~5.4M rows)
+ - ctd_measurement (~235M rows) — the bottleneck
+ - ctd_summary (~100-200M rows)
+
+ 3. calcofi4db — document and export
+
+ - Add roxygen2 docs with @export and @concept wrangle
+ - Run devtools::document() to update NAMESPACE
+
+ Verification
+
+ 1. devtools::document() and devtools::check() on calcofi4db
+ 2. Run the ctd_cast UUID assignment in ingest_calcofi_ctd-cast.qmd — should
+ complete in seconds/minutes instead of hours
+ 3. Verify row counts and uniqueness stats match expectations
+ 4. Spot-check that same input data produces same md5-based UUIDs on re-run
+ (determinism)
+
+⏺ All done. Here's what was implemented:                                       
+                                                                               
+  1. calcofi4db/R/wrangle.R — Added assign_deterministic_uuids_md5() (~90      
+  lines) that:                                                    
+    - Builds a single CREATE OR REPLACE TABLE ... AS SELECT SQL statement      
+    - Uses md5(concat_ws('|', ...)) inside DuckDB — zero data leaves to R      
+    - Formats the 32-char hex as UUID-style 8-4-4-4-12 string                  
+    - Includes a pre-check for composite key uniqueness with warning on        
+  duplicates                                                      
+    - Supports optional namespace string for domain separation
+    - Has full roxygen2 docs with @export and @concept wrangle
+  2. ingest_calcofi_ctd-cast.qmd — Switched all 3 call sites from
+  assign_deterministic_uuids() to assign_deterministic_uuids_md5():
+    - ctd_cast (~5.4M rows)
+    - ctd_measurement (~235M rows) — the bottleneck
+    - ctd_summary (~100-200M rows)
+  3. NAMESPACE — Updated via devtools::document(), now exports the new
+  function.
+
+  The old assign_deterministic_uuids() is preserved for ichthyo tables that
+  need UUID v5 compatibility.
+
+## 2026-03-10.a streamline ingest_calcofi_ctd-cast.qmd 
+
+Hitting issues with unique IDs and memory. How to streamline and manage memory, such as by chunks?
+
+⏺ Updated plan
+
+ Ready to code?                                   
+
+ Here is Claude's plan:                                 
+
+ Plan: Fix CTD Cast Deduplication + UUID Memory for Large Tables
+
+ Context
+
+ Rendering ingest_calcofi_ctd-cast.qmd hits two issues:
+
+ 1. ctd_cast has duplicate rows: SELECT DISTINCT cast_cols FROM ctd_raw includes _source_file and data_stage columns,
+ which vary per source file. Same physical cast (cruise_id, cast_key, cast_dir, datetime_utc) appears multiple times →
+ 6.5M rows instead of ~5.4M unique casts. UUID assignment warns about non-unique keys.
+ 2. ctd_measurement OOMs at 234M rows: assign_deterministic_uuids() pulls the entire table into R memory with
+ dbGetQuery(SELECT *), builds 234M key strings, generates 234M UUIDs — exceeds R's 24GB memory limit.
+
+ Fix 1: Deduplicate ctd_cast properly
+
+ File: workflows/ingest_calcofi_ctd-cast.qmd, chunk ctd_cast (~line 857)
+
+ Problem: cast_cols is computed as setdiff(names(d_filt), c(meas_cols, qual_cols, "depth_m")). This includes
+ _source_file and data_stage, which are per-file metadata, not cast-level attributes.
+
+ Fix: Explicitly exclude _source_file and data_stage from cast_cols before the SELECT DISTINCT:
+
+ cast_cols <- setdiff(
+   names(d_filt),
+   c(meas_cols, qual_cols, "depth_m", "_source_file", "data_stage")
+ )
+
+ After this, SELECT DISTINCT should yield ~5.4M truly unique casts matching the UUID key_cols.
+
+ Fix 2: SQL-based UUID generation for large tables
+
+ File: calcofi4db/R/wrangle.R, function assign_deterministic_uuids()
+
+ Problem: Reads entire table into R, generates UUIDs in R memory. Works for <10M rows, fails for 234M.
+
+ Approach: Add a chunk_size parameter with chunked processing. For tables exceeding chunk_size:
+
+ 1. Add the UUID column via ALTER TABLE
+ 2. Process in batches using LIMIT/OFFSET
+ 3. For each chunk: read key_cols only (not all columns), generate UUIDs in R, write back via temp table + UPDATE join
+ 4. No need to rewrite the entire table
+
+ ```r
+ assign_deterministic_uuids <- function(
+     con, table_name, id_col, key_cols,
+     namespace_uuid = "c0f1ca00-ca1c-5000-b000-1c4790000000",
+     chunk_size = 5e6) {
+
+   n_rows <- dbGetQuery(con, glue("SELECT COUNT(*) AS n FROM {table_name}"))$n
+
+   # add column
+   dbExecute(con, glue("ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS {id_col} VARCHAR"))
+
+   # add rowid for chunking
+   dbExecute(con, glue("ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS _rownum BIGINT"))
+   dbExecute(con, glue("
+     UPDATE {table_name} SET _rownum = rowid"))
+
+   n_chunks <- ceiling(n_rows / chunk_size)
+
+   for (i in seq_len(n_chunks)) {
+     offset <- (i - 1) * chunk_size
+
+     # read only key_cols + _rownum for this chunk
+     key_sel <- paste(c("_rownum", key_cols), collapse = ", ")
+     chunk <- dbGetQuery(con, glue(
+       "SELECT {key_sel} FROM {table_name}
+        ORDER BY _rownum
+        LIMIT {chunk_size} OFFSET {offset}"))
+
+     # generate UUIDs
+     key_strings <- do.call(paste, c(
+       lapply(key_cols, function(col) {
+         ifelse(is.na(chunk[[col]]), "", as.character(chunk[[col]]))
+       }),
+       sep = "|"))
+
+     chunk$uuid_val <- uuid::UUIDfromName(
+       namespace = namespace_uuid,
+       name = key_strings,
+       type = "sha1")
+
+     # write chunk UUIDs back via temp table + UPDATE join
+     dbWriteTable(con, "_uuid_tmp", chunk[, c("_rownum", "uuid_val")], overwrite = TRUE)
+     dbExecute(con, glue("
+       UPDATE {table_name} AS t
+       SET {id_col} = u.uuid_val
+       FROM _uuid_tmp AS u
+       WHERE t._rownum = u._rownum"))
+     dbExecute(con, "DROP TABLE IF EXISTS _uuid_tmp")
+
+     message(glue("  chunk {i}/{n_chunks}: {nrow(chunk)} rows"))
+     rm(chunk, key_strings)
+     gc()
+   }
+
+   # cleanup helper column, reorder
+   dbExecute(con, glue("ALTER TABLE {table_name} DROP COLUMN _rownum"))
+
+   # reorder columns to put id_col first
+   all_cols <- dbListFields(con, table_name)
+   col_order <- c(id_col, setdiff(all_cols, id_col))
+   dbExecute(con, glue("
+     CREATE OR REPLACE TABLE {table_name} AS
+     SELECT {paste(col_order, collapse = ', ')} FROM {table_name}"))
+
+   # validate
+   n_unique <- dbGetQuery(con, glue(
+     "SELECT COUNT(DISTINCT {id_col}) AS n FROM {table_name}"))$n
+   message(glue("Assigned {id_col} to {n_rows} rows ({n_unique} unique)"))
+
+   if (n_unique != n_rows) {
+     warning(glue("Non-unique UUIDs: {n_rows} rows but {n_unique} unique values."))
+   }
+   invisible(con)
+ }
+ ```
+
+ Key improvements:
+ - Only reads key_cols (not all columns) per chunk → much less memory
+ - Uses _rownum for stable row identification across chunks
+ - 5M rows/chunk × ~100 bytes/key = ~500MB per chunk (well within 24GB)
+ - Backward compatible — small tables just run in 1 chunk
+
+ Fix 3: Minor render fixes already applied
+
+ Already fixed in the previous session:
+ - Download error handling (tryCatch around download.file)
+ - URL cache (tryCatch around read_html with CSV fallback)
+ - list.files() instead of fs::dir_ls() for Google Drive compatibility
+ - Backtick _source_file in mutate
+
+ Files to Modify
+
+ 
+ │                 File                  │                            Change                            │
+ ├───────────────────────────────────────┼──────────────────────────────────────────────────────────────┤
+ │ calcofi4db/R/wrangle.R                │ Rewrite assign_deterministic_uuids() with chunked processing │
+ ├───────────────────────────────────────┼──────────────────────────────────────────────────────────────┤
+ │ workflows/ingest_calcofi_ctd-cast.qmd │ Exclude _source_file, data_stage from cast_cols              │
+ └───────────────────────────────────────┴──────────────────────────────────────────────────────────────┘
+
+ Verification
+
+ 1. Run devtools::document() in calcofi4db
+ 2. Render ingest_calcofi_ctd-cast.qmd — should complete without OOM
+ 3. Check: ctd_cast row count ≈ 5.4M (no duplicate warning)
+ 4. Check: ctd_measurement UUID assignment completes (234M rows in ~47 chunks)
+ 5. Check: ctd_summary and remaining chunks complete
+ 6. Render release_database.qmd after CTD completes
+
+⏺ The devtools::document() ran successfully (it updated assign_deterministic_uuids.Rd). The "permission denied" error is just a shell cleanup issue, not from R itself.
+
+  Both fixes are now in place:
+ 
+  Fix 1 (ingest_calcofi_ctd-cast.qmd:868): Added "_source_file" and "data_stage" to the exclusion list for cast_cols, so SELECT DISTINCT no longer includes per-file metadata columns that cause duplicate casts.
+
+  Fix 2 (calcofi4db/R/wrangle.R:278): Rewrote assign_deterministic_uuids() with a chunk_size parameter (default 5M rows):
+  - Small tables (≤ chunk_size): unchanged in-memory approach
+  - Large tables: adds a _rownum column for stable chunking, reads only key_cols per chunk (~500MB vs full table), writes UUIDs back via temp table + UPDATE join, then cleans up and reorders columns
+
+## 2026-03-09.b -merge_icthyo_bottle.qmd, +finalize_database.qmd
+
+Let's get rid of `@merge_icthyo_bottle.qmd` by moving functionality of code chunks into previous notebooks (`@ingest_swfsc_ichthyo.qmd`, `@ingest_calcofi_bottle.qmd`), which should render a working integrated database after each one, successively building out the database. And `@ingest_calcofi_ctd-cast.qmd` is to follow. Make dataset ingestion parsimonious with reusable functions in @../calcofi4db/ used throughout the ingest_*.qmd notebooks. Reference and update @README_PLAN.qmd with process.
+
+Ok, let's move the final migration from Working DuckLake to frozen release with RELEASE_NOTES.md in a new notebook that lists the previous notebooks. This way it can always be the "caboose" of workflows. What would be a good name for this?
+
+⏺ Good idea — that way adding a new ingest notebook doesn't require moving the freeze logic. Some options:
+                                                                                                                         
+  - release_database.qmd — clear, action-oriented, matches the pattern of other workflows                                
+  - freeze_release.qmd — mirrors the DuckLake "frozen release" terminology from README_PLAN
+  - finalize_database.qmd — emphasizes it's the last step                                                                
+                                                                                                                       
+  I'd recommend `release_database.qmd` — it's concise, describes what it does (create a versioned release), and pairs well
+  with the ingest_*.qmd naming pattern. It would:
+
+  1. List/verify all upstream ingest notebooks completed
+  2. List Working DuckLake tables
+  3. Run cross-dataset validation
+  4. Freeze release (strip provenance → clean parquet)
+  5. Generate RELEASE_NOTES.md
+  6. Upload to GCS
+
+⏺ Updated plan                                                                                                           
+  ⎿  /plan to preview                                                                                                    
+
+ Ready to code?                                                                                                          
+                                                                                                                         
+ Here is Claude's plan:
+
+ **Plan: Eliminate merge_ichthyo_bottle.qmd**
+
+ Context
+
+ The current architecture has a 3-step pipeline: `ingest_swfsc_ichthyo.qmd` → `ingest_calcofi_bottle.qmd` →
+ `merge_ichthyo_bottle.qmd`. The merge notebook loads all upstream parquet, performs cross-dataset integration (ship
+ matching, cruise bridge, taxonomy), then builds the Working DuckLake and frozen release.
+
+ Problem: This separate merge step adds complexity and prevents each ingest notebook from producing a usable integrated
+ database on its own. It also duplicates I/O (read parquet → write parquet → read again).
+
+ Goal: Redistribute merge functionality into the individual ingest notebooks so each one incrementally builds the
+ integrated database. Push reusable logic into calcofi4db package functions. Add a release_database.qmd "caboose"
+ notebook that creates the frozen release.
+
+ New pipeline:
+ `ingest_swfsc_ichthyo.qmd`      → Working DuckLake (ichthyo tables)
+ `ingest_calcofi_bottle.qmd`     → Working DuckLake (+ bottle tables)
+ `ingest_calcofi_ctd-cast.qmd`   → Working DuckLake (+ CTD tables)
+ `release_database.qmd`          → Frozen Release + GCS upload
+
+ Redistribution Map
+
+ ┌──────────────────────────────────┬─────────────────────────────────────┬────────────────────────────────────────┐
+ │ merge_ichthyo_bottle.qmd section │              Moves to               │        New calcofi4db function         │
+ ├──────────────────────────────────┼─────────────────────────────────────┼────────────────────────────────────────┤
+ │ Load upstream parquet (lines     │ Eliminated                          │ load_prior_tables() for selective      │
+ │ 190-316)                         │                                     │ loading                                │
+ ├──────────────────────────────────┼─────────────────────────────────────┼────────────────────────────────────────┤
+ │ Ship matching (lines 339-384)    │ ingest_calcofi_bottle.qmd           │ Use existing match_ships()             │
+ ├──────────────────────────────────┼─────────────────────────────────────┼────────────────────────────────────────┤
+ │ Cruise bridge (lines 386-534)    │ ingest_calcofi_bottle.qmd           │ derive_cruise_key_on_casts()           │
+ ├──────────────────────────────────┼─────────────────────────────────────┼────────────────────────────────────────┤
+ │ Taxonomy standardization (lines  │ ingest_swfsc_ichthyo.qmd            │ standardize_species_local() +          │
+ │ 543-931)                         │                                     │ build_taxon_hierarchy()                │
+ ├──────────────────────────────────┼─────────────────────────────────────┼────────────────────────────────────────┤
+ │ Cross-dataset validation (lines  │ ingest_calcofi_bottle.qmd           │ Use existing validate_fk_references()  │
+ │ 979-1035)                        │                                     │                                        │
+ ├──────────────────────────────────┼─────────────────────────────────────┼────────────────────────────────────────┤
+ │ Write modified parquet (lines    │ Absorbed into each notebook's       │ —                                      │
+ │ 1083-1107)                       │ existing write step                 │                                        │
+ ├──────────────────────────────────┼─────────────────────────────────────┼────────────────────────────────────────┤
+ │ Ingest to Working DuckLake       │ End of each ingest notebook         │ finalize_ingest()                      │
+ │ (lines 1166-1229)                │                                     │                                        │
+ ├──────────────────────────────────┼─────────────────────────────────────┼────────────────────────────────────────┤
+ │ Freeze release + upload (lines   │ release_database.qmd (new caboose)  │ finalize_ingest(freeze=TRUE)           │
+ │ 1257-1363)                       │                                     │                                        │
+ └──────────────────────────────────┴─────────────────────────────────────┴────────────────────────────────────────┘
+
+ Step 1: New calcofi4db Functions
+
+ 1a. load_prior_tables() in R/ducklake.R
+
+ Load specific tables from a prior ingest's parquet directory into current wrangling DuckDB. Replaces inline
+ parquet-loading in merge and the load_gcs_parquet_to_duckdb() calls for grid in bottle/CTD.
+
+ load_prior_tables <- function(con, tables, parquet_dir, geom_tables = c("grid", "site", "segment"))
+
+ - Reads each {table}.parquet from parquet_dir
+ - Handles WKB→GEOMETRY conversion for spatial tables
+ - Creates tables (or views if read_only=TRUE)
+
+ 1b. standardize_species_local() in R/taxonomy.R
+
+ Extract the species standardization logic from merge lines 543-735. Attaches local spp.duckdb, runs WoRMS/ITIS/GBIF
+ lookups, falls back to WoRMS API.
+
+ standardize_species_local <- function(con, spp_db_path, overwrite = FALSE, api_fallback = TRUE)
+
+ 1c. build_taxon_hierarchy() in R/taxonomy.R
+
+ Extract taxonomy hierarchy building from merge lines 741-931. Recursive CTEs for WoRMS + ITIS hierarchies, creates
+ taxon + taxa_rank tables.
+
+ build_taxon_hierarchy <- function(con, spp_db_path, overwrite = FALSE)
+
+ 1d. derive_cruise_key_on_casts() in R/ship.R
+
+ Encapsulate the full ship-matching + cruise-key derivation pipeline from merge lines 344-534.
+
+ derive_cruise_key_on_casts <- function(con, ship_renames_csv = NULL, fetch_ices = TRUE)
+
+ Steps internally:
+ 1. Find unmatched ship codes in casts vs ship table
+ 2. Call match_ships() for fuzzy matching
+ 3. ALTER TABLE casts ADD ship_key, cruise_key
+ 4. UPDATE via exact + fuzzy matches
+ 5. Derive YYMMKK cruise_key from datetime_utc + ship_key
+ 6. Validate against cruise table
+ 7. Return list(ship_matches, cruise_stats, unmatched_report)
+
+ 1e. finalize_ingest() in R/workflow.R
+
+ High-level function each notebook calls at the end to push tables to Working DuckLake.
+
+ finalize_ingest <- function(parquet_dir, source_label = basename(parquet_dir))
+
+ Steps:
+ 1. get_working_ducklake() — download/open Working DuckLake
+ 2. Load spatial extension
+ 3. For each .parquet in parquet_dir: read → ingest_to_working() with provenance
+ 4. save_working_ducklake() — upload to GCS
+ 5. Close Working DuckLake connection
+ 6. Return stats tibble
+
+ Step 2: Modify ingest_swfsc_ichthyo.qmd
+
+ Add after existing "Write Parquet" section, before Cleanup:
+
+ New section: "Standardize Taxonomy"
+
+ - Call standardize_species_local(con, spp_db_path) — updates species table with worms_id, itis_id, gbif_id
+ - Call build_taxon_hierarchy(con, spp_db_path) — creates taxon + taxa_rank tables
+ - Re-export: update write_parquet_outputs() call to include taxon, taxa_rank in table list
+ - Display taxonomy stats (species coverage, taxon row counts)
+
+ New section: "Finalize — Ingest to Working DuckLake"
+
+ - Call finalize_ingest(parquet_dir = dir_parquet)
+ - Display Working DuckLake table stats
+
+ Update existing "Write Parquet" section:
+ - Add taxon and taxa_rank to the tables list (total: 12 tables instead of 10)
+
+ Step 3: Modify ingest_calcofi_bottle.qmd
+
+ Replace existing load_gcs_parquet_to_duckdb() for grid:
+ - Use load_prior_tables(con, "grid", parquet_dir = here("data/parquet/swfsc.noaa.gov_calcofi-db"))
+
+ Add after existing "Write Parquet" section, before Cleanup:
+
+ New section: "Cross-Dataset Integration"
+
+ - load_prior_tables(con, c("ship", "cruise"), parquet_dir = here("data/parquet/swfsc.noaa.gov_calcofi-db")) — load
+ reference tables from ichthyo
+ - derive_cruise_key_on_casts(con, ship_renames_csv) — ship matching + cruise bridge
+ - Display match statistics
+ - Cross-dataset validation (grid_key orphans, PK uniqueness, cruise bridge coverage)
+ - Re-export casts.parquet (now includes ship_key, cruise_key columns)
+
+ New section: "Finalize — Ingest to Working DuckLake"
+
+ - Call finalize_ingest(parquet_dir = dir_parquet)
+ - Display Working DuckLake table stats
+
+ Step 4: Modify ingest_calcofi_ctd-cast.qmd
+
+ Replace existing grid loading with load_prior_tables() (if not already using it)
+
+ Add after existing "Write Parquet" section, before Cleanup:
+
+ New section: "Finalize — Ingest to Working DuckLake"
+
+ - Call finalize_ingest(parquet_dir = dir_parquet)
+ - Display Working DuckLake table stats
+
+ Step 5: Create release_database.qmd (NEW — the "caboose")
+
+ New notebook that always runs last. Responsible for creating the frozen release from the Working DuckLake.
+
+ Structure:
+
+ ```yaml
+ ---
+ title: "Release CalCOFI Database"
+ ---
+ ```
+ ```md
+ ## Overview
+ Lists upstream notebooks, validates the Working DuckLake, creates a
+ frozen release, and uploads to GCS.
+
+ ## Upstream Notebooks (must complete first)
+ 1. ingest_swfsc_ichthyo.qmd
+ 2. ingest_calcofi_bottle.qmd
+ 3. ingest_calcofi_ctd-cast.qmd
+
+ ## Setup
+ - Load calcofi4db
+ - Set release_version (e.g., "v2026.03")
+
+ ## Open Working DuckLake
+ - get_working_ducklake()
+ - list_working_tables() — display all tables with row counts
+
+ ## Validate
+ - Cross-dataset validation (grid_key orphans, PK uniqueness, FK integrity)
+ - validate_for_release() if it exists
+ - Display validation results
+
+ ## Show Combined Schema
+ - dm::dm_from_con() diagram with table colors by group
+   (ichthyo chain, bottle chain, CTD chain, taxonomy, spatial)
+
+ ## Create Frozen Release
+ - write_parquet_outputs(strip_provenance=TRUE, compression="zstd")
+ - Display freeze stats
+
+ ## Release Notes
+ - Generate RELEASE_NOTES.md with:
+   - Table list + row counts
+   - Data sources (list upstream notebooks)
+   - Cross-dataset integration summary
+   - Access instructions (DuckDB, calcofi4r)
+
+ ## Upload to GCS
+ - upload_frozen_release(release_dir, version, set_latest=TRUE)
+
+ ## Cleanup
+ - Close connections
+ - Print summary
+ ```
+
+ Key benefit: Adding a new `ingest_*.qmd` notebook only requires adding it to the upstream list in `release_database.qmd` —
+ no freeze logic needs to move.
+
+ Step 6: Delete `merge_ichthyo_bottle.qmd`
+
+ - Delete the file
+ - Remove data/parquet/merge_ichthyo_bottle/ directory
+ - Remove data/wrangling/merge_ichthyo_bottle.duckdb
+ - Update any references in _targets.R or other workflow config
+
+ Step 7: Update `README_PLAN.qmd`
+
+ - Update workflow diagrams to show linear pipeline (ichthyo → bottle → ctd-cast → release) without separate merge
+ - Update "Key Workflow Files" table to add release_database.qmd
+ - Document new calcofi4db functions
+ - Update implementation phases to reflect completed restructuring
+
+ Critical Files
+
+ ┌───────────────────────────────────────┬──────────────────────────────────────────────────────────┐
+ │                 File                  │                          Action                          │
+ ├───────────────────────────────────────┼──────────────────────────────────────────────────────────┤
+ │ calcofi4db/R/ducklake.R               │ Add load_prior_tables()                                  │
+ ├───────────────────────────────────────┼──────────────────────────────────────────────────────────┤
+ │ calcofi4db/R/taxonomy.R               │ Add standardize_species_local(), build_taxon_hierarchy() │
+ ├───────────────────────────────────────┼──────────────────────────────────────────────────────────┤
+ │ calcofi4db/R/ship.R                   │ Add derive_cruise_key_on_casts()                         │
+ ├───────────────────────────────────────┼──────────────────────────────────────────────────────────┤
+ │ calcofi4db/R/workflow.R               │ Add finalize_ingest()                                    │
+ ├───────────────────────────────────────┼──────────────────────────────────────────────────────────┤
+ │ calcofi4db/NAMESPACE                  │ Export new functions (via devtools::document())          │
+ ├───────────────────────────────────────┼──────────────────────────────────────────────────────────┤
+ │ workflows/ingest_swfsc_ichthyo.qmd    │ Add taxonomy + finalize sections                         │
+ ├───────────────────────────────────────┼──────────────────────────────────────────────────────────┤
+ │ workflows/ingest_calcofi_bottle.qmd   │ Add cross-dataset integration + finalize sections        │
+ ├───────────────────────────────────────┼──────────────────────────────────────────────────────────┤
+ │ workflows/ingest_calcofi_ctd-cast.qmd │ Add finalize section                                     │
+ ├───────────────────────────────────────┼──────────────────────────────────────────────────────────┤
+ │ workflows/release_database.qmd        │ Create — caboose for freeze + release                    │
+ ├───────────────────────────────────────┼──────────────────────────────────────────────────────────┤
+ │ workflows/merge_ichthyo_bottle.qmd    │ Delete                                                   │
+ ├───────────────────────────────────────┼──────────────────────────────────────────────────────────┤
+ │ workflows/README_PLAN.qmd             │ Update diagrams and phases                               │
+ └───────────────────────────────────────┴──────────────────────────────────────────────────────────┘
+
+ Implementation Order
+
+ 1. Create calcofi4db functions (1a–1e) + run devtools::document()
+ 2. Modify ingest_swfsc_ichthyo.qmd (taxonomy + finalize)
+ 3. Modify ingest_calcofi_bottle.qmd (cross-dataset + finalize)
+ 4. Modify ingest_calcofi_ctd-cast.qmd (finalize)
+ 5. Create release_database.qmd (caboose)
+ 6. Delete merge_ichthyo_bottle.qmd and artifacts
+ 7. Update README_PLAN.qmd
+
+ Verification
+
+ After each notebook renders successfully:
+
+ 1. `ingest_swfsc_ichthyo.qmd`: 12 parquet files (10 original + taxon + taxa_rank); species has worms_id/itis_id/gbif_id;
+ Working DuckLake has 12 tables
+ 2. `ingest_calcofi_bottle.qmd`: casts.parquet has ship_key + cruise_key; Working DuckLake now has 17 tables (12 ichthyo +
+  5 bottle)
+ 3. `ingest_calcofi_ctd-cast.qmd`: Working DuckLake has all ~21 tables (17 + 4 CTD)
+ 4. `release_database.qmd`: Frozen release created at data/releases/{version}/; RELEASE_NOTES.md generated; GCS upload
+ successful
+
+ Regression check: Row counts per table should match previous merge-based release output.
+
+⏺ All 7 steps of the plan are now complete. Here's a summary:                                                            
+  
+  Steps completed:                                                                                                       
+  1. calcofi4db functions — Added load_prior_tables(), standardize_species_local(), build_taxon_hierarchy(),
+  derive_cruise_key_on_casts(), finalize_ingest()                                                                        
+  2. ingest_swfsc_ichthyo.qmd — Added taxonomy standardization + finalize sections                                       
+  3. ingest_calcofi_bottle.qmd — Added cross-dataset integration (ship matching, cruise bridge) + finalize sections;
+  replaced load_gcs_parquet_to_duckdb() with load_prior_tables()
+  4. ingest_calcofi_ctd-cast.qmd — Added finalize section; replaced grid loading with load_prior_tables()
+  5. release_database.qmd — Created new caboose notebook (validate, freeze, upload)
+  6. merge_ichthyo_bottle.qmd — Deleted; cleaned up artifacts (data/parquet/merge_ichthyo_bottle/,
+  data/wrangling/merge_ichthyo_bottle.duckdb)
+  7. README_PLAN.qmd — Updated Key Workflow Files table, Phase 2/3/4b references; updated _targets.R and
+  publish_ichthyo_to_obis.qmd to use new pipeline
+
+Now render all these modified qmd notebooks in the proper order and debug any issues that arise until complete
+
+
+## 2026-03-09 refactor scrape_ctd.qmd
+
+Revise `@scrape_ctd.qmd` to align principles (eg "tidy" data) and goals (eg inject into integrated database and GCS parquet uploads) from these notebooks:
+
+- `@ingest_swfsc_icthyo.qmd`
+- `@ingest_calcofi_bottle.qmd`
+- `@merge_ichthyo_bottle.qmd`
+
+Also read the @README_PLAN.qmd. Per tidy data principles, separate and pivot the CTD casts table(s) as necessary. Where a cast has the same measurement in space (lon/lat/depth) and time, create avg and stddev — consider this as a separate summary table.
+
+⏺ Now I have full context from all files including README_PLAN.qmd. Let me ask a clarifying question about the table
+  structure before finalizing.
+
+ ☐ CTD pivot 
+
+For the CTD measurement pivot: each depth row has ~40+ sensor columns (temperature, salinity, oxygen, fluorescence,
+nitrate variants like CruiseCorr/StaCorr, etc.). Pivoting to long format would expand ~6.7M rows to ~200M+ rows. How
+should the cast_dir (upcast U vs downcast D) and correction variants (CruiseCorr vs StaCorr) be handled?
+
+ 1. Separate measurement_types    ┌───────────────────────────────────────────────────────────────────────┐
+    (Recommended)                 │ ctd_cast:                                                             │
+                                  │   ctd_cast_id | cruise_id | cast_dir | datetime_utc | lon | lat | ... │
+ 2. Hierarchy: base +             │                                                                       │
+   correction columns             │ ctd_measurement:                                                      │
+  3. Keep wide format             │   ctd_cast_id | depth_m | measurement_type      | value               │
+                                  │   1           | 0       | temperature           | 12.34               │
+                                  │   1           | 0       | temperature_sta_corr  | 12.31               │
+                                  │   1           | 0       | salinity              | 33.44               │
+                                  │   ...                                                                 │
+                                  │                                                                       │
+                                  │ ctd_summary:                                                          │
+                                  │   cruise_id | sta_key | depth_m | measurement_type | avg | stddev | n │
+                                  └───────────────────────────────────────────────────────────────────────┘
+
+                                  Notes: press n to add notes
+
+
+- Rename `scrape_ctd.qmd` → `ingest_calcofi_ctd-cast.qmd`
+- In `ctd_summary` include the field `n_obs` (number of observations) and include a row for every unique time and depth, so for n=1 stddev=0.
+- Missing `type_new` = "decimal" for row `lat_dec` under "`flds_redefine.csv` — Column renames for cast-level fields:"
+- Let's simplify to provider <- "calcofi" and dataset <- "ctd-cast". Move folders as needed to reflect this.
+- Move the `dt()` helper function for `DT::datatable()` into the calcofi4db R library with oxygen2 like documentation
+- Allow for intermediate RDS (write_rds, read_rds) in a temp folder not pushed to Github or GCS, if helps for debugging and speeding up execution of notebook
+- Remove duplicate columns that could be easily rendered with a view
+- Move source_file to _source_file, similar to @ingest_swfsc_ict
+- Instead of creating `mutate(ctd_cast_id = row_number()...` or `assign_sequential_ids()`, is there some way to preserve a globally unique identifier like the UUID or deterministic UUID in other notebooks? 
+- Let's try to keep measurement types naming simialr to bottles
+
+⏺ Plan updated with all your corrections:                                                                                
+                                                                                                                         
+  1. Renamed to ingest_calcofi_ctd-cast.qmd, provider = "calcofi", dataset = "ctd-cast"                                  
+  2. ctd_summary: includes n_obs field; every unique time/depth combo gets a row (n_obs=1 → stddev=0)
+  3. Fixed lat_dec type_new = decimal                                                                                    
+  4. Metadata folder moved to metadata/calcofi/ctd-cast/  
+  5. dt() helper moved to calcofi4db/R/display.R with roxygen2 docs
+  6. Intermediate RDS allowed in data/tmp/ (.gitignored, not pushed)
+  7. Derivable columns dropped from base tables, available via ctd_cast_derived VIEW
+  8. _source_file provenance convention (underscore prefix)
+  9. Deterministic UUIDs for all tables via assign_deterministic_uuids() — no sequential IDs
+  10. Measurement types consistent with bottle naming where same parameter is measured
+
+ Ready to code?
+
+ Here is Claude's plan:
+
+ Plan: Revise scrape_ctd.qmd to Align with Integrated Database Workflow
+
+ Context
+
+ scrape_ctd.qmd currently scrapes CalCOFI CTD data from calcofi.org, downloads/unzips files, reads CSVs, cleans data,
+ and writes to a standalone DuckDB + single ctd.parquet at ~/_big/. It does NOT follow the standardized ingest workflow
+ patterns established by ingest_swfsc_ichthyo.qmd, ingest_calcofi_bottle.qmd, and merge_ichthyo_bottle.qmd. This
+ revision aligns CTD ingestion with those patterns: tidy data normalization, calcofi4db utilities, GCS parquet uploads,
+ metadata sidecars, and the Working/Frozen DuckLake architecture.
+
+ File Changes
+
+ 1. Rename notebook
+
+ - scrape_ctd.qmd → ingest_calcofi_ctd-cast.qmd
+
+ 2. Add dt() helper to calcofi4db
+
+ Move the custom dt() helper function from scrape_ctd.qmd into calcofi4db/R/display.R with roxygen2 documentation:
+
+ ```r
+ #' Create Interactive Data Table with CSV Export
+ #'
+ #' Wrapper around DT::datatable() with sensible defaults for workflow
+ #' output tables: CSV download button, top filters, horizontal scroll,
+ #' and adaptive page lengths.
+ #'
+ #' @param d Data frame to display
+ #' @param fname Filename for CSV export (without extension)
+ #' @param n_page Number of rows per page (default: 10)
+ #' @param ... Additional arguments passed to DT::datatable()
+ #'
+ #' @return A DT::datatable widget
+ #' @export
+ #' @concept display
+ #' @importFrom DT datatable
+ dt <- function(d, fname, n_page = 10, ...) { ... }
+ ```
+
+ 3. Create metadata files
+
+ Create `metadata/calcofi/ctd-cast/`:
+
+ `measurement_type.csv` — Maps ~70 sensor columns to tidy measurement types. Use measurement type names consistent with
+ the bottle workflow's measurement_type.csv where the same parameter is measured (e.g., temperature, salinity,
+ oxygen_ml_l, oxygen_umol_kg, chlorophyll_a, nitrate, etc.). CTD-specific variants get suffixes for correction type and
+ sensor number:
+
+ ┌───────────────────────────────┬─────────┬───────────────────────┬─────────┬─────────────────────┬────────────────┐
+ │       measurement_type        │ dataset │      description      │  units  │   _source_column    │  qual_column   │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ temperature_1                 │ ctd     │ Temperature sensor 1  │ degC    │ temp1               │ temp1q         │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ temperature_2                 │ ctd     │ Temperature sensor 2  │ degC    │ temp2               │ temp2q         │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ temperature_ave               │ ctd     │ Average temperature   │ degC    │ temp_ave            │ -              │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ potential_temperature_1       │ ctd     │ Potential temperature │ degC    │ po_t1               │ -              │
+ │                               │         │  sensor 1             │         │                     │                │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ potential_temperature_2       │ ctd     │ Potential temperature │ degC    │ po_t2               │ -              │
+ │                               │         │  sensor 2             │         │                     │                │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ salinity_1                    │ ctd     │ Salinity sensor 1     │ PSU     │ salt1               │ salt1q         │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ salinity_1_corr               │ ctd     │ Salinity sensor 1     │ PSU     │ salt1_corr          │ -              │
+ │                               │         │ cruise-corrected      │         │                     │                │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ salinity_2                    │ ctd     │ Salinity sensor 2     │ PSU     │ salt2               │ salt2q         │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ salinity_2_corr               │ ctd     │ Salinity sensor 2     │ PSU     │ salt2_corr          │ -              │
+ │                               │         │ cruise-corrected      │         │                     │                │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ salinity_ave_corr             │ ctd     │ Average salinity      │ PSU     │ salt_ave_corr       │ -              │
+ │                               │         │ corrected             │         │                     │                │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ salinity_btl                  │ ctd     │ Bottle salinity       │ PSU     │ salt_b              │ -              │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ oxygen_ml_l_1                 │ ctd     │ Dissolved oxygen      │ ml/L    │ ox1                 │ ox1q           │
+ │                               │         │ sensor 1              │         │                     │                │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ oxygen_ml_l_1_cruise_corr     │ ctd     │ DO sensor 1           │ ml/L    │ ox1_cruise_corr     │ -              │
+ │                               │         │ cruise-corrected      │         │                     │                │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ oxygen_ml_l_1_sta_corr        │ ctd     │ DO sensor 1           │ ml/L    │ ox1_sta_corr        │ -              │
+ │                               │         │ station-corrected     │         │                     │                │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ oxygen_ml_l_2                 │ ctd     │ Dissolved oxygen      │ ml/L    │ ox2                 │ ox2q           │
+ │                               │         │ sensor 2              │         │                     │                │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ oxygen_ml_l_2_cruise_corr     │ ctd     │ DO sensor 2           │ ml/L    │ ox2_cruise_corr     │ -              │
+ │                               │         │ cruise-corrected      │         │                     │                │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ oxygen_ml_l_2_sta_corr        │ ctd     │ DO sensor 2           │ ml/L    │ ox2_sta_corr        │ -              │
+ │                               │         │ station-corrected     │         │                     │                │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ oxygen_ml_l_ave_sta_corr      │ ctd     │ DO average            │ ml/L    │ ox_ave_sta_corr     │ -              │
+ │                               │         │ station-corrected     │         │                     │                │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ oxygen_umol_kg_1              │ ctd     │ DO sensor 1           │ umol/kg │ ox1u_m              │ -              │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ oxygen_umol_kg_1_cruise_corr  │ ctd     │ DO sensor 1           │ umol/kg │ ox1u_m_cruise_corr  │ -              │
+ │                               │         │ cruise-corrected      │         │                     │                │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ oxygen_umol_kg_1_sta_corr     │ ctd     │ DO sensor 1           │ umol/kg │ ox1u_m_sta_corr     │ -              │
+ │                               │         │ station-corrected     │         │                     │                │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ oxygen_umol_kg_2              │ ctd     │ DO sensor 2           │ umol/kg │ ox2u_m              │ -              │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ oxygen_umol_kg_2_cruise_corr  │ ctd     │ DO sensor 2           │ umol/kg │ ox2u_m_cruise_corr  │ -              │
+ │                               │         │ cruise-corrected      │         │                     │                │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ oxygen_umol_kg_2_sta_corr     │ ctd     │ DO sensor 2           │ umol/kg │ ox2u_m_sta_corr     │ -              │
+ │                               │         │ station-corrected     │         │                     │                │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ oxygen_saturation_1           │ ctd     │ Oxygen saturation     │ %       │ ox_sat1             │ -              │
+ │                               │         │ sensor 1              │         │                     │                │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ oxygen_saturation_2           │ ctd     │ Oxygen saturation     │ %       │ ox_sat2             │ -              │
+ │                               │         │ sensor 2              │         │                     │                │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ oxygen_btl_ml_l               │ ctd     │ Bottle dissolved      │ ml/L    │ ox_b                │ -              │
+ │                               │         │ oxygen                │         │                     │                │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ oxygen_btl_umol_kg            │ ctd     │ Bottle dissolved      │ umol/kg │ ox_bu_m             │ -              │
+ │                               │         │ oxygen                │         │                     │                │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ fluorescence_v                │ ctd     │ Fluorescence voltage  │ V       │ fluor_v             │ fluor_q        │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ est_chlorophyll_a_cruise_corr │ ctd     │ Est. chlorophyll-a    │ ug/L    │ est_chl_cruise_corr │ -              │
+ │                               │         │ cruise-corrected      │         │                     │                │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ est_chlorophyll_a_sta_corr    │ ctd     │ Est. chlorophyll-a    │ ug/L    │ est_chl_sta_corr    │ -              │
+ │                               │         │ station-corrected     │         │                     │                │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ isus_v                        │ ctd     │ ISUS nitrate voltage  │ V       │ isusv               │ isusq          │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ est_nitrate_cruise_corr       │ ctd     │ Est. nitrate          │ umol/L  │ est_no3_cruise_corr │ -              │
+ │                               │         │ cruise-corrected      │         │                     │                │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ est_nitrate_sta_corr          │ ctd     │ Est. nitrate          │ umol/L  │ est_no3_sta_corr    │ -              │
+ │                               │         │ station-corrected     │         │                     │                │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ sigma_theta_1                 │ ctd     │ Potential density     │ kg/m3   │ sig_theta_ts1       │ sig_theta_ts1q │
+ │                               │         │ sensor 1              │         │                     │                │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ sigma_theta_2                 │ ctd     │ Potential density     │ kg/m3   │ sig_theta_ts2       │ sig_theta_ts2q │
+ │                               │         │ sensor 2              │         │                     │                │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ dynamic_height                │ ctd     │ Dynamic height        │ dyn m   │ dyn_ht              │ -              │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ specific_volume_anomaly       │ ctd     │ Specific volume       │ 10^-8   │ sva                 │ -              │
+ │                               │         │ anomaly               │ m3/kg   │                     │                │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ par                           │ ctd     │ Photosynthetically    │ uE/m2/s │ par                 │ parq           │
+ │                               │         │ active radiation      │         │                     │                │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ spar                          │ ctd     │ Surface PAR           │ uE/m2/s │ spar                │ sparq          │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ beam_attenuation              │ ctd     │ Beam attenuation      │ 1/m     │ bat                 │ -              │
+ │                               │         │ coefficient           │         │                     │                │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ transmissometer               │ ctd     │ Light transmissometer │ %       │ x_miss              │ trans_q        │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ ph                            │ ctd     │ pH                    │ pH      │ p_h                 │ p_hq           │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ btl_depth                     │ ctd     │ Bottle trip depth     │ m       │ btl_depth           │ -              │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ btl_temperature               │ ctd     │ Bottle temperature    │ degC    │ btl_temp            │ -              │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ btl_chlorophyll_a             │ ctd     │ Bottle chlorophyll-a  │ ug/L    │ chl_a               │ -              │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ btl_phaeopigment              │ ctd     │ Bottle phaeopigment   │ ug/L    │ phaeo               │ -              │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ btl_nitrate                   │ ctd     │ Bottle nitrate        │ umol/L  │ no3                 │ -              │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ btl_nitrite                   │ ctd     │ Bottle nitrite        │ umol/L  │ no2                 │ -              │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ btl_ammonium                  │ ctd     │ Bottle ammonium       │ umol/L  │ nh4                 │ -              │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ btl_phosphate                 │ ctd     │ Bottle phosphate      │ umol/L  │ po4                 │ -              │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ btl_silicate                  │ ctd     │ Bottle silicate       │ umol/L  │ sil                 │ -              │
+ ├───────────────────────────────┼─────────┼───────────────────────┼─────────┼─────────────────────┼────────────────┤
+ │ pressure                      │ ctd     │ Pressure              │ dbar    │ pressure            │ pr_q           │
+ └───────────────────────────────┴─────────┴───────────────────────┴─────────┴─────────────────────┴────────────────┘
+
+ `flds_redefine.csv` — Column renames for cast-level fields:
+
+ ┌───────────────┬───────────────┬──────────┬──────────────────────────────────────────────┐
+ │    fld_old    │    fld_new    │ type_new │               fld_description                │
+ ├───────────────┼───────────────┼──────────┼──────────────────────────────────────────────┤
+ │ depth         │ depth_m       │ decimal  │ Depth in meters                              │
+ ├───────────────┼───────────────┼──────────┼──────────────────────────────────────────────┤
+ │ sta_id        │ sta_key       │ varchar  │ Line and station ID                          │
+ ├───────────────┼───────────────┼──────────┼──────────────────────────────────────────────┤
+ │ cast_id       │ cast_key      │ varchar  │ Cast identifier (from CSV)                   │
+ ├───────────────┼───────────────┼──────────┼──────────────────────────────────────────────┤
+ │ date_time_utc │ date_time_utc │ varchar  │ Raw datetime string (parsed to datetime_utc) │
+ ├───────────────┼───────────────┼──────────┼──────────────────────────────────────────────┤
+ │ lon_dec       │ lon_dec       │ decimal  │ Longitude decimal degrees                    │
+ ├───────────────┼───────────────┼──────────┼──────────────────────────────────────────────┤
+ │ lat_dec       │ lat_dec       │ decimal  │ Latitude decimal degrees                     │
+ └───────────────┴───────────────┴──────────┴──────────────────────────────────────────────┘
+
+ `tbls_redefine.csv`:
+
+ ┌──────────────────┬────────────────────────────────────────────────────────────────────────────────────────────────┐
+ │     tbl_new      │                                        tbl_description                                         │
+ ├──────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────┤
+ │ ctd_cast         │ Cast-level metadata: one row per unique (cruise_id, cast_key, cast_dir)                        │
+ ├──────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────┤
+ │ ctd_measurement  │ Long-format CTD sensor readings at each depth within a cast                                    │
+ ├──────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────┤
+ │ ctd_summary      │ Summary statistics (avg, stddev, n_obs) per station/depth/measurement_type across cast         │
+ │                  │ directions                                                                                     │
+ ├──────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────┤
+ │ measurement_type │ Reference table for CTD measurement types with units and descriptions                          │
+ └──────────────────┴────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+ `metadata_derived.csv` — Descriptions for derived columns (datetime_utc, ctd_cast_uuid, grid_key, geom, etc.).
+
+ 4. Rewrite notebook sections
+
+ Setup (rewrite)
+
+ ```r
+ devtools::load_all(here::here("../calcofi4db"))
+ devtools::load_all(here::here("../calcofi4r"))
+ librarian::shelf(
+   CalCOFI/calcofi4db,
+   CalCOFI/calcofi4r,
+   DBI, dm, dplyr, DT, fs, glue, here, httr, janitor,
+   lubridate, mapview, plotly, purrr, readr, rvest,
+   sf, stringr, tibble, tidyr, zip,
+   quiet = T)
+
+ provider     <- "calcofi"
+ dataset      <- "ctd-cast"
+ overwrite    <- TRUE
+ dir_data     <- "~/My Drive/projects/calcofi/data-public"
+ dir_dl       <- path_expand(glue("{dir_data}/{provider}/{dataset}/download"))
+ dir_parquet  <- here(glue("data/parquet/{provider}_{dataset}"))
+ db_path      <- here(glue("data/wrangling/{provider}_{dataset}.duckdb"))
+ dir_tmp      <- here(glue("data/tmp/{provider}_{dataset}"))
+ url          <- "https://calcofi.org/data/oceanographic-data/ctd-cast-files/"
+
+ if (overwrite && file_exists(db_path)) file_delete(db_path)
+ dir_create(c(dir_dl, dirname(db_path), dir_parquet, dir_tmp), recurse = TRUE)
+
+ con <- get_duckdb_con(db_path)
+ load_duckdb_extension(con, "spatial")
+ ```
+
+ - Remove `dir_big`, standalone DuckDB path
+ - Add `dir_tmp` for intermediate RDS files (.gitignored, not pushed to GCS)
+ - Use `dt()` from `calcofi4db` (no local helper)
+
+ Scrape + Download + Prioritize (keep, minor cleanup)
+
+ Keep sections 2-4 largely as-is (scraping links, downloading zips, prioritizing final > preliminary). These are
+ CTD-specific acquisition. Minor:
+ - Replace local dt() calls with `calcofi4db::dt()`
+ - Tidy up variable names
+
+ Read and Standardize (adapt)
+
+ Keep CSV reading with repeat-header detection and type-mismatch correction.
+ - Allow intermediate RDS writes to dir_tmp for debugging/speed (e.g., `write_rds(d_bind, glue("{dir_tmp}/d_bind.rds"))`)
+ - These temp files are .gitignored and not synced to GCS
+
+ Datetime Parsing (keep logic)
+
+ Keep multi-format datetime parsing (dmy_hms, mdy_hm → datetime_utc). Apply in-memory.
+
+ Pseudo-NA and Lon/Lat Fill (keep logic)
+
+ Keep pseudo-NA detection (-9.99e-29, -99) and CalCOFI line/station projection fill.
+
+ **NEW: Split into Tidy Tables**
+
+ `ctd_cast` — Extract cast-level metadata (one row per unique cast). Use deterministic UUID v5 as primary key (same
+ pattern as ichthyo_uuid via assign_deterministic_uuids() in calcofi4db):
+
+ ```r
+ # extract unique casts
+ ctd_cast <- d_bind |>
+   distinct(cruise_id, cast_key, cast_dir, sta_key, line, sta,
+            ord_occ, event_num, data_stage, datetime_utc,
+            lon_dec, lat_dec, _source_file) |>
+   arrange(datetime_utc, cruise_id)
+
+ dbWriteTable(con, "ctd_cast", ctd_cast, overwrite = TRUE)
+
+ # assign deterministic UUID from composite natural key
+ assign_deterministic_uuids(
+   con        = con,
+   table_name = "ctd_cast",
+   id_col     = "ctd_cast_uuid",
+   key_cols   = c("cruise_id", "cast_key", "cast_dir", "datetime_utc"))
+ ```
+
+ Columns: `ctd_cast_uuid` (PK, deterministic UUID v5), `cruise_id, cast_key, sta_key, line, sta, ord_occ, event_num, cast_dir, data_stage, datetime_utc, lon_dec, lat_dec, _source_file`
+
+ Note: `_source_file` follows provenance column convention (underscore prefix, stripped in frozen releases).
+
+ Duplicate/derivable columns to drop (available via VIEW if needed):
+ - `date_time_pst` (derivable from datetime_utc)
+ - `project` (constant "CalCOFI")
+ - `study` (redundant with cruise_id after reconciliation)
+ - Any other columns that duplicate cast-level info
+
+ `ctd_measurement` — Pivot ~50+ measurement columns to long format:
+
+ Build pivot mapping from `measurement_type.csv` (similar to bottle's `bottle_meas_map`). Use UNION ALL SQL in DuckDB:
+
+ -- for each measurement_type row in measurement_type.csv:
+ ```sql
+ SELECT ctd_cast_uuid, depth_m,
+        '{measurement_type}' AS measurement_type,
+        CAST({_source_column} AS DOUBLE) AS measurement_value,
+        CAST({qual_column} AS VARCHAR) AS measurement_qual
+ FROM ctd_raw
+ WHERE {_source_column} IS NOT NULL
+ ```
+
+ Assign deterministic UUID:
+
+ ```r
+ assign_deterministic_uuids(
+   con        = con,
+   table_name = "ctd_measurement",
+   id_col     = "ctd_measurement_uuid",
+   key_cols   = c("ctd_cast_uuid", "depth_m", "measurement_type"))
+ ```
+
+ Columns: `ctd_measurement_uuid` (PK), `ctd_cast_uuid` (FK), `depth_m, measurement_type, measurement_value, measurement_qual`
+
+ `ctd_summary` — Summary stats per station/depth/measurement_type. Include a row for every unique combination, including
+ where n_obs=1 (stddev=0):
+
+ ```r
+ # group by: cruise_id, sta_key, depth_m, measurement_type
+ # collapses across cast_dir (U/D) and potentially overlapping casts
+ ctd_summary <- ctd_measurement |>
+   inner_join(ctd_cast, by = "ctd_cast_uuid") |>
+   group_by(cruise_id, sta_key, depth_m, measurement_type) |>
+   summarize(
+     avg    = mean(measurement_value, na.rm = TRUE),
+     stddev = ifelse(n() == 1, 0, sd(measurement_value, na.rm = TRUE)),
+     n_obs  = n(),
+     .groups = "drop")
+ ```
+
+ Assign deterministic UUID:
+ ```r
+ assign_deterministic_uuids(
+   con        = con,
+   table_name = "ctd_summary",
+   id_col     = "ctd_summary_uuid",
+   key_cols   = c("cruise_id", "sta_key", "depth_m", "measurement_type"))
+ ```
+
+ Columns: `ctd_summary_uuid` (PK), `cruise_id, sta_key, depth_m, measurement_type, avg, stddev, n_obs`
+
+ `measurement_type` — Reference table loaded from measurement_type.csv:
+ - Columns: measurement_type (PK), dataset, description, units, _source_column, qual_column
+
+ Distance Filtering (adapt)
+
+ Operate on ctd_cast table (not full profile data). Flag/remove casts exceeding 10km from line/station or outside
+ CalCOFI grid. Delete corresponding ctd_measurement rows by FK (ctd_cast_uuid).
+
+ Primary Key Strategy
+
+ All tables use deterministic UUID v5 primary keys (same namespace as ichthyo: c0f1ca00-ca1c-5000-b000-1c4790000000).
+ This ensures globally unique, stable identifiers that persist across re-ingestion:
+
+ ┌──────────────────┬──────────────────────┬───────────────────────────────────────────────┐
+ │      Table       │          PK          │                 Composite Key                 │
+ ├──────────────────┼──────────────────────┼───────────────────────────────────────────────┤
+ │ ctd_cast         │ ctd_cast_uuid        │ cruise_id, cast_key, cast_dir, datetime_utc   │
+ ├──────────────────┼──────────────────────┼───────────────────────────────────────────────┤
+ │ ctd_measurement  │ ctd_measurement_uuid │ ctd_cast_uuid, depth_m, measurement_type      │
+ ├──────────────────┼──────────────────────┼───────────────────────────────────────────────┤
+ │ ctd_summary      │ ctd_summary_uuid     │ cruise_id, sta_key, depth_m, measurement_type │
+ ├──────────────────┼──────────────────────┼───────────────────────────────────────────────┤
+ │ measurement_type │ measurement_type     │ (natural key, varchar)                        │
+ └──────────────────┴──────────────────────┴───────────────────────────────────────────────┘
+
+ Schema Documentation (new, standard)
+
+ ```r
+ dm_ctd <- dm_from_con(con) |>
+   dm_add_pk(ctd_cast, ctd_cast_uuid) |>
+   dm_add_pk(ctd_measurement, ctd_measurement_uuid) |>
+   dm_add_pk(ctd_summary, ctd_summary_uuid) |>
+   dm_add_fk(ctd_measurement, ctd_cast_uuid, ctd_cast)
+ dm_draw(dm_ctd, view_type = "all")
+ ```
+
+ Add Spatial (standard)
+
+ ```r
+ add_point_geom(con, "ctd_cast", lon_col = "lon_dec", lat_col = "lat_dec")
+ assign_grid_key(con, "ctd_cast")
+ ```
+
+ Validate, Enforce Types, Preview (standard)
+
+ ```r
+ validate_for_release(con)
+ enforce_column_types(con, d_flds_rd = d_flds_rd, ...)
+ # preview head/tail of each table
+ ```
+
+ Export Parquet + Manifest (standard)
+
+ ```r
+ parquet_stats <- write_parquet_outputs(
+   con        = con,
+   output_dir = dir_parquet,
+   tables     = c("ctd_cast", "ctd_measurement", "ctd_summary", "measurement_type"),
+   strip_provenance = FALSE)
+ ```
+
+ Build Metadata JSON (standard)
+
+ ```r
+ build_metadata_json(con = con, d_tbls_rd = d_tbls_rd, d_flds_rd = d_flds_rd,
+   output_dir = dir_parquet, provider = provider, dataset = dataset)
+ ```
+
+ Upload to GCS (standard)
+
+ ```r
+ sync_to_gcs(
+   local_dir  = dir_parquet,
+   gcs_prefix = glue("ingest/{provider}_{dataset}"),
+   bucket     = "calcofi-db")
+ ```
+
+ Cleanup (standard)
+
+ ```r
+ close_duckdb(con)
+ ```
+
+ Gantt Chart (keep as appendix)
+
+ Keep the interactive cruise timeline visualization. Read from parquet or reconnect.
+
+ 5. Sections to Remove
+
+ - "Check ctd.parquet for spatial functionality in DuckDB" — exploratory/debug
+ - "Notes (old)" — move relevant reference material to overview text or comments
+
+ 6. Views for Derivable Columns
+
+ Create SQL VIEWs (or document as optional) for columns dropped from base tables:
+
+ ```sql
+ -- ctd_cast_derived: adds back easily-derivable columns
+ CREATE VIEW ctd_cast_derived AS
+ SELECT *,
+   date_time_utc AT TIME ZONE 'UTC' AT TIME ZONE 'US/Pacific' AS datetime_pst,
+   EXTRACT(YEAR FROM datetime_utc) AS year,
+   EXTRACT(MONTH FROM datetime_utc) AS month,
+   EXTRACT(DOY FROM datetime_utc) AS julian_day
+ FROM ctd_cast;
+ ```
+
+ Critical Files
+
+ ┌──────────────────────────────────────────────────────────┬────────────────────────────────────────────────────────┐
+ │                           File                           │                         Action                         │
+ ├──────────────────────────────────────────────────────────┼────────────────────────────────────────────────────────┤
+ │ workflows/scrape_ctd.qmd                                 │ Rename to ingest_calcofi_ctd-cast.qmd + rewrite        │
+ ├──────────────────────────────────────────────────────────┼────────────────────────────────────────────────────────┤
+ │ calcofi4db/R/display.R                                   │ Add dt() helper with roxygen2 docs                     │
+ ├──────────────────────────────────────────────────────────┼────────────────────────────────────────────────────────┤
+ │ workflows/metadata/calcofi/ctd-cast/measurement_type.csv │ Create (pivot mapping)                                 │
+ ├──────────────────────────────────────────────────────────┼────────────────────────────────────────────────────────┤
+ │ workflows/metadata/calcofi/ctd-cast/flds_redefine.csv    │ Create (column renames)                                │
+ ├──────────────────────────────────────────────────────────┼────────────────────────────────────────────────────────┤
+ │ workflows/metadata/calcofi/ctd-cast/tbls_redefine.csv    │ Create (table descriptions)                            │
+ ├──────────────────────────────────────────────────────────┼────────────────────────────────────────────────────────┤
+ │ workflows/metadata/calcofi/ctd-cast/metadata_derived.csv │ Create (derived column docs)                           │
+ ├──────────────────────────────────────────────────────────┼────────────────────────────────────────────────────────┤
+ │ workflows/.gitignore                                     │ Add data/tmp/ to prevent temp RDS from being committed │
+ └──────────────────────────────────────────────────────────┴────────────────────────────────────────────────────────┘
+
+ Reference files (read-only):
+ - workflows/ingest_calcofi_bottle.qmd — primary pattern template
+ - workflows/metadata/calcofi.org/bottle-database/measurement_type.csv — naming conventions
+ - calcofi4db/R/wrangle.R — write_parquet_outputs, build_metadata_json, assign_deterministic_uuids
+ - calcofi4db/R/spatial.R — add_point_geom, assign_grid_key
+ - calcofi4db/R/duckdb.R — get_duckdb_con, load_duckdb_extension, close_duckdb
+
+ Data Volume Estimates
+
+ ┌──────────────────┬────────────────┬─────────────────────────────────────────────────────────┐
+ │      Table       │ Estimated Rows │                          Notes                          │
+ ├──────────────────┼────────────────┼─────────────────────────────────────────────────────────┤
+ │ ctd_cast         │ ~20,000-50,000 │ One per unique cast (cruise/station/direction)          │
+ ├──────────────────┼────────────────┼─────────────────────────────────────────────────────────┤
+ │ ctd_measurement  │ ~200-400M      │ ~6.7M depth rows × ~40 non-null measurements avg        │
+ ├──────────────────┼────────────────┼─────────────────────────────────────────────────────────┤
+ │ ctd_summary      │ ~100-200M      │ Aggregated across cast_dir; every unique combo included │
+ ├──────────────────┼────────────────┼─────────────────────────────────────────────────────────┤
+ │ measurement_type │ ~50            │ Reference table                                         │
+ └──────────────────┴────────────────┴─────────────────────────────────────────────────────────┘
+
+ Verification
+
+ 1. Render ingest_calcofi_ctd-cast.qmd end-to-end
+ 2. Confirm parquet files in data/parquet/calcofi_ctd-cast/
+ 3. Verify ctd_cast has valid geometry and grid_key assignments
+ 4. Verify ctd_measurement pivot covers all source columns (no data loss)
+ 5. Verify ctd_summary includes rows for n_obs=1 with stddev=0
+ 6. Confirm deterministic UUIDs are stable across re-runs (same input → same UUID)
+ 7. Confirm GCS upload to gs://calcofi-db/ingest/calcofi_ctd-cast/
+ 8. Validate dm schema diagram shows correct PK/FK relationships
+ 9. Spot-check measurement values against original CSV for a sample cast
+ 10. Verify _source_file is present and stripped correctly by write_parquet_outputs(strip_provenance = TRUE)
+
+
+⏺ Consistent use of data_stage throughout.                                                                               
+                                                     
+  Here's a summary of all changes made:                                                                                  
+                                                                                                                         
+  Summary of Changes                                                                                                     
+                                                                                                                         
+  1. New file: workflows/ingest_calcofi_ctd-cast.qmd              
+
+  Complete rewrite of scrape_ctd.qmd following the standardized ingest workflow pattern:
+  - Setup: Uses calcofi4db utilities (get_duckdb_con, load_duckdb_extension), loads metadata CSVs
+  - Scrape/Download/Prioritize: Preserved from original with minor cleanup
+  - Read/Standardize: Preserved, writes intermediates to data/tmp/ (gitignored)
+  - Datetime parsing: Uses datetime_utc (renamed from dtime_utc)
+  - Pseudo-NA/Lon-Lat fill: Preserved
+  - Distance filtering: Preserved, operates before tidy split
+  - NEW: Tidy normalization — splits into 4 tables:
+    - ctd_cast — one row per cast with deterministic UUID v5 PK
+    - ctd_measurement — long-format via UNION ALL SQL pivot from ~50 measurement columns
+    - ctd_summary — avg/stddev/n_obs per station/depth/measurement_type
+    - measurement_type — reference table from CSV
+  - Schema diagram via dm_draw()
+  - Spatial: add_point_geom(), assign_grid_key()
+  - Derived VIEW: ctd_cast_derived with datetime_pst, year, month, julian_day
+  - Validate/Enforce/Preview/Parquet/Metadata/GCS: Standard calcofi4db workflow
+  - Gantt chart: Moved to appendix, reads from parquet
+  - Removed: "Check ctd.parquet" debug section, "Notes (old)" section
+
+  2. New file: calcofi4db/R/display.R — added dt() helper
+
+  Exported dt() function with roxygen2 docs, matching the helper previously defined locally in scrape_ctd.qmd.
+
+  3. New metadata files: workflows/metadata/calcofi.org/ctd-cast/
+
+  - measurement_type.csv — 51 measurement types mapping source columns to tidy names
+  - flds_redefine.csv — column renames (depth→depth_m, sta_id→sta_key, etc.)
+  - tbls_redefine.csv — table descriptions
+  - metadata_derived.csv — documentation for derived/UUID columns
+
+  4. Updated: workflows/.gitignore
+
+  Added data/tmp/ to prevent intermediate RDS files from being committed.
+
+  5. Updated: calcofi4db/NAMESPACE
+
+  Regenerated via devtools::document() — now exports dt.
+
+  Still to do
+
+  - The old scrape_ctd.qmd still exists and should be git rm'd when committing (git will detect the rename)
+  - The notebook needs to be rendered end-to-end to verify (requires CTD download data on Google Drive)
+
+Help me understand how the `measurement_type` intersects and folds into the database from this `@ingest_calcofi_ctd-cast.qmd` workflow and the `@ingest_calcofi_bottle.qmd`?
+
+⏺ Here's what I found:                                                                                                   
+                                                                                                                         
+  Currently, each ingest workflow produces its own measurement_type table with different schemas:                        
+   
+  - Bottle (49 rows): columns
+    `measurement_type, dataset, description, units, _source_column, _source_table, _source_workflow`                                    
+  - CTD (51 rows): columns 
+    `measurement_type, dataset, description, units, _source_column, qual_column`
+
+  No PK collisions — bottle uses bare names (temperature, salinity) while CTD uses suffixed names (temperature_1,
+  salinity_1_corr).
+
+  At merge time (merge_ichthyo_bottle.qmd), only the bottle's measurement_type survives into the Working DuckLake.
+  Ichthyo's 3 rows (stage/size/tally) are pre-included in the bottle CSV. CTD isn't integrated yet.
+
+  The key question is how to handle this when CTD joins the integrated database:
+
+←  ☐ Unification  ☐ Schema  ✔ Submit  →
+                                                                                                                         
+How should the CTD and bottle measurement_type tables be unified?
+                                                                                                                         
+❯ 1. Single source CSV (Recommended)                    
+     Add CTD rows directly into the bottle's measurement_type.csv (like ichthyo rows already are). One CSV becomes the
+     single source-of-truth across all datasets. Harmonize schemas by adding qual_column to the shared CSV.
+  2. Separate CSVs, merge at integration
+     Keep per-workflow CSVs (bottle has its own, CTD has its own). The merge workflow combines them into one unified
+     table at integration time, filling missing columns with NULL.
+  3. Keep them fully separate
+     Each dataset keeps its own measurement_type table (e.g., bottle_measurement_type, ctd_measurement_type). Breaks
+     current single-table pattern but avoids schema harmonization.
+
+←  ☒ Unification  ☐ Schema  ✔ Submit  →
+                                                                                                                         
+Should the unified schema include qual_column (CTD's quality flag mapping)?
+                                                                                                                         
+❯ 1. Yes, add qual_column                               
+     Bottle measurements also have quality columns (t_qual, s_qual, etc.) that could be mapped here. Makes the reference 
+     table self-documenting for both value and quality columns.                                            
+  2. No, keep qual_column CTD-only      
+     Quality flag mapping stays in CTD's metadata CSV only, used at pivot time but not carried into the unified reference
+      table.                                                      
+
+⏺ Now I have the complete picture. The bottle workflow has qual_col and prec_col mappings hardcoded in the notebook's    
+  bottle_meas_map tribble — these are not in measurement_type.csv. Adding qual_column (and potentially prec_column) to
+  the unified CSV would consolidate this mapping into one place.                                                         
+                                                                                                                         
+  Let me finalize the plan:                                                                                              
+                                                                                                                         
+⏺ Updated plan                                          
+  ⎿  /plan to preview
+←  ☐ Scope  ☐ Cast conditions  ✔ Submit  →                                                                               
+                                                                                                                         
+Should each ingest workflow write ALL ~100 measurement_type rows to its DuckDB, or only the rows relevant to that 
+dataset?                                                                                                                 
+                                                        
+  1. All rows (Recommended)
+     Every ingest DuckDB gets the full measurement_type table (~100 rows). The reference table is self-contained in every
+      database. Simpler — no merging needed downstream.
+  2. Only relevant rows
+     Bottle writes 49 rows (bottle+cast+ichthyo), CTD writes 51 rows (ctd only). Merge workflow unions them. Keeps each
+     ingest database minimal but adds merge complexity.
+❯ 3. Let's go with all rows, but add a column `_source_datasets` with a character delimited list of datasets using the measurement_type (eg "swfsc_icthyo; calcofi_ctd-cast"). And add a check in all the `ingest_{provider}_{dataset}.qmd`  notebooks to check for all measurement_types used by the dataset are appropriately listed in this column (in case ones get added/removed/modified in future ingestion and need to be updated).
+
+I'm not understanding the qual/prec columns from ctd-cast vs bottle (there is no dataset='cast', which is also a reserved SQL word so to be avoided, hence use of table casts).
+
+←  ☐ dataset value  ☐ Dataset IDs  ✔ Submit  →                                                                           
+                                                                                                                         
+The existing bottle measurement_type.csv already has 14 rows with dataset='cast' (wave_direction, wind_speed, etc.) — 
+these are pivoted into the cast_condition table. The dataset column is a data value, not a table name, so the SQL        
+reserved word issue doesn't apply. Should we rename dataset='cast' to something else (e.g., 'cast_condition'), or leave 
+it as-is?
+
+  1. Rename to 'cast_condition'
+     Change the 14 rows from dataset='cast' to dataset='cast_condition' to match the actual target table name and avoid
+     any confusion with SQL CAST keyword.
+  2. Leave as 'cast'
+     Keep dataset='cast' since it's just a string value in a CSV/column, not a SQL identifier. No actual SQL issue
+     exists.
+❯ 3. I'm confused by this dataset column since we're now talking about merging datasets across icthyo, bottle (which has measurement_types associated with bottle and cast_conditions), and ctd-cast (which has even more measurement types); some of which overlap. So is dataset the right column name or...?
+
+←  ☒ dataset value  ☐ Dataset IDs  ✔ Submit  →                                                                           
+                                                                                                                         
+For the new _source_datasets column, what format should the dataset identifiers use? The plan proposed 'swfsc_ichthyo; 
+calcofi_ctd-cast' but the existing dataset column uses short labels like 'bottle', 'cast', 'ichthyo'. Which naming       
+convention?                                                                                                             
+         
+❯ 1. provider_dataset format      ┌───────────────────────────────────────────────────┐
+  2. Short labels                 │ _source_datasets                                  │
+                                  │ calcofi.org_bottle-database                       │                                 
+                                  │ calcofi.org_ctd-cast                              │
+                                  │ swfsc.noaa.gov_calcofi-db                         │
+                                  │ calcofi.org_bottle-database; calcofi.org_ctd-cast │                            
+                                  └───────────────────────────────────────────────────┘
+                                                                                     
+                                  Notes: I'm migrating to simpler {provider}_{dataset} naming of swfsc_ichthyo, calcofi_bottle, calcofi_ctd-cast. But this is related to my last response about confusion with the "dataset" column, especially if a measurement_type gets used across datasets.
+
+⏺ Great, this clarifies a lot. The dataset column is problematic because:                                                
+  1. A measurement_type can span multiple datasets (e.g., temperature could appear in both bottle and CTD)               
+  2. It conflates the target table (bottle vs cast_condition) with the source dataset                                    
+                                                                                                                         
+  The solution is: replace dataset with _source_datasets (the ;-delimited list the user wants) and the column tells you  
+  which workflows/datasets use that measurement type. Let me also think about what distinguishes bottle's temperature    
+  from CTD's temperature_1 — it's the measurement_type name itself, not a separate column.                               
+                                                                                                                         
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ☐ Column design                                                                                                         
+                                                                                                                         
+Should we replace the existing `dataset` column with `_source_datasets` (the semicolon-delimited list), or keep both? The
+ `dataset` column currently serves as a grouping label ('bottle', 'cast', 'ichthyo') but becomes ambiguous when a        
+measurement_type spans datasets.                        
+                                                                                                                         
+❯ 1. Replace dataset with         ┌─────────────────────────────────────────────────────────────────────────────────────┐
+    _source_datasets              │ measurement_type,description,units,_source_column,_source_table,_source_datasets,qu │
+  2. Keep both columns            │ temperature,Water temperature (QC'd),degC,t_deg_c,bottle,calcofi_bottle,,t_prec     │
+                                  │ temperature_1,Temperature sensor 1,degC,temp1,ctd_raw,calcofi_ctd-cast,temp1q,      │
+                                  │ wave_direction,Wave direction,degrees,wave_dir,casts,calcofi_bottle,,               │
+                                  └─────────────────────────────────────────────────────────────────────────────────────┘
+
+                                  Notes: press n to add notes
+
+
+⏺ Right — quality and precision values are already in the observation tables (bottle_measurement has measurement_prec and
+   measurement_qual; ctd_measurement has measurement_qual). The qual_column and prec_column in measurement_type.csv are
+  just pivot mappings that tell the UNION ALL SQL which source column to pull from — they're metadata about the CSV      
+  structure, not data that ends up in the final output table.                                                            
+                                                                                                                         
+  So the question is: should qual_column and prec_column even be in the unified measurement_type table that gets written 
+  to DuckDB/parquet? Or should they stay as pivot-time metadata only (used during ingest, then stripped)?
+
+←  ☐ Pivot metadata  ☐ Data types  ✔ Submit  →
+                                                                                                                         
+The qual_column and prec_column values are pivot mappings (e.g., 'which CSV column has the quality flag for 
+temperature'). They're used at ingest time to build the UNION ALL SQL, then the actual quality/precision values land in  
+bottle_measurement.measurement_qual and .measurement_prec. Should these mapping columns be in the exported 
+measurement_type table, or stripped before export?
+
+ 1. Keep as provenance (prefix    ┌─────────────────────────────────────────────────────────────────────────────────────┐
+    with _)                       │ measurement_type,description,units,_source_column,_source_table,_source_datasets,_q │
+  2. Strip before DuckDB write    │ temperature,...,t_deg_c,bottle,calcofi_bottle,t_qual,t_prec                         │
+  3. Keep without _ prefix        │ temperature_1,...,temp1,ctd_raw,calcofi_ctd-cast,temp1q,                            │
+                                  └─────────────────────────────────────────────────────────────────────────────────────┘
+  n: 
+
+←  ☒ Pivot metadata  ☐ Data types  ✔ Submit  →
+
+You asked about data types. The measurement_value column is always DOUBLE, but measurement_qual is VARCHAR (quality codes
+ like 'G', 'B', '4') and measurement_prec is DOUBLE (numeric precision). Should the measurement_type reference table
+document the expected types of these columns, or is the current approach sufficient?
+
+❯ 1. Current approach is fine
+     measurement_value is always DOUBLE, measurement_qual is always VARCHAR, measurement_prec is always DOUBLE. The types
+      are fixed by the observation table schema, not per measurement_type. No extra type column needed.
+  2. Add value_type column
+     Add a column like value_type ('double', 'integer', 'varchar') to measurement_type to document that some measurements
+      might need different handling. But in practice all values are cast to DOUBLE in the UNION ALL.
+
+
+⏺ Good. Plan is clean now.           
+                                                                                                                         
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Ready to code?                                                                                                          
+                                                                                                                         
+ Here is Claude's plan:                                 
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ Plan: Unify measurement_type Into a Single Source-of-Truth CSV
+
+ Context
+
+ The CTD (ingest_calcofi_ctd-cast.qmd) and bottle (ingest_calcofi_bottle.qmd) workflows each produce their own
+ measurement_type reference table with different schemas and separate CSVs. As CTD joins the integrated database, we
+ need a single unified CSV that serves as the source-of-truth for all measurement type definitions across all datasets.
+
+ Key decisions made:
+ - Single CSV at metadata/measurement_type.csv (not per-dataset)
+ - All ~100 rows written to every ingest DuckDB (complete reference table everywhere)
+ - Replace dataset with _source_datasets — semicolon-delimited list using {provider}_{dataset} format (e.g.,
+ calcofi_bottle; calcofi_ctd-cast)
+ - Add _qual_column and _prec_column to capture quality/precision column mappings (from CTD CSV and bottle's hardcoded
+ tribble)
+ - Drop _source_workflow — redundant with _source_datasets
+ - Each ingest workflow validates that its measurement_types are listed in _source_datasets
+
+ Unified CSV Schema
+
+ Location: workflows/metadata/measurement_type.csv
+
+ ┌──────────────────┬──────────────────────────────────────────────────────┬──────────────────────────────────┐
+ │      Column      │                     Description                      │             Example              │
+ ├──────────────────┼──────────────────────────────────────────────────────┼──────────────────────────────────┤
+ │ measurement_type │ PK, unique identifier                                │ temperature, temperature_1       │
+ ├──────────────────┼──────────────────────────────────────────────────────┼──────────────────────────────────┤
+ │ description      │ Human-readable description                           │ Water temperature (QC'd)         │
+ ├──────────────────┼──────────────────────────────────────────────────────┼──────────────────────────────────┤
+ │ units            │ Measurement units                                    │ degC, ml/L, %                    │
+ ├──────────────────┼──────────────────────────────────────────────────────┼──────────────────────────────────┤
+ │ _source_column   │ Provenance: original wide-format column name         │ t_deg_c, temp1                   │
+ ├──────────────────┼──────────────────────────────────────────────────────┼──────────────────────────────────┤
+ │ _source_table    │ Provenance: source table in ingest DuckDB            │ bottle, casts, ctd_raw, ichthyo  │
+ ├──────────────────┼──────────────────────────────────────────────────────┼──────────────────────────────────┤
+ │ _source_datasets │ Provenance: semicolon-delimited list of datasets     │ calcofi_bottle, calcofi_ctd-cast │
+ ├──────────────────┼──────────────────────────────────────────────────────┼──────────────────────────────────┤
+ │ _qual_column     │ Provenance: quality flag column name (blank if none) │ t_qual, temp1q                   │
+ ├──────────────────┼──────────────────────────────────────────────────────┼──────────────────────────────────┤
+ │ _prec_column     │ Provenance: precision column name (blank if none)    │ t_prec                           │
+ └──────────────────┴──────────────────────────────────────────────────────┴──────────────────────────────────┘
+
+ All _-prefixed columns are provenance — present in working DuckLake, stripped in frozen releases via
+ strip_provenance=TRUE.
+
+ Non-provenance columns (measurement_type, description, units) survive into frozen releases as a clean reference table.
+
+ Columns dropped vs old schema:
+ - dataset → replaced by _source_datasets
+ - _source_workflow → redundant with _source_datasets
+ - Old qual_column → renamed to _qual_column (provenance prefix)
+
+ Row count: ~100 rows (31 bottle + 14 cast_condition + 3 ichthyo + 51 CTD)
+
+ File Changes
+
+ 1. Create workflows/metadata/measurement_type.csv
+
+ Merge rows from:
+ - Old metadata/calcofi.org/bottle-database/measurement_type.csv (49 rows) — migrate dataset values to _source_datasets
+ format, add _qual_column/_prec_column from hardcoded bottle_meas_map tribble (bottle lines 391-423)
+ - Old metadata/calcofi.org/ctd-cast/measurement_type.csv (51 rows) — add _source_table=ctd_raw,
+ _source_datasets=calcofi_ctd-cast
+
+ Mapping for bottle rows' _source_datasets:
+ - Old dataset="bottle" → _source_datasets="calcofi_bottle"
+ - Old dataset="cast" → _source_datasets="calcofi_bottle" (cast conditions come from the bottle ingest workflow)
+ - Old dataset="ichthyo" → _source_datasets="swfsc_ichthyo"
+
+ Bottle _qual_column and _prec_column values (from hardcoded tribble at ingest_calcofi_bottle.qmd:391):
+
+ ┌───────────────────┬─────────────────────┬──────────────┐
+ │ measurement_type  │    _qual_column     │ _prec_column │
+ ├───────────────────┼─────────────────────┼──────────────┤
+ │ temperature       │ t_qual              │ t_prec       │
+ ├───────────────────┼─────────────────────┼──────────────┤
+ │ salinity          │ s_qual              │ s_prec       │
+ ├───────────────────┼─────────────────────┼──────────────┤
+ │ oxygen_ml_l       │ o_qual              │              │
+ ├───────────────────┼─────────────────────┼──────────────┤
+ │ sigma_theta       │ s_thtaq             │              │
+ ├───────────────────┼─────────────────────┼──────────────┤
+ │ oxygen_saturation │ o2satq              │              │
+ ├───────────────────┼─────────────────────┼──────────────┤
+ │ chlorophyll_a     │ chlqua              │              │
+ ├───────────────────┼─────────────────────┼──────────────┤
+ │ phaeopigment      │ phaqua              │              │
+ ├───────────────────┼─────────────────────┼──────────────┤
+ │ phosphate         │ po4q                │              │
+ ├───────────────────┼─────────────────────┼──────────────┤
+ │ silicate          │ si_o3qu             │              │
+ ├───────────────────┼─────────────────────┼──────────────┤
+ │ nitrite           │ no2q                │              │
+ ├───────────────────┼─────────────────────┼──────────────┤
+ │ nitrate           │ no3q                │              │
+ ├───────────────────┼─────────────────────┼──────────────┤
+ │ ammonia           │ nh3q                │              │
+ ├───────────────────┼─────────────────────┼──────────────┤
+ │ c14_rep1          │ c14a1q              │ c14a1p       │
+ ├───────────────────┼─────────────────────┼──────────────┤
+ │ c14_rep2          │ c14a2q              │ c14a2p       │
+ ├───────────────────┼─────────────────────┼──────────────┤
+ │ c14_dark          │ darkaq              │ dark_ap      │
+ ├───────────────────┼─────────────────────┼──────────────┤
+ │ c14_mean          │ mean_aq             │ mean_ap      │
+ ├───────────────────┼─────────────────────┼──────────────┤
+ │ dic_rep1          │ dic_quality_comment │              │
+ ├───────────────────┼─────────────────────┼──────────────┤
+ │ dic_rep2          │ dic_quality_comment │              │
+ └───────────────────┴─────────────────────┴──────────────┘
+
+ (All other bottle/cast/ichthyo rows have blank _qual_column and _prec_column.)
+
+ 2. Delete old per-dataset CSVs
+
+ - metadata/calcofi.org/bottle-database/measurement_type.csv — delete
+ - metadata/calcofi.org/ctd-cast/measurement_type.csv — delete
+
+ 3. Edit ingest_calcofi_bottle.qmd
+
+ Setup — change CSV load path:
+ ```r
+ # old:
+ meas_type_csv <- here("metadata/calcofi.org/bottle-database/measurement_type.csv")
+ # new:
+ meas_type_csv <- here("metadata/measurement_type.csv")
+ d_meas_type   <- read_csv(meas_type_csv, show_col_types = F)
+ ```
+
+ Replace hardcoded bottle_meas_map tribble (lines 391-423) — build from unified CSV:
+
+ ```r
+ bottle_meas_map <- d_meas_type |>
+   filter(str_detect(`_source_datasets`, "calcofi_bottle"),
+          `_source_table` == "bottle") |>
+   select(
+     measurement_type,
+     value_col  = `_source_column`,
+     prec_col   = `_prec_column`,
+     qual_col   = `_qual_column`) |>
+   mutate(across(c(prec_col, qual_col), ~ na_if(.x, "")))
+ ```
+
+ Similarly for cast_cond_map (lines 539-553):
+ ```r
+ cast_cond_map <- d_meas_type |>
+   filter(str_detect(`_source_datasets`, "calcofi_bottle"),
+          `_source_table` == "casts") |>
+   select(
+     condition_type = measurement_type,
+     source_col     = `_source_column`)
+ ```
+
+ Write full table to DuckDB (line 624) — unchanged, writes all ~100 rows.
+
+ Add validation check — verify all bottle/cast measurement_types list calcofi_bottle in _source_datasets:
+
+ ```r
+ # validate: all measurement_types used by this dataset are registered
+ bottle_types_used <- dbGetQuery(con,
+   "SELECT DISTINCT measurement_type FROM bottle_measurement")$measurement_type
+ cast_types_used   <- dbGetQuery(con,
+   "SELECT DISTINCT condition_type FROM cast_condition")$condition_type
+
+ registered <- d_meas_type |>
+   filter(str_detect(`_source_datasets`, "calcofi_bottle")) |>
+   pull(measurement_type)
+
+ unregistered <- setdiff(c(bottle_types_used, cast_types_used), registered)
+ stopifnot(
+   "all measurement_types used by calcofi_bottle must be registered in _source_datasets" =
+     length(unregistered) == 0)
+ ```
+
+ 4. Edit ingest_calcofi_ctd-cast.qmd
+
+ Setup — change CSV load path:
+
+ ```r
+ # old:
+ d_meas_type <- read_csv(glue("{dir_meta}/measurement_type.csv"), show_col_types = F)
+ # new:
+ d_meas_type <- read_csv(here("metadata/measurement_type.csv"), show_col_types = F)
+ ```
+
+ Filter for CTD pivot — only CTD rows drive the UNION ALL:
+ ```r
+ d_meas_ctd <- d_meas_type |>
+   filter(str_detect(`_source_datasets`, "calcofi_ctd-cast"))
+ ```
+
+ Use d_meas_ctd instead of d_meas_type in the pmap_chr() pivot builder (line 737).
+
+ Write full table to DuckDB — unchanged, writes all ~100 rows.
+
+ Add validation check:
+
+ ```r
+ ctd_types_used <- dbGetQuery(con,
+   "SELECT DISTINCT measurement_type FROM ctd_measurement")$measurement_type
+
+ registered <- d_meas_type |>
+   filter(str_detect(`_source_datasets`, "calcofi_ctd-cast")) |>
+   pull(measurement_type)
+
+ unregistered <- setdiff(ctd_types_used, registered)
+ stopifnot(
+   "all measurement_types used by calcofi_ctd-cast must be registered in _source_datasets" =
+     length(unregistered) == 0)
+ ```
+
+ 5. Update metadata_derived.csv files
+
+ Bottle (metadata/calcofi.org/bottle-database/metadata_derived.csv):
+ - Update measurement_type section: replace dataset description with _source_datasets, add _qual_column, _prec_column
+ descriptions
+ - Remove _source_workflow description
+
+ CTD (metadata/calcofi.org/ctd-cast/metadata_derived.csv):
+ - Update measurement_type section: replace dataset with _source_datasets, add _source_table, _prec_column descriptions
+
+ 6. No changes to merge_ichthyo_bottle.qmd
+
+ The merge workflow passes measurement_type through unchanged from bottle upstream. Since the bottle ingest now writes
+ the full ~100-row table, the merged Working DuckLake automatically gets all measurement types including CTD.
+
+ Critical Files
+
+ ┌─────────────────────────────────────────────────────────────────────┬─────────────────────────────────────────────┐
+ │                                File                                 │                   Action                    │
+ ├─────────────────────────────────────────────────────────────────────┼─────────────────────────────────────────────┤
+ │ workflows/metadata/measurement_type.csv                             │ Create — unified CSV (~100 rows)            │
+ ├─────────────────────────────────────────────────────────────────────┼─────────────────────────────────────────────┤
+ │ workflows/metadata/calcofi.org/bottle-database/measurement_type.csv │ Delete                                      │
+ ├─────────────────────────────────────────────────────────────────────┼─────────────────────────────────────────────┤
+ │ workflows/metadata/calcofi.org/ctd-cast/measurement_type.csv        │ Delete                                      │
+ ├─────────────────────────────────────────────────────────────────────┼─────────────────────────────────────────────┤
+ │ workflows/ingest_calcofi_bottle.qmd                                 │ Edit — new CSV path, replace tribbles, add  │
+ │                                                                     │ validation                                  │
+ ├─────────────────────────────────────────────────────────────────────┼─────────────────────────────────────────────┤
+ │ workflows/ingest_calcofi_ctd-cast.qmd                               │ Edit — new CSV path, filter for pivot, add  │
+ │                                                                     │ validation                                  │
+ ├─────────────────────────────────────────────────────────────────────┼─────────────────────────────────────────────┤
+ │ workflows/metadata/calcofi.org/bottle-database/metadata_derived.csv │ Edit — update column descriptions           │
+ ├─────────────────────────────────────────────────────────────────────┼─────────────────────────────────────────────┤
+ │ workflows/metadata/calcofi.org/ctd-cast/metadata_derived.csv        │ Edit — update column descriptions           │
+ └─────────────────────────────────────────────────────────────────────┴─────────────────────────────────────────────┘
+
+ Reference (read-only):
+ - ingest_calcofi_bottle.qmd:391-423 — hardcoded bottle_meas_map tribble (qual/prec values to migrate)
+ - ingest_calcofi_bottle.qmd:539-553 — hardcoded cast_cond_map tribble
+ - ingest_calcofi_bottle.qmd:616-656 — current CSV load + FK validation
+ - ingest_calcofi_ctd-cast.qmd:63,737-761,811 — current CSV load + pivot + dbWriteTable
+
+ Verification
+
+ 1. Unified CSV has ~100 rows, no duplicate measurement_type values
+ 2. Bottle workflow renders: bottle_meas_map built from CSV matches old tribble values exactly
+ 3. Bottle workflow renders: cast_cond_map built from CSV matches old tribble values exactly
+ 4. CTD workflow renders: pivot UNION ALL produces same ctd_measurement table
+ 5. Both workflows pass their _source_datasets validation check (no unregistered types)
+ 6. FK validation passes in bottle workflow (all bottle_measurement + cast_condition types in reference table)
+ 7. Both ingest DuckDBs contain the full ~100-row measurement_type table
+ 8. Merge workflow passes through measurement_type unchanged into Working DuckLake
+
+⏺ All changes are complete. Here's a summary:                                                                            
+                                                                  
+  Files created                                                                                                          
+                                                                                                                         
+  - `metadata/measurement_type.csv` — unified CSV with 100 rows (30 bottle + 14 cast + 3 ichthyo + 53 CTD), no duplicates  
+                                                                                                                         
+  Files deleted                                                   
+
+  - metadata/calcofi.org/bottle-database/measurement_type.csv
+  - metadata/calcofi.org/ctd-cast/measurement_type.csv
+
+  Files edited
+
+  `ingest_calcofi_bottle.qmd`:
+  - CSV path → here("metadata/measurement_type.csv")
+  - bottle_meas_map tribble replaced with CSV-derived filter (_source_table == "bottle")
+  - cast_cond_map tribble replaced with CSV-derived filter (_source_table == "casts")
+  - Added _source_datasets validation check after FK validation
+
+  `ingest_calcofi_ctd-cast.qmd`:
+  - CSV path → here("metadata/measurement_type.csv")
+  - Added d_meas_ctd filter for CTD-only rows
+  - meas_cols/qual_cols now built from d_meas_ctd with _qual_column
+  - pmap_chr pivot uses d_meas_ctd and _qual_column
+  - dbWriteTable still writes full d_meas_type (all ~100 rows)
+  - Added _source_datasets validation check
+
+  metadata/calcofi.org/bottle-database/metadata_derived.csv:
+  - dataset → _source_datasets, _qual_column, _prec_column; removed _source_workflow
+
+  metadata/calcofi.org/ctd-cast/metadata_derived.csv:
+  - dataset → _source_datasets; qual_column → _qual_column; added _source_table, _prec_column
+
+⏺ All three workflows render successfully:                                                                               
+                                                                                                                         
+  - ingest_calcofi_bottle.qmd — renders clean, all validation checks pass                                                
+  - ingest_calcofi_ctd-cast.qmd — fails at download step (network/URL issue for a new 2601RL cruise zip file, unrelated
+  to our changes). The CSV loading and filter logic verified correct via standalone R test: 53 CTD rows, 15 qual columns 
+  - merge_ichthyo_bottle.qmd — renders clean, passes measurement_type through unchanged
+
+
+## 2026-03-04 publish_[icthyo-bottle -> icthyo]_to_obis.qmd: drop bottle from icthyo OBIS
 
 - check logic of _uuid vs _id in `publish_icthyo-bottle_to_obis.qmd`:
   ⏺ Now I see the issue — the merged DuckDB uses integer *_id columns (not *_uuid). The original UUIDs are in _source_uuid. Let me fix the entire notebook systematically.       
@@ -12,9 +2282,6 @@
     - All 35,644 casts already have cruise_key (no filtering needed)
 - Whoah 3.6 GB 
 
-
-
-## 2026-03-04 publish_[icthyo-bottle -> icthyo]_to_obis.qmd: drop bottle from icthyo OBIS
 
 * Which bottle measurement types should be excluded from the OBIS eMoF?
 

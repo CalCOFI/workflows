@@ -254,8 +254,10 @@ This plan modernizes the CalCOFI data workflow architecture to:
 
 | Workflow | Purpose | Status |
 |----------|---------|--------|
-| `ingest_calcofi.org_bottle-database.qmd` | Ingest bottle/cast data | Partial |
-| `ingest_swfsc.noaa.gov_calcofi-db.qmd` | Ingest NOAA ichthyoplankton data | Active |
+| `ingest_swfsc_ichthyo.qmd` | Ingest ichthyo tables + taxonomy → Working DuckLake | Active |
+| `ingest_calcofi_bottle.qmd` | Ingest bottle/cast tables + cruise bridge → Working DuckLake | Active |
+| `ingest_calcofi_ctd-cast.qmd` | Ingest CTD tables → Working DuckLake | Active |
+| `release_database.qmd` | Validate, freeze, and upload release from Working DuckLake | Active |
 | `publish_larvae_to_obis.qmd` | Publish larvae to OBIS | Active (needs bottle data) |
 
 ### Identified Gaps
@@ -1552,14 +1554,13 @@ The final database step combines all ingest outputs into a unified DuckDB.
 
 3. **Update `workflows/_targets.R`** ✅
    - Extended with `ingest_swfsc_manifest` + `ingest_bottle_manifest` file targets
-   - Added `merge_manifest` target that renders `merge_ichthyo_bottle.qmd`
-   - Pipeline: CSV→parquet→DuckDB + manifest-based merge
+   - Pipeline: CSV→parquet→DuckDB + manifest-based integration
 
 4. **Cross-dataset integration (new)** ✅
-   - **Ship matching**: `calcofi4db/R/ship.R` with `match_ships()`, `fetch_ship_ices()`
-   - **Cruise bridge**: Derive `cruise_key` (YYMMKK) from bottle casts via ship_key + datetime
-   - **Taxonomy standardization**: `calcofi4db/R/taxonomy.R` with `standardize_species()`, `build_taxon_table()`
-   - **Grid canonical source**: grid.parquet only from swfsc (removed from bottle export)
+   - **Ship matching**: `calcofi4db/R/ship.R` with `match_ships()`, `fetch_ship_ices()`, `derive_cruise_key_on_casts()`
+   - **Cruise bridge**: Derive `cruise_key` (YYMMKK) from bottle casts via ship_key + datetime (now in `ingest_calcofi_bottle.qmd`)
+   - **Taxonomy standardization**: `calcofi4db/R/taxonomy.R` with `standardize_species_local()`, `build_taxon_hierarchy()` (now in `ingest_swfsc_ichthyo.qmd`)
+   - **Grid canonical source**: grid.parquet only from swfsc (loaded via `load_prior_tables()`)
 
 5. **Update publish workflow** (pending)
    - Modify `publish_larvae_to_obis.qmd` to read from DuckDB
@@ -1576,10 +1577,10 @@ The final database step combines all ingest outputs into a unified DuckDB.
    - `save_working_ducklake()`: Upload to GCS
    - `list_working_tables()`: Table summary with provenance stats
 
-2. **Merge workflow loads all tables** ✅
-   - `merge_ichthyo_bottle.qmd` loads 15+ tables from upstream parquet
-   - Modified tables (casts, species, taxon, taxa_rank) exported separately
-   - Manifest references GCS URIs for unchanged upstream tables
+2. **Each ingest notebook finalizes to Working DuckLake** ✅
+   - `merge_ichthyo_bottle.qmd` eliminated; integration redistributed to ingest notebooks
+   - Each notebook calls `finalize_ingest()` to push tables with provenance
+   - `release_database.qmd` creates frozen release from Working DuckLake
 
 ### Phase 4: Frozen DuckLake ✅ COMPLETE (2026-02-05)
 
@@ -1629,11 +1630,10 @@ cycles; sequential IDs do not.
    - Documented UUID-first approach with rationale
 
 4. **Next steps to update DuckLakes**:
-   - Re-render `ingest_swfsc.noaa.gov_calcofi-db.qmd` (rebuilds wrangling DB + parquet)
-   - Re-render `ingest_calcofi.org_bottle-database.qmd` (no structural changes, optional)
-   - Re-render `merge_ichthyo_bottle.qmd` (picks up new parquet schema)
-   - Upload new parquet outputs to GCS
-   - Create new frozen release (v2026.03 or v2026.02.1)
+   - Re-render `ingest_swfsc_ichthyo.qmd` (rebuilds wrangling DB + parquet + taxonomy + Working DuckLake)
+   - Re-render `ingest_calcofi_bottle.qmd` (bottle tables + cruise bridge + Working DuckLake)
+   - Re-render `ingest_calcofi_ctd-cast.qmd` (CTD tables + Working DuckLake)
+   - Re-render `release_database.qmd` (validate + freeze + upload to GCS)
    - Update `calcofi4r::cc_get_db()` and schema app if needed
 
 ### Phase 5: Documentation & Polish

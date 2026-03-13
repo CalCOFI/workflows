@@ -1,6 +1,6 @@
 # CalCOFI Database Release v2026.03
 
-**Release Date**: 2026-03-06
+**Release Date**: 2026-03-09
 
 ## Tables Included
 
@@ -12,7 +12,7 @@
 - grid (       218 rows)
 - ichthyo (   830,873 rows)
 - lookup (        26 rows)
-- measurement_type (        47 rows)
+- measurement_type (       100 rows)
 - net (    76,512 rows)
 - segment (    60,413 rows)
 - ship (        48 rows)
@@ -25,7 +25,7 @@
 ## Total
 
 - **Tables**: 17
-- **Total Rows**: 13,412,099
+- **Total Rows**: 13,412,152
 - **Total Size**: 90.7 MB
 
 ## Data Sources

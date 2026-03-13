@@ -10,7 +10,7 @@ This workflow converts CalCOFI ichthyoplankton (fish eggs and larvae) data to an
 
 **Note on bottle data**: CalCOFI bottle hydrography (temperature, salinity, dissolved oxygen, nutrients, chlorophyll, carbon system parameters) is not included in this DarwinCore Archive. These environmental data are already served via [ERDDAP CalCOFI SIO Hydrographic Bottle Data](https://coastwatch.pfeg.noaa.gov/erddap/tabledap/siocalcofiHydroBottle.html).
 
-**Data source**: merged DuckDB from `merge_ichthyo_bottle.qmd`, combining:
+**Data source**: Working DuckLake built by `ingest_swfsc_ichthyo.qmd` and `ingest_calcofi_bottle.qmd`, containing:
 
 - SWFSC ichthyoplankton tables (cruise, ship, site, tow, net, ichthyo, species, lookup)
 
@@ -93,10 +93,8 @@ intellectual_rights <- list(
 
 dir_out <- here("data/darwincore/ichthyo")
 
-# get merged duckdb connection ----
-db_path <- here("data/wrangling/merge_ichthyo_bottle.duckdb")
-stopifnot(file.exists(db_path))
-con <- dbConnect(duckdb(), dbdir = db_path, read_only = TRUE)
+# get working ducklake connection ----
+con <- calcofi4db::get_working_ducklake(read_only = TRUE)
 ```
 
 ## Event Hierarchy Design

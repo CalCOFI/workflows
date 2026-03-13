@@ -320,18 +320,18 @@ list(
     format = "file"),
 
   # ═══════════════════════════════════════════════════════════════════════════
-  # MERGE: Combine ichthyo + bottle → Working DuckLake → Frozen Release
+  # RELEASE: Validate Working DuckLake → Frozen Release + GCS upload
   # ═══════════════════════════════════════════════════════════════════════════
 
   tar_target(
-    merge_manifest,
+    release_manifest,
     {
       ingest_swfsc_manifest
       ingest_bottle_manifest
       quarto::quarto_render(
-        here::here("workflows/merge_ichthyo_bottle.qmd"))
+        here::here("workflows/release_database.qmd"))
       here::here(
-        "workflows/data/parquet/merge_ichthyo_bottle/manifest.json")
+        "workflows/data/releases")
     },
     format = "file")
 
