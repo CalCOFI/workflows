@@ -8,7 +8,7 @@ library(glue)
 library(readr)
 options(readr.show_col_types = F)
 
-dir_csv <- "~/My Drive/projects/calcofi/data/swfsc.noaa.gov/calcofi-db"
+dir_csv <- "~/My Drive/projects/calcofi/data/swfsc/ichthyo"
 # - calcofi-db - Google Drive
 #   https://drive.google.com/drive/u/0/folders/13A9yDJCdV0M-lrMLqurzIb3G3ozknr9O
 

@@ -30,7 +30,7 @@ Help me write a new a data workflow plan to manage and version raw data files, a
 
 -   We already have a server on the Google Cloud platform, so thinking of using Google Cloud Storage buckets and a new service account for managing that (rather than AWS S3).
 
--   We already have workflows in @workflows, but there are not yet dependencies built between them. Nor is the sequence anywhere stated. For instance, to build the integrated database thus far requires running first @workflows/ingest_calcofi.org_bottle-database.qmd, then @workflows/ingest_calcofi.org_bottle-database.qmd (once completed). How can these be better organized and developed as a dataset is initially explored, then ingested, then updated?
+-   We already have workflows in @workflows, but there are not yet dependencies built between them. Nor is the sequence anywhere stated. For instance, to build the integrated database thus far requires running first @workflows/ingest_swfsc_ichthyo.qmd, then @workflows/ingest_calcofi_bottle.qmd (once completed). How can these be better organized and developed as a dataset is initially explored, then ingested, then updated?
 
 -   Consider using R package `targets` to manage dependencies between files and workflows, and `pins` for sharing and versioning files.
 
@@ -42,7 +42,7 @@ Help me write a new a data workflow plan to manage and version raw data files, a
 
 -   For now, write this to @workflows/README_PLAN.md. Eventually, a more succinct version will probably be folded into @workflows/README.md, but also looking for suggestions, such as perhaps more appropriate in the R libraries @calcofi4r or @calcofi4db and/or @docs.
 
--   Be sure to include a systematic plan for implementation, including what should be refactored first. Prioritize producing a tidy, clean version of the integrated database with ingestion from: @workflows/ingest_calcofi.org_bottle-database.qmd, @workflows/ingest_calcofi.org_bottle-database.qmd; and output to @workflows/publish_larvae_to_obis.qmdpublish_larvae_to_obis.qmd (which does not yet include the bottle data). Then get this example to work from storing source files in a versioned cloud storage bucket, to referencing these files in the ingest scripts (perhaps with helper functions to get latest cloud version file, given state of Google Drive), producing and uploading parquet files to cloud storage, registering new versions with a DuckLake, and producing helper functions to get latest (or past) versions of the database as relational duckdb with metadata as COMMENTS and foreign keys registered.
+-   Be sure to include a systematic plan for implementation, including what should be refactored first. Prioritize producing a tidy, clean version of the integrated database with ingestion from: @workflows/ingest_swfsc_ichthyo.qmd, @workflows/ingest_calcofi_bottle.qmd; and output to @workflows/publish_larvae_to_obis.qmdpublish_larvae_to_obis.qmd (which does not yet include the bottle data). Then get this example to work from storing source files in a versioned cloud storage bucket, to referencing these files in the ingest scripts (perhaps with helper functions to get latest cloud version file, given state of Google Drive), producing and uploading parquet files to cloud storage, registering new versions with a DuckLake, and producing helper functions to get latest (or past) versions of the database as relational duckdb with metadata as COMMENTS and foreign keys registered.
 -->
 
 > This document outlines a comprehensive strategy for managing and versioning CalCOFI data files, building an integrated database, and publishing datasets to external portals.
@@ -114,7 +114,7 @@ flowchart TB
 
 **How to use it**:
 
-1. Create a folder for your data: `{provider}/{dataset}/` (e.g., `swfsc.noaa.gov/calcofi-db/`)
+1. Create a folder for your data: `{provider}/{dataset}/` (e.g., `swfsc/ichthyo/`)
 2. Inside, organize files into `raw/` (original data) and `derived/` (processed data)
 3. Simply upload or overwrite files—versioning happens automatically
 4. No special naming required (no date prefixes needed)
@@ -122,14 +122,14 @@ flowchart TB
 **Example structure**:
 ```
 data-public/
-├── calcofi.org/
-│   └── bottle-database/
+├── calcofi/
+│   └── bottle/
 │       ├── raw/
 │       │   └── bottle_export_2026-01-15.csv
 │       └── derived/
 │           └── bottle_cleaned.csv
-├── swfsc.noaa.gov/
-│   └── calcofi-db/
+├── swfsc/
+│   └── ichthyo/
 │       ├── raw/
 │       │   ├── larva.csv
 │       │   └── cruise.csv
@@ -293,16 +293,16 @@ This is "**The Drive**" from @sec-overview. Dataset managers upload files here; 
 
 ```
 calcofi/data-public/                       # Shared Google Drive folder (public data)
-├── calcofi.org/
-│   └── bottle-database/
+├── calcofi/
+│   └── bottle/
 │       ├── raw/                           # Original exports from source system
 │       │   └── bottle_export_2026-01.csv
 │       └── derived/                       # Cleaned/processed versions
 │           ├── bottle.csv
 │           ├── cast.csv
 │           └── field_descriptions.csv
-├── swfsc.noaa.gov/
-│   └── calcofi-db/
+├── swfsc/
+│   └── ichthyo/
 │       ├── raw/                           # Original NOAA database exports
 │       │   └── calcofi_db_dump_2026-01.sql
 │       └── derived/                       # Extracted CSV tables
@@ -333,8 +333,8 @@ calcofi/data-private/                      # Private/sensitive data (restricted 
 
 #### Google Drive Naming Conventions
 
-- **Top-level folders**: `{provider}/` - the organization providing the data (e.g., `swfsc.noaa.gov`)
-- **Dataset folders**: `{dataset}/` - specific dataset name (e.g., `calcofi-db`)
+- **Top-level folders**: `{provider}/` - the organization providing the data (e.g., `swfsc`)
+- **Dataset folders**: `{dataset}/` - specific dataset name (e.g., `ichthyo`)
 - **Subfolders** (recommended):
   - `raw/` - Original data as received from source (database dumps, original CSVs)
   - `derived/` - Processed/cleaned versions ready for ingestion
@@ -363,23 +363,23 @@ This is "**The Archive**" from @sec-overview[^datalake-detail]. It automatically
 ```
 gs://calcofi-files-public/                 # Versioned public source files
 ├── _sync/                                 # Working directory (rclone syncs here)
-│   ├── calcofi.org/
-│   │   └── bottle-database/
+│   ├── calcofi/
+│   │   └── bottle/
 │   │       ├── bottle.csv
 │   │       └── cast.csv
-│   └── swfsc.noaa.gov/
-│       └── calcofi-db/
+│   └── swfsc/
+│       └── ichthyo/
 │           ├── cruise.csv
 │           ├── egg.csv
 │           └── ...
 ├── archive/                               # Timestamped immutable snapshots
 │   ├── 2026-02-02_121557/                # YYYY-MM-DD_HHMMSS
-│   │   └── calcofi.org/
-│   │       └── bottle-database/
+│   │   └── calcofi/
+│   │       └── bottle/
 │   │           └── bottle.csv            # Snapshot at that time
 │   ├── 2026-02-15_120000/
-│   │   └── swfsc.noaa.gov/
-│   │       └── calcofi-db/
+│   │   └── swfsc/
+│   │       └── ichthyo/
 │   │           └── larva.csv
 │   └── ...
 └── manifests/                             # Version metadata
@@ -396,14 +396,14 @@ gs://calcofi-files-private/                # Versioned private source files
 
 gs://calcofi-db/                           # Integrated database
 ├── ingest/                                # Per-workflow outputs (intermediate)
-│   ├── swfsc.noaa.gov_calcofi-db/         # Flattened {provider}_{dataset}
+│   ├── swfsc_ichthyo/                     # Flattened {dir_label}
 │   │   ├── cruise.parquet
 │   │   ├── ship.parquet
 │   │   ├── site.parquet
 │   │   ├── ...
 │   │   ├── manifest.json                  # Provenance for this workflow
 │   │   └── metadata.json                  # Table & column metadata sidecar
-│   └── calcofi.org_bottle-database/
+│   └── calcofi_bottle/
 │       ├── cast.parquet
 │       ├── bottle.parquet
 │       ├── manifest.json
@@ -429,14 +429,14 @@ Redefinition files (column/table renaming rules) live in `workflows/metadata/`, 
 
 ```
 workflows/metadata/
-├── swfsc.noaa.gov/
-│   └── calcofi-db/
+├── swfsc/
+│   └── ichthyo/
 │       ├── tbls_redefine.csv              # Table renaming rules
 │       ├── flds_redefine.csv              # Field renaming/typing rules
 │       ├── tbls_raw.csv                   # Auto-generated raw table info
 │       └── flds_raw.csv                   # Auto-generated raw field info
-└── calcofi.org/
-    └── bottle-database/
+└── calcofi/
+    └── bottle/
         ├── flds_rename.csv
         └── ship_renames.csv
 ```
@@ -686,18 +686,18 @@ Each manifest captures the complete state of the archive at a point in time:
   "archive_path": "archive/2026-02-02_121557",
   "files": [
     {
-      "Path": "calcofi.org/bottle-database/bottle.csv",
+      "Path": "calcofi/bottle/bottle.csv",
       "Size": 45234567,
       "ModTime": "2026-02-02T10:30:00Z",
       "MimeType": "text/csv",
-      "gcs_url": "gs://calcofi-files-public/archive/2026-02-02_121557/calcofi.org/bottle-database/bottle.csv"
+      "gcs_url": "gs://calcofi-files-public/archive/2026-02-02_121557/calcofi/bottle/bottle.csv"
     },
     {
-      "Path": "swfsc.noaa.gov/calcofi-db/larva.csv",
+      "Path": "swfsc/ichthyo/larva.csv",
       "Size": 12345678,
       "ModTime": "2026-02-01T08:00:00Z",
       "MimeType": "text/csv",
-      "gcs_url": "gs://calcofi-files-public/archive/2026-02-02_121557/swfsc.noaa.gov/calcofi-db/larva.csv"
+      "gcs_url": "gs://calcofi-files-public/archive/2026-02-02_121557/swfsc/ichthyo/larva.csv"
     }
   ],
   "total_files": 112457,
@@ -963,6 +963,42 @@ segment.segment_id (PK)  ←──  segment.site_uuid_beg, segment.site_uuid_end
 
 **Note**: `grid.parquet` is only exported from the swfsc workflow (canonical source). The bottle workflow no longer exports grid.
 
+### Relationship Metadata (`relationships.json`)
+
+Since standalone parquet files cannot store table relationships natively,
+each ingest notebook produces a `relationships.json` sidecar file that
+records primary keys and foreign keys in a machine-readable format.
+
+**JSON schema:**
+
+```json
+{
+  "schema_version": "1.0",
+  "created_at": "2026-03-13T10:00:00-0700",
+  "provider": "swfsc",
+  "dataset": "ichthyo",
+  "primary_keys": { "cruise": "cruise_key", "ship": "ship_key" },
+  "foreign_keys": [
+    { "table": "cruise", "column": "ship_key",
+      "ref_table": "ship", "ref_column": "ship_key" }
+  ]
+}
+```
+
+**Per-dataset files** are produced by `build_relationships_json()` in each
+ingest notebook (ichthyo, bottle, ctd-cast) and written to
+`data/parquet/{provider}_{dataset}/relationships.json`.
+
+**Merged file** is created by `merge_relationships_json()` in
+`release_database.qmd`, which unions PKs (last-writer-wins for shared
+tables like `measurement_type`), concatenates and deduplicates FKs, and
+adds cross-dataset FKs (e.g. `casts.cruise_key → cruise.cruise_key`).
+The merged file is uploaded alongside parquet files in frozen releases.
+
+**User access** via `calcofi4r::cc_get_dm()` downloads
+`relationships.json` from the release and returns a `dm` object with
+PKs/FKs applied, enabling `dm::dm_draw()` schema visualization.
+
 ### UUID Column Handling
 
 - **Retain** `cruise_uuid`, `site_uuid`, `tow_uuid`, `net_uuid` in all output tables
@@ -1039,7 +1075,7 @@ The Working DuckLake is the **internal, mutable database** used by workflows. It
 -- Find all larvae records from a specific source file
 SELECT scientific_name, count, _source_file, _source_row
 FROM larvae
-WHERE _source_file LIKE '%swfsc.noaa.gov/calcofi-db/larva.csv'
+WHERE _source_file LIKE '%swfsc/ichthyo/larva.csv'
   AND cruise_id = '202301CC';
 ```
 
@@ -1312,66 +1348,45 @@ Create `workflows/_targets.R`:
 
 ```r
 library(targets)
-library(tarchetypes)
 
-tar_option_set(
-  packages = c("calcofi4db", "duckdb", "dplyr", "arrow"),
-  format = "qs"  # Fast serialization
-)
-
-# Config
-DIR_DATA     <- "~/My Drive/projects/calcofi/data-public"
-DIR_METADATA <- "metadata"  # workflows/metadata/
-GCS_BUCKET   <- "calcofi-db"
-
-# Define pipeline
+# define pipeline
 list(
-  # ─── Ingest SWFSC NOAA CalCOFI Database ─────────────────────────
   tar_target(
-    ingest_swfsc,
+    ingest_swfsc_ichthyo,
     {
-      d <- calcofi4db::read_csv_files(
-        provider     = "swfsc.noaa.gov",
-        dataset      = "calcofi-db",
-        dir_data     = DIR_DATA,
-        metadata_dir = DIR_METADATA)
+      quarto::quarto_render("ingest_swfsc_ichthyo.qmd")
+      "data/parquet/swfsc_ichthyo/manifest.json"
+    },
+    format = "file"),
 
-      calcofi4db::write_ingest_outputs(
-        data_info  = d,
-        provider   = "swfsc.noaa.gov",
-        dataset    = "calcofi-db",
-        gcs_bucket = GCS_BUCKET)
-    }),
-
-  # ─── Ingest CalCOFI.org Bottle Database ─────────────────────────
   tar_target(
-    ingest_bottle,
+    ingest_calcofi_bottle,
     {
-      d <- calcofi4db::read_csv_files(
-        provider     = "calcofi.org",
-        dataset      = "bottle-database",
-        dir_data     = DIR_DATA,
-        metadata_dir = DIR_METADATA)
+      ingest_swfsc_ichthyo  # depends on ichthyo (load_prior_tables)
+      quarto::quarto_render("ingest_calcofi_bottle.qmd")
+      "data/parquet/calcofi_bottle/manifest.json"
+    },
+    format = "file"),
 
-      calcofi4db::write_ingest_outputs(
-        data_info  = d,
-        provider   = "calcofi.org",
-        dataset    = "bottle-database",
-        gcs_bucket = GCS_BUCKET)
-    }),
-
-  # ─── Integrate Ingest Outputs into Working DuckLake ──────────────
   tar_target(
-    working_ducklake,
-    calcofi4db::integrate_to_working_ducklake(
-      ingests       = list(ingest_swfsc, ingest_bottle),
-      gcs_bucket    = GCS_BUCKET,
-      ducklake_path = "ducklake/working")),
+    ingest_calcofi_ctd_cast,
+    {
+      ingest_swfsc_ichthyo  # depends on ichthyo (load_prior_tables)
+      quarto::quarto_render("ingest_calcofi_ctd-cast.qmd")
+      "data/parquet/calcofi_ctd-cast/manifest.json"
+    },
+    format = "file"),
 
-  # ─── Publish Datasets ───────────────────────────────────────────
   tar_target(
-    obis_archive,
-    create_obis_archive(database, include_bottle = TRUE))
+    release,
+    {
+      ingest_swfsc_ichthyo
+      ingest_calcofi_bottle
+      ingest_calcofi_ctd_cast
+      quarto::quarto_render("release_database.qmd")
+      here::here("data/releases")
+    },
+    format = "file")
 )
 ```
 
@@ -1423,8 +1438,8 @@ flowchart TB
 
 flowchart LR
     subgraph archive["📁 GCS Archive"]
-        archive_swfsc["swfsc.noaa.gov/<br/>calcofi-db"]
-        archive_bottle["calcofi.org/<br/>bottle-database"]
+        archive_swfsc["swfsc/<br/>ichthyo"]
+        archive_bottle["calcofi/<br/>bottle"]
     end
 
     subgraph ingest["⚙️ Ingest Outputs"]

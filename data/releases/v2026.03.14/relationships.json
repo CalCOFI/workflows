@@ -1,0 +1,129 @@
+{
+  "schema_version": "1.0",
+  "provider": "calcofi",
+  "dataset": "calcofi-db-release",
+  "primary_keys": {
+    "bottle": "bottle_id",
+    "bottle_measurement": "bottle_measurement_id",
+    "cast_condition": "cast_condition_id",
+    "casts": "cast_id",
+    "cruise": "cruise_key",
+    "ctd_cast": "ctd_cast_uuid",
+    "ctd_measurement": "ctd_measurement_uuid",
+    "ctd_summary": "ctd_summary_uuid",
+    "grid": "grid_key",
+    "ichthyo": "ichthyo_uuid",
+    "lookup": "lookup_id",
+    "measurement_type": "measurement_type",
+    "net": "net_uuid",
+    "segment": "segment_id",
+    "ship": "ship_key",
+    "site": "site_uuid",
+    "species": "species_id",
+    "tow": "tow_uuid"
+  },
+  "foreign_keys": [
+    {
+      "table": "bottle_measurement",
+      "column": "bottle_id",
+      "ref_table": "bottle",
+      "ref_column": "bottle_id"
+    },
+    {
+      "table": "bottle",
+      "column": "cast_id",
+      "ref_table": "casts",
+      "ref_column": "cast_id"
+    },
+    {
+      "table": "cast_condition",
+      "column": "cast_id",
+      "ref_table": "casts",
+      "ref_column": "cast_id"
+    },
+    {
+      "table": "site",
+      "column": "cruise_key",
+      "ref_table": "cruise",
+      "ref_column": "cruise_key"
+    },
+    {
+      "table": "segment",
+      "column": "cruise_key",
+      "ref_table": "cruise",
+      "ref_column": "cruise_key"
+    },
+    {
+      "table": "casts",
+      "column": "cruise_key",
+      "ref_table": "cruise",
+      "ref_column": "cruise_key"
+    },
+    {
+      "table": "ctd_measurement",
+      "column": "ctd_cast_uuid",
+      "ref_table": "ctd_cast",
+      "ref_column": "ctd_cast_uuid"
+    },
+    {
+      "table": "site",
+      "column": "grid_key",
+      "ref_table": "grid",
+      "ref_column": "grid_key"
+    },
+    {
+      "table": "casts",
+      "column": "grid_key",
+      "ref_table": "grid",
+      "ref_column": "grid_key"
+    },
+    {
+      "table": "bottle_measurement",
+      "column": "measurement_type",
+      "ref_table": "measurement_type",
+      "ref_column": "measurement_type"
+    },
+    {
+      "table": "cast_condition",
+      "column": "condition_type",
+      "ref_table": "measurement_type",
+      "ref_column": "measurement_type"
+    },
+    {
+      "table": "ichthyo",
+      "column": "net_uuid",
+      "ref_table": "net",
+      "ref_column": "net_uuid"
+    },
+    {
+      "table": "cruise",
+      "column": "ship_key",
+      "ref_table": "ship",
+      "ref_column": "ship_key"
+    },
+    {
+      "table": "casts",
+      "column": "ship_key",
+      "ref_table": "ship",
+      "ref_column": "ship_key"
+    },
+    {
+      "table": "tow",
+      "column": "site_uuid",
+      "ref_table": "site",
+      "ref_column": "site_uuid"
+    },
+    {
+      "table": "ichthyo",
+      "column": "species_id",
+      "ref_table": "species",
+      "ref_column": "species_id"
+    },
+    {
+      "table": "net",
+      "column": "tow_uuid",
+      "ref_table": "tow",
+      "ref_column": "tow_uuid"
+    }
+  ]
+}

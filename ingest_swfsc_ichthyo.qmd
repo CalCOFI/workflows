@@ -83,13 +83,14 @@ options(readr.show_col_types = F)
 options(DT.options = list(scrollX = TRUE))
 
 # define paths
-dataset <- "calcofi-db"
-provider <- "swfsc.noaa.gov"
-dataset_name <- "NOAA CalCOFI Database"
+dataset_name <- "NOAA CalCOFI Ichthyoplankton Database"
+provider <- "swfsc"
+dataset <- "ichthyo"
+dir_label <- glue("{provider}_{dataset}")
 dir_data <- "~/My Drive/projects/calcofi/data-public"
 overwrite <- TRUE
-dir_parquet <- here(glue("data/parquet/{provider}_{dataset}"))
-db_path <- here(glue("data/wrangling/{provider}_{dataset}.duckdb"))
+dir_parquet <- here(glue("data/parquet/{dir_label}"))
+db_path <- here(glue("data/wrangling/{dir_label}.duckdb"))
 
 if (overwrite) {
   if (file_exists(db_path)) {
@@ -1070,7 +1071,7 @@ metadata_path <- build_metadata_json(
   d_tbls_rd = d$d_tbls_rd,
   d_flds_rd = d$d_flds_rd,
   metadata_derived_csv = here(
-    "metadata/swfsc.noaa.gov/calcofi-db/metadata_derived.csv"
+    "metadata/swfsc/ichthyo/metadata_derived.csv"
   ),
   output_dir = dir_parquet,
   tables = dbListTables(con),
@@ -1078,8 +1079,23 @@ metadata_path <- build_metadata_json(
   provider = provider,
   dataset = dataset,
   workflow_url = glue(
-    "https://calcofi.io/workflows/ingest_swfsc.noaa.gov_calcofi-db.html"
+    "https://calcofi.io/workflows/ingest_swfsc_ichthyo.html"
   )
+)
+
+# write relationships.json sidecar with PKs/FKs
+dm_all <- dm_from_con(
+  con,
+  table_names = dbListTables(con),
+  learn_keys = FALSE
+) |>
+  add_cc_keys() |>
+  add_cc_spatial_keys()
+build_relationships_json(
+  dm = dm_all,
+  output_dir = dir_parquet,
+  provider = provider,
+  dataset = dataset
 )
 
 # show metadata summary
@@ -1111,7 +1127,7 @@ Upload parquet files, manifest, and metadata sidecar to `gs://calcofi-db/ingest/
 ```{r}
 #| label: upload_gcs
 
-gcs_ingest_prefix <- glue("ingest/{provider}_{dataset}")
+gcs_ingest_prefix <- glue("ingest/{dir_label}")
 gcs_bucket <- "calcofi-db"
 
 # sync to GCS — only uploads new or changed files
@@ -1135,12 +1151,14 @@ CTEs.
 # MarineSensitivity species DB for local taxonomy lookups
 spp_db_path <- Sys.getenv(
   "SPP_DB_PATH",
-  unset = "/Users/bbest/_big/msens/derived/spp.duckdb")
+  unset = "/Users/bbest/_big/msens/derived/spp.duckdb"
+)
 
 sp_results <- standardize_species_local(
-  con         = con,
+  con = con,
   spp_db_path = spp_db_path,
-  overwrite   = overwrite)
+  overwrite = overwrite
+)
 
 sp_results |>
   datatable(caption = "Species standardization results")
@@ -1150,9 +1168,10 @@ sp_results |>
 #| label: build_taxon
 
 taxon_rows <- build_taxon_hierarchy(
-  con         = con,
+  con = con,
   spp_db_path = spp_db_path,
-  overwrite   = overwrite)
+  overwrite = overwrite
+)
 
 # show taxon stats
 if (nrow(taxon_rows) > 0) {
@@ -1173,15 +1192,29 @@ dbReadTable(con, "taxa_rank") |>
 #| label: taxonomy_stats
 
 n_species <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM species")$n
-n_worms   <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM species WHERE worms_id IS NOT NULL")$n
-n_itis    <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM species WHERE itis_id IS NOT NULL")$n
-n_gbif    <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM species WHERE gbif_id IS NOT NULL")$n
-n_taxon   <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM taxon")$n
+n_worms <- dbGetQuery(
+  con,
+  "SELECT COUNT(*) AS n FROM species WHERE worms_id IS NOT NULL"
+)$n
+n_itis <- dbGetQuery(
+  con,
+  "SELECT COUNT(*) AS n FROM species WHERE itis_id IS NOT NULL"
+)$n
+n_gbif <- dbGetQuery(
+  con,
+  "SELECT COUNT(*) AS n FROM species WHERE gbif_id IS NOT NULL"
+)$n
+n_taxon <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM taxon")$n
 
 tibble(
-  metric = c("total species", "with worms_id", "with itis_id",
-             "with gbif_id", "taxon hierarchy rows"),
-  count  = c(n_species, n_worms, n_itis, n_gbif, n_taxon)
+  metric = c(
+    "total species",
+    "with worms_id",
+    "with itis_id",
+    "with gbif_id",
+    "taxon hierarchy rows"
+  ),
+  count = c(n_species, n_worms, n_itis, n_gbif, n_taxon)
 ) |>
   datatable(caption = "Taxonomy standardization summary")
 ```
@@ -1198,14 +1231,22 @@ the updated species table (now with worms_id, itis_id, gbif_id).
 modified_tables <- c("species", "taxon", "taxa_rank")
 for (tbl in modified_tables) {
   pqt_path <- file.path(dir_parquet, paste0(tbl, ".parquet"))
-  cols <- DBI::dbGetQuery(con, glue(
-    "SELECT column_name FROM information_schema.columns
-     WHERE table_name = '{tbl}'"))$column_name
-  prov_cols   <- c("_source_file", "_source_row", "_source_uuid", "_ingested_at")
+  cols <- DBI::dbGetQuery(
+    con,
+    glue(
+      "SELECT column_name FROM information_schema.columns
+     WHERE table_name = '{tbl}'"
+    )
+  )$column_name
+  prov_cols <- c("_source_file", "_source_row", "_source_uuid", "_ingested_at")
   export_cols <- setdiff(cols, prov_cols)
-  DBI::dbExecute(con, glue(
-    "COPY (SELECT {paste(export_cols, collapse = ', ')} FROM {tbl})
-     TO '{pqt_path}' (FORMAT PARQUET, COMPRESSION 'snappy')"))
+  DBI::dbExecute(
+    con,
+    glue(
+      "COPY (SELECT {paste(export_cols, collapse = ', ')} FROM {tbl})
+     TO '{pqt_path}' (FORMAT PARQUET, COMPRESSION 'snappy')"
+    )
+  )
   message(glue("Re-exported {tbl}.parquet"))
 }
 
@@ -1214,26 +1255,15 @@ manifest_path <- file.path(dir_parquet, "manifest.json")
 if (file.exists(manifest_path)) {
   manifest <- jsonlite::fromJSON(manifest_path)
   new_tables <- unique(c(manifest$tables, modified_tables))
-  manifest$tables     <- new_tables
-  manifest$updated_at <- as.character(Sys.time())
-  jsonlite::write_json(manifest, manifest_path, auto_unbox = TRUE, pretty = TRUE)
+  manifest$tables <- new_tables
+  jsonlite::write_json(
+    manifest,
+    manifest_path,
+    auto_unbox = TRUE,
+    pretty = TRUE
+  )
   message(glue("Updated manifest: {length(new_tables)} tables"))
 }
-```
-
-## Finalize — Ingest to Working DuckLake
-
-Push all parquet tables to the Working DuckLake with provenance tracking.
-
-```{r}
-#| label: finalize_ingest
-
-wdl_stats <- finalize_ingest(
-  parquet_dir  = dir_parquet,
-  source_label = glue("{provider}_{dataset}"))
-
-wdl_stats |>
-  datatable(caption = "Working DuckLake ingestion stats")
 ```
 
 ## Cleanup
@@ -1245,7 +1275,7 @@ wdl_stats |>
 close_duckdb(con)
 message("Local wrangling database connection closed")
 
-# note: parquet outputs are in data/parquet/swfsc.noaa.gov_calcofi-db/
+# note: parquet outputs are in data/parquet/swfsc_ichthyo/
 # these can be used to update the Working DuckLake in a separate workflow
 message(glue("Parquet outputs written to: {dir_parquet}"))
 message(glue("GCS outputs at: gs://{gcs_bucket}/{gcs_ingest_prefix}/"))

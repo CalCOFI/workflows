@@ -78,14 +78,15 @@ options(readr.show_col_types = F)
 options(DT.options = list(scrollX = TRUE))
 
 # define paths
-provider <- "calcofi.org"
-dataset <- "bottle-database"
 dataset_name <- "CalCOFI Bottle Database"
+provider <- "calcofi"
+dataset <- "bottle"
+dir_label <- glue("{provider}_{dataset}")
 dir_data <- "~/My Drive/projects/calcofi/data-public"
 subdir <- "CalCOFI_Database_194903-202105_csv_16October2023"
 overwrite <- TRUE
-dir_parquet <- here(glue("data/parquet/{provider}_{dataset}"))
-db_path <- here(glue("data/wrangling/{provider}_{dataset}.duckdb"))
+dir_parquet <- here(glue("data/parquet/{dir_label}"))
+db_path <- here(glue("data/wrangling/{dir_label}.duckdb"))
 
 if (overwrite) {
   if (file_exists(db_path)) {
@@ -99,7 +100,7 @@ con <- get_duckdb_con(db_path)
 
 # load unified measurement_type reference (needed for pivot mappings)
 meas_type_csv <- here("metadata/measurement_type.csv")
-d_meas_type   <- read_csv(meas_type_csv)
+d_meas_type <- read_csv(meas_type_csv)
 load_duckdb_extension(con, "spatial")
 
 # load data using calcofi4db package
@@ -220,7 +221,7 @@ Apply known ship name/code corrections from `ship_renames.csv`.
 #| label: apply_ship_corrections
 
 ship_renames_csv <- here(
-  "metadata/calcofi.org/bottle-database/ship_renames.csv"
+  "metadata/calcofi/bottle/ship_renames.csv"
 )
 d_ship_renames <- read_csv(ship_renames_csv)
 
@@ -873,9 +874,10 @@ truth — grid is created in `ingest_swfsc_ichthyo.qmd`).
 #| label: load_grid
 
 load_prior_tables(
-  con         = con,
-  tables      = "grid",
-  parquet_dir = here("data/parquet/swfsc.noaa.gov_calcofi-db"))
+  con = con,
+  tables = "grid",
+  parquet_dir = here("data/parquet/swfsc_ichthyo")
+)
 ```
 
 ### Update `casts.grid_key`
@@ -1132,7 +1134,7 @@ metadata_path <- build_metadata_json(
   d_tbls_rd = d$d_tbls_rd,
   d_flds_rd = d$d_flds_rd,
   metadata_derived_csv = here(
-    "metadata/calcofi.org/bottle-database/metadata_derived.csv"
+    "metadata/calcofi/bottle/metadata_derived.csv"
   ),
   output_dir = dir_parquet,
   tables = db_tables(con),
@@ -1141,8 +1143,22 @@ metadata_path <- build_metadata_json(
   dataset = dataset,
   workflow_url = glue(
     "https://calcofi.io/workflows/",
-    "ingest_calcofi.org_bottle-database.html"
+    "ingest_calcofi_bottle.html"
   )
+)
+
+# write relationships.json sidecar with PKs/FKs
+dm_bottle <- dm_from_con(
+  con,
+  table_names = db_tables(con),
+  learn_keys = FALSE
+) |>
+  add_bottle_keys()
+build_relationships_json(
+  dm = dm_bottle,
+  output_dir = dir_parquet,
+  provider = provider,
+  dataset = dataset
 )
 
 # show metadata summary
@@ -1175,7 +1191,7 @@ Upload parquet files, manifest, and metadata sidecar to
 ```{r}
 #| label: upload_gcs
 
-gcs_ingest_prefix <- glue("ingest/{provider}_{dataset}")
+gcs_ingest_prefix <- glue("ingest/{dir_label}")
 gcs_bucket <- "calcofi-db"
 
 # list local files to upload (parquet + json sidecars)
@@ -1207,9 +1223,10 @@ workflow step.
 
 # load ship and cruise from ichthyo workflow
 load_prior_tables(
-  con         = con,
-  tables      = c("ship", "cruise"),
-  parquet_dir = here("data/parquet/swfsc.noaa.gov_calcofi-db"))
+  con = con,
+  tables = c("ship", "cruise"),
+  parquet_dir = here("data/parquet/swfsc_ichthyo")
+)
 ```
 
 ### Ship Matching + Cruise Bridge
@@ -1217,12 +1234,15 @@ load_prior_tables(
 ```{r}
 #| label: derive_cruise_key
 
-ship_renames_csv <- here("metadata/calcofi.org/bottle-database/ship_renames.csv")
+ship_renames_csv <- here(
+  "metadata/calcofi/bottle/ship_renames.csv"
+)
 
 bridge_result <- derive_cruise_key_on_casts(
-  con              = con,
+  con = con,
   ship_renames_csv = ship_renames_csv,
-  fetch_ices       = TRUE)
+  fetch_ices = TRUE
+)
 
 bridge_result$ship_matches |>
   datatable(caption = "Ship matching results")
@@ -1260,38 +1280,49 @@ if (nrow(bridge_result$unmatched_report) > 0) {
 #| label: cross_validate
 
 # grid_key integrity: casts.grid_key should all be in grid.grid_key
-if ("grid_key" %in% dbListFields(con, "casts") &&
-    "grid_key" %in% dbListFields(con, "grid")) {
-  grid_orphans <- dbGetQuery(con,
+if (
+  "grid_key" %in%
+    dbListFields(con, "casts") &&
+    "grid_key" %in% dbListFields(con, "grid")
+) {
+  grid_orphans <- dbGetQuery(
+    con,
     "SELECT COUNT(*) AS n FROM casts c
      WHERE c.grid_key IS NOT NULL
-       AND c.grid_key NOT IN (SELECT grid_key FROM grid)")$n
+       AND c.grid_key NOT IN (SELECT grid_key FROM grid)"
+  )$n
   message(glue("Grid key orphans in casts: {grid_orphans}"))
 }
 
 # ship PK uniqueness
-ship_dups <- dbGetQuery(con,
+ship_dups <- dbGetQuery(
+  con,
   "SELECT ship_key, COUNT(*) AS n FROM ship
-   GROUP BY ship_key HAVING COUNT(*) > 1")
+   GROUP BY ship_key HAVING COUNT(*) > 1"
+)
 if (nrow(ship_dups) > 0) {
   warning(glue("Duplicate ship_key values: {nrow(ship_dups)}"))
 }
 
 # cruise PK uniqueness
-cruise_dups <- dbGetQuery(con,
+cruise_dups <- dbGetQuery(
+  con,
   "SELECT cruise_key, COUNT(*) AS n FROM cruise
-   GROUP BY cruise_key HAVING COUNT(*) > 1")
+   GROUP BY cruise_key HAVING COUNT(*) > 1"
+)
 if (nrow(cruise_dups) > 0) {
   warning(glue("Duplicate cruise_key values: {nrow(cruise_dups)}"))
 }
 
 # cruise bridge coverage
-bridge_coverage <- dbGetQuery(con,
+bridge_coverage <- dbGetQuery(
+  con,
   "SELECT
     COUNT(*) AS total_casts,
     SUM(CASE WHEN ship_key IS NOT NULL THEN 1 ELSE 0 END) AS with_ship_key,
     SUM(CASE WHEN cruise_key IS NOT NULL THEN 1 ELSE 0 END) AS with_cruise_key
-  FROM casts")
+  FROM casts"
+)
 bridge_coverage |> datatable(caption = "Cruise bridge coverage")
 
 message("Cross-dataset validation complete")
@@ -1306,30 +1337,23 @@ Update casts.parquet with the new ship_key and cruise_key columns.
 
 # re-export casts parquet (now includes ship_key, cruise_key)
 casts_pqt <- file.path(dir_parquet, "casts.parquet")
-cols <- DBI::dbGetQuery(con, glue(
-  "SELECT column_name FROM information_schema.columns
-   WHERE table_name = 'casts'"))$column_name
-prov_cols   <- c("_source_file", "_source_row", "_source_uuid", "_ingested_at")
+cols <- DBI::dbGetQuery(
+  con,
+  glue(
+    "SELECT column_name FROM information_schema.columns
+   WHERE table_name = 'casts'"
+  )
+)$column_name
+prov_cols <- c("_source_file", "_source_row", "_source_uuid", "_ingested_at")
 export_cols <- setdiff(cols, prov_cols)
-DBI::dbExecute(con, glue(
-  "COPY (SELECT {paste(export_cols, collapse = ', ')} FROM casts)
-   TO '{casts_pqt}' (FORMAT PARQUET, COMPRESSION 'snappy')"))
+DBI::dbExecute(
+  con,
+  glue(
+    "COPY (SELECT {paste(export_cols, collapse = ', ')} FROM casts)
+   TO '{casts_pqt}' (FORMAT PARQUET, COMPRESSION 'snappy')"
+  )
+)
 message("Re-exported casts.parquet with ship_key + cruise_key")
-```
-
-## Finalize — Ingest to Working DuckLake
-
-Push all parquet tables to the Working DuckLake with provenance tracking.
-
-```{r}
-#| label: finalize_ingest
-
-wdl_stats <- finalize_ingest(
-  parquet_dir  = dir_parquet,
-  source_label = glue("{provider}_{dataset}"))
-
-wdl_stats |>
-  datatable(caption = "Working DuckLake ingestion stats")
 ```
 
 ## Cleanup
@@ -1341,7 +1365,7 @@ wdl_stats |>
 close_duckdb(con)
 message("Local wrangling database connection closed")
 
-# note: parquet outputs are in data/parquet/calcofi.org_bottle-database/
+# note: parquet outputs are in data/parquet/calcofi_bottle/
 # these can be used to update the Working DuckLake in a separate workflow
 message(glue("Parquet outputs written to: {dir_parquet}"))
 message(glue("GCS outputs at: gs://{gcs_bucket}/{gcs_ingest_prefix}/"))
@@ -1353,7 +1377,7 @@ message(glue("GCS outputs at: gs://{gcs_bucket}/{gcs_ingest_prefix}/"))
 - [x] Pivot longer casts/bottle tables for easier analysis. Created bottle_measurement (value/prec/qual) and cast_condition tables, plus measurement_type reference.
 - [x] Consolidate casts temporal columns (date+time -> datetime_utc), drop 16 derivable columns, create casts_derived VIEW.
 
-- [ ] Link possible fields to @workflows/ingest_swfsc.noaa.gov_calcofi-db.qmd. Flag mismatches.
+- [ ] Link possible fields to @workflows/ingest_swfsc_ichthyo.qmd. Flag mismatches.
 - [x] Cruise bridge prep: renamed `Cruise_ID` → `cruise_key_0` (was `cruise_key`) to avoid collision with SWFSC `cruise_key` (YYMMKK). Merge workflow adds `cruise_key` as new column derived from `datetime_utc` + `ship_key`.
 - [ ] Validate casts.ship_code -> ship.ship_nodc FK after integration with swfsc data.
 

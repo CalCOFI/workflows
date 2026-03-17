@@ -1,0 +1,219 @@
+---
+title: "Publish {{dataset_name}} to EDI"
+editor_options:
+  chunk_output_type: console
+---
+
+## Overview
+
+Publish **{{dataset_name}}** to the Environmental Data Initiative (EDI) as an EML data package.
+
+- **Source ingest**: `{{source_ingest}}`
+- **Portal**: EDI (https://portal.edirepository.org)
+- **Format**: EML + CSV data tables
+
+## Setup
+
+```{r}
+#| label: setup
+
+devtools::load_all(here::here("../calcofi4db"))
+devtools::load_all(here::here("../calcofi4r"))
+librarian::shelf(
+  CalCOFI/calcofi4db,
+  CalCOFI/calcofi4r,
+  DBI, dplyr, DT, EML, fs, glue,
+  here, lubridate, readr, stringr,
+  tibble, tidyr,
+  quiet = T)
+options(readr.show_col_types = F)
+
+# output paths
+dataset  <- "{{dataset}}"
+dir_edi  <- here(glue("data/edi/{dataset}"))
+dir_create(dir_edi)
+```
+
+## Load Source Data
+
+```{r}
+#| label: load-data
+
+# load from release parquet
+con <- get_duckdb_con(":memory:")
+load_prior_tables(
+  con,
+  parquet_dir = here("data/parquet/{{source_ingest}}"),
+  geom_tables = c("grid", "site"))
+
+dbListTables(con)
+```
+
+## Prepare Data Tables
+
+```{r}
+#| label: TODO-prepare-data
+
+# TODO: extract and format data tables for EDI distribution
+# - clean column names (no special characters)
+# - UTF-8 encoding
+# - dates in ISO 8601 format
+# - missing values as empty strings or NA
+
+# d_table1 <- dbGetQuery(con, "SELECT ... FROM ...")
+# d_table2 <- dbGetQuery(con, "SELECT ... FROM ...")
+
+# write_csv(d_table1, path(dir_edi, "{{dataset}}_data.csv"))
+# write_csv(d_table2, path(dir_edi, "{{dataset}}_stations.csv"))
+```
+
+## Build EML Metadata
+
+```{r}
+#| label: TODO-eml
+
+# TODO: build EML metadata using the EML R package
+# reference: https://docs.ropensci.org/EML/
+
+# define people ----
+# creator <- eml$creator(
+#   individualName = eml$individualName(
+#     givenName = "...",
+#     surName   = "..."),
+#   organizationName = "CalCOFI",
+#   electronicMailAddress = "...")
+
+# contact <- eml$contact(
+#   individualName = eml$individualName(
+#     givenName = "...",
+#     surName   = "..."),
+#   organizationName = "CalCOFI",
+#   electronicMailAddress = "calcofi@ucsd.edu")
+
+# define coverage ----
+# geographic <- eml$geographicCoverage(
+#   geographicDescription = "CalCOFI sampling grid, Southern California Current System",
+#   boundingCoordinates = eml$boundingCoordinates(
+#     westBoundingCoordinate  = -135,
+#     eastBoundingCoordinate  = -117,
+#     northBoundingCoordinate = 51,
+#     southBoundingCoordinate = 23))
+
+# temporal <- eml$temporalCoverage(
+#   rangeOfDates = eml$rangeOfDates(
+#     beginDate = eml$beginDate(calendarDate = "..."),
+#     endDate   = eml$endDate(calendarDate = "...")))
+
+# taxonomic <- eml$taxonomicCoverage(
+#   taxonomicClassification = list(
+#     eml$taxonomicClassification(
+#       taxonRankName  = "Kingdom",
+#       taxonRankValue = "Animalia",
+#       taxonomicClassification = list(...)
+#     )
+#   ))
+
+# define data table attributes ----
+# attributes_table1 <- data.frame(
+#   attributeName        = c("column1", "column2", ...),
+#   attributeDefinition  = c("description1", "description2", ...),
+#   measurementScale     = c("ratio", "nominal", ...),
+#   domain               = c("numericDomain", "textDomain", ...),
+#   unit                 = c("meter", NA, ...),
+#   numberType           = c("real", NA, ...),
+#   definition           = c(NA, "text definition", ...),
+#   formatString         = c(NA, NA, ...),
+#   stringsAsFactors     = FALSE
+# )
+
+# build data table ----
+# dataTable1 <- eml$dataTable(
+#   entityName        = "{{dataset}}_data.csv",
+#   entityDescription = "...",
+#   physical = eml$physical(
+#     objectName     = "{{dataset}}_data.csv",
+#     size           = file_size(path(dir_edi, "{{dataset}}_data.csv")),
+#     dataFormat     = eml$dataFormat(
+#       textFormat = eml$textFormat(
+#         numHeaderLines = 1,
+#         recordDelimiter = "\\n",
+#         attributeOrientation = "column",
+#         simpleDelimited = eml$simpleDelimited(fieldDelimiter = ",")))),
+#   attributeList = eml$attributeList(attribute = attributes_table1))
+
+# assemble EML ----
+# eml_doc <- eml$eml(
+#   packageId = "edi.xxx.1",
+#   system    = "https://pasta.lternet.edu",
+#   dataset   = eml$dataset(
+#     title    = "{{dataset_name}}",
+#     creator  = creator,
+#     contact  = contact,
+#     abstract = eml$abstract(para = "..."),
+#     keywordSet = eml$keywordSet(keyword = c("CalCOFI", "{{dataset}}", "oceanography")),
+#     coverage = eml$coverage(
+#       geographicCoverage = geographic,
+#       temporalCoverage   = temporal,
+#       taxonomicCoverage  = taxonomic),
+#     methods  = eml$methods(
+#       methodStep = eml$methodStep(
+#         description = eml$description(para = "..."))),
+#     dataTable = list(dataTable1),
+#     intellectualRights = eml$intellectualRights(
+#       para = "This data package is released under the Creative Commons Attribution 4.0 International License (CC BY 4.0)."
+#     )
+#   ))
+```
+
+## Validate EML
+
+```{r}
+#| label: TODO-validate-eml
+
+# eml_validate(eml_doc)
+# write_eml(eml_doc, path(dir_edi, "eml.xml"))
+```
+
+## Create Data Package
+
+```{r}
+#| label: TODO-package
+
+# zip_path <- path(dir_edi, glue("{dataset}_edi_package.zip"))
+# zip_files <- list.files(dir_edi, pattern = "\\.(csv|xml)$")
+# withr::with_dir(dir_edi, zip(zip_path, zip_files))
+# cat("EDI package created:", zip_path, "\n")
+```
+
+## Upload to EDI Staging (Optional)
+
+```{r}
+#| label: TODO-upload-edi
+
+# TODO: upload to EDI staging environment via API
+# requires EDI credentials
+#
+# librarian::shelf(EDIutils, quiet = T)
+# login()
+# create_data_package(
+#   eml      = path(dir_edi, "eml.xml"),
+#   env      = "staging",
+#   user_id  = "...",
+#   user_key = "...")
+```
+
+## Upload to GCS
+
+```{r}
+#| label: upload-gcs
+
+# sync_to_gcs(dir_edi, glue("publish/{dataset}_edi"))
+```
+
+## Cleanup
+
+```{r}
+#| label: cleanup
+
+dbDisconnect(con, shutdown = TRUE)
+```
