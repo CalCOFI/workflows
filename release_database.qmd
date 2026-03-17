@@ -16,8 +16,8 @@ editor:
 ## Overview {.unnumbered}
 
 **Goal**: Create a frozen (immutable) release of the CalCOFI integrated
-database from the Working DuckLake. This is the "caboose" notebook that
-always runs last, after all ingest notebooks complete.
+database by assembling all ingest parquet outputs. This is the "caboose"
+notebook that always runs last, after all ingest notebooks complete.
 
 **Upstream notebooks** (must complete first):
 
@@ -27,7 +27,7 @@ always runs last, after all ingest notebooks complete.
 
 ```{mermaid}
 %%| label: fig-workflow
-%%| fig-cap: "Pipeline: ingest notebooks build Working DuckLake → release caboose creates frozen release"
+%%| fig-cap: "Pipeline: ingest notebooks produce parquet → release caboose assembles frozen release"
 
 flowchart LR
     subgraph ingest["Ingest Notebooks"]
@@ -35,19 +35,19 @@ flowchart LR
         i2["bottle<br/>5 tables"]
         i3["ctd-cast<br/>4 tables"]
     end
-    subgraph wdl["Working DuckLake"]
-        w["~21 tables<br/>with provenance"]
+    subgraph assembly["Assembly (this notebook)"]
+        a["Load all parquet<br/>into in-memory DuckDB"]
     end
     subgraph release["Frozen Release"]
         f["Clean parquet<br/>+ catalog.json"]
     end
-    i1 --> w
-    i2 --> w
-    i3 --> w
-    w --> f
+    i1 --> a
+    i2 --> a
+    i3 --> a
+    a --> f
 
     style ingest fill:#e3f2fd,stroke:#1565c0
-    style wdl fill:#fff3e0,stroke:#ef6c00
+    style assembly fill:#fff3e0,stroke:#ef6c00
     style release fill:#e8f4e8,stroke:#2e7d32
 ```
 
@@ -57,6 +57,7 @@ flowchart LR
 #| label: setup
 
 devtools::load_all(here::here("../calcofi4db"))
+# cleanup_gcs_obsolete(dry_run = F)
 librarian::shelf(
   CalCOFI / calcofi4db,
   DBI,
@@ -74,21 +75,35 @@ librarian::shelf(
 options(DT.options = list(scrollX = TRUE))
 
 # release version
-release_version <- format(Sys.Date(), "v%Y.%m")
+release_version <- format(Sys.Date(), "v%Y.%m.%d")
 message(glue("Release version: {release_version}"))
 ```
 
-## Open Working DuckLake
+## Assemble from Ingest Outputs
+
+Load all per-dataset parquet outputs into an in-memory DuckDB. Each
+ingest notebook writes parquet to `data/parquet/{dataset}/` and uploads
+to `gs://calcofi-db/ingest/{dataset}/`.
 
 ```{r}
-#| label: open_working
+#| label: assemble_working
 
-con_wdl <- get_working_ducklake()
+con_wdl <- get_duckdb_con(":memory:")
 load_duckdb_extension(con_wdl, "spatial")
 
-working_tables <- list_working_tables(con_wdl)
-working_tables |>
-  datatable(caption = "Working DuckLake tables with provenance")
+# load all ingest parquet outputs into one DuckDB
+parquet_dirs <- c(
+  here("data/parquet/swfsc_ichthyo"),
+  here("data/parquet/calcofi_bottle"),
+  here("data/parquet/calcofi_ctd-cast")
+)
+
+load_stats <- purrr::map_dfr(parquet_dirs, function(pd) {
+  load_prior_tables(con = con_wdl, parquet_dir = pd)
+})
+
+load_stats |>
+  datatable(caption = "Assembled tables from ingest parquet outputs")
 ```
 
 ## Validate
@@ -102,21 +117,28 @@ Cross-dataset validation to ensure data integrity before freezing.
 tbls <- DBI::dbListTables(con_wdl)
 
 if (all(c("casts", "grid") %in% tbls)) {
-  if ("grid_key" %in% DBI::dbListFields(con_wdl, "casts") &&
-      "grid_key" %in% DBI::dbListFields(con_wdl, "grid")) {
-    grid_orphans <- dbGetQuery(con_wdl,
+  if (
+    "grid_key" %in%
+      DBI::dbListFields(con_wdl, "casts") &&
+      "grid_key" %in% DBI::dbListFields(con_wdl, "grid")
+  ) {
+    grid_orphans <- dbGetQuery(
+      con_wdl,
       "SELECT COUNT(*) AS n FROM casts c
        WHERE c.grid_key IS NOT NULL
-         AND c.grid_key NOT IN (SELECT grid_key FROM grid)")$n
+         AND c.grid_key NOT IN (SELECT grid_key FROM grid)"
+    )$n
     message(glue("Grid key orphans in casts: {grid_orphans}"))
   }
 }
 
 # ship PK uniqueness
 if ("ship" %in% tbls) {
-  ship_dups <- dbGetQuery(con_wdl,
+  ship_dups <- dbGetQuery(
+    con_wdl,
     "SELECT ship_key, COUNT(*) AS n FROM ship
-     GROUP BY ship_key HAVING COUNT(*) > 1")
+     GROUP BY ship_key HAVING COUNT(*) > 1"
+  )
   if (nrow(ship_dups) > 0) {
     warning(glue("Duplicate ship_key values: {nrow(ship_dups)}"))
   } else {
@@ -126,9 +148,11 @@ if ("ship" %in% tbls) {
 
 # cruise PK uniqueness
 if ("cruise" %in% tbls) {
-  cruise_dups <- dbGetQuery(con_wdl,
+  cruise_dups <- dbGetQuery(
+    con_wdl,
     "SELECT cruise_key, COUNT(*) AS n FROM cruise
-     GROUP BY cruise_key HAVING COUNT(*) > 1")
+     GROUP BY cruise_key HAVING COUNT(*) > 1"
+  )
   if (nrow(cruise_dups) > 0) {
     warning(glue("Duplicate cruise_key values: {nrow(cruise_dups)}"))
   } else {
@@ -138,12 +162,14 @@ if ("cruise" %in% tbls) {
 
 # cruise bridge coverage
 if ("casts" %in% tbls) {
-  bridge_stats <- dbGetQuery(con_wdl,
+  bridge_stats <- dbGetQuery(
+    con_wdl,
     "SELECT
       COUNT(*) AS total_casts,
       SUM(CASE WHEN ship_key IS NOT NULL THEN 1 ELSE 0 END) AS with_ship_key,
       SUM(CASE WHEN cruise_key IS NOT NULL THEN 1 ELSE 0 END) AS with_cruise_key
-    FROM casts")
+    FROM casts"
+  )
   bridge_stats |> datatable(caption = "Cruise bridge coverage")
 }
 
@@ -168,25 +194,86 @@ if (validation$passed) {
 schema_tbls <- setdiff(tbls, c("_meta", "_sp_update"))
 # exclude views
 schema_tbls <- schema_tbls[
-  !schema_tbls %in% c("casts_derived", "ctd_cast_derived")]
+  !schema_tbls %in% c("casts_derived", "ctd_cast_derived")
+]
 
 d <- dm::dm_from_con(con_wdl, table_names = schema_tbls, learn_keys = FALSE)
 
-# set table colors by group
-ichthyo_tbls <- intersect(c("cruise", "ship", "site", "tow", "net"), schema_tbls)
-species_tbls <- intersect(c("ichthyo", "species", "lookup", "taxon", "taxa_rank"), schema_tbls)
-spatial_tbls <- intersect(c("grid", "segment"), schema_tbls)
-bottle_tbls  <- intersect(
-  c("casts", "bottle", "bottle_measurement", "cast_condition", "measurement_type"),
-  schema_tbls)
-ctd_tbls <- intersect(
-  c("ctd_cast", "ctd_measurement", "ctd_summary"), schema_tbls)
+# merge per-dataset relationships.json files
+rels_paths <- c(
+  here("data/parquet/swfsc_ichthyo/relationships.json"),
+  here("data/parquet/calcofi_bottle/relationships.json"),
+  here("data/parquet/calcofi_ctd-cast/relationships.json")
+)
+rels_paths <- rels_paths[file.exists(rels_paths)]
 
-if (length(ichthyo_tbls) > 0) d <- d |> dm::dm_set_colors(lightblue    = !!ichthyo_tbls)
-if (length(species_tbls) > 0) d <- d |> dm::dm_set_colors(lightyellow   = !!species_tbls)
-if (length(spatial_tbls) > 0) d <- d |> dm::dm_set_colors(lightgreen    = !!spatial_tbls)
-if (length(bottle_tbls)  > 0) d <- d |> dm::dm_set_colors(pink          = !!bottle_tbls)
-if (length(ctd_tbls)     > 0) d <- d |> dm::dm_set_colors(lavender      = !!ctd_tbls)
+dir_frozen <- here(glue("data/releases/{release_version}"))
+dir.create(dir_frozen, recursive = TRUE, showWarnings = FALSE)
+rels_merged_path <- file.path(dir_frozen, "relationships.json")
+
+if (length(rels_paths) > 0) {
+  merge_relationships_json(rels_paths, rels_merged_path)
+
+  # apply merged PKs/FKs to dm
+  d <- read_relationships_json(rels_merged_path, dm = d)
+
+  # add cross-dataset FKs (bottle casts → ichthyo cruise/ship)
+  d <- tryCatch(
+    dm::dm_add_fk(d, casts, cruise_key, cruise),
+    error = function(e) d
+  )
+  d <- tryCatch(dm::dm_add_fk(d, casts, ship_key, ship), error = function(e) d)
+  d <- tryCatch(dm::dm_add_fk(d, casts, grid_key, grid), error = function(e) d)
+
+  # re-write merged file with cross-dataset FKs included
+  build_relationships_json(
+    dm = d,
+    output_dir = dir_frozen,
+    provider = "calcofi",
+    dataset = "calcofi-db-release"
+  )
+}
+
+# set table colors by group
+ichthyo_tbls <- intersect(
+  c("cruise", "ship", "site", "tow", "net"),
+  schema_tbls
+)
+species_tbls <- intersect(
+  c("ichthyo", "species", "lookup", "taxon", "taxa_rank"),
+  schema_tbls
+)
+spatial_tbls <- intersect(c("grid", "segment"), schema_tbls)
+bottle_tbls <- intersect(
+  c(
+    "casts",
+    "bottle",
+    "bottle_measurement",
+    "cast_condition",
+    "measurement_type"
+  ),
+  schema_tbls
+)
+ctd_tbls <- intersect(
+  c("ctd_cast", "ctd_measurement", "ctd_summary"),
+  schema_tbls
+)
+
+if (length(ichthyo_tbls) > 0) {
+  d <- d |> dm::dm_set_colors(lightblue = !!ichthyo_tbls)
+}
+if (length(species_tbls) > 0) {
+  d <- d |> dm::dm_set_colors(lightyellow = !!species_tbls)
+}
+if (length(spatial_tbls) > 0) {
+  d <- d |> dm::dm_set_colors(lightgreen = !!spatial_tbls)
+}
+if (length(bottle_tbls) > 0) {
+  d <- d |> dm::dm_set_colors(pink = !!bottle_tbls)
+}
+if (length(ctd_tbls) > 0) {
+  d <- d |> dm::dm_set_colors(lavender = !!ctd_tbls)
+}
 
 dm::dm_draw(d, rankdir = "LR", view_type = "all")
 ```
@@ -210,14 +297,16 @@ tables_to_freeze <- schema_tbls
 # create frozen parquet (strips provenance)
 # partition large tables by cruise_key for efficient reads
 freeze_stats <- write_parquet_outputs(
-  con              = con_wdl,
-  output_dir       = file.path(dir_frozen, "parquet"),
-  tables           = tables_to_freeze,
-  partition_by     = list(
+  con = con_wdl,
+  output_dir = file.path(dir_frozen, "parquet"),
+  tables = tables_to_freeze,
+  partition_by = list(
     ctd_measurement = "cruise_key",
-    ctd_summary     = "cruise_key"),
+    ctd_summary = "cruise_key"
+  ),
   strip_provenance = TRUE,
-  compression      = "zstd")
+  compression = "zstd"
+)
 
 freeze_stats |>
   datatable(caption = glue("Frozen release {release_version} statistics"))
@@ -231,19 +320,33 @@ freeze_stats |>
 
 # build release notes
 tables_list <- paste0(
-  "- ", freeze_stats$table,
-  " (", format(freeze_stats$rows, big.mark = ","), " rows)")
+  "- ",
+  freeze_stats$table,
+  " (",
+  format(freeze_stats$rows, big.mark = ","),
+  " rows)"
+)
 
 release_notes <- paste0(
-  "# CalCOFI Database Release ", release_version, "\n\n",
-  "**Release Date**: ", Sys.Date(), "\n\n",
+  "# CalCOFI Database Release ",
+  release_version,
+  "\n\n",
+  "**Release Date**: ",
+  Sys.Date(),
+  "\n\n",
   "## Tables Included\n\n",
-  paste(tables_list, collapse = "\n"), "\n\n",
+  paste(tables_list, collapse = "\n"),
+  "\n\n",
   "## Total\n\n",
-  "- **Tables**: ", nrow(freeze_stats), "\n",
-  "- **Total Rows**: ", format(sum(freeze_stats$rows), big.mark = ","), "\n",
+  "- **Tables**: ",
+  nrow(freeze_stats),
+  "\n",
+  "- **Total Rows**: ",
+  format(sum(freeze_stats$rows), big.mark = ","),
+  "\n",
   "- **Total Size**: ",
-    round(sum(freeze_stats$file_size) / 1024 / 1024, 1), " MB\n\n",
+  round(sum(freeze_stats$file_size) / 1024 / 1024, 1),
+  " MB\n\n",
   "## Data Sources\n\n",
   "- `ingest_swfsc_ichthyo.qmd` - Ichthyo tables (cruise, ship, site, tow, net, species, ichthyo, grid, segment, lookup, taxon, taxa_rank)\n",
   "- `ingest_calcofi_bottle.qmd` - Bottle/cast tables (casts, bottle, bottle_measurement, cast_condition, measurement_type)\n",
@@ -262,17 +365,23 @@ release_notes <- paste0(
   "dbGetQuery(con, \"\n",
   "  SELECT * FROM read_parquet(\n",
   "    'https://storage.googleapis.com/calcofi-db/ducklake/releases/",
-    release_version, "/parquet/ichthyo.parquet')\n",
+  release_version,
+  "/parquet/ichthyo.parquet')\n",
   "  LIMIT 10\")\n",
   "```\n\n",
   "Or use calcofi4r:\n\n",
   "```r\n",
   "library(calcofi4r)\n",
-  "con <- cc_get_db(version = '", release_version, "')\n",
-  "```\n")
+  "con <- cc_get_db(version = '",
+  release_version,
+  "')\n",
+  "```\n"
+)
 
 writeLines(release_notes, file.path(dir_frozen, "RELEASE_NOTES.md"))
-message(glue("Release notes written to {file.path(dir_frozen, 'RELEASE_NOTES.md')}"))
+message(glue(
+  "Release notes written to {file.path(dir_frozen, 'RELEASE_NOTES.md')}"
+))
 cat(release_notes)
 ```
 
@@ -284,8 +393,9 @@ cat(release_notes)
 # upload frozen release to GCS
 upload_frozen_release(
   release_dir = dir_frozen,
-  version     = release_version,
-  set_latest  = TRUE)
+  version = release_version,
+  set_latest = TRUE
+)
 ```
 
 ## Cleanup
@@ -293,9 +403,9 @@ upload_frozen_release(
 ```{r}
 #| label: cleanup
 
-# close working ducklake connection
+# close in-memory DuckDB connection
 close_duckdb(con_wdl)
-message("Working DuckLake connection closed")
+message("Assembly DuckDB connection closed")
 
 # summary
 message(glue("\n=== Summary ==="))

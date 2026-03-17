@@ -1,0 +1,255 @@
+---
+title: "Publish {{dataset_name}} to OBIS"
+editor_options:
+  chunk_output_type: console
+---
+
+## Overview
+
+Publish **{{dataset_name}}** to the Ocean Biodiversity Information System (OBIS) as a Darwin Core Archive (DwC-A).
+
+- **Source ingest**: `{{source_ingest}}`
+- **Portal**: OBIS (https://obis.org)
+- **Format**: Darwin Core Archive (Event Core + Occurrence + eMoF)
+
+### Event Hierarchy
+
+```{mermaid}
+graph TD
+  A[Cruise Event] --> B[Station/Site Event]
+  B --> C[Sample Event]
+  C --> D[Occurrence Records]
+  C --> E[eMoF Measurements]
+```
+
+## Setup
+
+```{r}
+#| label: setup
+
+devtools::load_all(here::here("../calcofi4db"))
+devtools::load_all(here::here("../calcofi4r"))
+librarian::shelf(
+  CalCOFI/calcofi4db,
+  CalCOFI/calcofi4r,
+  DBI, dplyr, DT, EML, fs, glue,
+  here, htmltools, lubridate, purrr, readr,
+  sf, stringr, tibble, tidyr, uuid, xml2,
+  quiet = T)
+options(readr.show_col_types = F)
+
+# output paths
+dataset      <- "{{dataset}}"
+dir_dwca     <- here(glue("data/darwincore/{dataset}"))
+dir_create(dir_dwca)
+```
+
+## Load Source Data
+
+```{r}
+#| label: load-data
+
+# load from release parquet or ingest parquet
+con <- get_duckdb_con(":memory:")
+load_prior_tables(
+  con,
+  parquet_dir = here("data/parquet/{{source_ingest}}"),
+  geom_tables = c("grid", "site"))
+
+# TODO: list tables and preview
+dbListTables(con)
+```
+
+## Build Event Table
+
+```{r}
+#| label: TODO-events
+
+# TODO: build hierarchical events following DwC Event Core
+# required fields: eventID, parentEventID, eventDate,
+#   decimalLatitude, decimalLongitude, coordinateUncertaintyInMeters,
+#   geodeticDatum, samplingProtocol, sampleSizeValue, sampleSizeUnit
+
+# cruise-level events
+# d_events_cruise <- dbGetQuery(con, "
+#   SELECT DISTINCT
+#     cruise_key                          AS eventID,
+#     NULL                                AS parentEventID,
+#     ...
+#   FROM cruise")
+
+# station/sample-level events
+# d_events_sample <- dbGetQuery(con, "
+#   SELECT DISTINCT
+#     ...                                 AS eventID,
+#     cruise_key                          AS parentEventID,
+#     ...
+#   FROM ...")
+
+# combine
+# d_events <- bind_rows(d_events_cruise, d_events_sample)
+```
+
+## Build Occurrence Table
+
+```{r}
+#| label: TODO-occurrences
+
+# TODO: build occurrence records
+# required fields: occurrenceID, eventID, scientificName,
+#   scientificNameID (WoRMS LSID: urn:lsid:marinespecies.org:taxname:{AphiaID}),
+#   kingdom, occurrenceStatus, basisOfRecord
+
+# d_occurrences <- dbGetQuery(con, "
+#   SELECT
+#     ...                                 AS occurrenceID,
+#     ...                                 AS eventID,
+#     scientific_name                     AS scientificName,
+#     CONCAT('urn:lsid:marinespecies.org:taxname:', worms_id) AS scientificNameID,
+#     'Animalia'                          AS kingdom,
+#     'present'                           AS occurrenceStatus,
+#     'HumanObservation'                  AS basisOfRecord
+#   FROM ...")
+```
+
+## Build ExtendedMeasurementOrFact
+
+```{r}
+#| label: TODO-emof
+
+# TODO: build eMoF records with NERC vocabulary URIs
+# required fields: measurementID, occurrenceID (or eventID),
+#   measurementType, measurementTypeID (NERC P01),
+#   measurementValue, measurementUnit, measurementUnitID (NERC P06)
+
+# example NERC URIs:
+# abundance: http://vocab.nerc.ac.uk/collection/P01/current/SDBIOL01/
+# count:     http://vocab.nerc.ac.uk/collection/P01/current/OCOUNT01/
+# length:    http://vocab.nerc.ac.uk/collection/P01/current/OBSINDLX/
+# per m²:    http://vocab.nerc.ac.uk/collection/P06/current/UPMS/
+# mm:        http://vocab.nerc.ac.uk/collection/P06/current/UXMM/
+
+# d_emof <- dbGetQuery(con, "
+#   SELECT
+#     ...   AS measurementID,
+#     ...   AS occurrenceID,
+#     ...   AS measurementType,
+#     ...   AS measurementTypeID,
+#     ...   AS measurementValue,
+#     ...   AS measurementUnit,
+#     ...   AS measurementUnitID
+#   FROM ...")
+```
+
+## Write DwC-A Files
+
+```{r}
+#| label: write-csvs
+
+# write_csv(d_events,      path(dir_dwca, "event.csv"))
+# write_csv(d_occurrences, path(dir_dwca, "occurrence.csv"))
+# write_csv(d_emof,        path(dir_dwca, "extendedmeasurementorfact.csv"))
+```
+
+## Create meta.xml
+
+```{r}
+#| label: TODO-meta-xml
+
+# TODO: create meta.xml mapping columns to DwC terms
+# follow pattern from publish_ichthyo_to_obis.qmd
+# key namespaces:
+#   core: http://rs.tdwg.org/dwc/terms/ (Event)
+#   extension 1: http://rs.tdwg.org/dwc/terms/ (Occurrence)
+#   extension 2: http://rs.iobis.org/obis/terms/ (eMoF)
+```
+
+## Create EML Metadata
+
+```{r}
+#| label: TODO-eml
+
+# TODO: build EML metadata for the DwC-A
+# required elements:
+#   title, abstract, creator, contact,
+#   geographicCoverage, temporalCoverage, taxonomicCoverage,
+#   intellectualRights, methods
+
+# eml <- list(
+#   dataset = list(
+#     title    = "{{dataset_name}}",
+#     abstract = list(para = "..."),
+#     creator  = list(
+#       individualName = list(givenName = "...", surName = "..."),
+#       organizationName = "CalCOFI",
+#       electronicMailAddress = "..."
+#     ),
+#     contact = list(...),
+#     coverage = list(
+#       geographicCoverage = list(
+#         geographicDescription = "CalCOFI sampling grid, Southern California Bight",
+#         boundingCoordinates = list(
+#           westBoundingCoordinate  = -135,
+#           eastBoundingCoordinate  = -117,
+#           northBoundingCoordinate = 51,
+#           southBoundingCoordinate = 23)),
+#       temporalCoverage = list(
+#         rangeOfDates = list(
+#           beginDate = list(calendarDate = "..."),
+#           endDate   = list(calendarDate = "...")))),
+#     intellectualRights = list(para = "CC-BY 4.0")
+#   ))
+```
+
+## Data Quality Checks
+
+```{r}
+#| label: TODO-quality-checks
+
+# TODO: validate DwC-A structure
+# - every occurrence has a valid eventID in events table
+# - every eMoF has a valid occurrenceID or eventID
+# - no orphan events (events without occurrences)
+# - scientificNameID format: urn:lsid:marinespecies.org:taxname:{digits}
+# - coordinates within expected range
+# - eventDate format: ISO 8601
+```
+
+## Package DwC Archive
+
+```{r}
+#| label: package-archive
+
+# zip_path <- path(dir_dwca, glue("{dataset}_dwca.zip"))
+# zip_files <- c("event.csv", "occurrence.csv",
+#                "extendedmeasurementorfact.csv", "meta.xml", "eml.xml")
+# withr::with_dir(dir_dwca, zip(zip_path, zip_files))
+# cat("DwC-A created:", zip_path, "\n")
+```
+
+## Validate with obistools
+
+```{r}
+#| label: TODO-validate-obis
+
+# librarian::shelf(obistools, quiet = T)
+# obistools::check_eventids(d_events)
+# obistools::check_fields(d_occurrences)
+# obistools::check_scientificname_and_ids(d_occurrences)
+```
+
+## Upload to GCS
+
+```{r}
+#| label: upload-gcs
+
+# sync_to_gcs(dir_dwca, glue("publish/{dataset}_obis"))
+```
+
+## Cleanup
+
+```{r}
+#| label: cleanup
+
+dbDisconnect(con, shutdown = TRUE)
+```

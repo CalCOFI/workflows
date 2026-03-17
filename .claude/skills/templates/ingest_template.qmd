@@ -1,0 +1,275 @@
+---
+title: "Ingest {{dataset_name}}"
+editor_options:
+  chunk_output_type: console
+---
+
+## Overview
+
+Ingest **{{dataset_name}}** from {{provider_name}} into the CalCOFI database.
+
+- **Provider**: `{{provider}}`
+- **Dataset**: `{{dataset}}`
+- **Source**: {{source_description}}
+
+### Data Flow
+
+```{mermaid}
+graph LR
+  A[Source CSVs] --> B[DuckDB Wrangling]
+  B --> C[Validate & Clean]
+  C --> D[Parquet Export]
+  D --> E[GCS Archive]
+  E --> F[Release Database]
+```
+
+## Setup
+
+```{r}
+#| label: setup
+
+devtools::load_all(here::here("../calcofi4db"))
+devtools::load_all(here::here("../calcofi4r"))
+librarian::shelf(
+  CalCOFI/calcofi4db,
+  CalCOFI/calcofi4r,
+  DBI, dm, dplyr, DT, fs, glue, googledrive,
+  here, htmltools, janitor, jsonlite, knitr,
+  lubridate, purrr, readr, sf, stringr,
+  tibble, tidyr, units,
+  quiet = T)
+options(readr.show_col_types = F)
+options(DT.options = list(scrollX = TRUE))
+
+# define paths
+dataset_name <- "{{dataset_name}}"
+provider     <- "{{provider}}"
+dataset      <- "{{dataset}}"
+dir_label    <- glue("{provider}_{dataset}")
+dir_data     <- "~/My Drive/projects/calcofi/data-public"
+overwrite    <- TRUE
+
+dir_parquet  <- here(glue("data/parquet/{dir_label}"))
+db_path      <- here(glue("data/wrangling/{dir_label}.duckdb"))
+
+# clean slate if overwrite
+if (overwrite) {
+  if (file_exists(db_path))     file_delete(db_path)
+  if (dir_exists(dir_parquet))  dir_delete(dir_parquet)
+}
+dir_create(dirname(db_path))
+con <- get_duckdb_con(db_path)
+load_duckdb_extension(con, "spatial")
+```
+
+## Read Source Data
+
+```{r}
+#| label: read-source
+
+# read CSV files with metadata redefinition
+d <- read_csv_files(
+  provider     = provider,
+  dataset      = dataset,
+  dir_data     = glue("{dir_data}/{{provider}}/{{dataset}}"),
+  metadata_dir = here(glue("metadata/{provider}/{dataset}")),
+  gcs_archive  = NULL)  # set to timestamp string if reading from GCS
+```
+
+## Check Data Integrity
+
+```{r}
+#| label: check-integrity
+
+integrity <- check_data_integrity(d)
+render_integrity_message(integrity)
+```
+
+## Source Files
+
+```{r}
+#| label: show-source
+show_source_files(d)
+```
+
+## Tables and Fields to Ingest
+
+```{r}
+#| label: show-tables
+show_tables_redefine(d)
+```
+
+```{r}
+#| label: show-fields
+show_fields_redefine(d)
+```
+
+## Load Tables into Database
+
+```{r}
+#| label: ingest-dataset
+
+ingest_dataset(con, d)
+```
+
+## Establish Primary Keys
+<!-- {{pk_section}} -->
+
+```{r}
+#| label: TODO-primary-keys
+
+# TODO: choose PK strategy for this dataset
+# option A: sequential IDs
+# assign_sequential_ids(con, "{{dataset}}_data", "{{dataset}}_id", sort_cols = c("..."))
+
+# option B: deterministic UUIDs (for datasets with natural composite keys)
+# assign_deterministic_uuids(con, "{{dataset}}_data", "{{dataset}}_uuid",
+#   key_cols = c("..."))
+
+# option C: source IDs (if provider includes stable identifiers)
+# (no action needed, use source PKs directly)
+```
+
+<!-- {{taxonomy_section_start}} -->
+## Standardize Taxonomy
+
+```{r}
+#| label: TODO-taxonomy
+
+# TODO: uncomment if dataset has species/taxonomy data
+# standardize_species_local(
+#   con,
+#   spp_db_path  = "~/My Drive/projects/calcofi/data-public/MarineSensitivity/spp.duckdb",
+#   species_tbl  = "species")
+
+# build_taxon_hierarchy(
+#   con,
+#   spp_db_path  = "~/My Drive/projects/calcofi/data-public/MarineSensitivity/spp.duckdb",
+#   species_tbl  = "species")
+```
+<!-- {{taxonomy_section_end}} -->
+
+<!-- {{pivot_section_start}} -->
+## Pivot Measurements
+
+```{r}
+#| label: TODO-pivot
+
+# TODO: if dataset has wide-format measurements, pivot to long format
+# e.g., pivot columns like temp, salinity, oxygen → measurement_type + value
+#
+# d_long <- dbGetQuery(con, "SELECT * FROM {{dataset}}_wide") |>
+#   pivot_longer(
+#     cols      = c(...),  # measurement columns
+#     names_to  = "measurement_type",
+#     values_to = "measurement_value") |>
+#   filter(!is.na(measurement_value))
+#
+# dbWriteTable(con, "{{dataset}}_measurement", d_long, overwrite = TRUE)
+```
+<!-- {{pivot_section_end}} -->
+
+<!-- {{cross_dataset_section_start}} -->
+## Cross-Dataset Integration
+
+```{r}
+#| label: load-prior-tables
+
+# load shared reference tables from prior ingest
+load_prior_tables(
+  con,
+  parquet_dir = here("data/parquet/swfsc_ichthyo"),
+  tables      = c("ship", "cruise", "grid"),
+  geom_tables = c("grid"))
+```
+
+```{r}
+#| label: TODO-cross-dataset
+
+# TODO: match this dataset's records to existing cruises/casts
+# derive_cruise_key_on_casts(con, ship_renames_csv = here("metadata/..."))
+```
+<!-- {{cross_dataset_section_end}} -->
+
+## Schema Documentation
+
+```{r}
+#| label: schema
+
+# build dm object for visualization
+tables <- dbListTables(con)
+dm_obj <- dm_from_con(con, tables, learn_keys = FALSE)
+dm_draw(dm_obj, rankdir = "LR", view_type = "all")
+```
+
+## Add Spatial
+
+```{r}
+#| label: TODO-spatial
+
+# TODO: add geometry column from lat/lon (adjust table and column names)
+# add_point_geom(con, "{{spatial_table}}", lon_col = "lon_dec", lat_col = "lat_dec")
+# assign_grid_key(con, "{{spatial_table}}")
+```
+
+## Validate
+
+```{r}
+#| label: validate
+
+results <- validate_for_release(con, checks = "all", strict = FALSE)
+cat("Validation:", ifelse(results$passed, "PASSED", "FAILED"), "\n")
+if (length(results$errors) > 0)
+  cat("Errors:\n", paste("-", results$errors, collapse = "\n"), "\n")
+if (length(results$warnings) > 0)
+  cat("Warnings:\n", paste("-", results$warnings, collapse = "\n"), "\n")
+```
+
+## Enforce Column Types
+
+```{r}
+#| label: enforce-types
+
+enforce_column_types(con)
+```
+
+## Data Preview
+
+```{r}
+#| label: preview
+
+preview_tables(con)
+```
+
+## Write Parquet Outputs
+
+```{r}
+#| label: write-parquet
+
+write_parquet_outputs(con, dir_parquet)
+```
+
+## Write Metadata
+
+```{r}
+#| label: write-metadata
+
+build_metadata_json(con, dir_parquet)
+build_relationships_json(con, dir_parquet)
+```
+
+## Upload to GCS Archive
+
+```{r}
+#| label: upload-gcs
+
+sync_to_gcs(dir_parquet, glue("ingest/{dir_label}"))
+```
+
+## Cleanup
+
+```{r}
+#| label: cleanup
+
+dbDisconnect(con, shutdown = TRUE)
+```

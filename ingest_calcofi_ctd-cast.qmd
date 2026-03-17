@@ -73,14 +73,16 @@ librarian::shelf(
   quiet = T
 )
 
-provider <- "calcofi.org"
+dataset_name <- "CalCOFI CTD Cast Database"
+provider <- "calcofi"
 dataset <- "ctd-cast"
+dir_label <- glue("{provider}_{dataset}")
 overwrite <- TRUE
 dir_data <- "~/My Drive/projects/calcofi/data-public"
 dir_dl <- path_expand(glue("{dir_data}/{provider}/{dataset}/download"))
-dir_parquet <- here(glue("data/parquet/{provider}_{dataset}"))
-db_path <- here(glue("data/wrangling/{provider}_{dataset}.duckdb"))
-dir_tmp <- here(glue("data/tmp/{provider}_{dataset}"))
+dir_parquet <- here(glue("data/parquet/{dir_label}"))
+db_path <- here(glue("data/wrangling/{dir_label}.duckdb"))
+dir_tmp <- here(glue("data/tmp/{dir_label}"))
 url <- "https://calcofi.org/data/oceanographic-data/ctd-cast-files/"
 dir_meta <- here(glue("metadata/{provider}/{dataset}"))
 
@@ -878,7 +880,7 @@ Load reference tables (ship, cruise, grid) from the ichthyo ingest, derive `ship
 load_prior_tables(
   con = con,
   tables = c("ship", "cruise", "grid"),
-  parquet_dir = here("data/parquet/swfsc.noaa.gov_calcofi-db")
+  parquet_dir = here("data/parquet/swfsc_ichthyo")
 )
 
 # 0404NHJD is a combined New Horizon + Jordan Davis cruise; use primary ship NH
@@ -1073,7 +1075,10 @@ assign_deterministic_uuids_md5(
 )
 
 # add cruise_key for partitioned parquet output
-dbExecute(con, "ALTER TABLE ctd_measurement ADD COLUMN IF NOT EXISTS cruise_key VARCHAR")
+dbExecute(
+  con,
+  "ALTER TABLE ctd_measurement ADD COLUMN IF NOT EXISTS cruise_key VARCHAR"
+)
 dbExecute(
   con,
   "UPDATE ctd_measurement AS m
@@ -1226,12 +1231,13 @@ preview_tables(
 #| label: write_parquet
 
 parquet_stats <- write_parquet_outputs(
-  con          = con,
-  output_dir   = dir_parquet,
-  tables       = c("ctd_cast", "ctd_measurement", "ctd_summary", "measurement_type"),
+  con = con,
+  output_dir = dir_parquet,
+  tables = c("ctd_cast", "ctd_measurement", "ctd_summary", "measurement_type"),
   partition_by = list(
     ctd_measurement = "cruise_key",
-    ctd_summary     = "cruise_key"),
+    ctd_summary = "cruise_key"
+  ),
   strip_provenance = FALSE
 )
 
@@ -1253,6 +1259,20 @@ build_metadata_json(
   provider = provider,
   dataset = dataset
 )
+
+# write relationships.json sidecar with PKs/FKs
+dm_ctd <- dm_from_con(con) |>
+  dm_add_pk(ctd_cast, ctd_cast_uuid) |>
+  dm_add_pk(ctd_measurement, ctd_measurement_uuid) |>
+  dm_add_pk(ctd_summary, ctd_summary_uuid) |>
+  dm_add_pk(measurement_type, measurement_type) |>
+  dm_add_fk(ctd_measurement, ctd_cast_uuid, ctd_cast)
+build_relationships_json(
+  dm = dm_ctd,
+  output_dir = dir_parquet,
+  provider = provider,
+  dataset = dataset
+)
 ```
 
 ## Upload to GCS
@@ -1262,25 +1282,9 @@ build_metadata_json(
 
 sync_to_gcs(
   local_dir = dir_parquet,
-  gcs_prefix = glue("ingest/{provider}_{dataset}"),
+  gcs_prefix = glue("ingest/{dir_label}"),
   bucket = "calcofi-db"
 )
-```
-
-## Finalize — Ingest to Working DuckLake
-
-Push all parquet tables to the Working DuckLake with provenance tracking.
-
-```{r}
-#| label: finalize_ingest
-
-wdl_stats <- finalize_ingest(
-  parquet_dir = dir_parquet,
-  source_label = glue("{provider}_{dataset}")
-)
-
-wdl_stats |>
-  dt(caption = "Working DuckLake ingestion stats")
 ```
 
 ## Cleanup

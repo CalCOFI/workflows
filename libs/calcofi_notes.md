@@ -1,7 +1,2670 @@
 ## TODO:
 
 - [ ] add ERDDAP server
-- [ ] viz CTD profiles
+
+## 2026-03-15.b build skills, agents for digesting datasets
+
+(cd `workflows`)
+
+Help me devise a strategy of developing Claude skills and agents (or even team of agents) for ingesting the rest of these CalCOFI datasets:
+
+- `@~/My Drive/projects/calcofi/docs/CalCOFI - EcoQuants Quote, 2025-10 to 2026-06_v2.docx`
+- `@~/My Drive/projects/calcofi/docs/Living program document_ CalCOFI Data Inventory_updated Feb2026.xlsx`
+
+Develop a template by deeply evaluating the following workflows and documentation:
+
+- `@README_PLAN.qmd`
+- `@ingest_swfsc_ichthyo.qmd`
+- `@ingest_calcofi_bottle.qmd`
+- `@ingest_calcofi_ctd-cast.qmd`
+- `@release_database.qmd`
+- `@publish_ichthyo_to_obis.qmd`
+- `@../docs/`
+- `@../calcofi4db/`
+- `@../calcofi4r/`
+
+Also look here `@.` in `workflows` for historical attempts at exploring and ingesting data to create a matrix of resources per dataset and prioritization of approach. Consider creating Github issues and cleaning up existing for developing a path forward.
+
+←  ☐ DIC strategy  ☐ Cephalopods  ☐ Approach  ☐ GH Issues  ✔ Submit  →
+
+**DIC strategy**. For DIC data: should DIC measurements be merged into the existing bottle_measurement table (since DIC
+ is sampled from the same Niskin bottles) or kept as a separate ingest with its own tables?
+
+❯ 1. Merge into bottle_measurement (Recommended)
+     Add DIC/alkalinity/pH rows to the existing bottle_measurement long-format table via
+     measurement_type. Simplest integration since DIC samples correspond to bottle casts. Would
+     require updating ingest_calcofi_bottle.qmd or creating a supplemental ingest that appends.
+  2. Separate ingest: ingest_calcofi_dic.qmd
+     Create a standalone ingest with its own tables (dic_sample, dic_measurement). Keeps DIC
+     provenance separate, but adds cross-dataset FK complexity. Better if DIC has different temporal
+     coverage or station grid than bottle.
+  3. Both -- separate ingest that writes to shared tables
+     Create ingest_calcofi_dic.qmd but have it write to the same bottle_measurement table (or a new
+     shared measurement table). Separate workflow but unified output.
+
+**Cephalopods**. For cephalopods: are they already in the SWFSC ichthyo database tables (just different species) or do
+ they need to be pulled from ERDDAP as a separate source?                                  
+
+  1. Already in SWFSC DB -- just need extraction
+     Cephalopod counts/sizes are already in the SWFSC CalCOFI database CSVs (species table includes 
+     cephalopod taxa). The existing ichthyo ingest may already capture them, or they need to be
+     extracted from the same source.                                                           
+  2. Separate source -- need ERDDAP pull    
+     Cephalopod data is served separately on ERDDAP (erdCalCOFI datasets) and is not in the SWFSC 
+     database CSVs. Needs a new data pull.                                                           
+  3. Not sure -- needs investigation      
+     I'll investigate the SWFSC species table and ERDDAP to determine the source before planning the 
+     ingest approach.                                                                               
+❯ 4. Some of these datasets, like `Datataset name` = "Invertebrate count (Cephalopods)", `Where are data dynamically served?`="https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFIinvcnt.html", are a published dataset package that is a subset of the full dataset, in this case the ceaphalopods from `swfsc_ichthyo`, that is published to erddap. So a workflow `publish_icthyo-cephalopods_to_erddap.qmd` (like `publish_icthyo_to_obis.qmd`) is to be created to feed this endpoint, but we do not need (or want) another `ingest_*.qmd` workflow.
+
+**Approach**. Should I implement all 5 Claude skills in Phase 0, or start with just the first dataset (DIC)        
+end-to-end and extract the skill patterns from that experience?                            
+
+  1. Build skills first, then use them          
+     Create all 5 skills upfront in Phase 0 (1 week). More structured but skills may need revision  
+     once they hit real data.                                                                   
+  2. DIC first, then extract skills (Recommended)                                              
+     Do DIC end-to-end manually (using existing patterns), then extract/generalize the workflow into 
+     reusable skills. The skills will be battle-tested from real experience.                      
+❯ 3. Parallel -- skills + DIC simultaneously                                                         
+     Build skills while also working on DIC. Use DIC as the test case to validate skills as they're 
+     built.
+
+**GH Issues**. For GitHub issues: should I create them now as part of this planning session, or defer to            
+implementation?                                                                            
+
+❯ 1. Create issues now                          
+     Create all new issues and close/consolidate old ones during this session. Gives immediate      
+     visibility to the full roadmap.                                                            
+  2. Create issues during implementation                                                       
+     Defer issue creation to when we start each phase. Avoids premature issue creation for datasets  
+     that may change scope.                                                                       
+  3. Create must-complete issues now, defer rest                                                     
+     Create issues for the 5 must-complete datasets and 2 must-complete publishes now. Create       
+     should/nice-to-have issues later.
+
+⏺ Updated plan                                                                                       
+  ⎿  /plan to preview                                                                                
+                                                                                                     
+⏺ The plan is updated with your decisions:                                                           
+                                                                                                     
+  1. DIC merges into bottle_measurement (not a separate ingest)                                      
+  2. Cephalopods = publish workflow from existing ichthyo data, not a new ingest (same for         
+  larvae/eggs subsets to ERDDAP)                                                                     
+  3. Parallel approach -- build skills + DIC simultaneously
+  4. Create all GitHub issues now                                                                    
+                                                                                                     
+  This significantly clarifies the work -- there are really ~11 true ingests and ~10 publish         
+  workflows, and several "datasets" in the inventory are just different views of already-ingested    
+  data.                                                                                              
+                                                        
+─────────────────────────────────────────────────────────────────────────────────────────────────────
+ Ready to code?
+                                                                                                     
+ Here is Claude's plan:
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ Strategy: Claude Skills & Agents for CalCOFI Dataset Ingestion
+
+ Context
+
+ The CalCOFI contract (Oct 2025 - Jun 2026, $44K) requires ingesting additional datasets and
+ publishing many to portals (OBIS, ERDDAP, EDI). Three production ingests are complete (ichthyo,
+ bottle, ctd-cast), plus a release workflow and OBIS publish workflow. The existing pipeline is
+ well-architected with 120+ reusable calcofi4db functions. The goal is to create Claude Code skills
+ that systematize the remaining work, while building the DIC ingest in parallel as a test case.
+
+ Key insight: Many "datasets" in the CalCOFI inventory are actually publish workflows from
+ already-ingested data (e.g., cephalopods are a subset of ichthyo published to ERDDAP), not new
+ ingest workflows. The matrix below separates true ingests from publish-only workflows.
+
+ ---
+ Dataset Matrix
+
+ True Ingest Workflows Needed
+
+ ┌─────┬───────────┬────────────┬───────────────┬───────┬──────┬─────────┬───────┬─────┬──────┐
+ │     │           │            │               │ Sourc │ On   │ Complex │ Prior │ Est │ GH   │
+ │  #  │  Dataset  │  Provider  │    Contact    │   e   │ GDri │   ity   │  ity  │  Da │ Issu │
+ │     │           │            │               │       │ ve?  │         │       │ ys  │  es  │
+ ├─────┼───────────┼────────────┼───────────────┼───────┼──────┼─────────┼───────┼─────┼──────┤
+ │     │           │ NCEI/calco │               │ CSV   │      │         │       │     │ #6,  │
+ │ 1   │ DIC       │ fi         │ Todd Martz    │ (500K │ Yes  │ Low     │ Must  │ 2-3 │ #19  │
+ │     │           │            │               │ B)    │      │         │       │     │      │
+ ├─────┼───────────┼────────────┼───────────────┼───────┼──────┼─────────┼───────┼─────┼──────┤
+ │     │ Euphausii │ EDI/CCE-LT │               │ CSV   │      │         │       │     │      │
+ │ 2   │ ds        │ ER         │ Rasmus/Linsey │ (1.2M │ Yes  │ Low-Med │ Must  │ 3-5 │ #7   │
+ │     │ (Krill)   │            │               │ B)    │      │         │       │     │      │
+ ├─────┼───────────┼────────────┼───────────────┼───────┼──────┼─────────┼───────┼─────┼──────┤
+ │     │ Zooplankt │            │ Rasmus/Ed/Lin │ CSV ( │      │         │       │     │      │
+ │ 3   │ on        │ SIO PIC    │ sey           │ 19MB) │ Yes  │ Medium  │ Must  │ 5-7 │ #22  │
+ │     │ biovolume │            │               │       │      │         │       │     │      │
+ ├─────┼───────────┼────────────┼───────────────┼───────┼──────┼─────────┼───────┼─────┼──────┤
+ │     │ Phytoplan │            │               │ Multi │      │         │       │     │      │
+ │ 4   │ kton      │ DataZoo +  │ Various       │ ple   │ No   │ High    │ Must  │ 7-1 │ -    │
+ │     │ (Venrick) │ EDI        │               │ sourc │      │         │       │ 0   │      │
+ │     │           │            │               │ es    │      │         │       │     │      │
+ ├─────┼───────────┼────────────┼───────────────┼───────┼──────┼─────────┼───────┼─────┼──────┤
+ │ 5   │ Lobster p │ Unknown    │ Unknown       │ Unkno │ No   │ Unknown │ Shoul │ TBD │ -    │
+ │     │ hyllosoma │            │               │ wn    │      │         │ d     │     │      │
+ ├─────┼───────────┼────────────┼───────────────┼───────┼──────┼─────────┼───────┼─────┼──────┤
+ │     │ ZooDb     │            │ Marina/Ohman/ │ Onlin │      │         │ Shoul │ 7-1 │      │
+ │ 6   │ (Holoplan │ DataZoo    │ Linsey        │ e DB  │ No   │ High    │ d     │ 0   │ -    │
+ │     │ kton)     │            │               │ API   │      │         │       │     │      │
+ ├─────┼───────────┼────────────┼───────────────┼───────┼──────┼─────────┼───────┼─────┼──────┤
+ │ 7   │ ZooScan   │ ZooScan    │ Marina/Ohman  │ Onlin │ No   │ Medium  │ Shoul │ 5-7 │ -    │
+ │     │           │ online     │               │ e DB  │      │         │ d     │     │      │
+ ├─────┼───────────┼────────────┼───────────────┼───────┼──────┼─────────┼───────┼─────┼──────┤
+ │ 8   │ Seabird ( │ SCCOOS/OBI │ Bill Sydeman  │ Multi │ Part │ Medium  │ Shoul │ 5-7 │ #9   │
+ │     │ underway) │ S/EDI      │               │ ple   │ ial  │         │ d     │     │      │
+ ├─────┼───────────┼────────────┼───────────────┼───────┼──────┼─────────┼───────┼─────┼──────┤
+ │     │ Marine    │ ERDDAP/CCE │ S. Baumann-Pi │ Multi │ Part │         │ Shoul │     │      │
+ │ 9   │ mammals ( │ -LTER      │ ckering       │ ple   │ ial  │ Medium  │ d     │ 5-7 │ #9   │
+ │     │ underway) │            │               │       │      │         │       │     │      │
+ ├─────┼───────────┼────────────┼───────────────┼───────┼──────┼─────────┼───────┼─────┼──────┤
+ │     │ PRODO     │            │               │       │      │         │       │     │      │
+ │ 10  │ (primary  │ CalCOFI    │ Various       │ Unkno │ No   │ Medium  │ Nice  │ 3-5 │ -    │
+ │     │ productio │            │               │ wn    │      │         │       │     │      │
+ │     │ n)        │            │               │       │      │         │       │     │      │
+ ├─────┼───────────┼────────────┼───────────────┼───────┼──────┼─────────┼───────┼─────┼──────┤
+ │ 11  │ Underway  │ SWFSC/ERDD │ Ed/Noelle     │ ERDDA │ No   │ Medium  │ Nice  │ 5-7 │ #15  │
+ │     │ CUFES     │ AP         │               │ P API │      │         │       │     │      │
+ └─────┴───────────┴────────────┴───────────────┴───────┴──────┴─────────┴───────┴─────┴──────┘
+
+ DIC decision: Merge DIC measurements into existing bottle_measurement table (same Niskin bottles),
+ extending ingest_calcofi_bottle.qmd or creating a supplemental ingest that appends to the same
+ parquet output.
+
+ Publish-Only Workflows (from already-ingested data)
+
+ ┌─────┬─────────────────────────────────┬──────────────┬──────┬────────┬─────┬────────────────┐
+ │     │                                 │   Source     │ Port │ Priori │ Est │                │
+ │  #  │            Workflow             │    Ingest    │  al  │   ty   │  Da │     Notes      │
+ │     │                                 │              │      │        │ ys  │                │
+ ├─────┼─────────────────────────────────┼──────────────┼──────┼────────┼─────┼────────────────┤
+ │ 1   │ publish_ctd_to_erddap.qmd       │ calcofi_ctd- │ ERDD │ Must   │ 3-5 │                │
+ │     │                                 │ cast         │ AP   │        │     │                │
+ ├─────┼─────────────────────────────────┼──────────────┼──────┼────────┼─────┼────────────────┤
+ │ 2   │ publish_bottle_to_erddap.qmd    │ calcofi_bott │ ERDD │ Must   │ 3-5 │                │
+ │     │                                 │ le           │ AP   │        │     │                │
+ ├─────┼─────────────────────────────────┼──────────────┼──────┼────────┼─────┼────────────────┤
+ │     │ publish_ichthyo-cephalopods_to_ │ swfsc_ichthy │ ERDD │        │     │ Subset of      │
+ │ 3   │ erddap.qmd                      │ o            │ AP   │ Must   │ 2-3 │ ichthyo        │
+ │     │                                 │              │      │        │     │ species        │
+ ├─────┼─────────────────────────────────┼──────────────┼──────┼────────┼─────┼────────────────┤
+ │     │ publish_ichthyo-larvae_to_erdda │ swfsc_ichthy │ ERDD │        │     │ Fish larvae    │
+ │ 4   │ p.qmd                           │ o            │ AP   │ Must   │ 2-3 │ counts/sizes/s │
+ │     │                                 │              │      │        │     │ tages          │
+ ├─────┼─────────────────────────────────┼──────────────┼──────┼────────┼─────┼────────────────┤
+ │ 5   │ publish_ichthyo-eggs_to_erddap. │ swfsc_ichthy │ ERDD │ Must   │ 2-3 │ Fish egg       │
+ │     │ qmd                             │ o            │ AP   │        │     │ counts/stages  │
+ ├─────┼─────────────────────────────────┼──────────────┼──────┼────────┼─────┼────────────────┤
+ │     │                                 │ calcofi_bott │ ERDD │        │     │ After DIC      │
+ │ 6   │ publish_dic_to_erddap.qmd       │ le           │ AP   │ Should │ 2-3 │ ingest         │
+ │     │                                 │ (extended)   │      │        │     │                │
+ ├─────┼─────────────────────────────────┼──────────────┼──────┼────────┼─────┼────────────────┤
+ │ 7   │ publish_zooplankton_to_edi.qmd  │ pic_zooplank │ EDI  │ Should │ 3-5 │                │
+ │     │                                 │ ton          │      │        │     │                │
+ ├─────┼─────────────────────────────────┼──────────────┼──────┼────────┼─────┼────────────────┤
+ │ 8   │ publish_seabird_to_obis.qmd     │ sccoos_seabi │ OBIS │ Should │ 3-5 │                │
+ │     │                                 │ rd           │      │        │     │                │
+ ├─────┼─────────────────────────────────┼──────────────┼──────┼────────┼─────┼────────────────┤
+ │ 9   │ publish_mammals_to_obis.qmd     │ various_mamm │ OBIS │ Should │ 3-5 │                │
+ │     │                                 │ als          │      │        │     │                │
+ ├─────┼─────────────────────────────────┼──────────────┼──────┼────────┼─────┼────────────────┤
+ │ 10  │ publish_met_to_erddap.qmd       │ calcofi_met  │ ERDD │ Should │ 2-3 │ Underway MET   │
+ │     │                                 │              │ AP   │        │     │ data           │
+ └─────┴─────────────────────────────────┴──────────────┴──────┴────────┴─────┴────────────────┘
+
+ ---
+ Claude Code Skill Architecture
+
+ Skill 1: /explore-dataset
+
+ Purpose: Profile a new CSV or ERDDAP dataset before ingestion.
+
+ Implementation: R script that:
+ 1. Reads CSV into DuckDB in-memory, runs SUMMARIZE on each table
+ 2. Checks for columns matching existing PKs (cruise_key, site_uuid, cast_id, etc.)
+ 3. Profiles lat/lon against CalCOFI grid extent
+ 4. Profiles date ranges, identifies temporal overlap with existing cruises
+ 5. Checks species columns against existing species table
+ 6. Outputs structured markdown report
+
+ Location: .claude/skills/explore-dataset.md + scripts/explore_dataset.R
+
+ Skill 2: /generate-metadata
+
+ Purpose: Create metadata/{provider}/{dataset}/ with scaffolded tbls_redefine.csv and
+ flds_redefine.csv by calling calcofi4db functions.
+
+ Implementation:
+ 1. Creates directory structure
+ 2. Calls read_csv_metadata() to inventory source CSVs
+ 3. Calls create_redefinition_files() to scaffold redefine CSVs
+ 4. Prints instructions for manual column renaming decisions
+
+ Location: .claude/skills/generate-metadata.md
+
+ Skill 3: /ingest-new
+
+ Purpose: Scaffold a new ingest_{provider}_{dataset}.qmd from parameterized template.
+
+ Template structure (from the 3 production workflows):
+ UNIVERSAL (~200 lines): YAML, setup, read_csv_files(), check_data_integrity(), ingest_dataset()
+ SEMI-CUSTOM (~150 lines): load_prior_tables(), add_point_geom(), assign_grid_key(),
+ write_parquet_outputs(), sync_to_gcs()
+ DATASET-SPECIFIC (~500+ lines): PK strategy, table consolidation, measurement pivoting, taxonomy,
+ validation
+
+ Parameters: provider, dataset, dataset_name, source_url, has_taxonomy, has_long_pivot,
+ spatial_table, lon_col, lat_col
+
+ Location: .claude/skills/ingest-new.md + .claude/skills/templates/ingest_template.qmd
+
+ Skill 4: /validate-ingest
+
+ Purpose: Post-ingest validation on a wrangling DuckDB.
+
+ Checks: PK uniqueness, FK integrity, NULL rates, coordinate ranges, date ranges, row count sanity,
+ orphan records.
+
+ Location: .claude/skills/validate-ingest.md
+
+ Skill 5: /publish-template
+
+ Purpose: Scaffold a publish workflow for a target portal (OBIS, ERDDAP, EDI).
+
+ Sub-templates:
+ - OBIS: Event Core + Occurrence + eMoF (following publish_ichthyo_to_obis.qmd)
+ - ERDDAP: NCCSV metadata generation for datasets.xml submission
+ - EDI: EML metadata + data package generation
+
+ Location: .claude/skills/publish-template.md +
+ .claude/skills/templates/publish_{portal}_template.qmd
+
+ Agent Strategy: Skill-Chained Workflow
+
+ For each new dataset, chain skills with human-in-the-loop:
+
+ /explore-dataset {csv_path}       --> human reviews profile report
+ /generate-metadata {provider} {dataset}  --> human edits flds_redefine.csv
+ /ingest-new {provider} {dataset}         --> human fills dataset-specific sections
+ /validate-ingest {provider} {dataset}    --> human reviews flagged rows
+ /publish-template {provider} {dataset} {portal}  --> human fills portal metadata
+
+ Human stays in the loop because each dataset has unique domain knowledge requirements, metadata
+ redefinitions need scientific judgment, and domain experts validate outputs.
+
+ ---
+ GitHub Issues Plan
+
+ Close/Consolidate Old Issues
+
+ - #6 + #19 --> close both, replaced by new DIC issue
+ - #7 --> close, replaced by new euphausiids issue
+ - #8 "load and read larval fish" --> close (done: ingest_swfsc_ichthyo)
+ - #21 "merge CalCOFI fish larvae and bottle data" --> close (done: cross-dataset bridge)
+ - #20 "harmonize table and field names" --> close (done: flds_redefine.csv system)
+
+ Update Parent Issue #1
+
+ Update "migrate priority datasets into database" body with the priority matrix and checkboxes
+ linking to child issues.
+
+ New Issues to Create
+
+ Ingest issues (one per dataset):
+ 1. ingest: DIC from NCEI into bottle_measurement - must-complete
+ 2. ingest: euphausiids (krill) from EDI - must-complete
+ 3. ingest: zooplankton biovolume from SIO PIC - must-complete
+ 4. ingest: phytoplankton from DataZoo + EDI - must-complete
+ 5. ingest: seabird underway census - should-complete
+ 6. ingest: marine mammals underway - should-complete
+ 7. ingest: ZooDb holoplankton - should-complete
+ 8. ingest: ZooScan holoplankton - should-complete
+ 9. ingest: lobster phyllosoma - should-complete
+ 10. ingest: PRODO primary production - nice-to-have
+ 11. ingest: underway CUFES - nice-to-have
+
+ Publish issues (one per workflow):
+ 12. publish: CTD to ERDDAP - must-complete
+ 13. publish: bottle to ERDDAP - must-complete
+ 14. publish: ichthyo cephalopods to ERDDAP - must-complete
+ 15. publish: ichthyo larvae to ERDDAP - must-complete
+ 16. publish: ichthyo eggs to ERDDAP - must-complete
+ 17. publish: DIC to ERDDAP - should-complete
+ 18. publish: zooplankton to EDI - should-complete
+ 19. publish: seabirds to OBIS - should-complete
+ 20. publish: marine mammals to OBIS - should-complete
+ 21. publish: underway MET to ERDDAP - should-complete
+
+ Infrastructure issues:
+ 22. infra: create Claude Code ingest/publish skills - infrastructure
+
+ Issue template (each ingest issue):
+ ```md
+ ## Dataset
+ - **Name**: {name}
+ - **Provider**: {provider}
+ - **Contact**: {person}
+ - **Source**: {URL or path}
+ - **Coverage**: {temporal range}
+
+ ## Checklist
+ - [ ] Data available on Google Drive
+ - [ ] `/explore-dataset` profile completed
+ - [ ] `/generate-metadata` redefinition files created
+ - [ ] `flds_redefine.csv` reviewed by domain expert
+ - [ ] `/ingest-new` workflow scaffolded
+ - [ ] Dataset-specific transforms implemented
+ - [ ] `/validate-ingest` passes
+ - [ ] Cross-dataset FKs validated
+ - [ ] Parquet exported & uploaded to GCS
+ - [ ] `_targets.R` updated
+ - [ ] `release_database.qmd` updated
+ - [ ] PR reviewed & merged
+
+ ## Dependencies
+ - Depends on: {prior ingests}
+ - Needed by: {publish workflows}
+ ```
+
+ ---
+ Phased Roadmap
+
+ Phase 0+1 (Parallel): Infrastructure + DIC (Weeks 1-3, Mar 17 - Apr 4)
+
+ Build skills while simultaneously doing DIC end-to-end. DIC validates the skill patterns.
+
+ - Create 5 Claude Code skills in .claude/skills/
+ - Create ingest/publish templates
+ - Create all GitHub issues + close stale ones
+ - DIC ingest (2-3 days) -- merge into bottle_measurement, extend bottle ingest or create
+ supplemental
+ - Refine skills based on DIC experience
+
+ Phase 2: Remaining Must-Complete Ingests (Weeks 4-6, Apr 7 - Apr 25)
+
+ - Euphausiids ingest (3-5 days) -- single CSV, species counts by net tow
+ - Zooplankton biovolume ingest (5-7 days) -- PIC data, station matching
+
+ Phase 3: Must-Complete Publishes + Complex Ingest (Weeks 7-10, Apr 28 - May 23)
+
+ - Phytoplankton ingest (7-10 days) -- most complex, multiple sources
+ - CTD to ERDDAP publish (3-5 days)
+ - Bottle to ERDDAP publish (3-5 days)
+ - Ichthyo subsets to ERDDAP publishes: cephalopods, larvae, eggs (2-3 days each)
+
+ Phase 4: Should-Complete (Weeks 11-13, May 26 - Jun 13)
+
+ - Seabird + Marine mammals ingests + OBIS publishes
+ - ZooDb ingest
+ - DIC to ERDDAP, Zooplankton to EDI publishes
+
+ Phase 5: Nice-to-Have (Weeks 14+, Jun 16-30)
+
+ - PRODO, CUFES, ZooScan, lobster phyllosoma -- only if time permits
+
+ ---
+ Key Architectural Decisions
+
+ A. DIC → bottle_measurement (Confirmed)
+
+ DIC measurements merge into existing bottle_measurement table since DIC is sampled from the same
+ Niskin bottles. Add dic, alkalinity, ph entries to measurement_type.csv. Map via cast_id or
+ cruise+station+depth matching to existing casts table.
+
+ B. Cephalopods = Publish, Not Ingest (Confirmed)
+
+ Cephalopods are already in the ichthyo ingest (subset of species in the SWFSC database). Create
+ publish_ichthyo-cephalopods_to_erddap.qmd to extract and format for ERDDAP. Same pattern applies to
+  larvae counts/sizes/stages and egg counts/stages -- all publish workflows from existing ichthyo
+ data.
+
+ C. Table Naming
+
+ New ingest tables follow {dataset}_{table} pattern. Shared tables (ship, cruise, grid,
+ measurement_type, species, taxon) loaded from ichthyo via load_prior_tables().
+
+ D. Cross-Dataset Matching
+
+ Standard: derive_cruise_key_on_casts() by ship_key + datetime. For datasets without ship/cruise
+ IDs: line+station+date proximity.
+
+ E. measurement_type Unification
+
+ metadata/measurement_type.csv (100 entries) is the reference. New datasets add entries before
+ implementing pivot logic.
+
+ F. release_database.qmd
+
+ Each new ingest adds a parquet_dirs entry. Release "caboose" assembles all and validates
+ cross-dataset integrity.
+
+ ---
+ Critical Files
+
+ ┌─────────────────────────────────────────┬─────────────────────────────────────────────────────┐
+ │                  File                   │                        Role                         │
+ ├─────────────────────────────────────────┼─────────────────────────────────────────────────────┤
+ │ calcofi4db/R/read.R                     │ read_csv_files(), create_redefinition_files() --    │
+ │                                         │ bootstraps every new ingest                         │
+ ├─────────────────────────────────────────┼─────────────────────────────────────────────────────┤
+ │ calcofi4db/R/workflow.R                 │ finalize_ingest(), write_ingest_outputs() -- export │
+ │                                         │  path                                               │
+ ├─────────────────────────────────────────┼─────────────────────────────────────────────────────┤
+ │ calcofi4db/R/wrangle.R                  │ derive_cruise_key_on_casts(),                       │
+ │                                         │ assign_deterministic_uuids()                        │
+ ├─────────────────────────────────────────┼─────────────────────────────────────────────────────┤
+ │ calcofi4db/R/taxonomy.R                 │ standardize_species_local(),                        │
+ │                                         │ build_taxon_hierarchy()                             │
+ ├─────────────────────────────────────────┼─────────────────────────────────────────────────────┤
+ │ calcofi4db/R/validate.R                 │ validate_fk_references(), validate_for_release()    │
+ ├─────────────────────────────────────────┼─────────────────────────────────────────────────────┤
+ │ workflows/ingest_calcofi_bottle.qmd     │ Best template reference (pivot, bridge, spatial)    │
+ ├─────────────────────────────────────────┼─────────────────────────────────────────────────────┤
+ │ workflows/_targets.R                    │ Pipeline DAG -- every new ingest/publish registers  │
+ │                                         │ here                                                │
+ ├─────────────────────────────────────────┼─────────────────────────────────────────────────────┤
+ │ workflows/metadata/measurement_type.csv │ Shared measurement vocabulary                       │
+ ├─────────────────────────────────────────┼─────────────────────────────────────────────────────┤
+ │ workflows/release_database.qmd          │ Release "caboose" -- updated per new ingest         │
+ ├─────────────────────────────────────────┼─────────────────────────────────────────────────────┤
+ │ workflows/publish_ichthyo_to_obis.qmd   │ OBIS publish template reference                     │
+ └─────────────────────────────────────────┴─────────────────────────────────────────────────────┘
+
+ ---
+ Verification
+
+ After Phase 0+1 (skills + DIC):
+ 1. Test each skill on the DIC dataset
+ 2. Verify DIC measurements appear in bottle_measurement table
+ 3. Verify cross-dataset FK integrity with existing casts
+ 4. Run release_database.qmd with DIC included
+
+ After each subsequent ingest:
+ 1. Render ingest QMD end-to-end
+ 2. /validate-ingest passes
+ 3. release_database.qmd includes new dataset
+ 4. Cross-dataset FK integrity verified
+ 5. Parquet files on GCS
+
+⏺ Everything is in place. Here's a summary of what was implemented:
+                                                                                                     
+  Completed                                                                                          
+  
+  Claude Code Skills (5)                                                                             
+                                                                  
+  ┌────────────────────┬─────────────────────────────────────┬────────────────────────────────────┐  
+  │       Skill        │                File                 │              Purpose               │
+  ├────────────────────┼─────────────────────────────────────┼────────────────────────────────────┤  
+  │ /explore-dataset   │ .claude/skills/explore-dataset.md   │ Profile CSV/ERDDAP data before     │
+  │                    │                                     │ ingestion                          │
+  ├────────────────────┼─────────────────────────────────────┼────────────────────────────────────┤  
+  │ /generate-metadata │ .claude/skills/generate-metadata.md │ Scaffold tbls_redefine.csv +       │
+  │                    │                                     │ flds_redefine.csv                  │  
+  ├────────────────────┼─────────────────────────────────────┼────────────────────────────────────┤
+  │ /ingest-new        │ .claude/skills/ingest-new.md        │ Generate ingest QMD from template  │  
+  ├────────────────────┼─────────────────────────────────────┼────────────────────────────────────┤  
+  │ /validate-ingest   │ .claude/skills/validate-ingest.md   │ Post-ingest validation (PKs, FKs,  │
+  │                    │                                     │ NULLs, ranges)                     │  
+  ├────────────────────┼─────────────────────────────────────┼────────────────────────────────────┤
+  │ /publish-template  │ .claude/skills/publish-template.md  │ Scaffold OBIS/ERDDAP/EDI publish   │  
+  │                    │                                     │ workflows                          │  
+  └────────────────────┴─────────────────────────────────────┴────────────────────────────────────┘
+                                                                                                     
+  Templates (4)                                                   
+
+  - templates/ingest_template.qmd — Universal ingest notebook with TODO markers                      
+  - templates/publish_obis_template.qmd — Darwin Core Archive (Event + Occurrence + eMoF)
+  - templates/publish_erddap_template.qmd — NCCSV with CF conventions                                
+  - templates/publish_edi_template.qmd — EML + CSV data package                                      
+                                                                                                     
+  Supporting Files                                                                                   
+                                                                                                     
+  - scripts/explore_dataset.R — R profiling script (DuckDB SUMMARIZE, FK matching, spatial/temporal  
+  coverage)
+                                                                                                     
+  GitHub Issues                                                                                      
+  
+  - Closed 6 stale issues: #6, #7, #8, #19, #20, #21                                                 
+  - Created 22 new issues: #25-46                                 
+    - 9 must-complete (4 ingest + 5 publish)                                                         
+    - 10 should-complete (5 ingest + 5 publish)                                                      
+    - 2 nice-to-have (ingest)                                                                        
+    - 1 infrastructure                                                                               
+  - Updated parent issue #1 with full project matrix and phase roadmap                               
+                                                                                                     
+  Labels Created                                                                                     
+                                                                                                     
+  must-complete, should-complete, nice-to-have, infrastructure, ingest, publish                      
+                                                                  
+  Workflow Chain                                                                                     
+                                                                  
+  /explore-dataset → /generate-metadata → /ingest-new → /validate-ingest → /publish-template         
+                                                                                                     
+  Ready to begin Phase 0+1: DIC ingest as the test case for these skills.
+
+## 2026-03-15 ctd-viz shiny app
+(cd apps)
+
+Now that the `@../workflows/ingest_calcofi_ctd-cast.qmd` has ingested the large `ctd-cast` dataset with 15 GB of `ctd_measurement` (partitioned by `cruise_key`), let's use the the client-side R functions @../calcofi4r (eg, starting with `calcofi4r::cc_get_db()`) to make a new app `ctd-viz` to:
+
+1. Visualize a **map** of one cruise at a time with segments. \
+   (Might need to create segments for this dataset. See previous segment creation with `ichthyo` dataset. This would be best done at dataset ingestion in `@../workflows/ingest_calcofi_ctd-cast.qmd` if not already there.)
+2. Visualize a **transect** from selected cruise segments with a start and end datetime.
+  - Ideally, begin/end points on the map could be selected spatially, or temporally on a timeline from begin to end of cruise.
+  - Explore these options for visualizing the transect:
+    * best: [**odv\_bathy**](https://theoceancode.netlify.app/post/odv_bathy/)
+    * [PlotSvalbard::section\_plot()](https://mikkovihtakari.github.io/PlotSvalbard/reference/section_plot.html)  
+      ggplot() \-\> interactive: plotly::ggplotly(), [ggiraph](https://davidgohel.github.io/ggiraph/)
+    * [ggOceanPlots](https://github.com/MikkoVihtakari/ggOceanPlots)
+    * [MBA::mba.surf()](https://www.rdocumentation.org/packages/MBA/versions/0.0-8/topics/mba.surf)
+    * [R oceanographic transect section plot \- Google Search](https://www.google.com/search?q=R+oceanographic+transect+section+plot)
+  - Ideally, we will supplement with best available bathymetric data to provide the seafloor in the transect visual. (Might need to filter/flag/correct CTD samples occurring below seafloor.)
+  - Ideally, this visual could be interactive to interrogate values and a maximum distance in space and time for interpolation set as a preference.
+
+←  ☐ DB connection  ☐ Selection UX  ☐ Segments  ✔ Submit  →
+                                                                               
+**DB connection**. The CTD data lives in a separate DuckDB file (calcofi-ctd.duckdb) from the 
+ichthyo data (calcofi.duckdb). The prototype connects directly to this file.   
+Should we use the httpfs remote-attach pattern (like querychat) pointing at the
+ CTD-specific DuckDB, or is the CTD data already available via
+calcofi4r::cc_get_db()?
+
+  1. httpfs to calcofi-ctd.duckdb (Recommended)
+     Same pattern as querychat app: ATTACH remote DuckDB via httpfs. Works now
+     with the existing CTD file at file.calcofi.io.
+  2. calcofi4r::cc_get_db()
+     Use the frozen parquet release system. Only works if CTD data is already
+     in a released version.
+  3. Local DuckDB file path
+     Like the prototype: direct file path with Darwin/Linux switch for ~/My
+     Drive/... vs /share/public/data
+❯ 4. Disregard the `querychat` app, which has patterns I want to skip, including use of local calcofi-ctd.duckdb. Use `calcofi4r::cc_get_db()` and think freshly about these tasks (do not repeat querychat app patterns).
+
+**Selection UX**. For the transect begin/end selection, which interaction model do you prefer?
+                                                                               
+  1. Click two map markers (Recommended)                                       
+     Click cast point markers on the map to set begin and end. Simple, works 
+     with leaflet click events. All casts between them (by temporal/ordinal 
+     order) form the transect.
+  2. Timeline slider below map                 
+     A datetime range slider below the map to select temporal begin/end. More  
+     visual but more complex to implement.         
+  3. Both options          
+     Support both click-on-map and timeline slider, synced together. Most     
+     flexible but most complex.
+❯ 4. Use both options to select begin/end either spatially or temporally, but also use the mapgl library for mapping like `@../int-app`, which has many preferred patterns.
+
+**Segments**. Should the segment creation also be added to the ingest workflow            
+(ingest_calcofi_ctd-cast.qmd) as part of this task, or just computed on-the-fly
+ in the app for now?                                                           
+                                                                             
+❯ 1. App-only for now (Recommended)                                         
+     Compute segments on-the-fly from ctd_cast data in the app. Fast enough for
+      a single cruise (~100-500 casts). Add to ingest workflow later.
+  2. Both app and ingest workflow                                              
+     Also add a ctd_segment table to the ingest workflow, following the ichthyo
+      segment pattern. Requires re-running the ingest.
+
+⏺ The plan is updated. Key changes from your feedback:  
+                                                                               
+  - calcofi4r::cc_get_db() for database connection (no httpfs/querychat        
+  patterns)                                                                    
+  - mapgl::maplibre() for mapping (not leaflet), following int-app patterns    
+  - Both map click + timeline slider for transect begin/end selection, synced  
+  together                                                                     
+  - bslib::page_sidebar() with navset_card_underline (int-app layout pattern)  
+  - Segments computed on-the-fly in the app only                               
+                                                                               
+
+ Ready to code?                                                                
+                                                                               
+ Here is Claude's plan:
+
+ Plan: ctd-viz Shiny App                                
+
+ Context
+
+ CalCOFI's CTD cast dataset (~15 GB of ctd_measurement partitioned by
+ cruise_key) has been ingested via workflows/ingest_calcofi_ctd-cast.qmd. The
+ data lives in DuckDB tables: ctd_cast (cast-level metadata with geometry),
+ ctd_measurement (long-format sensor readings at depth), ctd_summary
+ (pre-aggregated stats), and measurement_type (reference). No segments exist
+ for CTD data yet — computed on-the-fly in the app.
+
+ An early prototype exists at apps_dev/ctd-viz/app.R. The new app will be
+ production-quality at apps/ctd-viz/ using calcofi4r::cc_get_db() and patterns
+  from the int-app (mapgl, bslib page_sidebar, etc.).
+
+ File Structure
+
+ apps/ctd-viz/
+ ├── global.R    -- packages, cc_get_db() connection, startup queries, helper
+ functions
+ ├── ui.R        -- bslib page_sidebar with 2 tabs (Cruise Map, Transect)
+ └── server.R    -- reactive logic: map interaction, transect plotting
+
+ ---
+ Step 1: global.R — Setup & Helpers
+
+ Packages (following int-app pattern)
+
+ librarian::shelf(
+   bslib, bsicons, calcofi/calcofi4r,
+   DBI, dbplyr, dplyr, duckdb,
+   geosphere, ggplot2, glue,
+   lubridate, mapgl, marmap, MBA,
+   plotly, purrr, sf, shiny,
+   tidyr, viridis,
+   quiet = T)
+
+ Database connection
+
+ con <- calcofi4r::cc_get_db()
+ dbExecute(con, "INSTALL spatial; LOAD spatial;")
+
+ Startup queries (lightweight, run once)
+
+ 1. cruise_choices: distinct cruise_key from ctd_cast, joined with
+ cruise.date_ym and ship.ship_name → named vector for selectInput (ordered
+ desc by cruise_key for most recent first)
+ 2. meas_types: full measurement_type table filtered to CTD types → for
+ variable selector (show description (units))
+ 3. default cruise: pick most recent cruise_key as initial selection
+
+ Helper functions
+
+ compute_segments(casts_df) — On-the-fly segment creation (ichthyo pattern
+ from ingest_swfsc_ichthyo.qmd:806-890):
+ - Input: data.frame with ctd_cast_uuid, datetime_utc, lat_dec, lon_dec,
+ ord_occ, sta_key, line, sta
+ - Sort by ord_occ then datetime_utc
+ - Lag to get begin/end points for consecutive casts
+ - Create sf::st_linestring() geometries between consecutive casts
+ - Compute length_km via sf::st_length()
+ - Return sf data.frame of segment lines
+
+ get_transect_bathy(transect_pts) — Bathymetry along transect:
+ - marmap::getNOAA.bathy() with keep = TRUE for disk caching
+ - marmap::get.depth() at interpolated points along the transect path
+ - Return tibble with dist_km, bathy_depth_m
+
+ build_transect_plot(meas_data, bathy_data, meas_label, max_depth, interp_n) —
+  ODV-style plot:
+ - MBA::mba.surf() for 2D interpolation (dist_km × depth_m → value)
+ - ggplot: geom_raster() + geom_contour() + bathymetry polygon + station rug
+ marks
+ - Return ggplot object (caller wraps with ggplotly())
+
+ ---
+ Step 2: ui.R — Layout (following int-app's bslib patterns)
+
+ Use bslib::page_sidebar() with navset_card_underline for tabs (like int-app),
+  not page_navbar.
+
+ Sidebar (persistent across tabs)
+
+ - selectInput("sel_cruise") — single cruise selection
+ - actionButton("btn_load_cruise") — "Load Cruise"
+ - hr()
+ - Transect selection info — htmlOutput("txt_selection_info") showing
+ begin/end stations
+ - actionButton("btn_reset_selection") — "Reset Selection"
+ - hr()
+ - Transect plot controls (visible when Transect tab active):
+   - selectInput("sel_meas_type") — measurement variable
+   - selectInput("sel_cast_dir") — "Downcast (D)" / "Upcast (U)", default "D"
+   - sliderInput("sl_max_depth") — 0–5000, default 500
+   - numericInput("num_interp_n") — MBA grid resolution, default 200
+   - checkboxInput("chk_bathy") — "Show bathymetry", default TRUE
+   - actionButton("btn_plot") — "Plot Transect"
+
+ Main content — navset_card_underline
+
+ - "Cruise Map" tab: maplibreOutput("map_cruise", height = "100%")
+ - "Transect" tab: plotlyOutput("plot_transect", height = "100%")
+
+ Below map: Timeline slider
+
+ - sliderInput("sl_time_range") — datetime range slider spanning the cruise's
+ begin/end datetimes
+ - Synced with map click selection: clicking cast markers updates the slider,
+ dragging slider updates map highlights
+
+ ---
+ Step 3: server.R — Reactive Logic
+
+ Reactive values
+
+ rv <- reactiveValues(
+   cruise_casts    = NULL,   # sf: all casts for selected cruise
+   cruise_segments = NULL,   # sf: computed segment lines
+   sel_begin_idx   = NULL,   # integer index (by ord_occ order) of begin cast
+   sel_end_idx     = NULL,   # integer index of end cast
+   transect_casts  = NULL    # subset of casts between begin/end
+ )
+
+ Flow 1: Load Cruise → Map
+
+ observeEvent(input$btn_load_cruise):
+ 1. Query ctd_cast WHERE cruise_key = sel_cruise, collect
+ 2. Convert to sf with st_as_sf(coords = c("lon_dec", "lat_dec"), crs = 4326)
+ 3. Call compute_segments() to create segment lines
+ 4. Store in rv$cruise_casts, rv$cruise_segments
+ 5. Update timeline slider range to cruise's min/max datetime
+ 6. Reset selection state
+
+ Map rendering with mapgl::maplibre() (following int-app patterns):
+ - Base style: carto_style("voyager") (light mode)
+ - Cast points as circle layer via add_circle_layer() colored by line number
+ - Segment lines via add_line_layer()
+ - Navigation and scale controls
+ - fit_bounds() to cruise extent
+
+ Flow 2: Transect Selection (dual: map click + timeline slider)
+
+ Map click — observeEvent(input$map_cruise_feature_click):
+ 1. First click → set rv$sel_begin_idx, add green highlight marker via
+ maplibre_proxy()
+ 2. Second click → set rv$sel_end_idx, add red highlight marker
+ 3. Subset casts between begin/end by ord_occ order → rv$transect_casts
+ 4. Highlight selected segments (thicker/brighter line) via proxy
+ set_paint_property()
+ 5. Update timeline slider to match selected time range
+
+ Timeline slider — observeEvent(input$sl_time_range):
+ 1. Filter rv$cruise_casts to casts within slider's datetime range
+ 2. Set rv$sel_begin_idx and rv$sel_end_idx from first/last filtered cast
+ 3. Update rv$transect_casts
+ 4. Update map highlights via proxy
+
+ Both selection methods stay synced — changing one updates the other.
+
+ Flow 3: Plot Transect
+
+ eventReactive(input$btn_plot):
+ 1. Query measurements (performance-critical):
+ SELECT m.depth_m, m.measurement_value,
+        c.sta_key, c.lat_dec, c.lon_dec, c.ord_occ
+ FROM ctd_measurement m
+ INNER JOIN ctd_cast c ON m.ctd_cast_uuid = c.ctd_cast_uuid
+ WHERE m.cruise_key = '{cruise_key}'           -- partition pruning!
+   AND m.measurement_type = '{meas_type}'
+   AND c.cast_dir = '{cast_dir}'
+   AND c.ctd_cast_uuid IN ({uuid_list})
+ ORDER BY c.ord_occ, m.depth_m
+ 1. Single cruise × single variable × selected casts → typically 10K-100K
+ rows.
+ 2. Compute distance: cumulative haversine distance via
+ geosphere::distHaversine() between consecutive cast locations
+ 3. Interpolate: MBA::mba.surf(data.frame(dist_km, depth_m, value), no.X = n,
+ no.Y = n, extend = TRUE)
+ 4. Fetch bathymetry (if chk_bathy): get_transect_bathy() along the transect
+ path, cached
+ 5. Build plot: build_transect_plot() → plotly::ggplotly() for interactivity
+
+ ---
+ Step 4: ODV-Style Transect Plot Details
+
+ ggplot construction
+
+ ggplot() +
+   geom_raster(data = d_grid, aes(dist_km, depth_m, fill = value), interpolate
+  = TRUE) +
+   scale_fill_viridis_c(name = meas_label) +
+   geom_contour(data = d_grid, aes(dist_km, depth_m, z = value),
+                color = "white", alpha = 0.4, linewidth = 0.3) +
+   geom_rug(data = station_pos, aes(x = dist_km), sides = "t") +
+   geom_polygon(data = bathy_polygon, aes(dist_km, depth_m),
+                fill = "gray40", color = "black", linewidth = 0.5) +
+   scale_y_reverse(limits = c(max_depth, 0), expand = c(0, 0)) +
+   scale_x_continuous(expand = c(0, 0)) +
+   labs(x = "Distance (km)", y = "Depth (m)",
+        title = glue("{meas_desc} — Cruise {cruise_key}")) +
+   theme_minimal() +
+   theme(panel.grid = element_blank())
+
+ Bathymetry polygon closes the seafloor profile at the bottom of the plot
+ area.
+
+ ---
+ Step 5: Segment Creation for Ingest (future, not this task)
+
+ Note for later: add ctd_segment table to
+ workflows/ingest_calcofi_ctd-cast.qmd following ichthyo pattern, with
+ columns: segment_id, cruise_key, ctd_cast_uuid_beg/end, lon/lat_beg/end,
+ time_beg/end, geom, time_hr, length_km, km_per_hr.
+
+ ---
+ Files to Create
+
+ 1. /Users/bbest/Github/CalCOFI/apps/ctd-viz/global.R
+ 2. /Users/bbest/Github/CalCOFI/apps/ctd-viz/ui.R
+ 3. /Users/bbest/Github/CalCOFI/apps/ctd-viz/server.R
+
+ Key Reference Files
+
+ - /Users/bbest/Github/CalCOFI/int-app/app/global.R — package loading, DB
+ setup, mapgl patterns
+ - /Users/bbest/Github/CalCOFI/int-app/app/ui.R — bslib page_sidebar +
+ navset_card_underline layout
+ - /Users/bbest/Github/CalCOFI/int-app/app/server.R — reactive patterns,
+ maplibre_proxy, feature click
+ - /Users/bbest/Github/CalCOFI/int-app/app/functions.R — mapgl layer helpers,
+ buffer_transect
+ - /Users/bbest/Github/CalCOFI/apps_dev/ctd-viz/app.R — existing prototype
+ (data schema reference)
+ - /Users/bbest/Github/CalCOFI/workflows/ingest_swfsc_ichthyo.qmd:806-890 —
+ segment creation pattern
+ - /Users/bbest/Github/CalCOFI/calcofi4r/R/database.R — cc_get_db()
+ implementation
+ - /Users/bbest/Github/CalCOFI/workflows/data/parquet/calcofi_ctd-cast/metadat
+ a.json — full column schema
+
+ Verification
+
+ 1. cd apps/ctd-viz && Rscript -e "shiny::runApp('.', port = 3838)" — app
+ launches
+ 2. Select a cruise → maplibre map renders with cast circles and segment lines
+ 3. Click two cast markers on map → transect selection highlights, timeline
+ slider updates
+ 4. Drag timeline slider → map highlights update to match time range
+ 5. Switch to Transect tab, select temperature, click Plot → ODV-style
+ cross-section renders with MBA interpolation
+ 6. Toggle bathymetry → seafloor polygon appears/disappears from marmap data
+ 7. Hover over transect plot → distance, depth, and value display
+ interactively
+
+⏺ The app initializes cleanly. Here's a summary of what was created:           
+                                                                               
+  Created: apps/ctd-viz/                                                       
+                                                                  
+  3 files following the int-app patterns (bslib page_sidebar, mapgl,           
+  cc_get_db()):                                                   
+                                                                               
+  global.R                                                        
+
+  - Connects via calcofi4r::cc_get_db() (skips LOAD spatial which breaks       
+  dbplyr)
+  - Builds cruise choices from casts table joined with cruise + ship (521      
+  cruises, 1949-1999)                                                          
+  - Loads measurement_type reference (100 types; defaults to temperature)
+  - Helper functions: compute_segments(), get_transect_bathy(),                
+  build_transect_plot()                                                        
+                                                                               
+  ui.R                                                                         
+                                                                  
+  - page_sidebar with navset_card_underline (2 tabs: Cruise Map, Transect)     
+  - Sidebar: cruise selector, load button, selection info, reset, transect plot
+   controls                                                                    
+  - Cruise Map tab: maplibreOutput + time range slider            
+  - Transect tab: plotlyOutput                                                 
+                                                                  
+  server.R                                                                     
+                                                                  
+  - Flow 1 — Load Cruise: queries casts, creates sf points + segment lines,    
+  renders maplibre map with base + highlight layers
+  - Flow 2 — Select Transect: click two casts on map OR drag time slider;      
+  bidirectional sync with circular-update guard; map highlights via            
+  set_filter/set_paint_property proxy
+  - Flow 3 — Plot Transect: queries bottle + bottle_measurement, computes      
+  cumulative haversine distance, MBA interpolation, optional marmap bathymetry,
+   ggplot ODV-style plot → ggplotly
+                                                                               
+  Key adaptation from plan                                                     
+  
+  The ctd_measurement table (234M rows, partitioned) exists in the catalog but 
+  its parquet files haven't been uploaded to the GCS release yet. The app uses
+  the available casts + bottle + bottle_measurement tables instead. When       
+  ctd_measurement is released, switching back requires changing the table names
+   and join path in global.R/server.R.
+
+⏺ Syntax passes. The runtime error is just the DuckDB lock from RStudio holding
+   the cached database. The app will work once RStudio releases the lock (or on
+   the server where it'll create a fresh cache).                               
+  
+  Key changes in this update:                                                  
+                                                                  
+  global.R:                                                                    
+  - Uses ctd_cast for cruise choices (93 CTD cruises)             
+  - Falls back to S3-compatible GCS endpoint (httpfs) when cc_get_db() doesn't 
+  load partitioned tables — extracts the release version from existing view SQL
+  - Filters measurement_type to only CTD-available types (53 types)            
+  - Default measurement: temperature_1                             
+  - compute_segments() uses ctd_cast_uuid instead of cast_id                   
+                                                                  
+  ui.R:                                                                        
+  - Restored sel_cast_dir selector (Downcast D / Upcast U)        
+                                                                               
+  server.R:                                                       
+  - Loads from ctd_cast, deduplicates by ord_occ (preferring D over U) for map 
+  display                                                                      
+  - Stores both all_casts (D+U) and map_casts (deduped)
+  - Transect query: ctd_measurement joined via ctd_cast_uuid, with cruise_key  
+  partition pruning                                                            
+  - Uses selected cast_dir to pick the right UUIDs for transect measurements   
+                                                                               
+✻ Cogitated for 6m 36s                                                         
+                                                                  
+❯ Whoah, this looks very SLOW to open. When it says loading is it copying? It  
+should not copy local    
+
+I don't understand why using _source_table -- that's a provenance column that shouldn't have bearing on this app. Also, can you query cruise_key from the   
+partitions of the parquet table ctd_measurement rather than its contents?
+
+⏺ All files pass syntax. The key performance fixes:
+
+  - Cruise list: reads partition directory names from parquet_scan(...,        
+  hive_partitioning=true) (~6s) instead of scanning 6M ctd_cast rows for
+  DISTINCT cruise_key                                                          
+  - Measurement types: scans a single cruise partition (~1s) instead of all
+  234M rows                                                                    
+  - No _source_table: uses actual partition data, not provenance metadata
+
+## 2026-03-14.b rm `calcofi_working.duckdb`?
+
+Help me understand the copying of `calcofi_working.duckdb` to `gs://calcofi-db/ducklake/working/calcofi.duckdb` in `@ingest_calcofi_ctd-cast.qmd` that cause failure. It seems very big and probably unnecessary. The working database should be the same as the frozen database, except containing extra provenance columns. Both should be composed of parquet files that get imported as views into a temporary local working duckdb with a function like `calcofi4r::cc_get_db()` (@../calcofi4r/) and perhaps similar is needed in `calcofi4db` to get working duckdb, or better yet an argument in `calcofi4r::cc_get_db()` to get either working or frozen. It should also have relationships defining foreign keys between tables from the sidecar `relationships.json` file. Also, the working duckdb should only happen with the caboose of the notebooks `@release_database.qmd` anyways, not `@ingest_calcofi_ctd-cast.qmd`. Perhaps this is vestigial from previous iterations?
+
+Also reference `@README_PLAN.qmd` and `@_targets.R` -- perhaps the dependencies don't need to be linear, each dataset could be independently ingested, then merged by `@release_database.qmd`.
+
+```
+Copying file:///private/var/folders/xj/0t97bxlx4ng6s_zbmkkcfzg40000gn/T/RtmppHQ0f9/calcofi_working.duckdb to gs://calcofi-db/ducklake/working/calcofi.duckdb
+
+calcofi_working.duckdb to gs://calcofi-db/ducklake/working/calcofi.duckdb
+
+R chunk upload_gcs: 4215.2s ~ 11:20:47
+57/65                         
+58/65 [finalize_ingest]       
+WARNING: Parallel composite upload was turned ON to get the best performance on
+uploading large objects. If you would like to opt-out and instead
+perform a normal upload, run:
+`gcloud config set storage/parallel_composite_upload_enabled False`
+If you would like to disable this warning, run:
+`gcloud config set storage/parallel_composite_upload_enabled True`
+Note that with parallel composite uploads, your object might be
+uploaded as a composite object
+(https://cloud.google.com/storage/docs/composite-objects), which means
+that any user who downloads your object will need to use crc32c
+checksums to verify data integrity. gcloud storage is capable of
+computing crc32c checksums, but this might pose a problem for other
+clients.
+
+Copying file:///private/var/folders/xj/0t97bxlx4ng6s_zbmkkcfzg40000gn/T/RtmppHQ0f9/calcofi_working.duckdb to gs://calcofi-db/ducklake/working/calcofi.duckdb
+  
+.....................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................
+
+Average throughput: 16.0MiB/s
+Python(28768) MallocStackLogging: can't turn off malloc stack logging because it was not enabled.
+WARN: Error encountered when rendering files
+✖ ingest_calcofi_ctd_cast errored
+✖ errored pipeline [2h 4m 17.3s, 0 completed, 2 skipped]
+Error:
+! Error in tar_make():
+  ! Error running quarto CLI from R.
+Caused by error in `quarto::quarto_render()` at _targets.R:31:7:
+✖ Error returned by quarto CLI.
+  -----------------------------
+  
+  
+  processing file: ingest_calcofi_ctd-cast.qmd
+  1/65
+  2/65 [setup]
+  3/65
+  4/65 [d_zips]
+  R chunk d_zips: 3.1s ~ 09:48:20
+  5/65
+  6/65 [download_and_unzip]
+  R chunk download_and_unzip: 0.4s ~ 09:48:21
+  7/65
+  8/65 [d_csv]
+  R chunk d_csv: 1.2s ~ 09:48:22
+  9/65
+  10/65 [read_csv]
+  R chunk read_csv: 191.7s ~ 09:51:34
+  11/65
+  12/65 [d_bind]
+  R chunk d_bind: 85.1s ~ 09:52:59
+  13/65
+  14/65 [format_datetime]
+  R chunk format_datetime: 157.4s ~ 09:55:36
+  15/65
+  16/65 [fill_lonlat]
+  R chunk fill_lonlat: 156.8s ~ 09:58:13
+  17/65
+  18/65 [pts_distance_from_lnst]
+  R chunk pts_distance_from_lnst: 354.5s ~ 10:04:07
+  19/65
+  20/65 [view_badcr]
+  R chunk view_badcr: 0.9s ~ 10:04:08
+  21/65
+  22/65 [filter_pts]
+  R chunk filter_pts: 20.9s ~ 10:04:29
+  23/65
+  24/65 [view_pts_filt]
+  R chunk view_pts_filt: 18.8s ~ 10:04:48
+  25/65
+  26/65 [check_dupes]
+  R chunk check_dupes: 39.6s ~ 10:05:28
+  27/65
+  28/65 [rename_fields]
+  R chunk rename_fields: 20s ~ 10:05:48
+  29/65
+  30/65 [cross_dataset_bridge]
+  R chunk cross_dataset_bridge: 0.4s ~ 10:05:48
+  31/65
+  32/65 [ctd_cast]
+  R chunk ctd_cast: 4.9s ~ 10:05:53
+  33/65
+  34/65 [ctd_measurement]
+  R chunk ctd_measurement: 182.4s ~ 10:08:56
+  35/65
+  36/65 [ctd_summary]
+  R chunk ctd_summary: 85.1s ~ 10:10:21
+  37/65
+  38/65 [measurement_type]
+  R chunk measurement_type: 0.4s ~ 10:10:21
+  39/65
+  40/65 [drop_ctd_raw]
+  R chunk drop_ctd_raw: 0s ~ 10:10:21
+  41/65
+  42/65 [schema]
+  R chunk schema: 1.9s ~ 10:10:23
+  43/65
+  44/65 [add_spatial]
+  R chunk add_spatial: 3.2s ~ 10:10:26
+  45/65
+  46/65 [derived_view]
+  R chunk derived_view: 0.1s ~
+  See https://books.ropensci.org/targets/debugging.html
+```
+
+I'm not following the aspect "Update `release_database.qmd` to build from _**local parquet**_ instead of downloading from GCS". Don't we want it to use the _**remote parquet**_ on GCS?
+
+ ☐ Data source 
+                                                                               
+For `release_database.qmd`, should it read parquet from local files (guaranteed
+ by _targets dependency) or from GCS via HTTPS URLs (like cc_get_db does for   
+frozen releases)?                                         
+
+  1. Local parquet (Recommended)
+     Use local data/parquet/{dataset}/ files. Faster, no auth needed, _targets
+     guarantees they exist. GCS copies serve as backup/sharing.
+  2. GCS remote parquet
+     Read from gs://calcofi-db/ingest/{dataset}/ via httpfs HTTPS URLs. More
+     "canonical" but slower, requires GCS auth, and duplicates what's already
+     local.
+  3. Local with GCS fallback
+     Try local first, fall back to GCS if local files missing. More robust but
+     adds complexity.
+❯ 4. Local with GCS fallback. In some cases, tables might need to get merged across datasets, like `measurement_type`. Does this get handled properly? Also, not sure how the writing of parquet files gets handled successfully in this case if using remote. 
+
+⏺ Good — confirmed all 3 notebooks have finalize_ingest chunks to remove. The
+  plan is complete and coherent.
+
+ Ready to code?
+
+ Here is Claude's plan:
+
+ Plan: Eliminate Working DuckLake monolith; make ingest notebooks independent
+
+ Context
+
+ Each ingest notebook (ingest_swfsc_ichthyo.qmd, ingest_calcofi_bottle.qmd,
+ ingest_calcofi_ctd-cast.qmd) currently calls finalize_ingest() at the end,
+ which:
+
+ 1. Downloads the monolithic Working DuckLake from
+ gs://calcofi-db/ducklake/working/calcofi.duckdb
+ 2. Loads all local parquet tables into it
+ 3. Re-uploads the entire file (~20 GB) back to GCS
+
+ This takes ~70 min per upload and is redundant — release_database.qmd (the
+ "caboose") already assembles the final database from per-dataset parquet
+ outputs. The Working DuckLake was a vestigial intermediate layer.
+
+ Additionally, _targets.R enforces a strict linear chain (ichthyo → bottle →
+ ctd-cast) because load_prior_tables() reads from prior notebooks' local
+ parquet. But bottle and ctd-cast only need a few shared reference tables
+ (ship, cruise, grid) from ichthyo — they don't depend on each other.
+
+ Goals:
+ 1. Remove finalize_ingest() calls from all ingest notebooks — no more
+ monolithic DuckLake uploads
+ 2. Make bottle and ctd-cast independent (both depend on ichthyo only, not on
+ each other)
+ 3. Move the "assemble working DB" responsibility to release_database.qmd,
+ which already does this
+ 4. Update release_database.qmd to build from local parquet instead of
+ downloading from GCS
+
+ Changes
+
+ 1. Remove finalize_ingest() from ingest notebooks
+
+ Delete the "Finalize — Ingest to Working DuckLake" chunk from each notebook:
+
+ - ingest_swfsc_ichthyo.qmd (~lines 1271–1283): delete chunk finalize_ingest
+ - ingest_calcofi_bottle.qmd (~lines 1359–1373): delete chunk finalize_ingest
+ - ingest_calcofi_ctd-cast.qmd (~lines 1290–1304): delete chunk
+ finalize_ingest
+
+ 2. Make pipeline parallel where possible in _targets.R
+
+ Current chain: ichthyo → bottle → ctd-cast → release
+
+ New DAG:
+ ichthyo ──┬── bottle ──┬── release → publish_obis
+           └── ctd-cast ─┘
+
+ Change _targets.R:
+ ```r
+ list(
+   tar_target(
+     ingest_swfsc_ichthyo,
+     {
+       quarto::quarto_render("ingest_swfsc_ichthyo.qmd")
+       "data/parquet/swfsc_ichthyo/manifest.json"
+     },
+     format = "file"
+   ),
+
+   tar_target(
+     ingest_calcofi_bottle,
+     {
+       ingest_swfsc_ichthyo  # needs ship, cruise from ichthyo
+       quarto::quarto_render("ingest_calcofi_bottle.qmd")
+       "data/parquet/calcofi_bottle/manifest.json"
+     },
+     format = "file"
+   ),
+
+   tar_target(
+     ingest_calcofi_ctd_cast,
+     {
+       ingest_swfsc_ichthyo  # needs ship, cruise, grid from ichthyo
+       quarto::quarto_render("ingest_calcofi_ctd-cast.qmd")
+       "data/parquet/calcofi_ctd-cast/manifest.json"
+     },
+     format = "file"
+   ),
+
+   # ... release_database and publish_ichthyo_to_obis unchanged
+ )
+ ```
+
+ The only change: ingest_calcofi_ctd_cast depends on ingest_swfsc_ichthyo (not
+  ingest_calcofi_bottle).
+
+ 3. Update release_database.qmd to build from GCS ingest parquet (not
+ monolithic Working DuckLake)
+
+ Replace the "Open Working DuckLake" chunk (which downloads ~20 GB monolithic
+ DuckDB from GCS) with assembly from per-dataset parquet already on GCS.
+
+ Each ingest notebook uploads parquet to gs://calcofi-db/ingest/{dir_label}/
+ (e.g., ingest/swfsc_ichthyo/ship.parquet). The local manifest.json in
+ data/parquet/{dir_label}/ lists all tables and which are partitioned.
+
+ Current (release_database.qmd lines 83–92):
+ con_wdl <- get_working_ducklake()    # downloads ~20GB monolith from GCS
+ load_duckdb_extension(con_wdl, "spatial")
+
+ New: Create a local in-memory DuckDB and load_prior_tables() from each local
+ parquet dir:
+ ```r
+ con_wdl <- get_duckdb_con(":memory:")
+ load_duckdb_extension(con_wdl, "spatial")
+
+ # load all ingest parquet outputs into one DuckDB
+ parquet_dirs <- c(
+   here("data/parquet/swfsc_ichthyo"),
+   here("data/parquet/calcofi_bottle"),
+   here("data/parquet/calcofi_ctd-cast"))
+
+ for (pd in parquet_dirs) {
+   load_prior_tables(con = con_wdl, parquet_dir = pd)
+ }
+ ```
+
+ This uses the existing load_prior_tables() function (enhanced in step 4
+ below) to load all tables from each dataset's local parquet output. Since
+ _targets.R ensures all ingest notebooks complete before release_database, the
+  local parquet files are guaranteed to exist.
+
+ Shared tables: measurement_type is exported by both bottle and ctd-cast from
+ the same source CSV (metadata/measurement_type.csv). When loading all 3 dirs,
+  the second load overwrites — this is fine since content is identical.
+
+ Local with GCS fallback: Use local parquet first (fast, no auth). If local
+ files don't exist (e.g. running on a fresh machine), fall back to reading
+ from gs://calcofi-db/ingest/{dir_label}/ via HTTPS URLs. The
+ load_prior_tables() enhancement (step 4) should accept either a local dir or
+ a GCS prefix.
+
+ Also update: remove list_working_tables() call (line ~89) — replace with a
+ simple summary of loaded tables. Update prose to say "Assemble from ingest
+ outputs" instead of "Open Working DuckLake".
+
+ 4. Enhance load_prior_tables(): auto-discover, partitioned dirs, GCS fallback
+
+ File: calcofi4db/R/ducklake.R, load_prior_tables() (~line 43)
+
+ Current limitations:
+ 1. tables is required — make it optional (default NULL = discover all parquet
+  in dir)
+ 2. Only handles single .parquet files — doesn't handle hive-partitioned
+ subdirectories (like ctd_measurement/)
+ 3. Only reads local files — no GCS fallback
+
+ Changes:
+ - tables = NULL default: auto-discover single .parquet files + subdirectories
+  containing .parquet files (same discovery logic as finalize_ingest() lines
+ 258–275)
+ - Partitioned dirs: for subdirectories, use
+ read_parquet('{path}/**/*.parquet', hive_partitioning = true)
+ - gcs_prefix param (optional): when local parquet_dir doesn't exist or is
+ empty, read from https://storage.googleapis.com/calcofi-db/{gcs_prefix}/
+ instead. Requires httpfs extension. Uses the local manifest.json (or
+ downloads it from GCS) to discover table names and partitioning.
+ - Keep backward compatibility: existing calls with explicit tables param and
+ local dir still work unchanged
+
+ Files to modify
+
+ ┌───────────────────────────────────────┬─────────────────────────────────┐
+ │                 File                  │             Changes             │
+ ├───────────────────────────────────────┼─────────────────────────────────┤
+ │ workflows/ingest_swfsc_ichthyo.qmd    │ Remove finalize_ingest chunk    │
+ ├───────────────────────────────────────┼─────────────────────────────────┤
+ │ workflows/ingest_calcofi_bottle.qmd   │ Remove finalize_ingest chunk    │
+ ├───────────────────────────────────────┼─────────────────────────────────┤
+ │ workflows/ingest_calcofi_ctd-cast.qmd │ Remove finalize_ingest chunk    │
+ ├───────────────────────────────────────┼─────────────────────────────────┤
+ │ workflows/_targets.R                  │ ctd-cast depends on ichthyo     │
+ │                                       │ only (not bottle)               │
+ ├───────────────────────────────────────┼─────────────────────────────────┤
+ │                                       │ Build from local parquet        │
+ │ workflows/release_database.qmd        │ instead of                      │
+ │                                       │ get_working_ducklake()          │
+ ├───────────────────────────────────────┼─────────────────────────────────┤
+ │                                       │ Enhance load_prior_tables():    │
+ │ calcofi4db/R/ducklake.R               │ auto-discover tables, handle    │
+ │                                       │ partitioned dirs, add GCS       │
+ │                                       │ fallback                        │
+ └───────────────────────────────────────┴─────────────────────────────────┘
+
+ What NOT to change
+
+ - finalize_ingest() function itself — keep it in calcofi4db for potential
+ future use
+ - get_working_ducklake() / save_working_ducklake() — keep as utility
+ functions
+ - GCS sync of parquet files (sync_to_gcs / upload_gcs chunks) — these are
+ lightweight per-dataset uploads, not the monolithic DuckDB
+ - calcofi4r::cc_get_db() — unchanged; still reads from frozen releases
+
+ Verification
+
+ 1. Run `targets::tar_make()` — ichthyo runs first, then bottle + ctd-cast can
+ run (sequentially on single machine, but without artificial dependency)
+ 2. Each ingest notebook should finish after its `upload_gcs` chunk (no more
+ 70-min DuckLake upload)
+ 3. `release_database.qmd` should assemble all tables from local parquet and
+ produce a frozen release
+ 4. `devtools::document("calcofi4db")` if `load_prior_tables` signature changes
+
+⏺ All existing callers use named arguments (tables = ..., parquet_dir = ...),  
+  so the parameter reorder is backward compatible.                             
+                                                                               
+  Here's a summary of all changes made:                                        
+                                                                               
+  1. Removed finalize_ingest chunks from ingest notebooks                      
+                                                                    
+  - `ingest_swfsc_ichthyo.qmd`: Deleted the "Finalize — Ingest to Working
+  DuckLake" section (lines 1269–1283)
+  - `ingest_calcofi_bottle.qmd`: Same deletion (lines 1359–1373)
+  - `ingest_calcofi_ctd-cast.qmd`: Same deletion (lines 1290–1304)
+
+  2. Updated `_targets.R` — ctd-cast now depends on ichthyo only
+
+  Changed ingest_calcofi_ctd_cast dependency from ingest_calcofi_bottle to
+  ingest_swfsc_ichthyo. The DAG is now: `ichthyo → {bottle, ctd-cast} → release`.
+
+  3. Updated `release_database.qmd` — assembles from local parquet
+
+  - Replaced "Open Working DuckLake" (which downloaded ~20 GB monolith from
+  GCS) with "Assemble from Ingest Outputs" using an in-memory DuckDB +
+  load_prior_tables() over all 3 parquet dirs
+  - Updated the mermaid diagram to reflect the new flow
+  - Updated cleanup message
+
+  4. Enhanced `load_prior_tables()` in `calcofi4db/R/ducklake.R`
+
+  - tables now optional (default NULL = auto-discover all parquet sources)
+  - Partitioned dirs: auto-discovers subdirectories with .parquet files, uses
+  hive_partitioning = true
+  - GCS fallback: new gcs_prefix param reads from
+  https://storage.googleapis.com/calcofi-db/{gcs_prefix}/ when local dir is
+  missing, using manifest.json for table discovery
+  - Extracted helpers: .discover_parquet_sources(), .convert_wkb_to_geometry(),
+   .load_prior_tables_gcs()
+  - Ran devtools::document() — NAMESPACE and man pages updated
+
+Let's ∆ release from `vYYYY.MM` to `vYYYY.MM.DD`. And do I understand correctly that `working/calcofi.duckdb` will not get updated (and I can delete), so working DuckLake will essentially consist of the parquet files under `ingest/`. So I should also remove old dirs under `ingest/` from dataset renames: calcofi.org_bottle-database, calcofi.org_ctd-cast, swfsc.noaa.gov_calcofi-db; and from publish/: ichthyo_bottle, ichthyoplankton. Perhaps we could have a calcofi4db function to rename the dataset and handle this in the GCS?
+
+⏺ Updated plan                                                                 
+  ⎿  /plan to preview                                                          
+
+ Ready to code?                                                                
+                                                                               
+ Here is Claude's plan:
+
+ Plan: Version format change + GCS cleanup of obsolete dirs
+
+ Context
+
+ With the Working DuckLake monolith eliminated (previous plan), the
+ gs://calcofi-db/ducklake/working/calcofi.duckdb (26 GB) is now obsolete and
+ can be deleted. The "working" layer is now just the per-dataset parquet under
+  ingest/.
+
+ Additionally, dataset renames over time left orphan GCS directories that
+ should be cleaned up:
+ - ingest/calcofi.org_bottle-database/ → now ingest/calcofi_bottle/
+ - ingest/calcofi.org_ctd-cast/ → now ingest/calcofi_ctd-cast/
+ - ingest/swfsc.noaa.gov_calcofi-db/ → now ingest/swfsc_ichthyo/
+ - publish/ichthyo_bottle/ → obsolete (bottle removed from OBIS publication)
+ - publish/ichthyoplankton/ → now publish/ichthyo/
+
+ The release version format should change from vYYYY.MM to vYYYY.MM.DD for
+ finer granularity.
+
+ Changes
+
+ 1. Change release version format: vYYYY.MM → vYYYY.MM.DD
+
+ workflows/release_database.qmd (line 77):
+ ```r
+ # old
+ release_version <- format(Sys.Date(), "v%Y.%m")
+ # new
+ release_version <- format(Sys.Date(), "v%Y.%m.%d")
+ ```
+
+ calcofi4db/R/freeze.R — update version validation regexes:
+ ```r
+ - upload_frozen_release() (line 680): change ^v\\d{4}\\.\\d{2}$ →
+ ^v\\d{4}\\.\\d{2}\\.\\d{2}$
+ - freeze_release() (line 442): change ^v\\d{4}\\.\\d{2}(\\.\\d+)?$ →
+ ^v\\d{4}\\.\\d{2}\\.\\d{2}$
+ ```
+
+ - Update error message strings to say vYYYY.MM.DD
+ - Update @param version roxygen docs to say vYYYY.MM.DD
+
+ calcofi4r/R/database.R — update cc_get_db():
+ - Line 84: change regex ^v\\d{4}\\.\\d{2} → ^v\\d{4}\\.\\d{2}\\.\\d{2}
+ - Line 85: update error message to say vYYYY.MM.DD
+ - Line 77: update fallback default from "v2026.02" to "v2026.03.14" (or
+ whatever the current latest is — but this is a fallback, so it should match
+ the latest on GCS; we can leave this as-is for now since it reads latest.txt
+ first)
+
+ 2. Add delete_gcs_prefix() utility function
+
+ calcofi4db/R/cloud.R — new exported function:
+
+ ```r
+ #' Delete all objects under a GCS prefix
+ #'
+ #' Recursively deletes all objects matching the given prefix in a GCS bucket.
+ #' Uses `gcloud storage rm -r` under the hood. Always requires explicit
+ #' confirmation via `dry_run = FALSE`.
+ #'
+ #' @param prefix GCS prefix to delete (e.g., "ingest/old_dataset/")
+ #' @param bucket GCS bucket name (default: "calcofi-db")
+ #' @param dry_run If TRUE (default), only list what would be deleted
+ #' @return Tibble with prefix and action (would_delete / deleted)
+ #' @export
+ #' @concept cloud
+ delete_gcs_prefix <- function(
+     prefix,
+     bucket  = "calcofi-db",
+     dry_run = TRUE) {
+
+   gcs_uri <- glue::glue("gs://{bucket}/{prefix}")
+
+   if (dry_run) {
+     # list what's there
+     files <- list_gcs_files(bucket, prefix = prefix)
+     message(glue::glue(
+       "DRY RUN: would delete {nrow(files)} objects under {gcs_uri}"))
+     return(tibble::tibble(
+       prefix = prefix, n_objects = nrow(files), action = "would_delete"))
+   }
+
+   gcloud <- find_gcloud()
+   cmd    <- glue::glue('"{gcloud}" storage rm -r "{gcs_uri}"')
+   message(glue::glue("Deleting: {gcs_uri}"))
+   system(cmd, intern = TRUE)
+
+   tibble::tibble(prefix = prefix, n_objects = NA_integer_, action =
+ "deleted")
+ }
+ ```
+
+ 3. Add cleanup_gcs_obsolete() convenience function
+
+ calcofi4db/R/cloud.R — new exported function that wraps delete_gcs_prefix()
+ for the known obsolete dirs:
+
+ ```r
+ #' Clean up obsolete GCS directories from dataset renames
+ #'
+ #' Removes known-obsolete GCS prefixes left over from dataset renames
+ #' and the retired Working DuckLake monolith.
+ #'
+ #' @param bucket GCS bucket name (default: "calcofi-db")
+ #' @param dry_run If TRUE (default), only list what would be deleted
+ #' @return Tibble with prefix and action
+ #' @export
+ #' @concept cloud
+ cleanup_gcs_obsolete <- function(
+     bucket  = "calcofi-db",
+     dry_run = TRUE) {
+
+   obsolete_prefixes <- c(
+     "ducklake/working/",
+     "ingest/calcofi.org_bottle-database/",
+     "ingest/calcofi.org_ctd-cast/",
+     "ingest/swfsc.noaa.gov_calcofi-db/",
+     "publish/ichthyo_bottle/",
+     "publish/ichthyoplankton/")
+
+   purrr::map_dfr(obsolete_prefixes, function(pfx) {
+     delete_gcs_prefix(prefix = pfx, bucket = bucket, dry_run = dry_run)
+   })
+ }
+ ```
+
+ This keeps the list of obsolete prefixes explicit and auditable. The dry_run
+ = TRUE default prevents accidental deletion.
+
+ Files to modify
+
+ ┌────────────────────────────────┬────────────────────────────────────────┐
+ │              File              │                Changes                 │
+ ├────────────────────────────────┼────────────────────────────────────────┤
+ │ workflows/release_database.qmd │ v%Y.%m → v%Y.%m.%d                     │
+ ├────────────────────────────────┼────────────────────────────────────────┤
+ │ calcofi4db/R/freeze.R          │ Version validation regexes + docs (2   │
+ │                                │ functions)                             │
+ ├────────────────────────────────┼────────────────────────────────────────┤
+ │ calcofi4r/R/database.R         │ Version validation regex + error       │
+ │                                │ message in cc_get_db()                 │
+ ├────────────────────────────────┼────────────────────────────────────────┤
+ │ calcofi4db/R/cloud.R           │ Add delete_gcs_prefix() and            │
+ │                                │ cleanup_gcs_obsolete()                 │
+ └────────────────────────────────┴────────────────────────────────────────┘
+
+ What NOT to change
+
+ - Existing release dirs on GCS (v2026.02/, v2026.03/) — these stay as-is; old
+  versions are valid
+ - calcofi4r::cc_get_db() fallback default version — will get refreshed next
+ release
+ - The actual GCS deletion — that's a runtime action via
+ cleanup_gcs_obsolete(dry_run = FALSE), not a code change
+
+ Verification
+
+ 1. devtools::document("calcofi4db") — rebuild NAMESPACE/man for new functions
+ 2. devtools::document("calcofi4r") — if regex changed in cc_get_db
+ 3. Manually test: cleanup_gcs_obsolete(dry_run = TRUE) to preview deletions
+ 4. Manually test: cleanup_gcs_obsolete(dry_run = FALSE) to execute
+ 5. Run release_database.qmd — should produce a v2026.03.14/ release
+
+⏺ All changes are complete. Here's a summary:                                  
+                                                                               
+  1. Version format: vYYYY.MM → vYYYY.MM.DD                                    
+  - workflows/release_database.qmd:77 — v%Y.%m → v%Y.%m.%d                     
+  - calcofi4db/R/freeze.R — Updated freeze_release() regex + error message     
+  (line 442-443), upload_frozen_release() regex (line 680), roxygen docs and   
+  examples
+  - calcofi4r/R/database.R:84-85 — Updated cc_get_db() regex + error message
+
+  2. New GCS cleanup functions in calcofi4db/R/cloud.R
+  - delete_gcs_prefix() — generic function to delete all objects under a GCS
+  prefix (dry_run=TRUE by default)
+  - cleanup_gcs_obsolete() — convenience wrapper targeting the 6 known obsolete
+   prefixes:
+    - ducklake/working/
+    - ingest/calcofi.org_bottle-database/
+    - ingest/calcofi.org_ctd-cast/
+    - ingest/swfsc.noaa.gov_calcofi-db/
+    - publish/ichthyo_bottle/
+    - publish/ichthyoplankton/
+
+  Both packages documented successfully — NAMESPACE updated, new man pages
+  generated for delete_gcs_prefix and cleanup_gcs_obsolete.
+
+
+Why in running `Rscript -e 'targets::tar_make()'` was `@publish_ichthyo_to_obis.qmd` rendered after `@release_database.qmd` given `@_targets.R`? And why is it trying to open `calcofi_working.duckdb` -- I thought that got dismissed?
+
+```
+Output created: _output/release_database.html
+
+✔ release_database completed [52m 25.7s, 12.07 GB]
++ publish_ichthyo_to_obis dispatched
+
+
+processing file: publish_ichthyo_to_obis.qmd
+1/43                              
+2/43 [setup]                      
+Error in `.local()`:
+! {"exception_type":"IO","exception_message":"Cannot open database \"/private/var/folders/xj/0t97bxlx4ng6s_zbmkkcfzg40000gn/T/RtmpGjGZxe/calcofi_working.duckdb\" in read-only mode: database does not exist"}
+ℹ Context: rapi_startup
+Backtrace:
+     ▆
+  1. ├─calcofi4db::get_working_ducklake(read_only = TRUE)
+  2. │ └─calcofi4db::get_duckdb_con(path = local_path, read_only = read_only) at calcofi4db/R/ducklake.R:414:3
+  3. │   ├─DBI::dbConnect(...) at calcofi4db/R/duckdb.R:63:3
+  4. │   └─DBI::dbConnect(...)
+  5. │     └─duckdb (local) .local(drv, ...)
+  6. │       └─duckdb::duckdb(dbdir, read_only, bigint, config)
+  7. │         ├─methods::new(...)
+  8. │         │ ├─methods::initialize(value, ...)
+  9. │         │ └─methods::initialize(value, ...)
+ 10. │         └─duckdb:::rethrow_rapi_startup(dbdir, read_only, config, environment_scan)
+ 11. │           ├─rlang::try_fetch(...)
+ 12. │           │ ├─base::tryCatch(...)
+ 13. │           │ │ └─base (local) tryCatchList(expr, classes, parentenv, handlers)
+ 14. │           │ │   └─base (local) tryCatchOne(expr, names, parentenv, handlers[[1L]])
+ 15. │           │ │     └─base (local) doTryCatch(return(expr), name, parentenv, handler)
+ 16. │           │ └─base::withCallingHandlers(...)
+ 17. │           └─duckdb:::rapi_startup(dbdir, readonly, configsexp, environment_scan)
+ 18. ├─duckdb (local) `<fn>`("rapi_startup", "{\"exception_type\":\"IO\",\"exception_message\":\"Cannot open database \\\"/private/var/folders/xj/0t97bxlx4ng6s_zbmkkcfzg40000gn/T/RtmpGjGZxe/calcofi_working.duckdb\\\" in read-only mode: database does not exist\"}")
+ 19. │ └─rlang::abort(error_parts, class = "duckdb_error", !!!fields)
+ 20. │   └─rlang:::signal_abort(cnd, .file)
+ 21. │     └─base::signalCondition(cnd)
+ 22. └─rlang (local) `<fn>`(`<dckdb_rr>`)
+ 23.   └─handlers[[1L]](cnd)
+ 24.     └─duckdb:::rethrow_error_from_rapi(e, call)
+ 25.       └─rlang::abort(msg, call = call)
+
+Quitting from publish_ichthyo_to_obis.qmd:19-98 [setup]
+Execution halted
+WARN: Error encountered when rendering files
+✖ publish_ichthyo_to_obis errored
+✖ errored pipeline [2h 21m 16.7s, 2 completed, 2 skipped]
+Error:
+! Error in tar_make():
+  ! Error running quarto CLI from R.
+Caused by error:
+! Could not parse cli `{}` expression: `"exception_type":"I…`.
+Caused by error:
+! <text>:1:22: unexpected ','
+1: "exception_type":"IO",
+                         ^
+  See https://books.ropensci.org/targets/debugging.html
+```
+
+│ Plan to implement                                                           │
+│                                                                             │
+│ Plan: Fix publish_ichthyo_to_obis.qmd — use cc_get_db() instead of defunct  │
+│ Working DuckLake                                                            │
+│                                                                             │
+│ Context                                                                     │
+│                                                                             │
+│ publish_ichthyo_to_obis.qmd fails because it calls                          │
+│ get_working_ducklake(read_only = TRUE) (line 97), which tries to download   │
+│ gs://calcofi-db/ducklake/working/calcofi.duckdb — a monolithic file that no │
+│  longer exists. The notebook should use calcofi4r::cc_get_db() to read from │
+│  the frozen GCS release, making it work independently of local files (just  │
+│ like an external user).                                                     │
+│                                                                             │
+│ The _targets.R dependency on release_database should stay because           │
+│ cc_get_db() reads from the GCS release that release_database just uploaded. │
+│                                                                             │
+│ Changes                                                                     │
+│                                                                             │
+│ 1. Replace connection logic in publish_ichthyo_to_obis.qmd (lines 96-97) —  │
+│ REQUIRED                                                                    │
+│                                                                             │
+│ Replace:                                                                    │
+│ # get working ducklake connection ----                                      │
+│ con <- calcofi4db::get_working_ducklake(read_only = TRUE)                   │
+│ With:                                                                       │
+│ # connect to latest frozen release on GCS ----                              │
+│ con <- calcofi4r::cc_get_db()                                               │
+│                                                                             │
+│ Variable stays con so all downstream tbl(con, ...) references work          │
+│ unchanged.                                                                  │
+│                                                                             │
+│ 2. Fix cc_get_db() version regex — backward compatibility                   │
+│ (calcofi4r/R/database.R line 84)                                            │
+│                                                                             │
+│ The regex was just changed to ^v\\d{4}\\.\\d{2}\\.\\d{2} which rejects      │
+│ old-format releases like v2026.02 and v2026.03. Since cc_get_db() reads     │
+│ releases (vs freeze.R which creates them), it should accept both formats.   │
+│                                                                             │
+│ Replace:                                                                    │
+│ if (!grepl("^v\\d{4}\\.\\d{2}\\.\\d{2}", version)) {                        │
+│     stop("Version must be in format vYYYY.MM.DD (e.g., 'v2026.03.14')")     │
+│ With:                                                                       │
+│ if (!grepl("^v\\d{4}\\.\\d{2}", version)) {                                 │
+│     stop("Version must be in format vYYYY.MM or vYYYY.MM.DD (e.g.,          │
+│ 'v2026.03.14')")                                                            │
+│                                                                             │
+│ 3. Update data source docs in publish_ichthyo_to_obis.qmd (lines 13-16) —   │
+│ MINOR                                                                       │
+│                                                                             │
+│ Replace:                                                                    │
+│ **Data source**: Working DuckLake built by `ingest_swfsc_ichthyo.qmd` and   │
+│ `ingest_calcofi_bottle.qmd`, containing:                                    │
+│                                                                             │
+│ - SWFSC ichthyoplankton tables (cruise, ship, site, tow, net, ichthyo,      │
+│ species, lookup)                                                            │
+│ With:                                                                       │
+│ **Data source**: Frozen CalCOFI database release on GCS via                 │
+│ `calcofi4r::cc_get_db()`, containing:                                       │
+│                                                                             │
+│ - SWFSC ichthyoplankton tables (cruise, ship, site, tow, net, ichthyo,      │
+│ species, lookup, taxon, taxa_rank)                                          │
+│                                                                             │
+│ 4. Update cleanup chunk (line 1253) — MINOR                                 │
+│                                                                             │
+│ Replace dbDisconnect(con, shutdown = TRUE) with DBI::dbDisconnect(con,      │
+│ shutdown = TRUE) — actually this is already fine. No change needed.         │
+│                                                                             │
+│ Files to modify                                                             │
+│                                                                             │
+│ ┌───────────────────────────────────────┬───────┬─────────────────────────┐ │
+│ │                 File                  │ Lines │         Change          │ │
+│ ├───────────────────────────────────────┼───────┼─────────────────────────┤ │
+│ │                                       │       │ get_working_ducklake()  │ │
+│ │ workflows/publish_ichthyo_to_obis.qmd │ 96-97 │ →                       │ │
+│ │                                       │       │ calcofi4r::cc_get_db()  │ │
+│ ├───────────────────────────────────────┼───────┼─────────────────────────┤ │
+│ │ workflows/publish_ichthyo_to_obis.qmd │ 13-16 │ Update data source      │ │
+│ │                                       │       │ documentation           │ │
+│ ├───────────────────────────────────────┼───────┼─────────────────────────┤ │
+│ │                                       │       │ Relax regex to accept   │ │
+│ │ calcofi4r/R/database.R                │ 84-85 │ both vYYYY.MM and       │ │
+│ │                                       │       │ vYYYY.MM.DD             │ │
+│ └───────────────────────────────────────┴───────┴─────────────────────────┘ │
+│                                                                             │
+│ What NOT to change                                                          │
+│                                                                             │
+│ - _targets.R dependency — keep release_database since cc_get_db() reads the │
+│  GCS release                                                                │
+│ - calcofi4db/R/freeze.R regexes — these enforce new format for creating     │
+│ releases (correct)                                                          │
+│                                                                             │
+│ Verification                                                                │
+│                                                                             │
+│ 1. devtools::document("calcofi4r") — rebuild after regex fix                │
+│ 2. quarto::quarto_render("publish_ichthyo_to_obis.qmd") — should connect to │
+│  latest GCS release                                                         │
+│ 3. Or full pipeline: targets::tar_make() — publish runs after release       │
+│ uploads to GCS                  
+
+⏺ All three changes applied:
+
+  1. publish_ichthyo_to_obis.qmd line 96-97 — get_working_ducklake() →
+  calcofi4r::cc_get_db()
+  2. publish_ichthyo_to_obis.qmd lines 13-15 — Updated data source docs to
+  reference frozen GCS release and added taxon, taxa_rank to table list
+  3. calcofi4r/R/database.R line 84 — Relaxed version regex to accept both
+  vYYYY.MM and vYYYY.MM.DD formats
+
+  To verify, run devtools::document("calcofi4r") to rebuild docs after the
+  regex fix, then either render the notebook or run the full pipeline with
+  targets::tar_make().
+
+
+## 2026-03-14 rerun ingest_calcofi_ctd-cast.qmd ensuring sync 
+
+The @ingest_calcofi_ctd-cast.qmd finally got through the "upload_gcs" R chunk, only to error out b/c of missing fname argument to dt() in finalize_ingest R chunk, which I've fixed. Ready to run again, but want to be sure that the parquet files are not recreated unless need be and importantly are not uploaded unless different.
+
+But it is re-uploading the parquet files? Is there something non-deterministic about the primary key UUID generation or perhaps datetime-based that changes it on each run?
+
+```
+R chunk write_metadata: 0.9s ~ 08:32:37
+55/65                         
+56/65 [upload_gcs]            
+Copying file:///Users/bbest/Github/CalCOFI/workflows/data/parquet/calcofi_ctd-cast/ctd_cast.parquet to gs://calcofi-db/ingest/calcofi_ctd-cast/ctd_cast.parquet
+...
+Average throughput: 24.1MiB/s
+Copying file:///Users/bbest/Github/CalCOFI/workflows/data/parquet/calcofi_ctd-cast/ctd_measurement/cruise_key=0302JD/data_0.parquet to gs://calcofi-db/ingest/calcofi_ctd-cast/ctd_measurement/cruise_key=0302JD/data_0.parquet
+...
+```
+
+⏺ Updated plan
+  ⎿  /plan to preview
+
+ Ready to code?
+                                                                               
+ Here is Claude's plan:
+
+ Plan: Prevent unnecessary parquet re-writes and GCS re-uploads
+
+ Context
+
+ Re-running ingest_calcofi_ctd-cast.qmd re-uploads all parquet files to GCS
+ (~20 GB) even when data is identical. sync_to_gcs() correctly compares file
+ MD5s, but the regenerated files always differ because:
+
+ 1. Parquet files — DuckDB's COPY TO embeds writer metadata in the Parquet
+ footer → same data produces different binary → different MD5
+ 2. JSON sidecars — manifest.json, metadata.json, relationships.json embed
+ created_at = Sys.time() → always different
+
+ Changes
+
+ 1. Skip parquet write when row count matches existing output
+
+ File: calcofi4db/R/wrangle.R, write_parquet_outputs() (~line 1159, inside the
+  map_dfr loop)
+
+ Before writing each table, check if the output already exists. If the
+ existing parquet has the same row count as the current table, skip the write.
+
+ Insert before the if (is_partitioned) block at line 1179:
+
+ ```r
+ # check if we can skip this table (output exists with same row count)
+ n_rows <- DBI::dbGetQuery(con, glue::glue(
+   "SELECT COUNT(*) AS n FROM {tbl}"))$n
+
+ skip <- FALSE
+ if (is_partitioned && dir.exists(output_path)) {
+   existing_n <- tryCatch(
+     DBI::dbGetQuery(con, glue::glue(
+       "SELECT COUNT(*) AS n
+        FROM read_parquet('{output_path}/**/*.parquet')"))$n,
+     error = function(e) -1)
+   skip <- (existing_n == n_rows)
+ } else if (!is_partitioned && file.exists(output_path)) {
+   existing_n <- tryCatch(
+     DBI::dbGetQuery(con, glue::glue(
+       "SELECT COUNT(*) AS n FROM read_parquet('{output_path}')"))$n,
+     error = function(e) -1)
+   skip <- (existing_n == n_rows)
+ }
+
+ if (skip) {
+   file_size <- if (is_partitioned) {
+     part_files <- list.files(output_path, "\\.parquet$",
+                              recursive = TRUE, full.names = TRUE)
+     sum(file.info(part_files)$size)
+   } else {
+     file.info(output_path)$size
+   }
+   message(glue::glue(
+     "Skipped {tbl}: {format(n_rows, big.mark = ',')} rows unchanged"))
+   return(tibble::tibble(
+     table = tbl, rows = n_rows, file_size = file_size,
+     path = output_path, partitioned = is_partitioned))
+ }
+ ```
+
+ Move the existing n_rows query (line 1208) up into this block to avoid
+ querying it twice. The existing write logic stays as-is for the non-skip
+ path.
+
+ 2. Remove created_at timestamps from JSON sidecars
+
+ File: calcofi4db/R/wrangle.R
+
+ - Line 1229 (write_parquet_outputs manifest): remove created_at =
+ as.character(Sys.time())
+ - Line 1456 (build_metadata_json): remove created_at = format(Sys.time(),
+ ...)
+ - Line 1534 (build_relationships_json): remove created_at =
+ format(Sys.time(), ...)
+ - Line 1662 (merge_relationships_json): remove created_at =
+ format(Sys.time(), ...)
+
+ 3. Also remove updated_at from ichthyo rewrite_parquet manifest update
+
+ File: workflows/ingest_swfsc_ichthyo.qmd (~line 1251)
+
+ The rewrite_parquet chunk updates the manifest with manifest$updated_at <-
+ as.character(Sys.time()) — remove this line.
+
+ Files to modify
+
+ ┌────────────────────────────────────┬────────────────────────────────────┐
+ │                File                │              Changes               │
+ ├────────────────────────────────────┼────────────────────────────────────┤
+ │                                    │ Add row-count skip logic to        │
+ │ calcofi4db/R/wrangle.R             │ write_parquet_outputs(). Remove    │
+ │                                    │ created_at from 4 JSON outputs.    │
+ ├────────────────────────────────────┼────────────────────────────────────┤
+ │ workflows/ingest_swfsc_ichthyo.qmd │ Remove updated_at timestamp from   │
+ │                                    │ manifest rewrite (~line 1251)      │
+ └────────────────────────────────────┴────────────────────────────────────┘
+
+ Verification
+
+ 1. Run ingest_calcofi_ctd-cast.qmd — first run writes all parquet files
+ normally
+ 2. Re-run same notebook — should show "Skipped {table}: N rows unchanged" for
+  each table
+ 3. sync_to_gcs() should report "Skipped (unchanged)" for all files
+ 4. Run devtools::document("calcofi4db") after changes
+
+⏺ All changes are complete. Here's a summary:                                  
+                                                                               
+  Changes made:                                                                
+                                                                               
+  calcofi4db/R/wrangle.R                                                       
+  1. Row-count skip logic in write_parquet_outputs() — before writing each     
+  table, checks if existing parquet has the same row count. If so, skips the
+  write and prints "Skipped {tbl}: N rows unchanged". The n_rows query was
+  moved up to avoid duplication.
+  2. Removed created_at from 4 JSON outputs:
+    - write_parquet_outputs() manifest (line ~1229)
+    - build_metadata_json() metadata (line ~1456)
+    - build_relationships_json() relationships (line ~1534)
+    - merge_relationships_json() merged relationships (line ~1662)
+
+  workflows/ingest_swfsc_ichthyo.qmd
+  3. Removed updated_at timestamp from the manifest rewrite in the
+  rewrite_parquet chunk.
+
+  How it works:
+
+  - On first run, all parquet files write normally
+  - On re-run with identical data, existing parquets are detected with matching
+   row counts → writes are skipped → MD5s stay the same → sync_to_gcs() skips
+  uploads
+
+
+## 2026-03-13.d run all notebooks with targets
+
+Remind me how to use R package `targets` to re-render all these notebooks in sequence (see `@README_PLAN.qmd`), and later when just one of them updates to trigger all necessary dependencies.
+
+- `@ingest_swfsc_ichthyo.qmd`
+- `@ingest_calcofi_bottle.qmd`
+- `@ingest_calcofi_ctd-cast.qmd`
+- `@release_database.qmd`
+
+⏺ You already have a _targets.R in workflows/ but it's from an earlier
+  iteration — it tracks individual CSV-level targets rather than orchestrating 
+  the Quarto notebooks as units. Here's how to use targets +                   
+  tarchetypes::tar_quarto() for your current notebook-based pipeline:          
+                                                                               
+  How targets works with Quarto notebooks                                      
+                                                                  
+  The key function is tarchetypes::tar_quarto() — it renders a .qmd file and   
+  tracks it as a target. Combined with explicit dependencies between targets,
+  targets knows the execution order and only re-runs what changed.
+
+  Approach: `_targets.R` for notebook orchestration
+  ```r
+  # workflows/_targets.R
+  # run with: targets::tar_make()
+  # visualize: targets::tar_visnetwork()
+
+  library(targets)
+  library(tarchetypes)
+
+  tar_option_set(
+    packages = c("calcofi4db", "duckdb", "DBI", "glue", "here"))
+
+  list(
+    # ─── Step 1: Ingest SWFSC ichthyo ────────────────────────────────
+    tar_quarto(
+      ingest_ichthyo,
+      path = "ingest_swfsc_ichthyo.qmd",
+      quiet = FALSE),
+
+    # ─── Step 2: Ingest bottle (depends on ichthyo for shared tables) ─
+    tar_quarto(
+      ingest_bottle,
+      path = "ingest_calcofi_bottle.qmd",
+      quiet = FALSE),
+
+    # ─── Step 3: Ingest CTD-cast ─────────────────────────────────────
+    tar_quarto(
+      ingest_ctd,
+      path = "ingest_calcofi_ctd-cast.qmd",
+      quiet = FALSE),
+
+    # ─── Step 4: Release (depends on all 3 ingests) ──────────────────
+    tar_quarto(
+      release,
+      path = "release_database.qmd",
+      quiet = FALSE)
+  )
+  ```
+
+  The problem: implicit vs explicit dependencies
+
+  `tar_quarto()` auto-detects file-level dependencies (the .qmd source and
+  anything it source()s). But it does not know that `release_database.qmd`
+  depends on the outputs of the 3 ingest notebooks. You need to declare those
+  dependencies explicitly.
+
+  Two ways to do this:
+
+  **Option A: Use format = "file" targets for the outputs (recommended)**
+
+  Track the manifest/relationships files that each notebook produces as file
+  targets, then wire them together:
+
+  ```r
+  library(targets)
+  library(tarchetypes)
+
+  tar_option_set(
+    packages = c("calcofi4db", "duckdb", "DBI", "glue", "here"))
+
+  list(
+    # ─── Step 1: Ingest SWFSC ichthyo ────────────────────────────────
+    tar_quarto(
+      ingest_ichthyo,
+      path = "ingest_swfsc_ichthyo.qmd",
+      quiet = FALSE),
+
+    # track its output manifest as a file dependency
+    tar_target(
+      ichthyo_manifest,
+      {
+        ingest_ichthyo           # force dependency on render
+        "data/parquet/swfsc.noaa.gov_calcofi-db/manifest.json"
+      },
+      format = "file"),
+
+    # ─── Step 2: Ingest bottle ──────────────────────────────────────
+    tar_quarto(
+      ingest_bottle,
+      path = "ingest_calcofi_bottle.qmd",
+      quiet = FALSE),
+
+    tar_target(
+      bottle_manifest,
+      {
+        ingest_bottle
+        "data/parquet/calcofi.org_bottle-database/manifest.json"
+      },
+      format = "file"),
+
+    # ─── Step 3: Ingest CTD-cast ────────────────────────────────────
+    tar_quarto(
+      ingest_ctd,
+      path = "ingest_calcofi_ctd-cast.qmd",
+      quiet = FALSE),
+
+    tar_target(
+      ctd_manifest,
+      {
+        ingest_ctd
+        "data/parquet/calcofi.org_ctd-cast/manifest.json"
+      },
+      format = "file"),
+
+    # ─── Step 4: Release (depends on all 3 manifests) ───────────────
+    tar_target(
+      release,
+      {
+        # explicit dependency on all 3 ingest outputs
+        ichthyo_manifest
+        bottle_manifest
+        ctd_manifest
+        quarto::quarto_render("release_database.qmd", quiet = FALSE)
+        here::here("data/releases")
+      },
+      format = "file")
+  )
+  ```
+
+  **Option B: Simpler — just use tar_target with quarto_render calls**
+
+  If `tar_quarto()` causes issues (it can be finicky with complex notebooks), use
+   plain `tar_target` + `quarto::quarto_render()`:
+
+  ```r
+  list(
+    tar_target(
+      ingest_ichthyo,
+      {
+        quarto::quarto_render("ingest_swfsc_ichthyo.qmd")
+        "data/parquet/swfsc.noaa.gov_calcofi-db/manifest.json"
+      },
+      format = "file"),
+
+    tar_target(
+      ingest_bottle,
+      {
+        ingest_ichthyo  # depends on ichthyo finishing first
+        quarto::quarto_render("ingest_calcofi_bottle.qmd")
+        "data/parquet/calcofi.org_bottle-database/manifest.json"
+      },
+      format = "file"),
+
+    tar_target(
+      ingest_ctd,
+      {
+        ingest_bottle  # depends on bottle finishing first
+        quarto::quarto_render("ingest_calcofi_ctd-cast.qmd")
+        "data/parquet/calcofi.org_ctd-cast/manifest.json"
+      },
+      format = "file"),
+
+    tar_target(
+      release,
+      {
+        ingest_ichthyo
+        ingest_bottle
+        ingest_ctd
+        quarto::quarto_render("release_database.qmd")
+        here::here("data/releases")
+      },
+      format = "file")
+  )
+  ```
+
+  Running it
+
+  ```r
+  # from workflows/ directory:
+
+  # run all (or just what's outdated):
+  targets::tar_make()
+
+  # see what's outdated without running:
+  targets::tar_outdated()
+
+  # visualize the dependency graph:
+  targets::tar_visnetwork()
+
+  # force re-run of just one target + its downstream:
+  targets::tar_invalidate(ingest_bottle)
+  targets::tar_make()
+  ```
+  How re-runs work
+
+  - `tar_make()` checks each target's inputs (source file hash, upstream target
+  hashes). If nothing changed, it skips.
+  - If you re-render `ingest_calcofi_bottle.qmd` and its `manifest.json` changes →
+  `bottle_manifest` is outdated → `release` is outdated → both re-run.
+  - If only `ingest_calcofi_ctd-cast.qmd` changes → only `ingest_ctd` + `release`
+  re-run; `ichthyo` and `bottle` are skipped.
+
+  My recommendation
+
+  Use Option B — it's simpler, more robust with complex notebooks, and the
+  format = "file" on each manifest gives you proper change detection. Your
+  existing `_targets.R` already uses this pattern for `release_manifest`. You'd
+  essentially be replacing the current CSV-level pipeline with the
+  notebook-level one.
+
+  Want me to update your `_targets.R` with one of these approaches?
+
+Use **Option B with manifest files** but with same name as the notebooks. But I'm also noticing the older more complex `{provider}_{dataset}` pattern in the outputs. Change these paths on the filesystem and in the code to the simpler (still recognizable) pattern of the notebooks:
+
+* `ingest_ichthyo` -> `ingest_swfsc_ichthyo`\
+  `swfsc.noaa.gov_calcofi-db` -> `swfsc_ichthyo`
+* `ingest_bottle` -> `ingest_calcofi_bottle`\
+  `calcofi.org_bottle-database` -> `calcofi_bottle`
+* `ingest_ctd` -> `ingest_calcofi_ctd-cast`\
+  `calcofi.org_ctd-cast` -> `calcofi_ctd-cast`
+
+⏺ Updated plan                                                                 
+  ⎿  /plan to preview                                                         
+
+ Ready to code?                                                                
+                                                                               
+ Here is Claude's plan:                                                        
+
+ Plan: Simplify Parquet Directory Names + Add _targets.R Pipeline
+                                                                               
+ Context                                                
+
+ The parquet output directories currently use a verbose {provider}_{dataset}
+ naming convention (e.g. swfsc.noaa.gov_calcofi-db). The user wants to
+ simplify these to match the notebook names (e.g. swfsc_ichthyo), and replace
+ the existing _targets.R with an Option B notebook-orchestration pipeline
+ using quarto::quarto_render() + format = "file" manifest tracking.
+
+ Renaming Map
+
+ ┌───────────────────────────┬────────────────┬───────────────────────────┐
+ │    Old directory name     │ New directory  │         Notebook          │
+ │                           │      name      │                           │
+ ├───────────────────────────┼────────────────┼───────────────────────────┤
+ │ swfsc.noaa.gov_calcofi-db │ swfsc_ichthyo  │ ingest_swfsc_ichthyo.qmd  │
+ ├───────────────────────────┼────────────────┼───────────────────────────┤
+ │ calcofi.org_bottle-databa │ calcofi_bottle │ ingest_calcofi_bottle.qmd │
+ │ se                        │                │                           │
+ ├───────────────────────────┼────────────────┼───────────────────────────┤
+ │ calcofi.org_ctd-cast      │ calcofi_ctd-ca │ ingest_calcofi_ctd-cast.q │
+ │                           │ st             │ md                        │
+ └───────────────────────────┴────────────────┴───────────────────────────┘
+
+ This affects: local parquet dirs (data/parquet/), local wrangling duckdb
+ files (data/wrangling/), GCS ingest prefixes (ingest/), source_label in
+ finalize_ingest(), and cross-notebook references via load_prior_tables().
+
+ Scope of Changes
+
+ What to change (active source files)
+
+ These paths are constructed from provider/dataset variables via
+ glue("{provider}_{dataset}"), so most changes are simply updating the
+ variable values. A few hardcoded path strings also need updating.
+
+ What NOT to change
+
+ - libs/dev_notes.md — development log, historical references (~60
+ occurrences). Leave as-is.
+ - calcofi4db/inst/dev_prompts.md — historical prompts. Leave as-is.
+ - .Rd man pages — will be auto-regenerated by devtools::document().
+ - _output/*.html — rendered outputs, will be regenerated on next render.
+ - data/releases/*/RELEASE_NOTES.md — historical release artifacts. Leave
+ as-is.
+ - _git-logs_*/ — historical. Leave as-is.
+ - GCS files already uploaded — existing GCS paths remain valid; new uploads
+ will use new names.
+
+ Implementation
+
+ 1. Ingest notebooks — change provider/dataset variables
+
+ ingest_swfsc_ichthyo.qmd (lines 86-92):
+ ```r
+ # OLD:
+ dataset  <- "calcofi-db"
+ provider <- "swfsc.noaa.gov"
+ dir_parquet <- here(glue("data/parquet/{provider}_{dataset}"))
+ db_path     <- here(glue("data/wrangling/{provider}_{dataset}.duckdb"))
+
+ # NEW:
+ dataset  <- "calcofi-db"
+ provider <- "swfsc.noaa.gov"
+ dir_label   <- "swfsc_ichthyo"
+ dir_parquet <- here(glue("data/parquet/{dir_label}"))
+ db_path     <- here(glue("data/wrangling/{dir_label}.duckdb"))
+ ```
+
+ Also update:
+ - Line 1081: workflow_url stays as-is (it's an external URL, not a local
+ path)
+ - Line 1124: gcs_ingest_prefix <- glue("ingest/{dir_label}")
+ - Line 1243: source_label = dir_label
+ - Line 1258: comment # note: parquet outputs are in
+ data/parquet/swfsc_ichthyo/
+
+ ingest_calcofi_bottle.qmd (lines 81-88):
+ ```r
+ # NEW:
+ provider    <- "calcofi.org"
+ dataset     <- "bottle-database"
+ dir_label   <- "calcofi_bottle"
+ dir_parquet <- here(glue("data/parquet/{dir_label}"))
+ db_path     <- here(glue("data/wrangling/{dir_label}.duckdb"))
+ ```
+
+ Also update:
+ - Line 878: parquet_dir = here("data/parquet/swfsc_ichthyo"))
+ (load_prior_tables)
+ - Line 1187: gcs_ingest_prefix <- glue("ingest/{dir_label}")
+ - Line 1221: parquet_dir = here("data/parquet/swfsc_ichthyo"))
+ (load_prior_tables)
+ - Line 1338: source_label = dir_label
+ - Line 1353: comment update
+
+ ingest_calcofi_ctd-cast.qmd (lines 76-83):
+ ```r
+ # NEW:
+ provider    <- "calcofi.org"
+ dataset     <- "ctd-cast"
+ dir_label   <- "calcofi_ctd-cast"
+ dir_parquet <- here(glue("data/parquet/{dir_label}"))
+ db_path     <- here(glue("data/wrangling/{dir_label}.duckdb"))
+ dir_tmp     <- here(glue("data/tmp/{dir_label}"))
+ ```
+
+ Also update:
+ - Line 881: parquet_dir = here("data/parquet/swfsc_ichthyo")
+ (load_prior_tables)
+ - Line 1278: gcs_prefix = glue("ingest/{dir_label}")
+ - Line 1292: source_label = dir_label
+
+ 2. release_database.qmd — update hardcoded parquet paths
+
+ Lines 177-179:
+ ```r
+ rels_paths <- c(
+   here("data/parquet/swfsc_ichthyo/relationships.json"),
+   here("data/parquet/calcofi_bottle/relationships.json"),
+   here("data/parquet/calcofi_ctd-cast/relationships.json"))
+ ```
+
+ 3. _targets.R — replace with Option B notebook pipeline
+
+ Replace the entire file with:
+ ```r
+ # calcofi data workflow pipeline
+ # run with: targets::tar_make()
+ # visualize: targets::tar_visnetwork()
+
+ library(targets)
+
+ list(
+   tar_target(
+     ingest_swfsc_ichthyo,
+     {
+       quarto::quarto_render("ingest_swfsc_ichthyo.qmd")
+       "data/parquet/swfsc_ichthyo/manifest.json"
+     },
+     format = "file"),
+
+   tar_target(
+     ingest_calcofi_bottle,
+     {
+       ingest_swfsc_ichthyo  # depends on ichthyo (load_prior_tables)
+       quarto::quarto_render("ingest_calcofi_bottle.qmd")
+       "data/parquet/calcofi_bottle/manifest.json"
+     },
+     format = "file"),
+
+   tar_target(
+     ingest_calcofi_ctd_cast,
+     {
+       ingest_swfsc_ichthyo  # depends on ichthyo (load_prior_tables)
+       quarto::quarto_render("ingest_calcofi_ctd-cast.qmd")
+       "data/parquet/calcofi_ctd-cast/manifest.json"
+     },
+     format = "file"),
+
+   tar_target(
+     release,
+     {
+       ingest_swfsc_ichthyo
+       ingest_calcofi_bottle
+       ingest_calcofi_ctd_cast
+       quarto::quarto_render("release_database.qmd")
+       here::here("data/releases")
+     },
+     format = "file")
+ )
+ ```
+
+ 4. R package roxygen examples — update path strings
+
+ calcofi4db/R/wrangle.R:
+ - build_metadata_json() example (~line 1282): "data/parquet/swfsc_ichthyo"
+ - build_relationships_json() example (~line 1498):
+ "data/parquet/swfsc_ichthyo"
+ - merge_relationships_json() example (~line 1631-1632): update both paths
+
+ calcofi4db/R/cloud.R:
+ - sync_to_gcs() example (~lines 140, 152-153): "ingest/swfsc_ichthyo"
+
+ calcofi4db/R/ducklake.R:
+ - load_prior_tables() examples (~lines 31, 37): "data/parquet/swfsc_ichthyo"
+
+ calcofi4db/R/workflow.R:
+ - finalize_ingest() example (~lines 242-243): "data/parquet/swfsc_ichthyo"
+
+ calcofi4db/R/spatial.R:
+ - add_point_geom() example (~line 111): "ingest/swfsc_ichthyo/grid.parquet"
+
+ calcofi4db/R/ship.R:
+ - Comment referencing old notebook name (~line 73): update text
+
+ 5. README_PLAN.qmd — update directory structure docs
+
+ - Line 399: swfsc.noaa.gov_calcofi-db/ → swfsc_ichthyo/
+ - Line 406: calcofi.org_bottle-database/ → calcofi_bottle/
+ - Lines 33, 45: update workflow references
+ - _targets.R pipeline section (~line 1363): update to match new pipeline
+
+ 6. explore_scripps.ucsd.edu_pelagic-invertebrate-collection.qmd
+
+ - Line 121: reference to old notebook name in comment. Update.
+
+ 7. Run devtools::document() for calcofi4db
+
+ This regenerates .Rd files from the updated roxygen examples.
+
+ 8. Rename local directories on disk
+
+ mv data/parquet/swfsc.noaa.gov_calcofi-db    data/parquet/swfsc_ichthyo
+ mv data/parquet/calcofi.org_bottle-database   data/parquet/calcofi_bottle
+ mv data/parquet/calcofi.org_ctd-cast          data/parquet/calcofi_ctd-cast
+ mv data/wrangling/swfsc.noaa.gov_calcofi-db.duckdb
+ data/wrangling/swfsc_ichthyo.duckdb
+ mv data/wrangling/calcofi.org_bottle-database.duckdb
+ data/wrangling/calcofi_bottle.duckdb
+ mv data/wrangling/calcofi.org_ctd-cast.duckdb
+ data/wrangling/calcofi_ctd-cast.duckdb
+
+ (These are not git-tracked, so no git operations needed.)
+
+ Files Modified (summary)
+
+ File: workflows/ingest_swfsc_ichthyo.qmd
+ Changes: Add dir_label, update dir_parquet, db_path, gcs_ingest_prefix,
+   source_label, comment
+ ────────────────────────────────────────
+ File: workflows/ingest_calcofi_bottle.qmd
+ Changes: Add dir_label, update dir_parquet, db_path, 2x load_prior_tables
+   paths, gcs_ingest_prefix, source_label, comment
+ ────────────────────────────────────────
+ File: workflows/ingest_calcofi_ctd-cast.qmd
+ Changes: Add dir_label, update dir_parquet, db_path, dir_tmp,
+   load_prior_tables path, gcs_prefix, source_label
+ ────────────────────────────────────────
+ File: workflows/release_database.qmd
+ Changes: Update 3 hardcoded relationships.json paths
+ ────────────────────────────────────────
+ File: workflows/_targets.R
+ Changes: Full rewrite — Option B notebook pipeline
+ ────────────────────────────────────────
+ File: calcofi4db/R/wrangle.R
+ Changes: Roxygen example paths (4 places)
+ ────────────────────────────────────────
+ File: calcofi4db/R/cloud.R
+ Changes: Roxygen example paths (3 places)
+ ────────────────────────────────────────
+ File: calcofi4db/R/ducklake.R
+ Changes: Roxygen example paths (2 places)
+ ────────────────────────────────────────
+ File: calcofi4db/R/workflow.R
+ Changes: Roxygen example paths (2 places)
+ ────────────────────────────────────────
+ File: calcofi4db/R/spatial.R
+ Changes: Roxygen example path (1 place)
+ ────────────────────────────────────────
+ File: calcofi4db/R/ship.R
+ Changes: Comment text (1 place)
+ ────────────────────────────────────────
+ File: workflows/README_PLAN.qmd
+ Changes: Directory structure docs, _targets.R section
+ ────────────────────────────────────────
+ File: workflows/explore_scripps...qmd
+ Changes: Comment reference (1 place)
+
+ Verification
+
+ 1. grep -r "swfsc.noaa.gov_calcofi-db\|calcofi.org_bottle-database\|calcofi.o
+ rg_ctd-cast" workflows/*.qmd calcofi4db/R/ should return zero results
+ (excluding dev_notes.md, dev_prompts.md, RELEASE_NOTES.md)
+ 2. ls data/parquet/ should show swfsc_ichthyo/, calcofi_bottle/,
+ calcofi_ctd-cast/
+ 3. targets::tar_visnetwork() should show the 4-node dependency graph
+ 4. targets::tar_outdated() should list all 4 targets as outdated (fresh
+ pipeline)
+
+
+⏺ All done. Here's a summary of what was changed:
+                                                
+  Ingest notebooks (3 files) — added dir_label variable, updated dir_parquet,  
+  db_path, dir_tmp, gcs_ingest_prefix, source_label, load_prior_tables paths,
+  and comments.                                                                
+                                                                               
+  release_database.qmd — updated 3 hardcoded relationships.json paths.
+                                                                               
+  _targets.R — replaced entirely with Option B notebook-orchestration pipeline
+  (4 targets: ichthyo → bottle + ctd-cast → release).
+
+  R package calcofi4db (6 files) — updated roxygen example paths in wrangle.R,
+  cloud.R, ducklake.R, workflow.R, spatial.R, ship.R. Ran devtools::document()
+  to regenerate .Rd files.
+
+  README_PLAN.qmd — updated directory structure docs and _targets.R pipeline
+  section.
+
+  explore_scripps...qmd — updated notebook reference in comment.
+
+  Local directories — renamed data/parquet/ and data/wrangling/ files to new
+  names.
+
+  The only remaining old-name references are external URLs (published HTML
+  links), which are intentionally left as-is.
+
+
+## 2026-03-13.c bake schema into workflows
+
+Bake the table relationships into the workflows. These cannot be stored natively in standalone parquet files, so should be created as a new relationships.json per dataset and then enforced for visualization and understanding purposes with `@../calcofi4r` and any necessary builder functions in `@../calcofi4db`.
+
+- `@ingest_swfsc_ichthyo.qmd`
+- `@ingest_calcofi_bottle.qmd`
+- `@ingest_calcofi_ctd-cast.qmd`
+- `@release_database.qmd`
+
+Also update thinking with `README_PLAN.qmd`
+
+⏺ Updated plan
+  ⎿  /plan to preview
+
+ Ready to code?
+
+ Here is Claude's plan:
+
+ Plan: Add relationships.json to CalCOFI Data Pipeline
+
+ Context
+
+ Table relationships (PKs, FKs) are currently defined inline in each ingest
+ notebook using R's dm package (dm_add_pk, dm_add_fk) and exist only
+ ephemerally during notebook execution. Parquet files can't store these
+ natively, so there's no machine-readable source of truth for relationships
+ that persists across the pipeline. This plan adds a relationships.json
+ sidecar file per dataset, merges them at release time, and makes them
+ available to the user-facing calcofi4r package for schema visualization.
+
+ JSON Schema
+ ```json
+ {
+   "schema_version": "1.0",
+   "created_at": "2026-03-13T10:00:00-0700",
+   "provider": "swfsc.noaa.gov",
+   "dataset": "calcofi-db",
+   "primary_keys": {
+     "cruise": "cruise_key",
+     "ship": "ship_key"
+   },
+   "foreign_keys": [
+     {
+       "table": "cruise",
+       "column": "ship_key",
+       "ref_table": "ship",
+       "ref_column": "ship_key"
+     }
+   ]
+ }
+ ```
+
+ - primary_keys: flat object {table: pk_column} (all current tables use
+ single-column PKs)
+ - foreign_keys: array of {table, column, ref_table, ref_column} — supports
+ mismatched column names (e.g. cast_condition.condition_type →
+ measurement_type.measurement_type)
+ - Envelope fields mirror existing metadata.json pattern
+
+ Files to Modify
+
+ 1. calcofi4db/R/wrangle.R — 3 new functions
+
+ build_relationships_json(dm, output_dir, provider, dataset)
+ - Extract PKs via dm::dm_get_all_pks(), FKs via dm::dm_get_all_fks()
+ - Write relationships.json to output_dir
+ - Return file path
+
+ read_relationships_json(path, dm = NULL)
+ - Read JSON, if dm provided apply PKs/FKs via dm_add_pk()/dm_add_fk() and
+ return dm
+ - If dm is NULL, return raw list
+
+ merge_relationships_json(paths, output_path)
+ - Union PKs (last-writer-wins for shared tables like measurement_type)
+ - Concatenate + deduplicate FKs
+ - Write merged file
+
+ 2. Ingest Notebooks — add build_relationships_json() calls
+
+ `ingest_swfsc_ichthyo.qmd` — after build_metadata_json() call:
+ ```r
+ dm_all <- dm_from_con(con, table_names = DBI::dbListTables(con), learn_keys =
+  FALSE) |>
+   add_cc_keys() |>
+   add_cc_spatial_keys()
+ build_relationships_json(dm = dm_all, output_dir = dir_parquet, provider =
+ provider, dataset = dataset)
+ ```
+
+ `ingest_calcofi_bottle.qmd` — same pattern with add_bottle_keys():
+ ```r
+ dm_bottle <- dm_from_con(con, table_names = db_tables(con), learn_keys =
+ FALSE) |>
+   add_bottle_keys()
+ build_relationships_json(dm = dm_bottle, output_dir = dir_parquet, provider =
+  provider, dataset = dataset)
+ ```
+
+ `ingest_calcofi_ctd-cast.qmd` — same pattern with inline dm:
+ ```r
+ dm_ctd <- dm_from_con(con) |>
+   dm_add_pk(ctd_cast, ctd_cast_uuid) |>
+   dm_add_pk(ctd_measurement, ctd_measurement_uuid) |>
+   dm_add_pk(ctd_summary, ctd_summary_uuid) |>
+   dm_add_pk(measurement_type, measurement_type) |>
+   dm_add_fk(ctd_measurement, ctd_cast_uuid, ctd_cast)
+ build_relationships_json(dm = dm_ctd, output_dir = dir_parquet, provider =
+ provider, dataset = dataset)
+ ```
+
+ 3. release_database.qmd — merge + use for visualization
+
+ After write_parquet_outputs(), before upload:
+ ```r
+ rels_paths <- c(
+   here("data/parquet/swfsc.noaa.gov_calcofi-db/relationships.json"),
+   here("data/parquet/calcofi.org_bottle-database/relationships.json"),
+   here("data/parquet/calcofi.org_ctd-cast/relationships.json"))
+ rels_paths <- rels_paths[file.exists(rels_paths)]
+ merge_relationships_json(rels_paths, file.path(dir_frozen,
+ "relationships.json"))
+ ```
+
+ Replace the key-less dm_draw() in combined_schema chunk:
+ ```r
+ d <- dm::dm_from_con(con_wdl, table_names = schema_tbls, learn_keys = FALSE)
+ d <- read_relationships_json(file.path(dir_frozen, "relationships.json"), dm
+ = d)
+ # apply table colors as before...
+ dm::dm_draw(d, rankdir = "LR", view_type = "all")
+ ```
+
+ 4. calcofi4db/R/freeze.R — upload relationships.json
+
+ In upload_frozen_release(), after the RELEASE_NOTES.md upload block (~line
+ 737):
+ ```r
+ rels_path <- file.path(release_dir, "relationships.json")
+ if (file.exists(rels_path)) {
+   put_gcs_file(rels_path, glue::glue("{gcs_base}/relationships.json"))
+   message("Uploaded relationships.json")
+ }
+ ```
+ 5. calcofi4r/R/database.R — new cc_get_dm() function
+
+ cc_get_dm <- function(version = "latest", con = NULL)
+
+ - If con is NULL, call cc_get_db(version)
+ - Download relationships.json from GCS release URL
+ - Build dm via dm::dm_from_con(con, learn_keys = FALSE)
+ - Apply PKs/FKs from JSON (self-contained internal reader — avoids calcofi4db
+  dependency)
+ - Return dm object
+
+ Internal helper .apply_relationships(dm, rels) (~20 lines) reads the JSON
+ structure and calls dm_add_pk()/dm_add_fk() in a loop.
+
+ 6. README_PLAN.qmd — document the strategy
+
+ Add new subsection under "### Foreign Key Relationships" (after line ~962):
+
+ ```md
+ ### Relationship Metadata (`relationships.json`)
+
+ Since standalone parquet files cannot store table relationships natively,
+ each ingest notebook produces a `relationships.json` sidecar file...
+
+ Document: JSON schema, per-dataset vs. merged, usage via cc_get_dm().
+
+ Edge Cases
+
+ - Shared measurement_type table: appears in both bottle and ctd-cast. Merge
+ uses last-writer-wins for PKs (same definition), FKs are additive.
+ - Mismatched FK column names: cast_condition.condition_type →
+ measurement_type.measurement_type — JSON schema supports this with separate
+ column/ref_column fields.
+ - Cross-dataset FKs (e.g. casts.cruise_key → cruise.cruise_key): these exist
+ in release but not in per-dataset files. The release merge/validation step
+ can add these, or they can be defined in a relationships_cross.json alongside
+  release_database.qmd. Recommend: add cross-dataset FKs in the release
+ notebook directly after merge.
+ ```
+
+ Implementation Order
+
+ 1. calcofi4db/R/wrangle.R — add 3 new functions
+ 2. devtools::document() calcofi4db to export
+ 3. ingest_swfsc_ichthyo.qmd — add build call
+ 4. ingest_calcofi_bottle.qmd — add build call
+ 5. ingest_calcofi_ctd-cast.qmd — add build call
+ 6. release_database.qmd — add merge + dm_draw + cross-dataset FKs
+ 7. calcofi4db/R/freeze.R — add upload
+ 8. calcofi4r/R/database.R — add cc_get_dm()
+ 9. README_PLAN.qmd — document
+
+ Verification
+
+ 1. Run each ingest notebook — confirm relationships.json appears in
+ data/parquet/{provider}_{dataset}/
+ 2. Inspect JSON contents — PKs and FKs should match the existing inline dm
+ definitions
+ 3. Run release_database.qmd — confirm merged relationships.json in frozen
+ release dir, dm_draw shows keys
+ 4. In R console: devtools::load_all("../calcofi4r"); dm <- cc_get_dm();
+ dm::dm_draw(dm)
+
+⏺ All 9 implementation steps are complete. Here's a summary of changes:
+                                                                              
+  1. calcofi4db/R/wrangle.R — added 3 functions:
+    - build_relationships_json() — extracts PKs/FKs from a dm object, writes
+  relationships.json                                                           
+    - read_relationships_json() — reads JSON, optionally applies to a dm object
+    - merge_relationships_json() — unions PKs + deduplicates FKs from multiple 
+  files                                                           
+  2. calcofi4db/NAMESPACE — updated via devtools::document() (exports + new
+  imports for dm_get_all_pks, dm_get_all_fks, dm_get_tables)
+  3. ingest_swfsc_ichthyo.qmd — added build_relationships_json() call after
+  build_metadata_json(), using add_cc_keys() |> add_cc_spatial_keys()
+  4. ingest_calcofi_bottle.qmd — added build_relationships_json() call using
+  add_bottle_keys()
+  5. ingest_calcofi_ctd-cast.qmd — added build_relationships_json() call with
+  inline dm PK/FK definitions
+  6. release_database.qmd — in combined_schema chunk: merges per-dataset
+  relationship files, applies to dm, adds cross-dataset FKs (casts →
+  cruise/ship/grid), re-writes merged file, then draws schema with keys
+  7. calcofi4db/R/freeze.R — uploads relationships.json alongside
+  RELEASE_NOTES.md in upload_frozen_release()
+  8. calcofi4r/R/database.R — added cc_get_dm() function that downloads
+  relationships.json from GCS and returns a dm with PKs/FKs applied; plus
+  internal .apply_relationships() helper
+  9. README_PLAN.qmd — added "Relationship Metadata" subsection documenting the
+   JSON schema, per-dataset vs. merged workflow, and user access via
+  cc_get_dm()
 
 
 ## 2026-03-13.b partition ctd-cast parquet files (15G ctd_measurement.parquet)?

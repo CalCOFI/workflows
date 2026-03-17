@@ -1,0 +1,220 @@
+---
+title: "Publish {{dataset_name}} to ERDDAP"
+editor_options:
+  chunk_output_type: console
+---
+
+## Overview
+
+Publish **{{dataset_name}}** to ERDDAP for public access via OPeNDAP/WMS/WFS.
+
+- **Source ingest**: `{{source_ingest}}`
+- **Portal**: ERDDAP (https://coastwatch.pfeg.noaa.gov/erddap/)
+- **Format**: NCCSV (NetCDF-compatible CSV with CF metadata)
+
+## Setup
+
+```{r}
+#| label: setup
+
+devtools::load_all(here::here("../calcofi4db"))
+devtools::load_all(here::here("../calcofi4r"))
+librarian::shelf(
+  CalCOFI/calcofi4db,
+  CalCOFI/calcofi4r,
+  DBI, dplyr, DT, fs, glue,
+  here, lubridate, readr, stringr,
+  tibble, tidyr,
+  quiet = T)
+options(readr.show_col_types = F)
+
+# output paths
+dataset    <- "{{dataset}}"
+dir_erddap <- here(glue("data/erddap/{dataset}"))
+dir_create(dir_erddap)
+```
+
+## Load Source Data
+
+```{r}
+#| label: load-data
+
+# load from release parquet
+con <- get_duckdb_con(":memory:")
+load_prior_tables(
+  con,
+  parquet_dir = here("data/parquet/{{source_ingest}}"),
+  geom_tables = c("grid", "site"))
+
+dbListTables(con)
+```
+
+## Subset and Filter
+
+```{r}
+#| label: TODO-subset
+
+# TODO: extract the target subset from source data
+# e.g., for cephalopods: filter ichthyo by species list
+# e.g., for CTD: select measurement columns and reshape
+
+# d_erddap <- dbGetQuery(con, "
+#   SELECT
+#     ...
+#   FROM ...
+#   WHERE ...")
+```
+
+## Format for ERDDAP
+
+```{r}
+#| label: TODO-format
+
+# TODO: format columns for ERDDAP compatibility
+# - time: ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ)
+# - lat/lon: decimal degrees, WGS84
+# - depth: positive down (meters)
+# - missing values: NaN (not NA)
+# - column names: camelCase or CF standard names
+
+# d_erddap <- d_erddap |>
+#   mutate(
+#     time      = format(datetime_utc, "%Y-%m-%dT%H:%M:%SZ"),
+#     latitude  = lat_dec,
+#     longitude = lon_dec,
+#     depth     = depth_m) |>
+#   mutate(across(where(is.numeric), ~ifelse(is.na(.), NaN, .)))
+```
+
+## Generate NCCSV Metadata
+
+```{r}
+#| label: TODO-nccsv-global
+
+# TODO: define NCCSV global attributes
+# see: https://coastwatch.pfeg.noaa.gov/erddap/download/NCCSV.html
+
+nccsv_global <- list(
+  `*GLOBAL*,Conventions`           = '"COARDS, CF-1.6, ACDD-1.3, NCCSV-1.2"',
+  `*GLOBAL*,cdm_data_type`        = '"Point"',
+  `*GLOBAL*,creator_email`        = '"calcofi@ucsd.edu"',
+  `*GLOBAL*,creator_name`         = '"CalCOFI"',
+  `*GLOBAL*,creator_url`          = '"https://calcofi.org"',
+  `*GLOBAL*,history`              = glue('"Created {Sys.Date()} from CalCOFI database"'),
+  `*GLOBAL*,infoUrl`              = '"https://calcofi.org"',
+  `*GLOBAL*,institution`          = '"CalCOFI"',
+  `*GLOBAL*,keywords`             = '"CalCOFI, {{dataset}}, oceanography"',
+  `*GLOBAL*,license`              = '"CC-BY 4.0"',
+  `*GLOBAL*,sourceUrl`            = '"https://calcofi.org"',
+  `*GLOBAL*,standard_name_vocabulary` = '"CF Standard Name Table v79"',
+  `*GLOBAL*,summary`              = '"{{dataset_name}} from CalCOFI cruises"',
+  `*GLOBAL*,title`                = '"{{dataset_name}}"'
+)
+```
+
+## Generate Variable Attributes
+
+```{r}
+#| label: TODO-nccsv-variables
+
+# TODO: define per-variable attributes
+# required: long_name, units
+# recommended: standard_name (CF), colorBarMinimum, colorBarMaximum
+
+# nccsv_vars <- list(
+#   `time,*DATA_TYPE*`        = "String",
+#   `time,long_name`          = '"Time"',
+#   `time,standard_name`      = '"time"',
+#   `time,units`              = '"yyyy-MM-dd\'T\'HH:mm:ssZ"',
+#
+#   `latitude,*DATA_TYPE*`    = "double",
+#   `latitude,long_name`      = '"Latitude"',
+#   `latitude,standard_name`  = '"latitude"',
+#   `latitude,units`          = '"degrees_north"',
+#
+#   `longitude,*DATA_TYPE*`   = "double",
+#   `longitude,long_name`     = '"Longitude"',
+#   `longitude,standard_name` = '"longitude"',
+#   `longitude,units`         = '"degrees_east"',
+#
+#   `depth,*DATA_TYPE*`       = "double",
+#   `depth,long_name`         = '"Depth"',
+#   `depth,standard_name`     = '"depth"',
+#   `depth,units`             = '"m"',
+#   `depth,positive`          = '"down"'
+# )
+```
+
+## Write NCCSV File
+
+```{r}
+#| label: TODO-write-nccsv
+
+# nccsv_path <- path(dir_erddap, glue("{dataset}.csv"))
+#
+# # write header
+# header_lines <- c(
+#   paste(names(nccsv_global), nccsv_global, sep = ","),
+#   "",
+#   paste(names(nccsv_vars), nccsv_vars, sep = ","),
+#   "",
+#   "*END_METADATA*"
+# )
+# writeLines(header_lines, nccsv_path)
+#
+# # append data
+# write_csv(d_erddap, nccsv_path, append = TRUE, na = "NaN")
+# cat("NCCSV file written:", nccsv_path, "\n")
+```
+
+## Generate datasets.xml Snippet
+
+```{r}
+#| label: TODO-datasets-xml
+
+# TODO: generate the <dataset> element for ERDDAP's datasets.xml
+# this snippet gets sent to the ERDDAP admin for inclusion
+
+# cat('
+# <dataset type="EDDTableFromNccsvFiles" datasetID="calcofi_{{dataset}}"
+#          active="true">
+#   <reloadEveryNMinutes>10080</reloadEveryNMinutes>
+#   <fileDir>/path/to/data/</fileDir>
+#   <fileNameRegex>.*\\.csv</fileNameRegex>
+#   <recursive>false</recursive>
+#   <addAttributes>
+#     <att name="title">{{dataset_name}}</att>
+#     <att name="institution">CalCOFI</att>
+#   </addAttributes>
+# </dataset>
+# ')
+```
+
+## Validate
+
+```{r}
+#| label: TODO-validate
+
+# TODO: validate NCCSV format
+# - check CF standard names exist in CF table
+# - check coordinate conventions (lat: -90 to 90, lon: -180 to 180)
+# - check time format is ISO 8601
+# - check no NA values (should be NaN for numeric)
+# - check data types match declared *DATA_TYPE*
+```
+
+## Upload to GCS
+
+```{r}
+#| label: upload-gcs
+
+# sync_to_gcs(dir_erddap, glue("publish/{dataset}_erddap"))
+```
+
+## Cleanup
+
+```{r}
+#| label: cleanup
+
+dbDisconnect(con, shutdown = TRUE)
+```
