@@ -169,6 +169,41 @@ ingest_dataset(con, d)
 ```
 <!-- {{pivot_section_end}} -->
 
+<!-- {{measurement_summary_section_start}} -->
+## Summarize Replicate Measurements
+
+Aggregate replicate measurements at each unique position in time and
+space (station + date + depth) into mean and standard deviation.
+Filters out `NaN`, `-Inf`, `Inf` values. See `ctd_summary` in
+`ingest_calcofi_ctd-cast.qmd` and `dic_measurement_summary` in
+`ingest_calcofi_dic.qmd` for production examples.
+
+```{r}
+#| label: TODO-measurement-summary
+
+# TODO: adjust table names and grouping columns for this dataset
+# dbExecute(
+#   con,
+#   "CREATE OR REPLACE TABLE {{dataset}}_measurement_summary AS
+#    SELECT
+#      sta_key,
+#      datetime_utc,
+#      depth_m,
+#      measurement_type,
+#      AVG(measurement_value)    AS avg,
+#      CASE
+#        WHEN COUNT(*) = 1 THEN 0
+#        ELSE COALESCE(STDDEV_SAMP(measurement_value), 0)
+#      END                       AS stddev,
+#      COUNT(*)                  AS n_obs
+#    FROM {{dataset}}_measurement
+#    WHERE NOT isnan(measurement_value)
+#      AND isfinite(measurement_value)
+#    GROUP BY sta_key, datetime_utc, depth_m, measurement_type"
+# )
+```
+<!-- {{measurement_summary_section_end}} -->
+
 <!-- {{cross_dataset_section_start}} -->
 ## Cross-Dataset Integration
 
@@ -193,13 +228,53 @@ load_prior_tables(
 
 ## Schema Documentation
 
+Define PKs, FKs, and color-code tables for the ER diagram.
+Color scheme: lightblue = new dataset tables, lightyellow = amended
+reference tables (e.g. measurement_type), white = shared metadata.
+
 ```{r}
 #| label: schema
 
-# build dm object for visualization
-tables <- dbListTables(con)
-dm_obj <- dm_from_con(con, tables, learn_keys = FALSE)
-dm_draw(dm_obj, rankdir = "LR", view_type = "all")
+# TODO: define PK/FK relationships for this dataset
+add_{{dataset}}_keys <- function(dm) {
+  dm |>
+    dm_add_pk({{dataset}}_measurement, {{dataset}}_measurement_id) |>
+    dm_add_pk(measurement_type, measurement_type) |>
+    dm_add_fk({{dataset}}_measurement, measurement_type, measurement_type)
+    # add more FKs as needed
+}
+
+# build dm from dataset-specific tables (exclude loaded reference tables)
+{{dataset}}_tables <- c(
+  "{{dataset}}_sample", "{{dataset}}_measurement",
+  "{{dataset}}_measurement_summary",
+  "measurement_type", "dataset")
+dm_{{dataset}} <- dm_from_con(
+  con, table_names = {{dataset}}_tables, learn_keys = FALSE) |>
+  add_{{dataset}}_keys() |>
+  dm_set_colors(
+    lightblue   = c({{dataset}}_sample, {{dataset}}_measurement,
+                    {{dataset}}_measurement_summary),
+    lightyellow = measurement_type,
+    white       = dataset
+  )
+
+dm_draw(dm_{{dataset}}, rankdir = "LR", view_type = "all")
+```
+
+### Write relationships.json
+
+Write PK/FK sidecar for use in `release_database.qmd` schema merging.
+
+```{r}
+#| label: write-relationships
+
+build_relationships_json(
+  dm         = dm_{{dataset}},
+  output_dir = dir_parquet,
+  provider   = provider,
+  dataset    = dataset
+)
 ```
 
 ## Add Spatial
@@ -210,6 +285,21 @@ dm_draw(dm_obj, rankdir = "LR", view_type = "all")
 # TODO: add geometry column from lat/lon (adjust table and column names)
 # add_point_geom(con, "{{spatial_table}}", lon_col = "lon_dec", lat_col = "lat_dec")
 # assign_grid_key(con, "{{spatial_table}}")
+```
+
+## Load Dataset Metadata
+
+Register this dataset in the `dataset` reference table, which tracks
+citations, source URLs, and CalCOFI.org landing pages for all ingested
+datasets. Ensure `metadata/dataset.csv` has a row for this dataset
+before running.
+
+```{r}
+#| label: load-dataset-metadata
+
+d_dataset <- read_csv(here("metadata/dataset.csv"))
+dbWriteTable(con, "dataset", d_dataset, overwrite = TRUE)
+cat(glue("dataset: {nrow(d_dataset)} datasets registered"), "\n")
 ```
 
 ## Validate

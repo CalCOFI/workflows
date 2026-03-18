@@ -59,11 +59,11 @@ Based on the dataset characteristics (from `/explore-dataset` output or user inp
 - Full spatial/grid assignment
 - Example: euphausiids, zooplankton
 
-**Pattern B: Merge into existing table** (like DIC → bottle_measurement)
-- Appends rows to an existing table
-- Uses existing PKs from the target table
-- Joins via FK to existing casts/bottles
-- Example: DIC measurements → bottle_measurement
+**Pattern B: Supplementary measurements** (like DIC)
+- Creates own `{dataset}_sample` (position-only) and `{dataset}_measurement` tables
+- Matches to existing casts/bottles via station + date window
+- Keeps tables separate from bottle_measurement (different QC pipelines)
+- Example: DIC/TA → dic_sample + dic_measurement + dic_measurement_summary
 
 **Pattern C: Multi-source ingest** (like phytoplankton)
 - Reads from multiple source formats (CSV, API, etc.)
@@ -89,12 +89,17 @@ The notebook includes these sections (customize based on pattern):
 6. **Show source files** — `show_source_files()`
 7. **Show tables/fields** — Redefinition display
 8. **Load into database** — `ingest_dataset()` or custom load
-9. **Schema documentation** — dm visualization
+9. **Schema documentation** — Define PKs/FKs via `dm_add_pk()`/`dm_add_fk()`,
+  color-code tables (`lightblue` = new tables, `lightyellow` = amended
+  reference tables like measurement_type, `white` = shared metadata like
+  dataset), draw with `dm_draw()`, then write `relationships.json`
+  sidecar via `build_relationships_json()` for use in release_database.qmd
 10. **Validate** — `validate_for_release()`
 11. **Enforce column types** — `enforce_column_types()`
-12. **Data preview** — `preview_tables()`
+12. **Data preview** — Individual `datatable()` calls per table (NOT
+  `preview_tables()` in a loop, which has DT rendering issues)
 13. **Write parquet** — `write_parquet_outputs()`
-14. **Write metadata** — `build_metadata_json()`, `build_relationships_json()`
+14. **Write metadata** — `build_metadata_json()`
 15. **Upload to GCS** — `sync_to_gcs()`
 16. **Cleanup** — Close DuckDB connection
 
@@ -102,12 +107,47 @@ The notebook includes these sections (customize based on pattern):
 - **Cross-dataset loading** — `load_prior_tables()` (if depends on prior ingest)
 - **Primary key setup** — `assign_deterministic_uuids()` or `assign_sequential_ids()`
 - **Pivot measurements** — Wide→long transformation (if `--has-pivot`)
+- **Measurement summary** — Aggregate replicates with avg/stddev per unique
+  position (station + date + depth + measurement_type). Filter out invalid
+  values: `WHERE NOT isnan(measurement_value) AND isfinite(measurement_value)`.
+  Use `STDDEV_SAMP()` with `CASE WHEN COUNT(*) = 1 THEN 0` for single
+  observations. See `ctd_summary` in `ingest_calcofi_ctd-cast.qmd` and
+  `dic_measurement_summary` in `ingest_calcofi_dic.qmd` for examples.
 - **Taxonomy** — `standardize_species_local()`, `build_taxon_hierarchy()` (if `--has-taxonomy`)
-- **Spatial** — `add_point_geom()`, `assign_grid_key()` (if has lat/lon)
+- **Spatial** — `add_point_geom()`, `assign_grid_key()` (if has lat/lon).
+  For datasets without direct cast_id/bottle_id FKs, match via station +
+  date window (±3 days) or lat/lon spatial join. See issue #47 for the
+  site/grid/segment matching roadmap.
 - **Lookup tables** — `create_lookup_table()` (if categorical vocabularies exist)
 - **Ship/cruise matching** — `derive_cruise_key_on_casts()` (if cross-dataset bridge needed)
 
-### 5. Mark dataset-specific sections
+### 5. Coding conventions
+
+**Tidy data**: Apply tidy data principles throughout:
+- The base `{dataset}_sample` table has only position/time/FK columns —
+  NO measurement values as separate columns
+- ALL measurements (including ancillary ones like temp, salinity) are
+  pivoted into `{dataset}_measurement` with columns:
+  `measurement_type`, `measurement_value`, `measurement_qual`
+- Each row = one measurement at one position. Never mix different
+  measured quantities on the same row.
+- Example: DIC dataset pivots 4 types (dic, alkalinity, ctdtemp_its90,
+  salinity_pss78) into `dic_measurement` — `dic_sample` has zero
+  measurement columns.
+
+**Status output**: Use `cat()` (not `message()`) for user-facing status
+output in chunks. `message()` sends to stderr which Quarto may not
+render visibly with `code-fold: true`. Pattern:
+```r
+cat(glue("label: {value}"), "\n")
+```
+
+**Data preview**: Use individual `datatable()` calls per table in
+separate chunks (one chunk per table). Do NOT use `preview_tables()`
+in a loop — it has DT widget rendering issues where only the first
+table displays.
+
+### 6. Mark dataset-specific sections
 
 In the generated notebook, mark sections requiring manual implementation with:
 
@@ -117,7 +157,59 @@ In the generated notebook, mark sections requiring manual implementation with:
 # - {specific guidance based on dataset characteristics}
 ```
 
-### 6. Update `_targets.R`
+### 6. Include dataset metadata and release_database update
+
+Every ingest notebook MUST include these two standard sections:
+
+**a. Load Dataset Metadata** — Load `metadata/dataset.csv` into the
+wrangling DB so it's included in the parquet output and flows into
+`release_database.qmd`:
+
+```r
+d_dataset <- read_csv(here("metadata/dataset.csv"))
+dbWriteTable(con, "dataset", d_dataset, overwrite = TRUE)
+```
+
+**b. CalCOFI.org page check** — Before ingesting, scrape the CalCOFI.org
+landing page for the dataset (from `link_calcofi_org` in `dataset.csv`)
+to check for updated data, new download links, or changed metadata.
+
+**c. Update `release_database.qmd`** — Add the new dataset's parquet
+directory and relationships.json path to the release workflow:
+
+```r
+# in release_database.qmd, add to parquet_dirs:
+parquet_dirs <- c(
+  ...,
+  here("data/parquet/{provider}_{dataset}")
+)
+
+# and to rels_paths:
+rels_paths <- c(
+  ...,
+  here("data/parquet/{provider}_{dataset}/relationships.json")
+)
+```
+
+Also add the dataset's tables to the color grouping section and update
+the release notes data sources list.
+
+### 7. Provider naming convention
+
+The `provider` value represents the **organization curating the data**,
+not the data portal where it's hosted:
+
+| Provider | Organization | Example datasets |
+|----------|-------------|------------------|
+| `calcofi` | CalCOFI program | bottle, ctd-cast, dic |
+| `swfsc` | NOAA SWFSC | ichthyo |
+| `pic` | SIO Pelagic Invertebrates Collection | zooplankton |
+| `sccoos` | SCCOOS | underway |
+
+Data portals (NCEI, EDI, ERDDAP) are recorded in `link_data_source`
+in `metadata/dataset.csv`, not in the provider name.
+
+### 8. Update `_targets.R`
 
 Add a new target entry for the ingest workflow:
 
@@ -136,7 +228,7 @@ tar_target(
 
 Insert it in the correct dependency order (after its `depends_on` target, before `release_database`).
 
-### 7. Present results
+### 9. Present results
 
 Show the user:
 - Created file path

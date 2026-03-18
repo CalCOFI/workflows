@@ -35,11 +35,22 @@ list(
   ),
 
   tar_target(
+    ingest_calcofi_dic,
+    {
+      ingest_calcofi_bottle  # needs casts + bottle for FK matching
+      quarto::quarto_render("ingest_calcofi_dic.qmd")
+      "data/parquet/calcofi_dic/manifest.json"
+    },
+    format = "file"
+  ),
+
+  tar_target(
     release_database,
     {
       ingest_swfsc_ichthyo
       ingest_calcofi_bottle
       ingest_calcofi_ctd_cast
+      ingest_calcofi_dic
       quarto::quarto_render("release_database.qmd")
       here::here("data/releases")
     },

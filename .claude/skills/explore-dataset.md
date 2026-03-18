@@ -48,7 +48,23 @@ When the user invokes this skill, run the R script `scripts/explore_dataset.R` a
    - Measurement columns that could map to `measurement_type.csv`
    - Data quality flags (duplicates, outliers, encoding issues)
 
-4. **Generate recommendations**:
+4. **Scrape CalCOFI.org landing page**:
+   - Use `WebFetch` on the CalCOFI.org page for the dataset (e.g.,
+     `https://calcofi.org/data/oceanographic-data/{dataset}/`) to check
+     for updated data, download links, methodology notes, and citations.
+   - If not available, check the data portal landing page (NCEI, EDI, ERDDAP).
+   - Extract: citation, DOI, PI names, temporal/spatial coverage, license.
+
+5. **Determine provider**:
+   - The `provider` is the **organization curating the data**, not the
+     data portal where it's hosted. For example:
+     - Data from CalCOFI → `provider = "calcofi"` (even if hosted on NCEI or EDI)
+     - Data from SWFSC → `provider = "swfsc"`
+     - Data from SIO/PIC → `provider = "pic"`
+   - The data portal (NCEI, EDI, ERDDAP) is recorded in `link_data_source`
+     in the `dataset` metadata table, not in the provider name.
+
+6. **Generate recommendations**:
    - Suggest whether this is an **ingest** (new data) or **publish** (subset of existing data)
    - Recommend table naming following `{dataset}_{table}` convention
    - Identify which existing tables to join against
@@ -59,7 +75,7 @@ When the user invokes this skill, run the R script `scripts/explore_dataset.R` a
      - Taxonomy standardization needed
      - Spatial matching complexity
 
-5. **Output**: Display the markdown report directly in the conversation.
+7. **Output**: Display the markdown report directly in the conversation.
 
 ## Example Output
 

@@ -63,6 +63,349 @@ Per the following summary, please proceed with Phase 0+1: DIC ingest as the test
                                                                                                      
   Ready to begin Phase 0+1: DIC ingest as the test case for these skills.
 
+⏺ Validation Report: ncei_dic
+
+  Summary
+
+  - Status: WARN (functional, with expected limitations)
+  - Tables: 3 dataset tables (dic_sample, dic_measurement, measurement_type)
+  - Errors: 1 (measurement_prec 100% NULL — expected, NCEI has no precision column)
+  - Warnings: 3 (see below)
+
+  Results
+
+  ┌────────────────────────┬────────┬─────────────────────────────────────────────────────────────┐
+  │         Check          │ Status │                           Details                           │
+  ├────────────────────────┼────────┼─────────────────────────────────────────────────────────────┤
+  │ Spatial                │ PASS   │ 28.1-37.0°N, -125.1 to -117.3°W — within CalCOFI grid       │
+  ├────────────────────────┼────────┼─────────────────────────────────────────────────────────────┤
+  │ Temporal               │ PASS   │ 1983-03-19 to 2021-07-20                                    │
+  ├────────────────────────┼────────┼─────────────────────────────────────────────────────────────┤
+  │ measurement_type FK    │ PASS   │ All types registered                                        │
+  ├────────────────────────┼────────┼─────────────────────────────────────────────────────────────┤
+  │ dic_sample composite   │ WARN   │ 296 duplicate (expocode, sta_key, depth, date) — replicate  │
+  │ PK                     │        │ samples at same location                                    │
+  ├────────────────────────┼────────┼─────────────────────────────────────────────────────────────┤
+  │ dic_measurement        │ WARN   │ 258 duplicate (bottle_id, measurement_type) — multiple      │
+  │ composite PK           │        │ DIC/TA values per bottle                                    │
+  ├────────────────────────┼────────┼─────────────────────────────────────────────────────────────┤
+  │ cast_id match rate     │ WARN   │ 24.7% (1,086/4,391) — many DIC cruises pre-date or differ   │
+  │                        │        │ from calcofi.org bottle coverage                            │
+  ├────────────────────────┼────────┼─────────────────────────────────────────────────────────────┤
+  │ measurement_prec       │ INFO   │ 100% NULL — NCEI data uses WOCE flags, not precision values │
+  └────────────────────────┴────────┴─────────────────────────────────────────────────────────────┘
+
+  Key Findings
+
+  1. Cast matching at 24.7% — The NCEI DIC data goes back to 1983 and includes cruises/stations that
+  may not be in the calcofi.org bottle database (1949-2021). Many early DIC measurements were from
+  cruises where the bottle data isn't in the calcofi.org download.
+  2. Replicate samples — DIC and TA often have multiple measurements per bottle (replicate analyses).
+  The notebook flags 258 duplicate (bottle_id, measurement_type) pairs. These need a decision: average
+   replicates, or keep as separate rows with a replicate number.
+  3. Parquet export successful — 5 files uploaded to gs://calcofi-db/ingest/ncei_dic/
+
+  Files Created
+
+  metadata/ncei/dic/
+  ├── tbls_redefine.csv
+  └── flds_redefine.csv
+
+  ingest_ncei_dic.qmd              # ingest notebook
+  data/wrangling/ncei_dic.duckdb   # wrangling database
+  data/parquet/ncei_dic/
+  ├── dic_sample.parquet
+  ├── dic_measurement.parquet
+  ├── measurement_type.parquet
+  ├── manifest.json
+  └── metadata.json
+
+  Decisions Needed
+
+  1. Replicate handling: Should we average replicate DIC/TA measurements per bottle, or keep them as
+  separate rows (e.g., dic_rep1, dic_rep2 like the calcofi.org bottle data)?
+  2. Unmatched samples (75%): Should the unmatched DIC samples remain in dic_sample as standalone
+  records (with NULL cast_id/bottle_id), or should we attempt broader matching (e.g., by lat/lon
+  proximity instead of station key)?
+  3. Merge vs. separate: Should dic_measurement rows eventually be merged into the existing
+  bottle_measurement table, or stay as a separate table?
+
+  How would you like to proceed with these decisions?
+  
+1. **Replicate handling**: Should we average replicate DIC/TA measurements per bottle, or keep them as
+separate rows (e.g., dic_rep1, dic_rep2 like the calcofi.org bottle data)?
+
+Like `@ingest_calcofi_ctd-cast.qmd`, create a `dic_measurement_summary` table with average and standard deviation (0 if only 1 measurement) for every unique position in time and space (including depth). Update the appropriate skills to reflect this logic for future. Be sure to reference the example code since need to filter out odd values via DuckDB (`NaN,-Inf,Inf`).
+
+2. **Unmatched samples (75%)**: Should the unmatched DIC samples remain in dic_sample as standalone
+records (with NULL cast_id/bottle_id), or should we attempt broader matching (e.g., by lat/lon
+proximity instead of station key)?
+
+Retain all DIC samples. Create a new high priority issue about mismatches with `site` and spatial matching to `grid` and `segment`. Given `lon+lat`, we can always project to the CalCOFI coordinate system to a `site` (`lon+lat -> line+station`), but there remains questions about what precision to use, and perhaps simply fall back on the common `grid`. (See `@ingest_swfsc_ichthyo.qmd` for example of matching to site and grid.) Ideally, we update sites along a cruise track (a la `segment` table) that gets populated with more observations as datasets get ingested. Then we can add QA/QC checks into the ingest process to identify unrealistic deviations in space and time along the track, corroborated by other datasets.
+
+3. **Merge vs. separate**: Should dic_measurement rows eventually be merged into the existing bottle_measurement table, or stay as a separate table?
+
+Let's keep them seperated for now, but in the notebook and potentially another low-priority issue suggest possibilities for merging.
+
+⏺ Good, I have the patterns. Let me now:
+  1. Update the ingest notebook with dic_measurement_summary
+  2. Create the GitHub issue about spatial matching
+  3. Add merge notes to the notebook
+  4. Update the relevant skills
+
+⏺ Now let me provide a summary of everything done.                                                   
+                                                                    
+  ---                                                                                                
+  Phase 0+1 Complete: DIC Ingest                                                                     
+                                                                                                     
+  What was done                                                                                      
+                                                                                                     
+  1. /explore-dataset — Profiled CALCOFI_DIC_20250122.csv (NCEI accession 0301029)                   
+  - 4,391 rows, 18 columns, 1983-2021
+  - Units row (row 2) requires skip; -999 = missing (WOCE convention)                                
+  - 71 stations, 131 cruises, DIC + TA measurements                  
+                                                                                                     
+  2. /generate-metadata — Created metadata/ncei/dic/                                                 
+  - tbls_redefine.csv — maps source to dic_sample                                                    
+  - flds_redefine.csv — 18 field mappings with type casts                                            
+                                                                                                     
+  3. /ingest-new — Created ingest_ncei_dic.qmd (Pattern B: merge into existing)                      
+  - Reads CSV, skips units row, replaces -999→NA                                                     
+  - Matches to existing casts via sta_key + datetime (±3 day window): 24.7% match rate               
+  - Matches to bottles via cast_id + depth_m (±1m): 97.8% of cast-matched                            
+  - Pivots DIC + TA into dic_measurement (8,301 rows from all samples)                               
+  - dic_measurement_summary (7,868 rows) — avg/stddev per position, filtering NaN/Inf                
+  - Added dic and alkalinity measurement types to measurement_type.csv                               
+  - Exports to parquet, uploads to GCS                                                               
+                                                                                                     
+  4. /validate-ingest — All checks pass except expected warnings                                     
+  - Spatial/temporal: PASS                                                                           
+  - measurement_type FK: PASS                                                                        
+  - NaN/Inf in summary: 0                                                                            
+  - Cast matching: 24.7% (expected — spatial matching needed)                                        
+                                                                                                     
+  Files created/modified                                                                             
+                                                                                                     
+  ┌──────────────────────────────────────────────┬────────────────────────────────────────────────┐  
+  │                     File                     │                     Action                     │
+  ├──────────────────────────────────────────────┼────────────────────────────────────────────────┤  
+  │ ingest_ncei_dic.qmd                          │ Created — full ingest notebook                 │
+  ├──────────────────────────────────────────────┼────────────────────────────────────────────────┤  
+  │ metadata/ncei/dic/tbls_redefine.csv          │ Created                                        │  
+  ├──────────────────────────────────────────────┼────────────────────────────────────────────────┤  
+  │ metadata/ncei/dic/flds_redefine.csv          │ Created                                        │  
+  ├──────────────────────────────────────────────┼────────────────────────────────────────────────┤  
+  │ metadata/measurement_type.csv                │ Added dic, alkalinity types                    │
+  ├──────────────────────────────────────────────┼────────────────────────────────────────────────┤  
+  │ data/parquet/ncei_dic/                       │ 6 parquet/json files                           │
+  ├──────────────────────────────────────────────┼────────────────────────────────────────────────┤  
+  │ .claude/skills/ingest-new.md                 │ Updated — measurement summary + spatial        │
+  │                                              │ matching docs                                  │  
+  ├──────────────────────────────────────────────┼────────────────────────────────────────────────┤
+  │ .claude/skills/templates/ingest_template.qmd │ Updated — measurement summary section          │  
+  ├──────────────────────────────────────────────┼────────────────────────────────────────────────┤
+  │ .claude/skills/validate-ingest.md            │ Updated — summary consistency checks           │  
+  └──────────────────────────────────────────────┴────────────────────────────────────────────────┘  
+  
+  GitHub issues                                                                                      
+                                                                    
+  - #47 (must-complete): Spatial matching for DIC and future datasets — site, grid, segment          
+  projection from lon/lat  
+
+Let's change this `ingest_ncei_dic.qmd` and Claude skills in a few ways:
+
+**Rename `ingest_ncei_dic.qmd` to `ingest_calcofi_dic.qmd`**. This indicates a provider `calcofi` and dataset `dic`. The provider should not be NCEI since the data is from CalCOFI, even though the dataset is stored on NCEI here: https://www.ncei.noaa.gov/access/metadata/landing-page/bin/iso?id=gov.noaa.nodc:0301029. Looking there more deeply, we see a **Credit** tab with a suggested Dataset Citation that clearly suggests the provider is CalCOFI:
+
+  Keeling, Charles D.; Lueker, Timothy J.; Emanuele, Guy; Dickson, Andrew G.; Martz, Todd R.; Wolfe, Wiley H.; Mau, Aaron (2025). Discrete profile dissolved inorganic carbon, total alkalinity, water temperature and salinity measurements collected and assembled from a number of cruises on many different ships for the California Cooperative Oceanic Fisheries Investigations program (CalCOFI) in the North East Pacific Ocean Coastal area from 1983-03-19 to 2021-07-20 (NCEI Accession 0301029). [indicate subset used]. NOAA National Centers for Environmental Information. Dataset. https://doi.org/10.25921/3w9f-jd72. Accessed [date].
+
+Other CalCOFI datasets are stored on data portals like EDI or ERDDAP, but should retain a provider indicative of the organization curating it. We should also be storing dataset metadata such as citations (**`citation_main`**, `citation_others` with a semicolon delimited or similar list) and source URLs (**`link_data_source`** and `link_others`), probably in another table **`dataset`**, which could also indicate in a **`tables`** column which tables it is contributing into the integrated database and perhaps whethere wholly or partly. 
+
+The most current information on this dataset is found on the CalCOFI.org website at https://calcofi.org/data/oceanographic-data/dic/. We should include something like **`link_calcofi_org`** to indicate the CalCOFI.org landing page for the dataset. This web page should be scraped for any new or updated data or metadata for the dataset before proceeding with the ingest.
+
+Finally, at the end of each new dataset ingestion script we should be updating the **`release_database.qmd`** "caboose" of ingestion workflows to ensure the dataset gets folded into the integrated database and becomes part of a new release.
+
+Considerations above should be a standard part of the dataset ingestion process, so need to update skills accordingly. Plus, need to revise existing ingest_datasets.
+
+⏺ Good context. Let me work through this systematically. I'll:
+
+  1. Rename the notebook + metadata directory
+  2. Create the dataset metadata table
+  3. Update release_database.qmd
+  4. Update skills
+  5. Update measurement_type.csv references
+
+
+⏺ Everything looks good. Let me provide a summary of all changes.
+
+  ---
+  Summary of Changes
+
+  1. Renamed ingest_ncei_dic.qmd → ingest_calcofi_dic.qmd
+
+  - Updated provider = "calcofi", dataset_name = "CalCOFI DIC"
+  - Updated all internal references: metadata paths, workflow URLs, measurement type source
+  - Updated overview with CalCOFI.org link, NCEI accession link, and full citation
+
+  2. Created metadata/dataset.csv — unified dataset registry
+
+  New reference table with columns:
+
+  ┌──────────────────┬─────────────────────────────────────────────┐
+  │      Column      │                   Purpose                   │
+  ├──────────────────┼─────────────────────────────────────────────┤
+  │ provider         │ Curating organization (calcofi, swfsc, pic) │
+  ├──────────────────┼─────────────────────────────────────────────┤
+  │ dataset          │ Dataset identifier                          │
+  ├──────────────────┼─────────────────────────────────────────────┤
+  │ citation_main    │ Primary citation with DOI                   │
+  ├──────────────────┼─────────────────────────────────────────────┤
+  │ link_calcofi_org │ CalCOFI.org landing page                    │
+  ├──────────────────┼─────────────────────────────────────────────┤
+  │ link_data_source │ Data portal URL (NCEI, EDI, ERDDAP)         │
+  ├──────────────────┼─────────────────────────────────────────────┤
+  │ link_others      │ Additional links (DOI, publications)        │
+  ├──────────────────┼─────────────────────────────────────────────┤
+  │ tables           │ Semicolon-delimited tables contributed      │
+  ├──────────────────┼─────────────────────────────────────────────┤
+  │ pi_names         │ Principal investigators                     │
+  └──────────────────┴─────────────────────────────────────────────┘
+
+  Pre-populated with all 4 existing datasets (bottle, ctd-cast, dic, ichthyo).
+
+  3. Updated all 4 ingest notebooks
+
+  Added ## Load Dataset Metadata section to each:
+  - ingest_swfsc_ichthyo.qmd
+  - ingest_calcofi_bottle.qmd
+  - ingest_calcofi_ctd-cast.qmd
+  - ingest_calcofi_dic.qmd
+
+  4. Updated release_database.qmd
+
+  - Added calcofi_dic to parquet_dirs and rels_paths
+  - Added DIC tables to schema color grouping (lightsalmon)
+  - Added dataset table color grouping (white)
+  - Updated release notes data sources list
+
+  5. Updated skills (5 files)
+
+  explore-dataset.md — Added:
+  - CalCOFI.org page scraping step (WebFetch before ingest)
+  - Provider naming guidance (organization, not portal)
+
+  generate-metadata.md — Added:
+  - Step 7: Register in metadata/dataset.csv
+  - Provider naming rules
+  - Updated example from ncei → calcofi
+
+  ingest-new.md — Added:
+  - Step 6: Dataset metadata loading + release_database update
+  - Step 7: Provider naming convention table
+  - Updated references from ncei_dic → calcofi_dic
+
+  templates/ingest_template.qmd — Added:
+  - '## Load Dataset Metadata section
+  - Updated reference from ingest_ncei_dic → ingest_calcofi_dic
+
+  validate-ingest.md — No additional changes needed
+
+  6. Updated metadata/measurement_type.csv
+
+  - ncei_dic → calcofi_dic in _source_datasets column
+  - Removed "(NCEI QA'd)" from measurement descriptions
+
+  7. GitHub issues
+
+  - Issue #25: Updated title to "ingest: DIC from NCEI into calcofi_dic tables"
+  - Issue #47: Updated body to reference calcofi_dic naming
+
+Besides updating the `release_database.qmd`, each new ingest dataset script needs to update the **`_targets.R`** file to include the new dataset targets. Revise to apply tidy data principles to the data, per existing datasets. I don't want to measurements for salinity, temp and DIC on the same row. And what measurements are we adding or re-using from the `measurement_type` table?
+
+Update the skills accordingly.
+
+Also, why am I not seeing messages in the rendered html [Image #5] despite `@_quarto.yml`having directive:
+  ```yml
+  execute:
+    message: true
+  ```
+And why only the first `dic_sample` table getting previewed [Image #6] despite rows in others?
+
+⏺ ---
+  Summary of Changes
+
+  1. Tidy data structure
+
+  - dic_sample now has only 7 position/time columns: expocode, ship_name, datetime_utc, sta_key,
+  latitude, longitude, depth_m — zero measurement values
+  - dic_measurement (16,391 rows) pivots ALL 4 measurement types to long format:
+
+  ┌──────────────────┬───────┬────────────────────────────────────────────┐
+  │ measurement_type │   n   │                   status                   │
+  ├──────────────────┼───────┼────────────────────────────────────────────┤
+  │ dic              │ 4,237 │ NEW — dissolved inorganic carbon (umol/kg) │
+  ├──────────────────┼───────┼────────────────────────────────────────────┤
+  │ alkalinity       │ 4,064 │ NEW — total alkalinity (umol/kg)           │
+  ├──────────────────┼───────┼────────────────────────────────────────────┤
+  │ ctdtemp_its90    │ 4,009 │ NEW — CTD temperature ITS-90 (degC)        │
+  ├──────────────────┼───────┼────────────────────────────────────────────┤
+  │ salinity_pss78   │ 4,081 │ NEW — practical salinity PSS-78            │
+  └──────────────────┴───────┴────────────────────────────────────────────┘
+
+  All 4 are new types distinct from bottle/CTD equivalents (different QC pipeline with WOCE flags).
+
+  - dic_measurement_summary (15,786 rows) — avg/stddev per position
+
+  2. _targets.R updated
+
+  Added ingest_calcofi_dic target depending on ingest_calcofi_bottle, inserted before
+  release_database which now depends on all 4 ingests.
+
+  3. Fixed messages (cat vs message)
+
+  Switched all message() → cat(glue(...), "\n"). Messages now render visibly in HTML output.
+
+  4. Fixed preview tables
+
+  Replaced single preview_tables() loop call with individual datatable() calls in separate chunks.
+  All 3 tables now render correctly.
+
+  5. Skills updated
+
+  - ingest-new.md: Added tidy data conventions, cat() pattern, individual datatable() calls, updated
+  Pattern B description
+  - ingest_template.qmd: Switched message→cat
+  - Saved feedback memory for future conversations
+
+In the Schema Documentation [Image #8], let's be sure to show 1-to-many relationships and udpate the relationships.json sidecar for use in the release_database.qmd (and update Claude skills to do this consistently). It would also be nice to color code tables according to those newly added versus amended like `measurement_type`.
+
+⏺ The grViz widget is rendered with the color-coded tables and relationship arrows. Let me do a quick
+   summary.
+
+  ---
+  Summary
+
+  Schema Documentation updates
+
+  ingest_calcofi_dic.qmd now has a proper schema section that:
+  1. Defines PKs/FKs via dm_add_pk() and dm_add_fk():
+    - dic_measurement.measurement_type → measurement_type.measurement_type
+    - dic_measurement_summary.measurement_type → measurement_type.measurement_type
+  2. Color-codes tables:
+    - lightblue — new DIC tables (dic_sample, dic_measurement, dic_measurement_summary)
+    - lightyellow — amended reference table (measurement_type)
+    - white — shared metadata (dataset)
+  3. Writes relationships.json sidecar (2 PKs, 2 FKs) for merging in release_database.qmd
+
+  Skills updated
+
+  ingest_template.qmd — Schema section now includes:
+  - add_{{dataset}}_keys() function pattern for PKs/FKs
+  - Color-coding convention (lightblue/lightyellow/white)
+  - build_relationships_json() call to write sidecar
+
+  ingest-new.md — Section 9 updated to document the schema/relationships pattern, color-coding
+  convention, and relationships.json sidecar requirement.
+
 ## 2026-03-17.c build skills, agents for digesting datasets
 
 (cd `workflows`)

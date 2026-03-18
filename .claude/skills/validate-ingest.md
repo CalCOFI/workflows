@@ -150,6 +150,31 @@ date_cols <- c("datetime_utc", "date", "cruise_date")
 # check for near-duplicates (same key columns, different values)
 ```
 
+#### I. Measurement Summary Consistency (`summary`)
+```r
+# if a *_measurement_summary table exists, validate:
+# - all summary rows have n_obs >= 1
+# - stddev == 0 when n_obs == 1
+# - no NaN or Inf in avg or stddev columns
+# - summary row count <= measurement row count
+# - measurement types in summary match measurement table
+for (tbl in tables) {
+  if (grepl("_summary$", tbl)) {
+    # check for NaN/Inf in summary values
+    bad_vals <- dbGetQuery(con, glue(
+      "SELECT COUNT(*) FROM {tbl}
+       WHERE isnan(avg) OR NOT isfinite(avg)
+          OR isnan(stddev) OR NOT isfinite(stddev)"))[[1]]
+    if (bad_vals > 0) report_error("summary NaN/Inf", tbl, glue("{bad_vals} rows"))
+    # check stddev = 0 when n_obs = 1
+    bad_stddev <- dbGetQuery(con, glue(
+      "SELECT COUNT(*) FROM {tbl}
+       WHERE n_obs = 1 AND stddev != 0"))[[1]]
+    if (bad_stddev > 0) report_warning("stddev != 0 for n_obs=1", tbl, bad_stddev)
+  }
+}
+```
+
 ### 3. Cross-dataset validation
 
 If prior ingest parquet exists, also validate cross-dataset integrity:

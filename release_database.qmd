@@ -95,7 +95,8 @@ load_duckdb_extension(con_wdl, "spatial")
 parquet_dirs <- c(
   here("data/parquet/swfsc_ichthyo"),
   here("data/parquet/calcofi_bottle"),
-  here("data/parquet/calcofi_ctd-cast")
+  here("data/parquet/calcofi_ctd-cast"),
+  here("data/parquet/calcofi_dic")
 )
 
 load_stats <- purrr::map_dfr(parquet_dirs, function(pd) {
@@ -203,7 +204,8 @@ d <- dm::dm_from_con(con_wdl, table_names = schema_tbls, learn_keys = FALSE)
 rels_paths <- c(
   here("data/parquet/swfsc_ichthyo/relationships.json"),
   here("data/parquet/calcofi_bottle/relationships.json"),
-  here("data/parquet/calcofi_ctd-cast/relationships.json")
+  here("data/parquet/calcofi_ctd-cast/relationships.json"),
+  here("data/parquet/calcofi_dic/relationships.json")
 )
 rels_paths <- rels_paths[file.exists(rels_paths)]
 
@@ -258,6 +260,11 @@ ctd_tbls <- intersect(
   c("ctd_cast", "ctd_measurement", "ctd_summary"),
   schema_tbls
 )
+dic_tbls <- intersect(
+  c("dic_sample", "dic_measurement", "dic_measurement_summary"),
+  schema_tbls
+)
+meta_tbls <- intersect(c("dataset"), schema_tbls)
 
 if (length(ichthyo_tbls) > 0) {
   d <- d |> dm::dm_set_colors(lightblue = !!ichthyo_tbls)
@@ -273,6 +280,12 @@ if (length(bottle_tbls) > 0) {
 }
 if (length(ctd_tbls) > 0) {
   d <- d |> dm::dm_set_colors(lavender = !!ctd_tbls)
+}
+if (length(dic_tbls) > 0) {
+  d <- d |> dm::dm_set_colors(lightsalmon = !!dic_tbls)
+}
+if (length(meta_tbls) > 0) {
+  d <- d |> dm::dm_set_colors(white = !!meta_tbls)
 }
 
 dm::dm_draw(d, rankdir = "LR", view_type = "all")
@@ -350,7 +363,8 @@ release_notes <- paste0(
   "## Data Sources\n\n",
   "- `ingest_swfsc_ichthyo.qmd` - Ichthyo tables (cruise, ship, site, tow, net, species, ichthyo, grid, segment, lookup, taxon, taxa_rank)\n",
   "- `ingest_calcofi_bottle.qmd` - Bottle/cast tables (casts, bottle, bottle_measurement, cast_condition, measurement_type)\n",
-  "- `ingest_calcofi_ctd-cast.qmd` - CTD tables (ctd_cast, ctd_measurement, ctd_summary, measurement_type)\n\n",
+  "- `ingest_calcofi_ctd-cast.qmd` - CTD tables (ctd_cast, ctd_measurement, ctd_summary, measurement_type)\n",
+  "- `ingest_calcofi_dic.qmd` - DIC/alkalinity tables (dic_sample, dic_measurement, dic_measurement_summary, dataset)\n\n",
   "## Cross-Dataset Integration\n\n",
   "- **Ship matching**: Reconciled ship codes between bottle casts and swfsc ship reference\n",
   "- **Cruise bridge**: Derived cruise_key (YYMMKK) for bottle casts via ship_key + datetime\n",
