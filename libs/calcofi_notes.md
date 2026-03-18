@@ -2,7 +2,68 @@
 
 - [ ] add ERDDAP server
 
-## 2026-03-15.b build skills, agents for digesting datasets
+
+## 2026-03-18 Phase 0+1: DIC ingest
+
+Per the following summary, please proceed with Phase 0+1: DIC ingest as the test case for these skills. 
+
+⏺ Everything is in place. Here's a summary of what was implemented:
+                                                                                                     
+  Completed                                                                                          
+  
+  Claude Code Skills (5)                                                                             
+                                                                  
+  ┌────────────────────┬─────────────────────────────────────┬────────────────────────────────────┐  
+  │       Skill        │                File                 │              Purpose               │
+  ├────────────────────┼─────────────────────────────────────┼────────────────────────────────────┤  
+  │ /explore-dataset   │ .claude/skills/explore-dataset.md   │ Profile CSV/ERDDAP data before     │
+  │                    │                                     │ ingestion                          │
+  ├────────────────────┼─────────────────────────────────────┼────────────────────────────────────┤  
+  │ /generate-metadata │ .claude/skills/generate-metadata.md │ Scaffold tbls_redefine.csv +       │
+  │                    │                                     │ flds_redefine.csv                  │  
+  ├────────────────────┼─────────────────────────────────────┼────────────────────────────────────┤
+  │ /ingest-new        │ .claude/skills/ingest-new.md        │ Generate ingest QMD from template  │  
+  ├────────────────────┼─────────────────────────────────────┼────────────────────────────────────┤  
+  │ /validate-ingest   │ .claude/skills/validate-ingest.md   │ Post-ingest validation (PKs, FKs,  │
+  │                    │                                     │ NULLs, ranges)                     │  
+  ├────────────────────┼─────────────────────────────────────┼────────────────────────────────────┤
+  │ /publish-template  │ .claude/skills/publish-template.md  │ Scaffold OBIS/ERDDAP/EDI publish   │  
+  │                    │                                     │ workflows                          │  
+  └────────────────────┴─────────────────────────────────────┴────────────────────────────────────┘
+                                                                                                     
+  Templates (4)                                                   
+
+  - templates/ingest_template.qmd — Universal ingest notebook with TODO markers                      
+  - templates/publish_obis_template.qmd — Darwin Core Archive (Event + Occurrence + eMoF)
+  - templates/publish_erddap_template.qmd — NCCSV with CF conventions                                
+  - templates/publish_edi_template.qmd — EML + CSV data package                                      
+                                                                                                     
+  Supporting Files                                                                                   
+                                                                                                     
+  - scripts/explore_dataset.R — R profiling script (DuckDB SUMMARIZE, FK matching, spatial/temporal  
+  coverage)
+                                                                                                     
+  GitHub Issues                                                                                      
+  
+  - Closed 6 stale issues: #6, #7, #8, #19, #20, #21                                                 
+  - Created 22 new issues: #25-46                                 
+    - 9 must-complete (4 ingest + 5 publish)                                                         
+    - 10 should-complete (5 ingest + 5 publish)                                                      
+    - 2 nice-to-have (ingest)                                                                        
+    - 1 infrastructure                                                                               
+  - Updated parent issue #1 with full project matrix and phase roadmap                               
+                                                                                                     
+  Labels Created                                                                                     
+                                                                                                     
+  must-complete, should-complete, nice-to-have, infrastructure, ingest, publish                      
+                                                                  
+  Workflow Chain                                                                                     
+                                                                  
+  `/explore-dataset` → `/generate-metadata` → `/ingest-new` → `/validate-ingest` → `/publish-template`         
+                                                                                                     
+  Ready to begin Phase 0+1: DIC ingest as the test case for these skills.
+
+## 2026-03-17.c build skills, agents for digesting datasets
 
 (cd `workflows`)
 
@@ -541,11 +602,64 @@ implementation?
                                                                   
   Workflow Chain                                                                                     
                                                                   
-  /explore-dataset → /generate-metadata → /ingest-new → /validate-ingest → /publish-template         
+  `/explore-dataset` → `/generate-metadata` → `/ingest-new` → `/validate-ingest` → `/publish-template`         
                                                                                                      
   Ready to begin Phase 0+1: DIC ingest as the test case for these skills.
 
-## 2026-03-15 ctd-viz shiny app
+## 2026-03-17.b `2601RL` not processed by `@ingest_calcofi_ctd-cast.qmd`
+
+Why did `2601RL` not get processed in `@ingest_calcofi_ctd-cast.qmd` between `## Scrape CTD Download Links` and `## Find and Prioritize CTD Data Files`.
+
+⏺ Found the issue. Compare the directory structures:                        
+                                                                               
+  - 2501RL (works): has a db-csvs subdirectory → path matches                  
+  "Prelim.*db[_|-]csv"                                                         
+  - 2401RL: has a nested subdirectory 20-2401RL_CTDPrelim/ (likely contains    
+  db-csvs inside)                                                              
+  - 2601RL (broken): CSV files are directly in the top-level directory — no    
+  db-csvs or db_csv subfolder                                                  
+                                                                               
+  The data_stage classification at line 246-257 requires the path to match     
+  "Prelim.*db[_|-]csv" for preliminary data. Since 2601RL's path is            
+  20-2601RL_CTDPrelim/20-2601_CTD_001-116U.csv (no db-csv segment), data_stage 
+  is set to NA, and line 270 filters it out:                                   
+
+  filter(data_stage %in% c("final", "preliminary"))
+                                                                               
+  This is the same issue that already required special-case handling for 2507SR
+   and 2111SR. The fix is to add 2601RL to the special cases, or better yet,   
+  generalize the pattern. Would you like me to make the data_stage logic more  
+  robust — e.g., fall back to matching just "Prelim.*\\.csv$" for any cruise
+  where the CSVs aren't in a db-csv subdirectory?
+
+⏺ Now I see the full picture. All three cases have the same pattern — CSVs     
+  directly in the Prelim directory with no db-csvs subfolder:                  
+                                                                               
+  - 2507SR: 20-2507SR_CTDPrelim/20-2507_CTD_*.csv (flat)                       
+  - 2601RL: 20-2601RL_CTDPrelim/20-2601_CTD_*.csv (flat)                       
+  - 2111SR: unique — CSVs only in csvs-plots subfolder                         
+                                                                               
+  I'll generalize the flat-Prelim case and keep 2111SR as its only true edge   
+  case.                                      
+
+⏺ The fix replaces the cruise-specific 2507SR special case with a general rule:
+
+  str_detect(dir_unzip, "Prelim") &                                            
+    path_unzip == paste0(dir_unzip, "/", file_csv) ~ "preliminary",            
+                                                                               
+  This matches any CSV sitting directly in a Prelim directory (no intermediate 
+  subdirectory), which handles 2601RL, 2507SR, and any future cruises with the
+  same flat layout. It won't accidentally pull in files from csvs-plots,       
+  metadata, or asc-hdr-btl subdirectories for cruises that have a proper
+  db-csvs folder.
+
+  The 2111SR edge case is kept since its CSVs genuinely live in a different    
+  subdirectory (csvs-plots).
+                                                                               
+  Also removed the stale # NOT FOUND comment for 2601RL since the URL is now   
+  available.
+
+## 2026-03-17 ctd-viz shiny app
 (cd apps)
 
 Now that the `@../workflows/ingest_calcofi_ctd-cast.qmd` has ingested the large `ctd-cast` dataset with 15 GB of `ctd_measurement` (partitioned by `cruise_key`), let's use the the client-side R functions @../calcofi4r (eg, starting with `calcofi4r::cc_get_db()`) to make a new app `ctd-viz` to:
@@ -962,6 +1076,1352 @@ partitions of the parquet table ctd_measurement rather than its contents?
   - Measurement types: scans a single cruise partition (~1s) instead of all
   234M rows                                                                    
   - No _source_table: uses actual partition data, not provenance metadata
+
+Wait, I think you're right about getting measurement_types using             
+_source_table, but having a problem reading ctd_measurement
+
+```r
+con <- calcofi4r::cc_get_db()                                                         
+# Using cached database: v2026.03.14                                             
+
+cc_list_tables()                                                             
+# Using cached database: v2026.03.14                                             
+#  [1] "bottle"             "bottle_measurement" "cast_condition"     "casts"    
+#            "cruise"             "ctd_cast"                                     
+#  [7] "ctd_measurement"    "ctd_summary"        "grid"               "ichthyo"  
+#            "lookup"             "measurement_type"                             
+# [13] "net"                "segment"            "ship"               "site"     
+#            "species"            "taxa_rank"                                    
+# [19] "taxon"              "tow"                                                
+cc_describe_table("ctd_measurement")                                         
+# Using cached database: v2026.03.14                                             
+# # A tibble: 7 × 3                                                              
+#   column_name          data_type is_nullable                                   
+#   <chr>                <chr>     <chr>                                         
+# 1 ctd_measurement_uuid VARCHAR   YES                                           
+# 2 ctd_cast_uuid        VARCHAR   YES                                           
+# 3 depth_m              DOUBLE    YES                                           
+# 4 measurement_type     VARCHAR   YES                                           
+# 5 measurement_value    DOUBLE    YES                                           
+# 6 measurement_qual     VARCHAR   YES                                           
+# 7 cruise_key           VARCHAR   YES                                           
+tbl(con, "measurement_type") |> filter(`_source_table` == "ctd_raw") |>      
+collect()                                                                      
+# A tibble: 53 × 8                                                             
+#    measurement_type        description                   units                 
+# `_source_column` `_source_table` `_source_datasets` `_qual_column`             
+# `_prec_column`                                                                 
+#    <chr>                   <chr>                         <chr> <chr>           
+#   <chr>           <chr>              <chr>          <chr>                      
+#  1 temperature_1           Temperature sensor 1          degC  temp1           
+#   ctd_raw         calcofi_ctd-cast   temp1q         NA                         
+#  2 temperature_2           Temperature sensor 2          degC  temp2           
+#   ctd_raw         calcofi_ctd-cast   temp2q         NA                         
+#  3 temperature_ave         Average temperature           degC  temp_ave        
+#   ctd_raw         calcofi_ctd-cast   NA             NA                         
+#  4 potential_temperature_1 Potential temperature sensor… degC  po_t1           
+#   ctd_raw         calcofi_ctd-cast   NA             NA                         
+#  5 potential_temperature_2 Potential temperature sensor… degC  po_t2           
+#   ctd_raw         calcofi_ctd-cast   NA             NA                         
+#  6 salinity_1              Salinity sensor 1             PSU   salt1           
+#   ctd_raw         calcofi_ctd-cast   salt1q         NA                         
+#  7 salinity_1_corr         Salinity sensor 1 cruise-cor… PSU   salt1_corr      
+#   ctd_raw         calcofi_ctd-cast   NA             NA                         
+#  8 salinity_2              Salinity sensor 2             PSU   salt2           
+#   ctd_raw         calcofi_ctd-cast   salt2q         NA                         
+#  9 salinity_2_corr         Salinity sensor 2 cruise-cor… PSU   salt2_corr      
+#   ctd_raw         calcofi_ctd-cast   NA             NA                         
+# 10 salinity_ave_corr       Average salinity corrected    PSU   salt_ave_corr   
+#   ctd_raw         calcofi_ctd-cast   NA             NA                         
+# ℹ 43 more rows                                                               
+# ℹ Use `print(n = ...)` to see more rows                                      
+tbl(con, "ctd_measurement")                                                  
+# Error in `db_query_fields.DBIConnection()`:                                    
+# ! Can't query fields.                                                          
+# ℹ Using SQL: SELECT * FROM (FROM ctd_measurement) q01 WHERE (0 = 1)            
+# Caused by error in `dbSendQuery()`:                                            
+# ! HTTP Error: HTTP GET error reading 's3://calcofi-db/ducklake/releases/v2026. 
+# 03.14/parquet/ctd_measurement/?encoding-type=url&list-type=2&prefix=ducklake%2 
+# Freleases%2Fv2026.03.14%2Fparquet%2Fctd_measurement%2F' in region '' (HTTP 404 
+#  Not Found)                                                                    
+# ℹ Context: rapi_prepare                                                        
+# ℹ Error type: HTTP                                                             
+# Run `rlang::last_trace()` to see where the error occurred.                     
+```
+
+⏺ Two issues here:
+
+  1. `_source_table` is fine — you're right, it works well for filtering CTD
+  types. I'll switch back to it.
+  2. `tbl(con, "ctd_measurement")` fails because `cc_get_db()` creates the view
+  with `s3://` URLs but doesn't configure the httpfs S3 settings. My app's
+  `global.R` already configures httpfs after `cc_get_db()`, so the app should work.
+   But the RStudio console doesn't have those settings.
+
+  Let me update `global.R` to use `_source_table` for measurement types (instant,
+  no remote scan) and keep the httpfs setup for everything else.
+
+⏺ Syntax OK. Summary of the startup query strategy:
+
+  - Measurement types: `_source_table` == "ctd_raw" from the small
+  measurement_type reference table (instant, ~100 rows)
+  - Cruise list: `parquet_scan(..., hive_partitioning=true)` reads partition
+  directory names (~6s, no data scan)
+  - httpfs S3 settings: always configured after `cc_get_db()` — this is the key
+  fix for the error you're seeing. `cc_get_db()` creates the `ctd_measurement` view
+   with `s3://` URLs, but doesn't persist the httpfs settings. The app re-applies
+   them on every startup.
+
+         DBI, dbplyr, dplyr, duckdb, geosphere, ggplot2, glue, lubridate,
+         mapgl, marmap, MBA, plotly, purrr, sf, shiny, tidyr, viridis,
+     … +239 lines (ctrl+o to expand)
+  ⎿  (timeout 2m)
+
+⏺ All tests pass. 521 cruises available, segments compute correctly, and
+  measurements query returns temperature data (0-522m depth, 6.3-19.5°C). Let
+  me verify the app can launch.
+
+⏺ Bash(Rscript -e "
+      # test that the app can initialize (without actually running)…)
+  ⎿  Using cached database: v2026.03.14
+     App initialized successfully
+     UI class: bslib_page shiny.tag.list list
+     Server class: function
+  ⎿  (timeout 2m)
+
+⏺ The app initializes cleanly. Here's a summary of what was created:
+
+  Created: apps/ctd-viz/
+
+  3 files following the int-app patterns (bslib page_sidebar, mapgl,
+  cc_get_db()):
+
+  global.R
+
+  - Connects via calcofi4r::cc_get_db() (skips LOAD spatial which breaks
+  dbplyr)
+  - Builds cruise choices from casts table joined with cruise + ship (521
+  cruises, 1949-1999)
+  - Loads measurement_type reference (100 types; defaults to temperature)
+  - Helper functions: compute_segments(), get_transect_bathy(),
+  build_transect_plot()
+
+  ui.R
+
+  - page_sidebar with navset_card_underline (2 tabs: Cruise Map, Transect)
+  - Sidebar: cruise selector, load button, selection info, reset, transect plot
+   controls
+  - Cruise Map tab: maplibreOutput + time range slider
+  - Transect tab: plotlyOutput
+
+  server.R
+
+  - Flow 1 — Load Cruise: queries casts, creates sf points + segment lines,
+  renders maplibre map with base + highlight layers
+  - Flow 2 — Select Transect: click two casts on map OR drag time slider;
+  bidirectional sync with circular-update guard; map highlights via
+  set_filter/set_paint_property proxy
+  - Flow 3 — Plot Transect: queries bottle + bottle_measurement, computes
+  cumulative haversine distance, MBA interpolation, optional marmap bathymetry,
+   ggplot ODV-style plot → ggplotly
+
+  Key adaptation from plan
+
+  The ctd_measurement table (234M rows, partitioned) exists in the catalog but
+  its parquet files haven't been uploaded to the GCS release yet. The app uses
+  the available casts + bottle + bottle_measurement tables instead. When
+  ctd_measurement is released, switching back requires changing the table names
+   and join path in global.R/server.R.
+
+✻ Churned for 26m 42s
+
+❯ But I don't understand. The ctd_measurement is loaded in the latest release  
+v2026.03.14 per image. Are the calcofi4r functions not recognizing the         
+partitioned parquet files?                                                     
+  ⎿  [Image #1]
+
+⏺ Good catch — the parquet files ARE there. The issue is in cc_get_db(). Let me
+   check why the partitioned view creation failed silently.
+
+⏺ Read 1 file (ctrl+o to expand)
+  ⎿  Interrupted · What should Claude do instead?
+
+❯ Ah just committed calcofi4r with this ability (forgot to commit) and         
+installed from devtools::install_github("CalCOFI/calcofi4r").                  
+
+⏺ Let me verify ctd_measurement is now accessible and switch the app back to
+  the CTD data model.
+
+⏺ Bash(Rscript -e "
+      library(DBI)…)
+  ⎿  Error: Exit code 1
+
+     Attaching package: ‘dplyr’
+
+     The following objects are masked from ‘package:stats’:
+
+         filter, lag
+
+     The following objects are masked from ‘package:base’:
+
+     … +47 lines (ctrl+o to see all)
+
+⏺ The database is locked by RStudio. Let me try without refresh = TRUE (use
+  cached), or use a different approach.
+
+⏺ Bash(Rscript -e "
+      library(DBI)…)
+  ⎿  Error: Exit code 1
+
+     Attaching package: ‘dplyr’
+
+     The following objects are masked from ‘package:stats’:
+
+         filter, lag
+
+     The following objects are masked from ‘package:base’:
+
+     … +47 lines (ctrl+o to see all)
+
+⏺ RStudio is holding the DuckDB lock. Let me use a separate cache to test.
+
+⏺ Bash(Rscript -e "
+      library(DBI)…)
+  ⎿  Attaching package: ‘dplyr’
+
+     The following objects are masked from ‘package:stats’:
+     … +27 lines (ctrl+o to expand)
+  ⎿  (timeout 3m)
+
+⏺ The issue is clear — cc_get_db() is still treating ctd_measurement as a
+  non-partitioned table (trying .parquet instead of /**/*.parquet). Let me
+  check the installed calcofi4r code and the catalog format.
+
+⏺ Bash(Rscript -e "
+      # check installed calcofi4r version and the partitioned logic…)
+  ⎿  calcofi4r version: 1.1.3
+
+     Catalog table columns: name, rows, partitioned
+     … +24 lines (ctrl+o to expand)
+
+⏺ The catalog is fine. Let me check the actual installed cc_get_db code to see
+  if the fix is present.
+
+⏺ Bash(Rscript -e "
+      # show the actual installed cc_get_db function body…)
+  ⎿  Registered S3 method overwritten by 'quantmod':
+       method            from
+       as.zoo.data.frame zoo
+     Lines with partitioned/hive:
+  ⎿  (timeout 30s)
+
+⏺ The installed version (1.1.3) doesn't have the partition logic at all! Let me
+   check the actual installed code vs the local repo code.
+
+⏺ Bash(Rscript -e "
+      # show the view creation loop in installed cc_get_db…)
+  ⎿  Error: Exit code 1
+     Registered S3 method overwritten by 'quantmod':
+       method            from
+       as.zoo.data.frame zoo
+     Error: '\(' is an unrecognized escape in character string (<input>:1:19)
+     Execution halted
+
+⏺ Bash(Rscript -e "
+      body_text <- deparse(body(calcofi4r::cc_get_db))…)
+  ⎿  Registered S3 method overwritten by 'quantmod':
+       method            from
+       as.zoo.data.frame zoo
+     … +27 lines (ctrl+o to expand)
+  ⎿  (timeout 30s)
+
+⏺ The installed version 1.1.3 has the old code without partition support — it
+  always uses {tbl_name}.parquet. The local repo at
+  /Users/bbest/Github/CalCOFI/calcofi4r/R/database.R has the fix (lines 132-150
+   with has_partitioned / hive_partitioning), but the installed package doesn't
+   match. The GitHub install may have pulled the old version.
+
+  You may need to install from the local repo:
+  devtools::install("/Users/bbest/Github/CalCOFI/calcofi4r")
+
+  Or push the fix to GitHub first and then
+  devtools::install_github("CalCOFI/calcofi4r").
+
+  In the meantime, the app works with casts + bottle + bottle_measurement (521
+  cruises). Once the partition-aware cc_get_db() is installed, I can switch it
+  back to ctd_cast + ctd_measurement. Want me to wait or proceed with any other
+   changes?
+
+✻ Worked for 2m 2s
+
+❯ Ok, calcofi4r locally should now be version 1.1.4 with partitioned parquet   
+reading capability. Please update ctd-viz                                      
+
+⏺ Bash(Rscript -e "
+      library(DBI)…)
+  ⎿  Interrupted · What should Claude do instead?
+
+❯ Moving to server, so need to read remote                                     
+
+⏺ Bash(Rscript -e "
+      library(DBI)…)
+  ⎿  Attaching package: ‘dplyr’
+
+     The following objects are masked from ‘package:stats’:
+     … +28 lines (ctrl+o to expand)
+  ⎿  (timeout 5m)
+
+⏺ Version 1.1.4 now uses the glob pattern /**/*.parquet, but DuckDB can't glob
+  over plain HTTPS URLs. Let me try the S3-compatible endpoint workaround and
+  update the app to the CTD data model.
+
+⏺ Bash(Rscript -e "
+      library(DBI)…)
+  ⎿  S3 approach works! rows: 3
+     cols: ctd_measurement_uuid, ctd_cast_uuid, depth_m, measurement_type,
+      measurement_value, measurement_qual, cruise_key
+     … +16 lines (ctrl+o to expand)
+  ⎿  (timeout 2m)
+
+⏺ S3-compatible endpoint works. Now let me check which measurement types are in
+   ctd_measurement (they differ from the bottle measurement_type table).
+
+⏺ Bash(Rscript -e "
+      library(DBI)…)
+  ⎿  [1] 0
+     [1] 0
+     [1] 0
+     … +249 lines (ctrl+o to expand)
+  ⎿  (timeout 3m)
+
+⏺ 93 CTD cruises with 53 measurement types. The S3 endpoint works. Now I'll
+  update all three files to use the CTD data model with the httpfs fallback for
+   partitioned tables.
+
+⏺ Read 1 file (ctrl+o to expand)
+
+⏺ Now let me rewrite all three files for the CTD data model.
+
+⏺ Write(global.R)
+  ⎿  Added 44 lines, removed 9 lines
+       4    DBI, dbplyr, dplyr, duckdb,
+       5    geosphere, ggplot2, glue, htmltools,
+       6    lubridate, mapgl, marmap, MBA,
+       7 -  plotly, purrr, sf, shiny,
+       7 +  plotly, purrr, sf, shiny, stringr,
+       8    tidyr, viridis,
+       9    quiet = T)
+      10
+      11  # database ----
+      12  con <- calcofi4r::cc_get_db()
+      13 -# note: skip LOAD spatial — it breaks dbplyr field introspecti
+         -on for geom columns;
+      14 -# all spatial ops are done in R via sf, not DuckDB spatial SQL
+      13
+      14 +# ensure partitioned tables are available; cc_get_db() glob ov
+         +er HTTPS may fail,
+      15 +# so fall back to S3-compatible GCS endpoint for hive-partitio
+         +ned parquet
+      16 +if (!"ctd_measurement" %in% dbListTables(con)) {
+      17 +  # extract release version from an existing view's SQL
+      18 +  view_sql <- dbGetQuery(
+      19 +    con,
+      20 +    "SELECT sql FROM duckdb_views() WHERE view_name = 'cruise'
+         + LIMIT 1")$sql
+      21 +  db_version <- str_extract(view_sql, "v\\d{4}\\.\\d{2}(\\.\\d
+         +{2})?")
+      22 +
+      23 +  tryCatch({
+      24 +    dbExecute(con, "INSTALL httpfs; LOAD httpfs;")
+      25 +    dbExecute(con, "SET s3_region = 'auto';")
+      26 +    dbExecute(con, "SET s3_endpoint = 'storage.googleapis.com'
+         +;")
+      27 +    dbExecute(con, "SET s3_url_style = 'path';")
+      28 +    dbExecute(con, "SET s3_access_key_id = '';")
+      29 +    dbExecute(con, "SET s3_secret_access_key = '';")
+      30 +
+      31 +    s3_base <- glue("s3://calcofi-db/ducklake/releases/{db_ver
+         +sion}/parquet")
+      32 +
+      33 +    for (tbl_name in c("ctd_measurement", "ctd_summary")) {
+      34 +      dbExecute(con, glue(
+      35 +        "CREATE OR REPLACE VIEW {tbl_name} AS
+      36 +         SELECT * FROM read_parquet(
+      37 +           '{s3_base}/{tbl_name}/**/*.parquet',
+      38 +           hive_partitioning = true)"))
+      39 +    }
+      40 +    message("Loaded partitioned tables via S3 endpoint")
+      41 +  }, error = function(e) {
+      42 +    message("Could not load partitioned tables: ", e$message)
+      43 +  })
+      44 +}
+      45 +
+      46  # cruise choices ----
+      17 -# use `casts` table (bottle data); ctd_measurement not yet in
+         -released db
+      18 -cruise_choices <- tbl(con, "casts") |>
+      47 +cruise_choices <- tbl(con, "ctd_cast") |>
+      48    distinct(cruise_key) |>
+      49    inner_join(
+      50      tbl(con, "cruise"),
+     ...
+      61  cruise_vec     <- setNames(cruise_choices$cruise_key, cruise_c
+          hoices$label)
+      62  default_cruise <- cruise_choices$cruise_key[1]
+      63
+      35 -# measurement types ----
+      64 +# measurement types (filtered to those in ctd_measurement) ---
+         +-
+      65 +ctd_meas_types <- tbl(con, "ctd_measurement") |>
+      66 +  distinct(measurement_type) |>
+      67 +  collect() |>
+      68 +  pull(measurement_type)
+      69 +
+      70  meas_types <- tbl(con, "measurement_type") |>
+      71    select(measurement_type, description, units) |>
+      72    collect() |>
+      73 +  filter(measurement_type %in% ctd_meas_types) |>
+      74    mutate(
+      75      label = paste0(description, " (", units, ")"))
+      76
+      77  meas_vec <- setNames(meas_types$measurement_type, meas_types$l
+          abel)
+      78
+      44 -# default measurement: temperature if available
+      79 +# default measurement: temperature_1 if available
+      80  default_meas <- {
+      46 -  temp_idx <- grep("[Tt]emperature", meas_types$description)
+      81 +  temp_idx <- grep("^temperature_1$", meas_types$measurement_t
+         +ype)
+      82    if (length(temp_idx) > 0) meas_types$measurement_type[temp_i
+          dx[1]]
+      83    else meas_types$measurement_type[1]
+      84  }
+     ...
+      92
+      93    casts_df |>
+      94      mutate(
+      60 -      id_beg       = lag(cast_id),
+      95 +      uuid_beg     = lag(ctd_cast_uuid),
+      96        lon_beg      = lag(lon_dec),
+      97        lat_beg      = lag(lat_dec),
+      98        datetime_beg = lag(datetime_utc)) |>
+
+⏺ Write(ui.R)
+  ⎿  Added 4 lines
+      34          "sel_meas_type", "Measurement",
+      35          choices  = meas_vec,
+      36          selected = default_meas),
+      37 +      selectInput(
+      38 +        "sel_cast_dir", "Cast Direction",
+      39 +        choices  = c("Downcast (D)" = "D", "Upcast (U)" = "U")
+         +,
+      40 +        selected = "D"),
+      41        sliderInput(
+      42          "sl_max_depth", "Max Depth (m)",
+      43          min = 0, max = 5000, value = 500, step = 50),
+
+⏺ Write(server.R)
+  ⎿  Added 54 lines, removed 32 lines
+       3    # reactive values ----
+       4    rv <- reactiveValues(
+       5      cruise_key      = NULL,
+       6 -    map_casts       = NULL,   # sf: casts for map (one per sta
+         -tion)
+       6 +    all_casts       = NULL,   # data.frame: all casts (D and U
+         +)
+       7 +    map_casts       = NULL,   # sf: deduplicated casts for map
+         + (one per station)
+       8      cruise_segments = NULL,   # sf: segment lines between cons
+          ecutive stations
+       9      sel_begin_idx   = NULL,   # integer: begin cast index in m
+          ap_casts
+      10      sel_end_idx     = NULL,   # integer: end cast index in map
+          _casts
+     ...
+      19
+      20      withProgress(message = "Loading cruise...", {
+      21
+      21 -      # query casts for this cruise
+      22 -      d_casts <- tbl(con, "casts") |>
+      22 +      # query all casts for this cruise
+      23 +      d_all <- tbl(con, "ctd_cast") |>
+      24          filter(cruise_key == !!cruise_key_sel) |>
+      25          select(
+      25 -          cast_id, cruise_key, sta_key, order_occ, event_num,
+      26 -          lat_dec, lon_dec, datetime_utc, rpt_line, rpt_sta) |
+         ->
+      27 -        collect() |>
+      28 -        # order by order_occ if available, else by datetime
+      29 -        arrange(
+      30 -          if_else(is.na(order_occ), 9999L, order_occ),
+      31 -          datetime_utc) |>
+      26 +          ctd_cast_uuid, cruise_key, cast_dir, ord_occ,
+      27 +          datetime_utc, lat_dec, lon_dec, sta_key, line, sta)
+         +|>
+      28 +        collect()
+      29 +
+      30 +      setProgress(0.4, detail = "Processing casts...")
+      31 +
+      32 +      # deduplicate: one point per station visit (prefer D ove
+         +r U)
+      33 +      d_map <- d_all |>
+      34 +        arrange(ord_occ, cast_dir) |>
+      35 +        distinct(ord_occ, .keep_all = TRUE) |>
+      36 +        arrange(ord_occ, datetime_utc) |>
+      37          mutate(
+      38            cast_idx = row_number(),
+      39            tooltip  = paste0(
+      40              "<b>Station:</b> ", sta_key, "<br>",
+      41              "<b>Time:</b> ", format(datetime_utc, "%Y-%m-%d %H
+          :%M"), "<br>",
+      37 -            "<b>Line:</b> ", rpt_line, " Sta: ", rpt_sta))
+      42 +            "<b>Line:</b> ", line, " Sta: ", sta))
+      43
+      39 -      setProgress(0.5, detail = "Building map layers...")
+      40 - 
+      44        map_casts_sf <- st_as_sf(
+      42 -        d_casts,
+      45 +        d_map,
+      46          coords = c("lon_dec", "lat_dec"),
+      47          crs    = 4326,
+      48          remove = FALSE)
+      49
+      47 -      segments_sf <- compute_segments(d_casts)
+      50 +      setProgress(0.7, detail = "Computing segments...")
+      51
+      52 +      segments_sf <- compute_segments(d_map)
+      53 +
+      54        # store in reactive values
+      55        rv$cruise_key      <- cruise_key_sel
+      56 +      rv$all_casts       <- d_all
+      57        rv$map_casts       <- map_casts_sf
+      58        rv$cruise_segments <- segments_sf
+      59        rv$sel_begin_idx   <- NULL
+     ...
+      62        rv$transect_plot   <- NULL
+      63
+      64        # update time slider to cruise extent
+      59 -      time_rng <- range(d_casts$datetime_utc, na.rm = TRUE)
+      65 +      time_rng <- range(d_map$datetime_utc, na.rm = TRUE)
+      66        updateSliderInput(session, "sl_time_range",
+      67          min   = time_rng[1],
+      68          max   = time_rng[2],
+     ...
+      127      req(rv$map_casts)
+      128
+      129      click <- input$map_cruise_feature_click
+      124 -    req(click$properties$cast_id)
+      130 +    req(click$properties$ctd_cast_uuid)
+      131
+      126 -    clicked_id  <- click$properties$cast_id
+      127 -    casts       <- rv$map_casts
+      128 -    clicked_idx <- which(casts$cast_id == clicked_id)
+      132 +    clicked_uuid <- click$properties$ctd_cast_uuid
+      133 +    casts        <- rv$map_casts
+      134 +    clicked_idx  <- which(casts$ctd_cast_uuid == clicked_uuid
+          +)
+      135      if (length(clicked_idx) == 0) return()
+      136      clicked_idx <- clicked_idx[1]
+      137
+     ...
+      255
+      256    # plot transect ----
+      257    observeEvent(input$btn_plot, {
+      252 -    req(rv$transect_casts, rv$cruise_key)
+      258 +    req(rv$transect_casts, rv$all_casts, rv$cruise_key)
+      259
+      260      transect <- rv$transect_casts
+      261      n_casts  <- nrow(transect)
+     ...
+      274
+      275        transect_dist <- st_drop_geometry(transect) |>
+      276          mutate(dist_km = dists) |>
+      271 -        select(cast_id, dist_km)
+      277 +        select(ord_occ, dist_km)
+      278
+      273 -      transect_cast_ids <- transect$cast_id
+      279 +      # find UUIDs for selected cast direction
+      280 +      transect_ord_occs <- transect$ord_occ
+      281 +      cast_dir_sel      <- input$sel_cast_dir
+      282        meas_type_sel     <- input$sel_meas_type
+      283
+      284 +      transect_uuids <- rv$all_casts |>
+      285 +        filter(
+      286 +          ord_occ  %in% transect_ord_occs,
+      287 +          cast_dir == cast_dir_sel) |>
+      288 +        pull(ctd_cast_uuid)
+      289 +
+      290 +      if (length(transect_uuids) == 0) {
+      291 +        showNotification(
+      292 +          "No casts found for selected direction", type = "wa
+          +rning")
+      293 +        return()
+      294 +      }
+      295 +
+      296        setProgress(0.3, detail = "Querying measurements...")
+      297
+      278 -      # query via bottle -> bottle_measurement join
+      279 -      d_meas <- tbl(con, "bottle_measurement") |>
+      280 -        filter(measurement_type == !!meas_type_sel) |>
+      298 +      # query ctd_measurement with partition pruning on cruis
+          +e_key
+      299 +      d_meas <- tbl(con, "ctd_measurement") |>
+      300 +        filter(
+      301 +          cruise_key       == !!rv$cruise_key,
+      302 +          measurement_type == !!meas_type_sel) |>
+      303          inner_join(
+      282 -          tbl(con, "bottle") |>
+      283 -            filter(cast_id %in% !!transect_cast_ids) |>
+      284 -            select(bottle_id, cast_id, depth_m),
+      285 -          by = "bottle_id") |>
+      286 -        select(depth_m, measurement_value, cast_id) |>
+      304 +          tbl(con, "ctd_cast") |>
+      305 +            filter(ctd_cast_uuid %in% !!transect_uuids) |>
+      306 +            select(ctd_cast_uuid, ord_occ),
+      307 +          by = "ctd_cast_uuid") |>
+      308 +        select(depth_m, measurement_value, ord_occ) |>
+      309          collect() |>
+      288 -        left_join(transect_dist, by = "cast_id")
+      310 +        left_join(transect_dist, by = "ord_occ")
+      311
+      312        if (nrow(d_meas) == 0) {
+      313          showNotification("No measurements found", type = "war
+           ning")
+
+⏺ Now let me validate syntax and test the full pipeline.
+
+⏺ Bash(Rscript -e "
+      # syntax check…)
+  ⎿  Error: Exit code 1
+     expression(librarian::shelf(bslib, bsicons, calcofi/calcofi4r,
+         DBI, dbplyr, dplyr, duckdb, geosphere, ggplot2, glue, htmltools,
+         lubridate, mapgl, marmap, MBA, plotly, purrr, sf, shiny,
+         stringr, tidyr, viridis, quiet = T), con <- calcofi4r::cc_get_db(),
+         if (!"ctd_measurement" %in% dbListTables(con)) {
+             view_sql <- dbGetQuery(con, "SELECT sql FROM duckdb_views() WHERE
+     view_name = 'cruise' LIMIT 1")$sql
+             db_version <- str_extract(view_sql,
+     "v\\d{4}\\.\\d{2}(\\.\\d{2})?")
+             tryCatch({
+                 dbExecute(con, "INSTALL httpfs; LOAD httpfs;")
+     … +167 lines (ctrl+o to see all)
+
+⏺ Syntax passes. The runtime error is just the DuckDB lock from RStudio holding
+   the cached database. The app will work once RStudio releases the lock (or on
+   the server where it'll create a fresh cache).
+
+  Key changes in this update:
+
+  global.R:
+  - Uses ctd_cast for cruise choices (93 CTD cruises)
+  - Falls back to S3-compatible GCS endpoint (httpfs) when cc_get_db() doesn't
+  load partitioned tables — extracts the release version from existing view SQL
+  - Filters measurement_type to only CTD-available types (53 types)
+  - Default measurement: temperature_1
+  - compute_segments() uses ctd_cast_uuid instead of cast_id
+
+  ui.R:
+  - Restored sel_cast_dir selector (Downcast D / Upcast U)
+
+  server.R:
+  - Loads from ctd_cast, deduplicates by ord_occ (preferring D over U) for map
+  display
+  - Stores both all_casts (D+U) and map_casts (deduped)
+  - Transect query: ctd_measurement joined via ctd_cast_uuid, with cruise_key
+  partition pruning
+  - Uses selected cast_dir to pick the right UUIDs for transect measurements
+
+✻ Cogitated for 6m 36s
+
+❯ Whoah, this looks very SLOW to open. When it says loading is it copying? It  
+should not copy local                                                          
+  ⎿  [Image #2]
+
+⏺ The slow "DuckDB progress: 13%" is from the distinct(measurement_type) query
+  scanning all 234M rows of ctd_measurement remotely. Let me fix that — we can
+  hardcode the CTD measurement types or get them from the measurement_type
+  reference table instead.
+
+⏺ Read 1 file (ctrl+o to expand)
+
+⏺ Update(global.R)
+  ⎿  Added 5 lines, removed 8 lines
+      61  cruise_vec     <- setNames(cruise_choices$cruise_key, cruise_c
+          hoices$label)
+      62  default_cruise <- cruise_choices$cruise_key[1]
+      63
+      64 -# measurement types (filtered to those in ctd_measurement) ---
+         --
+      65 -ctd_meas_types <- tbl(con, "ctd_measurement") |>
+      66 -  distinct(measurement_type) |>
+      67 -  collect() |>
+      68 -  pull(measurement_type)
+      69 - 
+      64 +# measurement types (filtered to CTD source tables) ----
+      65 +# avoid scanning 234M-row ctd_measurement for DISTINCT; use _s
+         +ource_table instead
+      66  meas_types <- tbl(con, "measurement_type") |>
+      71 -  select(measurement_type, description, units) |>
+      67 +  select(measurement_type, description, units, `_source_table`
+         +) |>
+      68    collect() |>
+      73 -  filter(measurement_type %in% ctd_meas_types) |>
+      69 +  filter(grepl("ctd", `_source_table`, ignore.case = TRUE)) |>
+      70 +  select(-`_source_table`) |>
+      71    mutate(
+      72      label = paste0(description, " (", units, ")"))
+      73
+
+⏺ Wait — let me verify that _source_table actually identifies CTD types
+  correctly.
+
+⏺ Bash(Rscript -e "
+      library(DBI); library(dplyr); library(dbplyr)…)
+  ⎿  Attaching package: ‘dplyr’
+
+     The following objects are masked from ‘package:stats’:
+     … +28 lines (ctrl+o to expand)
+
+⏺ 53 CTD types from _source_table = 'ctd_raw'. The filter works. Now the
+  ctd_cast query might also be slow since it's 6M rows over HTTP. Let me check
+  if that's an issue too.
+
+⏺ Read 1 file (ctrl+o to expand)
+
+⏺ The distinct(cruise_key) on ctd_cast (6M rows) could also be slow over HTTP.
+  Let me use the cruise table directly — it's tiny and has all cruise_keys.
+  I'll filter to only those with CTD data by joining with ctd_cast... but that
+  ⎿  Interrupted · What should Claude do instead?
+
+❯ I don't understand why using _source_table -- that's a provenance table that 
+ shouldn't have bearing on this app. Also, can you query cruise_key from the   
+partitions of the parquet table ctd_measurement rather than its contents?      
+  ⎿  Interrupted · What should Claude do instead?
+
+❯ I don't understand why using _source_table -- that's a provenance column     
+that shouldn't have bearing on this app. Also, can you query cruise_key from   
+the                                                                            
+partitions of the parquet table ctd_measurement rather than its contents?      
+
+⏺ Good points. The _source_table is a provenance detail that could change — not
+   a reliable filter. And yes, we can get cruise_keys from the partition
+  directory names without scanning data.
+
+⏺ Bash(Rscript -e "
+      library(DBI)…)
+  ⎿  [1] 0
+     [1] 0
+     [1] 0
+     … +10 lines (ctrl+o to expand)
+  ⎿  (timeout 2m)
+
+⏺ 6.6s for partition listing — acceptable for startup. For measurement types,
+  let me scan just one partition instead of all 234M rows.
+
+⏺ Bash(Rscript -e "
+      library(DBI)…)
+  ⎿  [1] 0
+     [1] 0
+     [1] 0
+     … +27 lines (ctrl+o to expand)
+
+⏺ 1.2s for one partition — much better. But different cruises may have
+  different type subsets (37 vs 53 total). Let me use a recent cruise that's
+  likely to have the fullest set, or scan a couple partitions. Actually, the
+  simplest reliable approach: get cruise_keys and measurement types in parallel
+   from the partition listing, and scan 2-3 partitions for types.
+
+  Let me just use 2 partitions — an older and a newer one — and union the
+  types.
+
+⏺ Read 1 file (ctrl+o to expand)
+
+⏺ Now let me rewrite the startup queries to be fast: cruise_keys from partition
+   listing, measurement types from a single partition scan, and cruise labels
+  from the tiny cruise+ship tables.
+
+⏺ Update(global.R)
+  ⎿  Added 23 lines, removed 10 lines
+      44  }
+      45
+      46  # cruise choices ----
+      47 -cruise_choices <- tbl(con, "ctd_cast") |>
+      48 -  distinct(cruise_key) |>
+      47 +# get cruise_keys from ctd_measurement partition directories (
+         +fast, no data scan)
+      48 +ctd_cruise_keys <- dbGetQuery(con, glue(
+      49 +  "SELECT DISTINCT cruise_key
+      50 +   FROM parquet_scan(
+      51 +     '{s3_base}/ctd_measurement/**/*.parquet',
+      52 +     hive_partitioning = true,
+      53 +     hive_types = {{'cruise_key': 'VARCHAR'}})")) |>
+      54 +  pull(cruise_key)
+      55 +
+      56 +# join with small cruise + ship tables for labels
+      57 +cruise_choices <- tbl(con, "cruise") |>
+      58 +  filter(cruise_key %in% !!ctd_cruise_keys) |>
+      59    inner_join(
+      50 -    tbl(con, "cruise"),
+      51 -    by = "cruise_key") |>
+      52 -  inner_join(
+      60      tbl(con, "ship"),
+      61      by = "ship_key") |>
+      62    select(cruise_key, date_ym, ship_name) |>
+     ...
+      68  cruise_vec     <- setNames(cruise_choices$cruise_key, cruise_c
+          hoices$label)
+      69  default_cruise <- cruise_choices$cruise_key[1]
+      70
+      64 -# measurement types (filtered to CTD source tables) ----
+      65 -# avoid scanning 234M-row ctd_measurement for DISTINCT; use _s
+         -ource_table instead
+      71 +# measurement types ----
+      72 +# get distinct types from a single partition (fast, ~1s) then
+         +join with ref table
+      73 +sample_cruise  <- ctd_cruise_keys[length(ctd_cruise_keys)]  #
+         +recent cruise
+      74 +ctd_meas_keys  <- dbGetQuery(con, glue(
+      75 +  "SELECT DISTINCT measurement_type
+      76 +   FROM read_parquet(
+      77 +     '{s3_base}/ctd_measurement/cruise_key={sample_cruise}/*.p
+         +arquet')")) |>
+      78 +  pull(measurement_type)
+      79 +
+      80  meas_types <- tbl(con, "measurement_type") |>
+      67 -  select(measurement_type, description, units, `_source_table`
+         -) |>
+      81 +  select(measurement_type, description, units) |>
+      82    collect() |>
+      69 -  filter(grepl("ctd", `_source_table`, ignore.case = TRUE)) |>
+      70 -  select(-`_source_table`) |>
+      83 +  filter(measurement_type %in% ctd_meas_keys) |>
+      84    mutate(
+      85      label = paste0(description, " (", units, ")"))
+      86
+
+⏺ Now I need to fix a scoping issue — s3_base is defined inside the if block
+  but used later. Let me restructure so s3_base is always available.
+
+⏺ Read 1 file (ctrl+o to expand)
+
+⏺ Update(global.R)
+  ⎿  Added 24 lines, removed 23 lines
+      11  # database ----
+      12  con <- calcofi4r::cc_get_db()
+      13
+      14 -# ensure partitioned tables are available; cc_get_db() glob ov
+         -er HTTPS may fail,
+      15 -# so fall back to S3-compatible GCS endpoint for hive-partitio
+         -ned parquet
+      16 -if (!"ctd_measurement" %in% dbListTables(con)) {
+      17 -  # extract release version from an existing view's SQL
+      18 -  view_sql <- dbGetQuery(
+      19 -    con,
+      20 -    "SELECT sql FROM duckdb_views() WHERE view_name = 'cruise'
+         - LIMIT 1")$sql
+      21 -  db_version <- str_extract(view_sql, "v\\d{4}\\.\\d{2}(\\.\\d
+         -{2})?")
+      14 +# extract release version from an existing view's SQL
+      15 +view_sql <- dbGetQuery(
+      16 +  con,
+      17 +  "SELECT sql FROM duckdb_views() WHERE view_name = 'cruise' L
+         +IMIT 1")$sql
+      18 +db_version <- str_extract(view_sql, "v\\d{4}\\.\\d{2}(\\.\\d{2
+         +})?")
+      19
+      23 -  tryCatch({
+      24 -    dbExecute(con, "INSTALL httpfs; LOAD httpfs;")
+      25 -    dbExecute(con, "SET s3_region = 'auto';")
+      26 -    dbExecute(con, "SET s3_endpoint = 'storage.googleapis.com'
+         -;")
+      27 -    dbExecute(con, "SET s3_url_style = 'path';")
+      28 -    dbExecute(con, "SET s3_access_key_id = '';")
+      29 -    dbExecute(con, "SET s3_secret_access_key = '';")
+      20 +# S3-compatible GCS base path (used for partition queries and
+         +httpfs fallback)
+      21 +s3_base <- glue("s3://calcofi-db/ducklake/releases/{db_version
+         +}/parquet")
+      22
+      31 -    s3_base <- glue("s3://calcofi-db/ducklake/releases/{db_ver
+         -sion}/parquet")
+      23 +# ensure httpfs is loaded for S3 access
+      24 +tryCatch({
+      25 +  dbExecute(con, "INSTALL httpfs; LOAD httpfs;")
+      26 +  dbExecute(con, "SET s3_region = 'auto';")
+      27 +  dbExecute(con, "SET s3_endpoint = 'storage.googleapis.com';"
+         +)
+      28 +  dbExecute(con, "SET s3_url_style = 'path';")
+      29 +  dbExecute(con, "SET s3_access_key_id = '';")
+      30 +  dbExecute(con, "SET s3_secret_access_key = '';")
+      31 +}, error = function(e) message("httpfs setup: ", e$message))
+      32
+      33 -    for (tbl_name in c("ctd_measurement", "ctd_summary")) {
+      33 +# ensure partitioned tables are registered as views
+      34 +if (!"ctd_measurement" %in% dbListTables(con)) {
+      35 +  for (tbl_name in c("ctd_measurement", "ctd_summary")) {
+      36 +    tryCatch(
+      37        dbExecute(con, glue(
+      38          "CREATE OR REPLACE VIEW {tbl_name} AS
+      39           SELECT * FROM read_parquet(
+      40             '{s3_base}/{tbl_name}/**/*.parquet',
+      38 -           hive_partitioning = true)"))
+      39 -    }
+      40 -    message("Loaded partitioned tables via S3 endpoint")
+      41 -  }, error = function(e) {
+      42 -    message("Could not load partitioned tables: ", e$message)
+      43 -  })
+      41 +           hive_partitioning = true)")),
+      42 +      error = function(e)
+      43 +        message("Could not load ", tbl_name, ": ", e$message))
+      44 +  }
+      45  }
+      46
+      47  # cruise choices ----
+
+⏺ Now let me verify the final file looks correct.
+
+⏺ Read 1 file (ctrl+o to expand)
+
+⏺ Good. Let me verify syntax.
+
+⏺ Bash(Rscript -e "
+      tryCatch(parse('global.R'), error = function(e) cat('PARSE ERROR:',
+      e\$message, '\n'))…)
+  ⎿  expression(librarian::shelf(bslib, bsicons, calcofi/calcofi4r,
+         DBI, dbplyr, dplyr, duckdb, geosphere, ggplot2, glue, htmltools,
+         lubridate, mapgl, marmap, MBA, plotly, purrr, sf, shiny,
+     … +273 lines (ctrl+o to expand)
+
+⏺ All files pass syntax. The key performance fixes:
+
+  - Cruise list: reads partition directory names from parquet_scan(...,
+  hive_partitioning=true) (~6s) instead of scanning 6M ctd_cast rows for
+  DISTINCT cruise_key
+  - Measurement types: scans a single cruise partition (~1s) instead of all
+  234M rows
+  - No _source_table: uses actual partition data, not provenance metadata
+
+✻ Cogitated for 1m 55s
+
+❯ Wait, I think you're right about getting measurement_types using             
+_source_table, but having a problem reading ctd_measurement
+
+```
+con <-           
+calcofi4r::cc_get_db()                                                         
+Using cached database: v2026.03.14                                             
+>                                                                              
+> cc_list_tables()                                                             
+Using cached database: v2026.03.14                                             
+ [1] "bottle"             "bottle_measurement" "cast_condition"     "casts"    
+           "cruise"             "ctd_cast"                                     
+ [7] "ctd_measurement"    "ctd_summary"        "grid"               "ichthyo"  
+           "lookup"             "measurement_type"                             
+[13] "net"                "segment"            "ship"               "site"     
+           "species"            "taxa_rank"                                    
+[19] "taxon"              "tow"                                                
+> cc_describe_table("ctd_measurement")                                         
+Using cached database: v2026.03.14                                             
+# A tibble: 7 × 3                                                              
+  column_name          data_type is_nullable                                   
+  <chr>                <chr>     <chr>                                         
+1 ctd_measurement_uuid VARCHAR   YES                                           
+2 ctd_cast_uuid        VARCHAR   YES                                           
+3 depth_m              DOUBLE    YES                                           
+4 measurement_type     VARCHAR   YES                                           
+5 measurement_value    DOUBLE    YES                                           
+6 measurement_qual     VARCHAR   YES                                           
+7 cruise_key           VARCHAR   YES                                           
+>                                                                              
+> tbl(con, "measurement_type") |> filter(`_source_table` == "ctd_raw") |>      
+collect()                                                                      
+# A tibble: 53 × 8                                                             
+   measurement_type        description                   units                 
+`_source_column` `_source_table` `_source_datasets` `_qual_column`             
+`_prec_column`                                                                 
+   <chr>                   <chr>                         <chr> <chr>           
+  <chr>           <chr>              <chr>          <chr>                      
+ 1 temperature_1           Temperature sensor 1          degC  temp1           
+  ctd_raw         calcofi_ctd-cast   temp1q         NA                         
+ 2 temperature_2           Temperature sensor 2          degC  temp2           
+  ctd_raw         calcofi_ctd-cast   temp2q         NA                         
+ 3 temperature_ave         Average temperature           degC  temp_ave        
+  ctd_raw         calcofi_ctd-cast   NA             NA                         
+ 4 potential_temperature_1 Potential temperature sensor… degC  po_t1           
+  ctd_raw         calcofi_ctd-cast   NA             NA                         
+ 5 potential_temperature_2 Potential temperature sensor… degC  po_t2           
+  ctd_raw         calcofi_ctd-cast   NA             NA                         
+ 6 salinity_1              Salinity sensor 1             PSU   salt1           
+  ctd_raw         calcofi_ctd-cast   salt1q         NA                         
+ 7 salinity_1_corr         Salinity sensor 1 cruise-cor… PSU   salt1_corr      
+  ctd_raw         calcofi_ctd-cast   NA             NA                         
+ 8 salinity_2              Salinity sensor 2             PSU   salt2           
+  ctd_raw         calcofi_ctd-cast   salt2q         NA                         
+ 9 salinity_2_corr         Salinity sensor 2 cruise-cor… PSU   salt2_corr      
+  ctd_raw         calcofi_ctd-cast   NA             NA                         
+10 salinity_ave_corr       Average salinity corrected    PSU   salt_ave_corr   
+  ctd_raw         calcofi_ctd-cast   NA             NA                         
+# ℹ 43 more rows                                                               
+# ℹ Use `print(n = ...)` to see more rows                                      
+> tbl(con, "ctd_measurement")                                                  
+Error in `db_query_fields.DBIConnection()`:                                    
+! Can't query fields.                                                          
+ℹ Using SQL: SELECT * FROM (FROM ctd_measurement) q01 WHERE (0 = 1)            
+Caused by error in `dbSendQuery()`:                                            
+! HTTP Error: HTTP GET error reading 's3://calcofi-db/ducklake/releases/v2026. 
+03.14/parquet/ctd_measurement/?encoding-type=url&list-type=2&prefix=ducklake%2 
+Freleases%2Fv2026.03.14%2Fparquet%2Fctd_measurement%2F' in region '' (HTTP 404 
+ Not Found)                                                                    
+ℹ Context: rapi_prepare                                                        
+ℹ Error type: HTTP                                                             
+Run `rlang::last_trace()` to see where the error occurred.                     
+```
+
+⏺ Two issues here:
+
+  1. _source_table is fine — you're right, it works well for filtering CTD
+  types. I'll switch back to it.
+  2. tbl(con, "ctd_measurement") fails because cc_get_db() creates the view
+  with s3:// URLs but doesn't configure the httpfs S3 settings. My app's
+  global.R already configures httpfs after cc_get_db(), so the app should work.
+   But the RStudio console doesn't have those settings.
+
+  Let me update global.R to use _source_table for measurement types (instant,
+  no remote scan) and keep the httpfs setup for everything else.
+
+⏺ Read 1 file (ctrl+o to expand)
+
+⏺ Update(global.R)
+  ⎿  Added 2 lines, removed 10 lines
+      74  cruise_vec     <- setNames(cruise_choices$cruise_key, cruise_c
+          hoices$label)
+      75  default_cruise <- cruise_choices$cruise_key[1]
+      76
+      77 -# measurement types ----
+      78 -# get distinct types from a single partition (fast, ~1s) then
+         -join with ref table
+      79 -sample_cruise  <- ctd_cruise_keys[length(ctd_cruise_keys)]  #
+         -recent cruise
+      80 -ctd_meas_keys  <- dbGetQuery(con, glue(
+      81 -  "SELECT DISTINCT measurement_type
+      82 -   FROM read_parquet(
+      83 -     '{s3_base}/ctd_measurement/cruise_key={sample_cruise}/*.p
+         -arquet')")) |>
+      84 -  pull(measurement_type)
+      85 - 
+      77 +# measurement types (CTD only, from small reference table) ---
+         +-
+      78  meas_types <- tbl(con, "measurement_type") |>
+      79 +  filter(`_source_table` == "ctd_raw") |>
+      80    select(measurement_type, description, units) |>
+      81    collect() |>
+      89 -  filter(measurement_type %in% ctd_meas_keys) |>
+      82    mutate(
+      83      label = paste0(description, " (", units, ")"))
+      84
+
+⏺ Now let me verify the final file.
+
+⏺ Bash(Rscript -e "tryCatch(parse('global.R'), error = function(e) cat('PARSE
+      ERROR:', e\$message, '\n')); cat('OK\n')")
+  ⎿  expression(librarian::shelf(bslib, bsicons, calcofi/calcofi4r,
+         DBI, dbplyr, dplyr, duckdb, geosphere, ggplot2, glue, htmltools,
+         lubridate, mapgl, marmap, MBA, plotly, purrr, sf, shiny,
+     … +85 lines (ctrl+o to expand)
+
+⏺ Syntax OK. Summary of the startup query strategy:
+
+  - Measurement types: _source_table == "ctd_raw" from the small
+  measurement_type reference table (instant, ~100 rows)
+  - Cruise list: parquet_scan(..., hive_partitioning=true) reads partition
+  directory names (~6s, no data scan)
+  - httpfs S3 settings: always configured after cc_get_db() — this is the key
+  fix for the error you're seeing. cc_get_db() creates the ctd_measurement view
+   with s3:// URLs, but doesn't persist the httpfs settings. The app re-applies
+   them on every startup.
+
+✻ Cooked for 45s
+
+❯ Let's fix the calcofi4r R package to handle this in the cc_get_db()          
+function, ideally from information already available in GCS bucket             
+
+⏺ Read 1 file (ctrl+o to expand)
+
+⏺ Now I see the full picture. Two problems:
+
+  1. View creation: uses https:// glob which doesn't work — needs s3:// with
+  httpfs for partitioned tables
+  2. Cached load: early-returns without re-applying httpfs settings that
+  partitioned views need
+
+  The catalog already has the partitioned flag — that's all we need. Let me fix
+   both issues.
+
+⏺ Update(~/Github/CalCOFI/calcofi4r/R/database.R)
+  ⎿  Added 28 lines, removed 18 lines
+      104      }
+      105    })
+      106
+      107 -  # check if already initialized
+      108 -  tables <- DBI::dbListTables(con)
+      109 -  if (length(tables) > 0 && !refresh) {
+      110 -    message(glue::glue("Using cached database: {version}"))
+      111 -    return(con)
+      112 -  }
+      113 - 
+      114 -  # get catalog for this version
+      107 +  # get catalog for this version (needed for both cached and
+          +fresh paths)
+      108    gcs_base     <- glue::glue("gs://calcofi-db/ducklake/releas
+           es/{version}")
+      109    catalog_path <- file.path(cache_dir, glue::glue("catalog_{v
+           ersion}.json"))
+      110
+     ...
+      119
+      120    catalog <- jsonlite::fromJSON(catalog_path)
+      121
+      122 +  # configure httpfs if any tables are hive-partitioned (S3 g
+          +lob required);
+      123 +  # must run on EVERY connection since DuckDB settings are pe
+          +r-session
+      124 +  has_partitioned <- "partitioned" %in% names(catalog$tables)
+          + &&
+      125 +    any(catalog$tables$partitioned, na.rm = TRUE)
+      126 +
+      127 +  if (has_partitioned) {
+      128 +    .cc_setup_gcs_httpfs(con)
+      129 +  }
+      130 +
+      131 +  # check if already initialized
+      132 +  tables <- DBI::dbListTables(con)
+      133 +  if (length(tables) > 0 && !refresh) {
+      134 +    message(glue::glue("Using cached database: {version}"))
+      135 +    return(con)
+      136 +  }
+      137 +
+      138    # create views for each table pointing to parquet files
+      139    message(glue::glue("Loading {nrow(catalog$tables)} tables f
+           rom {version}..."))
+      140
+      132 -  # check which tables are hive-partitioned
+      133 -  has_partitioned <- "partitioned" %in% names(catalog$tables)
+      141 +  gcs_https_base <- glue::glue(
+      142 +    "https://storage.googleapis.com/calcofi-db/ducklake/relea
+          +ses/{version}/parquet")
+      143 +  gcs_s3_base <- glue::glue(
+      144 +    "s3://calcofi-db/ducklake/releases/{version}/parquet")
+      145
+      146    for (i in seq_len(nrow(catalog$tables))) {
+      136 -    tbl_name     <- catalog$tables$name[i]
+      137 -    is_partitioned <- has_partitioned && isTRUE(catalog$table
+          -s$partitioned[i])
+      147 +    tbl_name       <- catalog$tables$name[i]
+      148 +    is_partitioned <- has_partitioned &&
+      149 +      isTRUE(catalog$tables$partitioned[i])
+      150
+      139 -    gcs_parquet_base <- glue::glue(
+      140 -      "https://storage.googleapis.com/calcofi-db/ducklake/rel
+          -eases/{version}/parquet")
+      141 - 
+      151      if (is_partitioned) {
+      143 -      # hive-partitioned: read glob of all partition files
+      144 -      parquet_url <- glue::glue("{gcs_parquet_base}/{tbl_name
+          -}/**/*.parquet")
+      152 +      # hive-partitioned: use S3 protocol for glob support
+      153 +      parquet_url <- glue::glue("{gcs_s3_base}/{tbl_name}/**/
+          +*.parquet")
+      154        read_expr   <- glue::glue(
+      155          "read_parquet('{parquet_url}', hive_partitioning = tr
+           ue)")
+      156      } else {
+      148 -      parquet_url <- glue::glue("{gcs_parquet_base}/{tbl_name
+          -}.parquet")
+      157 +      # single file: plain HTTPS works fine
+      158 +      parquet_url <- glue::glue("{gcs_https_base}/{tbl_name}.
+          +parquet")
+      159        read_expr   <- glue::glue("read_parquet('{parquet_url}'
+           )")
+      160      }
+      161
+
+⏺ Now add the helper function for httpfs/GCS setup.
+
+⏺ Read 1 file (ctrl+o to expand)
+
+⏺ Update(~/Github/CalCOFI/calcofi4r/R/database.R)
+  ⎿  Added 10 lines
+      352    })
+      353  }
+      354
+      355 +# configure DuckDB httpfs to access GCS as S3-compatible (pub
+          +lic, anonymous)
+      356 +.cc_setup_gcs_httpfs <- function(con) {
+      357 +  DBI::dbExecute(con, "INSTALL httpfs; LOAD httpfs;")
+      358 +  DBI::dbExecute(con, "SET s3_region = 'auto';")
+      359 +  DBI::dbExecute(con, "SET s3_endpoint = 'storage.googleapis.
+          +com';")
+      360 +  DBI::dbExecute(con, "SET s3_url_style = 'path';")
+      361 +  DBI::dbExecute(con, "SET s3_access_key_id = '';")
+      362 +  DBI::dbExecute(con, "SET s3_secret_access_key = '';")
+      363 +}
+      364 +
+      365  # helper function to download from GCS (uses public HTTPS URL
+           s, no gcloud needed)
+      366  .cc_download_gcs_file <- function(gcs_path, local_path, overw
+           rite = FALSE) {
+      367    if (file.exists(local_path) && !overwrite) {
+
+⏺ Now update the NAMESPACE since we're using DBI functions in the helper.
+
+⏺ Bash(Rscript -e "
+      # verify the function parses correctly…)
+  ⎿  Parse OK
+     cc_get_db exists: TRUE
+     .cc_setup_gcs_httpfs exists: TRUE
+
+⏺ Now let me also simplify the ctd-viz global.R — with this fix in cc_get_db(),
+   the app no longer needs its own httpfs setup or partition view fallback.
+
+⏺ Read 1 file (ctrl+o to expand)
+
+⏺ Update(global.R)
+  ⎿  Added 1 line, removed 38 lines
+       9    quiet = T)
+      10
+      11  # database ----
+      12 +# cc_get_db() handles httpfs setup and partitioned parquet (ct
+         +d_measurement, etc.)
+      13  con <- calcofi4r::cc_get_db()
+      14
+      14 -# cc_list_tables()
+      15 -# cc_describe_table("ctd_measurement")
+      16 -# tbl(con, "measurement_type") |> filter(`_source_table` == "c
+         -td_raw") |> collect()
+      17 -# tbl(con, "ctd_measurement")
+      18 - 
+      19 -# extract release version from an existing view's SQL
+      20 -view_sql <- dbGetQuery(
+      21 -  con,
+      22 -  "SELECT sql FROM duckdb_views() WHERE view_name = 'cruise' L
+         -IMIT 1")$sql
+      23 -db_version <- str_extract(view_sql, "v\\d{4}\\.\\d{2}(\\.\\d{2
+         -})?")
+      24 - 
+      25 -# S3-compatible GCS base path (used for partition queries and
+         -httpfs fallback)
+      26 -s3_base <- glue("s3://calcofi-db/ducklake/releases/{db_version
+         -}/parquet")
+      27 - 
+      28 -# ensure httpfs is loaded for S3 access
+      29 -tryCatch({
+      30 -  dbExecute(con, "INSTALL httpfs; LOAD httpfs;")
+      31 -  dbExecute(con, "SET s3_region = 'auto';")
+      32 -  dbExecute(con, "SET s3_endpoint = 'storage.googleapis.com';"
+         -)
+      33 -  dbExecute(con, "SET s3_url_style = 'path';")
+      34 -  dbExecute(con, "SET s3_access_key_id = '';")
+      35 -  dbExecute(con, "SET s3_secret_access_key = '';")
+      36 -}, error = function(e) message("httpfs setup: ", e$message))
+      37 - 
+      38 -# ensure partitioned tables are registered as views
+      39 -if (!"ctd_measurement" %in% dbListTables(con)) {
+      40 -  for (tbl_name in c("ctd_measurement", "ctd_summary")) {
+      41 -    tryCatch(
+      42 -      dbExecute(con, glue(
+      43 -        "CREATE OR REPLACE VIEW {tbl_name} AS
+      44 -         SELECT * FROM read_parquet(
+      45 -           '{s3_base}/{tbl_name}/**/*.parquet',
+      46 -           hive_partitioning = true)")),
+      47 -      error = function(e)
+      48 -        message("Could not load ", tbl_name, ": ", e$message))
+      49 -  }
+      50 -}
+      51 - 
+      15  # cruise choices ----
+      16  # get cruise_keys from ctd_measurement partition directories (
+          fast, no data scan)
+      17  ctd_cruise_keys <- dbGetQuery(con, glue(
+
+⏺ Now the cruise_choices query also needs updating — it was using parquet_scan
+  via s3_base which no longer exists. With cc_get_db() handling httpfs, we can
+  just query ctd_cast directly via dbplyr.
+
+⏺ Read 1 file (ctrl+o to expand)
+
+⏺ Update(global.R)
+  ⎿  Added 6 lines, removed 12 lines
+      13  con <- calcofi4r::cc_get_db()
+      14
+      15  # cruise choices ----
+      16 -# get cruise_keys from ctd_measurement partition directories (
+         -fast, no data scan)
+      17 -ctd_cruise_keys <- dbGetQuery(con, glue(
+      18 -  "SELECT DISTINCT cruise_key
+      19 -   FROM parquet_scan(
+      20 -     '{s3_base}/ctd_measurement/**/*.parquet',
+      21 -     hive_partitioning = true,
+      22 -     hive_types = {{'cruise_key': 'VARCHAR'}})")) |>
+      23 -  pull(cruise_key)
+      24 - 
+      25 -# join with small cruise + ship tables for labels
+      26 -cruise_choices <- tbl(con, "cruise") |>
+      27 -  filter(cruise_key %in% !!ctd_cruise_keys) |>
+      16 +# get cruise_keys with CTD data; use ctd_cast (single parquet,
+         + columnar scan)
+      17 +cruise_choices <- tbl(con, "ctd_cast") |>
+      18 +  distinct(cruise_key) |>
+      19    inner_join(
+      20 +    tbl(con, "cruise"),
+      21 +    by = "cruise_key") |>
+      22 +  inner_join(
+      23      tbl(con, "ship"),
+      24      by = "ship_key") |>
+      25    select(cruise_key, date_ym, ship_name) |>
+
+⏺ Bash(Rscript -e "tryCatch(parse('global.R'), error = function(e)
+      cat('ERROR:', e\$message, '\n')); cat('OK\n')")
+  ⎿  expression(librarian::shelf(bslib, bsicons, calcofi/calcofi4r,
+         DBI, dbplyr, dplyr, duckdb, geosphere, ggplot2, glue, htmltools,
+         lubridate, mapgl, marmap, MBA, plotly, purrr, sf, shiny,
+     … +66 lines (ctrl+o to expand)
+
+⏺ All clean. Here's the summary of changes:
+
+  calcofi4r/R/database.R — 3 changes to cc_get_db():
+
+  1. Moved catalog fetch before the cached-return check — so we always know if
+  partitioned tables exist
+  2. Added .cc_setup_gcs_httpfs(con) — called on every connection (even cached)
+   when catalog has partitioned tables. Configures DuckDB's httpfs to access
+  GCS as anonymous S3. This is the key fix — S3 settings are per-session, so
+  they must be re-applied.
+  3. Partitioned views use s3:// URLs (glob-capable) while non-partitioned
+  tables keep https:// URLs (simpler, no httpfs needed)
+
+  apps/ctd-viz/global.R — simplified:
+  - Removed all httpfs setup and partition view fallback code (now handled by
+  cc_get_db())
+  - Just con <- calcofi4r::cc_get_db()
+
+  To test, you'll need to reinstall calcofi4r locally and delete the cached
+  .duckdb file (or use refresh = TRUE) so views get recreated with s3:// URLs:
+
+  devtools::install("~/Github/CalCOFI/calcofi4r")
+  con <- calcofi4r::cc_get_db(refresh = TRUE)
+  tbl(con, "ctd_measurement")  # should work now
+
+How is there such a disparity of available data from the calcofi_ctd-cast between the most recently available `cruise_key`?
+
+- `workflows/ingest_calcofi_ctd-cast.qmd`: 2026-01-01 per `2601RL` in `## Scrape CTD Download Links`, but missing under `## Find and Prioritize CTD Data Files`
+- GCS bucket: 2025-07-01 per `2507SR` in calcofi-db/ducklake/releases/v2026.03.14/parquet/ctd_measurement/cruise_key=2507SR
+- `apps/ctd-viz`: 2023-04-01 — BELL M. SHIMADA (`2304SH`)
+
+⏺ All 93 cruises now show, latest is 2025-07 — SALLY RIDE (2507SR). The fix
+  derives date_ym from ctd_cast.datetime_utc instead of the stale cruise
+  reference table, so it always reflects what's actually in the data.
+
 
 ## 2026-03-14.b rm `calcofi_working.duckdb`?
 

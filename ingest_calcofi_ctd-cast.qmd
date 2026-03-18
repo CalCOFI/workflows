@@ -128,7 +128,6 @@ d_zips <- tryCatch(
           url,
           paste0("https://calcofi.org", url)
         ),
-        # https://calcofi.org/downloads/2026/20-2601RL_CTDPrelim.zip # NOT FOUND
         file_zip = basename(url),
         year = str_extract(url, "/(\\d{4})/", group = 1) |> as.integer(),
         month = str_extract(url, "-\\d{2}(\\d{2})", group = 1) |> as.integer(),
@@ -244,10 +243,12 @@ d_csv <- tibble(
       group = 1
     ),
     data_stage = case_when(
-      str_detect(path_unzip, "Final.*db[_|-]csv") ~ "final",
+      str_detect(path_unzip, "Final.*db[_|-]csv")  ~ "final",
       str_detect(path_unzip, "Prelim.*db[_|-]csv") ~ "preliminary",
-      cruise_key == "2507SR" &
-        str_detect(path_unzip, "Prelim.*csv") ~ "preliminary",
+      # prelim CSVs directly in unzipped dir (no db-csv subfolder)
+      str_detect(dir_unzip, "Prelim") &
+        path_unzip == paste0(dir_unzip, "/", file_csv) ~ "preliminary",
+      # edge case: 2111SR has CSVs only in csvs-plots subfolder
       cruise_key == "2111SR" &
         str_detect(
           path_unzip,
