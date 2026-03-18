@@ -650,6 +650,16 @@ stopifnot(
 )
 ```
 
+## Load Dataset Metadata
+
+```{r}
+#| label: load-dataset-metadata
+
+d_dataset <- read_csv(here("metadata/dataset.csv"))
+dbWriteTable(con, "dataset", d_dataset, overwrite = TRUE)
+message(glue("dataset: {nrow(d_dataset)} datasets registered"))
+```
+
 ## Verify Primary Keys
 
 ```{r}

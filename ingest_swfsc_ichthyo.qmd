@@ -956,6 +956,16 @@ message(glue(
 message(glue("Total distance: {fmt(round(total_km))} km"))
 ```
 
+## Load Dataset Metadata
+
+```{r}
+#| label: load-dataset-metadata
+
+d_dataset <- read_csv(here("metadata/dataset.csv"))
+dbWriteTable(con, "dataset", d_dataset, overwrite = TRUE)
+message(glue("dataset: {nrow(d_dataset)} datasets registered"))
+```
+
 ## Validate Local Database
 
 Validate data quality in the local wrangling database before exporting to parquet.

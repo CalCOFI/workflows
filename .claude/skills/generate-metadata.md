@@ -131,13 +131,34 @@ cat(paste(mt$measurement_type, collapse = "\n"))
 
 Report which measurements already exist and which need to be added.
 
-### 7. Present results to user
+### 7. Register in `metadata/dataset.csv`
+
+Add a row to the unified `dataset` reference table with:
+
+```csv
+provider,dataset,dataset_name,description,citation_main,citation_others,link_calcofi_org,link_data_source,link_others,tables,coverage_temporal,coverage_spatial,license,pi_names
+```
+
+Fields:
+- `provider`: Organization curating the data (e.g., `calcofi`, `swfsc`, `pic`)
+  — NOT the data portal (NCEI, EDI, ERDDAP)
+- `citation_main`: Primary dataset citation (from DOI or data portal)
+- `link_calcofi_org`: CalCOFI.org landing page for the dataset
+- `link_data_source`: Data portal URL (NCEI accession, EDI package, ERDDAP endpoint)
+- `link_others`: Semicolon-delimited additional links (DOI, publications)
+- `tables`: Semicolon-delimited list of tables contributed to the database
+
+Scrape the CalCOFI.org page and data portal landing page for citation,
+DOI, PI names, and other metadata before filling in this row.
+
+### 8. Present results to user
 
 Show:
 - Created file paths
 - Table mapping summary
 - Field mapping summary with any that need manual review
 - Measurement types to add (if any)
+- Dataset metadata row added to `metadata/dataset.csv`
 - Instructions for next steps:
   1. Review and edit `flds_redefine.csv` (rename decisions, type overrides, include/exclude)
   2. Add new entries to `metadata/measurement_type.csv` if needed
@@ -146,12 +167,12 @@ Show:
 ## Example
 
 ```
-/generate-metadata ncei dic ~/My\ Drive/projects/calcofi/data-public/ncei/dic
+/generate-metadata calcofi dic ~/My\ Drive/projects/calcofi/data-public/calcofi/dic
 ```
 
 Creates:
 ```
-metadata/ncei/dic/
+metadata/calcofi/dic/
 ├── tbls_redefine.csv    # Maps CalCOFI_DIC_data → dic_measurement
 ├── flds_redefine.csv    # Maps DIC, TA, pH → standard names
 └── metadata_derived.csv # (empty, no derived columns needed)

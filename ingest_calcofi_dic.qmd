@@ -1,0 +1,723 @@
+---
+title: "Ingest DIC"
+editor_options:
+  chunk_output_type: console
+---
+
+## Overview
+
+**Source**: [DIC | CalCOFI.org](https://calcofi.org/data/oceanographic-data/dic/)
+
+Dissolved Inorganic Carbon (DIC) and Total Alkalinity (TA) from CalCOFI
+Niskin bottle samples, archived at NCEI accession
+[0301029](https://www.ncei.noaa.gov/access/metadata/landing-page/bin/iso?id=gov.noaa.nodc:0301029).
+
+- **Provider**: `calcofi` (CalCOFI program; PI: Todd Martz, Scripps)
+- **File**: `CALCOFI_DIC_20250122.csv` (~500KB, 4,391 rows)
+- **Coverage**: 1983–2021, 71 stations, 131 cruises
+- **Measurements**: DIC (umol/kg), TA (umol/kg), CTD temperature (degC),
+  salinity (PSS-78)
+- **Quality flags**: WOCE convention (2=good, 3=questionable, 4=bad, 9=missing)
+- **Citation**: Keeling, C.D. et al. (2025). Discrete profile dissolved
+  inorganic carbon, total alkalinity, water temperature and salinity
+  measurements ... for the CalCOFI program in the North East Pacific
+  Ocean Coastal area from 1983-03-19 to 2021-07-20 (NCEI Accession
+  0301029). NOAA NCEI. <https://doi.org/10.25921/3w9f-jd72>
+
+**Strategy**: Load source CSV, pivot ALL four measurement columns
+(DIC, TA, CTD temperature, salinity) into tidy long-format
+`dic_measurement`, then summarize replicates into
+`dic_measurement_summary`. The base `dic_sample` table retains only
+position/time/FK columns — no measurement values.
+
+### Data Flow
+
+```{mermaid}
+graph LR
+  A[NCEI CSV] --> B[DuckDB Wrangling]
+  B --> C[Parse Station + Date]
+  C --> D[Match to Casts]
+  D --> E[Pivot ALL → long]
+  E --> F[Summarize Replicates]
+  F --> G[Parquet Export]
+  G --> H[GCS Archive]
+```
+
+### Measurement Types
+
+Four measurement types from this dataset — all **new** types, distinct
+from bottle/CTD equivalents because these come from a separate
+instrument chain with WOCE QC:
+
+| measurement_type | description | units | source column | status |
+|-----------------|-------------|-------|---------------|--------|
+| `dic` | Dissolved inorganic carbon | umol/kg | DIC | **NEW** |
+| `alkalinity` | Total alkalinity | umol/kg | TA | **NEW** |
+| `ctdtemp_its90` | CTD temperature (ITS-90) | degC | CTDTEMP_ITS90 | **NEW** |
+| `salinity_pss78` | Practical salinity (PSS-78) | PSS-78 | Salinity_PSS78 | **NEW** |
+
+These are kept separate from the calcofi_bottle `temperature`/`salinity`
+types because the DIC dataset values come from a different QC pipeline
+(WOCE flags vs calcofi.org quality codes).
+
+## Setup
+
+```{r}
+#| label: setup
+
+# devtools::install_local(here::here("../calcofi4db"), force = T)
+devtools::load_all(here::here("../calcofi4db"))
+devtools::load_all(here::here("../calcofi4r"))
+
+librarian::shelf(
+  CalCOFI / calcofi4db,
+  CalCOFI / calcofi4r,
+  DBI,
+  dm,
+  dplyr,
+  DT,
+  fs,
+  glue,
+  googledrive,
+  here,
+  htmltools,
+  janitor,
+  jsonlite,
+  knitr,
+  lubridate,
+  purrr,
+  readr,
+  sf,
+  stringr,
+  tibble,
+  tidyr,
+  units,
+  quiet = T
+)
+options(readr.show_col_types = F)
+options(DT.options = list(scrollX = TRUE))
+
+# define paths
+dataset_name <- "CalCOFI DIC"
+provider     <- "calcofi"
+dataset      <- "dic"
+dir_label    <- glue("{provider}_{dataset}")
+dir_data     <- "~/My Drive/projects/calcofi/data-public"
+overwrite    <- TRUE
+
+dir_parquet <- here(glue("data/parquet/{dir_label}"))
+db_path     <- here(glue("data/wrangling/{dir_label}.duckdb"))
+
+# clean slate if overwrite
+if (overwrite) {
+  if (file_exists(db_path))    file_delete(db_path)
+  if (dir_exists(dir_parquet)) dir_delete(dir_parquet)
+}
+
+dir_create(dirname(db_path))
+con <- get_duckdb_con(db_path)
+load_duckdb_extension(con, "spatial")
+
+# load unified measurement_type reference
+meas_type_csv <- here("metadata/measurement_type.csv")
+d_meas_type   <- read_csv(meas_type_csv)
+```
+
+## Read Source Data
+
+The NCEI CSV has a units row (row 2) that must be skipped, and uses
+`-999` as the missing value sentinel.
+
+```{r}
+#| label: read-source
+
+dic_csv <- glue(
+  "{dir_data}/calcofi/dic/0301029/1.1/data/0-data/",
+  "CALCOFI_DIC_20250122.csv"
+)
+stopifnot("DIC CSV not found" = file_exists(dic_csv))
+
+# read, skipping the units row (row 2)
+d_raw <- read_csv(dic_csv, skip = 2, col_names = FALSE)
+
+# get header from row 1
+hdr <- read_csv(dic_csv, n_max = 0) |> names()
+names(d_raw) <- hdr
+
+cat(glue("Read {nrow(d_raw)} rows, {ncol(d_raw)} columns from {basename(dic_csv)}"), "\n")
+```
+
+## Clean and Type-Cast
+
+Replace `-999` with NA, convert character columns to proper types, and
+build a datetime column.
+
+```{r}
+#| label: clean-data
+
+d_clean <- d_raw |>
+  mutate(
+    # convert numeric columns stored as character (due to units row)
+    Latitude      = as.numeric(Latitude),
+    Longitude     = as.numeric(Longitude),
+    Depth         = as.numeric(Depth),
+    CTDTEMP_ITS90 = as.numeric(CTDTEMP_ITS90),
+    DIC           = as.numeric(DIC),
+    TA            = as.numeric(TA),
+
+    # replace -999 sentinels with NA across all numeric columns
+    across(
+      where(is.numeric),
+      ~ if_else(.x == -999, NA_real_, .x)),
+
+    # build datetime from components
+    datetime_utc = make_datetime(
+      Year_UTC, Month_UTC, Day_UTC,
+      tz = "UTC"),
+
+    # sta_key matching calcofi convention: "090.0 062.0"
+    sta_key = Station_ID
+  )
+
+# summary of NA replacement
+na_counts <- d_clean |>
+  summarise(across(where(is.numeric), ~ sum(is.na(.x)))) |>
+  pivot_longer(everything(), names_to = "column", values_to = "n_na") |>
+  filter(n_na > 0)
+na_counts |> datatable(caption = "NULL counts after -999 replacement")
+```
+
+## Load into Database
+
+Load `dic_sample` as a **tidy position table** — only station, time,
+depth, and FK columns. Measurement values (DIC, TA, temp, salinity) are
+pivoted into `dic_measurement` in the next step.
+
+```{r}
+#| label: load-to-db
+
+# tidy: dic_sample has position/time only, no measurement values
+d_dic <- d_clean |>
+  transmute(
+    expocode     = EXPOCODE,
+    ship_name    = Ship_Name,
+    datetime_utc = datetime_utc,
+    sta_key      = sta_key,
+    latitude     = Latitude,
+    longitude    = Longitude,
+    depth_m      = Depth
+  )
+
+dbWriteTable(con, "dic_sample", d_dic, overwrite = TRUE)
+cat(glue("dic_sample: {nrow(d_dic)} rows, {ncol(d_dic)} columns loaded"), "\n")
+
+# also load the wide-format data temporarily for pivoting
+d_wide <- d_clean |>
+  transmute(
+    expocode     = EXPOCODE,
+    sta_key      = Station_ID,
+    datetime_utc = datetime_utc,
+    depth_m      = Depth,
+    latitude     = Latitude,
+    longitude    = Longitude,
+    ctdtemp_its90     = CTDTEMP_ITS90,
+    ctdtemp_its90_flag = as.integer(CTDTEMP_flag),
+    salinity_pss78     = Salinity_PSS78,
+    salinity_pss78_flag = as.integer(Salinity_flag),
+    dic           = DIC,
+    dic_flag      = as.integer(DIC_flag),
+    alkalinity    = TA,
+    alkalinity_flag = as.integer(TA_flag)
+  )
+dbWriteTable(con, "dic_wide", d_wide, overwrite = TRUE)
+```
+
+## Match to Existing Casts
+
+Load existing casts from bottle workflow parquet and match DIC samples
+to casts using `sta_key` + `datetime_utc` (±3 day window).
+
+```{r}
+#| label: load-casts
+
+# load casts and bottle from bottle workflow
+load_prior_tables(
+  con         = con,
+  tables      = c("casts", "bottle"),
+  parquet_dir = here("data/parquet/calcofi_bottle")
+)
+
+# station matching
+n_dic_sta <- dbGetQuery(
+  con, "SELECT COUNT(DISTINCT sta_key) FROM dic_sample")[[1]]
+n_matched_sta <- dbGetQuery(
+  con,
+  "SELECT COUNT(DISTINCT d.sta_key)
+   FROM dic_sample d
+   INNER JOIN casts c ON d.sta_key = c.sta_key")[[1]]
+cat(glue(
+  "Station matching: {n_matched_sta}/{n_dic_sta} DIC stations found in casts"), "\n")
+```
+
+```{r}
+#| label: match-casts
+
+# match DIC samples to casts by sta_key + date (±3 day window)
+# many dates are offset by 1 day between NCEI and calcofi.org
+dbExecute(con, "ALTER TABLE dic_sample ADD COLUMN IF NOT EXISTS cast_id INTEGER")
+dbExecute(
+  con,
+  "UPDATE dic_sample d
+   SET cast_id = (
+     SELECT c.cast_id
+     FROM casts c
+     WHERE c.sta_key = d.sta_key
+       AND ABS(c.datetime_utc::DATE - d.datetime_utc::DATE) <= 3
+     ORDER BY ABS(c.datetime_utc::DATE - d.datetime_utc::DATE)
+     LIMIT 1
+   )"
+)
+
+n_matched <- dbGetQuery(con, "SELECT COUNT(*) FROM dic_sample WHERE cast_id IS NOT NULL")[[1]]
+n_total   <- dbGetQuery(con, "SELECT COUNT(*) FROM dic_sample")[[1]]
+cat(glue(
+  "Cast matching: {n_matched}/{n_total} DIC samples matched ",
+  "({round(100*n_matched/n_total, 1)}%)"), "\n")
+
+# show unmatched samples
+d_unmatched <- dbGetQuery(
+  con,
+  "SELECT DISTINCT sta_key, datetime_utc::DATE AS date, ship_name, expocode
+   FROM dic_sample WHERE cast_id IS NULL ORDER BY datetime_utc")
+if (nrow(d_unmatched) > 0)
+  d_unmatched |> datatable(caption = "Unmatched DIC samples (no matching cast)")
+```
+
+## Match to Bottles
+
+For matched casts, find the nearest bottle at the same depth.
+
+```{r}
+#| label: match-bottles
+
+dbExecute(con, "ALTER TABLE dic_sample ADD COLUMN IF NOT EXISTS bottle_id INTEGER")
+dbExecute(
+  con,
+  "UPDATE dic_sample d
+   SET bottle_id = (
+     SELECT b.bottle_id
+     FROM bottle b
+     WHERE b.cast_id = d.cast_id
+       AND ABS(b.depth_m - d.depth_m) <= 1.0
+     ORDER BY ABS(b.depth_m - d.depth_m)
+     LIMIT 1
+   )
+   WHERE d.cast_id IS NOT NULL"
+)
+
+n_bottle_matched <- dbGetQuery(
+  con, "SELECT COUNT(*) FROM dic_sample WHERE bottle_id IS NOT NULL")[[1]]
+cat(glue(
+  "Bottle matching: {n_bottle_matched}/{n_matched} cast-matched samples ",
+  "({round(100*n_bottle_matched/n_matched, 1)}%)"), "\n")
+
+# propagate FKs to dic_wide for pivoting
+dbExecute(con, "ALTER TABLE dic_wide ADD COLUMN IF NOT EXISTS cast_id INTEGER")
+dbExecute(con, "ALTER TABLE dic_wide ADD COLUMN IF NOT EXISTS bottle_id INTEGER")
+dbExecute(
+  con,
+  "UPDATE dic_wide w SET
+     cast_id   = s.cast_id,
+     bottle_id = s.bottle_id
+   FROM dic_sample s
+   WHERE w.expocode     = s.expocode
+     AND w.sta_key      = s.sta_key
+     AND w.datetime_utc = s.datetime_utc
+     AND w.depth_m IS NOT DISTINCT FROM s.depth_m"
+)
+```
+
+## Pivot ALL Measurements to Long Format
+
+Pivot all four measurement columns (DIC, TA, CTD temperature, salinity)
+into tidy long-format `dic_measurement`. Each row = one measurement at
+one position. This follows tidy data principles — no mixing of different
+measured quantities on the same row.
+
+```{r}
+#| label: pivot-measurements
+
+# pivot all 4 measurement types from wide to long
+meas_map <- list(
+  list(type = "dic",             col = "dic",             flag = "dic_flag"),
+  list(type = "alkalinity",      col = "alkalinity",      flag = "alkalinity_flag"),
+  list(type = "ctdtemp_its90",   col = "ctdtemp_its90",   flag = "ctdtemp_its90_flag"),
+  list(type = "salinity_pss78",  col = "salinity_pss78",  flag = "salinity_pss78_flag")
+)
+
+sql_parts <- map_chr(meas_map, \(m) glue(
+  "SELECT expocode, sta_key, datetime_utc, depth_m,
+          latitude, longitude, cast_id, bottle_id,
+          '{m$type}' AS measurement_type,
+          CAST({m$col} AS DOUBLE) AS measurement_value,
+          CAST({m$flag} AS VARCHAR) AS measurement_qual
+   FROM dic_wide
+   WHERE {m$col} IS NOT NULL
+     AND NOT isnan(CAST({m$col} AS DOUBLE))
+     AND isfinite(CAST({m$col} AS DOUBLE))"
+))
+
+dbExecute(con, glue(
+  "CREATE TABLE dic_measurement AS
+   SELECT ROW_NUMBER() OVER (
+     ORDER BY sta_key, datetime_utc, depth_m, measurement_type
+   ) AS dic_measurement_id, *
+   FROM ({paste(sql_parts, collapse = '\nUNION ALL\n')}) sub"
+))
+
+# drop the temporary wide table
+dbExecute(con, "DROP TABLE dic_wide")
+
+n_meas <- dbGetQuery(con, "SELECT COUNT(*) FROM dic_measurement")[[1]]
+cat(glue("dic_measurement: {format(n_meas, big.mark = ',')} rows"), "\n")
+
+# summary by type
+dbGetQuery(
+  con,
+  "SELECT measurement_type, COUNT(*) AS n,
+          ROUND(AVG(measurement_value), 1) AS mean_val,
+          ROUND(MIN(measurement_value), 1) AS min_val,
+          ROUND(MAX(measurement_value), 1) AS max_val
+   FROM dic_measurement
+   GROUP BY measurement_type
+   ORDER BY measurement_type"
+) |> datatable(caption = "Measurement summary by type")
+```
+
+## Summarize Replicate Measurements
+
+Aggregate replicate measurements at each unique position in time
+and space (station + date + depth) into mean and standard deviation,
+following `ctd_summary` in `ingest_calcofi_ctd-cast.qmd`. Filters out
+`NaN`, `-Inf`, `Inf` values.
+
+```{r}
+#| label: dic-measurement-summary
+
+dbExecute(
+  con,
+  "CREATE OR REPLACE TABLE dic_measurement_summary AS
+   SELECT
+     sta_key,
+     datetime_utc,
+     depth_m,
+     latitude,
+     longitude,
+     measurement_type,
+     AVG(measurement_value)    AS avg,
+     CASE
+       WHEN COUNT(*) = 1 THEN 0
+       ELSE COALESCE(STDDEV_SAMP(measurement_value), 0)
+     END                       AS stddev,
+     COUNT(*)                  AS n_obs,
+     MAX(cast_id)              AS cast_id,
+     MAX(bottle_id)            AS bottle_id
+   FROM dic_measurement
+   WHERE NOT isnan(measurement_value)
+     AND isfinite(measurement_value)
+   GROUP BY sta_key, datetime_utc, depth_m,
+            latitude, longitude, measurement_type"
+)
+
+n_summ <- dbGetQuery(con, "SELECT COUNT(*) FROM dic_measurement_summary")[[1]]
+cat(glue(
+  "dic_measurement_summary: {format(n_summ, big.mark = ',')} rows ",
+  "(from {format(n_meas, big.mark = ',')} measurements)"), "\n")
+
+dbGetQuery(
+  con,
+  "SELECT measurement_type,
+          COUNT(*) AS n_positions,
+          SUM(n_obs) AS n_raw_obs,
+          ROUND(AVG(n_obs), 1) AS avg_replicates,
+          SUM(CASE WHEN n_obs > 1 THEN 1 ELSE 0 END) AS n_with_replicates,
+          ROUND(AVG(stddev), 3) AS avg_stddev
+   FROM dic_measurement_summary
+   GROUP BY measurement_type
+   ORDER BY measurement_type"
+) |> datatable(caption = "Replicate statistics by type")
+```
+
+## Load Dataset Metadata
+
+```{r}
+#| label: load-dataset-metadata
+
+d_dataset <- read_csv(here("metadata/dataset.csv"))
+dbWriteTable(con, "dataset", d_dataset, overwrite = TRUE)
+cat(glue("dataset: {nrow(d_dataset)} datasets registered"), "\n")
+```
+
+## Add Measurement Types
+
+Register the 4 measurement types from this dataset. All are **new** —
+distinct from bottle/CTD types due to different QC pipelines.
+
+```{r}
+#| label: add-measurement-types
+
+dic_types <- tibble(
+  measurement_type   = c("dic",        "alkalinity",  "ctdtemp_its90",           "salinity_pss78"),
+  description        = c("Dissolved inorganic carbon",
+                          "Total alkalinity",
+                          "CTD temperature (ITS-90 scale)",
+                          "Practical salinity (PSS-78)"),
+  units              = c("umol/kg",    "umol/kg",     "degC",                    "PSS-78"),
+  `_source_column`   = c("DIC",        "TA",          "CTDTEMP_ITS90",           "Salinity_PSS78"),
+  `_source_table`    = c("dic_measurement", "dic_measurement", "dic_measurement", "dic_measurement"),
+  `_source_datasets` = c("calcofi_dic", "calcofi_dic", "calcofi_dic",            "calcofi_dic"),
+  `_qual_column`     = c("dic_flag",   "ta_flag",     "ctdtemp_its90_flag",      "salinity_pss78_flag"),
+  `_prec_column`     = c(NA_character_, NA_character_, NA_character_,             NA_character_)
+)
+
+existing <- d_meas_type |>
+  filter(measurement_type %in% dic_types$measurement_type) |>
+  pull(measurement_type)
+new_types <- dic_types |> filter(!measurement_type %in% existing)
+
+if (nrow(new_types) > 0) {
+  cat(glue("Adding {nrow(new_types)} new measurement types: ",
+           "{paste(new_types$measurement_type, collapse = ', ')}"), "\n")
+  d_meas_type <- bind_rows(d_meas_type, new_types)
+  write_csv(d_meas_type, meas_type_csv)
+} else {
+  cat("All measurement types already registered\n")
+}
+
+dbWriteTable(con, "measurement_type", d_meas_type, overwrite = TRUE)
+```
+
+## Verify Primary Keys
+
+```{r}
+#| label: verify-pks
+
+# dic_sample composite key
+n_dup_sample <- dbGetQuery(
+  con,
+  "SELECT COUNT(*) FROM (
+     SELECT expocode, sta_key, depth_m, datetime_utc, COUNT(*) AS n
+     FROM dic_sample
+     GROUP BY expocode, sta_key, depth_m, datetime_utc
+     HAVING COUNT(*) > 1)")[[1]]
+cat(glue("dic_sample composite key duplicates: {n_dup_sample}"), "\n")
+
+# dic_measurement_summary composite key
+n_dup_summ <- dbGetQuery(
+  con,
+  "SELECT COUNT(*) FROM (
+     SELECT sta_key, datetime_utc, depth_m, measurement_type, COUNT(*) AS n
+     FROM dic_measurement_summary
+     GROUP BY sta_key, datetime_utc, depth_m, measurement_type
+     HAVING COUNT(*) > 1)")[[1]]
+cat(glue("dic_measurement_summary composite key duplicates: {n_dup_summ}"), "\n")
+```
+
+## Schema Documentation
+
+### Primary Keys and Foreign Key Relationships
+
+```
+dic_sample (position/time)
+  ↓ (sta_key + datetime_utc + depth_m)
+dic_measurement (one row per measurement)
+  dic_measurement.measurement_type (FK) → measurement_type.measurement_type
+  ↓ (sta_key + datetime_utc + depth_m + measurement_type)
+dic_measurement_summary (avg/stddev per position)
+  dic_measurement_summary.measurement_type (FK) → measurement_type.measurement_type
+```
+
+```{r}
+#| label: schema
+
+# define PK/FK relationships for this dataset
+add_dic_keys <- function(dm) {
+  dm |>
+    dm_add_pk(dic_measurement, dic_measurement_id) |>
+    dm_add_pk(measurement_type, measurement_type) |>
+    dm_add_fk(dic_measurement, measurement_type, measurement_type) |>
+    dm_add_fk(dic_measurement_summary, measurement_type, measurement_type)
+}
+
+# build dm from DIC-specific tables only (exclude casts/bottle loaded for FK matching)
+dic_tables <- c(
+  "dic_sample", "dic_measurement", "dic_measurement_summary",
+  "measurement_type", "dataset")
+dm_dic <- dm_from_con(con, table_names = dic_tables, learn_keys = FALSE) |>
+  add_dic_keys() |>
+  dm_set_colors(
+    lightblue   = c(dic_sample, dic_measurement, dic_measurement_summary),
+    lightyellow = measurement_type,
+    white       = dataset
+  )
+
+dm_draw(dm_dic, rankdir = "LR", view_type = "all")
+```
+
+### Write relationships.json
+
+```{r}
+#| label: write-relationships
+
+build_relationships_json(
+  dm         = dm_dic,
+  output_dir = dir_parquet,
+  provider   = provider,
+  dataset    = dataset
+)
+```
+
+## Add Spatial
+
+```{r}
+#| label: spatial
+
+add_point_geom(con, "dic_sample", lon_col = "longitude", lat_col = "latitude")
+```
+
+## Data Preview
+
+```{r}
+#| label: preview-dic-sample
+
+dbGetQuery(con, "SELECT * FROM dic_sample LIMIT 100") |>
+  datatable(
+    caption = glue(
+      "dic_sample — first 100 of ",
+      "{format(dbGetQuery(con, 'SELECT COUNT(*) FROM dic_sample')[[1]], big.mark=',')} rows"),
+    rownames = FALSE, filter = "top")
+```
+
+```{r}
+#| label: preview-dic-measurement
+
+dbGetQuery(con, "SELECT * FROM dic_measurement LIMIT 100") |>
+  datatable(
+    caption = glue(
+      "dic_measurement — first 100 of ",
+      "{format(dbGetQuery(con, 'SELECT COUNT(*) FROM dic_measurement')[[1]], big.mark=',')} rows"),
+    rownames = FALSE, filter = "top")
+```
+
+```{r}
+#| label: preview-dic-summary
+
+dbGetQuery(con, "SELECT * FROM dic_measurement_summary LIMIT 100") |>
+  datatable(
+    caption = glue(
+      "dic_measurement_summary — first 100 of ",
+      "{format(dbGetQuery(con, 'SELECT COUNT(*) FROM dic_measurement_summary')[[1]], big.mark=',')} rows"),
+    rownames = FALSE, filter = "top")
+```
+
+## Write Parquet Outputs
+
+```{r}
+#| label: write-parquet
+
+dir_create(dir_parquet)
+
+parquet_stats <- write_parquet_outputs(
+  con        = con,
+  output_dir = dir_parquet,
+  tables     = c("dic_sample", "dic_measurement",
+                 "dic_measurement_summary", "measurement_type",
+                 "dataset"),
+  strip_provenance = FALSE
+)
+
+parquet_stats |>
+  mutate(file = basename(path)) |>
+  select(-path) |>
+  datatable(caption = "Parquet export statistics")
+```
+
+## Write Metadata
+
+```{r}
+#| label: write-metadata
+
+d_tbls_rd <- read_csv(here("metadata/calcofi/dic/tbls_redefine.csv"))
+d_flds_rd <- read_csv(here("metadata/calcofi/dic/flds_redefine.csv"))
+
+metadata_path <- build_metadata_json(
+  con          = con,
+  d_tbls_rd    = d_tbls_rd,
+  d_flds_rd    = d_flds_rd,
+  output_dir   = dir_parquet,
+  tables       = c("dic_sample", "dic_measurement",
+                   "dic_measurement_summary"),
+  set_comments = TRUE,
+  provider     = provider,
+  dataset      = dataset,
+  workflow_url = glue(
+    "https://calcofi.io/workflows/",
+    "ingest_calcofi_dic.html"
+  )
+)
+```
+
+## Upload to GCS Archive
+
+```{r}
+#| label: upload-gcs
+
+gcs_ingest_prefix <- glue("ingest/{dir_label}")
+gcs_bucket        <- "calcofi-db"
+
+local_files <- list.files(dir_parquet, full.names = TRUE)
+
+walk(local_files, function(f) {
+  gcs_path <- glue("gs://{gcs_bucket}/{gcs_ingest_prefix}/{basename(f)}")
+  put_gcs_file(f, gcs_path)
+  cat(glue("Uploaded {basename(f)} -> {gcs_path}"), "\n")
+})
+
+cat(glue(
+  "\nUploaded {length(local_files)} files to ",
+  "gs://{gcs_bucket}/{gcs_ingest_prefix}/"), "\n")
+```
+
+## Cleanup
+
+```{r}
+#| label: cleanup
+
+close_duckdb(con)
+cat(glue("Parquet outputs written to: {dir_parquet}"), "\n")
+```
+
+## TODO
+
+- [x] Tidy data: all measurements pivoted to long format in
+  `dic_measurement` — `dic_sample` has position/time only
+- [x] Handle replicates: `dic_measurement_summary` aggregates with
+  avg/stddev per position, following `ctd_summary` pattern
+- [ ] Spatial matching: match unmatched DIC samples to `site` and `grid`
+  via lat/lon projection to CalCOFI coordinate system (see issue #47)
+- [ ] Validate against calcofi_bottle `dic_rep1`/`dic_rep2` values for
+  overlapping bottles
+- [ ] Add WOCE flag interpretation (2=good, 3=questionable, 4=bad,
+  9=missing) to metadata
+- [ ] Consider merging `dic_measurement` into `bottle_measurement` for
+  matched samples via a VIEW that unions both tables for analysis
+
+::: {.callout-caution collapse="true"}
+
+## Session Info
+
+```{r session_info}
+devtools::session_info()
+```
+
+:::
