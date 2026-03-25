@@ -186,7 +186,7 @@ Filters out `NaN`, `-Inf`, `Inf` values. See `ctd_summary` in
 #   con,
 #   "CREATE OR REPLACE TABLE {{dataset}}_measurement_summary AS
 #    SELECT
-#      sta_key,
+#      site_key,
 #      datetime_utc,
 #      depth_m,
 #      measurement_type,
@@ -199,7 +199,7 @@ Filters out `NaN`, `-Inf`, `Inf` values. See `ctd_summary` in
 #    FROM {{dataset}}_measurement
 #    WHERE NOT isnan(measurement_value)
 #      AND isfinite(measurement_value)
-#    GROUP BY sta_key, datetime_utc, depth_m, measurement_type"
+#    GROUP BY site_key, datetime_utc, depth_m, measurement_type"
 # )
 ```
 <!-- {{measurement_summary_section_end}} -->

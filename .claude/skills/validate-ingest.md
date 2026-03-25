@@ -188,6 +188,10 @@ prior_dirs <- list(
 
 for (prior_name in names(prior_dirs)) {
   if (dir.exists(prior_dirs[[prior_name]])) {
+    # check cruise_key format (YYYY-MM-NODC)
+    # validate: grepl("^\\d{4}-\\d{2}-.+$", cruise_key)
+    # check site_key format (NNN.N NNN.N)
+    # validate: grepl("^\\d{3}\\.\\d \\d{3}\\.\\d$", site_key)
     # check cruise_key references
     # check grid_key references
     # check ship_key references

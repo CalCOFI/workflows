@@ -36,7 +36,7 @@ When the user invokes this skill, run the R script `scripts/explore_dataset.R` a
    - Column types and NULL rates
    - Potential primary key columns (unique identifiers)
    - Foreign key candidates matching existing CalCOFI tables:
-     - `cruise_key` (YYMMKK format)
+     - `cruise_key` (YYYY-MM-NODC format)
      - `ship_key`, `ship_nodc`, `ship_name`
      - `site_uuid`, `tow_uuid`, `net_uuid`
      - `cast_id`, `bottle_id`
