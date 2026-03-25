@@ -261,8 +261,8 @@ message(glue("\nTotal casts updated: {n_updated_total}"))
 The column renames in `flds_redefine.csv` follow these db conventions:
 
 - **`*_id`** for integer primary/foreign keys (e.g. `Cst_Cnt` → `cast_id`, `Btl_Cnt` → `bottle_id`)
-- **`*_key`** for varchar natural/composite keys (e.g. `Cast_ID` → `cast_key`, `Sta_ID` → `sta_key`)
-- Note: `Cruise_ID` → `cruise_key_0` (interim `_0` suffix avoids collision with SWFSC `cruise_key` YYMMKK; discarded after merge)
+- **`*_key`** for varchar natural/composite keys (e.g. `Cast_ID` → `cast_key`, `Sta_ID` → `site_key`)
+- Note: `Cruise_ID` → `cruise_key_0` (interim `_0` suffix avoids collision with SWFSC `cruise_key` YYYY-MM-NODC; discarded after merge)
 - **unit suffixes** for measurements (e.g. `Depthm` → `depth_m`)
 
 ### Ambiguous column pairs
@@ -270,7 +270,7 @@ The column renames in `flds_redefine.csv` follow these db conventions:
 | Column pair | Why different |
 |------------|---------------|
 | `Cst_Cnt` (→ `cast_id`) vs `Cast_ID` (→ `cast_key`) | integer counter (1, 2, 3...) vs varchar composite (19-4903CR-HY-060-0930-05400560) |
-| `Sta_ID` (→ `sta_key`) vs `DbSta_ID` (→ `db_sta_key`) | "054.0 056.0" (space-separated) vs "05400560" (compact, derivable) |
+| `Sta_ID` (→ `site_key`) vs `DbSta_ID` (→ `db_sta_key`) | "054.0 056.0" (space-separated) vs "05400560" (compact, derivable) |
 | `Depth_ID` (→ `depth_key`) vs `Depthm` (→ `depth_m`) | varchar identifier vs numeric depth in meters |
 
 ### `R_*` = "Reported" (pre-QC) values
@@ -481,7 +481,7 @@ into long-format `cast_condition` table.
 erDiagram
     casts_BEFORE {
         int cast_id PK
-        str sta_key
+        str site_key
         dbl lat_dec
         dbl lon_dec
         ts  datetime_utc
@@ -502,7 +502,7 @@ erDiagram
     }
     casts_AFTER {
         int cast_id PK
-        str sta_key
+        str site_key
         dbl lat_dec
         dbl lon_dec
         ts  datetime_utc
@@ -926,7 +926,7 @@ dbExecute(
     (ABS(lon_dec) - FLOOR(ABS(lon_dec))) * 60    AS lon_min,
     CASE WHEN lon_dec >= 0 THEN 'E' ELSE 'W' END AS lon_hem,
     STRFTIME(datetime_utc, '%Y%m')                AS cruise,
-    REPLACE(REPLACE(sta_key, '.', ''), ' ', '')   AS db_sta_key
+    REPLACE(REPLACE(site_key, '.', ''), ' ', '')   AS db_sta_key
   FROM casts"
 )
 message("Created casts_derived VIEW with derived temporal/coordinate columns")
@@ -941,7 +941,16 @@ message("Created casts_derived VIEW with derived temporal/coordinate columns")
 map_casts_png <- here(glue("figures/{provider}_{dataset}_casts_map.png"))
 
 if (!file_exists(map_casts_png)) {
-  casts_sf <- calcofi4r::cc_read_sf(con, "casts") |>
+  # exclude native GEOMETRY column; convert via ST_AsText for sf
+  cast_cols <- dbGetQuery(con,
+    "SELECT column_name FROM information_schema.columns
+     WHERE table_name = 'casts' AND data_type != 'GEOMETRY'")$column_name
+  cast_sql <- paste(
+    "SELECT", paste(cast_cols, collapse = ", "),
+    ", ST_AsText(geom) AS geom_wkt FROM casts")
+  casts_sf <- dbGetQuery(con, cast_sql) |>
+    st_as_sf(wkt = "geom_wkt", crs = 4326) |>
+    select(-geom_wkt) |>
     mutate(year = year(datetime_utc))
 
   m <- mapView(casts_sf, zcol = "year")
@@ -959,30 +968,31 @@ htmltools::img(
 ```{r}
 #| label: show_latest
 
+# exclude tables with GEOMETRY columns from dm (duckdb R driver limitation)
 all_tbls <- db_tables(con)
+geom_tbls <- DBI::dbGetQuery(con,
+  "SELECT DISTINCT table_name FROM information_schema.columns
+   WHERE data_type = 'GEOMETRY'")$table_name
+dm_tbls <- setdiff(all_tbls, geom_tbls)
 
-add_bottle_spatial_keys <- function(dm) {
-  dm |>
-    dm_add_pk(grid, grid_key) |>
-    dm_add_fk(casts, grid_key, grid)
-}
-
-dm_final <- dm_from_con(con, table_names = all_tbls, learn_keys = FALSE) |>
-  add_bottle_keys() |>
-  add_bottle_spatial_keys() |>
-  dm_set_colors(
-    lightgreen = grid,
-    lightyellow = c(bottle_measurement, cast_condition),
-    lightblue = measurement_type
-  )
-dm_draw(dm_final, view_type = "all")
+tryCatch({
+  dm_final <- dm_from_con(con, table_names = dm_tbls, learn_keys = FALSE) |>
+    add_bottle_keys() |>
+    dm_set_colors(
+      lightyellow = c(bottle_measurement, cast_condition),
+      lightblue = measurement_type
+    )
+  dm_draw(dm_final, view_type = "all")
+}, error = function(e) {
+  message(glue("dm diagram skipped: {e$message}"))
+})
 ```
 
 ```{r}
 #| label: summary_stats
 
 # summary statistics
-n_casts <- tbl(con, "casts") |> tally() |> pull(n)
+n_casts <- dbGetQuery(con, "SELECT COUNT(*) FROM casts")[[1]]
 n_bottles <- tbl(con, "bottle") |> tally() |> pull(n)
 n_meas <- dbGetQuery(con, "SELECT COUNT(*) FROM bottle_measurement")[[1]]
 n_cond <- dbGetQuery(con, "SELECT COUNT(*) FROM cast_condition")[[1]]
@@ -1071,7 +1081,7 @@ dbExecute(
     (ABS(lon_dec) - FLOOR(ABS(lon_dec))) * 60    AS lon_min,
     CASE WHEN lon_dec >= 0 THEN 'E' ELSE 'W' END AS lon_hem,
     STRFTIME(datetime_utc, '%Y%m')                AS cruise,
-    REPLACE(REPLACE(sta_key, '.', ''), ' ', '')   AS db_sta_key
+    REPLACE(REPLACE(site_key, '.', ''), ' ', '')   AS db_sta_key
   FROM casts"
 )
 message("Recreated casts_derived VIEW after column type enforcement")
@@ -1100,8 +1110,11 @@ preview_tables(
 ```{r}
 #| label: preview_casts_derived
 
-# casts_derived is a VIEW, preview separately
-dbGetQuery(con, "SELECT * FROM casts_derived LIMIT 100") |>
+# casts_derived is a VIEW; exclude GEOMETRY column for R driver compatibility
+cd_cols <- dbGetQuery(con,
+  "SELECT column_name FROM information_schema.columns
+   WHERE table_name = 'casts_derived' AND data_type != 'GEOMETRY'")$column_name
+dbGetQuery(con, glue("SELECT {paste(cd_cols, collapse=', ')} FROM casts_derived LIMIT 100")) |>
   datatable(
     caption = "casts_derived — first 100 rows (VIEW)",
     rownames = FALSE,
@@ -1158,18 +1171,28 @@ metadata_path <- build_metadata_json(
 )
 
 # write relationships.json sidecar with PKs/FKs
-dm_bottle <- dm_from_con(
-  con,
-  table_names = db_tables(con),
-  learn_keys = FALSE
-) |>
-  add_bottle_keys()
-build_relationships_json(
-  dm = dm_bottle,
-  output_dir = dir_parquet,
-  provider = provider,
-  dataset = dataset
-)
+# exclude tables with GEOMETRY columns (duckdb R driver limitation)
+geom_tbls_wr <- DBI::dbGetQuery(con,
+  "SELECT DISTINCT table_name FROM information_schema.columns
+   WHERE data_type = 'GEOMETRY'")$table_name
+dm_tbls_wr <- setdiff(db_tables(con), geom_tbls_wr)
+
+tryCatch({
+  dm_bottle <- dm_from_con(
+    con,
+    table_names = dm_tbls_wr,
+    learn_keys = FALSE
+  ) |>
+    add_bottle_keys()
+  build_relationships_json(
+    dm = dm_bottle,
+    output_dir = dir_parquet,
+    provider = provider,
+    dataset = dataset
+  )
+}, error = function(e) {
+  message(glue("relationships.json skipped: {e$message}"))
+})
 
 # show metadata summary
 metadata <- jsonlite::fromJSON(metadata_path)
@@ -1289,12 +1312,16 @@ if (nrow(bridge_result$unmatched_report) > 0) {
 ```{r}
 #| label: cross_validate
 
+# use information_schema to check columns (avoids GEOMETRY type issues with dbListFields)
+casts_cols <- dbGetQuery(con,
+  "SELECT column_name FROM information_schema.columns
+   WHERE table_name = 'casts'")$column_name
+grid_cols <- dbGetQuery(con,
+  "SELECT column_name FROM information_schema.columns
+   WHERE table_name = 'grid'")$column_name
+
 # grid_key integrity: casts.grid_key should all be in grid.grid_key
-if (
-  "grid_key" %in%
-    dbListFields(con, "casts") &&
-    "grid_key" %in% dbListFields(con, "grid")
-) {
+if ("grid_key" %in% casts_cols && "grid_key" %in% grid_cols) {
   grid_orphans <- dbGetQuery(
     con,
     "SELECT COUNT(*) AS n FROM casts c
@@ -1383,7 +1410,7 @@ message(glue("GCS outputs at: gs://{gcs_bucket}/{gcs_ingest_prefix}/"))
 
 ## TODO
 
-- [x] Review column names and apply db naming conventions, per @docs/db.qmd and @workflows/README_PLAN.qmd: cast_cnt -> cast_id, btl_cnt -> bottle_id, sta_id -> sta_key, etc.
+- [x] Review column names and apply db naming conventions, per @docs/db.qmd and @workflows/README_PLAN.qmd: cast_cnt -> cast_id, btl_cnt -> bottle_id, sta_id -> site_key, etc.
 - [x] Pivot longer casts/bottle tables for easier analysis. Created bottle_measurement (value/prec/qual) and cast_condition tables, plus measurement_type reference.
 - [x] Consolidate casts temporal columns (date+time -> datetime_utc), drop 16 derivable columns, create casts_derived VIEW.
 

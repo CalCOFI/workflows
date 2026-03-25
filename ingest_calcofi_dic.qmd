@@ -175,8 +175,8 @@ d_clean <- d_raw |>
       Year_UTC, Month_UTC, Day_UTC,
       tz = "UTC"),
 
-    # sta_key matching calcofi convention: "090.0 062.0"
-    sta_key = Station_ID
+    # site_key matching calcofi convention: "090.0 062.0"
+    site_key = Station_ID
   )
 
 # summary of NA replacement
@@ -202,7 +202,7 @@ d_dic <- d_clean |>
     expocode     = EXPOCODE,
     ship_name    = Ship_Name,
     datetime_utc = datetime_utc,
-    sta_key      = sta_key,
+    site_key      = site_key,
     latitude     = Latitude,
     longitude    = Longitude,
     depth_m      = Depth
@@ -215,7 +215,7 @@ cat(glue("dic_sample: {nrow(d_dic)} rows, {ncol(d_dic)} columns loaded"), "\n")
 d_wide <- d_clean |>
   transmute(
     expocode     = EXPOCODE,
-    sta_key      = Station_ID,
+    site_key      = Station_ID,
     datetime_utc = datetime_utc,
     depth_m      = Depth,
     latitude     = Latitude,
@@ -235,26 +235,28 @@ dbWriteTable(con, "dic_wide", d_wide, overwrite = TRUE)
 ## Match to Existing Casts
 
 Load existing casts from bottle workflow parquet and match DIC samples
-to casts using `sta_key` + `datetime_utc` (±3 day window).
+to casts using `site_key` + `datetime_utc` (±3 day window).
 
 ```{r}
 #| label: load-casts
 
 # load casts and bottle from bottle workflow
+# include "casts" in geom_tables since it has GEOMETRY columns
 load_prior_tables(
   con         = con,
   tables      = c("casts", "bottle"),
-  parquet_dir = here("data/parquet/calcofi_bottle")
+  parquet_dir = here("data/parquet/calcofi_bottle"),
+  geom_tables = c("grid", "site", "segment", "casts")
 )
 
 # station matching
 n_dic_sta <- dbGetQuery(
-  con, "SELECT COUNT(DISTINCT sta_key) FROM dic_sample")[[1]]
+  con, "SELECT COUNT(DISTINCT site_key) FROM dic_sample")[[1]]
 n_matched_sta <- dbGetQuery(
   con,
-  "SELECT COUNT(DISTINCT d.sta_key)
+  "SELECT COUNT(DISTINCT d.site_key)
    FROM dic_sample d
-   INNER JOIN casts c ON d.sta_key = c.sta_key")[[1]]
+   INNER JOIN casts c ON d.site_key = c.site_key")[[1]]
 cat(glue(
   "Station matching: {n_matched_sta}/{n_dic_sta} DIC stations found in casts"), "\n")
 ```
@@ -262,7 +264,7 @@ cat(glue(
 ```{r}
 #| label: match-casts
 
-# match DIC samples to casts by sta_key + date (±3 day window)
+# match DIC samples to casts by site_key + date (±3 day window)
 # many dates are offset by 1 day between NCEI and calcofi.org
 dbExecute(con, "ALTER TABLE dic_sample ADD COLUMN IF NOT EXISTS cast_id INTEGER")
 dbExecute(
@@ -271,7 +273,7 @@ dbExecute(
    SET cast_id = (
      SELECT c.cast_id
      FROM casts c
-     WHERE c.sta_key = d.sta_key
+     WHERE c.site_key = d.site_key
        AND ABS(c.datetime_utc::DATE - d.datetime_utc::DATE) <= 3
      ORDER BY ABS(c.datetime_utc::DATE - d.datetime_utc::DATE)
      LIMIT 1
@@ -287,7 +289,7 @@ cat(glue(
 # show unmatched samples
 d_unmatched <- dbGetQuery(
   con,
-  "SELECT DISTINCT sta_key, datetime_utc::DATE AS date, ship_name, expocode
+  "SELECT DISTINCT site_key, datetime_utc::DATE AS date, ship_name, expocode
    FROM dic_sample WHERE cast_id IS NULL ORDER BY datetime_utc")
 if (nrow(d_unmatched) > 0)
   d_unmatched |> datatable(caption = "Unmatched DIC samples (no matching cast)")
@@ -331,7 +333,7 @@ dbExecute(
      bottle_id = s.bottle_id
    FROM dic_sample s
    WHERE w.expocode     = s.expocode
-     AND w.sta_key      = s.sta_key
+     AND w.site_key      = s.site_key
      AND w.datetime_utc = s.datetime_utc
      AND w.depth_m IS NOT DISTINCT FROM s.depth_m"
 )
@@ -356,7 +358,7 @@ meas_map <- list(
 )
 
 sql_parts <- map_chr(meas_map, \(m) glue(
-  "SELECT expocode, sta_key, datetime_utc, depth_m,
+  "SELECT expocode, site_key, datetime_utc, depth_m,
           latitude, longitude, cast_id, bottle_id,
           '{m$type}' AS measurement_type,
           CAST({m$col} AS DOUBLE) AS measurement_value,
@@ -370,7 +372,7 @@ sql_parts <- map_chr(meas_map, \(m) glue(
 dbExecute(con, glue(
   "CREATE TABLE dic_measurement AS
    SELECT ROW_NUMBER() OVER (
-     ORDER BY sta_key, datetime_utc, depth_m, measurement_type
+     ORDER BY site_key, datetime_utc, depth_m, measurement_type
    ) AS dic_measurement_id, *
    FROM ({paste(sql_parts, collapse = '\nUNION ALL\n')}) sub"
 ))
@@ -408,7 +410,7 @@ dbExecute(
   con,
   "CREATE OR REPLACE TABLE dic_measurement_summary AS
    SELECT
-     sta_key,
+     site_key,
      datetime_utc,
      depth_m,
      latitude,
@@ -425,7 +427,7 @@ dbExecute(
    FROM dic_measurement
    WHERE NOT isnan(measurement_value)
      AND isfinite(measurement_value)
-   GROUP BY sta_key, datetime_utc, depth_m,
+   GROUP BY site_key, datetime_utc, depth_m,
             latitude, longitude, measurement_type"
 )
 
@@ -506,9 +508,9 @@ dbWriteTable(con, "measurement_type", d_meas_type, overwrite = TRUE)
 n_dup_sample <- dbGetQuery(
   con,
   "SELECT COUNT(*) FROM (
-     SELECT expocode, sta_key, depth_m, datetime_utc, COUNT(*) AS n
+     SELECT expocode, site_key, depth_m, datetime_utc, COUNT(*) AS n
      FROM dic_sample
-     GROUP BY expocode, sta_key, depth_m, datetime_utc
+     GROUP BY expocode, site_key, depth_m, datetime_utc
      HAVING COUNT(*) > 1)")[[1]]
 cat(glue("dic_sample composite key duplicates: {n_dup_sample}"), "\n")
 
@@ -516,9 +518,9 @@ cat(glue("dic_sample composite key duplicates: {n_dup_sample}"), "\n")
 n_dup_summ <- dbGetQuery(
   con,
   "SELECT COUNT(*) FROM (
-     SELECT sta_key, datetime_utc, depth_m, measurement_type, COUNT(*) AS n
+     SELECT site_key, datetime_utc, depth_m, measurement_type, COUNT(*) AS n
      FROM dic_measurement_summary
-     GROUP BY sta_key, datetime_utc, depth_m, measurement_type
+     GROUP BY site_key, datetime_utc, depth_m, measurement_type
      HAVING COUNT(*) > 1)")[[1]]
 cat(glue("dic_measurement_summary composite key duplicates: {n_dup_summ}"), "\n")
 ```
@@ -529,10 +531,10 @@ cat(glue("dic_measurement_summary composite key duplicates: {n_dup_summ}"), "\n"
 
 ```
 dic_sample (position/time)
-  ↓ (sta_key + datetime_utc + depth_m)
+  ↓ (site_key + datetime_utc + depth_m)
 dic_measurement (one row per measurement)
   dic_measurement.measurement_type (FK) → measurement_type.measurement_type
-  ↓ (sta_key + datetime_utc + depth_m + measurement_type)
+  ↓ (site_key + datetime_utc + depth_m + measurement_type)
 dic_measurement_summary (avg/stddev per position)
   dic_measurement_summary.measurement_type (FK) → measurement_type.measurement_type
 ```
@@ -590,7 +592,11 @@ add_point_geom(con, "dic_sample", lon_col = "longitude", lat_col = "latitude")
 ```{r}
 #| label: preview-dic-sample
 
-dbGetQuery(con, "SELECT * FROM dic_sample LIMIT 100") |>
+# exclude GEOMETRY columns for R driver compatibility
+ds_cols <- dbGetQuery(con,
+  "SELECT column_name FROM information_schema.columns
+   WHERE table_name = 'dic_sample' AND data_type NOT LIKE 'GEOMETRY%'")$column_name
+dbGetQuery(con, glue("SELECT {paste(ds_cols, collapse=', ')} FROM dic_sample LIMIT 100")) |>
   datatable(
     caption = glue(
       "dic_sample — first 100 of ",

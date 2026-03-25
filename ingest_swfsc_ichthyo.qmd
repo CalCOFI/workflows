@@ -208,12 +208,12 @@ UUID v5 hashed from its composite natural key. Other derived tables without sour
 
 ### Create cruise_key (natural key)
 
-The cruise_key is a natural key in format YYMMKK (2-digit year + 2-digit month + ship_key).
+The cruise_key is a natural key in format YYYY-MM-NODC (4-digit year + 2-digit month + NODC ship code).
 
 ```{r}
 #| label: create_cruise_key
 
-# create cruise_key as natural primary key (YYMMKK format)
+# create cruise_key as natural primary key (YYYY-MM-NODC format)
 create_cruise_key(
   con,
   cruise_tbl = "cruise",
@@ -230,7 +230,7 @@ tbl(con, "cruise") |>
   select(cruise_uuid, cruise_key, ship_key, date_ym) |>
   head(10) |>
   collect() |>
-  datatable(caption = "Sample cruise_key values (YYMMKK format)")
+  datatable(caption = "Sample cruise_key values (YYYY-MM-NODC format)")
 ```
 
 ### Propagate cruise_key to child tables
@@ -602,7 +602,7 @@ from its composite natural key.
 
 | Table | Primary Key | Type |
 |-------|-------------|------|
-| `cruise` | `cruise_key` | Natural key (YYMMKK); also retains `cruise_uuid` from source |
+| `cruise` | `cruise_key` | Natural key (YYYY-MM-NODC); also retains `cruise_uuid` from source |
 | `ship` | `ship_key` | Natural key (2-letter) |
 | `site` | `site_uuid` | Source UUID (minted at sea) |
 | `tow` | `tow_uuid` | Source UUID (minted at sea) |
@@ -686,7 +686,7 @@ Problems with
 [calcofi4r::`cc_grid`](https://calcofi.io/calcofi4r/articles/calcofi4r.html):
 
 -   uses old station (line, position) vs newer site (line, station)
--   `sta_lin`, `sta_pos`: integer, so drops necessary decimal that is found in `sta_key`
+-   `sta_lin`, `sta_pos`: integer, so drops necessary decimal that is found in `site_key`
 -   `sta_lin == 90, sta_pos == 120` repeats for:
     -   `sta_pattern` == 'historical' (`sta_dpos` == 20); and
     -   `sta_pattern` == 'standard' (`sta_dpos` == 10)
@@ -701,14 +701,16 @@ librarian::shelf(
 )
 
 cc_grid_v2 <- calcofi4r::cc_grid |>
+  # handle bundled data that may still have sta_key (renamed to site_key)
+  rename(any_of(c(site_key = "sta_key"))) |>
   select(
-    sta_key,
+    site_key,
     shore = sta_shore,
     pattern = sta_pattern,
     spacing = sta_dpos
   ) |>
   separate_wider_delim(
-    sta_key,
+    site_key,
     ",",
     names = c("line", "station"),
     cols_remove = F
@@ -732,17 +734,18 @@ cc_grid_v2 <- calcofi4r::cc_grid |>
   )
 
 cc_grid_ctrs_v2 <- calcofi4r::cc_grid_ctrs |>
-  select(sta_key, pattern = sta_pattern) |>
+  rename(any_of(c(site_key = "sta_key"))) |>
+  select(site_key, pattern = sta_pattern) |>
   left_join(
     cc_grid_v2 |>
       st_drop_geometry(),
-    by = c("sta_key", "pattern")
+    by = c("site_key", "pattern")
   ) |>
-  select(-sta_key) |>
+  select(-site_key) |>
   relocate(grid_key)
 
 cc_grid_v2 <- cc_grid_v2 |>
-  select(-sta_key)
+  select(-site_key)
 
 cc_grid_v2 |>
   st_drop_geometry() |>
@@ -796,6 +799,9 @@ message("Grid table created with geometry columns")
 
 grid_stats <- assign_grid_key(con, "site")
 grid_stats |> datatable()
+
+# add standardized site_key (NNN.N NNN.N format)
+standardize_site_key(con, "site", "line", "station")
 ```
 
 ### Add `segment`: line segments between consecutive sites
@@ -803,8 +809,10 @@ grid_stats |> datatable()
 ```{r}
 #| label: mk_segment
 
-segment <- tbl(con, "site") |>
-  select(cruise_key, orderocc, site_uuid, lon = longitude, lat = latitude) |>
+# use SQL to avoid GEOMETRY column type issue with tbl()
+segment <- tbl(con, sql(
+  "SELECT cruise_key, orderocc, site_uuid, longitude AS lon, latitude AS lat
+   FROM site")) |>
   left_join(
     tbl(con, "tow") |>
       select(site_uuid, time_start),
@@ -897,7 +905,17 @@ message("Segment table created")
 map_segment_png <- here(glue("figures/{provider}_{dataset}_segment_map.png"))
 
 if (!file_exists(map_segment_png)) {
-  segment_sf <- cc_read_sf(con, "segment") |>
+  # exclude native GEOMETRY column (unsupported by duckdb R driver);
+  # use ST_AsText to convert to WKT for sf
+  seg_cols <- dbGetQuery(con,
+    "SELECT column_name FROM information_schema.columns
+     WHERE table_name = 'segment' AND data_type != 'GEOMETRY'")$column_name
+  seg_sql  <- paste(
+    "SELECT", paste(seg_cols, collapse = ", "),
+    ", ST_AsText(geom) AS geom_wkt FROM segment")
+  segment_sf <- dbGetQuery(con, seg_sql) |>
+    st_as_sf(wkt = "geom_wkt", crs = 4326) |>
+    select(-geom_wkt) |>
     mutate(year = year(time_beg))
 
   m <- mapView(segment_sf, zcol = "year")
@@ -915,27 +933,34 @@ htmltools::img(
 ```{r}
 #| label: show_latest
 
+# exclude tables with GEOMETRY columns (unsupported by dm_from_con via duckdb R driver)
 all_tbls <- DBI::dbListTables(con)
+geom_tbls <- DBI::dbGetQuery(con,
+  "SELECT DISTINCT table_name FROM information_schema.columns
+   WHERE data_type = 'GEOMETRY'")$table_name
+dm_tbls <- setdiff(all_tbls, geom_tbls)
 
-add_cc_spatial_keys <- function(dm) {
-  dm |>
-    dm_add_pk(grid, grid_key) |>
-    dm_add_pk(segment, segment_id) |>
-    dm_add_fk(site, grid_key, grid) |>
-    dm_add_fk(segment, cruise_key, cruise)
-}
-
-dm_final <- dm_from_con(con, table_names = all_tbls, learn_keys = FALSE) |>
-  add_cc_keys() |>
-  add_cc_spatial_keys() |>
-  dm_set_colors(lightgreen = c(segment, grid))
-dm_draw(dm_final, view_type = "all")
+tryCatch({
+  dm_final <- dm_from_con(con, table_names = dm_tbls, learn_keys = FALSE) |>
+    add_cc_keys()
+  dm_draw(dm_final, view_type = "all")
+}, error = function(e) {
+  message(glue("dm diagram skipped: {e$message}"))
+  # list tables with row counts instead
+  tbl_stats <- purrr::map_dfr(all_tbls, function(t) {
+    n <- DBI::dbGetQuery(con, glue("SELECT COUNT(*) AS n FROM {t}"))$n
+    tibble(table = t, rows = n, has_geom = t %in% geom_tbls)
+  })
+  tbl_stats |> datatable(caption = "Tables in wrangling database")
+})
 ```
 
 ```{r}
 #| label: effort_stats
 
-d_eff <- tbl(con, "segment") |>
+# use sql() to avoid GEOMETRY column type issue with tbl()
+d_eff <- tbl(con, sql(
+  "SELECT segment_id, cruise_key, time_beg, time_hr, length_km FROM segment")) |>
   mutate(
     year = year(time_beg)
   ) |>
@@ -1094,19 +1119,30 @@ metadata_path <- build_metadata_json(
 )
 
 # write relationships.json sidecar with PKs/FKs
-dm_all <- dm_from_con(
-  con,
-  table_names = dbListTables(con),
-  learn_keys = FALSE
-) |>
-  add_cc_keys() |>
-  add_cc_spatial_keys()
-build_relationships_json(
-  dm = dm_all,
-  output_dir = dir_parquet,
-  provider = provider,
-  dataset = dataset
-)
+# note: tables with GEOMETRY columns are excluded from dm_from_con
+#   (duckdb R driver limitation); add_cc_keys may fail if referenced tables
+#   are excluded — wrap in tryCatch to gracefully handle
+geom_tbls_meta <- DBI::dbGetQuery(con,
+  "SELECT DISTINCT table_name FROM information_schema.columns
+   WHERE data_type = 'GEOMETRY'")$table_name
+dm_tbls_meta <- setdiff(dbListTables(con), geom_tbls_meta)
+
+tryCatch({
+  dm_all <- dm_from_con(
+    con,
+    table_names = dm_tbls_meta,
+    learn_keys = FALSE
+  ) |>
+    add_cc_keys()
+  build_relationships_json(
+    dm = dm_all,
+    output_dir = dir_parquet,
+    provider = provider,
+    dataset = dataset
+  )
+}, error = function(e) {
+  message(glue("relationships.json skipped (dm error): {e$message}"))
+})
 
 # show metadata summary
 metadata <- jsonlite::fromJSON(metadata_path)

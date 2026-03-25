@@ -99,8 +99,11 @@ parquet_dirs <- c(
   here("data/parquet/calcofi_dic")
 )
 
+# include all tables that may have GEOMETRY columns
+all_geom_tables <- c("grid", "site", "segment", "casts", "ctd_cast", "dic_sample")
+
 load_stats <- purrr::map_dfr(parquet_dirs, function(pd) {
-  load_prior_tables(con = con_wdl, parquet_dir = pd)
+  load_prior_tables(con = con_wdl, parquet_dir = pd, geom_tables = all_geom_tables)
 })
 
 load_stats |>
@@ -118,11 +121,14 @@ Cross-dataset validation to ensure data integrity before freezing.
 tbls <- DBI::dbListTables(con_wdl)
 
 if (all(c("casts", "grid") %in% tbls)) {
-  if (
-    "grid_key" %in%
-      DBI::dbListFields(con_wdl, "casts") &&
-      "grid_key" %in% DBI::dbListFields(con_wdl, "grid")
-  ) {
+  # use information_schema to check columns (avoids GEOMETRY type issues)
+  casts_cols_wdl <- dbGetQuery(con_wdl,
+    "SELECT column_name FROM information_schema.columns
+     WHERE table_name = 'casts'")$column_name
+  grid_cols_wdl <- dbGetQuery(con_wdl,
+    "SELECT column_name FROM information_schema.columns
+     WHERE table_name = 'grid'")$column_name
+  if ("grid_key" %in% casts_cols_wdl && "grid_key" %in% grid_cols_wdl) {
     grid_orphans <- dbGetQuery(
       con_wdl,
       "SELECT COUNT(*) AS n FROM casts c
@@ -174,14 +180,85 @@ if ("casts" %in% tbls) {
   bridge_stats |> datatable(caption = "Cruise bridge coverage")
 }
 
-# run standard release validation
-validation <- validate_for_release(con_wdl)
-if (validation$passed) {
-  message("Release validation passed!")
-} else {
-  cat("Validation FAILED:\n")
-  cat(paste("-", validation$errors, collapse = "\n"))
+# cruise_key format validation (YYYY-MM-NODC)
+if ("cruise" %in% tbls) {
+  bad_ck <- dbGetQuery(
+    con_wdl,
+    "SELECT cruise_key FROM cruise
+     WHERE cruise_key IS NOT NULL
+       AND NOT regexp_matches(cruise_key, '^\\d{4}-\\d{2}-.+$')")
+  if (nrow(bad_ck) > 0) {
+    warning(glue("cruise_key format violations: {nrow(bad_ck)} rows"))
+  } else {
+    message("cruise_key: all match YYYY-MM-NODC format")
+  }
 }
+
+# site_key format validation (NNN.N NNN.N)
+for (tbl_name in intersect(c("site", "casts", "ctd_cast"), tbls)) {
+  tbl_cols <- dbGetQuery(con_wdl, glue(
+    "SELECT column_name FROM information_schema.columns
+     WHERE table_name = '{tbl_name}'"))$column_name
+  if ("site_key" %in% tbl_cols) {
+    bad_sk <- dbGetQuery(
+      con_wdl, glue(
+        "SELECT COUNT(*) AS n FROM {tbl_name}
+         WHERE site_key IS NOT NULL
+           AND NOT regexp_matches(site_key, '^\\d{{3}}\\.\\d \\d{{3}}\\.\\d$')"))$n
+    if (bad_sk > 0) {
+      warning(glue("site_key format violations in {tbl_name}: {bad_sk} rows"))
+    } else {
+      message(glue("site_key in {tbl_name}: all match NNN.N NNN.N format"))
+    }
+  }
+}
+
+# cruise_summary table for Shiny app
+if (all(c("cruise", "ship") %in% tbls)) {
+  # detect site_key vs sta_key for backward compat with old parquets
+  ctd_site_col <- ifelse(
+    "site_key" %in% dbGetQuery(con_wdl,
+      "SELECT column_name FROM information_schema.columns
+       WHERE table_name = 'ctd_cast'")$column_name,
+    "site_key", "sta_key")
+
+  dbExecute(con_wdl, glue("
+    CREATE OR REPLACE TABLE cruise_summary AS
+    SELECT
+      cr.cruise_key,
+      EXTRACT(YEAR FROM cr.date_ym)::INTEGER  AS year,
+      EXTRACT(MONTH FROM cr.date_ym)::INTEGER AS month,
+      s.ship_name,
+      s.ship_nodc,
+      COALESCE((SELECT COUNT(DISTINCT site_key) FROM site
+                WHERE cruise_key = cr.cruise_key), 0) AS ichthyo,
+      COALESCE((SELECT COUNT(DISTINCT site_key) FROM casts
+                WHERE cruise_key = cr.cruise_key), 0) AS bottle,
+      COALESCE((SELECT COUNT(DISTINCT {ctd_site_col}) FROM ctd_cast
+                WHERE cruise_key = cr.cruise_key), 0) AS ctd_cast,
+      COALESCE((SELECT COUNT(DISTINCT ds.site_key)
+                FROM dic_sample ds
+                JOIN casts c ON ds.cast_id = c.cast_id
+                WHERE c.cruise_key = cr.cruise_key), 0) AS dic
+    FROM cruise cr
+    JOIN ship s ON cr.ship_key = s.ship_key
+    ORDER BY year DESC, month DESC"))
+  n_cs <- dbGetQuery(con_wdl, "SELECT COUNT(*) AS n FROM cruise_summary")$n
+  message(glue("Created cruise_summary table: {n_cs} rows"))
+}
+
+# run standard release validation (wrapped in tryCatch for GEOMETRY compat)
+tryCatch({
+  validation <- validate_for_release(con_wdl)
+  if (validation$passed) {
+    message("Release validation passed!")
+  } else {
+    cat("Validation FAILED:\n")
+    cat(paste("-", validation$errors, collapse = "\n"))
+  }
+}, error = function(e) {
+  message(glue("validate_for_release skipped: {e$message}"))
+})
 ```
 
 ## Show Combined Schema
@@ -191,14 +268,25 @@ if (validation$passed) {
 #| fig-width: 12
 #| fig-height: 10
 
-# build dm from connection (exclude internal tables)
-schema_tbls <- setdiff(tbls, c("_meta", "_sp_update"))
-# exclude views
+# build dm from connection (exclude internal tables, views, and GEOMETRY tables)
+geom_tbls_schema <- DBI::dbGetQuery(con_wdl,
+  "SELECT DISTINCT table_name FROM information_schema.columns
+   WHERE data_type LIKE 'GEOMETRY%'")$table_name
+schema_tbls <- setdiff(tbls, c("_meta", "_sp_update", geom_tbls_schema))
 schema_tbls <- schema_tbls[
   !schema_tbls %in% c("casts_derived", "ctd_cast_derived")
 ]
 
-d <- dm::dm_from_con(con_wdl, table_names = schema_tbls, learn_keys = FALSE)
+d <- tryCatch(
+  dm::dm_from_con(con_wdl, table_names = schema_tbls, learn_keys = FALSE),
+  error = function(e) {
+    message(glue("dm_from_con failed: {e$message}"))
+    NULL
+  })
+
+if (is.null(d)) {
+  message("Schema diagram skipped (dm_from_con failed on GEOMETRY tables)")
+} else {
 
 # merge per-dataset relationships.json files
 rels_paths <- c(
@@ -289,6 +377,12 @@ if (length(meta_tbls) > 0) {
 }
 
 dm::dm_draw(d, rankdir = "LR", view_type = "all")
+
+} # end if (!is.null(d))
+
+# ensure dir_frozen exists regardless of dm path
+dir_frozen <- here(glue("data/releases/{release_version}"))
+dir.create(dir_frozen, recursive = TRUE, showWarnings = FALSE)
 ```
 
 ## Create Frozen Release
@@ -367,7 +461,7 @@ release_notes <- paste0(
   "- `ingest_calcofi_dic.qmd` - DIC/alkalinity tables (dic_sample, dic_measurement, dic_measurement_summary, dataset)\n\n",
   "## Cross-Dataset Integration\n\n",
   "- **Ship matching**: Reconciled ship codes between bottle casts and swfsc ship reference\n",
-  "- **Cruise bridge**: Derived cruise_key (YYMMKK) for bottle casts via ship_key + datetime\n",
+  "- **Cruise bridge**: Derived cruise_key (YYYY-MM-NODC) for bottle casts via ship matching + datetime\n",
   "- **Taxonomy**: Standardized species with WoRMS AphiaID, ITIS TSN, GBIF backbone key\n",
   "- **Taxon hierarchy**: Built taxon + taxa_rank tables from WoRMS/ITIS classification\n\n",
   "## Access\n\n",

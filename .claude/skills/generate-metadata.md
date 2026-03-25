@@ -104,7 +104,7 @@ Standard column name mappings to apply:
 - Latitude → `lat_dec` or `latitude` (type: double)
 - Longitude → `lon_dec` or `longitude` (type: double)
 - Date/DateTime → `datetime_utc` (type: timestamp)
-- Station → `sta_key` (type: varchar)
+- Station → `site_key` (type: varchar)
 - Line → `line_key` (type: varchar)
 - Depth → `depth_m` (type: double, units: m)
 - Species/SppCode → `species_id` (type: smallint)

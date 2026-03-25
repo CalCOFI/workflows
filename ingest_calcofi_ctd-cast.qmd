@@ -93,6 +93,7 @@ dir_create(c(dir_dl, dirname(db_path), dir_parquet, dir_tmp), recurse = TRUE)
 
 con <- get_duckdb_con(db_path)
 load_duckdb_extension(con, "spatial")
+load_duckdb_extension(con, "icu")
 
 # limit memory to half of system RAM so DuckDB spills to disk instead of consuming all RAM
 mem_gb <- ps::ps_system_memory()$total / 1024^3 / 2 |> floor()
@@ -658,7 +659,8 @@ pts <- d_bind |>
   ) |>
   st_join(
     calcofi4r::cc_grid |>
-      select(grid_site = sta_key),
+      rename(any_of(c(site_key = "sta_key"))) |>
+      select(grid_site = site_key),
     join = st_intersects
   )
 st_agr(pts) <- "constant"
@@ -891,7 +893,8 @@ dbExecute(
    WHERE LENGTH(cruise_key) > 6"
 )
 
-# derive ship_key from last 2 chars of cruise_key (YYMMKK format)
+# derive ship_key from last 2 chars of cruise_key (YYMMKK format from filename;
+# converted to YYYY-MM-NODC later via convert_cruise_key_format())
 dbExecute(con, "ALTER TABLE ctd_raw ADD COLUMN IF NOT EXISTS ship_key VARCHAR")
 dbExecute(con, "UPDATE ctd_raw SET ship_key = RIGHT(cruise_key, 2)")
 
@@ -1100,7 +1103,7 @@ dbExecute(
   CREATE OR REPLACE TABLE ctd_summary AS
   SELECT
     c.cruise_key,
-    c.sta_key,
+    c.site_key,
     m.depth_m,
     m.measurement_type,
     AVG(m.measurement_value)    AS avg,
@@ -1113,7 +1116,7 @@ dbExecute(
   INNER JOIN ctd_cast c ON m.ctd_cast_uuid = c.ctd_cast_uuid
   WHERE NOT isnan(m.measurement_value)
     AND isfinite(m.measurement_value)
-  GROUP BY c.cruise_key, c.sta_key, m.depth_m, m.measurement_type"
+  GROUP BY c.cruise_key, c.site_key, m.depth_m, m.measurement_type"
 )
 
 n_summ <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM ctd_summary")$n
@@ -1123,7 +1126,7 @@ assign_deterministic_uuids_md5(
   con = con,
   table_name = "ctd_summary",
   id_col = "ctd_summary_uuid",
-  key_cols = c("cruise_key", "sta_key", "depth_m", "measurement_type")
+  key_cols = c("cruise_key", "site_key", "depth_m", "measurement_type")
 )
 ```
 
@@ -1272,18 +1275,25 @@ build_metadata_json(
 )
 
 # write relationships.json sidecar with PKs/FKs
-dm_ctd <- dm_from_con(con) |>
-  dm_add_pk(ctd_cast, ctd_cast_uuid) |>
-  dm_add_pk(ctd_measurement, ctd_measurement_uuid) |>
-  dm_add_pk(ctd_summary, ctd_summary_uuid) |>
-  dm_add_pk(measurement_type, measurement_type) |>
-  dm_add_fk(ctd_measurement, ctd_cast_uuid, ctd_cast)
-build_relationships_json(
-  dm = dm_ctd,
-  output_dir = dir_parquet,
-  provider = provider,
-  dataset = dataset
-)
+# exclude tables with GEOMETRY columns (duckdb R driver limitation)
+geom_tbls_ctd <- DBI::dbGetQuery(con,
+  "SELECT DISTINCT table_name FROM information_schema.columns
+   WHERE data_type LIKE 'GEOMETRY%'")$table_name
+dm_tbls_ctd <- setdiff(DBI::dbListTables(con), geom_tbls_ctd)
+
+tryCatch({
+  dm_ctd <- dm_from_con(con, table_names = dm_tbls_ctd, learn_keys = FALSE) |>
+    dm_add_pk(ctd_summary, ctd_summary_uuid) |>
+    dm_add_pk(measurement_type, measurement_type)
+  build_relationships_json(
+    dm = dm_ctd,
+    output_dir = dir_parquet,
+    provider = provider,
+    dataset = dataset
+  )
+}, error = function(e) {
+  message(glue("relationships.json skipped: {e$message}"))
+})
 ```
 
 ## Upload to GCS
@@ -1315,15 +1325,23 @@ close_duckdb(con)
 con_pq <- get_duckdb_con()
 load_duckdb_extension(con_pq, "spatial")
 
-# read ctd_cast from parquet
-dbExecute(
-  con_pq,
-  glue(
-    "
+# read ctd_cast from parquet (exclude GEOMETRY columns for R driver compat)
+dbExecute(con_pq, glue("
+  CREATE OR REPLACE VIEW _ctd_probe AS
+  SELECT * FROM read_parquet('{dir_parquet}/ctd_cast.parquet') LIMIT 0"))
+pq_geom_cols <- dbGetQuery(con_pq,
+  "SELECT column_name FROM information_schema.columns
+   WHERE table_name = '_ctd_probe' AND data_type LIKE 'GEOMETRY%'")$column_name
+pq_all_cols <- dbGetQuery(con_pq,
+  "SELECT column_name FROM information_schema.columns
+   WHERE table_name = '_ctd_probe'
+   ORDER BY ordinal_position")$column_name
+pq_safe_cols <- setdiff(pq_all_cols, pq_geom_cols)
+dbExecute(con_pq, "DROP VIEW IF EXISTS _ctd_probe")
+dbExecute(con_pq, glue("
   CREATE VIEW ctd_cast AS
-  SELECT * FROM read_parquet('{dir_parquet}/ctd_cast.parquet')"
-  )
-)
+  SELECT {paste(pq_safe_cols, collapse = ', ')}
+  FROM read_parquet('{dir_parquet}/ctd_cast.parquet')"))
 
 cruise_spans <- tbl(con_pq, "ctd_cast") |>
   group_by(cruise_key, data_stage) |>
