@@ -1,0 +1,25 @@
+---
+title: "Quarto Playground"
+format: html
+---
+
+```
+{mermaid}
+erDiagram
+    CUSTOMER ||--o{ ORDER : places
+    ORDER ||--|{ LINE-ITEM : contains
+    CUSTOMER }|..|{ DELIVERY-ADDRESS : uses
+```
+
+``` {r}
+librarian::shelf(DiagrammeR, quiet = T)
+
+DiagrammeR(
+  "
+erDiagram
+    CUSTOMER ||--o{ ORDER : places
+    ORDER ||--|{ LINE-ITEM : contains
+    CUSTOMER }|..|{ DELIVERY-ADDRESS : uses
+"
+)
+```

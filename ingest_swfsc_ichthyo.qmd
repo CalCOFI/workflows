@@ -810,9 +810,13 @@ standardize_site_key(con, "site", "line", "station")
 #| label: mk_segment
 
 # use SQL to avoid GEOMETRY column type issue with tbl()
-segment <- tbl(con, sql(
-  "SELECT cruise_key, orderocc, site_uuid, longitude AS lon, latitude AS lat
-   FROM site")) |>
+segment <- tbl(
+  con,
+  sql(
+    "SELECT cruise_key, orderocc, site_uuid, longitude AS lon, latitude AS lat
+   FROM site"
+  )
+) |>
   left_join(
     tbl(con, "tow") |>
       select(site_uuid, time_start),
@@ -907,12 +911,16 @@ map_segment_png <- here(glue("figures/{provider}_{dataset}_segment_map.png"))
 if (!file_exists(map_segment_png)) {
   # exclude native GEOMETRY column (unsupported by duckdb R driver);
   # use ST_AsText to convert to WKT for sf
-  seg_cols <- dbGetQuery(con,
+  seg_cols <- dbGetQuery(
+    con,
     "SELECT column_name FROM information_schema.columns
-     WHERE table_name = 'segment' AND data_type != 'GEOMETRY'")$column_name
-  seg_sql  <- paste(
-    "SELECT", paste(seg_cols, collapse = ", "),
-    ", ST_AsText(geom) AS geom_wkt FROM segment")
+     WHERE table_name = 'segment' AND data_type != 'GEOMETRY'"
+  )$column_name
+  seg_sql <- paste(
+    "SELECT",
+    paste(seg_cols, collapse = ", "),
+    ", ST_AsText(geom) AS geom_wkt FROM segment"
+  )
   segment_sf <- dbGetQuery(con, seg_sql) |>
     st_as_sf(wkt = "geom_wkt", crs = 4326) |>
     select(-geom_wkt) |>
@@ -935,32 +943,41 @@ htmltools::img(
 
 # exclude tables with GEOMETRY columns (unsupported by dm_from_con via duckdb R driver)
 all_tbls <- DBI::dbListTables(con)
-geom_tbls <- DBI::dbGetQuery(con,
+geom_tbls <- DBI::dbGetQuery(
+  con,
   "SELECT DISTINCT table_name FROM information_schema.columns
-   WHERE data_type = 'GEOMETRY'")$table_name
+   WHERE data_type = 'GEOMETRY'"
+)$table_name
 dm_tbls <- setdiff(all_tbls, geom_tbls)
 
-tryCatch({
-  dm_final <- dm_from_con(con, table_names = dm_tbls, learn_keys = FALSE) |>
-    add_cc_keys()
-  dm_draw(dm_final, view_type = "all")
-}, error = function(e) {
-  message(glue("dm diagram skipped: {e$message}"))
-  # list tables with row counts instead
-  tbl_stats <- purrr::map_dfr(all_tbls, function(t) {
-    n <- DBI::dbGetQuery(con, glue("SELECT COUNT(*) AS n FROM {t}"))$n
-    tibble(table = t, rows = n, has_geom = t %in% geom_tbls)
-  })
-  tbl_stats |> datatable(caption = "Tables in wrangling database")
-})
+tryCatch(
+  {
+    dm_final <- dm_from_con(con, table_names = dm_tbls, learn_keys = FALSE) |>
+      add_cc_keys()
+    dm_draw(dm_final, view_type = "all")
+  },
+  error = function(e) {
+    message(glue("dm diagram skipped: {e$message}"))
+    # list tables with row counts instead
+    tbl_stats <- purrr::map_dfr(all_tbls, function(t) {
+      n <- DBI::dbGetQuery(con, glue("SELECT COUNT(*) AS n FROM {t}"))$n
+      tibble(table = t, rows = n, has_geom = t %in% geom_tbls)
+    })
+    tbl_stats |> datatable(caption = "Tables in wrangling database")
+  }
+)
 ```
 
 ```{r}
 #| label: effort_stats
 
 # use sql() to avoid GEOMETRY column type issue with tbl()
-d_eff <- tbl(con, sql(
-  "SELECT segment_id, cruise_key, time_beg, time_hr, length_km FROM segment")) |>
+d_eff <- tbl(
+  con,
+  sql(
+    "SELECT segment_id, cruise_key, time_beg, time_hr, length_km FROM segment"
+  )
+) |>
   mutate(
     year = year(time_beg)
   ) |>
@@ -1122,27 +1139,32 @@ metadata_path <- build_metadata_json(
 # note: tables with GEOMETRY columns are excluded from dm_from_con
 #   (duckdb R driver limitation); add_cc_keys may fail if referenced tables
 #   are excluded — wrap in tryCatch to gracefully handle
-geom_tbls_meta <- DBI::dbGetQuery(con,
+geom_tbls_meta <- DBI::dbGetQuery(
+  con,
   "SELECT DISTINCT table_name FROM information_schema.columns
-   WHERE data_type = 'GEOMETRY'")$table_name
+   WHERE data_type = 'GEOMETRY'"
+)$table_name
 dm_tbls_meta <- setdiff(dbListTables(con), geom_tbls_meta)
 
-tryCatch({
-  dm_all <- dm_from_con(
-    con,
-    table_names = dm_tbls_meta,
-    learn_keys = FALSE
-  ) |>
-    add_cc_keys()
-  build_relationships_json(
-    dm = dm_all,
-    output_dir = dir_parquet,
-    provider = provider,
-    dataset = dataset
-  )
-}, error = function(e) {
-  message(glue("relationships.json skipped (dm error): {e$message}"))
-})
+tryCatch(
+  {
+    dm_all <- dm_from_con(
+      con,
+      table_names = dm_tbls_meta,
+      learn_keys = FALSE
+    ) |>
+      add_cc_keys()
+    build_relationships_json(
+      dm = dm_all,
+      output_dir = dir_parquet,
+      provider = provider,
+      dataset = dataset
+    )
+  },
+  error = function(e) {
+    message(glue("relationships.json skipped (dm error): {e$message}"))
+  }
+)
 
 # show metadata summary
 metadata <- jsonlite::fromJSON(metadata_path)
@@ -1163,24 +1185,6 @@ tibble(
 listviewer::jsonedit(
   jsonlite::fromJSON(metadata_path, simplifyVector = FALSE),
   mode = "view"
-)
-```
-
-## Upload to GCS Archive
-
-Upload parquet files, manifest, and metadata sidecar to `gs://calcofi-db/ingest/{provider}_{dataset}/`.
-
-```{r}
-#| label: upload_gcs
-
-gcs_ingest_prefix <- glue("ingest/{dir_label}")
-gcs_bucket <- "calcofi-db"
-
-# sync to GCS — only uploads new or changed files
-sync_results <- sync_to_gcs(
-  local_dir = dir_parquet,
-  gcs_prefix = gcs_ingest_prefix,
-  bucket = gcs_bucket
 )
 ```
 
@@ -1310,6 +1314,24 @@ if (file.exists(manifest_path)) {
   )
   message(glue("Updated manifest: {length(new_tables)} tables"))
 }
+```
+
+## Upload to GCS Archive
+
+Upload parquet files, manifest, and metadata sidecar to `gs://calcofi-db/ingest/{provider}_{dataset}/`.
+
+```{r}
+#| label: upload_gcs
+
+gcs_ingest_prefix <- glue("ingest/{dir_label}")
+gcs_bucket <- "calcofi-db"
+
+# sync to GCS — only uploads new or changed files
+sync_results <- sync_to_gcs(
+  local_dir = dir_parquet,
+  gcs_prefix = gcs_ingest_prefix,
+  bucket = gcs_bucket
+)
 ```
 
 ## Cleanup

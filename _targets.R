@@ -1,4 +1,5 @@
 # calcofi data workflow pipeline
+# start fresh: targets::tar_invalidate(everything())
 # run with: targets::tar_make() [Rscript -e 'targets::tar_make()']
 # visualize: targets::tar_visnetwork()
 
@@ -27,7 +28,7 @@ list(
   tar_target(
     ingest_calcofi_ctd_cast,
     {
-      ingest_swfsc_ichthyo  # needs ship, cruise, grid from ichthyo
+      ingest_swfsc_ichthyo # needs ship, cruise, grid from ichthyo
       quarto::quarto_render("ingest_calcofi_ctd-cast.qmd")
       "data/parquet/calcofi_ctd-cast/manifest.json"
     },
@@ -37,9 +38,18 @@ list(
   tar_target(
     ingest_calcofi_dic,
     {
-      ingest_calcofi_bottle  # needs casts + bottle for FK matching
+      ingest_calcofi_bottle # needs casts + bottle for FK matching
       quarto::quarto_render("ingest_calcofi_dic.qmd")
       "data/parquet/calcofi_dic/manifest.json"
+    },
+    format = "file"
+  ),
+
+  tar_target(
+    ingest_spatial,
+    {
+      quarto::quarto_render("ingest_spatial.qmd")
+      "data/parquet/spatial"
     },
     format = "file"
   ),
@@ -51,6 +61,7 @@ list(
       ingest_calcofi_bottle
       ingest_calcofi_ctd_cast
       ingest_calcofi_dic
+      ingest_spatial
       quarto::quarto_render("release_database.qmd")
       here::here("data/releases")
     },

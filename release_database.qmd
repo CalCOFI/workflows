@@ -2,7 +2,8 @@
 title: "Release CalCOFI Database"
 execute:
   echo: true
-  warning: false
+  message: true
+  warning: true
 editor_options:
   chunk_output_type: console
 format:
@@ -57,9 +58,11 @@ flowchart LR
 #| label: setup
 
 devtools::load_all(here::here("../calcofi4db"))
+devtools::load_all(here::here("../calcofi4r"))
 # cleanup_gcs_obsolete(dry_run = F)
 librarian::shelf(
   CalCOFI / calcofi4db,
+  CalCOFI / calcofi4r,
   DBI,
   dm,
   dplyr,
@@ -99,11 +102,12 @@ parquet_dirs <- c(
   here("data/parquet/calcofi_dic")
 )
 
-# include all tables that may have GEOMETRY columns
-all_geom_tables <- c("grid", "site", "segment", "casts", "ctd_cast", "dic_sample")
-
 load_stats <- purrr::map_dfr(parquet_dirs, function(pd) {
-  load_prior_tables(con = con_wdl, parquet_dir = pd, geom_tables = all_geom_tables)
+  load_prior_tables(
+    con = con_wdl,
+    parquet_dir = pd,
+    geom_tables = all_geom_tables
+  )
 })
 
 load_stats |>
@@ -122,12 +126,16 @@ tbls <- DBI::dbListTables(con_wdl)
 
 if (all(c("casts", "grid") %in% tbls)) {
   # use information_schema to check columns (avoids GEOMETRY type issues)
-  casts_cols_wdl <- dbGetQuery(con_wdl,
+  casts_cols_wdl <- dbGetQuery(
+    con_wdl,
     "SELECT column_name FROM information_schema.columns
-     WHERE table_name = 'casts'")$column_name
-  grid_cols_wdl <- dbGetQuery(con_wdl,
+     WHERE table_name = 'casts'"
+  )$column_name
+  grid_cols_wdl <- dbGetQuery(
+    con_wdl,
     "SELECT column_name FROM information_schema.columns
-     WHERE table_name = 'grid'")$column_name
+     WHERE table_name = 'grid'"
+  )$column_name
   if ("grid_key" %in% casts_cols_wdl && "grid_key" %in% grid_cols_wdl) {
     grid_orphans <- dbGetQuery(
       con_wdl,
@@ -136,6 +144,7 @@ if (all(c("casts", "grid") %in% tbls)) {
          AND c.grid_key NOT IN (SELECT grid_key FROM grid)"
     )$n
     message(glue("Grid key orphans in casts: {grid_orphans}"))
+    # Grid key orphans in casts: 0
   }
 }
 
@@ -152,6 +161,7 @@ if ("ship" %in% tbls) {
     message("ship_key: all unique")
   }
 }
+# ship_key: all unique
 
 # cruise PK uniqueness
 if ("cruise" %in% tbls) {
@@ -166,6 +176,7 @@ if ("cruise" %in% tbls) {
     message("cruise_key: all unique")
   }
 }
+# cruise_key: all unique
 
 # cruise bridge coverage
 if ("casts" %in% tbls) {
@@ -186,25 +197,35 @@ if ("cruise" %in% tbls) {
     con_wdl,
     "SELECT cruise_key FROM cruise
      WHERE cruise_key IS NOT NULL
-       AND NOT regexp_matches(cruise_key, '^\\d{4}-\\d{2}-.+$')")
+       AND NOT regexp_matches(cruise_key, '^\\d{4}-\\d{2}-.+$')"
+  )
   if (nrow(bad_ck) > 0) {
     warning(glue("cruise_key format violations: {nrow(bad_ck)} rows"))
   } else {
     message("cruise_key: all match YYYY-MM-NODC format")
   }
 }
+# Warning message: cruise_key format violations: 1 rows
+# cruise_key: 2019-07-
 
 # site_key format validation (NNN.N NNN.N)
 for (tbl_name in intersect(c("site", "casts", "ctd_cast"), tbls)) {
-  tbl_cols <- dbGetQuery(con_wdl, glue(
-    "SELECT column_name FROM information_schema.columns
-     WHERE table_name = '{tbl_name}'"))$column_name
+  tbl_cols <- dbGetQuery(
+    con_wdl,
+    glue(
+      "SELECT column_name FROM information_schema.columns
+     WHERE table_name = '{tbl_name}'"
+    )
+  )$column_name
   if ("site_key" %in% tbl_cols) {
     bad_sk <- dbGetQuery(
-      con_wdl, glue(
+      con_wdl,
+      glue(
         "SELECT COUNT(*) AS n FROM {tbl_name}
          WHERE site_key IS NOT NULL
-           AND NOT regexp_matches(site_key, '^\\d{{3}}\\.\\d \\d{{3}}\\.\\d$')"))$n
+           AND NOT regexp_matches(site_key, '^\\d{{3}}\\.\\d \\d{{3}}\\.\\d$')"
+      )
+    )$n
     if (bad_sk > 0) {
       warning(glue("site_key format violations in {tbl_name}: {bad_sk} rows"))
     } else {
@@ -212,17 +233,27 @@ for (tbl_name in intersect(c("site", "casts", "ctd_cast"), tbls)) {
     }
   }
 }
+# site_key in casts: all match NNN.N NNN.N format
+# Warning message: site_key format violations in site: 982 rows
 
 # cruise_summary table for Shiny app
 if (all(c("cruise", "ship") %in% tbls)) {
   # detect site_key vs sta_key for backward compat with old parquets
   ctd_site_col <- ifelse(
-    "site_key" %in% dbGetQuery(con_wdl,
-      "SELECT column_name FROM information_schema.columns
-       WHERE table_name = 'ctd_cast'")$column_name,
-    "site_key", "sta_key")
+    "site_key" %in%
+      dbGetQuery(
+        con_wdl,
+        "SELECT column_name FROM information_schema.columns
+       WHERE table_name = 'ctd_cast'"
+      )$column_name,
+    "site_key",
+    "sta_key"
+  )
 
-  dbExecute(con_wdl, glue("
+  dbExecute(
+    con_wdl,
+    glue(
+      "
     CREATE OR REPLACE TABLE cruise_summary AS
     SELECT
       cr.cruise_key,
@@ -242,26 +273,66 @@ if (all(c("cruise", "ship") %in% tbls)) {
                 WHERE c.cruise_key = cr.cruise_key), 0) AS dic
     FROM cruise cr
     JOIN ship s ON cr.ship_key = s.ship_key
-    ORDER BY year DESC, month DESC"))
+    ORDER BY year DESC, month DESC"
+    )
+  )
   n_cs <- dbGetQuery(con_wdl, "SELECT COUNT(*) AS n FROM cruise_summary")$n
   message(glue("Created cruise_summary table: {n_cs} rows"))
 }
+# Created cruise_summary table: 691 rows
+tbl(con_wdl, "cruise_summary") |>
+  collect() |>
+  datatable(caption = "cruise_summary preview")
 
 # run standard release validation (wrapped in tryCatch for GEOMETRY compat)
-tryCatch({
-  validation <- validate_for_release(con_wdl)
-  if (validation$passed) {
-    message("Release validation passed!")
-  } else {
-    cat("Validation FAILED:\n")
-    cat(paste("-", validation$errors, collapse = "\n"))
+tryCatch(
+  {
+    validation <- validate_for_release(con_wdl)
+    if (validation$passed) {
+      message("Release validation passed!")
+    } else {
+      cat("Validation FAILED:\n")
+      cat(paste("-", validation$errors, collapse = "\n"))
+    }
+  },
+  error = function(e) {
+    message(glue("validate_for_release skipped: {e$message}"))
   }
-}, error = function(e) {
-  message(glue("validate_for_release skipped: {e$message}"))
-})
+)
 ```
 
 ## Show Combined Schema
+
+```{r}
+
+erd <- cc_erd(con_wdl, layoutdir = "TB")
+plot(erd)
+
+erd <- cc_erd(
+  con_wdl,
+  rels_path = file.path(dir_frozen, "relationships.json"),
+  colors = list(
+    lightblue = c("cruise", "ship", "site", "tow", "net"),
+    lightyellow = c("ichthyo", "species", "lookup", "taxon", "taxa_rank"),
+    lightgreen = c("grid", "segment"),
+    pink = c(
+      "casts",
+      "bottle",
+      "bottle_measurement",
+      "cast_condition",
+      "measurement_type"
+    ),
+    lavender = c("ctd_cast", "ctd_measurement", "ctd_summary"),
+    lightsalmon = c("dic_sample", "dic_measurement", "dic_measurement_summary"),
+    white = c("dataset")
+  )
+)
+# lns <- cat(erd) |> separate("\n")
+
+# erd <- readLines("diagrams/erd.mmd") |> paste(collapse = "\n")
+plot(erd)
+
+```
 
 ```{r}
 #| label: combined_schema
@@ -269,9 +340,11 @@ tryCatch({
 #| fig-height: 10
 
 # build dm from connection (exclude internal tables, views, and GEOMETRY tables)
-geom_tbls_schema <- DBI::dbGetQuery(con_wdl,
+geom_tbls_schema <- DBI::dbGetQuery(
+  con_wdl,
   "SELECT DISTINCT table_name FROM information_schema.columns
-   WHERE data_type LIKE 'GEOMETRY%'")$table_name
+   WHERE data_type LIKE 'GEOMETRY%'"
+)$table_name
 schema_tbls <- setdiff(tbls, c("_meta", "_sp_update", geom_tbls_schema))
 schema_tbls <- schema_tbls[
   !schema_tbls %in% c("casts_derived", "ctd_cast_derived")
@@ -282,102 +355,105 @@ d <- tryCatch(
   error = function(e) {
     message(glue("dm_from_con failed: {e$message}"))
     NULL
-  })
+  }
+)
 
 if (is.null(d)) {
   message("Schema diagram skipped (dm_from_con failed on GEOMETRY tables)")
 } else {
-
-# merge per-dataset relationships.json files
-rels_paths <- c(
-  here("data/parquet/swfsc_ichthyo/relationships.json"),
-  here("data/parquet/calcofi_bottle/relationships.json"),
-  here("data/parquet/calcofi_ctd-cast/relationships.json"),
-  here("data/parquet/calcofi_dic/relationships.json")
-)
-rels_paths <- rels_paths[file.exists(rels_paths)]
-
-dir_frozen <- here(glue("data/releases/{release_version}"))
-dir.create(dir_frozen, recursive = TRUE, showWarnings = FALSE)
-rels_merged_path <- file.path(dir_frozen, "relationships.json")
-
-if (length(rels_paths) > 0) {
-  merge_relationships_json(rels_paths, rels_merged_path)
-
-  # apply merged PKs/FKs to dm
-  d <- read_relationships_json(rels_merged_path, dm = d)
-
-  # add cross-dataset FKs (bottle casts → ichthyo cruise/ship)
-  d <- tryCatch(
-    dm::dm_add_fk(d, casts, cruise_key, cruise),
-    error = function(e) d
+  # merge per-dataset relationships.json files
+  rels_paths <- c(
+    here("data/parquet/swfsc_ichthyo/relationships.json"), # TODO: add
+    here("data/parquet/calcofi_bottle/relationships.json"), # TODO: add
+    here("data/parquet/calcofi_ctd-cast/relationships.json"),
+    here("data/parquet/calcofi_dic/relationships.json")
   )
-  d <- tryCatch(dm::dm_add_fk(d, casts, ship_key, ship), error = function(e) d)
-  d <- tryCatch(dm::dm_add_fk(d, casts, grid_key, grid), error = function(e) d)
+  rels_paths <- rels_paths[file.exists(rels_paths)]
 
-  # re-write merged file with cross-dataset FKs included
-  build_relationships_json(
-    dm = d,
-    output_dir = dir_frozen,
-    provider = "calcofi",
-    dataset = "calcofi-db-release"
+  dir_frozen <- here(glue("data/releases/{release_version}"))
+  dir.create(dir_frozen, recursive = TRUE, showWarnings = FALSE)
+  rels_merged_path <- file.path(dir_frozen, "relationships.json")
+
+  if (length(rels_paths) > 0) {
+    merge_relationships_json(rels_paths, rels_merged_path)
+
+    # apply merged PKs/FKs to dm
+    d <- read_relationships_json(rels_merged_path, dm = d)
+
+    # add cross-dataset FKs (bottle casts → ichthyo cruise/ship)
+    d <- tryCatch(
+      dm::dm_add_fk(d, casts, cruise_key, cruise),
+      error = function(e) d
+    )
+    d <- tryCatch(dm::dm_add_fk(d, casts, ship_key, ship), error = function(e) {
+      d
+    })
+    d <- tryCatch(dm::dm_add_fk(d, casts, grid_key, grid), error = function(e) {
+      d
+    })
+
+    # re-write merged file with cross-dataset FKs included
+    build_relationships_json(
+      dm = d,
+      output_dir = dir_frozen,
+      provider = "calcofi",
+      dataset = "calcofi-db-release"
+    )
+  }
+
+  # set table colors by group
+  ichthyo_tbls <- intersect(
+    c("cruise", "ship", "site", "tow", "net"),
+    schema_tbls
   )
-}
+  species_tbls <- intersect(
+    c("ichthyo", "species", "lookup", "taxon", "taxa_rank"),
+    schema_tbls
+  )
+  spatial_tbls <- intersect(c("grid", "segment"), schema_tbls)
+  bottle_tbls <- intersect(
+    c(
+      "casts",
+      "bottle",
+      "bottle_measurement",
+      "cast_condition",
+      "measurement_type"
+    ),
+    schema_tbls
+  )
+  ctd_tbls <- intersect(
+    c("ctd_cast", "ctd_measurement", "ctd_summary"),
+    schema_tbls
+  )
+  dic_tbls <- intersect(
+    c("dic_sample", "dic_measurement", "dic_measurement_summary"),
+    schema_tbls
+  )
+  meta_tbls <- intersect(c("dataset"), schema_tbls)
 
-# set table colors by group
-ichthyo_tbls <- intersect(
-  c("cruise", "ship", "site", "tow", "net"),
-  schema_tbls
-)
-species_tbls <- intersect(
-  c("ichthyo", "species", "lookup", "taxon", "taxa_rank"),
-  schema_tbls
-)
-spatial_tbls <- intersect(c("grid", "segment"), schema_tbls)
-bottle_tbls <- intersect(
-  c(
-    "casts",
-    "bottle",
-    "bottle_measurement",
-    "cast_condition",
-    "measurement_type"
-  ),
-  schema_tbls
-)
-ctd_tbls <- intersect(
-  c("ctd_cast", "ctd_measurement", "ctd_summary"),
-  schema_tbls
-)
-dic_tbls <- intersect(
-  c("dic_sample", "dic_measurement", "dic_measurement_summary"),
-  schema_tbls
-)
-meta_tbls <- intersect(c("dataset"), schema_tbls)
+  if (length(ichthyo_tbls) > 0) {
+    d <- d |> dm::dm_set_colors(lightblue = !!ichthyo_tbls)
+  }
+  if (length(species_tbls) > 0) {
+    d <- d |> dm::dm_set_colors(lightyellow = !!species_tbls)
+  }
+  if (length(spatial_tbls) > 0) {
+    d <- d |> dm::dm_set_colors(lightgreen = !!spatial_tbls)
+  }
+  if (length(bottle_tbls) > 0) {
+    d <- d |> dm::dm_set_colors(pink = !!bottle_tbls)
+  }
+  if (length(ctd_tbls) > 0) {
+    d <- d |> dm::dm_set_colors(lavender = !!ctd_tbls)
+  }
+  if (length(dic_tbls) > 0) {
+    d <- d |> dm::dm_set_colors(lightsalmon = !!dic_tbls)
+  }
+  if (length(meta_tbls) > 0) {
+    d <- d |> dm::dm_set_colors(white = !!meta_tbls)
+  }
 
-if (length(ichthyo_tbls) > 0) {
-  d <- d |> dm::dm_set_colors(lightblue = !!ichthyo_tbls)
-}
-if (length(species_tbls) > 0) {
-  d <- d |> dm::dm_set_colors(lightyellow = !!species_tbls)
-}
-if (length(spatial_tbls) > 0) {
-  d <- d |> dm::dm_set_colors(lightgreen = !!spatial_tbls)
-}
-if (length(bottle_tbls) > 0) {
-  d <- d |> dm::dm_set_colors(pink = !!bottle_tbls)
-}
-if (length(ctd_tbls) > 0) {
-  d <- d |> dm::dm_set_colors(lavender = !!ctd_tbls)
-}
-if (length(dic_tbls) > 0) {
-  d <- d |> dm::dm_set_colors(lightsalmon = !!dic_tbls)
-}
-if (length(meta_tbls) > 0) {
-  d <- d |> dm::dm_set_colors(white = !!meta_tbls)
-}
-
-dm::dm_draw(d, rankdir = "LR", view_type = "all")
-
+  dm::dm_draw(d, rankdir = "LR", view_type = "all")
 } # end if (!is.null(d))
 
 # ensure dir_frozen exists regardless of dm path
@@ -391,6 +467,15 @@ Strip provenance columns and export clean parquet files for public
 access. See
 [Frozen DuckLake](https://ducklake.select/2025/10/24/frozen-ducklake/)
 pattern.
+
+```{r}
+#| label: eval_off_rest
+
+knitr::opts_chunk$set(
+  eval = FALSE
+)
+```
+
 
 ```{r}
 #| label: freeze_release

@@ -1,8 +1,1285 @@
-## TODO:
+## TODO:)
 
 - since re-ingest ctd-cast (2601RL) & dic, run release-database.qmd (version and notes?)
 - add ERDDAP server
 - ∆ ingest_dic: matching ships (-> ~expocode YYYY-MM_NODC)/sites/bottles, schema matching to foreign tables incl datasets (color code?). https://en.wikipedia.org/wiki/Expocode: NODCYYYYMMDD
+
+
+## 2026-03-27..-30 int-app speed up with cache query (h3t roadmap)
+
+The `@../int-app/app` is currently very slow to load because it loads the default query for all hexagons at all zoom levels. What can we do to speed this up? In the short term, I'm thinking of simply caching the results of the default query. In the long term, I'd like to extend [mapgl::add\_h3j_source()](https://walker-data.com/mapgl/reference/add_h3j_source.html) to using [h3t](https://github.com/INSPIDE/h3j-h3t) and setup an h3t endpoint that accepts arbitrary SQL to serve zoom and extent level H3 hexagon summary statistics. Can you help me with the short term now, and set stage for long term?
+
+⏺ Updated plan
+  ⎿  /plan to preview
+
+ Ready to code?
+
+ Here is Claude's plan:
+
+ Speed Up CalCOFI int-app: Cache Default Query + h3t Roadmap
+
+ Context
+
+ The Shiny app at int-app/app/ is slow to load because on every startup it
+ runs expensive DuckDB queries and aggregates data across 10 H3 resolutions
+ for both species (sardine) and environment (temperature). The bottleneck is
+ prep_sp_hex() and prep_env_hex() which each: .compute() a lazy table →
+ union_all across 10 resolutions → group_by/summarize → .collect() → join with
+  44MB sf_hex geometry. Additionally, prep_summary_stats() forces two
+ .collect() calls.
+
+ Short-term fix: Cache the pre-computed hex lists so the default view loads
+ instantly from disk on subsequent launches.
+ Long-term direction: Document h3t architecture for progressive tile-based
+ loading.
+
+ Short-term: Cache Default Hex Data
+
+ What gets cached (as RDS files in app/app_cache/)
+
+ ┌───────────────┬──────────────────────┬──────────────────────────────────┐
+ │     Item      │   Source function    │          Why expensive           │
+ ├───────────────┼──────────────────────┼──────────────────────────────────┤
+ │               │                      │ DuckDB query + 10-res            │
+ │ sp_hex_list   │ prep_sp_hex()        │ aggregation + collect + geometry │
+ │               │                      │  join                            │
+ ├───────────────┼──────────────────────┼──────────────────────────────────┤
+ │ env_hex_list  │ prep_env_hex()       │ Same pattern for env data        │
+ ├───────────────┼──────────────────────┼──────────────────────────────────┤
+ │ summary_stats │ prep_summary_stats() │ Two .collect() calls on full     │
+ │               │                      │ lazy tables                      │
+ └───────────────┴──────────────────────┴──────────────────────────────────┘
+
+ NOT cached: df_sp/df_env lazy tables (still needed live for time series,
+ scatter, downloads); scale lists (cheap to recompute from hex data via
+ interpolate_palette()).
+
+ Cache invalidation
+
+ Key = hash of (default params + DuckDB file mtime). Automatically invalidates
+  when:
+ - Database file is updated (mtime changes)
+ - Default parameters change in code
+
+ Files to modify
+
+ 1. int-app/app/global.R — add cache path variable
+
+ After line 22 (hex_geo <- here("data/hex.geojson")), add:
+ cache_dir <- here("app/app_cache")
+
+ Already gitignored (int-app/app/.gitignore has app_cache).
+
+ 2. int-app/app/functions.R — add 3 cache helper functions
+
+ Insert after prep_env_hex() (~line 541):
+
+ - cache_key(db_path) — hashes default params + file.info(db_path)$mtime via
+ rlang::hash()
+ - load_cache(cache_dir, db_path) — checks key match, returns list of cached
+ items or NULL
+ - save_cache(cache_dir, db_path, sp_hex_list, env_hex_list, summary_stats) —
+ writes RDS files + key
+
+ 3. int-app/app/server.R — restructure session.once block (lines 45–121)
+
+ Current flow:
+ get_sp() → get_env() → validate n_sp → prep_summary_stats() → prep_sp_hex() →
+  map_sp()
+
+ New flow:
+ get_sp() → get_env()  (still needed for downstream)
+   ↓
+ load_cache()
+   ├─ HIT:  use cached sp_hex_list, env_hex_list, summary_stats
+   └─ MISS: compute all three + save_cache()
+   ↓
+ interpolate_palette() → map_sp()  (always, from hex data)
+ store rx$env_hex_list for renderMaplibreCompare
+
+ Key changes:
+ - df_sp/df_env lazy tables are always created (downstream needs them)
+ - On cache hit, skip prep_sp_hex(), prep_env_hex(), prep_summary_stats() —
+ the expensive parts
+ - Store rx$env_hex_list so renderMaplibreCompare can use it
+
+ 4. int-app/app/server.R — update renderMaplibreCompare (lines 180–209)
+
+ Use rx$env_hex_list on first render (from cache), clear it after use so
+ subsequent re-renders with changed env_stat recompute from rx$df_env:
+
+ if (!is.null(rx$env_hex_list) && env_stat == "mean") {
+   env_hex_list    <- rx$env_hex_list
+   rx$env_hex_list <- NULL  # clear so re-renders recompute
+ } else {
+   env_hex_list <- prep_env_hex(rx$df_env, res_range, env_stat)
+ }
+
+ Long-term: h3t Tile Endpoint (Documentation Only)
+
+ Add a comment block near the hex prep functions in functions.R documenting
+ the target architecture:
+
+ - Plumber API endpoint /api/h3t/{z}/{x}/{y} accepting SQL query params
+ - Determines H3 resolution from zoom z, filters by tile extent
+ - Returns h3j-format JSON ([{h3: "hex_id", value: ...}, ...])
+ - Map sources switch from add_fill_layer(source = sf_data) to
+ add_h3j_source(url = api_endpoint) (or future add_h3t_source())
+ - Eliminates preloading all resolutions; data fetched on-demand per viewport
+
+ No code changes for this — just a documented roadmap comment.
+
+ Verification
+
+ 1. Delete app/app_cache/ if it exists
+ 2. Run the app — first launch computes and saves cache (confirm
+ app_cache/*.rds files created)
+ 3. Restart the app — second launch loads from cache (confirm faster startup
+ via debug messages)
+ 4. Verify maps, time series, scatter plots, and data downloads all work
+ identically
+ 5. Touch the DuckDB file (change mtime) → restart app → confirm cache
+ invalidates and recomputes
+
+⏺ Everything looks correct. Here's a summary of all changes:                   
+                                                                               
+  global.R — Added cache_dir path variable (line 23)                           
+                                                                               
+  functions.R — Two additions:                                                 
+  - h3t roadmap TODO comment near hex prep functions (lines 341-349)           
+  - Three cache helper functions after prep_env_hex() (lines 553-598):         
+  cache_key(), load_cache(), save_cache()
+                                                                               
+  server.R — Three changes:                                       
+  - Added env_hex_list to reactiveValues initialization (line 14)              
+  - Restructured session.once block (lines 45-135): tries cache first, falls   
+  back to computing + saving cache                                          
+  - Updated renderMaplibreCompare (lines 205-211): uses cached rx$env_hex_list 
+  on first render, clears it after use                            
+                                                                               
+  How it works:                                                   
+  1. First app launch: cache miss → computes everything (same as before) →     
+  saves RDS files to app/app_cache/                                            
+  2. Subsequent launches: cache hit → loads hex lists from disk, skipping
+  prep_sp_hex(), prep_env_hex(), and prep_summary_stats() (the expensive DuckDB
+   queries)                                                                    
+  3. Cache auto-invalidates when the DuckDB file changes (mtime-based key)
+                                                                               
+  To test: run the app once to populate the cache, then restart — the second   
+  launch should be noticeably faster. Debug messages will confirm "using cached
+   default data" vs "cache miss".                                              
+                                  
+
+## 2026-03-27..-30 add US/CA boundaries
+
+Within the `@../int-app/app` I want to add the following layers for viewing:
+
+- 12NM Territorial Sea
+- 24NM Contiguous Zone
+- 200NM EEZ and Maritime Boundaries
+
+The data for this is described here:
+
+- [U.S. Office of Coast Survey](https://nauticalcharts.noaa.gov/data/us-maritime-limits-and-boundaries.html)
+
+I have downloaded the shapefile to here:
+
+- `@~/My Drive/projects/calcofi/data-public/US-maritime-boundaries/USMaritimeLimitsNBoundaries.shp` (2.9 MB)
+
+Rather than send the whole shapefile to the client, I would rather use one of the hosted web services:
+
+- [MaritimeBoundaries/US\\_Maritime\\_Limits\\_Boundaries (MapServer)](https://maritimeboundaries.noaa.gov/arcgis/rest/services/MaritimeBoundaries/US_Maritime_Limits_Boundaries/MapServer)
+- [maritimeboundaries.noaa.gov/arcgis/services/MaritimeBoundaries/US\\_Maritime\\_Limits\\_Boundaries/MapServer/WMSServer?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetCapabilities](https://maritimeboundaries.noaa.gov/arcgis/services/MaritimeBoundaries/US_Maritime_Limits_Boundaries/MapServer/WMSServer?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetCapabilities)
+
+Or create a pmtiles layer for display.
+
+←  ☐ Data source  ☐ Scope  ✔ Submit  →
+
+**Data source** How should the boundary data be served to the map?
+
+ 1. Static GeoJSON                ┌───────────────────────────────────────────┐
+   (Recommended)                  │ data prep                                 │
+  2. NOAA WMS raster tiles        │                                           │
+❯ 3. PMTiles (local or GCS)       │ ogr2ogr -f GeoJSON /tmp/maritime.geojson  │
+                                  │   USMaritimeLimitsNBoundaries.shp         │
+                                  │ tippecanoe -o app/www/maritime.pmtiles    │
+                                  │   -z14 -Z0 --drop-densest-as-needed       │
+                                  │   /tmp/maritime.geojson                   │
+                                  │                                           │
+                                  │ in map_sp() / map_env()                   │
+                                  │                                           │
+                                  │ map |>                                    │
+                                  │   add_pmtiles_source(                     │
+                                  │     id  = "maritime",                     │
+                                  │     url = "maritime.pmtiles") |>          │
+                                  │   add_line_layer(                         │
+                                  │     id           = "eez",                 │
+                                  │     source       = "maritime",            │
+                                  │     source_layer = "maritime",            │
+                                  │     filter = list("==", "EEZ", 1))        │
+                                  └───────────────────────────────────────────┘
+
+
+**Scope** Should the boundary layers be limited to the Pacific Coast, or include all US 
+maritime boundaries (so users can pan to other regions)?
+                                                                               
+  1. Pacific Coast only                                                        
+     17 features, smallest file. Covers the CalCOFI study area. Boundaries     
+     disappear if user pans to Hawaii, Alaska, etc.                            
+  2. All US boundaries                                                         
+     260 features across all regions. Slightly larger file (~500 KB GeoJSON)   
+     but boundaries visible everywhere the user pans.                          
+❯ 3. Include Hawaii and Alaska since some CalCOFI data extends there
+
+I just moved the data source from:
+
+- OLD: `@~/My Drive/projects/calcofi/data-public/US-maritime-boundaries/USMaritimeLimitsNBoundaries.shp`
+- NEW: `@~/My Drive/projects/calcofi/data-public/_spatial/NOAA_maritime-boundaries/USMaritimeLimitsNBoundaries.shp`
+
+There are many other spatial boundaries of interest in this parent folder:
+
+  `@~/My Drive/projects/calcofi/data-public/_spatial`:
+
+    BOEM_WindPlanningAreas
+    CA_assembly-districts_2020
+    CA_CDFW-regions
+    CA_county-boundaries
+    CA_cowcod-conservation-areas
+    CA_marine-protected-areas
+    CA_maritime-boundaries
+    CA_ports
+    CA_senate-districts_2020
+    CA_State-Water-Quality-Protection-Areas
+    CA_water-districts
+    CA_watershed-boundaries
+    MEOW_ecoregions_Southern-California-Bight
+    NOAA_aquaculture_SoCal-AOAs
+    NOAA_IEA-regions
+    NOAA_maritime-boundaries
+    NOAA_ocean-disposal-sites
+    NOAA_ONMS-Sanctuaries
+
+Let's create a new workbook `digest_spatial.qmd` to make all of these available through  the app interface. Let's push them all to GCS into a `_spatial` subfolder of `calcofi-files-public` bucket. Before generating the pmtiles, pre-process all with:
+
+- Project to unprojected geographic coordinate system, ie `EPSG:4326`
+- Simplify column names to `snake_case` convention using `janitor::clean_names()`
+- Ensure the first column is a unique integer with column name `id`, borrowing from shapefile `FID` if exists, otherwise creating one. This will allow for efficient matching if need be to send summary stats to fields.
+
+Come up with a method in the app for turning on/off any of these spatial datasets. Consider that in future we may summarize data to any of these shapes, so having a flexible way to enable or disable datasets will be important, along with local access to the same shapes for rapid summary calculation within the integrated CalCOFI duckdb.
+
+←  ☐ Registry  ☐ UI placement  ☐ Error handling  ✔ Submit  →                   
+                                                                               
+**Registry** How should the spatial dataset registry be maintained? This registry maps each dataset to its PMTiles URL, layer group, styling, and geometry type.           
+                                                        
+❯ 1. CSV in metadata/ (Recommended)                                            
+     A `metadata/spatial_layers.csv` file with columns like: dataset_id, name,
+     group, geom_type, fill_color, line_color, description. Loaded in global.R.
+      Easy to edit and extend as new datasets are added.
+  2. Embedded in global.R
+     Define a list/tibble directly in global.R with all layer metadata. Simpler
+      (one file) but harder to maintain as the list grows.
+  3. YAML config file
+     A `spatial_layers.yml` with grouped structure. More expressive for nested
+     groups but adds a dependency on yaml parsing.
+
+**UI placement** For the layers control UI, where should the spatial layer toggles appear?      
+                                                                               
+  1. mapgl layers        ┌───────────────────────────────────────────┐         
+    control              │ No preview available                      │         
+    (Recommended)        └───────────────────────────────────────────┘         
+ 2. Sidebar accordion                                                          
+    panel                
+ 3. Both: sidebar + ✔   
+    map control
+
+Notes: I want both, so the Sidebar can be used to view all available layers (ideally in a modal window) and select a layer to be used for summarizing data into features (in future). It is also nice to be able to quickly turn on/off layers that have already been added to the map with the mapgl layers control (but not show the full list there as it would get too busy).
+
+**Error handling**Some datasets have issues: CA_water-districts is empty (broken source link),   
+and several show questionable geometry in ogrinfo. How should the workbook     
+handle these?                                                                  
+                                                                               
+  1. Skip broken, warn in output                                               
+     Skip datasets that fail to load (empty files, missing geometry). Log a    
+     warning in the rendered QMD output so it's visible. Process what we can.  
+  2. Fail fast on errors                                                       
+     Stop processing on any dataset error so nothing is partially published.   
+❯ 3. Skip broken, warn in output. Also skip data if pmtiles already exists, unless `redo_if_exists <- TRUE`. This way new spatial data can be added here and easily ingested without redoing all the datasets. Let's also rename this to `ingest_spatial.qmd` and include it in the integrated database ingestion process, without any dependencies and `release_database.qmd` becomes dependent on it. This way the spatial querying can happen within the duckdb.
+
+⏺ Updated plan
+  ⎿  /plan to preview
+
+⏺ The plan covers 8 steps:
+
+  1. metadata/spatial_layers.csv — registry with dataset IDs, groups, styling,
+  filter expressions, and default visibility per layer
+  2. ingest_spatial.qmd — processes all 17 datasets (skip CA_water-districts):
+  read → reproject to 4326 → clean_names → ensure integer id → write parquet +
+  PMTiles → upload to GCS
+  3. _targets.R — add ingest_spatial (no dependencies), add as dependency of
+  release_database
+  4. release_database.qmd — include spatial parquet tables in release DuckDB
+  5. global.R — load registry CSV, define PMTiles base URL
+  6. functions.R — add_spatial_layers() helper that adds all PMTiles sources +
+  layers (hidden by default) + grouped layers control for quick toggle
+  7. ui.R + server.R — "Map Layers" sidebar button opens modal with grouped
+  checkboxes; toggles visibility via set_layout_property() proxy on both sides
+  of compare map
+  8. Theme-reactive styling — adjust line/fill colors on dark/light toggle
+
+  Key design: PMTiles sources pre-loaded at map creation (required by mapgl),
+  all layers hidden by default. Modal for full layer management; mapgl layers
+  control shows only enabled layers for quick on/off.
+
+───────────────────────────────────────────────────────────────────────────────
+ Ready to code?
+
+ Here is Claude's plan:
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ Add Spatial Boundary Layers: ingest_spatial.qmd + App Integration
+
+ Context
+
+ CalCOFI needs reference spatial boundary layers (maritime zones, protected
+ areas, administrative boundaries, etc.) available for:
+ 1. Visual overlay on the interactive app's compare map
+ 2. Future spatial summarization of CalCOFI data into boundary features
+ 3. In-database spatial queries via DuckDB
+
+ Source data: 18 spatial datasets in ~/My
+ Drive/projects/calcofi/data-public/_spatial/. Each needs standardized
+ processing → PMTiles (for map display) + parquet (for DuckDB queries) →
+ uploaded to GCS.
+
+ Architecture Overview
+
+ ingest_spatial.qmd
+   reads: metadata/spatial_layers.csv  (registry)
+   reads: ~/My Drive/.../data-public/_spatial/*/  (source shapefiles)
+   writes: data/parquet/spatial/*.parquet  (for DuckDB)
+   writes: data/pmtiles/*.pmtiles  (for map display)
+   uploads: gs://calcofi-files-public/_spatial/*.pmtiles
+
+ int-app/app
+   reads: metadata/spatial_layers.csv  (layer config)
+   loads: PMTiles from https://file.calcofi.io/_spatial/*.pmtiles
+   loads: spatial parquet tables in calcofi.duckdb (for future summarization)
+
+ ---
+ Step 1: Create metadata/spatial_layers.csv
+
+ Registry of all spatial datasets. One row per visual layer (a dataset with
+ sub-types like NOAA maritime gets multiple rows sharing the same
+ pmtiles_file).
+
+ Columns:
+ - dataset_id — unique snake_case ID (e.g., noaa_maritime_ts)
+ - dataset_group — grouping for UI (e.g., noaa_maritime_boundaries)
+ - name — display name (e.g., "12NM Territorial Sea")
+ - group — UI category: "Maritime Zones", "Protected Areas", "Administrative",
+  "Energy & Industry", "Ecological"
+ - source_folder — folder name in _spatial/ (e.g., NOAA_maritime-boundaries)
+ - source_file — filename (e.g., USMaritimeLimitsNBoundaries.shp); for .gdb,
+ include layer name after |
+ - geom_type — polygon, line, point
+ - filter_expr — optional JSON filter for sub-layers (e.g., ["==", ["get",
+ "ts"], 1])
+ - line_color — hex color for lines/outlines
+ - fill_color — hex color for polygon fills (NA for lines)
+ - line_width — default line width
+ - fill_opacity — default fill opacity
+ - default_visible — TRUE/FALSE whether layer is initially visible
+ - description — brief description
+ - attribution — data source attribution
+
+ File: /Users/bbest/Github/CalCOFI/workflows/metadata/spatial_layers.csv
+
+ Layer grouping plan
+
+ ┌────────────────┬───────────────────────────────────────────┬────────────┐
+ │     Group      │                 Datasets                  │ Sub-layers │
+ ├────────────────┼───────────────────────────────────────────┼────────────┤
+ │                │                                           │ 12NM TS,   │
+ │ Maritime Zones │ NOAA_maritime-boundaries                  │ 24NM CZ,   │
+ │                │                                           │ 200NM EEZ  │
+ ├────────────────┼───────────────────────────────────────────┼────────────┤
+ │                │                                           │ CA 3NM     │
+ │ Maritime Zones │ CA_maritime-boundaries                    │ state      │
+ │                │                                           │ waters     │
+ ├────────────────┼───────────────────────────────────────────┼────────────┤
+ │ Protected      │ CA_marine-protected-areas                 │ (single    │
+ │ Areas          │                                           │ layer)     │
+ ├────────────────┼───────────────────────────────────────────┼────────────┤
+ │ Protected      │ NOAA_ONMS-Sanctuaries                     │ (single    │
+ │ Areas          │                                           │ layer)     │
+ ├────────────────┼───────────────────────────────────────────┼────────────┤
+ │ Protected      │ CA_cowcod-conservation-areas              │ (single    │
+ │ Areas          │                                           │ layer)     │
+ ├────────────────┼───────────────────────────────────────────┼────────────┤
+ │ Protected      │ CA_State-Water-Quality-Protection-Areas   │ (single    │
+ │ Areas          │                                           │ layer)     │
+ ├────────────────┼───────────────────────────────────────────┼────────────┤
+ │ Administrative │ CA_county-boundaries                      │ (single    │
+ │                │                                           │ layer)     │
+ ├────────────────┼───────────────────────────────────────────┼────────────┤
+ │ Administrative │ CA_assembly-districts_2020                │ (single    │
+ │                │                                           │ layer)     │
+ ├────────────────┼───────────────────────────────────────────┼────────────┤
+ │ Administrative │ CA_senate-districts_2020                  │ (single    │
+ │                │                                           │ layer)     │
+ ├────────────────┼───────────────────────────────────────────┼────────────┤
+ │ Administrative │ CA_CDFW-regions                           │ (single    │
+ │                │                                           │ layer)     │
+ ├────────────────┼───────────────────────────────────────────┼────────────┤
+ │ Administrative │ CA_watershed-boundaries                   │ (single    │
+ │                │                                           │ layer)     │
+ ├────────────────┼───────────────────────────────────────────┼────────────┤
+ │ Energy &       │ BOEM_WindPlanningAreas                    │ (single    │
+ │ Industry       │                                           │ layer)     │
+ ├────────────────┼───────────────────────────────────────────┼────────────┤
+ │ Energy &       │ NOAA_aquaculture_SoCal-AOAs               │ (single    │
+ │ Industry       │                                           │ layer)     │
+ ├────────────────┼───────────────────────────────────────────┼────────────┤
+ │ Energy &       │ NOAA_ocean-disposal-sites                 │ (single    │
+ │ Industry       │                                           │ layer)     │
+ ├────────────────┼───────────────────────────────────────────┼────────────┤
+ │ Energy &       │                                           │ (single    │
+ │ Industry       │ CA_ports                                  │ layer,     │
+ │                │                                           │ points)    │
+ ├────────────────┼───────────────────────────────────────────┼────────────┤
+ │ Ecological     │ MEOW_ecoregions_Southern-California-Bight │ (single    │
+ │                │                                           │ layer)     │
+ ├────────────────┼───────────────────────────────────────────┼────────────┤
+ │ Ecological     │ NOAA_IEA-regions                          │ (single    │
+ │                │                                           │ layer)     │
+ └────────────────┴───────────────────────────────────────────┴────────────┘
+
+ Skip: CA_water-districts (empty/broken source file)
+
+ ---
+ Step 2: Create ingest_spatial.qmd
+
+ File: /Users/bbest/Github/CalCOFI/workflows/ingest_spatial.qmd
+
+ Structure
+
+ ```yml
+ ---
+ title: "Ingest Spatial Boundaries"
+ ---
+ ```
+
+ Setup chunk:
+ ```r
+ librarian::shelf(
+   calcofi/calcofi4db, dplyr, fs, glue, here, janitor,
+   purrr, readr, sf, stringr, tibble,
+   quiet = T)
+
+ redo_if_exists <- FALSE
+
+ dir_spatial <- "~/My Drive/projects/calcofi/data-public/_spatial"
+ dir_pmtiles <- here("data/pmtiles")
+ dir_parquet <- here("data/parquet/spatial")
+ gcs_bucket  <- "calcofi-files-public"
+ gcs_prefix  <- "_spatial"
+ pmtiles_base_url <- "https://file.calcofi.io/_spatial"
+
+ dir_create(dir_pmtiles)
+ dir_create(dir_parquet)
+
+ d_layers <- read_csv(here("metadata/spatial_layers.csv"))
+ ```
+
+ Processing loop — for each unique dataset_group in the registry:
+
+ ```r
+ process_spatial_dataset <- function(source_folder, source_file,
+ dataset_group,
+                                      dir_spatial, dir_pmtiles, dir_parquet,
+                                      redo_if_exists = FALSE) {
+   pmtiles_path <- file.path(dir_pmtiles, glue("{dataset_group}.pmtiles"))
+   parquet_path <- file.path(dir_parquet, glue("{dataset_group}.parquet"))
+
+   # skip if already exists
+
+   if (!redo_if_exists && file.exists(pmtiles_path) &&
+ file.exists(parquet_path)) {
+     message(glue("  skipping {dataset_group}: already exists"))
+     return(invisible(NULL))
+   }
+
+   # read source
+   src_path <- file.path(dir_spatial, source_folder, source_file)
+   sf_data  <- tryCatch(
+     st_read(src_path, quiet = TRUE),
+     error = function(e) {
+       warning(glue("  FAILED to read {source_folder}/{source_file}:
+ {e$message}"))
+       return(NULL)
+     })
+   if (is.null(sf_data) || nrow(sf_data) == 0) return(invisible(NULL))
+
+   # reproject to EPSG:4326
+   if (st_crs(sf_data)$epsg != 4326)
+     sf_data <- st_transform(sf_data, 4326)
+
+   # clean column names
+   sf_data <- clean_names(sf_data)
+
+   # ensure integer id column first
+   if (!"id" %in% names(sf_data))
+     sf_data <- sf_data |> mutate(id = row_number())
+   sf_data <- sf_data |>
+     mutate(id = as.integer(id)) |>
+     relocate(id)
+
+   # write parquet (WKB geometry for DuckDB)
+   sfarrow::st_write_parquet(sf_data, parquet_path)
+
+   # write temp GeoJSON → tippecanoe → PMTiles
+   geojson_tmp <- tempfile(fileext = ".geojson")
+   st_write(sf_data, geojson_tmp, delete_dsn = TRUE, quiet = TRUE)
+
+   system2("tippecanoe", args = c(
+     "-o", pmtiles_path,
+     "-z10", "-Z0",
+     "--simplification=10",
+     "--no-tile-size-limit",
+     "-l", dataset_group,
+     "--force",
+     geojson_tmp))
+   unlink(geojson_tmp)
+
+   message(glue("  done: {dataset_group} ({nrow(sf_data)} features)"))
+ }
+ ```
+
+ Upload to GCS after all datasets processed:
+ ```r
+ # sync all PMTiles to GCS
+ sync_to_gcs(dir_pmtiles, gcs_prefix, gcs_bucket)
+
+ Load into DuckDB — for each parquet, create a table in the wrangling DB:
+ con <- get_duckdb_con(here("data/calcofi_wrangling.duckdb"))
+ load_duckdb_extension(con, "spatial")
+
+ parquet_files <- dir_ls(dir_parquet, glob = "*.parquet")
+ for (pq in parquet_files) {
+   tbl_name <- paste0("spatial_", path_ext_remove(path_file(pq)))
+   dbExecute(con, glue(
+     "CREATE OR REPLACE TABLE {tbl_name} AS
+      SELECT * FROM read_parquet('{pq}')"))
+   # convert WKB blob to geometry
+   # (use existing calcofi4db pattern for WKB → GEOMETRY conversion)
+ }
+ ```
+
+ Key pre-processing notes
+
+ - BOEM_WindPlanningAreas: .gdb format — use st_read(dsn, layer =
+ "BOEM_Wind_Planning_Areas_2_2023")
+ - NOAA_ocean-disposal-sites: .gpkg format — st_read() handles natively
+ - NOAA_ONMS-Sanctuaries: Nested subfolder — source_file should include
+ relative path
+ - CA_water-districts: Skip (empty file, warn in output)
+ - Datasets with projected CRS (EPSG:3310, 6414, Web Mercator):
+ st_transform(4326)
+
+ ---
+ Step 3: Add to _targets.R
+
+ Insert ingest_spatial as an independent target (no dependencies). Add it as a
+  dependency of release_database.
+ ```r
+ tar_target(
+   ingest_spatial,
+   {
+     quarto::quarto_render("ingest_spatial.qmd")
+     "data/parquet/spatial"
+   },
+   format = "file"
+ ),
+
+ tar_target(
+   release_database,
+   {
+     ingest_swfsc_ichthyo
+     ingest_calcofi_bottle
+     ingest_calcofi_ctd_cast
+     ingest_calcofi_dic
+     ingest_spatial              # ← add dependency
+     quarto::quarto_render("release_database.qmd")
+     here::here("data/releases")
+   },
+   format = "file"
+ ),
+ ```
+
+ File: /Users/bbest/Github/CalCOFI/workflows/_targets.R
+
+ ---
+ Step 4: Update release_database.qmd
+
+ Add a section to include spatial tables in the release database. Load each
+ data/parquet/spatial/*.parquet into the release DuckDB so the app has spatial
+  tables for queries.
+
+ File: /Users/bbest/Github/CalCOFI/workflows/release_database.qmd
+
+ ---
+ Step 5: App — load registry and PMTiles sources in global.R
+
+ After line 98 (sf_hex <- st_read(hex_geo, quiet = TRUE)):
+ ```r
+ # spatial layers registry ----
+ d_spatial_layers <- read_csv(
+   here("../workflows/metadata/spatial_layers.csv"),
+   show_col_types = FALSE)
+ pmtiles_base_url <- "https://file.calcofi.io/_spatial"
+ ```
+ File: /Users/bbest/Github/CalCOFI/int-app/app/global.R
+
+ ---
+ Step 6: App — add_spatial_layers() helper in functions.R
+
+ New function that adds all PMTiles sources and creates layers (all hidden by
+ default). Called in both map_sp() and map_env().
+
+ ```r
+ add_spatial_layers <- function(map, d_layers, is_dark = TRUE) {
+   # add one pmtiles source per unique dataset_group
+   for (grp in unique(d_layers$dataset_group)) {
+     url <- glue("{pmtiles_base_url}/{grp}.pmtiles")
+     map <- map |>
+       add_pmtiles_source(id = grp, url = url)
+   }
+
+   # add one layer per row
+   for (i in seq_len(nrow(d_layers))) {
+     row <- d_layers[i, ]
+     vis <- ifelse(row$default_visible, "visible", "none")
+
+     # parse filter expression if present
+     filt <- if (!is.na(row$filter_expr))
+       jsonlite::fromJSON(row$filter_expr, simplifyVector = FALSE)
+     else NULL
+
+     if (row$geom_type == "line") {
+       map <- map |>
+         add_line_layer(
+           id           = row$dataset_id,
+           source       = row$dataset_group,
+           source_layer = row$dataset_group,
+           line_color   = row$line_color,
+           line_width   = row$line_width,
+           line_opacity = 0.7,
+           visibility   = vis,
+           filter       = filt,
+           tooltip      = row$name)
+     } else if (row$geom_type == "polygon") {
+       map <- map |>
+         add_fill_layer(
+           id                 = row$dataset_id,
+           source             = row$dataset_group,
+           source_layer       = row$dataset_group,
+           fill_color         = row$fill_color,
+           fill_opacity       = row$fill_opacity,
+           fill_outline_color = row$line_color,
+           visibility         = vis,
+           filter             = filt,
+           tooltip            = row$name) |>
+         add_line_layer(
+           id           = paste0(row$dataset_id, "_outline"),
+           source       = row$dataset_group,
+           source_layer = row$dataset_group,
+           line_color   = row$line_color,
+           line_width   = row$line_width,
+           visibility   = vis,
+           filter       = filt)
+     } else if (row$geom_type == "point") {
+       map <- map |>
+         add_circle_layer(
+           id              = row$dataset_id,
+           source          = row$dataset_group,
+           source_layer    = row$dataset_group,
+           circle_color    = row$fill_color,
+           circle_radius   = 4,
+           circle_opacity  = 0.8,
+           visibility      = vis,
+           filter          = filt,
+           tooltip         = row$name)
+     }
+   }
+
+   # add layers control with grouped subsets for quick toggle
+   # only include layers marked default_visible = TRUE
+   visible_layers <- d_layers |> filter(default_visible)
+   if (nrow(visible_layers) > 0) {
+     ctrl_layers <- split(
+       setNames(visible_layers$dataset_id, visible_layers$name),
+       visible_layers$group)
+     map <- map |>
+       add_layers_control(
+         position    = "top-right",
+         layers      = ctrl_layers,
+         collapsible = TRUE)
+   }
+
+   map
+ }
+ ```
+
+ Integrate into map_sp() and map_env()
+
+ In map_sp() (after hexagon loop, before return):
+ ```r
+   sp_map <- sp_map |>
+     add_spatial_layers(d_spatial_layers, is_dark)
+ ```
+ Same pattern in map_env().
+
+ File: /Users/bbest/Github/CalCOFI/int-app/app/functions.R
+
+ ---
+ Step 7: App — sidebar modal for layer management in server.R
+
+ UI: Add "Map Layers" button in sidebar
+
+ In ui.R, add after the "Select Filters" button:
+ ```r
+ conditionalPanel(
+   "input.outputPanel === 'Map'",
+   actionButton("btn_layers", "Map Layers",
+                width = "100%", class = "mb-2",
+                icon = icon("layer-group")))
+ ```
+ Server: Modal with grouped checkboxes
+
+ In server.R, add an observer:
+ ```r
+ observeEvent(input$btn_layers, {
+   # build checkbox groups from registry
+   layer_choices <- split(
+     setNames(d_spatial_layers$dataset_id, d_spatial_layers$name),
+     d_spatial_layers$group)
+
+   showModal(modalDialog(
+     title = "Map Layers",
+     size  = "l",
+     # one checkboxGroupInput per group
+     tagList(
+       lapply(names(layer_choices), function(grp) {
+         checkboxGroupInput(
+           paste0("lyr_", janitor::make_clean_names(grp)),
+           grp,
+           choices  = layer_choices[[grp]],
+           selected = d_spatial_layers |>
+             filter(group == grp, default_visible) |>
+             pull(dataset_id))
+       })
+     ),
+     footer = modalButton("Close")
+   ))
+ })
+
+ # when checkboxes change → toggle layer visibility via proxy
+ observe({
+   # collect all selected layer IDs from all checkbox groups
+   all_groups <- unique(d_spatial_layers$group)
+   selected <- unlist(lapply(all_groups, function(grp) {
+     input_id <- paste0("lyr_", janitor::make_clean_names(grp))
+     input[[input_id]]
+   }))
+
+   # toggle each layer on both sides of compare map
+   for (lyr_id in d_spatial_layers$dataset_id) {
+     vis <- ifelse(lyr_id %in% selected, "visible", "none")
+     for (side in c("before", "after")) {
+       maplibre_compare_proxy("map", map_side = side) |>
+         set_layout_property(lyr_id, "visibility", vis)
+       # also toggle outline layer for polygons
+       if (paste0(lyr_id, "_outline") %in% ...) {
+         maplibre_compare_proxy("map", map_side = side) |>
+           set_layout_property(paste0(lyr_id, "_outline"), "visibility", vis)
+       }
+     }
+   }
+ })
+ ```
+
+ Files: /Users/bbest/Github/CalCOFI/int-app/app/ui.R,
+ /Users/bbest/Github/CalCOFI/int-app/app/server.R
+
+ ---
+ Step 8: Theme-reactive styling in server.R
+
+ In the existing observeEvent(input$dark_toggle, ...) handler, update spatial
+ layer colors when theme changes. Lighter colors on dark background, darker on
+  light.
+
+ File: /Users/bbest/Github/CalCOFI/int-app/app/server.R
+
+ ---
+ Verification
+
+ 1. Run ingest_spatial.qmd: Confirm all 17 datasets process successfully
+ (CA_water-districts skipped with warning). Check data/pmtiles/ and
+ data/parquet/spatial/ for output files.
+ 2. Check PMTiles sizes: Each should be 0.1-5 MB (BOEM may be larger due to
+ 9833 features).
+ 3. Verify GCS upload: gsutil ls gs://calcofi-files-public/_spatial/
+ 4. Run the app: shiny::runApp(here("app")) from int-app/
+ 5. Map layers control: Confirm default-visible layers appear on both sides of
+  compare map.
+ 6. Modal: Click "Map Layers" → toggle layers → confirm map updates.
+ 7. Theme toggle: Switch dark/light → boundary colors adjust.
+ 8. Pan to Hawaii/Alaska: Boundaries visible where expected.
+ 9. Pipeline: targets::tar_make() — confirm ingest_spatial runs before
+ release_database.
+
+ Files Modified/Created
+
+ ┌───────────────────────────────────────┬─────────────────────────────────┐
+ │                 File                  │             Action              │
+ ├───────────────────────────────────────┼─────────────────────────────────┤
+ │ workflows/metadata/spatial_layers.csv │ New: layer registry             │
+ ├───────────────────────────────────────┼─────────────────────────────────┤
+ │ workflows/ingest_spatial.qmd          │ New: processing workbook        │
+ ├───────────────────────────────────────┼─────────────────────────────────┤
+ │                                       │ Edit: add ingest_spatial        │
+ │ workflows/_targets.R                  │ target, add as dependency of    │
+ │                                       │ release_database                │
+ ├───────────────────────────────────────┼─────────────────────────────────┤
+ │ workflows/release_database.qmd        │ Edit: include spatial parquet   │
+ │                                       │ tables in release DB            │
+ ├───────────────────────────────────────┼─────────────────────────────────┤
+ │ int-app/app/global.R                  │ Edit: load spatial_layers.csv,  │
+ │                                       │ define PMTiles base URL         │
+ ├───────────────────────────────────────┼─────────────────────────────────┤
+ │                                       │ Edit: add add_spatial_layers(), │
+ │ int-app/app/functions.R               │  integrate into map_sp() and    │
+ │                                       │ map_env()                       │
+ ├───────────────────────────────────────┼─────────────────────────────────┤
+ │ int-app/app/ui.R                      │ Edit: add "Map Layers" button   │
+ │                                       │ in sidebar                      │
+ ├───────────────────────────────────────┼─────────────────────────────────┤
+ │                                       │ Edit: modal observer, layer     │
+ │ int-app/app/server.R                  │ toggle logic, theme-reactive    │
+ │                                       │ colors                          │
+ ├───────────────────────────────────────┼─────────────────────────────────┤
+ │ data/pmtiles/*.pmtiles                │ New: generated PMTiles (17      │
+ │                                       │ files)                          │
+ ├───────────────────────────────────────┼─────────────────────────────────┤
+ │ data/parquet/spatial/*.parquet        │ New: spatial parquet for DuckDB │
+ │                                       │  (17 files)                     │
+ └───────────────────────────────────────┴─────────────────────────────────┘
+
+⏺ Everything looks good. Here's a summary of all changes made:
+
+  Files created
+
+  File: workflows/metadata/spatial_layers.csv
+  Description: Registry of 19 visual layers across 17 dataset groups, with
+    source files, styling, filter expressions, and grouping
+  ────────────────────────────────────────
+  File: workflows/ingest_spatial.qmd
+  Description: Processing workbook: reads source data → reproject to 4326 →
+    clean_names → integer id → parquet + PMTiles → GCS upload → DuckDB load
+
+  Files modified
+
+  File: workflows/_targets.R
+  Changes: Added ingest_spatial target (no deps) + added as dependency of
+    release_database
+  ────────────────────────────────────────
+  File: int-app/app/global.R
+  Changes: Added jsonlite to shelf, loads spatial_layers.csv registry, defines
+    pmtiles_base_url
+  ────────────────────────────────────────
+  File: int-app/app/functions.R
+  Changes: Added add_spatial_layers() helper (~95 lines): adds PMTiles sources,
+
+    line/fill/circle layers per geom_type, grouped layers control. Integrated
+    into both map_sp() and map_env()
+  ────────────────────────────────────────
+  File: int-app/app/ui.R
+  Changes: Added "Map Layers" button (conditionally shown on Map tab)
+  ────────────────────────────────────────
+  File: int-app/app/server.R
+  Changes: Added modal observer (btn_layers): grouped checkboxes per category,
+    Apply button toggles layer visibility via set_layout_property() proxy on
+    both sides of compare map
+
+  Key architectural notes
+
+  - 6 datasets have missing .shp files (CA_assembly-districts, CA_CDFW-regions,
+   CA_county-boundaries, CA_senate-districts, CA_watershed-boundaries,
+  NOAA_IEA-regions) + CA_water-districts is empty. The workbook will skip these
+   with warnings.
+  - NOAA maritime boundaries uses sub-layer filters (TS=1, CZ=1, EEZ=1) — 3
+  visual layers from 1 PMTiles source
+  - NOAA ONMS Sanctuaries uses sanctuaries.rda (sf object with all 16
+  sanctuaries) rather than the single Chumash shapefile
+  - redo_if_exists <- FALSE skips re-processing datasets whose PMTiles/parquet
+  already exist
+
+  Next steps to test
+
+  1. Run ingest_spatial.qmd to generate PMTiles and parquet files
+  2. Upload PMTiles to GCS and sync to file.calcofi.io
+  3. Run the app to verify layers appear and the modal works
+
+But I shouldn't get this error because already projected to EPSG:4326, so    
+can be ignored, right? 10/13 [load-duckdb]                                     
+Error in `duckdb_result()`:                                                    
+! Invalid Error: Invalid Input Error: GEOMETRY columns with coordinate         
+reference system identifiers are not supported in storage versions prior       
+v1.5.0 (database "calcofi_wrangling" is using storage version v1.0.0+)         
+ℹ Context: rapi_execute                                                        
+ℹ Error type: INVALID                                                          
+Backtrace:                                                                     
+     ▆                                                                         
+  1. ├─DBI::dbExecute(con, glue("CREATE OR REPLACE TABLE {tbl_name} AS\n       
+SELECT * FROM read_parquet('{pq}')"))                                          
+  2. ├─DBI::dbExecute(con, glue("CREATE OR REPLACE TABLE {tbl_name} AS\n       
+SELECT * FROM read_parquet('{pq}')"))                                          
+  3. │ ├─DBI::dbSendStatement(conn, statement, ...)                            
+  4. │ └─DBI::dbSendStatement(conn, statement, ...)                            
+  5. │   ├─DBI::dbSendQuery(conn, statement, ...)                              
+  6. │   └─duckdb::dbSendQuery(conn, statement, ...)                           
+  7. │     └─duckdb (local) .local(conn, statement, ...)                       
+  8. │       └─duckdb:::duckdb_result(connection = conn, stmt_lst = stmt_lst,  
+arrow = arrow)                                                                 
+  9. │         └─duckdb:::duckdb_execute(res)                                  
+ 10. │           └─duckdb:::rethrow_rapi_execute(...)                          
+ 11. │             ├─rlang::try_fetch(...)                                     
+ 12. │             │ ├─base::tryCatch(...)                                     
+ 13. │             │ │ └─base (local) tryCatchList(expr, classes, parentenv,   
+handlers)                                                                      
+ 14. │             │ │   └─base (local) tryCatchOne(expr, names, parentenv,    
+handlers[[1L]])                                                                
+ 15. │             │ │     └─base (local) doTryCatch(return(expr), name,       
+parentenv, handler)                                                            
+ 16. │             │ └─base::withCallingHandlers(...)                          
+ 17. │             └─duckdb:::rapi_execute(stmt, convert_opts)                 
+ 18. ├─duckdb (local) `<fn>`(...)                                              
+ 19. │ └─rlang::abort(error_parts, class = "duckdb_error", !!!fields)          
+ 20. │   └─rlang:::signal_abort(cnd, .file)                                    
+ 21. │     └─base::signalCondition(cnd)                                        
+ 22. └─rlang (local) `<fn>`(`<dckdb_rr>`)                                      
+ 23.   └─handlers[[1L]](cnd)                                                   
+ 24.     └─duckdb:::rethrow_error_from_rapi(e, call)                           
+ 25.       └─rlang::abort(msg, call = call)   
+
+⏺ Yes, the CRS warning during st_transform is harmless — it's just
+  informational.
+                                                                               
+  The DuckDB error is because the wrangling database uses an older storage     
+  format (v1.0.0) that doesn't support CRS-tagged geometry columns. The        
+  geoparquet files embed CRS metadata which DuckDB tries to preserve. The fix  
+  is to strip the CRS when loading into DuckDB.  
+
+## 2026-03-26.b setup erddap server
+
+Update docker-compose.yml and this server repo to include an ERDDAP server   
+instance, per https://hub.docker.com/r/erddap/erddap  
+
+Also see https://ioos.github.io/erddap-gold-standard/index.html 
+
+⏺ Here's a summary of the changes:
+                                                                               
+  Files created                                                   
+                                                                               
+  - `erddap/content/setup.xml` -- ERDDAP server configuration with CalCOFI admin 
+  info (institution, La Jolla/CA, calcofi@ucsd.edu). Most values can be
+  overridden by ERDDAP_* env vars in docker-compose.                           
+  - `erddap/content/datasets.xml` -- Starter datasets file with global settings.
+  Add <dataset> entries here as you onboard data.                              
+  - `erddap/data/logs/` -- Directory for ERDDAP runtime logs/cache.
+                                                                               
+  Files modified                                                  
+                                                                               
+  - `docker-compose.yml` -- Added erddap_data named volume and erddap service:   
+    - Image: erddap/erddap:latest (official Docker Hub image)
+    - Port: 8090:8080 (8080 already used by pg_swagger)                        
+    - 4 volume mounts: config content, persistent data, /share, and            
+  /share/erddap_datasets → /datasets for source data files                     
+    - CalCOFI-specific env vars for admin metadata                             
+    - 4GB JVM heap (ERDDAP_MEMORY)                                             
+  - `caddy/Caddyfile` -- Added erddap.calcofi.io reverse proxy → erddap:8080     
+                                                                               
+  Next steps on the server                                                     
+                                                                               
+  1. Create the datasets directory: `sudo mkdir -p /share/erddap_datasets`
+  2. Set `ERDDAP_flagKeyKey` -- Add a unique random string to the environment
+  block in docker-compose.yml (security key for remote dataset reloading)      
+  3. Add datasets -- Place data files (NetCDF, CSV) in /share/erddap_datasets/
+  and add corresponding <dataset> entries to `erddap/content/datasets.xml`. You  
+  can use ERDDAP's `GenerateDatasetsXml` tool to auto-generate XML snippets.
+  4. DNS -- Point `erddap.calcofi.io` to the server (Caddy will auto-provision   
+  the TLS certificate)                                                         
+  5. Deploy: `docker compose up -d erddap` then restart caddy: `docker compose 
+  restart caddy`                                    
+
+But this is a Github repo, so I don't want to manage the datasets here --    
+too big.
+
+⏺ Good point. Let me remove the datasets.xml and data directory from the repo
+  and keep only the docker-compose and Caddy config changes. The content, data,
+   and datasets will all live on the server at /share.
+
+⏺ Clean. All ERDDAP state lives on the server under /share/erddap/:
+
+  ┌───────────────────────┬────────────────────────────────┬──────────────┐
+  │      Server path      │        Container mount         │   Purpose    │
+  ├───────────────────────┼────────────────────────────────┼──────────────┤
+  │ /share/erddap/content │ /usr/local/tomcat/content/erdd │ setup.xml, d │
+  │ /                     │ ap                             │ atasets.xml, │
+  │                       │                                │  images/CSS  │
+  ├───────────────────────┼────────────────────────────────┼──────────────┤
+  │ /share/erddap/data/   │ /erddapData                    │ Logs, cache, │
+  │                       │                                │  flags       │
+  ├───────────────────────┼────────────────────────────────┼──────────────┤
+  │                       │                                │ Source data  │
+  │ /share/erddap/dataset │ /datasets                      │ files        │
+  │ s/                    │                                │ (NetCDF,     │
+  │                       │                                │ CSV, etc.)   │
+  └───────────────────────┴────────────────────────────────┴──────────────┘
+
+  Server setup before first run
+
+  sudo mkdir -p /share/erddap/{content,data/logs,datasets}
+
+  Then create setup.xml and datasets.xml in /share/erddap/content/ on the
+  server (following the https://ioos.github.io/erddap-gold-standard/index.html
+  templates). Nothing from the erddap/ directory is tracked in this repo
+  anymore.
+
+⏺ Yes, that's a good pattern -- a separate repo for ERDDAP config that gets
+  cloned to /share/erddap on the server. Something like CalCOFI/erddap with:
+
+  erddap/
+    content/
+      setup.xml
+      datasets.xml
+      images/
+    .gitignore       # ignore data/ (logs, cache, flags)
+
+  The data/ and datasets/ directories would be .gitignored since they contain
+  runtime state and large data files, respectively.
+
+  Want me to create that repo structure locally so you can push it to
+  CalCOFI/erddap?
+
+⏺ Here's the final layout:
+
+  CalCOFI/erddap repo (new, tracked in git):
+  content/
+    setup.xml        # server config
+    datasets.xml     # dataset definitions
+    images/          # custom branding
+  .gitignore         # ignores data/ and datasets/
+
+  On server at /share (not in git):
+  /share/github/CalCOFI/erddap/   # git clone of the repo above
+  /share/erddap/data/              # runtime logs, cache, flags
+  /share/erddap/datasets/          # source data files (NetCDF, CSV)
+
+  Server setup
+  ```r
+  # clone config repo
+  cd /share/github/CalCOFI
+  git clone https://github.com/CalCOFI/erddap.git
+
+  # create runtime dirs
+  sudo mkdir -p /share/erddap/{data/logs,datasets}
+
+  You'll want to create the CalCOFI/erddap repo on GitHub, then push from
+  /Users/bbest/Github/CalCOFI/erddap. Want me to create it with gh repo create?
+  ```
+yes
+
+
+
+## 2026-03-26 + calcofi4r::cc_erd()
+
+The database schema visualization using `dm::dm_draw()` and its antecedent functions cannot handle geometry columns, which causes problems in showing critical tables (`segment`, `casts`, `grid`, `site`, `dic_sample`, `ctd_cast`). This has even led in `@release_database.qmd` to erroneously excluding these tables in the final frozen release database.
+
+Create a new function in `@../calcofi4r/` that reads the database, extracts table and column information along with relationships and generates an entity relationship diagram (ERD) in mermaid format with options for color coding (like current dm_draw() implementation). See - [Entity Relationship Diagrams | Mermaid](https://mermaid.ai/open-source/syntax/entityRelationshipDiagram.html).
+
+
+I meant create a new function in `@../calcofi4r/` (not `@../msens/`). 
+
+Here also is some useful DuckDB SQL (I was unable to install the required `webmacro` to get this to work):
+- [mermaid.sql](https://gist.github.com/lmangani/dc9ea2ba0a0b2a54a1330e7db868e0bc)
+
+
+Per your suggestion:
+
+> `knit_print.cc_erd(x, ...)` - renders via DiagrammeR + color JS injection
+
+The `DiagrammeR` R package does not seem to support ERD mermaid diagrams, but Quarto does. See [IMAGE #]. The core function should generate the mermaid ERD syntax, which could be passed into a Quarto doc directly or as an include (which renders natively on Github) and already we have a folder `@diagrams/`. Let's also consider using the [Mermaid client](https://github.com/mermaid-js/mermaid-cli) for rendering to PNG, such as for display in a Shiny app.
+
+⏺ The plan creates cc_erd() in calcofi4r/R/erd.R that generates Mermaid ERDs by
+   querying information_schema.columns (which handles GEOMETRY fine), reads    
+  PK/FK from relationships.json, and supports color-coded table groups. It     
+  renders automatically in Quarto via DiagrammeR::mermaid() with JS-based color
+   injection.                                                                  
+
+ Ready to code?
+                                                                               
+ Here is Claude's plan:
+
+ Plan: cc_erd() function for calcofi4r                  
+
+ Context
+
+ dm::dm_draw() fails on DuckDB GEOMETRY columns, forcing spatial tables (site,
+  grid, casts, segment, ctd_cast, dic_sample) to be excluded from ERD
+ diagrams. This has also caused these tables to be erroneously omitted from
+ the frozen release database. The fix: bypass dm entirely for ERD generation,
+ using information_schema.columns which reports GEOMETRY as a plain string
+ type.
+
+ Files to create/modify
+
+ ┌───────────────────────────────────────────────────┬─────────────────────┐
+ │                       File                        │       Action        │
+ ├───────────────────────────────────────────────────┼─────────────────────┤
+ │                                                   │ Create - new file   │
+ │ /Users/bbest/Github/CalCOFI/calcofi4r/R/erd.R     │ with cc_erd() and   │
+ │                                                   │ helpers             │
+ ├───────────────────────────────────────────────────┼─────────────────────┤
+ │                                                   │ Edit - add          │
+ │ /Users/bbest/Github/CalCOFI/calcofi4r/DESCRIPTION │ DiagrammeR,         │
+ │                                                   │ htmlwidgets to      │
+ │                                                   │ Suggests            │
+ └───────────────────────────────────────────────────┴─────────────────────┘
+
+ Implementation
+
+ 1. Create R/erd.R
+
+ Exported functions:
+ - cc_erd(con, tables, exclude, rels_path, colors, rankdir, view_type) - main
+ function
+ - print.cc_erd(x, ...) - outputs raw Mermaid code via cat()
+ - knit_print.cc_erd(x, ...) - renders via DiagrammeR + color JS injection
+
+ Internal helpers:
+ - .erd_shorten_type(dtype) - DuckDB types to compact labels (e.g., INTEGER ->
+  int, GEOMETRY(POINT) -> geometry)
+ - .erd_color_to_hex(color) - R color names to hex via grDevices::col2rgb()
+ - .erd_build_color_map(colors) - named list -> table->hex lookup
+ - .erd_build_color_js(color_map) - JS for htmlwidgets::onRender() to fill
+ entity rects
+
+ Key design decisions:
+ - Returns structure(mermaid_code, class = c("cc_erd", "character"), colors =
+ colors, tables = tables)
+ - rels_path is optional; when NULL, diagram shows tables without relationship
+  lines
+ - colors is a named list: list(lightblue = c("cruise", "ship"), pink =
+ c("casts")) - matches dm::dm_set_colors() convention
+ - Uses %%{init: {'er': {'layoutDirection': 'LR'}}}%% for Mermaid layout
+ direction
+ - Cardinality: all FKs rendered as ||--o{ (one-to-many, standard FK pattern)
+ - view_type: "all" (all columns), "keys_only" (PK/FK only), "title_only" (no
+ columns)
+
+ Schema extraction SQL:
+ SELECT table_name, column_name, data_type, ordinal_position
+ FROM information_schema.columns
+ WHERE table_name IN (...)
+ ORDER BY table_name, ordinal_position
+
+ Mermaid output format:
+ %%{init: {'er': {'layoutDirection': 'LR'}}}%%
+ erDiagram
+     casts {
+         int cast_id PK
+         varchar cruise_key FK
+         geometry geom
+     }
+     cruise ||--o{ casts : "cruise_key"
+
+ knit_print color injection: Uses htmlwidgets::onRender() with JS that selects
+  .er.entityBox rects inside g[id^="entity-"] elements, maps entity names to
+ hex colors from the color_map attribute. Uses setTimeout to wait for Mermaid
+ SVG rendering.
+
+ 2. Update DESCRIPTION
+
+ Add to existing Suggests section:
+ Suggests:
+     DiagrammeR,
+     htmlwidgets,
+     knitr,
+     rmarkdown
+
+ 3. Run devtools::document()
+
+ Regenerates NAMESPACE with:
+ - export(cc_erd)
+ - S3method(print,cc_erd)
+ - S3method(knitr::knit_print,cc_erd)
+
+ Existing patterns to reuse
+
+ - SQL via information_schema: cc_read_sf() in database.R:539 already queries
+ information_schema.columns for GEOMETRY detection
+ - jsonlite::fromJSON(): cc_get_db() in database.R:120 uses qualified
+ jsonlite::fromJSON() for catalog.json
+ - Roxygen style: @concept database, @importFrom DBI dbGetQuery dbListTables,
+ @importFrom glue glue
+ - Relationships JSON: .apply_relationships() in database.R:469 shows the
+ PK/FK parsing pattern
+
+ **Verification**
+
+ 1. Install package: `devtools::install()` from `calcofi4r` directory
+ 2. Test in R console:
+ ```r
+ library(calcofi4r)
+ con <- cc_get_db()
+ # basic ERD (no relationships, all tables including geometry ones)
+ erd <- cc_erd(con)
+ print(erd)  # should show Mermaid code with geometry tables
+ # with relationships and colors
+ erd <- cc_erd(con,
+   rels_path = "path/to/relationships.json",
+   colors = list(lightblue = c("cruise", "ship")))
+ ```
+ 3. Test in Quarto notebook: create a chunk with `cc_erd(con)` and render -
+ should produce an interactive diagram
+ 4. Confirm GEOMETRY tables (site, grid, casts, segment, ctd_cast, dic_sample)
+  appear in the output
+
+⏺ Correct - no relationship lines since the foreign_keys was empty. Everything
+  works as expected.                                                           
+                                                                               
+  Here's a summary of what was created:
+                                                                               
+  New file: /Users/bbest/Github/CalCOFI/calcofi4r/R/erd.R                      
+  - cc_erd(con, tables, exclude, rels_path, colors, rankdir, view_type) -
+  generates Mermaid ERD from a DuckDB connection using                         
+  information_schema.columns (handles GEOMETRY fine)              
+  - print.cc_erd() - outputs raw Mermaid code                                  
+  - knit_print.cc_erd() - auto-renders via DiagrammeR::mermaid() in Quarto,
+  with per-entity color injection via htmlwidgets::onRender()              
+  - Internal helpers for type shortening, color conversion, and JS generation  
+  
+  Modified: /Users/bbest/Github/CalCOFI/calcofi4r/DESCRIPTION                  
+  - Added DiagrammeR and htmlwidgets to Suggests                  
+                                                                               
+  Key features:                                                   
+  - GEOMETRY columns appear as geometry type (no exclusion needed)             
+  - PK/FK annotations from relationships.json                                  
+  - Color-coded table groups matching the dm_set_colors() convention
+  - view_type: "all", "keys_only", or "title_only"                             
+  - rankdir: "LR" or "TB" layout direction
+
+The javascript color injection of htmlwidget is not working. What about  injecting into the Diagrammer::mermaid() function instead, per its example: https://raw.githubusercontent.com/rich-iannone/DiagrammeR/refs/heads/main/R/mermaid.R
 
 ## 2026-03-24 ∆ cruise_key, match tracks, track stats in release_database.qmd
 
@@ -649,6 +1926,26 @@ everywhere?
 
 ⏺ New release v2026.03.25 created with catalog, parquet, relationships, and
   release notes. The full pipeline is complete.
+
+Please write git commit messages of changes and push                                                  
+
+⏺ All 4 repos committed and pushed:
+
+  ┌────────────┬─────────┬───────────────────────────────────────────────────────────────────────────┐
+  │    Repo    │ Commit  │                                  Summary                                  │
+  ├────────────┼─────────┼───────────────────────────────────────────────────────────────────────────┤
+  │            │         │ cruise_key → YYYY-MM-NODC; + standardize_site_key(),                      │
+  │ calcofi4db │ 15b6c19 │ convert_cruise_key_format(), report_ship_matches(); CRS stripping in      │
+  │            │         │ load_prior_tables()                                                       │
+  ├────────────┼─────────┼───────────────────────────────────────────────────────────────────────────┤
+  │ calcofi4r  │ a1d14ec │ rename sta_key → site_key in cc_grid data, docs, and database view        │
+  │            │         │ template                                                                  │
+  ├────────────┼─────────┼───────────────────────────────────────────────────────────────────────────┤
+  │ apps       │ d4a1569 │ + cruises/ Shiny app with Table + Map views                               │
+  ├────────────┼─────────┼───────────────────────────────────────────────────────────────────────────┤
+  │ workflows  │ b304ef3 │ sta_key → site_key; cruise_key → YYYY-MM-NODC across all notebooks,       │
+  │            │         │ skills, metadata; + release v2026.03.25                                   │
+  └────────────┴─────────┴───────────────────────────────────────────────────────────────────────────┘
 
 ## 2026-03-18 Phase 0+1: DIC ingest
 
