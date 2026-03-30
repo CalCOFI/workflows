@@ -1,0 +1,472 @@
+---
+title: "Ingest Spatial Boundaries"
+editor_options:
+  chunk_output_type: console
+---
+
+## Overview
+
+Process spatial boundary datasets for:
+
+1. **Map overlay** — PMTiles served via `file.calcofi.io/_spatial/`
+2. **Spatial queries** — parquet tables loaded into CalCOFI DuckDB
+3. **Future summarization** — aggregate CalCOFI data into boundary features
+
+**Source**: `~/My Drive/projects/calcofi/data-public/_spatial/`
+([US Maritime Limits](https://nauticalcharts.noaa.gov/data/us-maritime-limits-and-boundaries.html),
+CA CDFW, BOEM, NOAA ONMS, MEOW, and others)
+
+**Registry**: `metadata/spatial_layers.csv` — one row per visual layer, with
+dataset grouping, styling, filter expressions, and source file paths.
+
+### Data Flow
+
+```{mermaid}
+graph LR
+  A[Source Shapefiles] --> B[Read + Reproject 4326]
+  B --> C[clean_names + id column]
+  C --> D[Parquet Export]
+  C --> E[GeoJSON → tippecanoe → PMTiles]
+  D --> F[DuckDB Tables]
+  E --> G[GCS Upload]
+  G --> H[file.calcofi.io/_spatial/]
+```
+
+### Pre-processing
+
+Each dataset is standardized:
+
+- **CRS**: reprojected to `EPSG:4326` (WGS 84 unprojected)
+- **Columns**: `janitor::clean_names()` for snake_case
+- **ID**: integer `id` column as first column (from source FID or `row_number()`)
+
+## Setup
+
+```{r}
+#| label: setup
+librarian::shelf(
+  arcgislayers,
+  calcofi / calcofi4db,
+  DBI,
+  dplyr,
+  DT,
+  duckdb,
+  fs,
+  glue,
+  here,
+  janitor,
+  jsonlite,
+  purrr,
+  readr,
+  sf,
+  stringr,
+  tibble,
+  quiet = T
+)
+
+redo_if_exists <- FALSE
+
+dir_spatial <- path_expand("~/My Drive/projects/calcofi/data-public/_spatial")
+dir_pmtiles <- here("data/pmtiles")
+dir_parquet <- here("data/parquet/spatial")
+gcs_bucket <- "calcofi-files-public"
+gcs_prefix <- "_spatial"
+
+dir_create(dir_pmtiles)
+dir_create(dir_parquet)
+
+# load registry
+d_layers <- read_csv(
+  here("metadata/spatial_layers.csv"),
+  show_col_types = FALSE
+)
+
+datatable(
+  d_layers,
+  caption = "Spatial layers registry from `metadata/spatial_layers.csv`"
+)
+
+# compare with folders/files in dir_spatial
+spatial_dirs <- dir_ls(dir_spatial, type = "directory")
+spatial_dirs_not_layers_csv <- setdiff(
+  basename(spatial_dirs),
+  unique(d_layers$source_folder)
+)
+if (length(spatial_dirs_not_layers_csv) > 0) {
+  cat(
+    glue(
+      "⚠ WARNING: The following folders exist in `{dir_spatial}` but are not ",
+      "referenced in `metadata/spatial_layers.csv`:\n",
+      paste0("- ", spatial_dirs_not_layers_csv, collapse = "\n"),
+      "\n\n"
+    )
+  )
+}
+
+# unique dataset groups (one pmtiles + parquet per group)
+d_groups <- d_layers |>
+  distinct(dataset_group, source_folder, source_file, source_format) |>
+  mutate(
+    source_path = path(dir_spatial, source_folder, source_file),
+    file_exists = file_exists(source_path)
+  )
+
+cat(
+  glue("{nrow(d_layers)} layers across {nrow(d_groups)} dataset groups"),
+  "\n"
+)
+```
+
+## ArcGIS Rest layer(s) to gpkg: `CA_watershed-boundaries`
+
+```{r}
+#| label: arcgis-rest
+
+fs_to_sf <- function(url, where = NULL) {
+  fs <- arcgislayers::arc_open(url)
+  lyr <- arcgislayers::get_layer(fs, 0)
+
+  sf <- arcgislayers::arc_select(
+    lyr,
+    where = where
+  ) |>
+    tibble::tibble() |>
+    sf::st_as_sf() |>
+    janitor::clean_names()
+
+  return(sf)
+}
+
+# [USGS Watershed Boundary Dataset (WBD) HUC8, California Vicinity - Overview](https://www.arcgis.com/home/item.html?id=a98ef9ead82a4bd6aa09d46869f75a49&sublayer=0)
+url_rest <- "https://services2.arcgis.com/Uq9r85Potqm3MfRV/arcgis/rest/services/WBD_HU8_wm/FeatureServer"
+out_gpkg <- glue("{dir_spatial}/CA_watershed-boundaries/wbd-hu8_ca.gpkg")
+
+if (!file_exists(out_gpkg) || redo_if_exists) {
+  fs_to_sf(url_rest) |>
+    write_sf(out_gpkg, delete_dsn = TRUE)
+}
+```
+
+
+## Clip CA Current LME to US EEZ
+
+```{r}
+#| label: clip-layers
+
+cacurrent_geo <- glue(
+  "{dir_spatial}/NOAA_IEA-CA-Current/lme-ca-current.geojson"
+)
+usaeez_geo <- glue(
+  "{dir_spatial}/NOAA_IEA-CA-Current/usa-eez.geojson"
+)
+cacurrent_usaeez_geo <- glue(
+  "{dir_spatial}/NOAA_IEA-CA-Current/lme-ca-current_usa-eez.geojson"
+)
+
+if (!file_exists(cacurrent_usaeez_geo) || redo_if_exists) {
+  cacurrent <- st_read(cacurrent_geo, quiet = TRUE)
+  usaeez <- st_read(usaeez_geo, quiet = TRUE)
+
+  cacurrent_usaeez <- st_intersection(cacurrent, usaeez)
+
+  st_write(
+    cacurrent_usaeez,
+    cacurrent_usaeez_geo,
+    delete_dsn = TRUE,
+    quiet = TRUE
+  )
+}
+```
+
+## Process datasets
+
+```{r}
+#| label: process-datasets
+#| output: asis
+
+process_spatial_dataset <- function(
+  dataset_group,
+  source_folder,
+  source_file,
+  source_format,
+  dir_spatial,
+  dir_pmtiles,
+  dir_parquet,
+  redo_if_exists = FALSE
+) {
+  pmtiles_path <- path(dir_pmtiles, glue("{dataset_group}.pmtiles"))
+  parquet_path <- path(dir_parquet, glue("{dataset_group}.parquet"))
+
+  # skip if already processed
+  if (
+    !redo_if_exists &&
+      file_exists(pmtiles_path) &&
+      file_exists(parquet_path)
+  ) {
+    cat(glue("- **{dataset_group}**: skipped (already exists)\n\n"))
+    return(invisible(TRUE))
+  }
+
+  # read source data ----
+  sf_data <- tryCatch(
+    {
+      if (source_format == "rda") {
+        # .rda files: load() into temp env, extract sf object
+        e <- new.env()
+        load(path(dir_spatial, source_folder, source_file), envir = e)
+        obj_names <- ls(e)
+        sf_obj <- NULL
+        for (nm in obj_names) {
+          if (inherits(get(nm, envir = e), "sf")) {
+            sf_obj <- get(nm, envir = e)
+            break
+          }
+        }
+        sf_obj
+        # drop any list columns (e.g. from complex attributes that can't be written to parquet)
+        sf_obj |> select(where(~ !is.list(.)))
+      } else if (source_format == "gdb") {
+        # geodatabase: source_file = "file.gdb|layer_name"
+        parts <- str_split_1(source_file, "\\|")
+        st_read(
+          path(dir_spatial, source_folder, parts[1]),
+          layer = parts[2],
+          quiet = TRUE
+        )
+      } else {
+        # shp, gpkg, geojson
+        st_read(
+          path(dir_spatial, source_folder, source_file),
+          quiet = TRUE
+        )
+      }
+    },
+    error = function(e) {
+      cat(glue(
+        "- **{dataset_group}**: ⚠ SKIPPED — failed to read ",
+        "`{source_folder}/{source_file}`: {e$message}\n\n"
+      ))
+      return(NULL)
+    }
+  )
+
+  if (is.null(sf_data) || nrow(sf_data) == 0) {
+    cat(glue("- **{dataset_group}**: ⚠ SKIPPED — empty dataset\n\n"))
+    return(invisible(FALSE))
+  }
+
+  # reproject to EPSG:4326 ----
+  src_crs <- st_crs(sf_data)$epsg
+  if (is.na(src_crs) || src_crs != 4326) {
+    sf_data <- st_transform(sf_data, 4326)
+  }
+
+  # clean column names ----
+  sf_data <- clean_names(sf_data)
+
+  # ensure integer id column first ----
+  geom_col <- attr(sf_data, "sf_column")
+  if (!"id" %in% names(sf_data)) {
+    sf_data <- sf_data |> mutate(id = row_number())
+  }
+  sf_data <- sf_data |>
+    mutate(id = as.integer(id)) |>
+    relocate(id)
+
+  # write parquet ----
+  # use sf + arrow for geoparquet
+  tryCatch(
+    arrow::write_parquet(sf_data, parquet_path),
+    error = function(e) {
+      # fallback: write via DuckDB spatial
+      tmp_geojson <- tempfile(fileext = ".geojson")
+      st_write(sf_data, tmp_geojson, delete_dsn = TRUE, quiet = TRUE)
+      con_tmp <- dbConnect(duckdb())
+      dbExecute(con_tmp, "INSTALL spatial; LOAD spatial;")
+      dbExecute(
+        con_tmp,
+        glue(
+          "COPY (SELECT * FROM ST_Read('{tmp_geojson}'))
+         TO '{parquet_path}' (FORMAT PARQUET)"
+        )
+      )
+      dbDisconnect(con_tmp, shutdown = TRUE)
+      unlink(tmp_geojson)
+    }
+  )
+
+  # write pmtiles ----
+  geojson_tmp <- tempfile(fileext = ".geojson")
+  st_write(sf_data, geojson_tmp, delete_dsn = TRUE, quiet = TRUE)
+
+  tippecanoe_args <- c(
+    "-o",
+    pmtiles_path,
+    "-z10",
+    "-Z0",
+    "--simplification=10",
+    "--no-tile-size-limit",
+    "-l",
+    dataset_group,
+    "--force",
+    geojson_tmp
+  )
+
+  result <- system2(
+    "tippecanoe",
+    args = tippecanoe_args,
+    stdout = TRUE,
+    stderr = TRUE
+  )
+  unlink(geojson_tmp)
+
+  if (!file_exists(pmtiles_path)) {
+    cat(glue(
+      "- **{dataset_group}**: ⚠ SKIPPED — tippecanoe failed\n\n"
+    ))
+    return(invisible(FALSE))
+  }
+
+  pmtiles_size <- file_size(pmtiles_path)
+  parquet_size <- file_size(parquet_path)
+
+  cat(glue(
+    "- **{dataset_group}**: {nrow(sf_data)} features ",
+    "(CRS {src_crs} → 4326), ",
+    "PMTiles {pmtiles_size}, Parquet {parquet_size}\n\n"
+  ))
+
+  return(invisible(TRUE))
+}
+
+# process each dataset group
+results <- d_groups |>
+  # slice(4:nrow(d_groups)) |> # DEBUG: skip first 3 unproblematic groups
+  select(dataset_group, source_folder, source_file, source_format) |>
+  pmap_lgl(
+    process_spatial_dataset,
+    dir_spatial = dir_spatial,
+    dir_pmtiles = dir_pmtiles,
+    dir_parquet = dir_parquet,
+    redo_if_exists = redo_if_exists
+  )
+
+n_ok <- sum(results)
+n_skip <- sum(!results)
+cat(glue("\n**Summary**: {n_ok} succeeded, {n_skip} skipped/failed\n"))
+```
+
+## Upload to GCS
+
+```{r}
+#| label: upload-gcs
+
+pmtiles_files <- dir_ls(dir_pmtiles, glob = "*.pmtiles")
+cat(glue(
+  "Uploading {length(pmtiles_files)} PMTiles files to ",
+  "gs://{gcs_bucket}/{gcs_prefix}/\n\n"
+))
+
+sync_to_gcs(
+  local_dir = dir_pmtiles,
+  gcs_prefix = gcs_prefix,
+  bucket = gcs_bucket,
+  pattern = "\\.pmtiles$"
+)
+```
+
+## Load into DuckDB
+
+Load parquet files into the wrangling database for spatial queries.
+
+```{r}
+#| label: load-duckdb
+#| output: asis
+
+db_path <- here("data/calcofi_wrangling.duckdb")
+con <- dbConnect(duckdb(dbdir = db_path))
+dbExecute(con, "INSTALL spatial; LOAD spatial;")
+
+parquet_files <- dir_ls(dir_parquet, glob = "*.parquet")
+
+for (pq in parquet_files) {
+  tbl_name <- paste0("spatial_", path_ext_remove(path_file(pq)))
+
+  # read parquet into a temp view first to discover geometry column name
+  dbExecute(
+    con,
+    glue(
+      "CREATE OR REPLACE TEMP VIEW v_tmp AS
+     SELECT * FROM read_parquet('{pq}')"
+    )
+  )
+
+  # find geometry column (type GEOMETRY or contains 'geom' in name)
+  cols_info <- dbGetQuery(con, "DESCRIBE v_tmp")
+  geom_col <- cols_info$column_name[
+    grepl("GEOMETRY|WKB_GEOMETRY", cols_info$column_type, ignore.case = TRUE) |
+      grepl("^geom", cols_info$column_name, ignore.case = TRUE)
+  ]
+
+  if (length(geom_col) > 0) {
+    # strip CRS from geometry to avoid storage version error
+    geom_col <- geom_col[1]
+    other_cols <- setdiff(cols_info$column_name, geom_col)
+    select_sql <- paste(
+      c(
+        other_cols,
+        glue("ST_GeomFromWKB(ST_AsWKB({geom_col})) AS {geom_col}")
+      ),
+      collapse = ", "
+    )
+    dbExecute(
+      con,
+      glue(
+        "CREATE OR REPLACE TABLE {tbl_name} AS
+       SELECT {select_sql} FROM v_tmp"
+      )
+    )
+  } else {
+    # no geometry column, load as-is
+    dbExecute(
+      con,
+      glue(
+        "CREATE OR REPLACE TABLE {tbl_name} AS
+       SELECT * FROM v_tmp"
+      )
+    )
+  }
+
+  n_rows <- dbGetQuery(con, glue("SELECT COUNT(*) AS n FROM {tbl_name}"))$n
+  cat(glue("- {tbl_name}: {n_rows} rows\n\n"))
+}
+
+dbDisconnect(con, shutdown = TRUE)
+```
+
+## Output summary
+
+```{r}
+#| label: summary
+#| output: asis
+
+cat("### PMTiles\n\n")
+dir_ls(dir_pmtiles, glob = "*.pmtiles") |>
+  tibble(path = _) |>
+  mutate(
+    file = path_file(path),
+    size = file_size(path)
+  ) |>
+  select(file, size) |>
+  knitr::kable()
+
+cat("\n### Parquet\n\n")
+dir_ls(dir_parquet, glob = "*.parquet") |>
+  tibble(path = _) |>
+  mutate(
+    file = path_file(path),
+    size = file_size(path)
+  ) |>
+  select(file, size) |>
+  knitr::kable()
+```
