@@ -64,7 +64,7 @@ librarian::shelf(
   quiet = T
 )
 
-redo_if_exists <- FALSE
+redo_if_exists <- TRUE # set to FALSE to skip already processed datasets (for testing/debugging)
 
 dir_spatial <- path_expand("~/My Drive/projects/calcofi/data-public/_spatial")
 dir_pmtiles <- here("data/pmtiles")
@@ -306,6 +306,7 @@ process_spatial_dataset <- function(
     "-Z0",
     "--simplification=10",
     "--no-tile-size-limit",
+    "--use-attribute-for-id=id",
     "-l",
     dataset_group,
     "--force",
