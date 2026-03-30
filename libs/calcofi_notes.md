@@ -979,6 +979,227 @@ parentenv, handler)
   geoparquet files embed CRS metadata which DuckDB tries to preserve. The fix  
   is to strip the CRS when loading into DuckDB.  
 
+⏺ Update(ingest_spatial.qmd)
+
+⏺ This fix reads the parquet into a temp view, detects the geometry column,
+  then round-trips it through ST_AsWKB() → ST_GeomFromWKB() which strips the
+  CRS identifier. The resulting GEOMETRY column is CRS-free and compatible with
+   the older DuckDB storage format.
+
+### 2026-03-30 CORS on GCS _spatial/ for int-app
+
+Why am I still getting this CORS error when viewing the int-app locally?
+
+> Access to fetch at 'https://storage.googleapis.com/calcofi-files-public/_spatial/noaa_iea_regions.pmtiles' from origin 'http://127.0.0.1:4158' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.Understand this error
+
+Based on the following documentation:
+
+- [Set up and view CORS configurations  |  Cloud Storage  |  Google Cloud Documentation](https://docs.cloud.google.com/storage/docs/using-cors#command-line_1)
+- [CORS configuration examples  |  Cloud Storage  |  Google Cloud Documentation](https://docs.cloud.google.com/storage/docs/cors-configurations)
+
+I ran the following command:
+
+```bash
+cd ~/Github/CalCOFI/int-app/data
+gcloud storage buckets update gs://calcofi-files-public --cors-file=_cors_file.json
+```
+
+`_cors_file.json`:
+```json
+{
+ "cors": [
+    {
+        "origin": ["*"],
+        "method": ["GET"],
+        "responseHeader": ["Content-Type"],
+        "maxAgeSeconds": 1800
+      }
+  ]
+}
+```
+
+```
+(base) bbest@Bens-MacBook-Air data % gcloud storage buckets describe gs://calcofi-files-public
+creation_time: 2026-02-02T17:04:49+0000
+default_storage_class: STANDARD
+generation: 1770051889681677495
+location: US
+location_type: multi-region
+metageneration: 2
+name: calcofi-files-public
+public_access_prevention: inherited
+rpo: DEFAULT
+soft_delete_policy:
+  effectiveTime: '2026-02-02T17:04:49.810000+00:00'
+  retentionDurationSeconds: '604800'
+storage_url: gs://calcofi-files-public/
+uniform_bucket_level_access: true
+update_time: 2026-02-02T18:16:10+0000
+(base) bbest@Bens-MacBook-Air data % gcloud storage buckets update gs://calcofi-files-public --cors-file=_cors_file.json
+⠹Updating gs://calcofi-files-public/...                                       
+ERROR: 'str' object has no attribute 'items'
+  Completed 0                                                                 
+(base) bbest@Bens-MacBook-Air data % gcloud storage buckets describe gs://calcofi-files-public
+creation_time: 2026-02-02T17:04:49+0000
+default_storage_class: STANDARD
+generation: 1770051889681677495
+location: US
+location_type: multi-region
+metageneration: 2
+name: calcofi-files-public
+public_access_prevention: inherited
+rpo: DEFAULT
+soft_delete_policy:
+  effectiveTime: '2026-02-02T17:04:49.810000+00:00'
+  retentionDurationSeconds: '604800'
+storage_url: gs://calcofi-files-public/
+uniform_bucket_level_access: true
+update_time: 2026-02-02T18:16:10+0000
+```
+
+⏺ The CORS file format is wrong for the gcloud storage command. It expects a
+  JSON array at the top level, not an object with a "cors" key. Also, PMTiles
+  needs Range header support for byte-range requests.                          
+   
+  Read 1 file (ctrl+o to expand)                                               
+                                                                  
+⏺ Write(~/Github/CalCOFI/int-app/data/_cors_file.json)
+  ⎿  Added 14 lines, removed 10 lines                 
+       1 -{                                                                    
+       2 - "cors": [                                                           
+       3 -    {                                                                
+       4 -        "origin": ["*"],                                             
+       5 -        "method": ["GET"],                                           
+       6 -        "responseHeader": ["Content-Type"],                          
+       7 -        "maxAgeSeconds": 1800                                        
+       8 -      } 
+       9 -  ] 
+      10 -} 
+       1 +[
+       2 +  {
+       3 +    "origin": ["*"],
+       4 +    "method": ["GET", "HEAD"],
+       5 +    "responseHeader": [
+       6 +      "Content-Type",
+       7 +      "Content-Range",
+       8 +      "Accept-Ranges",
+       9 +      "Content-Length",
+      10 +      "Range" 
+      11 +    ],
+      12 +    "maxAgeSeconds": 3600 
+      13 +  }
+      14 +]
+
+⏺ Two issues with the original file:
+
+  1. Wrong JSON structure — gcloud storage buckets update --cors-file expects a
+   top-level array [{...}], not {"cors": [{...}]} (the {"cors":...} wrapper was
+   for the older gsutil cors set command)                                      
+  2. Missing headers for PMTiles — PMTiles uses HTTP range requests, so
+  Content-Range, Accept-Ranges, and Range must be in responseHeader. Also added
+   HEAD method.
+                                                                               
+  Now re-run the command:                                                      
+   
+  cd ~/Github/CalCOFI/int-app/data                                             
+  gcloud storage buckets update gs://calcofi-files-public         
+  --cors-file=_cors_file.json
+
+  You can verify it worked with:                                               
+   
+  gcloud storage buckets describe gs://calcofi-files-public --format="json(cors_config)"  
+
+### 2026-03-30.b
+
+Please update `int-app` so:
+
+1. The `tooltip` pulls from a reasonable field in each of the layers, using a new column `tooltip` in `../workflows/metadata/spatial_layers.csv` that gets populated with most likely fields in each of the layers.
+1. Update the layers control with each change of visible map layers using:
+  ```r
+  maplibre_proxy("map") |>
+    clear_controls(map, controls = "layers") |>
+    add_layers_control(...)
+  ```
+1. Group layers control with same groupings as the "Map layers" modal a la the [example](https://walker-data.com/mapgl/reference/add_layers_control.html):
+  ```r
+    add_layers_control(
+        layers = list(
+            "Counties" = c("county-fill", "county-outline"),
+            "Roads" = "roads-layer"
+        )
+  ```
+1. Highlight layer on hover with yellow outline for both the background map layers and the Hexagon data summaries.
+1. Add "Hexagon data summaries" to layers control to allow toggling on/off (ie, for examining background layers better).
+
+⏺ All changes are in place. Here's a summary of what was done:                 
+                                                                               
+  `metadata/spatial_layers.csv` — Added `tooltip_field` column with the best       
+  property name for each dataset (e.g., region for maritime boundaries,
+  fullname for MPAs, name for counties/watersheds, feat_name for ports). Two   
+  layers without meaningful fields (`ca_maritime_boundaries`,       
+  `ca_cowcod_conservation`) have NA and will show no tooltip.
+
+  `functions.R` — Three changes:
+
+  1. `add_spatial_layers()` — Now uses `tooltip_field` from CSV for tooltip (falls 
+  back to NULL), adds `hover_options` with yellow (#ffeb3b) highlight on all
+  layer types (fill gets brighter outline + higher opacity, lines get yellow + 
+  wider, circles get yellow + bigger), added `promote_id = "id"` for hover to
+  work on PMTiles. Removed the layers control from this function (moved to
+  callers).
+  2. `build_layers_control()` — New helper that builds a grouped named list for
+  `add_layers_control()`, including "Hexagon Data" group (sp1-sp10 or env1-env10)
+   plus visible spatial layers grouped by category.
+  3. `map_sp()` / `map_env()` — Spatial layers added first (render below hexagons),
+   hexagon layers now have `hover_options` with yellow outline highlight, both   
+  call `build_layers_control()` and `add_layers_control()` with grouped entries
+  including "Hexagon Data".                                                    
+                                                                  
+  `server.R` — After modal Apply, rebuilds the layers control on both sides via  
+  `clear_controls(controls = "layers") |> add_layers_control(...)` with the
+  updated visible spatial layers + hexagon groups.
+
+I'm not seeing the yellow outline on hover [Image #4]. Maybe has to do with the JS error messages: "Error: The sourceLayer parameter must be provided for vector source types." Also, the text in the tooltip is too light gray to be visible on white background -- need to darken. Let's update the popup to being the same value as the tooltip and keep the feature outline yellow bold, at least until another one is clicked. Only the "Maritime Zones" gets loaded into the layers control. All of the "Maritime Zones" are being shown in default map, not just the one selected  in the "Map Layers" modal (200NM EEZ).
+
+Let us enforce requiring proper feature IDs in `@ingest_spatial.qmd` so we can enable hover on ALL spatial layers, including **ALL PMTiles layers**, not just GeoJSON layers, in response to your statement:
+
+> 1. **sourceLayer JS error**: `hover_options` uses `setFeatureState` which fails on PMTiles without proper feature IDs. Remove `hover_options` from PMTiles layers; keep it on hexagon GeoJSON layers only. 
+
+⏺ The root cause is clear: tippecanoe isn't promoting the id column as the
+  feature ID. Let me check the tippecanoe flag syntax, then fix both the ingest
+   and the app.
+
+⏺ --use-attribute-for-id=id is exactly what we need. Let me update the ingest
+  workbook.
+
+⏺ Now restore hover_options and promote_id on the PMTiles layers in
+  functions.R, since with proper feature IDs in the tiles they will work:
+                                                                               
+⏺ Now add back promote_id on the source and hover_options on all layers:
+
+⏺ Here's a summary of all changes:   
+
+  `ingest_spatial.qmd` — Added --use-attribute-for-id=id to the tippecanoe       
+  command. This promotes the id column (which we ensure exists as an integer in
+   every dataset) as the vector tile feature ID. This is what MapLibre's       
+  setFeatureState needs to track hover/click state on PMTiles features.
+
+  `functions.R` — Three changes in `add_spatial_layers()`:                         
+  - Restored promote_id = "id" on `add_pmtiles_source()` — tells MapLibre to use
+  the id property as feature IDs                                               
+  - Restored hover_options on all PMTiles layers (line, fill, circle) with
+  yellow (#ffeb3b) highlight                                                   
+  - Added `popup = tt` alongside `tooltip = tt` so clicking shows the same field   
+  value in a persistent popup                                               
+                                                                               
+  `ui.R` — Added CSS to darken tooltip/popup text: .maplibregl-popup-content { 
+  color: #1a1a1a; font-weight: 500; }                                          
+                                                                  
+  To apply: You'll need to re-run `ingest_spatial.qmd` with `redo_if_exists <- TRUE` 
+  to regenerate all PMTiles with proper feature IDs, then re-upload to
+  GCS. The existing PMTiles were generated without `--use-attribute-for-id=id`,  
+  so they lack the feature IDs that setFeatureState requires.  
+
 ## 2026-03-26.b setup erddap server
 
 Update docker-compose.yml and this server repo to include an ERDDAP server   
