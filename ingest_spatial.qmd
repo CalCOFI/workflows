@@ -273,27 +273,20 @@ process_spatial_dataset <- function(
     mutate(id = as.integer(id)) |>
     relocate(id)
 
-  # write parquet ----
-  # use sf + arrow for geoparquet
-  tryCatch(
-    arrow::write_parquet(sf_data, parquet_path),
-    error = function(e) {
-      # fallback: write via DuckDB spatial
-      tmp_geojson <- tempfile(fileext = ".geojson")
-      st_write(sf_data, tmp_geojson, delete_dsn = TRUE, quiet = TRUE)
-      con_tmp <- dbConnect(duckdb())
-      dbExecute(con_tmp, "INSTALL spatial; LOAD spatial;")
-      dbExecute(
-        con_tmp,
-        glue(
-          "COPY (SELECT * FROM ST_Read('{tmp_geojson}'))
+  # write parquet via DuckDB spatial ----
+  tmp_geojson <- tempfile(fileext = ".geojson")
+  st_write(sf_data, tmp_geojson, delete_dsn = TRUE, quiet = TRUE)
+  con_tmp <- dbConnect(duckdb())
+  dbExecute(con_tmp, "INSTALL spatial; LOAD spatial;")
+  dbExecute(
+    con_tmp,
+    glue(
+      "COPY (SELECT * FROM ST_Read('{tmp_geojson}'))
          TO '{parquet_path}' (FORMAT PARQUET)"
-        )
-      )
-      dbDisconnect(con_tmp, shutdown = TRUE)
-      unlink(tmp_geojson)
-    }
+    )
   )
+  dbDisconnect(con_tmp, shutdown = TRUE)
+  unlink(tmp_geojson)
 
   # write pmtiles ----
   geojson_tmp <- tempfile(fileext = ".geojson")
@@ -306,7 +299,7 @@ process_spatial_dataset <- function(
     "-Z0",
     "--simplification=10",
     "--no-tile-size-limit",
-    "--use-attribute-for-id=id",
+    # "--use-attribute-for-id=id", # wierdly drops 'id', so incompatible with mapgl::add_pmtiles_source(promote_id='id')
     "-l",
     dataset_group,
     "--force",
@@ -342,7 +335,7 @@ process_spatial_dataset <- function(
 
 # process each dataset group
 results <- d_groups |>
-  # slice(4:nrow(d_groups)) |> # DEBUG: skip first 3 unproblematic groups
+  # filter(dataset_group == "ca_county_boundaries") |> # DEBUG: process one group first
   select(dataset_group, source_folder, source_file, source_format) |>
   pmap_lgl(
     process_spatial_dataset,
@@ -362,7 +355,9 @@ cat(glue("\n**Summary**: {n_ok} succeeded, {n_skip} skipped/failed\n"))
 ```{r}
 #| label: upload-gcs
 
-pmtiles_files <- dir_ls(dir_pmtiles, glob = "*.pmtiles")
+pmtiles_files <- dir_ls(dir_pmtiles, glob = "*.pmtiles") # |>
+# str_subset("ca_county_boundaries") # DEBUG: only upload one file first
+
 cat(glue(
   "Uploading {length(pmtiles_files)} PMTiles files to ",
   "gs://{gcs_bucket}/{gcs_prefix}/\n\n"
