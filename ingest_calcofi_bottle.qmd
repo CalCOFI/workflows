@@ -1,5 +1,11 @@
 ---
 title: "Ingest Bottle Database"
+calcofi:
+  target_name: ingest_calcofi_bottle
+  workflow_type: ingest
+  dependency:
+    - ingest_swfsc_ichthyo
+  output: data/parquet/calcofi_bottle/manifest.json
 ---
 
 ## Overview
@@ -47,7 +53,6 @@ librarian::shelf(
   CalCOFI / calcofi4db,
   CalCOFI / calcofi4r,
   DBI,
-  dm,
   dplyr,
   DT,
   fs,
@@ -220,9 +225,7 @@ Apply known ship name/code corrections from `ship_renames.csv`.
 ```{r}
 #| label: apply_ship_corrections
 
-ship_renames_csv <- here(
-  "metadata/calcofi/bottle/ship_renames.csv"
-)
+ship_renames_csv <- here("metadata/ship_renames.csv")
 d_ship_renames <- read_csv(ship_renames_csv)
 
 # apply each correction
@@ -777,18 +780,15 @@ message(glue("cast_condition FK: all cast_ids found in casts"))
 ## Schema Documentation
 
 ```{r}
-#| label: dm_tbls
+#| label: erd_tbls
 
-# exclude views (casts_derived) — dm_from_con can't access views
+# exclude views (casts_derived)
 db_tables <- function(con) {
   setdiff(dbListTables(con), "casts_derived") |> sort()
 }
 
 tbls <- db_tables(con)
-
-# dm object for visualization (keys learned from data, not DB constraints)
-dm_dev <- dm_from_con(con, table_names = tbls, learn_keys = FALSE)
-dm_draw(dm_dev, view_type = "all")
+cc_erd(con, tables = tbls)
 ```
 
 ### Primary Key Strategy
@@ -830,36 +830,24 @@ casts.ship_code (soft FK) → ship.ship_nodc (validated after integration with s
 ```
 
 ```{r}
-#| label: dm_fk
+#| label: erd_fk
 
-tbls <- db_tables(con)
+# define PK/FK relationships for visualization and relationships.json
+bottle_rels <- list(
+  primary_keys = list(
+    casts              = "cast_id",
+    bottle             = "bottle_id",
+    bottle_measurement = "bottle_measurement_id",
+    cast_condition     = "cast_condition_id",
+    measurement_type   = "measurement_type"),
+  foreign_keys = list(
+    list(table = "bottle",             column = "cast_id",          ref_table = "casts",            ref_column = "cast_id"),
+    list(table = "bottle_measurement", column = "bottle_id",        ref_table = "bottle",           ref_column = "bottle_id"),
+    list(table = "bottle_measurement", column = "measurement_type", ref_table = "measurement_type", ref_column = "measurement_type"),
+    list(table = "cast_condition",     column = "cast_id",          ref_table = "casts",            ref_column = "cast_id"),
+    list(table = "cast_condition",     column = "condition_type",   ref_table = "measurement_type", ref_column = "measurement_type")))
 
-dm_dev <- dm_from_con(con, table_names = tbls, learn_keys = FALSE)
-
-# define relationships in dm (in-memory for visualization only)
-add_bottle_keys <- function(dm) {
-  dm |>
-    dm_add_pk(casts, cast_id) |>
-    dm_add_pk(bottle, bottle_id) |>
-    dm_add_pk(bottle_measurement, bottle_measurement_id) |>
-    dm_add_pk(cast_condition, cast_condition_id) |>
-    dm_add_pk(measurement_type, measurement_type) |>
-    dm_add_fk(bottle, cast_id, casts) |>
-    dm_add_fk(bottle_measurement, bottle_id, bottle) |>
-    dm_add_fk(bottle_measurement, measurement_type, measurement_type) |>
-    dm_add_fk(cast_condition, cast_id, casts) |>
-    dm_add_fk(
-      cast_condition,
-      condition_type,
-      measurement_type,
-      measurement_type
-    )
-}
-
-dm_dev_fk <- dm_dev |>
-  add_bottle_keys()
-
-dm_draw(dm_dev_fk, view_type = "all")
+cc_erd(con, tables = db_tables(con), rels = bottle_rels)
 ```
 
 ## Add Spatial
@@ -968,24 +956,14 @@ htmltools::img(
 ```{r}
 #| label: show_latest
 
-# exclude tables with GEOMETRY columns from dm (duckdb R driver limitation)
-all_tbls <- db_tables(con)
-geom_tbls <- DBI::dbGetQuery(con,
-  "SELECT DISTINCT table_name FROM information_schema.columns
-   WHERE data_type = 'GEOMETRY'")$table_name
-dm_tbls <- setdiff(all_tbls, geom_tbls)
-
-tryCatch({
-  dm_final <- dm_from_con(con, table_names = dm_tbls, learn_keys = FALSE) |>
-    add_bottle_keys() |>
-    dm_set_colors(
-      lightyellow = c(bottle_measurement, cast_condition),
-      lightblue = measurement_type
-    )
-  dm_draw(dm_final, view_type = "all")
-}, error = function(e) {
-  message(glue("dm diagram skipped: {e$message}"))
-})
+# cc_erd handles GEOMETRY columns natively (unlike dm_from_con)
+cc_erd(
+  con,
+  tables = db_tables(con),
+  rels   = bottle_rels,
+  colors = list(
+    lightyellow = c("bottle_measurement", "cast_condition"),
+    lightblue   = "measurement_type"))
 ```
 
 ```{r}
@@ -1129,12 +1107,20 @@ Export tables to parquet files for downstream use.
 ```{r}
 #| label: write_parquet
 
+# collect mismatches for manifest
+mismatches <- list(
+  ships             = collect_ship_mismatches(con, "casts"),
+  measurement_types = collect_measurement_type_mismatches(
+    con, here("metadata/measurement_type.csv")),
+  cruise_keys       = collect_cruise_key_mismatches(con, "casts"))
+
 # write parquet files with manifest
 parquet_stats <- write_parquet_outputs(
   con = con,
   output_dir = dir_parquet,
   tables = setdiff(db_tables(con), "grid"), # grid canonical from swfsc
-  strip_provenance = F
+  strip_provenance = F,
+  mismatches = mismatches
 )
 
 parquet_stats |>
@@ -1171,28 +1157,12 @@ metadata_path <- build_metadata_json(
 )
 
 # write relationships.json sidecar with PKs/FKs
-# exclude tables with GEOMETRY columns (duckdb R driver limitation)
-geom_tbls_wr <- DBI::dbGetQuery(con,
-  "SELECT DISTINCT table_name FROM information_schema.columns
-   WHERE data_type = 'GEOMETRY'")$table_name
-dm_tbls_wr <- setdiff(db_tables(con), geom_tbls_wr)
-
-tryCatch({
-  dm_bottle <- dm_from_con(
-    con,
-    table_names = dm_tbls_wr,
-    learn_keys = FALSE
-  ) |>
-    add_bottle_keys()
-  build_relationships_json(
-    dm = dm_bottle,
-    output_dir = dir_parquet,
-    provider = provider,
-    dataset = dataset
-  )
-}, error = function(e) {
-  message(glue("relationships.json skipped: {e$message}"))
-})
+build_relationships_json(
+  rels       = bottle_rels,
+  output_dir = dir_parquet,
+  provider   = provider,
+  dataset    = dataset
+)
 
 # show metadata summary
 metadata <- jsonlite::fromJSON(metadata_path)
@@ -1267,15 +1237,14 @@ load_prior_tables(
 ```{r}
 #| label: derive_cruise_key
 
-ship_renames_csv <- here(
-  "metadata/calcofi/bottle/ship_renames.csv"
+bridge_result <- derive_cruise_key_on_casts(
+  con              = con,
+  ship_renames_csv = here("metadata/ship_renames.csv"),
+  fetch_ices       = TRUE
 )
 
-bridge_result <- derive_cruise_key_on_casts(
-  con = con,
-  ship_renames_csv = ship_renames_csv,
-  fetch_ices = TRUE
-)
+# insert interim entries for still-unmatched ships (ship_nodc = "?XX?")
+ensure_interim_ships(con, bridge_result$ship_matches)
 
 bridge_result$ship_matches |>
   datatable(caption = "Ship matching results")

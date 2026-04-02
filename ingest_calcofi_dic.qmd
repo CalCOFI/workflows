@@ -1,5 +1,11 @@
 ---
 title: "Ingest DIC"
+calcofi:
+  target_name: ingest_calcofi_dic
+  workflow_type: ingest
+  dependency:
+    - ingest_calcofi_bottle
+  output: data/parquet/calcofi_dic/manifest.json
 editor_options:
   chunk_output_type: console
 ---
@@ -73,7 +79,6 @@ librarian::shelf(
   CalCOFI / calcofi4db,
   CalCOFI / calcofi4r,
   DBI,
-  dm,
   dplyr,
   DT,
   fs,
@@ -542,28 +547,26 @@ dic_measurement_summary (avg/stddev per position)
 ```{r}
 #| label: schema
 
-# define PK/FK relationships for this dataset
-add_dic_keys <- function(dm) {
-  dm |>
-    dm_add_pk(dic_measurement, dic_measurement_id) |>
-    dm_add_pk(measurement_type, measurement_type) |>
-    dm_add_fk(dic_measurement, measurement_type, measurement_type) |>
-    dm_add_fk(dic_measurement_summary, measurement_type, measurement_type)
-}
+# define PK/FK relationships for visualization and relationships.json
+dic_rels <- list(
+  primary_keys = list(
+    dic_measurement  = "dic_measurement_id",
+    measurement_type = "measurement_type"),
+  foreign_keys = list(
+    list(table = "dic_measurement",         column = "measurement_type", ref_table = "measurement_type", ref_column = "measurement_type"),
+    list(table = "dic_measurement_summary", column = "measurement_type", ref_table = "measurement_type", ref_column = "measurement_type")))
 
-# build dm from DIC-specific tables only (exclude casts/bottle loaded for FK matching)
 dic_tables <- c(
   "dic_sample", "dic_measurement", "dic_measurement_summary",
   "measurement_type", "dataset")
-dm_dic <- dm_from_con(con, table_names = dic_tables, learn_keys = FALSE) |>
-  add_dic_keys() |>
-  dm_set_colors(
-    lightblue   = c(dic_sample, dic_measurement, dic_measurement_summary),
-    lightyellow = measurement_type,
-    white       = dataset
-  )
-
-dm_draw(dm_dic, rankdir = "LR", view_type = "all")
+cc_erd(
+  con,
+  tables = dic_tables,
+  rels   = dic_rels,
+  colors = list(
+    lightblue   = c("dic_sample", "dic_measurement", "dic_measurement_summary"),
+    lightyellow = "measurement_type",
+    white       = "dataset"))
 ```
 
 ### Write relationships.json
@@ -572,7 +575,7 @@ dm_draw(dm_dic, rankdir = "LR", view_type = "all")
 #| label: write-relationships
 
 build_relationships_json(
-  dm         = dm_dic,
+  rels       = dic_rels,
   output_dir = dir_parquet,
   provider   = provider,
   dataset    = dataset
@@ -633,13 +636,20 @@ dbGetQuery(con, "SELECT * FROM dic_measurement_summary LIMIT 100") |>
 
 dir_create(dir_parquet)
 
+# collect mismatches for manifest
+mismatches <- list(
+  measurement_types = collect_measurement_type_mismatches(
+    con, here("metadata/measurement_type.csv")),
+  cruise_keys       = collect_cruise_key_mismatches(con, "dic_sample"))
+
 parquet_stats <- write_parquet_outputs(
   con        = con,
   output_dir = dir_parquet,
   tables     = c("dic_sample", "dic_measurement",
                  "dic_measurement_summary", "measurement_type",
                  "dataset"),
-  strip_provenance = FALSE
+  strip_provenance = FALSE,
+  mismatches = mismatches
 )
 
 parquet_stats |>

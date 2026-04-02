@@ -33,7 +33,7 @@ devtools::load_all(here::here("../calcofi4r"))
 librarian::shelf(
   CalCOFI/calcofi4db,
   CalCOFI/calcofi4r,
-  DBI, dm, dplyr, DT, fs, glue, googledrive,
+  DBI, dplyr, DT, fs, glue, googledrive,
   here, htmltools, janitor, jsonlite, knitr,
   lubridate, purrr, readr, sf, stringr,
   tibble, tidyr, units,
@@ -236,30 +236,28 @@ reference tables (e.g. measurement_type), white = shared metadata.
 #| label: schema
 
 # TODO: define PK/FK relationships for this dataset
-add_{{dataset}}_keys <- function(dm) {
-  dm |>
-    dm_add_pk({{dataset}}_measurement, {{dataset}}_measurement_id) |>
-    dm_add_pk(measurement_type, measurement_type) |>
-    dm_add_fk({{dataset}}_measurement, measurement_type, measurement_type)
+{{dataset}}_rels <- list(
+  primary_keys = list(
+    {{dataset}}_measurement = "{{dataset}}_measurement_id",
+    measurement_type        = "measurement_type"),
+  foreign_keys = list(
+    list(table = "{{dataset}}_measurement", column = "measurement_type",
+         ref_table = "measurement_type", ref_column = "measurement_type")))
     # add more FKs as needed
-}
 
-# build dm from dataset-specific tables (exclude loaded reference tables)
 {{dataset}}_tables <- c(
   "{{dataset}}_sample", "{{dataset}}_measurement",
   "{{dataset}}_measurement_summary",
   "measurement_type", "dataset")
-dm_{{dataset}} <- dm_from_con(
-  con, table_names = {{dataset}}_tables, learn_keys = FALSE) |>
-  add_{{dataset}}_keys() |>
-  dm_set_colors(
-    lightblue   = c({{dataset}}_sample, {{dataset}}_measurement,
-                    {{dataset}}_measurement_summary),
-    lightyellow = measurement_type,
-    white       = dataset
-  )
-
-dm_draw(dm_{{dataset}}, rankdir = "LR", view_type = "all")
+cc_erd(
+  con,
+  tables = {{dataset}}_tables,
+  rels   = {{dataset}}_rels,
+  colors = list(
+    lightblue   = c("{{dataset}}_sample", "{{dataset}}_measurement",
+                    "{{dataset}}_measurement_summary"),
+    lightyellow = "measurement_type",
+    white       = "dataset"))
 ```
 
 ### Write relationships.json
@@ -270,7 +268,7 @@ Write PK/FK sidecar for use in `release_database.qmd` schema merging.
 #| label: write-relationships
 
 build_relationships_json(
-  dm         = dm_{{dataset}},
+  rels       = {{dataset}}_rels,
   output_dir = dir_parquet,
   provider   = provider,
   dataset    = dataset

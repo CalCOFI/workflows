@@ -1,58 +1,76 @@
-## TODO:)
+## TODO
 
-- int-app: lyrs ctrl only semi-working on right pane -- need to apply to left; still Maritime Zones all problem; need legend
-- since re-ingest ctd-cast (2601RL) & dic, run release-database.qmd (version and notes?)
+- `workflows/data/parquet/calcofi_ctd-cast/ctd_measurement/cruise_key=__HIVE_DEFAULT_PARTITION__`
+  ⏺ The CTD-cast ingest completed successfully. The parquet is now using         
+    YYYY-MM-NODC format (e.g., cruise_key=1998-02-31JD). I notice there's a    
+    __HIVE_DEFAULT_PARTITION__ for NULL cruise_keys. Let me continue monitoring  
+    the GCS upload and remaining targets 
+- int-app: need legend
 - add ERDDAP server
-- ∆ ingest_dic: matching ships (-> ~expocode YYYY-MM_NODC)/sites/bottles, schema matching to foreign tables incl datasets (color code?). https://en.wikipedia.org/wiki/Expocode: NODCYYYYMMDD
 
-Ok, that's working well. While we're at it with fixing the JS issues, how    
-about these that have been popping up every time? [Image #7]
+## 2026-04-02.b replace schema diagram fxn: `dm::dm_draw()` -> `calcofi4r::cc_erd()`, cruise_key=YYYY-MM-NODC
 
-⏺ Two issues:                                                                  
-                                                                               
-  1. favicon.ico 404 — No favicon in the app's www/ directory                  
-  2. "output is in an unexpected state" — Shiny is sending                     
-  progress/recalculating messages for the map output while it's in the wrong   
-  state. This typically happens when the output is rendered conditionally (via
-  renderUI) and the widget receives messages before it's fully initialized.   
+For any `*.qmd` files with `calcofi` yaml frontmatter, remove all instances of using the `dm` package and its functions like `dm_draw()`, since there was a problem with reading tables containing geometry data type. Replace to use `calcofi4r::cc_erd()` in mermaid format and set option for `mermaid-format: png` with `lightbox: true` for zooming into image, ideally in `_quarto.yml` to apply to all notebooks (otherwise in each yml header). Update function `calcofi4r::cc_erd()` if needed.
 
-⏺ Two fixes:                    
 
-  1. favicon 404 — Added <link rel="icon" href="logo_calcofi.svg"> to ui.R so  
-  the browser uses the existing CalCOFI logo instead of requesting a
-  nonexistent favicon.ico.                                                     
-  2. "output is in an unexpected state" — Added outputOptions(output, "map", 
-  suspendWhenHidden = TRUE) in server.R. This tells Shiny not to send          
-  progress/recalculating messages for the map output until
-  maplibreCompareOutput("map") is actually in the DOM (rendered by renderUI).  
-  The race condition was: renderMaplibreCompare starts computing immediately
-  when rx$map_sp is set, but the widget container doesn't exist yet because
-  renderUI(map_content) hasn't flushed.
+⏺ Everything looks correct. Here's a summary of all changes made:
 
-No JS errors, but app hangs here indefinitely [Image #8]
+  **Summary of Changes**
 
-⏺ The error is clear: outputOptions(output, "map", ...) is called at line 143  
-  before output$map is defined (which happens at line 200). Shiny can't set    
-  options on an output that doesn't exist yet. I need to move it after the     
-  renderMaplibreCompare definition.
+  `_quarto.yml`
 
-⏺ Moved outputOptions(output, "map", suspendWhenHidden = TRUE) to right after
-  the renderMaplibreCompare block (line 233), so output$map exists when the
-  option is set. This should fix the hang. 
+  - Added `mermaid-format: png` and `lightbox: true` under `format: html:` — applies
+  globally to all notebooks
 
-⏺ Removed the outputOptions line and added a comment explaining these are
-  harmless. To summarize:
-                                                                               
-  - "unexpected state" errors — Cosmetic race condition from renderUI +        
-  htmlwidget pattern. The map still renders correctly. The proper fix would be 
-  moving maplibreCompareOutput("map") into the static UI (not inside renderUI),
-   but that's a larger refactor. These warnings can be safely ignored.
-  - Tour not appearing — Working as designed. In global.R: is_tour_on <- !debug
-   and debug <- interactive(). When running interactively (RStudio), debug =   
-  TRUE → is_tour_on = FALSE. The tour only shows in deployed/non-interactive
-  mode.
+  `calcofi4r/R/erd.R`
 
-## 2026-04-02 revise release_database.qmd, + dependency in yaml
+  - `cc_erd()`: Added `rels` parameter (named list with `primary_keys` and
+  `foreign_keys`) as alternative to `rels_path` for passing relationships inline
+  - `knit_print.cc_erd()`: Changed from DiagrammeR HTML widget to raw `mermaid` code block output — this lets Quarto's native mermaid renderer handle it
+  (respects `mermaid-format: png` and `lightbox`)
+
+  `calcofi4db/R/wrangle.R`
+
+  - `build_relationships_json()`: Now accepts either `dm` (backward compat) or `rels`
+   (a list with `primary_keys`/`foreign_keys`). The `rels` path avoids the `dm`
+  dependency entirely.
+
+  6 QMD files (all with `calcofi: frontmatter`)
+  In each file:
+  - Removed `dm` from `librarian::shelf()`
+  - Replaced `dm_from_con()` / `dm_add_pk()` / `dm_add_fk()` / `dm_set_colors()` /
+  `dm_draw()` with `cc_erd()` using inline `rels` lists
+  - Replaced `build_relationships_json(dm = ...)` with
+  `build_relationships_json(rels = ...)`
+  - Removed `tryCatch` wrappers around geometry workarounds (`cc_erd` handles
+  GEOMETRY natively)
+
+  ┌─────────────────────────────┬───────────────────────────────────────────┐
+  │            File             │                Key changes                │
+  ├─────────────────────────────┼───────────────────────────────────────────┤
+  │ ingest_swfsc_ichthyo.qmd    │ ichthyo_rels list; 3 dm sections → cc_erd │
+  ├─────────────────────────────┼───────────────────────────────────────────┤
+  │ ingest_calcofi_bottle.qmd   │ bottle_rels list; 3 dm sections → cc_erd  │
+  ├─────────────────────────────┼───────────────────────────────────────────┤
+  │ ingest_calcofi_ctd-cast.qmd │ ctd_rels list; 2 dm sections → cc_erd     │
+  ├─────────────────────────────┼───────────────────────────────────────────┤
+  │ ingest_calcofi_dic.qmd      │ dic_rels list; schema +                   │
+  │                             │ write-relationships → cc_erd              │
+  ├─────────────────────────────┼───────────────────────────────────────────┤
+  │ ingest_swfsc_inverts.qmd    │ ichthyo_rels list (shared schema); dm →   │
+  │                             │ rels                                      │
+  ├─────────────────────────────┼───────────────────────────────────────────┤
+  │ release_database.qmd        │ Merge JSON + append cross-dataset FKs     │
+  │                             │ directly; color-coded cc_erd              │
+  └─────────────────────────────┴───────────────────────────────────────────┘
+
+  `.claude/skills/templates/ingest_template.qmd`
+
+  - Updated template to use `cc_erd()` + list-based `rels` pattern for new ingest
+  notebooks
+
+
+## 2026-04-02 revise release_database.qmd, + calcofi dependency in yaml, autogen _targets.yml
 
 The `@release_database.qmd` is too brittle in needing to revise every time a new workflow is added that preceeds it. At the moment the workflow dependencies are defined by the `_targets.R` file, which is also a bit unweildy to edit. Can we instead set this up so that we add this dependency information into the workflows' yaml frontmatter, eg for `@ingest_swfsc_inverts.qmd`:
 
@@ -94,8 +112,6 @@ In cases where the 2-letter `ship_key` is missing in the table `ships`, so `ship
 ⏺ Updated plan                                                                 
   ⎿  /plan to preview                                                 
                                                                                
-⏺ The updated plan now includes the full mismatch handling system:             
-                                                                               
   Key additions:                                                               
                                                         
   1. Interim ship entries — When ship_key is missing, ensure_interim_ships()   
@@ -114,26 +130,24 @@ In cases where the 2-letter `ship_key` is missing in the table `ships`, so `ship
    mismatch recording means a fix in one place propagates everywhere on next
   tar_make().                                                                  
                                                         
-───────────────────────────────────────────────────────────────────────────────
- Ready to code?
-                                                                               
  Here is Claude's plan:
-╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+
  Plan: Restructure CalCOFI Workflows Pipeline           
 
  Context
 
- The _targets.R file and release_database.qmd are brittle — every new ingest
+ The `_targets.R` file and `release_database.qmd` are brittle — every new ingest
  workflow requires manual edits to both. Ship codes, cruise keys, and
  measurement types are handled inconsistently across workflows. This
  restructuring moves dependency declarations into each .qmd's YAML
- frontmatter, auto-generates _targets.R, standardizes data matching patterns,
+ frontmatter, auto-generates `_targets.R`, standardizes data matching patterns,
  and introduces a manifest-driven mismatch/invalidation system.
 
- 1. YAML Frontmatter Schema
+ **1. YAML Frontmatter Schema**
 
- Add a calcofi: block to each pipeline .qmd:
+ Add a `calcofi:` block to each pipeline `.qmd`:
 
+ ```yaml
  ---
  title: "Ingest SWFSC Invertebrates"
  calcofi:
@@ -143,6 +157,7 @@ In cases where the 2-letter `ship_key` is missing in the table `ships`, so `ship
      - ingest_swfsc_ichthyo
    output: data/parquet/swfsc_inverts/manifest.json
  ---
+ ```
 
  ┌──────────────┬─────────────┬─────┬─────────────┬──────────────────────┐
  │     File     │ target_name │ typ │ dependency  │        output        │
@@ -179,18 +194,19 @@ In cases where the 2-letter `ship_key` is missing in the table `ships`, so `ship
  │ qmd          │ s           │ h   │             │                      │
  └──────────────┴─────────────┴─────┴─────────────┴──────────────────────┘
 
- - dependency: [auto] on release_database means "all workflows with type
+ - `dependency: [auto]` on release_database means "all workflows with type
  ingest or spatial"
- - target_name is explicit (handles ctd-cast.qmd → ctd_cast underscore
+ - `target_name` is explicit (handles `ctd-cast.qmd` → `ctd_cast` underscore
  mismatch)
 
  2. Manifest-Driven Mismatch & Invalidation System
 
- 2a. Extended manifest.json with mismatches
+ 2a. Extended `manifest.json` with mismatches
 
- Each workflow's manifest.json gains a mismatches section that records
+ Each workflow's `manifest.json` gains a `mismatches` section that records
  unresolved entity gaps:
 
+ ```json
  {
    "tables": ["ctd_cast", "ctd_measurement", "ctd_summary",
  "measurement_type"],
@@ -207,31 +223,34 @@ In cases where the 2-letter `ship_key` is missing in the table `ships`, so `ship
    },
    ...
  }
+ ```
 
- write_parquet_outputs() already generates manifest.json. We extend it (or add
-  a post-write step) to append the mismatches block from the workflow's
+ `write_parquet_outputs()` already generates `manifest.json`. We extend it (or add
+  a post-write step) to append the `mismatches` block from the workflow's
  validation results.
 
- 2b. Interim ship entries with "?SK?" placeholder
+ **2b. Interim ship entries with "?SK?" placeholder**
 
  When a ship_key (e.g., "XY") appears in data but is not in the ship reference
   table, the workflow creates an interim entry:
 
+ ```
  # in calcofi4db::ensure_interim_ships(con, table = "ctd_raw")
  INSERT INTO ship (ship_key, ship_nodc, ship_name)
  VALUES ('XY', '?XY?', NULL)
+ ```
 
- - ship_nodc = "?XY?" — placeholder format signals "needs resolution"
- - Allows the workflow to proceed (cruise_key derivation needs ship_nodc)
- - The placeholder ships appear in manifest.json mismatches and in the
+ - `ship_nodc = "?XY?"` — placeholder format signals "needs resolution"
+ - Allows the workflow to proceed (cruise_key derivation needs `ship_nodc`)
+ - The placeholder ships appear in `manifest.json` mismatches and in the
  notebook output
 
- 2c. Centralized metadata/ship_renames.csv
+ **2c. Centralized `metadata/ship_renames.csv`**
 
- Move from per-dataset metadata/calcofi/bottle/ship_renames.csv to a single
+ Move from per-dataset `metadata/calcofi/bottle/ship_renames.csv` to a single
  centralized file:
 
- File: metadata/ship_renames.csv
+ File: `metadata/ship_renames.csv`
 
  Columns (keeping existing format but adding dataset for provenance):
  dataset,csv_name,csv_code,csv_name_new,csv_code_new,notes
@@ -239,17 +258,20 @@ In cases where the 2-letter `ship_key` is missing in the table `ships`, so `ship
  db with diff't code"
  calcofi_ctd-cast,,XY,SOME SHIP,33AB,"Resolved from CTD orphan ships"
 
- Each ingest workflow passes this centralized file to match_ships():
+ Each ingest workflow passes this centralized file to `match_ships()`:
+ ```r
  match_ships(
    unmatched_ships  = unmatched,
    reference_ships  = dbReadTable(con, "ship"),
    ship_renames_csv = here("metadata/ship_renames.csv"))
+ ```
 
- 2d. build_targets_list() invalidation from corrections
+ **2d. build_targets_list() invalidation from corrections**
 
- build_targets_list() checks whether manifest mismatches have been resolved by
+ `build_targets_list()` checks whether manifest mismatches have been resolved by
   new entries in correction files:
 
+ ```r
  # pseudocode inside build_targets_list()
  for each workflow with a manifest.json:
    manifest <- read_json(manifest_path)
@@ -258,13 +280,16 @@ In cases where the 2-letter `ship_key` is missing in the table `ships`, so `ship
      if any ?XX? ship_key now has an entry in renames:
        # this manifest's corrections file is newer → force invalidation
        # add the renames CSV as a dependency input to this target
+ ```
 
- Mechanically: the target for a workflow includes metadata/ship_renames.csv as
-  a tracked file dependency. When someone adds a row to ship_renames.csv, the
+ Mechanically: the target for a workflow includes `metadata/ship_renames.csv` as
+  a tracked file dependency. When someone adds a row to `metadata/ship_renames.csv`, the
  file changes, and targets sees it as a new input → forces re-run of any
  workflow that depends on it.
 
  Implementation: each target body includes:
+ 
+ ```r
  tar_target(
    ingest_calcofi_bottle,
    {
@@ -275,61 +300,68 @@ In cases where the 2-letter `ship_key` is missing in the table `ships`, so `ship
    },
    format = "file"
  )
+ ```
 
- Where corrections_csv is a separate tar_target tracking
- metadata/ship_renames.csv and metadata/measurement_type.csv:
+ Where `corrections_csv` is a separate tar_target tracking
+ `metadata/ship_renames.csv` and `metadata/measurement_type.csv`:
+
+ ```r
  tar_target(
    corrections_csv,
    c("metadata/ship_renames.csv", "metadata/measurement_type.csv"),
    format = "file"
  )
+ ```
 
  This way ANY change to the correction files invalidates ALL ingest targets
  that reference them.
 
- 2e. Same pattern for measurement_types and other entities
+ **2e. Same pattern for measurement_types and other entities**
 
  The same mismatch → manifest → correction file → invalidation pattern applies
   to:
 
- - measurement_types: New types found during pivot that aren't in
- metadata/measurement_type.csv → recorded in manifest.json mismatches. User
- adds row to CSV → next tar_make() re-runs the workflow.
- - cruise_keys: Incomplete or malformed cruise_keys → recorded in mismatches.
+ - **measurement_types**: New types found during pivot that aren't in
+ `metadata/measurement_type.csv` → recorded in `manifest.json` mismatches. User
+ adds row to CSV → next `tar_make()` re-runs the workflow.
+ - **cruise_keys**: Incomplete or malformed cruise_keys → recorded in mismatches.
  Resolution may require adding a ship rename or fixing source data.
 
- 3. build_targets_list() in calcofi4db
+ **3. build_targets_list() in calcofi4db**
 
- File: /Users/bbest/Github/CalCOFI/calcofi4db/R/workflow.R (append)
+ File: `/Users/bbest/Github/CalCOFI/calcofi4db/R/workflow.R` (append)
 
  New function that:
- 1. Globs all *.qmd files in workflows_dir
+ 1. Globs all `*.qmd` files in workflows_dir
  2. Parses YAML frontmatter, extracts calcofi: block
  3. Resolves [auto] dependencies → all ingest + spatial target names
- 4. Creates a corrections_csv target tracking metadata/ship_renames.csv +
- metadata/measurement_type.csv
+ 4. Creates a corrections_csv target tracking `metadata/ship_renames.csv` +
+ `metadata/measurement_type.csv`
  5. All ingest/spatial targets depend on corrections_csv (any correction file
  change forces re-run)
- 6. Returns a list() of tar_target() calls with format = "file"
- 7. For glob outputs (e.g., *.zip), wraps with Sys.glob()
+ 6. Returns a `list()` of `tar_target()` calls with format = "file"
+ 7. For glob outputs (e.g., *.zip), wraps with `Sys.glob()`
 
- Also add internal helper parse_qmd_frontmatter().
+ Also add internal helper `parse_qmd_frontmatter()`.
 
- Add yaml to calcofi4db DESCRIPTION Imports, targets to Suggests.
+ Add `yaml` to calcofi4db DESCRIPTION Imports, `targets` to Suggests.
 
- Resulting _targets.R (~8 lines, never needs editing again)
+ Resulting `_targets.R` (~8 lines, never needs editing again)
 
+ ```r
  # calcofi data workflow pipeline (auto-generated from .qmd frontmatter)
  # targets::tar_make()
  # targets::tar_visnetwork()
  library(targets)
  devtools::load_all(here::here("../calcofi4db"))
  build_targets_list()
+ ```
 
- 4. Consistent Ship Matching in Every Ingest
+ **4. Consistent Ship Matching in Every Ingest**
 
  Each ingest workflow that encounters ship data follows this standard pattern:
 
+ ```r
  # 1. load ship reference from prior tables
  load_prior_tables(con, tables = c("ship", "cruise"), parquet_dir = ...)
 
@@ -348,11 +380,13 @@ In cases where the 2-letter `ship_key` is missing in the table `ships`, so `ship
 
  # 5. record mismatches for manifest
  ship_mismatches <- ship_result |> filter(match_type == "unmatched")
+ ```
 
- New calcofi4db function: ensure_interim_ships()
+ **New calcofi4db function**: `ensure_interim_ships()`
 
- File: /Users/bbest/Github/CalCOFI/calcofi4db/R/ship.R (append)
+ File: `/Users/bbest/Github/CalCOFI/calcofi4db/R/ship.R` (append)
 
+ ```r
  ensure_interim_ships <- function(con, match_result) {
    # find ship_keys with no match
 
@@ -368,8 +402,9 @@ In cases where the 2-letter `ship_key` is missing in the table `ships`, so `ship
    }
    # returns count of interim ships created
  }
+ ```
 
- Workflows that need ship matching
+ **Workflows that need ship matching**
 
  ┌──────────┬──────────────────────────────┬──────────────────────────────┐
  │ Workflow │       Current approach       │        Change needed         │
@@ -393,71 +428,76 @@ In cases where the 2-letter `ship_key` is missing in the table `ships`, so `ship
  │          │                              │ if needed                    │
  └──────────┴──────────────────────────────┴──────────────────────────────┘
 
- 5. CTD cruise_key → YYYY-MM-NODC
+ **5. CTD `cruise_key` → `YYYY-MM-NODC`**
 
  File: /Users/bbest/Github/CalCOFI/workflows/ingest_calcofi_ctd-cast.qmd
  (~line 899)
 
- Currently: ship_key = RIGHT(cruise_key, 2) with YYMMKK format, comment says
+ Currently: `ship_key = RIGHT(cruise_key, 2)` with `YYMMKK` format, comment says
  "converted later" but the conversion never happens.
 
  Fix: After line 899 (ship_key derivation) and after ensure_interim_ships():
+
+ ```r
  # convert YYMMKK → YYYY-MM-NODC (uses ship_key → ship_nodc lookup)
  convert_cruise_key_format(con, "ctd_raw", old_key_col = "cruise_key")
  dbExecute(con, "ALTER TABLE ctd_raw DROP COLUMN cruise_key")
  dbExecute(con, "ALTER TABLE ctd_raw RENAME COLUMN cruise_key_new TO
  cruise_key")
+ ```
 
- The convert_cruise_key_format() function already exists at
- calcofi4db/R/wrangle.R:105. Interim ships with ship_nodc = "?XY?" will
- produce cruise_keys like "2024-03-?XY?" — clearly flagged as needing
+ The `convert_cruise_key_format()` function already exists at
+ `calcofi4db/R/wrangle.R:105`. Interim ships with `ship_nodc = "?XY?"` will
+ produce `cruise_keys` like "2024-03-?XY?" — clearly flagged as needing
  resolution.
 
- 6. Manifest for ingest_spatial.qmd
+ **6. Manifest for `ingest_spatial.qmd`**
 
- File: /Users/bbest/Github/CalCOFI/calcofi4db/R/wrangle.R (append)
+ File: `/Users/bbest/Github/CalCOFI/calcofi4db/R/wrangle.R` (append)
 
- New function write_spatial_manifest(parquet_dir):
+ New function `write_spatial_manifest(parquet_dir)`:
  - Lists all .parquet files in dir
  - Opens transient DuckDB to read row counts
- - Writes manifest.json in same format as write_parquet_outputs()
+ - Writes `manifest.json` in same format as `write_parquet_outputs()`
 
- File: /Users/bbest/Github/CalCOFI/workflows/ingest_spatial.qmd
- - Add chunk at end calling write_spatial_manifest(dir_parquet) before the
+ File: `/Users/bbest/Github/CalCOFI/workflows/ingest_spatial.qmd`
+ - Add chunk at end calling `write_spatial_manifest(dir_parquet)` before the
  summary
  - Target output changes from "data/parquet/spatial" →
  "data/parquet/spatial/manifest.json"
 
- 7. New Data Append Pattern
+ **7. New Data Append Pattern**
 
- Extend write_parquet_outputs() to accept mismatches
+ Extend `write_parquet_outputs()` to accept mismatches
 
- Add optional mismatches parameter to write_parquet_outputs():
+ Add optional `mismatches` parameter to `write_parquet_outputs()`:
 
+ ```r
  write_parquet_outputs <- function(
      con, output_dir, tables = NULL,
      partition_by = NULL, strip_provenance = TRUE,
      compression = "snappy",
      mismatches = NULL)  # NEW: list with ships, measurement_types,
  cruise_keys
+ ```
 
- The function appends the mismatches block to manifest.json alongside the
+ The function appends the mismatches block to `manifest.json` alongside the
  existing tables, total_rows, etc.
 
- New calcofi4db functions for mismatch collection
+ New `calcofi4db` functions for mismatch collection
 
- collect_ship_mismatches(con, table, ship_tbl = "ship") — returns tibble of
- ships with "?" in ship_nodc
+ `collect_ship_mismatches(con, table, ship_tbl = "ship")` — returns tibble of
+ ships with "?" in `ship_nodc`
 
- collect_measurement_type_mismatches(con, measurement_type_csv) — returns
+ `collect_measurement_type_mismatches(con, measurement_type_csv)` — returns
  tibble of types in DB but not in CSV
 
- collect_cruise_key_mismatches(con, table) — returns tibble of malformed
- cruise_keys (regex ^\\d{4}-\\d{2}-.+$ failures or "?" in NODC portion)
-
+ `collect_cruise_key_mismatches(con, table)` — returns tibble of malformed
+ `cruise_keys` (regex `^\\d{4}-\\d{2}-.+$` failures or "?" in NODC portion)
  Each ingest workflow calls these near the end and passes results to
  write_parquet_outputs():
 
+ ```r
  mismatches <- list(
    ships             = collect_ship_mismatches(con, "ctd_cast"),
    measurement_types = collect_measurement_type_mismatches(con,
@@ -465,11 +505,13 @@ In cases where the 2-letter `ship_key` is missing in the table `ships`, so `ship
    cruise_keys       = collect_cruise_key_mismatches(con, "ctd_cast"))
 
  write_parquet_outputs(con, dir_parquet, mismatches = mismatches)
+ ```
 
- 8. Dynamic release_database.qmd
+ **8. Dynamic release_database.qmd**
 
  Replace hardcoded parquet_dirs (lines 98-103) with dynamic discovery:
 
+ ```r
  # discover upstream parquet dirs from .qmd frontmatter
  workflows <- parse_qmd_frontmatter(here())
  parquet_dirs <- workflows |>
@@ -477,9 +519,11 @@ In cases where the 2-letter `ship_key` is missing in the table `ships`, so `ship
    pull(output) |>
    dirname() |>
    purrr::map_chr(~ here(.x))
+ ```
 
  Add consolidated mismatch report:
 
+ ```r
  # scan all manifests for unresolved mismatches
  all_manifests <- list.files("data/parquet", "manifest.json",
    recursive = TRUE, full.names = TRUE)
@@ -490,81 +534,290 @@ In cases where the 2-letter `ship_key` is missing in the table `ships`, so `ship
      ...
    }
  })
+ ```
 
- 9. Implementation Sequence
+ **9. Implementation Sequence**
 
  Phase A: calcofi4db functions
 
- 1. Add yaml to DESCRIPTION Imports, targets to Suggests
- 2. Add parse_qmd_frontmatter() + build_targets_list() to R/workflow.R
- 3. Add write_spatial_manifest() to R/wrangle.R
- 4. Add ensure_interim_ships() to R/ship.R
- 5. Add collect_ship_mismatches(), collect_measurement_type_mismatches(),
- collect_cruise_key_mismatches() to R/wrangle.R
- 6. Extend write_parquet_outputs() with optional mismatches parameter
- 7. Create centralized metadata/ship_renames.csv (merge existing
+ 1. Add `yaml` to DESCRIPTION Imports, `targets` to Suggests
+ 2. Add `parse_qmd_frontmatter() + build_targets_list()` to R/workflow.R
+ 3. Add `write_spatial_manifest()` to R/wrangle.R
+ 4. Add `ensure_interim_ships()` to R/ship.R
+ 5. Add `collect_ship_mismatches()`, `collect_measurement_type_mismatches()`,
+ `collect_cruise_key_mismatches()` to R/wrangle.R
+ 6. Extend `write_parquet_outputs()` with optional `mismatches` parameter
+ 7. Create centralized `metadata/ship_renames.csv` (merge existing
  bottle-specific file)
- 8. Run devtools::document()
+ 8. Run `devtools::document()`
 
  Phase B: YAML frontmatter
 
- 9. Add calcofi: block to all 8 pipeline .qmd files
+ 9. Add `calcofi:` block to all 8 pipeline .qmd files
 
  Phase C: Workflow fixes
 
- 10. ingest_spatial.qmd: Add write_spatial_manifest() call
- 11. ingest_calcofi_ctd-cast.qmd: Add match_ships() + ensure_interim_ships() +
-  convert_cruise_key_format()
+ 10. ingest_spatial.qmd: Add `write_spatial_manifest()` call
+ 11. ingest_calcofi_ctd-cast.qmd: Add `match_ships()` + `ensure_interim_ships()` +
+  `convert_cruise_key_format()`
  12. ingest_calcofi_bottle.qmd: Switch to centralized
- metadata/ship_renames.csv; add ensure_interim_ships(); add mismatch
+ `metadata/ship_renames.csv`; add `ensure_interim_ships()`; add mismatch
  collection
- 13. ingest_swfsc_inverts.qmd: Add ship validation + ensure_interim_ships() if
+ 13. ingest_swfsc_inverts.qmd: Add ship validation + `ensure_interim_ships()` if
   needed; add mismatch collection
- 14. ingest_calcofi_dic.qmd: Add measurement_type mismatch collection
- 15. release_database.qmd: Replace hardcoded parquet_dirs with dynamic
+ 14. ingest_calcofi_dic.qmd: Add `measurement_type` mismatch collection
+ 15. release_database.qmd: Replace hardcoded `parquet_dirs` with dynamic
  discovery; add consolidated mismatch report
 
  Phase D: Replace _targets.R
 
- 16. Replace _targets.R with thin wrapper calling build_targets_list()
+ 16. Replace _targets.R with thin wrapper calling `build_targets_list()`
 
  10. Verification
 
- 1. devtools::load_all("../calcofi4db") — package loads without errors
- 2. build_targets_list() — returns equivalent DAG to current hand-written
- _targets.R (plus corrections_csv target)
- 3. targets::tar_visnetwork() — visual DAG matches expected dependency graph
- 4. targets::tar_outdated() — spatial target outdated (output path changed);
+ 1. `devtools::load_all("../calcofi4db")` — package loads without errors
+ 2. `build_targets_list()` — returns equivalent DAG to current hand-written
+ _targets.R (plus `corrections_csv` target)
+ 3. `targets::tar_visnetwork()` — visual DAG matches expected dependency graph
+ 4. `targets::tar_outdated()` — spatial target outdated (output path changed);
  others unchanged
- 5. Test parse_qmd_frontmatter() on each .qmd — all 8 return correct calcofi
+ 5. Test `parse_qmd_frontmatter()` on each .qmd — all 8 return correct `calcofi`
  metadata
- 6. Test invalidation: add a row to metadata/ship_renames.csv → verify
- tar_outdated() marks dependent targets
- 7. Test interim ships: run a workflow with unknown ship_key → verify "?XY?"
+ 6. Test invalidation: add a row to `metadata/ship_renames.csv` → verify
+ `tar_outdated()` marks dependent targets
+ 7. Test interim ships: run a workflow with unknown `ship_key` → verify "?XY?"
  placeholder created, manifest records mismatch
 
  Critical Files
 
- - /Users/bbest/Github/CalCOFI/calcofi4db/R/workflow.R — build_targets_list(),
-  parse_qmd_frontmatter()
+ - /Users/bbest/Github/CalCOFI/calcofi4db/R/workflow.R — `build_targets_list()`,
+  `parse_qmd_frontmatter()`
  - /Users/bbest/Github/CalCOFI/calcofi4db/R/wrangle.R —
- write_spatial_manifest(), collect_*_mismatches(), extended
- write_parquet_outputs()
- - /Users/bbest/Github/CalCOFI/calcofi4db/R/ship.R — ensure_interim_ships()
- - /Users/bbest/Github/CalCOFI/calcofi4db/DESCRIPTION — yaml, targets deps
- - /Users/bbest/Github/CalCOFI/workflows/_targets.R — replaced with thin
+ `write_spatial_manifest()`, `collect_*_mismatches()`, extended
+ `write_parquet_outputs()`
+ - `/Users/bbest/Github/CalCOFI/calcofi4db/R/ship.R` — `ensure_interim_ships()`
+ - `/Users/bbest/Github/CalCOFI/calcofi4db/DESCRIPTION` — yaml, targets deps
+ - `/Users/bbest/Github/CalCOFI/workflows/_targets.R` — replaced with thin
  wrapper
- - /Users/bbest/Github/CalCOFI/workflows/metadata/ship_renames.csv —
+ - `/Users/bbest/Github/CalCOFI/workflows/metadata/ship_renames.csv` —
  centralized (merged from bottle-specific)
- - /Users/bbest/Github/CalCOFI/workflows/release_database.qmd — dynamic
+ - `/Users/bbest/Github/CalCOFI/workflows/release_database.qmd` — dynamic
  parquet_dirs + mismatch report
- - /Users/bbest/Github/CalCOFI/workflows/ingest_calcofi_ctd-cast.qmd — ship
+ - `/Users/bbest/Github/CalCOFI/workflows/ingest_calcofi_ctd-cast.qmd` — ship
  matching + cruise_key conversion
- - /Users/bbest/Github/CalCOFI/workflows/ingest_calcofi_bottle.qmd —
+ - `/Users/bbest/Github/CalCOFI/workflows/ingest_calcofi_bottle.qmd` —
  centralized ship_renames + interim ships
- - /Users/bbest/Github/CalCOFI/workflows/ingest_spatial.qmd — manifest
+ - `/Users/bbest/Github/CalCOFI/workflows/ingest_spatial.qmd` — manifest
  generation
  - All 8 .qmd files — calcofi: frontmatter additions
+
+⏺ All 4 phases complete. Here's a summary of everything that was done:
+                                                                               
+  **Phase A: calcofi4db functions (6 new functions + 1 extended)**
+                                 
+  - `parse_qmd_frontmatter()` — Reads calcofi: YAML from all .qmd files          
+  - `build_targets_list()` — Auto-generates tar_target() calls from frontmatter
+  - `ensure_interim_ships()` — Creates ship_nodc = "?XX?" placeholder entries for
+   unmatched ships                                                             
+  - `collect_ship_mismatches()` — Finds ships with "?" placeholders              
+  - `collect_measurement_type_mismatches()` — Finds types in DB but not in CSV   
+  registry                                                                     
+  - `collect_cruise_key_mismatches()` — Finds malformed/placeholder cruise keys  
+  - `write_spatial_manifest()` — Generates manifest.json for spatial parquet dir 
+  - `write_parquet_outputs()` — Extended with mismatches parameter               
+                                                                                
+  **Phase B: YAML frontmatter on all 8 .qmd files**                              
+                                                                               
+  Each file got a `calcofi:` block with `target_name`, `workflow_type`, `dependency`,  
+  and `output`.                                                     
+                                                                               
+  **Phase C: Workflow fixes**                                        
+
+  - `ingest_spatial.qmd` — Added `write_spatial_manifest()` call                   
+  - `ingest_calcofi_ctd-cast.qmd` — Added `match_ships()` + `ensure_interim_ships()`
+  for orphan ships, `convert_cruise_key_format()` for YYMMKK → YYYY-MM-NODC,     
+  mismatch collection                                             
+  - `ingest_calcofi_bottle.qmd` — Switched to centralized                        
+  `metadata/ship_renames.csv`, added `ensure_interim_ships()`, mismatch collection 
+  - `ingest_calcofi_dic.qmd` — Added `measurement_type` + `cruise_key` mismatch
+  collection                                                                   
+  - `ingest_swfsc_inverts.qmd` — Added `ship` + `cruise_key` mismatch collection
+  - `ingest_swfsc_ichthyo.qmd` — Added `ship` + `cruise_key` mismatch collection     
+  - `release_database.qmd` — Dynamic `parquet_dirs` discovery from frontmatter,    
+  consolidated mismatch scan from all manifests, updated diagram               
+  - `metadata/ship_renames.csv` — New centralized file (merged from              
+  bottle-specific)                                                             
+                                                                  
+  **Phase D: _targets.R → 13-line thin wrapper**                                   
+                                                                  
+  Calls `build_targets_list()` — never needs manual editing again. Adding a new  
+  workflow just means adding `calcofi:` frontmatter to its .qmd.   
+
+[Image #1] Why is `ingest_swfsc_ichthyo` showing as "Errored" from `targets::tar_visnetwork()`
+
+⏺ It's a stale error from a previous run on 2026-03-24 — the ichthyo render
+  failed mid-GCS upload. The targets store remembers this. It has nothing to do
+   with our changes.                                                           
+   
+  To clear it, you can either:                                                 
+                                                                  
+  1. Invalidate just that target so it re-runs cleanly next time:              
+  targets::tar_invalidate(ingest_swfsc_ichthyo)                   
+  2. Invalidate everything to start fresh (since all targets are outdated      
+  anyway due to the new corrections_csv dependency):                           
+  targets::tar_invalidate(everything())                                        
+                                                                               
+  Since all 9 targets show as outdated already, option 2 is cleanest. Want me  
+  to run the invalidation?                      
+
+Run the following command:
+
+  ```bash
+  Rscript -e 'targets::tar_make()'
+  ```
+
+Babysit output and debug until completion. Do not take fast shortcuts to fixing problems. Go for long-term best solutions, and implement across all relevant workflows, ideally with reusable `calcofi4db` functions and  `metadata/*`.
+
+The workflow `ingest_calcofi_ctd-cast.qmd` is particularly slow and unweildy with outputs at `data/parquet/calcofi_ctd-cast` in excess of 21 GB (partitioned `ctd_measurement` alone is almost 16 GB). In this run, it should partition from old `cruise_key` of format `YYMMKK` (eg "0302JD") to newer format `YYYY-MM-NODC`. The workflow pivots from wide to long, but for the sake of serving later into ERDDAP, let's also add a wide format alternative output first -- this is to be used outside the regular database, so we need to flag this somehow in the `manifest.json` and ensure that downstream processes respect this flag. Since this notebook is so slow, be sure to use cached outputs whereever possible and skip (with appropriate cache invalidation). 
+
+     ◼ Add `supplemental` support to write_parquet_outputs()        
+     ◻ Add `include_supplemental` to load_prior_tables() and finalize_…
+     ◻ Add ctd_wide table and caching to ingest_calcofi_ctd-cast.qmd
+     ◻ Rebuild calcofi4db and run tar_make()
+
+⏺ Now I'll edit write_parquet_outputs() to add the supplemental parameter and
+  partition validation
+⏺ Now add partition value validation to the skip logic and the supplemental
+  field to the manifest  
+⏺ Now add the supplemental field to the manifest JSON output
+⏺ Now update load_prior_tables() to respect the supplemental flag
+⏺ Now I need to read the docstring for load_prior_tables to update it, and add
+  the filtering logic after .discover_parquet_sources
+⏺ Now update finalize_ingest() to also respect the supplemental flag
+⏺ Now let me update the CTD-cast workflow. I need to add the wide-format output
+   and improve caching. Let me re-read the key sections I'll modify
+⏺ Now I need to add the wide-format table creation. The best place is right
+  after the cross-dataset bridge section (after cruise_key conversion) and     
+  before the "Split into Tidy Tables" section. Let me also add a caching
+  mechanism for the expensive read+bind+filter steps.                          
+                                                                             
+  First, let me add smart caching for the setup — instead of unconditionally
+  deleting the DuckDB, check if a checkpoint exists
+⏺ Now I need to add conditional skipping of the expensive steps when a
+  checkpoint is available. The key sections that should be skipped are: d_zips,
+   download_and_unzip, d_csv, read_csv, d_bind, format_datetime, fill_lonlat,
+  pts_distance_from_lnst, view_badcr, filter_pts, view_pts_filt, check_dupes,
+  rename_fields. All these produce the ctd_raw table in DuckDB.
+
+  Let me add a conditional eval at the start of the scraping section
+⏺ Now I need to make the cross-dataset bridge section also conditional — it
+  should only run if cruise_key hasn't been converted yet. Let me check what
+  the section does and make it idempotent
+⏺ I see the cross-dataset bridge modifies cruise_key — it first truncates      
+  >6-char keys, derives ship_key, converts cruise_key to YYYY-MM-NODC format.
+  When using a checkpoint, the bridge section needs to detect whether this     
+  conversion was already done. Let me make it detect the format
+⏺ Now add the ctd_wide table and checkpoint after the cross-dataset bridge. I
+  need to insert a new section between the orphan cruise validation and the
+  "Split into Tidy Tables" section
+⏺ Good. Now I'll insert the wide-format and checkpoint sections between the    
+  bridge validation and "Split into Tidy Tables" 
+⏺ Now I need to update the "ctd_cast" chunk since d_meas_ctd and
+  meas_cols/qual_cols are now defined in the ctd_wide chunk above. Let me
+  update ctd_cast to not re-define them
+⏺ Now update the write_parquet section to include ctd_wide as supplemental and
+  partitioned
+⏺ Now update the write_parquet call to include ctd_wide  
+⏺ Now update the preview section to include ctd_wide
+⏺ Now update the metadata JSON section to also update the tbls_redefine
+  reference. Let me also add ctd_wide to the schema diagram and the metadata.
+  Let me read the schema section
+⏺ The schema diagram should be fine — dm_from_con(con) will pick up ctd_wide   
+  automatically. The DM won't add PK/FK for it since it's supplemental, but
+  it'll appear in the diagram. That's acceptable.                              
+                                                                             
+  Now let me also update the tbls_redefine.csv to document ctd_wide
+⏺ Now let me also clean up the drop_ctd_raw section — it should happen after 
+  ctd_wide is created (which it does since ctd_wide chunk comes before Split).
+  Let me verify the order is correct:                                  
+                                                                       
+  Searched for 1 pattern (ctrl+o to expand)                         
+                                            
+⏺ Good. The order is: ctd_wide → ctd_cast → ctd_measurement → ctd_summary →    
+  measurement_type → drop_ctd_raw → schema → ... → write_parquet. This is      
+  correct since ctd_wide is created from ctd_raw before it's dropped, and      
+  before the tidy tables are split out.                                        
+                                                                               
+  Now let me also make the drop_ctd_raw not drop ctd_wide (it's a separate
+  table)
+⏺ Good — drop_ctd_raw only drops ctd_raw, not ctd_wide. The ctd_wide table   
+  persists through write_parquet.                                              
+                                                            
+  Now let me also handle an edge case: the site_key column. The                
+  flds_redefine.csv shows that sta_id → site_key rename happens in the         
+  rename_fields step. But site_key might not be a column name in ctd_raw — let
+  me check what columns ctd_raw has. Looking at the rename step (line 856), it 
+  renames sta_id → site_key. So ctd_raw should have site_key. Good.            
+  
+  Let me also check if line and sta columns are still present in ctd_raw after 
+  the rename (they'd be needed for the wide format too)
+⏺ Looking at the renames: sta_id → site_key and cast_id → cast_key. The line,
+  sta, and other measurement columns remain as-is. The d_filt dataframe gets   
+  written to ctd_raw with all remaining columns.                       
+                                                                               
+  So ctd_raw has: cruise_key, _source_file, site_key, cast_key, datetime_utc,  
+  lon_dec, lat_dec, cast_dir, line, sta, depth_m, data_stage, ord_occ, cst_cnt,
+   btl_cnt, and all measurement/quality columns.                               
+                                                                               
+  The ctd_wide wide_keep list I wrote uses intersect() so it will safely pick  
+  only columns that exist. Good.                                               
+                                                                               
+  Now let me update the dm_from_con call in the schema section to exclude
+  ctd_wide since it won't have proper keys
+⏺ The dm_from_con will include ctd_wide in the diagram, which is fine — it     
+  shows the table exists. No PKs/FKs are defined for it, which correctly       
+  reflects it's a flat supplemental table.                             
+                                                                               
+  Now let me also handle the dm_from_con in the relationships.json writing   
+  section                                                                      
+⏺ The dm_tbls_ctd line will include ctd_wide which is fine — it won't have     
+  PKs/FKs but it'll appear in the relationships schema. Actually, I should     
+  exclude it from relationships.json since it's supplemental. Let me update
+⏺ Now let me also remove the checkpoint DuckDB during cleanup, so subsequent
+  pipeline runs start fresh
+⏺ Now let me rebuild the calcofi4db package and run the pipeline
+⏺ Installed successfully. Now let's run the targets pipeline
+⏺ format_datetime completed (183s). Now on fill_lonlat. Let me continue        
+  monitoring
+⏺ Excellent progress! The checkpoint was saved, ctd_wide was created (6.5s),   
+  ctd_cast (3.8s), and now it's on ctd_measurement (the expensive pivot). Let
+  me wait for that
+⏺ The CTD-cast ingest completed successfully. The parquet is now using         
+  YYYY-MM-NODC format (e.g., cruise_key=1998-02-31JD). I notice there's a    
+  __HIVE_DEFAULT_PARTITION__ for NULL cruise_keys. Let me continue monitoring  
+  the GCS upload and remaining targets 
+
+```bash
+tail -30 /private/tmp/claude-501/-Users-bbest-Github-CalCOFI-workflows/4cc25fe6-7c8f-45a1-b066-c3959a88b278/tasks/boy2w9g9k.output
+tail -30 /private/tmp/claude-501/-Users-bbest-Github-CalCOFI-workflows/4cc25fe6-7c8f-45a1-b066-c3959a88b278/tasks/bflvg62hc.output
+```
+
+Looks like we're hung on pts_distance_from_lnst R chunk. What can we do to   
+detect that's skippable, given we just ran this notebook and it is now being   
+re-run only because GCS upload got interrupted?                                
+                                                                 
+⏺ The root issue: the parquet output is already complete from the first run,
+  but the notebook doesn't know that. The checkpoint only saves the ctd_raw
+  stage — it doesn't detect that all final outputs are already written.        
+                                                                            
+  The fix: add an early-exit check right after setup that detects complete
+  parquet outputs and skips all computation, jumping straight to GCS upload.
+                                                                               
+  Let me kill the current run and implement this
+
+⏺ Good, all killed. Now let me implement the proper early-exit check. The idea:
+   right after setup, detect if parquet output is already complete and skip all
+   computation
 
 ## 2026-04-01 + ingest_swfsc_inverts.qmd
 
@@ -1224,7 +1477,52 @@ Excellent, works well! Now update the layout of the Map Layers modal to two
 
 You made several excellent fixes to the `mapgl` library, particularly for getting the `compare()` functionality levelled up to existing single map functionality (ie, `mapboxgl()` or `maplibre()`). Help me create a Github issue describing all the issues with one or more expositional examples, which we can render and include snapshots of, describing the problems. Then let's make a pull request from the up-to-date fork at ~/Github/bbest/mapgl (https://github.com/bbest/mapgl from master https://github.com/walkerke/mapgl/).
 
+Ok, that's working well. While we're at it with fixing the JS issues, how    
+about these that have been popping up every time? [Image #7]
 
+⏺ Two issues:                                                                  
+                                                                               
+  1. favicon.ico 404 — No favicon in the app's www/ directory                  
+  2. "output is in an unexpected state" — Shiny is sending                     
+  progress/recalculating messages for the map output while it's in the wrong   
+  state. This typically happens when the output is rendered conditionally (via
+  renderUI) and the widget receives messages before it's fully initialized.   
+
+⏺ Two fixes:                    
+
+  1. favicon 404 — Added <link rel="icon" href="logo_calcofi.svg"> to ui.R so  
+  the browser uses the existing CalCOFI logo instead of requesting a
+  nonexistent favicon.ico.                                                     
+  2. "output is in an unexpected state" — Added outputOptions(output, "map", 
+  suspendWhenHidden = TRUE) in server.R. This tells Shiny not to send          
+  progress/recalculating messages for the map output until
+  maplibreCompareOutput("map") is actually in the DOM (rendered by renderUI).  
+  The race condition was: renderMaplibreCompare starts computing immediately
+  when rx$map_sp is set, but the widget container doesn't exist yet because
+  renderUI(map_content) hasn't flushed.
+
+No JS errors, but app hangs here indefinitely [Image #8]
+
+⏺ The error is clear: outputOptions(output, "map", ...) is called at line 143  
+  before output$map is defined (which happens at line 200). Shiny can't set    
+  options on an output that doesn't exist yet. I need to move it after the     
+  renderMaplibreCompare definition.
+
+⏺ Moved outputOptions(output, "map", suspendWhenHidden = TRUE) to right after
+  the renderMaplibreCompare block (line 233), so output$map exists when the
+  option is set. This should fix the hang. 
+
+⏺ Removed the outputOptions line and added a comment explaining these are
+  harmless. To summarize:
+                                                                               
+  - "unexpected state" errors — Cosmetic race condition from renderUI +        
+  htmlwidget pattern. The map still renders correctly. The proper fix would be 
+  moving maplibreCompareOutput("map") into the static UI (not inside renderUI),
+   but that's a larger refactor. These warnings can be safely ignored.
+  - Tour not appearing — Working as designed. In global.R: is_tour_on <- !debug
+   and debug <- interactive(). When running interactively (RStudio), debug =   
+  TRUE → is_tour_on = FALSE. The tour only shows in deployed/non-interactive
+  mode.
 
 ## 2026-03-27..-30 int-app speed up with cache query (h3t roadmap)
 
