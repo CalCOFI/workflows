@@ -1,5 +1,10 @@
 ---
 title: "Ingest Spatial Boundaries"
+calcofi:
+  target_name: ingest_spatial
+  workflow_type: spatial
+  dependency: []
+  output: data/parquet/spatial/manifest.json
 editor_options:
   chunk_output_type: console
 ---
@@ -438,6 +443,14 @@ for (pq in parquet_files) {
 }
 
 dbDisconnect(con, shutdown = TRUE)
+```
+
+## Write manifest
+
+```{r}
+#| label: manifest
+
+write_spatial_manifest(dir_parquet)
 ```
 
 ## Output summary

@@ -1,5 +1,11 @@
 ---
 title: "Release CalCOFI Database"
+calcofi:
+  target_name: release_database
+  workflow_type: release
+  dependency:
+    - auto
+  output: data/releases
 execute:
   echo: true
   message: true
@@ -20,11 +26,10 @@ editor:
 database by assembling all ingest parquet outputs. This is the "caboose"
 notebook that always runs last, after all ingest notebooks complete.
 
-**Upstream notebooks** (must complete first):
-
-1.  `ingest_swfsc_ichthyo.qmd` — ichthyo tables + taxonomy
-2.  `ingest_calcofi_bottle.qmd` — bottle/cast tables + cruise bridge
-3.  `ingest_calcofi_ctd-cast.qmd` — CTD tables
+**Upstream notebooks** are auto-discovered from `calcofi:` YAML
+frontmatter in each `.qmd`. All workflows with `workflow_type: ingest`
+or `spatial` feed into this release notebook via `dependency: [auto]`
+in `_targets.R`.
 
 ```{mermaid}
 %%| label: fig-workflow
@@ -32,19 +37,25 @@ notebook that always runs last, after all ingest notebooks complete.
 
 flowchart LR
     subgraph ingest["Ingest Notebooks"]
-        i1["ichthyo<br/>12 tables"]
-        i2["bottle<br/>5 tables"]
-        i3["ctd-cast<br/>4 tables"]
+        i1["ichthyo"]
+        i2["bottle"]
+        i3["ctd-cast"]
+        i4["dic"]
+        i5["inverts"]
+        i6["spatial"]
     end
     subgraph assembly["Assembly (this notebook)"]
         a["Load all parquet<br/>into in-memory DuckDB"]
     end
     subgraph release["Frozen Release"]
-        f["Clean parquet<br/>+ catalog.json"]
+        f["Clean parquet<br/>+ manifest.json"]
     end
     i1 --> a
     i2 --> a
     i3 --> a
+    i4 --> a
+    i5 --> a
+    i6 --> a
     a --> f
 
     style ingest fill:#e3f2fd,stroke:#1565c0
@@ -64,7 +75,6 @@ librarian::shelf(
   CalCOFI / calcofi4db,
   CalCOFI / calcofi4r,
   DBI,
-  dm,
   dplyr,
   DT,
   fs,
@@ -94,13 +104,14 @@ to `gs://calcofi-db/ingest/{dataset}/`.
 con_wdl <- get_duckdb_con(":memory:")
 load_duckdb_extension(con_wdl, "spatial")
 
-# load all ingest parquet outputs into one DuckDB
-parquet_dirs <- c(
-  here("data/parquet/swfsc_ichthyo"),
-  here("data/parquet/calcofi_bottle"),
-  here("data/parquet/calcofi_ctd-cast"),
-  here("data/parquet/calcofi_dic")
-)
+# discover upstream parquet dirs from .qmd frontmatter
+wf <- parse_qmd_frontmatter(here())
+parquet_dirs <- wf |>
+  filter(workflow_type %in% c("ingest", "spatial")) |>
+  pull(output) |>
+  dirname() |>
+  purrr::map_chr(~ here(.x))
+message(glue("Loading {length(parquet_dirs)} ingest parquet dirs"))
 
 load_stats <- purrr::map_dfr(parquet_dirs, function(pd) {
   load_prior_tables(
@@ -112,6 +123,37 @@ load_stats <- purrr::map_dfr(parquet_dirs, function(pd) {
 
 load_stats |>
   datatable(caption = "Assembled tables from ingest parquet outputs")
+```
+
+## Scan Manifests for Mismatches
+
+```{r}
+#| label: scan_mismatches
+
+# scan all ingest manifests for unresolved mismatches
+all_manifests <- list.files(
+  "data/parquet", "manifest.json",
+  recursive = TRUE, full.names = TRUE)
+
+all_mismatches <- purrr::compact(lapply(all_manifests, function(mf) {
+  m <- jsonlite::read_json(mf)
+  if (is.null(m$mismatches)) return(NULL)
+  dataset <- basename(dirname(mf))
+  purrr::imap_dfr(m$mismatches, function(items, category) {
+    if (length(items) == 0) return(NULL)
+    purrr::map_dfr(items, as_tibble) |>
+      mutate(dataset = dataset, category = category, .before = 1)
+  })
+}))
+
+if (length(all_mismatches) > 0) {
+  d_mismatches <- bind_rows(all_mismatches)
+  message(glue("{nrow(d_mismatches)} unresolved mismatch(es) across manifests"))
+  d_mismatches |>
+    datatable(caption = "Unresolved mismatches (from manifest.json)")
+} else {
+  message("No unresolved mismatches found across manifests")
+}
 ```
 
 ## Validate
@@ -339,126 +381,60 @@ plot(erd)
 #| fig-width: 12
 #| fig-height: 10
 
-# build dm from connection (exclude internal tables, views, and GEOMETRY tables)
-geom_tbls_schema <- DBI::dbGetQuery(
-  con_wdl,
-  "SELECT DISTINCT table_name FROM information_schema.columns
-   WHERE data_type LIKE 'GEOMETRY%'"
-)$table_name
-schema_tbls <- setdiff(tbls, c("_meta", "_sp_update", geom_tbls_schema))
-schema_tbls <- schema_tbls[
-  !schema_tbls %in% c("casts_derived", "ctd_cast_derived")
-]
+# exclude internal tables and views
+schema_tbls <- setdiff(
+  tbls,
+  c("_meta", "_sp_update", "casts_derived", "ctd_cast_derived"))
 
-d <- tryCatch(
-  dm::dm_from_con(con_wdl, table_names = schema_tbls, learn_keys = FALSE),
-  error = function(e) {
-    message(glue("dm_from_con failed: {e$message}"))
-    NULL
-  }
+# merge per-dataset relationships.json files
+rels_paths <- c(
+  here("data/parquet/swfsc_ichthyo/relationships.json"),
+  here("data/parquet/calcofi_bottle/relationships.json"),
+  here("data/parquet/calcofi_ctd-cast/relationships.json"),
+  here("data/parquet/calcofi_dic/relationships.json")
 )
+rels_paths <- rels_paths[file.exists(rels_paths)]
 
-if (is.null(d)) {
-  message("Schema diagram skipped (dm_from_con failed on GEOMETRY tables)")
-} else {
-  # merge per-dataset relationships.json files
-  rels_paths <- c(
-    here("data/parquet/swfsc_ichthyo/relationships.json"), # TODO: add
-    here("data/parquet/calcofi_bottle/relationships.json"), # TODO: add
-    here("data/parquet/calcofi_ctd-cast/relationships.json"),
-    here("data/parquet/calcofi_dic/relationships.json")
-  )
-  rels_paths <- rels_paths[file.exists(rels_paths)]
-
-  dir_frozen <- here(glue("data/releases/{release_version}"))
-  dir.create(dir_frozen, recursive = TRUE, showWarnings = FALSE)
-  rels_merged_path <- file.path(dir_frozen, "relationships.json")
-
-  if (length(rels_paths) > 0) {
-    merge_relationships_json(rels_paths, rels_merged_path)
-
-    # apply merged PKs/FKs to dm
-    d <- read_relationships_json(rels_merged_path, dm = d)
-
-    # add cross-dataset FKs (bottle casts → ichthyo cruise/ship)
-    d <- tryCatch(
-      dm::dm_add_fk(d, casts, cruise_key, cruise),
-      error = function(e) d
-    )
-    d <- tryCatch(dm::dm_add_fk(d, casts, ship_key, ship), error = function(e) {
-      d
-    })
-    d <- tryCatch(dm::dm_add_fk(d, casts, grid_key, grid), error = function(e) {
-      d
-    })
-
-    # re-write merged file with cross-dataset FKs included
-    build_relationships_json(
-      dm = d,
-      output_dir = dir_frozen,
-      provider = "calcofi",
-      dataset = "calcofi-db-release"
-    )
-  }
-
-  # set table colors by group
-  ichthyo_tbls <- intersect(
-    c("cruise", "ship", "site", "tow", "net"),
-    schema_tbls
-  )
-  species_tbls <- intersect(
-    c("ichthyo", "species", "lookup", "taxon", "taxa_rank"),
-    schema_tbls
-  )
-  spatial_tbls <- intersect(c("grid", "segment"), schema_tbls)
-  bottle_tbls <- intersect(
-    c(
-      "casts",
-      "bottle",
-      "bottle_measurement",
-      "cast_condition",
-      "measurement_type"
-    ),
-    schema_tbls
-  )
-  ctd_tbls <- intersect(
-    c("ctd_cast", "ctd_measurement", "ctd_summary"),
-    schema_tbls
-  )
-  dic_tbls <- intersect(
-    c("dic_sample", "dic_measurement", "dic_measurement_summary"),
-    schema_tbls
-  )
-  meta_tbls <- intersect(c("dataset"), schema_tbls)
-
-  if (length(ichthyo_tbls) > 0) {
-    d <- d |> dm::dm_set_colors(lightblue = !!ichthyo_tbls)
-  }
-  if (length(species_tbls) > 0) {
-    d <- d |> dm::dm_set_colors(lightyellow = !!species_tbls)
-  }
-  if (length(spatial_tbls) > 0) {
-    d <- d |> dm::dm_set_colors(lightgreen = !!spatial_tbls)
-  }
-  if (length(bottle_tbls) > 0) {
-    d <- d |> dm::dm_set_colors(pink = !!bottle_tbls)
-  }
-  if (length(ctd_tbls) > 0) {
-    d <- d |> dm::dm_set_colors(lavender = !!ctd_tbls)
-  }
-  if (length(dic_tbls) > 0) {
-    d <- d |> dm::dm_set_colors(lightsalmon = !!dic_tbls)
-  }
-  if (length(meta_tbls) > 0) {
-    d <- d |> dm::dm_set_colors(white = !!meta_tbls)
-  }
-
-  dm::dm_draw(d, rankdir = "LR", view_type = "all")
-} # end if (!is.null(d))
-
-# ensure dir_frozen exists regardless of dm path
 dir_frozen <- here(glue("data/releases/{release_version}"))
 dir.create(dir_frozen, recursive = TRUE, showWarnings = FALSE)
+rels_merged_path <- file.path(dir_frozen, "relationships.json")
+
+if (length(rels_paths) > 0) {
+  merge_relationships_json(rels_paths, rels_merged_path)
+
+  # add cross-dataset FKs (bottle casts → ichthyo cruise/ship/grid)
+  rels_merged <- jsonlite::fromJSON(
+    rels_merged_path, simplifyVector = FALSE)
+  cross_fks <- list(
+    list(table = "casts", column = "cruise_key",
+         ref_table = "cruise", ref_column = "cruise_key"),
+    list(table = "casts", column = "ship_key",
+         ref_table = "ship", ref_column = "ship_key"),
+    list(table = "casts", column = "grid_key",
+         ref_table = "grid", ref_column = "grid_key"))
+  rels_merged$foreign_keys <- c(
+    rels_merged$foreign_keys, cross_fks)
+  jsonlite::write_json(
+    rels_merged, rels_merged_path,
+    auto_unbox = TRUE, pretty = TRUE, null = "null")
+}
+
+# render color-coded ERD (cc_erd handles GEOMETRY columns natively)
+cc_erd(
+  con_wdl,
+  tables   = schema_tbls,
+  rels_path = rels_merged_path,
+  colors = list(
+    lightblue   = c("cruise", "ship", "site", "tow", "net"),
+    lightyellow = c("ichthyo", "species", "lookup",
+                    "taxon", "taxa_rank"),
+    lightgreen  = c("grid", "segment"),
+    pink        = c("casts", "bottle", "bottle_measurement",
+                    "cast_condition", "measurement_type"),
+    lavender    = c("ctd_cast", "ctd_measurement", "ctd_summary"),
+    lightsalmon = c("dic_sample", "dic_measurement",
+                    "dic_measurement_summary"),
+    white       = "dataset"))
 ```
 
 ## Create Frozen Release

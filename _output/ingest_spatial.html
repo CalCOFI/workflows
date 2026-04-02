@@ -6,7 +6,7 @@
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
-<meta name="dcterms.date" content="2026-03-31">
+<meta name="dcterms.date" content="2026-04-02">
 
 <title>Ingest Spatial Boundaries</title>
 <style>
@@ -107,10 +107,11 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   <li><a href="#process-datasets" id="toc-process-datasets" class="nav-link" data-scroll-target="#process-datasets"><span class="header-section-number">5</span> Process datasets</a></li>
   <li><a href="#upload-to-gcs" id="toc-upload-to-gcs" class="nav-link" data-scroll-target="#upload-to-gcs"><span class="header-section-number">6</span> Upload to GCS</a></li>
   <li><a href="#load-into-duckdb" id="toc-load-into-duckdb" class="nav-link" data-scroll-target="#load-into-duckdb"><span class="header-section-number">7</span> Load into DuckDB</a></li>
-  <li><a href="#output-summary" id="toc-output-summary" class="nav-link" data-scroll-target="#output-summary"><span class="header-section-number">8</span> Output summary</a>
+  <li><a href="#write-manifest" id="toc-write-manifest" class="nav-link" data-scroll-target="#write-manifest"><span class="header-section-number">8</span> Write manifest</a></li>
+  <li><a href="#output-summary" id="toc-output-summary" class="nav-link" data-scroll-target="#output-summary"><span class="header-section-number">9</span> Output summary</a>
   <ul>
-  <li><a href="#pmtiles" id="toc-pmtiles" class="nav-link" data-scroll-target="#pmtiles"><span class="header-section-number">8.1</span> PMTiles</a></li>
-  <li><a href="#parquet" id="toc-parquet" class="nav-link" data-scroll-target="#parquet"><span class="header-section-number">8.2</span> Parquet</a></li>
+  <li><a href="#pmtiles" id="toc-pmtiles" class="nav-link" data-scroll-target="#pmtiles"><span class="header-section-number">9.1</span> PMTiles</a></li>
+  <li><a href="#parquet" id="toc-parquet" class="nav-link" data-scroll-target="#parquet"><span class="header-section-number">9.2</span> Parquet</a></li>
   </ul></li>
   </ul>
 </nav>
@@ -130,7 +131,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">2026-03-31</p>
+      <p class="date">2026-04-02</p>
     </div>
   </div>
   
@@ -243,8 +244,8 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb2-41"><a href="#cb2-41" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output-display">
-<div class="datatables html-widget html-fill-item" id="htmlwidget-e773762aac58aa8abc5c" style="width:100%;height:auto;"></div>
-<script type="application/json" data-for="htmlwidget-e773762aac58aa8abc5c">{"x":{"filter":"none","vertical":false,"caption":"<caption>Spatial layers registry from `metadata/spatial_layers.csv`<\/caption>","data":[["1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19"],["noaa_maritime_ts","noaa_maritime_cz","noaa_maritime_eez","ca_maritime_boundaries","ca_marine_protected_areas","noaa_onms_sanctuaries","ca_cowcod_conservation","ca_swqpa","ca_county_boundaries","ca_assembly_districts","ca_senate_districts","ca_cdfw_regions","ca_watershed_boundaries","boem_wind_planning","noaa_aquaculture_aoas","noaa_ocean_disposal","ca_ports","meow_ecoregions","noaa_iea_regions"],["noaa_maritime_boundaries","noaa_maritime_boundaries","noaa_maritime_boundaries","ca_maritime_boundaries","ca_marine_protected_areas","noaa_onms_sanctuaries","ca_cowcod_conservation","ca_swqpa","ca_county_boundaries","ca_assembly_districts","ca_senate_districts","ca_cdfw_regions","ca_watershed_boundaries","boem_wind_planning","noaa_aquaculture_aoas","noaa_ocean_disposal","ca_ports","meow_ecoregions","noaa_iea_regions"],["12NM Territorial Sea","24NM Contiguous Zone","200NM EEZ","CA State Waters (3NM)","Marine Protected Areas","National Marine Sanctuaries","Cowcod Conservation Areas","Water Quality Protection Areas","CA Counties","CA Assembly Districts","CA Senate Districts","CDFW Regions","CA Watersheds (HUC8)","BOEM Wind Planning Areas","SoCal Aquaculture AOAs","Ocean Disposal Sites","CA Ports","Marine Ecoregions (MEOW)","IEA Large Marine Ecosystems"],["Maritime Zones","Maritime Zones","Maritime Zones","Maritime Zones","Protected Areas","Protected Areas","Protected Areas","Protected Areas","Administrative","Administrative","Administrative","Administrative","Ecological","Energy &amp; Industry","Energy &amp; Industry","Energy &amp; Industry","Energy &amp; Industry","Ecological","Ecological"],["NOAA_maritime-boundaries","NOAA_maritime-boundaries","NOAA_maritime-boundaries","CA_maritime-boundaries","CA_marine-protected-areas","NOAA_ONMS-Sanctuaries","CA_cowcod-conservation-areas","CA_State-Water-Quality-Protection-Areas","CA_county-boundaries","CA_assembly-districts","CA_senate-districts","CA_CDFW-regions","CA_watershed-boundaries","BOEM_WindPlanningAreas","NOAA_aquaculture_SoCal-AOAs","NOAA_ocean-disposal-sites","CA_ports","MEOW_ecoregions_Southern-California-Bight","NOAA_IEA-CA-Current"],["USMaritimeLimitsNBoundaries.shp","USMaritimeLimitsNBoundaries.shp","USMaritimeLimitsNBoundaries.shp","CA_cst3nm.shp","ds582.shp","sanctuaries.rda","MAN_SCSR_Cowcod_ConsArea.shp","swqpa_may2003.shp","CA_Counties.shp","CRC_2021_Assembly_Final 2021-12-20.shp","SD_Final.shp","CDFW_Regions.geojson","wbd-hu8_ca.gpkg","BOEMWindLayers_4Download.gdb","AOA_SOCAL_Final_Options.shp","OceanDisposalSite.gpkg","marine_inland_ports.shp","meow_ecos.shp","lme-ca-current_usa-eez.geojson"],["shp","shp","shp","shp","shp","rda","shp","shp","shp","shp","shp","shp","shp","gdb","shp","gpkg","shp","shp","json"],["line","line","line","polygon","polygon","polygon","polygon","polygon","polygon","polygon","polygon","polygon","polygon","polygon","polygon","polygon","point","polygon","polygon"],["[\"==\", [\"get\", \"ts\"], 1]","[\"==\", [\"get\", \"cz\"], 1]","[\"==\", [\"get\", \"eez\"], 1]",null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null],["#42a5f5","#1e88e5","#1565c0","#0d47a1","#388e3c","#2e7d32","#1b5e20","#4caf50","#f57c00","#ef6c00","#e65100","#ff9800","#ff8f00","#7b1fa2","#9c27b0","#6a1b9a","#ab47bc","#00796b","#009688"],[null,null,null,"#bbdefb","#a5d6a7","#81c784","#c8e6c9","#e8f5e9","#ffe0b2","#ffcc80","#ffab91","#fff3e0","#ffd54f","#ce93d8","#e1bee7","#d1c4e9","#f3e5f5","#80cbc4","#b2dfdb"],[1,1.5,2,1,1,1.5,1,1,1,1,1,1,1,1,1,1,4,1,1],[0,0,0,0.15,0.2,0.2,0.2,0.15,0.1,0.1,0.1,0.1,0.1,0.15,0.2,0.15,0.8,0.15,0.1],[false,false,true,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false],["region","region","region",null,"fullname","sanctuary",null,"swqpaname","name","district","district","name","name","primary_wpa_category","option","description","feat_name","ecoregion","lme_name"],["US 12 nautical mile territorial sea limit","US 24 nautical mile contiguous zone","US 200 nautical mile exclusive economic zone","California 3 nautical mile state waters boundary","California marine protected areas (MPAs)","NOAA Office of National Marine Sanctuaries boundaries","Southern CA cowcod conservation areas","CA state water quality protection areas","California county boundaries","California Assembly districts (2020 redistricting)","California Senate districts (2020 redistricting)","CA Dept of Fish and Wildlife administrative regions","California watersheds (8-digit HUC boundaries)","Bureau of Ocean Energy Management wind energy planning areas","Southern CA aquaculture opportunity areas","NOAA-designated ocean disposal sites","California marine and inland ports","Marine Ecoregions of the World","NOAA Integrated Ecosystem Assessment large marine ecosystems"],["NOAA Office of Coast Survey","NOAA Office of Coast Survey","NOAA Office of Coast Survey","CA Dept of Fish and Wildlife","CA Dept of Fish and Wildlife","NOAA ONMS","CA Dept of Fish and Wildlife","CA State Water Resources Control Board","US Census Bureau TIGER 2016","CA Citizens Redistricting Commission","CA Citizens Redistricting Commission","CA Dept of Fish and Wildlife","USGS Watershed Boundary Dataset","BOEM","NOAA","NOAA/EPA","CA Dept of Fish and Wildlife","Spalding et al. 2007","NOAA IEA"]],"container":"<table class=\"display\">\n  <thead>\n    <tr>\n      <th> <\/th>\n      <th>dataset_id<\/th>\n      <th>dataset_group<\/th>\n      <th>name<\/th>\n      <th>group<\/th>\n      <th>source_folder<\/th>\n      <th>source_file<\/th>\n      <th>source_format<\/th>\n      <th>geom_type<\/th>\n      <th>filter_expr<\/th>\n      <th>line_color<\/th>\n      <th>fill_color<\/th>\n      <th>line_width<\/th>\n      <th>fill_opacity<\/th>\n      <th>default_visible<\/th>\n      <th>tooltip_field<\/th>\n      <th>description<\/th>\n      <th>attribution<\/th>\n    <\/tr>\n  <\/thead>\n<\/table>","options":{"columnDefs":[{"className":"dt-right","targets":[12,13]},{"orderable":false,"targets":0},{"name":" ","targets":0},{"name":"dataset_id","targets":1},{"name":"dataset_group","targets":2},{"name":"name","targets":3},{"name":"group","targets":4},{"name":"source_folder","targets":5},{"name":"source_file","targets":6},{"name":"source_format","targets":7},{"name":"geom_type","targets":8},{"name":"filter_expr","targets":9},{"name":"line_color","targets":10},{"name":"fill_color","targets":11},{"name":"line_width","targets":12},{"name":"fill_opacity","targets":13},{"name":"default_visible","targets":14},{"name":"tooltip_field","targets":15},{"name":"description","targets":16},{"name":"attribution","targets":17}],"order":[],"autoWidth":false,"orderClasses":false},"selection":{"mode":"multiple","selected":null,"target":"row","selectable":null}},"evals":[],"jsHooks":[]}</script>
+<div class="datatables html-widget html-fill-item" id="htmlwidget-09c60169eb58e218300b" style="width:100%;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-09c60169eb58e218300b">{"x":{"filter":"none","vertical":false,"caption":"<caption>Spatial layers registry from `metadata/spatial_layers.csv`<\/caption>","data":[["1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19"],["noaa_maritime_ts","noaa_maritime_cz","noaa_maritime_eez","ca_maritime_boundaries","ca_marine_protected_areas","noaa_onms_sanctuaries","ca_cowcod_conservation","ca_swqpa","ca_county_boundaries","ca_assembly_districts","ca_senate_districts","ca_cdfw_regions","ca_watershed_boundaries","boem_wind_planning","noaa_aquaculture_aoas","noaa_ocean_disposal","ca_ports","meow_ecoregions","noaa_iea_regions"],["noaa_maritime_boundaries","noaa_maritime_boundaries","noaa_maritime_boundaries","ca_maritime_boundaries","ca_marine_protected_areas","noaa_onms_sanctuaries","ca_cowcod_conservation","ca_swqpa","ca_county_boundaries","ca_assembly_districts","ca_senate_districts","ca_cdfw_regions","ca_watershed_boundaries","boem_wind_planning","noaa_aquaculture_aoas","noaa_ocean_disposal","ca_ports","meow_ecoregions","noaa_iea_regions"],["12NM Territorial Sea","24NM Contiguous Zone","200NM EEZ","CA State Waters (3NM)","Marine Protected Areas","National Marine Sanctuaries","Cowcod Conservation Areas","Water Quality Protection Areas","CA Counties","CA Assembly Districts","CA Senate Districts","CDFW Regions","CA Watersheds (HUC8)","BOEM Wind Planning Areas","SoCal Aquaculture AOAs","Ocean Disposal Sites","CA Ports","Marine Ecoregions (MEOW)","IEA Large Marine Ecosystems"],["Maritime Zones","Maritime Zones","Maritime Zones","Maritime Zones","Protected Areas","Protected Areas","Protected Areas","Protected Areas","Administrative","Administrative","Administrative","Administrative","Ecological","Energy &amp; Industry","Energy &amp; Industry","Energy &amp; Industry","Energy &amp; Industry","Ecological","Ecological"],["NOAA_maritime-boundaries","NOAA_maritime-boundaries","NOAA_maritime-boundaries","CA_maritime-boundaries","CA_marine-protected-areas","NOAA_ONMS-Sanctuaries","CA_cowcod-conservation-areas","CA_State-Water-Quality-Protection-Areas","CA_county-boundaries","CA_assembly-districts","CA_senate-districts","CA_CDFW-regions","CA_watershed-boundaries","BOEM_WindPlanningAreas","NOAA_aquaculture_SoCal-AOAs","NOAA_ocean-disposal-sites","CA_ports","MEOW_ecoregions_Southern-California-Bight","NOAA_IEA-CA-Current"],["USMaritimeLimitsNBoundaries.shp","USMaritimeLimitsNBoundaries.shp","USMaritimeLimitsNBoundaries.shp","CA_cst3nm.shp","ds582.shp","sanctuaries.rda","MAN_SCSR_Cowcod_ConsArea.shp","swqpa_may2003.shp","CA_Counties.shp","CRC_2021_Assembly_Final 2021-12-20.shp","SD_Final.shp","CDFW_Regions.geojson","wbd-hu8_ca.gpkg","BOEMWindLayers_4Download.gdb","AOA_SOCAL_Final_Options.shp","OceanDisposalSite.gpkg","marine_inland_ports.shp","meow_ecos.shp","lme-ca-current_usa-eez.geojson"],["shp","shp","shp","shp","shp","rda","shp","shp","shp","shp","shp","shp","shp","gdb","shp","gpkg","shp","shp","json"],["line","line","line","polygon","polygon","polygon","polygon","polygon","polygon","polygon","polygon","polygon","polygon","polygon","polygon","polygon","point","polygon","polygon"],["[\"==\", [\"get\", \"ts\"], 1]","[\"==\", [\"get\", \"cz\"], 1]","[\"==\", [\"get\", \"eez\"], 1]",null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null],["#42a5f5","#1e88e5","#1565c0","#0d47a1","#388e3c","#2e7d32","#1b5e20","#4caf50","#f57c00","#ef6c00","#e65100","#ff9800","#ff8f00","#7b1fa2","#9c27b0","#6a1b9a","#ab47bc","#00796b","#009688"],[null,null,null,"#bbdefb","#a5d6a7","#81c784","#c8e6c9","#e8f5e9","#ffe0b2","#ffcc80","#ffab91","#fff3e0","#ffd54f","#ce93d8","#e1bee7","#d1c4e9","#f3e5f5","#80cbc4","#b2dfdb"],[1,1.5,2,1,1,1.5,1,1,1,1,1,1,1,1,1,1,4,1,1],[0,0,0,0.15,0.2,0.2,0.2,0.15,0.1,0.1,0.1,0.1,0.1,0.15,0.2,0.15,0.8,0.15,0.1],[false,false,true,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false],["region","region","region",null,"fullname","sanctuary",null,"swqpaname","name","district","district","name","name","primary_wpa_category","option","description","feat_name","ecoregion","lme_name"],["US 12 nautical mile territorial sea limit","US 24 nautical mile contiguous zone","US 200 nautical mile exclusive economic zone","California 3 nautical mile state waters boundary","California marine protected areas (MPAs)","NOAA Office of National Marine Sanctuaries boundaries","Southern CA cowcod conservation areas","CA state water quality protection areas","California county boundaries","California Assembly districts (2020 redistricting)","California Senate districts (2020 redistricting)","CA Dept of Fish and Wildlife administrative regions","California watersheds (8-digit HUC boundaries)","Bureau of Ocean Energy Management wind energy planning areas","Southern CA aquaculture opportunity areas","NOAA-designated ocean disposal sites","California marine and inland ports","Marine Ecoregions of the World","NOAA Integrated Ecosystem Assessment large marine ecosystems"],["NOAA Office of Coast Survey","NOAA Office of Coast Survey","NOAA Office of Coast Survey","CA Dept of Fish and Wildlife","CA Dept of Fish and Wildlife","NOAA ONMS","CA Dept of Fish and Wildlife","CA State Water Resources Control Board","US Census Bureau TIGER 2016","CA Citizens Redistricting Commission","CA Citizens Redistricting Commission","CA Dept of Fish and Wildlife","USGS Watershed Boundary Dataset","BOEM","NOAA","NOAA/EPA","CA Dept of Fish and Wildlife","Spalding et al. 2007","NOAA IEA"]],"container":"<table class=\"display\">\n  <thead>\n    <tr>\n      <th> <\/th>\n      <th>dataset_id<\/th>\n      <th>dataset_group<\/th>\n      <th>name<\/th>\n      <th>group<\/th>\n      <th>source_folder<\/th>\n      <th>source_file<\/th>\n      <th>source_format<\/th>\n      <th>geom_type<\/th>\n      <th>filter_expr<\/th>\n      <th>line_color<\/th>\n      <th>fill_color<\/th>\n      <th>line_width<\/th>\n      <th>fill_opacity<\/th>\n      <th>default_visible<\/th>\n      <th>tooltip_field<\/th>\n      <th>description<\/th>\n      <th>attribution<\/th>\n    <\/tr>\n  <\/thead>\n<\/table>","options":{"columnDefs":[{"className":"dt-right","targets":[12,13]},{"orderable":false,"targets":0},{"name":" ","targets":0},{"name":"dataset_id","targets":1},{"name":"dataset_group","targets":2},{"name":"name","targets":3},{"name":"group","targets":4},{"name":"source_folder","targets":5},{"name":"source_file","targets":6},{"name":"source_format","targets":7},{"name":"geom_type","targets":8},{"name":"filter_expr","targets":9},{"name":"line_color","targets":10},{"name":"fill_color","targets":11},{"name":"line_width","targets":12},{"name":"fill_opacity","targets":13},{"name":"default_visible","targets":14},{"name":"tooltip_field","targets":15},{"name":"description","targets":16},{"name":"attribution","targets":17}],"order":[],"autoWidth":false,"orderClasses":false},"selection":{"mode":"multiple","selected":null,"target":"row","selectable":null}},"evals":[],"jsHooks":[]}</script>
 </div>
 <details class="code-fold">
 <summary>Code</summary>
@@ -575,22 +576,22 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
    file                              action   local_md5                       
    &lt;chr&gt;                             &lt;chr&gt;    &lt;chr&gt;                           
  1 boem_wind_planning.pmtiles        skipped  87a404c79ac5cc911e1f675e15ab7e9b
- 2 ca_assembly_districts.pmtiles     uploaded 964987db2f523e2dc9f73cc3ceb5a6d3
- 3 ca_cdfw_regions.pmtiles           uploaded ff23849ca4b8d9a6e07c43a7848c78d8
- 4 ca_county_boundaries.pmtiles      uploaded 1feab265afa5bea42192df08e5d51f2d
- 5 ca_cowcod_conservation.pmtiles    uploaded d4e437848e2a9da88397c0be20767e44
- 6 ca_marine_protected_areas.pmtiles uploaded 8962c944a4e2464ad8236fc564731820
- 7 ca_maritime_boundaries.pmtiles    uploaded 14111d35f64e883aa3ecd813d70c89c6
- 8 ca_ports.pmtiles                  uploaded 916a70b4b54adf6e1ca2bbfe7a8a59cd
- 9 ca_senate_districts.pmtiles       uploaded 03c1648c4bf48de4917294ec876bbde5
-10 ca_swqpa.pmtiles                  uploaded 6e97426030763321f4eece39a374de4d
-11 ca_watershed_boundaries.pmtiles   uploaded 2379ba510b4486ec8ef5847e2bc326a3
-12 meow_ecoregions.pmtiles           uploaded 5591b6da98b826dc3d353649e7a6b9a3
-13 noaa_aquaculture_aoas.pmtiles     uploaded dfb445ced46ab4059d6f0393097f10e7
-14 noaa_iea_regions.pmtiles          uploaded 06a90b0acdc9ca089bad9d16cd047dae
-15 noaa_maritime_boundaries.pmtiles  uploaded de8c501da191688fe800df333f699ab9
-16 noaa_ocean_disposal.pmtiles       uploaded 94680e1b6fe70249c5321b78ae9c8a3d
-17 noaa_onms_sanctuaries.pmtiles     uploaded 775438a159bb62e32b44bcd5e82e10cc</code></pre>
+ 2 ca_assembly_districts.pmtiles     uploaded 233ccf7c1610b8442d7a52be82082ad4
+ 3 ca_cdfw_regions.pmtiles           uploaded d017249b88078ffd04f0f2079c5b0a53
+ 4 ca_county_boundaries.pmtiles      uploaded fd2cee931fb5acbfa7e1393e19c5a4c3
+ 5 ca_cowcod_conservation.pmtiles    uploaded 71ec6c56fd776afc0e27f197d53f1392
+ 6 ca_marine_protected_areas.pmtiles uploaded b831bcc0651ed604de140a6dd46345b8
+ 7 ca_maritime_boundaries.pmtiles    uploaded 6b01175083608a5ee7f3f1b19c31c4a1
+ 8 ca_ports.pmtiles                  uploaded bf16be7dbf7a48550395726c2babd5d2
+ 9 ca_senate_districts.pmtiles       uploaded dc11b133016934618f95e37625e871f6
+10 ca_swqpa.pmtiles                  uploaded 1a9846ad2b1c88c91faae2ad40eb509b
+11 ca_watershed_boundaries.pmtiles   skipped  08981ae383c154baca4cd204413ec10c
+12 meow_ecoregions.pmtiles           uploaded bfd20ccb09e4e48da8c0711dd51119b7
+13 noaa_aquaculture_aoas.pmtiles     uploaded cc4cd6191a48432faadd375466b79c6f
+14 noaa_iea_regions.pmtiles          uploaded fe42df9194708566ff0087a06ff6cd43
+15 noaa_maritime_boundaries.pmtiles  uploaded 8076b42d363acd06b91afd868242b7d2
+16 noaa_ocean_disposal.pmtiles       uploaded 3febef633be29e047120d43ae6227ec3
+17 noaa_onms_sanctuaries.pmtiles     skipped  56eb89e004515102b8c79297de2712d5</code></pre>
 </div>
 </div>
 </section>
@@ -684,24 +685,33 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb17"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="fu">dbDisconnect</span>(con, <span class="at">shutdown =</span> <span class="cn">TRUE</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 </section>
-<section id="output-summary" class="level2" data-number="8">
-<h2 data-number="8" class="anchored" data-anchor-id="output-summary"><span class="header-section-number">8</span> Output summary</h2>
+<section id="write-manifest" class="level2" data-number="8">
+<h2 data-number="8" class="anchored" data-anchor-id="write-manifest"><span class="header-section-number">8</span> Write manifest</h2>
+<div class="cell">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb18"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"### PMTiles</span><span class="sc">\n\n</span><span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb18"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="fu">write_spatial_manifest</span>(dir_parquet)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
-<section id="pmtiles" class="level3" data-number="8.1">
-<h3 data-number="8.1" class="anchored" data-anchor-id="pmtiles"><span class="header-section-number">8.1</span> PMTiles</h3>
+</div>
+</section>
+<section id="output-summary" class="level2" data-number="9">
+<h2 data-number="9" class="anchored" data-anchor-id="output-summary"><span class="header-section-number">9</span> Output summary</h2>
 <details class="code-fold">
 <summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb19"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="fu">dir_ls</span>(dir_pmtiles, <span class="at">glob =</span> <span class="st">"*.pmtiles"</span>) <span class="sc">|&gt;</span></span>
-<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">tibble</span>(<span class="at">path =</span> _) <span class="sc">|&gt;</span></span>
-<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
-<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">file =</span> <span class="fu">path_file</span>(path),</span>
-<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">size =</span> <span class="fu">file_size</span>(path)</span>
-<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
-<span id="cb19-7"><a href="#cb19-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(file, size) <span class="sc">|&gt;</span></span>
-<span id="cb19-8"><a href="#cb19-8" aria-hidden="true" tabindex="-1"></a>  knitr<span class="sc">::</span><span class="fu">kable</span>()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb19"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"### PMTiles</span><span class="sc">\n\n</span><span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<section id="pmtiles" class="level3" data-number="9.1">
+<h3 data-number="9.1" class="anchored" data-anchor-id="pmtiles"><span class="header-section-number">9.1</span> PMTiles</h3>
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb20"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="fu">dir_ls</span>(dir_pmtiles, <span class="at">glob =</span> <span class="st">"*.pmtiles"</span>) <span class="sc">|&gt;</span></span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">tibble</span>(<span class="at">path =</span> _) <span class="sc">|&gt;</span></span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">file =</span> <span class="fu">path_file</span>(path),</span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">size =</span> <span class="fu">file_size</span>(path)</span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
+<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(file, size) <span class="sc">|&gt;</span></span>
+<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a>  knitr<span class="sc">::</span><span class="fu">kable</span>()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <table class="caption-top table">
 <thead>
@@ -783,21 +793,21 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </table>
 <details class="code-fold">
 <summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb20"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"</span><span class="sc">\n</span><span class="st">### Parquet</span><span class="sc">\n\n</span><span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb21"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"</span><span class="sc">\n</span><span class="st">### Parquet</span><span class="sc">\n\n</span><span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 </section>
-<section id="parquet" class="level3" data-number="8.2">
-<h3 data-number="8.2" class="anchored" data-anchor-id="parquet"><span class="header-section-number">8.2</span> Parquet</h3>
+<section id="parquet" class="level3" data-number="9.2">
+<h3 data-number="9.2" class="anchored" data-anchor-id="parquet"><span class="header-section-number">9.2</span> Parquet</h3>
 <details class="code-fold">
 <summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb21"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="fu">dir_ls</span>(dir_parquet, <span class="at">glob =</span> <span class="st">"*.parquet"</span>) <span class="sc">|&gt;</span></span>
-<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">tibble</span>(<span class="at">path =</span> _) <span class="sc">|&gt;</span></span>
-<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
-<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">file =</span> <span class="fu">path_file</span>(path),</span>
-<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">size =</span> <span class="fu">file_size</span>(path)</span>
-<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
-<span id="cb21-7"><a href="#cb21-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(file, size) <span class="sc">|&gt;</span></span>
-<span id="cb21-8"><a href="#cb21-8" aria-hidden="true" tabindex="-1"></a>  knitr<span class="sc">::</span><span class="fu">kable</span>()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb22"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="fu">dir_ls</span>(dir_parquet, <span class="at">glob =</span> <span class="st">"*.parquet"</span>) <span class="sc">|&gt;</span></span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">tibble</span>(<span class="at">path =</span> _) <span class="sc">|&gt;</span></span>
+<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
+<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">file =</span> <span class="fu">path_file</span>(path),</span>
+<span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">size =</span> <span class="fu">file_size</span>(path)</span>
+<span id="cb22-6"><a href="#cb22-6" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
+<span id="cb22-7"><a href="#cb22-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(file, size) <span class="sc">|&gt;</span></span>
+<span id="cb22-8"><a href="#cb22-8" aria-hidden="true" tabindex="-1"></a>  knitr<span class="sc">::</span><span class="fu">kable</span>()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <table class="caption-top table">
 <thead>
@@ -1335,474 +1345,487 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
     }
   });
   </script><div class="modal fade" id="quarto-embedded-source-code-modal" tabindex="-1" aria-labelledby="quarto-embedded-source-code-modal-label" aria-hidden="true"><div class="modal-dialog modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><h5 class="modal-title" id="quarto-embedded-source-code-modal-label">Source Code</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="">
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb22" data-shortcodes="false"><pre class="sourceCode markdown code-with-copy"><code class="sourceCode markdown"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="co">---</span></span>
-<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a><span class="an">title:</span><span class="co"> "Ingest Spatial Boundaries"</span></span>
-<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a><span class="an">editor_options:</span></span>
-<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a><span class="co">  chunk_output_type: console</span></span>
-<span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a><span class="co">---</span></span>
-<span id="cb22-6"><a href="#cb22-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-7"><a href="#cb22-7" aria-hidden="true" tabindex="-1"></a><span class="fu">## Overview</span></span>
-<span id="cb22-8"><a href="#cb22-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-9"><a href="#cb22-9" aria-hidden="true" tabindex="-1"></a>Process spatial boundary datasets for:</span>
-<span id="cb22-10"><a href="#cb22-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-11"><a href="#cb22-11" aria-hidden="true" tabindex="-1"></a><span class="ss">1. </span>**Map overlay** — PMTiles served via <span class="in">`file.calcofi.io/_spatial/`</span></span>
-<span id="cb22-12"><a href="#cb22-12" aria-hidden="true" tabindex="-1"></a><span class="ss">2. </span>**Spatial queries** — parquet tables loaded into CalCOFI DuckDB</span>
-<span id="cb22-13"><a href="#cb22-13" aria-hidden="true" tabindex="-1"></a><span class="ss">3. </span>**Future summarization** — aggregate CalCOFI data into boundary features</span>
-<span id="cb22-14"><a href="#cb22-14" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-15"><a href="#cb22-15" aria-hidden="true" tabindex="-1"></a>**Source**: <span class="in">`~/My Drive/projects/calcofi/data-public/_spatial/`</span></span>
-<span id="cb22-16"><a href="#cb22-16" aria-hidden="true" tabindex="-1"></a>(<span class="co">[</span><span class="ot">US Maritime Limits</span><span class="co">](https://nauticalcharts.noaa.gov/data/us-maritime-limits-and-boundaries.html)</span>,</span>
-<span id="cb22-17"><a href="#cb22-17" aria-hidden="true" tabindex="-1"></a>CA CDFW, BOEM, NOAA ONMS, MEOW, and others)</span>
-<span id="cb22-18"><a href="#cb22-18" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-19"><a href="#cb22-19" aria-hidden="true" tabindex="-1"></a>**Registry**: <span class="in">`metadata/spatial_layers.csv`</span> — one row per visual layer, with</span>
-<span id="cb22-20"><a href="#cb22-20" aria-hidden="true" tabindex="-1"></a>dataset grouping, styling, filter expressions, and source file paths.</span>
-<span id="cb22-21"><a href="#cb22-21" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-22"><a href="#cb22-22" aria-hidden="true" tabindex="-1"></a><span class="fu">### Data Flow</span></span>
-<span id="cb22-23"><a href="#cb22-23" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-26"><a href="#cb22-26" aria-hidden="true" tabindex="-1"></a><span class="in">```{mermaid}</span></span>
-<span id="cb22-27"><a href="#cb22-27" aria-hidden="true" tabindex="-1"></a>graph LR</span>
-<span id="cb22-28"><a href="#cb22-28" aria-hidden="true" tabindex="-1"></a>  A[Source Shapefiles] --&gt; B[Read + Reproject <span class="dv">4326</span>]</span>
-<span id="cb22-29"><a href="#cb22-29" aria-hidden="true" tabindex="-1"></a>  B --&gt; C[clean_names + id column]</span>
-<span id="cb22-30"><a href="#cb22-30" aria-hidden="true" tabindex="-1"></a>  C --&gt; D[Parquet Export]</span>
-<span id="cb22-31"><a href="#cb22-31" aria-hidden="true" tabindex="-1"></a>  C --&gt; E[GeoJSON → tippecanoe → PMTiles]</span>
-<span id="cb22-32"><a href="#cb22-32" aria-hidden="true" tabindex="-1"></a>  D --&gt; F[DuckDB Tables]</span>
-<span id="cb22-33"><a href="#cb22-33" aria-hidden="true" tabindex="-1"></a>  E --&gt; G[GCS Upload]</span>
-<span id="cb22-34"><a href="#cb22-34" aria-hidden="true" tabindex="-1"></a>  G --&gt; H[file.calcofi.io/_spatial/]</span>
-<span id="cb22-35"><a href="#cb22-35" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb22-36"><a href="#cb22-36" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-37"><a href="#cb22-37" aria-hidden="true" tabindex="-1"></a><span class="fu">### Pre-processing</span></span>
-<span id="cb22-38"><a href="#cb22-38" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-39"><a href="#cb22-39" aria-hidden="true" tabindex="-1"></a>Each dataset is standardized:</span>
-<span id="cb22-40"><a href="#cb22-40" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-41"><a href="#cb22-41" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**CRS**: reprojected to <span class="in">`EPSG:4326`</span> (WGS 84 unprojected)</span>
-<span id="cb22-42"><a href="#cb22-42" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Columns**: <span class="in">`janitor::clean_names()`</span> for snake_case</span>
-<span id="cb22-43"><a href="#cb22-43" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**ID**: integer <span class="in">`id`</span> column as first column (from source FID or <span class="in">`row_number()`</span>)</span>
-<span id="cb22-44"><a href="#cb22-44" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-45"><a href="#cb22-45" aria-hidden="true" tabindex="-1"></a><span class="fu">## Setup</span></span>
-<span id="cb22-46"><a href="#cb22-46" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-49"><a href="#cb22-49" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb22-50"><a href="#cb22-50" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: setup</span></span>
-<span id="cb22-51"><a href="#cb22-51" aria-hidden="true" tabindex="-1"></a>librarian<span class="sc">::</span><span class="fu">shelf</span>(</span>
-<span id="cb22-52"><a href="#cb22-52" aria-hidden="true" tabindex="-1"></a>  arcgislayers,</span>
-<span id="cb22-53"><a href="#cb22-53" aria-hidden="true" tabindex="-1"></a>  calcofi <span class="sc">/</span> calcofi4db,</span>
-<span id="cb22-54"><a href="#cb22-54" aria-hidden="true" tabindex="-1"></a>  DBI,</span>
-<span id="cb22-55"><a href="#cb22-55" aria-hidden="true" tabindex="-1"></a>  dplyr,</span>
-<span id="cb22-56"><a href="#cb22-56" aria-hidden="true" tabindex="-1"></a>  DT,</span>
-<span id="cb22-57"><a href="#cb22-57" aria-hidden="true" tabindex="-1"></a>  duckdb,</span>
-<span id="cb22-58"><a href="#cb22-58" aria-hidden="true" tabindex="-1"></a>  fs,</span>
-<span id="cb22-59"><a href="#cb22-59" aria-hidden="true" tabindex="-1"></a>  glue,</span>
-<span id="cb22-60"><a href="#cb22-60" aria-hidden="true" tabindex="-1"></a>  here,</span>
-<span id="cb22-61"><a href="#cb22-61" aria-hidden="true" tabindex="-1"></a>  janitor,</span>
-<span id="cb22-62"><a href="#cb22-62" aria-hidden="true" tabindex="-1"></a>  jsonlite,</span>
-<span id="cb22-63"><a href="#cb22-63" aria-hidden="true" tabindex="-1"></a>  purrr,</span>
-<span id="cb22-64"><a href="#cb22-64" aria-hidden="true" tabindex="-1"></a>  readr,</span>
-<span id="cb22-65"><a href="#cb22-65" aria-hidden="true" tabindex="-1"></a>  sf,</span>
-<span id="cb22-66"><a href="#cb22-66" aria-hidden="true" tabindex="-1"></a>  stringr,</span>
-<span id="cb22-67"><a href="#cb22-67" aria-hidden="true" tabindex="-1"></a>  tibble,</span>
-<span id="cb22-68"><a href="#cb22-68" aria-hidden="true" tabindex="-1"></a>  <span class="at">quiet =</span> T</span>
-<span id="cb22-69"><a href="#cb22-69" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb22-70"><a href="#cb22-70" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-71"><a href="#cb22-71" aria-hidden="true" tabindex="-1"></a>redo_if_exists <span class="ot">&lt;-</span> <span class="cn">TRUE</span> <span class="co"># set to FALSE to skip already processed datasets (for testing/debugging)</span></span>
-<span id="cb22-72"><a href="#cb22-72" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-73"><a href="#cb22-73" aria-hidden="true" tabindex="-1"></a>dir_spatial <span class="ot">&lt;-</span> <span class="fu">path_expand</span>(<span class="st">"~/My Drive/projects/calcofi/data-public/_spatial"</span>)</span>
-<span id="cb22-74"><a href="#cb22-74" aria-hidden="true" tabindex="-1"></a>dir_pmtiles <span class="ot">&lt;-</span> <span class="fu">here</span>(<span class="st">"data/pmtiles"</span>)</span>
-<span id="cb22-75"><a href="#cb22-75" aria-hidden="true" tabindex="-1"></a>dir_parquet <span class="ot">&lt;-</span> <span class="fu">here</span>(<span class="st">"data/parquet/spatial"</span>)</span>
-<span id="cb22-76"><a href="#cb22-76" aria-hidden="true" tabindex="-1"></a>gcs_bucket <span class="ot">&lt;-</span> <span class="st">"calcofi-files-public"</span></span>
-<span id="cb22-77"><a href="#cb22-77" aria-hidden="true" tabindex="-1"></a>gcs_prefix <span class="ot">&lt;-</span> <span class="st">"_spatial"</span></span>
-<span id="cb22-78"><a href="#cb22-78" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-79"><a href="#cb22-79" aria-hidden="true" tabindex="-1"></a><span class="fu">dir_create</span>(dir_pmtiles)</span>
-<span id="cb22-80"><a href="#cb22-80" aria-hidden="true" tabindex="-1"></a><span class="fu">dir_create</span>(dir_parquet)</span>
-<span id="cb22-81"><a href="#cb22-81" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-82"><a href="#cb22-82" aria-hidden="true" tabindex="-1"></a><span class="co"># load registry</span></span>
-<span id="cb22-83"><a href="#cb22-83" aria-hidden="true" tabindex="-1"></a>d_layers <span class="ot">&lt;-</span> <span class="fu">read_csv</span>(</span>
-<span id="cb22-84"><a href="#cb22-84" aria-hidden="true" tabindex="-1"></a>  <span class="fu">here</span>(<span class="st">"metadata/spatial_layers.csv"</span>),</span>
-<span id="cb22-85"><a href="#cb22-85" aria-hidden="true" tabindex="-1"></a>  <span class="at">show_col_types =</span> <span class="cn">FALSE</span></span>
-<span id="cb22-86"><a href="#cb22-86" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb22-87"><a href="#cb22-87" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-88"><a href="#cb22-88" aria-hidden="true" tabindex="-1"></a><span class="fu">datatable</span>(</span>
-<span id="cb22-89"><a href="#cb22-89" aria-hidden="true" tabindex="-1"></a>  d_layers,</span>
-<span id="cb22-90"><a href="#cb22-90" aria-hidden="true" tabindex="-1"></a>  <span class="at">caption =</span> <span class="st">"Spatial layers registry from `metadata/spatial_layers.csv`"</span></span>
-<span id="cb22-91"><a href="#cb22-91" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb22-92"><a href="#cb22-92" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-93"><a href="#cb22-93" aria-hidden="true" tabindex="-1"></a><span class="co"># compare with folders/files in dir_spatial</span></span>
-<span id="cb22-94"><a href="#cb22-94" aria-hidden="true" tabindex="-1"></a>spatial_dirs <span class="ot">&lt;-</span> <span class="fu">dir_ls</span>(dir_spatial, <span class="at">type =</span> <span class="st">"directory"</span>)</span>
-<span id="cb22-95"><a href="#cb22-95" aria-hidden="true" tabindex="-1"></a>spatial_dirs_not_layers_csv <span class="ot">&lt;-</span> <span class="fu">setdiff</span>(</span>
-<span id="cb22-96"><a href="#cb22-96" aria-hidden="true" tabindex="-1"></a>  <span class="fu">basename</span>(spatial_dirs),</span>
-<span id="cb22-97"><a href="#cb22-97" aria-hidden="true" tabindex="-1"></a>  <span class="fu">unique</span>(d_layers<span class="sc">$</span>source_folder)</span>
-<span id="cb22-98"><a href="#cb22-98" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb22-99"><a href="#cb22-99" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">length</span>(spatial_dirs_not_layers_csv) <span class="sc">&gt;</span> <span class="dv">0</span>) {</span>
-<span id="cb22-100"><a href="#cb22-100" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(</span>
-<span id="cb22-101"><a href="#cb22-101" aria-hidden="true" tabindex="-1"></a>    <span class="fu">glue</span>(</span>
-<span id="cb22-102"><a href="#cb22-102" aria-hidden="true" tabindex="-1"></a>      <span class="st">"⚠ WARNING: The following folders exist in `{dir_spatial}` but are not "</span>,</span>
-<span id="cb22-103"><a href="#cb22-103" aria-hidden="true" tabindex="-1"></a>      <span class="st">"referenced in `metadata/spatial_layers.csv`:</span><span class="sc">\n</span><span class="st">"</span>,</span>
-<span id="cb22-104"><a href="#cb22-104" aria-hidden="true" tabindex="-1"></a>      <span class="fu">paste0</span>(<span class="st">"- "</span>, spatial_dirs_not_layers_csv, <span class="at">collapse =</span> <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>),</span>
-<span id="cb22-105"><a href="#cb22-105" aria-hidden="true" tabindex="-1"></a>      <span class="st">"</span><span class="sc">\n\n</span><span class="st">"</span></span>
-<span id="cb22-106"><a href="#cb22-106" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="cb22-107"><a href="#cb22-107" aria-hidden="true" tabindex="-1"></a>  )</span>
-<span id="cb22-108"><a href="#cb22-108" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb22-109"><a href="#cb22-109" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-110"><a href="#cb22-110" aria-hidden="true" tabindex="-1"></a><span class="co"># unique dataset groups (one pmtiles + parquet per group)</span></span>
-<span id="cb22-111"><a href="#cb22-111" aria-hidden="true" tabindex="-1"></a>d_groups <span class="ot">&lt;-</span> d_layers <span class="sc">|&gt;</span></span>
-<span id="cb22-112"><a href="#cb22-112" aria-hidden="true" tabindex="-1"></a>  <span class="fu">distinct</span>(dataset_group, source_folder, source_file, source_format) <span class="sc">|&gt;</span></span>
-<span id="cb22-113"><a href="#cb22-113" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
-<span id="cb22-114"><a href="#cb22-114" aria-hidden="true" tabindex="-1"></a>    <span class="at">source_path =</span> <span class="fu">path</span>(dir_spatial, source_folder, source_file),</span>
-<span id="cb22-115"><a href="#cb22-115" aria-hidden="true" tabindex="-1"></a>    <span class="at">file_exists =</span> <span class="fu">file_exists</span>(source_path)</span>
-<span id="cb22-116"><a href="#cb22-116" aria-hidden="true" tabindex="-1"></a>  )</span>
-<span id="cb22-117"><a href="#cb22-117" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-118"><a href="#cb22-118" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(</span>
-<span id="cb22-119"><a href="#cb22-119" aria-hidden="true" tabindex="-1"></a>  <span class="fu">glue</span>(<span class="st">"{nrow(d_layers)} layers across {nrow(d_groups)} dataset groups"</span>),</span>
-<span id="cb22-120"><a href="#cb22-120" aria-hidden="true" tabindex="-1"></a>  <span class="st">"</span><span class="sc">\n</span><span class="st">"</span></span>
-<span id="cb22-121"><a href="#cb22-121" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb22-122"><a href="#cb22-122" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb22-123"><a href="#cb22-123" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-124"><a href="#cb22-124" aria-hidden="true" tabindex="-1"></a><span class="fu">## ArcGIS Rest layer(s) to gpkg: `CA_watershed-boundaries`</span></span>
-<span id="cb22-125"><a href="#cb22-125" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-128"><a href="#cb22-128" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb22-129"><a href="#cb22-129" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: arcgis-rest</span></span>
-<span id="cb22-130"><a href="#cb22-130" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-131"><a href="#cb22-131" aria-hidden="true" tabindex="-1"></a>fs_to_sf <span class="ot">&lt;-</span> <span class="cf">function</span>(url, <span class="at">where =</span> <span class="cn">NULL</span>) {</span>
-<span id="cb22-132"><a href="#cb22-132" aria-hidden="true" tabindex="-1"></a>  fs <span class="ot">&lt;-</span> arcgislayers<span class="sc">::</span><span class="fu">arc_open</span>(url)</span>
-<span id="cb22-133"><a href="#cb22-133" aria-hidden="true" tabindex="-1"></a>  lyr <span class="ot">&lt;-</span> arcgislayers<span class="sc">::</span><span class="fu">get_layer</span>(fs, <span class="dv">0</span>)</span>
-<span id="cb22-134"><a href="#cb22-134" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-135"><a href="#cb22-135" aria-hidden="true" tabindex="-1"></a>  sf <span class="ot">&lt;-</span> arcgislayers<span class="sc">::</span><span class="fu">arc_select</span>(</span>
-<span id="cb22-136"><a href="#cb22-136" aria-hidden="true" tabindex="-1"></a>    lyr,</span>
-<span id="cb22-137"><a href="#cb22-137" aria-hidden="true" tabindex="-1"></a>    <span class="at">where =</span> where</span>
-<span id="cb22-138"><a href="#cb22-138" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
-<span id="cb22-139"><a href="#cb22-139" aria-hidden="true" tabindex="-1"></a>    tibble<span class="sc">::</span><span class="fu">tibble</span>() <span class="sc">|&gt;</span></span>
-<span id="cb22-140"><a href="#cb22-140" aria-hidden="true" tabindex="-1"></a>    sf<span class="sc">::</span><span class="fu">st_as_sf</span>() <span class="sc">|&gt;</span></span>
-<span id="cb22-141"><a href="#cb22-141" aria-hidden="true" tabindex="-1"></a>    janitor<span class="sc">::</span><span class="fu">clean_names</span>()</span>
-<span id="cb22-142"><a href="#cb22-142" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-143"><a href="#cb22-143" aria-hidden="true" tabindex="-1"></a>  <span class="fu">return</span>(sf)</span>
-<span id="cb22-144"><a href="#cb22-144" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb22-145"><a href="#cb22-145" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-146"><a href="#cb22-146" aria-hidden="true" tabindex="-1"></a><span class="co"># [USGS Watershed Boundary Dataset (WBD) HUC8, California Vicinity - Overview](https://www.arcgis.com/home/item.html?id=a98ef9ead82a4bd6aa09d46869f75a49&amp;sublayer=0)</span></span>
-<span id="cb22-147"><a href="#cb22-147" aria-hidden="true" tabindex="-1"></a>url_rest <span class="ot">&lt;-</span> <span class="st">"https://services2.arcgis.com/Uq9r85Potqm3MfRV/arcgis/rest/services/WBD_HU8_wm/FeatureServer"</span></span>
-<span id="cb22-148"><a href="#cb22-148" aria-hidden="true" tabindex="-1"></a>out_gpkg <span class="ot">&lt;-</span> <span class="fu">glue</span>(<span class="st">"{dir_spatial}/CA_watershed-boundaries/wbd-hu8_ca.gpkg"</span>)</span>
-<span id="cb22-149"><a href="#cb22-149" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-150"><a href="#cb22-150" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="sc">!</span><span class="fu">file_exists</span>(out_gpkg) <span class="sc">||</span> redo_if_exists) {</span>
-<span id="cb22-151"><a href="#cb22-151" aria-hidden="true" tabindex="-1"></a>  <span class="fu">fs_to_sf</span>(url_rest) <span class="sc">|&gt;</span></span>
-<span id="cb22-152"><a href="#cb22-152" aria-hidden="true" tabindex="-1"></a>    <span class="fu">write_sf</span>(out_gpkg, <span class="at">delete_dsn =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb22-153"><a href="#cb22-153" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb22-154"><a href="#cb22-154" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb22-155"><a href="#cb22-155" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-156"><a href="#cb22-156" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-157"><a href="#cb22-157" aria-hidden="true" tabindex="-1"></a><span class="fu">## Clip CA Current LME to US EEZ</span></span>
-<span id="cb22-158"><a href="#cb22-158" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-161"><a href="#cb22-161" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb22-162"><a href="#cb22-162" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: clip-layers</span></span>
-<span id="cb22-163"><a href="#cb22-163" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-164"><a href="#cb22-164" aria-hidden="true" tabindex="-1"></a>cacurrent_geo <span class="ot">&lt;-</span> <span class="fu">glue</span>(</span>
-<span id="cb22-165"><a href="#cb22-165" aria-hidden="true" tabindex="-1"></a>  <span class="st">"{dir_spatial}/NOAA_IEA-CA-Current/lme-ca-current.geojson"</span></span>
-<span id="cb22-166"><a href="#cb22-166" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb22-167"><a href="#cb22-167" aria-hidden="true" tabindex="-1"></a>usaeez_geo <span class="ot">&lt;-</span> <span class="fu">glue</span>(</span>
-<span id="cb22-168"><a href="#cb22-168" aria-hidden="true" tabindex="-1"></a>  <span class="st">"{dir_spatial}/NOAA_IEA-CA-Current/usa-eez.geojson"</span></span>
-<span id="cb22-169"><a href="#cb22-169" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb22-170"><a href="#cb22-170" aria-hidden="true" tabindex="-1"></a>cacurrent_usaeez_geo <span class="ot">&lt;-</span> <span class="fu">glue</span>(</span>
-<span id="cb22-171"><a href="#cb22-171" aria-hidden="true" tabindex="-1"></a>  <span class="st">"{dir_spatial}/NOAA_IEA-CA-Current/lme-ca-current_usa-eez.geojson"</span></span>
-<span id="cb22-172"><a href="#cb22-172" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb22-173"><a href="#cb22-173" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-174"><a href="#cb22-174" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="sc">!</span><span class="fu">file_exists</span>(cacurrent_usaeez_geo) <span class="sc">||</span> redo_if_exists) {</span>
-<span id="cb22-175"><a href="#cb22-175" aria-hidden="true" tabindex="-1"></a>  cacurrent <span class="ot">&lt;-</span> <span class="fu">st_read</span>(cacurrent_geo, <span class="at">quiet =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb22-176"><a href="#cb22-176" aria-hidden="true" tabindex="-1"></a>  usaeez <span class="ot">&lt;-</span> <span class="fu">st_read</span>(usaeez_geo, <span class="at">quiet =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb22-177"><a href="#cb22-177" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-178"><a href="#cb22-178" aria-hidden="true" tabindex="-1"></a>  cacurrent_usaeez <span class="ot">&lt;-</span> <span class="fu">st_intersection</span>(cacurrent, usaeez)</span>
-<span id="cb22-179"><a href="#cb22-179" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-180"><a href="#cb22-180" aria-hidden="true" tabindex="-1"></a>  <span class="fu">st_write</span>(</span>
-<span id="cb22-181"><a href="#cb22-181" aria-hidden="true" tabindex="-1"></a>    cacurrent_usaeez,</span>
-<span id="cb22-182"><a href="#cb22-182" aria-hidden="true" tabindex="-1"></a>    cacurrent_usaeez_geo,</span>
-<span id="cb22-183"><a href="#cb22-183" aria-hidden="true" tabindex="-1"></a>    <span class="at">delete_dsn =</span> <span class="cn">TRUE</span>,</span>
-<span id="cb22-184"><a href="#cb22-184" aria-hidden="true" tabindex="-1"></a>    <span class="at">quiet =</span> <span class="cn">TRUE</span></span>
-<span id="cb22-185"><a href="#cb22-185" aria-hidden="true" tabindex="-1"></a>  )</span>
-<span id="cb22-186"><a href="#cb22-186" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb22-187"><a href="#cb22-187" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb22-188"><a href="#cb22-188" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-189"><a href="#cb22-189" aria-hidden="true" tabindex="-1"></a><span class="fu">## Process datasets</span></span>
-<span id="cb22-190"><a href="#cb22-190" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-193"><a href="#cb22-193" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb22-194"><a href="#cb22-194" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: process-datasets</span></span>
-<span id="cb22-195"><a href="#cb22-195" aria-hidden="true" tabindex="-1"></a><span class="co">#| output: asis</span></span>
-<span id="cb22-196"><a href="#cb22-196" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-197"><a href="#cb22-197" aria-hidden="true" tabindex="-1"></a>process_spatial_dataset <span class="ot">&lt;-</span> <span class="cf">function</span>(</span>
-<span id="cb22-198"><a href="#cb22-198" aria-hidden="true" tabindex="-1"></a>  dataset_group,</span>
-<span id="cb22-199"><a href="#cb22-199" aria-hidden="true" tabindex="-1"></a>  source_folder,</span>
-<span id="cb22-200"><a href="#cb22-200" aria-hidden="true" tabindex="-1"></a>  source_file,</span>
-<span id="cb22-201"><a href="#cb22-201" aria-hidden="true" tabindex="-1"></a>  source_format,</span>
-<span id="cb22-202"><a href="#cb22-202" aria-hidden="true" tabindex="-1"></a>  dir_spatial,</span>
-<span id="cb22-203"><a href="#cb22-203" aria-hidden="true" tabindex="-1"></a>  dir_pmtiles,</span>
-<span id="cb22-204"><a href="#cb22-204" aria-hidden="true" tabindex="-1"></a>  dir_parquet,</span>
-<span id="cb22-205"><a href="#cb22-205" aria-hidden="true" tabindex="-1"></a>  <span class="at">redo_if_exists =</span> <span class="cn">FALSE</span></span>
-<span id="cb22-206"><a href="#cb22-206" aria-hidden="true" tabindex="-1"></a>) {</span>
-<span id="cb22-207"><a href="#cb22-207" aria-hidden="true" tabindex="-1"></a>  pmtiles_path <span class="ot">&lt;-</span> <span class="fu">path</span>(dir_pmtiles, <span class="fu">glue</span>(<span class="st">"{dataset_group}.pmtiles"</span>))</span>
-<span id="cb22-208"><a href="#cb22-208" aria-hidden="true" tabindex="-1"></a>  parquet_path <span class="ot">&lt;-</span> <span class="fu">path</span>(dir_parquet, <span class="fu">glue</span>(<span class="st">"{dataset_group}.parquet"</span>))</span>
-<span id="cb22-209"><a href="#cb22-209" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-210"><a href="#cb22-210" aria-hidden="true" tabindex="-1"></a>  <span class="co"># skip if already processed</span></span>
-<span id="cb22-211"><a href="#cb22-211" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (</span>
-<span id="cb22-212"><a href="#cb22-212" aria-hidden="true" tabindex="-1"></a>    <span class="sc">!</span>redo_if_exists <span class="sc">&amp;&amp;</span></span>
-<span id="cb22-213"><a href="#cb22-213" aria-hidden="true" tabindex="-1"></a>      <span class="fu">file_exists</span>(pmtiles_path) <span class="sc">&amp;&amp;</span></span>
-<span id="cb22-214"><a href="#cb22-214" aria-hidden="true" tabindex="-1"></a>      <span class="fu">file_exists</span>(parquet_path)</span>
-<span id="cb22-215"><a href="#cb22-215" aria-hidden="true" tabindex="-1"></a>  ) {</span>
-<span id="cb22-216"><a href="#cb22-216" aria-hidden="true" tabindex="-1"></a>    <span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"- **{dataset_group}**: skipped (already exists)</span><span class="sc">\n\n</span><span class="st">"</span>))</span>
-<span id="cb22-217"><a href="#cb22-217" aria-hidden="true" tabindex="-1"></a>    <span class="fu">return</span>(<span class="fu">invisible</span>(<span class="cn">TRUE</span>))</span>
-<span id="cb22-218"><a href="#cb22-218" aria-hidden="true" tabindex="-1"></a>  }</span>
-<span id="cb22-219"><a href="#cb22-219" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-220"><a href="#cb22-220" aria-hidden="true" tabindex="-1"></a>  <span class="co"># read source data ----</span></span>
-<span id="cb22-221"><a href="#cb22-221" aria-hidden="true" tabindex="-1"></a>  sf_data <span class="ot">&lt;-</span> <span class="fu">tryCatch</span>(</span>
-<span id="cb22-222"><a href="#cb22-222" aria-hidden="true" tabindex="-1"></a>    {</span>
-<span id="cb22-223"><a href="#cb22-223" aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> (source_format <span class="sc">==</span> <span class="st">"rda"</span>) {</span>
-<span id="cb22-224"><a href="#cb22-224" aria-hidden="true" tabindex="-1"></a>        <span class="co"># .rda files: load() into temp env, extract sf object</span></span>
-<span id="cb22-225"><a href="#cb22-225" aria-hidden="true" tabindex="-1"></a>        e <span class="ot">&lt;-</span> <span class="fu">new.env</span>()</span>
-<span id="cb22-226"><a href="#cb22-226" aria-hidden="true" tabindex="-1"></a>        <span class="fu">load</span>(<span class="fu">path</span>(dir_spatial, source_folder, source_file), <span class="at">envir =</span> e)</span>
-<span id="cb22-227"><a href="#cb22-227" aria-hidden="true" tabindex="-1"></a>        obj_names <span class="ot">&lt;-</span> <span class="fu">ls</span>(e)</span>
-<span id="cb22-228"><a href="#cb22-228" aria-hidden="true" tabindex="-1"></a>        sf_obj <span class="ot">&lt;-</span> <span class="cn">NULL</span></span>
-<span id="cb22-229"><a href="#cb22-229" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> (nm <span class="cf">in</span> obj_names) {</span>
-<span id="cb22-230"><a href="#cb22-230" aria-hidden="true" tabindex="-1"></a>          <span class="cf">if</span> (<span class="fu">inherits</span>(<span class="fu">get</span>(nm, <span class="at">envir =</span> e), <span class="st">"sf"</span>)) {</span>
-<span id="cb22-231"><a href="#cb22-231" aria-hidden="true" tabindex="-1"></a>            sf_obj <span class="ot">&lt;-</span> <span class="fu">get</span>(nm, <span class="at">envir =</span> e)</span>
-<span id="cb22-232"><a href="#cb22-232" aria-hidden="true" tabindex="-1"></a>            <span class="cf">break</span></span>
-<span id="cb22-233"><a href="#cb22-233" aria-hidden="true" tabindex="-1"></a>          }</span>
-<span id="cb22-234"><a href="#cb22-234" aria-hidden="true" tabindex="-1"></a>        }</span>
-<span id="cb22-235"><a href="#cb22-235" aria-hidden="true" tabindex="-1"></a>        sf_obj</span>
-<span id="cb22-236"><a href="#cb22-236" aria-hidden="true" tabindex="-1"></a>        <span class="co"># drop any list columns (e.g. from complex attributes that can't be written to parquet)</span></span>
-<span id="cb22-237"><a href="#cb22-237" aria-hidden="true" tabindex="-1"></a>        sf_obj <span class="sc">|&gt;</span> <span class="fu">select</span>(<span class="fu">where</span>(<span class="sc">~</span> <span class="sc">!</span><span class="fu">is.list</span>(.)))</span>
-<span id="cb22-238"><a href="#cb22-238" aria-hidden="true" tabindex="-1"></a>      } <span class="cf">else</span> <span class="cf">if</span> (source_format <span class="sc">==</span> <span class="st">"gdb"</span>) {</span>
-<span id="cb22-239"><a href="#cb22-239" aria-hidden="true" tabindex="-1"></a>        <span class="co"># geodatabase: source_file = "file.gdb|layer_name"</span></span>
-<span id="cb22-240"><a href="#cb22-240" aria-hidden="true" tabindex="-1"></a>        parts <span class="ot">&lt;-</span> <span class="fu">str_split_1</span>(source_file, <span class="st">"</span><span class="sc">\\</span><span class="st">|"</span>)</span>
-<span id="cb22-241"><a href="#cb22-241" aria-hidden="true" tabindex="-1"></a>        <span class="fu">st_read</span>(</span>
-<span id="cb22-242"><a href="#cb22-242" aria-hidden="true" tabindex="-1"></a>          <span class="fu">path</span>(dir_spatial, source_folder, parts[<span class="dv">1</span>]),</span>
-<span id="cb22-243"><a href="#cb22-243" aria-hidden="true" tabindex="-1"></a>          <span class="at">layer =</span> parts[<span class="dv">2</span>],</span>
-<span id="cb22-244"><a href="#cb22-244" aria-hidden="true" tabindex="-1"></a>          <span class="at">quiet =</span> <span class="cn">TRUE</span></span>
-<span id="cb22-245"><a href="#cb22-245" aria-hidden="true" tabindex="-1"></a>        )</span>
-<span id="cb22-246"><a href="#cb22-246" aria-hidden="true" tabindex="-1"></a>      } <span class="cf">else</span> {</span>
-<span id="cb22-247"><a href="#cb22-247" aria-hidden="true" tabindex="-1"></a>        <span class="co"># shp, gpkg, geojson</span></span>
-<span id="cb22-248"><a href="#cb22-248" aria-hidden="true" tabindex="-1"></a>        <span class="fu">st_read</span>(</span>
-<span id="cb22-249"><a href="#cb22-249" aria-hidden="true" tabindex="-1"></a>          <span class="fu">path</span>(dir_spatial, source_folder, source_file),</span>
-<span id="cb22-250"><a href="#cb22-250" aria-hidden="true" tabindex="-1"></a>          <span class="at">quiet =</span> <span class="cn">TRUE</span></span>
-<span id="cb22-251"><a href="#cb22-251" aria-hidden="true" tabindex="-1"></a>        )</span>
-<span id="cb22-252"><a href="#cb22-252" aria-hidden="true" tabindex="-1"></a>      }</span>
-<span id="cb22-253"><a href="#cb22-253" aria-hidden="true" tabindex="-1"></a>    },</span>
-<span id="cb22-254"><a href="#cb22-254" aria-hidden="true" tabindex="-1"></a>    <span class="at">error =</span> <span class="cf">function</span>(e) {</span>
-<span id="cb22-255"><a href="#cb22-255" aria-hidden="true" tabindex="-1"></a>      <span class="fu">cat</span>(<span class="fu">glue</span>(</span>
-<span id="cb22-256"><a href="#cb22-256" aria-hidden="true" tabindex="-1"></a>        <span class="st">"- **{dataset_group}**: ⚠ SKIPPED — failed to read "</span>,</span>
-<span id="cb22-257"><a href="#cb22-257" aria-hidden="true" tabindex="-1"></a>        <span class="st">"`{source_folder}/{source_file}`: {e$message}</span><span class="sc">\n\n</span><span class="st">"</span></span>
-<span id="cb22-258"><a href="#cb22-258" aria-hidden="true" tabindex="-1"></a>      ))</span>
-<span id="cb22-259"><a href="#cb22-259" aria-hidden="true" tabindex="-1"></a>      <span class="fu">return</span>(<span class="cn">NULL</span>)</span>
-<span id="cb22-260"><a href="#cb22-260" aria-hidden="true" tabindex="-1"></a>    }</span>
-<span id="cb22-261"><a href="#cb22-261" aria-hidden="true" tabindex="-1"></a>  )</span>
-<span id="cb22-262"><a href="#cb22-262" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-263"><a href="#cb22-263" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">is.null</span>(sf_data) <span class="sc">||</span> <span class="fu">nrow</span>(sf_data) <span class="sc">==</span> <span class="dv">0</span>) {</span>
-<span id="cb22-264"><a href="#cb22-264" aria-hidden="true" tabindex="-1"></a>    <span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"- **{dataset_group}**: ⚠ SKIPPED — empty dataset</span><span class="sc">\n\n</span><span class="st">"</span>))</span>
-<span id="cb22-265"><a href="#cb22-265" aria-hidden="true" tabindex="-1"></a>    <span class="fu">return</span>(<span class="fu">invisible</span>(<span class="cn">FALSE</span>))</span>
-<span id="cb22-266"><a href="#cb22-266" aria-hidden="true" tabindex="-1"></a>  }</span>
-<span id="cb22-267"><a href="#cb22-267" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-268"><a href="#cb22-268" aria-hidden="true" tabindex="-1"></a>  <span class="co"># reproject to EPSG:4326 ----</span></span>
-<span id="cb22-269"><a href="#cb22-269" aria-hidden="true" tabindex="-1"></a>  src_crs <span class="ot">&lt;-</span> <span class="fu">st_crs</span>(sf_data)<span class="sc">$</span>epsg</span>
-<span id="cb22-270"><a href="#cb22-270" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">is.na</span>(src_crs) <span class="sc">||</span> src_crs <span class="sc">!=</span> <span class="dv">4326</span>) {</span>
-<span id="cb22-271"><a href="#cb22-271" aria-hidden="true" tabindex="-1"></a>    sf_data <span class="ot">&lt;-</span> <span class="fu">st_transform</span>(sf_data, <span class="dv">4326</span>)</span>
-<span id="cb22-272"><a href="#cb22-272" aria-hidden="true" tabindex="-1"></a>  }</span>
-<span id="cb22-273"><a href="#cb22-273" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-274"><a href="#cb22-274" aria-hidden="true" tabindex="-1"></a>  <span class="co"># clean column names ----</span></span>
-<span id="cb22-275"><a href="#cb22-275" aria-hidden="true" tabindex="-1"></a>  sf_data <span class="ot">&lt;-</span> <span class="fu">clean_names</span>(sf_data)</span>
-<span id="cb22-276"><a href="#cb22-276" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-277"><a href="#cb22-277" aria-hidden="true" tabindex="-1"></a>  <span class="co"># ensure integer id column first ----</span></span>
-<span id="cb22-278"><a href="#cb22-278" aria-hidden="true" tabindex="-1"></a>  geom_col <span class="ot">&lt;-</span> <span class="fu">attr</span>(sf_data, <span class="st">"sf_column"</span>)</span>
-<span id="cb22-279"><a href="#cb22-279" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="st">"id"</span> <span class="sc">%in%</span> <span class="fu">names</span>(sf_data)) {</span>
-<span id="cb22-280"><a href="#cb22-280" aria-hidden="true" tabindex="-1"></a>    sf_data <span class="ot">&lt;-</span> sf_data <span class="sc">|&gt;</span> <span class="fu">mutate</span>(<span class="at">id =</span> <span class="fu">row_number</span>())</span>
-<span id="cb22-281"><a href="#cb22-281" aria-hidden="true" tabindex="-1"></a>  }</span>
-<span id="cb22-282"><a href="#cb22-282" aria-hidden="true" tabindex="-1"></a>  sf_data <span class="ot">&lt;-</span> sf_data <span class="sc">|&gt;</span></span>
-<span id="cb22-283"><a href="#cb22-283" aria-hidden="true" tabindex="-1"></a>    <span class="fu">mutate</span>(<span class="at">id =</span> <span class="fu">as.integer</span>(id)) <span class="sc">|&gt;</span></span>
-<span id="cb22-284"><a href="#cb22-284" aria-hidden="true" tabindex="-1"></a>    <span class="fu">relocate</span>(id)</span>
-<span id="cb22-285"><a href="#cb22-285" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-286"><a href="#cb22-286" aria-hidden="true" tabindex="-1"></a>  <span class="co"># write parquet via DuckDB spatial ----</span></span>
-<span id="cb22-287"><a href="#cb22-287" aria-hidden="true" tabindex="-1"></a>  tmp_geojson <span class="ot">&lt;-</span> <span class="fu">tempfile</span>(<span class="at">fileext =</span> <span class="st">".geojson"</span>)</span>
-<span id="cb22-288"><a href="#cb22-288" aria-hidden="true" tabindex="-1"></a>  <span class="fu">st_write</span>(sf_data, tmp_geojson, <span class="at">delete_dsn =</span> <span class="cn">TRUE</span>, <span class="at">quiet =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb22-289"><a href="#cb22-289" aria-hidden="true" tabindex="-1"></a>  con_tmp <span class="ot">&lt;-</span> <span class="fu">dbConnect</span>(<span class="fu">duckdb</span>())</span>
-<span id="cb22-290"><a href="#cb22-290" aria-hidden="true" tabindex="-1"></a>  <span class="fu">dbExecute</span>(con_tmp, <span class="st">"INSTALL spatial; LOAD spatial;"</span>)</span>
-<span id="cb22-291"><a href="#cb22-291" aria-hidden="true" tabindex="-1"></a>  <span class="fu">dbExecute</span>(</span>
-<span id="cb22-292"><a href="#cb22-292" aria-hidden="true" tabindex="-1"></a>    con_tmp,</span>
-<span id="cb22-293"><a href="#cb22-293" aria-hidden="true" tabindex="-1"></a>    <span class="fu">glue</span>(</span>
-<span id="cb22-294"><a href="#cb22-294" aria-hidden="true" tabindex="-1"></a>      <span class="st">"COPY (SELECT * FROM ST_Read('{tmp_geojson}'))</span></span>
-<span id="cb22-295"><a href="#cb22-295" aria-hidden="true" tabindex="-1"></a><span class="st">         TO '{parquet_path}' (FORMAT PARQUET)"</span></span>
-<span id="cb22-296"><a href="#cb22-296" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="cb22-297"><a href="#cb22-297" aria-hidden="true" tabindex="-1"></a>  )</span>
-<span id="cb22-298"><a href="#cb22-298" aria-hidden="true" tabindex="-1"></a>  <span class="fu">dbDisconnect</span>(con_tmp, <span class="at">shutdown =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb22-299"><a href="#cb22-299" aria-hidden="true" tabindex="-1"></a>  <span class="fu">unlink</span>(tmp_geojson)</span>
-<span id="cb22-300"><a href="#cb22-300" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-301"><a href="#cb22-301" aria-hidden="true" tabindex="-1"></a>  <span class="co"># write pmtiles ----</span></span>
-<span id="cb22-302"><a href="#cb22-302" aria-hidden="true" tabindex="-1"></a>  geojson_tmp <span class="ot">&lt;-</span> <span class="fu">tempfile</span>(<span class="at">fileext =</span> <span class="st">".geojson"</span>)</span>
-<span id="cb22-303"><a href="#cb22-303" aria-hidden="true" tabindex="-1"></a>  <span class="fu">st_write</span>(sf_data, geojson_tmp, <span class="at">delete_dsn =</span> <span class="cn">TRUE</span>, <span class="at">quiet =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb22-304"><a href="#cb22-304" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-305"><a href="#cb22-305" aria-hidden="true" tabindex="-1"></a>  tippecanoe_args <span class="ot">&lt;-</span> <span class="fu">c</span>(</span>
-<span id="cb22-306"><a href="#cb22-306" aria-hidden="true" tabindex="-1"></a>    <span class="st">"-o"</span>,</span>
-<span id="cb22-307"><a href="#cb22-307" aria-hidden="true" tabindex="-1"></a>    pmtiles_path,</span>
-<span id="cb22-308"><a href="#cb22-308" aria-hidden="true" tabindex="-1"></a>    <span class="st">"-z10"</span>,</span>
-<span id="cb22-309"><a href="#cb22-309" aria-hidden="true" tabindex="-1"></a>    <span class="st">"-Z0"</span>,</span>
-<span id="cb22-310"><a href="#cb22-310" aria-hidden="true" tabindex="-1"></a>    <span class="st">"--simplification=10"</span>,</span>
-<span id="cb22-311"><a href="#cb22-311" aria-hidden="true" tabindex="-1"></a>    <span class="st">"--no-tile-size-limit"</span>,</span>
-<span id="cb22-312"><a href="#cb22-312" aria-hidden="true" tabindex="-1"></a>    <span class="co"># "--use-attribute-for-id=id", # wierdly drops 'id', so incompatible with mapgl::add_pmtiles_source(promote_id='id')</span></span>
-<span id="cb22-313"><a href="#cb22-313" aria-hidden="true" tabindex="-1"></a>    <span class="st">"-l"</span>,</span>
-<span id="cb22-314"><a href="#cb22-314" aria-hidden="true" tabindex="-1"></a>    dataset_group,</span>
-<span id="cb22-315"><a href="#cb22-315" aria-hidden="true" tabindex="-1"></a>    <span class="st">"--force"</span>,</span>
-<span id="cb22-316"><a href="#cb22-316" aria-hidden="true" tabindex="-1"></a>    geojson_tmp</span>
-<span id="cb22-317"><a href="#cb22-317" aria-hidden="true" tabindex="-1"></a>  )</span>
-<span id="cb22-318"><a href="#cb22-318" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-319"><a href="#cb22-319" aria-hidden="true" tabindex="-1"></a>  result <span class="ot">&lt;-</span> <span class="fu">system2</span>(</span>
-<span id="cb22-320"><a href="#cb22-320" aria-hidden="true" tabindex="-1"></a>    <span class="st">"tippecanoe"</span>,</span>
-<span id="cb22-321"><a href="#cb22-321" aria-hidden="true" tabindex="-1"></a>    <span class="at">args =</span> tippecanoe_args,</span>
-<span id="cb22-322"><a href="#cb22-322" aria-hidden="true" tabindex="-1"></a>    <span class="at">stdout =</span> <span class="cn">TRUE</span>,</span>
-<span id="cb22-323"><a href="#cb22-323" aria-hidden="true" tabindex="-1"></a>    <span class="at">stderr =</span> <span class="cn">TRUE</span></span>
-<span id="cb22-324"><a href="#cb22-324" aria-hidden="true" tabindex="-1"></a>  )</span>
-<span id="cb22-325"><a href="#cb22-325" aria-hidden="true" tabindex="-1"></a>  <span class="fu">unlink</span>(geojson_tmp)</span>
-<span id="cb22-326"><a href="#cb22-326" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-327"><a href="#cb22-327" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">file_exists</span>(pmtiles_path)) {</span>
-<span id="cb22-328"><a href="#cb22-328" aria-hidden="true" tabindex="-1"></a>    <span class="fu">cat</span>(<span class="fu">glue</span>(</span>
-<span id="cb22-329"><a href="#cb22-329" aria-hidden="true" tabindex="-1"></a>      <span class="st">"- **{dataset_group}**: ⚠ SKIPPED — tippecanoe failed</span><span class="sc">\n\n</span><span class="st">"</span></span>
-<span id="cb22-330"><a href="#cb22-330" aria-hidden="true" tabindex="-1"></a>    ))</span>
-<span id="cb22-331"><a href="#cb22-331" aria-hidden="true" tabindex="-1"></a>    <span class="fu">return</span>(<span class="fu">invisible</span>(<span class="cn">FALSE</span>))</span>
-<span id="cb22-332"><a href="#cb22-332" aria-hidden="true" tabindex="-1"></a>  }</span>
-<span id="cb22-333"><a href="#cb22-333" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-334"><a href="#cb22-334" aria-hidden="true" tabindex="-1"></a>  pmtiles_size <span class="ot">&lt;-</span> <span class="fu">file_size</span>(pmtiles_path)</span>
-<span id="cb22-335"><a href="#cb22-335" aria-hidden="true" tabindex="-1"></a>  parquet_size <span class="ot">&lt;-</span> <span class="fu">file_size</span>(parquet_path)</span>
-<span id="cb22-336"><a href="#cb22-336" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-337"><a href="#cb22-337" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="fu">glue</span>(</span>
-<span id="cb22-338"><a href="#cb22-338" aria-hidden="true" tabindex="-1"></a>    <span class="st">"- **{dataset_group}**: {nrow(sf_data)} features "</span>,</span>
-<span id="cb22-339"><a href="#cb22-339" aria-hidden="true" tabindex="-1"></a>    <span class="st">"(CRS {src_crs} → 4326), "</span>,</span>
-<span id="cb22-340"><a href="#cb22-340" aria-hidden="true" tabindex="-1"></a>    <span class="st">"PMTiles {pmtiles_size}, Parquet {parquet_size}</span><span class="sc">\n\n</span><span class="st">"</span></span>
-<span id="cb22-341"><a href="#cb22-341" aria-hidden="true" tabindex="-1"></a>  ))</span>
-<span id="cb22-342"><a href="#cb22-342" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-343"><a href="#cb22-343" aria-hidden="true" tabindex="-1"></a>  <span class="fu">return</span>(<span class="fu">invisible</span>(<span class="cn">TRUE</span>))</span>
-<span id="cb22-344"><a href="#cb22-344" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb22-345"><a href="#cb22-345" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-346"><a href="#cb22-346" aria-hidden="true" tabindex="-1"></a><span class="co"># process each dataset group</span></span>
-<span id="cb22-347"><a href="#cb22-347" aria-hidden="true" tabindex="-1"></a>results <span class="ot">&lt;-</span> d_groups <span class="sc">|&gt;</span></span>
-<span id="cb22-348"><a href="#cb22-348" aria-hidden="true" tabindex="-1"></a>  <span class="co"># filter(dataset_group == "ca_county_boundaries") |&gt; # DEBUG: process one group first</span></span>
-<span id="cb22-349"><a href="#cb22-349" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(dataset_group, source_folder, source_file, source_format) <span class="sc">|&gt;</span></span>
-<span id="cb22-350"><a href="#cb22-350" aria-hidden="true" tabindex="-1"></a>  <span class="fu">pmap_lgl</span>(</span>
-<span id="cb22-351"><a href="#cb22-351" aria-hidden="true" tabindex="-1"></a>    process_spatial_dataset,</span>
-<span id="cb22-352"><a href="#cb22-352" aria-hidden="true" tabindex="-1"></a>    <span class="at">dir_spatial =</span> dir_spatial,</span>
-<span id="cb22-353"><a href="#cb22-353" aria-hidden="true" tabindex="-1"></a>    <span class="at">dir_pmtiles =</span> dir_pmtiles,</span>
-<span id="cb22-354"><a href="#cb22-354" aria-hidden="true" tabindex="-1"></a>    <span class="at">dir_parquet =</span> dir_parquet,</span>
-<span id="cb22-355"><a href="#cb22-355" aria-hidden="true" tabindex="-1"></a>    <span class="at">redo_if_exists =</span> redo_if_exists</span>
-<span id="cb22-356"><a href="#cb22-356" aria-hidden="true" tabindex="-1"></a>  )</span>
-<span id="cb22-357"><a href="#cb22-357" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-358"><a href="#cb22-358" aria-hidden="true" tabindex="-1"></a>n_ok <span class="ot">&lt;-</span> <span class="fu">sum</span>(results)</span>
-<span id="cb22-359"><a href="#cb22-359" aria-hidden="true" tabindex="-1"></a>n_skip <span class="ot">&lt;-</span> <span class="fu">sum</span>(<span class="sc">!</span>results)</span>
-<span id="cb22-360"><a href="#cb22-360" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"</span><span class="sc">\n</span><span class="st">**Summary**: {n_ok} succeeded, {n_skip} skipped/failed</span><span class="sc">\n</span><span class="st">"</span>))</span>
-<span id="cb22-361"><a href="#cb22-361" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb22-362"><a href="#cb22-362" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-363"><a href="#cb22-363" aria-hidden="true" tabindex="-1"></a><span class="fu">## Upload to GCS</span></span>
-<span id="cb22-364"><a href="#cb22-364" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-367"><a href="#cb22-367" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb22-368"><a href="#cb22-368" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: upload-gcs</span></span>
-<span id="cb22-369"><a href="#cb22-369" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-370"><a href="#cb22-370" aria-hidden="true" tabindex="-1"></a>pmtiles_files <span class="ot">&lt;-</span> <span class="fu">dir_ls</span>(dir_pmtiles, <span class="at">glob =</span> <span class="st">"*.pmtiles"</span>) <span class="co"># |&gt;</span></span>
-<span id="cb22-371"><a href="#cb22-371" aria-hidden="true" tabindex="-1"></a><span class="co"># str_subset("ca_county_boundaries") # DEBUG: only upload one file first</span></span>
-<span id="cb22-372"><a href="#cb22-372" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-373"><a href="#cb22-373" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(</span>
-<span id="cb22-374"><a href="#cb22-374" aria-hidden="true" tabindex="-1"></a>  <span class="st">"Uploading {length(pmtiles_files)} PMTiles files to "</span>,</span>
-<span id="cb22-375"><a href="#cb22-375" aria-hidden="true" tabindex="-1"></a>  <span class="st">"gs://{gcs_bucket}/{gcs_prefix}/</span><span class="sc">\n\n</span><span class="st">"</span></span>
-<span id="cb22-376"><a href="#cb22-376" aria-hidden="true" tabindex="-1"></a>))</span>
-<span id="cb22-377"><a href="#cb22-377" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-378"><a href="#cb22-378" aria-hidden="true" tabindex="-1"></a><span class="fu">sync_to_gcs</span>(</span>
-<span id="cb22-379"><a href="#cb22-379" aria-hidden="true" tabindex="-1"></a>  <span class="at">local_dir =</span> dir_pmtiles,</span>
-<span id="cb22-380"><a href="#cb22-380" aria-hidden="true" tabindex="-1"></a>  <span class="at">gcs_prefix =</span> gcs_prefix,</span>
-<span id="cb22-381"><a href="#cb22-381" aria-hidden="true" tabindex="-1"></a>  <span class="at">bucket =</span> gcs_bucket,</span>
-<span id="cb22-382"><a href="#cb22-382" aria-hidden="true" tabindex="-1"></a>  <span class="at">pattern =</span> <span class="st">"</span><span class="sc">\\</span><span class="st">.pmtiles$"</span></span>
-<span id="cb22-383"><a href="#cb22-383" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb22-384"><a href="#cb22-384" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb22-385"><a href="#cb22-385" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-386"><a href="#cb22-386" aria-hidden="true" tabindex="-1"></a><span class="fu">## Load into DuckDB</span></span>
-<span id="cb22-387"><a href="#cb22-387" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-388"><a href="#cb22-388" aria-hidden="true" tabindex="-1"></a>Load parquet files into the wrangling database for spatial queries.</span>
-<span id="cb22-389"><a href="#cb22-389" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-392"><a href="#cb22-392" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb22-393"><a href="#cb22-393" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: load-duckdb</span></span>
-<span id="cb22-394"><a href="#cb22-394" aria-hidden="true" tabindex="-1"></a><span class="co">#| output: asis</span></span>
-<span id="cb22-395"><a href="#cb22-395" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-396"><a href="#cb22-396" aria-hidden="true" tabindex="-1"></a>db_path <span class="ot">&lt;-</span> <span class="fu">here</span>(<span class="st">"data/calcofi_wrangling.duckdb"</span>)</span>
-<span id="cb22-397"><a href="#cb22-397" aria-hidden="true" tabindex="-1"></a>con <span class="ot">&lt;-</span> <span class="fu">dbConnect</span>(<span class="fu">duckdb</span>(<span class="at">dbdir =</span> db_path))</span>
-<span id="cb22-398"><a href="#cb22-398" aria-hidden="true" tabindex="-1"></a><span class="fu">dbExecute</span>(con, <span class="st">"INSTALL spatial; LOAD spatial;"</span>)</span>
-<span id="cb22-399"><a href="#cb22-399" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-400"><a href="#cb22-400" aria-hidden="true" tabindex="-1"></a>parquet_files <span class="ot">&lt;-</span> <span class="fu">dir_ls</span>(dir_parquet, <span class="at">glob =</span> <span class="st">"*.parquet"</span>)</span>
-<span id="cb22-401"><a href="#cb22-401" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-402"><a href="#cb22-402" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (pq <span class="cf">in</span> parquet_files) {</span>
-<span id="cb22-403"><a href="#cb22-403" aria-hidden="true" tabindex="-1"></a>  tbl_name <span class="ot">&lt;-</span> <span class="fu">paste0</span>(<span class="st">"spatial_"</span>, <span class="fu">path_ext_remove</span>(<span class="fu">path_file</span>(pq)))</span>
-<span id="cb22-404"><a href="#cb22-404" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-405"><a href="#cb22-405" aria-hidden="true" tabindex="-1"></a>  <span class="co"># read parquet into a temp view first to discover geometry column name</span></span>
-<span id="cb22-406"><a href="#cb22-406" aria-hidden="true" tabindex="-1"></a>  <span class="fu">dbExecute</span>(</span>
-<span id="cb22-407"><a href="#cb22-407" aria-hidden="true" tabindex="-1"></a>    con,</span>
-<span id="cb22-408"><a href="#cb22-408" aria-hidden="true" tabindex="-1"></a>    <span class="fu">glue</span>(</span>
-<span id="cb22-409"><a href="#cb22-409" aria-hidden="true" tabindex="-1"></a>      <span class="st">"CREATE OR REPLACE TEMP VIEW v_tmp AS</span></span>
-<span id="cb22-410"><a href="#cb22-410" aria-hidden="true" tabindex="-1"></a><span class="st">     SELECT * FROM read_parquet('{pq}')"</span></span>
-<span id="cb22-411"><a href="#cb22-411" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="cb22-412"><a href="#cb22-412" aria-hidden="true" tabindex="-1"></a>  )</span>
-<span id="cb22-413"><a href="#cb22-413" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-414"><a href="#cb22-414" aria-hidden="true" tabindex="-1"></a>  <span class="co"># find geometry column (type GEOMETRY or contains 'geom' in name)</span></span>
-<span id="cb22-415"><a href="#cb22-415" aria-hidden="true" tabindex="-1"></a>  cols_info <span class="ot">&lt;-</span> <span class="fu">dbGetQuery</span>(con, <span class="st">"DESCRIBE v_tmp"</span>)</span>
-<span id="cb22-416"><a href="#cb22-416" aria-hidden="true" tabindex="-1"></a>  geom_col <span class="ot">&lt;-</span> cols_info<span class="sc">$</span>column_name[</span>
-<span id="cb22-417"><a href="#cb22-417" aria-hidden="true" tabindex="-1"></a>    <span class="fu">grepl</span>(<span class="st">"GEOMETRY|WKB_GEOMETRY"</span>, cols_info<span class="sc">$</span>column_type, <span class="at">ignore.case =</span> <span class="cn">TRUE</span>) <span class="sc">|</span></span>
-<span id="cb22-418"><a href="#cb22-418" aria-hidden="true" tabindex="-1"></a>      <span class="fu">grepl</span>(<span class="st">"^geom"</span>, cols_info<span class="sc">$</span>column_name, <span class="at">ignore.case =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb22-419"><a href="#cb22-419" aria-hidden="true" tabindex="-1"></a>  ]</span>
-<span id="cb22-420"><a href="#cb22-420" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-421"><a href="#cb22-421" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">length</span>(geom_col) <span class="sc">&gt;</span> <span class="dv">0</span>) {</span>
-<span id="cb22-422"><a href="#cb22-422" aria-hidden="true" tabindex="-1"></a>    <span class="co"># strip CRS from geometry to avoid storage version error</span></span>
-<span id="cb22-423"><a href="#cb22-423" aria-hidden="true" tabindex="-1"></a>    geom_col <span class="ot">&lt;-</span> geom_col[<span class="dv">1</span>]</span>
-<span id="cb22-424"><a href="#cb22-424" aria-hidden="true" tabindex="-1"></a>    other_cols <span class="ot">&lt;-</span> <span class="fu">setdiff</span>(cols_info<span class="sc">$</span>column_name, geom_col)</span>
-<span id="cb22-425"><a href="#cb22-425" aria-hidden="true" tabindex="-1"></a>    select_sql <span class="ot">&lt;-</span> <span class="fu">paste</span>(</span>
-<span id="cb22-426"><a href="#cb22-426" aria-hidden="true" tabindex="-1"></a>      <span class="fu">c</span>(</span>
-<span id="cb22-427"><a href="#cb22-427" aria-hidden="true" tabindex="-1"></a>        other_cols,</span>
-<span id="cb22-428"><a href="#cb22-428" aria-hidden="true" tabindex="-1"></a>        <span class="fu">glue</span>(<span class="st">"ST_GeomFromWKB(ST_AsWKB({geom_col})) AS {geom_col}"</span>)</span>
-<span id="cb22-429"><a href="#cb22-429" aria-hidden="true" tabindex="-1"></a>      ),</span>
-<span id="cb22-430"><a href="#cb22-430" aria-hidden="true" tabindex="-1"></a>      <span class="at">collapse =</span> <span class="st">", "</span></span>
-<span id="cb22-431"><a href="#cb22-431" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="cb22-432"><a href="#cb22-432" aria-hidden="true" tabindex="-1"></a>    <span class="fu">dbExecute</span>(</span>
-<span id="cb22-433"><a href="#cb22-433" aria-hidden="true" tabindex="-1"></a>      con,</span>
-<span id="cb22-434"><a href="#cb22-434" aria-hidden="true" tabindex="-1"></a>      <span class="fu">glue</span>(</span>
-<span id="cb22-435"><a href="#cb22-435" aria-hidden="true" tabindex="-1"></a>        <span class="st">"CREATE OR REPLACE TABLE {tbl_name} AS</span></span>
-<span id="cb22-436"><a href="#cb22-436" aria-hidden="true" tabindex="-1"></a><span class="st">       SELECT {select_sql} FROM v_tmp"</span></span>
-<span id="cb22-437"><a href="#cb22-437" aria-hidden="true" tabindex="-1"></a>      )</span>
-<span id="cb22-438"><a href="#cb22-438" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="cb22-439"><a href="#cb22-439" aria-hidden="true" tabindex="-1"></a>  } <span class="cf">else</span> {</span>
-<span id="cb22-440"><a href="#cb22-440" aria-hidden="true" tabindex="-1"></a>    <span class="co"># no geometry column, load as-is</span></span>
-<span id="cb22-441"><a href="#cb22-441" aria-hidden="true" tabindex="-1"></a>    <span class="fu">dbExecute</span>(</span>
-<span id="cb22-442"><a href="#cb22-442" aria-hidden="true" tabindex="-1"></a>      con,</span>
-<span id="cb22-443"><a href="#cb22-443" aria-hidden="true" tabindex="-1"></a>      <span class="fu">glue</span>(</span>
-<span id="cb22-444"><a href="#cb22-444" aria-hidden="true" tabindex="-1"></a>        <span class="st">"CREATE OR REPLACE TABLE {tbl_name} AS</span></span>
-<span id="cb22-445"><a href="#cb22-445" aria-hidden="true" tabindex="-1"></a><span class="st">       SELECT * FROM v_tmp"</span></span>
-<span id="cb22-446"><a href="#cb22-446" aria-hidden="true" tabindex="-1"></a>      )</span>
-<span id="cb22-447"><a href="#cb22-447" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="cb22-448"><a href="#cb22-448" aria-hidden="true" tabindex="-1"></a>  }</span>
-<span id="cb22-449"><a href="#cb22-449" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-450"><a href="#cb22-450" aria-hidden="true" tabindex="-1"></a>  n_rows <span class="ot">&lt;-</span> <span class="fu">dbGetQuery</span>(con, <span class="fu">glue</span>(<span class="st">"SELECT COUNT(*) AS n FROM {tbl_name}"</span>))<span class="sc">$</span>n</span>
-<span id="cb22-451"><a href="#cb22-451" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"- {tbl_name}: {n_rows} rows</span><span class="sc">\n\n</span><span class="st">"</span>))</span>
-<span id="cb22-452"><a href="#cb22-452" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb22-453"><a href="#cb22-453" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-454"><a href="#cb22-454" aria-hidden="true" tabindex="-1"></a><span class="fu">dbDisconnect</span>(con, <span class="at">shutdown =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb22-455"><a href="#cb22-455" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb22-456"><a href="#cb22-456" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-457"><a href="#cb22-457" aria-hidden="true" tabindex="-1"></a><span class="fu">## Output summary</span></span>
-<span id="cb22-458"><a href="#cb22-458" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-461"><a href="#cb22-461" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb22-462"><a href="#cb22-462" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: summary</span></span>
-<span id="cb22-463"><a href="#cb22-463" aria-hidden="true" tabindex="-1"></a><span class="co">#| output: asis</span></span>
-<span id="cb22-464"><a href="#cb22-464" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-465"><a href="#cb22-465" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"### PMTiles</span><span class="sc">\n\n</span><span class="st">"</span>)</span>
-<span id="cb22-466"><a href="#cb22-466" aria-hidden="true" tabindex="-1"></a><span class="fu">dir_ls</span>(dir_pmtiles, <span class="at">glob =</span> <span class="st">"*.pmtiles"</span>) <span class="sc">|&gt;</span></span>
-<span id="cb22-467"><a href="#cb22-467" aria-hidden="true" tabindex="-1"></a>  <span class="fu">tibble</span>(<span class="at">path =</span> _) <span class="sc">|&gt;</span></span>
-<span id="cb22-468"><a href="#cb22-468" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
-<span id="cb22-469"><a href="#cb22-469" aria-hidden="true" tabindex="-1"></a>    <span class="at">file =</span> <span class="fu">path_file</span>(path),</span>
-<span id="cb22-470"><a href="#cb22-470" aria-hidden="true" tabindex="-1"></a>    <span class="at">size =</span> <span class="fu">file_size</span>(path)</span>
-<span id="cb22-471"><a href="#cb22-471" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
-<span id="cb22-472"><a href="#cb22-472" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(file, size) <span class="sc">|&gt;</span></span>
-<span id="cb22-473"><a href="#cb22-473" aria-hidden="true" tabindex="-1"></a>  knitr<span class="sc">::</span><span class="fu">kable</span>()</span>
-<span id="cb22-474"><a href="#cb22-474" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-475"><a href="#cb22-475" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"</span><span class="sc">\n</span><span class="st">### Parquet</span><span class="sc">\n\n</span><span class="st">"</span>)</span>
-<span id="cb22-476"><a href="#cb22-476" aria-hidden="true" tabindex="-1"></a><span class="fu">dir_ls</span>(dir_parquet, <span class="at">glob =</span> <span class="st">"*.parquet"</span>) <span class="sc">|&gt;</span></span>
-<span id="cb22-477"><a href="#cb22-477" aria-hidden="true" tabindex="-1"></a>  <span class="fu">tibble</span>(<span class="at">path =</span> _) <span class="sc">|&gt;</span></span>
-<span id="cb22-478"><a href="#cb22-478" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
-<span id="cb22-479"><a href="#cb22-479" aria-hidden="true" tabindex="-1"></a>    <span class="at">file =</span> <span class="fu">path_file</span>(path),</span>
-<span id="cb22-480"><a href="#cb22-480" aria-hidden="true" tabindex="-1"></a>    <span class="at">size =</span> <span class="fu">file_size</span>(path)</span>
-<span id="cb22-481"><a href="#cb22-481" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
-<span id="cb22-482"><a href="#cb22-482" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(file, size) <span class="sc">|&gt;</span></span>
-<span id="cb22-483"><a href="#cb22-483" aria-hidden="true" tabindex="-1"></a>  knitr<span class="sc">::</span><span class="fu">kable</span>()</span>
-<span id="cb22-484"><a href="#cb22-484" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb23" data-shortcodes="false"><pre class="sourceCode markdown code-with-copy"><code class="sourceCode markdown"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a><span class="co">---</span></span>
+<span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a><span class="an">title:</span><span class="co"> "Ingest Spatial Boundaries"</span></span>
+<span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a><span class="an">calcofi:</span></span>
+<span id="cb23-4"><a href="#cb23-4" aria-hidden="true" tabindex="-1"></a><span class="co">  target_name: ingest_spatial</span></span>
+<span id="cb23-5"><a href="#cb23-5" aria-hidden="true" tabindex="-1"></a><span class="co">  workflow_type: spatial</span></span>
+<span id="cb23-6"><a href="#cb23-6" aria-hidden="true" tabindex="-1"></a><span class="co">  dependency: []</span></span>
+<span id="cb23-7"><a href="#cb23-7" aria-hidden="true" tabindex="-1"></a><span class="co">  output: data/parquet/spatial/manifest.json</span></span>
+<span id="cb23-8"><a href="#cb23-8" aria-hidden="true" tabindex="-1"></a><span class="an">editor_options:</span></span>
+<span id="cb23-9"><a href="#cb23-9" aria-hidden="true" tabindex="-1"></a><span class="co">  chunk_output_type: console</span></span>
+<span id="cb23-10"><a href="#cb23-10" aria-hidden="true" tabindex="-1"></a><span class="co">---</span></span>
+<span id="cb23-11"><a href="#cb23-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-12"><a href="#cb23-12" aria-hidden="true" tabindex="-1"></a><span class="fu">## Overview</span></span>
+<span id="cb23-13"><a href="#cb23-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-14"><a href="#cb23-14" aria-hidden="true" tabindex="-1"></a>Process spatial boundary datasets for:</span>
+<span id="cb23-15"><a href="#cb23-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-16"><a href="#cb23-16" aria-hidden="true" tabindex="-1"></a><span class="ss">1. </span>**Map overlay** — PMTiles served via <span class="in">`file.calcofi.io/_spatial/`</span></span>
+<span id="cb23-17"><a href="#cb23-17" aria-hidden="true" tabindex="-1"></a><span class="ss">2. </span>**Spatial queries** — parquet tables loaded into CalCOFI DuckDB</span>
+<span id="cb23-18"><a href="#cb23-18" aria-hidden="true" tabindex="-1"></a><span class="ss">3. </span>**Future summarization** — aggregate CalCOFI data into boundary features</span>
+<span id="cb23-19"><a href="#cb23-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-20"><a href="#cb23-20" aria-hidden="true" tabindex="-1"></a>**Source**: <span class="in">`~/My Drive/projects/calcofi/data-public/_spatial/`</span></span>
+<span id="cb23-21"><a href="#cb23-21" aria-hidden="true" tabindex="-1"></a>(<span class="co">[</span><span class="ot">US Maritime Limits</span><span class="co">](https://nauticalcharts.noaa.gov/data/us-maritime-limits-and-boundaries.html)</span>,</span>
+<span id="cb23-22"><a href="#cb23-22" aria-hidden="true" tabindex="-1"></a>CA CDFW, BOEM, NOAA ONMS, MEOW, and others)</span>
+<span id="cb23-23"><a href="#cb23-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-24"><a href="#cb23-24" aria-hidden="true" tabindex="-1"></a>**Registry**: <span class="in">`metadata/spatial_layers.csv`</span> — one row per visual layer, with</span>
+<span id="cb23-25"><a href="#cb23-25" aria-hidden="true" tabindex="-1"></a>dataset grouping, styling, filter expressions, and source file paths.</span>
+<span id="cb23-26"><a href="#cb23-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-27"><a href="#cb23-27" aria-hidden="true" tabindex="-1"></a><span class="fu">### Data Flow</span></span>
+<span id="cb23-28"><a href="#cb23-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-31"><a href="#cb23-31" aria-hidden="true" tabindex="-1"></a><span class="in">```{mermaid}</span></span>
+<span id="cb23-32"><a href="#cb23-32" aria-hidden="true" tabindex="-1"></a>graph LR</span>
+<span id="cb23-33"><a href="#cb23-33" aria-hidden="true" tabindex="-1"></a>  A[Source Shapefiles] --&gt; B[Read + Reproject <span class="dv">4326</span>]</span>
+<span id="cb23-34"><a href="#cb23-34" aria-hidden="true" tabindex="-1"></a>  B --&gt; C[clean_names + id column]</span>
+<span id="cb23-35"><a href="#cb23-35" aria-hidden="true" tabindex="-1"></a>  C --&gt; D[Parquet Export]</span>
+<span id="cb23-36"><a href="#cb23-36" aria-hidden="true" tabindex="-1"></a>  C --&gt; E[GeoJSON → tippecanoe → PMTiles]</span>
+<span id="cb23-37"><a href="#cb23-37" aria-hidden="true" tabindex="-1"></a>  D --&gt; F[DuckDB Tables]</span>
+<span id="cb23-38"><a href="#cb23-38" aria-hidden="true" tabindex="-1"></a>  E --&gt; G[GCS Upload]</span>
+<span id="cb23-39"><a href="#cb23-39" aria-hidden="true" tabindex="-1"></a>  G --&gt; H[file.calcofi.io/_spatial/]</span>
+<span id="cb23-40"><a href="#cb23-40" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb23-41"><a href="#cb23-41" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-42"><a href="#cb23-42" aria-hidden="true" tabindex="-1"></a><span class="fu">### Pre-processing</span></span>
+<span id="cb23-43"><a href="#cb23-43" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-44"><a href="#cb23-44" aria-hidden="true" tabindex="-1"></a>Each dataset is standardized:</span>
+<span id="cb23-45"><a href="#cb23-45" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-46"><a href="#cb23-46" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**CRS**: reprojected to <span class="in">`EPSG:4326`</span> (WGS 84 unprojected)</span>
+<span id="cb23-47"><a href="#cb23-47" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Columns**: <span class="in">`janitor::clean_names()`</span> for snake_case</span>
+<span id="cb23-48"><a href="#cb23-48" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**ID**: integer <span class="in">`id`</span> column as first column (from source FID or <span class="in">`row_number()`</span>)</span>
+<span id="cb23-49"><a href="#cb23-49" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-50"><a href="#cb23-50" aria-hidden="true" tabindex="-1"></a><span class="fu">## Setup</span></span>
+<span id="cb23-51"><a href="#cb23-51" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-54"><a href="#cb23-54" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb23-55"><a href="#cb23-55" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: setup</span></span>
+<span id="cb23-56"><a href="#cb23-56" aria-hidden="true" tabindex="-1"></a>librarian<span class="sc">::</span><span class="fu">shelf</span>(</span>
+<span id="cb23-57"><a href="#cb23-57" aria-hidden="true" tabindex="-1"></a>  arcgislayers,</span>
+<span id="cb23-58"><a href="#cb23-58" aria-hidden="true" tabindex="-1"></a>  calcofi <span class="sc">/</span> calcofi4db,</span>
+<span id="cb23-59"><a href="#cb23-59" aria-hidden="true" tabindex="-1"></a>  DBI,</span>
+<span id="cb23-60"><a href="#cb23-60" aria-hidden="true" tabindex="-1"></a>  dplyr,</span>
+<span id="cb23-61"><a href="#cb23-61" aria-hidden="true" tabindex="-1"></a>  DT,</span>
+<span id="cb23-62"><a href="#cb23-62" aria-hidden="true" tabindex="-1"></a>  duckdb,</span>
+<span id="cb23-63"><a href="#cb23-63" aria-hidden="true" tabindex="-1"></a>  fs,</span>
+<span id="cb23-64"><a href="#cb23-64" aria-hidden="true" tabindex="-1"></a>  glue,</span>
+<span id="cb23-65"><a href="#cb23-65" aria-hidden="true" tabindex="-1"></a>  here,</span>
+<span id="cb23-66"><a href="#cb23-66" aria-hidden="true" tabindex="-1"></a>  janitor,</span>
+<span id="cb23-67"><a href="#cb23-67" aria-hidden="true" tabindex="-1"></a>  jsonlite,</span>
+<span id="cb23-68"><a href="#cb23-68" aria-hidden="true" tabindex="-1"></a>  purrr,</span>
+<span id="cb23-69"><a href="#cb23-69" aria-hidden="true" tabindex="-1"></a>  readr,</span>
+<span id="cb23-70"><a href="#cb23-70" aria-hidden="true" tabindex="-1"></a>  sf,</span>
+<span id="cb23-71"><a href="#cb23-71" aria-hidden="true" tabindex="-1"></a>  stringr,</span>
+<span id="cb23-72"><a href="#cb23-72" aria-hidden="true" tabindex="-1"></a>  tibble,</span>
+<span id="cb23-73"><a href="#cb23-73" aria-hidden="true" tabindex="-1"></a>  <span class="at">quiet =</span> T</span>
+<span id="cb23-74"><a href="#cb23-74" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb23-75"><a href="#cb23-75" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-76"><a href="#cb23-76" aria-hidden="true" tabindex="-1"></a>redo_if_exists <span class="ot">&lt;-</span> <span class="cn">TRUE</span> <span class="co"># set to FALSE to skip already processed datasets (for testing/debugging)</span></span>
+<span id="cb23-77"><a href="#cb23-77" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-78"><a href="#cb23-78" aria-hidden="true" tabindex="-1"></a>dir_spatial <span class="ot">&lt;-</span> <span class="fu">path_expand</span>(<span class="st">"~/My Drive/projects/calcofi/data-public/_spatial"</span>)</span>
+<span id="cb23-79"><a href="#cb23-79" aria-hidden="true" tabindex="-1"></a>dir_pmtiles <span class="ot">&lt;-</span> <span class="fu">here</span>(<span class="st">"data/pmtiles"</span>)</span>
+<span id="cb23-80"><a href="#cb23-80" aria-hidden="true" tabindex="-1"></a>dir_parquet <span class="ot">&lt;-</span> <span class="fu">here</span>(<span class="st">"data/parquet/spatial"</span>)</span>
+<span id="cb23-81"><a href="#cb23-81" aria-hidden="true" tabindex="-1"></a>gcs_bucket <span class="ot">&lt;-</span> <span class="st">"calcofi-files-public"</span></span>
+<span id="cb23-82"><a href="#cb23-82" aria-hidden="true" tabindex="-1"></a>gcs_prefix <span class="ot">&lt;-</span> <span class="st">"_spatial"</span></span>
+<span id="cb23-83"><a href="#cb23-83" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-84"><a href="#cb23-84" aria-hidden="true" tabindex="-1"></a><span class="fu">dir_create</span>(dir_pmtiles)</span>
+<span id="cb23-85"><a href="#cb23-85" aria-hidden="true" tabindex="-1"></a><span class="fu">dir_create</span>(dir_parquet)</span>
+<span id="cb23-86"><a href="#cb23-86" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-87"><a href="#cb23-87" aria-hidden="true" tabindex="-1"></a><span class="co"># load registry</span></span>
+<span id="cb23-88"><a href="#cb23-88" aria-hidden="true" tabindex="-1"></a>d_layers <span class="ot">&lt;-</span> <span class="fu">read_csv</span>(</span>
+<span id="cb23-89"><a href="#cb23-89" aria-hidden="true" tabindex="-1"></a>  <span class="fu">here</span>(<span class="st">"metadata/spatial_layers.csv"</span>),</span>
+<span id="cb23-90"><a href="#cb23-90" aria-hidden="true" tabindex="-1"></a>  <span class="at">show_col_types =</span> <span class="cn">FALSE</span></span>
+<span id="cb23-91"><a href="#cb23-91" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb23-92"><a href="#cb23-92" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-93"><a href="#cb23-93" aria-hidden="true" tabindex="-1"></a><span class="fu">datatable</span>(</span>
+<span id="cb23-94"><a href="#cb23-94" aria-hidden="true" tabindex="-1"></a>  d_layers,</span>
+<span id="cb23-95"><a href="#cb23-95" aria-hidden="true" tabindex="-1"></a>  <span class="at">caption =</span> <span class="st">"Spatial layers registry from `metadata/spatial_layers.csv`"</span></span>
+<span id="cb23-96"><a href="#cb23-96" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb23-97"><a href="#cb23-97" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-98"><a href="#cb23-98" aria-hidden="true" tabindex="-1"></a><span class="co"># compare with folders/files in dir_spatial</span></span>
+<span id="cb23-99"><a href="#cb23-99" aria-hidden="true" tabindex="-1"></a>spatial_dirs <span class="ot">&lt;-</span> <span class="fu">dir_ls</span>(dir_spatial, <span class="at">type =</span> <span class="st">"directory"</span>)</span>
+<span id="cb23-100"><a href="#cb23-100" aria-hidden="true" tabindex="-1"></a>spatial_dirs_not_layers_csv <span class="ot">&lt;-</span> <span class="fu">setdiff</span>(</span>
+<span id="cb23-101"><a href="#cb23-101" aria-hidden="true" tabindex="-1"></a>  <span class="fu">basename</span>(spatial_dirs),</span>
+<span id="cb23-102"><a href="#cb23-102" aria-hidden="true" tabindex="-1"></a>  <span class="fu">unique</span>(d_layers<span class="sc">$</span>source_folder)</span>
+<span id="cb23-103"><a href="#cb23-103" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb23-104"><a href="#cb23-104" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">length</span>(spatial_dirs_not_layers_csv) <span class="sc">&gt;</span> <span class="dv">0</span>) {</span>
+<span id="cb23-105"><a href="#cb23-105" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(</span>
+<span id="cb23-106"><a href="#cb23-106" aria-hidden="true" tabindex="-1"></a>    <span class="fu">glue</span>(</span>
+<span id="cb23-107"><a href="#cb23-107" aria-hidden="true" tabindex="-1"></a>      <span class="st">"⚠ WARNING: The following folders exist in `{dir_spatial}` but are not "</span>,</span>
+<span id="cb23-108"><a href="#cb23-108" aria-hidden="true" tabindex="-1"></a>      <span class="st">"referenced in `metadata/spatial_layers.csv`:</span><span class="sc">\n</span><span class="st">"</span>,</span>
+<span id="cb23-109"><a href="#cb23-109" aria-hidden="true" tabindex="-1"></a>      <span class="fu">paste0</span>(<span class="st">"- "</span>, spatial_dirs_not_layers_csv, <span class="at">collapse =</span> <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>),</span>
+<span id="cb23-110"><a href="#cb23-110" aria-hidden="true" tabindex="-1"></a>      <span class="st">"</span><span class="sc">\n\n</span><span class="st">"</span></span>
+<span id="cb23-111"><a href="#cb23-111" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb23-112"><a href="#cb23-112" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb23-113"><a href="#cb23-113" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb23-114"><a href="#cb23-114" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-115"><a href="#cb23-115" aria-hidden="true" tabindex="-1"></a><span class="co"># unique dataset groups (one pmtiles + parquet per group)</span></span>
+<span id="cb23-116"><a href="#cb23-116" aria-hidden="true" tabindex="-1"></a>d_groups <span class="ot">&lt;-</span> d_layers <span class="sc">|&gt;</span></span>
+<span id="cb23-117"><a href="#cb23-117" aria-hidden="true" tabindex="-1"></a>  <span class="fu">distinct</span>(dataset_group, source_folder, source_file, source_format) <span class="sc">|&gt;</span></span>
+<span id="cb23-118"><a href="#cb23-118" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
+<span id="cb23-119"><a href="#cb23-119" aria-hidden="true" tabindex="-1"></a>    <span class="at">source_path =</span> <span class="fu">path</span>(dir_spatial, source_folder, source_file),</span>
+<span id="cb23-120"><a href="#cb23-120" aria-hidden="true" tabindex="-1"></a>    <span class="at">file_exists =</span> <span class="fu">file_exists</span>(source_path)</span>
+<span id="cb23-121"><a href="#cb23-121" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb23-122"><a href="#cb23-122" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-123"><a href="#cb23-123" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(</span>
+<span id="cb23-124"><a href="#cb23-124" aria-hidden="true" tabindex="-1"></a>  <span class="fu">glue</span>(<span class="st">"{nrow(d_layers)} layers across {nrow(d_groups)} dataset groups"</span>),</span>
+<span id="cb23-125"><a href="#cb23-125" aria-hidden="true" tabindex="-1"></a>  <span class="st">"</span><span class="sc">\n</span><span class="st">"</span></span>
+<span id="cb23-126"><a href="#cb23-126" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb23-127"><a href="#cb23-127" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb23-128"><a href="#cb23-128" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-129"><a href="#cb23-129" aria-hidden="true" tabindex="-1"></a><span class="fu">## ArcGIS Rest layer(s) to gpkg: `CA_watershed-boundaries`</span></span>
+<span id="cb23-130"><a href="#cb23-130" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-133"><a href="#cb23-133" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb23-134"><a href="#cb23-134" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: arcgis-rest</span></span>
+<span id="cb23-135"><a href="#cb23-135" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-136"><a href="#cb23-136" aria-hidden="true" tabindex="-1"></a>fs_to_sf <span class="ot">&lt;-</span> <span class="cf">function</span>(url, <span class="at">where =</span> <span class="cn">NULL</span>) {</span>
+<span id="cb23-137"><a href="#cb23-137" aria-hidden="true" tabindex="-1"></a>  fs <span class="ot">&lt;-</span> arcgislayers<span class="sc">::</span><span class="fu">arc_open</span>(url)</span>
+<span id="cb23-138"><a href="#cb23-138" aria-hidden="true" tabindex="-1"></a>  lyr <span class="ot">&lt;-</span> arcgislayers<span class="sc">::</span><span class="fu">get_layer</span>(fs, <span class="dv">0</span>)</span>
+<span id="cb23-139"><a href="#cb23-139" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-140"><a href="#cb23-140" aria-hidden="true" tabindex="-1"></a>  sf <span class="ot">&lt;-</span> arcgislayers<span class="sc">::</span><span class="fu">arc_select</span>(</span>
+<span id="cb23-141"><a href="#cb23-141" aria-hidden="true" tabindex="-1"></a>    lyr,</span>
+<span id="cb23-142"><a href="#cb23-142" aria-hidden="true" tabindex="-1"></a>    <span class="at">where =</span> where</span>
+<span id="cb23-143"><a href="#cb23-143" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
+<span id="cb23-144"><a href="#cb23-144" aria-hidden="true" tabindex="-1"></a>    tibble<span class="sc">::</span><span class="fu">tibble</span>() <span class="sc">|&gt;</span></span>
+<span id="cb23-145"><a href="#cb23-145" aria-hidden="true" tabindex="-1"></a>    sf<span class="sc">::</span><span class="fu">st_as_sf</span>() <span class="sc">|&gt;</span></span>
+<span id="cb23-146"><a href="#cb23-146" aria-hidden="true" tabindex="-1"></a>    janitor<span class="sc">::</span><span class="fu">clean_names</span>()</span>
+<span id="cb23-147"><a href="#cb23-147" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-148"><a href="#cb23-148" aria-hidden="true" tabindex="-1"></a>  <span class="fu">return</span>(sf)</span>
+<span id="cb23-149"><a href="#cb23-149" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb23-150"><a href="#cb23-150" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-151"><a href="#cb23-151" aria-hidden="true" tabindex="-1"></a><span class="co"># [USGS Watershed Boundary Dataset (WBD) HUC8, California Vicinity - Overview](https://www.arcgis.com/home/item.html?id=a98ef9ead82a4bd6aa09d46869f75a49&amp;sublayer=0)</span></span>
+<span id="cb23-152"><a href="#cb23-152" aria-hidden="true" tabindex="-1"></a>url_rest <span class="ot">&lt;-</span> <span class="st">"https://services2.arcgis.com/Uq9r85Potqm3MfRV/arcgis/rest/services/WBD_HU8_wm/FeatureServer"</span></span>
+<span id="cb23-153"><a href="#cb23-153" aria-hidden="true" tabindex="-1"></a>out_gpkg <span class="ot">&lt;-</span> <span class="fu">glue</span>(<span class="st">"{dir_spatial}/CA_watershed-boundaries/wbd-hu8_ca.gpkg"</span>)</span>
+<span id="cb23-154"><a href="#cb23-154" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-155"><a href="#cb23-155" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="sc">!</span><span class="fu">file_exists</span>(out_gpkg) <span class="sc">||</span> redo_if_exists) {</span>
+<span id="cb23-156"><a href="#cb23-156" aria-hidden="true" tabindex="-1"></a>  <span class="fu">fs_to_sf</span>(url_rest) <span class="sc">|&gt;</span></span>
+<span id="cb23-157"><a href="#cb23-157" aria-hidden="true" tabindex="-1"></a>    <span class="fu">write_sf</span>(out_gpkg, <span class="at">delete_dsn =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb23-158"><a href="#cb23-158" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb23-159"><a href="#cb23-159" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb23-160"><a href="#cb23-160" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-161"><a href="#cb23-161" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-162"><a href="#cb23-162" aria-hidden="true" tabindex="-1"></a><span class="fu">## Clip CA Current LME to US EEZ</span></span>
+<span id="cb23-163"><a href="#cb23-163" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-166"><a href="#cb23-166" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb23-167"><a href="#cb23-167" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: clip-layers</span></span>
+<span id="cb23-168"><a href="#cb23-168" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-169"><a href="#cb23-169" aria-hidden="true" tabindex="-1"></a>cacurrent_geo <span class="ot">&lt;-</span> <span class="fu">glue</span>(</span>
+<span id="cb23-170"><a href="#cb23-170" aria-hidden="true" tabindex="-1"></a>  <span class="st">"{dir_spatial}/NOAA_IEA-CA-Current/lme-ca-current.geojson"</span></span>
+<span id="cb23-171"><a href="#cb23-171" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb23-172"><a href="#cb23-172" aria-hidden="true" tabindex="-1"></a>usaeez_geo <span class="ot">&lt;-</span> <span class="fu">glue</span>(</span>
+<span id="cb23-173"><a href="#cb23-173" aria-hidden="true" tabindex="-1"></a>  <span class="st">"{dir_spatial}/NOAA_IEA-CA-Current/usa-eez.geojson"</span></span>
+<span id="cb23-174"><a href="#cb23-174" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb23-175"><a href="#cb23-175" aria-hidden="true" tabindex="-1"></a>cacurrent_usaeez_geo <span class="ot">&lt;-</span> <span class="fu">glue</span>(</span>
+<span id="cb23-176"><a href="#cb23-176" aria-hidden="true" tabindex="-1"></a>  <span class="st">"{dir_spatial}/NOAA_IEA-CA-Current/lme-ca-current_usa-eez.geojson"</span></span>
+<span id="cb23-177"><a href="#cb23-177" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb23-178"><a href="#cb23-178" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-179"><a href="#cb23-179" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="sc">!</span><span class="fu">file_exists</span>(cacurrent_usaeez_geo) <span class="sc">||</span> redo_if_exists) {</span>
+<span id="cb23-180"><a href="#cb23-180" aria-hidden="true" tabindex="-1"></a>  cacurrent <span class="ot">&lt;-</span> <span class="fu">st_read</span>(cacurrent_geo, <span class="at">quiet =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb23-181"><a href="#cb23-181" aria-hidden="true" tabindex="-1"></a>  usaeez <span class="ot">&lt;-</span> <span class="fu">st_read</span>(usaeez_geo, <span class="at">quiet =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb23-182"><a href="#cb23-182" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-183"><a href="#cb23-183" aria-hidden="true" tabindex="-1"></a>  cacurrent_usaeez <span class="ot">&lt;-</span> <span class="fu">st_intersection</span>(cacurrent, usaeez)</span>
+<span id="cb23-184"><a href="#cb23-184" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-185"><a href="#cb23-185" aria-hidden="true" tabindex="-1"></a>  <span class="fu">st_write</span>(</span>
+<span id="cb23-186"><a href="#cb23-186" aria-hidden="true" tabindex="-1"></a>    cacurrent_usaeez,</span>
+<span id="cb23-187"><a href="#cb23-187" aria-hidden="true" tabindex="-1"></a>    cacurrent_usaeez_geo,</span>
+<span id="cb23-188"><a href="#cb23-188" aria-hidden="true" tabindex="-1"></a>    <span class="at">delete_dsn =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb23-189"><a href="#cb23-189" aria-hidden="true" tabindex="-1"></a>    <span class="at">quiet =</span> <span class="cn">TRUE</span></span>
+<span id="cb23-190"><a href="#cb23-190" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb23-191"><a href="#cb23-191" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb23-192"><a href="#cb23-192" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb23-193"><a href="#cb23-193" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-194"><a href="#cb23-194" aria-hidden="true" tabindex="-1"></a><span class="fu">## Process datasets</span></span>
+<span id="cb23-195"><a href="#cb23-195" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-198"><a href="#cb23-198" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb23-199"><a href="#cb23-199" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: process-datasets</span></span>
+<span id="cb23-200"><a href="#cb23-200" aria-hidden="true" tabindex="-1"></a><span class="co">#| output: asis</span></span>
+<span id="cb23-201"><a href="#cb23-201" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-202"><a href="#cb23-202" aria-hidden="true" tabindex="-1"></a>process_spatial_dataset <span class="ot">&lt;-</span> <span class="cf">function</span>(</span>
+<span id="cb23-203"><a href="#cb23-203" aria-hidden="true" tabindex="-1"></a>  dataset_group,</span>
+<span id="cb23-204"><a href="#cb23-204" aria-hidden="true" tabindex="-1"></a>  source_folder,</span>
+<span id="cb23-205"><a href="#cb23-205" aria-hidden="true" tabindex="-1"></a>  source_file,</span>
+<span id="cb23-206"><a href="#cb23-206" aria-hidden="true" tabindex="-1"></a>  source_format,</span>
+<span id="cb23-207"><a href="#cb23-207" aria-hidden="true" tabindex="-1"></a>  dir_spatial,</span>
+<span id="cb23-208"><a href="#cb23-208" aria-hidden="true" tabindex="-1"></a>  dir_pmtiles,</span>
+<span id="cb23-209"><a href="#cb23-209" aria-hidden="true" tabindex="-1"></a>  dir_parquet,</span>
+<span id="cb23-210"><a href="#cb23-210" aria-hidden="true" tabindex="-1"></a>  <span class="at">redo_if_exists =</span> <span class="cn">FALSE</span></span>
+<span id="cb23-211"><a href="#cb23-211" aria-hidden="true" tabindex="-1"></a>) {</span>
+<span id="cb23-212"><a href="#cb23-212" aria-hidden="true" tabindex="-1"></a>  pmtiles_path <span class="ot">&lt;-</span> <span class="fu">path</span>(dir_pmtiles, <span class="fu">glue</span>(<span class="st">"{dataset_group}.pmtiles"</span>))</span>
+<span id="cb23-213"><a href="#cb23-213" aria-hidden="true" tabindex="-1"></a>  parquet_path <span class="ot">&lt;-</span> <span class="fu">path</span>(dir_parquet, <span class="fu">glue</span>(<span class="st">"{dataset_group}.parquet"</span>))</span>
+<span id="cb23-214"><a href="#cb23-214" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-215"><a href="#cb23-215" aria-hidden="true" tabindex="-1"></a>  <span class="co"># skip if already processed</span></span>
+<span id="cb23-216"><a href="#cb23-216" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (</span>
+<span id="cb23-217"><a href="#cb23-217" aria-hidden="true" tabindex="-1"></a>    <span class="sc">!</span>redo_if_exists <span class="sc">&amp;&amp;</span></span>
+<span id="cb23-218"><a href="#cb23-218" aria-hidden="true" tabindex="-1"></a>      <span class="fu">file_exists</span>(pmtiles_path) <span class="sc">&amp;&amp;</span></span>
+<span id="cb23-219"><a href="#cb23-219" aria-hidden="true" tabindex="-1"></a>      <span class="fu">file_exists</span>(parquet_path)</span>
+<span id="cb23-220"><a href="#cb23-220" aria-hidden="true" tabindex="-1"></a>  ) {</span>
+<span id="cb23-221"><a href="#cb23-221" aria-hidden="true" tabindex="-1"></a>    <span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"- **{dataset_group}**: skipped (already exists)</span><span class="sc">\n\n</span><span class="st">"</span>))</span>
+<span id="cb23-222"><a href="#cb23-222" aria-hidden="true" tabindex="-1"></a>    <span class="fu">return</span>(<span class="fu">invisible</span>(<span class="cn">TRUE</span>))</span>
+<span id="cb23-223"><a href="#cb23-223" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb23-224"><a href="#cb23-224" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-225"><a href="#cb23-225" aria-hidden="true" tabindex="-1"></a>  <span class="co"># read source data ----</span></span>
+<span id="cb23-226"><a href="#cb23-226" aria-hidden="true" tabindex="-1"></a>  sf_data <span class="ot">&lt;-</span> <span class="fu">tryCatch</span>(</span>
+<span id="cb23-227"><a href="#cb23-227" aria-hidden="true" tabindex="-1"></a>    {</span>
+<span id="cb23-228"><a href="#cb23-228" aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> (source_format <span class="sc">==</span> <span class="st">"rda"</span>) {</span>
+<span id="cb23-229"><a href="#cb23-229" aria-hidden="true" tabindex="-1"></a>        <span class="co"># .rda files: load() into temp env, extract sf object</span></span>
+<span id="cb23-230"><a href="#cb23-230" aria-hidden="true" tabindex="-1"></a>        e <span class="ot">&lt;-</span> <span class="fu">new.env</span>()</span>
+<span id="cb23-231"><a href="#cb23-231" aria-hidden="true" tabindex="-1"></a>        <span class="fu">load</span>(<span class="fu">path</span>(dir_spatial, source_folder, source_file), <span class="at">envir =</span> e)</span>
+<span id="cb23-232"><a href="#cb23-232" aria-hidden="true" tabindex="-1"></a>        obj_names <span class="ot">&lt;-</span> <span class="fu">ls</span>(e)</span>
+<span id="cb23-233"><a href="#cb23-233" aria-hidden="true" tabindex="-1"></a>        sf_obj <span class="ot">&lt;-</span> <span class="cn">NULL</span></span>
+<span id="cb23-234"><a href="#cb23-234" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> (nm <span class="cf">in</span> obj_names) {</span>
+<span id="cb23-235"><a href="#cb23-235" aria-hidden="true" tabindex="-1"></a>          <span class="cf">if</span> (<span class="fu">inherits</span>(<span class="fu">get</span>(nm, <span class="at">envir =</span> e), <span class="st">"sf"</span>)) {</span>
+<span id="cb23-236"><a href="#cb23-236" aria-hidden="true" tabindex="-1"></a>            sf_obj <span class="ot">&lt;-</span> <span class="fu">get</span>(nm, <span class="at">envir =</span> e)</span>
+<span id="cb23-237"><a href="#cb23-237" aria-hidden="true" tabindex="-1"></a>            <span class="cf">break</span></span>
+<span id="cb23-238"><a href="#cb23-238" aria-hidden="true" tabindex="-1"></a>          }</span>
+<span id="cb23-239"><a href="#cb23-239" aria-hidden="true" tabindex="-1"></a>        }</span>
+<span id="cb23-240"><a href="#cb23-240" aria-hidden="true" tabindex="-1"></a>        sf_obj</span>
+<span id="cb23-241"><a href="#cb23-241" aria-hidden="true" tabindex="-1"></a>        <span class="co"># drop any list columns (e.g. from complex attributes that can't be written to parquet)</span></span>
+<span id="cb23-242"><a href="#cb23-242" aria-hidden="true" tabindex="-1"></a>        sf_obj <span class="sc">|&gt;</span> <span class="fu">select</span>(<span class="fu">where</span>(<span class="sc">~</span> <span class="sc">!</span><span class="fu">is.list</span>(.)))</span>
+<span id="cb23-243"><a href="#cb23-243" aria-hidden="true" tabindex="-1"></a>      } <span class="cf">else</span> <span class="cf">if</span> (source_format <span class="sc">==</span> <span class="st">"gdb"</span>) {</span>
+<span id="cb23-244"><a href="#cb23-244" aria-hidden="true" tabindex="-1"></a>        <span class="co"># geodatabase: source_file = "file.gdb|layer_name"</span></span>
+<span id="cb23-245"><a href="#cb23-245" aria-hidden="true" tabindex="-1"></a>        parts <span class="ot">&lt;-</span> <span class="fu">str_split_1</span>(source_file, <span class="st">"</span><span class="sc">\\</span><span class="st">|"</span>)</span>
+<span id="cb23-246"><a href="#cb23-246" aria-hidden="true" tabindex="-1"></a>        <span class="fu">st_read</span>(</span>
+<span id="cb23-247"><a href="#cb23-247" aria-hidden="true" tabindex="-1"></a>          <span class="fu">path</span>(dir_spatial, source_folder, parts[<span class="dv">1</span>]),</span>
+<span id="cb23-248"><a href="#cb23-248" aria-hidden="true" tabindex="-1"></a>          <span class="at">layer =</span> parts[<span class="dv">2</span>],</span>
+<span id="cb23-249"><a href="#cb23-249" aria-hidden="true" tabindex="-1"></a>          <span class="at">quiet =</span> <span class="cn">TRUE</span></span>
+<span id="cb23-250"><a href="#cb23-250" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb23-251"><a href="#cb23-251" aria-hidden="true" tabindex="-1"></a>      } <span class="cf">else</span> {</span>
+<span id="cb23-252"><a href="#cb23-252" aria-hidden="true" tabindex="-1"></a>        <span class="co"># shp, gpkg, geojson</span></span>
+<span id="cb23-253"><a href="#cb23-253" aria-hidden="true" tabindex="-1"></a>        <span class="fu">st_read</span>(</span>
+<span id="cb23-254"><a href="#cb23-254" aria-hidden="true" tabindex="-1"></a>          <span class="fu">path</span>(dir_spatial, source_folder, source_file),</span>
+<span id="cb23-255"><a href="#cb23-255" aria-hidden="true" tabindex="-1"></a>          <span class="at">quiet =</span> <span class="cn">TRUE</span></span>
+<span id="cb23-256"><a href="#cb23-256" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb23-257"><a href="#cb23-257" aria-hidden="true" tabindex="-1"></a>      }</span>
+<span id="cb23-258"><a href="#cb23-258" aria-hidden="true" tabindex="-1"></a>    },</span>
+<span id="cb23-259"><a href="#cb23-259" aria-hidden="true" tabindex="-1"></a>    <span class="at">error =</span> <span class="cf">function</span>(e) {</span>
+<span id="cb23-260"><a href="#cb23-260" aria-hidden="true" tabindex="-1"></a>      <span class="fu">cat</span>(<span class="fu">glue</span>(</span>
+<span id="cb23-261"><a href="#cb23-261" aria-hidden="true" tabindex="-1"></a>        <span class="st">"- **{dataset_group}**: ⚠ SKIPPED — failed to read "</span>,</span>
+<span id="cb23-262"><a href="#cb23-262" aria-hidden="true" tabindex="-1"></a>        <span class="st">"`{source_folder}/{source_file}`: {e$message}</span><span class="sc">\n\n</span><span class="st">"</span></span>
+<span id="cb23-263"><a href="#cb23-263" aria-hidden="true" tabindex="-1"></a>      ))</span>
+<span id="cb23-264"><a href="#cb23-264" aria-hidden="true" tabindex="-1"></a>      <span class="fu">return</span>(<span class="cn">NULL</span>)</span>
+<span id="cb23-265"><a href="#cb23-265" aria-hidden="true" tabindex="-1"></a>    }</span>
+<span id="cb23-266"><a href="#cb23-266" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb23-267"><a href="#cb23-267" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-268"><a href="#cb23-268" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">is.null</span>(sf_data) <span class="sc">||</span> <span class="fu">nrow</span>(sf_data) <span class="sc">==</span> <span class="dv">0</span>) {</span>
+<span id="cb23-269"><a href="#cb23-269" aria-hidden="true" tabindex="-1"></a>    <span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"- **{dataset_group}**: ⚠ SKIPPED — empty dataset</span><span class="sc">\n\n</span><span class="st">"</span>))</span>
+<span id="cb23-270"><a href="#cb23-270" aria-hidden="true" tabindex="-1"></a>    <span class="fu">return</span>(<span class="fu">invisible</span>(<span class="cn">FALSE</span>))</span>
+<span id="cb23-271"><a href="#cb23-271" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb23-272"><a href="#cb23-272" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-273"><a href="#cb23-273" aria-hidden="true" tabindex="-1"></a>  <span class="co"># reproject to EPSG:4326 ----</span></span>
+<span id="cb23-274"><a href="#cb23-274" aria-hidden="true" tabindex="-1"></a>  src_crs <span class="ot">&lt;-</span> <span class="fu">st_crs</span>(sf_data)<span class="sc">$</span>epsg</span>
+<span id="cb23-275"><a href="#cb23-275" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">is.na</span>(src_crs) <span class="sc">||</span> src_crs <span class="sc">!=</span> <span class="dv">4326</span>) {</span>
+<span id="cb23-276"><a href="#cb23-276" aria-hidden="true" tabindex="-1"></a>    sf_data <span class="ot">&lt;-</span> <span class="fu">st_transform</span>(sf_data, <span class="dv">4326</span>)</span>
+<span id="cb23-277"><a href="#cb23-277" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb23-278"><a href="#cb23-278" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-279"><a href="#cb23-279" aria-hidden="true" tabindex="-1"></a>  <span class="co"># clean column names ----</span></span>
+<span id="cb23-280"><a href="#cb23-280" aria-hidden="true" tabindex="-1"></a>  sf_data <span class="ot">&lt;-</span> <span class="fu">clean_names</span>(sf_data)</span>
+<span id="cb23-281"><a href="#cb23-281" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-282"><a href="#cb23-282" aria-hidden="true" tabindex="-1"></a>  <span class="co"># ensure integer id column first ----</span></span>
+<span id="cb23-283"><a href="#cb23-283" aria-hidden="true" tabindex="-1"></a>  geom_col <span class="ot">&lt;-</span> <span class="fu">attr</span>(sf_data, <span class="st">"sf_column"</span>)</span>
+<span id="cb23-284"><a href="#cb23-284" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="st">"id"</span> <span class="sc">%in%</span> <span class="fu">names</span>(sf_data)) {</span>
+<span id="cb23-285"><a href="#cb23-285" aria-hidden="true" tabindex="-1"></a>    sf_data <span class="ot">&lt;-</span> sf_data <span class="sc">|&gt;</span> <span class="fu">mutate</span>(<span class="at">id =</span> <span class="fu">row_number</span>())</span>
+<span id="cb23-286"><a href="#cb23-286" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb23-287"><a href="#cb23-287" aria-hidden="true" tabindex="-1"></a>  sf_data <span class="ot">&lt;-</span> sf_data <span class="sc">|&gt;</span></span>
+<span id="cb23-288"><a href="#cb23-288" aria-hidden="true" tabindex="-1"></a>    <span class="fu">mutate</span>(<span class="at">id =</span> <span class="fu">as.integer</span>(id)) <span class="sc">|&gt;</span></span>
+<span id="cb23-289"><a href="#cb23-289" aria-hidden="true" tabindex="-1"></a>    <span class="fu">relocate</span>(id)</span>
+<span id="cb23-290"><a href="#cb23-290" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-291"><a href="#cb23-291" aria-hidden="true" tabindex="-1"></a>  <span class="co"># write parquet via DuckDB spatial ----</span></span>
+<span id="cb23-292"><a href="#cb23-292" aria-hidden="true" tabindex="-1"></a>  tmp_geojson <span class="ot">&lt;-</span> <span class="fu">tempfile</span>(<span class="at">fileext =</span> <span class="st">".geojson"</span>)</span>
+<span id="cb23-293"><a href="#cb23-293" aria-hidden="true" tabindex="-1"></a>  <span class="fu">st_write</span>(sf_data, tmp_geojson, <span class="at">delete_dsn =</span> <span class="cn">TRUE</span>, <span class="at">quiet =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb23-294"><a href="#cb23-294" aria-hidden="true" tabindex="-1"></a>  con_tmp <span class="ot">&lt;-</span> <span class="fu">dbConnect</span>(<span class="fu">duckdb</span>())</span>
+<span id="cb23-295"><a href="#cb23-295" aria-hidden="true" tabindex="-1"></a>  <span class="fu">dbExecute</span>(con_tmp, <span class="st">"INSTALL spatial; LOAD spatial;"</span>)</span>
+<span id="cb23-296"><a href="#cb23-296" aria-hidden="true" tabindex="-1"></a>  <span class="fu">dbExecute</span>(</span>
+<span id="cb23-297"><a href="#cb23-297" aria-hidden="true" tabindex="-1"></a>    con_tmp,</span>
+<span id="cb23-298"><a href="#cb23-298" aria-hidden="true" tabindex="-1"></a>    <span class="fu">glue</span>(</span>
+<span id="cb23-299"><a href="#cb23-299" aria-hidden="true" tabindex="-1"></a>      <span class="st">"COPY (SELECT * FROM ST_Read('{tmp_geojson}'))</span></span>
+<span id="cb23-300"><a href="#cb23-300" aria-hidden="true" tabindex="-1"></a><span class="st">         TO '{parquet_path}' (FORMAT PARQUET)"</span></span>
+<span id="cb23-301"><a href="#cb23-301" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb23-302"><a href="#cb23-302" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb23-303"><a href="#cb23-303" aria-hidden="true" tabindex="-1"></a>  <span class="fu">dbDisconnect</span>(con_tmp, <span class="at">shutdown =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb23-304"><a href="#cb23-304" aria-hidden="true" tabindex="-1"></a>  <span class="fu">unlink</span>(tmp_geojson)</span>
+<span id="cb23-305"><a href="#cb23-305" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-306"><a href="#cb23-306" aria-hidden="true" tabindex="-1"></a>  <span class="co"># write pmtiles ----</span></span>
+<span id="cb23-307"><a href="#cb23-307" aria-hidden="true" tabindex="-1"></a>  geojson_tmp <span class="ot">&lt;-</span> <span class="fu">tempfile</span>(<span class="at">fileext =</span> <span class="st">".geojson"</span>)</span>
+<span id="cb23-308"><a href="#cb23-308" aria-hidden="true" tabindex="-1"></a>  <span class="fu">st_write</span>(sf_data, geojson_tmp, <span class="at">delete_dsn =</span> <span class="cn">TRUE</span>, <span class="at">quiet =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb23-309"><a href="#cb23-309" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-310"><a href="#cb23-310" aria-hidden="true" tabindex="-1"></a>  tippecanoe_args <span class="ot">&lt;-</span> <span class="fu">c</span>(</span>
+<span id="cb23-311"><a href="#cb23-311" aria-hidden="true" tabindex="-1"></a>    <span class="st">"-o"</span>,</span>
+<span id="cb23-312"><a href="#cb23-312" aria-hidden="true" tabindex="-1"></a>    pmtiles_path,</span>
+<span id="cb23-313"><a href="#cb23-313" aria-hidden="true" tabindex="-1"></a>    <span class="st">"-z10"</span>,</span>
+<span id="cb23-314"><a href="#cb23-314" aria-hidden="true" tabindex="-1"></a>    <span class="st">"-Z0"</span>,</span>
+<span id="cb23-315"><a href="#cb23-315" aria-hidden="true" tabindex="-1"></a>    <span class="st">"--simplification=10"</span>,</span>
+<span id="cb23-316"><a href="#cb23-316" aria-hidden="true" tabindex="-1"></a>    <span class="st">"--no-tile-size-limit"</span>,</span>
+<span id="cb23-317"><a href="#cb23-317" aria-hidden="true" tabindex="-1"></a>    <span class="co"># "--use-attribute-for-id=id", # wierdly drops 'id', so incompatible with mapgl::add_pmtiles_source(promote_id='id')</span></span>
+<span id="cb23-318"><a href="#cb23-318" aria-hidden="true" tabindex="-1"></a>    <span class="st">"-l"</span>,</span>
+<span id="cb23-319"><a href="#cb23-319" aria-hidden="true" tabindex="-1"></a>    dataset_group,</span>
+<span id="cb23-320"><a href="#cb23-320" aria-hidden="true" tabindex="-1"></a>    <span class="st">"--force"</span>,</span>
+<span id="cb23-321"><a href="#cb23-321" aria-hidden="true" tabindex="-1"></a>    geojson_tmp</span>
+<span id="cb23-322"><a href="#cb23-322" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb23-323"><a href="#cb23-323" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-324"><a href="#cb23-324" aria-hidden="true" tabindex="-1"></a>  result <span class="ot">&lt;-</span> <span class="fu">system2</span>(</span>
+<span id="cb23-325"><a href="#cb23-325" aria-hidden="true" tabindex="-1"></a>    <span class="st">"tippecanoe"</span>,</span>
+<span id="cb23-326"><a href="#cb23-326" aria-hidden="true" tabindex="-1"></a>    <span class="at">args =</span> tippecanoe_args,</span>
+<span id="cb23-327"><a href="#cb23-327" aria-hidden="true" tabindex="-1"></a>    <span class="at">stdout =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb23-328"><a href="#cb23-328" aria-hidden="true" tabindex="-1"></a>    <span class="at">stderr =</span> <span class="cn">TRUE</span></span>
+<span id="cb23-329"><a href="#cb23-329" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb23-330"><a href="#cb23-330" aria-hidden="true" tabindex="-1"></a>  <span class="fu">unlink</span>(geojson_tmp)</span>
+<span id="cb23-331"><a href="#cb23-331" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-332"><a href="#cb23-332" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">file_exists</span>(pmtiles_path)) {</span>
+<span id="cb23-333"><a href="#cb23-333" aria-hidden="true" tabindex="-1"></a>    <span class="fu">cat</span>(<span class="fu">glue</span>(</span>
+<span id="cb23-334"><a href="#cb23-334" aria-hidden="true" tabindex="-1"></a>      <span class="st">"- **{dataset_group}**: ⚠ SKIPPED — tippecanoe failed</span><span class="sc">\n\n</span><span class="st">"</span></span>
+<span id="cb23-335"><a href="#cb23-335" aria-hidden="true" tabindex="-1"></a>    ))</span>
+<span id="cb23-336"><a href="#cb23-336" aria-hidden="true" tabindex="-1"></a>    <span class="fu">return</span>(<span class="fu">invisible</span>(<span class="cn">FALSE</span>))</span>
+<span id="cb23-337"><a href="#cb23-337" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb23-338"><a href="#cb23-338" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-339"><a href="#cb23-339" aria-hidden="true" tabindex="-1"></a>  pmtiles_size <span class="ot">&lt;-</span> <span class="fu">file_size</span>(pmtiles_path)</span>
+<span id="cb23-340"><a href="#cb23-340" aria-hidden="true" tabindex="-1"></a>  parquet_size <span class="ot">&lt;-</span> <span class="fu">file_size</span>(parquet_path)</span>
+<span id="cb23-341"><a href="#cb23-341" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-342"><a href="#cb23-342" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="fu">glue</span>(</span>
+<span id="cb23-343"><a href="#cb23-343" aria-hidden="true" tabindex="-1"></a>    <span class="st">"- **{dataset_group}**: {nrow(sf_data)} features "</span>,</span>
+<span id="cb23-344"><a href="#cb23-344" aria-hidden="true" tabindex="-1"></a>    <span class="st">"(CRS {src_crs} → 4326), "</span>,</span>
+<span id="cb23-345"><a href="#cb23-345" aria-hidden="true" tabindex="-1"></a>    <span class="st">"PMTiles {pmtiles_size}, Parquet {parquet_size}</span><span class="sc">\n\n</span><span class="st">"</span></span>
+<span id="cb23-346"><a href="#cb23-346" aria-hidden="true" tabindex="-1"></a>  ))</span>
+<span id="cb23-347"><a href="#cb23-347" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-348"><a href="#cb23-348" aria-hidden="true" tabindex="-1"></a>  <span class="fu">return</span>(<span class="fu">invisible</span>(<span class="cn">TRUE</span>))</span>
+<span id="cb23-349"><a href="#cb23-349" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb23-350"><a href="#cb23-350" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-351"><a href="#cb23-351" aria-hidden="true" tabindex="-1"></a><span class="co"># process each dataset group</span></span>
+<span id="cb23-352"><a href="#cb23-352" aria-hidden="true" tabindex="-1"></a>results <span class="ot">&lt;-</span> d_groups <span class="sc">|&gt;</span></span>
+<span id="cb23-353"><a href="#cb23-353" aria-hidden="true" tabindex="-1"></a>  <span class="co"># filter(dataset_group == "ca_county_boundaries") |&gt; # DEBUG: process one group first</span></span>
+<span id="cb23-354"><a href="#cb23-354" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(dataset_group, source_folder, source_file, source_format) <span class="sc">|&gt;</span></span>
+<span id="cb23-355"><a href="#cb23-355" aria-hidden="true" tabindex="-1"></a>  <span class="fu">pmap_lgl</span>(</span>
+<span id="cb23-356"><a href="#cb23-356" aria-hidden="true" tabindex="-1"></a>    process_spatial_dataset,</span>
+<span id="cb23-357"><a href="#cb23-357" aria-hidden="true" tabindex="-1"></a>    <span class="at">dir_spatial =</span> dir_spatial,</span>
+<span id="cb23-358"><a href="#cb23-358" aria-hidden="true" tabindex="-1"></a>    <span class="at">dir_pmtiles =</span> dir_pmtiles,</span>
+<span id="cb23-359"><a href="#cb23-359" aria-hidden="true" tabindex="-1"></a>    <span class="at">dir_parquet =</span> dir_parquet,</span>
+<span id="cb23-360"><a href="#cb23-360" aria-hidden="true" tabindex="-1"></a>    <span class="at">redo_if_exists =</span> redo_if_exists</span>
+<span id="cb23-361"><a href="#cb23-361" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb23-362"><a href="#cb23-362" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-363"><a href="#cb23-363" aria-hidden="true" tabindex="-1"></a>n_ok <span class="ot">&lt;-</span> <span class="fu">sum</span>(results)</span>
+<span id="cb23-364"><a href="#cb23-364" aria-hidden="true" tabindex="-1"></a>n_skip <span class="ot">&lt;-</span> <span class="fu">sum</span>(<span class="sc">!</span>results)</span>
+<span id="cb23-365"><a href="#cb23-365" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"</span><span class="sc">\n</span><span class="st">**Summary**: {n_ok} succeeded, {n_skip} skipped/failed</span><span class="sc">\n</span><span class="st">"</span>))</span>
+<span id="cb23-366"><a href="#cb23-366" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb23-367"><a href="#cb23-367" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-368"><a href="#cb23-368" aria-hidden="true" tabindex="-1"></a><span class="fu">## Upload to GCS</span></span>
+<span id="cb23-369"><a href="#cb23-369" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-372"><a href="#cb23-372" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb23-373"><a href="#cb23-373" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: upload-gcs</span></span>
+<span id="cb23-374"><a href="#cb23-374" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-375"><a href="#cb23-375" aria-hidden="true" tabindex="-1"></a>pmtiles_files <span class="ot">&lt;-</span> <span class="fu">dir_ls</span>(dir_pmtiles, <span class="at">glob =</span> <span class="st">"*.pmtiles"</span>) <span class="co"># |&gt;</span></span>
+<span id="cb23-376"><a href="#cb23-376" aria-hidden="true" tabindex="-1"></a><span class="co"># str_subset("ca_county_boundaries") # DEBUG: only upload one file first</span></span>
+<span id="cb23-377"><a href="#cb23-377" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-378"><a href="#cb23-378" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(</span>
+<span id="cb23-379"><a href="#cb23-379" aria-hidden="true" tabindex="-1"></a>  <span class="st">"Uploading {length(pmtiles_files)} PMTiles files to "</span>,</span>
+<span id="cb23-380"><a href="#cb23-380" aria-hidden="true" tabindex="-1"></a>  <span class="st">"gs://{gcs_bucket}/{gcs_prefix}/</span><span class="sc">\n\n</span><span class="st">"</span></span>
+<span id="cb23-381"><a href="#cb23-381" aria-hidden="true" tabindex="-1"></a>))</span>
+<span id="cb23-382"><a href="#cb23-382" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-383"><a href="#cb23-383" aria-hidden="true" tabindex="-1"></a><span class="fu">sync_to_gcs</span>(</span>
+<span id="cb23-384"><a href="#cb23-384" aria-hidden="true" tabindex="-1"></a>  <span class="at">local_dir =</span> dir_pmtiles,</span>
+<span id="cb23-385"><a href="#cb23-385" aria-hidden="true" tabindex="-1"></a>  <span class="at">gcs_prefix =</span> gcs_prefix,</span>
+<span id="cb23-386"><a href="#cb23-386" aria-hidden="true" tabindex="-1"></a>  <span class="at">bucket =</span> gcs_bucket,</span>
+<span id="cb23-387"><a href="#cb23-387" aria-hidden="true" tabindex="-1"></a>  <span class="at">pattern =</span> <span class="st">"</span><span class="sc">\\</span><span class="st">.pmtiles$"</span></span>
+<span id="cb23-388"><a href="#cb23-388" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb23-389"><a href="#cb23-389" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb23-390"><a href="#cb23-390" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-391"><a href="#cb23-391" aria-hidden="true" tabindex="-1"></a><span class="fu">## Load into DuckDB</span></span>
+<span id="cb23-392"><a href="#cb23-392" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-393"><a href="#cb23-393" aria-hidden="true" tabindex="-1"></a>Load parquet files into the wrangling database for spatial queries.</span>
+<span id="cb23-394"><a href="#cb23-394" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-397"><a href="#cb23-397" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb23-398"><a href="#cb23-398" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: load-duckdb</span></span>
+<span id="cb23-399"><a href="#cb23-399" aria-hidden="true" tabindex="-1"></a><span class="co">#| output: asis</span></span>
+<span id="cb23-400"><a href="#cb23-400" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-401"><a href="#cb23-401" aria-hidden="true" tabindex="-1"></a>db_path <span class="ot">&lt;-</span> <span class="fu">here</span>(<span class="st">"data/calcofi_wrangling.duckdb"</span>)</span>
+<span id="cb23-402"><a href="#cb23-402" aria-hidden="true" tabindex="-1"></a>con <span class="ot">&lt;-</span> <span class="fu">dbConnect</span>(<span class="fu">duckdb</span>(<span class="at">dbdir =</span> db_path))</span>
+<span id="cb23-403"><a href="#cb23-403" aria-hidden="true" tabindex="-1"></a><span class="fu">dbExecute</span>(con, <span class="st">"INSTALL spatial; LOAD spatial;"</span>)</span>
+<span id="cb23-404"><a href="#cb23-404" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-405"><a href="#cb23-405" aria-hidden="true" tabindex="-1"></a>parquet_files <span class="ot">&lt;-</span> <span class="fu">dir_ls</span>(dir_parquet, <span class="at">glob =</span> <span class="st">"*.parquet"</span>)</span>
+<span id="cb23-406"><a href="#cb23-406" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-407"><a href="#cb23-407" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (pq <span class="cf">in</span> parquet_files) {</span>
+<span id="cb23-408"><a href="#cb23-408" aria-hidden="true" tabindex="-1"></a>  tbl_name <span class="ot">&lt;-</span> <span class="fu">paste0</span>(<span class="st">"spatial_"</span>, <span class="fu">path_ext_remove</span>(<span class="fu">path_file</span>(pq)))</span>
+<span id="cb23-409"><a href="#cb23-409" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-410"><a href="#cb23-410" aria-hidden="true" tabindex="-1"></a>  <span class="co"># read parquet into a temp view first to discover geometry column name</span></span>
+<span id="cb23-411"><a href="#cb23-411" aria-hidden="true" tabindex="-1"></a>  <span class="fu">dbExecute</span>(</span>
+<span id="cb23-412"><a href="#cb23-412" aria-hidden="true" tabindex="-1"></a>    con,</span>
+<span id="cb23-413"><a href="#cb23-413" aria-hidden="true" tabindex="-1"></a>    <span class="fu">glue</span>(</span>
+<span id="cb23-414"><a href="#cb23-414" aria-hidden="true" tabindex="-1"></a>      <span class="st">"CREATE OR REPLACE TEMP VIEW v_tmp AS</span></span>
+<span id="cb23-415"><a href="#cb23-415" aria-hidden="true" tabindex="-1"></a><span class="st">     SELECT * FROM read_parquet('{pq}')"</span></span>
+<span id="cb23-416"><a href="#cb23-416" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb23-417"><a href="#cb23-417" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb23-418"><a href="#cb23-418" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-419"><a href="#cb23-419" aria-hidden="true" tabindex="-1"></a>  <span class="co"># find geometry column (type GEOMETRY or contains 'geom' in name)</span></span>
+<span id="cb23-420"><a href="#cb23-420" aria-hidden="true" tabindex="-1"></a>  cols_info <span class="ot">&lt;-</span> <span class="fu">dbGetQuery</span>(con, <span class="st">"DESCRIBE v_tmp"</span>)</span>
+<span id="cb23-421"><a href="#cb23-421" aria-hidden="true" tabindex="-1"></a>  geom_col <span class="ot">&lt;-</span> cols_info<span class="sc">$</span>column_name[</span>
+<span id="cb23-422"><a href="#cb23-422" aria-hidden="true" tabindex="-1"></a>    <span class="fu">grepl</span>(<span class="st">"GEOMETRY|WKB_GEOMETRY"</span>, cols_info<span class="sc">$</span>column_type, <span class="at">ignore.case =</span> <span class="cn">TRUE</span>) <span class="sc">|</span></span>
+<span id="cb23-423"><a href="#cb23-423" aria-hidden="true" tabindex="-1"></a>      <span class="fu">grepl</span>(<span class="st">"^geom"</span>, cols_info<span class="sc">$</span>column_name, <span class="at">ignore.case =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb23-424"><a href="#cb23-424" aria-hidden="true" tabindex="-1"></a>  ]</span>
+<span id="cb23-425"><a href="#cb23-425" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-426"><a href="#cb23-426" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">length</span>(geom_col) <span class="sc">&gt;</span> <span class="dv">0</span>) {</span>
+<span id="cb23-427"><a href="#cb23-427" aria-hidden="true" tabindex="-1"></a>    <span class="co"># strip CRS from geometry to avoid storage version error</span></span>
+<span id="cb23-428"><a href="#cb23-428" aria-hidden="true" tabindex="-1"></a>    geom_col <span class="ot">&lt;-</span> geom_col[<span class="dv">1</span>]</span>
+<span id="cb23-429"><a href="#cb23-429" aria-hidden="true" tabindex="-1"></a>    other_cols <span class="ot">&lt;-</span> <span class="fu">setdiff</span>(cols_info<span class="sc">$</span>column_name, geom_col)</span>
+<span id="cb23-430"><a href="#cb23-430" aria-hidden="true" tabindex="-1"></a>    select_sql <span class="ot">&lt;-</span> <span class="fu">paste</span>(</span>
+<span id="cb23-431"><a href="#cb23-431" aria-hidden="true" tabindex="-1"></a>      <span class="fu">c</span>(</span>
+<span id="cb23-432"><a href="#cb23-432" aria-hidden="true" tabindex="-1"></a>        other_cols,</span>
+<span id="cb23-433"><a href="#cb23-433" aria-hidden="true" tabindex="-1"></a>        <span class="fu">glue</span>(<span class="st">"ST_GeomFromWKB(ST_AsWKB({geom_col})) AS {geom_col}"</span>)</span>
+<span id="cb23-434"><a href="#cb23-434" aria-hidden="true" tabindex="-1"></a>      ),</span>
+<span id="cb23-435"><a href="#cb23-435" aria-hidden="true" tabindex="-1"></a>      <span class="at">collapse =</span> <span class="st">", "</span></span>
+<span id="cb23-436"><a href="#cb23-436" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb23-437"><a href="#cb23-437" aria-hidden="true" tabindex="-1"></a>    <span class="fu">dbExecute</span>(</span>
+<span id="cb23-438"><a href="#cb23-438" aria-hidden="true" tabindex="-1"></a>      con,</span>
+<span id="cb23-439"><a href="#cb23-439" aria-hidden="true" tabindex="-1"></a>      <span class="fu">glue</span>(</span>
+<span id="cb23-440"><a href="#cb23-440" aria-hidden="true" tabindex="-1"></a>        <span class="st">"CREATE OR REPLACE TABLE {tbl_name} AS</span></span>
+<span id="cb23-441"><a href="#cb23-441" aria-hidden="true" tabindex="-1"></a><span class="st">       SELECT {select_sql} FROM v_tmp"</span></span>
+<span id="cb23-442"><a href="#cb23-442" aria-hidden="true" tabindex="-1"></a>      )</span>
+<span id="cb23-443"><a href="#cb23-443" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb23-444"><a href="#cb23-444" aria-hidden="true" tabindex="-1"></a>  } <span class="cf">else</span> {</span>
+<span id="cb23-445"><a href="#cb23-445" aria-hidden="true" tabindex="-1"></a>    <span class="co"># no geometry column, load as-is</span></span>
+<span id="cb23-446"><a href="#cb23-446" aria-hidden="true" tabindex="-1"></a>    <span class="fu">dbExecute</span>(</span>
+<span id="cb23-447"><a href="#cb23-447" aria-hidden="true" tabindex="-1"></a>      con,</span>
+<span id="cb23-448"><a href="#cb23-448" aria-hidden="true" tabindex="-1"></a>      <span class="fu">glue</span>(</span>
+<span id="cb23-449"><a href="#cb23-449" aria-hidden="true" tabindex="-1"></a>        <span class="st">"CREATE OR REPLACE TABLE {tbl_name} AS</span></span>
+<span id="cb23-450"><a href="#cb23-450" aria-hidden="true" tabindex="-1"></a><span class="st">       SELECT * FROM v_tmp"</span></span>
+<span id="cb23-451"><a href="#cb23-451" aria-hidden="true" tabindex="-1"></a>      )</span>
+<span id="cb23-452"><a href="#cb23-452" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb23-453"><a href="#cb23-453" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb23-454"><a href="#cb23-454" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-455"><a href="#cb23-455" aria-hidden="true" tabindex="-1"></a>  n_rows <span class="ot">&lt;-</span> <span class="fu">dbGetQuery</span>(con, <span class="fu">glue</span>(<span class="st">"SELECT COUNT(*) AS n FROM {tbl_name}"</span>))<span class="sc">$</span>n</span>
+<span id="cb23-456"><a href="#cb23-456" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"- {tbl_name}: {n_rows} rows</span><span class="sc">\n\n</span><span class="st">"</span>))</span>
+<span id="cb23-457"><a href="#cb23-457" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb23-458"><a href="#cb23-458" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-459"><a href="#cb23-459" aria-hidden="true" tabindex="-1"></a><span class="fu">dbDisconnect</span>(con, <span class="at">shutdown =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb23-460"><a href="#cb23-460" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb23-461"><a href="#cb23-461" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-462"><a href="#cb23-462" aria-hidden="true" tabindex="-1"></a><span class="fu">## Write manifest</span></span>
+<span id="cb23-463"><a href="#cb23-463" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-466"><a href="#cb23-466" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb23-467"><a href="#cb23-467" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: manifest</span></span>
+<span id="cb23-468"><a href="#cb23-468" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-469"><a href="#cb23-469" aria-hidden="true" tabindex="-1"></a><span class="fu">write_spatial_manifest</span>(dir_parquet)</span>
+<span id="cb23-470"><a href="#cb23-470" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb23-471"><a href="#cb23-471" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-472"><a href="#cb23-472" aria-hidden="true" tabindex="-1"></a><span class="fu">## Output summary</span></span>
+<span id="cb23-473"><a href="#cb23-473" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-476"><a href="#cb23-476" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb23-477"><a href="#cb23-477" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: summary</span></span>
+<span id="cb23-478"><a href="#cb23-478" aria-hidden="true" tabindex="-1"></a><span class="co">#| output: asis</span></span>
+<span id="cb23-479"><a href="#cb23-479" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-480"><a href="#cb23-480" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"### PMTiles</span><span class="sc">\n\n</span><span class="st">"</span>)</span>
+<span id="cb23-481"><a href="#cb23-481" aria-hidden="true" tabindex="-1"></a><span class="fu">dir_ls</span>(dir_pmtiles, <span class="at">glob =</span> <span class="st">"*.pmtiles"</span>) <span class="sc">|&gt;</span></span>
+<span id="cb23-482"><a href="#cb23-482" aria-hidden="true" tabindex="-1"></a>  <span class="fu">tibble</span>(<span class="at">path =</span> _) <span class="sc">|&gt;</span></span>
+<span id="cb23-483"><a href="#cb23-483" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
+<span id="cb23-484"><a href="#cb23-484" aria-hidden="true" tabindex="-1"></a>    <span class="at">file =</span> <span class="fu">path_file</span>(path),</span>
+<span id="cb23-485"><a href="#cb23-485" aria-hidden="true" tabindex="-1"></a>    <span class="at">size =</span> <span class="fu">file_size</span>(path)</span>
+<span id="cb23-486"><a href="#cb23-486" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
+<span id="cb23-487"><a href="#cb23-487" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(file, size) <span class="sc">|&gt;</span></span>
+<span id="cb23-488"><a href="#cb23-488" aria-hidden="true" tabindex="-1"></a>  knitr<span class="sc">::</span><span class="fu">kable</span>()</span>
+<span id="cb23-489"><a href="#cb23-489" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-490"><a href="#cb23-490" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"</span><span class="sc">\n</span><span class="st">### Parquet</span><span class="sc">\n\n</span><span class="st">"</span>)</span>
+<span id="cb23-491"><a href="#cb23-491" aria-hidden="true" tabindex="-1"></a><span class="fu">dir_ls</span>(dir_parquet, <span class="at">glob =</span> <span class="st">"*.parquet"</span>) <span class="sc">|&gt;</span></span>
+<span id="cb23-492"><a href="#cb23-492" aria-hidden="true" tabindex="-1"></a>  <span class="fu">tibble</span>(<span class="at">path =</span> _) <span class="sc">|&gt;</span></span>
+<span id="cb23-493"><a href="#cb23-493" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
+<span id="cb23-494"><a href="#cb23-494" aria-hidden="true" tabindex="-1"></a>    <span class="at">file =</span> <span class="fu">path_file</span>(path),</span>
+<span id="cb23-495"><a href="#cb23-495" aria-hidden="true" tabindex="-1"></a>    <span class="at">size =</span> <span class="fu">file_size</span>(path)</span>
+<span id="cb23-496"><a href="#cb23-496" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
+<span id="cb23-497"><a href="#cb23-497" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(file, size) <span class="sc">|&gt;</span></span>
+<span id="cb23-498"><a href="#cb23-498" aria-hidden="true" tabindex="-1"></a>  knitr<span class="sc">::</span><span class="fu">kable</span>()</span>
+<span id="cb23-499"><a href="#cb23-499" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
 </code></pre></div><button title="Copy to Clipboard" class="code-copy-button" data-in-quarto-modal=""><i class="bi"></i></button></div>
 </div></div></div></div></div>
 </div> <!-- /content -->

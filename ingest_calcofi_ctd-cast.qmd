@@ -1,5 +1,11 @@
 ---
 title: "Ingest CalCOFI CTD Cast Data"
+calcofi:
+  target_name: ingest_calcofi_ctd_cast
+  workflow_type: ingest
+  dependency:
+    - ingest_swfsc_ichthyo
+  output: data/parquet/calcofi_ctd-cast/manifest.json
 ---
 
 ## Overview
@@ -50,7 +56,6 @@ librarian::shelf(
   CalCOFI / calcofi4db,
   CalCOFI / calcofi4r,
   DBI,
-  dm,
   dplyr,
   DT,
   fs,
@@ -77,16 +82,21 @@ dataset_name <- "CalCOFI CTD Cast Database"
 provider <- "calcofi"
 dataset <- "ctd-cast"
 dir_label <- glue("{provider}_{dataset}")
-overwrite <- TRUE
 dir_data <- "~/My Drive/projects/calcofi/data-public"
 dir_dl <- path_expand(glue("{dir_data}/{provider}/{dataset}/download"))
 dir_parquet <- here(glue("data/parquet/{dir_label}"))
 db_path <- here(glue("data/wrangling/{dir_label}.duckdb"))
+db_checkpoint <- here(glue("data/wrangling/{dir_label}_checkpoint.duckdb"))
 dir_tmp <- here(glue("data/tmp/{dir_label}"))
 url <- "https://calcofi.org/data/oceanographic-data/ctd-cast-files/"
 dir_meta <- here(glue("metadata/{provider}/{dataset}"))
 
-if (overwrite && file_exists(db_path)) {
+# use checkpoint DB if available (skips expensive read+bind+filter steps)
+if (file_exists(db_checkpoint)) {
+  if (file_exists(db_path)) file_delete(db_path)
+  file_copy(db_checkpoint, db_path, overwrite = TRUE)
+  message(glue("Restored from checkpoint: {db_checkpoint}"))
+} else if (file_exists(db_path)) {
   file_delete(db_path)
 }
 dir_create(c(dir_dl, dirname(db_path), dir_parquet, dir_tmp), recurse = TRUE)
@@ -107,6 +117,50 @@ d_meas_type <- read_csv(
 )
 d_flds_rd <- read_csv(glue("{dir_meta}/flds_redefine.csv"), show_col_types = F)
 d_tbls_rd <- read_csv(glue("{dir_meta}/tbls_redefine.csv"), show_col_types = F)
+```
+
+## Check for Resumable State
+
+```{r}
+#| label: check_resume
+
+# detect if parquet outputs are already complete (e.g. prior run failed
+# only during GCS upload). If so, skip ALL computation and jump to upload.
+parquet_complete <- FALSE
+manifest_path <- file.path(dir_parquet, "manifest.json")
+if (file_exists(manifest_path)) {
+  mf <- jsonlite::read_json(manifest_path)
+  expected <- setdiff(mf$tables, unlist(mf$supplemental))
+  parquet_ok <- all(vapply(expected, function(tbl) {
+    p <- file.path(dir_parquet, paste0(tbl, ".parquet"))
+    d <- file.path(dir_parquet, tbl)
+    file_exists(p) || dir_exists(d)
+  }, logical(1)))
+  if (parquet_ok) {
+    parquet_complete <- TRUE
+    message(glue(
+      "Parquet output already complete ({length(mf$tables)} tables, ",
+      "{format(mf$total_rows, big.mark = ',')} rows) — ",
+      "skipping computation, resuming at upload"))
+  }
+}
+
+# if parquet not complete, check for checkpoint (ctd_raw pre-computed)
+has_ctd_raw <- FALSE
+if (!parquet_complete) {
+  has_ctd_raw <- "ctd_raw" %in% DBI::dbListTables(con)
+  if (has_ctd_raw) {
+    n_raw <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM ctd_raw")$n
+    message(glue(
+      "Checkpoint: ctd_raw already loaded ",
+      "({format(n_raw, big.mark = ',')} rows) — ",
+      "skipping read+bind+filter"))
+  }
+}
+
+# set eval for read+bind+filter chunks
+skip_read_bind <- parquet_complete || has_ctd_raw
+knitr::opts_chunk$set(eval = !skip_read_bind)
 ```
 
 ## Scrape CTD Download Links
@@ -872,6 +926,19 @@ dbWriteTable(con, "ctd_raw", d_filt, overwrite = TRUE)
 message(glue("Loaded {nrow(d_filt)} rows into ctd_raw"))
 ```
 
+```{r}
+#| label: restore_eval
+
+# if parquet already complete, skip computation through write_parquet
+# only re-enable for upload_gcs and cleanup
+if (parquet_complete) {
+  knitr::opts_chunk$set(eval = FALSE)
+  message("Parquet complete — skipping to upload")
+} else {
+  knitr::opts_chunk$set(eval = TRUE)
+}
+```
+
 ## Cross-Dataset Bridge
 
 Load reference tables (ship, cruise, grid) from the ichthyo ingest, derive `ship_key`, and validate against known ships/cruises.
@@ -886,45 +953,75 @@ load_prior_tables(
   parquet_dir = here("data/parquet/swfsc_ichthyo")
 )
 
-# 0404NHJD is a combined New Horizon + Jordan Davis cruise; use primary ship NH
-dbExecute(
-  con,
-  "UPDATE ctd_raw SET cruise_key = LEFT(cruise_key, 6)
-   WHERE LENGTH(cruise_key) > 6"
-)
+# detect whether cruise_key already in YYYY-MM-NODC format (from checkpoint)
+sample_ck <- dbGetQuery(
+  con, "SELECT cruise_key FROM ctd_raw LIMIT 1")$cruise_key
+cruise_key_already_converted <- grepl("^\\d{4}-\\d{2}-", sample_ck)
 
-# derive ship_key from last 2 chars of cruise_key (YYMMKK format from filename;
-# converted to YYYY-MM-NODC later via convert_cruise_key_format())
-dbExecute(con, "ALTER TABLE ctd_raw ADD COLUMN IF NOT EXISTS ship_key VARCHAR")
-dbExecute(con, "UPDATE ctd_raw SET ship_key = RIGHT(cruise_key, 2)")
-
-# validate ship_key against ship reference table
-ctd_ships <- dbGetQuery(con, "SELECT DISTINCT ship_key FROM ctd_raw")
-ref_ships <- dbGetQuery(con, "SELECT ship_key FROM ship")
-orphan_ships <- setdiff(ctd_ships$ship_key, ref_ships$ship_key)
-
-if (length(orphan_ships) > 0) {
-  message(glue(
-    "{length(orphan_ships)} ship_key(s) in CTD not in ship table: ",
-    "{paste(orphan_ships, collapse = ', ')}"
-  ))
-  dbGetQuery(
+if (!cruise_key_already_converted) {
+  # 0404NHJD is a combined New Horizon + Jordan Davis cruise; use primary ship NH
+  dbExecute(
     con,
-    glue(
-      "SELECT ship_key, COUNT(DISTINCT cruise_key) AS n_cruises,
-              COUNT(*) AS n_rows
+    "UPDATE ctd_raw SET cruise_key = LEFT(cruise_key, 6)
+     WHERE LENGTH(cruise_key) > 6"
+  )
+
+  # derive ship_key from last 2 chars of cruise_key (YYMMKK format from filename)
+  dbExecute(con, "ALTER TABLE ctd_raw ADD COLUMN IF NOT EXISTS ship_key VARCHAR")
+  dbExecute(con, "UPDATE ctd_raw SET ship_key = RIGHT(cruise_key, 2)")
+
+  # validate ship_key against ship reference table
+  ctd_ships <- dbGetQuery(con, "SELECT DISTINCT ship_key FROM ctd_raw")
+  ref_ships <- dbGetQuery(con, "SELECT ship_key FROM ship")
+  orphan_ships <- setdiff(ctd_ships$ship_key, ref_ships$ship_key)
+
+  if (length(orphan_ships) > 0) {
+    message(glue(
+      "{length(orphan_ships)} ship_key(s) in CTD not in ship table: ",
+      "{paste(orphan_ships, collapse = ', ')}"
+    ))
+
+    # run match_ships() with centralized renames for orphan ships
+    orphan_tbl <- dbGetQuery(con, glue(
+      "SELECT DISTINCT ship_key AS ship_code, NULL AS ship_name
        FROM ctd_raw
-       WHERE ship_key IN ({paste(shQuote(orphan_ships, type = 'sh'), collapse = ', ')})
-       GROUP BY ship_key
-       ORDER BY ship_key"
-    )
-  ) |>
-    dt(
-      caption = "Orphan ship_keys (in CTD but not in ship table)",
-      fname = "ctd_orphan_ship_keys"
-    )
+       WHERE ship_key IN ({paste(shQuote(orphan_ships, type = 'sh'), collapse = ', ')})")) |>
+      mutate(ship_name = as.character(ship_name))
+
+    ship_result <- match_ships(
+      unmatched_ships  = orphan_tbl,
+      reference_ships  = dbReadTable(con, "ship"),
+      ship_renames_csv = here("metadata/ship_renames.csv"),
+      fetch_ices       = FALSE)
+
+    # insert interim entries for still-unmatched ships (ship_nodc = "?XX?")
+    ensure_interim_ships(con, ship_result)
+
+    dbGetQuery(
+      con,
+      glue(
+        "SELECT ship_key, COUNT(DISTINCT cruise_key) AS n_cruises,
+                COUNT(*) AS n_rows
+         FROM ctd_raw
+         WHERE ship_key IN ({paste(shQuote(orphan_ships, type = 'sh'), collapse = ', ')})
+         GROUP BY ship_key
+         ORDER BY ship_key"
+      )
+    ) |>
+      dt(
+        caption = "Orphan ship_keys (in CTD but not in ship table)",
+        fname = "ctd_orphan_ship_keys"
+      )
+  } else {
+    message("All CTD ship_keys found in ship reference table")
+  }
+
+  # convert cruise_key from YYMMKK → YYYY-MM-NODC format
+  convert_cruise_key_format(con, "ctd_raw", old_key_col = "cruise_key")
+  dbExecute(con, "ALTER TABLE ctd_raw DROP COLUMN cruise_key")
+  dbExecute(con, "ALTER TABLE ctd_raw RENAME COLUMN cruise_key_new TO cruise_key")
 } else {
-  message("All CTD ship_keys found in ship reference table")
+  message("cruise_key already in YYYY-MM-NODC format (from checkpoint)")
 }
 
 # validate cruise_key against cruise reference table
@@ -957,6 +1054,66 @@ if (length(orphan_cruises) > 0) {
 }
 ```
 
+## Save Checkpoint
+
+Save a DuckDB checkpoint after the expensive read+bind+filter+bridge steps so subsequent runs can resume from here.
+
+```{r}
+#| label: save_checkpoint
+
+if (!file_exists(db_checkpoint)) {
+  close_duckdb(con)
+  file_copy(db_path, db_checkpoint, overwrite = TRUE)
+  con <- get_duckdb_con(db_path)
+  load_duckdb_extension(con, "spatial")
+  load_duckdb_extension(con, "icu")
+  message(glue("Saved checkpoint: {db_checkpoint}"))
+} else {
+  message(glue("Checkpoint already exists: {db_checkpoint}"))
+}
+```
+
+## Wide-Format Output (for ERDDAP)
+
+Create a wide-format table preserving the original column layout for serving into ERDDAP. This is a supplemental output — not part of the normalized database.
+
+```{r}
+#| label: ctd_wide
+
+# identify measurement and quality columns from measurement_type metadata
+d_meas_ctd <- d_meas_type |>
+  filter(str_detect(`_source_datasets`, "calcofi_ctd-cast"))
+meas_cols <- d_meas_ctd$`_source_column`
+qual_cols <- d_meas_ctd$`_qual_column` |> na.omit() |> as.character()
+qual_cols <- qual_cols[qual_cols != ""]
+
+# get raw columns
+raw_cols <- dbGetQuery(
+  con,
+  "SELECT column_name FROM information_schema.columns WHERE table_name = 'ctd_raw'"
+)$column_name
+
+# wide-format: cast metadata + depth + all measurement/quality columns
+# exclude provenance and intermediate columns
+wide_keep <- intersect(
+  raw_cols,
+  c("cruise_key", "site_key", "cast_key", "cast_dir",
+    "datetime_utc", "lon_dec", "lat_dec", "ship_key",
+    "data_stage", "depth_m", meas_cols, qual_cols))
+
+dbExecute(
+  con,
+  glue(
+    "CREATE OR REPLACE TABLE ctd_wide AS
+     SELECT {paste(wide_keep, collapse = ', ')}
+     FROM ctd_raw
+     ORDER BY cruise_key, site_key, cast_dir, depth_m")
+)
+
+n_wide <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM ctd_wide")$n
+message(glue("ctd_wide: {format(n_wide, big.mark = ',')} rows (supplemental, for ERDDAP)"))
+```
+
 ## Split into Tidy Tables
 
 ### ctd_cast — cast-level metadata
@@ -964,14 +1121,7 @@ if (length(orphan_cruises) > 0) {
 ```{r}
 #| label: ctd_cast
 
-# filter for CTD measurement types only
-d_meas_ctd <- d_meas_type |>
-  filter(str_detect(`_source_datasets`, "calcofi_ctd-cast"))
-
-# define cast-level columns (everything that's NOT a measurement or quality flag)
-meas_cols <- d_meas_ctd$`_source_column`
-qual_cols <- d_meas_ctd$`_qual_column` |> na.omit() |> as.character()
-qual_cols <- qual_cols[qual_cols != ""]
+# d_meas_ctd, meas_cols, qual_cols already defined in ctd_wide chunk above
 
 # use ctd_raw columns (includes ship_key and data_stage added via SQL)
 raw_cols <- dbGetQuery(
@@ -1170,13 +1320,17 @@ dbExecute(con, "DROP TABLE IF EXISTS ctd_raw")
 ```{r}
 #| label: schema
 
-dm_ctd <- dm_from_con(con) |>
-  dm_add_pk(ctd_cast, ctd_cast_uuid) |>
-  dm_add_pk(ctd_measurement, ctd_measurement_uuid) |>
-  dm_add_pk(ctd_summary, ctd_summary_uuid) |>
-  dm_add_pk(measurement_type, measurement_type) |>
-  dm_add_fk(ctd_measurement, ctd_cast_uuid, ctd_cast)
-dm_draw(dm_ctd, view_type = "all")
+# define PK/FK relationships for visualization and relationships.json
+ctd_rels <- list(
+  primary_keys = list(
+    ctd_cast        = "ctd_cast_uuid",
+    ctd_measurement = "ctd_measurement_uuid",
+    ctd_summary     = "ctd_summary_uuid",
+    measurement_type = "measurement_type"),
+  foreign_keys = list(
+    list(table = "ctd_measurement", column = "ctd_cast_uuid", ref_table = "ctd_cast", ref_column = "ctd_cast_uuid")))
+
+cc_erd(con, rels = ctd_rels)
 ```
 
 ## Add Spatial
@@ -1235,7 +1389,8 @@ enforce_column_types(con, d_flds_rd = d_flds_rd)
 
 preview_tables(
   con,
-  tables = c("ctd_cast", "ctd_measurement", "ctd_summary", "measurement_type")
+  tables = c("ctd_cast", "ctd_measurement", "ctd_summary",
+             "measurement_type", "ctd_wide")
 )
 ```
 
@@ -1244,15 +1399,26 @@ preview_tables(
 ```{r}
 #| label: write_parquet
 
+# collect mismatches for manifest
+mismatches <- list(
+  ships             = collect_ship_mismatches(con, "ctd_cast"),
+  measurement_types = collect_measurement_type_mismatches(
+    con, here("metadata/measurement_type.csv")),
+  cruise_keys       = collect_cruise_key_mismatches(con, "ctd_cast"))
+
 parquet_stats <- write_parquet_outputs(
-  con = con,
-  output_dir = dir_parquet,
-  tables = c("ctd_cast", "ctd_measurement", "ctd_summary", "measurement_type"),
+  con          = con,
+  output_dir   = dir_parquet,
+  tables       = c("ctd_cast", "ctd_measurement", "ctd_summary",
+                    "measurement_type", "ctd_wide"),
   partition_by = list(
     ctd_measurement = "cruise_key",
-    ctd_summary = "cruise_key"
+    ctd_summary     = "cruise_key",
+    ctd_wide        = "cruise_key"
   ),
-  strip_provenance = FALSE
+  strip_provenance = FALSE,
+  mismatches       = mismatches,
+  supplemental     = "ctd_wide"
 )
 
 parquet_stats |>
@@ -1275,28 +1441,23 @@ build_metadata_json(
 )
 
 # write relationships.json sidecar with PKs/FKs
-# exclude tables with GEOMETRY columns (duckdb R driver limitation)
-geom_tbls_ctd <- DBI::dbGetQuery(con,
-  "SELECT DISTINCT table_name FROM information_schema.columns
-   WHERE data_type LIKE 'GEOMETRY%'")$table_name
-dm_tbls_ctd <- setdiff(DBI::dbListTables(con), geom_tbls_ctd)
-
-tryCatch({
-  dm_ctd <- dm_from_con(con, table_names = dm_tbls_ctd, learn_keys = FALSE) |>
-    dm_add_pk(ctd_summary, ctd_summary_uuid) |>
-    dm_add_pk(measurement_type, measurement_type)
-  build_relationships_json(
-    dm = dm_ctd,
-    output_dir = dir_parquet,
-    provider = provider,
-    dataset = dataset
-  )
-}, error = function(e) {
-  message(glue("relationships.json skipped: {e$message}"))
-})
+build_relationships_json(
+  rels       = ctd_rels,
+  output_dir = dir_parquet,
+  provider   = provider,
+  dataset    = dataset
+)
 ```
 
 ## Upload to GCS
+
+```{r}
+#| label: resume_for_upload
+#| eval: true
+
+# always re-enable eval for upload and cleanup
+knitr::opts_chunk$set(eval = TRUE)
+```
 
 ```{r}
 #| label: upload_gcs
@@ -1314,6 +1475,12 @@ sync_to_gcs(
 #| label: cleanup
 
 close_duckdb(con)
+
+# remove checkpoint after successful completion (fresh next run)
+if (file_exists(db_checkpoint)) {
+  file_delete(db_checkpoint)
+  message(glue("Removed checkpoint: {db_checkpoint}"))
+}
 ```
 
 ## Appendix: Interactive Gantt Chart {.appendix}

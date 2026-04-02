@@ -1,5 +1,11 @@
 ---
 title: "Ingest SWFSC Invertebrates"
+calcofi:
+  target_name: ingest_swfsc_inverts
+  workflow_type: ingest
+  dependency:
+    - ingest_swfsc_ichthyo
+  output: data/parquet/swfsc_inverts/manifest.json
 editor_options:
   chunk_output_type: console
 ---
@@ -44,7 +50,6 @@ librarian::shelf(
   CalCOFI / calcofi4db,
   CalCOFI / calcofi4r,
   DBI,
-  dm,
   dplyr,
   DT,
   fs,
@@ -273,11 +278,17 @@ if (nrow(type_changes) > 0) {
 ```{r}
 #| label: write_parquet
 
+# collect mismatches for manifest (inverts inherit ship from ichthyo tow/net)
+mismatches <- list(
+  ships       = collect_ship_mismatches(con, "invert_count"),
+  cruise_keys = collect_cruise_key_mismatches(con, "invert_count"))
+
 parquet_stats <- write_parquet_outputs(
   con = con,
   output_dir = dir_parquet,
   tables = dbListTables(con),
-  strip_provenance = FALSE
+  strip_provenance = FALSE,
+  mismatches = mismatches
 )
 
 parquet_stats |>
@@ -305,32 +316,30 @@ metadata_path <- build_metadata_json(
   )
 )
 
-# write relationships.json
-geom_tbls <- DBI::dbGetQuery(
-  con,
-  "SELECT DISTINCT table_name FROM information_schema.columns
-   WHERE data_type = 'GEOMETRY'"
-)$table_name
-dm_tbls <- setdiff(dbListTables(con), geom_tbls)
+# write relationships.json (same schema as ichthyo)
+ichthyo_rels <- list(
+  primary_keys = list(
+    cruise  = "cruise_key",
+    ship    = "ship_key",
+    site    = "site_uuid",
+    tow     = "tow_uuid",
+    net     = "net_uuid",
+    species = "species_id",
+    ichthyo = "ichthyo_uuid",
+    lookup  = "lookup_id"),
+  foreign_keys = list(
+    list(table = "ichthyo", column = "net_uuid",   ref_table = "net",     ref_column = "net_uuid"),
+    list(table = "ichthyo", column = "species_id", ref_table = "species", ref_column = "species_id"),
+    list(table = "net",     column = "tow_uuid",   ref_table = "tow",     ref_column = "tow_uuid"),
+    list(table = "tow",     column = "site_uuid",  ref_table = "site",    ref_column = "site_uuid"),
+    list(table = "site",    column = "cruise_key",  ref_table = "cruise",  ref_column = "cruise_key"),
+    list(table = "cruise",  column = "ship_key",    ref_table = "ship",    ref_column = "ship_key")))
 
-tryCatch(
-  {
-    dm_all <- dm_from_con(
-      con,
-      table_names = dm_tbls,
-      learn_keys = FALSE
-    ) |>
-      add_cc_keys()
-    build_relationships_json(
-      dm = dm_all,
-      output_dir = dir_parquet,
-      provider = provider,
-      dataset = dataset
-    )
-  },
-  error = function(e) {
-    message(glue("relationships.json skipped (dm error): {e$message}"))
-  }
+build_relationships_json(
+  rels       = ichthyo_rels,
+  output_dir = dir_parquet,
+  provider   = provider,
+  dataset    = dataset
 )
 ```
 
