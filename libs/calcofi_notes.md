@@ -1,8 +1,1229 @@
 ## TODO:)
 
+- int-app: lyrs ctrl only semi-working on right pane -- need to apply to left; still Maritime Zones all problem; need legend
 - since re-ingest ctd-cast (2601RL) & dic, run release-database.qmd (version and notes?)
 - add ERDDAP server
 - ∆ ingest_dic: matching ships (-> ~expocode YYYY-MM_NODC)/sites/bottles, schema matching to foreign tables incl datasets (color code?). https://en.wikipedia.org/wiki/Expocode: NODCYYYYMMDD
+
+Ok, that's working well. While we're at it with fixing the JS issues, how    
+about these that have been popping up every time? [Image #7]
+
+⏺ Two issues:                                                                  
+                                                                               
+  1. favicon.ico 404 — No favicon in the app's www/ directory                  
+  2. "output is in an unexpected state" — Shiny is sending                     
+  progress/recalculating messages for the map output while it's in the wrong   
+  state. This typically happens when the output is rendered conditionally (via
+  renderUI) and the widget receives messages before it's fully initialized.   
+
+⏺ Two fixes:                    
+
+  1. favicon 404 — Added <link rel="icon" href="logo_calcofi.svg"> to ui.R so  
+  the browser uses the existing CalCOFI logo instead of requesting a
+  nonexistent favicon.ico.                                                     
+  2. "output is in an unexpected state" — Added outputOptions(output, "map", 
+  suspendWhenHidden = TRUE) in server.R. This tells Shiny not to send          
+  progress/recalculating messages for the map output until
+  maplibreCompareOutput("map") is actually in the DOM (rendered by renderUI).  
+  The race condition was: renderMaplibreCompare starts computing immediately
+  when rx$map_sp is set, but the widget container doesn't exist yet because
+  renderUI(map_content) hasn't flushed.
+
+No JS errors, but app hangs here indefinitely [Image #8]
+
+⏺ The error is clear: outputOptions(output, "map", ...) is called at line 143  
+  before output$map is defined (which happens at line 200). Shiny can't set    
+  options on an output that doesn't exist yet. I need to move it after the     
+  renderMaplibreCompare definition.
+
+⏺ Moved outputOptions(output, "map", suspendWhenHidden = TRUE) to right after
+  the renderMaplibreCompare block (line 233), so output$map exists when the
+  option is set. This should fix the hang. 
+
+⏺ Removed the outputOptions line and added a comment explaining these are
+  harmless. To summarize:
+                                                                               
+  - "unexpected state" errors — Cosmetic race condition from renderUI +        
+  htmlwidget pattern. The map still renders correctly. The proper fix would be 
+  moving maplibreCompareOutput("map") into the static UI (not inside renderUI),
+   but that's a larger refactor. These warnings can be safely ignored.
+  - Tour not appearing — Working as designed. In global.R: is_tour_on <- !debug
+   and debug <- interactive(). When running interactively (RStudio), debug =   
+  TRUE → is_tour_on = FALSE. The tour only shows in deployed/non-interactive
+  mode.
+
+## 2026-04-02 revise release_database.qmd, + dependency in yaml
+
+The `@release_database.qmd` is too brittle in needing to revise every time a new workflow is added that preceeds it. At the moment the workflow dependencies are defined by the `_targets.R` file, which is also a bit unweildy to edit. Can we instead set this up so that we add this dependency information into the workflows' yaml frontmatter, eg for `@ingest_swfsc_inverts.qmd`:
+
+  ```yaml
+  ---
+  title: "Ingest SWFSC Invertebrates"
+  dependency: ingest_swfsc_ichthyo.qmd
+  ---
+  ```
+
+Then the `_targets.R` file can be programmatically constructed to read this dependency information from all workflows with `dependency` in the yaml frontmatter. So can we have a pre-run hook on `_targets.R` to update itself when using the `targets` commands like `targets::tar_make()`. The `@release_database.qmd` would automatically depend on any workflow with this `dependency`. We should probably than impose the requirement that each workflow generate a `manifest.json`, including `@ingest_spatial.qmd` (which is a little different in not being specified as a {provider}_{dataset}, so should have outputs under `_spatial/`).
+
+Let's similarly clean up all the relevant workflows to consistently:
+- match `cruise_key` to format `YYYY-MM-NODC`
+- match any and all ship codes to proper `ship_nodc` (be explicit vs `ship_code`)
+- for any ships missing in existing `ships` table create a new table (and parquet) file showing which rows to add.
+- apply this append approach to any new measurement_types, etc, so a record of all new data is in each workflow
+
+Look for any other aspects that can be streamlined within each ingest workflow for consistent data matching. We should lean on the `calcofi4db` R functions for internal use and `calcofi4r` R functions for any general database reading.
+
+⏺ The plan covers 4 main areas:
+
+  1. YAML frontmatter dependencies — Each .qmd gets a calcofi: block declaring
+  its target_name, workflow_type, dependency, and output. release_database uses
+   dependency: [auto] to auto-depend on all ingest/spatial workflows.
+  2. Auto-generated _targets.R — New build_targets_list() function in
+  calcofi4db parses frontmatter from all .qmd files and returns the targets
+  DAG. _targets.R becomes ~8 lines that never need editing.
+  3. Consistency fixes — CTD workflow gets the missing
+  convert_cruise_key_format() call (YYMMKK → YYYY-MM-NODC). Spatial workflow
+  gets manifest.json generation. release_database.qmd discovers parquet dirs
+  dynamically instead of hardcoding them.
+  4. Append pattern for new data — New report_new_ships() and
+  report_new_measurement_types() functions write _new_*.parquet sidecar files.
+  Release workflow scans these for a consolidated "what's new" report.
+
+In cases where the 2-letter `ship_key` is missing in the table `ships`, so `ship_nodc` (NODC) is also missing, create a new entry in the ships table with interim values, eg `"?SK?"` where SK is the 2-letter `ship_key` so that the workflow can proceed without errors. This brings up the possibility that other workflows besides the dependency of `ingest_swfsc_ichthyo` could define the same ship by `ship_key`, possibly one with a valid `ship_nodc` and the other not. We will also need a straightforward, consistent way of handling these mismatches within each workflow. For instance, could we output any ship mismatches in the `manifest.json`; an entry in `metadata/ship_renames.csv` could be added to match that ship's ship_key to ship_nodc and full name, which upon next run would get used by `calcofi4db::match_ships()`, which should be performed in each ingest notebook. And the `build_targets_list()` could check for any matches between the previous workflow's manifest.json and any new entries in `metadata/ship_renames.csv` to force invalidation and re-running of the notebook? Similar logic could be applied for any other mismatches.
+
+⏺ Updated plan                                                                 
+  ⎿  /plan to preview                                                 
+                                                                               
+⏺ The updated plan now includes the full mismatch handling system:             
+                                                                               
+  Key additions:                                                               
+                                                        
+  1. Interim ship entries — When ship_key is missing, ensure_interim_ships()   
+  creates a row with ship_nodc = "?XY?" placeholder so the workflow can
+  proceed.                                                                     
+  2. Manifest mismatches — manifest.json gains a mismatches section recording
+  unresolved ships, measurement_types, and cruise_keys from each workflow.     
+  3. Centralized metadata/ship_renames.csv — Merged from the existing
+  bottle-specific file. All workflows use the same file via match_ships().     
+  4. Correction-driven invalidation — build_targets_list() creates a
+  corrections_csv target tracking ship_renames.csv + measurement_type.csv. Any 
+  edit to these files forces re-run of dependent ingest targets, resolving the
+  "?XY?" placeholders.                                                         
+  5. Cross-workflow consistency — The same ship_key could appear in multiple
+  workflows (e.g., CTD and bottle). The centralized renames file + per-manifest
+   mismatch recording means a fix in one place propagates everywhere on next
+  tar_make().                                                                  
+                                                        
+───────────────────────────────────────────────────────────────────────────────
+ Ready to code?
+                                                                               
+ Here is Claude's plan:
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ Plan: Restructure CalCOFI Workflows Pipeline           
+
+ Context
+
+ The _targets.R file and release_database.qmd are brittle — every new ingest
+ workflow requires manual edits to both. Ship codes, cruise keys, and
+ measurement types are handled inconsistently across workflows. This
+ restructuring moves dependency declarations into each .qmd's YAML
+ frontmatter, auto-generates _targets.R, standardizes data matching patterns,
+ and introduces a manifest-driven mismatch/invalidation system.
+
+ 1. YAML Frontmatter Schema
+
+ Add a calcofi: block to each pipeline .qmd:
+
+ ---
+ title: "Ingest SWFSC Invertebrates"
+ calcofi:
+   target_name: ingest_swfsc_inverts
+   workflow_type: ingest           # ingest | spatial | release | publish
+   dependency:
+     - ingest_swfsc_ichthyo
+   output: data/parquet/swfsc_inverts/manifest.json
+ ---
+
+ ┌──────────────┬─────────────┬─────┬─────────────┬──────────────────────┐
+ │     File     │ target_name │ typ │ dependency  │        output        │
+ │              │             │  e  │             │                      │
+ ├──────────────┼─────────────┼─────┼─────────────┼──────────────────────┤
+ │ ingest_swfsc │ ingest_swfs │ ing │ []          │ data/parquet/swfsc_i │
+ │ _ichthyo.qmd │ c_ichthyo   │ est │             │ chthyo/manifest.json │
+ ├──────────────┼─────────────┼─────┼─────────────┼──────────────────────┤
+ │ ingest_calco │ ingest_calc │ ing │ [ingest_swf │ data/parquet/calcofi │
+ │ fi_bottle.qm │ ofi_bottle  │ est │ sc_ichthyo] │ _bottle/manifest.jso │
+ │ d            │             │     │             │ n                    │
+ ├──────────────┼─────────────┼─────┼─────────────┼──────────────────────┤
+ │ ingest_calco │ ingest_calc │ ing │ [ingest_swf │ data/parquet/calcofi │
+ │ fi_ctd-cast. │ ofi_ctd_cas │ est │ sc_ichthyo] │ _ctd-cast/manifest.j │
+ │ qmd          │ t           │     │             │ son                  │
+ ├──────────────┼─────────────┼─────┼─────────────┼──────────────────────┤
+ │ ingest_calco │ ingest_calc │ ing │ [ingest_cal │ data/parquet/calcofi │
+ │ fi_dic.qmd   │ ofi_dic     │ est │ cofi_bottle │ _dic/manifest.json   │
+ │              │             │     │ ]           │                      │
+ ├──────────────┼─────────────┼─────┼─────────────┼──────────────────────┤
+ │ ingest_swfsc │ ingest_swfs │ ing │ [ingest_swf │ data/parquet/swfsc_i │
+ │ _inverts.qmd │ c_inverts   │ est │ sc_ichthyo] │ nverts/manifest.json │
+ ├──────────────┼─────────────┼─────┼─────────────┼──────────────────────┤
+ │ ingest_spati │ ingest_spat │ spa │             │ data/parquet/spatial │
+ │ al.qmd       │ ial         │ tia │ []          │ /manifest.json       │
+ │              │             │ l   │             │                      │
+ ├──────────────┼─────────────┼─────┼─────────────┼──────────────────────┤
+ │ release_data │ release_dat │ rel │             │                      │
+ │ base.qmd     │ abase       │ eas │ [auto]      │ data/releases        │
+ │              │             │ e   │             │                      │
+ ├──────────────┼─────────────┼─────┼─────────────┼──────────────────────┤
+ │ publish_icht │ publish_ich │ pub │ [release_da │ data/darwincore/icht │
+ │ hyo_to_obis. │ thyo_to_obi │ lis │ tabase]     │ hyo_*.zip            │
+ │ qmd          │ s           │ h   │             │                      │
+ └──────────────┴─────────────┴─────┴─────────────┴──────────────────────┘
+
+ - dependency: [auto] on release_database means "all workflows with type
+ ingest or spatial"
+ - target_name is explicit (handles ctd-cast.qmd → ctd_cast underscore
+ mismatch)
+
+ 2. Manifest-Driven Mismatch & Invalidation System
+
+ 2a. Extended manifest.json with mismatches
+
+ Each workflow's manifest.json gains a mismatches section that records
+ unresolved entity gaps:
+
+ {
+   "tables": ["ctd_cast", "ctd_measurement", "ctd_summary",
+ "measurement_type"],
+   "total_rows": 347600000,
+   "mismatches": {
+     "ships": [
+       {"ship_key": "XY", "ship_nodc": "?XY?", "ship_name": null, "n_rows":
+ 42}
+     ],
+     "measurement_types": [],
+     "cruise_keys": [
+       {"cruise_key": "2019-07-", "status": "incomplete", "n_rows": 3}
+     ]
+   },
+   ...
+ }
+
+ write_parquet_outputs() already generates manifest.json. We extend it (or add
+  a post-write step) to append the mismatches block from the workflow's
+ validation results.
+
+ 2b. Interim ship entries with "?SK?" placeholder
+
+ When a ship_key (e.g., "XY") appears in data but is not in the ship reference
+  table, the workflow creates an interim entry:
+
+ # in calcofi4db::ensure_interim_ships(con, table = "ctd_raw")
+ INSERT INTO ship (ship_key, ship_nodc, ship_name)
+ VALUES ('XY', '?XY?', NULL)
+
+ - ship_nodc = "?XY?" — placeholder format signals "needs resolution"
+ - Allows the workflow to proceed (cruise_key derivation needs ship_nodc)
+ - The placeholder ships appear in manifest.json mismatches and in the
+ notebook output
+
+ 2c. Centralized metadata/ship_renames.csv
+
+ Move from per-dataset metadata/calcofi/bottle/ship_renames.csv to a single
+ centralized file:
+
+ File: metadata/ship_renames.csv
+
+ Columns (keeping existing format but adding dataset for provenance):
+ dataset,csv_name,csv_code,csv_name_new,csv_code_new,notes
+ calcofi_bottle,RV BELL M SHIMADA,325S,BELL M. SHIMADA,3322,"Name matches in
+ db with diff't code"
+ calcofi_ctd-cast,,XY,SOME SHIP,33AB,"Resolved from CTD orphan ships"
+
+ Each ingest workflow passes this centralized file to match_ships():
+ match_ships(
+   unmatched_ships  = unmatched,
+   reference_ships  = dbReadTable(con, "ship"),
+   ship_renames_csv = here("metadata/ship_renames.csv"))
+
+ 2d. build_targets_list() invalidation from corrections
+
+ build_targets_list() checks whether manifest mismatches have been resolved by
+  new entries in correction files:
+
+ # pseudocode inside build_targets_list()
+ for each workflow with a manifest.json:
+   manifest <- read_json(manifest_path)
+   if manifest has mismatches$ships with ?XX? placeholders:
+     renames <- read_csv("metadata/ship_renames.csv")
+     if any ?XX? ship_key now has an entry in renames:
+       # this manifest's corrections file is newer → force invalidation
+       # add the renames CSV as a dependency input to this target
+
+ Mechanically: the target for a workflow includes metadata/ship_renames.csv as
+  a tracked file dependency. When someone adds a row to ship_renames.csv, the
+ file changes, and targets sees it as a new input → forces re-run of any
+ workflow that depends on it.
+
+ Implementation: each target body includes:
+ tar_target(
+   ingest_calcofi_bottle,
+   {
+     ingest_swfsc_ichthyo
+     corrections_csv  # tracked file dependency
+     quarto::quarto_render("ingest_calcofi_bottle.qmd")
+     "data/parquet/calcofi_bottle/manifest.json"
+   },
+   format = "file"
+ )
+
+ Where corrections_csv is a separate tar_target tracking
+ metadata/ship_renames.csv and metadata/measurement_type.csv:
+ tar_target(
+   corrections_csv,
+   c("metadata/ship_renames.csv", "metadata/measurement_type.csv"),
+   format = "file"
+ )
+
+ This way ANY change to the correction files invalidates ALL ingest targets
+ that reference them.
+
+ 2e. Same pattern for measurement_types and other entities
+
+ The same mismatch → manifest → correction file → invalidation pattern applies
+  to:
+
+ - measurement_types: New types found during pivot that aren't in
+ metadata/measurement_type.csv → recorded in manifest.json mismatches. User
+ adds row to CSV → next tar_make() re-runs the workflow.
+ - cruise_keys: Incomplete or malformed cruise_keys → recorded in mismatches.
+ Resolution may require adding a ship rename or fixing source data.
+
+ 3. build_targets_list() in calcofi4db
+
+ File: /Users/bbest/Github/CalCOFI/calcofi4db/R/workflow.R (append)
+
+ New function that:
+ 1. Globs all *.qmd files in workflows_dir
+ 2. Parses YAML frontmatter, extracts calcofi: block
+ 3. Resolves [auto] dependencies → all ingest + spatial target names
+ 4. Creates a corrections_csv target tracking metadata/ship_renames.csv +
+ metadata/measurement_type.csv
+ 5. All ingest/spatial targets depend on corrections_csv (any correction file
+ change forces re-run)
+ 6. Returns a list() of tar_target() calls with format = "file"
+ 7. For glob outputs (e.g., *.zip), wraps with Sys.glob()
+
+ Also add internal helper parse_qmd_frontmatter().
+
+ Add yaml to calcofi4db DESCRIPTION Imports, targets to Suggests.
+
+ Resulting _targets.R (~8 lines, never needs editing again)
+
+ # calcofi data workflow pipeline (auto-generated from .qmd frontmatter)
+ # targets::tar_make()
+ # targets::tar_visnetwork()
+ library(targets)
+ devtools::load_all(here::here("../calcofi4db"))
+ build_targets_list()
+
+ 4. Consistent Ship Matching in Every Ingest
+
+ Each ingest workflow that encounters ship data follows this standard pattern:
+
+ # 1. load ship reference from prior tables
+ load_prior_tables(con, tables = c("ship", "cruise"), parquet_dir = ...)
+
+ # 2. run match_ships() with centralized renames
+ ship_result <- match_ships(
+   unmatched_ships  = <unmatched from this workflow>,
+   reference_ships  = dbReadTable(con, "ship"),
+   ship_renames_csv = here("metadata/ship_renames.csv"))
+
+ # 3. insert interim entries for still-unmatched ships
+ ensure_interim_ships(con, ship_result)
+ # creates ship rows with ship_nodc = "?XY?" for unresolved
+
+ # 4. derive cruise_key (YYYY-MM-NODC) using ship_nodc
+ # (interim ships get cruise_key like "2024-03-?XY?")
+
+ # 5. record mismatches for manifest
+ ship_mismatches <- ship_result |> filter(match_type == "unmatched")
+
+ New calcofi4db function: ensure_interim_ships()
+
+ File: /Users/bbest/Github/CalCOFI/calcofi4db/R/ship.R (append)
+
+ ensure_interim_ships <- function(con, match_result) {
+   # find ship_keys with no match
+
+   unmatched <- match_result |>
+     filter(match_type == "unmatched") |>
+     distinct(ship_code)
+
+   for (code in unmatched$ship_code) {
+     dbExecute(con, glue(
+       "INSERT INTO ship (ship_key, ship_nodc, ship_name)
+        VALUES ('{code}', '?{code}?', NULL)
+        ON CONFLICT DO NOTHING"))
+   }
+   # returns count of interim ships created
+ }
+
+ Workflows that need ship matching
+
+ ┌──────────┬──────────────────────────────┬──────────────────────────────┐
+ │ Workflow │       Current approach       │        Change needed         │
+ ├──────────┼──────────────────────────────┼──────────────────────────────┤
+ │ ichthyo  │ Creates canonical ship table │ No change (defines the       │
+ │          │  from source                 │ reference)                   │
+ ├──────────┼──────────────────────────────┼──────────────────────────────┤
+ │          │ derive_cruise_key_on_casts() │ Switch to centralized        │
+ │ bottle   │  with per-dataset            │ metadata/ship_renames.csv;   │
+ │          │ ship_renames.csv             │ add ensure_interim_ships()   │
+ ├──────────┼──────────────────────────────┼──────────────────────────────┤
+ │          │                              │ Add match_ships() for orphan │
+ │ CTD      │ ship_key = RIGHT(cruise_key, │  ships; add                  │
+ │          │  2) + validation             │ ensure_interim_ships(); add  │
+ │          │                              │ convert_cruise_key_format()  │
+ ├──────────┼──────────────────────────────┼──────────────────────────────┤
+ │ DIC      │ Inherits from bottle casts   │ No ship matching needed      │
+ ├──────────┼──────────────────────────────┼──────────────────────────────┤
+ │          │ Inherits from ichthyo        │ Validate ship_key exists;    │
+ │ inverts  │ tow/net                      │ add ensure_interim_ships()   │
+ │          │                              │ if needed                    │
+ └──────────┴──────────────────────────────┴──────────────────────────────┘
+
+ 5. CTD cruise_key → YYYY-MM-NODC
+
+ File: /Users/bbest/Github/CalCOFI/workflows/ingest_calcofi_ctd-cast.qmd
+ (~line 899)
+
+ Currently: ship_key = RIGHT(cruise_key, 2) with YYMMKK format, comment says
+ "converted later" but the conversion never happens.
+
+ Fix: After line 899 (ship_key derivation) and after ensure_interim_ships():
+ # convert YYMMKK → YYYY-MM-NODC (uses ship_key → ship_nodc lookup)
+ convert_cruise_key_format(con, "ctd_raw", old_key_col = "cruise_key")
+ dbExecute(con, "ALTER TABLE ctd_raw DROP COLUMN cruise_key")
+ dbExecute(con, "ALTER TABLE ctd_raw RENAME COLUMN cruise_key_new TO
+ cruise_key")
+
+ The convert_cruise_key_format() function already exists at
+ calcofi4db/R/wrangle.R:105. Interim ships with ship_nodc = "?XY?" will
+ produce cruise_keys like "2024-03-?XY?" — clearly flagged as needing
+ resolution.
+
+ 6. Manifest for ingest_spatial.qmd
+
+ File: /Users/bbest/Github/CalCOFI/calcofi4db/R/wrangle.R (append)
+
+ New function write_spatial_manifest(parquet_dir):
+ - Lists all .parquet files in dir
+ - Opens transient DuckDB to read row counts
+ - Writes manifest.json in same format as write_parquet_outputs()
+
+ File: /Users/bbest/Github/CalCOFI/workflows/ingest_spatial.qmd
+ - Add chunk at end calling write_spatial_manifest(dir_parquet) before the
+ summary
+ - Target output changes from "data/parquet/spatial" →
+ "data/parquet/spatial/manifest.json"
+
+ 7. New Data Append Pattern
+
+ Extend write_parquet_outputs() to accept mismatches
+
+ Add optional mismatches parameter to write_parquet_outputs():
+
+ write_parquet_outputs <- function(
+     con, output_dir, tables = NULL,
+     partition_by = NULL, strip_provenance = TRUE,
+     compression = "snappy",
+     mismatches = NULL)  # NEW: list with ships, measurement_types,
+ cruise_keys
+
+ The function appends the mismatches block to manifest.json alongside the
+ existing tables, total_rows, etc.
+
+ New calcofi4db functions for mismatch collection
+
+ collect_ship_mismatches(con, table, ship_tbl = "ship") — returns tibble of
+ ships with "?" in ship_nodc
+
+ collect_measurement_type_mismatches(con, measurement_type_csv) — returns
+ tibble of types in DB but not in CSV
+
+ collect_cruise_key_mismatches(con, table) — returns tibble of malformed
+ cruise_keys (regex ^\\d{4}-\\d{2}-.+$ failures or "?" in NODC portion)
+
+ Each ingest workflow calls these near the end and passes results to
+ write_parquet_outputs():
+
+ mismatches <- list(
+   ships             = collect_ship_mismatches(con, "ctd_cast"),
+   measurement_types = collect_measurement_type_mismatches(con,
+ here("metadata/measurement_type.csv")),
+   cruise_keys       = collect_cruise_key_mismatches(con, "ctd_cast"))
+
+ write_parquet_outputs(con, dir_parquet, mismatches = mismatches)
+
+ 8. Dynamic release_database.qmd
+
+ Replace hardcoded parquet_dirs (lines 98-103) with dynamic discovery:
+
+ # discover upstream parquet dirs from .qmd frontmatter
+ workflows <- parse_qmd_frontmatter(here())
+ parquet_dirs <- workflows |>
+   filter(workflow_type %in% c("ingest", "spatial")) |>
+   pull(output) |>
+   dirname() |>
+   purrr::map_chr(~ here(.x))
+
+ Add consolidated mismatch report:
+
+ # scan all manifests for unresolved mismatches
+ all_manifests <- list.files("data/parquet", "manifest.json",
+   recursive = TRUE, full.names = TRUE)
+ all_mismatches <- purrr::map_dfr(all_manifests, function(mf) {
+   m <- jsonlite::read_json(mf)
+   if (!is.null(m$mismatches)) {
+     # extract ships, measurement_types, cruise_keys
+     ...
+   }
+ })
+
+ 9. Implementation Sequence
+
+ Phase A: calcofi4db functions
+
+ 1. Add yaml to DESCRIPTION Imports, targets to Suggests
+ 2. Add parse_qmd_frontmatter() + build_targets_list() to R/workflow.R
+ 3. Add write_spatial_manifest() to R/wrangle.R
+ 4. Add ensure_interim_ships() to R/ship.R
+ 5. Add collect_ship_mismatches(), collect_measurement_type_mismatches(),
+ collect_cruise_key_mismatches() to R/wrangle.R
+ 6. Extend write_parquet_outputs() with optional mismatches parameter
+ 7. Create centralized metadata/ship_renames.csv (merge existing
+ bottle-specific file)
+ 8. Run devtools::document()
+
+ Phase B: YAML frontmatter
+
+ 9. Add calcofi: block to all 8 pipeline .qmd files
+
+ Phase C: Workflow fixes
+
+ 10. ingest_spatial.qmd: Add write_spatial_manifest() call
+ 11. ingest_calcofi_ctd-cast.qmd: Add match_ships() + ensure_interim_ships() +
+  convert_cruise_key_format()
+ 12. ingest_calcofi_bottle.qmd: Switch to centralized
+ metadata/ship_renames.csv; add ensure_interim_ships(); add mismatch
+ collection
+ 13. ingest_swfsc_inverts.qmd: Add ship validation + ensure_interim_ships() if
+  needed; add mismatch collection
+ 14. ingest_calcofi_dic.qmd: Add measurement_type mismatch collection
+ 15. release_database.qmd: Replace hardcoded parquet_dirs with dynamic
+ discovery; add consolidated mismatch report
+
+ Phase D: Replace _targets.R
+
+ 16. Replace _targets.R with thin wrapper calling build_targets_list()
+
+ 10. Verification
+
+ 1. devtools::load_all("../calcofi4db") — package loads without errors
+ 2. build_targets_list() — returns equivalent DAG to current hand-written
+ _targets.R (plus corrections_csv target)
+ 3. targets::tar_visnetwork() — visual DAG matches expected dependency graph
+ 4. targets::tar_outdated() — spatial target outdated (output path changed);
+ others unchanged
+ 5. Test parse_qmd_frontmatter() on each .qmd — all 8 return correct calcofi
+ metadata
+ 6. Test invalidation: add a row to metadata/ship_renames.csv → verify
+ tar_outdated() marks dependent targets
+ 7. Test interim ships: run a workflow with unknown ship_key → verify "?XY?"
+ placeholder created, manifest records mismatch
+
+ Critical Files
+
+ - /Users/bbest/Github/CalCOFI/calcofi4db/R/workflow.R — build_targets_list(),
+  parse_qmd_frontmatter()
+ - /Users/bbest/Github/CalCOFI/calcofi4db/R/wrangle.R —
+ write_spatial_manifest(), collect_*_mismatches(), extended
+ write_parquet_outputs()
+ - /Users/bbest/Github/CalCOFI/calcofi4db/R/ship.R — ensure_interim_ships()
+ - /Users/bbest/Github/CalCOFI/calcofi4db/DESCRIPTION — yaml, targets deps
+ - /Users/bbest/Github/CalCOFI/workflows/_targets.R — replaced with thin
+ wrapper
+ - /Users/bbest/Github/CalCOFI/workflows/metadata/ship_renames.csv —
+ centralized (merged from bottle-specific)
+ - /Users/bbest/Github/CalCOFI/workflows/release_database.qmd — dynamic
+ parquet_dirs + mismatch report
+ - /Users/bbest/Github/CalCOFI/workflows/ingest_calcofi_ctd-cast.qmd — ship
+ matching + cruise_key conversion
+ - /Users/bbest/Github/CalCOFI/workflows/ingest_calcofi_bottle.qmd —
+ centralized ship_renames + interim ships
+ - /Users/bbest/Github/CalCOFI/workflows/ingest_spatial.qmd — manifest
+ generation
+ - All 8 .qmd files — calcofi: frontmatter additions
+
+## 2026-04-01 + ingest_swfsc_inverts.qmd
+
+Ingest the following ERDDAP datasets in a single new workflow `ingest_swfsc_inverts.qmd`:
+
+- [ERDDAP - CalCOFI NOAA Invertebrates - Data Access Form](https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFIinvcnt.html)
+- [ERDDAP - CalCOFI NOAA Invertebrate Sizes - Data Access Form](https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFIinvsiz.html)
+
+Read all the ERDDAP data and write to CSV files in Google Drive here:
+
+  `~/My Drive/projects/calcofi/data-public/swfsc/inverts`
+
+Add this dataset as dependent on `swfsc_ichthyo`.
+
+When I use the command `/skills`, why are no skills found in `.claude/skills/` since they clearly are there?
+
+ ```
+  ❯ /skills  
+  Skills                                                                     
+  No skills found  
+
+  Create skills in .claude/skills/ or ~/.claude/skills/
+                                                                   
+  Esc to close
+  ```  
+
+  ```
+  ! ls .claude/skills/ 
+  ⎿  explore-dataset.md
+     generate-metadata.md
+     ingest-new.md 
+     publish-template.md
+     templates
+     validate-ingest.md
+  ```
+
+⏺ For the /skills question: your skills files are in the right place and have  
+  correct frontmatter (user_invocable: true). This is likely a Claude Code     
+  version issue — the /skills UI dialog sometimes doesn't discover             
+  project-level skills. You can still invoke them directly by name (e.g.,
+  /ingest-new). I'd suggest reporting at
+  https://github.com/anthropics/claude-code/issues if the direct invocation
+  also fails.
+                                                                               
+  Now let me explore the ERDDAP datasets and existing patterns for the ingest  
+  plan.                                                                        
+                                                                               
+⏺ 2 Explore agents finished (ctrl+o to expand)          
+   ├─ Explore ERDDAP invertebrate datasets · 10 tool uses · 17.1k tokens       
+   │  ⎿  Done                                                                  
+   └─ Explore existing ingest patterns · 28 tool uses · 37.9k tokens
+      ⎿  Done                                                                  
+                                                                               
+  Read 2 files (ctrl+o to expand)                                              
+                                                                               
+⏺ Now I have all the context I need. Let me write the plan.                    
+                                                                               
+⏺ Updated plan                                                                 
+  ⎿  /plan to preview                                                          
+
+ Ready to code?                                                                
+                                                                               
+ Here is Claude's plan:                                                        
+
+ Ingest SWFSC Invertebrates (ingest_swfsc_inverts.qmd)                         
+
+ Context
+
+ Two ERDDAP datasets contain invertebrate (primarily squid) data from CalCOFI
+ ichthyoplankton nets collected by SWFSC:
+
+ - erdCalCOFIinvcnt — Invertebrate counts (22 columns, ~1978–2023)
+ - erdCalCOFIinvsiz — Invertebrate sizes (23 columns, ~1980–2023)
+
+ These need to be downloaded from ERDDAP, saved as CSVs in Google Drive, then
+ ingested through the standard pipeline (DuckDB → parquet → GCS). The ingest
+ depends on swfsc_ichthyo for reference tables (ship, cruise, grid).
+
+ Files to Create/Modify
+
+ ┌──────────────────────────────────────────────────┬─────────────────────┐
+ │                       File                       │       Action        │
+ ├──────────────────────────────────────────────────┼─────────────────────┤
+ │ workflows/ingest_swfsc_inverts.qmd               │ New: main ingest    │
+ │                                                  │ workbook            │
+ ├──────────────────────────────────────────────────┼─────────────────────┤
+ │ workflows/metadata/swfsc/inverts/tbls_redefine.c │ New: table          │
+ │ sv                                               │ redefinitions       │
+ ├──────────────────────────────────────────────────┼─────────────────────┤
+ │ workflows/metadata/swfsc/inverts/flds_redefine.c │ New: field          │
+ │ sv                                               │ redefinitions       │
+ ├──────────────────────────────────────────────────┼─────────────────────┤
+ │ workflows/metadata/dataset.csv                   │ Edit: add row for   │
+ │                                                  │ swfsc/inverts       │
+ ├──────────────────────────────────────────────────┼─────────────────────┤
+ │ workflows/_targets.R                             │ Edit: add ingest_sw │
+ │                                                  │ fsc_inverts target  │
+ └──────────────────────────────────────────────────┴─────────────────────┘
+
+ Step 1: Create ingest_swfsc_inverts.qmd
+
+ Structure
+
+ Follow the ingest_swfsc_ichthyo.qmd pattern with these sections:
+
+ 1. Setup — Libraries including rerddap for ERDDAP access, standard path
+ definitions:
+ - provider = "swfsc", dataset = "inverts"
+ - dir_csv = "~/My Drive/projects/calcofi/data-public/swfsc/inverts"
+ - dir_parquet = here("data/parquet/swfsc_inverts")
+ - db_path = here("data/wrangling/swfsc_inverts.duckdb")
+
+ 2. Download from ERDDAP — Fetch both datasets and write to CSV in Google
+ Drive:
+
+ ```r
+ librarian::shelf(rerddap, quiet = T)
+
+ erddap_url <- "https://coastwatch.pfeg.noaa.gov/erddap"
+ dir_create(dir_csv)
+
+ # invertebrate counts
+ csv_cnt <- path(dir_csv, "erdCalCOFIinvcnt.csv")
+ if (!file_exists(csv_cnt)) {
+   info_cnt <- rerddap::info("erdCalCOFIinvcnt", url = erddap_url)
+   d_cnt    <- rerddap::tabledap(info_cnt)
+   write_csv(d_cnt, csv_cnt)
+ }
+
+ # invertebrate sizes
+ csv_siz <- path(dir_csv, "erdCalCOFIinvsiz.csv")
+ if (!file_exists(csv_siz)) {
+   info_siz <- rerddap::info("erdCalCOFIinvsiz", url = erddap_url)
+   d_siz    <- rerddap::tabledap(info_siz)
+   write_csv(d_siz, csv_siz)
+ }
+ ```
+
+ 3. Read CSVs — Use read_csv_files() from calcofi4db (reads from Google Drive
+ dir, syncs to GCS archive)
+
+ 4. Ingest to DuckDB — ingest_dataset() loads tables with field redefinitions
+
+ 5. Load prior tables — load_prior_tables() from ichthyo for ship, cruise,
+ site, tow, net references
+
+ 6. Cross-reference — Match invertebrate records to existing tow/net records
+ via cruise + ship + tow_number + net_location. Add foreign keys.
+
+ 7. Standardize taxonomy — Map ITIS TSN and CalCOFI species codes to WoRMS via
+  standardize_species_local()
+
+ 8. Schema documentation — Define PK/FK with dm, draw diagram
+
+ 9. Validate — validate_for_release()
+
+ 10. Write parquet + metadata — write_parquet_outputs(),
+ build_metadata_json(), build_relationships_json()
+
+ 11. Upload to GCS — sync_to_gcs()
+
+ Key Column Mappings (flds_redefine.csv)
+
+ From the ERDDAP metadata:
+
+ ┌──────────────────────┬──────────────────────┬───────────┬───────────────┐
+ │    ERDDAP column     │       New name       │   Type    │     Notes     │
+ ├──────────────────────┼──────────────────────┼───────────┼───────────────┤
+ │ cruise               │ cruise               │ character │ CalCOFI       │
+ │                      │                      │           │ cruise ID     │
+ ├──────────────────────┼──────────────────────┼───────────┼───────────────┤
+ │                      │                      │           │ rename for    │
+ │ ship                 │ ship_name            │ character │ consistency   │
+ │                      │                      │           │ with ichthyo  │
+ ├──────────────────────┼──────────────────────┼───────────┼───────────────┤
+ │ ship_code            │ ship_code            │ character │ NODC ship     │
+ │                      │                      │           │ code          │
+ ├──────────────────────┼──────────────────────┼───────────┼───────────────┤
+ │ order_occupied       │ order_occupied       │ integer   │ station visit │
+ │                      │                      │           │  order        │
+ ├──────────────────────┼──────────────────────┼───────────┼───────────────┤
+ │ tow_type             │ tow_type             │ character │ net tow type  │
+ ├──────────────────────┼──────────────────────┼───────────┼───────────────┤
+ │ tow_number           │ tow_number           │ integer   │ sequential    │
+ │                      │                      │           │ tow number    │
+ ├──────────────────────┼──────────────────────┼───────────┼───────────────┤
+ │ net_location         │ net_location         │ character │ position in   │
+ │                      │                      │           │ net array     │
+ ├──────────────────────┼──────────────────────┼───────────┼───────────────┤
+ │ time                 │ time_start           │ datetime  │ rename for    │
+ │                      │                      │           │ consistency   │
+ ├──────────────────────┼──────────────────────┼───────────┼───────────────┤
+ │ latitude             │ latitude             │ double    │               │
+ ├──────────────────────┼──────────────────────┼───────────┼───────────────┤
+ │ longitude            │ longitude            │ double    │               │
+ ├──────────────────────┼──────────────────────┼───────────┼───────────────┤
+ │ line                 │ line                 │ double    │ CalCOFI line  │
+ │                      │                      │           │ number        │
+ ├──────────────────────┼──────────────────────┼───────────┼───────────────┤
+ │                      │                      │           │ CalCOFI       │
+ │ station              │ station              │ double    │ station       │
+ │                      │                      │           │ number        │
+ ├──────────────────────┼──────────────────────┼───────────┼───────────────┤
+ │ standard_haul_factor │ standard_haul_factor │ double    │               │
+ ├──────────────────────┼──────────────────────┼───────────┼───────────────┤
+ │ volume_sampled       │ volume_sampled       │ double    │ m³            │
+ ├──────────────────────┼──────────────────────┼───────────┼───────────────┤
+ │ proportion_sorted    │ proportion_sorted    │ double    │               │
+ ├──────────────────────┼──────────────────────┼───────────┼───────────────┤
+ │ scientific_name      │ scientific_name      │ character │               │
+ ├──────────────────────┼──────────────────────┼───────────┼───────────────┤
+ │ common_name          │ common_name          │ character │               │
+ ├──────────────────────┼──────────────────────┼───────────┼───────────────┤
+ │                      │                      │           │ ITIS          │
+ │ itis_tsn             │ itis_tsn             │ integer   │ taxonomic     │
+ │                      │                      │           │ serial number │
+ ├──────────────────────┼──────────────────────┼───────────┼───────────────┤
+ │ calcofi_species_code │ calcofi_species_code │ integer   │               │
+ ├──────────────────────┼──────────────────────┼───────────┼───────────────┤
+ │                      │                      │           │ raw count     │
+ │ invert_count         │ invert_count         │ integer   │ (cnt table    │
+ │                      │                      │           │ only)         │
+ ├──────────────────────┼──────────────────────┼───────────┼───────────────┤
+ │                      │                      │           │ standardized  │
+ │ inverts_10m2         │ inverts_10m2         │ double    │ per 10m² (cnt │
+ │                      │                      │           │  only)        │
+ ├──────────────────────┼──────────────────────┼───────────┼───────────────┤
+ │                      │                      │           │ standardized  │
+ │ inverts_100m3        │ inverts_100m3        │ double    │ per 100m³     │
+ │                      │                      │           │ (cnt only)    │
+ ├──────────────────────┼──────────────────────┼───────────┼───────────────┤
+ │ invert_size          │ invert_size          │ double    │ mm (siz table │
+ │                      │                      │           │  only)        │
+ └──────────────────────┴──────────────────────┴───────────┴───────────────┘
+
+ Step 2: Create metadata files
+
+ metadata/swfsc/inverts/tbls_redefine.csv — Two tables:
+ - erdCalCOFIinvcnt → invert_count (or keep as-is)
+ - erdCalCOFIinvsiz → invert_size (or keep as-is)
+
+ metadata/swfsc/inverts/flds_redefine.csv — Column renames and type
+ specifications per table above.
+
+ Step 3: Add row to metadata/dataset.csv
+
+ swfsc,inverts,SWFSC Invertebrates,"Invertebrate (primarily squid) counts and
+ sizes captured in CalCOFI ichthyoplankton nets",...,https://calcofi.org/data/
+ biology/invertebrates/,"https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdC
+ alCOFIinvcnt.html;https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFI
+ invsiz.html",...,invert_count;invert_size,1978 to 2023,"30-51°N, -180 to
+ -78°W",,
+
+ Step 4: Update _targets.R
+
+ Add ingest_swfsc_inverts target that depends on ingest_swfsc_ichthyo:
+ ```r
+ tar_target(
+   ingest_swfsc_inverts,
+   {
+     ingest_swfsc_ichthyo  # needs ship, cruise, tow, net from ichthyo
+     quarto::quarto_render("ingest_swfsc_inverts.qmd")
+     "data/parquet/swfsc_inverts/manifest.json"
+   },
+   format = "file"
+ ),
+ ```
+
+ Add as dependency of release_database.
+
+ Verification
+
+ 1. Run ingest_swfsc_inverts.qmd — CSVs download from ERDDAP to Google Drive
+ 2. Parquet files created in data/parquet/swfsc_inverts/
+ 3. Schema diagram shows correct PK/FK relationships
+ 4. validate_for_release() passes
+ 5. targets::tar_make() runs the new target in correct order
+
+⏺ All files created/updated:                            
+                                                     
+  New files:                                   
+  - workflows/ingest_swfsc_inverts.qmd — Full ingest workbook: downloads from
+  ERDDAP → CSV in Google Drive → DuckDB → parquet → GCS                        
+  - workflows/metadata/swfsc/inverts/tbls_redefine.csv — Maps erdCalCOFIinvcnt 
+  → invert_count, erdCalCOFIinvsiz → invert_size                               
+  - workflows/metadata/swfsc/inverts/flds_redefine.csv — Column mappings for   
+  both tables (renames ship → ship_name, time → time_start, types,             
+  descriptions, units)                                                         
+                                                                               
+  Modified files:                                                              
+  - workflows/metadata/dataset.csv — Added swfsc,inverts row with ERDDAP source
+   links                                                                       
+  - workflows/_targets.R — Added ingest_swfsc_inverts target depending on
+  ingest_swfsc_ichthyo, added as dependency of release_database                
+                                                                               
+  Regarding /skills: The skill files exist at .claude/skills/ with correct
+  user_invocable: true frontmatter. Try invoking directly (e.g., /ingest-new) —
+   the /skills listing dialog may have a display bug. If direct invocation also
+   fails, report at https://github.com/anthropics/claude-code/issues.
+
+## 2026-03-31 int-app hover JS issues
+
+Despite fixing input pmtiles to retain column "id", I am getting the error   
+on hover without opacity and the *_outline on_hover yellow line_width wider is 
+ not showing, eg when turning on ca_county_boundaries
+
+⏺ The error is specifically in the compare widget JS
+  (maplibregl_compare.js:3282), not the regular widget. Let me inspect the
+  compare widget's hover handler to find the bug.
+
+⏺ Found the bug. Lines 3255-3264 and 3267-3276 build the featureState object
+  but never add sourceLayer — unlike the proxy path (lines 737-739) which does
+  check layer.source_layer. This is the bug in the compare widget's initial
+  render path.
+
+⏺ Good — layer.source_layer IS available (used at line 3164). The initial
+  render hover code at lines 3255-3291 simply forgot to include it in the
+  setFeatureState calls. This is a bug in mapgl. Let me patch it locally:
+
+⏺ Now check if the regular (non-compare) widget has the same bug:
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+⏺ The regular widget already has the fix (lines 1369-1370, 1382-1383,
+  1399-1400). Only the compare widget's initial render path was missing it.
+
+  Now let me also verify the promote_id still works correctly. Since
+  --use-attribute-for-id=id drops the id property from tiles, we should NOT use
+   it. Instead, promote_id = "id" on the MapLibre source will look at the id
+  property in the tile features and promote it to the feature ID at runtime.
+  This requires id to stay as a regular property in the tiles (which it does
+  without the tippecanoe flag).
+
+  Let me verify the current state of add_spatial_layers() has promote_id =
+  "id":
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+⏺ Good. The fix is:
+
+  1. Root cause: The maplibregl_compare.js initial render hover handler was
+  missing sourceLayer in the setFeatureState call — a bug in the compare widget
+   that was already fixed in the regular widget.
+  2. The patch: Added the same if (layer.source_layer) {
+  featureState.sourceLayer = layer.source_layer; } check to all three
+  setFeatureState calls in the compare widget's initial render path.
+  3. --use-attribute-for-id=id stays commented out — correctly, because it
+  removes id from properties. Instead, promote_id = "id" on the source promotes
+   the id property to feature ID at runtime.
+
+  This is a mapgl package bug. You may want to report it at
+  https://github.com/walkerke/mapgl/issues. The fix is a one-line addition in
+  three places in maplibregl_compare.js. Restart your R session so Shiny picks
+  up the patched JS file.
+
+Ok, that seems to get the hover working, but getting some new JS errors --   
+should those be fixed too?
+
+⏺ Two distinct errors:
+
+  1. layers.forEach is not a function — This happens in
+  maplibregl_compare.js:2149 when the layers control receives data that isn't
+  an array. This is from our clear_controls + add_layers_control proxy call in
+  server.R after modal Apply. The build_layers_control() returns a named list,
+  but the proxy path may expect a different format.
+  2. Server returned no content-length header... storage backend supports HTTP
+  Byte Serving — This is a GCS CORS/range-request issue for PMTiles. The CORS
+  config needs Content-Length in allowed response headers. We already added it
+  but it may not have been applied.
+
+  Let me fix the layers control error first — that's the layers.forEach crash.
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+⏺ The compare widget's proxy add_layers_control handler (line 2149) only
+  supports a flat array — it doesn't handle grouped layers. Let me check how
+  the initial render path handles groups:
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ The initial render path at line 4173 uses layers_config which is a structured
+   array with {label, ids, type} objects — that's how add_layers_control()
+  sends grouped layers on first render. But the proxy path (line 2149) doesn't
+  handle this format at all.
+
+  The simplest fix: rather than patching more JS, I should send a flat array
+  from R in the proxy call. Let me update the server.R modal Apply handler to
+  flatten the grouped list into a simple character vector:
+
+⏺ Now for the second error — "Server returned no content-length header... 
+  storage backend supports HTTP Byte Serving" — this is PMTiles failing to
+  fetch tiles from GCS because the CORS response headers don't include         
+  Content-Length. Let me check the current CORS config:
+
+⏺ The CORS file looks correct. The issue is that responseHeader controls which 
+  headers the browser is allowed to read in the response (i.e.,
+  Access-Control-Expose-Headers). But the config seems right. Let me check if  
+  it was actually applied to the bucket:
+
+⏺ CORS is applied correctly. The "Server returned no content-length header"
+  error from PMTiles is actually about the initial response not including      
+  Content-Length — GCS sometimes doesn't include it for certain requests. Let  
+  me check if the PMTiles files are accessible:
+
+⏺ GCS returns 206 Partial Content for range requests — that's correct. The
+  range request works. The "Failed to fetch" errors might be transient (initial
+   CORS preflight caching) or from a different PMTiles file that doesn't exist.
+   Let me check if all the expected files are on GCS:
+
+⏺ All 17 PMTiles files are on GCS and range requests work. The "Failed to
+  fetch" / "no content-length" errors are likely:                              
+                                                                               
+  1. Transient CORS preflight issues — The browser may have cached a pre-CORS  
+  response. A hard refresh (Cmd+Shift+R) should fix it.                        
+  2. PMTiles requesting tiles outside the extent — When the user pans to areas 
+  with no data, PMTiles will request tiles that return errors. This is normal  
+  and harmless.
+                                                                               
+  Summary of fixes applied:                                                    
+  
+  1. maplibregl_compare.js (mapgl package patch) — Added missing sourceLayer to
+   setFeatureState in the initial render hover handler. This fixed the hover JS
+   error.                                                                      
+  2. server.R — Changed the proxy add_layers_control call to use a flat
+  character vector of layer IDs (c(hex_ids, selected)) instead of a grouped    
+  named list, since the compare widget's proxy path only supports flat arrays.
+  This fixes the layers.forEach is not a function error.                       
+  3. GCS CORS / "Failed to fetch" — The CORS config is correctly applied. These
+   errors are likely transient (cached pre-CORS responses) or from             
+  out-of-extent tile requests. Try a hard refresh.
+
+The spatial layers control selector is not getting properly updated with
+  the latest layers added and even when layer is clicked only applies          
+  visibility on or off to the right side of the compare map (not the left)
+
+⏺ Now restart R to pick up the JS changes. Here's what was fixed:
+
+  maplibregl_compare.js (2 patches):                                           
+  1. Grouped layers control onclick (line ~4195) — Now toggles both beforeMap
+  and afterMap instead of just the single map in scope. Same fix applied to the
+   flat-array fallback path.                                                   
+  2. Previous hover fix is also in place.                                      
+                                                                  
+  server.R — Removed the broken proxy-based clear_controls + add_layers_control
+   rebuild. The proxy path in the compare widget only supports flat arrays and 
+  creates a new control that only knows one map. The initial render control    
+  (which now toggles both sides) is the correct one to use.                    
+                                                                  
+  functions.R — build_layers_control() now includes ALL spatial layers (not    
+  just visible ones). The layers control uses getLayoutProperty("visibility")
+  to set each toggle's initial active/inactive state, so hidden layers appear  
+  as inactive/dimmed in the control. 
+
+Ok, better, but toggling off Hexagon Data only works on right map. The       
+others work on both, but apply the entire group of layers on, versus those     
+actively selected in Map Layers button and modal. This gets further confused   
+by showing "Maritime Zones" by default. It should only show "200NM EEZ" by     
+default, but shows all layers in that group (ie also 12NM Territorial Sea,     
+24NM Contiguous Zone, CA State Waters (3NM)). Ideally only layers and groups   
+turned on in the "Map Layers" modal show in the layers control. And toggling   
+the given group only turns off/on the layers already selected in the "Map      
+Layers" modal
+
+⏺ Updated plan                                                                 
+  ⎿  /plan to preview                                                          
+
+ Ready to code?                                                                
+                                                                               
+ Here is Claude's plan:                                                        
+
+ Fix Layers Control: Modal-Driven, Both Maps, Correct Grouping                 
+
+ Context
+
+ The spatial layers control in the CalCOFI compare map has three bugs:
+
+ 1. Hexagon Data toggle only works on right map — The "Hexagon Data" group
+ uses sp1-sp10 on the left control and env1-env10 on the right. When toggled,
+ each side only knows its own IDs. Need to include BOTH sets of IDs so
+ toggling affects both maps.
+ 2. Category groups toggle all layers, not individual ones —
+ build_layers_control groups all layers in a category (e.g., "Maritime Zones")
+  as a single toggle entry. Clicking it toggles ALL 4 maritime layers on/off
+ together. Each layer should be its own toggle entry (with fill+outline
+ paired), not lumped by category.
+ 3. Layers control shows all layers, not just modal-selected ones — The
+ control should only show layers enabled in the "Map Layers" modal. After
+ modal Apply, the control needs to be rebuilt with only the selected layers.
+ Currently the proxy add_layers_control in the compare JS only supports flat
+ arrays (no grouped layers_config), so it was removed. Need to fix the proxy
+ path.
+
+ Plan
+
+ Step 1: Fix build_layers_control() in functions.R
+
+ Change from grouping by category to individual entries per layer (pairing
+ fill+outline for polygons):
+
+ ```r
+ build_layers_control <- function(visible_ids, d_layers, hex_layer_ids) {
+   visible <- d_layers |> filter(dataset_id %in% visible_ids)
+
+   # each layer is its own toggle entry; polygons pair fill + outline
+   layer_entries <- lapply(seq_len(nrow(visible)), function(i) {
+     row <- visible[i, ]
+     ids <- row$dataset_id
+     if (row$geom_type == "polygon")
+       ids <- c(ids, paste0(ids, "_outline"))
+     setNames(list(ids), row$name)
+   })
+
+   # combine hex data (BOTH sp + env) + individual layer entries
+   c(list("Hexagon Data" = hex_layer_ids), unlist(layer_entries, recursive =
+ FALSE))
+ }
+ ```
+
+ Called with BOTH hex ID sets:
+ hex_ids <- c(paste0("sp", res_range), paste0("env", res_range))
+
+ File: /Users/bbest/Github/CalCOFI/int-app/app/functions.R
+
+ Step 2: Pass visible_ids back into build_layers_control
+
+ Restore visible_ids parameter so only modal-selected layers appear:
+ - Initial render: uses default_visible layers
+ - After modal Apply: uses rx$spatial_visible
+
+ In map_sp() and map_env():
+ ```r
+ vis_ids <- d_spatial_layers |> filter(default_visible) |> pull(dataset_id)
+ hex_ids <- c(paste0("sp", res_range), paste0("env", res_range))
+ ctrl    <- build_layers_control(vis_ids, d_spatial_layers, hex_ids)
+ ```
+
+ File: /Users/bbest/Github/CalCOFI/int-app/app/functions.R
+
+ Step 3: Fix proxy add_layers_control in compare JS to support layers_config
+
+ The proxy handler at line ~2072 in maplibregl_compare.js only supports flat
+ arrays. Copy the layers_config branch from the initial render path (lines
+ 4173-4223) into the proxy handler, and ensure the onclick toggles both
+ beforeMap and afterMap.
+
+ Key changes in the proxy add_layers_control handler:
+ 1. Check for message.layers_config first (grouped format)
+ 2. If present, create grouped entries with data-layer-ids attributes
+ 3. Onclick toggles both [beforeMap, afterMap]
+ 4. Fall back to flat array behavior if no layers_config
+
+ File: /Library/Frameworks/R.framework/Versions/4.5-arm64/Resources/library/ma
+ pgl/htmlwidgets/maplibregl_compare.js (lines ~2072-2195)
+
+ Step 4: Restore proxy clear_controls + add_layers_control in server.R
+
+ After modal Apply, rebuild the layers control on both sides:
+
+ ```r
+ # after toggling visibility...
+ hex_ids <- c(paste0("sp", res_range), paste0("env", res_range))
+ ctrl    <- build_layers_control(selected, d_spatial_layers, hex_ids)
+
+ for (side in c("before", "after")) {
+   maplibre_compare_proxy("map", map_side = side) |>
+     clear_controls(controls = "layers") |>
+     add_layers_control(
+       position    = "top-right",
+       layers      = ctrl,
+       collapsible = TRUE)
+ }
+ ```
+
+ File: /Users/bbest/Github/CalCOFI/int-app/app/server.R
+
+ Files Modified
+
+ ┌─────────────────────────┬───────────────────────────────────────────────┐
+ │          File           │                    Change                     │
+ ├─────────────────────────┼───────────────────────────────────────────────┤
+ │                         │ Fix build_layers_control() — individual layer │
+ │ int-app/app/functions.R │  entries, both hex ID sets, filter by         │
+ │                         │ visible_ids                                   │
+ ├─────────────────────────┼───────────────────────────────────────────────┤
+ │ int-app/app/server.R    │ Restore proxy layers control rebuild after    │
+ │                         │ modal Apply                                   │
+ ├─────────────────────────┼───────────────────────────────────────────────┤
+ │ maplibregl_compare.js   │ Fix proxy add_layers_control to support       │
+ │                         │ layers_config format + toggle both maps       │
+ └─────────────────────────┴───────────────────────────────────────────────┘
+
+ Verification
+
+ 1. On initial load: layers control shows "Hexagon Data" + "200NM EEZ" only
+ 2. Toggle "Hexagon Data": hexagons disappear on BOTH sides
+ 3. Toggle "200NM EEZ": EEZ lines disappear on BOTH sides
+ 4. Open modal → enable "CA Counties" + "Marine Protected Areas" → Apply
+ 5. Layers control now shows "Hexagon Data" + "200NM EEZ" + "CA Counties" +
+ "Marine Protected Areas"
+ 6. Toggle "CA Counties": county fill+outline toggle on BOTH sides
+ 7. Open modal → disable "200NM EEZ" → Apply
+ 8. Layers control updates: "200NM EEZ" gone, remaining layers still shown
+
+⏺ Good — only "200NM EEZ" is default visible. The initial layers control will
+  show "Hexagon Data" + "200NM EEZ" only.                                      
+                                                                               
+  Restart R to pick up the JS changes. Here's what was fixed:                  
+                                                                               
+  functions.R — build_layers_control() now:                                    
+  - Takes visible_ids parameter — only selected layers appear in control
+  - Creates individual toggle entries per layer (not grouped by category)      
+  - Polygons pair fill + outline as one toggle (c("ca_counties",         
+  "ca_counties_outline"))                                                      
+  - Hex IDs include BOTH sp1-sp10 AND env1-env10 so toggling works on both maps
+                                                                               
+  maplibregl_compare.js — Proxy add_layers_control handler now:                
+  - Supports layers_config format (grouped layers with labels)                 
+  - Determines initial active/inactive by checking visibility on whichever map 
+  has the layer                                                                
+  - Onclick toggles both beforeMap and afterMap via try/catch                  
+  - Includes use_icon support for the stacked layers icon         
+                                                                               
+  server.R — After modal Apply, rebuilds the layers control on both sides with 
+  clear_controls("layers") + add_layers_control(ctrl) using only the           
+  modal-selected layers.
+
+Ok, working much better! The map layers control is updating and 
+"Hexagon Data" toggling for both. [Image #10] But all the Maritime Zones appear regardless of which individual one selected in Map Layers amongst 3 with the same data same source (but additional filter): 12NM Territorial Sea, 24NM Contiguous Zone, 200NM EEZ. Also, please nudge the layer selector a bit to the left of current position since gets overplotted by zoom +/- control.
+
+⏺ Found it! The layerConfig at line 3185 doesn't include filter. The
+  layer.filter property from R is never added to the MapLibre layer config.
+  This is another compare widget bug — the regular widget likely handles it,
+  but the compare widget's initial render path doesn't.
+
+⏺ Restart R to pick up the JS change. Three fixes:
+
+  1. Maritime Zones all showing — Root cause found: The compare widget's       
+  initial layer creation was missing filter support. Line 3185 in
+  maplibregl_compare.js builds layerConfig but never adds layer.filter, unlike 
+  the regular widget (line 1267). Added if (layer.filter) {       
+  layerConfig["filter"] = layer.filter; }. Now the TS layer only shows features
+   where ts=1, CZ where cz=1, EEZ where eez=1.
+  2. Layers control overlapping zoom buttons — Added margin_right = 45 to all
+  add_layers_control() calls (both initial render in functions.R and proxy     
+  rebuild in server.R).
+  3. This is the third missing feature from the compare widget we've patched:  
+  first sourceLayer in hover setFeatureState, then layers_config support in    
+  proxy add_layers_control, now filter in initial layer creation. Worth
+  reporting all three to the mapgl maintainer.                                 
+
+Excellent, works well! Now update the layout of the Map Layers modal to two
+  columns, so don't have to scroll down so much to see others
+
+⏺ The modal now splits the layer groups into two columns using
+  fluidRow(column(6, ...), column(6, ...)). The first half of the groups goes
+  in the left column, the rest in the right.
+
+You made several excellent fixes to the `mapgl` library, particularly for getting the `compare()` functionality levelled up to existing single map functionality (ie, `mapboxgl()` or `maplibre()`). Help me create a Github issue describing all the issues with one or more expositional examples, which we can render and include snapshots of, describing the problems. Then let's make a pull request from the up-to-date fork at ~/Github/bbest/mapgl (https://github.com/bbest/mapgl from master https://github.com/walkerke/mapgl/).
+
 
 
 ## 2026-03-27..-30 int-app speed up with cache query (h3t roadmap)
@@ -1109,7 +2330,7 @@ update_time: 2026-02-02T18:16:10+0000
    
   gcloud storage buckets describe gs://calcofi-files-public --format="json(cors_config)"  
 
-### 2026-03-30.b
+### 2026-03-30.b tooltip and layers control
 
 Please update `int-app` so:
 

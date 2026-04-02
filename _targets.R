@@ -1,7 +1,9 @@
 # calcofi data workflow pipeline
-# start fresh: targets::tar_invalidate(everything())
-# run with: targets::tar_make() [Rscript -e 'targets::tar_make()']
-# visualize: targets::tar_visnetwork()
+# targets::tar_invalidate(everything()) # start fresh
+# targets::tar_make()                   # run make; Rscript -e 'targets::tar_make()'
+# targets::tar_visnetwork()             # visualize the dependency graph
+# targets::tar_outdated()               # see which targets would run
+# targets::tar_manifest()               # inspect all targets as a data frame
 
 library(targets)
 
@@ -46,6 +48,16 @@ list(
   ),
 
   tar_target(
+    ingest_swfsc_inverts,
+    {
+      ingest_swfsc_ichthyo # needs ship, cruise, tow, net from ichthyo
+      quarto::quarto_render("ingest_swfsc_inverts.qmd")
+      "data/parquet/swfsc_inverts/manifest.json"
+    },
+    format = "file"
+  ),
+
+  tar_target(
     ingest_spatial,
     {
       quarto::quarto_render("ingest_spatial.qmd")
@@ -58,6 +70,7 @@ list(
     release_database,
     {
       ingest_swfsc_ichthyo
+      ingest_swfsc_inverts
       ingest_calcofi_bottle
       ingest_calcofi_ctd_cast
       ingest_calcofi_dic
