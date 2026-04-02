@@ -130,7 +130,12 @@ Load all necessary tables from the merged DuckDB:
 # ichthyo chain ----
 tbl_cruise <- tbl(con, "cruise")
 tbl_ship <- tbl(con, "ship")
-tbl_site <- tbl(con, "site")
+# use SQL to exclude GEOMETRY column (unsupported by duckdb R driver)
+site_cols <- dbGetQuery(con,
+  "SELECT column_name FROM information_schema.columns
+   WHERE table_name = 'site' AND data_type NOT LIKE 'GEOMETRY%'")$column_name
+tbl_site <- tbl(con, sql(
+  glue("SELECT {paste(site_cols, collapse = ', ')} FROM site")))
 tbl_tow <- tbl(con, "tow")
 tbl_net <- tbl(con, "net")
 tbl_ichthyo <- tbl(con, "ichthyo")
@@ -141,21 +146,13 @@ tbl_lookup <- tbl(con, "lookup")
 tbl_taxon <- tbl(con, "taxon")
 tbl_taxa_rank <- tbl(con, "taxa_rank")
 
-# quick counts
+# quick counts (use SQL to avoid GEOMETRY column issues)
 cat("Table row counts:\n")
 for (tname in c(
-  "cruise",
-  "ship",
-  "site",
-  "tow",
-  "net",
-  "ichthyo",
-  "species",
-  "lookup",
-  "taxon",
-  "taxa_rank"
+  "cruise", "ship", "site", "tow", "net",
+  "ichthyo", "species", "lookup", "taxon", "taxa_rank"
 )) {
-  n <- tbl(con, tname) |> summarize(n = n()) |> pull(n)
+  n <- dbGetQuery(con, glue("SELECT COUNT(*) AS n FROM {tname}"))$n
   cat(glue("  {tname}: {prettyNum(n, big.mark = ',')}"), "\n")
 }
 ```

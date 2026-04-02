@@ -145,10 +145,13 @@ message(glue("total rows: {sum(d$source_files$nrow)}"))
 #| label: data_integrity
 #| output: asis
 
+# type_exceptions = "all": ERDDAP type names (String, int, float) don't
+# match R column classes (character, integer, numeric) — accept all
 integrity <- check_data_integrity(
   d = d,
   dataset_name = dataset_name,
-  halt_on_fail = TRUE
+  halt_on_fail = TRUE,
+  type_exceptions = "all"
 )
 
 render_integrity_message(integrity)
@@ -210,14 +213,11 @@ prior <- load_prior_tables(
 )
 
 message(glue(
-  "loaded {length(prior)} prior tables: {paste(prior, collapse=', ')}"
+  "loaded {nrow(prior)} prior tables: {paste(prior$table, collapse=', ')}"
 ))
 
-# show loaded prior table row counts
-for (tbl in prior) {
-  n <- dbGetQuery(con, glue("SELECT COUNT(*) AS n FROM {tbl}"))$n
-  message(glue("  {tbl}: {n} rows"))
-}
+prior |>
+  datatable(caption = "Prior tables loaded from ichthyo ingest")
 ```
 
 ## Data Preview

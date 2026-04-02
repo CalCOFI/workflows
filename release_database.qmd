@@ -116,8 +116,7 @@ message(glue("Loading {length(parquet_dirs)} ingest parquet dirs"))
 load_stats <- purrr::map_dfr(parquet_dirs, function(pd) {
   load_prior_tables(
     con = con_wdl,
-    parquet_dir = pd,
-    geom_tables = all_geom_tables
+    parquet_dir = pd
   )
 })
 
@@ -141,7 +140,11 @@ all_mismatches <- purrr::compact(lapply(all_manifests, function(mf) {
   dataset <- basename(dirname(mf))
   purrr::imap_dfr(m$mismatches, function(items, category) {
     if (length(items) == 0) return(NULL)
-    purrr::map_dfr(items, as_tibble) |>
+    purrr::map_dfr(items, function(x) {
+      # replace NULL values with NA so as_tibble works
+      x[vapply(x, is.null, logical(1))] <- NA
+      as_tibble(x)
+    }) |>
       mutate(dataset = dataset, category = category, .before = 1)
   })
 }))
@@ -347,12 +350,15 @@ tryCatch(
 
 ```{r}
 
-erd <- cc_erd(con_wdl, layoutdir = "TB")
+# dir_frozen used later; define early so ERD can reference it
+dir_frozen <- here(glue("data/releases/{release_version}"))
+dir.create(dir_frozen, recursive = TRUE, showWarnings = FALSE)
+
+erd <- cc_erd(con_wdl, layout = "elk")
 plot(erd)
 
 erd <- cc_erd(
   con_wdl,
-  rels_path = file.path(dir_frozen, "relationships.json"),
   colors = list(
     lightblue = c("cruise", "ship", "site", "tow", "net"),
     lightyellow = c("ichthyo", "species", "lookup", "taxon", "taxa_rank"),
@@ -369,9 +375,6 @@ erd <- cc_erd(
     white = c("dataset")
   )
 )
-# lns <- cat(erd) |> separate("\n")
-
-# erd <- readLines("diagrams/erd.mmd") |> paste(collapse = "\n")
 plot(erd)
 
 ```
@@ -447,9 +450,8 @@ pattern.
 ```{r}
 #| label: eval_off_rest
 
-knitr::opts_chunk$set(
-  eval = FALSE
-)
+# freeze + upload enabled so GCS release includes all tables (incl. geometry)
+# knitr::opts_chunk$set(eval = FALSE)
 ```
 
 
