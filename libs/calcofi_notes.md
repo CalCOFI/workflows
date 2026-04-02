@@ -69,6 +69,121 @@ For any `*.qmd` files with `calcofi` yaml frontmatter, remove all instances of u
   - Updated template to use `cc_erd()` + list-based `rels` pattern for new ingest
   notebooks
 
+There is an annoying persistence of dropping tables with geometry that is vestigial from using the `dm::dm_draw()` command, which was unable to parse tables with a geometry data type column. We have since replaced `dm::dm_draw()` with `calcofi4r::cc_erd()`, but as you said "`publish_ichthyo_to_obis` errors because `site` table (geometry) is missing from the GCS frozen release." Look for any instance of excepting "geom" tables from inclusion throughout the workflows (`*.qmd`) with `calcofi` in the yaml frontmatter, fix them and invalidate for `targets::tar_make()`.
+
+⏺ Now I see the full picture. The combined_schema chunk was already cleaned up
+  to use cc_erd() instead of dm_from_con() + dm_draw(). The schema_tbls no
+  longer excludes geometry tables (the old geom_tbls_schema exclusion was
+  already removed). But schema_tbls is still the basis for tables_to_freeze.
+
+  Let me check what the old geom_tbls_schema code looked like — was it already
+  removed?
+
+⏺ Good — the old geom_tbls_schema code was already removed from
+  release_database.qmd. The geometry tables should already be in schema_tbls.
+  Let me verify what tables are actually loaded
+
+⏺ The tables all load fine — site, grid, segment are there. The error was just
+  my test script's quoting. The key finding: all geometry tables load
+  correctly. The load_prior_tables() already handles geometry tables via
+  WKB→GEOMETRY conversion.
+
+  Now let me find the actual places where geometry tables get excluded from
+  output/inclusion
+
+⏺ Those are all column-level exclusions (R driver compat) or geom_tables params
+   for WKB conversion — all legitimate. Now let me find the table-level
+  exclusions that drop entire tables
+
+
+tail -50 /private/tmp/claude-501/-Users-bbest-Github-CalCOFI-workflows/4cc25fe6-7c8f-45a1-b066-c3959a88b278/tasks/bcd6sfpc7.output
+
+
+Does it make sense that all these files should be re-syncing even though I
+  don't think they should be changed in content? eg                            
+  calcofi_ctd-cast/ctd_measurement. Are date stamps generated in the parquet
+  files that make them different every run or what can be done to ensure only
+  syncing when actual content changes?
+
+⏺ The sync messages aren't showing because sync_to_gcs messages go to R's      
+  message stream which may be suppressed in Quarto. What we're seeing in the
+  output is gcloud storage cp calls from put_gcs_file(). Let me check — the CTD
+   re-upload is expected since partition paths changed. But it shouldn't
+  re-upload every run going forward.                                           
+                                                                     
+  To answer your question directly:                                            
+   
+  For CTD-cast specifically: The re-upload is expected this one time because   
+  partition directory names changed from cruise_key=0302JD to        
+  cruise_key=2003-02-31JD. The sync_to_gcs MD5 comparison can't match old paths
+   to new ones — they're entirely different file paths. The old YYMMKK
+  partitions on GCS are now orphaned.
+
+  For future runs: The write_parquet_outputs() skip logic (row count +         
+  partition value check) will avoid re-writing parquet files, so local files
+  stay unchanged, and sync_to_gcs will skip them via MD5 match.                
+                                                                     
+  Parquet timestamp metadata: DuckDB's COPY TO PARQUET does embed a created_by 
+  string but NOT a creation timestamp in the parquet footer. So re-writing the
+  same data produces the same binary content — MD5 will match.                 
+                                                                     
+  One cleanup to consider: The old YYMMKK partitions on GCS should be deleted  
+  since they're orphaned. The sync_to_gcs only uploads, it doesn't delete
+  remote files that no longer exist locally. Want me to add cleanup of stale   
+  GCS partitions, or is that for later?
+
+Yes, cleanup old files on GCS. I don't see any locally in                   
+  `@data/parquet/calcofi_ctd-cast/ctd_measurement`. Can you add a              
+  programmatic cleanup in case a similar change happens in future to changing  
+  a table name or partitioning strategy?
+
+⏺ All YYYY-MM-NODC locally. The old YYMMKK dirs exist only on GCS. The right   
+  fix is to add a delete_stale option to sync_to_gcs that removes GCS files not
+   present locally. Let me implement it
+
+⏺ All 9 targets complete. Here's a recap of everything done in this session:
+                                                                               
+  Changes Summary                                                              
+  
+  calcofi4db package                                                           
+                                                                  
+  - write_parquet_outputs() — supplemental param for non-DB tables in          
+  manifest.json; partition value validation forces re-write when keys change
+  - load_prior_tables() / finalize_ingest() — include_supplemental = FALSE     
+  excludes supplemental tables by default                                      
+  - sync_to_gcs() — delete_stale = TRUE removes orphaned GCS files after
+  partition/table renames                                                      
+                                                                  
+  ingest_calcofi_ctd-cast.qmd                                                  
+                                                                  
+  - ctd_wide wide-format table (6.8M rows, ~1 GB) for ERDDAP, marked           
+  supplemental
+  - Partition keys: YYMMKK → YYYY-MM-NODC                                      
+  - Checkpoint + parquet-complete detection for fast re-runs (0s per chunk on  
+  retry)                                                                       
+  - delete_stale = TRUE on GCS sync                                            
+                                                                               
+  ingest_swfsc_inverts.qmd                                        
+                                                                               
+  - Added 3 missing flds_redefine columns for erdCalCOFIinvsiz                 
+  - type_exceptions = "all" for ERDDAP type names
+  - Fixed load_prior_tables() return value usage                               
+                                                                  
+  release_database.qmd                                                         
+                                                                  
+  - Enabled freeze+upload (was eval=FALSE)                                     
+  - Removed vestigial all_geom_tables; fixed cc_erd() params
+  - Fixed NULL values in manifest mismatch scanning                            
+  - Geometry tables (site, grid, segment) now included in frozen GCS releases  
+                                                                               
+  publish_ichthyo_to_obis.qmd                                                  
+                                                                               
+  - tbl_site uses SQL to exclude GEOMETRY column (R driver limitation)         
+  - Row count loop uses dbGetQuery to avoid GEOMETRY errors
+                                                                               
+  GCS cleanup                                                     
+
+  - 192 stale YYMMKK partition files deleted from ctd_measurement + ctd_summary
 
 ## 2026-04-02 revise release_database.qmd, + calcofi dependency in yaml, autogen _targets.yml
 
@@ -818,6 +933,111 @@ re-run only because GCS upload got interrupted?
 ⏺ Good, all killed. Now let me implement the proper early-exit check. The idea:
    right after setup, detect if parquet output is already complete and skip all
    computation
+
+```bash
+tail -20 /private/tmp/claude-501/-Users-bbest-Github-CalCOFI-workflows/4cc25fe6-7c8f-45a1-b066-c3959a88b278/tasks/b7yx6toc3.output
+```
+
+tail -50 /private/tmp/claude-501/-Users-bbest-Github-CalCOFI-workflows/4cc25fe6-7c8f-45a1-b066-c3959a88b278/tasks/bfjl7ydf9.output
+
+❯ Did  you see: Output created: _output/ingest_swfsc_inverts.html            
+                                                                               
+✖ ingest_swfsc_inverts errored                                                 
+✖ errored pipeline [1h 27m 13s, 2 completed, 3 skipped]                        
+Error:                                                                         
+! Error in tar_make():                                                         
+  Error resolving output location: missing files:                              
+data/parquet/swfsc_inverts/manifest.json                                       
+                                                                               
+⏺ So the CTD-cast target completed (2 completed includes it), but            
+  ingest_swfsc_inverts rendered successfully yet didn't produce              
+  data/parquet/swfsc_inverts/manifest.json. Let me investigate:              
+                                                                             
+  Searched for 1 pattern, read 2 files (ctrl+o to expand)                      
+                                                                               
+⏺ The notebook rendered HTML successfully, meaning no R errors. But targets    
+  says manifest.json doesn't exist. Let me check what write_parquet_outputs  
+  actually wrote — maybe there was a silent issue where the tables list was    
+  empty:                                                               
+                                                                               
+  Read 1 file (ctrl+o to expand)                                             
+                                                                               
+⏺ I see: line 86 if (dir_exists(dir_parquet)) dir_delete(dir_parquet) — it     
+  deletes the parquet dir on each run. Then the notebook writes parquet and    
+  uploads to GCS. But the cleanup chunk closes the DuckDB and just prints      
+  messages — it doesn't do anything with parquet.                              
+                                                                               
+  The write_parquet_outputs() call (line 286) writes to dir_parquet and creates
+   manifest.json. The HTML was generated. So the code ran successfully... but  
+  maybe the parquet dir got deleted by something else, or write_parquet_outputs
+   had an issue.                                                               
+                                                                               
+  Let me check the rendered HTML for clues:                                  
+                                                                               
+  Searched for 3 patterns (ctrl+o to expand)                        
+                                                                               
+⏺ The notebook rendered without R errors, but manifest.json doesn't exist. This
+   likely means write_parquet_outputs was passed an empty table list
+  (dbListTables(con) returned nothing), so it wrote a manifest with no tables  
+  and then the function didn't create the directory. Or the issue is that
+  build_relationships_json has a different signature than expected.            
+                                                                             
+  Let me check the build_relationships_json function — the inverts notebook    
+  passes rels parameter which might not exist:                               
+                                                                               
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)                     
+                                                            
+⏺ The function signature is fine. The real question is: what happened to the
+  parquet dir? Let me look more carefully at the problem. The notebook         
+  rendered, meaning all chunks ran, but the dir doesn't exist. Most likely: the
+   cleanup step at line 86 (if (dir_exists(dir_parquet))                       
+  dir_delete(dir_parquet)) runs at setup, but there's a more subtle issue —    
+  maybe the write_parquet_outputs call wrote to a dir that then gets deleted by
+   some other process, OR the table list was empty.                            
+                                                                               
+  Actually, wait — the output in YAML says                                     
+  data/parquet/swfsc_inverts/manifest.json. The notebook ran, HTML generated,  
+  but targets couldn't find that file. Maybe the notebook actually completed 
+  but the file was written to a different path. Let me check
+
+⏺ All 8 ingest + release targets completed successfully. Here's a summary of   
+  what was done:                                                             
+                                                                               
+  Changes Made                                                                 
+                                            
+  calcofi4db package                                                           
+                                                                               
+  1. write_parquet_outputs() — added supplemental parameter to flag non-DB
+  tables in manifest.json; added partition value validation so changed         
+  cruise_key format forces re-write                                          
+  2. load_prior_tables() — added include_supplemental parameter (default FALSE)
+   that reads manifest.json and excludes supplemental tables                   
+  3. finalize_ingest() — same include_supplemental parameter for Working
+  DuckLake push                                                                
+                                                                  
+  ingest_calcofi_ctd-cast.qmd                                                  
+                                                                               
+  1. Wide-format output: ctd_wide table (6.8M rows, ~1 GB) created before the  
+  pivot, partitioned by cruise_key (YYYY-MM-NODC), marked as supplemental in   
+  manifest.json                                                                
+  2. Partition re-keying: cruise_key partitions changed from YYMMKK (e.g.      
+  0302JD) → YYYY-MM-NODC (e.g. 2003-02-31JD)                                   
+  3. Resumability: Checkpoint DuckDB after expensive read+bind+filter;
+  parquet-complete detection skips all computation on re-runs (proven: 0s per  
+  chunk on GCS-failure retry)                                     
+                                                                               
+  Other fixes                                                     
+
+  - ingest_swfsc_inverts.qmd: Added 3 missing flds_redefine columns for        
+  erdCalCOFIinvsiz; added type_exceptions = "all" for ERDDAP type names; fixed
+  load_prior_tables() return value usage                                       
+  - release_database.qmd: Removed undefined all_geom_tables; fixed cc_erd()
+  parameter name; fixed NULL values in manifest mismatch scanning              
+   
+  Pre-existing issue (not fixed)                                               
+                                                                  
+  - publish_ichthyo_to_obis errors because site table (geometry) is missing    
+  from the GCS frozen release — this predates our changes
 
 ## 2026-04-01 + ingest_swfsc_inverts.qmd
 
