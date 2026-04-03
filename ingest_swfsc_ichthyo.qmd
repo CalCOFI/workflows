@@ -584,6 +584,87 @@ message(glue(
 ))
 ```
 
+## Standardize Taxonomy
+
+Update species table with WoRMS/ITIS/GBIF identifiers using local lookups
+against `spp.duckdb` (MarineSensitivity species DB). Falls back to WoRMS API
+only for species not found locally. Then build taxonomy hierarchy via recursive
+CTEs.
+
+```{r}
+#| label: standardize_species
+
+# MarineSensitivity species DB for local taxonomy lookups
+spp_db_path <- Sys.getenv(
+  "SPP_DB_PATH",
+  unset = "/Users/bbest/_big/msens/derived/spp.duckdb"
+)
+
+sp_results <- standardize_species_local(
+  con = con,
+  spp_db_path = spp_db_path,
+  overwrite = overwrite
+)
+
+sp_results |>
+  datatable(caption = "Species standardization results")
+```
+
+```{r}
+#| label: build_taxon
+
+taxon_rows <- build_taxon_hierarchy(
+  con = con,
+  spp_db_path = spp_db_path,
+  overwrite = overwrite
+)
+
+# show taxon stats
+if (nrow(taxon_rows) > 0) {
+  taxon_rows |>
+    count(authority, taxonRank) |>
+    arrange(authority, taxonRank) |>
+    datatable(caption = "Taxon hierarchy by authority and rank")
+}
+
+# show taxa_rank lookup
+dbReadTable(con, "taxa_rank") |>
+  datatable(caption = "Taxa rank ordering")
+```
+
+### Taxonomy Statistics
+
+```{r}
+#| label: taxonomy_stats
+
+n_species <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM species")$n
+n_worms <- dbGetQuery(
+  con,
+  "SELECT COUNT(*) AS n FROM species WHERE worms_id IS NOT NULL"
+)$n
+n_itis <- dbGetQuery(
+  con,
+  "SELECT COUNT(*) AS n FROM species WHERE itis_id IS NOT NULL"
+)$n
+n_gbif <- dbGetQuery(
+  con,
+  "SELECT COUNT(*) AS n FROM species WHERE gbif_id IS NOT NULL"
+)$n
+n_taxon <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM taxon")$n
+
+tibble(
+  metric = c(
+    "total species",
+    "with worms_id",
+    "with itis_id",
+    "with gbif_id",
+    "taxon hierarchy rows"
+  ),
+  count = c(n_species, n_worms, n_itis, n_gbif, n_taxon)
+) |>
+  datatable(caption = "Taxonomy standardization summary")
+```
+
 ## Schema Documentation
 
 ```{r}
@@ -611,6 +692,8 @@ from its composite natural key.
 | `species` | `species_id` | Natural from source |
 | `ichthyo` | `ichthyo_uuid` | Deterministic UUID v5 (from net_uuid, species_id, life_stage, measurement_type, measurement_value) |
 | `lookup` | `lookup_id` | Sequential (derived table, sorted by lookup_type, lookup_num) |
+| `taxon` | `(authority, taxonID)` | Compound natural key (authority + ID within authority); ERD uses `taxonID` only |
+| `taxa_rank` | `taxonRank` | Natural key (rank name string) |
 
 ### Foreign Key Relationships
 
@@ -631,6 +714,11 @@ net.net_uuid (PK)        ←──  net.tow_uuid (FK → tow.tow_uuid)
     ↓
 ichthyo.ichthyo_uuid (PK) ←──  ichthyo.net_uuid (FK → net.net_uuid)
                                ichthyo.species_id (FK) → species.species_id
+
+taxon.(authority, taxonID) (PK)  ←──  taxon.taxonRank (FK) → taxa_rank.taxonRank
+taxa_rank.taxonRank (PK)
+                                      species.worms_id ··> taxon.taxonID (logical, WHERE authority='WoRMS')
+                                      species.itis_id  ··> taxon.taxonID (logical, WHERE authority='ITIS')
 ```
 
 ```{r}
@@ -640,21 +728,24 @@ ichthyo.ichthyo_uuid (PK) ←──  ichthyo.net_uuid (FK → net.net_uuid)
 # uses UUID PKs for source tables, sequential IDs for derived tables
 ichthyo_rels <- list(
   primary_keys = list(
-    cruise  = "cruise_key",
-    ship    = "ship_key",
-    site    = "site_uuid",
-    tow     = "tow_uuid",
-    net     = "net_uuid",
-    species = "species_id",
-    ichthyo = "ichthyo_uuid",
-    lookup  = "lookup_id"),
+    cruise    = "cruise_key",
+    ship      = "ship_key",
+    site      = "site_uuid",
+    tow       = "tow_uuid",
+    net       = "net_uuid",
+    species   = "species_id",
+    ichthyo   = "ichthyo_uuid",
+    lookup    = "lookup_id",
+    taxon     = "taxonID",
+    taxa_rank = "taxonRank"),
   foreign_keys = list(
-    list(table = "ichthyo", column = "net_uuid",   ref_table = "net",     ref_column = "net_uuid"),
-    list(table = "ichthyo", column = "species_id", ref_table = "species", ref_column = "species_id"),
-    list(table = "net",     column = "tow_uuid",   ref_table = "tow",     ref_column = "tow_uuid"),
-    list(table = "tow",     column = "site_uuid",  ref_table = "site",    ref_column = "site_uuid"),
-    list(table = "site",    column = "cruise_key",  ref_table = "cruise",  ref_column = "cruise_key"),
-    list(table = "cruise",  column = "ship_key",    ref_table = "ship",    ref_column = "ship_key")))
+    list(table = "ichthyo", column = "net_uuid",    ref_table = "net",       ref_column = "net_uuid"),
+    list(table = "ichthyo", column = "species_id",  ref_table = "species",   ref_column = "species_id"),
+    list(table = "net",     column = "tow_uuid",    ref_table = "tow",       ref_column = "tow_uuid"),
+    list(table = "tow",     column = "site_uuid",   ref_table = "site",      ref_column = "site_uuid"),
+    list(table = "site",    column = "cruise_key",   ref_table = "cruise",    ref_column = "cruise_key"),
+    list(table = "cruise",  column = "ship_key",     ref_table = "ship",      ref_column = "ship_key"),
+    list(table = "taxon",   column = "taxonRank",    ref_table = "taxa_rank", ref_column = "taxonRank")))
 
 cc_erd(con, rels = ichthyo_rels)
 ```
@@ -772,7 +863,7 @@ grid_df <- grid |>
 # write to DuckDB
 dbWriteTable(con, "grid", grid_df, overwrite = TRUE)
 
-# convert WKB back to geometry
+# convert WKB back to geometry with EPSG:4326
 dbExecute(con, "ALTER TABLE grid ADD COLUMN geom GEOMETRY")
 dbExecute(con, "UPDATE grid SET geom = ST_GeomFromHEXWKB(geom_wkb)")
 dbExecute(con, "ALTER TABLE grid DROP COLUMN geom_wkb")
@@ -1014,15 +1105,22 @@ type_changes <- enforce_column_types(
   con = con,
   d_flds_rd = d$d_flds_rd,
   type_overrides = list(
-    ichthyo.ichthyo_uuid = "UUID",
-    ichthyo.net_uuid = "UUID",
-    ichthyo.species_id = "SMALLINT",
-    ichthyo.tally = "INTEGER",
-    lookup.lookup_id = "INTEGER",
-    lookup.lookup_num = "INTEGER",
-    segment.segment_id = "INTEGER",
-    segment.site_uuid_beg = "UUID",
-    segment.site_uuid_end = "UUID"
+    ichthyo.ichthyo_uuid         = "UUID",
+    ichthyo.net_uuid             = "UUID",
+    ichthyo.species_id           = "SMALLINT",
+    ichthyo.tally                = "INTEGER",
+    lookup.lookup_id             = "INTEGER",
+    lookup.lookup_num            = "INTEGER",
+    segment.segment_id           = "INTEGER",
+    segment.site_uuid_beg        = "UUID",
+    segment.site_uuid_end        = "UUID",
+    species.worms_id             = "INTEGER",
+    species.itis_id              = "INTEGER",
+    species.gbif_id              = "INTEGER",
+    taxon.taxonID                = "INTEGER",
+    taxon.acceptedNameUsageID    = "INTEGER",
+    taxon.parentNameUsageID      = "INTEGER",
+    taxa_rank.rank_order         = "SMALLINT"
   ),
   tables = dbListTables(con),
   verbose = TRUE
@@ -1051,6 +1149,8 @@ preview_tables(
     "tow",
     "net",
     "species",
+    "taxon",
+    "taxa_rank",
     "ichthyo",
     "lookup",
     "grid",
@@ -1138,134 +1238,6 @@ listviewer::jsonedit(
   jsonlite::fromJSON(metadata_path, simplifyVector = FALSE),
   mode = "view"
 )
-```
-
-## Standardize Taxonomy
-
-Update species table with WoRMS/ITIS/GBIF identifiers using local lookups
-against `spp.duckdb` (MarineSensitivity species DB). Falls back to WoRMS API
-only for species not found locally. Then build taxonomy hierarchy via recursive
-CTEs.
-
-```{r}
-#| label: standardize_species
-
-# MarineSensitivity species DB for local taxonomy lookups
-spp_db_path <- Sys.getenv(
-  "SPP_DB_PATH",
-  unset = "/Users/bbest/_big/msens/derived/spp.duckdb"
-)
-
-sp_results <- standardize_species_local(
-  con = con,
-  spp_db_path = spp_db_path,
-  overwrite = overwrite
-)
-
-sp_results |>
-  datatable(caption = "Species standardization results")
-```
-
-```{r}
-#| label: build_taxon
-
-taxon_rows <- build_taxon_hierarchy(
-  con = con,
-  spp_db_path = spp_db_path,
-  overwrite = overwrite
-)
-
-# show taxon stats
-if (nrow(taxon_rows) > 0) {
-  taxon_rows |>
-    count(authority, taxonRank) |>
-    arrange(authority, taxonRank) |>
-    datatable(caption = "Taxon hierarchy by authority and rank")
-}
-
-# show taxa_rank lookup
-dbReadTable(con, "taxa_rank") |>
-  datatable(caption = "Taxa rank ordering")
-```
-
-### Taxonomy Statistics
-
-```{r}
-#| label: taxonomy_stats
-
-n_species <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM species")$n
-n_worms <- dbGetQuery(
-  con,
-  "SELECT COUNT(*) AS n FROM species WHERE worms_id IS NOT NULL"
-)$n
-n_itis <- dbGetQuery(
-  con,
-  "SELECT COUNT(*) AS n FROM species WHERE itis_id IS NOT NULL"
-)$n
-n_gbif <- dbGetQuery(
-  con,
-  "SELECT COUNT(*) AS n FROM species WHERE gbif_id IS NOT NULL"
-)$n
-n_taxon <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM taxon")$n
-
-tibble(
-  metric = c(
-    "total species",
-    "with worms_id",
-    "with itis_id",
-    "with gbif_id",
-    "taxon hierarchy rows"
-  ),
-  count = c(n_species, n_worms, n_itis, n_gbif, n_taxon)
-) |>
-  datatable(caption = "Taxonomy standardization summary")
-```
-
-## Re-export Parquet with Taxonomy Tables
-
-Update parquet outputs to include the new taxon and taxa_rank tables, and
-the updated species table (now with worms_id, itis_id, gbif_id).
-
-```{r}
-#| label: rewrite_parquet
-
-# rewrite parquet for modified/new tables
-modified_tables <- c("species", "taxon", "taxa_rank")
-for (tbl in modified_tables) {
-  pqt_path <- file.path(dir_parquet, paste0(tbl, ".parquet"))
-  cols <- DBI::dbGetQuery(
-    con,
-    glue(
-      "SELECT column_name FROM information_schema.columns
-     WHERE table_name = '{tbl}'"
-    )
-  )$column_name
-  prov_cols <- c("_source_file", "_source_row", "_source_uuid", "_ingested_at")
-  export_cols <- setdiff(cols, prov_cols)
-  DBI::dbExecute(
-    con,
-    glue(
-      "COPY (SELECT {paste(export_cols, collapse = ', ')} FROM {tbl})
-     TO '{pqt_path}' (FORMAT PARQUET, COMPRESSION 'snappy')"
-    )
-  )
-  message(glue("Re-exported {tbl}.parquet"))
-}
-
-# update manifest
-manifest_path <- file.path(dir_parquet, "manifest.json")
-if (file.exists(manifest_path)) {
-  manifest <- jsonlite::fromJSON(manifest_path)
-  new_tables <- unique(c(manifest$tables, modified_tables))
-  manifest$tables <- new_tables
-  jsonlite::write_json(
-    manifest,
-    manifest_path,
-    auto_unbox = TRUE,
-    pretty = TRUE
-  )
-  message(glue("Updated manifest: {length(new_tables)} tables"))
-}
 ```
 
 ## Upload to GCS Archive

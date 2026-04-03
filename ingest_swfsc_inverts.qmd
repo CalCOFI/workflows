@@ -208,8 +208,9 @@ Load reference tables from ichthyo ingest for cross-referencing.
 
 prior <- load_prior_tables(
   parquet_dir = here("data/parquet/swfsc_ichthyo"),
-  con = con,
-  tables = c("ship", "cruise", "site", "tow", "net", "grid")
+  con         = con,
+  tables      = c("ship", "cruise", "site", "tow", "net", "grid"),
+  as_view     = TRUE
 )
 
 message(glue(
@@ -283,12 +284,15 @@ mismatches <- list(
   ships       = collect_ship_mismatches(con, "invert_count"),
   cruise_keys = collect_cruise_key_mismatches(con, "invert_count"))
 
+# export only tables this ingest creates (not dependency VIEWs from ichthyo)
+own_tables <- c("invert_count", "invert_size", "dataset")
+
 parquet_stats <- write_parquet_outputs(
-  con = con,
-  output_dir = dir_parquet,
-  tables = dbListTables(con),
+  con            = con,
+  output_dir     = dir_parquet,
+  tables         = own_tables,
   strip_provenance = FALSE,
-  mismatches = mismatches
+  mismatches     = mismatches
 )
 
 parquet_stats |>

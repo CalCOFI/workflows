@@ -6,6 +6,8 @@ calcofi:
   dependency:
     - ingest_swfsc_ichthyo
   output: data/parquet/calcofi_bottle/manifest.json
+  modifies:
+    - ship
 ---
 
 ## Overview
@@ -92,6 +94,17 @@ subdir <- "CalCOFI_Database_194903-202105_csv_16October2023"
 overwrite <- TRUE
 dir_parquet <- here(glue("data/parquet/{dir_label}"))
 db_path <- here(glue("data/wrangling/{dir_label}.duckdb"))
+# load data using calcofi4db package
+# - reads from local Google Drive mount
+# - syncs to GCS archive if files changed (creates new timestamped archive)
+# - tracks GCS archive path for provenance
+dir_dataset <- glue("{dir_data}/{provider}/{dataset}")
+# unified measurement_type reference (needed for pivot mappings)
+meas_type_csv <- here("metadata/measurement_type.csv")
+```
+
+```{r}
+#| label: load_db
 
 if (overwrite) {
   if (file_exists(db_path)) {
@@ -102,17 +115,13 @@ if (overwrite) {
 
 dir_create(dirname(db_path))
 con <- get_duckdb_con(db_path)
-
-# load unified measurement_type reference (needed for pivot mappings)
-meas_type_csv <- here("metadata/measurement_type.csv")
-d_meas_type <- read_csv(meas_type_csv)
 load_duckdb_extension(con, "spatial")
+```
 
-# load data using calcofi4db package
-# - reads from local Google Drive mount
-# - syncs to GCS archive if files changed (creates new timestamped archive)
-# - tracks GCS archive path for provenance
-dir_dataset <- glue("{dir_data}/{provider}/{dataset}")
+```{r}
+#| label: read_csv_files
+
+d_meas_type <- read_csv(meas_type_csv)
 
 d <- read_csv_files(
   provider = provider,
@@ -835,17 +844,45 @@ casts.ship_code (soft FK) → ship.ship_nodc (validated after integration with s
 # define PK/FK relationships for visualization and relationships.json
 bottle_rels <- list(
   primary_keys = list(
-    casts              = "cast_id",
-    bottle             = "bottle_id",
+    casts = "cast_id",
+    bottle = "bottle_id",
     bottle_measurement = "bottle_measurement_id",
-    cast_condition     = "cast_condition_id",
-    measurement_type   = "measurement_type"),
+    cast_condition = "cast_condition_id",
+    measurement_type = "measurement_type"
+  ),
   foreign_keys = list(
-    list(table = "bottle",             column = "cast_id",          ref_table = "casts",            ref_column = "cast_id"),
-    list(table = "bottle_measurement", column = "bottle_id",        ref_table = "bottle",           ref_column = "bottle_id"),
-    list(table = "bottle_measurement", column = "measurement_type", ref_table = "measurement_type", ref_column = "measurement_type"),
-    list(table = "cast_condition",     column = "cast_id",          ref_table = "casts",            ref_column = "cast_id"),
-    list(table = "cast_condition",     column = "condition_type",   ref_table = "measurement_type", ref_column = "measurement_type")))
+    list(
+      table = "bottle",
+      column = "cast_id",
+      ref_table = "casts",
+      ref_column = "cast_id"
+    ),
+    list(
+      table = "bottle_measurement",
+      column = "bottle_id",
+      ref_table = "bottle",
+      ref_column = "bottle_id"
+    ),
+    list(
+      table = "bottle_measurement",
+      column = "measurement_type",
+      ref_table = "measurement_type",
+      ref_column = "measurement_type"
+    ),
+    list(
+      table = "cast_condition",
+      column = "cast_id",
+      ref_table = "casts",
+      ref_column = "cast_id"
+    ),
+    list(
+      table = "cast_condition",
+      column = "condition_type",
+      ref_table = "measurement_type",
+      ref_column = "measurement_type"
+    )
+  )
+)
 
 cc_erd(con, tables = db_tables(con), rels = bottle_rels)
 ```
@@ -874,7 +911,8 @@ truth — grid is created in `ingest_swfsc_ichthyo.qmd`).
 load_prior_tables(
   con = con,
   tables = "grid",
-  parquet_dir = here("data/parquet/swfsc_ichthyo")
+  parquet_dir = here("data/parquet/swfsc_ichthyo"),
+  as_view = TRUE
 )
 ```
 
@@ -930,12 +968,16 @@ map_casts_png <- here(glue("figures/{provider}_{dataset}_casts_map.png"))
 
 if (!file_exists(map_casts_png)) {
   # exclude native GEOMETRY column; convert via ST_AsText for sf
-  cast_cols <- dbGetQuery(con,
+  cast_cols <- dbGetQuery(
+    con,
     "SELECT column_name FROM information_schema.columns
-     WHERE table_name = 'casts' AND data_type != 'GEOMETRY'")$column_name
+     WHERE table_name = 'casts' AND data_type != 'GEOMETRY'"
+  )$column_name
   cast_sql <- paste(
-    "SELECT", paste(cast_cols, collapse = ", "),
-    ", ST_AsText(geom) AS geom_wkt FROM casts")
+    "SELECT",
+    paste(cast_cols, collapse = ", "),
+    ", ST_AsText(geom) AS geom_wkt FROM casts"
+  )
   casts_sf <- dbGetQuery(con, cast_sql) |>
     st_as_sf(wkt = "geom_wkt", crs = 4326) |>
     select(-geom_wkt) |>
@@ -960,10 +1002,12 @@ htmltools::img(
 cc_erd(
   con,
   tables = db_tables(con),
-  rels   = bottle_rels,
+  rels = bottle_rels,
   colors = list(
     lightyellow = c("bottle_measurement", "cast_condition"),
-    lightblue   = "measurement_type"))
+    lightblue = "measurement_type"
+  )
+)
 ```
 
 ```{r}
@@ -1089,10 +1133,15 @@ preview_tables(
 #| label: preview_casts_derived
 
 # casts_derived is a VIEW; exclude GEOMETRY column for R driver compatibility
-cd_cols <- dbGetQuery(con,
+cd_cols <- dbGetQuery(
+  con,
   "SELECT column_name FROM information_schema.columns
-   WHERE table_name = 'casts_derived' AND data_type != 'GEOMETRY'")$column_name
-dbGetQuery(con, glue("SELECT {paste(cd_cols, collapse=', ')} FROM casts_derived LIMIT 100")) |>
+   WHERE table_name = 'casts_derived' AND data_type != 'GEOMETRY'"
+)$column_name
+dbGetQuery(
+  con,
+  glue("SELECT {paste(cd_cols, collapse=', ')} FROM casts_derived LIMIT 100")
+) |>
   datatable(
     caption = "casts_derived — first 100 rows (VIEW)",
     rownames = FALSE,
@@ -1109,17 +1158,30 @@ Export tables to parquet files for downstream use.
 
 # collect mismatches for manifest
 mismatches <- list(
-  ships             = collect_ship_mismatches(con, "casts"),
+  ships = collect_ship_mismatches(con, "casts"),
   measurement_types = collect_measurement_type_mismatches(
-    con, here("metadata/measurement_type.csv")),
-  cruise_keys       = collect_cruise_key_mismatches(con, "casts"))
+    con,
+    here("metadata/measurement_type.csv")
+  ),
+  cruise_keys = collect_cruise_key_mismatches(con, "casts")
+)
 
 # write parquet files with manifest
+# export only tables this ingest creates (dependency _new deltas added later)
+own_tables <- c(
+  "casts",
+  "bottle",
+  "bottle_measurement",
+  "cast_condition",
+  "measurement_type",
+  "dataset"
+)
+
 parquet_stats <- write_parquet_outputs(
   con = con,
   output_dir = dir_parquet,
-  tables = setdiff(db_tables(con), "grid"), # grid canonical from swfsc
-  strip_provenance = F,
+  tables = own_tables,
+  strip_provenance = FALSE,
   mismatches = mismatches
 )
 
@@ -1158,10 +1220,10 @@ metadata_path <- build_metadata_json(
 
 # write relationships.json sidecar with PKs/FKs
 build_relationships_json(
-  rels       = bottle_rels,
+  rels = bottle_rels,
   output_dir = dir_parquet,
-  provider   = provider,
-  dataset    = dataset
+  provider = provider,
+  dataset = dataset
 )
 
 # show metadata summary
@@ -1224,12 +1286,36 @@ workflow step.
 ```{r}
 #| label: load_reference_tables
 
-# load ship and cruise from ichthyo workflow
+# tables declared in calcofi.modifies frontmatter — loaded as TABLEs (writable)
+# all other dependency tables loaded as VIEWs (zero-copy, read-only)
+modifies_tables <- c("ship") # from calcofi.modifies in YAML frontmatter
 load_prior_tables(
   con = con,
-  tables = c("ship", "cruise"),
+  tables = modifies_tables,
   parquet_dir = here("data/parquet/swfsc_ichthyo")
 )
+load_prior_tables(
+  con = con,
+  tables = setdiff(c("ship", "cruise"), modifies_tables),
+  parquet_dir = here("data/parquet/swfsc_ichthyo"),
+  as_view = TRUE
+)
+
+# snapshot PKs of modified tables before modifications
+modifies_pks <- list()
+for (tbl in modifies_tables) {
+  pk_col <- dbGetQuery(
+    con,
+    glue(
+      "SELECT column_name FROM information_schema.columns
+     WHERE table_name = '{tbl}' ORDER BY ordinal_position LIMIT 1"
+    )
+  )$column_name
+  modifies_pks[[tbl]] <- list(
+    pk_col = pk_col,
+    keys = dbGetQuery(con, glue("SELECT {pk_col} FROM {tbl}"))[[1]]
+  )
+}
 ```
 
 ### Ship Matching + Cruise Bridge
@@ -1238,9 +1324,9 @@ load_prior_tables(
 #| label: derive_cruise_key
 
 bridge_result <- derive_cruise_key_on_casts(
-  con              = con,
+  con = con,
   ship_renames_csv = here("metadata/ship_renames.csv"),
-  fetch_ices       = TRUE
+  fetch_ices = TRUE
 )
 
 # insert interim entries for still-unmatched ships (ship_nodc = "?XX?")
@@ -1282,12 +1368,16 @@ if (nrow(bridge_result$unmatched_report) > 0) {
 #| label: cross_validate
 
 # use information_schema to check columns (avoids GEOMETRY type issues with dbListFields)
-casts_cols <- dbGetQuery(con,
+casts_cols <- dbGetQuery(
+  con,
   "SELECT column_name FROM information_schema.columns
-   WHERE table_name = 'casts'")$column_name
-grid_cols <- dbGetQuery(con,
+   WHERE table_name = 'casts'"
+)$column_name
+grid_cols <- dbGetQuery(
+  con,
   "SELECT column_name FROM information_schema.columns
-   WHERE table_name = 'grid'")$column_name
+   WHERE table_name = 'grid'"
+)$column_name
 
 # grid_key integrity: casts.grid_key should all be in grid.grid_key
 if ("grid_key" %in% casts_cols && "grid_key" %in% grid_cols) {
@@ -1360,6 +1450,29 @@ DBI::dbExecute(
   )
 )
 message("Re-exported casts.parquet with ship_key + cruise_key")
+
+# export _new delta sidecars for modified dependency tables (from calcofi.modifies)
+# these are NOT in the manifest — picked up by build_release_table_registry()
+for (tbl in modifies_tables) {
+  pk_col <- modifies_pks[[tbl]]$pk_col
+  keys_old <- modifies_pks[[tbl]]$keys
+  keys_new <- dbGetQuery(con, glue("SELECT {pk_col} FROM {tbl}"))[[1]]
+  additions <- setdiff(keys_new, keys_old)
+
+  if (length(additions) > 0) {
+    new_tbl <- paste0(tbl, "_new")
+    pq_path <- file.path(dir_parquet, paste0(new_tbl, ".parquet"))
+    vals <- paste(shQuote(additions, "sh"), collapse = ", ")
+    export_parquet(
+      con,
+      glue("SELECT * FROM {tbl} WHERE {pk_col} IN ({vals})"),
+      pq_path
+    )
+    message(glue("{length(additions)} new {tbl} row(s) -> {new_tbl}.parquet"))
+  } else {
+    message(glue("No new {tbl} rows — {tbl}_new not exported"))
+  }
+}
 ```
 
 ## Cleanup

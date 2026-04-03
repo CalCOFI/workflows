@@ -45,3 +45,18 @@ segment,time_hr,Time Duration,hours,Duration of segment transit
 segment,length_km,Length,km,Distance of segment
 segment,km_per_hr,Speed,km/hr,Average speed during segment transit
 segment,geom,Geometry,,LineString geometry (WGS84 EPSG:4326) of segment
+species,worms_id,WoRMS ID,,WoRMS AphiaID (accepted) for this species; derived via local spp.duckdb lookup
+species,itis_id,ITIS ID,,ITIS Taxonomic Serial Number (TSN) for this species; derived via local spp.duckdb lookup
+species,gbif_id,GBIF ID,,GBIF Backbone Taxonomy key for this species; derived via local spp.duckdb lookup
+taxon,,Taxon,,Taxonomic hierarchy for species via WoRMS and ITIS authorities (built from spp.duckdb via recursive CTEs)
+taxon,authority,Authority,,Taxonomic authority source: 'WoRMS' or 'ITIS'
+taxon,taxonID,Taxon ID,,Integer identifier within the authority (AphiaID for WoRMS; TSN for ITIS). Compound PK with authority.
+taxon,acceptedNameUsageID,Accepted Name Usage ID,,ID of the leaf (species-level) taxon this hierarchy row was built from
+taxon,parentNameUsageID,Parent Name Usage ID,,ID of the immediate parent taxon in the hierarchy
+taxon,scientificName,Scientific Name,,Scientific name at this taxonomic rank
+taxon,taxonRank,Taxon Rank,,Taxonomic rank (e.g. Kingdom; Phylum; Class; Order; Family; Genus; Species). FK to taxa_rank.
+taxon,taxonomicStatus,Taxonomic Status,,Taxonomic status (accepted)
+taxon,scientificNameAuthorship,Scientific Name Authorship,,Authority string for the scientific name
+taxa_rank,,Taxa Rank,,Lookup table mapping taxonomic rank names to sort order
+taxa_rank,taxonRank,Taxon Rank,,Taxonomic rank name (e.g. Kingdom; Species). Primary key.
+taxa_rank,rank_order,Rank Order,,Integer sort order from broadest (1=Kingdom) to most specific

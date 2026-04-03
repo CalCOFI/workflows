@@ -14,7 +14,7 @@ editor_options:
 Process spatial boundary datasets for:
 
 1. **Map overlay** — PMTiles served via `file.calcofi.io/_spatial/`
-2. **Spatial queries** — parquet tables loaded into CalCOFI DuckDB
+2. **Spatial queries** — `_spatial` + `_spatial_attr` tables in CalCOFI DuckDB
 3. **Future summarization** — aggregate CalCOFI data into boundary features
 
 **Source**: `~/My Drive/projects/calcofi/data-public/_spatial/`
@@ -29,12 +29,12 @@ dataset grouping, styling, filter expressions, and source file paths.
 ```{mermaid}
 graph LR
   A[Source Shapefiles] --> B[Read + Reproject 4326]
-  B --> C[clean_names + id column]
-  C --> D[Parquet Export]
-  C --> E[GeoJSON → tippecanoe → PMTiles]
+  B --> C["clean_names + id/layer/name"]
+  C --> D["_spatial + _spatial_attr Parquet"]
+  C --> E["GeoJSON → tippecanoe → PMTiles"]
   D --> F[DuckDB Tables]
   E --> G[GCS Upload]
-  G --> H[file.calcofi.io/_spatial/]
+  G --> H["file.calcofi.io/_spatial/"]
 ```
 
 ### Pre-processing
@@ -43,7 +43,9 @@ Each dataset is standardized:
 
 - **CRS**: reprojected to `EPSG:4326` (WGS 84 unprojected)
 - **Columns**: `janitor::clean_names()` for snake_case
-- **ID**: integer `id` column as first column (from source FID or `row_number()`)
+- **ID**: integer `id` column (per-layer sequential)
+- **layer**: readable layer name from `metadata/spatial_layers.csv`
+- **name**: per-feature label from `name_field` (or `layer` for dissolved layers)
 
 ## Setup
 
@@ -66,16 +68,17 @@ librarian::shelf(
   sf,
   stringr,
   tibble,
+  tidyr,
   quiet = T
 )
 
-redo_if_exists <- TRUE # set to FALSE to skip already processed datasets (for testing/debugging)
+redo_if_exists <- FALSE
 
 dir_spatial <- path_expand("~/My Drive/projects/calcofi/data-public/_spatial")
 dir_pmtiles <- here("data/pmtiles")
 dir_parquet <- here("data/parquet/spatial")
-gcs_bucket <- "calcofi-files-public"
-gcs_prefix <- "_spatial"
+gcs_bucket  <- "calcofi-files-public"
+gcs_prefix  <- "_spatial"
 
 dir_create(dir_pmtiles)
 dir_create(dir_parquet)
@@ -100,7 +103,7 @@ spatial_dirs_not_layers_csv <- setdiff(
 if (length(spatial_dirs_not_layers_csv) > 0) {
   cat(
     glue(
-      "⚠ WARNING: The following folders exist in `{dir_spatial}` but are not ",
+      "WARNING: The following folders exist in `{dir_spatial}` but are not ",
       "referenced in `metadata/spatial_layers.csv`:\n",
       paste0("- ", spatial_dirs_not_layers_csv, collapse = "\n"),
       "\n\n"
@@ -108,7 +111,7 @@ if (length(spatial_dirs_not_layers_csv) > 0) {
   )
 }
 
-# unique dataset groups (one pmtiles + parquet per group)
+# unique dataset groups (one pmtiles per group)
 d_groups <- d_layers |>
   distinct(dataset_group, source_folder, source_file, source_format) |>
   mutate(
@@ -183,176 +186,338 @@ if (!file_exists(cacurrent_usaeez_geo) || redo_if_exists) {
 }
 ```
 
+## Helper functions
+
+```{r}
+#| label: helpers
+
+# read source spatial data from various formats
+read_spatial_source <- function(source_folder, source_file, source_format,
+                                dir_spatial) {
+  if (source_format == "rda") {
+    e <- new.env()
+    load(path(dir_spatial, source_folder, source_file), envir = e)
+    for (nm in ls(e)) {
+      if (inherits(get(nm, envir = e), "sf")) {
+        return(get(nm, envir = e) |> select(where(~ !is.list(.))))
+      }
+    }
+    return(NULL)
+  } else if (source_format == "gdb") {
+    parts <- str_split_1(source_file, "\\|")
+    st_read(
+      path(dir_spatial, source_folder, parts[1]),
+      layer = parts[2], quiet = TRUE)
+  } else {
+    st_read(
+      path(dir_spatial, source_folder, source_file),
+      quiet = TRUE)
+  }
+}
+
+# apply a MapLibre filter expression as R filter on sf
+# supports: ["==", ["get", "col"], val]
+apply_filter_expr <- function(sf_data, filter_expr_json) {
+  if (is.na(filter_expr_json) || filter_expr_json == "") return(sf_data)
+  expr <- jsonlite::fromJSON(filter_expr_json, simplifyVector = FALSE)
+  if (length(expr) == 3 && expr[[1]] == "==" &&
+      is.list(expr[[2]]) && expr[[2]][[1]] == "get") {
+    col_name <- expr[[2]][[2]]
+    val <- expr[[3]]
+    sf_data |> filter(.data[[col_name]] == val)
+  } else {
+    warning(glue("unsupported filter_expr: {filter_expr_json}"))
+    sf_data
+  }
+}
+
+# build _spatial_attr rows from an sf object
+build_spatial_attr <- function(sf_data, layer_name) {
+  # exclude core columns and geometry
+  geom_col <- attr(sf_data, "sf_column")
+  core_cols <- c("id", "layer", "name", geom_col)
+  attr_cols <- setdiff(names(sf_data), core_cols)
+
+  if (length(attr_cols) == 0) return(tibble())
+
+  # pivot each attribute column into EAV rows
+  map_dfr(attr_cols, function(col) {
+    vals <- sf_data[[col]]
+    cls <- class(vals)[1]
+
+    base <- tibble(
+      layer    = layer_name,
+      id       = sf_data$id,
+      fld      = col,
+      val_dbl  = NA_real_,
+      val_int  = NA_integer_,
+      val_chr  = NA_character_,
+      val_date = as.Date(NA),
+      val_lgl  = NA)
+
+    if (cls %in% c("numeric", "double")) {
+      base$val_dbl <- as.double(vals)
+    } else if (cls == "integer") {
+      base$val_int <- as.integer(vals)
+    } else if (cls %in% c("character", "factor")) {
+      base$val_chr <- as.character(vals)
+    } else if (cls == "Date") {
+      base$val_date <- as.Date(vals)
+    } else if (cls == "logical") {
+      base$val_lgl <- as.logical(vals)
+    } else {
+      # fallback: coerce to character
+      base$val_chr <- as.character(vals)
+    }
+    base
+  })
+}
+```
+
 ## Process datasets
+
+For each dataset group: read source, add `id`/`layer`/`name` columns,
+generate PMTiles, and accumulate data for consolidated `_spatial` tables.
 
 ```{r}
 #| label: process-datasets
 #| output: asis
 
-process_spatial_dataset <- function(
-  dataset_group,
-  source_folder,
-  source_file,
-  source_format,
-  dir_spatial,
-  dir_pmtiles,
-  dir_parquet,
-  redo_if_exists = FALSE
-) {
-  pmtiles_path <- path(dir_pmtiles, glue("{dataset_group}.pmtiles"))
-  parquet_path <- path(dir_parquet, glue("{dataset_group}.parquet"))
+# accumulators for consolidated tables
+all_spatial <- list()
+all_spatial_attr <- list()
 
-  # skip if already processed
-  if (
-    !redo_if_exists &&
-      file_exists(pmtiles_path) &&
-      file_exists(parquet_path)
-  ) {
+for (i in seq_len(nrow(d_groups))) {
+  grp <- d_groups[i, ]
+  dataset_group <- grp$dataset_group
+
+  pmtiles_path <- path(dir_pmtiles, glue("{dataset_group}.pmtiles"))
+
+  # skip if already processed and not redoing
+  if (!redo_if_exists && file_exists(pmtiles_path)) {
     cat(glue("- **{dataset_group}**: skipped (already exists)\n\n"))
-    return(invisible(TRUE))
+    next
   }
 
-  # read source data ----
+  # read source data
   sf_data <- tryCatch(
-    {
-      if (source_format == "rda") {
-        # .rda files: load() into temp env, extract sf object
-        e <- new.env()
-        load(path(dir_spatial, source_folder, source_file), envir = e)
-        obj_names <- ls(e)
-        sf_obj <- NULL
-        for (nm in obj_names) {
-          if (inherits(get(nm, envir = e), "sf")) {
-            sf_obj <- get(nm, envir = e)
-            break
-          }
-        }
-        sf_obj
-        # drop any list columns (e.g. from complex attributes that can't be written to parquet)
-        sf_obj |> select(where(~ !is.list(.)))
-      } else if (source_format == "gdb") {
-        # geodatabase: source_file = "file.gdb|layer_name"
-        parts <- str_split_1(source_file, "\\|")
-        st_read(
-          path(dir_spatial, source_folder, parts[1]),
-          layer = parts[2],
-          quiet = TRUE
-        )
-      } else {
-        # shp, gpkg, geojson
-        st_read(
-          path(dir_spatial, source_folder, source_file),
-          quiet = TRUE
-        )
-      }
-    },
+    read_spatial_source(
+      grp$source_folder, grp$source_file,
+      grp$source_format, dir_spatial),
     error = function(e) {
       cat(glue(
-        "- **{dataset_group}**: ⚠ SKIPPED — failed to read ",
-        "`{source_folder}/{source_file}`: {e$message}\n\n"
-      ))
-      return(NULL)
-    }
-  )
+        "- **{dataset_group}**: SKIPPED — failed to read ",
+        "`{grp$source_folder}/{grp$source_file}`: {e$message}\n\n"))
+      NULL
+    })
 
   if (is.null(sf_data) || nrow(sf_data) == 0) {
-    cat(glue("- **{dataset_group}**: ⚠ SKIPPED — empty dataset\n\n"))
-    return(invisible(FALSE))
+    cat(glue("- **{dataset_group}**: SKIPPED — empty dataset\n\n"))
+    next
   }
 
-  # reproject to EPSG:4326 ----
+  # reproject to EPSG:4326
   src_crs <- st_crs(sf_data)$epsg
   if (is.na(src_crs) || src_crs != 4326) {
     sf_data <- st_transform(sf_data, 4326)
   }
 
-  # clean column names ----
+  # clean column names
   sf_data <- clean_names(sf_data)
 
-  # ensure integer id column first ----
-  geom_col <- attr(sf_data, "sf_column")
-  if (!"id" %in% names(sf_data)) {
-    sf_data <- sf_data |> mutate(id = row_number())
+  # get layer rows for this group
+  grp_layers <- d_layers |> filter(dataset_group == !!dataset_group)
+
+  if (nrow(grp_layers) == 1 && is.na(grp_layers$filter_expr[1])) {
+    # single layer, no filter
+    layer_name <- grp_layers$layer[1]
+    name_field <- grp_layers$name_field[1]
+
+    if (is.na(name_field) || name_field == "") {
+      # dissolve all features into one (st_make_valid for bad geometries)
+      sf_data <- sf_data |>
+        st_make_valid() |>
+        summarise(geometry = st_union(geometry)) |>
+        mutate(
+          id    = 1L,
+          layer = layer_name,
+          name  = layer_name) |>
+        relocate(id, layer, name)
+    } else {
+      sf_data <- sf_data |>
+        mutate(
+          id    = row_number() |> as.integer(),
+          layer = layer_name,
+          name  = as.character(.data[[name_field]])) |>
+        relocate(id, layer, name)
+    }
+
+    # accumulate for _spatial tables
+    geom_col_name <- attr(sf_data, "sf_column")
+    all_spatial[[layer_name]] <- sf_data |>
+      select(id, layer, name, all_of(geom_col_name))
+    all_spatial_attr[[layer_name]] <- build_spatial_attr(sf_data, layer_name)
+
+  } else {
+    # multi-layer group (e.g., noaa_maritime_boundaries with filter_exprs)
+    parts_list <- list()
+    for (j in seq_len(nrow(grp_layers))) {
+      lr <- grp_layers[j, ]
+      layer_name <- lr$layer
+      name_field <- lr$name_field
+
+      sf_filtered <- apply_filter_expr(sf_data, lr$filter_expr)
+
+      if (nrow(sf_filtered) == 0) next
+
+      if (is.na(name_field) || name_field == "") {
+        sf_filtered <- sf_filtered |>
+          st_make_valid() |>
+          summarise(geometry = st_union(geometry)) |>
+          mutate(id = 1L, layer = layer_name, name = layer_name) |>
+          relocate(id, layer, name)
+      } else {
+        sf_filtered <- sf_filtered |>
+          mutate(
+            id    = row_number() |> as.integer(),
+            layer = layer_name,
+            name  = as.character(.data[[name_field]])) |>
+          relocate(id, layer, name)
+      }
+
+      parts_list[[layer_name]] <- sf_filtered
+
+      geom_col_name <- attr(sf_filtered, "sf_column")
+      all_spatial[[layer_name]] <- sf_filtered |>
+        select(id, layer, name, all_of(geom_col_name))
+      all_spatial_attr[[layer_name]] <- build_spatial_attr(
+        sf_filtered, layer_name)
+    }
+
+    # for PMTiles: use the full original sf_data with layer/name added per-feature
+    # tag each feature with its layer based on which filter it matches
+    sf_data <- sf_data |> mutate(layer = NA_character_, name = NA_character_)
+    for (j in seq_len(nrow(grp_layers))) {
+      lr <- grp_layers[j, ]
+      if (!is.na(lr$filter_expr) && lr$filter_expr != "") {
+        expr <- jsonlite::fromJSON(lr$filter_expr, simplifyVector = FALSE)
+        if (length(expr) == 3 && expr[[1]] == "==" &&
+            is.list(expr[[2]]) && expr[[2]][[1]] == "get") {
+          col_nm <- expr[[2]][[2]]
+          val <- expr[[3]]
+          mask <- sf_data[[col_nm]] == val
+          mask[is.na(mask)] <- FALSE
+          sf_data$layer[mask] <- lr$layer
+          nf <- lr$name_field
+          if (!is.na(nf) && nf != "") {
+            sf_data$name[mask] <- as.character(sf_data[[nf]][mask])
+          } else {
+            sf_data$name[mask] <- lr$layer
+          }
+        }
+      }
+    }
+    # features not matching any filter: use group name
+    sf_data <- sf_data |>
+      mutate(
+        layer = if_else(is.na(layer), dataset_group, layer),
+        name  = if_else(is.na(name), layer, name))
+
+    if (!"id" %in% names(sf_data)) {
+      sf_data <- sf_data |> mutate(id = row_number() |> as.integer())
+    } else {
+      sf_data <- sf_data |> mutate(id = as.integer(id))
+    }
+    sf_data <- sf_data |> relocate(id, layer, name)
   }
-  sf_data <- sf_data |>
-    mutate(id = as.integer(id)) |>
-    relocate(id)
 
-  # write parquet via DuckDB spatial ----
-  tmp_geojson <- tempfile(fileext = ".geojson")
-  st_write(sf_data, tmp_geojson, delete_dsn = TRUE, quiet = TRUE)
-  con_tmp <- dbConnect(duckdb())
-  dbExecute(con_tmp, "INSTALL spatial; LOAD spatial;")
-  dbExecute(
-    con_tmp,
-    glue(
-      "COPY (SELECT * FROM ST_Read('{tmp_geojson}'))
-         TO '{parquet_path}' (FORMAT PARQUET)"
-    )
-  )
-  dbDisconnect(con_tmp, shutdown = TRUE)
-  unlink(tmp_geojson)
-
-  # write pmtiles ----
+  # write PMTiles via tippecanoe
   geojson_tmp <- tempfile(fileext = ".geojson")
   st_write(sf_data, geojson_tmp, delete_dsn = TRUE, quiet = TRUE)
 
   tippecanoe_args <- c(
-    "-o",
-    pmtiles_path,
-    "-z10",
-    "-Z0",
+    "-o", pmtiles_path,
+    "-z10", "-Z0",
     "--simplification=10",
     "--no-tile-size-limit",
-    # "--use-attribute-for-id=id", # wierdly drops 'id', so incompatible with mapgl::add_pmtiles_source(promote_id='id')
-    "-l",
-    dataset_group,
+    "-l", dataset_group,
     "--force",
-    geojson_tmp
-  )
+    geojson_tmp)
 
-  result <- system2(
-    "tippecanoe",
-    args = tippecanoe_args,
-    stdout = TRUE,
-    stderr = TRUE
-  )
+  system2("tippecanoe", args = tippecanoe_args,
+          stdout = TRUE, stderr = TRUE)
   unlink(geojson_tmp)
 
   if (!file_exists(pmtiles_path)) {
-    cat(glue(
-      "- **{dataset_group}**: ⚠ SKIPPED — tippecanoe failed\n\n"
-    ))
-    return(invisible(FALSE))
+    cat(glue("- **{dataset_group}**: SKIPPED — tippecanoe failed\n\n"))
+    next
   }
 
   pmtiles_size <- file_size(pmtiles_path)
-  parquet_size <- file_size(parquet_path)
-
   cat(glue(
     "- **{dataset_group}**: {nrow(sf_data)} features ",
-    "(CRS {src_crs} → 4326), ",
-    "PMTiles {pmtiles_size}, Parquet {parquet_size}\n\n"
-  ))
+    "(CRS {src_crs} -> 4326), PMTiles {pmtiles_size}\n\n"))
+}
+```
 
-  return(invisible(TRUE))
+## Build consolidated `_spatial` + `_spatial_attr` parquet
+
+```{r}
+#| label: build-spatial-parquet
+
+pq_spatial      <- path(dir_parquet, "_spatial.parquet")
+pq_spatial_attr <- path(dir_parquet, "_spatial_attr.parquet")
+
+# skip if parquet already exists and no new layers were processed
+if (length(all_spatial) == 0 && file_exists(pq_spatial)) {
+  message("_spatial parquet already exists, skipping rebuild")
+  # read back for downstream references
+  con_tmp <- dbConnect(duckdb())
+  dbExecute(con_tmp, "INSTALL spatial; LOAD spatial;")
+  spatial_combined <- st_read(con_tmp,
+    query = glue("SELECT * FROM read_parquet('{pq_spatial}')"))
+  attr_combined <- arrow::read_parquet(pq_spatial_attr)
+  dbDisconnect(con_tmp, shutdown = TRUE)
+} else {
+
+# combine all layers into single sf
+spatial_combined <- bind_rows(all_spatial) |>
+  st_as_sf()
+message(glue(
+  "_spatial: {nrow(spatial_combined)} features across ",
+  "{length(unique(spatial_combined$layer))} layers"))
+
+# combine all attributes
+attr_combined <- bind_rows(all_spatial_attr)
+message(glue("_spatial_attr: {nrow(attr_combined)} rows"))
+
+# remove old per-dataset parquet files
+old_parquets <- dir_ls(dir_parquet, glob = "*.parquet")
+old_parquets <- old_parquets[!grepl("^_spatial", basename(old_parquets))]
+if (length(old_parquets) > 0) {
+  file_delete(old_parquets)
+  message(glue("Removed {length(old_parquets)} old per-dataset parquet files"))
 }
 
-# process each dataset group
-results <- d_groups |>
-  # filter(dataset_group == "ca_county_boundaries") |> # DEBUG: process one group first
-  select(dataset_group, source_folder, source_file, source_format) |>
-  pmap_lgl(
-    process_spatial_dataset,
-    dir_spatial = dir_spatial,
-    dir_pmtiles = dir_pmtiles,
-    dir_parquet = dir_parquet,
-    redo_if_exists = redo_if_exists
-  )
+# write _spatial via DuckDB (preserves geometry as WKB in parquet)
+spatial_geojson <- tempfile(fileext = ".geojson")
+st_write(spatial_combined, spatial_geojson, delete_dsn = TRUE, quiet = TRUE)
+con_tmp <- dbConnect(duckdb())
+dbExecute(con_tmp, "INSTALL spatial; LOAD spatial;")
+dbExecute(con_tmp, glue(
+  "COPY (SELECT * FROM ST_Read('{spatial_geojson}'))
+   TO '{pq_spatial}' (FORMAT PARQUET)"))
+dbDisconnect(con_tmp, shutdown = TRUE)
+unlink(spatial_geojson)
 
-n_ok <- sum(results)
-n_skip <- sum(!results)
-cat(glue("\n**Summary**: {n_ok} succeeded, {n_skip} skipped/failed\n"))
+# write _spatial_attr as plain parquet
+arrow::write_parquet(attr_combined, pq_spatial_attr)
+
+message(glue(
+  "Wrote _spatial.parquet ({file_size(pq_spatial)}) ",
+  "and _spatial_attr.parquet ({file_size(pq_spatial_attr)})"))
+
+} # end else (rebuild)
 ```
 
 ## Upload to GCS
@@ -360,86 +525,53 @@ cat(glue("\n**Summary**: {n_ok} succeeded, {n_skip} skipped/failed\n"))
 ```{r}
 #| label: upload-gcs
 
-pmtiles_files <- dir_ls(dir_pmtiles, glob = "*.pmtiles") # |>
-# str_subset("ca_county_boundaries") # DEBUG: only upload one file first
-
 cat(glue(
-  "Uploading {length(pmtiles_files)} PMTiles files to ",
-  "gs://{gcs_bucket}/{gcs_prefix}/\n\n"
-))
+  "Uploading PMTiles to gs://{gcs_bucket}/{gcs_prefix}/\n\n"))
 
 sync_to_gcs(
-  local_dir = dir_pmtiles,
-  gcs_prefix = gcs_prefix,
-  bucket = gcs_bucket,
-  pattern = "\\.pmtiles$"
+  local_dir    = dir_pmtiles,
+  gcs_prefix   = gcs_prefix,
+  bucket       = gcs_bucket,
+  pattern      = "\\.pmtiles$"
 )
 ```
 
 ## Load into DuckDB
 
-Load parquet files into the wrangling database for spatial queries.
-
 ```{r}
 #| label: load-duckdb
-#| output: asis
 
 db_path <- here("data/calcofi_wrangling.duckdb")
 con <- dbConnect(duckdb(dbdir = db_path))
 dbExecute(con, "INSTALL spatial; LOAD spatial;")
 
-parquet_files <- dir_ls(dir_parquet, glob = "*.parquet")
+pq_spatial      <- path(dir_parquet, "_spatial.parquet")
+pq_spatial_attr <- path(dir_parquet, "_spatial_attr.parquet")
 
-for (pq in parquet_files) {
-  tbl_name <- paste0("spatial_", path_ext_remove(path_file(pq)))
+# load _spatial with EPSG:4326
+dbExecute(con, glue(
+  "CREATE OR REPLACE TABLE _spatial AS
+   SELECT id, layer, name,
+          ST_GeomFromWKB(ST_AsWKB(geom)) AS geom
+   FROM read_parquet('{pq_spatial}')"))
 
-  # read parquet into a temp view first to discover geometry column name
-  dbExecute(
-    con,
-    glue(
-      "CREATE OR REPLACE TEMP VIEW v_tmp AS
-     SELECT * FROM read_parquet('{pq}')"
-    )
-  )
+n_spatial <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM _spatial")$n
+message(glue("_spatial: {n_spatial} rows"))
 
-  # find geometry column (type GEOMETRY or contains 'geom' in name)
-  cols_info <- dbGetQuery(con, "DESCRIBE v_tmp")
-  geom_col <- cols_info$column_name[
-    grepl("GEOMETRY|WKB_GEOMETRY", cols_info$column_type, ignore.case = TRUE) |
-      grepl("^geom", cols_info$column_name, ignore.case = TRUE)
-  ]
+# load _spatial_attr (no geometry)
+dbExecute(con, glue(
+  "CREATE OR REPLACE TABLE _spatial_attr AS
+   SELECT * FROM read_parquet('{pq_spatial_attr}')"))
 
-  if (length(geom_col) > 0) {
-    # strip CRS from geometry to avoid storage version error
-    geom_col <- geom_col[1]
-    other_cols <- setdiff(cols_info$column_name, geom_col)
-    select_sql <- paste(
-      c(
-        other_cols,
-        glue("ST_GeomFromWKB(ST_AsWKB({geom_col})) AS {geom_col}")
-      ),
-      collapse = ", "
-    )
-    dbExecute(
-      con,
-      glue(
-        "CREATE OR REPLACE TABLE {tbl_name} AS
-       SELECT {select_sql} FROM v_tmp"
-      )
-    )
-  } else {
-    # no geometry column, load as-is
-    dbExecute(
-      con,
-      glue(
-        "CREATE OR REPLACE TABLE {tbl_name} AS
-       SELECT * FROM v_tmp"
-      )
-    )
-  }
+n_attr <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM _spatial_attr")$n
+message(glue("_spatial_attr: {n_attr} rows"))
 
-  n_rows <- dbGetQuery(con, glue("SELECT COUNT(*) AS n FROM {tbl_name}"))$n
-  cat(glue("- {tbl_name}: {n_rows} rows\n\n"))
+# drop old spatial_* tables if they exist
+old_tbls <- dbListTables(con)
+old_spatial <- old_tbls[grepl("^spatial_", old_tbls)]
+for (tbl in old_spatial) {
+  dbExecute(con, glue("DROP TABLE IF EXISTS {tbl}"))
+  message(glue("Dropped old table: {tbl}"))
 }
 
 dbDisconnect(con, shutdown = TRUE)
@@ -469,7 +601,7 @@ dir_ls(dir_pmtiles, glob = "*.pmtiles") |>
   select(file, size) |>
   knitr::kable()
 
-cat("\n### Parquet\n\n")
+cat("\n### Consolidated Parquet\n\n")
 dir_ls(dir_parquet, glob = "*.parquet") |>
   tibble(path = _) |>
   mutate(
@@ -478,4 +610,10 @@ dir_ls(dir_parquet, glob = "*.parquet") |>
   ) |>
   select(file, size) |>
   knitr::kable()
+
+cat(glue(
+  "\n### Database Tables\n\n",
+  "- `_spatial`: {nrow(spatial_combined)} features, ",
+  "{length(unique(spatial_combined$layer))} layers\n",
+  "- `_spatial_attr`: {nrow(attr_combined)} attribute rows\n"))
 ```

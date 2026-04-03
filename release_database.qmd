@@ -94,9 +94,8 @@ message(glue("Release version: {release_version}"))
 
 ## Assemble from Ingest Outputs
 
-Load all per-dataset parquet outputs into an in-memory DuckDB. Each
-ingest notebook writes parquet to `data/parquet/{dataset}/` and uploads
-to `gs://calcofi-db/ingest/{dataset}/`.
+Create VIEWs on local parquet files from each ingest (zero-copy).
+For tables appearing in multiple ingests, use the canonical (first) source.
 
 ```{r}
 #| label: assemble_working
@@ -104,24 +103,77 @@ to `gs://calcofi-db/ingest/{dataset}/`.
 con_wdl <- get_duckdb_con(":memory:")
 load_duckdb_extension(con_wdl, "spatial")
 
-# discover upstream parquet dirs from .qmd frontmatter
-wf <- parse_qmd_frontmatter(here())
-parquet_dirs <- wf |>
-  filter(workflow_type %in% c("ingest", "spatial")) |>
-  pull(output) |>
-  dirname() |>
-  purrr::map_chr(~ here(.x))
-message(glue("Loading {length(parquet_dirs)} ingest parquet dirs"))
+# auto-discover table registry from all ingest manifests
+registry <- build_release_table_registry(here())
 
-load_stats <- purrr::map_dfr(parquet_dirs, function(pd) {
-  load_prior_tables(
-    con = con_wdl,
-    parquet_dir = pd
-  )
-})
+# use only canonical, non-supplemental tables
+reg_canon <- registry |>
+  filter(canonical, !supplemental)
+
+message(glue(
+  "{nrow(reg_canon)} canonical tables from ",
+  "{length(unique(reg_canon$ingest))} ingests"))
+
+# create VIEWs on local parquet for each canonical table
+# _new delta tables handled separately for merging
+all_geom_tables <- c("grid", "site", "segment", "casts", "ctd_cast", "_spatial")
+main_tables <- reg_canon |> filter(!grepl("_new$", table))
+new_tables  <- registry |> filter(grepl("_new$", table))
+
+load_stats <- purrr::map_dfr(
+  split(main_tables, seq_len(nrow(main_tables))),
+  function(row) {
+    load_prior_tables(
+      con         = con_wdl,
+      parquet_dir = row$parquet_dir,
+      tables      = row$table,
+      geom_tables = all_geom_tables,
+      as_view     = TRUE
+    )
+  })
+
+# merge {table}_new additions into their base tables
+# driven by calcofi.modifies in YAML frontmatter
+if (nrow(new_tables) > 0) {
+  # group _new tables by their base table
+  base_names <- unique(sub("_new$", "", new_tables$table))
+
+  for (base_tbl in base_names) {
+    delta_rows <- new_tables |> filter(table == paste0(base_tbl, "_new"))
+
+    # replace VIEW with TABLE for this base table (so we can INSERT)
+    base_src <- main_tables |> filter(table == base_tbl)
+    if (nrow(base_src) > 0) {
+      dbExecute(con_wdl, glue("DROP VIEW IF EXISTS {base_tbl}"))
+      load_prior_tables(
+        con = con_wdl, parquet_dir = base_src$parquet_dir[1],
+        tables = base_tbl, geom_tables = all_geom_tables)
+
+      # get PK column for dedup
+      pk_col <- dbGetQuery(con_wdl, glue(
+        "SELECT column_name FROM information_schema.columns
+         WHERE table_name = '{base_tbl}'
+         ORDER BY ordinal_position LIMIT 1"))$column_name
+
+      for (j in seq_len(nrow(delta_rows))) {
+        dr <- delta_rows[j, ]
+        pq_path <- file.path(dr$parquet_dir, paste0(base_tbl, "_new.parquet"))
+        if (file.exists(pq_path)) {
+          dbExecute(con_wdl, glue(
+            "INSERT INTO {base_tbl}
+             SELECT * FROM read_parquet('{pq_path}')
+             WHERE {pk_col} NOT IN (SELECT {pk_col} FROM {base_tbl})"))
+          n_new <- dbGetQuery(con_wdl, glue(
+            "SELECT COUNT(*) AS n FROM read_parquet('{pq_path}')"))$n
+          message(glue("Merged {n_new} {base_tbl} addition(s) from {dr$ingest}"))
+        }
+      }
+    }
+  }
+}
 
 load_stats |>
-  datatable(caption = "Assembled tables from ingest parquet outputs")
+  datatable(caption = "Assembled tables (VIEWs on local parquet)")
 ```
 
 ## Scan Manifests for Mismatches
@@ -437,6 +489,7 @@ cc_erd(
     lavender    = c("ctd_cast", "ctd_measurement", "ctd_summary"),
     lightsalmon = c("dic_sample", "dic_measurement",
                     "dic_measurement_summary"),
+    lightcyan   = c("_spatial", "_spatial_attr"),
     white       = "dataset"))
 ```
 
@@ -448,38 +501,59 @@ access. See
 pattern.
 
 ```{r}
-#| label: eval_off_rest
-
-# freeze + upload enabled so GCS release includes all tables (incl. geometry)
-# knitr::opts_chunk$set(eval = FALSE)
-```
-
-
-```{r}
 #| label: freeze_release
 
 dir_frozen <- here(glue("data/releases/{release_version}"))
+dir_frozen_pq <- file.path(dir_frozen, "parquet")
+dir.create(dir_frozen_pq, recursive = TRUE, showWarnings = FALSE)
 message(glue("Creating frozen release: {release_version}"))
 
-# get tables to freeze (exclude internal and view tables)
-tables_to_freeze <- schema_tbls
+# only cruise_summary is derived in this notebook — export locally
+# all other tables are GCS-copied from ingest/ (including provenance columns)
+derived_tables <- "cruise_summary"
+if (nrow(new_tables) > 0) {
+  # tables with _new additions need local merge + export
+  merged_base <- unique(sub("_new$", "", new_tables$table))
+  derived_tables <- c(derived_tables, merged_base)
+}
 
-# create frozen parquet (strips provenance)
-# partition large tables by cruise_key for efficient reads
-freeze_stats <- write_parquet_outputs(
-  con = con_wdl,
-  output_dir = file.path(dir_frozen, "parquet"),
-  tables = tables_to_freeze,
-  partition_by = list(
-    ctd_measurement = "cruise_key",
-    ctd_summary = "cruise_key"
-  ),
-  strip_provenance = TRUE,
-  compression = "zstd"
-)
+# export only derived/merged tables to local parquet
+export_parquet(con_wdl, "cruise_summary",
+  file.path(dir_frozen_pq, "cruise_summary.parquet"), compression = "zstd")
+message("Exported cruise_summary.parquet")
+
+# export merged tables (e.g., ship with _new additions)
+for (tbl in setdiff(derived_tables, "cruise_summary")) {
+  export_parquet(con_wdl, tbl,
+    file.path(dir_frozen_pq, paste0(tbl, ".parquet")), compression = "zstd")
+  message(glue("Exported {tbl}.parquet (merged)"))
+}
+
+# build freeze stats from registry (auto-discovered)
+# exclude _new delta tables (intermediate) and supplemental
+freeze_stats <- reg_canon |>
+  filter(!supplemental, !grepl("_new$", table)) |>
+  select(table, rows, partitioned, gcs_prefix)
+
+# merged tables (from _new additions) → mark as derived (gcs_prefix = NA → upload from local)
+if (nrow(new_tables) > 0) {
+  merged_base <- unique(sub("_new$", "", new_tables$table))
+  freeze_stats <- freeze_stats |>
+    mutate(gcs_prefix = if_else(table %in% merged_base, NA_character_, gcs_prefix))
+}
+
+# add derived tables (cruise_summary, etc.)
+for (dt in derived_tables) {
+  if (!dt %in% freeze_stats$table) {
+    n <- dbGetQuery(con_wdl, glue("SELECT COUNT(*) AS n FROM {dt}"))$n
+    freeze_stats <- freeze_stats |>
+      bind_rows(tibble(
+        table = dt, rows = n, partitioned = FALSE, gcs_prefix = NA_character_))
+  }
+}
 
 freeze_stats |>
-  datatable(caption = glue("Frozen release {release_version} statistics"))
+  datatable(caption = glue("Frozen release {release_version} — {nrow(freeze_stats)} tables"))
 ```
 
 ## Release Notes
@@ -512,11 +586,8 @@ release_notes <- paste0(
   nrow(freeze_stats),
   "\n",
   "- **Total Rows**: ",
-  format(sum(freeze_stats$rows), big.mark = ","),
-  "\n",
-  "- **Total Size**: ",
-  round(sum(freeze_stats$file_size) / 1024 / 1024, 1),
-  " MB\n\n",
+  format(sum(freeze_stats$rows, na.rm = TRUE), big.mark = ","),
+  "\n\n",
   "## Data Sources\n\n",
   "- `ingest_swfsc_ichthyo.qmd` - Ichthyo tables (cruise, ship, site, tow, net, species, ichthyo, grid, segment, lookup, taxon, taxa_rank)\n",
   "- `ingest_calcofi_bottle.qmd` - Bottle/cast tables (casts, bottle, bottle_measurement, cast_condition, measurement_type)\n",
@@ -561,12 +632,109 @@ cat(release_notes)
 ```{r}
 #| label: upload_frozen
 
-# upload frozen release to GCS
-upload_frozen_release(
-  release_dir = dir_frozen,
-  version = release_version,
-  set_latest = TRUE
-)
+gcs_bucket  <- "calcofi-db"
+gcs_release <- glue("ducklake/releases/{release_version}")
+gcloud      <- find_gcloud()
+
+# 1. GCS server-side copy for ingest tables (auto-discovered from registry)
+copy_rows <- freeze_stats |> filter(!is.na(gcs_prefix))
+message(glue("Copying {nrow(copy_rows)} tables from ingest/ to releases/ on GCS..."))
+
+for (i in seq_len(nrow(copy_rows))) {
+  tbl  <- copy_rows$table[i]
+  pfx  <- copy_rows$gcs_prefix[i]
+  part <- copy_rows$partitioned[i]
+
+  if (part) {
+    # partitioned: copy directory
+    src <- glue("gs://{gcs_bucket}/{pfx}/{tbl}")
+    dst <- glue("gs://{gcs_bucket}/{gcs_release}/parquet/{tbl}")
+    system2(gcloud, c("storage", "cp", "-r",
+      paste0(src, "/*"), dst), stdout = TRUE, stderr = TRUE)
+  } else {
+    src <- glue("gs://{gcs_bucket}/{pfx}/{tbl}.parquet")
+    dst <- glue("gs://{gcs_bucket}/{gcs_release}/parquet/{tbl}.parquet")
+    system2(gcloud, c("storage", "cp",
+      src, dst), stdout = TRUE, stderr = TRUE)
+  }
+  message(glue("  {tbl}: copied from {pfx}"))
+}
+
+# 2. upload derived tables from local parquet (cruise_summary)
+derived_local <- list.files(dir_frozen_pq, pattern = "[.]parquet$",
+                            full.names = TRUE)
+for (pq in derived_local) {
+  tbl <- tools::file_path_sans_ext(basename(pq))
+  gcs_path <- glue("gs://{gcs_bucket}/{gcs_release}/parquet/{tbl}.parquet")
+  put_gcs_file(pq, gcs_path)
+  message(glue("  {tbl}: uploaded (derived)"))
+}
+
+# 3. build and upload catalog.json (needed by cc_get_db())
+tables_df <- freeze_stats |>
+  select(name = table, rows, partitioned)
+
+catalog <- list(
+  version      = release_version,
+  release_date = as.character(Sys.Date()),
+  total_rows   = sum(tables_df$rows, na.rm = TRUE),
+  total_size   = 0,
+  tables       = tables_df)
+catalog_path <- file.path(dir_frozen, "catalog.json")
+jsonlite::write_json(catalog, catalog_path, auto_unbox = TRUE, pretty = TRUE)
+put_gcs_file(catalog_path,
+  glue("gs://{gcs_bucket}/{gcs_release}/catalog.json"))
+
+# upload RELEASE_NOTES.md
+notes_path <- file.path(dir_frozen, "RELEASE_NOTES.md")
+if (file.exists(notes_path))
+  put_gcs_file(notes_path,
+    glue("gs://{gcs_bucket}/{gcs_release}/RELEASE_NOTES.md"))
+
+# upload relationships.json
+rels_json <- file.path(dir_frozen, "relationships.json")
+if (file.exists(rels_json))
+  put_gcs_file(rels_json,
+    glue("gs://{gcs_bucket}/{gcs_release}/relationships.json"))
+
+# 4. update versions.json and latest.txt
+# discover all releases from GCS and rebuild versions.json
+gcs_ls <- system2(gcloud, c("storage", "ls",
+  glue("gs://{gcs_bucket}/ducklake/releases/")),
+  stdout = TRUE, stderr = TRUE)
+release_vers <- regmatches(gcs_ls,
+  regexpr("v[0-9]{4}[.][0-9]{2}[.]*[0-9]*", gcs_ls))
+https_base <- glue("https://storage.googleapis.com/{gcs_bucket}/ducklake/releases")
+
+all_versions <- purrr::compact(lapply(release_vers, function(v) {
+  tryCatch({
+    cat_data <- jsonlite::fromJSON(glue("{https_base}/{v}/catalog.json"))
+    list(
+      version      = cat_data$version,
+      release_date = cat_data$release_date %||% NA_character_,
+      tables       = if (is.data.frame(cat_data$tables)) nrow(cat_data$tables)
+                     else length(cat_data$tables),
+      total_rows   = as.integer(cat_data$total_rows %||% 0),
+      size_mb      = round((cat_data$total_size %||% 0) / 1024 / 1024, 1))
+  }, error = function(e) NULL)
+}))
+all_versions <- all_versions[order(
+  sapply(all_versions, `[[`, "version"), decreasing = TRUE)]
+
+versions_local <- tempfile(fileext = ".json")
+jsonlite::write_json(list(versions = all_versions), versions_local,
+  auto_unbox = TRUE, pretty = TRUE)
+put_gcs_file(versions_local,
+  glue("gs://{gcs_bucket}/ducklake/releases/versions.json"))
+
+# update latest.txt
+latest_local <- tempfile()
+writeLines(release_version, latest_local)
+put_gcs_file(latest_local,
+  glue("gs://{gcs_bucket}/ducklake/releases/latest.txt"))
+
+message(glue(
+  "Release {release_version} published ({length(all_versions)} versions tracked)"))
 ```
 
 ## Cleanup
@@ -582,7 +750,7 @@ message("Assembly DuckDB connection closed")
 message(glue("\n=== Summary ==="))
 message(glue("Frozen release: {release_version} created at {dir_frozen}"))
 message(glue("Tables: {nrow(freeze_stats)}"))
-message(glue("Total rows: {format(sum(freeze_stats$rows), big.mark = ',')}"))
+message(glue("Total rows: {format(sum(freeze_stats$rows, na.rm = TRUE), big.mark = ',')}"))
 ```
 
 ::: {.callout-caution collapse="true"}
