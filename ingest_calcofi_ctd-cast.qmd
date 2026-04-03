@@ -6,6 +6,8 @@ calcofi:
   dependency:
     - ingest_swfsc_ichthyo
   output: data/parquet/calcofi_ctd-cast/manifest.json
+  modifies:
+    - ship
 ---
 
 ## Overview
@@ -946,12 +948,31 @@ Load reference tables (ship, cruise, grid) from the ichthyo ingest, derive `ship
 ```{r}
 #| label: cross_dataset_bridge
 
-# load reference tables from ichthyo workflow's local parquet output
+# tables declared in calcofi.modifies — loaded as TABLEs (writable)
+modifies_tables <- c("ship")  # from calcofi.modifies in YAML frontmatter
 load_prior_tables(
-  con = con,
-  tables = c("ship", "cruise", "grid"),
+  con         = con,
+  tables      = modifies_tables,
   parquet_dir = here("data/parquet/swfsc_ichthyo")
 )
+# cruise + grid as VIEWs (read-only: cruise used for JOIN, grid for assign_grid_key)
+load_prior_tables(
+  con         = con,
+  tables      = c("cruise", "grid"),
+  parquet_dir = here("data/parquet/swfsc_ichthyo"),
+  as_view     = TRUE
+)
+
+# snapshot PKs of modified tables before modifications
+modifies_pks <- list()
+for (tbl in modifies_tables) {
+  pk_col <- dbGetQuery(con, glue(
+    "SELECT column_name FROM information_schema.columns
+     WHERE table_name = '{tbl}' ORDER BY ordinal_position LIMIT 1"))$column_name
+  modifies_pks[[tbl]] <- list(
+    pk_col = pk_col,
+    keys   = dbGetQuery(con, glue("SELECT {pk_col} FROM {tbl}"))[[1]])
+}
 
 # detect whether cruise_key already in YYYY-MM-NODC format (from checkpoint)
 sample_ck <- dbGetQuery(
@@ -1413,8 +1434,7 @@ parquet_stats <- write_parquet_outputs(
                     "measurement_type", "ctd_wide"),
   partition_by = list(
     ctd_measurement = "cruise_key",
-    ctd_summary     = "cruise_key",
-    ctd_wide        = "cruise_key"
+    ctd_summary     = "cruise_key"
   ),
   strip_provenance = FALSE,
   mismatches       = mismatches,
@@ -1449,6 +1469,31 @@ build_relationships_json(
 )
 ```
 
+## Export Modified Dependency Deltas
+
+```{r}
+#| label: export_new_deltas
+
+# export _new delta sidecars for modified dependency tables (from calcofi.modifies)
+# these are NOT in the manifest — picked up by build_release_table_registry()
+for (tbl in modifies_tables) {
+  pk_col   <- modifies_pks[[tbl]]$pk_col
+  keys_old <- modifies_pks[[tbl]]$keys
+  keys_new <- dbGetQuery(con, glue("SELECT {pk_col} FROM {tbl}"))[[1]]
+  additions <- setdiff(keys_new, keys_old)
+
+  if (length(additions) > 0) {
+    pq_path <- file.path(dir_parquet, paste0(tbl, "_new.parquet"))
+    vals <- paste(shQuote(additions, "sh"), collapse = ", ")
+    export_parquet(con,
+      glue("SELECT * FROM {tbl} WHERE {pk_col} IN ({vals})"), pq_path)
+    message(glue("{length(additions)} new {tbl} row(s) -> {tbl}_new.parquet"))
+  } else {
+    message(glue("No new {tbl} rows — {tbl}_new not exported"))
+  }
+}
+```
+
 ## Upload to GCS
 
 ```{r}
@@ -1462,12 +1507,17 @@ knitr::opts_chunk$set(eval = TRUE)
 ```{r}
 #| label: upload_gcs
 
-sync_to_gcs(
-  local_dir    = dir_parquet,
-  gcs_prefix   = glue("ingest/{dir_label}"),
-  bucket       = "calcofi-db",
-  delete_stale = TRUE
-)
+# skip sync if all parquet tables were unchanged (no re-write)
+if (parquet_complete) {
+  message("Parquet unchanged — skipping GCS sync")
+} else {
+  sync_to_gcs(
+    local_dir    = dir_parquet,
+    gcs_prefix   = glue("ingest/{dir_label}"),
+    bucket       = "calcofi-db",
+    delete_stale = TRUE
+  )
+}
 ```
 
 ## Cleanup
