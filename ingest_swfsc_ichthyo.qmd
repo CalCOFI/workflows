@@ -92,7 +92,7 @@ provider <- "swfsc"
 dataset <- "ichthyo"
 dir_label <- glue("{provider}_{dataset}")
 dir_data <- "~/My Drive/projects/calcofi/data-public"
-overwrite <- TRUE
+overwrite <- FALSE
 dir_parquet <- here(glue("data/parquet/{dir_label}"))
 db_path <- here(glue("data/wrangling/{dir_label}.duckdb"))
 
@@ -227,7 +227,14 @@ create_cruise_key(
 
 # verify uniqueness
 cruise_keys <- tbl(con, "cruise") |> pull(cruise_key)
-stopifnot("cruise_key must be unique" = !any(duplicated(cruise_keys)))
+if (any(duplicated(cruise_keys))) {
+  dups <- cruise_keys[duplicated(cruise_keys)] |> unique() |> head(5)
+  stop(glue(
+    "cruise_key must be unique — found {sum(duplicated(cruise_keys))} ",
+    "duplicates, e.g.: {paste(dups, collapse = ', ')}. ",
+    "Try deleting {db_path} and re-rendering."
+  ))
+}
 
 # show sample cruise keys
 tbl(con, "cruise") |>
@@ -728,24 +735,62 @@ taxa_rank.taxonRank (PK)
 # uses UUID PKs for source tables, sequential IDs for derived tables
 ichthyo_rels <- list(
   primary_keys = list(
-    cruise    = "cruise_key",
-    ship      = "ship_key",
-    site      = "site_uuid",
-    tow       = "tow_uuid",
-    net       = "net_uuid",
-    species   = "species_id",
-    ichthyo   = "ichthyo_uuid",
-    lookup    = "lookup_id",
-    taxon     = "taxonID",
-    taxa_rank = "taxonRank"),
+    cruise = "cruise_key",
+    ship = "ship_key",
+    site = "site_uuid",
+    tow = "tow_uuid",
+    net = "net_uuid",
+    species = "species_id",
+    ichthyo = "ichthyo_uuid",
+    lookup = "lookup_id",
+    taxon = "taxonID",
+    taxa_rank = "taxonRank"
+  ),
   foreign_keys = list(
-    list(table = "ichthyo", column = "net_uuid",    ref_table = "net",       ref_column = "net_uuid"),
-    list(table = "ichthyo", column = "species_id",  ref_table = "species",   ref_column = "species_id"),
-    list(table = "net",     column = "tow_uuid",    ref_table = "tow",       ref_column = "tow_uuid"),
-    list(table = "tow",     column = "site_uuid",   ref_table = "site",      ref_column = "site_uuid"),
-    list(table = "site",    column = "cruise_key",   ref_table = "cruise",    ref_column = "cruise_key"),
-    list(table = "cruise",  column = "ship_key",     ref_table = "ship",      ref_column = "ship_key"),
-    list(table = "taxon",   column = "taxonRank",    ref_table = "taxa_rank", ref_column = "taxonRank")))
+    list(
+      table = "ichthyo",
+      column = "net_uuid",
+      ref_table = "net",
+      ref_column = "net_uuid"
+    ),
+    list(
+      table = "ichthyo",
+      column = "species_id",
+      ref_table = "species",
+      ref_column = "species_id"
+    ),
+    list(
+      table = "net",
+      column = "tow_uuid",
+      ref_table = "tow",
+      ref_column = "tow_uuid"
+    ),
+    list(
+      table = "tow",
+      column = "site_uuid",
+      ref_table = "site",
+      ref_column = "site_uuid"
+    ),
+    list(
+      table = "site",
+      column = "cruise_key",
+      ref_table = "cruise",
+      ref_column = "cruise_key"
+    ),
+    list(
+      table = "cruise",
+      column = "ship_key",
+      ref_table = "ship",
+      ref_column = "ship_key"
+    ),
+    list(
+      table = "taxon",
+      column = "taxonRank",
+      ref_table = "taxa_rank",
+      ref_column = "taxonRank"
+    )
+  )
+)
 
 cc_erd(con, rels = ichthyo_rels)
 ```
@@ -864,11 +909,11 @@ grid_df <- grid |>
 dbWriteTable(con, "grid", grid_df, overwrite = TRUE)
 
 # convert WKB back to geometry with EPSG:4326
-dbExecute(con, "ALTER TABLE grid ADD COLUMN geom GEOMETRY")
+dbExecute(con, "ALTER TABLE grid ADD COLUMN IF NOT EXISTS geom GEOMETRY")
 dbExecute(con, "UPDATE grid SET geom = ST_GeomFromHEXWKB(geom_wkb)")
 dbExecute(con, "ALTER TABLE grid DROP COLUMN geom_wkb")
 
-dbExecute(con, "ALTER TABLE grid ADD COLUMN geom_ctr GEOMETRY")
+dbExecute(con, "ALTER TABLE grid ADD COLUMN IF NOT EXISTS geom_ctr GEOMETRY")
 dbExecute(con, "UPDATE grid SET geom_ctr = ST_GeomFromHEXWKB(geom_ctr_wkb)")
 dbExecute(con, "ALTER TABLE grid DROP COLUMN geom_ctr_wkb")
 
@@ -970,7 +1015,7 @@ segment_df <- segment |>
 
 dbWriteTable(con, "segment", segment_df, overwrite = TRUE)
 
-dbExecute(con, "ALTER TABLE segment ADD COLUMN geom GEOMETRY")
+dbExecute(con, "ALTER TABLE segment ADD COLUMN IF NOT EXISTS geom GEOMETRY")
 dbExecute(con, "UPDATE segment SET geom = ST_GeomFromHEXWKB(geom_wkb)")
 dbExecute(con, "ALTER TABLE segment DROP COLUMN geom_wkb")
 
@@ -1105,22 +1150,22 @@ type_changes <- enforce_column_types(
   con = con,
   d_flds_rd = d$d_flds_rd,
   type_overrides = list(
-    ichthyo.ichthyo_uuid         = "UUID",
-    ichthyo.net_uuid             = "UUID",
-    ichthyo.species_id           = "SMALLINT",
-    ichthyo.tally                = "INTEGER",
-    lookup.lookup_id             = "INTEGER",
-    lookup.lookup_num            = "INTEGER",
-    segment.segment_id           = "INTEGER",
-    segment.site_uuid_beg        = "UUID",
-    segment.site_uuid_end        = "UUID",
-    species.worms_id             = "INTEGER",
-    species.itis_id              = "INTEGER",
-    species.gbif_id              = "INTEGER",
-    taxon.taxonID                = "INTEGER",
-    taxon.acceptedNameUsageID    = "INTEGER",
-    taxon.parentNameUsageID      = "INTEGER",
-    taxa_rank.rank_order         = "SMALLINT"
+    ichthyo.ichthyo_uuid = "UUID",
+    ichthyo.net_uuid = "UUID",
+    ichthyo.species_id = "SMALLINT",
+    ichthyo.tally = "INTEGER",
+    lookup.lookup_id = "INTEGER",
+    lookup.lookup_num = "INTEGER",
+    segment.segment_id = "INTEGER",
+    segment.site_uuid_beg = "UUID",
+    segment.site_uuid_end = "UUID",
+    species.worms_id = "INTEGER",
+    species.itis_id = "INTEGER",
+    species.gbif_id = "INTEGER",
+    taxon.taxonID = "INTEGER",
+    taxon.acceptedNameUsageID = "INTEGER",
+    taxon.parentNameUsageID = "INTEGER",
+    taxa_rank.rank_order = "SMALLINT"
   ),
   tables = dbListTables(con),
   verbose = TRUE
@@ -1168,8 +1213,9 @@ Export tables to parquet files for downstream use.
 
 # collect mismatches for manifest
 mismatches <- list(
-  ships       = collect_ship_mismatches(con, "cruise"),
-  cruise_keys = collect_cruise_key_mismatches(con, "cruise"))
+  ships = collect_ship_mismatches(con, "cruise"),
+  cruise_keys = collect_cruise_key_mismatches(con, "cruise")
+)
 
 # write parquet files with manifest
 parquet_stats <- write_parquet_outputs(
@@ -1212,10 +1258,10 @@ metadata_path <- build_metadata_json(
 
 # write relationships.json sidecar with PKs/FKs
 build_relationships_json(
-  rels       = ichthyo_rels,
+  rels = ichthyo_rels,
   output_dir = dir_parquet,
-  provider   = provider,
-  dataset    = dataset
+  provider = provider,
+  dataset = dataset
 )
 
 # show metadata summary

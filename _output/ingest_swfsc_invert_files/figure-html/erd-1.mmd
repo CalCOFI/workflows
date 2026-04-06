@@ -1,0 +1,59 @@
+---
+config:
+  layout: elk
+---
+erDiagram
+    invert {
+        bigint invert_id PK
+        int invert_net_id FK
+        varchar scientific_name
+        varchar common_name
+        double itis_tsn
+        double calcofi_species_code
+        varchar measurement_type
+        double measurement_value
+    }
+    invert_net {
+        varchar cruise_key FK
+        varchar cruise_erddap
+        varchar ship_code
+        double order_occupied
+        varchar tow_type
+        double tow_number
+        varchar net_location
+        timestamp time_start
+        double latitude
+        double longitude
+        double line
+        double station
+        double standard_haul_factor
+        double volume_sampled
+        double proportion_sorted
+        int invert_net_id PK
+    }
+    cruise {
+        uuid cruise_uuid
+        date date_ym
+        varchar ship_key FK
+        varchar _source_file
+        int _source_row
+        timestamp _ingested_at
+        varchar _source_uuid
+        varchar cruise_key PK
+    }
+    ship {
+        varchar ship_key PK
+        varchar ship_name
+        varchar ship_nodc
+        varchar _source_file
+        int _source_row
+        timestamp _ingested_at
+        varchar _source_uuid
+    }
+    invert_net ||--o{ invert : "invert_net_id"
+    cruise ||--o{ invert_net : "cruise_key"
+    ship ||--o{ cruise : "ship_key"
+    classDef lightblue fill:#ADD8E6,stroke:#68828A
+    class invert,invert_net lightblue
+    classDef lightyellow fill:#FFFFE0,stroke:#999986
+    class cruise,ship lightyellow

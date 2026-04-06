@@ -1,0 +1,101 @@
+---
+config:
+  layout: elk
+---
+erDiagram
+    bottle {
+        double cast_id FK
+        double bottle_id PK
+        varchar site_key
+        varchar depth_key
+        double depth_m
+        double btl_num
+        double rec_ind
+        double depth_qual
+        interval inc_tim
+        varchar _source_file
+        int _source_row
+        timestamp _ingested_at
+        varchar _source_uuid
+    }
+    bottle_measurement {
+        bigint bottle_measurement_id PK
+        double bottle_id FK
+        varchar measurement_type FK
+        double measurement_value
+        double measurement_prec
+        varchar measurement_qual
+    }
+    cast_condition {
+        bigint cast_condition_id PK
+        double cast_id FK
+        varchar condition_type FK
+        double condition_value
+    }
+    casts {
+        double cast_id PK
+        varchar cruise_key_0
+        varchar cast_key
+        varchar site_key
+        varchar sta_code
+        double distance
+        double lat_dec
+        double lon_dec
+        varchar rpt_line
+        double st_line
+        double ac_line
+        varchar rpt_sta
+        double st_station
+        double ac_sta
+        double bottom_depth_m
+        varchar ship_name
+        varchar ship_code
+        varchar data_type
+        double order_occ
+        double event_num
+        double cruz_leg
+        varchar orig_sta_id
+        varchar data_or
+        double int_chl
+        double int_c14
+        interval inc_str
+        interval inc_end
+        interval pst_lan
+        interval civil_t
+        varchar _source_file
+        int _source_row
+        timestamp _ingested_at
+        varchar _source_uuid
+        timestamp datetime_utc
+    }
+    dataset {
+        varchar provider
+        varchar dataset
+        varchar dataset_name
+        varchar description
+        varchar citation_main
+        bool citation_others
+        varchar link_calcofi_org
+        varchar link_data_source
+        varchar link_others
+        varchar tables
+        varchar coverage_temporal
+        varchar coverage_spatial
+        varchar license
+        varchar pi_names
+    }
+    measurement_type {
+        varchar measurement_type PK
+        varchar description
+        varchar units
+        varchar _source_column
+        varchar _source_table
+        varchar _source_datasets
+        varchar _qual_column
+        varchar _prec_column
+    }
+    casts ||--o{ bottle : "cast_id"
+    bottle ||--o{ bottle_measurement : "bottle_id"
+    measurement_type ||--o{ bottle_measurement : "measurement_type"
+    casts ||--o{ cast_condition : "cast_id"
+    measurement_type ||--o{ cast_condition : "condition_type"

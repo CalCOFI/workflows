@@ -1,0 +1,389 @@
+---
+config:
+  layout: elk
+---
+erDiagram
+    _spatial {
+        int id
+        varchar layer
+        varchar name
+        geometry geom
+    }
+    _spatial_attr {
+        varchar layer
+        int id
+        varchar fld
+        double val_dbl
+        int val_int
+        varchar val_chr
+        date val_date
+        bool val_lgl
+    }
+    bottle {
+        int cast_id FK
+        int bottle_id PK
+        varchar site_key
+        varchar depth_key
+        double depth_m
+        smallint btl_num
+        varchar rec_ind
+        double depth_qual
+        varchar inc_tim
+        varchar _source_file
+        int _source_row
+        timestamp _ingested_at
+        varchar _source_uuid
+    }
+    bottle_measurement {
+        bigint bottle_measurement_id PK
+        double bottle_id FK
+        varchar measurement_type FK
+        double measurement_value
+        double measurement_prec
+        varchar measurement_qual
+    }
+    cast_condition {
+        bigint cast_condition_id PK
+        double cast_id FK
+        varchar condition_type FK
+        double condition_value
+    }
+    casts {
+        int cast_id PK
+        varchar cruise_key_0
+        varchar cast_key
+        varchar site_key
+        varchar sta_code
+        double distance
+        double lat_dec
+        double lon_dec
+        double rpt_line
+        double st_line
+        double ac_line
+        double rpt_sta
+        double st_station
+        double ac_sta
+        double bottom_depth_m
+        varchar ship_name
+        varchar ship_code
+        varchar data_type
+        smallint order_occ
+        smallint event_num
+        varchar cruz_leg
+        varchar orig_sta_id
+        varchar data_or
+        double int_chl
+        double int_c14
+        varchar inc_str
+        varchar inc_end
+        varchar pst_lan
+        varchar civil_t
+        timestamp datetime_utc
+        geometry geom
+        varchar grid_key FK
+        varchar ship_key FK
+        varchar cruise_key FK
+    }
+    cruise {
+        uuid cruise_uuid
+        date date_ym
+        varchar ship_key FK
+        varchar _source_file
+        int _source_row
+        timestamp _ingested_at
+        varchar _source_uuid
+        varchar cruise_key PK
+    }
+    ctd_cast {
+        varchar ctd_cast_uuid
+        varchar cruise_key
+        varchar data_stage
+        varchar cast_dir
+        varchar ord_occ
+        double event_num
+        varchar cast_key
+        timestamp datetime_utc
+        double lat_dec
+        double lon_dec
+        varchar sta_key
+        varchar line
+        varchar sta
+        double ox_aveu_m_sta_corr
+        varchar ship_key
+        geometry geom
+        varchar grid_key
+    }
+    ctd_measurement {
+        varchar ctd_measurement_uuid
+        varchar ctd_cast_uuid
+        double depth_m
+        varchar measurement_type
+        double measurement_value
+        varchar measurement_qual
+        varchar cruise_key
+    }
+    ctd_summary {
+        varchar ctd_summary_uuid PK
+        varchar site_key
+        double depth_m
+        varchar measurement_type
+        double avg
+        double stddev
+        bigint n_obs
+        varchar cruise_key
+    }
+    dataset {
+        varchar provider
+        varchar dataset
+        varchar dataset_name
+        varchar description
+        varchar citation_main
+        bool citation_others
+        varchar link_calcofi_org
+        varchar link_data_source
+        varchar link_others
+        varchar tables
+        varchar coverage_temporal
+        varchar coverage_spatial
+        varchar license
+        varchar pi_names
+    }
+    dic_measurement {
+        bigint dic_measurement_id PK
+        varchar expocode
+        varchar site_key
+        timestamp datetime_utc
+        double depth_m
+        double latitude
+        double longitude
+        int cast_id
+        int bottle_id
+        varchar measurement_type FK
+        double measurement_value
+        varchar measurement_qual
+    }
+    dic_sample {
+        varchar expocode
+        varchar ship_name
+        timestamp datetime_utc
+        varchar site_key
+        double latitude
+        double longitude
+        double depth_m
+        int cast_id
+        int bottle_id
+        geometry geom
+    }
+    dic_summary {
+        varchar site_key
+        timestamp datetime_utc
+        double depth_m
+        double latitude
+        double longitude
+        varchar measurement_type FK
+        double avg
+        double stddev
+        bigint n_obs
+        int cast_id
+        int bottle_id
+    }
+    grid {
+        varchar grid_key
+        double station
+        double line
+        varchar shore
+        varchar pattern
+        int spacing
+        varchar zone
+        double area_km2
+        geometry geom
+        geometry geom_ctr
+    }
+    ichthyo {
+        uuid ichthyo_uuid PK
+        uuid net_uuid FK
+        smallint species_id FK
+        varchar life_stage
+        varchar measurement_type
+        double measurement_value
+        int tally
+        varchar _source_file
+        int _source_row
+        timestamp _ingested_at
+        varchar _source_uuid
+    }
+    invert {
+        bigint invert_id
+        int invert_net_id
+        varchar scientific_name
+        varchar common_name
+        double itis_tsn
+        double calcofi_species_code
+        varchar measurement_type
+        double measurement_value
+    }
+    invert_net {
+        varchar cruise_key
+        varchar cruise_erddap
+        varchar ship_code
+        double order_occupied
+        varchar tow_type
+        double tow_number
+        varchar net_location
+        timestamp time_start
+        double latitude
+        double longitude
+        double line
+        double station
+        double standard_haul_factor
+        double volume_sampled
+        double proportion_sorted
+        int invert_net_id
+    }
+    lookup {
+        int lookup_id PK
+        varchar lookup_type
+        int lookup_num
+        varchar lookup_chr
+        varchar description
+        varchar _source_file
+        int _source_row
+        varchar _ingested_at
+        varchar _source_uuid
+    }
+    measurement_type {
+        varchar measurement_type PK
+        varchar description
+        varchar units
+        varchar _source_column
+        varchar _source_table
+        varchar _source_datasets
+        varchar _qual_column
+        varchar _prec_column
+    }
+    net {
+        uuid net_uuid PK
+        uuid tow_uuid FK
+        varchar side
+        double std_haul_factor
+        double vol_sampled_m3
+        double prop_sorted
+        double smallplankton
+        double totalplankton
+        varchar _source_file
+        int _source_row
+        timestamp _ingested_at
+        varchar _source_uuid
+    }
+    segment {
+        varchar cruise_key
+        uuid site_uuid_beg
+        uuid site_uuid_end
+        double lon_beg
+        double lat_beg
+        double lon_end
+        double lat_end
+        timestamp time_beg
+        timestamp time_end
+        double time_hr
+        double length_km
+        double km_per_hr
+        geometry geom
+        int segment_id
+    }
+    ship {
+        varchar ship_key PK
+        varchar ship_name
+        varchar ship_nodc
+        varchar _source_file
+        int _source_row
+        timestamp _ingested_at
+        varchar _source_uuid
+    }
+    site {
+        uuid site_uuid PK
+        uuid cruise_uuid
+        smallint orderocc
+        double longitude
+        double latitude
+        double line
+        double station
+        varchar _source_file
+        int _source_row
+        timestamp _ingested_at
+        varchar _source_uuid
+        varchar cruise_key FK
+        geometry geom
+        varchar grid_key
+        varchar site_key
+    }
+    species {
+        smallint species_id PK
+        varchar scientific_name
+        int itis_id
+        int worms_id
+        varchar common_name
+        varchar _source_file
+        int _source_row
+        timestamp _ingested_at
+        varchar _source_uuid
+        int gbif_id
+    }
+    taxa_rank {
+        varchar taxonRank PK
+        smallint rank_order
+    }
+    taxon {
+        varchar authority
+        int taxonID PK
+        int acceptedNameUsageID
+        int parentNameUsageID
+        varchar scientificName
+        varchar taxonRank FK
+        varchar taxonomicStatus
+        varchar scientificNameAuthorship
+    }
+    tow {
+        uuid tow_uuid PK
+        uuid site_uuid FK
+        varchar tow_type_key
+        smallint tow_number
+        timestamp time_start
+        varchar _source_file
+        int _source_row
+        timestamp _ingested_at
+        varchar _source_uuid
+    }
+    net ||--o{ ichthyo : "net_uuid"
+    species ||--o{ ichthyo : "species_id"
+    tow ||--o{ net : "tow_uuid"
+    site ||--o{ tow : "site_uuid"
+    cruise ||--o{ site : "cruise_key"
+    ship ||--o{ cruise : "ship_key"
+    taxa_rank ||--o{ taxon : "taxonRank"
+    casts ||--o{ bottle : "cast_id"
+    bottle ||--o{ bottle_measurement : "bottle_id"
+    measurement_type ||--o{ bottle_measurement : "measurement_type"
+    casts ||--o{ cast_condition : "cast_id"
+    measurement_type ||--o{ cast_condition : "condition_type"
+    measurement_type ||--o{ dic_measurement : "measurement_type"
+    measurement_type ||--o{ dic_summary : "measurement_type"
+    cruise ||--o{ casts : "cruise_key"
+    ship ||--o{ casts : "ship_key"
+    grid ||--o{ casts : "grid_key"
+    classDef lightblue fill:#ADD8E6,stroke:#68828A
+    class cruise,ship,site,tow,net lightblue
+    classDef lightyellow fill:#FFFFE0,stroke:#999986
+    class ichthyo,species,lookup,taxon,taxa_rank lightyellow
+    classDef lightgreen fill:#90EE90,stroke:#568F56
+    class grid,segment lightgreen
+    classDef pink fill:#FFC0CB,stroke:#99737A
+    class casts,bottle,bottle_measurement,cast_condition,measurement_type pink
+    classDef lavender fill:#E6E6FA,stroke:#8A8A96
+    class ctd_cast,ctd_measurement,ctd_summary lavender
+    classDef lightsalmon fill:#FFA07A,stroke:#996049
+    class dic_sample,dic_measurement,dic_summary lightsalmon
+    classDef lightcyan fill:#E0FFFF,stroke:#869999
+    class _spatial,_spatial_attr lightcyan
+    classDef white fill:#FFFFFF,stroke:#999999
+    class dataset white

@@ -91,7 +91,7 @@ dataset <- "bottle"
 dir_label <- glue("{provider}_{dataset}")
 dir_data <- "~/My Drive/projects/calcofi/data-public"
 subdir <- "CalCOFI_Database_194903-202105_csv_16October2023"
-overwrite <- TRUE
+overwrite <- FALSE
 dir_parquet <- here(glue("data/parquet/{dir_label}"))
 db_path <- here(glue("data/wrangling/{dir_label}.duckdb"))
 # load data using calcofi4db package
@@ -304,7 +304,7 @@ and create a `casts_derived` convenience VIEW.
 # -- create datetime_utc from date (DATE) + time (INTERVAL) ----
 # date is DATE type (e.g. 1949-03-01), time is INTERVAL (e.g. 09:30:00)
 # adding DATE + INTERVAL yields TIMESTAMP; 324 casts have NULL time
-dbExecute(con, "ALTER TABLE casts ADD COLUMN datetime_utc TIMESTAMP")
+dbExecute(con, "ALTER TABLE casts ADD COLUMN IF NOT EXISTS datetime_utc TIMESTAMP")
 dbExecute(
   con,
   "
@@ -440,7 +440,7 @@ sql_parts <- purrr::pmap_chr(
 )
 
 sql_create <- glue(
-  "CREATE TABLE bottle_measurement AS
+  "CREATE OR REPLACE TABLE bottle_measurement AS
    SELECT ROW_NUMBER() OVER (ORDER BY bottle_id, measurement_type)
      AS bottle_measurement_id, *
    FROM (
@@ -556,7 +556,7 @@ sql_parts <- purrr::pmap_chr(
 )
 
 sql_create <- glue(
-  "CREATE TABLE cast_condition AS
+  "CREATE OR REPLACE TABLE cast_condition AS
    SELECT ROW_NUMBER() OVER (ORDER BY cast_id, condition_type)
      AS cast_condition_id, *
    FROM (
