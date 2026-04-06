@@ -33,7 +33,7 @@ Niskin bottle samples, archived at NCEI accession
 **Strategy**: Load source CSV, pivot ALL four measurement columns
 (DIC, TA, CTD temperature, salinity) into tidy long-format
 `dic_measurement`, then summarize replicates into
-`dic_measurement_summary`. The base `dic_sample` table retains only
+`dic_summary`. The base `dic_sample` table retains only
 position/time/FK columns — no measurement values.
 
 ### Data Flow
@@ -108,7 +108,7 @@ provider     <- "calcofi"
 dataset      <- "dic"
 dir_label    <- glue("{provider}_{dataset}")
 dir_data     <- "~/My Drive/projects/calcofi/data-public"
-overwrite    <- TRUE
+overwrite    <- FALSE
 
 dir_parquet <- here(glue("data/parquet/{dir_label}"))
 db_path     <- here(glue("data/wrangling/{dir_label}.duckdb"))
@@ -376,7 +376,7 @@ sql_parts <- map_chr(meas_map, \(m) glue(
 ))
 
 dbExecute(con, glue(
-  "CREATE TABLE dic_measurement AS
+  "CREATE OR REPLACE TABLE dic_measurement AS
    SELECT ROW_NUMBER() OVER (
      ORDER BY site_key, datetime_utc, depth_m, measurement_type
    ) AS dic_measurement_id, *
@@ -414,7 +414,7 @@ following `ctd_summary` in `ingest_calcofi_ctd-cast.qmd`. Filters out
 
 dbExecute(
   con,
-  "CREATE OR REPLACE TABLE dic_measurement_summary AS
+  "CREATE OR REPLACE TABLE dic_summary AS
    SELECT
      site_key,
      datetime_utc,
@@ -437,9 +437,9 @@ dbExecute(
             latitude, longitude, measurement_type"
 )
 
-n_summ <- dbGetQuery(con, "SELECT COUNT(*) FROM dic_measurement_summary")[[1]]
+n_summ <- dbGetQuery(con, "SELECT COUNT(*) FROM dic_summary")[[1]]
 cat(glue(
-  "dic_measurement_summary: {format(n_summ, big.mark = ',')} rows ",
+  "dic_summary: {format(n_summ, big.mark = ',')} rows ",
   "(from {format(n_meas, big.mark = ',')} measurements)"), "\n")
 
 dbGetQuery(
@@ -450,7 +450,7 @@ dbGetQuery(
           ROUND(AVG(n_obs), 1) AS avg_replicates,
           SUM(CASE WHEN n_obs > 1 THEN 1 ELSE 0 END) AS n_with_replicates,
           ROUND(AVG(stddev), 3) AS avg_stddev
-   FROM dic_measurement_summary
+   FROM dic_summary
    GROUP BY measurement_type
    ORDER BY measurement_type"
 ) |> datatable(caption = "Replicate statistics by type")
@@ -520,15 +520,15 @@ n_dup_sample <- dbGetQuery(
      HAVING COUNT(*) > 1)")[[1]]
 cat(glue("dic_sample composite key duplicates: {n_dup_sample}"), "\n")
 
-# dic_measurement_summary composite key
+# dic_summary composite key
 n_dup_summ <- dbGetQuery(
   con,
   "SELECT COUNT(*) FROM (
      SELECT site_key, datetime_utc, depth_m, measurement_type, COUNT(*) AS n
-     FROM dic_measurement_summary
+     FROM dic_summary
      GROUP BY site_key, datetime_utc, depth_m, measurement_type
      HAVING COUNT(*) > 1)")[[1]]
-cat(glue("dic_measurement_summary composite key duplicates: {n_dup_summ}"), "\n")
+cat(glue("dic_summary composite key duplicates: {n_dup_summ}"), "\n")
 ```
 
 ## Schema Documentation
@@ -541,8 +541,8 @@ dic_sample (position/time)
 dic_measurement (one row per measurement)
   dic_measurement.measurement_type (FK) → measurement_type.measurement_type
   ↓ (site_key + datetime_utc + depth_m + measurement_type)
-dic_measurement_summary (avg/stddev per position)
-  dic_measurement_summary.measurement_type (FK) → measurement_type.measurement_type
+dic_summary (avg/stddev per position)
+  dic_summary.measurement_type (FK) → measurement_type.measurement_type
 ```
 
 ```{r}
@@ -555,17 +555,17 @@ dic_rels <- list(
     measurement_type = "measurement_type"),
   foreign_keys = list(
     list(table = "dic_measurement",         column = "measurement_type", ref_table = "measurement_type", ref_column = "measurement_type"),
-    list(table = "dic_measurement_summary", column = "measurement_type", ref_table = "measurement_type", ref_column = "measurement_type")))
+    list(table = "dic_summary", column = "measurement_type", ref_table = "measurement_type", ref_column = "measurement_type")))
 
 dic_tables <- c(
-  "dic_sample", "dic_measurement", "dic_measurement_summary",
+  "dic_sample", "dic_measurement", "dic_summary",
   "measurement_type", "dataset")
 cc_erd(
   con,
   tables = dic_tables,
   rels   = dic_rels,
   colors = list(
-    lightblue   = c("dic_sample", "dic_measurement", "dic_measurement_summary"),
+    lightblue   = c("dic_sample", "dic_measurement", "dic_summary"),
     lightyellow = "measurement_type",
     white       = "dataset"))
 ```
@@ -622,11 +622,11 @@ dbGetQuery(con, "SELECT * FROM dic_measurement LIMIT 100") |>
 ```{r}
 #| label: preview-dic-summary
 
-dbGetQuery(con, "SELECT * FROM dic_measurement_summary LIMIT 100") |>
+dbGetQuery(con, "SELECT * FROM dic_summary LIMIT 100") |>
   datatable(
     caption = glue(
-      "dic_measurement_summary — first 100 of ",
-      "{format(dbGetQuery(con, 'SELECT COUNT(*) FROM dic_measurement_summary')[[1]], big.mark=',')} rows"),
+      "dic_summary — first 100 of ",
+      "{format(dbGetQuery(con, 'SELECT COUNT(*) FROM dic_summary')[[1]], big.mark=',')} rows"),
     rownames = FALSE, filter = "top")
 ```
 
@@ -647,7 +647,7 @@ parquet_stats <- write_parquet_outputs(
   con        = con,
   output_dir = dir_parquet,
   tables     = c("dic_sample", "dic_measurement",
-                 "dic_measurement_summary", "measurement_type",
+                 "dic_summary", "measurement_type",
                  "dataset"),
   strip_provenance = FALSE,
   mismatches = mismatches
@@ -673,7 +673,7 @@ metadata_path <- build_metadata_json(
   d_flds_rd    = d_flds_rd,
   output_dir   = dir_parquet,
   tables       = c("dic_sample", "dic_measurement",
-                   "dic_measurement_summary"),
+                   "dic_summary"),
   set_comments = TRUE,
   provider     = provider,
   dataset      = dataset,
@@ -681,6 +681,15 @@ metadata_path <- build_metadata_json(
     "https://calcofi.io/workflows/",
     "ingest_calcofi_dic.html"
   )
+)
+```
+
+```{r}
+#| label: show_metadata_json
+
+listviewer::jsonedit(
+  jsonlite::fromJSON(metadata_path, simplifyVector = FALSE),
+  mode = "view"
 )
 ```
 
@@ -718,7 +727,7 @@ cat(glue("Parquet outputs written to: {dir_parquet}"), "\n")
 
 - [x] Tidy data: all measurements pivoted to long format in
   `dic_measurement` — `dic_sample` has position/time only
-- [x] Handle replicates: `dic_measurement_summary` aggregates with
+- [x] Handle replicates: `dic_summary` aggregates with
   avg/stddev per position, following `ctd_summary` pattern
 - [ ] Spatial matching: match unmatched DIC samples to `site` and `grid`
   via lat/lon projection to CalCOFI coordinate system (see issue #47)

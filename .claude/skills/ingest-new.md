@@ -63,7 +63,7 @@ Based on the dataset characteristics (from `/explore-dataset` output or user inp
 - Creates own `{dataset}_sample` (position-only) and `{dataset}_measurement` tables
 - Matches to existing casts/bottles via station + date window
 - Keeps tables separate from bottle_measurement (different QC pipelines)
-- Example: DIC/TA → dic_sample + dic_measurement + dic_measurement_summary
+- Example: DIC/TA → dic_sample + dic_measurement + dic_summary
 
 **Pattern C: Multi-source ingest** (like phytoplankton)
 - Reads from multiple source formats (CSV, API, etc.)
@@ -112,7 +112,7 @@ The notebook includes these sections (customize based on pattern):
   values: `WHERE NOT isnan(measurement_value) AND isfinite(measurement_value)`.
   Use `STDDEV_SAMP()` with `CASE WHEN COUNT(*) = 1 THEN 0` for single
   observations. See `ctd_summary` in `ingest_calcofi_ctd-cast.qmd` and
-  `dic_measurement_summary` in `ingest_calcofi_dic.qmd` for examples.
+  `dic_summary` in `ingest_calcofi_dic.qmd` for examples.
 - **Taxonomy** — `standardize_species_local()`, `build_taxon_hierarchy()` (if `--has-taxonomy`)
 - **Spatial** — `add_point_geom()`, `assign_grid_key()` (if has lat/lon).
   For datasets without direct cast_id/bottle_id FKs, match via station +

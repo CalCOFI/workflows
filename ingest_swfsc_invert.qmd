@@ -1,0 +1,521 @@
+---
+title: "Ingest SWFSC Invertebrates"
+calcofi:
+  target_name: ingest_swfsc_invert
+  workflow_type: ingest
+  dependency:
+    - ingest_swfsc_ichthyo
+  output: data/parquet/swfsc_invert/manifest.json
+editor_options:
+  chunk_output_type: console
+---
+
+## Overview
+
+**Source**: NOAA CoastWatch ERDDAP
+
+- [erdCalCOFIinvcnt](https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFIinvcnt.html) — invertebrate counts
+- [erdCalCOFIinvsiz](https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFIinvsiz.html) — invertebrate sizes
+
+Counts and sizes of invertebrates (primarily squids) captured in CalCOFI
+ichthyoplankton nets, processed by SWFSC. The two ERDDAP datasets share
+the same sampling metadata columns; `invcnt` adds count/abundance fields,
+`invsiz` adds a size measurement field.
+
+This ingest creates two output tables:
+
+- **`invert_net`** — unique sampling events (xyt: time, location, net metadata)
+- **`invert`** — measurements in long format (count, standardized counts, size)
+  with FK to `invert_net` and species identifiers
+
+- **Provider**: `swfsc`
+- **Coverage**: 1978–2023 (counts), 1980–2023 (sizes)
+- **Spatial**: Pacific coast, 0–51°N
+
+### Data Flow
+
+```{mermaid}
+graph LR
+  A[ERDDAP] --> B[CSV on Google Drive]
+  B --> C[DuckDB Wrangling]
+  C --> D[Load Prior ichthyo Tables]
+  D --> E[Build cruise_key + invert_net]
+  E --> F[Pivot to long-format invert]
+  F --> G[Parquet Export]
+  G --> H[GCS Archive]
+```
+
+## Setup
+
+```{r}
+#| label: setup
+
+devtools::load_all(here::here("../calcofi4db"))
+devtools::load_all(here::here("../calcofi4r"))
+
+librarian::shelf(
+  CalCOFI / calcofi4db,
+  CalCOFI / calcofi4r,
+  DBI,
+  dplyr,
+  DT,
+  fs,
+  glue,
+  here,
+  janitor,
+  jsonlite,
+  readr,
+  rerddap,
+  sf,
+  stringr,
+  tibble,
+  tidyr,
+  quiet = T
+)
+options(readr.show_col_types = F)
+options(DT.options = list(scrollX = TRUE))
+
+# define paths
+dataset_name <- "SWFSC CalCOFI Invertebrates"
+provider <- "swfsc"
+dataset <- "invert"
+dir_label <- glue("{provider}_{dataset}")
+dir_data <- "~/My Drive/projects/calcofi/data-public"
+dir_csv <- path_expand(glue("{dir_data}/{provider}/{dataset}"))
+overwrite <- FALSE
+dir_parquet <- here(glue("data/parquet/{dir_label}"))
+db_path <- here(glue("data/wrangling/{dir_label}.duckdb"))
+
+if (overwrite) {
+  if (file_exists(db_path)) {
+    file_delete(db_path)
+  }
+  if (dir_exists(dir_parquet)) dir_delete(dir_parquet)
+}
+
+dir_create(dirname(db_path))
+con <- get_duckdb_con(db_path)
+load_duckdb_extension(con, "spatial")
+```
+
+## Download from ERDDAP
+
+Fetch both datasets and save as CSVs in Google Drive. Skips download if
+CSV already exists (delete to re-download).
+
+```{r}
+#| label: download_erddap
+
+erddap_url <- "https://coastwatch.pfeg.noaa.gov/erddap"
+dir_create(dir_csv)
+
+erddap_datasets <- list(
+  erdCalCOFIinvcnt = "erdCalCOFIinvcnt",
+  erdCalCOFIinvsiz = "erdCalCOFIinvsiz"
+)
+
+for (ds_name in names(erddap_datasets)) {
+  csv_path <- path(dir_csv, glue("{ds_name}.csv"))
+
+  if (!file_exists(csv_path)) {
+    message(glue("downloading {ds_name} from ERDDAP..."))
+    ds_info <- rerddap::info(erddap_datasets[[ds_name]], url = erddap_url)
+    d_raw <- rerddap::tabledap(ds_info)
+    write_csv(as_tibble(d_raw), csv_path)
+    message(glue("  wrote {nrow(d_raw)} rows to {csv_path}"))
+  } else {
+    message(glue("  {ds_name}: CSV exists, skipping download"))
+  }
+}
+```
+
+## Read CSVs
+
+```{r}
+#| label: read_csvs
+
+d <- read_csv_files(
+  provider = provider,
+  dataset = dataset,
+  dir_data = dir_data,
+  sync_archive = TRUE,
+  metadata_dir = here("metadata")
+)
+
+message(glue("loaded {nrow(d$source_files)} tables from {d$paths$dir_csv}"))
+message(glue("total rows: {sum(d$source_files$nrow)}"))
+```
+
+## Check Data Integrity
+
+```{r}
+#| label: data_integrity
+#| output: asis
+
+# type_exceptions = "all": ERDDAP type names (String, int, float) don't
+# match R column classes (character, integer, numeric) — accept all
+integrity <- check_data_integrity(
+  d = d,
+  dataset_name = dataset_name,
+  halt_on_fail = TRUE,
+  type_exceptions = "all"
+)
+
+render_integrity_message(integrity)
+```
+
+## Source Files
+
+```{r}
+#| label: source_files
+
+show_source_files(d)
+```
+
+## Tables & Fields
+
+```{r}
+#| label: show_redefine
+
+show_tables_redefine(d)
+show_fields_redefine(d)
+```
+
+## Load into Database
+
+```{r}
+#| label: load_to_db
+
+tbl_stats <- ingest_dataset(
+  con = con,
+  d = d,
+  mode = if (overwrite) "replace" else "append",
+  verbose = TRUE
+)
+
+tbl_stats |>
+  datatable(rownames = FALSE, filter = "top")
+```
+
+## Load Dataset Metadata
+
+```{r}
+#| label: load_dataset_metadata
+
+d_dataset <- read_csv(here("metadata/dataset.csv"))
+dbWriteTable(con, "dataset", d_dataset, overwrite = TRUE)
+```
+
+## Load Prior Tables
+
+Load reference tables from ichthyo ingest for cross-referencing cruise_key.
+
+```{r}
+#| label: load_prior
+
+prior <- load_prior_tables(
+  parquet_dir = here("data/parquet/swfsc_ichthyo"),
+  con         = con,
+  tables      = c("ship", "cruise"),
+  as_view     = TRUE
+)
+
+message(glue(
+  "loaded {nrow(prior)} prior tables: {paste(prior$table, collapse=', ')}"
+))
+
+prior |>
+  datatable(caption = "Prior tables loaded from ichthyo ingest")
+```
+
+## Build cruise_key
+
+The ERDDAP `cruise` column is YYYYMM format (e.g., 197804 = April 1978)
+and `ship_code` is the 2-letter ship key (e.g., "JD"). Combine with the
+ship table's `ship_nodc` to create `cruise_key` in YYYY-MM-NODC format
+for matching to the ichthyo cruise hierarchy.
+
+```{r}
+#| label: build_cruise_key
+
+# add cruise_key to both source tables
+for (tbl in c("invert_count", "invert_size")) {
+  dbExecute(con, glue(
+    "ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS cruise_key VARCHAR"))
+  dbExecute(con, glue("
+    UPDATE {tbl} AS ic
+    SET cruise_key = CONCAT(
+      LEFT(CAST(ic.cruise AS VARCHAR), 4), '-',
+      SUBSTR(CAST(ic.cruise AS VARCHAR), 5, 2), '-',
+      s.ship_nodc)
+    FROM ship s
+    WHERE s.ship_key = ic.ship_code"))
+}
+
+# report match rates
+for (tbl in c("invert_count", "invert_size")) {
+  n_total <- dbGetQuery(con, glue("SELECT COUNT(*) FROM {tbl}"))[[1]]
+  n_match <- dbGetQuery(con, glue(
+    "SELECT COUNT(*) FROM {tbl} WHERE cruise_key IS NOT NULL"))[[1]]
+  n_cruise <- dbGetQuery(con, glue("
+    SELECT COUNT(*) FROM {tbl}
+    WHERE cruise_key IN (SELECT cruise_key FROM cruise)"))[[1]]
+  cat(glue("{tbl}: {n_match}/{n_total} rows got cruise_key, ",
+           "{n_cruise} matched to ichthyo cruise table"), "\n")
+}
+```
+
+## Create `invert_net` — sampling events
+
+Extract unique sampling events (xyt) from the denormalized ERDDAP data.
+Each unique combination of cruise + tow + net metadata defines one
+sampling event.
+
+```{r}
+#| label: create_invert_net
+
+dbExecute(con, "
+  CREATE OR REPLACE TABLE invert_net AS
+  SELECT DISTINCT
+    cruise_key,
+    CAST(cruise AS VARCHAR)  AS cruise_erddap,
+    ship_code,
+    order_occupied,
+    tow_type,
+    tow_number,
+    net_location,
+    time_start,
+    latitude,
+    longitude,
+    line,
+    station,
+    standard_haul_factor,
+    volume_sampled,
+    proportion_sorted
+  FROM invert_count
+  WHERE cruise_key IS NOT NULL
+  ORDER BY cruise_key, order_occupied, tow_number")
+
+# assign sequential id
+assign_sequential_ids(
+  con        = con,
+  table_name = "invert_net",
+  id_col     = "invert_net_id",
+  sort_cols  = c("cruise_key", "order_occupied", "tow_number")
+)
+
+n_net <- dbGetQuery(con, "SELECT COUNT(*) FROM invert_net")[[1]]
+cat(glue("invert_net: {format(n_net, big.mark = ',')} unique sampling events"), "\n")
+
+dbGetQuery(con, "SELECT * FROM invert_net LIMIT 10") |>
+  datatable(caption = "invert_net — first 10 sampling events")
+```
+
+## Create `invert` — measurements in long format
+
+Pivot count and size measurements into a single long-format table,
+similar to how ichthyo stores egg/larva measurements. Each row is one
+measurement for one species at one sampling event.
+
+```{r}
+#| label: create_invert
+
+# -- pivot invert_count: 3 measurement types per row ----
+# join to invert_net to get invert_net_id
+sql_count <- "
+  SELECT
+    n.invert_net_id,
+    ic.scientific_name,
+    ic.common_name,
+    ic.itis_tsn,
+    ic.calcofi_species_code,
+    mt.measurement_type,
+    mt.measurement_value
+  FROM invert_count ic
+  JOIN invert_net n
+    ON  ic.cruise_key      = n.cruise_key
+    AND ic.order_occupied   = n.order_occupied
+    AND ic.tow_type         = n.tow_type
+    AND ic.tow_number       = n.tow_number
+    AND ic.net_location IS NOT DISTINCT FROM n.net_location
+  CROSS JOIN LATERAL (VALUES
+    ('count',           CAST(ic.invert_count  AS DOUBLE)),
+    ('count_per_10m2',  ic.inverts_10m2),
+    ('count_per_100m3', ic.inverts_100m3)
+  ) AS mt(measurement_type, measurement_value)
+  WHERE ic.cruise_key IS NOT NULL
+    AND mt.measurement_value IS NOT NULL"
+
+# -- pivot invert_size: size measurement ----
+sql_size <- "
+  SELECT
+    n.invert_net_id,
+    isz.scientific_name,
+    isz.common_name,
+    isz.itis_tsn,
+    isz.calcofi_species_code,
+    'size' AS measurement_type,
+    isz.invert_size AS measurement_value
+  FROM invert_size isz
+  JOIN invert_net n
+    ON  isz.cruise_key      = n.cruise_key
+    AND isz.order_occupied   = n.order_occupied
+    AND isz.tow_type         = n.tow_type
+    AND isz.tow_number       = n.tow_number
+    AND isz.net_location IS NOT DISTINCT FROM n.net_location
+  WHERE isz.cruise_key IS NOT NULL
+    AND isz.invert_size IS NOT NULL"
+
+# combine and assign sequential id
+dbExecute(con, glue("
+  CREATE OR REPLACE TABLE invert AS
+  SELECT
+    ROW_NUMBER() OVER (
+      ORDER BY invert_net_id, scientific_name, measurement_type, measurement_value
+    ) AS invert_id,
+    *
+  FROM (
+    {sql_count}
+    UNION ALL
+    {sql_size}
+  ) sub"))
+
+n_invert <- dbGetQuery(con, "SELECT COUNT(*) FROM invert")[[1]]
+n_by_type <- dbGetQuery(con, "
+  SELECT measurement_type, COUNT(*) AS n
+  FROM invert
+  GROUP BY measurement_type
+  ORDER BY measurement_type")
+
+cat(glue("invert: {format(n_invert, big.mark = ',')} total measurement rows"), "\n")
+n_by_type |>
+  datatable(caption = "Measurement rows by type")
+```
+
+## Data Preview
+
+```{r}
+#| label: preview_tables
+
+dbGetQuery(con, "SELECT * FROM invert_net LIMIT 100") |>
+  datatable(
+    caption = "invert_net (first 100 rows)",
+    rownames = FALSE, filter = "top")
+
+dbGetQuery(con, "SELECT * FROM invert LIMIT 100") |>
+  datatable(
+    caption = "invert (first 100 rows)",
+    rownames = FALSE, filter = "top")
+```
+
+## Schema Documentation
+
+```{r}
+#| label: erd
+
+invert_rels <- list(
+  primary_keys = list(
+    invert_net = "invert_net_id",
+    invert     = "invert_id",
+    cruise     = "cruise_key",
+    ship       = "ship_key"),
+  foreign_keys = list(
+    list(table = "invert",     column = "invert_net_id",
+         ref_table = "invert_net", ref_column = "invert_net_id"),
+    list(table = "invert_net", column = "cruise_key",
+         ref_table = "cruise",     ref_column = "cruise_key"),
+    list(table = "cruise",     column = "ship_key",
+         ref_table = "ship",       ref_column = "ship_key")))
+
+cc_erd(
+  con,
+  tables = c("invert", "invert_net", "cruise", "ship"),
+  rels   = invert_rels,
+  colors = list(
+    lightblue   = c("invert", "invert_net"),
+    lightyellow = c("cruise", "ship")))
+```
+
+## Write Parquet
+
+```{r}
+#| label: write_parquet
+
+# export only tables this ingest creates (not dependency VIEWs)
+own_tables <- c("invert_net", "invert", "dataset")
+
+parquet_stats <- write_parquet_outputs(
+  con              = con,
+  output_dir       = dir_parquet,
+  tables           = own_tables,
+  strip_provenance = FALSE
+)
+
+parquet_stats |>
+  mutate(file = basename(path)) |>
+  select(-path) |>
+  datatable(caption = "Parquet export statistics")
+```
+
+## Write Metadata
+
+```{r}
+#| label: write_metadata
+
+metadata_path <- build_metadata_json(
+  con = con,
+  d_tbls_rd = d$d_tbls_rd,
+  d_flds_rd = d$d_flds_rd,
+  output_dir = dir_parquet,
+  tables = own_tables,
+  set_comments = TRUE,
+  provider = provider,
+  dataset = dataset,
+  workflow_url = glue(
+    "https://calcofi.io/workflows/ingest_swfsc_invert.html"
+  )
+)
+
+# write relationships.json
+build_relationships_json(
+  rels       = invert_rels,
+  output_dir = dir_parquet,
+  provider   = provider,
+  dataset    = dataset
+)
+```
+
+```{r}
+#| label: show_metadata_json
+
+listviewer::jsonedit(
+  jsonlite::fromJSON(metadata_path, simplifyVector = FALSE),
+  mode = "view"
+)
+```
+
+## Upload to GCS
+
+```{r}
+#| label: upload_gcs
+
+gcs_ingest_prefix <- glue("ingest/{dir_label}")
+gcs_bucket <- "calcofi-db"
+
+sync_results <- sync_to_gcs(
+  local_dir = dir_parquet,
+  gcs_prefix = gcs_ingest_prefix,
+  bucket = gcs_bucket
+)
+```
+
+## Cleanup
+
+```{r}
+#| label: cleanup
+
+close_duckdb(con)
+message("local wrangling database connection closed")
+message(glue("parquet outputs written to: {dir_parquet}"))
+message(glue("GCS outputs at: gs://{gcs_bucket}/{gcs_ingest_prefix}/"))
+```

@@ -1231,7 +1231,7 @@ for (i in seq_len(nrow(d_meas_ctd))) {
   )
 
   if (i == 1) {
-    dbExecute(con, glue("CREATE TABLE ctd_measurement AS {sql_select}"))
+    dbExecute(con, glue("CREATE OR REPLACE TABLE ctd_measurement AS {sql_select}"))
   } else {
     dbExecute(con, glue("INSERT INTO ctd_measurement {sql_select}"))
   }
@@ -1261,6 +1261,17 @@ dbExecute(
    FROM ctd_cast AS c
    WHERE m.ctd_cast_uuid = c.ctd_cast_uuid"
 )
+
+# remove orphaned measurements with no parent cast
+n_orphan <- dbGetQuery(
+  con,
+  "SELECT COUNT(*) FROM ctd_measurement WHERE ctd_cast_uuid IS NULL"
+)[[1]]
+if (n_orphan > 0) {
+  dbExecute(con, "DELETE FROM ctd_measurement WHERE ctd_cast_uuid IS NULL")
+  cat(glue("{format(n_orphan, big.mark = ',')} orphaned ctd_measurement ",
+           "rows removed (NULL ctd_cast_uuid)"), "\n")
+}
 ```
 
 ### ctd_summary — summary stats across cast directions
@@ -1450,7 +1461,7 @@ parquet_stats |>
 ```{r}
 #| label: write_metadata
 
-build_metadata_json(
+metadata_path <- build_metadata_json(
   con = con,
   d_tbls_rd = d_tbls_rd,
   d_flds_rd = d_flds_rd,
@@ -1466,6 +1477,15 @@ build_relationships_json(
   output_dir = dir_parquet,
   provider   = provider,
   dataset    = dataset
+)
+```
+
+```{r}
+#| label: show_metadata_json
+
+listviewer::jsonedit(
+  jsonlite::fromJSON(metadata_path, simplifyVector = FALSE),
+  mode = "view"
 )
 ```
 

@@ -1,0 +1,113 @@
+---
+config:
+  layout: elk
+---
+erDiagram
+    cruise {
+        varchar cruise_uuid
+        date date_ym
+        varchar ship_key
+        varchar _source_file
+        int _source_row
+        timestamp _ingested_at
+        varchar _source_uuid
+        varchar cruise_key
+    }
+    ichthyo {
+        varchar ichthyo_uuid
+        varchar net_uuid
+        double species_id
+        varchar life_stage
+        varchar measurement_type
+        double measurement_value
+        double tally
+        varchar _source_file
+        int _source_row
+        timestamp _ingested_at
+        varchar _source_uuid
+    }
+    lookup {
+        int lookup_id
+        varchar lookup_type
+        int lookup_num
+        varchar lookup_chr
+        varchar description
+        varchar _source_file
+        int _source_row
+        varchar _ingested_at
+        varchar _source_uuid
+    }
+    net {
+        varchar net_uuid
+        varchar tow_uuid
+        varchar side
+        double std_haul_factor
+        double vol_sampled_m3
+        double prop_sorted
+        double smallplankton
+        double totalplankton
+        varchar _source_file
+        int _source_row
+        timestamp _ingested_at
+        varchar _source_uuid
+    }
+    ship {
+        varchar ship_key
+        varchar ship_name
+        varchar ship_nodc
+        varchar _source_file
+        int _source_row
+        timestamp _ingested_at
+        varchar _source_uuid
+    }
+    site {
+        varchar site_uuid
+        varchar cruise_uuid
+        double orderocc
+        double longitude
+        double latitude
+        double line
+        double station
+        varchar _source_file
+        int _source_row
+        timestamp _ingested_at
+        varchar _source_uuid
+        varchar cruise_key
+    }
+    species {
+        double species_id
+        varchar scientific_name
+        double itis_id
+        double worms_id
+        varchar common_name
+        varchar _source_file
+        int _source_row
+        timestamp _ingested_at
+        varchar _source_uuid
+        int gbif_id
+    }
+    taxa_rank {
+        varchar taxonRank
+        int rank_order
+    }
+    taxon {
+        varchar authority
+        int taxonID
+        int acceptedNameUsageID
+        int parentNameUsageID
+        varchar scientificName
+        varchar taxonRank
+        varchar taxonomicStatus
+        varchar scientificNameAuthorship
+    }
+    tow {
+        varchar tow_uuid
+        varchar site_uuid
+        varchar tow_type_key
+        double tow_number
+        timestamp time_start
+        varchar _source_file
+        int _source_row
+        timestamp _ingested_at
+        varchar _source_uuid
+    }

@@ -1,0 +1,77 @@
+---
+config:
+  layout: elk
+---
+erDiagram
+    dic_sample {
+        varchar expocode
+        varchar ship_name
+        timestamp datetime_utc
+        varchar site_key
+        double latitude
+        double longitude
+        double depth_m
+        int cast_id
+        int bottle_id
+    }
+    dic_measurement {
+        bigint dic_measurement_id PK
+        varchar expocode
+        varchar site_key
+        timestamp datetime_utc
+        double depth_m
+        double latitude
+        double longitude
+        int cast_id
+        int bottle_id
+        varchar measurement_type FK
+        double measurement_value
+        varchar measurement_qual
+    }
+    dic_summary {
+        varchar site_key
+        timestamp datetime_utc
+        double depth_m
+        double latitude
+        double longitude
+        varchar measurement_type FK
+        double avg
+        double stddev
+        bigint n_obs
+        int cast_id
+        int bottle_id
+    }
+    measurement_type {
+        varchar measurement_type PK
+        varchar description
+        varchar units
+        varchar _source_column
+        varchar _source_table
+        varchar _source_datasets
+        varchar _qual_column
+        varchar _prec_column
+    }
+    dataset {
+        varchar provider
+        varchar dataset
+        varchar dataset_name
+        varchar description
+        varchar citation_main
+        bool citation_others
+        varchar link_calcofi_org
+        varchar link_data_source
+        varchar link_others
+        varchar tables
+        varchar coverage_temporal
+        varchar coverage_spatial
+        varchar license
+        varchar pi_names
+    }
+    measurement_type ||--o{ dic_measurement : "measurement_type"
+    measurement_type ||--o{ dic_summary : "measurement_type"
+    classDef lightblue fill:#ADD8E6,stroke:#68828A
+    class dic_sample,dic_measurement,dic_summary lightblue
+    classDef lightyellow fill:#FFFFE0,stroke:#999986
+    class measurement_type lightyellow
+    classDef white fill:#FFFFFF,stroke:#999999
+    class dataset white
