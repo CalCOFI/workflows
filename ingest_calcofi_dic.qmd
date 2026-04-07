@@ -102,13 +102,14 @@ librarian::shelf(
 options(readr.show_col_types = F)
 options(DT.options = list(scrollX = TRUE))
 
+# common ingest settings (overwrite, dir_data)
+source(here("libs/ingest.R"))
+
 # define paths
 dataset_name <- "CalCOFI DIC"
 provider     <- "calcofi"
 dataset      <- "dic"
 dir_label    <- glue("{provider}_{dataset}")
-dir_data     <- "~/My Drive/projects/calcofi/data-public"
-overwrite    <- FALSE
 
 dir_parquet <- here(glue("data/parquet/{dir_label}"))
 db_path     <- here(glue("data/wrangling/{dir_label}.duckdb"))
@@ -652,13 +653,16 @@ mismatches <- list(
   cruise_keys       = collect_cruise_key_mismatches(con, "dic_sample"))
 
 parquet_stats <- write_parquet_outputs(
-  con        = con,
-  output_dir = dir_parquet,
-  tables     = c("dic_sample", "dic_measurement",
-                 "dic_summary", "measurement_type",
-                 "dataset"),
+  con              = con,
+  output_dir       = dir_parquet,
+  tables           = c("dic_sample", "dic_measurement",
+                       "dic_summary", "measurement_type",
+                       "dataset"),
+  sort_by          = list(
+    dic_measurement = "measurement_type",
+    dic_summary     = "measurement_type"),
   strip_provenance = FALSE,
-  mismatches = mismatches
+  mismatches       = mismatches
 )
 
 parquet_stats |>

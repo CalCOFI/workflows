@@ -80,11 +80,13 @@ librarian::shelf(
   quiet = T
 )
 
+# common ingest settings (overwrite, dir_data)
+source(here("libs/ingest.R"))
+
 dataset_name <- "CalCOFI CTD Cast Database"
 provider <- "calcofi"
 dataset <- "ctd-cast"
 dir_label <- glue("{provider}_{dataset}")
-dir_data <- "~/My Drive/projects/calcofi/data-public"
 dir_dl <- path_expand(glue("{dir_data}/{provider}/{dataset}/download"))
 dir_parquet <- here(glue("data/parquet/{dir_label}"))
 db_path <- here(glue("data/wrangling/{dir_label}.duckdb"))
@@ -1453,8 +1455,11 @@ parquet_stats <- write_parquet_outputs(
                     "measurement_type", "ctd_wide"),
   partition_by = list(
     ctd_measurement = "cruise_key",
-    ctd_summary     = "cruise_key"
-  ),
+    ctd_summary     = "cruise_key"),
+  sort_by = list(
+    ctd_measurement = c("measurement_type", "depth_m"),
+    ctd_summary     = c("measurement_type", "depth_m"),
+    ctd_cast        = "hilbert:lon_dec,lat_dec"),
   strip_provenance = FALSE,
   mismatches       = mismatches,
   supplemental     = "ctd_wide"

@@ -32,7 +32,7 @@ Validation FAILED:
 - Table 'species' has 170 NULL values in required column 'gbif_id'
 ```
 
-## 2026-04-07 tar_make() all nodes, write to native GEOMETRY in DuckDB v1.5.1
+## 2026-04-07 write duckdb v1.5.1 GEOMETRY parquet files; + libs/ingest.R; sort by hilbert:lon_dec,lat_dec
 
 Please run `Rscript -e 'targets::tar_make("ingest_calcofi_dic")'` and debug to completion:
 ```
@@ -275,6 +275,198 @@ This "grid geometry refresh workaround" in calcofi4db v2.5.6 feels a bit hacky. 
  refresh workaround
  5. Verify: SELECT current_setting('storage_compatibility_version') returns
  'latest' on any wrangling DB
+
+Let's also require version 1.5.1 of the duckdb R package in calcofi4db and calcofi4r to ensure this GEOMETRY data type is properly handled 
+
+[Image #13] I'm not seeing the spatial *.parquet timestamps updating with this run to the new GEOMETRY type. I think we need to first set the      
+`redo_if_exists <- TRUE` (`@ingest_spatial.qmd`) or `overwrite <- TRUE` (`@ingest_swfsc_ichthyo.qmd`) equivalent for all the calcofi QMDs --         
+actually we should standardize on this so same flag with all QMDs, or perhaps a source a new file libs/ingest.R or similar to set flags and paths    
+common to ingest scripts?                                                                                                                            
+⏺ Good catch — the parquet files from Apr 3 weren't regenerated because overwrite=FALSE skipped them. And yes, standardizing the flag across all QMDs
+   is the right call. A shared libs/ingest.R makes sense — single source of truth for common setup.
+
+⏺ Done. All 7 ingest QMDs now source `libs/ingest.R`:
+  - `libs/ingest.R` — single source of truth for overwrite and dir_data 
+  - `overwrite = TRUE` for this rebuild (set back to FALSE after)
+  - `redo_if_exists` in spatial renamed to overwrite for consistency    
+
+While we're at it with the spatial and re-writing parquet files to the latest standard, we should try to specify sort columns on the output parquet files, particularly for big partitioned tables that optimize query results. For instance, consider the future implementation with the database and the integrated app `@../int-app/app/` and the cruise app `@../apps/cruise/`. Consider the biggest table in the db: `ctd_measurement`. It is already partitioned by cruise_key, and within the table should probably be sorted by `measurement_type`. For spatial tables, consider Morton (Z-Order) or Hilbert: https://duckdb.org/2025/06/06/advanced-sorting-for-fast-selective-queries. How could this be specified most simply and tracked? I'm thinking the calcofi frontmatter of the QMDs and the `metadata.json`.
+
+⏺ Updated plan
+  ⎿  /plan to preview
+
+ Ready to code?
+
+ Here is Claude's plan:
+
+ **Sorted Parquet Output for Query Performance**
+
+ Context
+
+ Parquet files benefit from sorted row groups — DuckDB's row group
+ statistics (min/max) enable predicate pushdown, skipping entire chunks
+ when filtering. Currently write_parquet_outputs() exports with no sort
+ order, leaving performance on the table.
+
+ **Key tables and their query patterns** (from int-app and cruise app):
+
+     ┌────────────────────┬───────────┬────────────┬─────────────────────────────┬──────────────────────────────────┐
+     │       Table        │   Size    │ Partition  │       Typical filters       │         Recommended sort         │
+     ├────────────────────┼───────────┼────────────┼─────────────────────────────┼──────────────────────────────────┤
+     │ ctd_measurement    │ 237M rows │ cruise_key │ measurement_type, depth_m   │ measurement_type, depth_m        │
+     ├────────────────────┼───────────┼────────────┼─────────────────────────────┼──────────────────────────────────┤
+     │ ctd_summary        │ ~10M rows │ cruise_key │ measurement_type, depth_m   │ measurement_type, depth_m        │
+     ├────────────────────┼───────────┼────────────┼─────────────────────────────┼──────────────────────────────────┤
+     │ ichthyo            │ ~2M rows  │ none       │ species_id, life_stage      │ species_id, life_stage           │
+     ├────────────────────┼───────────┼────────────┼─────────────────────────────┼──────────────────────────────────┤
+     │ bottle_measurement │ ~3M rows  │ none       │ measurement_type, bottle_id │ measurement_type                 │
+     ├────────────────────┼───────────┼────────────┼─────────────────────────────┼──────────────────────────────────┤
+     │ site               │ 61K rows  │ none       │ cruise_key, lat/lon         │ Hilbert on (longitude, latitude) │
+     ├────────────────────┼───────────┼────────────┼─────────────────────────────┼──────────────────────────────────┤
+     │ ctd_cast           │ 6K rows   │ none       │ cruise_key, lat/lon         │ Hilbert on (lon_dec, lat_dec)    │
+     ├────────────────────┼───────────┼────────────┼─────────────────────────────┼──────────────────────────────────┤
+     │ _spatial           │ ~2K rows  │ none       │ layer, lat/lon bounding box │ Hilbert on geometry centroid     │
+     └────────────────────┴───────────┴────────────┴─────────────────────────────┴──────────────────────────────────┘
+
+ Hilbert/Morton encoding (from DuckDB blog): for spatial tables queried
+ by bounding box, Hilbert curve ordering clusters nearby features in the
+  same row groups, enabling efficient spatial predicate pushdown. DuckDB
+  provides hilbert_encode().
+
+ Approach
+
+ 1. Add sort_by parameter to write_parquet_outputs()
+
+ File: calcofi4db/R/wrangle.R
+ ```r
+ write_parquet_outputs <- function(
+     con, output_dir, tables = NULL,
+     partition_by     = NULL,
+     sort_by          = NULL,   # NEW: named list, e.g.
+ list(ctd_measurement = c("measurement_type", "depth_m"))
+     strip_provenance = TRUE,
+     compression      = "snappy",
+     mismatches       = NULL,
+     supplemental     = NULL)
+ ```
+
+ When `sort_by` specifies columns for a table, the COPY TO query becomes:
+ COPY (SELECT {cols} FROM {table} ORDER BY {sort_cols}) TO '...' (FORMAT
+  PARQUET, ...)
+
+ For Hilbert-sorted spatial tables, use a special prefix "hilbert:":
+ ```r
+ sort_by = list(
+   ctd_measurement = c("measurement_type", "depth_m"),
+   site            = "hilbert:longitude,latitude"
+ )
+ ```
+
+ Which generates:
+ ```sql
+ COPY (SELECT * FROM site ORDER BY hilbert_encode([longitude,latitude]::DOUBLE[2])) TO ...
+ ```
+
+ 2. Document sort columns in metadata.json
+
+ Add sort_by to table metadata:
+ ```json
+ {
+   "tables": {
+     "ctd_measurement": {
+       "name_long": "CTD Measurement",
+       "sort_by": ["measurement_type", "depth_m"],
+       "partition_by": "cruise_key"
+     }
+   }
+ }
+ ```
+
+ This lets downstream consumers know the data is pre-sorted for optimal
+ query patterns.
+
+ 3. Specify sort in QMD write_parquet_outputs() calls
+
+ Each ingest QMD adds sort_by alongside existing partition_by:
+
+ `ingest_calcofi_ctd-cast.qmd`:
+ ```r
+ write_parquet_outputs(
+   con = con, output_dir = dir_parquet,
+   tables = c("ctd_cast", "ctd_measurement", "ctd_summary", "measurement_type"),
+   partition_by = list(ctd_measurement = "cruise_key", ctd_summary =
+ "cruise_key"),
+   sort_by = list(
+     ctd_measurement = c("measurement_type", "depth_m"),
+     ctd_summary     = c("measurement_type", "depth_m"),
+     ctd_cast        = "hilbert:lon_dec,lat_dec"))
+ ```
+
+ `ingest_swfsc_ichthyo.qmd`:
+ ```r
+ sort_by = list(
+   ichthyo = c("species_id", "life_stage"),
+   site    = "hilbert:longitude,latitude")
+ ```
+
+ `ingest_calcofi_bottle.qmd`:
+ ```r
+ sort_by = list(
+   bottle_measurement = "measurement_type",
+   casts              = "hilbert:lon_dec,lat_dec")
+ ```
+
+ 4. Record in manifest.json
+
+ The manifest already tracks partition_by. Add sort_by alongside it:
+
+ ```json
+ {
+   "tables": [...],
+   "partition_by": {"ctd_measurement": "cruise_key"},
+   "sort_by": {"ctd_measurement": ["measurement_type", "depth_m"]}
+ }
+ ```
+
+ Files to modify
+
+ ┌───────────────────────────────────────┬───────────────────────────┐
+ │                 File                  │          Change           │
+ ├───────────────────────────────────────┼───────────────────────────┤
+ │                                       │ Add sort_by param to      │
+ │ calcofi4db/R/wrangle.R                │ write_parquet_outputs(),  │
+ │                                       │ generate ORDER BY SQL     │
+ ├───────────────────────────────────────┼───────────────────────────┤
+ │                                       │ Update                    │
+ │ calcofi4db/R/cloud.R                  │ build_metadata_json() to  │
+ │                                       │ include sort_by in table  │
+ │                                       │ metadata                  │
+ ├───────────────────────────────────────┼───────────────────────────┤
+ │                                       │ Add sort_by to            │
+ │ workflows/ingest_calcofi_ctd-cast.qmd │ write_parquet_outputs     │
+ │                                       │ call                      │
+ ├───────────────────────────────────────┼───────────────────────────┤
+ │                                       │ Add sort_by to            │
+ │ workflows/ingest_swfsc_ichthyo.qmd    │ write_parquet_outputs     │
+ │                                       │ call                      │
+ ├───────────────────────────────────────┼───────────────────────────┤
+ │                                       │ Add sort_by to            │
+ │ workflows/ingest_calcofi_bottle.qmd   │ write_parquet_outputs     │
+ │                                       │ call                      │
+ ├───────────────────────────────────────┼───────────────────────────┤
+ │                                       │ Add sort_by to            │
+ │ workflows/ingest_calcofi_dic.qmd      │ write_parquet_outputs     │
+ │                                       │ call                      │
+ └───────────────────────────────────────┴───────────────────────────┘
+
+ Verification
+
+ 1. Export ctd_measurement with sort → check row group stats show tight
+ min/max ranges for measurement_type
+ 2. Query SELECT * FROM read_parquet('...') WHERE measurement_type =
+ 'temperature' → confirm row groups skipped in EXPLAIN ANALYZE
+ 3. Verify metadata.json includes sort_by fields
+ 4. Verify manifest.json includes sort_by
 
 ## 2026-04-07 Github Action with pkgdown docs on R packages
 

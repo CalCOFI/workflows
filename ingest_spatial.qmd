@@ -72,9 +72,10 @@ librarian::shelf(
   quiet = T
 )
 
-redo_if_exists <- FALSE
+# common ingest settings (overwrite, dir_data)
+source(here("libs/ingest.R"))
 
-dir_spatial <- path_expand("~/My Drive/projects/calcofi/data-public/_spatial")
+dir_spatial <- path_expand(glue("{dir_data}/_spatial"))
 dir_pmtiles <- here("data/pmtiles")
 dir_parquet <- here("data/parquet/spatial")
 gcs_bucket  <- "calcofi-files-public"
@@ -156,7 +157,7 @@ fs_to_sf <- function(url, where = NULL) {
 url_rest <- "https://services2.arcgis.com/Uq9r85Potqm3MfRV/arcgis/rest/services/WBD_HU8_wm/FeatureServer"
 out_gpkg <- glue("{dir_spatial}/CA_watershed-boundaries/wbd-hu8_ca.gpkg")
 
-if (!file_exists(out_gpkg) || redo_if_exists) {
+if (!file_exists(out_gpkg) || overwrite) {
   fs_to_sf(url_rest) |>
     write_sf(out_gpkg, delete_dsn = TRUE)
 }
@@ -178,7 +179,7 @@ cacurrent_usaeez_geo <- glue(
   "{dir_spatial}/NOAA_IEA-CA-Current/lme-ca-current_usa-eez.geojson"
 )
 
-if (!file_exists(cacurrent_usaeez_geo) || redo_if_exists) {
+if (!file_exists(cacurrent_usaeez_geo) || overwrite) {
   cacurrent <- st_read(cacurrent_geo, quiet = TRUE)
   usaeez <- st_read(usaeez_geo, quiet = TRUE)
 
@@ -301,7 +302,7 @@ for (i in seq_len(nrow(d_groups))) {
   pmtiles_path <- path(dir_pmtiles, glue("{dataset_group}.pmtiles"))
 
   # skip if already processed and not redoing
-  if (!redo_if_exists && file_exists(pmtiles_path)) {
+  if (!overwrite && file_exists(pmtiles_path)) {
     cat(glue("- **{dataset_group}**: skipped (already exists)\n\n"))
     next
   }
