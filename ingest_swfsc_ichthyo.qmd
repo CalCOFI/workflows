@@ -908,14 +908,14 @@ grid_df <- grid |>
 # write to DuckDB
 dbWriteTable(con, "grid", grid_df, overwrite = TRUE)
 
-# convert WKB back to geometry with EPSG:4326
+# convert WKB to geometry; keep geom_wkb for refresh before spatial joins
+# (workaround for DuckDB spatial serialization bug that corrupts GEOMETRY
+# columns after many operations in file-backed DBs)
 dbExecute(con, "ALTER TABLE grid ADD COLUMN IF NOT EXISTS geom GEOMETRY")
 dbExecute(con, "UPDATE grid SET geom = ST_GeomFromHEXWKB(geom_wkb)")
-dbExecute(con, "ALTER TABLE grid DROP COLUMN geom_wkb")
 
 dbExecute(con, "ALTER TABLE grid ADD COLUMN IF NOT EXISTS geom_ctr GEOMETRY")
 dbExecute(con, "UPDATE grid SET geom_ctr = ST_GeomFromHEXWKB(geom_ctr_wkb)")
-dbExecute(con, "ALTER TABLE grid DROP COLUMN geom_ctr_wkb")
 
 message("Grid table created with geometry columns")
 ```
@@ -1282,8 +1282,17 @@ tibble(
 
 listviewer::jsonedit(
   jsonlite::fromJSON(metadata_path, simplifyVector = FALSE),
-  mode = "view"
-)
+  mode = "view")
+```
+
+```{r}
+#| label: show_relationships_json
+
+listviewer::jsonedit(
+  jsonlite::fromJSON(
+    file.path(dir_parquet, "relationships.json"),
+    simplifyVector = FALSE),
+  mode = "view")
 ```
 
 ## Upload to GCS Archive

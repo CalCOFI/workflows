@@ -7,73 +7,160 @@ editor_options:
 ## Overview
 
 Mirrors the entire Google Drive `data-public/` folder to
-`gs://calcofi-files-public/_sync/`. Uses hash-based comparison
-(CRC32C) to skip unchanged files and logs all actions to GCS.
+`gs://calcofi-files-public/_sync/` using `rclone`. This transfers
+directly between cloud providers (GD API → GCS API) without needing
+files cached on the local machine.
 
 This is a standalone utility — not a pipeline target. Run manually
 or schedule as a cron job for daily backup.
 
-**Buckets**:
+**Two-tier sync**:
 
-- `calcofi-files-public/_sync/` — living mirror of GD (this notebook)
+- `calcofi-files-public/_sync/` — living mirror of GD (this notebook).
+  Deletes stale GCS files so it always matches GD.
 - `calcofi-files-public/archive/` — immutable timestamped snapshots
-  (created by ingest QMDs)
+  (created by ingest QMDs via `sync_to_gcs(archive = TRUE)`).
+  Nothing is lost permanently.
 
-The `_sync/` mirror deletes stale GCS files, but `archive/` provides
-the reproducibility safety net — nothing is lost permanently.
+**Prerequisites**: `rclone` configured with remotes:
+
+- `gdrive-ecoquants` — Google Drive (or `gdrive-server` on server)
+- `gcs-calcofi` — Google Cloud Storage
+
+Check with `rclone config` or `rclone listremotes`.
+
+### rclone exclude patterns
+
+All sync commands below exclude these files:
+
+| Pattern | Reason |
+|---------|--------|
+| `.DS_Store` | macOS metadata |
+| `*.tmp` | temporary files |
+| `~$*` | Office lock files |
+| `*.gdoc`, `*.gsheet`, `*.gslides` | Google Docs shortcuts (not real files) |
 
 ## Setup
 
 ```{r}
 #| label: setup
 
-devtools::load_all(here::here("../calcofi4db"))
-
 librarian::shelf(
   DT,
   fs,
   glue,
-  here,
+  tibble,
+  dplyr,
   quiet = T
 )
 options(DT.options = list(scrollX = TRUE))
 
-gd_dir     <- path_expand("~/My Drive/projects/calcofi/data-public")
-gcs_bucket <- "calcofi-files-public"
-gcs_prefix <- "_sync"
+# rclone remote paths — override via env vars for server deployment
+# e.g. CALCOFI_GD_REMOTE="gdrive-server:projects/calcofi/data-public"
+gd_remote <- Sys.getenv(
+  "CALCOFI_GD_REMOTE",
+  "gdrive-ecoquants:projects/calcofi/data-public"
+)
+gcs_remote <- Sys.getenv(
+  "CALCOFI_GCS_REMOTE",
+  "gcs-calcofi:calcofi-files-public/_sync"
+)
+
+# shared exclude flags for all rclone commands
+rclone_excludes <- c(
+  "--exclude", ".DS_Store",
+  "--exclude", "*.tmp",
+  "--exclude", "~$*",
+  "--exclude", "*.gdoc",
+  "--exclude", "*.gsheet",
+  "--exclude", "*.gslides"
+)
+
+# local log directory
+log_dir <- here::here("data/logs")
+dir_create(log_dir)
 ```
 
-## Scan Google Drive
+## Dry Run
+
+Preview what rclone would do without making changes. This is fast
+and useful for verifying before a large sync.
 
 ```{r}
-#| label: scan_gd
+#| label: dry_run
 
-gd_files <- dir_ls(gd_dir, recurse = TRUE, type = "file")
-gd_rel   <- sub(paste0("^", normalizePath(gd_dir), "/?"), "", gd_files)
+cat(glue("dry run: {gd_remote} → {gcs_remote}"), "\n\n")
 
-cat(glue("{length(gd_files)} files in Google Drive data-public/"), "\n")
-cat(glue("Total size: {sum(file_size(gd_files))}"), "\n\n")
+dry_out <- system2(
+  "rclone",
+  c("sync", gd_remote, gcs_remote,
+    "--dry-run", rclone_excludes, "-v"),
+  stdout = TRUE, stderr = TRUE
+)
 
-# summary by top-level folder
-tibble::tibble(path = gd_rel) |>
-  dplyr::mutate(folder = sub("/.*", "", path)) |>
-  dplyr::count(folder, name = "files") |>
-  dplyr::arrange(dplyr::desc(files)) |>
-  datatable(caption = "Files per top-level folder in Google Drive")
+# parse actions from rclone verbose output
+actions <- dry_out[grepl("NOTICE|INFO|Copied|Deleted", dry_out)]
+cat(glue("{length(actions)} actions would be taken"), "\n\n")
+
+if (length(actions) > 0) {
+  tibble(message = actions) |>
+    datatable(
+      caption = "rclone dry-run actions",
+      rownames = FALSE
+    )
+}
 ```
 
-## Sync to GCS
+## Sync
+
+Run the actual sync. `rclone sync` makes the destination match the
+source — uploads new/changed files and deletes files in GCS that no
+longer exist in GD.
+
+**Initial sync**: The first run transfers all files (~8 GB) and can
+take several hours. For a large initial sync, run directly from the
+terminal instead of this notebook:
+
+```bash
+# run in background with progress logging
+rclone sync \
+  gdrive-ecoquants:projects/calcofi/data-public \
+  gcs-calcofi:calcofi-files-public/_sync \
+  --exclude ".DS_Store" --exclude "*.tmp" --exclude "~\$*" \
+  --exclude "*.gdoc" --exclude "*.gsheet" --exclude "*.gslides" \
+  --progress --stats 30s -v \
+  --log-file data/logs/sync_gd_to_gcs_$(date +%Y-%m-%d_%H%M%S).log &
+
+# monitor progress
+tail -f data/logs/sync_gd_to_gcs_*.log
+```
+
+**Incremental sync**: Subsequent runs only transfer changed files
+and complete in seconds to minutes. These run fine in this notebook.
 
 ```{r}
 #| label: sync
 
-results <- sync_to_gcs(
-  local_dir    = gd_dir,
-  gcs_prefix   = gcs_prefix,
-  bucket       = gcs_bucket,
-  delete_stale = TRUE,
-  log_to_gcs   = TRUE,
-  exclude      = c(".DS_Store", "*.tmp", "~$*"))
+cat(glue("syncing {gd_remote} → {gcs_remote}"), "\n\n")
+
+sync_out <- system2(
+  "rclone",
+  c("sync", gd_remote, gcs_remote,
+    rclone_excludes,
+    "--log-level", "INFO",
+    "--stats-one-line",
+    "-v"),
+  stdout = TRUE, stderr = TRUE
+)
+
+# write log
+log_ts   <- format(Sys.time(), "%Y-%m-%d_%H%M%S")
+log_file <- path(log_dir, glue("sync_gd_to_gcs_{log_ts}.log"))
+writeLines(sync_out, log_file)
+cat(glue("log written to {log_file}"), "\n\n")
+
+# show last 30 lines of output
+cat(paste(tail(sync_out, 30), collapse = "\n"))
 ```
 
 ## Summary
@@ -81,16 +168,49 @@ results <- sync_to_gcs(
 ```{r}
 #| label: summary
 
-results |>
-  dplyr::count(action, name = "files") |>
-  datatable(caption = "Sync action summary")
+# parse stats from rclone output
+stats_lines <- sync_out[grepl("Transferred:|Deleted:|Checks:", sync_out)]
+if (length(stats_lines) > 0) {
+  cat("rclone transfer stats:\n")
+  cat(paste(stats_lines, collapse = "\n"), "\n\n")
+}
 
-# show non-skipped actions
-results |>
-  dplyr::filter(action != "skipped") |>
-  dplyr::mutate(size = fs::as_fs_bytes(size)) |>
-  datatable(
-    caption = "Files uploaded or deleted",
-    rownames = FALSE,
-    filter = "top")
+# parse copied/deleted file actions for a table
+action_lines <- sync_out[grepl("INFO.*Copied|INFO.*Deleted", sync_out)]
+if (length(action_lines) > 0) {
+  tibble(message = action_lines) |>
+    datatable(
+      caption = glue("{length(action_lines)} files transferred or deleted"),
+      rownames = FALSE
+    )
+} else {
+  cat("no files changed — GCS already in sync with GD\n")
+}
+
+# count log files
+logs <- dir_ls(log_dir, glob = "*sync_gd_to_gcs*")
+cat(glue("\n{length(logs)} total sync logs in {log_dir}"), "\n")
+```
+
+## Server Cron
+
+To run this daily on a server, schedule via cron or systemd timer:
+
+```bash
+# crontab -e
+0 2 * * * cd /path/to/workflows && \
+  rclone sync \
+    gdrive-server:projects/calcofi/data-public \
+    gcs-calcofi:calcofi-files-public/_sync \
+    --exclude ".DS_Store" --exclude "*.tmp" --exclude "~\$*" \
+    --exclude "*.gdoc" --exclude "*.gsheet" --exclude "*.gslides" \
+    --stats-one-line -v \
+    --log-file data/logs/sync_gd_to_gcs_$(date +\%Y-\%m-\%d_\%H\%M\%S).log
+```
+
+Or render the full notebook for an HTML report:
+
+```bash
+CALCOFI_GD_REMOTE="gdrive-server:projects/calcofi/data-public" \
+  Rscript -e "quarto::quarto_render('sync_gd_to_gcs.qmd')"
 ```

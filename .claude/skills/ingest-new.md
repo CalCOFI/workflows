@@ -81,27 +81,31 @@ ingest_{provider}_{dataset}.qmd
 The notebook includes these sections (customize based on pattern):
 
 #### Universal sections (always included):
-1. **YAML frontmatter** — title, editor options
+1. **YAML frontmatter** — title, calcofi target metadata, editor options
 2. **Overview** — Dataset description, source, Mermaid data flow diagram
-3. **Setup** — Libraries, paths, DuckDB initialization
-4. **Read source data** — `read_csv_files()` or custom reader
+3. **Setup** — Libraries, paths, DuckDB initialization, `overwrite <- FALSE`
+4. **Read source data** — `read_csv_files(sync_archive = TRUE)` archives
+   source CSVs to `gs://calcofi-files-public/archive/{provider}/{dataset}/`
+   on every run. For non-CSV sources (shapefiles, zips), use
+   `sync_to_gcs(local_dir, gcs_prefix = "archive/{provider}/{dataset}",
+   bucket = "calcofi-files-public")` instead.
 5. **Check data integrity** — `check_data_integrity()`, `render_integrity_message()`
 6. **Show source files** — `show_source_files()`
 7. **Show tables/fields** — Redefinition display
 8. **Load into database** — `ingest_dataset()` or custom load
-9. **Schema documentation** — Define PKs/FKs via `dm_add_pk()`/`dm_add_fk()`,
-  color-code tables (`lightblue` = new tables, `lightyellow` = amended
-  reference tables like measurement_type, `white` = shared metadata like
-  dataset), draw with `dm_draw()`, then write `relationships.json`
-  sidecar via `build_relationships_json()` for use in release_database.qmd
+9. **Schema documentation** — Define PKs/FKs, color-code tables
+  (`lightblue` = new tables, `lightyellow` = amended reference tables,
+  `white` = shared metadata), draw with `cc_erd()`, then write
+  `relationships.json` sidecar via `build_relationships_json()`
 10. **Validate** — `validate_for_release()`
 11. **Enforce column types** — `enforce_column_types()`
 12. **Data preview** — Individual `datatable()` calls per table (NOT
   `preview_tables()` in a loop, which has DT rendering issues)
 13. **Write parquet** — `write_parquet_outputs()`
 14. **Write metadata** — `build_metadata_json()`
-15. **Upload to GCS** — `sync_to_gcs()`
-16. **Cleanup** — Close DuckDB connection
+15. **Show metadata** — `listviewer::jsonedit()` for interactive JSON viewer
+16. **Upload to GCS** — `sync_to_gcs()` for parquet outputs
+17. **Cleanup** — `close_duckdb(con)`
 
 #### Conditional sections:
 - **Cross-dataset loading** — `load_prior_tables()` (if depends on prior ingest)

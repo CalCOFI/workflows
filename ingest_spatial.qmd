@@ -83,6 +83,13 @@ gcs_prefix  <- "_spatial"
 dir_create(dir_pmtiles)
 dir_create(dir_parquet)
 
+# archive source spatial files to GCS
+sync_to_gcs(
+  local_dir  = dir_spatial,
+  gcs_prefix = "archive/_spatial",
+  bucket     = gcs_bucket,
+  exclude    = c(".DS_Store", "*.tmp"))
+
 # load registry
 d_layers <- read_csv(
   here("metadata/spatial_layers.csv"),

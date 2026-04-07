@@ -112,6 +112,14 @@ mem_gb <- ps::ps_system_memory()$total / 1024^3 / 2 |> floor()
 dbExecute(con, glue("SET memory_limit = '{mem_gb}GB'"))
 dbExecute(con, glue("SET temp_directory = '{dir_tmp}'"))
 
+# archive source files to GCS
+dir_src <- path_expand(glue("{dir_data}/{provider}/{dataset}"))
+sync_to_gcs(
+  local_dir  = dir_src,
+  gcs_prefix = glue("archive/{provider}/{dataset}"),
+  bucket     = "calcofi-files-public",
+  exclude    = c(".DS_Store", "*.tmp"))
+
 # load metadata
 d_meas_type <- read_csv(
   here("metadata/measurement_type.csv"),
@@ -1485,8 +1493,17 @@ build_relationships_json(
 
 listviewer::jsonedit(
   jsonlite::fromJSON(metadata_path, simplifyVector = FALSE),
-  mode = "view"
-)
+  mode = "view")
+```
+
+```{r}
+#| label: show_relationships_json
+
+listviewer::jsonedit(
+  jsonlite::fromJSON(
+    file.path(dir_parquet, "relationships.json"),
+    simplifyVector = FALSE),
+  mode = "view")
 ```
 
 ## Export Modified Dependency Deltas
