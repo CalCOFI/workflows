@@ -1,9 +1,9 @@
 ## TODO
 
+- [ ] after rclone finishes sync, targets invalidate and run all QMDs (redo/overwrite = F) and git commit
 - [ ] cleanup buckets, share w/ UCSB datascience
-  - missing calcofi-db/ingest/_spatial
-    (but see calcofi-db/ducklake/releases/v2026.04.03/parquet/_spatial.parquet)
-  
+  - missing `calcofi-db/ingest/_spatial`
+    (but see `calcofi-db/ducklake/releases/v2026.04.03/parquet/_spatial.parquet`)
 - [ ] note missing relationships: *_summary tables, grid, places, segments
 - [ ] erd color-code schema into yaml? https://calcofi.io/workflows/release_database.html#show-combined-schema
 - [ ] rename `swfsc_inverts` to `swfsc_invert` including `ingest_swfsc_inverts.qmd` -> `ingest_swfsc_invert.qmd`
@@ -11,8 +11,9 @@
 - add ERDDAP server
 
 https://calcofi.io/workflows/release_database.html#validate
+```
+Warning: cruise_key format violations: 1 rows
 Validation FAILED:
-- Table 'ca_ports' has 4 NULL values in required column 'gnis_id'
 - Table 'casts' has 298 NULL values in required column 'grid_key'
 - Table 'casts' has 49 NULL values in required column 'ship_key'
 - Table 'casts' has 49 NULL values in required column 'cruise_key'
@@ -20,12 +21,34 @@ Validation FAILED:
 - Table 'ctd_measurement' has 3773585 NULL values in required column 'cruise_key'
 - Table 'dic_measurement' has 12683 NULL values in required column 'cast_id'
 - Table 'dic_measurement' has 12721 NULL values in required column 'bottle_id'
-- Table 'dic_measurement_summary' has 12592 NULL values in required column 'cast_id'
-- Table 'dic_measurement_summary' has 12611 NULL values in required column 'bottle_id'
 - Table 'dic_sample' has 3305 NULL values in required column 'cast_id'
 - Table 'dic_sample' has 3326 NULL values in required column 'bottle_id'
+- Table 'dic_summary' has 12592 NULL values in required column 'cast_id'
+- Table 'dic_summary' has 12611 NULL values in required column 'bottle_id'
 - Table 'site' has 2084 NULL values in required column 'grid_key'
 - Table 'species' has 170 NULL values in required column 'gbif_id'
+```
+
+## 2026-04-07 Github Action with pkgdown docs on R packages
+
+Let's also setup Github Action to render pkgdown to documentation website for the R packages, a la    
+@~/Github/MarineSensitivity/msens/.github/workflows/pkgdown.yaml
+
+⏺ Done. Both packages now have .github/workflows/pkgdown.yaml that will build and deploy pkgdown sites  
+  to GitHub Pages on push to main.                                
+                                                                                                        
+  - calcofi4db (fb2bb54): new pkgdown workflow → will deploy to calcofi.io/calcofi4db                   
+  - calcofi4r (f92f48a): replaced old static.yml with pkgdown workflow → will deploy to                 
+  calcofi.io/calcofi4r                                                                                  
+                                                                  
+  Note: the repos' GitHub Pages settings need to be set to deploy from the gh-pages branch (Settings →  
+  Pages → Source → gh-pages branch). The workflow will create that branch on first push.
+
+
+I keep getting R package dependency errors with Github Action for pkgdown compiling @../calcofi4r/, 
+  so apply eg last time `usethis::use_package("fuzzyjoin")`. Latest is issue with highcharter, per      
+  https://github.com/CalCOFI/calcofi4r/actions/runs/24076562085/job/70226364070. Can you inspect for    
+  any others missing, run use_package(), commit and check GA logs until complete?
 
 
 ## 2026-04-06.b GCS vs Gdrive?
@@ -504,23 +527,342 @@ Looking good, but what does `sync_to_gcs_archive()` do and where used? Can it be
 
 ⏺ Clean install. Here's the summary of what's done:
 
-  calcofi4db/R/cloud.R — Consolidated sync_to_gcs():
-  - New params: exclude (glob patterns), log_to_gcs (JSON log to GCS), archive/provider/dataset
+  `calcofi4db/R/cloud.R` — Consolidated **`sync_to_gcs()`**:
+  - New params: `exclude` (glob patterns), `log_to_gcs` (JSON log to GCS), `archive`/`provider`/`dataset`
   (snapshot mode)
   - Mirror mode (default): hash-based sync with delete_stale, exclude, logging
-  - Archive mode (archive=TRUE): timestamped immutable snapshots (replaces sync_to_gcs_archive()
+  - Archive mode (archive=TRUE): timestamped immutable snapshots (replaces `sync_to_gcs_archive()`
   internals)
   - Results now include size and reason columns
 
-  calcofi4db/R/archive.R — sync_to_gcs_archive() is now a thin wrapper calling
+  `calcofi4db/R/archive.R` — sync_to_gcs_archive() is now a thin wrapper calling
   sync_to_gcs(archive=TRUE). Existing QMD calls work unchanged.
 
-  workflows/sync_gd_to_gcs.qmd — New standalone utility notebook that mirrors all of data-public/ to
-  gs://calcofi-files-public/_sync/ with delete_stale=TRUE and GCS logging.
+  `workflows/sync_gd_to_gcs.qmd` — New standalone utility notebook that mirrors all of data-public/ to
+  `gs://calcofi-files-public/_sync/` with `delete_stale=TRUE` and GCS logging.
 
   Still remaining from the plan (can do next):
-  - Add source archival to ingest_calcofi_ctd-cast.qmd, ingest_calcofi_dic.qmd, ingest_spatial.qmd
+  - Add source archival to `ingest_calcofi_ctd-cast.qmd`, `ingest_calcofi_dic.qmd`, `ingest_spatial.qmd`
 
+Let's return to adding source archival to `ingest_calcofi_ctd-cast.qmd`, `ingest_calcofi_dic.qmd`, `ingest_spatial.qmd` 
+
+Like `@ingest_swfsc_ichthyo.qmd`, I think we want `read_csv_files(sync_archive=TRUE)` for these
+  notebooks, except `@ingest_spatial.qmd` which probably needs `sync_to_gcs(archive=TRUE)` since does not  
+  read CSV files
+
+⏺ Done. Source archival added to all three notebooks:
+
+  - ingest_calcofi_ctd-cast.qmd — archives calcofi/ctd-cast/ (zips, CSVs, Access DBs) to                
+  gs://calcofi-files-public/archive/calcofi/ctd-cast/
+  - ingest_calcofi_dic.qmd — archives calcofi/dic/ (NCEI CSV + docs) to                                 
+  gs://calcofi-files-public/archive/calcofi/dic/                                                        
+  - ingest_spatial.qmd — archives _spatial/ (shapefiles, GeoJSON, gpkg) to
+  gs://calcofi-files-public/archive/_spatial/                                                           
+                                                                  
+  All use sync_to_gcs() in mirror mode — hash-based incremental sync, skips unchanged files, excludes   
+  .DS_Store and .tmp.  
+
+Let's update the appropriate @.claude/skills/ with this notion of always archiving source files in    
+Google Drive to Google Cloud Storage in ingest 
+
+⏺ Done. Updated both files:         
+
+  .claude/skills/ingest-new.md (step 4, universal sections):                                            
+  - Step 4 now documents source archival: read_csv_files(sync_archive = TRUE) for CSVs, sync_to_gcs()
+  for non-CSV sources                                                                                   
+  - Added step 15 (show metadata via listviewer::jsonedit)        
+  - Step 9 now references cc_erd() instead of deprecated dm_draw()                                      
+  - Step 17: close_duckdb(con) instead of bare dbDisconnect                                             
+                                                                                                        
+  .claude/skills/templates/ingest_template.qmd:                                                         
+  - overwrite <- FALSE (was TRUE)                                                                       
+  - read_csv_files(sync_archive = TRUE) with correct dir_data/metadata_dir params                       
+  - Write Metadata section: full build_metadata_json() call with all params + listviewer::jsonedit()
+  viewer                                                                                                
+  - Upload section: full sync_to_gcs() call with explicit bucket                                        
+  - Cleanup: close_duckdb(con) instead of dbDisconnect   
+
+Looks like most of the calcofi *.qmd notebooks have a metadata listviewer, but are missing a listviewer of the relationships.json. Do you think we should fold that into the metadata.json or keep it seperate?
+
+⏺ Keep them separate. They serve different audiences and lifecycles:                                    
+                                               
+  - metadata.json — describes what's in the data (tables, columns, types, provenance). Changes when     
+  schema changes.
+  - relationships.json — describes how tables connect (PKs, FKs). Changes when relationships change.    
+  Used by release_database.qmd to merge cross-dataset FK graphs.                                        
+   
+  Folding FKs into metadata.json would complicate the merge logic in release and mix concerns.          
+                                                                  
+  Better to just add a second jsonedit() call. Let me check which QMDs have relationships.json but no   
+  viewer for it
+
+⏺ All five ingest QMDs that build relationships.json are missing the viewer. Let me add it to each —
+  right after the existing show_metadata_json chunk
+
+⏺ The build_relationships_json() writes to dir_parquet. The file path would be file.path(dir_parquet,
+  "relationships.json"). Now add the viewer chunk after each show_metadata_json chunk. All five files
+  have the same pattern
+
+⏺ Done. Added show_relationships_json viewer chunk to all 5 ingest QMDs + the template. Each now has
+  both:
+  - show_metadata_json — interactive viewer of metadata.json                                            
+  - show_relationships_json — interactive viewer of relationships.json  
+
+The `quarto render sync_gd_to_gcs.qmd` results in a log file that reports only:
+```
+2026/04/07 12:32:22 CRITICAL: Can't set -v and --log-level
+```
+
+⏺ Line 138-141: both --log-level INFO and -v are set. In rclone, -v is shorthand for --log-level DEBUG  
+  (or similar), so they conflict.
+
+  Remove the -v flag since --log-level INFO is already explicit
+
+⏺ That first -v (line 90) is fine — it's on the dry-run command and has no --log-level conflict. Only   
+  the second call had both flags.                                 
+                                                                                                        
+  The fix: removed the redundant -v on line 141 which conflicted with --log-level INFO on line 138.     
+  rclone treats -v as --log-level DEBUG, so having both is an error.
+
+The rendering of @sync_gd_to_gcs.qmd  seems hung on "6/9 [sync]". I'm not seeing changes on the
+  bucket that I'd expect like deletion of stale folders that got moved to _spatial [Image #10]  
+
+⏺ The sync is slow because there are many files to compare and transfer across two cloud APIs. The stale
+   folders (CA-boundaries, BOEM, etc.) won't be deleted until the full sync completes — rclone deletes
+  stale files AFTER uploading new ones.
+
+  But there's a bigger issue: looking at the _sync/ bucket, many of those legacy folders
+  (2020-CA-assembly-districts, BOEM-WindPlanningAreas, CA-CDFW-regions, etc.) were previously at the top
+   level but are now under _spatial/ on Google Drive. The rclone sync should eventually handle this —
+  they'll appear under _spatial/ and the top-level copies will be deleted.
+
+  However, for a large initial sync like this, running it from the notebook is impractical. Let me kill
+  the render and run rclone directly from the command line so you can monitor progress  
+
+⏺ It's working — 8.2 GB to transfer, ETA ~3-5 hours for the initial sync. 316 new files to upload plus
+  stale deletions afterward. This is too slow for a notebook render. Kill the quarto preview and run it
+  directly in terminal:
+
+  ```bash
+  rclone sync gdrive-ecoquants:projects/calcofi/data-public gcs-calcofi:calcofi-files-public/_sync \
+    --exclude ".DS_Store" --exclude "*.tmp" --exclude "~\$*" \
+    --exclude "*.gdoc" --exclude "*.gsheet" --exclude "*.gslides" \
+    --progress --stats 30s -v \
+    --log-file data/logs/sync_gd_to_gcs_$(date +%Y-%m-%d_%H%M%S).log &
+  ```
+
+  The & runs it in the background. Check progress with `tail -f data/logs/sync_gd_to_gcs_*.log`.  
+
+Ok, let's add this command and logic to the notebook for documentation
+
+⏺ Key changes:
+
+  - Exclude patterns documented in a table and shared via rclone_excludes variable (DRY)
+  - Initial sync section with the terminal command for background execution + tail -f monitoring
+  - Incremental sync note explaining the notebook is suited for fast subsequent runs
+  - Server Cron section with crontab example and env var override for server rclone remote
+  - Cleaned up the dry run parsing and summary to show a datatable of actual file actions
+
+```bash
+rclone sync gdrive-ecoquants:projects/calcofi/data-public gcs-calcofi:calcofi-files-public/_sync \
+  --exclude ".DS_Store" --exclude "*.tmp" --exclude "~\$*" \
+  --exclude "*.gdoc" --exclude "*.gsheet" --exclude "*.gslides" \
+  --progress --stats 30s -v \
+  --log-file data/logs/sync_gd_to_gcs_$(date +%Y-%m-%d_%H%M%S).log &
+```
+
+[Image #11] I am concerned that the rclone sync does not seem to store the local file's last modified date and instead seems to store the upload time, per browser [Image #11] vs locally:
+```
+(base) bbest@Bens-MacBook-Air download % ls -la
+total 37326048
+drwxr-xr-x@ 346 bbest  staff      11072 Mar 11 09:03 .
+drwx------@  10 bbest  staff        320 Mar 30 12:09 ..
+-rw-r--r--@   1 bbest  staff      43012 Feb 12 23:54 .DS_Store
+drwx------@  49 bbest  staff       1568 Dec  4 23:39 19-9003JD_CTDTest
+-rw-r--r--@   1 bbest  staff    1635457 Oct 14 22:29 19-9003JD_CTDTest.zip
+-rw-r--r--@   1 bbest  staff    5783194 Oct 14 22:29 19-9011NH_CTDTest.zip
+-rw-r--r--@   1 bbest  staff    3261492 Oct 14 22:29 19-9101JD_CTDTest.zip
+-rw-r--r--@   1 bbest  staff    3044353 Oct 14 22:29 19-9103JD_CTDTest.zip
+-rw-r--r--@   1 bbest  staff   15122505 Oct 14 22:29 19-9108JD_CTDCast.zip
+-rw-r--r--@   1 bbest  staff    6905054 Oct 14 22:29 19-9110NH_CTDCast.zip
+-rw-r--r--@   1 bbest  staff    6764672 Oct 14 22:29 19-9202JD_CTDCastProdoStas.zip
+-rw-r--r--@   1 bbest  staff     409510 Oct 14 22:29 19-9204JD_CTDTest01.zip
+-rw-r--r--@   1 bbest  staff   10038626 Oct 14 22:29 19-9207NH_CTDCastProdoStas.zip
+-rw-r--r--@   1 bbest  staff   11695762 Oct 14 22:29 19-9210NH_CTDCastProdoStas.zip
+```
+
+Also, in the synchronizing found in existing calcofi QMD files (`read_csv_files(sync_archive=TRUE)` and `sync_to_gcs()`; is `put_gcs_file()` redundant / superceded?) the files that are already in GCS `_sync` should be used if available and needing to copy to `archive` -- that logic may already be there, but want to check.
+
+⏺ Good questions. Let me check how the current archive and sync functions work — specifically whether they can do GCS-to-GCS copies (from _sync to archive) instead of re-uploading from local.
+
+I don't see any clarity in the Plan about the perceived mismatch between the currently running rclone command's producing last modified datetime according to upload datetime VERSUS the last modified datetime of the local file (= truth):
+
+```bash
+rclone sync gdrive-ecoquants:projects/calcofi/data-public gcs-calcofi:calcofi-files-public/_sync \
+  --exclude ".DS_Store" --exclude "*.tmp" --exclude "~\$*" \
+  --exclude "*.gdoc" --exclude "*.gsheet" --exclude "*.gslides" \
+  --progress --stats 30s -v \
+  --log-file data/logs/sync_gd_to_gcs_$(date +%Y-%m-%d_%H%M%S).log &
+```
+
+⏺ There's the mismatch:                                              
+                                                                                                        
+  - `rclone lsl` shows the **original** GD modification time (e.g., 2022-03-10) — stored in GCS object        
+  metadata by rclone
+  - `gcloud storage ls` shows the **upload** time (e.g., 2026-04-07) — the GCS-native updated timestamp       
+                                                                                                        
+  So rclone does preserve the original mtime in metadata, but gcloud and the GCS console show the upload
+   time. Our R code uses `gcloud storage ls --json` (via `list_gcs_files()`), which returns the GCS-native  
+  timestamps — NOT the rclone-stored original mtime.                                                    
+                                                        
+  This matters for the archive system which derives timestamps from max(file.mtime()). Let me update the plan
+
+⏺ Updated plan                                          
+  ⎿  /plan to preview
+
+ Ready to code?                                                                                         
+                                                                                                        
+ Here is Claude's plan:                                                                                 
+
+ **GCS Sync Optimization: Server-side Copy & Cleanup**
+
+ Context
+
+ Three related issues:
+
+ **1. Archive should copy from _sync/ (server-side) instead of re-uploading from local**
+
+ Currently `.sync_to_gcs_archive()` uploads files from the LOCAL Google Drive mount via `put_gcs_file()`.
+ This is slow and fails when the GD FUSE mount times out. Since _sync/ on GCS now mirrors GD (via
+ rclone), archive creation should do a server-side GCS copy from _sync/ → archive/ — instant, no local
+ I/O.
+
+ Current flow: Local GD mount → `put_gcs_file()` → archive/{timestamp}/
+ Proposed flow: _sync/{provider}/{dataset}/ → `gcloud storage cp` → archive/{timestamp}/
+ Fallback: if file not in _sync/, upload from local (backward compat)
+
+ **2. `put_gcs_file()` loops should use `sync_to_gcs()`**
+ Two QMDs use `put_gcs_file()` in a `walk()` loop instead of `sync_to_gcs()`:
+ - `ingest_calcofi_bottle.qmd` (line 1274)
+ - `ingest_calcofi_dic.qmd` (line 724)
+
+ This misses hash-based deduplication — re-uploads everything every render. Replace with `sync_to_gcs()`.
+
+ `put_gcs_file()` itself stays — it's the low-level primitive used by `release_database.qmd` for individual
+  files (`catalog.json`, `versions.json`, etc.) where `sync_to_gcs()` doesn't fit.
+
+ **3. The `sync_to_gcs()` calls in ctd-cast/dic/spatial for source archival**
+
+ Added last session — these use mirror mode `(archive=FALSE)` to sync source dirs to
+ archive/{provider}/{dataset}/. This works but overwrites the same path every time (no timestamped
+ snapshots). Should these use `archive=TRUE` for timestamped snapshots, or is the mirror approach fine
+ since _sync/ already preserves the current state?
+
+ Recommendation: Mirror mode is fine for these. The _sync/ rclone job provides the living backup, and
+ these `sync_to_gcs()` calls provide a secondary copy at the archive/ prefix. Timestamped snapshots are
+ only needed for the CSV-based ingests that use `read_csv_files(sync_archive=TRUE)`.
+
+ 4. GCS timestamp mismatch: upload time vs original mtime
+
+ When rclone copies files from GD → GCS, GCS native timestamps (gcloud storage ls, GCS console) show
+ the **upload time**, not the **original modification time**. However, rclone stores the original mtime in GCS
+ object metadata (visible via `rclone lsl`).
+
+ ┌───────────────────────────────┬───────────────────┬─────────────┐
+ │            Tool               │       Shows       │   Example   │
+ ├───────────────────────────────┼───────────────────┼─────────────┤
+ │ `rclone lsl`                  │ Original GD mtime │ 2022-03-10  │
+ ├───────────────────────────────┼───────────────────┼─────────────┤
+ │ `gcloud storage ls`           │ GCS upload time   │ 2026-04-07  │
+ ├───────────────────────────────┼───────────────────┼─────────────┤
+ │ GCS console "Last modified"   │ GCS upload time   │ Apr 7, 2026 │
+ └───────────────────────────────┴───────────────────┴─────────────┘
+
+ Impact: Our R code uses `list_gcs_files()` which calls `gcloud storage ls --json` — so it sees upload
+ timestamps, not original mtimes. This doesn't affect hash-based comparisons (archive uses MD5/CRC32C,
+ not mtime). But it means:
+ - The GCS console visually shows "wrong" dates (cosmetic)
+ - Any mtime-based logic in _sync/ would use upload time, not GD mtime
+ - The archive timestamp (`max(file.mtime())`) is derived from LOCAL files, not GCS, so it's correct
+
+ Recommendation: No code change needed — hash comparison is the source of truth. Document this as a
+ known quirk. If we ever need original mtimes from GCS, use `rclone lsjson` instead of `gcloud storage ls`.
+
+ Changes
+
+ A. Optimize `.sync_to_gcs_archive()` to prefer GCS-to-GCS copy
+
+ File: calcofi4db/R/cloud.R (.sync_to_gcs_archive(), line ~478)
+
+ When uploading files to a new archive snapshot, check if the file exists in _sync/ with matching hash.
+  If so, use gcloud storage cp (server-side copy within GCS bucket) instead of uploading from local.
+
+ ```r
+ # for each file to archive:
+ sync_path <- glue("gs://{gcs_bucket}/_sync/{provider}/{dataset}/{filename}")
+ # check if exists in _sync with same md5
+ sync_exists <- # list_gcs_files check
+ if (sync_exists && hashes_match) {
+   # server-side copy (fast, no local I/O)
+   system2(gcloud, c("storage", "cp", sync_path, archive_path))
+ } else {
+   # fallback: upload from local
+   put_gcs_file(local_path, archive_path)
+ }
+ ```
+
+ New helper: `copy_gcs_file(src_gcs_path, dst_gcs_path)` for server-side copy.
+
+ B. Replace `put_gcs_file()` loops with `sync_to_gcs()`
+
+ File: `workflows/ingest_calcofi_bottle.qmd` (line ~1268)
+ File: `workflows/ingest_calcofi_dic.qmd` (line ~720)
+
+ Replace:
+ ```r
+ walk(local_files, function(f) {
+   put_gcs_file(f, glue("gs://{bucket}/{prefix}/{basename(f)}"))
+ })
+ ```
+
+ With:
+ ```r
+ sync_to_gcs(
+   local_dir  = dir_parquet,
+   gcs_prefix = glue("ingest/{dir_label}"),
+   bucket     = "calcofi-db")
+ ```
+
+ Files to modify
+
+ ┌─────────────────────────────────────┬──────────────────────────────────────────────────────┐
+ │                File                 │                        Change                        │
+ ├─────────────────────────────────────┼──────────────────────────────────────────────────────┤
+ │ calcofi4db/R/cloud.R                │ Add copy_gcs_file(), optimize .sync_to_gcs_archive() │
+ ├─────────────────────────────────────┼──────────────────────────────────────────────────────┤
+ │ workflows/ingest_calcofi_bottle.qmd │ Replace put_gcs_file() loop with sync_to_gcs()       │
+ ├─────────────────────────────────────┼──────────────────────────────────────────────────────┤
+ │ workflows/ingest_calcofi_dic.qmd    │ Replace put_gcs_file() loop with sync_to_gcs()       │
+ └─────────────────────────────────────┴──────────────────────────────────────────────────────┘
+
+ Verification
+
+ 1. Run ichthyo ingest → archive creation uses GCS-to-GCS copy from _sync/ (check logs for "Copied from
+  _sync")
+ 2. Run bottle ingest → parquet upload uses sync_to_gcs() with hash deduplication
+ 3. Re-run bottle → all files "skipped" (idempotent)
+
+⏺ Done. Three changes:                                                                                  
+                                                                                                        
+  `calcofi4db/R/cloud.R`:                                                                                 
+  - New `copy_gcs_file(src, dst)` — server-side GCS copy via gcloud storage cp
+  - `.sync_to_gcs_archive()` now checks `_sync/{provider}/{dataset}/` first. If a file exists there with    
+  matching MD5, it does a server-side copy (instant, no local I/O). Falls back to local upload if not in
+   `_sync/`.                                                                                              
+                                                                  
+  `ingest_calcofi_bottle.qmd` and `ingest_calcofi_dic.qmd`:                                                 
+  - Replaced `put_gcs_file()` loops with `sync_to_gcs()` — gets hash-based deduplication for free,          
+  idempotent on re-render. 
 
 ## 2026-04-06 ingest_swfsc_invert.qmd to be like ichthyo: invert, invert_net
 

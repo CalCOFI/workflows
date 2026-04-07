@@ -47,7 +47,7 @@ provider     <- "{{provider}}"
 dataset      <- "{{dataset}}"
 dir_label    <- glue("{provider}_{dataset}")
 dir_data     <- "~/My Drive/projects/calcofi/data-public"
-overwrite    <- TRUE
+overwrite    <- FALSE
 
 dir_parquet  <- here(glue("data/parquet/{dir_label}"))
 db_path      <- here(glue("data/wrangling/{dir_label}.duckdb"))
@@ -67,13 +67,13 @@ load_duckdb_extension(con, "spatial")
 ```{r}
 #| label: read-source
 
-# read CSV files with metadata redefinition
+# read CSV files with metadata redefinition and archive to GCS
 d <- read_csv_files(
   provider     = provider,
   dataset      = dataset,
-  dir_data     = glue("{dir_data}/{{provider}}/{{dataset}}"),
-  metadata_dir = here(glue("metadata/{provider}/{dataset}")),
-  gcs_archive  = NULL)  # set to timestamp string if reading from GCS
+  dir_data     = dir_data,
+  metadata_dir = here("metadata"),
+  sync_archive = TRUE)  # archives source CSVs to gs://calcofi-files-public/archive/
 ```
 
 ## Check Data Integrity
@@ -342,16 +342,50 @@ write_parquet_outputs(con, dir_parquet)
 ```{r}
 #| label: write-metadata
 
-build_metadata_json(con, dir_parquet)
-build_relationships_json(con, dir_parquet)
+metadata_path <- build_metadata_json(
+  con        = con,
+  d_tbls_rd  = d$d_tbls_rd,
+  d_flds_rd  = d$d_flds_rd,
+  output_dir = dir_parquet,
+  provider   = provider,
+  dataset    = dataset,
+  workflow_url = glue(
+    "https://calcofi.io/workflows/ingest_{dir_label}.html"))
+
+build_relationships_json(
+  rels       = {{dataset}}_rels,
+  output_dir = dir_parquet,
+  provider   = provider,
+  dataset    = dataset)
 ```
 
-## Upload to GCS Archive
+```{r}
+#| label: show_metadata_json
+
+listviewer::jsonedit(
+  jsonlite::fromJSON(metadata_path, simplifyVector = FALSE),
+  mode = "view")
+```
+
+```{r}
+#| label: show_relationships_json
+
+listviewer::jsonedit(
+  jsonlite::fromJSON(
+    file.path(dir_parquet, "relationships.json"),
+    simplifyVector = FALSE),
+  mode = "view")
+```
+
+## Upload to GCS
 
 ```{r}
 #| label: upload-gcs
 
-sync_to_gcs(dir_parquet, glue("ingest/{dir_label}"))
+sync_to_gcs(
+  local_dir  = dir_parquet,
+  gcs_prefix = glue("ingest/{dir_label}"),
+  bucket     = "calcofi-db")
 ```
 
 ## Cleanup
@@ -359,5 +393,6 @@ sync_to_gcs(dir_parquet, glue("ingest/{dir_label}"))
 ```{r}
 #| label: cleanup
 
-dbDisconnect(con, shutdown = TRUE)
+close_duckdb(con)
+cat(glue("parquet outputs written to: {dir_parquet}"), "\n")
 ```

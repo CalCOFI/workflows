@@ -490,8 +490,17 @@ build_relationships_json(
 
 listviewer::jsonedit(
   jsonlite::fromJSON(metadata_path, simplifyVector = FALSE),
-  mode = "view"
-)
+  mode = "view")
+```
+
+```{r}
+#| label: show_relationships_json
+
+listviewer::jsonedit(
+  jsonlite::fromJSON(
+    file.path(dir_parquet, "relationships.json"),
+    simplifyVector = FALSE),
+  mode = "view")
 ```
 
 ## Upload to GCS

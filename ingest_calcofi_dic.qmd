@@ -123,6 +123,14 @@ dir_create(dirname(db_path))
 con <- get_duckdb_con(db_path)
 load_duckdb_extension(con, "spatial")
 
+# archive source files to GCS
+dir_src <- path_expand(glue("{dir_data}/{provider}/{dataset}"))
+sync_to_gcs(
+  local_dir  = dir_src,
+  gcs_prefix = glue("archive/{provider}/{dataset}"),
+  bucket     = "calcofi-files-public",
+  exclude    = c(".DS_Store", "*.tmp"))
+
 # load unified measurement_type reference
 meas_type_csv <- here("metadata/measurement_type.csv")
 d_meas_type   <- read_csv(meas_type_csv)
@@ -689,8 +697,17 @@ metadata_path <- build_metadata_json(
 
 listviewer::jsonedit(
   jsonlite::fromJSON(metadata_path, simplifyVector = FALSE),
-  mode = "view"
-)
+  mode = "view")
+```
+
+```{r}
+#| label: show_relationships_json
+
+listviewer::jsonedit(
+  jsonlite::fromJSON(
+    file.path(dir_parquet, "relationships.json"),
+    simplifyVector = FALSE),
+  mode = "view")
 ```
 
 ## Upload to GCS Archive
@@ -698,20 +715,10 @@ listviewer::jsonedit(
 ```{r}
 #| label: upload-gcs
 
-gcs_ingest_prefix <- glue("ingest/{dir_label}")
-gcs_bucket        <- "calcofi-db"
-
-local_files <- list.files(dir_parquet, full.names = TRUE)
-
-walk(local_files, function(f) {
-  gcs_path <- glue("gs://{gcs_bucket}/{gcs_ingest_prefix}/{basename(f)}")
-  put_gcs_file(f, gcs_path)
-  cat(glue("Uploaded {basename(f)} -> {gcs_path}"), "\n")
-})
-
-cat(glue(
-  "\nUploaded {length(local_files)} files to ",
-  "gs://{gcs_bucket}/{gcs_ingest_prefix}/"), "\n")
+sync_to_gcs(
+  local_dir  = dir_parquet,
+  gcs_prefix = glue("ingest/{dir_label}"),
+  bucket     = "calcofi-db")
 ```
 
 ## Cleanup
