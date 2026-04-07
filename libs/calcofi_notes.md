@@ -356,6 +356,171 @@ Do we really need a new function `sync_gd_to_gcs()` or do we need to simply reus
 
 Looking good, but what does `sync_to_gcs_archive()` do and where used? Can it be consolidated into `sync_to_gcs()` with extra arguments? Yes, let's be sure to add the synchronizing functionality to any calcofi *.qmd files that do not yet have it and need it.
 
+⏺ Updated plan
+  ⎿  /plan to preview
+
+ Ready to code?
+
+ Here is Claude's plan:
+
+ Systematic GD → GCS Sync
+
+ Context
+
+ GCS _sync/ is stale (legacy one-time upload). The archive/ system only captures source CSVs for QMDs
+ that call read_csv_files(sync_archive=TRUE) — only ichthyo, bottle, invert. CTD-cast, DIC, and spatial
+  never archive their sources. Folders like _lookups, scripps, euphausiids, whales-seabirds-turtles
+ have no GCS backup at all.
+
+ Function Consolidation
+
+ Current (confusing)
+
+ ┌───────────────────────────────────┬───────────┬──────────────────────────────────────────────────┐
+ │             Function              │ Location  │                     Purpose                      │
+ ├───────────────────────────────────┼───────────┼──────────────────────────────────────────────────┤
+ │ sync_to_gcs()                     │ cloud.R   │ Hash-based mirror: local dir → GCS prefix        │
+ ├───────────────────────────────────┼───────────┼──────────────────────────────────────────────────┤
+ │ sync_to_gcs_archive()             │ archive.R │ Timestamped immutable snapshot per               │
+ │                                   │           │ provider/dataset                                 │
+ ├───────────────────────────────────┼───────────┼──────────────────────────────────────────────────┤
+ │ read_csv_files(sync_archive=TRUE) │ read.R    │ Side-effect: calls sync_to_gcs_archive()         │
+ └───────────────────────────────────┴───────────┴──────────────────────────────────────────────────┘
+
+ Proposed: Consolidate into sync_to_gcs()
+
+ Add an archive param. When TRUE, creates timestamped snapshot; when FALSE (default), standard mirror.
+
+ sync_to_gcs <- function(
+     local_dir,
+     gcs_prefix,
+     bucket,
+     pattern      = NULL,
+     exclude      = NULL,        # NEW: glob patterns to skip
+     delete_stale = FALSE,
+     log_to_gcs   = FALSE,       # NEW: write JSON action log
+     archive      = FALSE,       # NEW: timestamped snapshot mode
+     provider     = NULL,        # required when archive = TRUE
+     dataset      = NULL,        # required when archive = TRUE
+     verbose      = TRUE)
+
+ archive = FALSE (default — mirror mode):
+ - Syncs local_dir/ → gs://{bucket}/{gcs_prefix}/
+ - Hash comparison: CRC32C > MD5 > size
+ - Optional delete_stale, exclude, log_to_gcs
+ - Returns tibble: file, action, size, reason
+
+ archive = TRUE (snapshot mode):
+ - Derives timestamp from max(file.mtime())
+ - Syncs to gs://{bucket}/{gcs_prefix}/{timestamp}/{provider}/{dataset}/
+ - Compares against latest existing archive — skips if unchanged
+ - Returns list: archive_timestamp, archive_path, created_new, files_uploaded
+
+ Deprecate: sync_to_gcs_archive() becomes a thin wrapper calling sync_to_gcs(archive = TRUE) during
+ transition. Eventually remove.
+
+ read_csv_files(sync_archive=TRUE): Stays but calls sync_to_gcs(archive = TRUE) internally.
+
+ Usage Across QMDs
+
+ What needs adding (currently missing sync)
+
+ ┌─────────────────────────────┬──────────────────────────────┬─────────────────────────────────────┐
+ │             QMD             │        What's missing        │                 Fix                 │
+ ├─────────────────────────────┼──────────────────────────────┼─────────────────────────────────────┤
+ │ ingest_calcofi_ctd-cast.qmd │ No source CSV archival       │ Add sync_to_gcs(archive=TRUE) for   │
+ │                             │                              │ source CSVs                         │
+ ├─────────────────────────────┼──────────────────────────────┼─────────────────────────────────────┤
+ │ ingest_calcofi_dic.qmd      │ No source CSV archival       │ Add sync_to_gcs(archive=TRUE) for   │
+ │                             │                              │ source CSVs                         │
+ ├─────────────────────────────┼──────────────────────────────┼─────────────────────────────────────┤
+ │ ingest_spatial.qmd          │ Only syncs PMTiles output,   │ Add source archival step            │
+ │                             │ not source _spatial/         │                                     │
+ └─────────────────────────────┴──────────────────────────────┴─────────────────────────────────────┘
+
+ What already works (no change)
+
+ ┌───────────────────────┬───────────────────────────────────────┬─────────────────────────────┐
+ │          QMD          │            Archive source             │         Sync output         │
+ ├───────────────────────┼───────────────────────────────────────┼─────────────────────────────┤
+ │ ingest_swfsc_ichthyo  │ via read_csv_files(sync_archive=TRUE) │ sync_to_gcs() → calcofi-db  │
+ ├───────────────────────┼───────────────────────────────────────┼─────────────────────────────┤
+ │ ingest_calcofi_bottle │ via read_csv_files(sync_archive=TRUE) │ put_gcs_file() → calcofi-db │
+ ├───────────────────────┼───────────────────────────────────────┼─────────────────────────────┤
+ │ ingest_swfsc_invert   │ via read_csv_files(sync_archive=TRUE) │ sync_to_gcs() → calcofi-db  │
+ ├───────────────────────┼───────────────────────────────────────┼─────────────────────────────┤
+ │ release_database      │ n/a (reads from parquet)              │ put_gcs_file() → calcofi-db │
+ └───────────────────────┴───────────────────────────────────────┴─────────────────────────────┘
+
+ New Notebook: sync_gd_to_gcs.qmd
+
+ Standalone utility (no calcofi: yaml). Mirrors entire GD data-public/ → GCS _sync/.
+
+ ```r
+ # full GD backup
+ sync_to_gcs(
+   local_dir    = "~/My Drive/projects/calcofi/data-public",
+   gcs_prefix   = "_sync",
+   bucket       = "calcofi-files-public",
+   delete_stale = TRUE,
+   log_to_gcs   = TRUE,
+   exclude      = c(".DS_Store", "*.tmp"))
+ ```
+
+ Sections: setup → scan GD → scan GCS → compare & sync → log → summary datatable.
+
+ Works on Mac (local GD mount) and server (rclone-fetched copy, same function, different local_dir).
+
+ Files to modify
+
+ ┌───────────────────────────────────────┬──────────────────────────────────────────────────────────┐
+ │                 File                  │                          Change                          │
+ ├───────────────────────────────────────┼──────────────────────────────────────────────────────────┤
+ │ calcofi4db/R/cloud.R                  │ Add exclude, log_to_gcs, archive, provider, dataset      │
+ │                                       │ params to sync_to_gcs()                                  │
+ ├───────────────────────────────────────┼──────────────────────────────────────────────────────────┤
+ │ calcofi4db/R/archive.R                │ Deprecate sync_to_gcs_archive() → thin wrapper           │
+ ├───────────────────────────────────────┼──────────────────────────────────────────────────────────┤
+ │ calcofi4db/R/read.R                   │ Update read_csv_files() to call                          │
+ │                                       │ sync_to_gcs(archive=TRUE)                                │
+ ├───────────────────────────────────────┼──────────────────────────────────────────────────────────┤
+ │ workflows/sync_gd_to_gcs.qmd          │ New utility notebook                                     │
+ ├───────────────────────────────────────┼──────────────────────────────────────────────────────────┤
+ │ workflows/ingest_calcofi_ctd-cast.qmd │ Add source CSV archival                                  │
+ ├───────────────────────────────────────┼──────────────────────────────────────────────────────────┤
+ │ workflows/ingest_calcofi_dic.qmd      │ Add source CSV archival                                  │
+ ├───────────────────────────────────────┼──────────────────────────────────────────────────────────┤
+ │ workflows/ingest_spatial.qmd          │ Add source _spatial/ archival                            │
+ └───────────────────────────────────────┴──────────────────────────────────────────────────────────┘
+
+ Verification
+
+ 1. devtools::document() + devtools::install() calcofi4db
+ 2. Verify existing QMDs still work (archive mode via read_csv_files)
+ 3. Run sync_gd_to_gcs.qmd → _sync/ on GCS matches GD
+ 4. Check _sync/_logs/ for JSON action log
+ 5. Re-run → idempotent (all "skipped")
+ 6. Add/remove file on GD → re-run → correct action logged
+
+⏺ Clean install. Here's the summary of what's done:
+
+  calcofi4db/R/cloud.R — Consolidated sync_to_gcs():
+  - New params: exclude (glob patterns), log_to_gcs (JSON log to GCS), archive/provider/dataset
+  (snapshot mode)
+  - Mirror mode (default): hash-based sync with delete_stale, exclude, logging
+  - Archive mode (archive=TRUE): timestamped immutable snapshots (replaces sync_to_gcs_archive()
+  internals)
+  - Results now include size and reason columns
+
+  calcofi4db/R/archive.R — sync_to_gcs_archive() is now a thin wrapper calling
+  sync_to_gcs(archive=TRUE). Existing QMD calls work unchanged.
+
+  workflows/sync_gd_to_gcs.qmd — New standalone utility notebook that mirrors all of data-public/ to
+  gs://calcofi-files-public/_sync/ with delete_stale=TRUE and GCS logging.
+
+  Still remaining from the plan (can do next):
+  - Add source archival to ingest_calcofi_ctd-cast.qmd, ingest_calcofi_dic.qmd, ingest_spatial.qmd
+
 
 ## 2026-04-06 ingest_swfsc_invert.qmd to be like ichthyo: invert, invert_net
 

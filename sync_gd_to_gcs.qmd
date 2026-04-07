@@ -1,0 +1,96 @@
+---
+title: "Sync Google Drive to GCS"
+editor_options:
+  chunk_output_type: console
+---
+
+## Overview
+
+Mirrors the entire Google Drive `data-public/` folder to
+`gs://calcofi-files-public/_sync/`. Uses hash-based comparison
+(CRC32C) to skip unchanged files and logs all actions to GCS.
+
+This is a standalone utility — not a pipeline target. Run manually
+or schedule as a cron job for daily backup.
+
+**Buckets**:
+
+- `calcofi-files-public/_sync/` — living mirror of GD (this notebook)
+- `calcofi-files-public/archive/` — immutable timestamped snapshots
+  (created by ingest QMDs)
+
+The `_sync/` mirror deletes stale GCS files, but `archive/` provides
+the reproducibility safety net — nothing is lost permanently.
+
+## Setup
+
+```{r}
+#| label: setup
+
+devtools::load_all(here::here("../calcofi4db"))
+
+librarian::shelf(
+  DT,
+  fs,
+  glue,
+  here,
+  quiet = T
+)
+options(DT.options = list(scrollX = TRUE))
+
+gd_dir     <- path_expand("~/My Drive/projects/calcofi/data-public")
+gcs_bucket <- "calcofi-files-public"
+gcs_prefix <- "_sync"
+```
+
+## Scan Google Drive
+
+```{r}
+#| label: scan_gd
+
+gd_files <- dir_ls(gd_dir, recurse = TRUE, type = "file")
+gd_rel   <- sub(paste0("^", normalizePath(gd_dir), "/?"), "", gd_files)
+
+cat(glue("{length(gd_files)} files in Google Drive data-public/"), "\n")
+cat(glue("Total size: {sum(file_size(gd_files))}"), "\n\n")
+
+# summary by top-level folder
+tibble::tibble(path = gd_rel) |>
+  dplyr::mutate(folder = sub("/.*", "", path)) |>
+  dplyr::count(folder, name = "files") |>
+  dplyr::arrange(dplyr::desc(files)) |>
+  datatable(caption = "Files per top-level folder in Google Drive")
+```
+
+## Sync to GCS
+
+```{r}
+#| label: sync
+
+results <- sync_to_gcs(
+  local_dir    = gd_dir,
+  gcs_prefix   = gcs_prefix,
+  bucket       = gcs_bucket,
+  delete_stale = TRUE,
+  log_to_gcs   = TRUE,
+  exclude      = c(".DS_Store", "*.tmp", "~$*"))
+```
+
+## Summary
+
+```{r}
+#| label: summary
+
+results |>
+  dplyr::count(action, name = "files") |>
+  datatable(caption = "Sync action summary")
+
+# show non-skipped actions
+results |>
+  dplyr::filter(action != "skipped") |>
+  dplyr::mutate(size = fs::as_fs_bytes(size)) |>
+  datatable(
+    caption = "Files uploaded or deleted",
+    rownames = FALSE,
+    filter = "top")
+```
