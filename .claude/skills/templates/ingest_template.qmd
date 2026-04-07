@@ -41,13 +41,14 @@ librarian::shelf(
 options(readr.show_col_types = F)
 options(DT.options = list(scrollX = TRUE))
 
+# common ingest settings (overwrite, dir_data)
+source(here("libs/ingest.R"))
+
 # define paths
 dataset_name <- "{{dataset_name}}"
 provider     <- "{{provider}}"
 dataset      <- "{{dataset}}"
 dir_label    <- glue("{provider}_{dataset}")
-dir_data     <- "~/My Drive/projects/calcofi/data-public"
-overwrite    <- FALSE
 
 dir_parquet  <- here(glue("data/parquet/{dir_label}"))
 db_path      <- here(glue("data/wrangling/{dir_label}.duckdb"))

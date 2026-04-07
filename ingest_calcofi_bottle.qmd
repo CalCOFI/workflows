@@ -85,13 +85,14 @@ options(readr.show_col_types = F)
 options(DT.options = list(scrollX = TRUE))
 
 # define paths
+# common ingest settings (overwrite, dir_data)
+source(here("libs/ingest.R"))
+
 dataset_name <- "CalCOFI Bottle Database"
 provider <- "calcofi"
 dataset <- "bottle"
 dir_label <- glue("{provider}_{dataset}")
-dir_data <- "~/My Drive/projects/calcofi/data-public"
 subdir <- "CalCOFI_Database_194903-202105_csv_16October2023"
-overwrite <- FALSE
 dir_parquet <- here(glue("data/parquet/{dir_label}"))
 db_path <- here(glue("data/wrangling/{dir_label}.duckdb"))
 # load data using calcofi4db package
@@ -1165,11 +1166,14 @@ own_tables <- c(
 )
 
 parquet_stats <- write_parquet_outputs(
-  con = con,
-  output_dir = dir_parquet,
-  tables = own_tables,
+  con              = con,
+  output_dir       = dir_parquet,
+  tables           = own_tables,
+  sort_by          = list(
+    bottle_measurement = "measurement_type",
+    casts              = "hilbert:lon_dec,lat_dec"),
   strip_provenance = FALSE,
-  mismatches = mismatches
+  mismatches       = mismatches
 )
 
 parquet_stats |>

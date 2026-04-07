@@ -86,13 +86,14 @@ librarian::shelf(
 options(readr.show_col_types = F)
 options(DT.options = list(scrollX = TRUE))
 
+# common ingest settings (overwrite, dir_data)
+source(here("libs/ingest.R"))
+
 # define paths
 dataset_name <- "NOAA CalCOFI Ichthyoplankton Database"
 provider <- "swfsc"
 dataset <- "ichthyo"
 dir_label <- glue("{provider}_{dataset}")
-dir_data <- "~/My Drive/projects/calcofi/data-public"
-overwrite <- FALSE
 dir_parquet <- here(glue("data/parquet/{dir_label}"))
 db_path <- here(glue("data/wrangling/{dir_label}.duckdb"))
 
@@ -1219,11 +1220,14 @@ mismatches <- list(
 
 # write parquet files with manifest
 parquet_stats <- write_parquet_outputs(
-  con = con,
-  output_dir = dir_parquet,
-  tables = dbListTables(con),
-  strip_provenance = F,
-  mismatches = mismatches
+  con              = con,
+  output_dir       = dir_parquet,
+  tables           = dbListTables(con),
+  sort_by          = list(
+    ichthyo = c("species_id", "life_stage"),
+    site    = "hilbert:longitude,latitude"),
+  strip_provenance = FALSE,
+  mismatches       = mismatches
 )
 
 parquet_stats |>
