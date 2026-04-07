@@ -10,6 +10,9 @@
 - int-app: need legend
 - add ERDDAP server
 
+
+geometry from WKB to work around DuckDB spatial serialization bug where GEOMETRY columns corrupt after many operations
+
 https://calcofi.io/workflows/release_database.html#validate
 ```
 Warning: cruise_key format violations: 1 rows
@@ -28,6 +31,250 @@ Validation FAILED:
 - Table 'site' has 2084 NULL values in required column 'grid_key'
 - Table 'species' has 170 NULL values in required column 'gbif_id'
 ```
+
+## 2026-04-07 tar_make() all nodes, write to native GEOMETRY in DuckDB v1.5.1
+
+Please run `Rscript -e 'targets::tar_make("ingest_calcofi_dic")'` and debug to completion:
+```
+56/87 [update_site_from_grid]                                                                                     
+Error in `duckdb_result()`:                                                                                       
+! Invalid Error: Invalid Input Error: Skipping beyond end of binary data at position 16                           
+ℹ Context: rapi_execute                                                                                           
+ℹ Error type: INVALID                                                                                             
+Backtrace:                                                                                                        
+     ▆                                                                                                            
+  1. ├─calcofi4db::assign_grid_key(con, "site")                                                                   
+  2. │ ├─DBI::dbExecute(con, glue::glue("UPDATE {table} SET grid_key = (\n       SELECT g.grid_key FROM           
+{grid_table} g\n       WHERE ST_Intersects({table}.{geom_col}, g.geom) LIMIT 1)")) at calcofi4db/R/spatial.R:71:3 
+  3. │ └─DBI::dbExecute(con, glue::glue("UPDATE {table} SET grid_key = (\n       SELECT g.grid_key FROM           
+{grid_table} g\n       WHERE ST_Intersects({table}.{geom_col}, g.geom) LIMIT 1)"))                                
+  4. │   ├─DBI::dbSendStatement(conn, statement, ...)                                                             
+  5. │   └─DBI::dbSendStatement(conn, statement, ...)                                                             
+  6. │     ├─DBI::dbSendQuery(conn, statement, ...)                                                               
+  7. │     └─duckdb::dbSendQuery(conn, statement, ...)                                                            
+  8. │       └─duckdb (local) .local(conn, statement, ...)                                                        
+  9. │         └─duckdb:::duckdb_result(connection = conn, stmt_lst = stmt_lst, arrow = arrow)                    
+ 10. │           └─duckdb:::duckdb_execute(res)                                                                   
+ 11. │             └─duckdb:::rethrow_rapi_execute(...)                                                           
+ 12. │               ├─rlang::try_fetch(...)                                                                      
+ 13. │               │ ├─base::tryCatch(...)                                                                      
+ 14. │               │ │ └─base (local) tryCatchList(expr, classes, parentenv, handlers)                          
+ 15. │               │ │   └─base (local) tryCatchOne(expr, names, parentenv, handlers[[1L]])                     
+ 16. │               │ │     └─base (local) doTryCatch(return(expr), name, parentenv, handler)                    
+ 17. │               │ └─base::withCallingHandlers(...)                                                           
+ 18. │               └─duckdb:::rapi_execute(stmt, convert_opts)                                                  
+ 19. ├─duckdb (local) `<fn>`(...)                                                                                 
+ 20. │ └─rlang::abort(error_parts, class = "duckdb_error", !!!fields)                                             
+ 21. │   └─rlang:::signal_abort(cnd, .file)                                                                       
+ 22. │     └─base::signalCondition(cnd)                                                                           
+ 23. └─rlang (local) `<fn>`(`<dckdb_rr>`)                                                                         
+ 24.   └─handlers[[1L]](cnd)                                                                                      
+ 25.     └─duckdb:::rethrow_error_from_rapi(e, call)                                                              
+ 26.       └─rlang::abort(msg, call = call)                                                                       
+                                                                                                                  
+Quitting from ingest_swfsc_ichthyo.qmd:925-933 [update_site_from_grid]  
+```
+
+⏺ The DuckDB spatial geometry bug is back — same ST_Intersects error at assign_grid_key. The named driver fix
+  didn't resolve the underlying issue. Let me check if the wrangling DB has a stale WAL:
+
+⏺ This is a confirmed DuckDB spatial bug — Serde::Deserialize buffer overflow. The named driver fix prevents WAL
+  corruption on crash but doesn't fix the in-session geometry deserialization issue. Let me try adding a
+  CHECKPOINT to force proper serialization before the spatial join:
+
+⏺ CHECKPOINT doesn't help. Let me isolate which geometry is corrupt — site points or grid polygons:
+
+⏺ The grid polygon geometry is corrupt — ST_AsText(grid.geom) fails. Site points are fine. Even reconstructing the
+   site point with ST_Point(lon,lat) doesn't help because the grid.geom it intersects against is still broken.
+
+  The grid is loaded from hex WKB via ST_GeomFromHEXWKB(). The bug is specifically in how DuckDB v1.5.1 spatial
+  stores polygon WKB after deserialization. Let me fix the assign_grid_key function to re-parse the grid geometry
+  on-the-fly:
+
+⏺ The grid geometry works fine in a fresh DB in the same session. The corruption only happens in the ichthyo
+  wrangling DB after many operations. The issue is that the grid table is written mid-pipeline after 50+ chunks of
+   heavy processing. Let me check: if we reload the grid fresh on the existing corrupt DB, does it fix?
+
+⏺ Reloading the grid fixes it. The geometry gets corrupted during the long pipeline of DuckDB operations between
+  grid creation and the spatial join. The fix: add a CHECKPOINT + reload of the grid geometry right before
+  assign_grid_key.
+
+  Actually, a simpler approach: keep the hex WKB column and re-create the GEOMETRY column from it right before the
+   spatial query. Let me update assign_grid_key() to do this:
+
+⏺ Now update the QMD to keep the geom_wkb column (currently it drops it):
+
+⏺ Now install, delete the stale DB, and run:
+
+⏺ Pipeline running in background. The fix: assign_grid_key() now refreshes grid geometry from the stored geom_wkb
+  column before the spatial join, working around the DuckDB spatial serialization bug where GEOMETRY columns
+  corrupt after many operations. The QMD keeps geom_wkb on the grid table instead of dropping it.
+
+⏺ This is in ingest_calcofi_bottle.qmd at the consolidate_casts chunk — the "time" column doesn't exist because it
+   was already dropped in a previous render (idempotency issue). The datetime_utc was already created and
+  time/date were dropped. On re-render with overwrite=FALSE, the casts table already has datetime_utc but no time
+  column.
+
+⏺ Now delete the stale bottle DB and re-run:
+
+⏺ Running. Fixed the idempotency issue — the consolidate_casts chunk now checks if date and time columns exist
+  before trying to create datetime_utc from them. On re-render, it skips with a message.
+
+⏺ The glue::glue() call in the new assign_grid_key() code is evaluating inside message() where grid_table isn't
+  visible due to the cli {} interpolation. The issue is in my edit — the glue::glue() inside DBI::dbGetQuery()
+  works fine, but the message() that references grid_table is being intercepted by cli. Let me check:
+
+⏺ The glue::glue() uses {grid_table} which works fine — grid_table is a function parameter. The error "Could not
+  evaluate cli {} expression: grid_table" is from targets/cli trying to interpolate {grid_table} in the error
+  message propagation. This happens when the function errors and targets formats the error.
+
+  The actual error is likely that the information_schema query failed. Let me check — the grid_table in the SQL
+  uses single quotes which makes it a SQL string literal, not a glue expression. Wait, looking again at line 75:
+  WHERE table_name = '{grid_table}' — that's glue interpolating grid_table into the SQL. That should work.
+
+  Let me check if the grid table actually exists at the point where assign_grid_key is called in the bottle
+  ingest:
+
+⏺ The grid is loaded as a VIEW from parquet — it won't have geom_wkb (the parquet doesn't include it, since we
+  previously dropped it). The assign_grid_key refresh logic looks for geom_wkb which only exists in the ichthyo
+  wrangling DB's grid table.
+
+  The fix: the refresh should check if grid_table is a TABLE (not VIEW) and has geom_wkb. For VIEWs reading
+  parquet, the geometry should be fine since it's freshly loaded.
+
+⏺ Fix: the grid geometry refresh now only runs on BASE TABLEs with geom_wkb — skips VIEWs loaded from parquet
+  (where geometry is already fresh). Running pipeline again.
+
+⏺ The output is very short — the error happens immediately. This is a targets-level issue, not inside the
+  notebook. The {grid_table} is being evaluated by cli/targets in the error formatting. The issue is that
+  glue::glue() inside the function uses {grid_table}, and when the error propagates through targets, cli tries to
+  interpolate {grid_table} from the error message text.
+
+  Let me check — is targets somehow evaluating the function body? No, this must be the information_schema.tables
+  query itself erroring because DuckDB's information_schema.tables doesn't have table_type in some contexts. Let
+  me test:
+
+⏺ That works. The issue must be that the error from the glue::glue() in the SQL is being caught and re-thrown with
+   {grid_table} in the message, which cli then tries to evaluate. Let me just use paste0 instead of glue for the
+  information_schema queries to avoid cli interpolation:
+
+⏺ Wait — the real issue might be that grid_table as a variable name collides with DuckDB's
+  information_schema.tables which also uses the column table_name. But that should be fine as SQL. Let me check if
+   the problem is actually that the grid table simply doesn't exist yet when bottle ingest calls assign_grid_key
+  and the information_schema query returns 0 rows...
+
+  Actually, looking more carefully at the error: "Could not evaluate cli {} expression: grid_table" — this is
+  cli/rlang intercepting {grid_table} in a glue string. The issue is that when glue::glue() is used inside a
+  function and an error occurs, the error message contains literal {grid_table} which cli then tries to evaluate
+  in a different scope.
+
+  Let me just use DBI::dbListTables() instead — simpler and avoids the information_schema issue:
+
+⏺ Fixed. The issue was glue::glue("{grid_table}") — when errors propagate through targets/cli, the {grid_table} in
+   the error text gets re-evaluated by cli in a scope where grid_table doesn't exist. Switched to dbListTables() +
+   dbListFields() + paste0() to avoid glue interpolation entirely.
+
+⏺ The ST_Intersects query on line 87 errors (buffer overflow on the bottle ingest's grid VIEW), and the error
+  message contains {grid_table} which cli tries to interpolate. Let me replace all glue calls in this function
+  with paste0:
+
+This "grid geometry refresh workaround" in calcofi4db v2.5.6 feels a bit hacky. I think there may be issues with DuckDB writing parquet files with compatibility at version 1.0 but to get the new fully native GEOMETRY data type, we need to impose DuckDB version 1.5.1 (latest) or higher. Then we back out this extraneous geom_wkb and use the native storage and spatial capabilities. See documentation at https://duckdb.org/docs/current/internals/storage
+
+⏺ There it is. DuckDB v1.5.1 is running but the storage compatibility version is v0.10.2 — that's the default for backward compat. The native GEOMETRY type was
+  introduced in v1.5, but the storage format is writing at v0.10.2 level where GEOMETRY was an extension type with different serialization.                     
+
+
+⏺ Updated plan
+  ⎿  /plan to preview
+
+ Ready to code?
+
+ Here is Claude's plan:
+
+ **Fix DuckDB Spatial: Use Native `GEOMETRY` via `storage_compatibility_version`**
+
+ Context
+
+ The "grid geometry refresh from geom_wkb" workaround in calcofi4db v2.5.6
+ is hacky. The real root cause: DuckDB v1.5.1 defaults to
+ `storage_compatibility_version = 'v0.10.2'` for backward compat. At that
+ storage version, GEOMETRY is serialized using the old spatial extension
+ format, which has a deserialization bug (_Buffer overflow / Skipping beyond end of binary data_).
+
+ **DuckDB `v1.5` made `GEOMETRY` a built-in native type**. Setting
+ `storage_compatibility_version = 'latest'` (storage version 68) uses the new
+ native serialization, which works correctly — confirmed with 61K points +
+ 218 grid polygons + heavy workload, no corruption.
+
+ Changes
+
+ 1. Set `storage_compatibility_version = 'latest'` in `get_duckdb_con()`
+
+ File: calcofi4db/R/duckdb.R
+
+ The existing code already sets `autoload_known_extensions = "true"` in the
+ default config. Add `storage_compatibility_version = "latest"`:
+
+ ```r
+ default_config <- list(
+   autoload_known_extensions    = "true",
+   storage_compatibility_version = "latest"
+ )
+ ```
+
+ This applies to ALL wrangling DBs created by `get_duckdb_con()`.
+
+ 2. Remove the `geom_wkb` workaround from `assign_grid_key()`
+
+ File: calcofi4db/R/spatial.R
+
+ Remove the grid geometry refresh block (the `geom_wkb` check and
+ `ST_GeomFromHEXWKB` re-parse). With native `GEOMETRY` storage, this is
+ unnecessary.
+
+ 3. Drop `geom_wkb` / `geom_ctr_wkb` columns in ichthyo QMD
+
+ File: workflows/ingest_swfsc_ichthyo.qmd
+
+ Restore the DROP COLUMN `geom_wkb` / DROP COLUMN `geom_ctr_wkb` lines that were
+  removed in the workaround.
+
+ 4. Delete stale wrangling DBs
+
+ All existing wrangling DBs were created with v0.10.2 storage. They need to
+ be rebuilt with the new storage version:
+
+ ```bash
+ rm -f data/wrangling/*.duckdb data/wrangling/*.wal
+ ```
+
+ Files to modify
+
+ ┌────────────────────────────────────┬──────────────────────────────────┐
+ │                File                │              Change              │
+ ├────────────────────────────────────┼──────────────────────────────────┤
+ │                                    │ Add                              │
+ │ calcofi4db/R/duckdb.R              │ storage_compatibility_version =  │
+ │                                    │ "latest" to default config       │
+ ├────────────────────────────────────┼──────────────────────────────────┤
+ │                                    │ Remove geom_wkb refresh          │
+ │ calcofi4db/R/spatial.R             │ workaround from                  │
+ │                                    │ assign_grid_key()                │
+ ├────────────────────────────────────┼──────────────────────────────────┤
+ │ workflows/ingest_swfsc_ichthyo.qmd │ Restore DROP COLUMN geom_wkb /   │
+ │                                    │ geom_ctr_wkb                     │
+ └────────────────────────────────────┴──────────────────────────────────┘
+
+ Verification
+
+ 1. devtools::document() + devtools::install() calcofi4db
+ 2. Delete all wrangling DBs
+ 3. targets::tar_invalidate(everything()) +
+ targets::tar_make("ingest_calcofi_dic")
+ 4. Confirm ichthyo passes chunk 56 (update_site_from_grid) without the
+ refresh workaround
+ 5. Verify: SELECT current_setting('storage_compatibility_version') returns
+ 'latest' on any wrangling DB
 
 ## 2026-04-07 Github Action with pkgdown docs on R packages
 
