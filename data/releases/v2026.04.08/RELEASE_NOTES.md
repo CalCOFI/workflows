@@ -20,24 +20,23 @@
 - _spatial (      3,373 rows)
 - cruise (        691 rows)
 - grid (        218 rows)
-- ichthyo (    830,873 rows)
+- ichthyo (    841,417 rows)
+- invert (     11,815 rows)
 - lookup (         26 rows)
 - net (     76,512 rows)
 - segment (     60,413 rows)
 - ship (         48 rows)
 - site (     61,104 rows)
-- species (      1,144 rows)
+- species (      1,150 rows)
 - taxa_rank (         41 rows)
-- taxon (      3,348 rows)
+- taxon (      3,359 rows)
 - tow (     75,506 rows)
-- invert_net (      7,463 rows)
-- invert (     23,830 rows)
 - cruise_summary (        691 rows)
 
 ## Total
 
-- **Tables**: 29
-- **Total Rows**: 357,426,957
+- **Tables**: 28
+- **Total Rows**: 357,418,040
 
 ## Data Sources
 

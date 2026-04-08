@@ -649,13 +649,18 @@ for (i in seq_len(nrow(copy_rows))) {
     # partitioned: copy directory
     src <- glue("gs://{gcs_bucket}/{pfx}/{tbl}")
     dst <- glue("gs://{gcs_bucket}/{gcs_release}/parquet/{tbl}")
-    system2(gcloud, c("storage", "cp", "-r",
+    res <- system2(gcloud, c("storage", "cp", "-r",
       paste0(src, "/*"), dst), stdout = TRUE, stderr = TRUE)
   } else {
     src <- glue("gs://{gcs_bucket}/{pfx}/{tbl}.parquet")
     dst <- glue("gs://{gcs_bucket}/{gcs_release}/parquet/{tbl}.parquet")
-    system2(gcloud, c("storage", "cp",
+    res <- system2(gcloud, c("storage", "cp",
       src, dst), stdout = TRUE, stderr = TRUE)
+  }
+  rc <- attr(res, "status") %||% 0L
+  if (rc != 0) {
+    stop(glue("GCS copy failed for {tbl}: {src} -> {dst}\n",
+              "  exit code {rc}: {paste(res, collapse = '\n')}"))
   }
   message(glue("  {tbl}: copied from {pfx}"))
 }
