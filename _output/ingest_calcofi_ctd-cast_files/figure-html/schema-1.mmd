@@ -1,0 +1,163 @@
+---
+config:
+  layout: elk
+---
+erDiagram
+    cruise {
+        uuid cruise_uuid
+        date date_ym
+        varchar ship_key
+        varchar _source_file
+        int _source_row
+        timestamp _ingested_at
+        varchar _source_uuid
+        varchar cruise_key
+    }
+    ctd_cast {
+        varchar ctd_cast_uuid PK
+        varchar data_stage
+        varchar cast_dir
+        varchar ord_occ
+        double event_num
+        varchar cast_key
+        timestamp datetime_utc
+        double lat_dec
+        double lon_dec
+        varchar site_key
+        varchar line
+        varchar sta
+        double ox_aveu_m_sta_corr
+        varchar ship_key
+        varchar cruise_key
+    }
+    ctd_measurement {
+        varchar ctd_measurement_uuid PK
+        varchar ctd_cast_uuid FK
+        double depth_m
+        varchar measurement_type
+        double measurement_value
+        varchar measurement_qual
+        varchar cruise_key
+    }
+    ctd_summary {
+        varchar ctd_summary_uuid PK
+        varchar cruise_key
+        varchar site_key
+        double depth_m
+        varchar measurement_type
+        double avg
+        double stddev
+        bigint n_obs
+    }
+    ctd_wide {
+        varchar data_stage
+        varchar cast_dir
+        varchar cast_key
+        timestamp datetime_utc
+        double lat_dec
+        double lon_dec
+        varchar site_key
+        double depth_m
+        double pressure
+        double pr_q
+        double temp1
+        double temp1q
+        double temp2
+        double temp2q
+        double temp_ave
+        double salt1
+        double salt1q
+        double salt1_corr
+        double salt2
+        double salt2q
+        double salt2_corr
+        double salt_ave_corr
+        double ox1
+        double ox1q
+        double ox1_cruise_corr
+        double ox1_sta_corr
+        double ox2
+        double ox2q
+        double ox2_cruise_corr
+        double ox2_sta_corr
+        double ox_ave_sta_corr
+        double ox1u_m
+        double ox1u_m_cruise_corr
+        double ox1u_m_sta_corr
+        double ox2u_m
+        double ox2u_m_cruise_corr
+        double ox2u_m_sta_corr
+        double fluor_v
+        double fluor_q
+        double est_chl_cruise_corr
+        double est_chl_sta_corr
+        double isusv
+        double isusq
+        double est_no3_cruise_corr
+        double est_no3_sta_corr
+        double sig_theta_ts1
+        double sig_theta_ts1q
+        double sig_theta_ts2
+        double sig_theta_ts2q
+        double bat
+        double x_miss
+        double trans_q
+        double p_h
+        double p_hq
+        double spar
+        double sparq
+        double par
+        double parq
+        double po_t1
+        double po_t2
+        double dyn_ht
+        double sva
+        double ox_sat1
+        double ox_sat2
+        double btl_depth
+        double btl_temp
+        double salt_b
+        double ox_b
+        double ox_bu_m
+        double chl_a
+        double phaeo
+        double no3
+        double no2
+        double nh4
+        double po4
+        double sil
+        varchar ship_key
+        varchar cruise_key
+    }
+    grid {
+        varchar grid_key
+        double station
+        double line
+        varchar shore
+        varchar pattern
+        int spacing
+        varchar zone
+        double area_km2
+        geometry geom
+        geometry geom_ctr
+    }
+    measurement_type {
+        varchar measurement_type PK
+        varchar description
+        varchar units
+        varchar _source_column
+        varchar _source_table
+        varchar _source_datasets
+        varchar _qual_column
+        varchar _prec_column
+    }
+    ship {
+        varchar ship_key
+        varchar ship_name
+        varchar ship_nodc
+        varchar _source_file
+        int _source_row
+        timestamp _ingested_at
+        varchar _source_uuid
+    }
+    ctd_cast ||--o{ ctd_measurement : "ctd_cast_uuid"

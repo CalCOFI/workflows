@@ -95,8 +95,7 @@ erDiagram
         varchar cruise_key PK
     }
     ctd_cast {
-        varchar ctd_cast_uuid
-        varchar cruise_key
+        varchar ctd_cast_uuid PK
         varchar data_stage
         varchar cast_dir
         varchar ord_occ
@@ -105,17 +104,18 @@ erDiagram
         timestamp datetime_utc
         double lat_dec
         double lon_dec
-        varchar sta_key
+        varchar site_key
         varchar line
         varchar sta
         double ox_aveu_m_sta_corr
         varchar ship_key
+        varchar cruise_key
         geometry geom
         varchar grid_key
     }
     ctd_measurement {
-        varchar ctd_measurement_uuid
-        varchar ctd_cast_uuid
+        varchar ctd_measurement_uuid PK
+        varchar ctd_cast_uuid FK
         double depth_m
         varchar measurement_type
         double measurement_value
@@ -366,6 +366,7 @@ erDiagram
     measurement_type ||--o{ bottle_measurement : "measurement_type"
     casts ||--o{ cast_condition : "cast_id"
     measurement_type ||--o{ cast_condition : "condition_type"
+    ctd_cast ||--o{ ctd_measurement : "ctd_cast_uuid"
     measurement_type ||--o{ dic_measurement : "measurement_type"
     measurement_type ||--o{ dic_summary : "measurement_type"
     cruise ||--o{ casts : "cruise_key"
