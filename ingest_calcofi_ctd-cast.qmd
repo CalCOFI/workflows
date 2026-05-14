@@ -12,7 +12,7 @@ calcofi:
 
 ## Overview
 
-This notebook ingests CalCOFI CTD data from <https://calcofi.org/data/oceanographic-data/ctd-cast-files/>, downloads and unzips **final** and **preliminary** CTD files, normalizes into tidy tables (`ctd_cast`, `ctd_measurement`, `ctd_summary`), and exports to Parquet for the CalCOFI integrated database.
+This notebook ingests CalCOFI CTD data from <https://calcofi.org/data/oceanographic-data/ctd-cast-files/>, downloads and unzips **final** and **preliminary** CTD files, normalizes into tidy tables (`ctd_cast`, `ctd_measurement`, `ctd_thin`, `ctd_summary`), and exports to Parquet for the CalCOFI integrated database.
 
 ### Key Features
 
@@ -29,7 +29,8 @@ This notebook ingests CalCOFI CTD data from <https://calcofi.org/data/oceanograp
 
 4.  **Tidy Normalization**:
     -   `ctd_cast`: one row per unique cast (cruise/station/direction)
-    -   `ctd_measurement`: long-format sensor readings at each depth
+    -   `ctd_measurement`: long-format sensor readings at each depth (supplemental)
+    -   `ctd_thin`: adaptively-thinned `ctd_measurement` — single direction, canonical types, ~10 m grid with inflections preserved; the headline CTD table
     -   `ctd_summary`: summary stats per station/depth/measurement_type across cast directions
     -   `measurement_type`: reference table for measurement codes
 
@@ -944,6 +945,43 @@ dbWriteTable(con, "ctd_raw", d_filt, overwrite = TRUE)
 message(glue("Loaded {nrow(d_filt)} rows into ctd_raw"))
 ```
 
+## De-duplicate ctd_raw
+
+Some cruises ship the same casts twice in the download archive — a primary copy plus a reorganized copy in a sub-folder (e.g. `db_csvs/` alongside `db_csvs/south-north/`), both classified `final` by the path regex, so both pass the priority filter (see the duplicates reported above). The copies are identical except for re-rounded coordinates (and occasionally a re-processed measurement value). Collapse to one row per measurement position so the deterministic UUIDs downstream (`ctd_cast_uuid`, `ctd_measurement_uuid`, …) are unique.
+
+```{r}
+#| label: dedup_ctd_raw
+
+raw_cols <- dbGetQuery(
+  con,
+  "SELECT column_name FROM information_schema.columns WHERE table_name = 'ctd_raw'"
+)$column_name
+
+# a measurement position is identified by these five columns; duplicate copies
+# share all five and differ only in re-rounded coordinates / re-processed values
+dedup_key  <- c("cruise_key", "cast_key", "cast_dir", "datetime_utc", "depth_m")
+stopifnot(
+  "ctd_raw missing expected columns for de-duplication" =
+    all(c(dedup_key, "_source_file", "lat_dec", "lon_dec") %in% raw_cols))
+
+# keep the primary copy: reorganized duplicates sit in deeper source paths, so
+# prefer the shortest `_source_file`; coordinates tie-break for full determinism
+n_before <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM ctd_raw")$n
+dbExecute(con, glue("
+  CREATE OR REPLACE TABLE ctd_raw AS
+  SELECT * FROM ctd_raw
+  QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY {paste(dedup_key, collapse = ', ')}
+    ORDER BY length(\"_source_file\"), \"_source_file\", lat_dec, lon_dec) = 1"))
+n_after <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM ctd_raw")$n
+
+cat(glue(
+  "ctd_raw de-duplicated: removed {format(n_before - n_after, big.mark = ',')} ",
+  "duplicate-position rows ",
+  "({round(100 * (n_before - n_after) / max(n_before, 1), 1)}%); ",
+  "{format(n_after, big.mark = ',')} rows remain"), "\n")
+```
+
 ```{r}
 #| label: restore_eval
 
@@ -1171,14 +1209,22 @@ cast_cols <- setdiff(
   c(meas_cols, qual_cols, "depth_m", "_source_file")
 )
 
-# extract unique casts
+# extract one row per cast, keyed (cruise_key, cast_key, cast_dir,
+# datetime_utc). within that key the only cast-level column that varies is
+# lat/lon (sub-meter GPS jitter between same-second scans), so order by it for a
+# deterministic pick. measurement-like columns (e.g. ox_aveu_m_sta_corr) must be
+# registered in measurement_type.csv so they pivot to ctd_measurement and never
+# reach cast_cols — otherwise SELECT DISTINCT would emit multiple rows per cast.
 dbExecute(
   con,
   glue(
     "
   CREATE OR REPLACE TABLE ctd_cast AS
-  SELECT DISTINCT {paste(cast_cols, collapse = ', ')}
+  SELECT {paste(cast_cols, collapse = ', ')}
   FROM ctd_raw
+  QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY cruise_key, cast_key, cast_dir, datetime_utc
+    ORDER BY lat_dec, lon_dec) = 1
   ORDER BY datetime_utc, cruise_key"
   )
 )
@@ -1193,6 +1239,15 @@ assign_deterministic_uuids_md5(
   id_col = "ctd_cast_uuid",
   key_cols = c("cruise_key", "cast_key", "cast_dir", "datetime_utc")
 )
+
+# guard: ctd_cast_uuid must be a valid unique PK — fail loudly if a
+# measurement-like column ever leaks into cast_cols again (see #53)
+stopifnot(
+  "ctd_cast_uuid is not unique" =
+    dbGetQuery(
+      con,
+      "SELECT COUNT(*) - COUNT(DISTINCT ctd_cast_uuid) AS n FROM ctd_cast"
+    )$n == 0)
 ```
 
 ### ctd_measurement — long-format sensor readings
@@ -1363,6 +1418,577 @@ stopifnot(
 dbExecute(con, "DROP TABLE IF EXISTS ctd_raw")
 ```
 
+## Measurement Frequency
+
+`ctd_measurement` is by far the largest table in this dataset — in the prior release the `calcofi_ctd-cast` parquet totaled 22.16 GB, with `ctd_measurement` alone at 15.8 GB (233 M rows). Three stacked multipliers drive that size. The queries below quantify each, motivating the adaptively-thinned `ctd_thin` table built in the next section.
+
+```{r}
+#| label: freq_table_sizes
+
+freq_tbl_sizes <- dbGetQuery(con, "
+  SELECT 'ctd_cast'         AS table_name, COUNT(*) AS n_rows FROM ctd_cast
+  UNION ALL
+  SELECT 'ctd_measurement' AS table_name, COUNT(*) AS n_rows FROM ctd_measurement
+  UNION ALL
+  SELECT 'ctd_summary'     AS table_name, COUNT(*) AS n_rows FROM ctd_summary")
+
+n_meas_rows <- freq_tbl_sizes$n_rows[freq_tbl_sizes$table_name == "ctd_measurement"]
+cat(glue("ctd_measurement: {format(n_meas_rows, big.mark = ',')} rows"), "\n")
+
+freq_tbl_sizes |>
+  dt(caption = "Normalized CTD table row counts (this run)",
+     fname   = "ctd_freq_table_sizes")
+```
+
+### Multiplier 1 — sub-meter depth resolution
+
+CTD profiles record a sample roughly every metre from surface to seafloor (~3,600 m max). Thinning to a 10 m grid is therefore an order-of-magnitude reduction on the depth axis.
+
+```{r}
+#| label: freq_depth_resolution
+
+# depth interval between consecutive samples within a cast, using `pressure`
+# as a representative measurement_type (all types share a cast's depth grid)
+freq_depth_int <- dbGetQuery(con, "
+  WITH gaps AS (
+    SELECT depth_m - LAG(depth_m) OVER (
+             PARTITION BY ctd_cast_uuid ORDER BY depth_m) AS d_gap
+    FROM ctd_measurement
+    WHERE measurement_type = 'pressure')
+  SELECT
+    ROUND(MIN(d_gap), 2)                 AS min_m,
+    ROUND(QUANTILE_CONT(d_gap, 0.25), 2) AS q25_m,
+    ROUND(MEDIAN(d_gap), 2)              AS median_m,
+    ROUND(QUANTILE_CONT(d_gap, 0.75), 2) AS q75_m,
+    ROUND(MAX(d_gap), 2)                 AS max_m
+  FROM gaps
+  WHERE d_gap IS NOT NULL")
+
+cat(glue(
+  "median within-cast depth interval: {freq_depth_int$median_m} m ",
+  "(~{round(10 / freq_depth_int$median_m)}x reduction at a 10 m grid)"), "\n")
+
+freq_depth_int |>
+  dt(caption = "Within-cast depth interval (m), representative type `pressure`",
+     fname   = "ctd_freq_depth_resolution")
+```
+
+### Multiplier 2 — up- and down-casts both stored
+
+Nearly every physical cast is recorded as a separate down-cast and up-cast. Keeping a single direction roughly halves the rows.
+
+```{r}
+#| label: freq_cast_direction
+
+# physical cast = (cruise_key, site_key, cast_base); direction resolved from
+# cast_dir, falling back to the cast_key suffix (trailing d/u)
+freq_cast_dir <- dbGetQuery(con, "
+  WITH phys AS (
+    SELECT DISTINCT
+      cruise_key, site_key,
+      regexp_replace(cast_key, '[duDU]$', '') AS cast_base,
+      COALESCE(
+        cast_dir,
+        CASE
+          WHEN RIGHT(cast_key, 1) IN ('d', 'D') THEN 'D'
+          WHEN RIGHT(cast_key, 1) IN ('u', 'U') THEN 'U'
+        END) AS dir
+    FROM ctd_cast)
+  SELECT
+    COUNT(DISTINCT cruise_key || '|' || site_key || '|' || cast_base)
+                                       AS n_physical_casts,
+    COUNT(*) FILTER (WHERE dir = 'D')   AS n_with_downcast,
+    COUNT(*) FILTER (WHERE dir = 'U')   AS n_with_upcast,
+    COUNT(*) FILTER (WHERE dir IS NULL) AS n_unknown_dir
+  FROM phys")
+
+cat(glue(
+  "{format(freq_cast_dir$n_physical_casts, big.mark = ',')} physical casts; ",
+  "{format(freq_cast_dir$n_with_downcast, big.mark = ',')} have a downcast, ",
+  "{format(freq_cast_dir$n_with_upcast, big.mark = ',')} an upcast"), "\n")
+
+freq_cast_dir |>
+  dt(caption = "Cast direction coverage per physical cast",
+     fname   = "ctd_freq_cast_direction")
+```
+
+### Multiplier 3 — redundant measurement-type variants
+
+Many of the measurement types below are variants of the same property (multiple oxygen units and sensor/correction combinations, dual temperature and salinity sensors, derived estimates). `ctd_thin` keeps one canonical type per property — see the `is_canonical` flag in `metadata/measurement_type.csv`.
+
+```{r}
+#| label: freq_measurement_types
+
+freq_meas_types <- dbGetQuery(con, "
+  SELECT
+    measurement_type,
+    COUNT(*)                      AS n_rows,
+    COUNT(DISTINCT ctd_cast_uuid) AS n_casts
+  FROM ctd_measurement
+  GROUP BY measurement_type
+  ORDER BY n_rows DESC")
+
+cat(glue(
+  "{nrow(freq_meas_types)} distinct measurement_type values in ctd_measurement"),
+  "\n")
+
+freq_meas_types |>
+  dt(caption = "Rows per measurement_type",
+     fname   = "ctd_freq_measurement_types")
+```
+
+## CTD Thin
+
+`ctd_thin` is an adaptively-thinned `ctd_measurement`: one cast direction per physical cast, canonical measurement types only, and a ~10 m depth grid with thermocline / halocline inflections preserved via Ramer–Douglas–Peucker line simplification. It is the headline CTD table; full `ctd_measurement` is retained as a supplemental output. See the Measurement Frequency section above for the size rationale.
+
+### Verify cast pairing
+
+```{r}
+#| label: ctd_thin_verify_pairing
+
+# physical cast = (cruise_key, site_key, cast_base); direction comes from the
+# cast_key suffix (trailing d/u), which is part of the deterministic
+# ctd_cast_uuid key and fully consistent per cast. confirm casts are paired
+# before thinning by direction.
+ctd_pairing <- dbGetQuery(con, "
+  WITH phys AS (
+    SELECT DISTINCT
+      cruise_key, site_key,
+      regexp_replace(cast_key, '[duDU]$', '') AS cast_base,
+      CASE WHEN RIGHT(cast_key, 1) IN ('d', 'D') THEN 'D'
+           WHEN RIGHT(cast_key, 1) IN ('u', 'U') THEN 'U' END AS dir
+    FROM ctd_cast)
+  SELECT n_dirs, COUNT(*) AS n_physical_casts
+  FROM (
+    SELECT cruise_key, site_key, cast_base, COUNT(DISTINCT dir) AS n_dirs
+    FROM phys GROUP BY 1, 2, 3)
+  GROUP BY n_dirs ORDER BY n_dirs")
+
+n_paired <- sum(ctd_pairing$n_physical_casts[ctd_pairing$n_dirs == 2])
+n_single <- sum(ctd_pairing$n_physical_casts[ctd_pairing$n_dirs == 1])
+cat(glue(
+  "{format(n_paired, big.mark = ',')} physical casts have both directions, ",
+  "{format(n_single, big.mark = ',')} have one"), "\n")
+
+# sanity: most casts should be paired — a near-zero n_paired means the pairing
+# key is wrong and the single-direction lever would silently keep everything
+stopifnot(
+  "ctd_thin: cast pairing key looks wrong (no two-direction casts)" =
+    n_paired > n_single)
+
+ctd_pairing |>
+  dt(caption = "Cast directions per physical cast", fname = "ctd_thin_pairing")
+```
+
+### Choose a single cast direction
+
+```{r}
+#| label: ctd_thin_chosen_dir
+
+# canonical measurement types for ctd_thin (one per property; see is_canonical
+# in metadata/measurement_type.csv)
+canon_types <- d_meas_type |>
+  filter(str_detect(`_source_datasets`, "calcofi_ctd-cast"), is_canonical) |>
+  pull(measurement_type)
+canon_in <- paste0("'", canon_types, "'", collapse = ", ")
+cat(glue("{length(canon_types)} canonical measurement types: ",
+         "{paste(canon_types, collapse = ', ')}"), "\n")
+
+# choose one direction per physical cast: prefer downcast, fall back to upcast.
+# _chosen_dir maps every chosen-direction ctd_cast_uuid to its physical cast
+# (phys_cast_id) and direction.
+dbExecute(con, "
+  CREATE OR REPLACE TEMP TABLE _chosen_dir AS
+  WITH resolved AS (
+    SELECT DISTINCT
+      ctd_cast_uuid, cruise_key, site_key, cast_key,
+      regexp_replace(cast_key, '[duDU]$', '') AS cast_base,
+      CASE WHEN RIGHT(cast_key, 1) IN ('d', 'D') THEN 'D'
+           WHEN RIGHT(cast_key, 1) IN ('u', 'U') THEN 'U' END AS dir
+    FROM ctd_cast),
+  pick AS (
+    SELECT cruise_key, site_key, cast_base, cast_key, dir
+    FROM (SELECT DISTINCT cruise_key, site_key, cast_base, cast_key, dir
+          FROM resolved)
+    QUALIFY ROW_NUMBER() OVER (
+      PARTITION BY cruise_key, site_key, cast_base
+      ORDER BY CASE dir WHEN 'D' THEN 1 WHEN 'U' THEN 2 ELSE 3 END,
+               cast_key) = 1)
+  SELECT
+    r.ctd_cast_uuid,
+    r.cruise_key,
+    r.cruise_key || '|' || r.site_key || '|' || r.cast_base AS phys_cast_id,
+    p.dir AS cast_dir
+  FROM resolved r
+  JOIN pick p USING (cruise_key, site_key, cast_base, cast_key)")
+
+n_chosen <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM _chosen_dir")$n
+cat(glue("_chosen_dir: {format(n_chosen, big.mark = ',')} cast records ",
+         "(single direction per physical cast)"), "\n")
+```
+
+### 10 m depth grid
+
+```{r}
+#| label: ctd_thin_grid
+
+# depth backbone: every distinct depth a canonical measurement is recorded at,
+# per chosen-direction physical cast
+dbExecute(con, glue("
+  CREATE OR REPLACE TEMP TABLE _profile_depths AS
+  SELECT DISTINCT cd.phys_cast_id, m.depth_m
+  FROM ctd_measurement m
+  JOIN _chosen_dir cd ON m.ctd_cast_uuid = cd.ctd_cast_uuid
+  WHERE m.measurement_type IN ({canon_in})"))
+
+# 10 m grid: the sample nearest each 10 m node per profile, plus the shallowest
+# and deepest sample (RDP needs fixed profile endpoints)
+dbExecute(con, "
+  CREATE OR REPLACE TEMP TABLE _grid_depths AS
+  WITH ranked AS (
+    SELECT phys_cast_id, depth_m,
+      ROW_NUMBER() OVER (
+        PARTITION BY phys_cast_id, ROUND(depth_m / 10.0) * 10.0
+        ORDER BY ABS(depth_m - ROUND(depth_m / 10.0) * 10.0), depth_m) AS rn
+    FROM _profile_depths),
+  endpoints AS (
+    SELECT phys_cast_id, MIN(depth_m) AS depth_m FROM _profile_depths GROUP BY 1
+    UNION
+    SELECT phys_cast_id, MAX(depth_m) AS depth_m FROM _profile_depths GROUP BY 1)
+  SELECT phys_cast_id, depth_m FROM ranked WHERE rn = 1
+  UNION
+  SELECT phys_cast_id, depth_m FROM endpoints")
+
+n_prof <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM _profile_depths")$n
+n_grid <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM _grid_depths")$n
+cat(glue("_grid_depths: {format(n_grid, big.mark = ',')} depths on the 10 m grid ",
+         "(from {format(n_prof, big.mark = ',')} profile depths)"), "\n")
+```
+
+### Inflection points (Ramer–Douglas–Peucker)
+
+```{r}
+#| label: ctd_thin_rdp
+
+# Ramer-Douglas-Peucker line simplification: keep depths where a profile deviates
+# from the local straight line by more than `eps` (captures thermocline /
+# halocline inflections). pure DP — the ~10 m backbone is provided separately by
+# _grid_depths, so RDP only adds genuine inflections on top of it.
+rdp_keep <- function(x, y, eps) {
+  n    <- length(x)
+  keep <- rep(FALSE, n)
+  if (n == 0L) return(keep)
+  keep[c(1L, n)] <- TRUE
+  if (n <= 2L) return(keep)
+  stack <- list(c(1L, n))
+  while (length(stack) > 0L) {
+    seg   <- stack[[length(stack)]]
+    stack[[length(stack)]] <- NULL
+    i <- seg[1L]; j <- seg[2L]
+    if (j - i < 2L) next
+    idx <- (i + 1L):(j - 1L)
+    dx  <- x[j] - x[i]
+    dy  <- y[j] - y[i]
+    den <- sqrt(dx * dx + dy * dy)
+    d <- if (den == 0) {
+      abs(y[idx] - y[i])
+    } else {
+      abs(dy * x[idx] - dx * y[idx] + x[j] * y[i] - y[j] * x[i]) / den
+    }
+    if (max(d) > eps) {
+      k <- idx[which.max(d)]
+      keep[k] <- TRUE
+      stack[[length(stack) + 1L]] <- c(i, k)
+      stack[[length(stack) + 1L]] <- c(k, j)
+    }
+  }
+  keep
+}
+
+# per-variable tolerance in measurement units — the primary tuning knob, set so
+# the median retained-sample gap lands near the 10 m grid spacing (a looser eps
+# keeps fewer inflections; revisit with the spot-check in the verification section)
+rdp_eps <- c(temperature_ave = 0.2, salinity_ave_corr = 0.04)
+
+# run RDP per cruise to keep memory flat: pull the two key variables for
+# chosen-direction casts, simplify each profile, collect retained depths
+cruise_keys <- dbGetQuery(con, "SELECT DISTINCT cruise_key FROM _chosen_dir")$cruise_key
+
+rdp_retained <- purrr::map(cruise_keys, function(ck) {
+  d_prof <- dbGetQuery(con, glue("
+    SELECT cd.phys_cast_id, m.measurement_type, m.depth_m,
+           AVG(m.measurement_value) AS measurement_value
+    FROM ctd_measurement m
+    JOIN _chosen_dir cd
+      ON m.ctd_cast_uuid = cd.ctd_cast_uuid AND cd.cruise_key = '{ck}'
+    WHERE m.cruise_key = '{ck}'
+      AND m.measurement_type IN ('temperature_ave', 'salinity_ave_corr')
+      AND m.measurement_value IS NOT NULL
+    GROUP BY cd.phys_cast_id, m.measurement_type, m.depth_m"))
+  if (nrow(d_prof) == 0) return(NULL)
+  d_prof |>
+    arrange(phys_cast_id, measurement_type, depth_m) |>
+    group_by(phys_cast_id, measurement_type) |>
+    filter(rdp_keep(depth_m, measurement_value,
+                    eps = rdp_eps[[measurement_type[1]]])) |>
+    ungroup() |>
+    distinct(phys_cast_id, depth_m)
+}) |>
+  purrr::list_rbind() |>
+  distinct(phys_cast_id, depth_m)
+
+dbWriteTable(con, "_rdp_retained", rdp_retained,
+             temporary = TRUE, overwrite = TRUE)
+cat(glue("_rdp_retained: {format(nrow(rdp_retained), big.mark = ',')} ",
+         "(profile, depth) pairs flagged as inflections"), "\n")
+```
+
+### Assemble ctd_thin
+
+```{r}
+#| label: ctd_thin_assemble
+
+# union the 10 m grid and the RDP inflection points (grid wins ties)
+dbExecute(con, "
+  CREATE OR REPLACE TEMP TABLE _retained_depths AS
+  SELECT phys_cast_id, depth_m, 'grid' AS retained_reason FROM _grid_depths
+  UNION
+  SELECT r.phys_cast_id, r.depth_m, 'inflection' AS retained_reason
+  FROM _rdp_retained r
+  WHERE NOT EXISTS (
+    SELECT 1 FROM _grid_depths g
+    WHERE g.phys_cast_id = r.phys_cast_id AND g.depth_m = r.depth_m)")
+
+# ctd_thin: ctd_measurement rows that are a canonical type, on the chosen
+# direction, at a retained depth — a pure row subset (values never interpolated).
+# the QUALIFY de-dups defensively on (ctd_cast_uuid, depth_m, measurement_type):
+# the dedup_ctd_raw chunk above already makes ctd_measurement unique, so this is
+# a no-op safeguard that keeps ctd_thin's PK guaranteed-unique on its own.
+dbExecute(con, glue("
+  CREATE OR REPLACE TABLE ctd_thin AS
+  WITH candidates AS (
+    SELECT
+      m.ctd_cast_uuid,
+      m.depth_m,
+      m.measurement_type,
+      m.measurement_value,
+      m.measurement_qual,
+      cd.cast_dir,
+      rd.retained_reason,
+      m.cruise_key
+    FROM ctd_measurement m
+    JOIN _chosen_dir cd      ON m.ctd_cast_uuid = cd.ctd_cast_uuid
+    JOIN _retained_depths rd ON rd.phys_cast_id = cd.phys_cast_id
+                            AND rd.depth_m      = m.depth_m
+    WHERE m.measurement_type IN ({canon_in}))
+  SELECT *
+  FROM candidates
+  QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY ctd_cast_uuid, depth_m, measurement_type
+    ORDER BY measurement_qual NULLS LAST, measurement_value) = 1
+  ORDER BY cruise_key, ctd_cast_uuid, measurement_type, depth_m"))
+
+n_thin <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM ctd_thin")$n
+n_meas <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM ctd_measurement")$n
+cat(glue(
+  "ctd_thin: {format(n_thin, big.mark = ',')} rows ",
+  "({round(100 * n_thin / n_meas, 1)}% of ctd_measurement's ",
+  "{format(n_meas, big.mark = ',')})"), "\n")
+
+# deterministic PK from the natural key, mirroring ctd_measurement
+assign_deterministic_uuids_md5(
+  con        = con,
+  table_name = "ctd_thin",
+  id_col     = "ctd_thin_uuid",
+  key_cols   = c("ctd_cast_uuid", "depth_m", "measurement_type"))
+
+# drop scratch tables; _chosen_dir is kept for the verification chunk that
+# follows and dropped there (downstream metadata helpers enumerate all DB tables)
+dbExecute(con, "DROP TABLE IF EXISTS _profile_depths")
+dbExecute(con, "DROP TABLE IF EXISTS _grid_depths")
+dbExecute(con, "DROP TABLE IF EXISTS _rdp_retained")
+dbExecute(con, "DROP TABLE IF EXISTS _retained_depths")
+```
+
+### Verify ctd_thin
+
+```{r}
+#| label: ctd_thin_verify
+
+# 1. row count + thinning ratio
+n_thin <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM ctd_thin")$n
+n_meas <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM ctd_measurement")$n
+cat(glue("ctd_thin: {format(n_thin, big.mark = ',')} rows = ",
+         "{round(100 * n_thin / n_meas, 1)}% of ctd_measurement"), "\n")
+stopifnot(
+  "ctd_thin is empty"                          = n_thin > 0,
+  "ctd_thin not smaller than ctd_measurement"  = n_thin < n_meas)
+
+# 2. measurement_type is a subset of the canonical list
+thin_types <- dbGetQuery(con,
+  "SELECT DISTINCT measurement_type FROM ctd_thin")$measurement_type
+stopifnot("ctd_thin has non-canonical measurement_type" =
+  length(setdiff(thin_types, canon_types)) == 0)
+
+# 3. ctd_thin_uuid is unique
+stopifnot("ctd_thin_uuid not unique" = dbGetQuery(con,
+  "SELECT COUNT(*) - COUNT(DISTINCT ctd_thin_uuid) AS n FROM ctd_thin")$n == 0)
+
+# 4. faithful subset of ctd_measurement — every ctd_thin row corresponds to a
+#    real ctd_measurement row with the same value (thinning selects rows, never
+#    interpolates). a NOT EXISTS check, since ctd_measurement has duplicate keys.
+stopifnot("ctd_thin rows not a faithful subset of ctd_measurement" =
+  dbGetQuery(con, "
+    SELECT COUNT(*) AS n
+    FROM ctd_thin t
+    WHERE NOT EXISTS (
+      SELECT 1 FROM ctd_measurement m
+      WHERE m.ctd_cast_uuid     = t.ctd_cast_uuid
+        AND m.depth_m           = t.depth_m
+        AND m.measurement_type  = t.measurement_type
+        AND m.measurement_value IS NOT DISTINCT FROM t.measurement_value)")$n == 0)
+
+# 5. retained_reason populated with the two expected categories
+reason_breakdown <- dbGetQuery(con,
+  "SELECT retained_reason, COUNT(*) AS n FROM ctd_thin GROUP BY 1 ORDER BY 1")
+stopifnot(
+  "ctd_thin retained_reason has unexpected values" =
+    all(reason_breakdown$retained_reason %in% c("grid", "inflection")),
+  "ctd_thin retained_reason missing a category" =
+    all(c("grid", "inflection") %in% reason_breakdown$retained_reason))
+
+# 6. one cast direction per physical cast; no physical cast dropped entirely
+coverage <- dbGetQuery(con, glue("
+  WITH meas_casts AS (
+    SELECT DISTINCT cd.phys_cast_id
+    FROM ctd_measurement m
+    JOIN _chosen_dir cd ON m.ctd_cast_uuid = cd.ctd_cast_uuid
+    WHERE m.measurement_type IN ({canon_in})),
+  thin AS (
+    SELECT cd.phys_cast_id, COUNT(DISTINCT t.cast_dir) AS n_dir
+    FROM ctd_thin t
+    JOIN _chosen_dir cd ON t.ctd_cast_uuid = cd.ctd_cast_uuid
+    GROUP BY cd.phys_cast_id)
+  SELECT
+    (SELECT COUNT(*) FROM thin)                  AS n_thin_casts,
+    (SELECT COUNT(*) FROM thin WHERE n_dir > 1)  AS n_multi_dir,
+    (SELECT COUNT(*) FROM (
+       SELECT phys_cast_id FROM meas_casts
+       EXCEPT
+       SELECT phys_cast_id FROM thin))           AS n_dropped"))
+stopifnot(
+  "ctd_thin: physical cast with >1 direction" = coverage$n_multi_dir == 0,
+  "ctd_thin: physical cast dropped entirely"  = coverage$n_dropped   == 0)
+cat(glue("{format(coverage$n_thin_casts, big.mark = ',')} physical casts ",
+         "retained (single direction each)"), "\n")
+
+# 7. depth-gap distribution between retained samples
+gap_stats <- dbGetQuery(con, "
+  WITH g AS (
+    SELECT t.depth_m - LAG(t.depth_m) OVER (
+             PARTITION BY cd.phys_cast_id, t.measurement_type
+             ORDER BY t.depth_m) AS gap_m
+    FROM ctd_thin t
+    JOIN _chosen_dir cd ON t.ctd_cast_uuid = cd.ctd_cast_uuid)
+  SELECT
+    ROUND(MEDIAN(gap_m), 2)              AS median_gap_m,
+    ROUND(QUANTILE_CONT(gap_m, 0.95), 2) AS p95_gap_m,
+    ROUND(MAX(gap_m), 2)                 AS max_gap_m
+  FROM g WHERE gap_m IS NOT NULL")
+cat(glue("depth gaps between retained samples: median {gap_stats$median_gap_m} m, ",
+         "p95 {gap_stats$p95_gap_m} m, max {gap_stats$max_gap_m} m"), "\n")
+
+# 8. every ctd_thin type is registered as canonical in measurement_type
+stopifnot("ctd_thin types not registered as canonical in measurement_type" =
+  length(dbGetQuery(con, "
+    SELECT DISTINCT t.measurement_type
+    FROM ctd_thin t
+    LEFT JOIN measurement_type mt ON t.measurement_type = mt.measurement_type
+    WHERE mt.measurement_type IS NULL OR NOT mt.is_canonical")$measurement_type) == 0)
+
+# done with _chosen_dir — drop before downstream metadata helpers enumerate tables
+dbExecute(con, "DROP TABLE IF EXISTS _chosen_dir")
+
+reason_breakdown |>
+  dt(caption = "ctd_thin rows by retained_reason", fname = "ctd_thin_reason")
+```
+
+### Spot-check thinned profiles
+
+Overlay the full `ctd_measurement` profile (line) against the `ctd_thin` samples (points) for the six temperature profiles with the most retained inflection points — confirming thermocline curvature is tracked while flat segments stay sparse.
+
+```{r}
+#| label: ctd_thin_spotcheck
+#| fig-width: 9
+#| fig-height: 6
+
+# a ctd_cast_uuid is a single depth sample, not a profile — group by the
+# physical cast (cruise_key + cast_key). pick six temperature profiles with the
+# most retained inflection points (the hardest cases to thin faithfully).
+cast_map <- "(SELECT DISTINCT ctd_cast_uuid, cast_key FROM ctd_cast)"
+
+spot <- dbGetQuery(con, glue("
+  WITH thin AS (
+    SELECT t.cruise_key, cm.cast_key, t.retained_reason
+    FROM ctd_thin t
+    JOIN {cast_map} cm ON t.ctd_cast_uuid = cm.ctd_cast_uuid
+    WHERE t.measurement_type = 'temperature_ave')
+  SELECT cruise_key, cast_key
+  FROM thin
+  GROUP BY cruise_key, cast_key
+  HAVING COUNT(*) >= 20
+  ORDER BY COUNT(*) FILTER (WHERE retained_reason = 'inflection') DESC,
+           cruise_key, cast_key
+  LIMIT 6"))
+spot$cast <- paste("cast", seq_len(nrow(spot)))
+spot_in <- if (nrow(spot) > 0) {
+  paste(sprintf("('%s', '%s')", spot$cruise_key, spot$cast_key), collapse = ", ")
+} else "('', '')"
+
+# full ctd_measurement profile (de-duplicated) and the thinned samples
+d_full <- dbGetQuery(con, glue("
+  SELECT t.cruise_key, cm.cast_key, t.depth_m,
+         AVG(t.measurement_value) AS measurement_value
+  FROM ctd_measurement t
+  JOIN {cast_map} cm ON t.ctd_cast_uuid = cm.ctd_cast_uuid
+  WHERE t.measurement_type = 'temperature_ave'
+    AND (t.cruise_key, cm.cast_key) IN ({spot_in})
+  GROUP BY t.cruise_key, cm.cast_key, t.depth_m
+  ORDER BY t.cruise_key, cm.cast_key, t.depth_m"))
+d_thin <- dbGetQuery(con, glue("
+  SELECT t.cruise_key, cm.cast_key, t.depth_m, t.measurement_value,
+         t.retained_reason
+  FROM ctd_thin t
+  JOIN {cast_map} cm ON t.ctd_cast_uuid = cm.ctd_cast_uuid
+  WHERE t.measurement_type = 'temperature_ave'
+    AND (t.cruise_key, cm.cast_key) IN ({spot_in})
+  ORDER BY t.cruise_key, cm.cast_key, t.depth_m"))
+
+# short facet labels keyed on cruise_key + cast_key
+prof_key  <- function(d) paste(d$cruise_key, d$cast_key)
+cast_lab  <- setNames(spot$cast, prof_key(spot))
+d_full$cast <- cast_lab[prof_key(d_full)]
+d_thin$cast <- cast_lab[prof_key(d_thin)]
+
+ggplot2::ggplot() +
+  ggplot2::geom_path(
+    data = d_full, ggplot2::aes(measurement_value, depth_m),
+    color = "grey70", linewidth = 0.3) +
+  ggplot2::geom_point(
+    data = d_thin,
+    ggplot2::aes(measurement_value, depth_m, color = retained_reason),
+    size = 1.1) +
+  ggplot2::scale_y_reverse() +
+  ggplot2::scale_color_manual(
+    values = c(grid = "#0077cc", inflection = "#ff6600")) +
+  ggplot2::facet_wrap(~ cast, scales = "free", nrow = 2) +
+  ggplot2::labs(
+    x = "temperature_ave (degC)", y = "depth (m)", color = "retained",
+    title = "Full ctd_measurement profile (line) vs ctd_thin samples (points)") +
+  ggplot2::theme_minimal(base_size = 9) +
+  ggplot2::theme(legend.position = "bottom")
+```
+
 ## Schema Diagram
 
 ```{r}
@@ -1373,10 +1999,12 @@ ctd_rels <- list(
   primary_keys = list(
     ctd_cast        = "ctd_cast_uuid",
     ctd_measurement = "ctd_measurement_uuid",
+    ctd_thin        = "ctd_thin_uuid",
     ctd_summary     = "ctd_summary_uuid",
     measurement_type = "measurement_type"),
   foreign_keys = list(
-    list(table = "ctd_measurement", column = "ctd_cast_uuid", ref_table = "ctd_cast", ref_column = "ctd_cast_uuid")))
+    list(table = "ctd_measurement", column = "ctd_cast_uuid", ref_table = "ctd_cast", ref_column = "ctd_cast_uuid"),
+    list(table = "ctd_thin", column = "ctd_cast_uuid", ref_table = "ctd_cast", ref_column = "ctd_cast_uuid")))
 
 cc_erd(con, rels = ctd_rels)
 ```
@@ -1437,7 +2065,7 @@ enforce_column_types(con, d_flds_rd = d_flds_rd)
 
 preview_tables(
   con,
-  tables = c("ctd_cast", "ctd_measurement", "ctd_summary",
+  tables = c("ctd_cast", "ctd_measurement", "ctd_thin", "ctd_summary",
              "measurement_type", "ctd_wide")
 )
 ```
@@ -1457,18 +2085,20 @@ mismatches <- list(
 parquet_stats <- write_parquet_outputs(
   con          = con,
   output_dir   = dir_parquet,
-  tables       = c("ctd_cast", "ctd_measurement", "ctd_summary",
+  tables       = c("ctd_cast", "ctd_measurement", "ctd_thin", "ctd_summary",
                     "measurement_type", "ctd_wide"),
   partition_by = list(
     ctd_measurement = "cruise_key",
+    ctd_thin        = "cruise_key",
     ctd_summary     = "cruise_key"),
   sort_by = list(
     ctd_measurement = c("measurement_type", "depth_m"),
+    ctd_thin        = c("measurement_type", "depth_m"),
     ctd_summary     = c("measurement_type", "depth_m"),
     ctd_cast        = "hilbert:lon_dec,lat_dec"),
   strip_provenance = FALSE,
   mismatches       = mismatches,
-  supplemental     = "ctd_wide"
+  supplemental     = c("ctd_wide", "ctd_measurement")
 )
 
 parquet_stats |>
