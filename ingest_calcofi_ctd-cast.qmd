@@ -136,6 +136,8 @@ d_meas_type <- read_csv(
 )
 d_flds_rd <- read_csv(glue("{dir_meta}/flds_redefine.csv"), show_col_types = F)
 d_tbls_rd <- read_csv(glue("{dir_meta}/tbls_redefine.csv"), show_col_types = F)
+d_cruise_corrections <- read_csv(
+  glue("{dir_meta}/cruise_key_corrections.csv"), show_col_types = F)
 ```
 
 ## Check for Resumable State
@@ -1026,6 +1028,23 @@ for (tbl in modifies_tables) {
   modifies_pks[[tbl]] <- list(
     pk_col = pk_col,
     keys   = dbGetQuery(con, glue("SELECT {pk_col} FROM {tbl}"))[[1]])
+}
+
+# apply cruise_key corrections for known study-column data quality errors.
+# runs unconditionally so it fires for both fresh runs (YYMMKK keys) and
+# checkpoint-restored runs (already-converted YYYY-MM-NODC keys).
+for (i in seq_len(nrow(d_cruise_corrections))) {
+  n_wrong <- dbGetQuery(con, glue(
+    "SELECT COUNT(*) AS n FROM ctd_raw
+     WHERE cruise_key = '{d_cruise_corrections$cruise_key_raw[i]}'"))$n
+  if (n_wrong > 0) {
+    dbExecute(con, glue(
+      "UPDATE ctd_raw SET cruise_key = '{d_cruise_corrections$cruise_key_correct[i]}'
+       WHERE cruise_key = '{d_cruise_corrections$cruise_key_raw[i]}'"))
+    message(glue(
+      "cruise_key correction: {d_cruise_corrections$cruise_key_raw[i]} → ",
+      "{d_cruise_corrections$cruise_key_correct[i]} ({format(n_wrong, big.mark=',')} rows)"))
+  }
 }
 
 # detect whether cruise_key already in YYYY-MM-NODC format (from checkpoint)
