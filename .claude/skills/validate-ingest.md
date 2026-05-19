@@ -258,7 +258,64 @@ if (length(results$warnings) > 0) cat("Warnings:\n", paste("-", results$warnings
 # save any orphan/invalid rows to data/flagged/
 ```
 
-### 7. Present results
+### 7. Validate metadata.json completeness
+
+Open `data/parquet/{provider}_{dataset}/metadata.json` and enforce three
+hard assertions. Failures should appear in the validation report as
+**errors** (not warnings) since these fields are user-facing in
+`cc_describe_table()` and `cc_db_catalog()`.
+
+```r
+librarian::shelf(jsonlite, glue, here, dplyr, quiet = T)
+provider <- "{provider}"; dataset <- "{dataset}"
+meta_path <- here(glue("data/parquet/{provider}_{dataset}/metadata.json"))
+stopifnot(file.exists(meta_path))
+m <- fromJSON(meta_path, simplifyVector = FALSE)
+
+# (a) every table has non-empty description_md
+no_tbl_desc <- names(Filter(function(t) !nzchar(t$description_md %||% ""), m$tables))
+
+# (b) every non-identifier, non-geometry, non-qual column has non-empty description_md
+is_identifier <- function(col) grepl("(_id|_key|_uuid|_qual|_flag|_status|_at|geom|datetime|date)$", col)
+no_col_desc <- vapply(names(m$columns), function(k) {
+  col <- sub("^[^.]+\\.", "", k)
+  !is_identifier(col) && !nzchar(m$columns[[k]]$description_md %||% "")
+}, logical(1))
+no_col_desc <- names(m$columns)[no_col_desc]
+
+# (c) measurement_value / avg / stddev columns must have a unit (either inline
+#     or via the measurement_type CSV)
+mt <- read.csv(here("metadata/measurement_type.csv"), stringsAsFactors = FALSE)
+measurement_cols <- grep("\\.(measurement_value|avg|stddev|value)$",
+                         names(m$columns), value = TRUE)
+no_unit <- vapply(measurement_cols, function(k) {
+  is.null(m$columns[[k]]$units) || !nzchar(m$columns[[k]]$units)
+}, logical(1))
+no_unit <- measurement_cols[no_unit]
+# any of these MUST be paired with a measurement_type column whose values are
+# all registered in measurement_type.csv. Flag if not.
+
+cat(glue("\nMetadata completeness for {provider}_{dataset}:\n"))
+cat(glue("  tables with empty description_md: {length(no_tbl_desc)}\n"))
+cat(glue("  non-identifier columns with empty description_md: {length(no_col_desc)}\n"))
+cat(glue("  measurement columns with NULL units: {length(no_unit)}\n"))
+
+# Hard fail if any tables are undocumented or > 25% of non-ID columns are undocumented
+status <- "PASS"
+if (length(no_tbl_desc) > 0) status <- "ERROR"
+n_doc_cols <- sum(!vapply(names(m$columns), function(k) {
+  col <- sub("^[^.]+\\.", "", k); is_identifier(col)
+}, logical(1)))
+if (n_doc_cols > 0 && length(no_col_desc) / n_doc_cols > 0.25) status <- "ERROR"
+if (length(no_unit) > 0) status <- "ERROR"
+cat(glue("  metadata.json status: {status}\n"))
+```
+
+Include the lists of offending tables/columns in the report so the user
+has a copy-paste TODO for the underlying `tbls_redefine.csv` and
+`flds_redefine.csv`.
+
+### 8. Present results
 
 Show the validation report and recommend actions:
 - For errors: specific fix instructions

@@ -680,11 +680,24 @@ for (pq in derived_local) {
 tables_df <- freeze_stats |>
   select(name = table, rows, partitioned)
 
+# sum bytes of the uploaded parquet tree on GCS
+du_out <- system2(
+  gcloud,
+  c("storage", "du", "--summarize",
+    glue("gs://{gcs_bucket}/{gcs_release}/parquet/")),
+  stdout = TRUE, stderr = TRUE)
+total_bytes <- suppressWarnings(
+  as.numeric(sub("\\s.*$", "", trimws(du_out[1]))))
+if (is.na(total_bytes)) {
+  warning(glue("Could not parse gcloud storage du output: {paste(du_out, collapse='; ')}"))
+  total_bytes <- 0
+}
+
 catalog <- list(
   version      = release_version,
   release_date = as.character(Sys.Date()),
   total_rows   = sum(tables_df$rows, na.rm = TRUE),
-  total_size   = 0,
+  total_size   = total_bytes,
   tables       = tables_df)
 catalog_path <- file.path(dir_frozen, "catalog.json")
 jsonlite::write_json(catalog, catalog_path, auto_unbox = TRUE, pretty = TRUE)
@@ -702,6 +715,31 @@ rels_json <- file.path(dir_frozen, "relationships.json")
 if (file.exists(rels_json))
   put_gcs_file(rels_json,
     glue("gs://{gcs_bucket}/{gcs_release}/relationships.json"))
+
+# build and upload metadata.json (table/column descriptions + units)
+meta_paths <- c(
+  here("data/parquet/swfsc_ichthyo/metadata.json"),
+  here("data/parquet/calcofi_bottle/metadata.json"),
+  here("data/parquet/calcofi_ctd-cast/metadata.json"),
+  here("data/parquet/calcofi_dic/metadata.json")
+)
+meta_paths <- meta_paths[file.exists(meta_paths)]
+
+meta_json_path <- file.path(dir_frozen, "metadata.json")
+if (length(meta_paths) > 0) {
+  merge_metadata_json(
+    paths                = meta_paths,
+    output_path          = meta_json_path,
+    release_version      = release_version,
+    release_tables_csv   = here("metadata/release_tables.csv"),
+    release_columns_csv  = here("metadata/release_columns.csv"),
+    measurement_type_csv = here("metadata/measurement_type.csv"),
+    dataset_csv          = here("metadata/dataset.csv"))
+  put_gcs_file(meta_json_path,
+    glue("gs://{gcs_bucket}/{gcs_release}/metadata.json"))
+} else {
+  warning("No per-ingest metadata.json files found; skipping release metadata.json")
+}
 
 # 4. update versions.json and latest.txt
 # discover all releases from GCS and rebuild versions.json
