@@ -2130,13 +2130,15 @@ parquet_stats |>
 #| label: write_metadata
 
 metadata_path <- build_metadata_json(
-  con = con,
-  d_tbls_rd = d_tbls_rd,
-  d_flds_rd = d_flds_rd,
+  con                  = con,
+  d_tbls_rd            = d_tbls_rd,
+  d_flds_rd            = d_flds_rd,
   metadata_derived_csv = glue("{dir_meta}/metadata_derived.csv"),
-  output_dir = dir_parquet,
-  provider = provider,
-  dataset = dataset
+  output_dir           = dir_parquet,
+  tables               = parquet_stats$table,
+  provider             = provider,
+  dataset              = dataset,
+  workflow_url         = glue("https://calcofi.io/workflows/ingest_{provider}_{dataset}.html")
 )
 
 # write relationships.json sidecar with PKs/FKs
