@@ -119,7 +119,45 @@ tar_target(
 )
 ```
 
-### 6. Present results
+### 6. Post-release sidecar smoke test
+
+After `release_database.qmd` has published a release to GCS, verify the
+`metadata.json` sidecar parses cleanly and covers every table named in
+`catalog.json`. The publish workflow consumes both sidecars when
+assembling EML / datasets.xml, so a drift between them is a publish
+blocker.
+
+```r
+librarian::shelf(jsonlite, glue, here, quiet = T)
+v <- readLines("https://storage.googleapis.com/calcofi-db/ducklake/releases/latest.txt", warn = FALSE)
+base <- glue("https://storage.googleapis.com/calcofi-db/ducklake/releases/{v}")
+
+cat_json  <- fromJSON(file.path(base, "catalog.json"))
+meta_json <- fromJSON(file.path(base, "metadata.json"), simplifyVector = FALSE)
+
+cat_tbls  <- cat_json$tables$name
+meta_tbls <- names(meta_json$tables)
+
+missing_in_meta <- setdiff(cat_tbls, meta_tbls)
+missing_in_cat  <- setdiff(meta_tbls, cat_tbls)
+
+cat(glue("Release: {v}\n"))
+cat(glue("catalog.json tables:  {length(cat_tbls)}\n"))
+cat(glue("metadata.json tables: {length(meta_tbls)}\n"))
+cat(glue("schema_version: {meta_json$schema_version} (expect 1.1)\n"))
+cat(glue("missing from metadata.json: {length(missing_in_meta)}\n"))
+if (length(missing_in_meta) > 0) cat("  ", paste(missing_in_meta, collapse=", "), "\n")
+cat(glue("missing from catalog.json:  {length(missing_in_cat)}\n"))
+if (length(missing_in_cat)  > 0) cat("  ", paste(missing_in_cat,  collapse=", "), "\n")
+stopifnot(meta_json$schema_version == "1.1",
+          length(missing_in_meta) == 0)
+```
+
+Abort the publish if either set-diff is non-empty — the
+`release_database.qmd` step needs to be re-run to repair the sidecar
+before any portal sees stale metadata.
+
+### 7. Present results
 
 Show the user:
 - Created file path

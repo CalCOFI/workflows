@@ -242,3 +242,35 @@ Show the user:
   1. Fill in TODO sections with dataset-specific transforms
   2. Run the notebook to test
   3. Run `/validate-ingest {provider} {dataset}` to verify
+
+### 10. Post-ingest metadata.json completeness scan
+
+After the first successful render of the new ingest notebook (which runs
+`finalize_ingest()` → `build_metadata_json()`), scan the produced sidecar
+for empty descriptions and units. These ship verbatim to the release
+`metadata.json` and on to calcofi4r `cc_describe_table()` /
+`cc_db_catalog()`, so empties should be surfaced as TODOs, not ignored.
+
+```r
+librarian::shelf(jsonlite, glue, here, quiet = T)
+provider <- "{provider}"; dataset <- "{dataset}"
+meta_path <- here(glue("data/parquet/{provider}_{dataset}/metadata.json"))
+m <- fromJSON(meta_path, simplifyVector = FALSE)
+
+empty_tbl_desc <- Filter(function(t) !nzchar(t$description_md %||% ""), m$tables)
+empty_col_desc <- Filter(function(c) !nzchar(c$description_md %||% ""), m$columns)
+empty_col_unit <- Filter(function(c) is.null(c$units),                   m$columns)
+
+cat(glue("\nmetadata.json gaps for {provider}_{dataset}:\n"))
+cat(glue("  tables with empty description_md: {length(empty_tbl_desc)}\n"))
+cat(glue("  columns with empty description_md: {length(empty_col_desc)}\n"))
+cat(glue("  columns with NULL units (review numeric only): {length(empty_col_unit)}\n"))
+if (length(empty_tbl_desc) > 0)
+  cat("  ", paste(names(empty_tbl_desc), collapse = ", "), "\n")
+if (length(empty_col_desc) > 0)
+  cat("  ", paste(head(names(empty_col_desc), 20), collapse = ", "),
+      if (length(empty_col_desc) > 20) glue(" (+{length(empty_col_desc)-20} more)") else "", "\n")
+```
+
+Report the counts back to the user along with the top offenders so they
+can backfill `flds_redefine.csv` and re-run.
