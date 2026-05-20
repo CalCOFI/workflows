@@ -1,0 +1,351 @@
+---
+title: "Test Release — gate latest.txt on query suite"
+calcofi:
+  target_name: test_release
+  workflow_type: test
+  dependency:
+    - release_database
+  output: _output/test_release.html
+execute:
+  echo: true
+  message: true
+  warning: true
+editor_options:
+  chunk_output_type: console
+format:
+  html:
+    code-fold: true
+editor:
+  markdown:
+    wrap: 72
+---
+
+## Overview {.unnumbered}
+
+**Goal**: Promote a freshly-built release to `latest.txt` only when every
+pre-baked query in [CalCOFI/query](https://github.com/CalCOFI/query) runs
+cleanly against it.
+
+Pipeline position: this notebook runs after `release_database.qmd` has
+uploaded the parquet, `metadata.json`, `relationships.json`, `erd.mmd`, and
+`catalog.json` to `gs://calcofi-db/ducklake/releases/{release_version}/`,
+but **before** `latest.txt` is updated. Every `.md` query in the
+[`_queries/`](https://github.com/CalCOFI/query/tree/main/_queries) folder
+is rendered with its YAML defaults, executed against the just-uploaded
+release on GCS, and reported below. If every query returns without error,
+`latest.txt` is written; otherwise the target fails and consumer apps
+keep pointing at the previously-promoted version.
+
+## Setup
+
+```{r}
+#| label: setup
+
+devtools::load_all(here::here("../calcofi4db"))
+librarian::shelf(
+  CalCOFI / calcofi4db,
+  DBI,
+  duckdb,
+  dplyr,
+  DT,
+  fs,
+  glue,
+  here,
+  jsonlite,
+  purrr,
+  tibble,
+  yaml,
+  quiet = T)
+
+# which release to test? read the just-uploaded version from the local
+# release directory (most recent date-stamped folder under data/releases/)
+releases_dir <- here("data/releases")
+release_dirs <- list.dirs(releases_dir, recursive = FALSE)
+release_dirs <- release_dirs[grepl("v[0-9]{4}[.][0-9]{2}[.]?[0-9]*$",
+                                   basename(release_dirs))]
+stopifnot(length(release_dirs) > 0)
+release_version <- basename(release_dirs[which.max(file.mtime(release_dirs))])
+message(glue("Testing release: {release_version}"))
+
+# where the pre-baked queries live
+queries_dir <- here("../query/_queries")
+if (!dir.exists(queries_dir)) {
+  stop(glue(
+    "Could not find {queries_dir}. Clone CalCOFI/query as a sibling of ",
+    "this repo, or set queries_dir manually."))
+}
+message(glue("Query repo: {queries_dir}"))
+
+# fresh in-memory DuckDB with httpfs + spatial — every query reads parquet
+# from GCS over httpfs, mirroring what the query app's DuckDB-WASM does
+con_test <- get_duckdb_con(":memory:")
+load_duckdb_extension(con_test, "httpfs")
+load_duckdb_extension(con_test, "spatial")
+```
+
+## Render the query templates
+
+The query app uses Handlebars at runtime. For tests we replicate the
+subset of Handlebars features actually used in `_queries/*.md`:
+
+- `{{var}}` — simple substitution
+- `{{{var}}}` — raw substitution (no escaping; same effect here)
+- `{{sqlesc var}}` — escape single quotes for SQL string literals
+- `{{#if var}}...{{/if}}` — include block when `var` is truthy
+
+```{r}
+#| label: render_helpers
+
+sqlesc <- function(x) gsub("'", "''", as.character(x %||% ""), fixed = TRUE)
+
+# truthy test mirrors Handlebars: non-NULL, non-NA, non-empty string,
+# non-zero number, non-FALSE logical
+is_truthy <- function(val) {
+  if (is.null(val))           return(FALSE)
+  if (length(val) == 0)       return(FALSE)
+  if (is.logical(val))        return(isTRUE(val))
+  if (is.character(val))      return(any(!is.na(val) & nzchar(val)))
+  if (is.numeric(val))        return(any(!is.na(val) & val != 0))
+  !is.na(val[[1]])
+}
+
+# resolve innermost {{#if X}}...{{/if}} repeatedly until none remain.
+# [\\s\\S] (not .) so the body spans newlines; (?!\\{\\{#if) guard forces
+# "innermost only" so we strip from the inside out.
+render_if_blocks <- function(txt, params) {
+  pat <- "\\{\\{#if\\s+([A-Za-z_][A-Za-z0-9_]*)\\}\\}((?:(?!\\{\\{#if)[\\s\\S])*?)\\{\\{/if\\}\\}"
+  repeat {
+    m <- regexpr(pat, txt, perl = TRUE)
+    if (m == -1) break
+    full <- regmatches(txt, m)
+    parts <- regmatches(full, regexec(pat, full, perl = TRUE))[[1]]
+    var_name <- parts[2]
+    body     <- parts[3]
+    replacement <- if (is_truthy(params[[var_name]])) body else ""
+    txt <- paste0(
+      substr(txt, 1, m - 1),
+      replacement,
+      substr(txt, m + attr(m, "match.length"), nchar(txt)))
+  }
+  txt
+}
+
+render_template <- function(template, params) {
+  txt <- template
+
+  # 1. {{#if X}}...{{/if}} blocks
+  txt <- render_if_blocks(txt, params)
+
+  # 2. {{sqlesc VAR}}
+  helper_pat <- "\\{\\{\\s*sqlesc\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\}\\}"
+  repeat {
+    m <- regexpr(helper_pat, txt, perl = TRUE)
+    if (m == -1) break
+    full <- regmatches(txt, m)
+    name <- sub(helper_pat, "\\1", full, perl = TRUE)
+    txt <- sub(full, sqlesc(params[[name]]), txt, fixed = TRUE)
+  }
+
+  # 3. {{{VAR}}} (triple-brace, raw) and {{VAR}} (simple) — handle the
+  #    triple-brace first so the {{VAR}} pass doesn't eat the inner pair
+  triple_pat <- "\\{\\{\\{\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*\\}\\}\\}"
+  repeat {
+    m <- regexpr(triple_pat, txt, perl = TRUE)
+    if (m == -1) break
+    full <- regmatches(txt, m)
+    name <- sub(triple_pat, "\\1", full, perl = TRUE)
+    val <- as.character(params[[name]] %||% "")
+    txt <- sub(full, val, txt, fixed = TRUE)
+  }
+  single_pat <- "\\{\\{\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*\\}\\}"
+  repeat {
+    m <- regexpr(single_pat, txt, perl = TRUE)
+    if (m == -1) break
+    full <- regmatches(txt, m)
+    name <- sub(single_pat, "\\1", full, perl = TRUE)
+    val <- as.character(params[[name]] %||% "")
+    txt <- sub(full, val, txt, fixed = TRUE)
+  }
+
+  txt
+}
+
+# parse YAML front-matter + body from a query .md file
+parse_query_md <- function(path) {
+  raw <- readLines(path, warn = FALSE)
+  delims <- which(trimws(raw) == "---")
+  if (length(delims) < 2) {
+    stop(glue("Missing YAML delimiters in {path}"))
+  }
+  yaml_text <- paste(raw[(delims[1] + 1):(delims[2] - 1)], collapse = "\n")
+  meta <- yaml::yaml.load(yaml_text)
+  body <- paste(raw[(delims[2] + 1):length(raw)], collapse = "\n")
+  list(meta = meta, body = body, path = path)
+}
+
+# build the params list for a query: each parameter's `default`, with
+# `version` overridden to the release under test
+defaults_for <- function(meta, release_version) {
+  params <- list(version = release_version)
+  if (!is.null(meta$parameters)) {
+    for (name in names(meta$parameters)) {
+      spec <- meta$parameters[[name]]
+      params[[name]] <- spec$default
+    }
+  }
+  params$version <- release_version
+  params
+}
+```
+
+## Discover and execute every query
+
+```{r}
+#| label: execute
+
+query_files <- list.files(queries_dir, pattern = "[.]md$",
+                          recursive = TRUE, full.names = TRUE)
+message(glue("Found {length(query_files)} query files"))
+
+results <- purrr::map_dfr(query_files, function(qpath) {
+  rel  <- sub(paste0(normalizePath(queries_dir), "/"), "",
+              normalizePath(qpath), fixed = TRUE)
+  q    <- parse_query_md(qpath)
+  meta <- q$meta
+
+  # sql_builder queries are JS-only — flag them; the query app exercises
+  # them in the browser
+  if (!is.null(meta$sql_builder)) {
+    return(tibble::tibble(
+      query    = rel,
+      label    = meta$label %||% NA_character_,
+      status   = "skip",
+      reason   = paste0("sql_builder=", meta$sql_builder),
+      rows     = NA_integer_,
+      ms       = NA_real_,
+      error    = NA_character_))
+  }
+
+  if (is.null(meta$sql)) {
+    return(tibble::tibble(
+      query = rel, label = meta$label %||% NA_character_,
+      status = "skip", reason = "no inline sql",
+      rows = NA_integer_, ms = NA_real_, error = NA_character_))
+  }
+
+  params <- defaults_for(meta, release_version)
+  sql    <- render_template(meta$sql, params)
+
+  t0  <- Sys.time()
+  out <- tryCatch(
+    DBI::dbGetQuery(con_test, sql),
+    error = function(e) e)
+  elapsed_ms <- as.numeric(difftime(Sys.time(), t0, units = "secs")) * 1000
+
+  if (inherits(out, "error")) {
+    tibble::tibble(
+      query = rel, label = meta$label %||% NA_character_,
+      status = "fail", reason = NA_character_,
+      rows   = NA_integer_, ms = round(elapsed_ms, 1),
+      error  = conditionMessage(out))
+  } else {
+    tibble::tibble(
+      query = rel, label = meta$label %||% NA_character_,
+      status = "pass", reason = NA_character_,
+      rows   = nrow(out), ms = round(elapsed_ms, 1),
+      error  = NA_character_)
+  }
+})
+
+# status badges for the report
+status_badge <- function(s) {
+  color <- c(pass = "#2e7d32", fail = "#c62828", skip = "#757575")[s]
+  glue("<span style='background:{color};color:#fff;padding:2px 8px;",
+       "border-radius:10px;font-size:11px;'>{toupper(s)}</span>")
+}
+
+results |>
+  mutate(status_html = status_badge(status)) |>
+  select(status_html, query, label, rows, ms, reason, error) |>
+  DT::datatable(
+    escape    = FALSE,
+    rownames  = FALSE,
+    options   = list(pageLength = 20, order = list(list(0, "asc"))),
+    colnames  = c("", "query", "label", "rows", "ms", "skip reason", "error"))
+```
+
+## Save results sidecar
+
+```{r}
+#| label: save_results
+
+results_path <- file.path(here("data/releases"), release_version,
+                          "test_results.json")
+jsonlite::write_json(
+  list(
+    release_version = release_version,
+    tested_at       = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
+    n_pass          = sum(results$status == "pass"),
+    n_fail          = sum(results$status == "fail"),
+    n_skip          = sum(results$status == "skip"),
+    results         = results),
+  results_path,
+  auto_unbox = TRUE, pretty = TRUE, null = "null")
+
+gcs_bucket  <- "calcofi-db"
+gcs_release <- glue("ducklake/releases/{release_version}")
+put_gcs_file(results_path,
+  glue("gs://{gcs_bucket}/{gcs_release}/test_results.json"))
+message(glue("test_results.json uploaded for {release_version}"))
+```
+
+## Promote (gated on all-pass)
+
+`latest.txt` is written **only** if no query failed. Skipped queries
+(JS-only `sql_builder`) do not block promotion — they're exercised in
+the browser by the query app.
+
+```{r}
+#| label: promote
+
+n_fail <- sum(results$status == "fail")
+n_pass <- sum(results$status == "pass")
+n_skip <- sum(results$status == "skip")
+
+if (n_fail > 0) {
+  failures <- results |> filter(status == "fail")
+  for (i in seq_len(nrow(failures))) {
+    message(glue("FAIL [{failures$query[i]}]: {failures$error[i]}"))
+  }
+  stop(glue(
+    "{n_fail} query(ies) failed against {release_version}. ",
+    "latest.txt NOT updated."))
+}
+
+# all green — promote
+latest_local <- tempfile()
+writeLines(release_version, latest_local)
+put_gcs_file(latest_local,
+  glue("gs://{gcs_bucket}/ducklake/releases/latest.txt"))
+message(glue(
+  "PROMOTED {release_version}: {n_pass} passed, {n_skip} skipped, ",
+  "0 failed. latest.txt is now {release_version}."))
+```
+
+## Cleanup
+
+```{r}
+#| label: cleanup
+
+close_duckdb(con_test)
+```
+
+::: {.callout-caution collapse="true"}
+
+## Session Info
+
+```{r session_info}
+devtools::session_info()
+```
+
+:::
