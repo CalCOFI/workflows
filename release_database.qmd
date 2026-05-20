@@ -735,13 +735,51 @@ if (length(meta_paths) > 0) {
     release_columns_csv  = here("metadata/release_columns.csv"),
     measurement_type_csv = here("metadata/measurement_type.csv"),
     dataset_csv          = here("metadata/dataset.csv"))
+
+  # enrich columns with data_type from the working DuckDB (so the schema
+  # site can render types without spinning up DuckDB-WASM)
+  schema_cols <- DBI::dbGetQuery(con_wdl, "
+    SELECT table_name, column_name, data_type
+    FROM information_schema.columns
+    WHERE table_schema = 'main'")
+  meta <- jsonlite::read_json(meta_json_path, simplifyVector = FALSE)
+  n_typed <- 0L
+  for (i in seq_len(nrow(schema_cols))) {
+    key <- paste0(schema_cols$table_name[i], ".", schema_cols$column_name[i])
+    if (key %in% names(meta$columns)) {
+      meta$columns[[key]]$data_type <- schema_cols$data_type[i]
+    } else {
+      meta$columns[[key]] <- list(data_type = schema_cols$data_type[i])
+    }
+    n_typed <- n_typed + 1L
+  }
+  jsonlite::write_json(meta, meta_json_path,
+    auto_unbox = TRUE, pretty = TRUE, null = "null")
+  message(glue("metadata.json enriched with data_type for {n_typed} columns"))
+
   put_gcs_file(meta_json_path,
     glue("gs://{gcs_bucket}/{gcs_release}/metadata.json"))
+
+  # erd.mmd sidecar: Mermaid ER diagram driven by relationships.json
+  rels_for_erd <- file.path(dir_frozen, "relationships.json")
+  if (file.exists(rels_for_erd)) {
+    erd <- cc_erd(
+      con       = con_wdl,
+      rels_path = rels_for_erd,
+      view_type = "all")
+    erd_path <- file.path(dir_frozen, "erd.mmd")
+    writeLines(unclass(erd), erd_path)
+    put_gcs_file(erd_path,
+      glue("gs://{gcs_bucket}/{gcs_release}/erd.mmd"))
+    message(glue("erd.mmd uploaded ({length(attr(erd, 'tables'))} tables)"))
+  } else {
+    warning("relationships.json missing; skipping erd.mmd sidecar")
+  }
 } else {
   warning("No per-ingest metadata.json files found; skipping release metadata.json")
 }
 
-# 4. update versions.json and latest.txt
+# 4. update versions.json (latest.txt promotion is deferred to test_release.qmd)
 # discover all releases from GCS and rebuild versions.json
 gcs_ls <- system2(gcloud, c("storage", "ls",
   glue("gs://{gcs_bucket}/ducklake/releases/")),
@@ -771,14 +809,12 @@ jsonlite::write_json(list(versions = all_versions), versions_local,
 put_gcs_file(versions_local,
   glue("gs://{gcs_bucket}/ducklake/releases/versions.json"))
 
-# update latest.txt
-latest_local <- tempfile()
-writeLines(release_version, latest_local)
-put_gcs_file(latest_local,
-  glue("gs://{gcs_bucket}/ducklake/releases/latest.txt"))
-
+# NOTE: latest.txt is NOT updated here. Promotion is gated on the
+# query-test pass in test_release.qmd, which writes latest.txt only
+# when every pre-baked query in CalCOFI/query/_queries succeeds.
 message(glue(
-  "Release {release_version} published ({length(all_versions)} versions tracked)"))
+  "Release {release_version} uploaded ({length(all_versions)} versions tracked); ",
+  "latest.txt promotion deferred to test_release.qmd"))
 ```
 
 ## Cleanup
