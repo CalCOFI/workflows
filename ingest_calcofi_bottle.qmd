@@ -593,6 +593,12 @@ Merging would create a sparse table with many NULL columns (e.g., `units`/`_sour
 ```{r}
 #| label: load_measurement_type
 
+# derive provider/dataset from _source_datasets for downstream consumers
+# (callers want `WHERE provider = 'calcofi'` not `_source_datasets LIKE ...`)
+d_meas_type <- d_meas_type |>
+  mutate(
+    provider = sub("_.*$",    "", `_source_datasets`),
+    dataset  = sub("^[^_]+_", "", `_source_datasets`))
 dbWriteTable(con, "measurement_type", d_meas_type, overwrite = TRUE)
 
 # validate FK: all bottle_measurement types exist in reference table
@@ -1419,6 +1425,10 @@ Update casts.parquet with the new ship_key and cruise_key columns.
 #| label: rewrite_casts_parquet
 
 # re-export casts parquet (now includes ship_key, cruise_key)
+# also drop cruise_key_0 — interim rename used to avoid collision during
+# the bridge merge; canonical `cruise_key` (YYYY-MM-NODC) is what consumers
+# query against (see /query/_queries/browse/cruises.md and CLAUDE.md note
+# on identifier standardization)
 casts_pqt <- file.path(dir_parquet, "casts.parquet")
 cols <- DBI::dbGetQuery(
   con,
@@ -1427,8 +1437,9 @@ cols <- DBI::dbGetQuery(
    WHERE table_name = 'casts'"
   )
 )$column_name
-prov_cols <- c("_source_file", "_source_row", "_source_uuid", "_ingested_at")
-export_cols <- setdiff(cols, prov_cols)
+prov_cols   <- c("_source_file", "_source_row", "_source_uuid", "_ingested_at")
+drop_cols   <- c(prov_cols, "cruise_key_0")
+export_cols <- setdiff(cols, drop_cols)
 DBI::dbExecute(
   con,
   glue(
@@ -1436,7 +1447,15 @@ DBI::dbExecute(
    TO '{casts_pqt}' (FORMAT PARQUET, COMPRESSION 'snappy')"
   )
 )
-message("Re-exported casts.parquet with ship_key + cruise_key")
+message("Re-exported casts.parquet with ship_key + cruise_key (cruise_key_0 dropped)")
+
+# sync the fixed casts.parquet back to GCS (the earlier sync_to_gcs ran
+# before the cruise bridge; without this push, the release would copy the
+# stale ingest/calcofi_bottle/casts.parquet that has cruise_key_0 only)
+put_gcs_file(
+  casts_pqt,
+  glue("gs://calcofi-db/ingest/{dir_label}/casts.parquet"))
+message("Re-uploaded casts.parquet to GCS ingest/")
 
 # export _new delta sidecars for modified dependency tables (from calcofi.modifies)
 # these are NOT in the manifest — picked up by build_release_table_registry()
