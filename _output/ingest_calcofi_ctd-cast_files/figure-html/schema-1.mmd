@@ -26,7 +26,6 @@ erDiagram
         varchar site_key
         varchar line
         varchar sta
-        double ox_aveu_m_sta_corr
         varchar ship_key
         varchar cruise_key
     }
@@ -48,6 +47,17 @@ erDiagram
         double avg
         double stddev
         bigint n_obs
+    }
+    ctd_thin {
+        varchar ctd_thin_uuid PK
+        varchar ctd_cast_uuid FK
+        double depth_m
+        varchar measurement_type
+        double measurement_value
+        varchar measurement_qual
+        varchar cast_dir
+        varchar retained_reason
+        varchar cruise_key
     }
     ctd_wide {
         varchar data_stage
@@ -87,6 +97,7 @@ erDiagram
         double ox2u_m
         double ox2u_m_cruise_corr
         double ox2u_m_sta_corr
+        double ox_aveu_m_sta_corr
         double fluor_v
         double fluor_q
         double est_chl_cruise_corr
@@ -145,6 +156,7 @@ erDiagram
         varchar measurement_type PK
         varchar description
         varchar units
+        bool is_canonical
         varchar _source_column
         varchar _source_table
         varchar _source_datasets
@@ -161,3 +173,4 @@ erDiagram
         varchar _source_uuid
     }
     ctd_cast ||--o{ ctd_measurement : "ctd_cast_uuid"
+    ctd_cast ||--o{ ctd_thin : "ctd_cast_uuid"

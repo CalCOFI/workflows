@@ -1,0 +1,2840 @@
+{
+  "schema_version": "1.1",
+  "release_version": "v2026.05.20",
+  "release_date": "2026-05-20",
+  "datasets": {
+    "calcofi_bottle": {
+      "provider": "calcofi",
+      "dataset": "bottle",
+      "dataset_name": "CalCOFI Bottle Database",
+      "description": "Hydrographic bottle data including temperature, salinity, oxygen, nutrients, pigments, and C14 from CalCOFI cruises",
+      "citation_main": "CalCOFI. (2023). CalCOFI Bottle Database 194903-202105. CalCOFI.org.",
+      "link_calcofi_org": "https://calcofi.org/data/oceanographic-data/bottle-database/",
+      "link_data_source": "https://calcofi.org/downloads/database/CalCOFI_Database_194903-202105_csv_16October2023.zip",
+      "coverage_temporal": "1949-03 to 2021-05",
+      "coverage_spatial": "23-51°N, -170 to -117°W",
+      "license": null,
+      "pi_names": null
+    },
+    "calcofi_ctd-cast": {
+      "provider": "calcofi",
+      "dataset": "ctd-cast",
+      "dataset_name": "CalCOFI CTD Cast Files",
+      "description": "CTD downcast profiles with temperature, salinity, oxygen, fluorescence, and other sensors at standard depths",
+      "citation_main": "CalCOFI. (2023). CalCOFI CTD Cast Files. CalCOFI.org.",
+      "link_calcofi_org": "https://calcofi.org/data/oceanographic-data/ctd-cast-files/",
+      "link_data_source": "https://calcofi.org/data/oceanographic-data/ctd-cast-files/",
+      "coverage_temporal": "1993-01 to 2021-05",
+      "coverage_spatial": "28-37°N, -125 to -117°W",
+      "license": null,
+      "pi_names": null
+    },
+    "calcofi_dic": {
+      "provider": "calcofi",
+      "dataset": "dic",
+      "dataset_name": "CalCOFI DIC",
+      "description": "Discrete profile dissolved inorganic carbon (DIC) and total alkalinity (TA) from CalCOFI Niskin bottle samples, quality-controlled using WOCE flagging",
+      "citation_main": "Keeling, C.D.; Lueker, T.J.; Emanuele, G.; Dickson, A.G.; Martz, T.R.; Wolfe, W.H.; Mau, A. (2025). Discrete profile dissolved inorganic carbon, total alkalinity, water temperature and salinity measurements for CalCOFI (NCEI Accession 0301029). NOAA NCEI. https://doi.org/10.25921/3w9f-jd72",
+      "link_calcofi_org": "https://calcofi.org/data/oceanographic-data/dic/",
+      "link_data_source": "https://www.ncei.noaa.gov/access/metadata/landing-page/bin/iso?id=gov.noaa.nodc:0301029",
+      "coverage_temporal": "1983-03 to 2021-07",
+      "coverage_spatial": "28-37°N, -125 to -117°W",
+      "license": "CC BY 4.0",
+      "pi_names": "Todd Martz; Aaron Mau"
+    },
+    "swfsc_ichthyo": {
+      "provider": "swfsc",
+      "dataset": "ichthyo",
+      "dataset_name": "SWFSC Ichthyoplankton",
+      "description": "Ichthyoplankton (fish eggs and larvae) collected by bongo and manta net tows on CalCOFI cruises, processed by SWFSC",
+      "citation_main": "NOAA Fisheries SWFSC. CalCOFI Ichthyoplankton Database.",
+      "link_calcofi_org": "https://calcofi.org/data/biology/ichthyoplankton/",
+      "link_data_source": null,
+      "coverage_temporal": "1951 to present",
+      "coverage_spatial": "23-51°N, -170 to -117°W",
+      "license": null,
+      "pi_names": null
+    },
+    "swfsc_invert": {
+      "provider": "swfsc",
+      "dataset": "invert",
+      "dataset_name": "SWFSC Invertebrates",
+      "description": "Invertebrate (primarily squid) counts and sizes captured in CalCOFI ichthyoplankton nets, processed by SWFSC",
+      "citation_main": "NOAA Fisheries SWFSC. CalCOFI Invertebrate Database.",
+      "link_calcofi_org": "https://calcofi.org/data/biology/invertebrates/",
+      "link_data_source": "https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFIinvcnt.html;https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFIinvsiz.html",
+      "coverage_temporal": "1978 to 2023",
+      "coverage_spatial": "0-51°N, -180 to -78°W",
+      "license": null,
+      "pi_names": null
+    }
+  },
+  "tables": {
+    "cruise": {
+      "name_long": "Cruise",
+      "description_md": "unique by ship and year-month",
+      "provider": "swfsc",
+      "dataset": "ichthyo"
+    },
+    "dataset": {
+      "name_long": "Dataset",
+      "description_md": "",
+      "provider": "calcofi",
+      "dataset": "bottle"
+    },
+    "grid": {
+      "name_long": "Grid",
+      "description_md": "CalCOFI survey grid polygons and centroids",
+      "provider": "calcofi",
+      "dataset": "bottle"
+    },
+    "ichthyo": {
+      "name_long": "Ichthyoplankton",
+      "description_md": "Consolidated tidy table of ichthyoplankton observations from egg, egg_stage, larva, larva_stage, and larva_size source tables",
+      "provider": "swfsc",
+      "dataset": "ichthyo"
+    },
+    "invert": {
+      "name_long": "Invert",
+      "description_md": "number of invertebrates from net tow by species",
+      "provider": "swfsc",
+      "dataset": "ichthyo"
+    },
+    "lookup": {
+      "name_long": "Lookup",
+      "description_md": "Unified vocabulary lookup table for egg stages, larva stages, and tow types",
+      "provider": "swfsc",
+      "dataset": "ichthyo"
+    },
+    "net": {
+      "name_long": "Net",
+      "description_md": "individual net from given tow",
+      "provider": "swfsc",
+      "dataset": "ichthyo"
+    },
+    "segment": {
+      "name_long": "Segment",
+      "description_md": "Line segments between consecutive sites along a cruise track",
+      "provider": "swfsc",
+      "dataset": "ichthyo"
+    },
+    "ship": {
+      "name_long": "Ship",
+      "description_md": "unique ship with many cruises",
+      "provider": "swfsc",
+      "dataset": "ichthyo"
+    },
+    "site": {
+      "name_long": "Site",
+      "description_md": "unique location (longitude, latitude) and time along cruise",
+      "provider": "swfsc",
+      "dataset": "ichthyo"
+    },
+    "species": {
+      "name_long": "Species",
+      "description_md": "unique species (or taxa) found in egg or larva net tows",
+      "provider": "swfsc",
+      "dataset": "ichthyo"
+    },
+    "taxa_rank": {
+      "name_long": "Taxa Rank",
+      "description_md": "Lookup table mapping taxonomic rank names to sort order",
+      "provider": "swfsc",
+      "dataset": "ichthyo"
+    },
+    "taxon": {
+      "name_long": "Taxon",
+      "description_md": "Taxonomic hierarchy for species via WoRMS and ITIS authorities (built from spp.duckdb via recursive CTEs)",
+      "provider": "swfsc",
+      "dataset": "ichthyo"
+    },
+    "tow": {
+      "name_long": "Tow",
+      "description_md": "unique net tows",
+      "provider": "swfsc",
+      "dataset": "ichthyo"
+    },
+    "bottle": {
+      "name_long": "Bottle",
+      "description_md": "water sample identity and context at specific depths; measurements pivoted to bottle_measurement",
+      "provider": "calcofi",
+      "dataset": "bottle"
+    },
+    "bottle_measurement": {
+      "name_long": "Bottle Measurement",
+      "description_md": "long-format measurement values pivoted from bottle table",
+      "provider": "calcofi",
+      "dataset": "bottle"
+    },
+    "cast_condition": {
+      "name_long": "Cast Condition",
+      "description_md": "long-format environmental/meteorological conditions pivoted from casts table",
+      "provider": "calcofi",
+      "dataset": "bottle"
+    },
+    "casts": {
+      "name_long": "Casts",
+      "description_md": "station-level cast metadata including location and integrated measurements; environmental conditions pivoted to cast_condition",
+      "provider": "calcofi",
+      "dataset": "bottle"
+    },
+    "measurement_type": {
+      "name_long": "Measurement Type",
+      "description_md": "reference table for CTD measurement types with units and descriptions",
+      "provider": "calcofi",
+      "dataset": "ctd-cast"
+    },
+    "ctd_cast": {
+      "name_long": "CTD Cast",
+      "description_md": "cast-level metadata for CalCOFI CTD profiles; measurements pivoted to ctd_measurement",
+      "provider": "calcofi",
+      "dataset": "ctd-cast"
+    },
+    "ctd_measurement": {
+      "name_long": "CTD Measurement",
+      "description_md": "long-format sensor readings pivoted from wide CTD profile data",
+      "provider": "calcofi",
+      "dataset": "ctd-cast"
+    },
+    "ctd_thin": {
+      "name_long": "CTD Thin",
+      "description_md": "adaptively-thinned ctd_measurement: single cast direction, canonical measurement types, ~10 m depth grid with inflection points preserved (see Measurement Frequency section); headline table — full ctd_measurement is supplemental",
+      "provider": "calcofi",
+      "dataset": "ctd-cast"
+    },
+    "ctd_summary": {
+      "name_long": "CTD Summary",
+      "description_md": "summary statistics per station/depth/measurement_type across cast directions",
+      "provider": "calcofi",
+      "dataset": "ctd-cast"
+    },
+    "ctd_wide": {
+      "name_long": "CTD Wide",
+      "description_md": "wide-format CTD profile — one column per measurement type (supplemental output for ERDDAP; not part of normalized release). Column definitions follow the CalCOFI CTD+Bottle CSV column format (Sep 2015).",
+      "provider": "calcofi",
+      "dataset": "ctd-cast"
+    },
+    "dic_sample": {
+      "name_long": "Dic Sample",
+      "description_md": "DIC and total alkalinity measurements from Niskin bottle samples, NCEI accession 0301029",
+      "provider": "calcofi",
+      "dataset": "dic"
+    },
+    "dic_measurement": {
+      "name_long": "Dic Measurement",
+      "description_md": "",
+      "provider": "calcofi",
+      "dataset": "dic"
+    },
+    "dic_summary": {
+      "name_long": "Dic Summary",
+      "description_md": "",
+      "provider": "calcofi",
+      "dataset": "dic"
+    },
+    "cruise_summary": {
+      "name_long": "Cruise Summary",
+      "description_md": "Per-cruise rollup with year/month/ship and counts of sites sampled across ichthyo bottle CTD and DIC. Built in release_database.qmd from cruise + ship and site/casts/ctd_cast/dic_sample. Used by the CalCOFI cruises Shiny app.",
+      "provider": "calcofi",
+      "dataset": "calcofi-db-release"
+    },
+    "_spatial": {
+      "name_long": "Spatial Layers",
+      "description_md": "Geometries for ancillary spatial layers (CA jurisdictions NOAA boundaries marine protected areas etc.) keyed by layer + feature_id. Sourced from metadata/spatial_layers.csv. Companion to _spatial_attr.",
+      "provider": "calcofi",
+      "dataset": "spatial"
+    },
+    "_spatial_attr": {
+      "name_long": "Spatial Layer Attributes",
+      "description_md": "Non-geometry attributes for features in _spatial in long form (layer feature_id attr_name attr_value). Allows attribute schemas to differ across layers without column proliferation.",
+      "provider": "calcofi",
+      "dataset": "spatial"
+    }
+  },
+  "columns": {
+    "cruise.cruise_uuid": {
+      "name_long": "Cruise Uuid",
+      "units": null,
+      "description_md": "CalCOFI species identifier, primary key in species table",
+      "data_type": "UUID"
+    },
+    "cruise.date_ym": {
+      "name_long": "Date Ym",
+      "units": null,
+      "description_md": "",
+      "data_type": "DATE"
+    },
+    "cruise.ship_key": {
+      "name_long": "Ship Key",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "cruise._source_file": {
+      "name_long": " Source File",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "cruise._source_row": {
+      "name_long": " Source Row",
+      "units": null,
+      "description_md": "",
+      "data_type": "INTEGER"
+    },
+    "cruise._ingested_at": {
+      "name_long": " Ingested At",
+      "units": null,
+      "description_md": "",
+      "data_type": "TIMESTAMP"
+    },
+    "cruise._source_uuid": {
+      "name_long": " Source Uuid",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "cruise.cruise_key": {
+      "name_long": "Cruise Key",
+      "description_md": "Natural primary key in YYMMKK format (2-digit year + 2-digit month + ship_key)",
+      "data_type": "VARCHAR"
+    },
+    "dataset.provider": {
+      "name_long": "Provider",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "dataset.dataset": {
+      "name_long": "Dataset",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "dataset.dataset_name": {
+      "name_long": "Dataset Name",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "dataset.description": {
+      "name_long": "Description",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "dataset.citation_main": {
+      "name_long": "Citation Main",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "dataset.citation_others": {
+      "name_long": "Citation Others",
+      "units": null,
+      "description_md": "",
+      "data_type": "BOOLEAN"
+    },
+    "dataset.link_calcofi_org": {
+      "name_long": "Link Calcofi Org",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "dataset.link_data_source": {
+      "name_long": "Link Data Source",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "dataset.link_others": {
+      "name_long": "Link Others",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "dataset.tables": {
+      "name_long": "Tables",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "dataset.coverage_temporal": {
+      "name_long": "Coverage Temporal",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "dataset.coverage_spatial": {
+      "name_long": "Coverage Spatial",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "dataset.license": {
+      "name_long": "License",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "dataset.pi_names": {
+      "name_long": "Pi Names",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "grid.grid_key": {
+      "name_long": "Grid Key",
+      "description_md": "Natural primary key (e.g. st60-ln80 or st60-ln80_hist for historical)",
+      "data_type": "VARCHAR"
+    },
+    "grid.station": {
+      "name_long": "Station",
+      "description_md": "Offshore component of CalCOFI coordinate system",
+      "data_type": "DOUBLE"
+    },
+    "grid.line": {
+      "name_long": "Line",
+      "description_md": "Alongshore component of CalCOFI coordinate system",
+      "data_type": "DOUBLE"
+    },
+    "grid.shore": {
+      "name_long": "Shore",
+      "description_md": "Shore classification (nearshore, offshore, etc.)",
+      "data_type": "VARCHAR"
+    },
+    "grid.pattern": {
+      "name_long": "Pattern",
+      "description_md": "Station pattern: 'standard' or 'historical'",
+      "data_type": "VARCHAR"
+    },
+    "grid.spacing": {
+      "name_long": "Spacing",
+      "description_md": "Station spacing in nautical miles",
+      "data_type": "INTEGER"
+    },
+    "grid.zone": {
+      "name_long": "Zone",
+      "description_md": "Combined shore-pattern zone label",
+      "data_type": "VARCHAR"
+    },
+    "grid.area_km2": {
+      "name_long": "Area",
+      "units": "km^2",
+      "description_md": "Grid cell area",
+      "data_type": "DOUBLE"
+    },
+    "grid.geom": {
+      "name_long": "Geometry",
+      "description_md": "Polygon geometry (WGS84 EPSG:4326) of grid cell",
+      "data_type": "GEOMETRY"
+    },
+    "grid.geom_ctr": {
+      "name_long": "Geometry Center",
+      "description_md": "Point geometry (WGS84 EPSG:4326) of grid cell centroid",
+      "data_type": "GEOMETRY"
+    },
+    "ichthyo.ichthyo_uuid": {
+      "name_long": "Ichthyo UUID",
+      "description_md": "Deterministic UUID v5 primary key derived from composite natural key (net_uuid, species_id, life_stage, measurement_type, measurement_value)",
+      "data_type": "UUID"
+    },
+    "ichthyo.net_uuid": {
+      "name_long": "Net UUID",
+      "description_md": "Foreign key to net table (source UUID)",
+      "data_type": "UUID"
+    },
+    "ichthyo.species_id": {
+      "name_long": "Species ID",
+      "description_md": "Foreign key to species table",
+      "data_type": "SMALLINT"
+    },
+    "ichthyo.life_stage": {
+      "name_long": "Life Stage",
+      "description_md": "Life stage: 'egg' or 'larva'",
+      "data_type": "VARCHAR"
+    },
+    "ichthyo.measurement_type": {
+      "name_long": "Measurement Type",
+      "description_md": "Type of measurement: 'stage', 'size', or NULL for total count",
+      "data_type": "VARCHAR"
+    },
+    "ichthyo.measurement_value": {
+      "name_long": "Measurement Value",
+      "description_md": "Numeric value of measurement (stage number or length in mm)",
+      "data_type": "DOUBLE"
+    },
+    "ichthyo.tally": {
+      "name_long": "Tally",
+      "units": "count",
+      "description_md": "Raw count of individuals",
+      "data_type": "INTEGER"
+    },
+    "ichthyo._source_file": {
+      "name_long": " Source File",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "ichthyo._source_row": {
+      "name_long": " Source Row",
+      "units": null,
+      "description_md": "",
+      "data_type": "INTEGER"
+    },
+    "ichthyo._ingested_at": {
+      "name_long": " Ingested At",
+      "units": null,
+      "description_md": "",
+      "data_type": "TIMESTAMP"
+    },
+    "ichthyo._source_uuid": {
+      "name_long": " Source Uuid",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "invert.net_uuid": {
+      "name_long": "Net Uuid",
+      "units": null,
+      "description_md": "",
+      "data_type": "UUID"
+    },
+    "invert.species_id": {
+      "name_long": "Species Id",
+      "units": null,
+      "description_md": "CalCOFI species identifier, primary key in species table",
+      "data_type": "SMALLINT"
+    },
+    "invert.tally": {
+      "name_long": "Tally",
+      "units": "count",
+      "description_md": "Raw count of invertebrates",
+      "data_type": "INTEGER"
+    },
+    "invert._source_file": {
+      "name_long": " Source File",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "invert._source_row": {
+      "name_long": " Source Row",
+      "units": null,
+      "description_md": "",
+      "data_type": "INTEGER"
+    },
+    "invert._ingested_at": {
+      "name_long": " Ingested At",
+      "units": null,
+      "description_md": "",
+      "data_type": "TIMESTAMP"
+    },
+    "invert._source_uuid": {
+      "name_long": " Source Uuid",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "lookup.lookup_id": {
+      "name_long": "Lookup ID",
+      "description_md": "Sequential integer primary key",
+      "data_type": "INTEGER"
+    },
+    "lookup.lookup_type": {
+      "name_long": "Lookup Type",
+      "description_md": "Category: 'egg_stage', 'larva_stage', or 'tow_type'",
+      "data_type": "VARCHAR"
+    },
+    "lookup.lookup_num": {
+      "name_long": "Lookup Number",
+      "description_md": "Numeric code for the lookup value",
+      "data_type": "INTEGER"
+    },
+    "lookup.lookup_chr": {
+      "name_long": "Lookup Character",
+      "description_md": "Character code for the lookup value (e.g. YOLK, PREF)",
+      "data_type": "VARCHAR"
+    },
+    "lookup.description": {
+      "name_long": "Description",
+      "description_md": "Human-readable description of the lookup value",
+      "data_type": "VARCHAR"
+    },
+    "lookup._source_file": {
+      "name_long": " Source File",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "lookup._source_row": {
+      "name_long": " Source Row",
+      "units": null,
+      "description_md": "",
+      "data_type": "INTEGER"
+    },
+    "lookup._ingested_at": {
+      "name_long": " Ingested At",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "lookup._source_uuid": {
+      "name_long": " Source Uuid",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "net.net_uuid": {
+      "name_long": "Net Uuid",
+      "units": null,
+      "description_md": "",
+      "data_type": "UUID"
+    },
+    "net.tow_uuid": {
+      "name_long": "Tow Uuid",
+      "units": null,
+      "description_md": "",
+      "data_type": "UUID"
+    },
+    "net.side": {
+      "name_long": "Side",
+      "units": null,
+      "description_md": "Net location side",
+      "data_type": "VARCHAR"
+    },
+    "net.std_haul_factor": {
+      "name_long": "Std Haul Factor",
+      "units": "dimensionless",
+      "description_md": "Standard Haul Factor (SHF) used to adjust for variations in water volume filtered and tow depth, standardizing abundance to 10 m_ area integrated over the tow depth",
+      "data_type": "DOUBLE"
+    },
+    "net.vol_sampled_m3": {
+      "name_long": "Vol Sampled M3",
+      "units": "m^3",
+      "description_md": "Volume of water sampled by the net (m^3)",
+      "data_type": "DOUBLE"
+    },
+    "net.prop_sorted": {
+      "name_long": "Prop Sorted",
+      "units": "proportion",
+      "description_md": "Proportion of the net sample that was sorted in the laboratory",
+      "data_type": "DOUBLE"
+    },
+    "net.smallplankton": {
+      "name_long": "Smallplankton",
+      "units": "mL",
+      "description_md": "Small plankton (ml)",
+      "data_type": "DOUBLE"
+    },
+    "net.totalplankton": {
+      "name_long": "Totalplankton",
+      "units": "mL",
+      "description_md": "Total plankton (ml)",
+      "data_type": "DOUBLE"
+    },
+    "net._source_file": {
+      "name_long": " Source File",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "net._source_row": {
+      "name_long": " Source Row",
+      "units": null,
+      "description_md": "",
+      "data_type": "INTEGER"
+    },
+    "net._ingested_at": {
+      "name_long": " Ingested At",
+      "units": null,
+      "description_md": "",
+      "data_type": "TIMESTAMP"
+    },
+    "net._source_uuid": {
+      "name_long": " Source Uuid",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "segment.cruise_key": {
+      "name_long": "Cruise Key",
+      "description_md": "Foreign key to cruise table",
+      "data_type": "VARCHAR"
+    },
+    "segment.site_uuid_beg": {
+      "name_long": "Site UUID Begin",
+      "description_md": "Site UUID at segment start",
+      "data_type": "UUID"
+    },
+    "segment.site_uuid_end": {
+      "name_long": "Site UUID End",
+      "description_md": "Site UUID at segment end",
+      "data_type": "UUID"
+    },
+    "segment.lon_beg": {
+      "name_long": "Longitude Begin",
+      "units": "decimal_degrees",
+      "description_md": "Longitude at segment start",
+      "data_type": "DOUBLE"
+    },
+    "segment.lat_beg": {
+      "name_long": "Latitude Begin",
+      "units": "decimal_degrees",
+      "description_md": "Latitude at segment start",
+      "data_type": "DOUBLE"
+    },
+    "segment.lon_end": {
+      "name_long": "Longitude End",
+      "units": "decimal_degrees",
+      "description_md": "Longitude at segment end",
+      "data_type": "DOUBLE"
+    },
+    "segment.lat_end": {
+      "name_long": "Latitude End",
+      "units": "decimal_degrees",
+      "description_md": "Latitude at segment end",
+      "data_type": "DOUBLE"
+    },
+    "segment.time_beg": {
+      "name_long": "Time Begin",
+      "description_md": "Timestamp at segment start",
+      "data_type": "TIMESTAMP"
+    },
+    "segment.time_end": {
+      "name_long": "Time End",
+      "description_md": "Timestamp at segment end",
+      "data_type": "TIMESTAMP"
+    },
+    "segment.time_hr": {
+      "name_long": "Time Duration",
+      "units": "hours",
+      "description_md": "Duration of segment transit",
+      "data_type": "DOUBLE"
+    },
+    "segment.length_km": {
+      "name_long": "Length",
+      "units": "km",
+      "description_md": "Distance of segment",
+      "data_type": "DOUBLE"
+    },
+    "segment.km_per_hr": {
+      "name_long": "Speed",
+      "units": "km/hr",
+      "description_md": "Average speed during segment transit",
+      "data_type": "DOUBLE"
+    },
+    "segment.geom": {
+      "name_long": "Geometry",
+      "description_md": "LineString geometry (WGS84 EPSG:4326) of segment",
+      "data_type": "GEOMETRY"
+    },
+    "segment.segment_id": {
+      "name_long": "Segment ID",
+      "description_md": "Sequential integer primary key (sorted by time_beg)",
+      "data_type": "INTEGER"
+    },
+    "ship.ship_key": {
+      "name_long": "Ship Key",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "ship.ship_name": {
+      "name_long": "Ship Name",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "ship.ship_nodc": {
+      "name_long": "Ship Nodc",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "ship._source_file": {
+      "name_long": " Source File",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "ship._source_row": {
+      "name_long": " Source Row",
+      "units": null,
+      "description_md": "",
+      "data_type": "INTEGER"
+    },
+    "ship._ingested_at": {
+      "name_long": " Ingested At",
+      "units": null,
+      "description_md": "",
+      "data_type": "TIMESTAMP"
+    },
+    "ship._source_uuid": {
+      "name_long": " Source Uuid",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "site.site_uuid": {
+      "name_long": "Site Uuid",
+      "units": null,
+      "description_md": "",
+      "data_type": "UUID"
+    },
+    "site.cruise_uuid": {
+      "name_long": "Cruise Uuid",
+      "units": null,
+      "description_md": "",
+      "data_type": "UUID"
+    },
+    "site.orderocc": {
+      "name_long": "Orderocc",
+      "units": null,
+      "description_md": "",
+      "data_type": "SMALLINT"
+    },
+    "site.longitude": {
+      "name_long": "Longitude",
+      "units": "decimal_degrees",
+      "description_md": "Decimal degrees of longitude, in geographic coordinates (WGS84)",
+      "data_type": "DOUBLE"
+    },
+    "site.latitude": {
+      "name_long": "Latitude",
+      "units": "decimal_degrees",
+      "description_md": "Decimal degrees of latitude, in geographic coordinates (WGS84)",
+      "data_type": "DOUBLE"
+    },
+    "site.line": {
+      "name_long": "Line",
+      "units": null,
+      "description_md": "Alongshore component of CalCOFI coordinate system for survey sites (https://proj.org/en/stable/operations/projections/calcofi.html)",
+      "data_type": "DOUBLE"
+    },
+    "site.station": {
+      "name_long": "Station",
+      "units": null,
+      "description_md": "Offshore component of CalCOFI coordinate system for survey sites (https://proj.org/en/stable/operations/projections/calcofi.html)",
+      "data_type": "DOUBLE"
+    },
+    "site._source_file": {
+      "name_long": " Source File",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "site._source_row": {
+      "name_long": " Source Row",
+      "units": null,
+      "description_md": "",
+      "data_type": "INTEGER"
+    },
+    "site._ingested_at": {
+      "name_long": " Ingested At",
+      "units": null,
+      "description_md": "",
+      "data_type": "TIMESTAMP"
+    },
+    "site._source_uuid": {
+      "name_long": " Source Uuid",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "site.cruise_key": {
+      "name_long": "Cruise Key",
+      "description_md": "Denormalized natural key (propagated from cruise via cruise_uuid) for convenience queries",
+      "data_type": "VARCHAR"
+    },
+    "site.geom": {
+      "name_long": "Geometry",
+      "description_md": "Point geometry (WGS84 EPSG:4326) created from longitude and latitude",
+      "data_type": "GEOMETRY"
+    },
+    "site.grid_key": {
+      "name_long": "Grid Key",
+      "description_md": "Foreign key to grid table (assigned via spatial intersection)",
+      "data_type": "VARCHAR"
+    },
+    "site.site_key": {
+      "name_long": "Site Key",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "species.species_id": {
+      "name_long": "Species Id",
+      "units": null,
+      "description_md": "CalCOFI species identifier",
+      "data_type": "SMALLINT"
+    },
+    "species.scientific_name": {
+      "name_long": "Scientific Name",
+      "units": null,
+      "description_md": "Scientific (Latin) name of the taxon",
+      "data_type": "VARCHAR"
+    },
+    "species.itis_id": {
+      "name_long": "ITIS ID",
+      "description_md": "ITIS Taxonomic Serial Number (TSN) for this species; derived via local spp.duckdb lookup",
+      "data_type": "INTEGER"
+    },
+    "species.worms_id": {
+      "name_long": "WoRMS ID",
+      "description_md": "WoRMS AphiaID (accepted) for this species; derived via local spp.duckdb lookup",
+      "data_type": "INTEGER"
+    },
+    "species.common_name": {
+      "name_long": "Common Name",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "species._source_file": {
+      "name_long": " Source File",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "species._source_row": {
+      "name_long": " Source Row",
+      "units": null,
+      "description_md": "",
+      "data_type": "INTEGER"
+    },
+    "species._ingested_at": {
+      "name_long": " Ingested At",
+      "units": null,
+      "description_md": "",
+      "data_type": "TIMESTAMP"
+    },
+    "species._source_uuid": {
+      "name_long": " Source Uuid",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "species.gbif_id": {
+      "name_long": "GBIF ID",
+      "description_md": "GBIF Backbone Taxonomy key for this species; derived via local spp.duckdb lookup",
+      "data_type": "INTEGER"
+    },
+    "taxa_rank.taxonRank": {
+      "name_long": "Taxon Rank",
+      "description_md": "Taxonomic rank name (e.g. Kingdom; Species). Primary key.",
+      "data_type": "VARCHAR"
+    },
+    "taxa_rank.rank_order": {
+      "name_long": "Rank Order",
+      "description_md": "Integer sort order from broadest (1=Kingdom) to most specific",
+      "data_type": "SMALLINT"
+    },
+    "taxon.authority": {
+      "name_long": "Authority",
+      "description_md": "Taxonomic authority source: 'WoRMS' or 'ITIS'",
+      "data_type": "VARCHAR"
+    },
+    "taxon.taxonID": {
+      "name_long": "Taxon ID",
+      "description_md": "Integer identifier within the authority (AphiaID for WoRMS; TSN for ITIS). Compound PK with authority.",
+      "data_type": "INTEGER"
+    },
+    "taxon.acceptedNameUsageID": {
+      "name_long": "Accepted Name Usage ID",
+      "description_md": "ID of the leaf (species-level) taxon this hierarchy row was built from",
+      "data_type": "INTEGER"
+    },
+    "taxon.parentNameUsageID": {
+      "name_long": "Parent Name Usage ID",
+      "description_md": "ID of the immediate parent taxon in the hierarchy",
+      "data_type": "INTEGER"
+    },
+    "taxon.scientificName": {
+      "name_long": "Scientific Name",
+      "description_md": "Scientific name at this taxonomic rank",
+      "data_type": "VARCHAR"
+    },
+    "taxon.taxonRank": {
+      "name_long": "Taxon Rank",
+      "description_md": "Taxonomic rank (e.g. Kingdom; Phylum; Class; Order; Family; Genus; Species). FK to taxa_rank.",
+      "data_type": "VARCHAR"
+    },
+    "taxon.taxonomicStatus": {
+      "name_long": "Taxonomic Status",
+      "description_md": "Taxonomic status (accepted)",
+      "data_type": "VARCHAR"
+    },
+    "taxon.scientificNameAuthorship": {
+      "name_long": "Scientific Name Authorship",
+      "description_md": "Authority string for the scientific name",
+      "data_type": "VARCHAR"
+    },
+    "tow.tow_uuid": {
+      "name_long": "Tow Uuid",
+      "units": null,
+      "description_md": "",
+      "data_type": "UUID"
+    },
+    "tow.site_uuid": {
+      "name_long": "Site Uuid",
+      "units": null,
+      "description_md": "",
+      "data_type": "UUID"
+    },
+    "tow.tow_type_key": {
+      "name_long": "Tow Type Key",
+      "units": null,
+      "description_md": "See tow_type.description",
+      "data_type": "VARCHAR"
+    },
+    "tow.tow_number": {
+      "name_long": "Tow Number",
+      "units": null,
+      "description_md": "",
+      "data_type": "SMALLINT"
+    },
+    "tow.time_start": {
+      "name_long": "Time Start",
+      "units": null,
+      "description_md": "",
+      "data_type": "TIMESTAMP"
+    },
+    "tow._source_file": {
+      "name_long": " Source File",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "tow._source_row": {
+      "name_long": " Source Row",
+      "units": null,
+      "description_md": "",
+      "data_type": "INTEGER"
+    },
+    "tow._ingested_at": {
+      "name_long": " Ingested At",
+      "units": null,
+      "description_md": "",
+      "data_type": "TIMESTAMP"
+    },
+    "tow._source_uuid": {
+      "name_long": " Source Uuid",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "bottle.cast_id": {
+      "name_long": "Cast Id",
+      "units": null,
+      "description_md": "Cast Count - All CalCOFI casts ever conducted, consecutively numbered",
+      "data_type": "INTEGER"
+    },
+    "bottle.bottle_id": {
+      "name_long": "Bottle Id",
+      "units": null,
+      "description_md": "Bottle Count - All CalCOFI bottles ever sampled, consecutively numbered",
+      "data_type": "INTEGER"
+    },
+    "bottle.site_key": {
+      "name_long": "Site Key",
+      "units": null,
+      "description_md": "Line and Station [Line] [Station]",
+      "data_type": "VARCHAR"
+    },
+    "bottle.depth_key": {
+      "name_long": "Depth Key",
+      "units": null,
+      "description_md": "Uses the Cast_ID prefix but adds three additional variables: [Depth][Bottle]-[Rec_Ind]",
+      "data_type": "VARCHAR"
+    },
+    "bottle.depth_m": {
+      "name_long": "Depth M",
+      "units": "meters",
+      "description_md": "Bottle depth in meters",
+      "data_type": "DOUBLE"
+    },
+    "bottle.btl_num": {
+      "name_long": "Btl Num",
+      "units": null,
+      "description_md": "Niskin bottle sample was collected from",
+      "data_type": "SMALLINT"
+    },
+    "bottle.rec_ind": {
+      "name_long": "Rec Ind",
+      "units": null,
+      "description_md": "Record Indicator (quality code that applies to the whole bottle, instead of just to a specific parameter)",
+      "data_type": "VARCHAR"
+    },
+    "bottle.depth_qual": {
+      "name_long": "Depth Quality",
+      "description_md": "pressure/depth quality code (renamed from p_qual)",
+      "data_type": "DOUBLE"
+    },
+    "bottle.inc_tim": {
+      "name_long": "Inc Tim",
+      "units": null,
+      "description_md": "Elapsed incubation time of the primary productivity experiment",
+      "data_type": "VARCHAR"
+    },
+    "bottle._source_file": {
+      "name_long": " Source File",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "bottle._source_row": {
+      "name_long": " Source Row",
+      "units": null,
+      "description_md": "",
+      "data_type": "INTEGER"
+    },
+    "bottle._ingested_at": {
+      "name_long": " Ingested At",
+      "units": null,
+      "description_md": "",
+      "data_type": "TIMESTAMP"
+    },
+    "bottle._source_uuid": {
+      "name_long": " Source Uuid",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "bottle_measurement.bottle_measurement_id": {
+      "name_long": "Bottle Measurement ID",
+      "description_md": "PK: auto-increment integer assigned via ROW_NUMBER(ORDER BY bottle_id, measurement_type)",
+      "data_type": "BIGINT"
+    },
+    "bottle_measurement.bottle_id": {
+      "name_long": "Bottle ID",
+      "description_md": "FK to bottle.bottle_id",
+      "data_type": "DOUBLE"
+    },
+    "bottle_measurement.measurement_type": {
+      "name_long": "Measurement Type",
+      "description_md": "measurement type key (FK to measurement_type.measurement_type)",
+      "data_type": "VARCHAR"
+    },
+    "bottle_measurement.measurement_value": {
+      "name_long": "Measurement Value",
+      "description_md": "numeric measurement value",
+      "data_type": "DOUBLE"
+    },
+    "bottle_measurement.measurement_prec": {
+      "name_long": "Measurement Precision",
+      "description_md": "replicate precision (nullable)",
+      "data_type": "DOUBLE"
+    },
+    "bottle_measurement.measurement_qual": {
+      "name_long": "Measurement Quality",
+      "description_md": "quality code (nullable)",
+      "data_type": "VARCHAR"
+    },
+    "cast_condition.cast_condition_id": {
+      "name_long": "Cast Condition ID",
+      "description_md": "PK: auto-increment integer assigned via ROW_NUMBER(ORDER BY cast_id, condition_type)",
+      "data_type": "BIGINT"
+    },
+    "cast_condition.cast_id": {
+      "name_long": "Cast ID",
+      "description_md": "FK to casts.cast_id",
+      "data_type": "DOUBLE"
+    },
+    "cast_condition.condition_type": {
+      "name_long": "Condition Type",
+      "description_md": "condition type key (FK to measurement_type.measurement_type)",
+      "data_type": "VARCHAR"
+    },
+    "cast_condition.condition_value": {
+      "name_long": "Condition Value",
+      "description_md": "numeric condition value",
+      "data_type": "DOUBLE"
+    },
+    "casts.cast_id": {
+      "name_long": "Cast Id",
+      "units": null,
+      "description_md": "Cast Count - All CalCOFI casts ever conducted, consecutively numbered",
+      "data_type": "INTEGER"
+    },
+    "casts.cruise_key_0": {
+      "name_long": "Cruise Key 0",
+      "units": null,
+      "description_md": "Cruise identifier [Year]-[Month]-[Day]-C-[Ship Code]"
+    },
+    "casts.cast_key": {
+      "name_long": "Cast Key",
+      "units": null,
+      "description_md": "Cast Identifier [Century] - [YY][MM][ShipCode] - [CastType][Julian Day] - [CastTime]-[Line][Sta]",
+      "data_type": "VARCHAR"
+    },
+    "casts.site_key": {
+      "name_long": "Site Key",
+      "units": null,
+      "description_md": "Line and Station",
+      "data_type": "VARCHAR"
+    },
+    "casts.sta_code": {
+      "name_long": "Sta Code",
+      "units": null,
+      "description_md": "Station Designation (See Station_ID and 0-St_Code for codes)",
+      "data_type": "VARCHAR"
+    },
+    "casts.distance": {
+      "name_long": "Distance",
+      "units": "nautical miles",
+      "description_md": "Nautical miles from coast intercept, calculated from estimated latitude and longitude",
+      "data_type": "DOUBLE"
+    },
+    "casts.lat_dec": {
+      "name_long": "Lat Dec",
+      "units": "decimal degrees",
+      "description_md": "Observed Latitude in decimal degrees",
+      "data_type": "DOUBLE"
+    },
+    "casts.lon_dec": {
+      "name_long": "Lon Dec",
+      "units": "decimal degrees",
+      "description_md": "Observed Longitude in decimal degrees",
+      "data_type": "DOUBLE"
+    },
+    "casts.rpt_line": {
+      "name_long": "Rpt Line",
+      "units": null,
+      "description_md": "Reported Line Number",
+      "data_type": "DOUBLE"
+    },
+    "casts.st_line": {
+      "name_long": "St Line",
+      "units": null,
+      "description_md": "Nearest Standard Line",
+      "data_type": "DOUBLE"
+    },
+    "casts.ac_line": {
+      "name_long": "Ac Line",
+      "units": null,
+      "description_md": "Calculated actual line from observed latitude and longitude",
+      "data_type": "DOUBLE"
+    },
+    "casts.rpt_sta": {
+      "name_long": "Rpt Sta",
+      "units": null,
+      "description_md": "Reported Station Number",
+      "data_type": "DOUBLE"
+    },
+    "casts.st_station": {
+      "name_long": "St Station",
+      "units": null,
+      "description_md": "Nearest Standard Station Number",
+      "data_type": "DOUBLE"
+    },
+    "casts.ac_sta": {
+      "name_long": "Ac Sta",
+      "units": null,
+      "description_md": "Calculated actual station from observed lat and long",
+      "data_type": "DOUBLE"
+    },
+    "casts.bottom_depth_m": {
+      "name_long": "Bottom Depth M",
+      "units": "meters",
+      "description_md": "Bottom depth in meters",
+      "data_type": "DOUBLE"
+    },
+    "casts.ship_name": {
+      "name_long": "Ship Name",
+      "units": null,
+      "description_md": "Ship's Name",
+      "data_type": "VARCHAR"
+    },
+    "casts.ship_code": {
+      "name_long": "Ship Code",
+      "units": null,
+      "description_md": "Ship's NODC Code",
+      "data_type": "VARCHAR"
+    },
+    "casts.data_type": {
+      "name_long": "Data Type",
+      "units": null,
+      "description_md": "Data Type",
+      "data_type": "VARCHAR"
+    },
+    "casts.order_occ": {
+      "name_long": "Order Occ",
+      "units": null,
+      "description_md": "Order station was occupied (within each cruise)",
+      "data_type": "SMALLINT"
+    },
+    "casts.event_num": {
+      "name_long": "Event Num",
+      "units": null,
+      "description_md": "Event number; includes all research operations within each cruise (e.g. nets, CTD)",
+      "data_type": "SMALLINT"
+    },
+    "casts.cruz_leg": {
+      "name_long": "Cruz Leg",
+      "units": null,
+      "description_md": "Leg of cruise, if multiple legs",
+      "data_type": "VARCHAR"
+    },
+    "casts.orig_sta_id": {
+      "name_long": "Orig Sta Id",
+      "units": null,
+      "description_md": "IEH Reported Station ID",
+      "data_type": "VARCHAR"
+    },
+    "casts.data_or": {
+      "name_long": "Data Or",
+      "units": null,
+      "description_md": "Data Origin",
+      "data_type": "VARCHAR"
+    },
+    "casts.int_chl": {
+      "name_long": "Int Chl",
+      "units": "milligrams chl per square meter per half light day",
+      "description_md": "Integrated Chlorophyll per half light day",
+      "data_type": "DOUBLE"
+    },
+    "casts.int_c14": {
+      "name_long": "Int C14",
+      "units": "milligrams C per square meter per half light day",
+      "description_md": "Integrated Primary Productivity per half light day",
+      "data_type": "DOUBLE"
+    },
+    "casts.inc_str": {
+      "name_long": "Inc Str",
+      "units": null,
+      "description_md": "Incubation Start Time (PST)",
+      "data_type": "VARCHAR"
+    },
+    "casts.inc_end": {
+      "name_long": "Inc End",
+      "units": null,
+      "description_md": "Incubation End Time (PST)",
+      "data_type": "VARCHAR"
+    },
+    "casts.pst_lan": {
+      "name_long": "Pst Lan",
+      "units": null,
+      "description_md": "Time of Local Apparent Noon (PST)",
+      "data_type": "VARCHAR"
+    },
+    "casts.civil_t": {
+      "name_long": "Civil T",
+      "units": null,
+      "description_md": "Time of Civil Twilight (PST)",
+      "data_type": "VARCHAR"
+    },
+    "casts._source_file": {
+      "name_long": " Source File",
+      "units": null,
+      "description_md": ""
+    },
+    "casts._source_row": {
+      "name_long": " Source Row",
+      "units": null,
+      "description_md": ""
+    },
+    "casts._ingested_at": {
+      "name_long": " Ingested At",
+      "units": null,
+      "description_md": ""
+    },
+    "casts._source_uuid": {
+      "name_long": " Source Uuid",
+      "units": null,
+      "description_md": ""
+    },
+    "casts.datetime_utc": {
+      "name_long": "Datetime UTC",
+      "description_md": "UTC timestamp consolidated from date + time columns",
+      "data_type": "TIMESTAMP"
+    },
+    "casts.geom": {
+      "name_long": "Geometry",
+      "description_md": "point geometry (WGS84) from lat_dec and lon_dec",
+      "data_type": "GEOMETRY"
+    },
+    "casts.grid_key": {
+      "name_long": "Grid Key",
+      "description_md": "CalCOFI grid cell identifier from spatial join",
+      "data_type": "VARCHAR"
+    },
+    "measurement_type.measurement_type": {
+      "name_long": "Measurement Type",
+      "description_md": "PK: measurement type code",
+      "data_type": "VARCHAR"
+    },
+    "measurement_type.description": {
+      "name_long": "Description",
+      "description_md": "human-readable description",
+      "data_type": "VARCHAR"
+    },
+    "measurement_type.units": {
+      "name_long": "Units",
+      "description_md": "measurement units",
+      "data_type": "VARCHAR"
+    },
+    "measurement_type.is_canonical": {
+      "name_long": "Is Canonical",
+      "description_md": "TRUE for canonical measurement types kept in ctd_thin and ctd_summary",
+      "data_type": "BOOLEAN"
+    },
+    "measurement_type._source_column": {
+      "name_long": "Source Column",
+      "description_md": "original column name in wide-format CTD CSV",
+      "data_type": "VARCHAR"
+    },
+    "measurement_type._source_table": {
+      "name_long": "Source Table",
+      "description_md": "provenance: wide-format DuckDB table the measurement was pivoted from",
+      "data_type": "VARCHAR"
+    },
+    "measurement_type._source_datasets": {
+      "name_long": "Source Datasets",
+      "description_md": "provenance: semicolon-delimited list of datasets that produce this measurement type",
+      "data_type": "VARCHAR"
+    },
+    "measurement_type._qual_column": {
+      "name_long": "Quality Column",
+      "description_md": "provenance: quality flag column name in source wide-format table (blank if none)",
+      "data_type": "VARCHAR"
+    },
+    "measurement_type._prec_column": {
+      "name_long": "Precision Column",
+      "description_md": "provenance: precision column name in source wide-format table (blank if none)",
+      "data_type": "VARCHAR"
+    },
+    "measurement_type.provider": {
+      "name_long": "Provider",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "measurement_type.dataset": {
+      "name_long": "Dataset",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "ctd_cast.ctd_cast_uuid": {
+      "name_long": "CTD Cast UUID",
+      "description_md": "PK: deterministic UUID v5 from (cruise_key, cast_key, cast_dir, datetime_utc)",
+      "data_type": "VARCHAR"
+    },
+    "ctd_cast.data_stage": {
+      "name_long": "Data Stage",
+      "description_md": "data processing stage: final or preliminary",
+      "data_type": "VARCHAR"
+    },
+    "ctd_cast.cast_dir": {
+      "name_long": "Cast Direction",
+      "description_md": "cast direction: D=downcast (start time and start lat/lon) or U=upcast (time and lat/lon at first bottle tripped)",
+      "data_type": "VARCHAR"
+    },
+    "ctd_cast.ord_occ": {
+      "name_long": "Order Occupied",
+      "description_md": "order in which the station was occupied during the cruise (CalCOFI Ord_Occ)",
+      "data_type": "VARCHAR"
+    },
+    "ctd_cast.event_num": {
+      "name_long": "Event Number",
+      "description_md": "CTD-at-Depth event number from source CSV",
+      "data_type": "DOUBLE"
+    },
+    "ctd_cast.cast_key": {
+      "name_long": "Cast Key",
+      "description_md": "cast identifier from source CSV (Cast_ID); composed of Study + Ord_Occ + up/downcast code",
+      "data_type": "VARCHAR"
+    },
+    "ctd_cast.datetime_utc": {
+      "name_long": "Datetime UTC",
+      "description_md": "UTC timestamp parsed from date_time_utc string",
+      "data_type": "TIMESTAMP"
+    },
+    "ctd_cast.lat_dec": {
+      "name_long": "Latitude",
+      "units": "decimal degrees",
+      "description_md": "GPS decimal latitude; downcast = start latitude, upcast = latitude at first bottle tripped (CalCOFI Lat_Dec)",
+      "data_type": "DOUBLE"
+    },
+    "ctd_cast.lon_dec": {
+      "name_long": "Longitude",
+      "units": "decimal degrees",
+      "description_md": "GPS decimal longitude; downcast = start longitude, upcast = longitude at first bottle tripped (CalCOFI Lon_Dec)",
+      "data_type": "DOUBLE"
+    },
+    "ctd_cast.site_key": {
+      "name_long": "Site Key",
+      "description_md": "CalCOFI Line and Station composite key in the form \"LLL.L SSS.S\" (renamed from Sta_ID)",
+      "data_type": "VARCHAR"
+    },
+    "ctd_cast.line": {
+      "name_long": "Line",
+      "description_md": "CalCOFI Line in LLL.L format (e.g. 80.0)",
+      "data_type": "VARCHAR"
+    },
+    "ctd_cast.sta": {
+      "name_long": "Station",
+      "description_md": "CalCOFI Station in SSS.S format (e.g. 60.0)",
+      "data_type": "VARCHAR"
+    },
+    "ctd_cast.ship_key": {
+      "name_long": "Ship Key",
+      "description_md": "2-char ship code derived from RIGHT(cruise_key, 2)",
+      "data_type": "VARCHAR"
+    },
+    "ctd_cast.cruise_key": {
+      "name_long": "Cruise Key",
+      "description_md": "cruise identifier in YYMMKK format; last 2 chars encode ship",
+      "data_type": "VARCHAR"
+    },
+    "ctd_cast.geom": {
+      "name_long": "Geometry",
+      "description_md": "point geometry (WGS84) from lat_dec and lon_dec",
+      "data_type": "GEOMETRY"
+    },
+    "ctd_cast.grid_key": {
+      "name_long": "Grid Key",
+      "description_md": "CalCOFI grid cell identifier from spatial join",
+      "data_type": "VARCHAR"
+    },
+    "ctd_measurement.ctd_measurement_uuid": {
+      "name_long": "CTD Measurement UUID",
+      "description_md": "PK: deterministic UUID v5 from (ctd_cast_uuid, depth_m, measurement_type)"
+    },
+    "ctd_measurement.ctd_cast_uuid": {
+      "name_long": "CTD Cast UUID",
+      "description_md": "FK to ctd_cast.ctd_cast_uuid"
+    },
+    "ctd_measurement.depth_m": {
+      "name_long": "Depth",
+      "units": "m",
+      "description_md": "depth in meters"
+    },
+    "ctd_measurement.measurement_type": {
+      "name_long": "Measurement Type",
+      "description_md": "measurement type key (FK to measurement_type.measurement_type)"
+    },
+    "ctd_measurement.measurement_value": {
+      "name_long": "Measurement Value",
+      "description_md": "numeric measurement value"
+    },
+    "ctd_measurement.measurement_qual": {
+      "name_long": "Measurement Quality",
+      "description_md": "quality code (nullable)"
+    },
+    "ctd_measurement.cruise_key": {
+      "name_long": "Cruise Key",
+      "description_md": "cruise identifier in YYYY-MM-NODC format; hive partition key"
+    },
+    "ctd_summary.ctd_summary_uuid": {
+      "name_long": "CTD Summary UUID",
+      "description_md": "PK: deterministic UUID v5 from (cruise_key, site_key, depth_m, measurement_type)",
+      "data_type": "VARCHAR"
+    },
+    "ctd_summary.cruise_key": {
+      "name_long": "Cruise Key",
+      "description_md": "cruise identifier in YYMMKK format",
+      "data_type": "VARCHAR"
+    },
+    "ctd_summary.site_key": {
+      "name_long": "Station Key",
+      "description_md": "line and station identifier",
+      "data_type": "VARCHAR"
+    },
+    "ctd_summary.depth_m": {
+      "name_long": "Depth",
+      "units": "m",
+      "description_md": "depth in meters",
+      "data_type": "DOUBLE"
+    },
+    "ctd_summary.measurement_type": {
+      "name_long": "Measurement Type",
+      "description_md": "measurement type key",
+      "data_type": "VARCHAR"
+    },
+    "ctd_summary.avg": {
+      "name_long": "Average",
+      "description_md": "mean measurement value across cast directions",
+      "data_type": "DOUBLE"
+    },
+    "ctd_summary.stddev": {
+      "name_long": "Standard Deviation",
+      "description_md": "standard deviation (0 when n_obs=1)",
+      "data_type": "DOUBLE"
+    },
+    "ctd_summary.n_obs": {
+      "name_long": "Observation Count",
+      "description_md": "number of observations aggregated",
+      "data_type": "BIGINT"
+    },
+    "ctd_thin.ctd_thin_uuid": {
+      "name_long": "CTD Thin UUID",
+      "description_md": "PK: deterministic UUID v5 from (ctd_cast_uuid, depth_m, measurement_type)",
+      "data_type": "VARCHAR"
+    },
+    "ctd_thin.ctd_cast_uuid": {
+      "name_long": "CTD Cast UUID",
+      "description_md": "FK to ctd_cast.ctd_cast_uuid",
+      "data_type": "VARCHAR"
+    },
+    "ctd_thin.depth_m": {
+      "name_long": "Depth",
+      "units": "m",
+      "description_md": "depth in meters (retained depths only)",
+      "data_type": "DOUBLE"
+    },
+    "ctd_thin.measurement_type": {
+      "name_long": "Measurement Type",
+      "description_md": "measurement type key; canonical types only (FK to measurement_type.measurement_type where is_canonical)",
+      "data_type": "VARCHAR"
+    },
+    "ctd_thin.measurement_value": {
+      "name_long": "Measurement Value",
+      "description_md": "numeric measurement value (exact copy from ctd_measurement; thinning selects rows, never interpolates)",
+      "data_type": "DOUBLE"
+    },
+    "ctd_thin.measurement_qual": {
+      "name_long": "Measurement Quality",
+      "description_md": "quality code (nullable)",
+      "data_type": "VARCHAR"
+    },
+    "ctd_thin.cast_dir": {
+      "name_long": "Cast Direction",
+      "description_md": "single retained direction per physical cast: D (downcast, preferred) or U (upcast, fallback)",
+      "data_type": "VARCHAR"
+    },
+    "ctd_thin.retained_reason": {
+      "name_long": "Retained Reason",
+      "description_md": "why this depth was kept: grid (on the ~10 m grid) or inflection (RDP-retained between grid nodes)",
+      "data_type": "VARCHAR"
+    },
+    "ctd_thin.cruise_key": {
+      "name_long": "Cruise Key",
+      "description_md": "cruise identifier; hive partition key",
+      "data_type": "VARCHAR"
+    },
+    "ctd_wide.data_stage": {
+      "name_long": "Data Stage",
+      "description_md": "data processing stage: final or preliminary"
+    },
+    "ctd_wide.cast_dir": {
+      "name_long": "Cast Direction",
+      "description_md": "cast direction: D=downcast (start time, start lat/lon) or U=upcast (time, lat/lon at first bottle tripped)"
+    },
+    "ctd_wide.cast_key": {
+      "name_long": "Cast Key",
+      "description_md": "cast identifier (CalCOFI Cast_ID = Study+Ord_Occ+up/downcast code)"
+    },
+    "ctd_wide.datetime_utc": {
+      "name_long": "Datetime UTC",
+      "description_md": "date/time UTC; downcast=start time, upcast=time at first bottle tripped"
+    },
+    "ctd_wide.lat_dec": {
+      "name_long": "Latitude",
+      "units": "decimal degrees",
+      "description_md": "GPS decimal latitude; downcast=start lat, upcast=lat at first bottle tripped"
+    },
+    "ctd_wide.lon_dec": {
+      "name_long": "Longitude",
+      "units": "decimal degrees",
+      "description_md": "GPS decimal longitude; downcast=start lon, upcast=lon at first bottle tripped"
+    },
+    "ctd_wide.site_key": {
+      "name_long": "Site Key",
+      "description_md": "CalCOFI Line and Station composite key \"LLL.L SSS.S\" (renamed from Sta_ID)"
+    },
+    "ctd_wide.depth_m": {
+      "name_long": "Depth",
+      "units": "m",
+      "description_md": "1 m bin-averaged depth"
+    },
+    "ctd_wide.pressure": {
+      "name_long": "Pressure",
+      "units": "dbar",
+      "description_md": "1 m bin-averaged pressure"
+    },
+    "ctd_wide.pr_q": {
+      "name_long": "Pressure Quality",
+      "description_md": "pressure sensor data quality code (PrQ): 0/blank=good, 8=questionable, 9=bad"
+    },
+    "ctd_wide.temp1": {
+      "name_long": "Temperature 1°",
+      "units": "degC",
+      "description_md": "primary CTD temperature sensor (Temp1)"
+    },
+    "ctd_wide.temp1q": {
+      "name_long": "Temperature 1° Quality",
+      "description_md": "primary temperature data quality code (T1Q)"
+    },
+    "ctd_wide.temp2": {
+      "name_long": "Temperature 2°",
+      "units": "degC",
+      "description_md": "secondary CTD temperature sensor (Temp2)"
+    },
+    "ctd_wide.temp2q": {
+      "name_long": "Temperature 2° Quality",
+      "description_md": "secondary temperature data quality code (T2Q)"
+    },
+    "ctd_wide.temp_ave": {
+      "name_long": "Temperature Average",
+      "units": "degC",
+      "description_md": "average temperature (Temp1+Temp2)/2"
+    },
+    "ctd_wide.salt1": {
+      "name_long": "Salinity 1°",
+      "units": "PSU",
+      "description_md": "primary CTD salinity (PSS-78)"
+    },
+    "ctd_wide.salt1q": {
+      "name_long": "Salinity 1° Quality",
+      "description_md": "primary salinity data quality code"
+    },
+    "ctd_wide.salt1_corr": {
+      "name_long": "Salinity 1° Bottle-corrected",
+      "units": "PSU",
+      "description_md": "primary salinity corrected against deep (>350 m) bottle salinities"
+    },
+    "ctd_wide.salt2": {
+      "name_long": "Salinity 2°",
+      "units": "PSU",
+      "description_md": "secondary CTD salinity (PSS-78)"
+    },
+    "ctd_wide.salt2q": {
+      "name_long": "Salinity 2° Quality",
+      "description_md": "secondary salinity data quality code"
+    },
+    "ctd_wide.salt2_corr": {
+      "name_long": "Salinity 2° Bottle-corrected",
+      "units": "PSU",
+      "description_md": "secondary salinity corrected against deep bottle salinities"
+    },
+    "ctd_wide.salt_ave_corr": {
+      "name_long": "Salinity Average Corrected",
+      "units": "PSU",
+      "description_md": "average corrected salinity (Salt1_Corr+Salt2_Corr)/2"
+    },
+    "ctd_wide.ox1": {
+      "name_long": "Oxygen 1°",
+      "units": "mL/L",
+      "description_md": "primary CTD oxygen sensor"
+    },
+    "ctd_wide.ox1q": {
+      "name_long": "Oxygen 1° Quality",
+      "description_md": "primary oxygen data quality code"
+    },
+    "ctd_wide.ox1_cruise_corr": {
+      "name_long": "Oxygen 1° Cruise-corrected",
+      "units": "mL/L",
+      "description_md": "primary oxygen corrected using cruise-average regression vs bottle samples"
+    },
+    "ctd_wide.ox1_sta_corr": {
+      "name_long": "Oxygen 1° Station-corrected",
+      "units": "mL/L",
+      "description_md": "primary oxygen corrected using station-average regression vs bottle samples"
+    },
+    "ctd_wide.ox2": {
+      "name_long": "Oxygen 2°",
+      "units": "mL/L",
+      "description_md": "secondary CTD oxygen sensor"
+    },
+    "ctd_wide.ox2q": {
+      "name_long": "Oxygen 2° Quality",
+      "description_md": "secondary oxygen data quality code"
+    },
+    "ctd_wide.ox2_cruise_corr": {
+      "name_long": "Oxygen 2° Cruise-corrected",
+      "units": "mL/L",
+      "description_md": "secondary oxygen corrected using cruise-average regression"
+    },
+    "ctd_wide.ox2_sta_corr": {
+      "name_long": "Oxygen 2° Station-corrected",
+      "units": "mL/L",
+      "description_md": "secondary oxygen corrected using station-average regression"
+    },
+    "ctd_wide.ox_ave_sta_corr": {
+      "name_long": "Oxygen Average Station-corrected",
+      "units": "mL/L",
+      "description_md": "average station-corrected oxygen (Ox1_StaCorr+Ox2_StaCorr)/2"
+    },
+    "ctd_wide.ox1u_m": {
+      "name_long": "Oxygen 1°",
+      "units": "umol/kg",
+      "description_md": "primary CTD oxygen in micromoles per kilogram"
+    },
+    "ctd_wide.ox1u_m_cruise_corr": {
+      "name_long": "Oxygen 1° Cruise-corrected",
+      "units": "umol/kg",
+      "description_md": "primary oxygen cruise-corrected in umol/kg"
+    },
+    "ctd_wide.ox1u_m_sta_corr": {
+      "name_long": "Oxygen 1° Station-corrected",
+      "units": "umol/kg",
+      "description_md": "primary oxygen station-corrected in umol/kg"
+    },
+    "ctd_wide.ox2u_m": {
+      "name_long": "Oxygen 2°",
+      "units": "umol/kg",
+      "description_md": "secondary CTD oxygen in umol/kg"
+    },
+    "ctd_wide.ox2u_m_cruise_corr": {
+      "name_long": "Oxygen 2° Cruise-corrected",
+      "units": "umol/kg",
+      "description_md": "secondary oxygen cruise-corrected in umol/kg"
+    },
+    "ctd_wide.ox2u_m_sta_corr": {
+      "name_long": "Oxygen 2° Station-corrected",
+      "units": "umol/kg",
+      "description_md": "secondary oxygen station-corrected in umol/kg"
+    },
+    "ctd_wide.ox_aveu_m_sta_corr": {
+      "name_long": "Oxygen Average Station-corrected",
+      "units": "umol/kg",
+      "description_md": "average station-corrected oxygen in umol/kg"
+    },
+    "ctd_wide.fluor_v": {
+      "name_long": "Fluorometer Voltage",
+      "units": "V",
+      "description_md": "fluorometer voltage"
+    },
+    "ctd_wide.fluor_q": {
+      "name_long": "Fluorometer Quality",
+      "description_md": "fluorometer data quality code (FlQ)"
+    },
+    "ctd_wide.est_chl_cruise_corr": {
+      "name_long": "Estimated Chlorophyll Cruise-corrected",
+      "units": "mg/m^3",
+      "description_md": "estimated chlorophyll from cruise-corrected fluorometer regression (0-200 m)"
+    },
+    "ctd_wide.est_chl_sta_corr": {
+      "name_long": "Estimated Chlorophyll Station-corrected",
+      "units": "mg/m^3",
+      "description_md": "estimated chlorophyll from station-corrected fluorometer regression (0-200 m)"
+    },
+    "ctd_wide.isusv": {
+      "name_long": "ISUS Voltage",
+      "units": "V",
+      "description_md": "ISUS nitrate sensor voltage"
+    },
+    "ctd_wide.isusq": {
+      "name_long": "ISUS Quality",
+      "description_md": "ISUS data quality code (IsQ)"
+    },
+    "ctd_wide.est_no3_cruise_corr": {
+      "name_long": "Estimated Nitrate Cruise-corrected",
+      "units": "uM",
+      "description_md": "estimated nitrate from cruise-corrected ISUS regression vs bottle samples"
+    },
+    "ctd_wide.est_no3_sta_corr": {
+      "name_long": "Estimated Nitrate Station-corrected",
+      "units": "uM",
+      "description_md": "estimated nitrate from station-corrected ISUS regression (~20 bottle samples per cast)"
+    },
+    "ctd_wide.sig_theta_ts1": {
+      "name_long": "Sigma-theta T1S1",
+      "units": "kg/m^3",
+      "description_md": "potential density anomaly computed from Temp1 and Salt1"
+    },
+    "ctd_wide.sig_theta_ts1q": {
+      "name_long": "Sigma-theta T1S1 Quality",
+      "description_md": "sigma-theta T1S1 quality code"
+    },
+    "ctd_wide.sig_theta_ts2": {
+      "name_long": "Sigma-theta T2S2",
+      "units": "kg/m^3",
+      "description_md": "potential density anomaly computed from Temp2 and Salt2"
+    },
+    "ctd_wide.sig_theta_ts2q": {
+      "name_long": "Sigma-theta T2S2 Quality",
+      "description_md": "sigma-theta T2S2 quality code"
+    },
+    "ctd_wide.bat": {
+      "name_long": "Beam Attenuation",
+      "units": "1/m",
+      "description_md": "beam attenuation coefficient from transmissometer"
+    },
+    "ctd_wide.x_miss": {
+      "name_long": "Light Transmission",
+      "units": "%",
+      "description_md": "percent light transmission from transmissometer"
+    },
+    "ctd_wide.trans_q": {
+      "name_long": "Transmissometer Quality",
+      "description_md": "transmissometer data quality code"
+    },
+    "ctd_wide.p_h": {
+      "name_long": "pH",
+      "description_md": "pH from CTD pH sensor"
+    },
+    "ctd_wide.p_hq": {
+      "name_long": "pH Quality",
+      "description_md": "pH sensor data quality code"
+    },
+    "ctd_wide.spar": {
+      "name_long": "Surface PAR",
+      "units": "uE/m^2/s",
+      "description_md": "surface photosynthetically active radiation"
+    },
+    "ctd_wide.sparq": {
+      "name_long": "Surface PAR Quality",
+      "description_md": "surface PAR data quality code"
+    },
+    "ctd_wide.par": {
+      "name_long": "Remote PAR",
+      "units": "uE/m^2/s",
+      "description_md": "in-water (remote) photosynthetically active radiation"
+    },
+    "ctd_wide.parq": {
+      "name_long": "Remote PAR Quality",
+      "description_md": "remote PAR data quality code"
+    },
+    "ctd_wide.po_t1": {
+      "name_long": "Potential Temperature 1°",
+      "units": "degC",
+      "description_md": "potential temperature from Temp1"
+    },
+    "ctd_wide.po_t2": {
+      "name_long": "Potential Temperature 2°",
+      "units": "degC",
+      "description_md": "potential temperature from Temp2"
+    },
+    "ctd_wide.dyn_ht": {
+      "name_long": "Dynamic Height",
+      "units": "dynamic meters",
+      "description_md": "dynamic height anomaly"
+    },
+    "ctd_wide.sva": {
+      "name_long": "Specific Volume Anomaly",
+      "units": "1e-8 m^3/kg",
+      "description_md": "specific volume anomaly"
+    },
+    "ctd_wide.ox_sat1": {
+      "name_long": "Oxygen Saturation 1°",
+      "units": "%",
+      "description_md": "oxygen saturation computed from primary sensor"
+    },
+    "ctd_wide.ox_sat2": {
+      "name_long": "Oxygen Saturation 2°",
+      "units": "%",
+      "description_md": "oxygen saturation computed from secondary sensor"
+    },
+    "ctd_wide.btl_depth": {
+      "name_long": "Bottle Depth",
+      "units": "m",
+      "description_md": "depth at which Niskin bottle was tripped"
+    },
+    "ctd_wide.btl_temp": {
+      "name_long": "Bottle Temperature",
+      "units": "degC",
+      "description_md": "bottle-measured temperature (usually Temp1)"
+    },
+    "ctd_wide.salt_b": {
+      "name_long": "Bottle Salinity",
+      "units": "PSU",
+      "description_md": "bottle-measured salinity"
+    },
+    "ctd_wide.ox_b": {
+      "name_long": "Bottle Oxygen",
+      "units": "mL/L",
+      "description_md": "bottle-measured dissolved oxygen"
+    },
+    "ctd_wide.ox_bu_m": {
+      "name_long": "Bottle Oxygen",
+      "units": "umol/kg",
+      "description_md": "bottle-measured dissolved oxygen in umol/kg"
+    },
+    "ctd_wide.chl_a": {
+      "name_long": "Bottle Chlorophyll",
+      "units": "mg/m^3",
+      "description_md": "bottle-measured chlorophyll-a"
+    },
+    "ctd_wide.phaeo": {
+      "name_long": "Bottle Phaeopigments",
+      "units": "mg/m^3",
+      "description_md": "bottle-measured phaeopigments"
+    },
+    "ctd_wide.no3": {
+      "name_long": "Bottle Nitrate",
+      "units": "uM",
+      "description_md": "bottle-measured nitrate"
+    },
+    "ctd_wide.no2": {
+      "name_long": "Bottle Nitrite",
+      "units": "uM",
+      "description_md": "bottle-measured nitrite"
+    },
+    "ctd_wide.nh4": {
+      "name_long": "Bottle Ammonium",
+      "units": "uM",
+      "description_md": "bottle-measured ammonium"
+    },
+    "ctd_wide.po4": {
+      "name_long": "Bottle Phosphate",
+      "units": "uM",
+      "description_md": "bottle-measured phosphate"
+    },
+    "ctd_wide.sil": {
+      "name_long": "Bottle Silicate",
+      "units": "uM",
+      "description_md": "bottle-measured silicate"
+    },
+    "ctd_wide.ship_key": {
+      "name_long": "Ship Key",
+      "description_md": "2-char NODC ship code derived from cruise_key"
+    },
+    "ctd_wide.cruise_key": {
+      "name_long": "Cruise Key",
+      "description_md": "cruise identifier YYYY-MM-NODC"
+    },
+    "dic_measurement.dic_measurement_id": {
+      "name_long": "Dic Measurement Id",
+      "units": null,
+      "description_md": "",
+      "data_type": "BIGINT"
+    },
+    "dic_measurement.expocode": {
+      "name_long": "Expocode",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "dic_measurement.site_key": {
+      "name_long": "Site Key",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "dic_measurement.datetime_utc": {
+      "name_long": "Datetime Utc",
+      "units": null,
+      "description_md": "",
+      "data_type": "TIMESTAMP"
+    },
+    "dic_measurement.depth_m": {
+      "name_long": "Depth M",
+      "units": null,
+      "description_md": "",
+      "data_type": "DOUBLE"
+    },
+    "dic_measurement.latitude": {
+      "name_long": "Latitude",
+      "units": null,
+      "description_md": "",
+      "data_type": "DOUBLE"
+    },
+    "dic_measurement.longitude": {
+      "name_long": "Longitude",
+      "units": null,
+      "description_md": "",
+      "data_type": "DOUBLE"
+    },
+    "dic_measurement.cast_id": {
+      "name_long": "Cast Id",
+      "units": null,
+      "description_md": "",
+      "data_type": "INTEGER"
+    },
+    "dic_measurement.bottle_id": {
+      "name_long": "Bottle Id",
+      "units": null,
+      "description_md": "",
+      "data_type": "INTEGER"
+    },
+    "dic_measurement.measurement_type": {
+      "name_long": "Measurement Type",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "dic_measurement.measurement_value": {
+      "name_long": "Measurement Value",
+      "units": null,
+      "description_md": "",
+      "data_type": "DOUBLE"
+    },
+    "dic_measurement.measurement_qual": {
+      "name_long": "Measurement Qual",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "dic_sample.expocode": {
+      "name_long": "Expocode",
+      "units": null,
+      "description_md": "WOCE expedition code (ship+date)",
+      "data_type": "VARCHAR"
+    },
+    "dic_sample.ship_name": {
+      "name_long": "Ship Name",
+      "units": null,
+      "description_md": "Ship name",
+      "data_type": "VARCHAR"
+    },
+    "dic_sample.datetime_utc": {
+      "name_long": "Datetime Utc",
+      "units": null,
+      "description_md": "",
+      "data_type": "TIMESTAMP"
+    },
+    "dic_sample.site_key": {
+      "name_long": "Site Key",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "dic_sample.latitude": {
+      "name_long": "Latitude",
+      "units": "decimal degrees",
+      "description_md": "Latitude of station",
+      "data_type": "DOUBLE"
+    },
+    "dic_sample.longitude": {
+      "name_long": "Longitude",
+      "units": "decimal degrees",
+      "description_md": "Longitude of station",
+      "data_type": "DOUBLE"
+    },
+    "dic_sample.depth_m": {
+      "name_long": "Depth M",
+      "units": "m",
+      "description_md": "Sampling depth",
+      "data_type": "DOUBLE"
+    },
+    "dic_sample.cast_id": {
+      "name_long": "Cast Id",
+      "units": null,
+      "description_md": "",
+      "data_type": "INTEGER"
+    },
+    "dic_sample.bottle_id": {
+      "name_long": "Bottle Id",
+      "units": null,
+      "description_md": "",
+      "data_type": "INTEGER"
+    },
+    "dic_sample.geom": {
+      "name_long": "Geom",
+      "units": null,
+      "description_md": "",
+      "data_type": "GEOMETRY('OGC:CRS84')"
+    },
+    "dic_summary.site_key": {
+      "name_long": "Site Key",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "dic_summary.datetime_utc": {
+      "name_long": "Datetime Utc",
+      "units": null,
+      "description_md": "",
+      "data_type": "TIMESTAMP"
+    },
+    "dic_summary.depth_m": {
+      "name_long": "Depth M",
+      "units": null,
+      "description_md": "",
+      "data_type": "DOUBLE"
+    },
+    "dic_summary.latitude": {
+      "name_long": "Latitude",
+      "units": null,
+      "description_md": "",
+      "data_type": "DOUBLE"
+    },
+    "dic_summary.longitude": {
+      "name_long": "Longitude",
+      "units": null,
+      "description_md": "",
+      "data_type": "DOUBLE"
+    },
+    "dic_summary.measurement_type": {
+      "name_long": "Measurement Type",
+      "units": null,
+      "description_md": "",
+      "data_type": "VARCHAR"
+    },
+    "dic_summary.avg": {
+      "name_long": "Avg",
+      "units": null,
+      "description_md": "",
+      "data_type": "DOUBLE"
+    },
+    "dic_summary.stddev": {
+      "name_long": "Stddev",
+      "units": null,
+      "description_md": "",
+      "data_type": "DOUBLE"
+    },
+    "dic_summary.n_obs": {
+      "name_long": "N Obs",
+      "units": null,
+      "description_md": "",
+      "data_type": "BIGINT"
+    },
+    "dic_summary.cast_id": {
+      "name_long": "Cast Id",
+      "units": null,
+      "description_md": "",
+      "data_type": "INTEGER"
+    },
+    "dic_summary.bottle_id": {
+      "name_long": "Bottle Id",
+      "units": null,
+      "description_md": "",
+      "data_type": "INTEGER"
+    },
+    "cruise_summary.cruise_key": {
+      "name_long": "Cruise Key",
+      "units": null,
+      "description_md": "Natural key YYYY-MM-NODC (e.g. 1998-02-33JD).",
+      "data_type": "VARCHAR"
+    },
+    "cruise_summary.year": {
+      "name_long": "Year",
+      "units": null,
+      "description_md": "Cruise year extracted from date_ym.",
+      "data_type": "INTEGER"
+    },
+    "cruise_summary.month": {
+      "name_long": "Month",
+      "units": null,
+      "description_md": "Cruise month extracted from date_ym.",
+      "data_type": "INTEGER"
+    },
+    "cruise_summary.ship_name": {
+      "name_long": "Ship Name",
+      "units": null,
+      "description_md": "Ship name as resolved against NODC ship registry.",
+      "data_type": "VARCHAR"
+    },
+    "cruise_summary.ship_nodc": {
+      "name_long": "Ship NODC",
+      "units": null,
+      "description_md": "NODC ship code.",
+      "data_type": "VARCHAR"
+    },
+    "cruise_summary.ichthyo": {
+      "name_long": "Ichthyo Sites",
+      "units": "count",
+      "description_md": "Distinct sites sampled by SWFSC ichthyo on this cruise.",
+      "data_type": "BIGINT"
+    },
+    "cruise_summary.bottle": {
+      "name_long": "Bottle Sites",
+      "units": "count",
+      "description_md": "Distinct sites sampled by CalCOFI bottle casts on this cruise.",
+      "data_type": "BIGINT"
+    },
+    "cruise_summary.ctd_cast": {
+      "name_long": "CTD Sites",
+      "units": "count",
+      "description_md": "Distinct sites sampled by CTD casts on this cruise.",
+      "data_type": "BIGINT"
+    },
+    "cruise_summary.dic": {
+      "name_long": "DIC Sites",
+      "units": "count",
+      "description_md": "Distinct sites with NCEI DIC samples on this cruise.",
+      "data_type": "BIGINT"
+    },
+    "_spatial.layer": {
+      "name_long": "Layer",
+      "units": null,
+      "description_md": "Spatial layer slug from metadata/spatial_layers.csv (e.g. ca_county_boundaries).",
+      "data_type": "VARCHAR"
+    },
+    "_spatial.feature_id": {
+      "name_long": "Feature ID",
+      "units": null,
+      "description_md": "Stable feature identifier within the layer."
+    },
+    "_spatial.geom": {
+      "name_long": "Geometry",
+      "units": null,
+      "description_md": "Feature geometry in WGS84 (EPSG:4326).",
+      "data_type": "GEOMETRY"
+    },
+    "_spatial_attr.layer": {
+      "name_long": "Layer",
+      "units": null,
+      "description_md": "Spatial layer slug matching _spatial.layer.",
+      "data_type": "VARCHAR"
+    },
+    "_spatial_attr.feature_id": {
+      "name_long": "Feature ID",
+      "units": null,
+      "description_md": "Feature identifier matching _spatial.feature_id."
+    },
+    "_spatial_attr.attr_name": {
+      "name_long": "Attribute Name",
+      "units": null,
+      "description_md": "Source-attribute column name."
+    },
+    "_spatial_attr.attr_value": {
+      "name_long": "Attribute Value",
+      "units": null,
+      "description_md": "Source-attribute value cast to text."
+    },
+    "casts.ship_key": {
+      "data_type": "VARCHAR"
+    },
+    "casts.cruise_key": {
+      "data_type": "VARCHAR"
+    },
+    "_spatial.id": {
+      "data_type": "INTEGER"
+    },
+    "_spatial.name": {
+      "data_type": "VARCHAR"
+    },
+    "_spatial_attr.id": {
+      "data_type": "INTEGER"
+    },
+    "_spatial_attr.fld": {
+      "data_type": "VARCHAR"
+    },
+    "_spatial_attr.val_dbl": {
+      "data_type": "DOUBLE"
+    },
+    "_spatial_attr.val_int": {
+      "data_type": "INTEGER"
+    },
+    "_spatial_attr.val_chr": {
+      "data_type": "VARCHAR"
+    },
+    "_spatial_attr.val_date": {
+      "data_type": "DATE"
+    },
+    "_spatial_attr.val_lgl": {
+      "data_type": "BOOLEAN"
+    }
+  },
+  "measurement_types": {
+    "temperature": {
+      "description": "Water temperature (QC'd)",
+      "units": "degC",
+      "is_canonical": true
+    },
+    "salinity": {
+      "description": "Salinity - Practical Salinity Scale 1978 (QC'd)",
+      "units": "PSS-78",
+      "is_canonical": true
+    },
+    "oxygen_ml_l": {
+      "description": "Dissolved oxygen (QC'd)",
+      "units": "ml/L",
+      "is_canonical": true
+    },
+    "sigma_theta": {
+      "description": "Potential density (Sigma Theta)",
+      "units": "kg/m3",
+      "is_canonical": true
+    },
+    "oxygen_saturation": {
+      "description": "Oxygen percent saturation",
+      "units": "%",
+      "is_canonical": true
+    },
+    "oxygen_umol_kg": {
+      "description": "Dissolved oxygen (QC'd)",
+      "units": "umol/kg",
+      "is_canonical": true
+    },
+    "chlorophyll_a": {
+      "description": "Chlorophyll-a measured fluorometrically",
+      "units": "ug/L",
+      "is_canonical": true
+    },
+    "phaeopigment": {
+      "description": "Phaeopigment measured fluorometrically",
+      "units": "ug/L",
+      "is_canonical": true
+    },
+    "phosphate": {
+      "description": "Phosphate concentration",
+      "units": "umol/L",
+      "is_canonical": true
+    },
+    "silicate": {
+      "description": "Silicate concentration",
+      "units": "umol/L",
+      "is_canonical": true
+    },
+    "nitrite": {
+      "description": "Nitrite concentration",
+      "units": "umol/L",
+      "is_canonical": true
+    },
+    "nitrate": {
+      "description": "Nitrate concentration",
+      "units": "umol/L",
+      "is_canonical": true
+    },
+    "ammonia": {
+      "description": "Ammonia concentration (QC'd)",
+      "units": "umol/L",
+      "is_canonical": true
+    },
+    "c14_rep1": {
+      "description": "14C assimilation replicate 1",
+      "units": "mgC/m3/hld",
+      "is_canonical": true
+    },
+    "c14_rep2": {
+      "description": "14C assimilation replicate 2",
+      "units": "mgC/m3/hld",
+      "is_canonical": true
+    },
+    "c14_dark": {
+      "description": "14C assimilation dark/control bottle",
+      "units": "mgC/m3/hld",
+      "is_canonical": true
+    },
+    "c14_mean": {
+      "description": "Mean 14C assimilation of replicates 1 and 2",
+      "units": "mgC/m3/hld",
+      "is_canonical": true
+    },
+    "light_pct": {
+      "description": "Light intensity of incubation tubes",
+      "units": "%",
+      "is_canonical": true
+    },
+    "r_depth": {
+      "description": "Reported depth from pressure (pre-QC)",
+      "units": "m",
+      "is_canonical": true
+    },
+    "r_temperature": {
+      "description": "Reported potential temperature (pre-QC)",
+      "units": "degC",
+      "is_canonical": true
+    },
+    "r_salinity_sva": {
+      "description": "Reported Specific Volume Anomaly (pre-QC); WARNING: different parameter/scale than salinity PSS-78",
+      "units": "10^-8 m3/kg",
+      "is_canonical": true
+    },
+    "r_dynamic_height": {
+      "description": "Reported dynamic height (no QC'd counterpart)",
+      "units": "dyn m",
+      "is_canonical": true
+    },
+    "r_ammonium": {
+      "description": "Reported ammonium concentration (pre-QC)",
+      "units": "umol/L",
+      "is_canonical": true
+    },
+    "r_oxygen_umol_kg": {
+      "description": "Reported oxygen (pre-QC)",
+      "units": "umol/kg",
+      "is_canonical": true
+    },
+    "dic_rep1": {
+      "description": "Dissolved inorganic carbon replicate 1",
+      "units": "umol/kg",
+      "is_canonical": true
+    },
+    "dic_rep2": {
+      "description": "Dissolved inorganic carbon replicate 2",
+      "units": "umol/kg",
+      "is_canonical": true
+    },
+    "alkalinity_rep1": {
+      "description": "Total alkalinity replicate 1",
+      "units": "umol/kg",
+      "is_canonical": true
+    },
+    "alkalinity_rep2": {
+      "description": "Total alkalinity replicate 2",
+      "units": "umol/kg",
+      "is_canonical": true
+    },
+    "ph_rep1": {
+      "description": "pH replicate 1",
+      "units": "pH",
+      "is_canonical": true
+    },
+    "ph_rep2": {
+      "description": "pH replicate 2",
+      "units": "pH",
+      "is_canonical": true
+    },
+    "wave_direction": {
+      "description": "Wave direction (abbreviated 360 degree azimuth)",
+      "units": "degrees",
+      "is_canonical": true
+    },
+    "wave_height": {
+      "description": "Wave height",
+      "units": "feet",
+      "is_canonical": true
+    },
+    "wave_period": {
+      "description": "Wave period",
+      "units": "seconds",
+      "is_canonical": true
+    },
+    "wind_direction": {
+      "description": "Wind direction (abbreviated 360 degree azimuth)",
+      "units": "degrees",
+      "is_canonical": true
+    },
+    "wind_speed": {
+      "description": "Wind speed",
+      "units": "knots",
+      "is_canonical": true
+    },
+    "barometric_pressure": {
+      "description": "Barometric pressure",
+      "units": "millibars",
+      "is_canonical": true
+    },
+    "dry_air_temp": {
+      "description": "Dry air temperature from sling psychrometer",
+      "units": "degC",
+      "is_canonical": true
+    },
+    "wet_air_temp": {
+      "description": "Wet air temperature from sling psychrometer",
+      "units": "degC",
+      "is_canonical": true
+    },
+    "weather_code": {
+      "description": "WMO weather code (WMO 4501)",
+      "units": null,
+      "is_canonical": true
+    },
+    "cloud_type": {
+      "description": "WMO cloud type code (WMO 0500)",
+      "units": null,
+      "is_canonical": true
+    },
+    "cloud_amount": {
+      "description": "Cloud amount in oktas (WMO 2700)",
+      "units": "oktas",
+      "is_canonical": true
+    },
+    "visibility": {
+      "description": "WMO visibility code (WMO 4300)",
+      "units": null,
+      "is_canonical": true
+    },
+    "secchi_depth": {
+      "description": "Secchi disk depth",
+      "units": "meters",
+      "is_canonical": true
+    },
+    "water_color": {
+      "description": "Water color on Forel-Ule scale",
+      "units": "Forel-Ule",
+      "is_canonical": true
+    },
+    "stage": {
+      "description": "Egg or larva developmental stage",
+      "units": null,
+      "is_canonical": true
+    },
+    "size": {
+      "description": "Larva size measurement",
+      "units": "mm",
+      "is_canonical": true
+    },
+    "tally": {
+      "description": "Specimen count",
+      "units": null,
+      "is_canonical": true
+    },
+    "temperature_1": {
+      "description": "Temperature sensor 1",
+      "units": "degC",
+      "is_canonical": false
+    },
+    "temperature_2": {
+      "description": "Temperature sensor 2",
+      "units": "degC",
+      "is_canonical": false
+    },
+    "temperature_ave": {
+      "description": "Average temperature",
+      "units": "degC",
+      "is_canonical": true
+    },
+    "potential_temperature_1": {
+      "description": "Potential temperature sensor 1",
+      "units": "degC",
+      "is_canonical": false
+    },
+    "potential_temperature_2": {
+      "description": "Potential temperature sensor 2",
+      "units": "degC",
+      "is_canonical": false
+    },
+    "salinity_1": {
+      "description": "Salinity sensor 1",
+      "units": "PSU",
+      "is_canonical": false
+    },
+    "salinity_1_corr": {
+      "description": "Salinity sensor 1 cruise-corrected",
+      "units": "PSU",
+      "is_canonical": false
+    },
+    "salinity_2": {
+      "description": "Salinity sensor 2",
+      "units": "PSU",
+      "is_canonical": false
+    },
+    "salinity_2_corr": {
+      "description": "Salinity sensor 2 cruise-corrected",
+      "units": "PSU",
+      "is_canonical": false
+    },
+    "salinity_ave_corr": {
+      "description": "Average salinity corrected",
+      "units": "PSU",
+      "is_canonical": true
+    },
+    "salinity_btl": {
+      "description": "Bottle salinity",
+      "units": "PSU",
+      "is_canonical": false
+    },
+    "oxygen_ml_l_1": {
+      "description": "Dissolved oxygen sensor 1",
+      "units": "ml/L",
+      "is_canonical": false
+    },
+    "oxygen_ml_l_1_cruise_corr": {
+      "description": "DO sensor 1 cruise-corrected",
+      "units": "ml/L",
+      "is_canonical": false
+    },
+    "oxygen_ml_l_1_sta_corr": {
+      "description": "DO sensor 1 station-corrected",
+      "units": "ml/L",
+      "is_canonical": false
+    },
+    "oxygen_ml_l_2": {
+      "description": "Dissolved oxygen sensor 2",
+      "units": "ml/L",
+      "is_canonical": false
+    },
+    "oxygen_ml_l_2_cruise_corr": {
+      "description": "DO sensor 2 cruise-corrected",
+      "units": "ml/L",
+      "is_canonical": false
+    },
+    "oxygen_ml_l_2_sta_corr": {
+      "description": "DO sensor 2 station-corrected",
+      "units": "ml/L",
+      "is_canonical": false
+    },
+    "oxygen_ml_l_ave_sta_corr": {
+      "description": "DO average station-corrected",
+      "units": "ml/L",
+      "is_canonical": true
+    },
+    "oxygen_umol_kg_1": {
+      "description": "DO sensor 1",
+      "units": "umol/kg",
+      "is_canonical": false
+    },
+    "oxygen_umol_kg_1_cruise_corr": {
+      "description": "DO sensor 1 cruise-corrected",
+      "units": "umol/kg",
+      "is_canonical": false
+    },
+    "oxygen_umol_kg_1_sta_corr": {
+      "description": "DO sensor 1 station-corrected",
+      "units": "umol/kg",
+      "is_canonical": false
+    },
+    "oxygen_umol_kg_2": {
+      "description": "DO sensor 2",
+      "units": "umol/kg",
+      "is_canonical": false
+    },
+    "oxygen_umol_kg_2_cruise_corr": {
+      "description": "DO sensor 2 cruise-corrected",
+      "units": "umol/kg",
+      "is_canonical": false
+    },
+    "oxygen_umol_kg_2_sta_corr": {
+      "description": "DO sensor 2 station-corrected",
+      "units": "umol/kg",
+      "is_canonical": false
+    },
+    "oxygen_umol_kg_ave_sta_corr": {
+      "description": "DO average station-corrected",
+      "units": "umol/kg",
+      "is_canonical": true
+    },
+    "oxygen_saturation_1": {
+      "description": "Oxygen saturation sensor 1",
+      "units": "%",
+      "is_canonical": false
+    },
+    "oxygen_saturation_2": {
+      "description": "Oxygen saturation sensor 2",
+      "units": "%",
+      "is_canonical": false
+    },
+    "oxygen_btl_ml_l": {
+      "description": "Bottle dissolved oxygen",
+      "units": "ml/L",
+      "is_canonical": false
+    },
+    "oxygen_btl_umol_kg": {
+      "description": "Bottle dissolved oxygen",
+      "units": "umol/kg",
+      "is_canonical": false
+    },
+    "fluorescence_v": {
+      "description": "Fluorescence voltage",
+      "units": "V",
+      "is_canonical": true
+    },
+    "est_chlorophyll_a_cruise_corr": {
+      "description": "Est. chlorophyll-a cruise-corrected",
+      "units": "ug/L",
+      "is_canonical": false
+    },
+    "est_chlorophyll_a_sta_corr": {
+      "description": "Est. chlorophyll-a station-corrected",
+      "units": "ug/L",
+      "is_canonical": false
+    },
+    "isus_v": {
+      "description": "ISUS nitrate voltage",
+      "units": "V",
+      "is_canonical": true
+    },
+    "est_nitrate_cruise_corr": {
+      "description": "Est. nitrate cruise-corrected",
+      "units": "umol/L",
+      "is_canonical": false
+    },
+    "est_nitrate_sta_corr": {
+      "description": "Est. nitrate station-corrected",
+      "units": "umol/L",
+      "is_canonical": false
+    },
+    "sigma_theta_1": {
+      "description": "Potential density sensor 1",
+      "units": "kg/m3",
+      "is_canonical": true
+    },
+    "sigma_theta_2": {
+      "description": "Potential density sensor 2",
+      "units": "kg/m3",
+      "is_canonical": false
+    },
+    "dynamic_height": {
+      "description": "Dynamic height",
+      "units": "dyn m",
+      "is_canonical": true
+    },
+    "specific_volume_anomaly": {
+      "description": "Specific volume anomaly",
+      "units": "10^-8 m3/kg",
+      "is_canonical": true
+    },
+    "par": {
+      "description": "Photosynthetically active radiation",
+      "units": "uE/m2/s",
+      "is_canonical": true
+    },
+    "spar": {
+      "description": "Surface PAR",
+      "units": "uE/m2/s",
+      "is_canonical": true
+    },
+    "beam_attenuation": {
+      "description": "Beam attenuation coefficient",
+      "units": "1/m",
+      "is_canonical": true
+    },
+    "transmissometer": {
+      "description": "Light transmissometer",
+      "units": "%",
+      "is_canonical": true
+    },
+    "ph": {
+      "description": "pH",
+      "units": "pH",
+      "is_canonical": true
+    },
+    "btl_depth": {
+      "description": "Bottle trip depth",
+      "units": "m",
+      "is_canonical": false
+    },
+    "btl_temperature": {
+      "description": "Bottle temperature",
+      "units": "degC",
+      "is_canonical": false
+    },
+    "btl_chlorophyll_a": {
+      "description": "Bottle chlorophyll-a",
+      "units": "ug/L",
+      "is_canonical": false
+    },
+    "btl_phaeopigment": {
+      "description": "Bottle phaeopigment",
+      "units": "ug/L",
+      "is_canonical": false
+    },
+    "btl_nitrate": {
+      "description": "Bottle nitrate",
+      "units": "umol/L",
+      "is_canonical": false
+    },
+    "btl_nitrite": {
+      "description": "Bottle nitrite",
+      "units": "umol/L",
+      "is_canonical": false
+    },
+    "btl_ammonium": {
+      "description": "Bottle ammonium",
+      "units": "umol/L",
+      "is_canonical": false
+    },
+    "btl_phosphate": {
+      "description": "Bottle phosphate",
+      "units": "umol/L",
+      "is_canonical": false
+    },
+    "btl_silicate": {
+      "description": "Bottle silicate",
+      "units": "umol/L",
+      "is_canonical": false
+    },
+    "pressure": {
+      "description": "Pressure",
+      "units": "dbar",
+      "is_canonical": true
+    },
+    "dic": {
+      "description": "Dissolved inorganic carbon",
+      "units": "umol/kg",
+      "is_canonical": true
+    },
+    "alkalinity": {
+      "description": "Total alkalinity",
+      "units": "umol/kg",
+      "is_canonical": true
+    },
+    "ctdtemp_its90": {
+      "description": "CTD temperature (ITS-90 scale)",
+      "units": "degC",
+      "is_canonical": true
+    },
+    "salinity_pss78": {
+      "description": "Practical salinity (PSS-78)",
+      "units": "PSS-78",
+      "is_canonical": true
+    }
+  }
+}
