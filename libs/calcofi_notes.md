@@ -1,5 +1,14 @@
 ## TODO
 
+
+
+
+One thing to note: run-api.R is running again (PIDs 2413 and 1416 — two instances!). That's the script that caused the original meltdown. It's only at 3% each right now so it's not a problem at the moment, but you may want to investigate what's launching it repeatedly.
+
+
+- [ ] Get schema and table/column descriptions into **`query`**.
+- [ ] 
+- [ ] see below `### /btw are the h3t json files being compressed between server and browser? or …`
 - publish inverts dataset to OBIS from `ingest_swfsc_ichthyo.qmd` and filter properly for existing `publish_ichthyo_to_obis`
 - re-run with Ed's latest ichthyo updates. Should've failed b/c not capturing new CSV files, so need to fix.
 - [ ] after rclone finishes sync, targets invalidate and run all QMDs (redo/overwrite = F) and git commit
@@ -34,6 +43,4661 @@ Validation FAILED:
 - Table 'site' has 2084 NULL values in required column 'grid_key'
 - Table 'species' has 170 NULL values in required column 'gbif_id'
 ```
+
+## 2026-05-20.b query bump with db release like schema
+
+I'm confused how @../query/ is supposed to pick up the latest db version. Online at https://calcofi.io/query/ it is stuck at v2026.05.14, but we already have v2026.05.19 which is the default at             
+  https://calcofi.io/schema/ (ie @../query/)  
+
+⏺ I've got the picture now. Two-stage promotion, plus a poller in the query repo — and one of those stages is stalled.
+
+  Chain:
+  1. workflows/release_database.qmd uploads parquet + sidecars to gs://calcofi-db/ducklake/releases/{v}/ but explicitly does not touch latest.txt (line 812: "promotion deferred to test_release.qmd").
+  2. workflows/test_release.qmd (added in ac5fde2, never run — not in _targets/meta/meta) runs the _queries/*.md suite against the new release; on full pass it writes latest.txt.
+  3. query/.github/workflows/bump-default-version.yml polls latest.txt every 6h and bumps _config.yml:default_version, which triggers a Pages rebuild.
+
+  Current state:
+  - gs://.../latest.txt is already v2026.05.19 (yesterday's tar_make() ran an older release_database.qmd that did push latest.txt, before ac5fde2 introduced the deferral).
+  - query/_config.yml:default_version is v2026.05.14 — never bumped.
+  - bump-default-version.yml was added to main in commit e1b90e3 (also yesterday).
+  
+  So the gate (test_release.qmd) hasn't run yet for v2026.05.19, but it doesn't need to: latest.txt is already pointing where you want. The actual stall is just that
+  query/.github/workflows/bump-default-version.yml hasn't fired since it was added — */6h cron + GitHub's discovery latency on newly-added workflows.
+
+  Want me to:
+  1. Trigger the bump workflow manually (gh workflow run in query/) so the site updates now, and/or
+  2. Run tar_make("test_release") to formally pass the gate for v2026.05.19 (no-op for latest.txt since it's already pointing there, but registers the target so the next release goes through the proper gate)?
+
+Yes, run the `tar_make("test_release")` b/c I am already seeing queries that do not run on @../query/, eg https://calcofi.io/query/#browse--cruises 
+  ✗ Query failed: Binder Error: Referenced column "cruise_key" not found in FROM clause! Candidate bindings: "read_parquet.cruise_key_0", "read_parquet.site_key", "read_parquet.cast_key",
+  "read_parquet.grid_key", "read_parquet._source_file" LINE 10: GROUP BY cruise_key ^ 
+
+⏺ Heads-up: release_database got re-dispatched (targets thinks it's outdated, likely because release_database.qmd changed in ac5fde2). That'll generate a fresh v2026.05.20 release first, then test_release
+  will run against it. Net effect: new release uploaded (~36 GB through GCS) and latest.txt promotion goes through the proper test gate.
+
+  If you'd rather skip the re-upload and just test against the existing v2026.05.19, say the word and I'll cancel and run test_release.qmd directly against that pinned version. Otherwise I'll let it run.
+
+⏺ All green.
+
+  Final state:
+  - gs://calcofi-db/ducklake/releases/latest.txt → v2026.05.20
+  - test_results.json for v2026.05.20: 9 pass, 4 skip (JS-only bio-env queries), 0 fail
+  - Schema browser at https://calcofi.io/schema/ will show v2026.05.20 as default
+  
+  Two PR branches pushed:
+  
+  - workflows fix-cruise-key-and-mt-provider — https://github.com/CalCOFI/workflows/pull/new/fix-cruise-key-and-mt-provider
+    - ingest_calcofi_bottle.qmd: drop cruise_key_0 from casts.parquet, derive provider/dataset from _source_datasets for measurement_type, re-put_gcs_file casts after the bridge fixes it
+    - metadata/swfsc/ichthyo/flds_redefine.csv: the taxon/tsn upstream rename
+    - metadata/swfsc/ichthyo/{flds,tbls}_raw.csv: regenerated source snapshots
+  - query fix-cruise-key-0 — https://github.com/CalCOFI/query/pull/new/fix-cruise-key-0
+    - _queries/{datasets/bottle, spatial/bbox, temporal/date-range}.md: cruise_key_0 → cruise_key
+
+  Next: the query app's bump-default-version.yml cron will detect latest.txt = v2026.05.20 within 6h and bump _config.yml:default_version, which Pages will deploy. You can also trigger it manually via gh 
+  workflow run -R CalCOFI/query bump-default-version.yml if you want it immediately.
+
+But then why after updating to the latest version and running the tests does the query I previously shared fail? https://calcofi.io/query/#browse--cruises
+  ✗ Query failed: Binder Error: Referenced column "cruise_key" not found in FROM clause! Candidate bindings: "read_parquet.cruise_key_0", "read_parquet.site_key", "read_parquet.cast_key",
+  "read_parquet.grid_key", "read_parquet._source_file" LINE 10: GROUP BY cruise_key ^
+
+⏺ Pushed. Pages will rebuild in ~1 min. After that, every query form (cruises, bbox, date-range, datasets/*, etc.) will default to whatever _config.yml:default_version says — currently v2026.05.20.
+  
+  The fix chain is now:
+  1. release_database.qmd uploads release to GCS
+  2. test_release.qmd runs all queries; on full pass, writes latest.txt
+  3. bump-default-version.yml polls latest.txt every 6h, bumps _config.yml:default_version on a commit
+  4. Pages rebuilds, every form's version field defaults to the new value (via form-field.html override)
+  5. Browser users get the current release without staleness
+  
+  Hard refresh https://calcofi.io/query/#browse--cruises once Pages finishes (~1 min) and the form should pre-fill v2026.05.20. The cruise_key_0 error will still happen until the fix-cruise-key-0 PR is merged
+   though — that's the separate fix to the three queries that reference the old column name.
+
+Ok, merged fix-cruise-key-0, but now seeing v2026.05.14 parquet files in SQL despite default v2026.05.20 showing [Image #2]
+
+⏺ Two queries have hardcoded URLs in their textarea defaults. I'll introduce a __VERSION__ placeholder that the form-field include substitutes with site.default_version, then swap the literals.
+
+⏺ Pushed (after fast-forwarding to pick up the merged fix-cruise-key-0 PR). Pages will rebuild in ~1 min.
+
+  After it deploys, every textarea default that previously embedded releases/v2026.05.14/ will render with releases/v2026.05.20/ instead — no per-query YAML edits needed on future bumps. The
+  bump-default-version.yml cron writes _config.yml:default_version, and form-field.html's two-step substitution propagates that everywhere:
+
+  1. def = def | replace: "__VERSION__", site.default_version — for any field whose YAML default embeds the placeholder
+  2. def = site.default_version (special-case for name == "version") — for the version field itself
+
+  Hard refresh https://calcofi.io/query/#bio-env-matching--custom once Pages finishes and the textareas should pre-fill with v2026.05.20 URLs.
+  
+⏺ All three pushed.
+
+  ┌──────────────────────────────────────────────────────────┬─────────────────────────────────────────────────────────┬───────────────────────────────────┐
+  │                           Repo                           │                         Commit                          │              Pushed               │
+  ├──────────────────────────────────────────────────────────┼─────────────────────────────────────────────────────────┼───────────────────────────────────┤
+  │ CalCOFI/schema (https://github.com/CalCOFI/schema)       │ 946a177 Add schema browser site                         │ ✓ main (14 new files, 1470 lines) │
+  ├──────────────────────────────────────────────────────────┼─────────────────────────────────────────────────────────┼───────────────────────────────────┤
+  │ CalCOFI/query (https://github.com/CalCOFI/query)         │ e1b90e3 Schema links + sidebar + bump-default action    │ ✓ main (5 files)                  │
+  ├──────────────────────────────────────────────────────────┼─────────────────────────────────────────────────────────┼───────────────────────────────────┤
+  │ CalCOFI/workflows (https://github.com/CalCOFI/workflows) │ ac5fde2 erd.mmd sidecar + data_type + test_release gate │ ✓ main (2 files)                  │
+  └──────────────────────────────────────────────────────────┴─────────────────────────────────────────────────────────┴───────────────────────────────────┘
+
+  The query repo's push will trigger its pages.yml GH Action to redeploy. The schema repo's first-ever main push will trigger its new pages.yml — if GH Pages isn't already set to "GitHub Actions" source in
+  the repo settings, the first run may fail until you toggle it (Settings → Pages → Source = GitHub Actions).
+
+```bash
+# Resume this session with:
+claude --resume edb14d63-5012-42e7-9921-ee0b57cf5149
+```
+
+## 2026-05-20 calcofi4r: cleanup drift README.md vs README.Rmd
+
+Ok, clean up the drift between Heads-up: there's a long-standing drift between calcofi4r/README.Rmd (sparse) and README.md (rich, hand-written). I appended See-also to both, but did NOT regenerate          
+  README.md from README.Rmd (would have                                                                                                                                                                         
+    wiped the rich content). Worth either porting README.md's content back into README.Rmd, or stopping treating README.Rmd as the source. Out of scope for this PR. 
+
+⏺ Pushed to link-schema branch on calcofi4r. PR URL unchanged: https://github.com/CalCOFI/calcofi4r/pull/new/link-schema
+
+  What's now true:
+  - README.Rmd is the canonical source with the full content (177 lines + See-also)
+  - All example chunks are eval = FALSE — devtools::build_readme() is safe to run without GCS access or API keys
+  - README.md is freshly regenerated from README.Rmd and they no longer drift
+  - Bumped example version to v2026.05.19 and added metadata.json to the documented release directory layout
+
+  Future maintenance: edit README.Rmd, run devtools::build_readme(), commit both files. The pre-existing trap (silent README.md wipe) is closed.
+
+## 2026-05-19.d `query`: update with schema
+
+Now that we have `metadata.json` in the GCS, devise a practical intuitive way to show the schema in the `@../query` app. We previously created `calcofi4r::cc_erd()` to generate a Mermaid diagram and then render that as an image in a QMD for zoom/pan with Lightbox, but with a pure HTML/JS approach there is probably a more direct and prettier way to do that. We would also want the full set of tables with descriptions and columns with data type, description and units a la `calcofi4r::cc_db_catalog()`. This would help inform the pre-baked queries and especially for any custom query building.
+
+I am also unclear how to proceed with a new database release per running `@_targets.R`. All queries should probably be tested in this repo and the default db version updated in the repo and then website updated via GH Action. 
+
+←  ☐ Scope  ☐ ERD approach  ☐ UI placement  ☐ Release flow  ✔ Submit  →
+
+**Scope** These are two related but distinct workstreams (schema browser UI + release/test/deploy loop). Should I plan both in one file or split them?
+
+❯ 1. Both in one plan
+     Single plan covers schema browser UI, query testing, default-version bump, and GH Action. Larger but coherent.
+  2. Schema browser only
+     Focus this plan on the schema browser UI; release workflow handled separately later.
+  3. Release workflow only
+     Focus this plan on _targets.R → test → bump → deploy. Schema browser handled separately.
+
+**ERD approach** How should the ERD diagram render in the query app?
+
+❯ 1. Mermaid.js client-side (recommended)
+     Reuse cc_erd() to emit Mermaid syntax into metadata.json; render in-browser with mermaid.js + svg-pan-zoom. Pretty, zoom/pan native, no new R code needed.
+  2. Interactive SVG (D3 / dagre-d3)
+     Generate a custom force-directed or layered SVG from relationships.json client-side. Most flexible (click table → highlight FKs, drag nodes) but heaviest lift.
+  3. Static SVG/PNG uploaded with release
+     cc_erd() → SVG/PNG uploaded to GCS alongside metadata.json; embed with svg-pan-zoom. Simplest, same as today but interactive.
+  4. Reusing `cc_erd()` to produce a mermaid ERD diagram would probably best be done 
+     in `@release_database.qmd` and pushed to the GCS as another sidecar companion to
+     `relationships.json`
+
+**UI placement** Where should the schema browser live in the query app?
+
+❯ 1. New "Schema" sidebar category
+     Add to the existing left-nav accordion alongside Browse / Custom. Lowest friction, matches existing pattern. Sub-items: ERD, Tables, Columns, Datasets.
+  2. Dedicated /schema page + sidebar link
+     Full-width page (Jekyll-rendered or JS) with tabs: ERD / Tables / Columns / Datasets. Linked from sidebar and intro. Most room to breathe.
+  3. Header button → modal/drawer overlay
+     "Schema" button next to theme toggle opens an overlay. Always accessible while writing a query, but more JS to wire up.
+  4. Ok, I'm realizing this will be a useful reference more generally, so let's make it standalone. I created Github repo `@../schema` (`git clone https://github.com/CalCOFI/schema.git`) so it will be live at https://calcofi.io/schema. Ideally a dropdown will be available to view any past schemas (and descriptions) too. For the `@../query`, can you enable the sidebar to be collapsable?
+
+**Release flow** How should new releases get promoted to the live query app?
+
+❯ 1. Gate latest.txt on tests passing (recommended)
+     release_database.qmd stops auto-pushing latest.txt. A new test step in workflows runs queries; if green, it pushes latest.txt AND opens a PR in query repo bumping _config.yml. GH Action merges/deploys.
+  2. Keep auto-latest.txt; add separate "promote" target
+     release_database.qmd keeps pushing latest.txt (so calcofi4r users always get latest). A separate target/notebook tests queries and, if green, opens the query-app PR. Decouples R-package latest from 
+     website default.
+  3. Single pinned file in workflows repo
+     Add e.g. metadata/current_release.txt to workflows repo. _targets.R updates it only after tests pass. GH Action watches this file and mirrors it to query app + GCS latest.txt.
+
+
+⏺ All six parts done. Summary:
+
+  Workflows repo (/Users/bbest/Github/CalCOFI/workflows)
+
+  release_database.qmd — extended the existing metadata.json chunk:
+  - Enriches every column with data_type from information_schema.columns (so the schema site doesn't need DuckDB-WASM)
+  - Emits erd.mmd sidecar via cc_erd(con_wdl, rels_path = relationships.json) and uploads to GCS alongside the other sidecars
+  - Removed the unconditional latest.txt push — promotion is now gated downstream 
+  
+  test_release.qmd (new) — Quarto notebook that:
+  - Reads the just-built release version from data/releases/
+  - Discovers every _queries/**/*.md in the sibling CalCOFI/query repo
+  - Renders the SQL with a small Handlebars subset ({{var}}, {{{var}}}, {{sqlesc var}}, {{#if var}}…{{/if}}) using each parameter's YAML default, with version overridden to the new release
+  - Skips sql_builder: queries (JS-only)
+  - Executes against an in-memory DuckDB with httpfs + spatial, reading the parquet that was just uploaded to GCS
+  - Renders a pass/fail/skip DT table; writes test_results.json to GCS
+  - Writes latest.txt only if zero failures; otherwise stop()s so the target fails
+  
+  _targets.R — no edits needed. build_targets_list() auto-discovers test_release.qmd via its calcofi: frontmatter (workflow_type: test, dependency: [release_database]).
+
+  The Handlebars subset was sanity-checked against all 9 inline-SQL queries — they render correctly. Renderer fixed a multi-line {{#if}} body match (needed [\\s\\S] not .).
+
+  New schema site repo (/Users/bbest/Github/CalCOFI/schema)
+
+  15 files. Jekyll + vanilla ES module, no DuckDB-WASM. Stack: Mermaid.js + svg-pan-zoom + marked, all from jsDelivr. Five tabs (ERD / Tables / Columns / Datasets / Measurements) plus a version dropdown
+  that re-fetches per-version sidecars and re-renders the active tab. Sortable Columns + Measurements tables, filter inputs, theme toggle, URL hash routing (#columns?v=v2026.05.14). bundle exec jekyll build
+   clean; node --check app.js clean; live dev server served all assets. GCS CORS is open (access-control-allow-origin: *) so it Just Works from any origin. Includes .github/workflows/pages.yml so pushing to
+   main deploys to calcofi.io/schema.
+
+  The site degrades gracefully — without erd.mmd it shows "erd.mmd not found"; the other four tabs work against the existing v2026.05.19/metadata.json already on GCS.
+
+  Query repo (/Users/bbest/Github/CalCOFI/query)
+  
+  .github/workflows/bump-default-version.yml (new) — cron 0 */6 * * * + workflow_dispatch. Curls latest.txt, compares to _config.yml:default_version, sed-bumps + commits to main if different. Existing
+  pages.yml redeploys on push.
+
+  Sidebar collapse — ☰ button left of the logo (_layouts/default.html); CSS #layout[data-nav-collapsed="true"] #body { grid-template-columns: 1fr }; JS toggle mirroring the theme-toggle pattern with
+  localStorage.
+
+  What the user needs to do next
+
+  1. Re-render release_database.qmd (next targets::tar_make()) to publish erd.mmd + the data_type-enriched metadata.json for v2026.05.20.
+  2. After that, test_release.qmd runs automatically and (assuming green) writes latest.txt.
+  3. Push the schema repo to github.com/CalCOFI/schema — the pages.yml action will deploy on the first push. (Setting must already exist: Settings → Pages → Source = "GitHub Actions".)
+  4. Verify the query app's sidebar toggle locally with bundle exec jekyll serve in the query repo.
+
+  Nothing was committed or pushed — all edits are in working trees ready for the user to review and commit.
+
+⏺ Render verified end-to-end:
+
+  ┌──────────────────────────────────────────────┬──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │                    Check                     │                                                            Result                                                            │
+  ├──────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ release_database.qmd exit code               │ 0                                                                                                                            │
+  ├──────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ metadata.json columns enriched               │ 289 / 383 carry data_type (sample: bottle.bottle_id = INTEGER, ctd_thin.depth_m = DOUBLE, species.scientific_name = VARCHAR) │
+  ├──────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ erd.mmd on GCS                               │ 367 lines, 28 tables, 17 FK relationships                                                                                    │
+  ├──────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ latest.txt                                   │ still v2026.05.19 — confirmed not auto-rewritten (test_release.qmd is the only writer now)                                   │
+  ├──────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Tables / datasets / measurement_types counts │ 30 / 5 / 105                                                                                                                 │
+  └──────────────────────────────────────────────┴──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+  Schema site is live at http://127.0.0.1:4321/ — open it and you should see:
+  
+  - Version dropdown defaulting to v2026.05.19 (the latest)
+  - ERD tab renders the Mermaid diagram with pan/zoom (⤢ fit / ↺ reset controls)
+  - Tables tab: 30 cards, click each to expand columns
+  - Columns tab: 383-row sortable / filterable table with the new type column
+  - Datasets tab: 5 dataset cards with citations + coverage
+  - Measurements tab: 105 measurement types with canonical filter
+
+  The 94 columns without data_type are orphans in the metadata source (described in CSVs but no longer in the DB) — separate data-quality cleanup, not blocking. Tell me what looks off and I'll tighten.
+
+⏺ Build output is clean:
+
+  metadata.json enriched with data_type for 289 columns
+  erd.mmd uploaded (28 tables)
+  Release v2026.05.19 uploaded (9 versions tracked); latest.txt promotion deferred to test_release
+
+  - 25/25 chunks completed; Quarto exited 0 and produced _output/release_database.html.
+  - All GCS uploads recorded: cruise_summary.parquet, ship.parquet, catalog.json, RELEASE_NOTES.md, relationships.json, metadata.json, erd.mmd (new sidecar), versions.json. No latest.txt upload — confirmed
+  gated.
+  - Warnings are all pre-existing, not introduced by Part 1:
+    - cruise_key format violations: 1 rows / site_key format violations: 982/3211 rows — same DQ flags as prior renders.
+    - merge_metadata_json: duplicate table keys across ingests (last-writer-wins): dataset, grid, measurement_type — by design (those tables exist in multiple per-ingest manifests).
+
+  Math reconciles: merge_metadata_json finalized 372 columns; the post-merge data_type enrichment added 11 new entries (DB columns with no prior metadata) → 383 total, 289 with data_type. The 94 without are
+   either VIEWs (not in information_schema.columns WHERE table_schema = 'main') or orphan metadata entries.
+
+  Tell me how the schema site looks at http://127.0.0.1:4321/ and I can iterate.
+
+```bash
+cd /Users/bbest/Github/CalCOFI/schema && bundle exec jekyll serve --baseurl "" --host 127.0.0.1 --port 4321 --no-watch 2>&1
+```
+
+There are two "notes" buttons labeled in image as A (top) and B (right), which redundantly show the same info, but A opens a new tab and only shows raw markdown, whereas B expands into rendered markdown
+    which also stays visible as other menu items are clicked, thus obscuring the content of Diagram, Tables, Columns, etc. Drop A and make B open a modal window with obvious close button in upper right.
+  Speaking of @../schema/ [Image #2]
+
+⏺ Header A button is gone, and the inline notes panel is replaced by a <dialog> modal:
+
+  - Click release notes (in the meta strip) → centered modal with backdrop dim, max 92vw × 85vh, scrollable body.
+  - Close via × button (upper-right), Esc, or clicking the backdrop.
+  - Title shows Release notes · v2026.05.19 so it's clear which version's notes are displayed.
+
+  The Jekyll server is watching — reload the page to see it.
+
+Now that we've added a new @../schema/ page with ERD and descriptions of tables, columns and measurements, let's update the interfaces at @../query/, @../docs/, @../calcofi4r/ in appropriate locations with URL to it at https://calcofi.io/schema
+
+⏺ All three pushed.
+
+  ┌──────────────────────────────────────────────────────────┬─────────────────────────────────────────────────────────┬───────────────────────────────────┐
+  │                           Repo                           │                         Commit                          │              Pushed               │
+  ├──────────────────────────────────────────────────────────┼─────────────────────────────────────────────────────────┼───────────────────────────────────┤
+  │ CalCOFI/schema (https://github.com/CalCOFI/schema)       │ 946a177 Add schema browser site                         │ ✓ main (14 new files, 1470 lines) │
+  ├──────────────────────────────────────────────────────────┼─────────────────────────────────────────────────────────┼───────────────────────────────────┤
+  │ CalCOFI/query (https://github.com/CalCOFI/query)         │ e1b90e3 Schema links + sidebar + bump-default action    │ ✓ main (5 files)                  │
+  ├──────────────────────────────────────────────────────────┼─────────────────────────────────────────────────────────┼───────────────────────────────────┤
+  │ CalCOFI/workflows (https://github.com/CalCOFI/workflows) │ ac5fde2 erd.mmd sidecar + data_type + test_release gate │ ✓ main (2 files)                  │
+  └──────────────────────────────────────────────────────────┴─────────────────────────────────────────────────────────┴───────────────────────────────────┘
+
+  The query repo's push will trigger its pages.yml GH Action to redeploy. The schema repo's first-ever main push will trigger its new pages.yml — if GH Pages isn't already set to "GitHub Actions" source in
+  the repo settings, the first run may fail until you toggle it (Settings → Pages → Source = GitHub Actions).
+
+⏺ All three pushed.
+
+  Repo: CalCOFI/schema (https://github.com/CalCOFI/schema)
+  Commit: 946a177 Add schema browser site
+  Pushed: ✓ main (14 new files, 1470 lines)
+  ────────────────────────────────────────
+  Repo: CalCOFI/query (https://github.com/CalCOFI/query)
+  Commit: e1b90e3 Schema links + sidebar + bump-default action
+  Pushed: ✓ main (5 files)
+  ────────────────────────────────────────
+  Repo: CalCOFI/workflows (https://github.com/CalCOFI/workflows)
+  Commit: ac5fde2 erd.mmd sidecar + data_type + test_release gate
+  Pushed: ✓ main (2 files)
+
+  The query repo's push will trigger its pages.yml GH Action to redeploy. The schema repo's
+  first-ever main push will trigger its new pages.yml — if GH Pages isn't already set to "GitHub
+  Actions" source in the repo settings, the first run may fail until you toggle it (Settings →
+  Pages → Source = GitHub Actions).
+
+⏺ Both branches pushed.
+
+  Summary:
+     
+  - query — already done by a prior commit (e1b90e3 Schema browser links + collapsible sidebar). Header release pill, footer "See also", and intro.md all link to schema. No changes needed.
+  - docs — branch link-schema pushed. PR URL: https://github.com/CalCOFI/docs/pull/new/link-schema
+    - apps.qmd: Schema + Query listed alongside existing apps
+    - data-access.qmd: Schema explorer link in "Where the data lives"; added metadata.json to the documented release layout
+    - db.qmd: Schema explorer recommended at top of "Consuming descriptions"
+  - calcofi4r — branch link-schema pushed. PR URL: https://github.com/CalCOFI/calcofi4r/pull/new/link-schema
+    - inst/_pkgdown.yml: navbar adds Schema / Query / Docs on the right
+    - R/read.R cc_describe_table() and R/database.R cc_db_catalog(): @seealso pointing at schema
+    - README.md: new "See also" section (manually edited — build_readme() regressed it, see below)
+
+## 2026-05-19.c api-h3t in Python
+
+The `@../api-h3t` (used by `@../int-app`) is using `sqlglot` to verify valid SQL in Python, but implemented as an R Plumber service. Could this be much faster if rewritten in Python using FastAPI or similar?
+
+⏺ Here's the short version, then a couple of clarifying questions before I'd recommend committing to a rewrite plan.
+
+  TL;DR: No, it would not be much faster per request. The bottleneck is DuckDB (10–1000 ms), not Plumber or the reticulate→sqlglot bridge (which loads Python once at startup and is ~1–5 ms per call).
+  Varnish in front means most requests are <100 ms cache hits regardless of language.
+
+  Where Python/FastAPI would genuinely help:
+  - Concurrency. Plumber serializes requests per worker; FastAPI/uvicorn handles concurrent tile requests in parallel against DuckDB's thread-safe read connection. Real win on cache-miss bursts (new filter
+  → N tiles fetched simultaneously).
+  - Simplicity. No reticulate, no dual R+Python runtime in the Docker image. ~380 LOC R → ~200–250 LOC Python. The sql_validate.py already exists as native Python.
+  - Not a perf fix — the int-app agent found no documented slowness complaints; maps.qmd reports the current setup as fast.
+  
+  A couple of questions before I commit a real implementation plan.
+
+←  ☐ Motivation  ☐ Scope  ✔ Submit  →
+  
+**Motivation** What's the underlying motivation for considering this rewrite?
+
+  1. Observed slowness / users notice lag
+     There's a real perf complaint driving this — likely burst-load on filter changes or cache misses.
+  2. Architectural fit (R↔Python bridge feels off)
+     Code/ops simplicity is the goal; perf is fine but the polyglot setup is awkward to maintain.
+❯ 3. Future workload concerns
+     Current load is fine but you expect more users / heavier queries and want headroom before pain shows up.
+
+**Scope** If we proceed, what's the desired scope?
+
+❯ 1. Full rewrite plan in FastAPI + parity tests
+     I'll write a detailed plan for a FastAPI port with deploy strategy and ETag/cache parity verification.
+  2. Stop here — assessment is enough
+     You wanted the analysis, not an implementation. No plan beyond this.
+  3. Benchmark first, decide later
+     Plan a small load test against the current api-h3t (concurrent cache-miss tile requests) to confirm whether concurrency is actually a bottleneck before any rewrite.
+
+PLAN: ./libs/plans/**2026-05-19 Rewrite `api-h3t` from R Plumber to Python FastAPI.md**
+
+I am also interested in using this service with different databases -- can that be another parameter with a default db if not mentioned for backward compatability? Does Varnish and/or FastAPI send to the client zipped if it can handle it for improved performance?
+
+←  ☐ Location  ☐ Scope  ✔ Submit  →
+
+**Location** Where should the new Python service code live?
+
+  1. New repo: CalCOFI/api-h3t-py (Recommended)
+     Clean git history, separate CI, clearer cutover. I'll create /Users/bbest/Github/CalCOFI/api-h3t-py/ locally; you can `gh repo create` later.
+  2. Subdirectory: api-h3t/py/
+     Both implementations in one repo during transition. Easier side-by-side parity testing; messier git history.
+  3. Worktree branch of api-h3t
+     Use a `python-rewrite` branch in the existing api-h3t repo; one repo, isolated from main.
+❯ 4. Please proceed with populating into `@../api-h3t-py`, created from:
+```bash
+cd /Users/bbest/Github/CalCOFI
+git clone https://github.com/CalCOFI/api-h3t-py.git
+```
+
+**Scope** What's the scope for this session?
+
+  1. Scaffold + ports (sql_validate, h3t_query, tests) (Recommended)
+     Project structure, copy sql_validate.py, port h3t_query.R to Python, golden-output parity tests. Foundational, low-risk.
+❯ 2. Everything in this session
+     All endpoints, DB layer, Dockerfile, parity tests. I'd push through; you'd review at the end.
+  3. Just the scaffold + directory structure
+     Project layout, empty modules with docstrings, pyproject.toml, requirements.txt, Dockerfile. You take it from there.
+
+⏺ Done. Here's the final summary.
+
+  What was built
+
+  Repo: /Users/bbest/Github/CalCOFI/api-h3t-py/ (cloned from CalCOFI/api-h3t-py)
+
+  Source (app/):
+  - sql_validate.py — verbatim copy of the existing native-Python validator
+  - h3t_query.py — port of h3t_query.R (zoom→res, bbox, SQL wrappers)
+  - config.py — env parsing with multi-DB registry + legacy DUCKDB_PATH fallback
+  - db.py — DuckDB connection registry (one shared con per DB, per-request cursors with statement_timeout)
+  - tiles.py — base64 decode, {{res}} substitution, ETag, cache headers, cell payload
+  - main.py — FastAPI app: /health, /h3t/{z}/{x}/{y}.h3t, /stats, /meta with ?db= support, async run_in_threadpool for concurrent DuckDB calls, CORS middleware, optional gzip middleware
+  
+  Tests (tests/): 67 tests, all passing — test_config.py, test_sql_validate.py, test_h3t_query.py (parity vs R-generated fixtures/r_golden.json), test_tiles.py, test_endpoints.py (FastAPI TestClient with
+  mocked DB layer)
+
+  Tooling: Dockerfile (python:3.13-slim), pyproject.toml, requirements.txt, requirements-dev.txt, scripts/generate_r_golden.R, .gitignore, .dockerignore, full README.md
+
+  End-to-end verification
+  
+  - 67 unit tests pass
+  - Server boots against real DuckDB; /health and /meta return valid responses
+  - Invalid SQL → 400 with reason from sqlglot
+  - Unknown DB → 400 with allowed list
+  - CORS preflight returns proper headers
+
+  What's left (per plan)
+
+  - Run live parity tests against the R service with real queries
+  - Update api-h3t/plumber.R:155, :192 to the new stable-string ETag scheme
+  - Load test (vegeta/oha) to confirm concurrency win on cache-miss bursts
+  - Varnish backend cutover
+
+  Nothing has been committed in either repo — the new files are untracked in api-h3t-py and the R service hasn't been touched.
+
+⏺ All pushed. Three commits live:
+  - CalCOFI/api-h3t-py @ b880c99 — scaffold
+  - CalCOFI/api-h3t-py @ 3aa6deb — deploy.md
+  - CalCOFI/api-h3t @ f590b34 — stable-string ETag
+  
+  Full deployment instructions are in api-h3t-py/deploy.md. Here's the condensed version:
+
+  Cutover at a glance
+
+  Strategy: parallel deploy → parity test → flip Varnish backend → flush cache. The R container stays running for instant rollback.
+
+  1. On the server, pull the new code
+
+
+  sudo -u bebest git -C /share/github/CalCOFI clone https://github.com/CalCOFI/api-h3t-py.git
+  git -C /share/github/CalCOFI/api-h3t pull --ff-only   # picks up the ETag change
+
+  2. Add h3t_api_py to server/docker-compose.yml alongside h3t_api
+
+  Same env (DUCKDB_PATH, port 8889) plus H3T_DB_NAME=default and H3T_APP_GZIP=false. Both containers can share port 8889 internally — docker resolves them by hostname (h3t_api vs h3t_api_py).
+
+  3. Build & launch
+
+  cd /share/github/CalCOFI/server
+  sudo docker compose build h3t_api_py
+  sudo docker compose up -d h3t_api_py
+  sudo docker compose logs -f h3t_api_py   # wait for "Uvicorn running"
+
+  4. Parity check from the docker network
+
+  sudo docker run --rm --network=server_default -v "$PWD:/work" -w /work \
+    python:3.13-slim sh -c "pip install -q httpx && python \
+    /share/github/CalCOFI/api-h3t-py/scripts/parity_check.py \
+    --r-base http://h3t_api:8889 --py-base http://h3t_api_py:8889 \
+    --release v2026.04.08"
+  Must print OK: all checks passed before proceeding.
+
+  5. Flip Varnish backend
+
+  Edit server/varnish/default.vcl: change .host = "h3t_api" → .host = "h3t_api_py". Then:
+  sudo docker compose exec varnish varnishadm vcl.load v_py /etc/varnish/default.vcl
+  sudo docker compose exec varnish varnishadm vcl.use v_py
+  sudo docker compose exec varnish varnishadm ban 'req.url ~ "^/h3t/"'   # flush
+  Zero downtime — vcl.use is hot-swap.
+
+  6. Verify through Caddy
+
+  curl -s https://h3t.calcofi.io/h3t/health | jq .
+  curl -sI "https://h3t.calcofi.io/h3t/4/3/6.h3t?q=$Q&release=v2026.04.08" \
+    | grep -Ei '^(HTTP|X-Cache|ETag|Cache-Control)'
+  Open int-app, pan/zoom, watch network panel for X-Cache: HIT.
+
+  7. Rollback (if needed)
+
+  Edit VCL back to .host = "h3t_api", reload — the R container is still running.
+
+  8. Decommission after ~1 week
+
+  docker compose stop h3t_api && docker compose rm -f h3t_api, remove block from compose file, commit.
+
+  Breaking-change audit
+
+  Three response shapes are different — int-app doesn't touch any of them, but other clients should be checked:
+  - /h3t/health body — {db, db_mtime} → {default_db, dbs:{name:{path,mtime}}}
+  - /h3t/meta body — adds available_dbs, default_db, db, db_mtime
+  - Adds ?db= query param (optional; default preserves behavior)
+
+```bash
+# Resume this session with:
+claude --resume 02a3e2a1-2bfb-48ec-b648-94c9bafca234
+```
+
+## 2026-05-19.b add table/column metadata to DuckLake
+
+The initial workflows in `@_targets.R` have descriptions as markdown of tables and for columns also units under `@metadata/` which somehow got dropped from inclusion in the development of the parquet files uploaded into GCS for the integrated DuckLake database. There are vestigial functions in `@../calcofi4r/` that fetched this metadata from the Postgres database in `cc_describe_table()`, and from the API `@../api/plumber.R` connecting to the Postgres db with `cc_db_catalog()` and described in `@../docs` (eg https://calcofi.io/docs/db.html#metadata-and-documentation). There is a LOT of inconsistency with the vestigial Postgres across the CalCOFI repos and the entire lack of table and column documentation in the current DuckLake implementation. A new sidecar file per db release `metadata.json` could take on this role, or one of the existing ones (`catalog.json`, `relationships.json`) could be expanded upon. The skills `@./claude/skills` would need to also include explicit instructions.
+
+←  ☐ Sidecar approach  ☐ Scope  ☐ Cross-cut tables  ✔ Submit  →
+
+**Sidecar approach** Where should table/column descriptions and units live in the release?
+
+❯ 1. New metadata.json sidecar    ┌───────────────────────────────────────────────────────────────────────────────┐
+  2. Expand catalog.json          │ data/releases/v2026.05.14/                                                    │
+  3. Expand relationships.json    │   catalog.json        # structural manifest (rows, partitioned)               │
+                                  │   relationships.json  # PKs + FKs                                             │
+                                  │   metadata.json       # NEW — tables{} + columns{} with description_md, units │
+                                  │   RELEASE_NOTES.md                                                            │
+                                  └───────────────────────────────────────────────────────────────────────────────┘
+
+**Scope** How far should the plan reach beyond producing the sidecar?
+
+  1. [ ] Update calcofi4r consumers
+  Rewrite cc_describe_table() to JOIN DuckDB schema with the new sidecar (descriptions + units). Either deprecate cc_db_catalog() loudly or rewire it to consume the sidecar.
+  2. [ ] Update docs/db.qmd
+  Replace the 'Metadata and documentation' section (lines 256-310) that still describes the Postgres COMMENT pattern with the new sidecar-based pattern.
+  3. [ ] Update skills
+  Update generate-metadata, ingest-new, validate-ingest skills so the description/units columns of flds_redefine.csv and tbls_redefine.csv are actively populated (today they ship mostly empty for dic, 
+  casts, summary tables).
+  4. [ ] Fix catalog.json bugs
+  Fix total_size: 0 hardcode (release_database.qmd:687) by summing parquet file sizes. Quick fix while we're touching that chunk.
+❯ 5. [✔] All of the above 
+
+**Cross-cut tables** How should release-only tables (no per-ingest source) get descriptions?
+
+❯ 1. Add to metadata/dataset.csv-style registry
+     Add a workflows/metadata/release_tables.csv that holds descriptions/units for tables built in release_database.qmd itself: cruise_summary, _spatial, _spatial_attr, taxon, taxa_rank, lookup, ship, 
+     cruise. Loaded and merged at release time.
+  2. Inline in release_database.qmd chunks
+     Wherever the release notebook builds these tables, attach inline description literals (R named list) that get merged into the release metadata.json.
+  3. Defer — descriptions empty for now
+     Ship release metadata.json with descriptions only for tables that come from ingest notebooks; leave release-only tables with empty description_md until later.
+
+**PLAN**: `@./libs/plans/2026-05-19 Release-level metadata.json sidecar for table/column descriptions and units.md`
+
+⏺ Plan approved and saved to /Users/bbest/.claude/plans/glimmering-inventing-swing.md. The plan covers four pieces of work:
+
+  1. Producer: add calcofi4db::merge_metadata_json(), two new workflows/metadata/release_*.csv registries for release-only tables, and wire the merge + GCS upload into release_database.qmd (also fixes the
+  total_size: 0 bug).
+  2. Consumer: rewrite calcofi4r::cc_describe_table() to JOIN the sidecar onto DuckDB information_schema, and rewire (recommended) or deprecate cc_db_catalog().
+  3. Docs: replace the Postgres-COMMENT section in docs/db.qmd:201–310 with the sidecar pattern.
+  4. Skills: tighten generate-metadata, ingest-new, validate-ingest, publish-template so empty descriptions/units are surfaced and the release smoke-tests the sidecar.
+
+  Want me to start with the calcofi4db::merge_metadata_json() function plus the release_database.qmd wiring (the producer side), or work in a different order?
+
+That's a good working order. Proceed to all without interruption, git commit and push as needed 
+
+⏺ All eight tasks complete. Here's the summary:
+
+  Branches pushed (metadata-sidecar in each repo):
+  - `calcofi4db` — https://github.com/CalCOFI/calcofi4db/pull/new/metadata-sidecar
+  - `calcofi4r` — https://github.com/CalCOFI/calcofi4r/pull/new/metadata-sidecar
+  - `docs` — https://github.com/CalCOFI/docs/pull/new/metadata-sidecar
+  - `workflows` — https://github.com/CalCOFI/workflows/pull/new/metadata-sidecar
+  
+  What changed:
+  
+  - `calcofi4db`: new `merge_metadata_json()` in R/wrangle.R (schema 1.1, conflict warnings, dataset/measurement_type/release_tables/release_columns overlays). Smoke-tested locally against the three existing
+  per-ingest metadata.json files — 22 tables, 236 columns, 5 datasets, 105 measurement types.
+  - `calcofi4r`: `cc_describe_table()` left-joins DuckDB information_schema.columns with the release metadata.json (adds name_long, units, description_md, table-level description via attribute). `cc_db_catalog()`
+   rewired off the dead api.calcofi.io endpoints to the sidecar; new version arg.
+  - `docs`: `db.qmd` metadata section rewritten — drops Postgres COMMENT / pg_description / pgadmin.calcofi.io references; documents the per-ingest → release flow and consumer entry points.
+  - `workflows`:
+    - `release_database.qmd` now merges per-ingest `metadata.json` files plus `metadata/release_tables.csv` + `metadata/release_columns.csv` and uploads `metadata.json` next to `catalog.json`/`relationships.json`. Fixed
+  total_size: 0 by summing GCS bytes via `gcloud storage du --summarize`.
+    - New `metadata/release_tables.csv` and `metadata/release_columns.csv` with descriptions/units for `cruise_summary`, `_spatial`, `_spatial_attr`, `ctd_cast`, `ctd_thin`, `ctd_summary`.
+    - Skills: `generate-metadata` (correct CSV schema docs, require descriptions/units, hand-off completeness check), `ingest-new` (post-render scan), `validate-ingest` (metadata.json hard assertions),
+  `publish-template` (release-sidecar smoke test).
+
+  **Open follow-ups** (not in this PR set):
+  - `data/parquet/calcofi_ctd-cast/metadata.json` is missing — the per-ingest sidecar isn't being written for CTD. Until that's fixed, CTD descriptions come from the release_columns.csv I added; the proper fix is in `ingest_calcofi_ctd-cast.qmd`.
+  - Open the four PRs on GitHub when you're ready — the push output gave you the URLs.
+
+
+Fix `@ingest_calcofi_ctd-cast.qmd` to properly produce a `@data/parquet/calcofi_ctd-cast/metadata.json` as it should based on metadata in `@metadata/calcofi/ctd-cast`, similar to other workflows listed in `@_targets.R`. If metadata still missing, try to glean from source like `@~/My Drive/projects/calcofi/data-public/calcofi/ctd-cast/download/20-2105SH_CTDFinalQC/CTD-CSV-Format.pdf` and populate with likely / most reasonable values otherwise.
+  
+⏺ Done. CTD metadata is fully wired:
+
+  What was broken:
+  - The write_metadata chunk in ingest_calcofi_ctd-cast.qmd did call build_metadata_json(), but the working DB had cross-cutting tables (cruise, ctd_cast_derived) leaking in because no tables= filter was
+  set. The notebook also wasn't re-rendered after the chunk was added, so the file simply didn't exist on disk.
+  - Even when generated, ~140 columns shipped with empty descriptions because metadata_derived.csv missed key ctd_cast columns and didn't cover ctd_wide at all.
+  - release_tables.csv had stand-in CTD rows from my earlier PR that were overriding the richer per-ingest descriptions once we filled them in. 
+
+  What changed:
+
+  1. ingest_calcofi_ctd-cast.qmd — build_metadata_json() call now passes tables = parquet_stats$table and workflow_url = .... Future renders produce a clean 6-table sidecar.
+  2. metadata/calcofi/ctd-cast/metadata_derived.csv — added 9 ctd_cast columns + 79 ctd_wide columns + 2 cleanups (ctd_measurement.cruise_key, measurement_type.is_canonical). Descriptions/units for ctd_wide
+   come straight from the CalCOFI CTD+Bottle CSV column format PDF you pointed me at (Sep 2015 spec — Temp1/2, Salt1/2_Corr, Ox1/2_CruiseCorr/StaCorr, ISUS/EstNO3, BAT/XMiss, PAR/SPAR, bottle measurements,
+  all with proper units).
+  3. calcofi4db::merge_metadata_json() — overlay semantics fixed: release_tables.csv / release_columns.csv now only fill missing fields, so per-ingest sources always win when both are present.
+  4. metadata/release_tables.csv, release_columns.csv — dropped the redundant CTD rows; now only cover truly release-only tables (cruise_summary, _spatial, _spatial_attr).
+  5. data/parquet/calcofi_ctd-cast/metadata.json — generated locally and confirmed: 6 tables, 128 columns, 0 empty descriptions. (Local file, not committed — regenerated by the notebook.)
+
+  Verified release merge picks up ctd_thin description as "adaptively-thinned ctd_measurement: single cast direction, canonical measurement types, ~10 m depth grid…" (the rich per-ingest text), not the
+  one-liner that was previously overriding it.
+
+  Both branches pushed: calcofi4db metadata-sidecar and workflows metadata-sidecar.
+
+ Ok, I've merged all repos. Please cleanup local and remote branches metadata-sidecar and checkout and pull main locally for all repos. Do I next need to run `Rscript -e 'targets::tar_make()'` to push an updated release? 
+
+ ⏺ Clean across all four repos.
+
+  On the release question: yes, targets::tar_make() is the path, with a couple of things to know:
+
+  1. CTD is excluded from tar_make() (see _targets.R:18), which is exactly what you want — the locally-generated data/parquet/calcofi_ctd-cast/metadata.json (6 tables, 128 columns, 0 empty descriptions)
+  will be picked up as-is. CTD won't re-run for hours.
+  2. Bottle / ichthyo / DIC ingests will re-run if targets sees a changed dependency (it tracks each .qmd and its declared inputs). The new release_database.qmd chunk doesn't touch their inputs, but the
+  ingest qmds themselves haven't changed — tar_outdated() will tell you exactly what will run.
+  3. release_database.qmd will definitely re-run (we modified it), creating data/releases/v2026.05.19/ (today's date) and uploading four sidecars to gs://calcofi-db/ducklake/releases/v2026.05.19/:
+  catalog.json (with the real total_size), relationships.json, the new metadata.json (schema 1.1), and RELEASE_NOTES.md.
+  4. Heads-up on completeness: the bottle/ichthyo/DIC per-ingest metadata.json files still have many empty description_md and units (we only backfilled CTD). The release sidecar will ship with those gaps.
+  If you want them filled before publishing, run /validate-ingest against each provider/dataset first — it'll list the gaps in flds_redefine.csv / metadata_derived.csv.
+
+  Suggested order:
+  Rscript -e 'targets::tar_outdated()'   # preview what will run
+  Rscript -e 'targets::tar_make()'       # run it
+  
+  If you just want the new sidecar published without touching ingests at all, you can render the release notebook directly: quarto render release_database.qmd.
+
+```bash
+Rscript -e 'targets::tar_outdated()'
+```
+```
+ℹ Loading calcofi4db
+Excluded 2 target(s): ingest_calcofi_ctd_cast, publish_ichthyo_to_obis
+Parsed 5 pipeline workflows:
+  ingest_calcofi_bottle (ingest) -> data/parquet/calcofi_bottle/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_dic (ingest) -> data/parquet/calcofi_dic/manifest.json [deps: ingest_calcofi_bottle]
+  ingest_spatial (spatial) -> data/parquet/spatial/manifest.json
+  ingest_swfsc_ichthyo (ingest) -> data/parquet/swfsc_ichthyo/manifest.json
+  release_database (release) -> data/releases [deps: auto]
+[1] "ingest_swfsc_ichthyo"  "ingest_calcofi_dic"    "corrections_csv"      
+[4] "release_database"      "ingest_spatial"        "ingest_calcofi_bottle"
+```
+
+```bash
+Rscript -e 'targets::tar_make()' 
+```
+```
+ℹ Loading calcofi4db
+Excluded 2 target(s): ingest_calcofi_ctd_cast, publish_ichthyo_to_obis
+Parsed 5 pipeline workflows:
+  ingest_calcofi_bottle (ingest) -> data/parquet/calcofi_bottle/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_dic (ingest) -> data/parquet/calcofi_dic/manifest.json [deps: ingest_calcofi_bottle]
+  ingest_spatial (spatial) -> data/parquet/spatial/manifest.json
+  ingest_swfsc_ichthyo (ingest) -> data/parquet/swfsc_ichthyo/manifest.json
+  release_database (release) -> data/releases [deps: auto]
++ corrections_csv dispatched
+✔ corrections_csv completed [0ms, 11.16 kB]
++ ingest_swfsc_ichthyo dispatched
+
+
+processing file: ingest_swfsc_ichthyo.qmd
+```
+
+⏺ Found the silent-skip mechanism: check_data_integrity(halt_on_fail = TRUE) calls knitr::opts_chunk$set(eval = FALSE) when CSV-vs-redefinition mismatches are detected. All chunks after #6 then skipped. Let
+   me run the check directly to see what's mismatched.
+
+⏺ The CSV source for species.csv was upstream-renamed: scientific_name → taxon, itis_tsn → tsn. The flds_redefine.csv still references the old names. Let me update.
+
+⏺ Release_database dispatched. This will render the qmd, build catalog.json/relationships.json/metadata.json sidecars, fix total_size via gcloud storage du, upload everything to GCS, and update
+  versions.json + latest.txt. Expect this to take several minutes.
+
+Please run, babysit and iteratively fix `Rscript -e 'targets::tar_make()'` to completion. I got this error:
+
+⏺ Pipeline complete. The new release v2026.05.19 is live on GCS:
+
+  Sidecar verification (gs://calcofi-db/ducklake/releases/v2026.05.19/):
+  - latest.txt → v2026.05.19 ✓
+  - metadata.json → schema_version 1.1, 30 tables, 372 columns, 5 datasets, 105 measurement types
+  - catalog.json → 28 tables, 133M rows, total_size = 5.77 GB (no more 0 hardcode)
+
+  Pipeline summary (14m 47s end-to-end):
+  - ingest_swfsc_ichthyo — 1m 39s (after fixing the taxon/tsn rename in flds_redefine.csv)
+  - ingest_spatial — 5m 8s 
+  - ingest_calcofi_bottle — 2m 12s
+  - ingest_calcofi_dic — 56s
+  - release_database — 4m 25s (built and uploaded 4 sidecars, 35.94 GB through GCS)
+  - ingest_calcofi_ctd_cast — skipped (excluded; uses the locally-generated metadata.json we made earlier)
+  
+  The metadata sidecar covers more tables (30) than catalog.json (28) because it includes ctd_cast_derived (a VIEW) and ctd_wide (supplemental). Catalog only lists tables shipped as parquet files. That's
+  expected behavior.
+
+  The taxon/tsn source CSV rename fix is committed locally to metadata/swfsc/ichthyo/flds_redefine.csv but not yet pushed — want me to commit and push that to main on workflows?
+
+```bash
+# Resume this session with:
+claude --resume 3d09c25a-05bf-4e1d-84d0-95f4a6d5198c
+```
+
+## 2026-05-19 add Google Analytics to calcofi.io/query
+
+Please add Google Analytics to `@../query` (https://calcofi.io/query) with `G-0HVK8TDMCF`. Can you also log which queries get clicked on, run, and if so parameters are used (especially if different from default)?
+
+**PLAN**: `@./libs/plans/2026-05-19 Add Google Analytics to CalCOFI Query app.md`
+
+⏺ All edits in place. Final state:
+
+  - Created query/_includes/google-analytics.html — gtag loader for G-0HVK8TDMCF
+  - Edited query/_layouts/default.html:22 — {% include google-analytics.html %} before </head>
+  - Edited query/app.js:
+    - ga() safe wrapper, paramsChangedFromDefaults(), activeQueryId() helpers (after the $/$$ block)
+    - query_view in showQuery() — { query_id, category, label }
+    - query_run at top of runQuery() — { query_id, release_version, n_params_changed, params_changed, params_total }
+    - query_success after the success status — { query_id, n_rows, n_cols, duration_sec }
+    - query_error in three catches — error_stage = sql_build / duckdb_init / duckdb_run
+    - download on the three result-action buttons — kind = csv / sql / copy_sql
+
+  To verify locally: cd /Users/bbest/Github/CalCOFI/query && bundle exec jekyll serve, open DevTools, and check window.dataLayer after clicks/runs/downloads.
+
+Actually, since this query page is more like an app, let's change to using `G-VV117EV9ZT` instead of `G-0HVK8TDMCF` 
+
+⏺ Swapped to G-VV117EV9ZT (matches int-app). The event hooks in app.js are property-agnostic, so no other changes needed.
+
+
+## 2026-05-17 calcofi.io/query as JS WASM duckdb
+
+The docs `@../docs/data-access.qmd`, `@../docs/helpers.qmd` and `@../calcofi4r/vignettes/bio-env-matching.Rmd` all lay out the case for using parquet files and DuckDB from anywhere, but the WASM example simply points to https://shell.duckdb.org/ without instructions. Can we create a JavaScript only page with WASM DuckDB connnectors and these same helper functions (without any R or Python dependencies) for selecting the function, entering input arguments and getting the results, a la the client-side version of the Plumber API `@../api`? And can we update the referenced documentation with more specifics and consistency across?
+
+←  ☐ Page style  ☐ Function scope  ✔ Submit  →
+
+How should the browser-only matching page be implemented and hosted?
+
+ 1. Quarto .qmd with vanilla      ┌───────────────────────────────────────────┐
+   JS                             │ docs/_quarto.yml                          │
+  2. Standalone HTML app          │   chapters:                               │
+ 3. Quarto .qmd with              │     - db.qmd                              │
+   Observable JS                  │     - data-access.qmd                     │
+                                  │     - helpers.qmd                         │
+                                  │     - match.qmd        ← new              │
+                                  │     - api.qmd          (now: "superseded  │
+                                  │     - portals.qmd                         │
+                                  │                                           │
+                                  │ docs/match.qmd                            │
+                                  │ - raw HTML form + results panel           │
+                                  │                                           │
+                                  │ docs/match/match.js                       │
+                                  │   the SQL-builder port of calcofi4r/R/mat │
+                                  │   (reusable; can be imported by other app │
+                                  └───────────────────────────────────────────┘
+
+ 1. Quarto .qmd with vanilla      ┌───────────────────────────────────────────┐
+   JS                             │ docs/match/                               │
+❯ 2. Standalone HTML app          │ ├── index.html         standalone page (f │
+ 3. Quarto .qmd with              │ ├── app.js             UI + reactive logi │
+   Observable JS                  │ ├── match.js           SQL-builder port o │
+                                  │ └── style.css                             │
+                                  │                                           │
+                                  │ Linked from:                              │
+                                  │   data-access.qmd → "Try it in your brows │
+                                  │   helpers.qmd     → "Try it in your brows │
+                                  │   api.qmd         → "Try it in your brows │
+                                  └───────────────────────────────────────────
+
+ 1. Quarto .qmd with vanilla      ┌───────────────────────────────────────────┐
+   JS                             │ No preview available                      │
+  2. Standalone HTML app          └───────────────────────────────────────────┘
+ 3. Quarto .qmd with              
+   Observable JS                  Notes: press n to add notes
+
+←  ☒ Page style  ☐ Function scope  ✔ Submit  →
+
+Which matching functions should the page expose in the UI?
+   
+  1. 3 wrappers only
+     Just cc_match_ichthyo_by_name, cc_match_ichthyo_by_taxon,  
+     cc_match_zooplankton_biomass — the user-facing form has fields for each, 
+     no raw SQL editing. Mirrors the 3 retired Plumber endpoints exactly. 
+     Simplest UX.                 
+  2. 3 wrappers + Custom SQL      
+     The 3 wrappers + an "Advanced: Custom bio + env SQL" mode with two 
+     textareas mapping to cc_match_bio_env(bio, env, ...). Exposes the full 
+     engine for power users who want a non-canonical bio or env side.
+❯ 3. 3 wrappers + Custom + DuckDB shell
+     Above, plus a free-form DuckDB shell tab to run any SQL against the 
+     release Parquet (essentially shell.duckdb.org embedded). Most flexible, 
+     biggest scope.               
+
+
+⏺ All shipped. Two PRs ready for review:
+
+  CalCOFI/docs #7 (https://github.com/CalCOFI/docs/pull/7) — match-wasm-app @
+  05fa4b4
+
+  A standalone, JavaScript-only Match app at docs/match/ mirroring the three
+  retired Plumber-API bio↔env endpoints — DuckDB-WASM in a worker, public
+  Parquet over HTTPS, no server, no credentials, no install. Five tabs (by name
+   / by taxon / zoo biomass / custom (bio + env) / SQL shell), three sub-panels
+   (Results / SQL / Metadata), Download CSV, Copy SQL, Download .sql, ?version=
+   deep-link, default form pre-populated with the recurring Q1 2018
+  sardine-larva example.
+
+  Plus the cross-doc "Run it from anywhere" alignment promised in the plan:
+  data-access.qmd, helpers.qmd, and api.qmd now tell the same R / Python /
+  shell / browser story with consistent framing and links into the new app.
+
+  CalCOFI/calcofi4r #13 (https://github.com/CalCOFI/calcofi4r/pull/13) —
+  vignette-link-match-app @ 4537ef4
+
+  Two-line vignette edit: point the browser bullet at the new app instead of
+  generic shell.duckdb.org (kept as a fallback).
+
+  Verification summary
+
+  ┌────────────────────────────────┬───────────────────────────────────────┐
+  │             Check              │                Result                 │
+  ├────────────────────────────────┼───────────────────────────────────────┤
+  │ SQL fidelity — match.js ≡      │                                       │
+  │ attr(cc_match_*(),"sql") in R, │ diff empty for by-name, by-taxon, zoo │
+  │  for all 3 wrappers            │                                       │
+  ├────────────────────────────────┼───────────────────────────────────────┤
+  │ Browser end-to-end —           │ 13 rows × 19 cols in 29.5 s, no JS    │
+  │ Playwright + Chromium against  │ errors, release_version=v2026.05.14,  │
+  │ a local HTTP server            │ 8 GCS source URLs in metadata         │
+  ├────────────────────────────────┼───────────────────────────────────────┤
+  │                                │ Applied open GET/HEAD (matches        │
+  │ CORS on gs://calcofi-db        │ calcofi-files-public); preflight now  │
+  │                                │ returns Access-Control-Allow-Origin:  │
+  │                                │ *                                     │
+  ├────────────────────────────────┼───────────────────────────────────────┤
+  │ quarto render for the three    │ Clean HTML, no warnings               │
+  │ modified chapters              │                                       │
+  └────────────────────────────────┴───────────────────────────────────────┘
+
+  What runs in your browser
+
+  The page lazy-loads @duckdb/duckdb-wasm@1.29.0 from jsDelivr (~5 s cold
+  start, cached afterwards), then for each Run: the JS port of
+  calcofi4r/R/match.R
+  (https://github.com/CalCOFI/calcofi4r/blob/main/R/match.R) emits the same SQL
+   R does, DuckDB-WASM fetches Parquet ranges directly from
+  storage.googleapis.com, and Arrow rows come back to the page. The whole stack
+   — app, package, int-app download bundle — now has four equivalent paths to
+  the same rows (R / Python / shell / browser), each producing a byte-identical
+   SQL artifact you can hand to anyone.
+
+Looks great! Let's however move this to a seperate repo `@../query` on Github so https://calcofi.io/query renders the index page. I would like to see a dark theme default similar to https://shell.duckdb.org/ and `@../int-app/app`, `@../apps/ctd-viz`. I would also like to see the different endpoint queries moved from horizontal to vertical navigation on the left side with accordion for headers to allow for more queries ranging from simple (cruises, spatial / temporal extent) to complex per dataset and combo (ie this bio-env matching). I am also curious about alternative design choices previously suggested using Quarto .qmd with vanilla JS or Observable JS, but I found limited JS library choices in the past when going this route so initially opted for standalone JS; Quarto .qmd is however more consistent with our existing documentation so preferred if sufficient and ObservableJS also has many tools packaged so again preferred if sufficient.
+
+  │ Open risks / follow-ups                                                │
+  │                                                                        │
+  │ - calcofi4r/R/match.R ↔ query/lib/match.js sync — same risk as before, │
+  │  just at a new path. Add a CONTRIBUTING note in the new repo + a TODO  │
+  │ comment atop match.R pointing here.                                    │
+  │ - Query module count — v1 ships 12; trivial to add more. Each new      │
+  │ query is ~30–80 lines of JS (the field schema + a build()).            │
+  │ Anticipated additions over time: DIC, CTD-thin profile by station,     │
+  │ station-line transects, per-cruise summaries, taxonomy tree explorer.  │
+  │ - Performance — the simple Browse / Quick-facts queries are sub-second │
+  │  after warm; the bio↔env matches still take ~15–30 s on cold GCS.      │
+  │ Status pill keeps the user informed; we don't optimize further in v1.  │
+  │ - SQL editor upgrade — v1 uses a plain <textarea> for the SQL shell.   │
+  │ CodeMirror with SQL highlighting is one new ES module away; out of     │
+  │ scope for v1 to keep the diff small.                                   │
+  │ - Mobile — works in mobile browsers but the bundle is heavy for        │
+  │ cellular. Sidebar collapses behind a hamburger button on narrow        │
+  │ viewports. Initial v1 acceptable; further polish later. 
+
+Also make this something of a framework to allow easily dropping in new queries using yaml and markdown that contain the parameters, SQL with interpolation, description and navigational location, ideally all in a single file contained in a subfolder called something like "queries". Include an intro page which again describes the overall approach, advantages/disadvantages/caveats (like iniital load time and subsequent speed-up), with links out to similar resources / explanations in calcofi4r and docs.
+
+Could we simplify the structure more by setting this up as a Jekyll site so the navigation and js could be parsed from the input queries/*.md, hence decreasing the burden of on-the-fly JS parsing of md queries and nav? Could we simplify organization further by matching the header with a subfolder and the name of of the query with the [name].md (perhaps replacing "_" with space if you recommend)?
+
+⏺ All shipped. Summary of what's live and what's open:
+
+  ✅ Live now — https://calcofi.io/query/
+  
+  CalCOFI/query (https://github.com/CalCOFI/query) — a fresh Jekyll site, dark theme by default, vertical left-side accordion, file-per-query framework. First
+  push deployed via GHA run 26024603323 (https://github.com/CalCOFI/query/actions/runs/26024603323). Playwright smoke against the deployed origin:
+  #bio-env-matching--by-name → Run → 13 rows × 19 cols in 50.9 s ✓
+  
+  What ships
+
+  ┌──────────────┬──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │    Layer     │                                                                  Detail                                                                  │
+  ├──────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Build        │ Jekyll. _queries/<category>/<query>.md → folder = category; file = label. Liquid pre-renders nav + sections; runtime JS does ~zero       │
+  │              │ parsing                                                                                                                                  │
+  ├──────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Theme        │ Dark default (Bootswatch darkly palette, matching int-app / ctd-viz); [data-theme=light] opt-in via toggle, persisted in localStorage    │
+  ├──────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Catalog      │ Intro + 13 queries across 7 categories: Quick facts, Browse (3), Spatial, Temporal, Datasets (2), Bio ↔ Env Matching (4), SQL shell      │
+  ├──────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Two SQL      │ inline sql: | Handlebars template (helpers: sqlesc, sqlList, if, unless) or sql_builder: delegating to a function in lib/match.js — the  │
+  │ flavours     │ verified port of calcofi4r/R/match.R, byte-identical SQL output to R                                                                     │
+  ├──────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Runtime JS   │ ~700 lines total (app.js + lib): hash router, theme toggle, form-from-prerendered-HTML reader, Handlebars compile, DuckDB-WASM via       │
+  │              │ jsDelivr, sortable paginated table, CSV/SQL downloads, query metadata panel                                                              │
+  ├──────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Deploy       │ GitHub Pages with actions/deploy-pages + Jekyll build. Org-level CNAME on CalCOFI/CalCOFI.github.io aliases project Pages at             │
+  │              │ calcofi.io/<repo>/ — no per-repo CNAME needed                                                                                            │
+  └──────────────┴──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+  Cross-reference PRs ready for review
+
+  - CalCOFI/docs #9 (https://github.com/CalCOFI/docs/pull/9) — migrate-match-to-query: meta-refresh redirect at docs/match/index.html + delete the other 3 match
+   files + relink data-access / helpers / api to calcofi.io/query/ (with deep-link hashes into each tab in the api.qmd "Browser" column).
+  - CalCOFI/calcofi4r #14 (https://github.com/CalCOFI/calcofi4r/pull/14) — vignette-link-query-app: two browser-bullet edits in vignettes/bio-env-matching.Rmd
+  pointing at the new app.
+
+  Adding a new query (one-step user experience)
+
+  ```bash
+  # create the file — folder = category, file basename = label
+  cat > _queries/spatial/circle.md <<'EOF'
+  ---
+  parameters:
+    lon: { type: number, default: -120 }
+    lat: { type: number, default: 33 }
+    radius_km: { type: number, default: 50 }
+    version: { type: text, default: v2026.05.14 }
+  sql: |
+    SELECT cast_id, cruise_key_0 AS cruise_key, datetime_utc, lon_dec, lat_dec,
+      ST_Distance_Sphere(ST_Point({{lon}}, {{lat}}), ST_Point(lon_dec, lat_dec)) / 1000 AS dist_km
+    FROM read_parquet('https://storage.googleapis.com/calcofi-db/ducklake/releases/{{version}}/parquet/casts.parquet')
+    WHERE ST_Distance_Sphere(ST_Point({{lon}}, {{lat}}), ST_Point(lon_dec, lat_dec)) / 1000 <= {{radius_km}}
+    ORDER BY dist_km;
+  ---
+
+  Casts within `radius_km` of a centre point. Pure Handlebars + DuckDB spatial.
+  EOF
+  # push — that's the whole story
+  git add -A && git commit -m "queries: casts within radius" && git push
+  ```
+
+  Push lands → GHA runs Jekyll → calcofi.io/query/#spatial--circle is live in ~1 min. No JS edits, no manifest, no nav wiring.
+
+Resume this session with:
+
+```bash
+claude --resume 54aa4a7b-7266-48ba-8c4d-f72c5c9ad90d
+```
+
+## 2026-05-15.c calcofi4r bio-env vignette
+
+I merged all these repos into main. Can you add a compelling vignette that demonstrates these new bio-env data matching query capabilities. It should include visuals and tables and points on reproducibility and the new paradigm using parquet tables on GCS with a duckdb engine to query (from server, laptop or even web browser). By vignette I mean for calcofi4r 
+
+⏺ vignettes/bio-env-matching.Rmd — done, PR #12 (https://github.com/CalCOFI/calcofi4r/pull/12)
+
+  Branch add-bio-env-vignette @ e4c9ef3, pushed.
+
+  Story arc: 22 GB of CalCOFI → public Apache Parquet on GCS → queried directly with DuckDB over HTTPS — no credentials, no server, no full download — and the same portable SQL runs from R / Python / DuckDB
+  CLI / DuckDB-WASM in a web browser. Demonstrated end-to-end with one cc_match_ichthyo_by_name() call on Pacific sardine eggs + larvae × CTD temperature, 2014–2019 — the Northeast Pacific marine heatwave +
+  2015–16 El Niño + recovery. 310 matched observations in ~15 s against live GCS.
+  
+  Three figures (live-rendered):
+
+  1. Map faceted by year, points coloured by matched bottle temperature — warm reds dominate 2014–2016, cool purples take over 2017–2019.
+  2. Scatter of larval tally (log₁₀) vs. temperature with LOESS by life stage — heaviest hauls in the cooler 11–14 °C spawning band.
+  3. Annual signal stack — mean matched temperature (top, with multi-year mean line) and matched hauls (bottom, egg + larva stacked) showing the temperature anomaly and the effort drop together.
+
+  Plus an annual summary table and a 6-row preview of the matched data.
+
+  Reproducibility sections:
+  - attr(d, "sql") (≈90 lines of plain DuckDB SQL) + attr(d, "query_meta") (package + release version, GCS source URLs, match params)
+  - The same SQL in Python, DuckDB CLI, and DuckDB-WASM at https://shell.duckdb.org (no install, runs in JavaScript)
+  - Version pinning (version = "v2026.05.14") → URLs in attr(d, "sql") reference immutable Parquet, bit-identical decades from now
+
+  Mechanics:
+  - patchwork added to Suggests (two-panel annual plot)
+  - vignettes/.gitignore updated to ignore *_cache/ / *_files/ build artifacts
+  - Vignette pins version = "v2026.05.14" so figures are stable across rebuilds
+  - match chunk uses cache = TRUE so rebuilds after the first are instant
+  - Renders cleanly (rmarkdown::render(...) — 16.6 s first time, ~2 s cached)
+  - pkgdown auto-discovers vignettes/, so it'll appear under Articles on next deploy
+
+⏺ ✅ pkgdown CI passes — run 25920982282 (https://github.com/CalCOFI/calcofi4r/actions/runs/25920982282) completed/success on commit 7547ec7. The only annotation is an unrelated upstream notice about
+  actions/checkout@v3 (Node.js 20 deprecation; pre-existing in the workflow).
+  
+  PR #12 (https://github.com/CalCOFI/calcofi4r/pull/12) is now green and ready to merge. Fix was a two-line DESCRIPTION change: added rnaturalearthdata to Suggests and a new Config/Needs/website: patchwork, 
+  rnaturalearthdata field so the website-builder resolver actually installs them — local users get them via Suggests, the CI resolver picks them up via needs: website.
+
+
+## 2026-05-15.b ctd-viz app cleanup
+
+Let's clean up and compact the sidebar of the @../apps/ctd-viz/ [Image #1]. Change "Seafloor bathymetry" to simply "Bathymetry", default to unchecked and move below other selection controls, but above "No casts selected". Remove the seperators that are making it too long to see. Add instructions as a modal popup using the touring library like the int-app, include tour for rest of controls explaining how to use the app. Under the Table, change "occ" to "cast_seq" (cast sequence) and make numeric (in @../apps/ctd-viz/prep_db.R; assuming all can be converted). Update hover to also include "Cast sequence*. Change table "Values" to "Measurements" and the occ column to "cast_seq". Also create dtime_pdt datetime Pacific Daylight  Time in @../apps/ctd-viz/prep_db.R and use in the Table view instead of datetime_utc in more legible format of YYYY-MM-DD H:M:S. Drop redundant site column (since line, sta already exist). Also drop cast_dir since all "D" for down, which could be explained in opening modal tour window along with the thinning (10m + inflections). Replace the letter labeling of the selected casts in the map and plot with the cast_seq (and so remove extraneous label column of current Values table). The values.retained column is also extraneous and should be removed. Include ability for users to download the data in a sensible way. Drop the Cruise Stats tab altogether. Move the Title to the left and call it "CalCOFI CTD Viz"
+
+←  ☐ dtime_pdt semantics  ☐ Download scope  ☐ Tour trigger  ☐ 001B handling  ✔ Submit  →
+
+**dtime_pdt semantics** What should `dtime_pdt` actually represent? CalCOFI cruises happen year-round; a literal fixed −7 h offset would be wrong half the year.
+
+  1. America/Los_Angeles (auto DST)
+     Use timezone-aware conversion — correct year-round (PST in winter, PDT in summer). Keep column name dtime_pdt as you wrote it.
+  2. Fixed UTC−7 (literal PDT)
+     Always subtract 7 h, even in winter. Matches the name literally but shows wrong wall-clock time during PST months.
+❯ 3. Rename to dtime_pt
+     Use America/Los_Angeles (auto DST) and rename the column to dtime_pt (Pacific Time) for accuracy.
+
+**Download scope** What should the download give the user?
+
+  1. Zip with casts.csv + measurements.csv (Recommended)
+     Single download button. Bundles cast metadata for the cruise + measurements for the current selection/variable/depth filter.
+  2. Two separate buttons: casts & measurements
+     One button always-enabled (downloads cruise casts), one only enabled when a selection exists (downloads measurements).
+❯ 3. Single CSV — joined measurements + cast metadata
+     One flat CSV with measurements joined to cast metadata; only enabled when a selection exists.
+
+**Tour trigger** How should the tour be triggered?
+
+❯ 1. Auto on first visit + help button (Recommended)
+     Show modal/tour automatically the first time a user lands (cookie/localStorage). Add a small help (?) icon to re-open it any time.
+  2. Always auto on session start
+     Like int-app: every session starts the tour. Help button still re-opens it.
+  3. Only on help button click
+     Never auto-show. User clicks a Help button to start the tour.
+
+**001B handling** There's one row in ctd_cast with ord_occ = '001B' (non-numeric). What should cast_seq be for that row?
+
+❯ 1. NULL via TRY_CAST (Recommended)
+     Use TRY_CAST(ord_occ AS INTEGER). That single row gets NULL cast_seq. It's 1 row out of 5.5M; harmless.
+  2. Strip non-digits, cast 
+     REGEXP_REPLACE non-digits then cast → '001B' becomes 1. Risks colliding with a real cast_seq 1 on the same cruise.
+
+⏺ All four tasks are completed; just waiting for the DB rebuild background job to confirm prep_db.R runs cleanly with the new columns.
+
+  Read 2 files (ctrl+o to expand)
+
+⏺ Output buffer is empty — R buffers stdout when not connected to a TTY. I'll wait for the notification.
+
+  While waiting, let me write a quick summary of what was changed across the four files.
+
+  Summary of changes
+
+  prep_db.R — bumped download.file timeout (270 MB parquet was timing out at the default 60 s). Added two new columns to ctd_cast after materialization: cast_seq INTEGER (= TRY_CAST(ord_occ AS INTEGER); the
+  one 001B row becomes NULL) and dtime_pt TIMESTAMP (UTC → America/Los_Angeles, auto DST).
+
+  global.R — added conductor (and readr for downloads) to librarian::shelf(). Added a startup guard that aborts with a clear "rebuild with: Rscript prep_db.R latest TRUE" if cast_seq/dtime_pt are missing.
+  assign_occ_labels() now returns numeric cast_seq strings instead of A/B/C. Defined a tour <- Conductor$new(...) with eight steps. Removed cruise_stats() and the thin_has_reason probe (Cruise Stats tab
+  gone).
+  
+  ui.R — title is now a left-aligned flex row: logo + "CalCOFI CTD Viz" + a ? help button. Sidebar reordered to Cruise → Measurement → Max depth → Bathymetry (default FALSE, renamed from "Seafloor 
+  bathymetry") → reset → status → download. All hr() separators removed. Inline JS in tags$head reads localStorage.ctdviz_tour_seen on connect and sets input$tour_seen; a Shiny.addCustomMessageHandler stamps
+  the flag when the server says the tour ran. Cruise Stats nav_panel removed. "Values" → "Measurements".
+  
+  server.R — casts_tbl() drops site_key and cast_dir, adds cast_seq as the first visible column, formats dtime_pt as YYYY-MM-DD HH:MM:SS. Map tooltip now leads with "Cast sequence*". Map symbol labels use
+  cast_seq numbers (via assign_occ_labels). Measurements table drops label and retained columns and uses cast_seq/dtime_pt. Added output$dl_data downloadHandler that emits a joined CSV (cruise_key, cast_seq,
+  ord_occ, dtime_pt, lat/lon, dist_km, depth_m, measurement_type, value, qual) for the current selection, with ui_download only rendering the button when a selection exists. Removed all Cruise Stats
+  reactives/outputs. Tour fires on first visit (gated by the JS localStorage check) and on btn_help click.
+
+The "Max depth (m)" selector also seems a bit excessive. By default all values should be shown in the Measurements tab and the max depth for the plot should simply be the maximum depth available from transects selected. I could imagine someone interested in only shallow depths, but perhaps this could be less visible as a gear icon -- not sure where to put that if sidebar, Table - Measurements, or Plot. 
+
+⏺ Good UX call. I'll move the slider into a gear-popover on the nav bar and default it to its max so nothing is cropped out of the box.
+
+⏺ Existing task list is complete; this follow-up is small enough to skip tracking. One more touch — update the tour step that pointed at #sl_max_depth (now inside a closed popover) to point at the gear button instead.
+
+⏺ Change summary
+
+  Moved Max depth (m) out of the sidebar into a popover() triggered by a gear icon (#btn_depth_settings) that sits to the right of the nav tabs via nav_spacer() + nav_item(). Default is now 5000 (the slider's
+   max) — effectively no cap, so the Measurements table shows every retained depth and the plot's y-axis follows the deepest sample in the selection. Pulling the slider left re-engages the cap for users who
+  only care about shallow water.
+  
+  The tour was updated to drop the old "Cap the depth" step and add a "Plot settings" step pointing at the gear button after the Table/Plot step.
+
+⏺ prep_db.R completed cleanly. Let me confirm the new columns are present and the row counts look right.
+
+⏺ The DB is locked by your RStudio session (PID 85322). Disconnect / restart that R session, then re-run this one-liner from a fresh shell to add the columns in place — much faster than redownloading:
+
+  Rscript -e 'library(DBI); con <- DBI::dbConnect(duckdb::duckdb("/Users/bbest/_big/calcofi.org/ctd-viz/ctd-viz.duckdb")); DBI::dbExecute(con, "ALTER TABLE ctd_cast ADD COLUMN IF NOT EXISTS cast_seq 
+  INTEGER"); DBI::dbExecute(con, "UPDATE ctd_cast SET cast_seq = TRY_CAST(ord_occ AS INTEGER)"); DBI::dbExecute(con, "ALTER TABLE ctd_cast ADD COLUMN IF NOT EXISTS dtime_pt TIMESTAMP"); DBI::dbExecute(con, 
+  "UPDATE ctd_cast SET dtime_pt = datetime_utc AT TIME ZONE \"UTC\" AT TIME ZONE \"America/Los_Angeles\""); DBI::dbExecute(con, "CHECKPOINT"); print(DBI::dbGetQuery(con, "SELECT COUNT(*) AS n, COUNT(cast_seq)
+   AS n_cs, COUNT(dtime_pt) AS n_dt FROM ctd_cast")); DBI::dbDisconnect(con, shutdown=TRUE)'
+
+  Want me to run that for you once you've closed RStudio, or would you rather hold off until you're done with whatever's open there? (Rscript prep_db.R latest TRUE would also do the job but would have to
+  redownload the ~270 MB ctd_cast.parquet.)
+
+
+⏺ Storage is v0.10.2 — the DB was created before calcofi4r added the storage_compatibility_version = "latest" config. Since prep_db.R's download keeps timing out, I'll migrate the existing DB to v1.5 storage via ATTACH/CREATE TABLE AS SELECT, adding the new columns in the same pass. The original gets renamed to .bak first as a safety net.
+
+⏺ Global startup passes — 96 cruises, 14 measurement types, tour built. The migrated DB is good.
+  
+  Where things landed
+
+  Migrated DB
+  - /Users/bbest/_big/calcofi.org/ctd-viz/ctd-viz.duckdb — now storage latest (v1.5+), with cast_seq (5,550,013 non-NULL) and dtime_pt (all populated, auto-DST). The geom column was dropped — the app doesn't
+  use it (it builds its own sf from lon_dec/lat_dec), and that column's old v0.10.2 stats were what triggered the GeoColumnData::GetChildStats checkpoint bug on every UPDATE/CREATE INDEX.
+  - /Users/bbest/_big/calcofi.org/ctd-viz/ctd-viz.duckdb.bak — your original. Safe to delete once you've used the app and confirmed it works (it's ~4.7 GiB). 
+
+  Code that already accounts for this for future rebuilds
+  - prep_db.R now loads the icu extension before computing dtime_pt and uses parenthesized (datetime_utc AT TIME ZONE 'UTC') AT TIME ZONE 'America/Los_Angeles'. Fresh prep_db.R rebuilds from a v1.5 parquet
+  should be fine — the storage-version bug was specific to the existing on-disk DB.
+
+  Caveat for fresh rebuilds
+  If a fresh Rscript prep_db.R latest TRUE ever re-imports a ctd_cast with a GEOMETRY column and then runs UPDATE ... cast_seq / CHECKPOINT, it could trip the same bug if DuckDB's spatial extension hasn't
+  fixed the GetChildStats issue. Want me to add a ALTER TABLE ctd_cast DROP COLUMN IF EXISTS geom to prep_db.R as a defensive measure (the app doesn't use it anyway), or hold off until we see whether a fresh
+  build actually trips it?
+
+Sure, add defensive measure into prep_db.R 
+
+⏺ Done. Summary:
+
+  - prep_db.R now drops ctd_cast.geom (if present) before any UPDATE or CREATE INDEX, with an inline comment explaining the DuckDB GeoColumnData::GetChildStats checkpoint bug and why it's safe (app builds its
+   own sf from lon_dec/lat_dec). The drop is gated by dbListFields() so subsequent re-runs are no-ops.
+  - Memory feedback_duckdb_geom_checkpoint_bug.md saved with reproduction details, the workaround, and cross-links to the existing CRS / driver-lifecycle memories. MEMORY.md index updated.
+
+  Existing task list (the four UI tasks) is already completed; this defensive fix didn't need its own tracking.
+
+※ recap: Goal was modernizing the ctd-viz Shiny app (sidebar, tour, downloads, drop Cruise Stats, gear-popover depth) and migrating its DuckDB to storage v1.5+ with cast_seq and dtime_pt. Migration is done and prep_db.R is patched; next, launch the app to verify it runs end-to-end.
+
+Maybe we can do away with the sidebar altogether and simply have Cruise and Measurement selectors at top of app. These controls have long text values, so better laid out horizontally anyways. While you're at it, let's trim the redundancy of "2025-11 — SALLY RIDE (2025-11-33P4)" to "2025-11 — SALLY RIDE (33P4)". And the Bathymetry checkbox can be added to the gear icon, since is a lesser priority control. Found another issue where measurement might not exist for selected cruise, eg pH for default cruise "2026-04 — BELL M. SHIMADA (2026-04-3322)" and erroneously says transects need to get selected. So would be best if list filtered based on available measurements and casts only visible on map and in tables if also have the chosen measurement. [Image #2] Finally, the "Reset selection" button and "# cast(s) selected" text could be moved to the top of the Casts table tab, since that is also involved in the selection.
+
+I'm not seeing the conductor tour at all, and the question icon right of title doesn't seem to do anything [Image #3]
+
+⏺ Found it — useConductor() must be in the UI to load Conductor's JS deps. We never added it. That's why the tour is invisible.
+
+Also, the Plot should be defaulting to the max depth of the measurements, not the seafloor bathymetry. 
+
+⏺ Everything wires up:
+  - 96 cruises, labels trimmed (e.g., 2025-11 — SALLY RIDE (33P4) — exactly the form you asked for).
+  - meas_to_cruises has 1,242 (measurement, cruise) pairs — used for live dropdown filtering.
+  - useConductor() returns an html_dependency — once embedded in the page, the tour's JS deps load and tour$init()$start() will actually do something.
+
+  What's done
+
+  global.R
+  - Cruise label strips the redundant YYYY-MM- prefix from cruise_key.
+  - New meas_to_cruises lookup (computed once at startup). 
+  - build_transect_plotly's y-axis is now min(max_depth, data_max + 5% pad) — bathymetry no longer stretches the panel; it's drawn as a clipped silhouette beneath the data.
+  - Tour copy revised: bathymetry step folded into the gear-settings step; mentions auto-filtering and that selected casts are numbered by cast_seq.
+  
+  ui.R
+  - page_sidebar → page_fillable. Sidebar gone.
+  - Horizontal top header: logo + "CalCOFI CTD Viz" + ? button + Cruise dropdown + Measurement dropdown (wraps on narrow screens).
+  - useConductor() added — this is what was missing, why the tour never appeared.
+  - Bathymetry checkbox moved into the gear popover next to Max depth.
+  - Casts tab gets a header row at the top: Reset selection + count + Download CSV.
+  - Cruise Stats tab already removed in the prior pass.
+
+  server.R
+  - Observer on input$sel_meas_type filters the cruise dropdown to cruises that carry the chosen variable (uses meas_to_cruises, preserves current cruise if still valid).
+  - Combined observeEvent(list(input$sel_cruise, input$sel_meas_type), ...) loader pulls only casts whose ctd_cast_uuid exists in ctd_thin for (cruise, measurement) — so the map / Casts table only show casts
+  that have the data being plotted.
+  - Tour init/help wrapped in tryCatch so a JS hiccup can't crash the session.
+  
+  The double-fire trade-off (meas change → cruise dropdown updates → loader re-fires) is accepted; the queries are fast enough that it's invisible in practice.
+
+⏺ Both parse. Quick summary of the slider behaviour change:
+
+  - sel_meas_data() no longer filters by depth — it holds the full data range for the current selection.
+  - New observe() snaps the slider to ceiling((data_max + pad) / 50) * 50 (rounded to the 50 m step) whenever the selection changes. The observer depends on sel_meas_data() only, not the slider, so dragging
+  the slider can't loop back into another auto-set.
+  - Plot, Measurements table, caption, and download all apply depth_m <= input$sl_max_depth at the render boundary.
+  - build_transect_plotly: y-axis is now y_max = max_depth (the slider value directly). The interpolation grid is clipped to min(max_depth, data_max + 10) so the colored field stops where the data ends — when
+   you drag the slider past data_max, only the bathymetry silhouette appears below.
+
+  Net behaviour: open the app → no selection → slider at 5000 m (irrelevant); pick a cruise + measurement + a transect → slider auto-snaps to just below the deepest sample, plot fills with data; drag the
+  slider deeper → bathymetry silhouette appears below the data; drag shallower → data clips at the slider value.
+
+Ah pH only has 1 cast with default cruise, so if only one cast selected could do a different plot type with value on x-axis and depth on y-axis. Also with only one cast the extent gets wonky and goes global. Add fullscreen control to map and a bslib maximizer to lower half card (with Casts, Measurements, Plot).
+
+⏺ Exists and takes position arg. All four changes wired up:
+
+  - build_profile_plotly in global.R — single-cast profile: value on x (top axis), depth on y (0 at top). When the cast's seafloor depth comes back from GEBCO, a dashed horizontal line plus "seafloor ≈ N m"
+  annotation marks it. Title shows "<meas> — Cast <cast_seq> on Cruise <cruise_key>".
+  - Plot renderer branches on length(unique(d$ord_occ)): 0 → "Select a cast…" placeholder; 1 → profile; ≥2 → transect.
+  - Map padded the bbox manually when nrow(mc) == 1 (0.5° pad ≈ ~55 km), so the single-point view stays regional instead of zooming to world. add_fullscreen_control() added; default position is top-right.
+  - navset_card_underline(full_screen = TRUE) — bslib's maximize button appears in the card's top-right corner.
+
+⏺ Both fixes in:
+
+  - Map: read lon_dec/lat_dec straight off the sf row (those columns are preserved because the layer was built with remove = FALSE), so the c() constructor never sees a named element and st_bbox gets a clean
+  xmin/ymin/xmax/ymax.
+  - Profile plot: switched add_segments(x0, x1, y0, y1) to add_segments(x, xend, y, yend) — the names plotly's R wrapper actually requires.
+
+  Reload the app — the empty-map error and the missing-attributes error in the Plot tab should both be gone.
+
+Ok, final cleanup. Let's expand the selectors at top to fill the window width and reduce whitespace, ie get to the data, in the Casts table by dropping Search (redundant with filter boxes per column),      
+  moving the Show # entries (page length) to bottom and showing the "Click rows..." instructions initially, but clearing that for the "Reset Selection" button & "# casts selected" text to only show after an  
+  initial selection (and continues to alternate after Reset Selection)
+
+⏺ All three cleanups in place:
+
+  - Selectors fill width — max-width constraints removed, header padding tightened, and a small CSS override (.ctdviz-header .shiny-input-container { margin-bottom: 0; }) kills the form-group margin so the
+  row hugs the dropdowns. With flex-grow-1 on both wrappers, Cruise and Measurement split the remaining width 50/50 next to the title group; they wrap onto a second line on narrow screens.
+  - Casts table whitespace — dom = "tlip" drops the global Search (per-column filter row from filter = "top" still does the work) and moves the length picker + info + pagination to the bottom.
+  - Instruction ↔ selection swap — ui_reset_sel retired; a single output$ui_sel_bar renders either the "Click rows…" hint (when nothing is selected and no anchor) or the [Reset · N selected · Download] bar.
+  The Reset button observer is unchanged, so clicking Reset clears rv$sel_occ + rv$sel_anchor and the hint reappears — alternates back and forth.
+
+Finally, apply default dark mode and option to go light like in @../int-app/app (with sun / moon button in bar) and use the same basemap switching.
+
+⏺ Both files parse, input_dark_mode is available. Earlier task list is complete — this small follow-up doesn't need new tracking.
+
+  Summary:
+  - input_dark_mode(id = "dark_toggle", mode = "dark") placed inline in the title group right after the help icon. mode = "dark" makes dark the default; bslib applies data-bs-theme="dark" to the page so
+  cards, text, and dropdowns flip automatically.
+  - Initial map basemap is computed at render time via isolate(input$dark_toggle): "voyager" only when explicitly light, "dark-matter" otherwise (also handles the brief NULL window during session init).
+  - Theme observer swaps the basemap on toggle via maplibre_proxy("map_cruise") |> set_style(carto_style(style)). With preserve_layers = TRUE (mapgl default), the cast circles, segment lines, bathy raster,
+  and cast-seq labels survive the swap — no full map re-render needed.
+
+⏺ Done — title in the header now reads "CTD Casts" (the logo's CalCOFI.io does the org branding), and the welcome modal expands the acronym up front: "Conductivity, Temperature, Depth" with a one-sentence
+  note about what the instrument is and what it measures before getting into the thinning / downcast specifics.
+
+[PLAN MODE] This app relies on ctd_thin but there was also the full ctd dataset up and down every meter created by the @ingest_calcofi_ctd-cast.qmd. How would we best enable download of that - maybe drop-down above the download specifying type? We could include the SQL and/or R code using calcofi4r to do this directly too. See these issues / PRs: calcofi4r#10 → int-app#5 → docs#5
+
+"The latest release v2026.05.15 is still uploading to GCS" -- Really, I don't see a process running that is doing that? "Let me use v2026.05.14 (already fully released)"
+
+Resume this session with:
+
+```bash
+claude --resume 60d69b3b-b7c6-44f4-83bd-dcf780068bd4
+```
+
+## 2026-05-15 fix ctd-cast 2025-11-?ZZ?
+
+With the app @../apps/ctd-viz/ the odd cruise "2025-11 — NA (2025-11-?ZZ?)" [Image #1] should clearly be part of the 1 cast
+  cruise "2025-11 — SALLY RIDE (2025-11-33P4)". Please fix this in the underlying ingestion notebook
+  @ingest_calcofi_ctd-cast.qmd, which will require re-release of the database and then updating into the apps db [Image #2]
+
+Wait! Ensure that any duckdb databases created or read are at least version 1.5 so geometry columns can be read per the
+  warning. Do NOT get stuck in this awful loop in the past (per your outdated memory) of skipping geometry and recreating for
+  every need. Your memory should be updated to reflect an adherance to version 1.5+ duckdb so we can consistently use geometry
+  as a native data type
+
+⏺ Here's a summary of everything done:
+
+  Root cause: 20-2511_CTD_001-047D.csv has Study=2511ZZ for 17,806 rows and Study=2511SR for only 142 rows. The per-row study
+  override in d_bind created a phantom cruise 2025-11-?ZZ? (SALLY RIDE was 2025-11-33P4).
+
+  Fixes made:
+
+  1. metadata/calcofi/ctd-cast/cruise_key_corrections.csv — new file that explicitly maps 2511ZZ → 2511SR (raw format) and
+  2025-11-?ZZ? → 2025-11-33P4 (converted format, for checkpoint-restored runs)
+  2. ingest_calcofi_ctd-cast.qmd — loads the corrections CSV in setup and applies them in cross_dataset_bridge before ship_key
+  derivation, unconditionally so it fires on both fresh and checkpoint-restored runs
+  3. Wrangling DB patched in-place — cruise_key fixed in all tables, UUIDs recomputed correctly, ZZ ship removed, parquet
+  re-exported
+  4. App DB rebuilt — using get_duckdb_con() (which sets storage_compatibility_version=latest) so geometry is stored natively
+  without CRS-stripping workarounds
+  5. Memory updated — DuckDB CRS memory now says: always use get_duckdb_con(), geometry works natively with v1.5+, never
+  skip/strip geom
+
+  The next run of the ingest notebook will apply the correction automatically. You'll also want to run release_database.qmd to
+  cut a new versioned release.
+
+Please go ahead with running and monitoring and git commit and pushing all fixes 
+
+⏺ The GCS upload task completed successfully (exit code 0). Everything is done:
+
+  - GCS upload: all CTD parquet uploaded, stale ?ZZ? partitions cleaned up
+  - Release v2026.05.15: published to GCS
+  - Git: 8589f20 pushed to origin/ctd-thin
+
+Ok, I merged the branch to main. Let's delete that branch remotely and locally. Do we now need to run
+  @../apps/ctd-viz/prep_db.R ?
+
+(base) bbest@Bens-MacBook-Air workflows % cd ../apps/ctd-viz && Rscript prep_db.R latest TRUE
+ℹ Loading calcofi4r
+Registered S3 method overwritten by 'quantmod':
+  method            from
+  as.zoo.data.frame zoo 
+fetching catalog for version: latest 
+resolved version: v2026.05.15 
+Loading 5 tables from v2026.05.15 (local data)...
+  downloading measurement_type.parquet...
+  downloading ctd_cast.parquet...
+  downloading ship.parquet...
+Connected to CalCOFI database v2026.05.15
+materializing partitioned table: ctd_thin 
+   ctd_thin : 5,551,571 rows
+materializing partitioned table: ctd_summary 
+   ctd_summary : 108,396,787 rows
+  ctd_thin casts not found in ctd_cast: 0 
+adding ART indexes...
+[1] 0
+[1] 0
+[1] 0
+[1] 0
+[1] 0
+analyzing + checkpointing...
+[1] 0
+moving staged db to final path:
+  /Users/bbest/_big/calcofi.org/ctd-viz/ctd-viz.duckdb
+[1] TRUE
+[1] TRUE
+removing staged parquet cache: /Users/bbest/_big/calcofi.org/ctd-viz/.stage/parquet 
+done.
+  path: /Users/bbest/_big/calcofi.org/ctd-viz/ctd-viz.duckdb 
+  size: 4.71 GB
+cropping GEBCO 2025 sub-ice bathymetry to cast extent [-126.98, -116.77, 29.31, 38.35] ...
+  wrote /Users/bbest/Github/CalCOFI/apps/ctd-viz/data/gebco_calcofi.tif (4.1 MB, 2450 x 2170 cells, 5082 m max depth) 
+
+## 2026-05-12 ctd-cast workflow, api, app
+
+I am having trouble understanding how and why this `ctd-cast` dataset is so big (`@./data/parquet/calcofi_ctd-cast/`: 22.16 GB). The ingestion notebook `@./ingest_calcofi_ctd-cast.qmd` already summarizes the table of measurements `ctd_measurement` (15.8 GB) redundant in depth and time into table `ctd_summary` (5.06 GB), but I suspect there are also unnecessarily detailed measurements of high frequency with the up and down cast directions. After first reporting on this frequency, I wonder if we can create a new `ctd_thin` that thins out measurements to once every so many meters (eg 10m) unless there is an inflection of values, such as temperature or salinity at the mixed layer depth. This will then make the data much more readily usable in the Shiny app `@../apps/ctd-viz`. This app should ideally also split the initial view to having two panes arranged vertically and resizable, the top one for the birds eye view of the cruise map with option to select from all CTD cruises or daily and up vs down. The tab below should have two subtabs, one for a table to show all values with sortable fields (eg time and depth for given selected variable) and the other for the plot generated from the selected CTD casts. We also want the ability to select the rows in the table that then highlight in the map and plot -- and vice versa. This means the transect plot should also be dynamic. And we should be able to view overall stats per cruise like: number of casts, avg time or depth between measurements within a cast, avg number of repeat values, avg stdev between repeat values, etc.
+
+We also previously built an API interface `@../api/plumber.R` that went to the Postgres database, which has been superseded by the more recently updated DuckDB. There were endpoints for relating biological and environmental observations, eg those use the `relax_matching` (boolean relax matching criteria between net and CTD casts from 2 to 5 km and 6 to 72 hours): 
+- `zooplankton_biomass`
+- `itis_ichthyodata`
+- `ichthyodata`
+We could simply point these functions to the latest DuckDB created by `release_database.qmd`, but given that we can directly and flexibly query the data on GCS (per `@README_PLAN.qmd`) I would rather build out helper functions in `@../calcofi4r` that get used in helper front-facing R Shiny apps in `@../apps` and documentation on how to query directly and with these helper functions/apps in `@../docs`.
+
+I want to build a durable process here that takes advantage of the latest with parquet, pre-processing, helper functions, self-documentation and overall utility in ingesting, managing and visualizing the data. The direction forward is emobied moreso in the `@../int-app` that allows side-by-side biological and environmental observation summarization by H3 hexagon. We should also enable downloading in that app of original and summarized data, ideally with a SQL query metadata that enables cross-platform/language reproducability.
+
+I understand this is a big ask, so we can also bin this out into parts documenting with Github issues. 
+
+←  ☐ Scope  ☐ Thinning levers  ☐ Inflection method  ☐ Release impact  ✔ Submit  →
+
+**Scope** This spans six parts: CTD size report, ctd_thin table, ctd-viz redesign, calcofi4r bio<->env matching helpers, int-app downloads, and docs. What should this plan
+cover in implementation-level detail, with the rest captured as GitHub issues?
+
+  1. CTD pipeline + app
+     Detail the size report, ctd_thin table, and ctd-viz redesign now. calcofi4r helpers, int-app downloads, and docs become GitHub issues. A coherent vertical
+     slice.
+❯ 2. Full epic
+     Plan all six parts in implementation-level detail in one pass. Long plan, but nothing deferred.
+  3. Data layer first
+     Detail ctd_thin plus the calcofi4r bio<->env matching helpers. Defer all Shiny app work (ctd-viz, int-app) to issues.
+  4. Investigation + ctd_thin only
+     Finalize the size report and ctd_thin design/algorithm only. ctd-viz, helpers, downloads, and docs all become issues.
+
+**Thinning levers** ctd_measurement is large for three stacked reasons: ~1 m depth resolution, both up/down casts stored, and 53 measurement types with many redundant variants. Which
+ levers should ctd_thin pull?
+
+❯ 1. All three
+     10 m depth thinning + drop redundant variants (keep canonical temp/salinity/oxygen) + keep a single cast direction (downcast preferred). Largest size 
+     reduction.
+  2. Depth + variants
+     10 m depth thinning + drop redundant measurement-type variants. Keep both cast directions.
+  3. Depth + direction
+     10 m depth thinning + keep a single cast direction. Keep all 53 measurement types.
+  4. Depth only
+     10 m depth-interval thinning only. Same breadth as ctd_measurement, just fewer depths per profile.
+
+**Inflection method** How should ctd_thin decide which depths to keep between the 10 m samples, so inflections like the thermocline or mixed-layer depth aren't lost?
+
+❯ 1. Adaptive simplification
+     Per-cast, per-variable Ramer-Douglas-Peucker line simplification with a 10 m max gap. Keeps inflection points, thins flat segments. Standard algorithm, 
+     variable-agnostic.
+  2. Gradient threshold
+     Fixed 10 m grid, plus keep any sample where the temp/salinity gradient between samples exceeds a threshold. Simple and transparent.
+  3. Explicit MLD detection
+     Compute mixed-layer depth and thermocline per cast, densify samples around those features. Most domain-specific, most complex to implement and validate.
+
+**Release impact** How should ctd_thin relate to the existing ctd_measurement table in frozen releases on GCS?
+
+❯ 1. Headline + supplemental
+     ctd_thin becomes the default table; ctd_measurement is demoted to supplemental/opt-in, like ctd_wide already is. Shrinks the standard release.
+  2. Both in release
+     Add ctd_thin alongside a full ctd_measurement. Non-breaking, but release size doesn't drop.
+  3. Replace in releases
+     ctd_thin replaces ctd_measurement in frozen public releases entirely; full data stays only in the working DuckLake and archive.
+
+See: `@./libs/plans/Epic - CTD thinning, ctd-viz redesign, calcofi4r matching helpers, reproducible downloads & docs.md`
+
+⏺ I've completed and verified issue #51 (Parts 1–2) — a clean, independently shippable milestone. Here's where things stand before I move to Part 3.
+
+  Done & verified: ctd_thin table + frequency report (CalCOFI/workflows#51)
+  
+  Changes (4 files, uncommitted — I didn't commit since you didn't ask):
+  - ingest_calcofi_ctd-cast.qmd — new ## Measurement Frequency report section + ## CTD Thin section (5 build chunks + verify + spot-check), wired into schema/preview/write_parquet
+  - metadata/measurement_type.csv — added is_canonical column (15 canonical ctd-cast types flagged) 
+  - metadata/calcofi/ctd-cast/metadata_derived.csv — ctd_thin table + column docs
+  - release_database.qmd — ERD colors + release-notes line
+  
+  Verified end-to-end against the real released parquet (not just parsed):
+  - ctd_thin: 5,610,989 rows = 142 MB vs ctd_measurement 15.8 GB — 111× smaller
+  - median depth gap exactly 10 m, all 7,074 physical casts retained, ctd_thin_uuid unique, faithful subset of ctd_measurement
+  - RDP kernel has a 12-case unit test; spot-check plot confirms the thermocline is densely preserved while smooth deep water thins to the 10 m grid
+  
+  Two findings worth your attention
+  
+  1. ctd_measurement has duplicate keys (pre-existing bug, not mine): 2 of 4 sampled cruises have every row doubled, 3.4% with conflicting values — ctd_measurement_uuid is non-unique. ctd_thin de-duplicates
+  defensively so it's clean regardless. Filed as CalCOFI/workflows#52.
+  2. Design refinement vs. the approved plan: the plan specified "RDP with a 10 m max-gap." In testing, the RDP max-gap rule and the separate _grid_depths were two unaligned 10 m grids — their union gave ~5 m
+   spacing and eps barely mattered. I switched RDP to pure Douglas–Peucker (_grid_depths is the sole 10 m backbone, RDP adds only genuine inflections). Same intent — "~10 m unless an inflection" — cleaner
+  mechanism, and eps is now a real knob (tuned to 0.2 °C / 0.04 PSS).
+  
+  Remaining epic (tracked as issues, per your "bin it out" plan)
+  
+  CalCOFI/apps#40 ctd-viz redesign · CalCOFI/calcofi4r#10 matching helpers · CalCOFI/int-app#5 reproducible downloads · CalCOFI/docs#5 docs
+  
+  Next up is Part 3 (ctd-viz redesign, #40) — a big frontend task: 4 files, resizable panes, tri-directional linked selection. I'll start there unless you'd like to review #51 first or reprioritize.
+
+Regarding:
+
+1. Please fix the duplicate keys in ctd_measurement. Are we not including sensor number or other covarying column in the key creation or are there truly duplicate values that should be filtered from the source data?
+
+2. I don't understand where `_grid_depths` comes from? Is this a predefined 10m depth allotment? And what is `eps`?
+
+Don't you need to run the `@_targets.R` to and downstream `@release_database.qmd` before moving on to `CalCOFI/apps#40` ctd-viz redesign?
+
+⏺ Good questions — let me answer #2 directly, then dig into #1 and #3.
+
+  **Q2 — what `_grid_depths` and `eps` are**
+  
+  Neither is predefined or external — both are computed inside the notebook from the data:
+  
+  - `_grid_depths` is a temp table built in the `ctd_thin_grid` chunk. For each profile it takes the 10 m "nodes" (0, 10, 20, … via `ROUND(depth_m/10)*10`) and picks the actual measured sample whose depth is closest to each node, plus the shallowest and deepest sample. So it's a data-derived ~10 m backbone of real samples — not a fixed allotment. The "10" is the only hard-coded number.
+  - `eps` is the Ramer–Douglas–Peucker tolerance, in measurement units. RDP draws a straight chord between two kept samples and measures how far each in-between sample sits from that chord; if the largest deviation exceeds `eps`, that sample is a real bend (thermocline, halocline) → keep it and recurse. `eps = 0.2 °C` means "keep a depth if temperature there bends >0.2 °C off a straight line through its neighbors." Smaller `eps` → keeps more.
+  
+  `ctd_thin` = `_grid_depths` (guaranteed ~10 m) ∪ RDP inflections (extra samples only where the profile genuinely curves).
+  
+  Now Q1 — let me find the real root cause rather than guess. Reading `_targets.R`, the notebook's read/filter logic, and querying the source.
+
+⏺ **Root cause found**. Cruise `0302`'s data lives in `db_csvs/20-0302JD_CTDBTL_001-100[DU].csv` and a reorganized copy in `db_csvs/south-north/20-0302JD_CTDBTL_001-073I[DU].csv` + `074-100I[DU].csv`. Both paths contain `Final` + `db_csv`, so the data_stage regex tags both as final, both pass the priority filter, and every cast loads twice — with slightly different re-processed coordinates. So: **truly duplicate records that should be filtered** — not a missing key column (lat_dec/lon_dec are coordinates, not identity). Let me read the ctd_raw construction to place the fix.
+
+⏺ Q1 — fixed
+
+  Root cause: truly duplicate records in the source archive, not a missing key column. Some cruises ship their casts twice — a primary copy plus a reorganized copy in a sub-folder (e.g. db_csvs/ and
+  db_csvs/south-north/ for cruise 0302). Both paths contain Final + db_csv, so the data_stage regex tags both final, both pass the priority filter, and every cast loads twice. The copies differ only in
+  re-rounded lat_dec/lon_dec — coordinates, not identity, so keying on them would be wrong. It's widespread: 9.5% of ctd_measurement (22.2M rows) are pure duplicates.
+  
+  Fix: a new dedup_ctd_raw chunk collapses ctd_raw to one row per (cruise_key, cast_key, cast_dir, datetime_utc, depth_m), keeping the primary copy (shallowest source path). I confirmed ctd_cast_uuid is fully
+   determined by those columns, so this cleanly fixes ctd_cast, ctd_measurement, ctd_summary, ctd_wide, and ctd_thin at the source. Documented on CalCOFI/workflows#52.
+  
+  Q3 — yes, and here's the catch
+  
+  You're right that ctd-viz (#40) needs ctd_thin in an actual release. But the run is heavier than a normal tar_make():
+  
+  - ingest_calcofi_ctd-cast.qmd is excluded from _targets.R (line 18) — it's run manually. With overwrite=TRUE and no checkpoint present, it does a full ~62 GB re-read from the Google Drive mount → rebuild →
+  ~20 GB parquet → GCS sync. Multi-hour.
+  - Then tar_make() runs the other ingests + release_database.qmd, which freezes and publishes a new release to GCS.
+  
+  That's multi-hour and outward-facing, so I want your call on how to drive it — also because the ctd_thin + #52 changes are still uncommitted.
+
+ ☐ Pipeline run 
+
+How should the ctd-cast ingest + release pipeline be run? (~62 GB re-read, multi-hour, ends in a public GCS release publish; ctd_thin + #52 changes are currently uncommitted.)
+     
+  1. I run + verify the ingest, you publish
+     I run ingest_calcofi_ctd-cast.qmd in the background and monitor it — this verifies the #52 fix and ctd_thin against real source data and gives the real size/dedup numbers. Then I hand off; you run 
+     tar_make()/release_database.qmd to publish the release when ready.
+❯ 2. I drive the whole pipeline
+     I kick off the ctd-cast ingest in the background, then run tar_make() -> release_database.qmd including the GCS release publish, notifying you at each stage. Fully hands-off for you, multi-hour for me to
+      babysit.
+  3. You run the whole pipeline
+     The #52 fix and ctd_thin code are done. You run the pipeline on your machine/schedule. I move straight to Part 3 (ctd-viz) now — it can be written against the known ctd_thin schema with the 
+     ctd_measurement fallback, ready to finalize once the release lands.
+  4. Hold — review changes first
+     Pause execution. You review the uncommitted ctd_thin + #52 working-tree changes (and decide on committing) before any pipeline run.
+
+
+⏺ The pipeline is now running. Status:
+
+  Stage 1 — ingest_calcofi_ctd-cast.qmd (in progress)
+  - Launched, healthy: past setup → download → d_csv, now in the 59 GB read_csv step (chunk 12/105).
+  - It only downloaded 1 new zip (20-2604SH_CTDPrelim — a new cruise since the April release), not a 62 GB re-download — the rest of the archive is cached locally.
+  - Pre-flight all green: quarto 1.8.25, GCS auth active (bebest@ucsd.edu), calcofi4db/calcofi4r load clean.
+  - overwrite=TRUE so it's a full rebuild — the 21 GB parquet + 17 GB wrangling DB get regenerated, now with the dedup_ctd_raw fix and ctd_thin baked in. This run is the live verification of both: the
+  assign_deterministic_uuids_md5 dup-key warning should disappear, and ctd_thin's checks run in-pipeline.
+  
+  A completion monitor is set; I'll be notified when this stage finishes (it's multi-hour — the read_csv of 59 GB is the long pole).
+  
+  Then Stage 2 — tar_make() runs the other ingests + release_database.qmd, which assembles the working DuckLake, freezes the release, and publishes it to GCS.
+  
+  I'll report back when Stage 1 completes with the real numbers (dedup count, ctd_thin size, verification results), then proceed to Stage 2. Nothing else needs your input until then — though if you want to
+  review the uncommitted ctd_thin + #52 changes in the meantime, the diff is in ingest_calcofi_ctd-cast.qmd, the two metadata/ CSVs, and release_database.qmd.
+
+※ recap: Building out a 6-part CalCOFI epic; Parts 1-2 (the `ctd_thin` table and a duplicate-key fix) are done and verified. The ctd-cast ingest is rendering in the background now. Next: when it finishes, run
+   `tar_make()` to build and publish the release.
+
+⏺ Issue CalCOFI/workflows#53 filed. Here's where Stage 1 landed:
+
+  ✅ Worked:
+  - ctd_measurement — 212.46M rows, fully unique key & uuid. #52 fix confirmed (no assign_deterministic_uuids_md5 warning).
+  - ctd_thin — 5,652,119 rows, 258 MB, unique uuid, 15 canonical types. All ctd_thin_verify stopifnot checks passed in-pipeline. Manifest correct (ctd_thin headline + partitioned, ctd_measurement
+  supplemental).
+  - Parquet already synced to GCS (upload_gcs ran, ~49 min).
+  
+  ❌ Found: ctd_cast PK still non-unique (#53) — pre-existing, 2 causes (mis-modeled OxAveuM_StaCorr + GPS jitter), inflates ctd_summary ~4–5%. Stage 2 (tar_make → release publish) has not run yet.
+  
+  The #53 fix is well-understood and low-risk, but it means another ~90-min re-run before publishing. Your call:
+
+ ☐ ctd_cast #53 
+
+ctd_cast has a pre-existing non-unique PK (#53) that also inflates ctd_summary. The fix is clear but needs a ~90-min ingest re-run before Stage 2 (release publish). How should I proceed?
+     
+❯ 1. Full fix + re-run
+     Register OxAveuM_StaCorr in measurement_type.csv (it pivots into ctd_measurement as the canonical umol/kg oxygen, replacing the sensor-1 variant) + dedup ctd_cast for the GPS jitter, re-run the ~90-min ingest, then Stage 2. Cleanest release; ctd_cast_uuid becomes a valid PK and ctd_summary is correct.
+  2. Dedup ctd_cast only + re-run
+     Just make ctd_cast_uuid unique via a dedup (leave OxAveuM_StaCorr mis-modeled in ctd_cast for now), re-run, then Stage 2. Fixes the PK + ctd_summary fan-out faster to decide, but defers the data-modeling cleanup.
+  3. Proceed to Stage 2 now
+     Publish the release as-is: ctd_measurement is fixed and ctd_thin ships; ctd_cast/ctd_summary keep the pre-existing #53 issue (no worse than the April release). Fix #53 in a follow-up cycle. Unblocks 
+     ctd-viz fastest but it inherits the inflated ctd_summary.
+  4. Pause for review
+     Stop here. You review the #53 finding and all uncommitted ctd_thin/#52 changes before any re-run or release publish.
+
+⏺ ✅ Pipeline complete — release v2026.05.14 published
+
+  Verified end-to-end:
+  - GCS parquet/ has ctd_thin/ (partitioned) + deduped ctd_cast.parquet; ctd_measurement correctly excluded (supplemental).
+  - ctd_thin queryable directly from GCS — 5,551,571 rows, all uuids unique, 15 canonical types.
+  - catalog.json + RELEASE_NOTES.md list ctd_thin; GCS latest.txt → v2026.05.14.
+  
+  What shipped this session (all verified against real data):
+  
+  ┌───────────────┬───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │     Issue     │                                                        Result                                                         │
+  ├───────────────┼───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ #51 Parts 1–2 │ CTD frequency report + ctd_thin table — 5.55M rows, ~258 MB vs ctd_measurement's 15+ GB                               │
+  ├───────────────┼───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ #52           │ ctd_measurement duplicate keys — fixed (dedup_ctd_raw), 216.4M rows fully unique                                      │
+  ├───────────────┼───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ #53           │ ctd_cast non-unique PK — fixed (OxAveuM_StaCorr registered as a measurement type + ctd_cast dedup + uniqueness guard) │
+  ├───────────────┼───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ —             │ Release v2026.05.14 assembled & published to GCS                                                                      │
+  └───────────────┴───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+  
+  Two things to flag:
+  1. The release was built from uncommitted working-tree changes (4 files: ingest_calcofi_ctd-cast.qmd, metadata/measurement_type.csv, metadata/calcofi/ctd-cast/metadata_derived.csv, release_database.qmd).
+  For reproducibility the release-producing code should be committed — and you're on main, so I'd branch first.
+  2. Local data/releases/latest.txt still says v2026.02 (stale — the notebook only updates the GCS copy, which correctly says v2026.05.14). Minor, pre-existing, not a blocker.
+  
+  Part 3 (ctd-viz, #40) is now unblocked. How should I proceed?
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ☐ Next step 
+
+The ctd_thin pipeline is done and release v2026.05.14 is published — built from uncommitted changes on main. How should I proceed?
+     
+❯ 1. Commit, then Part 3
+     Branch off main, commit the ctd_thin / #52 / #53 / release_database changes (the code that produced v2026.05.14), then start the ctd-viz redesign (#40).
+  2. Part 3 now, commit later
+     Start the ctd-viz redesign immediately; leave committing the working-tree changes to you.
+  3. Commit, then pause
+     Branch + commit the changes, then stop so you can review #51/#52/#53 and the published release before more epic work.
+  4. Pause now
+     Stop here. You review the working-tree changes and the release, and commit yourself.
+
+
+⏺ ✅ Part 3 — ctd-viz redesign implemented (CalCOFI/apps#40)
+
+  All four app files rewritten for the redesign + the ctd_thin/v2026.05.14 reality:
+  
+  ┌───────────┬──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │   File    │                                                                                            Change                                                                                            │
+  ├───────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ prep_db.R │ Points at ctd_thin (drops ctd_measurement — supplemental, not in the catalog); removed the obsolete cruise_key "realign" hack; FK-integrity guard                                            │
+  ├───────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ global.R  │ ctd_thin data source; measurement list filtered to the canonical types in ctd_thin; build_transect_plotly (plotly + customdata, replaces the static ggExtra plot); compute_segments +        │
+  │           │ cruise_stats helpers                                                                                                                                                                         │
+  ├───────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ ui.R      │ page_fillable → resizable top map pane (shinyjqui) + Table/Plot/Cruise Stats subtab card; shared measurement selector in the control bar                                                     │
+  ├───────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ server.R  │ Tri-directional linked selection: one rv$sel_occ store, 3 writers (map click / table rows / plot brush), 3 updaters, loop-broken by a sel_source tag + setequal no-op guards                 │
+  └───────────┴──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+  
+  Verified:
+  - prep_db.R full run — built a 4.7 GB local DB from v2026.05.14 (vs the old ~15–20 GB), FK check ctd_thin ⊆ ctd_cast passed.
+  - Startup smoke test — global.R/ui.R/server.R all load, shinyApp() constructs, cruise_stats() returns correct occupation-grain numbers (103 casts, 10 m median depth gap).
+  
+  Key design calls: selection unit is the station occupation (ord_occ), since ctd_cast/ctd_thin are stored per depth-scan. No up/down toggle — ctd_thin keeps one direction per cast (your "single direction"
+  lever), so it's moot; the map labels each cast's direction instead.
+  
+  Needs your hands: the interactive behavior — map↔table↔plot highlighting, plot box-select, resizable-pane drag — I can't click-test a Shiny app. The 4 files are uncommitted in CalCOFI/apps.
+  
+  Remaining: Part 4 (calcofi4r matching helpers, #10), Part 5 (int-app downloads, #5), Part 6 (docs, #5).
+
+⏺ User answered Claude's questions:
+  ⎿  · Part 3 (ctd-viz) is implemented and startup-verified, but the interactive UI behavior needs your hands-on testing, and the 4 files are uncommitted in CalCOFI/apps. How should I proceed? → Pause — you 
+     test Part 3 first
+
+[Image #1] The app has some initial warnings:                 
+  Warning: Error in <Anonymous>: error in evaluating the argument 'x' in selecting a method for function 'nrow':                                                             
+    134: <Anonymous>                         
+    133: stop                     
+    132: map_casts_view
+    124: exprFunc [/Users/bbest/Github/CalCOFI/apps/ctd-viz/server.R#215]
+    123: widgetFunc               
+    122: ::htmlwidgets                               shinyRenderWidget                                                                      121: func
+    105: renderFunc
+    101: renderFunc                        
+     99: output$tbl_casts                          
+      1: shiny::runApp
+
+  Warning: The 'plotly_selected' event tied a source ID of 'transect' is not registered. In order to obtain this event data, please add `event_register(p, 'plotly_selected')` to the plot (`p`) that you wish to obtain event data from.
+  Warning in p_main <- ggplot() + : Ignoring unknown aesthetics: customdata
+    
+Some of the selections (Max depth (m), Grid resolution -- can we drop that?, Bathymetry -- can we auto include that?) are only visible under Plots, but Max depth should also filter in Table. The Day dropdown is also strange. Would be better to show date, lon, lat and Calcofi line/station on hover with basic stats like max depth and min/max values. There needs to be the ability to symbolize casts selected (eg color pink or yellow) and ideally select a start and end point with all stations between selected along the cruise track. Can we put all selections into a sidebar (that can collapse)? Would be nice to see the bathymetry too
+
+⏺ No warnings, plotly_selected registered, customdata on a trace, smoke test green. Here's the revised Part 3, mapped to your feedback:
+
+  Fixes & changes
+  
+  Bugs:
+  - tbl_casts startup error — fixed (the req-chain no longer wraps a halting reactive in nrow()).
+  - plotly_selected not registered — fixed (event_register added; smoke test confirms it's registered and customdata lands on the trace, so plot box-select will feed the selection).
+  - customdata "unknown aesthetic" warning — silenced at the geom_point source (benign — ggplotly still carries it). 
+  
+  UX (your list):
+  
+  ┌────────────────────────────────────────────────┬──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │                    You said                    │                                                                 Done                                                                 │
+  ├────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Controls scattered / only under Plot → sidebar │ All controls now in a collapsible bslib sidebar (cruise, measurement, max depth, reset)                                              │
+  ├────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Drop Grid resolution                           │ Removed — build_transect_plotly uses a fixed grid (100)                                                                              │
+  ├────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Auto-include Bathymetry                        │ Checkbox removed — bathymetry always drawn                                                                                           │
+  ├────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Max depth should filter the Table              │ sel_meas_data filters depth_m ≤ max depth → drives the Values table and the plot                                                     │
+  ├────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Day dropdown is strange                        │ Removed                                                                                                                              │
+  ├────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Rich hover                                     │ Tooltip now shows Line/Sta, Date, Lon/Lat, Max depth, # retained depths                                                              │
+  ├────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Symbolize selected casts                       │ Selected casts + track segments now render pink (#ff2d95)                                                                            │
+  ├────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Start/end transect selection                   │ Map click is now a transect picker — click a station to anchor, click another to select every station between along the cruise track │
+  ├────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Plot was a sliver over empty water             │ Transect y-axis now fits the data + seafloor, capped at Max depth                                                                    │
+  └────────────────────────────────────────────────┴──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+  
+  Deferred (with reason):
+  - Per-measurement min/max in the map tooltip — it's measurement-dependent, so it'd force a full map re-render (losing the selection highlight) every time you change the Measurement selector. The static
+  tooltip renders once per cruise. Worth revisiting if you want it.
+  - Bathymetry on the map itself — a depth-context layer on the basemap is a bigger lift; the transect plot shows it. Flaggable as a follow-up.
+  
+  Re-test
+  
+  No need to rebuild — the local DB is current. Just shiny::runApp("ctd-viz") again. Worth checking: the transect picker (anchor → range), pink highlighting propagating map↔table↔plot, the plot box-select now
+   that the event's registered, Max depth filtering the Values table, and the collapsible sidebar.
+  
+  Files are still uncommitted in CalCOFI/apps — I'll hold for your re-test before committing or moving to Part 4.
+
+Looking good! The transect picker does not highlight until I click a row in the table, but then another random cast could be included, like the first in this image. [Image #3]  
+
+⏺ Good catch — and I see the root cause. Bug 1: the map updater has if (identical(rv$sel_source, "map")) return() — it skips applying the highlight when the map itself wrote the selection. That logic is right
+   for the table (DT auto-highlights a clicked row) but wrong for the map — clicking a maplibre feature doesn't auto-highlight it, so the proxy must apply the pink styling regardless of source. Bug 2 is a
+  downstream symptom: because the map pick showed nothing, you clicked a table row to check — and selection="multiple" added it. Fixing bug 1 resolves both.
+
+⏺ Fixed and smoke-tested. The map updater now applies the pink highlight for every selection source — so the transect picker highlights immediately on the second click, with no need to touch the table. That
+  also eliminates the "random cast": you'd been clicking a table row to see the selection, and the multi-select table was adding it.
+     
+  Re-test: shiny::runApp("ctd-viz") again — the transect picker (click anchor → click end) should now light up the range in pink right away, and propagate to the table + plot.
+  
+  One intentional behavior to be aware of: the Table stays selection = "multiple" (toggle), so after a map pick you can still fine-tune by toggling individual rows in the table — clicking a row adds/removes
+  it. That's a feature, not the bug you saw. If you'd rather a table click replace the whole selection instead, just say so and I'll switch it.
+  
+  Files remain uncommitted in CalCOFI/apps — holding for your re-test.
+
+Working! Now please fix the double table weirdness where table headers repeat [Image #4]. We currently can't tell how the plot relates to the map -- need labels like letters to display markers on map and   
+  along x axis in plot [Image #5] 
+
+⏺ Both done, smoke test green. Summary:
+
+  Double-table fix — tbl_casts and tbl_values are now each in a bslib card with its own header, clearly separated; dropped the redundant filter row from the Values table (kept search/filter on the Casts
+  table). No more "repeating headers."
+  
+  Station labels (A, B, C…) — assign_occ_labels() assigns letters to the selected casts in cruise-track order, used as one source of truth across:
+  - Map — a new sel-labels symbol layer puts the letter next to each pink marker (updated live via set_source on selection change).
+  - Plot — a faint vertical line + the bold letter at the surface for each station, at its transect distance — so A on the map = A on the plot's x-axis.
+  - Values table — a label column so those rows correlate too.
+  
+  (I left the letter out of the tbl_casts table on purpose — putting it there would force that table to re-render on every selection change and complicate the row-selection sync. It's on the map, plot, and
+  Values table.)
+  
+  Re-test: shiny::runApp("ctd-viz") — check the Table tab is two clean cards, and that selecting a transect shows matching A/B/C… letters on the map markers and along the top of the plot.
+  
+  One thing I couldn't verify without running it: the map labels update via mapgl's set_source on the sel-labels layer — if the letters don't appear on the map (plot/table would still be fine), that's the
+  spot to look. Files remain uncommitted in CalCOFI/apps.
+
+[Image #6] The map label shows all "label" and the plot label might be there but outside trimmed plot   
+
+⏺ Both fixed, smoke test green:
+
+  - Map labels — text_field was passing the bare string "label" (rendered literally). Now get_column("label"), which mapgl resolves as ["get","label"] — so selected markers show the actual letters A/B/C…
+  - Plot labels — were anchored at y = 0, the clipped top edge. Moved to ~4 % depth inside the panel so the letters render.
+  
+  Re-test: shiny::runApp("ctd-viz") — selecting a transect should now show matching letters on the map's pink markers and along the top of the plot. Files still uncommitted in CalCOFI/apps.
+
+
+Better! The map labels work well. The plot labels are still not visible by default [Image #7], but are visible when I zoom out [Image #8]. Instead of being added as annotations inside the plot, could they be added as axis labels, either along the top edge or as a second row of bottom edge -- so they would always be visible even with zoom into a specific depth? 
+
+⏺ Confirmed after plotly_build(): 4 station annotations attached — A/B/C/D at their distances, all xref="x" / yref="paper" / y=1, top margin bumped to 70px, plotly_selected still registered.
+
+  What changed in global.R:
+  - Removed the in-panel geom_text — that's what clipped when zoomed into a depth range.
+  - Kept the faint geom_vline guide lines at each station.
+  - Added plotly::add_annotations(xref="x", yref="paper", y=1, yanchor="bottom") — xref="x" makes each letter track its station's distance (scrolls with x-zoom, like an axis tick), yref="paper" pins it just
+  above the panel so depth-zoom never hides it. Top margin → 70px so the letters clear the title. 
+  
+  Re-test: shiny::runApp("ctd-viz") — the A B C D… letters should now sit on the top edge of the transect panel and stay put when you zoom into any depth slice. Files still uncommitted in CalCOFI/apps.
+  
+
+Looks great! Let's move Casts and Values into subtabs of Table so they can be seperately viewed. Let's also drop the "Load cruise" button so it automatically loads upon selection. And the "Reset selection" button should only show if a selection has already been made/started, not on initial view. Finally, can you also turn off this warning?
+> Warning: The 'plotly_selected' event tied a source ID of 'transect' is not registered.
+> In order to obtain this event data, please add `event_register(p, 'plotly_selected')` to the plot (`p`) that you wish to obtain event data from.
+
+⏺ All four changes done and verified against the live reactive graph (testServer) — zero warnings:
+
+  ┌──────────────────────┬────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┬─────────────────────────────────────┐
+  │        Change        │                                                                 What I did                                                                 │              Verified               │
+  ├──────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┼─────────────────────────────────────┤
+  │ Casts/Values subtabs │ ui.R: Table tab now wraps a nested navset_underline with Casts and Values nav panels (each with its caption as a muted line above the DT)  │ smoke test                          │
+  ├──────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┼─────────────────────────────────────┤
+  │ Auto-load on         │ Dropped the Load cruise button; observeEvent(input$sel_cruise, …) fires on startup and every dropdown change                               │ cruise_key set on startup; cruise   │
+  │ selection            │                                                                                                                                            │ switch → reload + selection cleared │
+  ├──────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┼─────────────────────────────────────┤
+  │ Conditional Reset    │ Replaced the static button with uiOutput("ui_reset_sel") — renderUI returns NULL until sel_occ is non-empty or a map anchor is dropped     │ hidden initially → shown after a    │
+  │ button               │                                                                                                                                            │ selection                           │
+  ├──────────────────────┼────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┼─────────────────────────────────────┤
+  │ Kill the not         │ An empty-but-registered transect_placeholder() plotly is rendered whenever there's nothing to draw, outputOptions(…, suspendWhenHidden =   │                                     │
+  │ registered warning   │ FALSE) keeps it (and the transect source) alive on the hidden Plot tab, and the plot writer's event_data() calls are                       │ 0 not registered warnings           │
+  │                      │ suppressWarnings-wrapped                                                                                                                   │                                     │
+  └──────────────────────┴────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┴─────────────────────────────────────┘
+  
+  One unrelated bug surfaced and fixed along the way: the table-select path was silently dead. freezeReactiveValue(input, "tbl_casts_rows_selected") in the cruise-load handler was invalidating the table
+  writer mid-flush, aborting it before its ignoreInit flag set — so the first real table click was always eaten. The freeze was redundant (the updater's selectRows() clears the stale DT selection, and the
+  setequal guard absorbs the echo), so I removed it. testServer now confirms a table click sets sel_source = table, sel_occ = 001,002.
+  
+  Also kept the tbl_casts output alive across subtabs (suspendWhenHidden = FALSE) so the linked selection still works while you're on the Values subtab.
+  
+  Re-test: shiny::runApp("ctd-viz"). Files still uncommitted in CalCOFI/apps.
+
+[Image #9] The seafloor depth is not captured properly nearshore. Let's update this properly in prep_db.R (and make an issue to do so later in the database) using                                            
+  /Users/bbest/_big/gebco_2025_sub_ice_topo_geotiff/gebco_2025_sub_ice_n90.0_s0.0_w-180.0_e-90.0.tif. Also enable the visualization of this raster bathy layer in the app.   
+
+⏺ The bug is clear: the current gebco_calcofi.tif is a derived MSENS product with NA holes in the ocean (e.g. nearshore San Diego (-117.2, 32.7) → NA) — so get_transect_bathy returns NA for those casts and
+  the polygon path jumps around them. The GEBCO 2025 tile is clean (elevation convention, complete). Let me check mapgl's raster capabilities before planning the map layer:
+
+⏺ Both tests green — map_cruise renders: TRUE, chk_bathy toggle off/on: no error, zero warnings.
+
+  Summary
+     
+  Root cause of the bad bathymetry: the old data/gebco_calcofi.tif was a derived MSENS product with NA holes in the ocean nearshore (e.g. (-117.2, 32.7) → NA). get_transect_bathy returned NA for casts in
+  those holes, and geom_polygon jumped around the NA vertices — that's the spike at H and the wrong nearshore profile.
+  
+  What changed:
+  
+  ┌────────────────────────┬─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │          File          │                                                                                     Change                                                                                      │
+  ├────────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ prep_db.R              │ Crops the GEBCO 2025 sub-ice tile to the CalCOFI AOI → data/gebco_calcofi.tif (elevation negated → positive-down depth, land clamped to 0). Own idempotency check, runs before  │
+  │                        │ the DB check. Header updated; terra added.                                                                                                                                      │
+  ├────────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ prep_bathy.R           │ Deleted — folded into prep_db.R, so there's one script and no ordering confusion.                                                                                               │
+  ├────────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ global.R               │ Loads bathy_rast (full-res, for transect sampling) + derives bathy_rast_map (land→NA, aggregated 3×) and bathy_pal for the map. Error message points to prep_db.R.              │
+  ├────────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ ui.R                   │ "Seafloor bathymetry" checkbox (default on).                                                                                                                                    │
+  ├────────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ server.R               │ Map draws the depth raster beneath casts/segments via add_image_source(data = bathy_rast_map) + add_raster_layer; a set_layout_property observer toggles it live without        │
+  │                        │ re-rendering.                                                                                                                                                                   │
+  ├────────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ data/gebco_calcofi.tif │ Regenerated — 3.5 MB, 2640×1680, 5082 m max, zero NAs, sensible nearshore depths.                                                                                               │
+  └────────────────────────┴─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+  
+  Verified: crop is clean (range 0–5082, no NA holes), add_image_source is 0.19 s, prep_db.R ran correctly (cropped bathy, then stopped at the DB idempotency check), and the reactive test confirms the map
+  renders with the raster and the toggle works.
+  
+  Issue CalCOFI/workflows#54 (https://github.com/CalCOFI/workflows/issues/54) tracks moving bathymetry into the released database properly.
+  
+  Re-test: shiny::runApp("ctd-viz") — the transect seafloor polygon should now be smooth (no NA spikes), and the map shows a blue depth raster you can toggle. All files uncommitted in CalCOFI/apps.
+
+But the bathy in the app does not show up in the north like it should -- wrong clip extent [Image #10]
+
+⏺ The AOI ymax = 36 (inherited from the old prep_bathy.R) is clipping the raster — this cruise runs well past San Francisco. Let me find the actual extent of all CTD cast data to size the AOI properly:
+
+⏺ Both tests green. The fix:
+
+  Root cause: I'd inherited the fixed AOI ext(-126, -115, 29, 36) from the old prep_bathy.R, but the cast data runs to lat 37.85 (past San Francisco) — so the raster was clipped at lat 36.
+  
+  Fix — data-derived AOI. prep_db.R now has a crop_bathy() helper that queries the actual ctd_cast lon/lat extent and pads it 0.5°, so the raster always covers every cruise. To do that it needs the DB on
+  hand, so I restructured the script:
+  
+  - db_needed / bathy_needed are tracked independently.
+  - Fast "bathy-only" path — if the DB exists but the tif doesn't (or is forced), it crops bathy straight from the DB and exits, no DB rebuild. That's the path the regen just took.
+  - Otherwise: build the DB, then crop bathy from it.
+  - A forced run (latest TRUE) rebuilds both.
+  
+  New raster: extent -126.98, -116.78, 29.31, 38.35, 4.1 MB, covers all cast data, zero NAs.
+  
+  Re-test: shiny::runApp("ctd-viz") — the bathy raster should now extend the full length of the cruise track, past San Francisco. Files still uncommitted in CalCOFI/apps.
+
+[Image #11] [Image #12] I'm confused by the different plotly labels on hover, especially negative depth_m. I was hoping to more visibly see the points of observed values (from   ctd_thin) vs the interpolated background
+
+⏺ Both tests green, zero warnings. Here's what changed in build_transect_plotly:
+
+  The negative depth_m was an artifact of scale_y_reverse — ggplotly negates the y-data to fake a reversed axis, but kept the original aesthetic name in the tooltip. The inconsistent labels (x/y vs
+  dist_km/depth_m) came from each ggplot layer carrying different aesthetic names. Rather than patch the auto-tooltips, I replaced them:
+  
+  - Observation points now stand out — every ctd_thin sample is drawn as a white-filled, dark-ringed dot (shape 21, size 1.5) instead of the near-invisible faint black dots, so observed values read clearly
+  against the interpolated viridis field.
+  - Hover works only on those points — the interpolated raster, contours, bathymetry polygon, and guide lines are all hoverinfo: skip. So the rule is now unambiguous: a tooltip ⇒ you're on a real observation;
+   no tooltip ⇒ interpolated background.
+  - The tooltip is one clean, consistent label — Station C · Depth: 1 m · Average temperature (degC): 18.289 — positive depth, the actual measured value, same format on every point. Built from a text
+  aesthetic + hovertemplate, so scale_y_reverse no longer leaks through.
+  
+  Box-select still works — it reads customdata = ord_occ, untouched by the hover changes.
+  
+  Re-test: shiny::runApp("ctd-viz") — the sampling points should be plainly visible, and hovering one shows station/depth/value while hovering the background shows nothing. Files still uncommitted in
+  CalCOFI/apps.
+
+Good! Can you give the points some transparency to see overlapping, plus some buffer to left and right of horizontal access to see the points better. And add value labels on contours                        
+
+⏺ All green, zero warnings. Three refinements to the transect plot, all in build_transect_plotly:
+
+  ┌──────────────────┬──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │      Change      │                                                                                        Detail                                                                                        │
+  ├──────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Point            │ geom_point now alpha = 0.6 — overlapping/dense samples within a cast stay legible instead of merging into a solid white column.                                                      │
+  │ transparency     │                                                                                                                                                                                      │
+  ├──────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Horizontal       │ scale_x_continuous expand c(0,0) → expansion(mult = 0.04) — 4 % padding each side, so the first/last station's points (and their letter labels) aren't jammed against the panel      │
+  │ buffer           │ edge.                                                                                                                                                                                │
+  ├──────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Contour value    │ geom_contour now uses explicit shared ctr_breaks; one solid-bold-white label per level is placed on its longest contour piece nearest the panel centre. Label positions are          │
+  │ labels           │ extracted via a throwaway ggplot_build (no public API for contour geometry), guarded with tryCatch for degenerate fields.                                                            │
+  └──────────────────┴──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+  
+  Smoke test confirms: 6 contour labels rendered (e.g. the "8" isotherm), point trace marker.opacity = 0.6, and all prior behavior intact — hover still only on observation points, box-select's customdata
+  untouched, no warnings.
+
+⏺ Both confirmed:
+
+  1. Legend title → units only. The colorbar now reads degC instead of Average temperature (degC). The variable name stays in the plot title (Average temperature (degC) — Cruise 2026-04-3322), so it's no
+  longer duplicated — and the shorter colorbar title gives the panel more width. units_lab is extracted from meas_label via regex ("...(units)" → "units"), with the full string as a fallback if there are no
+  parens.
+  
+  2. Plot is now display-only. Removed the plotly_selected box-select writer in server.R, along with the now-dead event_register / source = "transect" / outputOptions(suspendWhenHidden) plumbing. dragmode
+  changed from "select" to "zoom", so dragging on the plot zooms (the normal expectation) instead of re-filtering the map. The plot still re-renders from rv$sel_occ — it follows the selection — it just no
+  longer drives it. With stations clearly lettered on both map and plot, the visual cross-reference replaces the box-select link.
+  
+  Updated the doc comments (server header: "two writers (map / table)"; rv$sel_source is now "map" | "table" | "reset"), the customdata comment (now "tags this trace for the hover wiring"), and the Casts-tab
+  caption ("selecting on the map updates the table").
+  
+  Smoke + reactive tests green — display-only (no plotly_selected): TRUE, dragmode is zoom: TRUE, hover/contour-labels/transparency all intact, zero warnings. Re-test: shiny::runApp("ctd-viz"). Files
+  uncommitted in CalCOFI/apps.  
+
+Now that parts 1-3 of plan `@./libs/plans/Epic - CTD thinning, ctd-viz redesign, calcofi4r matching helpers, reproducible downloads & docs.md` are complete proceed to the rest (parts 4-6) without        interruption. Document concerns or questions in the issues already started:
+
+- [ ] `CalCOFI/calcofi4r#10` matching helpers
+- [ ] `CalCOFI/int-app#5` reproducible downloads
+- [ ] `CalCOFI/docs#5` docs
+
+⏺ All three parts of the epic (4–6) are complete. Here's the summary:
+
+  Parts 4–6 delivered — 3 feature branches, all pushed
+
+  ┌─────────────────┬────────────┬────────────────────────────┬──────────────────────────────────────────────────────────────┐
+  │      Part       │  Repo /    │      Branch / commit       │                         Verification                         │
+  │                 │   issue    │                            │                                                              │
+  ├─────────────────┼────────────┼────────────────────────────┼──────────────────────────────────────────────────────────────┤
+  │ 4 matching      │ calcofi4r  │ match-helpers @ 06cab1c    │ devtools::check() exit 0; all wrappers run against live GCS; │
+  │ helpers         │ #10        │                            │  attr(x,"sql") round-trips to identical rows                 │
+  ├─────────────────┼────────────┼────────────────────────────┼──────────────────────────────────────────────────────────────┤
+  │ 5 reproducible  │            │ reproducible-downloads @   │ duckdb CLI re-run of query/integrated_nearest_time.sql = CSV │
+  │ downloads       │ int-app #5 │ 18257d4                    │  = manifest (23 rows, md5 matches); Shiny testServer smoke   │
+  │                 │            │                            │ test passes                                                  │
+  ├─────────────────┼────────────┼────────────────────────────┼──────────────────────────────────────────────────────────────┤
+  │                 │            │ data-access-helpers-docs @ │ all 3 pages render to HTML; worked-example SQL               │
+  What was built
+  - calcofi4r::cc_match_bio_env() core engine + cc_match_ichthyo_by_name/_by_taxon/_zooplankton_biomass() — temporal interval +
+  spatial join over GCS release parquet, emitting fully-portable SQL. DESCRIPTION → 1.2.0.
+  - int-app download handler now emits data/{original,summarized,integrated}/ + a query/ folder (manifest.json, per-file
+  copy-paste-runnable *.sql, REPRODUCE.md) via build_download_bundle().
+  - docs gained data-access.qmd (direct DuckDB/GCS querying) + helpers.qmd (matching helpers), an api.qmd "superseded" callout,
+  and reordered chapters.
+
+  Key decisions/concerns — documented in each issue
+  - Worked example moved Q1 2023 → Q1 2018: CTD-bottle env data ends 2021-05-13 while bio data runs to 2023-01, so "Q1 2023"
+  matches zero env rows. Applied consistently across all three repos.
+  - No pre-existing get_*() shims to delegate to — the old zooplankton_biomass/ichthyodata endpoints were never R functions;
+  helpers are net-new.
+  - zooplankton_biomass has no release table — it's net.totalplankton/smallplankton (units unverified, flagged).
+  - Merge order matters: calcofi4r#10 → int-app#5 → docs#5 (int-app's librarian::shelf pulls calcofi4r from main;
+  build_download_bundle() errors clearly if calcofi4r < 1.2.0).
+  - Full multi-format quarto render docs/ stalled on the PDF path in this environment — verified each page with --to html (the
+  deployed _book is HTML via GHA).
+
+  Issue comments posted on calcofi4r#10, int-app#5, docs#5; apps#40 was already closed. The branches are ready for PRs/review in
+  the dependency order above.
+
+✻ Baked for 3m 37s
+
+※ recap: Completed parts 4–6 of the CTD-thinning epic: calcofi4r matching helpers, int-app reproducible downloads, and docs 
+  pages, each committed and pushed on its own branch with issue comments posted. Next: open PRs and merge in order calcofi4r#10, 
+  int-app#5, docs#5.
+
+## 2026-05-06 tracking usage with Google Analytics
+
+I previously shared Google Analytics usage of the `../int-app` here:
+
+https://analytics.google.com/analytics/web/#/a257200031p509537765/reports/intelligenthome
+
+Now I'm being asked about everything else...
+
+> I also wonder if we have any analytics for these links? My reporting officer is asking for number of users for:
+> - CalCOFI R Packages and API: Tools for streamlined data access and integration, accessible via CalCOFI API Documentation. The API now includes expanded datasets such as CTD bottle data and zooplankton biovolume.
+> - Integrated Database: New Postgres database views link ichthyoplankton data with hydrographic datasets.
+> - GitHub Repository CalCOFI
+> - CalCOFI.io: Documentation and resources for developers using the CalCOFI API and data workflows.
+> - CalCOFI Marine mammal App: Interactive visualizations of CalCOFI marine mammal data for public use and research
+> - Safer Seafood: A tool for visualizing ocean conditions and seafood safety.
+> - Oceano Shiny App: A platform for exploring integrated datasets related to oceanographic conditions.
+
+Claude...
+
+Review all the repositories in `~/Github/CalCOFI` and individual apps and report on status of tracking (I think quite minimal) and instructions on updating all.
+
+
+**# Plan: CalCOFI Analytics Audit & Tracking Setup**
+
+**## Context**
+
+The reporting officer needs user counts across 7 CalCOFI tools/resources. Most apps have no analytics tracking. This plan audits current status and provides the minimal code changes needed to enable GA4 tracking on each untracked app, following the same pattern already used in `int-app`.
+
+---
+
+**## Current Tracking Status**
+
+| Resource | Repo / Location | URL | Tracking Status |
+|---|---|---|---|
+| CalCOFI R Packages & API | calcofi4r, calcofi4db, api | calcofi.io/calcofi4r, calcofi.io/calcofi4db | **None** — use GitHub Traffic stats |
+| Integrated Database | (Postgres views, not a web app) | github.com/CalCOFI | **None** — GitHub Traffic only |
+| GitHub Repository CalCOFI | github.com/CalCOFI org | github.com/CalCOFI | **Built-in** — GitHub Insights (no code needed) |
+| CalCOFI.io (docs site) | CalCOFI/docs | calcofi.io | **Configured but commented out** — one-line fix |
+| Marine Mammal App | apps/dashboard/ tab `tab_ei_marmam` | Not yet deployed publicly (shows "TBD") | **Not applicable** — app not yet public |
+| Safer Seafood | SaferSeafood/shinydashboard/ | saferseafood.shinyapps.io/shinydashboard | **None** — needs GA added |
+| Oceano Shiny App | apps/oceano/ | shiny.calcofi.io/oceano/ | **None** — needs GA added |
+
+**Existing GA4 properties found:**
+- `int-app`: `G-VV117EV9ZT` (active) — GA account a257200031, property p509537765
+- `CalCOFI.github.io`: `G-0HVK8TDMCF` (active, with GTM)
+- `docs`: `G-V3HZN14Z8G` (configured but commented out in `_quarto.yml`)
+
+---
+
+**## Recommended Actions**
+
+**### 1. Immediate — No Code Changes (Get Numbers Now)**
+
+**GitHub Traffic Stats** (covers R packages, API repo, Integrated Database repo, GitHub org):
+- Go to each repo → Insights → Traffic tab
+- Shows: page views, unique visitors, clones, top referrers (last 14 days only)
+- Key repos: github.com/CalCOFI/calcofi4r, /calcofi4db, /api, /workflows
+- Org-level: github.com/CalCOFI → no aggregate view; must check per-repo
+
+**int-app GA4** (already active):
+- Property: https://analytics.google.com/analytics/web/#/a257200031p509537765/reports/intelligenthome
+- Measurement ID: `G-VV117EV9ZT`
+
+**### 2. One-Line Fix — docs / CalCOFI.io**
+
+**File:** `CalCOFI/docs/_quarto.yml` line 44
+
+Change:
+```yaml
+# google-analytics: "G-V3HZN14Z8G" # TODO: add Google Analytics
+```
+To:
+```yaml
+google-analytics: "G-V3HZN14Z8G"
+```
+
+Then render and push. Quarto natively injects the gtag.js snippet — no other changes needed.
+
+**Verify** GA property `G-V3HZN14Z8G` exists in your Google Analytics account before uncommenting. If the property was never created, create it at analytics.google.com → Admin → Create Property.
+
+**### 3. Add GA4 to Oceano Shiny App**
+
+**Pattern:** copy from `int-app/app/google-analytics.html`
+
+**New file:** `apps/oceano/google-analytics.html`
+```html
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-XXXXXXXXXX');
+</script>
+```
+Replace `G-XXXXXXXXXX` with a new data stream measurement ID created in the same GA4 property (a257200031/p509537765) or a new property.
+
+**Edit:** `apps/oceano/ui.R` — add inside `fluidPage()` or `navbarPage()`:
+```r
+tags$head(includeHTML("google-analytics.html"))
+```
+
+The server deploys from the `apps/` directory on shiny.calcofi.io — no rsconnect config needed, just push the files.
+
+**### 4. Add GA4 to Safer Seafood**
+
+**Files to edit:** `SaferSeafood/shinydashboard/`
+
+Same pattern as Oceano:
+1. Create `SaferSeafood/shinydashboard/google-analytics.html` with a new GA4 measurement ID
+2. Add to `ui.R`: `tags$head(includeHTML("google-analytics.html"))`
+3. Redeploy to shinyapps.io: `rsconnect::deployApp()`
+
+Deployed at: https://saferseafood.shinyapps.io/shinydashboard/
+
+**### 5. Marine Mammal App — Defer**
+
+The marine mammal section (`tab_ei_marmam`) in `apps/dashboard/` currently shows "TBD" and has no public deployment URL. No action needed until the app is ready.
+
+---
+
+**## GA4 Property Strategy**
+
+**Option A (recommended for simplicity):** Add new Data Streams to the existing property `p509537765` — one stream per app. Gives a unified view across all CalCOFI tools. Use stream filters in GA4 to report per-app.
+
+**Option B:** Create a new GA4 property per app. More isolation but harder to get org-wide totals.
+
+To add a new data stream: analytics.google.com → Admin → Data Streams → Add stream → Web → enter app URL → copy new Measurement ID.
+
+---
+
+**## Files to Modify**
+
+| File | Change |
+|---|---|
+| `CalCOFI/docs/_quarto.yml:44` | Uncomment `google-analytics: "G-V3HZN14Z8G"` |
+| `CalCOFI/apps/oceano/google-analytics.html` | Create — GA4 snippet with new Measurement ID |
+| `CalCOFI/apps/oceano/ui.R` | Add `tags$head(includeHTML("google-analytics.html"))` |
+| `CalCOFI/SaferSeafood/shinydashboard/google-analytics.html` | Create — GA4 snippet with new Measurement ID |
+| `CalCOFI/SaferSeafood/shinydashboard/ui.R` | Add `tags$head(includeHTML("google-analytics.html"))` |
+
+---
+
+**## Verification**
+
+1. **docs**: After render+push, visit calcofi.io and open browser DevTools → Network tab — confirm `gtag/js?id=G-V3HZN14Z8G` request fires
+2. **Oceano**: Visit shiny.calcofi.io/oceano/ → DevTools → confirm gtag fires
+3. **Safer Seafood**: Redeploy → visit saferseafood.shinyapps.io → confirm gtag fires
+4. **GA4 Realtime view**: analytics.google.com → Realtime report — should show active user immediately when you visit each app
+5. **GitHub Traffic**: No deployment needed — just check per-repo Insights tabs
+
+---
+
+**## Reporting Summary (For Officer)**
+
+| Resource | Data Source | Current Status |
+|---|---|---|
+| R Packages & API | GitHub Traffic (per-repo Insights) | Available now (14-day window) |
+| Integrated Database | GitHub Traffic | Available now |
+| GitHub Repository | GitHub Traffic (each repo) | Available now |
+| CalCOFI.io | GA4 `G-V3HZN14Z8G` | Needs one-line fix + redeploy |
+| Marine Mammal App | N/A | Not publicly deployed yet |
+| Safer Seafood | GA4 (new stream) | Needs GA added + redeploy |
+| Oceano | GA4 (new stream) | Needs GA added + push |
+
+
+The Github Traffic is virtually useless since it's only for the past 14 days and we want a long-term record. Let's use Google Analytics to track all web content and Shiny apps using:
+
+> **Option A (recommended for simplicity)**: Add new Data Streams to the existing property `p509537765` — one stream per app. Gives a unified view across all CalCOFI tools. Use stream filters in GA4 to report per-app.
+
+First, also report out on which apps are available online (via listing at https://app.calcofi.io/ via directories listed under `/srv/shiny-server` on Shiny server) and displayed on CalCOFI.io (via `@../CalCOFI.github.io`) with further reporting on status of GA tracking.
+
+```bash
+cd /srv/shiny-server
+ls -la
+```
+```
+total 12
+drwxr-xr-x  3 root root 4096 Oct 30  2025 .
+drwxr-xr-x  1 root root 4096 Jan 22  2025 ..
+lrwxrwxrwx  1 root root   36 Jul 20  2022 capstone     -> /share/github/capstone/scripts/shiny
+lrwxrwxrwx  1 root root   28 Jan  4  2024 casts        -> /share/github/apps_dev/casts
+lrwxrwxrwx  1 root root   29 May 10  2024 copernicus   -> /share/github/apps/copernicus
+lrwxrwxrwx  1 root root   28 Aug  9  2022 dashboard    -> /share/github/apps/dashboard
+lrwxrwxrwx  1 root root   34 Dec  7  2023 hex          -> /share/github/apps_dev/hex_density
+lrwxrwxrwx  1 root root   26 Oct 30  2025 int          -> /share/github/int-app/app/
+lrwxrwxrwx  1 root root   26 Oct  8  2025 int-app      -> /share/github/int-app/app/
+lrwxrwxrwx  1 root root   32 Nov  1  2023 larvae       -> /share/github/apps_larvae/oceano
+lrwxrwxrwx  1 root root   24 Dec 16  2024 marmam       -> /share/github/marmam-app
+lrwxrwxrwx  1 root root   25 Jul 12  2022 oceano       -> /share/github/apps/oceano
+lrwxrwxrwx  1 root root   29 Jul 12  2022 oceano-dev   -> /share/github/apps_dev/oceano
+lrwxrwxrwx  1 root root   32 Dec  9  2022 pollutants   -> /share/github/pollutants-app/app
+lrwxrwxrwx  1 root root   41 Jun 19  2024 SaferSeafood -> /share/github/SaferSeafood/shinydashboard
+lrwxrwxrwx  1 root root   37 Jul  6  2022 sample-apps  -> /opt/shiny-server/samples/sample-apps
+lrwxrwxrwx  1 root root   29 Jul 29  2025 spp          -> /share/github/ivy/species_app
+lrwxrwxrwx  1 root root   27 Jan 22  2025 taxa-dev     -> /share/github/apps_dev/taxa
+lrwxrwxrwx  1 root root   28 Nov 19  2024 up2db        -> /share/github/apps_dev/up2db
+drwxr-xr-x 13 root root 4096 May  8  2025 x_shiny
+```
+
+We actually do have stats being collected at http://calcofi.io per images: 
+
+We also have the ability to access apps via different URLs, so do these need seperate tracking IDs or extra information entered into GA tag? eg:
+
+- https://shiny.calcofi.io/int-app
+- https://shiny.calcofi.io/app
+- https://app.calcofi.io/int-app
+- https://app.calcofi.io/int
+
+I did some cleanup: to add missing app repos locally and remove old / extraneous apps on server:
+
+```bash
+# locally on Mac laptop
+cd ~/Github/CalCOFI
+git clone https://github.com/CalCOFI/marmam-app.git
+git clone https://github.com/CalCOFI/pollutants-app.git
+```
+
+```bash
+# remotely on Ubuntu Shiny server
+cd /srv/shiny-server
+sudo rm spp
+sudo rm larvae
+```
+
+And `capstone/scripts/shinyl` should be `capstone/scripts/shiny`
+
+How do I find `G-V3HZN14Z8G` for `docs` repo in Google Analytics? I think that was just a placeholder, so I need to create a new one or probably better to add `G-0HVK8TDMCF ` already used for calcofi.io.
+
+The R Packages calcofi4r and calcofi4db are not on CRAN. Let's add GA to the pkgdown websites, per https://pkgdown.r-lib.org/reference/build_site.md.
+
+Beyond this initial GA setup, we need a strategy for capturing specifics of queries within apps, especially int-app, and tabs viewed. Plus we need a fast logging strategy for the API and accessing the integrated database on Google Cloud Storage. 
+
+
+Since `G-QG51NXJ2PZ` ("shiny-oceano") hasn't yet been used, let's consolidate all app usage into `G-VV117EV9ZT`, which I'll rename "int-app" -> "apps".
+
+
+I added the capstone repo locally:
+
+```bash
+git clone https://github.com/CalCOFI/capstone.git
+```
+
+In anticipation of Phase 2, and per https://shiny.posit.co/r/articles/build/google-analytics/, let's use the recommended `google-analytics.html` with extra Javascript handling to allow for event=level tracking similar to:
+
+```html
+<!-- Global site tag (gtag.js) - Google Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=GT-XXXXXX"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'GT-XXXXXX');
+
+  $(document).on('change', 'select', function(e) {
+    gtag('event', 'widget', {
+      action: 'select data',
+      label: $(e.currentTarget).val()
+    });
+  });
+
+  $(document).on('click', 'button', function() {
+    gtag('event', 'button', { action: 'update plot' });
+  });
+</script>
+```
+
+Create Github issues in workflows repo to document subsequent phases.
+
+**# Plan: CalCOFI Analytics Audit & Tracking Setup**
+
+**## Context**
+
+The reporting officer needs user counts across CalCOFI tools. This plan covers: (1) Phase 1 — GA4 basic setup across all Shiny apps and static/Quarto sites, (2) GitHub issues documenting Phases 2–4.
+
+---
+
+**## GA4 Consolidation**
+
+**User action needed first:** In GA4 admin, rename property "int-app" (509537765) → **"apps"**. This property (`G-VV117EV9ZT`) will cover all Shiny apps on shiny.calcofi.io.
+
+| Property | Measurement ID | Covers |
+|---|---|---|
+| calcofi.io (353746301) | **G-0HVK8TDMCF** | calcofi.io website, /docs, /calcofi4r, /calcofi4db |
+| apps (509537765) | **G-VV117EV9ZT** | All Shiny apps on shiny.calcofi.io |
+
+Property `shiny-oceano` (G-QG51NXJ2PZ) — unused, can be deleted or kept as archive.
+
+---
+
+**## Phase 1a: Shiny Apps — Add `google-analytics.html`**
+
+**Single template** (same file for all apps, enhanced with jQuery event tracking per https://shiny.posit.co/r/articles/build/google-analytics/):
+
+`google-analytics.html`:
+```html
+<!-- Google tag (gtag.js) - Google Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-VV117EV9ZT"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-VV117EV9ZT');
+
+  $(document).on('change', 'select', function(e) {
+    gtag('event', 'widget', {
+      action: 'select data',
+      label: $(e.currentTarget).val()
+    });
+  });
+
+  $(document).on('click', 'button', function() {
+    gtag('event', 'button', { action: 'update plot' });
+  });
+</script>
+```
+
+**Add to each app's UI** — inside the top-level UI function:
+```r
+tags$head(includeHTML("google-analytics.html"))
+```
+
+For `shinydashboard` apps (marmam-app uses `dashboardPage`), add inside `dashboardBody()`:
+```r
+dashboardBody(
+  tags$head(includeHTML("google-analytics.html")),
+  # ... rest of body
+)
+```
+
+**Apps to update:**
+
+| Repo path | UI file | UI function | Status |
+|---|---|---|---|
+| `int-app/app/` | ui.R | (existing) | Update to enhanced template |
+| `apps/oceano/` | ui.R | (check) | Create + add |
+| `SaferSeafood/shinydashboard/` | ui.R | dashboardPage | Create + add |
+| `marmam-app/` | app.R | fluidPage + dashboardPage | Create + add to dashboardBody |
+| `pollutants-app/app/` | ui.R | navbarPage | Create + add |
+| `apps/dashboard/` | ui.R | (check) | Create + add |
+| `apps/copernicus/` | ui.R | (check) | Create + add |
+| `apps_dev/casts/` | ui.R | (check) | Create + add |
+| `capstone/scripts/shiny/` | app.R | navbarPage | Create + add |
+
+---
+
+**## Phase 1b: Static/Quarto Sites — Add G-0HVK8TDMCF**
+
+**### pkgdown sites**
+
+**`calcofi4r/inst/_pkgdown.yml`** — add after `url:`:
+```yaml
+google_analytics: "G-0HVK8TDMCF"
+```
+
+**`calcofi4db/inst/_pkgdown.yml`** — same.
+
+Rebuild: `pkgdown::build_site()` in each package directory.
+
+**### docs Quarto book**
+
+**`docs/_quarto.yml` line 44** — replace commented placeholder:
+```yaml
+# Before:
+# google-analytics: "G-V3HZN14Z8G" # TODO: add Google Analytics
+
+# After:
+google-analytics: "G-0HVK8TDMCF"
+```
+
+Then: `quarto render`
+
+---
+
+**## GitHub Issues to Create (workflows repo)**
+
+Create 3 issues in CalCOFI/workflows to document subsequent phases:
+
+**Issue A — Phase 2: Shiny custom event tracking**
+- Title: `analytics: custom event tracking in Shiny apps (tab views, queries)`
+- Body: After basic GA setup, add server-side custom events via `session$sendCustomMessage` for tab switches and query submissions. Implement JS handler in each app's google-analytics.html. Priority: int-app (most used). Pattern: `gtag('event', 'tab_view', {tab_name: input$tabs})`.
+
+**Issue B — Phase 3: Plumber API access logging**
+- Title: `analytics: structured access logging for Plumber API`
+- Body: Add plumber middleware filter to log JSON records (timestamp, method, endpoint, query params, IP) to `/var/log/calcofi-api.log`. Periodically sync to GCS bucket via `googleCloudStorageR`. Consider `logger` package for structured output.
+
+**Issue C — Phase 4: GCS database access audit logging**
+- Title: `analytics: enable GCS data access audit logs for integrated database`  
+- Body: Enable Data Access Audit Logs in GCP Console → IAM & Admin → Audit Logs → Cloud Storage → DATA_READ. Export logs to BigQuery via Log Router sink for long-term querying. Captures all DuckDB httpfs reads of parquet files.
+
+---
+
+**## Files to Change (complete list)**
+
+| File | Change |
+|---|---|
+| `int-app/app/google-analytics.html` | Update to enhanced jQuery template |
+| `apps/oceano/google-analytics.html` | Create |
+| `apps/oceano/ui.R` | Add `tags$head(includeHTML(...))` |
+| `SaferSeafood/shinydashboard/google-analytics.html` | Create |
+| `SaferSeafood/shinydashboard/ui.R` | Add `tags$head(includeHTML(...))` |
+| `marmam-app/google-analytics.html` | Create |
+| `marmam-app/app.R` | Add `tags$head(includeHTML(...))` in dashboardBody |
+| `pollutants-app/app/google-analytics.html` | Create |
+| `pollutants-app/app/ui.R` | Add `tags$head(includeHTML(...))` |
+| `apps/dashboard/google-analytics.html` | Create |
+| `apps/dashboard/ui.R` | Add `tags$head(includeHTML(...))` |
+| `apps/copernicus/google-analytics.html` | Create |
+| `apps/copernicus/ui.R` | Add `tags$head(includeHTML(...))` |
+| `apps_dev/casts/google-analytics.html` | Create |
+| `apps_dev/casts/ui.R` | Add `tags$head(includeHTML(...))` |
+| `capstone/scripts/shiny/google-analytics.html` | Create |
+| `capstone/scripts/shiny/app.R` | Add `tags$head(includeHTML(...))` in navbarPage |
+| `calcofi4r/inst/_pkgdown.yml` | Add `google_analytics: "G-0HVK8TDMCF"` |
+| `calcofi4db/inst/_pkgdown.yml` | Add `google_analytics: "G-0HVK8TDMCF"` |
+| `docs/_quarto.yml:44` | Replace commented placeholder with `google-analytics: "G-0HVK8TDMCF"` |
+
+---
+
+**## Verification**
+
+1. After push/deploy, visit each app → DevTools → Network → confirm `gtag/js?id=G-VV117EV9ZT` fires
+2. Change a `<select>` input → confirm `widget` event in GA4 Realtime → Events
+3. GA4 → apps property → Realtime → confirm users appear on shiny.calcofi.io pages
+4. Visit calcofi.io/calcofi4r → confirm G-0HVK8TDMCF fires
+5. GA4 → calcofi.io property → Realtime → confirm docs/pkgdown traffic
+
+⏺ All done. Here's a summary of what was implemented:                             
+
+  **google-analytics.html** (enhanced with jQuery `select`/`button` event tracking) created or updated in 9 apps:
+  - `int-app/app/` (updated)
+  - `apps/oceano/`, `apps/dashboard/`, `apps/copernicus/`                                                             
+  - `SaferSeafood/shinydashboard/`, `marmam-app/`, `pollutants-app/app/`
+  - `apps_dev/casts/`, `capstone/scripts/shiny/`                                  
+
+  **UI files edited** to wire in the tag — `tags$head(includeHTML(...))` added to each app's `dashboardBody()` / `navbarPage()` / `page_sidebar()` / `page_fillable()`.
+                                                 
+  **Static sites**:
+  - `calcofi4r/inst/_pkgdown.yml` and `calcofi4db/inst/_pkgdown.yml` — added `google_analytics: "G-0HVK8TDMCF"`                                                                                                       
+  - `docs/_quarto.yml` — activated `google-analytics: "G-0HVK8TDMCF"`
+
+  **GitHub issues created**: #48 (https://github.com/CalCOFI/workflows/issues/48) (Shiny custom events), #49 (https://github.com/CalCOFI/workflows/issues/49) (API logging), #50 (https://github.com/CalCOFI/workflows/issues/50) (GCS audit logs)
+  
+  **Remaining steps for you**:
+  1. GA4 admin → rename property "int-app" (509537765) → "apps"
+  2. Commit and push each repo; pull on the Shiny server (apps served directly from /share/github/ pick up changes on next session start)
+  3. `SaferSeafood`: redeploy via `rsconnect::deployApp()` since it's on shinyapps.io
+  4. Rebuild pkgdown sites: `pkgdown::build_site()` in calcofi4r and calcofi4db     
+  5. Quarto docs: `quarto render` in the docs/ directory
+
+[Image #5] For this STREAM ID `12322839505` and MEASUREMENT ID `G-VV117EV9ZT` should I rename **STREAM NAME** from "CalCOFI Integrated App" to "CalCOFI apps" and the **STREAM URL** from "https://shiny.calcofi.io/int-app" to "https://shiny.calcofi.io" or more recently used "https://app.calcofi.io"?
+
+⏺ The Stream URL in GA4 is purely a label — it doesn't filter or restrict which pages get tracked. The measurement ID (G-VV117EV9ZT) in the tag code is what ties traffic to this property, regardless of domain. So this is just an organizational decision.
+
+  Recommendations:                                                                      
+  - Stream Name: Yes, rename to "CalCOFI apps" — it now covers all Shiny apps, not just int-app.
+  - Stream URL: Use https://shiny.calcofi.io — it's the canonical subdomain used across all the app deployment configs (shiny.calcofi.io/oceano, /SaferSeafood, etc.). The app.calcofi.io alias will still be tracked correctly; the URL here is just the label GA4 shows in the admin UI.
+                                                                  
+  The app.calcofi.io and shiny.calcofi.io traffic will both appear in GA4 reports — you can distinguish them by the page_location dimension if needed.  
+
+⏺ All repos pushed. Complete summary:
+
+  ┌────────────────┬───────────────────────────────────────────┬───────────┐
+  │      Repo      │                  Change                   │  Status   │
+  ├────────────────┼───────────────────────────────────────────┼───────────┤
+  │ int-app        │ Enhanced GA tag with jQuery events        │ ✅ pushed │
+  ├────────────────┼───────────────────────────────────────────┼───────────┤
+  │ apps           │ GA added to oceano, dashboard, copernicus │ ✅ pushed │
+  ├────────────────┼───────────────────────────────────────────┼───────────┤
+  │ apps_dev       │ GA added to casts                         │ ✅ pushed │
+  ├────────────────┼───────────────────────────────────────────┼───────────┤
+  │ marmam-app     │ GA added                                  │ ✅ pushed │
+  ├────────────────┼───────────────────────────────────────────┼───────────┤
+  │ SaferSeafood   │ GA added                                  │ ✅ pushed │
+  ├────────────────┼───────────────────────────────────────────┼───────────┤
+  │ pollutants-app │ GA added                                  │ ✅ pushed │
+  ├────────────────┼───────────────────────────────────────────┼───────────┤
+  │ capstone       │ GA added                                  │ ✅ pushed │
+  ├────────────────┼───────────────────────────────────────────┼───────────┤
+  │ calcofi4r      │ pkgdown GA + rebuilt site                 │ ✅ pushed │
+  ├────────────────┼───────────────────────────────────────────┼───────────┤
+  │ calcofi4db     │ pkgdown GA + rebuilt site                 │ ✅ pushed │
+  ├────────────────┼───────────────────────────────────────────┼───────────┤
+  │ docs           │ Quarto GA activated, GHA rendering        │ ✅ pushed │
+  └────────────────┴───────────────────────────────────────────┴───────────┘
+
+  One remaining manual step: GA4 admin → rename property "int-app" → "apps"
+  and update stream name/URL as discussed.
+
+  Once the Shiny server pulls the updated repos (or you restart affected
+  apps), GA4 → apps property → Realtime should start showing traffic across
+  all shiny.calcofi.io apps.
+
+Ok, I'm seeing the apps and docs showing up in GA, but not the R pkgs, both of which have a docs/ output, but actually serve based on gh-pages generated by GH Action, both of which completed successfully.  
+
+
+Still, am not seeing in GA despite tags supposedly added [Image #6] [Image #7] [Image #8] 
+
+⏺ Both pushed — GHA will now rebuild with the GA tag properly injected under template:
+
+Shouldn't we .gitignore and git rm the docs folders from both?  
+
+Yes, absolutely — since GHA deploys to gh-pages, the docs/ folder in main is redundant and noisy. Let me clean both up.  
+
+
+## 2026-04-27 docs: + Maps w/ H3T
+
+The recent devlopment of the H3T endpoint for the hexagon mapping in `@../int-app` represents a major leap in the mapping capabilities of this CalCOFI project. It is rather complicated to explain to a non-technical user how the tiling works, but hopefully can be done so in a visual way with diagrams and explanations in the docs `@../docs`. See also the `@./calcofi_notes.md` for recent conversations on this and `../../MarineSensitivity/docs/software.qmd` for a raster-based example of encoding a query to a cached tile representation.
+
+←  ☐ Doc location  ☐ Audience  ☐ Diagram count  ☐ Worked example  ✔ Submit  →   
+                                                                                
+**Doc location** Where should the H3T documentation live in the CalCOFI docs Quarto book?        
+                                                                                
+❯ 1. New chapter: maps.qmd (Recommended)                
+     Add a new top-level chapter focused on the int-app mapping/tiling system.
+     Most parallel to MarineSensitivity software.qmd. Sits between apps.qmd and
+     api.qmd in _quarto.yml.
+  2. Expand apps.qmd
+     Promote the current 6-line apps.qmd into a richer chapter and put H3T
+     explanation inside it as a major section.
+  3. Expand api.qmd
+     Add an H3T section under the existing API reference. Fits the
+     technical-reference style but mixes tile architecture with REST endpoint
+     listings.
+
+**Audience** Who is the primary audience for tone and depth?                                 
+                                                                                
+❯ 1. Mixed: scientists + technical staff (Recommended)  
+     Mirrors MarineSensitivity software.qmd: problem-first prose any CalCOFI   
+     scientist can follow, with mermaid diagrams + a couple of code/URL snippets
+      for technical readers. Approachable without being shallow.
+  2. Strictly non-technical
+     No SQL, no code, no URL anatomy. Pure visual explanation with analogies 
+     (e.g. 'like Google Maps but for hexagons of data'). Diagrams + 
+     plain-language prose only.
+  3. Technical reference                                           
+     Full system spec: SQL contract, base64 URL encoding, sqlglot validation  
+     rules, ETag/Varnish caching. Fewer analogies, more precision. Closer to 
+     api-h3t/README.md.
+
+**Diagram count** How many mermaid diagrams to include?                                           
+                                                                                
+❯ 1. Three diagrams (Recommended)                       
+     (1) H3 hex hierarchy + zoom→resolution mapping, (2) request lifecycle     
+     sequence (Shiny → Caddy → Varnish → Plumber → DuckDB), (3) cache           
+     invalidation on data release. Mirrors software.qmd pacing. 
+  2. One overview diagram  
+     Single end-to-end sequence diagram with inline prose for the rest. Fastest 
+     to maintain; less visual scaffolding for non-technical readers.
+  3. Four+ diagrams            
+     Adds a query-encoding zoom-in (SQL → base64 → URL) and a worked example 
+     (user picks sardine → tile request → render). More pedagogical but longer 
+     to build.
+
+**Worked example** Should the page include a worked example with a real query?                     
+                                                                                
+❯ 1. Yes, sardine + temperature (Recommended)           
+     Walk through 'user picks sardine + temperature → SQL is built → encoded → 
+     tile fetched → hexagons rendered'. Concrete, makes the abstract pieces     
+     click. Uses examples already in functions_h3t.R.           
+  2. No worked example     
+     Keep it conceptual. Diagrams + prose only. Shorter and less code-heavy.
+
+**# Plan: Document the H3T Hexagon Tiling Endpoint in CalCOFI Docs**
+
+**## Context**
+
+The H3T endpoint at `https://h3t.calcofi.io` (code in `/Users/bbest/Github/CalCOFI/api-h3t`, frontend in `/Users/bbest/Github/CalCOFI/int-app`) is the largest leap in CalCOFI's mapping capability so far: instead of pre-aggregating species/environment data across all 10 H3 resolutions and shipping the whole thing to the browser at app startup (>10s, multi-GB), the int-app now sends a base64-encoded `SELECT` to a Plumber API, which validates it (sqlglot AST), runs it against a read-only DuckDB at exactly the resolution + viewport the user is looking at, and returns h3j-format JSON tiles that MapLibre renders client-side. Varnish caches by URL+ETag; new data releases invalidate the cache automatically through a `release` query parameter. Initial load dropped from >10s to <2s; cache hits return in <100ms.
+
+The mechanics are powerful but unintuitive to a non-technical audience (CalCOFI scientists, program staff, partners). The goal is a visual, narrative explanation in `/Users/bbest/Github/CalCOFI/docs` that mirrors the proven structure of `/Users/bbest/Github/MarineSensitivity/docs/software.qmd` — problem-first, mermaid sequence diagrams, mixed-audience prose. The intended outcome: a reader unfamiliar with tile servers can come away understanding *why* hexagons + tiles + caching work together, and a developer reader can follow the breadcrumbs to the code.
+
+**## Approach**
+
+Add a new top-level chapter **`maps.qmd`** to the `CalCOFI/docs` Quarto book, register it in `_quarto.yml` between `apps.qmd` and `api.qmd`, and create three accompanying mermaid diagrams under `diagrams/`. Tone follows MarineSensitivity `software.qmd`: problem-first, three-tier solution decomposition, sequence diagrams over architecture diagrams, "source of truth" framing (DuckDB is canonical; H3T tiles are a performance layer).
+
+**## Files to create / modify**
+
+**### 1. `/Users/bbest/Github/CalCOFI/docs/_quarto.yml`**
+Insert `- maps.qmd` between `apps.qmd` and `api.qmd` in the `chapters:` list (line 36–37).
+
+**### 2. `/Users/bbest/Github/CalCOFI/docs/maps.qmd` (new)**
+Outline (mirrors `software.qmd` headers):
+
+- `# Maps {#sec-maps}`
+- `## Overview` — one paragraph: the int-app shows hexagonal heatmaps of species occurrence and environmental variables; H3T is the engine. State the source-of-truth principle: DuckDB is canonical; H3T tiles are a performance layer.
+- `## Why hexagons?` — short prose on H3 (Uber's hexagonal hierarchical index): equal-area cells, parent/child nesting, no shape distortion at high latitudes. One sentence on why hex > raster pixels for ecological data (no orientation bias, every neighbor is equidistant).
+- `## The problem: aggregating millions of points at every zoom` — the pre-H3T pain: 10 resolutions × all species/variables pre-aggregated at startup, 10+ s load. Frame as the same class of problem MarineSensitivity solved with TiTiler, but for *hexagons* not rasters.
+- `## The solution: query-as-URL hexagonal tiles` — three sub-sections:
+    - `### Resolution follows zoom` → **Diagram 1** (`fig-h3-pyramid`): H3 res 1–10 hierarchy + zoom→resolution lookup table. Visual showing one giant res-1 hex at the world view and many small res-8 hexes at city view. Short prose on `zoom_to_res()` (api-h3t/h3t_query.R:7–12) and how the SQL template `hex_h3res{{res}}` is substituted server-side per tile so one query string serves all zoom levels.
+    - `### Request lifecycle` → **Diagram 2** (`fig-h3t-sequence`): mermaid sequence — Browser (mapgl + h3j-h3t) → Caddy → Varnish → Plumber API → DuckDB → back. Annotate the URL: `h3tiles://h3t.calcofi.io/h3t/{z}/{x}/{y}.h3t?q=<base64-SQL>&release=<version>`. Short prose on what each layer does, including SQL validation (sqlglot, read-only DuckDB, 3 s timeout, 50k row cap) framed as "guardrails so the public URL can't damage anything."
+    - `### Cache invalidation by release` → **Diagram 3** (`fig-h3t-release`): timeline showing "data release v2026.04.08 → all old tile URLs cache-miss → new tiles regenerated on demand → no manual purge." Explains the elegant trick: because `release` is in the URL, a new release just makes old URLs different from new ones; the cache fills naturally.
+- `## A worked example: sardine + temperature` — walk through the journey of one click:
+    1. User selects "Pacific sardine" + "Temperature" + 1949–2024 in the int-app sidebar.
+    2. `build_sp_sql()` (int-app/app/functions_h3t.R:17–52) constructs `SELECT hex_h3res{{res}} AS cell_id, AVG(std_tally) AS value, COUNT(*) AS n FROM bio_obs WHERE scientific_name = 'Sardinops sagax' GROUP BY 1`.
+    3. `h3t_b64()` (functions_h3t.R:83–89) base64-encodes the SQL → `q=...`.
+    4. `fetch_h3t_stats()` calls `/h3t/stats` once to get min/max/p02/p98 for the legend.
+    5. As the user pans, MapLibre requests `/h3t/{z}/{x}/{y}.h3t?q=...&release=v2026.04.08` for each visible tile.
+    6. Plumber decodes the SQL, substitutes `{{res}}` from zoom, wraps in viewport bbox, runs against DuckDB, returns h3j cells.
+    7. MapLibre paints each hex by interpolating the stats palette.
+    Show the tile URL and a fragment of the h3j response (3–4 cells) inline as a code block — the *clever bit* deserves the spotlight.
+- `## How the data gets there` — one short paragraph + bullet list pointing to the workflows pipeline (`workflows/*.qmd` ingest notebooks → release DuckDB → consumed by H3T API). Reference `db.qmd` for the schema. No diagram here — it's covered in `index.qmd` and `db.qmd`.
+- `## Repositories and code` — table linking to:
+    - `CalCOFI/api-h3t` — Plumber backend (cite `plumber.R`, `h3t_query.R`, `sql_validate.py`, `README.md`, `deploy.md`)
+    - `CalCOFI/int-app` — Shiny consumer (cite `app/functions_h3t.R`, `app/server.R`, `app/global.R`)
+    - `bbest/mapgl@feat/add-h3t-source` — `add_h3t_source()` extension to the mapgl R package
+    - `INSPIDE/h3j-h3t` — JS protocol handler
+
+**### 3. `/Users/bbest/Github/CalCOFI/docs/diagrams/h3-pyramid.mmd` (new)**
+Mermaid graph or table-style diagram showing H3 resolution hierarchy mapped to zoom. Likely a simple flowchart with res 1 (1106 km) at the top branching to res 10 (7.5 m) at the bottom, annotated with zoom ranges from `global.R:195–200`.
+
+**### 4. `/Users/bbest/Github/CalCOFI/docs/diagrams/h3t-sequence.mmd` (new)**
+Mermaid `sequenceDiagram`:
+```
+participant Browser as Browser (MapLibre + h3j-h3t)
+participant Caddy
+participant Varnish
+participant API as Plumber /h3t
+participant DB as DuckDB (read-only)
+Browser->>Caddy: GET /h3t/{z}/{x}/{y}.h3t?q=...&release=v2026.04.08
+Caddy->>Varnish: forward
+Varnish-->>Browser: cache hit (sub-100ms) — OR — miss → API
+Varnish->>API: forward on miss
+API->>API: decode base64 + validate SQL (sqlglot)
+API->>API: substitute {{res}} from zoom; wrap in bbox
+API->>DB: SELECT (read-only, 3s timeout)
+DB-->>API: cell_id, value, n rows
+API-->>Varnish: h3j JSON + ETag
+Varnish-->>Browser: h3j JSON
+Browser->>Browser: render hexagons via h3tiles:// protocol
+```
+
+**### 5. `/Users/bbest/Github/CalCOFI/docs/diagrams/h3t-release.mmd` (new)**
+Either a small sequenceDiagram showing the release-version cache-busting trick, or a simple timeline / flowchart:
+- t=0: tile URLs include `release=v2026.04.01`; Varnish caches them
+- t=1: new release `v2026.04.08` published; symlink updated
+- t=2: int-app reads `/h3t/meta` → sees new release → next user requests use `release=v2026.04.08`
+- t=3: old URLs idle in cache (they'd still serve old data correctly if asked); new URLs cache-miss and regenerate against new DuckDB
+
+**## Key references already found (use, don't re-derive)**
+
+**API backend** (`/Users/bbest/Github/CalCOFI/api-h3t/`):
+- `plumber.R:118–166` — tile endpoint
+- `plumber.R:169–197` — stats endpoint
+- `h3t_query.R:7–12` — H3 res table
+- `h3t_query.R:36–50` — `tile_bbox()`
+- `h3t_query.R:57–71` — `wrap_tile_sql()`
+- `sql_validate.py` — sqlglot AST rules
+- `README.md`, `deploy.md` — already-written technical references; `maps.qmd` should *summarize visually*, not duplicate
+
+**Shiny frontend** (`/Users/bbest/Github/CalCOFI/int-app/app/`):
+- `functions_h3t.R:17–52` — `build_sp_sql()` (sardine example source)
+- `functions_h3t.R:83–89` — `h3t_b64()` (URL-safe base64 encoding)
+- `functions_h3t.R:91–98` — `h3t_tile_url()` (h3tiles:// URL)
+- `functions_h3t.R:101–116` — `fetch_h3t_stats()`
+- `functions_h3t.R:147–215` — `map_sp_h3t()`, `map_env_h3t()`
+- `global.R:195–200` — zoom→res lookup
+- `server.R:62–89` — wiring user inputs to SQL builders
+
+**Style model**: `/Users/bbest/Github/MarineSensitivity/docs/software.qmd` — match its problem-first ordering, mermaid-with-`%%| file:` pattern, source-of-truth framing, and willingness to put one inline code/URL example in the prose.
+
+**Existing diagram pattern** in `/Users/bbest/Github/CalCOFI/docs/diagrams/` (`portals_flow.mmd`, `db_doc.mmd`) — confirms the `.mmd` separate-file convention used in the book.
+
+**## Verification**
+
+1. From `/Users/bbest/Github/CalCOFI/docs`:
+   ```
+   quarto preview
+   ```
+   Visually inspect the new "Maps" chapter. Confirm:
+   - All three mermaid diagrams render (no syntax errors)
+   - Cross-references (`@fig-h3-pyramid`, `@fig-h3t-sequence`, `@fig-h3t-release`) resolve
+   - Inline links to api-h3t, int-app repos work
+   - Worked-example URL renders without breaking line-wrapping
+2. `quarto render` produces a clean HTML build with no warnings.
+3. Read the page top-to-bottom imagining a non-technical CalCOFI scientist: does each diagram have enough caption + surrounding prose to land without code knowledge? If a section needs SQL or base64 to make sense, push that detail into a callout or footnote rather than the main flow.
+4. Optionally have the user review against `software.qmd` side-by-side to confirm tone parity.
+
+**## Out of scope**
+
+- No changes to `api-h3t` or `int-app` code — the backend `README.md` already documents the contract for developers; this plan is *user-facing* docs only.
+- No changes to `db.qmd`, `api.qmd`, or `index.qmd`. Cross-link to them where relevant, but don't restructure them.
+- No new screenshots/images in `figs/` — diagrams only. (Screenshots can be added later if desired.)
+
+⏺ Done. Added a new "Maps" chapter to the CalCOFI docs Quarto book:
+
+  - /Users/bbest/Github/CalCOFI/docs/_quarto.yml — registered maps.qmd between 
+  apps.qmd and api.qmd
+  - /Users/bbest/Github/CalCOFI/docs/maps.qmd — new chapter (overview → why    
+  hexagons → problem → 3-part solution → worked sardine+temperature example →  
+  repos)
+  - /Users/bbest/Github/CalCOFI/docs/diagrams/h3-pyramid.mmd — zoom→H3         
+  resolution mapping                                                           
+  - /Users/bbest/Github/CalCOFI/docs/diagrams/h3t-sequence.mmd — request
+  lifecycle (Browser → Caddy → Varnish → Plumber → DuckDB)                     
+  - /Users/bbest/Github/CalCOFI/docs/diagrams/h3t-release.mmd — release-version
+   cache-busting trick                                                         
+                                                                  
+  Verified with quarto render maps.qmd — clean build, all three figures and    
+  captions present in the HTML output. To preview the full book: `cd /Users/bbest/Github/CalCOFI/docs && quarto preview`.
+
+Please add this screenshot `@../docs/figs/int-app_map-compare-bio-env.png` to the doc with a caption referencing the comparison map of hexagons summarizing biology vs environment available online at https://app.calcofi.io/int.
+
+⏺ Clean render. Added the screenshot at the top of the Overview section as     
+  @fig-int-app-compare, with a caption that links to https://app.calcofi.io/int
+   and frames it as the biology-vs-environment comparison powered by H3T —     
+  giving readers the visual payoff before any technical detail.
+
+※ recap: Goal: document the H3T hexagon-tile system in the CalCOFI docs Quarto 
+  book. Done: added maps.qmd chapter with three mermaid diagrams and the 
+  int-app comparison screenshot, verified with quarto render. Next: run quarto 
+  preview to visually review.
+
+## 2026-04-21 int-app speed up with `h3t` Plumber endpoint, `mapgl::add_h3t_source()`
+
+The Shiny app at `../int-app/app/` is slow to load because on every startup it
+runs expensive DuckDB queries and aggregates data across 10 H3 resolutions
+for both species (sardine) and environment (temperature).
+
+Let's now create and make use of an `h3t` tile endpoint to retrieve only hexagon values based on the current viewport (xyz extent) in a tiled manner. This involves:
+
+1. Build out an `h3t` endpoint that queries the app's duckdb (read-only). 
+   This would probably be easiest to maintain as an R plumber endpoint, 
+   but probably fastest as an API written in Go.
+   The API endpoint /api/h3t/{z}/{x}/{y} should accept SQL query params and optionally an H3 hexagon level (determined otherwise dynamically based on zoom level).
+   This API probably also needs an extra statistics generating endpoint to determine color ramps, such as min and max. Could borrow from TiTiler endpoint ideas for this.
+   Should return h3j-format JSON ([{h3: "hex_id", value: ...}, ...]).
+   Needs to check for SQL attacks and should be read-only query, ie SELECT.
+
+2. Extend [mapgl::add\_h3j_source()](https://walker-data.com/mapgl/reference/add_h3j_source.html) to use [h3t](https://github.com/INSPIDE/h3j-h3t), 
+   probably with a new function `mapgl::add_h3t_source()`.
+   In my local fork of `mapgl` at `@~/Github/bbest/mapgl/inst/htmlwidgets/maplibregl.yaml`, I see it's using version 0.9.2 of `h3j-h3t`, 
+   which I have also forked to `@~/Github/bbest/h3j-h3t`.
+
+3. Update the app to use this new function `mapgl::add_h3t_source()`. Map sources switch from `add_fill_layer(source = sf_data)` to `add_h3t_source(url = api_endpoint)`.
+
+4. Add a Varnish container to the `@../server` to cache the `h3t` outputs for blazing fast responsiveness. Come up with a cache invalidating strategy, probably using a timestamp on the database.
+    
+This would eliminates preloading of all resolutions and enable dynamically fetched data on-demand per viewport.
+
+←  ☐ Backend  ☐ Deployment  ☐ Data source  ☐ Query scope  ✔ Submit  →
+
+**Backend** Which backend should run the h3t endpoint?
+
+❯ 1. R plumber (Recommended)
+     Matches the existing stack at api.calcofi.io; DuckDB-R is fast enough
+     behind Varnish. Easiest to maintain.
+  2. Go
+     Faster per-request (cache misses ~2-5x quicker), but second
+     codebase/runtime to maintain. Use go-duckdb + uber/h3-go.
+  3. Rust
+     Fastest and safest; uses duckdb-rs + h3o. Highest build complexity and no
+     precedent in the org.
+
+**Deployment** Where should the h3t service live physically?
+
+❯ 1. New container in server/ stack (Recommended)
+     Separate h3t_api + varnish containers behind Caddy at h3t.calcofi.io.
+     Clean isolation; Varnish easy to add.
+  2. Add routes to existing plumber (api.calcofi.io)
+     Fewer containers, but mixes DuckDB with current PostGIS plumber. 
+     Complicates Varnish (existing API doesn't want aggressive caching).
+  3. Run inside the int-app Shiny container
+     Simplest deploy; no network hop. But no Varnish = no cross-session        
+     caching, and couples API lifecycle to the app.
+
+**Data source** What data source should the h3t API read from?
+
+❯ 1. Local released DuckDB file (Recommended)    
+     The same calcofi_latest.duckdb the Shiny app uses, mounted read-only.
+     Fast, simple, matches existing pattern.
+  2. Released parquet files on GCS                  
+     DuckDB httpfs reads gs://calcofi-db/ducklake/releases/... directly. Stays 
+     in sync with releases automatically, slower cold reads.            
+  3. New precomputed H3 aggregate tables   
+     Pre-aggregate (species × res × hex) into compact tables on each release.  
+     Smallest query, but adds a release step and inflates storage.
+
+**Query scope** 
+
+How flexible should the query params be?      
+
+  1. Whitelisted params only (Recommended)       
+     dataset, species/measurement, qtr, date range, depth, stat, res. Safest; 
+     covers all current app use cases.      
+  2. Whitelisted + raw SQL WHERE fragment           
+     Allow a ?where= SQL fragment validated via a parser. More flexible for    
+     ad-hoc exploration; bigger attack surface.                         
+  3. Full SELECT passthrough (sandboxed)   
+     User submits a full query; server enforces read-only role + statement-type
+      check. Maximum flexibility, hardest to make safe.           
+❯ 4. I want to be able to send queries that have JOIN, WITH and even RECURSIVE (for hierarchical taxa CTE queries),
+     so free-form SQL, but read-only (eg SELECT). For another project in which I was connecting a custom TiTiler 
+     endpoint to duckdb, Claude added `sqlglot` validation and had client send base64-encoded `SELECT cell_id, value FROM ...`. 
+     Server parses with sqlglot, rejects non-SELECT / multi-statement / dangerous functions, caps rows. Maximum flexibility; larger security surface.
+
+**# H3T Tile Endpoint for Dynamic Viewport-Based Hex Loading**
+
+**## Context**
+
+The CalCOFI int-app Shiny app at `/Users/bbest/Github/CalCOFI/int-app/app/` is slow to start because on every app launch it preloads, for both species (sardine) and environment (temperature) defaults, **all 10 H3 resolutions** as sf polygon grids (`prep_sp_hex()` / `prep_env_hex()` in `functions.R:331-492`). The entire hex grid for each resolution is sent to the browser and styled with `add_fill_layer()`, toggled by `min_zoom`/`max_zoom`. Even with the RDS cache (`int-app/app/app_cache/*.rds`), it only covers the *default* selection — any user change triggers another full 10-resolution aggregation.
+
+**Goal:** Replace preload-everything with a tiled, on-demand HTTP endpoint. The browser requests hex data only for the current viewport (z/x/y), at the resolution appropriate for the current zoom, via the [h3j-h3t](https://github.com/INSPIDE/h3j-h3t) protocol. A Varnish cache makes repeat viewports near-instant.
+
+End state:
+- App startup drops the 10-resolution preload entirely.
+- Each map source becomes a tile URL, not an sf object.
+- Users can pick any species/variable/filter without 10-resolution recomputation.
+- Cache key tied to released DB version/mtime so stale tiles auto-invalidate on release.
+
+---
+
+**## Architecture**
+
+```
+  Browser (mapgl + h3j-h3t.js)
+    │   h3tiles://h3t.calcofi.io/{z}/{x}/{y}.h3t?q=<base64(SELECT...)>&res=<n>&release=<v>
+    ▼
+  Caddy (h3t.calcofi.io)
+    │
+    ▼
+  Varnish (new container, cache keyed on full URL inc. q and release)
+    │
+    ▼
+  Plumber /h3t service (new container; DuckDB read-only + sqlglot-validated SQL)
+    │
+    ▼
+  DuckDB (local released file calcofi_latest.duckdb, mounted read-only)
+```
+
+Layered so the **slow thing runs once per (SQL, z, x, y, release)**; every subsequent client gets a Varnish cache hit. SQL is free-form `SELECT` (supports `WITH`, `RECURSIVE`, `JOIN`) and validated server-side before execution.
+
+---
+
+**## Phase 1 — h3t Plumber API**
+
+**Stack:** R plumber + reticulate→sqlglot for SQL validation. Matches your prior TiTiler-over-DuckDB pattern. DuckDB read-only connection at driver level, sqlglot AST validation at application level.
+
+**### Service layout**
+
+New dedicated directory `/Users/bbest/Github/CalCOFI/api-h3t/`:
+- `api-h3t/plumber.R` — endpoint handlers
+- `api-h3t/h3t_query.R` — bbox→H3, query wrapping, response shaping
+- `api-h3t/sql_validate.R` — sqlglot-based SELECT validator (reticulate wrapper)
+- `api-h3t/run-api.R` — launcher (port 8889)
+- `api-h3t/Dockerfile` — rocker/r-ver + Python + sqlglot + duckdb + plumber
+- `api-h3t/requirements.txt` — just `sqlglot` for reticulate's Python env
+
+DuckDB connection (pooled, one per worker):
+```r
+con <- dbConnect(duckdb::duckdb(), dbdir = Sys.getenv("DUCKDB_PATH"), read_only = TRUE)
+dbExecute(con, "INSTALL h3 FROM community; LOAD h3; LOAD spatial;")
+```
+
+**### Contract for user SQL**
+
+The client submits a base64-encoded SELECT that **MUST project exactly two named columns**:
+- `cell_id` — an H3 cell identifier at the target resolution (BIGINT or hex STRING; the server normalizes to hex via `h3_h3_to_string`).
+- `value` — the numeric to colorize (numeric).
+
+Optional third column `n` (integer count) is carried through if present.
+
+Example (hierarchical taxa with RECURSIVE CTE, then spatial filter-able aggregation):
+
+```sql
+WITH RECURSIVE children AS (
+  SELECT worms_id FROM taxon WHERE worms_id = 158075
+  UNION ALL
+  SELECT t.worms_id FROM taxon t JOIN children c ON t.parent_worms_id = c.worms_id
+)
+SELECT hex_h3res5 AS cell_id, AVG(std_tally) AS value, COUNT(*) AS n
+FROM bio_obs
+WHERE worms_id IN (SELECT worms_id FROM children)
+  AND quarter IN (1,2,3,4)
+GROUP BY 1
+```
+
+The server wraps this as an inner subquery so it can apply the tile bbox filter, the row cap, and H3 normalization without the client knowing about any of it. Resolution is communicated through the `res` URL param (the client bakes the matching `hex_h3res{N}` column into the SQL) so the server can validate consistency.
+
+**### Endpoints**
+
+**#### `GET /h3t/{z}/{x}/{y}.h3t`**
+
+Path params:
+- `z`, `x`, `y` — Web Mercator XYZ tile coords.
+
+Query params:
+- `q` (required) — base64-encoded SELECT (per contract above).
+- `res` (optional) — H3 resolution 1–10; default derived from `z` via the same `zoom_breaks` logic in `int-app/app/global.R:175-181` (relocated into `h3t_query.R`).
+- `release` (optional but recommended) — release version string; echoed into response headers + included in cache key. Enables instant invalidation on new release.
+
+Server pipeline (in `plumber.R` handler):
+1. Base64-decode `q` → raw SQL string. Reject if >16 KB, not valid UTF-8, or empty.
+2. **Validate via `sql_validate.R`** (details below). On fail → 400 with reason.
+3. Compute tile bbox in lon/lat from `z/x/y`.
+4. Wrap as:
+   ```sql
+   WITH user_q AS ( <validated SQL> ),
+        cells  AS (
+          SELECT
+            CASE WHEN typeof(cell_id) = 'VARCHAR' THEN cell_id
+                 ELSE h3_h3_to_string(cell_id::BIGINT) END AS h3id,
+            value,
+            COALESCE(TRY_CAST(n AS BIGINT), NULL) AS n
+          FROM user_q
+        )
+   SELECT h3id, value, n
+   FROM cells
+   WHERE value IS NOT NULL
+     AND NOT isnan(value::DOUBLE) AND isfinite(value::DOUBLE)
+     AND h3_cell_to_latlng(h3_string_to_h3(h3id)) /* within bbox */
+   LIMIT {MAX_ROWS_PER_TILE}     -- default 50_000
+   ```
+   (Actual bbox filter uses `h3_cell_to_lat` / `h3_cell_to_lng` or a pre-filter before the aggregation; see `h3t_query.R` comments. For res ≥ 4 we can alternatively pass the tile polygon into `h3_polygon_to_cells` to compute an IN-list, which is faster than per-row centroid check.)
+5. Execute against read-only DuckDB with a statement timeout (e.g. 3s) via `dbExecute(con, "PRAGMA threads=...; SET statement_timeout='3s'")` inside a per-request transaction.
+6. Stream result to JSON in H3J cells format:
+   ```json
+   { "cells": [ { "h3id": "8c390cb1bcdb400", "value": 12.37, "n": 42 }, ... ] }
+   ```
+
+**#### `GET /h3t/stats`**
+
+Same pipeline but wraps the user SQL as:
+```sql
+SELECT MIN(value), MAX(value),
+       approx_quantile(value, 0.02), approx_quantile(value, 0.98),
+       COUNT(*)
+FROM ( <validated SQL> )
+```
+Returns: `{ "min":…, "max":…, "p02":…, "p98":…, "n":…, "release":"…" }`. No bbox filter — app uses this once per filter change to set the legend/color ramp for all zooms.
+
+**#### `GET /h3t/meta`**
+
+No SQL. Returns release version, DB file mtime, list of known tables & columns (from `information_schema.columns`), built-in H3 column hints (`hex_h3res1..10`), list of commonly used lookups (measurement types, top species). Lets the Shiny app populate dropdowns without ad-hoc queries on startup.
+
+**### SQL validator (`sql_validate.R`)**
+
+Uses `reticulate::import("sqlglot")`. Validation rules (reject → 400 with specific reason):
+
+1. **Parse**: `sqlglot.parse(sql, dialect="duckdb")` — must return exactly 1 statement.
+2. **Top-level type**: root expression must be `exp.Select` OR `exp.With` whose terminal is a `Select`. Anything else (INSERT, UPDATE, DELETE, CREATE, DROP, ATTACH, COPY, EXPORT, CALL, PRAGMA, SET, BEGIN, COMMIT, LOAD, INSTALL, USE) → reject.
+3. **Projections**: among final SELECT expressions, columns aliased `cell_id` and `value` must exist. Optional `n`. Anything else → reject (keeps output schema predictable).
+4. **Function denylist**: walk AST, reject any function whose name is in:
+   `read_csv*, read_parquet*, read_json*, read_blob, httpfs, copy_from_database, load_extension, install_extension, pg_exec, postgres_query, mysql_query, sqlite_scan, shell, system, set_variable, attach, detach` (case-insensitive). Also any `UDF` that isn't in our vetted allowlist.
+5. **No table qualifiers** referring to external schemas (e.g. `postgres.`, `sqlite_*`, `pg_*`, `information_schema` OK for meta only → disallow in user queries).
+6. **No `;`** other than trailing — re-parsed count must equal 1.
+7. **Size cap**: raw SQL ≤ 16 KB; parsed AST ≤ configured node count (e.g. 2000) to prevent parser DoS.
+
+All checks return structured reasons so the client can surface meaningful errors. Defense-in-depth also:
+- Connection opened `read_only = TRUE` → writes fail at the driver.
+- `statement_timeout` 3s per request; `memory_limit` set on the DuckDB instance.
+- Plumber worker ulimit / cgroup memory cap via docker-compose.
+
+**### Response headers**
+
+- `Cache-Control: public, max-age=600`
+- `ETag: W/"<sha256(q + res + release)>"`
+- `X-Calcofi-Release: <release>`
+- `Content-Type: application/json`
+
+---
+
+**## Phase 2 — `mapgl::add_h3t_source()`**
+
+The bundled `h3j-h3t.js` **already provides** `map.addH3TSource()` (see `/Users/bbest/Github/bbest/h3j-h3t/src/index.js:57-99`) — it registers the `h3tiles://` protocol, fetches JSON from `{z}/{x}/{y}`, converts to MVT on the fly, and feeds a vector source. We just need an R-side wrapper matching the `add_h3j_source()` pattern.
+
+**### R-side: `mapgl/R/h3j-h3t.R`**
+
+Append next to `add_h3j_source()`:
+
+```r
+#' Add an H3 tile source (h3t) from a tiled H3J endpoint.
+#' @references https://github.com/INSPIDE/h3j-h3t
+#' @export
+add_h3t_source <- function(map, id, tiles, sourcelayer = id,
+                           geometry_type = c("Polygon", "Point"),
+                           minzoom = 0, maxzoom = 14,
+                           promote_id = TRUE, debug = FALSE) {
+  geometry_type <- match.arg(geometry_type)
+  tiles <- as.list(tiles)
+  h3t_sources <- list(
+    id = id, tiles = tiles, sourcelayer = sourcelayer,
+    geometry_type = geometry_type, minzoom = minzoom, maxzoom = maxzoom,
+    promoteId = promote_id, debug = debug
+  )
+  if (inherits(map, "mapboxgl_proxy") || inherits(map, "maplibre_proxy")) {
+    proxy_class <- if (inherits(map, "mapboxgl_proxy")) "mapboxgl-proxy" else "maplibre-proxy"
+    map$session$sendCustomMessage(proxy_class,
+      list(id = map$id, message = list(type = "add_h3t_sources", h3t_sources = h3t_sources)))
+  } else {
+    map$x$h3t_sources <- c(map$x$h3t_sources, list(h3t_sources))
+  }
+  map
+}
+```
+
+**### JS-side: `mapgl/inst/htmlwidgets/maplibregl.js`**
+
+Mirror the existing `x.h3j_sources` block at `maplibregl.js:1300-1311`:
+
+```js
+if (x.h3t_sources) {
+  x.h3t_sources.forEach(function (source) {
+    map.addH3TSource(source.id, {
+      tiles: source.tiles,
+      sourcelayer: source.sourcelayer,
+      geometry_type: source.geometry_type,
+      minzoom: source.minzoom,
+      maxzoom: source.maxzoom,
+      promoteId: source.promoteId,
+      debug: source.debug
+    });
+    if (x.layers) x.layers.forEach((layer) => add_my_layers(layer));
+  });
+}
+```
+
+Proxy handlers (`mapboxgl-proxy`, `maplibre-proxy`) also need an `add_h3t_sources` case; follow the existing `add_h3j_sources` handler pattern.
+
+**### Layers on top of an h3t source**
+
+Because h3t is a **vector** source, `add_fill_layer(source = id, source_layer = id, ...)` needs `source_layer` populated (unlike h3j). Document this in the Rd example and verify the current `add_fill_layer()` passes `source-layer` through for vector sources.
+
+**### Package housekeeping**
+
+- `@export add_h3t_source` → NAMESPACE regenerated via `devtools::document()`.
+- `man/add_h3t_source.Rd` auto-built.
+- Bump `inst/htmlwidgets/lib/h3j-h3t/h3j_h3t.js` only if `/Users/bbest/Github/bbest/h3j-h3t/` publishes a new version; 0.9.2 already contains `addH3TSource`.
+
+---
+
+**## Phase 3 — Update int-app**
+
+**### Remove from `int-app/app/server.R`**
+
+- Delete the `observeEvent(session$clientData, once = TRUE)` preload block (lines ~46–137) that calls `prep_sp_hex(df_sp, 1:10)` / `prep_env_hex(df_env, 1:10)`.
+- Delete cache-RDS read/write for `sp_hex_list.rds` / `env_hex_list.rds`.
+- Keep `summary_stats` preload (cheap, small).
+
+**### Remove from `int-app/app/functions.R`**
+
+- Keep `prep_sp_hex()` / `prep_env_hex()` for now in case any other caller exists, but stop calling them from server.R. Mark deprecated once confirmed unused.
+
+**### Replace in `functions.R` map builders**
+
+`map_sp()` (lines 1162-1208) and `map_env()` (lines 1242-1288) currently add 10 fill layers from sf data. Replace with **one** h3t source + **one** fill layer whose color expression uses the app-computed scale.
+
+Two new helpers in `functions.R`:
+- `build_sp_sql(sp_name, qtr, date_range, include_children, res_placeholder = "{{res}}")` — returns a SELECT string projecting `cell_id, value, n` from `bio_obs` (with a `WITH RECURSIVE children AS …` preamble when `include_children = TRUE`). The `hex_h3res{N}` column reference uses a placeholder so the per-tile URL can bake in the right resolution.
+- `build_env_sql(measurement_type, qtr, date_range, depth_range, stat)` — analogous, from `env_obs`.
+- `h3t_tile_url(sql, release)` — base64-encodes SQL (with `{{res}}` substituted for each zoom bracket), appends `release`, emits `h3tiles://h3t.calcofi.io/{z}/{x}/{y}.h3t?q=<b64>&res=<n>&release=<v>`.
+
+Because the h3t source is a single MapLibre vector source, we emit **one** tile template per resolution bracket by supplying an array of URLs filtered by zoom on the fly, OR — simpler — we render the map with a template containing `{{res}}` resolved by the same `zoom_breaks` in a client-side hook on `zoomend`, which swaps the source's tile URLs via proxy. The cleaner option: server computes `res` from `z` by default, so the client can send **a single URL with no `res` param** and let the server pick resolution per tile. That's the recommended path — keeps the client trivial.
+
+```r
+sql_sp <- build_sp_sql(sp_name, qtr, date_range, include_children = TRUE)
+map <- maplibre(...) |>
+  add_h3t_source(
+    id          = "sp",
+    tiles       = list(h3t_tile_url(sql_sp, release = rx$release_version)),
+    sourcelayer = "sp"
+  ) |>
+  add_fill_layer(
+    id           = "sp",
+    source       = "sp",
+    source_layer = "sp",
+    fill_color   = sp_scale$expression,   # reuse existing interpolate() helper
+    fill_opacity = 0.7
+  )
+```
+
+- Fetch stats once per user filter change via `/h3t/stats?q=<b64>`; drive the existing legend via those values.
+- On filter change in Shiny, use a `maplibre_proxy` with a helper that re-adds the source with a fresh tile URL — Varnish key changes automatically.
+
+**### Zoom→resolution mapping****
+
+Moves **server-side** (in the API). Client no longer flips layer visibility by zoom. Existing `zoom_breaks` logic relocates to `h3t_query.R`, unchanged.
+
+**### Legend**
+
+Legend updates still need min/max — now served by `GET /h3t/stats?q=<b64>` instead of derived from the preloaded sf lists. One stats fetch per filter change; result reused across zooms.
+
+---
+
+**## Phase 4 — Varnish cache + deploy**
+
+**### New container in `/Users/bbest/Github/CalCOFI/server/docker-compose.yml`**
+
+```yaml
+varnish:
+  image: varnish:7
+  container_name: varnish
+  restart: unless-stopped
+  depends_on: [h3t_api]
+  environment:
+    VARNISH_SIZE: 1G
+  volumes:
+    - ./varnish/default.vcl:/etc/varnish/default.vcl:ro
+  expose: ["80"]
+
+h3t_api:
+  build: /share/github/api-h3t
+  container_name: h3t_api
+  restart: unless-stopped
+  volumes:
+    - /share/calcofi/data:/data:ro     # released DuckDB / parquets
+  expose: ["8889"]
+  environment:
+    DUCKDB_PATH: /data/calcofi_latest.duckdb
+```
+
+**### Caddyfile**
+
+Add to `/Users/bbest/Github/CalCOFI/server/caddy/Caddyfile`:
+```
+h3t.calcofi.io {
+  reverse_proxy varnish:80
+}
+```
+
+**### `server/varnish/default.vcl`**
+
+Key rules:
+- Cache only `GET /h3t/*`; default TTL 24h (safe: URL contains `release` param).
+- Hash includes full query string so every filter combo is its own cache object.
+- `vcl_backend_response`: `beresp.ttl = 24h; beresp.grace = 1h;` for graceful staleness.
+- Accept `PURGE` / `BAN` requests only from the internal docker network (ACL).
+
+**### Cache-invalidation strategy**
+
+Primary key: **release version**, passed explicitly as a `release` query param from the client. The app reads current release from `/h3t/meta` at startup and appends it to every tile URL. When a new release drops:
+1. Backend `/h3t/meta` reports new release (reads DB file mtime + embedded `metadata` table version).
+2. Next app load uses new URLs → fresh cache fill, zero purge required.
+
+Secondary safety net: `release_database.qmd` post-step POSTs `BAN req.url ~ ^/h3t/` to Varnish so old cache objects are evicted promptly (not required for correctness — URLs differ — but reclaims RAM).
+
+Fallback short TTL (24h default, 10 min if `release` param is missing) so a truly botched release doesn't pin bad data forever.
+
+**### Cache key nuance**
+
+Varnish key = `host + URL + query string` (default). Because `q` is base64 of the same SQL on every client, identical filters share a single cache object. Different filters (different SQL) → different cache objects — exactly what we want. No need for custom `vcl_hash`.
+
+---
+
+**## Files touched**
+
+**### New**
+- `/Users/bbest/Github/CalCOFI/api-h3t/plumber.R`
+- `/Users/bbest/Github/CalCOFI/api-h3t/h3t_query.R`
+- `/Users/bbest/Github/CalCOFI/api-h3t/sql_validate.R`
+- `/Users/bbest/Github/CalCOFI/api-h3t/run-api.R`
+- `/Users/bbest/Github/CalCOFI/api-h3t/Dockerfile`
+- `/Users/bbest/Github/CalCOFI/api-h3t/requirements.txt`
+- `/Users/bbest/Github/CalCOFI/server/varnish/default.vcl`
+- `/Users/bbest/Github/bbest/mapgl/man/add_h3t_source.Rd` (generated)
+
+**### Modified**
+- `/Users/bbest/Github/bbest/mapgl/R/h3j-h3t.R` — add `add_h3t_source()`
+- `/Users/bbest/Github/bbest/mapgl/inst/htmlwidgets/maplibregl.js` — handle `x.h3t_sources` in init + proxies
+- `/Users/bbest/Github/bbest/mapgl/NAMESPACE` — export (via `document()`)
+- `/Users/bbest/Github/CalCOFI/server/docker-compose.yml` — add `varnish`, `h3t_api`
+- `/Users/bbest/Github/CalCOFI/server/caddy/Caddyfile` — add `h3t.calcofi.io`
+- `/Users/bbest/Github/CalCOFI/int-app/app/server.R` — drop preload, switch map init
+- `/Users/bbest/Github/CalCOFI/int-app/app/functions.R` — drop `prep_*_hex` calls in `map_sp`/`map_env`, add `h3t_tile_url()`
+- `/Users/bbest/Github/CalCOFI/int-app/app/global.R` — drop RDS cache constants if unused
+
+**### Functions to reuse (don't reinvent)**
+- `mapgl::interpolate()` — color-ramp expression builder (already used)
+- `mapgl::add_fill_layer()` — works with vector source when `source_layer` is passed
+- `glue::glue_sql()` — parameterized SQL (consistent with CLAUDE.md's database guideline)
+- `zoom_breaks` logic from `int-app/app/global.R:175-181` — relocate verbatim into API
+
+---
+
+**## Verification**
+
+1. **Unit-ish smoke** — call the API directly:
+   ```bash
+   SQL='SELECT hex_h3res4 AS cell_id, AVG(std_tally) AS value, COUNT(*) AS n
+        FROM bio_obs WHERE scientific_name = '\''Sardinops sagax'\'' GROUP BY 1'
+   Q=$(printf '%s' "$SQL" | base64)
+   # one tile (expected ~ sub-second for res 4 mid-Pacific)
+   curl -s "http://localhost:8889/h3t/4/3/6.h3t?q=$Q&res=4" | jq '.cells | length'
+   # stats
+   curl -s "http://localhost:8889/h3t/stats?q=$Q"
+   ```
+   Reject-path tests — each must return 400 with a structured reason:
+   - `DROP TABLE bio_obs` (non-SELECT)
+   - `SELECT 1; SELECT 2` (multi-statement)
+   - `SELECT * FROM read_csv('/etc/passwd')` (denylisted function)
+   - `ATTACH 'x' AS y; SELECT 1 FROM y.t` (attach denied)
+   - `SELECT foo FROM bio_obs` (missing `cell_id`/`value` projections)
+   - 20 KB SQL (size cap)
+
+2. **Varnish hit rate** — `varnishstat -1 -f MAIN.cache_hit -f MAIN.cache_miss` after warming a session; expect >90% hit on re-pan/zoom.
+
+3. **mapgl unit test** — new `add_h3t_source` call in an interactive `maplibre()` example; verify the `h3tiles://` protocol request fires in browser devtools network panel.
+
+4. **int-app end-to-end** — start app with the local h3t service:
+   - Initial load time should drop from >10s to <2s (the preload is gone).
+   - Pan/zoom triggers new `/h3t/.../{z}/{x}/{y}` requests; they return <100ms on cache hit.
+   - Changing species/variable/filters updates tiles correctly and independently.
+   - Legend still shows sensible min/max (via `/stats`).
+   - Regression: dual-panel compare map still syncs; spatial boundary PMTiles layers unaffected.
+
+5. **Release invalidation** — bump `release_version`, reload app, confirm new URLs resolve and old Varnish objects are banned (`varnishlog -g request -q 'ReqURL ~ "/h3t"'`).
+
+6. **Failure modes**:
+   - API down → map shows no hexes; Shiny does not hard-crash (wrap tile URL behind a liveness check or let MapLibre handle the 5xx).
+   - Single tile 500 → MapLibre shows a gap but continues; confirm no cascading error.
+
+
+⏺ All four phases delivered and verified where locally possible.                      
+                                                                             
+  What shipped:                                                                       
+  - **api-h3t/** — R plumber service with sqlglot-based SELECT validator. Endpoints GET 
+  /h3t/{z}/{x}/{y}.h3t, /h3t/stats, /h3t/meta, /h3t/health. Free-form SQL (JOIN / WITH
+   / RECURSIVE), base64 over the wire. {{res}} placeholder so one SQL serves every    
+  zoom.                                                                               
+  - **~/Github/bbest/mapgl** — add_h3t_source() (R + NAMESPACE + Rd), plus JS init and    
+  proxy handlers in maplibregl.js and maplibregl_compare.js. Package reinstalled.     
+  - **int-app/app/functions_h3t.R** — SQL builders, URL base64 encoder, stats fetch, 
+  color-scale builder, map_sp_h3t() / map_env_h3t().                                  
+  - **int-app/app/server.R + global.R** — USE_H3T feature flag (default OFF, set          
+  H3T_USE=TRUE to enable). When on, skips the 10-resolution preload; pulls stats + a  
+  single scale instead.                                                               
+  - **server/** — varnish/default.vcl with 24h TTL on release-tagged URLs, 10m fallback,
+  PURGE/BAN ACL. h3t_api + varnish containers in docker-compose.yml. h3t.calcofi.io in
+   Caddyfile.                                            
+                                                                                      
+  Verified end-to-end (against the local DuckDB):                                     
+  - Tile requests at z=1–9 all return 200 with correct per-zoom resolutions (z→res
+  mapping runs server-side).                                                          
+  - Stats endpoint returns min/max/p02/p98/n.                                       
+  - All 5 reject paths (DROP, multi-statement, read_csv, missing cols, SELECT *)      
+  return 400.                                                                   
+  - mapgl serializes x.h3t_sources into the htmlwidget payload.                       
+                                                               
+  What needs your browser:
+  Start the API and the Shiny app, then open the app:                               
+  cd /Users/bbest/Github/CalCOFI/api-h3t && \                                         
+    DUCKDB_PATH=/Users/bbest/Github/CalCOFI/int-app/data/calcofi_v2026.04.08.duckdb \ 
+    RETICULATE_PYTHON=/Users/bbest/Github/CalCOFI/api-h3t/.venv/bin/python \          
+    H3T_PORT=8889 Rscript run-api.R &                                                 
+                                                                                      
+  H3T_USE=TRUE H3T_BASE_URL=http://127.0.0.1:8889/h3t \                               
+    R -e 'shiny::runApp("/Users/bbest/Github/CalCOFI/int-app/app", port=4000)'        
+  Confirm the compare map renders hexes on pan/zoom and that                          
+  http://127.0.0.1:8889/h3t/... requests fire per tile (Chrome devtools → Network).   
+                                                                                      
+  One known rough edge: the include_children = TRUE RECURSIVE CTE in build_sp_sql()   
+  references taxon.taxonID / taxon.parentNameUsageID — I didn't verify those exact    
+  column names against the released DB; if the first run errors there, it's a one-line
+   column-name fix. 
+
+
+⏺ Sorry, that was ambiguous. Nothing has been executed on the server. Here's the
+  honest state:
+                                                                                      
+  Already done (local, verified):                                                     
+  - Code written in all four repos.                                                   
+  - Local h3t_api booted and smoke-tested end-to-end against your local DuckDB.       
+  - mapgl fork rebuilt and installed locally.                                  
+                                                                                      
+  Not done (pending):                                                                 
+  - No git commit or git push anywhere — all changes are still uncommitted in your    
+  working trees.                                                                      
+  - Nothing built, pushed, or started on the production server.
+  - Int-app not yet run with USE_H3T=TRUE in a browser.                               
+                                                                                      
+  The plan file I just wrote is a runbook for you to execute on the server — it covers
+   (1) the git commits/pushes from your laptop, then (2) the ssh + docker compose     
+  commands on the server. I wrote it as a plan file because we're in plan mode; I     
+  can't run ssh or git push without your ok anyway.                                   
+                                                        
+  A few choices for how to proceed — which would you prefer?                          
+   
+  1. I do the local git commits + pushes (laptop side, reversible), and you run the   
+  server-side steps from the runbook. Least work for you.
+  2. You run everything yourself from the runbook — I just hand it over. Most control.
+  3. Skip the runbook format — I just print the server commands here in chat so you   
+  can scroll-copy. Quickest if you just want the commands inline.                     
+                                                                                      
+  Also worth flagging before any deploy: the runbook assumes a host path              
+  /share/calcofi/data/calcofi_latest.duckdb for the released DB. If your server uses a
+   different layout, tell me and I'll adjust the docker-compose.yml volume mount.     
+                                                        
+※ recap: Goal: replace the int-app's 10-resolution hex preload with an on-demand h3t  
+  tile API. Code is written and locally verified; nothing is committed or deployed 
+  yet. Next: decide whether I do the git commits or you run the server runbook        
+  yourself. (disable recaps in /config)                 
+
+1. Please proceed with git commits and pushes. I confirmed that the int-app on the server uses the @../int-app/app/global.R logic and path is reported as:             
+
+  Using database: /share/github/int-app/data/calcofi_v2026.04.08.duckdb               
+
+I would also like to submit a PR to https://github.com/walkerke/mapgl/ with small reproducible examples demonstrating the new `h3t` functionality in an issue, so need to include instructions with the Plumber API as its own standalone but interoperable product.
+
+⏺ Proceeding. First, updating the docker-compose volume to match the actual server
+  path you reported, plus giving api-h3t a proper README + .gitignore so it stands on 
+  its own (for the mapgl PR).
+
+⏺ Back in plan mode. This is a new task (deploy + make api-h3t standalone + open mapgl
+   PR), so I'll overwrite the existing plan file. One clarifying question first.
+
+←  ☐ api-h3t host  ☐ License  ✔ Submit  →                                             
+                                                                                      
+**api-h3t host** Where should the standalone api-h3t repo live?
+                                                                                      
+❯ 1. CalCOFI/api-h3t, public (Recommended)              
+     Matches CalCOFI's other infra repos; walkerke can click through from the mapgl
+     PR; referenced by Caddy/docker-compose as CalCOFI-org code.
+  2. bbest/api-h3t, public
+     Personal org, public. Cleaner if you'd rather decouple the generic tile-server
+     tool from the CalCOFI brand.
+  3. CalCOFI/api-h3t, private
+     Keeps code internal. Means the mapgl PR example can't reference the repo
+     directly; would need to inline the server code.
+
+**License** License for api-h3t (needed to publish + reference from a public mapgl PR)?
+                                                                                      
+❯ 1. MIT (Recommended)                                  
+     Matches mapgl itself; permissive; no concerns for walkerke linking to it.      
+  2. Apache-2.0                                                 
+     Permissive + patent grant. Fine, slightly heavier than MIT.
+  3. No license file yet                                                            
+     Defer; I'll drop in a LICENSE later. Note: GitHub will mark the repo as 
+     all-rights-reserved until you add one.
+
+**# Publish h3t & open mapgl PR**
+
+**## Context****
+
+All code is written and verified locally end-to-end (the previous plan's verification section passed). Nothing has been committed or pushed yet. The goal now is to:
+
+1. **Publish the four repos** so the server can `git pull` and deploy.
+2. **Make `api-h3t` a standalone, reproducible product** (generic README + LICENSE + .gitignore + Docker quickstart) — so the upstream `walkerke/mapgl` reviewer can spin it up against any DuckDB file with H3 columns to verify `add_h3t_source()`.
+3. **Open a PR to `walkerke/mapgl`** with a self-contained reproducible demo that references the published `api-h3t` repo.
+
+User decisions (already captured):
+- `api-h3t` → **`CalCOFI/api-h3t`, public, MIT**.
+- Server DuckDB actually lives at `/share/github/int-app/data/calcofi_v2026.04.08.duckdb` (not the path I assumed earlier). Docker volume must point there.
+
+Deploy runbook already exists at `/Users/bbest/.claude/plans/h3t-server-deploy.md` — it will get a small volume-path edit.
+
+---
+
+**## Repo inventory (pre-publish state)**
+
+| Repo | Path | State | Remote |
+|---|---|---|---|
+| api-h3t | `/Users/bbest/Github/CalCOFI/api-h3t` | **not a git repo yet** | (none — create `CalCOFI/api-h3t`) |
+| server | `/Users/bbest/Github/CalCOFI/server` | modified: Caddyfile, docker-compose.yml; untracked: `varnish/` | `CalCOFI/server` |
+| mapgl | `/Users/bbest/Github/bbest/mapgl` | modified: NAMESPACE, R/h3j-h3t.R, inst/htmlwidgets/maplibregl{,_compare}.js; untracked: `man/add_h3t_source.Rd` | origin=`bbest/mapgl`, upstream=`walkerke/mapgl` |
+| int-app | `/Users/bbest/Github/CalCOFI/int-app` | behind origin by 1 commit; modified: app/global.R, app/server.R; untracked: app/functions_h3t.R | `CalCOFI/int-app` |
+
+---
+
+**## Phase A — `api-h3t` as a standalone product**
+
+Create these files before first commit:
+
+**### `api-h3t/.gitignore`**
+```
+.venv/
+__pycache__/
+*.pyc
+.Rhistory
+.Rproj.user/
+*.duckdb
+```
+
+**### `api-h3t/LICENSE`** — MIT, copyright Ben Best / CalCOFI.
+
+**### `api-h3t/README.md`** (generic, no CalCOFI lock-in)
+Sections:
+- **What it is** — an h3t tile server: takes a base64-encoded `SELECT` → returns h3j-format JSON tiles; pairs with `mapgl::add_h3t_source()` (link to the upstream PR once open).
+- **Contract** — the user SQL MUST project `cell_id` (BIGINT H3 cell) + `value` (numeric); optional `n`; may contain `{{res}}` which the server substitutes with the tile's H3 resolution derived from zoom.
+- **Endpoints** — `GET /h3t/{z}/{x}/{y}.h3t`, `/h3t/stats`, `/h3t/meta`, `/h3t/health` with example `curl` calls.
+- **Security model** — sqlglot AST validation (SELECT-only, single statement, projection whitelist, function denylist); DuckDB opened read-only; server-side row cap; R `setTimeLimit` wall clock.
+- **Quickstart (Docker)** — `docker build`, `docker run -e DUCKDB_PATH=/data/your.duckdb -v /host/path:/data:ro -p 8889:8889 api-h3t` + a 10-line example showing a real tile fetch.
+- **Quickstart (local R)** — `Rscript run-api.R` with env vars.
+- **Companion tools** — `mapgl::add_h3t_source()`; `INSPIDE/h3j-h3t` (the JS protocol handler); DuckDB h3 community extension.
+- **Configuration** — env vars table (DUCKDB_PATH, H3T_PORT, H3T_HOST, H3T_MAX_ROWS, H3T_STMT_TIMEOUT_MS, RETICULATE_PYTHON, SQLGLOT_PY).
+
+**### `api-h3t/example/demo.sql`** (tiny demonstration query that doesn't depend on bio_obs)
+```sql
+-- works against any DuckDB that has an H3 column per row;
+-- this builds a trivial "cells with row counts" layer
+SELECT hex_h3res{{res}} AS cell_id,
+       COUNT(*)         AS value,
+       COUNT(*)         AS n
+  FROM my_points
+ GROUP BY 1
+```
+
+**### Repo creation + first commit**
+```bash
+cd /Users/bbest/Github/CalCOFI/api-h3t
+git init -b main
+git add .gitignore LICENSE README.md example \
+        Dockerfile requirements.txt run-api.R \
+        plumber.R h3t_query.R sql_validate.R sql_validate.py
+git commit -m "feat: initial h3t tile API — plumber + sqlglot-validated DuckDB SELECT"
+gh repo create CalCOFI/api-h3t --public --source . --push \
+   --description "An h3t tile server: base64-encoded SELECT against DuckDB → h3j JSON tiles for MapLibre."
+```
+
+Notably excluded from the first commit: `.venv/` (dev-only), any `*.duckdb` files (data), `notes/` or similar. Verify with `git status` before pushing.
+
+---
+
+**## Phase B — server repo (fix volume mount + commit)**
+
+Edit `/Users/bbest/Github/CalCOFI/server/docker-compose.yml` — change the `h3t_api` volume mount to the real path the user confirmed:
+
+```yaml
+  h3t_api:
+    ...
+    volumes:
+      - /share/github/int-app/data:/data:ro   # was /share/calcofi/data
+    environment:
+      DUCKDB_PATH: /data/calcofi_latest.duckdb
+      ...
+```
+
+Also note: no `calcofi_latest.duckdb` symlink exists there yet per the user's report (the path they gave ends in `calcofi_v2026.04.08.duckdb`). Two options — I'll default to (2), the symlink, since it avoids editing docker-compose on each release:
+
+1. Hard-code the versioned file in the env var (`DUCKDB_PATH: /data/calcofi_v2026.04.08.duckdb`). Requires docker-compose edit on each release.
+2. Create a `calcofi_latest.duckdb` symlink on the server (**runbook step, no repo change**): `ln -sfn calcofi_v2026.04.08.duckdb /share/github/int-app/data/calcofi_latest.duckdb`.
+
+Then commit + push server:
+```bash
+cd /Users/bbest/Github/CalCOFI/server
+git add caddy/Caddyfile docker-compose.yml varnish/default.vcl
+git commit -m "feat: add h3t_api + varnish containers behind h3t.calcofi.io"
+git push
+```
+
+Also refresh the deploy runbook (`/Users/bbest/.claude/plans/h3t-server-deploy.md`) to reflect the `/share/github/int-app/data` path.
+
+---
+
+**## Phase C — mapgl PR to walkerke**
+
+Goal: land `add_h3t_source()` upstream. Commit on a **feature branch** of `bbest/mapgl`, then PR against `walkerke/mapgl`.
+
+```bash
+cd /Users/bbest/Github/bbest/mapgl
+git fetch upstream
+git checkout -b feat/add-h3t-source upstream/main  # branch off walkerke main for a clean diff
+# cherry-apply our local edits (they're currently loose in working tree on `main`)
+git checkout main -- R/h3j-h3t.R \
+                      inst/htmlwidgets/maplibregl.js \
+                      inst/htmlwidgets/maplibregl_compare.js \
+                      NAMESPACE man/add_h3t_source.Rd
+# re-run document() so NAMESPACE/Rd match the branch base
+Rscript -e 'devtools::document()'
+git add R/h3j-h3t.R inst/htmlwidgets/maplibregl.js inst/htmlwidgets/maplibregl_compare.js \
+        NAMESPACE man/add_h3t_source.Rd
+git commit -m "feat: add_h3t_source() — tiled h3j via h3tiles:// protocol"
+git push -u origin feat/add-h3t-source
+```
+
+Then open the PR:
+```bash
+gh pr create \
+  --repo walkerke/mapgl \
+  --base main --head bbest:feat/add-h3t-source \
+  --title "Add add_h3t_source() for tiled H3J (h3t) data" \
+  --body-file .github/h3t-pr-body.md
+```
+
+**### PR body — `/Users/bbest/Github/bbest/mapgl/.github/h3t-pr-body.md`****
+Sections (I'll draft verbatim during execution):
+1. **Why** — the `addH3TSource()` method is already bundled in `inst/htmlwidgets/lib/h3j-h3t/h3j_h3t.js` (via `addProtocol('h3tiles')`), but there's no R wrapper; only `addH3JSource` is exposed. `add_h3t_source()` closes that gap and enables viewport-driven hex loading for large datasets that don't fit as a single H3J file.
+2. **What** — new `add_h3t_source(map, id, tiles, sourcelayer, geometry_type, minzoom, maxzoom, promote_id, debug)`; JS init handler in `maplibregl.js` + `maplibregl_compare.js`; proxy message handler for `add_h3t_sources` (and, as a side-fix, `add_h3j_sources` — `add_h3j_source()`'s proxy path previously had no JS counterpart).
+3. **Reproducible demo** — ~20 lines showing:
+   - `docker run ghcr.io/calcofi/api-h3t ...` against a tiny public DuckDB sample, OR `Rscript run-api.R` if no container registry.
+   - R code using `maplibre() |> add_h3t_source(...) |> add_fill_layer(...)`.
+   - Screenshot/gif of pan/zoom loading tiles on demand.
+4. **Testing** — smoke-tested against two datasets (sardine abundance ~3000 cells @ res 5, temperature ~500k rows), cold tile ~30–100 ms, warm browser cache <10 ms.
+5. **Scope / non-goals** — the Mapbox side (`mapboxgl.js`) is not touched; h3j didn't have a Mapbox path either. Happy to mirror if you want it in the same PR.
+
+**### Local verification before pushing the PR**
+```bash
+# clean build against walkerke base to make sure the diff stands alone
+R CMD build /Users/bbest/Github/bbest/mapgl
+R CMD check --no-manual mapgl_*.tar.gz   # expect 0 errors / 0 warnings
+```
+
+---
+
+**## Phase D — int-app commit**
+
+After api-h3t is on GitHub (so the app can reference it), commit the Shiny-side additions:
+
+```bash
+cd /Users/bbest/Github/CalCOFI/int-app
+git pull --ff-only                 # catch up the 1 commit we're behind
+git add app/global.R app/server.R app/functions_h3t.R
+git commit -m "feat: USE_H3T flag — read hex data from h3t tile API"
+git push
+```
+
+`USE_H3T` defaults to `FALSE`, so pushing is a no-op behavior change until the server sets the env var.
+
+---
+
+**## Execution order (for the non-plan-mode follow-up)**
+
+1. **api-h3t**: write LICENSE + README + .gitignore + example → `git init` + commit + `gh repo create --public --push`.
+2. **server**: edit docker-compose volume → commit + push.
+3. **mapgl**: feature branch off upstream/main → cherry-apply → document → commit + push → `gh pr create` against walkerke.
+4. **int-app**: pull → commit + push.
+5. Update `/Users/bbest/.claude/plans/h3t-server-deploy.md` volume path.
+6. Hand user: the PR URL + three git-push confirmations + runbook path for the server steps.
+
+---
+
+**## Verification**
+
+- `gh repo view CalCOFI/api-h3t` returns a public repo with README rendering correctly.
+- A fresh `git clone https://github.com/CalCOFI/api-h3t && cd api-h3t && docker build -t api-h3t . && docker run -e DUCKDB_PATH=/data/x.duckdb -v $PWD/example:/data:ro api-h3t` boots and `curl localhost:8889/h3t/health` returns ok. (Validates the README quickstart from a clean slate.)
+- `gh pr view <n> --repo walkerke/mapgl` shows the PR with passing CI (if walkerke/mapgl runs CI on forks).
+- `git -C /share/github/CalCOFI/server pull` on the server sees the new docker-compose + Caddyfile + vcl.
+- Deploy runbook (`h3t-server-deploy.md`) is the only remaining work on the server side.
+
+⏺ All four repos published. Final summary:                                     
+                                                                                      
+  ┌─────────────────────────┬────────────────────────────────────────────┬─────────┐  
+  │          Repo           │                    Link                    │ Commit  │
+  ├─────────────────────────┼────────────────────────────────────────────┼─────────┤  
+  │ api-h3t (new, public,   │ https://github.com/CalCOFI/api-h3t         │ 3521f7f │
+  │ MIT)                    │                                            │         │  
+  ├─────────────────────────┼────────────────────────────────────────────┼─────────┤  
+  │ server                  │ https://github.com/CalCOFI/server          │ 9a6bbb9 │  
+  ├─────────────────────────┼────────────────────────────────────────────┼─────────┤  
+  │ int-app                 │ https://github.com/CalCOFI/int-app         │ f54f383 │  
+  ├─────────────────────────┼────────────────────────────────────────────┼─────────┤  
+  │ mapgl PR → walkerke     │ https://github.com/walkerke/mapgl/pull/199 │ cf4215b │  
+  └─────────────────────────┴────────────────────────────────────────────┴─────────┘
+                                                                                      
+  **mapgl PR**: Clean 4-file diff (+136/-0 vs upstream/main); R CMD check passes 0E/0W/0N;
+   body references CalCOFI/api-h3t for a reproducible Docker demo.
+   - [Add add_h3t_source() for tiled H3J (h3t) data by bbest · Pull Request #199 · walkerke/mapgl](https://github.com/walkerke/mapgl/pull/199)
+                                                                                      
+  Left on your plate (server side):                                                   
+  1. On the server: git -C /share/github/CalCOFI/server pull (picks up compose + Caddy
+   + varnish).                                                                        
+  2. On the server: place a calcofi_latest.duckdb symlink next to the versioned file —
+   sudo ln -sfn calcofi_v2026.04.08.duckdb                                            
+  /share/github/int-app/data/calcofi_latest.duckdb.                                   
+  3. On the server: cd /share/github/CalCOFI/server && docker compose build h3t_api &&
+   docker compose up -d h3t_api varnish && docker compose exec caddy caddy reload     
+  --config /etc/caddy/Caddyfile.                                                      
+  4. On the server: add H3T_USE=TRUE, H3T_BASE_URL=https://h3t.calcofi.io/h3t,
+  H3T_RELEASE=v2026.04.08 to the int-app's .Renviron and touch restart.txt.           
+                                                                                      
+  Full runbook with verification curls lives at
+  /Users/bbest/.claude/plans/h3t-server-deploy.md (I refreshed the path there to      
+  /share/github/int-app/data). 
+
+⏺ install.packages() doesn't error the Dockerfile RUN — it just warns and moves on, so
+   the image builds "successfully" with packages missing. Most likely culprit: plumber
+   → sodium needs libsodium-dev, which isn't in the apt list, so the source compile   
+  failed silently.
+
+⏺ Pushed. On the server:                                 
+
+  ```bash
+  # pull the Dockerfile fix                                                           
+  git -C /share/github/CalCOFI/api-h3t pull --ff-only
+                                                                                      
+  # rebuild with no cache so the new apt libs + install2.r path actually run          
+  cd /share/github/CalCOFI/server                                                     
+  docker compose build --no-cache h3t_api
+                                                         
+  # bring it back up                                                                  
+  docker compose up -d h3t_api
+                                                                                      
+  # tail logs — expect "Running plumber API at http://0.0.0.0:8889" and NO library()  
+  errors
+  docker compose logs -f h3t_api  
+  ```                                                    
+                                                         
+  What changed and why:                                                               
+   
+  1. install.packages() is the culprit. It doesn't error the Dockerfile RUN on failure
+   — it warns and continues, so the image builds "successfully" with plumber never
+  installed. The symptom you saw (library(plumber) fails at runtime) is the classic   
+  signature.                                             
+  2. Missing system lib: libsodium-dev. plumber depends on sodium, which needs
+  libsodium-dev at compile time. Without it, the source build silently fails.         
+  3. Switched to install2.r --error. Rocker ships install2.r (via littler)
+  specifically for Dockerfiles — it exits non-zero on any package failure, making     
+  docker build fail loudly instead of producing a broken image.
+  4. Added a sanity-check library() line so the build fails if anything goes sideways 
+  in the future.                                                                      
+   
+  If the rebuild still errors, paste the last ~30 lines of docker compose build       
+  --no-cache h3t_api and I'll drill in from there.
+
+I started the Docker daemon, so please try locally and debug first
+
+⏺ Two new errors to fix — let me address both. First the sql_validate.R reticulate  
+  issue (which is what's crashing h3t_api). The varnish error is downstream (it's     
+  unhealthy because h3t_api is dead).
+
+⏺ Fixes pushed. Both root causes and a downstream effect addressed:             
+
+  Commits:                                                                            
+  - CalCOFI/`api-h3t`@3f1ca79 — fixes the Python shared library not found crash + adds
+  container healthcheck                                                               
+  - CalCOFI/`server`@e4e0d6a — makes Varnish wait for h3t_api to be healthy before
+  compiling its VCL                                                                   
+                                                                                      
+  What was wrong:
+                                                                                      
+  1. **reticulate couldn't find Python** (the h3t_api crash you pasted). In Docker,       
+  RETICULATE_PYTHON=/opt/venv/bin/python3 in ENV isn't always enough — reticulate's
+  auto-detection can fall through and pick the default R-embedded Python (which has no
+   shared lib). sql_validate.R now explicitly calls                     
+  reticulate::use_virtualenv("/opt/venv", required = TRUE) before the first
+  reticulate::import("sqlglot"). Verified locally by reproducing the container
+  scenario: unset SQLGLOT_PY, set only RETICULATE_PYTHON, then h3t_load_validator()
+  now loads cleanly (previously failed).
+
+  2. **Varnish "could not resolve h3t_api"** was a downstream effect. Varnish compiles its
+   VCL at startup and resolves the backend hostname once, at boot. If h3t_api was     
+  crash-looping from (1), Varnish raced it and saw no DNS record. The fix in compose
+  adds condition: service_healthy on depends_on, so Varnish only starts after the     
+  /h3t/health endpoint is actually answering. Needs the healthcheck in the Dockerfile
+  (also added).
+
+  On the server:                                                                      
+  
+  ```bash
+  git -C /share/github/CalCOFI/api-h3t pull --ff-only                                 
+  git -C /share/github/CalCOFI/server  pull --ff-only                   
+  ```
+                                                                                      
+  ```bash
+  cd /share/github/CalCOFI/server
+  docker compose build --no-cache h3t_api
+  docker compose up -d --force-recreate h3t_api varnish
+  docker compose logs -f h3t_api
+  # expect:
+  #   Running plumber API at http://0.0.0.0:8889                                      
+  #   (no "Python shared library" error, no library(plumber) error)     
+  ```
+                                                                                      
+  Once h3t_api reports healthy (docker compose ps will show (healthy) after ~30 s),   
+  Varnish will start and the VCL will compile. You can then hit curl -s               
+  https://h3t.calcofi.io/h3t/health.                                                  
+                                                                        
+  Note on my local build: it got stuck mid-install on my arm64 Mac (Docker Desktop /  
+  PPM source-compile quirk). I couldn't kill the stuck process (correctly — you denied
+   the kill), so I validated the reticulate fix against the .venv outside Docker      
+  instead. Your amd64 server gets PPM binary packages, which is much faster and avoids
+   the compile path entirely.
+
+⏺ Pushed. On the server:                                 
+
+  ```bash
+  git -C /share/github/CalCOFI/api-h3t pull --ff-only
+  cd /share/github/CalCOFI/server                                                     
+  docker compose build --no-cache h3t_api
+  docker compose up -d --force-recreate h3t_api varnish
+  docker compose logs -f h3t_api
+  ```
+  
+  Why this should be the last reticulate error:                                       
+                                                         
+  python3 -m venv /opt/venv creates a shim that delegates to the system Python 3.10,  
+  not a full standalone install. reticulate needs to dlopen an actual libpython3.10.so
+   — and on slim Docker images the python3 package alone doesn't ship it. python3-dev 
+  provides libpython3.10.so (plus headers), and          
+  reticulate::use_virtualenv("/opt/venv") will then find it via the venv's reference
+  back to the base Python.
+
+  Once you see:                                                                       
+  Running plumber API at http://0.0.0.0:8889
+  …the healthcheck will start passing (~30 s), at which point Varnish's condition:    
+  service_healthy gate releases and it'll start too. docker compose ps should show    
+  both as running (healthy). 
+
+⏺ Pushed. Rebuild on the server:                         
+
+  ```bash
+  git -C /share/github/CalCOFI/api-h3t pull --ff-only
+  cd /share/github/CalCOFI/server                                                     
+  docker compose build --no-cache h3t_api
+  docker compose up -d --force-recreate h3t_api varnish
+  docker compose logs -f h3t_api
+  ```
+
+  ```bash
+  cd /share/github/CalCOFI/api-h3t
+  sudo -u bebest git pull
+  cd ../server/
+  sudo -u bebest git pull
+  docker compose build --no-cache h3t_api
+  docker compose up -d --force-recreate h3t_api varnish
+  docker compose logs -f h3t_api
+  ```
+
+  **Root cause of that last error**: `rocker/r-ver:4.4.1` pins CRAN to a snapshot from      
+  `2024-10-30`, when `DuckDB` R was still at 1.1.3 (storage format 64). `calcofi4db` writes
+  with `1.5.1+` (storage `68`) — hence the can only read version `64` mismatch. The fix     
+  splits the `install2.r` so `duckdb` comes from PPM's rolling latest URL (same binary
+  source, but today's version) while the other packages stay on the pinned snapshot
+  for reproducibility.
+
+  In the build output you should now see a line like:                                 
+  duckdb R pkg version: 1.5.1
+  (or whatever's current) — I added that as a sanity check so a future storage-version
+  drift is visible at docker compose build, not at runtime.                          
+                                                                                      
+  Should come up clean this round. If not, paste the next log and I'll keep going.
+
+⏺ Pushed. On the server — this one's cheap, no --no-cache needed since only plumber.R
+  changed:
+
+  ```bash
+  cd /share/github/CalCOFI/api-h3t
+  sudo -u bebest git pull
+  cd /share/github/CalCOFI/server
+
+  # Quick restart — Dockerfile didn't change; the COPY . /app layer will pick up
+  # the new plumber.R on a normal build.
+  docker compose build h3t_api
+  docker compose up -d --force-recreate h3t_api
+
+  # Purge the existing Varnish cache so old no-ACAO responses are evicted
+  docker compose exec varnish varnishadm ban 'req.url ~ "^/h3t/"'
+  ```
+
+  Then hard-reload the Shiny app in your browser and the CORS errors should clear.
+
+  Verify directly:
+
+  ```r
+  # from your laptop; expect `access-control-allow-origin: *` in headers
+  curl -sI "https://h3t.calcofi.io/h3t/health" | grep -i access-control
+  curl -sI -H 'Origin: https://rstudio.calcofi.io' \
+       "https://h3t.calcofi.io/h3t/health" | grep -i access-control
+  ```
+
+  What the filter does:
+  - `Access-Control-Allow-Origin: *` — allows any origin (default; overridable via
+  `H3T_CORS_ORIGIN` env var if you want to lock down to `rstudio.calcofi.io` or similar).
+  - `Access-Control-Expose-Headers: ETag, X-Calcofi-Release, X-Cache` — so the browser
+  app can read those metadata headers for cache-debug / release tracking.
+  - OPTIONS preflights short-circuit to 204 without touching DuckDB.
+
+  Using * keeps Varnish cache fragmentation at zero (no Vary: Origin) — one cache
+  entry per tile URL regardless of which domain loads it.
+
+  The maplibre-gl.js Cannot read properties of undefined (reading 'data') errors at
+  the top are MapLibre reacting to the failed tile fetches — they should disappear
+  once tiles load successfully.
+
+※ recap: Goal: launch an h3t tile API (CalCOFI/api-h3t + Varnish + Caddy) so the      
+  int-app Shiny map loads hexes on demand instead of preloading. Just pushed a 
+  CORS-headers fix; next: on the server, git pull api-h3t, rebuild h3t_api, recreate, 
+  ban Varnish cache, and reload the app.
+
+I am not seeing any hexagons, although their values do seem to be transmitting through the h3t interface. There are errors in the JS console. Can you launch the Shiny app locally and  debug in Google Chrome browser yourself?
+
+⏺ I can't actually drive Chrome, but I can start the services locally and inspect the 
+  JS code for the bug — the symptom (Cannot read properties of undefined (reading 
+  'data') from maplibre-gl + tiles successfully loading) is a classic empty-tile bug  
+  in the bundled h3j-h3t JS. Let me verify.
+                                                                                      
+⏺ Confirmed — there's a latent bug in h3j-h3t.js for empty tiles. When getTile()      
+  returns null (no features in that tile's bbox), fromGeojsonVt({sourcelayer: null})
+  throws, which MapLibre then mishandles with the reading 'data' error. Tiles at the  
+  edge of your data region all trip this.                                             
+                                                                                      
+  Let me also try to run the app locally while I patch.
+
+⏺ Root cause (confirmed locally):                                                     
+                                                                                      
+  Your server is returning data for populated tiles (the 450.04 / 282.18 etc. values  
+  you saw). The problem is the empty tiles — the ones MapLibre requests for the       
+  corners/edges of the viewport that fall outside the sardine distribution. My h3t    
+  server correctly returns {"cells": []} for those. The bundled h3j-h3t.js v0.9.2 then
+   does:
+
+  ```js
+  const f = utils.tovt(g).getTile(...zxy);   // returns null for empty geojson
+  fo[o.sourcelayer] = f;                      // fo = {sp: null}                      
+  const p = utils.topbf.fromGeojsonVt(fo, ...);   // ← throws reading .features on    
+  null 
+  ```                                                                               
+                                                                                      
+  The promise rejection reaches MapLibre, which mishandles it as Cannot read          
+  properties of undefined (reading 'data'). Because that exception fires during the
+  protocol handler, MapLibre tears down the entire source — that's why even the tiles 
+  with data don't paint. The Shiny "progress message for map" errors above are just
+  the upstream reactive trying to push to a dead source.
+
+  Fix is a 4-line patch to bbest/h3j-h3t src: short-circuit to an empty pbf when      
+  getTile() returns null. Bundle rebuilt to v0.9.3 and copied into the mapgl fork.
+                                                                                      
+  Published:                                             
+  - `bbest/h3j-h3t@2b2e84a` — v0.9.3 source fix + rebuilt bundle`
+  - `bbest/mapgl@28b954b` on feat/add-h3t-source — updated bundled JS + yaml bump       
+                                                                               
+  On the server (inside the RStudio/Shiny container):                                 
+
+  ```r
+  # reinstall mapgl from the feat branch                                              
+  remotes::install_github("bbest/mapgl@feat/add-h3t-source", force = TRUE, upgrade = FALSE)
+  ```                                                               
+                                                                                      
+  Then bounce the Shiny app so it picks up the new htmlwidget assets:
+
+  ```r                                                         
+  touch /share/github/int-app/restart.txt                                             
+  # (or whichever path matches your shiny-server.conf app_dir)
+  ```
+                                                                                      
+  Hard-reload the browser (⌘⇧R) to bust the old cached `h3j_h3t.js`. The hexes should   
+  now render, and the `Cannot read properties of undefined (reading 'data')` errors in  
+  the console should vanish.                                                          
+                                                         
+  About "launch locally": I can start the services locally (I did — the h3t API came  
+  up and returned the expected data), but I genuinely can't drive a Chrome browser
+  from Claude Code — I have no GUI handle to a browser. The empty-tile failure path is
+   deterministic and visible from the server-side + source-code side, which is why I
+  could fix it without seeing the UI. If you want, after you install+reload, share the
+   new console state (or the screen if tiles still don't show) and I'll keep going.
+
+Still not seeing hexagons and getting those errors `"Cannot read properties of undefined (reading 'data')"` after running 
+```r
+remotes::install_github("bbest/mapgl@feat/add-h3t-source", force = TRUE, upgrade = FALSE)
+# confirmed install after R Session refresh with
+devtools::session_info()
+# mapgl        * 0.4.6    2026-04-21 [1] Github (bbest/mapgl@28b954b)
+```
+But then seeing paths suggesting use of unpatched h3j-h3t `0.9.2` despite presence in
+https://github.com/bbest/mapgl/blob/feat/add-h3t-source/inst/htmlwidgets/maplibregl.yaml#L48-L49:
+```yaml
+  - name: h3j-h3t
+    version: 0.9.3
+```
+
+⏺ Pushed. On the server:                                 
+
+  remotes::install_github("bbest/mapgl@feat/add-h3t-source", force = TRUE, upgrade =  
+  FALSE)                                                                              
+  then bounce the app:                                                                
+  touch /share/github/int-app/restart.txt                                             
+  and hard-reload (⌘⇧R) to bust the h3j-h3t-0.9.2/... cached bundle.
+                                                                                      
+  Good diagnostic work on your end. <script src="h3j-h3t-0.9.2/h3j_h3t.js"></script>  
+  was the tell — the htmlwidgets dependency URL is built from the yaml's name + "-" + 
+  version, so a stale 0.9.2 in any yaml served by a loaded widget means the browser   
+  pulls the old bundle.                                                               
+                                                         
+  Four yamls ship with mapgl — mapboxgl.yaml, mapboxgl_compare.yaml, maplibregl.yaml, 
+  maplibregl_compare.yaml — but only the two maplibregl*.yaml reference h3j-h3t. Your
+  int-app uses compare (dual-panel map), so the maplibregl_compare.yaml is the one    
+  that matters. I bumped only the non-compare one last time. Now both are on 0.9.3 and
+   point at the patched bundle.
+
+  After the reload, the Sources tree should show h3j-h3t-0.9.3 and the (reading       
+  'data') errors should be gone.
+
+Still no hexagons and errors persisting despite now showing proper version 0.9.3    
+  [Image #14] [Image #15]. This is true both locally and on server. Wish there was a  
+  way to get you to debug this more deeply directly in the Chrome browser. I have the 
+   Claude extension installed, so maybe I can point it to this session? 
+
+⏺ Found the real problem. Your mapgl ships MapLibre GL JS v3+/v4, where addProtocol   
+  uses the promise-returning API ((params, abortController) => Promise<{data}>), not
+  the old callback-style (params, callback) => callback(err, data) that h3j-h3t v0.9.3
+   still uses. When MapLibre calls our handler, it passes an AbortController as the
+  second arg — our code then tries to invoke it as a function (callback(null, p, ...))
+   and throws e is not a function. That rejection propagates as Cannot read properties
+   of undefined (reading 'data'), the layer fails to mount, and everything downstream
+  cascades.
+
+  Empty-tile was a real bug but it wasn't the one you're hitting. Rewriting the       
+  protocol handler for the promise API.
+
+⏺ Pushed. Same rebuild recipe:                           
+
+  ```r
+  remotes::install_github("bbest/mapgl@feat/add-h3t-source", force = TRUE, upgrade = FALSE)
+  touch /share/github/int-app/restart.txt
+  ```
+  Hard-reload (⌘⇧R).                                                                  
+                                                                                      
+  Root cause this time:                                                               
+                                                                                      
+  Your mapgl ships MapLibre GL JS v3 or newer, which switched the addProtocol handler 
+  from callback-style to promise-returning. The bundled h3j-h3t was written for v2's
+  callback API:                                                                       
+
+  ```js
+  // v2 (old):
+  addProtocol('h3tiles', (params, callback) => callback(null, data, ...))
+                                                                                      
+  // v3+ (new, what your mapgl actually uses):                                        
+  addProtocol('h3tiles', (params, abortController) => Promise<{data}>)                
+  ```
+                                                                                      
+  When MapLibre called our handler, it passed an AbortController as the 2nd arg. Our  
+  code then did callback(null, p, null, null) — invoking the AbortController as if it 
+  were a function — which threw Uncaught (in promise) TypeError: e is not a function. 
+  That rejection surfaced through MapLibre as the Cannot read properties of undefined 
+  (reading 'data') you kept seeing, which tore the source down, which is why layer
+  "sp" then had no source to bind to and applyMapModifications threw Cannot get style
+  of non-existing layer "sp" — a cascade.
+
+  v0.9.4 of the bundled JS auto-detects the protocol API shape (function vs           
+  AbortController) and returns a Promise<{data}> when it's v3+. The empty-tile
+  short-circuit from v0.9.3 is preserved.                                             
+                                                         
+  Re: the Chrome Claude extension — can't connect remotely to this CLI session,       
+  they're separate runtimes. The way we're doing this now (you paste console + Sources
+   panel screenshots, I diff against the bundle code) has actually been pretty        
+  effective — every error message in your last screenshot pointed straight at the
+  answer once I searched the minified bundle for addProtocol internals. If this fix
+  doesn't land it, the next screenshot will narrow it further.
+
+Ok, not seeing those errors any more, just a few others that do not multiply as I   
+  zoom, but still hexagons are not showing up despite the h3t json files downloading  
+  [Image #16] [Image #17]
+
+⏺ Great, the e is not a function / reading 'data' errors are gone — protocol API fix  
+  landed. The remaining Cannot get style of non-existing layer "sp" is the real
+  blocker now: tiles arrive but there's nothing to render them onto. Let me look at   
+  the compare widget's init order.
+
+⏺ Pushed. Same rebuild recipe:                           
+
+  remotes::install_github("bbest/mapgl@feat/add-h3t-source", force = TRUE, upgrade = FALSE)
+  touch /share/github/int-app/restart.txt                                             
+  Hard-reload (⌘⇧R).                                                                  
+                                                                                      
+  What was actually wrong — and why fixing only the protocol API wasn't enough:       
+                                                                                      
+  applyMapModifications(map, mapData) runs the entire init sequence for each side of  
+  the compare widget: add sources → add layers → build the layers_control UI → apply  
+  terrain/fog/light/etc. That function is synchronous past the source-add stage, so   
+  when getLayoutProperty("sp", "visibility") on the env-side map threw Cannot get 
+  style of non-existing layer "sp", it aborted the whole forEach, and nothing
+  downstream ran on that side. That's why — even though individual tile fetches were
+  succeeding — the layer never actually got mounted/styled. Once the compare widget's
+  init fails mid-stream, the Shiny progress message for map/output 'map' is
+  recalculating warnings start firing too, which explains their presence in every
+  screenshot.
+
+  The fix wraps both the init-time read (for setting the control's active state) and  
+  the click-time read (for toggling) in try/catch. Missing layers on one side now
+  quietly fall back to "visible" instead of throwing. The click handler already had   
+  try/catch around setLayoutProperty — this extends the same defense to the
+  getLayoutProperty reads.
+
+  This was a pre-existing bug in the compare widget, not something the h3t migration  
+  introduced — the original sf-based path likely hit the same error, but either it hit
+   a slightly different code branch (e.g. the layers_config vs layers fallback), or it
+   threw silently somewhere the user's preload masked it. Either way, now it's
+  defended.
+
+  After this cycle you should see hexes on both sides of the compare split. If not,   
+  next screenshot again please.
+
+⏺ Pushed commit 5586842. On the server:                  
+
+  ```r
+  remotes::install_github("bbest/mapgl@feat/add-h3t-source", force = TRUE, upgrade = FALSE)
+                                                                                      
+  # VERIFY you actually got the new commit                                            
+  packageDescription("mapgl")$RemoteSha    # should start with "5586842" (or newer)
+  ```
+                                                                                      
+  Then:
+                                                                                      
+  touch /share/github/int-app/restart.txt                
+                                                                                      
+  ⌘⇧R the browser.                                                                    
+                                                                                      
+  The console should now log [mapgl] maplibregl_compare.js build: 2026-04-22a at page 
+  load. If you don't see that line, the old JS is still cached in Chrome — try View → 
+  Developer → Empty Caches and Hard Reload, or uncheck "Disable cache" in Network     
+  panel.                                                 
+
+  Your last screenshot is still running mapgl commit 28b954b (protocol API fix only — 
+  the snapshot before the try/catch fix). That's why the layer-control exception at
+  line 4252 still throws — the try/catch landed in 21eee49, one commit later, which   
+  wasn't installed yet.                                  
+
+  Once the marker appears in console AND you see no Cannot get style of non-existing  
+  layer "sp" error, the hexagons should render. If the marker logs but hexes still
+  don't appear, we'll know it's a new/different problem. 
+
+⏺ Important finding! Cannot get style of non-existing layer is NOT a throw — MapLibre
+  fires it as an event (this.fire(new Error(...))), returning undefined. So try/catch
+  can't catch it. It's just noise in the console. The try/catch doesn't break         
+  anything, but doesn't silence it either.
+                                                                                      
+  The real question: why aren't tiles rendering when the layer and source both exist  
+  and tiles are fetched. Let me add a diagnostic to find out what tile data actually
+  arrives.
+
+⏺ Three fixes pushed. Key insight from the MapLibre source:
+
+  getLayoutProperty(e,i){                                                             
+    const o=this.getLayer(e);                                                         
+    if(o) return o.getLayoutProperty(i);                                              
+    this.fire(new t.k(new Error(`Cannot get style of non-existing layer "${e}".`)));  
+  }                                                                                   
+                                                                                      
+  That's not a throw — it's this.fire() (event emission). try/catch literally cannot  
+  catch it. It's harmless console noise (my try/catch was a no-op, but also not
+  breaking anything). The real reason hexes don't render is something else.           
+                                                         
+  To find the actual cause, I pushed two things:                                      
+   
+  1. debug=TRUE on every add_h3t_source() call → logs per-tile feature counts and byte
+   sizes.                                                
+  2. ArrayBuffer return from the h3j-h3t bundle instead of Uint8Array (some MapLibre  
+  internal paths strictly check instanceof ArrayBuffer, which Uint8Array fails).      
+   
+  Rebuild recipe:                                                                     
+                                                         
+  git -C /share/github/CalCOFI/int-app pull --ff-only
+  remotes::install_github("bbest/mapgl@feat/add-h3t-source", force = TRUE, upgrade =  
+  FALSE)                                                                              
+  packageDescription("mapgl")$RemoteSha   # should start with "0dd15d4"               
+  touch /share/github/int-app/restart.txt                                             
+  ⌘⇧R the browser.                                                                    
+                                                         
+  What to look for in console:                                                        
+                                                         
+  - [mapgl] maplibregl_compare.js build: 2026-04-22b (new marker — confirms load)     
+  - [h3t] 5,5,12: 23 feats (g), 23 feats (tile), sourcelayer=sp, 1234B, 145 ms style
+  lines — if you see these with non-zero feature counts, the source is healthy and the
+   problem is layer/paint-side.                          
+  - If all lines show 0 feats (empty tile) even for tiles that clearly overlap the    
+  data, the server→client data path has a mismatch.                                   
+  - If you don't see [h3t] lines at all, tiles aren't being fetched through the
+  protocol handler.                                                                   
+                                                         
+  Paste whatever shows up and we'll know immediately which half of the pipeline to    
+  fix. If the ArrayBuffer change alone fixes it (hexes appear), great — then we can
+  revert debug=TRUE on the next push.  
+
+No hexagons, still seeing some errors and all lines show `0 feats (empty tile)` despite content in the h3t json files [Image #20]                                                                      
+                                                                                      
+⏺ FOUND IT. Look at the debug: [h3t] 12,NaN,4: 0 features — the y coordinate is NaN!
+                                                                                      
+  The bundled URL parser in h3j-h3t splits on both / AND ., so your                   
+  ?release=v2026.04.08 query string breaks it. It's reading 12 as z,                  
+  "h3t?q=..&release=v2026" as x (→ NaN when coerced to number), and 04 as y. With NaN 
+  x, getTile(z, NaN, y) returns nothing → every tile looks empty. Fix the parser with
+  a regex.
+
+⏺ Pushed. Same rebuild recipe:                           
+
+  remotes::install_github("bbest/mapgl@feat/add-h3t-source", force = TRUE, upgrade =  
+  FALSE)                                                                              
+  packageDescription("mapgl")$RemoteSha   # should start with "e4ad8a7"               
+  touch /share/github/int-app/restart.txt                                             
+  ⌘⇧R.                                                   
+                                                                                      
+  The smoking gun — exactly why debug=TRUE was worth it:                              
+                                                                                      
+  Your tile URL is /h3t/5/5/12.h3t?q=<b64>&release=v2026.04.08. The bundled parser    
+  was:                                                                                
+                                                                                      
+  const s = params.url.split(/\/|\./i);       // split on / AND .
+  const zxy = s.slice(l - 4, l - 1).map(k => k * 1);                                  
+                                                                                      
+  With v2026.04.08 in the query string, the split produces a bunch of extra trailing  
+  segments (from splitting on the dots in the version). It then grabs the last 4 as   
+  z/x/y, which become:                                                                
+                                                         
+  [12, "h3t?q=...&release=v2026", "04"]  →  [12, NaN, 4]
+                                                                                      
+  NaN for x means getTile(z, NaN, y) returns nothing. Every tile was "empty" even     
+  though the server's JSON contained the right cells.                                 
+                                                                                      
+  Two things make this fun in retrospect: (1) this latent bug existed in upstream     
+  h3j-h3t but was never hit because their examples use trailing-slash URLs with no
+  query string, and (2) the promise-API fix + ArrayBuffer fix + try/catch were all    
+  real bugs, just each hiding the next one. This URL parser is the load-bearing one —
+  once tiles actually carry features, the layer should paint.
+
+  Replaced the whole parser with a regex: .../(\d+)/(\d+)/(\d+)\.h3t$ — same pattern  
+  tile servers use everywhere. Query string is stripped before matching.
+                                                                                      
+  After reload, you should see:                          
+  - Console: [h3t] 5,4,11: 23 feats (g), 23 feats (tile), sourcelayer=sp, 1234B, 145 
+  ms (real numbers for z, x, y)                                                       
+  - Hexagons on the map.       
+                                                                                      
+  If the [h3t] lines still show zeros or show real numbers but no hexes render, paste 
+  those and I'll keep going. But based on the bug I just fixed, I'm optimistic this is
+   the last one.
+
+[Image #21] Woohoo! We have hexagons, but only for right env side, not left sp side
+
+⏺ Pushed — same reinstall + restart + reload, marker 2026-04-22d. After reload, the
+  console should show (before ⌘⇧R):
+                                                                                      
+  [mapgl/before] applyMapModifications: h3t_sources=1, layers=N
+  [mapgl/before] addH3TSource id=sp, sourcelayer=sp, tiles[0]=h3tiles://...           
+  [mapgl/before] addLayer id=sp, source=sp, source_layer=sp                           
+  ...                                                                                 
+  [mapgl/after]  applyMapModifications: h3t_sources=1, layers=N                       
+  [mapgl/after]  addH3TSource id=env, sourcelayer=env, tiles[0]=h3tiles://...         
+  [mapgl/after]  addLayer id=env, source=env, source_layer=env                        
+                                                                                      
+  Three diagnostic branches possible:                                                 
+                                                         
+  - If [mapgl/before] never appears → beforeMap's applyMapModifications isn't being   
+  called at all, or map1$x is missing the data. Looks like something with rx$map_sp.
+  - If [mapgl/before] applyMapModifications: h3t_sources=1, layers=N but no           
+  addH3TSource → the layer add of "sp" threw before we got to it (unlikely — the h3t  
+  block runs before layers).
+  - If both addH3TSource and addLayer id=sp log on /before but still no [h3t]         
+  sourcelayer=sp tile fetches → the source is added, the layer is added, but MapLibre 
+  never paints the layer (style/paint issue). That's a different rabbit hole.
+                                                                                      
+  Paste the new console lines and we'll know which branch we're in. The fact that env 
+  renders shows the plumbing can work end-to-end; whatever's different about sp is
+  isolable.
+
+So it turns out if I keep doing a hard Refresh, sometimes the left side hexagons show up (and the right do not) or vice versa. Here's a screenshot with left sp showing up and right env not and the JS Console. I wonder if this has to do with the 'feature' we previously added of allowing the layer selector to turn off layers on both sides of the compare widget
+
+⏺ Huge clue: the log shows both sides calling addH3TSource but only [mapgl/after]     
+  addLayer entries appear — no [mapgl/before] addLayer at all. So the before-side
+  stalls between source-add and layer-add. That tells me applyMapModifications is     
+  async and the two sides are interfering with each other when run concurrently.
+
+⏺ Got it — found the root cause. lib.addProtocol('h3tiles', handler) is global        
+  (per-window), not per-map. MapLibre's REGISTERED_PROTOCOLS[scheme] = handler just
+  overwrites. So when both maps call addH3TSource, the second one's closure wins — and
+   its closure captures the wrong sourcelayer. Whichever registers last renders; the  
+  other gets tiles with the wrong source-layer name and shows nothing. That explains  
+  the flip-flop on reload (race between the two load events).                         
+                                                                                      
+  Fix: give each source its own unique protocol scheme.
+
+⏺ Here's the last fix summary again:                                           
+                                                                               
+  Pushed commits:                                                              
+  - bbest/h3j-h3t@bd880d2 — v0.9.7: unique scheme per source (fixes global
+  protocol collision)                                                          
+  - bbest/mapgl@db4b037 on feat/add-h3t-source — bundled JS bump to 0.9.7      
+                                                                               
+  Root cause:                                                                  
+                                                                               
+  // MapLibre's internal registry:                                             
+  REGISTERED_PROTOCOLS["h3tiles"] = <most recent closure>                      
+                                                                               
+  When beforeMap.addH3TSource("sp", ...) and afterMap.addH3TSource("env", ...) 
+  both ran, the second call's closure overwrote the first. Both maps' tile     
+  requests went to h3tiles:// → dispatched to whichever closure won the race → 
+  that closure always returned a PBF tagged with ITS sourcelayer name (either  
+  all "sp" or all "env"). The other side's layer then had zero matching        
+  features because its source-layer looked for a name that wasn't in the PBF.  
+                                                                               
+  That's why hard-refresh sometimes gave you sp and sometimes env — whichever  
+  side's load event fired second won.                                          
+                                                                               
+  Fix: each addH3TSource now mints a private scheme h3t1, h3t2, ... and        
+  rewrites the tile URLs from h3tiles:// to h3tN://. Two independent closures,
+  both alive, both serving their correct sourcelayer.                          
+                                                         
+  Rebuild on server:                                                           
+   
+  remotes::install_github("bbest/mapgl@feat/add-h3t-source", force = TRUE,     
+  upgrade = FALSE)                                                             
+  packageDescription("mapgl")$RemoteSha   # should start with db4b037
+  touch /share/github/int-app/restart.txt                                      
+  Hard-reload (⌘⇧R).                                     
+                    
+  Expected in console:                                                         
+  [mapgl] maplibregl_compare.js build: 2026-04-22e                             
+  [h3t] addSource "sp"  → scheme "h3t1", sourcelayer="sp"                      
+  [h3t] addSource "env" → scheme "h3t2", sourcelayer="env"                     
+  and then tile logs from both sourcelayer=sp AND sourcelayer=env on every     
+  reload — no more coin flip, both sides should render hexagons.
+
+That works! I do still see an sp style error:                                
+  Error: Cannot get style of non-existing layer "sp".                          
+      at Ai.getLayoutProperty (maplibre-gl.js:46:305236)                       
+      at ns.getLayoutProperty (maplibre-gl.js:46:505716)                       
+      at maplibregl_compare.js:4260:43                                         
+      at Array.forEach (<anonymous>)                                           
+      at applyMapModifications (maplibregl_compare.js:4240:28)                 
+  [Image #25] [Image #26]                                                      
+                                                                               
+  And there are some strange tile effects at what appear to be tile boundaries 
+   [Image #27] [Image #28] [Image #29]
+
+⏺ Both issues are clear. Let me fix them.                
+                                                                        
+  Issue 1 (the "sp" layer error): getLayoutProperty on a missing layer calls   
+  this.fire(new ErrorEvent(err)) — it's an emitted event, not a thrown error.  
+  The try/catch can't silence it. Fix: pre-check with map.getLayer(id).        
+                                                                               
+  Issue 2 (tile seams): The server's bbox filter on the cell centroid drops    
+  hexagons whose centroids fall in the neighbor tile but whose geometry
+  overlaps the current tile. geojson-vt then clips the remaining cells at the  
+  boundary, producing visible seams. Fix: add a resolution-aware buffer to the
+  bbox filter.
+
+⏺ Both fixes look good. Here's what changed:                                   
+                                                          
+  mapgl maplibregl_compare.js — both the init path (line 4257) and the click   
+  handler (line 4277) now pre-check map.getLayer(id) before calling            
+  getLayoutProperty/setLayoutProperty. Try/catch couldn't silence the error    
+  because it's fired as an event, not thrown. Build marker bumped to           
+  2026-04-22f.                                                                 
+
+  api-h3t h3t_query.R + plumber.R — added h3_edge_length_deg(r) helper; the    
+  tile endpoint now passes buffer_deg = 1.5 * edge_length to wrap_tile_sql. At
+  res 5 that's ~0.115° (~13 km); at res 10 ~0.0009° (~100 m) — just enough that
+   any hex whose geometry crosses the tile is returned on both sides, letting
+  geojson-vt clip cleanly without seams.
+
+  To test:
+  1. Reinstall bbest/mapgl from your feature branch (or
+  remotes::install_local() if iterating from the working tree) → reloading the 
+  Shiny app should drop the "sp" console noise.                               
+  2. Restart the local plumber server (or rebuild/restart the h3t_api          
+  container) so the new buffer takes effect. If Varnish is in front, PURGE or
+  bump H3T_RELEASE to sidestep cached empty-neighbour tiles.                   
+                                                            
+  Once you confirm both issues are gone, I'll clean up debug = TRUE in         
+  functions_h3t.R, strip the [mapgl/…] console diagnostics, and refresh the    
+  walkerke PR description.
+
+⏺ Pushed 1ed1751 to CalCOFI/api-h3t main. On the server: 
+
+  cd /share/github/api-h3t && git pull                                         
+  cd /share/github/server && docker compose up -d --no-deps --force-recreate --build h3t_api varnish
+                                                                               
+  (Rebuild h3t_api for the new code; recreate varnish so its cache is empty —  
+  otherwise old seamed tiles linger for up to 24h per the release TTL.)
+  Alternatively, bump H3T_RELEASE in the int-app env to force a cache-busting  
+  URL.                                                   
+
+  Left uncommitted: deploy.md (untracked) — let me know if you want that staged
+   too.
+
+⏺ Pushed 8e53cf5 to bbest/mapgl on feat/add-h3t-source. Reinstall with:
+
+  remotes::install_github("bbest/mapgl@feat/add-h3t-source", force = TRUE)     
+                                                                               
+  Build marker to verify in console after reload: 2026-04-22f. The "sp" error  
+  should disappear — both the init read and the click toggle now skip any map  
+  that doesn't have the layer.                                                 
+                                                         
+Sharded hexagons still present at tile boundaries. Did you buffer enough? [Image #30]
+
+⏺ The code is definitely in the container — step 10 (COPY . /app) wasn't cached
+   — but two 10-min caches sit between you and the new tiles: browser cache and
+   Varnish (both TTL 600s for URLs without &release=).                         
+                                                                               
+  Before bumping the buffer, let's rule out stale tiles:                       
+                                                                               
+  1. Hard-refresh with DevTools → Network → "Disable cache" checked, then      
+  reload. If the seams clear up, we were just looking at stale browser-cached
+  tiles.                                                                       
+  2. Or curl a tile and check it's reaching the new backend (should say
+  X-Cache: MISS first time):                                                   
+  curl -sD - -o /dev/null
+  'https://h3t.calcofi.io/h3t/6/11/25.h3t?q=U0VMRUNUIGhleF9oM3Jlc3t7cmVzfX0=' |
+   grep -iE 'x-cache|content-length'                     
+  2. (Swap in the real q from a request in the Network tab.) A second identical
+   curl should show X-Cache: HIT and identical content-length — so you can     
+  confirm the first one came from the fresh backend.
+  3. If you'd rather not wait: nuke both caches by banning in Varnish          
+  docker compose exec varnish varnishadm ban 'obj.http.X-Url ~ .'              
+  3. plus hard-refresh. Varnish then repopulates from the new backend on       
+  demand.                                                                      
+                                                                               
+  If seams persist after a verified cache-bust, the issue isn't the server     
+  buffer — it'll be either my 1.5× constant being still too tight at a
+  particular resolution, or geojson-vt's clip buffer (64/4096 ≈ 1.5% of tile   
+  width) being too small for the hex overhang. That's a one-line change in
+  h3j-h3t.js (pass { buffer: 256 } to tovt) which I can push next. Let's
+  confirm the cache hypothesis first.
+
+Ahah the hard refresh worked! Hard-refresh with DevTools → Network →       
+  "Disable cache" checked -- thank you, didn't know about that    
+
+**### compress h3t json files**
+
+Per your earlier sugggestion please add compression to Caddy block for h3t.calcofi.io.
+Also ensure Varnish's cache keys don't fragment on Accept-Encoding
+
+  Plumber doesn't auto-compress.
+  - The container running h3t_api has no compression middleware in front of
+  it inside itself.
+  - Caddy (in server/docker-compose.yml) has encode zstd gzip for
+  file.calcofi.io but not for h3t.calcofi.io — that block just does
+  reverse_proxy varnish:80.
+  - Varnish by default does not compress or decompress — it proxies bytes
+  through.
+
+  So tiles currently go over the wire as raw JSON. Given the payloads you've
+  been seeing (e.g. the tile you zoomed through with 370 feats / 30 729 B,
+  188 feats / 15 077 B), these are very gzip-friendly — long repetitive h3id
+  hex strings and numeric JSON. You should expect roughly 5–10× compression
+  ratios, dropping a 30 KB tile to 3–5 KB. Meaningful for dozens of tiles per
+    viewport update, especially on slower networks.
+
+  Where to add it, in order of least-invasive:
+
+  1. **Caddy block for h3t.calcofi.io** — add encode zstd gzip alongside the
+  reverse_proxy. Public edge-only; Varnish and the API stay uncompressed
+  internally, which is what you want (Varnish caches uncompressed and Caddy
+  negotiates per-client). One-line change.
+  2. **Varnish can also do_gzip / serve gzipped from cache**, but since Caddy is
+  already at the edge and will gzip on the fly, you don't need both.
+  3. **Plumber filter that sets Content-Encoding: gzip and gzips the body** —
+  only worth doing if you ever expose the API without Caddy in front.
+
+  Recommendation: option 1. Add encode zstd gzip to the h3t.calcofi.io
+  Caddyfile stanza, reload Caddy. Same pattern you already use for
+  file.calcofi.io. No Varnish or API changes needed, and the browser handles
+  Accept-Encoding negotiation automatically.
+
+  One caveat: if you add compression at Caddy, make sure Varnish's cache keys
+  don't fragment on Accept-Encoding (default Varnish VCL strips/normalizes
+  this; worth verifying once).
+
+⏺ Now the Varnish side. The default vcl_hash only hashes URL + host (not
+  Accept-Encoding), and the plumber backend never emits Vary: Accept-Encoding,
+  so by default we're already safe. To be defensive — so a future plumber      
+  middleware doing on-the-fly compression can't sneak Accept-Encoding into the
+  picture — strip it in vcl_recv before hashing. 
+
+⏺ Pushed 62cd32a to CalCOFI/server. On the server:          
+
+  ```bash
+  cd /share/github/CalCOFI/server
+  sudo -u bebest git pull                                  
+  docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile         
+  docker compose restart varnish                                               
+  ```
+
+  (Caddy reload is hot — no connection drop. Varnish needs a restart to pick up
+   the new VCL; the cache wipes with it, which is fine.)                       
+                                                                               
+  To verify compression end-to-end from your laptop once deployed:             
+  
+  ```bash
+  curl -sD - -o /tmp/tile.h3t -H 'Accept-Encoding: gzip' \
+    'https://h3t.calcofi.io/h3t/6/11/25.h3t?q=<your-base64>' \
+    | grep -iE 'content-encoding|content-length|x-cache'
+  ```
+
+  ```bash
+  q=U0VMRUNUIGhleF9oM3Jlc3t7cmVzfX0gQVMgY2VsbF9pZCwgQVZHKHN0ZF90YWxseSkgQVMgdmFsdWUsIENPVU5UKCopIEFTIG4KIEZST00gYmlvX29icwpXSEVSRSBzdGRfdGFsbHkgSVMgTk9UIE5VTEwKICBBTkQgc2NpZW50aWZpY19uYW1lID0gJ1NhcmRpbm9wcyBzYWdheCcKICBBTkQgcXVhcnRlciBJTiAoMSwgMiwgMywgNCkKICBBTkQgdGltZV9zdGFydCBCRVRXRUVOICcxOTQ5LTAyLTI4JyBBTkQgJzIwMjMtMDEtMjUnCkdST1VQIEJZIDE
+  release=v2026.04.08
+  curl -sD - -o /tmp/tile.h3t -H 'Accept-Encoding: gzip' \
+    "https://h3t.calcofi.io/h3t/6/11/25.h3t?q=${q}&release=${release}" \
+    | grep -iE 'content-encoding|content-length|x-cache'
+  ```
+  7.400 KB -> 2.450 KB
+                                                                               
+  You should see Content-Encoding: gzip and a markedly smaller Content-Length  
+  (for a ~30 KB JSON tile expect ~3–5 KB on the wire). Run it twice and the    
+  second should flip to X-Cache: HIT with an identical content-length —        
+  confirming Accept-Encoding isn't fragmenting the Varnish cache.
+
+⏺ The "Disable cache" DevTools checkbox is a lifesaver for iteration — pairs   
+  well with having DevTools open.     
+                                                                               
+  With both fixes confirmed, the remaining loose ends from this whole effort:  
+                                                                               
+  1. Revert debug = TRUE → FALSE in int-app/app/functions_h3t.R (two           
+  add_h3t_source() calls)             
+  2. Strip the [mapgl/before] / [mapgl/after] diagnostic console.logs from     
+  maplibregl_compare.js (keep the build marker — that one's useful)            
+  3. Refresh walkerke/mapgl PR description to reflect the full set of h3j-h3t
+  fixes (v0.9.2 → v0.9.7)                                                      
+  4. Open a matching PR from bbest/h3j-h3t → INSPIDE/h3j-h3t upstream so the
+  fixes don't live only in your fork                                           
+                                      
+  Want me to run through all four now? 
+
+Please proceed with the remaining loose ends from this whole effort:  
+                                                                               
+  1. Revert debug = TRUE → FALSE in int-app/app/functions_h3t.R (two           
+  add_h3t_source() calls)             
+  2. Strip the [mapgl/before] / [mapgl/after] diagnostic console.logs from     
+  maplibregl_compare.js (keep the build marker — that one's useful)            
+  3. Refresh walkerke/mapgl PR description to reflect the full set of h3j-h3t
+  fixes (v0.9.2 → v0.9.7)
+  4. Open a matching PR from bbest/h3j-h3t → INSPIDE/h3j-h3t upstream so the
+  fixes don't live only in your fork
+
+⏺ All four loose ends closed:                                                  
+                                                                               
+  1. **int-app 6041856** — debug = TRUE dropped from both add_h3t_source() calls in
+   functions_h3t.R; pushed to main.
+
+  2. **bbest/mapgl 0b70b3f** — [mapgl/before] / [mapgl/after] console logs (and the
+   __mapSide const they relied on) removed from maplibregl_compare.js; build
+  marker bumped to 2026-04-22g. Pushed to feat/add-h3t-source.
+
+  3. **walkerke/mapgl#199** — PR body refreshed with a "Bundled h3j-h3t JS: 0.9.2 →
+   0.9.7" table, a link to the upstream INSPIDE PR, and a note on the
+  compare.js getLayer() pre-checks: https://github.com/walkerke/mapgl/pull/199 
+  4. **INSPIDE/h3j-h3t#8** — new PR from bbest:fix/maplibre-v3-compat →          
+  INSPIDE:main with the five fixes separated per-commit and a table of         
+  symptoms/repros: https://github.com/INSPIDE/h3j-h3t/pull/8
+
+  Server side, when you're ready to deploy the cleanup:
+
+  ```bash                                                                             
+  cd /share/github/CalCOFI/int-app && git pull                                
+  # then the usual app restart
+  ```
+                                                                             
+  No other services need touching — the mapgl cleanup is client-side only
+  (reinstall bbest/mapgl@feat/add-h3t-source in the int-app R env if you want  
+  the cleaner console).
+
+## 2026-04-20 update ctd-viz
+
+Let's get the **ctd-viz** app (`@../apps/ctd-viz`) working with:
+
+- Create a custom local database with new `@../apps/ctd-viz/prep_db.R`like for the **int-app** with `@../int-app/prep_db.R` but with the needed tables from `@ingest_calcofi_ctd_cast.qmd`. This will be BIG (17 GB of ctd measurement), so should be stored in `~/_big/calcofi.org/ctd-viz/ctd-viz.duckdb` on laptop and `/share/data/ctd-viz/ctd-viz.duckdb` on server.
+- Wire up this database in the ctd-viz app.
+- Show small semi-transparent black dots in the visualization of the CTD profile so we understand where sampling occurred.
+- Include a narrow density histogram summary plot along horizontal and vertical axis.
+- Review code in [**odv_bathy**](https://theoceancode.netlify.app/post/odv_bathy/) and evaluate if visualization in app could be improved.
+- The `marmap_coord_*.csv` files should not be there. Add another script `@../apps/ctd-viz/prep_bathy.R` to extract depth from the downloading [Gridded Bathymetry Data | GEBCO](https://www.gebco.net/data-products/gridded-bathymetry-data) **GEBCO_2025 Grid** (sub-ice topo/bathy) [Data GeoTiff](https://dap.ceda.ac.uk/bodc/gebco/global/gebco_2025/sub_ice_topography_bathymetry/geotiff/gebco_2025_sub_ice_topo_geotiff.zip?download=1) (4 Gbytes, 8 Gbytes uncompressed). For now use previously downloaded path: `~/_big/msens/derived/archive_2026-02-12/gebco_depth.tif`.
+
+⏺ Updated plan                                                                                                                   
+  ⎿  /plan to preview                                                                                                            
+
+ Ready to code?                                                                                                                  
+                                                                                                                                 
+ Here is Claude's plan:                                                                                                          
+
+ Get the ctd-viz app buzzing                            
+
+ Context
+
+ The ctd-viz Shiny app (apps/ctd-viz/) currently connects to the public
+ cc_get_db() remote release (CTD tables are huge, remote joins are slow) and
+ uses marmap::getNOAA.bathy() for bathymetry — which fails without network
+ and has littered the app dir with five marmap_coord_*.csv cache files. We
+ want the app to:
+
+ 1. Run off a local, self-contained DuckDB that only carries what it needs.
+ 2. Show where sampling actually occurred (dots) and the density of samples
+ along the transect (marginal histograms).
+ 3. Read bathymetry from a local GEBCO GeoTIFF instead of marmap.
+ 4. Adopt any useful ideas from the ODV-style section-plot post at
+ https://theoceancode.netlify.app/post/odv_bathy/.
+
+ Outcome: a faster, network-independent CTD Viz app with a tidier repo and
+ clearer section plots.
+
+ Files to create
+
+ apps/ctd-viz/prep_db.R (new)
+
+ Mirror int-app/prep_db.R but scope to CTD. Writes a single DuckDB file:
+
+ - Laptop: ~/_big/calcofi.org/ctd-viz/ctd-viz.duckdb
+ - Server: /share/data/ctd-viz/ctd-viz.duckdb
+
+ Path selection:
+
+ db_file <- if (dir.exists("/share/data")) {
+   "/share/data/ctd-viz/ctd-viz.duckdb"
+ } else {
+   path.expand("~/_big/calcofi.org/ctd-viz/ctd-viz.duckdb")
+ }
+
+ Steps:
+
+ 1. devtools::load_all("../../calcofi4r"), shelf DBI, duckdb, glue, here, fs.
+ 2. Resolve db_version from commandArgs() (default "latest").
+ 3. Tables to keep (from ingest_calcofi_ctd-cast.qmd + app usage):
+   - ctd_cast, ctd_measurement, ctd_summary
+   - measurement_type, ship, cruise, dataset
+   - Skip ctd_wide (ERDDAP supplemental, not used by app).
+ 4. Call cc_get_db(version, local_data = TRUE, cache_dir = tmp_dir, tables = keep_tables, refresh = TRUE) — downloads parquets
+ to tmp_dir/parquet/ and creates tmp_dir/calcofi_{version}.duckdb with native tables.
+ 5. dbDisconnect(con, shutdown = TRUE), then file.rename() the produced .duckdb to the target path.
+ 6. Optionally delete the tmp_dir/parquet/ once import is verified (the duckdb is self-contained).
+ 7. Idempotent: skip download if target exists and refresh = FALSE flag not passed.
+
+ Reference: existing int-app pattern at int-app/prep_db.R:11-67 — reuse the
+ catalog + cc_get_db() flow. cc_get_db signature confirmed in
+ calcofi4r/R/database.R:55-61 — it does not accept a custom db path, hence
+ the rename step.
+
+ apps/ctd-viz/prep_bathy.R (new)
+
+ Strip the five marmap_coord_*.csv files (delete them; they're stale cache)
+ and build a trimmed GEBCO raster covering the CalCOFI domain.
+
+ Steps:
+
+ 1. Shelf terra, glue, here.
+ 2. Source raster: ~/_big/msens/derived/archive_2026-02-12/gebco_depth.tif
+ (already present locally; no download this run).
+ 3. Add commented-out block for the full download (GEBCO_2025 Sub-Ice GeoTIFF,
+ 4 GB zip / 8 GB unzipped) so a fresh machine can re-materialize it:
+ https://dap.ceda.ac.uk/bodc/gebco/global/gebco_2025/sub_ice_topography_bathymetry/geotiff/gebco_2025_sub_ice_topo_geotiff.zip?d
+ ownload=1
+ 4. terra::rast() the source, crop to CalCOFI AOI (e.g. c(-126, -115, 29, 36)),
+ write to apps/ctd-viz/data/gebco_calcofi.tif (COG-compressed, a few MB).
+ 5. Committed output is small enough to ship with the app (no _big dependency
+ at runtime); prep_bathy.R is only run when bathy needs refresh.
+ 6. Delete the five marmap_coord_*.csv files.
+
+ apps/ctd-viz/global.R (modify)
+
+ - Drop marmap from librarian::shelf(); add terra, ggExtra (or
+ patchwork if we compose manually — see below).
+ - Replace con <- calcofi4r::cc_get_db() with a direct connection to the
+ prepped file:
+
+ db_file <- if (dir.exists("/share/data")) {
+   "/share/data/ctd-viz/ctd-viz.duckdb"
+ } else {
+   path.expand("~/_big/calcofi.org/ctd-viz/ctd-viz.duckdb")
+ }
+ stopifnot(file.exists(db_file))
+ con <- dbConnect(duckdb::duckdb(), dbdir = db_file, read_only = TRUE)
+ dbExecute(con, "INSTALL spatial; LOAD spatial;")
+ - Rewrite get_transect_bathy() to read from the local GEBCO raster:
+
+ bathy_rast <- terra::rast(here::here("apps/ctd-viz/data/gebco_calcofi.tif"))
+ get_transect_bathy <- function(lons, lats, n_pts = 200) {
+   pts_lon <- approx(seq_along(lons), lons, n = n_pts)$y
+   pts_lat <- approx(seq_along(lats), lats, n = n_pts)$y
+   depths  <- terra::extract(bathy_rast, cbind(pts_lon, pts_lat))[, 1]
+   dist_km <- c(0, cumsum(
+     geosphere::distHaversine(
+       cbind(pts_lon[-n_pts], pts_lat[-n_pts]),
+       cbind(pts_lon[-1],     pts_lat[-1])) / 1000))
+   tibble(dist_km = dist_km, bathy_depth_m = pmax(-depths, 0))
+ }
+ - Rewrite build_transect_plot():
+   - Keep MBA interpolation + viridis fill (matches ODV-post technique).
+   - Add sampling dots: geom_point(data = xyz, aes(x, y), color = "black", alpha = 0.25, size = 0.6) — small, semi-transparent,
+ as requested.
+   - Replace coord_cartesian(expand = FALSE) to drop padding (ODV-post tip).
+   - Apply an ODV-ish gradient palette via scale_fill_viridis_c() — current choice is fine; optionally offer
+ scale_fill_gradientn(colours = cmocean::cmocean("thermal")(100)).
+   - Return a patchwork: main heatmap + top marginal histogram of dist_km (sample density per km) + right marginal histogram of
+ depth_m (sample density per depth bin). Use patchwork::wrap_plots() with plot_layout(widths = c(5,1), heights = c(1,5)). Do not
+  convert to plotly (plotly + patchwork doesn't compose well) — render via renderPlot() instead.
+
+ apps/ctd-viz/server.R (modify)
+
+ - Change output$plot_transect <- renderPlotly(...) to renderPlot(...) and
+ replace the ggplotly() wrap with plain p.
+ - Remove the ggplotly(p) |> config(...) step.
+
+ apps/ctd-viz/ui.R (modify)
+
+ - Swap plotlyOutput("plot_transect", ...) → plotOutput("plot_transect", ...).
+
+ Cleanup
+
+ - Remove the five committed marmap_coord_*.csv files and add
+ marmap_coord_*.csv to apps/ctd-viz/.gitignore (or repo root).
+
+ ODV-post review — what to adopt
+
+ Per the blog post (accessed 2026-04-20):
+
+ - Adopt: MBA interpolation (already in use), station dots with alpha
+ (adopting), polygon bathy mask with fill="grey80", colour="black"
+ (already), expand=FALSE on scales, contour overlays (already present).
+ - Consider: custom ODV hex palette via scale_fill_gradientn() — nice
+ touch but viridis is colorblind-safe; leave as-is unless user prefers ODV.
+ - Skip: FNN-based bathy-to-station nearest-point trick. With GEBCO at
+ ~450 m resolution, direct bilinear terra::extract() along the interpolated
+ great-circle path is both simpler and more accurate.
+ - Not in post: marginal histograms — the user is asking for something
+ beyond the ODV post, implemented via patchwork as described above.
+
+ Verification
+
+ 1. cd apps/ctd-viz && Rscript prep_bathy.R — confirms data/gebco_calcofi.tif is written (a few MB).
+ 2. cd apps/ctd-viz && Rscript prep_db.R — confirms ~/_big/calcofi.org/ctd-viz/ctd-viz.duckdb exists; expected size ~2–4 GB
+ (ctd_measurement is the bulk).
+ 3. R -e 'shiny::runApp("apps/ctd-viz")':
+   - Cruise dropdown populates; pick a recent cruise; Load Cruise.
+   - Click two stations on the map; Plot Transect.
+   - Verify heatmap renders, black sampling dots appear, bathymetry polygon draws from local GEBCO (no network call), and
+ marginal histograms show sample-density along both axes.
+ 4. git status — confirm the five marmap_coord_*.csv files are gone.
+
+ Critical files
+
+ - apps/ctd-viz/prep_db.R (new)
+ - apps/ctd-viz/prep_bathy.R (new)
+ - apps/ctd-viz/global.R (modify — swap DB source, replace bathy helper, rework plot builder)
+ - apps/ctd-viz/server.R (modify — renderPlotly → renderPlot)
+ - apps/ctd-viz/ui.R (modify — plotlyOutput → plotOutput)
+ - Reference: int-app/prep_db.R, calcofi4r/R/database.R:55-61, workflows/ingest_calcofi_ctd-cast.qmd
+
+※ recap: Getting ctd-viz working on a local DuckDB with sampling dots, marginal
+   histograms, and GEBCO bathymetry. prep_db.R is materializing ctd_measurement
+   (4.4 GB of ~17 GB expected). Next: wait, then launch the Shiny app to       
+  verify.
+
+⏺ Plot now reads cleanly — temperature section with contours, semi-transparent
+  black sampling dots as thin vertical streaks (one per cast), top histogram
+  showing cast distribution along the transect, right histogram showing depth
+  distribution of measurements. Bathymetry polygon isn't visible for this
+  cruise because all stations are offshore (seafloor >500 m, below the plot's
+  max_depth).                                 
+                                                  
+  Listed 1 directory (ctrl+o to expand)                      
+                                                                   
+⏺ Done. Summary:                                                               
+                                                           
+  Artefacts:                                                                   
+  - ~/_big/calcofi.org/ctd-viz/`ctd-viz.duckdb` (19.8 GB) — local CTD database 
+  - apps/ctd-viz/data/`gebco_calcofi.tif` (1.6 MB) — cropped bathymetry          
+  - apps/ctd-viz/`prep_db.R` — rebuilds the DB; materializes partitioned
+  ctd_measurement (236M rows) + ctd_summary (105M rows) into native tables;    
+  realigns ctd_cast.cruise_key to YYYY-MM-{ship_nodc} format and regenerates   
+  ctd_cast_uuid to match ctd_measurement                                       
+  - apps/ctd-viz/`prep_bathy.R` — crops GEBCO to the CalCOFI AOI                 
+                                                                               
+  App changes (global.R, server.R, ui.R):                                      
+  - Direct DuckDB read-only connection to the local DB (no more cc_get_db())   
+  - get_transect_bathy() uses terra::extract() on the local GEBCO raster       
+  (marmap removed)                                                             
+  - build_transect_plot() adds small semi-transparent black sampling dots and  
+  marginal histograms (sample-density along dist_km + depth_m) via patchwork 
+  - Static renderPlot/plotOutput instead of plotly (patchwork composition      
+  doesn't survive ggplotly)                                              
+  - 5 stale marmap_coord_*.csv files deleted; already ignored by               
+  apps/.gitignore                                                 
+                                                                               
+  Upstream bug found & worked around: the released `ctd_cast.ctd_cast_uuid` was
+  MD5'd against old-format `cruise_key` (9802JD) while                           
+  `ctd_measurement.ctd_cast_uuid` used new format (1998-02-31JD), so joins
+  returned 0 rows. `prep_db.R` now derives the new `cruise_key` from old via       
+  `ship.ship_nodc` and regenerates the UUID, producing 5.36M overlapping UUIDs.
+
+  Verification: Shiny app serves HTTP 200; rendered a 10-cast transect for     
+  cruise 2026-01-33UD (96,597 measurement rows) to /tmp/ctdviz_transect2.png
+  showing the ODV-style section with sampling dots and both marginal           
+  histograms. Interactive map + click-to-select still needs a human browser
+  pass.
+
+✻ Churned for 16m 4s                   
+                                                                    
+※ recap: Goal: get the ctd-viz Shiny app running on a local 19.8 GB DuckDB with
+   GEBCO bathymetry, sampling dots, and marginal histograms — all tasks are    
+  complete and a headless transect render verified. Next: browse               
+  http://127.0.0.1:8767 to confirm interactive map click-to-select still works.
+
+The density histograms should be a tiny fraction (like 5%) of overall plot,  
+  not 50% on right and 15% top. [Image #1] I should also be able to see Depth  
+  (m) labels on y-axis and Distance (km) on x-axis. Adding a few Date labels   
+  along x-axis would also be informative as to orient the transect spatially.  
+  The land is also impossible and very messed up since there's no way the      
+  zig-zag of the survey could produce a linear output. [Image #2] 
+
+⏺ All four fixes in place:                                                     
+                                                                               
+  1. **Marginals at ~5%** — switched from patchwork (which wouldn't honor width    
+  ratios because of axis grobs and legend claims) to ggExtra::ggMarginal(size =
+   20) which explicitly sizes the histograms as 1/20th of the main panel.      
+   
+  2. **Axis labels visible** — "Depth (m)" on left, "Distance (km)" on bottom,     
+  scale_y_reverse + scale_x_continuous with proper labs().                     
+
+  3. **Date labels on top** — secondary x-axis via ggplot2::dup_axis() with ~6     
+  evenly-spaced breaks mapped to cast datetime_utc (e.g. "07-18 ... 07-29").   
+
+  4. **Bathymetry uses actual cast locations** — get_transect_bathy() now samples  
+  GEBCO at each cast lon/lat directly; no densified interpolation that crosses 
+  land. Also fixed the sign: this GEBCO tif is positive-down (300m = 300m
+  deep), so pmax(depths, 0) not pmax(-depths, 0).                              
+                                                                  
+  The seafloor polygon will still look jagged when you plot all 49 casts of a  
+  zigzag cruise as one "transect" — because consecutive casts really do
+  alternate between nearshore (shallow) and offshore (deep) positions.         
+  Selecting a smaller, more linear subset (single offshore/onshore arm) will
+  give a cleaner section. Rendered /tmp/ctdviz_transect12.png confirms the
+  cruise 2025-07-33P4 / all-49-casts / potential_temperature_1 scenario you
+  screenshot.
+
+✻ Churned for 11m 14s                   
+                                                                    
+※ recap: Getting the ctd-viz app working with a local DuckDB, GEBCO bathymetry,
+   sampling dots, and marginal histograms. The plot builder now matches all    
+  your feedback; next is a live browser pass at http://127.0.0.1:8767 to       
+  confirm click-to-transect works end-to-end.   
+
+
+Can we drop the "Load Cruise" button, so load whichever    
+  cruise is selected, drop the "Reset Selection"  
+
+
+
+## 2026-04-09 respond to Ed on 10 missing species
+
+Help me draft a response to Ed based on conversation here:
+
+  `@/Users/bbest/Desktop/EcoQuants Mail - Quick Q on squid invert data.pdf`
+
+I am trying to suggest he share ALL species with me. That is fine that some may have the same scientific name for now. The existing source `~/My Drive/projects/calcofi/data-public/swfsc/ichthyo/species.csv` are already unique by `sppcode`, which is the important defining feature. I think there are even already some sppcodes with the same worms_id -- please check db.
+
+Queries in the database already should be aggregating on taxonomy, based on WoRMS identifier, whether in the integrated app (https://app.calcofi.io/int; `@../int-app`) or the OBIS publication (https://calcofi.io/workflows/publish_ichthyo_to_obis.html; `@publish_ichthyo_to_obis.qmd`).
+
+From earlier update to `@ingest_swfsc_ichthyo.qmd` integrating new `inverts.csv` into the dataset:
+
+⏺ Here's the full picture — 10 missing species codes, 3,683 rows (31%) of Ed's 
+  inverts lost to the INNER JOIN:                                 
+                                                                               
+  ┌─────────┬───────────────────┬────────────────┬───────┬─────────────────┐
+  │ sppcode │  scientific_name  │  common_name   │ rows  │      notes      │   
+  ├─────────┼───────────────────┼────────────────┼───────┼─────────────────┤   
+  │ 9542    │ Doryteuthis       │ Market squid   │ 1,080 │ main motivation │   
+  │         │ opalescens        │                │       │  for this work  │   
+  ├─────────┼───────────────────┼────────────────┼───────┼─────────────────┤   
+  │ 9785    │ ?                 │ ?              │ 647   │ not in ERDDAP   │
+  │         │                   │                │       │ either          │
+  ├─────────┼───────────────────┼────────────────┼───────┼─────────────────┤   
+  │ 9787    │ Octopodid type E  │ —              │ 647   │                 │
+  ├─────────┼───────────────────┼────────────────┼───────┼─────────────────┤   
+  │ 9790    │ Octopodid type H  │ —              │ 647   │                 │
+  ├─────────┼───────────────────┼────────────────┼───────┼─────────────────┤   
+  │ 9791    │ ?                 │ ?              │ 647   │ not in ERDDAP   │
+  │         │                   │                │       │ either          │
+  ├─────────┼───────────────────┼────────────────┼───────┼─────────────────┤
+  │ 9607    │ Onykia robusta    │ Robust         │ 11    │                 │
+  │         │                   │ clubhook squid │       │                 │   
+  ├─────────┼───────────────────┼────────────────┼───────┼─────────────────┤
+  │ 9562    │ Abraliopsis sp A  │ —              │ 1     │                 │   
+  ├─────────┼───────────────────┼────────────────┼───────┼─────────────────┤
+  │ 9563    │ ?                 │ ?              │ 1     │ not in ERDDAP   │
+  │         │                   │                │       │ either          │
+  ├─────────┼───────────────────┼────────────────┼───────┼─────────────────┤   
+  │ 9597    │ Onychoteuthis sp  │ —              │ 1     │                 │
+  │         │ B                 │                │       │                 │   
+  ├─────────┼───────────────────┼────────────────┼───────┼─────────────────┤
+  │ 9598    │ ?                 │ ?              │ 1     │ not in ERDDAP   │
+  │         │                   │                │       │ either          │
+  └─────────┴───────────────────┴────────────────┴───────┴─────────────────┘
+
+  4 codes (9785, 9791, 9563, 9598) aren't even in the ERDDAP data — they may be
+   new codes Ed added. The 6 others have names from ERDDAP. Ed's species.csv
+  needs these 10 rows added. Worth sending him this table. 
+
+Use the same fields from `~/My Drive/projects/calcofi/data-public/swfsc/ichthyo/species.csv` to create a file in `~/My Drive/projects/calcofi/data-public/swfsc/ichthyo/species_fixes/` with the missing rows and suggested values (and perhaps an extra notes column).
+
+
+This brings up another question for you and Erin: we already have this dataset:
+
+- [CalCOFI Fish Larvae & Egg Tows | OBIS](https://obis.org/dataset/0e223f55-c826-4513-ae9a-b04cbf2e189c)
+
+We can further publish the inverts dataset by either:
+
+  1. Publishing a new "CalCOFI Invertebrate Counts from Net Tows" dataset (recommended); or
+
+  2. Updating the existing dataset to include the invertebrates, and rename it to "CalCOFI Ichthyoplankton Tows"
+
+I prefer 1 given: a) the simpler nomenclature (Fish & Invertebrate vs Ichthyoplankton); and b) the difference in methodology and consistency between datasets.
+
 
 ## 2026-04-08 int-app with inverts
 

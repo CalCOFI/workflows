@@ -50,7 +50,6 @@ erDiagram
     }
     casts {
         int cast_id PK
-        varchar cruise_key_0
         varchar cast_key
         varchar site_key
         varchar sta_code
@@ -95,7 +94,7 @@ erDiagram
         varchar cruise_key PK
     }
     ctd_cast {
-        varchar ctd_cast_uuid PK
+        varchar ctd_cast_uuid
         varchar data_stage
         varchar cast_dir
         varchar ord_occ
@@ -107,29 +106,30 @@ erDiagram
         varchar site_key
         varchar line
         varchar sta
-        double ox_aveu_m_sta_corr
         varchar ship_key
         varchar cruise_key
         geometry geom
         varchar grid_key
     }
-    ctd_measurement {
-        varchar ctd_measurement_uuid PK
-        varchar ctd_cast_uuid FK
-        double depth_m
-        varchar measurement_type
-        double measurement_value
-        varchar measurement_qual
-        varchar cruise_key
-    }
     ctd_summary {
-        varchar ctd_summary_uuid PK
+        varchar ctd_summary_uuid
         varchar site_key
         double depth_m
         varchar measurement_type
         double avg
         double stddev
         bigint n_obs
+        varchar cruise_key
+    }
+    ctd_thin {
+        varchar ctd_thin_uuid
+        varchar ctd_cast_uuid
+        double depth_m
+        varchar measurement_type
+        double measurement_value
+        varchar measurement_qual
+        varchar cast_dir
+        varchar retained_reason
         varchar cruise_key
     }
     dataset {
@@ -236,11 +236,14 @@ erDiagram
         varchar measurement_type PK
         varchar description
         varchar units
+        bool is_canonical
         varchar _source_column
         varchar _source_table
         varchar _source_datasets
         varchar _qual_column
         varchar _prec_column
+        varchar provider
+        varchar dataset
     }
     net {
         uuid net_uuid PK
@@ -347,7 +350,6 @@ erDiagram
     measurement_type ||--o{ bottle_measurement : "measurement_type"
     casts ||--o{ cast_condition : "cast_id"
     measurement_type ||--o{ cast_condition : "condition_type"
-    ctd_cast ||--o{ ctd_measurement : "ctd_cast_uuid"
     measurement_type ||--o{ dic_measurement : "measurement_type"
     measurement_type ||--o{ dic_summary : "measurement_type"
     cruise ||--o{ casts : "cruise_key"
@@ -362,7 +364,7 @@ erDiagram
     classDef pink fill:#FFC0CB,stroke:#99737A
     class casts,bottle,bottle_measurement,cast_condition,measurement_type pink
     classDef lavender fill:#E6E6FA,stroke:#8A8A96
-    class ctd_cast,ctd_measurement,ctd_summary lavender
+    class ctd_cast,ctd_thin,ctd_summary lavender
     classDef lightsalmon fill:#FFA07A,stroke:#996049
     class dic_sample,dic_measurement,dic_summary lightsalmon
     classDef lightcyan fill:#E0FFFF,stroke:#869999
