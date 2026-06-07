@@ -138,7 +138,11 @@ erddap_dataset_xml <- function(
     '  <updateEveryNMillis>0</updateEveryNMillis>\n',
     '  <fileDir>{file_dir}</fileDir>\n',
     '  <fileNameRegex>.*\\.parquet</fileNameRegex>\n',
-    '  <recursive>false</recursive>\n',
+    # recursive: staged parquet lands one level deep ({datasetID}/{table}/{table}.parquet),
+    # so ERDDAP must descend into the per-table subdir to find it (and to pick up
+    # any future partitioned/multi-file table). false would scan only the top dir
+    # and load the dataset EMPTY.
+    '  <recursive>true</recursive>\n',
     '  <pathRegex>.*</pathRegex>\n',
     '  <metadataFrom>last</metadataFrom>\n',
     '  <standardizeWhat>0</standardizeWhat>\n',
