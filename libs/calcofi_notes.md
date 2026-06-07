@@ -7,7 +7,14 @@ One thing to note: run-api.R is running again (PIDs 2413 and 1416 — two instan
 
 
 - [ ] Get schema and table/column descriptions into **`query`**.
-- [ ] 
+- [ ] Drop vestigial `calcofi4db::get_working_ducklake()`
+  Admin "Working DuckLake" (calcofi4db::get_working_ducklake()) — despite the name, it's a
+  plain DuckDB file, not a true DuckLake (no ATTACH … TYPE ducklake anywhere). If used,
+  finalize_ingest() materializes parquet into it (CREATE TABLE AS SELECT * FROM read_parquet(…)),
+  which would duplicate the data inside the .duckdb. But in the current pipeline it's vestigial:
+  (a) none of the 4 ingests call finalize_ingest, (b) gs://calcofi-db/ducklake/working/ is empty
+  (no object there), and (c) release_database doesn't read it — it builds an in-memory DuckDB
+  with VIEWs over local parquet. So there's nothing to reset.
 - [ ] see below `### /btw are the h3t json files being compressed between server and browser? or …`
 - publish inverts dataset to OBIS from `ingest_swfsc_ichthyo.qmd` and filter properly for existing `publish_ichthyo_to_obis`
 - re-run with Ed's latest ichthyo updates. Should've failed b/c not capturing new CSV files, so need to fix.
@@ -43,6 +50,831 @@ Validation FAILED:
 - Table 'site' has 2084 NULL values in required column 'grid_key'
 - Table 'species' has 170 NULL values in required column 'gbif_id'
 ```
+
+ 
+
+We had previously laid out a plan to ingest more datasets into the integrated database and publish them to endpoints on the server -- see `## 2026-03-17.c build skills, agents for digesting datasets` in `@./calcofi_notes.md`. This involved a detailed review of the contract deliverables in [CalCOFI - EcoQuants Quote, 2025-10 to 2026-06_v2](https://docs.google.com/document/d/1rU6TrhVeHsUsVInNgIY7bcMk7TWfumyy/edit?usp=sharing&ouid=110432758197556205349&rtpof=true&sd=true) and the list of dataset sources in [Living program document: CalCOFI Data Inventory_updated Feb2026](https://docs.google.com/spreadsheets/d/1uhviF2ecfOqGaSbC_JE8B5jPRqqjMaFc9TNCK_m297c/edit?usp=sharing) (slightly updated since). Skills were created in `@./_skills` and Github Issues at https://github.com/CalCOFI/workflows/issues.
+
+We are now ready to iterate through all these datasets with rigorous methods and documentation.
+
+There are a few things I would like to especially track as we forge a plan forward:
+
+- **Schema**. 
+
+- **Questions** Each of the ingest_* and publish_* workflows should have follow up questions for the data providers.
+
+## 2026-06-05 schema updates
+
+We have created this nice overall schema description page `../schema/` (rendered at https://calcofi.io/schema). Many of the tables have no relationships and there is no indication in the ERD of dataset source, whereas color coding exists in `@release_database.qmd`, but it seems hard-coded (rendered at https://calcofi.io/workflows/release_database.html#show-combined-schema). I would like to see relationships exist where possible, which means updating the associated `ingest_*.qmd` scripts.
+
+I like the **Datasets** tab but would hope that it could also show us the tables each dataset contributes and if the table is mixed then something like # of rows and/or percentage contribution. Would be good to also include the ingest_* workflow(s)(linked to rendered html) used to generate the table and/or dataset.
+
+As much as possible, I would like to use the yaml of the input `./ingest_*.qmd` and the sidecar files uploaded into GCS to efficiently track and store in an efficient, authoritative manner.
+
+I like the pill tags added to **Tables** for provider and dataset, but they are not clickable, nor seemingly reused elsewhere (except cryptically in Datasets). It might be nice to be able to add a filter interface to click on one or more tags that filters for across Datasets, **Tables**, **Columns** and **Measurements**.
+
+Planning: /Users/bbest/.claude/plans/typed-humming-crab.md
+
+←  ☐ ERD coloring  ☐ Contribution detail  ☐ Sequencing  ☐ Source of truth  ✔ Submit  →
+  
+**ERD coloring** The ERD color coding in release_database.qmd is hard-coded into 7 manual groups (and ichthyo is split across 3 colors: cruise/ship/site/tow/net, ichthyo/species/lookup, grid/segment). To make it 'indicate 
+dataset source' authoritatively, how should colors be derived?
+
+  1. By dataset (provider_dataset)
+     One color per dataset (e.g. swfsc_ichthyo, calcofi_bottle, calcofi_ctd-cast, calcofi_dic). Collapses ichthyo's 3 sub-colors into 1. Driven from table→dataset metadata, not a hard-coded list. Shared
+     tables (measurement_type, dataset, _spatial) get a neutral color.
+  2. By provider
+     Coarser: one color per provider (calcofi, swfsc, pic...). Fewer colors but bottle/ctd/dic all share one.
+  3. Keep manual groups, data-driven
+     Preserve the current finer visual grouping but move the list out of hard-code into a metadata file so it's maintained in one place.
+❯ 4. Let's color code by dataset (provider_dataset) and add an optional yaml config for the color to apply along with exceptions to apply on a table by table basis for anything unique. This could also apply to the release_database.qmd which would apply an override, especially for common tables. And rather than using the `fill` which applies to alternating rows like in https://calcofi.io/workflows/release_database.html#show-combined-schema, let's use something subtler and less busy like `stroke`.
+
+**Contribution detail** For 'mixed' tables (e.g. measurement_type, ship, dataset — contributed/modified
+by multiple ingests), how much contribution detail do you want on the Datasets
+tab?
+
+❯ 1. Row counts + % per dataset
+     Each ingest records how many rows it contributes to each table; Datasets
+     tab shows e.g. 'measurement_type: 42 rows (39%) from calcofi_bottle'. Most
+     informative but requires instrumenting each ingest_*.qmd to emit
+     per-table row counts.
+  2. List contributors only
+     Show which datasets/workflows contribute to each table (and link the
+     workflow), but no row counts/percentages. Much cheaper — derivable from
+     existing YAML + dataset.csv 'tables' column.
+  3. Total rows + contributor list
+     Show the table's total row count (already in catalog.json) plus the list
+     of contributing datasets/workflows, but skip per-dataset row splitting.
+
+**Sequencing** This spans 3 layers: the schema/ frontend (cheap, no pipeline re-run), the 
+workflows backend (ingest FK definitions + metadata, requires re-running 
+release_database.qmd), and R packages (erd.R/wrangle.R). How should I sequence 
+the plan?
+
+❯ 1. Full plan, all layers
+     Plan everything end-to-end: backend relationship/metadata additions, 
+     R-package ERD coloring, AND the frontend filter/Datasets/clickable-tags 
+     work. One comprehensive plan.
+  2. Frontend-first, backend follow-up
+     Phase 1 = schema/ site changes that work against current data (clickable 
+     tags, cross-tab filter, use existing relationships.json/catalog.json). 
+     Phase 2 = backend FK + metadata enrichment. Lets you ship UI quickly.
+  3. Backend-first
+     Phase 1 = enrich relationships + metadata sidecars (so ERD draws more 
+     edges, contributions exist). Phase 2 = frontend consumes the richer data.
+
+**Source of truth** You want to use the ingest_*.qmd YAML as the authoritative source. Today the 
+'calcofi:' YAML block has target_name/workflow_type/dependency/output/modifies,
+while metadata/dataset.csv has the 'tables' (semicolon list) + citation 
+columns. What should be authoritative for table→dataset→workflow mapping?
+
+  1. Extend YAML, keep dataset.csv for citations
+     Add provider/dataset/tables_owned to each ingest YAML 'calcofi:' block 
+     (authoritative for which workflow produces which tables + the 
+     rendered-HTML link). dataset.csv keeps citation/coverage/license. 
+     release_database.qmd reads YAMLs to build the lineage sidecar.
+  2. Keep dataset.csv authoritative
+     Leave the table list in dataset.csv; just add a workflow/target_name 
+     column there. Don't touch YAML beyond what exists.
+❯ 3. YAML authoritative for everything
+     Move dataset-level metadata into YAML too, deprecating dataset.csv. Larger
+     refactor.
+
+⏺ All five layers are implemented, verified, and recorded. Here's the summary.
+
+  **What I built**
+  
+  I implemented the full plan across three repos + two R packages, all driven authoritatively
+  from each ingest's YAML and the GCS sidecars.
+  
+  **1. YAML authoritative (deprecates `metadata/dataset.csv`)**
+  
+  Each `ingest_*.qmd` `calcofi:` block now carries `provider`, `dataset`, `workflow_url`, `dataset_meta`
+  (citation/coverage/license/links), `tables_owned`, and `erd.color`. ichthyo folds `swfsc_invert` via
+  `additional_datasets:`. New `calcofi4db` functions read these: `read_ingest_yaml()`,
+  `read_calcofi_meta()`, `ingest_yaml_to_dataset_df()` (rebuilds the in-DB dataset registry — ingests
+  no longer read the CSV). Setup chunks now pull `provider`/`dataset` from their own YAML.
+
+  **2. ERD relationships + dataset coloring**
+  
+  - `cc_erd()` switched to stroke-only styling (no busy alternating fill); new `cc_erd_color_map()`
+  derives one color per dataset from table→dataset metadata, shared/common tables → neutral, with
+  overrides.
+  - **Key fix**: the `erd.mmd` uploaded to GCS previously passed no colors — the schema-site ERD has
+  been colorless. It now gets the color map.
+  - Added safe FK edges (verified against real columns): ctd→measurement_type; ichthyo
+  grid/segment PKs, segment→cruise/site, invert→net/species; release `cross_fks` for
+  ctd_cast→cruise/ship/grid and dic_sample→casts/bottle.
+  
+  **3. Contributions + workflow links**
+  
+  `merge_metadata_json` now emits `metadata.json` v1.2 with per-table workflow, a contributions block
+  (per-dataset rows + %, over_attributed flag for deduped shared tables), `erd_legend`,
+  `datasets[].tables`, and `measurement_types[].datasets`. Each ingest counts its own rows per
+  `tables_owned` (reference tables like grid correctly excluded).
+
+  **4. Frontend (clickable tags + cross-tab filter)**
+  
+  `schema/` gets a global dataset filter bar, clickable chips in Tables/Datasets, and one delegated
+  handler that filters Tables/Columns/Measurements/Datasets together (OR union, composes with
+  text search, persists across tab switches). The Datasets tab shows each dataset's contributed
+  tables with rows/% and workflow ↗ links. ERD legend added. Everything reads new fields
+  defensively so old releases still render.
+
+  **Verified**
+
+  - Both R packages load; new functions exported; docs generated.
+  - cc_erd_color_map + cc_erd produce stroke-only classDefs (no fill), correct dataset colors,
+  shared/common tables neutral.
+  - Full metadata.json contract from R matches what app.js reads (contributions %,
+  over_attributed, per-table workflow, dataset tables, measurement datasets, erd_legend).
+  - build_metadata_json contributions: owned-only, correct counts/shared flags, missing-table
+  warning.
+  - app.js passes node --check.
+
+  **To deploy (requires you to run)**
+  
+  1. Reinstall/load_all `calcofi4db` + `calcofi4r`.
+  2. Re-run all 4 `ingest_*.qmd`, then `release_database.qmd` → regenerates GCS sidecars.
+  3. Deploy the `schema/` site (CalCOFI/schema GitHub Pages).
+
+  I couldn't run a browser here, so the one thing left to eyeball is the live UI — the plan's
+  verification section covers it: `jekyll serve schema/` with `SCHEMA_GCS_BASE` pointed at the new
+  release, then check the stroke-colored ERD + legend, chip filtering across tabs, the Datasets
+  rows/%/links, and that an older version still renders.
+
+  One open item I flagged: swfsc_invert row-level contribution isn't attributed (invert is folded
+  into ichthyo's DB) — its Datasets card lists the invert table from the registry but without a
+  row count/%. Let me know if you want that wired up.
+
+what's the status -- has been a while
+
+⏺ This is the real bottleneck, and it's worth flagging before you wait further. Here's the honest
+  picture:
+
+  - ctd_measurement is 15 GB, partitioned into 96 cruise_key folders, marked supplemental (the
+  headline CTD table is ctd_thin at ~258 MB).
+  - The CTD ingest re-ran, so all 96 partitions are being fully re-uploaded to GCS at ~0.5 MiB/s.
+  Only 15/96 done (~16%, currently at 2005-11).
+  - At this rate the CTD→GCS leg alone is likely another ~2 hours; after that, dic +
+  release_database + test_release are quick (minutes).
+
+  The key insight: my changes don't alter ctd_measurement's data — only metadata
+  (rels/tables_owned/YAML). The 15 GB re-upload is incidental; the schema-site features actually
+  come from the small metadata.json / erd.mmd / relationships.json / contributions that
+  release_database produces. So we're spending ~2 hours re-uploading unchanged bulk data.
+
+⏺ User answered Claude's questions:
+  ⎿  · The CTD ingest is re-uploading 15 GB of unchanged ctd_measurement parquet to GCS (~16% 
+     done, ~2 hr remaining) before dic + release can run. How do you want to proceed? → Let it 
+     finish (~2+ hr)
+
+⏺ Sounds good — letting it run to completion. The background watcher is still armed and will
+  notify me the moment the pipeline finishes (release + test) or hits any error. When it
+  completes I'll verify the new release's sidecars (colored erd.mmd, contributions, erd_legend in
+  metadata.json) and then deploy the schema site by pushing schema/ to main (GitHub Pages).
+  Nothing more to do until then — I'll report back on completion.
+  
+✻ Cogitated for 2m 31s · 1 shell still running
+
+If only the sidecar files for the ctd-cast are changed, why then should all the parquet files  
+  need re-uploading? This is a fundamental glitch that will come back to haunt on every change   
+  -- we need to streamline this so only actually changed files are uploaded to GCS, otherwise    
+  used from previous                                                                             
+  
+⏺ Good catch — that's the right thing to fix at the root. Re-uploading 15 GB of byte-identical
+  data on every metadata-only change is wasteful. Let me investigate the actual upload path
+  (read-only; won't disturb the running pipeline) to find why it re-sends everything.
+
+⏺ This is the root cause: stable historical partitions (2012, 2014, 2016) all have different
+  crc32c and different sizes between the freshly regenerated local parquet and the prior GCS
+  version — for data that hasn't changed. So re-generating parquet is byte-non-deterministic
+  (almost certainly nondeterministic row ordering → different compression). The crc32c sync would
+  re-upload them even if its hash command worked — and separately, sync_to_gcs's gcloud storage
+  hash --crc32c is broken on gcloud 563, silently falling back to size.
+
+  Let me verify the determinism hypothesis and read how parquet is written, so the fix is
+  grounded:
+
+⏺ Determinism test confirms the fix direction: ORDER BY makes parquet byte-identical run-to-run
+  (ordered c==e: TRUE), while large unordered parallel writes drift. So there are two real
+  defects:
+
+  1. Non-deterministic parquet ordering — large partitioned tables (like ctd_measurement) are
+  written without a stable ORDER BY, so every re-run produces different bytes → crc32c/size
+  differ → full re-upload.
+  2. Broken hash command — sync_to_gcs calls gcloud storage hash --crc32c which gcloud 563
+  rejects, silently falling back to size-only comparison.
+
+  Let me see how the CTD ingest calls write_parquet_outputs (does it pass sort_by for the big
+  tables?) and the order-clause logic:
+
+⏺ Found the precise root cause. ctd_measurement does have sort_by = c("measurement_type", 
+  "depth_m") — but that's not a unique ordering. Many rows share the same (cruise_key,
+  measurement_type, depth_m), and those ties break nondeterministically across parallel runs →
+  different bytes every time. Same issue for bottle_measurement (sorted by measurement_type
+  only). The fix is a deterministic tiebreaker (the primary key) appended to the sort, plus
+  fixing the hash command.
+  
+  Let me confirm the corrected hash command and that a unique tiebreaker yields byte-stable
+  output:
+
+⏺ Both confirmed: the corrected command gcloud storage hash <path> emits crc32c_hash: (and it
+  matches the earlier local hash), and a unique tiebreaker guarantees byte-identical output. The
+  fix is well-grounded. Let me check which ingests call write_parquet_outputs so I update them
+  all:
+
+⏺ Now write_parquet_outputs — add primary_keys param and the deterministic tiebreaker. Let me
+  view the signature and roxygen:
+
+Let's also implement these default setting recommendations from DuckLake engineers [Image #1]
+
+⏺ Good additions — those DuckLake/parquet settings are deterministic (they won't conflict with
+  the byte-stability fix) and pair naturally with this work. Let me fold them in. First let me
+  finish the tiebreaker edit and apply the parquet settings (V2, zstd, 80MB row groups) to the
+  COPY statements. Let me read the current write section:
+
+⏺ Important: partitioned writes with ROW_GROUP_SIZE_BYTES (which forces
+  preserve_insertion_order=false) are not deterministic. Determinism is the higher priority (it's
+  what stops the re-uploads). Let me find the combination that's both deterministic and uses the
+  recommended settings for partitioned tables:
+
+Prioritize insertion order over row group size for the sake of deterministically avoiding      
+  re-upload of same data
+
+⏺ Agreed — determinism wins. But my last test showed partitioned output is non-deterministic even
+  with preserve_insertion_order=true + ORDER BY unless an explicit row-group size is set. Let me
+  rigorously confirm the reliable combination (3 writes each) before committing:
+
+⏺ Key finding: threads=1 makes partitioned writes reliably deterministic, and an
+  order-independent content hash works (even for geometry via ST_AsWKB). But before choosing, let
+  me settle whether full-thread writes with preserve_insertion_order=true + unique ORDER BY and
+  no row-group override are reliably deterministic (your stated preference). Definitive 5× test:
+
+⏺ Definitive result: full-thread partitioned writes are not deterministic (2 distinct
+  byte-outputs across 5 runs) even with preserve_insertion_order=true and a unique ORDER BY. The
+  only ways to get byte-stable partitioned parquet are threads=1 (deterministic but slow) or not 
+  rewriting unchanged data at all.
+
+  This changes the implementation choice, so I want to confirm before building the larger piece:
+─────────────────────────────────────────────────────────────────────────────────────────────────
+←  ☐ Dedup approach  ☐ Parquet settings  ✔ Submit  →
+  
+**Dedup approach** Partitioned parquet can't be made byte-deterministic at full threads (DuckDB parallel partition 
+writer). Both options below stop re-uploading unchanged data — they differ in whether we also 
+avoid the expensive re-write. Which approach?
+  
+❯ 1. Content-hash skip (recommended)
+     Compute an order-independent content signature per table; store it in manifest.json. On
+     re-run, if a table's data is unchanged AND its local parquet still exists, skip BOTH
+     re-writing and re-uploading — reuse the previous files. Fastest (no 15 GB re-write on
+     metadata-only changes), robust regardless of write nondeterminism. Most code. Matches 'used
+     from previous' exactly.
+  2. threads=1 deterministic write
+     Force single-threaded ordered writes (preserve_insertion_order=true + unique ORDER BY + PK
+     tiebreaker) so identical data yields identical bytes; the crc32c sync then skips upload.
+     Simpler, but re-writes the full 15 GB single-threaded on EVERY ingest re-run (slow), even
+     for metadata-only changes — only the upload is skipped.
+  3. Both: hash-skip + threads=1 fallback
+     Content-hash skip as primary; when a table IS rewritten, also use threads=1 so its bytes are
+     stable. Maximum robustness, most complexity.
+
+**Parquet settings**  Apply the DuckLake engineers' parquet quality settings where they don't conflict with the
+   dedup goal? 
+   → I think `V2 + zstd, skip row-group-bytes`, but want to confirm that we retain the native 
+   GEOMETRY introduced in recent DuckDB version 1.5+. Not having the GEOMETRY properly read and 
+   write has been a huge headache in the past
+
+⏺ GEOMETRY is fully preserved through V2 + zstd — round-trip returns GEOMETRY('OGC:CRS84'), ST_X
+  works, all 1000 geoms identical. Your concern is addressed. (Pipeline: ichthyo + spatial done,
+  ctd still uploading.)
+
+  Now let me implement content-hash skip. Let me read the manifest-assembly section of
+  write_parquet_outputs:
+
+⏺ There's already a coarse skip — but for partitioned tables it's all-or-nothing: when new
+  partition values appear (e.g. new 2026 cruises in the source), it forces a full re-write of all
+  96 partitions (line 1415-1419). That's the real culprit — new data triggers
+  re-writing/re-uploading unchanged historical partitions. The robust fix is per-partition 
+  content-hash skip. Let me read the rest of the function to integrate it:
+
+Given that the default compression is now changed (snappy to zstd) as is parquet version (1 to 
+  2), I would expect that we would have to rewrite all parquet files, but I could be wrong with  
+  new dedup strategy                                                                             
+  
+⏺ Excellent catch — you're exactly right. The content-hash compares logical data, not file bytes,
+  so changing snappy→zstd / V1→V2 would not trigger a rewrite — the old-format files would
+  persist forever. The dedup needs to also detect a format change and force a one-time rewrite.
+  Let me add a format gate.
+
+⏺ Wait — critical issue I need to verify: ctd/bottle use strip_provenance=FALSE, so the exported
+  parquet (and thus my hash's exclude_cols) includes provenance columns like _ingested_at, which
+  changes every run. That would make the content hash always differ → dedup never triggers for
+  exactly the big tables we care about. The content hash must ignore provenance regardless of
+  strip_provenance. Let me check and fix:
+
+⏺ The big ctd_measurement table doesn't carry provenance columns, so it's fine — but other tables
+  (e.g. invert) do carry _ingested_at, which changes every run and would defeat dedup. The
+  correct, robust fix is to always exclude provenance columns from the content hash (dedup should
+  track real data, not ingestion timestamps):
+
+⏺ The run is stopped and the watcher released. GCS findings:
+  - No v2026.06.05 release dir — yesterday's run never reached release_database, so there's no
+  release to delete. latest.txt is still v2026.05.20 (untouched).
+  - The only thing yesterday's run wrote was to gs://calcofi-db/ingest/ — fully re-uploading
+  swfsc_ichthyo + spatial (snappy) and partially overwriting calcofi_ctd-cast (half snappy, half
+  old). That's the inconsistent state. 
+  
+  Two things matter for a correct clean re-run: (1) I must tar_invalidate(everything()) or
+  targets will skip the already-completed ichthyo/spatial (leaving them snappy), and (2) clear
+  the partial GCS ingest data. Since ingest/ is fully regenerable and the new run rebuilds it all
+  in zstd/V2, deleting all of it is the cleanest slate. Because this is a bulk, hard-to-reverse
+  GCS delete, let me confirm scope:
+─────────────────────────────────────────────────────────────────────────────────────────────────
+←  ☒ GCS cleanup  ☐ Working DuckLake  ✔ Submit  →
+
+What should I delete in GCS before the clean re-run? (Published releases under 
+ducklake/releases/** and the working DuckLake are kept regardless.)
+
+❯ 1. All of gs://calcofi-db/ingest/** (recommended) ✔
+     Delete every ingest dataset's parquet (ichthyo, spatial, ctd-cast, bottle, dic, invert). 
+     Fully regenerable — the full re-run rebuilds all of it fresh in zstd/V2. Cleanest slate, no 
+     leftover snappy files.
+  2. Only yesterday's touched prefixes
+     Delete only ingest/swfsc_ichthyo, ingest/spatial, ingest/calcofi_ctd-cast (what yesterday's 
+     run wrote/partially wrote). Leaves bottle/dic/invert as-is until the run overwrites them.
+  3. Nothing — let the run overwrite
+     Skip manual deletion; rely on sync_to_gcs(delete_stale=TRUE) + the format-change full 
+     rewrite to overwrite everything during the re-run. Less explicit but self-healing.
+
+←  ☒ GCS cleanup  ☐ Working DuckLake  ✔ Submit  →
+
+Also reset the working DuckLake (gs://calcofi-db/ducklake/working/calcofi.duckdb) for a 
+from-scratch wrangle?
+
+❯ 1. Keep it (recommended)
+     Leave the working DuckLake; ingests overwrite their tables in it. The new parquet settings 
+     apply at export time, not in the DuckLake, so a reset isn't needed.
+  2. Reset it
+     Delete the working DuckLake so ingests rebuild every table from source. Slower, fully 
+     from-scratch. Only needed if you suspect stale state in the wrangle DB.
+
+Review your answers
+
+ ● What should I delete in GCS before the clean re-run? (Published releases under
+   ducklake/releases/** and the working DuckLake are kept regardless.)
+   → All of gs://calcofi-db/ingest/** (recommended)
+ ● Also reset the working DuckLake (gs://calcofi-db/ducklake/working/calcofi.duckdb) for a
+   from-scratch wrangle?
+   → Can you please remind me of when this gets created, if all the parquet files get contained 
+   within (therefore duplicating the parquet) and where it gets used (if at all), such as in 
+   calcofi4r? Is it a true DuckLake? I thought the working DuckLake from calcofi4r uses a remote 
+   view (unless download opted) of parquet files on GCS, as opposed to downloading an actual 
+   duckdb on GCS
+
+⏺ Confirmed: release_version <- format(Sys.Date(), "v%Y.%m.%d") → today's run is v2026.06.06
+  automatically. Here's the answer to your working-DuckLake question:
+
+  Two different things, often conflated:
+
+  1. Admin "Working DuckLake" (calcofi4db::get_working_ducklake()) — despite the name, it's a
+  plain DuckDB file, not a true DuckLake (no ATTACH … TYPE ducklake anywhere). If used,
+  finalize_ingest() materializes parquet into it (CREATE TABLE AS SELECT * FROM read_parquet(…)),
+  which would duplicate the data inside the .duckdb. But in the current pipeline it's vestigial:
+  (a) none of the 4 ingests call finalize_ingest, (b) gs://calcofi-db/ducklake/working/ is empty
+  (no object there), and (c) release_database doesn't read it — it builds an in-memory DuckDB
+  with VIEWs over local parquet. So there's nothing to reset.
+  2. User-facing DB (calcofi4r::cc_get_db()) — exactly as you remembered: default
+  local_data=FALSE makes remote VIEWs over released parquet at …/releases/{version}/parquet via
+  httpfs (no download, no duplication); local_data=TRUE downloads. It reads releases, never the
+  working DuckLake.
+  
+  So "reset working DuckLake" is moot — nothing exists in GCS to reset, and it's off the
+  release/user path.
+
+  GCS state now: ingest/ fully deleted; releases intact (v2026.05.20 still latest); working dir
+  empty.
+
+  Now the clean re-run — invalidate all targets (so ichthyo/spatial re-run with the new code, not
+  skipped) and relaunch:
+
+⏺ The clean re-run is in motion and a watcher will notify me when it finishes or errors. Summary
+  of this turn:
+
+  - Killed yesterday's run (tar_make + ctd render tree); left the unrelated data-access.qmd
+  render and Positron LSP untouched.
+  - Cleared GCS ingest/** (fully regenerable; releases + latest.txt = v2026.05.20 intact; working
+  dir was already empty).
+  - Clarified the "Working DuckLake": it's a vestigial plain-DuckDB file not used by the current
+  ingests, release_database, or calcofi4r — nothing to reset. cc_get_db() uses remote parquet
+  views of releases, as you recalled.
+  - Invalidated all targets (so ichthyo/spatial re-run with the new code instead of being
+  skipped) and relaunched — now running fresh with zstd/V2 + content-hash dedup from the start,
+  versioned v2026.06.06.
+
+  This run does a one-time full write+upload of all parquet in zstd/V2 (recording dedup hashes);
+  subsequent runs will only re-send genuinely changed partitions. When it completes I'll verify
+  the new release sidecars (colored erd.mmd, contributions, erd_legend) and then deploy the
+  schema site.
+
+I don't see any parquet files uploaded into gs://calcofi-db/ingest since 12 hours ago (8:27
+  am) and only for gs://calcofi-db/ingest/swfsc_ichthyo/
+
+⏺ The run is progressing and the detector is armed (it'll ping me on completion, error, or a
+  20-min hang). Here's what was wrong and what I fixed this turn:
+
+  1. The 12-hour "stall" = ichthyo's quarto render wedged after knitting (a deno output-pipe
+  deadlock, 0% CPU). Transient — it didn't recur (ichthyo completed in 3 min on retry).
+  2. ctd error #1 = a stale DuckDB WAL left by killing the render mid-write (WAL checkpoint 
+  iteration mismatch). Fixed: cleared the stale .wal/.tmp, and added defensive WAL/tmp cleanup to
+  all four ingests' overwrite blocks so a future kill won't wedge them.
+  3. ctd error #2 = a latent bug in ctd's eval-toggle logic: on the checkpoint-restore path the
+  chunk that re-enables computation (restore_eval) was itself being skipped, so
+  write_parquet_outputs never ran but the downstream gantt_chart chunk read the never-written
+  parquet. Fixed by giving restore_eval #| eval: true.
+  4. Bonus dedup fix: all four ingests were deleting dir_parquet on every overwrite, which would
+  wipe the prior manifest and defeat the content-hash dedup. Now they preserve dir_parquet
+  (deletion moved to overwrite_all), so future runs actually skip unchanged partitions.
+
+  ctd is now on the clean full-rebuild path (reading source → transform → write 15 GB zstd/V2 →
+  upload), then bottle → dic → release → test. This is the slow leg (full source read + 15 GB
+  write/upload), so expect a while.
+  
+  Note: these ingest .qmd fixes are uncommitted in the workflows repo (you'd asked me to
+  bump/push only the R packages). I'll surface them for commit once the run succeeds and the
+  schema site is deployed. I'll report back when the detector fires.
+
+⏺ The ctd_wide upload (gcloud PID 15732) is wedged — STAT SN, 0% CPU, only 1.3s CPU in 25 min:
+  another stalled large transfer. The good news: ctd_measurement/ctd_thin/ctd_summary (12.66 GB)
+  already uploaded successfully. Let me look at the image you shared and check put_gcs_file's
+  retry behavior before unsticking:
+
+⏺ That speed test is the key — your upload is only 1.69 Mbps (~0.21 MB/s, server Turin). That
+  reframes everything: the "stall" is almost certainly just a slow upload, not a hang — gcloud
+  suppresses progress output to a redirected (non-TTY) log, so a slow transfer looks idle. Let me
+  confirm ctd_wide is actively uploading (live connection) vs truly wedged:
+
+⏺ The connections are in CLOSE_WAIT — Google closed them (the slow 1.69 Mbps trickle got dropped,
+  very likely when the machine slept overnight) and gcloud is wedged instead of retrying. So
+  it's genuinely stuck, not progressing. The 12.66 GB already uploaded is fine; only ctd_wide +
+  measurement_type remain.
+
+  Two fixes: kill the wedged upload and resume (dedup + crc-skip means it only retries the
+  un-uploaded files), and run under caffeinate so overnight sleep can't drop the connection
+  again. Let me get the process tree and kill it:
+
+⏺ Clean kill; the 12.66 GB already uploaded is intact. Now relaunching under caffeinate so the
+  machine can't sleep mid-upload (the likely cause of the dropped/CLOSE_WAIT connection). The
+  re-run will dedup-reuse all ctd parquet (no rewrite) and crc-skip the 12.66 GB already in GCS —
+  so it only resumes ctd_wide + measurement_type, then proceeds to bottle/dic/release:
+
+⏺ The eval fix worked — ctd is now running the transforms (chunk 42/105, rebuilding tables) past
+  restore_eval. It'll dedup-reuse the parquet and resume uploading ctd_wide. Let me arm a smarter
+  detector that distinguishes a slow upload (ESTABLISHED connection) from a CLOSE_WAIT hang, so
+  I catch a real wedge in ~3 min without false alarms on slow transfers:
+
+⏺ Detector armed — it now distinguishes a slow upload (live ESTABLISHED connection) from a
+  CLOSE_WAIT wedge, so a real hang is caught in ~3 min while slow transfers run undisturbed.
+
+  Root cause of the overnight failure: your 1.69 Mbps upload + the machine sleeping overnight
+  dropped the in-flight ctd_wide upload; Google closed the sockets (CLOSE_WAIT) and gcloud wedged
+  instead of retrying. The earlier ichthyo deno hang was likely the same sleep-induced pipe
+  break.
+
+  What I changed:
+  - Running the pipeline under caffeinate -i so it can't idle-sleep mid-transfer.
+  - Resuming smartly: ctd's parquet is dedup-reused (no 15 GB rewrite) and the 12.66 GB already 
+  in GCS is crc-skipped — so it only re-uploads ctd_wide (~960 MB, ~75 min at this uplink) + the
+  tiny measurement_type, then continues to bottle → dic → release. 
+  - release_database copies ingest→release server-side in GCS (no re-upload), so the release step
+  won't be bandwidth-bound. 
+  
+  This run will still be slow purely due to the 1.69 Mbps uplink for the remaining ingest parquet
+  — but that's exactly why the dedup work matters: once this baseline is uploaded, future runs
+  send only changed partitions. I'll report the moment the detector fires (completion, error, or
+  a real CLOSE_WAIT hang).
+
+⏺ Let me check the actual upload state — a 960 MB single file won't appear in GCS until it
+  finishes, so "no new files" can be normal mid-upload. The question is whether the connection is
+  live or wedged:
+
+⏺ Two surprises: the log shows bottle finished knitting (ingest_calcofi_bottle.knit.md, 95/95) —
+  so ctd completed and bottle ran — but there's a gcloud process (16662) alive 3.5 h with zero 
+  connections and 0% CPU, and the log's been idle since 08:28. My detector missed it because it
+  only flags CLOSE_WAIT, not a connection-less wedge. Let me get the full picture:
+
+⏺ My mistake — 16662 is my own detector (its command text contains the string gcloud.py storage 
+  cp, so pgrep matched itself); there's no gcloud upload running. The real state: ctd completed
+  (2h10m — including the resumed ctd_wide upload), and bottle finished knitting at 08:28 but its
+  render has been idle 76 min since. This is the post-knit deno HTML hang again (same as
+  ichthyo's transient one). Let me confirm and check bottle's GCS upload:
+
+⏺ Found the real recurring culprit: bottle's render spawned a headless Google Chrome (32124)
+  that's wedged — this is Quarto's headless-browser mermaid rendering (the notebooks render
+  cc_erd + workflow mermaid diagrams). deno is blocked on pipes waiting for it. ichthyo hit this
+  once (recovered); bottle is stuck on it now. Bottle's data + parquet are fully uploaded — only
+  the HTML render is wedged. Let me confirm and check the quarto mermaid config:
+
+⏺ Confirmed: _quarto.yml sets mermaid-format: png, which renders every mermaid diagram via a
+  headless Chrome during the build — that's what intermittently wedges (bottle now, ichthyo
+  once). The fix is mermaid-format: js (client-side rendering, no server Chrome — robust, and
+  diagrams still display when viewing the HTML). Bottle's data is already uploaded, so I just
+  need to unstick the render. Let me kill the wedged tree + runner + detector, fix the config,
+  and resume:
+
+⏺ Bash(cd /Users/bbest/Github/CalCOFI/workflows
+      echo "=== runner pids ==="; pgrep -fl "caffeinate -i Rscript|targets::tar_make" | grep -v
+      pgrep…)
+  ⎿  === runner pids ===
+     16581 /Library/Frameworks/R.framework/Resources/bin/exec/R --no-echo --no-restore -e ta
+     rgets::tar_make()
+     … +23 lines (ctrl+o to expand)
+  ⎿  Allowed by auto mode classifier
+     
+⏺ Background command "CLOSE_WAIT-aware hang detector + terminal/crash" failed with exit code 144
+
+⏺ Wedged tree, runner, and detector all killed (the leftover caffeinate -i -t 300 is a separate
+  5-min timer, not mine). Now fix the mermaid config:
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(_quarto.yml)
+  ⎿  Added 4 lines, removed 1 line
+      13      code-fold: true 
+      14      code-tools: true
+      15      embed-resources: false
+      16 -    mermaid-format: png                                                         
+      16 +    # client-side mermaid (no headless-Chrome screenshot): the png renderer     
+      17 +    # intermittently wedges during pipeline builds (deno blocked on a hung      
+      18 +    # headless Chrome); js renders diagrams in-browser and never hangs the build
+      19 +    mermaid-format: js                                                          
+      20      lightbox: true
+      21  execute:
+      22    echo: true
+  ⎿  Interrupted · What should Claude do instead?
+
+─────────────────────────────────────────────────────────── schema-site-relationships-coloring ──
+❯ I want the mermaid format to remain PNG so it can be zoomed in on via lightbox. Instead of 
+  preventing headless Chrome from running to get the screenshot, can you make it work and not 
+  hang? Here's some advice I see from Googling:
+
+When Quarto hangs during headless Google Chrome processes (usually while rendering dynamic content like Mermaid/Graphviz diagrams or exporting to PDF/DOCX), it is frequently caused by a compatibility mismatch between modern Chrome updates and older Quarto versions, or orphaned zombie browser instances.
+
+To quickly resolve this, try the following solutions:1. Force the New Headless ModeRecent Google Chrome updates removed the legacy headless mode, which can cause Quarto to error out or freeze. You can force Quarto to use the updated headless API by setting an environment variable before running your command.
+
+On macOS/Linux in your terminal:
+
+```bash
+export QUARTO_CHROMIUM_HEADLESS_MODE=new
+quarto render your_document.qmd
+```
+⏺ Good call — that's the proper fix. Chrome 147 (which you have) removed the legacy --headless 
+  mode, and the earlier process showed Quarto launching Google Chrome --headless (legacy) →
+  freeze. Forcing QUARTO_CHROMIUM_HEADLESS_MODE=new makes Quarto use the modern headless API. Let
+  me revert to PNG and apply the env var persistently.
+
+⏺ Now make the env var persistent in _targets.R so every pipeline run uses the modern headless
+  API:
+
+⏺ Update(_targets.R)
+  ⎿  Added 7 lines
+      14  library(targets)
+      16  library(calcofi4db)
+      17 +                                                                                
+      18 +# Chrome >= 132 removed the legacy --headless mode that Quarto uses to          
+      19 +# screenshot mermaid diagrams (mermaid-format: png), causing renders to hang.   
+      20 +# Force the modern headless API so PNG mermaid (zoomable via lightbox) works. 
+      21 +# Inherited by the quarto/Chrome subprocesses spawned via quarto_render(). 
+      22 +Sys.setenv(QUARTO_CHROMIUM_HEADLESS_MODE = "new")
+      23 + 
+      24  build_targets_list(
+      26    exclude = c("publish_ichthyo_to_obis")
+
+⏺ Now clear any orphaned headless-Chrome zombies (without touching your regular Chrome) and
+  relaunch with the new headless mode + caffeinate:
+
+⏺ All set — only bottle/dic/release/test remain (ctd/ichthyo/spatial completed, will skip), and
+  bottle's data is already uploaded so it'll dedup-resume fast. Relaunching with the modern
+  headless mode + caffeinate:
+
+⏺ bottle is progressing (chunk 30/95). Let me arm a detector that catches completion/error, a
+  crash, a headless-Chrome wedge (Chrome present >5 min = screenshots take seconds), or a long
+  stall:
+
+⏺ Detector armed — it'll alert on completion/error, a crash, a headless-Chrome wedge (>5 min =
+  the fix didn't take), or a 30-min stall.
+
+  Root cause nailed: Chrome 147 dropped the legacy --headless API that Quarto's mermaid-format: 
+  png relies on → the render froze waiting on a headless Chrome that never responded (this was
+  the ichthyo and bottle "hang," not a data problem).
+
+  Fix applied (keeping PNG + lightbox zoom as you want):
+  - QUARTO_CHROMIUM_HEADLESS_MODE=new — set persistently in _targets.R (inherited by the
+  quarto/Chrome subprocesses) and exported on the launch. Reverted _quarto.yml back to
+  mermaid-format: png.
+  - Cleared orphaned headless-Chrome zombies; running under caffeinate so it can't sleep
+  mid-render/upload. 
+  
+  Progress is real and mostly done: ctd ✔ completed (2h10m; full 13.67 GB uploaded) and bottle's
+  parquet is already in GCS. Only bottle's render + dic + release + test remain — bottle
+  dedup-resumes fast, dic is small, and release_database copies ingest→release server-side (no
+  re-upload), so almost no bandwidth is left to spend. bottle is currently at chunk 30/95.
+  
+  I'll report the moment the detector fires. (The workflow-side fixes — _quarto.yml/_targets.R
+  headless mode, the ingest WAL/eval/parquet-preservation edits — are uncommitted; I'll list them
+  for commit once the release lands and the schema site is deployed.)
+
+⏺ Major progress — the headless fix worked: bottle ✔ (1m, dedup-fast), dic ✔ (44s), and
+  release_database ✔ completed (3m42s, 35.94 GB — the v2026.06.06 release was built and
+  uploaded!). Only test_release errored at its promote chunk. Let me see that error:
+
+⏺ The headless fix fully worked — the pipeline ran cleanly through release_database (the
+  v2026.06.07 release is built and uploaded, 35.94 GB). Note the date rolled to 06.07 during the
+  long run (version = render-date). test_release then ran its validation gate, 1 query failed, so
+  it correctly refused to promote latest.txt. Let me see which query failed:
+
+⏺ The release data is fine — the one failure is a test-fixture bug: the sql-shell/shell.md query
+  hit a literal __VERSION__ placeholder that wasn't substituted (404 on
+  .../releases/__VERSION__/parquet/species.parquet). The other 8 passed; 4 are skips. So the gate
+  blocked promotion over an unsubstituted placeholder, not a data issue. Let me find that query
+  and the substitution logic:
+
+⏺ Clear now: shell.md's default SQL hardcodes the query app's runtime placeholder __VERSION__,
+  but the test harness only substitutes its own {version}-style param, so __VERSION__ stays
+  literal → 404. The release data is valid (species.parquet exists at the real version). The fix:
+  have the test harness also resolve __VERSION__. Let me see render_template/defaults_for:
+
+⏺ The harness does Handlebars {{version}} substitution but shell.md's default SQL uses the query
+  app's __VERSION__ convention, which the harness doesn't resolve. Let me verify species.parquet
+  actually exists at the release (confirming it's purely the placeholder), then add __VERSION__
+  handling to render_template:
+
+⏺ species.parquet exists at v2026.06.07 — so it's purely the placeholder. Let me confirm the
+  app's __VERSION__ convention, then fix the harness:
+
+⏺ Now re-run test_release — it'll re-test v2026.06.07 (all 9 should pass) and promote latest.txt.
+  This step is quick (queries over the fast download link). Launching and watching for the
+  result:
+
+⏺ The pipeline is essentially done — bottle, dic, and release_database all completed (v2026.06.07
+  built + uploaded, 35.94 GB). The only failure was the validation gate tripping on a
+  test-fixture bug: sql-shell/shell.md uses the query app's __VERSION__ placeholder, which the
+  test harness wasn't resolving (so it 404'd on a literal __VERSION__ path). The release data
+  itself is valid (species.parquet exists at the version).
+  
+  I fixed render_template in test_release.qmd to resolve __VERSION__ → release version (mirroring
+  the app's _includes/form-field.html), and re-launched test_release. A watcher will report
+  whether all queries pass and latest.txt gets promoted to v2026.06.07. Once it does, I'll deploy
+  the schema site (and list the uncommitted workflow fixes for you to commit).
+
+⏺ The deployed site is live and serving the new code (13 new-feature references in the live
+  app.js; the filter bar is in the live HTML).
+
+  Done — release shipped and schema site deployed
+
+  tar_make() completed cleanly and the schema site is deployed at https://calcofi.io/schema.
+
+  Release v2026.06.07 — built (35.94 GB), validated (9/9 queries pass), and promoted to 
+  latest.txt, with the full new schema model: metadata.json v1.2 (contributions, erd_legend,
+  datasets[].tables, per-table workflow, swfsc_invert), stroke-colored erd.mmd, and the parquet
+  now written zstd/V2 with the content-hash dedup baseline established (future runs upload only
+  changed partitions — important on your 1.69 Mbps uplink).
+
+  The schema site now has the cross-tab dataset filter (clickable chips across
+  Tables/Columns/Measurements/Datasets), the Datasets-tab contributions view with workflow links,
+  and the ERD legend — all reading the live v2026.06.07 release.
+
+  Along the way I fixed seven distinct failure modes (transient render wedge, stale WAL, ctd eval
+  skip, dedup-defeating parquet wipe, slow-uplink/sleep CLOSE_WAIT, the Chrome-147
+  legacy-headless freeze, and the __VERSION__ test-gate bug).
+
+  Already pushed: calcofi4db (2.8.1), calcofi4r (1.3.0), and the schema site.
+
+  Still uncommitted — the workflows repo (all the backend behind this release + the bug fixes):
+  _targets.R, _quarto.yml, test_release.qmd, the four ingest_*.qmd, release_database.qmd,
+  libs/calcofi_notes.md. You'd had me push only the R packages + site, so I've left these for
+  your go-ahead.
+
+  Want me to commit and push the workflows changes now? If so, I can group them into logical
+  commits (schema-feature work vs. the pipeline-robustness fixes) or do a single commit — your
+  call.
+
+## 2026-06-04 ca-ocean-monitoring-map
+
+Help me refactor the code to consistently reference input files from the following data folder, particularly under `@./R/`:
+
+`@~/My Drive/projects/calcofi/data-public/_projects/ca-ocean-monitoring-map/`
+
+Use `here::here()` and `glue::glue()` where applicable for consistent, efficient file path naming.
+
+Run the necessary R scripts to successful completion under under `@./R/` and test live in a web browser in  `@./web/index.html`, fixing any paths as needed. Provide instructions for hosting on our Google VM server or on Github Pages if possible. We could also use reference data files hosted on Google Cloud Service.
+
+⏺ I've now mapped the situation. Before finalizing a plan, I need to surface a few things I found, because they block "run to completion" and only you can resolve them.
+  
+  What I found:
+  - R scripts (R/): build_program_layer.R already uses here()/glue() (anchored to the repo via the .Rproj), but points at here("data") / here("outputs") — neither folder exists in the repo.
+  build_combine_map.R and build_discharger_layer.R still hardcode Windows paths (C:/Users/bhuan/...).
+  - The data folder (~/My Drive/.../ca-ocean-monitoring-map/) contains only raw input CSVs in 9 category folders (Carbonate Chemistry, eDNA, Fish Eggs and Larvae, Marine Mammals, Phytoplankton…, Primary
+  Productivity, Seabirds, Standard Parameter, Zooplankton).
+  - Missing reference files — nowhere on this machine: Attribute_Table.csv (read unconditionally at build_program_layer.R:81 — hard fail without it), ca_state/CA_State.shp (coastal clip), and the specific
+  gebco_2025_...tif (depth; has a file.exists guard so it can degrade).
+  - No pre-built outputs exist (Master_Inventory.geojson, transects.csv, Dischargers.geojson), so the web app currently has nothing to load.
+  - Tooling is fine: R 4.5.2 with sf, terra, tidyverse, here, glue all installed; python3 available to serve web/.
+  - Structural mismatch: build_program_layer.R processes one program folder → one layer (and was written for specific programs like CalCOFI/NOAA THL/SCCWRP per the README), but your data is organized by
+  category, each with multiple program CSVs of differing schemas.
+  
+  Let me confirm how you want to handle the blockers:
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+Planning: /Users/bbest/.claude/plans/help-me-refactor-the-generic-garden.md
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+←  ☐ Ref files  ☐ Layer mapping  ☐ Hosting  ✔ Submit  →
+
+The pipeline needs 3 reference files that aren't in the data folder or anywhere on this Mac: Attribute_Table.csv (required — script hard-fails without it), CA_State.shp (coastal clip), and the 
+gebco_2025_*.tif (depth). How should I proceed?
+
+❯ 1. I'll add them to data folder
+     You'll place Attribute_Table.csv, a ca_state/ shapefile, and the GEBCO .tif under the data folder, then I run the full pipeline against them.
+  2. Make optional, run partial
+     I refactor the scripts so missing reference files degrade gracefully (skip clip/depth/attribute enrichment) and run with whatever's available — output quality reduced.
+  3. Refactor paths only, don't run yet
+     I do the path refactor + hosting docs now; you supply reference files later and run the pipeline yourself.
+
+←  ☒ Ref files  ☐ Layer mapping  ☐ Hosting  ✔ Submit  →
+
+build_program_layer.R produces one map layer per program folder. Your data has 9 category folders. How should I map them to layers?
+
+  1. One layer per category folder
+     Run the program builder once per category folder (Carbonate Chemistry, eDNA, …), naming each layer after the folder.
+  2. Start with one folder to validate
+     Wire it up and run on a single small folder (e.g. eDNA) end-to-end first, then scale to the rest once it works.
+❯ 3. Not sure — depends on Attribute_Table
+     The schema mapping likely needs the Attribute_Table; decide after seeing whether the CSVs parse.
+
+←  ☒ Ref files  ☒ Layer mapping  ☐ Hosting  ✔ Submit  →
+
+Where should the final map + data be hosted?
+
+  1. [ ] GitHub Pages
+  Static site from the repo (web/). Simplest; data files must be small enough to commit (note: Standard Parameter raw CSV is 266 MB, but only built GeoJSON outputs get served).
+  2. [ ] Google VM server
+  Serve web/ + outputs from your existing Google Compute Engine VM (e.g. nginx/Apache or a simple static server).
+❯ 3. [ ] Data on Google Cloud Storage
+  Host the large GeoJSON/CSV outputs in a public GCS bucket and have the web app fetch them from there (works with either site host).
+
+⏺ Everything is complete and verified. The locally-staged data files are correctly gitignored (they don't appear as
+  untracked), and R/paths.R is the one new source file.
+
+  Summary
+
+  I refactored the pipeline to a single, portable path convention, ran it end-to-end against your data folder, and verified
+  the map live in a browser.
+
+  Path refactor (here() + glue())
+
+  - New R/paths.R — single source of truth, sourced by all three scripts. Defines dir_data (the shared Drive folder,
+  overridable via CALCOFI_DATA env var), dir_out/dir_tmp/dir_web via here(), and the three reference-file paths via glue().
+  - build_combine_map.R and build_discharger_layer.R — removed the hardcoded C:/Users/bhuan/... Windows paths; both now
+  source paths.R. The discharger script skips cleanly when no Dischargers/ folder exists.
+  - build_program_layer.R — replaced the here("data")/here("outputs") block with paths.R; the input folder is now selected
+  via a PROGRAM env var.
+
+  Bugs found and fixed while making it actually run
+
+  1. Attribute table schema — the real Attribute_Table.csv uses ACRYNOM (and split SAMPLING FREQUENCY/SAMPLING PLATFORM)
+  columns; added a resilient normalize_attr_cols() so it maps to what the script expects.
+  2. Pre-existing gebco_mean_depth bug — the column was renamed then re-selected by its old name, crashing every GeoJSON
+  write. Fixed the duplicate.
+  3. Transect header mismatch — the pipeline writes Latitude Start but the web app only looked for Latitude Start 
+  (º)/latitude_start; added the actual names as fallbacks (so all 1,629 transects now draw).
+
+  Layer labels (your choice)
+  
+  Added a theme_titles map so the 9 parameter-theme folders get friendly names (e.g. eDNA → "Environmental DNA (eDNA)") since
+  they aren't programs in the attribute table.
+
+  Pipeline run — all green
+
+  All 9 theme folders built → combined into outputs/Master_Inventory.geojson (7,778 hexes, GEBCO depths) +
+  outputs/transects.csv (1,645 rows).
+
+  Web verification (headless Chrome screenshots)
+
+  - Hex layer renders for all 9 themes with the legend and friendly labels.
+  - Survey transects render offshore once toggled (validated my fix: 0 missing coords, 1,629 drawable).
+
+  Hosting (web/index.html now has a DATA_BASE constant)
+
+  - Data → GCS: gsutil mb + public read + CORS (required for cross-origin fetch) + gsutil rsync outputs/ gs://…, then set
+  DATA_BASE = 'https://storage.googleapis.com/<bucket>/'. Full commands are in the README.
+  - Site → GitHub Pages or your Google VM: serve web/ (only index.html is committed); data comes from the bucket via
+  DATA_BASE.
+
+  The full how-to-run and hosting steps are written into README.md, and outputs/ plus the locally-staged web/ data copies are
+  gitignored. Nothing was committed — let me know if you'd like me to commit these changes.
+
+  One thing to flag for later: the data is organized by parameter theme, but Attribute_Table.csv is program-centric (62
+  acronyms), so Platform/Full Program Name show "Unknown" for these theme layers. If you later reorganize inputs by program
+  (matching the acronyms), the same pipeline will populate that metadata automatically.
 
 ## 2026-05-20.b query bump with db release like schema
 

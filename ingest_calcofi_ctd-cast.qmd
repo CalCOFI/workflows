@@ -8,6 +8,28 @@ calcofi:
   output: data/parquet/calcofi_ctd-cast/manifest.json
   modifies:
     - ship
+  provider: calcofi
+  dataset: ctd-cast
+  workflow_url: https://calcofi.io/workflows/ingest_calcofi_ctd-cast.html
+  dataset_meta:
+    dataset_name: CalCOFI CTD Cast Files
+    description: >
+      CTD downcast profiles with temperature, salinity, oxygen, fluorescence,
+      and other sensors at standard depths.
+    citation_main: "CalCOFI. (2023). CalCOFI CTD Cast Files. CalCOFI.org."
+    link_calcofi_org: https://calcofi.org/data/oceanographic-data/ctd-cast-files/
+    link_data_source: https://calcofi.org/data/oceanographic-data/ctd-cast-files/
+    coverage_temporal: 1993-01 to 2021-05
+    coverage_spatial: "28-37°N, -125 to -117°W"
+  tables_owned:
+    - {table: ctd_cast}
+    - {table: ctd_thin}
+    - {table: ctd_measurement}
+    - {table: ctd_summary}
+    - {table: ctd_wide}
+    - {table: measurement_type, shared: true, note: "shared registry across bottle/ctd/dic"}
+  erd:
+    color: "#e0ccf0"
 ---
 
 ## Overview
@@ -84,9 +106,12 @@ librarian::shelf(
 # common ingest settings (overwrite, dir_data)
 source(here("libs/ingest.R"))
 
-dataset_name <- "CalCOFI CTD Cast Database"
-provider <- "calcofi"
-dataset <- "ctd-cast"
+# provider/dataset/metadata read from this file's authoritative YAML block
+cc           <- read_calcofi_meta(here("ingest_calcofi_ctd-cast.qmd"))
+provider     <- cc$provider
+dataset      <- cc$dataset
+dataset_name <- cc$dataset_meta$dataset_name
+tables_owned <- cc$tables_owned
 dir_label <- glue("{provider}_{dataset}")
 dir_dl <- path_expand(glue("{dir_data}/{provider}/{dataset}/download"))
 dir_parquet <- here(glue("data/parquet/{dir_label}"))
@@ -96,16 +121,24 @@ dir_tmp <- here(glue("data/tmp/{dir_label}"))
 url <- "https://calcofi.org/data/oceanographic-data/ctd-cast-files/"
 dir_meta <- here(glue("metadata/{provider}/{dataset}"))
 
-# overwrite: delete wrangling DB + parquet, but keep checkpoint DB + downloads
-# overwrite_all: also delete checkpoint DB and RDS intermediates
+# overwrite: rebuild the wrangling DB, but keep checkpoint DB + downloads and
+# (importantly) keep dir_parquet so write_parquet_outputs can content-hash
+# dedup against the prior run — only changed partitions get re-written/uploaded.
+# overwrite_all: also delete parquet, checkpoint DB, and RDS intermediates.
 if (overwrite) {
   if (file_exists(db_path)) file_delete(db_path)
-  if (dir_exists(dir_parquet)) dir_delete(dir_parquet)
+  # clear any stale WAL/tmp from an interrupted run so the restored checkpoint
+  # DB opens cleanly (avoids "WAL checkpoint iteration does not match" errors)
+  db_wal <- paste0(db_path, ".wal")
+  db_tmp <- paste0(db_path, ".tmp")
+  if (file_exists(db_wal)) file_delete(db_wal)
+  if (dir_exists(db_tmp))  dir_delete(db_tmp)
   if (overwrite_all) {
+    if (dir_exists(dir_parquet))   dir_delete(dir_parquet)
     if (file_exists(db_checkpoint)) file_delete(db_checkpoint)
     rds_files <- list.files(dir_tmp, pattern = "\\.rds$", full.names = TRUE)
     if (length(rds_files) > 0) file_delete(rds_files)
-    message("Deleted checkpoint DB and RDS intermediates")
+    message("Deleted parquet, checkpoint DB, and RDS intermediates")
   }
 }
 
@@ -986,9 +1019,12 @@ cat(glue(
 
 ```{r}
 #| label: restore_eval
+#| eval: true
 
-# if parquet already complete, skip computation through write_parquet
-# only re-enable for upload_gcs and cleanup
+# must always evaluate: line ~217 may have set eval=FALSE to skip read+bind
+# when restoring from checkpoint; this chunk re-enables computation through
+# write_parquet. without `eval: true` it would inherit eval=FALSE and be
+# skipped, so write_parquet never runs yet downstream chunks expect its output.
 if (parquet_complete) {
   knitr::opts_chunk$set(eval = FALSE)
   message("Parquet complete — skipping to upload")
@@ -2023,7 +2059,10 @@ ctd_rels <- list(
     measurement_type = "measurement_type"),
   foreign_keys = list(
     list(table = "ctd_measurement", column = "ctd_cast_uuid", ref_table = "ctd_cast", ref_column = "ctd_cast_uuid"),
-    list(table = "ctd_thin", column = "ctd_cast_uuid", ref_table = "ctd_cast", ref_column = "ctd_cast_uuid")))
+    list(table = "ctd_thin", column = "ctd_cast_uuid", ref_table = "ctd_cast", ref_column = "ctd_cast_uuid"),
+    list(table = "ctd_measurement", column = "measurement_type", ref_table = "measurement_type", ref_column = "measurement_type"),
+    list(table = "ctd_thin", column = "measurement_type", ref_table = "measurement_type", ref_column = "measurement_type"),
+    list(table = "ctd_summary", column = "measurement_type", ref_table = "measurement_type", ref_column = "measurement_type")))
 
 cc_erd(con, rels = ctd_rels)
 ```
@@ -2062,7 +2101,8 @@ dbExecute(
 ```{r}
 #| label: load-dataset-metadata
 
-d_dataset <- read_csv(here("metadata/dataset.csv"))
+# dataset registry built from authoritative ingest_*.qmd YAML (was dataset.csv)
+d_dataset <- ingest_yaml_to_dataset_df(read_ingest_yaml(here()))
 dbWriteTable(con, "dataset", d_dataset, overwrite = TRUE)
 message(glue("dataset: {nrow(d_dataset)} datasets registered"))
 ```
@@ -2138,7 +2178,8 @@ metadata_path <- build_metadata_json(
   tables               = parquet_stats$table,
   provider             = provider,
   dataset              = dataset,
-  workflow_url         = glue("https://calcofi.io/workflows/ingest_{provider}_{dataset}.html")
+  workflow_url         = cc$workflow_url,
+  tables_owned         = tables_owned
 )
 
 # write relationships.json sidecar with PKs/FKs
