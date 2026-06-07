@@ -869,6 +869,25 @@ jsonlite::write_json(list(versions = all_versions), versions_local,
 put_gcs_file(versions_local,
   glue("gs://{gcs_bucket}/ducklake/releases/versions.json"))
 
+# the schema site (calcofi.io/schema) fetches these JSON/mmd sidecars at runtime
+# and they are OVERWRITTEN in place when a release is re-run (e.g. to fix a bug).
+# GCS defaults to `cache-control: public, max-age=3600`, so a corrected re-upload
+# stays masked by browser/CDN caches for up to an hour. Tag the mutable sidecars
+# `no-cache` (revalidate-always; cheap 304s) so a re-render is visible immediately.
+sidecar_urls <- c(
+  glue("gs://{gcs_bucket}/ducklake/releases/versions.json"),
+  glue("gs://{gcs_bucket}/{gcs_release}/catalog.json"),
+  glue("gs://{gcs_bucket}/{gcs_release}/metadata.json"),
+  glue("gs://{gcs_bucket}/{gcs_release}/relationships.json"),
+  glue("gs://{gcs_bucket}/{gcs_release}/erd.mmd"),
+  glue("gs://{gcs_bucket}/{gcs_release}/RELEASE_NOTES.md"))
+cc_res <- system2(gcloud,
+  c("storage", "objects", "update", "--cache-control=no-cache", sidecar_urls),
+  stdout = TRUE, stderr = TRUE)
+if (!identical(attr(cc_res, "status") %||% 0L, 0L))
+  warning(glue("could not set no-cache on sidecars: {paste(cc_res, collapse='; ')}"))
+message("runtime sidecars tagged cache-control: no-cache")
+
 # NOTE: latest.txt is NOT updated here. Promotion is gated on the
 # query-test pass in test_release.qmd, which writes latest.txt only
 # when every pre-baked query in CalCOFI/query/_queries succeeds.
