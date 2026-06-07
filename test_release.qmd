@@ -167,6 +167,13 @@ render_template <- function(template, params) {
     txt <- sub(full, val, txt, fixed = TRUE)
   }
 
+  # query-app convention: literal __VERSION__ placeholder -> release version,
+  # mirroring _includes/form-field.html ({% replace "__VERSION__",
+  # site.default_version %}). Used in free-form defaults like sql-shell/shell.md.
+  if (!is.null(params$version)) {
+    txt <- gsub("__VERSION__", as.character(params$version), txt, fixed = TRUE)
+  }
+
   txt
 }
 

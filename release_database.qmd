@@ -787,6 +787,29 @@ if (length(meta_paths) > 0) {
       view_type = "all")
     erd_path <- file.path(dir_frozen, "erd.mmd")
     writeLines(unclass(erd), erd_path)
+
+    # validate the Mermaid parses before publishing — a malformed erd.mmd
+    # (e.g. erDiagram styling unsupported by an older mermaid) would break the
+    # schema site, which renders it client-side with mermaid. Validate with
+    # mermaid-cli (mmdc); KEEP schema/_config.yml `mermaid_version` >= this
+    # mmdc's bundled mermaid so the site accepts what passes here.
+    mmdc <- Sys.which("mmdc")
+    if (nzchar(mmdc)) {
+      erd_svg_check <- tempfile(fileext = ".svg")
+      erd_val <- suppressWarnings(system2(
+        mmdc, c("-i", erd_path, "-o", erd_svg_check),
+        stdout = TRUE, stderr = TRUE))
+      if (!identical(attr(erd_val, "status"), NULL) &&
+          !identical(attr(erd_val, "status"), 0L)) {
+        stop(glue(
+          "erd.mmd failed Mermaid validation; not uploading.\n",
+          "{paste(erd_val, collapse = '\n')}"))
+      }
+      message("erd.mmd passed Mermaid validation (mmdc)")
+    } else {
+      warning("mmdc not found; skipping Mermaid validation of erd.mmd")
+    }
+
     put_gcs_file(erd_path,
       glue("gs://{gcs_bucket}/{gcs_release}/erd.mmd"))
     message(glue("erd.mmd uploaded ({length(attr(erd, 'tables'))} tables)"))
