@@ -650,6 +650,11 @@ d_bind <- d_bind |>
     )
   )
 
+# normalize raw coordinate column names (CalCOFI CTD CSV ships Lon_Dec/Lat_Dec ->
+# clean_names lon_dec/lat_dec) to the canonical dictionary names used downstream
+d_bind <- d_bind |>
+  rename(longitude = lon_dec, latitude = lat_dec)
+
 # save intermediate for resumability
 write_rds(d_bind, glue("{dir_tmp}/d_bind_pre_datetime.rds"), compress = "gz")
 ```
@@ -675,22 +680,22 @@ d_bind <- d_bind |>
       ) ~ "mdy_hm",
       TRUE ~ "unknown"
     ),
-    datetime_utc = NA,
-    datetime_utc = if_else(
+    datetime_start_utc = NA,
+    datetime_start_utc = if_else(
       date_time_format == "dmy_hms",
       suppressWarnings(dmy_hms(date_time_utc, tz = "UTC")),
-      datetime_utc
+      datetime_start_utc
     ),
-    datetime_utc = if_else(
+    datetime_start_utc = if_else(
       date_time_format == "mdy_hm",
       suppressWarnings(mdy_hm(date_time_utc, tz = "UTC")),
-      datetime_utc
+      datetime_start_utc
     )
   ) |>
-  relocate(date_time_format, datetime_utc, .after = date_time_utc) |>
-  arrange(datetime_utc, depth)
+  relocate(date_time_format, datetime_start_utc, .after = date_time_utc) |>
+  arrange(datetime_start_utc, depth)
 
-stopifnot(all(!is.na(d_bind$datetime_utc)))
+stopifnot(all(!is.na(d_bind$datetime_start_utc)))
 
 write_rds(d_bind, glue("{dir_tmp}/d_bind_post_datetime.rds"), compress = "gz")
 
@@ -698,8 +703,8 @@ d_bind |>
   group_by(cruise_key, `_source_file`, date_time_format) |>
   summarize(
     n_records = n(),
-    datetime_min = min(datetime_utc),
-    datetime_max = max(datetime_utc),
+    datetime_min = min(datetime_start_utc),
+    datetime_max = max(datetime_start_utc),
     .groups = "drop"
   ) |>
   arrange(cruise_key, `_source_file`, date_time_format) |>
@@ -732,17 +737,17 @@ d_bind <- d_bind |>
       TRUE,
       FALSE
     ),
-    is_lon_pseudoNA = map_lgl(lon_dec, ~ some(pseudoNA_values, near, .x)),
-    is_lat_pseudoNA = map_lgl(lat_dec, ~ some(pseudoNA_values, near, .x)),
-    lon_dec = if_else(
+    is_lon_pseudoNA = map_lgl(longitude, ~ some(pseudoNA_values, near, .x)),
+    is_lat_pseudoNA = map_lgl(latitude, ~ some(pseudoNA_values, near, .x)),
+    longitude = if_else(
       is_lon_pseudoNA | is_lat_pseudoNA,
       NA_real_,
-      lon_dec
+      longitude
     ),
-    lat_dec = if_else(
+    latitude = if_else(
       is_lon_pseudoNA | is_lat_pseudoNA,
       NA_real_,
-      lat_dec
+      latitude
     ),
     lon_lnst = if_else(
       !is.na(line) & !is.na(sta) & !is_lnsta_pseudoNA,
@@ -762,12 +767,12 @@ d_bind <- d_bind |>
       )[, 2]),
       NA_real_
     ),
-    lon_dec = if_else(is.na(lon_dec), lon_lnst, lon_dec),
-    lat_dec = if_else(is.na(lat_dec), lat_lnst, lat_dec)
+    longitude = if_else(is.na(longitude), lon_lnst, longitude),
+    latitude = if_else(is.na(latitude), lat_lnst, latitude)
   )
 
-stopifnot(sum(is.na(d_bind$lon_dec)) == 0)
-stopifnot(sum(is.na(d_bind$lat_dec)) == 0)
+stopifnot(sum(is.na(d_bind$longitude)) == 0)
+stopifnot(sum(is.na(d_bind$latitude)) == 0)
 
 d_bind |>
   filter(is_lon_pseudoNA | is_lat_pseudoNA) |>
@@ -799,7 +804,7 @@ d_bind |>
 max_dist_dec_lnst_km <- 10
 
 pts <- d_bind |>
-  st_as_sf(coords = c("lon_dec", "lat_dec"), remove = F, crs = 4326) |>
+  st_as_sf(coords = c("longitude", "latitude"), remove = F, crs = 4326) |>
   mutate(
     geom_lnst = purrr::map2(lon_lnst, lat_lnst, \(x, y) st_point(c(x, y))) |>
       st_sfc(crs = 4326),
@@ -839,9 +844,9 @@ mapView(bb_badcr) +
       ) |>
       select(
         cruise_key,
-        datetime_utc,
-        lon_dec,
-        lat_dec,
+        datetime_start_utc,
+        longitude,
+        latitude,
         sta_id,
         line,
         sta,
@@ -932,13 +937,13 @@ mapView(bb_cr) +
       ungroup() |>
       select(
         cruise_key,
-        lon_dec,
-        lat_dec,
+        longitude,
+        latitude,
         sta_id,
         line,
         sta,
         dist_dec_lnst_km,
-        datetime_utc
+        datetime_start_utc
       ),
     zcol = "cruise_key",
     cex = 5,
@@ -953,22 +958,22 @@ mapView(bb_cr) +
 
 d_dupes <- pts_filt |>
   st_drop_geometry() |>
-  select(datetime_utc, depth) |>
-  group_by(datetime_utc, depth) |>
+  select(datetime_start_utc, depth) |>
+  group_by(datetime_start_utc, depth) |>
   summarize(n = n(), .groups = "drop") |>
   filter(n > 1) |>
   arrange(desc(n))
 
 n_distinct_dtime_depth <- pts_filt |>
   st_drop_geometry() |>
-  select(datetime_utc, depth) |>
+  select(datetime_start_utc, depth) |>
   n_distinct()
 
 d_dupes |>
   slice(c(1:10, (n() - 9):n())) |>
   dt(
     caption = glue(
-      "First and last 10 duplicates by datetime_utc, depth ",
+      "First and last 10 duplicates by datetime_start_utc, depth ",
       "(nrows = {format(nrow(d_dupes), big.mark = ',')}; ",
       "n_distinct = {format(n_distinct_dtime_depth, big.mark = ',')})"
     ),
@@ -1037,10 +1042,10 @@ raw_cols <- dbGetQuery(
 
 # a measurement position is identified by these five columns; duplicate copies
 # share all five and differ only in re-rounded coordinates / re-processed values
-dedup_key  <- c("cruise_key", "cast_key", "cast_dir", "datetime_utc", "depth_m")
+dedup_key  <- c("cruise_key", "cast_key", "cast_dir", "datetime_start_utc", "depth_m")
 stopifnot(
   "ctd_raw missing expected columns for de-duplication" =
-    all(c(dedup_key, "_source_file", "lat_dec", "lon_dec") %in% raw_cols))
+    all(c(dedup_key, "_source_file", "latitude", "longitude") %in% raw_cols))
 
 # keep the primary copy: reorganized duplicates sit in deeper source paths, so
 # prefer the shortest `_source_file`; coordinates tie-break for full determinism
@@ -1050,7 +1055,7 @@ dbExecute(con, glue("
   SELECT * FROM ctd_raw
   QUALIFY ROW_NUMBER() OVER (
     PARTITION BY {paste(dedup_key, collapse = ', ')}
-    ORDER BY length(\"_source_file\"), \"_source_file\", lat_dec, lon_dec) = 1"))
+    ORDER BY length(\"_source_file\"), \"_source_file\", latitude, longitude) = 1"))
 n_after <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM ctd_raw")$n
 
 cat(glue(
@@ -1271,7 +1276,7 @@ raw_cols <- dbGetQuery(
 wide_keep <- intersect(
   raw_cols,
   c("cruise_key", "site_key", "cast_key", "cast_dir",
-    "datetime_utc", "lon_dec", "lat_dec", "ship_key",
+    "datetime_start_utc", "longitude", "latitude", "ship_key",
     "data_stage", "depth_m", meas_cols, qual_cols))
 
 dbExecute(
@@ -1308,7 +1313,7 @@ cast_cols <- setdiff(
 )
 
 # extract one row per cast, keyed (cruise_key, cast_key, cast_dir,
-# datetime_utc). within that key the only cast-level column that varies is
+# datetime_start_utc). within that key the only cast-level column that varies is
 # lat/lon (sub-meter GPS jitter between same-second scans), so order by it for a
 # deterministic pick. measurement-like columns (e.g. ox_aveu_m_sta_corr) must be
 # registered in measurement_type.csv so they pivot to ctd_measurement and never
@@ -1321,9 +1326,9 @@ dbExecute(
   SELECT {paste(cast_cols, collapse = ', ')}
   FROM ctd_raw
   QUALIFY ROW_NUMBER() OVER (
-    PARTITION BY cruise_key, cast_key, cast_dir, datetime_utc
-    ORDER BY lat_dec, lon_dec) = 1
-  ORDER BY datetime_utc, cruise_key"
+    PARTITION BY cruise_key, cast_key, cast_dir, datetime_start_utc
+    ORDER BY latitude, longitude) = 1
+  ORDER BY datetime_start_utc, cruise_key"
   )
 )
 
@@ -1335,7 +1340,7 @@ assign_deterministic_uuids_md5(
   con = con,
   table_name = "ctd_cast",
   id_col = "ctd_cast_uuid",
-  key_cols = c("cruise_key", "cast_key", "cast_dir", "datetime_utc")
+  key_cols = c("cruise_key", "cast_key", "cast_dir", "datetime_start_utc")
 )
 
 # guard: ctd_cast_uuid must be a valid unique PK — fail loudly if a
@@ -1368,7 +1373,7 @@ dbExecute(
   WHERE r.cruise_key   = c.cruise_key
     AND r.cast_key     = c.cast_key
     AND r.cast_dir     = c.cast_dir
-    AND r.datetime_utc = c.datetime_utc"
+    AND r.datetime_start_utc = c.datetime_start_utc"
 )
 
 # pivot wide-to-long one measurement type at a time to avoid OOM
@@ -2115,7 +2120,7 @@ cc_erd(con, rels = ctd_rels)
 ```{r}
 #| label: add_spatial
 
-add_point_geom(con, "ctd_cast", lon_col = "lon_dec", lat_col = "lat_dec")
+add_point_geom(con, "ctd_cast", lon_col = "longitude", lat_col = "latitude")
 
 # grid already loaded in Cross-Dataset Bridge section
 assign_grid_key(con, "ctd_cast")
@@ -2131,10 +2136,10 @@ dbExecute(
   "
   CREATE OR REPLACE VIEW ctd_cast_derived AS
   SELECT *,
-    datetime_utc AT TIME ZONE 'UTC' AT TIME ZONE 'US/Pacific' AS datetime_pst,
-    EXTRACT(YEAR FROM datetime_utc)  AS year,
-    EXTRACT(MONTH FROM datetime_utc) AS month,
-    EXTRACT(DOY FROM datetime_utc)   AS julian_day
+    datetime_start_utc AT TIME ZONE 'UTC' AT TIME ZONE 'US/Pacific' AS datetime_pst,
+    EXTRACT(YEAR FROM datetime_start_utc)  AS year,
+    EXTRACT(MONTH FROM datetime_start_utc) AS month,
+    EXTRACT(DOY FROM datetime_start_utc)   AS julian_day
   FROM ctd_cast"
 )
 ```
@@ -2197,7 +2202,7 @@ parquet_stats <- write_parquet_outputs(
     ctd_measurement = c("measurement_type", "depth_m"),
     ctd_thin        = c("measurement_type", "depth_m"),
     ctd_summary     = c("measurement_type", "depth_m"),
-    ctd_cast        = "hilbert:lon_dec,lat_dec"),
+    ctd_cast        = "hilbert:longitude,latitude"),
   strip_provenance = FALSE,
   mismatches       = mismatches,
   supplemental     = c("ctd_wide", "ctd_measurement")
@@ -2347,8 +2352,8 @@ dbExecute(con_pq, glue("
 cruise_spans <- tbl(con_pq, "ctd_cast") |>
   group_by(cruise_key, data_stage) |>
   summarize(
-    beg_date = min(datetime_utc, na.rm = TRUE) |> as.Date(),
-    end_date = max(datetime_utc, na.rm = TRUE) |> as.Date(),
+    beg_date = min(datetime_start_utc, na.rm = TRUE) |> as.Date(),
+    end_date = max(datetime_start_utc, na.rm = TRUE) |> as.Date(),
     .groups = "drop"
   ) |>
   collect() |>

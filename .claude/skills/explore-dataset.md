@@ -35,13 +35,17 @@ When the user invokes this skill, run the R script `scripts/explore_dataset.R` a
    - Table/file inventory (names, row counts, column counts)
    - Column types and NULL rates
    - Potential primary key columns (unique identifiers)
-   - Foreign key candidates matching existing CalCOFI tables:
-     - `cruise_key` (YYYY-MM-NODC format)
-     - `ship_key`, `ship_nodc`, `ship_name`
-     - `site_uuid`, `tow_uuid`, `net_uuid`
-     - `cast_id`, `bottle_id`
-     - `species_id`, `sppcode`
-     - `grid_key` (line_station format)
+   - Foreign key / canonical-field candidates. Load `metadata/field_dictionary.csv`
+     and match the source column names against its `aliases` to spot identifier
+     and join columns (rather than a hardcoded list):
+     ```r
+     fd <- readr::read_csv(here("metadata/field_dictionary.csv"), show_col_types = F)
+     ids <- dplyr::filter(fd, is_identifier | category %in% c("spatial","temporal","taxonomic"))
+     ```
+     Common matches: `cruise_key` (YYYY-MM-NODC), `ship_key`/`ship_nodc`,
+     `site_key` (line+station, e.g. `090.0 062.0`), `site_uuid`/`tow_uuid`/`net_uuid`,
+     `cast_id`/`bottle_id`, `species_id`, `grid_key`, and the canonical coordinate
+     (`latitude`/`longitude`), depth (`depth_m`), and time (`datetime_utc`) fields.
    - Spatial coverage (lat/lon ranges vs CalCOFI grid extent ~23-51°N, ~-135 to -117°W)
    - Temporal coverage (date ranges, overlap with existing cruises 1949-present)
    - Species columns (if present) and match rate against existing species table
@@ -75,7 +79,32 @@ When the user invokes this skill, run the R script `scripts/explore_dataset.R` a
      - Taxonomy standardization needed
      - Spatial matching complexity
 
-7. **Output**: Display the markdown report directly in the conversation.
+7. **Seed `questions.csv` for the data provider**:
+   Profiling is the natural moment to capture follow-up questions for the
+   provider — unmatched FK candidates, ambiguous units, coordinate/date
+   anomalies, taxonomy match failures, duplicate keys, etc. Create
+   `metadata/{provider}/{dataset}/questions.csv` (the file every `ingest_*`/
+   `publish_*` workflow renders, and that `questions_email.qmd` aggregates per
+   provider). Schema:
+
+   ```csv
+   id,question,context,status,priority,answer,asked_date,answered_date,who,related_table,related_field
+   ```
+   - `id`: `{provider}_{dataset}_NN` (zero-padded, stable).
+   - `status`: `open` | `asked` | `answered` | `wontfix`.
+   - `priority`: `blocker` (cannot publish without an answer) | `high` | `normal`.
+   - `context`: why it matters / what is ambiguous.
+   - `related_table` / `related_field`: link the question to a specific column
+     so it surfaces next to that field.
+
+   Seed one row per genuine ambiguity surfaced during profiling. Example:
+   ```csv
+   id,question,context,status,priority,answer,asked_date,answered_date,who,related_table,related_field
+   calcofi_euphausiids_01,Which net mesh and tow type produced these counts?,Standardization to abundance needs mesh+tow,open,high,,,,,euphausiids_tow,
+   ```
+
+8. **Output**: Display the markdown report directly in the conversation, and
+   note the path to the seeded `questions.csv` and the count of open questions.
 
 ## Example Output
 

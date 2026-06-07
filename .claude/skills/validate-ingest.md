@@ -22,7 +22,7 @@ Run comprehensive post-ingest validation on a DuckDB wrangling database or parqu
 
 - `--strict`: Treat warnings as errors (fail on any issue)
 - `--checks={check_list}`: Comma-separated list of checks to run (default: `all`)
-  - Available: `pks`, `fks`, `nulls`, `ranges`, `counts`, `orphans`, `duplicates`, `spatial`, `temporal`
+  - Available: `pks`, `fks`, `nulls`, `ranges`, `counts`, `orphans`, `duplicates`, `spatial`, `temporal`, `schema_lint`, `questions`
 
 ## Instructions
 
@@ -174,6 +174,78 @@ for (tbl in tables) {
   }
 }
 ```
+
+#### J. Schema Lint vs the field dictionary (`schema_lint`)
+
+Enforce cross-dataset consistency by comparing this dataset's
+`flds_redefine.csv` against the canonical `metadata/field_dictionary.csv`.
+Report findings as **warnings** by default (legitimate new canonical fields
+exist and the dictionary grows over time); `--strict` promotes them to errors
+for release gating.
+
+```r
+fd  <- readr::read_csv(here("metadata/field_dictionary.csv"), show_col_types = F)
+fld <- readr::read_csv(here(glue("metadata/{provider}/{dataset}/flds_redefine.csv")),
+                       show_col_types = F)
+
+canon <- fd$fld_new
+# raw pre-pivot measurement columns are exempt (they map to measurement_type.csv
+# and get pivoted into *_measurement); skip obvious quality/identifier suffixes too
+is_exempt <- function(x) grepl("(_qual|_flag|q$)$", x)
+
+for (i in seq_len(nrow(fld))) {
+  f <- fld$fld_new[i]
+  hit <- fd[fd$fld_new == f, ]
+  if (nrow(hit) == 1) {
+    # (b) type mismatch vs dictionary
+    if (!is.na(fld$type_new[i]) &&
+        toupper(fld$type_new[i]) != toupper(hit$type_new))
+      report_warning("schema_lint type", f,
+        glue("dataset={fld$type_new[i]} vs dictionary={hit$type_new}"))
+    # (c) units mismatch vs dictionary
+    du <- fld$units[i] %||% ""; cu <- hit$units %||% ""
+    if (nzchar(cu) && nzchar(du) && du != cu)
+      report_warning("schema_lint units", f,
+        glue("dataset='{du}' vs dictionary='{cu}'"))
+  } else if (!is_exempt(f)) {
+    # (a) fld_new not in dictionary and not an obvious raw/measurement column.
+    # check whether it is a known alias that should have been normalized.
+    alias_hit <- fd[grepl(paste0("(^|;)", f, "(;|$)"), fd$aliases, ignore.case = TRUE), ]
+    if (nrow(alias_hit) >= 1)
+      report_warning("schema_lint alias-not-normalized", f,
+        glue("'{f}' is an alias of canonical '{alias_hit$fld_new[1]}' — rename it"))
+    else
+      report_warning("schema_lint new-field", f,
+        "not in field_dictionary.csv — add a canonical row or confirm it is a raw measurement")
+  }
+}
+# (d) cross-dataset collision: same fld_new used with different type/units than
+#     any prior dataset is caught implicitly above because the dictionary is the
+#     single source of truth — a prior dataset that drifted will itself lint.
+```
+
+Render a `### Schema Lint` table: `fld_new | issue | dictionary_says | dataset_has | status`.
+
+#### K. Provider questions triaged (`questions`)
+
+Confirm the dataset carries a questions file and that no release-blocking
+question is still open.
+
+```r
+q_path <- here(glue("metadata/{provider}/{dataset}/questions.csv"))
+if (!file.exists(q_path)) {
+  report_warning("questions", dataset, "no questions.csv — run /explore-dataset to seed one")
+} else {
+  q <- readr::read_csv(q_path, show_col_types = F)
+  open_blockers <- dplyr::filter(q, status == "open", priority == "blocker")
+  if (nrow(open_blockers) > 0)
+    report_warning("questions blocker-open", dataset,  # error under --strict
+      glue("{nrow(open_blockers)} blocker question(s) still open: {paste(open_blockers$id, collapse=', ')}"))
+}
+```
+
+Under `--strict`, an open `blocker` question is an **error** (gates release);
+otherwise a warning. Include the open-question list in the report.
 
 ### 3. Cross-dataset validation
 

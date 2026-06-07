@@ -300,7 +300,7 @@ propagate_natural_key(
 
 # verify cruise_key is now in site
 tbl(con, "site") |>
-  select(site_uuid, cruise_uuid, cruise_key, orderocc) |>
+  select(site_uuid, cruise_uuid, cruise_key, order_occ) |>
   head(10) |>
   collect() |>
   datatable(caption = "Sample site rows with cruise_key")
@@ -1004,31 +1004,31 @@ standardize_site_key(con, "site", "line", "station")
 segment <- tbl(
   con,
   sql(
-    "SELECT cruise_key, orderocc, site_uuid, longitude AS lon, latitude AS lat
+    "SELECT cruise_key, order_occ, site_uuid, longitude AS lon, latitude AS lat
    FROM site"
   )
 ) |>
   left_join(
     tbl(con, "tow") |>
-      select(site_uuid, time_start),
+      select(site_uuid, datetime_start_utc),
     by = "site_uuid"
   ) |>
   group_by(
     cruise_key,
-    orderocc,
+    order_occ,
     site_uuid,
     lon,
     lat
   ) |>
   summarize(
-    time_beg = min(time_start, na.rm = T),
-    time_end = max(time_start, na.rm = T),
+    time_beg = min(datetime_start_utc, na.rm = T),
+    time_end = max(datetime_start_utc, na.rm = T),
     .groups = "drop"
   ) |>
   collect()
 
 segment <- segment |>
-  arrange(cruise_key, orderocc, time_beg) |>
+  arrange(cruise_key, order_occ, time_beg) |>
   group_by(cruise_key) |>
   mutate(
     site_uuid_beg = lag(site_uuid),
