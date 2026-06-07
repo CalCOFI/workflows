@@ -755,14 +755,10 @@ if (file.exists(rels_json))
   put_gcs_file(rels_json,
     glue("gs://{gcs_bucket}/{gcs_release}/relationships.json"))
 
-# build and upload metadata.json (table/column descriptions + units)
-meta_paths <- c(
-  here("data/parquet/swfsc_ichthyo/metadata.json"),
-  here("data/parquet/calcofi_bottle/metadata.json"),
-  here("data/parquet/calcofi_ctd-cast/metadata.json"),
-  here("data/parquet/calcofi_dic/metadata.json")
-)
-meta_paths <- meta_paths[file.exists(meta_paths)]
+# build and upload metadata.json (table/column descriptions + units).
+# auto-discover every ingest's metadata.json (same as rels_paths) so newly added
+# datasets' tables/columns are merged in — not just a hardcoded set.
+meta_paths <- Sys.glob(here("data/parquet/*/metadata.json"))
 
 meta_json_path <- file.path(dir_frozen, "metadata.json")
 if (length(meta_paths) > 0) {
