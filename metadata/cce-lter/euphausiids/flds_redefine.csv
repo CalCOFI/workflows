@@ -1,0 +1,13 @@
+tbl_old,tbl_new,fld_old,fld_new,type_old,type_new,order_old,order_new,fld_description,units,notes,mutation
+data,euphausiids_tow,RowNumber,tow_id,numeric,INTEGER,1,1,Source row identifier; primary key (one row = one euphausiid tow).,,stable source counter used as PK,
+data,euphausiids_tow,Cruise,cruise_orig,character,VARCHAR,2,2,"Original cruise label as provided (e.g. 'CALCOFI 5511B', 'CALCOFI 1504'); cruise_key is derived from this with ship + date.",,mixed formats — see questions,
+data,euphausiids_tow,Ship,ship_name,character,VARCHAR,3,3,Vessel name as provided; resolved to ship_key against the NODC ship registry.,,"needs normalization: case, 'R/V ' prefix, double spaces — see questions",
+data,euphausiids_tow,Date,date,Date,DATE,4,4,Tow date (redundant with datetime_utc from TowBegin; retained for QA).,,,
+data,euphausiids_tow,Line,line,character,DOUBLE,5,5,Alongshore component of the CalCOFI coordinate system.,,source stored as text,TRY_CAST(Line AS DOUBLE)
+data,euphausiids_tow,Station,station,character,DOUBLE,6,6,Offshore component of the CalCOFI coordinate system.,,source stored as text,TRY_CAST(Station AS DOUBLE)
+data,euphausiids_tow,Region,region,character,VARCHAR,7,7,Region label; constant 'All Regions' in this extract.,,single-valued — candidate to drop,
+data,euphausiids_tow,TowBegin,datetime_start_utc,character,TIMESTAMP,8,8,Tow start date-time (UTC); canonical event timestamp.,,UTC vs local unconfirmed — see questions,CAST(TowBegin AS TIMESTAMP)
+data,euphausiids_tow,TowEnd,datetime_end_utc,timestamp,TIMESTAMP,9,9,Tow end date-time (UTC).,,"one row has year 2371 (typo), nulled at ingest — see questions",
+data,euphausiids_tow,Latitude,latitude,numeric,DOUBLE,10,10,"Latitude in decimal degrees, WGS84 (EPSG:4326).",decimal_degrees,one garbage value (lat 87.25) — see questions,
+data,euphausiids_tow,Longitude,longitude,numeric,DOUBLE,11,11,"Longitude in decimal degrees, WGS84 (EPSG:4326).",decimal_degrees,"~15 rows positive (sign error), should be negative — see questions",
+data,euphausiids_tow,Abundance,abundance,numeric,DOUBLE,12,12,Euphausiid abundance (units TBD — see questions); pivoted into euphausiids_measurement as measurement_type 'euphausiid_abundance'.,,raw measurement; pivoted to long format,
