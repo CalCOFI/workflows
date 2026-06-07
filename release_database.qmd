@@ -150,9 +150,8 @@ for (key in names(ingest_yaml)) {
   }
 }
 
-# one color per dataset (from calcofi.erd.color); fold invert into ichthyo hue
+# one color per dataset (from calcofi.erd.color)
 dataset_colors <- lapply(ingest_yaml, function(cc) cc$erd$color)
-dataset_colors[["swfsc_invert"]] <- dataset_colors[["swfsc_ichthyo"]]
 
 # release-level config: cross-dataset FKs + neutral overrides for common tables
 rel_cfg           <- read_calcofi_meta(here("release_database.qmd"))
