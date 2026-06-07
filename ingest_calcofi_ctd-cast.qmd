@@ -281,6 +281,49 @@ d_zips |>
   )
 ```
 
+## Prime Downloads from GCS Source (optional)
+
+The authoritative source for the CTD `.zip` files is the organization Shared Drive
+("CalCOFI Data Folder"), mirrored to
+`gs://calcofi-files-public/_sync/calcofi/ctd-cast/download/` by
+`scripts/sync_gdrive_to_gcs.sh`. If that source exposes zips, copy them into
+`dir_dl` so the next chunk simply unzips them rather than re-scraping calcofi.org.
+This is a no-op (falls back to calcofi.org) until the GCS source is populated; set
+`CTD_ZIP_SOURCE=""` to disable, or override it to point elsewhere.
+
+```{r}
+#| label: prime_zips_from_gcs
+
+# authoritative zip source (gdrive→gcs); empty string disables priming
+ctd_zip_source <- Sys.getenv(
+  "CTD_ZIP_SOURCE",
+  "gcs-calcofi:calcofi-files-public/_sync/calcofi/ctd-cast/download")
+
+prime_zips_from_gcs <- function(src, dest_dir) {
+  # skip if disabled or rclone unavailable
+  if (src == "" || Sys.which("rclone") == "")
+    return(invisible(0L))
+  # only act if the source actually exposes zips (else fall back to scraping)
+  n_src <- tryCatch(
+    length(system2(
+      "rclone", c("lsf", src, "--include", "*.zip", "--max-depth", "1"),
+      stdout = TRUE, stderr = FALSE)),
+    error = function(e) 0L)
+  if (n_src == 0) {
+    message(glue("No zips at {src} — skipping GCS prime (will use calcofi.org)"))
+    return(invisible(0L))
+  }
+  message(glue("Priming {n_src} zip(s) from {src} → {dest_dir}"))
+  system2("rclone", c(
+    "copy", src, dest_dir,
+    "--include", "*.zip", "--max-depth", "1",
+    "--transfers", "8", "--checkers", "16"))
+  invisible(n_src)
+}
+
+prime_zips_from_gcs(ctd_zip_source, dir_dl)
+```
+
 ## Download and Unzip Files
 
 ```{r}
