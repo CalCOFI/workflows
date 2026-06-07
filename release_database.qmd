@@ -6,6 +6,25 @@ calcofi:
   dependency:
     - auto
   output: data/releases
+  # cross-dataset foreign keys (relationships spanning ingests). intra-dataset
+  # FKs live in each ingest's *_rels / relationships.json.
+  cross_fks:
+    - {table: casts,      column: cruise_key, ref_table: cruise, ref_column: cruise_key}
+    - {table: casts,      column: ship_key,   ref_table: ship,   ref_column: ship_key}
+    - {table: casts,      column: grid_key,   ref_table: grid,   ref_column: grid_key}
+    - {table: ctd_cast,   column: cruise_key, ref_table: cruise, ref_column: cruise_key}
+    - {table: ctd_cast,   column: ship_key,   ref_table: ship,   ref_column: ship_key}
+    - {table: ctd_cast,   column: grid_key,   ref_table: grid,   ref_column: grid_key}
+    - {table: dic_sample, column: cast_id,    ref_table: casts,  ref_column: cast_id}
+    - {table: dic_sample, column: bottle_id,  ref_table: bottle, ref_column: bottle_id}
+  # ERD color overrides for common/cross-cutting tables (neutral). dataset
+  # colors themselves come from each ingest's calcofi.erd.color.
+  erd_overrides:
+    dataset:          "#e8e8e8"
+    measurement_type: "#e8e8e8"
+    cruise_summary:   "#e8e8e8"
+    _spatial:         "#cfe8ea"
+    _spatial_attr:    "#cfe8ea"
 execute:
   echo: true
   message: true
@@ -113,6 +132,39 @@ reg_canon <- registry |>
 message(glue(
   "{nrow(reg_canon)} canonical tables from ",
   "{length(unique(reg_canon$ingest))} ingests"))
+
+# --- authoritative dataset metadata + ERD coloring from ingest YAML ----
+# table -> provider_dataset(s) owned, from each ingest's calcofi.tables_owned
+ingest_yaml   <- read_ingest_yaml(here())
+table_dataset <- list()
+add_owner <- function(tbl, pd) {
+  if (is.null(tbl)) return(invisible())
+  table_dataset[[tbl]] <<- unique(c(table_dataset[[tbl]], pd))
+}
+for (key in names(ingest_yaml)) {
+  cc <- ingest_yaml[[key]]
+  for (e in cc$tables_owned %||% list()) add_owner(e$table, key)
+  for (ad in cc$additional_datasets %||% list()) {
+    pd2 <- paste0(ad$provider, "_", ad$dataset)
+    for (e in ad$tables_owned %||% list()) add_owner(e$table, pd2)
+  }
+}
+
+# one color per dataset (from calcofi.erd.color); fold invert into ichthyo hue
+dataset_colors <- lapply(ingest_yaml, function(cc) cc$erd$color)
+dataset_colors[["swfsc_invert"]] <- dataset_colors[["swfsc_ichthyo"]]
+
+# release-level config: cross-dataset FKs + neutral overrides for common tables
+rel_cfg           <- read_calcofi_meta(here("release_database.qmd"))
+cross_fks         <- rel_cfg$cross_fks
+release_overrides <- rel_cfg$erd_overrides
+
+# stroke-based color map consumed by every cc_erd() call below
+color_map <- cc_erd_color_map(
+  table_dataset  = table_dataset,
+  dataset_colors = dataset_colors,
+  overrides      = release_overrides,
+  neutral        = "#dcdcdc")
 
 # create VIEWs on local parquet for each canonical table
 # _new delta tables handled separately for merging
@@ -409,24 +461,7 @@ dir.create(dir_frozen, recursive = TRUE, showWarnings = FALSE)
 erd <- cc_erd(con_wdl, layout = "elk")
 plot(erd)
 
-erd <- cc_erd(
-  con_wdl,
-  colors = list(
-    lightblue = c("cruise", "ship", "site", "tow", "net"),
-    lightyellow = c("ichthyo", "species", "lookup", "taxon", "taxa_rank"),
-    lightgreen = c("grid", "segment"),
-    pink = c(
-      "casts",
-      "bottle",
-      "bottle_measurement",
-      "cast_condition",
-      "measurement_type"
-    ),
-    lavender = c("ctd_cast", "ctd_measurement", "ctd_thin", "ctd_summary"),
-    lightsalmon = c("dic_sample", "dic_measurement", "dic_summary"),
-    white = c("dataset")
-  )
-)
+erd <- cc_erd(con_wdl, colors = color_map)
 plot(erd)
 
 ```
@@ -457,16 +492,9 @@ rels_merged_path <- file.path(dir_frozen, "relationships.json")
 if (length(rels_paths) > 0) {
   merge_relationships_json(rels_paths, rels_merged_path)
 
-  # add cross-dataset FKs (bottle casts → ichthyo cruise/ship/grid)
+  # append cross-dataset FKs declared in this notebook's calcofi.cross_fks YAML
   rels_merged <- jsonlite::fromJSON(
     rels_merged_path, simplifyVector = FALSE)
-  cross_fks <- list(
-    list(table = "casts", column = "cruise_key",
-         ref_table = "cruise", ref_column = "cruise_key"),
-    list(table = "casts", column = "ship_key",
-         ref_table = "ship", ref_column = "ship_key"),
-    list(table = "casts", column = "grid_key",
-         ref_table = "grid", ref_column = "grid_key"))
   rels_merged$foreign_keys <- c(
     rels_merged$foreign_keys, cross_fks)
   jsonlite::write_json(
@@ -474,24 +502,12 @@ if (length(rels_paths) > 0) {
     auto_unbox = TRUE, pretty = TRUE, null = "null")
 }
 
-# render color-coded ERD (cc_erd handles GEOMETRY columns natively)
+# render dataset-colored ERD (stroke outlines; cc_erd handles GEOMETRY natively)
 cc_erd(
   con_wdl,
-  tables   = schema_tbls,
+  tables    = schema_tbls,
   rels_path = rels_merged_path,
-  colors = list(
-    lightblue   = c("cruise", "ship", "site", "tow", "net"),
-    lightyellow = c("ichthyo", "species", "lookup",
-                    "taxon", "taxa_rank"),
-    lightgreen  = c("grid", "segment"),
-    pink        = c("casts", "bottle", "bottle_measurement",
-                    "cast_condition", "measurement_type"),
-    lavender    = c("ctd_cast", "ctd_measurement", "ctd_thin",
-                    "ctd_summary"),
-    lightsalmon = c("dic_sample", "dic_measurement",
-                    "dic_summary"),
-    lightcyan   = c("_spatial", "_spatial_attr"),
-    white       = "dataset"))
+  colors    = color_map)
 ```
 
 ## Create Frozen Release
@@ -734,7 +750,8 @@ if (length(meta_paths) > 0) {
     release_tables_csv   = here("metadata/release_tables.csv"),
     release_columns_csv  = here("metadata/release_columns.csv"),
     measurement_type_csv = here("metadata/measurement_type.csv"),
-    dataset_csv          = here("metadata/dataset.csv"))
+    ingest_yaml          = ingest_yaml,
+    table_rows           = setNames(freeze_stats$rows, freeze_stats$table))
 
   # enrich columns with data_type from the working DuckDB (so the schema
   # site can render types without spinning up DuckDB-WASM)
@@ -766,6 +783,7 @@ if (length(meta_paths) > 0) {
     erd <- cc_erd(
       con       = con_wdl,
       rels_path = rels_for_erd,
+      colors    = color_map,
       view_type = "all")
     erd_path <- file.path(dir_frozen, "erd.mmd")
     writeLines(unclass(erd), erd_path)

@@ -5,6 +5,50 @@ calcofi:
   workflow_type: ingest
   dependency: []
   output: data/parquet/swfsc_ichthyo/manifest.json
+  provider: swfsc
+  dataset: ichthyo
+  workflow_url: https://calcofi.io/workflows/ingest_swfsc_ichthyo.html
+  dataset_meta:
+    dataset_name: SWFSC Ichthyoplankton
+    description: >
+      Ichthyoplankton (fish eggs and larvae) collected by bongo and manta net
+      tows on CalCOFI cruises, processed by SWFSC.
+    citation_main: "NOAA Fisheries SWFSC. CalCOFI Ichthyoplankton Database."
+    link_calcofi_org: https://calcofi.org/data/biology/ichthyoplankton/
+    coverage_temporal: 1951 to present
+    coverage_spatial: "23-51°N, -170 to -117°W"
+  tables_owned:
+    - {table: cruise}
+    - {table: ship, shared: true, note: "ship registry; also modified by bottle/ctd ingests"}
+    - {table: site}
+    - {table: tow}
+    - {table: net}
+    - {table: ichthyo}
+    - {table: species}
+    - {table: taxon}
+    - {table: taxa_rank}
+    - {table: lookup}
+    - {table: grid, shared: true, note: "spatial grid referenced across datasets"}
+    - {table: segment}
+  erd:
+    color: "#cdebc6"
+  # swfsc invertebrate counts are folded into this ingest (see Invert section)
+  additional_datasets:
+    - provider: swfsc
+      dataset: invert
+      dataset_name: SWFSC Invertebrates
+      description: >
+        Invertebrate (primarily squid) counts and sizes captured in CalCOFI
+        ichthyoplankton nets, processed by SWFSC.
+      citation_main: "NOAA Fisheries SWFSC. CalCOFI Invertebrate Database."
+      link_calcofi_org: https://calcofi.org/data/biology/invertebrates/
+      link_others:
+        - https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFIinvcnt.html
+        - https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFIinvsiz.html
+      coverage_temporal: 1978 to 2023
+      coverage_spatial: "0-51°N, -180 to -78°W"
+      tables_owned:
+        - {table: invert}
 ---
 
 ## Overview
@@ -90,9 +134,12 @@ options(DT.options = list(scrollX = TRUE))
 source(here("libs/ingest.R"))
 
 # define paths
-dataset_name <- "NOAA CalCOFI Ichthyoplankton Database"
-provider <- "swfsc"
-dataset <- "ichthyo"
+# provider/dataset/metadata read from this file's authoritative YAML block
+cc           <- read_calcofi_meta(here("ingest_swfsc_ichthyo.qmd"))
+provider     <- cc$provider
+dataset      <- cc$dataset
+dataset_name <- cc$dataset_meta$dataset_name
+tables_owned <- cc$tables_owned
 dir_label <- glue("{provider}_{dataset}")
 dir_parquet <- here(glue("data/parquet/{dir_label}"))
 db_path <- here(glue("data/wrangling/{dir_label}.duckdb"))
@@ -101,7 +148,12 @@ if (overwrite) {
   if (file_exists(db_path)) {
     file_delete(db_path)
   }
-  if (dir_exists(dir_parquet)) dir_delete(dir_parquet)
+  # clear stale WAL/tmp from an interrupted run (avoids "WAL checkpoint
+  # iteration does not match" errors when reopening)
+  if (file_exists(paste0(db_path, ".wal"))) file_delete(paste0(db_path, ".wal"))
+  if (dir_exists(paste0(db_path, ".tmp")))  dir_delete(paste0(db_path, ".tmp"))
+  # keep dir_parquet so write_parquet_outputs can content-hash dedup against
+  # the prior run (only changed partitions re-written/uploaded)
 }
 
 dir_create(dirname(db_path))
@@ -745,7 +797,9 @@ ichthyo_rels <- list(
     ichthyo = "ichthyo_uuid",
     lookup = "lookup_id",
     taxon = "taxonID",
-    taxa_rank = "taxonRank"
+    taxa_rank = "taxonRank",
+    grid = "grid_key",
+    segment = "segment_id"
   ),
   foreign_keys = list(
     list(
@@ -789,6 +843,30 @@ ichthyo_rels <- list(
       column = "taxonRank",
       ref_table = "taxa_rank",
       ref_column = "taxonRank"
+    ),
+    list(
+      table = "segment",
+      column = "cruise_key",
+      ref_table = "cruise",
+      ref_column = "cruise_key"
+    ),
+    list(
+      table = "segment",
+      column = "site_uuid_beg",
+      ref_table = "site",
+      ref_column = "site_uuid"
+    ),
+    list(
+      table = "invert",
+      column = "net_uuid",
+      ref_table = "net",
+      ref_column = "net_uuid"
+    ),
+    list(
+      table = "invert",
+      column = "species_id",
+      ref_table = "species",
+      ref_column = "species_id"
     )
   )
 )
@@ -1109,7 +1187,8 @@ message(glue("Total distance: {fmt(round(total_km))} km"))
 ```{r}
 #| label: load-dataset-metadata
 
-d_dataset <- read_csv(here("metadata/dataset.csv"))
+# dataset registry built from authoritative ingest_*.qmd YAML (was dataset.csv)
+d_dataset <- ingest_yaml_to_dataset_df(read_ingest_yaml(here()))
 dbWriteTable(con, "dataset", d_dataset, overwrite = TRUE)
 message(glue("dataset: {nrow(d_dataset)} datasets registered"))
 ```
@@ -1255,9 +1334,8 @@ metadata_path <- build_metadata_json(
   set_comments = TRUE,
   provider = provider,
   dataset = dataset,
-  workflow_url = glue(
-    "https://calcofi.io/workflows/ingest_swfsc_ichthyo.html"
-  )
+  workflow_url = cc$workflow_url,
+  tables_owned = tables_owned
 )
 
 # write relationships.json sidecar with PKs/FKs

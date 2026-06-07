@@ -8,6 +8,27 @@ calcofi:
   output: data/parquet/calcofi_bottle/manifest.json
   modifies:
     - ship
+  provider: calcofi
+  dataset: bottle
+  workflow_url: https://calcofi.io/workflows/ingest_calcofi_bottle.html
+  dataset_meta:
+    dataset_name: CalCOFI Bottle Database
+    description: >
+      Hydrographic bottle data including temperature, salinity, oxygen,
+      nutrients, pigments, and C14 from CalCOFI cruises.
+    citation_main: "CalCOFI. (2023). CalCOFI Bottle Database 194903-202105. CalCOFI.org."
+    link_calcofi_org: https://calcofi.org/data/oceanographic-data/bottle-database/
+    link_data_source: https://calcofi.org/downloads/database/CalCOFI_Database_194903-202105_csv_16October2023.zip
+    coverage_temporal: 1949-03 to 2021-05
+    coverage_spatial: "23-51°N, -170 to -117°W"
+  tables_owned:
+    - {table: casts}
+    - {table: bottle}
+    - {table: bottle_measurement}
+    - {table: cast_condition}
+    - {table: measurement_type, shared: true, note: "shared registry across bottle/ctd/dic"}
+  erd:
+    color: "#f5cad9"
 ---
 
 ## Overview
@@ -88,9 +109,12 @@ options(DT.options = list(scrollX = TRUE))
 # common ingest settings (overwrite, dir_data)
 source(here("libs/ingest.R"))
 
-dataset_name <- "CalCOFI Bottle Database"
-provider <- "calcofi"
-dataset <- "bottle"
+# provider/dataset/metadata read from this file's authoritative YAML block
+cc           <- read_calcofi_meta(here("ingest_calcofi_bottle.qmd"))
+provider     <- cc$provider
+dataset      <- cc$dataset
+dataset_name <- cc$dataset_meta$dataset_name
+tables_owned <- cc$tables_owned
 dir_label <- glue("{provider}_{dataset}")
 subdir <- "CalCOFI_Database_194903-202105_csv_16October2023"
 dir_parquet <- here(glue("data/parquet/{dir_label}"))
@@ -111,7 +135,12 @@ if (overwrite) {
   if (file_exists(db_path)) {
     file_delete(db_path)
   }
-  if (dir_exists(dir_parquet)) dir_delete(dir_parquet)
+  # clear stale WAL/tmp from an interrupted run (avoids "WAL checkpoint
+  # iteration does not match" errors when reopening)
+  if (file_exists(paste0(db_path, ".wal"))) file_delete(paste0(db_path, ".wal"))
+  if (dir_exists(paste0(db_path, ".tmp")))  dir_delete(paste0(db_path, ".tmp"))
+  # keep dir_parquet so write_parquet_outputs can content-hash dedup against
+  # the prior run (only changed partitions re-written/uploaded)
 }
 
 dir_create(dirname(db_path))
@@ -661,7 +690,8 @@ stopifnot(
 ```{r}
 #| label: load-dataset-metadata
 
-d_dataset <- read_csv(here("metadata/dataset.csv"))
+# dataset registry built from authoritative ingest_*.qmd YAML (was dataset.csv)
+d_dataset <- ingest_yaml_to_dataset_df(read_ingest_yaml(here()))
 dbWriteTable(con, "dataset", d_dataset, overwrite = TRUE)
 message(glue("dataset: {nrow(d_dataset)} datasets registered"))
 ```
@@ -1209,10 +1239,8 @@ metadata_path <- build_metadata_json(
   set_comments = TRUE,
   provider = provider,
   dataset = dataset,
-  workflow_url = glue(
-    "https://calcofi.io/workflows/",
-    "ingest_calcofi_bottle.html"
-  )
+  workflow_url = cc$workflow_url,
+  tables_owned = tables_owned
 )
 
 # write relationships.json sidecar with PKs/FKs

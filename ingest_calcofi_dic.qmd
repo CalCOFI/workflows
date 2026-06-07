@@ -6,6 +6,31 @@ calcofi:
   dependency:
     - ingest_calcofi_bottle
   output: data/parquet/calcofi_dic/manifest.json
+  provider: calcofi
+  dataset: dic
+  workflow_url: https://calcofi.io/workflows/ingest_calcofi_dic.html
+  dataset_meta:
+    dataset_name: CalCOFI DIC
+    description: >
+      Discrete profile dissolved inorganic carbon (DIC) and total alkalinity
+      (TA) from CalCOFI Niskin bottle samples, quality-controlled using WOCE
+      flagging.
+    citation_main: "Keeling, C.D.; Lueker, T.J.; Emanuele, G.; Dickson, A.G.; Martz, T.R.; Wolfe, W.H.; Mau, A. (2025). Discrete profile dissolved inorganic carbon, total alkalinity, water temperature and salinity measurements for CalCOFI (NCEI Accession 0301029). NOAA NCEI. https://doi.org/10.25921/3w9f-jd72"
+    link_calcofi_org: https://calcofi.org/data/oceanographic-data/dic/
+    link_data_source: https://www.ncei.noaa.gov/access/metadata/landing-page/bin/iso?id=gov.noaa.nodc:0301029
+    link_others:
+      - https://doi.org/10.25921/3w9f-jd72
+    coverage_temporal: 1983-03 to 2021-07
+    coverage_spatial: "28-37°N, -125 to -117°W"
+    license: CC BY 4.0
+    pi_names: Todd Martz; Aaron Mau
+  tables_owned:
+    - {table: dic_sample}
+    - {table: dic_measurement}
+    - {table: dic_summary}
+    - {table: measurement_type, shared: true, note: "shared registry across bottle/ctd/dic"}
+  erd:
+    color: "#ffd2bb"
 editor_options:
   chunk_output_type: console
 ---
@@ -106,18 +131,23 @@ options(DT.options = list(scrollX = TRUE))
 source(here("libs/ingest.R"))
 
 # define paths
-dataset_name <- "CalCOFI DIC"
-provider     <- "calcofi"
-dataset      <- "dic"
+# provider/dataset/metadata read from this file's authoritative YAML block
+cc           <- read_calcofi_meta(here("ingest_calcofi_dic.qmd"))
+provider     <- cc$provider
+dataset      <- cc$dataset
+dataset_name <- cc$dataset_meta$dataset_name
+tables_owned <- cc$tables_owned
 dir_label    <- glue("{provider}_{dataset}")
 
 dir_parquet <- here(glue("data/parquet/{dir_label}"))
 db_path     <- here(glue("data/wrangling/{dir_label}.duckdb"))
 
-# clean slate if overwrite
+# clean slate if overwrite (keep dir_parquet for content-hash dedup)
 if (overwrite) {
   if (file_exists(db_path))    file_delete(db_path)
-  if (dir_exists(dir_parquet)) dir_delete(dir_parquet)
+  # clear stale WAL/tmp from an interrupted run
+  if (file_exists(paste0(db_path, ".wal"))) file_delete(paste0(db_path, ".wal"))
+  if (dir_exists(paste0(db_path, ".tmp")))  dir_delete(paste0(db_path, ".tmp"))
 }
 
 dir_create(dirname(db_path))
@@ -470,7 +500,8 @@ dbGetQuery(
 ```{r}
 #| label: load-dataset-metadata
 
-d_dataset <- read_csv(here("metadata/dataset.csv"))
+# dataset registry built from authoritative ingest_*.qmd YAML (was dataset.csv)
+d_dataset <- ingest_yaml_to_dataset_df(read_ingest_yaml(here()))
 dbWriteTable(con, "dataset", d_dataset, overwrite = TRUE)
 cat(glue("dataset: {nrow(d_dataset)} datasets registered"), "\n")
 ```
@@ -689,10 +720,8 @@ metadata_path <- build_metadata_json(
   set_comments = TRUE,
   provider     = provider,
   dataset      = dataset,
-  workflow_url = glue(
-    "https://calcofi.io/workflows/",
-    "ingest_calcofi_dic.html"
-  )
+  workflow_url = cc$workflow_url,
+  tables_owned = tables_owned
 )
 ```
 
