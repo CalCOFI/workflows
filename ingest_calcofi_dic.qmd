@@ -215,7 +215,7 @@ d_clean <- d_raw |>
       ~ if_else(.x == -999, NA_real_, .x)),
 
     # build datetime from components
-    datetime_utc = make_datetime(
+    datetime_start_utc = make_datetime(
       Year_UTC, Month_UTC, Day_UTC,
       tz = "UTC"),
 
@@ -245,7 +245,7 @@ d_dic <- d_clean |>
   transmute(
     expocode     = EXPOCODE,
     ship_name    = Ship_Name,
-    datetime_utc = datetime_utc,
+    datetime_start_utc = datetime_start_utc,
     site_key      = site_key,
     latitude     = Latitude,
     longitude    = Longitude,
@@ -260,7 +260,7 @@ d_wide <- d_clean |>
   transmute(
     expocode     = EXPOCODE,
     site_key      = Station_ID,
-    datetime_utc = datetime_utc,
+    datetime_start_utc = datetime_start_utc,
     depth_m      = Depth,
     latitude     = Latitude,
     longitude    = Longitude,
@@ -279,7 +279,7 @@ dbWriteTable(con, "dic_wide", d_wide, overwrite = TRUE)
 ## Match to Existing Casts
 
 Load existing casts from bottle workflow parquet and match DIC samples
-to casts using `site_key` + `datetime_utc` (±3 day window).
+to casts using `site_key` + `datetime_start_utc` (±3 day window).
 
 ```{r}
 #| label: load-casts
@@ -309,35 +309,21 @@ cat(glue(
 ```{r}
 #| label: match-casts
 
-# match DIC samples to casts by site_key + date (±3 day window)
-# many dates are offset by 1 day between NCEI and calcofi.org
-dbExecute(con, "ALTER TABLE dic_sample ADD COLUMN IF NOT EXISTS cast_id INTEGER")
-dbExecute(
-  con,
-  "UPDATE dic_sample d
-   SET cast_id = (
-     SELECT c.cast_id
-     FROM casts c
-     WHERE c.site_key = d.site_key
-       AND ABS(c.datetime_utc::DATE - d.datetime_utc::DATE) <= 3
-     ORDER BY ABS(c.datetime_utc::DATE - d.datetime_utc::DATE)
-     LIMIT 1
-   )"
-)
+# match DIC samples to casts by site_key + datetime (±3 day window) via the
+# shared calcofi4db helper (resolves issue #47). many dates are offset by 1 day
+# between NCEI and calcofi.org, hence the window.
+m_cast <- match_by_site_datetime(
+  con, data_tbl = "dic_sample", ref_tbl = "casts",
+  fk_col = "cast_id", ref_pk = "cast_id",
+  key_col = "site_key", datetime_col = "datetime_start_utc", window_days = 3)
 
-n_matched <- dbGetQuery(con, "SELECT COUNT(*) FROM dic_sample WHERE cast_id IS NOT NULL")[[1]]
-n_total   <- dbGetQuery(con, "SELECT COUNT(*) FROM dic_sample")[[1]]
 cat(glue(
-  "Cast matching: {n_matched}/{n_total} DIC samples matched ",
-  "({round(100*n_matched/n_total, 1)}%)"), "\n")
+  "Cast matching: {m_cast$matched}/{m_cast$total} DIC samples matched ",
+  "({m_cast$pct}%)"), "\n")
 
 # show unmatched samples
-d_unmatched <- dbGetQuery(
-  con,
-  "SELECT DISTINCT site_key, datetime_utc::DATE AS date, ship_name, expocode
-   FROM dic_sample WHERE cast_id IS NULL ORDER BY datetime_utc")
-if (nrow(d_unmatched) > 0)
-  d_unmatched |> datatable(caption = "Unmatched DIC samples (no matching cast)")
+if (nrow(m_cast$unmatched) > 0)
+  m_cast$unmatched |> datatable(caption = "Unmatched DIC samples (no matching cast)")
 ```
 
 ## Match to Bottles
@@ -347,26 +333,16 @@ For matched casts, find the nearest bottle at the same depth.
 ```{r}
 #| label: match-bottles
 
-dbExecute(con, "ALTER TABLE dic_sample ADD COLUMN IF NOT EXISTS bottle_id INTEGER")
-dbExecute(
-  con,
-  "UPDATE dic_sample d
-   SET bottle_id = (
-     SELECT b.bottle_id
-     FROM bottle b
-     WHERE b.cast_id = d.cast_id
-       AND ABS(b.depth_m - d.depth_m) <= 1.0
-     ORDER BY ABS(b.depth_m - d.depth_m)
-     LIMIT 1
-   )
-   WHERE d.cast_id IS NOT NULL"
-)
+# for cast-matched samples, find the nearest bottle by depth via the shared
+# calcofi4db helper (scoped to the already-matched cast_id).
+m_btl <- match_nearest_by_depth(
+  con, data_tbl = "dic_sample", ref_tbl = "bottle",
+  fk_col = "bottle_id", ref_pk = "bottle_id",
+  parent_fk = "cast_id", axis_col = "depth_m", tolerance = 1.0)
 
-n_bottle_matched <- dbGetQuery(
-  con, "SELECT COUNT(*) FROM dic_sample WHERE bottle_id IS NOT NULL")[[1]]
 cat(glue(
-  "Bottle matching: {n_bottle_matched}/{n_matched} cast-matched samples ",
-  "({round(100*n_bottle_matched/n_matched, 1)}%)"), "\n")
+  "Bottle matching: {m_btl$matched}/{m_btl$eligible} cast-matched samples ",
+  "({m_btl$pct}%)"), "\n")
 
 # propagate FKs to dic_wide for pivoting
 dbExecute(con, "ALTER TABLE dic_wide ADD COLUMN IF NOT EXISTS cast_id INTEGER")
@@ -379,7 +355,7 @@ dbExecute(
    FROM dic_sample s
    WHERE w.expocode     = s.expocode
      AND w.site_key      = s.site_key
-     AND w.datetime_utc = s.datetime_utc
+     AND w.datetime_start_utc = s.datetime_start_utc
      AND w.depth_m IS NOT DISTINCT FROM s.depth_m"
 )
 ```
@@ -403,7 +379,7 @@ meas_map <- list(
 )
 
 sql_parts <- map_chr(meas_map, \(m) glue(
-  "SELECT expocode, site_key, datetime_utc, depth_m,
+  "SELECT expocode, site_key, datetime_start_utc, depth_m,
           latitude, longitude, cast_id, bottle_id,
           '{m$type}' AS measurement_type,
           CAST({m$col} AS DOUBLE) AS measurement_value,
@@ -417,7 +393,7 @@ sql_parts <- map_chr(meas_map, \(m) glue(
 dbExecute(con, glue(
   "CREATE OR REPLACE TABLE dic_measurement AS
    SELECT ROW_NUMBER() OVER (
-     ORDER BY site_key, datetime_utc, depth_m, measurement_type
+     ORDER BY site_key, datetime_start_utc, depth_m, measurement_type
    ) AS dic_measurement_id, *
    FROM ({paste(sql_parts, collapse = '\nUNION ALL\n')}) sub"
 ))
@@ -456,7 +432,7 @@ dbExecute(
   "CREATE OR REPLACE TABLE dic_summary AS
    SELECT
      site_key,
-     datetime_utc,
+     datetime_start_utc,
      depth_m,
      latitude,
      longitude,
@@ -472,7 +448,7 @@ dbExecute(
    FROM dic_measurement
    WHERE NOT isnan(measurement_value)
      AND isfinite(measurement_value)
-   GROUP BY site_key, datetime_utc, depth_m,
+   GROUP BY site_key, datetime_start_utc, depth_m,
             latitude, longitude, measurement_type"
 )
 
@@ -554,9 +530,9 @@ dbWriteTable(con, "measurement_type", d_meas_type, overwrite = TRUE)
 n_dup_sample <- dbGetQuery(
   con,
   "SELECT COUNT(*) FROM (
-     SELECT expocode, site_key, depth_m, datetime_utc, COUNT(*) AS n
+     SELECT expocode, site_key, depth_m, datetime_start_utc, COUNT(*) AS n
      FROM dic_sample
-     GROUP BY expocode, site_key, depth_m, datetime_utc
+     GROUP BY expocode, site_key, depth_m, datetime_start_utc
      HAVING COUNT(*) > 1)")[[1]]
 cat(glue("dic_sample composite key duplicates: {n_dup_sample}"), "\n")
 
@@ -564,9 +540,9 @@ cat(glue("dic_sample composite key duplicates: {n_dup_sample}"), "\n")
 n_dup_summ <- dbGetQuery(
   con,
   "SELECT COUNT(*) FROM (
-     SELECT site_key, datetime_utc, depth_m, measurement_type, COUNT(*) AS n
+     SELECT site_key, datetime_start_utc, depth_m, measurement_type, COUNT(*) AS n
      FROM dic_summary
-     GROUP BY site_key, datetime_utc, depth_m, measurement_type
+     GROUP BY site_key, datetime_start_utc, depth_m, measurement_type
      HAVING COUNT(*) > 1)")[[1]]
 cat(glue("dic_summary composite key duplicates: {n_dup_summ}"), "\n")
 ```
@@ -577,10 +553,10 @@ cat(glue("dic_summary composite key duplicates: {n_dup_summ}"), "\n")
 
 ```
 dic_sample (position/time)
-  ↓ (site_key + datetime_utc + depth_m)
+  ↓ (site_key + datetime_start_utc + depth_m)
 dic_measurement (one row per measurement)
   dic_measurement.measurement_type (FK) → measurement_type.measurement_type
-  ↓ (site_key + datetime_utc + depth_m + measurement_type)
+  ↓ (site_key + datetime_start_utc + depth_m + measurement_type)
 dic_summary (avg/stddev per position)
   dic_summary.measurement_type (FK) → measurement_type.measurement_type
 ```

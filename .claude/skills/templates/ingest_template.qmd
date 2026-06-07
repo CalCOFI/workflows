@@ -1,5 +1,10 @@
 ---
 title: "Ingest {{dataset_name}}"
+calcofi:
+  # follow-up questions for the data provider live here and render in the
+  # "Questions for Data Providers" section below; questions_email.qmd aggregates
+  # them per provider from metadata/{provider}/{dataset}/questions.csv
+  questions_file: metadata/{{provider}}/{{dataset}}/questions.csv
 editor_options:
   chunk_output_type: console
 ---
@@ -222,8 +227,22 @@ load_prior_tables(
 ```{r}
 #| label: TODO-cross-dataset
 
-# TODO: match this dataset's records to existing cruises/casts
-# derive_cruise_key_on_casts(con, ship_renames_csv = here("metadata/..."))
+# TODO: match this dataset's records to existing cruises/casts.
+#
+# (a) records that carry ship + datetime -> derive cruise_key:
+# derive_cruise_key_on_casts(con, ship_renames_csv = here("metadata/ship_renames.csv"))
+#
+# (b) records lacking a cast_id/cruise FK -> match by site_key + datetime window,
+#     then to the nearest bottle by depth (resolves issue #47; see ingest_calcofi_dic.qmd):
+# match_by_site_datetime(
+#   con, data_tbl = "{{dataset}}_sample", ref_tbl = "casts",
+#   fk_col = "cast_id", ref_pk = "cast_id",
+#   key_col = "site_key", datetime_col = "datetime_start_utc", window_days = 3)
+# match_nearest_by_depth(
+#   con, data_tbl = "{{dataset}}_sample", ref_tbl = "bottle",
+#   fk_col = "bottle_id", ref_pk = "bottle_id", parent_fk = "cast_id",
+#   axis_col = "depth_m", tolerance = 1.0)
+# both return matched/unmatched counts — report the match rate for validation.
 ```
 <!-- {{cross_dataset_section_end}} -->
 
@@ -281,8 +300,11 @@ build_relationships_json(
 ```{r}
 #| label: TODO-spatial
 
-# TODO: add geometry column from lat/lon (adjust table and column names)
-# add_point_geom(con, "{{spatial_table}}", lon_col = "lon_dec", lat_col = "lat_dec")
+# TODO: add geometry column from canonical lat/lon, then assign the CalCOFI grid
+# cell. Use canonical names from metadata/field_dictionary.csv (latitude/longitude,
+# NOT lat_dec/lon_dec). For datasets with coordinates but no site_key, this also
+# provides the grid_key join path (no station+date match needed).
+# add_point_geom(con, "{{spatial_table}}", lon_col = "longitude", lat_col = "latitude")
 # assign_grid_key(con, "{{spatial_table}}")
 ```
 
@@ -299,6 +321,31 @@ before running.
 d_dataset <- read_csv(here("metadata/dataset.csv"))
 dbWriteTable(con, "dataset", d_dataset, overwrite = TRUE)
 cat(glue("dataset: {nrow(d_dataset)} datasets registered"), "\n")
+```
+
+## Questions for Data Providers
+
+Open and resolved follow-up questions for the provider, tracked in
+`metadata/{provider}/{dataset}/questions.csv`. Seed new questions during
+`/explore-dataset` and `/generate-metadata`; `questions_email.qmd` aggregates
+open ones into a draft email per provider. A `blocker` question still `open`
+fails `/validate-ingest --strict`.
+
+```{r}
+#| label: provider-questions
+
+q_path <- here(glue("metadata/{provider}/{dataset}/questions.csv"))
+if (file.exists(q_path)) {
+  read_csv(q_path) |>
+    arrange(
+      factor(status,   c("blocker", "open", "asked", "answered", "wontfix")),
+      factor(priority, c("blocker", "high", "normal"))) |>
+    datatable(
+      caption = "Follow-up questions for the data provider",
+      options = list(dom = "tp", pageLength = 10))
+} else {
+  cat("No questions.csv yet — run /explore-dataset to seed one.\n")
+}
 ```
 
 ## Validate

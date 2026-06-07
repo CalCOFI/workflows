@@ -6,17 +6,9 @@ calcofi:
   dependency:
     - auto
   output: data/releases
-  # cross-dataset foreign keys (relationships spanning ingests). intra-dataset
-  # FKs live in each ingest's *_rels / relationships.json.
-  cross_fks:
-    - {table: casts,      column: cruise_key, ref_table: cruise, ref_column: cruise_key}
-    - {table: casts,      column: ship_key,   ref_table: ship,   ref_column: ship_key}
-    - {table: casts,      column: grid_key,   ref_table: grid,   ref_column: grid_key}
-    - {table: ctd_cast,   column: cruise_key, ref_table: cruise, ref_column: cruise_key}
-    - {table: ctd_cast,   column: ship_key,   ref_table: ship,   ref_column: ship_key}
-    - {table: ctd_cast,   column: grid_key,   ref_table: grid,   ref_column: grid_key}
-    - {table: dic_sample, column: cast_id,    ref_table: casts,  ref_column: cast_id}
-    - {table: dic_sample, column: bottle_id,  ref_table: bottle, ref_column: bottle_id}
+  # cross-dataset foreign keys (relationships spanning ingests) are authored in
+  # metadata/relationships_cross.csv; intra-dataset FKs live in each ingest's
+  # relationships.json. both are merged below into the release relationships.json.
   # ERD color overrides for common/cross-cutting tables (neutral). dataset
   # colors themselves come from each ingest's calcofi.erd.color.
   erd_overrides:
@@ -153,10 +145,16 @@ for (key in names(ingest_yaml)) {
 # one color per dataset (from calcofi.erd.color)
 dataset_colors <- lapply(ingest_yaml, function(cc) cc$erd$color)
 
-# release-level config: cross-dataset FKs + neutral overrides for common tables
+# release-level config: neutral ERD overrides for common tables
 rel_cfg           <- read_calcofi_meta(here("release_database.qmd"))
-cross_fks         <- rel_cfg$cross_fks
 release_overrides <- rel_cfg$erd_overrides
+
+# cross-dataset foreign keys (relationships spanning ingests) are authored in a
+# reviewable CSV; intra-dataset FKs live in each ingest's relationships.json.
+cross_fks_df <- readr::read_csv(
+  here("metadata/relationships_cross.csv"), show_col_types = FALSE)
+cross_fks <- lapply(seq_len(nrow(cross_fks_df)), function(i)
+  as.list(cross_fks_df[i, c("table", "column", "ref_table", "ref_column")]))
 
 # stroke-based color map consumed by every cc_erd() call below
 color_map <- cc_erd_color_map(
@@ -475,14 +473,10 @@ schema_tbls <- setdiff(
   tbls,
   c("_meta", "_sp_update", "casts_derived", "ctd_cast_derived"))
 
-# merge per-dataset relationships.json files
-rels_paths <- c(
-  here("data/parquet/swfsc_ichthyo/relationships.json"),
-  here("data/parquet/calcofi_bottle/relationships.json"),
-  here("data/parquet/calcofi_ctd-cast/relationships.json"),
-  here("data/parquet/calcofi_dic/relationships.json")
-)
-rels_paths <- rels_paths[file.exists(rels_paths)]
+# merge per-dataset relationships.json files (auto-discovered — every ingest
+# writes data/parquet/{provider}_{dataset}/relationships.json, so new datasets
+# are picked up without editing this list)
+rels_paths <- Sys.glob(here("data/parquet/*/relationships.json"))
 
 dir_frozen <- here(glue("data/releases/{release_version}"))
 dir.create(dir_frozen, recursive = TRUE, showWarnings = FALSE)
@@ -491,7 +485,7 @@ rels_merged_path <- file.path(dir_frozen, "relationships.json")
 if (length(rels_paths) > 0) {
   merge_relationships_json(rels_paths, rels_merged_path)
 
-  # append cross-dataset FKs declared in this notebook's calcofi.cross_fks YAML
+  # append cross-dataset FKs authored in metadata/relationships_cross.csv
   rels_merged <- jsonlite::fromJSON(
     rels_merged_path, simplifyVector = FALSE)
   rels_merged$foreign_keys <- c(
@@ -499,6 +493,36 @@ if (length(rels_paths) > 0) {
   jsonlite::write_json(
     rels_merged, rels_merged_path,
     auto_unbox = TRUE, pretty = TRUE, null = "null")
+
+  # emit a flat, reviewable view of every relationship (intra + cross) alongside
+  # relationships.json / erd.mmd, so the cross-dataset graph is legible as a table
+  g <- function(x, k) { v <- x[[k]]; if (is.null(v)) NA_character_ else as.character(v) }
+  fk_df <- do.call(rbind, lapply(rels_merged$foreign_keys, function(fk)
+    data.frame(
+      from_table  = g(fk, "table"),     from_column = g(fk, "column"),
+      to_table    = g(fk, "ref_table"), to_column   = g(fk, "ref_column"),
+      stringsAsFactors = FALSE)))
+  cross_keys <- paste(cross_fks_df$table, cross_fks_df$column,
+                      cross_fks_df$ref_table, cross_fks_df$ref_column)
+  fk_df$scope <- ifelse(
+    paste(fk_df$from_table, fk_df$from_column,
+          fk_df$to_table, fk_df$to_column) %in% cross_keys, "cross", "intra")
+  readr::write_csv(fk_df, file.path(dir_frozen, "relationships_all.csv"))
+
+  # validate: every cross-FK target column exists in the assembled release schema
+  schema_cols <- unlist(lapply(schema_tbls, function(t)
+    paste(t, DBI::dbListFields(con_wdl, t))))
+  cross_targets   <- paste(cross_fks_df$ref_table, cross_fks_df$ref_column)
+  missing_targets <- cross_fks_df[!(cross_targets %in% schema_cols), , drop = FALSE]
+  if (nrow(missing_targets) > 0) {
+    warning(glue(
+      "cross-FK target(s) missing from release schema: ",
+      "{paste(missing_targets$ref_table, missing_targets$ref_column, collapse = ', ')}"))
+  } else {
+    message(glue(
+      "cross-FK check: all {nrow(cross_fks_df)} cross-dataset targets present; ",
+      "wrote {nrow(fk_df)} relationships to relationships_all.csv"))
+  }
 }
 
 # render dataset-colored ERD (stroke outlines; cc_erd handles GEOMETRY natively)

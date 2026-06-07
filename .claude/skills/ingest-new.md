@@ -81,7 +81,9 @@ ingest_{provider}_{dataset}.qmd
 The notebook includes these sections (customize based on pattern):
 
 #### Universal sections (always included):
-1. **YAML frontmatter** — title, calcofi target metadata, editor options
+1. **YAML frontmatter** — title, calcofi target metadata (including
+   `calcofi.questions_file: metadata/{provider}/{dataset}/questions.csv`),
+   editor options
 2. **Overview** — Dataset description, source, Mermaid data flow diagram
 3. **Setup** — Libraries, paths, DuckDB initialization, `overwrite <- FALSE`
 4. **Read source data** — `read_csv_files(sync_archive = TRUE)` archives
@@ -107,6 +109,10 @@ The notebook includes these sections (customize based on pattern):
 16. **Upload to GCS** — `sync_to_gcs()` for parquet outputs
 17. **Cleanup** — `close_duckdb(con)`
 
+Also keep the template's **Questions for Data Providers** section (renders
+`metadata/{provider}/{dataset}/questions.csv` as a `datatable()`, placed after
+"Load Dataset Metadata", before "Validate"). Every ingest workflow carries it.
+
 #### Conditional sections:
 - **Cross-dataset loading** — `load_prior_tables()` (if depends on prior ingest)
 - **Primary key setup** — `assign_deterministic_uuids()` or `assign_sequential_ids()`
@@ -118,10 +124,12 @@ The notebook includes these sections (customize based on pattern):
   observations. See `ctd_summary` in `ingest_calcofi_ctd-cast.qmd` and
   `dic_summary` in `ingest_calcofi_dic.qmd` for examples.
 - **Taxonomy** — `standardize_species_local()`, `build_taxon_hierarchy()` (if `--has-taxonomy`)
-- **Spatial** — `add_point_geom()`, `assign_grid_key()` (if has lat/lon).
-  For datasets without direct cast_id/bottle_id FKs, match via station +
-  date window (±3 days) or lat/lon spatial join. See issue #47 for the
-  site/grid/segment matching roadmap.
+- **Spatial** — `add_point_geom()`, `assign_grid_key()` (if has lat/lon; use
+  canonical `latitude`/`longitude` per `metadata/field_dictionary.csv`).
+  For datasets without direct cast_id/bottle_id FKs, match to existing
+  casts/bottles with the calcofi4db helpers `match_by_site_datetime()`
+  (site_key + datetime window) and `match_nearest_by_depth()` (nearest bottle
+  by depth) — do NOT re-implement the SQL inline. These resolve issue #47.
 - **Lookup tables** — `create_lookup_table()` (if categorical vocabularies exist)
 - **Ship/cruise matching** — `derive_cruise_key_on_casts()` (if cross-dataset bridge needed)
 
@@ -178,25 +186,16 @@ dbWriteTable(con, "dataset", d_dataset, overwrite = TRUE)
 landing page for the dataset (from `link_calcofi_org` in `dataset.csv`)
 to check for updated data, new download links, or changed metadata.
 
-**c. Update `release_database.qmd`** — Add the new dataset's parquet
-directory and relationships.json path to the release workflow:
-
-```r
-# in release_database.qmd, add to parquet_dirs:
-parquet_dirs <- c(
-  ...,
-  here("data/parquet/{provider}_{dataset}")
-)
-
-# and to rels_paths:
-rels_paths <- c(
-  ...,
-  here("data/parquet/{provider}_{dataset}/relationships.json")
-)
-```
-
-Also add the dataset's tables to the color grouping section and update
-the release notes data sources list.
+**c. Update `release_database.qmd`** — `release_database.qmd` auto-discovers
+every `data/parquet/*/relationships.json` and `data/parquet/*` output via
+`Sys.glob()`, so you do NOT need to hand-edit `parquet_dirs`/`rels_paths` for a
+new dataset. Two things still need attention:
+- If the dataset introduces a **cross-dataset** foreign key (a FK whose target
+  lives in another ingest, e.g. `{dataset}_sample.cast_id → casts.cast_id`),
+  add a row to `metadata/relationships_cross.csv`. Intra-dataset FKs stay in
+  the ingest's own `relationships.json` and are picked up automatically.
+- Optionally add the dataset's tables to the ERD color grouping and the release
+  notes data-sources list.
 
 ### 7. Provider naming convention
 
