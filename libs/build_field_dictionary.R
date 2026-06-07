@@ -1,0 +1,199 @@
+# build_field_dictionary.R
+# one-off authoring script for metadata/field_dictionary.csv — the canonical,
+# prescriptive cross-dataset field registry. structural fields only; raw
+# pre-pivot measurement columns live in metadata/measurement_type.csv.
+# re-runnable: regenerates the CSV from the tibble below.
+
+suppressMessages({library(readr); library(tibble); library(here)})
+
+fd <- tribble(
+  ~fld_new, ~type_new, ~units, ~category, ~fld_description, ~aliases, ~measurement_type, ~is_identifier, ~notes,
+
+  # -- identifiers: cruise / ship ------------------------------------------------
+  "cruise_key", "VARCHAR", "", "identifier",
+  "Natural cruise key in YYYY-MM-NODC form (e.g. 1998-02-33JD); primary key of cruise.",
+  "cruise;Cruise;cruise_id;CruiseID;cruise_key_0", "", TRUE,
+  "public cross-dataset join key; derive via derive_cruise_key_on_casts().",
+
+  "cruise_uuid", "UUID", "", "identifier",
+  "Stable UUID for a cruise (SWFSC source tables).",
+  "cruise_id", "", TRUE,
+  "internal to swfsc source; cruise_key is the public join key.",
+
+  "ship_key", "VARCHAR", "", "identifier",
+  "NODC ship code key; primary key of ship.",
+  "shipcode", "", TRUE, "",
+
+  "ship_nodc", "VARCHAR", "", "identifier",
+  "NODC ship code.",
+  "shipnodc", "", TRUE, "",
+
+  "ship_code", "VARCHAR", "", "identifier",
+  "Source ship code as provided by the data provider; resolve to ship_key.",
+  "Ship_Code", "", TRUE, "",
+
+  "ship_name", "VARCHAR", "", "descriptive",
+  "Ship name as resolved against the NODC ship registry.",
+  "shipname;Ship_Name;ship", "", FALSE, "",
+
+  # -- identifiers: site / spatial keys -----------------------------------------
+  "site_key", "VARCHAR", "", "identifier",
+  "CalCOFI station key in 'line station' form (e.g. '090.0 062.0'); canonical spatial join key.",
+  "Sta_ID;sta_id;station_id;Station_ID;stationid", "", TRUE, "",
+
+  "site_uuid", "UUID", "", "identifier",
+  "Stable UUID for a site occupation (SWFSC source).",
+  "stationid", "", TRUE, "",
+
+  "grid_key", "VARCHAR", "", "identifier",
+  "CalCOFI grid-cell key; FK to grid. Assigned spatially via assign_grid_key().",
+  "", "", TRUE, "",
+
+  "cast_id", "INTEGER", "", "identifier",
+  "Bottle/CTD cast identifier; primary key of casts.",
+  "Cast_ID", "", TRUE, "",
+
+  "cast_key", "VARCHAR", "", "identifier",
+  "Natural cast key.",
+  "", "", TRUE, "",
+
+  "bottle_id", "INTEGER", "", "identifier",
+  "Niskin bottle identifier; primary key of bottle.",
+  "", "", TRUE, "",
+
+  "net_uuid", "UUID", "", "identifier",
+  "Stable UUID for a plankton net sample (SWFSC source).",
+  "", "", TRUE, "",
+
+  "tow_uuid", "UUID", "", "identifier",
+  "Stable UUID for a net tow (SWFSC source).",
+  "", "", TRUE, "",
+
+  "tow_number", "INTEGER", "", "identifier",
+  "Sequential tow number within an occupation.",
+  "townumber;tow_num", "", TRUE, "",
+
+  "tow_id", "INTEGER", "", "identifier",
+  "Net-tow identifier (source integer counter); primary key of a tow table.",
+  "RowNumber", "", TRUE,
+  "use where the source provides a stable integer rather than a UUID (cf. tow_uuid).",
+
+  "order_occ", "SMALLINT", "", "identifier",
+  "Order of station occupation within a cruise.",
+  "orderocc;order_occupied;Order_Occ", "", TRUE, "",
+
+  # -- spatial -------------------------------------------------------------------
+  "latitude", "DOUBLE", "decimal_degrees", "spatial",
+  "Latitude in decimal degrees, WGS84 (EPSG:4326).",
+  "lat_dec;Lat_Dec;latidude;lat", "", FALSE,
+  "canonical over lat_dec; maps to DwC decimalLatitude on publish.",
+
+  "longitude", "DOUBLE", "decimal_degrees", "spatial",
+  "Longitude in decimal degrees, WGS84 (EPSG:4326).",
+  "lon_dec;Lon_Dec;lon", "", FALSE,
+  "canonical over lon_dec; maps to DwC decimalLongitude on publish.",
+
+  "line", "DOUBLE", "", "spatial",
+  "Alongshore component of the CalCOFI coordinate system (https://proj.org/en/stable/operations/projections/calcofi.html).",
+  "Line", "", FALSE,
+  "numeric; site_key encodes line+station as text. bottle keeps rpt_/st_/ac_ line variants distinct.",
+
+  "station", "DOUBLE", "", "spatial",
+  "Offshore component of the CalCOFI coordinate system (https://proj.org/en/stable/operations/projections/calcofi.html).",
+  "Station", "", FALSE,
+  "numeric; bottle keeps rpt_/st_/ac_ sta variants distinct.",
+
+  "depth_m", "DOUBLE", "m", "spatial",
+  "Sampling depth below surface, in meters.",
+  "Depthm;depth;Depth", "", FALSE, "",
+
+  "bottom_depth_m", "DOUBLE", "m", "spatial",
+  "Seafloor (bottom) depth, in meters.",
+  "Bottom_D", "", FALSE, "",
+
+  "geom", "GEOMETRY", "", "spatial",
+  "Feature geometry in WGS84 (EPSG:4326).",
+  "", "", FALSE, "added via add_point_geom(); never strip.",
+
+  # -- temporal ------------------------------------------------------------------
+  "datetime_start_utc", "TIMESTAMP", "", "temporal",
+  "Observation (or sampling-event start) date-time in UTC. For instantaneous samples this is the sample time; for tows/casts it is the start.",
+  "datetime_utc;time_start;starttime;date_time_utc;datetime;TowBegin", "", FALSE,
+  "canonical event timestamp; derive from source date+time or Y/M/D + time components. used by match_by_site_datetime().",
+
+  "datetime_end_utc", "TIMESTAMP", "", "temporal",
+  "Sampling-event end date-time in UTC (datetime_start_utc holds the start); e.g. net-tow end.",
+  "time_end;TowEnd", "", FALSE, "",
+
+  "date_ym", "DATE", "", "temporal",
+  "Year-month of the cruise (first day of month).",
+  "cruise_ymd", "", FALSE, "",
+
+  # -- taxonomy ------------------------------------------------------------------
+  "species_id", "SMALLINT", "", "taxonomic",
+  "CalCOFI species identifier; primary key of species.",
+  "sppcode;SppCode;calcofi_species_code", "", TRUE, "",
+
+  "scientific_name", "VARCHAR", "", "taxonomic",
+  "Scientific (Latin) name of the taxon.",
+  "taxon;Taxon", "", FALSE, "",
+
+  "common_name", "VARCHAR", "", "taxonomic",
+  "Common (vernacular) name of the taxon.",
+  "", "", FALSE, "",
+
+  "itis_id", "INTEGER", "", "taxonomic",
+  "ITIS Taxonomic Serial Number (TSN) for the taxon.",
+  "tsn;itis_tsn;TSN", "", TRUE, "",
+
+  "worms_id", "INTEGER", "", "taxonomic",
+  "WoRMS AphiaID for the taxon.",
+  "aphiaid;AphiaID", "", TRUE, "",
+
+  "life_stage", "VARCHAR", "", "taxonomic",
+  "Life stage of the organism (e.g. egg, yolk-sac larva).",
+  "stage", "", FALSE,
+  "harmonize categorical values across datasets; ichthyo currently ships numeric stage.",
+
+  # -- measurement (long format) + replicate summary ----------------------------
+  "measurement_type", "VARCHAR", "", "measurement",
+  "Type of measurement; FK to measurement_type. Vocabulary in metadata/measurement_type.csv.",
+  "", "", TRUE, "",
+
+  "measurement_value", "DOUBLE", "", "measurement",
+  "Numeric value of the measurement; units carried by measurement_type, not here.",
+  "", "", FALSE, "",
+
+  "measurement_qual", "VARCHAR", "", "quality",
+  "Quality flag or comment for the measurement.",
+  "", "", FALSE, "",
+
+  "avg", "DOUBLE", "", "measurement",
+  "Mean of replicate measurements at a unique position (site_key+datetime+depth+type).",
+  "", "", FALSE, "",
+
+  "stddev", "DOUBLE", "", "measurement",
+  "Sample standard deviation of replicates; 0 when n_obs = 1.",
+  "", "", FALSE, "",
+
+  "n_obs", "INTEGER", "count", "measurement",
+  "Number of replicate observations aggregated.",
+  "", "", FALSE, "",
+
+  # -- common measured quantities (plankton) ------------------------------------
+  "tally", "INTEGER", "count", "measurement",
+  "Raw count of individuals.",
+  "Tally", "", FALSE, "",
+
+  "standard_haul_factor", "DOUBLE", "", "measurement",
+  "Standard haul factor for abundance standardization.",
+  "std_haul_factor", "", FALSE, "",
+
+  "volume_sampled", "DOUBLE", "m3", "measurement",
+  "Volume of water filtered/sampled.",
+  "vol_sampled_m3", "", FALSE, ""
+)
+
+out <- here("metadata/field_dictionary.csv")
+write_csv(fd, out, na = "")
+cat("wrote", nrow(fd), "canonical fields to", out, "\n")

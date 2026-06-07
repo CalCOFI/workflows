@@ -1,0 +1,525 @@
+---
+title: "Ingest CCE-LTER Euphausiids"
+calcofi:
+  target_name: ingest_cce_lter_euphausiids
+  workflow_type: ingest
+  dependency:
+    - ingest_swfsc_ichthyo
+  output: data/parquet/cce-lter_euphausiids/manifest.json
+  provider: cce-lter
+  dataset: euphausiids
+  workflow_url: https://calcofi.io/workflows/ingest_cce-lter_euphausiids.html
+  questions_file: metadata/cce-lter/euphausiids/questions.csv
+  dataset_meta:
+    dataset_name: CCE-LTER Euphausiid Abundance
+    description: >
+      Euphausiid (krill) abundance from CalCOFI / CCE-LTER net tows,
+      1951-2019, one row per tow. Provisional pending provider answers on
+      abundance units and taxonomic scope (see Questions for Data Providers).
+    citation_main: ""
+    link_calcofi_org: ""
+    link_data_source: "https://portal.edirepository.org/ (EDI package TBD)"
+    link_others: []
+    coverage_temporal: 1951-01 to 2019-04
+    coverage_spatial: "CalCOFI grid incl. Baja lines"
+    license: ""
+    pi_names: Rasmus Swalethorp; Linsey Sala
+  tables_owned:
+    - {table: euphausiids_tow}
+    - {table: euphausiids_measurement}
+    - {table: euphausiids_summary}
+    - {table: measurement_type, shared: true, note: "shared registry across datasets"}
+  erd:
+    color: "#d2f0bb"
+editor_options:
+  chunk_output_type: console
+---
+
+## Overview
+
+**Source**: CCE-LTER euphausiid abundance time series (`data.csv`, ~1.2 MB,
+10,150 tows, 1951–2019), curated by CCE-LTER (Rasmus Swalethorp, Linsey Sala)
+and published on EDI.
+
+- **Provider**: `cce-lter`
+- **Grain**: one row per net tow, with a single `Abundance` measurement
+- **Strategy**: load the source CSV into a tidy `euphausiids_tow` position
+  table; resolve `ship_key`, `cruise_key`, `site_key`, and `grid_key` against
+  the shared reference tables; pivot `Abundance` into long-format
+  `euphausiids_measurement`; summarize replicates into `euphausiids_summary`.
+
+This ingest **proceeds with documented best-guess decisions** for the open
+provider questions (units, taxonomic scope, coordinate/cruise/ship fixes); each
+decision is flagged inline and tracked, ranked by importance, in the
+*Questions for Data Providers* section at the end.
+
+```{mermaid}
+graph LR
+  A[data.csv<br/>10,150 tows] --> B[euphausiids_tow<br/>position + keys]
+  B --> C[euphausiids_measurement<br/>long format]
+  C --> D[euphausiids_summary<br/>avg/stddev]
+  B -.ship/cruise/grid.-> E[(shared refs)]
+```
+
+## Setup
+
+```{r}
+#| label: setup
+
+devtools::load_all(here::here("../calcofi4db"))
+devtools::load_all(here::here("../calcofi4r"))
+
+librarian::shelf(
+  CalCOFI/calcofi4db, CalCOFI/calcofi4r,
+  DBI, dplyr, DT, fs, glue, here, htmltools, janitor, jsonlite, knitr,
+  lubridate, purrr, readr, sf, stringr, tibble, tidyr, units,
+  quiet = T)
+options(readr.show_col_types = F)
+options(DT.options = list(scrollX = TRUE))
+
+# common ingest settings (overwrite, dir_data)
+source(here("libs/ingest.R"))
+
+# provider/dataset/metadata from this file's authoritative YAML block
+cc           <- read_calcofi_meta(here("ingest_cce-lter_euphausiids.qmd"))
+provider     <- cc$provider
+dataset      <- cc$dataset
+dataset_name <- cc$dataset_meta$dataset_name
+tables_owned <- cc$tables_owned
+dir_label    <- glue("{provider}_{dataset}")
+
+dir_parquet  <- here(glue("data/parquet/{dir_label}"))
+db_path      <- here(glue("data/wrangling/{dir_label}.duckdb"))
+
+if (overwrite) {
+  if (file_exists(db_path))                  file_delete(db_path)
+  if (file_exists(paste0(db_path, ".wal")))  file_delete(paste0(db_path, ".wal"))
+  if (dir_exists(paste0(db_path, ".tmp")))   dir_delete(paste0(db_path, ".tmp"))
+}
+dir_create(dirname(db_path))
+con <- get_duckdb_con(db_path)
+load_duckdb_extension(con, "spatial")
+
+# load unified measurement_type reference
+meas_type_csv <- here("metadata/measurement_type.csv")
+d_meas_type   <- read_csv(meas_type_csv)
+```
+
+## Read Source Data
+
+The source CSV currently lives at `{dir_data}/euphausiids/data.csv` (not under
+a `cce-lter/` subdirectory), so it is read directly rather than via
+`read_csv_files()`. Source columns are renamed to canonical names per
+`metadata/cce-lter/euphausiids/flds_redefine.csv`.
+
+```{r}
+#| label: read-source
+
+euph_csv <- path_expand(glue("{dir_data}/euphausiids/data.csv"))
+stopifnot("euphausiids data.csv not found" = file_exists(euph_csv))
+
+# archive source to GCS for provenance
+sync_to_gcs(
+  local_dir  = path_dir(euph_csv),
+  gcs_prefix = glue("archive/{provider}/{dataset}"),
+  bucket     = "calcofi-files-public",
+  exclude    = c(".DS_Store", "*.tmp", "*.gdoc"))  # .gdoc is a Drive stub
+
+d_raw <- read_csv(euph_csv)
+cat(glue("Read {format(nrow(d_raw), big.mark=',')} rows, ",
+         "{ncol(d_raw)} columns from {basename(euph_csv)}"), "\n")
+```
+
+## Clean, Type-Cast, and Correct
+
+Apply the documented data-quality decisions (each tied to a ranked provider
+question). Canonical field names follow `metadata/field_dictionary.csv`.
+
+```{r}
+#| label: clean-data
+
+d_clean <- d_raw |>
+  transmute(
+    tow_id             = as.integer(RowNumber),
+    cruise_orig        = Cruise,
+    ship_name          = Ship,
+    date               = as.Date(Date),
+    line               = suppressWarnings(as.numeric(Line)),
+    station            = suppressWarnings(as.numeric(Station)),
+    region             = Region,
+    datetime_start_utc = as_datetime(TowBegin),     # Q07: assumed already UTC
+    datetime_end_utc   = as_datetime(TowEnd),
+    latitude           = as.numeric(Latitude),
+    longitude          = as.numeric(Longitude),
+    abundance          = as.numeric(Abundance)) |>
+  mutate(
+    # Q05: ~15 tows have positive longitudes (sign errors) -> flip to negative
+    longitude = if_else(longitude > 0, -longitude, longitude),
+    # Q05: one garbage coordinate (lat 87.25, far outside survey) -> drop coords
+    bad_coord = latitude > 51 | latitude < 20 | longitude < -135 | longitude > -105,
+    latitude  = if_else(bad_coord, NA_real_, latitude),
+    longitude = if_else(bad_coord, NA_real_, longitude),
+    # Q06: one TowEnd in year 2371 (typo) -> null out-of-range tow-end times
+    datetime_end_utc = if_else(
+      year(datetime_end_utc) > 2025 | year(datetime_end_utc) < 1949,
+      as_datetime(NA), datetime_end_utc),
+    # canonical CalCOFI site_key "LLL.L SSS.S" from line + station
+    site_key = if_else(
+      is.na(line) | is.na(station), NA_character_,
+      sprintf("%05.1f %05.1f", line, station)))
+
+cat(glue("Cleaned {nrow(d_clean)} tows; ",
+         "{sum(d_clean$bad_coord, na.rm=TRUE)} coordinate(s) nulled (Q05), ",
+         "{sum(is.na(d_clean$datetime_end_utc))} tow-end null (incl. Q06)"), "\n")
+```
+
+## Resolve Ship and Cruise Keys
+
+Load shared reference tables, normalize the messy vessel names (Q04), resolve
+`ship_key`/`ship_nodc`, then derive `cruise_key` as `{YYYY}-{MM}-{ship_nodc}`
+(the CalCOFI natural-key form) and validate against the `cruise` table (Q03).
+
+```{r}
+#| label: resolve-keys
+
+# shared reference tables from the ichthyo ingest
+load_prior_tables(
+  con,
+  parquet_dir = here("data/parquet/swfsc_ichthyo"),
+  tables      = c("ship", "cruise", "grid"),
+  geom_tables = c("grid"),
+  as_view     = TRUE)
+
+d_ship <- dbGetQuery(con, "SELECT ship_key, ship_name, ship_nodc FROM ship") |>
+  mutate(ship_name_norm = ship_name |> str_to_upper() |> str_squish())
+
+# normalize euphausiids vessel names (strip 'R/V ', collapse spaces, upper-case)
+d_keys <- d_clean |>
+  mutate(
+    ship_name_norm = ship_name |>
+      str_replace("^R/?V\\.?\\s+", "") |> str_to_upper() |> str_squish()) |>
+  left_join(
+    d_ship |> select(ship_name_norm, ship_key, ship_nodc),
+    by = "ship_name_norm") |>
+  mutate(
+    # cruise_key = YYYY-MM-{ship_nodc} (NA when ship unresolved)
+    cruise_key = if_else(
+      is.na(ship_nodc), NA_character_,
+      glue("{format(date, '%Y-%m')}-{ship_nodc}") |> as.character()))
+
+n_ship  <- sum(!is.na(d_keys$ship_key))
+# validate derived cruise_key exists in the cruise table
+valid_ck <- dbGetQuery(con, "SELECT DISTINCT cruise_key FROM cruise")$cruise_key
+d_keys <- d_keys |>
+  mutate(cruise_key = if_else(cruise_key %in% valid_ck, cruise_key, NA_character_))
+n_cruise <- sum(!is.na(d_keys$cruise_key))
+
+cat(glue(
+  "Ship match: {n_ship}/{nrow(d_keys)} ({round(100*n_ship/nrow(d_keys),1)}%); ",
+  "cruise_key match: {n_cruise}/{nrow(d_keys)} ",
+  "({round(100*n_cruise/nrow(d_keys),1)}%)"), "\n")
+
+# report unresolved ship names for the provider follow-up (Q04)
+d_keys |> filter(is.na(ship_key)) |> count(ship_name, sort = TRUE) |>
+  datatable(caption = "Unresolved vessel names (Q04)")
+```
+
+## Load Tidy Tow Table
+
+`euphausiids_tow` carries position, time, and FK columns only — the
+`abundance` measurement is pivoted out in the next step.
+
+```{r}
+#| label: load-tow
+
+d_tow <- d_keys |>
+  transmute(
+    tow_id, cruise_key, ship_key, ship_name, cruise_orig,
+    site_key, line, station, region,
+    datetime_start_utc, datetime_end_utc,
+    latitude, longitude, abundance)
+
+dbWriteTable(con, "euphausiids_tow_wide", d_tow, overwrite = TRUE)
+
+# tidy tow table: drop the raw measurement column
+dbExecute(con,
+  "CREATE OR REPLACE TABLE euphausiids_tow AS
+   SELECT tow_id, cruise_key, ship_key, ship_name, cruise_orig,
+          site_key, line, station, region,
+          datetime_start_utc, datetime_end_utc, latitude, longitude
+   FROM euphausiids_tow_wide")
+
+cat(glue("euphausiids_tow: {dbGetQuery(con,'SELECT COUNT(*) FROM euphausiids_tow')[[1]]} rows"), "\n")
+```
+
+## Add Spatial
+
+```{r}
+#| label: spatial
+
+add_point_geom(con, "euphausiids_tow", lon_col = "longitude", lat_col = "latitude")
+grid_stats <- assign_grid_key(con, "euphausiids_tow")
+grid_stats |> datatable(caption = "Grid assignment")
+```
+
+## Pivot Measurement to Long Format
+
+A single measurement type, `euphausiid_abundance`. **Q01 (units) and Q02
+(taxonomic scope) are unresolved** — registered provisionally and flagged.
+
+```{r}
+#| label: pivot-measurement
+
+dbExecute(con,
+  "CREATE OR REPLACE TABLE euphausiids_measurement AS
+   SELECT ROW_NUMBER() OVER (ORDER BY tow_id) AS euphausiids_measurement_id,
+          tow_id,
+          'euphausiid_abundance' AS measurement_type,
+          CAST(abundance AS DOUBLE) AS measurement_value,
+          NULL::VARCHAR AS measurement_qual
+   FROM euphausiids_tow_wide
+   WHERE abundance IS NOT NULL
+     AND NOT isnan(CAST(abundance AS DOUBLE))
+     AND isfinite(CAST(abundance AS DOUBLE))")
+
+dbExecute(con, "DROP TABLE euphausiids_tow_wide")
+
+n_meas <- dbGetQuery(con, "SELECT COUNT(*) FROM euphausiids_measurement")[[1]]
+cat(glue("euphausiids_measurement: {format(n_meas, big.mark=',')} rows"), "\n")
+```
+
+## Summarize Replicate Measurements
+
+Aggregate replicate tows at each unique position (site + datetime + type) into
+mean and standard deviation, following the `dic_summary`/`ctd_summary` pattern.
+
+```{r}
+#| label: measurement-summary
+
+dbExecute(con,
+  "CREATE OR REPLACE TABLE euphausiids_summary AS
+   SELECT
+     t.site_key, t.datetime_start_utc, t.latitude, t.longitude,
+     m.measurement_type,
+     AVG(m.measurement_value) AS avg,
+     CASE WHEN COUNT(*) = 1 THEN 0
+          ELSE COALESCE(STDDEV_SAMP(m.measurement_value), 0) END AS stddev,
+     COUNT(*) AS n_obs
+   FROM euphausiids_measurement m
+   JOIN euphausiids_tow t USING (tow_id)
+   WHERE NOT isnan(m.measurement_value) AND isfinite(m.measurement_value)
+   GROUP BY t.site_key, t.datetime_start_utc, t.latitude, t.longitude,
+            m.measurement_type")
+
+cat(glue("euphausiids_summary: {dbGetQuery(con,'SELECT COUNT(*) FROM euphausiids_summary')[[1]]} positions"), "\n")
+```
+
+## Add Measurement Type
+
+```{r}
+#| label: add-measurement-type
+
+euph_types <- tibble(
+  measurement_type   = "euphausiid_abundance",
+  description        = paste(
+    "Euphausiid (krill) abundance per net tow. PROVISIONAL: units and",
+    "taxonomic scope unconfirmed (see questions Q01, Q02)."),
+  units              = "count/1000m3",   # Q01: PROVISIONAL best guess
+  `_source_column`   = "Abundance",
+  `_source_table`    = "euphausiids_measurement",
+  `_source_datasets` = "cce-lter_euphausiids",
+  `_qual_column`     = NA_character_,
+  `_prec_column`     = NA_character_)
+
+if (!"euphausiid_abundance" %in% d_meas_type$measurement_type) {
+  d_meas_type <- bind_rows(d_meas_type, euph_types)
+  write_csv(d_meas_type, meas_type_csv)
+  cat("Added measurement type: euphausiid_abundance (provisional units)\n")
+} else {
+  cat("euphausiid_abundance already registered\n")
+}
+dbWriteTable(con, "measurement_type", d_meas_type, overwrite = TRUE)
+```
+
+## Load Dataset Metadata
+
+```{r}
+#| label: load-dataset-metadata
+
+d_dataset <- ingest_yaml_to_dataset_df(read_ingest_yaml(here()))
+dbWriteTable(con, "dataset", d_dataset, overwrite = TRUE)
+cat(glue("dataset: {nrow(d_dataset)} datasets registered"), "\n")
+```
+
+## Schema Documentation
+
+```{r}
+#| label: schema
+
+euph_rels <- list(
+  primary_keys = list(
+    euphausiids_tow         = "tow_id",
+    euphausiids_measurement = "euphausiids_measurement_id",
+    measurement_type        = "measurement_type"),
+  foreign_keys = list(
+    list(table = "euphausiids_measurement", column = "tow_id",
+         ref_table = "euphausiids_tow", ref_column = "tow_id"),
+    list(table = "euphausiids_measurement", column = "measurement_type",
+         ref_table = "measurement_type", ref_column = "measurement_type")))
+
+euph_tables <- c(
+  "euphausiids_tow", "euphausiids_measurement", "euphausiids_summary",
+  "measurement_type", "dataset")
+cc_erd(
+  con, tables = euph_tables, rels = euph_rels,
+  colors = list(
+    lightblue   = c("euphausiids_tow", "euphausiids_measurement", "euphausiids_summary"),
+    lightyellow = "measurement_type",
+    white       = "dataset"))
+
+build_relationships_json(
+  rels = euph_rels, output_dir = dir_parquet,
+  provider = provider, dataset = dataset)
+```
+
+## Validate
+
+```{r}
+#| label: validate
+
+results <- validate_for_release(con, checks = "all", strict = FALSE)
+cat("Validation:", ifelse(results$passed, "PASSED", "FAILED"), "\n")
+if (length(results$errors) > 0)
+  cat("Errors:\n", paste("-", results$errors, collapse = "\n"), "\n")
+if (length(results$warnings) > 0)
+  cat("Warnings:\n", paste("-", results$warnings, collapse = "\n"), "\n")
+
+# NOTE: NULLs in the cross-dataset FK keys (cruise_key, ship_key, site_key,
+# grid_key) are the EXPECTED unmatched remainder of partial matching — the same
+# accepted behavior as calcofi_dic's nullable cast_id/bottle_id (issue #47).
+# They are tracked in questions Q03 (cruise) and Q04 (ship), not a hard failure.
+cat(glue(
+  "\nMatch coverage (non-NULL): ",
+  "ship_key {round(100*dbGetQuery(con,\"SELECT AVG(CASE WHEN ship_key IS NOT NULL THEN 1 ELSE 0 END) FROM euphausiids_tow\")[[1]],1)}%, ",
+  "cruise_key {round(100*dbGetQuery(con,\"SELECT AVG(CASE WHEN cruise_key IS NOT NULL THEN 1 ELSE 0 END) FROM euphausiids_tow\")[[1]],1)}%, ",
+  "grid_key {round(100*dbGetQuery(con,\"SELECT AVG(CASE WHEN grid_key IS NOT NULL THEN 1 ELSE 0 END) FROM euphausiids_tow\")[[1]],1)}%"), "\n")
+
+# composite-key duplicate check
+n_dup <- dbGetQuery(con,
+  "SELECT COUNT(*) FROM (
+     SELECT tow_id, COUNT(*) n FROM euphausiids_tow GROUP BY tow_id HAVING COUNT(*)>1)")[[1]]
+cat(glue("euphausiids_tow tow_id duplicates: {n_dup}"), "\n")
+```
+
+## Data Preview
+
+```{r}
+#| label: preview-tow
+
+tow_cols <- dbGetQuery(con,
+  "SELECT column_name FROM information_schema.columns
+   WHERE table_name='euphausiids_tow' AND data_type NOT LIKE 'GEOMETRY%'")$column_name
+dbGetQuery(con, glue("SELECT {paste(tow_cols, collapse=', ')} FROM euphausiids_tow LIMIT 100")) |>
+  datatable(caption = "euphausiids_tow — first 100 rows", rownames = FALSE, filter = "top")
+```
+
+```{r}
+#| label: preview-measurement
+
+dbGetQuery(con, "SELECT * FROM euphausiids_measurement LIMIT 100") |>
+  datatable(caption = "euphausiids_measurement — first 100 rows", rownames = FALSE)
+```
+
+## Write Parquet Outputs
+
+```{r}
+#| label: write-parquet
+
+dir_create(dir_parquet)
+
+mismatches <- list(
+  measurement_types = collect_measurement_type_mismatches(
+    con, here("metadata/measurement_type.csv")),
+  cruise_keys       = collect_cruise_key_mismatches(con, "euphausiids_tow"))
+
+parquet_stats <- write_parquet_outputs(
+  con        = con,
+  output_dir = dir_parquet,
+  tables     = c("euphausiids_tow", "euphausiids_measurement",
+                 "euphausiids_summary", "measurement_type", "dataset"),
+  sort_by    = list(euphausiids_summary = "measurement_type"),
+  strip_provenance = FALSE,
+  mismatches = mismatches)
+
+parquet_stats |> mutate(file = basename(path)) |> select(-path) |>
+  datatable(caption = "Parquet export statistics")
+```
+
+## Write Metadata
+
+```{r}
+#| label: write-metadata
+
+d_tbls_rd <- read_csv(here("metadata/cce-lter/euphausiids/tbls_redefine.csv"))
+d_flds_rd <- read_csv(here("metadata/cce-lter/euphausiids/flds_redefine.csv"))
+
+metadata_path <- build_metadata_json(
+  con        = con,
+  d_tbls_rd  = d_tbls_rd,
+  d_flds_rd  = d_flds_rd,
+  output_dir = dir_parquet,
+  tables     = c("euphausiids_tow", "euphausiids_measurement", "euphausiids_summary"),
+  set_comments = TRUE,
+  provider   = provider,
+  dataset    = dataset,
+  workflow_url = cc$workflow_url,
+  tables_owned = tables_owned)
+```
+
+## Upload to GCS
+
+```{r}
+#| label: upload-gcs
+
+sync_to_gcs(
+  local_dir  = dir_parquet,
+  gcs_prefix = glue("ingest/{dir_label}"),
+  bucket     = "calcofi-db")
+```
+
+## Questions for Data Providers
+
+Follow-up questions for CCE-LTER (Rasmus Swalethorp, Linsey Sala), **ranked by
+importance**. This ingest proceeded with the documented provisional decisions
+noted above; `blocker`/`high` answers may change registered units, taxonomy, or
+matched rows on the next run. Tracked in
+`metadata/cce-lter/euphausiids/questions.csv`; aggregated per provider by
+`questions_email.qmd`.
+
+```{r}
+#| label: provider-questions
+
+q_path <- here(glue("metadata/{provider}/{dataset}/questions.csv"))
+read_csv(q_path) |>
+  arrange(factor(priority, c("blocker", "high", "normal")), id) |>
+  select(priority, question, context, related_field, status) |>
+  datatable(
+    caption = "Questions for data providers (ranked by importance)",
+    options = list(dom = "t", pageLength = 20), rownames = FALSE)
+```
+
+## Cleanup
+
+```{r}
+#| label: cleanup
+
+close_duckdb(con)
+cat(glue("Parquet outputs written to: {dir_parquet}"), "\n")
+```
+
+::: {.callout-caution collapse="true"}
+## Session Info
+```{r session_info}
+devtools::session_info()
+```
+:::

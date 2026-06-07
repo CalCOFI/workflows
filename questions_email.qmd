@@ -1,0 +1,110 @@
+---
+title: "Questions for Data Providers"
+editor_options:
+  chunk_output_type: console
+---
+
+## Overview
+
+Aggregates the per-dataset `metadata/{provider}/{dataset}/questions.csv` files
+(seeded during `/explore-dataset` and `/generate-metadata`, rendered inside each
+`ingest_*`/`publish_*` workflow) into **one draft email per provider** for the
+data team to review and send. Open (`open`/`asked`) questions only; `answered`
+and `wontfix` are excluded. Nothing is sent — this produces copy-paste drafts.
+
+```{r setup}
+#| message: false
+librarian::shelf(dplyr, glue, here, purrr, readr, stringr, knitr, quiet = T)
+options(readr.show_col_types = FALSE)
+```
+
+## Collect Questions
+
+```{r collect}
+q_files <- Sys.glob(here("metadata/*/*/questions.csv"))
+
+questions <- map_dfr(q_files, function(f) {
+  rel   <- str_replace(f, "^.*/metadata/", "")        # provider/dataset/questions.csv
+  parts <- str_split(rel, "/", simplify = TRUE)
+  read_csv(f, col_types = cols(.default = "c")) |>
+    mutate(provider = parts[1], dataset = parts[2], .before = 1)
+})
+
+d_dataset <- read_csv(here("metadata/dataset.csv")) |>
+  select(provider, dataset, dataset_name, pi_names)
+
+open_q <- questions |>
+  filter(status %in% c("open", "asked")) |>
+  left_join(d_dataset, by = c("provider", "dataset")) |>
+  mutate(
+    priority = factor(priority, c("blocker", "high", "normal")),
+    dataset_name = coalesce(dataset_name, glue("{provider}/{dataset}")))
+
+cat(glue(
+  "{nrow(open_q)} open questions across ",
+  "{n_distinct(open_q$provider)} providers ",
+  "({sum(open_q$priority == 'blocker', na.rm = TRUE)} blockers)"), "\n")
+```
+
+## Summary
+
+```{r summary}
+open_q |>
+  count(provider, dataset, priority, .drop = FALSE) |>
+  filter(n > 0) |>
+  arrange(provider, dataset, priority) |>
+  kable()
+```
+
+## Draft Emails
+
+One draft per provider. Recipients are drawn from `pi_names` in `dataset.csv`;
+fill in the bracketed placeholders before sending.
+
+```{r emails}
+#| results: asis
+
+providers <- sort(unique(open_q$provider))
+
+for (prov in providers) {
+  pq <- open_q |> filter(provider == prov) |> arrange(dataset, priority)
+
+  recipients <- pq$pi_names |>
+    na.omit() |> unique() |>
+    str_split(";\\s*") |> unlist() |> unique() |> str_trim()
+  recipients <- recipients[recipients != ""]
+  to_line <- if (length(recipients)) paste(recipients, collapse = ", ") else
+    "[data provider contact]"
+
+  n_block <- sum(pq$priority == "blocker", na.rm = TRUE)
+
+  cat(glue("\n### {prov} ({nrow(pq)} questions, {n_block} blockers)\n\n"))
+  cat("```\n")
+  cat(glue("To: {to_line}\n"))
+  cat(glue("Subject: CalCOFI data integration — follow-up questions on ",
+           "{paste(sort(unique(pq$dataset_name)), collapse = ', ')}\n\n"))
+  cat("Hi,\n\n")
+  cat(str_wrap(glue(
+    "As we integrate your data into the CalCOFI database we have a few ",
+    "follow-up questions. Answers will improve how the data are matched, ",
+    "documented, and published. Questions marked [BLOCKER] are gating ",
+    "publication. Thank you!"), width = 78), "\n")
+
+  for (ds in sort(unique(pq$dataset))) {
+    dq <- pq |> filter(dataset == ds)
+    cat(glue("\n\n{unique(dq$dataset_name)}:\n"))
+    for (i in seq_len(nrow(dq))) {
+      tag <- if (!is.na(dq$priority[i]) && dq$priority[i] == "blocker")
+        " [BLOCKER]" else ""
+      field <- if (!is.na(dq$related_field[i]) && nzchar(dq$related_field[i]))
+        glue(" (re: {dq$related_field[i]})") else ""
+      cat(glue("\n  {i}.{tag} {dq$question[i]}{field}\n"))
+      if (!is.na(dq$context[i]) && nzchar(dq$context[i]))
+        cat(str_wrap(glue("      Context: {dq$context[i]}"),
+                     width = 76, exdent = 9), "\n")
+    }
+  }
+  cat("\n\nBest regards,\nThe CalCOFI data team\n")
+  cat("```\n\n")
+}
+```

@@ -1,0 +1,276 @@
+---
+title: "Ingest CalCOFI Bird & Mammal Census"
+calcofi:
+  target_name: ingest_calcofi_bird_mammal_census
+  workflow_type: ingest
+  dependency:
+    - ingest_swfsc_ichthyo
+  output: data/parquet/calcofi_bird_mammal_census/manifest.json
+  provider: calcofi
+  dataset: bird_mammal_census
+  workflow_url: https://calcofi.io/workflows/ingest_calcofi_bird_mammal_census.html
+  questions_file: metadata/calcofi/bird_mammal_census/questions.csv
+  dataset_meta:
+    dataset_name: CalCOFI Bird & Mammal Census
+    description: >
+      Bird and mammal observations along CalCOFI (and NMFS, CPR) cruise transects,
+      1987-2021. Transect effort + counts + species/behavior lookups. Curated via
+      CCE-LTER DataZoo 255 (PI Bill Sydeman).
+    citation_main: ""
+    link_calcofi_org: ""
+    link_data_source: "https://oceaninformatics.ucsd.edu/datazoo/catalogs/ccelter/datasets/255"
+    link_others:
+      - http://dx.doi.org/10.6073/pasta/4ee1bd702acb11786277192a41626800
+    coverage_temporal: 1987 to 2021
+    coverage_spatial: "CalCOFI region (California Current)"
+    license: ""
+    pi_names: Bill Sydeman
+  tables_owned:
+    - {table: bird_mammal_transect}
+    - {table: bird_mammal_observation}
+    - {table: bird_mammal_species}
+    - {table: bird_mammal_behavior}
+  erd:
+    color: "#f0d2e8"
+editor_options:
+  chunk_output_type: console
+---
+
+## Overview
+
+**Source**: `whales-seabirds-turtles/bird-mammal-census/` (CCE-LTER DataZoo 255,
+PI Bill Sydeman). Bird & mammal observations along CalCOFI/NMFS/CPR cruise
+transects, 1987-2021.
+
+- **Provider**: `calcofi` (tentative — curated via CCE-LTER; see questions)
+- **Tables**: `bird_mammal_transect` (effort) ⨝ `bird_mammal_observation` (counts)
+  on `gis_key`, plus `bird_mammal_species` (ITIS taxonomy) and
+  `bird_mammal_behavior` lookups.
+
+```{mermaid}
+graph LR
+  T[transects] --> TR[bird_mammal_transect<br/>effort + position]
+  O[observations] --> OB[bird_mammal_observation<br/>counts]
+  OB -.gis_key.-> TR
+  OB -.species_code.-> SP[bird_mammal_species]
+  OB -.behavior_code.-> BH[bird_mammal_behavior]
+```
+
+## Setup
+
+```{r}
+#| label: setup
+#| message: false
+
+devtools::load_all(here::here("../calcofi4db"))
+devtools::load_all(here::here("../calcofi4r"))
+librarian::shelf(
+  CalCOFI/calcofi4db, CalCOFI/calcofi4r,
+  DBI, dplyr, DT, fs, glue, here, janitor, jsonlite, knitr,
+  lubridate, purrr, readr, sf, stringr, tibble, tidyr, units, quiet = T)
+options(readr.show_col_types = F)
+options(DT.options = list(scrollX = TRUE))
+source(here("libs/ingest.R"))
+
+cc           <- read_calcofi_meta(here("ingest_calcofi_bird_mammal_census.qmd"))
+provider     <- cc$provider
+dataset      <- cc$dataset
+tables_owned <- cc$tables_owned
+dir_label    <- glue("{provider}_{dataset}")
+dir_parquet  <- here(glue("data/parquet/{dir_label}"))
+db_path      <- here(glue("data/wrangling/{dir_label}.duckdb"))
+dir_src      <- path_expand(glue("{dir_data}/whales-seabirds-turtles/bird-mammal-census"))
+
+if (overwrite) {
+  if (file_exists(db_path))                 file_delete(db_path)
+  if (file_exists(paste0(db_path, ".wal"))) file_delete(paste0(db_path, ".wal"))
+}
+dir_create(dirname(db_path))
+con <- get_duckdb_con(db_path)
+load_duckdb_extension(con, "spatial")
+```
+
+## Read Source Data
+
+```{r}
+#| label: read-source
+
+stopifnot("source dir not found" = dir_exists(dir_src))
+sync_to_gcs(local_dir = dir_src, gcs_prefix = glue("archive/{provider}/{dataset}"),
+            bucket = "calcofi-files-public", exclude = c(".DS_Store", "*.tmp", "*.gdoc"))
+
+rd <- function(f) read_csv(file.path(dir_src, glue("CalCOFI_bird-mammal-census_{f}.csv")),
+                           col_types = cols(.default = "c")) |> clean_names()
+d_tr <- rd("transects"); d_ob <- rd("observations")
+d_sp <- rd("allspecieslist"); d_bh <- rd("behaviorcodes")
+cat(glue("transects {nrow(d_tr)}, observations {nrow(d_ob)}, species {nrow(d_sp)}, behaviors {nrow(d_bh)}"), "\n")
+cat("transect clean names:", paste(names(d_tr), collapse=", "), "\n")
+```
+
+## Build Lookups (species, behavior)
+
+```{r}
+#| label: lookups
+
+b01 <- function(x) !is.na(x) & x %in% c("1","TRUE","true","Y","y")
+
+d_species <- d_sp |>
+  transmute(
+    species_code = species, common_name, scientific_name = latin_name,
+    itis_id = suppressWarnings(as.integer(itis)),
+    is_bird = b01(bird), is_mammal = b01(mammal), is_fish = b01(fish),
+    is_large_bird = b01(large_bird), is_unidentified = b01(unidentified),
+    include_flag = b01(include), nmfs_code = nmfs, comment)
+dbWriteTable(con, "bird_mammal_species", d_species, overwrite = TRUE)
+
+d_behavior <- d_bh |> transmute(behavior_code = id, behavior, description)
+dbWriteTable(con, "bird_mammal_behavior", d_behavior, overwrite = TRUE)
+cat(glue("species {nrow(d_species)}, behaviors {nrow(d_behavior)}"), "\n")
+```
+
+## Build Transect (effort) Table
+
+```{r}
+#| label: transect
+
+d_transect <- d_tr |>
+  transmute(
+    gis_key,
+    cruise_label    = cruise,
+    transect_number = suppressWarnings(as.integer(transect_number)),
+    bin_number      = suppressWarnings(as.integer(bin_number)),
+    date            = suppressWarnings(as.Date(date)),
+    time_sec        = suppressWarnings(as.numeric(time_sec)),
+    latitude        = suppressWarnings(as.numeric(latitude_mid_o)),
+    longitude       = suppressWarnings(as.numeric(longitude_mid_o)),
+    latitude_start  = suppressWarnings(as.numeric(latitude_start_o)),
+    longitude_start = suppressWarnings(as.numeric(longitude_start_o)),
+    latitude_stop   = suppressWarnings(as.numeric(latitude_stop_o)),
+    longitude_stop  = suppressWarnings(as.numeric(longitude_stop_o)),
+    length_m        = suppressWarnings(as.numeric(length_m)),
+    width_m         = suppressWarnings(as.numeric(width_m)),
+    area_m2         = suppressWarnings(as.numeric(area_m2)),
+    bottom_depth_m  = suppressWarnings(as.numeric(depth_m)),
+    julian_date     = suppressWarnings(as.numeric(julian_date)),
+    julian_day      = suppressWarnings(as.integer(julian_day)),
+    svy, season,
+    # datetime from date + time_sec (Q01: tz unconfirmed, treated as given)
+    datetime_start_utc = as_datetime(date) + dseconds(coalesce(time_sec, 0)))
+
+dbWriteTable(con, "bird_mammal_transect", d_transect, overwrite = TRUE)
+cat(glue("bird_mammal_transect: {nrow(d_transect)} rows"), "\n")
+```
+
+## Build Observation (counts) Table
+
+```{r}
+#| label: observation
+
+d_observation <- d_ob |>
+  transmute(gis_key, species_code = species, behavior_code = behavior,
+            count = suppressWarnings(as.integer(count))) |>
+  mutate(observation_id = row_number(), .before = 1)
+dbWriteTable(con, "bird_mammal_observation", d_observation, overwrite = TRUE)
+cat(glue("bird_mammal_observation: {nrow(d_observation)} rows"), "\n")
+```
+
+## Resolve cruise_key + Spatial
+
+```{r}
+#| label: spatial-cruise
+
+# cruise_key: best-effort YYYY-MM from cruise_label/date (no ship column -> Q02).
+# leave NULL for now; record format for the provider question.
+dbExecute(con, "ALTER TABLE bird_mammal_transect ADD COLUMN IF NOT EXISTS cruise_key VARCHAR")
+
+# geometry + grid from the transect midpoint
+load_prior_tables(con, parquet_dir = here("data/parquet/swfsc_ichthyo"),
+                  tables = c("grid"), geom_tables = c("grid"), as_view = TRUE)
+add_point_geom(con, "bird_mammal_transect", lon_col = "longitude", lat_col = "latitude")
+assign_grid_key(con, "bird_mammal_transect") |> datatable(caption = "Grid assignment")
+```
+
+## Load Dataset Metadata + Schema
+
+```{r}
+#| label: meta-schema
+
+d_dataset <- ingest_yaml_to_dataset_df(read_ingest_yaml(here()))
+dbWriteTable(con, "dataset", d_dataset, overwrite = TRUE)
+
+bmc_rels <- list(
+  primary_keys = list(
+    bird_mammal_transect = "gis_key", bird_mammal_observation = "observation_id",
+    bird_mammal_species = "species_code", bird_mammal_behavior = "behavior_code"),
+  foreign_keys = list(
+    list(table="bird_mammal_observation", column="gis_key",       ref_table="bird_mammal_transect", ref_column="gis_key"),
+    list(table="bird_mammal_observation", column="species_code",  ref_table="bird_mammal_species",  ref_column="species_code"),
+    list(table="bird_mammal_observation", column="behavior_code", ref_table="bird_mammal_behavior", ref_column="behavior_code")))
+cc_erd(con, tables = c("bird_mammal_transect","bird_mammal_observation","bird_mammal_species","bird_mammal_behavior","dataset"),
+       rels = bmc_rels,
+       colors = list(lightblue = c("bird_mammal_transect","bird_mammal_observation"),
+                     lightyellow = c("bird_mammal_species","bird_mammal_behavior"), white = "dataset"))
+build_relationships_json(rels = bmc_rels, output_dir = dir_parquet, provider = provider, dataset = dataset)
+```
+
+## Validate + Preview
+
+```{r}
+#| label: validate
+
+results <- validate_for_release(con, checks = "all", strict = FALSE)
+cat("Validation:", ifelse(results$passed, "PASSED", "FAILED"), "\n")
+# orphan check: observations whose gis_key is not in transects
+n_orphan <- dbGetQuery(con, "SELECT COUNT(*) FROM bird_mammal_observation o
+  LEFT JOIN bird_mammal_transect t USING(gis_key) WHERE t.gis_key IS NULL")[[1]]
+cat(glue("observation gis_key orphans (no transect): {n_orphan}"), "\n")
+```
+
+```{r}
+#| label: preview
+
+cols <- dbGetQuery(con, "SELECT column_name FROM information_schema.columns
+  WHERE table_name='bird_mammal_transect' AND data_type NOT LIKE 'GEOMETRY%'")$column_name
+dbGetQuery(con, glue("SELECT {paste(cols, collapse=', ')} FROM bird_mammal_transect LIMIT 100")) |>
+  datatable(caption = "bird_mammal_transect — first 100", rownames = FALSE, filter = "top")
+```
+
+## Questions for Data Providers
+
+```{r}
+#| label: provider-questions
+
+read_csv(here(glue("metadata/{provider}/{dataset}/questions.csv"))) |>
+  arrange(factor(priority, c("blocker","high","normal")), id) |>
+  select(priority, question, context, status) |>
+  datatable(caption = "Questions (ranked)", options = list(dom="t", pageLength=10), rownames = FALSE)
+```
+
+## Write Outputs + Upload
+
+```{r}
+#| label: outputs
+
+dir_create(dir_parquet)
+write_parquet_outputs(
+  con = con, output_dir = dir_parquet,
+  tables = c("bird_mammal_transect","bird_mammal_observation","bird_mammal_species","bird_mammal_behavior","dataset"),
+  strip_provenance = FALSE)
+
+d_tbls_rd <- read_csv(here("metadata/calcofi/bird_mammal_census/tbls_redefine.csv"))
+d_flds_rd <- read_csv(here("metadata/calcofi/bird_mammal_census/flds_redefine.csv"))
+build_metadata_json(
+  con = con, d_tbls_rd = d_tbls_rd, d_flds_rd = d_flds_rd,
+  metadata_derived_csv = here("metadata/calcofi/bird_mammal_census/metadata_derived.csv"),
+  output_dir = dir_parquet, tables = c("bird_mammal_transect","bird_mammal_observation","bird_mammal_species","bird_mammal_behavior"),
+  set_comments = TRUE, provider = provider, dataset = dataset,
+  workflow_url = cc$workflow_url, tables_owned = tables_owned)
+
+sync_to_gcs(local_dir = dir_parquet, gcs_prefix = glue("ingest/{dir_label}"), bucket = "calcofi-db")
+```
+
+```{r}
+#| label: cleanup
+close_duckdb(con)
+cat(glue("Parquet outputs written to: {dir_parquet}"), "\n")
+```

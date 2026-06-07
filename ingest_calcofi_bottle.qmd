@@ -57,7 +57,7 @@ parquet files. The workflow:
 1. Reads CSV files from source directory (with GCS archive sync)
 2. Loads into local wrangling DuckDB with column renames
 3. Applies ship name/code corrections
-4. Consolidates temporal columns into `datetime_utc`, drops derivable columns, creates `casts_derived` VIEW
+4. Consolidates temporal columns into `datetime_start_utc`, drops derivable columns, creates `casts_derived` VIEW
 5. Pivots bottle measurements into long-format `bottle_measurement` table
 6. Pivots cast environmental conditions into `cast_condition` table
 7. Loads `measurement_type` reference table
@@ -325,23 +325,23 @@ PSS-78, values ~33.44). These are pivoted as distinct measurement types
 
 ## Consolidate Casts Columns
 
-Combine `date` + `time` into `datetime_utc`, drop 16 derivable columns,
+Combine `date` + `time` into `datetime_start_utc`, drop 16 derivable columns,
 and create a `casts_derived` convenience VIEW.
 
 ```{r}
 #| label: consolidate_casts
 
-# -- create datetime_utc from date + time (idempotent) ----
+# -- create datetime_start_utc from date + time (idempotent) ----
 casts_cols <- dbListFields(con, "casts")
 
 if ("date" %in% casts_cols && "time" %in% casts_cols) {
   # date is DATE type (e.g. 1949-03-01), time is INTERVAL (e.g. 09:30:00)
   # adding DATE + INTERVAL yields TIMESTAMP; 324 casts have NULL time
-  dbExecute(con, "ALTER TABLE casts ADD COLUMN IF NOT EXISTS datetime_utc TIMESTAMP")
+  dbExecute(con, "ALTER TABLE casts ADD COLUMN IF NOT EXISTS datetime_start_utc TIMESTAMP")
   dbExecute(
     con,
     "
-    UPDATE casts SET datetime_utc =
+    UPDATE casts SET datetime_start_utc =
       CASE
         WHEN \"time\" IS NOT NULL
         THEN CAST(\"date\" AS TIMESTAMP) + \"time\"
@@ -349,7 +349,7 @@ if ("date" %in% casts_cols && "time" %in% casts_cols) {
       END"
   )
   message(glue(
-    "Created datetime_utc: {dbGetQuery(con, 'SELECT COUNT(*) FROM casts WHERE datetime_utc IS NOT NULL')[[1]]} non-null values"
+    "Created datetime_start_utc: {dbGetQuery(con, 'SELECT COUNT(*) FROM casts WHERE datetime_start_utc IS NOT NULL')[[1]]} non-null values"
   ))
 
   # -- drop derivable columns ----
@@ -370,7 +370,7 @@ if ("date" %in% casts_cols && "time" %in% casts_cols) {
   n_after <- length(dbListFields(con, "casts"))
   message(glue("casts columns: {n_before} -> {n_after} (dropped {n_before - n_after})"))
 } else {
-  message("casts already consolidated (datetime_utc exists, date/time dropped)")
+  message("casts already consolidated (datetime_start_utc exists, date/time dropped)")
 }
 ```
 
@@ -511,9 +511,9 @@ erDiagram
     casts_BEFORE {
         int cast_id PK
         str site_key
-        dbl lat_dec
-        dbl lon_dec
-        ts  datetime_utc
+        dbl latitude
+        dbl longitude
+        ts  datetime_start_utc
         dbl wave_dir
         dbl wave_ht
         dbl wave_prd
@@ -532,9 +532,9 @@ erDiagram
     casts_AFTER {
         int cast_id PK
         str site_key
-        dbl lat_dec
-        dbl lon_dec
-        ts  datetime_utc
+        dbl latitude
+        dbl longitude
+        ts  datetime_start_utc
     }
     cast_condition {
         int cast_condition_id PK
@@ -921,7 +921,7 @@ cc_erd(con, tables = db_tables(con), rels = bottle_rels)
 # add geometry column using DuckDB spatial
 # note: DuckDB spatial doesn't track SRID metadata (unlike PostGIS)
 # all geometries assumed WGS84 (EPSG:4326) by convention
-add_point_geom(con, "casts")
+add_point_geom(con, "casts", lon_col = "longitude", lat_col = "latitude")
 ```
 
 ### Load `grid` table
@@ -964,18 +964,18 @@ dbExecute(
   "
   CREATE VIEW casts_derived AS
   SELECT *,
-    EXTRACT(YEAR FROM datetime_utc)::SMALLINT    AS year,
-    EXTRACT(MONTH FROM datetime_utc)::SMALLINT   AS month,
-    EXTRACT(QUARTER FROM datetime_utc)::SMALLINT AS quarter,
-    EXTRACT(DOY FROM datetime_utc)::SMALLINT     AS julian_day,
-    (datetime_utc::DATE - DATE '1899-12-30')     AS julian_date,
-    FLOOR(ABS(lat_dec))::SMALLINT                AS lat_deg,
-    (ABS(lat_dec) - FLOOR(ABS(lat_dec))) * 60    AS lat_min,
-    CASE WHEN lat_dec >= 0 THEN 'N' ELSE 'S' END AS lat_hem,
-    FLOOR(ABS(lon_dec))::SMALLINT                AS lon_deg,
-    (ABS(lon_dec) - FLOOR(ABS(lon_dec))) * 60    AS lon_min,
-    CASE WHEN lon_dec >= 0 THEN 'E' ELSE 'W' END AS lon_hem,
-    STRFTIME(datetime_utc, '%Y%m')                AS cruise,
+    EXTRACT(YEAR FROM datetime_start_utc)::SMALLINT    AS year,
+    EXTRACT(MONTH FROM datetime_start_utc)::SMALLINT   AS month,
+    EXTRACT(QUARTER FROM datetime_start_utc)::SMALLINT AS quarter,
+    EXTRACT(DOY FROM datetime_start_utc)::SMALLINT     AS julian_day,
+    (datetime_start_utc::DATE - DATE '1899-12-30')     AS julian_date,
+    FLOOR(ABS(latitude))::SMALLINT                AS lat_deg,
+    (ABS(latitude) - FLOOR(ABS(latitude))) * 60    AS lat_min,
+    CASE WHEN latitude >= 0 THEN 'N' ELSE 'S' END AS lat_hem,
+    FLOOR(ABS(longitude))::SMALLINT                AS lon_deg,
+    (ABS(longitude) - FLOOR(ABS(longitude))) * 60    AS lon_min,
+    CASE WHEN longitude >= 0 THEN 'E' ELSE 'W' END AS lon_hem,
+    STRFTIME(datetime_start_utc, '%Y%m')                AS cruise,
     REPLACE(REPLACE(site_key, '.', ''), ' ', '')   AS db_sta_key
   FROM casts"
 )
@@ -1005,7 +1005,7 @@ if (!file_exists(map_casts_png)) {
   casts_sf <- dbGetQuery(con, cast_sql) |>
     st_as_sf(wkt = "geom_wkt", crs = 4326) |>
     select(-geom_wkt) |>
-    mutate(year = year(datetime_utc))
+    mutate(year = year(datetime_start_utc))
 
   m <- mapView(casts_sf, zcol = "year")
   mapshot2(m, file = map_casts_png)
@@ -1047,8 +1047,8 @@ year_range <- dbGetQuery(
   con,
   "
   SELECT
-    EXTRACT(YEAR FROM MIN(datetime_utc))::INTEGER AS yr_min,
-    EXTRACT(YEAR FROM MAX(datetime_utc))::INTEGER AS yr_max
+    EXTRACT(YEAR FROM MIN(datetime_start_utc))::INTEGER AS yr_min,
+    EXTRACT(YEAR FROM MAX(datetime_start_utc))::INTEGER AS yr_max
   FROM casts"
 )
 
@@ -1115,18 +1115,18 @@ dbExecute(
   "
   CREATE VIEW casts_derived AS
   SELECT *,
-    EXTRACT(YEAR FROM datetime_utc)::SMALLINT    AS year,
-    EXTRACT(MONTH FROM datetime_utc)::SMALLINT   AS month,
-    EXTRACT(QUARTER FROM datetime_utc)::SMALLINT AS quarter,
-    EXTRACT(DOY FROM datetime_utc)::SMALLINT     AS julian_day,
-    (datetime_utc::DATE - DATE '1899-12-30')     AS julian_date,
-    FLOOR(ABS(lat_dec))::SMALLINT                AS lat_deg,
-    (ABS(lat_dec) - FLOOR(ABS(lat_dec))) * 60    AS lat_min,
-    CASE WHEN lat_dec >= 0 THEN 'N' ELSE 'S' END AS lat_hem,
-    FLOOR(ABS(lon_dec))::SMALLINT                AS lon_deg,
-    (ABS(lon_dec) - FLOOR(ABS(lon_dec))) * 60    AS lon_min,
-    CASE WHEN lon_dec >= 0 THEN 'E' ELSE 'W' END AS lon_hem,
-    STRFTIME(datetime_utc, '%Y%m')                AS cruise,
+    EXTRACT(YEAR FROM datetime_start_utc)::SMALLINT    AS year,
+    EXTRACT(MONTH FROM datetime_start_utc)::SMALLINT   AS month,
+    EXTRACT(QUARTER FROM datetime_start_utc)::SMALLINT AS quarter,
+    EXTRACT(DOY FROM datetime_start_utc)::SMALLINT     AS julian_day,
+    (datetime_start_utc::DATE - DATE '1899-12-30')     AS julian_date,
+    FLOOR(ABS(latitude))::SMALLINT                AS lat_deg,
+    (ABS(latitude) - FLOOR(ABS(latitude))) * 60    AS lat_min,
+    CASE WHEN latitude >= 0 THEN 'N' ELSE 'S' END AS lat_hem,
+    FLOOR(ABS(longitude))::SMALLINT                AS lon_deg,
+    (ABS(longitude) - FLOOR(ABS(longitude))) * 60    AS lon_min,
+    CASE WHEN longitude >= 0 THEN 'E' ELSE 'W' END AS lon_hem,
+    STRFTIME(datetime_start_utc, '%Y%m')                AS cruise,
     REPLACE(REPLACE(site_key, '.', ''), ' ', '')   AS db_sta_key
   FROM casts"
 )
@@ -1207,7 +1207,7 @@ parquet_stats <- write_parquet_outputs(
   tables           = own_tables,
   sort_by          = list(
     bottle_measurement = "measurement_type",
-    casts              = "hilbert:lon_dec,lat_dec"),
+    casts              = "hilbert:longitude,latitude"),
   strip_provenance = FALSE,
   mismatches       = mismatches
 )
@@ -1347,7 +1347,8 @@ for (tbl in modifies_tables) {
 bridge_result <- derive_cruise_key_on_casts(
   con = con,
   ship_renames_csv = here("metadata/ship_renames.csv"),
-  fetch_ices = TRUE
+  fetch_ices = TRUE,
+  datetime_col = "datetime_start_utc"
 )
 
 # insert interim entries for still-unmatched ships (ship_nodc = "?XX?")
@@ -1528,10 +1529,10 @@ message(glue("GCS outputs at: gs://calcofi-db/ingest/{dir_label}/"))
 
 - [x] Review column names and apply db naming conventions, per @docs/db.qmd and @workflows/README_PLAN.qmd: cast_cnt -> cast_id, btl_cnt -> bottle_id, sta_id -> site_key, etc.
 - [x] Pivot longer casts/bottle tables for easier analysis. Created bottle_measurement (value/prec/qual) and cast_condition tables, plus measurement_type reference.
-- [x] Consolidate casts temporal columns (date+time -> datetime_utc), drop 16 derivable columns, create casts_derived VIEW.
+- [x] Consolidate casts temporal columns (date+time -> datetime_start_utc), drop 16 derivable columns, create casts_derived VIEW.
 
 - [ ] Link possible fields to @workflows/ingest_swfsc_ichthyo.qmd. Flag mismatches.
-- [x] Cruise bridge prep: renamed `Cruise_ID` → `cruise_key_0` (was `cruise_key`) to avoid collision with SWFSC `cruise_key` (YYMMKK). Merge workflow adds `cruise_key` as new column derived from `datetime_utc` + `ship_key`.
+- [x] Cruise bridge prep: renamed `Cruise_ID` → `cruise_key_0` (was `cruise_key`) to avoid collision with SWFSC `cruise_key` (YYMMKK). Merge workflow adds `cruise_key` as new column derived from `datetime_start_utc` + `ship_key`.
 - [ ] Validate casts.ship_code -> ship.ship_nodc FK after integration with swfsc data.
 
 - [ ] Review documentation for more comment descriptions at [Data \>
