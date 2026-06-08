@@ -28,7 +28,8 @@ rels_cross <- tribble(
   "cufes_sample", "grid_key",   "grid",   "grid_key",   "underway sample grid assignment (95% in CalCOFI grid)",
   "phyllosoma_tow", "cruise_key", "cruise", "cruise_key", "tow cruise via ship_nodc + date (88% matched)",
   "phyllosoma_tow", "ship_key",   "ship",   "ship_key",   "tow vessel resolved via ship_nodc code (98% matched)",
-  "phyllosoma_tow", "grid_key",   "grid",   "grid_key",   "tow grid assignment (98% in CalCOFI grid)"
+  "phyllosoma_tow", "grid_key",   "grid",   "grid_key",   "tow grid assignment (98% in CalCOFI grid)",
+  "phyto_sample",   "cruise_key", "cruise", "cruise_key", "region-pooled sample cruise matched by year-month (59%; no site_key/grid_key — region-pooled)"
 )
 write_csv(rels_cross, here("metadata/relationships_cross.csv"), na = "")
 cat("wrote", nrow(rels_cross), "cross-dataset FKs to metadata/relationships_cross.csv\n")
@@ -48,7 +49,7 @@ st <- tribble(
   # ---- pending must-complete ingests ----
   "cce-lter","euphausiids", "#26",     "must-complete",  "ingested",  "done",   "done",    "done",  "done",    "n/a",         "n/a",                  "#42 planned","ingested w/ provisional units+taxon (Q01/Q02); ship 98.3%/cruise 81.9% matched", today,
   "pic",     "zooplankton", "#27",     "must-complete",  "ingested",  "done",   "done",    "done",  "done",    "n/a",         "n/a",                  "#42 planned","tow registry ingested (99,530 CalCOFI-region tows); biovolume pending Q01", today,
-  "calcofi", "phytoplankton","#28",    "must-complete",  "explored",  "done",   "",        "",      "",        "n/a",         "n/a",                  "planned",    "ACQUIRED: EDI knb-lter-cce.254.4 (Venrick, 1996-2022, region-pooled, 162.8k long rows, 385 taxa); parser libs/parse_phytoplankton.R; pending grain decision (Q01) + WoRMS + cruise_key year-month match", today,
+  "calcofi", "phytoplankton","#28",    "must-complete",  "ingested",  "done",   "done",    "done",  "done",    "n/a",         "#46 planned",          "planned",    "INGESTED: EDI knb-lter-cce.254.4 (Venrick, 1996-2022); region-pooled grain (phyto_sample 409 = 4 regions x 103 cruises, phyto_measurement 159.8k, phyto_taxon 399); cruise_key 59% (Q06), WoRMS 309/390 (Q05), region centroids provisional (Q01)", today,
   "calcofi", "bird_mammal_census","#29","should-complete","ingested",  "done",   "done",    "done",  "done",    "#43 planned", "n/a",                  "planned",    "transect+obs+species+behavior (1987-2021, Sydeman/DataZoo255); covers seabird #29 + mammal #30", today,
   # ---- pending should-complete ingests ----
   "calcofi", "seabird",     "#29",     "should-complete","todo",      "",       "",        "",      "",        "#43 planned", "n/a",                  "planned",    "confirm provider/source; underway census",  today,
