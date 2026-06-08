@@ -42,36 +42,43 @@ frontmatter in each `.qmd`. All workflows with `workflow_type: ingest`
 or `spatial` feed into this release notebook via `dependency: [auto]`
 in `_targets.R`.
 
-```{mermaid}
-%%| label: fig-workflow
-%%| fig-cap: "Pipeline: ingest notebooks produce parquet → release caboose assembles frozen release"
+```{r}
+#| label: fig-workflow
+#| fig-cap: "Pipeline dependency graph, auto-discovered from `_targets.R` (every workflow added to this folder appears here). This notebook — `release_database` — is the highlighted caboose: it runs last, after all ingests, to assemble the frozen release."
+#| message: false
+#| warning: false
+librarian::shelf(targets, visNetwork, quiet = TRUE)
 
-flowchart LR
-    subgraph ingest["Ingest Notebooks"]
-        i1["ichthyo"]
-        i2["bottle"]
-        i3["ctd-cast"]
-        i4["dic"]
-        i5["inverts"]
-        i6["spatial"]
-    end
-    subgraph assembly["Assembly (this notebook)"]
-        a["Load all parquet<br/>into in-memory DuckDB"]
-    end
-    subgraph release["Frozen Release"]
-        f["Clean parquet<br/>+ manifest.json"]
-    end
-    i1 --> a
-    i2 --> a
-    i3 --> a
-    i4 --> a
-    i5 --> a
-    i6 --> a
-    a --> f
+# auto-discover the pipeline graph straight from _targets.R, so newly added
+# workflows show up without editing this diagram. callr_function = NULL keeps it
+# in-process (safe when this notebook is rendered via tar_make); outdated = FALSE
+# skips the up-to-date check, so there's no "Outdated / Regular target" legend.
+invisible(suppressMessages(capture.output(
+  net <- tar_network(targets_only = TRUE, outdated = FALSE, callr_function = NULL))))
 
-    style ingest fill:#e3f2fd,stroke:#1565c0
-    style assembly fill:#fff3e0,stroke:#ef6c00
-    style release fill:#e8f4e8,stroke:#2e7d32
+nodes <- data.frame(
+  id    = net$vertices$name,
+  label = net$vertices$name,
+  group = ifelse(net$vertices$name == "release_database", "release", "workflow"),
+  stringsAsFactors = FALSE)
+edges <- data.frame(
+  from = net$edges$from, to = net$edges$to, stringsAsFactors = FALSE)
+
+visNetwork(nodes, edges, height = "520px", width = "100%") |>
+  visGroups(
+    groupname = "workflow", shape = "dot", size = 16,
+    color = list(background = "#7fb3c8", border = "#5a8ea3",
+                 highlight = "#a9d0de")) |>
+  visGroups(
+    groupname = "release", shape = "dot", size = 34, shadow = TRUE,
+    color = list(background = "#ef6c00", border = "#b35100",
+                 highlight = "#ff9a3d"),
+    font  = list(size = 22, color = "#b35100", face = "bold")) |>
+  visNodes(font = list(size = 16)) |>
+  visEdges(arrows = "to", color = list(color = "#b0b0b0", highlight = "#666666")) |>
+  visHierarchicalLayout(
+    direction = "LR", sortMethod = "directed", levelSeparation = 230) |>
+  visOptions(highlightNearest = list(enabled = TRUE, degree = 1, hover = TRUE))
 ```
 
 ## Setup
