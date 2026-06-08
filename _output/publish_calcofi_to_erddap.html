@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.8.25">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="dcterms.date" content="2026-06-08">
+
+<title>Publish CalCOFI tables to ERDDAP (EDDTableFromParquetFiles)</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="publish_calcofi_to_erddap_files/libs/clipboard/clipboard.min.js"></script>
+<script src="publish_calcofi_to_erddap_files/libs/quarto-html/quarto.js" type="module"></script>
+<script src="publish_calcofi_to_erddap_files/libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="publish_calcofi_to_erddap_files/libs/quarto-html/axe/axe-check.js" type="module"></script>
+<script src="publish_calcofi_to_erddap_files/libs/quarto-html/popper.min.js"></script>
+<script src="publish_calcofi_to_erddap_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="publish_calcofi_to_erddap_files/libs/quarto-html/anchor.min.js"></script>
+<link href="publish_calcofi_to_erddap_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="publish_calcofi_to_erddap_files/libs/quarto-html/quarto-syntax-highlighting-7b89279ff1a6dce999919e0e67d4d9ec.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="publish_calcofi_to_erddap_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="publish_calcofi_to_erddap_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="publish_calcofi_to_erddap_files/libs/bootstrap/bootstrap-d6a003b94517c951b2d65075d42fb01b.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+
+
+</head>
+
+<body class="quarto-light">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+  <nav id="TOC" role="doc-toc" class="toc-active" data-toc-expanded="1">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#overview" id="toc-overview" class="nav-link active" data-scroll-target="#overview"><span class="header-section-number">1</span> Overview</a></li>
+  <li><a href="#setup" id="toc-setup" class="nav-link" data-scroll-target="#setup"><span class="header-section-number">2</span> Setup</a></li>
+  <li><a href="#curated-tables" id="toc-curated-tables" class="nav-link" data-scroll-target="#curated-tables"><span class="header-section-number">3</span> Curated Tables</a></li>
+  <li><a href="#stage-parquet-generate-datasets.xml" id="toc-stage-parquet-generate-datasets.xml" class="nav-link" data-scroll-target="#stage-parquet-generate-datasets.xml"><span class="header-section-number">4</span> Stage Parquet + Generate datasets.xml</a></li>
+  <li><a href="#assemble-datasets.xml" id="toc-assemble-datasets.xml" class="nav-link" data-scroll-target="#assemble-datasets.xml"><span class="header-section-number">5</span> Assemble datasets.xml</a></li>
+  <li><a href="#deploy-manual" id="toc-deploy-manual" class="nav-link" data-scroll-target="#deploy-manual"><span class="header-section-number">6</span> Deploy (manual)</a></li>
+  <li><a href="#cleanup" id="toc-cleanup" class="nav-link" data-scroll-target="#cleanup"><span class="header-section-number">7</span> Cleanup</a></li>
+  </ul>
+</nav>
+</div>
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<div class="quarto-title-block"><div><h1 class="title">Publish CalCOFI tables to ERDDAP (EDDTableFromParquetFiles)</h1><button type="button" class="btn code-tools-button dropdown-toggle" id="quarto-code-tools-menu" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi"></i> Code</button><ul class="dropdown-menu dropdown-menu-end" aria-labelelledby="quarto-code-tools-menu"><li><a id="quarto-show-all-code" class="dropdown-item" href="javascript:void(0)" role="button">Show All Code</a></li><li><a id="quarto-hide-all-code" class="dropdown-item" href="javascript:void(0)" role="button">Hide All Code</a></li><li><hr class="dropdown-divider"></li><li><a id="quarto-view-source" class="dropdown-item" href="javascript:void(0)" role="button">View Source</a></li></ul></div></div>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    
+    <div>
+    <div class="quarto-title-meta-heading">Published</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">2026-06-08</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="overview" class="level2" data-number="1">
+<h2 data-number="1" class="anchored" data-anchor-id="overview"><span class="header-section-number">1</span> Overview</h2>
+<p>Publish CalCOFI tabular data to the CalCOFI ERDDAP server (<code>erddap/erddap:latest</code> = v2.30, which supports <strong>EDDTableFromParquetFiles</strong> natively since v2.27) as a set of EDDTable datasets backed directly by Parquet.</p>
+<p>For each curated table this workflow:</p>
+<ol type="1">
+<li><strong>Stages</strong> an ERDDAP-friendly Parquet (<code>libs/erddap.R::stage_table_for_erddap</code>): drops <code>geom</code>/provenance, exposes <code>latitude</code>/<code>longitude</code>/<code>depth</code> as doubles and <code>time</code> as epoch-seconds (ERDDAP has no geometry type and wants numeric time).</li>
+<li><strong>Generates</strong> an <code>EDDTableFromParquetFiles</code> <code>&lt;dataset&gt;</code> block (<code>erddap_dataset_xml</code>) with <code>&lt;dataType&gt;</code>/<code>units</code>/<code>ioos_category</code>/<code>standard_name</code> per variable (units pulled from each table’s <code>metadata.json</code>).</li>
+<li>Writes the staged Parquet to <code>data/erddap/{datasetID}/</code> and assembles all blocks into <code>data/erddap/datasets_calcofi.xml</code>.</li>
+</ol>
+<p><strong>Deploy</strong> (manual, documented at the end): rsync <code>data/erddap/*</code> to the server’s <code>/share/erddap/datasets/</code>, splice the XML into <code>CalCOFI/erddap/content/datasets.xml</code>, and reload via flag files.</p>
+</section>
+<section id="setup" class="level2" data-number="2">
+<h2 data-number="2" class="anchored" data-anchor-id="setup"><span class="header-section-number">2</span> Setup</h2>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>librarian<span class="sc">::</span><span class="fu">shelf</span>(DBI, duckdb, dplyr, fs, glue, jsonlite, purrr, readr,</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>                 stringr, tibble, here, knitr, <span class="at">quiet =</span> T)</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="fu">options</span>(<span class="at">readr.show_col_types =</span> F)</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="fu">source</span>(<span class="fu">here</span>(<span class="st">"libs/erddap.R"</span>))</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>dir_erddap <span class="ot">&lt;-</span> <span class="fu">here</span>(<span class="st">"data/erddap"</span>)</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="fu">dir_create</span>(dir_erddap)</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>con <span class="ot">&lt;-</span> <span class="fu">dbConnect</span>(<span class="fu">duckdb</span>()); <span class="fu">dbExecute</span>(con, <span class="st">"INSTALL spatial; LOAD spatial"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>[1] 0</code></pre>
+</div>
+</div>
+</section>
+<section id="curated-tables" class="level2" data-number="3">
+<h2 data-number="3" class="anchored" data-anchor-id="curated-tables"><span class="header-section-number">3</span> Curated Tables</h2>
+<p>Tables that carry (or derive) <code>time</code>/<code>latitude</code>/<code>longitude</code> directly. Measurement tables keyed only by UUID+depth (e.g.&nbsp;<code>ctd_measurement</code>, <code>bottle_measurement</code>) are published via their coordinate-bearing companions (<code>ctd_wide</code>, joined views) in a later pass.</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>cfg <span class="ot">&lt;-</span> <span class="fu">tribble</span>(</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>  <span class="sc">~</span>dataset_id,            <span class="sc">~</span>parquet,                                              <span class="sc">~</span>title,                          <span class="sc">~</span>summary,                                                            <span class="sc">~</span>cdm,                <span class="sc">~</span>depth_col,</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>  <span class="st">"calcofi_ctd"</span>,          <span class="st">"data/parquet/calcofi_ctd-cast/ctd_wide.parquet"</span>,      <span class="st">"CalCOFI CTD Profiles (wide)"</span>,   <span class="st">"Wide-format CTD profiles (one row per cast/depth) from CalCOFI cruises."</span>, <span class="st">"TrajectoryProfile"</span>, <span class="st">"depth_m"</span>,</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>  <span class="st">"calcofi_casts"</span>,        <span class="st">"data/parquet/calcofi_bottle/casts.parquet"</span>,           <span class="st">"CalCOFI Casts"</span>,                 <span class="st">"Cast-level metadata for CalCOFI CTD/bottle stations."</span>,                <span class="st">"Point"</span>,             <span class="st">""</span>,</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>  <span class="st">"calcofi_dic"</span>,          <span class="st">"data/parquet/calcofi_dic/dic_sample.parquet"</span>,         <span class="st">"CalCOFI DIC Samples"</span>,           <span class="st">"Dissolved inorganic carbon / alkalinity sample positions."</span>,          <span class="st">"Point"</span>,             <span class="st">"depth_m"</span>,</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>  <span class="st">"calcofi_euphausiids"</span>,  <span class="st">"data/parquet/cce-lter_euphausiids/euphausiids_tow.parquet"</span>, <span class="st">"CalCOFI Euphausiid Tows"</span>, <span class="st">"Euphausiid (krill) abundance net tows, 1951-2019."</span>,                  <span class="st">"Point"</span>,             <span class="st">""</span>,</span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>  <span class="st">"calcofi_zooplankton"</span>,  <span class="st">"data/parquet/pic_zooplankton/zooplankton_tow.parquet"</span>,<span class="st">"CalCOFI Zooplankton Tows"</span>,      <span class="st">"SIO PIC zooplankton net-tow registry (CalCOFI region)."</span>,             <span class="st">"Point"</span>,             <span class="st">""</span>,</span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>  <span class="st">"calcofi_phytoplankton"</span>,<span class="st">"data/parquet/calcofi_phytoplankton/phyto_obs.parquet"</span>, <span class="st">"CalCOFI Phytoplankton (Venrick)"</span>,<span class="st">"Phytoplankton abundance (cells/L) by taxon, 1996-2022 (Venrick, EDI knb-lter-cce.254). Region-pooled: latitude/longitude are provisional region centroids."</span>, <span class="st">"Point"</span>,       <span class="st">""</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>) <span class="sc">|&gt;</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">parquet =</span> <span class="fu">here</span>(parquet),</span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>         <span class="at">metadata =</span> <span class="fu">here</span>(<span class="fu">glue</span>(<span class="st">"{path_dir(parquet)}/metadata.json"</span>)))</span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>cfg <span class="sc">|&gt;</span> <span class="fu">select</span>(dataset_id, title, cdm) <span class="sc">|&gt;</span> <span class="fu">kable</span>()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output-display">
+<table class="caption-top table table-sm table-striped small">
+<colgroup>
+<col style="width: 30%">
+<col style="width: 44%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">dataset_id</th>
+<th style="text-align: left;">title</th>
+<th style="text-align: left;">cdm</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">calcofi_ctd</td>
+<td style="text-align: left;">CalCOFI CTD Profiles (wide)</td>
+<td style="text-align: left;">TrajectoryProfile</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">calcofi_casts</td>
+<td style="text-align: left;">CalCOFI Casts</td>
+<td style="text-align: left;">Point</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">calcofi_dic</td>
+<td style="text-align: left;">CalCOFI DIC Samples</td>
+<td style="text-align: left;">Point</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">calcofi_euphausiids</td>
+<td style="text-align: left;">CalCOFI Euphausiid Tows</td>
+<td style="text-align: left;">Point</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">calcofi_zooplankton</td>
+<td style="text-align: left;">CalCOFI Zooplankton Tows</td>
+<td style="text-align: left;">Point</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">calcofi_phytoplankton</td>
+<td style="text-align: left;">CalCOFI Phytoplankton (Venrick)</td>
+<td style="text-align: left;">Point</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</section>
+<section id="stage-parquet-generate-datasets.xml" class="level2" data-number="4">
+<h2 data-number="4" class="anchored" data-anchor-id="stage-parquet-generate-datasets.xml"><span class="header-section-number">4</span> Stage Parquet + Generate datasets.xml</h2>
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co"># pull a column -&gt; units lookup from a table's metadata.json (keys are "table.column")</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>units_from_metadata <span class="ot">&lt;-</span> <span class="cf">function</span>(meta_path) {</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">file.exists</span>(meta_path)) <span class="fu">return</span>(<span class="fu">list</span>())</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>  m <span class="ot">&lt;-</span> <span class="fu">fromJSON</span>(meta_path, <span class="at">simplifyVector =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">setNames</span>(</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    <span class="fu">lapply</span>(m<span class="sc">$</span>columns, <span class="cf">function</span>(c) c<span class="sc">$</span>units <span class="sc">%||%</span> <span class="st">""</span>),</span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>    <span class="fu">sub</span>(<span class="st">"^[^.]+</span><span class="sc">\\</span><span class="st">."</span>, <span class="st">""</span>, <span class="fu">names</span>(m<span class="sc">$</span>columns)))</span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>blocks <span class="ot">&lt;-</span> <span class="fu">character</span>(<span class="dv">0</span>)</span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (i <span class="cf">in</span> <span class="fu">seq_len</span>(<span class="fu">nrow</span>(cfg))) {</span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>  r <span class="ot">&lt;-</span> cfg[i, ]</span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">file.exists</span>(r<span class="sc">$</span>parquet)) { <span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"</span><span class="sc">\n</span><span class="st">- SKIP {r$dataset_id}: {r$parquet} not found</span><span class="sc">\n</span><span class="st">"</span>)); <span class="cf">next</span> }</span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>  tbl <span class="ot">&lt;-</span> tools<span class="sc">::</span><span class="fu">file_path_sans_ext</span>(<span class="fu">basename</span>(r<span class="sc">$</span>parquet))</span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>  staged <span class="ot">&lt;-</span> <span class="fu">stage_table_for_erddap</span>(</span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>    con, r<span class="sc">$</span>parquet, tbl, <span class="fu">file.path</span>(dir_erddap, r<span class="sc">$</span>dataset_id),</span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a>    <span class="at">depth_col =</span> <span class="cf">if</span> (<span class="fu">nzchar</span>(r<span class="sc">$</span>depth_col)) r<span class="sc">$</span>depth_col <span class="cf">else</span> <span class="st">"depth_m"</span>)</span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>  units_lk <span class="ot">&lt;-</span> <span class="fu">units_from_metadata</span>(r<span class="sc">$</span>metadata)</span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a>  xml <span class="ot">&lt;-</span> <span class="fu">erddap_dataset_xml</span>(</span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a>    staged, <span class="at">dataset_id =</span> r<span class="sc">$</span>dataset_id, <span class="at">title =</span> r<span class="sc">$</span>title, <span class="at">summary =</span> r<span class="sc">$</span>summary,</span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a>    <span class="at">file_dir =</span> <span class="fu">glue</span>(<span class="st">"/datasets/{r$dataset_id}/"</span>),</span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a>    <span class="at">units_lookup =</span> units_lk, <span class="at">cdm_data_type =</span> r<span class="sc">$</span>cdm)</span>
+<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a>  <span class="fu">writeLines</span>(xml, <span class="fu">file.path</span>(dir_erddap, r<span class="sc">$</span>dataset_id, <span class="fu">glue</span>(<span class="st">"{r$dataset_id}.xml"</span>)))</span>
+<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a>  blocks <span class="ot">&lt;-</span> <span class="fu">c</span>(blocks, xml)</span>
+<span id="cb4-25"><a href="#cb4-25" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"</span><span class="sc">\n</span><span class="st">- {r$dataset_id}: staged {nrow(staged)} cols, "</span>,</span>
+<span id="cb4-26"><a href="#cb4-26" aria-hidden="true" tabindex="-1"></a>           <span class="st">"{ifelse('time' %in% staged$column,'time OK','NO TIME')}, "</span>,</span>
+<span id="cb4-27"><a href="#cb4-27" aria-hidden="true" tabindex="-1"></a>           <span class="st">"{ifelse('latitude' %in% staged$column,'lat/lon OK','NO COORDS')}</span><span class="sc">\n</span><span class="st">"</span>))</span>
+<span id="cb4-28"><a href="#cb4-28" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<ul>
+<li>calcofi_ctd: staged 79 cols, time OK, lat/lon OK- calcofi_casts: staged 32 cols, time OK, lat/lon OK- calcofi_dic: staged 9 cols, time OK, lat/lon OK- calcofi_euphausiids: staged 14 cols, time OK, lat/lon OK- calcofi_zooplankton: staged 25 cols, time OK, lat/lon OK- calcofi_phytoplankton: staged 14 cols, time OK, lat/lon OK</li>
+</ul>
+</section>
+<section id="assemble-datasets.xml" class="level2" data-number="5">
+<h2 data-number="5" class="anchored" data-anchor-id="assemble-datasets.xml"><span class="header-section-number">5</span> Assemble datasets.xml</h2>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>xml_all <span class="ot">&lt;-</span> <span class="fu">paste0</span>(</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>  <span class="st">"&lt;!-- CalCOFI EDDTableFromParquetFiles datasets (generated by "</span>,</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>  <span class="st">"publish_calcofi_to_erddap.qmd) --&gt;</span><span class="sc">\n</span><span class="st">"</span>, <span class="fu">paste</span>(blocks, <span class="at">collapse =</span> <span class="st">"</span><span class="sc">\n\n</span><span class="st">"</span>))</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="fu">writeLines</span>(xml_all, <span class="fu">file.path</span>(dir_erddap, <span class="st">"datasets_calcofi.xml"</span>))</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"wrote"</span>, <span class="fu">length</span>(blocks), <span class="st">"dataset blocks to data/erddap/datasets_calcofi.xml</span><span class="sc">\n</span><span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>wrote 6 dataset blocks to data/erddap/datasets_calcofi.xml</code></pre>
+</div>
+</div>
+</section>
+<section id="deploy-manual" class="level2" data-number="6">
+<h2 data-number="6" class="anchored" data-anchor-id="deploy-manual"><span class="header-section-number">6</span> Deploy (manual)</h2>
+<p>To deploy to the live ERDDAP server (CalCOFI/server docker-compose, erddap.calcofi.io):</p>
+<ol type="1">
+<li><p><strong>Sync staged parquet</strong> to the server data dir (container <code>/datasets/</code>):</p>
+<pre><code>rsync -av data/erddap/*/   &lt;server&gt;:/share/erddap/datasets/</code></pre>
+<p>(each <code>data/erddap/{datasetID}/{table}.parquet</code> -&gt; <code>/share/erddap/datasets/{datasetID}/</code>)</p></li>
+<li><p><strong>Splice the dataset blocks</strong> in <code>data/erddap/datasets_calcofi.xml</code> into <code>CalCOFI/erddap/content/datasets.xml</code> at the <code>&lt;!-- add dataset definitions below --&gt;</code> marker, and commit/push the <code>CalCOFI/erddap</code> repo (it is bind-mounted into the container).</p></li>
+<li><p><strong>Reload ERDDAP</strong> per dataset (flag), e.g.:</p>
+<pre><code>touch /share/erddap/data/flag/calcofi_ctd        # or each datasetID</code></pre>
+<p>or hit https://erddap.calcofi.io/erddap/setDatasetFlag.html?datasetID=calcofi_ctd&amp;flagKey=…</p></li>
+<li><p><strong>Verify</strong>: curl https://erddap.calcofi.io/erddap/tabledap/calcofi_ctd.das and check /share/erddap/data/log.txt for any “WARNING: Bad line(s)” Parquet messages.</p></li>
+</ol>
+<p>NOTE: confirm each table’s time/lat/lon column types; hand-tune units/long_name in datasets.xml where metadata.json was sparse (Parquet carries no CF metadata).</p>
+</section>
+<section id="cleanup" class="level2" data-number="7">
+<h2 data-number="7" class="anchored" data-anchor-id="cleanup"><span class="header-section-number">7</span> Cleanup</h2>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="fu">dbDisconnect</span>(con, <span class="at">shutdown =</span> <span class="cn">TRUE</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+<!-- -->
+
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+    const viewSource = window.document.getElementById('quarto-view-source') ||
+                       window.document.getElementById('quarto-code-tools-source');
+    if (viewSource) {
+      const sourceUrl = viewSource.getAttribute("data-quarto-source-url");
+      viewSource.addEventListener("click", function(e) {
+        if (sourceUrl) {
+          // rstudio viewer pane
+          if (/\bcapabilities=\b/.test(window.location)) {
+            window.open(sourceUrl);
+          } else {
+            window.location.href = sourceUrl;
+          }
+        } else {
+          const modal = new bootstrap.Modal(document.getElementById('quarto-embedded-source-code-modal'));
+          modal.show();
+        }
+        return false;
+      });
+    }
+    function toggleCodeHandler(show) {
+      return function(e) {
+        const detailsSrc = window.document.querySelectorAll(".cell > details > .sourceCode");
+        for (let i=0; i<detailsSrc.length; i++) {
+          const details = detailsSrc[i].parentElement;
+          if (show) {
+            details.open = true;
+          } else {
+            details.removeAttribute("open");
+          }
+        }
+        const cellCodeDivs = window.document.querySelectorAll(".cell > .sourceCode");
+        const fromCls = show ? "hidden" : "unhidden";
+        const toCls = show ? "unhidden" : "hidden";
+        for (let i=0; i<cellCodeDivs.length; i++) {
+          const codeDiv = cellCodeDivs[i];
+          if (codeDiv.classList.contains(fromCls)) {
+            codeDiv.classList.remove(fromCls);
+            codeDiv.classList.add(toCls);
+          } 
+        }
+        return false;
+      }
+    }
+    const hideAllCode = window.document.getElementById("quarto-hide-all-code");
+    if (hideAllCode) {
+      hideAllCode.addEventListener("click", toggleCodeHandler(false));
+    }
+    const showAllCode = window.document.getElementById("quarto-show-all-code");
+    if (showAllCode) {
+      showAllCode.addEventListener("click", toggleCodeHandler(true));
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script><div class="modal fade" id="quarto-embedded-source-code-modal" tabindex="-1" aria-labelledby="quarto-embedded-source-code-modal-label" aria-hidden="true"><div class="modal-dialog modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><h5 class="modal-title" id="quarto-embedded-source-code-modal-label">Source Code</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="">
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb10" data-shortcodes="false"><pre class="sourceCode markdown code-with-copy"><code class="sourceCode markdown"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="co">---</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="an">title:</span><span class="co"> "Publish CalCOFI tables to ERDDAP (EDDTableFromParquetFiles)"</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a><span class="an">editor_options:</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="co">  chunk_output_type: console</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a><span class="co">---</span></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a><span class="fu">## Overview</span></span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>Publish CalCOFI tabular data to the CalCOFI ERDDAP server</span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>(<span class="in">`erddap/erddap:latest`</span> = v2.30, which supports **EDDTableFromParquetFiles**</span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a>natively since v2.27) as a set of EDDTable datasets backed directly by Parquet.</span>
+<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a>For each curated table this workflow:</span>
+<span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-15"><a href="#cb10-15" aria-hidden="true" tabindex="-1"></a><span class="ss">1. </span>**Stages** an ERDDAP-friendly Parquet (<span class="in">`libs/erddap.R::stage_table_for_erddap`</span>):</span>
+<span id="cb10-16"><a href="#cb10-16" aria-hidden="true" tabindex="-1"></a>   drops <span class="in">`geom`</span>/provenance, exposes <span class="in">`latitude`</span>/<span class="in">`longitude`</span>/<span class="in">`depth`</span> as doubles and</span>
+<span id="cb10-17"><a href="#cb10-17" aria-hidden="true" tabindex="-1"></a>   <span class="in">`time`</span> as epoch-seconds (ERDDAP has no geometry type and wants numeric time).</span>
+<span id="cb10-18"><a href="#cb10-18" aria-hidden="true" tabindex="-1"></a><span class="ss">2. </span>**Generates** an <span class="in">`EDDTableFromParquetFiles`</span> <span class="in">`&lt;dataset&gt;`</span> block</span>
+<span id="cb10-19"><a href="#cb10-19" aria-hidden="true" tabindex="-1"></a>   (<span class="in">`erddap_dataset_xml`</span>) with <span class="in">`&lt;dataType&gt;`</span>/<span class="in">`units`</span>/<span class="in">`ioos_category`</span>/<span class="in">`standard_name`</span></span>
+<span id="cb10-20"><a href="#cb10-20" aria-hidden="true" tabindex="-1"></a>   per variable (units pulled from each table's <span class="in">`metadata.json`</span>).</span>
+<span id="cb10-21"><a href="#cb10-21" aria-hidden="true" tabindex="-1"></a><span class="ss">3. </span>Writes the staged Parquet to <span class="in">`data/erddap/{datasetID}/`</span> and assembles all</span>
+<span id="cb10-22"><a href="#cb10-22" aria-hidden="true" tabindex="-1"></a>   blocks into <span class="in">`data/erddap/datasets_calcofi.xml`</span>.</span>
+<span id="cb10-23"><a href="#cb10-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-24"><a href="#cb10-24" aria-hidden="true" tabindex="-1"></a>**Deploy** (manual, documented at the end): rsync <span class="in">`data/erddap/*`</span> to the server's</span>
+<span id="cb10-25"><a href="#cb10-25" aria-hidden="true" tabindex="-1"></a><span class="in">`/share/erddap/datasets/`</span>, splice the XML into <span class="in">`CalCOFI/erddap/content/datasets.xml`</span>,</span>
+<span id="cb10-26"><a href="#cb10-26" aria-hidden="true" tabindex="-1"></a>and reload via flag files.</span>
+<span id="cb10-27"><a href="#cb10-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-28"><a href="#cb10-28" aria-hidden="true" tabindex="-1"></a><span class="fu">## Setup</span></span>
+<span id="cb10-29"><a href="#cb10-29" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-32"><a href="#cb10-32" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb10-33"><a href="#cb10-33" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: setup</span></span>
+<span id="cb10-34"><a href="#cb10-34" aria-hidden="true" tabindex="-1"></a><span class="co">#| message: false</span></span>
+<span id="cb10-35"><a href="#cb10-35" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-36"><a href="#cb10-36" aria-hidden="true" tabindex="-1"></a>librarian<span class="sc">::</span><span class="fu">shelf</span>(DBI, duckdb, dplyr, fs, glue, jsonlite, purrr, readr,</span>
+<span id="cb10-37"><a href="#cb10-37" aria-hidden="true" tabindex="-1"></a>                 stringr, tibble, here, knitr, <span class="at">quiet =</span> T)</span>
+<span id="cb10-38"><a href="#cb10-38" aria-hidden="true" tabindex="-1"></a><span class="fu">options</span>(<span class="at">readr.show_col_types =</span> F)</span>
+<span id="cb10-39"><a href="#cb10-39" aria-hidden="true" tabindex="-1"></a><span class="fu">source</span>(<span class="fu">here</span>(<span class="st">"libs/erddap.R"</span>))</span>
+<span id="cb10-40"><a href="#cb10-40" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-41"><a href="#cb10-41" aria-hidden="true" tabindex="-1"></a>dir_erddap <span class="ot">&lt;-</span> <span class="fu">here</span>(<span class="st">"data/erddap"</span>)</span>
+<span id="cb10-42"><a href="#cb10-42" aria-hidden="true" tabindex="-1"></a><span class="fu">dir_create</span>(dir_erddap)</span>
+<span id="cb10-43"><a href="#cb10-43" aria-hidden="true" tabindex="-1"></a>con <span class="ot">&lt;-</span> <span class="fu">dbConnect</span>(<span class="fu">duckdb</span>()); <span class="fu">dbExecute</span>(con, <span class="st">"INSTALL spatial; LOAD spatial"</span>)</span>
+<span id="cb10-44"><a href="#cb10-44" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb10-45"><a href="#cb10-45" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-46"><a href="#cb10-46" aria-hidden="true" tabindex="-1"></a><span class="fu">## Curated Tables</span></span>
+<span id="cb10-47"><a href="#cb10-47" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-48"><a href="#cb10-48" aria-hidden="true" tabindex="-1"></a>Tables that carry (or derive) <span class="in">`time`</span>/<span class="in">`latitude`</span>/<span class="in">`longitude`</span> directly. Measurement</span>
+<span id="cb10-49"><a href="#cb10-49" aria-hidden="true" tabindex="-1"></a>tables keyed only by UUID+depth (e.g. <span class="in">`ctd_measurement`</span>, <span class="in">`bottle_measurement`</span>)</span>
+<span id="cb10-50"><a href="#cb10-50" aria-hidden="true" tabindex="-1"></a>are published via their coordinate-bearing companions (<span class="in">`ctd_wide`</span>, joined views)</span>
+<span id="cb10-51"><a href="#cb10-51" aria-hidden="true" tabindex="-1"></a>in a later pass.</span>
+<span id="cb10-52"><a href="#cb10-52" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-55"><a href="#cb10-55" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb10-56"><a href="#cb10-56" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: config</span></span>
+<span id="cb10-57"><a href="#cb10-57" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-58"><a href="#cb10-58" aria-hidden="true" tabindex="-1"></a>cfg <span class="ot">&lt;-</span> <span class="fu">tribble</span>(</span>
+<span id="cb10-59"><a href="#cb10-59" aria-hidden="true" tabindex="-1"></a>  <span class="sc">~</span>dataset_id,            <span class="sc">~</span>parquet,                                              <span class="sc">~</span>title,                          <span class="sc">~</span>summary,                                                            <span class="sc">~</span>cdm,                <span class="sc">~</span>depth_col,</span>
+<span id="cb10-60"><a href="#cb10-60" aria-hidden="true" tabindex="-1"></a>  <span class="st">"calcofi_ctd"</span>,          <span class="st">"data/parquet/calcofi_ctd-cast/ctd_wide.parquet"</span>,      <span class="st">"CalCOFI CTD Profiles (wide)"</span>,   <span class="st">"Wide-format CTD profiles (one row per cast/depth) from CalCOFI cruises."</span>, <span class="st">"TrajectoryProfile"</span>, <span class="st">"depth_m"</span>,</span>
+<span id="cb10-61"><a href="#cb10-61" aria-hidden="true" tabindex="-1"></a>  <span class="st">"calcofi_casts"</span>,        <span class="st">"data/parquet/calcofi_bottle/casts.parquet"</span>,           <span class="st">"CalCOFI Casts"</span>,                 <span class="st">"Cast-level metadata for CalCOFI CTD/bottle stations."</span>,                <span class="st">"Point"</span>,             <span class="st">""</span>,</span>
+<span id="cb10-62"><a href="#cb10-62" aria-hidden="true" tabindex="-1"></a>  <span class="st">"calcofi_dic"</span>,          <span class="st">"data/parquet/calcofi_dic/dic_sample.parquet"</span>,         <span class="st">"CalCOFI DIC Samples"</span>,           <span class="st">"Dissolved inorganic carbon / alkalinity sample positions."</span>,          <span class="st">"Point"</span>,             <span class="st">"depth_m"</span>,</span>
+<span id="cb10-63"><a href="#cb10-63" aria-hidden="true" tabindex="-1"></a>  <span class="st">"calcofi_euphausiids"</span>,  <span class="st">"data/parquet/cce-lter_euphausiids/euphausiids_tow.parquet"</span>, <span class="st">"CalCOFI Euphausiid Tows"</span>, <span class="st">"Euphausiid (krill) abundance net tows, 1951-2019."</span>,                  <span class="st">"Point"</span>,             <span class="st">""</span>,</span>
+<span id="cb10-64"><a href="#cb10-64" aria-hidden="true" tabindex="-1"></a>  <span class="st">"calcofi_zooplankton"</span>,  <span class="st">"data/parquet/pic_zooplankton/zooplankton_tow.parquet"</span>,<span class="st">"CalCOFI Zooplankton Tows"</span>,      <span class="st">"SIO PIC zooplankton net-tow registry (CalCOFI region)."</span>,             <span class="st">"Point"</span>,             <span class="st">""</span>,</span>
+<span id="cb10-65"><a href="#cb10-65" aria-hidden="true" tabindex="-1"></a>  <span class="st">"calcofi_phytoplankton"</span>,<span class="st">"data/parquet/calcofi_phytoplankton/phyto_obs.parquet"</span>, <span class="st">"CalCOFI Phytoplankton (Venrick)"</span>,<span class="st">"Phytoplankton abundance (cells/L) by taxon, 1996-2022 (Venrick, EDI knb-lter-cce.254). Region-pooled: latitude/longitude are provisional region centroids."</span>, <span class="st">"Point"</span>,       <span class="st">""</span></span>
+<span id="cb10-66"><a href="#cb10-66" aria-hidden="true" tabindex="-1"></a>) <span class="sc">|&gt;</span></span>
+<span id="cb10-67"><a href="#cb10-67" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">parquet =</span> <span class="fu">here</span>(parquet),</span>
+<span id="cb10-68"><a href="#cb10-68" aria-hidden="true" tabindex="-1"></a>         <span class="at">metadata =</span> <span class="fu">here</span>(<span class="fu">glue</span>(<span class="st">"{path_dir(parquet)}/metadata.json"</span>)))</span>
+<span id="cb10-69"><a href="#cb10-69" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-70"><a href="#cb10-70" aria-hidden="true" tabindex="-1"></a>cfg <span class="sc">|&gt;</span> <span class="fu">select</span>(dataset_id, title, cdm) <span class="sc">|&gt;</span> <span class="fu">kable</span>()</span>
+<span id="cb10-71"><a href="#cb10-71" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb10-72"><a href="#cb10-72" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-73"><a href="#cb10-73" aria-hidden="true" tabindex="-1"></a><span class="fu">## Stage Parquet + Generate datasets.xml</span></span>
+<span id="cb10-74"><a href="#cb10-74" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-77"><a href="#cb10-77" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb10-78"><a href="#cb10-78" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: publish</span></span>
+<span id="cb10-79"><a href="#cb10-79" aria-hidden="true" tabindex="-1"></a><span class="co">#| results: asis</span></span>
+<span id="cb10-80"><a href="#cb10-80" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-81"><a href="#cb10-81" aria-hidden="true" tabindex="-1"></a><span class="co"># pull a column -&gt; units lookup from a table's metadata.json (keys are "table.column")</span></span>
+<span id="cb10-82"><a href="#cb10-82" aria-hidden="true" tabindex="-1"></a>units_from_metadata <span class="ot">&lt;-</span> <span class="cf">function</span>(meta_path) {</span>
+<span id="cb10-83"><a href="#cb10-83" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">file.exists</span>(meta_path)) <span class="fu">return</span>(<span class="fu">list</span>())</span>
+<span id="cb10-84"><a href="#cb10-84" aria-hidden="true" tabindex="-1"></a>  m <span class="ot">&lt;-</span> <span class="fu">fromJSON</span>(meta_path, <span class="at">simplifyVector =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb10-85"><a href="#cb10-85" aria-hidden="true" tabindex="-1"></a>  <span class="fu">setNames</span>(</span>
+<span id="cb10-86"><a href="#cb10-86" aria-hidden="true" tabindex="-1"></a>    <span class="fu">lapply</span>(m<span class="sc">$</span>columns, <span class="cf">function</span>(c) c<span class="sc">$</span>units <span class="sc">%||%</span> <span class="st">""</span>),</span>
+<span id="cb10-87"><a href="#cb10-87" aria-hidden="true" tabindex="-1"></a>    <span class="fu">sub</span>(<span class="st">"^[^.]+</span><span class="sc">\\</span><span class="st">."</span>, <span class="st">""</span>, <span class="fu">names</span>(m<span class="sc">$</span>columns)))</span>
+<span id="cb10-88"><a href="#cb10-88" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb10-89"><a href="#cb10-89" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-90"><a href="#cb10-90" aria-hidden="true" tabindex="-1"></a>blocks <span class="ot">&lt;-</span> <span class="fu">character</span>(<span class="dv">0</span>)</span>
+<span id="cb10-91"><a href="#cb10-91" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (i <span class="cf">in</span> <span class="fu">seq_len</span>(<span class="fu">nrow</span>(cfg))) {</span>
+<span id="cb10-92"><a href="#cb10-92" aria-hidden="true" tabindex="-1"></a>  r <span class="ot">&lt;-</span> cfg[i, ]</span>
+<span id="cb10-93"><a href="#cb10-93" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">file.exists</span>(r<span class="sc">$</span>parquet)) { <span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"</span><span class="sc">\n</span><span class="st">- SKIP {r$dataset_id}: {r$parquet} not found</span><span class="sc">\n</span><span class="st">"</span>)); <span class="cf">next</span> }</span>
+<span id="cb10-94"><a href="#cb10-94" aria-hidden="true" tabindex="-1"></a>  tbl <span class="ot">&lt;-</span> tools<span class="sc">::</span><span class="fu">file_path_sans_ext</span>(<span class="fu">basename</span>(r<span class="sc">$</span>parquet))</span>
+<span id="cb10-95"><a href="#cb10-95" aria-hidden="true" tabindex="-1"></a>  staged <span class="ot">&lt;-</span> <span class="fu">stage_table_for_erddap</span>(</span>
+<span id="cb10-96"><a href="#cb10-96" aria-hidden="true" tabindex="-1"></a>    con, r<span class="sc">$</span>parquet, tbl, <span class="fu">file.path</span>(dir_erddap, r<span class="sc">$</span>dataset_id),</span>
+<span id="cb10-97"><a href="#cb10-97" aria-hidden="true" tabindex="-1"></a>    <span class="at">depth_col =</span> <span class="cf">if</span> (<span class="fu">nzchar</span>(r<span class="sc">$</span>depth_col)) r<span class="sc">$</span>depth_col <span class="cf">else</span> <span class="st">"depth_m"</span>)</span>
+<span id="cb10-98"><a href="#cb10-98" aria-hidden="true" tabindex="-1"></a>  units_lk <span class="ot">&lt;-</span> <span class="fu">units_from_metadata</span>(r<span class="sc">$</span>metadata)</span>
+<span id="cb10-99"><a href="#cb10-99" aria-hidden="true" tabindex="-1"></a>  xml <span class="ot">&lt;-</span> <span class="fu">erddap_dataset_xml</span>(</span>
+<span id="cb10-100"><a href="#cb10-100" aria-hidden="true" tabindex="-1"></a>    staged, <span class="at">dataset_id =</span> r<span class="sc">$</span>dataset_id, <span class="at">title =</span> r<span class="sc">$</span>title, <span class="at">summary =</span> r<span class="sc">$</span>summary,</span>
+<span id="cb10-101"><a href="#cb10-101" aria-hidden="true" tabindex="-1"></a>    <span class="at">file_dir =</span> <span class="fu">glue</span>(<span class="st">"/datasets/{r$dataset_id}/"</span>),</span>
+<span id="cb10-102"><a href="#cb10-102" aria-hidden="true" tabindex="-1"></a>    <span class="at">units_lookup =</span> units_lk, <span class="at">cdm_data_type =</span> r<span class="sc">$</span>cdm)</span>
+<span id="cb10-103"><a href="#cb10-103" aria-hidden="true" tabindex="-1"></a>  <span class="fu">writeLines</span>(xml, <span class="fu">file.path</span>(dir_erddap, r<span class="sc">$</span>dataset_id, <span class="fu">glue</span>(<span class="st">"{r$dataset_id}.xml"</span>)))</span>
+<span id="cb10-104"><a href="#cb10-104" aria-hidden="true" tabindex="-1"></a>  blocks <span class="ot">&lt;-</span> <span class="fu">c</span>(blocks, xml)</span>
+<span id="cb10-105"><a href="#cb10-105" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"</span><span class="sc">\n</span><span class="st">- {r$dataset_id}: staged {nrow(staged)} cols, "</span>,</span>
+<span id="cb10-106"><a href="#cb10-106" aria-hidden="true" tabindex="-1"></a>           <span class="st">"{ifelse('time' %in% staged$column,'time OK','NO TIME')}, "</span>,</span>
+<span id="cb10-107"><a href="#cb10-107" aria-hidden="true" tabindex="-1"></a>           <span class="st">"{ifelse('latitude' %in% staged$column,'lat/lon OK','NO COORDS')}</span><span class="sc">\n</span><span class="st">"</span>))</span>
+<span id="cb10-108"><a href="#cb10-108" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb10-109"><a href="#cb10-109" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb10-110"><a href="#cb10-110" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-111"><a href="#cb10-111" aria-hidden="true" tabindex="-1"></a><span class="fu">## Assemble datasets.xml</span></span>
+<span id="cb10-112"><a href="#cb10-112" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-115"><a href="#cb10-115" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb10-116"><a href="#cb10-116" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: assemble</span></span>
+<span id="cb10-117"><a href="#cb10-117" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-118"><a href="#cb10-118" aria-hidden="true" tabindex="-1"></a>xml_all <span class="ot">&lt;-</span> <span class="fu">paste0</span>(</span>
+<span id="cb10-119"><a href="#cb10-119" aria-hidden="true" tabindex="-1"></a>  <span class="st">"&lt;!-- CalCOFI EDDTableFromParquetFiles datasets (generated by "</span>,</span>
+<span id="cb10-120"><a href="#cb10-120" aria-hidden="true" tabindex="-1"></a>  <span class="st">"publish_calcofi_to_erddap.qmd) --&gt;</span><span class="sc">\n</span><span class="st">"</span>, <span class="fu">paste</span>(blocks, <span class="at">collapse =</span> <span class="st">"</span><span class="sc">\n\n</span><span class="st">"</span>))</span>
+<span id="cb10-121"><a href="#cb10-121" aria-hidden="true" tabindex="-1"></a><span class="fu">writeLines</span>(xml_all, <span class="fu">file.path</span>(dir_erddap, <span class="st">"datasets_calcofi.xml"</span>))</span>
+<span id="cb10-122"><a href="#cb10-122" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"wrote"</span>, <span class="fu">length</span>(blocks), <span class="st">"dataset blocks to data/erddap/datasets_calcofi.xml</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb10-123"><a href="#cb10-123" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb10-124"><a href="#cb10-124" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-125"><a href="#cb10-125" aria-hidden="true" tabindex="-1"></a><span class="fu">## Deploy (manual)</span></span>
+<span id="cb10-126"><a href="#cb10-126" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-129"><a href="#cb10-129" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb10-130"><a href="#cb10-130" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: deploy-instructions</span></span>
+<span id="cb10-131"><a href="#cb10-131" aria-hidden="true" tabindex="-1"></a><span class="co">#| echo: false</span></span>
+<span id="cb10-132"><a href="#cb10-132" aria-hidden="true" tabindex="-1"></a><span class="co">#| results: asis</span></span>
+<span id="cb10-133"><a href="#cb10-133" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-134"><a href="#cb10-134" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">'</span></span>
+<span id="cb10-135"><a href="#cb10-135" aria-hidden="true" tabindex="-1"></a><span class="st">To deploy to the live ERDDAP server (CalCOFI/server docker-compose, erddap.calcofi.io):</span></span>
+<span id="cb10-136"><a href="#cb10-136" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-137"><a href="#cb10-137" aria-hidden="true" tabindex="-1"></a><span class="st">1. **Sync staged parquet** to the server data dir (container `/datasets/`):</span></span>
+<span id="cb10-138"><a href="#cb10-138" aria-hidden="true" tabindex="-1"></a><span class="st">   ```</span></span>
+<span id="cb10-139"><a href="#cb10-139" aria-hidden="true" tabindex="-1"></a><span class="st">   rsync -av data/erddap/*/   &lt;server&gt;:/share/erddap/datasets/</span></span>
+<span id="cb10-140"><a href="#cb10-140" aria-hidden="true" tabindex="-1"></a><span class="st">   ```</span></span>
+<span id="cb10-141"><a href="#cb10-141" aria-hidden="true" tabindex="-1"></a><span class="st">   (each `data/erddap/{datasetID}/{table}.parquet` -&gt; `/share/erddap/datasets/{datasetID}/`)</span></span>
+<span id="cb10-142"><a href="#cb10-142" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-143"><a href="#cb10-143" aria-hidden="true" tabindex="-1"></a><span class="st">2. **Splice the dataset blocks** in `data/erddap/datasets_calcofi.xml` into</span></span>
+<span id="cb10-144"><a href="#cb10-144" aria-hidden="true" tabindex="-1"></a><span class="st">   `CalCOFI/erddap/content/datasets.xml` at the `&lt;!-- add dataset definitions below --&gt;`</span></span>
+<span id="cb10-145"><a href="#cb10-145" aria-hidden="true" tabindex="-1"></a><span class="st">   marker, and commit/push the `CalCOFI/erddap` repo (it is bind-mounted into the container).</span></span>
+<span id="cb10-146"><a href="#cb10-146" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-147"><a href="#cb10-147" aria-hidden="true" tabindex="-1"></a><span class="st">3. **Reload ERDDAP** per dataset (flag), e.g.:</span></span>
+<span id="cb10-148"><a href="#cb10-148" aria-hidden="true" tabindex="-1"></a><span class="st">   ```</span></span>
+<span id="cb10-149"><a href="#cb10-149" aria-hidden="true" tabindex="-1"></a><span class="st">   touch /share/erddap/data/flag/calcofi_ctd        # or each datasetID</span></span>
+<span id="cb10-150"><a href="#cb10-150" aria-hidden="true" tabindex="-1"></a><span class="st">   ```</span></span>
+<span id="cb10-151"><a href="#cb10-151" aria-hidden="true" tabindex="-1"></a><span class="st">   or hit https://erddap.calcofi.io/erddap/setDatasetFlag.html?datasetID=calcofi_ctd&amp;flagKey=...</span></span>
+<span id="cb10-152"><a href="#cb10-152" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-153"><a href="#cb10-153" aria-hidden="true" tabindex="-1"></a><span class="st">4. **Verify**: curl https://erddap.calcofi.io/erddap/tabledap/calcofi_ctd.das</span></span>
+<span id="cb10-154"><a href="#cb10-154" aria-hidden="true" tabindex="-1"></a><span class="st">   and check /share/erddap/data/log.txt for any "WARNING: Bad line(s)" Parquet messages.</span></span>
+<span id="cb10-155"><a href="#cb10-155" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-156"><a href="#cb10-156" aria-hidden="true" tabindex="-1"></a><span class="st">NOTE: confirm each table</span><span class="sc">\'</span><span class="st">s time/lat/lon column types; hand-tune units/long_name in</span></span>
+<span id="cb10-157"><a href="#cb10-157" aria-hidden="true" tabindex="-1"></a><span class="st">datasets.xml where metadata.json was sparse (Parquet carries no CF metadata).</span></span>
+<span id="cb10-158"><a href="#cb10-158" aria-hidden="true" tabindex="-1"></a><span class="st">'</span>)</span>
+<span id="cb10-159"><a href="#cb10-159" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb10-160"><a href="#cb10-160" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-161"><a href="#cb10-161" aria-hidden="true" tabindex="-1"></a><span class="fu">## Cleanup</span></span>
+<span id="cb10-162"><a href="#cb10-162" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-165"><a href="#cb10-165" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb10-166"><a href="#cb10-166" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: cleanup</span></span>
+<span id="cb10-167"><a href="#cb10-167" aria-hidden="true" tabindex="-1"></a><span class="fu">dbDisconnect</span>(con, <span class="at">shutdown =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb10-168"><a href="#cb10-168" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+</code></pre></div><button title="Copy to Clipboard" class="code-copy-button" data-in-quarto-modal=""><i class="bi"></i></button></div>
+</div></div></div></div></div>
+</div> <!-- /content -->
+
+
+
+
+</body></html>
