@@ -43,42 +43,57 @@ or `spatial` feed into this release notebook via `dependency: [auto]`
 in `_targets.R`.
 
 ```{r}
-#| label: fig-workflow
-#| fig-cap: "Pipeline dependency graph, auto-discovered from `_targets.R` (every workflow added to this folder appears here). This notebook — `release_database` — is the highlighted caboose: it runs last, after all ingests, to assemble the frozen release."
+#| label: gen_fig_workflow
+#| results: asis
+#| echo: false
 #| message: false
 #| warning: false
-librarian::shelf(targets, visNetwork, quiet = TRUE)
+# echo must stay false: this chunk emits a ```{mermaid} cell, and echoing R
+# source that contains literal ``` fences would corrupt the document structure.
+librarian::shelf(targets, quiet = TRUE)
 
 # auto-discover the pipeline graph straight from _targets.R, so newly added
 # workflows show up without editing this diagram. callr_function = NULL keeps it
 # in-process (safe when this notebook is rendered via tar_make); outdated = FALSE
-# skips the up-to-date check, so there's no "Outdated / Regular target" legend.
+# skips the up-to-date check (no node status needed here).
 invisible(suppressMessages(capture.output(
   net <- tar_network(targets_only = TRUE, outdated = FALSE, callr_function = NULL))))
 
-nodes <- data.frame(
-  id    = net$vertices$name,
-  label = net$vertices$name,
-  group = ifelse(net$vertices$name == "release_database", "release", "workflow"),
-  stringsAsFactors = FALSE)
-edges <- data.frame(
-  from = net$edges$from, to = net$edges$to, stringsAsFactors = FALSE)
+nodes <- net$vertices$name
+edges <- net$edges
 
-visNetwork(nodes, edges, height = "520px", width = "100%") |>
-  visGroups(
-    groupname = "workflow", shape = "dot", size = 16,
-    color = list(background = "#7fb3c8", border = "#5a8ea3",
-                 highlight = "#a9d0de")) |>
-  visGroups(
-    groupname = "release", shape = "dot", size = 34, shadow = TRUE,
-    color = list(background = "#ef6c00", border = "#b35100",
-                 highlight = "#ff9a3d"),
-    font  = list(size = 22, color = "#b35100", face = "bold")) |>
-  visNodes(font = list(size = 16)) |>
-  visEdges(arrows = "to", color = list(color = "#b0b0b0", highlight = "#666666")) |>
-  visHierarchicalLayout(
-    direction = "LR", sortMethod = "directed", levelSeparation = 230) |>
-  visOptions(highlightNearest = list(enabled = TRUE, degree = 1, hover = TRUE))
+# group each node by name so the diagram colors input / ingest / release / test
+node_grp <- ifelse(nodes == "release_database", "rel",
+            ifelse(nodes == "test_release",     "test",
+            ifelse(nodes == "corrections_csv",  "input", "ingest")))
+
+# emit Mermaid source; rendered to a zoomable PNG via the project-level
+# `mermaid-format: png` + `lightbox: true` (see _quarto.yml). release_database
+# (this notebook) is highlighted.
+mmd <- c(
+  "flowchart LR",
+  vapply(nodes, function(n) sprintf('  %s["%s"]', n, n), ""),
+  apply(edges, 1, function(r) sprintf("  %s --> %s", r[["from"]], r[["to"]])),
+  "  classDef input  fill:#eeeeee,stroke:#999999,color:#333333;",
+  "  classDef ingest fill:#e3f2fd,stroke:#1565c0,color:#0d3c61;",
+  "  classDef rel    fill:#ef6c00,stroke:#b35100,color:#ffffff,font-weight:bold;",
+  "  classDef test   fill:#e8f4e8,stroke:#2e7d32,color:#1b5e20;")
+for (grp in c("input", "ingest", "rel", "test")) {
+  members <- nodes[node_grp == grp]
+  if (length(members))
+    mmd <- c(mmd, sprintf("  class %s %s;", paste(members, collapse = ","), grp))
+}
+
+cap <- paste(
+  "Pipeline dependency graph, auto-discovered from `_targets.R`: every workflow",
+  "in this folder is a node and edges are dependencies. `release_database` (this",
+  "notebook, orange) is the caboose — it runs last, after all ingests, to assemble",
+  "the frozen release. Click to zoom.")
+cat("```{mermaid}\n")
+cat("%%| label: fig-workflow\n")
+cat('%%| fig-cap: "', cap, '"\n', sep = "")
+cat(mmd, sep = "\n")
+cat("\n```\n")
 ```
 
 ## Setup
