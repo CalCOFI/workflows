@@ -57,7 +57,8 @@ cfg <- tribble(
   "calcofi_casts",        "data/parquet/calcofi_bottle/casts.parquet",           "CalCOFI Casts",                 "Cast-level metadata for CalCOFI CTD/bottle stations.",                "Point",             "",
   "calcofi_dic",          "data/parquet/calcofi_dic/dic_sample.parquet",         "CalCOFI DIC Samples",           "Dissolved inorganic carbon / alkalinity sample positions.",          "Point",             "depth_m",
   "calcofi_euphausiids",  "data/parquet/cce-lter_euphausiids/euphausiids_tow.parquet", "CalCOFI Euphausiid Tows", "Euphausiid (krill) abundance net tows, 1951-2019.",                  "Point",             "",
-  "calcofi_zooplankton",  "data/parquet/pic_zooplankton/zooplankton_tow.parquet","CalCOFI Zooplankton Tows",      "SIO PIC zooplankton net-tow registry (CalCOFI region).",             "Point",             ""
+  "calcofi_zooplankton",  "data/parquet/pic_zooplankton/zooplankton_tow.parquet","CalCOFI Zooplankton Tows",      "SIO PIC zooplankton net-tow registry (CalCOFI region).",             "Point",             "",
+  "calcofi_phytoplankton","data/parquet/calcofi_phytoplankton/phyto_obs.parquet", "CalCOFI Phytoplankton (Venrick)","Phytoplankton abundance (cells/L) by taxon, 1996-2022 (Venrick, EDI knb-lter-cce.254). Region-pooled: latitude/longitude are provisional region centroids.", "Point",       ""
 ) |>
   mutate(parquet = here(parquet),
          metadata = here(glue("{path_dir(parquet)}/metadata.json")))
