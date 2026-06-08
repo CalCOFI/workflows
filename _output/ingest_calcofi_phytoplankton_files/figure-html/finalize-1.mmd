@@ -1,0 +1,81 @@
+---
+config:
+  layout: elk
+---
+erDiagram
+    phyto_sample {
+        int phyto_sample_id PK
+        varchar cruise_yymm
+        varchar cruise_key
+        int year
+        int month
+        varchar season
+        varchar region_key FK
+        double latitude
+        double longitude
+        geometry geom
+    }
+    phyto_measurement {
+        int phyto_measurement_id PK
+        int phyto_sample_id FK
+        varchar species_code FK
+        varchar measurement_type FK
+        double measurement_value
+    }
+    phyto_taxon {
+        varchar species_code PK
+        varchar taxa
+        varchar species
+        int aphia_id
+        varchar scientific_name_accepted
+        varchar rank
+        varchar kingdom
+        varchar phylum
+    }
+    region {
+        varchar region_key PK
+        varchar description
+        double latitude
+        double longitude
+        int n_stations
+        varchar station_codes
+    }
+    measurement_type {
+        varchar measurement_type PK
+        varchar description
+        varchar units
+        bool is_canonical
+        varchar _source_column
+        varchar _source_table
+        varchar _source_datasets
+        varchar _qual_column
+        varchar _prec_column
+    }
+    dataset {
+        varchar provider
+        varchar dataset
+        varchar dataset_name
+        varchar description
+        varchar citation_main
+        varchar citation_others
+        varchar link_calcofi_org
+        varchar link_data_source
+        varchar link_others
+        varchar tables
+        varchar coverage_temporal
+        varchar coverage_spatial
+        varchar license
+        varchar pi_names
+    }
+    region ||--o{ phyto_sample : "region_key"
+    phyto_sample ||--o{ phyto_measurement : "phyto_sample_id"
+    phyto_taxon ||--o{ phyto_measurement : "species_code"
+    measurement_type ||--o{ phyto_measurement : "measurement_type"
+    classDef lightblue stroke:#ADD8E6,stroke-width:3px
+    class phyto_sample,phyto_measurement lightblue
+    classDef lightgreen stroke:#90EE90,stroke-width:3px
+    class phyto_taxon,region lightgreen
+    classDef lightyellow stroke:#FFFFE0,stroke-width:3px
+    class measurement_type lightyellow
+    classDef white stroke:#FFFFFF,stroke-width:3px
+    class dataset white
