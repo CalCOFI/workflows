@@ -1,0 +1,74 @@
+---
+config:
+  layout: elk
+---
+erDiagram
+    euphausiids_tow {
+        int tow_id PK
+        varchar cruise_key
+        varchar ship_key
+        varchar ship_name
+        varchar cruise_orig
+        varchar site_key
+        double line
+        double station
+        varchar region
+        timestamp datetime_start_utc
+        timestamp datetime_end_utc
+        double latitude
+        double longitude
+        geometry geom
+        varchar grid_key
+    }
+    euphausiids_measurement {
+        bigint euphausiids_measurement_id PK
+        int tow_id FK
+        varchar measurement_type FK
+        double measurement_value
+        varchar measurement_qual
+    }
+    euphausiids_summary {
+        varchar site_key
+        timestamp datetime_start_utc
+        double latitude
+        double longitude
+        varchar measurement_type
+        double avg
+        double stddev
+        bigint n_obs
+    }
+    measurement_type {
+        varchar measurement_type PK
+        varchar description
+        varchar units
+        bool is_canonical
+        varchar _source_column
+        varchar _source_table
+        varchar _source_datasets
+        varchar _qual_column
+        varchar _prec_column
+    }
+    dataset {
+        varchar provider
+        varchar dataset
+        varchar dataset_name
+        varchar description
+        varchar citation_main
+        varchar citation_others
+        varchar link_calcofi_org
+        varchar link_data_source
+        varchar link_others
+        varchar tables
+        varchar coverage_temporal
+        varchar coverage_spatial
+        varchar license
+        varchar pi_names
+    }
+    euphausiids_tow ||--o{ euphausiids_measurement : "tow_id"
+    measurement_type ||--o{ euphausiids_measurement : "measurement_type"
+    classDef lightblue stroke:#ADD8E6,stroke-width:3px
+    class euphausiids_tow,euphausiids_measurement,euphausiids_summary lightblue
+    classDef lightyellow stroke:#FFFFE0,stroke-width:3px
+    class measurement_type lightyellow
+    classDef white stroke:#FFFFFF,stroke-width:3px
+    class dataset white
