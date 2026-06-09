@@ -1,0 +1,74 @@
+---
+config:
+  layout: elk
+---
+erDiagram
+    cufes_sample {
+        int sample_id PK
+        double cruise_orig
+        varchar ship_name
+        varchar ship_code
+        int sample_number
+        timestamp datetime_start_utc
+        timestamp datetime_end_utc
+        double latitude
+        double longitude
+        double latitude_stop
+        double longitude_stop
+        double start_temperature
+        double start_salinity
+        double start_wind_speed
+        double start_wind_direction
+        double start_pump_speed
+        double stop_temperature
+        double stop_salinity
+        double stop_wind_speed
+        double stop_wind_direction
+        double stop_pump_speed
+        varchar ship_key
+        varchar cruise_key
+        geometry geom
+        varchar grid_key
+    }
+    cufes_measurement {
+        int cufes_measurement_id PK
+        int sample_id FK
+        varchar measurement_type FK
+        double measurement_value
+        varchar measurement_qual
+    }
+    measurement_type {
+        varchar measurement_type PK
+        varchar description
+        varchar units
+        bool is_canonical
+        varchar _source_column
+        varchar _source_table
+        varchar _source_datasets
+        varchar _qual_column
+        varchar _prec_column
+    }
+    dataset {
+        varchar provider
+        varchar dataset
+        varchar dataset_name
+        varchar description
+        varchar citation_main
+        varchar citation_others
+        varchar link_calcofi_org
+        varchar link_data_source
+        varchar link_others
+        varchar tables
+        varchar coverage_temporal
+        varchar coverage_spatial
+        varchar license
+        varchar pi_names
+    }
+    cufes_sample ||--o{ cufes_measurement : "sample_id"
+    measurement_type ||--o{ cufes_measurement : "measurement_type"
+    classDef lightblue stroke:#ADD8E6,stroke-width:3px
+    class cufes_sample,cufes_measurement lightblue
+    classDef lightyellow stroke:#FFFFE0,stroke-width:3px
+    class measurement_type lightyellow
+    classDef white stroke:#FFFFFF,stroke-width:3px
+    class dataset white

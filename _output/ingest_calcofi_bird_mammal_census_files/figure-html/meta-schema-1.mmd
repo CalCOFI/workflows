@@ -1,0 +1,82 @@
+---
+config:
+  layout: elk
+---
+erDiagram
+    bird_mammal_transect {
+        varchar gis_key PK
+        varchar cruise_label
+        int transect_number
+        int bin_number
+        date date
+        double time_sec
+        double latitude
+        double longitude
+        double latitude_start
+        double longitude_start
+        double latitude_stop
+        double longitude_stop
+        double length_m
+        double width_m
+        double area_m2
+        double bottom_depth_m
+        double julian_date
+        int julian_day
+        varchar svy
+        varchar season
+        timestamp datetime_start_utc
+        varchar cruise_key
+        geometry geom
+        varchar grid_key
+    }
+    bird_mammal_observation {
+        int observation_id PK
+        varchar gis_key FK
+        varchar species_code FK
+        varchar behavior_code FK
+        int count
+    }
+    bird_mammal_species {
+        varchar species_code PK
+        varchar common_name
+        varchar scientific_name
+        int itis_id
+        bool is_bird
+        bool is_mammal
+        bool is_fish
+        bool is_large_bird
+        bool is_unidentified
+        bool include_flag
+        varchar nmfs_code
+        varchar comment
+    }
+    bird_mammal_behavior {
+        varchar behavior_code PK
+        varchar behavior
+        varchar description
+    }
+    dataset {
+        varchar provider
+        varchar dataset
+        varchar dataset_name
+        varchar description
+        varchar citation_main
+        varchar citation_others
+        varchar link_calcofi_org
+        varchar link_data_source
+        varchar link_others
+        varchar tables
+        varchar coverage_temporal
+        varchar coverage_spatial
+        varchar license
+        varchar pi_names
+    }
+    bird_mammal_transect ||--o{ bird_mammal_observation : "gis_key"
+    bird_mammal_species ||--o{ bird_mammal_observation : "species_code"
+    bird_mammal_behavior ||--o{ bird_mammal_observation : "behavior_code"
+    classDef lightblue stroke:#ADD8E6,stroke-width:3px
+    class bird_mammal_transect,bird_mammal_observation lightblue
+    classDef lightyellow stroke:#FFFFE0,stroke-width:3px
+    class bird_mammal_species,bird_mammal_behavior lightyellow
+    classDef white stroke:#FFFFFF,stroke-width:3px
+    class dataset white

@@ -1,0 +1,69 @@
+---
+config:
+  layout: elk
+---
+erDiagram
+    phyllosoma_tow {
+        int tow_id PK
+        varchar cruise_orig
+        varchar ship_name
+        varchar sorting_lab
+        date date
+        timestamp datetime_start_utc
+        double line
+        double station
+        varchar site_key
+        double latitude
+        double longitude
+        double max_tow_depth_m
+        double volume_filtered
+        double aliquot_pct
+        varchar aliquot_adjustment
+        varchar study_flag
+        varchar ship_key
+        varchar cruise_key
+        geometry geom
+        varchar grid_key
+    }
+    phyllosoma_measurement {
+        int phyllosoma_measurement_id PK
+        int tow_id FK
+        varchar measurement_type FK
+        double measurement_value
+        varchar measurement_qual
+    }
+    measurement_type {
+        varchar measurement_type PK
+        varchar description
+        varchar units
+        bool is_canonical
+        varchar _source_column
+        varchar _source_table
+        varchar _source_datasets
+        varchar _qual_column
+        varchar _prec_column
+    }
+    dataset {
+        varchar provider
+        varchar dataset
+        varchar dataset_name
+        varchar description
+        varchar citation_main
+        varchar citation_others
+        varchar link_calcofi_org
+        varchar link_data_source
+        varchar link_others
+        varchar tables
+        varchar coverage_temporal
+        varchar coverage_spatial
+        varchar license
+        varchar pi_names
+    }
+    phyllosoma_tow ||--o{ phyllosoma_measurement : "tow_id"
+    measurement_type ||--o{ phyllosoma_measurement : "measurement_type"
+    classDef lightblue stroke:#ADD8E6,stroke-width:3px
+    class phyllosoma_tow,phyllosoma_measurement lightblue
+    classDef lightyellow stroke:#FFFFE0,stroke-width:3px
+    class measurement_type lightyellow
+    classDef white stroke:#FFFFFF,stroke-width:3px
+    class dataset white
