@@ -1,21 +1,11 @@
 # workflows
 
-scripts to explore and load data into the CalCOFI database
+This directory is the published Jekyll site at <https://calcofi.io/workflows/> —
+rendered Quarto/R notebooks plus the landing page (`index.html`, driven by
+`_data/workflows.yml`).
 
-## notebooks
+- Landing page source: `index.html` + `_layouts/default.html` + `style.css`
+- Manifest generator: [`scripts/build_workflows_index.R`](https://github.com/CalCOFI/workflows/blob/main/scripts/build_workflows_index.R)
+- Notebook sources: <https://github.com/CalCOFI/workflows>
 
-These web pages (\*.html) are typically rendered from Quarto or R markdown (\*.qmd, \*.Rmd) source files:
-
-<!-- Jekyll rendering -->
-{% for file in site.static_files %}
-  {% if file.extname == '.html' %}
-* [{{ file.basename }}]({{ site.baseurl }}{{ file.path }})
-  {% endif %}
-{% endfor %}
-
-## source
-
-These notebook web pages (\*.html) are typically rendered from Rmarkdown (\*.Rmd) or Quarto markdown (\*.qmd) source files:
-
-- [github.com/CalCOFI/workflows](https://github.com/CalCOFI/workflows)
-
+This file is excluded from the build (see `_config.yml`); `index.html` is the served root.
