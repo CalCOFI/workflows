@@ -51,6 +51,119 @@ Validation FAILED:
 - Table 'species' has 170 NULL values in required column 'gbif_id'
 ```
 
+## 2026-06-10 workflows cleanup, new Jekyll
+
+Help me clean up the workflows, particularly the rendered HTML that show up at https://calcofi.io/workflows/. For instance some are superseded, like ingest_coastwatch.pfeg.noaa.gov_erdCalCOFIlrvsiz is superseded by ingest_swfsc_ichthyo. Some are test_* and should be removed like test_release. Some, like "Epic - CTD thinning, ctd-viz redesign, calcofi4r matching helpers, reproducible downloads & docs" belong in lib/plans as md only. I'm open to an alternate structure of the Jekyll page that would prioritize ingest_* then publish_* and all others much lower, ideally using styles from @../schema/, @../query/, @../uptime/. PS I pushed those 4 commits.
+
+Also prioritize rendered *.qmd to html that have the calcofi metadata in the yaml 
+
+⏺ The calcofi: YAML block is the "calcofi metadata" — files with it are the official workflows (workflow_type: ingest|release|publish, dataset metadata, ERD
+  color). That's exactly what should drive a prioritized landing page. Let me (1) find the "Epic" doc you mentioned, and (2) extract the calcofi: metadata from
+  every source via R so the audit is authoritative.
+
+⏺ The Explore agent confirmed strong reuse opportunities: calcofi4db already has parse_qmd_frontmatter(), read_ingest_yaml(), and read_calcofi_meta() that
+  enumerate every notebook's calcofi: block — so the index generator can reuse those rather than parse YAML from scratch, and the schema site's renderDatasets()
+  shows the exact card fields (dataset_name, description, provider, coverage, color swatch, workflow_url) to stay consistent.
+
+  Two genuine design choices are yours to make before I finalize the plan:
+
+←  ☒ README_PLAN  ☐ Legacy notebooks  ✔ Submit  →
+
+The exact 'Epic – CTD thinning…' text now only lives in libs/calcofi_notes.md — there's no rendered Epic page. The closest published plan doc is README_PLAN 
+('CalCOFI Data Workflow Plan', 4.2 MB, no calcofi metadata). How should README_PLAN be handled on the redesigned site?
+  
+❯ 1. Move to libs/plans (md)
+     Un-publish from the site; relocate source to libs/plans/ as a markdown planning doc (matches your 'plans belong in libs/plans as md only' intent). Removes 
+     README_PLAN.html from _output.
+  2. Keep, low-priority
+     Leave it published but list it under a low 'Docs & plans' section, below ingest/publish.
+  3. Keep prominent
+     It's the canonical workflow / primary-key-strategy reference (cited in memory); keep it readily visible near the top.
+  4. Keep as low-priority or consider ways it could be better folded into @../docs/ or similar ✔
+
+←  ☒ README_PLAN  ☐ Legacy notebooks  ✔ Submit  →
+
+The ~20 notebooks with no calcofi metadata (explore_*, Postgres-era load_*, clean_db, sync/update utilities) — how should they appear on the redesigned page that 
+prioritizes ingest_* then publish_*?
+  
+❯ 1. Keep in low 'Other' section
+     All stay published, listed compactly in a low 'Exploratory & legacy' section below ingest/publish/release. Least destructive.
+  2. Collapse behind toggle
+     Listed but tucked inside an expandable <details> disclosure so the page stays focused on the official workflows.
+  3. Curate: drop obsolete
+     Remove clearly-obsolete Postgres-era renders from the site (e.g. load_bottle-stations, load_field-labels, load_sanctuaries, explore_pg_contour*, 
+     explore_station-*); keep the rest in a low section.
+
+**PLAN**: `./libs/plans/2026-06-10 Clean up & restructure the calcofi.io/workflows/ landing page.md`
+
+Out of scope (noted for later)
+
+ - Wiring the generator into CI / the targets pipeline (left as a documented one-liner for now).
+ - Folding README_PLAN content into calcofi.io/docs/ (your suggestion; tracked, not done here).
+
+⏺ Done — committed as 7490f08 on main (local; ahead of origin by 1, not pushed).
+
+
+  What changed
+
+  Pruned from the published site (_output/, 4 renders + their _files/ trees):
+
+  ┌────────────────────────────────────┬──────────────────────────────────────────────────────────────────┬───────────────┐
+  │              Removed               │                              Reason                              │    Source     │
+  ├────────────────────────────────────┼──────────────────────────────────────────────────────────────────┼───────────────┤
+  │ test_release                       │ CI gate (workflow_type: test)                                    │ .qmd kept     │
+  ├────────────────────────────────────┼──────────────────────────────────────────────────────────────────┼───────────────┤
+  │ ingest_coastwatch…erdCalCOFIlrvsiz │ superseded by ingest_swfsc_ichthyo                               │ moved to old/ │
+  ├────────────────────────────────────┼──────────────────────────────────────────────────────────────────┼───────────────┤
+  │ ingest_ships                       │ orphan render, no source (stale dup of ingest_ices.dk_ship-ices) │ —             │
+  ├────────────────────────────────────┼──────────────────────────────────────────────────────────────────┼───────────────┤
+  │ scrape_ctd                         │ orphan render, no source (superseded by ingest_calcofi_ctd-cast) │ —             │
+  └────────────────────────────────────┴──────────────────────────────────────────────────────────────────┴───────────────┘
+
+  New metadata-driven landing page, styled as a sibling of schema/query (dark-default theme, sticky header + 🌓 toggle, cross-site footer):
+  - scripts/build_workflows_index.R → generates _output/_data/workflows.yml from each notebook's calcofi: YAML. Re-run it whenever notebooks change.
+  - Categories in priority order: Ingest 11 (cards grouped by provider — CalCOFI · SWFSC · SIO PIC · CCE-LTER, with color swatches, descriptions, coverage, and
+  notebook/calcofi.org/data-source links) → Publish 2 → Release & pipeline 6 → Reference & plans 1 (README_PLAN, with the note about possibly folding into
+  ../docs/) → Other notebooks 18 (explore/legacy, kept but demoted).
+  - _output/{index.html, _layouts/default.html, style.css, _config.yml, assets/}; README trimmed to a pointer (index.html is now the served root).
+
+  Verified: Jekyll build is clean (1.1 s via the schema bundle), all links resolve under /workflows/, pruned pages absent, & escaped, data/erddap/data/cache still
+  ignored.
+
+  Two things to note
+
+  - libs/calcofi_notes.md has an appended session-log section (raw, some TUI artifacts) — I left it unstaged for you to curate.
+  - The approved plan was auto-saved to libs/plans/2026-06-10 …landing page.md and is included in the commit (matching your plans convention).
+
+  On the "Epic" doc
+
+  The exact "Epic – CTD thinning…" text only exists in calcofi_notes.md now — there's no rendered Epic page to move. Nothing to relocate; flagging so you can
+  confirm.
+
+  Pushing deploys the live site (the GH Action rebuilds on push to main). Want me to git push origin main, or would you rather review the rendered page locally
+  first? To preview: cd ../schema && bundle exec jekyll serve --source ../workflows/_output then open http://localhost:4000/workflows/.
+
+⏺ All done. ✅
+
+  Summary
+
+  Pushed and deployed — 7490f08 is live on origin/main; the Pages Action built (38 s) and deployed (15 s) successfully. The redesigned site is up at
+  https://calcofi.io/workflows/.
+
+  What shipped:
+  - Pruned 4 stale renders from _output/ (test_release, superseded ingest_coastwatch…, orphan ingest_ships & scrape_ctd) + their asset trees; coastwatch source
+  moved to old/.
+  - New metadata-driven landing page generated from each notebook's calcofi: YAML via scripts/build_workflows_index.R → _output/_data/workflows.yml, rendered by
+  Jekyll scaffolding styled like schema/query. Priority order: Ingest (11, provider-grouped cards w/ color swatches) → Publish (2) → Release & pipeline (6) →
+  Reference & plans (1) → Other (18).
+
+  Notes for you:
+  - libs/calcofi_notes.md still has an unstaged session-log addition — left for you to curate.
+  - Recorded the architecture in project memory (project-workflows-landing-page) so future sessions know to re-run the generator after adding notebooks.
+  - FYI (non-blocking): the Action logged a Node.js 20 deprecation warning — actions/checkout@v4, configure-pages@v5, upload-artifact@v4 will be forced to Node 24
+  after June 16, 2026. Worth bumping those action versions in jekyll-gh-pages.yml sometime, but the build is fine for now.
+
+
 ## 2026-06-08.e tile not loading
 
 why is https://tile.calcofi.io not loading: HTTP ERROR 502. See docker compose setup in @server/
