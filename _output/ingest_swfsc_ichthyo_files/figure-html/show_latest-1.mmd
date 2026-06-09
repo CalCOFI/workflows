@@ -14,7 +14,7 @@ erDiagram
         varchar cruise_key PK
     }
     grid {
-        varchar grid_key
+        varchar grid_key PK
         double station
         double line
         varchar shore
@@ -39,8 +39,8 @@ erDiagram
         varchar _source_uuid
     }
     invert {
-        varchar net_uuid
-        double species_id
+        varchar net_uuid FK
+        double species_id FK
         double tally
         varchar _source_file
         int _source_row
@@ -62,8 +62,8 @@ erDiagram
         varchar net_uuid PK
         varchar tow_uuid FK
         varchar side
-        double std_haul_factor
-        double vol_sampled_m3
+        double standard_haul_factor
+        double volume_sampled
         double prop_sorted
         double smallplankton
         double totalplankton
@@ -73,8 +73,8 @@ erDiagram
         varchar _source_uuid
     }
     segment {
-        varchar cruise_key
-        varchar site_uuid_beg
+        varchar cruise_key FK
+        varchar site_uuid_beg FK
         varchar site_uuid_end
         double lon_beg
         double lat_beg
@@ -86,7 +86,7 @@ erDiagram
         double length_km
         double km_per_hr
         geometry geom
-        int segment_id
+        int segment_id PK
     }
     ship {
         varchar ship_key PK
@@ -100,7 +100,7 @@ erDiagram
     site {
         varchar site_uuid PK
         varchar cruise_uuid
-        double orderocc
+        double order_occ
         double longitude
         double latitude
         double line
@@ -145,7 +145,7 @@ erDiagram
         varchar site_uuid FK
         varchar tow_type_key
         double tow_number
-        timestamp time_start
+        timestamp datetime_start_utc
         varchar _source_file
         int _source_row
         timestamp _ingested_at
@@ -158,3 +158,7 @@ erDiagram
     cruise ||--o{ site : "cruise_key"
     ship ||--o{ cruise : "ship_key"
     taxa_rank ||--o{ taxon : "taxonRank"
+    cruise ||--o{ segment : "cruise_key"
+    site ||--o{ segment : "site_uuid_beg"
+    net ||--o{ invert : "net_uuid"
+    species ||--o{ invert : "species_id"
