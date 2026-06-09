@@ -1,0 +1,64 @@
+---
+layout: default
+---
+{%- assign wf = site.data.workflows -%}
+
+<div class="lede">
+  <p>
+    Reproducible <a href="https://quarto.org">Quarto</a> / R notebooks that ingest source
+    datasets, freeze versioned releases, and publish the CalCOFI integrated database.
+    Rendered from <a href="https://github.com/CalCOFI/workflows">CalCOFI/workflows</a>.
+  </p>
+  <p class="stat muted">
+    {{ wf.n_total }} notebooks · {{ wf.n_meta }} metadata-described workflows · generated {{ wf.generated }}
+  </p>
+</div>
+
+<nav class="section-nav">
+  {%- for c in wf.categories -%}
+  <a href="#{{ c.id }}">{{ c.title | escape }}<span class="n">{{ c.count }}</span></a>
+  {%- endfor -%}
+</nav>
+
+{%- for c in wf.categories -%}
+<section class="wf-section" id="{{ c.id }}">
+  <h2>{{ c.title | escape }} <span class="count">{{ c.count }}</span></h2>
+  <p class="blurb">{{ c.blurb | escape }}</p>
+
+  {%- for g in c.groups -%}
+    {%- if g.label != "" %}<div class="wf-provider">{{ g.label | escape }}</div>{% endif -%}
+
+    {%- if c.layout == "cards" -%}
+    <div class="wf-grid">
+      {%- for item in g.items -%}
+      <article class="wf-card"{% if item.color %} style="--swatch: {{ item.color }}"{% endif %}>
+        <h3><a href="{{ item.url | relative_url }}">{{ item.title | escape }}</a></h3>
+        <div class="wf-meta">
+          {%- if item.provider %}<span class="chip">{{ item.provider | escape }}</span>{% endif -%}
+          {%- if item.coverage %}<span class="wf-cov">{{ item.coverage | escape }}</span>{% endif -%}
+        </div>
+        {%- if item.dataset_name %}<div class="wf-dsname">{{ item.dataset_name | escape }}</div>{% endif -%}
+        {%- if item.description %}<p class="wf-desc">{{ item.description | escape }}</p>{% endif -%}
+        <div class="wf-links">
+          <a href="{{ item.url | relative_url }}">notebook ↗</a>
+          {%- if item.link_calcofi_org %}<a href="{{ item.link_calcofi_org }}">calcofi.org ↗</a>{% endif -%}
+          {%- if item.link_data_source %}<a href="{{ item.link_data_source }}">data source ↗</a>{% endif -%}
+        </div>
+      </article>
+      {%- endfor -%}
+    </div>
+
+    {%- else -%}
+    <ul class="wf-list">
+      {%- for item in g.items -%}
+      <li class="wf-row">
+        <a href="{{ item.url | relative_url }}">{{ item.title | escape }}</a>
+        {%- if item.description %}<span class="wf-row-desc">{{ item.description | escape }}</span>{% endif -%}
+      </li>
+      {%- endfor -%}
+    </ul>
+    {%- endif -%}
+
+  {%- endfor -%}
+</section>
+{%- endfor -%}
