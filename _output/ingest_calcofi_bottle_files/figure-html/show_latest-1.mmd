@@ -39,8 +39,8 @@ erDiagram
         varchar site_key
         varchar sta_code
         double distance
-        double lat_dec
-        double lon_dec
+        double latitude
+        double longitude
         varchar rpt_line
         double st_line
         double ac_line
@@ -66,7 +66,7 @@ erDiagram
         int _source_row
         timestamp _ingested_at
         varchar _source_uuid
-        timestamp datetime_utc
+        timestamp datetime_start_utc
         geometry geom
         varchar grid_key
     }
@@ -76,7 +76,7 @@ erDiagram
         varchar dataset_name
         varchar description
         varchar citation_main
-        bool citation_others
+        varchar citation_others
         varchar link_calcofi_org
         varchar link_data_source
         varchar link_others
@@ -116,7 +116,7 @@ erDiagram
     measurement_type ||--o{ bottle_measurement : "measurement_type"
     casts ||--o{ cast_condition : "cast_id"
     measurement_type ||--o{ cast_condition : "condition_type"
-    classDef lightyellow fill:#FFFFE0,stroke:#999986
+    classDef lightyellow stroke:#FFFFE0,stroke-width:3px
     class bottle_measurement,cast_condition lightyellow
-    classDef lightblue fill:#ADD8E6,stroke:#68828A
+    classDef lightblue stroke:#ADD8E6,stroke-width:3px
     class measurement_type lightblue

@@ -20,9 +20,9 @@ erDiagram
         varchar ord_occ
         double event_num
         varchar cast_key
-        timestamp datetime_utc
-        double lat_dec
-        double lon_dec
+        timestamp datetime_start_utc
+        double latitude
+        double longitude
         varchar site_key
         varchar line
         varchar sta
@@ -33,7 +33,7 @@ erDiagram
         varchar ctd_measurement_uuid PK
         varchar ctd_cast_uuid FK
         double depth_m
-        varchar measurement_type
+        varchar measurement_type FK
         double measurement_value
         varchar measurement_qual
         varchar cruise_key
@@ -43,7 +43,7 @@ erDiagram
         varchar cruise_key
         varchar site_key
         double depth_m
-        varchar measurement_type
+        varchar measurement_type FK
         double avg
         double stddev
         bigint n_obs
@@ -52,7 +52,7 @@ erDiagram
         varchar ctd_thin_uuid PK
         varchar ctd_cast_uuid FK
         double depth_m
-        varchar measurement_type
+        varchar measurement_type FK
         double measurement_value
         varchar measurement_qual
         varchar cast_dir
@@ -63,9 +63,9 @@ erDiagram
         varchar data_stage
         varchar cast_dir
         varchar cast_key
-        timestamp datetime_utc
-        double lat_dec
-        double lon_dec
+        timestamp datetime_start_utc
+        double latitude
+        double longitude
         varchar site_key
         double depth_m
         double pressure
@@ -174,3 +174,6 @@ erDiagram
     }
     ctd_cast ||--o{ ctd_measurement : "ctd_cast_uuid"
     ctd_cast ||--o{ ctd_thin : "ctd_cast_uuid"
+    measurement_type ||--o{ ctd_measurement : "measurement_type"
+    measurement_type ||--o{ ctd_thin : "measurement_type"
+    measurement_type ||--o{ ctd_summary : "measurement_type"

@@ -6,7 +6,7 @@ erDiagram
     dic_sample {
         varchar expocode
         varchar ship_name
-        timestamp datetime_utc
+        timestamp datetime_start_utc
         varchar site_key
         double latitude
         double longitude
@@ -18,7 +18,7 @@ erDiagram
         bigint dic_measurement_id PK
         varchar expocode
         varchar site_key
-        timestamp datetime_utc
+        timestamp datetime_start_utc
         double depth_m
         double latitude
         double longitude
@@ -30,7 +30,7 @@ erDiagram
     }
     dic_summary {
         varchar site_key
-        timestamp datetime_utc
+        timestamp datetime_start_utc
         double depth_m
         double latitude
         double longitude
@@ -58,7 +58,7 @@ erDiagram
         varchar dataset_name
         varchar description
         varchar citation_main
-        bool citation_others
+        varchar citation_others
         varchar link_calcofi_org
         varchar link_data_source
         varchar link_others
@@ -70,9 +70,9 @@ erDiagram
     }
     measurement_type ||--o{ dic_measurement : "measurement_type"
     measurement_type ||--o{ dic_summary : "measurement_type"
-    classDef lightblue fill:#ADD8E6,stroke:#68828A
+    classDef lightblue stroke:#ADD8E6,stroke-width:3px
     class dic_sample,dic_measurement,dic_summary lightblue
-    classDef lightyellow fill:#FFFFE0,stroke:#999986
+    classDef lightyellow stroke:#FFFFE0,stroke-width:3px
     class measurement_type lightyellow
-    classDef white fill:#FFFFFF,stroke:#999999
+    classDef white stroke:#FFFFFF,stroke-width:3px
     class dataset white

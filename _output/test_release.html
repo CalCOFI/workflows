@@ -6,7 +6,7 @@
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
-<meta name="dcterms.date" content="2026-05-20">
+<meta name="dcterms.date" content="2026-06-07">
 
 <title>Test Release — gate latest.txt on query suite</title>
 <style>
@@ -118,7 +118,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">2026-05-20</p>
+      <p class="date">2026-06-07</p>
     </div>
   </div>
   
@@ -173,7 +173,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a><span class="fu">message</span>(<span class="fu">glue</span>(<span class="st">"Testing release: {release_version}"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stderr">
-<pre><code>Testing release: v2026.05.20</code></pre>
+<pre><code>Testing release: v2026.06.07</code></pre>
 </div>
 <details class="code-fold">
 <summary>Code</summary>
@@ -291,35 +291,42 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb11-69"><a href="#cb11-69" aria-hidden="true" tabindex="-1"></a>    txt <span class="ot">&lt;-</span> <span class="fu">sub</span>(full, val, txt, <span class="at">fixed =</span> <span class="cn">TRUE</span>)</span>
 <span id="cb11-70"><a href="#cb11-70" aria-hidden="true" tabindex="-1"></a>  }</span>
 <span id="cb11-71"><a href="#cb11-71" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-72"><a href="#cb11-72" aria-hidden="true" tabindex="-1"></a>  txt</span>
-<span id="cb11-73"><a href="#cb11-73" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb11-74"><a href="#cb11-74" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-75"><a href="#cb11-75" aria-hidden="true" tabindex="-1"></a><span class="co"># parse YAML front-matter + body from a query .md file</span></span>
-<span id="cb11-76"><a href="#cb11-76" aria-hidden="true" tabindex="-1"></a>parse_query_md <span class="ot">&lt;-</span> <span class="cf">function</span>(path) {</span>
-<span id="cb11-77"><a href="#cb11-77" aria-hidden="true" tabindex="-1"></a>  raw <span class="ot">&lt;-</span> <span class="fu">readLines</span>(path, <span class="at">warn =</span> <span class="cn">FALSE</span>)</span>
-<span id="cb11-78"><a href="#cb11-78" aria-hidden="true" tabindex="-1"></a>  delims <span class="ot">&lt;-</span> <span class="fu">which</span>(<span class="fu">trimws</span>(raw) <span class="sc">==</span> <span class="st">"---"</span>)</span>
-<span id="cb11-79"><a href="#cb11-79" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">length</span>(delims) <span class="sc">&lt;</span> <span class="dv">2</span>) {</span>
-<span id="cb11-80"><a href="#cb11-80" aria-hidden="true" tabindex="-1"></a>    <span class="fu">stop</span>(<span class="fu">glue</span>(<span class="st">"Missing YAML delimiters in {path}"</span>))</span>
-<span id="cb11-81"><a href="#cb11-81" aria-hidden="true" tabindex="-1"></a>  }</span>
-<span id="cb11-82"><a href="#cb11-82" aria-hidden="true" tabindex="-1"></a>  yaml_text <span class="ot">&lt;-</span> <span class="fu">paste</span>(raw[(delims[<span class="dv">1</span>] <span class="sc">+</span> <span class="dv">1</span>)<span class="sc">:</span>(delims[<span class="dv">2</span>] <span class="sc">-</span> <span class="dv">1</span>)], <span class="at">collapse =</span> <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
-<span id="cb11-83"><a href="#cb11-83" aria-hidden="true" tabindex="-1"></a>  meta <span class="ot">&lt;-</span> yaml<span class="sc">::</span><span class="fu">yaml.load</span>(yaml_text)</span>
-<span id="cb11-84"><a href="#cb11-84" aria-hidden="true" tabindex="-1"></a>  body <span class="ot">&lt;-</span> <span class="fu">paste</span>(raw[(delims[<span class="dv">2</span>] <span class="sc">+</span> <span class="dv">1</span>)<span class="sc">:</span><span class="fu">length</span>(raw)], <span class="at">collapse =</span> <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
-<span id="cb11-85"><a href="#cb11-85" aria-hidden="true" tabindex="-1"></a>  <span class="fu">list</span>(<span class="at">meta =</span> meta, <span class="at">body =</span> body, <span class="at">path =</span> path)</span>
-<span id="cb11-86"><a href="#cb11-86" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb11-87"><a href="#cb11-87" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-88"><a href="#cb11-88" aria-hidden="true" tabindex="-1"></a><span class="co"># build the params list for a query: each parameter's `default`, with</span></span>
-<span id="cb11-89"><a href="#cb11-89" aria-hidden="true" tabindex="-1"></a><span class="co"># `version` overridden to the release under test</span></span>
-<span id="cb11-90"><a href="#cb11-90" aria-hidden="true" tabindex="-1"></a>defaults_for <span class="ot">&lt;-</span> <span class="cf">function</span>(meta, release_version) {</span>
-<span id="cb11-91"><a href="#cb11-91" aria-hidden="true" tabindex="-1"></a>  params <span class="ot">&lt;-</span> <span class="fu">list</span>(<span class="at">version =</span> release_version)</span>
-<span id="cb11-92"><a href="#cb11-92" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.null</span>(meta<span class="sc">$</span>parameters)) {</span>
-<span id="cb11-93"><a href="#cb11-93" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> (name <span class="cf">in</span> <span class="fu">names</span>(meta<span class="sc">$</span>parameters)) {</span>
-<span id="cb11-94"><a href="#cb11-94" aria-hidden="true" tabindex="-1"></a>      spec <span class="ot">&lt;-</span> meta<span class="sc">$</span>parameters[[name]]</span>
-<span id="cb11-95"><a href="#cb11-95" aria-hidden="true" tabindex="-1"></a>      params[[name]] <span class="ot">&lt;-</span> spec<span class="sc">$</span>default</span>
-<span id="cb11-96"><a href="#cb11-96" aria-hidden="true" tabindex="-1"></a>    }</span>
-<span id="cb11-97"><a href="#cb11-97" aria-hidden="true" tabindex="-1"></a>  }</span>
-<span id="cb11-98"><a href="#cb11-98" aria-hidden="true" tabindex="-1"></a>  params<span class="sc">$</span>version <span class="ot">&lt;-</span> release_version</span>
-<span id="cb11-99"><a href="#cb11-99" aria-hidden="true" tabindex="-1"></a>  params</span>
-<span id="cb11-100"><a href="#cb11-100" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb11-72"><a href="#cb11-72" aria-hidden="true" tabindex="-1"></a>  <span class="co"># query-app convention: literal __VERSION__ placeholder -&gt; release version,</span></span>
+<span id="cb11-73"><a href="#cb11-73" aria-hidden="true" tabindex="-1"></a>  <span class="co"># mirroring _includes/form-field.html ({% replace "__VERSION__",</span></span>
+<span id="cb11-74"><a href="#cb11-74" aria-hidden="true" tabindex="-1"></a>  <span class="co"># site.default_version %}). Used in free-form defaults like sql-shell/shell.md.</span></span>
+<span id="cb11-75"><a href="#cb11-75" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.null</span>(params<span class="sc">$</span>version)) {</span>
+<span id="cb11-76"><a href="#cb11-76" aria-hidden="true" tabindex="-1"></a>    txt <span class="ot">&lt;-</span> <span class="fu">gsub</span>(<span class="st">"__VERSION__"</span>, <span class="fu">as.character</span>(params<span class="sc">$</span>version), txt, <span class="at">fixed =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb11-77"><a href="#cb11-77" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb11-78"><a href="#cb11-78" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-79"><a href="#cb11-79" aria-hidden="true" tabindex="-1"></a>  txt</span>
+<span id="cb11-80"><a href="#cb11-80" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb11-81"><a href="#cb11-81" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-82"><a href="#cb11-82" aria-hidden="true" tabindex="-1"></a><span class="co"># parse YAML front-matter + body from a query .md file</span></span>
+<span id="cb11-83"><a href="#cb11-83" aria-hidden="true" tabindex="-1"></a>parse_query_md <span class="ot">&lt;-</span> <span class="cf">function</span>(path) {</span>
+<span id="cb11-84"><a href="#cb11-84" aria-hidden="true" tabindex="-1"></a>  raw <span class="ot">&lt;-</span> <span class="fu">readLines</span>(path, <span class="at">warn =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb11-85"><a href="#cb11-85" aria-hidden="true" tabindex="-1"></a>  delims <span class="ot">&lt;-</span> <span class="fu">which</span>(<span class="fu">trimws</span>(raw) <span class="sc">==</span> <span class="st">"---"</span>)</span>
+<span id="cb11-86"><a href="#cb11-86" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">length</span>(delims) <span class="sc">&lt;</span> <span class="dv">2</span>) {</span>
+<span id="cb11-87"><a href="#cb11-87" aria-hidden="true" tabindex="-1"></a>    <span class="fu">stop</span>(<span class="fu">glue</span>(<span class="st">"Missing YAML delimiters in {path}"</span>))</span>
+<span id="cb11-88"><a href="#cb11-88" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb11-89"><a href="#cb11-89" aria-hidden="true" tabindex="-1"></a>  yaml_text <span class="ot">&lt;-</span> <span class="fu">paste</span>(raw[(delims[<span class="dv">1</span>] <span class="sc">+</span> <span class="dv">1</span>)<span class="sc">:</span>(delims[<span class="dv">2</span>] <span class="sc">-</span> <span class="dv">1</span>)], <span class="at">collapse =</span> <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb11-90"><a href="#cb11-90" aria-hidden="true" tabindex="-1"></a>  meta <span class="ot">&lt;-</span> yaml<span class="sc">::</span><span class="fu">yaml.load</span>(yaml_text)</span>
+<span id="cb11-91"><a href="#cb11-91" aria-hidden="true" tabindex="-1"></a>  body <span class="ot">&lt;-</span> <span class="fu">paste</span>(raw[(delims[<span class="dv">2</span>] <span class="sc">+</span> <span class="dv">1</span>)<span class="sc">:</span><span class="fu">length</span>(raw)], <span class="at">collapse =</span> <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb11-92"><a href="#cb11-92" aria-hidden="true" tabindex="-1"></a>  <span class="fu">list</span>(<span class="at">meta =</span> meta, <span class="at">body =</span> body, <span class="at">path =</span> path)</span>
+<span id="cb11-93"><a href="#cb11-93" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb11-94"><a href="#cb11-94" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-95"><a href="#cb11-95" aria-hidden="true" tabindex="-1"></a><span class="co"># build the params list for a query: each parameter's `default`, with</span></span>
+<span id="cb11-96"><a href="#cb11-96" aria-hidden="true" tabindex="-1"></a><span class="co"># `version` overridden to the release under test</span></span>
+<span id="cb11-97"><a href="#cb11-97" aria-hidden="true" tabindex="-1"></a>defaults_for <span class="ot">&lt;-</span> <span class="cf">function</span>(meta, release_version) {</span>
+<span id="cb11-98"><a href="#cb11-98" aria-hidden="true" tabindex="-1"></a>  params <span class="ot">&lt;-</span> <span class="fu">list</span>(<span class="at">version =</span> release_version)</span>
+<span id="cb11-99"><a href="#cb11-99" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.null</span>(meta<span class="sc">$</span>parameters)) {</span>
+<span id="cb11-100"><a href="#cb11-100" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> (name <span class="cf">in</span> <span class="fu">names</span>(meta<span class="sc">$</span>parameters)) {</span>
+<span id="cb11-101"><a href="#cb11-101" aria-hidden="true" tabindex="-1"></a>      spec <span class="ot">&lt;-</span> meta<span class="sc">$</span>parameters[[name]]</span>
+<span id="cb11-102"><a href="#cb11-102" aria-hidden="true" tabindex="-1"></a>      params[[name]] <span class="ot">&lt;-</span> spec<span class="sc">$</span>default</span>
+<span id="cb11-103"><a href="#cb11-103" aria-hidden="true" tabindex="-1"></a>    }</span>
+<span id="cb11-104"><a href="#cb11-104" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb11-105"><a href="#cb11-105" aria-hidden="true" tabindex="-1"></a>  params<span class="sc">$</span>version <span class="ot">&lt;-</span> release_version</span>
+<span id="cb11-106"><a href="#cb11-106" aria-hidden="true" tabindex="-1"></a>  params</span>
+<span id="cb11-107"><a href="#cb11-107" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 </div>
 </section>
@@ -404,8 +411,8 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb14-65"><a href="#cb14-65" aria-hidden="true" tabindex="-1"></a>    <span class="at">colnames  =</span> <span class="fu">c</span>(<span class="st">""</span>, <span class="st">"query"</span>, <span class="st">"label"</span>, <span class="st">"rows"</span>, <span class="st">"ms"</span>, <span class="st">"skip reason"</span>, <span class="st">"error"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output-display">
-<div class="datatables html-widget html-fill-item" id="htmlwidget-fccd8d70dd18b8517a48" style="width:100%;height:auto;"></div>
-<script type="application/json" data-for="htmlwidget-fccd8d70dd18b8517a48">{"x":{"filter":"none","vertical":false,"data":[["<span style='background:#757575;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;'>SKIP<\/span>","<span style='background:#757575;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;'>SKIP<\/span>","<span style='background:#757575;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;'>SKIP<\/span>","<span style='background:#757575;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;'>SKIP<\/span>","<span style='background:#2e7d32;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;'>PASS<\/span>","<span style='background:#2e7d32;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;'>PASS<\/span>","<span style='background:#2e7d32;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;'>PASS<\/span>","<span style='background:#2e7d32;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;'>PASS<\/span>","<span style='background:#2e7d32;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;'>PASS<\/span>","<span style='background:#2e7d32;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;'>PASS<\/span>","<span style='background:#2e7d32;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;'>PASS<\/span>","<span style='background:#2e7d32;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;'>PASS<\/span>","<span style='background:#2e7d32;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;'>PASS<\/span>"],["bio-env-matching/by-name.md","bio-env-matching/by-taxon.md","bio-env-matching/custom.md","bio-env-matching/zoo-biomass.md","browse/cruises.md","browse/measurement-types.md","browse/species.md","datasets/bottle.md","datasets/ichthyo.md","quick-facts/release.md","spatial/bbox.md","sql-shell/shell.md","temporal/date-range.md"],["by scientific name","by taxon","custom (bio + env)","zooplankton biomass","cruises","measurement types","species","bottle measurements","ichthyoplankton","release facts","casts in bbox","shell","casts in date range"],[null,null,null,null,200,102,1,500,300,10,288,1,294],[null,null,null,null,1347.2,365.6,617.5,5582.7,8588.1,1232.1,501.9,758.6,172.3],["sql_builder=matchIchthyoByName","sql_builder=matchIchthyoByTaxon","sql_builder=matchBioEnv","sql_builder=matchZooplanktonBiomass",null,null,null,null,null,null,null,null,null],[null,null,null,null,null,null,null,null,null,null,null,null,null]],"container":"<table class=\"display\">\n  <thead>\n    <tr>\n      <th><\/th>\n      <th>query<\/th>\n      <th>label<\/th>\n      <th>rows<\/th>\n      <th>ms<\/th>\n      <th>skip reason<\/th>\n      <th>error<\/th>\n    <\/tr>\n  <\/thead>\n<\/table>","options":{"pageLength":20,"order":[[0,"asc"]],"columnDefs":[{"className":"dt-right","targets":[3,4]},{"name":"status_html","targets":0},{"name":"query","targets":1},{"name":"label","targets":2},{"name":"rows","targets":3},{"name":"ms","targets":4},{"name":"reason","targets":5},{"name":"error","targets":6}],"autoWidth":false,"orderClasses":false,"lengthMenu":[10,20,25,50,100]},"selection":{"mode":"multiple","selected":null,"target":"row","selectable":null}},"evals":[],"jsHooks":[]}</script>
+<div class="datatables html-widget html-fill-item" id="htmlwidget-fa1be02eec381d784ee7" style="width:100%;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-fa1be02eec381d784ee7">{"x":{"filter":"none","vertical":false,"data":[["<span style='background:#757575;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;'>SKIP<\/span>","<span style='background:#757575;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;'>SKIP<\/span>","<span style='background:#757575;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;'>SKIP<\/span>","<span style='background:#757575;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;'>SKIP<\/span>","<span style='background:#2e7d32;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;'>PASS<\/span>","<span style='background:#2e7d32;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;'>PASS<\/span>","<span style='background:#2e7d32;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;'>PASS<\/span>","<span style='background:#2e7d32;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;'>PASS<\/span>","<span style='background:#2e7d32;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;'>PASS<\/span>","<span style='background:#2e7d32;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;'>PASS<\/span>","<span style='background:#2e7d32;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;'>PASS<\/span>","<span style='background:#2e7d32;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;'>PASS<\/span>","<span style='background:#2e7d32;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;'>PASS<\/span>"],["bio-env-matching/by-name.md","bio-env-matching/by-taxon.md","bio-env-matching/custom.md","bio-env-matching/zoo-biomass.md","browse/cruises.md","browse/measurement-types.md","browse/species.md","datasets/bottle.md","datasets/ichthyo.md","quick-facts/release.md","spatial/bbox.md","sql-shell/shell.md","temporal/date-range.md"],["by scientific name","by taxon","custom (bio + env)","zooplankton biomass","cruises","measurement types","species","bottle measurements","ichthyoplankton","release facts","casts in bbox","shell","casts in date range"],[null,null,null,null,200,102,1,500,300,10,288,1,294],[null,null,null,null,1443.3,346.6,552,5361.4,7688.5,1372.3,627.7,212.4,206.7],["sql_builder=matchIchthyoByName","sql_builder=matchIchthyoByTaxon","sql_builder=matchBioEnv","sql_builder=matchZooplanktonBiomass",null,null,null,null,null,null,null,null,null],[null,null,null,null,null,null,null,null,null,null,null,null,null]],"container":"<table class=\"display\">\n  <thead>\n    <tr>\n      <th><\/th>\n      <th>query<\/th>\n      <th>label<\/th>\n      <th>rows<\/th>\n      <th>ms<\/th>\n      <th>skip reason<\/th>\n      <th>error<\/th>\n    <\/tr>\n  <\/thead>\n<\/table>","options":{"pageLength":20,"order":[[0,"asc"]],"columnDefs":[{"className":"dt-right","targets":[3,4]},{"name":"status_html","targets":0},{"name":"query","targets":1},{"name":"label","targets":2},{"name":"rows","targets":3},{"name":"ms","targets":4},{"name":"reason","targets":5},{"name":"error","targets":6}],"autoWidth":false,"orderClasses":false,"lengthMenu":[10,20,25,50,100]},"selection":{"mode":"multiple","selected":null,"target":"row","selectable":null}},"evals":[],"jsHooks":[]}</script>
 </div>
 </div>
 </section>
@@ -433,14 +440,14 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb15-17"><a href="#cb15-17" aria-hidden="true" tabindex="-1"></a>  <span class="fu">glue</span>(<span class="st">"gs://{gcs_bucket}/{gcs_release}/test_results.json"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>gs://calcofi-db/ducklake/releases/v2026.05.20/test_results.json</code></pre>
+<pre><code>gs://calcofi-db/ducklake/releases/v2026.06.07/test_results.json</code></pre>
 </div>
 <details class="code-fold">
 <summary>Code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb17"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="fu">message</span>(<span class="fu">glue</span>(<span class="st">"test_results.json uploaded for {release_version}"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stderr">
-<pre><code>test_results.json uploaded for v2026.05.20</code></pre>
+<pre><code>test_results.json uploaded for v2026.06.07</code></pre>
 </div>
 </div>
 </section>
@@ -480,7 +487,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a>  <span class="st">"0 failed. latest.txt is now {release_version}."</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stderr">
-<pre><code>PROMOTED v2026.05.20: 9 passed, 4 skipped, 0 failed. latest.txt is now v2026.05.20.</code></pre>
+<pre><code>PROMOTED v2026.06.07: 9 passed, 4 skipped, 0 failed. latest.txt is now v2026.06.07.</code></pre>
 </div>
 </div>
 </section>
@@ -520,102 +527,101 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
  collate  en_US.UTF-8
  ctype    en_US.UTF-8
  tz       Europe/Rome
- date     2026-05-20
+ date     2026-06-07
  pandoc   3.8.3 @ /opt/homebrew/bin/ (via rmarkdown)
  quarto   1.8.25 @ /usr/local/bin/quarto
 
 ─ Packages ───────────────────────────────────────────────────────────────────
- !  package       * version  date (UTC) lib source
-    arrow           23.0.1.2 2026-03-25 [1] CRAN (R 4.5.2)
-    assertthat      0.2.1    2019-03-21 [1] CRAN (R 4.5.0)
-    backports       1.5.1    2026-04-03 [1] CRAN (R 4.5.2)
-    bit             4.6.0    2025-03-06 [1] CRAN (R 4.5.0)
-    bit64           4.6.0-1  2025-01-16 [1] CRAN (R 4.5.0)
-    blob            1.3.0    2026-01-14 [1] CRAN (R 4.5.2)
-    bslib           0.10.0   2026-01-26 [1] CRAN (R 4.5.2)
-    cachem          1.1.0    2024-05-16 [1] CRAN (R 4.5.0)
- VP calcofi4db    * 2.6.2    2026-04-07 [?] load_all() (on disk 2.6.0)
-    cli             3.6.5    2025-04-23 [1] CRAN (R 4.5.0)
-    crayon          1.5.3    2024-06-20 [1] CRAN (R 4.5.0)
-    crosstalk       1.2.2    2025-08-26 [1] CRAN (R 4.5.0)
-    curl            7.0.0    2025-08-19 [1] CRAN (R 4.5.0)
-    DBI           * 1.3.0    2026-02-25 [1] CRAN (R 4.5.2)
-    dbplyr          2.5.2    2026-02-13 [1] CRAN (R 4.5.2)
-    desc            1.4.3    2023-12-10 [1] CRAN (R 4.5.0)
-    devtools        2.5.0    2026-03-14 [1] CRAN (R 4.5.2)
-    DiagrammeR      1.0.11   2024-02-02 [1] CRAN (R 4.5.0)
-    DiagrammeRsvg   0.1      2016-02-04 [1] CRAN (R 4.5.0)
-    digest          0.6.39   2025-11-19 [1] CRAN (R 4.5.2)
-    dm              1.1.1    2026-03-05 [1] CRAN (R 4.5.2)
-    dplyr         * 1.2.1    2026-04-03 [1] CRAN (R 4.5.2)
-    DT            * 0.34.0   2025-09-02 [1] CRAN (R 4.5.0)
-    duckdb        * 1.5.1    2026-03-26 [1] CRAN (R 4.5.2)
-    ellipsis        0.3.2    2021-04-29 [1] CRAN (R 4.5.0)
-    evaluate        1.0.5    2025-08-27 [1] CRAN (R 4.5.0)
-    fastmap         1.2.0    2024-05-15 [1] CRAN (R 4.5.0)
-    fs            * 2.0.1    2026-03-24 [1] CRAN (R 4.5.2)
-    gargle          1.6.1    2026-01-29 [1] CRAN (R 4.5.2)
-    generics        0.1.4    2025-05-09 [1] CRAN (R 4.5.0)
-    glue          * 1.8.0    2024-09-30 [1] CRAN (R 4.5.0)
-    googledrive     2.1.2    2025-09-10 [1] CRAN (R 4.5.0)
-    here          * 1.0.2    2025-09-15 [1] CRAN (R 4.5.0)
-    hms             1.1.4    2025-10-17 [1] CRAN (R 4.5.0)
-    htmltools       0.5.9    2025-12-04 [1] CRAN (R 4.5.2)
-    htmlwidgets     1.6.4    2023-12-06 [1] CRAN (R 4.5.0)
-    httpuv          1.6.17   2026-03-18 [1] CRAN (R 4.5.2)
-    igraph          2.2.2    2026-02-12 [1] CRAN (R 4.5.2)
-    janitor         2.2.1    2024-12-22 [1] CRAN (R 4.5.0)
-    jquerylib       0.1.4    2021-04-26 [1] CRAN (R 4.5.0)
-    jsonlite      * 2.0.0    2025-03-27 [1] CRAN (R 4.5.0)
-    knitr           1.51     2025-12-20 [1] CRAN (R 4.5.2)
-    later           1.4.8    2026-03-05 [1] CRAN (R 4.5.2)
-    librarian       1.8.1    2021-07-12 [1] CRAN (R 4.5.0)
-    lifecycle       1.0.5    2026-01-08 [1] CRAN (R 4.5.2)
-    lubridate       1.9.5    2026-02-04 [1] CRAN (R 4.5.2)
-    magrittr        2.0.5    2026-04-04 [1] CRAN (R 4.5.2)
-    memoise         2.0.1    2021-11-26 [1] CRAN (R 4.5.0)
-    mime            0.13     2025-03-17 [1] CRAN (R 4.5.0)
-    otel            0.2.0    2025-08-29 [1] CRAN (R 4.5.0)
-    pillar          1.11.1   2025-09-17 [1] CRAN (R 4.5.0)
-    pkgbuild        1.4.8    2025-05-26 [1] CRAN (R 4.5.0)
-    pkgconfig       2.0.3    2019-09-22 [1] CRAN (R 4.5.0)
-    pkgload         1.5.1    2026-04-01 [1] CRAN (R 4.5.2)
-    promises        1.5.0    2025-11-01 [1] CRAN (R 4.5.0)
-    purrr         * 1.2.1    2026-01-09 [1] CRAN (R 4.5.2)
-    R6              2.6.1    2025-02-15 [1] CRAN (R 4.5.0)
-    RColorBrewer    1.1-3    2022-04-03 [1] CRAN (R 4.5.0)
-    Rcpp            1.1.1    2026-01-10 [1] CRAN (R 4.5.2)
-    readr           2.2.0    2026-02-19 [1] CRAN (R 4.5.2)
-    rlang           1.1.7    2026-01-09 [1] CRAN (R 4.5.2)
-    rmarkdown       2.31     2026-03-26 [1] CRAN (R 4.5.2)
-    RPostgres       1.4.10   2026-02-16 [1] CRAN (R 4.5.2)
-    rprojroot       2.1.1    2025-08-26 [1] CRAN (R 4.5.0)
-    rstudioapi      0.18.0   2026-01-16 [1] CRAN (R 4.5.2)
-    sass            0.4.10   2025-04-11 [1] CRAN (R 4.5.0)
-    sessioninfo     1.2.3    2025-02-05 [1] CRAN (R 4.5.0)
-    shiny           1.13.0   2026-02-20 [1] CRAN (R 4.5.2)
-    snakecase       0.11.1   2023-08-27 [1] CRAN (R 4.5.0)
-    stringi         1.8.7    2025-03-27 [1] CRAN (R 4.5.0)
-    stringr         1.6.0    2025-11-04 [1] CRAN (R 4.5.0)
-    tibble        * 3.3.1    2026-01-11 [1] CRAN (R 4.5.2)
-    tidyr           1.3.2    2025-12-19 [1] CRAN (R 4.5.2)
-    tidyselect      1.2.1    2024-03-11 [1] CRAN (R 4.5.0)
-    timechange      0.4.0    2026-01-29 [1] CRAN (R 4.5.2)
-    tzdb            0.5.0    2025-03-15 [1] CRAN (R 4.5.0)
-    usethis         3.2.1    2025-09-06 [1] CRAN (R 4.5.0)
-    uuid            1.2-2    2026-01-23 [1] CRAN (R 4.5.2)
-    V8              8.0.1    2025-10-10 [1] CRAN (R 4.5.0)
-    vctrs           0.7.2    2026-03-21 [1] CRAN (R 4.5.2)
-    visNetwork      2.1.4    2025-09-04 [1] CRAN (R 4.5.0)
-    withr           3.0.2    2024-10-28 [1] CRAN (R 4.5.0)
-    xfun            0.57     2026-03-20 [1] CRAN (R 4.5.2)
-    xtable          1.8-8    2026-02-22 [1] CRAN (R 4.5.2)
-    yaml          * 2.3.12   2025-12-10 [1] CRAN (R 4.5.2)
+ ! package       * version   date (UTC) lib source
+   arrow           24.0.0    2026-04-29 [1] CRAN (R 4.5.2)
+   assertthat      0.2.1     2019-03-21 [1] CRAN (R 4.5.0)
+   backports       1.5.1     2026-04-03 [1] CRAN (R 4.5.2)
+   bit             4.6.0     2025-03-06 [1] CRAN (R 4.5.0)
+   bit64           4.8.2     2026-05-19 [1] CRAN (R 4.5.2)
+   blob            1.3.0     2026-01-14 [1] CRAN (R 4.5.2)
+   bslib           0.11.0    2026-05-16 [1] CRAN (R 4.5.2)
+   cachem          1.1.0     2024-05-16 [1] CRAN (R 4.5.0)
+ P calcofi4db    * 2.8.1     2026-06-05 [?] load_all()
+   cli             3.6.6     2026-04-09 [1] CRAN (R 4.5.2)
+   crayon          1.5.3     2024-06-20 [1] CRAN (R 4.5.0)
+   crosstalk       1.2.2     2025-08-26 [1] CRAN (R 4.5.0)
+   curl            7.1.0     2026-04-22 [1] CRAN (R 4.5.2)
+   DBI           * 1.3.0     2026-02-25 [1] CRAN (R 4.5.2)
+   dbplyr          2.5.2     2026-02-13 [1] CRAN (R 4.5.2)
+   desc            1.4.3     2023-12-10 [1] CRAN (R 4.5.0)
+   devtools        2.5.0     2026-03-14 [1] CRAN (R 4.5.2)
+   DiagrammeR      1.0.12    2026-04-27 [1] CRAN (R 4.5.2)
+   DiagrammeRsvg   0.1       2016-02-04 [1] CRAN (R 4.5.0)
+   digest          0.6.39    2025-11-19 [1] CRAN (R 4.5.2)
+   dm              1.1.2     2026-05-17 [1] CRAN (R 4.5.2)
+   dplyr         * 1.2.1     2026-04-03 [1] CRAN (R 4.5.2)
+   DT            * 0.34.0    2025-09-02 [1] CRAN (R 4.5.0)
+   duckdb        * 1.5.2     2026-04-13 [1] CRAN (R 4.5.2)
+   ellipsis        0.3.2     2021-04-29 [1] CRAN (R 4.5.0)
+   evaluate        1.0.5     2025-08-27 [1] CRAN (R 4.5.0)
+   fastmap         1.2.0     2024-05-15 [1] CRAN (R 4.5.0)
+   fs            * 2.1.0     2026-04-18 [1] CRAN (R 4.5.2)
+   gargle          1.6.1     2026-01-29 [1] CRAN (R 4.5.2)
+   generics        0.1.4     2025-05-09 [1] CRAN (R 4.5.0)
+   glue          * 1.8.1     2026-04-17 [1] CRAN (R 4.5.2)
+   googledrive     2.1.2     2025-09-10 [1] CRAN (R 4.5.0)
+   here          * 1.0.2     2025-09-15 [1] CRAN (R 4.5.0)
+   hms             1.1.4     2025-10-17 [1] CRAN (R 4.5.0)
+   htmltools       0.5.9     2025-12-04 [1] CRAN (R 4.5.2)
+   htmlwidgets     1.6.4     2023-12-06 [1] CRAN (R 4.5.0)
+   httpuv          1.6.17    2026-03-18 [1] CRAN (R 4.5.2)
+   igraph          2.3.2     2026-05-29 [1] CRAN (R 4.5.2)
+   janitor         2.2.1     2024-12-22 [1] CRAN (R 4.5.0)
+   jquerylib       0.1.4     2021-04-26 [1] CRAN (R 4.5.0)
+   jsonlite      * 2.0.0     2025-03-27 [1] CRAN (R 4.5.0)
+   knitr           1.51      2025-12-20 [1] CRAN (R 4.5.2)
+   later           1.4.8     2026-03-05 [1] CRAN (R 4.5.2)
+   librarian       1.8.1     2021-07-12 [1] CRAN (R 4.5.0)
+   lifecycle       1.0.5     2026-01-08 [1] CRAN (R 4.5.2)
+   lubridate       1.9.5     2026-02-04 [1] CRAN (R 4.5.2)
+   magrittr        2.0.5     2026-04-04 [1] CRAN (R 4.5.2)
+   memoise         2.0.1     2021-11-26 [1] CRAN (R 4.5.0)
+   mime            0.13      2025-03-17 [1] CRAN (R 4.5.0)
+   otel            0.2.0     2025-08-29 [1] CRAN (R 4.5.0)
+   pillar          1.11.1    2025-09-17 [1] CRAN (R 4.5.0)
+   pkgbuild        1.4.8     2025-05-26 [1] CRAN (R 4.5.0)
+   pkgconfig       2.0.3     2019-09-22 [1] CRAN (R 4.5.0)
+   pkgload         1.5.1     2026-04-01 [1] CRAN (R 4.5.2)
+   promises        1.5.0     2025-11-01 [1] CRAN (R 4.5.0)
+   purrr         * 1.2.2     2026-04-10 [1] CRAN (R 4.5.2)
+   R6              2.6.1     2025-02-15 [1] CRAN (R 4.5.0)
+   RColorBrewer    1.1-3     2022-04-03 [1] CRAN (R 4.5.0)
+   Rcpp            1.1.1-1.1 2026-04-24 [1] CRAN (R 4.5.2)
+   readr           2.2.0     2026-02-19 [1] CRAN (R 4.5.2)
+   rlang           1.2.0     2026-04-06 [1] CRAN (R 4.5.2)
+   rmarkdown       2.31      2026-03-26 [1] CRAN (R 4.5.2)
+   RPostgres       1.4.10    2026-02-16 [1] CRAN (R 4.5.2)
+   rprojroot       2.1.1     2025-08-26 [1] CRAN (R 4.5.0)
+   rstudioapi      0.18.0    2026-01-16 [1] CRAN (R 4.5.2)
+   sass            0.4.10    2025-04-11 [1] CRAN (R 4.5.0)
+   sessioninfo     1.2.3     2025-02-05 [1] CRAN (R 4.5.0)
+   shiny           1.13.0    2026-02-20 [1] CRAN (R 4.5.2)
+   snakecase       0.11.1    2023-08-27 [1] CRAN (R 4.5.0)
+   stringi         1.8.7     2025-03-27 [1] CRAN (R 4.5.0)
+   stringr         1.6.0     2025-11-04 [1] CRAN (R 4.5.0)
+   tibble        * 3.3.1     2026-01-11 [1] CRAN (R 4.5.2)
+   tidyr           1.3.2     2025-12-19 [1] CRAN (R 4.5.2)
+   tidyselect      1.2.1     2024-03-11 [1] CRAN (R 4.5.0)
+   timechange      0.4.0     2026-01-29 [1] CRAN (R 4.5.2)
+   tzdb            0.5.0     2025-03-15 [1] CRAN (R 4.5.0)
+   usethis         3.2.1     2025-09-06 [1] CRAN (R 4.5.0)
+   uuid            1.2-2     2026-01-23 [1] CRAN (R 4.5.2)
+   V8              8.2.0     2026-04-21 [1] CRAN (R 4.5.2)
+   vctrs           0.7.3     2026-04-11 [1] CRAN (R 4.5.2)
+   visNetwork      2.1.4     2025-09-04 [1] CRAN (R 4.5.0)
+   withr           3.0.2     2024-10-28 [1] CRAN (R 4.5.0)
+   xfun            0.58      2026-06-01 [1] CRAN (R 4.5.2)
+   xtable          1.8-8     2026-02-22 [1] CRAN (R 4.5.2)
+   yaml          * 2.3.12    2025-12-10 [1] CRAN (R 4.5.2)
 
  [1] /Library/Frameworks/R.framework/Versions/4.5-arm64/Resources/library
 
  * ── Packages attached to the search path.
- V ── Loaded and on-disk version mismatch.
  P ── Loaded and on-disk path mismatch.
 
 ──────────────────────────────────────────────────────────────────────────────</code></pre>
@@ -1250,188 +1256,195 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb26-171"><a href="#cb26-171" aria-hidden="true" tabindex="-1"></a>    txt <span class="ot">&lt;-</span> <span class="fu">sub</span>(full, val, txt, <span class="at">fixed =</span> <span class="cn">TRUE</span>)</span>
 <span id="cb26-172"><a href="#cb26-172" aria-hidden="true" tabindex="-1"></a>  }</span>
 <span id="cb26-173"><a href="#cb26-173" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-174"><a href="#cb26-174" aria-hidden="true" tabindex="-1"></a>  txt</span>
-<span id="cb26-175"><a href="#cb26-175" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb26-176"><a href="#cb26-176" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-177"><a href="#cb26-177" aria-hidden="true" tabindex="-1"></a><span class="co"># parse YAML front-matter + body from a query .md file</span></span>
-<span id="cb26-178"><a href="#cb26-178" aria-hidden="true" tabindex="-1"></a>parse_query_md <span class="ot">&lt;-</span> <span class="cf">function</span>(path) {</span>
-<span id="cb26-179"><a href="#cb26-179" aria-hidden="true" tabindex="-1"></a>  raw <span class="ot">&lt;-</span> <span class="fu">readLines</span>(path, <span class="at">warn =</span> <span class="cn">FALSE</span>)</span>
-<span id="cb26-180"><a href="#cb26-180" aria-hidden="true" tabindex="-1"></a>  delims <span class="ot">&lt;-</span> <span class="fu">which</span>(<span class="fu">trimws</span>(raw) <span class="sc">==</span> <span class="st">"---"</span>)</span>
-<span id="cb26-181"><a href="#cb26-181" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">length</span>(delims) <span class="sc">&lt;</span> <span class="dv">2</span>) {</span>
-<span id="cb26-182"><a href="#cb26-182" aria-hidden="true" tabindex="-1"></a>    <span class="fu">stop</span>(<span class="fu">glue</span>(<span class="st">"Missing YAML delimiters in {path}"</span>))</span>
-<span id="cb26-183"><a href="#cb26-183" aria-hidden="true" tabindex="-1"></a>  }</span>
-<span id="cb26-184"><a href="#cb26-184" aria-hidden="true" tabindex="-1"></a>  yaml_text <span class="ot">&lt;-</span> <span class="fu">paste</span>(raw[(delims[<span class="dv">1</span>] <span class="sc">+</span> <span class="dv">1</span>)<span class="sc">:</span>(delims[<span class="dv">2</span>] <span class="sc">-</span> <span class="dv">1</span>)], <span class="at">collapse =</span> <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
-<span id="cb26-185"><a href="#cb26-185" aria-hidden="true" tabindex="-1"></a>  meta <span class="ot">&lt;-</span> yaml<span class="sc">::</span><span class="fu">yaml.load</span>(yaml_text)</span>
-<span id="cb26-186"><a href="#cb26-186" aria-hidden="true" tabindex="-1"></a>  body <span class="ot">&lt;-</span> <span class="fu">paste</span>(raw[(delims[<span class="dv">2</span>] <span class="sc">+</span> <span class="dv">1</span>)<span class="sc">:</span><span class="fu">length</span>(raw)], <span class="at">collapse =</span> <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
-<span id="cb26-187"><a href="#cb26-187" aria-hidden="true" tabindex="-1"></a>  <span class="fu">list</span>(<span class="at">meta =</span> meta, <span class="at">body =</span> body, <span class="at">path =</span> path)</span>
-<span id="cb26-188"><a href="#cb26-188" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb26-189"><a href="#cb26-189" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-190"><a href="#cb26-190" aria-hidden="true" tabindex="-1"></a><span class="co"># build the params list for a query: each parameter's `default`, with</span></span>
-<span id="cb26-191"><a href="#cb26-191" aria-hidden="true" tabindex="-1"></a><span class="co"># `version` overridden to the release under test</span></span>
-<span id="cb26-192"><a href="#cb26-192" aria-hidden="true" tabindex="-1"></a>defaults_for <span class="ot">&lt;-</span> <span class="cf">function</span>(meta, release_version) {</span>
-<span id="cb26-193"><a href="#cb26-193" aria-hidden="true" tabindex="-1"></a>  params <span class="ot">&lt;-</span> <span class="fu">list</span>(<span class="at">version =</span> release_version)</span>
-<span id="cb26-194"><a href="#cb26-194" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.null</span>(meta<span class="sc">$</span>parameters)) {</span>
-<span id="cb26-195"><a href="#cb26-195" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> (name <span class="cf">in</span> <span class="fu">names</span>(meta<span class="sc">$</span>parameters)) {</span>
-<span id="cb26-196"><a href="#cb26-196" aria-hidden="true" tabindex="-1"></a>      spec <span class="ot">&lt;-</span> meta<span class="sc">$</span>parameters[[name]]</span>
-<span id="cb26-197"><a href="#cb26-197" aria-hidden="true" tabindex="-1"></a>      params[[name]] <span class="ot">&lt;-</span> spec<span class="sc">$</span>default</span>
-<span id="cb26-198"><a href="#cb26-198" aria-hidden="true" tabindex="-1"></a>    }</span>
-<span id="cb26-199"><a href="#cb26-199" aria-hidden="true" tabindex="-1"></a>  }</span>
-<span id="cb26-200"><a href="#cb26-200" aria-hidden="true" tabindex="-1"></a>  params<span class="sc">$</span>version <span class="ot">&lt;-</span> release_version</span>
-<span id="cb26-201"><a href="#cb26-201" aria-hidden="true" tabindex="-1"></a>  params</span>
-<span id="cb26-202"><a href="#cb26-202" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb26-203"><a href="#cb26-203" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb26-204"><a href="#cb26-204" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-205"><a href="#cb26-205" aria-hidden="true" tabindex="-1"></a><span class="fu">## Discover and execute every query</span></span>
-<span id="cb26-206"><a href="#cb26-206" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-209"><a href="#cb26-209" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb26-210"><a href="#cb26-210" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: execute</span></span>
+<span id="cb26-174"><a href="#cb26-174" aria-hidden="true" tabindex="-1"></a>  <span class="co"># query-app convention: literal __VERSION__ placeholder -&gt; release version,</span></span>
+<span id="cb26-175"><a href="#cb26-175" aria-hidden="true" tabindex="-1"></a>  <span class="co"># mirroring _includes/form-field.html ({% replace "__VERSION__",</span></span>
+<span id="cb26-176"><a href="#cb26-176" aria-hidden="true" tabindex="-1"></a>  <span class="co"># site.default_version %}). Used in free-form defaults like sql-shell/shell.md.</span></span>
+<span id="cb26-177"><a href="#cb26-177" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.null</span>(params<span class="sc">$</span>version)) {</span>
+<span id="cb26-178"><a href="#cb26-178" aria-hidden="true" tabindex="-1"></a>    txt <span class="ot">&lt;-</span> <span class="fu">gsub</span>(<span class="st">"__VERSION__"</span>, <span class="fu">as.character</span>(params<span class="sc">$</span>version), txt, <span class="at">fixed =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb26-179"><a href="#cb26-179" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb26-180"><a href="#cb26-180" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-181"><a href="#cb26-181" aria-hidden="true" tabindex="-1"></a>  txt</span>
+<span id="cb26-182"><a href="#cb26-182" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb26-183"><a href="#cb26-183" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-184"><a href="#cb26-184" aria-hidden="true" tabindex="-1"></a><span class="co"># parse YAML front-matter + body from a query .md file</span></span>
+<span id="cb26-185"><a href="#cb26-185" aria-hidden="true" tabindex="-1"></a>parse_query_md <span class="ot">&lt;-</span> <span class="cf">function</span>(path) {</span>
+<span id="cb26-186"><a href="#cb26-186" aria-hidden="true" tabindex="-1"></a>  raw <span class="ot">&lt;-</span> <span class="fu">readLines</span>(path, <span class="at">warn =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb26-187"><a href="#cb26-187" aria-hidden="true" tabindex="-1"></a>  delims <span class="ot">&lt;-</span> <span class="fu">which</span>(<span class="fu">trimws</span>(raw) <span class="sc">==</span> <span class="st">"---"</span>)</span>
+<span id="cb26-188"><a href="#cb26-188" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">length</span>(delims) <span class="sc">&lt;</span> <span class="dv">2</span>) {</span>
+<span id="cb26-189"><a href="#cb26-189" aria-hidden="true" tabindex="-1"></a>    <span class="fu">stop</span>(<span class="fu">glue</span>(<span class="st">"Missing YAML delimiters in {path}"</span>))</span>
+<span id="cb26-190"><a href="#cb26-190" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb26-191"><a href="#cb26-191" aria-hidden="true" tabindex="-1"></a>  yaml_text <span class="ot">&lt;-</span> <span class="fu">paste</span>(raw[(delims[<span class="dv">1</span>] <span class="sc">+</span> <span class="dv">1</span>)<span class="sc">:</span>(delims[<span class="dv">2</span>] <span class="sc">-</span> <span class="dv">1</span>)], <span class="at">collapse =</span> <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb26-192"><a href="#cb26-192" aria-hidden="true" tabindex="-1"></a>  meta <span class="ot">&lt;-</span> yaml<span class="sc">::</span><span class="fu">yaml.load</span>(yaml_text)</span>
+<span id="cb26-193"><a href="#cb26-193" aria-hidden="true" tabindex="-1"></a>  body <span class="ot">&lt;-</span> <span class="fu">paste</span>(raw[(delims[<span class="dv">2</span>] <span class="sc">+</span> <span class="dv">1</span>)<span class="sc">:</span><span class="fu">length</span>(raw)], <span class="at">collapse =</span> <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb26-194"><a href="#cb26-194" aria-hidden="true" tabindex="-1"></a>  <span class="fu">list</span>(<span class="at">meta =</span> meta, <span class="at">body =</span> body, <span class="at">path =</span> path)</span>
+<span id="cb26-195"><a href="#cb26-195" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb26-196"><a href="#cb26-196" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-197"><a href="#cb26-197" aria-hidden="true" tabindex="-1"></a><span class="co"># build the params list for a query: each parameter's `default`, with</span></span>
+<span id="cb26-198"><a href="#cb26-198" aria-hidden="true" tabindex="-1"></a><span class="co"># `version` overridden to the release under test</span></span>
+<span id="cb26-199"><a href="#cb26-199" aria-hidden="true" tabindex="-1"></a>defaults_for <span class="ot">&lt;-</span> <span class="cf">function</span>(meta, release_version) {</span>
+<span id="cb26-200"><a href="#cb26-200" aria-hidden="true" tabindex="-1"></a>  params <span class="ot">&lt;-</span> <span class="fu">list</span>(<span class="at">version =</span> release_version)</span>
+<span id="cb26-201"><a href="#cb26-201" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.null</span>(meta<span class="sc">$</span>parameters)) {</span>
+<span id="cb26-202"><a href="#cb26-202" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> (name <span class="cf">in</span> <span class="fu">names</span>(meta<span class="sc">$</span>parameters)) {</span>
+<span id="cb26-203"><a href="#cb26-203" aria-hidden="true" tabindex="-1"></a>      spec <span class="ot">&lt;-</span> meta<span class="sc">$</span>parameters[[name]]</span>
+<span id="cb26-204"><a href="#cb26-204" aria-hidden="true" tabindex="-1"></a>      params[[name]] <span class="ot">&lt;-</span> spec<span class="sc">$</span>default</span>
+<span id="cb26-205"><a href="#cb26-205" aria-hidden="true" tabindex="-1"></a>    }</span>
+<span id="cb26-206"><a href="#cb26-206" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb26-207"><a href="#cb26-207" aria-hidden="true" tabindex="-1"></a>  params<span class="sc">$</span>version <span class="ot">&lt;-</span> release_version</span>
+<span id="cb26-208"><a href="#cb26-208" aria-hidden="true" tabindex="-1"></a>  params</span>
+<span id="cb26-209"><a href="#cb26-209" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb26-210"><a href="#cb26-210" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
 <span id="cb26-211"><a href="#cb26-211" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-212"><a href="#cb26-212" aria-hidden="true" tabindex="-1"></a>query_files <span class="ot">&lt;-</span> <span class="fu">list.files</span>(queries_dir, <span class="at">pattern =</span> <span class="st">"[.]md$"</span>,</span>
-<span id="cb26-213"><a href="#cb26-213" aria-hidden="true" tabindex="-1"></a>                          <span class="at">recursive =</span> <span class="cn">TRUE</span>, <span class="at">full.names =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb26-214"><a href="#cb26-214" aria-hidden="true" tabindex="-1"></a><span class="fu">message</span>(<span class="fu">glue</span>(<span class="st">"Found {length(query_files)} query files"</span>))</span>
-<span id="cb26-215"><a href="#cb26-215" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-216"><a href="#cb26-216" aria-hidden="true" tabindex="-1"></a>results <span class="ot">&lt;-</span> purrr<span class="sc">::</span><span class="fu">map_dfr</span>(query_files, <span class="cf">function</span>(qpath) {</span>
-<span id="cb26-217"><a href="#cb26-217" aria-hidden="true" tabindex="-1"></a>  rel  <span class="ot">&lt;-</span> <span class="fu">sub</span>(<span class="fu">paste0</span>(<span class="fu">normalizePath</span>(queries_dir), <span class="st">"/"</span>), <span class="st">""</span>,</span>
-<span id="cb26-218"><a href="#cb26-218" aria-hidden="true" tabindex="-1"></a>              <span class="fu">normalizePath</span>(qpath), <span class="at">fixed =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb26-219"><a href="#cb26-219" aria-hidden="true" tabindex="-1"></a>  q    <span class="ot">&lt;-</span> <span class="fu">parse_query_md</span>(qpath)</span>
-<span id="cb26-220"><a href="#cb26-220" aria-hidden="true" tabindex="-1"></a>  meta <span class="ot">&lt;-</span> q<span class="sc">$</span>meta</span>
-<span id="cb26-221"><a href="#cb26-221" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-222"><a href="#cb26-222" aria-hidden="true" tabindex="-1"></a>  <span class="co"># sql_builder queries are JS-only — flag them; the query app exercises</span></span>
-<span id="cb26-223"><a href="#cb26-223" aria-hidden="true" tabindex="-1"></a>  <span class="co"># them in the browser</span></span>
-<span id="cb26-224"><a href="#cb26-224" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.null</span>(meta<span class="sc">$</span>sql_builder)) {</span>
-<span id="cb26-225"><a href="#cb26-225" aria-hidden="true" tabindex="-1"></a>    <span class="fu">return</span>(tibble<span class="sc">::</span><span class="fu">tibble</span>(</span>
-<span id="cb26-226"><a href="#cb26-226" aria-hidden="true" tabindex="-1"></a>      <span class="at">query    =</span> rel,</span>
-<span id="cb26-227"><a href="#cb26-227" aria-hidden="true" tabindex="-1"></a>      <span class="at">label    =</span> meta<span class="sc">$</span>label <span class="sc">%||%</span> <span class="cn">NA_character_</span>,</span>
-<span id="cb26-228"><a href="#cb26-228" aria-hidden="true" tabindex="-1"></a>      <span class="at">status   =</span> <span class="st">"skip"</span>,</span>
-<span id="cb26-229"><a href="#cb26-229" aria-hidden="true" tabindex="-1"></a>      <span class="at">reason   =</span> <span class="fu">paste0</span>(<span class="st">"sql_builder="</span>, meta<span class="sc">$</span>sql_builder),</span>
-<span id="cb26-230"><a href="#cb26-230" aria-hidden="true" tabindex="-1"></a>      <span class="at">rows     =</span> <span class="cn">NA_integer_</span>,</span>
-<span id="cb26-231"><a href="#cb26-231" aria-hidden="true" tabindex="-1"></a>      <span class="at">ms       =</span> <span class="cn">NA_real_</span>,</span>
-<span id="cb26-232"><a href="#cb26-232" aria-hidden="true" tabindex="-1"></a>      <span class="at">error    =</span> <span class="cn">NA_character_</span>))</span>
-<span id="cb26-233"><a href="#cb26-233" aria-hidden="true" tabindex="-1"></a>  }</span>
-<span id="cb26-234"><a href="#cb26-234" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-235"><a href="#cb26-235" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">is.null</span>(meta<span class="sc">$</span>sql)) {</span>
-<span id="cb26-236"><a href="#cb26-236" aria-hidden="true" tabindex="-1"></a>    <span class="fu">return</span>(tibble<span class="sc">::</span><span class="fu">tibble</span>(</span>
-<span id="cb26-237"><a href="#cb26-237" aria-hidden="true" tabindex="-1"></a>      <span class="at">query =</span> rel, <span class="at">label =</span> meta<span class="sc">$</span>label <span class="sc">%||%</span> <span class="cn">NA_character_</span>,</span>
-<span id="cb26-238"><a href="#cb26-238" aria-hidden="true" tabindex="-1"></a>      <span class="at">status =</span> <span class="st">"skip"</span>, <span class="at">reason =</span> <span class="st">"no inline sql"</span>,</span>
-<span id="cb26-239"><a href="#cb26-239" aria-hidden="true" tabindex="-1"></a>      <span class="at">rows =</span> <span class="cn">NA_integer_</span>, <span class="at">ms =</span> <span class="cn">NA_real_</span>, <span class="at">error =</span> <span class="cn">NA_character_</span>))</span>
+<span id="cb26-212"><a href="#cb26-212" aria-hidden="true" tabindex="-1"></a><span class="fu">## Discover and execute every query</span></span>
+<span id="cb26-213"><a href="#cb26-213" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-216"><a href="#cb26-216" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb26-217"><a href="#cb26-217" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: execute</span></span>
+<span id="cb26-218"><a href="#cb26-218" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-219"><a href="#cb26-219" aria-hidden="true" tabindex="-1"></a>query_files <span class="ot">&lt;-</span> <span class="fu">list.files</span>(queries_dir, <span class="at">pattern =</span> <span class="st">"[.]md$"</span>,</span>
+<span id="cb26-220"><a href="#cb26-220" aria-hidden="true" tabindex="-1"></a>                          <span class="at">recursive =</span> <span class="cn">TRUE</span>, <span class="at">full.names =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb26-221"><a href="#cb26-221" aria-hidden="true" tabindex="-1"></a><span class="fu">message</span>(<span class="fu">glue</span>(<span class="st">"Found {length(query_files)} query files"</span>))</span>
+<span id="cb26-222"><a href="#cb26-222" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-223"><a href="#cb26-223" aria-hidden="true" tabindex="-1"></a>results <span class="ot">&lt;-</span> purrr<span class="sc">::</span><span class="fu">map_dfr</span>(query_files, <span class="cf">function</span>(qpath) {</span>
+<span id="cb26-224"><a href="#cb26-224" aria-hidden="true" tabindex="-1"></a>  rel  <span class="ot">&lt;-</span> <span class="fu">sub</span>(<span class="fu">paste0</span>(<span class="fu">normalizePath</span>(queries_dir), <span class="st">"/"</span>), <span class="st">""</span>,</span>
+<span id="cb26-225"><a href="#cb26-225" aria-hidden="true" tabindex="-1"></a>              <span class="fu">normalizePath</span>(qpath), <span class="at">fixed =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb26-226"><a href="#cb26-226" aria-hidden="true" tabindex="-1"></a>  q    <span class="ot">&lt;-</span> <span class="fu">parse_query_md</span>(qpath)</span>
+<span id="cb26-227"><a href="#cb26-227" aria-hidden="true" tabindex="-1"></a>  meta <span class="ot">&lt;-</span> q<span class="sc">$</span>meta</span>
+<span id="cb26-228"><a href="#cb26-228" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-229"><a href="#cb26-229" aria-hidden="true" tabindex="-1"></a>  <span class="co"># sql_builder queries are JS-only — flag them; the query app exercises</span></span>
+<span id="cb26-230"><a href="#cb26-230" aria-hidden="true" tabindex="-1"></a>  <span class="co"># them in the browser</span></span>
+<span id="cb26-231"><a href="#cb26-231" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.null</span>(meta<span class="sc">$</span>sql_builder)) {</span>
+<span id="cb26-232"><a href="#cb26-232" aria-hidden="true" tabindex="-1"></a>    <span class="fu">return</span>(tibble<span class="sc">::</span><span class="fu">tibble</span>(</span>
+<span id="cb26-233"><a href="#cb26-233" aria-hidden="true" tabindex="-1"></a>      <span class="at">query    =</span> rel,</span>
+<span id="cb26-234"><a href="#cb26-234" aria-hidden="true" tabindex="-1"></a>      <span class="at">label    =</span> meta<span class="sc">$</span>label <span class="sc">%||%</span> <span class="cn">NA_character_</span>,</span>
+<span id="cb26-235"><a href="#cb26-235" aria-hidden="true" tabindex="-1"></a>      <span class="at">status   =</span> <span class="st">"skip"</span>,</span>
+<span id="cb26-236"><a href="#cb26-236" aria-hidden="true" tabindex="-1"></a>      <span class="at">reason   =</span> <span class="fu">paste0</span>(<span class="st">"sql_builder="</span>, meta<span class="sc">$</span>sql_builder),</span>
+<span id="cb26-237"><a href="#cb26-237" aria-hidden="true" tabindex="-1"></a>      <span class="at">rows     =</span> <span class="cn">NA_integer_</span>,</span>
+<span id="cb26-238"><a href="#cb26-238" aria-hidden="true" tabindex="-1"></a>      <span class="at">ms       =</span> <span class="cn">NA_real_</span>,</span>
+<span id="cb26-239"><a href="#cb26-239" aria-hidden="true" tabindex="-1"></a>      <span class="at">error    =</span> <span class="cn">NA_character_</span>))</span>
 <span id="cb26-240"><a href="#cb26-240" aria-hidden="true" tabindex="-1"></a>  }</span>
 <span id="cb26-241"><a href="#cb26-241" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-242"><a href="#cb26-242" aria-hidden="true" tabindex="-1"></a>  params <span class="ot">&lt;-</span> <span class="fu">defaults_for</span>(meta, release_version)</span>
-<span id="cb26-243"><a href="#cb26-243" aria-hidden="true" tabindex="-1"></a>  sql    <span class="ot">&lt;-</span> <span class="fu">render_template</span>(meta<span class="sc">$</span>sql, params)</span>
-<span id="cb26-244"><a href="#cb26-244" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-245"><a href="#cb26-245" aria-hidden="true" tabindex="-1"></a>  t0  <span class="ot">&lt;-</span> <span class="fu">Sys.time</span>()</span>
-<span id="cb26-246"><a href="#cb26-246" aria-hidden="true" tabindex="-1"></a>  out <span class="ot">&lt;-</span> <span class="fu">tryCatch</span>(</span>
-<span id="cb26-247"><a href="#cb26-247" aria-hidden="true" tabindex="-1"></a>    DBI<span class="sc">::</span><span class="fu">dbGetQuery</span>(con_test, sql),</span>
-<span id="cb26-248"><a href="#cb26-248" aria-hidden="true" tabindex="-1"></a>    <span class="at">error =</span> <span class="cf">function</span>(e) e)</span>
-<span id="cb26-249"><a href="#cb26-249" aria-hidden="true" tabindex="-1"></a>  elapsed_ms <span class="ot">&lt;-</span> <span class="fu">as.numeric</span>(<span class="fu">difftime</span>(<span class="fu">Sys.time</span>(), t0, <span class="at">units =</span> <span class="st">"secs"</span>)) <span class="sc">*</span> <span class="dv">1000</span></span>
-<span id="cb26-250"><a href="#cb26-250" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-251"><a href="#cb26-251" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">inherits</span>(out, <span class="st">"error"</span>)) {</span>
-<span id="cb26-252"><a href="#cb26-252" aria-hidden="true" tabindex="-1"></a>    tibble<span class="sc">::</span><span class="fu">tibble</span>(</span>
-<span id="cb26-253"><a href="#cb26-253" aria-hidden="true" tabindex="-1"></a>      <span class="at">query =</span> rel, <span class="at">label =</span> meta<span class="sc">$</span>label <span class="sc">%||%</span> <span class="cn">NA_character_</span>,</span>
-<span id="cb26-254"><a href="#cb26-254" aria-hidden="true" tabindex="-1"></a>      <span class="at">status =</span> <span class="st">"fail"</span>, <span class="at">reason =</span> <span class="cn">NA_character_</span>,</span>
-<span id="cb26-255"><a href="#cb26-255" aria-hidden="true" tabindex="-1"></a>      <span class="at">rows   =</span> <span class="cn">NA_integer_</span>, <span class="at">ms =</span> <span class="fu">round</span>(elapsed_ms, <span class="dv">1</span>),</span>
-<span id="cb26-256"><a href="#cb26-256" aria-hidden="true" tabindex="-1"></a>      <span class="at">error  =</span> <span class="fu">conditionMessage</span>(out))</span>
-<span id="cb26-257"><a href="#cb26-257" aria-hidden="true" tabindex="-1"></a>  } <span class="cf">else</span> {</span>
-<span id="cb26-258"><a href="#cb26-258" aria-hidden="true" tabindex="-1"></a>    tibble<span class="sc">::</span><span class="fu">tibble</span>(</span>
-<span id="cb26-259"><a href="#cb26-259" aria-hidden="true" tabindex="-1"></a>      <span class="at">query =</span> rel, <span class="at">label =</span> meta<span class="sc">$</span>label <span class="sc">%||%</span> <span class="cn">NA_character_</span>,</span>
-<span id="cb26-260"><a href="#cb26-260" aria-hidden="true" tabindex="-1"></a>      <span class="at">status =</span> <span class="st">"pass"</span>, <span class="at">reason =</span> <span class="cn">NA_character_</span>,</span>
-<span id="cb26-261"><a href="#cb26-261" aria-hidden="true" tabindex="-1"></a>      <span class="at">rows   =</span> <span class="fu">nrow</span>(out), <span class="at">ms =</span> <span class="fu">round</span>(elapsed_ms, <span class="dv">1</span>),</span>
-<span id="cb26-262"><a href="#cb26-262" aria-hidden="true" tabindex="-1"></a>      <span class="at">error  =</span> <span class="cn">NA_character_</span>)</span>
-<span id="cb26-263"><a href="#cb26-263" aria-hidden="true" tabindex="-1"></a>  }</span>
-<span id="cb26-264"><a href="#cb26-264" aria-hidden="true" tabindex="-1"></a>})</span>
-<span id="cb26-265"><a href="#cb26-265" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-266"><a href="#cb26-266" aria-hidden="true" tabindex="-1"></a><span class="co"># status badges for the report</span></span>
-<span id="cb26-267"><a href="#cb26-267" aria-hidden="true" tabindex="-1"></a>status_badge <span class="ot">&lt;-</span> <span class="cf">function</span>(s) {</span>
-<span id="cb26-268"><a href="#cb26-268" aria-hidden="true" tabindex="-1"></a>  color <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="at">pass =</span> <span class="st">"#2e7d32"</span>, <span class="at">fail =</span> <span class="st">"#c62828"</span>, <span class="at">skip =</span> <span class="st">"#757575"</span>)[s]</span>
-<span id="cb26-269"><a href="#cb26-269" aria-hidden="true" tabindex="-1"></a>  <span class="fu">glue</span>(<span class="st">"&lt;span style='background:{color};color:#fff;padding:2px 8px;"</span>,</span>
-<span id="cb26-270"><a href="#cb26-270" aria-hidden="true" tabindex="-1"></a>       <span class="st">"border-radius:10px;font-size:11px;'&gt;{toupper(s)}&lt;/span&gt;"</span>)</span>
-<span id="cb26-271"><a href="#cb26-271" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb26-242"><a href="#cb26-242" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">is.null</span>(meta<span class="sc">$</span>sql)) {</span>
+<span id="cb26-243"><a href="#cb26-243" aria-hidden="true" tabindex="-1"></a>    <span class="fu">return</span>(tibble<span class="sc">::</span><span class="fu">tibble</span>(</span>
+<span id="cb26-244"><a href="#cb26-244" aria-hidden="true" tabindex="-1"></a>      <span class="at">query =</span> rel, <span class="at">label =</span> meta<span class="sc">$</span>label <span class="sc">%||%</span> <span class="cn">NA_character_</span>,</span>
+<span id="cb26-245"><a href="#cb26-245" aria-hidden="true" tabindex="-1"></a>      <span class="at">status =</span> <span class="st">"skip"</span>, <span class="at">reason =</span> <span class="st">"no inline sql"</span>,</span>
+<span id="cb26-246"><a href="#cb26-246" aria-hidden="true" tabindex="-1"></a>      <span class="at">rows =</span> <span class="cn">NA_integer_</span>, <span class="at">ms =</span> <span class="cn">NA_real_</span>, <span class="at">error =</span> <span class="cn">NA_character_</span>))</span>
+<span id="cb26-247"><a href="#cb26-247" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb26-248"><a href="#cb26-248" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-249"><a href="#cb26-249" aria-hidden="true" tabindex="-1"></a>  params <span class="ot">&lt;-</span> <span class="fu">defaults_for</span>(meta, release_version)</span>
+<span id="cb26-250"><a href="#cb26-250" aria-hidden="true" tabindex="-1"></a>  sql    <span class="ot">&lt;-</span> <span class="fu">render_template</span>(meta<span class="sc">$</span>sql, params)</span>
+<span id="cb26-251"><a href="#cb26-251" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-252"><a href="#cb26-252" aria-hidden="true" tabindex="-1"></a>  t0  <span class="ot">&lt;-</span> <span class="fu">Sys.time</span>()</span>
+<span id="cb26-253"><a href="#cb26-253" aria-hidden="true" tabindex="-1"></a>  out <span class="ot">&lt;-</span> <span class="fu">tryCatch</span>(</span>
+<span id="cb26-254"><a href="#cb26-254" aria-hidden="true" tabindex="-1"></a>    DBI<span class="sc">::</span><span class="fu">dbGetQuery</span>(con_test, sql),</span>
+<span id="cb26-255"><a href="#cb26-255" aria-hidden="true" tabindex="-1"></a>    <span class="at">error =</span> <span class="cf">function</span>(e) e)</span>
+<span id="cb26-256"><a href="#cb26-256" aria-hidden="true" tabindex="-1"></a>  elapsed_ms <span class="ot">&lt;-</span> <span class="fu">as.numeric</span>(<span class="fu">difftime</span>(<span class="fu">Sys.time</span>(), t0, <span class="at">units =</span> <span class="st">"secs"</span>)) <span class="sc">*</span> <span class="dv">1000</span></span>
+<span id="cb26-257"><a href="#cb26-257" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-258"><a href="#cb26-258" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">inherits</span>(out, <span class="st">"error"</span>)) {</span>
+<span id="cb26-259"><a href="#cb26-259" aria-hidden="true" tabindex="-1"></a>    tibble<span class="sc">::</span><span class="fu">tibble</span>(</span>
+<span id="cb26-260"><a href="#cb26-260" aria-hidden="true" tabindex="-1"></a>      <span class="at">query =</span> rel, <span class="at">label =</span> meta<span class="sc">$</span>label <span class="sc">%||%</span> <span class="cn">NA_character_</span>,</span>
+<span id="cb26-261"><a href="#cb26-261" aria-hidden="true" tabindex="-1"></a>      <span class="at">status =</span> <span class="st">"fail"</span>, <span class="at">reason =</span> <span class="cn">NA_character_</span>,</span>
+<span id="cb26-262"><a href="#cb26-262" aria-hidden="true" tabindex="-1"></a>      <span class="at">rows   =</span> <span class="cn">NA_integer_</span>, <span class="at">ms =</span> <span class="fu">round</span>(elapsed_ms, <span class="dv">1</span>),</span>
+<span id="cb26-263"><a href="#cb26-263" aria-hidden="true" tabindex="-1"></a>      <span class="at">error  =</span> <span class="fu">conditionMessage</span>(out))</span>
+<span id="cb26-264"><a href="#cb26-264" aria-hidden="true" tabindex="-1"></a>  } <span class="cf">else</span> {</span>
+<span id="cb26-265"><a href="#cb26-265" aria-hidden="true" tabindex="-1"></a>    tibble<span class="sc">::</span><span class="fu">tibble</span>(</span>
+<span id="cb26-266"><a href="#cb26-266" aria-hidden="true" tabindex="-1"></a>      <span class="at">query =</span> rel, <span class="at">label =</span> meta<span class="sc">$</span>label <span class="sc">%||%</span> <span class="cn">NA_character_</span>,</span>
+<span id="cb26-267"><a href="#cb26-267" aria-hidden="true" tabindex="-1"></a>      <span class="at">status =</span> <span class="st">"pass"</span>, <span class="at">reason =</span> <span class="cn">NA_character_</span>,</span>
+<span id="cb26-268"><a href="#cb26-268" aria-hidden="true" tabindex="-1"></a>      <span class="at">rows   =</span> <span class="fu">nrow</span>(out), <span class="at">ms =</span> <span class="fu">round</span>(elapsed_ms, <span class="dv">1</span>),</span>
+<span id="cb26-269"><a href="#cb26-269" aria-hidden="true" tabindex="-1"></a>      <span class="at">error  =</span> <span class="cn">NA_character_</span>)</span>
+<span id="cb26-270"><a href="#cb26-270" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb26-271"><a href="#cb26-271" aria-hidden="true" tabindex="-1"></a>})</span>
 <span id="cb26-272"><a href="#cb26-272" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-273"><a href="#cb26-273" aria-hidden="true" tabindex="-1"></a>results <span class="sc">|&gt;</span></span>
-<span id="cb26-274"><a href="#cb26-274" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">status_html =</span> <span class="fu">status_badge</span>(status)) <span class="sc">|&gt;</span></span>
-<span id="cb26-275"><a href="#cb26-275" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(status_html, query, label, rows, ms, reason, error) <span class="sc">|&gt;</span></span>
-<span id="cb26-276"><a href="#cb26-276" aria-hidden="true" tabindex="-1"></a>  DT<span class="sc">::</span><span class="fu">datatable</span>(</span>
-<span id="cb26-277"><a href="#cb26-277" aria-hidden="true" tabindex="-1"></a>    <span class="at">escape    =</span> <span class="cn">FALSE</span>,</span>
-<span id="cb26-278"><a href="#cb26-278" aria-hidden="true" tabindex="-1"></a>    <span class="at">rownames  =</span> <span class="cn">FALSE</span>,</span>
-<span id="cb26-279"><a href="#cb26-279" aria-hidden="true" tabindex="-1"></a>    <span class="at">options   =</span> <span class="fu">list</span>(<span class="at">pageLength =</span> <span class="dv">20</span>, <span class="at">order =</span> <span class="fu">list</span>(<span class="fu">list</span>(<span class="dv">0</span>, <span class="st">"asc"</span>))),</span>
-<span id="cb26-280"><a href="#cb26-280" aria-hidden="true" tabindex="-1"></a>    <span class="at">colnames  =</span> <span class="fu">c</span>(<span class="st">""</span>, <span class="st">"query"</span>, <span class="st">"label"</span>, <span class="st">"rows"</span>, <span class="st">"ms"</span>, <span class="st">"skip reason"</span>, <span class="st">"error"</span>))</span>
-<span id="cb26-281"><a href="#cb26-281" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb26-282"><a href="#cb26-282" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-283"><a href="#cb26-283" aria-hidden="true" tabindex="-1"></a><span class="fu">## Save results sidecar</span></span>
-<span id="cb26-284"><a href="#cb26-284" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-287"><a href="#cb26-287" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb26-288"><a href="#cb26-288" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: save_results</span></span>
+<span id="cb26-273"><a href="#cb26-273" aria-hidden="true" tabindex="-1"></a><span class="co"># status badges for the report</span></span>
+<span id="cb26-274"><a href="#cb26-274" aria-hidden="true" tabindex="-1"></a>status_badge <span class="ot">&lt;-</span> <span class="cf">function</span>(s) {</span>
+<span id="cb26-275"><a href="#cb26-275" aria-hidden="true" tabindex="-1"></a>  color <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="at">pass =</span> <span class="st">"#2e7d32"</span>, <span class="at">fail =</span> <span class="st">"#c62828"</span>, <span class="at">skip =</span> <span class="st">"#757575"</span>)[s]</span>
+<span id="cb26-276"><a href="#cb26-276" aria-hidden="true" tabindex="-1"></a>  <span class="fu">glue</span>(<span class="st">"&lt;span style='background:{color};color:#fff;padding:2px 8px;"</span>,</span>
+<span id="cb26-277"><a href="#cb26-277" aria-hidden="true" tabindex="-1"></a>       <span class="st">"border-radius:10px;font-size:11px;'&gt;{toupper(s)}&lt;/span&gt;"</span>)</span>
+<span id="cb26-278"><a href="#cb26-278" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb26-279"><a href="#cb26-279" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-280"><a href="#cb26-280" aria-hidden="true" tabindex="-1"></a>results <span class="sc">|&gt;</span></span>
+<span id="cb26-281"><a href="#cb26-281" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">status_html =</span> <span class="fu">status_badge</span>(status)) <span class="sc">|&gt;</span></span>
+<span id="cb26-282"><a href="#cb26-282" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(status_html, query, label, rows, ms, reason, error) <span class="sc">|&gt;</span></span>
+<span id="cb26-283"><a href="#cb26-283" aria-hidden="true" tabindex="-1"></a>  DT<span class="sc">::</span><span class="fu">datatable</span>(</span>
+<span id="cb26-284"><a href="#cb26-284" aria-hidden="true" tabindex="-1"></a>    <span class="at">escape    =</span> <span class="cn">FALSE</span>,</span>
+<span id="cb26-285"><a href="#cb26-285" aria-hidden="true" tabindex="-1"></a>    <span class="at">rownames  =</span> <span class="cn">FALSE</span>,</span>
+<span id="cb26-286"><a href="#cb26-286" aria-hidden="true" tabindex="-1"></a>    <span class="at">options   =</span> <span class="fu">list</span>(<span class="at">pageLength =</span> <span class="dv">20</span>, <span class="at">order =</span> <span class="fu">list</span>(<span class="fu">list</span>(<span class="dv">0</span>, <span class="st">"asc"</span>))),</span>
+<span id="cb26-287"><a href="#cb26-287" aria-hidden="true" tabindex="-1"></a>    <span class="at">colnames  =</span> <span class="fu">c</span>(<span class="st">""</span>, <span class="st">"query"</span>, <span class="st">"label"</span>, <span class="st">"rows"</span>, <span class="st">"ms"</span>, <span class="st">"skip reason"</span>, <span class="st">"error"</span>))</span>
+<span id="cb26-288"><a href="#cb26-288" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
 <span id="cb26-289"><a href="#cb26-289" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-290"><a href="#cb26-290" aria-hidden="true" tabindex="-1"></a>results_path <span class="ot">&lt;-</span> <span class="fu">file.path</span>(<span class="fu">here</span>(<span class="st">"data/releases"</span>), release_version,</span>
-<span id="cb26-291"><a href="#cb26-291" aria-hidden="true" tabindex="-1"></a>                          <span class="st">"test_results.json"</span>)</span>
-<span id="cb26-292"><a href="#cb26-292" aria-hidden="true" tabindex="-1"></a>jsonlite<span class="sc">::</span><span class="fu">write_json</span>(</span>
-<span id="cb26-293"><a href="#cb26-293" aria-hidden="true" tabindex="-1"></a>  <span class="fu">list</span>(</span>
-<span id="cb26-294"><a href="#cb26-294" aria-hidden="true" tabindex="-1"></a>    <span class="at">release_version =</span> release_version,</span>
-<span id="cb26-295"><a href="#cb26-295" aria-hidden="true" tabindex="-1"></a>    <span class="at">tested_at       =</span> <span class="fu">format</span>(<span class="fu">Sys.time</span>(), <span class="st">"%Y-%m-%dT%H:%M:%SZ"</span>, <span class="at">tz =</span> <span class="st">"UTC"</span>),</span>
-<span id="cb26-296"><a href="#cb26-296" aria-hidden="true" tabindex="-1"></a>    <span class="at">n_pass          =</span> <span class="fu">sum</span>(results<span class="sc">$</span>status <span class="sc">==</span> <span class="st">"pass"</span>),</span>
-<span id="cb26-297"><a href="#cb26-297" aria-hidden="true" tabindex="-1"></a>    <span class="at">n_fail          =</span> <span class="fu">sum</span>(results<span class="sc">$</span>status <span class="sc">==</span> <span class="st">"fail"</span>),</span>
-<span id="cb26-298"><a href="#cb26-298" aria-hidden="true" tabindex="-1"></a>    <span class="at">n_skip          =</span> <span class="fu">sum</span>(results<span class="sc">$</span>status <span class="sc">==</span> <span class="st">"skip"</span>),</span>
-<span id="cb26-299"><a href="#cb26-299" aria-hidden="true" tabindex="-1"></a>    <span class="at">results         =</span> results),</span>
-<span id="cb26-300"><a href="#cb26-300" aria-hidden="true" tabindex="-1"></a>  results_path,</span>
-<span id="cb26-301"><a href="#cb26-301" aria-hidden="true" tabindex="-1"></a>  <span class="at">auto_unbox =</span> <span class="cn">TRUE</span>, <span class="at">pretty =</span> <span class="cn">TRUE</span>, <span class="at">null =</span> <span class="st">"null"</span>)</span>
-<span id="cb26-302"><a href="#cb26-302" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-303"><a href="#cb26-303" aria-hidden="true" tabindex="-1"></a>gcs_bucket  <span class="ot">&lt;-</span> <span class="st">"calcofi-db"</span></span>
-<span id="cb26-304"><a href="#cb26-304" aria-hidden="true" tabindex="-1"></a>gcs_release <span class="ot">&lt;-</span> <span class="fu">glue</span>(<span class="st">"ducklake/releases/{release_version}"</span>)</span>
-<span id="cb26-305"><a href="#cb26-305" aria-hidden="true" tabindex="-1"></a><span class="fu">put_gcs_file</span>(results_path,</span>
-<span id="cb26-306"><a href="#cb26-306" aria-hidden="true" tabindex="-1"></a>  <span class="fu">glue</span>(<span class="st">"gs://{gcs_bucket}/{gcs_release}/test_results.json"</span>))</span>
-<span id="cb26-307"><a href="#cb26-307" aria-hidden="true" tabindex="-1"></a><span class="fu">message</span>(<span class="fu">glue</span>(<span class="st">"test_results.json uploaded for {release_version}"</span>))</span>
-<span id="cb26-308"><a href="#cb26-308" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb26-290"><a href="#cb26-290" aria-hidden="true" tabindex="-1"></a><span class="fu">## Save results sidecar</span></span>
+<span id="cb26-291"><a href="#cb26-291" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-294"><a href="#cb26-294" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb26-295"><a href="#cb26-295" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: save_results</span></span>
+<span id="cb26-296"><a href="#cb26-296" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-297"><a href="#cb26-297" aria-hidden="true" tabindex="-1"></a>results_path <span class="ot">&lt;-</span> <span class="fu">file.path</span>(<span class="fu">here</span>(<span class="st">"data/releases"</span>), release_version,</span>
+<span id="cb26-298"><a href="#cb26-298" aria-hidden="true" tabindex="-1"></a>                          <span class="st">"test_results.json"</span>)</span>
+<span id="cb26-299"><a href="#cb26-299" aria-hidden="true" tabindex="-1"></a>jsonlite<span class="sc">::</span><span class="fu">write_json</span>(</span>
+<span id="cb26-300"><a href="#cb26-300" aria-hidden="true" tabindex="-1"></a>  <span class="fu">list</span>(</span>
+<span id="cb26-301"><a href="#cb26-301" aria-hidden="true" tabindex="-1"></a>    <span class="at">release_version =</span> release_version,</span>
+<span id="cb26-302"><a href="#cb26-302" aria-hidden="true" tabindex="-1"></a>    <span class="at">tested_at       =</span> <span class="fu">format</span>(<span class="fu">Sys.time</span>(), <span class="st">"%Y-%m-%dT%H:%M:%SZ"</span>, <span class="at">tz =</span> <span class="st">"UTC"</span>),</span>
+<span id="cb26-303"><a href="#cb26-303" aria-hidden="true" tabindex="-1"></a>    <span class="at">n_pass          =</span> <span class="fu">sum</span>(results<span class="sc">$</span>status <span class="sc">==</span> <span class="st">"pass"</span>),</span>
+<span id="cb26-304"><a href="#cb26-304" aria-hidden="true" tabindex="-1"></a>    <span class="at">n_fail          =</span> <span class="fu">sum</span>(results<span class="sc">$</span>status <span class="sc">==</span> <span class="st">"fail"</span>),</span>
+<span id="cb26-305"><a href="#cb26-305" aria-hidden="true" tabindex="-1"></a>    <span class="at">n_skip          =</span> <span class="fu">sum</span>(results<span class="sc">$</span>status <span class="sc">==</span> <span class="st">"skip"</span>),</span>
+<span id="cb26-306"><a href="#cb26-306" aria-hidden="true" tabindex="-1"></a>    <span class="at">results         =</span> results),</span>
+<span id="cb26-307"><a href="#cb26-307" aria-hidden="true" tabindex="-1"></a>  results_path,</span>
+<span id="cb26-308"><a href="#cb26-308" aria-hidden="true" tabindex="-1"></a>  <span class="at">auto_unbox =</span> <span class="cn">TRUE</span>, <span class="at">pretty =</span> <span class="cn">TRUE</span>, <span class="at">null =</span> <span class="st">"null"</span>)</span>
 <span id="cb26-309"><a href="#cb26-309" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-310"><a href="#cb26-310" aria-hidden="true" tabindex="-1"></a><span class="fu">## Promote (gated on all-pass)</span></span>
-<span id="cb26-311"><a href="#cb26-311" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-312"><a href="#cb26-312" aria-hidden="true" tabindex="-1"></a><span class="in">`latest.txt`</span> is written **only** if no query failed. Skipped queries</span>
-<span id="cb26-313"><a href="#cb26-313" aria-hidden="true" tabindex="-1"></a>(JS-only <span class="in">`sql_builder`</span>) do not block promotion — they're exercised in</span>
-<span id="cb26-314"><a href="#cb26-314" aria-hidden="true" tabindex="-1"></a>the browser by the query app.</span>
-<span id="cb26-315"><a href="#cb26-315" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-318"><a href="#cb26-318" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb26-319"><a href="#cb26-319" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: promote</span></span>
-<span id="cb26-320"><a href="#cb26-320" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-321"><a href="#cb26-321" aria-hidden="true" tabindex="-1"></a>n_fail <span class="ot">&lt;-</span> <span class="fu">sum</span>(results<span class="sc">$</span>status <span class="sc">==</span> <span class="st">"fail"</span>)</span>
-<span id="cb26-322"><a href="#cb26-322" aria-hidden="true" tabindex="-1"></a>n_pass <span class="ot">&lt;-</span> <span class="fu">sum</span>(results<span class="sc">$</span>status <span class="sc">==</span> <span class="st">"pass"</span>)</span>
-<span id="cb26-323"><a href="#cb26-323" aria-hidden="true" tabindex="-1"></a>n_skip <span class="ot">&lt;-</span> <span class="fu">sum</span>(results<span class="sc">$</span>status <span class="sc">==</span> <span class="st">"skip"</span>)</span>
-<span id="cb26-324"><a href="#cb26-324" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-325"><a href="#cb26-325" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (n_fail <span class="sc">&gt;</span> <span class="dv">0</span>) {</span>
-<span id="cb26-326"><a href="#cb26-326" aria-hidden="true" tabindex="-1"></a>  failures <span class="ot">&lt;-</span> results <span class="sc">|&gt;</span> <span class="fu">filter</span>(status <span class="sc">==</span> <span class="st">"fail"</span>)</span>
-<span id="cb26-327"><a href="#cb26-327" aria-hidden="true" tabindex="-1"></a>  <span class="cf">for</span> (i <span class="cf">in</span> <span class="fu">seq_len</span>(<span class="fu">nrow</span>(failures))) {</span>
-<span id="cb26-328"><a href="#cb26-328" aria-hidden="true" tabindex="-1"></a>    <span class="fu">message</span>(<span class="fu">glue</span>(<span class="st">"FAIL [{failures$query[i]}]: {failures$error[i]}"</span>))</span>
-<span id="cb26-329"><a href="#cb26-329" aria-hidden="true" tabindex="-1"></a>  }</span>
-<span id="cb26-330"><a href="#cb26-330" aria-hidden="true" tabindex="-1"></a>  <span class="fu">stop</span>(<span class="fu">glue</span>(</span>
-<span id="cb26-331"><a href="#cb26-331" aria-hidden="true" tabindex="-1"></a>    <span class="st">"{n_fail} query(ies) failed against {release_version}. "</span>,</span>
-<span id="cb26-332"><a href="#cb26-332" aria-hidden="true" tabindex="-1"></a>    <span class="st">"latest.txt NOT updated."</span>))</span>
-<span id="cb26-333"><a href="#cb26-333" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb26-334"><a href="#cb26-334" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-335"><a href="#cb26-335" aria-hidden="true" tabindex="-1"></a><span class="co"># all green — promote</span></span>
-<span id="cb26-336"><a href="#cb26-336" aria-hidden="true" tabindex="-1"></a>latest_local <span class="ot">&lt;-</span> <span class="fu">tempfile</span>()</span>
-<span id="cb26-337"><a href="#cb26-337" aria-hidden="true" tabindex="-1"></a><span class="fu">writeLines</span>(release_version, latest_local)</span>
-<span id="cb26-338"><a href="#cb26-338" aria-hidden="true" tabindex="-1"></a><span class="fu">put_gcs_file</span>(latest_local,</span>
-<span id="cb26-339"><a href="#cb26-339" aria-hidden="true" tabindex="-1"></a>  <span class="fu">glue</span>(<span class="st">"gs://{gcs_bucket}/ducklake/releases/latest.txt"</span>))</span>
-<span id="cb26-340"><a href="#cb26-340" aria-hidden="true" tabindex="-1"></a><span class="fu">message</span>(<span class="fu">glue</span>(</span>
-<span id="cb26-341"><a href="#cb26-341" aria-hidden="true" tabindex="-1"></a>  <span class="st">"PROMOTED {release_version}: {n_pass} passed, {n_skip} skipped, "</span>,</span>
-<span id="cb26-342"><a href="#cb26-342" aria-hidden="true" tabindex="-1"></a>  <span class="st">"0 failed. latest.txt is now {release_version}."</span>))</span>
-<span id="cb26-343"><a href="#cb26-343" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb26-344"><a href="#cb26-344" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-345"><a href="#cb26-345" aria-hidden="true" tabindex="-1"></a><span class="fu">## Cleanup</span></span>
-<span id="cb26-346"><a href="#cb26-346" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-349"><a href="#cb26-349" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb26-350"><a href="#cb26-350" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: cleanup</span></span>
+<span id="cb26-310"><a href="#cb26-310" aria-hidden="true" tabindex="-1"></a>gcs_bucket  <span class="ot">&lt;-</span> <span class="st">"calcofi-db"</span></span>
+<span id="cb26-311"><a href="#cb26-311" aria-hidden="true" tabindex="-1"></a>gcs_release <span class="ot">&lt;-</span> <span class="fu">glue</span>(<span class="st">"ducklake/releases/{release_version}"</span>)</span>
+<span id="cb26-312"><a href="#cb26-312" aria-hidden="true" tabindex="-1"></a><span class="fu">put_gcs_file</span>(results_path,</span>
+<span id="cb26-313"><a href="#cb26-313" aria-hidden="true" tabindex="-1"></a>  <span class="fu">glue</span>(<span class="st">"gs://{gcs_bucket}/{gcs_release}/test_results.json"</span>))</span>
+<span id="cb26-314"><a href="#cb26-314" aria-hidden="true" tabindex="-1"></a><span class="fu">message</span>(<span class="fu">glue</span>(<span class="st">"test_results.json uploaded for {release_version}"</span>))</span>
+<span id="cb26-315"><a href="#cb26-315" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb26-316"><a href="#cb26-316" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-317"><a href="#cb26-317" aria-hidden="true" tabindex="-1"></a><span class="fu">## Promote (gated on all-pass)</span></span>
+<span id="cb26-318"><a href="#cb26-318" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-319"><a href="#cb26-319" aria-hidden="true" tabindex="-1"></a><span class="in">`latest.txt`</span> is written **only** if no query failed. Skipped queries</span>
+<span id="cb26-320"><a href="#cb26-320" aria-hidden="true" tabindex="-1"></a>(JS-only <span class="in">`sql_builder`</span>) do not block promotion — they're exercised in</span>
+<span id="cb26-321"><a href="#cb26-321" aria-hidden="true" tabindex="-1"></a>the browser by the query app.</span>
+<span id="cb26-322"><a href="#cb26-322" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-325"><a href="#cb26-325" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb26-326"><a href="#cb26-326" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: promote</span></span>
+<span id="cb26-327"><a href="#cb26-327" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-328"><a href="#cb26-328" aria-hidden="true" tabindex="-1"></a>n_fail <span class="ot">&lt;-</span> <span class="fu">sum</span>(results<span class="sc">$</span>status <span class="sc">==</span> <span class="st">"fail"</span>)</span>
+<span id="cb26-329"><a href="#cb26-329" aria-hidden="true" tabindex="-1"></a>n_pass <span class="ot">&lt;-</span> <span class="fu">sum</span>(results<span class="sc">$</span>status <span class="sc">==</span> <span class="st">"pass"</span>)</span>
+<span id="cb26-330"><a href="#cb26-330" aria-hidden="true" tabindex="-1"></a>n_skip <span class="ot">&lt;-</span> <span class="fu">sum</span>(results<span class="sc">$</span>status <span class="sc">==</span> <span class="st">"skip"</span>)</span>
+<span id="cb26-331"><a href="#cb26-331" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-332"><a href="#cb26-332" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (n_fail <span class="sc">&gt;</span> <span class="dv">0</span>) {</span>
+<span id="cb26-333"><a href="#cb26-333" aria-hidden="true" tabindex="-1"></a>  failures <span class="ot">&lt;-</span> results <span class="sc">|&gt;</span> <span class="fu">filter</span>(status <span class="sc">==</span> <span class="st">"fail"</span>)</span>
+<span id="cb26-334"><a href="#cb26-334" aria-hidden="true" tabindex="-1"></a>  <span class="cf">for</span> (i <span class="cf">in</span> <span class="fu">seq_len</span>(<span class="fu">nrow</span>(failures))) {</span>
+<span id="cb26-335"><a href="#cb26-335" aria-hidden="true" tabindex="-1"></a>    <span class="fu">message</span>(<span class="fu">glue</span>(<span class="st">"FAIL [{failures$query[i]}]: {failures$error[i]}"</span>))</span>
+<span id="cb26-336"><a href="#cb26-336" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb26-337"><a href="#cb26-337" aria-hidden="true" tabindex="-1"></a>  <span class="fu">stop</span>(<span class="fu">glue</span>(</span>
+<span id="cb26-338"><a href="#cb26-338" aria-hidden="true" tabindex="-1"></a>    <span class="st">"{n_fail} query(ies) failed against {release_version}. "</span>,</span>
+<span id="cb26-339"><a href="#cb26-339" aria-hidden="true" tabindex="-1"></a>    <span class="st">"latest.txt NOT updated."</span>))</span>
+<span id="cb26-340"><a href="#cb26-340" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb26-341"><a href="#cb26-341" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-342"><a href="#cb26-342" aria-hidden="true" tabindex="-1"></a><span class="co"># all green — promote</span></span>
+<span id="cb26-343"><a href="#cb26-343" aria-hidden="true" tabindex="-1"></a>latest_local <span class="ot">&lt;-</span> <span class="fu">tempfile</span>()</span>
+<span id="cb26-344"><a href="#cb26-344" aria-hidden="true" tabindex="-1"></a><span class="fu">writeLines</span>(release_version, latest_local)</span>
+<span id="cb26-345"><a href="#cb26-345" aria-hidden="true" tabindex="-1"></a><span class="fu">put_gcs_file</span>(latest_local,</span>
+<span id="cb26-346"><a href="#cb26-346" aria-hidden="true" tabindex="-1"></a>  <span class="fu">glue</span>(<span class="st">"gs://{gcs_bucket}/ducklake/releases/latest.txt"</span>))</span>
+<span id="cb26-347"><a href="#cb26-347" aria-hidden="true" tabindex="-1"></a><span class="fu">message</span>(<span class="fu">glue</span>(</span>
+<span id="cb26-348"><a href="#cb26-348" aria-hidden="true" tabindex="-1"></a>  <span class="st">"PROMOTED {release_version}: {n_pass} passed, {n_skip} skipped, "</span>,</span>
+<span id="cb26-349"><a href="#cb26-349" aria-hidden="true" tabindex="-1"></a>  <span class="st">"0 failed. latest.txt is now {release_version}."</span>))</span>
+<span id="cb26-350"><a href="#cb26-350" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
 <span id="cb26-351"><a href="#cb26-351" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-352"><a href="#cb26-352" aria-hidden="true" tabindex="-1"></a><span class="fu">close_duckdb</span>(con_test)</span>
-<span id="cb26-353"><a href="#cb26-353" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb26-354"><a href="#cb26-354" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-355"><a href="#cb26-355" aria-hidden="true" tabindex="-1"></a>::: {.callout-caution collapse="true"}</span>
-<span id="cb26-356"><a href="#cb26-356" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-357"><a href="#cb26-357" aria-hidden="true" tabindex="-1"></a><span class="fu">## Session Info</span></span>
+<span id="cb26-352"><a href="#cb26-352" aria-hidden="true" tabindex="-1"></a><span class="fu">## Cleanup</span></span>
+<span id="cb26-353"><a href="#cb26-353" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-356"><a href="#cb26-356" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb26-357"><a href="#cb26-357" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: cleanup</span></span>
 <span id="cb26-358"><a href="#cb26-358" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-359"><a href="#cb26-359" aria-hidden="true" tabindex="-1"></a><span class="in">```{r session_info}</span></span>
-<span id="cb26-360"><a href="#cb26-360" aria-hidden="true" tabindex="-1"></a>devtools<span class="sc">::</span><span class="fu">session_info</span>()</span>
-<span id="cb26-361"><a href="#cb26-361" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb26-362"><a href="#cb26-362" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb26-363"><a href="#cb26-363" aria-hidden="true" tabindex="-1"></a>:::</span>
+<span id="cb26-359"><a href="#cb26-359" aria-hidden="true" tabindex="-1"></a><span class="fu">close_duckdb</span>(con_test)</span>
+<span id="cb26-360"><a href="#cb26-360" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb26-361"><a href="#cb26-361" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-362"><a href="#cb26-362" aria-hidden="true" tabindex="-1"></a>::: {.callout-caution collapse="true"}</span>
+<span id="cb26-363"><a href="#cb26-363" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-364"><a href="#cb26-364" aria-hidden="true" tabindex="-1"></a><span class="fu">## Session Info</span></span>
+<span id="cb26-365"><a href="#cb26-365" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-366"><a href="#cb26-366" aria-hidden="true" tabindex="-1"></a><span class="in">```{r session_info}</span></span>
+<span id="cb26-367"><a href="#cb26-367" aria-hidden="true" tabindex="-1"></a>devtools<span class="sc">::</span><span class="fu">session_info</span>()</span>
+<span id="cb26-368"><a href="#cb26-368" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb26-369"><a href="#cb26-369" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-370"><a href="#cb26-370" aria-hidden="true" tabindex="-1"></a>:::</span>
 </code></pre></div><button title="Copy to Clipboard" class="code-copy-button" data-in-quarto-modal=""><i class="bi"></i></button></div>
 </div></div></div></div></div>
 </div> <!-- /content -->
