@@ -1,0 +1,192 @@
+<dataset type="EDDTableFromDatabase" datasetID="calcofi_ctd_measurement" active="true">
+  <reloadEveryNMinutes>10080</reloadEveryNMinutes>
+  <sourceUrl>jdbc:duckdb:/ssd/erddap-duckdb/duckdb/calcofi_ctd.db</sourceUrl>
+  <driverName>org.duckdb.DuckDBDriver</driverName>
+  <connectionProperty name="duckdb.read_only">true</connectionProperty>
+  <connectionProperty name="memory_limit">1024MB</connectionProperty>
+  <connectionProperty name="threads">2</connectionProperty>
+  <connectionProperty name="temp_directory">/ssd/erddap-duckdb/tmp</connectionProperty>
+  <catalogName></catalogName>
+  <schemaName></schemaName>
+  <tableName>ctd_measurement_erddap</tableName>
+  <columnNameQuotes>"</columnNameQuotes>
+  <sourceCanOrderBy>yes</sourceCanOrderBy>
+  <sourceCanDoDistinct>yes</sourceCanDoDistinct>
+  <addAttributes>
+    <att name="cdm_data_type">Point</att>
+    <att name="Conventions">COARDS, CF-1.10, ACDD-1.3</att>
+    <att name="institution">CalCOFI</att>
+    <att name="infoUrl">https://calcofi.org</att>
+    <att name="sourceUrl">(local DuckDB)</att>
+    <att name="license">CC-BY 4.0</att>
+    <att name="creator_name">CalCOFI</att>
+    <att name="creator_url">https://calcofi.org</att>
+    <att name="title">CalCOFI CTD Measurements (full)</att>
+    <att name="summary">Full long-format CTD measurements (~216M rows, all sensor variants), joined to cast coordinates/time. Served via DuckDB views over Parquet partitioned by cruise_key (EDDTableFromDatabase). The adaptively-thinned calcofi_ctd_thin is the lighter headline table.</att>
+    <att name="standard_name_vocabulary">CF Standard Name Table v79</att>
+    <att name="keywords">CalCOFI, CTD, ocean, temperature, salinity, oxygen, fluorescence, profiles, California Current, depth</att>
+    <att name="comment">Long format: one row per cast x depth x measurement_type. measurement_value units depend on measurement_type. time/latitude/longitude are denormalized from ctd_cast via a DuckDB view over Parquet (EDDTableFromDatabase) — see https://calcofi.io/schema.</att>
+    <att name="references">https://calcofi.io/schema ; https://calcofi.org/data/oceanographic-data/ctd-cast-files/</att>
+    <att name="source">CalCOFI CTD cast files (https://calcofi.org)</att>
+    <att name="creator_email">calcofi@ucsd.edu</att>
+    <att name="publisher_name">CalCOFI</att>
+    <att name="publisher_url">https://calcofi.org</att>
+    <att name="project">CalCOFI</att>
+    <att name="geospatial_lat_min">29.80726</att>
+    <att name="geospatial_lat_max">37.85147</att>
+    <att name="geospatial_lat_units">degrees_north</att>
+    <att name="geospatial_lon_min">-126.4843</att>
+    <att name="geospatial_lon_max">-117.2734</att>
+    <att name="geospatial_lon_units">degrees_east</att>
+    <att name="geospatial_vertical_min">1</att>
+    <att name="geospatial_vertical_max">3630</att>
+    <att name="geospatial_vertical_positive">down</att>
+    <att name="geospatial_vertical_units">m</att>
+    <att name="time_coverage_start">1998-01-23T11:14:25Z</att>
+    <att name="time_coverage_end">2026-01-30T16:39:00Z</att>
+    <att name="subsetVariables">cruise_key, measurement_type</att>
+  </addAttributes>
+<dataVariable>
+    <sourceName>ctd_cast_uuid</sourceName>
+    <destinationName>ctd_cast_uuid</destinationName>
+    <dataType>String</dataType>
+    <addAttributes>
+      <att name="ioos_category">Identifier</att>
+      <att name="long_name">CTD Cast UUID</att>
+      <att name="comment">FK to ctd_cast.ctd_cast_uuid</att>
+    </addAttributes>
+  </dataVariable>
+<dataVariable>
+    <sourceName>time</sourceName>
+    <destinationName>time</destinationName>
+    <dataType>double</dataType>
+    <addAttributes>
+      <att name="units">seconds since 1970-01-01T00:00:00Z</att>
+      <att name="ioos_category">Time</att>
+      <att name="standard_name">time</att>
+      <att name="long_name">Time</att>
+      <att name="comment">UTC timestamp parsed from date_time_utc string</att>
+      <att name="actual_range" type="doubleList">885554065 1769791140</att>
+    </addAttributes>
+  </dataVariable>
+<dataVariable>
+    <sourceName>latitude</sourceName>
+    <destinationName>latitude</destinationName>
+    <dataType>double</dataType>
+    <addAttributes>
+      <att name="units">degrees_north</att>
+      <att name="ioos_category">Location</att>
+      <att name="standard_name">latitude</att>
+      <att name="long_name">Latitude</att>
+      <att name="comment">GPS decimal latitude; downcast = start latitude, upcast = latitude at first bottle tripped (CalCOFI Lat_Dec)</att>
+      <att name="actual_range" type="doubleList">29.80726 37.85147</att>
+    </addAttributes>
+  </dataVariable>
+<dataVariable>
+    <sourceName>longitude</sourceName>
+    <destinationName>longitude</destinationName>
+    <dataType>double</dataType>
+    <addAttributes>
+      <att name="units">degrees_east</att>
+      <att name="ioos_category">Location</att>
+      <att name="standard_name">longitude</att>
+      <att name="long_name">Longitude</att>
+      <att name="comment">GPS decimal longitude; downcast = start longitude, upcast = longitude at first bottle tripped (CalCOFI Lon_Dec)</att>
+      <att name="actual_range" type="doubleList">-126.4843 -117.2734</att>
+    </addAttributes>
+  </dataVariable>
+<dataVariable>
+    <sourceName>depth</sourceName>
+    <destinationName>depth</destinationName>
+    <dataType>double</dataType>
+    <addAttributes>
+      <att name="units">m</att>
+      <att name="positive">down</att>
+      <att name="ioos_category">Location</att>
+      <att name="standard_name">depth</att>
+      <att name="long_name">Depth</att>
+      <att name="comment">depth in meters</att>
+      <att name="actual_range" type="doubleList">1 3630</att>
+    </addAttributes>
+  </dataVariable>
+<dataVariable>
+    <sourceName>cruise_key</sourceName>
+    <destinationName>cruise_key</destinationName>
+    <dataType>String</dataType>
+    <addAttributes>
+      <att name="ioos_category">Identifier</att>
+      <att name="long_name">Cruise Key</att>
+      <att name="comment">cruise identifier in YYYY-MM-NODC format; hive partition key</att>
+    </addAttributes>
+  </dataVariable>
+<dataVariable>
+    <sourceName>site_key</sourceName>
+    <destinationName>site_key</destinationName>
+    <dataType>String</dataType>
+    <addAttributes>
+      <att name="ioos_category">Identifier</att>
+      <att name="long_name">Site Key</att>
+      <att name="comment">CalCOFI Line and Station composite key in the form &quot;LLL.L SSS.S&quot; (renamed from Sta_ID)</att>
+    </addAttributes>
+  </dataVariable>
+<dataVariable>
+    <sourceName>line</sourceName>
+    <destinationName>line</destinationName>
+    <dataType>String</dataType>
+    <addAttributes>
+      <att name="ioos_category">Location</att>
+      <att name="long_name">Line</att>
+      <att name="comment">CalCOFI Line in LLL.L format (e.g. 80.0)</att>
+    </addAttributes>
+  </dataVariable>
+<dataVariable>
+    <sourceName>sta</sourceName>
+    <destinationName>sta</destinationName>
+    <dataType>String</dataType>
+    <addAttributes>
+      <att name="ioos_category">Other</att>
+      <att name="long_name">Station</att>
+      <att name="comment">CalCOFI Station in SSS.S format (e.g. 60.0)</att>
+    </addAttributes>
+  </dataVariable>
+<dataVariable>
+    <sourceName>measurement_type</sourceName>
+    <destinationName>measurement_type</destinationName>
+    <dataType>String</dataType>
+    <addAttributes>
+      <att name="ioos_category">Other</att>
+      <att name="long_name">Measurement Type</att>
+      <att name="comment">measurement type key (FK to measurement_type.measurement_type)</att>
+    </addAttributes>
+  </dataVariable>
+<dataVariable>
+    <sourceName>measurement_value</sourceName>
+    <destinationName>measurement_value</destinationName>
+    <dataType>double</dataType>
+    <addAttributes>
+      <att name="ioos_category">Other</att>
+      <att name="long_name">Measurement Value</att>
+      <att name="comment">Units VARY by measurement_type — this long-format column holds the numeric value for whichever sensor the row's measurement_type names. Canonical examples: temperature (degC), salinity (PSS-78), oxygen_ml_l (ml/L), sigma_theta (kg/m3), oxygen_saturation (%), oxygen_umol_kg (umol/kg), chlorophyll_a (ug/L), phaeopigment (ug/L). See the measurement_type variable and https://calcofi.io/schema.</att>
+    </addAttributes>
+  </dataVariable>
+<dataVariable>
+    <sourceName>measurement_qual</sourceName>
+    <destinationName>measurement_qual</destinationName>
+    <dataType>String</dataType>
+    <addAttributes>
+      <att name="ioos_category">Other</att>
+      <att name="long_name">Measurement Quality</att>
+      <att name="comment">quality code (nullable)</att>
+    </addAttributes>
+  </dataVariable>
+<dataVariable>
+    <sourceName>ctd_measurement_uuid</sourceName>
+    <destinationName>ctd_measurement_uuid</destinationName>
+    <dataType>String</dataType>
+    <addAttributes>
+      <att name="ioos_category">Identifier</att>
+      <att name="long_name">CTD Measurement UUID</att>
+      <att name="comment">PK: deterministic UUID v5 from (ctd_cast_uuid, depth_m, measurement_type)</att>
+    </addAttributes>
+  </dataVariable>
+</dataset>

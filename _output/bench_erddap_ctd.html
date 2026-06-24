@@ -1,0 +1,1159 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.9.37">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="CalCOFI (B. Best) — for Lynn DeWitt &amp; the ERDDAP community">
+<meta name="dcterms.date" content="2026-06-24">
+
+<title>Serving large CalCOFI CTD profiles on ERDDAP via DuckDB-over-Parquet</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="bench_erddap_ctd_files/libs/clipboard/clipboard.min.js"></script>
+<script src="bench_erddap_ctd_files/libs/quarto-html/quarto.js" type="module"></script>
+<script src="bench_erddap_ctd_files/libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="bench_erddap_ctd_files/libs/quarto-html/popper.min.js"></script>
+<script src="bench_erddap_ctd_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="bench_erddap_ctd_files/libs/quarto-html/anchor.min.js"></script>
+<link href="bench_erddap_ctd_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="bench_erddap_ctd_files/libs/quarto-html/quarto-syntax-highlighting-7f8f88aac4f3542376d5c11b86a4c14d.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="bench_erddap_ctd_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="bench_erddap_ctd_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="bench_erddap_ctd_files/libs/bootstrap/bootstrap-446e58b931a921461ecb4dff5ead0121.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+
+
+</head>
+
+<body class="quarto-light">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+  <nav id="TOC" role="doc-toc" class="toc-active" data-toc-expanded="1">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#summary" id="toc-summary" class="nav-link active" data-scroll-target="#summary"><span class="header-section-number">1</span> Summary</a></li>
+  <li><a href="#background" id="toc-background" class="nav-link" data-scroll-target="#background"><span class="header-section-number">2</span> 1 · Background</a></li>
+  <li><a href="#the-memory-problem-with-eddtablefromparquetfiles" id="toc-the-memory-problem-with-eddtablefromparquetfiles" class="nav-link" data-scroll-target="#the-memory-problem-with-eddtablefromparquetfiles"><span class="header-section-number">3</span> 2 · The memory problem with <code>EDDTableFromParquetFiles</code></a></li>
+  <li><a href="#the-approach-eddtablefromdatabase-duckdb-views" id="toc-the-approach-eddtablefromdatabase-duckdb-views" class="nav-link" data-scroll-target="#the-approach-eddtablefromdatabase-duckdb-views"><span class="header-section-number">4</span> 3 · The approach: <code>EDDTableFromDatabase</code> + DuckDB views</a></li>
+  <li><a href="#benchmark-duckdb-vs-parquet-vs-csv" id="toc-benchmark-duckdb-vs-parquet-vs-csv" class="nav-link" data-scroll-target="#benchmark-duckdb-vs-parquet-vs-csv"><span class="header-section-number">5</span> 4 · Benchmark: DuckDB vs Parquet vs CSV</a></li>
+  <li><a href="#partitioning-ordering-for-long-format-bbox-queries" id="toc-partitioning-ordering-for-long-format-bbox-queries" class="nav-link" data-scroll-target="#partitioning-ordering-for-long-format-bbox-queries"><span class="header-section-number">6</span> 5 · Partitioning &amp; ordering for long-format bbox queries</a></li>
+  <li><a href="#recommendations-open-questions" id="toc-recommendations-open-questions" class="nav-link" data-scroll-target="#recommendations-open-questions"><span class="header-section-number">7</span> 6 · Recommendations &amp; open questions</a></li>
+  <li><a href="#reproduce" id="toc-reproduce" class="nav-link" data-scroll-target="#reproduce"><span class="header-section-number">8</span> 7 · Reproduce</a></li>
+  </ul>
+</nav>
+</div>
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<div class="quarto-title-block"><div><h1 class="title">Serving large CalCOFI CTD profiles on ERDDAP via DuckDB-over-Parquet</h1><button type="button" class="btn code-tools-button dropdown-toggle" id="quarto-code-tools-menu" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi"></i> Code</button><ul class="dropdown-menu dropdown-menu-end" aria-labelelledby="quarto-code-tools-menu"><li><a id="quarto-show-all-code" class="dropdown-item" href="javascript:void(0)" role="button">Show All Code</a></li><li><a id="quarto-hide-all-code" class="dropdown-item" href="javascript:void(0)" role="button">Hide All Code</a></li><li><hr class="dropdown-divider"></li><li><a id="quarto-view-source" class="dropdown-item" href="javascript:void(0)" role="button">View Source</a></li></ul></div></div>
+<p class="subtitle lead">Memory, latency, and partitioning/ordering — with notes for the CoastWatch ERDDAP</p>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>CalCOFI (B. Best) — for Lynn DeWitt &amp; the ERDDAP community </p>
+          </div>
+  </div>
+    
+    <div>
+    <div class="quarto-title-meta-heading">Published</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">2026-06-24</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="summary" class="level2" data-number="1">
+<h2 data-number="1" class="anchored" data-anchor-id="summary"><span class="header-section-number">1</span> Summary</h2>
+<p>CalCOFI’s CTD profile data is large in <em>long</em> (tidy) format — one row per cast × depth × <code>measurement_type</code> (~104 sensor types): <code>ctd_measurement</code> is <strong>~216 M rows / ~16 GB</strong> of Parquet (partitioned by <code>cruise_key</code>), plus an adaptively-thinned headline table <code>ctd_thin</code> (~5.5 M rows). We wanted to serve these on ERDDAP without converting to NetCDF and without the memory blow-up that <code>EDDTableFromParquetFiles</code> hits on large files.</p>
+<p><strong>What we found / did:</strong></p>
+<ol type="1">
+<li><code>EDDTableFromParquetFiles</code> reads each matching file <em>fully into the JVM heap</em> before filtering. A single 935 MB <code>ctd_wide.parquet</code> OOM’d our 4 GB heap; the 216 M-row table can’t load at all on a 2 GB heap (times out at ~1.98 GB).</li>
+<li><strong><code>EDDTableFromDatabase</code> + the DuckDB JDBC driver</strong>, pointed at a tiny <code>.db</code> of <code>CREATE VIEW … read_parquet(…)</code> views (joining the long tables to <code>ctd_cast</code> for <code>time</code>/<code>lat</code>/<code>lon</code>), serves the <strong>full 216 M-row table within a ~63 MB load heap</strong> and streams filtered queries. This is now live at <a href="https://erddap.calcofi.io" class="uri">https://erddap.calcofi.io</a> (<code>calcofi_ctd_thin</code>, <code>calcofi_ctd_measurement</code>).</li>
+<li>On the partitioning question you raised (Lynn): for the typical <em>“one variable in a lat/lon/depth box”</em> query, <strong>partitioning the long table by <code>measurement_type</code></strong> (so the query touches ~1/N of the data) and <strong>ordering rows spatially within each partition</strong> gives the biggest wins — quantified below. DuckDB already does predicate pushdown + Parquet row-group skipping, so layout changes translate directly into less I/O.</li>
+</ol>
+<p>This note documents the benchmark and the layout experiment so others weighing Parquet-on-ERDDAP (cf.&nbsp;Roy Mendelssohn’s posts, ERDDAP <a href="https://github.com/ERDDAP/erddap/discussions/447">#447</a> / <a href="https://github.com/ERDDAP/erddap/issues/448">#448</a>) have concrete numbers.</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(dplyr); <span class="fu">library</span>(readr); <span class="fu">library</span>(tidyr); <span class="fu">library</span>(knitr); <span class="fu">library</span>(stringr)</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>res <span class="ot">&lt;-</span> <span class="fu">read_csv</span>(<span class="st">"data/bench_erddap/results_all.csv"</span>, <span class="at">show_col_types =</span> <span class="cn">FALSE</span>) <span class="sc">|&gt;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">approach =</span> <span class="fu">factor</span>(approach, <span class="at">levels =</span> <span class="fu">c</span>(<span class="st">"duckdb"</span>,<span class="st">"parquet"</span>,<span class="st">"csv"</span>)),</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>         <span class="at">table =</span> <span class="fu">factor</span>(table, <span class="at">levels =</span> <span class="fu">c</span>(<span class="st">"thin"</span>,<span class="st">"measurement"</span>)))</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>lay_path <span class="ot">&lt;-</span> <span class="st">"data/bench_erddap/layout_results.csv"</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>lay <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="fu">file.exists</span>(lay_path)) <span class="fu">read_csv</span>(lay_path, <span class="at">show_col_types =</span> <span class="cn">FALSE</span>) <span class="cf">else</span> <span class="cn">NULL</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+</section>
+<section id="background" class="level2" data-number="2">
+<h2 data-number="2" class="anchored" data-anchor-id="background"><span class="header-section-number">2</span> 1 · Background</h2>
+<p>CalCOFI has occupied the California Current quarterly since 1949. The CTD cast files (<a href="https://calcofi.org/data/oceanographic-data/ctd-cast-files/" class="uri">https://calcofi.org/data/oceanographic-data/ctd-cast-files/</a>) are ~1 GB as a single wide Parquet (one column per sensor). We ingest them into a tidy <strong>long</strong> schema (<code>ingest_calcofi_ctd-cast</code>, <a href="https://calcofi.io/workflows/ingest_calcofi_ctd-cast.html" class="uri">https://calcofi.io/workflows/ingest_calcofi_ctd-cast.html</a>): each sensor reading on its own row keyed by <code>measurement_type</code>, which is convenient for analysis and for adding new sensors, but multiplies row count. Tables (release v2026.06.08 / supplemental v2026.04.08):</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>table</th>
+<th style="text-align: right;">rows</th>
+<th style="text-align: right;">Parquet</th>
+<th>note</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>ctd_cast</code></td>
+<td style="text-align: right;">5.55 M</td>
+<td style="text-align: right;">128 MB</td>
+<td>one row per cast; carries <code>time</code>,<code>lat</code>,<code>lon</code></td>
+</tr>
+<tr class="even">
+<td><code>ctd_thin</code></td>
+<td style="text-align: right;">5.55 M</td>
+<td style="text-align: right;">155 MB</td>
+<td>adaptively-thinned headline table</td>
+</tr>
+<tr class="odd">
+<td><code>ctd_measurement</code></td>
+<td style="text-align: right;">216 M</td>
+<td style="text-align: right;">~16 GB</td>
+<td>full long table (partitioned by <code>cruise_key</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>The long tables are keyed by <code>ctd_cast_uuid</code> and <strong>do not carry coordinates</strong> — <code>time</code>/<code>latitude</code>/<code>longitude</code> live in <code>ctd_cast</code>. Any ERDDAP representation must re-join them.</p>
+</section>
+<section id="the-memory-problem-with-eddtablefromparquetfiles" class="level2" data-number="3">
+<h2 data-number="3" class="anchored" data-anchor-id="the-memory-problem-with-eddtablefromparquetfiles"><span class="header-section-number">3</span> 2 · The memory problem with <code>EDDTableFromParquetFiles</code></h2>
+<p><code>EDDTableFromParquetFiles</code> (ERDDAP ≥ 2.27) reads each <em>matching file</em> fully into the JVM heap, then filters. That is fine for small files but:</p>
+<ul>
+<li>The single <strong>935 MB</strong> <code>ctd_wide.parquet</code> OOM’d our 4 GB heap and dropped the dataset from every <code>LoadDatasets</code> run.</li>
+<li>Even partitioned and at a deliberately small 2 GB heap, the 216 M-row table <strong>could not load</strong> (heap peaked ~1.98 GB, then timed out building the file table / reading files).</li>
+<li>Every <em>query</em> re-reads the whole matching file into heap, so latency scales with file size, not result size.</li>
+</ul>
+</section>
+<section id="the-approach-eddtablefromdatabase-duckdb-views" class="level2" data-number="4">
+<h2 data-number="4" class="anchored" data-anchor-id="the-approach-eddtablefromdatabase-duckdb-views"><span class="header-section-number">4</span> 3 · The approach: <code>EDDTableFromDatabase</code> + DuckDB views</h2>
+<p>ERDDAP has no native DuckDB type yet (<code>EDDTableFromDuckDb</code>, <a href="https://github.com/ERDDAP/erddap/issues/448">#448</a>, is a proposal; the ADBC/S3 idea is <a href="https://github.com/ERDDAP/erddap/discussions/447">#447</a>). But ERDDAP <em>already</em> speaks JDBC via <code>EDDTableFromDatabase</code>, and DuckDB ships a JDBC driver. So we:</p>
+<ol type="1">
+<li>Build a <strong>tiny <code>.db</code></strong> (274 KB — view definitions only) of <code>CREATE VIEW ctd_*_erddap AS SELECT … FROM read_parquet('…/ctd_*/**/*.parquet') t JOIN read_parquet('…/ctd_cast.parquet') c USING (ctd_cast_uuid)</code> — the join denormalizes <code>time</code>/<code>lat</code>/<code>lon</code> <em>logically</em> (no physical 16 GB rewrite).</li>
+<li>Add the <strong>DuckDB JDBC jar</strong> to ERDDAP’s <code>WEB-INF/lib</code> via a 4-line custom image (<code>FROM erddap/erddap:latest</code>). Pin the jar to the DuckDB engine that built the <code>.db</code> (we use 1.5.2).</li>
+<li>Point <code>EDDTableFromDatabase</code> at <code>jdbc:duckdb:/…/calcofi_ctd.db</code> with connection properties <code>duckdb.read_only=true, memory_limit, threads, temp_directory</code>, and <code>sourceCanOrderBy/sourceCanDoDistinct = yes</code> so DuckDB (not the heap) does any ORDER BY / DISTINCT.</li>
+</ol>
+<p>DuckDB then does predicate pushdown + Parquet partition pruning + row-group skipping, and streams the JDBC <code>ResultSet</code> back to ERDDAP — so the whole table is never on the heap.</p>
+<div class="callout callout-style-default callout-important callout-titled" title="Gotcha: serve time as a TIMESTAMP, not epoch double">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Important</span>Gotcha: serve time as a TIMESTAMP, not epoch double
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>ERDDAP reads any <code>time</code> variable (units <code>seconds since 1970-…</code>) via <code>ResultSet.getTimestamp()</code>. If the DuckDB view exposes <code>time</code> as an epoch <strong>DOUBLE</strong>, the DuckDB JDBC driver throws <code>NullPointerException: … varlen_data is null</code> on <em>every</em> query that selects time. Expose <code>time</code> as a real <strong>TIMESTAMP</strong> in the view (ERDDAP converts it to epoch seconds) and run the container in UTC. Also: <code>EDDTableFromDatabase</code> does <strong>not</strong> auto-compute variable ranges, so set <code>actual_range</code> (+ <code>geospatial_*</code>/<code>time_coverage_*</code>) on <code>time</code>/<code>lat</code>/<code>lon</code>/<code>depth</code> or the form shows no min/max or sliders.</p>
+</div>
+</div>
+</section>
+<section id="benchmark-duckdb-vs-parquet-vs-csv" class="level2" data-number="5">
+<h2 data-number="5" class="anchored" data-anchor-id="benchmark-duckdb-vs-parquet-vs-csv"><span class="header-section-number">5</span> 4 · Benchmark: DuckDB vs Parquet vs CSV</h2>
+<p>Isolated ERDDAP (custom image) on our host, <strong>2 GB heap</strong> (deliberately small to expose the differences), serving identical denormalized columns three ways. Queries (median of repeats): <strong>q1</strong> <code>.das</code>; <strong>q2</strong> one cruise + one <code>measurement_type</code>; <strong>q3</strong> one type, depth 0–200 m, all cruises; <strong>q4</strong> whole-cruise dump.</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>res <span class="sc">|&gt;</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">transmute</span>(table, approach,</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>            <span class="at">load =</span> load_status, <span class="st">`</span><span class="at">load s</span><span class="st">`</span> <span class="ot">=</span> load_secs,</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>            <span class="st">`</span><span class="at">load heap MB</span><span class="st">`</span> <span class="ot">=</span> load_peak_heap_mb,</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>            <span class="st">`</span><span class="at">query heap MB</span><span class="st">`</span> <span class="ot">=</span> query_peak_heap_mb,</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>            <span class="st">`</span><span class="at">q2 cruise ms</span><span class="st">`</span> <span class="ot">=</span> q2_cruise_ms, <span class="st">`</span><span class="at">q3 type+depth ms</span><span class="st">`</span> <span class="ot">=</span> q3_type200_ms,</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>            <span class="st">`</span><span class="at">q4 dump ms</span><span class="st">`</span> <span class="ot">=</span> q4_dump_ms, <span class="st">`</span><span class="at">q3 rows</span><span class="st">`</span> <span class="ot">=</span> q3_rows) <span class="sc">|&gt;</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(table, approach) <span class="sc">|&gt;</span> <span class="fu">kable</span>()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output-display">
+<table class="caption-top table table-sm table-striped small">
+<colgroup>
+<col style="width: 10%">
+<col style="width: 7%">
+<col style="width: 7%">
+<col style="width: 6%">
+<col style="width: 11%">
+<col style="width: 12%">
+<col style="width: 11%">
+<col style="width: 14%">
+<col style="width: 9%">
+<col style="width: 8%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">table</th>
+<th style="text-align: left;">approach</th>
+<th style="text-align: left;">load</th>
+<th style="text-align: right;">load s</th>
+<th style="text-align: right;">load heap MB</th>
+<th style="text-align: right;">query heap MB</th>
+<th style="text-align: right;">q2 cruise ms</th>
+<th style="text-align: right;">q3 type+depth ms</th>
+<th style="text-align: right;">q4 dump ms</th>
+<th style="text-align: right;">q3 rows</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">thin</td>
+<td style="text-align: left;">duckdb</td>
+<td style="text-align: left;">loaded</td>
+<td style="text-align: right;">5</td>
+<td style="text-align: right;">66</td>
+<td style="text-align: right;">1124</td>
+<td style="text-align: right;">686</td>
+<td style="text-align: right;">1699</td>
+<td style="text-align: right;">1807</td>
+<td style="text-align: right;">11728431</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">thin</td>
+<td style="text-align: left;">parquet</td>
+<td style="text-align: left;">loaded</td>
+<td style="text-align: right;">10</td>
+<td style="text-align: right;">66</td>
+<td style="text-align: right;">1730</td>
+<td style="text-align: right;">12830</td>
+<td style="text-align: right;">13896</td>
+<td style="text-align: right;">34356</td>
+<td style="text-align: right;">11728431</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">thin</td>
+<td style="text-align: left;">csv</td>
+<td style="text-align: left;">timeout</td>
+<td style="text-align: right;">203</td>
+<td style="text-align: right;">1635</td>
+<td style="text-align: right;">1635</td>
+<td style="text-align: right;">-1</td>
+<td style="text-align: right;">-1</td>
+<td style="text-align: right;">-1</td>
+<td style="text-align: right;">0</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">measurement</td>
+<td style="text-align: left;">duckdb</td>
+<td style="text-align: left;">loaded</td>
+<td style="text-align: right;">11</td>
+<td style="text-align: right;">63</td>
+<td style="text-align: right;">1555</td>
+<td style="text-align: right;">4863</td>
+<td style="text-align: right;">23896</td>
+<td style="text-align: right;">99139</td>
+<td style="text-align: right;">140611985</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">measurement</td>
+<td style="text-align: left;">parquet</td>
+<td style="text-align: left;">timeout</td>
+<td style="text-align: right;">241</td>
+<td style="text-align: right;">1981</td>
+<td style="text-align: right;">1981</td>
+<td style="text-align: right;">-1</td>
+<td style="text-align: right;">-1</td>
+<td style="text-align: right;">-1</td>
+<td style="text-align: right;">0</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<p><strong>Takeaways.</strong> DuckDB loads <em>both</em> tables (incl.&nbsp;216 M rows) with a flat ~63 MB heap and streams queries; Parquet is 7–19× slower on the thin table (it re-reads the file per query) and <strong>cannot load</strong> the 216 M-row table at 2 GB; CSV cannot even load the thin table in 200 s. The DuckDB query-time heap (~1.1–1.6 GB on the big dump) is ERDDAP buffering the <em>response</em>, not the table.</p>
+</section>
+<section id="partitioning-ordering-for-long-format-bbox-queries" class="level2" data-number="6">
+<h2 data-number="6" class="anchored" data-anchor-id="partitioning-ordering-for-long-format-bbox-queries"><span class="header-section-number">6</span> 5 · Partitioning &amp; ordering for long-format bbox queries</h2>
+<blockquote class="blockquote">
+<p><em>“I wonder how organizing each sensor reading on its own row affects a query for data within a lat/lon/depth box.”</em> — Lynn DeWitt</p>
+</blockquote>
+<p>This is the key question for long format. We measured (DuckDB, the serving engine) the same bounding-box query — <strong><code>temperature_ave</code>, 32–34°N, 119–121°W, 0–200 m (~393 k rows)</strong> — against four physical layouts of the 216 M-row denormalized table:</p>
+<ul>
+<li><strong>A</strong> — production view: raw Parquet partitioned by <code>cruise_key</code>, joined to <code>ctd_cast</code> at query time (what’s live now).</li>
+<li><strong>B</strong> — denormalized, partitioned by <code>cruise_key</code> (isolates layout from the join).</li>
+<li><strong>C</strong> — denormalized, partitioned by <code>measurement_type</code> (one variable ⇒ ~1/N files).</li>
+<li><strong>D</strong> — denormalized, partitioned by <code>measurement_type</code> <strong>and</strong> ordered by <code>latitude, longitude, depth</code> within each partition (row-group skipping for the box).</li>
+</ul>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>lay <span class="sc">|&gt;</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">transmute</span>(layout, <span class="st">`</span><span class="at">build s</span><span class="st">`</span> <span class="ot">=</span> build_secs, size, <span class="at">files =</span> nfiles,</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>            <span class="st">`</span><span class="at">query s (median)</span><span class="st">`</span> <span class="ot">=</span> query_secs_median, <span class="st">`</span><span class="at">result rows</span><span class="st">`</span> <span class="ot">=</span> result_rows) <span class="sc">|&gt;</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kable</span>()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output-display">
+<table class="caption-top table table-sm table-striped small">
+<colgroup>
+<col style="width: 21%">
+<col style="width: 7%">
+<col style="width: 38%">
+<col style="width: 5%">
+<col style="width: 15%">
+<col style="width: 11%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">layout</th>
+<th style="text-align: right;">build s</th>
+<th style="text-align: left;">size</th>
+<th style="text-align: right;">files</th>
+<th style="text-align: right;">query s (median)</th>
+<th style="text-align: right;">result rows</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">A_prodview_cruise_join</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: left;">(view over cruise-partitioned raw + JOIN)</td>
+<td style="text-align: right;">95</td>
+<td style="text-align: right;">0.875</td>
+<td style="text-align: right;">393271</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">B_denorm_cruise</td>
+<td style="text-align: right;">188</td>
+<td style="text-align: left;">17G</td>
+<td style="text-align: right;">95</td>
+<td style="text-align: right;">0.223</td>
+<td style="text-align: right;">393271</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">C_denorm_type</td>
+<td style="text-align: right;">166</td>
+<td style="text-align: left;">17G</td>
+<td style="text-align: right;">53</td>
+<td style="text-align: right;">0.104</td>
+<td style="text-align: right;">393271</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">D_type_spatialsort</td>
+<td style="text-align: right;">686</td>
+<td style="text-align: left;">17G</td>
+<td style="text-align: right;">53</td>
+<td style="text-align: right;">0.075</td>
+<td style="text-align: right;">393271</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<p><strong>How to read this.</strong> Partition pruning (C, D) drops the data DuckDB must open from all ~95 cruise files to just the one <code>measurement_type</code> partition. Spatial ordering (D) additionally lets DuckDB skip Parquet <strong>row groups</strong> whose lat/lon/depth min–max can’t intersect the box. The trade-off: partitioning by <code>measurement_type</code> <em>helps single-variable queries</em> (the common ERDDAP case) but a query for <em>all</em> variables in a region must then open all type partitions — so the “best” layout depends on expected access patterns (exactly your point). For the adaptively-thinned <code>ctd_thin</code> (155 MB) the question is moot; for the full <code>ctd_measurement</code> it matters, and the layout is a cheap one-time re-write.</p>
+<p><strong>Takeaway.</strong> This ~393 k-row box query runs in <strong>0.075–0.875 s across all four layouts — every one sub-second</strong>, so DuckDB + SSD already handle long-format bbox queries comfortably; layout is an optimization, not a rescue (reassuring for the “sensor-reading-per-row” worry). Decomposing the ~12× spread:</p>
+<ul>
+<li><strong>Removing the query-time join ≈ 4×</strong> (A→B, 0.875 → 0.223 s): materializing <code>time</code>/<code>lat</code>/<code>lon</code> into the table both skips the join <em>and</em> lets the lat/lon predicate prune at the Parquet scan.</li>
+<li><strong>Partitioning by <code>measurement_type</code> ≈ 2×</strong> (B→C, → 0.104 s): a one-variable query opens 1 of 53 partitions instead of all 95 cruise files.</li>
+<li><strong>Spatial ordering within each partition ≈ 1.4×</strong> (C→D, → 0.075 s): DuckDB skips Parquet row groups whose <code>latitude/longitude/depth</code> min–max miss the box.</li>
+</ul>
+<p>Costs &amp; caveats: the denormalized layouts add ~17 GB, and the spatial sort is a one-time global sort (here ~11 min with heavy temp spill) — pay once at ingest, save on every query. And partitioning by <code>measurement_type</code> <em>slows</em> a query that wants <em>all</em> variables in a region (it must open every type partition), so the optimum depends on whether single-variable or all-variable access dominates. Our live datasets currently keep the <strong>zero-extra-storage logical-join view</strong> (layout A, 0.2–0.9 s here); if heavy single-variable bbox traffic emerges, the <code>measurement_type</code>-partition + spatial-sort layout is a cheap ~12× upgrade.</p>
+</section>
+<section id="recommendations-open-questions" class="level2" data-number="7">
+<h2 data-number="7" class="anchored" data-anchor-id="recommendations-open-questions"><span class="header-section-number">7</span> 6 · Recommendations &amp; open questions</h2>
+<ul>
+<li><strong>Serving path.</strong> <code>EDDTableFromDatabase</code> + DuckDB JDBC works on stock ERDDAP today (only the driver jar is added) and is the only option here that serves the 216 M-row table within a small heap. It complements — and is a pragmatic bridge to — native Parquet/DuckDB support (#447/#448). We’re happy to share the custom image + <code>.db</code> builder.</li>
+<li><strong>Layout.</strong> For the full long table, partition by <code>measurement_type</code> and order spatially within; keep <code>cruise_key</code> only if cruise-scoped access dominates.</li>
+<li><strong>NetCDF alternative.</strong> Rasmus’s NetCDF-per-cast route (à la Trinidad Head) is fully viable too and may be the better fit if CoastWatch hosts; the long-format DuckDB approach is attractive when you want the tidy table queryable as-is.</li>
+<li><strong>Open:</strong> for hosting on the CoastWatch ERDDAP, would you prefer (a) NetCDF files we generate, (b) Parquet + a DuckDB <code>.db</code> (this approach), or (c) waiting on native DuckDB/ADBC? We can produce any of these from the same pipeline.</li>
+</ul>
+</section>
+<section id="reproduce" class="level2" data-number="8">
+<h2 data-number="8" class="anchored" data-anchor-id="reproduce"><span class="header-section-number">8</span> 7 · Reproduce</h2>
+<p>All on our host (<code>CalCOFI/workflows</code>, <code>CalCOFI/server</code>, <code>CalCOFI/erddap</code>):</p>
+<ul>
+<li><code>server/erddap/Dockerfile</code> — ERDDAP + <code>duckdb_jdbc</code>.</li>
+<li><code>libs/erddap_duckdb.R</code> — <code>.db</code> view builder + <code>EDDTableFromDatabase</code> XML generator (reuses <code>libs/erddap.R</code>).</li>
+<li><code>scripts/gen_prod_datasets.R</code> — production dataset blocks (metadata-enriched, with <code>actual_range</code>).</li>
+<li><code>scripts/bench_erddap.sh</code> — the DuckDB/Parquet/CSV matrix → <code>results_all.csv</code>.</li>
+<li><code>scripts/bench_parquet_layout.sh</code> — the partitioning/ordering experiment → <code>layout_results.csv</code>.</li>
+</ul>
+<p>Live: <a href="https://erddap.calcofi.io/erddap/tabledap/calcofi_ctd_thin.html" class="uri">https://erddap.calcofi.io/erddap/tabledap/calcofi_ctd_thin.html</a> · <a href="https://erddap.calcofi.io/erddap/tabledap/calcofi_ctd_measurement.html" class="uri">https://erddap.calcofi.io/erddap/tabledap/calcofi_ctd_measurement.html</a></p>
+<!-- -->
+
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+    const viewSource = window.document.getElementById('quarto-view-source') ||
+                       window.document.getElementById('quarto-code-tools-source');
+    if (viewSource) {
+      const sourceUrl = viewSource.getAttribute("data-quarto-source-url");
+      viewSource.addEventListener("click", function(e) {
+        if (sourceUrl) {
+          // rstudio viewer pane
+          if (/\bcapabilities=\b/.test(window.location)) {
+            window.open(sourceUrl);
+          } else {
+            window.location.href = sourceUrl;
+          }
+        } else {
+          const modal = new bootstrap.Modal(document.getElementById('quarto-embedded-source-code-modal'));
+          modal.show();
+        }
+        return false;
+      });
+    }
+    function toggleCodeHandler(show) {
+      return function(e) {
+        const detailsSrc = window.document.querySelectorAll(".cell > details > .sourceCode");
+        for (let i=0; i<detailsSrc.length; i++) {
+          const details = detailsSrc[i].parentElement;
+          if (show) {
+            details.open = true;
+          } else {
+            details.removeAttribute("open");
+          }
+        }
+        const cellCodeDivs = window.document.querySelectorAll(".cell > .sourceCode");
+        const fromCls = show ? "hidden" : "unhidden";
+        const toCls = show ? "unhidden" : "hidden";
+        for (let i=0; i<cellCodeDivs.length; i++) {
+          const codeDiv = cellCodeDivs[i];
+          if (codeDiv.classList.contains(fromCls)) {
+            codeDiv.classList.remove(fromCls);
+            codeDiv.classList.add(toCls);
+          } 
+        }
+        return false;
+      }
+    }
+    const hideAllCode = window.document.getElementById("quarto-hide-all-code");
+    if (hideAllCode) {
+      hideAllCode.addEventListener("click", toggleCodeHandler(false));
+    }
+    const showAllCode = window.document.getElementById("quarto-show-all-code");
+    if (showAllCode) {
+      showAllCode.addEventListener("click", toggleCodeHandler(true));
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script><div class="modal fade" id="quarto-embedded-source-code-modal" tabindex="-1" aria-labelledby="quarto-embedded-source-code-modal-label" aria-hidden="true"><div class="modal-dialog modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><h5 class="modal-title" id="quarto-embedded-source-code-modal-label">Source Code</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="">
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb4" data-shortcodes="false"><pre class="sourceCode markdown code-with-copy"><code class="sourceCode markdown"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co">---</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="an">title:</span><span class="co"> "Serving large CalCOFI CTD profiles on ERDDAP via DuckDB-over-Parquet"</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="an">subtitle:</span><span class="co"> "Memory, latency, and partitioning/ordering — with notes for the CoastWatch ERDDAP"</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="an">author:</span><span class="co"> "CalCOFI (B. Best) — for Lynn DeWitt &amp; the ERDDAP community"</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="an">date:</span><span class="co"> today</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="an">format:</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="co">  html:</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="co">    toc: true</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a><span class="co">    toc-depth: 3</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a><span class="co">    code-fold: true</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a><span class="co">    df-print: kable</span></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a><span class="an">editor_options:</span></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a><span class="co">  chunk_output_type: console</span></span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a><span class="co">---</span></span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a><span class="fu">## Summary</span></span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>CalCOFI's CTD profile data is large in *long* (tidy) format — one row per</span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a>cast × depth × <span class="in">`measurement_type`</span> (~104 sensor types): <span class="in">`ctd_measurement`</span> is</span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a>**~216 M rows / ~16 GB** of Parquet (partitioned by <span class="in">`cruise_key`</span>), plus an</span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a>adaptively-thinned headline table <span class="in">`ctd_thin`</span> (~5.5 M rows). We wanted to serve</span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a>these on ERDDAP without converting to NetCDF and without the memory blow-up that</span>
+<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a><span class="in">`EDDTableFromParquetFiles`</span> hits on large files.</span>
+<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-25"><a href="#cb4-25" aria-hidden="true" tabindex="-1"></a>**What we found / did:**</span>
+<span id="cb4-26"><a href="#cb4-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-27"><a href="#cb4-27" aria-hidden="true" tabindex="-1"></a><span class="ss">1. </span><span class="in">`EDDTableFromParquetFiles`</span> reads each matching file *fully into the JVM heap*</span>
+<span id="cb4-28"><a href="#cb4-28" aria-hidden="true" tabindex="-1"></a>   before filtering. A single 935 MB <span class="in">`ctd_wide.parquet`</span> OOM'd our 4 GB heap; the</span>
+<span id="cb4-29"><a href="#cb4-29" aria-hidden="true" tabindex="-1"></a>   216 M-row table can't load at all on a 2 GB heap (times out at ~1.98 GB).</span>
+<span id="cb4-30"><a href="#cb4-30" aria-hidden="true" tabindex="-1"></a><span class="ss">2. </span>**`EDDTableFromDatabase` + the DuckDB JDBC driver**, pointed at a tiny <span class="in">`.db`</span></span>
+<span id="cb4-31"><a href="#cb4-31" aria-hidden="true" tabindex="-1"></a>   of <span class="in">`CREATE VIEW … read_parquet(…)`</span> views (joining the long tables to</span>
+<span id="cb4-32"><a href="#cb4-32" aria-hidden="true" tabindex="-1"></a>   <span class="in">`ctd_cast`</span> for <span class="in">`time`</span>/<span class="in">`lat`</span>/<span class="in">`lon`</span>), serves the **full 216 M-row table within a</span>
+<span id="cb4-33"><a href="#cb4-33" aria-hidden="true" tabindex="-1"></a>   ~63 MB load heap** and streams filtered queries. This is now live at</span>
+<span id="cb4-34"><a href="#cb4-34" aria-hidden="true" tabindex="-1"></a>   <span class="ot">&lt;https://erddap.calcofi.io&gt;</span> (<span class="in">`calcofi_ctd_thin`</span>, <span class="in">`calcofi_ctd_measurement`</span>).</span>
+<span id="cb4-35"><a href="#cb4-35" aria-hidden="true" tabindex="-1"></a><span class="ss">3. </span>On the partitioning question you raised (Lynn): for the typical *"one variable</span>
+<span id="cb4-36"><a href="#cb4-36" aria-hidden="true" tabindex="-1"></a>   in a lat/lon/depth box"* query, **partitioning the long table by</span>
+<span id="cb4-37"><a href="#cb4-37" aria-hidden="true" tabindex="-1"></a>   <span class="in">`measurement_type`</span>** (so the query touches ~1/N of the data) and **ordering</span>
+<span id="cb4-38"><a href="#cb4-38" aria-hidden="true" tabindex="-1"></a>   rows spatially within each partition** gives the biggest wins — quantified</span>
+<span id="cb4-39"><a href="#cb4-39" aria-hidden="true" tabindex="-1"></a>   below. DuckDB already does predicate pushdown + Parquet row-group skipping, so</span>
+<span id="cb4-40"><a href="#cb4-40" aria-hidden="true" tabindex="-1"></a>   layout changes translate directly into less I/O.</span>
+<span id="cb4-41"><a href="#cb4-41" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-42"><a href="#cb4-42" aria-hidden="true" tabindex="-1"></a>This note documents the benchmark and the layout experiment so others weighing</span>
+<span id="cb4-43"><a href="#cb4-43" aria-hidden="true" tabindex="-1"></a>Parquet-on-ERDDAP (cf. Roy Mendelssohn's posts, ERDDAP</span>
+<span id="cb4-44"><a href="#cb4-44" aria-hidden="true" tabindex="-1"></a><span class="co">[</span><span class="ot">#447</span><span class="co">](https://github.com/ERDDAP/erddap/discussions/447)</span> /</span>
+<span id="cb4-45"><a href="#cb4-45" aria-hidden="true" tabindex="-1"></a><span class="co">[</span><span class="ot">#448</span><span class="co">](https://github.com/ERDDAP/erddap/issues/448)</span>) have concrete numbers.</span>
+<span id="cb4-46"><a href="#cb4-46" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-49"><a href="#cb4-49" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb4-50"><a href="#cb4-50" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: setup</span></span>
+<span id="cb4-51"><a href="#cb4-51" aria-hidden="true" tabindex="-1"></a><span class="co">#| message: false</span></span>
+<span id="cb4-52"><a href="#cb4-52" aria-hidden="true" tabindex="-1"></a><span class="co">#| warning: false</span></span>
+<span id="cb4-53"><a href="#cb4-53" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(dplyr); <span class="fu">library</span>(readr); <span class="fu">library</span>(tidyr); <span class="fu">library</span>(knitr); <span class="fu">library</span>(stringr)</span>
+<span id="cb4-54"><a href="#cb4-54" aria-hidden="true" tabindex="-1"></a>res <span class="ot">&lt;-</span> <span class="fu">read_csv</span>(<span class="st">"data/bench_erddap/results_all.csv"</span>, <span class="at">show_col_types =</span> <span class="cn">FALSE</span>) <span class="sc">|&gt;</span></span>
+<span id="cb4-55"><a href="#cb4-55" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">approach =</span> <span class="fu">factor</span>(approach, <span class="at">levels =</span> <span class="fu">c</span>(<span class="st">"duckdb"</span>,<span class="st">"parquet"</span>,<span class="st">"csv"</span>)),</span>
+<span id="cb4-56"><a href="#cb4-56" aria-hidden="true" tabindex="-1"></a>         <span class="at">table =</span> <span class="fu">factor</span>(table, <span class="at">levels =</span> <span class="fu">c</span>(<span class="st">"thin"</span>,<span class="st">"measurement"</span>)))</span>
+<span id="cb4-57"><a href="#cb4-57" aria-hidden="true" tabindex="-1"></a>lay_path <span class="ot">&lt;-</span> <span class="st">"data/bench_erddap/layout_results.csv"</span></span>
+<span id="cb4-58"><a href="#cb4-58" aria-hidden="true" tabindex="-1"></a>lay <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="fu">file.exists</span>(lay_path)) <span class="fu">read_csv</span>(lay_path, <span class="at">show_col_types =</span> <span class="cn">FALSE</span>) <span class="cf">else</span> <span class="cn">NULL</span></span>
+<span id="cb4-59"><a href="#cb4-59" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb4-60"><a href="#cb4-60" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-61"><a href="#cb4-61" aria-hidden="true" tabindex="-1"></a><span class="fu">## 1 · Background</span></span>
+<span id="cb4-62"><a href="#cb4-62" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-63"><a href="#cb4-63" aria-hidden="true" tabindex="-1"></a>CalCOFI has occupied the California Current quarterly since 1949. The CTD cast</span>
+<span id="cb4-64"><a href="#cb4-64" aria-hidden="true" tabindex="-1"></a>files (<span class="ot">&lt;https://calcofi.org/data/oceanographic-data/ctd-cast-files/&gt;</span>) are ~1 GB</span>
+<span id="cb4-65"><a href="#cb4-65" aria-hidden="true" tabindex="-1"></a>as a single wide Parquet (one column per sensor). We ingest them into a tidy</span>
+<span id="cb4-66"><a href="#cb4-66" aria-hidden="true" tabindex="-1"></a>**long** schema (<span class="in">`ingest_calcofi_ctd-cast`</span>,</span>
+<span id="cb4-67"><a href="#cb4-67" aria-hidden="true" tabindex="-1"></a><span class="ot">&lt;https://calcofi.io/workflows/ingest_calcofi_ctd-cast.html&gt;</span>): each sensor reading</span>
+<span id="cb4-68"><a href="#cb4-68" aria-hidden="true" tabindex="-1"></a>on its own row keyed by <span class="in">`measurement_type`</span>, which is convenient for analysis and</span>
+<span id="cb4-69"><a href="#cb4-69" aria-hidden="true" tabindex="-1"></a>for adding new sensors, but multiplies row count. Tables (release v2026.06.08 /</span>
+<span id="cb4-70"><a href="#cb4-70" aria-hidden="true" tabindex="-1"></a>supplemental v2026.04.08):</span>
+<span id="cb4-71"><a href="#cb4-71" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-72"><a href="#cb4-72" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> table <span class="pp">|</span> rows <span class="pp">|</span> Parquet <span class="pp">|</span> note <span class="pp">|</span></span>
+<span id="cb4-73"><a href="#cb4-73" aria-hidden="true" tabindex="-1"></a><span class="pp">|---|</span>--:<span class="pp">|</span>--:<span class="pp">|---|</span></span>
+<span id="cb4-74"><a href="#cb4-74" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="in">`ctd_cast`</span> <span class="pp">|</span> 5.55 M <span class="pp">|</span> 128 MB <span class="pp">|</span> one row per cast; carries <span class="in">`time`</span>,<span class="in">`lat`</span>,<span class="in">`lon`</span> <span class="pp">|</span></span>
+<span id="cb4-75"><a href="#cb4-75" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="in">`ctd_thin`</span> <span class="pp">|</span> 5.55 M <span class="pp">|</span> 155 MB <span class="pp">|</span> adaptively-thinned headline table <span class="pp">|</span></span>
+<span id="cb4-76"><a href="#cb4-76" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="in">`ctd_measurement`</span> <span class="pp">|</span> 216 M <span class="pp">|</span> ~16 GB <span class="pp">|</span> full long table (partitioned by <span class="in">`cruise_key`</span>) <span class="pp">|</span></span>
+<span id="cb4-77"><a href="#cb4-77" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-78"><a href="#cb4-78" aria-hidden="true" tabindex="-1"></a>The long tables are keyed by <span class="in">`ctd_cast_uuid`</span> and **do not carry coordinates** —</span>
+<span id="cb4-79"><a href="#cb4-79" aria-hidden="true" tabindex="-1"></a><span class="in">`time`</span>/<span class="in">`latitude`</span>/<span class="in">`longitude`</span> live in <span class="in">`ctd_cast`</span>. Any ERDDAP representation must</span>
+<span id="cb4-80"><a href="#cb4-80" aria-hidden="true" tabindex="-1"></a>re-join them.</span>
+<span id="cb4-81"><a href="#cb4-81" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-82"><a href="#cb4-82" aria-hidden="true" tabindex="-1"></a><span class="fu">## 2 · The memory problem with `EDDTableFromParquetFiles`</span></span>
+<span id="cb4-83"><a href="#cb4-83" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-84"><a href="#cb4-84" aria-hidden="true" tabindex="-1"></a><span class="in">`EDDTableFromParquetFiles`</span> (ERDDAP ≥ 2.27) reads each *matching file* fully into</span>
+<span id="cb4-85"><a href="#cb4-85" aria-hidden="true" tabindex="-1"></a>the JVM heap, then filters. That is fine for small files but:</span>
+<span id="cb4-86"><a href="#cb4-86" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-87"><a href="#cb4-87" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>The single **935 MB** <span class="in">`ctd_wide.parquet`</span> OOM'd our 4 GB heap and dropped the</span>
+<span id="cb4-88"><a href="#cb4-88" aria-hidden="true" tabindex="-1"></a>  dataset from every <span class="in">`LoadDatasets`</span> run.</span>
+<span id="cb4-89"><a href="#cb4-89" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>Even partitioned and at a deliberately small 2 GB heap, the 216 M-row table</span>
+<span id="cb4-90"><a href="#cb4-90" aria-hidden="true" tabindex="-1"></a>  **could not load** (heap peaked ~1.98 GB, then timed out building the file</span>
+<span id="cb4-91"><a href="#cb4-91" aria-hidden="true" tabindex="-1"></a>  table / reading files).</span>
+<span id="cb4-92"><a href="#cb4-92" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>Every *query* re-reads the whole matching file into heap, so latency scales</span>
+<span id="cb4-93"><a href="#cb4-93" aria-hidden="true" tabindex="-1"></a>  with file size, not result size.</span>
+<span id="cb4-94"><a href="#cb4-94" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-95"><a href="#cb4-95" aria-hidden="true" tabindex="-1"></a><span class="fu">## 3 · The approach: `EDDTableFromDatabase` + DuckDB views</span></span>
+<span id="cb4-96"><a href="#cb4-96" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-97"><a href="#cb4-97" aria-hidden="true" tabindex="-1"></a>ERDDAP has no native DuckDB type yet (<span class="in">`EDDTableFromDuckDb`</span>,</span>
+<span id="cb4-98"><a href="#cb4-98" aria-hidden="true" tabindex="-1"></a><span class="co">[</span><span class="ot">#448</span><span class="co">](https://github.com/ERDDAP/erddap/issues/448)</span>, is a proposal; the ADBC/S3</span>
+<span id="cb4-99"><a href="#cb4-99" aria-hidden="true" tabindex="-1"></a>idea is <span class="co">[</span><span class="ot">#447</span><span class="co">](https://github.com/ERDDAP/erddap/discussions/447)</span>). But ERDDAP</span>
+<span id="cb4-100"><a href="#cb4-100" aria-hidden="true" tabindex="-1"></a>*already* speaks JDBC via <span class="in">`EDDTableFromDatabase`</span>, and DuckDB ships a JDBC driver.</span>
+<span id="cb4-101"><a href="#cb4-101" aria-hidden="true" tabindex="-1"></a>So we:</span>
+<span id="cb4-102"><a href="#cb4-102" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-103"><a href="#cb4-103" aria-hidden="true" tabindex="-1"></a><span class="ss">1. </span>Build a **tiny `.db`** (274 KB — view definitions only) of</span>
+<span id="cb4-104"><a href="#cb4-104" aria-hidden="true" tabindex="-1"></a>   `CREATE VIEW ctd_*_erddap AS SELECT … FROM read_parquet('…/ctd_*/**/*.parquet')</span>
+<span id="cb4-105"><a href="#cb4-105" aria-hidden="true" tabindex="-1"></a>   t JOIN read_parquet('…/ctd_cast.parquet') c USING (ctd_cast_uuid)` — the join</span>
+<span id="cb4-106"><a href="#cb4-106" aria-hidden="true" tabindex="-1"></a>   denormalizes <span class="in">`time`</span>/<span class="in">`lat`</span>/<span class="in">`lon`</span> *logically* (no physical 16 GB rewrite).</span>
+<span id="cb4-107"><a href="#cb4-107" aria-hidden="true" tabindex="-1"></a><span class="ss">2. </span>Add the **DuckDB JDBC jar** to ERDDAP's <span class="in">`WEB-INF/lib`</span> via a 4-line custom</span>
+<span id="cb4-108"><a href="#cb4-108" aria-hidden="true" tabindex="-1"></a>   image (<span class="in">`FROM erddap/erddap:latest`</span>). Pin the jar to the DuckDB engine that</span>
+<span id="cb4-109"><a href="#cb4-109" aria-hidden="true" tabindex="-1"></a>   built the <span class="in">`.db`</span> (we use 1.5.2).</span>
+<span id="cb4-110"><a href="#cb4-110" aria-hidden="true" tabindex="-1"></a><span class="ss">3. </span>Point <span class="in">`EDDTableFromDatabase`</span> at <span class="in">`jdbc:duckdb:/…/calcofi_ctd.db`</span> with</span>
+<span id="cb4-111"><a href="#cb4-111" aria-hidden="true" tabindex="-1"></a>   connection properties `duckdb.read_only=true, memory_limit, threads,</span>
+<span id="cb4-112"><a href="#cb4-112" aria-hidden="true" tabindex="-1"></a>   temp_directory<span class="in">`, and `</span>sourceCanOrderBy/sourceCanDoDistinct = yes` so DuckDB</span>
+<span id="cb4-113"><a href="#cb4-113" aria-hidden="true" tabindex="-1"></a>   (not the heap) does any ORDER BY / DISTINCT.</span>
+<span id="cb4-114"><a href="#cb4-114" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-115"><a href="#cb4-115" aria-hidden="true" tabindex="-1"></a>DuckDB then does predicate pushdown + Parquet partition pruning + row-group</span>
+<span id="cb4-116"><a href="#cb4-116" aria-hidden="true" tabindex="-1"></a>skipping, and streams the JDBC <span class="in">`ResultSet`</span> back to ERDDAP — so the whole table is</span>
+<span id="cb4-117"><a href="#cb4-117" aria-hidden="true" tabindex="-1"></a>never on the heap.</span>
+<span id="cb4-118"><a href="#cb4-118" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-119"><a href="#cb4-119" aria-hidden="true" tabindex="-1"></a>::: {.callout-important title="Gotcha: serve time as a TIMESTAMP, not epoch double"}</span>
+<span id="cb4-120"><a href="#cb4-120" aria-hidden="true" tabindex="-1"></a>ERDDAP reads any <span class="in">`time`</span> variable (units <span class="in">`seconds since 1970-…`</span>) via</span>
+<span id="cb4-121"><a href="#cb4-121" aria-hidden="true" tabindex="-1"></a><span class="in">`ResultSet.getTimestamp()`</span>. If the DuckDB view exposes <span class="in">`time`</span> as an epoch</span>
+<span id="cb4-122"><a href="#cb4-122" aria-hidden="true" tabindex="-1"></a>**DOUBLE**, the DuckDB JDBC driver throws `NullPointerException: … varlen_data is</span>
+<span id="cb4-123"><a href="#cb4-123" aria-hidden="true" tabindex="-1"></a>null<span class="in">` on *every* query that selects time. Expose `</span>time` as a real **TIMESTAMP**</span>
+<span id="cb4-124"><a href="#cb4-124" aria-hidden="true" tabindex="-1"></a>in the view (ERDDAP converts it to epoch seconds) and run the container in UTC.</span>
+<span id="cb4-125"><a href="#cb4-125" aria-hidden="true" tabindex="-1"></a>Also: <span class="in">`EDDTableFromDatabase`</span> does **not** auto-compute variable ranges, so set</span>
+<span id="cb4-126"><a href="#cb4-126" aria-hidden="true" tabindex="-1"></a><span class="in">`actual_range`</span> (+ <span class="in">`geospatial_*`</span>/<span class="in">`time_coverage_*`</span>) on <span class="in">`time`</span>/<span class="in">`lat`</span>/<span class="in">`lon`</span>/<span class="in">`depth`</span></span>
+<span id="cb4-127"><a href="#cb4-127" aria-hidden="true" tabindex="-1"></a>or the form shows no min/max or sliders.</span>
+<span id="cb4-128"><a href="#cb4-128" aria-hidden="true" tabindex="-1"></a>:::</span>
+<span id="cb4-129"><a href="#cb4-129" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-130"><a href="#cb4-130" aria-hidden="true" tabindex="-1"></a><span class="fu">## 4 · Benchmark: DuckDB vs Parquet vs CSV</span></span>
+<span id="cb4-131"><a href="#cb4-131" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-132"><a href="#cb4-132" aria-hidden="true" tabindex="-1"></a>Isolated ERDDAP (custom image) on our host, **2 GB heap** (deliberately small to</span>
+<span id="cb4-133"><a href="#cb4-133" aria-hidden="true" tabindex="-1"></a>expose the differences), serving identical denormalized columns three ways.</span>
+<span id="cb4-134"><a href="#cb4-134" aria-hidden="true" tabindex="-1"></a>Queries (median of repeats): **q1** `.das`; **q2** one cruise + one</span>
+<span id="cb4-135"><a href="#cb4-135" aria-hidden="true" tabindex="-1"></a><span class="in">`measurement_type`</span>; **q3** one type, depth 0–200 m, all cruises; **q4**</span>
+<span id="cb4-136"><a href="#cb4-136" aria-hidden="true" tabindex="-1"></a>whole-cruise dump.</span>
+<span id="cb4-137"><a href="#cb4-137" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-140"><a href="#cb4-140" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb4-141"><a href="#cb4-141" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: matrix</span></span>
+<span id="cb4-142"><a href="#cb4-142" aria-hidden="true" tabindex="-1"></a>res <span class="sc">|&gt;</span></span>
+<span id="cb4-143"><a href="#cb4-143" aria-hidden="true" tabindex="-1"></a>  <span class="fu">transmute</span>(table, approach,</span>
+<span id="cb4-144"><a href="#cb4-144" aria-hidden="true" tabindex="-1"></a>            <span class="at">load =</span> load_status, <span class="st">`</span><span class="at">load s</span><span class="st">`</span> <span class="ot">=</span> load_secs,</span>
+<span id="cb4-145"><a href="#cb4-145" aria-hidden="true" tabindex="-1"></a>            <span class="st">`</span><span class="at">load heap MB</span><span class="st">`</span> <span class="ot">=</span> load_peak_heap_mb,</span>
+<span id="cb4-146"><a href="#cb4-146" aria-hidden="true" tabindex="-1"></a>            <span class="st">`</span><span class="at">query heap MB</span><span class="st">`</span> <span class="ot">=</span> query_peak_heap_mb,</span>
+<span id="cb4-147"><a href="#cb4-147" aria-hidden="true" tabindex="-1"></a>            <span class="st">`</span><span class="at">q2 cruise ms</span><span class="st">`</span> <span class="ot">=</span> q2_cruise_ms, <span class="st">`</span><span class="at">q3 type+depth ms</span><span class="st">`</span> <span class="ot">=</span> q3_type200_ms,</span>
+<span id="cb4-148"><a href="#cb4-148" aria-hidden="true" tabindex="-1"></a>            <span class="st">`</span><span class="at">q4 dump ms</span><span class="st">`</span> <span class="ot">=</span> q4_dump_ms, <span class="st">`</span><span class="at">q3 rows</span><span class="st">`</span> <span class="ot">=</span> q3_rows) <span class="sc">|&gt;</span></span>
+<span id="cb4-149"><a href="#cb4-149" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(table, approach) <span class="sc">|&gt;</span> <span class="fu">kable</span>()</span>
+<span id="cb4-150"><a href="#cb4-150" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb4-151"><a href="#cb4-151" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-152"><a href="#cb4-152" aria-hidden="true" tabindex="-1"></a>**Takeaways.** DuckDB loads *both* tables (incl. 216 M rows) with a flat ~63 MB</span>
+<span id="cb4-153"><a href="#cb4-153" aria-hidden="true" tabindex="-1"></a>heap and streams queries; Parquet is 7–19× slower on the thin table (it re-reads</span>
+<span id="cb4-154"><a href="#cb4-154" aria-hidden="true" tabindex="-1"></a>the file per query) and **cannot load** the 216 M-row table at 2 GB; CSV cannot</span>
+<span id="cb4-155"><a href="#cb4-155" aria-hidden="true" tabindex="-1"></a>even load the thin table in 200 s. The DuckDB query-time heap (~1.1–1.6 GB on the</span>
+<span id="cb4-156"><a href="#cb4-156" aria-hidden="true" tabindex="-1"></a>big dump) is ERDDAP buffering the *response*, not the table.</span>
+<span id="cb4-157"><a href="#cb4-157" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-158"><a href="#cb4-158" aria-hidden="true" tabindex="-1"></a><span class="fu">## 5 · Partitioning &amp; ordering for long-format bbox queries</span></span>
+<span id="cb4-159"><a href="#cb4-159" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-160"><a href="#cb4-160" aria-hidden="true" tabindex="-1"></a><span class="at">&gt; *"I wonder how organizing each sensor reading on its own row affects a query for</span></span>
+<span id="cb4-161"><a href="#cb4-161" aria-hidden="true" tabindex="-1"></a><span class="at">&gt; data within a lat/lon/depth box."* — Lynn DeWitt</span></span>
+<span id="cb4-162"><a href="#cb4-162" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-163"><a href="#cb4-163" aria-hidden="true" tabindex="-1"></a>This is the key question for long format. We measured (DuckDB, the serving engine)</span>
+<span id="cb4-164"><a href="#cb4-164" aria-hidden="true" tabindex="-1"></a>the same bounding-box query — **<span class="in">`temperature_ave`</span>, 32–34°N, 119–121°W, 0–200 m</span>
+<span id="cb4-165"><a href="#cb4-165" aria-hidden="true" tabindex="-1"></a>(~393 k rows)** — against four physical layouts of the 216 M-row denormalized</span>
+<span id="cb4-166"><a href="#cb4-166" aria-hidden="true" tabindex="-1"></a>table:</span>
+<span id="cb4-167"><a href="#cb4-167" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-168"><a href="#cb4-168" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**A** — production view: raw Parquet partitioned by <span class="in">`cruise_key`</span>, joined to</span>
+<span id="cb4-169"><a href="#cb4-169" aria-hidden="true" tabindex="-1"></a>  <span class="in">`ctd_cast`</span> at query time (what's live now).</span>
+<span id="cb4-170"><a href="#cb4-170" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**B** — denormalized, partitioned by <span class="in">`cruise_key`</span> (isolates layout from the join).</span>
+<span id="cb4-171"><a href="#cb4-171" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**C** — denormalized, partitioned by <span class="in">`measurement_type`</span> (one variable ⇒ ~1/N files).</span>
+<span id="cb4-172"><a href="#cb4-172" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**D** — denormalized, partitioned by `measurement_type` **and** ordered by</span>
+<span id="cb4-173"><a href="#cb4-173" aria-hidden="true" tabindex="-1"></a>  <span class="in">`latitude, longitude, depth`</span> within each partition (row-group skipping for the box).</span>
+<span id="cb4-174"><a href="#cb4-174" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-177"><a href="#cb4-177" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb4-178"><a href="#cb4-178" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: layout</span></span>
+<span id="cb4-179"><a href="#cb4-179" aria-hidden="true" tabindex="-1"></a><span class="co">#| eval: !expr "!is.null(lay)"</span></span>
+<span id="cb4-180"><a href="#cb4-180" aria-hidden="true" tabindex="-1"></a>lay <span class="sc">|&gt;</span></span>
+<span id="cb4-181"><a href="#cb4-181" aria-hidden="true" tabindex="-1"></a>  <span class="fu">transmute</span>(layout, <span class="st">`</span><span class="at">build s</span><span class="st">`</span> <span class="ot">=</span> build_secs, size, <span class="at">files =</span> nfiles,</span>
+<span id="cb4-182"><a href="#cb4-182" aria-hidden="true" tabindex="-1"></a>            <span class="st">`</span><span class="at">query s (median)</span><span class="st">`</span> <span class="ot">=</span> query_secs_median, <span class="st">`</span><span class="at">result rows</span><span class="st">`</span> <span class="ot">=</span> result_rows) <span class="sc">|&gt;</span></span>
+<span id="cb4-183"><a href="#cb4-183" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kable</span>()</span>
+<span id="cb4-184"><a href="#cb4-184" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb4-185"><a href="#cb4-185" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-188"><a href="#cb4-188" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb4-189"><a href="#cb4-189" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: layout-missing</span></span>
+<span id="cb4-190"><a href="#cb4-190" aria-hidden="true" tabindex="-1"></a><span class="co">#| echo: false</span></span>
+<span id="cb4-191"><a href="#cb4-191" aria-hidden="true" tabindex="-1"></a><span class="co">#| output: asis</span></span>
+<span id="cb4-192"><a href="#cb4-192" aria-hidden="true" tabindex="-1"></a><span class="co">#| eval: !expr "is.null(lay)"</span></span>
+<span id="cb4-193"><a href="#cb4-193" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"*(layout_results.csv not yet present — run scripts/bench_parquet_layout.sh)*"</span>)</span>
+<span id="cb4-194"><a href="#cb4-194" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb4-195"><a href="#cb4-195" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-196"><a href="#cb4-196" aria-hidden="true" tabindex="-1"></a>**How to read this.** Partition pruning (C, D) drops the data DuckDB must open</span>
+<span id="cb4-197"><a href="#cb4-197" aria-hidden="true" tabindex="-1"></a>from all ~95 cruise files to just the one <span class="in">`measurement_type`</span> partition. Spatial</span>
+<span id="cb4-198"><a href="#cb4-198" aria-hidden="true" tabindex="-1"></a>ordering (D) additionally lets DuckDB skip Parquet **row groups** whose</span>
+<span id="cb4-199"><a href="#cb4-199" aria-hidden="true" tabindex="-1"></a>lat/lon/depth min–max can't intersect the box. The trade-off: partitioning by</span>
+<span id="cb4-200"><a href="#cb4-200" aria-hidden="true" tabindex="-1"></a><span class="in">`measurement_type`</span> *helps single-variable queries* (the common ERDDAP case) but a</span>
+<span id="cb4-201"><a href="#cb4-201" aria-hidden="true" tabindex="-1"></a>query for *all* variables in a region must then open all type partitions — so the</span>
+<span id="cb4-202"><a href="#cb4-202" aria-hidden="true" tabindex="-1"></a>"best" layout depends on expected access patterns (exactly your point). For the</span>
+<span id="cb4-203"><a href="#cb4-203" aria-hidden="true" tabindex="-1"></a>adaptively-thinned <span class="in">`ctd_thin`</span> (155 MB) the question is moot; for the full</span>
+<span id="cb4-204"><a href="#cb4-204" aria-hidden="true" tabindex="-1"></a><span class="in">`ctd_measurement`</span> it matters, and the layout is a cheap one-time re-write.</span>
+<span id="cb4-205"><a href="#cb4-205" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-206"><a href="#cb4-206" aria-hidden="true" tabindex="-1"></a>**Takeaway.** This ~393 k-row box query runs in **0.075–0.875 s across all four</span>
+<span id="cb4-207"><a href="#cb4-207" aria-hidden="true" tabindex="-1"></a>layouts — every one sub-second**, so DuckDB + SSD already handle long-format bbox</span>
+<span id="cb4-208"><a href="#cb4-208" aria-hidden="true" tabindex="-1"></a>queries comfortably; layout is an optimization, not a rescue (reassuring for the</span>
+<span id="cb4-209"><a href="#cb4-209" aria-hidden="true" tabindex="-1"></a>"sensor-reading-per-row" worry). Decomposing the ~12× spread:</span>
+<span id="cb4-210"><a href="#cb4-210" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-211"><a href="#cb4-211" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Removing the query-time join ≈ 4×** (A→B, 0.875 → 0.223 s): materializing</span>
+<span id="cb4-212"><a href="#cb4-212" aria-hidden="true" tabindex="-1"></a>  <span class="in">`time`</span>/<span class="in">`lat`</span>/<span class="in">`lon`</span> into the table both skips the join *and* lets the lat/lon</span>
+<span id="cb4-213"><a href="#cb4-213" aria-hidden="true" tabindex="-1"></a>  predicate prune at the Parquet scan.</span>
+<span id="cb4-214"><a href="#cb4-214" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Partitioning by `measurement_type` ≈ 2×** (B→C, → 0.104 s): a one-variable</span>
+<span id="cb4-215"><a href="#cb4-215" aria-hidden="true" tabindex="-1"></a>  query opens 1 of 53 partitions instead of all 95 cruise files.</span>
+<span id="cb4-216"><a href="#cb4-216" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Spatial ordering within each partition ≈ 1.4×** (C→D, → 0.075 s): DuckDB</span>
+<span id="cb4-217"><a href="#cb4-217" aria-hidden="true" tabindex="-1"></a>  skips Parquet row groups whose <span class="in">`latitude/longitude/depth`</span> min–max miss the box.</span>
+<span id="cb4-218"><a href="#cb4-218" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-219"><a href="#cb4-219" aria-hidden="true" tabindex="-1"></a>Costs &amp; caveats: the denormalized layouts add ~17 GB, and the spatial sort is a</span>
+<span id="cb4-220"><a href="#cb4-220" aria-hidden="true" tabindex="-1"></a>one-time global sort (here ~11 min with heavy temp spill) — pay once at ingest,</span>
+<span id="cb4-221"><a href="#cb4-221" aria-hidden="true" tabindex="-1"></a>save on every query. And partitioning by <span class="in">`measurement_type`</span> *slows* a query that</span>
+<span id="cb4-222"><a href="#cb4-222" aria-hidden="true" tabindex="-1"></a>wants *all* variables in a region (it must open every type partition), so the</span>
+<span id="cb4-223"><a href="#cb4-223" aria-hidden="true" tabindex="-1"></a>optimum depends on whether single-variable or all-variable access dominates. Our</span>
+<span id="cb4-224"><a href="#cb4-224" aria-hidden="true" tabindex="-1"></a>live datasets currently keep the **zero-extra-storage logical-join view** (layout</span>
+<span id="cb4-225"><a href="#cb4-225" aria-hidden="true" tabindex="-1"></a>A, 0.2–0.9 s here); if heavy single-variable bbox traffic emerges, the</span>
+<span id="cb4-226"><a href="#cb4-226" aria-hidden="true" tabindex="-1"></a><span class="in">`measurement_type`</span>-partition + spatial-sort layout is a cheap ~12× upgrade.</span>
+<span id="cb4-227"><a href="#cb4-227" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-228"><a href="#cb4-228" aria-hidden="true" tabindex="-1"></a><span class="fu">## 6 · Recommendations &amp; open questions</span></span>
+<span id="cb4-229"><a href="#cb4-229" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-230"><a href="#cb4-230" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Serving path.** <span class="in">`EDDTableFromDatabase`</span> + DuckDB JDBC works on stock ERDDAP</span>
+<span id="cb4-231"><a href="#cb4-231" aria-hidden="true" tabindex="-1"></a>  today (only the driver jar is added) and is the only option here that serves the</span>
+<span id="cb4-232"><a href="#cb4-232" aria-hidden="true" tabindex="-1"></a>  216 M-row table within a small heap. It complements — and is a pragmatic bridge</span>
+<span id="cb4-233"><a href="#cb4-233" aria-hidden="true" tabindex="-1"></a>  to — native Parquet/DuckDB support (#447/#448). We're happy to share the custom</span>
+<span id="cb4-234"><a href="#cb4-234" aria-hidden="true" tabindex="-1"></a>  image + <span class="in">`.db`</span> builder.</span>
+<span id="cb4-235"><a href="#cb4-235" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Layout.** For the full long table, partition by <span class="in">`measurement_type`</span> and order</span>
+<span id="cb4-236"><a href="#cb4-236" aria-hidden="true" tabindex="-1"></a>  spatially within; keep <span class="in">`cruise_key`</span> only if cruise-scoped access dominates.</span>
+<span id="cb4-237"><a href="#cb4-237" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**NetCDF alternative.** Rasmus's NetCDF-per-cast route (à la Trinidad Head) is</span>
+<span id="cb4-238"><a href="#cb4-238" aria-hidden="true" tabindex="-1"></a>  fully viable too and may be the better fit if CoastWatch hosts; the long-format</span>
+<span id="cb4-239"><a href="#cb4-239" aria-hidden="true" tabindex="-1"></a>  DuckDB approach is attractive when you want the tidy table queryable as-is.</span>
+<span id="cb4-240"><a href="#cb4-240" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Open:** for hosting on the CoastWatch ERDDAP, would you prefer (a) NetCDF</span>
+<span id="cb4-241"><a href="#cb4-241" aria-hidden="true" tabindex="-1"></a>  files we generate, (b) Parquet + a DuckDB <span class="in">`.db`</span> (this approach), or (c) waiting</span>
+<span id="cb4-242"><a href="#cb4-242" aria-hidden="true" tabindex="-1"></a>  on native DuckDB/ADBC? We can produce any of these from the same pipeline.</span>
+<span id="cb4-243"><a href="#cb4-243" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-244"><a href="#cb4-244" aria-hidden="true" tabindex="-1"></a><span class="fu">## 7 · Reproduce</span></span>
+<span id="cb4-245"><a href="#cb4-245" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-246"><a href="#cb4-246" aria-hidden="true" tabindex="-1"></a>All on our host (<span class="in">`CalCOFI/workflows`</span>, <span class="in">`CalCOFI/server`</span>, <span class="in">`CalCOFI/erddap`</span>):</span>
+<span id="cb4-247"><a href="#cb4-247" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-248"><a href="#cb4-248" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span><span class="in">`server/erddap/Dockerfile`</span> — ERDDAP + <span class="in">`duckdb_jdbc`</span>.</span>
+<span id="cb4-249"><a href="#cb4-249" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span><span class="in">`libs/erddap_duckdb.R`</span> — <span class="in">`.db`</span> view builder + <span class="in">`EDDTableFromDatabase`</span> XML</span>
+<span id="cb4-250"><a href="#cb4-250" aria-hidden="true" tabindex="-1"></a>  generator (reuses <span class="in">`libs/erddap.R`</span>).</span>
+<span id="cb4-251"><a href="#cb4-251" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span><span class="in">`scripts/gen_prod_datasets.R`</span> — production dataset blocks (metadata-enriched,</span>
+<span id="cb4-252"><a href="#cb4-252" aria-hidden="true" tabindex="-1"></a>  with <span class="in">`actual_range`</span>).</span>
+<span id="cb4-253"><a href="#cb4-253" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span><span class="in">`scripts/bench_erddap.sh`</span> — the DuckDB/Parquet/CSV matrix → <span class="in">`results_all.csv`</span>.</span>
+<span id="cb4-254"><a href="#cb4-254" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span><span class="in">`scripts/bench_parquet_layout.sh`</span> — the partitioning/ordering experiment →</span>
+<span id="cb4-255"><a href="#cb4-255" aria-hidden="true" tabindex="-1"></a>  <span class="in">`layout_results.csv`</span>.</span>
+<span id="cb4-256"><a href="#cb4-256" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-257"><a href="#cb4-257" aria-hidden="true" tabindex="-1"></a>Live: <span class="ot">&lt;https://erddap.calcofi.io/erddap/tabledap/calcofi_ctd_thin.html&gt;</span> ·</span>
+<span id="cb4-258"><a href="#cb4-258" aria-hidden="true" tabindex="-1"></a><span class="ot">&lt;https://erddap.calcofi.io/erddap/tabledap/calcofi_ctd_measurement.html&gt;</span></span>
+</code></pre></div><button title="Copy to Clipboard" class="code-copy-button" data-in-quarto-modal=""><i class="bi"></i></button></div>
+</div></div></div></div></div>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

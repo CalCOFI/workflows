@@ -1,0 +1,250 @@
+---
+title: "Serving large CalCOFI CTD profiles on ERDDAP via DuckDB-over-Parquet"
+subtitle: "Memory, latency, and partitioning/ordering — with notes for the CoastWatch ERDDAP"
+author: "CalCOFI (B. Best) — for Lynn DeWitt & the ERDDAP community"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: true
+    df-print: kable
+editor_options:
+  chunk_output_type: console
+---
+
+## Summary
+
+CalCOFI's CTD profile data is large in *long* (tidy) format — one row per
+cast × depth × `measurement_type` (~104 sensor types): `ctd_measurement` is
+**~216 M rows / ~16 GB** of Parquet (partitioned by `cruise_key`), plus an
+adaptively-thinned headline table `ctd_thin` (~5.5 M rows). We wanted to serve
+these on ERDDAP without converting to NetCDF and without the memory blow-up that
+`EDDTableFromParquetFiles` hits on large files.
+
+**What we found / did:**
+
+1. `EDDTableFromParquetFiles` reads each matching file *fully into the JVM heap*
+   before filtering. A single 935 MB `ctd_wide.parquet` OOM'd our 4 GB heap; the
+   216 M-row table can't load at all on a 2 GB heap (times out at ~1.98 GB).
+2. **`EDDTableFromDatabase` + the DuckDB JDBC driver**, pointed at a tiny `.db`
+   of `CREATE VIEW … read_parquet(…)` views (joining the long tables to
+   `ctd_cast` for `time`/`lat`/`lon`), serves the **full 216 M-row table within a
+   ~63 MB load heap** and streams filtered queries. This is now live at
+   <https://erddap.calcofi.io> (`calcofi_ctd_thin`, `calcofi_ctd_measurement`).
+3. On the partitioning question you raised (Lynn): for the typical *"one variable
+   in a lat/lon/depth box"* query, **partitioning the long table by
+   `measurement_type`** (so the query touches ~1/N of the data) and **ordering
+   rows spatially within each partition** gives the biggest wins — quantified
+   below. DuckDB already does predicate pushdown + Parquet row-group skipping, so
+   layout changes translate directly into less I/O.
+
+This note documents the benchmark and the layout experiment so others weighing
+Parquet-on-ERDDAP (cf. Roy Mendelssohn's posts, ERDDAP
+[#447](https://github.com/ERDDAP/erddap/discussions/447) /
+[#448](https://github.com/ERDDAP/erddap/issues/448)) have concrete numbers.
+
+```{r}
+#| label: setup
+#| message: false
+#| warning: false
+library(dplyr); library(readr); library(tidyr); library(knitr); library(stringr)
+res <- read_csv("data/bench_erddap/results_all.csv", show_col_types = FALSE) |>
+  mutate(approach = factor(approach, levels = c("duckdb","parquet","csv")),
+         table = factor(table, levels = c("thin","measurement")))
+lay_path <- "data/bench_erddap/layout_results.csv"
+lay <- if (file.exists(lay_path)) read_csv(lay_path, show_col_types = FALSE) else NULL
+```
+
+## 1 · Background
+
+CalCOFI has occupied the California Current quarterly since 1949. The CTD cast
+files (<https://calcofi.org/data/oceanographic-data/ctd-cast-files/>) are ~1 GB
+as a single wide Parquet (one column per sensor). We ingest them into a tidy
+**long** schema (`ingest_calcofi_ctd-cast`,
+<https://calcofi.io/workflows/ingest_calcofi_ctd-cast.html>): each sensor reading
+on its own row keyed by `measurement_type`, which is convenient for analysis and
+for adding new sensors, but multiplies row count. Tables (release v2026.06.08 /
+supplemental v2026.04.08):
+
+| table | rows | Parquet | note |
+|---|--:|--:|---|
+| `ctd_cast` | 5.55 M | 128 MB | one row per cast; carries `time`,`lat`,`lon` |
+| `ctd_thin` | 5.55 M | 155 MB | adaptively-thinned headline table |
+| `ctd_measurement` | 216 M | ~16 GB | full long table (partitioned by `cruise_key`) |
+
+The long tables are keyed by `ctd_cast_uuid` and **do not carry coordinates** —
+`time`/`latitude`/`longitude` live in `ctd_cast`. Any ERDDAP representation must
+re-join them.
+
+## 2 · The memory problem with `EDDTableFromParquetFiles`
+
+`EDDTableFromParquetFiles` (ERDDAP ≥ 2.27) reads each *matching file* fully into
+the JVM heap, then filters. That is fine for small files but:
+
+- The single **935 MB** `ctd_wide.parquet` OOM'd our 4 GB heap and dropped the
+  dataset from every `LoadDatasets` run.
+- Even partitioned and at a deliberately small 2 GB heap, the 216 M-row table
+  **could not load** (heap peaked ~1.98 GB, then timed out building the file
+  table / reading files).
+- Every *query* re-reads the whole matching file into heap, so latency scales
+  with file size, not result size.
+
+## 3 · The approach: `EDDTableFromDatabase` + DuckDB views
+
+ERDDAP has no native DuckDB type yet (`EDDTableFromDuckDb`,
+[#448](https://github.com/ERDDAP/erddap/issues/448), is a proposal; the ADBC/S3
+idea is [#447](https://github.com/ERDDAP/erddap/discussions/447)). But ERDDAP
+*already* speaks JDBC via `EDDTableFromDatabase`, and DuckDB ships a JDBC driver.
+So we:
+
+1. Build a **tiny `.db`** (274 KB — view definitions only) of
+   `CREATE VIEW ctd_*_erddap AS SELECT … FROM read_parquet('…/ctd_*/**/*.parquet')
+   t JOIN read_parquet('…/ctd_cast.parquet') c USING (ctd_cast_uuid)` — the join
+   denormalizes `time`/`lat`/`lon` *logically* (no physical 16 GB rewrite).
+2. Add the **DuckDB JDBC jar** to ERDDAP's `WEB-INF/lib` via a 4-line custom
+   image (`FROM erddap/erddap:latest`). Pin the jar to the DuckDB engine that
+   built the `.db` (we use 1.5.2).
+3. Point `EDDTableFromDatabase` at `jdbc:duckdb:/…/calcofi_ctd.db` with
+   connection properties `duckdb.read_only=true, memory_limit, threads,
+   temp_directory`, and `sourceCanOrderBy/sourceCanDoDistinct = yes` so DuckDB
+   (not the heap) does any ORDER BY / DISTINCT.
+
+DuckDB then does predicate pushdown + Parquet partition pruning + row-group
+skipping, and streams the JDBC `ResultSet` back to ERDDAP — so the whole table is
+never on the heap.
+
+::: {.callout-important title="Gotcha: serve time as a TIMESTAMP, not epoch double"}
+ERDDAP reads any `time` variable (units `seconds since 1970-…`) via
+`ResultSet.getTimestamp()`. If the DuckDB view exposes `time` as an epoch
+**DOUBLE**, the DuckDB JDBC driver throws `NullPointerException: … varlen_data is
+null` on *every* query that selects time. Expose `time` as a real **TIMESTAMP**
+in the view (ERDDAP converts it to epoch seconds) and run the container in UTC.
+Also: `EDDTableFromDatabase` does **not** auto-compute variable ranges, so set
+`actual_range` (+ `geospatial_*`/`time_coverage_*`) on `time`/`lat`/`lon`/`depth`
+or the form shows no min/max or sliders.
+:::
+
+## 4 · Benchmark: DuckDB vs Parquet vs CSV
+
+Isolated ERDDAP (custom image) on our host, **2 GB heap** (deliberately small to
+expose the differences), serving identical denormalized columns three ways.
+Queries (median of repeats): **q1** `.das`; **q2** one cruise + one
+`measurement_type`; **q3** one type, depth 0–200 m, all cruises; **q4**
+whole-cruise dump.
+
+```{r}
+#| label: matrix
+res |>
+  transmute(table, approach,
+            load = load_status, `load s` = load_secs,
+            `load heap MB` = load_peak_heap_mb,
+            `query heap MB` = query_peak_heap_mb,
+            `q2 cruise ms` = q2_cruise_ms, `q3 type+depth ms` = q3_type200_ms,
+            `q4 dump ms` = q4_dump_ms, `q3 rows` = q3_rows) |>
+  arrange(table, approach) |> kable()
+```
+
+**Takeaways.** DuckDB loads *both* tables (incl. 216 M rows) with a flat ~63 MB
+heap and streams queries; Parquet is 7–19× slower on the thin table (it re-reads
+the file per query) and **cannot load** the 216 M-row table at 2 GB; CSV cannot
+even load the thin table in 200 s. The DuckDB query-time heap (~1.1–1.6 GB on the
+big dump) is ERDDAP buffering the *response*, not the table.
+
+## 5 · Partitioning & ordering for long-format bbox queries
+
+> *"I wonder how organizing each sensor reading on its own row affects a query for
+> data within a lat/lon/depth box."* — Lynn DeWitt
+
+This is the key question for long format. We measured (DuckDB, the serving engine)
+the same bounding-box query — **`temperature_ave`, 32–34°N, 119–121°W, 0–200 m
+(~393 k rows)** — against four physical layouts of the 216 M-row denormalized
+table:
+
+- **A** — production view: raw Parquet partitioned by `cruise_key`, joined to
+  `ctd_cast` at query time (what's live now).
+- **B** — denormalized, partitioned by `cruise_key` (isolates layout from the join).
+- **C** — denormalized, partitioned by `measurement_type` (one variable ⇒ ~1/N files).
+- **D** — denormalized, partitioned by `measurement_type` **and** ordered by
+  `latitude, longitude, depth` within each partition (row-group skipping for the box).
+
+```{r}
+#| label: layout
+#| eval: !expr "!is.null(lay)"
+lay |>
+  transmute(layout, `build s` = build_secs, size, files = nfiles,
+            `query s (median)` = query_secs_median, `result rows` = result_rows) |>
+  kable()
+```
+
+```{r}
+#| label: layout-missing
+#| echo: false
+#| output: asis
+#| eval: !expr "is.null(lay)"
+cat("*(layout_results.csv not yet present — run scripts/bench_parquet_layout.sh)*")
+```
+
+**How to read this.** Partition pruning (C, D) drops the data DuckDB must open
+from all ~95 cruise files to just the one `measurement_type` partition. Spatial
+ordering (D) additionally lets DuckDB skip Parquet **row groups** whose
+lat/lon/depth min–max can't intersect the box. The trade-off: partitioning by
+`measurement_type` *helps single-variable queries* (the common ERDDAP case) but a
+query for *all* variables in a region must then open all type partitions — so the
+"best" layout depends on expected access patterns (exactly your point). For the
+adaptively-thinned `ctd_thin` (155 MB) the question is moot; for the full
+`ctd_measurement` it matters, and the layout is a cheap one-time re-write.
+
+**Takeaway.** This ~393 k-row box query runs in **0.075–0.875 s across all four
+layouts — every one sub-second**, so DuckDB + SSD already handle long-format bbox
+queries comfortably; layout is an optimization, not a rescue (reassuring for the
+"sensor-reading-per-row" worry). Decomposing the ~12× spread:
+
+- **Removing the query-time join ≈ 4×** (A→B, 0.875 → 0.223 s): materializing
+  `time`/`lat`/`lon` into the table both skips the join *and* lets the lat/lon
+  predicate prune at the Parquet scan.
+- **Partitioning by `measurement_type` ≈ 2×** (B→C, → 0.104 s): a one-variable
+  query opens 1 of 53 partitions instead of all 95 cruise files.
+- **Spatial ordering within each partition ≈ 1.4×** (C→D, → 0.075 s): DuckDB
+  skips Parquet row groups whose `latitude/longitude/depth` min–max miss the box.
+
+Costs & caveats: the denormalized layouts add ~17 GB, and the spatial sort is a
+one-time global sort (here ~11 min with heavy temp spill) — pay once at ingest,
+save on every query. And partitioning by `measurement_type` *slows* a query that
+wants *all* variables in a region (it must open every type partition), so the
+optimum depends on whether single-variable or all-variable access dominates. Our
+live datasets currently keep the **zero-extra-storage logical-join view** (layout
+A, 0.2–0.9 s here); if heavy single-variable bbox traffic emerges, the
+`measurement_type`-partition + spatial-sort layout is a cheap ~12× upgrade.
+
+## 6 · Recommendations & open questions
+
+- **Serving path.** `EDDTableFromDatabase` + DuckDB JDBC works on stock ERDDAP
+  today (only the driver jar is added) and is the only option here that serves the
+  216 M-row table within a small heap. It complements — and is a pragmatic bridge
+  to — native Parquet/DuckDB support (#447/#448). We're happy to share the custom
+  image + `.db` builder.
+- **Layout.** For the full long table, partition by `measurement_type` and order
+  spatially within; keep `cruise_key` only if cruise-scoped access dominates.
+- **NetCDF alternative.** Rasmus's NetCDF-per-cast route (à la Trinidad Head) is
+  fully viable too and may be the better fit if CoastWatch hosts; the long-format
+  DuckDB approach is attractive when you want the tidy table queryable as-is.
+- **Open:** for hosting on the CoastWatch ERDDAP, would you prefer (a) NetCDF
+  files we generate, (b) Parquet + a DuckDB `.db` (this approach), or (c) waiting
+  on native DuckDB/ADBC? We can produce any of these from the same pipeline.
+
+## 7 · Reproduce
+
+All on our host (`CalCOFI/workflows`, `CalCOFI/server`, `CalCOFI/erddap`):
+
+- `server/erddap/Dockerfile` — ERDDAP + `duckdb_jdbc`.
+- `libs/erddap_duckdb.R` — `.db` view builder + `EDDTableFromDatabase` XML
+  generator (reuses `libs/erddap.R`).
+- `scripts/gen_prod_datasets.R` — production dataset blocks (metadata-enriched,
+  with `actual_range`).
+- `scripts/bench_erddap.sh` — the DuckDB/Parquet/CSV matrix → `results_all.csv`.
+- `scripts/bench_parquet_layout.sh` — the partitioning/ordering experiment →
+  `layout_results.csv`.
+
+Live: <https://erddap.calcofi.io/erddap/tabledap/calcofi_ctd_thin.html> ·
+<https://erddap.calcofi.io/erddap/tabledap/calcofi_ctd_measurement.html>
