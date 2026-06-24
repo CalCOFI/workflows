@@ -82,16 +82,31 @@ stage_table_for_erddap <- function(
   data.frame(column = st$column_name, duckdb_type = st$column_type, stringsAsFactors = FALSE)
 }
 
+# XML-escape an attribute value (descriptions carry &, <, >, quotes).
+.xml_escape <- function(x) {
+  x <- gsub("&", "&amp;", x, fixed = TRUE); x <- gsub("<", "&lt;", x, fixed = TRUE)
+  x <- gsub(">", "&gt;", x, fixed = TRUE); gsub('"', "&quot;", x, fixed = TRUE)
+}
+
 #' Build one <dataVariable> block.
-.erddap_datavar_xml <- function(col, dtype, units = "", long_name = "", standard_name = "") {
+#' @param actual_range optional length-2 numeric c(min,max). EDDTableFromDatabase
+#'   does NOT auto-compute ranges, so set this to get min/max + sliders on the form.
+.erddap_datavar_xml <- function(col, dtype, units = "", long_name = "", standard_name = "",
+                                comment = "", actual_range = NULL) {
   a <- if (col %in% names(.erddap_coord_attrs)) .erddap_coord_attrs[[col]] else
     list(dataType = .duckdb_to_erddap_type(dtype),
          ioos_category = .erddap_ioos_category(col),
          long_name = if (nzchar(long_name)) long_name else gsub("_", " ", tools::toTitleCase(col)))
   if (nzchar(units) && is.null(a$units)) a$units <- units
   if (nzchar(standard_name) && is.null(a$standard_name)) a$standard_name <- standard_name
+  if (nzchar(comment)) a$comment <- comment
   atts <- a[setdiff(names(a), "dataType")]
-  att_xml <- paste0('      <att name="', names(atts), '">', unlist(atts), "</att>", collapse = "\n")
+  att_xml <- paste0('      <att name="', names(atts), '">', .xml_escape(unlist(atts)), "</att>", collapse = "\n")
+  if (!is.null(actual_range) && length(actual_range) == 2 && all(is.finite(actual_range)))
+    att_xml <- paste(att_xml, paste0(
+      '      <att name="actual_range" type="doubleList">',
+      format(actual_range[1], scientific = FALSE, trim = TRUE), ' ',
+      format(actual_range[2], scientific = FALSE, trim = TRUE), '</att>'), sep = "\n")
   glue::glue(
     '  <dataVariable>\n',
     '    <sourceName>{col}</sourceName>\n',
