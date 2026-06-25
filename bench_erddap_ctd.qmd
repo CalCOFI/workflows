@@ -36,25 +36,26 @@ read, we benchmarked a controlled grid of **four axes** at a deliberately small
   file for the whole table) — *for the file formats; DuckDB is granularity-agnostic*
 - **query** — whole-dataset (load) vs subset (filtered)
 
-**What the grid shows (the four findings):**
+**What the grid shows (three findings, the first two mapping to the two figures):**
 
-1. **Granularity is the memory lever, not format.** ERDDAP's file backends read
-   *whole matching files onto the heap*, so a single **lumped 2.1 GB** wide NetCDF
-   can't be served at a 2 GB heap (ERDDAP sheds requests, then times out), while the
-   **same data split into 96 per-cruise files loads at ~1.1 GB and serves fast**.
+1. **Granularity — not format — is the memory lever (Fig 1).** ERDDAP's file
+   backends read *whole matching files onto the heap*, so a single **lumped 2.1 GB**
+   wide NetCDF can't be served at a 2 GB heap (ERDDAP sheds requests, then times
+   out), while the **same data split into 96 per-cruise files loads at ~1.1 GB**.
    This — not the file format — is what sank the original single-file `ctd_wide`.
-2. **Lumped "loads" ≠ usable.** A smaller lumped file can bind (the 598 MB wide
-   Parquet loaded at 1.6 GB) but then *every query re-reads the whole file*: a
-   cruise dump took **74 s lumped vs 1.2 s split**. Split wins on latency even when
-   lumped fits.
-3. **DuckDB is the memory-safe baseline (~65 MB any config)** because it *streams*
-   from the underlying Parquet instead of loading files onto the heap — but its
-   *on-the-fly wide pivot view* is expensive for broad cross-cruise queries (76 s),
-   so keep the **long** view live and materialize wide only if needed.
-4. **NetCDF, the native path, is per-cruise.** CalCOFI has **~5.55 M casts**, so
-   one file *per cast* (à la Trinidad Head) is infeasible; bundling **by cruise = 96
-   files**, served as **one aggregated ERDDAP dataset** (one form), loads small and
-   serves cruise-scoped queries fastest.
+   **DuckDB sidesteps the whole axis** (~65 MB in *every* config) by *streaming*
+   from the Parquet rather than loading files onto the heap.
+2. **Split serves subsets fast; lumped re-reads everything (Fig 2).** A per-cruise
+   split file answers a cruise query in well under a second (one cruise → one file);
+   a lumped file has no such pruning, so *every query re-reads the whole file* — a
+   cruise dump took **74 s lumped vs 1.2 s split** (even when the lumped file fits in
+   memory). DuckDB's on-the-fly *wide* pivot view is the exception that proves the
+   rule: cheap to load but slow on broad cross-cruise scans (76 s), so keep the tidy
+   **long** view live.
+3. **NetCDF, the native path, is per-cruise = one dataset.** CalCOFI has **~5.55 M
+   casts**, so one file *per cast* (à la Trinidad Head) is infeasible; bundling **by
+   cruise = 96 files**, served as **one aggregated ERDDAP dataset** (one form), loads
+   small and serves cruise-scoped queries fastest.
 
 Live now at <https://erddap.calcofi.io> (`calcofi_ctd_thin`, `calcofi_ctd_measurement`,
 DuckDB-long). Everything needed to reproduce is in §8.
@@ -145,7 +146,7 @@ res |>
   kable()
 ```
 
-### Finding 1 & 3 — load memory: granularity (files) vs streaming (DuckDB)
+### Finding 1 — load memory: lumped vs split (and DuckDB streams)
 
 ```{r}
 #| label: fig-mem
