@@ -7,10 +7,10 @@
 #
 #   bash scripts/bench_parquet_layout.sh
 set -u
-DB=/ssd/erddap-bench/bin/duckdb
-SRCDB=/ssd/erddap-duckdb/duckdb/calcofi_ctd.db      # has ctd_measurement_erddap view (denormalized)
-EXP=/ssd/erddap-exp; mkdir -p "$EXP"
-TMP=/ssd/erddap-duckdb/tmp
+DB=/share/data/erddap-bench/bin/duckdb
+SRCDB=/share/data/erddap-duckdb/duckdb/calcofi_ctd.db      # has ctd_measurement_erddap view (denormalized)
+EXP=/share/data/erddap-exp; mkdir -p "$EXP"
+TMP=/share/data/erddap-duckdb/tmp
 PRAGMA="SET memory_limit='3GB'; SET threads=3; SET temp_directory='$TMP'; SET preserve_insertion_order=false;"
 RES=$EXP/layout_results.csv
 echo "layout,build_secs,size,nfiles,query_secs_median,scan_rows,result_rows" > "$RES"

@@ -54,7 +54,7 @@ build_ctd_duckdb <- function(db_path, data_dir,
 erddap_duckdb_dataset_xml <- function(
     staged, dataset_id, title, summary, source_url, table_name,
     conn_props = c(`duckdb.read_only` = "true", memory_limit = "1500MB",
-                   threads = "2", temp_directory = "/ssd/erddap-bench/tmp"),
+                   threads = "2", temp_directory = "/share/data/erddap-duckdb/tmp"),
     subset_vars = NULL, cdm_data_type = "Point", institution = "CalCOFI",
     units_lookup = list(), longname_lookup = list(), comment_lookup = list(),
     range_lookup = list(), global_atts = list(), reload_minutes = 10080, order_by = NULL) {

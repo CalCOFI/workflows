@@ -14,7 +14,7 @@ CELLS=("$@"); [ ${#CELLS[@]} -eq 0 ] && CELLS=(thin_duckdb thin_parquet thin_csv
 LOAD_TIMEOUT="${LOAD_TIMEOUT:-300}"   # seconds to wait for a dataset to bind
 MIN_AVAIL_MB="${MIN_AVAIL_MB:-1500}"  # host-memory guard (no swap on this VM)
 
-BENCH=/ssd/erddap-bench
+BENCH=/share/data/erddap-bench
 BLOCKS=/share/github/CalCOFI/workflows/data/bench_erddap
 CONTENT=$BENCH/content/datasets.xml   # owned by container uid 1000 -> write via sudo
 HEADER=$BENCH/bench/header.xml         # dir we own
@@ -70,7 +70,7 @@ for cell in "${CELLS[@]}"; do
     thin_*) TABLE=thin;        DID="calcofi_ctd_${cell}";;
     meas_*) TABLE=measurement; DID="calcofi_ctd_measurement_${cell#meas_}";;
   esac
-  case "$cell" in *_duckdb) APP=duckdb;; *_parquet) APP=parquet;; *_csv) APP=csv;; esac
+  case "$cell" in *_duckdb) APP=duckdb;; *_parquet) APP=parquet;; *_csv) APP=csv;; *_netcdf) APP=netcdf;; esac
   BLOCK="$BLOCKS/${DID}.xml"
   echo "================ CELL $cell  (DID=$DID, heap=$HEAP) ================"
   [ -f "$BLOCK" ] || { echo "  MISSING block $BLOCK, skip"; continue; }
@@ -109,13 +109,22 @@ for cell in "${CELLS[@]}"; do
     CRU='%221998-04-31JD%22'; T1='%22temperature_ave%22'; T2='%22salinity_ave_corr%22'
     read -r q1 _   < <(timeit "$BASE/${DID}.das" 5)
     h=$(heap_mb); r=$(rss_mb); [ "${h:-0}" -gt "$qph" ] && qph=$h; [ "${r:-0}" -gt "$qpr" ] && qpr=$r
-    read -r q2 q2r < <(timeit "$BASE/${DID}.csv?time,depth,measurement_value&cruise_key=$CRU&measurement_type=$T1" 3)
-    h=$(heap_mb); r=$(rss_mb); [ "${h:-0}" -gt "$qph" ] && qph=$h; [ "${r:-0}" -gt "$qpr" ] && qpr=$r
-    read -r q3 q3r < <(timeit "$BASE/${DID}.csv?time,latitude,longitude,depth,measurement_value&measurement_type=$T2&depth%3E=0&depth%3C=200" 2)
-    h=$(heap_mb); r=$(rss_mb); [ "${h:-0}" -gt "$qph" ] && qph=$h; [ "${r:-0}" -gt "$qpr" ] && qpr=$r
+    # Same query INTENT across backends; NetCDF is WIDE (sensors are columns, no
+    # measurement_type), so it selects the named variable instead of filtering type.
+    if [ "$APP" = netcdf ]; then
+      read -r q2 q2r < <(timeit "$BASE/${DID}.csv?time,depth,temperature_ave&cruise_key=$CRU" 3)
+      h=$(heap_mb); r=$(rss_mb); [ "${h:-0}" -gt "$qph" ] && qph=$h; [ "${r:-0}" -gt "$qpr" ] && qpr=$r
+      read -r q3 q3r < <(timeit "$BASE/${DID}.csv?time,latitude,longitude,depth,salinity_ave_corr&depth%3E=0&depth%3C=200" 2)
+      h=$(heap_mb); r=$(rss_mb); [ "${h:-0}" -gt "$qph" ] && qph=$h; [ "${r:-0}" -gt "$qpr" ] && qpr=$r
+    else
+      read -r q2 q2r < <(timeit "$BASE/${DID}.csv?time,depth,measurement_value&cruise_key=$CRU&measurement_type=$T1" 3)
+      h=$(heap_mb); r=$(rss_mb); [ "${h:-0}" -gt "$qph" ] && qph=$h; [ "${r:-0}" -gt "$qpr" ] && qpr=$r
+      read -r q3 q3r < <(timeit "$BASE/${DID}.csv?time,latitude,longitude,depth,measurement_value&measurement_type=$T2&depth%3E=0&depth%3C=200" 2)
+      h=$(heap_mb); r=$(rss_mb); [ "${h:-0}" -gt "$qph" ] && qph=$h; [ "${r:-0}" -gt "$qpr" ] && qpr=$r
+    fi
     read -r q4 q4r < <(timeit "$BASE/${DID}.csv?&cruise_key=$CRU" 2)
     h=$(heap_mb); r=$(rss_mb); [ "${h:-0}" -gt "$qph" ] && qph=$h; [ "${r:-0}" -gt "$qpr" ] && qpr=$r
-    echo "  q1_das=${q1}ms q2_cruise=${q2}ms(${q2r}B) q3_type200=${q3}ms(${q3r}B) q4_dump=${q4}ms(${q4r}B) peak_heap=${qph}MB peak_rss=${qpr}MB"
+    echo "  q1_das=${q1}ms q2_cruise=${q2}ms(${q2r}B) q3_var200=${q3}ms(${q3r}B) q4_dump=${q4}ms(${q4r}B) peak_heap=${qph}MB peak_rss=${qpr}MB"
   fi
   echo "$cell,$TABLE,$APP,$HEAP,$status,$load_secs,$lph,$lpr,$q1,$q2,$q3,$q4,$q2r,$q3r,$q4r,$qph,$qpr" >> "$RES"
 done
