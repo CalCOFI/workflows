@@ -1,11 +1,9 @@
 #!/usr/bin/env Rscript
-# Generate the ERDDAP <dataset> blocks for the CTD serving-backend benchmark:
-# {ctd_thin, ctd_measurement} x {DuckDB (EDDTableFromDatabase), Parquet
-# (EDDTableFromParquetFiles), CSV (EDDTableFromAsciiFiles)}. Reuses the shared
-# dataVariable/type/units machinery in libs/erddap.R so the bench XML matches the
-# production pattern. Writes one block per (table x approach) to
-# data/bench_erddap/<datasetID>.xml; the harness splices them into the bench
-# datasets.xml one at a time. Run inside the rstudio container:
+# Generate the ERDDAP <dataset> blocks for the CTD serving-backend benchmark, across
+# four axes: format (NetCDF/Parquet/CSV/DuckDB) x schema (wide/long) x granularity
+# (split per-cruise / lumped single-file) x table (thin/measurement). datasetID == the
+# cell name == the block filename, so the harness reads data/bench_erddap/<cell>.xml.
+# Reuses the shared dataVariable/type/units helpers in libs/erddap.R. Run in rstudio:
 #   docker exec rstudio Rscript /share/github/CalCOFI/workflows/scripts/gen_bench_datasets.R
 suppressMessages({ library(glue); library(DBI); library(readr) })
 WF <- "/share/github/CalCOFI/workflows"
@@ -13,55 +11,9 @@ source(file.path(WF, "libs/erddap.R"))
 source(file.path(WF, "libs/erddap_duckdb.R"))
 source(file.path(WF, "libs/erddap_netcdf.R"))
 out <- file.path(WF, "data/bench_erddap"); dir.create(out, recursive = TRUE, showWarnings = FALSE)
-
-# --- denormalized view columns (same for all 3 approaches of a given table) ---
-staged_thin <- data.frame(
-  column = c("ctd_cast_uuid","time","latitude","longitude","depth","cruise_key",
-             "site_key","line","sta","measurement_type","measurement_value",
-             "measurement_qual","cast_dir","retained_reason","ctd_thin_uuid"),
-  duckdb_type = c("VARCHAR","DOUBLE","DOUBLE","DOUBLE","DOUBLE","VARCHAR","VARCHAR",
-                  "VARCHAR","VARCHAR","VARCHAR","DOUBLE","VARCHAR","VARCHAR","VARCHAR","VARCHAR"),
-  stringsAsFactors = FALSE)
-staged_meas <- data.frame(
-  column = c("ctd_cast_uuid","time","latitude","longitude","depth","cruise_key",
-             "site_key","line","sta","measurement_type","measurement_value",
-             "measurement_qual","ctd_measurement_uuid"),
-  duckdb_type = c("VARCHAR","DOUBLE","DOUBLE","DOUBLE","DOUBLE","VARCHAR","VARCHAR",
-                  "VARCHAR","VARCHAR","VARCHAR","DOUBLE","VARCHAR","VARCHAR"),
-  stringsAsFactors = FALSE)
-
-SUBSET <- c("cruise_key","measurement_type")
-CONN   <- c(`duckdb.read_only`="true", memory_limit="1024MB", threads="2",
-            temp_directory="/share/data/erddap-duckdb/tmp")
-DBURL  <- "jdbc:duckdb:/share/data/erddap-duckdb/duckdb/calcofi_ctd.db"
 wr <- function(id, xml) { writeLines(xml, file.path(out, paste0(id, ".xml"))); cat("wrote", id, "\n") }
 
-# ---- ctd_thin ----
-wr("calcofi_ctd_thin_duckdb", erddap_duckdb_dataset_xml(
-  staged_thin, "calcofi_ctd_thin_duckdb", "CalCOFI CTD thinned (DuckDB)",
-  "Adaptively-thinned CTD profiles, long format, served via DuckDB views over partitioned Parquet.",
-  source_url = DBURL, table_name = "ctd_thin_erddap", conn_props = CONN, subset_vars = SUBSET))
-wr("calcofi_ctd_thin_parquet", erddap_dataset_xml(
-  staged_thin, "calcofi_ctd_thin_parquet", "CalCOFI CTD thinned (Parquet)",
-  "Adaptively-thinned CTD profiles, long format, served from a denormalized Parquet file.",
-  file_dir = "/share/data/erddap-bench/staged/A_thin/ctd_thin/", subset_vars = SUBSET))
-wr("calcofi_ctd_thin_csv", erddap_csv_dataset_xml(
-  staged_thin, "calcofi_ctd_thin_csv", "CalCOFI CTD thinned (CSV)",
-  "Adaptively-thinned CTD profiles, long format, served from a denormalized CSV file.",
-  file_dir = "/share/data/erddap-bench/staged/C_thin/ctd_thin/", subset_vars = SUBSET))
-
-# ---- ctd_measurement ----
-wr("calcofi_ctd_measurement_duckdb", erddap_duckdb_dataset_xml(
-  staged_meas, "calcofi_ctd_measurement_duckdb", "CalCOFI CTD measurements (DuckDB)",
-  "Full long-format CTD measurements (~216M rows) served via DuckDB views over partitioned Parquet.",
-  source_url = DBURL, table_name = "ctd_measurement_erddap", conn_props = CONN, subset_vars = SUBSET))
-wr("calcofi_ctd_measurement_parquet", erddap_dataset_xml(
-  staged_meas, "calcofi_ctd_measurement_parquet", "CalCOFI CTD measurements (Parquet)",
-  "Full long-format CTD measurements (~216M rows) served from denormalized Parquet partitioned by cruise_key.",
-  file_dir = "/share/data/erddap-bench/staged/A_measurement/", subset_vars = SUBSET))
-
-# ---- NetCDF (EDDTableFromNcCFFiles): per-cruise CF profile files, WIDE format ----
-# canonical measurement_types -> wide variables (canonical∩present, from gen_ctd_netcdf.R).
+# canonical measurement_types -> wide variables (canonical∩present per table)
 mt <- read_csv(file.path(WF, "metadata/measurement_type.csv"), show_col_types = FALSE)
 units_lk    <- setNames(as.list(mt$units),       mt$measurement_type)
 longname_lk <- setNames(as.list(mt$description),  mt$measurement_type)
@@ -70,16 +22,56 @@ vars_thin <- c("temperature_ave","salinity_ave_corr","oxygen_ml_l_ave_sta_corr",
                "dynamic_height","specific_volume_anomaly","par","spar","beam_attenuation",
                "transmissometer","ph","pressure")
 vars_meas <- setdiff(vars_thin, "oxygen_umol_kg_ave_sta_corr")  # 14 present in ctd_measurement
-NCBASE <- "/share/data/erddap-duckdb/netcdf"
-wr("calcofi_ctd_thin_netcdf", erddap_nccf_dataset_xml(
-  "calcofi_ctd_thin_netcdf", "CalCOFI CTD thinned (NetCDF)",
-  "Adaptively-thinned CTD profiles as per-cruise CF profile NetCDF (wide), served natively by EDDTableFromNcCFFiles.",
-  file_dir = file.path(NCBASE, "thin/"), vars = vars_thin,
+vars_of   <- list(thin = vars_thin, measurement = vars_meas)
+
+# wide flat-table column spec (for Parquet/CSV/DuckDB wide blocks)
+wide_staged <- function(vars) data.frame(
+  column = c("cruise_key","ctd_cast_uuid","time","latitude","longitude","depth","line","sta", vars),
+  duckdb_type = c("VARCHAR","VARCHAR","TIMESTAMP","DOUBLE","DOUBLE","DOUBLE","VARCHAR","VARCHAR",
+                  rep("DOUBLE", length(vars))), stringsAsFactors = FALSE)
+WSUB   <- c("cruise_key","line","sta")
+DATA   <- "/share/data/erddap-duckdb"
+CONNW  <- c(`duckdb.read_only`="true", memory_limit="1024MB", threads="2",
+            temp_directory = file.path(DATA, "tmp"))
+WIDEDB <- glue("jdbc:duckdb:{DATA}/duckdb/calcofi_ctd_wide.db")
+
+# ---------- WIDE (canonical sensors as columns) ----------
+for (tb in c("thin","measurement")) {
+  vars <- vars_of[[tb]]; st <- wide_staged(vars); pre <- substr(tb,1,4)
+  tlab <- if (tb=="thin") "thin" else "full"
+  ttl <- function(f,g) glue("CalCOFI CTD {tlab} wide {f} {g}")
+  # NetCDF (EDDTableFromNcCFFiles) — split per-cruise vs lumped single file
+  wr(glue("{pre}_netcdf_wide_split"), erddap_nccf_dataset_xml(
+    glue("{pre}_netcdf_wide_split"), ttl("NetCDF","split"), "Per-cruise CF profile NetCDF (split).",
+    file_dir = glue("{DATA}/netcdf/{tb}/"), vars = vars, units_lookup = units_lk, longname_lookup = longname_lk))
+  wr(glue("{pre}_netcdf_wide_lumped"), erddap_nccf_dataset_xml(
+    glue("{pre}_netcdf_wide_lumped"), ttl("NetCDF","lumped"), "Single-file CF profile NetCDF (lumped).",
+    file_dir = glue("{DATA}/serving/wide_lumped_netcdf/ctd_{tb}/"), vars = vars,
+    units_lookup = units_lk, longname_lookup = longname_lk))
+  # Parquet (EDDTableFromParquetFiles) — split vs lumped
+  wr(glue("{pre}_parquet_wide_split"), erddap_dataset_xml(
+    st, glue("{pre}_parquet_wide_split"), ttl("Parquet","split"), "Per-cruise wide Parquet (split).",
+    file_dir = glue("{DATA}/parquet_wide/ctd_{tb}/"), subset_vars = WSUB,
+    units_lookup = units_lk, longname_lookup = longname_lk))
+  wr(glue("{pre}_parquet_wide_lumped"), erddap_dataset_xml(
+    st, glue("{pre}_parquet_wide_lumped"), ttl("Parquet","lumped"), "Single-file wide Parquet (lumped).",
+    file_dir = glue("{DATA}/serving/wide_lumped_parquet/ctd_{tb}/"), subset_vars = WSUB,
+    units_lookup = units_lk, longname_lookup = longname_lk))
+  # DuckDB wide pivot view (EDDTableFromDatabase) — granularity-agnostic
+  wr(glue("{pre}_duckdb_wide"), erddap_duckdb_dataset_xml(
+    st, glue("{pre}_duckdb_wide"), ttl("DuckDB","view"), "Wide DuckDB pivot view over partitioned Parquet.",
+    source_url = WIDEDB, table_name = glue("ctd_{tb}_wide_erddap"), conn_props = CONNW,
+    subset_vars = WSUB, units_lookup = units_lk, longname_lookup = longname_lk))
+}
+# CSV (EDDTableFromAsciiFiles), thin only (measurement CSV is tens of GB)
+st <- wide_staged(vars_thin)
+wr("thin_csv_wide_split", erddap_csv_dataset_xml(
+  st, "thin_csv_wide_split", "CalCOFI CTD thin wide CSV split", "Per-cruise wide CSV (split).",
+  file_dir = glue("{DATA}/serving/wide_split_csv/thin/"), subset_vars = WSUB,
   units_lookup = units_lk, longname_lookup = longname_lk))
-wr("calcofi_ctd_measurement_netcdf", erddap_nccf_dataset_xml(
-  "calcofi_ctd_measurement_netcdf", "CalCOFI CTD measurements (NetCDF)",
-  "Full-resolution CTD profiles as per-cruise CF profile NetCDF (wide), served natively by EDDTableFromNcCFFiles.",
-  file_dir = file.path(NCBASE, "measurement/"), vars = vars_meas,
+wr("thin_csv_wide_lumped", erddap_csv_dataset_xml(
+  st, "thin_csv_wide_lumped", "CalCOFI CTD thin wide CSV lumped", "Single-file wide CSV (lumped).",
+  file_dir = glue("{DATA}/serving/wide_lumped_csv/thin/"), subset_vars = WSUB,
   units_lookup = units_lk, longname_lookup = longname_lk))
 
 cat("done ->", out, "\n")

@@ -23,7 +23,7 @@ BASE=http://localhost:8091/erddap/tabledap
 TS=$(date +%Y%m%d_%H%M%S)
 RES=$BENCH/bench/results_${TS}.csv
 mkdir -p "$BENCH/bench"
-echo "cell,table,approach,heap,load_status,load_secs,load_peak_heap_mb,load_peak_rss_mb,q1_das_ms,q2_cruise_ms,q3_type200_ms,q4_dump_ms,q2_rows,q3_rows,q4_rows,query_peak_heap_mb,query_peak_rss_mb" > "$RES"
+echo "cell,table,format,schema,granularity,heap,load_status,load_secs,load_peak_heap_mb,load_peak_rss_mb,q1_das_ms,q2_cruise_ms,q3_var200_ms,q4_dump_ms,q2_bytes,q3_bytes,q4_bytes,query_peak_heap_mb,query_peak_rss_mb" > "$RES"
 echo "results -> $RES (heap=$HEAP, cells: ${CELLS[*]})"
 
 # JVM heap used (MB) via jcmd; 0 if unavailable (e.g. mid-OOM)
@@ -66,13 +66,14 @@ cat > "$HEADER" <<'HDR'
 HDR
 
 for cell in "${CELLS[@]}"; do
-  case "$cell" in
-    thin_*) TABLE=thin;        DID="calcofi_ctd_${cell}";;
-    meas_*) TABLE=measurement; DID="calcofi_ctd_measurement_${cell#meas_}";;
-  esac
-  case "$cell" in *_duckdb) APP=duckdb;; *_parquet) APP=parquet;; *_csv) APP=csv;; *_netcdf) APP=netcdf;; esac
-  BLOCK="$BLOCKS/${DID}.xml"
-  echo "================ CELL $cell  (DID=$DID, heap=$HEAP) ================"
+  # cell name == datasetID == block file, encoding all four axes, e.g.
+  # meas_parquet_wide_lumped / thin_duckdb_wide / thin_netcdf_wide_split
+  DID="$cell"; BLOCK="$BLOCKS/${cell}.xml"
+  case "$cell" in *thin*) TABLE=thin;; *meas*) TABLE=measurement;; *) TABLE=?;; esac
+  case "$cell" in *netcdf*) APP=netcdf;; *parquet*) APP=parquet;; *csv*) APP=csv;; *duckdb*) APP=duckdb;; esac
+  case "$cell" in *wide*) SCHEMA=wide;; *) SCHEMA=long;; esac
+  case "$cell" in *lumped*) GRAN=lumped;; *split*) GRAN=split;; *) GRAN=na;; esac
+  echo "================ CELL $cell  (table=$TABLE $APP/$SCHEMA/$GRAN, heap=$HEAP) ================"
   [ -f "$BLOCK" ] || { echo "  MISSING block $BLOCK, skip"; continue; }
 
   avail=$(free -m | awk '/Mem:/{print $7}')
@@ -111,7 +112,7 @@ for cell in "${CELLS[@]}"; do
     h=$(heap_mb); r=$(rss_mb); [ "${h:-0}" -gt "$qph" ] && qph=$h; [ "${r:-0}" -gt "$qpr" ] && qpr=$r
     # Same query INTENT across backends; NetCDF is WIDE (sensors are columns, no
     # measurement_type), so it selects the named variable instead of filtering type.
-    if [ "$APP" = netcdf ]; then
+    if [ "$SCHEMA" = wide ]; then
       read -r q2 q2r < <(timeit "$BASE/${DID}.csv?time,depth,temperature_ave&cruise_key=$CRU" 3)
       h=$(heap_mb); r=$(rss_mb); [ "${h:-0}" -gt "$qph" ] && qph=$h; [ "${r:-0}" -gt "$qpr" ] && qpr=$r
       read -r q3 q3r < <(timeit "$BASE/${DID}.csv?time,latitude,longitude,depth,salinity_ave_corr&depth%3E=0&depth%3C=200" 2)
@@ -126,6 +127,6 @@ for cell in "${CELLS[@]}"; do
     h=$(heap_mb); r=$(rss_mb); [ "${h:-0}" -gt "$qph" ] && qph=$h; [ "${r:-0}" -gt "$qpr" ] && qpr=$r
     echo "  q1_das=${q1}ms q2_cruise=${q2}ms(${q2r}B) q3_var200=${q3}ms(${q3r}B) q4_dump=${q4}ms(${q4r}B) peak_heap=${qph}MB peak_rss=${qpr}MB"
   fi
-  echo "$cell,$TABLE,$APP,$HEAP,$status,$load_secs,$lph,$lpr,$q1,$q2,$q3,$q4,$q2r,$q3r,$q4r,$qph,$qpr" >> "$RES"
+  echo "$cell,$TABLE,$APP,$SCHEMA,$GRAN,$HEAP,$status,$load_secs,$lph,$lpr,$q1,$q2,$q3,$q4,$q2r,$q3r,$q4r,$qph,$qpr" >> "$RES"
 done
-echo "=== DONE -> $RES ==="; column -s, -t < "$RES"
+echo "=== DONE -> $RES ==="; cat "$RES"
