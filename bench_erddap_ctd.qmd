@@ -1,6 +1,6 @@
 ---
-title: "Serving large CalCOFI CTD profiles on ERDDAP: NetCDF vs DuckDB vs Parquet vs CSV"
-subtitle: "Memory, latency, and partitioning/ordering — with notes for the CoastWatch ERDDAP"
+title: "Serving large CalCOFI CTD profiles on ERDDAP: format × schema × granularity"
+subtitle: "NetCDF vs DuckDB vs Parquet vs CSV — memory, latency, and layout, for the CoastWatch ERDDAP"
 author: "CalCOFI (B. Best) — for Lynn DeWitt & the ERDDAP community"
 date: today
 format:
@@ -23,75 +23,69 @@ editor_options:
 
 CalCOFI's CTD profile data is large in *long* (tidy) format — one row per
 cast × depth × `measurement_type` (~53 sensor types): `ctd_measurement` is
-**~216 M rows / ~16 GB** of Parquet (partitioned by `cruise_key`), plus an
-adaptively-thinned headline table `ctd_thin` (~5.5 M rows). We wanted to serve
-these on ERDDAP — testing the **native NetCDF path** as well as backends that
-avoid converting away from Parquet — without the memory blow-up that
-`EDDTableFromParquetFiles` hits on large files.
+**~216 M rows / ~16 GB** of Parquet, plus an adaptively-thinned headline table
+`ctd_thin` (~5.5 M rows). We want to serve it on ERDDAP without the memory
+blow-up that disabled an earlier single-file attempt. To get an *apples-to-apples*
+read, we benchmarked a controlled grid of **four axes** at a deliberately small
+**2 GB JVM heap**:
 
-We benchmarked four serving backends at a deliberately small **2 GB JVM heap**:
+- **format** — NetCDF (`EDDTableFromNcCFFiles`), DuckDB (`EDDTableFromDatabase`),
+  Parquet (`EDDTableFromParquetFiles`), CSV (`EDDTableFromAsciiFiles`)
+- **schema** — **wide** (canonical sensors as columns) vs **long** (tidy)
+- **granularity** — **split** (one file per cruise, 96 files) vs **lumped** (one
+  file for the whole table) — *for the file formats; DuckDB is granularity-agnostic*
+- **query** — whole-dataset (load) vs subset (filtered)
 
-| backend | EDDType | format | loads `ctd_measurement` (216 M)? |
-|---|---|---|:--:|
-| **NetCDF** (per-cruise CF profiles) | `EDDTableFromNcCFFiles` | wide | ✅ (heap ~1.3 GB) |
-| **DuckDB** (JDBC views over Parquet) | `EDDTableFromDatabase` | long | ✅ (heap ~60 MB) |
-| **Parquet** (one denormalized file) | `EDDTableFromParquetFiles` | long | ❌ OOM / timeout |
-| **CSV** (uncompressed) | `EDDTableFromAsciiFiles` | long | ❌ (disk-prohibitive) |
+**What the grid shows (the four findings):**
 
-**Headline findings:**
+1. **Granularity is the memory lever, not format.** ERDDAP's file backends read
+   *whole matching files onto the heap*, so a single **lumped 2.1 GB** wide NetCDF
+   can't be served at a 2 GB heap (ERDDAP sheds requests, then times out), while the
+   **same data split into 96 per-cruise files loads at ~1.1 GB and serves fast**.
+   This — not the file format — is what sank the original single-file `ctd_wide`.
+2. **Lumped "loads" ≠ usable.** A smaller lumped file can bind (the 598 MB wide
+   Parquet loaded at 1.6 GB) but then *every query re-reads the whole file*: a
+   cruise dump took **74 s lumped vs 1.2 s split**. Split wins on latency even when
+   lumped fits.
+3. **DuckDB is the memory-safe baseline (~65 MB any config)** because it *streams*
+   from the underlying Parquet instead of loading files onto the heap — but its
+   *on-the-fly wide pivot view* is expensive for broad cross-cruise queries (76 s),
+   so keep the **long** view live and materialize wide only if needed.
+4. **NetCDF, the native path, is per-cruise.** CalCOFI has **~5.55 M casts**, so
+   one file *per cast* (à la Trinidad Head) is infeasible; bundling **by cruise = 96
+   files**, served as **one aggregated ERDDAP dataset** (one form), loads small and
+   serves cruise-scoped queries fastest.
 
-1. **NetCDF is the native ERDDAP path and it works well** — *if* the data is
-   re-shaped to per-cruise CF profile files. CalCOFI has **~5.55 M casts**, so
-   "one NetCDF *per cast*" (à la Trinidad Head) is **5.55 M files** (infeasible);
-   bundling **by cruise gives just 96 files**. ERDDAP reads each file's index and
-   opens only matching files, so the 216 M-row-equivalent table loads in a ~1.3 GB
-   heap and **cruise-scoped queries are the fastest of any backend** (it opens one
-   file). ERDDAP also auto-computes `actual_range` from the files, so the
-   min/max + sliders work with no extra config.
-2. **DuckDB-over-Parquet keeps the tidy long table queryable as-is** with a tiny
-   footprint: a 274 KB `.db` of `CREATE VIEW … read_parquet(…)` views serves the
-   **full 216 M-row table within a ~60 MB load heap** and streams filtered queries.
-   It is live now at <https://erddap.calcofi.io> (`calcofi_ctd_thin`,
-   `calcofi_ctd_measurement`).
-3. **Plain Parquet is the memory trap.** `EDDTableFromParquetFiles` reads each
-   matching file *fully into the JVM heap* before filtering: a single 935 MB
-   `ctd_wide.parquet` OOM'd a 4 GB heap, and the 216 M-row table won't load at 2 GB.
-4. On the **partitioning** question (Lynn): for the typical *"one variable in a
-   lat/lon/depth box"* query, partitioning the long table by `measurement_type`
-   and ordering rows spatially within gives ~12× — quantified below — though every
-   layout is already sub-second with DuckDB on SSD.
-
-This note documents the benchmark, the layout experiment, and **everything needed
-to reproduce it** (§8) so others weighing Parquet/NetCDF-on-ERDDAP (cf. Roy
-Mendelssohn's posts, ERDDAP
-[#447](https://github.com/ERDDAP/erddap/discussions/447) /
-[#448](https://github.com/ERDDAP/erddap/issues/448)) have concrete numbers.
+Live now at <https://erddap.calcofi.io> (`calcofi_ctd_thin`, `calcofi_ctd_measurement`,
+DuckDB-long). Everything needed to reproduce is in §8.
 
 ```{r}
 #| label: setup
 #| message: false
 #| warning: false
-library(dplyr); library(readr); library(tidyr); library(knitr); library(stringr); library(ggplot2)
+library(dplyr); library(readr); library(tidyr); library(knitr); library(stringr); library(ggplot2); library(forcats)
 res <- read_csv("data/bench_erddap/results_all.csv", show_col_types = FALSE) |>
-  mutate(approach = factor(approach, levels = c("netcdf","duckdb","parquet","csv")),
-         table    = factor(table, levels = c("thin","measurement"),
-                           labels = c("ctd_thin (5.5M rows)","ctd_measurement (216M rows)")),
-         loaded   = load_status == "loaded")
+  mutate(format = factor(format, levels = c("duckdb","netcdf","parquet","csv")),
+         schema = factor(schema, levels = c("wide","long")),
+         granularity = factor(granularity, levels = c("na","split","lumped"),
+                              labels = c("view (DB)","split (per-cruise)","lumped (1 file)")),
+         table = factor(table, levels = c("thin","measurement"),
+                        labels = c("ctd_thin (5.5M rows)","ctd_measurement (216M rows)")),
+         loaded = load_status == "loaded")
 lay_path <- "data/bench_erddap/layout_results.csv"
 lay <- if (file.exists(lay_path)) read_csv(lay_path, show_col_types = FALSE) else NULL
-hsz <- function(b) ifelse(is.na(b) | b <= 0, "—", paste0(formatC(b/1024, format="f", digits=0, big.mark=","), " KB"))
+PAL <- c("split (per-cruise)" = "#1b9e77", "lumped (1 file)" = "#d95f02", "view (DB)" = "#7570b3")
 ```
 
 ## 1 · Background
 
 CalCOFI has occupied the California Current quarterly since 1949. The CTD cast
 files (<https://calcofi.org/data/oceanographic-data/ctd-cast-files/>) are ~1 GB
-as a single wide Parquet (one column per sensor). We ingest them into a tidy
-**long** schema (`ingest_calcofi_ctd-cast`,
+as a single wide Parquet. We ingest them into a tidy **long** schema
+(`ingest_calcofi_ctd-cast`,
 <https://calcofi.io/workflows/ingest_calcofi_ctd-cast.html>): each sensor reading
-on its own row keyed by `measurement_type`, which is convenient for analysis and
-for adding new sensors, but multiplies row count. Tables (release v2026.06.08 /
-supplemental v2026.04.08):
+on its own row keyed by `measurement_type`, convenient for analysis but
+multiplying row count. Tables (release v2026.06.08 / supplemental v2026.04.08):
 
 | table | rows | casts | Parquet | note |
 |---|--:|--:|--:|---|
@@ -99,184 +93,147 @@ supplemental v2026.04.08):
 | `ctd_thin` | 5.55 M | 0.42 M | 155 MB | adaptively-thinned headline table |
 | `ctd_measurement` | 216 M | 5.36 M | ~16 GB | full long table (96 `cruise_key` partitions) |
 
-The long tables are keyed by `ctd_cast_uuid` and **do not carry coordinates** —
-`time`/`latitude`/`longitude` live in `ctd_cast`. Any ERDDAP representation must
-re-join them. The **5.55 M casts** number is what makes per-cast NetCDF
-infeasible and motivates the per-cruise bundling in §4.
+The long tables are keyed by `ctd_cast_uuid` and carry no coordinates —
+`time`/`latitude`/`longitude` live in `ctd_cast`, so every representation re-joins
+them. The **5.55 M casts** figure is what makes per-cast NetCDF infeasible (§3).
 
-## 2 · The memory problem with `EDDTableFromParquetFiles`
+## 2 · How ERDDAP serves files — and the NetCDF "per-cruise = one dataset" point
 
-`EDDTableFromParquetFiles` (ERDDAP ≥ 2.27) reads each *matching file* fully into
-the JVM heap, then filters. That is fine for small files but:
+A persistent point of confusion: **per-cruise files do *not* mean a dataset (or
+form) per cruise.** Every ERDDAP `…FromFiles` type points at a *directory*
+(`fileDir` + `fileNameRegex`) and aggregates all matching files into **one**
+`datasetID` — one Data Access Form, one `.das`, with sliders/min-max **rolled up
+across the whole collection**. The per-cruise split is purely *storage*: it's how
+we go from "5.55 M per-cast files ERDDAP can't index" to "96 files it can," while
+the user still sees a single dataset. ERDDAP prunes by `cruise_key` (a
+`subsetVariable`) and by each file's time/lat/lon min-max, so a cruise-scoped query
+opens one file and a broad spatial query opens many.
 
-- The single **935 MB** `ctd_wide.parquet` OOM'd our 4 GB heap and dropped the
-  dataset from every `LoadDatasets` run.
-- Even partitioned and at a deliberately small 2 GB heap, the 216 M-row table
-  **could not load** (heap peaked ~1.98 GB, then timed out building the file
-  table / reading files).
-- Every *query* re-reads the whole matching file into heap, so latency scales
-  with file size, not result size.
+The flip side is the memory model: for **file** backends ERDDAP reads each
+*matching file fully onto the JVM heap* before filtering. That is the entire
+origin of the memory problem — a single **935 MB** `ctd_wide.parquet` OOM'd a 4 GB
+heap and dropped the dataset from every `LoadDatasets` run. The benchmark below
+isolates that as the **granularity** axis. **DuckDB** is the exception: via JDBC it
+*streams* a filtered `ResultSet` from the underlying Parquet (predicate pushdown +
+partition pruning + disk spill), so the whole table is never on the heap.
 
-## 3 · DuckDB-over-Parquet (`EDDTableFromDatabase`)
-
-ERDDAP has no native DuckDB type yet (`EDDTableFromDuckDb`,
-[#448](https://github.com/ERDDAP/erddap/issues/448), is a proposal; the ADBC/S3
-idea is [#447](https://github.com/ERDDAP/erddap/discussions/447)). But ERDDAP
-*already* speaks JDBC via `EDDTableFromDatabase`, and DuckDB ships a JDBC driver.
-So we:
-
-1. Build a **tiny `.db`** (274 KB — view definitions only) of
-   `CREATE VIEW ctd_*_erddap AS SELECT … FROM read_parquet('…/ctd_*/**/*.parquet')
-   t JOIN read_parquet('…/ctd_cast.parquet') c USING (ctd_cast_uuid)` — the join
-   denormalizes `time`/`lat`/`lon` *logically* (no physical 16 GB rewrite).
-2. Add the **DuckDB JDBC jar** to ERDDAP's `WEB-INF/lib` via a 4-line custom
-   image (`FROM erddap/erddap:latest`). Pin the jar to the DuckDB engine that
-   built the `.db` (we use 1.5.2).
-3. Point `EDDTableFromDatabase` at `jdbc:duckdb:/…/calcofi_ctd.db` with
-   connection properties `duckdb.read_only=true, memory_limit, threads,
-   temp_directory`, and `sourceCanOrderBy/sourceCanDoDistinct = yes`.
-
-DuckDB then does predicate pushdown + Parquet partition pruning + row-group
-skipping, and streams the JDBC `ResultSet` back to ERDDAP — so the whole table is
-never on the heap.
-
-::: {.callout-important title="Gotcha: serve time as a TIMESTAMP, not epoch double"}
-ERDDAP reads any `time` variable (units `seconds since 1970-…`) via
-`ResultSet.getTimestamp()`. If the DuckDB view exposes `time` as an epoch
-**DOUBLE**, the DuckDB JDBC driver throws `NullPointerException: … varlen_data is
-null` on *every* query that selects time. Expose `time` as a real **TIMESTAMP**
-in the view (ERDDAP converts it to epoch seconds) and run the container in UTC.
-Also: `EDDTableFromDatabase` does **not** auto-compute variable ranges, so set
-`actual_range` (+ `geospatial_*`/`time_coverage_*`) on `time`/`lat`/`lon`/`depth`
-or the form shows no min/max or sliders. (NetCDF, §4, computes these for you.)
+::: {.callout-important title="Two DuckDB gotchas"}
+Serve `time` as a real **TIMESTAMP** in the view (not epoch double) or the DuckDB
+JDBC driver NPEs on every query that selects time. And `EDDTableFromDatabase` does
+**not** auto-compute variable ranges — set `actual_range` (+ `geospatial_*`) or the
+form shows no sliders. (NetCDF computes these from the files automatically.)
 :::
 
-## 4 · NetCDF (`EDDTableFromNcCFFiles`) — the native ERDDAP path
+## 3 · The benchmark grid
 
-This is Lynn's first option ("NetCDF per cast, à la your Trinidad Head setup") and
-ERDDAP's bread-and-butter format. The catch is **scale**: CalCOFI has **~5.55 M
-casts**, so one file per cast is 5.55 M files — far past what ERDDAP's file table
-can manage. We bundle **by cruise** instead: **96 files**, one per `cruise_key`.
-
-Each file is a **CF Discrete-Sampling-Geometry "profile"** dataset (contiguous
-ragged array): `profile = cast`, `obs = depth level`, canonical sensors pivoted
-**wide** to one variable each. We generate them by pivoting each cruise's long
-rows in DuckDB and writing with R `ncdf4` (`libs/erddap_netcdf.R`,
-`scripts/gen_ctd_netcdf.R`), one cruise at a time so memory stays bounded.
-
-Two things fall out nicely:
-
-- **ERDDAP auto-computes `actual_range`** for time/lat/lon/depth from the files —
-  so the min/max + sliders work with **no** manual ranges (unlike DuckDB above).
-- **`accessibleViaFiles=true`** lets users download the source `.nc` directly.
-
-Trade-offs to weigh: the wide files carry **canonical sensors only** (non-canonical
-variants are dropped); they **duplicate** the data (~2.3 GB of NetCDF for the full
-table); and they must be **regenerated** when the data updates (vs the DuckDB view,
-which always reflects the live Parquet). CalCOFI's casts are also fine-grained
-(≈1 depth per `ctd_cast_uuid`), so these are effectively point-like profiles.
-
-## 5 · Benchmark: NetCDF vs DuckDB vs Parquet vs CSV
-
-Isolated ERDDAP (custom image) on our host, **2 GB heap** (deliberately small to
-expose the differences). Queries are the **same intent** across backends — but
-NetCDF is *wide* (sensors are columns), so it selects a named variable where the
-long backends filter `measurement_type`: **q1** `.das`; **q2** one cruise +
-temperature; **q3** one variable (salinity) over depth 0–200 m, all cruises;
-**q4** whole-cruise dump.
+Isolated ERDDAP (custom image with the DuckDB JDBC jar) on our host, **2 GB heap**.
+We serve the **same canonical data** every way and run the **same-intent** queries:
+**q1** `.das`; **q2** one cruise + temperature (subset); **q3** one variable
+(salinity) over depth 0–200 m across all cruises (subset, cross-file); **q4**
+whole-cruise dump. In *wide* schema a query selects a named column; in *long* it
+filters `measurement_type` — chosen so q2/q3 return the **same rows** either way.
 
 ```{r}
 #| label: matrix
 res |>
-  transmute(table, approach,
-            load = load_status, `load s` = load_secs,
+  arrange(table, schema, format, granularity) |>
+  transmute(table, format, schema, granularity, load = load_status,
             `load heap MB` = load_peak_heap_mb,
             `q2 cruise ms` = na_if(q2_cruise_ms, -1),
-            `q3 var+depth ms` = na_if(q3_type200_ms, -1),
-            `q4 dump ms` = na_if(q4_dump_ms, -1),
-            `q3 size` = hsz(q3_rows)) |>
-  arrange(table, approach) |> kable()
+            `q3 var+depth ms` = na_if(q3_var200_ms, -1),
+            `q4 dump ms` = na_if(q4_dump_ms, -1)) |>
+  kable()
 ```
 
-### Load memory — the headline
+### Finding 1 & 3 — load memory: granularity (files) vs streaming (DuckDB)
 
 ```{r}
-#| label: mem-plot
-#| fig-width: 8
-#| fig-height: 4.2
-#| fig-cap: "Peak JVM heap during dataset load at a 2 GB cap. NetCDF and DuckDB load the full 216 M-row table; Parquet OOMs and CSV times out (bars labeled ✗). DuckDB is flattest (~60 MB); NetCDF reads 95 file headers (~1.3 GB) but still fits."
+#| label: fig-mem
+#| fig-width: 9
+#| fig-height: 5
+#| fig-cap: "Peak JVM heap during dataset load at a 2 GB cap, by format and granularity. DuckDB (purple) stays ~65 MB whatever the schema/size because it streams. The file formats rise with what ERDDAP must read; the lumped 2.1 GB measurement NetCDF blows past the cap and times out (labeled). Bars are labeled with peak MB, or the failure mode."
 res |>
-  mutate(lab = ifelse(loaded, paste0(load_peak_heap_mb, " MB"),
-                       paste0("✗ ", toupper(load_status)))) |>
-  ggplot(aes(approach, load_peak_heap_mb, fill = loaded)) +
-  geom_col(width = 0.7) +
-  geom_text(aes(label = lab), vjust = -0.3, size = 3.1) +
-  geom_hline(yintercept = 2048, linetype = "dashed", colour = "grey50") +
-  annotate("text", x = 0.7, y = 2048, label = "2 GB heap cap", vjust = -0.4,
-           hjust = 0, size = 2.8, colour = "grey40") +
-  facet_wrap(~table) +
-  scale_fill_manual(values = c(`TRUE` = "#2c7fb8", `FALSE` = "#d95f0e"),
-                    labels = c(`TRUE` = "loaded", `FALSE` = "failed"), name = NULL) +
+  mutate(lab = ifelse(loaded, paste0(load_peak_heap_mb), toupper(load_status))) |>
+  ggplot(aes(format, load_peak_heap_mb, fill = granularity)) +
+  geom_col(position = position_dodge2(preserve = "single"), width = 0.85) +
+  geom_text(aes(label = lab, colour = loaded),
+            position = position_dodge2(width = 0.85, preserve = "single"),
+            vjust = -0.3, size = 2.6, show.legend = FALSE) +
+  geom_hline(yintercept = 2048, linetype = "dashed", colour = "grey45") +
+  facet_grid(schema ~ table) +
+  scale_fill_manual(values = PAL, name = "granularity") +
+  scale_colour_manual(values = c(`TRUE` = "grey20", `FALSE` = "#d95f02")) +
   scale_y_continuous(expand = expansion(mult = c(0, 0.18))) +
-  labs(x = NULL, y = "peak load heap (MB)") +
+  labs(x = NULL, y = "peak load heap (MB); dashed = 2 GB cap") +
   theme_minimal(base_size = 11) + theme(legend.position = "top")
 ```
 
-### Query latency (backends that loaded)
+### Finding 2 — query latency: split serves subsets fast, lumped re-reads everything
 
 ```{r}
-#| label: latency-plot
-#| fig-width: 8.5
-#| fig-height: 4.2
-#| fig-cap: "Median query latency (log scale) for the backends that loaded. NetCDF wins the cruise-scoped queries (q2/q4: one subsetVariable → one file); for the cross-cruise single-variable scan (q3) NetCDF and DuckDB are comparable. q4 differs by schema: the long backends return every sensor row (more bytes) than the wide NetCDF."
+#| label: fig-latency
+#| fig-width: 9
+#| fig-height: 4.6
+#| fig-cap: "Median latency (log scale) for loaded cells. SPLIT files serve cruise-scoped queries (q2, q4) fastest — one cruise = one file. LUMPED files re-read the whole file on every query (q4 cruise-dump up to 74 s). DuckDB shows TWO purple bars — its wide-pivot and long views; the wide view is slow on the broad cross-cruise scan (q3: 76.5 s wide vs 23.9 s long) because it aggregates the whole table on the fly, while it's faster on the cruise dump (q4: 3 s wide vs 99 s long, fewer rows)."
+lbl_ms <- function(x) ifelse(x >= 1000, paste0(round(x/1000, 1), "s"), paste0(round(x), "ms"))
 res |>
   filter(loaded) |>
-  transmute(table, approach,
+  transmute(table, format, granularity,
             `q2 cruise` = na_if(q2_cruise_ms, -1),
-            `q3 var+depth` = na_if(q3_type200_ms, -1),
+            `q3 var+depth` = na_if(q3_var200_ms, -1),
             `q4 cruise dump` = na_if(q4_dump_ms, -1)) |>
   pivot_longer(starts_with("q"), names_to = "query", values_to = "ms") |>
   filter(!is.na(ms)) |>
-  ggplot(aes(query, ms, fill = approach)) +
-  geom_col(position = position_dodge2(width = 0.8, preserve = "single"), width = 0.7) +
-  geom_text(aes(label = formatC(ms, format = "d", big.mark = ",")),
+  ggplot(aes(format, ms, fill = granularity)) +
+  geom_col(position = position_dodge2(preserve = "single"), width = 0.8) +
+  geom_text(aes(label = lbl_ms(ms)),
             position = position_dodge2(width = 0.8, preserve = "single"),
-            vjust = -0.3, size = 2.6) +
-  facet_wrap(~table, scales = "free_x") +
-  scale_y_log10(expand = expansion(mult = c(0, 0.15))) +
-  scale_fill_manual(values = c(netcdf = "#1b9e77", duckdb = "#7570b3",
-                               parquet = "#d95f0e", csv = "#999999"), name = NULL) +
-  labs(x = NULL, y = "median latency (ms, log scale)") +
-  theme_minimal(base_size = 11) + theme(legend.position = "top")
+            vjust = -0.3, size = 2.2) +
+  facet_grid(query ~ table) +
+  scale_fill_manual(values = PAL, name = "granularity") +
+  scale_y_log10(expand = expansion(mult = c(0, 0.25))) +
+  labs(x = NULL, y = "median latency (log scale)") +
+  theme_minimal(base_size = 10) + theme(legend.position = "top")
 ```
 
-**Takeaways.** Both **NetCDF** and **DuckDB** load *both* tables (incl. 216 M rows)
-within the 2 GB cap; **Parquet cannot load** the big table and **CSV** cannot even
-load the thin one. DuckDB's load heap is flattest (~60 MB) because it streams from
-the live Parquet; NetCDF's is higher (~1.3 GB) because ERDDAP reads all 95 file
-headers, but it still fits — and NetCDF then serves **cruise-scoped queries
-fastest of all** (q4 dump on the big table: **0.8 s** vs DuckDB's 99 s), since one
-`cruise_key` maps to one file. The catch is that the wide/canonical NetCDF returns
-*less* data per dump than the long backends (which emit every sensor row), so q4
-is not a like-for-like byte comparison — q2/q3, where result sizes match closely,
-are the fair head-to-head, and there NetCDF and DuckDB trade the lead.
+**Reading the grid.**
 
-## 6 · Partitioning & ordering for long-format bbox queries
+- **Load memory (Fig 1).** **DuckDB ≈ 65 MB in every cell** — wide or long, thin or
+  216 M rows — because it never holds a file on-heap. The file formats scale with
+  what ERDDAP reads: per-cruise **split** measurement loads at ~1.1–1.8 GB (it
+  indexes 96 files), and the **lumped 2.1 GB** measurement NetCDF **exceeds the cap
+  and times out** (ERDDAP starts shedding requests under memory pressure). The
+  smaller 598 MB lumped Parquet squeaks in at 1.6 GB — *granularity bites once the
+  single file is large relative to the heap.*
+- **Query latency (Fig 2).** **Split** files serve cruise-scoped q2/q4 in well under
+  a second (one `cruise_key` → one file). **Lumped** files have no such pruning, so
+  every query re-reads the whole file — the lumped-Parquet cruise dump took **74 s**
+  vs **1.2 s** split, and lumped CSV/Parquet q2 are seconds, not milliseconds.
+  **DuckDB-wide's** broad q3 is **76 s** because the pivot view aggregates the whole
+  216 M-row table on the fly; the **DuckDB-long** view does the same q3 in 24 s and
+  is what we serve live.
+- **Apples-to-apples format (wide, split).** With schema and granularity held fixed,
+  **NetCDF-split** and **Parquet-split** are the fast file formats (sub-second
+  cruise queries); DuckDB is lightest on memory but slowest on broad aggregation;
+  CSV works only at thin scale.
+- **Schema (wide vs long).** For the materialized file formats it's close. For
+  **DuckDB** the on-the-fly wide pivot is *slower* than long on cross-cruise scans —
+  a reason to keep the tidy long view live and reach for wide only behind a
+  materialization.
+
+## 4 · Partitioning & ordering within the long table (Lynn's question)
 
 > *"I wonder how organizing each sensor reading on its own row affects a query for
 > data within a lat/lon/depth box."* — Lynn DeWitt
 
-This is the key question for long format. We measured (DuckDB, the serving engine)
-the same bounding-box query — **`temperature_ave`, 32–34°N, 119–121°W, 0–200 m
-(~393 k rows)** — against four physical layouts of the 216 M-row denormalized
-table:
+Beyond split-vs-lumped, *within* the long table we measured (in DuckDB, the serving
+engine) the same bounding-box query — **`temperature_ave`, 32–34°N, 119–121°W,
+0–200 m (~393 k rows)** — across four physical layouts:
 
-- **A** — production view: raw Parquet partitioned by `cruise_key`, joined to
-  `ctd_cast` at query time (what's live now).
-- **B** — denormalized, partitioned by `cruise_key` (isolates layout from the join).
-- **C** — denormalized, partitioned by `measurement_type` (one variable ⇒ ~1/N files).
-- **D** — denormalized, partitioned by `measurement_type` **and** ordered by
-  `latitude, longitude, depth` within each partition (row-group skipping for the box).
+- **A** raw Parquet partitioned by `cruise_key`, joined to `ctd_cast` at query time
+  (live now); **B** denormalized, partitioned by `cruise_key`; **C** denormalized,
+  partitioned by `measurement_type`; **D** = C **plus** rows sorted by
+  `latitude,longitude,depth` within each partition.
 
 ```{r}
 #| label: layout
@@ -288,19 +245,18 @@ lay |>
 ```
 
 ```{r}
-#| label: layout-plot
+#| label: fig-layout
 #| eval: !expr "!is.null(lay)"
 #| fig-width: 7.5
-#| fig-height: 3.2
-#| fig-cap: "The same ~393k-row bbox query across four physical layouts of the long table (DuckDB on SSD). ~12× spread, but every layout is sub-second."
+#| fig-height: 3
+#| fig-cap: "The same ~393k-row bbox query across four physical layouts of the long table (DuckDB on SSD). ~12× spread, but every layout is already sub-second."
 lay |>
-  mutate(layout = factor(layout, levels = rev(layout))) |>
+  mutate(layout = fct_rev(factor(layout))) |>
   ggplot(aes(layout, query_secs_median)) +
   geom_col(width = 0.7, fill = "#7570b3") +
   geom_text(aes(label = paste0(formatC(query_secs_median, format="f", digits=3), " s")),
             hjust = -0.15, size = 3) +
-  coord_flip() +
-  scale_y_continuous(expand = expansion(mult = c(0, 0.18))) +
+  coord_flip() + scale_y_continuous(expand = expansion(mult = c(0, 0.18))) +
   labs(x = NULL, y = "median query (s)") + theme_minimal(base_size = 11)
 ```
 
@@ -312,81 +268,63 @@ lay |>
 cat("*(layout_results.csv not present — run scripts/bench_parquet_layout.sh)*")
 ```
 
-**How to read this.** Partition pruning (C, D) drops the data DuckDB must open
-from all ~95 cruise files to just the one `measurement_type` partition. Spatial
-ordering (D) additionally lets DuckDB skip Parquet **row groups** whose
-lat/lon/depth min–max can't intersect the box. Decomposing the ~12× spread:
+Decomposing the ~12× spread: removing the query-time join ≈ 4× (A→B);
+partitioning by `measurement_type` ≈ 2× (B→C, a one-variable query opens 1 of 53
+partitions); spatial ordering ≈ 1.4× (C→D, row-group skipping). The trade-off is
+the one you raised: partitioning by `measurement_type` helps single-variable
+queries but slows "all variables in a region." Every layout is already sub-second,
+so for the long table this is an optimization, not a rescue.
 
-- **Removing the query-time join ≈ 4×** (A→B): materializing `time`/`lat`/`lon`
-  into the table skips the join *and* lets the lat/lon predicate prune at scan.
-- **Partitioning by `measurement_type` ≈ 2×** (B→C): a one-variable query opens
-  1 of 53 partitions instead of all 95 cruise files.
-- **Spatial ordering within each partition ≈ 1.4×** (C→D): DuckDB skips Parquet
-  row groups whose `latitude/longitude/depth` min–max miss the box.
+## 5 · Recommendations
 
-The trade-off is exactly your point: partitioning by `measurement_type` *helps
-single-variable queries* (the common case) but *slows* a query that wants *all*
-variables in a region. Our live datasets keep the **zero-extra-storage
-logical-join view** (layout A, 0.2–0.9 s here); if heavy single-variable bbox
-traffic emerges, the `measurement_type`-partition + spatial-sort layout is a cheap
-~12× upgrade. (This is the same wide-vs-access-pattern tension that makes the
-per-cruise *NetCDF* wide files fast for "all sensors at a cast" but slower for "one
-sensor across a region.")
+- **The memory question is "lumped vs split," not "which format."** Never serve the
+  big table as one file via a file backend — split it per cruise (96 files). DuckDB
+  sidesteps the question entirely by streaming.
+- **For CoastWatch hosting, NetCDF is the most native fit** — per-cruise CF profile
+  files served as one `EDDTableFromNcCFFiles` dataset; small load heap, fast
+  cruise-scoped queries, auto ranges/sliders, source `.nc` downloadable. We generate
+  them from the same pipeline (96 files/table). Costs: canonical sensors only,
+  ~2.3 GB duplicated, regenerate on update.
+- **To keep the tidy long table queryable as-is, DuckDB-over-Parquet** is the
+  lightest path: a 274 KB `.db` of views on stock ERDDAP (only the driver jar
+  added), serving 216 M rows within ~65 MB, always reflecting the live Parquet. Keep
+  it **long** — the wide pivot view is slow on broad scans. This runs live today.
+- **Avoid `EDDTableFromParquetFiles` on a single large file** (whole-file on-heap
+  reads), and **avoid lumped anything** for the big table.
+- **Open for you, Lynn:** (a) per-cruise **NetCDF** we generate, (b) **Parquet + the
+  small DuckDB `.db`**, or (c) wait on native Parquet/DuckDB
+  ([#447](https://github.com/ERDDAP/erddap/discussions/447) /
+  [#448](https://github.com/ERDDAP/erddap/issues/448))? Any is producible from the
+  same pipeline.
 
-## 7 · Recommendations & open questions
+## 6 · Reproduce
 
-- **If you host on CoastWatch ERDDAP, NetCDF is the most native fit** —
-  `EDDTableFromNcCFFiles` over **per-cruise CF profile files (96 files)**, which we
-  generate from the same pipeline. It loads within a small heap, auto-computes
-  ranges/sliders, and serves cruise-scoped queries fastest. Costs: it carries
-  canonical sensors only, duplicates ~2.3 GB, and must be regenerated on update.
-- **If you want the tidy long table queryable as-is, DuckDB-over-Parquet** is the
-  lightest option: a 274 KB `.db` of views on stock ERDDAP (only the driver jar is
-  added), serving the 216 M-row table within ~60 MB. It always reflects the live
-  Parquet. It's what runs at <https://erddap.calcofi.io> today.
-- **Avoid plain `EDDTableFromParquetFiles` for large files** — whole-file on-heap
-  reads OOM. Both options above are pragmatic bridges to native Parquet/DuckDB
-  support (#447/#448).
-- **Layout:** for the full long table, partition by `measurement_type` and order
-  spatially within if single-variable bbox access dominates.
-- **Open for you, Lynn:** which would be least work to receive and maintain —
-  (a) per-cruise **NetCDF** files we generate, (b) **Parquet + the small DuckDB
-  `.db`** (this approach), or (c) waiting on native DuckDB/ADBC? We can produce any
-  from the same pipeline.
-
-## 8 · Reproduce
-
-Everything runs in the CalCOFI server containers (`../server/`), reading Parquet
-from and writing outputs to the shared **`/share/data/erddap-duckdb`** tree, which
-is mounted identically into `rstudio` (build), the live `erddap`, and the bench
-`erddap_bench`. No host-specific paths.
+Everything runs in the CalCOFI server containers (`../server/`), reading from and
+writing to the shared **`/share/data/erddap-duckdb`** tree, mounted identically into
+`rstudio` (build), the live `erddap`, and the bench `erddap_bench` — no
+host-specific paths.
 
 **Code** (all in [CalCOFI/workflows](https://github.com/CalCOFI/workflows)):
 
 | file | role |
 |---|---|
-| [`libs/erddap_netcdf.R`](https://github.com/CalCOFI/workflows/blob/main/libs/erddap_netcdf.R) | per-cruise CF NetCDF builder + `EDDTableFromNcCFFiles` XML |
+| [`libs/erddap_netcdf.R`](https://github.com/CalCOFI/workflows/blob/main/libs/erddap_netcdf.R) | per-cruise + lumped CF NetCDF builders + `EDDTableFromNcCFFiles` XML |
 | [`libs/erddap_duckdb.R`](https://github.com/CalCOFI/workflows/blob/main/libs/erddap_duckdb.R) | `.db` view builder + `EDDTableFromDatabase` XML |
 | [`libs/erddap.R`](https://github.com/CalCOFI/workflows/blob/main/libs/erddap.R) | shared dataVariable / type / units helpers |
-| [`scripts/gen_ctd_netcdf.R`](https://github.com/CalCOFI/workflows/blob/main/scripts/gen_ctd_netcdf.R) | driver: generate all per-cruise NetCDF |
-| [`scripts/gen_prod_datasets.R`](https://github.com/CalCOFI/workflows/blob/main/scripts/gen_prod_datasets.R) · [`gen_bench_datasets.R`](https://github.com/CalCOFI/workflows/blob/main/scripts/gen_bench_datasets.R) | generate the dataset XML blocks |
-| [`scripts/bench_erddap.sh`](https://github.com/CalCOFI/workflows/blob/main/scripts/bench_erddap.sh) | the NetCDF/DuckDB/Parquet/CSV matrix → `results_all.csv` |
+| [`scripts/gen_ctd_netcdf.R`](https://github.com/CalCOFI/workflows/blob/main/scripts/gen_ctd_netcdf.R) · [`gen_ctd_wide.R`](https://github.com/CalCOFI/workflows/blob/main/scripts/gen_ctd_wide.R) · [`gen_ctd_lumped.R`](https://github.com/CalCOFI/workflows/blob/main/scripts/gen_ctd_lumped.R) | build the split/lumped, wide/long serving artifacts |
+| [`scripts/gen_bench_datasets.R`](https://github.com/CalCOFI/workflows/blob/main/scripts/gen_bench_datasets.R) | emit the per-cell `<dataset>` blocks (datasetID = cell) |
+| [`scripts/bench_erddap.sh`](https://github.com/CalCOFI/workflows/blob/main/scripts/bench_erddap.sh) | the format×schema×granularity matrix → `results_all.csv` |
 | [`scripts/bench_parquet_layout.sh`](https://github.com/CalCOFI/workflows/blob/main/scripts/bench_parquet_layout.sh) | the partitioning/ordering experiment → `layout_results.csv` |
 | [`server/erddap/Dockerfile`](https://github.com/CalCOFI/server/blob/main/erddap/Dockerfile) · [`docker-compose.bench.yml`](https://github.com/CalCOFI/server/blob/main/docker-compose.bench.yml) | ERDDAP + `duckdb_jdbc`; isolated bench instance |
-| [`erddap/content/datasets.xml`](https://github.com/CalCOFI/erddap/blob/main/content/datasets.xml) | live dataset config |
 
 **Data & artifacts** are browsable / downloadable via the Caddy file server at
-[**file.calcofi.io/erddap-ctd**](https://file.calcofi.io/erddap-ctd/) — the result
-CSVs, generated dataset XML, the DuckDB `.db`, and sample per-cruise `.nc`. The
-served datasets themselves are at
+[**file.calcofi.io/erddap-ctd**](https://file.calcofi.io/erddap-ctd/). Live datasets:
 <https://erddap.calcofi.io/erddap/tabledap/calcofi_ctd_thin.html> ·
 <https://erddap.calcofi.io/erddap/tabledap/calcofi_ctd_measurement.html>.
 
-The two result tables read above:
-
 ```{r}
 #| label: data-files
-read_csv("data/bench_erddap/results_all.csv", show_col_types = FALSE) |> kable(caption = "results_all.csv")
+read_csv("data/bench_erddap/results_all.csv", show_col_types = FALSE) |> kable(caption = "results_all.csv (the full grid)")
 if (!is.null(lay)) kable(lay, caption = "layout_results.csv")
 ```
 
@@ -401,6 +339,5 @@ The per-cruise NetCDF builder and the benchmark harness, in full:
 ```{r}
 #| label: embed-bench
 #| eval: false
-#| code-overflow: wrap
 #| file: scripts/bench_erddap.sh
 ```

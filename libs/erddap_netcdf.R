@@ -46,7 +46,7 @@
 #' Write one cruise's wide data.frame to a CF contiguous-ragged Profile NetCDF.
 .write_cruise_nc <- function(df, cruise_key, out_file, vars, title, summary,
                              units_lookup = list(), longname_lookup = list(),
-                             institution = "CalCOFI") {
+                             institution = "CalCOFI", force_v4 = FALSE) {
   prof_ids  <- unique(df$profile_id)          # df is ordered by profile_id, so contiguous
   nprof     <- length(prof_ids)
   nobs      <- nrow(df)
@@ -75,11 +75,13 @@
 
   nc <- ncdf4::nc_create(out_file, c(list(v_pid, v_cru, v_line, v_sta, v_time,
                                           v_lat, v_lon, v_rs, v_depth), v_data),
-                         force_v4 = FALSE)
+                         force_v4 = force_v4)  # nc4 for big lumped files (nc3 size limit)
   on.exit(ncdf4::nc_close(nc), add = TRUE)
 
+  # cruise_key per profile: from df if present (lumped, many cruises) else the scalar
+  cru_vec <- if ("cruise_key" %in% names(df)) df$cruise_key[first_idx] else rep(cruise_key, nprof)
   ncdf4::ncvar_put(nc, v_pid,  prof_ids)
-  ncdf4::ncvar_put(nc, v_cru,  rep(cruise_key, nprof))
+  ncdf4::ncvar_put(nc, v_cru,  cru_vec)
   ncdf4::ncvar_put(nc, v_line, df$line[first_idx])
   ncdf4::ncvar_put(nc, v_sta,  df$sta[first_idx])
   ncdf4::ncvar_put(nc, v_time, df$time[first_idx])
@@ -118,7 +120,8 @@
     cdm_profile_variables = "profile_id, time, latitude, longitude, cruise_key, line, sta",
     Conventions = "CF-1.6, COARDS, ACDD-1.3", institution = institution,
     infoUrl = "https://calcofi.org", license = "CC-BY 4.0",
-    title = title, summary = summary, cruise_key = cruise_key,
+    title = title, summary = summary,
+    cruise_key = if (length(unique(cru_vec)) == 1L) cru_vec[1] else "multiple",
     source = "CalCOFI CTD cast files (https://calcofi.org)",
     creator_name = "CalCOFI", creator_url = "https://calcofi.org")
   for (nm in names(g)) ncdf4::ncatt_put(nc, 0, nm, g[[nm]])
@@ -174,6 +177,37 @@ build_ctd_netcdf <- function(con, data_dir, out_dir, table, vars, title, summary
     rm(df); gc(FALSE)
   }
   do.call(rbind, rows)
+}
+
+#' Build ONE lumped CF Profile NetCDF holding ALL cruises (the "lumped" granularity
+#' level for the split-vs-lumped experiment). Same CF structure as the per-cruise
+#' files but cruise_key varies per profile. Pulls the whole wide pivot into R, so
+#' it's heavier than the per-cruise path — fine for the benchmark's one-time build.
+#' @return c(nprof, nobs) written.
+build_ctd_netcdf_lumped <- function(con, data_dir, out_file, table, vars, title, summary,
+                                    units_lookup = list(), longname_lookup = list(),
+                                    mem_limit = "3GB", threads = 2,
+                                    tmp_dir = "/share/data/erddap-duckdb/tmp") {
+  for (s in c(glue::glue("SET memory_limit='{mem_limit}'"), glue::glue("SET threads={threads}"),
+              glue::glue("SET temp_directory='{tmp_dir}'"), "SET preserve_insertion_order=false"))
+    try(DBI::dbExecute(con, s), silent = TRUE)
+  val <- vapply(vars, function(v) glue::glue(
+    "MAX(t.measurement_value) FILTER (WHERE t.measurement_type='{v}')::DOUBLE AS \"{v}\""), character(1))
+  df <- DBI::dbGetQuery(con, glue::glue(
+    "SELECT t.ctd_cast_uuid AS profile_id, t.cruise_key,
+       epoch(any_value(c.datetime_start_utc))::DOUBLE AS time,
+       any_value(c.latitude)::DOUBLE AS latitude, any_value(c.longitude)::DOUBLE AS longitude,
+       any_value(c.line) AS line, any_value(c.sta) AS sta, t.depth_m::DOUBLE AS depth,
+       {paste(val, collapse = ',\n       ')}
+     FROM read_parquet('{data_dir}/{table}/**/*.parquet', hive_partitioning=true) t
+     JOIN read_parquet('{data_dir}/ctd_cast.parquet') c USING (ctd_cast_uuid)
+     GROUP BY t.ctd_cast_uuid, t.cruise_key, t.depth_m
+     ORDER BY t.ctd_cast_uuid, t.depth_m"))
+  if (!dir.exists(dirname(out_file))) dir.create(dirname(out_file), recursive = TRUE)
+  dims <- .write_cruise_nc(df, NA_character_, out_file, vars, title, summary,
+                          units_lookup, longname_lookup, force_v4 = TRUE)
+  rm(df); gc(FALSE)
+  dims
 }
 
 #' EDDTableFromNcCFFiles <dataset> block for the per-cruise Profile NetCDF.
