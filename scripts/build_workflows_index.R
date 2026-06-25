@@ -54,6 +54,7 @@ classify <- function(base, cc) {
     if (wt %in% c("ingest", "spatial")) return("ingest")
     if (wt == "publish") return("publish")
     if (wt == "release") return("release")
+    if (wt == "reference") return("reference")
   }
   if (grepl("^publish_", base)) return("publish")
   if (grepl("^(release|update|sync|clean)_", base) || base == "load_views") return("release")
