@@ -3,7 +3,7 @@
 # long CTD tables via DuckDB views (the benchmark winner), enriched with
 # long_name / units / comment from metadata/calcofi/ctd-cast/metadata_derived.csv
 # (+ measurement_type.csv for the per-type units note). Clean public IDs; prod
-# .db + temp under /ssd/erddap-duckdb. Run in the rstudio container:
+# .db + temp under /share/data/erddap-duckdb. Run in the rstudio container:
 #   docker exec rstudio Rscript /share/github/CalCOFI/workflows/scripts/gen_prod_datasets.R
 suppressMessages({ library(glue); library(DBI); library(readr); library(dplyr) })
 options(readr.show_col_types = FALSE)
@@ -42,8 +42,8 @@ mk_lookups <- function(tbl, cols) {
 }
 
 CONN <- c(`duckdb.read_only`="true", memory_limit="1024MB", threads="2",
-          temp_directory="/ssd/erddap-duckdb/tmp")
-DBURL <- "jdbc:duckdb:/ssd/erddap-duckdb/duckdb/calcofi_ctd.db"
+          temp_directory="/share/data/erddap-duckdb/tmp")
+DBURL <- "jdbc:duckdb:/share/data/erddap-duckdb/duckdb/calcofi_ctd.db"
 SUBSET <- c("cruise_key","measurement_type")
 GLOBAL <- list(
   keywords = "CalCOFI, CTD, ocean, temperature, salinity, oxygen, fluorescence, profiles, California Current, depth",

@@ -8,13 +8,13 @@
 #
 # Run with the bench ERDDAP STOPPED. ~20 GB output, a few minutes.
 set -e
-DB=/ssd/erddap-bench/bin/duckdb
-DBFILE=/ssd/erddap-bench/duckdb/calcofi_ctd.db
-OUT=/ssd/erddap-bench/staged/A_measurement
+DB=/share/data/erddap-bench/bin/duckdb
+DBFILE=/share/data/erddap-duckdb/duckdb/calcofi_ctd.db
+OUT=/share/data/erddap-bench/staged/A_measurement
 rm -rf "$OUT"; mkdir -p "$OUT"
 echo "staging denormalized ctd_measurement -> $OUT (partitioned by cruise_key)"
 "$DB" "$DBFILE" -readonly -c "
-  SET memory_limit='2GB'; SET threads=2; SET temp_directory='/ssd/erddap-bench/tmp';
+  SET memory_limit='2GB'; SET threads=2; SET temp_directory='/share/data/erddap-duckdb/tmp';
   SET preserve_insertion_order=false;
   COPY (
     SELECT * REPLACE (epoch(time)::DOUBLE AS time)
