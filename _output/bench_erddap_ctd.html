@@ -94,7 +94,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   <li><a href="#how-erddap-serves-files-and-the-netcdf-per-cruise-one-dataset-point" id="toc-how-erddap-serves-files-and-the-netcdf-per-cruise-one-dataset-point" class="nav-link" data-scroll-target="#how-erddap-serves-files-and-the-netcdf-per-cruise-one-dataset-point">2 · How ERDDAP serves files — and the NetCDF “per-cruise = one dataset” point</a></li>
   <li><a href="#the-benchmark-grid" id="toc-the-benchmark-grid" class="nav-link" data-scroll-target="#the-benchmark-grid">3 · The benchmark grid</a>
   <ul class="collapse">
-  <li><a href="#finding-1-3-load-memory-granularity-files-vs-streaming-duckdb" id="toc-finding-1-3-load-memory-granularity-files-vs-streaming-duckdb" class="nav-link" data-scroll-target="#finding-1-3-load-memory-granularity-files-vs-streaming-duckdb">Finding 1 &amp; 3 — load memory: granularity (files) vs streaming (DuckDB)</a></li>
+  <li><a href="#finding-1-load-memory-lumped-vs-split-and-duckdb-streams" id="toc-finding-1-load-memory-lumped-vs-split-and-duckdb-streams" class="nav-link" data-scroll-target="#finding-1-load-memory-lumped-vs-split-and-duckdb-streams">Finding 1 — load memory: lumped vs split (and DuckDB streams)</a></li>
   <li><a href="#finding-2-query-latency-split-serves-subsets-fast-lumped-re-reads-everything" id="toc-finding-2-query-latency-split-serves-subsets-fast-lumped-re-reads-everything" class="nav-link" data-scroll-target="#finding-2-query-latency-split-serves-subsets-fast-lumped-re-reads-everything">Finding 2 — query latency: split serves subsets fast, lumped re-reads everything</a></li>
   </ul></li>
   <li><a href="#partitioning-ordering-within-the-long-table-lynns-question" id="toc-partitioning-ordering-within-the-long-table-lynns-question" class="nav-link" data-scroll-target="#partitioning-ordering-within-the-long-table-lynns-question">4 · Partitioning &amp; ordering within the long table (Lynn’s question)</a></li>
@@ -146,12 +146,11 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <li><strong>granularity</strong> — <strong>split</strong> (one file per cruise, 96 files) vs <strong>lumped</strong> (one file for the whole table) — <em>for the file formats; DuckDB is granularity-agnostic</em></li>
 <li><strong>query</strong> — whole-dataset (load) vs subset (filtered)</li>
 </ul>
-<p><strong>What the grid shows (the four findings):</strong></p>
+<p><strong>What the grid shows (three findings, the first two mapping to the two figures):</strong></p>
 <ol type="1">
-<li><strong>Granularity is the memory lever, not format.</strong> ERDDAP’s file backends read <em>whole matching files onto the heap</em>, so a single <strong>lumped 2.1 GB</strong> wide NetCDF can’t be served at a 2 GB heap (ERDDAP sheds requests, then times out), while the <strong>same data split into 96 per-cruise files loads at ~1.1 GB and serves fast</strong>. This — not the file format — is what sank the original single-file <code>ctd_wide</code>.</li>
-<li><strong>Lumped “loads” ≠ usable.</strong> A smaller lumped file can bind (the 598 MB wide Parquet loaded at 1.6 GB) but then <em>every query re-reads the whole file</em>: a cruise dump took <strong>74 s lumped vs 1.2 s split</strong>. Split wins on latency even when lumped fits.</li>
-<li><strong>DuckDB is the memory-safe baseline (~65 MB any config)</strong> because it <em>streams</em> from the underlying Parquet instead of loading files onto the heap — but its <em>on-the-fly wide pivot view</em> is expensive for broad cross-cruise queries (76 s), so keep the <strong>long</strong> view live and materialize wide only if needed.</li>
-<li><strong>NetCDF, the native path, is per-cruise.</strong> CalCOFI has <strong>~5.55 M casts</strong>, so one file <em>per cast</em> (à la Trinidad Head) is infeasible; bundling <strong>by cruise = 96 files</strong>, served as <strong>one aggregated ERDDAP dataset</strong> (one form), loads small and serves cruise-scoped queries fastest.</li>
+<li><strong>Granularity — not format — is the memory lever (Fig 1).</strong> ERDDAP’s file backends read <em>whole matching files onto the heap</em>, so a single <strong>lumped 2.1 GB</strong> wide NetCDF can’t be served at a 2 GB heap (ERDDAP sheds requests, then times out), while the <strong>same data split into 96 per-cruise files loads at ~1.1 GB</strong>. This — not the file format — is what sank the original single-file <code>ctd_wide</code>. <strong>DuckDB sidesteps the whole axis</strong> (~65 MB in <em>every</em> config) by <em>streaming</em> from the Parquet rather than loading files onto the heap.</li>
+<li><strong>Split serves subsets fast; lumped re-reads everything (Fig 2).</strong> A per-cruise split file answers a cruise query in well under a second (one cruise → one file); a lumped file has no such pruning, so <em>every query re-reads the whole file</em> — a cruise dump took <strong>74 s lumped vs 1.2 s split</strong> (even when the lumped file fits in memory). DuckDB’s on-the-fly <em>wide</em> pivot view is the exception that proves the rule: cheap to load but slow on broad cross-cruise scans (76 s), so keep the tidy <strong>long</strong> view live.</li>
+<li><strong>NetCDF, the native path, is per-cruise = one dataset.</strong> CalCOFI has <strong>~5.55 M casts</strong>, so one file <em>per cast</em> (à la Trinidad Head) is infeasible; bundling <strong>by cruise = 96 files</strong>, served as <strong>one aggregated ERDDAP dataset</strong> (one form), loads small and serves cruise-scoped queries fastest.</li>
 </ol>
 <p>Live now at <a href="https://erddap.calcofi.io" class="uri">https://erddap.calcofi.io</a> (<code>calcofi_ctd_thin</code>, <code>calcofi_ctd_measurement</code>, DuckDB-long). Everything needed to reproduce is in §8.</p>
 <div class="cell">
@@ -469,8 +468,8 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </table>
 </div>
 </div>
-<section id="finding-1-3-load-memory-granularity-files-vs-streaming-duckdb" class="level3">
-<h3 class="anchored" data-anchor-id="finding-1-3-load-memory-granularity-files-vs-streaming-duckdb">Finding 1 &amp; 3 — load memory: granularity (files) vs streaming (DuckDB)</h3>
+<section id="finding-1-load-memory-lumped-vs-split-and-duckdb-streams" class="level3">
+<h3 class="anchored" data-anchor-id="finding-1-load-memory-lumped-vs-split-and-duckdb-streams">Finding 1 — load memory: lumped vs split (and DuckDB streams)</h3>
 <div class="cell">
 <details class="code-fold">
 <summary>Code</summary>
@@ -2093,311 +2092,312 @@ Figure&nbsp;3: The same ~393k-row bbox query across four physical layouts of the
 <span id="cb11-36"><a href="#cb11-36" aria-hidden="true" tabindex="-1"></a>  file for the whole table) — *for the file formats; DuckDB is granularity-agnostic*</span>
 <span id="cb11-37"><a href="#cb11-37" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**query** — whole-dataset (load) vs subset (filtered)</span>
 <span id="cb11-38"><a href="#cb11-38" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-39"><a href="#cb11-39" aria-hidden="true" tabindex="-1"></a>**What the grid shows (the four findings):**</span>
+<span id="cb11-39"><a href="#cb11-39" aria-hidden="true" tabindex="-1"></a>**What the grid shows (three findings, the first two mapping to the two figures):**</span>
 <span id="cb11-40"><a href="#cb11-40" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-41"><a href="#cb11-41" aria-hidden="true" tabindex="-1"></a><span class="ss">1. </span>**Granularity is the memory lever, not format.** ERDDAP's file backends read</span>
-<span id="cb11-42"><a href="#cb11-42" aria-hidden="true" tabindex="-1"></a>   *whole matching files onto the heap*, so a single **lumped 2.1 GB** wide NetCDF</span>
-<span id="cb11-43"><a href="#cb11-43" aria-hidden="true" tabindex="-1"></a>   can't be served at a 2 GB heap (ERDDAP sheds requests, then times out), while the</span>
-<span id="cb11-44"><a href="#cb11-44" aria-hidden="true" tabindex="-1"></a>   **same data split into 96 per-cruise files loads at ~1.1 GB and serves fast**.</span>
+<span id="cb11-41"><a href="#cb11-41" aria-hidden="true" tabindex="-1"></a><span class="ss">1. </span>**Granularity — not format — is the memory lever (Fig 1).** ERDDAP's file</span>
+<span id="cb11-42"><a href="#cb11-42" aria-hidden="true" tabindex="-1"></a>   backends read *whole matching files onto the heap*, so a single **lumped 2.1 GB**</span>
+<span id="cb11-43"><a href="#cb11-43" aria-hidden="true" tabindex="-1"></a>   wide NetCDF can't be served at a 2 GB heap (ERDDAP sheds requests, then times</span>
+<span id="cb11-44"><a href="#cb11-44" aria-hidden="true" tabindex="-1"></a>   out), while the **same data split into 96 per-cruise files loads at ~1.1 GB**.</span>
 <span id="cb11-45"><a href="#cb11-45" aria-hidden="true" tabindex="-1"></a>   This — not the file format — is what sank the original single-file <span class="in">`ctd_wide`</span>.</span>
-<span id="cb11-46"><a href="#cb11-46" aria-hidden="true" tabindex="-1"></a><span class="ss">2. </span>**Lumped "loads" ≠ usable.** A smaller lumped file can bind (the 598 MB wide</span>
-<span id="cb11-47"><a href="#cb11-47" aria-hidden="true" tabindex="-1"></a>   Parquet loaded at 1.6 GB) but then *every query re-reads the whole file*: a</span>
-<span id="cb11-48"><a href="#cb11-48" aria-hidden="true" tabindex="-1"></a>   cruise dump took **74 s lumped vs 1.2 s split**. Split wins on latency even when</span>
-<span id="cb11-49"><a href="#cb11-49" aria-hidden="true" tabindex="-1"></a>   lumped fits.</span>
-<span id="cb11-50"><a href="#cb11-50" aria-hidden="true" tabindex="-1"></a><span class="ss">3. </span>**DuckDB is the memory-safe baseline (~65 MB any config)** because it *streams*</span>
-<span id="cb11-51"><a href="#cb11-51" aria-hidden="true" tabindex="-1"></a>   from the underlying Parquet instead of loading files onto the heap — but its</span>
-<span id="cb11-52"><a href="#cb11-52" aria-hidden="true" tabindex="-1"></a>   *on-the-fly wide pivot view* is expensive for broad cross-cruise queries (76 s),</span>
-<span id="cb11-53"><a href="#cb11-53" aria-hidden="true" tabindex="-1"></a>   so keep the **long** view live and materialize wide only if needed.</span>
-<span id="cb11-54"><a href="#cb11-54" aria-hidden="true" tabindex="-1"></a><span class="ss">4. </span>**NetCDF, the native path, is per-cruise.** CalCOFI has **~5.55 M casts**, so</span>
-<span id="cb11-55"><a href="#cb11-55" aria-hidden="true" tabindex="-1"></a>   one file *per cast* (à la Trinidad Head) is infeasible; bundling **by cruise = 96</span>
-<span id="cb11-56"><a href="#cb11-56" aria-hidden="true" tabindex="-1"></a>   files**, served as **one aggregated ERDDAP dataset** (one form), loads small and</span>
-<span id="cb11-57"><a href="#cb11-57" aria-hidden="true" tabindex="-1"></a>   serves cruise-scoped queries fastest.</span>
-<span id="cb11-58"><a href="#cb11-58" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-59"><a href="#cb11-59" aria-hidden="true" tabindex="-1"></a>Live now at <span class="ot">&lt;https://erddap.calcofi.io&gt;</span> (<span class="in">`calcofi_ctd_thin`</span>, <span class="in">`calcofi_ctd_measurement`</span>,</span>
-<span id="cb11-60"><a href="#cb11-60" aria-hidden="true" tabindex="-1"></a>DuckDB-long). Everything needed to reproduce is in §8.</span>
-<span id="cb11-61"><a href="#cb11-61" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-64"><a href="#cb11-64" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb11-65"><a href="#cb11-65" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: setup</span></span>
-<span id="cb11-66"><a href="#cb11-66" aria-hidden="true" tabindex="-1"></a><span class="co">#| message: false</span></span>
-<span id="cb11-67"><a href="#cb11-67" aria-hidden="true" tabindex="-1"></a><span class="co">#| warning: false</span></span>
-<span id="cb11-68"><a href="#cb11-68" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(dplyr); <span class="fu">library</span>(readr); <span class="fu">library</span>(tidyr); <span class="fu">library</span>(knitr); <span class="fu">library</span>(stringr); <span class="fu">library</span>(ggplot2); <span class="fu">library</span>(forcats)</span>
-<span id="cb11-69"><a href="#cb11-69" aria-hidden="true" tabindex="-1"></a>res <span class="ot">&lt;-</span> <span class="fu">read_csv</span>(<span class="st">"data/bench_erddap/results_all.csv"</span>, <span class="at">show_col_types =</span> <span class="cn">FALSE</span>) <span class="sc">|&gt;</span></span>
-<span id="cb11-70"><a href="#cb11-70" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">format =</span> <span class="fu">factor</span>(format, <span class="at">levels =</span> <span class="fu">c</span>(<span class="st">"duckdb"</span>,<span class="st">"netcdf"</span>,<span class="st">"parquet"</span>,<span class="st">"csv"</span>)),</span>
-<span id="cb11-71"><a href="#cb11-71" aria-hidden="true" tabindex="-1"></a>         <span class="at">schema =</span> <span class="fu">factor</span>(schema, <span class="at">levels =</span> <span class="fu">c</span>(<span class="st">"wide"</span>,<span class="st">"long"</span>)),</span>
-<span id="cb11-72"><a href="#cb11-72" aria-hidden="true" tabindex="-1"></a>         <span class="at">granularity =</span> <span class="fu">factor</span>(granularity, <span class="at">levels =</span> <span class="fu">c</span>(<span class="st">"na"</span>,<span class="st">"split"</span>,<span class="st">"lumped"</span>),</span>
-<span id="cb11-73"><a href="#cb11-73" aria-hidden="true" tabindex="-1"></a>                              <span class="at">labels =</span> <span class="fu">c</span>(<span class="st">"view (DB)"</span>,<span class="st">"split (per-cruise)"</span>,<span class="st">"lumped (1 file)"</span>)),</span>
-<span id="cb11-74"><a href="#cb11-74" aria-hidden="true" tabindex="-1"></a>         <span class="at">table =</span> <span class="fu">factor</span>(table, <span class="at">levels =</span> <span class="fu">c</span>(<span class="st">"thin"</span>,<span class="st">"measurement"</span>),</span>
-<span id="cb11-75"><a href="#cb11-75" aria-hidden="true" tabindex="-1"></a>                        <span class="at">labels =</span> <span class="fu">c</span>(<span class="st">"ctd_thin (5.5M rows)"</span>,<span class="st">"ctd_measurement (216M rows)"</span>)),</span>
-<span id="cb11-76"><a href="#cb11-76" aria-hidden="true" tabindex="-1"></a>         <span class="at">loaded =</span> load_status <span class="sc">==</span> <span class="st">"loaded"</span>)</span>
-<span id="cb11-77"><a href="#cb11-77" aria-hidden="true" tabindex="-1"></a>lay_path <span class="ot">&lt;-</span> <span class="st">"data/bench_erddap/layout_results.csv"</span></span>
-<span id="cb11-78"><a href="#cb11-78" aria-hidden="true" tabindex="-1"></a>lay <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="fu">file.exists</span>(lay_path)) <span class="fu">read_csv</span>(lay_path, <span class="at">show_col_types =</span> <span class="cn">FALSE</span>) <span class="cf">else</span> <span class="cn">NULL</span></span>
-<span id="cb11-79"><a href="#cb11-79" aria-hidden="true" tabindex="-1"></a>PAL <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"split (per-cruise)"</span> <span class="ot">=</span> <span class="st">"#1b9e77"</span>, <span class="st">"lumped (1 file)"</span> <span class="ot">=</span> <span class="st">"#d95f02"</span>, <span class="st">"view (DB)"</span> <span class="ot">=</span> <span class="st">"#7570b3"</span>)</span>
-<span id="cb11-80"><a href="#cb11-80" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb11-81"><a href="#cb11-81" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-82"><a href="#cb11-82" aria-hidden="true" tabindex="-1"></a><span class="fu">## 1 · Background</span></span>
-<span id="cb11-83"><a href="#cb11-83" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-84"><a href="#cb11-84" aria-hidden="true" tabindex="-1"></a>CalCOFI has occupied the California Current quarterly since 1949. The CTD cast</span>
-<span id="cb11-85"><a href="#cb11-85" aria-hidden="true" tabindex="-1"></a>files (<span class="ot">&lt;https://calcofi.org/data/oceanographic-data/ctd-cast-files/&gt;</span>) are ~1 GB</span>
-<span id="cb11-86"><a href="#cb11-86" aria-hidden="true" tabindex="-1"></a>as a single wide Parquet. We ingest them into a tidy **long** schema</span>
-<span id="cb11-87"><a href="#cb11-87" aria-hidden="true" tabindex="-1"></a>(<span class="in">`ingest_calcofi_ctd-cast`</span>,</span>
-<span id="cb11-88"><a href="#cb11-88" aria-hidden="true" tabindex="-1"></a><span class="ot">&lt;https://calcofi.io/workflows/ingest_calcofi_ctd-cast.html&gt;</span>): each sensor reading</span>
-<span id="cb11-89"><a href="#cb11-89" aria-hidden="true" tabindex="-1"></a>on its own row keyed by <span class="in">`measurement_type`</span>, convenient for analysis but</span>
-<span id="cb11-90"><a href="#cb11-90" aria-hidden="true" tabindex="-1"></a>multiplying row count. Tables (release v2026.06.08 / supplemental v2026.04.08):</span>
-<span id="cb11-91"><a href="#cb11-91" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-92"><a href="#cb11-92" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> table <span class="pp">|</span> rows <span class="pp">|</span> casts <span class="pp">|</span> Parquet <span class="pp">|</span> note <span class="pp">|</span></span>
-<span id="cb11-93"><a href="#cb11-93" aria-hidden="true" tabindex="-1"></a><span class="pp">|---|</span>--:<span class="pp">|</span>--:<span class="pp">|</span>--:<span class="pp">|---|</span></span>
-<span id="cb11-94"><a href="#cb11-94" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="in">`ctd_cast`</span> <span class="pp">|</span> 5.55 M <span class="pp">|</span> 5.55 M <span class="pp">|</span> 128 MB <span class="pp">|</span> one row per cast; carries <span class="in">`time`</span>,<span class="in">`lat`</span>,<span class="in">`lon`</span> <span class="pp">|</span></span>
-<span id="cb11-95"><a href="#cb11-95" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="in">`ctd_thin`</span> <span class="pp">|</span> 5.55 M <span class="pp">|</span> 0.42 M <span class="pp">|</span> 155 MB <span class="pp">|</span> adaptively-thinned headline table <span class="pp">|</span></span>
-<span id="cb11-96"><a href="#cb11-96" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="in">`ctd_measurement`</span> <span class="pp">|</span> 216 M <span class="pp">|</span> 5.36 M <span class="pp">|</span> ~16 GB <span class="pp">|</span> full long table (96 <span class="in">`cruise_key`</span> partitions) <span class="pp">|</span></span>
-<span id="cb11-97"><a href="#cb11-97" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-98"><a href="#cb11-98" aria-hidden="true" tabindex="-1"></a>The long tables are keyed by <span class="in">`ctd_cast_uuid`</span> and carry no coordinates —</span>
-<span id="cb11-99"><a href="#cb11-99" aria-hidden="true" tabindex="-1"></a><span class="in">`time`</span>/<span class="in">`latitude`</span>/<span class="in">`longitude`</span> live in <span class="in">`ctd_cast`</span>, so every representation re-joins</span>
-<span id="cb11-100"><a href="#cb11-100" aria-hidden="true" tabindex="-1"></a>them. The **5.55 M casts** figure is what makes per-cast NetCDF infeasible (§3).</span>
-<span id="cb11-101"><a href="#cb11-101" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-102"><a href="#cb11-102" aria-hidden="true" tabindex="-1"></a><span class="fu">## 2 · How ERDDAP serves files — and the NetCDF "per-cruise = one dataset" point</span></span>
-<span id="cb11-103"><a href="#cb11-103" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-104"><a href="#cb11-104" aria-hidden="true" tabindex="-1"></a>A persistent point of confusion: **per-cruise files do *not* mean a dataset (or</span>
-<span id="cb11-105"><a href="#cb11-105" aria-hidden="true" tabindex="-1"></a>form) per cruise.** Every ERDDAP <span class="in">`…FromFiles`</span> type points at a *directory*</span>
-<span id="cb11-106"><a href="#cb11-106" aria-hidden="true" tabindex="-1"></a>(<span class="in">`fileDir`</span> + <span class="in">`fileNameRegex`</span>) and aggregates all matching files into **one**</span>
-<span id="cb11-107"><a href="#cb11-107" aria-hidden="true" tabindex="-1"></a><span class="in">`datasetID`</span> — one Data Access Form, one <span class="in">`.das`</span>, with sliders/min-max **rolled up</span>
-<span id="cb11-108"><a href="#cb11-108" aria-hidden="true" tabindex="-1"></a>across the whole collection**. The per-cruise split is purely *storage*: it's how</span>
-<span id="cb11-109"><a href="#cb11-109" aria-hidden="true" tabindex="-1"></a>we go from "5.55 M per-cast files ERDDAP can't index" to "96 files it can," while</span>
-<span id="cb11-110"><a href="#cb11-110" aria-hidden="true" tabindex="-1"></a>the user still sees a single dataset. ERDDAP prunes by <span class="in">`cruise_key`</span> (a</span>
-<span id="cb11-111"><a href="#cb11-111" aria-hidden="true" tabindex="-1"></a><span class="in">`subsetVariable`</span>) and by each file's time/lat/lon min-max, so a cruise-scoped query</span>
-<span id="cb11-112"><a href="#cb11-112" aria-hidden="true" tabindex="-1"></a>opens one file and a broad spatial query opens many.</span>
-<span id="cb11-113"><a href="#cb11-113" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-114"><a href="#cb11-114" aria-hidden="true" tabindex="-1"></a>The flip side is the memory model: for **file** backends ERDDAP reads each</span>
-<span id="cb11-115"><a href="#cb11-115" aria-hidden="true" tabindex="-1"></a>*matching file fully onto the JVM heap* before filtering. That is the entire</span>
-<span id="cb11-116"><a href="#cb11-116" aria-hidden="true" tabindex="-1"></a>origin of the memory problem — a single **935 MB** <span class="in">`ctd_wide.parquet`</span> OOM'd a 4 GB</span>
-<span id="cb11-117"><a href="#cb11-117" aria-hidden="true" tabindex="-1"></a>heap and dropped the dataset from every <span class="in">`LoadDatasets`</span> run. The benchmark below</span>
-<span id="cb11-118"><a href="#cb11-118" aria-hidden="true" tabindex="-1"></a>isolates that as the **granularity** axis. **DuckDB** is the exception: via JDBC it</span>
-<span id="cb11-119"><a href="#cb11-119" aria-hidden="true" tabindex="-1"></a>*streams* a filtered <span class="in">`ResultSet`</span> from the underlying Parquet (predicate pushdown +</span>
-<span id="cb11-120"><a href="#cb11-120" aria-hidden="true" tabindex="-1"></a>partition pruning + disk spill), so the whole table is never on the heap.</span>
-<span id="cb11-121"><a href="#cb11-121" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-122"><a href="#cb11-122" aria-hidden="true" tabindex="-1"></a>::: {.callout-important title="Two DuckDB gotchas"}</span>
-<span id="cb11-123"><a href="#cb11-123" aria-hidden="true" tabindex="-1"></a>Serve <span class="in">`time`</span> as a real **TIMESTAMP** in the view (not epoch double) or the DuckDB</span>
-<span id="cb11-124"><a href="#cb11-124" aria-hidden="true" tabindex="-1"></a>JDBC driver NPEs on every query that selects time. And <span class="in">`EDDTableFromDatabase`</span> does</span>
-<span id="cb11-125"><a href="#cb11-125" aria-hidden="true" tabindex="-1"></a>**not** auto-compute variable ranges — set <span class="in">`actual_range`</span> (+ <span class="in">`geospatial_*`</span>) or the</span>
-<span id="cb11-126"><a href="#cb11-126" aria-hidden="true" tabindex="-1"></a>form shows no sliders. (NetCDF computes these from the files automatically.)</span>
-<span id="cb11-127"><a href="#cb11-127" aria-hidden="true" tabindex="-1"></a>:::</span>
-<span id="cb11-128"><a href="#cb11-128" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-129"><a href="#cb11-129" aria-hidden="true" tabindex="-1"></a><span class="fu">## 3 · The benchmark grid</span></span>
-<span id="cb11-130"><a href="#cb11-130" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-131"><a href="#cb11-131" aria-hidden="true" tabindex="-1"></a>Isolated ERDDAP (custom image with the DuckDB JDBC jar) on our host, **2 GB heap**.</span>
-<span id="cb11-132"><a href="#cb11-132" aria-hidden="true" tabindex="-1"></a>We serve the **same canonical data** every way and run the **same-intent** queries:</span>
-<span id="cb11-133"><a href="#cb11-133" aria-hidden="true" tabindex="-1"></a>**q1** `.das`; **q2** one cruise + temperature (subset); **q3** one variable</span>
-<span id="cb11-134"><a href="#cb11-134" aria-hidden="true" tabindex="-1"></a>(salinity) over depth 0–200 m across all cruises (subset, cross-file); **q4**</span>
-<span id="cb11-135"><a href="#cb11-135" aria-hidden="true" tabindex="-1"></a>whole-cruise dump. In *wide* schema a query selects a named column; in *long* it</span>
-<span id="cb11-136"><a href="#cb11-136" aria-hidden="true" tabindex="-1"></a>filters <span class="in">`measurement_type`</span> — chosen so q2/q3 return the **same rows** either way.</span>
-<span id="cb11-137"><a href="#cb11-137" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-140"><a href="#cb11-140" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb11-141"><a href="#cb11-141" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: matrix</span></span>
-<span id="cb11-142"><a href="#cb11-142" aria-hidden="true" tabindex="-1"></a>res <span class="sc">|&gt;</span></span>
-<span id="cb11-143"><a href="#cb11-143" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(table, schema, format, granularity) <span class="sc">|&gt;</span></span>
-<span id="cb11-144"><a href="#cb11-144" aria-hidden="true" tabindex="-1"></a>  <span class="fu">transmute</span>(table, format, schema, granularity, <span class="at">load =</span> load_status,</span>
-<span id="cb11-145"><a href="#cb11-145" aria-hidden="true" tabindex="-1"></a>            <span class="st">`</span><span class="at">load heap MB</span><span class="st">`</span> <span class="ot">=</span> load_peak_heap_mb,</span>
-<span id="cb11-146"><a href="#cb11-146" aria-hidden="true" tabindex="-1"></a>            <span class="st">`</span><span class="at">q2 cruise ms</span><span class="st">`</span> <span class="ot">=</span> <span class="fu">na_if</span>(q2_cruise_ms, <span class="sc">-</span><span class="dv">1</span>),</span>
-<span id="cb11-147"><a href="#cb11-147" aria-hidden="true" tabindex="-1"></a>            <span class="st">`</span><span class="at">q3 var+depth ms</span><span class="st">`</span> <span class="ot">=</span> <span class="fu">na_if</span>(q3_var200_ms, <span class="sc">-</span><span class="dv">1</span>),</span>
-<span id="cb11-148"><a href="#cb11-148" aria-hidden="true" tabindex="-1"></a>            <span class="st">`</span><span class="at">q4 dump ms</span><span class="st">`</span> <span class="ot">=</span> <span class="fu">na_if</span>(q4_dump_ms, <span class="sc">-</span><span class="dv">1</span>)) <span class="sc">|&gt;</span></span>
-<span id="cb11-149"><a href="#cb11-149" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kable</span>()</span>
-<span id="cb11-150"><a href="#cb11-150" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb11-151"><a href="#cb11-151" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-152"><a href="#cb11-152" aria-hidden="true" tabindex="-1"></a><span class="fu">### Finding 1 &amp; 3 — load memory: granularity (files) vs streaming (DuckDB)</span></span>
-<span id="cb11-153"><a href="#cb11-153" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-156"><a href="#cb11-156" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb11-157"><a href="#cb11-157" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: fig-mem</span></span>
-<span id="cb11-158"><a href="#cb11-158" aria-hidden="true" tabindex="-1"></a><span class="co">#| fig-width: 9</span></span>
-<span id="cb11-159"><a href="#cb11-159" aria-hidden="true" tabindex="-1"></a><span class="co">#| fig-height: 5</span></span>
-<span id="cb11-160"><a href="#cb11-160" aria-hidden="true" tabindex="-1"></a><span class="co">#| fig-cap: "Peak JVM heap during dataset load at a 2 GB cap, by format and granularity. DuckDB (purple) stays ~65 MB whatever the schema/size because it streams. The file formats rise with what ERDDAP must read; the lumped 2.1 GB measurement NetCDF blows past the cap and times out (labeled). Bars are labeled with peak MB, or the failure mode."</span></span>
-<span id="cb11-161"><a href="#cb11-161" aria-hidden="true" tabindex="-1"></a>res <span class="sc">|&gt;</span></span>
-<span id="cb11-162"><a href="#cb11-162" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">lab =</span> <span class="fu">ifelse</span>(loaded, <span class="fu">paste0</span>(load_peak_heap_mb), <span class="fu">toupper</span>(load_status))) <span class="sc">|&gt;</span></span>
-<span id="cb11-163"><a href="#cb11-163" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ggplot</span>(<span class="fu">aes</span>(format, load_peak_heap_mb, <span class="at">fill =</span> granularity)) <span class="sc">+</span></span>
-<span id="cb11-164"><a href="#cb11-164" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_col</span>(<span class="at">position =</span> <span class="fu">position_dodge2</span>(<span class="at">preserve =</span> <span class="st">"single"</span>), <span class="at">width =</span> <span class="fl">0.85</span>) <span class="sc">+</span></span>
-<span id="cb11-165"><a href="#cb11-165" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_text</span>(<span class="fu">aes</span>(<span class="at">label =</span> lab, <span class="at">colour =</span> loaded),</span>
-<span id="cb11-166"><a href="#cb11-166" aria-hidden="true" tabindex="-1"></a>            <span class="at">position =</span> <span class="fu">position_dodge2</span>(<span class="at">width =</span> <span class="fl">0.85</span>, <span class="at">preserve =</span> <span class="st">"single"</span>),</span>
-<span id="cb11-167"><a href="#cb11-167" aria-hidden="true" tabindex="-1"></a>            <span class="at">vjust =</span> <span class="sc">-</span><span class="fl">0.3</span>, <span class="at">size =</span> <span class="fl">2.6</span>, <span class="at">show.legend =</span> <span class="cn">FALSE</span>) <span class="sc">+</span></span>
-<span id="cb11-168"><a href="#cb11-168" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_hline</span>(<span class="at">yintercept =</span> <span class="dv">2048</span>, <span class="at">linetype =</span> <span class="st">"dashed"</span>, <span class="at">colour =</span> <span class="st">"grey45"</span>) <span class="sc">+</span></span>
-<span id="cb11-169"><a href="#cb11-169" aria-hidden="true" tabindex="-1"></a>  <span class="fu">facet_grid</span>(schema <span class="sc">~</span> table) <span class="sc">+</span></span>
-<span id="cb11-170"><a href="#cb11-170" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_fill_manual</span>(<span class="at">values =</span> PAL, <span class="at">name =</span> <span class="st">"granularity"</span>) <span class="sc">+</span></span>
-<span id="cb11-171"><a href="#cb11-171" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_colour_manual</span>(<span class="at">values =</span> <span class="fu">c</span>(<span class="st">`</span><span class="at">TRUE</span><span class="st">`</span> <span class="ot">=</span> <span class="st">"grey20"</span>, <span class="st">`</span><span class="at">FALSE</span><span class="st">`</span> <span class="ot">=</span> <span class="st">"#d95f02"</span>)) <span class="sc">+</span></span>
-<span id="cb11-172"><a href="#cb11-172" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_y_continuous</span>(<span class="at">expand =</span> <span class="fu">expansion</span>(<span class="at">mult =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="fl">0.18</span>))) <span class="sc">+</span></span>
-<span id="cb11-173"><a href="#cb11-173" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="cn">NULL</span>, <span class="at">y =</span> <span class="st">"peak load heap (MB); dashed = 2 GB cap"</span>) <span class="sc">+</span></span>
-<span id="cb11-174"><a href="#cb11-174" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme_minimal</span>(<span class="at">base_size =</span> <span class="dv">11</span>) <span class="sc">+</span> <span class="fu">theme</span>(<span class="at">legend.position =</span> <span class="st">"top"</span>)</span>
-<span id="cb11-175"><a href="#cb11-175" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb11-176"><a href="#cb11-176" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-177"><a href="#cb11-177" aria-hidden="true" tabindex="-1"></a><span class="fu">### Finding 2 — query latency: split serves subsets fast, lumped re-reads everything</span></span>
-<span id="cb11-178"><a href="#cb11-178" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-181"><a href="#cb11-181" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb11-182"><a href="#cb11-182" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: fig-latency</span></span>
-<span id="cb11-183"><a href="#cb11-183" aria-hidden="true" tabindex="-1"></a><span class="co">#| fig-width: 9</span></span>
-<span id="cb11-184"><a href="#cb11-184" aria-hidden="true" tabindex="-1"></a><span class="co">#| fig-height: 4.6</span></span>
-<span id="cb11-185"><a href="#cb11-185" aria-hidden="true" tabindex="-1"></a><span class="co">#| fig-cap: "Median latency (log scale) for loaded cells. SPLIT files serve cruise-scoped queries (q2, q4) fastest — one cruise = one file. LUMPED files re-read the whole file on every query (q4 cruise-dump up to 74 s). DuckDB shows TWO purple bars — its wide-pivot and long views; the wide view is slow on the broad cross-cruise scan (q3: 76.5 s wide vs 23.9 s long) because it aggregates the whole table on the fly, while it's faster on the cruise dump (q4: 3 s wide vs 99 s long, fewer rows)."</span></span>
-<span id="cb11-186"><a href="#cb11-186" aria-hidden="true" tabindex="-1"></a>lbl_ms <span class="ot">&lt;-</span> <span class="cf">function</span>(x) <span class="fu">ifelse</span>(x <span class="sc">&gt;=</span> <span class="dv">1000</span>, <span class="fu">paste0</span>(<span class="fu">round</span>(x<span class="sc">/</span><span class="dv">1000</span>, <span class="dv">1</span>), <span class="st">"s"</span>), <span class="fu">paste0</span>(<span class="fu">round</span>(x), <span class="st">"ms"</span>))</span>
-<span id="cb11-187"><a href="#cb11-187" aria-hidden="true" tabindex="-1"></a>res <span class="sc">|&gt;</span></span>
-<span id="cb11-188"><a href="#cb11-188" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(loaded) <span class="sc">|&gt;</span></span>
-<span id="cb11-189"><a href="#cb11-189" aria-hidden="true" tabindex="-1"></a>  <span class="fu">transmute</span>(table, format, granularity,</span>
-<span id="cb11-190"><a href="#cb11-190" aria-hidden="true" tabindex="-1"></a>            <span class="st">`</span><span class="at">q2 cruise</span><span class="st">`</span> <span class="ot">=</span> <span class="fu">na_if</span>(q2_cruise_ms, <span class="sc">-</span><span class="dv">1</span>),</span>
-<span id="cb11-191"><a href="#cb11-191" aria-hidden="true" tabindex="-1"></a>            <span class="st">`</span><span class="at">q3 var+depth</span><span class="st">`</span> <span class="ot">=</span> <span class="fu">na_if</span>(q3_var200_ms, <span class="sc">-</span><span class="dv">1</span>),</span>
-<span id="cb11-192"><a href="#cb11-192" aria-hidden="true" tabindex="-1"></a>            <span class="st">`</span><span class="at">q4 cruise dump</span><span class="st">`</span> <span class="ot">=</span> <span class="fu">na_if</span>(q4_dump_ms, <span class="sc">-</span><span class="dv">1</span>)) <span class="sc">|&gt;</span></span>
-<span id="cb11-193"><a href="#cb11-193" aria-hidden="true" tabindex="-1"></a>  <span class="fu">pivot_longer</span>(<span class="fu">starts_with</span>(<span class="st">"q"</span>), <span class="at">names_to =</span> <span class="st">"query"</span>, <span class="at">values_to =</span> <span class="st">"ms"</span>) <span class="sc">|&gt;</span></span>
-<span id="cb11-194"><a href="#cb11-194" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(<span class="sc">!</span><span class="fu">is.na</span>(ms)) <span class="sc">|&gt;</span></span>
-<span id="cb11-195"><a href="#cb11-195" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ggplot</span>(<span class="fu">aes</span>(format, ms, <span class="at">fill =</span> granularity)) <span class="sc">+</span></span>
-<span id="cb11-196"><a href="#cb11-196" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_col</span>(<span class="at">position =</span> <span class="fu">position_dodge2</span>(<span class="at">preserve =</span> <span class="st">"single"</span>), <span class="at">width =</span> <span class="fl">0.8</span>) <span class="sc">+</span></span>
-<span id="cb11-197"><a href="#cb11-197" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_text</span>(<span class="fu">aes</span>(<span class="at">label =</span> <span class="fu">lbl_ms</span>(ms)),</span>
-<span id="cb11-198"><a href="#cb11-198" aria-hidden="true" tabindex="-1"></a>            <span class="at">position =</span> <span class="fu">position_dodge2</span>(<span class="at">width =</span> <span class="fl">0.8</span>, <span class="at">preserve =</span> <span class="st">"single"</span>),</span>
-<span id="cb11-199"><a href="#cb11-199" aria-hidden="true" tabindex="-1"></a>            <span class="at">vjust =</span> <span class="sc">-</span><span class="fl">0.3</span>, <span class="at">size =</span> <span class="fl">2.2</span>) <span class="sc">+</span></span>
-<span id="cb11-200"><a href="#cb11-200" aria-hidden="true" tabindex="-1"></a>  <span class="fu">facet_grid</span>(query <span class="sc">~</span> table) <span class="sc">+</span></span>
-<span id="cb11-201"><a href="#cb11-201" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_fill_manual</span>(<span class="at">values =</span> PAL, <span class="at">name =</span> <span class="st">"granularity"</span>) <span class="sc">+</span></span>
-<span id="cb11-202"><a href="#cb11-202" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_y_log10</span>(<span class="at">expand =</span> <span class="fu">expansion</span>(<span class="at">mult =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="fl">0.25</span>))) <span class="sc">+</span></span>
-<span id="cb11-203"><a href="#cb11-203" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="cn">NULL</span>, <span class="at">y =</span> <span class="st">"median latency (log scale)"</span>) <span class="sc">+</span></span>
-<span id="cb11-204"><a href="#cb11-204" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme_minimal</span>(<span class="at">base_size =</span> <span class="dv">10</span>) <span class="sc">+</span> <span class="fu">theme</span>(<span class="at">legend.position =</span> <span class="st">"top"</span>)</span>
-<span id="cb11-205"><a href="#cb11-205" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb11-206"><a href="#cb11-206" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-207"><a href="#cb11-207" aria-hidden="true" tabindex="-1"></a>**Reading the grid.**</span>
-<span id="cb11-208"><a href="#cb11-208" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-209"><a href="#cb11-209" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Load memory (Fig 1).** **DuckDB ≈ 65 MB in every cell** — wide or long, thin or</span>
-<span id="cb11-210"><a href="#cb11-210" aria-hidden="true" tabindex="-1"></a>  216 M rows — because it never holds a file on-heap. The file formats scale with</span>
-<span id="cb11-211"><a href="#cb11-211" aria-hidden="true" tabindex="-1"></a>  what ERDDAP reads: per-cruise **split** measurement loads at ~1.1–1.8 GB (it</span>
-<span id="cb11-212"><a href="#cb11-212" aria-hidden="true" tabindex="-1"></a>  indexes 96 files), and the **lumped 2.1 GB** measurement NetCDF **exceeds the cap</span>
-<span id="cb11-213"><a href="#cb11-213" aria-hidden="true" tabindex="-1"></a>  and times out** (ERDDAP starts shedding requests under memory pressure). The</span>
-<span id="cb11-214"><a href="#cb11-214" aria-hidden="true" tabindex="-1"></a>  smaller 598 MB lumped Parquet squeaks in at 1.6 GB — *granularity bites once the</span>
-<span id="cb11-215"><a href="#cb11-215" aria-hidden="true" tabindex="-1"></a>  single file is large relative to the heap.*</span>
-<span id="cb11-216"><a href="#cb11-216" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Query latency (Fig 2).** **Split** files serve cruise-scoped q2/q4 in well under</span>
-<span id="cb11-217"><a href="#cb11-217" aria-hidden="true" tabindex="-1"></a>  a second (one <span class="in">`cruise_key`</span> → one file). **Lumped** files have no such pruning, so</span>
-<span id="cb11-218"><a href="#cb11-218" aria-hidden="true" tabindex="-1"></a>  every query re-reads the whole file — the lumped-Parquet cruise dump took **74 s**</span>
-<span id="cb11-219"><a href="#cb11-219" aria-hidden="true" tabindex="-1"></a>  vs **1.2 s** split, and lumped CSV/Parquet q2 are seconds, not milliseconds.</span>
-<span id="cb11-220"><a href="#cb11-220" aria-hidden="true" tabindex="-1"></a>  **DuckDB-wide's** broad q3 is **76 s** because the pivot view aggregates the whole</span>
-<span id="cb11-221"><a href="#cb11-221" aria-hidden="true" tabindex="-1"></a>  216 M-row table on the fly; the **DuckDB-long** view does the same q3 in 24 s and</span>
-<span id="cb11-222"><a href="#cb11-222" aria-hidden="true" tabindex="-1"></a>  is what we serve live.</span>
-<span id="cb11-223"><a href="#cb11-223" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Apples-to-apples format (wide, split).** With schema and granularity held fixed,</span>
-<span id="cb11-224"><a href="#cb11-224" aria-hidden="true" tabindex="-1"></a>  **NetCDF-split** and **Parquet-split** are the fast file formats (sub-second</span>
-<span id="cb11-225"><a href="#cb11-225" aria-hidden="true" tabindex="-1"></a>  cruise queries); DuckDB is lightest on memory but slowest on broad aggregation;</span>
-<span id="cb11-226"><a href="#cb11-226" aria-hidden="true" tabindex="-1"></a>  CSV works only at thin scale.</span>
-<span id="cb11-227"><a href="#cb11-227" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Schema (wide vs long).** For the materialized file formats it's close. For</span>
-<span id="cb11-228"><a href="#cb11-228" aria-hidden="true" tabindex="-1"></a>  **DuckDB** the on-the-fly wide pivot is *slower* than long on cross-cruise scans —</span>
-<span id="cb11-229"><a href="#cb11-229" aria-hidden="true" tabindex="-1"></a>  a reason to keep the tidy long view live and reach for wide only behind a</span>
-<span id="cb11-230"><a href="#cb11-230" aria-hidden="true" tabindex="-1"></a>  materialization.</span>
-<span id="cb11-231"><a href="#cb11-231" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-232"><a href="#cb11-232" aria-hidden="true" tabindex="-1"></a><span class="fu">## 4 · Partitioning &amp; ordering within the long table (Lynn's question)</span></span>
-<span id="cb11-233"><a href="#cb11-233" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-234"><a href="#cb11-234" aria-hidden="true" tabindex="-1"></a><span class="at">&gt; *"I wonder how organizing each sensor reading on its own row affects a query for</span></span>
-<span id="cb11-235"><a href="#cb11-235" aria-hidden="true" tabindex="-1"></a><span class="at">&gt; data within a lat/lon/depth box."* — Lynn DeWitt</span></span>
-<span id="cb11-236"><a href="#cb11-236" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-237"><a href="#cb11-237" aria-hidden="true" tabindex="-1"></a>Beyond split-vs-lumped, *within* the long table we measured (in DuckDB, the serving</span>
-<span id="cb11-238"><a href="#cb11-238" aria-hidden="true" tabindex="-1"></a>engine) the same bounding-box query — **<span class="in">`temperature_ave`</span>, 32–34°N, 119–121°W,</span>
-<span id="cb11-239"><a href="#cb11-239" aria-hidden="true" tabindex="-1"></a>0–200 m (~393 k rows)** — across four physical layouts:</span>
-<span id="cb11-240"><a href="#cb11-240" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-241"><a href="#cb11-241" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**A** raw Parquet partitioned by <span class="in">`cruise_key`</span>, joined to <span class="in">`ctd_cast`</span> at query time</span>
-<span id="cb11-242"><a href="#cb11-242" aria-hidden="true" tabindex="-1"></a>  (live now); **B** denormalized, partitioned by `cruise_key`; **C** denormalized,</span>
-<span id="cb11-243"><a href="#cb11-243" aria-hidden="true" tabindex="-1"></a>  partitioned by <span class="in">`measurement_type`</span>; **D** = C **plus** rows sorted by</span>
-<span id="cb11-244"><a href="#cb11-244" aria-hidden="true" tabindex="-1"></a>  <span class="in">`latitude,longitude,depth`</span> within each partition.</span>
-<span id="cb11-245"><a href="#cb11-245" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-248"><a href="#cb11-248" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb11-249"><a href="#cb11-249" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: layout</span></span>
-<span id="cb11-250"><a href="#cb11-250" aria-hidden="true" tabindex="-1"></a><span class="co">#| eval: !expr "!is.null(lay)"</span></span>
-<span id="cb11-251"><a href="#cb11-251" aria-hidden="true" tabindex="-1"></a>lay <span class="sc">|&gt;</span></span>
-<span id="cb11-252"><a href="#cb11-252" aria-hidden="true" tabindex="-1"></a>  <span class="fu">transmute</span>(layout, <span class="st">`</span><span class="at">build s</span><span class="st">`</span> <span class="ot">=</span> build_secs, size, <span class="at">files =</span> nfiles,</span>
-<span id="cb11-253"><a href="#cb11-253" aria-hidden="true" tabindex="-1"></a>            <span class="st">`</span><span class="at">query s (median)</span><span class="st">`</span> <span class="ot">=</span> query_secs_median, <span class="st">`</span><span class="at">result rows</span><span class="st">`</span> <span class="ot">=</span> result_rows) <span class="sc">|&gt;</span></span>
-<span id="cb11-254"><a href="#cb11-254" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kable</span>()</span>
-<span id="cb11-255"><a href="#cb11-255" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb11-256"><a href="#cb11-256" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-259"><a href="#cb11-259" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb11-260"><a href="#cb11-260" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: fig-layout</span></span>
-<span id="cb11-261"><a href="#cb11-261" aria-hidden="true" tabindex="-1"></a><span class="co">#| eval: !expr "!is.null(lay)"</span></span>
-<span id="cb11-262"><a href="#cb11-262" aria-hidden="true" tabindex="-1"></a><span class="co">#| fig-width: 7.5</span></span>
-<span id="cb11-263"><a href="#cb11-263" aria-hidden="true" tabindex="-1"></a><span class="co">#| fig-height: 3</span></span>
-<span id="cb11-264"><a href="#cb11-264" aria-hidden="true" tabindex="-1"></a><span class="co">#| fig-cap: "The same ~393k-row bbox query across four physical layouts of the long table (DuckDB on SSD). ~12× spread, but every layout is already sub-second."</span></span>
-<span id="cb11-265"><a href="#cb11-265" aria-hidden="true" tabindex="-1"></a>lay <span class="sc">|&gt;</span></span>
-<span id="cb11-266"><a href="#cb11-266" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">layout =</span> <span class="fu">fct_rev</span>(<span class="fu">factor</span>(layout))) <span class="sc">|&gt;</span></span>
-<span id="cb11-267"><a href="#cb11-267" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ggplot</span>(<span class="fu">aes</span>(layout, query_secs_median)) <span class="sc">+</span></span>
-<span id="cb11-268"><a href="#cb11-268" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_col</span>(<span class="at">width =</span> <span class="fl">0.7</span>, <span class="at">fill =</span> <span class="st">"#7570b3"</span>) <span class="sc">+</span></span>
-<span id="cb11-269"><a href="#cb11-269" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_text</span>(<span class="fu">aes</span>(<span class="at">label =</span> <span class="fu">paste0</span>(<span class="fu">formatC</span>(query_secs_median, <span class="at">format=</span><span class="st">"f"</span>, <span class="at">digits=</span><span class="dv">3</span>), <span class="st">" s"</span>)),</span>
-<span id="cb11-270"><a href="#cb11-270" aria-hidden="true" tabindex="-1"></a>            <span class="at">hjust =</span> <span class="sc">-</span><span class="fl">0.15</span>, <span class="at">size =</span> <span class="dv">3</span>) <span class="sc">+</span></span>
-<span id="cb11-271"><a href="#cb11-271" aria-hidden="true" tabindex="-1"></a>  <span class="fu">coord_flip</span>() <span class="sc">+</span> <span class="fu">scale_y_continuous</span>(<span class="at">expand =</span> <span class="fu">expansion</span>(<span class="at">mult =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="fl">0.18</span>))) <span class="sc">+</span></span>
-<span id="cb11-272"><a href="#cb11-272" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="cn">NULL</span>, <span class="at">y =</span> <span class="st">"median query (s)"</span>) <span class="sc">+</span> <span class="fu">theme_minimal</span>(<span class="at">base_size =</span> <span class="dv">11</span>)</span>
-<span id="cb11-273"><a href="#cb11-273" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb11-274"><a href="#cb11-274" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-277"><a href="#cb11-277" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb11-278"><a href="#cb11-278" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: layout-missing</span></span>
-<span id="cb11-279"><a href="#cb11-279" aria-hidden="true" tabindex="-1"></a><span class="co">#| echo: false</span></span>
-<span id="cb11-280"><a href="#cb11-280" aria-hidden="true" tabindex="-1"></a><span class="co">#| output: asis</span></span>
-<span id="cb11-281"><a href="#cb11-281" aria-hidden="true" tabindex="-1"></a><span class="co">#| eval: !expr "is.null(lay)"</span></span>
-<span id="cb11-282"><a href="#cb11-282" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"*(layout_results.csv not present — run scripts/bench_parquet_layout.sh)*"</span>)</span>
-<span id="cb11-283"><a href="#cb11-283" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb11-284"><a href="#cb11-284" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-285"><a href="#cb11-285" aria-hidden="true" tabindex="-1"></a>Decomposing the ~12× spread: removing the query-time join ≈ 4× (A→B);</span>
-<span id="cb11-286"><a href="#cb11-286" aria-hidden="true" tabindex="-1"></a>partitioning by <span class="in">`measurement_type`</span> ≈ 2× (B→C, a one-variable query opens 1 of 53</span>
-<span id="cb11-287"><a href="#cb11-287" aria-hidden="true" tabindex="-1"></a>partitions); spatial ordering ≈ 1.4× (C→D, row-group skipping). The trade-off is</span>
-<span id="cb11-288"><a href="#cb11-288" aria-hidden="true" tabindex="-1"></a>the one you raised: partitioning by <span class="in">`measurement_type`</span> helps single-variable</span>
-<span id="cb11-289"><a href="#cb11-289" aria-hidden="true" tabindex="-1"></a>queries but slows "all variables in a region." Every layout is already sub-second,</span>
-<span id="cb11-290"><a href="#cb11-290" aria-hidden="true" tabindex="-1"></a>so for the long table this is an optimization, not a rescue.</span>
-<span id="cb11-291"><a href="#cb11-291" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-292"><a href="#cb11-292" aria-hidden="true" tabindex="-1"></a><span class="fu">## 5 · Recommendations</span></span>
-<span id="cb11-293"><a href="#cb11-293" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-294"><a href="#cb11-294" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**The memory question is "lumped vs split," not "which format."** Never serve the</span>
-<span id="cb11-295"><a href="#cb11-295" aria-hidden="true" tabindex="-1"></a>  big table as one file via a file backend — split it per cruise (96 files). DuckDB</span>
-<span id="cb11-296"><a href="#cb11-296" aria-hidden="true" tabindex="-1"></a>  sidesteps the question entirely by streaming.</span>
-<span id="cb11-297"><a href="#cb11-297" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**For CoastWatch hosting, NetCDF is the most native fit** — per-cruise CF profile</span>
-<span id="cb11-298"><a href="#cb11-298" aria-hidden="true" tabindex="-1"></a>  files served as one <span class="in">`EDDTableFromNcCFFiles`</span> dataset; small load heap, fast</span>
-<span id="cb11-299"><a href="#cb11-299" aria-hidden="true" tabindex="-1"></a>  cruise-scoped queries, auto ranges/sliders, source <span class="in">`.nc`</span> downloadable. We generate</span>
-<span id="cb11-300"><a href="#cb11-300" aria-hidden="true" tabindex="-1"></a>  them from the same pipeline (96 files/table). Costs: canonical sensors only,</span>
-<span id="cb11-301"><a href="#cb11-301" aria-hidden="true" tabindex="-1"></a>  ~2.3 GB duplicated, regenerate on update.</span>
-<span id="cb11-302"><a href="#cb11-302" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**To keep the tidy long table queryable as-is, DuckDB-over-Parquet** is the</span>
-<span id="cb11-303"><a href="#cb11-303" aria-hidden="true" tabindex="-1"></a>  lightest path: a 274 KB <span class="in">`.db`</span> of views on stock ERDDAP (only the driver jar</span>
-<span id="cb11-304"><a href="#cb11-304" aria-hidden="true" tabindex="-1"></a>  added), serving 216 M rows within ~65 MB, always reflecting the live Parquet. Keep</span>
-<span id="cb11-305"><a href="#cb11-305" aria-hidden="true" tabindex="-1"></a>  it **long** — the wide pivot view is slow on broad scans. This runs live today.</span>
-<span id="cb11-306"><a href="#cb11-306" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Avoid `EDDTableFromParquetFiles` on a single large file** (whole-file on-heap</span>
-<span id="cb11-307"><a href="#cb11-307" aria-hidden="true" tabindex="-1"></a>  reads), and **avoid lumped anything** for the big table.</span>
-<span id="cb11-308"><a href="#cb11-308" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Open for you, Lynn:** (a) per-cruise **NetCDF** we generate, (b) **Parquet + the</span>
-<span id="cb11-309"><a href="#cb11-309" aria-hidden="true" tabindex="-1"></a>  small DuckDB <span class="in">`.db`</span>**, or (c) wait on native Parquet/DuckDB</span>
-<span id="cb11-310"><a href="#cb11-310" aria-hidden="true" tabindex="-1"></a>  (<span class="co">[</span><span class="ot">#447</span><span class="co">](https://github.com/ERDDAP/erddap/discussions/447)</span> /</span>
-<span id="cb11-311"><a href="#cb11-311" aria-hidden="true" tabindex="-1"></a>  <span class="co">[</span><span class="ot">#448</span><span class="co">](https://github.com/ERDDAP/erddap/issues/448)</span>)? Any is producible from the</span>
-<span id="cb11-312"><a href="#cb11-312" aria-hidden="true" tabindex="-1"></a>  same pipeline.</span>
-<span id="cb11-313"><a href="#cb11-313" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-314"><a href="#cb11-314" aria-hidden="true" tabindex="-1"></a><span class="fu">## 6 · Reproduce</span></span>
-<span id="cb11-315"><a href="#cb11-315" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-316"><a href="#cb11-316" aria-hidden="true" tabindex="-1"></a>Everything runs in the CalCOFI server containers (<span class="in">`../server/`</span>), reading from and</span>
-<span id="cb11-317"><a href="#cb11-317" aria-hidden="true" tabindex="-1"></a>writing to the shared **`/share/data/erddap-duckdb`** tree, mounted identically into</span>
-<span id="cb11-318"><a href="#cb11-318" aria-hidden="true" tabindex="-1"></a><span class="in">`rstudio`</span> (build), the live <span class="in">`erddap`</span>, and the bench <span class="in">`erddap_bench`</span> — no</span>
-<span id="cb11-319"><a href="#cb11-319" aria-hidden="true" tabindex="-1"></a>host-specific paths.</span>
-<span id="cb11-320"><a href="#cb11-320" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-321"><a href="#cb11-321" aria-hidden="true" tabindex="-1"></a>**Code** (all in <span class="co">[</span><span class="ot">CalCOFI/workflows</span><span class="co">](https://github.com/CalCOFI/workflows)</span>):</span>
-<span id="cb11-322"><a href="#cb11-322" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-323"><a href="#cb11-323" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> file <span class="pp">|</span> role <span class="pp">|</span></span>
-<span id="cb11-324"><a href="#cb11-324" aria-hidden="true" tabindex="-1"></a><span class="pp">|---|---|</span></span>
-<span id="cb11-325"><a href="#cb11-325" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="co">[</span><span class="ot">`libs/erddap_netcdf.R`</span><span class="co">](https://github.com/CalCOFI/workflows/blob/main/libs/erddap_netcdf.R)</span> <span class="pp">|</span> per-cruise + lumped CF NetCDF builders + <span class="in">`EDDTableFromNcCFFiles`</span> XML <span class="pp">|</span></span>
-<span id="cb11-326"><a href="#cb11-326" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="co">[</span><span class="ot">`libs/erddap_duckdb.R`</span><span class="co">](https://github.com/CalCOFI/workflows/blob/main/libs/erddap_duckdb.R)</span> <span class="pp">|</span> <span class="in">`.db`</span> view builder + <span class="in">`EDDTableFromDatabase`</span> XML <span class="pp">|</span></span>
-<span id="cb11-327"><a href="#cb11-327" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="co">[</span><span class="ot">`libs/erddap.R`</span><span class="co">](https://github.com/CalCOFI/workflows/blob/main/libs/erddap.R)</span> <span class="pp">|</span> shared dataVariable / type / units helpers <span class="pp">|</span></span>
-<span id="cb11-328"><a href="#cb11-328" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="co">[</span><span class="ot">`scripts/gen_ctd_netcdf.R`</span><span class="co">](https://github.com/CalCOFI/workflows/blob/main/scripts/gen_ctd_netcdf.R)</span> · <span class="co">[</span><span class="ot">`gen_ctd_wide.R`</span><span class="co">](https://github.com/CalCOFI/workflows/blob/main/scripts/gen_ctd_wide.R)</span> · <span class="co">[</span><span class="ot">`gen_ctd_lumped.R`</span><span class="co">](https://github.com/CalCOFI/workflows/blob/main/scripts/gen_ctd_lumped.R)</span> <span class="pp">|</span> build the split/lumped, wide/long serving artifacts <span class="pp">|</span></span>
-<span id="cb11-329"><a href="#cb11-329" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="co">[</span><span class="ot">`scripts/gen_bench_datasets.R`</span><span class="co">](https://github.com/CalCOFI/workflows/blob/main/scripts/gen_bench_datasets.R)</span> <span class="pp">|</span> emit the per-cell <span class="in">`&lt;dataset&gt;`</span> blocks (datasetID = cell) <span class="pp">|</span></span>
-<span id="cb11-330"><a href="#cb11-330" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="co">[</span><span class="ot">`scripts/bench_erddap.sh`</span><span class="co">](https://github.com/CalCOFI/workflows/blob/main/scripts/bench_erddap.sh)</span> <span class="pp">|</span> the format×schema×granularity matrix → <span class="in">`results_all.csv`</span> <span class="pp">|</span></span>
-<span id="cb11-331"><a href="#cb11-331" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="co">[</span><span class="ot">`scripts/bench_parquet_layout.sh`</span><span class="co">](https://github.com/CalCOFI/workflows/blob/main/scripts/bench_parquet_layout.sh)</span> <span class="pp">|</span> the partitioning/ordering experiment → <span class="in">`layout_results.csv`</span> <span class="pp">|</span></span>
-<span id="cb11-332"><a href="#cb11-332" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="co">[</span><span class="ot">`server/erddap/Dockerfile`</span><span class="co">](https://github.com/CalCOFI/server/blob/main/erddap/Dockerfile)</span> · <span class="co">[</span><span class="ot">`docker-compose.bench.yml`</span><span class="co">](https://github.com/CalCOFI/server/blob/main/docker-compose.bench.yml)</span> <span class="pp">|</span> ERDDAP + <span class="in">`duckdb_jdbc`</span>; isolated bench instance <span class="pp">|</span></span>
-<span id="cb11-333"><a href="#cb11-333" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-334"><a href="#cb11-334" aria-hidden="true" tabindex="-1"></a>**Data &amp; artifacts** are browsable / downloadable via the Caddy file server at</span>
-<span id="cb11-335"><a href="#cb11-335" aria-hidden="true" tabindex="-1"></a><span class="co">[</span><span class="ot">**file.calcofi.io/erddap-ctd**</span><span class="co">](https://file.calcofi.io/erddap-ctd/)</span>. Live datasets:</span>
-<span id="cb11-336"><a href="#cb11-336" aria-hidden="true" tabindex="-1"></a><span class="ot">&lt;https://erddap.calcofi.io/erddap/tabledap/calcofi_ctd_thin.html&gt;</span> ·</span>
-<span id="cb11-337"><a href="#cb11-337" aria-hidden="true" tabindex="-1"></a><span class="ot">&lt;https://erddap.calcofi.io/erddap/tabledap/calcofi_ctd_measurement.html&gt;</span>.</span>
-<span id="cb11-338"><a href="#cb11-338" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-341"><a href="#cb11-341" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb11-342"><a href="#cb11-342" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: data-files</span></span>
-<span id="cb11-343"><a href="#cb11-343" aria-hidden="true" tabindex="-1"></a><span class="fu">read_csv</span>(<span class="st">"data/bench_erddap/results_all.csv"</span>, <span class="at">show_col_types =</span> <span class="cn">FALSE</span>) <span class="sc">|&gt;</span> <span class="fu">kable</span>(<span class="at">caption =</span> <span class="st">"results_all.csv (the full grid)"</span>)</span>
-<span id="cb11-344"><a href="#cb11-344" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.null</span>(lay)) <span class="fu">kable</span>(lay, <span class="at">caption =</span> <span class="st">"layout_results.csv"</span>)</span>
-<span id="cb11-345"><a href="#cb11-345" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb11-346"><a href="#cb11-346" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-347"><a href="#cb11-347" aria-hidden="true" tabindex="-1"></a>The per-cruise NetCDF builder and the benchmark harness, in full:</span>
-<span id="cb11-348"><a href="#cb11-348" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-351"><a href="#cb11-351" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb11-352"><a href="#cb11-352" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: embed-netcdf</span></span>
-<span id="cb11-353"><a href="#cb11-353" aria-hidden="true" tabindex="-1"></a><span class="co">#| eval: false</span></span>
-<span id="cb11-354"><a href="#cb11-354" aria-hidden="true" tabindex="-1"></a><span class="co">#| file: libs/erddap_netcdf.R</span></span>
-<span id="cb11-355"><a href="#cb11-355" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb11-356"><a href="#cb11-356" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-359"><a href="#cb11-359" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb11-360"><a href="#cb11-360" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: embed-bench</span></span>
-<span id="cb11-361"><a href="#cb11-361" aria-hidden="true" tabindex="-1"></a><span class="co">#| eval: false</span></span>
-<span id="cb11-362"><a href="#cb11-362" aria-hidden="true" tabindex="-1"></a><span class="co">#| file: scripts/bench_erddap.sh</span></span>
-<span id="cb11-363"><a href="#cb11-363" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb11-46"><a href="#cb11-46" aria-hidden="true" tabindex="-1"></a>   **DuckDB sidesteps the whole axis** (~65 MB in *every* config) by *streaming*</span>
+<span id="cb11-47"><a href="#cb11-47" aria-hidden="true" tabindex="-1"></a>   from the Parquet rather than loading files onto the heap.</span>
+<span id="cb11-48"><a href="#cb11-48" aria-hidden="true" tabindex="-1"></a><span class="ss">2. </span>**Split serves subsets fast; lumped re-reads everything (Fig 2).** A per-cruise</span>
+<span id="cb11-49"><a href="#cb11-49" aria-hidden="true" tabindex="-1"></a>   split file answers a cruise query in well under a second (one cruise → one file);</span>
+<span id="cb11-50"><a href="#cb11-50" aria-hidden="true" tabindex="-1"></a>   a lumped file has no such pruning, so *every query re-reads the whole file* — a</span>
+<span id="cb11-51"><a href="#cb11-51" aria-hidden="true" tabindex="-1"></a>   cruise dump took **74 s lumped vs 1.2 s split** (even when the lumped file fits in</span>
+<span id="cb11-52"><a href="#cb11-52" aria-hidden="true" tabindex="-1"></a>   memory). DuckDB's on-the-fly *wide* pivot view is the exception that proves the</span>
+<span id="cb11-53"><a href="#cb11-53" aria-hidden="true" tabindex="-1"></a>   rule: cheap to load but slow on broad cross-cruise scans (76 s), so keep the tidy</span>
+<span id="cb11-54"><a href="#cb11-54" aria-hidden="true" tabindex="-1"></a>   **long** view live.</span>
+<span id="cb11-55"><a href="#cb11-55" aria-hidden="true" tabindex="-1"></a><span class="ss">3. </span>**NetCDF, the native path, is per-cruise = one dataset.** CalCOFI has **~5.55 M</span>
+<span id="cb11-56"><a href="#cb11-56" aria-hidden="true" tabindex="-1"></a>   casts**, so one file *per cast* (à la Trinidad Head) is infeasible; bundling **by</span>
+<span id="cb11-57"><a href="#cb11-57" aria-hidden="true" tabindex="-1"></a>   cruise = 96 files**, served as **one aggregated ERDDAP dataset** (one form), loads</span>
+<span id="cb11-58"><a href="#cb11-58" aria-hidden="true" tabindex="-1"></a>   small and serves cruise-scoped queries fastest.</span>
+<span id="cb11-59"><a href="#cb11-59" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-60"><a href="#cb11-60" aria-hidden="true" tabindex="-1"></a>Live now at <span class="ot">&lt;https://erddap.calcofi.io&gt;</span> (<span class="in">`calcofi_ctd_thin`</span>, <span class="in">`calcofi_ctd_measurement`</span>,</span>
+<span id="cb11-61"><a href="#cb11-61" aria-hidden="true" tabindex="-1"></a>DuckDB-long). Everything needed to reproduce is in §8.</span>
+<span id="cb11-62"><a href="#cb11-62" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-65"><a href="#cb11-65" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb11-66"><a href="#cb11-66" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: setup</span></span>
+<span id="cb11-67"><a href="#cb11-67" aria-hidden="true" tabindex="-1"></a><span class="co">#| message: false</span></span>
+<span id="cb11-68"><a href="#cb11-68" aria-hidden="true" tabindex="-1"></a><span class="co">#| warning: false</span></span>
+<span id="cb11-69"><a href="#cb11-69" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(dplyr); <span class="fu">library</span>(readr); <span class="fu">library</span>(tidyr); <span class="fu">library</span>(knitr); <span class="fu">library</span>(stringr); <span class="fu">library</span>(ggplot2); <span class="fu">library</span>(forcats)</span>
+<span id="cb11-70"><a href="#cb11-70" aria-hidden="true" tabindex="-1"></a>res <span class="ot">&lt;-</span> <span class="fu">read_csv</span>(<span class="st">"data/bench_erddap/results_all.csv"</span>, <span class="at">show_col_types =</span> <span class="cn">FALSE</span>) <span class="sc">|&gt;</span></span>
+<span id="cb11-71"><a href="#cb11-71" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">format =</span> <span class="fu">factor</span>(format, <span class="at">levels =</span> <span class="fu">c</span>(<span class="st">"duckdb"</span>,<span class="st">"netcdf"</span>,<span class="st">"parquet"</span>,<span class="st">"csv"</span>)),</span>
+<span id="cb11-72"><a href="#cb11-72" aria-hidden="true" tabindex="-1"></a>         <span class="at">schema =</span> <span class="fu">factor</span>(schema, <span class="at">levels =</span> <span class="fu">c</span>(<span class="st">"wide"</span>,<span class="st">"long"</span>)),</span>
+<span id="cb11-73"><a href="#cb11-73" aria-hidden="true" tabindex="-1"></a>         <span class="at">granularity =</span> <span class="fu">factor</span>(granularity, <span class="at">levels =</span> <span class="fu">c</span>(<span class="st">"na"</span>,<span class="st">"split"</span>,<span class="st">"lumped"</span>),</span>
+<span id="cb11-74"><a href="#cb11-74" aria-hidden="true" tabindex="-1"></a>                              <span class="at">labels =</span> <span class="fu">c</span>(<span class="st">"view (DB)"</span>,<span class="st">"split (per-cruise)"</span>,<span class="st">"lumped (1 file)"</span>)),</span>
+<span id="cb11-75"><a href="#cb11-75" aria-hidden="true" tabindex="-1"></a>         <span class="at">table =</span> <span class="fu">factor</span>(table, <span class="at">levels =</span> <span class="fu">c</span>(<span class="st">"thin"</span>,<span class="st">"measurement"</span>),</span>
+<span id="cb11-76"><a href="#cb11-76" aria-hidden="true" tabindex="-1"></a>                        <span class="at">labels =</span> <span class="fu">c</span>(<span class="st">"ctd_thin (5.5M rows)"</span>,<span class="st">"ctd_measurement (216M rows)"</span>)),</span>
+<span id="cb11-77"><a href="#cb11-77" aria-hidden="true" tabindex="-1"></a>         <span class="at">loaded =</span> load_status <span class="sc">==</span> <span class="st">"loaded"</span>)</span>
+<span id="cb11-78"><a href="#cb11-78" aria-hidden="true" tabindex="-1"></a>lay_path <span class="ot">&lt;-</span> <span class="st">"data/bench_erddap/layout_results.csv"</span></span>
+<span id="cb11-79"><a href="#cb11-79" aria-hidden="true" tabindex="-1"></a>lay <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="fu">file.exists</span>(lay_path)) <span class="fu">read_csv</span>(lay_path, <span class="at">show_col_types =</span> <span class="cn">FALSE</span>) <span class="cf">else</span> <span class="cn">NULL</span></span>
+<span id="cb11-80"><a href="#cb11-80" aria-hidden="true" tabindex="-1"></a>PAL <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"split (per-cruise)"</span> <span class="ot">=</span> <span class="st">"#1b9e77"</span>, <span class="st">"lumped (1 file)"</span> <span class="ot">=</span> <span class="st">"#d95f02"</span>, <span class="st">"view (DB)"</span> <span class="ot">=</span> <span class="st">"#7570b3"</span>)</span>
+<span id="cb11-81"><a href="#cb11-81" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb11-82"><a href="#cb11-82" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-83"><a href="#cb11-83" aria-hidden="true" tabindex="-1"></a><span class="fu">## 1 · Background</span></span>
+<span id="cb11-84"><a href="#cb11-84" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-85"><a href="#cb11-85" aria-hidden="true" tabindex="-1"></a>CalCOFI has occupied the California Current quarterly since 1949. The CTD cast</span>
+<span id="cb11-86"><a href="#cb11-86" aria-hidden="true" tabindex="-1"></a>files (<span class="ot">&lt;https://calcofi.org/data/oceanographic-data/ctd-cast-files/&gt;</span>) are ~1 GB</span>
+<span id="cb11-87"><a href="#cb11-87" aria-hidden="true" tabindex="-1"></a>as a single wide Parquet. We ingest them into a tidy **long** schema</span>
+<span id="cb11-88"><a href="#cb11-88" aria-hidden="true" tabindex="-1"></a>(<span class="in">`ingest_calcofi_ctd-cast`</span>,</span>
+<span id="cb11-89"><a href="#cb11-89" aria-hidden="true" tabindex="-1"></a><span class="ot">&lt;https://calcofi.io/workflows/ingest_calcofi_ctd-cast.html&gt;</span>): each sensor reading</span>
+<span id="cb11-90"><a href="#cb11-90" aria-hidden="true" tabindex="-1"></a>on its own row keyed by <span class="in">`measurement_type`</span>, convenient for analysis but</span>
+<span id="cb11-91"><a href="#cb11-91" aria-hidden="true" tabindex="-1"></a>multiplying row count. Tables (release v2026.06.08 / supplemental v2026.04.08):</span>
+<span id="cb11-92"><a href="#cb11-92" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-93"><a href="#cb11-93" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> table <span class="pp">|</span> rows <span class="pp">|</span> casts <span class="pp">|</span> Parquet <span class="pp">|</span> note <span class="pp">|</span></span>
+<span id="cb11-94"><a href="#cb11-94" aria-hidden="true" tabindex="-1"></a><span class="pp">|---|</span>--:<span class="pp">|</span>--:<span class="pp">|</span>--:<span class="pp">|---|</span></span>
+<span id="cb11-95"><a href="#cb11-95" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="in">`ctd_cast`</span> <span class="pp">|</span> 5.55 M <span class="pp">|</span> 5.55 M <span class="pp">|</span> 128 MB <span class="pp">|</span> one row per cast; carries <span class="in">`time`</span>,<span class="in">`lat`</span>,<span class="in">`lon`</span> <span class="pp">|</span></span>
+<span id="cb11-96"><a href="#cb11-96" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="in">`ctd_thin`</span> <span class="pp">|</span> 5.55 M <span class="pp">|</span> 0.42 M <span class="pp">|</span> 155 MB <span class="pp">|</span> adaptively-thinned headline table <span class="pp">|</span></span>
+<span id="cb11-97"><a href="#cb11-97" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="in">`ctd_measurement`</span> <span class="pp">|</span> 216 M <span class="pp">|</span> 5.36 M <span class="pp">|</span> ~16 GB <span class="pp">|</span> full long table (96 <span class="in">`cruise_key`</span> partitions) <span class="pp">|</span></span>
+<span id="cb11-98"><a href="#cb11-98" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-99"><a href="#cb11-99" aria-hidden="true" tabindex="-1"></a>The long tables are keyed by <span class="in">`ctd_cast_uuid`</span> and carry no coordinates —</span>
+<span id="cb11-100"><a href="#cb11-100" aria-hidden="true" tabindex="-1"></a><span class="in">`time`</span>/<span class="in">`latitude`</span>/<span class="in">`longitude`</span> live in <span class="in">`ctd_cast`</span>, so every representation re-joins</span>
+<span id="cb11-101"><a href="#cb11-101" aria-hidden="true" tabindex="-1"></a>them. The **5.55 M casts** figure is what makes per-cast NetCDF infeasible (§3).</span>
+<span id="cb11-102"><a href="#cb11-102" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-103"><a href="#cb11-103" aria-hidden="true" tabindex="-1"></a><span class="fu">## 2 · How ERDDAP serves files — and the NetCDF "per-cruise = one dataset" point</span></span>
+<span id="cb11-104"><a href="#cb11-104" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-105"><a href="#cb11-105" aria-hidden="true" tabindex="-1"></a>A persistent point of confusion: **per-cruise files do *not* mean a dataset (or</span>
+<span id="cb11-106"><a href="#cb11-106" aria-hidden="true" tabindex="-1"></a>form) per cruise.** Every ERDDAP <span class="in">`…FromFiles`</span> type points at a *directory*</span>
+<span id="cb11-107"><a href="#cb11-107" aria-hidden="true" tabindex="-1"></a>(<span class="in">`fileDir`</span> + <span class="in">`fileNameRegex`</span>) and aggregates all matching files into **one**</span>
+<span id="cb11-108"><a href="#cb11-108" aria-hidden="true" tabindex="-1"></a><span class="in">`datasetID`</span> — one Data Access Form, one <span class="in">`.das`</span>, with sliders/min-max **rolled up</span>
+<span id="cb11-109"><a href="#cb11-109" aria-hidden="true" tabindex="-1"></a>across the whole collection**. The per-cruise split is purely *storage*: it's how</span>
+<span id="cb11-110"><a href="#cb11-110" aria-hidden="true" tabindex="-1"></a>we go from "5.55 M per-cast files ERDDAP can't index" to "96 files it can," while</span>
+<span id="cb11-111"><a href="#cb11-111" aria-hidden="true" tabindex="-1"></a>the user still sees a single dataset. ERDDAP prunes by <span class="in">`cruise_key`</span> (a</span>
+<span id="cb11-112"><a href="#cb11-112" aria-hidden="true" tabindex="-1"></a><span class="in">`subsetVariable`</span>) and by each file's time/lat/lon min-max, so a cruise-scoped query</span>
+<span id="cb11-113"><a href="#cb11-113" aria-hidden="true" tabindex="-1"></a>opens one file and a broad spatial query opens many.</span>
+<span id="cb11-114"><a href="#cb11-114" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-115"><a href="#cb11-115" aria-hidden="true" tabindex="-1"></a>The flip side is the memory model: for **file** backends ERDDAP reads each</span>
+<span id="cb11-116"><a href="#cb11-116" aria-hidden="true" tabindex="-1"></a>*matching file fully onto the JVM heap* before filtering. That is the entire</span>
+<span id="cb11-117"><a href="#cb11-117" aria-hidden="true" tabindex="-1"></a>origin of the memory problem — a single **935 MB** <span class="in">`ctd_wide.parquet`</span> OOM'd a 4 GB</span>
+<span id="cb11-118"><a href="#cb11-118" aria-hidden="true" tabindex="-1"></a>heap and dropped the dataset from every <span class="in">`LoadDatasets`</span> run. The benchmark below</span>
+<span id="cb11-119"><a href="#cb11-119" aria-hidden="true" tabindex="-1"></a>isolates that as the **granularity** axis. **DuckDB** is the exception: via JDBC it</span>
+<span id="cb11-120"><a href="#cb11-120" aria-hidden="true" tabindex="-1"></a>*streams* a filtered <span class="in">`ResultSet`</span> from the underlying Parquet (predicate pushdown +</span>
+<span id="cb11-121"><a href="#cb11-121" aria-hidden="true" tabindex="-1"></a>partition pruning + disk spill), so the whole table is never on the heap.</span>
+<span id="cb11-122"><a href="#cb11-122" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-123"><a href="#cb11-123" aria-hidden="true" tabindex="-1"></a>::: {.callout-important title="Two DuckDB gotchas"}</span>
+<span id="cb11-124"><a href="#cb11-124" aria-hidden="true" tabindex="-1"></a>Serve <span class="in">`time`</span> as a real **TIMESTAMP** in the view (not epoch double) or the DuckDB</span>
+<span id="cb11-125"><a href="#cb11-125" aria-hidden="true" tabindex="-1"></a>JDBC driver NPEs on every query that selects time. And <span class="in">`EDDTableFromDatabase`</span> does</span>
+<span id="cb11-126"><a href="#cb11-126" aria-hidden="true" tabindex="-1"></a>**not** auto-compute variable ranges — set <span class="in">`actual_range`</span> (+ <span class="in">`geospatial_*`</span>) or the</span>
+<span id="cb11-127"><a href="#cb11-127" aria-hidden="true" tabindex="-1"></a>form shows no sliders. (NetCDF computes these from the files automatically.)</span>
+<span id="cb11-128"><a href="#cb11-128" aria-hidden="true" tabindex="-1"></a>:::</span>
+<span id="cb11-129"><a href="#cb11-129" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-130"><a href="#cb11-130" aria-hidden="true" tabindex="-1"></a><span class="fu">## 3 · The benchmark grid</span></span>
+<span id="cb11-131"><a href="#cb11-131" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-132"><a href="#cb11-132" aria-hidden="true" tabindex="-1"></a>Isolated ERDDAP (custom image with the DuckDB JDBC jar) on our host, **2 GB heap**.</span>
+<span id="cb11-133"><a href="#cb11-133" aria-hidden="true" tabindex="-1"></a>We serve the **same canonical data** every way and run the **same-intent** queries:</span>
+<span id="cb11-134"><a href="#cb11-134" aria-hidden="true" tabindex="-1"></a>**q1** `.das`; **q2** one cruise + temperature (subset); **q3** one variable</span>
+<span id="cb11-135"><a href="#cb11-135" aria-hidden="true" tabindex="-1"></a>(salinity) over depth 0–200 m across all cruises (subset, cross-file); **q4**</span>
+<span id="cb11-136"><a href="#cb11-136" aria-hidden="true" tabindex="-1"></a>whole-cruise dump. In *wide* schema a query selects a named column; in *long* it</span>
+<span id="cb11-137"><a href="#cb11-137" aria-hidden="true" tabindex="-1"></a>filters <span class="in">`measurement_type`</span> — chosen so q2/q3 return the **same rows** either way.</span>
+<span id="cb11-138"><a href="#cb11-138" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-141"><a href="#cb11-141" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb11-142"><a href="#cb11-142" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: matrix</span></span>
+<span id="cb11-143"><a href="#cb11-143" aria-hidden="true" tabindex="-1"></a>res <span class="sc">|&gt;</span></span>
+<span id="cb11-144"><a href="#cb11-144" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(table, schema, format, granularity) <span class="sc">|&gt;</span></span>
+<span id="cb11-145"><a href="#cb11-145" aria-hidden="true" tabindex="-1"></a>  <span class="fu">transmute</span>(table, format, schema, granularity, <span class="at">load =</span> load_status,</span>
+<span id="cb11-146"><a href="#cb11-146" aria-hidden="true" tabindex="-1"></a>            <span class="st">`</span><span class="at">load heap MB</span><span class="st">`</span> <span class="ot">=</span> load_peak_heap_mb,</span>
+<span id="cb11-147"><a href="#cb11-147" aria-hidden="true" tabindex="-1"></a>            <span class="st">`</span><span class="at">q2 cruise ms</span><span class="st">`</span> <span class="ot">=</span> <span class="fu">na_if</span>(q2_cruise_ms, <span class="sc">-</span><span class="dv">1</span>),</span>
+<span id="cb11-148"><a href="#cb11-148" aria-hidden="true" tabindex="-1"></a>            <span class="st">`</span><span class="at">q3 var+depth ms</span><span class="st">`</span> <span class="ot">=</span> <span class="fu">na_if</span>(q3_var200_ms, <span class="sc">-</span><span class="dv">1</span>),</span>
+<span id="cb11-149"><a href="#cb11-149" aria-hidden="true" tabindex="-1"></a>            <span class="st">`</span><span class="at">q4 dump ms</span><span class="st">`</span> <span class="ot">=</span> <span class="fu">na_if</span>(q4_dump_ms, <span class="sc">-</span><span class="dv">1</span>)) <span class="sc">|&gt;</span></span>
+<span id="cb11-150"><a href="#cb11-150" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kable</span>()</span>
+<span id="cb11-151"><a href="#cb11-151" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb11-152"><a href="#cb11-152" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-153"><a href="#cb11-153" aria-hidden="true" tabindex="-1"></a><span class="fu">### Finding 1 — load memory: lumped vs split (and DuckDB streams)</span></span>
+<span id="cb11-154"><a href="#cb11-154" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-157"><a href="#cb11-157" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb11-158"><a href="#cb11-158" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: fig-mem</span></span>
+<span id="cb11-159"><a href="#cb11-159" aria-hidden="true" tabindex="-1"></a><span class="co">#| fig-width: 9</span></span>
+<span id="cb11-160"><a href="#cb11-160" aria-hidden="true" tabindex="-1"></a><span class="co">#| fig-height: 5</span></span>
+<span id="cb11-161"><a href="#cb11-161" aria-hidden="true" tabindex="-1"></a><span class="co">#| fig-cap: "Peak JVM heap during dataset load at a 2 GB cap, by format and granularity. DuckDB (purple) stays ~65 MB whatever the schema/size because it streams. The file formats rise with what ERDDAP must read; the lumped 2.1 GB measurement NetCDF blows past the cap and times out (labeled). Bars are labeled with peak MB, or the failure mode."</span></span>
+<span id="cb11-162"><a href="#cb11-162" aria-hidden="true" tabindex="-1"></a>res <span class="sc">|&gt;</span></span>
+<span id="cb11-163"><a href="#cb11-163" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">lab =</span> <span class="fu">ifelse</span>(loaded, <span class="fu">paste0</span>(load_peak_heap_mb), <span class="fu">toupper</span>(load_status))) <span class="sc">|&gt;</span></span>
+<span id="cb11-164"><a href="#cb11-164" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ggplot</span>(<span class="fu">aes</span>(format, load_peak_heap_mb, <span class="at">fill =</span> granularity)) <span class="sc">+</span></span>
+<span id="cb11-165"><a href="#cb11-165" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_col</span>(<span class="at">position =</span> <span class="fu">position_dodge2</span>(<span class="at">preserve =</span> <span class="st">"single"</span>), <span class="at">width =</span> <span class="fl">0.85</span>) <span class="sc">+</span></span>
+<span id="cb11-166"><a href="#cb11-166" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_text</span>(<span class="fu">aes</span>(<span class="at">label =</span> lab, <span class="at">colour =</span> loaded),</span>
+<span id="cb11-167"><a href="#cb11-167" aria-hidden="true" tabindex="-1"></a>            <span class="at">position =</span> <span class="fu">position_dodge2</span>(<span class="at">width =</span> <span class="fl">0.85</span>, <span class="at">preserve =</span> <span class="st">"single"</span>),</span>
+<span id="cb11-168"><a href="#cb11-168" aria-hidden="true" tabindex="-1"></a>            <span class="at">vjust =</span> <span class="sc">-</span><span class="fl">0.3</span>, <span class="at">size =</span> <span class="fl">2.6</span>, <span class="at">show.legend =</span> <span class="cn">FALSE</span>) <span class="sc">+</span></span>
+<span id="cb11-169"><a href="#cb11-169" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_hline</span>(<span class="at">yintercept =</span> <span class="dv">2048</span>, <span class="at">linetype =</span> <span class="st">"dashed"</span>, <span class="at">colour =</span> <span class="st">"grey45"</span>) <span class="sc">+</span></span>
+<span id="cb11-170"><a href="#cb11-170" aria-hidden="true" tabindex="-1"></a>  <span class="fu">facet_grid</span>(schema <span class="sc">~</span> table) <span class="sc">+</span></span>
+<span id="cb11-171"><a href="#cb11-171" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_fill_manual</span>(<span class="at">values =</span> PAL, <span class="at">name =</span> <span class="st">"granularity"</span>) <span class="sc">+</span></span>
+<span id="cb11-172"><a href="#cb11-172" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_colour_manual</span>(<span class="at">values =</span> <span class="fu">c</span>(<span class="st">`</span><span class="at">TRUE</span><span class="st">`</span> <span class="ot">=</span> <span class="st">"grey20"</span>, <span class="st">`</span><span class="at">FALSE</span><span class="st">`</span> <span class="ot">=</span> <span class="st">"#d95f02"</span>)) <span class="sc">+</span></span>
+<span id="cb11-173"><a href="#cb11-173" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_y_continuous</span>(<span class="at">expand =</span> <span class="fu">expansion</span>(<span class="at">mult =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="fl">0.18</span>))) <span class="sc">+</span></span>
+<span id="cb11-174"><a href="#cb11-174" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="cn">NULL</span>, <span class="at">y =</span> <span class="st">"peak load heap (MB); dashed = 2 GB cap"</span>) <span class="sc">+</span></span>
+<span id="cb11-175"><a href="#cb11-175" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme_minimal</span>(<span class="at">base_size =</span> <span class="dv">11</span>) <span class="sc">+</span> <span class="fu">theme</span>(<span class="at">legend.position =</span> <span class="st">"top"</span>)</span>
+<span id="cb11-176"><a href="#cb11-176" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb11-177"><a href="#cb11-177" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-178"><a href="#cb11-178" aria-hidden="true" tabindex="-1"></a><span class="fu">### Finding 2 — query latency: split serves subsets fast, lumped re-reads everything</span></span>
+<span id="cb11-179"><a href="#cb11-179" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-182"><a href="#cb11-182" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb11-183"><a href="#cb11-183" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: fig-latency</span></span>
+<span id="cb11-184"><a href="#cb11-184" aria-hidden="true" tabindex="-1"></a><span class="co">#| fig-width: 9</span></span>
+<span id="cb11-185"><a href="#cb11-185" aria-hidden="true" tabindex="-1"></a><span class="co">#| fig-height: 4.6</span></span>
+<span id="cb11-186"><a href="#cb11-186" aria-hidden="true" tabindex="-1"></a><span class="co">#| fig-cap: "Median latency (log scale) for loaded cells. SPLIT files serve cruise-scoped queries (q2, q4) fastest — one cruise = one file. LUMPED files re-read the whole file on every query (q4 cruise-dump up to 74 s). DuckDB shows TWO purple bars — its wide-pivot and long views; the wide view is slow on the broad cross-cruise scan (q3: 76.5 s wide vs 23.9 s long) because it aggregates the whole table on the fly, while it's faster on the cruise dump (q4: 3 s wide vs 99 s long, fewer rows)."</span></span>
+<span id="cb11-187"><a href="#cb11-187" aria-hidden="true" tabindex="-1"></a>lbl_ms <span class="ot">&lt;-</span> <span class="cf">function</span>(x) <span class="fu">ifelse</span>(x <span class="sc">&gt;=</span> <span class="dv">1000</span>, <span class="fu">paste0</span>(<span class="fu">round</span>(x<span class="sc">/</span><span class="dv">1000</span>, <span class="dv">1</span>), <span class="st">"s"</span>), <span class="fu">paste0</span>(<span class="fu">round</span>(x), <span class="st">"ms"</span>))</span>
+<span id="cb11-188"><a href="#cb11-188" aria-hidden="true" tabindex="-1"></a>res <span class="sc">|&gt;</span></span>
+<span id="cb11-189"><a href="#cb11-189" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(loaded) <span class="sc">|&gt;</span></span>
+<span id="cb11-190"><a href="#cb11-190" aria-hidden="true" tabindex="-1"></a>  <span class="fu">transmute</span>(table, format, granularity,</span>
+<span id="cb11-191"><a href="#cb11-191" aria-hidden="true" tabindex="-1"></a>            <span class="st">`</span><span class="at">q2 cruise</span><span class="st">`</span> <span class="ot">=</span> <span class="fu">na_if</span>(q2_cruise_ms, <span class="sc">-</span><span class="dv">1</span>),</span>
+<span id="cb11-192"><a href="#cb11-192" aria-hidden="true" tabindex="-1"></a>            <span class="st">`</span><span class="at">q3 var+depth</span><span class="st">`</span> <span class="ot">=</span> <span class="fu">na_if</span>(q3_var200_ms, <span class="sc">-</span><span class="dv">1</span>),</span>
+<span id="cb11-193"><a href="#cb11-193" aria-hidden="true" tabindex="-1"></a>            <span class="st">`</span><span class="at">q4 cruise dump</span><span class="st">`</span> <span class="ot">=</span> <span class="fu">na_if</span>(q4_dump_ms, <span class="sc">-</span><span class="dv">1</span>)) <span class="sc">|&gt;</span></span>
+<span id="cb11-194"><a href="#cb11-194" aria-hidden="true" tabindex="-1"></a>  <span class="fu">pivot_longer</span>(<span class="fu">starts_with</span>(<span class="st">"q"</span>), <span class="at">names_to =</span> <span class="st">"query"</span>, <span class="at">values_to =</span> <span class="st">"ms"</span>) <span class="sc">|&gt;</span></span>
+<span id="cb11-195"><a href="#cb11-195" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(<span class="sc">!</span><span class="fu">is.na</span>(ms)) <span class="sc">|&gt;</span></span>
+<span id="cb11-196"><a href="#cb11-196" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ggplot</span>(<span class="fu">aes</span>(format, ms, <span class="at">fill =</span> granularity)) <span class="sc">+</span></span>
+<span id="cb11-197"><a href="#cb11-197" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_col</span>(<span class="at">position =</span> <span class="fu">position_dodge2</span>(<span class="at">preserve =</span> <span class="st">"single"</span>), <span class="at">width =</span> <span class="fl">0.8</span>) <span class="sc">+</span></span>
+<span id="cb11-198"><a href="#cb11-198" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_text</span>(<span class="fu">aes</span>(<span class="at">label =</span> <span class="fu">lbl_ms</span>(ms)),</span>
+<span id="cb11-199"><a href="#cb11-199" aria-hidden="true" tabindex="-1"></a>            <span class="at">position =</span> <span class="fu">position_dodge2</span>(<span class="at">width =</span> <span class="fl">0.8</span>, <span class="at">preserve =</span> <span class="st">"single"</span>),</span>
+<span id="cb11-200"><a href="#cb11-200" aria-hidden="true" tabindex="-1"></a>            <span class="at">vjust =</span> <span class="sc">-</span><span class="fl">0.3</span>, <span class="at">size =</span> <span class="fl">2.2</span>) <span class="sc">+</span></span>
+<span id="cb11-201"><a href="#cb11-201" aria-hidden="true" tabindex="-1"></a>  <span class="fu">facet_grid</span>(query <span class="sc">~</span> table) <span class="sc">+</span></span>
+<span id="cb11-202"><a href="#cb11-202" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_fill_manual</span>(<span class="at">values =</span> PAL, <span class="at">name =</span> <span class="st">"granularity"</span>) <span class="sc">+</span></span>
+<span id="cb11-203"><a href="#cb11-203" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_y_log10</span>(<span class="at">expand =</span> <span class="fu">expansion</span>(<span class="at">mult =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="fl">0.25</span>))) <span class="sc">+</span></span>
+<span id="cb11-204"><a href="#cb11-204" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="cn">NULL</span>, <span class="at">y =</span> <span class="st">"median latency (log scale)"</span>) <span class="sc">+</span></span>
+<span id="cb11-205"><a href="#cb11-205" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme_minimal</span>(<span class="at">base_size =</span> <span class="dv">10</span>) <span class="sc">+</span> <span class="fu">theme</span>(<span class="at">legend.position =</span> <span class="st">"top"</span>)</span>
+<span id="cb11-206"><a href="#cb11-206" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb11-207"><a href="#cb11-207" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-208"><a href="#cb11-208" aria-hidden="true" tabindex="-1"></a>**Reading the grid.**</span>
+<span id="cb11-209"><a href="#cb11-209" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-210"><a href="#cb11-210" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Load memory (Fig 1).** **DuckDB ≈ 65 MB in every cell** — wide or long, thin or</span>
+<span id="cb11-211"><a href="#cb11-211" aria-hidden="true" tabindex="-1"></a>  216 M rows — because it never holds a file on-heap. The file formats scale with</span>
+<span id="cb11-212"><a href="#cb11-212" aria-hidden="true" tabindex="-1"></a>  what ERDDAP reads: per-cruise **split** measurement loads at ~1.1–1.8 GB (it</span>
+<span id="cb11-213"><a href="#cb11-213" aria-hidden="true" tabindex="-1"></a>  indexes 96 files), and the **lumped 2.1 GB** measurement NetCDF **exceeds the cap</span>
+<span id="cb11-214"><a href="#cb11-214" aria-hidden="true" tabindex="-1"></a>  and times out** (ERDDAP starts shedding requests under memory pressure). The</span>
+<span id="cb11-215"><a href="#cb11-215" aria-hidden="true" tabindex="-1"></a>  smaller 598 MB lumped Parquet squeaks in at 1.6 GB — *granularity bites once the</span>
+<span id="cb11-216"><a href="#cb11-216" aria-hidden="true" tabindex="-1"></a>  single file is large relative to the heap.*</span>
+<span id="cb11-217"><a href="#cb11-217" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Query latency (Fig 2).** **Split** files serve cruise-scoped q2/q4 in well under</span>
+<span id="cb11-218"><a href="#cb11-218" aria-hidden="true" tabindex="-1"></a>  a second (one <span class="in">`cruise_key`</span> → one file). **Lumped** files have no such pruning, so</span>
+<span id="cb11-219"><a href="#cb11-219" aria-hidden="true" tabindex="-1"></a>  every query re-reads the whole file — the lumped-Parquet cruise dump took **74 s**</span>
+<span id="cb11-220"><a href="#cb11-220" aria-hidden="true" tabindex="-1"></a>  vs **1.2 s** split, and lumped CSV/Parquet q2 are seconds, not milliseconds.</span>
+<span id="cb11-221"><a href="#cb11-221" aria-hidden="true" tabindex="-1"></a>  **DuckDB-wide's** broad q3 is **76 s** because the pivot view aggregates the whole</span>
+<span id="cb11-222"><a href="#cb11-222" aria-hidden="true" tabindex="-1"></a>  216 M-row table on the fly; the **DuckDB-long** view does the same q3 in 24 s and</span>
+<span id="cb11-223"><a href="#cb11-223" aria-hidden="true" tabindex="-1"></a>  is what we serve live.</span>
+<span id="cb11-224"><a href="#cb11-224" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Apples-to-apples format (wide, split).** With schema and granularity held fixed,</span>
+<span id="cb11-225"><a href="#cb11-225" aria-hidden="true" tabindex="-1"></a>  **NetCDF-split** and **Parquet-split** are the fast file formats (sub-second</span>
+<span id="cb11-226"><a href="#cb11-226" aria-hidden="true" tabindex="-1"></a>  cruise queries); DuckDB is lightest on memory but slowest on broad aggregation;</span>
+<span id="cb11-227"><a href="#cb11-227" aria-hidden="true" tabindex="-1"></a>  CSV works only at thin scale.</span>
+<span id="cb11-228"><a href="#cb11-228" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Schema (wide vs long).** For the materialized file formats it's close. For</span>
+<span id="cb11-229"><a href="#cb11-229" aria-hidden="true" tabindex="-1"></a>  **DuckDB** the on-the-fly wide pivot is *slower* than long on cross-cruise scans —</span>
+<span id="cb11-230"><a href="#cb11-230" aria-hidden="true" tabindex="-1"></a>  a reason to keep the tidy long view live and reach for wide only behind a</span>
+<span id="cb11-231"><a href="#cb11-231" aria-hidden="true" tabindex="-1"></a>  materialization.</span>
+<span id="cb11-232"><a href="#cb11-232" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-233"><a href="#cb11-233" aria-hidden="true" tabindex="-1"></a><span class="fu">## 4 · Partitioning &amp; ordering within the long table (Lynn's question)</span></span>
+<span id="cb11-234"><a href="#cb11-234" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-235"><a href="#cb11-235" aria-hidden="true" tabindex="-1"></a><span class="at">&gt; *"I wonder how organizing each sensor reading on its own row affects a query for</span></span>
+<span id="cb11-236"><a href="#cb11-236" aria-hidden="true" tabindex="-1"></a><span class="at">&gt; data within a lat/lon/depth box."* — Lynn DeWitt</span></span>
+<span id="cb11-237"><a href="#cb11-237" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-238"><a href="#cb11-238" aria-hidden="true" tabindex="-1"></a>Beyond split-vs-lumped, *within* the long table we measured (in DuckDB, the serving</span>
+<span id="cb11-239"><a href="#cb11-239" aria-hidden="true" tabindex="-1"></a>engine) the same bounding-box query — **<span class="in">`temperature_ave`</span>, 32–34°N, 119–121°W,</span>
+<span id="cb11-240"><a href="#cb11-240" aria-hidden="true" tabindex="-1"></a>0–200 m (~393 k rows)** — across four physical layouts:</span>
+<span id="cb11-241"><a href="#cb11-241" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-242"><a href="#cb11-242" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**A** raw Parquet partitioned by <span class="in">`cruise_key`</span>, joined to <span class="in">`ctd_cast`</span> at query time</span>
+<span id="cb11-243"><a href="#cb11-243" aria-hidden="true" tabindex="-1"></a>  (live now); **B** denormalized, partitioned by `cruise_key`; **C** denormalized,</span>
+<span id="cb11-244"><a href="#cb11-244" aria-hidden="true" tabindex="-1"></a>  partitioned by <span class="in">`measurement_type`</span>; **D** = C **plus** rows sorted by</span>
+<span id="cb11-245"><a href="#cb11-245" aria-hidden="true" tabindex="-1"></a>  <span class="in">`latitude,longitude,depth`</span> within each partition.</span>
+<span id="cb11-246"><a href="#cb11-246" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-249"><a href="#cb11-249" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb11-250"><a href="#cb11-250" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: layout</span></span>
+<span id="cb11-251"><a href="#cb11-251" aria-hidden="true" tabindex="-1"></a><span class="co">#| eval: !expr "!is.null(lay)"</span></span>
+<span id="cb11-252"><a href="#cb11-252" aria-hidden="true" tabindex="-1"></a>lay <span class="sc">|&gt;</span></span>
+<span id="cb11-253"><a href="#cb11-253" aria-hidden="true" tabindex="-1"></a>  <span class="fu">transmute</span>(layout, <span class="st">`</span><span class="at">build s</span><span class="st">`</span> <span class="ot">=</span> build_secs, size, <span class="at">files =</span> nfiles,</span>
+<span id="cb11-254"><a href="#cb11-254" aria-hidden="true" tabindex="-1"></a>            <span class="st">`</span><span class="at">query s (median)</span><span class="st">`</span> <span class="ot">=</span> query_secs_median, <span class="st">`</span><span class="at">result rows</span><span class="st">`</span> <span class="ot">=</span> result_rows) <span class="sc">|&gt;</span></span>
+<span id="cb11-255"><a href="#cb11-255" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kable</span>()</span>
+<span id="cb11-256"><a href="#cb11-256" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb11-257"><a href="#cb11-257" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-260"><a href="#cb11-260" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb11-261"><a href="#cb11-261" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: fig-layout</span></span>
+<span id="cb11-262"><a href="#cb11-262" aria-hidden="true" tabindex="-1"></a><span class="co">#| eval: !expr "!is.null(lay)"</span></span>
+<span id="cb11-263"><a href="#cb11-263" aria-hidden="true" tabindex="-1"></a><span class="co">#| fig-width: 7.5</span></span>
+<span id="cb11-264"><a href="#cb11-264" aria-hidden="true" tabindex="-1"></a><span class="co">#| fig-height: 3</span></span>
+<span id="cb11-265"><a href="#cb11-265" aria-hidden="true" tabindex="-1"></a><span class="co">#| fig-cap: "The same ~393k-row bbox query across four physical layouts of the long table (DuckDB on SSD). ~12× spread, but every layout is already sub-second."</span></span>
+<span id="cb11-266"><a href="#cb11-266" aria-hidden="true" tabindex="-1"></a>lay <span class="sc">|&gt;</span></span>
+<span id="cb11-267"><a href="#cb11-267" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">layout =</span> <span class="fu">fct_rev</span>(<span class="fu">factor</span>(layout))) <span class="sc">|&gt;</span></span>
+<span id="cb11-268"><a href="#cb11-268" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ggplot</span>(<span class="fu">aes</span>(layout, query_secs_median)) <span class="sc">+</span></span>
+<span id="cb11-269"><a href="#cb11-269" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_col</span>(<span class="at">width =</span> <span class="fl">0.7</span>, <span class="at">fill =</span> <span class="st">"#7570b3"</span>) <span class="sc">+</span></span>
+<span id="cb11-270"><a href="#cb11-270" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_text</span>(<span class="fu">aes</span>(<span class="at">label =</span> <span class="fu">paste0</span>(<span class="fu">formatC</span>(query_secs_median, <span class="at">format=</span><span class="st">"f"</span>, <span class="at">digits=</span><span class="dv">3</span>), <span class="st">" s"</span>)),</span>
+<span id="cb11-271"><a href="#cb11-271" aria-hidden="true" tabindex="-1"></a>            <span class="at">hjust =</span> <span class="sc">-</span><span class="fl">0.15</span>, <span class="at">size =</span> <span class="dv">3</span>) <span class="sc">+</span></span>
+<span id="cb11-272"><a href="#cb11-272" aria-hidden="true" tabindex="-1"></a>  <span class="fu">coord_flip</span>() <span class="sc">+</span> <span class="fu">scale_y_continuous</span>(<span class="at">expand =</span> <span class="fu">expansion</span>(<span class="at">mult =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="fl">0.18</span>))) <span class="sc">+</span></span>
+<span id="cb11-273"><a href="#cb11-273" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="cn">NULL</span>, <span class="at">y =</span> <span class="st">"median query (s)"</span>) <span class="sc">+</span> <span class="fu">theme_minimal</span>(<span class="at">base_size =</span> <span class="dv">11</span>)</span>
+<span id="cb11-274"><a href="#cb11-274" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb11-275"><a href="#cb11-275" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-278"><a href="#cb11-278" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb11-279"><a href="#cb11-279" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: layout-missing</span></span>
+<span id="cb11-280"><a href="#cb11-280" aria-hidden="true" tabindex="-1"></a><span class="co">#| echo: false</span></span>
+<span id="cb11-281"><a href="#cb11-281" aria-hidden="true" tabindex="-1"></a><span class="co">#| output: asis</span></span>
+<span id="cb11-282"><a href="#cb11-282" aria-hidden="true" tabindex="-1"></a><span class="co">#| eval: !expr "is.null(lay)"</span></span>
+<span id="cb11-283"><a href="#cb11-283" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"*(layout_results.csv not present — run scripts/bench_parquet_layout.sh)*"</span>)</span>
+<span id="cb11-284"><a href="#cb11-284" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb11-285"><a href="#cb11-285" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-286"><a href="#cb11-286" aria-hidden="true" tabindex="-1"></a>Decomposing the ~12× spread: removing the query-time join ≈ 4× (A→B);</span>
+<span id="cb11-287"><a href="#cb11-287" aria-hidden="true" tabindex="-1"></a>partitioning by <span class="in">`measurement_type`</span> ≈ 2× (B→C, a one-variable query opens 1 of 53</span>
+<span id="cb11-288"><a href="#cb11-288" aria-hidden="true" tabindex="-1"></a>partitions); spatial ordering ≈ 1.4× (C→D, row-group skipping). The trade-off is</span>
+<span id="cb11-289"><a href="#cb11-289" aria-hidden="true" tabindex="-1"></a>the one you raised: partitioning by <span class="in">`measurement_type`</span> helps single-variable</span>
+<span id="cb11-290"><a href="#cb11-290" aria-hidden="true" tabindex="-1"></a>queries but slows "all variables in a region." Every layout is already sub-second,</span>
+<span id="cb11-291"><a href="#cb11-291" aria-hidden="true" tabindex="-1"></a>so for the long table this is an optimization, not a rescue.</span>
+<span id="cb11-292"><a href="#cb11-292" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-293"><a href="#cb11-293" aria-hidden="true" tabindex="-1"></a><span class="fu">## 5 · Recommendations</span></span>
+<span id="cb11-294"><a href="#cb11-294" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-295"><a href="#cb11-295" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**The memory question is "lumped vs split," not "which format."** Never serve the</span>
+<span id="cb11-296"><a href="#cb11-296" aria-hidden="true" tabindex="-1"></a>  big table as one file via a file backend — split it per cruise (96 files). DuckDB</span>
+<span id="cb11-297"><a href="#cb11-297" aria-hidden="true" tabindex="-1"></a>  sidesteps the question entirely by streaming.</span>
+<span id="cb11-298"><a href="#cb11-298" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**For CoastWatch hosting, NetCDF is the most native fit** — per-cruise CF profile</span>
+<span id="cb11-299"><a href="#cb11-299" aria-hidden="true" tabindex="-1"></a>  files served as one <span class="in">`EDDTableFromNcCFFiles`</span> dataset; small load heap, fast</span>
+<span id="cb11-300"><a href="#cb11-300" aria-hidden="true" tabindex="-1"></a>  cruise-scoped queries, auto ranges/sliders, source <span class="in">`.nc`</span> downloadable. We generate</span>
+<span id="cb11-301"><a href="#cb11-301" aria-hidden="true" tabindex="-1"></a>  them from the same pipeline (96 files/table). Costs: canonical sensors only,</span>
+<span id="cb11-302"><a href="#cb11-302" aria-hidden="true" tabindex="-1"></a>  ~2.3 GB duplicated, regenerate on update.</span>
+<span id="cb11-303"><a href="#cb11-303" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**To keep the tidy long table queryable as-is, DuckDB-over-Parquet** is the</span>
+<span id="cb11-304"><a href="#cb11-304" aria-hidden="true" tabindex="-1"></a>  lightest path: a 274 KB <span class="in">`.db`</span> of views on stock ERDDAP (only the driver jar</span>
+<span id="cb11-305"><a href="#cb11-305" aria-hidden="true" tabindex="-1"></a>  added), serving 216 M rows within ~65 MB, always reflecting the live Parquet. Keep</span>
+<span id="cb11-306"><a href="#cb11-306" aria-hidden="true" tabindex="-1"></a>  it **long** — the wide pivot view is slow on broad scans. This runs live today.</span>
+<span id="cb11-307"><a href="#cb11-307" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Avoid `EDDTableFromParquetFiles` on a single large file** (whole-file on-heap</span>
+<span id="cb11-308"><a href="#cb11-308" aria-hidden="true" tabindex="-1"></a>  reads), and **avoid lumped anything** for the big table.</span>
+<span id="cb11-309"><a href="#cb11-309" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Open for you, Lynn:** (a) per-cruise **NetCDF** we generate, (b) **Parquet + the</span>
+<span id="cb11-310"><a href="#cb11-310" aria-hidden="true" tabindex="-1"></a>  small DuckDB <span class="in">`.db`</span>**, or (c) wait on native Parquet/DuckDB</span>
+<span id="cb11-311"><a href="#cb11-311" aria-hidden="true" tabindex="-1"></a>  (<span class="co">[</span><span class="ot">#447</span><span class="co">](https://github.com/ERDDAP/erddap/discussions/447)</span> /</span>
+<span id="cb11-312"><a href="#cb11-312" aria-hidden="true" tabindex="-1"></a>  <span class="co">[</span><span class="ot">#448</span><span class="co">](https://github.com/ERDDAP/erddap/issues/448)</span>)? Any is producible from the</span>
+<span id="cb11-313"><a href="#cb11-313" aria-hidden="true" tabindex="-1"></a>  same pipeline.</span>
+<span id="cb11-314"><a href="#cb11-314" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-315"><a href="#cb11-315" aria-hidden="true" tabindex="-1"></a><span class="fu">## 6 · Reproduce</span></span>
+<span id="cb11-316"><a href="#cb11-316" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-317"><a href="#cb11-317" aria-hidden="true" tabindex="-1"></a>Everything runs in the CalCOFI server containers (<span class="in">`../server/`</span>), reading from and</span>
+<span id="cb11-318"><a href="#cb11-318" aria-hidden="true" tabindex="-1"></a>writing to the shared **`/share/data/erddap-duckdb`** tree, mounted identically into</span>
+<span id="cb11-319"><a href="#cb11-319" aria-hidden="true" tabindex="-1"></a><span class="in">`rstudio`</span> (build), the live <span class="in">`erddap`</span>, and the bench <span class="in">`erddap_bench`</span> — no</span>
+<span id="cb11-320"><a href="#cb11-320" aria-hidden="true" tabindex="-1"></a>host-specific paths.</span>
+<span id="cb11-321"><a href="#cb11-321" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-322"><a href="#cb11-322" aria-hidden="true" tabindex="-1"></a>**Code** (all in <span class="co">[</span><span class="ot">CalCOFI/workflows</span><span class="co">](https://github.com/CalCOFI/workflows)</span>):</span>
+<span id="cb11-323"><a href="#cb11-323" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-324"><a href="#cb11-324" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> file <span class="pp">|</span> role <span class="pp">|</span></span>
+<span id="cb11-325"><a href="#cb11-325" aria-hidden="true" tabindex="-1"></a><span class="pp">|---|---|</span></span>
+<span id="cb11-326"><a href="#cb11-326" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="co">[</span><span class="ot">`libs/erddap_netcdf.R`</span><span class="co">](https://github.com/CalCOFI/workflows/blob/main/libs/erddap_netcdf.R)</span> <span class="pp">|</span> per-cruise + lumped CF NetCDF builders + <span class="in">`EDDTableFromNcCFFiles`</span> XML <span class="pp">|</span></span>
+<span id="cb11-327"><a href="#cb11-327" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="co">[</span><span class="ot">`libs/erddap_duckdb.R`</span><span class="co">](https://github.com/CalCOFI/workflows/blob/main/libs/erddap_duckdb.R)</span> <span class="pp">|</span> <span class="in">`.db`</span> view builder + <span class="in">`EDDTableFromDatabase`</span> XML <span class="pp">|</span></span>
+<span id="cb11-328"><a href="#cb11-328" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="co">[</span><span class="ot">`libs/erddap.R`</span><span class="co">](https://github.com/CalCOFI/workflows/blob/main/libs/erddap.R)</span> <span class="pp">|</span> shared dataVariable / type / units helpers <span class="pp">|</span></span>
+<span id="cb11-329"><a href="#cb11-329" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="co">[</span><span class="ot">`scripts/gen_ctd_netcdf.R`</span><span class="co">](https://github.com/CalCOFI/workflows/blob/main/scripts/gen_ctd_netcdf.R)</span> · <span class="co">[</span><span class="ot">`gen_ctd_wide.R`</span><span class="co">](https://github.com/CalCOFI/workflows/blob/main/scripts/gen_ctd_wide.R)</span> · <span class="co">[</span><span class="ot">`gen_ctd_lumped.R`</span><span class="co">](https://github.com/CalCOFI/workflows/blob/main/scripts/gen_ctd_lumped.R)</span> <span class="pp">|</span> build the split/lumped, wide/long serving artifacts <span class="pp">|</span></span>
+<span id="cb11-330"><a href="#cb11-330" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="co">[</span><span class="ot">`scripts/gen_bench_datasets.R`</span><span class="co">](https://github.com/CalCOFI/workflows/blob/main/scripts/gen_bench_datasets.R)</span> <span class="pp">|</span> emit the per-cell <span class="in">`&lt;dataset&gt;`</span> blocks (datasetID = cell) <span class="pp">|</span></span>
+<span id="cb11-331"><a href="#cb11-331" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="co">[</span><span class="ot">`scripts/bench_erddap.sh`</span><span class="co">](https://github.com/CalCOFI/workflows/blob/main/scripts/bench_erddap.sh)</span> <span class="pp">|</span> the format×schema×granularity matrix → <span class="in">`results_all.csv`</span> <span class="pp">|</span></span>
+<span id="cb11-332"><a href="#cb11-332" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="co">[</span><span class="ot">`scripts/bench_parquet_layout.sh`</span><span class="co">](https://github.com/CalCOFI/workflows/blob/main/scripts/bench_parquet_layout.sh)</span> <span class="pp">|</span> the partitioning/ordering experiment → <span class="in">`layout_results.csv`</span> <span class="pp">|</span></span>
+<span id="cb11-333"><a href="#cb11-333" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="co">[</span><span class="ot">`server/erddap/Dockerfile`</span><span class="co">](https://github.com/CalCOFI/server/blob/main/erddap/Dockerfile)</span> · <span class="co">[</span><span class="ot">`docker-compose.bench.yml`</span><span class="co">](https://github.com/CalCOFI/server/blob/main/docker-compose.bench.yml)</span> <span class="pp">|</span> ERDDAP + <span class="in">`duckdb_jdbc`</span>; isolated bench instance <span class="pp">|</span></span>
+<span id="cb11-334"><a href="#cb11-334" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-335"><a href="#cb11-335" aria-hidden="true" tabindex="-1"></a>**Data &amp; artifacts** are browsable / downloadable via the Caddy file server at</span>
+<span id="cb11-336"><a href="#cb11-336" aria-hidden="true" tabindex="-1"></a><span class="co">[</span><span class="ot">**file.calcofi.io/erddap-ctd**</span><span class="co">](https://file.calcofi.io/erddap-ctd/)</span>. Live datasets:</span>
+<span id="cb11-337"><a href="#cb11-337" aria-hidden="true" tabindex="-1"></a><span class="ot">&lt;https://erddap.calcofi.io/erddap/tabledap/calcofi_ctd_thin.html&gt;</span> ·</span>
+<span id="cb11-338"><a href="#cb11-338" aria-hidden="true" tabindex="-1"></a><span class="ot">&lt;https://erddap.calcofi.io/erddap/tabledap/calcofi_ctd_measurement.html&gt;</span>.</span>
+<span id="cb11-339"><a href="#cb11-339" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-342"><a href="#cb11-342" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb11-343"><a href="#cb11-343" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: data-files</span></span>
+<span id="cb11-344"><a href="#cb11-344" aria-hidden="true" tabindex="-1"></a><span class="fu">read_csv</span>(<span class="st">"data/bench_erddap/results_all.csv"</span>, <span class="at">show_col_types =</span> <span class="cn">FALSE</span>) <span class="sc">|&gt;</span> <span class="fu">kable</span>(<span class="at">caption =</span> <span class="st">"results_all.csv (the full grid)"</span>)</span>
+<span id="cb11-345"><a href="#cb11-345" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.null</span>(lay)) <span class="fu">kable</span>(lay, <span class="at">caption =</span> <span class="st">"layout_results.csv"</span>)</span>
+<span id="cb11-346"><a href="#cb11-346" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb11-347"><a href="#cb11-347" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-348"><a href="#cb11-348" aria-hidden="true" tabindex="-1"></a>The per-cruise NetCDF builder and the benchmark harness, in full:</span>
+<span id="cb11-349"><a href="#cb11-349" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-352"><a href="#cb11-352" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb11-353"><a href="#cb11-353" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: embed-netcdf</span></span>
+<span id="cb11-354"><a href="#cb11-354" aria-hidden="true" tabindex="-1"></a><span class="co">#| eval: false</span></span>
+<span id="cb11-355"><a href="#cb11-355" aria-hidden="true" tabindex="-1"></a><span class="co">#| file: libs/erddap_netcdf.R</span></span>
+<span id="cb11-356"><a href="#cb11-356" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb11-357"><a href="#cb11-357" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-360"><a href="#cb11-360" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb11-361"><a href="#cb11-361" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: embed-bench</span></span>
+<span id="cb11-362"><a href="#cb11-362" aria-hidden="true" tabindex="-1"></a><span class="co">#| eval: false</span></span>
+<span id="cb11-363"><a href="#cb11-363" aria-hidden="true" tabindex="-1"></a><span class="co">#| file: scripts/bench_erddap.sh</span></span>
+<span id="cb11-364"><a href="#cb11-364" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
 </code></pre></div><button title="Copy to Clipboard" class="code-copy-button" data-in-quarto-modal=""><i class="bi"></i></button></div>
 </div></div></div></div></div>
 </div> <!-- /content -->
