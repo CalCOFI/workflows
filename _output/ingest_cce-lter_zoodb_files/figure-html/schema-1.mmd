@@ -1,0 +1,87 @@
+---
+config:
+  layout: elk
+---
+erDiagram
+    zoodb_sample {
+        int sample_id PK
+        varchar source
+        varchar cruise_orig
+        varchar cruise_key
+        varchar ship_name
+        varchar ship_key
+        date date
+        timestamp datetime_start_utc
+        timestamp datetime_end_utc
+        double line
+        double station
+        varchar site_key
+        varchar region
+        double latitude
+        double longitude
+        double max_depth_m
+        double min_depth_m
+        varchar net_type
+        int n_tows_pooled
+        geometry geom
+        varchar grid_key
+    }
+    zoodb_measurement {
+        int measurement_id PK
+        int sample_id FK
+        int taxon_id FK
+        varchar measurement_type FK
+        double measurement_value
+    }
+    zoodb_taxon {
+        int taxon_id PK
+        varchar taxon_zoodb
+        varchar taxon_slug
+        int aphia_id
+        varchar scientific_name
+        varchar rank
+        varchar taxon_status
+        varchar kingdom
+        varchar phylum
+        varchar class
+        varchar order_taxon
+        varchar family
+    }
+    measurement_type {
+        varchar measurement_type PK
+        varchar description
+        varchar units
+        bool is_canonical
+        varchar _source_column
+        varchar _source_table
+        varchar _source_datasets
+        varchar _qual_column
+        varchar _prec_column
+    }
+    dataset {
+        varchar provider
+        varchar dataset
+        varchar dataset_name
+        varchar description
+        varchar citation_main
+        varchar citation_others
+        varchar link_calcofi_org
+        varchar link_data_source
+        varchar link_others
+        varchar tables
+        varchar coverage_temporal
+        varchar coverage_spatial
+        varchar license
+        varchar pi_names
+    }
+    zoodb_sample ||--o{ zoodb_measurement : "sample_id"
+    zoodb_taxon ||--o{ zoodb_measurement : "taxon_id"
+    measurement_type ||--o{ zoodb_measurement : "measurement_type"
+    classDef lightblue stroke:#ADD8E6,stroke-width:3px
+    class zoodb_sample,zoodb_measurement lightblue
+    classDef lightgreen stroke:#90EE90,stroke-width:3px
+    class zoodb_taxon lightgreen
+    classDef lightyellow stroke:#FFFFE0,stroke-width:3px
+    class measurement_type lightyellow
+    classDef white stroke:#FFFFFF,stroke-width:3px
+    class dataset white
