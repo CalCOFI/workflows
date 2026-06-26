@@ -28,6 +28,18 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      # Regenerate the landing-page index from each notebook's `calcofi:` YAML so
+      # newly added/removed workflows appear at calcofi.io/workflows/ on push,
+      # without anyone re-running scripts/build_workflows_index.R by hand.
+      - name: Setup R
+        uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      - name: Install index-builder R deps
+        run: install.packages(c("librarian", "rmarkdown", "yaml"))
+        shell: Rscript {0}
+      - name: Build workflows index (_data/workflows.yml)
+        run: Rscript scripts/build_workflows_index.R
       - name: Setup Pages
         uses: actions/configure-pages@v5
       - name: Build with Jekyll
