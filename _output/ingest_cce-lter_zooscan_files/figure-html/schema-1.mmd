@@ -1,0 +1,86 @@
+---
+config:
+  layout: elk
+---
+erDiagram
+    zooscan_sample {
+        int sample_id PK
+        varchar cruise_orig
+        varchar cruise_key
+        varchar ship_key
+        varchar ship_name
+        double line
+        double station
+        varchar site_key
+        double latitude
+        double longitude
+        double max_depth_m
+        double min_depth_m
+        date cruise_mid_date
+        date station_date
+        varchar local_time_pst
+        timestamp datetime_local_pst
+        varchar day_night
+        geometry geom
+        varchar grid_key
+    }
+    zooscan_measurement {
+        int measurement_id PK
+        int sample_id FK
+        int taxon_id FK
+        varchar measurement_type FK
+        double measurement_value
+    }
+    zooscan_taxon {
+        int taxon_id PK
+        varchar taxon_zooscan
+        varchar taxon_slug
+        int aphia_id
+        varchar scientific_name
+        varchar rank
+        varchar taxon_status
+        varchar taxon_note
+        varchar kingdom
+        varchar phylum
+        varchar class
+        varchar order_taxon
+        varchar family
+    }
+    measurement_type {
+        varchar measurement_type PK
+        varchar description
+        varchar units
+        bool is_canonical
+        varchar _source_column
+        varchar _source_table
+        varchar _source_datasets
+        varchar _qual_column
+        varchar _prec_column
+    }
+    dataset {
+        varchar provider
+        varchar dataset
+        varchar dataset_name
+        varchar description
+        varchar citation_main
+        varchar citation_others
+        varchar link_calcofi_org
+        varchar link_data_source
+        varchar link_others
+        varchar tables
+        varchar coverage_temporal
+        varchar coverage_spatial
+        varchar license
+        varchar pi_names
+    }
+    zooscan_sample ||--o{ zooscan_measurement : "sample_id"
+    zooscan_taxon ||--o{ zooscan_measurement : "taxon_id"
+    measurement_type ||--o{ zooscan_measurement : "measurement_type"
+    classDef lightblue stroke:#ADD8E6,stroke-width:3px
+    class zooscan_sample,zooscan_measurement lightblue
+    classDef lightgreen stroke:#90EE90,stroke-width:3px
+    class zooscan_taxon lightgreen
+    classDef lightyellow stroke:#FFFFE0,stroke-width:3px
+    class measurement_type lightyellow
+    classDef white stroke:#FFFFFF,stroke-width:3px
+    class dataset white

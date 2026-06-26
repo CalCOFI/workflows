@@ -32,6 +32,9 @@
 - zoodb_sample (        506 rows)
 - zoodb_measurement (     30,948 rows)
 - zoodb_taxon (         33 rows)
+- zooscan_sample (      1,483 rows)
+- zooscan_measurement (    126,692 rows)
+- zooscan_taxon (         23 rows)
 - zooplankton_tow (     99,530 rows)
 - _spatial_attr (     40,298 rows)
 - _spatial (      3,373 rows)
@@ -54,8 +57,8 @@
 
 ## Total
 
-- **Tables**: 47
-- **Total Rows**: 133,838,798
+- **Tables**: 50
+- **Total Rows**: 133,966,996
 
 ## Data Sources
 
