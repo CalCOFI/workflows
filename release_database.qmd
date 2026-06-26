@@ -784,6 +784,26 @@ meta_paths <- Sys.glob(here("data/parquet/*/metadata.json"))
 
 meta_json_path <- file.path(dir_frozen, "metadata.json")
 if (length(meta_paths) > 0) {
+  # data-derived one-to-many measurement_type -> dataset(s) map. build the
+  # table -> owning-dataset(s) lookup from the ingest YAML's tables_owned (the
+  # `measurement_type` lookup table is excluded — its measurement_type column is
+  # the vocabulary, not measured rows), then scan each measurement table in the
+  # assembled DB for the types it actually reports.
+  table_datasets <- list()
+  for (key in names(ingest_yaml)) {
+    cc <- ingest_yaml[[key]]
+    for (e in cc$tables_owned %||% list())
+      table_datasets[[e$table]] <- union(table_datasets[[e$table]], key)
+    for (ad in cc$additional_datasets %||% list()) {
+      k2 <- paste0(ad$provider, "_", ad$dataset)
+      for (e in ad$tables_owned %||% list())
+        table_datasets[[e$table]] <- union(table_datasets[[e$table]], k2)
+    }
+  }
+  table_datasets[["measurement_type"]] <- NULL
+  meas_ds <- derive_measurement_type_datasets(con_wdl, table_datasets)
+  cat(glue("derived dataset membership for {length(meas_ds)} measurement types\n"))
+
   merge_metadata_json(
     paths                = meta_paths,
     output_path          = meta_json_path,
@@ -792,7 +812,8 @@ if (length(meta_paths) > 0) {
     release_columns_csv  = here("metadata/release_columns.csv"),
     measurement_type_csv = here("metadata/measurement_type.csv"),
     ingest_yaml          = ingest_yaml,
-    table_rows           = setNames(freeze_stats$rows, freeze_stats$table))
+    table_rows           = setNames(freeze_stats$rows, freeze_stats$table),
+    measurement_datasets = meas_ds)
 
   # enrich columns with data_type from the working DuckDB (so the schema
   # site can render types without spinning up DuckDB-WASM)
