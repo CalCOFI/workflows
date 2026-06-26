@@ -44,9 +44,9 @@ editor_options:
 
 **Source**: [ZooDB](https://oceaninformatics.ucsd.edu/zoodb/) — the SIO Ocean
 Informatics zooplankton database (Mark Ohman Lab, SIO Pelagic Invertebrate
-Collection). Per-taxon CSVs were exported from the portal's `save.php` endpoint
-(public access) and consolidated to `zoodb_holoplankton.csv`
-(see `by_taxon/_PROVENANCE.md`).
+Collection). Per-taxon CSVs are scripted from the portal's `save.php` endpoint
+(public access) by `libs/download_zoodb.R` and consolidated to
+`zoodb_holoplankton.csv` (see the Acquire step below + `by_taxon/_PROVENANCE.md`).
 
 - **Provider**: `cce-lter` (curated by CCE-LTER / Ohman Lab; sibling of
   `cce-lter_euphausiids`, which the ZooDB methods note as a *separate* database)
@@ -117,17 +117,32 @@ meas_type_csv <- here("metadata/measurement_type.csv")
 d_meas_type   <- read_csv(meas_type_csv)
 ```
 
+## Acquire Source Data
+
+ZooDB is an interactive portal, not a file download. `libs/download_zoodb.R`
+scripts its public login + `save.php` CSV export — the 33 higher taxa × 2
+abundance units (`pooled=combined`, raw/uncorrected, all years/months/times/
+regions) — and merges the two unit files per taxon (on the source `RowNumber`)
+into `zoodb_holoplankton.csv`. It runs once then caches; set `overwrite_all =
+TRUE` in `libs/ingest.R` to re-scrape. Exact query parameters are recorded in
+`by_taxon/_PROVENANCE.md`.
+
+```{r}
+#| label: acquire
+
+source(here("libs/download_zoodb.R"))
+zoo_dir <- path_expand(glue("{dir_data}/cce-lter/ZooDB"))
+zoo_csv <- download_zoodb(zoo_dir, overwrite = overwrite_all)
+```
+
 ## Read Source Data
 
-The consolidated long table (33 per-taxon × 2-unit portal exports merged on the
-shared tow key) lives at `{dir_data}/cce-lter/ZooDB/zoodb_holoplankton.csv`.
-Pooled rows carry `N/A` for the per-station fields, read as `NA`.
+The consolidated long table (one row per taxon × sample) carries `N/A` for the
+per-station fields on pooled rows, read as `NA`.
 
 ```{r}
 #| label: read-source
 
-zoo_dir <- path_expand(glue("{dir_data}/cce-lter/ZooDB"))
-zoo_csv <- path(zoo_dir, "zoodb_holoplankton.csv")
 stopifnot("zoodb_holoplankton.csv not found" = file_exists(zoo_csv))
 
 # archive source (consolidated + per-taxon exports + portal method PDFs) to GCS

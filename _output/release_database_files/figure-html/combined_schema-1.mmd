@@ -596,6 +596,49 @@ erDiagram
         geometry geom
         varchar grid_key FK
     }
+    zooscan_measurement {
+        int measurement_id PK
+        int sample_id FK
+        int taxon_id FK
+        varchar measurement_type FK
+        double measurement_value
+    }
+    zooscan_sample {
+        int sample_id PK
+        varchar cruise_orig
+        varchar cruise_key FK
+        varchar ship_key FK
+        varchar ship_name
+        double line
+        double station
+        varchar site_key
+        double latitude
+        double longitude
+        double max_depth_m
+        double min_depth_m
+        date cruise_mid_date
+        date station_date
+        varchar local_time_pst
+        timestamp datetime_local_pst
+        varchar day_night
+        geometry geom
+        varchar grid_key FK
+    }
+    zooscan_taxon {
+        int taxon_id PK
+        varchar taxon_zooscan
+        varchar taxon_slug
+        int aphia_id
+        varchar scientific_name
+        varchar rank
+        varchar taxon_status
+        varchar taxon_note
+        varchar kingdom
+        varchar phylum
+        varchar class
+        varchar order_taxon
+        varchar family
+    }
     bird_mammal_transect ||--o{ bird_mammal_observation : "gis_key"
     bird_mammal_species ||--o{ bird_mammal_observation : "species_code"
     bird_mammal_behavior ||--o{ bird_mammal_observation : "behavior_code"
@@ -620,6 +663,9 @@ erDiagram
     zoodb_sample ||--o{ zoodb_measurement : "sample_id"
     zoodb_taxon ||--o{ zoodb_measurement : "taxon_id"
     measurement_type ||--o{ zoodb_measurement : "measurement_type"
+    zooscan_sample ||--o{ zooscan_measurement : "sample_id"
+    zooscan_taxon ||--o{ zooscan_measurement : "taxon_id"
+    measurement_type ||--o{ zooscan_measurement : "measurement_type"
     cufes_sample ||--o{ cufes_measurement : "sample_id"
     measurement_type ||--o{ cufes_measurement : "measurement_type"
     net ||--o{ ichthyo : "net_uuid"
@@ -658,6 +704,9 @@ erDiagram
     cruise ||--o{ zoodb_sample : "cruise_key"
     ship ||--o{ zoodb_sample : "ship_key"
     grid ||--o{ zoodb_sample : "grid_key"
+    cruise ||--o{ zooscan_sample : "cruise_key"
+    ship ||--o{ zooscan_sample : "ship_key"
+    grid ||--o{ zooscan_sample : "grid_key"
     classDef _f0d2e8 stroke:#f0d2e8,stroke-width:3px
     class bird_mammal_transect,bird_mammal_observation,bird_mammal_species,bird_mammal_behavior _f0d2e8
     classDef _f5cad9 stroke:#f5cad9,stroke-width:3px
@@ -676,6 +725,8 @@ erDiagram
     class euphausiids_tow,euphausiids_measurement,euphausiids_summary _d2f0bb
     classDef _d9c2f0 stroke:#d9c2f0,stroke-width:3px
     class zoodb_sample,zoodb_measurement,zoodb_taxon _d9c2f0
+    classDef _c2e8f0 stroke:#c2e8f0,stroke-width:3px
+    class zooscan_sample,zooscan_measurement,zooscan_taxon _c2e8f0
     classDef _bbe0f0 stroke:#bbe0f0,stroke-width:3px
     class zooplankton_tow _bbe0f0
     classDef _f0e8bb stroke:#f0e8bb,stroke-width:3px
