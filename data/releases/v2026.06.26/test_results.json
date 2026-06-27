@@ -1,8 +1,8 @@
 {
   "release_version": "v2026.06.26",
-  "tested_at": "2026-06-26T17:49:30Z",
-  "n_pass": 3,
-  "n_fail": 6,
+  "tested_at": "2026-06-26T18:01:51Z",
+  "n_pass": 9,
+  "n_fail": 0,
   "n_skip": 4,
   "results": [
     {
@@ -32,65 +32,65 @@
     {
       "query": "browse/cruises.md",
       "label": "cruises",
-      "status": "fail",
-      "ms": 879.1,
-      "error": "Binder Error: Referenced column \"datetime_utc\" not found in FROM clause!\nCandidate bindings: \"datetime_start_utc\", \"latitude\", \"data_type\", \"distance\", \"data_or\"\n\nLINE 9:   WHERE datetime_utc BETWEEN TIMESTAMP '1949-01-01' AND TIMESTAMP...\n                ^\nℹ Context: rapi_prepare\nℹ Error type: BINDER"
+      "status": "pass",
+      "rows": 200,
+      "ms": 2335.8
     },
     {
       "query": "browse/measurement-types.md",
       "label": "measurement types",
       "status": "pass",
       "rows": 102,
-      "ms": 742.5
+      "ms": 873.7
     },
     {
       "query": "browse/species.md",
       "label": "species",
       "status": "pass",
       "rows": 1,
-      "ms": 1329.1
+      "ms": 1354.1
     },
     {
       "query": "datasets/bottle.md",
       "label": "bottle measurements",
-      "status": "fail",
-      "ms": 2844.2,
-      "error": "Binder Error: Table \"c\" does not have a column named \"datetime_utc\"\n\nCandidate bindings: : \"datetime_start_utc\"\n\nLINE 17:   AND c.datetime_utc BETWEEN TIMESTAMP '2018-01-01' AND TIMESTAMP...\n               ^\nℹ Context: rapi_prepare\nℹ Error type: BINDER"
+      "status": "pass",
+      "rows": 500,
+      "ms": 7809.3
     },
     {
       "query": "datasets/ichthyo.md",
       "label": "ichthyoplankton",
-      "status": "fail",
-      "ms": 4341,
-      "error": "Binder Error: Table \"t\" does not have a column named \"time_start\"\n\nCandidate bindings: : \"datetime_start_utc\"\n\nLINE 22:   AND t.time_start BETWEEN TIMESTAMP '2014-01-01' AND TIMESTAMP...\n               ^\nℹ Context: rapi_prepare\nℹ Error type: BINDER"
+      "status": "pass",
+      "rows": 300,
+      "ms": 10826.8
     },
     {
       "query": "quick-facts/release.md",
       "label": "release facts",
-      "status": "fail",
-      "ms": 776.7,
-      "error": "Binder Error: Referenced column \"time_start\" not found in FROM clause!\nCandidate bindings: \"_ingested_at\", \"datetime_start_utc\", \"site_uuid\", \"tow_number\"\n\nLINE 7:   bio_date_rng  AS (SELECT min(time_start)::VARCHAR AS d0, max(time_start)::VARCHAR AS...\n                                       ^\nℹ Context: rapi_prepare\nℹ Error type: BINDER"
+      "status": "pass",
+      "rows": 10,
+      "ms": 3766.9
     },
     {
       "query": "spatial/bbox.md",
       "label": "casts in bbox",
-      "status": "fail",
-      "ms": 11.8,
-      "error": "Binder Error: Referenced column \"lon_dec\" not found in FROM clause!\nCandidate bindings: \"longitude\", \"order_occ\", \"inc_end\", \"bottom_depth_m\", \"int_c14\"\n\nLINE 11: WHERE lon_dec BETWEEN -125 AND -117\n               ^\nℹ Context: rapi_prepare\nℹ Error type: BINDER"
+      "status": "pass",
+      "rows": 288,
+      "ms": 1451.5
     },
     {
       "query": "sql-shell/shell.md",
       "label": "shell",
       "status": "pass",
       "rows": 1,
-      "ms": 1.6
+      "ms": 493.3
     },
     {
       "query": "temporal/date-range.md",
       "label": "casts in date range",
-      "status": "fail",
-      "ms": 502,
-      "error": "Binder Error: Referenced column \"datetime_utc\" not found in FROM clause!\nCandidate bindings: \"datetime_start_utc\", \"latitude\", \"data_type\", \"distance\", \"data_or\"\n\nLINE 10: WHERE datetime_utc BETWEEN TIMESTAMP '2018-01-01' AND TIMESTAMP...\n               ^\nℹ Context: rapi_prepare\nℹ Error type: BINDER"
+      "status": "pass",
+      "rows": 294,
+      "ms": 1261.4
     }
   ]
 }
