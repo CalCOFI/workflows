@@ -337,6 +337,25 @@ put_gcs_file(latest_local,
 message(glue(
   "PROMOTED {release_version}: {n_pass} passed, {n_skip} skipped, ",
   "0 failed. latest.txt is now {release_version}."))
+
+# nudge the query site to adopt the new default_version now (previously a
+# 6-hourly cron poll): dispatch CalCOFI/query's bump-default-version workflow,
+# which mirrors latest.txt -> _config.yml and triggers a Pages redeploy. Gated
+# here on the all-pass promotion, so the site never points at a release whose
+# queries haven't been validated. Non-fatal — a missing gh just means the bump
+# waits for a manual `gh workflow run`.
+gh_bin <- Sys.which("gh")
+if (nzchar(gh_bin)) {
+  disp <- system2(gh_bin,
+    c("workflow", "run", "bump-default-version.yml", "--repo", "CalCOFI/query"),
+    stdout = TRUE, stderr = TRUE)
+  if (!identical(attr(disp, "status") %||% 0L, 0L))
+    warning(glue("query bump dispatch failed: {paste(disp, collapse = '; ')}"))
+  else
+    message("dispatched CalCOFI/query bump-default-version workflow")
+} else {
+  message("gh not found; CalCOFI/query default_version needs a manual bump dispatch")
+}
 ```
 
 ## Cleanup
