@@ -74,7 +74,7 @@ cc_list_tables() # list available tables
 DBI::dbGetQuery(con, "SELECT COUNT(*) FROM ichthyo") # query with SQL
 ```
 
-Reference the space-time windowing in the `@int-app/app/` workflow (but
+Reference the space-time windowing in the `@db-viz-hex/app/` workflow (but
 with older version of database having different schema). Try different
 approaches to matching the data, including:
 
@@ -83,7 +83,7 @@ approaches to matching the data, including:
 
 ![Scatterplot showing relating ichthyo dataset to bottle environmental
 dataset with space-time windows from the [CalCOFI integrated
-app](https://app.calcofi.io/int/).](./figures/int-app_scatterplot.png)
+app](https://app.calcofi.io/db-viz-hex/).](./figures/int-app_scatterplot.png)
 
 #### Response {.unnumbered}
 
@@ -91,7 +91,7 @@ app](https://app.calcofi.io/int/).](./figures/int-app_scatterplot.png)
 ⏺ The plan is complete. I explored:                                            
   1. The zooplankton CSV (148K records, 20 columns) and Excel metadata                                                                                                                                          
   2. The calcofi4r database schema (ichthyo → net → tow → site → cruise chain with integer IDs)                                                                                                                 
-  3. The prep_splot() space-time matching reference in int-app/app/functions.R                                                                                                                                  
+  3. The prep_splot() space-time matching reference in db-viz-hex/app/functions.R                                                                                                                                  
   4. The merge_ichthyo_bottle.qmd notebook for style/pattern reference                                                                                                                                          
                                                                                
   The plan covers 6 notebook sections: Setup, Zooplankton exploration, Ichthyoplankton exploration, Station-based matching (line + station + cruise), Space-time window matching (adapted from prep_splot()),
@@ -115,7 +115,7 @@ app](https://app.calcofi.io/int/).](./figures/int-app_scatterplot.png)
 
  Key reference files
 
- - int-app/app/functions.R:716-788 — prep_splot() space-time matching pattern
+ - db-viz-hex/app/functions.R:716-788 — prep_splot() space-time matching pattern
  - calcofi4r/R/read.R — cc_get_db(), cc_read_*() convenience functions
  - workflows/merge_ichthyo_bottle.qmd — notebook style reference (librarian::shelf, datatable, dir_data pattern)
  - workflows/ingest_swfsc_ichthyo.qmd:600-630 — DB schema (cruise_key, site_id, tow_id, net_id)
@@ -176,7 +176,7 @@ app](https://app.calcofi.io/int/).](./figures/int-app_scatterplot.png)
 
  5. Match by Space-Time Window
 
- Adapt the prep_splot() approach from int-app/app/functions.R:
+ Adapt the prep_splot() approach from db-viz-hex/app/functions.R:
 
  - Register zoo data in DuckDB: DBI::dbWriteTable(con, "zoo_pnt", d_zoo_db, overwrite = TRUE) after selecting/renaming key columns
  - Load spatial extension: DBI::dbExecute(con, "INSTALL spatial; LOAD spatial;")
@@ -428,7 +428,7 @@ distinguish paired tows; pre-1951 records excluded per Ed):
 1.  **Station match** — line + station number
 2.  **Station + cruise match** — line + station + expedition code
 3.  **Space-time window** — adapted from `prep_splot()` in the [CalCOFI
-    integrated app](https://app.calcofi.io/int/)
+    integrated app](https://app.calcofi.io/db-viz-hex/)
 4.  **Field diagnostics** — within space-time matches, compare
     cruise/line/station to identify discrepancies
 
@@ -992,7 +992,7 @@ d_m2_year |>
 
 ## Match by Space-Time Window
 
-Adapted from `prep_splot()` in `int-app/app/functions.R`.
+Adapted from `prep_splot()` in `db-viz-hex/app/functions.R`.
 
 ### Create local DuckDB for matching
 

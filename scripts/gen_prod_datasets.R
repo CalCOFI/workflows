@@ -19,7 +19,7 @@ type_units <- mt |> filter(is_canonical %in% c(TRUE, "TRUE")) |>
   paste(collapse = ", ")
 val_comment <- paste0("Units VARY by measurement_type — this long-format column holds the ",
   "numeric value for whichever sensor the row's measurement_type names. Canonical examples: ",
-  type_units, ". See the measurement_type variable and https://calcofi.io/schema.")
+  type_units, ". See the measurement_type variable and https://calcofi.io/db-schema.")
 
 # destination column -> source column in metadata_derived (renamed by the view)
 src_of <- c(time = "datetime_start_utc", depth = "depth_m")
@@ -49,8 +49,8 @@ GLOBAL <- list(
   keywords = "CalCOFI, CTD, ocean, temperature, salinity, oxygen, fluorescence, profiles, California Current, depth",
   comment = paste("Long format: one row per cast x depth x measurement_type. measurement_value units",
                   "depend on measurement_type. time/latitude/longitude are denormalized from ctd_cast",
-                  "via a DuckDB view over Parquet (EDDTableFromDatabase) — see https://calcofi.io/schema."),
-  references = "https://calcofi.io/schema ; https://calcofi.org/data/oceanographic-data/ctd-cast-files/",
+                  "via a DuckDB view over Parquet (EDDTableFromDatabase) — see https://calcofi.io/db-schema."),
+  references = "https://calcofi.io/db-schema ; https://calcofi.org/data/oceanographic-data/ctd-cast-files/",
   source = "CalCOFI CTD cast files (https://calcofi.org)",
   creator_email = "calcofi@ucsd.edu", publisher_name = "CalCOFI",
   publisher_url = "https://calcofi.org", project = "CalCOFI")
