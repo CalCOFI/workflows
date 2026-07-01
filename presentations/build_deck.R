@@ -122,10 +122,10 @@ content_slide("A repeatable, self-tracking ingest loop", c(
 # 9. VISUALIZE SECTION ----
 section_slide("Component 2 of 3", "② VISUALIZE")
 content_slide("Visualize — interactive products", c(
-  "Schema site (calcofi.io/schema): interactive ERD, table & column browser, cross-dataset filter — data-driven from GCS sidecars.",
+  "Schema site (calcofi.io/db-schema): interactive ERD, table & column browser, cross-dataset filter — data-driven from GCS sidecars.",
   "ctd-viz app: ODV-style interpolated CTD transects with bathymetry, linked map/table/plot.",
   "datacheck app (NEW): cross-dataset observations for any cruise on a map/table/plot, with deep-linkable URLs for provider questions.",
-  "Integrated app (app.calcofi.io/int): H3 hexagon summaries; new cached endpoint serves hexes on-the-fly by map extent & zoom.",
+  "Integrated app (app.calcofi.io/db-viz-hex): H3 hexagon summaries; new cached endpoint serves hexes on-the-fly by map extent & zoom.",
   "Management areas of interest (sanctuaries, MPAs, BOEM wind) — in progress."))
 
 # 10. SCHEMA IMAGE ----

@@ -23,14 +23,14 @@ editor:
 ## Overview {.unnumbered}
 
 **Goal**: Promote a freshly-built release to `latest.txt` only when every
-pre-baked query in [CalCOFI/query](https://github.com/CalCOFI/query) runs
+pre-baked query in [CalCOFI/db-query](https://github.com/CalCOFI/db-query) runs
 cleanly against it.
 
 Pipeline position: this notebook runs after `release_database.qmd` has
 uploaded the parquet, `metadata.json`, `relationships.json`, `erd.mmd`, and
 `catalog.json` to `gs://calcofi-db/ducklake/releases/{release_version}/`,
 but **before** `latest.txt` is updated. Every `.md` query in the
-[`_queries/`](https://github.com/CalCOFI/query/tree/main/_queries) folder
+[`_queries/`](https://github.com/CalCOFI/db-query/tree/main/_queries) folder
 is rendered with its YAML defaults, executed against the just-uploaded
 release on GCS, and reported below. If every query returns without error,
 `latest.txt` is written; otherwise the target fails and consumer apps
@@ -68,10 +68,10 @@ release_version <- basename(release_dirs[which.max(file.mtime(release_dirs))])
 message(glue("Testing release: {release_version}"))
 
 # where the pre-baked queries live
-queries_dir <- here("../query/_queries")
+queries_dir <- here("../db-query/_queries")
 if (!dir.exists(queries_dir)) {
   stop(glue(
-    "Could not find {queries_dir}. Clone CalCOFI/query as a sibling of ",
+    "Could not find {queries_dir}. Clone CalCOFI/db-query as a sibling of ",
     "this repo, or set queries_dir manually."))
 }
 message(glue("Query repo: {queries_dir}"))
@@ -339,7 +339,7 @@ message(glue(
   "0 failed. latest.txt is now {release_version}."))
 
 # nudge the query site to adopt the new default_version now (previously a
-# 6-hourly cron poll): dispatch CalCOFI/query's bump-default-version workflow,
+# 6-hourly cron poll): dispatch CalCOFI/db-query's bump-default-version workflow,
 # which mirrors latest.txt -> _config.yml and triggers a Pages redeploy. Gated
 # here on the all-pass promotion, so the site never points at a release whose
 # queries haven't been validated. Non-fatal — a missing gh just means the bump
@@ -347,14 +347,14 @@ message(glue(
 gh_bin <- Sys.which("gh")
 if (nzchar(gh_bin)) {
   disp <- system2(gh_bin,
-    c("workflow", "run", "bump-default-version.yml", "--repo", "CalCOFI/query"),
+    c("workflow", "run", "bump-default-version.yml", "--repo", "CalCOFI/db-query"),
     stdout = TRUE, stderr = TRUE)
   if (!identical(attr(disp, "status") %||% 0L, 0L))
     warning(glue("query bump dispatch failed: {paste(disp, collapse = '; ')}"))
   else
-    message("dispatched CalCOFI/query bump-default-version workflow")
+    message("dispatched CalCOFI/db-query bump-default-version workflow")
 } else {
-  message("gh not found; CalCOFI/query default_version needs a manual bump dispatch")
+  message("gh not found; CalCOFI/db-query default_version needs a manual bump dispatch")
 }
 ```
 
