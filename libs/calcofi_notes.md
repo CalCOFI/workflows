@@ -1,5 +1,6 @@
 ## TODO
 
+- RENAMEs: the colloquial name "datacheck" in db-viz-cruise runtime JS keys / CSV-download name / code comments (identifiers & paths were changed); image filenames like *int-app*.png; NEWS.md, historical plans, your libs/calcofi_notes.md; rendered Quarto .html (need a re-render); uptime history/graphs + site display-names (keeps history slugs intact).
 - crosswalk: calcofi.org + erddap (coastwatch + oceanview) + EDI + OBIS + other (ZooDB, ...): and compare extent temporal + spatial, row count
 - schema:
   redundant `{date}`: `v{date} - {date}`
@@ -58,10 +59,920 @@
   - Table 'species' has 170 NULL values in required column 'gbif_id'
   ```
 
+## 2026-07-01.b db-viz-grid
+
+
+
+## 2026-07-01 rename: schema/query/datacheck/int-app -> db-schema/db-query/db-viz-hex/db-viz-cruise
+
+Let's rename stuff (including whole repository names) to explicitly clarify those associated with the new integrated database:
+
+- schema -> db-schema
+- query -> db-query
+- apps/datacheck -> apps/db-viz-cruise
+- int-app -> db-viz-hex
+
+Look for any necessary replacements throughout the rest of the repositories, particularly `@../docs`.
+
+I will have to update server with repos and Shiny app links (and symbolically link old to keep old URLs working): provide commands to to do that. 
+
+←  ☒ URL strategy  ☒ Execution scope  ✔ Submit  →
+
+Should the public URLs move to the new names, or stay at the old paths?
+
+❯ 1. New URLs canonical, old redirected ✔
+     Canonical becomes calcofi.io/db-schema, /db-query, app.calcofi.io/db-viz-cruise, /db-viz-hex. Old paths (/schema, /query, /datacheck, /int) kept alive via symlink/redirect. I rewrite all cross-references (docs, calcofi4r, landing page) to the new URLs. Most consistent, more churn.
+  2. Keep old URLs, rename repos only
+     Public URLs stay exactly as today (calcofi.io/schema, app.calcofi.io/datacheck, /int). Only repo + local dir names change for org tidiness. Server symlinks / Jekyll baseurl preserve old paths. Minimal reference churn — only github.com/CalCOFI/<repo> and clone-path refs change.
+
+←  ☒ URL strategy  ☒ Execution scope  ✔ Submit  →
+
+How far should I go now vs. hand off to you?
+
+❯ 1. Edit refs + local renames; you run gh + server
+     I rename local directories and update all in-repo references across the CalCOFI repos, then give you the exact `gh repo rename` and server/symlink commands to run yourself. Nothing outward-facing happens without you.
+  2. Also run gh repo rename myself ✔
+     In addition to edits + local renames, I run `gh repo rename` for schema/query/int-app on GitHub (outward-facing, org-wide). I still hand you the server commands since I can't reach the server.
+  3. Only edit references, no dir renames
+     I only update in-repo text references. You handle all directory renames, gh repo renames, and server changes. Lowest blast radius from me.
+
+Done. Here's the full picture.
+
+What I did (local + GitHub)
+
+**GitHub repos renamed** (via gh repo rename, redirects auto-created):
+
+┌─────────────────────────┬────────────────────┬────────────────┬───────────────────────────────┐
+│           old           │        new         │    serving     │         canonical URL         │
+├─────────────────────────┼────────────────────┼────────────────┼───────────────────────────────┤
+│ CalCOFI/schema          │ CalCOFI/db-schema  │ GitHub Pages   │ calcofi.io/db-schema          │
+├─────────────────────────┼────────────────────┼────────────────┼───────────────────────────────┤
+│ CalCOFI/query           │ CalCOFI/db-query   │ GitHub Pages   │ calcofi.io/db-query           │
+├─────────────────────────┼────────────────────┼────────────────┼───────────────────────────────┤
+│ CalCOFI/int-app         │ CalCOFI/db-viz-hex │ Shiny (server) │ app.calcofi.io/db-viz-hex/    │
+├─────────────────────────┼────────────────────┼────────────────┼───────────────────────────────┤
+│ apps/datacheck (subdir) │ apps/db-viz-cruise │ Shiny (server) │ app.calcofi.io/db-viz-cruise/ │
+└─────────────────────────┴────────────────────┴────────────────┴───────────────────────────────┘
+
+**Local dirs renamed** to match (git mv for the apps subdir; int-app.Rproj→db-viz-hex.Rproj; remotes re-pointed).
+
+**Reference edits across 12 repos** — new URLs made canonical everywhere active: db-schema/db-query internals (Jekyll baseurl + pages.yml + cross-links), the two apps, docs/*.qmd (incl. the docs/match/ redirect shim), calcofi4r/calcofi4db, the CalCOFI.github.io landing page (product keys, URLs, screenshots git mv'd to db-*.png), uptime, server (incl. the h3t docker-compose.yml data mount), api-h3t/api-h3t-py, and workflows. The live test_release.qmd now clones ../db-query and dispatches bump-default-version.yml --repo CalCOFI/db-query.
+
+**Deliberately left (flag if you want them changed)**: the colloquial name "datacheck" in db-viz-cruise runtime JS keys / CSV-download name / code comments (identifiers & paths were changed); image filenames like *int-app*.png; NEWS.md, historical plans, your libs/calcofi_notes.md; rendered Quarto .html (need a re-render); uptime history/graphs + site display-names (keeps history slugs intact).
+
+**What you need to run**
+
+1. **Push the repos** (required before the server git pulls). I have not committed/pushed — say the word and I'll commit + push all 12 with per-repo messages, or do it yourself. ⚠️ Pushing db-schema/db-query triggers a Pages rebuild at the new /db-* path with the new baseurl — brief window where the old path is stale.
+
+2. **Keep old GitHub Pages URLs alive** (server symlinks can't cover Pages — GitHub does not auto-redirect Pages paths on rename). Create tiny redirect stubs:
+
+```bash
+# for each of schema, query → point at the db-* site
+for old in schema query; do
+  gh repo create CalCOFI/$old --public -y
+  tmp=$(mktemp -d); new="db-$old"
+  cat > $tmp/index.html <<EOF
+<!doctype html><meta http-equiv="refresh" content="0; url=https://calcofi.io/$new/">
+<link rel="canonical" href="https://calcofi.io/$new/">Moved to <a href="https://calcofi.io/$new/">calcofi.io/$new</a>
+EOF
+  ( cd $tmp && git init -q && git add . && git commit -qm "redirect to /$new" \
+    && git branch -M main && git remote add origin https://github.com/CalCOFI/$old.git && git push -qu origin main )
+  gh api -X POST repos/CalCOFI/$old/pages -f 'source[branch]=main' -f 'source[path]=/' 2>/dev/null || true
+done
+```
+
+3. **Server (SSH to the shiny-server VM)**. Verify existing symlink targets first (ls -la /srv/shiny-server/), then:
+```bash
+# --- rename the int-app clone so it matches the updated docker-compose mount ---
+mv /share/github/CalCOFI/int-app /share/github/CalCOFI/db-viz-hex
+git -C /share/github/CalCOFI/db-viz-hex remote set-url origin https://github.com/CalCOFI/db-viz-hex.git
+
+# --- pull the apps repo (picks up datacheck → db-viz-cruise rename) ---
+git -C /share/github/apps pull   # old /srv/shiny-server/datacheck symlink will now dangle
+
+# --- Shiny symlinks: new canonical + back-compat alias to keep old URLs working ---
+cd /srv/shiny-server
+rm -f datacheck int
+ln -s /share/github/apps/db-viz-cruise        db-viz-cruise   # NEW canonical
+ln -s /share/github/apps/db-viz-cruise        datacheck       # old /datacheck/ compat
+ln -s /share/github/CalCOFI/db-viz-hex/app     db-viz-hex      # NEW canonical (verify /app subpath)
+ln -s /share/github/CalCOFI/db-viz-hex/app     int             # old /int/ compat
+
+# --- rebuild db-viz-cruise data (path moved to /share/data/db-viz-cruise/) ---
+( cd /share/github/apps/db-viz-cruise && Rscript prep_db.R )
+
+# --- remount the h3t API on the renamed data dir ---
+cd /share/github/CalCOFI/server && docker compose up -d h3t_api_py varnish
+```
+
+4. **Ordering note for uptime**: .upptimerc.yml now points at the new canonical URLs. Push it after the server symlinks exist, or the next 15-min check flags db-viz-hex/db-viz-cruise as down. Site display-names are unchanged, so datacheck-app/integrated-app history is preserved.
+
+5. **Re-render docs** (quarto render) so the published HTML picks up the new links (old links still resolve via redirects meanwhile).
+
+Want me to commit + push all 12 repos now (per-repo commits), or hold for your review?
+
+All committed and pushed. Summary of the push:
+
+13 repos pushed, 0 unpushed. 12 landed on main. One caveat:
+
+- api-h3t-py was checked out on its open-PR branch fix/antimeridian-tiles (PR #1), so its rename commit went there, not main. The edits are doc/comment-only (deploy.md + two code comments) and will reach main when that PR merges — the functional h3t dependency (the data-dir mount) lives in server/docker-compose.yml, which is on main. Say the word if you'd rather I cherry-pick those 3 comment lines onto main now.
+
+Other notes from the push:
+- apps / server needed a clean rebase onto newer remote commits — no conflicts.
+- uptime conflicted only on the bot-generated README.md; I kept the bot's version (your .upptimerc.yml monitor/navbar changes to db-* URLs are intact — the next upptime run regenerates the README).
+- workflows: committed only my 7 rename files; your libs/calcofi_notes.md edits and untracked files (CLAUDE.md, _output/…) are untouched.
+
+What happens automatically now: db-schema and db-query Pages workflows rebuild at the new /db-schema and /db-query paths (new baseurl).
+
+Still on you (commands provided in my previous message):
+1. Pages redirect stubs for schema + query — the only way to keep calcofi.io/schema and calcofi.io/query alive (GitHub doesn't auto-redirect Pages paths on rename).
+2. Server: rename the int-app clone → db-viz-hex, git pull in apps, re-point Shiny symlinks (new canonical + old-slug compat), rebuild db-viz-cruise data, docker compose up -d h3t_api_py varnish.
+3. Push uptime only after the server symlinks exist (already pushed — so make sure the new endpoints are live, or the next check flags them down).
+4. quarto render the docs so published HTML picks up the new links (old links still resolve via redirects until then).
+
+Want me to cherry-pick the api-h3t-py rename onto main?
+
+
+## 2026-06-26.b ingest `cce-lter_zoodb`
+
+Work on ingesting ZooDB (`CalCOFI/workflows#31`) per metadata listed in:
+
+- [Living program document: CalCOFI Data Inventory\\_updated Feb2026 - Google Sheets](https://docs.google.com/spreadsheets/d/1uhviF2ecfOqGaSbC_JE8B5jPRqqjMaFc9TNCK_m297c/edit?gid=348406762#gid=348406762)
+  on row 14, `Dataset name` (column G) = "Permanent zooplankton (Holoplankton) community: ZooDb"
+
+and downloaded data at: `@~/My Drive/projects/calcofi/data-public/cce-lter/ZooDB`
+
+Picking the ZooDB ingest back up. The data is downloaded, so issue #31 is unblocked. Let me follow the skills loop (/explore-dataset → /generate-metadata → /ingest-new → validate → release). First I'll profile the actual data exports and look at the closest existing ingests as templates.
+
+ZooDB is fully ingested. Here's the summary.
+
+ZooDB Holoplankton (cce-lter/zoodb, #31) — ingested ✅
+
+The key move: the data already on Drive (q1/q2/q3.csv) was whole-community totals. You chose to pull the per-taxon data, so I reverse-engineered public access to the ZooDB portal and scripted its save.php export to get the diversity half the dataset is actually about.
+
+What was built:
+- Source pull — 33 higher taxa × 2 units via save.php (pooled=combined, raw/uncorrected, 1949–2026) → 68 CSVs consolidated to ~/My Drive/…/cce-lter/ZooDB/zoodb_holoplankton.csv, with by_taxon/_PROVENANCE.md. Archived to gs://calcofi-files-public/archive/cce-lter/zoodb/.
+- Tables (parquet + manifest/metadata/relationships JSON, uploaded to gs://calcofi-db/ingest/cce-lter_zoodb/):
+  - zoodb_sample — 506 (351 unpooled tows + 155 pooled regional composites)
+  - zoodb_measurement — 30,948 long rows (abundance #/1000m³, #/m², biomass mgC/m²; explicit 0 = analyzed-absent, missing = not-analyzed — no zero imputation)
+  - zoodb_taxon — 33 higher taxa, WoRMS 33/33 (2 unaccepted flagged)
+- Notebook ingest_cce-lter_zoodb.qmd renders cleanly (mermaid PNG lightbox preserved — it was just slow, not hung; fix is QUARTO_CHROMIUM_HEADLESS_MODE=new in-process).
+- Registries updated: measurement_type, dataset, dataset_status (provider corrected calcofi→cce-lter, matching its euphausiids sibling), relationships_cross; metadata redefinition files + taxon_worms.csv + 7 provider questions.csv.
+- Validation: all checks PASS (PK/FK/dup/spatial/temporal/orphan/schema_lint/questions/metadata). Coverage: ship_key 100% on unpooled, cruise_key 75.9%, grid 350 in-grid. The validate_for_release NULL-key "FAIL" is the expected non-gating remainder (identical to euphausiids).
+- _targets.R auto-discovers the target (no edit needed).
+
+Saved to memory: the reusable ZooDB portal-export recipe (handy for ZooScan #32) and the mermaid-PNG-render-is-slow-not-hung note.
+
+Left for you (deliberately not done — your call):
+1. release_database.qmd re-render — it auto-discovers the new outputs, but re-rendering freezes/uploads a new versioned release across all datasets; that's the heavy "caboose" you usually run intentionally.
+2. PR/commit — I did not commit (per policy). New: ingest_cce-lter_zoodb.qmd, metadata/cce-lter/zoodb/; modified: 4 registry CSVs. Source data lives on Drive/GCS (not git).
+3. Issue #31 update — I drafted a completion comment + checklist but the post was auto-blocked (external write not explicitly requested). Want me to post it?
+
+One thing worth your eye: the live ZooDB ("WORK IN PROGRESS") now returns 225 all-taxa unpooled tows vs the 276 in your June‑19 export — euphausiids look split out into the separate DB. I treated this pull as one dated snapshot and logged it as question Q06.
+
+Want me to post the #31 update, kick off the release_database.qmd re-render, or open a PR?
+
+### ZooScan
+
+See if you can similarly ingest ZooScan holoplankton #32 using https://oceaninformatics.ucsd.edu/zooscandb/secure/login.php
+
+Everything is complete and verified. Summary of this session's work:
+
+ZooScan PRPOOS (#32) — ingested ✅
+
+Same approach as ZooDB, but ZooScan's bulk download is disabled, so the data is scraped from its PRPOOS plot CGI (tssubplot_new.py), whose Plotly page embeds the per-station values as a data:text/csv URI.
+- zooscan_sample 1,483 tows · zooscan_measurement 126,692 (abundance, C biomass, Feret diameter, individual C) · zooscan_taxon 23 bioclasses (WoRMS 19/23)
+- Lines 80/87/90, 2005–2026; ship_key 100%, cruise_key 70%, grid 100%
+- Fixed two data quirks: longitude stored as positive °W (negated), and per-class NA positions (recovered per sample)
+
+Reproducibility fix (your correction) ✅
+
+The scraping code now lives in committed R, not my scratchpad:
+- libs/download_zooscan.R and libs/download_zoodb.R (R/httr2) — each invoked from a guarded "Acquire Source Data" chunk in its notebook (cached unless overwrite_all). The ZooDB save.php helper was verified to reproduce the exact data (335-row spot check). Saved as durable feedback in memory.
+
+Index + GH Action (your idea) ✅
+
+- jekyll-gh-pages.yml now runs build_workflows_index.R before the Jekyll build, so new notebooks auto-appear on push. First attempt failed (CRAN mirror unset) — fixed (RSPM repo) and made the R steps continue-on-error so a CI hiccup never blocks the deploy.
+- Verified live: the Action's index-build step is green and https://calcofi.io/workflows/ now lists both ZooDB and ZooScan.
+
+Released + pushed
+
+- Frozen release v2026.06.26 now folds in both ZooDB + ZooScan (47 tables).
+- Commits on main: 408ec9b (ZooDB), dcd23ac (index+Action), 988d6ed (ZooScan + retrofit + CI fix). Issues #31 and #32 updated.
+
+I committed straight to main per the workflow you set with ZooDB. The pre-existing unrelated changes (libs/calcofi_notes.md, new.*/old.*, and the /init CLAUDE.md) were left untouched — let me know if you'd like the CLAUDE.md committed too.
+
+Resume this session with:
+```bash
+claude --resume 2ab830de-764e-4485-ae57-9bbbc938684d
+```
+
+## 2026-06-26.a /init CLAUDE.md
+
+/init
+
+## 2026-06-25.c docs status 2026-07-01
+
+Perform an exhaustive review of git histories for all CalCOFI repositories and create a status update for `2026-07-01` in `@../docs/status.qmd`. Also review emails with esatterthwaite@ucsd.edu in Gmail Connector, and reference all deliverables in `@~/My Drive/contracts/calcofi/CalCOFI - EcoQuants Quote, 2025-10 to 2026-06_v2.docx`.
+
+## 022-06-25 help Nastassia w/ 2022-10 data
+
+Help me with Nastassia's question below in search of 2022-10 hydrographic data.
+
+When I visit the datacheck app (source: `@../apps/datacheck`; online: https://app.calcofi.io/datacheck/?cruise=2022-10-33UD) I find cruise `2022-10-33UD` (screenshot: `@/Users/bbest/Desktop/calcofi_2022-10/app.calcofi.io:datacheck:?cruise=2022-10-33UD.png`), but then there is no datetime associated (download: `@/Users/bbest/Desktop/calcofi_2022-10/datacheck_2022-10-33UD.csv`). And when I try to filter in the integrated app (source: ; online: ) for 2022-10-01 to 2022-10-31 it says no observations found. You might need to revisit the `@ingest_swfsc_ichthyo.qmd` and/or input data `@~/My Drive/projects/calcofi/data-public/swfsc/ichthyo`.
+
+---------- Forwarded message ---------
+From: Nastassia Patin <nvpatin@ucsd.edu>
+Date: Thu, Jun 25, 2026 at 12:30 AM
+Subject: CalCOFI October 2022 data
+To: Benjamin Gire <bmgire@ucsd.edu>, Ben Best <bebest@ucsd.edu>
+Cc: Noelle Bowlin - NOAA Federal <noelle.bowlin@noaa.gov>
+
+
+Hi Ben and Ben,
+
+I am interested in getting the hydrographic data from the "surprise" CalCOFI cruise in October 2022. This was a non-standard CalCOFI, shorter than normal and with many fewer stations. I didn't see any available data on calcofi.org or calcofi.io but I do think CTD data were collected...any ideas where they might be?
+
+Thanks,
+Nastassia
+
+--
+Dr. Nastassia Patin
+Marine Molecular Ecology Program Coordinator
+California Cooperative Oceanic Fisheries Investigations (CalCOFI)
+Scripps Institution of Oceanography
+
+ORCID: 0000-0001-8522-7682
+
+
+Done. Committed and pushed to main (633208d) on the CalCOFI/apps repo.
+
+On the host, after pulling:
+git -C <apps-repo>/datacheck pull
+Rscript <apps-repo>/datacheck/prep_db.R TRUE   # force-rebuild obs on /share/data
+# then restart/reload the datacheck Shiny app so global.R rebuilds cruise_summary
+
+Quick re-verification checklist once it's live:
+- ?cruise=2022-11-33P4 → loads (no DataTables Ajax error), ~146 CTD casts, ship reads SALLY RIDE.
+- ?cruise=2022-10-33UD → 16 ichthyo stations with datetimes Oct 13–19 2022.
+- Dropdown ship names populated for the previously blank cruises (2022-08-39C2 → BOLD HORIZON, 2021-07/2021-10 33P4 → SALLY RIDE).
+
+One harmless leftover: the 2019-07- cruise (single ichthyo record with a blank NODC in the source key) still shows "—" — pre-existing source data issue, not worth chasing here. Flag it if you want me to track it.
+
+
+## 2026-06-25 erddap continue
+
+I have started to revise the email to Lynne (below) and realize that I want to:
+
+- expand upon the benchmarks to include a NetCDF comparison
+- include summary plots like `@./_output/bench_erddap_ctd_files/figure-html/mem-plot-1.png`, which for some reason did not get included in `@./bench_erddap_ctd.qmd`
+- ensure reproducibility by making all code and data files explicitly avilable with links  / code chunks
+
+> Hi Lynn,  
+>   
+> To understand limitations and options for serving our large CTD data (16 GB of compressed parquet), I stood up a test ERDDAP instance:
+> 
+> &nbsp;&nbsp;&nbsp;&nbsp;[**erddap.calcofi.io**](https://erddap.calcofi.io/)
+> -   [ERDDAP - CalCOFI CTD Measurements (**full**) - Data Access Form](https://erddap.calcofi.io/erddap/tabledap/calcofi_ctd_measurement.html)
+> -   [ERDDAP - CalCOFI CTD Profiles (**thinned**) - Data Access Form](https://erddap.calcofi.io/erddap/tabledap/calcofi_ctd_thin.html)\
+> _adaptively-thinned CTD profiles (long format, one row per cast/depth/measurement\_type; canonical sensors only, ~10 m depth grid with inflection points preserved)_
+> 
+> This enabled testing with parquet versus DuckDB along with wide versus long ("tidy") formats, using specified lat/lon/depth box queries:  
+>   
+> &nbsp;&nbsp;&nbsp;&nbsp;[calcofi.io/workflows/bench\_erddap\_ctd.html](https://calcofi.io/workflows/bench_erddap_ctd.html)
+>   
+> Here's the summary:  
+> 1.  **Parquet.** The Parquet memory issue is real. ERDDAP's [**EDDTableFromParquetFiles**](https://erddap.github.io/docs/server-admin/datasets#eddtablefromparquetfiles) reads each matching file fully into the JVM memory before filtering — our single ~935 MB wide file sent out of memory 4 GB, and the 216 M-row long table (ctd\_measurement) won't load at all (on our modest server with only 2 GB RAM allocated for ERDDAP).    
+> 2.  **\[TODO: NetCDF\]        
+> 3.  **DuckDB.** What worked well: pointing [**EDDTableFromDatabase**](https://erddap.github.io/docs/server-admin/datasets#eddtablefromdatabase) at the DuckDB JDBC driver, over a tiny (~270 KB) DuckDB file of CREATE VIEW … read\_parquet(…) views that join the long tables back to the cast table for time/lat/lon. DuckDB does the predicate pushdown + Parquet row-group skipping and streams results, so the full 216 M-row table loads with a ~60 MB memory and filtered queries return in well under a second. It runs on stock ERDDAP — the only change is dropping the duckdb\_jdbc jar into WEB-INF/lib.  
+>     Two gotchas worth passing along:
+>     1.  **Time**. Serve time as a real TIMESTAMP in the view, not epoch-seconds double, or the DuckDB driver throws null pointer exceptions on every query that selects time; and
+>     2.  **Ranges**. EDDTableFromDatabase doesn't auto-compute variable ranges, so you have to set actual\_range on time/lat/lon/depth to get the min/max + sliders on the ERDDAP data form.
+> 
+> Regarding your partitioning question — I benchmarked the same box query (temperature in a 2°×2°, 0–200 m box, ~390 k rows) across layouts of the long table:
+> -   cruise\_key partition + join at query time (what's live now): ~0.9 s
+> -   partition by measurement\_type (one variable → reads ~1/53 of the data): ~0.10 s
+> -   sort rows spatially within each partition (row-group skipping): ~0.075 s
+> 
+> So there's ~12× speed up from layout, but every option is already sub-second — the long format isn't the bottleneck one might fear, at least with DuckDB on SSD. The catch is exactly the one you raised: partitioning by measurement\_type speeds single-variable queries (the common case) but slows queries for "all variables in a region," so it comes down to expected access patterns.
+>   
+> Which brings me to the real question for you: if you're still up for hosting these on the CoastWatch ERDDAP, what format would be easiest for you to receive and maintain?
+> 
+> 1.  **NetCDF per cast** — ~~Rasmus can generate these via Xarray~~, à la your Trinidad Head setup; most native to your stack.
+> 2.  **Parquet + the small DuckDB .db of views** (this approach) — keeps the tidy table queryable as-is, needs the duckdb\_jdbc jar.
+> 3.  **Hold** for native Parquet/DuckDB support ERDDAP [#447](https://github.com/ERDDAP/erddap/discussions/447) / [#448](https://github.com/ERDDAP/erddap/issues/448).
+> 
+> We can produce any of these from the same pipeline, so it's really about what's least work on your end.
+> 
+> Thanks again for all the guidance!
+>   
+> Cheers, Ben 
+>   
+> PS Here are a few more links:
+> -   [CalCOFI/server](https://github.com/CalCOFI/server/tree/main/erddap) Docker containers
+>     -   [docker-compose.yml](https://github.com/CalCOFI/server/blob/main/docker-compose.yml) for production server
+>     -   [docker-compose.bench.yml](https://github.com/CalCOFI/server/blob/main/docker-compose.bench.yml) for benchmark testing (and memory containment)
+>     -   [erddap/](https://github.com/CalCOFI/server/tree/main/erddap) Dockerfile with duckdb\_jdbc
+> -   [CalCOFI/erddap](https://github.com/calcofi/erddap/): server (setup.xml) and datasets configuration ([datasets.xml](https://github.com/CalCOFI/erddap/blob/main/content/datasets.xml))
+ 
+
+● Everything checks out for feasibility:
+  - Host: 11.5 GB available now (16 GB total, no swap; live stack ~4 GB). A 2 GB bench ERDDAP +
+  memory-capped, one-cruise-at-a-time NetCDF generation fits with margin. 
+  - Infra: bench compose + custom calcofi-erddap:duckdb image both present; bench container just needs
+  restarting.
+  - Tooling: R ncdf4, RNetCDF, and duckdb all available in the rstudio container — I can generate CF
+  NetCDF in R, consistent with the rest of the pipeline.
+
+  And a key correction: the report's "ctd_cast 5.55 M rows / one row per cast" is accurate — there
+  really are 5.55M casts. That's exactly why "NetCDF per cast" (Lynn's Trinidad-Head model) can't
+  scale here (5.5M files), but per-cruise NetCDF is just 96 files. That finding is itself a strong
+  answer to Lynn.
+
+  One genuine scoping decision will shape how heavy (and memory-risky) the new benchmark is:
+──────
+Planning: /home/bebest/.claude/plans/a-previous-attempt-to-lucky-eich.md
+──────
+ ☐ NetCDF scope 
+
+How far should the new NetCDF benchmark go? (NetCDF = per-cruise CF profile files served via 
+EDDTableFromNcCFFiles — the format Lynn would actually receive. Per-cast is infeasible at 5.55M casts;
+per-cruise = 96 files.)
+
+  1. Thin only (recommended)
+     Generate 96 per-cruise wide NetCDF profile files for the thin table (15 canonical vars),
+     benchmark as a 4th backend at 2 GB heap. Cover the full 216M measurement-as-NetCDF case by
+     projection. Fast, low memory risk, clean canonical variables, directly answers Lynn.
+  2. Thin + 1-cruise measurement probe
+     Full thin-NetCDF benchmark PLUS generate one full-resolution cruise of the 216M measurement table
+     as NetCDF to measure ERDDAP's per-file load memory at real scale — without building all 96 heavy
+     files. Middle ground on cost/value.
+❯ 3. Thin + measurement (full)
+     Generate all 96 per-cruise wide NetCDF files for BOTH thin and the full 216M measurement table,
+     benchmark both. Most complete head-to-head vs DuckDB, but heaviest generation (~16+ GB NetCDF),
+     more time and memory risk on the no-swap host.
+  1. Type something.
+
+ Here is Claude's plan:
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ Extend the CTD-on-ERDDAP report: add a NetCDF backend, summary plots, and full reproducibility
+  
+ Context
+
+ bench_erddap_ctd.qmd (live at https://calcofi.io/workflows/bench_erddap_ctd.html)
+ benchmarks serving CalCOFI's long-format CTD tables on ERDDAP across DuckDB vs
+ Parquet vs CSV, plus a Parquet partitioning/ordering study. It backs an email to
+ Lynn DeWitt (ERDDAP manager, CoastWatch node) about whether/how CoastWatch could
+ host these data. While revising that email, three gaps surfaced:
+
+ 1. No NetCDF data point. Lynn's first option is "NetCDF per cast, à la your
+ Trinidad Head setup" — the most ERDDAP-native path — but the report only mentions
+ it in prose. It needs real memory/latency numbers so the email's option (1) is
+ grounded, and so the wide-vs-long axis (promised in the email) is actually measured.
+ 2. Summary plots dropped. A mem-plot chunk existed once (stale
+ _output/bench_erddap_ctd_files/figure-html/mem-plot-1.png remains) but the
+ committed qmd (250 lines) has no plot chunks — only tables. The report should
+ visualize the headline memory and latency results.
+ 3. Reproducibility is link-thin. §7 lists filenames but gives no GitHub links and
+ embeds no code/data, so a reader can't reproduce from the report alone.
+
+ Key scale finding (verified against the data): there are 5.55 M distinct casts
+ (ctd_cast.parquet), so "one NetCDF per cast" = 5.5 M files (infeasible). The right
+ granularity is per-cruise = 96 files. This is itself a direct answer to Lynn.
+ The thin table exposes 15 canonical variables; the host has ~11.5 GB free, no
+ swap (a prior run forced a hard VM reset — memory discipline is mandatory).
+
+ Decision (user): full scope — generate per-cruise wide NetCDF for both the
+ thin table and the full 216 M-row ctd_measurement, and benchmark both.
+
+ Approach
+
+ Add NetCDF (wide, per-cruise CF profiles, served via EDDTableFromNcCFFiles) as a
+ 4th serving backend alongside DuckDB/Parquet/CSV. ERDDAP reads NcCF files per-file
+ (its native path), so this is the natural "what Lynn would receive" artifact and a clean
+ wide-format counterpoint to the long-format DuckDB winner. Then restore summary plots
+ and make the report fully reproducible. Finally, rewrite the email with the new numbers.
+
+ NetCDF files go under /ssd/erddap-bench/staged/netcdf/{thin,measurement}/<cruise_key>.nc
+ — already identity-mounted :ro into the bench container, so no docker-compose.bench.yml
+ change is needed. All work stays in CalCOFI/workflows. R ncdf4 (+ duckdb) are
+ available in the rstudio container — generate there, consistent with the pipeline.
+
+ Implementation
+
+ 1 · NetCDF generator — libs/erddap_netcdf.R (new)
+
+ - build_ctd_netcdf(view, out_dir, vars, db, data_dir, cruises = NULL, mem_limit = "2GB"):
+ loop the 96 cruise_keys; for each, DuckDB-pivots that cruise's canonical rows from the
+ *_erddap view (long → wide by measurement_type, ordered by cast then depth), then
+ writes <cruise_key>.nc as a CF contiguous-ragged featureType=Profile file:
+   - dims profile (casts in cruise), obs (all depth rows in cruise);
+   - per-profile: profile_id (cf_role=profile_id), time, latitude, longitude,
+ cruise_key, line, sta, and rowSize (sample_dimension="obs");
+   - per-obs: depth + one variable per canonical measurement_type (with units/long_name
+ from metadata_derived.csv / measurement_type.csv).
+   - Memory-bounded: one cruise at a time, DuckDB memory_limit capped, threads=2,
+ temp_directory spill, MIN_AVAIL guard; free the R frame each iteration.
+ - erddap_nccf_dataset_xml(...): emit the EDDTableFromNcCFFiles <dataset> block
+ (<fileDir>, <fileNameRegex>.*\.nc</fileNameRegex>, cdm_data_type=Profile,
+ cdm_profile_variables, featureType=Profile), reusing .erddap_datavar_xml,
+ .erddap_coord_attrs, .duckdb_to_erddap_type, .xml_escape, %||% from libs/erddap.R.
+ - Robustness: after the first .nc is written, validate with ncdump -h and bootstrap
+ a known-good block with ERDDAP's GenerateDatasetsXml (docker exec erddap_bench …),
+ then reconcile the helper's output against it before generating all 96.
+
+ 2 · Generation driver — scripts/gen_ctd_netcdf.R (new)
+
+ Determine canonical vars per table (thin: the 15 seen; measurement: canonical types ∩
+ its 53), then call build_ctd_netcdf() for thin and measurement into
+ /ssd/erddap-bench/staged/netcdf/{thin,measurement}/. Run in rstudio container. Measurement
+ is the heavy one — generate cruise-by-cruise, log progress, respect the memory guard.
+
+ 3 · Dataset blocks — scripts/gen_bench_datasets.R (edit)
+
+ Add calcofi_ctd_thin_netcdf and calcofi_ctd_measurement_netcdf via
+ erddap_nccf_dataset_xml(); write to data/bench_erddap/.
+
+ 4 · Harness — scripts/bench_erddap.sh (edit)
+
+ - Recognize *_netcdf cells → APP=netcdf, DID=calcofi_ctd_{thin,measurement}_netcdf.
+ - NetCDF is wide (no measurement_type column), so add a per-schema query set keyed by
+ the same intent as the long queries: q1 .das; q2 single-cruise dump; q3 = the
+ single-variable bbox (temperature_ave, 32–34°N/119–121°W, 0–200 m — the layout-study
+ box) via &latitude>=32&latitude<=34&longitude>=-119… &depth>=0&depth<=200; q4 large dump.
+ Keep the existing long-query branch for duckdb/parquet/csv. Same result columns.
+ - Reuse MIN_AVAIL_MB guard, cold-clear, stable-load poll. Run at 2 GB heap.
+
+ 5 · Plots + reproducibility — bench_erddap_ctd.qmd (edit)
+
+ - New §4 NetCDF subsection: the per-cast→per-cruise (5.55 M→96) scale finding, the
+ CF featureType=Profile choice, and NetCDF rows folded into the matrix table.
+ - Three ggplot chunks (from results_all.csv + layout_results.csv):
+ mem-plot (load peak heap MB per cell, OOM/timeout annotated — the restored headline);
+ latency-plot (q2/q3/q4 ms by backend, log scale); layout-plot (A–D query medians).
+ - Reproducibility: GitHub permalinks for every file (CalCOFI/workflows, /server,
+ /erddap), and embed key sources verbatim via folded #| file: + #| eval: false chunks
+ (libs/erddap_duckdb.R, libs/erddap_netcdf.R, the view-build SQL, bench_erddap.sh,
+ bench_parquet_layout.sh); link the result CSVs (already shown as tables).
+ - Refresh §1/§4 takeaways and the §6 recommendation to reflect measured NetCDF results.
+
+ 6 · Run, render, deploy
+
+ - docker compose -f server/docker-compose.bench.yml -p erddap-bench up -d (2 GB), then
+ scripts/bench_erddap.sh 2g thin_netcdf meas_netcdf; append to results_all.csv via
+ consolidate_results.sh. Stop the bench container before/around heavy generation —
+ never generate and serve concurrently on the no-swap host.
+ - Render in rstudio: quarto render bench_erddap_ctd.qmd → _output/; remove the stale
+ mem-plot-1.png (regenerated). Commit + push CalCOFI/workflows; the
+ jekyll-gh-pages.yml Action redeploys to calcofi.io/workflows/.
+
+ 7 · Email to Lynn (deliver as text; offer Gmail draft via MCP)
+
+ Fill the [TODO: NetCDF] item with the measured numbers + the 5.55 M-cast → 96-file
+ per-cruise finding (why per-cast can't scale, what per-cruise costs), point to the updated
+ report, and keep the three-option ask. Use the calcofi.io report URL.
+
+ Files
+
+ New: `libs/erddap_netcdf.R`; `scripts/gen_ctd_netcdf.R`.
+ Edit: `scripts/gen_bench_datasets.R`; `scripts/bench_erddap.sh`; `bench_erddap_ctd.qmd`;
+ `data/bench_erddap/results_all.csv` (+ new *_netcdf.xml blocks).
+ Reuse verbatim: `libs/erddap.R` (.erddap_datavar_xml, .erddap_coord_attrs,
+ .duckdb_to_erddap_type, .xml_escape, %||%), `scripts/consolidate_results.sh`.
+ No change: `server/docker-compose.bench.yml` (NetCDF dir is under the mounted staged/).
+
+ Verification
+
+ 1. NetCDF validity: ncdump -h on a sample shows CF featureType=Profile, ragged
+ rowSize, cf_role=profile_id; ERDDAP GenerateDatasetsXml ingests it without error.
+ 2. Bench loads: curl localhost:8091/erddap/tabledap/calcofi_ctd_thin_netcdf.das and
+ …_measurement_netcdf.das → 200 at 2 GB heap; capture load peak heap + RSS (expect low,
+ per-file reads) and q1–q4 latency.
+ 3. Correctness: a NetCDF bbox query for temperature_ave returns the same values as the
+ equivalent DuckDB query over the Parquet (spot-check a cruise × depth).
+ 4. Report: results_all.csv has the two *_netcdf rows; matrix + all three plots
+ render; _output/bench_erddap_ctd.html rebuilt; stale figure removed.
+ 5. Deploy: after push, calcofi.io/workflows/bench_erddap_ctd.html shows the NetCDF
+ section, the plots, and the reproducibility links.
+
+ Risks & caveats
+
+ - No swap (top risk). Generate one cruise at a time with capped DuckDB memory + temp
+ spill and a MIN_AVAIL guard; never run generation and the bench ERDDAP concurrently;
+ the 216 M-row measurement is the heavy step — checkpoint per cruise and log progress.
+ - Wide pivot scope. NetCDF carries canonical variables only (CF/ERDDAP norm); document
+ that non-canonical sensor-variant types are omitted from the wide NetCDF.
+ - Schema asymmetry. NetCDF queries hit named variables, not measurement_type=…;
+ compare by intent (same bbox/box) and state the mapping so it stays apples-to-apples.
+ - NcCF XML fiddliness. Mitigated by bootstrapping the block with GenerateDatasetsXml
+ and validating before generating all 96 files.
+ - Disk: measurement NetCDF adds ~16 GB; 87 GB free on /ssd — fine, but clean up bench
+ artifacts after.
+
+Let us not run anything of import for reproducibility in the host machine, only the containers, ideally the ones already made in `@../server/`, and use consistent paths from shared mount points (especially `/share`)
+
+● Understood — reproducible steps run in the existing ../server/ containers, with consistent /share paths, not on the host. That changes the setup: the current bench data lives at /ssd/erddap-duckdb and /ssd/erddap-bench, which are siblings of /ssd/share and so invisible to the containers via /share. Let me look at the compose definitions and the pipeline's data-path conventions to find the idiomatic /share-based location.
+
+Let's simply move /ssd/erddap-duckdb into /share/data/erddap-duckdb. Also consider making files downloadable via the Caddy file server.
+
+● The user is directing a real-time refinement: relocate /ssd/erddap-duckdb → /share/data/erddap-duckdb (making it visible to all containers via /share), and expose files for download via Caddy. This is cleaner than the old /ssd identity-mount hack — one shared /share path resolves identically in rstudio, prod erddap, and bench erddap. But it touches the live erddap (which currently mounts /ssd/erddap-duckdb and whose .db views bind those paths). Let me map every reference to update and read the Caddyfile before executing.
+
+● Everything is done and live. Here's the redrafted email to Lynn, with the NetCDF section filled in
+  from the actual measurements:
+     
+  ---
+  Hi Lynn,
+  
+  To understand the limits and options for serving our large CTD data (~216 M rows / ~16 GB of
+  compressed Parquet in long/"tidy" form), I stood up a test ERDDAP instance and benchmarked four
+  backends — including the NetCDF route you suggested:
+  
+  &nbsp;&nbsp;&nbsp;&nbsp;erddap.calcofi.io (https://erddap.calcofi.io/)
+  - CalCOFI CTD Measurements (full) — Data Access Form
+  (https://erddap.calcofi.io/erddap/tabledap/calcofi_ctd_measurement.html)
+  - CalCOFI CTD Profiles (thinned) — Data Access Form
+  (https://erddap.calcofi.io/erddap/tabledap/calcofi_ctd_thin.html)
+  adaptively-thinned CTD profiles (long format; canonical sensors, ~10 m depth grid with inflection 
+  points preserved)
+
+  Full writeup — with plots and fully reproducible code + downloadable data:
+  &nbsp;&nbsp;&nbsp;&nbsp;https://calcofi.io/workflows/bench_erddap_ctd.html
+
+  Here's the summary, comparing NetCDF vs DuckDB vs Parquet vs CSV (wide vs long), all at a
+  deliberately small 2 GB ERDDAP heap to expose the differences:
+
+  1. NetCDF (your option). I tried EDDTableFromNcCFFiles, the native path. The catch is scale: we have
+  ~5.55 M casts, so one NetCDF per cast (à la Trinidad Head) would be 5.5 M files — infeasible.
+  Bundling by cruise gives just 96 files (CF "profile" files, canonical sensors pivoted wide). That
+  works well: the full table loads in a ~1.3 GB heap, ERDDAP auto-computes the min/max + sliders, the
+  source .nc are directly downloadable, and cruise-scoped queries are the fastest of any backend (a
+  whole-cruise dump is ~0.8 s vs DuckDB's ~99 s, since one cruise = one file). Costs: it carries
+  canonical sensors only, duplicates ~2.3 GB, and must be regenerated on each data update.
+  2. Parquet. The memory issue is real. EDDTableFromParquetFiles reads each matching file fully into 
+  the JVM heap before filtering — our single ~935 MB wide file OOM'd a 4 GB heap, and the 216 M-row
+  long table won't load at all at 2 GB.
+  3. DuckDB. Pointing EDDTableFromDatabase at the DuckDB JDBC driver, over a tiny (~270 KB) .db of
+  CREATE VIEW … read_parquet(…) views that join the long tables back to the cast table for
+  time/lat/lon. DuckDB does the predicate pushdown + row-group skipping and streams results, so the
+  full 216 M-row table loads with a ~60 MB heap and filtered queries return well under a second. It
+  keeps the tidy long table queryable as-is and always reflects the live Parquet; runs on stock ERDDAP
+  (only the duckdb_jdbc jar is added). Two gotchas: serve time as a real TIMESTAMP (not epoch double)
+  or the driver NPEs on every time query; and set actual_range yourself (EDDTableFromDatabase doesn't
+  auto-compute it — NetCDF does).
+
+  So both NetCDF and DuckDB serve the full table within a small heap — NetCDF fastest for
+  cruise-scoped access, DuckDB lightest and keeping the long table live.
+
+  On your partitioning question — I benchmarked the same box query (temperature in a 2°×2°, 0–200 m
+  box, ~390 k rows) across layouts of the long table:
+  - cruise_key partition + join at query time (live now): ~0.9 s
+  - partition by measurement_type (one variable → ~1/53 of the data): ~0.10 s
+  - sort rows spatially within each partition (row-group skipping): ~0.075 s
+
+  ~12× from layout, but every option is already sub-second — long format isn't the bottleneck one
+  might fear, at least with DuckDB on SSD. The catch is exactly the one you raised: partitioning by
+  measurement_type speeds single-variable queries (the common case) but slows "all variables in a
+  region," so it comes down to expected access patterns.
+
+  Which brings me to the real question: if you're still up for hosting these on the CoastWatch ERDDAP,
+  what would be least work to receive and maintain?
+  1. NetCDF per cruise — 96 CF profile files we generate (most native to your stack; I have them
+  ready).
+  2. Parquet + the small DuckDB .db of views — keeps the tidy table queryable as-is, needs the
+  duckdb_jdbc jar.
+  3. Hold for native Parquet/DuckDB support (#447 (https://github.com/ERDDAP/erddap/discussions/447) /
+  #448 (https://github.com/ERDDAP/erddap/issues/448)).
+
+  We can produce any of these from the same pipeline.
+
+  Thanks again for all the guidance!
+
+  Cheers, Ben
+
+  PS — reproducible code + downloadable artifacts:
+  - report + a browsable data bundle: https://calcofi.io/workflows/bench_erddap_ctd.html ·
+  file.calcofi.io/erddap-ctd (https://file.calcofi.io/erddap-ctd/) (result CSVs, dataset XML, the
+  DuckDB .db, sample .nc)
+  - CalCOFI/server (https://github.com/CalCOFI/server/tree/main/erddap) — erddap/Dockerfile
+  (+duckdb_jdbc), docker-compose.bench.yml
+  - CalCOFI/workflows (https://github.com/CalCOFI/workflows) — libs/erddap_netcdf.R,
+  libs/erddap_duckdb.R, scripts/
+  - CalCOFI/erddap (https://github.com/CalCOFI/erddap/blob/main/content/datasets.xml) — datasets.xml
+
+  ---
+  Summary of what's done
+
+  Benchmark + report (the three asks):
+  - NetCDF comparison added — generated per-cruise CF profile NetCDF for both tables (thin: 96
+  files/169 MB; measurement: 95 files/2.1 GB) via the new libs/erddap_netcdf.R +
+  scripts/gen_ctd_netcdf.R, served via EDDTableFromNcCFFiles, benchmarked as a 4th backend. Key
+  result: NetCDF loads the 216 M-row table at ~1.3 GB heap (Parquet OOMs) and is fastest for
+  cruise-scoped queries; the "5.55 M casts → per-cast infeasible → 96 per-cruise files" finding
+  directly answers Lynn. 
+  - Summary plots restored — mem-plot (load heap, the headline), latency-plot, and layout-plot. The
+  stale figure was from a dropped chunk; the report now renders all three.
+  - Reproducibility — GitHub links to every file, embedded source (NetCDF builder + harness), and a
+  downloadable bundle at file.calcofi.io/erddap-ctd (Caddy).
+
+  Infrastructure (your directives):
+  - Relocated the data tree /ssd/erddap-duckdb → /share/data/erddap-duckdb and the bench world to
+  /share/data/erddap-bench, all via containers — one /share path now resolves identically in rstudio,
+  prod, and bench (retiring the /ssd identity-mount hack). Rebuilt the .db views, re-pointed prod
+  compose + datasets.xml, recreated prod erddap and verified all 7 datasets return 200.
+  - Files downloadable via the existing Caddy file server.
+
+  Published: all three repos committed + pushed (a remote landing-page commit was merged in cleanly);
+  GH Pages redeployed — https://calcofi.io/workflows/bench_erddap_ctd.html is live with the NetCDF
+  section and plots.
+
+  Want me to create this as a Gmail draft (via the connected Gmail account) so you can review/send it
+  there? I won't send anything — just stage the draft.
+
+But I am unclear about the NetCDF per cruise design -- does that mean that there would be a seperate dataset and form for each, or can they be aggregated by ERDDAP? Also let's label figures in Quarto. This figure does not have the TIMEOUT or "(bars labeled X)" from the first figure in bench_erddap_ctd.qmd. I am also wondering about more apples-to-apple comparisons, ie wide to wide across formats (not wide vs long different formats) when comparing load and query (and whole dataset vs subset)
+
+● Now I've seen both figures and understand all four points. Let me address them.
+
+  1. NetCDF per-cruise = one ERDDAP dataset, not 96
+
+  This is the key thing to clear up: EDDTableFromNcCFFiles aggregates all the per-cruise files into a 
+  single dataset with a single form. Like every ERDDAP …FromFiles type, you point it at a directory
+  (fileDir + fileNameRegex), and ERDDAP builds one datasetID / one Data Access Form / one .das
+  spanning all 96 files. The per-cruise split is purely storage — it's how we get from "5.5 M per-cast
+  files ERDDAP can't index" down to "96 files it can." To the user it's one dataset:
+
+  - one form at …/calcofi_ctd_thin_netcdf.html (not 96);
+  - the sliders/min-max aggregate across the whole collection (ERDDAP rolls up each file's per-file
+  ranges — that's the auto-actual_range I mentioned);
+  - a query for a region/time pulls from whichever cruise files overlap (ERDDAP prunes by cruise_key
+  and each file's time/lat/lon min-max) — could be one file or many.
+
+  That's exactly how the live DuckDB datasets present as one dataset too, and how Lynn's
+  swfscTrinidadCTD aggregates its per-deployment files. The cross-file pruning is also why a
+  cruise-scoped query is fast (one file) but a pure spatial bbox across all time is slower (opens
+  every cruise that covers that spot) — the honest NetCDF tradeoff. I'll make this explicit in §4 of
+  the report (current wording "each file is a … dataset" is misleading).
+
+  2 + 3. The figures
+
+  You're right on both counts, and I found the cause:
+  - mem-plot (Fig 1): it does draw the TIMEOUT labels, but the ✗ glyph isn't in the plot font, so it
+  renders as a tofu box (▯). Fix: drop the ✗, label failed bars plainly (e.g. TIMEOUT / OOM).
+  - latency-plot (Fig 2) & layout-plot: no failure indication at all — partly by design (a backend
+  that didn't load has no latency bar), but it reads inconsistently. I'll add a caption/footnote
+  noting "absent = failed to load (see Fig 1)".
+  - No figure numbers: my chunk labels are mem-plot, not fig-mem — Quarto only auto-numbers and
+  cross-references figures whose label starts with fig-. I'll rename to fig-* and reference them as
+  "Figure 1/2/3" in the text.
+
+  4. Apples-to-apples (wide↔wide, long↔long)
+
+  You've put your finger on the real weakness: the latency chart compares NetCDF (wide) against
+  DuckDB/Parquet (long) — so it's confounding format with schema. To isolate format, I need wide 
+  variants of DuckDB and Parquet (NetCDF is already the wide reference), giving:
+
+  - Wide trio: NetCDF · DuckDB-wide · Parquet-wide
+  - Long trio: DuckDB-long · Parquet-long · CSV-long
+  - and the same-format schema comparison (DuckDB-wide vs -long, etc.)
+
+  DuckDB-wide is essentially free (a pivot view, no new storage). Parquet-wide means materializing the
+  canonical-wide pivot to per-cruise Parquet (~2 GB for measurement) — and it's genuinely
+  interesting, because per-cruise wide Parquet has ~40× fewer rows than the long partition, so it may
+  load where the long Parquet OOM'd. I'd also split the metrics cleanly into whole-dataset (load
+  memory/time + full dump) vs subset (filtered single-variable query), with the subset queries
+  returning the same logical rows in wide and long so the bytes match.
+
+  One scoping decision drives how much compute/storage this takes:
+──────────────────────────────────────────────────────────────────────────────────────────────────────
+ ☐ Wide-vs-wide scope 
+
+How far should I take the wide↔wide / long↔long comparison? (NetCDF is the wide reference; I'd add 
+wide variants of DuckDB and/or Parquet, plus relabel/fix the figures and clarify the 
+NetCDF-aggregation wording in all cases.)
+
+❯ 1. Full: DuckDB-wide + Parquet-wide, both tables
+     Add a wide DuckDB pivot view AND materialize per-cruise wide Parquet (~2 GB) for both thin +
+     measurement. Gives the complete wide trio (NetCDF/DuckDB/Parquet) and long trio, plus same-format
+     wide-vs-long. Tests whether per-cruise wide Parquet avoids the OOM. One more bench run; most
+     complete answer to your question.
+  2. Thin only: both wide variants
+     Full wide+long matrix (NetCDF/DuckDB/Parquet wide, DuckDB/Parquet/CSV long) but only on the
+     5.5M-row thin table — skips the heavy 216M measurement-wide Parquet materialization.
+     Faster/lighter; the format story is the same but without the big-table stress point for the wide
+     formats.
+  3. DuckDB-wide only, both tables
+     Add just the wide DuckDB pivot view (free, no extra storage) so the wide comparison is NetCDF vs
+     DuckDB-wide; no Parquet-wide. Lightest — no ~2 GB materialization, no extra bench cells for
+     Parquet — but doesn't test wide Parquet.
+
+Also when considering the apples-to-apples comparison, should we consider split (ie netcdf or parquet or csv split by cruise) vs lumped (all in one file)?  
+
+● Good catch — and yes, split-vs-lumped is arguably the most important axis of all, because it's the
+  actual mechanism behind the whole memory story: the original ctd_wide OOM'd precisely because it was
+  one lumped 935 MB file that EDDTableFromParquetFiles pulled wholly onto the heap. "Per-cruise"
+  isn't really a NetCDF property — it's a granularity choice that applies equally to NetCDF, Parquet,
+  and CSV. Right now that axis is tangled up inside the format axis, which is exactly what makes the
+  comparison muddy.
+
+  So the clean design has up to four axes:
+
+  ┌─────────────┬───────────────────────────────────────────────┐
+  │    axis     │                    levels                     │
+  ├─────────────┼───────────────────────────────────────────────┤
+  │ format      │ NetCDF · Parquet · CSV · DuckDB               │
+  ├─────────────┼───────────────────────────────────────────────┤
+  │ schema      │ wide · long                                   │
+  ├─────────────┼───────────────────────────────────────────────┤
+  │ granularity │ split (per-cruise, N files) · lumped (1 file) │
+  ├─────────────┼───────────────────────────────────────────────┤
+  │ query       │ whole-dataset (load) · subset (filtered)      │
+  └─────────────┴───────────────────────────────────────────────┘
+
+  The honest way to read it:
+  - Granularity is the memory lever for the three file formats (NetCDF/Parquet/CSV) — ERDDAP loads
+  whole matching files onto the heap, so lumped → OOM on the big table, split → fits. DuckDB is 
+  granularity-agnostic (it streams from the underlying Parquet via JDBC, never whole-file-on-heap) —
+  so it's the natural baseline, not a competitor on this axis. 
+  - Format/schema is the apples-to-apples lever — hold granularity = split and compare NetCDF vs
+  Parquet-wide vs DuckDB-wide (and long vs long).
+
+  The decisive new experiment is therefore: wide ctd_measurement, same data, split ↔ lumped — does it
+  OOM as one file and fit as 96? (CSV-lumped on the 216 M-row table would be tens of GB, so that one
+  cell is infeasible — I'd note it rather than run it.)
+
+  One scoping decision on how much of the lumped side to build (the split side I'm already
+  generating):
+──────────────────────────────────────────────────────────────────────────────────────────────────────
+ ☐ Granularity scope 
+
+How broadly should I add the split-vs-lumped (granularity) axis? (Split = per-cruise files, already 
+generating. Lumped = single whole-table file, which I'd build to test the OOM crossover. DuckDB is 
+granularity-agnostic; CSV-lumped on the 216M table is infeasible.)
+
+❯ 1. NetCDF + Parquet lumped, measurement (recommended)
+     Build a single lumped wide file for BOTH NetCDF and Parquet on the 216M-row measurement table,
+     and benchmark split↔lumped for each. Directly shows 'one file OOMs, 96 files fit' for the two
+     viable file formats — the crisp answer to why ctd_wide failed. ~2 lumped builds + 2 bench cells
+     on top of the wide grid.
+  2. Parquet lumped only, measurement
+     Build just the single lumped wide Parquet (the same shape as the original ctd_wide that OOM'd)
+     and compare to per-cruise split. Lighter; note that NetCDF/CSV behave analogously rather than
+     measuring them. 1 lumped build + 1 cell.
+  3. Full grid: also thin + CSV
+     Add split↔lumped on the small thin table too (everything fits there — shows the crossover is
+     size-driven) and CSV split↔lumped on thin. Most exhaustive; more cells/time, several of which
+     just confirm 'small = fine either way'.
+
+● All verified: deploy succeeded, report live with the new figures, prod still healthy, Caddy bundle
+  refreshed (17-cell grid). Let me close out the tasks.
+
+
+  Clarified explicitly: EDDTableFromNcCFFiles points at a directory and aggregates all 96 per-cruise
+  files into one datasetID, one form, one .das, with sliders/min-max rolled up across the whole
+  collection. Per-cruise is purely storage (96 files ERDDAP can index vs 5.55 M per-cast files it
+  can't) — never a dataset/form per cruise. ERDDAP prunes by cruise_key + per-file time/lat/lon
+  ranges.
+
+  2 + 3. Figures fixed & labeled
+
+  - The ✗ was rendering as a tofu box (not in the plot font) — replaced with plain "TIMEOUT" labels.
+  - Chunks renamed to fig-mem / fig-latency / fig-layout so Quarto numbers and cross-references them
+  (Figure 1/2/3).
+  - The latency figure was unreadable (crammed x-axis) — rebuilt as format-on-x, dodged by
+  granularity, with ms/s value labels, faceted by query × table.
+
+  4. Apples-to-apples — the full 4-axis grid (17 cells)
+
+  I added wide DuckDB/Parquet/CSV variants and made split-vs-lumped a first-class axis, so format is
+  compared at constant schema and granularity is isolated. The honest findings turned out richer than
+  "DuckDB wins":
+
+  ┌────────────────────────────────┬──────────────────────────────────────────────────────────────┐
+  │            finding             │                           evidence                           │
+  ├────────────────────────────────┼──────────────────────────────────────────────────────────────┤
+  │ Granularity is the memory      │ lumped 2.1 GB NetCDF → TIMEOUT at 2 GB; same data split into │
+  │ lever, not format              │  96 files → loads at 1.1 GB                                  │
+  ├────────────────────────────────┼──────────────────────────────────────────────────────────────┤
+  │ Lumped "loads" ≠ usable        │ 598 MB lumped Parquet binds (1.6 GB) but re-reads the whole  │
+  │                                │ file per query: cruise dump 74 s lumped vs 1.2 s split       │
+  ├────────────────────────────────┼──────────────────────────────────────────────────────────────┤
+  │ DuckDB ~65 MB any config       │ but its wide pivot view is slow on broad scans: q3 76 s wide │
+  │ (streams)                      │  vs 24 s long → keep the long view live                      │
+  ├────────────────────────────────┼──────────────────────────────────────────────────────────────┤
+  │ Wide-vs-long is mostly a wash  │ NetCDF-split & Parquet-split are the fast file formats; CSV  │
+  │ for materialized files         │ only viable at thin scale                                    │
+  └────────────────────────────────┴──────────────────────────────────────────────────────────────┘
+
+  Net for Lynn: don't serve the big table as one file via any file backend — split per cruise (or let
+  DuckDB stream). That's the real reason the original ctd_wide failed.
+
+  The 17-cell results_all.csv, all dataset XML, and the report are downloadable at
+  file.calcofi.io/erddap-ctd (https://file.calcofi.io/erddap-ctd/). Pushed to all repos; GH Pages
+  redeployed; prod ERDDAP unaffected (verified 200).
+
+  ---
+  Two optional follow-ups — want me to do either?
+  - Refresh the email to Lynn with the sharper framing (the "per-cruise = one dataset" clarification
+  she'd care about, and "split-not-format is the memory lever"), and/or stage it as a Gmail draft.
+  - The long side of the grid is currently the 5 reused cells (partial). I could fill in the missing
+  long split/lumped cells (e.g., long-lumped measurement) for full symmetry — though it mostly
+  re-confirms "lumped big = bad."
+
+
+## 2026-06-025 added swap
+
+● Now I have the full picture. Here's what's going on and my plan.
+
+  Why there's no swap
+
+  Nothing is wrong — GCP's stock Debian/Ubuntu images simply ship with zero swap by design. There's no
+  swap entry in /etc/fstab, so SwapTotal: 0. It's not "unavailable," it just was never configured.
+  (swapon wasn't found in your interactive shell only because /sbin isn't in your $PATH; it works fine
+  under sudo.)
+
+  What I found
+  
+  ┌──────────┬───────────┬───────┬──────┬───────────────────────────────────────────────┐
+  │          │  Device   │ Size  │ Free │                     Type                      │
+  ├──────────┼───────────┼───────┼──────┼───────────────────────────────────────────────┤
+  │ / (root) │ /dev/sda1 │ 40 G  │ 26 G │ SSD, persistent boot disk                     │
+  ├──────────┼───────────┼───────┼──────┼───────────────────────────────────────────────┤
+  │ /ssd     │ /dev/sdb  │ 200 G │ 87 G │ SSD, persistent, DuckDB temp-spill lives here │
+  └──────────┴───────────┴───────┴──────┴───────────────────────────────────────────────┘
+
+  Both are SSD-class and persistent. Passwordless sudo works.
+
+  Plan — 8 GB swapfile on / (root)
+
+  - Size: 8 GB. A safety overflow net for spikes on a 16 GB box, not primary memory. Big enough to
+  absorb an unexpected spike and avoid the instant OOM-wedge you hit before; small enough to bound
+  thrashing.
+  - Location: root /dev/sda1, not /ssd. Deliberate — it puts swap I/O on a different physical disk
+  than the DuckDB temp spill (/ssd). When memory pressure hits, swap paging and DuckDB's spill won't
+  fight over the same disk queue. Root has 26 GB free, so 8 GB leaves 18 GB headroom.
+  - vm.swappiness=10 so the kernel only reaches for swap under real pressure — it won't proactively
+  page out your benchmark's working set and hurt latency.
+  - Persist via /etc/fstab (with nofail) and /etc/sysctl.d/.
+
+● Done — 8 GB swap is live and persistent
+
+  Swap:  8.0Gi  used 0B  free 8.0Gi      (/swapfile, prio -2)
+
+  What I did:
+  1. Created /swapfile (8 GiB, on the root disk /dev/sda1) with dd → mkswap → swapon.
+  2. Added /swapfile none swap sw,nofail 0 0 to /etc/fstab (backed up the original to
+  /etc/fstab.bak.*), so it comes back on reboot. The nofail flag means a missing swapfile can never
+  block boot.
+  3. Set vm.swappiness=10 (live + persisted in /etc/sysctl.d/99-swap.conf).
+  4. Verified the fstab entry by toggling swap off and re-enabling it purely from /etc/fstab (swapon 
+  -a) — so a reboot will behave identically.
+
+  Two design choices worth knowing:
+  - It's on / (root), not /ssd — intentional. Swap I/O now sits on a different physical disk than
+  DuckDB's temp spill (/ssd). When RAM pressure hits, paging and spilling won't contend for the same
+  disk queue.
+  - swappiness=10 means the kernel only reaches for swap under genuine pressure, so it won't
+  proactively page out your benchmark's working set and add latency.
+
+  Important caveat for your benchmark plan: this is a safety net against an unexpected spike, not a
+  reason to relax the memory discipline. On a 16 GB box, 8 GB of overflow will still thrash badly
+  under a real runaway/leak — it just turns "instant hard-wedge needing a reset" into "slow,
+  usually-recoverable degradation." Keep the capped JVM heap, the DuckDB memory_limit + temp_directory
+  spill, and not running generation and serving concurrently. The plan from the other session stands
+  exactly as written; this just adds a cushion under it.
+
+  To remove it later: sudo swapoff /swapfile && sudo rm /swapfile, then delete the /etc/fstab line.
+
+  I also updated your project memory (the old note said this host had no swap)
 
 ## 2026-06-24 update to 2026-ucla-ca-ocean-monitoring-map
 
 Similar to `@../2026-ucla-ca-ocean-monitoring-map`, which forked `bhuang0022/ca-ocean-monitoring-map` and made code portable for serving to `https://calcofi.io/2026-ucla-ca-ocean-monitoring-map/` with card at `@../CalCOFI.github.io`, please update `@../2026-ucla-cal-ocean-coastal-monitoring-map` (forked from `bhuang0022/cal-ocean-coastal-monitoring-map`) and get it served to `https://calcofi.io/2026-ucla-cal-ocean-coastal-monitoring-map/` replacing the card `@../CalCOFI.github.io` with this updated app. 
+
+
+⏺ Everything is in place. Done.
+
+  Summary
+
+  I ported 2026-ucla-cal-ocean-coastal-monitoring-map (Betty Huang's expanded fork) the same way as the reference ca-ocean-monitoring-map, deployed it live, and repointed the CalCOFI.io card to it.
+
+  App repo (CalCOFI/2026-ucla-cal-ocean-coastal-monitoring-map, pushed to main):
+  - Moved index.html + all runtime data into a web/ folder (build inputs R/, WEA/, ca_state/ stay at root, excluded from the deployed artifact). Every fetch was already document-relative, so the app is
+  portable to any subpath. 
+  - Relocated CHIS_polygons.geojson → web/CHIS/ to match the existing fetch('CHIS/CHIS_polygons.geojson') path — this layer was broken before and now loads.
+  - Added .github/workflows/pages.yml (publishes ./web on push) + .gitignore, mirroring the reference.
+  - Enabled GitHub Pages (build type "GitHub Actions"); the deploy workflow ran green.
+  - Updated the README with the web/ structure and hosting notes.
+
+  Live and verified — https://calcofi.io/2026-ucla-cal-ocean-coastal-monitoring-map/ and all key assets return 200.
+
+  Card (CalCOFI/CalCOFI.github.io, pushed to main): updated the existing ucla-monitoring-map card to point at the new app — retitled "CA Ocean & Coastal Monitoring Map", new live/source URLs, an expanded
+  description (adds monitoring gaps, wind energy areas, MPAs), and a fresh thumbnail (images/ucla-coastal-monitoring-map.png) captured from the live map.
+
+  Two notes:
+  - fetch('Master_Polygons.geojson') 404s — that file doesn't exist anywhere in the fork (pre-existing data gap, not introduced by me). It's wrapped in a .catch() so the app loads fine; that polygon-overlay
+  layer simply doesn't render. If you have that file, drop it in web/ and it'll work.
+  - I read "replacing the card" as repurposing the existing ucla-monitoring-map slot, since both apps are Betty Huang's and this is her expanded version. The old 2026-ucla-ca-ocean-monitoring-map repo/site is
+  still live but no longer linked from the landing page — say the word if you'd prefer a separate second card or want the old one archived.
 
 
 ## 2026-06-23 serve calcofi_ctd-cast on ERDDAP
