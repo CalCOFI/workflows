@@ -250,9 +250,9 @@ load_stats |>
 ## Dataset Reference & Observation Views
 
 Non-destructive enablers (Part B of the station-portal epic): a `dataset`
-reference table keyed by `dataset_id = provider_dataset`, and unified
+reference table keyed by `dataset_key = provider_dataset`, and unified
 `v_obs_env` / `v_obs_bio` (+ `v_obs`) VIEWs that project every dataset's
-long-format observations into a common shape stamped with `dataset_id`. These
+long-format observations into a common shape stamped with `dataset_key`. These
 are the shared query surface behind the three spatial summarizers (hex /
 cruise-track / station-grid) and prove the env/bio consolidation target
 (Part C) non-destructively — no ingest re-run required.
@@ -260,10 +260,10 @@ cruise-track / station-grid) and prove the env/bio consolidation target
 ```{r}
 #| label: obs_views
 
-# dataset reference: dataset_id = provider_dataset (from the registry)
+# dataset reference: dataset_key = provider_dataset (from the registry)
 dbExecute(con_wdl, glue(
   "CREATE OR REPLACE TABLE dataset AS
-   SELECT provider || '_' || dataset AS dataset_id, provider, dataset, dataset_name,
+   SELECT provider || '_' || dataset AS dataset_key, provider, dataset, dataset_name,
           description, citation_main, link_calcofi_org, link_data_source, license, pi_names
    FROM read_csv_auto('{here('metadata/dataset.csv')}')"))
 
@@ -274,7 +274,7 @@ has  <- function(...) all(c(...) %in% tbls)
 # --- environment arms (point-depth measurement grain) ----------------------
 env_arms <- list(
   bottle = if (has("bottle_measurement","bottle","casts")) "
-    SELECT 'calcofi_bottle' AS dataset_id, c.grid_key, c.cruise_key,
+    SELECT 'calcofi_bottle' AS dataset_key, c.grid_key, c.cruise_key,
            c.latitude, c.longitude, CAST(c.datetime_start_utc AS TIMESTAMP) AS datetime,
            b.depth_m AS depth_min, b.depth_m AS depth_max,
            m.measurement_type, m.measurement_value, m.measurement_qual
@@ -299,7 +299,7 @@ env_arms <- Filter(Negate(is.null), env_arms)
 # where the taxon is encoded in measurement_type (cufes eggs, phyllosoma stages).
 bio_arms <- list(
   ichthyo = if (has("ichthyo","net","tow","site")) "
-    SELECT 'swfsc_ichthyo' AS dataset_id, s.grid_key, s.cruise_key,
+    SELECT 'swfsc_ichthyo' AS dataset_key, s.grid_key, s.cruise_key,
            s.latitude, s.longitude, CAST(t.datetime_start_utc AS TIMESTAMP) AS datetime,
            NULL::DOUBLE AS depth_min, NULL::DOUBLE AS depth_max,
            i.measurement_type, i.measurement_value, NULL AS measurement_qual,
@@ -347,16 +347,16 @@ dbExecute(con_wdl, glue(
 # v_obs: common columns across both realms (drops taxon_key/life_stage)
 dbExecute(con_wdl,
   "CREATE OR REPLACE VIEW v_obs AS
-   SELECT realm, dataset_id, grid_key, cruise_key, latitude, longitude, datetime,
+   SELECT realm, dataset_key, grid_key, cruise_key, latitude, longitude, datetime,
           depth_min, depth_max, measurement_type, measurement_value, measurement_qual FROM v_obs_env
    UNION ALL
-   SELECT realm, dataset_id, grid_key, cruise_key, latitude, longitude, datetime,
+   SELECT realm, dataset_key, grid_key, cruise_key, latitude, longitude, datetime,
           depth_min, depth_max, measurement_type, measurement_value, measurement_qual FROM v_obs_bio")
 
 dbGetQuery(con_wdl,
-  "SELECT realm, dataset_id, count(*) n_obs, count(DISTINCT grid_key) n_stations
+  "SELECT realm, dataset_key, count(*) n_obs, count(DISTINCT grid_key) n_stations
    FROM v_obs GROUP BY 1,2 ORDER BY 1,2") |>
-  datatable(caption = "v_obs: unified observation views (dataset_id-stamped)")
+  datatable(caption = "v_obs: unified observation views (dataset_key-stamped)")
 ```
 
 ## Scan Manifests for Mismatches

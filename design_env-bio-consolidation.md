@@ -21,8 +21,8 @@ union at a different grain:
 Two goals:
 
 1. **Provenance** — stamp every observation with a single
-   `dataset_id = provider_dataset` (done in Part B: `dataset` ref table +
-   `dataset_id` in the views + `field_dictionary`).
+   `dataset_key = provider_dataset` (done in Part B: `dataset` ref table +
+   `dataset_key` in the views + `field_dictionary`).
 2. **A common observation surface** that honors the two fundamentally different
    observation grains: **environment** (physical/chemical, depth *profile*) vs
    **biology** (taxon, tow-*integrated* depth).
@@ -31,9 +31,9 @@ Two goals:
 
 `release_database.qmd` now builds, over the existing per-dataset tables:
 
-- `dataset` reference (keyed by `dataset_id`), and
+- `dataset` reference (keyed by `dataset_key`), and
 - `v_obs_env` / `v_obs_bio` / `v_obs` VIEWs projecting every dataset into a
-  common, `dataset_id`-stamped shape.
+  common, `dataset_key`-stamped shape.
 
 Validated against the release parquet: env = bottle (11.0 M obs / 26 measurement
 types), CTD (`ctd_measurement ⨝ ctd_cast`), DIC; bio = ichthyo (826 K obs / 759
@@ -43,14 +43,14 @@ bird_mammal. This proves the model with **zero re-ingest**.
 ## Target model — two consolidated long tables
 
 ### `obs_env` (physical / chemical — point depth)
-`obs_env_id` PK · `dataset_id`→dataset · `grid_key`→grid · `cruise_key`→cruise ·
+`obs_env_id` PK · `dataset_key`→dataset · `grid_key`→grid · `cruise_key`→cruise ·
 `cast_key` · `latitude` · `longitude` · `datetime` · **`depth_m` (point)** ·
 `measurement_type`→measurement_type · `measurement_value` · `measurement_qual` ·
 `measurement_prec`. Sources: **bottle, ctd-cast, dic**. Grain: one row per
 (cast/scan, depth, measurement_type) — a vertical profile.
 
 ### `obs_bio` (species / biology — tow-integrated depth)
-`obs_bio_id` PK · `dataset_id` · `grid_key` · `cruise_key` · `sample_key` ·
+`obs_bio_id` PK · `dataset_key` · `grid_key` · `cruise_key` · `sample_key` ·
 `latitude` · `longitude` · `datetime` · **`depth_min_m` / `depth_max_m` (range)** ·
 `taxon_id`→taxa · `life_stage` · `measurement_type` (abundance/biomass/tally/count) ·
 `measurement_value` · `measurement_qual`. Sources: **ichthyo, cufes, euphausiids,
@@ -75,7 +75,7 @@ row per (sample, taxon, measurement_type).
 ## How ingestion shifts
 
 - Each ingest, after building its per-dataset tables, **projects into
-  `obs_env`/`obs_bio`** with `dataset_id` + `grid_key` — using exactly the
+  `obs_env`/`obs_bio`** with `dataset_key` + `grid_key` — using exactly the
   per-dataset mapping already encoded in `v_obs_*`. Add `calcofi4db` helpers
   `append_obs_env()` / `append_obs_bio()` that standardize this projection (peers
   of `finalize_ingest()`).
@@ -108,12 +108,12 @@ to one dataset's ingest and forces ichthyo to run first. Promote it:
   by `grid_key` / `cruise_key` / `measurement_type` / `taxon_id`.
 - All three spatial summarizers read `obs_*` instead of re-implementing per-dataset
   unions. Concretely, the station portal's `build_stations.sql` obs stream
-  collapses to `SELECT … FROM v_obs GROUP BY grid_key, dataset_id`.
+  collapses to `SELECT … FROM v_obs GROUP BY grid_key, dataset_key`.
 - `calcofi4r` read helpers expose `obs_env` / `obs_bio` / `v_obs`.
 
 ## Migration path (phased, non-destructive)
 
-1. **Phase 1 — done.** `dataset_id` + `v_obs_env`/`v_obs_bio`/`v_obs` VIEWs over
+1. **Phase 1 — done.** `dataset_key` + `v_obs_env`/`v_obs_bio`/`v_obs` VIEWs over
    existing tables. Consumers can adopt now.
 2. **Phase 2.** Promote `grid`; unify `taxa`; add `append_obs_*` helpers; backfill
    physical `obs_env`/`obs_bio` (`CREATE TABLE AS SELECT * FROM v_obs_*`);
@@ -147,7 +147,7 @@ to one dataset's ingest and forces ichthyo to run first. Promote it:
 
 - **Row-count parity**: `obs_env` count == Σ per-dataset env measurement counts;
   same for `obs_bio`.
-- Every row has a valid `dataset_id` (FK `dataset`), `grid_key` (FK `grid`, or
+- Every row has a valid `dataset_key` (FK `dataset`), `grid_key` (FK `grid`, or
   NULL for phyto), `measurement_type` (FK `measurement_type`).
 - The three apps produce identical summaries reading `obs_*` vs their current
   per-dataset unions.

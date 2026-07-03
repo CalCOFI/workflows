@@ -114,6 +114,11 @@ self-documenting; human review happens at every hand-off. Scaffolds come from
   it.** CalCOFI program data is `calcofi` even when served from NCEI/EDI/ERDDAP;
   the portal goes in `link_data_source`. Other providers: `swfsc`, `pic`,
   `sccoos`, `cce-lter`.
+- **Key-suffix convention (per `../docs/db.qmd`)**: `*_id` = **integer** key
+  (surrogate/counter); `*_key` = **string** natural key; `*_seq` =
+  auto-incrementing integer sequence. A character-valued identifier must use
+  `_key`, never `_id` — e.g. `cruise_key`, `site_key`, `grid_key`, and
+  `dataset_key` (= `provider_dataset`, the observation provenance stamp).
 - **Identifiers**: `*_uuid` for source tables that mint UUIDs at sea (site, tow,
   net), `cruise_key` natural key `YYYY-MM-NODC`, `site_key`; source integer
   counters where stable (bottle `cast_id`/`bottle_id`); sequential `*_id` only
