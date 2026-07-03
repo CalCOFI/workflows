@@ -143,6 +143,112 @@ to one dataset's ingest and forces ichthyo to run first. Promote it:
   (lazy), or materialize `obs_env` from the thinned `ctd_thin` for interactive use
   and leave full `ctd_measurement` supplemental.
 
+## Spatial keys — bake in `grid_key` **and** `hex_id`
+
+Same question as `grid_key`, for the H3 hexagons that power `db-viz-hex` /
+`api-h3t`. **Store one `hex_id` at the finest resolution any consumer needs — not
+one column per resolution.** H3 is hierarchical: every fine cell has exactly one
+parent at each coarser level, so coarser aggregations are a query-time function,
+not stored data.
+
+- Add `hex_id` (H3 index, a `UBIGINT` → `_id` per the key convention) to `obs_env`
+  / `obs_bio`, computed at build time from `latitude`/`longitude` with the DuckDB
+  **`h3` extension**: `h3_latlng_to_cell(lat, lng, res_max)`.
+- Aggregate at **any** coarser resolution on the fly:
+  `SELECT h3_cell_to_parent(hex_id, :res) AS hex, avg(measurement_value) …
+   GROUP BY 1`. Parenting is an integer bit-op — cheap, no join.
+- This **retires** the current `hex_h3res0…N` wide columns that `api-h3t` /
+  `prep_db.R` precompute per resolution: one `hex_id` + `h3_cell_to_parent`
+  replaces the whole ladder. Pick `res_max` = the finest zoom the hex app renders
+  (it bounds the achievable detail; everything coarser is derivable).
+- `grid_key` stays too — it's the *station* abstraction (Voronoi cells, the
+  program's sampling design); `hex_id` is the *equal-area* abstraction. They are
+  complementary summarization grains over the same `latitude`/`longitude`, so the
+  three apps (grid / hex / cruise-track) all read `obs_*` and pick their grain.
+
+## Before / after ERD (example datasets: bottle = env, ichthyo = bio)
+
+**Before** — per-dataset triples, each with its own join path to the shared refs:
+
+```mermaid
+erDiagram
+  grid             ||--o{ casts              : grid_key
+  cruise           ||--o{ casts              : cruise_key
+  casts            ||--o{ bottle             : cast_id
+  bottle           ||--o{ bottle_measurement : bottle_id
+  measurement_type ||--o{ bottle_measurement : measurement_type
+  grid             ||--o{ site               : grid_key
+  site             ||--o{ tow                : site_uuid
+  tow              ||--o{ net                : tow_uuid
+  net              ||--o{ ichthyo            : net_uuid
+  species          ||--o{ ichthyo            : species_id
+```
+
+**After** — two long tables + shared refs; every dataset lands the same way:
+
+```mermaid
+erDiagram
+  dataset          ||--o{ obs_env : dataset_key
+  grid             ||--o{ obs_env : grid_key
+  cruise           ||--o{ obs_env : cruise_key
+  measurement_type ||--o{ obs_env : measurement_type
+  dataset          ||--o{ obs_bio : dataset_key
+  grid             ||--o{ obs_bio : grid_key
+  cruise           ||--o{ obs_bio : cruise_key
+  taxa             ||--o{ obs_bio : taxon_id
+  measurement_type ||--o{ obs_bio : measurement_type
+```
+
+(`hex_id` is a computed column on `obs_env`/`obs_bio`, not a table; the
+per-dataset `{ds}_sample`/`_measurement` remain as detail/VIEWs, not shown.)
+
+## Impact on table count & size
+
+- **Table count: ~40–50 → ~8 core.** Today ≈ 13 datasets × (sample + measurement
+  + summary) + per-dataset taxon/lookup tables + shared refs. After: `obs_env`,
+  `obs_bio`, and six shared refs (`dataset`, `grid`, `cruise`, `ship`,
+  `measurement_type`, `taxa`) — a ~5× reduction. Per-dataset detail survives only
+  where genuinely dataset-specific, ideally as VIEWs.
+- **Row count: unchanged** (same observations). `obs_env` ≈ Σ env measurement rows
+  — dominated by `ctd_measurement` (**216 M rows / ~16 GB**); `obs_bio` is a few M
+  rows. Consolidation does not add rows.
+- **Storage: modestly smaller, not dramatically.** The `ctd_measurement` bulk is
+  unchanged, but (a) the `{ds}_summary` tables become VIEWs (drop their stored
+  bytes), (b) merging N per-dataset taxon tables into one `taxa` removes
+  duplication, and (c) homogeneous, sorted long columns compress better under
+  zstd than N heterogeneous schemas. The win is **schema simplicity + one query
+  surface**, not a big byte reduction (the CTD long table dominates either way).
+
+## Parquet partitioning, sorting & ERDDAP serving
+
+Grounded in `bench_erddap_ctd.qmd` (216 M-row CTD benchmark on a 2 GB ERDDAP heap):
+
+- **Granularity, not format, is the memory lever.** A single 935 MB
+  `ctd_wide.parquet` OOM'd a 4 GB heap; the fix was **Hive-partition by
+  `cruise_key`** (96 files) served as one aggregated ERDDAP dataset, which ERDDAP
+  prunes by `cruise_key`. → Partition `obs_env` **by `cruise_key`** (or
+  `dataset_key`/`year(datetime)` for a coarser fan-out); partition the much
+  smaller `obs_bio` **by `dataset_key`**.
+- **Sort within each partition** for compression + predicate pushdown:
+  `obs_env` by `(grid_key, depth_m, measurement_type)`; `obs_bio` by
+  `(grid_key, taxon_id)`. For spatial-range/hex workloads, order by a space-filling
+  curve on `hex_id` (H3 ordering) or `ST_Hilbert(geom)` — the repo already prefers
+  `ST_Hilbert()`.
+- **Compression** zstd (repo default); moderate row groups (~100 K–1 M rows) so
+  ERDDAP/DuckDB push predicates down without reading whole groups.
+- **ERDDAP serving:** for the big `obs_env` (CTD-dominated), use **DuckDB
+  `EDDTableFromDatabase`** — via JDBC it *streams* a filtered `ResultSet`
+  (predicate pushdown + partition pruning + disk spill), staying ~65 MB heap for
+  *any* size, vs file backends that load whole files. Serve `datetime` as a real
+  **`TIMESTAMP`** in the view (epoch-double NPEs the DuckDB JDBC driver). The
+  smaller `obs_bio` can be `EDDTableFromParquetFiles` over the partitioned files or
+  DuckDB. Keep `ctd_thin` as the interactive headline; full `obs_env` stays the
+  supplemental deep dataset.
+- **Apps:** `db-viz-hex` reads `obs_*` + `h3_cell_to_parent(hex_id, res)` (drops
+  the precomputed per-res tables); the station portal's build becomes
+  `… FROM v_obs GROUP BY grid_key, dataset_key`; `db-viz-cruise` groups by
+  `cruise_key`. One partitioned/sorted source, three grains.
+
 ## Verification (when materialized)
 
 - **Row-count parity**: `obs_env` count == Σ per-dataset env measurement counts;
