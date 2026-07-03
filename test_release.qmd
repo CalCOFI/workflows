@@ -356,6 +356,19 @@ if (nzchar(gh_bin)) {
 } else {
   message("gh not found; CalCOFI/db-query default_version needs a manual bump dispatch")
 }
+
+# also refresh the station data portal: rebuild its prebuilt per-station coverage
+# JSON (public/data/*.json) from the new release's ingest parquet, then redeploy.
+# Same gating + non-fatal pattern as the db-query bump above.
+if (nzchar(gh_bin)) {
+  disp2 <- system2(gh_bin,
+    c("workflow", "run", "refresh.yml", "--repo", "CalCOFI/2026-ucsb-station-data-portal"),
+    stdout = TRUE, stderr = TRUE)
+  if (!identical(attr(disp2, "status") %||% 0L, 0L))
+    warning(glue("station-portal refresh dispatch failed: {paste(disp2, collapse = '; ')}"))
+  else
+    message("dispatched CalCOFI/2026-ucsb-station-data-portal refresh workflow")
+}
 ```
 
 ## Cleanup
