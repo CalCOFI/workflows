@@ -247,6 +247,118 @@ load_stats |>
   datatable(caption = "Assembled tables (VIEWs on local parquet)")
 ```
 
+## Dataset Reference & Observation Views
+
+Non-destructive enablers (Part B of the station-portal epic): a `dataset`
+reference table keyed by `dataset_key = provider_dataset`, and unified
+`v_obs_env` / `v_obs_bio` (+ `v_obs`) VIEWs that project every dataset's
+long-format observations into a common shape stamped with `dataset_key`. These
+are the shared query surface behind the three spatial summarizers (hex /
+cruise-track / station-grid) and prove the env/bio consolidation target
+(Part C) non-destructively — no ingest re-run required.
+
+```{r}
+#| label: obs_views
+
+# dataset reference: dataset_key = provider_dataset (from the registry)
+dbExecute(con_wdl, glue(
+  "CREATE OR REPLACE TABLE dataset AS
+   SELECT provider || '_' || dataset AS dataset_key, provider, dataset, dataset_name,
+          description, citation_main, link_calcofi_org, link_data_source, license, pi_names
+   FROM read_csv_auto('{here('metadata/dataset.csv')}')"))
+
+# only build view arms whose source tables are present in this release
+tbls <- dbGetQuery(con_wdl, "SELECT table_name FROM information_schema.tables")$table_name
+has  <- function(...) all(c(...) %in% tbls)
+
+# --- environment arms (point-depth measurement grain) ----------------------
+env_arms <- list(
+  bottle = if (has("bottle_measurement","bottle","casts")) "
+    SELECT 'calcofi_bottle' AS dataset_key, c.grid_key, c.cruise_key,
+           c.latitude, c.longitude, CAST(c.datetime_start_utc AS TIMESTAMP) AS datetime,
+           b.depth_m AS depth_min, b.depth_m AS depth_max,
+           m.measurement_type, m.measurement_value, m.measurement_qual
+    FROM bottle_measurement m JOIN bottle b USING (bottle_id) JOIN casts c USING (cast_id)
+    WHERE c.grid_key IS NOT NULL",
+  ctd = if (has("ctd_measurement","ctd_cast")) "
+    SELECT 'calcofi_ctd-cast', cc.grid_key, cc.cruise_key,
+           cc.latitude, cc.longitude, CAST(cc.datetime_start_utc AS TIMESTAMP),
+           m.depth_m, m.depth_m, m.measurement_type, m.measurement_value, m.measurement_qual
+    FROM ctd_measurement m JOIN ctd_cast cc ON m.ctd_cast_uuid = cc.ctd_cast_uuid
+    WHERE cc.grid_key IS NOT NULL",
+  dic = if (has("dic_measurement","casts")) "
+    SELECT 'calcofi_dic', c.grid_key, c.cruise_key,
+           dm.latitude, dm.longitude, CAST(dm.datetime_start_utc AS TIMESTAMP),
+           dm.depth_m, dm.depth_m, dm.measurement_type, dm.measurement_value, dm.measurement_qual
+    FROM dic_measurement dm JOIN casts c USING (cast_id)
+    WHERE c.grid_key IS NOT NULL")
+env_arms <- Filter(Negate(is.null), env_arms)
+
+# --- biology arms (taxon x measurement, tow-integrated depth) ---------------
+# taxon_key = raw species/taxon id (resolve to names via the taxon tables); NULL
+# where the taxon is encoded in measurement_type (cufes eggs, phyllosoma stages).
+bio_arms <- list(
+  ichthyo = if (has("ichthyo","net","tow","site")) "
+    SELECT 'swfsc_ichthyo' AS dataset_key, s.grid_key, s.cruise_key,
+           s.latitude, s.longitude, CAST(t.datetime_start_utc AS TIMESTAMP) AS datetime,
+           NULL::DOUBLE AS depth_min, NULL::DOUBLE AS depth_max,
+           i.measurement_type, i.measurement_value, NULL AS measurement_qual,
+           CAST(i.species_id AS VARCHAR) AS taxon_key, i.life_stage
+    FROM ichthyo i JOIN net n USING (net_uuid) JOIN tow t USING (tow_uuid) JOIN site s USING (site_uuid)
+    WHERE s.grid_key IS NOT NULL",
+  cufes = if (has("cufes_measurement","cufes_sample")) "
+    SELECT 'swfsc_cufes', c.grid_key, c.cruise_key, c.latitude, c.longitude,
+           CAST(c.datetime_start_utc AS TIMESTAMP), 0::DOUBLE, 0::DOUBLE,
+           m.measurement_type, m.measurement_value, m.measurement_qual, NULL, NULL
+    FROM cufes_measurement m JOIN cufes_sample c USING (sample_id) WHERE c.grid_key IS NOT NULL",
+  euphausiids = if (has("euphausiids_measurement","euphausiids_tow")) "
+    SELECT 'cce-lter_euphausiids', tw.grid_key, tw.cruise_key, tw.latitude, tw.longitude,
+           CAST(tw.datetime_start_utc AS TIMESTAMP), NULL::DOUBLE, NULL::DOUBLE,
+           m.measurement_type, m.measurement_value, m.measurement_qual, NULL, NULL
+    FROM euphausiids_measurement m JOIN euphausiids_tow tw USING (tow_id) WHERE tw.grid_key IS NOT NULL",
+  phyllosoma = if (has("phyllosoma_measurement","phyllosoma_tow")) "
+    SELECT 'calcofi_phyllosoma', tw.grid_key, tw.cruise_key, tw.latitude, tw.longitude,
+           CAST(tw.datetime_start_utc AS TIMESTAMP), 0::DOUBLE, tw.max_tow_depth_m,
+           m.measurement_type, m.measurement_value, m.measurement_qual, NULL, NULL
+    FROM phyllosoma_measurement m JOIN phyllosoma_tow tw USING (tow_id) WHERE tw.grid_key IS NOT NULL",
+  zoodb = if (has("zoodb_measurement","zoodb_sample")) "
+    SELECT 'cce-lter_zoodb', sp.grid_key, sp.cruise_key, sp.latitude, sp.longitude,
+           CAST(sp.datetime_start_utc AS TIMESTAMP), sp.min_depth_m, sp.max_depth_m,
+           m.measurement_type, m.measurement_value, NULL, CAST(m.taxon_id AS VARCHAR), NULL
+    FROM zoodb_measurement m JOIN zoodb_sample sp USING (sample_id) WHERE sp.grid_key IS NOT NULL",
+  zooscan = if (has("zooscan_measurement","zooscan_sample")) "
+    SELECT 'cce-lter_zooscan', sp.grid_key, sp.cruise_key, sp.latitude, sp.longitude,
+           CAST(sp.station_date AS TIMESTAMP), sp.min_depth_m, sp.max_depth_m,
+           m.measurement_type, m.measurement_value, NULL, CAST(m.taxon_id AS VARCHAR), NULL
+    FROM zooscan_measurement m JOIN zooscan_sample sp USING (sample_id) WHERE sp.grid_key IS NOT NULL",
+  bird_mammal = if (has("bird_mammal_observation","bird_mammal_transect")) "
+    SELECT 'calcofi_bird_mammal_census', tr.grid_key, tr.cruise_key, tr.latitude, tr.longitude,
+           CAST(tr.datetime_start_utc AS TIMESTAMP), 0::DOUBLE, 0::DOUBLE,
+           'count', o.count, NULL, CAST(o.species_code AS VARCHAR), o.behavior_code
+    FROM bird_mammal_observation o JOIN bird_mammal_transect tr USING (gis_key) WHERE tr.grid_key IS NOT NULL")
+bio_arms <- Filter(Negate(is.null), bio_arms)
+
+dbExecute(con_wdl, glue(
+  "CREATE OR REPLACE VIEW v_obs_env AS
+   SELECT 'env' AS realm, * FROM (\n{paste(env_arms, collapse='\nUNION ALL\n')}\n)"))
+dbExecute(con_wdl, glue(
+  "CREATE OR REPLACE VIEW v_obs_bio AS
+   SELECT 'bio' AS realm, * FROM (\n{paste(bio_arms, collapse='\nUNION ALL\n')}\n)"))
+# v_obs: common columns across both realms (drops taxon_key/life_stage)
+dbExecute(con_wdl,
+  "CREATE OR REPLACE VIEW v_obs AS
+   SELECT realm, dataset_key, grid_key, cruise_key, latitude, longitude, datetime,
+          depth_min, depth_max, measurement_type, measurement_value, measurement_qual FROM v_obs_env
+   UNION ALL
+   SELECT realm, dataset_key, grid_key, cruise_key, latitude, longitude, datetime,
+          depth_min, depth_max, measurement_type, measurement_value, measurement_qual FROM v_obs_bio")
+
+dbGetQuery(con_wdl,
+  "SELECT realm, dataset_key, count(*) n_obs, count(DISTINCT grid_key) n_stations
+   FROM v_obs GROUP BY 1,2 ORDER BY 1,2") |>
+  datatable(caption = "v_obs: unified observation views (dataset_key-stamped)")
+```
+
 ## Scan Manifests for Mismatches
 
 ```{r}

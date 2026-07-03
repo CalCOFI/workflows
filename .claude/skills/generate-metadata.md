@@ -92,7 +92,11 @@ tbl_old,tbl_new,fld_old,fld_new,type_old,type_new,order_old,order_new,fld_descri
 
 Rules:
 - `fld_old`: Original column name from source CSV
-- `fld_new`: snake_case name following CalCOFI conventions
+- `fld_new`: snake_case name following CalCOFI conventions. **Key-suffix rule
+  (per `../docs/db.qmd`)**: `*_id` = **integer** key, `*_key` = **string** key,
+  `*_seq` = auto-increment sequence. A character-valued identifier must be `*_key`
+  (e.g. `cruise_key`, `site_key`, `dataset_key`), never `*_id`; the suffix must
+  match `type_new`.
 - `type_new`: DuckDB type (`INTEGER`, `SMALLINT`, `DOUBLE`, `VARCHAR`, `DATE`, `TIMESTAMP`, `UUID`, `BOOLEAN`)
 - `fld_description`: **Required** for every column. Markdown allowed.
   Empty descriptions land verbatim in the release `metadata.json` and
