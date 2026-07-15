@@ -1,0 +1,574 @@
+{
+  "schema_version": "1.0",
+  "provider": "calcofi",
+  "dataset": "calcofi-db-release",
+  "primary_keys": {
+    "bird_mammal_transect": "gis_key",
+    "bird_mammal_observation": "observation_id",
+    "bird_mammal_species": "species_code",
+    "bird_mammal_behavior": "behavior_code",
+    "casts": "cast_id",
+    "bottle": "bottle_id",
+    "bottle_measurement": "bottle_measurement_id",
+    "cast_condition": "cast_condition_id",
+    "measurement_type": "measurement_type",
+    "ctd_cast": "ctd_cast_uuid",
+    "ctd_measurement": "ctd_measurement_uuid",
+    "ctd_thin": "ctd_thin_uuid",
+    "ctd_summary": "ctd_summary_uuid",
+    "dic_measurement": "dic_measurement_id",
+    "phyllosoma_tow": "tow_id",
+    "phyllosoma_measurement": "phyllosoma_measurement_id",
+    "phyto_sample": "phyto_sample_id",
+    "phyto_measurement": "phyto_measurement_id",
+    "phyto_taxon": "species_code",
+    "region": "region_key",
+    "euphausiids_tow": "tow_id",
+    "euphausiids_measurement": "euphausiids_measurement_id",
+    "zoodb_sample": "sample_id",
+    "zoodb_measurement": "measurement_id",
+    "zoodb_taxon": "taxon_id",
+    "zooscan_sample": "sample_id",
+    "zooscan_measurement": "measurement_id",
+    "zooscan_taxon": "taxon_id",
+    "zooplankton_tow": "tow_id",
+    "cufes_sample": "sample_id",
+    "cufes_measurement": "cufes_measurement_id",
+    "cruise": "cruise_key",
+    "ship": "ship_key",
+    "site": "site_uuid",
+    "tow": "tow_uuid",
+    "net": "net_uuid",
+    "species": "species_id",
+    "ichthyo": "ichthyo_uuid",
+    "lookup": "lookup_id",
+    "taxon": "taxonID",
+    "taxa_rank": "taxonRank",
+    "grid": "grid_key",
+    "segment": "segment_id"
+  },
+  "foreign_keys": [
+    {
+      "table": "bird_mammal_observation",
+      "column": "gis_key",
+      "ref_table": "bird_mammal_transect",
+      "ref_column": "gis_key"
+    },
+    {
+      "table": "bird_mammal_observation",
+      "column": "species_code",
+      "ref_table": "bird_mammal_species",
+      "ref_column": "species_code"
+    },
+    {
+      "table": "bird_mammal_observation",
+      "column": "behavior_code",
+      "ref_table": "bird_mammal_behavior",
+      "ref_column": "behavior_code"
+    },
+    {
+      "table": "bottle",
+      "column": "cast_id",
+      "ref_table": "casts",
+      "ref_column": "cast_id"
+    },
+    {
+      "table": "bottle_measurement",
+      "column": "bottle_id",
+      "ref_table": "bottle",
+      "ref_column": "bottle_id"
+    },
+    {
+      "table": "bottle_measurement",
+      "column": "measurement_type",
+      "ref_table": "measurement_type",
+      "ref_column": "measurement_type"
+    },
+    {
+      "table": "cast_condition",
+      "column": "cast_id",
+      "ref_table": "casts",
+      "ref_column": "cast_id"
+    },
+    {
+      "table": "cast_condition",
+      "column": "condition_type",
+      "ref_table": "measurement_type",
+      "ref_column": "measurement_type"
+    },
+    {
+      "table": "ctd_measurement",
+      "column": "ctd_cast_uuid",
+      "ref_table": "ctd_cast",
+      "ref_column": "ctd_cast_uuid"
+    },
+    {
+      "table": "ctd_thin",
+      "column": "ctd_cast_uuid",
+      "ref_table": "ctd_cast",
+      "ref_column": "ctd_cast_uuid"
+    },
+    {
+      "table": "ctd_measurement",
+      "column": "measurement_type",
+      "ref_table": "measurement_type",
+      "ref_column": "measurement_type"
+    },
+    {
+      "table": "ctd_thin",
+      "column": "measurement_type",
+      "ref_table": "measurement_type",
+      "ref_column": "measurement_type"
+    },
+    {
+      "table": "ctd_summary",
+      "column": "measurement_type",
+      "ref_table": "measurement_type",
+      "ref_column": "measurement_type"
+    },
+    {
+      "table": "dic_measurement",
+      "column": "measurement_type",
+      "ref_table": "measurement_type",
+      "ref_column": "measurement_type"
+    },
+    {
+      "table": "dic_summary",
+      "column": "measurement_type",
+      "ref_table": "measurement_type",
+      "ref_column": "measurement_type"
+    },
+    {
+      "table": "phyllosoma_measurement",
+      "column": "tow_id",
+      "ref_table": "phyllosoma_tow",
+      "ref_column": "tow_id"
+    },
+    {
+      "table": "phyllosoma_measurement",
+      "column": "measurement_type",
+      "ref_table": "measurement_type",
+      "ref_column": "measurement_type"
+    },
+    {
+      "table": "phyto_sample",
+      "column": "region_key",
+      "ref_table": "region",
+      "ref_column": "region_key"
+    },
+    {
+      "table": "phyto_measurement",
+      "column": "phyto_sample_id",
+      "ref_table": "phyto_sample",
+      "ref_column": "phyto_sample_id"
+    },
+    {
+      "table": "phyto_measurement",
+      "column": "species_code",
+      "ref_table": "phyto_taxon",
+      "ref_column": "species_code"
+    },
+    {
+      "table": "phyto_measurement",
+      "column": "measurement_type",
+      "ref_table": "measurement_type",
+      "ref_column": "measurement_type"
+    },
+    {
+      "table": "euphausiids_measurement",
+      "column": "tow_id",
+      "ref_table": "euphausiids_tow",
+      "ref_column": "tow_id"
+    },
+    {
+      "table": "euphausiids_measurement",
+      "column": "measurement_type",
+      "ref_table": "measurement_type",
+      "ref_column": "measurement_type"
+    },
+    {
+      "table": "zoodb_measurement",
+      "column": "sample_id",
+      "ref_table": "zoodb_sample",
+      "ref_column": "sample_id"
+    },
+    {
+      "table": "zoodb_measurement",
+      "column": "taxon_id",
+      "ref_table": "zoodb_taxon",
+      "ref_column": "taxon_id"
+    },
+    {
+      "table": "zoodb_measurement",
+      "column": "measurement_type",
+      "ref_table": "measurement_type",
+      "ref_column": "measurement_type"
+    },
+    {
+      "table": "zooscan_measurement",
+      "column": "sample_id",
+      "ref_table": "zooscan_sample",
+      "ref_column": "sample_id"
+    },
+    {
+      "table": "zooscan_measurement",
+      "column": "taxon_id",
+      "ref_table": "zooscan_taxon",
+      "ref_column": "taxon_id"
+    },
+    {
+      "table": "zooscan_measurement",
+      "column": "measurement_type",
+      "ref_table": "measurement_type",
+      "ref_column": "measurement_type"
+    },
+    {
+      "table": "cufes_measurement",
+      "column": "sample_id",
+      "ref_table": "cufes_sample",
+      "ref_column": "sample_id"
+    },
+    {
+      "table": "cufes_measurement",
+      "column": "measurement_type",
+      "ref_table": "measurement_type",
+      "ref_column": "measurement_type"
+    },
+    {
+      "table": "ichthyo",
+      "column": "net_uuid",
+      "ref_table": "net",
+      "ref_column": "net_uuid"
+    },
+    {
+      "table": "ichthyo",
+      "column": "species_id",
+      "ref_table": "species",
+      "ref_column": "species_id"
+    },
+    {
+      "table": "net",
+      "column": "tow_uuid",
+      "ref_table": "tow",
+      "ref_column": "tow_uuid"
+    },
+    {
+      "table": "tow",
+      "column": "site_uuid",
+      "ref_table": "site",
+      "ref_column": "site_uuid"
+    },
+    {
+      "table": "site",
+      "column": "cruise_key",
+      "ref_table": "cruise",
+      "ref_column": "cruise_key"
+    },
+    {
+      "table": "cruise",
+      "column": "ship_key",
+      "ref_table": "ship",
+      "ref_column": "ship_key"
+    },
+    {
+      "table": "taxon",
+      "column": "taxonRank",
+      "ref_table": "taxa_rank",
+      "ref_column": "taxonRank"
+    },
+    {
+      "table": "segment",
+      "column": "cruise_key",
+      "ref_table": "cruise",
+      "ref_column": "cruise_key"
+    },
+    {
+      "table": "segment",
+      "column": "site_uuid_beg",
+      "ref_table": "site",
+      "ref_column": "site_uuid"
+    },
+    {
+      "table": "invert",
+      "column": "net_uuid",
+      "ref_table": "net",
+      "ref_column": "net_uuid"
+    },
+    {
+      "table": "invert",
+      "column": "species_id",
+      "ref_table": "species",
+      "ref_column": "species_id"
+    },
+    {
+      "table": "casts",
+      "column": "cruise_key",
+      "ref_table": "cruise",
+      "ref_column": "cruise_key"
+    },
+    {
+      "table": "casts",
+      "column": "ship_key",
+      "ref_table": "ship",
+      "ref_column": "ship_key"
+    },
+    {
+      "table": "casts",
+      "column": "grid_key",
+      "ref_table": "grid",
+      "ref_column": "grid_key"
+    },
+    {
+      "table": "ctd_cast",
+      "column": "cruise_key",
+      "ref_table": "cruise",
+      "ref_column": "cruise_key"
+    },
+    {
+      "table": "ctd_cast",
+      "column": "ship_key",
+      "ref_table": "ship",
+      "ref_column": "ship_key"
+    },
+    {
+      "table": "ctd_cast",
+      "column": "grid_key",
+      "ref_table": "grid",
+      "ref_column": "grid_key"
+    },
+    {
+      "table": "dic_sample",
+      "column": "cast_id",
+      "ref_table": "casts",
+      "ref_column": "cast_id"
+    },
+    {
+      "table": "dic_sample",
+      "column": "bottle_id",
+      "ref_table": "bottle",
+      "ref_column": "bottle_id"
+    },
+    {
+      "table": "euphausiids_tow",
+      "column": "cruise_key",
+      "ref_table": "cruise",
+      "ref_column": "cruise_key"
+    },
+    {
+      "table": "euphausiids_tow",
+      "column": "ship_key",
+      "ref_table": "ship",
+      "ref_column": "ship_key"
+    },
+    {
+      "table": "euphausiids_tow",
+      "column": "grid_key",
+      "ref_table": "grid",
+      "ref_column": "grid_key"
+    },
+    {
+      "table": "zooplankton_tow",
+      "column": "cruise_key",
+      "ref_table": "cruise",
+      "ref_column": "cruise_key"
+    },
+    {
+      "table": "zooplankton_tow",
+      "column": "ship_key",
+      "ref_table": "ship",
+      "ref_column": "ship_key"
+    },
+    {
+      "table": "zooplankton_tow",
+      "column": "grid_key",
+      "ref_table": "grid",
+      "ref_column": "grid_key"
+    },
+    {
+      "table": "bird_mammal_transect",
+      "column": "grid_key",
+      "ref_table": "grid",
+      "ref_column": "grid_key"
+    },
+    {
+      "table": "cufes_sample",
+      "column": "cruise_key",
+      "ref_table": "cruise",
+      "ref_column": "cruise_key"
+    },
+    {
+      "table": "cufes_sample",
+      "column": "ship_key",
+      "ref_table": "ship",
+      "ref_column": "ship_key"
+    },
+    {
+      "table": "cufes_sample",
+      "column": "grid_key",
+      "ref_table": "grid",
+      "ref_column": "grid_key"
+    },
+    {
+      "table": "phyllosoma_tow",
+      "column": "cruise_key",
+      "ref_table": "cruise",
+      "ref_column": "cruise_key"
+    },
+    {
+      "table": "phyllosoma_tow",
+      "column": "ship_key",
+      "ref_table": "ship",
+      "ref_column": "ship_key"
+    },
+    {
+      "table": "phyllosoma_tow",
+      "column": "grid_key",
+      "ref_table": "grid",
+      "ref_column": "grid_key"
+    },
+    {
+      "table": "phyto_sample",
+      "column": "cruise_key",
+      "ref_table": "cruise",
+      "ref_column": "cruise_key"
+    },
+    {
+      "table": "zoodb_sample",
+      "column": "cruise_key",
+      "ref_table": "cruise",
+      "ref_column": "cruise_key"
+    },
+    {
+      "table": "zoodb_sample",
+      "column": "ship_key",
+      "ref_table": "ship",
+      "ref_column": "ship_key"
+    },
+    {
+      "table": "zoodb_sample",
+      "column": "grid_key",
+      "ref_table": "grid",
+      "ref_column": "grid_key"
+    },
+    {
+      "table": "zooscan_sample",
+      "column": "cruise_key",
+      "ref_table": "cruise",
+      "ref_column": "cruise_key"
+    },
+    {
+      "table": "zooscan_sample",
+      "column": "ship_key",
+      "ref_table": "ship",
+      "ref_column": "ship_key"
+    },
+    {
+      "table": "zooscan_sample",
+      "column": "grid_key",
+      "ref_table": "grid",
+      "ref_column": "grid_key"
+    },
+    {
+      "table": "obs",
+      "column": "sample_key",
+      "ref_table": "sample",
+      "ref_column": "sample_key"
+    },
+    {
+      "table": "obs",
+      "column": "dataset_key",
+      "ref_table": "dataset",
+      "ref_column": "dataset_key"
+    },
+    {
+      "table": "obs",
+      "column": "grid_key",
+      "ref_table": "grid",
+      "ref_column": "grid_key"
+    },
+    {
+      "table": "obs",
+      "column": "cruise_key",
+      "ref_table": "cruise",
+      "ref_column": "cruise_key"
+    },
+    {
+      "table": "obs",
+      "column": "measurement_type",
+      "ref_table": "measurement_type",
+      "ref_column": "measurement_type"
+    },
+    {
+      "table": "sample",
+      "column": "parent_sample_key",
+      "ref_table": "sample",
+      "ref_column": "sample_key"
+    },
+    {
+      "table": "sample",
+      "column": "dataset_key",
+      "ref_table": "dataset",
+      "ref_column": "dataset_key"
+    },
+    {
+      "table": "sample",
+      "column": "grid_key",
+      "ref_table": "grid",
+      "ref_column": "grid_key"
+    },
+    {
+      "table": "sample",
+      "column": "cruise_key",
+      "ref_table": "cruise",
+      "ref_column": "cruise_key"
+    },
+    {
+      "table": "obs_freq",
+      "column": "sample_key",
+      "ref_table": "sample",
+      "ref_column": "sample_key"
+    },
+    {
+      "table": "obs_freq",
+      "column": "measurement_type",
+      "ref_table": "measurement_type",
+      "ref_column": "measurement_type"
+    },
+    {
+      "table": "sample_measurement",
+      "column": "sample_key",
+      "ref_table": "sample",
+      "ref_column": "sample_key"
+    },
+    {
+      "table": "sample_measurement",
+      "column": "dataset_key",
+      "ref_table": "dataset",
+      "ref_column": "dataset_key"
+    },
+    {
+      "table": "sample_measurement",
+      "column": "measurement_type",
+      "ref_table": "measurement_type",
+      "ref_column": "measurement_type"
+    },
+    {
+      "table": "obs_ctd_full",
+      "column": "sample_key",
+      "ref_table": "sample",
+      "ref_column": "sample_key"
+    },
+    {
+      "table": "obs_ctd_full",
+      "column": "dataset_key",
+      "ref_table": "dataset",
+      "ref_column": "dataset_key"
+    },
+    {
+      "table": "obs_ctd_full",
+      "column": "measurement_type",
+      "ref_table": "measurement_type",
+      "ref_column": "measurement_type"
+    }
+  ]
+}
