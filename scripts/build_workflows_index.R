@@ -92,38 +92,42 @@ observed_coverage <- tryCatch({
 
 # build the pipeline DAG as Mermaid directly from the calcofi: front-matter
 # (target_name + dependency + workflow_type) — the same fields build_targets_list()
-# uses — so it needs no `targets` install. Nodes are grouped into subgraphs by
-# workflow type and color-coded via classDef.
+# uses — so it needs no `targets` install. Flat graph (no subgraphs) of rounded
+# "pill" nodes; each ingest node is filled with its dataset color (calcofi.erd.color),
+# other node types get a categorical color.
 build_dag_mermaid <- function(recs) {
-  # only genuine pipeline targets (a calcofi: block in an ingest/publish/release
-  # category) — excludes the disconnected explore_*/legacy "other" + reference
-  # notebooks that clutter the graph and aren't part of tar_make().
-  cats       <- c("ingest", "publish", "release")
+  cats <- c("ingest", "publish", "release")
   tr <- Filter(function(r) isTRUE(r$has_meta) && r$category %in% cats && nzchar(r$target), recs)
   if (!length(tr)) return("")
-  type_col   <- c(ingest = "#4dabf7", publish = "#20c997", release = "#f06595")
-  type_title <- c(ingest = "Ingest", publish = "Publish", release = "Release")
   sid <- function(t) gsub("[^A-Za-z0-9_]", "_", t)
   all_targets <- vapply(tr, function(r) r$target, "")
   auto_deps   <- all_targets[vapply(tr, function(r) r$category, "") == "ingest"]
+  # categorical colors for non-ingest types (+ a fallback for ingest w/o a color)
+  cat_col <- c(ingest = "#cdd9e5", publish = "#20c997", release = "#f06595")
 
   lines <- "graph LR"
-  for (cid in cats) {
-    incat <- Filter(function(r) r$category == cid, tr)
-    if (!length(incat)) next
-    lines <- c(lines, sprintf("  subgraph %s [%s]", cid, type_title[[cid]]), "    direction LR")
-    for (r in incat)
-      lines <- c(lines, sprintf('    %s["%s"]:::%s', sid(r$target), r$target, cid))
-    lines <- c(lines, "  end")
+  cls_defs <- character(); seen <- character()
+  for (r in tr) {
+    id <- sid(r$target)
+    if (r$category == "ingest" && nzchar(r$color)) {
+      cls <- paste0("c_", id); col <- r$color
+    } else {
+      cls <- r$category;        col <- cat_col[[r$category]]
+    }
+    if (!cls %in% seen) {
+      cls_defs <- c(cls_defs, sprintf(
+        "  classDef %s fill:%s,stroke:#00000033,color:#10161c;", cls, col))
+      seen <- c(seen, cls)
+    }
+    # stadium node (["…"]) renders as a rounded pill
+    lines <- c(lines, sprintf('  %s(["%s"]):::%s', id, r$target, cls))
   }
   for (r in tr) {
     dv <- unlist(r$deps)
     if (length(dv) && any(dv == "auto")) dv <- setdiff(auto_deps, r$target)
     for (d in dv[dv %in% all_targets]) lines <- c(lines, sprintf("  %s --> %s", sid(d), sid(r$target)))
   }
-  for (cid in names(type_col))
-    lines <- c(lines, sprintf("  classDef %s fill:%s,stroke:#00000066,color:#10161c;", cid, type_col[[cid]]))
-  paste(lines, collapse = "\n")
+  paste(c(lines, cls_defs), collapse = "\n")
 }
 
 # build one record per published page ----
@@ -147,7 +151,7 @@ recs <- lapply(htmls, function(h) {
   list(
     base        = base,
     url         = h,
-    title       = oneline(fm$title %||% base),
+    title       = base,   # use the simplified notebook file name as the card header + link text
     category    = cat_id,
     has_meta    = !is.null(cc),
     provider    = prov,
