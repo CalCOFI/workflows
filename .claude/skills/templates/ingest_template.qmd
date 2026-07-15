@@ -377,6 +377,40 @@ enforce_column_types(con)
 preview_tables(con)
 ```
 
+## Emit Core Tables
+
+Project this dataset's per-dataset tables into the shared **core** family
+(`sample` / `obs` / `obs_freq` / `sample_measurement`) via the `calcofi4db` model
+helpers, then expose the per-dataset tables as compat VIEWs. See `RUNBOOK.md`
+(§3b) and `design_env-bio-consolidation.md`. `sample_key` is namespaced
+`dataset_key:sample_type:id`.
+
+```{r}
+#| label: emit-core
+
+build_grid_reference(con)  # idempotent shared grid reference
+
+# 1. sample dimension (adjacency list) — one row per physical event
+append_sample(con, glue("
+  SELECT '{provider}_{dataset}:{sample_type}:' || CAST({id_col} AS VARCHAR) AS sample_key,
+         '{sample_type}' AS sample_type, NULL::VARCHAR AS parent_sample_key,
+         '{provider}_{dataset}:{sample_type}:' || CAST({id_col} AS VARCHAR) AS root_sample_key,
+         '{provider}_{dataset}' AS dataset_key, grid_key, cruise_key,
+         latitude, longitude, CAST(datetime_start_utc AS TIMESTAMP) AS datetime,
+         depth_min_m, depth_max_m
+  FROM {event_tbl}"))
+
+# 2. obs — occurrence headline (bio abundance = the count); 3. obs_freq (bins);
+#    4. sample_measurement (event-level effort). Fill the SELECTs per dataset.
+append_obs(con, "<headline occurrence SELECT yielding the canonical obs columns>")
+# append_obs_freq(con, "<bin/count SELECT>")            # only if size/stage detail
+# append_sample_measurement(con, "<event-effort SELECT>")  # only if per-event effort
+
+# 5. per-dataset tables become VIEWs over the core (edit per dataset)
+# dbExecute(con, "CREATE OR REPLACE VIEW {dataset}_measurement AS
+#   SELECT ... FROM obs WHERE dataset_key = '{provider}_{dataset}'")
+```
+
 ## Write Parquet Outputs
 
 ```{r}

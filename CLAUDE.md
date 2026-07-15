@@ -85,6 +85,35 @@ a target temporarily.
   versioned release. Read-only consumers use `calcofi4r::cc_get_db()` against the
   frozen release, not the Working DuckLake.
 
+### Consolidated core model (`obs` / `sample` / …)
+
+Per `design_env-bio-consolidation.md`, the ~40 per-dataset triples collapse into a
+small **core** family that every consumer reads (built by the `calcofi4db` model
+engine, `R/model.R`):
+
+| core table | grain | built by |
+|---|---|---|
+| `sample` | one row per physical sampling event (site/tow/net/cast/bottle/underway/transect/region_pool); adjacency list via `parent_sample_key` + `root_sample_key` | `build_sample_reference()` |
+| `obs` | occurrence-headline long table (`realm` env\|bio, one scalar/row); env CTD via `ctd_thin` | `append_obs()` |
+| `obs_freq` | sub-occurrence (bin, count) distributions (ichthyo `body_length` / `stage`) | `append_obs_freq()` |
+| `sample_measurement` | event-level effort (net `volume_sampled`/`std_haul_factor`/… ; bottle cast conditions) | `append_sample_measurement()` |
+| `obs_ctd_full` | supplemental full-resolution CTD scans (~216M rows; opt-in) | `append_obs(obs_tbl="obs_ctd_full")` |
+
+- **Namespaced keys**: every `sample_key` is `dataset_key:sample_type:id` (globally
+  unique across datasets *and* event levels; makes the DIC→bottle dedup fall out).
+  `obs.sample_key` FKs into `sample`; `grid_key`/`cruise_key` stay **denormalized**
+  on `obs` so rollups `GROUP BY` them without a join.
+- **`hex_id`** (H3, `UBIGINT`) is computed on `obs`/`obs_ctd_full` at
+  `CC_H3_RES_MAX` (res 10); aggregate coarser via `h3_cell_to_parent(hex_id, res)`
+  — no per-resolution columns. `geom` lives on `sample` (and refs), never on `obs`.
+- **Phased migration**: Phase 2 (done) materializes the core centrally in
+  `release_database.qmd` (chunks `core_tables` + `core_parity`) over the existing
+  per-dataset tables, with hard parity assertions. Phase 3 cuts each ingest over to
+  emit its slice via the `append_*` helpers, with the per-dataset tables surviving
+  as compat VIEWs (see the `emit_core` pattern in `RUNBOOK.md`).
+- **`build_grid_reference(con)`** materializes the shared `grid` deterministically
+  from `calcofi4r::cc_grid` (promoted out of the ichthyo ingest; non-destructive).
+
 ### Metadata registries — single sources of truth (`metadata/`)
 
 | File | Role |
@@ -124,10 +153,12 @@ self-documenting; human review happens at every hand-off. Scaffolds come from
   counters where stable (bottle `cast_id`/`bottle_id`); sequential `*_id` only
   for derived/pivoted tables without a source key. UUID-first where available.
 - **Tidy long-format measurements**: `measurement_type` / `measurement_value` /
-  `measurement_qual`. A base `{dataset}_sample` table holds only position/time/FK
-  columns; a `{dataset}_measurement` table holds the long-format values; a
-  `{dataset}_summary` aggregates replicates (`AVG()` + `STDDEV_SAMP()`, filtering
-  `NOT isnan(value) AND isfinite(value)`).
+  `measurement_qual`. Historically each dataset built a triple (`{dataset}_sample`
+  position/time/FK + `{dataset}_measurement` long values + `{dataset}_summary`
+  replicate aggregate). These now **project into the core family** (`sample` /
+  `obs` / `obs_freq` / `sample_measurement`, see above): headline occurrences →
+  `obs`, event-level effort → `sample_measurement`, (bin, count) detail →
+  `obs_freq`. Per-dataset triple tables survive as compat VIEWs over the core.
 - **Records lacking a cast/cruise FK**: use the `calcofi4db` helpers
   `match_by_site_datetime()` then `match_nearest_by_depth()` — do not hand-write
   the matching SQL.

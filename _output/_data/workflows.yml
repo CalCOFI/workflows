@@ -1,6 +1,6 @@
-generated: '2026-06-26'
-n_total: 41
-n_meta: 16
+generated: '2026-07-15'
+n_total: 42
+n_meta: 17
 categories:
 - id: ingest
   title: Ingest
@@ -203,7 +203,7 @@ categories:
   title: Other notebooks
   blurb: Exploratory analyses and legacy load scripts, kept for reference.
   layout: list
-  count: 18
+  count: 19
   groups:
   - label: ''
     items:
@@ -243,4 +243,60 @@ categories:
       title: Oceanographic Bottle Database
     - url: explore_gdatasets.html
       title: Scrape Google Dataset Search
+    - url: test_release.html
+      title: Test Release — gate latest.txt on query suite
+dag_mermaid: |-
+  graph LR
+    subgraph ingest [Ingest]
+      direction LR
+      ingest_calcofi_bird_mammal_census["ingest_calcofi_bird_mammal_census"]:::ingest
+      ingest_calcofi_bottle["ingest_calcofi_bottle"]:::ingest
+      ingest_calcofi_ctd_cast["ingest_calcofi_ctd_cast"]:::ingest
+      ingest_calcofi_dic["ingest_calcofi_dic"]:::ingest
+      ingest_calcofi_phyllosoma["ingest_calcofi_phyllosoma"]:::ingest
+      ingest_calcofi_phytoplankton["ingest_calcofi_phytoplankton"]:::ingest
+      ingest_cce_lter_euphausiids["ingest_cce_lter_euphausiids"]:::ingest
+      ingest_cce_lter_zoodb["ingest_cce_lter_zoodb"]:::ingest
+      ingest_cce_lter_zooscan["ingest_cce_lter_zooscan"]:::ingest
+      ingest_pic_zooplankton["ingest_pic_zooplankton"]:::ingest
+      ingest_spatial["ingest_spatial"]:::ingest
+      ingest_swfsc_cufes["ingest_swfsc_cufes"]:::ingest
+      ingest_swfsc_ichthyo["ingest_swfsc_ichthyo"]:::ingest
+    end
+    subgraph publish [Publish]
+      direction LR
+      publish_ichthyo_to_obis["publish_ichthyo_to_obis"]:::publish
+    end
+    subgraph release [Release]
+      direction LR
+      release_database["release_database"]:::release
+    end
+    ingest_swfsc_ichthyo --> ingest_calcofi_bird_mammal_census
+    ingest_swfsc_ichthyo --> ingest_calcofi_bottle
+    ingest_swfsc_ichthyo --> ingest_calcofi_ctd_cast
+    ingest_calcofi_bottle --> ingest_calcofi_dic
+    ingest_swfsc_ichthyo --> ingest_calcofi_phyllosoma
+    ingest_swfsc_ichthyo --> ingest_calcofi_phytoplankton
+    ingest_swfsc_ichthyo --> ingest_cce_lter_euphausiids
+    ingest_swfsc_ichthyo --> ingest_cce_lter_zoodb
+    ingest_swfsc_ichthyo --> ingest_cce_lter_zooscan
+    ingest_swfsc_ichthyo --> ingest_pic_zooplankton
+    ingest_swfsc_ichthyo --> ingest_swfsc_cufes
+    release_database --> publish_ichthyo_to_obis
+    ingest_calcofi_bird_mammal_census --> release_database
+    ingest_calcofi_bottle --> release_database
+    ingest_calcofi_ctd_cast --> release_database
+    ingest_calcofi_dic --> release_database
+    ingest_calcofi_phyllosoma --> release_database
+    ingest_calcofi_phytoplankton --> release_database
+    ingest_cce_lter_euphausiids --> release_database
+    ingest_cce_lter_zoodb --> release_database
+    ingest_cce_lter_zooscan --> release_database
+    ingest_pic_zooplankton --> release_database
+    ingest_spatial --> release_database
+    ingest_swfsc_cufes --> release_database
+    ingest_swfsc_ichthyo --> release_database
+    classDef ingest fill:#4dabf7,stroke:#00000066,color:#10161c;
+    classDef publish fill:#20c997,stroke:#00000066,color:#10161c;
+    classDef release fill:#f06595,stroke:#00000066,color:#10161c;
 

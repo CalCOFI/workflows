@@ -69,6 +69,63 @@ find_source <- function(base) {
   NA_character_
 }
 
+# DB-derived temporal coverage from the latest frozen release's metadata.json
+# (dataset_key -> "YYYY-MM to YYYY-MM"), computed in release_database.qmd from the
+# real obs/sample datetimes. Best-effort: falls back to static coverage if the
+# release sidecar can't be fetched (e.g. offline CI).
+observed_coverage <- tryCatch({
+  suppressWarnings(librarian::shelf(jsonlite, quiet = TRUE))
+  base_url <- "https://storage.googleapis.com/calcofi-db/ducklake/releases"
+  ver  <- trimws(readLines(url(file.path(base_url, "latest.txt")), warn = FALSE)[1])
+  meta <- jsonlite::fromJSON(file.path(base_url, ver, "metadata.json"), simplifyVector = FALSE)
+  obs  <- list()
+  for (k in names(meta$datasets)) {
+    o <- meta$datasets[[k]]$coverage_temporal_observed
+    if (!is.null(o) && nzchar(o)) obs[[k]] <- o
+  }
+  cat(sprintf("observed temporal coverage for %d datasets from release %s\n", length(obs), ver))
+  obs
+}, error = function(e) {
+  message("observed coverage unavailable (", conditionMessage(e), ") — using static coverage_temporal")
+  list()
+})
+
+# build the pipeline DAG as Mermaid directly from the calcofi: front-matter
+# (target_name + dependency + workflow_type) — the same fields build_targets_list()
+# uses — so it needs no `targets` install. Nodes are grouped into subgraphs by
+# workflow type and color-coded via classDef.
+build_dag_mermaid <- function(recs) {
+  # only genuine pipeline targets (a calcofi: block in an ingest/publish/release
+  # category) — excludes the disconnected explore_*/legacy "other" + reference
+  # notebooks that clutter the graph and aren't part of tar_make().
+  cats       <- c("ingest", "publish", "release")
+  tr <- Filter(function(r) isTRUE(r$has_meta) && r$category %in% cats && nzchar(r$target), recs)
+  if (!length(tr)) return("")
+  type_col   <- c(ingest = "#4dabf7", publish = "#20c997", release = "#f06595")
+  type_title <- c(ingest = "Ingest", publish = "Publish", release = "Release")
+  sid <- function(t) gsub("[^A-Za-z0-9_]", "_", t)
+  all_targets <- vapply(tr, function(r) r$target, "")
+  auto_deps   <- all_targets[vapply(tr, function(r) r$category, "") == "ingest"]
+
+  lines <- "graph LR"
+  for (cid in cats) {
+    incat <- Filter(function(r) r$category == cid, tr)
+    if (!length(incat)) next
+    lines <- c(lines, sprintf("  subgraph %s [%s]", cid, type_title[[cid]]), "    direction LR")
+    for (r in incat)
+      lines <- c(lines, sprintf('    %s["%s"]:::%s', sid(r$target), r$target, cid))
+    lines <- c(lines, "  end")
+  }
+  for (r in tr) {
+    dv <- unlist(r$deps)
+    if (length(dv) && any(dv == "auto")) dv <- setdiff(auto_deps, r$target)
+    for (d in dv[dv %in% all_targets]) lines <- c(lines, sprintf("  %s --> %s", sid(d), sid(r$target)))
+  }
+  for (cid in names(type_col))
+    lines <- c(lines, sprintf("  classDef %s fill:%s,stroke:#00000066,color:#10161c;", cid, type_col[[cid]]))
+  paste(lines, collapse = "\n")
+}
+
 # build one record per published page ----
 htmls <- sort(list.files(out_dir, pattern = "[.]html$"))
 htmls <- htmls[!basename(htmls) %in% c("index.html")]
@@ -81,16 +138,24 @@ recs <- lapply(htmls, function(h) {
   dm   <- cc$dataset_meta
   cat_id <- classify(base, cc)
 
+  prov   <- tolower(cc$provider %||% (if (cat_id == "ingest") "calcofi" else ""))
+  ds_key <- if (nzchar(prov) && !is.null(cc$dataset)) paste0(prov, "_", cc$dataset) else ""
+  # DB-derived temporal extent (from the frozen release) beats the static
+  # coverage_temporal in the QMD front-matter; fall back to the static string.
+  cov <- observed_coverage[[ds_key]] %||% dm$coverage_temporal %||% ""
+
   list(
     base        = base,
     url         = h,
     title       = oneline(fm$title %||% base),
     category    = cat_id,
     has_meta    = !is.null(cc),
-    provider    = tolower(cc$provider %||% (if (cat_id == "ingest") "calcofi" else "")),
+    provider    = prov,
+    target      = oneline(cc$target_name %||% base),
+    deps        = cc$dependency,
     dataset_name= oneline(dm$dataset_name %||% ""),
     description = oneline(dm$description %||% ""),
-    coverage    = oneline(dm$coverage_temporal %||% ""),
+    coverage    = oneline(cov),
     color       = cc$erd$color %||% "",
     link_calcofi_org = dm$link_calcofi_org %||% "",
     link_data_source = dm$link_data_source %||% "",
@@ -140,13 +205,20 @@ for (cid in names(categories)) {
     body)
 }
 
-doc <- list(
-  generated  = format(Sys.time(), "%Y-%m-%d"),
-  n_total    = length(recs),
-  n_meta     = sum(vapply(recs, function(r) r$has_meta, logical(1))),
-  categories = cats_out)
-
 out_yaml <- file.path(data_dir, "workflows.yml")
+
+# pipeline DAG (preserve a previously committed one if the rebuild comes up empty)
+dag_mermaid <- tryCatch(build_dag_mermaid(recs), error = function(e) "")
+if (!nzchar(dag_mermaid))
+  dag_mermaid <- tryCatch(yaml::read_yaml(out_yaml)$dag_mermaid %||% "", error = function(e) "")
+
+doc <- list(
+  generated   = format(Sys.time(), "%Y-%m-%d"),
+  n_total     = length(recs),
+  n_meta      = sum(vapply(recs, function(r) r$has_meta, logical(1))),
+  categories  = cats_out,
+  dag_mermaid = dag_mermaid)
+
 writeLines(yaml::as.yaml(doc, indent = 2), out_yaml)
 cat("wrote", out_yaml, "\n",
     length(recs), "pages;", doc$n_meta, "with calcofi metadata;",

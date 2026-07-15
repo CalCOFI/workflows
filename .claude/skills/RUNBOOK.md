@@ -45,6 +45,30 @@ cross-dataset FK, add a row to `relationships_cross.csv`. No manual edit of
 `release_database.qmd` `rels_paths` is needed — it auto-discovers. →
 `ingest=done`, `stage=ingested`.
 
+### 3b. Emit core tables (`emit_core` block, Phase 3)
+
+After building its per-dataset tables, each ingest projects them into the shared
+**core** family (`sample` / `obs` / `obs_freq` / `sample_measurement`) via the
+`calcofi4db` model helpers, then the per-dataset tables become compat VIEWs. The
+canonical block (added before `write_parquet_outputs`):
+
+```r
+build_grid_reference(con)                       # idempotent shared grid
+append_sample(con, "<this dataset's sample arm(s)>")          # namespaced sample_key
+append_sample_measurement(con, "<event-effort SELECT or skip>")
+append_obs(con, "<headline occurrence SELECT>")              # bio base rows -> 'abundance'
+append_obs_freq(con, "<bin/count SELECT or skip>")           # e.g. body_length / stage
+# per-dataset tables become VIEWs over the core (detail survives, bytes don't):
+dbExecute(con, "CREATE OR REPLACE VIEW {ds}_measurement AS SELECT ... FROM obs WHERE dataset_key='...'")
+```
+
+`sample_key` is namespaced `dataset_key:sample_type:id`. `obs` carries the
+occurrence headline (bio abundance = the count), `obs_freq` the (bin, count)
+detail, `sample_measurement` event-level effort. Env CTD rows come from `ctd_thin`
+(full scans → the supplemental `obs_ctd_full`). Until an ingest is migrated,
+`release_database.qmd` (`core_tables` chunk) materializes its slice centrally and
+`core_parity` asserts the counts match — so cut-over is per-ingest and safe.
+
 ### 4. Run the notebook, then `/validate-ingest {provider} {dataset} [--strict]`
 PK/FK/null/range/duplicate checks, `summary` consistency, **`schema_lint`** (vs
 the dictionary), **`questions`** (no open `blocker`), and metadata.json
@@ -68,6 +92,8 @@ each `questions.csv` (`status=answered`, fill `answer`/`answered_date`).
 
 ## Conventions (see CLAUDE.md)
 snake_case; `*_key`/`*_id`/`*_uuid` identifiers; unit suffixes; tidy long-format
-measurements (`measurement_type`/`measurement_value`/`measurement_qual`); base
-`{dataset}_sample` holds only position/time/FK columns; `cat()` not `message()`
-in chunks; individual `datatable()` calls (not `preview_tables()` in a loop).
+measurements (`measurement_type`/`measurement_value`/`measurement_qual`) that
+project into the **core** family (`sample`/`obs`/`obs_freq`/`sample_measurement`,
+namespaced `sample_key = dataset_key:sample_type:id`) via the `emit_core` block;
+`cat()` not `message()` in chunks; individual `datatable()` calls (not
+`preview_tables()` in a loop).

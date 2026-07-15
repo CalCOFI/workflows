@@ -27,3 +27,20 @@ zoodb_sample,grid_key,grid,grid_key,unpooled tow spatial grid assignment
 zooscan_sample,cruise_key,cruise,cruise_key,sample cruise parsed as YYYY-MM + ship_nodc from the cruise code
 zooscan_sample,ship_key,ship,ship_key,ship parsed from the 2-letter cruise-code suffix
 zooscan_sample,grid_key,grid,grid_key,station tow spatial grid assignment
+obs,sample_key,sample,sample_key,every observation belongs to a sampling event
+obs,dataset_key,dataset,dataset_key,observation provenance stamp
+obs,grid_key,grid,grid_key,observation spatial grid cell (nullable)
+obs,cruise_key,cruise,cruise_key,observation cruise (denormalized)
+obs,measurement_type,measurement_type,measurement_type,observation measured quantity vocabulary
+sample,parent_sample_key,sample,sample_key,adjacency-list parent event (site tow net; cast bottle)
+sample,dataset_key,dataset,dataset_key,sample provenance stamp
+sample,grid_key,grid,grid_key,sample spatial grid cell (nullable)
+sample,cruise_key,cruise,cruise_key,sample cruise
+obs_freq,sample_key,sample,sample_key,frequency distribution belongs to a sampling event
+obs_freq,measurement_type,measurement_type,measurement_type,binned attribute vocabulary
+sample_measurement,sample_key,sample,sample_key,effort measurement belongs to a sampling event
+sample_measurement,dataset_key,dataset,dataset_key,effort measurement provenance stamp
+sample_measurement,measurement_type,measurement_type,measurement_type,event-level measured quantity vocabulary
+obs_ctd_full,sample_key,sample,sample_key,full-resolution CTD scan belongs to a cast event
+obs_ctd_full,dataset_key,dataset,dataset_key,supplemental CTD provenance stamp
+obs_ctd_full,measurement_type,measurement_type,measurement_type,CTD measured quantity vocabulary

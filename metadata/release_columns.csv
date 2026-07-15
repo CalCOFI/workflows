@@ -1,13 +1,13 @@
 table,column,name_long,units,description_md
-cruise_summary,cruise_key,Cruise Key,,Natural key YYYY-MM-NODC (e.g. 1998-02-33JD).
-cruise_summary,year,Year,,Cruise year extracted from date_ym.
-cruise_summary,month,Month,,Cruise month extracted from date_ym.
-cruise_summary,ship_name,Ship Name,,Ship name as resolved against NODC ship registry.
-cruise_summary,ship_nodc,Ship NODC,,NODC ship code.
-cruise_summary,ichthyo,Ichthyo Sites,count,Distinct sites sampled by SWFSC ichthyo on this cruise.
-cruise_summary,bottle,Bottle Sites,count,Distinct sites sampled by CalCOFI bottle casts on this cruise.
-cruise_summary,ctd_cast,CTD Sites,count,Distinct sites sampled by CTD casts on this cruise.
-cruise_summary,dic,DIC Sites,count,Distinct sites with NCEI DIC samples on this cruise.
+cruise,cruise_key,Cruise Key,,Natural key YYYY-MM-NODC (e.g. 1998-02-33JD).
+cruise,year,Year,,Cruise year extracted from date_ym.
+cruise,month,Month,,Cruise month extracted from date_ym.
+cruise,ship_name,Ship Name,,Ship name as resolved against NODC ship registry.
+cruise,ship_nodc,Ship NODC,,NODC ship code.
+cruise,ichthyo,Ichthyo Sites,count,Distinct sites sampled by SWFSC ichthyo on this cruise.
+cruise,bottle,Bottle Sites,count,Distinct sites sampled by CalCOFI bottle casts on this cruise.
+cruise,ctd_cast,CTD Sites,count,Distinct sites sampled by CTD casts on this cruise.
+cruise,dic,DIC Sites,count,Distinct sites with NCEI DIC samples on this cruise.
 _spatial,layer,Layer,,Spatial layer slug from metadata/spatial_layers.csv (e.g. ca_county_boundaries).
 _spatial,feature_id,Feature ID,,Stable feature identifier within the layer.
 _spatial,geom,Geometry,,Feature geometry in WGS84 (EPSG:4326).
@@ -15,3 +15,50 @@ _spatial_attr,layer,Layer,,Spatial layer slug matching _spatial.layer.
 _spatial_attr,feature_id,Feature ID,,Feature identifier matching _spatial.feature_id.
 _spatial_attr,attr_name,Attribute Name,,Source-attribute column name.
 _spatial_attr,attr_value,Attribute Value,,Source-attribute value cast to text.
+obs,obs_id,Observation ID,,Surrogate integer key assigned at release assembly.
+obs,realm,Realm,,Observation realm: env (environmental) or bio (biological).
+obs,dataset_key,Dataset Key,,Provenance stamp provider_dataset (e.g. calcofi_bottle).
+obs,sample_key,Sample Key,,Namespaced FK to sample (dataset:type:id); the true sampling-event leaf.
+obs,grid_key,Grid Key,,FK to grid station cell (nullable; NULL for region-pooled phytoplankton).
+obs,cruise_key,Cruise Key,,FK to cruise (natural key YYYY-MM-NODC) denormalized for rollups.
+obs,latitude,Latitude,degrees_north,Observation latitude (WGS84).
+obs,longitude,Longitude,degrees_east,Observation longitude (WGS84).
+obs,datetime,Datetime,,Observation timestamp (UTC).
+obs,depth_min_m,Minimum Depth,m,Shallow end of the observation depth (equals depth_max_m for point env readings).
+obs,depth_max_m,Maximum Depth,m,Deep end of the observation depth (a range for tow-integrated biology).
+obs,taxon_id,Taxon ID,,Taxon identifier for biological rows (nullable; NULL when the taxon is encoded in measurement_type).
+obs,life_stage,Life Stage,,Developmental life stage for biological rows (nullable).
+obs,measurement_type,Measurement Type,,FK to measurement_type vocabulary; bio headline rows use abundance.
+obs,measurement_value,Measurement Value,,The measured scalar (for abundance this is the count).
+obs,measurement_qual,Measurement Qualifier,,Quality flag or qualifier (nullable).
+obs,measurement_prec,Measurement Precision,,Reported measurement precision (bottle only; nullable).
+obs,hex_id,H3 Hex ID,,H3 cell index at the finest stored resolution; aggregate coarser via h3_cell_to_parent(hex_id res).
+sample,sample_key,Sample Key,,Namespaced primary key (dataset:type:id) globally unique across datasets and event levels.
+sample,sample_type,Sample Type,,Event grain: site tow net cast bottle underway transect or region_pool.
+sample,parent_sample_key,Parent Sample Key,,Self-FK to the containing event (nullable; e.g. a net points at its tow).
+sample,root_sample_key,Root Sample Key,,The station-occupation root of this event (self for single-level datasets).
+sample,dataset_key,Dataset Key,,Provenance stamp provider_dataset.
+sample,grid_key,Grid Key,,FK to grid station cell (nullable).
+sample,cruise_key,Cruise Key,,FK to cruise.
+sample,latitude,Latitude,degrees_north,Event latitude (WGS84).
+sample,longitude,Longitude,degrees_east,Event longitude (WGS84).
+sample,datetime,Datetime,,Event timestamp (UTC).
+sample,depth_min_m,Minimum Depth,m,Shallow end of the event depth range.
+sample,depth_max_m,Maximum Depth,m,Deep end of the event depth range.
+sample,geom,Geometry,,Point geometry of the sampling event (WGS84).
+obs_freq,obs_freq_id,Frequency Row ID,,Surrogate integer key.
+obs_freq,dataset_key,Dataset Key,,Provenance stamp provider_dataset.
+obs_freq,sample_key,Sample Key,,FK to sample; links the distribution to its event.
+obs_freq,taxon_id,Taxon ID,,Taxon identifier (nullable).
+obs_freq,life_stage,Life Stage,,Developmental life stage (nullable).
+obs_freq,measurement_type,Measurement Type,,The binned attribute (e.g. body_length or stage).
+obs_freq,bin_value,Bin Value,,The numeric bin (length in mm or stage number).
+obs_freq,bin_label,Bin Label,,Human-readable bin label from the lookup vocabulary (nullable).
+obs_freq,count,Count,,Number of individuals in the bin.
+obs_freq,measurement_qual,Measurement Qualifier,,Quality flag (nullable).
+sample_measurement,sample_measurement_id,Sample Measurement ID,,Surrogate integer key.
+sample_measurement,sample_key,Sample Key,,FK to sample; the event these effort measures apply to.
+sample_measurement,dataset_key,Dataset Key,,Provenance stamp provider_dataset.
+sample_measurement,measurement_type,Measurement Type,,FK to measurement_type (e.g. volume_sampled std_haul_factor).
+sample_measurement,measurement_value,Measurement Value,,The event-level measured scalar.
+sample_measurement,measurement_qual,Measurement Qualifier,,Quality flag (nullable).
