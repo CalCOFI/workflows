@@ -281,6 +281,78 @@ results |>
     colnames  = c("", "query", "label", "rows", "ms", "skip reason", "error"))
 ```
 
+## Consumer contract queries
+
+The `_queries/*.md` suite covers the query app, but the `sql_builder` (match) and
+the reproducible-download / app SQL live in calcofi4r + the Shiny apps and are
+otherwise only exercised in the browser — so a schema change (a renamed column, a
+retired table) slips past the gate and breaks downloads/apps in production. These
+**contract** queries pin the exact shapes those consumers depend on (bio↔env
+match, station rollup, sample/cruise counts) plus core-integrity asserts, run
+server-side against the frozen release, and feed the same promote gate.
+
+```{r}
+#| label: consumer_contract
+
+rel_base <- glue(
+  "https://storage.googleapis.com/calcofi-db/ducklake/releases/{release_version}/parquet")
+rp <- function(t) glue("read_parquet('{rel_base}/{t}.parquet')")
+
+# name | expect ('nonzero' rows for a consumer read, or 'zero' for an integrity
+# assert) | SQL returning a single column `n`
+contract <- tibble::tribble(
+  ~name, ~expect, ~sql,
+  "consumer: match env (bottle temperature)", "nonzero", glue(
+    "SELECT count(*) n FROM {rp('obs')}
+     WHERE realm='env' AND dataset_key='calcofi_bottle' AND measurement_type='temperature'"),
+  "consumer: match/download bio (ichthyo abundance x species x effort)", "nonzero", glue(
+    "SELECT count(*) n FROM {rp('obs')} o
+       JOIN {rp('species')} sp ON CAST(o.taxon_id AS INTEGER) = sp.species_id
+       LEFT JOIN {rp('sample_measurement')} shf ON shf.sample_key=o.sample_key AND shf.measurement_type='std_haul_factor'
+     WHERE o.realm='bio' AND o.dataset_key='swfsc_ichthyo' AND o.measurement_type='abundance'"),
+  "consumer: station coverage rollup (obs GROUP BY grid,dataset)", "nonzero", glue(
+    "SELECT count(*) n FROM (
+       SELECT grid_key, dataset_key, count(*), count(DISTINCT sample_key), count(DISTINCT cruise_key)
+       FROM {rp('obs')} WHERE grid_key IS NOT NULL GROUP BY 1,2)"),
+  "consumer: sample event grain (bottle cast)", "nonzero", glue(
+    "SELECT count(*) n FROM {rp('sample')} WHERE dataset_key='calcofi_bottle' AND sample_type='cast'"),
+  "consumer: cruise enriched per-dataset counts", "nonzero", glue(
+    "SELECT count(*) n FROM {rp('cruise')} WHERE ichthyo IS NOT NULL"),
+  "consumer: obs single-file readable over HTTPS (browser match.js)", "nonzero", glue(
+    "SELECT count(*) n FROM {rp('obs')} WHERE realm='bio' LIMIT 1"),
+  "contract: obs.measurement_type all in registry", "zero", glue(
+    "SELECT count(*) n FROM {rp('obs')}
+     WHERE measurement_type NOT IN (SELECT measurement_type FROM {rp('measurement_type')})"),
+  "contract: obs.sample_key resolves in sample", "zero", glue(
+    "SELECT count(*) n FROM {rp('obs')} WHERE sample_key NOT IN (SELECT sample_key FROM {rp('sample')})"),
+  "contract: obs.hex_id present where lat/lng", "zero", glue(
+    "SELECT count(*) n FROM {rp('obs')} WHERE hex_id IS NULL AND latitude IS NOT NULL AND longitude IS NOT NULL"))
+
+contract_res <- purrr::pmap_dfr(contract, function(name, expect, sql) {
+  t0  <- Sys.time()
+  out <- tryCatch(DBI::dbGetQuery(con_test, sql), error = function(e) e)
+  ms  <- as.numeric(difftime(Sys.time(), t0, units = "secs")) * 1000
+  if (inherits(out, "error"))
+    return(tibble::tibble(query = name, label = "consumer-contract", status = "fail",
+      reason = NA_character_, rows = NA_integer_, ms = round(ms, 1), error = conditionMessage(out)))
+  n  <- as.numeric(out$n[1])
+  ok <- if (expect == "zero") n == 0 else n > 0
+  tibble::tibble(query = name, label = "consumer-contract",
+    status = if (ok) "pass" else "fail", reason = NA_character_,
+    rows = as.integer(n), ms = round(ms, 1),
+    error = if (ok) NA_character_ else glue("expected {expect}, got n={n}"))
+})
+
+# fold into the same results table the promote gate reads
+results <- dplyr::bind_rows(results, contract_res)
+
+contract_res |>
+  mutate(status_html = status_badge(status)) |>
+  select(status_html, query, rows, ms, error) |>
+  DT::datatable(escape = FALSE, rownames = FALSE,
+    options = list(pageLength = 20), colnames = c("", "contract query", "n", "ms", "error"))
+```
+
 ## Save results sidecar
 
 ```{r}
