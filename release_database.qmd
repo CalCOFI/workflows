@@ -851,6 +851,25 @@ tryCatch(
 dir_frozen <- here(glue("data/releases/{release_version}"))
 dir.create(dir_frozen, recursive = TRUE, showWarnings = FALSE)
 
+# --- retire the per-dataset event/measurement/summary tables ----------------
+# the consolidated core (obs/sample/obs_freq/sample_measurement) replaces them;
+# obs was materialized from them upstream, so drop them now. Keep the core,
+# shared references, and the taxon lookups that obs.taxon_id points at. Dropping
+# here makes the ERD, catalog, metadata.json and frozen release all core-only.
+core_keep <- c(
+  "obs", "sample", "obs_freq", "sample_measurement", "obs_ctd_full",         # core
+  "grid", "cruise", "ship", "measurement_type", "dataset",                   # refs
+  "species", "taxon", "taxa_rank", "lookup", "zoodb_taxon", "zooscan_taxon",  # taxon lookups
+  "phyto_taxon", "bird_mammal_species", "bird_mammal_behavior", "region",
+  "_spatial", "_spatial_attr")
+retire_tbls <- setdiff(DBI::dbListTables(con_wdl), core_keep)
+for (t in retire_tbls) {
+  DBI::dbExecute(con_wdl, glue('DROP VIEW IF EXISTS "{t}"'))
+  DBI::dbExecute(con_wdl, glue('DROP TABLE IF EXISTS "{t}"'))
+}
+message(glue("retired {length(retire_tbls)} per-dataset tables: ",
+             "{paste(head(retire_tbls, 8), collapse=', ')}…"))
+
 erd <- cc_erd(con_wdl, layout = "elk")
 plot(erd)
 
@@ -977,11 +996,16 @@ for (tbl in core_single)
     file.path(dir_frozen_pq, paste0(tbl, ".parquet")), compression = "zstd")
 
 core_sort <- "grid_key NULLS LAST, depth_min_m NULLS LAST, measurement_type"
-if ("obs" %in% dbListTables(con_wdl))
+if ("obs" %in% dbListTables(con_wdl)) {
   dbExecute(con_wdl, glue(
     "COPY (SELECT * FROM obs ORDER BY dataset_key, {core_sort})
      TO '{file.path(dir_frozen_pq, 'obs')}'
      (FORMAT PARQUET, COMPRESSION 'zstd', PARTITION_BY (dataset_key), OVERWRITE_OR_IGNORE)"))
+  # also a single-file obs.parquet: browser DuckDB-WASM (db-query/match.js) and
+  # plain-HTTPS consumers can't glob the Hive-partitioned obs/ dir over GCS.
+  export_parquet(con_wdl, glue("SELECT * FROM obs ORDER BY dataset_key, {core_sort}"),
+    file.path(dir_frozen_pq, "obs.parquet"), compression = "zstd")
+}
 if (build_obs_ctd_full && "obs_ctd_full" %in% dbListTables(con_wdl))
   dbExecute(con_wdl, glue(
     "COPY (SELECT * FROM obs_ctd_full ORDER BY cruise_key, {core_sort})
@@ -1031,8 +1055,13 @@ core_spec <- core_spec |>
     gcs_prefix = NA_character_)
 freeze_stats <- bind_rows(freeze_stats, core_spec)
 
+# retire the per-dataset event/measurement/summary tables from the frozen release
+# — only the consolidated core + shared refs + taxon lookups are published
+# (`core_keep` defined in the retire step above).
+freeze_stats <- freeze_stats |> filter(table %in% core_keep)
+
 freeze_stats |>
-  datatable(caption = glue("Frozen release {release_version} — {nrow(freeze_stats)} tables"))
+  datatable(caption = glue("Frozen release {release_version} — {nrow(freeze_stats)} core+ref tables"))
 ```
 
 ## Release Notes
@@ -1299,6 +1328,13 @@ if (length(meta_paths) > 0) {
       meta$datasets[[k]]$coverage_temporal_observed <-
         paste(obs_time$t_min[i], "to", obs_time$t_max[i])
   }
+
+  # retire per-dataset tables from metadata.json too (core_keep from the retire
+  # step) so the schema site's Tables/ERD/contributions show only the core+refs
+  meta$tables        <- meta$tables[names(meta$tables) %in% core_keep]
+  meta$contributions <- meta$contributions[names(meta$contributions) %in% core_keep]
+  meta$columns       <- meta$columns[
+    vapply(names(meta$columns), function(k) sub("[.].*$", "", k) %in% core_keep, logical(1))]
 
   jsonlite::write_json(meta, meta_json_path,
     auto_unbox = TRUE, pretty = TRUE, null = "null")
