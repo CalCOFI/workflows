@@ -18,6 +18,7 @@ layout: default
   {%- for c in wf.categories -%}
   <a href="#{{ c.id }}">{{ c.title | escape }}<span class="n">{{ c.count }}</span></a>
   {%- endfor -%}
+  {%- if wf.dag_mermaid and wf.dag_mermaid != "" %}<a href="#dag">Pipeline DAG</a>{% endif -%}
 </nav>
 
 {%- for c in wf.categories -%}
@@ -62,3 +63,26 @@ layout: default
   {%- endfor -%}
 </section>
 {%- endfor -%}
+
+<section class="wf-dag" id="dag">
+  <h2>Pipeline DAG</h2>
+  <p class="blurb">
+    The <code>targets</code> dependency graph parsed from each notebook's
+    <code>calcofi:</code> front-matter (the same fields
+    <code>calcofi4db::build_targets_list()</code> wires up), grouped into
+    subgraphs by workflow type and color-coded to match the sections above.
+  </p>
+  <div class="dag-frame">
+    {%- if wf.dag_mermaid and wf.dag_mermaid != "" -%}
+    <pre class="mermaid">{{ wf.dag_mermaid }}</pre>
+    {%- else -%}
+    <p class="muted">DAG unavailable — regenerate with <code>scripts/build_workflows_index.R</code>.</p>
+    {%- endif -%}
+  </div>
+</section>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  const dark = document.documentElement.getAttribute("data-theme") !== "light";
+  mermaid.initialize({ startOnLoad: true, theme: dark ? "dark" : "default", securityLevel: "loose" });
+</script>

@@ -12,11 +12,16 @@ calcofi:
   # ERD color overrides for common/cross-cutting tables (neutral). dataset
   # colors themselves come from each ingest's calcofi.erd.color.
   erd_overrides:
-    dataset:          "#e8e8e8"
-    measurement_type: "#e8e8e8"
-    cruise_summary:   "#e8e8e8"
-    _spatial:         "#cfe8ea"
-    _spatial_attr:    "#cfe8ea"
+    dataset:            "#e8e8e8"
+    measurement_type:   "#e8e8e8"
+    cruise:             "#e8e8e8"
+    sample:             "#e8e8e8"
+    obs:                "#e8e8e8"
+    obs_freq:           "#e8e8e8"
+    sample_measurement: "#e8e8e8"
+    obs_ctd_full:       "#e8e8e8"
+    _spatial:           "#cfe8ea"
+    _spatial_attr:      "#cfe8ea"
 execute:
   echo: true
   message: true
@@ -260,7 +265,9 @@ cruise-track / station-grid) and prove the env/bio consolidation target
 ```{r}
 #| label: obs_views
 
-# dataset reference: dataset_key = provider_dataset (from the registry)
+# dataset reference: dataset_key = provider_dataset (authoritative from the CSV,
+# replacing any per-ingest `dataset` VIEW assembled above)
+dbExecute(con_wdl, "DROP VIEW IF EXISTS dataset")
 dbExecute(con_wdl, glue(
   "CREATE OR REPLACE TABLE dataset AS
    SELECT provider || '_' || dataset AS dataset_key, provider, dataset, dataset_name,
@@ -357,6 +364,262 @@ dbGetQuery(con_wdl,
   "SELECT realm, dataset_key, count(*) n_obs, count(DISTINCT grid_key) n_stations
    FROM v_obs GROUP BY 1,2 ORDER BY 1,2") |>
   datatable(caption = "v_obs: unified observation views (dataset_key-stamped)")
+```
+
+## Consolidated Core Tables
+
+Part C of the station-portal epic: promote the Phase-1 `v_obs_*` VIEWs to
+materialized **core** tables that every consumer reads, replacing the ~40
+per-dataset triples. Built with the `calcofi4db` model engine
+(`build_sample_reference()` / `append_obs()` / `append_obs_freq()` /
+`append_sample_measurement()`), keyed by a namespaced `sample_key`
+(`dataset_key:sample_type:id`) and stamped with a computed H3 `hex_id`. See
+`design_env-bio-consolidation.md`.
+
+```{r}
+#| label: core_tables
+
+# build obs_ctd_full (216M full-resolution CTD scans) is the heavy step; the
+# default `obs` carries CTD via the thinned ctd_thin (~5.5M). Flip off for a fast
+# render; the full pipeline builds it.
+build_obs_ctd_full <- TRUE
+
+# measurement_type: authoritative from the metadata CSV (adds abundance, count,
+# body_length, and the event-level effort types), replacing any per-ingest VIEW
+# so the FK parity check below sees the current vocabulary.
+dbExecute(con_wdl, "DROP VIEW IF EXISTS measurement_type")
+dbExecute(con_wdl, glue(
+  "CREATE OR REPLACE TABLE measurement_type AS
+   SELECT * FROM read_csv_auto('{here('metadata/measurement_type.csv')}')"))
+
+# 1. sample dimension (adjacency list) from the per-dataset event tables --------
+n_sample <- build_sample_reference(con_wdl)
+message(glue("sample: {n_sample} rows"))
+
+# 2. obs — occurrence-headline long table --------------------------------------
+# shared DIC natural key (columns present in dic_measurement so obs aligns with
+# the `sample` dic arm); a DIC obs sharing a physical Niskin points at the bottle.
+dic_key <- "CASE WHEN dm.bottle_id IS NOT NULL
+                  AND dm.bottle_id IN (SELECT bottle_id FROM bottle)
+                 THEN 'calcofi_bottle:bottle:' || CAST(dm.bottle_id AS VARCHAR)
+                 ELSE 'calcofi_dic:bottle:' || md5(concat_ws('|', dm.expocode,
+                   CAST(dm.datetime_start_utc AS VARCHAR), CAST(dm.latitude AS VARCHAR),
+                   CAST(dm.longitude AS VARCHAR), CAST(dm.depth_m AS VARCHAR))) END"
+
+env_obs_arms <- list(
+  bottle = if (has("bottle_measurement", "bottle", "casts")) "
+    SELECT 'env' realm, 'calcofi_bottle' dataset_key,
+           'calcofi_bottle:bottle:' || CAST(b.bottle_id AS VARCHAR) sample_key,
+           c.grid_key, c.cruise_key, c.latitude, c.longitude,
+           CAST(c.datetime_start_utc AS TIMESTAMP) datetime, b.depth_m depth_min_m, b.depth_m depth_max_m,
+           NULL::VARCHAR taxon_id, NULL::VARCHAR life_stage,
+           m.measurement_type, m.measurement_value, m.measurement_qual, m.measurement_prec
+    FROM bottle_measurement m JOIN bottle b USING (bottle_id) JOIN casts c USING (cast_id)
+    WHERE c.grid_key IS NOT NULL",
+  # CTD via thinned ctd_thin; map each thin scan's ctd_cast_uuid to its physical cast_key
+  ctd = if (has("ctd_thin", "ctd_cast")) "
+    SELECT 'env', 'calcofi_ctd-cast',
+           'calcofi_ctd-cast:cast:' || CAST(cc.cast_key AS VARCHAR),
+           cc.grid_key, cc.cruise_key, cc.latitude, cc.longitude,
+           CAST(cc.datetime_start_utc AS TIMESTAMP), t.depth_m, t.depth_m,
+           NULL::VARCHAR, NULL::VARCHAR, t.measurement_type, t.measurement_value,
+           t.measurement_qual, NULL::DOUBLE
+    FROM ctd_thin t JOIN ctd_cast cc ON t.ctd_cast_uuid = cc.ctd_cast_uuid
+    WHERE cc.grid_key IS NOT NULL",
+  dic = if (has("dic_measurement", "bottle", "casts")) glue("
+    SELECT 'env', 'calcofi_dic', {dic_key},
+           c.grid_key, c.cruise_key, dm.latitude, dm.longitude,
+           CAST(dm.datetime_start_utc AS TIMESTAMP), dm.depth_m, dm.depth_m,
+           NULL::VARCHAR, NULL::VARCHAR, dm.measurement_type, dm.measurement_value,
+           dm.measurement_qual, NULL::DOUBLE
+    FROM dic_measurement dm JOIN casts c USING (cast_id)
+    WHERE c.grid_key IS NOT NULL"))
+
+bio_obs_arms <- list(
+  # ichthyo base rows (measurement_type IS NULL) -> abundance headline; the count
+  # (tally) is the value. size/stage go to obs_freq below.
+  ichthyo = if (has("ichthyo", "net", "tow", "site")) "
+    SELECT 'bio', 'swfsc_ichthyo', 'swfsc_ichthyo:net:' || CAST(i.net_uuid AS VARCHAR),
+           s.grid_key, s.cruise_key, s.latitude, s.longitude,
+           CAST(t.datetime_start_utc AS TIMESTAMP), NULL::DOUBLE, NULL::DOUBLE,
+           CAST(i.species_id AS VARCHAR), i.life_stage,
+           'abundance', CAST(i.tally AS DOUBLE), NULL::VARCHAR, NULL::DOUBLE
+    FROM ichthyo i JOIN net n USING (net_uuid) JOIN tow t USING (tow_uuid) JOIN site s USING (site_uuid)
+    WHERE i.measurement_type IS NULL AND s.grid_key IS NOT NULL",
+  cufes = if (has("cufes_measurement", "cufes_sample")) "
+    SELECT 'bio', 'swfsc_cufes', 'swfsc_cufes:underway:' || CAST(c.sample_id AS VARCHAR),
+           c.grid_key, c.cruise_key, c.latitude, c.longitude,
+           CAST(c.datetime_start_utc AS TIMESTAMP), 0::DOUBLE, 0::DOUBLE,
+           NULL::VARCHAR, NULL::VARCHAR, m.measurement_type, m.measurement_value, m.measurement_qual, NULL::DOUBLE
+    FROM cufes_measurement m JOIN cufes_sample c USING (sample_id) WHERE c.grid_key IS NOT NULL",
+  euphausiids = if (has("euphausiids_measurement", "euphausiids_tow")) "
+    SELECT 'bio', 'cce-lter_euphausiids', 'cce-lter_euphausiids:tow:' || CAST(tw.tow_id AS VARCHAR),
+           tw.grid_key, tw.cruise_key, tw.latitude, tw.longitude,
+           CAST(tw.datetime_start_utc AS TIMESTAMP), NULL::DOUBLE, NULL::DOUBLE,
+           NULL::VARCHAR, NULL::VARCHAR, m.measurement_type, m.measurement_value, m.measurement_qual, NULL::DOUBLE
+    FROM euphausiids_measurement m JOIN euphausiids_tow tw USING (tow_id) WHERE tw.grid_key IS NOT NULL",
+  phyllosoma = if (has("phyllosoma_measurement", "phyllosoma_tow")) "
+    SELECT 'bio', 'calcofi_phyllosoma', 'calcofi_phyllosoma:tow:' || CAST(tw.tow_id AS VARCHAR),
+           tw.grid_key, tw.cruise_key, tw.latitude, tw.longitude,
+           CAST(tw.datetime_start_utc AS TIMESTAMP), 0::DOUBLE, tw.max_tow_depth_m,
+           NULL::VARCHAR, NULL::VARCHAR, m.measurement_type, m.measurement_value, m.measurement_qual, NULL::DOUBLE
+    FROM phyllosoma_measurement m JOIN phyllosoma_tow tw USING (tow_id) WHERE tw.grid_key IS NOT NULL",
+  zoodb = if (has("zoodb_measurement", "zoodb_sample")) "
+    SELECT 'bio', 'cce-lter_zoodb', 'cce-lter_zoodb:tow:' || CAST(sp.sample_id AS VARCHAR),
+           sp.grid_key, sp.cruise_key, sp.latitude, sp.longitude,
+           CAST(sp.datetime_start_utc AS TIMESTAMP), sp.min_depth_m, sp.max_depth_m,
+           CAST(m.taxon_id AS VARCHAR), NULL::VARCHAR, m.measurement_type, m.measurement_value, NULL::VARCHAR, NULL::DOUBLE
+    FROM zoodb_measurement m JOIN zoodb_sample sp USING (sample_id) WHERE sp.grid_key IS NOT NULL",
+  zooscan = if (has("zooscan_measurement", "zooscan_sample")) "
+    SELECT 'bio', 'cce-lter_zooscan', 'cce-lter_zooscan:tow:' || CAST(sp.sample_id AS VARCHAR),
+           sp.grid_key, sp.cruise_key, sp.latitude, sp.longitude,
+           CAST(sp.station_date AS TIMESTAMP), sp.min_depth_m, sp.max_depth_m,
+           CAST(m.taxon_id AS VARCHAR), NULL::VARCHAR, m.measurement_type, m.measurement_value, NULL::VARCHAR, NULL::DOUBLE
+    FROM zooscan_measurement m JOIN zooscan_sample sp USING (sample_id) WHERE sp.grid_key IS NOT NULL",
+  bird_mammal = if (has("bird_mammal_observation", "bird_mammal_transect")) "
+    SELECT 'bio', 'calcofi_bird_mammal_census', 'calcofi_bird_mammal_census:transect:' || CAST(tr.gis_key AS VARCHAR),
+           tr.grid_key, tr.cruise_key, tr.latitude, tr.longitude,
+           CAST(tr.datetime_start_utc AS TIMESTAMP), 0::DOUBLE, 0::DOUBLE,
+           CAST(o.species_code AS VARCHAR), o.behavior_code, 'count', CAST(o.count AS DOUBLE), NULL::VARCHAR, NULL::DOUBLE
+    FROM bird_mammal_observation o JOIN bird_mammal_transect tr USING (gis_key) WHERE tr.grid_key IS NOT NULL")
+
+obs_arms <- Filter(Negate(is.null), c(env_obs_arms, bio_obs_arms))
+n_obs <- append_obs(con_wdl, paste(obs_arms, collapse = "\nUNION ALL\n"))
+message(glue("obs: {n_obs} rows"))
+
+# 3. obs_freq — ichthyo (bin, count) distributions -----------------------------
+# size -> body_length; stage keeps its number + a lookup label
+if (has("ichthyo", "lookup")) {
+  n_freq <- append_obs_freq(con_wdl, "
+    SELECT 'swfsc_ichthyo' dataset_key, 'swfsc_ichthyo:net:' || CAST(i.net_uuid AS VARCHAR) sample_key,
+           CAST(i.species_id AS VARCHAR) taxon_id, i.life_stage,
+           CASE i.measurement_type WHEN 'size' THEN 'body_length' ELSE i.measurement_type END measurement_type,
+           i.measurement_value bin_value,
+           CASE WHEN i.measurement_type = 'stage' THEN lk.description ELSE NULL END bin_label,
+           i.tally count, NULL::VARCHAR measurement_qual
+    FROM ichthyo i
+    LEFT JOIN lookup lk ON lk.lookup_type = i.life_stage || '_stage'
+                       AND lk.lookup_num = CAST(i.measurement_value AS INTEGER)
+    WHERE i.measurement_type IN ('stage','size')")
+  message(glue("obs_freq: {n_freq} rows"))
+}
+
+# 4. sample_measurement — event-level effort -----------------------------------
+sm_arms <- list(
+  # ichthyo net effort (canonical type names)
+  net = if (has("net")) "
+    SELECT 'swfsc_ichthyo:net:' || CAST(net_uuid AS VARCHAR) sample_key, 'swfsc_ichthyo' dataset_key,
+           mt measurement_type, mv measurement_value, NULL::VARCHAR measurement_qual
+    FROM (
+      SELECT net_uuid, 'volume_sampled' mt, volume_sampled mv FROM net UNION ALL
+      SELECT net_uuid, 'std_haul_factor', standard_haul_factor FROM net UNION ALL
+      SELECT net_uuid, 'prop_sorted', prop_sorted FROM net UNION ALL
+      SELECT net_uuid, 'small_plankton_biomass', smallplankton FROM net UNION ALL
+      SELECT net_uuid, 'total_plankton_biomass', totalplankton FROM net)
+    WHERE mv IS NOT NULL",
+  # bottle cast conditions (already event-level; condition_* -> measurement_*).
+  # cast_condition.cast_id is DOUBLE -> cast to BIGINT so the namespaced key
+  # matches casts.cast_id (INTEGER): 'calcofi_bottle:cast:5' not '...:5.0'.
+  cast_condition = if (has("cast_condition")) "
+    SELECT 'calcofi_bottle:cast:' || CAST(CAST(cast_id AS BIGINT) AS VARCHAR), 'calcofi_bottle',
+           condition_type, condition_value, NULL::VARCHAR
+    FROM cast_condition")
+sm_arms <- Filter(Negate(is.null), sm_arms)
+n_sm <- append_sample_measurement(con_wdl, paste(sm_arms, collapse = "\nUNION ALL\n"))
+message(glue("sample_measurement: {n_sm} rows"))
+
+# 5. obs_ctd_full — supplemental full-resolution CTD scans ----------------------
+if (build_obs_ctd_full && has("ctd_cast")) {
+  ctd_pd <- registry |> filter(table == "ctd_thin") |> slice(1) |> pull(parquet_dir)
+  ctd_meas_glob <- file.path(ctd_pd, "ctd_measurement", "**", "*.parquet")
+  n_full <- append_obs(con_wdl, obs_tbl = "obs_ctd_full", select_sql = glue("
+    SELECT 'env' realm, 'calcofi_ctd-cast' dataset_key,
+           'calcofi_ctd-cast:cast:' || CAST(cc.cast_key AS VARCHAR) sample_key,
+           cc.grid_key, cc.cruise_key, cc.latitude, cc.longitude,
+           CAST(cc.datetime_start_utc AS TIMESTAMP) datetime, m.depth_m depth_min_m, m.depth_m depth_max_m,
+           NULL::VARCHAR taxon_id, NULL::VARCHAR life_stage,
+           m.measurement_type, m.measurement_value, m.measurement_qual, NULL::DOUBLE measurement_prec
+    FROM read_parquet('{ctd_meas_glob}', hive_partitioning = true) m
+    JOIN ctd_cast cc ON m.ctd_cast_uuid = cc.ctd_cast_uuid
+    WHERE cc.grid_key IS NOT NULL"))
+  message(glue("obs_ctd_full: {n_full} rows"))
+}
+
+dbGetQuery(con_wdl,
+  "SELECT dataset_key, count(*) n_obs, count(DISTINCT sample_key) n_samples,
+          count(DISTINCT hex_id) n_hex
+   FROM obs GROUP BY 1 ORDER BY 1") |>
+  datatable(caption = "obs: consolidated observations by dataset")
+```
+
+### Core Table Parity Checks
+
+Hard assertions that the materialized core reproduces the per-dataset tables
+(see `design_env-bio-consolidation.md` Verification). A break fails the render.
+
+```{r}
+#| label: core_parity
+
+q <- function(sql) dbGetQuery(con_wdl, sql)$n
+
+# (A) sample-count parity per level ------------------------------------------
+sample_parity <- c(
+  "sample net"    = q("SELECT COUNT(*) n FROM sample WHERE sample_type='net'") ==
+                    q("SELECT COUNT(DISTINCT net_uuid) n FROM net"),
+  "sample tow"    = q("SELECT COUNT(*) n FROM sample WHERE sample_type='tow' AND dataset_key='swfsc_ichthyo'") ==
+                    q("SELECT COUNT(DISTINCT tow_uuid) n FROM tow"),
+  "sample site"   = q("SELECT COUNT(*) n FROM sample WHERE sample_type='site'") ==
+                    q("SELECT COUNT(DISTINCT site_uuid) n FROM site"),
+  "sample cast"   = q("SELECT COUNT(*) n FROM sample WHERE dataset_key='calcofi_bottle' AND sample_type='cast'") ==
+                    q("SELECT COUNT(DISTINCT cast_id) n FROM casts"),
+  "sample bottle" = q("SELECT COUNT(*) n FROM sample WHERE dataset_key='calcofi_bottle' AND sample_type='bottle'") ==
+                    q("SELECT COUNT(DISTINCT bottle_id) n FROM bottle"),
+  "sample ctd"    = q("SELECT COUNT(*) n FROM sample WHERE dataset_key='calcofi_ctd-cast'") ==
+                    q("SELECT COUNT(DISTINCT cast_key) n FROM ctd_cast"))
+stopifnot("sample-count parity" = all(sample_parity))
+
+# (B) obs row-count parity = sum of per-dataset headline counts (CTD via ctd_thin)
+obs_expected <-
+  q("SELECT COUNT(*) n FROM bottle_measurement m JOIN bottle b USING(bottle_id) JOIN casts c USING(cast_id) WHERE c.grid_key IS NOT NULL") +
+  q("SELECT COUNT(*) n FROM ctd_thin t JOIN ctd_cast cc ON t.ctd_cast_uuid=cc.ctd_cast_uuid WHERE cc.grid_key IS NOT NULL") +
+  q("SELECT COUNT(*) n FROM dic_measurement dm JOIN casts c USING(cast_id) WHERE c.grid_key IS NOT NULL") +
+  q("SELECT COUNT(*) n FROM ichthyo i JOIN net USING(net_uuid) JOIN tow USING(tow_uuid) JOIN site s USING(site_uuid) WHERE i.measurement_type IS NULL AND s.grid_key IS NOT NULL") +
+  q("SELECT COUNT(*) n FROM cufes_measurement m JOIN cufes_sample c USING(sample_id) WHERE c.grid_key IS NOT NULL") +
+  q("SELECT COUNT(*) n FROM euphausiids_measurement m JOIN euphausiids_tow tw USING(tow_id) WHERE tw.grid_key IS NOT NULL") +
+  q("SELECT COUNT(*) n FROM phyllosoma_measurement m JOIN phyllosoma_tow tw USING(tow_id) WHERE tw.grid_key IS NOT NULL") +
+  q("SELECT COUNT(*) n FROM zoodb_measurement m JOIN zoodb_sample sp USING(sample_id) WHERE sp.grid_key IS NOT NULL") +
+  q("SELECT COUNT(*) n FROM zooscan_measurement m JOIN zooscan_sample sp USING(sample_id) WHERE sp.grid_key IS NOT NULL") +
+  q("SELECT COUNT(*) n FROM bird_mammal_observation o JOIN bird_mammal_transect tr USING(gis_key) WHERE tr.grid_key IS NOT NULL")
+stopifnot("obs row-count parity" = q("SELECT COUNT(*) n FROM obs") == obs_expected)
+message(glue("obs row-count parity OK: {obs_expected} rows"))
+
+if (build_obs_ctd_full && exists("n_full"))
+  stopifnot("obs_ctd_full parity" =
+    q("SELECT COUNT(*) n FROM obs_ctd_full") ==
+    q("SELECT COUNT(*) n FROM read_parquet('{ctd_meas_glob}', hive_partitioning=true) m JOIN ctd_cast cc ON m.ctd_cast_uuid=cc.ctd_cast_uuid WHERE cc.grid_key IS NOT NULL"))
+
+# (C) FK validity — every core row resolves against its reference --------------
+fk_bad <- c(
+  "obs.dataset_key"      = q("SELECT COUNT(*) n FROM obs WHERE dataset_key NOT IN (SELECT dataset_key FROM dataset)"),
+  "obs.sample_key"       = q("SELECT COUNT(*) n FROM obs WHERE sample_key NOT IN (SELECT sample_key FROM sample)"),
+  "obs.grid_key"         = q("SELECT COUNT(*) n FROM obs WHERE grid_key IS NOT NULL AND grid_key NOT IN (SELECT grid_key FROM grid)"),
+  "obs.measurement_type" = q("SELECT COUNT(*) n FROM obs WHERE measurement_type NOT IN (SELECT measurement_type FROM measurement_type)"),
+  "sample_measurement.sample_key" = q("SELECT COUNT(*) n FROM sample_measurement WHERE sample_key NOT IN (SELECT sample_key FROM sample)"),
+  "obs_freq.sample_key"  = q("SELECT COUNT(*) n FROM obs_freq WHERE sample_key NOT IN (SELECT sample_key FROM sample)"))
+if (any(fk_bad > 0)) print(fk_bad[fk_bad > 0])
+stopifnot("core FK validity" = all(fk_bad == 0))
+
+# (D) obs_freq sum-of-bins — reported (biology may legitimately differ, so warn) -
+freq_check <- dbGetQuery(con_wdl, "
+  WITH f AS (SELECT sample_key, taxon_id, life_stage, SUM(count) s FROM obs_freq
+             WHERE measurement_type='stage' GROUP BY 1,2,3),
+       o AS (SELECT sample_key, taxon_id, life_stage, SUM(measurement_value) a FROM obs
+             WHERE dataset_key='swfsc_ichthyo' AND measurement_type='abundance' GROUP BY 1,2,3)
+  SELECT count(*) n_occ, count(*) FILTER (WHERE f.s <> o.a) n_stage_ne_abundance
+  FROM f JOIN o USING (sample_key, taxon_id, life_stage)")
+message(glue("obs_freq stage vs abundance: {freq_check$n_stage_ne_abundance}/{freq_check$n_occ} occurrences differ (staged subsample)"))
+
+message("Core parity checks passed.")
 ```
 
 ## Scan Manifests for Mismatches
@@ -516,53 +779,50 @@ for (tbl_name in intersect(c("site", "casts", "ctd_cast"), tbls)) {
 # site_key in casts: all match NNN.N NNN.N format
 # Warning message: site_key format violations in site: 982 rows
 
-# cruise_summary table for Shiny app
+# enrich the `cruise` reference in place with per-cruise x dataset event counts
+# from the consolidated obs/sample (this is the former `cruise_summary`, folded
+# into `cruise` so there is a single cruise table). count(DISTINCT root_sample_key)
+# = distinct sampling-event roots (station occupations for net tows; casts for
+# bottle/CTD/DIC). LEFT JOINs keep every reference cruise (no cruise dropped, so
+# cruise_key FKs stay valid) and all its columns (cr.*). Add a FILTER column to
+# extend to new datasets.
 if (all(c("cruise", "ship") %in% tbls)) {
-  # detect site_key vs sta_key for backward compat with old parquets
-  ctd_site_col <- ifelse(
-    "site_key" %in%
-      dbGetQuery(
-        con_wdl,
-        "SELECT column_name FROM information_schema.columns
-       WHERE table_name = 'ctd_cast'"
-      )$column_name,
-    "site_key",
-    "sta_key"
-  )
-
+  dbExecute(con_wdl, "CREATE OR REPLACE TEMP TABLE cruise_ref AS SELECT * FROM cruise")
+  dbExecute(con_wdl, "DROP VIEW IF EXISTS cruise")
+  dbExecute(con_wdl, "DROP TABLE IF EXISTS cruise")
   dbExecute(
     con_wdl,
-    glue(
-      "
-    CREATE OR REPLACE TABLE cruise_summary AS
-    SELECT
-      cr.cruise_key,
-      EXTRACT(YEAR FROM cr.date_ym)::INTEGER  AS year,
-      EXTRACT(MONTH FROM cr.date_ym)::INTEGER AS month,
-      s.ship_name,
-      s.ship_nodc,
-      COALESCE((SELECT COUNT(DISTINCT site_key) FROM site
-                WHERE cruise_key = cr.cruise_key), 0) AS ichthyo,
-      COALESCE((SELECT COUNT(DISTINCT site_key) FROM casts
-                WHERE cruise_key = cr.cruise_key), 0) AS bottle,
-      COALESCE((SELECT COUNT(DISTINCT {ctd_site_col}) FROM ctd_cast
-                WHERE cruise_key = cr.cruise_key), 0) AS ctd_cast,
-      COALESCE((SELECT COUNT(DISTINCT ds.site_key)
-                FROM dic_sample ds
-                JOIN casts c ON ds.cast_id = c.cast_id
-                WHERE c.cruise_key = cr.cruise_key), 0) AS dic
-    FROM cruise cr
-    JOIN ship s ON cr.ship_key = s.ship_key
-    ORDER BY year DESC, month DESC"
-    )
-  )
-  n_cs <- dbGetQuery(con_wdl, "SELECT COUNT(*) AS n FROM cruise_summary")$n
-  message(glue("Created cruise_summary table: {n_cs} rows"))
+    "CREATE TABLE cruise AS
+     WITH ev AS (
+       SELECT o.cruise_key, o.dataset_key, COUNT(DISTINCT s.root_sample_key) AS n_events
+       FROM obs o JOIN sample s ON o.sample_key = s.sample_key
+       WHERE o.cruise_key IS NOT NULL
+       GROUP BY 1, 2),
+     piv AS (
+       SELECT cruise_key,
+              COALESCE(MAX(n_events) FILTER (WHERE dataset_key = 'swfsc_ichthyo'), 0)    AS ichthyo,
+              COALESCE(MAX(n_events) FILTER (WHERE dataset_key = 'calcofi_bottle'), 0)   AS bottle,
+              COALESCE(MAX(n_events) FILTER (WHERE dataset_key = 'calcofi_ctd-cast'), 0) AS ctd_cast,
+              COALESCE(MAX(n_events) FILTER (WHERE dataset_key = 'calcofi_dic'), 0)      AS dic
+       FROM ev GROUP BY 1)
+     SELECT cr.*,
+            EXTRACT(YEAR FROM cr.date_ym)::INTEGER  AS year,
+            EXTRACT(MONTH FROM cr.date_ym)::INTEGER AS month,
+            sh.ship_name, sh.ship_nodc,
+            COALESCE(piv.ichthyo, 0)  AS ichthyo,
+            COALESCE(piv.bottle, 0)   AS bottle,
+            COALESCE(piv.ctd_cast, 0) AS ctd_cast,
+            COALESCE(piv.dic, 0)      AS dic
+     FROM cruise_ref cr
+     LEFT JOIN ship sh ON cr.ship_key = sh.ship_key
+     LEFT JOIN piv USING (cruise_key)
+     ORDER BY year DESC, month DESC")
+  n_cs <- dbGetQuery(con_wdl, "SELECT COUNT(*) AS n FROM cruise")$n
+  message(glue("Enriched cruise table: {n_cs} rows"))
 }
-# Created cruise_summary table: 691 rows
-tbl(con_wdl, "cruise_summary") |>
+tbl(con_wdl, "cruise") |>
   collect() |>
-  datatable(caption = "cruise_summary preview")
+  datatable(caption = "cruise (enriched with per-dataset event counts)")
 
 # run standard release validation (wrapped in tryCatch for GEOMETRY compat)
 tryCatch(
@@ -682,9 +942,9 @@ dir_frozen_pq <- file.path(dir_frozen, "parquet")
 dir.create(dir_frozen_pq, recursive = TRUE, showWarnings = FALSE)
 message(glue("Creating frozen release: {release_version}"))
 
-# only cruise_summary is derived in this notebook — export locally
+# `cruise` is enriched (derived) in this notebook — export locally
 # all other tables are GCS-copied from ingest/ (including provenance columns)
-derived_tables <- "cruise_summary"
+derived_tables <- "cruise"
 if (nrow(new_tables) > 0) {
   # tables with _new additions need local merge + export
   merged_base <- unique(sub("_new$", "", new_tables$table))
@@ -692,16 +952,40 @@ if (nrow(new_tables) > 0) {
 }
 
 # export only derived/merged tables to local parquet
-export_parquet(con_wdl, "cruise_summary",
-  file.path(dir_frozen_pq, "cruise_summary.parquet"), compression = "zstd")
-message("Exported cruise_summary.parquet")
+export_parquet(con_wdl, "cruise",
+  file.path(dir_frozen_pq, "cruise.parquet"), compression = "zstd")
+message("Exported cruise.parquet")
 
 # export merged tables (e.g., ship with _new additions)
-for (tbl in setdiff(derived_tables, "cruise_summary")) {
+for (tbl in setdiff(derived_tables, "cruise")) {
   export_parquet(con_wdl, tbl,
     file.path(dir_frozen_pq, paste0(tbl, ".parquet")), compression = "zstd")
   message(glue("Exported {tbl}.parquet (merged)"))
 }
+
+# --- consolidated core tables (derived here in Phase 2) ---------------------
+# single-file exports (sample carries geom as GeoParquet; the long tables +
+# measurement_type are plain); obs / obs_ctd_full are Hive-partitioned + sorted
+# for compression + predicate pushdown (see design "Parquet partitioning").
+core_single <- intersect(
+  c("sample", "obs_freq", "sample_measurement", "measurement_type"),
+  dbListTables(con_wdl))
+for (tbl in core_single)
+  export_parquet(con_wdl, tbl,
+    file.path(dir_frozen_pq, paste0(tbl, ".parquet")), compression = "zstd")
+
+core_sort <- "grid_key NULLS LAST, depth_min_m NULLS LAST, measurement_type"
+if ("obs" %in% dbListTables(con_wdl))
+  dbExecute(con_wdl, glue(
+    "COPY (SELECT * FROM obs ORDER BY dataset_key, {core_sort})
+     TO '{file.path(dir_frozen_pq, 'obs')}'
+     (FORMAT PARQUET, COMPRESSION 'zstd', PARTITION_BY (dataset_key), OVERWRITE_OR_IGNORE)"))
+if (build_obs_ctd_full && "obs_ctd_full" %in% dbListTables(con_wdl))
+  dbExecute(con_wdl, glue(
+    "COPY (SELECT * FROM obs_ctd_full ORDER BY cruise_key, {core_sort})
+     TO '{file.path(dir_frozen_pq, 'obs_ctd_full')}'
+     (FORMAT PARQUET, COMPRESSION 'zstd', PARTITION_BY (cruise_key), OVERWRITE_OR_IGNORE)"))
+message(glue("Exported core tables: {paste(core_single, collapse=', ')}, obs (partitioned)"))
 
 # build freeze stats from registry (auto-discovered)
 # exclude _new delta tables (intermediate) and supplemental
@@ -716,7 +1000,7 @@ if (nrow(new_tables) > 0) {
     mutate(gcs_prefix = if_else(table %in% merged_base, NA_character_, gcs_prefix))
 }
 
-# add derived tables (cruise_summary, etc.)
+# add derived tables (cruise, etc.)
 for (dt in derived_tables) {
   if (!dt %in% freeze_stats$table) {
     n <- dbGetQuery(con_wdl, glue("SELECT COUNT(*) AS n FROM {dt}"))$n
@@ -725,6 +1009,25 @@ for (dt in derived_tables) {
         table = dt, rows = n, partitioned = FALSE, gcs_prefix = NA_character_))
   }
 }
+
+# `measurement_type` (rebuilt from the authoritative CSV) and `cruise` (enriched
+# with per-dataset event counts) are derived + exported locally here, so upload
+# the local copy rather than GCS-copying the stale ingest parquet
+freeze_stats <- freeze_stats |>
+  mutate(gcs_prefix = if_else(
+    table %in% c("measurement_type", "cruise"), NA_character_, gcs_prefix))
+
+# add consolidated core tables (gcs_prefix = NA → upload from local frozen dir)
+core_spec <- tibble(
+  table       = c("sample", "obs", "obs_freq", "sample_measurement", "obs_ctd_full"),
+  partitioned = c(FALSE,    TRUE,  FALSE,      FALSE,                TRUE))
+core_spec <- core_spec |>
+  filter(table %in% dbListTables(con_wdl), !table %in% freeze_stats$table) |>
+  mutate(
+    rows = vapply(table, function(t)
+      as.numeric(dbGetQuery(con_wdl, glue("SELECT COUNT(*) AS n FROM {t}"))$n), numeric(1)),
+    gcs_prefix = NA_character_)
+freeze_stats <- bind_rows(freeze_stats, core_spec)
 
 freeze_stats |>
   datatable(caption = glue("Frozen release {release_version} — {nrow(freeze_stats)} tables"))
@@ -839,7 +1142,7 @@ for (i in seq_len(nrow(copy_rows))) {
   message(glue("  {tbl}: copied from {pfx}"))
 }
 
-# 2. upload derived tables from local parquet (cruise_summary)
+# 2. upload derived tables from local parquet (cruise, measurement_type)
 derived_local <- list.files(dir_frozen_pq, pattern = "[.]parquet$",
                             full.names = TRUE)
 for (pq in derived_local) {
@@ -944,6 +1247,44 @@ if (length(meta_paths) > 0) {
     }
     n_typed <- n_typed + 1L
   }
+
+  # --- contributions + observed temporal for the derived core tables ---------
+  # obs/sample/obs_freq/sample_measurement are materialized here (no per-ingest
+  # metadata.json), so compute each dataset's row share directly from the data.
+  # Unlike the measurement_type vocabulary lookup, every core row belongs to
+  # exactly one dataset (dataset_key) -> clean, non-over-attributed stacks.
+  ds_workflow <- vapply(ingest_yaml,
+    function(cc) cc$workflow_url %||% NA_character_, character(1))
+  for (tbl in intersect(c("obs", "sample", "obs_freq", "sample_measurement"),
+                        dbListTables(con_wdl))) {
+    by_ds <- DBI::dbGetQuery(con_wdl, glue(
+      "SELECT dataset_key, COUNT(*) AS n FROM {tbl} GROUP BY 1 ORDER BY n DESC"))
+    total <- sum(by_ds$n)
+    meta$contributions[[tbl]] <- list(
+      total_rows      = total,
+      over_attributed = FALSE,
+      by_dataset      = lapply(seq_len(nrow(by_ds)), function(i) list(
+        provider_dataset = by_ds$dataset_key[i],
+        rows             = by_ds$n[i],
+        pct              = round(by_ds$n[i] / total * 100, 1),
+        workflow         = unname(ds_workflow[by_ds$dataset_key[i]]))))
+  }
+
+  # observed temporal extent per dataset from the real data (obs + sample),
+  # replacing the static coverage_temporal from QMD frontmatter on the cards.
+  obs_time <- DBI::dbGetQuery(con_wdl,
+    "SELECT dataset_key, strftime(min(datetime), '%Y-%m') AS t_min,
+            strftime(max(datetime), '%Y-%m') AS t_max
+     FROM (SELECT dataset_key, datetime FROM obs WHERE datetime IS NOT NULL
+           UNION ALL SELECT dataset_key, datetime FROM sample WHERE datetime IS NOT NULL)
+     GROUP BY 1")
+  for (i in seq_len(nrow(obs_time))) {
+    k <- obs_time$dataset_key[i]
+    if (k %in% names(meta$datasets))
+      meta$datasets[[k]]$coverage_temporal_observed <-
+        paste(obs_time$t_min[i], "to", obs_time$t_max[i])
+  }
+
   jsonlite::write_json(meta, meta_json_path,
     auto_unbox = TRUE, pretty = TRUE, null = "null")
   message(glue("metadata.json enriched with data_type for {n_typed} columns"))
