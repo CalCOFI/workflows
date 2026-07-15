@@ -167,6 +167,29 @@ cat(glue("added {nrow(new_types)} measurement types"), "\n")
 
 ## Metadata, Schema, Validate, Outputs
 
+## Emit Core Tables
+
+Project this dataset into the shared consolidated core model
+(`design_env-bio-consolidation.md`) via `calcofi4db::emit_core_tables()` — the
+single source of truth for the per-dataset projection into `sample` / `obs` /
+`obs_freq` / `sample_measurement`, also used by `release_database.qmd` to
+assemble the authoritative cross-dataset release.
+
+```{r}
+#| label: emit_core
+
+core <- emit_core_tables(con, "swfsc_cufes")
+cat(glue(
+  "core projection — sample={core$sample %||% 0} obs={core$obs %||% 0} ",
+  "obs_freq={core$obs_freq %||% 0} sample_measurement={core$sample_measurement %||% 0}\n"))
+
+# the frozen release assembles the authoritative cross-dataset core; keep this
+# ingest's parquet output per-dataset by dropping the local core projection here.
+for (tbl_core in c("obs", "obs_freq", "sample_measurement", "sample"))
+  dbExecute(con, glue("DROP TABLE IF EXISTS {tbl_core}"))
+```
+
+
 ```{r}
 #| label: finalize
 
