@@ -79,7 +79,19 @@ lint error gates the release. → `validate=done`, `stage=validated`.
 Auto-discovers `data/parquet/*/relationships.json` + outputs, merges
 `relationships_cross.csv`, emits `relationships.json`, `relationships_all.csv`,
 and `erd.mmd`, and checks every cross-FK target exists. Re-render to fold in the
-new dataset.
+new dataset. `latest.txt` is promoted only after `test_release.qmd`'s
+consumer-contract query suite passes (so a schema drift that would break the apps
+/ `calcofi4r` / `db-query` fails the release, not the consumer).
+
+### 6. Deploy to consumers (after `latest` promoted)
+Refresh the read-only consumers (full runbook in `CLAUDE.md` §Deploy):
+- **Shiny apps** (`ssh calcofi`): `git -C /share/github/CalCOFI/{calcofi4r,db-viz-hex,apps} pull --ff-only`,
+  rebuild each app's DuckDB in the `rstudio` container
+  (`docker exec -d rstudio bash -lc 'cd …/db-viz-hex && Rscript prep_db.R'`;
+  db-viz-cruise takes `prep_db.R TRUE` to force), then `touch <app>/restart.txt`.
+  `prep_db.R` repoints `calcofi_latest.duckdb` at the new version itself.
+- **Station portal**: `gh workflow run refresh.yml --ref main` (also release-dispatch + weekly).
+- `calcofi.io/query`+`/schema` (GitHub Pages) and `calcofi4r` (reads `latest`) need no manual deploy.
 
 ### Publish (optional)
 `/publish-template {dataset} {portal}` (obis | erddap | edi). Carries its own
