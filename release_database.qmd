@@ -380,9 +380,10 @@ per-dataset triples. Built with the `calcofi4db` model engine
 #| label: core_tables
 
 # build obs_ctd_full (216M full-resolution CTD scans) is the heavy step; the
-# default `obs` carries CTD via the thinned ctd_thin (~5.5M). Flip off for a fast
-# render; the full pipeline builds it.
-build_obs_ctd_full <- TRUE
+# default `obs` carries CTD via the thinned ctd_thin (~5.5M). Defaults ON for the
+# full pipeline; set env BUILD_OBS_CTD_FULL=FALSE for a fast render (the
+# supplemental full-scan table is opt-in).
+build_obs_ctd_full <- as.logical(Sys.getenv("BUILD_OBS_CTD_FULL", "TRUE"))
 
 # measurement_type: authoritative from the metadata CSV (adds abundance, count,
 # body_length, and the event-level effort types), replacing any per-ingest VIEW
@@ -596,7 +597,8 @@ message(glue("obs row-count parity OK: {obs_expected} rows"))
 if (build_obs_ctd_full && exists("n_full"))
   stopifnot("obs_ctd_full parity" =
     q("SELECT COUNT(*) n FROM obs_ctd_full") ==
-    q("SELECT COUNT(*) n FROM read_parquet('{ctd_meas_glob}', hive_partitioning=true) m JOIN ctd_cast cc ON m.ctd_cast_uuid=cc.ctd_cast_uuid WHERE cc.grid_key IS NOT NULL"))
+    q(glue("SELECT COUNT(*) n FROM read_parquet('{ctd_meas_glob}', hive_partitioning=true) m
+            JOIN ctd_cast cc ON m.ctd_cast_uuid=cc.ctd_cast_uuid WHERE cc.grid_key IS NOT NULL")))
 
 # (C) FK validity — every core row resolves against its reference --------------
 fk_bad <- c(
@@ -1142,7 +1144,9 @@ for (i in seq_len(nrow(copy_rows))) {
   message(glue("  {tbl}: copied from {pfx}"))
 }
 
-# 2. upload derived tables from local parquet (cruise, measurement_type)
+# 2. upload derived tables from local parquet — single files (cruise,
+# measurement_type, sample, obs_freq, sample_measurement) AND partitioned dirs
+# (obs, obs_ctd_full: Hive-partitioned, uploaded recursively).
 derived_local <- list.files(dir_frozen_pq, pattern = "[.]parquet$",
                             full.names = TRUE)
 for (pq in derived_local) {
@@ -1150,6 +1154,17 @@ for (pq in derived_local) {
   gcs_path <- glue("gs://{gcs_bucket}/{gcs_release}/parquet/{tbl}.parquet")
   put_gcs_file(pq, gcs_path)
   message(glue("  {tbl}: uploaded (derived)"))
+}
+# partitioned derived dirs (obs, obs_ctd_full)
+derived_dirs <- list.dirs(dir_frozen_pq, recursive = FALSE)
+for (d in derived_dirs) {
+  tbl <- basename(d)
+  dst <- glue("gs://{gcs_bucket}/{gcs_release}/parquet/{tbl}")
+  res <- system2(gcloud, c("storage", "cp", "-r", paste0(d, "/*"), dst),
+                 stdout = TRUE, stderr = TRUE)
+  if ((attr(res, "status") %||% 0L) != 0)
+    stop(glue("GCS copy failed for derived partitioned {tbl}: {paste(res, collapse='\n')}"))
+  message(glue("  {tbl}: uploaded (derived, partitioned)"))
 }
 
 # 3. build and upload catalog.json (needed by cc_get_db())
