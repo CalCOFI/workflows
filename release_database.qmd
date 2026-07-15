@@ -888,9 +888,10 @@ plot(erd)
 #| fig-width: 12
 #| fig-height: 10
 
-# exclude internal tables and views
+# exclude internal tables and views. Use the CURRENT tables (the retire step
+# above dropped the per-dataset tables) so the ERD + FK checks are core-only.
 schema_tbls <- setdiff(
-  tbls,
+  DBI::dbListTables(con_wdl),
   c("_meta", "_sp_update", "casts_derived", "ctd_cast_derived"))
 
 # merge per-dataset relationships.json files (auto-discovered — every ingest
