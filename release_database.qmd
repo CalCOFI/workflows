@@ -862,11 +862,16 @@ core_keep <- c(
   "species", "taxon", "taxa_rank", "lookup", "zoodb_taxon", "zooscan_taxon",  # taxon lookups
   "phyto_taxon", "bird_mammal_species", "bird_mammal_behavior", "region",
   "_spatial", "_spatial_attr")
-retire_tbls <- setdiff(DBI::dbListTables(con_wdl), core_keep)
-for (t in retire_tbls) {
-  DBI::dbExecute(con_wdl, glue('DROP VIEW IF EXISTS "{t}"'))
-  DBI::dbExecute(con_wdl, glue('DROP TABLE IF EXISTS "{t}"'))
+# drop by the object's actual type (DROP VIEW on a TABLE — or vice versa — errors
+# even with IF EXISTS; some are parquet VIEWs, some are temp tables like cruise_ref)
+retire_objs <- DBI::dbGetQuery(con_wdl,
+  "SELECT table_name, table_type FROM information_schema.tables")
+retire_objs <- retire_objs[!retire_objs$table_name %in% core_keep, , drop = FALSE]
+for (i in seq_len(nrow(retire_objs))) {
+  kind <- if (grepl("VIEW", retire_objs$table_type[i], ignore.case = TRUE)) "VIEW" else "TABLE"
+  DBI::dbExecute(con_wdl, glue('DROP {kind} IF EXISTS "{retire_objs$table_name[i]}"'))
 }
+retire_tbls <- retire_objs$table_name
 message(glue("retired {length(retire_tbls)} per-dataset tables: ",
              "{paste(head(retire_tbls, 8), collapse=', ')}…"))
 
