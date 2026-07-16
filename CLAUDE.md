@@ -138,10 +138,21 @@ engine, `R/model.R`):
 | core table | grain | built by |
 |---|---|---|
 | `sample` | one row per physical sampling event (site/tow/net/cast/bottle/underway/transect/region_pool); adjacency list via `parent_sample_key` + `root_sample_key` | `build_sample_reference()` |
-| `obs` | occurrence-headline long table (`realm` env\|bio, one scalar/row); env CTD via `ctd_thin` | `append_obs()` |
-| `obs_freq` | sub-occurrence (bin, count) distributions (ichthyo `body_length` / `stage`) | `append_obs_freq()` |
+| `obs` | occurrence-headline long table (`realm` env\|bio, one scalar/row); bio taxon via `taxon_key` (global, `worms:`/`itis:`); env CTD via `ctd_thin` | `append_obs()` |
+| `obs_attribute` | sub-occurrence attribution — length/stage frequency (`bin_value`/`bin_label`/`count`) **+ categorical behavior** (was `obs_freq`) | `append_obs_attribute()` |
 | `sample_measurement` | event-level effort (net `volume_sampled`/`std_haul_factor`/… ; bottle cast conditions) | `append_sample_measurement()` |
-| `obs_ctd_full` | supplemental full-resolution CTD scans (~216M rows; opt-in) | `append_obs(obs_tbl="obs_ctd_full")` |
+| `obs_ctd_full` | **supplemental** full-resolution CTD scans (~216M rows; hosted + catalog-flagged, excluded from ERD/default list; `cc_get_db(supplemental=TRUE)`) | `append_obs(obs_tbl="obs_ctd_full")` |
+
+Shared taxonomy refs (built by `calcofi4db/R/taxa.R`, replacing the ~7 per-dataset
+taxon tables): **`taxon`** (one row per taxon, `taxon_key` = lowercase authority
+prefix `worms:<id>` — or `itis:<id>` for birds/Aves — + `worms_id`/`itis_id`/
+`gbif_id`/`ncbi_id`/`inat_id`, `parent_taxon_key`, lineage), **`dataset_taxon`**
+(per-dataset vocabulary → `taxon_key` crosswalk; `obs` resolves `taxon_key` by
+joining it on `(dataset_key, ds_taxa_code)`), **`taxon_group`** (groupings). Built
+by `build_taxon_reference()` / `build_dataset_taxon()` / `build_taxon_group()`.
+Coarse/composite taxa (cufes eggs, phyllosoma stages, euphausiid family, phyto
+functional groups, seabirds/mammals) resolve to real WoRMS/ITIS ids via the
+reviewable `metadata/measurement_taxon.csv` + `metadata/taxon_override.csv`.
 
 - **Namespaced keys**: every `sample_key` is `dataset_key:sample_type:id` (globally
   unique across datasets *and* event levels; makes the DIC→bottle dedup fall out).
@@ -200,9 +211,9 @@ self-documenting; human review happens at every hand-off. Scaffolds come from
   `measurement_qual`. Historically each dataset built a triple (`{dataset}_sample`
   position/time/FK + `{dataset}_measurement` long values + `{dataset}_summary`
   replicate aggregate). These now **project into the core family** (`sample` /
-  `obs` / `obs_freq` / `sample_measurement`, see above): headline occurrences →
-  `obs`, event-level effort → `sample_measurement`, (bin, count) detail →
-  `obs_freq`. Per-dataset triple tables survive as compat VIEWs over the core.
+  `obs` / `obs_attribute` / `sample_measurement`, see above): headline occurrences →
+  `obs`, event-level effort → `sample_measurement`, sub-occurrence (bin/count +
+  behavior) detail → `obs_attribute`. Per-dataset triple tables survive as compat VIEWs over the core.
 - **Records lacking a cast/cruise FK**: use the `calcofi4db` helpers
   `match_by_site_datetime()` then `match_nearest_by_depth()` — do not hand-write
   the matching SQL.
