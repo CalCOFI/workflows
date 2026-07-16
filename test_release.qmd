@@ -305,11 +305,15 @@ contract <- tibble::tribble(
   "consumer: match env (bottle temperature)", "nonzero", glue(
     "SELECT count(*) n FROM {rp('obs')}
      WHERE realm='env' AND dataset_key='calcofi_bottle' AND measurement_type='temperature'"),
-  "consumer: match/download bio (ichthyo abundance x species x effort)", "nonzero", glue(
+  "consumer: match/download bio (ichthyo abundance x taxon x effort)", "nonzero", glue(
     "SELECT count(*) n FROM {rp('obs')} o
-       JOIN {rp('species')} sp ON CAST(o.taxon_id AS INTEGER) = sp.species_id
+       JOIN {rp('taxon')} t ON t.taxon_key = o.taxon_key
        LEFT JOIN {rp('sample_measurement')} shf ON shf.sample_key=o.sample_key AND shf.measurement_type='std_haul_factor'
      WHERE o.realm='bio' AND o.dataset_key='swfsc_ichthyo' AND o.measurement_type='abundance'"),
+  "integrity: every non-null obs.taxon_key resolves to taxon", "zero", glue(
+    "SELECT count(*) n FROM {rp('obs')} o
+     WHERE o.taxon_key IS NOT NULL
+       AND NOT EXISTS (SELECT 1 FROM {rp('taxon')} t WHERE t.taxon_key=o.taxon_key)"),
   "consumer: station coverage rollup (obs GROUP BY grid,dataset)", "nonzero", glue(
     "SELECT count(*) n FROM (
        SELECT grid_key, dataset_key, count(*), count(DISTINCT sample_key), count(DISTINCT cruise_key)
