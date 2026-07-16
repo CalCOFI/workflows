@@ -389,9 +389,14 @@ build_obs_ctd_full <- as.logical(Sys.getenv("BUILD_OBS_CTD_FULL", "TRUE"))
 # body_length, and the event-level effort types), replacing any per-ingest VIEW
 # so the FK parity check below sees the current vocabulary.
 dbExecute(con_wdl, "DROP VIEW IF EXISTS measurement_type")
+# derive provider/dataset from _source_datasets (first source) so the schema site
+# + query app ("browse measurement types") keep their provider/dataset columns.
 dbExecute(con_wdl, glue(
   "CREATE OR REPLACE TABLE measurement_type AS
-   SELECT * FROM read_csv_auto('{here('metadata/measurement_type.csv')}')"))
+   SELECT *,
+          split_part(split_part(_source_datasets, ';', 1), '_', 1)          AS provider,
+          regexp_replace(split_part(_source_datasets, ';', 1), '^[^_]*_', '') AS dataset
+   FROM read_csv_auto('{here('metadata/measurement_type.csv')}')"))
 
 # unified taxon references ------------------------------------------------------
 # taxon (one authoritative row per taxon, keyed worms:/itis:), dataset_taxon
