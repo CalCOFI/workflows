@@ -60,6 +60,105 @@
   ```
   
 
+## 2026-07-16 schema cleanup (including taxon)
+
+While we did a good job consolidating the majority of tables in the env-bio consolidation according to [tables](https://calcofi.io/db-schema/#erd?v=v2026.07.15) down to **22 tables**, there is still a bit of a mess with dataset-specific taxon tables. 
+
+
+And when I view with calcofi4r (per it's vignette https://calcofi.io/calcofi4r/articles/calcofi4r.html#connect-to-the-database), I see a whopping **53 tables** (quite the disparity)!
+
+```
+> con <- cc_get_db()
+Using cached database: v2026.07.15
+> dbListTables(con)
+ [1] "_spatial"                "_spatial_attr"           "bird_mammal_behavior"   
+ [4] "bird_mammal_observation" "bird_mammal_species"     "bird_mammal_transect"   
+ [7] "bottle"                  "bottle_measurement"      "cast_condition"         
+[10] "casts"                   "cruise"                  "ctd_cast"               
+[13] "ctd_summary"             "ctd_thin"                "cufes_measurement"      
+[16] "cufes_sample"            "dataset"                 "dic_measurement"        
+[19] "dic_sample"              "dic_summary"             "euphausiids_measurement"
+[22] "euphausiids_summary"     "euphausiids_tow"         "grid"                   
+[25] "ichthyo"                 "invert"                  "lookup"                 
+[28] "measurement_type"        "net"                     "obs"                    
+[31] "obs_freq"                "phyllosoma_measurement"  "phyllosoma_tow"         
+[34] "phyto_measurement"       "phyto_sample"            "phyto_taxon"            
+[37] "region"                  "sample"                  "sample_measurement"     
+[40] "segment"                 "ship"                    "site"                   
+[43] "species"                 "taxa_rank"               "taxon"                  
+[46] "tow"                     "zoodb_measurement"       "zoodb_sample"           
+[49] "zoodb_taxon"             "zooplankton_tow"         "zooscan_measurement"    
+[52] "zooscan_sample"          "zooscan_taxon"          
+```
+
+The tables and schema need to get cleaned up! I understand that we should probably have a `taxon_list` field that allows the creation of species lists by groups, which could be portable across datasets (and include a dataset source field).
+
+----
+
+Now the core problem is crystal clear: obs.taxon_id is a VARCHAR that means something different per dataset — ichthyo puts species.species_id, zoodb/zooscan put their own local taxon_id, bird_mammal puts species_code, others NULL. There's no unified taxa table (the design called for one but it was never built), so obs.taxon_id "42" from ichthyo collides with "42" from zoodb. It also violates the repo's own key convention (a VARCHAR key must be *_key, not *_id).
+
+The mechanism is now clear: catalog.json is built from freeze_stats, which IS filtered to core_keep (~21 tables) — but the published v2026.07.15 catalog has 53, meaning that release was frozen before the retire filter landed (or the GCS parquet tree was never pruned). Either way the published release needs a re-freeze. But the deeper point: even the intended 21-table core_keep still keeps 7 per-dataset taxon tables (species, taxon, taxa_rank, zoodb_taxon, zooscan_taxon, phyto_taxon, bird_mammal_species) — the design doc's unified taxa was never built. That's exactly the mess the user flagged.
+
+----
+
+I have everything I need to frame the design. Two decisions genuinely change the implementation and are yours to make — let me confirm those before writing the final plan.
+
+←  ☒ taxon_list  ☒ Key + name  ✔ Submit  →
+
+**taxon_list** What should `taxon_list` be? The unified `taxa` table dedupes taxa across datasets (e.g. Appendicularia currently appears as separate rows in zoodb_taxon AND zooscan_taxon at the same AphiaID 146421 — it collapses to one). `taxon_list` is the second table. Which shape do you want?
+
+❯ 1. Dataset-provenance bridge     ┌─────────────────────────────────────────────────────────────────────────────────┐
+  1. Bridge + optional group label │  taxon_key     scientific_name  rank                                            │
+  2. Curated groups only           │  worms:146421  Appendicularia   Class                                           │
+                                   │  worms:1207    Gammaridea       Suborder                                        │
+                                   │                                                                                 │
+                                   │ taxon_list  (provenance bridge — the 'source field')                            │
+                                   │  taxon_key     dataset_key       local_name                                     │
+                                   │  worms:146421  cce-lter_zoodb    APPENDICULARIA                                 │
+                                   │  worms:146421  cce-lter_zooscan  appendicularia                                 │
+                                   │  worms:1207    cce-lter_zoodb    AMPHIPODA GAMMARIDEA                           │
+                                   └─────────────────────────────────────────────────────────────────────────────────┘
+
+Ok, we need to keep `taxon` as the authoritative unique taxon per row (using `taxon_key` with a lower-case authority prefix followed by `:`) and additional columns for explicitly holding WoRMS (integer `worms_id`) and ITIS (integer `itis_id`). Add also placeholders for `gbif_id`, `ncbi_id` and `inat_id`. We'll use `worms:` as the authoritative `taxon_key` for all taxa, except for birds (class=Aves) we'll use `itis:`. For example, `taxon_key` should be `itis:174715` for the great cormorant (_Phalacrocorax carbo_) with [`itis_id=174715`](https://www.itis.gov/servlet/SingleRpt/SingleRpt?search_topic=TSN&search_value=174715#null) and []`worms_id=137179`](https://www.marinespecies.org/aphia.php?p=taxdetails&id=137179). Let's also add a `common_name` with one "best" common name.
+
+Then we need to crosswalk from a `dataset` to the `taxon` tables. Let's simply call this `dataset_taxon` with a column `ds_taxon_key` and prefix it with the dataset, then use the dataset's unique identifier (whether numeric or character) unless it is a known list, like `CalCOFI:{species_id}` for the `icthyo` dataset. Add fields to capture `ds_common_name`, `ds_scientific_name`, `ds_taxa_code` (numeric or character). And of course `taxon_key`.
+
+The term "taxon_list" is too vague. My intention was in fact to allow groupings, so in keeping with the singular table naming convention, let's call it `taxon_group` with a column `taxon_group_key`. Again let it prefix with the dataset unless a known grouping like "CalCOFI". Include a description and allow  many `taxon_key` to one `taxon_group_key`.
+
+Does this make sense and will it generically capture all the taxa information from across the datasets?
+
+**Key + name** How should the unified taxon reference be keyed and named? Today `obs.taxon_id` is a VARCHAR holding a *different dataset-local id per dataset* (ichthyo=species_id, zoodb=taxon_id, bird=species_code), so it collides across datasets and only ichthyo resolves in match.R/match.js. It also violates the repo's own rule (a VARCHAR key must be `*_key`).
+
+  1. taxa, WoRMS key, rename obs col │ taxon                                                                            │
+> 2. Same, but call it `taxon`       │  taxon_key      aphia_id  itis_id  scientific_name   rank      common_name      │
+  3. Keep obs.taxon_id name          │  worms:275403   275403    161112   Elops affinis     Species   Machete          │
+                                     │  itis:177008    NULL      177008   Synthlib...antiq  Species   Ancient Murrelet │
+                                     │                                                                                 │
+                                     │ obs.taxon_key  ->  taxon.taxon_key   (was obs.taxon_id, dataset-local)           │
+                                     └─────────────────────────────────────────────────────────────────────────────────┘
+
+----
+
+PLAN: "libs/plans/2026-07-16 Consolidate the taxon tables → unified `taxon` + `dataset_taxon` + `taxon_group`.md"
+
+> Three edges to name explicitly: 
+> - (a) taxa unresolvable to WoRMS/ITIS (e.g. phyto "diatom, centric", NULL aphia) get a **dataset-local fallback** `taxon_key ={dataset_key}:{code}` with NULL worms_id/itis_id — `taxon` stays complete;
+> - (b) datasets that bake the taxon into `measurement_type` (cufes eggs, phyllosoma stages) keep `obs.taxon_key` NULL (taxon is in the type name); 
+> - (c) euphausiids have no per-species resolution → NULL until re-ingested.
+
+Let's keep the taxon_key, taxon_group_key and ds_taxon_key prefix always lowercase, so `calcofi:{species_id}` (not `CalCOFI:{species_id}`) and `calcofi:forage_fish` (not `CalCOFI:forage_fish`).
+
+For the three edge cases, (a) couldn't you approximate "diatom, centric" to _Bacillariophyceae_ [`worms_id=148899`](https://www.marinespecies.org/aphia.php?p=taxdetails&id=148899) with English vernacular "diatoms"? 
+
+Similarly for (c), you could generalize "euphausiids" to _Euphausiidae_ [`worms_id=110671`](https://www.marinespecies.org/aphia.php?p=taxdetails&id=110671)
+
+And for (b) just because the "taxon is in the type name" of `measurement_type` (cufes eggs, phyllosoma stages), I don't see `taxon_key` yet as a column in `measurement_type`. Think of how we can facilitate querying AND database normalization with this rescheming. Don't be lazy. Be as explicit as possible and perform lookups as needed.
+
+We also need another category of table besides `core_keep` to capture `obs_ctd_full`. I DO want to generate this parquet and make it available via GCS storage bucket and associated with this database version. BUT I do NOT want it by default included in the schema diagram or list of default tables. It is an ancillary full dataset-specific table, not in regular use, but made available for the rare deep dive scientist. We need to update the `@../schema/` representation to mention it, but not in the ERD diagram and with special flags. We may also need an extra argument to `calcofi4r::cc_get_db()` to include ALL tables (FALSE by default), or also the `supplemental_dataset` types or similar.
+
+I am thinking that `obs_freq` and `bird_mammal_behavior` could be further generalized into an `obs_attribute` table that provides additional attribution of frequency, length, behavior, etc. The `measurement_type` table could again be used as the lookup table, like it already is for `obs` and `sample_measurement`. Perhaps we add another column distinguishing the `measurement_type` of type "obs", "sample" or "attribute", or maybe that's not necessary?
+
+
 ## 2026-07-15 schema: env-bio consolidation;
 
 PROMPT: Implement @design_env-bio-consolidation.md. This will require rewriting all the ingest notebooks. The CLAUDE.md, README.md and .claude/skills should also be updated. Now that we're consolidating tables we need improved reporting on rows and percentage contributions of each dataset to each table in the db-schema, ideally in a visually compelling simplified way (think stacked bar with color coding and dataset label on hover). I am also noticing that the cards at https://calcofi.io/workflows/ for each ingest are reporting incorrect statically defined temporal extents -- these should come from the database, not from outdated QMD frontmatter. We will need to re-render all QMD notebooks to HTML. I want the DAG to be added to the bottom of the workflows index page (like ../../MarineSensitivity/workflows/) with color coding and subgraphs by type.

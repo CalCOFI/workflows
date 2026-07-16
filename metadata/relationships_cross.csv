@@ -36,11 +36,17 @@ sample,parent_sample_key,sample,sample_key,adjacency-list parent event (site tow
 sample,dataset_key,dataset,dataset_key,sample provenance stamp
 sample,grid_key,grid,grid_key,sample spatial grid cell (nullable)
 sample,cruise_key,cruise,cruise_key,sample cruise
-obs_freq,sample_key,sample,sample_key,frequency distribution belongs to a sampling event
-obs_freq,measurement_type,measurement_type,measurement_type,binned attribute vocabulary
+obs_attribute,sample_key,sample,sample_key,frequency distribution belongs to a sampling event
+obs_attribute,measurement_type,measurement_type,measurement_type,binned attribute vocabulary
 sample_measurement,sample_key,sample,sample_key,effort measurement belongs to a sampling event
 sample_measurement,dataset_key,dataset,dataset_key,effort measurement provenance stamp
 sample_measurement,measurement_type,measurement_type,measurement_type,event-level measured quantity vocabulary
 obs_ctd_full,sample_key,sample,sample_key,full-resolution CTD scan belongs to a cast event
 obs_ctd_full,dataset_key,dataset,dataset_key,supplemental CTD provenance stamp
 obs_ctd_full,measurement_type,measurement_type,measurement_type,CTD measured quantity vocabulary
+obs,taxon_key,taxon,taxon_key,observation taxon (nullable; env + taxon-in-type rows are NULL)
+obs_attribute,taxon_key,taxon,taxon_key,sub-occurrence attribute taxon (nullable)
+dataset_taxon,taxon_key,taxon,taxon_key,dataset-local taxon resolves to the global taxon
+dataset_taxon,dataset_key,dataset,dataset_key,dataset that uses this local taxon vocabulary
+taxon_group,taxon_key,taxon,taxon_key,group membership references a taxon
+taxon,parent_taxon_key,taxon,taxon_key,WoRMS lineage parent (self-reference, nullable)
