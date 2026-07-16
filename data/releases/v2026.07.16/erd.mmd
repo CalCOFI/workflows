@@ -3,6 +3,20 @@ config:
   layout: elk
 ---
 erDiagram
+    _measurement_taxon {
+        varchar dataset_key
+        varchar raw_measurement_type
+        varchar target
+        varchar measurement_type
+        varchar taxon_scientific_name
+        bigint worms_id
+        bigint itis_id
+        varchar life_stage
+        bigint bin_value
+        bool review
+        varchar note
+        varchar taxon_key
+    }
     _spatial {
         int id
         varchar layer
@@ -124,6 +138,26 @@ erDiagram
         int count
         varchar measurement_qual
     }
+    obs_ctd_full {
+        bigint obs_id
+        varchar realm
+        varchar dataset_key FK
+        varchar sample_key FK
+        varchar grid_key
+        varchar cruise_key
+        double latitude
+        double longitude
+        timestamp datetime
+        double depth_min_m
+        double depth_max_m
+        varchar taxon_key
+        varchar life_stage
+        varchar measurement_type FK
+        double measurement_value
+        varchar measurement_qual
+        double measurement_prec
+        ubigint hex_id
+    }
     region {
         varchar region_key PK
         varchar description
@@ -203,6 +237,9 @@ erDiagram
     sample ||--o{ sample_measurement : "sample_key"
     dataset ||--o{ sample_measurement : "dataset_key"
     measurement_type ||--o{ sample_measurement : "measurement_type"
+    sample ||--o{ obs_ctd_full : "sample_key"
+    dataset ||--o{ obs_ctd_full : "dataset_key"
+    measurement_type ||--o{ obs_ctd_full : "measurement_type"
     taxon ||--o{ obs : "taxon_key"
     taxon ||--o{ obs_attribute : "taxon_key"
     taxon ||--o{ dataset_taxon : "taxon_key"
@@ -212,7 +249,7 @@ erDiagram
     classDef _f0d2e8 stroke:#f0d2e8,stroke-width:3px
     classDef _f5cad9 stroke:#f5cad9,stroke-width:3px
     classDef _e8e8e8 stroke:#e8e8e8,stroke-width:3px
-    class measurement_type,cruise,dataset,sample,obs,obs_attribute,sample_measurement _e8e8e8
+    class measurement_type,cruise,dataset,sample,obs,obs_attribute,sample_measurement,obs_ctd_full _e8e8e8
     classDef _e0ccf0 stroke:#e0ccf0,stroke-width:3px
     classDef _ffd2bb stroke:#ffd2bb,stroke-width:3px
     classDef _e0bbf0 stroke:#e0bbf0,stroke-width:3px
