@@ -17,7 +17,7 @@ calcofi:
     cruise:             "#e8e8e8"
     sample:             "#e8e8e8"
     obs:                "#e8e8e8"
-    obs_freq:           "#e8e8e8"
+    obs_attribute:           "#e8e8e8"
     sample_measurement: "#e8e8e8"
     obs_ctd_full:       "#e8e8e8"
     _spatial:           "#cfe8ea"
@@ -371,7 +371,7 @@ dbGetQuery(con_wdl,
 Part C of the station-portal epic: promote the Phase-1 `v_obs_*` VIEWs to
 materialized **core** tables that every consumer reads, replacing the ~40
 per-dataset triples. Built with the `calcofi4db` model engine
-(`build_sample_reference()` / `append_obs()` / `append_obs_freq()` /
+(`build_sample_reference()` / `append_obs()` / `append_obs_attribute()` /
 `append_sample_measurement()`), keyed by a namespaced `sample_key`
 (`dataset_key:sample_type:id`) and stamped with a computed H3 `hex_id`. See
 `design_env-bio-consolidation.md`.
@@ -393,6 +393,27 @@ dbExecute(con_wdl, glue(
   "CREATE OR REPLACE TABLE measurement_type AS
    SELECT * FROM read_csv_auto('{here('metadata/measurement_type.csv')}')"))
 
+# unified taxon references ------------------------------------------------------
+# taxon (one authoritative row per taxon, keyed worms:/itis:), dataset_taxon
+# (per-dataset vocabulary -> taxon_key crosswalk) and taxon_group (groupings),
+# replacing the ~7 per-dataset taxon tables. Coarse/composite taxa (cufes eggs,
+# phyllosoma stages, euphausiid family, phyto functional groups, seabird/mammal
+# species) resolve to real WoRMS/ITIS ids via two reviewable registries.
+mt_taxon  <- readr::read_csv(here("metadata/measurement_taxon.csv"), show_col_types = FALSE)
+tx_over   <- readr::read_csv(here("metadata/taxon_override.csv"),    show_col_types = FALSE)
+n_taxon   <- build_taxon_reference(con_wdl, measurement_taxon = mt_taxon, overrides = tx_over)
+n_ds_tax  <- build_dataset_taxon(con_wdl,   measurement_taxon = mt_taxon, overrides = tx_over)
+n_tx_grp  <- build_taxon_group(con_wdl,      measurement_taxon = mt_taxon, overrides = tx_over)
+# _measurement_taxon: the composite-decomposition map the bio obs arms join to
+# split "sardine_eggs"/"phyllosoma_stage_N" into (taxon_key, canonical type,
+# life_stage). taxon_key derived here (composites are non-bird -> worms:, itis fallback).
+dbExecute(con_wdl, glue(
+  "CREATE OR REPLACE TABLE _measurement_taxon AS
+   SELECT *, CASE WHEN worms_id IS NOT NULL THEN 'worms:' || CAST(worms_id AS BIGINT)
+                  WHEN itis_id  IS NOT NULL THEN 'itis:'  || CAST(itis_id  AS BIGINT) END AS taxon_key
+   FROM read_csv_auto('{here('metadata/measurement_taxon.csv')}')"))
+message(glue("taxon: {n_taxon} / dataset_taxon: {n_ds_tax} / taxon_group: {n_tx_grp}"))
+
 # 1. sample dimension (adjacency list) from the per-dataset event tables --------
 n_sample <- build_sample_reference(con_wdl)
 message(glue("sample: {n_sample} rows"))
@@ -413,7 +434,7 @@ env_obs_arms <- list(
            'calcofi_bottle:bottle:' || CAST(b.bottle_id AS VARCHAR) sample_key,
            c.grid_key, c.cruise_key, c.latitude, c.longitude,
            CAST(c.datetime_start_utc AS TIMESTAMP) datetime, b.depth_m depth_min_m, b.depth_m depth_max_m,
-           NULL::VARCHAR taxon_id, NULL::VARCHAR life_stage,
+           NULL::VARCHAR taxon_key, NULL::VARCHAR life_stage,
            m.measurement_type, m.measurement_value, m.measurement_qual, m.measurement_prec
     FROM bottle_measurement m JOIN bottle b USING (bottle_id) JOIN casts c USING (cast_id)
     WHERE c.grid_key IS NOT NULL",
@@ -436,73 +457,135 @@ env_obs_arms <- list(
     FROM dic_measurement dm JOIN casts c USING (cast_id)
     WHERE c.grid_key IS NOT NULL"))
 
+# bio arms resolve the GLOBAL taxon_key: taxon-table datasets join `dataset_taxon`
+# on (dataset_key, ds_taxa_code); composite datasets (cufes/euphausiids/phyllosoma)
+# join `_measurement_taxon` (target='obs') to decompose the taxon out of the type
+# name into taxon_key + canonical measurement_type + life_stage.
 bio_obs_arms <- list(
-  # ichthyo base rows (measurement_type IS NULL) -> abundance headline; the count
-  # (tally) is the value. size/stage go to obs_freq below.
+  # ichthyo base rows (measurement_type IS NULL) -> abundance headline; size/stage
+  # go to obs_attribute below.
   ichthyo = if (has("ichthyo", "net", "tow", "site")) "
     SELECT 'bio', 'swfsc_ichthyo', 'swfsc_ichthyo:net:' || CAST(i.net_uuid AS VARCHAR),
            s.grid_key, s.cruise_key, s.latitude, s.longitude,
            CAST(t.datetime_start_utc AS TIMESTAMP), NULL::DOUBLE, NULL::DOUBLE,
-           CAST(i.species_id AS VARCHAR), i.life_stage,
+           dt.taxon_key, i.life_stage,
            'abundance', CAST(i.tally AS DOUBLE), NULL::VARCHAR, NULL::DOUBLE
     FROM ichthyo i JOIN net n USING (net_uuid) JOIN tow t USING (tow_uuid) JOIN site s USING (site_uuid)
+    LEFT JOIN dataset_taxon dt ON dt.dataset_key = 'swfsc_ichthyo'
+                              AND dt.ds_taxa_code = CAST(i.species_id AS VARCHAR)
     WHERE i.measurement_type IS NULL AND s.grid_key IS NOT NULL",
+  # cufes: taxon baked in the type name (sardine_eggs, ...) -> abundance + life_stage='egg'
   cufes = if (has("cufes_measurement", "cufes_sample")) "
     SELECT 'bio', 'swfsc_cufes', 'swfsc_cufes:underway:' || CAST(c.sample_id AS VARCHAR),
            c.grid_key, c.cruise_key, c.latitude, c.longitude,
            CAST(c.datetime_start_utc AS TIMESTAMP), 0::DOUBLE, 0::DOUBLE,
-           NULL::VARCHAR, NULL::VARCHAR, m.measurement_type, m.measurement_value, m.measurement_qual, NULL::DOUBLE
-    FROM cufes_measurement m JOIN cufes_sample c USING (sample_id) WHERE c.grid_key IS NOT NULL",
+           mx.taxon_key, mx.life_stage, mx.measurement_type, m.measurement_value, m.measurement_qual, NULL::DOUBLE
+    FROM cufes_measurement m JOIN cufes_sample c USING (sample_id)
+    JOIN _measurement_taxon mx ON mx.dataset_key = 'swfsc_cufes'
+                              AND mx.raw_measurement_type = m.measurement_type AND mx.target = 'obs'
+    WHERE c.grid_key IS NOT NULL",
   euphausiids = if (has("euphausiids_measurement", "euphausiids_tow")) "
     SELECT 'bio', 'cce-lter_euphausiids', 'cce-lter_euphausiids:tow:' || CAST(tw.tow_id AS VARCHAR),
            tw.grid_key, tw.cruise_key, tw.latitude, tw.longitude,
            CAST(tw.datetime_start_utc AS TIMESTAMP), NULL::DOUBLE, NULL::DOUBLE,
-           NULL::VARCHAR, NULL::VARCHAR, m.measurement_type, m.measurement_value, m.measurement_qual, NULL::DOUBLE
-    FROM euphausiids_measurement m JOIN euphausiids_tow tw USING (tow_id) WHERE tw.grid_key IS NOT NULL",
+           mx.taxon_key, mx.life_stage, mx.measurement_type, m.measurement_value, m.measurement_qual, NULL::DOUBLE
+    FROM euphausiids_measurement m JOIN euphausiids_tow tw USING (tow_id)
+    JOIN _measurement_taxon mx ON mx.dataset_key = 'cce-lter_euphausiids'
+                              AND mx.raw_measurement_type = m.measurement_type AND mx.target = 'obs'
+    WHERE tw.grid_key IS NOT NULL",
+  # phyllosoma: only total_phyllosoma is the obs headline (target='obs'); the
+  # phyllosoma_stage_N (target='attribute') go to obs_attribute below.
   phyllosoma = if (has("phyllosoma_measurement", "phyllosoma_tow")) "
     SELECT 'bio', 'calcofi_phyllosoma', 'calcofi_phyllosoma:tow:' || CAST(tw.tow_id AS VARCHAR),
            tw.grid_key, tw.cruise_key, tw.latitude, tw.longitude,
            CAST(tw.datetime_start_utc AS TIMESTAMP), 0::DOUBLE, tw.max_tow_depth_m,
-           NULL::VARCHAR, NULL::VARCHAR, m.measurement_type, m.measurement_value, m.measurement_qual, NULL::DOUBLE
-    FROM phyllosoma_measurement m JOIN phyllosoma_tow tw USING (tow_id) WHERE tw.grid_key IS NOT NULL",
+           mx.taxon_key, mx.life_stage, mx.measurement_type, m.measurement_value, m.measurement_qual, NULL::DOUBLE
+    FROM phyllosoma_measurement m JOIN phyllosoma_tow tw USING (tow_id)
+    JOIN _measurement_taxon mx ON mx.dataset_key = 'calcofi_phyllosoma'
+                              AND mx.raw_measurement_type = m.measurement_type AND mx.target = 'obs'
+    WHERE tw.grid_key IS NOT NULL",
   zoodb = if (has("zoodb_measurement", "zoodb_sample")) "
     SELECT 'bio', 'cce-lter_zoodb', 'cce-lter_zoodb:tow:' || CAST(sp.sample_id AS VARCHAR),
            sp.grid_key, sp.cruise_key, sp.latitude, sp.longitude,
            CAST(sp.datetime_start_utc AS TIMESTAMP), sp.min_depth_m, sp.max_depth_m,
-           CAST(m.taxon_id AS VARCHAR), NULL::VARCHAR, m.measurement_type, m.measurement_value, NULL::VARCHAR, NULL::DOUBLE
-    FROM zoodb_measurement m JOIN zoodb_sample sp USING (sample_id) WHERE sp.grid_key IS NOT NULL",
+           dt.taxon_key, NULL::VARCHAR, m.measurement_type, m.measurement_value, NULL::VARCHAR, NULL::DOUBLE
+    FROM zoodb_measurement m JOIN zoodb_sample sp USING (sample_id)
+    LEFT JOIN dataset_taxon dt ON dt.dataset_key = 'cce-lter_zoodb'
+                              AND dt.ds_taxa_code = CAST(m.taxon_id AS VARCHAR)
+    WHERE sp.grid_key IS NOT NULL",
   zooscan = if (has("zooscan_measurement", "zooscan_sample")) "
     SELECT 'bio', 'cce-lter_zooscan', 'cce-lter_zooscan:tow:' || CAST(sp.sample_id AS VARCHAR),
            sp.grid_key, sp.cruise_key, sp.latitude, sp.longitude,
            CAST(sp.station_date AS TIMESTAMP), sp.min_depth_m, sp.max_depth_m,
-           CAST(m.taxon_id AS VARCHAR), NULL::VARCHAR, m.measurement_type, m.measurement_value, NULL::VARCHAR, NULL::DOUBLE
-    FROM zooscan_measurement m JOIN zooscan_sample sp USING (sample_id) WHERE sp.grid_key IS NOT NULL",
+           dt.taxon_key, NULL::VARCHAR, m.measurement_type, m.measurement_value, NULL::VARCHAR, NULL::DOUBLE
+    FROM zooscan_measurement m JOIN zooscan_sample sp USING (sample_id)
+    LEFT JOIN dataset_taxon dt ON dt.dataset_key = 'cce-lter_zooscan'
+                              AND dt.ds_taxa_code = CAST(m.taxon_id AS VARCHAR)
+    WHERE sp.grid_key IS NOT NULL",
+  # phytoplankton: region-pooled (grid_key NULL, no datetime); taxon via dataset_taxon
+  phyto = if (has("phyto_measurement", "phyto_sample")) "
+    SELECT 'bio', 'calcofi_phytoplankton', 'calcofi_phytoplankton:region_pool:' || CAST(ps.phyto_sample_id AS VARCHAR),
+           NULL::VARCHAR, ps.cruise_key, ps.latitude, ps.longitude,
+           NULL::TIMESTAMP, 0::DOUBLE, 0::DOUBLE,
+           dt.taxon_key, NULL::VARCHAR, pm.measurement_type, pm.measurement_value, NULL::VARCHAR, NULL::DOUBLE
+    FROM phyto_measurement pm JOIN phyto_sample ps USING (phyto_sample_id)
+    LEFT JOIN dataset_taxon dt ON dt.dataset_key = 'calcofi_phytoplankton'
+                              AND dt.ds_taxa_code = CAST(pm.species_code AS VARCHAR)",
+  # bird_mammal headline: one row per (transect, species), count SUMmed across
+  # behaviors; the behavior breakdown goes to obs_attribute below.
   bird_mammal = if (has("bird_mammal_observation", "bird_mammal_transect")) "
     SELECT 'bio', 'calcofi_bird_mammal_census', 'calcofi_bird_mammal_census:transect:' || CAST(tr.gis_key AS VARCHAR),
            tr.grid_key, tr.cruise_key, tr.latitude, tr.longitude,
            CAST(tr.datetime_start_utc AS TIMESTAMP), 0::DOUBLE, 0::DOUBLE,
-           CAST(o.species_code AS VARCHAR), o.behavior_code, 'count', CAST(o.count AS DOUBLE), NULL::VARCHAR, NULL::DOUBLE
-    FROM bird_mammal_observation o JOIN bird_mammal_transect tr USING (gis_key) WHERE tr.grid_key IS NOT NULL")
+           dt.taxon_key, NULL::VARCHAR, 'count', CAST(SUM(o.count) AS DOUBLE), NULL::VARCHAR, NULL::DOUBLE
+    FROM bird_mammal_observation o JOIN bird_mammal_transect tr USING (gis_key)
+    LEFT JOIN dataset_taxon dt ON dt.dataset_key = 'calcofi_bird_mammal_census'
+                              AND dt.ds_taxa_code = CAST(o.species_code AS VARCHAR)
+    WHERE tr.grid_key IS NOT NULL
+    GROUP BY tr.gis_key, tr.grid_key, tr.cruise_key, tr.latitude, tr.longitude,
+             tr.datetime_start_utc, dt.taxon_key")
 
 obs_arms <- Filter(Negate(is.null), c(env_obs_arms, bio_obs_arms))
 n_obs <- append_obs(con_wdl, paste(obs_arms, collapse = "\nUNION ALL\n"))
 message(glue("obs: {n_obs} rows"))
 
-# 3. obs_freq — ichthyo (bin, count) distributions -----------------------------
-# size -> body_length; stage keeps its number + a lookup label
-if (has("ichthyo", "lookup")) {
-  n_freq <- append_obs_freq(con_wdl, "
+# 3. obs_attribute — sub-occurrence attribution (length/stage frequency + behavior)
+attr_arms <- list(
+  # ichthyo size->body_length + stage frequency; taxon_key via dataset_taxon
+  ichthyo = if (has("ichthyo", "lookup")) "
     SELECT 'swfsc_ichthyo' dataset_key, 'swfsc_ichthyo:net:' || CAST(i.net_uuid AS VARCHAR) sample_key,
-           CAST(i.species_id AS VARCHAR) taxon_id, i.life_stage,
+           dt.taxon_key, i.life_stage,
            CASE i.measurement_type WHEN 'size' THEN 'body_length' ELSE i.measurement_type END measurement_type,
            i.measurement_value bin_value,
            CASE WHEN i.measurement_type = 'stage' THEN lk.description ELSE NULL END bin_label,
            i.tally count, NULL::VARCHAR measurement_qual
     FROM ichthyo i
+    LEFT JOIN dataset_taxon dt ON dt.dataset_key = 'swfsc_ichthyo' AND dt.ds_taxa_code = CAST(i.species_id AS VARCHAR)
     LEFT JOIN lookup lk ON lk.lookup_type = i.life_stage || '_stage'
                        AND lk.lookup_num = CAST(i.measurement_value AS INTEGER)
-    WHERE i.measurement_type IN ('stage','size')")
-  message(glue("obs_freq: {n_freq} rows"))
+    WHERE i.measurement_type IN ('stage','size')",
+  # phyllosoma stage-frequency: phyllosoma_stage_N -> ('stage', bin_value=N, count=value)
+  phyllosoma = if (has("phyllosoma_measurement", "phyllosoma_tow")) "
+    SELECT 'calcofi_phyllosoma' dataset_key, 'calcofi_phyllosoma:tow:' || CAST(tw.tow_id AS VARCHAR) sample_key,
+           mx.taxon_key, mx.life_stage, mx.measurement_type, mx.bin_value,
+           NULL::VARCHAR bin_label, CAST(m.measurement_value AS INTEGER) count, NULL::VARCHAR measurement_qual
+    FROM phyllosoma_measurement m JOIN phyllosoma_tow tw USING (tow_id)
+    JOIN _measurement_taxon mx ON mx.dataset_key = 'calcofi_phyllosoma'
+                              AND mx.raw_measurement_type = m.measurement_type AND mx.target = 'attribute'
+    WHERE tw.grid_key IS NOT NULL AND m.measurement_value > 0",
+  # bird_mammal behavior breakdown -> ('behavior', label from bird_mammal_behavior)
+  behavior = if (has("bird_mammal_observation", "bird_mammal_transect", "bird_mammal_behavior")) "
+    SELECT 'calcofi_bird_mammal_census' dataset_key, 'calcofi_bird_mammal_census:transect:' || CAST(tr.gis_key AS VARCHAR) sample_key,
+           dt.taxon_key, NULL::VARCHAR life_stage, 'behavior' measurement_type, NULL::DOUBLE bin_value,
+           bb.description bin_label, CAST(o.count AS INTEGER) count, NULL::VARCHAR measurement_qual
+    FROM bird_mammal_observation o JOIN bird_mammal_transect tr USING (gis_key)
+    LEFT JOIN dataset_taxon dt ON dt.dataset_key = 'calcofi_bird_mammal_census' AND dt.ds_taxa_code = CAST(o.species_code AS VARCHAR)
+    LEFT JOIN bird_mammal_behavior bb ON bb.behavior_code = o.behavior_code
+    WHERE tr.grid_key IS NOT NULL")
+attr_arms <- Filter(Negate(is.null), attr_arms)
+if (length(attr_arms)) {
+  n_attr <- append_obs_attribute(con_wdl, paste(attr_arms, collapse = "\nUNION ALL\n"))
+  message(glue("obs_attribute: {n_attr} rows"))
 }
 
 # 4. sample_measurement — event-level effort -----------------------------------
@@ -538,7 +621,7 @@ if (build_obs_ctd_full && has("ctd_cast")) {
            'calcofi_ctd-cast:cast:' || CAST(cc.cast_key AS VARCHAR) sample_key,
            cc.grid_key, cc.cruise_key, cc.latitude, cc.longitude,
            CAST(cc.datetime_start_utc AS TIMESTAMP) datetime, m.depth_m depth_min_m, m.depth_m depth_max_m,
-           NULL::VARCHAR taxon_id, NULL::VARCHAR life_stage,
+           NULL::VARCHAR taxon_key, NULL::VARCHAR life_stage,
            m.measurement_type, m.measurement_value, m.measurement_qual, NULL::DOUBLE measurement_prec
     FROM read_parquet('{ctd_meas_glob}', hive_partitioning = true) m
     JOIN ctd_cast cc ON m.ctd_cast_uuid = cc.ctd_cast_uuid
@@ -579,20 +662,18 @@ sample_parity <- c(
                     q("SELECT COUNT(DISTINCT cast_key) n FROM ctd_cast"))
 stopifnot("sample-count parity" = all(sample_parity))
 
-# (B) obs row-count parity = sum of per-dataset headline counts (CTD via ctd_thin)
-obs_expected <-
+# (B) env obs row-count parity — env arms are 1:1 with source (CTD via ctd_thin).
+# Bio arms intentionally aggregate (bird_mammal per transect x species) and
+# decompose (phyllosoma stages -> obs_attribute; phyto added), so bio is reported,
+# not asserted against the raw measurement counts.
+env_expected <-
   q("SELECT COUNT(*) n FROM bottle_measurement m JOIN bottle b USING(bottle_id) JOIN casts c USING(cast_id) WHERE c.grid_key IS NOT NULL") +
   q("SELECT COUNT(*) n FROM ctd_thin t JOIN ctd_cast cc ON t.ctd_cast_uuid=cc.ctd_cast_uuid WHERE cc.grid_key IS NOT NULL") +
-  q("SELECT COUNT(*) n FROM dic_measurement dm JOIN casts c USING(cast_id) WHERE c.grid_key IS NOT NULL") +
-  q("SELECT COUNT(*) n FROM ichthyo i JOIN net USING(net_uuid) JOIN tow USING(tow_uuid) JOIN site s USING(site_uuid) WHERE i.measurement_type IS NULL AND s.grid_key IS NOT NULL") +
-  q("SELECT COUNT(*) n FROM cufes_measurement m JOIN cufes_sample c USING(sample_id) WHERE c.grid_key IS NOT NULL") +
-  q("SELECT COUNT(*) n FROM euphausiids_measurement m JOIN euphausiids_tow tw USING(tow_id) WHERE tw.grid_key IS NOT NULL") +
-  q("SELECT COUNT(*) n FROM phyllosoma_measurement m JOIN phyllosoma_tow tw USING(tow_id) WHERE tw.grid_key IS NOT NULL") +
-  q("SELECT COUNT(*) n FROM zoodb_measurement m JOIN zoodb_sample sp USING(sample_id) WHERE sp.grid_key IS NOT NULL") +
-  q("SELECT COUNT(*) n FROM zooscan_measurement m JOIN zooscan_sample sp USING(sample_id) WHERE sp.grid_key IS NOT NULL") +
-  q("SELECT COUNT(*) n FROM bird_mammal_observation o JOIN bird_mammal_transect tr USING(gis_key) WHERE tr.grid_key IS NOT NULL")
-stopifnot("obs row-count parity" = q("SELECT COUNT(*) n FROM obs") == obs_expected)
-message(glue("obs row-count parity OK: {obs_expected} rows"))
+  q("SELECT COUNT(*) n FROM dic_measurement dm JOIN casts c USING(cast_id) WHERE c.grid_key IS NOT NULL")
+stopifnot("env obs row-count parity" = q("SELECT COUNT(*) n FROM obs WHERE realm='env'") == env_expected)
+message(glue("env obs parity OK: {env_expected} rows"))
+dbGetQuery(con_wdl, "SELECT dataset_key, count(*) n_obs, count(taxon_key) n_with_taxon
+                     FROM obs WHERE realm='bio' GROUP BY 1 ORDER BY 1") |> print()
 
 if (build_obs_ctd_full && exists("n_full"))
   stopifnot("obs_ctd_full parity" =
@@ -600,26 +681,31 @@ if (build_obs_ctd_full && exists("n_full"))
     q(glue("SELECT COUNT(*) n FROM read_parquet('{ctd_meas_glob}', hive_partitioning=true) m
             JOIN ctd_cast cc ON m.ctd_cast_uuid=cc.ctd_cast_uuid WHERE cc.grid_key IS NOT NULL")))
 
-# (C) FK validity — every core row resolves against its reference --------------
+# (C) FK validity — every core row resolves against its reference, INCLUDING the
+# unified taxon (obs/obs_attribute/dataset_taxon all key into taxon.taxon_key) ---
 fk_bad <- c(
   "obs.dataset_key"      = q("SELECT COUNT(*) n FROM obs WHERE dataset_key NOT IN (SELECT dataset_key FROM dataset)"),
   "obs.sample_key"       = q("SELECT COUNT(*) n FROM obs WHERE sample_key NOT IN (SELECT sample_key FROM sample)"),
   "obs.grid_key"         = q("SELECT COUNT(*) n FROM obs WHERE grid_key IS NOT NULL AND grid_key NOT IN (SELECT grid_key FROM grid)"),
   "obs.measurement_type" = q("SELECT COUNT(*) n FROM obs WHERE measurement_type NOT IN (SELECT measurement_type FROM measurement_type)"),
-  "sample_measurement.sample_key" = q("SELECT COUNT(*) n FROM sample_measurement WHERE sample_key NOT IN (SELECT sample_key FROM sample)"),
-  "obs_freq.sample_key"  = q("SELECT COUNT(*) n FROM obs_freq WHERE sample_key NOT IN (SELECT sample_key FROM sample)"))
+  "obs.taxon_key"        = q("SELECT COUNT(*) n FROM obs WHERE taxon_key IS NOT NULL AND taxon_key NOT IN (SELECT taxon_key FROM taxon)"),
+  "obs_attribute.sample_key" = q("SELECT COUNT(*) n FROM obs_attribute WHERE sample_key NOT IN (SELECT sample_key FROM sample)"),
+  "obs_attribute.taxon_key"  = q("SELECT COUNT(*) n FROM obs_attribute WHERE taxon_key IS NOT NULL AND taxon_key NOT IN (SELECT taxon_key FROM taxon)"),
+  "obs_attribute.measurement_type" = q("SELECT COUNT(*) n FROM obs_attribute WHERE measurement_type NOT IN (SELECT measurement_type FROM measurement_type)"),
+  "dataset_taxon.taxon_key" = q("SELECT COUNT(*) n FROM dataset_taxon WHERE taxon_key NOT IN (SELECT taxon_key FROM taxon)"),
+  "sample_measurement.sample_key" = q("SELECT COUNT(*) n FROM sample_measurement WHERE sample_key NOT IN (SELECT sample_key FROM sample)"))
 if (any(fk_bad > 0)) print(fk_bad[fk_bad > 0])
 stopifnot("core FK validity" = all(fk_bad == 0))
 
-# (D) obs_freq sum-of-bins — reported (biology may legitimately differ, so warn) -
-freq_check <- dbGetQuery(con_wdl, "
-  WITH f AS (SELECT sample_key, taxon_id, life_stage, SUM(count) s FROM obs_freq
+# (D) obs_attribute stage sum vs abundance headline — reported (source may differ)
+attr_check <- dbGetQuery(con_wdl, "
+  WITH f AS (SELECT sample_key, taxon_key, life_stage, SUM(count) s FROM obs_attribute
              WHERE measurement_type='stage' GROUP BY 1,2,3),
-       o AS (SELECT sample_key, taxon_id, life_stage, SUM(measurement_value) a FROM obs
-             WHERE dataset_key='swfsc_ichthyo' AND measurement_type='abundance' GROUP BY 1,2,3)
-  SELECT count(*) n_occ, count(*) FILTER (WHERE f.s <> o.a) n_stage_ne_abundance
-  FROM f JOIN o USING (sample_key, taxon_id, life_stage)")
-message(glue("obs_freq stage vs abundance: {freq_check$n_stage_ne_abundance}/{freq_check$n_occ} occurrences differ (staged subsample)"))
+       o AS (SELECT sample_key, taxon_key, life_stage, SUM(measurement_value) a FROM obs
+             WHERE measurement_type='abundance' GROUP BY 1,2,3)
+  SELECT count(*) n_occ, count(*) FILTER (WHERE f.s > o.a) n_stage_gt_headline
+  FROM f JOIN o USING (sample_key, taxon_key, life_stage)")
+message(glue("obs_attribute stage vs abundance: {attr_check$n_stage_gt_headline}/{attr_check$n_occ} occurrences exceed headline (source quirk)"))
 
 message("Core parity checks passed.")
 ```
@@ -851,22 +937,24 @@ tryCatch(
 dir_frozen <- here(glue("data/releases/{release_version}"))
 dir.create(dir_frozen, recursive = TRUE, showWarnings = FALSE)
 
-# --- retire the per-dataset event/measurement/summary tables ----------------
-# the consolidated core (obs/sample/obs_freq/sample_measurement) replaces them;
-# obs was materialized from them upstream, so drop them now. Keep the core,
-# shared references, and the taxon lookups that obs.taxon_id points at. Dropping
-# here makes the ERD, catalog, metadata.json and frozen release all core-only.
+# --- retire the per-dataset event/measurement/summary + per-dataset taxon tables
+# the consolidated core (obs/sample/obs_attribute/sample_measurement) + unified
+# taxon/dataset_taxon/taxon_group replace them; all were materialized upstream, so
+# drop them now. `core_keep` = the DEFAULT published set (in the ERD + catalog);
+# `supplemental_keep` = ancillary full tables that are hosted + tagged to the
+# release but excluded from the ERD and default table list (opt-in deep dives).
 core_keep <- c(
-  "obs", "sample", "obs_freq", "sample_measurement", "obs_ctd_full",         # core
-  "grid", "cruise", "ship", "measurement_type", "dataset",                   # refs
-  "species", "taxon", "taxa_rank", "lookup", "zoodb_taxon", "zooscan_taxon",  # taxon lookups
-  "phyto_taxon", "bird_mammal_species", "bird_mammal_behavior", "region",
+  "obs", "sample", "obs_attribute", "sample_measurement",                    # core facts
+  "grid", "cruise", "ship", "measurement_type", "dataset", "region",         # refs
+  "taxon", "dataset_taxon", "taxon_group", "lookup",                         # taxa + lookups
   "_spatial", "_spatial_attr")
+supplemental_keep <- c("obs_ctd_full")                                       # hosted, hidden by default
 # drop by the object's actual type (DROP VIEW on a TABLE — or vice versa — errors
 # even with IF EXISTS; some are parquet VIEWs, some are temp tables like cruise_ref)
 retire_objs <- DBI::dbGetQuery(con_wdl,
   "SELECT table_name, table_type FROM information_schema.tables")
-retire_objs <- retire_objs[!retire_objs$table_name %in% core_keep, , drop = FALSE]
+retire_objs <- retire_objs[!retire_objs$table_name %in% c(core_keep, supplemental_keep) &
+                           retire_objs$table_name != "_measurement_taxon", , drop = FALSE]
 for (i in seq_len(nrow(retire_objs))) {
   kind <- if (grepl("VIEW", retire_objs$table_type[i], ignore.case = TRUE)) "VIEW" else "TABLE"
   DBI::dbExecute(con_wdl, glue('DROP {kind} IF EXISTS "{retire_objs$table_name[i]}"'))
@@ -888,11 +976,13 @@ plot(erd)
 #| fig-width: 12
 #| fig-height: 10
 
-# exclude internal tables and views. Use the CURRENT tables (the retire step
-# above dropped the per-dataset tables) so the ERD + FK checks are core-only.
+# exclude internal tables and the SUPPLEMENTAL tables (obs_ctd_full) so the ERD
+# stays the default core schema. Use the CURRENT tables (the retire step above
+# dropped the per-dataset tables) so the ERD + FK checks are core-only.
 schema_tbls <- setdiff(
   DBI::dbListTables(con_wdl),
-  c("_meta", "_sp_update", "casts_derived", "ctd_cast_derived"))
+  c("_meta", "_sp_update", "casts_derived", "ctd_cast_derived",
+    "_measurement_taxon", supplemental_keep))
 
 # merge per-dataset relationships.json files (auto-discovered — every ingest
 # writes data/parquet/{provider}_{dataset}/relationships.json, so new datasets
@@ -995,7 +1085,8 @@ for (tbl in setdiff(derived_tables, "cruise")) {
 # measurement_type are plain); obs / obs_ctd_full are Hive-partitioned + sorted
 # for compression + predicate pushdown (see design "Parquet partitioning").
 core_single <- intersect(
-  c("sample", "obs_freq", "sample_measurement", "measurement_type"),
+  c("sample", "obs_attribute", "sample_measurement", "measurement_type",
+    "taxon", "dataset_taxon", "taxon_group"),   # unified taxa refs, rebuilt here
   dbListTables(con_wdl))
 for (tbl in core_single)
   export_parquet(con_wdl, tbl,
@@ -1042,17 +1133,22 @@ for (dt in derived_tables) {
   }
 }
 
-# `measurement_type` (rebuilt from the authoritative CSV) and `cruise` (enriched
-# with per-dataset event counts) are derived + exported locally here, so upload
-# the local copy rather than GCS-copying the stale ingest parquet
+# `measurement_type` (rebuilt from the authoritative CSV), `cruise` (enriched
+# with per-dataset event counts), and the unified taxon refs (taxon/dataset_taxon/
+# taxon_group, rebuilt from the per-dataset taxon tables) are derived + exported
+# locally here, so upload the local copy rather than GCS-copying the stale ingest
+# parquet (esp. the old ichthyo `taxon` hierarchy the new `taxon` replaces).
 freeze_stats <- freeze_stats |>
   mutate(gcs_prefix = if_else(
-    table %in% c("measurement_type", "cruise"), NA_character_, gcs_prefix))
+    table %in% c("measurement_type", "cruise", "taxon", "dataset_taxon", "taxon_group"),
+    NA_character_, gcs_prefix))
 
-# add consolidated core tables (gcs_prefix = NA → upload from local frozen dir)
+# add consolidated core + supplemental tables (gcs_prefix = NA → upload from local)
 core_spec <- tibble(
-  table       = c("sample", "obs", "obs_freq", "sample_measurement", "obs_ctd_full"),
-  partitioned = c(FALSE,    TRUE,  FALSE,      FALSE,                TRUE))
+  table       = c("sample", "obs", "obs_attribute", "sample_measurement", "obs_ctd_full",
+                  "dataset_taxon", "taxon_group"),
+  partitioned = c(FALSE,    TRUE,  FALSE,           FALSE,                TRUE,
+                  FALSE,           FALSE))
 core_spec <- core_spec |>
   filter(table %in% dbListTables(con_wdl), !table %in% freeze_stats$table) |>
   mutate(
@@ -1061,10 +1157,12 @@ core_spec <- core_spec |>
     gcs_prefix = NA_character_)
 freeze_stats <- bind_rows(freeze_stats, core_spec)
 
-# retire the per-dataset event/measurement/summary tables from the frozen release
-# — only the consolidated core + shared refs + taxon lookups are published
-# (`core_keep` defined in the retire step above).
-freeze_stats <- freeze_stats |> filter(table %in% core_keep)
+# keep only the DEFAULT core + shared refs + unified taxa (`core_keep`) plus the
+# SUPPLEMENTAL tables (`obs_ctd_full`); flag the latter so the catalog/metadata
+# mark them and cc_get_db()/db-schema hide them by default.
+freeze_stats <- freeze_stats |>
+  filter(table %in% c(core_keep, supplemental_keep)) |>
+  mutate(supplemental = table %in% supplemental_keep)
 
 freeze_stats |>
   datatable(caption = glue("Frozen release {release_version} — {nrow(freeze_stats)} core+ref tables"))
@@ -1180,7 +1278,7 @@ for (i in seq_len(nrow(copy_rows))) {
 }
 
 # 2. upload derived tables from local parquet — single files (cruise,
-# measurement_type, sample, obs_freq, sample_measurement) AND partitioned dirs
+# measurement_type, sample, obs_attribute, sample_measurement) AND partitioned dirs
 # (obs, obs_ctd_full: Hive-partitioned, uploaded recursively).
 derived_local <- list.files(dir_frozen_pq, pattern = "[.]parquet$",
                             full.names = TRUE)
@@ -1204,7 +1302,8 @@ for (d in derived_dirs) {
 
 # 3. build and upload catalog.json (needed by cc_get_db())
 tables_df <- freeze_stats |>
-  select(name = table, rows, partitioned)
+  mutate(supplemental = dplyr::coalesce(supplemental, FALSE)) |>
+  select(name = table, rows, partitioned, supplemental)
 
 # sum bytes of the uploaded parquet tree on GCS
 du_out <- system2(
@@ -1299,13 +1398,13 @@ if (length(meta_paths) > 0) {
   }
 
   # --- contributions + observed temporal for the derived core tables ---------
-  # obs/sample/obs_freq/sample_measurement are materialized here (no per-ingest
+  # obs/sample/obs_attribute/sample_measurement are materialized here (no per-ingest
   # metadata.json), so compute each dataset's row share directly from the data.
   # Unlike the measurement_type vocabulary lookup, every core row belongs to
   # exactly one dataset (dataset_key) -> clean, non-over-attributed stacks.
   ds_workflow <- vapply(ingest_yaml,
     function(cc) cc$workflow_url %||% NA_character_, character(1))
-  for (tbl in intersect(c("obs", "sample", "obs_freq", "sample_measurement"),
+  for (tbl in intersect(c("obs", "sample", "obs_attribute", "sample_measurement"),
                         dbListTables(con_wdl))) {
     by_ds <- DBI::dbGetQuery(con_wdl, glue(
       "SELECT dataset_key, COUNT(*) AS n FROM {tbl} GROUP BY 1 ORDER BY n DESC"))
@@ -1335,12 +1434,17 @@ if (length(meta_paths) > 0) {
         paste(obs_time$t_min[i], "to", obs_time$t_max[i])
   }
 
-  # retire per-dataset tables from metadata.json too (core_keep from the retire
-  # step) so the schema site's Tables/ERD/contributions show only the core+refs
-  meta$tables        <- meta$tables[names(meta$tables) %in% core_keep]
-  meta$contributions <- meta$contributions[names(meta$contributions) %in% core_keep]
+  # retire per-dataset tables from metadata.json too (core_keep + supplemental
+  # from the retire step) so the schema site's Tables/ERD/contributions show only
+  # the core+refs+taxa (obs_ctd_full is kept but flagged supplemental below).
+  keep_meta <- c(core_keep, supplemental_keep)
+  meta$tables        <- meta$tables[names(meta$tables) %in% keep_meta]
+  meta$contributions <- meta$contributions[names(meta$contributions) %in% keep_meta]
   meta$columns       <- meta$columns[
-    vapply(names(meta$columns), function(k) sub("[.].*$", "", k) %in% core_keep, logical(1))]
+    vapply(names(meta$columns), function(k) sub("[.].*$", "", k) %in% keep_meta, logical(1))]
+  # mark the supplemental tables in metadata.json so db-schema can badge + hide
+  for (t in intersect(supplemental_keep, names(meta$tables)))
+    meta$tables[[t]]$supplemental <- TRUE
 
   jsonlite::write_json(meta, meta_json_path,
     auto_unbox = TRUE, pretty = TRUE, null = "null")
