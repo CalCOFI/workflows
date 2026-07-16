@@ -198,6 +198,21 @@ default — opt-in for deep CTD work. The default `obs` carries CTD via the thin
 
 `grid`, `cruise`, `ship`, `measurement_type`, **`taxa`** (unified), `dataset`.
 
+> **Implemented (2026-07-16):** the unified taxon shipped as **three** tables, not
+> one — **`taxon`** (one authoritative row per taxon, `taxon_key` = lowercase
+> authority prefix `worms:<worms_id>`, or **`itis:<itis_id>` for birds/Aves**;
+> explicit `worms_id`/`itis_id`/`gbif_id`/`ncbi_id`/`inat_id`, `parent_taxon_key`
+> self-FK, lineage), **`dataset_taxon`** (per-dataset vocabulary → `taxon_key`
+> crosswalk; `obs.taxon_key` is resolved by joining it on `(dataset_key,
+> ds_taxa_code)`), and **`taxon_group`** (groupings, many `taxon_key` per group).
+> `obs.taxon_id`→`obs.taxon_key`; `obs_freq`→`obs_attribute` (adds categorical
+> behavior). Coarse/composite taxa (cufes eggs, phyllosoma stages, euphausiid
+> family, phyto functional groups, seabird/mammal species) resolve to real
+> WoRMS/ITIS ids via the reviewable `metadata/measurement_taxon.csv` +
+> `metadata/taxon_override.csv`. `obs_ctd_full` is a **supplemental** table
+> (hosted + catalog-flagged, excluded from the ERD/default list;
+> `cc_get_db(supplemental = TRUE)` to attach). Engine: `calcofi4db/R/taxa.R`.
+
 ## Why one `obs` (and how `ctd_thin` / `obs_ctd_full` make it viable)
 
 The earlier design split env/bio into two physical tables. The decisive argument
