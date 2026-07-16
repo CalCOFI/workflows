@@ -1164,6 +1164,18 @@ freeze_stats <- freeze_stats |>
   filter(table %in% c(core_keep, supplemental_keep)) |>
   mutate(supplemental = table %in% supplemental_keep)
 
+# refresh row counts from the ASSEMBLED DB — reg_canon carries stale ingest-manifest
+# counts for the rebuilt/derived tables (measurement_type from CSV, the unified
+# `taxon` that replaces the old hierarchy, cruise, …), so the catalog/metadata
+# would otherwise show wrong `rows`. The frozen parquet is already correct.
+.present  <- intersect(freeze_stats$table, DBI::dbListTables(con_wdl))
+.rows_now <- setNames(
+  vapply(.present, function(t)
+    as.numeric(dbGetQuery(con_wdl, glue("SELECT COUNT(*) AS n FROM \"{t}\""))$n), numeric(1)),
+  .present)
+freeze_stats <- freeze_stats |>
+  mutate(rows = ifelse(table %in% .present, .rows_now[table], rows))
+
 freeze_stats |>
   datatable(caption = glue("Frozen release {release_version} — {nrow(freeze_stats)} core+ref tables"))
 ```
