@@ -438,12 +438,12 @@ if (nzchar(gh_bin)) {
 # Same gating + non-fatal pattern as the db-query bump above.
 if (nzchar(gh_bin)) {
   disp2 <- system2(gh_bin,
-    c("workflow", "run", "refresh.yml", "--repo", "CalCOFI/2026-ucsb-station-data-portal"),
+    c("workflow", "run", "refresh.yml", "--repo", "CalCOFI/db-viz-station"),
     stdout = TRUE, stderr = TRUE)
   if (!identical(attr(disp2, "status") %||% 0L, 0L))
     warning(glue("station-portal refresh dispatch failed: {paste(disp2, collapse = '; ')}"))
   else
-    message("dispatched CalCOFI/2026-ucsb-station-data-portal refresh workflow")
+    message("dispatched CalCOFI/db-viz-station refresh workflow")
 }
 ```
 
