@@ -84,8 +84,9 @@ only `git pull` + `restart.txt`. Ports 5432-forward warnings from `ssh calcofi`
 are harmless.
 
 **Static / hosted consumers** redeploy themselves on push or on release dispatch:
-the **station portal** (`2026-ucsb-station-data-portal`) rebuilds its coverage
-JSON from the DB via GitHub Actions — `gh workflow run refresh.yml --ref main`
+the **station portal** (`db-viz-station`; the archived 2026 UCSB student capstone
+`2026-ucsb-station-data-portal` was forked here) rebuilds its coverage
+JSON from the DB via GitHub Actions — `gh workflow run refresh.yml --ref main -R CalCOFI/db-viz-station`
 (also runs weekly + on release dispatch); **`calcofi.io/query`** and
 **`calcofi.io/schema`** are GitHub Pages and rebuild on push. `calcofi4r` reads
 `latest` directly, so it needs no deploy — but keep `calcofi4r/R/match.R`

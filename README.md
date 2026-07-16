@@ -95,8 +95,8 @@ it backgrounded in the `rstudio` container). Runtime-reading apps (`apps/cruises
 need only `git pull` + `restart.txt`.
 
 **Static / hosted consumers** self-deploy: the station portal
-(`2026-ucsb-station-data-portal`) rebuilds coverage JSON on release dispatch /
-weekly (`gh workflow run refresh.yml --ref main`); `calcofi.io/query` + `/schema`
+(`db-viz-station`) rebuilds coverage JSON on release dispatch /
+weekly (`gh workflow run refresh.yml --ref main -R CalCOFI/db-viz-station`); `calcofi.io/query` + `/schema`
 are GitHub Pages (rebuild on push); `calcofi4r` reads `latest` directly.
 
 See the full implementation plan at [README_PLAN.md](README_PLAN.md).
