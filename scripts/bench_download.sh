@@ -31,6 +31,11 @@
 set -u
 HEAP="${1:-2g}"; shift || true
 CELLS=("$@"); [ ${#CELLS[@]} -eq 0 ] && CELLS=(thin_duckdb_long meas_duckdb_long thin_netcdf_wide_split meas_netcdf_wide_split)
+# HARD container cap (cgroup), passed through to docker-compose.bench.yml as
+# BENCH_MEM_LIMIT. This is what makes a runaway query OOM-kill the bench container
+# instead of the HOST — without it the 232M-row unconstrained query took the live
+# services down (2026-07-25). Sweep it to find the floor each dataset needs.
+MEM_CAP="${MEM_CAP:-4g}"
 MAX_TIME="${MAX_TIME:-300}"           # seconds before we stop pulling (status=capped)
 LOAD_TIMEOUT="${LOAD_TIMEOUT:-300}"
 MIN_AVAIL_MB="${MIN_AVAIL_MB:-1500}"
@@ -44,13 +49,22 @@ BASE=http://localhost:8091/erddap/tabledap
 TS=$(date +%Y%m%d_%H%M%S)
 RES=$BENCH/bench/download_${TS}.csv
 mkdir -p "$BENCH/bench"
-echo "cell,table,format,schema,granularity,heap,query,nvars,status,http_code,ttfb_ms,total_ms,bytes,peak_heap_mb,peak_rss_mb,error" > "$RES"
-echo "results -> $RES (heap=$HEAP, max_time=${MAX_TIME}s, cells: ${CELLS[*]})"
+echo "cell,table,format,schema,granularity,heap,mem_cap,query,nvars,status,http_code,ttfb_ms,total_ms,bytes,peak_heap_mb,peak_anon_mb,peak_charged_mb,oom_killed,error" > "$RES"
+echo "results -> $RES (heap=$HEAP, cap=$MEM_CAP, max_time=${MAX_TIME}s, cells: ${CELLS[*]})"
 
 heap_mb() { docker exec erddap_bench jcmd 1 GC.heap_info 2>/dev/null \
   | grep -oE 'used [0-9]+K' | head -1 | grep -oE '[0-9]+' | awk '{printf "%d", $1/1024}'; }
+# TRUE allocation: cgroup `anon` from memory.stat, NOT memory.current. memory.current
+# includes page cache from reading Parquet/NetCDF, which is reclaimable and wildly
+# overstates what the process actually needs — the first run of this benchmark
+# reported ~12 GB "RSS" that was largely cache. anon is what the kernel must find.
+anon_mb() { local b; b=$(docker exec erddap_bench awk '/^anon /{print $2}' /sys/fs/cgroup/memory.stat 2>/dev/null); \
+  [ -n "$b" ] && awk -v b="$b" 'BEGIN{printf "%d", b/1048576}' || echo 0; }
+# total charged to the cgroup (anon + cache); kept for comparison
 rss_mb() { local b; b=$(docker exec erddap_bench cat /sys/fs/cgroup/memory.current 2>/dev/null); \
   [ -n "$b" ] && awk -v b="$b" 'BEGIN{printf "%d", b/1048576}' || echo 0; }
+# did the kernel OOM-kill inside the container? (only meaningful with mem_limit set)
+oom_killed() { docker inspect erddap_bench --format '{{.State.OOMKilled}}' 2>/dev/null || echo false; }
 csv_escape() { printf '%s' "$1" | tr '\n\r"' "   " | cut -c1-300; }  # field is emitted quoted
 
 assemble() { local tmp; tmp=$(mktemp)
@@ -118,7 +132,16 @@ for cell in "${CELLS[@]}"; do
   if [ "${avail:-0}" -lt "$MIN_AVAIL_MB" ]; then echo "  ABORT: host avail ${avail}MB < ${MIN_AVAIL_MB}MB"; break; fi
   rm -rf "$BENCH"/data/* 2>/dev/null
   assemble "$BLOCK"
-  BENCH_ERDDAP_MEMORY="$HEAP" "${COMPOSE[@]}" up -d --force-recreate erddap_bench >/dev/null 2>&1
+  BENCH_ERDDAP_MEMORY="$HEAP" BENCH_MEM_LIMIT="$MEM_CAP" \
+    "${COMPOSE[@]}" up -d --force-recreate erddap_bench >/dev/null 2>&1
+  # confirm the cap actually applied — a silently-uncapped run is the dangerous one
+  applied=$(docker inspect erddap_bench --format '{{.HostConfig.Memory}}' 2>/dev/null)
+  if [ "${applied:-0}" -le 0 ]; then
+    echo "  REFUSING TO RUN: container has no memory cap (expected $MEM_CAP)." >&2
+    echo "  Update docker-compose.bench.yml with mem_limit before benchmarking." >&2
+    exit 3
+  fi
+  echo "  container cap: $(awk -v b="$applied" 'BEGIN{printf "%.1f GB", b/1073741824}')"
   for i in $(seq 1 40); do [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8091/erddap/index.html)" = 200 ] && break; sleep 2; done
 
   # wait for the dataset to bind (same stability check as bench_erddap.sh)
@@ -133,7 +156,7 @@ for cell in "${CELLS[@]}"; do
   done
   if [ "$status" != loaded ]; then
     echo "  dataset did not load ($status) — recording and moving on"
-    echo "$cell,$TABLE,$APP,$SCHEMA,$GRAN,$HEAP,load,0,$status,0,-1,-1,0,0,0," >> "$RES"
+    echo "$cell,$TABLE,$APP,$SCHEMA,$GRAN,$HEAP,$MEM_CAP,load,0,$status,0,-1,-1,0,0,0,0,false," >> "$RES"
     continue
   fi
 
@@ -153,15 +176,40 @@ for cell in "${CELLS[@]}"; do
   fi
 
   run() { # $1=label $2=nvars $3=url
-    local h0 r0 out
-    h0=$(heap_mb); r0=$(rss_mb)
-    out=$(download "$3")
-    local h1 r1; h1=$(heap_mb); r1=$(rss_mb)
-    [ "${h1:-0}" -lt "${h0:-0}" ] && h1=$h0
-    [ "${r1:-0}" -lt "${r0:-0}" ] && r1=$r0
+    # Sample memory IN FLIGHT — peak occurs during the transfer, so before/after
+    # sampling systematically misses it (and reports a low number for exactly the
+    # queries that are about to blow up).
+    local peak; peak=$(mktemp)
+    echo "0 0 0" > "$peak"
+    ( while :; do
+        h=$(heap_mb); a=$(anon_mb); c=$(rss_mb)
+        read -r ph pa pc < "$peak"
+        [ "${h:-0}" -gt "${ph:-0}" ] && ph=$h
+        [ "${a:-0}" -gt "${pa:-0}" ] && pa=$a
+        [ "${c:-0}" -gt "${pc:-0}" ] && pc=$c
+        echo "$ph $pa $pc" > "$peak"
+        sleep 2
+      done ) & local sampler=$!
+
+    local out; out=$(download "$3")
+    kill "$sampler" 2>/dev/null; wait "$sampler" 2>/dev/null
+    read -r ph pa pc < "$peak"; rm -f "$peak"
+
+    local oom; oom=$(oom_killed)
     read -r st code ttfb total bytes err <<< "$out"
-    echo "  $1: status=$st code=$code ttfb=${ttfb}ms total=${total}ms bytes=$bytes heap=${h1}MB ${err:+err=$err}"
-    echo "$cell,$TABLE,$APP,$SCHEMA,$GRAN,$HEAP,$1,$2,$st,$code,$ttfb,$total,$bytes,$h1,$r1,\"$err\"" >> "$RES"
+    # a container OOM-kill outranks whatever curl thought happened
+    [ "$oom" = "true" ] && { st=oom; [ -z "$err" ] && err="container OOM-killed at $MEM_CAP cap"; }
+    echo "  $1: status=$st code=$code ttfb=${ttfb}ms total=${total}ms bytes=$bytes heap=${ph}MB anon=${pa}MB oom=$oom ${err:+err=$err}"
+    echo "$cell,$TABLE,$APP,$SCHEMA,$GRAN,$HEAP,$MEM_CAP,$1,$2,$st,$code,$ttfb,$total,$bytes,$ph,$pa,$pc,$oom,\"$err\"" >> "$RES"
+
+    # if the kernel killed it, the container is gone — bring it back for the next query
+    if [ "$oom" = "true" ]; then
+      BENCH_ERDDAP_MEMORY="$HEAP" BENCH_MEM_LIMIT="$MEM_CAP" \
+        "${COMPOSE[@]}" up -d --force-recreate erddap_bench >/dev/null 2>&1
+      for i in $(seq 1 60); do
+        [ "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/${DID}.das")" = 200 ] && break; sleep 2
+      done
+    fi
   }
 
   run allvars_das 0 "$BASE/${DID}.das"
