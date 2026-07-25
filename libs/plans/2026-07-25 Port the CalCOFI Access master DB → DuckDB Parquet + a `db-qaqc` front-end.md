@@ -216,23 +216,39 @@ concern quality-flag semantics and gate Phase 5:
   has 3–10. Until resolved, salinity quality cannot be interpreted and any ported
   salinity QC rule would be built on sand.
 
-### Phase 3 — Full reconciliation against the current release
+### Phase 3 — Full reconciliation against the current release ✅ DONE
 
-This runs **before** any new ingest, because it determines what is actually net-new.
+`libs/reconcile_hydro_master.R`. **The headline is that the pipeline is vindicated:**
 
-- Row-by-row compare Access `Cast` (36,217) and `Bottle` (909,076) against the released
-  bottle tables, joining on the `Cst_Cnt` → `cast_id` / `Btl_Cnt` → `bottle_id` source
-  counters. Report: rows only in Access, rows only in the release, and per-column value
-  deltas for shared rows.
-- Explain the 8-row `Bottle` (909,076) vs `BottleData_194903_202304` (909,068) delta.
-- Reconcile `Chl`, `Nuts`, `Zooplankton`, `DICs`, `Cruises`, `Station_ID`,
-  `CurrentStations` the same way.
-- Deliverable: a reconciliation report chunk plus
-  `data/accdb/calcofi_hydro-master/reconciliation/*.csv`. Every delta resolves to either a
-  release bug, an Access-era artifact, or a documented intentional difference — no
-  unexplained residue.
-- Run the ported `TR` (referential) checks against the current release as part of this;
-  each finding is either a real bug or a rule to retire.
+- **The release is a strict subset of the master, with zero release-only rows.**
+  `Cast` 36,217 → 35,644 shared + 573 Access-only; `Bottle` 909,076 → 895,371 shared +
+  13,705 Access-only. Nothing invented, no orphans.
+- **All 13 measurement types agree to floating-point rounding.** Across 6.0 M shared
+  bottle-measurement comparisons exactly **one** value differs by more than 1e-4
+  (`oxygen_umol_kg`, 3e-4); max deviation anywhere is 3e-4. No nulls introduced in either
+  direction.
+- **The Access-only rows are exactly 7 cruises, 202107–202304** — post-2021-05 data the
+  release does not have, consistent with it being built from the published
+  "through 2105" extract.
+
+Two corrections to what this plan previously assumed:
+
+- The `Bottle` vs `BottleData_194903_202304` gap is **not** "8 missing rows". It is
+  **93 out / 85 in**, netting −8. The 93 are all cruise 202304 (mid-import); the 85 are
+  bottles *deleted from the master after* the export was generated, across 202105 /
+  202111 / 202208 / 202211.
+- `BottleData_194903_202304` is **not a plain extract** of `Bottle` — it is a
+  denormalized Cast⨝Bottle export (30 columns vs 13).
+- Since 202105 falls inside the release's coverage, withdrawn data could plausibly have
+  leaked in. **Checked: zero of the 85 appear in `bottle` or `bottle_measurement`.**
+
+**Table disposition** — all 65 Access tables classified, none left unclassified
+(`metadata/calcofi/hydro-master/table_disposition.csv`): 30 working copies / staging,
+10 documentation (harvested in Phase 2), 8 covered by an existing release dataset,
+2 reconciled and verified, and **15 NET-NEW carrying 2,853,787 rows** — the Phase 4 input.
+
+Deferred: running the ported `TR` checks against the release moves to Phase 5, since it
+needs the rule registry that phase builds.
 
 ### Phase 4 — Ingest the net-new tables
 
