@@ -2,13 +2,23 @@
 # Build the LUMPED (single-file) wide variants + wide CSV (split+lumped, thin) for the
 # split-vs-lumped granularity experiment. (Wide SPLIT parquet -> gen_ctd_wide.R; wide
 # SPLIT netcdf -> gen_ctd_netcdf.R; wide DuckDB views -> gen_ctd_wide.R.) Run in rstudio:
-#   docker exec rstudio Rscript /share/github/CalCOFI/workflows/scripts/gen_ctd_lumped.R
+#   docker exec rstudio Rscript /share/github/CalCOFI/workflows/scripts/gen_ctd_lumped.R [parquet|csv|netcdf|all]
+#
+# Artifact selector (default all). Only the NETCDF path depends on the CF profile
+# grain — the flat parquet/csv pivots are one row per depth sample by construction,
+# so a profile-grain change (see .ctd_cruise_wide in libs/erddap_netcdf.R) means
+# rebuilding `netcdf` alone, not the multi-GB parquet/csv artifacts.
 suppressMessages({ library(DBI); library(duckdb); library(glue); library(readr); library(ncdf4) })
 WF   <- "/share/github/CalCOFI/workflows"
 DATA <- "/share/data/erddap-duckdb/datasets"
 SERV <- "/share/data/erddap-duckdb/serving"
 TMP  <- "/share/data/erddap-duckdb/tmp"
 source(file.path(WF, "libs/erddap.R")); source(file.path(WF, "libs/erddap_netcdf.R"))
+
+argv <- commandArgs(trailingOnly = TRUE)
+WANT <- if (length(argv) && argv[1] %in% c("parquet", "csv", "netcdf")) argv[1] else "all"
+want <- function(x) WANT %in% c("all", x)
+cat(sprintf("building: %s\n", WANT))
 
 mt <- read_csv(file.path(WF, "metadata/measurement_type.csv"), show_col_types = FALSE)
 canonical   <- mt$measurement_type[mt$is_canonical %in% c(TRUE, "TRUE")]
@@ -40,7 +50,7 @@ present <- function(tbl) dbGetQuery(con, glue(
   "SELECT DISTINCT measurement_type FROM read_parquet('{DATA}/{tbl}/**/*.parquet', hive_partitioning=true)"))$measurement_type
 
 # --- wide LUMPED parquet (single file per table) ---
-for (tbl in c("ctd_thin", "ctd_measurement")) {
+if (want("parquet")) for (tbl in c("ctd_thin", "ctd_measurement")) {
   vars <- intersect(canonical, present(tbl))
   f <- file.path(mkdir(SERV, "wide_lumped_parquet", tbl), paste0(tbl, ".parquet"))
   dbExecute(con, glue("COPY ({wide_sql(tbl, vars, epoch_t)}) TO '{f}' (FORMAT parquet)"))
@@ -48,21 +58,23 @@ for (tbl in c("ctd_thin", "ctd_measurement")) {
 }
 
 # --- wide CSV, thin only (measurement CSV is tens of GB) ---
-vars <- intersect(canonical, present("ctd_thin"))
-f <- file.path(mkdir(SERV, "wide_lumped_csv", "thin"), "ctd_thin.csv")
-dbExecute(con, glue("COPY ({wide_sql('ctd_thin', vars, epoch_t)}) TO '{f}' (FORMAT csv, HEADER)"))
-cat(sprintf("lumped csv thin  %.1f MB\n", file.size(f) / 1048576))
-d <- mkdir(SERV, "wide_split_csv", "thin")
-cru <- setdiff(sort(sub("^cruise_key=", "", list.files(file.path(DATA, "ctd_thin"), pattern = "^cruise_key="))),
-               "__HIVE_DEFAULT_PARTITION__")
-for (ck in cru) {
-  sql <- wide_sql("ctd_thin", vars, epoch_t, glue("WHERE t.cruise_key='{ck}'"))
-  dbExecute(con, glue("COPY ({sql}) TO '{file.path(d, paste0(ck, '.csv'))}' (FORMAT csv, HEADER)"))
+if (want("csv")) {
+  vars <- intersect(canonical, present("ctd_thin"))
+  f <- file.path(mkdir(SERV, "wide_lumped_csv", "thin"), "ctd_thin.csv")
+  dbExecute(con, glue("COPY ({wide_sql('ctd_thin', vars, epoch_t)}) TO '{f}' (FORMAT csv, HEADER)"))
+  cat(sprintf("lumped csv thin  %.1f MB\n", file.size(f) / 1048576))
+  d <- mkdir(SERV, "wide_split_csv", "thin")
+  cru <- setdiff(sort(sub("^cruise_key=", "", list.files(file.path(DATA, "ctd_thin"), pattern = "^cruise_key="))),
+                 "__HIVE_DEFAULT_PARTITION__")
+  for (ck in cru) {
+    sql <- wide_sql("ctd_thin", vars, epoch_t, glue("WHERE t.cruise_key='{ck}'"))
+    dbExecute(con, glue("COPY ({sql}) TO '{file.path(d, paste0(ck, '.csv'))}' (FORMAT csv, HEADER)"))
+  }
+  cat(sprintf("split csv thin  %d files\n", length(cru)))
 }
-cat(sprintf("split csv thin  %d files\n", length(cru)))
 
 # --- wide LUMPED netcdf (single CF file per table; heavy for measurement) ---
-for (tbl in c("ctd_thin", "ctd_measurement")) {
+if (want("netcdf")) for (tbl in c("ctd_thin", "ctd_measurement")) {
   vars <- intersect(canonical, present(tbl))
   f <- file.path(mkdir(SERV, "wide_lumped_netcdf", tbl), paste0(tbl, ".nc"))
   dims <- build_ctd_netcdf_lumped(con, DATA, f, tbl, vars, nc_title[[tbl]], nc_summ, units_lk, longname_lk)
