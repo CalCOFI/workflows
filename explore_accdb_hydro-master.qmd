@@ -1,0 +1,426 @@
+---
+title: "Access hydro master — inventory & query triage"
+subtitle: "Phase 1 of porting `CalCOFI_4903-2304_Master_Final_through_2105`"
+format:
+  html:
+    # override the project-wide `mermaid-format: png`. PNG needs a headless
+    # browser and is currently broken on this machine in both directions: quarto
+    # picks the system Chrome, which hangs on its profile lock, and quarto's own
+    # bundled Chromium is 91.0.4469.0 (2021), too old to render mermaid 11.x
+    # ("Couldn't find an svg element in svg string"). SVG needs no browser.
+    # Costs the lightbox zoom; this diagram is small enough not to need it.
+    mermaid-format: svg
+---
+
+## Overview
+
+`CalCOFI_4903-2304_Master_Final_through_2105_October162023.accdb` (2.0 GB, ACE12)
+is the **hydrographic master / authoring database** behind the published CalCOFI
+bottle database, covering 1949-03 → 2023-04. It is a **frozen archive**: we are
+mining it and retiring it, not replacing it as a live authoring environment.
+
+It carries ~30 years of institutional QA/QC knowledge that has no counterpart in
+the modern pipeline — 155 saved queries, a self-documenting metadata layer, a
+declared FK graph, and a harmonic-climatology expected-value engine.
+
+Phase 0 (`scripts/extract_accdb.sh`) already extracted it. This notebook does
+**Phase 1: inventory and triage** — it classifies every query, scores the
+porting hazards, and emits `metadata/calcofi/hydro-master/query_triage.csv` as
+the artifact a human reviews before any rule is ported.
+
+Nothing here modifies the pipeline. The full design lives in the Phase plan under
+`libs/plans/` (2026-07-25, "Port the CalCOFI Access master DB").
+
+## Setup
+
+```{r}
+#| label: setup
+
+librarian::shelf(
+  dplyr, DT, glue, here, purrr, readr, stringr, tidyr,
+  quiet = T)
+
+source(here("libs/extract_accdb.R"))
+
+dir_accdb <- here("metadata/calcofi/hydro-master/accdb")
+dir_pq    <- here("data/accdb/calcofi_hydro-master/tables")
+dir_out   <- here("metadata/calcofi/hydro-master")
+
+# the one query Jackcess could not extract has empty sql, which read_csv makes NA;
+# coalesce so the hazard regexes below yield FALSE rather than poisoning every sum()
+d_queries <- read_csv(glue("{dir_accdb}/queries.csv"), show_col_types = F) |>
+  mutate(sql = coalesce(sql, ""))
+d_diff    <- read_csv(glue("{dir_accdb}/query_sql_diff.csv"), show_col_types = F)
+d_rels    <- read_csv(glue("{dir_accdb}/relationships.csv"), show_col_types = F)
+d_objects <- read_csv(glue("{dir_accdb}/objects.csv"),       show_col_types = F)
+d_tables  <- read_csv(glue("{dir_accdb}/tables.csv"),        show_col_types = F)
+
+con <- calcofi4db::get_duckdb_con(":memory:")
+pq  <- function(tbl) glue("read_parquet('{dir_pq}/{tbl}.parquet')")
+
+cat(glue(
+  "extraction: {nrow(d_tables)} tables, {format(sum(d_tables$n_row), big.mark=',')} rows, ",
+  "{nrow(d_queries)} queries, {nrow(d_rels)} relationships\n"))
+```
+
+## Object inventory
+
+What is actually in the file — this is what settles whether Access (and therefore
+a Windows VM) is needed at all.
+
+```{r}
+#| label: objects
+
+d_obj_summary <- d_objects |>
+  count(object_type, name = "n") |>
+  arrange(desc(n))
+
+datatable(
+  d_obj_summary,
+  caption = "MSysObjects by decoded type",
+  options = list(pageLength = 15, dom = "t"))
+```
+
+The scientific content is entirely in **queries + tables + relationships**. The
+only objects unreachable without Access are 2 utility VBA modules
+(`mdl_autonum`, `rownum`), 1 data-entry form and 1 report — and the report's
+record source was recovered as a saved query anyway. That is the whole basis for
+"no Windows needed".
+
+## Tables
+
+```{r}
+#| label: tables
+
+datatable(
+  d_tables |>
+    select(table, n_row, n_col) |>
+    arrange(desc(n_row)),
+  caption = "Extracted tables by row count",
+  options  = list(pageLength = 15)) |>
+  formatRound("n_row", digits = 0)
+```
+
+### The `Bottle` satellites are 1:1, not 1:many
+
+Six tables share exactly 909,076 rows. The declared FK graph calls them children
+of `Bottle`, which would suggest 1:many — but this is a classic Access **vertical
+partition**: one row per bottle in each, joined on `Btl_Cnt`. Verify rather than
+assume, because it decides whether they survive as six tables or collapse into
+long-format `obs` rows.
+
+```{r}
+#| label: satellites
+
+satellites <- c("Bottle_Q", "Chl", "Nuts", "Rpt_Data", "Prodo_Bottle")
+
+d_1to1 <- map_df(satellites, \(s) {
+  DBI::dbGetQuery(con, glue("
+    SELECT
+      '{s}'                                              AS satellite,
+      COUNT(*)                                           AS n_row,
+      COUNT(DISTINCT s.Btl_Cnt)                          AS n_distinct_btl,
+      SUM(CASE WHEN b.Btl_Cnt IS NULL THEN 1 ELSE 0 END) AS n_orphan
+    FROM {pq(s)} s
+    LEFT JOIN (SELECT DISTINCT Btl_Cnt FROM {pq('Bottle')}) b
+      ON s.Btl_Cnt = b.Btl_Cnt"))
+}) |>
+  mutate(is_1to1 = n_row == n_distinct_btl & n_orphan == 0)
+
+datatable(d_1to1, caption = "Bottle satellites — 1:1 on Btl_Cnt?", options = list(dom = "t"))
+```
+
+```{r}
+#| label: satellites-assert
+
+stopifnot(all(d_1to1$is_1to1))
+cat("all", nrow(d_1to1), "satellites are strictly 1:1 with Bottle on Btl_Cnt,",
+    "with zero orphans\n")
+cat("-> these collapse into long-format `obs` rows; they must NOT survive as",
+    "six per-dataset tables\n")
+```
+
+## Relationship graph
+
+```{r}
+#| label: rels
+
+datatable(
+  d_rels |> select(relationship, from_table, from_column, to_table, to_column, flags, enforced),
+  caption = "MSysRelationships, with DAO flag bitmasks decoded",
+  options  = list(pageLength = 12, dom = "t"))
+```
+
+```{mermaid}
+%%| label: fig-erd
+%%| fig-cap: "Declared referential integrity in the Access master"
+erDiagram
+  Cruises        ||--o{ Cast         : "Cruise"
+  Cast           ||--o{ Bottle       : "Cst_Cnt"
+  Cast           ||--o{ Weather      : "Cst_Cnt"
+  Cast           ||--o{ Prodo_Cast   : "Cst_Cnt"
+  Cast           }o--|| CurrentStations : "DbSta_ID (not enforced)"
+  Cast           }o--o{ Zooplankton  : "Cruise (not enforced)"
+  Bottle         ||--|| Bottle_Q     : "Btl_Cnt"
+  Bottle         ||--|| Chl          : "Btl_Cnt"
+  Bottle         ||--|| Nuts         : "Btl_Cnt"
+  Bottle         ||--|| Rpt_Data     : "Btl_Cnt"
+  Bottle         ||--|| Prodo_Bottle : "Btl_Cnt"
+  Prodo_Cast     ||--o{ Prodo_Bottle : "Cst_Cnt"
+```
+
+Ten of twelve relationships enforce referential integrity with cascades. The two
+that do not — `Cast → CurrentStations` (a left join) and `Cast ↔ Zooplankton`
+(by `Cruise`) — are precisely the joins the `TR -` test queries were written to
+police by hand.
+
+## The self-documenting metadata layer
+
+The database documents itself. These `0-*` tables are the highest-value, lowest-risk
+harvest, and they define the query taxonomy used for triage below.
+
+```{r}
+#| label: query-info
+
+d_qinfo <- DBI::dbGetQuery(con, glue("SELECT * FROM {pq('0-Query_Info')}")) |>
+  as_tibble()
+
+datatable(
+  d_qinfo |> select(Name, Purpose, Comments),
+  caption = "`0-Query Info` — the taxonomy, in the authors' own words",
+  options  = list(pageLength = 10))
+```
+
+```{r}
+#| label: measurements
+
+datatable(
+  DBI::dbGetQuery(con, glue(
+    "SELECT Name, Units, Accuracy, Description, Year_started, Year_ended, Method
+     FROM {pq('0-Measurements')}")),
+  caption = "`0-Measurements` — method/accuracy/date provenance the repo lacks entirely",
+  options  = list(pageLength = 10))
+```
+
+## Query corpus triage
+
+The deliverable of this phase. Every query is classified, scored for porting
+hazards, and written out for human review.
+
+### Classify
+
+`0-Query Info` documents both individual queries and whole **prefix families**
+(rows named `TR - <name>`, `TV - <name>`, …). Resolve the exact-name match first,
+then fall back to the family description.
+
+```{r}
+#| label: classify
+
+# family purpose text, keyed by prefix (rows literally named e.g. "TR - <name>")
+d_family <- d_qinfo |>
+  filter(str_detect(Name, "<name>")) |>
+  transmute(
+    prefix         = str_remove(Name, "\\s*<name>.*$") |> str_trim(),
+    family_purpose = Purpose)
+
+d_triage <- d_queries |>
+  mutate(
+    prefix = case_when(
+      str_detect(query_name, "^TR\\s*-")            ~ "TR -",
+      str_detect(query_name, "^TQ\\s*-")            ~ "TQ -",
+      str_detect(query_name, "^TS\\s*-")            ~ "TS -",
+      str_detect(query_name, "^TV\\s*-")            ~ "TV -",
+      str_detect(query_name, "^TX\\s*-")            ~ "TX -",
+      str_detect(query_name, "^TI\\s*-")            ~ "TI -",
+      str_detect(query_name, "^TM\\s*-")            ~ "TM -",
+      str_detect(query_name, "^QC")                 ~ "QC",
+      str_detect(query_name, "^UQ")                 ~ "UQ",
+      str_detect(query_name, "^(MT-|MK_|Make )")    ~ "MakeTable",
+      str_detect(query_name, "^Export")             ~ "Export",
+      str_detect(query_name, "^Anomalies")          ~ "Anomalies",
+      str_detect(query_name, "^Isopycnal")          ~ "Isopycnal",
+      str_detect(query_name, "^(ML Data|MLD)")      ~ "MLD",
+      str_detect(query_name, "^(Depth Data|Data for|Cluster)") ~ "Analysis",
+      str_detect(query_name, "^(Zoop|Zooplankton)") ~ "Zooplankton",
+      str_detect(query_name, "^Find dup")           ~ "FindDuplicates",
+      TRUE                                          ~ "(other)"),
+    category = case_when(
+      query_type %in% c("UPDATE", "APPEND")         ~ "correction-history",
+      query_type == "MAKE_TABLE"                    ~ "materialization",
+      prefix %in% c("TR -", "TQ -", "TS -", "TV -", "TX -", "QC",
+                    "FindDuplicates")               ~ "validate",
+      prefix %in% c("Anomalies", "Isopycnal", "MLD", "Analysis",
+                    "Zooplankton")                  ~ "derived-product",
+      prefix %in% c("Export", "TI -", "TM -")       ~ "export-or-info",
+      TRUE                                          ~ "unclassified")) |>
+  left_join(d_qinfo |> select(query_name = Name, purpose = Purpose), by = "query_name") |>
+  left_join(d_family, by = "prefix") |>
+  mutate(purpose = coalesce(purpose, family_purpose)) |>
+  select(-family_purpose)
+
+d_triage |>
+  count(category, query_type) |>
+  pivot_wider(names_from = query_type, values_from = n, values_fill = 0) |>
+  datatable(caption = "Triage: category × Access query type", options = list(dom = "t"))
+```
+
+### Score porting hazards
+
+Access SQL is not DuckDB SQL. These are the specific dialect features present in
+this corpus that will silently mistranslate if copy-pasted.
+
+```{r}
+#| label: hazards
+
+d_triage <- d_triage |>
+  mutate(
+    # Access `!` member operator, e.g. Cast!Bottom_D  -> Cast.Bottom_D
+    hz_bang          = str_detect(sql, "\\w!\\w"),
+    # TRANSFORM ... PIVOT has no DuckDB equivalent
+    hz_crosstab      = query_type == "CROSS_TAB",
+    # hardcoded single-cruise filters -> must become parameters
+    hz_hardcoded_cruise = str_detect(sql, "Cruise\\w*\\)?\\s*=\\s*[0-9]{6}"),
+    # string comparison against a numeric-looking field: "76.6" sorts wrong
+    hz_string_numeric = str_detect(
+      sql, '(Line|Sta|Station|Year|Depth|Cnt)\\w*\\)\\s*[<>]=?\\s*"'),
+    # Access-only scalar functions
+    hz_access_fn     = str_detect(sql, "\\b(Nz|IIf|DatePart|Val|CInt|CDbl|CSng|Format)\\s*\\("),
+    # references another saved query -> port in dependency order
+    hz_query_ref     = map_lgl(seq_len(n()), \(i) any(str_detect(
+      sql[i], fixed(setdiff(d_queries$query_name, query_name[i]))))),
+    n_hazard = hz_bang + hz_crosstab + hz_hardcoded_cruise +
+               hz_string_numeric + hz_access_fn + hz_query_ref)
+
+d_triage |>
+  summarise(across(starts_with("hz_"), sum)) |>
+  pivot_longer(everything(), names_to = "hazard", values_to = "n_queries") |>
+  mutate(hazard = str_remove(hazard, "^hz_")) |>
+  arrange(desc(n_queries)) |>
+  datatable(caption = "Porting hazards across all 155 queries", options = list(dom = "t"))
+```
+
+### The portable set
+
+```{r}
+#| label: portable
+
+d_validate <- d_triage |>
+  filter(category == "validate") |>
+  select(query_name, query_type, prefix, n_hazard, purpose) |>
+  arrange(desc(n_hazard), query_name)
+
+cat(glue(
+  "{nrow(d_validate)} queries classified `validate` — the Phase 5 rule-registry candidates\n",
+  "{sum(d_validate$n_hazard == 0)} of them are hazard-free (near-mechanical port)\n"))
+
+datatable(d_validate, caption = "Candidate QC rules, hardest first", options = list(pageLength = 15))
+```
+
+### Dependency order
+
+Access queries are views: 26 of them read other saved queries, so they must be
+ported bottom-up.
+
+```{r}
+#| label: dag
+
+d_dag <- d_triage |>
+  filter(hz_query_ref) |>
+  mutate(depends_on = map_chr(seq_len(n()), \(i) {
+    refs <- setdiff(d_queries$query_name, query_name[i])
+    paste(refs[str_detect(sql[i], fixed(refs))], collapse = "; ") })) |>
+  select(query_name, category, depends_on)
+
+datatable(d_dag, caption = "Queries that read other queries — port these last",
+          options = list(pageLength = 10))
+```
+
+## Extractor fidelity
+
+Phase 0 ran both extractors and diffed them. This is the standing guard against
+trusting the lossy one.
+
+```{r}
+#| label: fidelity
+
+d_fid <- d_diff |>
+  summarise(
+    queries            = n(),
+    mdbtools_empty     = sum(mdbtools_empty),
+    mdbtools_lost_join = sum(mdbtools_lost_join),
+    mdbtools_lost_group= sum(mdbtools_lost_group),
+    mdbtools_has_extra = sum(mdbtools_has_extra)) |>
+  pivot_longer(everything(), names_to = "metric", values_to = "n")
+
+datatable(d_fid, caption = "mdbtools vs Jackcess", options = list(dom = "t"))
+```
+
+```{r}
+#| label: fidelity-assert
+
+# mdbtools must be a STRICT SUBSET of Jackcess. A non-zero `has_extra` means one
+# of the two engines regressed and neither can be trusted until it is explained.
+stopifnot(sum(d_diff$mdbtools_has_extra) == 0)
+cat("mdbtools is a strict subset of Jackcess, as expected:",
+    sum(d_diff$mdbtools_lost_join), "queries lost a JOIN and",
+    sum(d_diff$mdbtools_lost_group), "lost a GROUP BY under mdbtools\n")
+```
+
+## Known gaps
+
+```{r}
+#| label: gaps
+
+d_gaps <- bind_rows(
+  d_queries |>
+    filter(!ok) |>
+    transmute(item = query_name, gap = "Jackcess extraction failed", detail = error),
+  d_triage |>
+    filter(hz_crosstab) |>
+    transmute(item = query_name, gap = "Access TRANSFORM/PIVOT",
+              detail = "no DuckDB equivalent; needs manual translation"))
+
+datatable(d_gaps, caption = "Recorded, not hidden", options = list(pageLength = 15))
+```
+
+## Emit the triage artifact
+
+```{r}
+#| label: write-triage
+
+path_triage <- glue("{dir_out}/query_triage.csv")
+
+d_triage |>
+  mutate(sql_file = as.character(glue("accdb/sql/{accdb_safe_name(query_name)}.sql"))) |>
+  arrange(category, query_name) |>
+  select(query_name, query_type, category, prefix, purpose,
+         ok, n_hazard, starts_with("hz_"), sql_file) |>
+  write_csv(path_triage, na = "")
+
+cat("wrote", path_triage, "-", nrow(d_triage), "rows\n")
+```
+
+## Next steps
+
+`query_triage.csv` is the **human review gate**. The `category` column is a
+mechanical first pass from naming convention and query type; the `Goericke` /
+`JRW` / `AEH` initials in `0-Work Done` name the lineage whose intent is being
+reconstructed, and a CalCOFI data manager should confirm the classification
+before any rule is ported.
+
+Two judgement calls to settle during review:
+
+- **`TQ - StationNameChecker` has a latent Access bug** — it compares
+  `Rpt_Line > "76.6"` as *strings*, so line 100 sorts below line 76.6. Port the
+  bug, or the intent?
+- The `QC-DIC_*` family is hardcoded to single cruises (e.g. `Cruise = 201507`).
+  These were ad-hoc one-offs; they only become reusable rules once parameterized.
+
+Then: Phase 2 (metadata harvest), Phase 3 (reconciliation against the current
+release), Phase 4 (ingest the net-new tables).
+
+```{r}
+#| label: cleanup
+
+DBI::dbDisconnect(con, shutdown = TRUE)
+```
