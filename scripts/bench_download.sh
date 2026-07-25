@@ -92,13 +92,28 @@ download() {
 
 for cell in "${CELLS[@]}"; do
   DID="$cell"; BLOCK="$BLOCKS/${cell}.xml"
-  case "$cell" in *thin*) TABLE=thin;; *meas*) TABLE=measurement;; *) TABLE=?;; esac
-  case "$cell" in *netcdf*) APP=netcdf;; *parquet*) APP=parquet;; *csv*) APP=csv;; *duckdb*) APP=duckdb;; esac
-  case "$cell" in *wide*) SCHEMA=wide;; *) SCHEMA=long;; esac
-  case "$cell" in *lumped*) GRAN=lumped;; *split*) GRAN=split;; *) GRAN=na;; esac
-  echo "======== CELL $cell (table=$TABLE $APP/$SCHEMA/$GRAN heap=$HEAP) ========"
   [ -f "$BLOCK" ] || { echo "  MISSING block $BLOCK, skip"; continue; }
-
+  # Classify from the BLOCK, not the cell name: the production-mirroring cells
+  # (calcofi_ctd_measurement_netcdf, ..._duckdb) carry no wide/long/split token in
+  # their name, and guessing from the name silently mislabels them in the results.
+  case "$cell" in *thin*) TABLE=thin;; *meas*) TABLE=measurement;; *) TABLE=?;; esac
+  case "$(grep -oE 'type="EDDTable[A-Za-z]+"' "$BLOCK" | head -1)" in
+    *FromDatabase*)     APP=duckdb;;
+    *FromNcCFFiles*)    APP=netcdf;;
+    *FromParquetFiles*) APP=parquet;;
+    *FromAsciiFiles*)   APP=csv;;
+    *)                  APP=?;;
+  esac
+  # long schema declares measurement_value/measurement_type; wide names sensors directly
+  if grep -q '<destinationName>measurement_value<' "$BLOCK"; then SCHEMA=long; else SCHEMA=wide; fi
+  # granularity from the actual file count behind fileDir (DB-backed cells have none)
+  FDIR=$(grep -oE '<fileDir>[^<]+' "$BLOCK" | head -1 | sed 's/<fileDir>//')
+  if [ -z "$FDIR" ]; then GRAN=view
+  else
+    NF=$(find "$FDIR" -maxdepth 2 -type f \( -name '*.nc' -o -name '*.parquet' -o -name '*.csv' \) 2>/dev/null | wc -l)
+    [ "$NF" -le 1 ] && GRAN=lumped || GRAN=split
+  fi
+  echo "======== CELL $cell (table=$TABLE $APP/$SCHEMA/$GRAN heap=$HEAP) ========"
   avail=$(free -m | awk '/Mem:/{print $7}')
   if [ "${avail:-0}" -lt "$MIN_AVAIL_MB" ]; then echo "  ABORT: host avail ${avail}MB < ${MIN_AVAIL_MB}MB"; break; fi
   rm -rf "$BENCH"/data/* 2>/dev/null
