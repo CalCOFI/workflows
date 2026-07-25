@@ -105,7 +105,7 @@ Two things I left as flags rather than solving: tM is the one Jackcess failure (
 
 Working artifacts from the spike are in the scrat, queries_jackcess.csv, DumpQueries.java) — Phase0 says to lift the Java dumper rather than rewrite it. Want me to move the plan into libs/plans/ following your dated-filename convention, and start on Phase 0?
 
-## 2026-06-25
+## 2026-06-25 netCDF erddap parquet
 
 Find the email thread "Re: data management plan and link to supporting documentation" and provide a response, given
   existing work throughout CalCOFI.io, especially @../erddap/ and @bench_erddap_ctd.qmd. I think we can easily provide netCDF
@@ -176,6 +176,43 @@ The email needs no change yet. The draft says the CF profile files are "written 
 
 One thing worth your judgment: the NetCDF rows in bench_erddap_ctd.qmd were measured against the old grain. The granularity-is-the-memory-lever conclusion doesn't depend on it, but the NetCDF file characteristics would differ on a re-run — worth a footnote there, or a re-run of just the NetCDF cells, before that page gets cited in the DMP thread.
 
+----
+
+Done — deployed, verified correct, email updated.
+
+Live and verified
+
+calcofi_ctd_thin_nc is serving at https://erddap.calcofi.io/erddap/tabledap/calcofi_ctd_thin_nc.html. End-to-end check on the same cruise that exposed the bug:
+
+featureType: Profile   Conventions: CF-1.10   cf_role: profile_id
+dims:    profile=3, obs=164
+rowSize: 9, 70, 85                          ← matches ord_occ ground truth exactly
+ids:     2025-02-33UD:001:D, :002:D, :003:D
+temp:    5.38–14.63 °C over 164 levels
+
+Total dropped from 168.4 MB to 55.4 MB — independent corroboration, since the degenerate version was storing 5.5 M profile records with 36-char UUIDs. ERDDAP memory went down (4.28 → 4.21 GiB).
+
+Three false starts worth knowing about
+
+The regeneration took three attempts, and two of them reported success while doing nothing:
+
+1. Relative script path. cd in the ssh command changes the host shell's directory, not the container's, so docker exec … Rscript scripts/gen_ctd_netcdf.R couldn't find the file. My wait-loop counted 96 files and declared victory — they were the stale ones.
+2. Skip-existing. build_ctd_netcdf() skips existing .nc so interrupted runs resume, but gen_ctd_netcdf.R never exposed overwrite. It printed DONE ctd_thin: 96 files, 168.4 MB having rewritten nothing. I added a --force flag rather than hand-deleting, since regenerating after a grain change will recur.
+
+Both failure modes look identical to success from the outside. I only caught them by checking file mtimes and the profiles=/obs= ratio in the log, not the exit status.
+
+Commits
+
+- fb203fd — the ord_occ grain fix (both per-cruise and lumped builders)
+- 1d0e9a1 — --force flag
+- a134b18 in CalCOFI/erddap — datasets.xml, pushed to main
+
+The email draft now leads with the live URL and asks Ben Gire directly to open the file and say whether the structure is what modelers want — since he's the one who raised CF-compliance, that's the cheapest way to validate step 2 before building it.
+
+Two loose ends for you:
+
+- erddap-ctd-netcdf is unmerged, and the host has those files checked out over main. I left it that way deliberately — reverting the host to main would restore the buggy erddap_netcdf.R, so a future regeneration would reintroduce single-point profiles. Want me to open a PR?
+- The bench doc still reports NetCDF measurements taken against the old grain. The granularity conclusion holds, but the NetCDF file sizes are now ~3× smaller, so those specific numbers are stale — worth a footnote before that page gets cited in the DMP thread.
 
 
 ## 2026-07-2?
