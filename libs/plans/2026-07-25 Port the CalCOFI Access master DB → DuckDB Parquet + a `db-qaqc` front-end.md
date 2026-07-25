@@ -172,18 +172,49 @@ the path is identical: `apt install mdbtools` + JDK + Jackcess.
   `Goericke` / `JRW` / `AEH` initials in `0-Work Done` name the people whose intent we are
   reconstructing.
 
-### Phase 2 — Harvest the metadata layer
+### Phase 2 — Harvest the metadata layer ✅ DONE
 
-- Merge `0-Categories` → `metadata/field_dictionary.csv`; regenerate via
-  `libs/build_field_dictionary.R`.
-- Extend `metadata/measurement_type.csv` with new `method`, `accuracy`, `year_started`,
-  `year_ended` columns from `0-Measurements`.
-- New `metadata/measurement_qual.csv` from `Bottle_Q` — the controlled vocabulary
-  `measurement_qual` has always lacked. Then **start interpreting the flag** instead of
-  passing it through.
-- New `metadata/calcofi/bottle/change_log.csv` from `0-Work Done` (281 rows).
-- Cross-check `0-Ships` / `0-Sta_Code` against `metadata/ship_renames.csv`, and
-  `MSysRelationships` against `relationships.json` / `relationships_cross.csv`.
+`libs/build_hydro_master_metadata.R` (re-runnable, idempotent). Three deviations from
+the original design, each forced by what the data turned out to be:
+
+- **Nothing was merged into `metadata/field_dictionary.csv`.** That registry is
+  *prescriptive*; the Access tables are *descriptive* of a 1949-era source schema
+  (`T_degC`, `Salnty`, `Cst_Cnt`). Injecting 181 source names would corrupt it. Instead:
+  `accdb_field_descriptions.csv` (181 fields / 19 tables, merging `0-Field Descriptions`
+  for the core tables with `0-Categories` for the rest) plus `accdb_field_crosswalk.csv`
+  proposing canonical targets — 35 matched (8 canonical / 10 alias / 17 measurement_type),
+  146 unmatched, all left for review.
+- **`0-Measurements` became its own registry, not columns on `measurement_type.csv`** —
+  it is one-to-many (Temperature has 6 method eras, Chlorophyll and Phosphate 4 each).
+  Flattening would discard the instrument history, which is the entire value.
+  `measurement_method.csv`: 35 method-eras, 17 linked by an **explicit seed map**
+  (fuzzy matching linked 0 — "Sil"/"PO4-P"/"O2" share no substring with the canonical
+  keys, and a looser rule would mis-link silently).
+- **The quality vocabulary split in two.** `metadata/measurement_qual.csv` is the real
+  controlled vocabulary — 3 documented (`6` = data OK but taken from CTD, `8` = suspect,
+  `9` = missing) plus 7 observed-but-undocumented single-digit codes. The full per-column
+  distribution went to `qual_code_observed.csv` (279 pairs, 248 with code > 9), because
+  pooling them would drown a 3-code vocabulary in what is almost certainly corruption.
+
+Also emitted: `change_log.csv` (280 entries, 2005-10-19 → 2023-10-16, 9 contributors),
+`station_code.csv`, `ship_crosswalk.csv` (29 Access ships, 5 matched to `ship_renames.csv`).
+
+**Interpreting `measurement_qual` is deliberately NOT done yet** — it is blocked on
+questions 02/02b/05 below. Guessing the semantics would be worse than the current
+honest pass-through.
+
+### Data-manager review gate
+
+14 questions are queued in `metadata/calcofi/hydro-master/questions.csv`
+(2 blocker, 6 high, 6 medium) rather than resolved by guesswork. The two blockers both
+concern quality-flag semantics and gate Phase 5:
+
+- **`hydro_master_02`** — `T_qual` uses 0–7 and `P_qual` uses 3/5/7, but only 6/8/9 are
+  documented.
+- **`hydro_master_02b`** — `S_qual` holds **253 distinct values** with a dense 256–271
+  cluster (256 + a low nibble, i.e. bit 8 of a bitmask), where every other quality column
+  has 3–10. Until resolved, salinity quality cannot be interpreted and any ported
+  salinity QC rule would be built on sand.
 
 ### Phase 3 — Full reconciliation against the current release
 
