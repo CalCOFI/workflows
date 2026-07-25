@@ -110,7 +110,7 @@ for cell in "${CELLS[@]}"; do
   # Classify from the BLOCK, not the cell name: the production-mirroring cells
   # (calcofi_ctd_measurement_netcdf, ..._duckdb) carry no wide/long/split token in
   # their name, and guessing from the name silently mislabels them in the results.
-  case "$cell" in *thin*) TABLE=thin;; *meas*) TABLE=measurement;; *) TABLE=?;; esac
+  TABLE=$(echo "$cell" | sed -E "s/^(live_|calcofi_)+//; s/_(duckdb|netcdf|parquet|csv)$//")
   case "$(grep -oE 'type="EDDTable[A-Za-z]+"' "$BLOCK" | head -1)" in
     *FromDatabase*)     APP=duckdb;;
     *FromNcCFFiles*)    APP=netcdf;;
@@ -160,20 +160,43 @@ for cell in "${CELLS[@]}"; do
     continue
   fi
 
-  # Variable sets. WIDE selects named sensor columns; LONG filters measurement_type,
-  # so "one variable" means the same rows either way (the invariant bench_erddap.sh uses).
-  if [ "$SCHEMA" = wide ]; then
-    Q_ONE="time,latitude,longitude,depth,temperature_ave"
-    Q_THREE="time,latitude,longitude,depth,temperature_ave,salinity_ave_corr,oxygen_ml_l_ave_sta_corr"
-    Q_ALL=""                                   # empty selection = every variable
-    SUF_ONE=""; SUF_THREE=""
-  else
-    Q_ONE="time,latitude,longitude,depth,measurement_value"
-    Q_THREE="time,latitude,longitude,depth,measurement_type,measurement_value"
-    Q_ALL=""
-    SUF_ONE='&measurement_type=%22temperature_ave%22'
-    SUF_THREE='&measurement_type=~%22(temperature_ave|salinity_ave_corr|oxygen_ml_l_ave_sta_corr)%22'
+  # For LONG datasets, ask the dataset itself which measurement_type values exist
+  # rather than assuming CTD names. distinct() is cheap — it is answered from the
+  # subsetVariables index, not a table scan.
+  MTYPES=""
+  if grep -q '<destinationName>measurement_value<' "$BLOCK"; then
+    MTYPES=$(curl -s -m 60 "$BASE/${DID}.csv?measurement_type&distinct()" \
+      | tail -n +3 | tr -d '"\r' | grep -v '^$' | head -20)
+    [ -z "$MTYPES" ] && echo "  WARN: could not list measurement_type values" >&2
   fi
+
+  # Variable sets, derived from THIS dataset's own variables. Hardcoding CTD sensor
+  # names made every non-CTD dataset return HTTP 400 (the variable simply does not
+  # exist there), which looks like a failure but measures nothing.
+  #
+  # Coordinates present in the block are always selected (they are cheap and make the
+  # output interpretable); "payload" variables are everything else, in declared order.
+  ALLVARS=$(grep -oE '<destinationName>[^<]+' "$BLOCK" | sed 's/<destinationName>//')
+  COORDS=$(echo "$ALLVARS" | grep -xE 'time|latitude|longitude|depth' | paste -sd, -)
+  PAYLOAD=$(echo "$ALLVARS" | grep -vxE 'time|latitude|longitude|depth')
+  P1=$(echo "$PAYLOAD" | head -1)
+  P3=$(echo "$PAYLOAD" | head -3 | paste -sd, -)
+  Q_ONE="${COORDS:+$COORDS,}$P1"
+  Q_THREE="${COORDS:+$COORDS,}$P3"
+  Q_ALL=""                                     # empty selection = every variable
+  SUF_ONE=""; SUF_THREE=""
+  # LONG-format datasets put the variable NAME in a row value, so narrowing to one
+  # "variable" means constraining measurement_type, not selecting a column. Selecting
+  # three requires ERDDAP's =~ regex — worth flagging, because unlike = it is applied
+  # by ERDDAP rather than pushed to the database.
+  if [ "$SCHEMA" = long ]; then
+    Q_ONE="${COORDS:+$COORDS,}measurement_value"
+    Q_THREE="${COORDS:+$COORDS,}measurement_type,measurement_value"
+    T1=$(echo "$MTYPES" | head -1); T3=$(echo "$MTYPES" | head -3 | paste -sd'|' -)
+    SUF_ONE="&measurement_type=%22${T1}%22"
+    SUF_THREE="&measurement_type=~%22(${T3})%22"
+  fi
+  echo "  vars: 1=[$Q_ONE$SUF_ONE] 3=[$Q_THREE$SUF_THREE]"
 
   run() { # $1=label $2=nvars $3=url
     # Sample memory IN FLIGHT — peak occurs during the transfer, so before/after
