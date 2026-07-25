@@ -60,6 +60,247 @@
   ```
   
 
+## 2026-06-25.b CTD cast accdb
+
+Help me come up with a plan to ingest and convert the existing queries and QA/QC that is embedded in this file @`/Users/bbest/Library/CloudStorage/GoogleDrive-ben@ecoquants.com/My Drive/projects/calcofi/data-public/calcofi/ctd-cast/CalCOFI_4903-2304_Master_Final_through_2105_October162023.accdb`. I think we want to continue this work in DuckDB with parquet tables, but I'm also curious about the emerging turso (sqlite replacement). Also, the users need a front-end user interface. And I currently only have a laptop with Mac OS and servers with Ubuntu, so need some sort of emulation or perhaps a temporary VM with Windows to read and evaluate the Access db.
+
+----
+
+Plan is at /Users/bbest/.claude/plans/help-me-come-up-atomic-valiant.md. Here's what I found and what it says.
+
+The headline: you don't need Windows
+
+I tested this rather than guessing. The file is ACE12 (Access 2007), and on this Mac:
+
+- brew install mdbtools reads all 91 tables and dumps a 1,715-line schema.
+- Jackcess 4.0.7 + a JDK extracted 154 of the 155 saved queries with full fidelity — LEFT JOIN/INNER JOIN nesting, GROUP BY, HAVING, aliases, all intact.
+- The database contains only 2 VBA modules (mdl_autonum, rownum — utility, not science), 1 form, and 1 report. There is no hidden logic that requires Access.
+
+One important trap: mdbtools' SQL output is lossy — it silently drops JOIN clauses, GROUP BY and aliases, and renders one query as SELECT FROM. It looks like it worked. Jackcess is the authoritative extractor; mdbtools is only good as a cross-check. Same path works on your Ubuntu servers.
+
+Scope correction
+
+Despite sitting in the Drive ctd-cast/ folder, this is not the CTD dataset. Its Cast table is 36,217 hydrographic casts; your ctd_cast is 5.55 M per-scan rows. This is the master behind the published bottle database — Bottle/Bottle_Q/Chl/Nuts/Rpt_Data at 909,076 rows each. Its Cst_Cnt/Btl_Cnt counters are the cast_id/bottle_id your bottle ingest already uses, so the reconciliation join key exists.
+
+What's actually worth mining
+
+The database documents itself. 0-Query Info defines its own naming taxonomy — TR- = test table linkage, TV- = test unusual values, TQ- = quality control — which classifies ~48 of the 95 SELECT queries as directly portable checks. The 30 UPDATE queries are historical one-time repairs to document, not re-run.
+
+Three things stand out as filling real gaps in the current pipeline:
+
+- Bottle_Q (T_qual, S_qual, O_qual, SThtaq…) is the controlled vocabulary measurement_qual has never had — right now that column is passed through uninterpreted and used only as a tiebreak sort.
+- HarmCoeff* gives expected value and stdev per station × depth × day-of-year. That's a z-score outlier engine. Nothing in the pipeline currently checks a measurement against any expected range.
+- 0-Measurements carries method/accuracy/year-started provenance (reversing thermometer → CTD thermistor on 1993-08-11, PO4 method changes 1949→1983) that measurement_type.csv lacks entirely.
+
+On Turso
+
+I'd skip it. It's row-oriented OLTP against 900 K–216 M-row column scans, the Rust engine is explicitly beta (the maintainers say libSQL is the production line), and it has no Parquet/GCS story when your data already lives as Parquet. The one case that could have justified it — a writable multi-user review ledger — is moot now that you've confirmed the Access file is a frozen archive.
+
+The plan, in eight phases
+
+Extraction harness → land & triage → metadata harvest → full reconciliation → ingest the net-new tables (Weather, Prodo_*, Rpt_Data, MLD_Sigma, NutClineDepth, HarmCoeff* appear to have no counterpart in the release) → declarative qc_rules.csv registry wired into validate_for_release() → climqc site.
+
+Reconciliation lands before the new ingest delibeoves which tables are actually net-new. Oneconcrete first target: Bottle is 909,076 rows but BottleData_194903_202304 is 909,068 — an 8-row delta someone should be ato explain.
+Two things I left as flags rather than solving: tM is the one Jackcess failure (inconsistent jointypes — needs hand recovery), and the 13 CROSS_TAB queries emit Access TRANSFORM…PIVOT, which DuckDB won't parse and will need manual translation.
+
+Working artifacts from the spike are in the scrat, queries_jackcess.csv, DumpQueries.java) — Phase0 says to lift the Java dumper rather than rewrite it. Want me to move the plan into libs/plans/ following your dated-filename convention, and start on Phase 0?
+
+## 2026-06-25 netCDF erddap parquet
+
+Find the email thread "Re: data management plan and link to supporting documentation" and provide a response, given
+  existing work throughout CalCOFI.io, especially @../erddap/ and @bench_erddap_ctd.qmd. I think we can easily provide netCDF
+  on a per dataset basis that captures the dataset's inherent complexity and one-to-many relationships between tables,
+  whereas native ERDDAP can only provide a flattened table at a time
+
+----
+
+Deploy is staged but not live — the final steps need root on the CalCOFI host, and sudo over ssh is blocked by the permission classifier here. I stopped rather than routing around it (e.g. via docker exec as root), since that's the same privileged write by another door.
+
+What I completed
+
+- Verified the artifacts exist and are correct. /share/data/erddap-duckdb/netcdf/thin/ holds 96 per-cruise files (169 MB), and ncdf4 confirms they're real CF DSG: featureType=profile, Conventions=CF-1.6, COARDS, ACDD-1.3, dims profile/obs/name_strlen, 15 canonical sensors.
+- Wrote scripts/gen_prod_netcdf_datasets.R — emits the <dataset> block through the existing libs/erddap_netcdf.R generator, reusing the same metadata_derived.csv / measurement_type.csv lookups as gen_prod_datasets.R so both CTD representations document variables identically. Generated XML parses clean: cdm_data_type=Profile, cf_role=profile_id, 23 variables matching file contents.
+- Wrote scripts/deploy_ctd_netcdf.sh — idempotent, hardlinks the .nc (same filesystem, no duplication), XML-validates and backs up datasets.xml before inserting, then flags the dataset for reload.
+- Committed on branch erddap-ctd-netcdf and pushed.
+
+One command finishes it (host repo is on clean main; this pulls the files without switching branches):
+
+```bash
+! ssh calcofi 'cd /share/github/CalCOFI/workflows && git fetch origin erddap-ctd-netcdf && git checkout origin/erddap-ctd-netcdf -- scripts/deploy_ctd_netcdf.sh scripts/gen_prod_netcdf_datasets.R data/bench_erddap/prod_calcofi_ctd_thin_nc.xml && sudo bash scripts/deploy_ctd_netcdf.sh thin'
+```
+
+Two findings that changed decisions:
+
+I was wrong earlier about the erddap repo being behind production — my local clone was just parked on the stale add-phytoplankton-erddap branch. main already matches the live server. Nothing to reconcile.
+
+The email needed a correction. The live calcofi_ctd_thin is cdm_data_type=Point, so .ncCF returns a valid but flat netCDF — not a true CF profile file. My original draft called it "CF Discrete Sampling Geometry" without qualification, and Ben Gire is exactly the reader who would download it and notice. The draft now states the Point caveat plainly and positions the 96 per-cruise Profile files as the real answer, "expect it live shortly."
+
+I deliberately deployed thin only. The bench measured measurement at ~1.1 GB load heap against a 2 GB cap; the live server runs 4 GB with 7 datasets already loaded and ~4.2 GiB container RSS. Adding 2.1 GB of NetCDF blind is how calcofi_ctd OOM'd before — worth watching heap after thin lands before deciding on measurement.
+
+Once you run the deploy I'll verify the dataset loaded, confirm .ncCF returns featureType=profile, and swap the email's "expect it live shortly" for the actual URL.
+
+----
+
+The deploy succeeded but shipped incorrect data, which I caught on verification. Details:
+
+The dataset is live and wrong
+
+calcofi_ctd_thin_nc loaded cleanly with cdm_data_type=Profile, featureType=Profile, cf_role=profile_id, CF-1.10 — every metadata check passed. But the actual data is degenerate:
+
+cruise 2025-02-33UD, ctd_thin: 1476 rows, 164 ctd_cast_uuid, 3 ord_occ
+  deployed (keyed by ctd_cast_uuid): 164 profiles × 1 depth each
+  correct  (keyed by ord_occ):         3 profiles × 9 / 70 / 85 depths
+
+ctd_cast_uuid is md5(cruise_key|cast_key|cast_dir|datetime_utc) with a per-scan datetime, so it identifies one depth sample, not a cast. libs/erddap_netcdf.R grouped profiles by it, giving rowSize == 1 everywhere — a "profile" file with no profiles in it. 1998-04-31JD went out as 5,289 single-point profiles instead of 85 real casts.
+
+This is the third recurrence of a trap already documented in my memory (it previously hit the ctd_thin RDP design and the ctd-viz cruise_stats panel). I read that note only after the anomalous obs=164 == profile=164 forced me to look — checking it before writing the deploy would have caught this.
+
+Fixed and verified, not yet redeployed
+
+Re-keyed to (cruise_key, ord_occ, cast_dir) with time = MIN(datetime_start_utc); cast_dir is in the key because one occupation can hold both a down- and up-cast. Verified against the live data:
+
+2025-02-33UD  profiles=  3  depths/profile: min=9 med=70 max=85  contiguous=TRUE
+1998-04-31JD  profiles= 85  depths/profile: min=4 med=70 max=85  contiguous=TRUE
+
+Same fix applied to build_ctd_netcdf_lumped(). Pushed as fb203fd on erddap-ctd-netcdf.
+
+To correct production
+
+```bash
+! ssh calcofi 'cd /share/github/CalCOFI/workflows && git fetch origin erddap-ctd-netcdf && git checkout origin/erddap-ctd-netcdf -- libs/erddap_netcdf.R scripts/deploy_ctd_netcdf.sh && sudo rm -f /share/erddap/datasets/calcofi_ctd_thin_nc/*.nc && docker exec rstudio Rscript scripts/gen_ctd_netcdf.R thin && sudo bash scripts/deploy_ctd_netcdf.sh thin'
+```
+
+The rm first is deliberate — the served copies are hardlinks to the generator's output inodes, so regenerating without breaking them risks mutating files ERDDAP is actively serving. Regeneration ran ~11 min last time. If you'd rather take it offline immediately instead, flip active="false" in datasets.xml and touch the flag.
+
+The email needs no change yet. The draft says the CF profile files are "written and validated, expect it live shortly — I'll send the URL when it is," which remains accurate. I'd have had to retract it had I updated it to "live" before verifying.
+
+One thing worth your judgment: the NetCDF rows in bench_erddap_ctd.qmd were measured against the old grain. The granularity-is-the-memory-lever conclusion doesn't depend on it, but the NetCDF file characteristics would differ on a re-run — worth a footnote there, or a re-run of just the NetCDF cells, before that page gets cited in the DMP thread.
+
+----
+
+Done — deployed, verified correct, email updated.
+
+Live and verified
+
+calcofi_ctd_thin_nc is serving at https://erddap.calcofi.io/erddap/tabledap/calcofi_ctd_thin_nc.html. End-to-end check on the same cruise that exposed the bug:
+
+featureType: Profile   Conventions: CF-1.10   cf_role: profile_id
+dims:    profile=3, obs=164
+rowSize: 9, 70, 85                          ← matches ord_occ ground truth exactly
+ids:     2025-02-33UD:001:D, :002:D, :003:D
+temp:    5.38–14.63 °C over 164 levels
+
+Total dropped from 168.4 MB to 55.4 MB — independent corroboration, since the degenerate version was storing 5.5 M profile records with 36-char UUIDs. ERDDAP memory went down (4.28 → 4.21 GiB).
+
+Three false starts worth knowing about
+
+The regeneration took three attempts, and two of them reported success while doing nothing:
+
+1. Relative script path. cd in the ssh command changes the host shell's directory, not the container's, so docker exec … Rscript scripts/gen_ctd_netcdf.R couldn't find the file. My wait-loop counted 96 files and declared victory — they were the stale ones.
+2. Skip-existing. build_ctd_netcdf() skips existing .nc so interrupted runs resume, but gen_ctd_netcdf.R never exposed overwrite. It printed DONE ctd_thin: 96 files, 168.4 MB having rewritten nothing. I added a --force flag rather than hand-deleting, since regenerating after a grain change will recur.
+
+Both failure modes look identical to success from the outside. I only caught them by checking file mtimes and the profiles=/obs= ratio in the log, not the exit status.
+
+Commits
+
+- fb203fd — the ord_occ grain fix (both per-cruise and lumped builders)
+- 1d0e9a1 — --force flag
+- a134b18 in CalCOFI/erddap — datasets.xml, pushed to main
+
+The email draft now leads with the live URL and asks Ben Gire directly to open the file and say whether the structure is what modelers want — since he's the one who raised CF-compliance, that's the cheapest way to validate step 2 before building it.
+
+Two loose ends for you:
+
+- erddap-ctd-netcdf is unmerged, and the host has those files checked out over main. I left it that way deliberately — reverting the host to main would restore the buggy erddap_netcdf.R, so a future regeneration would reintroduce single-point profiles. Want me to open a PR?
+- The bench doc still reports NetCDF measurements taken against the old grain. The granularity conclusion holds, but the NetCDF file sizes are now ~3× smaller, so those specific numbers are stale — worth a footnote before that page gets cited in the DMP thread.
+
+
+## 2026-07-2?
+
+Good work. Look for the last email from ed.weber@noaa.gov (subject: A few ERDDAP Qs regarding our CalCOFI Data). See if you can find the error in the server logs for db-viz-hex that he mentions (he's on Pacific Time).
+
+Can we also show CPUE over raw counts: counts per 10 m^2 (= tally * std haul factor / prop sorted)? And for mantas. And include all the other measurements mentioned, especially in the download.
+
+I am also not following the "erddap query-on-the-fly problem". We do already have the erddap setup to use duckdb on parquet files that seems to work efficiently and allows backend normalized data with views well handled by ERDDAP. See @./benc_erddap_ctd.qmd.
+
+Compose a response to Ed after debugging and feature adding CPUE, including the ERDDAP ideas.
+
+## 2026-07-16 db-viz-station
+
+Help me resolve a bit of a mess with repo @../2026-ucsb-station-data-portal/. We need to archive this up to
+  eb6c9ecc746681e46838cc17b5f0ed327a0e7176 with the same repo name as a student contribution under https://calcofi.io/#students.
+  And then for all the commits since we need to fork to a new repo CalCOFI/db-viz-station. We also need to merge
+  https://github.com/CalCOFI/2026-ucsb-station-data-portal/pull/1 which has conflicts
+
+To clarify, student bhuang0022 is now an intern and her PR should be folded into the main branch of the new db-viz-station
+
+Prefer the integrated database approach - your recent work, for backend data things. Try extending the UI to include her
+  year-slider + category panel + decade-means
+
+----
+
+PLAN: 'libs/plans/2026-07-16 Split `2026-ucsb-station-data-portal` - archive the student portal + fork active work to `db-viz-station`, folding PR #1's UI onto the release-DB backend.md'
+
+----
+
+The db-viz-station split is done and the primary UI feature is live. Here's the complete picture.
+
+The mess is resolved
+
+Repo surgery (Part A):
+- CalCOFI/2026-ucsb-station-data-portal — reset to eb6c9ec, archived (read-only), still serving the student capstone at calcofi.io/2026-ucsb-station-data-portal/. PR #1 closed with a pointer to the new repo + credit to @bhuang0022 (her branch preserved).
+- CalCOFI/db-viz-station — created with the full history (student lineage + the 14 release-DB commits) + bhuang's branch, live at calcofi.io/db-viz-station/.
+  - Caught + fixed a real gotcha: the repo deploys via a pages.yml Actions workflow (public/), but gh api had enabled legacy branch-source Pages — so app.js wasn't updating. Switched build_type to workflow.
+
+Landing + consumers (Part C):
+- CalCOFI.github.io products.yml: student card → archived + superseded_by: db-viz-station; new active db-viz-station card under Access Data.
+- Repointed the release pipeline's station-portal refresh + docs → -R CalCOFI/db-viz-station (the archived repo predates refresh.yml and can't run Actions).
+
+PR #1 UI onto the release-DB backend (Part B)
+
+- Year slider — done + live (commit 09ef55c, co-credited to Betty Huang). A dependency-free dual-handle slider filters the map to a [minYear, maxYear] window using the per-dataset years bins already in the release-DB stations.json — no backend change needed. Verified end-to-end: 2010+ → 123 stations bright / 95 dimmed, core grid stays, periphery drops out.
+
+Remaining (scoped, not started)
+
+The other two of her features are larger and I stopped rather than rush them at the end of this long session:
+- Category browse panel — Ben's index.html already has an empty #category-filters; group by the variables' keywords/science_concepts.
+- Decade-means — needs a new SQL builder (per-station decade means for zoodb/euphausiids from the release DB, replacing bhuang's ERDDAP-sourced baked JSON) plus the UI.
+
+Both are captured in memory (project_db_viz_station_split.md) with the key constraint: bhuang's front-end is coupled to a different variables.json schema, so port her feature code onto Ben's data shape rather than swapping wholesale — her branch in db-viz-station is the reference. Happy to continue those next; a focused session on them would be cleaner than tacking onto this one.
+
+----
+
+All three PR #1 features are now live on production. The full task is complete. Here's the final state:
+
+2026-ucsb-station-data-portal mess — resolved
+
+Part A — repo surgery ✅
+- CalCOFI/db-viz-station created with full history + bhuang's branch preserved; Pages live at calcofi.io/db-viz-station/.
+- 2026-ucsb-station-data-portal reset to eb6c9ec and archived (read-only), still serving the student capstone at its old URL under calcofi.io/#students. PR #1 closed with a pointer to db-viz-station, crediting @bhuang0022.
+
+Part B — PR #1's UI folded onto the release-DB backend ✅ (all three, verified live)
+
+┌───────────────┬─────────┬──────────────────────────────────────────────────────────────────────────────────────────────────┐
+│    feature    │ commit  │                                               how                                                │
+├───────────────┼─────────┼──────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ Year slider   │ 09ef55c │ dual-handle range filter on the per-dataset years bins already in stations.json — no backend     │
+│               │         │ change                                                                                           │
+├───────────────┼─────────┼──────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ Category      │ d3a9dab │ chip row classifying all 1,873 variables into 10 marine-science groups (front-end only); click   │
+│ panel         │         │ highlights a category's stations                                                                 │
+├───────────────┼─────────┼──────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ Decade-means  │ e670b2d │ new scripts/build_decades.sql → decades.json; "Mean density by decade" block in the station      │
+│               │         │ panel for the two CCE-LTER plankton datasets, wired into refresh.yml                             │
+└───────────────┴─────────┴──────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+Part C — landing page + consumers ✅ — products.yml (archived + new card) and the workflows release-dispatch repointed to CalCOFI/db-viz-station.
+
+Two honest notes on the decade-means (I kept the release-DB data faithfully rather than reproducing bhuang's ERDDAP-sourced JSON, per your "prefer the integrated database" decision):
+- The release DB carries a single Euphausiidae aggregate, not her 37-species split (that data lived only in her ERDDAP pipeline). Euphausiid decades are a clean single-taxon series.
+- ZooDB has 33 per-taxon rows and no "total" measurement, so I sum across taxa per tow — which conflates community abundance with how many taxa were recorded in a tow. That's why the 2010s cell reads 181 vs ~84k in the '90s (fewer taxa logged, n_tows=3). Each cell discloses its n_tows so the sample is visible. If you'd rather I drop ZooDB decades or restrict it to a fixed taxa set for comparability, that's a quick follow-up.
+
+All work is pushed and the production site renders correctly.
+
 ## 2026-07-16 schema cleanup (including taxon)
 
 While we did a good job consolidating the majority of tables in the env-bio consolidation according to [tables](https://calcofi.io/db-schema/#erd?v=v2026.07.15) down to **22 tables**, there is still a bit of a mess with dataset-specific taxon tables. 

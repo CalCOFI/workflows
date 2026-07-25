@@ -5,8 +5,11 @@
 # make per-cast files infeasible, so we bundle by cruise (96 files/table).
 # Reads Parquet from and writes NetCDF to the shared /share/data tree so the paths
 # resolve identically when ERDDAP later reads them. Run in the rstudio container:
-#   docker exec rstudio Rscript /share/github/CalCOFI/workflows/scripts/gen_ctd_netcdf.R [thin|measurement|all] [n_cruises]
+#   docker exec rstudio Rscript /share/github/CalCOFI/workflows/scripts/gen_ctd_netcdf.R [thin|measurement|all] [n_cruises] [--force]
 # (n_cruises limits to the first N cruises for a quick validation run.)
+# Existing .nc are SKIPPED by default so an interrupted run resumes; pass --force
+# to re-write them, which is what you want after changing the pivot/profile grain
+# (a silent skip there leaves stale files that still look complete).
 suppressMessages({ library(DBI); library(duckdb); library(glue); library(readr); library(ncdf4) })
 options(readr.show_col_types = FALSE)
 WF <- "/share/github/CalCOFI/workflows"
@@ -17,6 +20,8 @@ NCDIR <- "/share/data/erddap-duckdb/netcdf"
 TMP  <- "/share/data/erddap-duckdb/tmp"
 
 argv   <- commandArgs(trailingOnly = TRUE)
+FORCE  <- any(argv %in% c("--force", "force"))
+argv   <- argv[!argv %in% c("--force", "force")]
 which_ <- if (length(argv) >= 1) argv[1] else "all"
 ncru   <- if (length(argv) >= 2) as.integer(argv[2]) else NA_integer_
 tables <- if (which_ == "all") c("ctd_thin", "ctd_measurement") else paste0("ctd_", sub("^ctd_", "", which_))
@@ -54,7 +59,7 @@ for (tbl in tables) {
     con = con, data_dir = DATA, out_dir = out, table = tbl, vars = vars,
     title = titles[[tbl]], summary = summaries[[tbl]],
     units_lookup = units_lk, longname_lookup = longname_lk,
-    cruises = cru, mem_limit = "2GB", threads = 2, tmp_dir = TMP)
+    cruises = cru, mem_limit = "2GB", threads = 2, tmp_dir = TMP, overwrite = FORCE)
   tot_mb <- sum(res$mb, na.rm = TRUE)
   cat(sprintf("  DONE %s: %d files, %.1f MB total\n", tbl, nrow(res), tot_mb))
   write_csv(res, file.path(out, "_manifest.csv"))
