@@ -19,6 +19,16 @@
 .NC_FILL_DOUBLE <- 9.969209968386869e36
 
 #' Pivot one cruise of a long CTD table to a wide (cast x depth) data.frame.
+#'
+#' GRAIN GOTCHA: `ctd_cast_uuid` is the DEPTH-SCAN key, not the cast key — it is
+#' md5(cruise_key|cast_key|cast_dir|datetime_utc) with a per-scan datetime, so one
+#' station occupation carries hundreds of them. Keying CF profiles by it yields
+#' one single-point "profile" per scan (rowSize == 1 everywhere), which is not a
+#' profile at all. The cast-level key is `ord_occ` (station occupation order
+#' within a cruise), disambiguated by `cast_dir` since a single occupation can
+#' hold both a down- and an up-cast. See the same trap in the ctd_thin RDP design
+#' and the ctd-viz cruise_stats panel (CalCOFI/workflows v2026.05.14).
+#'
 #' @return data.frame ordered by (profile_id, depth): columns profile_id, time
 #'   (epoch s), latitude, longitude, line, sta, depth, then one per `vars`.
 .ctd_cruise_wide <- function(con, data_dir, table, cruise_key, vars) {
@@ -27,19 +37,19 @@
     character(1))
   sql <- glue::glue(
     "SELECT
-       t.ctd_cast_uuid                                  AS profile_id,
-       epoch(any_value(c.datetime_start_utc))::DOUBLE   AS time,
-       any_value(c.latitude)::DOUBLE                    AS latitude,
-       any_value(c.longitude)::DOUBLE                   AS longitude,
-       any_value(c.line)                                AS line,
-       any_value(c.sta)                                 AS sta,
-       t.depth_m::DOUBLE                                AS depth,
+       t.cruise_key || ':' || c.ord_occ || ':' || c.cast_dir  AS profile_id,
+       epoch(MIN(c.datetime_start_utc))::DOUBLE               AS time,
+       any_value(c.latitude)::DOUBLE                          AS latitude,
+       any_value(c.longitude)::DOUBLE                         AS longitude,
+       any_value(c.line)                                      AS line,
+       any_value(c.sta)                                       AS sta,
+       t.depth_m::DOUBLE                                      AS depth,
        {paste(val, collapse=',\n       ')}
      FROM read_parquet('{data_dir}/{table}/**/*.parquet', hive_partitioning=true) t
      JOIN read_parquet('{data_dir}/ctd_cast.parquet') c USING (ctd_cast_uuid)
      WHERE t.cruise_key = '{cruise_key}'
-     GROUP BY t.ctd_cast_uuid, t.depth_m
-     ORDER BY t.ctd_cast_uuid, t.depth_m")
+     GROUP BY profile_id, t.depth_m
+     ORDER BY profile_id, t.depth_m")
   DBI::dbGetQuery(con, sql)
 }
 
@@ -194,15 +204,15 @@ build_ctd_netcdf_lumped <- function(con, data_dir, out_file, table, vars, title,
   val <- vapply(vars, function(v) glue::glue(
     "MAX(t.measurement_value) FILTER (WHERE t.measurement_type='{v}')::DOUBLE AS \"{v}\""), character(1))
   df <- DBI::dbGetQuery(con, glue::glue(
-    "SELECT t.ctd_cast_uuid AS profile_id, t.cruise_key,
-       epoch(any_value(c.datetime_start_utc))::DOUBLE AS time,
+    "SELECT t.cruise_key || ':' || c.ord_occ || ':' || c.cast_dir AS profile_id, t.cruise_key,
+       epoch(MIN(c.datetime_start_utc))::DOUBLE AS time,
        any_value(c.latitude)::DOUBLE AS latitude, any_value(c.longitude)::DOUBLE AS longitude,
        any_value(c.line) AS line, any_value(c.sta) AS sta, t.depth_m::DOUBLE AS depth,
        {paste(val, collapse = ',\n       ')}
      FROM read_parquet('{data_dir}/{table}/**/*.parquet', hive_partitioning=true) t
      JOIN read_parquet('{data_dir}/ctd_cast.parquet') c USING (ctd_cast_uuid)
-     GROUP BY t.ctd_cast_uuid, t.cruise_key, t.depth_m
-     ORDER BY t.ctd_cast_uuid, t.depth_m"))
+     GROUP BY profile_id, t.cruise_key, t.depth_m
+     ORDER BY profile_id, t.depth_m"))
   if (!dir.exists(dirname(out_file))) dir.create(dirname(out_file), recursive = TRUE)
   dims <- .write_cruise_nc(df, NA_character_, out_file, vars, title, summary,
                           units_lookup, longname_lookup, force_v4 = TRUE)
