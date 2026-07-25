@@ -203,7 +203,10 @@ for cell in "${CELLS[@]}"; do
     # sampling systematically misses it (and reports a low number for exactly the
     # queries that are about to blow up).
     local peak; peak=$(mktemp)
-    echo "0 0 0" > "$peak"
+    # Seed with a SYNCHRONOUS reading. Each sample costs 3 docker execs (~0.5-1 s), so
+    # a sub-second query finishes before the async sampler writes anything and the row
+    # lands as anon=0 — indistinguishable from "used no memory" when reading the CSV.
+    echo "$(heap_mb) $(anon_mb) $(rss_mb)" > "$peak"
     ( while :; do
         h=$(heap_mb); a=$(anon_mb); c=$(rss_mb)
         read -r ph pa pc < "$peak"
