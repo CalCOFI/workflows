@@ -1,0 +1,8 @@
+-- query: Anomalies ISL 4 Year
+-- type:  SELECT
+-- source: CalCOFI_4903-2304_Master_Final_through_2105_October162023.accdb (ACE12), extracted via Jackcess
+
+SELECT [Anomalies ISL 3 Cruise].Year, [Anomalies ISL 3 Cruise].Depth, Avg([Anomalies ISL 3 Cruise].Temp) AS Temp, Avg([Anomalies ISL 3 Cruise].Sal) AS Sal, Avg([Anomalies ISL 3 Cruise].Density) AS Density, Avg([Anomalies ISL 3 Cruise].O2) AS O2, Avg([Anomalies ISL 3 Cruise].NO3) AS NO3, Avg([Anomalies ISL 3 Cruise].PO4) AS PO4, Avg([Anomalies ISL 3 Cruise].SiO3) AS SiO3, Avg([Anomalies ISL 3 Cruise].O2Sat) AS O2Sat, Avg([Anomalies ISL 3 Cruise].TempAnom) AS TempAnom, Avg([Anomalies ISL 3 Cruise].SalAnom) AS SalAnom, Avg([Anomalies ISL 3 Cruise].DensAnom) AS DensAnom, Avg([Anomalies ISL 3 Cruise].O2Anom) AS O2Anom, Avg([Anomalies ISL 3 Cruise].O2SatAnom) AS O2SatAnom, Avg([Anomalies ISL 3 Cruise].NO3Anom) AS NO3Anom, Avg([Anomalies ISL 3 Cruise].PO4Anom) AS PO4Anom, Avg([Anomalies ISL 3 Cruise].SIO3Anom) AS SIO3Anom, Avg([Anomalies ISL 3 Cruise].TempStAnom) AS TempStAnom, Avg([Anomalies ISL 3 Cruise].SalStAnom) AS SalStAnom, Avg([Anomalies ISL 3 Cruise].DensStAnom) AS DensStAnom, Avg([Anomalies ISL 3 Cruise].O2StAnom) AS O2StAnom, Avg([Anomalies ISL 3 Cruise].O2SatStAnom) AS O2SatStAnom, Avg([Anomalies ISL 3 Cruise].NO3StAnom) AS NO3StAnom, Avg([Anomalies ISL 3 Cruise].PO4StAnom) AS PO4StAnom, Avg([Anomalies ISL 3 Cruise].SIO3StAnom) AS SIO3StAnom
+FROM [Anomalies ISL 3 Cruise]
+GROUP BY [Anomalies ISL 3 Cruise].Year, [Anomalies ISL 3 Cruise].Depth
+HAVING ((([Anomalies ISL 3 Cruise].Year)<2010) AND (([Anomalies ISL 3 Cruise].Depth)=200) AND ((Avg([Anomalies ISL 3 Cruise].Sal)) Is Not Null));

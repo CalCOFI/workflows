@@ -1,0 +1,7 @@
+-- query: Anomalies Sigma 2 Regions Ann
+-- type:  SELECT
+-- source: CalCOFI_4903-2304_Master_Final_through_2105_October162023.accdb (ACE12), extracted via Jackcess
+
+SELECT [Anomalies Sigma 1 Regions Cruise].Year AS Expr1, Avg([Anomalies Sigma 1 Regions Cruise].Date) AS Date, Avg([Anomalies Sigma 1 Regions Cruise].Month) AS Month, Count([Anomalies Sigma 1 Regions Cruise].NoStations) AS NoCruises, Avg([Anomalies Sigma 1 Regions Cruise].Sigma) AS AvgOfSigma, Avg([Anomalies Sigma 1 Regions Cruise].Depth) AS Depth, Avg([Anomalies Sigma 1 Regions Cruise].Temp) AS Temp, Avg([Anomalies Sigma 1 Regions Cruise].Sal) AS Sal, Avg([Anomalies Sigma 1 Regions Cruise].PO4) AS PO4, Avg([Anomalies Sigma 1 Regions Cruise].SiO4) AS SiO4, Avg([Anomalies Sigma 1 Regions Cruise].NO3) AS NO3, Avg([Anomalies Sigma 1 Regions Cruise].O2) AS O2, Avg([Anomalies Sigma 1 Regions Cruise].O2Sat) AS O2Sat, Avg([Anomalies Sigma 1 Regions Cruise].DepthAnom) AS DepthAnom, Avg([Anomalies Sigma 1 Regions Cruise].TempAnom) AS TempAnom, Avg([Anomalies Sigma 1 Regions Cruise].SalAnom) AS SalAnom, Avg([Anomalies Sigma 1 Regions Cruise].NO3Anom) AS NO3Anom, Avg([Anomalies Sigma 1 Regions Cruise].PO4Anom) AS PO4Anom, Avg([Anomalies Sigma 1 Regions Cruise].SiO3Anom) AS SiO3Anom, Avg([Anomalies Sigma 1 Regions Cruise].O2Anom) AS O2Anom, Avg([Anomalies Sigma 1 Regions Cruise].[N-P_Ratio]) AS [N-P_Ratio], Avg([Anomalies Sigma 1 Regions Cruise].[N-Star]) AS [N-Star]
+FROM [Anomalies Sigma 1 Regions Cruise]
+GROUP BY [Anomalies Sigma 1 Regions Cruise].Year;
