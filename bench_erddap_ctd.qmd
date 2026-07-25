@@ -55,13 +55,16 @@ reported as *evidence*, not as a menu of things to deploy simultaneously.
 
 **What the grid shows (three findings, the first two mapping to the two figures):**
 
-1. **Granularity — not format — is the memory lever (Fig 1).** ERDDAP's file
-   backends read *whole matching files onto the heap*, so a single **lumped 2.1 GB**
-   wide NetCDF can't be served at a 2 GB heap (ERDDAP sheds requests, then times
-   out), while the **same data split into 96 per-cruise files loads at ~1.1 GB**.
-   This — not the file format — is what sank the original single-file `ctd_wide`.
-   **DuckDB sidesteps the whole axis** (~65 MB in *every* config) by *streaming*
-   from the Parquet rather than loading files onto the heap.
+1. **Granularity is a memory lever only once a single file is large relative to the
+   heap (Fig 1).** ERDDAP's file backends read *whole matching files onto the heap*.
+   A **935 MB** single `ctd_wide.parquet` is what OOM'd the original attempt at a
+   4 GB heap, and a lumped **598 MB** Parquet still loads at 1.6 GB. But the effect
+   is proportional to file size, not intrinsic to lumping: after the profile-grain
+   fix (§1) the lumped `ctd_measurement` NetCDF fell from 2.1 GB to **686 MB** and
+   now **loads in 19 s at a 1,079 MB heap** — where the old oversized file timed
+   out. Per-cruise splitting still loads lighter (66 MB) and prunes better, but
+   *"lumped always fails" was an artefact of a file that should never have been
+   that big.* **DuckDB is flat** (~65 MB in every config) because it streams.
 2. **Split serves subsets fast; lumped re-reads everything (Fig 2).** A per-cruise
    split file answers a cruise query in well under a second (one cruise → one file);
    a lumped file has no such pruning, so *every query re-reads the whole file* — a
