@@ -48,9 +48,9 @@ counters the bottle ingest already uses — so the reconciliation join key alrea
 | Question | Result |
 |---|---|
 | Format | `mdb-ver` → **ACE12** |
-| Tables readable on macOS ARM? | Yes — `brew install mdbtools`; 91 local tables, `mdb-schema` 1,715 lines |
+| Tables readable on macOS ARM? | Yes — `brew install mdbtools`; **65 user tables** (91 `table_local` incl. system), `mdb-schema` 1,715 lines |
 | Saved query SQL readable? | Yes — **Jackcess 4.0.7 + JDK 25 extracted 154 / 155** at full fidelity |
-| mdbtools SQL good enough? | **No** — silently drops `JOIN`, `GROUP BY`, `HAVING`, aliases; renders one query as `SELECT FROM`. Cross-check only |
+| mdbtools SQL good enough? | **No.** Measured across all 155: **96 lost a `JOIN`**, **81 lost a `GROUP BY`**, 1 rendered empty, **0 gained anything Jackcess lacked**. Strict subset — cross-check only |
 | Forms / reports / macros / VBA? | Only **2 VBA modules** (`mdl_autonum`, `rownum` — utility, not science), **1 form** (`Cruises` data entry), **1 report** (`QC_Weather`, whose record source Jackcess recovered anyway) |
 
 Jackcess output is faithful, e.g. `TR - Cast & Bottle: Cst_Cnt`:
@@ -99,10 +99,19 @@ Cruises ─< Cast ─< Bottle ─< {Bottle_Q, Chl, Nuts, Rpt_Data, Prodo_Bottle}
              └──  Zooplankton       (by Cruise, RI not enforced)
 ```
 
-**Row counts** (data rows, header excluded): `Bottle` / `Bottle_Q` / `Chl` / `Nuts` /
-`Rpt_Data` 909,076 each; `BottleData_194903_202304` 909,068 (an **8-row delta**);
-`Cast` 36,217; `Zooplankton` 49,943; `Station_ID` 4,091; `Cruises` 401;
-`CurrentStations` 75; `HarmCoeffBottle` 840; `MLD_Sigma` 620; `NutClineDepth` 585.
+**Row counts** (verified against the Phase 0 Parquet, 65 tables / 10,509,889 rows total):
+`Bottle` / `Bottle_Q` / `Chl` / `Nuts` / `Rpt_Data` / `Prodo_Bottle` 909,076 **each**;
+`BottleData_194903_202304` 909,068 (an **8-row delta**); `Cast` 36,217;
+`Zooplankton` 49,943; `Station_ID` 4,091; `Cruises` 400; `CurrentStations` 75;
+`HarmCoeffBottle` 840; `MLD_Sigma` 620; `NutClineDepth` 585.
+
+Two things that fall out of those counts:
+
+- **`Bottle` and its five satellites are 1:1, not 1:many** — a classic Access vertical
+  partition. They should collapse into long-format `obs` rows, not survive as six tables.
+- Do **not** re-derive counts with `mdb-export | wc -l`. Free-text fields contain embedded
+  newlines (e.g. a captain name in `Cruises` line 345), so `wc -l` over-counts; DuckDB's
+  CSV reader parses the quoted field correctly. All 400 `Cruises.Cruise` values are distinct.
 
 ---
 
@@ -132,24 +141,25 @@ the path is identical: `apt install mdbtools` + JDK + Jackcess.
 
 ## Plan
 
-### Phase 0 — Reproducible extraction harness
+### Phase 0 — Reproducible extraction harness ✅ DONE
 
-Acquisition code is committed, not scratchpad work.
-
-- `libs/extract_accdb.R` — `accdb_tables()`, `accdb_export_table()`, `accdb_queries()`,
-  `accdb_relationships()`, `accdb_objects()`.
-- `libs/java/DumpQueries.java` — Jackcess `Query.toSQLString()` dumper. **A working version
-  exists in this session's scratchpad at
-  `…/scratchpad/accdb/DumpQueries.java` — lift it rather than rewriting.**
-- `scripts/extract_accdb.sh` — driver: mdbtools for bulk table export, Jackcess for
-  authoritative query SQL. Pin `jackcess 4.0.7`, `commons-lang3 3.14.0`,
-  `commons-logging 1.3.0` (Maven Central); record the JDK version.
-- Outputs under `data/accdb/calcofi_hydro-master/`: `tables/*.parquet` (91),
-  `queries/sql/*.sql` (155) + `queries.csv`, `relationships.csv`, `objects.csv`, `schema.sql`.
-- **Encode the known gaps as assertions**: `Anomalies ISL 0 IM` fails Jackcess
-  (`IllegalStateException: Inconsistent join types`) — recover from `MSysQueries` or by hand;
-  `CROSS_TAB` queries emit Access `TRANSFORM…PIVOT`, which DuckDB will not parse.
-- Assert extracted row counts equal the counts tabulated above.
+- `libs/extract_accdb.R` — tool discovery, catalogs (`accdb_objects()`,
+  `accdb_relationships()` with decoded DAO flag bitmasks), `accdb_export_tables()`
+  (all-VARCHAR → Parquet), both query extractors, and `accdb_diff_query_sql()`.
+- `libs/java/DumpQueries.java` — Jackcess `Query#toSQLString()` dumper, emitting one CSV
+  so the filename-sanitizing rule lives only in R.
+- `scripts/extract_accdb.sh` — driver. Jars pinned (`jackcess 4.0.7`,
+  `commons-lang3 3.14.0`, `commons-logging 1.3.0`), cached in `data/cache/jackcess`.
+- Outputs split by reviewability:
+  `metadata/calcofi/hydro-master/accdb/` **committed** (~800 KB: `sql/*.sql` ×155,
+  `queries.csv`, `query_sql_diff.csv`, `relationships.csv`, `objects.csv`, `schema.sql`,
+  `tables.csv`); `data/accdb/calcofi_hydro-master/tables/*.parquet` **gitignored**.
+- **Known gaps, encoded rather than hidden**: `Anomalies ISL 0 IM` fails Jackcess
+  (`IllegalStateException: Inconsistent join types`) and lands with `ok=false` + the
+  message in `queries.csv`; the 13 `CROSS_TAB` queries emit Access `TRANSFORM…PIVOT`,
+  which DuckDB will not parse.
+- Portability trap fixed: macOS ships a `/usr/bin/java` stub that exists but is not a JVM,
+  so `accdb_tool_paths()` probes candidates with `-version` instead of trusting `Sys.which`.
 
 ### Phase 1 — Land + triage
 

@@ -1,0 +1,602 @@
+"query_name","query_type","ok","error","sql"
+"10m Properties Cruises","CROSS_TAB",TRUE,"","TRANSFORM Avg(Bottle.STheta) AS AvgOfSTheta
+SELECT Cast.Cruise, Station_ID.St_Sta
+FROM Cruises INNER JOIN ((Station_ID INNER JOIN Cast ON Station_ID.DBSta_ID = Cast.DbSta_ID) INNER JOIN ((Bottle LEFT JOIN Chl ON Bottle.Btl_Cnt = Chl.Btl_Cnt) LEFT JOIN Nuts ON Bottle.Btl_Cnt = Nuts.Btl_Cnt) ON Cast.Cst_Cnt = Bottle.Cst_Cnt) ON Cruises.Cruise = Cast.Cruise
+WHERE (((Cast.Cruise)=200701) AND ((Station_ID.Sta_Code)=""st"") AND ((Cruises.[Code-ST])=""st"") AND ((Bottle.Depthm)=10))
+GROUP BY Cast.Cruise, Station_ID.St_Sta
+PIVOT Station_ID.St_Line;"
+"8246 to 818 469 Query","SELECT",TRUE,"","SELECT Bottle.Cst_Cnt, Bottle.Sta_ID AS Bottle_Sta_ID, Bottle.Depth_ID, Cast.DbSta_ID, Cast.Sta_ID AS Cast_Sta_ID, Cast.Cast_ID
+FROM Cast INNER JOIN Bottle ON Cast.[Cst_Cnt] = Bottle.[Cst_Cnt];"
+"Anomalies ISL 0 IM","SELECT",FALSE,"IllegalStateException: Inconsistent join types for Cast and Bottle (Query: Anomalies ISL 0 IM)",""
+"Anomalies ISL 1 Station","SELECT",TRUE,"","SELECT [Anomalies ISL 0 IM].Year AS Year, [Anomalies ISL 0 IM].Cruise, [Anomalies ISL 0 IM].Sta_ID, [Anomalies ISL 0 IM].Cast_ID, Avg([Anomalies ISL 0 IM].YearValue) AS YearValue, Avg([Anomalies ISL 0 IM].Date) AS Date, Avg([Anomalies ISL 0 IM].Julian_Day) AS Julian_Day, Avg([Anomalies ISL 0 IM].Time) AS Time, [Anomalies ISL 0 IM].Depth, Avg([Anomalies ISL 0 IM].Temp) AS Temp, Avg([Anomalies ISL 0 IM].Sal) AS Sal, Avg([Anomalies ISL 0 IM].STheta) AS Density, Avg([Anomalies ISL 0 IM].O2) AS O2, [Anomalies ISL 0 IM].NO3 AS NO3, [Anomalies ISL 0 IM].PO4 AS PO4, [Anomalies ISL 0 IM].SiO3 AS SiO3, Avg([Anomalies ISL 0 IM].O2Sat) AS O2Sat, Avg([Anomalies ISL 0 IM].TempStDev) AS TempStDev, Avg([Anomalies ISL 0 IM].SalStDev) AS SalStDev, Avg([Anomalies ISL 0 IM].SigStDev) AS DensStDev, Avg([Anomalies ISL 0 IM].O2StDev) AS O2StDev, Avg([Anomalies ISL 0 IM].O2SatStDev) AS O2SatStDev, Avg([Anomalies ISL 0 IM].ChlaStDev) AS ChlaStDev, Avg([Anomalies ISL 0 IM].NO3StDev) AS NO3StDev, Avg([Anomalies ISL 0 IM].NO2StDev) AS NO2StDev, Avg([Anomalies ISL 0 IM].PO4StDev) AS PO4StDev, Avg([Anomalies ISL 0 IM].SiO3StDev) AS SiO3StDev, Avg([Anomalies ISL 0 IM].TempAnom) AS TempAnom, Avg([Anomalies ISL 0 IM].SalAnom) AS SalAnom, Avg([Anomalies ISL 0 IM].SigAnom) AS DensAnom, Avg([Anomalies ISL 0 IM].O2Anom) AS O2Anom, Avg([Anomalies ISL 0 IM].O2SatAnom) AS O2SatAnom, Avg([Anomalies ISL 0 IM].NO3Anom) AS NO3Anom, Avg([Anomalies ISL 0 IM].PO4Anom) AS PO4Anom, Avg([Anomalies ISL 0 IM].SIO3Anom) AS SIO3Anom, ([TempAnom]/[TempStDev]) AS TempStAnom, ([SalAnom]/[SalStDev]) AS SalStAnom, ([DensAnom]/[DensStDev]) AS DensStAnom, ([O2Anom]/[O2StDev]) AS O2StAnom, ([O2SatAnom]/[O2SatStDev]) AS O2SatStAnom, ([NO3Anom]/[NO3StDev]) AS NO3StAnom, ([PO4Anom]/[PO4StDev]) AS PO4StAnom, ([SIO3Anom]/[SIO3StDev]) AS SIO3StAnom
+FROM Station_ID INNER JOIN [Anomalies ISL 0 IM] ON Station_ID.Sta_ID = [Anomalies ISL 0 IM].Sta_ID
+GROUP BY [Anomalies ISL 0 IM].Year, [Anomalies ISL 0 IM].Cruise, [Anomalies ISL 0 IM].Sta_ID, [Anomalies ISL 0 IM].Cast_ID, [Anomalies ISL 0 IM].Depth, [Anomalies ISL 0 IM].NO3, [Anomalies ISL 0 IM].PO4, [Anomalies ISL 0 IM].SiO3
+HAVING ((([Anomalies ISL 0 IM].Cruise)>201511));"
+"Anomalies ISL 1 Station_Jen","MAKE_TABLE",TRUE,"","SELECT [Anomalies ISL 0 IM].Cruise, St_Stations.Code_Region, St_Stations.[Code-SCB], St_Stations.[Code-Nearshore], [Anomalies ISL 0 IM].Sta_ID, Station_ID.St_Line, Station_ID.St_Sta, Station_ID.Distance, [Anomalies ISL 0 IM].Cast_ID, [Anomalies ISL 0 IM].Year AS Year, Cast.Quarter, Avg([Anomalies ISL 0 IM].YearValue) AS YearValue, Avg([Anomalies ISL 0 IM].Date) AS Date, Avg([Anomalies ISL 0 IM].Julian_Day) AS Julian_Day, Avg([Anomalies ISL 0 IM].Time) AS Time, [Anomalies ISL 0 IM].Depth, Avg([Anomalies ISL 0 IM].Temp) AS Temp, Avg([Anomalies ISL 0 IM].Sal) AS Sal, Avg([Anomalies ISL 0 IM].STheta) AS Density, Avg([Anomalies ISL 0 IM].O2) AS O2, [Anomalies ISL 0 IM].NO3 AS NO3, [Anomalies ISL 0 IM].PO4 AS PO4, [Anomalies ISL 0 IM].SiO3 AS SiO3, Avg([Anomalies ISL 0 IM].O2Sat) AS O2Sat, Avg([Anomalies ISL 0 IM].Chla) AS Chla, Avg([Anomalies ISL 0 IM].TempStDev) AS TempStDev, Avg([Anomalies ISL 0 IM].SalStDev) AS SalStDev, Avg([Anomalies ISL 0 IM].SigStDev) AS DensStDev, Avg([Anomalies ISL 0 IM].O2StDev) AS O2StDev, Avg([Anomalies ISL 0 IM].O2SatStDev) AS O2SatStDev, Avg([Anomalies ISL 0 IM].ChlaStDev) AS ChlaStDev, Avg([Anomalies ISL 0 IM].NO3StDev) AS NO3StDev, Avg([Anomalies ISL 0 IM].NO2StDev) AS NO2StDev, Avg([Anomalies ISL 0 IM].PO4StDev) AS PO4StDev, Avg([Anomalies ISL 0 IM].SiO3StDev) AS SiO3StDev, Avg([Anomalies ISL 0 IM].TempAnom) AS TempAnom, Avg([Anomalies ISL 0 IM].SalAnom) AS SalAnom, Avg([Anomalies ISL 0 IM].SigAnom) AS DensAnom, Avg([Anomalies ISL 0 IM].O2Anom) AS O2Anom, Avg([Anomalies ISL 0 IM].O2SatAnom) AS O2SatAnom, Avg([Anomalies ISL 0 IM].ChlaAnom) AS ChlaAnom, Avg([Anomalies ISL 0 IM].NO3Anom) AS NO3Anom, Avg([Anomalies ISL 0 IM].PO4Anom) AS PO4Anom, Avg([Anomalies ISL 0 IM].SIO3Anom) AS SIO3Anom, ([TempAnom]/[TempStDev]) AS TempStAnom, ([SalAnom]/[SalStDev]) AS SalStAnom, ([DensAnom]/[DensStDev]) AS DensStAnom, ([O2Anom]/[O2StDev]) AS O2StAnom, ([O2SatAnom]/[O2SatStDev]) AS O2SatStAnom, ([ChlaAnom]/[ChlaStDev]) AS ChlaStAnom, ([NO3Anom]/[NO3StDev]) AS NO3StAnom, ([PO4Anom]/[PO4StDev]) AS PO4StAnom, ([SiO3Anom]/[SiO3StDev]) AS SiO3StAnom, "" "" AS Spice, ((([NO3]-16*[PO4]+2.9))) AS NStar INTO Anom_ISL_1_Jen_all
+FROM Cast INNER JOIN (St_Stations INNER JOIN (Station_ID INNER JOIN [Anomalies ISL 0 IM] ON Station_ID.Sta_ID = [Anomalies ISL 0 IM].Sta_ID) ON St_Stations.Sta_ID = Station_ID.Sta_ID) ON Cast.Cast_ID = [Anomalies ISL 0 IM].Cast_ID
+GROUP BY [Anomalies ISL 0 IM].Cruise, St_Stations.Code_Region, St_Stations.[Code-SCB], St_Stations.[Code-Nearshore], [Anomalies ISL 0 IM].Sta_ID, Station_ID.St_Line, Station_ID.St_Sta, Station_ID.Distance, [Anomalies ISL 0 IM].Cast_ID, [Anomalies ISL 0 IM].Year, Cast.Quarter, [Anomalies ISL 0 IM].Depth, [Anomalies ISL 0 IM].NO3, [Anomalies ISL 0 IM].PO4, [Anomalies ISL 0 IM].SiO3, "" ""
+HAVING ((([Anomalies ISL 0 IM].Cruise)>195000));"
+"Anomalies ISL 2 Lines","SELECT",TRUE,"","SELECT [Anomalies ISL 1 Station].Year, Avg([Anomalies ISL 1 Station].YearValue) AS YearValue, [Anomalies ISL 1 Station].Cruise, St_Stations.St_Line, [Anomalies ISL 1 Station].Depth, Avg([Anomalies ISL 1 Station].Temp) AS Temp, Avg([Anomalies ISL 1 Station].Sal) AS Sal, Avg([Anomalies ISL 1 Station].Density) AS Density, Avg([Anomalies ISL 1 Station].O2) AS O2, Avg([Anomalies ISL 1 Station].NO3) AS NO3, Avg([Anomalies ISL 1 Station].PO4) AS PO4, Avg([Anomalies ISL 1 Station].SiO3) AS SiO3, Avg([Anomalies ISL 1 Station].O2Sat) AS O2Sat, Avg([Anomalies ISL 1 Station].TempAnom) AS TempAnom, Avg([Anomalies ISL 1 Station].SalAnom) AS SalAnom, Avg([Anomalies ISL 1 Station].DensAnom) AS DensAnom, Avg([Anomalies ISL 1 Station].O2Anom) AS O2Anom, Avg([Anomalies ISL 1 Station].O2SatAnom) AS O2SatAnom, Avg([Anomalies ISL 1 Station].NO3Anom) AS NO3Anom, Avg([Anomalies ISL 1 Station].PO4Anom) AS PO4Anom, Avg([Anomalies ISL 1 Station].SIO3Anom) AS SIO3Anom, Avg([Anomalies ISL 1 Station].TempStAnom) AS TempStAnom, Avg([Anomalies ISL 1 Station].SalStAnom) AS SalStAnom, Avg([Anomalies ISL 1 Station].DensStAnom) AS DensStAnom, Avg([Anomalies ISL 1 Station].O2StAnom) AS O2StAnom, Avg([Anomalies ISL 1 Station].O2SatStAnom) AS O2SatStAnom, Avg([Anomalies ISL 1 Station].NO3StAnom) AS NO3StAnom, Avg([Anomalies ISL 1 Station].PO4StAnom) AS PO4StAnom, Avg([Anomalies ISL 1 Station].SIO3StAnom) AS SIO3StAnom
+FROM St_Stations INNER JOIN [Anomalies ISL 1 Station] ON St_Stations.Sta_ID = [Anomalies ISL 1 Station].Sta_ID
+GROUP BY [Anomalies ISL 1 Station].Year, [Anomalies ISL 1 Station].Cruise, St_Stations.St_Line, [Anomalies ISL 1 Station].Depth
+ORDER BY [Anomalies ISL 1 Station].Cruise, St_Stations.St_Line;"
+"Anomalies ISL 3 Cruise","SELECT",TRUE,"","SELECT [Anomalies ISL 1 Station].Year, Avg([Anomalies ISL 1 Station].YearValue) AS YearValue, [Anomalies ISL 1 Station].Cruise, [Anomalies ISL 1 Station].Depth, Avg([Anomalies ISL 1 Station].Temp) AS Temp, Avg([Anomalies ISL 1 Station].Sal) AS Sal, Avg([Anomalies ISL 1 Station].Density) AS Density, Avg([Anomalies ISL 1 Station].O2) AS O2, Avg([Anomalies ISL 1 Station].NO3) AS NO3, Avg([Anomalies ISL 1 Station].PO4) AS PO4, Avg([Anomalies ISL 1 Station].SiO3) AS SiO3, Avg([Anomalies ISL 1 Station].O2Sat) AS O2Sat, Avg([Anomalies ISL 1 Station].TempAnom) AS TempAnom, Avg([Anomalies ISL 1 Station].SalAnom) AS SalAnom, Avg([Anomalies ISL 1 Station].DensAnom) AS DensAnom, Avg([Anomalies ISL 1 Station].O2Anom) AS O2Anom, Avg([Anomalies ISL 1 Station].O2SatAnom) AS O2SatAnom, Avg([Anomalies ISL 1 Station].NO3Anom) AS NO3Anom, Avg([Anomalies ISL 1 Station].PO4Anom) AS PO4Anom, Avg([Anomalies ISL 1 Station].SIO3Anom) AS SIO3Anom, Avg([Anomalies ISL 1 Station].TempStAnom) AS TempStAnom, Avg([Anomalies ISL 1 Station].SalStAnom) AS SalStAnom, Avg([Anomalies ISL 1 Station].DensStAnom) AS DensStAnom, Avg([Anomalies ISL 1 Station].O2StAnom) AS O2StAnom, Avg([Anomalies ISL 1 Station].O2SatStAnom) AS O2SatStAnom, Avg([Anomalies ISL 1 Station].NO3StAnom) AS NO3StAnom, Avg([Anomalies ISL 1 Station].PO4StAnom) AS PO4StAnom, Avg([Anomalies ISL 1 Station].SIO3StAnom) AS SIO3StAnom
+FROM St_Stations INNER JOIN [Anomalies ISL 1 Station] ON St_Stations.Sta_ID = [Anomalies ISL 1 Station].Sta_ID
+GROUP BY [Anomalies ISL 1 Station].Year, [Anomalies ISL 1 Station].Cruise, [Anomalies ISL 1 Station].Depth
+ORDER BY [Anomalies ISL 1 Station].Cruise;"
+"Anomalies ISL 4 Year","SELECT",TRUE,"","SELECT [Anomalies ISL 3 Cruise].Year, [Anomalies ISL 3 Cruise].Depth, Avg([Anomalies ISL 3 Cruise].Temp) AS Temp, Avg([Anomalies ISL 3 Cruise].Sal) AS Sal, Avg([Anomalies ISL 3 Cruise].Density) AS Density, Avg([Anomalies ISL 3 Cruise].O2) AS O2, Avg([Anomalies ISL 3 Cruise].NO3) AS NO3, Avg([Anomalies ISL 3 Cruise].PO4) AS PO4, Avg([Anomalies ISL 3 Cruise].SiO3) AS SiO3, Avg([Anomalies ISL 3 Cruise].O2Sat) AS O2Sat, Avg([Anomalies ISL 3 Cruise].TempAnom) AS TempAnom, Avg([Anomalies ISL 3 Cruise].SalAnom) AS SalAnom, Avg([Anomalies ISL 3 Cruise].DensAnom) AS DensAnom, Avg([Anomalies ISL 3 Cruise].O2Anom) AS O2Anom, Avg([Anomalies ISL 3 Cruise].O2SatAnom) AS O2SatAnom, Avg([Anomalies ISL 3 Cruise].NO3Anom) AS NO3Anom, Avg([Anomalies ISL 3 Cruise].PO4Anom) AS PO4Anom, Avg([Anomalies ISL 3 Cruise].SIO3Anom) AS SIO3Anom, Avg([Anomalies ISL 3 Cruise].TempStAnom) AS TempStAnom, Avg([Anomalies ISL 3 Cruise].SalStAnom) AS SalStAnom, Avg([Anomalies ISL 3 Cruise].DensStAnom) AS DensStAnom, Avg([Anomalies ISL 3 Cruise].O2StAnom) AS O2StAnom, Avg([Anomalies ISL 3 Cruise].O2SatStAnom) AS O2SatStAnom, Avg([Anomalies ISL 3 Cruise].NO3StAnom) AS NO3StAnom, Avg([Anomalies ISL 3 Cruise].PO4StAnom) AS PO4StAnom, Avg([Anomalies ISL 3 Cruise].SIO3StAnom) AS SIO3StAnom
+FROM [Anomalies ISL 3 Cruise]
+GROUP BY [Anomalies ISL 3 Cruise].Year, [Anomalies ISL 3 Cruise].Depth
+HAVING ((([Anomalies ISL 3 Cruise].Year)<2010) AND (([Anomalies ISL 3 Cruise].Depth)=200) AND ((Avg([Anomalies ISL 3 Cruise].Sal)) Is Not Null));"
+"Anomalies Sigma 0 IM","SELECT",TRUE,"","SELECT Cast.Cruise, Bottle_Sigm.Cast_ID, Cast.Sta_ID, Cast.Date, Cast.Julian_Day, Cast.Year, Year([Date])+Month([Date])/12 AS YearValue, Cast.Time, HarmCoeffSigma.StSigma AS Sigma, Bottle_Sigm.Depth AS Depth, Bottle_Sigm.Temp AS Temp, Bottle_Sigm.Sal AS Sal, Bottle_Sigm.O2 AS O2, Bottle_Sigm.O2Sat AS O2Sat, Bottle_Sigm.NO3 AS NO3, Bottle_Sigm.PO4 AS PO4, Bottle_Sigm.SiO4 AS SiO4, Avg(HarmCoeffSigma.DepthStDev) AS DepthStDev, Avg(HarmCoeffSigma.TempStDev) AS TempStDev, Avg(HarmCoeffSigma.SalStDev) AS SalStDev, Avg(HarmCoeffSigma.O2StDev) AS O2StDev, Avg(HarmCoeffSigma.NO3StDev) AS NO3StDev, Avg(HarmCoeffSigma.PO4StDev) AS PO4StDev, Avg(HarmCoeffSigma.SiO3StDev) AS SiO3StDev, Avg(Bottle_Sigm!Depth-(HarmCoeffSigma!DepthMean+HarmCoeffSigma!DepthAmpl*Sin(HarmCoeffSigma!DepthFreq*([Julian_Day]-HarmCoeffSigma!DepthPhase)))) AS DepthAnom, Avg(Bottle_Sigm!Temp-(HarmCoeffSigma!TempMean+HarmCoeffSigma!TempAmpl*Sin(HarmCoeffSigma!TempFreq*([Julian_Day]-HarmCoeffSigma!TempPhase)))) AS TempAnom, Avg(Bottle_Sigm!Sal-(HarmCoeffSigma!SalMean+HarmCoeffSigma!SalAmpl*Sin(HarmCoeffSigma!SalFreq*([Julian_Day]-HarmCoeffSigma!SalPhase)))) AS SalAnom, Avg(Bottle_Sigm!O2-(HarmCoeffSigma!O2Mean+HarmCoeffSigma!O2Ampl*Sin(HarmCoeffSigma!O2Freq*([Julian_Day]-HarmCoeffSigma!O2Phase)))) AS O2Anom, Avg(Bottle_Sigm!NO3-(HarmCoeffSigma!NO3Mean+HarmCoeffSigma!NO3Ampl*Sin(HarmCoeffSigma!NO3Freq*([Julian_Day]-HarmCoeffSigma!NO3Phase)))) AS NO3Anom, Avg(Bottle_Sigm!PO4-(HarmCoeffSigma!PO4Mean+HarmCoeffSigma!PO4Ampl*Sin(HarmCoeffSigma!PO4Freq*([Julian_Day]-HarmCoeffSigma!PO4Phase)))) AS PO4Anom, Avg(Bottle_Sigm!SiO4-(HarmCoeffSigma!SiO3Mean+HarmCoeffSigma!SiO3Ampl*Sin(HarmCoeffSigma!SiO3Freq*([Julian_Day]-HarmCoeffSigma!SiO3Phase)))) AS SiO3Anom, ([NO3]/[PO4]) AS [N-P_Ratio], ((([NO3]-16*[PO4]+2.9))) AS [N-Star]
+FROM (Cast INNER JOIN HarmCoeffSigma ON Cast.Sta_ID = HarmCoeffSigma.Sta_ID) INNER JOIN Bottle_Sigm ON (HarmCoeffSigma.StSigma = Bottle_Sigm.STheta) AND (Cast.Cast_ID = Bottle_Sigm.Cast_ID)
+WHERE (((Bottle_Sigm.STheta)=[HarmCoeffSigma]![StSigma]))
+GROUP BY Cast.Cruise, Bottle_Sigm.Cast_ID, Cast.Sta_ID, Cast.Date, Cast.Julian_Day, Cast.Year, Cast.Time, HarmCoeffSigma.StSigma, Bottle_Sigm.Depth, Bottle_Sigm.Temp, Bottle_Sigm.Sal, Bottle_Sigm.O2, Bottle_Sigm.O2Sat, Bottle_Sigm.NO3, Bottle_Sigm.PO4, Bottle_Sigm.SiO4
+ORDER BY Cast.Cruise, Cast.Sta_ID, HarmCoeffSigma.StSigma;"
+"Anomalies Sigma 1 Lines","SELECT",TRUE,"","SELECT St_Stations.[Code-SCB], [Anomalies Sigma 0 IM].Year, Avg([Anomalies Sigma 0 IM].YearValue) AS YearValue, [Anomalies Sigma 0 IM].Sigma AS Sigma, [Anomalies Sigma 0 IM].Cruise, St_Stations.St_Line, St_Stations.St_Station, Avg([Anomalies Sigma 0 IM].Date) AS Date, Count([Anomalies Sigma 0 IM].Depth) AS NoStations, Avg([Anomalies Sigma 0 IM].Depth) AS Depth, Avg([Anomalies Sigma 0 IM].Temp) AS Temp, Avg([Anomalies Sigma 0 IM].Sal) AS Sal, Avg([Anomalies Sigma 0 IM].O2) AS O2, Avg([Anomalies Sigma 0 IM].PO4) AS PO4, [Anomalies Sigma 0 IM].SiO4 AS SiO4, Avg([Anomalies Sigma 0 IM].NO3) AS NO3, Avg([Anomalies Sigma 0 IM].DepthAnom) AS DepthAnom, Avg([Anomalies Sigma 0 IM].TempAnom) AS TempAnom, Avg([Anomalies Sigma 0 IM].SalAnom) AS SalAnom, Avg([Anomalies Sigma 0 IM].O2Anom) AS O2Anom, Avg([Anomalies Sigma 0 IM].NO3Anom) AS NO3Anom, Avg([Anomalies Sigma 0 IM].PO4Anom) AS PO4Anom, Avg([Anomalies Sigma 0 IM].SiO3Anom) AS SiO3Anom
+FROM St_Stations INNER JOIN ((Cruises INNER JOIN Cast ON Cruises.Cruise = Cast.Cruise) INNER JOIN [Anomalies Sigma 0 IM] ON (Cast.Cast_ID = [Anomalies Sigma 0 IM].Cast_ID) AND (Cast.Cruise = [Anomalies Sigma 0 IM].Cruise)) ON St_Stations.Sta_ID = Cast.Sta_ID
+GROUP BY St_Stations.[Code-SCB], [Anomalies Sigma 0 IM].Year, [Anomalies Sigma 0 IM].Sigma, [Anomalies Sigma 0 IM].Cruise, St_Stations.St_Line, St_Stations.St_Station, [Anomalies Sigma 0 IM].SiO4
+HAVING ((([Anomalies Sigma 0 IM].Sigma)=26.4))
+ORDER BY Avg([Anomalies Sigma 0 IM].YearValue), St_Stations.St_Line, St_Stations.St_Station;"
+"Anomalies Sigma 1 Regions Cruise","SELECT",TRUE,"","SELECT [Anomalies Sigma 0 IM].Year, Avg([Anomalies Sigma 0 IM].YearValue) AS YearValue, [Anomalies Sigma 0 IM].Sigma AS Sigma, [Anomalies Sigma 0 IM].Cruise, Avg([Anomalies Sigma 0 IM].Date) AS Date, Month([Date])+Day([Date])/30 AS Month, Count([Anomalies Sigma 0 IM].Depth) AS NoStations, Avg([Anomalies Sigma 0 IM].Depth) AS Depth, Avg([Anomalies Sigma 0 IM].Temp) AS Temp, Avg([Anomalies Sigma 0 IM].Sal) AS Sal, Avg([Anomalies Sigma 0 IM].O2) AS O2, Avg([Anomalies Sigma 0 IM].O2Sat) AS O2Sat, Avg([Anomalies Sigma 0 IM].PO4) AS PO4, Avg([Anomalies Sigma 0 IM].SiO4) AS SiO4, Avg([Anomalies Sigma 0 IM].NO3) AS NO3, Avg([Anomalies Sigma 0 IM].DepthAnom) AS DepthAnom, Avg([Anomalies Sigma 0 IM].TempAnom) AS TempAnom, Avg([Anomalies Sigma 0 IM].SalAnom) AS SalAnom, Avg([Anomalies Sigma 0 IM].O2Anom) AS O2Anom, Avg([Anomalies Sigma 0 IM].NO3Anom) AS NO3Anom, Avg([Anomalies Sigma 0 IM].PO4Anom) AS PO4Anom, Avg([Anomalies Sigma 0 IM].SiO3Anom) AS SiO3Anom, Avg([Anomalies Sigma 0 IM].[N-P_Ratio]) AS [N-P_Ratio], Avg([Anomalies Sigma 0 IM].[N-Star]) AS [N-Star]
+FROM St_Stations INNER JOIN (Cruises INNER JOIN (Cast INNER JOIN [Anomalies Sigma 0 IM] ON Cast.Cast_ID = [Anomalies Sigma 0 IM].Cast_ID) ON Cruises.Cruise = [Anomalies Sigma 0 IM].Cruise) ON (Cruises.Cruise = Cast.Cruise) AND (St_Stations.Sta_ID = Cast.Sta_ID)
+WHERE (((Cruises.[Code-ST])=""ST""))
+GROUP BY [Anomalies Sigma 0 IM].Year, [Anomalies Sigma 0 IM].Sigma, [Anomalies Sigma 0 IM].Cruise
+HAVING ((([Anomalies Sigma 0 IM].Sigma)=26.6));"
+"Anomalies Sigma 2 Cruises","SELECT",TRUE,"","SELECT [Anomalies Sigma 1 Lines].Year AS Expr1, Avg([Anomalies Sigma 1 Lines].YearValue) AS YearValue, Avg([Anomalies Sigma 1 Lines].Sigma) AS Sigma, [Anomalies Sigma 1 Lines].Cruise AS Expr2, Avg([Anomalies Sigma 1 Lines].Date) AS Date, Month([Date]) AS Month, Count([Anomalies Sigma 1 Lines].NoStations) AS NoStations, Avg([Anomalies Sigma 1 Lines].Depth) AS Depth, Avg([Anomalies Sigma 1 Lines].Temp) AS Temp, Avg([Anomalies Sigma 1 Lines].Sal) AS Sal, Avg([Anomalies Sigma 1 Lines].PO4) AS PO4, Avg([Anomalies Sigma 1 Lines].SiO4) AS SiO4, Avg([Anomalies Sigma 1 Lines].NO3) AS NO3, Avg([Anomalies Sigma 1 Lines].O2) AS O2, Avg([Anomalies Sigma 1 Lines].DepthAnom) AS DepthAnom, Avg([Anomalies Sigma 1 Lines].TempAnom) AS TempAnom, Avg([Anomalies Sigma 1 Lines].SalAnom) AS SalAnom, Avg([Anomalies Sigma 1 Lines].PO4Anom) AS PO4Anom, Avg([Anomalies Sigma 1 Lines].SiO3Anom) AS SiO3Anom, Avg([Anomalies Sigma 1 Lines].NO3Anom) AS NO3Anom, Avg([Anomalies Sigma 1 Lines].O2Anom) AS O2Anom
+FROM [Anomalies Sigma 1 Lines]
+GROUP BY [Anomalies Sigma 1 Lines].Year, [Anomalies Sigma 1 Lines].Cruise
+ORDER BY Avg([Anomalies Sigma 1 Lines].Sigma), [Anomalies Sigma 1 Lines].Cruise;"
+"Anomalies Sigma 2 Regions Ann","SELECT",TRUE,"","SELECT [Anomalies Sigma 1 Regions Cruise].Year AS Expr1, Avg([Anomalies Sigma 1 Regions Cruise].Date) AS Date, Avg([Anomalies Sigma 1 Regions Cruise].Month) AS Month, Count([Anomalies Sigma 1 Regions Cruise].NoStations) AS NoCruises, Avg([Anomalies Sigma 1 Regions Cruise].Sigma) AS AvgOfSigma, Avg([Anomalies Sigma 1 Regions Cruise].Depth) AS Depth, Avg([Anomalies Sigma 1 Regions Cruise].Temp) AS Temp, Avg([Anomalies Sigma 1 Regions Cruise].Sal) AS Sal, Avg([Anomalies Sigma 1 Regions Cruise].PO4) AS PO4, Avg([Anomalies Sigma 1 Regions Cruise].SiO4) AS SiO4, Avg([Anomalies Sigma 1 Regions Cruise].NO3) AS NO3, Avg([Anomalies Sigma 1 Regions Cruise].O2) AS O2, Avg([Anomalies Sigma 1 Regions Cruise].O2Sat) AS O2Sat, Avg([Anomalies Sigma 1 Regions Cruise].DepthAnom) AS DepthAnom, Avg([Anomalies Sigma 1 Regions Cruise].TempAnom) AS TempAnom, Avg([Anomalies Sigma 1 Regions Cruise].SalAnom) AS SalAnom, Avg([Anomalies Sigma 1 Regions Cruise].NO3Anom) AS NO3Anom, Avg([Anomalies Sigma 1 Regions Cruise].PO4Anom) AS PO4Anom, Avg([Anomalies Sigma 1 Regions Cruise].SiO3Anom) AS SiO3Anom, Avg([Anomalies Sigma 1 Regions Cruise].O2Anom) AS O2Anom, Avg([Anomalies Sigma 1 Regions Cruise].[N-P_Ratio]) AS [N-P_Ratio], Avg([Anomalies Sigma 1 Regions Cruise].[N-Star]) AS [N-Star]
+FROM [Anomalies Sigma 1 Regions Cruise]
+GROUP BY [Anomalies Sigma 1 Regions Cruise].Year;"
+"Anomalies Sigma 3 Year","SELECT",TRUE,"","SELECT [Anomalies Sigma 2 Cruises].Year AS Expr1, Avg([Anomalies Sigma 2 Cruises].Date) AS Date, Avg([Anomalies Sigma 2 Cruises].Month) AS Month, Count([Anomalies Sigma 2 Cruises].Cruise) AS NoCruises, Avg([Anomalies Sigma 2 Cruises].Sigma) AS Sigma, Avg([Anomalies Sigma 2 Cruises].Depth) AS Depth, Avg([Anomalies Sigma 2 Cruises].Temp) AS Temp, Avg([Anomalies Sigma 2 Cruises].Sal) AS Sal, Avg([Anomalies Sigma 2 Cruises].PO4) AS PO4, Avg([Anomalies Sigma 2 Cruises].SiO4) AS SiO4, Avg([Anomalies Sigma 2 Cruises].NO3) AS NO3, Avg([Anomalies Sigma 2 Cruises].O2) AS O2, Avg([Anomalies Sigma 2 Cruises].DepthAnom) AS DepthAnom, Avg([Anomalies Sigma 2 Cruises].TempAnom) AS TempAnom, Avg([Anomalies Sigma 2 Cruises].SalAnom) AS SalAnom, Avg([Anomalies Sigma 2 Cruises].PO4Anom) AS PO4Anom, Avg([Anomalies Sigma 2 Cruises].SiO3Anom) AS SiO3Anom, Avg([Anomalies Sigma 2 Cruises].NO3Anom) AS NO3Anom, Avg([Anomalies Sigma 2 Cruises].O2Anom) AS O2Anom
+FROM [Anomalies Sigma 2 Cruises]
+GROUP BY [Anomalies Sigma 2 Cruises].Year
+ORDER BY [Anomalies Sigma 2 Cruises].Year, Avg([Anomalies Sigma 2 Cruises].Sigma);"
+"Anomalies Sigma for Cruise Maps","SELECT",TRUE,"","SELECT [Anomalies Sigma 0 IM].Sigma AS Sigma, Avg(Cast.Year) AS AvgOfYear, St_Stations.Sta_ID, Avg(St_Stations.DLat_Dec) AS Lat, Avg(St_Stations.DLon_Dec) AS Long, Avg([Anomalies Sigma 0 IM].Depth) AS Depth, Avg([Anomalies Sigma 0 IM].Temp) AS Temp, Avg([Anomalies Sigma 0 IM].Sal) AS Sal, Avg([Anomalies Sigma 0 IM].PO4) AS PO4, Avg([Anomalies Sigma 0 IM].SiO4) AS SiO4, Avg([Anomalies Sigma 0 IM].NO3) AS NO3, Avg([Anomalies Sigma 0 IM].O2) AS O2, Avg([Anomalies Sigma 0 IM].DepthAnom) AS DepthAnom, Avg([Anomalies Sigma 0 IM].TempAnom) AS TempAnom, Avg([Anomalies Sigma 0 IM].SalAnom) AS SalAnom, Avg([Anomalies Sigma 0 IM].PO4Anom) AS PO4Anom, Avg([Anomalies Sigma 0 IM].SiO3Anom) AS SiO3Anom, Avg([Anomalies Sigma 0 IM].NO3Anom) AS NO3Anom, Avg([Anomalies Sigma 0 IM].O2Anom) AS O2Anom, Avg([Anomalies Sigma 0 IM]!DepthAnom/[Anomalies Sigma 0 IM]!DepthStDev) AS DepthStAnom, Avg([Anomalies Sigma 0 IM]!TempAnom/[Anomalies Sigma 0 IM]!TempStDev) AS TempStAnom, Avg([Anomalies Sigma 0 IM]!SalAnom/[Anomalies Sigma 0 IM]!SalStDev) AS SalStAnom, Avg([Anomalies Sigma 0 IM]!NO3Anom/[Anomalies Sigma 0 IM]!NO3StDev) AS NO3StAnom, Avg([Anomalies Sigma 0 IM]!O2Anom/[Anomalies Sigma 0 IM]!O2StDev) AS O2StAnom
+FROM St_Stations INNER JOIN ((Cruises INNER JOIN Cast ON Cruises.Cruise = Cast.Cruise) INNER JOIN [Anomalies Sigma 0 IM] ON (Cast.Cast_ID = [Anomalies Sigma 0 IM].Cast_ID) AND (Cast.Cruise = [Anomalies Sigma 0 IM].Cruise)) ON St_Stations.Sta_ID = Cast.Sta_ID
+WHERE (((Cast.Cruise) Between 201100 And 201412))
+GROUP BY [Anomalies Sigma 0 IM].Sigma, St_Stations.Sta_ID
+HAVING ((([Anomalies Sigma 0 IM].Sigma)=26.4));"
+"Cast Query","UPDATE",TRUE,"","UPDATE Cast INNER JOIN Prodo_Cast ON Cast.Cst_Cnt = Prodo_Cast.Cst_Cnt
+SET Prodo_Cast.Cast_ID = [cast].[cast_ID]
+WHERE (((Cast.cast_ID)<>[prodo_cast].[cast_ID]));"
+"Cluster - Chl a: Station_Cruise for Cluster","CROSS_TAB",TRUE,"","TRANSFORM Avg(Chl.ChlorA) AS AvgOfChlorA
+SELECT Cast.DbSta_ID, Station_ID.DLat_Dec, Station_ID.DLon_Dec
+FROM Cruises INNER JOIN ((((Station_ID INNER JOIN Cast ON Station_ID.DBSta_ID = Cast.DbSta_ID) INNER JOIN MLD_Sigma ON Cast.Cast_ID = MLD_Sigma.Cast_ID) LEFT JOIN NutClineDepth ON Cast.Cast_ID = NutClineDepth.Cast_ID) INNER JOIN ((Bottle LEFT JOIN Chl ON Bottle.Btl_Cnt = Chl.Btl_Cnt) LEFT JOIN Nuts ON Bottle.Btl_Cnt = Nuts.Btl_Cnt) ON Cast.Cst_Cnt = Bottle.Cst_Cnt) ON Cruises.Cruise = Cast.Cruise
+WHERE (((Station_ID.Sta_Code)=""st"") AND ((Cruises.[Code-ST])=""st"") AND ((Bottle.Depthm)>[MLD_Sigma]![MLD_Sigma]) AND ((Bottle.RecInd)=3) AND ((Cruises.Cruise)>198400))
+GROUP BY Cast.DbSta_ID, Station_ID.DLat_Dec, Station_ID.DLon_Dec
+PIVOT Cast.Cruise;"
+"Cluster Tests","CROSS_TAB",TRUE,"","TRANSFORM Avg(NutClineDepth.NCDepth) AS AvgOfNCDepth
+SELECT Cast.DbSta_ID, Station_ID.DLat_Dec, Station_ID.DLon_Dec
+FROM Cruises INNER JOIN ((((Station_ID INNER JOIN Cast ON Station_ID.DBSta_ID = Cast.DbSta_ID) INNER JOIN MLD_Sigma ON Cast.Cast_ID = MLD_Sigma.Cast_ID) LEFT JOIN NutClineDepth ON Cast.Cast_ID = NutClineDepth.Cast_ID) INNER JOIN ((Bottle LEFT JOIN Chl ON Bottle.Btl_Cnt = Chl.Btl_Cnt) LEFT JOIN Nuts ON Bottle.Btl_Cnt = Nuts.Btl_Cnt) ON Cast.Cst_Cnt = Bottle.Cst_Cnt) ON Cruises.Cruise = Cast.Cruise
+WHERE (((Station_ID.Sta_Code)=""st"") AND ((Cruises.[Code-ST])=""st"") AND ((Bottle.Depthm)>[MLD_Sigma]![MLD_Sigma]) AND ((Bottle.RecInd)=3) AND ((Cruises.Cruise) Between 200000 And 200700))
+GROUP BY Cast.DbSta_ID, Station_ID.DLat_Dec, Station_ID.DLon_Dec
+PIVOT Cast.Cruise;"
+"DBOutput","MAKE_TABLE",TRUE,"","SELECT Bottle.Cst_Cnt, Bottle.Btl_Cnt, Cast.Cruise, Cast.Cruz_Sta, Cast.DbSta_ID, Cast.Cast_ID, Cast.Sta_ID, Cast.Sta_Code, Bottle.Depth_ID, Bottle.Depthm, Bottle.T_degC, Bottle_Q.T_prec, Bottle_Q.T_qual, Bottle.Salnty, Bottle_Q.S_prec, Bottle_Q.S_qual, Bottle_Q.P_qual, Bottle.O2ml_L, Bottle_Q.O_qual, Nuts.PO4uM, Nuts.PO4q, Nuts.SiO3uM, Nuts.SiO3qu, Nuts.NO2uM, Nuts.NO2q, Nuts.NO3uM, Nuts.NO3q, Nuts.NH3uM, Nuts.NH3q, Chl.ChlorA, Chl.Chlqua, Chl.Phaeop, Chl.Phaqua, Bottle.STheta, Bottle_Q.SThtaq, Bottle.O2Sat, Bottle_Q.O2Satq, Bottle.BtlNum, Prodo_Bottle.C14As1, Prodo_Bottle.C14A1p, Prodo_Bottle.C14A1q, Prodo_Bottle.C14As2, Prodo_Bottle.C14A2p, Prodo_Bottle.C14A2q, Prodo_Bottle.DarkAs, Prodo_Bottle.DarkAp, Prodo_Bottle.DarkAq, Prodo_Bottle.MeanAs, Prodo_Bottle.MeanAp, Prodo_Bottle.MeanAq, Prodo_Bottle.IncTim, Prodo_Bottle.LightP, Bottle.RecInd, Rpt_Data.R_Depth, Rpt_Data.R_TEMP, Rpt_Data.R_POTEMP, Rpt_Data.R_SALINITY, Rpt_Data.R_SIGMA, Rpt_Data.R_SVA, Rpt_Data.R_DYNHT, Rpt_Data.R_O2, Rpt_Data.R_O2Sat, Rpt_Data.R_SIO3, Rpt_Data.R_PO4, Rpt_Data.R_NO3, Rpt_Data.R_NO2, Rpt_Data.R_NH4, Rpt_Data.R_CHLA, Rpt_Data.R_PHAEO, Rpt_Data.R_PRES, Rpt_Data.R_SAMP INTO 0501Bottle2013
+FROM ((Bottle INNER JOIN ((Bottle_Q INNER JOIN (Cast INNER JOIN Prodo_Bottle ON Cast.Cst_Cnt = Prodo_Bottle.Cst_Cnt) ON Bottle_Q.Btl_Cnt = Prodo_Bottle.Btl_Cnt) INNER JOIN Rpt_Data ON Prodo_Bottle.Btl_Cnt = Rpt_Data.Btl_Cnt) ON Bottle.Btl_Cnt = Bottle_Q.Btl_Cnt) INNER JOIN Chl ON Bottle.Btl_Cnt = Chl.Btl_Cnt) INNER JOIN Nuts ON (Cast.Cst_Cnt = Bottle.Cst_Cnt) AND (Bottle.Btl_Cnt = Rpt_Data.Btl_Cnt) AND (Bottle.Btl_Cnt = Prodo_Bottle.Btl_Cnt) AND (Bottle.Btl_Cnt = Nuts.Btl_Cnt)
+WHERE (((Cast.Cruise)=200501));"
+"DIC_MkTbl_For_Web","MAKE_TABLE",TRUE,"","SELECT DICs.ID, [Bottle.Cst_Cnt] AS Cast_Index, [Bottle.Btl_Cnt] AS Bottle_Index, Cast.Cruise, [Bottle.Depthm] AS [Depth(m)], [Cast.Sta_ID] AS [Line Sta_ID], Bottle.Depth_ID, DICs.DIC1, DICs.DIC2, DICs.TA1, DICs.TA2, DICs.pH1, DICs.pH2, DICs.Salinity1, DICs.Salinity2, [Bottle.T_degC] AS Temperature_degC, [Bottle.Salnty] AS [Bottle Salinity], [bottle.O2ml_L] AS [Bottle O2(ml_L)], [bottle.Oxy_µmol/Kg] AS [Bottle O2 (µmol/Kg)], [bottle.STheta] AS [Sigma-theta], [Dics.Bottle_ID1] AS [DIC Bottle_ID1], [Dics.Bottle_ID2] AS [DIC Bottle_ID2], DICs.[DIC Quality Comment] INTO Web_DICs
+FROM Cast INNER JOIN (Bottle INNER JOIN DICs ON Bottle.Btl_Cnt = DICs.Btl_Cnt) ON Cast.Cst_Cnt = Bottle.Cst_Cnt;"
+"DIC_Station_Query","SELECT",TRUE,"","SELECT Bottle.Depthm, Bottle.Sta_ID, Cast.Cruise, DICs.DIC1, DICs.Salinity1, Bottle.Salnty, Bottle.O2ml_L, Bottle.RecInd, DICs.TA1, Bottle.[Oxy_µmol/Kg]
+FROM Cast INNER JOIN (Bottle LEFT JOIN DICs ON Bottle.Btl_Cnt = DICs.Btl_Cnt) ON Cast.Cst_Cnt = Bottle.Cst_Cnt
+WHERE (((Bottle.Sta_ID)=""081.8 046.9"") AND ((Cast.Cruise)=201004) AND ((Bottle.RecInd)=3))
+ORDER BY Bottle.Depthm;"
+"Data for HarmCoefSigma Calc","CROSS_TAB",TRUE,"","TRANSFORM Avg(Cast.Julian_Day) AS AvgOfJulian_Day
+SELECT Bottle_Sigm.Sta_ID, Bottle_Sigm.STheta
+FROM Cruises INNER JOIN (Cast INNER JOIN Bottle_Sigm ON Cast.Cast_ID = Bottle_Sigm.Cast_ID) ON Cruises.Cruise = Cast.Cruise
+WHERE (((Cruises.[Code-ST])=""st"") AND ((Cruises.Cruise) Between 198400 And 200812))
+GROUP BY Bottle_Sigm.Sta_ID, Bottle_Sigm.STheta
+PIVOT Cruises.Cruise;"
+"Data for Line93 SigmaMap","SELECT",TRUE,"","SELECT Cast.Year, Cast.Cruise, Cast.Cast_ID, Cast.Sta_ID, Avg(Cast!Date+Cast!Time) AS DateTime, Bottle.Depthm AS Depth, Avg(Bottle.T_degC) AS Temp, Avg(Bottle.Salnty) AS Sal, Avg(Bottle.O2ml_L) AS O2, Avg(Bottle.O2Sat) AS O2Sat, Avg(Bottle.STheta) AS STheta, Avg(Nuts.PO4ug) AS PO4, Avg(Nuts.SiO3ug) AS SiO4, Avg(Nuts.NO3ug) AS NO3, Avg(Nuts.NO2ug) AS AvgOfNO2ug
+FROM Cruises RIGHT JOIN ((Cast LEFT JOIN Station_ID ON Cast.Sta_ID = Station_ID.Sta_ID) INNER JOIN (Bottle LEFT JOIN Nuts ON Bottle.Btl_Cnt = Nuts.Btl_Cnt) ON Cast.Cst_Cnt = Bottle.Cst_Cnt) ON Cruises.Cruise = Cast.Cruise
+WHERE (((Bottle.RecInd)=3 Or (Bottle.RecInd)=5))
+GROUP BY Cast.Year, Cast.Cruise, Cast.Cast_ID, Cast.Sta_ID, Bottle.Depthm
+HAVING (((Cast.Cruise)>198400) AND ((Avg(Bottle.STheta)) Is Not Null))
+ORDER BY Cast.Year, Cast.Cast_ID, Bottle.Depthm;"
+"Data for Matlab ML Calc","SELECT",TRUE,"","SELECT Cast.Year, Cast.CruiseAlias AS Cruise, Cast.Cast_ID, Cast.Sta_ID, Avg(Cast!Date+Cast!Time) AS DateTime, Bottle.Depthm AS Depth, Avg(Bottle.T_degC) AS Temp, Avg(Bottle.STheta) AS Density, Bottle.RecInd
+FROM Cast INNER JOIN Bottle ON Cast.Cst_Cnt = Bottle.Cst_Cnt
+GROUP BY Cast.Year, Cast.CruiseAlias, Cast.Cast_ID, Cast.Sta_ID, Bottle.Depthm, Bottle.RecInd
+HAVING (((Cast.CruiseAlias)>201611) AND ((Bottle.Depthm)<300) AND ((Avg(Bottle.STheta)) Is Not Null) AND ((Bottle.RecInd)=3 Or (Bottle.RecInd)=5))
+ORDER BY Cast.Cast_ID, Bottle.Depthm;"
+"Data for Matlab NC Calc","SELECT",TRUE,"","SELECT Cast.Year, Cast.Cruise, Cast.Cast_ID, Cast.Sta_ID, Avg(Cast!Date+Cast!Time) AS DateTime, Bottle.Depthm AS Depth, Avg(Bottle.T_degC) AS Temp, Avg(Bottle.STheta) AS STheta, Avg(Nuts.PO4uM) AS PO4, Avg(Nuts.SiO3uM) AS SiO4, Avg(Nuts.NO3uM) AS NO3
+FROM Cast INNER JOIN (Bottle LEFT JOIN Nuts ON Bottle.Btl_Cnt = Nuts.Btl_Cnt) ON Cast.Cst_Cnt = Bottle.Cst_Cnt
+WHERE (((Bottle.RecInd)=3))
+GROUP BY Cast.Year, Cast.Cruise, Cast.Cast_ID, Cast.Sta_ID, Bottle.Depthm
+HAVING (((Cast.Cruise)>201611) AND ((Bottle.Depthm)<260) AND ((Avg(Bottle.T_degC))>5) AND ((Avg(Nuts.NO3uM)) Is Not Null))
+ORDER BY Cast.Cast_ID, Bottle.Depthm;"
+"Data for OMZ Sigma Map Matlab","SELECT",TRUE,"","SELECT Cast.Year, Cast.Cruise, Cast.Cast_ID, Cast.Sta_ID, Avg(Cast!Date+Cast!Time) AS DateTime, Avg(Bottle.Depthm) AS Depth, Avg(Bottle.T_degC) AS Temp, Avg(Bottle.Salnty) AS Sal, Avg(Bottle.O2ml_L) AS O2, Avg(Bottle.O2Sat) AS O2Sat, Bottle.STheta AS STheta, Avg(Nuts.PO4ug) AS PO4, Avg(Nuts.SiO3ug) AS SiO4, Avg(Nuts.NO3ug) AS NO3, Avg(Nuts.NO2ug) AS NO2
+FROM Cruises RIGHT JOIN ((St_Stations INNER JOIN Cast ON St_Stations.Sta_ID = Cast.Sta_ID) INNER JOIN (Bottle LEFT JOIN Nuts ON Bottle.Btl_Cnt = Nuts.Btl_Cnt) ON Cast.Cst_Cnt = Bottle.Cst_Cnt) ON Cruises.Cruise = Cast.Cruise
+WHERE (((Bottle.RecInd)=3 Or (Bottle.RecInd)=5) AND ((St_Stations.[Code-Nearshore])=""near"" Or (St_Stations.[Code-Nearshore])=""cow""))
+GROUP BY Cast.Year, Cast.Cruise, Cast.Cast_ID, Cast.Sta_ID, Bottle.STheta
+HAVING (((Avg(Bottle.T_degC))>5) AND ((Avg(Bottle.O2ml_L)) Is Not Null) AND ((Bottle.STheta) Is Not Null))
+ORDER BY Cast.Year, Cast.Cruise, Cast.Cast_ID, Cast.Sta_ID, Bottle.STheta;"
+"Data for Sigma Map Matlab","SELECT",TRUE,"","SELECT Cast.Year, Cast.Cruise, Cast.Cast_ID, Cast.Sta_ID, Avg(Cast!Date+Cast!Time) AS DateTime, Avg(Bottle.Depthm) AS Depth, Avg(Bottle.T_degC) AS Temp, Avg(Bottle.Salnty) AS Sal, Avg(Bottle.O2ml_L) AS O2, Avg(Bottle.O2Sat) AS O2Sat, Bottle.STheta AS STheta, Avg(Nuts.PO4uM) AS PO4, Avg(Nuts.SiO3uM) AS SiO4, Avg(Nuts.NO3uM) AS NO3, Avg(Nuts.NO2uM) AS NO2
+FROM Cruises RIGHT JOIN ((St_Stations INNER JOIN Cast ON St_Stations.Sta_ID = Cast.Sta_ID) INNER JOIN (Bottle LEFT JOIN Nuts ON Bottle.Btl_Cnt = Nuts.Btl_Cnt) ON Cast.Cst_Cnt = Bottle.Cst_Cnt) ON Cruises.Cruise = Cast.Cruise
+WHERE (((Bottle.RecInd)=3 Or (Bottle.RecInd)=5))
+GROUP BY Cast.Year, Cast.Cruise, Cast.Cast_ID, Cast.Sta_ID, Bottle.STheta
+HAVING (((Cast.Cruise)>198400) AND ((Avg(Bottle.T_degC))>5) AND ((Bottle.STheta) Is Not Null))
+ORDER BY Cast.Year, Cast.Cruise, Cast.Cast_ID, Cast.Sta_ID, Bottle.STheta;"
+"Depth Data - 1 Stations","SELECT",TRUE,"","SELECT Cast.Year, Cast.Cruise, Cast.Sta_ID, Cast.Lat_Dec, Cast.Lon_Dec, Avg(Cast.Date) AS Date, Avg(Cast!Month+Day(Cast!Date)/31.5-1) AS Month, Avg(Bottle.Depthm) AS Depth, Avg(Bottle.STheta) AS Density, Avg(Bottle.T_degC) AS Temp, Avg(Bottle.Salnty) AS Sal, Avg(Chl.ChlorA) AS Chl, Avg(Nuts.PO4ug) AS PO4, Avg(Nuts.SiO3ug) AS SiO4, Avg(Nuts.NO2ug) AS NO2, Avg(Nuts.NO3ug) AS NO3, Avg(Bottle.O2ml_L) AS O2
+FROM Cruises INNER JOIN (Cast INNER JOIN ((Bottle LEFT JOIN Chl ON Bottle.Btl_Cnt = Chl.Btl_Cnt) LEFT JOIN Nuts ON Bottle.Btl_Cnt = Nuts.Btl_Cnt) ON Cast.Cst_Cnt = Bottle.Cst_Cnt) ON Cruises.Cruise = Cast.Cruise
+WHERE (((Bottle.Depthm)=200) AND ((Cruises.[Code-ST])=""st"") AND ((Cast.Sta_Code)=""st""))
+GROUP BY Cast.Year, Cast.Cruise, Cast.Sta_ID, Cast.Lat_Dec, Cast.Lon_Dec, Cast.Cast_ID
+HAVING (((Cast.Cruise)>198400))
+ORDER BY Cast.Year, Cast.Cruise;"
+"Depth Data - 2 Cruises","SELECT",TRUE,"","SELECT [Depth Data - 1 Stations].Year, [Depth Data - 1 Stations].Cruise, Avg([Depth Data - 1 Stations].Date) AS Date, Avg([Depth Data - 1 Stations].Month) AS Month, Count([Depth Data - 1 Stations].Depth) AS St_Count, Avg([Depth Data - 1 Stations].Depth) AS Depth, Avg([Depth Data - 1 Stations].Temp) AS Temp, Avg([Depth Data - 1 Stations].Sal) AS Sal, Avg([Depth Data - 1 Stations].Density) AS Density, Avg([Depth Data - 1 Stations].Chl) AS Chl, Avg([Depth Data - 1 Stations].PO4) AS PO4, Avg([Depth Data - 1 Stations].SiO4) AS SiO4, Avg([Depth Data - 1 Stations].NO2) AS NO2, Avg([Depth Data - 1 Stations].NO3) AS NO3, Avg([Depth Data - 1 Stations].O2) AS O2
+FROM [Depth Data - 1 Stations]
+GROUP BY [Depth Data - 1 Stations].Year, [Depth Data - 1 Stations].Cruise;"
+"Depth Data - 3 Annual","SELECT",TRUE,"","SELECT [Depth Data - 2 Cruises].Year, Avg([Depth Data - 2 Cruises].Depth) AS Depth, Avg([Depth Data - 2 Cruises].Temp) AS Temp, Avg([Depth Data - 2 Cruises].Sal) AS Sal, Avg([Depth Data - 2 Cruises].Density) AS Density, Avg([Depth Data - 2 Cruises].Chl) AS Chl, Avg([Depth Data - 2 Cruises].PO4) AS PO4, Avg([Depth Data - 2 Cruises].SiO4) AS SiO4, Avg([Depth Data - 2 Cruises].NO2) AS NO2, Avg([Depth Data - 2 Cruises].NO3) AS NO3, Avg([Depth Data - 2 Cruises].O2) AS O2
+FROM [Depth Data - 2 Cruises]
+GROUP BY [Depth Data - 2 Cruises].Year;"
+"ExportQuery_BottleAll","SELECT",TRUE,"","SELECT Bottle_All.Cst_Cnt, Bottle_All.Btl_Cnt, Bottle_All.Sta_ID, Bottle_All.Depth_ID, Bottle_All.Depthm, Bottle_All.T_degC, Bottle_All.Salnty, Bottle_All.O2ml_L, Bottle_All.STheta, Bottle_All.O2Sat, Bottle_All.[Oxy_µmol/Kg], Bottle_All.BtlNum, Bottle_All.RecInd, Bottle_All.T_prec, Bottle_All.T_qual, Bottle_All.S_prec, Bottle_All.S_qual, Bottle_All.P_qual, Bottle_All.O_qual, Bottle_All.SThtaq, Bottle_All.O2Satq, Bottle_All.ChlorA, Bottle_All.Chlqua, Bottle_All.Phaeop, Bottle_All.Phaqua, Bottle_All.PO4ug, Bottle_All.PO4q, Bottle_All.SiO3ug, Bottle_All.SiO3qu, Bottle_All.NO2ug, Bottle_All.NO2q, Bottle_All.NO3ug, Bottle_All.NO3q, Bottle_All.NH3ug, Bottle_All.NH3q, Bottle_All.C14As1, Bottle_All.C14A1p, Bottle_All.C14A1q, Bottle_All.C14As2, Bottle_All.C14A2p, Bottle_All.C14A2q, Bottle_All.DarkAs, Bottle_All.DarkAp, Bottle_All.DarkAq, Bottle_All.MeanAs, Bottle_All.MeanAp, Bottle_All.MeanAq, Bottle_All.IncTim, Bottle_All.LightP, Bottle_All.R_Depth, Bottle_All.R_TEMP, Bottle_All.R_POTEMP, Bottle_All.R_SALINITY, Bottle_All.R_SIGMA, Bottle_All.R_SVA, Bottle_All.R_DYNHT, Bottle_All.R_O2, Bottle_All.R_O2Sat, Bottle_All.R_SIO3, Bottle_All.R_PO4, Bottle_All.R_NO3, Bottle_All.R_NO2, Bottle_All.R_NH4, Bottle_All.R_CHLA, Bottle_All.R_PHAEO, Bottle_All.R_PRES, Bottle_All.R_SAMP, Bottle_All.[R_Oxy_µmol/Kg], Bottle_All.DIC1, Bottle_All.DIC2, Bottle_All.TA1, Bottle_All.TA2, Bottle_All.[DIC Quality Comment]
+FROM Bottle_All
+ORDER BY Bottle_All.Btl_Cnt;"
+"ExportQuery_Cast_All","SELECT",TRUE,"","SELECT Cast_All.Cst_Cnt AS Expr1, Cast_All.Cruise_ID AS Expr2, Cast_All.Cruz_Sta AS Expr3, Cast_All.DbSta_ID AS Expr4, Cast_All.Cast_ID AS Expr5, Cast_All.Sta_ID AS Expr6, Cast_All.Quarter AS Expr7, Cast_All.Sta_Code AS Expr8, Cast_All.Distance AS Expr9, Format([Cast].[Date],""mm/dd/yyyy"") AS Date, Cast_All.Year AS Expr10, Cast_All.Month AS Expr11, Cast_All.Julian_Date AS Expr12, Cast_All.Julian_Day AS Expr13, Cast_All.Time AS Expr14, Cast_All.Lat_Dec AS Expr15, Cast_All.Lat_Deg AS Expr16, Cast_All.Lat_Min AS Expr17, Cast_All.Lat_Hem AS Expr18, Cast_All.Lon_Dec AS Expr19, Cast_All.Lon_Deg AS Expr20, Cast_All.Lon_Min AS Expr21, Cast_All.Lon_Hem AS Expr22, Cast_All.Rpt_Line AS Expr23, Cast_All.St_Line AS Expr24, Cast_All.Ac_Line AS Expr25, Cast_All.Rpt_Sta AS Expr26, Cast_All.St_Station AS Expr27, Cast_All.Ac_Sta AS Expr28, Cast_All.Bottom_D AS Expr29, Cast_All.Ship_Name AS Expr30, Cast_All.Ship_Code AS Expr31, Cast_All.Data_Type AS Expr32, Cast_All.Order_Occ AS Expr33, Cast_All.Event_Num AS Expr34, Cast_All.Cruz_Leg AS Expr35, Cast_All.Orig_Sta_ID AS Expr36, Cast_All.Data_Or AS Expr37, Cast_All.Cruz_Num AS Expr38, Cast_All.IntChl AS Expr39, Cast_All.IntC14 AS Expr2, Cast_All.Inc_Str AS Expr40, Cast_All.Inc_End AS Expr41, Cast_All.PST_LAN AS Expr42, Cast_All.Civil_T AS Expr43, Cast_All.TimeZone AS Expr44, Cast_All.Wave_Dir AS Expr45, Cast_All.Wave_Ht AS Expr46, Cast_All.Wave_Prd AS Expr47, Cast_All.Wind_Dir AS Expr48, Cast_All.Wind_Spd AS Expr49, Cast_All.Barometer AS Expr50, Cast_All.Dry_T AS Expr51, Cast_All.Wet_T AS Expr52, Cast_All.Wea AS Expr53, Cast_All.Cloud_Typ AS Expr54, Cast_All.Cloud_Amt AS Expr55, Cast_All.Visibility AS Expr56, Cast_All.Secchi AS Expr3, Cast_All.ForelU AS Expr4
+FROM Cast_All
+ORDER BY Cast_All.Cst_Cnt;"
+"ExportQuery_Zoop","SELECT",TRUE,"","SELECT Zooplankton.ID, Zooplankton.Cruise, Zooplankton.CruiseAlias, Zooplankton.Sta_ID, Zooplankton.Cruz_Sta, Zooplankton.Ship_Code, Zooplankton.Order_Occ, Zooplankton.Cruz_Code, Zooplankton.St_Line, Zooplankton.St_Station, Zooplankton.Lat_Deg, Zooplankton.Lat_Min, Zooplankton.Lat_Hem, Zooplankton.Lon_Deg, Zooplankton.Lon_Min, Zooplankton.Lon_Hem, Zooplankton.Tow_Type, Zooplankton.Net_Loc, Format([Zooplankton].[End_Time],""Short Time"") AS End_Time, Format([Zooplankton].[Tow_Date],""mm/dd/yyyy"") AS Tow_Date, Format([Zooplankton].[Tow_Time],""Short Time"") AS Tow_Time, Zooplankton.Vol_StrM3, Zooplankton.Tow_DpthM, Zooplankton.Ttl_PVolC3, Zooplankton.Sml_PVolC3, Zooplankton.HaulFact, Zooplankton.Ttl_Eggs_Raw, Zooplankton.Ttl_Larvae_Raw, Zooplankton.Ttl_Eggs_Stnd, Zooplankton.Ttl_Larvae_Stnd, Zooplankton.Sardine_Eggs_Raw, Zooplankton.Sardine_Eggs_Stnd, Zooplankton.Anchovy_Eggs_Raw, Zooplankton.Anchovy_Eggs_Stnd, Zooplankton.Sardine_Larvae_Raw, Zooplankton.Sardine_Larvae_Stnd, Zooplankton.Anchovy_Larvae_Raw, Zooplankton.Anchovy_Larvae_Stnd
+FROM Zooplankton
+WHERE (((Zooplankton.Cruise)<201804))
+ORDER BY Zooplankton.ID;"
+"Find duplicates for 1504NH Volumesdb","SELECT",TRUE,"","SELECT [1504NH Volumesdb].[ID], [1504NH Volumesdb].[Cruise], [1504NH Volumesdb].[Sta_ID]
+FROM [1504NH Volumesdb]
+WHERE ((([1504NH Volumesdb].[ID]) In (SELECT [ID] FROM [1504NH Volumesdb] As Tmp GROUP BY [ID] HAVING Count(*)>1 )))
+ORDER BY [1504NH Volumesdb].[ID];"
+"Find duplicates for 1604_btldb","SELECT",TRUE,"","SELECT First([1604_btldb].[Btl_Cnt]) AS [Btl_Cnt Field], First([1604_btldb].[Depth_ID]) AS [Depth_ID Field], Count([1604_btldb].[Btl_Cnt]) AS NumberOfDups
+FROM 1604_btldb
+GROUP BY [1604_btldb].[Btl_Cnt], [1604_btldb].[Depth_ID]
+HAVING (((Count([1604_btldb].[Btl_Cnt]))>1) AND ((Count([1604_btldb].[Depth_ID]))>1));"
+"Find duplicates for Bottle_All","SELECT",TRUE,"","SELECT First(Bottle_All.[Btl_Cnt]) AS [Btl_Cnt Field], Count(Bottle_All.[Btl_Cnt]) AS NumberOfDups
+FROM Bottle_All
+GROUP BY Bottle_All.[Btl_Cnt]
+HAVING (((Count(Bottle_All.[Btl_Cnt]))>1));"
+"Find duplicates for Cast","SELECT",TRUE,"","SELECT Cast.[Date], Cast.[Sta_ID], Cast.[Cruise]
+FROM Cast
+WHERE (((Cast.[Date]) In (SELECT [Date] FROM [Cast] As Tmp GROUP BY [Date],[Sta_ID] HAVING Count(*)>1  And [Sta_ID] = [Cast].[Sta_ID])))
+ORDER BY Cast.[Date], Cast.[Sta_ID];"
+"Isopycnal Properties - 1 Station","SELECT",TRUE,"","SELECT Bottle_Sigm.Sta_ID, Cast.Year, Avg(Year(Cast!Date)+Month(Cast!Date)/12+Day(Cast!Date)/365) AS YearValue, Cast.Cruise, Avg(Cast.Date) AS Date, Avg(Cast!Month+Day(Cast!Date)/31.5-1) AS Month, Count(Bottle_Sigm.Depth) AS StCount, Avg(Bottle_Sigm.STheta) AS STheta, Avg(Bottle_Sigm.Depth) AS Depth, Avg(Bottle_Sigm.Temp) AS Temp, Avg(Bottle_Sigm.Sal) AS Sal, Avg(Bottle_Sigm.PO4) AS PO4, Avg(Bottle_Sigm.SiO4) AS SiO4, Avg(Bottle_Sigm.NO3) AS NO3, Avg(Bottle_Sigm.NO2) AS NO2, Avg(Bottle_Sigm.O2) AS O2, Avg(Bottle_Sigm.O2Sat) AS O2Sat, ([NO3]/[PO4]) AS [N-P_Ratio], ((([NO3]-16*[PO4]+2.9))) AS [N-Star]
+FROM Cruises INNER JOIN (St_Stations INNER JOIN (Cast INNER JOIN Bottle_Sigm ON Cast.Cast_ID = Bottle_Sigm.Cast_ID) ON St_Stations.Sta_ID = Cast.Sta_ID) ON Cruises.Cruise = Cast.Cruise
+WHERE (((Bottle_Sigm.STheta) Between 26 And 26.4) AND ((Cruises.[Code-ST])=""ST""))
+GROUP BY Bottle_Sigm.Sta_ID, Cast.Year, Cast.Cruise
+HAVING (((Bottle_Sigm.Sta_ID)=""093.3 030.0"") AND ((Cast.Year)>1983))
+ORDER BY Bottle_Sigm.Sta_ID, Cast.Cruise, Avg(Bottle_Sigm.STheta);"
+"Isopycnal Properties - 2 Cruises","SELECT",TRUE,"","SELECT [Isopycnal Properties - 1 Station].Year, Avg([Isopycnal Properties - 1 Station].YearValue) AS AvgOfYearValue, [Isopycnal Properties - 1 Station].Cruise, Avg([Isopycnal Properties - 1 Station].Date) AS Date, Avg([Isopycnal Properties - 1 Station].Month) AS Month, Sum([Isopycnal Properties - 1 Station].StCount) AS NoStations, Avg([Isopycnal Properties - 1 Station].STheta) AS STheta, Avg([Isopycnal Properties - 1 Station].Depth) AS Depth, Avg([Isopycnal Properties - 1 Station].Temp) AS Temp, Avg([Isopycnal Properties - 1 Station].Sal) AS Sal, Avg([Isopycnal Properties - 1 Station].PO4) AS PO4, Avg([Isopycnal Properties - 1 Station].SiO4) AS SiO4, Avg([Isopycnal Properties - 1 Station].NO2) AS NO2, Avg([Isopycnal Properties - 1 Station].NO3) AS NO3, Avg([Isopycnal Properties - 1 Station].O2) AS O2, Avg([Isopycnal Properties - 1 Station].O2Sat) AS O2Sat, Avg([Isopycnal Properties - 1 Station].[N-P_Ratio]) AS [N-P_Ratio], Avg([Isopycnal Properties - 1 Station].[N-Star]) AS [N-Star]
+FROM [Isopycnal Properties - 1 Station]
+GROUP BY [Isopycnal Properties - 1 Station].Year, [Isopycnal Properties - 1 Station].Cruise;"
+"Isopycnal Properties - 3 Annual","SELECT",TRUE,"","SELECT [Isopycnal Properties - 2 Cruises].Year, Avg([Isopycnal Properties - 2 Cruises].Date) AS AvgDate, Avg([Isopycnal Properties - 2 Cruises].Month) AS AvgMonth, Count([Isopycnal Properties - 2 Cruises].NoStations) AS CruiseCount, Avg([Isopycnal Properties - 2 Cruises].STheta) AS STheta, Avg([Isopycnal Properties - 2 Cruises].Depth) AS Depth, Avg([Isopycnal Properties - 2 Cruises].Temp) AS Temp, Avg([Isopycnal Properties - 2 Cruises].Sal) AS Sal, Avg([Isopycnal Properties - 2 Cruises].PO4) AS PO4, Avg([Isopycnal Properties - 2 Cruises].SiO4) AS SiO4, Avg([Isopycnal Properties - 2 Cruises].NO2) AS NO2, Avg([Isopycnal Properties - 2 Cruises].NO3) AS NO3, Avg([Isopycnal Properties - 2 Cruises].O2) AS O2, Avg([Isopycnal Properties - 2 Cruises].O2Sat) AS O2Sat
+FROM [Isopycnal Properties - 2 Cruises]
+GROUP BY [Isopycnal Properties - 2 Cruises].Year;"
+"Line Station Coverage","CROSS_TAB",TRUE,"","TRANSFORM Count(Bottle.Depthm) AS NoDepths
+SELECT Cast.Year, Cast.Cruise
+FROM (St_Stations RIGHT JOIN Cast ON St_Stations.Sta_ID = Cast.Sta_ID) INNER JOIN (StDepths INNER JOIN Bottle ON StDepths.StDepth = Bottle.Depthm) ON Cast.Cst_Cnt = Bottle.Cst_Cnt
+WHERE (((Cast.St_Line)=93.3) AND ((Cast.St_Station)<60))
+GROUP BY Cast.Year, Cast.Cruise
+PIVOT Cast.St_Station;"
+"MK_Tbl_DICs_SalCompare","MAKE_TABLE",TRUE,"","SELECT Abs([bottle.Salnty]-[DICs.Salinity1]) AS SalComp, DICs.Depth_ID, DICs.Btl_Cnt, Bottle.Salnty, DICs.Salinity1, DICs.Bottle_ID1, DICs.Cruise, DICs.Comments INTO DIC_ABS_salCompare
+FROM Bottle INNER JOIN DICs ON Bottle.Btl_Cnt = DICs.Btl_Cnt;"
+"ML Data 1 Stations","SELECT",TRUE,"","SELECT Cast.Year, Cast.Cruise, Cast.Sta_ID, Avg(Cast.Date) AS Date, Avg(Cast!Month+Day(Cast!Date)/31.5-1) AS Month, Count(Cast.Date) AS SampleCount, Avg(Bottle.T_degC) AS Temp, Avg(Bottle.Salnty) AS Sal, Avg(Bottle.STheta) AS Density, Avg(Chl.ChlorA) AS Chl, Avg(Cast.IntChl) AS IntChl, Avg(Cast.IntC14) AS IntC14, Avg(Nuts.PO4uM) AS PO4, Avg(Nuts.SiO3uM) AS SiO4, Avg(Nuts.NO2uM) AS NO2, Avg(Nuts.NO3uM) AS NO3, Avg(MLD_Sigma.MLD_Sigma) AS MLD_Sigma, Avg(NutClineDepth.NCDepth) AS NCDepth, Avg(Bottle.O2Sat) AS O2Sat, Cast.Sta_Code, Avg(Bottle.O2ml_L) AS O2
+FROM Cruises INNER JOIN ((St_Stations INNER JOIN ((Cast LEFT JOIN MLD_Sigma ON Cast.Cast_ID = MLD_Sigma.Cast_ID) LEFT JOIN NutClineDepth ON Cast.Cast_ID = NutClineDepth.Cast_ID) ON St_Stations.Sta_ID = Cast.Sta_ID) INNER JOIN ((Bottle LEFT JOIN Chl ON Bottle.Btl_Cnt = Chl.Btl_Cnt) LEFT JOIN Nuts ON Bottle.Btl_Cnt = Nuts.Btl_Cnt) ON Cast.Cst_Cnt = Bottle.Cst_Cnt) ON Cruises.Cruise = Cast.Cruise
+WHERE (((Cruises.[Code-ST])=""st"") And ((Bottle.Depthm)<MLD_Sigma!MLD_Sigma) And ((Bottle.RecInd)=3 Or (Bottle.RecInd)=5))
+GROUP BY Cast.Year, Cast.Cruise, Cast.Sta_ID, Cast.Sta_Code
+HAVING (((Cast.Cruise)>201611) AND ((Cast.Sta_Code)=""st""))
+ORDER BY Cast.Cruise;"
+"ML Data 1 Stations_Jen","SELECT",TRUE,"","SELECT Cast.Year, Cast.Cruise, Cast.Sta_ID, St_Stations.St_Line, St_Stations.[Code-SCB] AS Code_SCB, St_Stations.[Code-Nearshore] AS Code_Nearshore, St_Stations.Code_Region, St_Stations.St_Station AS St_Sta, St_Stations.Distance, St_Stations.DLat_Dec, St_Stations.DLon_Dec, Avg(Cast.Date) AS Date, Cast.Quarter, Year([Date])+Month([Date])/12 AS YearValue, Avg([Cast]![Month]+Day([Cast]![Date])/31.5-1) AS MonthValue, Count(Cast.Date) AS SampleCount, (4-5) AS Depth, Avg(Bottle.T_degC) AS Temp, Avg(Bottle.Salnty) AS Sal, Avg(Bottle.STheta) AS Density, Avg(Bottle.O2ml_L) AS O2, Avg(Bottle.O2Sat) AS O2Sat, Avg(Chl.ChlorA) AS Chla, Avg(Nuts.NO3uM) AS NO3, Avg(Nuts.NO2uM) AS NO2, Avg(Nuts.PO4uM) AS PO4, Avg(Nuts.SiO3uM) AS SiO3, Avg(Cast.IntChl) AS IntChl, Avg(Cast.IntC14) AS IntC14, Avg(MLD_Sigma.MLD_Sigma) AS MLD_Sigma, Avg(NutClineDepth.NCDepth) AS NCDepth, Cast.Sta_Code
+FROM Cruises INNER JOIN ((St_Stations INNER JOIN ((Cast LEFT JOIN MLD_Sigma ON Cast.Cast_ID = MLD_Sigma.Cast_ID) LEFT JOIN NutClineDepth ON Cast.Cast_ID = NutClineDepth.Cast_ID) ON St_Stations.Sta_ID = Cast.Sta_ID) INNER JOIN ((Bottle LEFT JOIN Chl ON Bottle.Btl_Cnt = Chl.Btl_Cnt) LEFT JOIN Nuts ON Bottle.Btl_Cnt = Nuts.Btl_Cnt) ON Cast.Cst_Cnt = Bottle.Cst_Cnt) ON Cruises.Cruise = Cast.Cruise
+WHERE (((Cruises.[Code-ST])=""st"") AND ((Bottle.Depthm)<[MLD_Sigma]![MLD_Sigma]) AND ((Bottle.RecInd)=3 Or (Bottle.RecInd)=5))
+GROUP BY Cast.Year, Cast.Cruise, Cast.Sta_ID, St_Stations.St_Line, St_Stations.[Code-SCB], St_Stations.[Code-Nearshore], St_Stations.Code_Region, St_Stations.St_Station, St_Stations.Distance, St_Stations.DLat_Dec, St_Stations.DLon_Dec, Cast.Quarter, Cast.Sta_Code
+HAVING (((Cast.Cruise)=201511) AND ((Cast.Sta_Code)=""st""))
+ORDER BY Cast.Cruise;"
+"ML Data 2 Cruises","SELECT",TRUE,"","SELECT [ML Data 1 Stations].Year, [ML Data 1 Stations].Cruise, Avg([ML Data 1 Stations].Date) AS Date, Avg([ML Data 1 Stations].Month) AS Month, Count([ML Data 1 Stations].SampleCount) AS StationCount, Avg([ML Data 1 Stations].Temp) AS Temp, Avg([ML Data 1 Stations].Sal) AS Sal, Avg([ML Data 1 Stations].Density) AS Density, Avg([ML Data 1 Stations].Chl) AS Chl, Avg([ML Data 1 Stations].IntChl) AS IntChl, Avg([ML Data 1 Stations].IntC14) AS IntC14, Avg([ML Data 1 Stations].PO4) AS PO4, Avg([ML Data 1 Stations].SiO4) AS SiO4, Avg([ML Data 1 Stations].NO2) AS NO2, Avg([ML Data 1 Stations].NO3) AS NO3, Avg([ML Data 1 Stations].MLD_Sigma) AS MLD, Avg([ML Data 1 Stations].NCDepth) AS NCDepth, Avg([ML Data 1 Stations].O2) AS O2, Avg([ML Data 1 Stations].O2Sat) AS O2_Sat
+FROM [ML Data 1 Stations]
+GROUP BY [ML Data 1 Stations].Year, [ML Data 1 Stations].Cruise;"
+"ML Data 3 Annual","SELECT",TRUE,"","SELECT [ML Data 2 Cruises].Year, Avg([ML Data 2 Cruises].Date) AS Date, Avg([ML Data 2 Cruises].Month) AS Month, Count([ML Data 2 Cruises].StationCount) AS CruiseCount, Avg([ML Data 2 Cruises].Temp) AS Temp, Avg([ML Data 2 Cruises].Sal) AS Sal, Avg([ML Data 2 Cruises].Density) AS Density, Avg([ML Data 2 Cruises].Chl) AS Chl, Avg([ML Data 2 Cruises].IntChl) AS IntChl, Avg([ML Data 2 Cruises].IntC14) AS IntC14, Avg([ML Data 2 Cruises].PO4) AS PO4, Avg([ML Data 2 Cruises].SiO4) AS SiO4, Avg([ML Data 2 Cruises].NO2) AS NO2, Avg([ML Data 2 Cruises].NO3) AS NO3, Avg([ML Data 2 Cruises].MLD) AS MLD, Avg([ML Data 2 Cruises].NCDepth) AS NCDepth, Avg([ML Data 2 Cruises].O2) AS O2, Avg([ML Data 2 Cruises].O2_Sat) AS O2_Sat
+FROM [ML Data 2 Cruises]
+GROUP BY [ML Data 2 Cruises].Year;"
+"MLD_NutriclineDepth Make Table","MAKE_TABLE",TRUE,"","SELECT Cast.Cast_ID, NutClineDepth.NCDepth AS Expr1 INTO [MLD_Nutricline new]
+FROM Cast INNER JOIN NutClineDepth ON Cast.Cast_ID = NutClineDepth.Cast_ID
+GROUP BY Cast.Cast_ID, NutClineDepth.NCDepth;"
+"MT-Bottle_113Sta","MAKE_TABLE",TRUE,"","SELECT Cast_All.DbSta_ID, Bottle_All.* INTO Bottle_113sta
+FROM Cast_All INNER JOIN Bottle_All ON Cast_All.Cst_Cnt=Bottle_All.Cst_Cnt
+WHERE (((Cast_All.St_Line)<94 And (Cast_All.St_Line)>59.5) AND ((Cast_All.St_Station)<130));"
+"MT-Cast_113Sta","MAKE_TABLE",TRUE,"","SELECT Cast_All.* INTO Cast_113Sta
+FROM Cast_All
+WHERE (((Cast_All.St_Line)<94 And (Cast_All.St_Line)>59.5) AND ((Cast_All.St_Station)<130));"
+"Make Bottle_All","MAKE_TABLE",TRUE,"","SELECT Bottle.*, Bottle_Q.*, Chl.*, Nuts.*, Prodo_Bottle.*, Rpt_Data.R_PRES, Rpt_Data.R_POTEMP, Rpt_Data.R_SVA, Rpt_Data.R_DYNHT, Rpt_Data.R_NH4, Rpt_Data.[R_Oxy_µmol/Kg], DICs.DIC1, DICs.DIC2, DICs.TA1, DICs.TA2, DICs.pH1, DICs.pH2, DICs.Btl_Cnt, DICs.[DIC Quality Comment] INTO Bottle_All_2105
+FROM Cast INNER JOIN ((((((Bottle LEFT JOIN DICs ON Bottle.Btl_Cnt = DICs.Btl_Cnt) INNER JOIN Bottle_Q ON Bottle.Btl_Cnt = Bottle_Q.Btl_Cnt) INNER JOIN Chl ON Bottle.Btl_Cnt = Chl.Btl_Cnt) INNER JOIN Nuts ON Bottle.Btl_Cnt = Nuts.Btl_Cnt) INNER JOIN Prodo_Bottle ON Bottle.Btl_Cnt = Prodo_Bottle.Btl_Cnt) INNER JOIN Rpt_Data ON Bottle.Btl_Cnt = Rpt_Data.Btl_Cnt) ON Cast.Cst_Cnt = Bottle.Cst_Cnt
+WHERE (((Cast.Cruise)<=202105));"
+"Make Cast_All","MAKE_TABLE",TRUE,"","SELECT Cast.Cst_Cnt, Cast.Cruise_ID, Cast.Cruise, Cast.Cruz_Sta, Cast.DbSta_ID, Cast.Cast_ID, Cast.Sta_ID, Cast.Quarter, Cast.Sta_Code, Cast.Distance, Format([Cast].[Date],""mm/dd/yyyy"") AS Date, Cast.Year, Cast.Month, Cast.Julian_Date, Cast.Julian_Day, Format([Cast].[Time],""hh:nn:ss"") AS Time, Cast.Lat_Dec, Cast.Lat_Deg, Cast.Lat_Min, Cast.Lat_Hem, Cast.Lon_Dec, Cast.Lon_Deg, Cast.Lon_Min, Cast.Lon_Hem, Cast.Rpt_Line, Cast.St_Line, Cast.Ac_Line, Cast.Rpt_Sta, Cast.St_Station, Cast.Ac_Sta, Cast.Bottom_D, Cast.Secchi, Cast.ForelU, Cast.Ship_Name, Cast.Ship_Code, Cast.Data_Type, Cast.Order_Occ, Cast.Event_Num, Cast.Cruz_Leg, Cast.Orig_Sta_ID, Cast.Data_Or, Cast.Cruz_Num, Cast.IntChl, Cast.IntC14, Prodo_Cast.*, Weather.* INTO Cast_2105
+FROM (Cast INNER JOIN Prodo_Cast ON Cast.Cst_Cnt = Prodo_Cast.Cst_Cnt) INNER JOIN Weather ON Cast.Cst_Cnt = Weather.Cst_Cnt
+WHERE (((Cast.Cruise)<=202105));"
+"Make_LTER_Bottle_All","MAKE_TABLE",TRUE,"","SELECT Bottle.*, Bottle_Q.*, Chl.*, Nuts.*, Prodo_Bottle.*, Rpt_Data.R_PRES, Rpt_Data.R_POTEMP, Rpt_Data.R_SVA, Rpt_Data.R_DYNHT, Rpt_Data.R_NH4, Rpt_Data.[R_Oxy_µmol/Kg], DICs.DIC1, DICs.DIC2, DICs.TA1, DICs.TA2, DICs.pH1, DICs.pH2, DICs.Btl_Cnt, DICs.[DIC Quality Comment] INTO Bottle_All_LTER_all
+FROM Cast INNER JOIN ((((((Bottle LEFT JOIN DICs ON Bottle.Btl_Cnt = DICs.Btl_Cnt) INNER JOIN Bottle_Q ON Bottle.Btl_Cnt = Bottle_Q.Btl_Cnt) INNER JOIN Chl ON Bottle.Btl_Cnt = Chl.Btl_Cnt) INNER JOIN Nuts ON Bottle.Btl_Cnt = Nuts.Btl_Cnt) INNER JOIN Prodo_Bottle ON Bottle.Btl_Cnt = Prodo_Bottle.Btl_Cnt) INNER JOIN Rpt_Data ON Bottle.Btl_Cnt = Rpt_Data.Btl_Cnt) ON Cast.Cst_Cnt = Bottle.Cst_Cnt
+WHERE (((Cast.Cruise)<=202201));"
+"Mati_Hydro_Query","MAKE_TABLE",TRUE,"","SELECT Cast.Cruise, Bottle.Sta_ID, Bottle.Depthm, Bottle.T_degC, Bottle.Salnty, Bottle.O2ml_L, Chl.ChlorA, Chl.Phaeop, Nuts.PO4uM, Nuts.SiO3uM, Nuts.NO2uM, Nuts.NO3uM, Nuts.NH3uM, Bottle.Cst_Cnt, Bottle.Btl_Cnt, Bottle.STheta, Bottle.O2Sat, Bottle.[Oxy_µmol/Kg] INTO [Mati_Hydro_1902-2107_finalthru2001]
+FROM Cast INNER JOIN ((Bottle INNER JOIN Chl ON Bottle.Btl_Cnt = Chl.Btl_Cnt) INNER JOIN Nuts ON Bottle.Btl_Cnt = Nuts.Btl_Cnt) ON Cast.Cst_Cnt = Bottle.Cst_Cnt
+WHERE (((Cast.Cruise) Between 202204 And 202208) AND ((Bottle.RecInd)=3));"
+"Mati_Meta_Query","MAKE_TABLE",TRUE,"","SELECT Cast.Cst_Cnt, Cast.Cruise_ID, Cast.Cruise, Cast.CruiseAlias, Cast.Cruz_Sta, Cast.DbSta_ID, Cast.Cast_ID, Cast.Sta_ID, Cast.Quarter, Cast.Sta_Code, Cast.Distance, Format([Cast].[Date],""mm/dd/yyyy"") AS Date, Cast.Year, Cast.Month, Cast.Julian_Date, Cast.Julian_Day, Format([Cast].[Time],""hh:nn:ss"") AS Time, Cast.Lat_Dec, Cast.Lat_Deg, Cast.Lat_Min, Cast.Lat_Hem, Cast.Lon_Dec, Cast.Lon_Deg, Cast.Lon_Min, Cast.Lon_Hem, Cast.Rpt_Line, Cast.St_Line, Cast.Ac_Line, Cast.Rpt_Sta, Cast.St_Station, Cast.Ac_Sta, Cast.Bottom_D, Cast.Secchi, Cast.ForelU, Cast.Ship_Name, Cast.Ship_Code, Cast.Data_Type, Cast.Order_Occ, Cast.Event_Num, Cast.Cruz_Leg, Cast.Orig_Sta_ID, Cast.Data_Or, Cast.Cruz_Num, Cast.IntChl, Cast.IntC14 INTO [Mati_Meta_201902-202101]
+FROM Cast
+WHERE (((Cast.Cruise) Between 202204 And 202208));"
+"NH4","MAKE_TABLE",TRUE,"","SELECT Cast.Cruise, Cast.Sta_ID, Bottle.Cst_Cnt, Bottle.Btl_Cnt, Bottle.Depthm, Cast.Order_Occ, NH4_Data.[NH4_uM/l] AS Expr1 INTO NH4_DB
+FROM NH4_Data, Cast INNER JOIN Bottle ON Cast.Cst_Cnt = Bottle.Cst_Cnt
+WHERE (((NH4_Data.Cruise)=[cast].[cruise]) AND ((NH4_Data.Order_Occ)=[Cast].[order_occ]) AND (([NH4_Data].[Btlnum])=[bottle].[btlnum]));"
+"Nearshore Station Coverage","CROSS_TAB",TRUE,"","TRANSFORM Avg(Cast.Month) AS AvgOfMonth
+SELECT Cast.Year
+FROM Station_ID INNER JOIN Cast ON Station_ID.DBSta_ID = Cast.DbSta_ID
+WHERE (((Cast.St_Line)=83.3 Or (Cast.St_Line)=86.7 Or (Cast.St_Line)=90 Or (Cast.St_Line)=93.3) AND ((Cast.Distance)>-33))
+GROUP BY Cast.Year
+PIVOT Cast.St_Line;"
+"Prodo_NameProb","SELECT",TRUE,"","SELECT Cast.Cast_ID, Cast.Cruise, Cast.Sta_ID, Cast.Cst_Cnt, Prodo_Bottle.MeanAs, Prodo_Cast.IntC14, Cast.IntC14, Bottle.Depth_ID, Cast.Data_Type, Bottle.Btl_Cnt, Prodo_Cast.Civil_T, Cast.Cruise_ID
+FROM (Prodo_Cast INNER JOIN Bottle ON Prodo_Cast.Cst_Cnt = Bottle.Cst_Cnt) INNER JOIN (Cast INNER JOIN Prodo_Bottle ON Cast.Cst_Cnt = Prodo_Bottle.Cst_Cnt) ON (Prodo_Cast.Cst_Cnt = Prodo_Bottle.Cst_Cnt) AND (Cast.Cst_Cnt = Prodo_Cast.Cst_Cnt) AND (Cast.Cst_Cnt = Bottle.Cst_Cnt) AND (Bottle.Btl_Cnt = Prodo_Bottle.Btl_Cnt)
+WHERE (((Cast.Cst_Cnt)=23954));"
+"QC - BottomDepthCheck_AllValues","SELECT",TRUE,"","SELECT Cast.Cruise, Cast.Cst_Cnt, Cast.Bottom_D, Cast.DbSta_ID, CurrentStations.Sta_ID, CurrentStations.Avg_Depth
+FROM Cast INNER JOIN CurrentStations ON Cast.Sta_ID = CurrentStations.Sta_ID
+GROUP BY Cast.Cruise, Cast.Cst_Cnt, Cast.Bottom_D, Cast.DbSta_ID, CurrentStations.Sta_ID, CurrentStations.Avg_Depth, Cast.Sta_Code, Cast.Year, Cast.St_Line
+HAVING (((Cast.Cruise)=202111) AND ((Cast.Sta_Code)=""st"" Or (Cast.Sta_Code)=""sco""))
+ORDER BY Cast.DbSta_ID;"
+"QC - CharLengthBottle","SELECT",TRUE,"","SELECT *
+FROM Bottle
+WHERE (((Len([Depth_ID]))>38));"
+"QC-DIC_Btl_CntComp","SELECT",TRUE,"","SELECT Bottle.Btl_Cnt, Bottle.Depth_ID, DICs.Btl_Cnt, DICs.Depth_ID, DICs.Cruise, Abs(Mid([Bottle]![Depth_ID],32,4)-Mid([DICs]![Depth_ID],32,4)) AS DepthID_Compare, [DICs]![StaPr]-Abs(Mid([Bottle].[Depth_ID],32,4)) AS [DIC_StaPr-Btl_DepthID_Depth], [DICs]![StaPr]-[Bottle]![Depthm] AS [DIC_StaPres-Btl_Depthm], [DICs]![Salinity1]-[Bottle]![Salnty] AS SalComp, DICs.Salinity1, Bottle.Salnty, DICs.TA1, DICs.Comments
+FROM Bottle INNER JOIN DICs ON Bottle.Btl_Cnt = DICs.Btl_Cnt
+WHERE (((DICs.Cruise)=201407));"
+"QC-DIC_DepthComp","SELECT",TRUE,"","SELECT DICs.Cruise, Abs([StaPr]-[Depthm]) AS depth_Comp, DICs.Depth_ID, DICs.Depthm, DICs.StaPr, DICs.Btl_Cnt
+FROM DICs
+WHERE (((DICs.Cruise)=201501));"
+"QC-DIC_DepthIDComp","SELECT",TRUE,"","SELECT Abs(Mid([DICs].[Depth_ID],33,3))-Abs(Mid([Bottle].[Depth_ID],33,3)) AS Depth_ID_Compare
+FROM DICs INNER JOIN Bottle ON DICs.Btl_Cnt = Bottle.Btl_Cnt;"
+"QC-DIC_Depth_Sal","SELECT",TRUE,"","SELECT Abs(Mid([Depth_ID],33,3)-([D_Depth1])) AS Depth_ID_Compare, [0808DIC_DB].Depth_ID AS Depth_ID, Abs([StaSalt]-[Salinity1]) AS sal_comp, [0808DIC_DB].StaSalt AS StaSalnty, [0808DIC_DB].Salinity1 AS DIC_Salnty, [0808DIC_DB].Ord_Occ, [0808DIC_DB].Bottle_ID, [0808DIC_DB].Bottle_ID2, [0808DIC_DB].Btl_Cnt, [0808DIC_DB].ID, [0808DIC_DB].StaSalt
+FROM 0808DIC_DB
+WHERE ((([0808DIC_DB].StaSalt) Is Not Null));"
+"QC_CharLengthCast","SELECT",TRUE,"","SELECT *
+FROM Cast
+WHERE (((Len([Cast_ID]))<30));"
+"QC_DIC_Oxy_um-Kg","SELECT",TRUE,"","SELECT Bottle.Depth_ID, Bottle.Sta_ID, DICs.DIC1, DICs.DIC2, DICs.TA1, DICs.TA2, DICs.Cruise, DICs.Salinity1, DICs.Salinity2, Bottle.Salnty, Bottle.[Oxy_µmol/Kg], DICs.Bottle_ID1
+FROM Cast INNER JOIN (Bottle INNER JOIN DICs ON Bottle.Btl_Cnt = DICs.Btl_Cnt) ON Cast.Cst_Cnt = Bottle.Cst_Cnt
+WHERE (((DICs.Cruise)=201507))
+ORDER BY Bottle.Depthm;"
+"QC_Weather","SELECT",TRUE,"","SELECT Cast.Cruise, Cast.Sta_ID, Weather.Wave_Dir, Weather.Wave_Ht, Weather.Wave_Prd, Weather.Wind_Dir, Weather.Wind_Spd, Weather.Barometer, Weather.Dry_T, Weather.Wet_T, Weather.Wea, Weather.Cloud_Typ, Weather.Cloud_Amt, Weather.Visibility, Weather.Secchi, Cast.Order_Occ
+FROM Cast INNER JOIN Weather ON Cast.Cst_Cnt = Weather.Cst_Cnt
+WHERE (((Cast.Cruise)=201207));"
+"Query2","UPDATE",TRUE,"","UPDATE [1407Add2DB-cast]
+SET [1407Add2DB-cast].Lon_Deg = [1407Add2DB-cast].[Lon_Deg]*-1;"
+"Query_MinMax","SELECT",TRUE,"","SELECT Cast.Cruise, Min(Bottle.Salnty) AS MinOfSalnty, Max(Bottle.Salnty) AS MaxOfSalnty, Min(Bottle.O2ml_L) AS MinOfO2ml_L, Max(Bottle.O2ml_L) AS MaxOfO2ml_L, Min(Nuts.PO4uM) AS MinOfPO4ug, Max(Nuts.PO4uM) AS MaxOfPO4ug, Min(Nuts.SiO3uM) AS MinOfSiO3ug, Max(Nuts.SiO3uM) AS MaxOfSiO3ug, Min(Nuts.NO2uM) AS MinOfNO2ug, Max(Nuts.NO2uM) AS MaxOfNO2ug, Min(Nuts.NO3uM) AS MinOfNO3ug, Max(Nuts.NO3uM) AS MaxOfNO3ug, Min(Nuts.NH3uM) AS MinOfNH3ug, Max(Nuts.NH3uM) AS MaxOfNH3ug, Min(Chl.ChlorA) AS MinOfChlorA, Max(Chl.ChlorA) AS MaxOfChlorA, Min(Chl.Phaeop) AS MinOfPhaeop, Max(Chl.Phaeop) AS MaxOfPhaeop
+FROM Cast INNER JOIN ((Bottle LEFT JOIN Chl ON Bottle.Btl_Cnt = Chl.Btl_Cnt) LEFT JOIN Nuts ON Bottle.Btl_Cnt = Nuts.Btl_Cnt) ON Cast.Cst_Cnt = Bottle.Cst_Cnt
+GROUP BY Cast.Cruise
+HAVING (((Cast.Cruise)>198310))
+ORDER BY Cast.Cruise, Max(Bottle.Salnty), Min(Bottle.O2ml_L), Max(Bottle.O2ml_L), Min(Nuts.PO4uM), Max(Nuts.PO4uM), Min(Nuts.SiO3uM), Max(Nuts.SiO3uM), Min(Nuts.NO2uM), Max(Nuts.NO2uM), Min(Nuts.NO3uM), Max(Nuts.NO3uM), Min(Nuts.NH3uM), Max(Nuts.NH3uM), Min(Chl.ChlorA), Max(Chl.ChlorA), Min(Chl.Phaeop), Max(Chl.Phaeop);"
+"RS Deep basin O2","SELECT",TRUE,"","SELECT Cast.Year, Cast.Month, Cast.St_Line, Cast.St_Station, Bottle.Depthm, Bottle.T_degC, Bottle.Salnty, Bottle.O2ml_L, Bottle.BtlNum
+FROM Cruises INNER JOIN (Cast INNER JOIN Bottle ON Cast.Cst_Cnt = Bottle.Cst_Cnt) ON Cruises.Cruise = Cast.Cruise
+WHERE (((Cast.St_Line)=86.7) AND ((Cast.St_Station)=40) AND ((Bottle.BtlNum)=1)) OR (((Cast.St_Line)=81.8) AND ((Cast.St_Station)=46.9) AND ((Bottle.BtlNum)=1));"
+"SBB O2 below 560m","SELECT",TRUE,"","SELECT Cast.Year, Cast.Month, Cast.Date, Cast.St_Line, Cast.St_Station, Bottle.Depthm, Bottle.T_degC, Bottle.Salnty, Bottle.[Oxy_µmol/Kg], Bottle.O2ml_L
+FROM (Cruises INNER JOIN Cast ON Cruises.Cruise = Cast.Cruise) INNER JOIN Bottle ON Cast.Cst_Cnt = Bottle.Cst_Cnt
+WHERE (((Cast.St_Station)=46.9) AND ((Bottle.Depthm)>560) AND ((Bottle.O2ml_L) Is Not Null));"
+"SSB Deep Properties","SELECT",TRUE,"","SELECT Cast.Cruise, Avg(Cast.Date) AS Date, Avg(Cast!Month+Day(Cast!Date)/31.5-1) AS Month, Avg(Bottle.Depthm) AS AvgDepth, Avg(Bottle.T_degC) AS Temp, Avg(Bottle.Salnty) AS Sal, Avg(Bottle.STheta) AS Density, Avg(Bottle.O2ml_L) AS O2, Avg(Nuts.PO4ug) AS PO4, Avg(Nuts.SiO3ug) AS SiO4, Avg(Nuts.NO2ug) AS NO2, Avg(Nuts.NO3ug) AS NO3
+FROM Cruises INNER JOIN ((Station_ID INNER JOIN Cast ON Station_ID.DBSta_ID = Cast.DbSta_ID) INNER JOIN ((Bottle LEFT JOIN Chl ON Bottle.Btl_Cnt = Chl.Btl_Cnt) LEFT JOIN Nuts ON Bottle.Btl_Cnt = Nuts.Btl_Cnt) ON Cast.Cst_Cnt = Bottle.Cst_Cnt) ON Cruises.Cruise = Cast.Cruise
+WHERE (((Bottle.Depthm)>524) AND ((Bottle.RecInd)=3) AND ((Station_ID.Sta_ID)=""081.8 046.9"" Or (Station_ID.Sta_ID)=""081.8 046.0""))
+GROUP BY Cast.Cruise, Cast.Year
+HAVING (((Cast.Year)>1986));"
+"St_Stations MT","MAKE_TABLE",TRUE,"","SELECT Station_ID.St_Line, Station_ID.Sta_ID, Station_ID.DLat_Dec, Station_ID.DLon_Dec, -Station_ID!Distance AS Distance INTO [St_Stations New]
+FROM Station_ID
+WHERE (((Station_ID.Sta_Code)=""st""))
+GROUP BY Station_ID.St_Line, Station_ID.Sta_ID, Station_ID.DLat_Dec, Station_ID.DLon_Dec, -Station_ID!Distance;"
+"TI - Bottle","SELECT",TRUE,"","SELECT Cast.Cruise, Cast.Date, Cast.Cast_ID, Cast.St_Line, Bottle.Sta_ID, Cast.Sta_Code, Bottle.Depthm, Bottle.T_degC, Bottle.Salnty, Bottle.O2ml_L, Bottle.STheta, Bottle.O2Sat, Nuts.PO4ug, Nuts.SiO3ug, Nuts.NO3ug, Chl.ChlorA, Bottle.RecInd
+FROM Cast INNER JOIN ((Bottle LEFT JOIN Chl ON Bottle.Btl_Cnt = Chl.Btl_Cnt) LEFT JOIN Nuts ON Bottle.Btl_Cnt = Nuts.Btl_Cnt) ON Cast.Cst_Cnt = Bottle.Cst_Cnt
+GROUP BY Cast.Cruise, Cast.Date, Cast.Cast_ID, Cast.St_Line, Bottle.Sta_ID, Cast.Sta_Code, Bottle.Depthm, Bottle.T_degC, Bottle.Salnty, Bottle.O2ml_L, Bottle.STheta, Bottle.O2Sat, Nuts.PO4ug, Nuts.SiO3ug, Nuts.NO3ug, Chl.ChlorA, Bottle.RecInd
+HAVING (((Cast.Cast_ID)=""20-1004FN-PR-119-1742-09331100""))
+ORDER BY Bottle.Sta_ID;"
+"TI - BottleData","MAKE_TABLE",TRUE,"","SELECT Cast.[Cast_ID] AS Cast_Num, Bottle.[Btl_Cnt] AS Btl_Num, Cast.Cst_Cnt, Cast.Cruise, Cast.Order_Occ, Cast.Date, Cast.Time, [Date]+[Time] AS DateTime, Cast.St_Line, Cast.Cast_ID, Bottle.Sta_ID, Cast.Sta_Code, Cast.Lat_Dec, Cast.Lon_Dec, Cast.Distance, Bottle.Btl_Cnt, Bottle.BtlNum, Bottle.Depthm, Bottle.T_degC, Bottle.Salnty, Bottle.STheta, Bottle.O2ml_L, Bottle.O2Sat, Nuts.PO4uM, Nuts.SiO3uM, Nuts.NO3uM, Nuts.NH3uM, Chl.ChlorA, Chl.Phaeop, Bottle.RecInd INTO BottleData_202107
+FROM Cast INNER JOIN ((Bottle LEFT JOIN Chl ON Bottle.Btl_Cnt = Chl.Btl_Cnt) LEFT JOIN Nuts ON Bottle.Btl_Cnt = Nuts.Btl_Cnt) ON Cast.Cst_Cnt = Bottle.Cst_Cnt
+GROUP BY Cast.Cst_Cnt, Cast.Cruise, Cast.Order_Occ, Cast.Date, Cast.Time, Cast.St_Line, Cast.Cast_ID, Bottle.Sta_ID, Cast.Sta_Code, Cast.Lat_Dec, Cast.Lon_Dec, Cast.Distance, Bottle.Btl_Cnt, Bottle.BtlNum, Bottle.Depthm, Bottle.T_degC, Bottle.Salnty, Bottle.STheta, Bottle.O2ml_L, Bottle.O2Sat, Nuts.PO4uM, Nuts.SiO3uM, Nuts.NO3uM, Nuts.NH3uM, Chl.ChlorA, Chl.Phaeop, Bottle.RecInd
+HAVING (((Cast.Cst_Cnt) Between 35645 And 35715))
+ORDER BY Cast.Cruise, Bottle.Sta_ID, Bottle.Depthm;"
+"TI - Cast","SELECT",TRUE,"","SELECT Cast.Cruise, Cast.Order_Occ, Station_ID.St_Line, Cast.Sta_ID, Cast.Time, Cast.Cst_Cnt, Cast.Sta_Code, Cast.Date, Cast.Lat_Dec, Cast.Lon_Dec, Cast.St_Line, Cast.St_Station, Cast.Bottom_D
+FROM Cast LEFT JOIN Station_ID ON Cast.Sta_ID = Station_ID.Sta_ID
+GROUP BY Cast.Cruise, Cast.Order_Occ, Station_ID.St_Line, Cast.Sta_ID, Cast.Time, Cast.Cst_Cnt, Cast.Sta_Code, Cast.Date, Cast.Lat_Dec, Cast.Lon_Dec, Cast.St_Line, Cast.St_Station, Cast.Bottom_D
+HAVING (((Cast.Sta_ID)=""080.0 080.0"") AND ((Cast.Sta_Code)=""ST""));"
+"TI - Cruise","SELECT",TRUE,"","SELECT Cruises.Cruise, Cruises.[Code-ST], Cruises.Ship1, Cruises.BegDate1, Cruises.EndDate1
+FROM Cruises
+WHERE (((Cruises.Cruise)>198400) AND ((Cruises.[Code-ST])=""st""));"
+"TI - Single Cruise Station Loc","SELECT",TRUE,"","SELECT Cast.Cruise, Cast.Ship_Code, Cast.Sta_ID, Cast.Lon_Dec, Cast.Lat_Dec, Cast.Date
+FROM Cast
+WHERE (((Cast.Cruise)=198406));"
+"TI - Zooplankton","SELECT",TRUE,"","SELECT Zooplankton.ID, Zooplankton.Cruise, Zooplankton.Sta_ID, Zooplankton.Cruz_Sta, Zooplankton.Order_Occ, Zooplankton.St_Line, Zooplankton.St_Sta, Avg([Zooplankton]![Lat_Deg]+([Zooplankton]![Lat_Min]/60)) AS Lat_Dec, Avg([Zooplankton]![Lon_Deg]+([Zooplankton]![Lon_Min]/60)) AS Lon_Dec, Zooplankton.Tow_Type, Zooplankton.Net_Loc, Zooplankton.Tow_Date, Zooplankton.Tow_Time, Avg([Zooplankton]![Tow_Date]+[Zooplankton]![Tow_Time]) AS Tow_DateTime, Zooplankton.Tow_DpthM, Zooplankton.Ttl_PVolC3, Zooplankton.Sml_PVolC3
+FROM Zooplankton
+GROUP BY Zooplankton.ID, Zooplankton.Cruise, Zooplankton.Sta_ID, Zooplankton.Cruz_Sta, Zooplankton.Order_Occ, Zooplankton.St_Line, Zooplankton.St_Sta, Zooplankton.Tow_Type, Zooplankton.Net_Loc, Zooplankton.Tow_Date, Zooplankton.Tow_Time, Zooplankton.Tow_DpthM, Zooplankton.Ttl_PVolC3, Zooplankton.Sml_PVolC3;"
+"TM - NMFS_Station_ID","MAKE_TABLE",TRUE,"","SELECT [TR - NMFS_Tows].NMFS_Sta_ID, Count([TR - NMFS_Tows].NMFS_OrdOcc) AS Times_Occup, Avg([TR - NMFS_Tows].NMFS_TowDateTimeGMT) AS NMFS_Time, Avg([TR - NMFS_Tows].NMFS_DLat) AS NMFS_DLat, Avg([TR - NMFS_Tows].NMFS_Dlong) AS NMFS_Dlong INTO [New-NMFS_Station_ID]
+FROM [TR - NMFS_Tows]
+GROUP BY [TR - NMFS_Tows].NMFS_Sta_ID;"
+"TQ - Bottom Depth_AVg_STDEV","SELECT",TRUE,"","SELECT Avg(Cast.Bottom_D) AS AvgOfBottom_D, Cast.Sta_ID, StDev(Cast.Bottom_D) AS StDevOfBottom_D, Cast.St_Line, Min(Cast.Bottom_D) AS MinOfBottom_D, Max(Cast.Bottom_D) AS MaxOfBottom_D, Count(Cast.Sta_Code) AS CountOfSta_Code
+FROM Cast
+WHERE (((Cast.Sta_Code)=""st"") AND ((Cast.Year)>1983))
+GROUP BY Cast.Sta_ID, Cast.St_Line
+HAVING (((StDev(Cast.Bottom_D)) Is Not Null) AND ((Cast.St_Line)>76.6 And (Cast.St_Line)<93.5))
+ORDER BY StDev(Cast.Bottom_D);"
+"TQ - BottomDepthPerStation","SELECT",TRUE,"","SELECT Cast.Bottom_D, Cast.Cst_Cnt, Cast.Cruise_ID, Cast.Cast_ID
+FROM Cast
+GROUP BY Cast.Bottom_D, Cast.Cst_Cnt, Cast.Cruise_ID, Cast.Cast_ID, Cast.Sta_ID
+HAVING (((Cast.Sta_ID)=""076.7 049.0""));"
+"TQ - BottomDepth_Vs_AvgBottomDepth","SELECT",TRUE,"","SELECT Cast.Cruise, CurrentStations.Sta_ID, Cast.Cst_Cnt, Cast.Bottom_D, CurrentStations.Avg_Depth
+FROM Cast INNER JOIN CurrentStations ON Cast.Sta_ID=CurrentStations.Sta_ID
+WHERE (((Cast!Bottom_D)>(CurrentStations!Avg_Depth+500) Or (Cast!Bottom_D)<(CurrentStations!Avg_Depth-500)))
+GROUP BY Cast.Cruise, CurrentStations.Sta_ID, Cast.Cst_Cnt, Cast.Bottom_D, CurrentStations.Avg_Depth
+ORDER BY Cast.Cruise;"
+"TQ - DeepValues_Avg","SELECT",TRUE,"","SELECT Cast.Year, Cast.Cruise, Avg(Cast.Date) AS Date, Count(Bottle.Depthm) AS DepthCount, Avg(Bottle.Depthm) AS AvgDepth, Avg(Bottle.T_degC) AS Temp, Avg(Bottle.Salnty) AS Sal, Avg(Bottle.STheta) AS Density, Avg(Nuts.PO4uM) AS PO4, Avg(Nuts.SiO3uM) AS SiO4, Avg(Nuts.NO2uM) AS NO2, Avg(Nuts.NO3uM) AS NO3, Avg(Bottle.O2ml_L) AS O2, [NO3]/[PO4] AS [N-P Ratio], [NO3]/[SiO4] AS [N-Si Ratio], [PO4]/[SiO4] AS [P-Si Ratio], [Sal]/[O2] AS [Sal-O2 Ratio], [NO3]/[Sal] AS [N-Sal Ratio], [PO4]/[Sal] AS [P-Sal Ratio], [Sio4]/[Sal] AS [Si-Sal], StDev(Nuts.PO4uM) AS StDevOfPO4ug, StDev(Bottle.Salnty) AS StDevOfSalnty
+FROM Cruises INNER JOIN ((Station_ID INNER JOIN Cast ON Station_ID.DBSta_ID = Cast.DbSta_ID) INNER JOIN ((Bottle LEFT JOIN Chl ON Bottle.Btl_Cnt = Chl.Btl_Cnt) LEFT JOIN Nuts ON Bottle.Btl_Cnt = Nuts.Btl_Cnt) ON Cast.Cst_Cnt = Bottle.Cst_Cnt) ON Cruises.Cruise = Cast.Cruise
+WHERE (((Bottle.Depthm) Between 400 And 550) AND ((Bottle.RecInd)=3) AND ((Cruises.[Code-ST])=""st"") AND ((Station_ID.St_Sta) Between 50 And 120) AND ((Station_ID.St_Line) Between 80 And 90))
+GROUP BY Cast.Year, Cast.Cruise, Cast.Year
+HAVING (((Cast.Year)>1983));"
+"TQ - DeepValues_Avg-ADK","SELECT",TRUE,"","SELECT Cast.Year, Cast.Cruise, Avg(Cast.Date) AS Date, Count(Bottle.Depthm) AS DepthCount, Avg(Bottle.Depthm) AS AvgDepth, Avg(Bottle.T_degC) AS Temp, Avg(Bottle.Salnty) AS Sal, Avg(Bottle.STheta) AS STheta, Avg(Nuts.PO4uM) AS PO4, Avg(Nuts.SiO3uM) AS SIO4, Avg(Nuts.NO2uM) AS NO2, Avg(Nuts.NO3uM) AS NO3, Avg(Bottle.O2ml_L) AS O2, [NO3]/[PO4] AS [N-P Ratio], [NO3]/[SiO4] AS [N-Si Ratio], [PO4]/[SiO4] AS [P-Si Ratio], [Sal]/[O2] AS [Sal-O2 Ratio], StDev(Nuts.PO4uM) AS StDevOfPO4ug, StDev(Nuts.SiO3uM) AS StDevOfSiO3ug, StDev(Nuts.NO2uM) AS StDevOfNO2ug, StDev(Nuts.NO3uM) AS StDevOfNO3ug, StDev(Bottle.Salnty) AS StDevOfSalnty, [NO3]/[Sal] AS [NO3-Sal], [PO4]/[Sal] AS [PO4-Sal], [SiO4]/[Sal] AS [Si-Sal], Avg(Cast.IntC14) AS AvgOfIntC14, Avg(Cast.IntChl) AS AvgOfIntChl
+FROM Cruises INNER JOIN (Cast INNER JOIN (Bottle INNER JOIN (Chl INNER JOIN Nuts ON Chl.Btl_Cnt = Nuts.Btl_Cnt) ON (Bottle.Btl_Cnt = Nuts.Btl_Cnt) AND (Bottle.Btl_Cnt = Chl.Btl_Cnt)) ON Cast.Cst_Cnt = Bottle.Cst_Cnt) ON Cruises.Cruise = Cast.Cruise
+WHERE (((Bottle.Depthm) Between 500 And 550) AND ((Cast.St_Station) Between 50 And 120) AND ((Cast.St_Line) Between 80 And 90))
+GROUP BY Cast.Year, Cast.Cruise, Bottle.RecInd, Cast.Sta_Code, Cruises.[Code-ST]
+HAVING (((Cast.Year)>1983) AND ((Count(Bottle.Depthm))>15) AND ((Bottle.RecInd)=3) AND ((Cast.Sta_Code)=""st"") AND ((Cruises.[Code-ST])=""ST""));"
+"TQ - DeepValues_Avg-jen","SELECT",TRUE,"","SELECT Cast.Year, Cast.Cruise, Avg(Cast.Date) AS Date, Count(Bottle.Depthm) AS DepthCount, Avg(Bottle.Depthm) AS AvgDepth, Avg(Bottle.T_degC) AS Temp, Avg(Bottle.Salnty) AS Sal, Avg(Bottle.STheta) AS STheta, Avg(Nuts.PO4uM) AS PO4, Avg(Nuts.SiO3uM) AS SIO4, Avg(Nuts.NO2uM) AS NO2, Avg(Nuts.NO3uM) AS NO3, Avg(Bottle.O2ml_L) AS O2, [NO3]/[PO4] AS [N-P Ratio], [NO3]/[SiO4] AS [N-Si Ratio], [PO4]/[SiO4] AS [P-Si Ratio], [Sal]/[O2] AS [Sal-O2 Ratio], StDev(Nuts.PO4uM) AS StDevOfPO4ug, StDev(Nuts.SiO3uM) AS StDevOfSiO3ug, StDev(Nuts.NO2uM) AS StDevOfNO2ug, StDev(Nuts.NO3uM) AS StDevOfNO3ug, StDev(Bottle.Salnty) AS StDevOfSalnty, [NO3]/[Sal] AS [NO3-Sal], [PO4]/[Sal] AS [PO4-Sal], [SiO4]/[Sal] AS [Si-Sal], Avg(Cast.IntC14) AS AvgOfIntC14, Avg(Cast.IntChl) AS AvgOfIntChl
+FROM Cast INNER JOIN (Bottle INNER JOIN (Chl INNER JOIN Nuts ON Chl.Btl_Cnt = Nuts.Btl_Cnt) ON (Bottle.Btl_Cnt = Nuts.Btl_Cnt) AND (Bottle.Btl_Cnt = Chl.Btl_Cnt)) ON Cast.Cst_Cnt = Bottle.Cst_Cnt
+WHERE (((Bottle.Depthm) Between 400 And 550) AND ((Cast.St_Station) Between 50 And 120) AND ((Cast.St_Line) Between 80 And 90))
+GROUP BY Cast.Year, Cast.Cruise, Bottle.RecInd, Cast.Sta_Code
+HAVING (((Cast.Year)>2000) AND ((Bottle.RecInd)=3) AND ((Cast.Sta_Code)=""st""));"
+"TQ - LatLongAvgCluster-jen","CROSS_TAB",TRUE,"","TRANSFORM Avg(Cast.Lon_Dec) AS AvgOfLon_Dec
+SELECT Cast.St_Line, Cast.Rpt_Line
+FROM Cast
+WHERE (((Cast.Cruise) Between 194901 And 195109))
+GROUP BY Cast.St_Line, Cast.Rpt_Line
+PIVOT Cast.Cruise;"
+"TQ - Property Tests_AllDiscreet per depth","SELECT",TRUE,"","SELECT Cast.Year, Cast.Cruise, Cast.Sta_ID, Bottle.Depthm AS Depth, Count(Bottle.Depthm) AS DepthCount, Avg(Bottle.STheta) AS STheta, Avg(Bottle.T_degC) AS Temp, Avg(Bottle.Salnty) AS Sal, Avg(Nuts.[NO3uM]) AS Nitrate, Avg(Nuts.[PO4uM]) AS Phosphate, Avg(Nuts.[SiO3uM]) AS Silicate, Avg(Bottle.O2Sat) AS O2Sat, [Nitrate]/[Phosphate] AS [N-P Ratio], [Nitrate]/[Silicate] AS [N-Si Ratio], [Phosphate]/[Silicate] AS [P-Si Ratio], [Sal]/[O2Sat] AS [Sal-O2 Ratio], Bottle.RecInd, Bottle.Depth_ID, Bottle.Depth_ID, Cast.Lon_Dec
+FROM Cruises INNER JOIN ((Station_ID INNER JOIN Cast ON Station_ID.DBSta_ID = Cast.DbSta_ID) INNER JOIN ((Bottle LEFT JOIN Chl ON Bottle.Btl_Cnt = Chl.Btl_Cnt) INNER JOIN Nuts ON Bottle.Btl_Cnt = Nuts.Btl_Cnt) ON Cast.Cst_Cnt = Bottle.Cst_Cnt) ON Cruises.Cruise = Cast.Cruise
+WHERE (((Cruises.[Code-ST])=""st"") AND ((Station_ID.St_Line) Between 80 And 90) AND ((Station_ID.St_Sta) Between 50 And 120) AND ((Bottle.Depthm) Between 500 And 550))
+GROUP BY Cast.Year, Cast.Cruise, Cast.Sta_ID, Bottle.Depthm, Bottle.RecInd, Bottle.Depth_ID, Cast.Lon_Dec, Station_ID.Sta_Code, Bottle.Depth_ID
+HAVING (((Cast.Cruise)>200911) AND ((Bottle.RecInd)=3) AND ((Station_ID.Sta_Code)=""st""));"
+"TQ - StationNameChecker","SELECT",TRUE,"","SELECT Cast.Cst_Cnt, Cast.Cast_ID, Cast.Cruise_ID, Cast.Cruise, Cast.Sta_ID, Cast.Rpt_Line, Cast.Rpt_Sta, Cast.St_Line, Cast.St_Station, Cast.Cruz_Sta, Cast.DbSta_ID, Cast.Sta_Code
+FROM Cast LEFT JOIN CurrentStations ON Cast.Sta_ID = CurrentStations.Sta_ID
+WHERE (((Cast.Sta_Code)=""st"" Or (Cast.Sta_Code)=""sco""))
+GROUP BY Cast.Cst_Cnt, Cast.Cast_ID, Cast.Cruise_ID, Cast.Cruise, Cast.Sta_ID, Cast.Rpt_Line, Cast.Rpt_Sta, Cast.St_Line, Cast.St_Station, Cast.Cruz_Sta, Cast.DbSta_ID, Cast.Sta_Code, CurrentStations.Sta_ID, Cast.Year
+HAVING (((Cast.Rpt_Line)>""76.6"" And (Cast.Rpt_Line)<""93.4"") AND ((CurrentStations.Sta_ID) Is Null) AND ((Cast.Year)>2000));"
+"TQ_DeepValues: PropertyCluster","CROSS_TAB",TRUE,"","TRANSFORM Avg([TQ - Property Tests_AllDiscreet per depth].Nitrate) AS AvgOfNitrate
+SELECT [TQ - Property Tests_AllDiscreet per depth].Sta_ID, [TQ - Property Tests_AllDiscreet per depth].Depth, [TQ - Property Tests_AllDiscreet per depth].Temp
+FROM [TQ - Property Tests_AllDiscreet per depth]
+GROUP BY [TQ - Property Tests_AllDiscreet per depth].Sta_ID, [TQ - Property Tests_AllDiscreet per depth].Depth, [TQ - Property Tests_AllDiscreet per depth].Temp
+PIVOT [TQ - Property Tests_AllDiscreet per depth].Cruise;"
+"TR - Bottle & Cast: Cst_Cnt","SELECT",TRUE,"","SELECT Bottle.Cst_Cnt, Bottle.Sta_ID, Bottle.Depth_ID
+FROM Cast INNER JOIN Bottle ON Cast.Cst_Cnt = Bottle.Cst_Cnt
+WHERE (((Cast.Cst_Cnt) Is Null));"
+"TR - Cast & Bottle: Cst_Cnt","SELECT",TRUE,"","SELECT Cast.Cst_Cnt, Cast.Cruise, Cast.Sta_ID, Bottle.Cst_Cnt
+FROM Cast LEFT JOIN Bottle ON Cast.Cst_Cnt = Bottle.Cst_Cnt
+WHERE (((Bottle.Cst_Cnt) Is Null));"
+"TR - Cast & Bottle: St_ID","SELECT",TRUE,"","SELECT Cast.Cst_Cnt, Cast.Cruise, Cast.Sta_ID, Bottle.Sta_ID, Bottle.Btl_Cnt, Cast.Order_Occ
+FROM Cast INNER JOIN Bottle ON Cast.Cst_Cnt = Bottle.Cst_Cnt
+WHERE (((Cast.Sta_ID)<>[Bottle]![Sta_ID]))
+GROUP BY Cast.Cst_Cnt, Cast.Cruise, Cast.Sta_ID, Bottle.Sta_ID, Bottle.Btl_Cnt, Cast.Order_Occ;"
+"TR - Cast & Cruise: Cruise","SELECT",TRUE,"","SELECT Cast.Cruise, Count(Cast.Cruz_Sta) AS CountOfCruz_Sta
+FROM Cast LEFT JOIN Cruises ON Cast.Cruise = Cruises.Cruise
+WHERE (((Cruises.Cruise) Is Null))
+GROUP BY Cast.Cruise;"
+"TR - Cast & Station_ID: St_ID, DBSta_ID","SELECT",TRUE,"","SELECT Cast.Year, Cast.Cruise, Cast.DbSta_ID, Cast.Sta_ID, Cast.Sta_Code, Cast.Cst_Cnt, Station_ID.Sta_ID
+FROM Cast LEFT JOIN Station_ID ON Cast.DbSta_ID = Station_ID.DBSta_ID
+WHERE (((Station_ID.Sta_ID) Is Null))
+GROUP BY Cast.Year, Cast.Cruise, Cast.DbSta_ID, Cast.Sta_ID, Cast.Sta_Code, Cast.Cst_Cnt, Station_ID.Sta_ID;"
+"TR - Cast & Zooplankton: Possible Matches","SELECT",TRUE,"","SELECT [TR - Cast & Zooplankton: Station].Cruise, [TR - Cast & Zooplankton: Station].Sta_ID, [TR - Cast & Zooplankton: Station].DateTime, ZooplanktonNew.Cruise, ZooplanktonNew.Sta_ID, ZooplanktonNew.DateTime_GMT
+FROM [TR - Cast & Zooplankton: Station], ZooplanktonNew
+WHERE (((ZooplanktonNew.Lat_Dec) Between ([TR - Cast & Zooplankton: Station]!Lat_Dec+0.2) And ([TR - Cast & Zooplankton: Station]!Lat_Dec-0.2)) And ((ZooplanktonNew.Lon_Dec) Between ([TR - Cast & Zooplankton: Station]!Lon_Dec+0.2) And ([TR - Cast & Zooplankton: Station]!Lon_Dec-0.2)) And ((ZooplanktonNew.DateTime_GMT) Between ([TR - Cast & Zooplankton: Station]!DateTime-0.3) And ([TR - Cast & Zooplankton: Station]!DateTime+0.3)))
+GROUP BY [TR - Cast & Zooplankton: Station].Cruise, [TR - Cast & Zooplankton: Station].Sta_ID, [TR - Cast & Zooplankton: Station].DateTime, ZooplanktonNew.Cruise, ZooplanktonNew.Sta_ID, ZooplanktonNew.DateTime_GMT;"
+"TR - Cast & Zooplankton: Station","SELECT",TRUE,"","SELECT Cast.Cst_Cnt, Cast.Cruise, Cast.Sta_ID, Cast.Date, Cast.St_Line
+FROM Cruises INNER JOIN (Cast LEFT JOIN Zooplankton ON Cast.Cruz_Sta = Zooplankton.Cruz_Sta) ON Cruises.Cruise = Cast.Cruise
+WHERE (((Cast.Sta_Code)=""st"") AND ((Cruises.[Code-ST])=""st""))
+GROUP BY Cast.Cst_Cnt, Cast.Cruise, Cast.Sta_ID, Cast.Date, Cast.St_Line, Zooplankton.Cruz_Sta
+HAVING (((Cast.Cruise) Between 198400 And 200900) AND ((Zooplankton.Cruz_Sta) Is Null));"
+"TR - Chl & Bottle: Btl_Cnt","SELECT",TRUE,"","SELECT Chl.Btl_Cnt, Chl.ChlorA, Bottle.Btl_Cnt
+FROM Bottle RIGHT JOIN Chl ON Bottle.Btl_Cnt = Chl.Btl_Cnt
+WHERE (((Bottle.Btl_Cnt) Is Null));"
+"TR - Cruise & Cast: Cruise","SELECT",TRUE,"","SELECT Cruises.Cruise
+FROM Cast RIGHT JOIN Cruises ON Cast.Cruise = Cruises.Cruise
+WHERE (((Cast.Cruise) Is Null))
+GROUP BY Cruises.Cruise;"
+"TR - Cruise & Zooplankton: Cruise","SELECT",TRUE,"","SELECT Cruises.Cruise, Cruises.[Code-ST]
+FROM Cruises LEFT JOIN Zooplankton ON Cruises.Cruise = Zooplankton.Cruise
+WHERE (((Zooplankton.Cruise) Is Null))
+GROUP BY Cruises.Cruise, Cruises.[Code-ST]
+HAVING (((Cruises.Cruise)>198400) AND ((Cruises.[Code-ST])=""st""));"
+"TR - Cruises from Cast","SELECT",TRUE,"","SELECT Cast.Cruise, Cast.Ship_Code, Count(Cast.Sta_ID) AS NO_Stations, Min(Cast.Date) AS From, Max(Cast.Date) AS To
+FROM Cast
+GROUP BY Cast.Cruise, Cast.Ship_Code
+ORDER BY Cast.Cruise, Cast.Ship_Code;"
+"TR - Keeling_DIC & Cast: Cruise-St_ID","SELECT",TRUE,"","SELECT [Keeling DIC].ID, [Keeling DIC].Cruise, [Keeling DIC].Station_ID, [Keeling DIC].Notes, Avg(Cast.Date) AS Cast_Date, [Keeling DIC].Date AS DIC_Date, [Keeling DIC].Lat_dec AS DIC_Lat, [Keeling DIC].Long_dec AS DIC_Long, Avg(Cast.Lat_Dec) AS Cast_Lat, Avg(Cast.Lon_Dec) AS Cast_Long, ([DIC_Date]-[Cast_Date])*0.999 AS Date_Test, ([DIC_Lat]-[Cast_Lat]) AS Lat_Test, [DIC_Long]+[Cast_Long] AS Long_Test
+FROM Cast RIGHT JOIN [Keeling DIC] ON (Cast.Cruise = [Keeling DIC].Cruise) AND (Cast.Sta_ID = [Keeling DIC].Station_ID)
+GROUP BY [Keeling DIC].ID, [Keeling DIC].Cruise, [Keeling DIC].Station_ID, [Keeling DIC].Notes, [Keeling DIC].Date, [Keeling DIC].Lat_dec, [Keeling DIC].Long_dec
+HAVING ((([Keeling DIC].Lat_dec) Is Not Null))
+ORDER BY [Keeling DIC].ID;"
+"TR - Nuts & Bottle: Btl_Cnt","SELECT",TRUE,"","SELECT Nuts.Btl_Cnt, Nuts.PO4ug AS Expr1, Bottle.Btl_Cnt
+FROM Nuts LEFT JOIN Bottle ON Nuts.Btl_Cnt = Bottle.Btl_Cnt
+WHERE (((Bottle.Btl_Cnt) Is Null));"
+"TR - Prodo Bottle & Prodo_Cast: Cst_Cnt","SELECT",TRUE,"","SELECT Prodo_Bottle.Cst_Cnt AS Expr1, Prodo_Bottle.Btl_Cnt
+FROM Prodo_Bottle, Prodo_Cast
+WHERE (((Prodo_Cast.Cst_Cnt) Is Null));"
+"TR - Prodo_Cast & Cast: Cst_Cnt","SELECT",TRUE,"","SELECT Prodo_Cast.Cst_Cnt, Prodo_Cast.Cast_ID AS Expr1
+FROM Cast RIGHT JOIN Prodo_Cast ON Cast.Cst_Cnt = Prodo_Cast.Cst_Cnt
+WHERE (((Cast.Cst_Cnt)=[prodo_cast].[cst_cnt]) AND ((Cast.Cast_ID)<>[Prodo_Cast].[Cast_ID]));"
+"TR - Prodo_Cast & Prodo_Bottle: Cst_Cnt","SELECT",TRUE,"","SELECT Cast.Cruise, Cast.Sta_ID, Cast.Date, Prodo_Cast.Cst_Cnt
+FROM Cast INNER JOIN (Prodo_Bottle RIGHT JOIN Prodo_Cast ON Prodo_Bottle.Cst_Cnt = Prodo_Cast.Cst_Cnt) ON Cast.Cst_Cnt = Prodo_Cast.Cst_Cnt
+WHERE (((Prodo_Bottle.Cst_Cnt) Is Null));"
+"TR - Station_ID & Cast: DbSta_ID","SELECT",TRUE,"","SELECT Station_ID.ID, Station_ID.Sta_ID, Station_ID.DBSta_ID, Station_ID.Sta_Code
+FROM Station_ID LEFT JOIN Cast ON Station_ID.DBSta_ID = Cast.DbSta_ID
+WHERE (((Cast.DbSta_ID) Is Null));"
+"TR - Zooplankton","SELECT",TRUE,"","SELECT Zooplankton.Cruise, Zooplankton.Order_Occ, Zooplankton.Tow_Date, Zooplankton.Sta_ID, Zooplankton.Cruz_Sta, Zooplankton.St_Line, Zooplankton.St_Sta, Zooplankton.Net_Loc
+FROM Zooplankton INNER JOIN Station_ID ON Zooplankton.Sta_ID = Station_ID.Sta_ID
+GROUP BY Zooplankton.Cruise, Zooplankton.Order_Occ, Zooplankton.Tow_Date, Zooplankton.Sta_ID, Zooplankton.Cruz_Sta, Zooplankton.St_Line, Zooplankton.St_Sta, Zooplankton.Net_Loc
+HAVING (((Zooplankton.Cruise)=196009) AND ((Zooplankton.Net_Loc)=""S""))
+ORDER BY Zooplankton.Sta_ID;"
+"TR - Zooplankton & Cast: Cruise","SELECT",TRUE,"","SELECT Zooplankton.Cruise, Count(Zooplankton.Sta_ID) AS CountOfSta_ID
+FROM Cast RIGHT JOIN Zooplankton ON Cast.Cruz_Sta = Zooplankton.Cruz_Sta
+WHERE (((Cast.Cruise) Is Null))
+GROUP BY Zooplankton.Cruise;"
+"TR - Zooplankton & Cast: Station","SELECT",TRUE,"","SELECT Zooplankton.Cruise AS Zoo_Cruise, Zooplankton.Sta_ID AS Zoo_St_ID, Cast.St_Line, Zooplankton.Tow_Date
+FROM Cast RIGHT JOIN Zooplankton ON Cast.Cruz_Sta=Zooplankton.Cruz_Sta
+WHERE (((Cast.Sta_ID) Is Null))
+GROUP BY Zooplankton.Cruise, Zooplankton.Sta_ID, Cast.St_Line, Zooplankton.Tow_Date
+HAVING (((Zooplankton.Cruise) Between 198400 And 200900));"
+"TR - Zooplankton & Station_ID: Station","SELECT",TRUE,"","SELECT Zooplankton.Cruise AS Zoo_Cruise, Zooplankton.Sta_ID AS Zoo_St_ID, Station_ID.Sta_ID
+FROM Zooplankton LEFT JOIN Station_ID ON Zooplankton.Sta_ID = Station_ID.Sta_ID
+GROUP BY Zooplankton.Cruise, Zooplankton.Sta_ID, Station_ID.Sta_ID
+HAVING (((Zooplankton.Cruise)>198400) AND ((Station_ID.Sta_ID) Is Null));"
+"TS - Cast: Line  Coverage","CROSS_TAB",TRUE,"","TRANSFORM Count(Cast.Cast_ID) AS CountOfCast_ID
+SELECT Cruises.Cruise
+FROM Cruises INNER JOIN (Station_ID INNER JOIN Cast ON Station_ID.Sta_ID = Cast.Sta_ID) ON Cruises.Cruise = Cast.Cruise
+WHERE (((Cast.St_Line)=76.7 Or (Cast.St_Line)=80 Or (Cast.St_Line)=83.3 Or (Cast.St_Line)=86.7 Or (Cast.St_Line)=90 Or (Cast.St_Line)=93.3) AND ((Station_ID.Sta_Code)=""st"")) OR (((Cast.St_Line) Between 76.5 And 77.2))
+GROUP BY Cruises.Cruise
+PIVOT Cast.St_Line;"
+"TS - Cast: Line Chl  Coverage","CROSS_TAB",TRUE,"","TRANSFORM Count(Chl.ChlorA) AS CountOfChlorA
+SELECT Cast.Cruise
+FROM (Cast INNER JOIN Bottle ON Cast.Cst_Cnt = Bottle.Cst_Cnt) INNER JOIN Chl ON Bottle.Btl_Cnt = Chl.Btl_Cnt
+WHERE (((Cast.St_Line)=76.7 Or (Cast.St_Line)=80 Or (Cast.St_Line)=83.3 Or (Cast.St_Line)=86.7 Or (Cast.St_Line)=90 Or (Cast.St_Line)=93.3) AND ((Chl.ChlorA) Is Not Null))
+GROUP BY Cast.Cruise
+PIVOT Cast.St_Line;"
+"TS - Cruise: Line 90 Coverage","CROSS_TAB",TRUE,"","TRANSFORM Count(Bottle.Depthm) AS CountOfDepthm
+SELECT Cruises.Cruise, Cast.St_Line, Avg(Cast.Date) AS AvgOfDate
+FROM Cruises INNER JOIN ((Station_ID INNER JOIN Cast ON Station_ID.Sta_ID = Cast.Sta_ID) INNER JOIN Bottle ON Cast.Cst_Cnt = Bottle.Cst_Cnt) ON Cruises.Cruise = Cast.Cruise
+WHERE (((Cast.St_Line)=93.3) AND ((Station_ID.Sta_Code)=""st"") AND ((Bottle.RecInd)=3))
+GROUP BY Cruises.Cruise, Cast.St_Line, Bottle.RecInd
+ORDER BY Cruises.Cruise
+PIVOT Cast.St_Station;"
+"TS - Tow Station Coverage","CROSS_TAB",TRUE,"","TRANSFORM Avg([TR - NMFS_Tows].NMFS_TowDateTimeGMT) AS AvgOfNMFS_TowDateTimeGMT
+SELECT [TR - NMFS_Tows].CC_CruiseNo
+FROM NMFS_Station_ID INNER JOIN [TR - NMFS_Tows] ON NMFS_Station_ID.NMFS_Sta_ID = [TR - NMFS_Tows].NMFS_Sta_ID
+WHERE (((NMFS_Station_ID.St_Code)=""st""))
+GROUP BY [TR - NMFS_Tows].CC_CruiseNo
+ORDER BY [TR - NMFS_Tows].CC_CruiseNo
+PIVOT [TR - NMFS_Tows].St_ID;"
+"TV - Chl Value Tests","SELECT",TRUE,"","SELECT Cast.Cruise, Cast.Sta_ID, Bottle.Depthm, Chl.ChlorA, Chl.Phaeop, [ChlorA]/([Phaeop]+0.0001) AS [Chl-Pheo Ratio]
+FROM Cast INNER JOIN (Bottle INNER JOIN Chl ON Bottle.Btl_Cnt = Chl.Btl_Cnt) ON Cast.Cst_Cnt = Bottle.Cst_Cnt
+WHERE (((Cast.St_Station)>50))
+GROUP BY Cast.Cruise, Cast.Sta_ID, Bottle.Depthm, Chl.ChlorA, Chl.Phaeop
+HAVING (((Bottle.Depthm)<21) AND ((Chl.ChlorA) Is Not Null) AND ((Chl.Phaeop)>0) AND (([ChlorA]/([Phaeop]+0.0001))<1))
+ORDER BY [ChlorA]/([Phaeop]+0.0001);"
+"TV - Deep Properties","SELECT",TRUE,"","SELECT Cast.Year, Cast.Cruise, Avg(Cast.Date) AS Date, Avg(Cast.St_Line) AS AvgLine, Avg(Cast.St_Station) AS AvgStation, Count(Bottle.Depthm) AS StationCount, Bottle.Depthm AS Depth, Avg(Bottle.T_degC) AS Temp, Avg(Bottle.Salnty) AS Sal, Avg(Bottle.STheta) AS STheta, Avg(Nuts.PO4uM) AS Phosphate, Avg(Nuts.SiO3uM) AS Silicate, Avg(Nuts.NO2uM) AS Nitrite, Avg(Nuts.NO3uM) AS Nitrate, Avg(Bottle.O2ml_L) AS O2, [Nitrate]/[Phosphate] AS [N-P Ratio], [Nitrate]/[Silicate] AS [N-Si Ratio], [Phosphate]/[Silicate] AS [P-Si Ratio], [Sal]/[O2] AS [Sal-O2 Ratio]
+FROM Cruises INNER JOIN ((Station_ID INNER JOIN Cast ON Station_ID.DBSta_ID = Cast.DbSta_ID) INNER JOIN (Bottle INNER JOIN Nuts ON Bottle.Btl_Cnt = Nuts.Btl_Cnt) ON Cast.Cst_Cnt = Bottle.Cst_Cnt) ON Cruises.Cruise = Cast.Cruise
+WHERE (((Cruises.[Code-ST])=""st"") AND ((Station_ID.St_Line) Between 80 And 90) AND ((Station_ID.St_Sta) Between 50 And 120) AND ((Bottle.Depthm)=500) AND ((Bottle.RecInd)=7))
+GROUP BY Cast.Year, Cast.Cruise, Bottle.Depthm, Station_ID.Sta_Code
+HAVING (((Cast.Year)>1983) AND ((Station_ID.Sta_Code)=""st""));"
+"TV - Property Tests","SELECT",TRUE,"","SELECT Cast.Year, Cast.Cruise, Cast.Sta_ID, Bottle.Depthm AS Depth, Count(Bottle.Depthm) AS DepthCount, Avg(Bottle.STheta) AS STheta, Avg(Bottle.T_degC) AS Temp, Avg(Bottle.Salnty) AS Sal, Avg(Nuts.NO3uM) AS Nitrate, Avg(Nuts.PO4uM) AS Phosphate, Avg(Nuts.SiO3uM) AS Silicate, Avg(Bottle.O2Sat) AS O2Sat, [Nitrate]/[Phosphate] AS [N-P Ratio], [Nitrate]/[Silicate] AS [N-Si Ratio], [Phosphate]/[Silicate] AS [P-Si Ratio], [Sal]/[O2Sat] AS [Sal-O2 Ratio]
+FROM Cruises INNER JOIN ((Station_ID INNER JOIN Cast ON Station_ID.DBSta_ID = Cast.DbSta_ID) INNER JOIN ((Bottle LEFT JOIN Chl ON Bottle.Btl_Cnt = Chl.Btl_Cnt) INNER JOIN Nuts ON Bottle.Btl_Cnt = Nuts.Btl_Cnt) ON Cast.Cst_Cnt = Bottle.Cst_Cnt) ON Cruises.Cruise = Cast.Cruise
+WHERE (((Cruises.[Code-ST])=""st"") AND ((Station_ID.St_Line) Between 80 And 90) AND ((Station_ID.St_Sta) Between 50 And 120) AND ((Cast.Year) Between 1984 And 2006))
+GROUP BY Cast.Year, Cast.Cruise, Cast.Sta_ID, Bottle.Depthm, Station_ID.Sta_Code
+HAVING (((Station_ID.Sta_Code)=""st""));"
+"TX - Cast","SELECT",TRUE,"","SELECT Cast.Cst_Cnt, Cast.Cruise, Cruises.Ship1, Cast.Sta_ID, Station_ID.Sta_Code
+FROM Cruises INNER JOIN (Station_ID INNER JOIN Cast ON Station_ID.Sta_ID = Cast.Sta_ID) ON Cruises.Cruise = Cast.Cruise
+WHERE (((Cast.Cruise)=199702));"
+"TX - Cast & Zooplankton: Station Matches","SELECT",TRUE,"","SELECT Cast.Cst_Cnt, Cast.Cruise, Cast.Sta_ID, Cast.Date, Cast.Time, [Date]+[Time] AS DateTime, Cast.Month, Cast.Lat_Dec, Cast.Lon_Dec, Cast.Sta_Code
+FROM Cruises INNER JOIN (Cast LEFT JOIN Zooplankton ON Cast.Cruz_Sta = Zooplankton.Cruz_Sta) ON Cruises.Cruise = Cast.Cruise
+WHERE (((Cruises.[Code-ST])=""st""))
+GROUP BY Cast.Cst_Cnt, Cast.Cruise, Cast.Sta_ID, Cast.Date, Cast.Time, Cast.Month, Cast.Lat_Dec, Cast.Lon_Dec, Cast.Sta_Code
+HAVING (((Cast.Cruise)>198312) AND ((Cast.Sta_Code)=""sco"" Or (Cast.Sta_Code)=""st""));"
+"Temp Line90 -MT","CROSS_TAB",TRUE,"","TRANSFORM Avg(Bottle.T_degC) AS AvgOfT_degC
+SELECT Cast.Year, Cast.Cruise, Avg(Cast.Date) AS Date, (Month([Date])+Day([Date])/30.5-1) AS Month, Avg(Cast.Quarter) AS AvgOfQuarter
+FROM (Station_ID INNER JOIN Cast ON Station_ID.Sta_ID = Cast.Sta_ID) INNER JOIN Bottle ON Cast.Cst_Cnt = Bottle.Cst_Cnt
+WHERE (((Bottle.Depthm)=10) AND ((Station_ID.St_Line)=90) AND ((Station_ID.Sta_Code)=""st""))
+GROUP BY Cast.Year, Cast.Cruise
+PIVOT Cast.Sta_ID;"
+"UQ-Bottle-ShipCode Query","UPDATE",TRUE,"","UPDATE Cast INNER JOIN Bottle ON Cast.Cst_Cnt = Bottle.Cst_Cnt
+SET Bottle.Depth_ID = Left([Depth_ID],7)+Right([Ship_Code],2)+Right([Depth_ID],29)
+WHERE (((InStr([Bottle].[Depth_ID],Right([Cast].[Ship_Code],2)))=""0""));"
+"UQ-Bottle_Oxyumol/Kg_equation","UPDATE",TRUE,"","UPDATE Cast INNER JOIN Bottle ON Cast.Cst_Cnt = Bottle.Cst_Cnt
+SET Bottle.[Oxy_µmol/Kg] = (([Bottle].[O2ml_L]*44660)/([Bottle].[STheta]+1000))
+WHERE (((Cast.Cruise)=201604) AND ((Bottle.O2ml_L) Is Not Null));"
+"UQ-BtlNum","UPDATE",TRUE,"","UPDATE Bottle1 INNER JOIN [1995-2009Bottle] ON Bottle1.Btl_Cnt=[1995-2009Bottle].Btl_Cnt
+SET Bottle1.BtlNum = [1995-2009Bottle].BtlNum
+WHERE (((Bottle1.Depthm)=[1995-2009Bottle].Depthm) And ((Bottle1.Btl_Cnt)=[1995-2009Bottle].Btl_Cnt));"
+"UQ-Cast-ShipCode Query","UPDATE",TRUE,"","UPDATE Cast
+SET Cast.Cast_ID = Left([Cast_ID],7)+Right([Ship_Code],2)+Right([Cast_ID],21)
+WHERE (((InStr([Cast_ID],Right([Ship_Code],2)))=""0""));"
+"UQ-CruiseAlias","UPDATE",TRUE,"","UPDATE Cast
+SET Cast.CruiseAlias = [cast].[Cruise]
+WHERE (((Cast.Cruise)=202304));"
+"UQ-CruiseAlias_Zoop","UPDATE",TRUE,"","UPDATE Zooplankton
+SET Zooplankton.CruiseAlias = [Zooplankton].[Cruise]
+WHERE (((Zooplankton.Cruise)=201802));"
+"UQ-Cruise_ID","UPDATE",TRUE,"","UPDATE Cruises INNER JOIN Cast ON Cruises.Cruise = Cast.Cruise
+SET Cast.Cruise_ID = UCase(Format(cruises.begdate1,""yyyy-mm-dd""))+""-C-""+cast.ship_code;"
+"UQ-Cruise_ID_new","UPDATE",TRUE,"","UPDATE Cast, Cast1
+SET Cast.Ship_Code = Cast1.Ship_Code
+WHERE (((Cast.Ship_Code)<>[Cast1].[Ship_Code]));"
+"UQ-Decimal Lat/Lon","UPDATE",TRUE,"","UPDATE Cast
+SET Cast.Lat_Dec = Cast.Lat_Deg+(Cast.Lat_Min/60), Cast.Lon_Dec = Cast.Lon_Deg-(Cast.Lon_Min/60);"
+"UQ-DepthID_PR","UPDATE",TRUE,"","UPDATE Bottle
+SET Bottle.Depth_ID = Replace([Depth_ID],""-PR-"",""-MX-"")
+WHERE (((Bottle.Depth_ID) Like ""*-8410NM-PR-*"") AND ((Bottle.Cst_Cnt)=23954));"
+"UQ-Prodo_Cast-ShipCode Query","UPDATE",TRUE,"","UPDATE Cast INNER JOIN Prodo_Cast ON Cast.Cst_Cnt = Prodo_Cast.Cst_Cnt
+SET Prodo_Cast.Cast_ID = Left(Prodo_Cast.Cast_ID,7)+Right(Cast.Ship_Code,2)+Right(Prodo_Cast.Cast_ID,21)
+WHERE (((InStr([Prodo_Cast].[Cast_ID],Right([Cast].[Ship_Code],2)))=""0""));"
+"UQ-Prodo_IncTim","UPDATE",TRUE,"","UPDATE Prodo_Cast INNER JOIN Prodo_Bottle ON Prodo_Cast.Cst_Cnt = Prodo_Bottle.Cst_Cnt
+SET Prodo_Bottle.IncTim = Format(Abs([Prodo_Cast].[Inc_Str]-[Prodo_Cast].[Inc_End]),""Long Time"")
+WHERE (((Prodo_Bottle.C14As1) Is Not Null) AND ((Prodo_Bottle.C14As2) Is Not Null) AND ((Prodo_Bottle.DarkAs) Is Not Null) AND ((Prodo_Bottle.Btl_Cnt)>=887236));"
+"UQ-Rpt_Line","UPDATE",TRUE,"","UPDATE Cast
+SET Cast.Rpt_Line = Format(Val(Left(Cast.Sta_ID,5)),""#.0""), Cast.Rpt_Sta = Format(Val(Right(Cast.Sta_ID,5)),""#.0"")
+WHERE (((Cast.Year)>2008));"
+"UQ-Rpt_Oxyumol/Kg_equation","UPDATE",TRUE,"","UPDATE Rpt_Data
+SET Rpt_Data.[R_Oxy_µmol/Kg] = (([Rpt_Data].[R_O2]*44660)/([Rpt_Data].[R_SIGMA]+1000))
+WHERE (((Rpt_Data.R_O2) Is Not Null) AND ((Rpt_Data.Btl_Cnt)>862871));"
+"UQ-Rpt_R_Oxyumol/Kg","UPDATE",TRUE,"","UPDATE Cast INNER JOIN (Bottle INNER JOIN Rpt_Data ON Bottle.Btl_Cnt = Rpt_Data.Btl_Cnt) ON Cast.Cst_Cnt = Bottle.Cst_Cnt
+SET Rpt_Data.[R_Oxy_µmol/Kg] = [Bottle].[Oxy_µmol/Kg]
+WHERE (((Cast.Cruise)=202304));"
+"UQ-Ship_Code","UPDATE",TRUE,"","UPDATE Cast INNER JOIN [0-Ships] ON Cast.Ship_Code = [0-Ships].Ship_Code
+SET Cast.Ship_Name = [0-Ships].Ship_Name
+WHERE (((Cast.Ship_Name)<>[0-Ships].[Ship_Name]) AND ((Cast.Ship_Code)=[0-Ships].[Ship_Code]));"
+"UQ_AppendTo_DIC","APPEND",TRUE,"","INSERT INTO DICs (ID, Cruise, Btl_Cnt, StaPr, Depthm, Depth_ID, Sta_ID, pH1, pH2, DIC1, DIC2, TA1, TA2, Salinity1, Salinity2, Bottle_ID2, Niskin)
+SELECT [1507DIC_DB].ID, [1507DIC_DB].Cruise, [1507DIC_DB].Btl_Cnt, [1507DIC_DB].StaPr, [1507DIC_DB].Depthm, [1507DIC_DB].Depth_ID, [1507DIC_DB].Sta_ID, [1507DIC_DB].pH1, [1507DIC_DB].pH2, [1507DIC_DB].DIC1, [1507DIC_DB].DIC2, [1507DIC_DB].TA1, [1507DIC_DB].TA2, [1507DIC_DB].Salinity1, [1507DIC_DB].Salinity2, [1507DIC_DB].Bottle_ID2, [1507DIC_DB].D_Nisk1
+FROM 1507DIC_DB;"
+"UQ_Blt_Cnt_Renumber","UPDATE",TRUE,"","UPDATE [2007-2107rpt-data]
+SET [2007-2107rpt-data].Btl_Cnt = [2007-2107rpt-data].[Btl_Cnt]-18;"
+"UQ_Depth_ID_CharLen_BottleTable","UPDATE",TRUE,"","UPDATE Bottle
+SET Bottle.Depth_ID = Replace([Depth_ID],""-800505"",""-08000505"")
+WHERE (((Bottle.Depth_ID) Like ""*-800505*"") AND ((Bottle.Cst_Cnt)>32423));"
+"UQ_Depth_ID_SBB_BottleTable","UPDATE",TRUE,"","UPDATE Bottle
+SET Bottle.Depth_ID = Replace([Depth_ID],""0470"",""0469"")
+WHERE (((Bottle.Depth_ID) Like ""*-08180470*"") AND ((Bottle.Cst_Cnt)>32423));"
+"UQ_StaName","UPDATE",TRUE,"","UPDATE Cast
+SET Cast.St_Station = Replace([St_Station],""47"",""46.9"")
+WHERE (((Cast.St_Station) Like ""*47"") AND ((Cast.Year)>2008));"
+"UQ_Sta_ID_SBB_BottleTable","UPDATE",TRUE,"","UPDATE Bottle
+SET Bottle.Sta_ID = Replace([Sta_ID],""86.7 050.0"",""086.7 050.0"")
+WHERE (((Bottle.Sta_ID) Like ""86.7 050.0"") AND ((Bottle.Cst_Cnt)>32665));"
+"UQ_Table2Table_Bottle_To_DIC","UPDATE",TRUE,"","UPDATE Cast INNER JOIN (Bottle INNER JOIN DICs ON Bottle.Sta_ID = DICs.Sta_ID) ON (Cast.Cst_Cnt = Bottle.Cst_Cnt) AND (Cast.Cruise = DICs.Cruise)
+SET DICs.Depth_ID = [Bottle].[Depth_ID], DICs.Btl_Cnt = [Bottle].[Btl_Cnt]
+WHERE (((Cast.Cruise)=201402) AND ((Cast.Cst_Cnt)<>33468) AND ((DICs.Niskin)=[Bottle].[BtlNum]) AND ((DICs.Sta_ID)=[Bottle].[Sta_ID]));"
+"UQ_Table2Table_Bottle_To_DIC_csv","UPDATE",TRUE,"","UPDATE (1507DIC_DB INNER JOIN Cast ON [1507DIC_DB].Cruise = Cast.Cruise) INNER JOIN Bottle ON (Cast.Cst_Cnt = Bottle.Cst_Cnt) AND ([1507DIC_DB].Sta_ID = Bottle.Sta_ID)
+SET [1507DIC_DB].Depth_ID = [Bottle].[Depth_ID], [1507DIC_DB].Btl_Cnt = [Bottle].[Btl_Cnt]
+WHERE ((([1507DIC_DB].StaNisk)=[Bottle].[BtlNum]) AND ((Cast.Cruise)=201507) AND (([1507DIC_DB].Sta_ID)=[Bottle].[Sta_ID]));"
+"UQ_UpdateRpt_Line","UPDATE",TRUE,"","UPDATE Cast
+SET Cast.Rpt_Line = Format(Val(Right([Rpt_Line],4)),""#.0"")
+WHERE (((Cast.Rpt_Line) Like ""90"" Or (Cast.Rpt_Line)=""80"" Or (Cast.Rpt_Line)=""70"" Or (Cast.Rpt_Line)=""60"") AND ((Cast.Cst_Cnt)>=35959));"
+"UQ_UpdateRpt_Sta_4digits","UPDATE",TRUE,"","UPDATE Cast
+SET Cast.Rpt_Sta = Format(Val(Right([Rpt_Sta],4)),""#.0"")
+WHERE (((Cast.Rpt_Sta) Like ""28"" Or (Cast.Rpt_Sta)=""30"" Or (Cast.Rpt_Sta)=""35"" Or (Cast.Rpt_Sta)=""37"" Or (Cast.Rpt_Sta)=""45"" Or (Cast.Rpt_Sta)=""50"" Or (Cast.Rpt_Sta)=""53"" Or (Cast.Rpt_Sta)=""60"" Or (Cast.Rpt_Sta)=""55"" Or (Cast.Rpt_Sta)=""70"" Or (Cast.Rpt_Sta)=""80"" Or (Cast.Rpt_Sta)=""90"" Or (Cast.Rpt_Sta)=""42"" Or (Cast.Rpt_Sta)=""51"" Or (Cast.Rpt_Sta)=""33"" Or (Cast.Rpt_Sta)=""40"" Or (Cast.Rpt_Sta)=""49"") AND ((Cast.Cst_Cnt)>=35128));"
+"UQ_UpdateRpt_Sta_5digits","UPDATE",TRUE,"","UPDATE Cast
+SET Cast.Rpt_Sta = Format(Val(Right([Rpt_Sta],5)),""#.0"")
+WHERE (((Cast.Rpt_Sta) Like ""100"" Or (Cast.Rpt_Sta)=""110"" Or (Cast.Rpt_Sta)=""120"") AND ((Cast.Cst_Cnt)>=35128));"
+"UQ_reupdateProdo","UPDATE",TRUE,"","UPDATE 1411_btldb INNER JOIN Prodo_Bottle ON [1411_btldb].Btl_Cnt = Prodo_Bottle.Btl_Cnt
+SET Prodo_Bottle.C14As1 = [1411_btldb].[C14As1], Prodo_Bottle.C14A1p = [1411_btldb].[C14A1p], Prodo_Bottle.C14A1q = [1411_btldb].[C14A1q], Prodo_Bottle.C14As2 = [1411_btldb].[C14As2], Prodo_Bottle.C14A2p = [1411_btldb].[C14A2p], Prodo_Bottle.C14A2q = [1411_btldb].[C14A2q], Prodo_Bottle.DarkAs = [1411_btldb].[DarkAs], Prodo_Bottle.DarkAp = [1411_btldb].[DarkAp], Prodo_Bottle.DarkAq = [1411_btldb].[DarkAq], Prodo_Bottle.MeanAs = [1411_btldb].[MeanAs], Prodo_Bottle.MeanAp = [1411_btldb].[MeanAp], Prodo_Bottle.MeanAq = [1411_btldb].[MeanAq], Prodo_Bottle.IncTim = [1411_btldb].[IncTim], Prodo_Bottle.LightP = [1411_btldb].[LightP];"
+"Uq-ShipName","UPDATE",TRUE,"","UPDATE [0-Ships] INNER JOIN Cast ON [0-Ships].Ship_Code = Cast.Ship_Code
+SET Cast.Ship_Name = [0-Ships].Ship_Name
+WHERE (((Cast.Ship_Name)<>[0-Ships].[Ship_Name]));"
+"Zoop_Vols","SELECT",TRUE,"","SELECT Zooplankton.Cruise, Zooplankton.Sta_ID, Zooplankton.Cruz_Sta, Zooplankton.Ship_Code, Zooplankton.Order_Occ, Zooplankton.St_Line, Zooplankton.St_Station, Zooplankton.Lat_Deg, Zooplankton.Lat_Min, Zooplankton.Lat_Hem, Zooplankton.Lon_Deg, Zooplankton.Lon_Min, Zooplankton.Lon_Hem, Zooplankton.Tow_Type, Zooplankton.Net_Loc, Zooplankton.Tow_Date, Zooplankton.Tow_Time, Zooplankton.End_Time, Zooplankton.Vol_StrM3, Zooplankton.Tow_DpthM, Zooplankton.Ttl_PVolC3, Zooplankton.Sml_PVolC3, Zooplankton.HaulFact
+FROM Zooplankton
+WHERE (((Zooplankton.Cruise)=201704) AND ((Zooplankton.Net_Loc)=""S""));"
+"Zooplankton - 1 Station - I","SELECT",TRUE,"","SELECT Avg(Year(Zooplankton!Tow_Date)) AS Year, Cruises.Cruise, St_Stations.St_Line, Zooplankton.Sta_ID, St_Stations.Sta_ID, Zooplankton.Tow_Date AS Date, Avg(Month(Zooplankton!Tow_Date)+Day(Zooplankton!Tow_Date)/30.5-1) AS Month, Count(Zooplankton.Ttl_PVolC3) AS NoSamples, Zooplankton.Ttl_PVolC3 AS T_Zoo, Zooplankton.Sml_PVolC3 AS S_Zoo, Avg(Log([T_Zoo])) AS Log_TZoo, Avg(Log([S_Zoo])) AS Log_SZoo
+FROM St_Stations INNER JOIN (Cruises INNER JOIN Zooplankton ON Cruises.Cruise = Zooplankton.Cruise) ON St_Stations.Sta_ID = Zooplankton.Sta_ID
+WHERE (((Cruises.[Code-ST])=""st"") AND ((Zooplankton.Ttl_PVolC3)>0) AND ((Zooplankton.Net_Loc)=""S""))
+GROUP BY Cruises.Cruise, St_Stations.St_Line, Zooplankton.Sta_ID, St_Stations.Sta_ID, Zooplankton.Tow_Date, Zooplankton.Ttl_PVolC3, Zooplankton.Sml_PVolC3
+ORDER BY Cruises.Cruise, Zooplankton.Sta_ID;"
+"Zooplankton - 2 Station","SELECT",TRUE,"","SELECT [Zooplankton - 1 Station - I].Year, [Zooplankton - 1 Station - I].Cruise, [Zooplankton - 1 Station - I].St_Line, [Zooplankton - 1 Station - I].Zooplankton.Sta_ID AS St_ID, Avg([Zooplankton - 1 Station - I].Date) AS Date, Avg([Zooplankton - 1 Station - I].Month) AS Month, Avg([Zooplankton - 1 Station - I].T_Zoo) AS T_Zoo, Avg([Zooplankton - 1 Station - I].S_Zoo) AS S_Zoo, Avg([Zooplankton - 1 Station - I].Log_TZoo) AS Log_TZoo, Avg([Zooplankton - 1 Station - I].Log_SZoo) AS Log_SZoo, Count([Zooplankton - 1 Station - I].Log_SZoo) AS No_Stations
+FROM [Zooplankton - 1 Station - I]
+GROUP BY [Zooplankton - 1 Station - I].Year, [Zooplankton - 1 Station - I].Cruise, [Zooplankton - 1 Station - I].St_Line, [Zooplankton - 1 Station - I].Zooplankton.Sta_ID
+ORDER BY [Zooplankton - 1 Station - I].Cruise, [Zooplankton - 1 Station - I].Zooplankton.Sta_ID;"
+"Zooplankton - 3 Cruise","SELECT",TRUE,"","SELECT [Zooplankton - 2 Station].Year, [Zooplankton - 2 Station].Cruise, Avg([Zooplankton - 2 Station].Date) AS Date, Avg([Zooplankton - 2 Station].Month) AS Month, Avg([Zooplankton - 2 Station].T_Zoo) AS T_Zoo, Avg([Zooplankton - 2 Station].S_Zoo) AS S_Zoo, Avg([Zooplankton - 2 Station].Log_TZoo) AS Log_TZoo, Avg([Zooplankton - 2 Station].Log_SZoo) AS Log_SZoo, Count([Zooplankton - 2 Station].T_Zoo) AS SampCount
+FROM [Zooplankton - 2 Station]
+GROUP BY [Zooplankton - 2 Station].Year, [Zooplankton - 2 Station].Cruise
+ORDER BY [Zooplankton - 2 Station].Cruise;"
+"Zooplankton - 4 Annual","SELECT",TRUE,"","SELECT [Zooplankton - 3 Cruise].Year, Avg([Zooplankton - 3 Cruise].Date) AS Date, Avg([Zooplankton - 3 Cruise].T_Zoo) AS T_Zoo, Avg([Zooplankton - 3 Cruise].S_Zoo) AS S_Zoo, Avg([Zooplankton - 3 Cruise].Log_TZoo) AS Log_TZoo, Avg([Zooplankton - 3 Cruise].Log_SZoo) AS Log_SZoo, Count([Zooplankton - 3 Cruise].T_Zoo) AS No_Cruises
+FROM [Zooplankton - 3 Cruise]
+WHERE ((([Zooplankton - 3 Cruise].Cruise)<>198505 And ([Zooplankton - 3 Cruise].Cruise)<>198711))
+GROUP BY [Zooplankton - 3 Cruise].Year;"
+"~sq_fCruises","SELECT",TRUE,"","SELECT DISTINCTROW *
+FROM Cruises;"
