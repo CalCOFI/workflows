@@ -29,9 +29,10 @@
 #   Rscript scripts/build_release_index.R --dry-run --out=DIR  # render to DIR to preview
 librarian::shelf(jsonlite, glue, quiet = TRUE)
 
-BUCKET   <- "calcofi-db"
-PREFIX   <- "ducklake/releases"
-HTTPS    <- glue("https://storage.googleapis.com/{BUCKET}/{PREFIX}")
+BUCKET     <- "calcofi-db"
+PREFIX     <- "ducklake/releases"
+BUCKET_URL <- glue("https://storage.googleapis.com/{BUCKET}")   # object keys hang off THIS
+HTTPS      <- glue("{BUCKET_URL}/{PREFIX}")                     # convenience for page links
 XML_API  <- glue("https://storage.googleapis.com/{BUCKET}")
 ARGV     <- commandArgs(trailingOnly = TRUE)
 DRY      <- any(ARGV %in% c("--dry-run", "-n"))
@@ -124,37 +125,58 @@ list_objects <- function(ver) {
 }
 
 # --- per-release page ---------------------------------------------------------
-release_page <- function(ver, is_latest) {
+# Object keys are absolute from the BUCKET root, so links must be built on
+# BUCKET_URL, not HTTPS (which already ends in /ducklake/releases). Prepending the
+# latter double-prefixed every link and returned "No such object".
+#
+# Large tables are hive-PARTITIONED DIRECTORIES (obs/dataset_key=…/data_0.parquet,
+# obs_ctd_full/cruise_key=…/data_0.parquet), not single files. Listing every key
+# and showing basename() collapsed all of them to a wall of identical
+# "data_0.parquet" rows and threw away the structure the names imply. So: group by
+# the first path segment under parquet/, render a single row per table, and give
+# each partitioned table its OWN nested index page listing its parts.
+release_page <- function(ver, is_latest, emit_child) {
   objs <- list_objects(ver)
-  cat_url <- glue("{HTTPS}/{ver}/catalog.json")
-  ctl <- tryCatch(fromJSON(cat_url, simplifyDataFrame = TRUE), error = function(e) NULL)
+  ctl <- tryCatch(fromJSON(glue("{HTTPS}/{ver}/catalog.json"), simplifyDataFrame = TRUE),
+                  error = function(e) NULL)
   tbls <- if (!is.null(ctl) && is.data.frame(ctl$tables)) ctl$tables else NULL
-
-  objs$base <- basename(objs$key)
-  pq <- objs[grepl("/parquet/", objs$key), ]
-  sc <- objs[!grepl("/parquet/", objs$key), ]
-
   rows_of <- function(nm) if (!is.null(tbls) && nm %in% tbls$name)
     tbls$rows[match(nm, tbls$name)] else NA
   supp_of <- function(nm) if (!is.null(tbls) && nm %in% tbls$name)
     isTRUE(tbls$supplemental[match(nm, tbls$name)]) else FALSE
 
-  pq_rows <- if (nrow(pq)) paste0(vapply(seq_len(nrow(pq)), function(i) {
-    nm <- sub("[.]parquet$", "", pq$base[i])
-    glue('<tr><td><a href="{HTTPS}/{pq$key[i]}">{esc(pq$base[i])}</a>',
-         '{if (supp_of(nm)) " <span class=\\"chip\\">supplemental</span>" else ""}</td>',
-         '<td class="num">{if (is.na(rows_of(nm))) "—" else fmt_n(rows_of(nm))}</td>',
-         '<td class="num">{fmt_mb(pq$size[i])}</td></tr>')
+  pq_pre <- glue("{PREFIX}/{ver}/parquet/")
+  is_pq  <- startsWith(objs$key, pq_pre)
+  pq     <- objs[is_pq, ]; sc <- objs[!is_pq, ]
+  pq$rel <- substring(pq$key, nchar(pq_pre) + 1)
+  pq$top <- sub("/.*$", "", pq$rel)                    # first segment == the table
+  pq$is_dir <- grepl("/", pq$rel)
+
+  tops <- unique(pq$top)
+  pq_rows <- if (length(tops)) paste0(vapply(sort(tops), function(tp) {
+    part <- pq[pq$top == tp, ]
+    nm   <- sub("[.]parquet$", "", tp)
+    chip <- if (supp_of(nm)) ' <span class="chip">supplemental</span>' else ""
+    rws  <- if (is.na(rows_of(nm))) "—" else fmt_n(rows_of(nm))
+    if (any(part$is_dir)) {                            # partitioned -> child page
+      emit_child(ver, tp, part)
+      glue('<tr><td><a href="{HTTPS}/{ver}/parquet/{tp}/index.html">{esc(tp)}/</a>{chip}',
+           ' <span class="chip">{nrow(part)} parts</span></td>',
+           '<td class="num">{rws}</td><td class="num">{fmt_mb(sum(part$size))}</td></tr>')
+    } else {
+      glue('<tr><td><a href="{BUCKET_URL}/{part$key[1]}">{esc(tp)}</a>{chip}</td>',
+           '<td class="num">{rws}</td><td class="num">{fmt_mb(part$size[1])}</td></tr>')
+    }
   }, character(1)), collapse = "\n") else '<tr><td colspan="3">(none)</td></tr>'
 
   sc_rows <- if (nrow(sc)) paste0(vapply(seq_len(nrow(sc)), function(i)
-    glue('<tr><td><a href="{HTTPS}/{sc$key[i]}">{esc(sc$base[i])}</a></td>',
+    glue('<tr><td><a href="{BUCKET_URL}/{sc$key[i]}">{esc(basename(sc$key[i]))}</a></td>',
          '<td class="num">{fmt_mb(sc$size[i])}</td></tr>'), character(1)),
     collapse = "\n") else '<tr><td colspan="2">(none)</td></tr>'
 
   body <- glue('
 <div class="scroll"><table>
-<thead><tr><th>table (parquet)</th><th style="text-align:right">rows</th><th style="text-align:right">size</th></tr></thead>
+<thead><tr><th>table</th><th style="text-align:right">rows</th><th style="text-align:right">size</th></tr></thead>
 <tbody>
 {pq_rows}
 </tbody></table></div>
@@ -168,15 +190,47 @@ release_page <- function(ver, is_latest) {
 </tbody></table></div>
 
 <div class="note">
-Read directly with DuckDB — no download needed:<br>
-<code>SELECT * FROM read_parquet(\'{HTTPS}/{ver}/parquet/obs.parquet\') LIMIT 10;</code>
+Read directly with DuckDB — no download needed. A single-file table:<br>
+<code>SELECT * FROM read_parquet(\'{BUCKET_URL}/{PREFIX}/{ver}/parquet/sample.parquet\') LIMIT 10;</code>
+<br><br>
+A <b>partitioned</b> table (note the <code>/**/*.parquet</code> glob and
+<code>hive_partitioning</code>, which turns the directory names into a real column):<br>
+<code>SELECT * FROM read_parquet(\'{BUCKET_URL}/{PREFIX}/{ver}/parquet/obs_ctd_full/**/*.parquet\',
+hive_partitioning = true) LIMIT 10;</code>
 </div>')
 
-  sub <- glue('{ctl$release_date %||% ""} · {nrow(pq)} tables · ',
+  sub <- glue('{ctl$release_date %||% ""} · {length(tops)} tables · ',
               '{fmt_n(ctl$total_rows %||% 0)} rows · {fmt_mb(ctl$total_size %||% NA)}',
               '{if (is_latest) " · <span class=\\"chip\\">latest</span>" else ""}')
   page(glue("CalCOFI release {ver}"), sub, body,
        crumb = glue('<p class="crumb"><a href="{HTTPS}/index.html">← all releases</a></p>'))
+}
+
+# --- page for one partitioned table (its parts, structure preserved) -----------
+partition_page <- function(ver, tp, part) {
+  part <- part[order(part$rel), ]
+  rows <- paste0(vapply(seq_len(nrow(part)), function(i) {
+    sub_path <- substring(part$rel[i], nchar(tp) + 2)   # drop "<tp>/"
+    glue('<tr><td><a href="{BUCKET_URL}/{part$key[i]}">{esc(sub_path)}</a></td>',
+         '<td class="num">{fmt_mb(part$size[i])}</td></tr>')
+  }, character(1)), collapse = "\n")
+  body <- glue('
+<div class="scroll"><table>
+<thead><tr><th>partition / file</th><th style="text-align:right">size</th></tr></thead>
+<tbody>
+{rows}
+</tbody></table></div>
+
+<div class="note">
+Query every partition at once rather than downloading them individually —
+<code>hive_partitioning</code> exposes the directory name as a column you can filter on:<br>
+<code>SELECT * FROM read_parquet(\'{BUCKET_URL}/{PREFIX}/{ver}/parquet/{tp}/**/*.parquet\',
+hive_partitioning = true) LIMIT 10;</code>
+</div>')
+  page(glue("{tp} — {ver}"),
+       glue("{nrow(part)} partitions · {fmt_mb(sum(part$size))}"), body,
+       crumb = glue('<p class="crumb"><a href="{HTTPS}/index.html">all releases</a> / ',
+                    '<a href="{HTTPS}/{ver}/index.html">{ver}</a></p>'))
 }
 
 # --- root page ----------------------------------------------------------------
@@ -219,8 +273,16 @@ targets <- list(list(local = file.path(tmp, "root.html"),
                      gcs = glue("gs://{BUCKET}/{PREFIX}/index.html")))
 
 for (v in versions) {
+  # release_page calls back here for each partitioned table so its child page is
+  # written in the same pass (and lands next to the parts it describes)
+  emit_child <- function(ver, tp, part) {
+    cf <- file.path(tmp, glue("{ver}__{gsub('[^A-Za-z0-9]', '_', tp)}.html"))
+    writeLines(partition_page(ver, tp, part), cf)
+    targets[[length(targets) + 1]] <<- list(local = cf,
+      gcs = glue("gs://{BUCKET}/{PREFIX}/{ver}/parquet/{tp}/index.html"))
+  }
   f <- file.path(tmp, glue("{v$version}.html"))
-  writeLines(release_page(v$version, identical(v$version, latest)), f)
+  writeLines(release_page(v$version, identical(v$version, latest), emit_child), f)
   targets[[length(targets) + 1]] <- list(local = f,
     gcs = glue("gs://{BUCKET}/{PREFIX}/{v$version}/index.html"))
   message(glue("  rendered {v$version}"))
