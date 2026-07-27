@@ -38,16 +38,24 @@ BUCKETS <- list(
        desc  = paste("Versioned Parquet releases of the integrated CalCOFI database —",
                      "observations, samples, taxonomy and reference tables, plus",
                      "machine-readable catalog/metadata sidecars for each release."),
-       entry = "ducklake/releases/"),
+       entry = "ducklake/releases/",
+       # Directories with their OWN richer generator. The generic walker must not
+       # emit pages here: build_release_index.R publishes per-release pages with
+       # row counts, catalog data and the partitioned/single-file explanation, and
+       # a plain file listing written on top would silently destroy all of that.
+       skip  = "^ducklake/releases(/|$)"),
   list(name  = "calcofi-files-public",
        title = "Published files",
        desc  = paste("Derived products published for download, including whole-dataset",
                      "CF NetCDF files, spatial layers and sync manifests."),
-       entry = ""),
+       # netcdf/ is owned by the per-dataset publish notebooks, which write a
+       # curated page (provenance, CF structure, how to read it). A generic file
+       # listing on top would erase that.
+       entry = "", skip = "^netcdf(/|$)"),
   list(name  = "calcofi-projects",
        title = "Project outputs",
        desc  = "Outputs from individual CalCOFI projects and analyses.",
-       entry = "")
+       entry = "", skip = NA_character_)
 )
 
 # --- root page ----------------------------------------------------------------
@@ -91,58 +99,113 @@ pages <- list(list(
   gcs  = glue("gs://calcofi-files-public/_index/storage.html"),
   file = "root.html"))
 
-# --- one index per bucket -----------------------------------------------------
-# Top-level entries only: these buckets hold tens of thousands of objects, so a
-# flat listing would be unusable (and slow). Folders link onward; where a folder
-# has its own generated index (e.g. ducklake/releases/) that page takes over.
+# --- one index per DIRECTORY, for every bucket ----------------------------------
+# The first version generated only bucket-root pages, then linked every folder to
+# `/<bucket>/<folder>/` — URLs with no object behind them, so every link 404'd
+# with NoSuchKey. On object storage a browsable folder only exists if we publish
+# an index.html for it, so we walk the whole tree and emit one per directory.
 for (b in BUCKETS) {
-  objs <- gcs_list(b$name, prefix = "", max_keys = 5000)
+  message(glue("  listing {b$name} ..."))
+  objs <- gcs_list_all(b$name)
+  if (isTRUE(attr(objs, "truncated")))
+    message(glue("  WARNING: {b$name} listing truncated — pages will be incomplete"))
+  # never index our own generated pages
+  objs <- objs[!grepl("(^|/)index\\.html$", objs$key), , drop = FALSE]
   if (!nrow(objs)) {
-    body <- '<div class="note">This bucket is empty, or its listing is not public.</div>'
+    dirs <- ""
   } else {
-    top    <- sub("/.*$", "", objs$key)
-    is_dir <- grepl("/", objs$key)
-    agg <- do.call(rbind, lapply(sort(unique(top)), function(tp) {
+    parts <- strsplit(objs$key, "/", fixed = TRUE)
+    dirs  <- unique(c("", unlist(lapply(parts, function(p)
+      if (length(p) > 1) vapply(seq_len(length(p) - 1),
+        function(i) paste(p[seq_len(i)], collapse = "/"), character(1)) else NULL))))
+  }
+  message(glue("    {nrow(objs)} objects -> {length(dirs)} directory pages"))
+
+  skip_re <- b$skip %||% NA_character_
+  if (!is.na(skip_re)) {
+    n0 <- length(dirs); dirs <- dirs[!grepl(skip_re, dirs)]
+    message(glue("    skipping {n0 - length(dirs)} dirs owned by another generator ({skip_re})"))
+  }
+  for (d in dirs) {
+    pre  <- if (nzchar(d)) paste0(d, "/") else ""
+    here <- objs[startsWith(objs$key, pre), , drop = FALSE]
+    rel  <- substring(here$key, nchar(pre) + 1)
+    top  <- sub("/.*$", "", rel)
+    isd  <- grepl("/", rel)
+    agg  <- do.call(rbind, lapply(sort(unique(top)), function(tp) {
       sel <- top == tp
-      data.frame(name = tp, dir = any(is_dir[sel]), n = sum(sel),
-                 size = sum(objs$size[sel]), stringsAsFactors = FALSE)
+      data.frame(name = tp, dir = any(isd[sel]), n = sum(sel),
+                 size = sum(here$size[sel]), stringsAsFactors = FALSE)
     }))
+    agg <- agg[order(!agg$dir, agg$name), , drop = FALSE]   # folders first
     rows <- paste0(vapply(seq_len(nrow(agg)), function(i) {
       a <- agg[i, ]
-      href <- if (a$dir) glue("{SITE_URL}/{b$name}/{a$name}/")
-              else glue("{GCS_HOST}/{b$name}/{a$name}")
-      label <- if (a$dir) glue("{esc(a$name)}/") else esc(a$name)
-      cnt <- if (a$dir) glue('<span class="chip">{fmt_n(a$n)} objects</span>') else ""
-      glue('<tr><td><a href="{href}">{label}</a> {cnt}</td>',
+      href <- if (a$dir) glue("{SITE_URL}/{b$name}/{pre}{a$name}/")
+              else       glue("{GCS_HOST}/{b$name}/{pre}{a$name}")
+      lbl  <- if (a$dir) glue("{esc(a$name)}/") else esc(a$name)
+      cnt  <- if (a$dir) glue(' <span class="chip">{fmt_n(a$n)}</span>') else ""
+      glue('<tr><td><a href="{href}">{lbl}</a>{cnt}</td>',
            '<td class="num">{fmt_mb(a$size)}</td></tr>')
     }, character(1)), collapse = "\n")
+
+    # breadcrumb back up through every ancestor
+    segs <- if (nzchar(d)) strsplit(d, "/", fixed = TRUE)[[1]] else character()
+    crumb <- glue('<a href="{SITE_URL}/">storage</a> / <a href="{SITE_URL}/{b$name}/">{b$name}</a>')
+    acc <- ""
+    for (s in segs) {
+      acc <- if (nzchar(acc)) paste0(acc, "/", s) else s
+      crumb <- glue('{crumb} / <a href="{SITE_URL}/{b$name}/{acc}/">{esc(s)}</a>')
+    }
     body <- glue('
 <div class="scroll"><table>
-<thead><tr><th>entry</th><th style="text-align:right">size</th></tr></thead>
+<thead><tr><th>name</th><th style="text-align:right">size</th></tr></thead>
 <tbody>
 {rows}
-</tbody></table></div>
-<div class="note">Top-level entries only. Folders that have their own generated
-index (such as <code>ducklake/releases/</code>) open into it.</div>')
+</tbody></table></div>')
+    sub <- glue("{fmt_n(nrow(agg))} entries · {fmt_mb(sum(agg$size))}")
+    ttl <- if (nzchar(d)) glue("{b$name}/{d}") else b$name
+    pages[[length(pages) + 1]] <- list(
+      html = page(ttl, if (nzchar(d)) sub else esc(b$desc), body,
+                  crumb = glue('<p class="crumb">{crumb}</p>')),
+      gcs  = glue("gs://{b$name}/{pre}index.html"),
+      file = file.path(b$name, pre, "index.html"))
   }
-  pages[[length(pages) + 1]] <- list(
-    html = page(glue("{b$name}"), esc(b$desc), body,
-                crumb = glue('<p class="crumb"><a href="{SITE_URL}/">← all buckets</a></p>')),
-    gcs  = glue("gs://{b$name}/index.html"),
-    file = glue("{b$name}.html"))
-  message(glue("  rendered {b$name}"))
 }
 
 # --- write / upload -----------------------------------------------------------
+# Upload is ONE batched recursive copy of a local mirror, not a gcloud invocation
+# per page: with ~1.5k directory pages, per-file calls (a few seconds of process
+# startup each) would take hours.
 tmp <- if (!is.na(OUT_DIR)) OUT_DIR else file.path(tempdir(), "storage_index")
-dir.create(tmp, showWarnings = FALSE, recursive = TRUE)
-for (p in pages) writeLines(p$html, file.path(tmp, p$file))
+unlink(tmp, recursive = TRUE); dir.create(tmp, showWarnings = FALSE, recursive = TRUE)
+for (p in pages) {
+  f <- file.path(tmp, p$file)
+  dir.create(dirname(f), showWarnings = FALSE, recursive = TRUE)
+  writeLines(p$html, f)
+}
+message(glue("  wrote {length(pages)} pages to {tmp}"))
 
 if (DRY) {
-  cat("\nDRY RUN — nothing uploaded:\n")
-  for (p in pages) cat(sprintf("  %s  ->  %s\n", file.path(tmp, p$file), p$gcs))
+  cat(glue("\nDRY RUN — {length(pages)} pages under {tmp}, nothing uploaded\n"))
+  cat("  sample:\n")
+  for (p in head(pages, 6)) cat(sprintf("    %s\n", p$gcs))
 } else {
-  for (p in pages) gcs_upload(file.path(tmp, p$file), p$gcs)
+  gcloud <- Sys.which("gcloud")
+  sub <- if (system2(gcloud, c("storage", "--help"), stdout = FALSE, stderr = FALSE) == 0)
+    "storage" else c("alpha", "storage")
+  # root page lives in a bucket but is not part of a bucket mirror
+  root <- Filter(function(p) !grepl("/", p$file), pages)
+  for (p in root) gcs_upload(file.path(tmp, p$file), p$gcs)
+  for (b in BUCKETS) {
+    d <- file.path(tmp, b$name)
+    if (!dir.exists(d)) next
+    message(glue("  uploading {b$name} pages ..."))
+    res <- system2(gcloud, c(sub, "cp", "--recursive", "--content-type=text/html",
+                             "--cache-control=no-cache",
+                             shQuote(file.path(d, ".")), shQuote(glue("gs://{b$name}/"))),
+                   stdout = TRUE, stderr = TRUE)
+    if (!is.null(attr(res, "status"))) warning(glue("upload failed for {b$name}"))
+  }
   cat(glue("\nuploaded {length(pages)} pages\n"))
   cat(glue("  root:   {SITE_URL}/\n"))
   for (b in BUCKETS) cat(glue("  bucket: {SITE_URL}/{b$name}/\n"))

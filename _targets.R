@@ -22,6 +22,6 @@ library(calcofi4db) # remotes::install_github("calcofi/calcofi4db"); remotes::in
 Sys.setenv(QUARTO_CHROMIUM_HEADLESS_MODE = "new")
 
 build_targets_list(
-  # exclude = c("ingest_calcofi_ctd-cast", "publish_ichthyo_to_obis")
-  exclude = c("publish_ichthyo_to_obis")
+  # exclude = c("ingest_calcofi_ctd-cast", "publish_ichthyo_to-obis")
+  exclude = c("publish_ichthyo_to-obis")
 )

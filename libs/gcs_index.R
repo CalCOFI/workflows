@@ -115,3 +115,36 @@ gcs_upload <- function(local, gcs, content_type = "text/html",
   if (!is.null(attr(res, "status"))) warning(glue("upload failed: {gcs}"))
   invisible(res)
 }
+
+#' List EVERY object in a bucket, paginating the XML API.
+#'
+#' The single-request gcs_list() silently stops at max-keys, which for a bucket
+#' with 200k+ objects means a directory tree that looks complete and is not. This
+#' pages through with `marker` and reports explicitly when it hits `cap`, because
+#' a truncated listing produces index pages that omit files without saying so.
+#' @return data.frame(key, size) plus attr(, "truncated")
+gcs_list_all <- function(bucket, cap = 250000, quiet = FALSE) {
+  keys <- character(); sizes <- numeric(); marker <- NULL; truncated <- FALSE
+  repeat {
+    u <- glue("{GCS_HOST}/{bucket}?max-keys=1000")
+    if (!is.null(marker)) u <- glue("{u}&marker={utils::URLencode(marker, reserved = TRUE)}")
+    x <- tryCatch(paste(readLines(url(u), warn = FALSE), collapse = ""),
+                  error = function(e) "")
+    k <- regmatches(x, gregexpr("(?<=<Key>)[^<]+", x, perl = TRUE))[[1]]
+    s <- regmatches(x, gregexpr("(?<=<Size>)[0-9]+", x, perl = TRUE))[[1]]
+    if (!length(k)) break
+    n <- min(length(k), length(s))
+    keys <- c(keys, k[seq_len(n)]); sizes <- c(sizes, as.numeric(s[seq_len(n)]))
+    more <- grepl("<IsTruncated>true", x, fixed = TRUE)
+    if (!quiet && length(keys) %% 10000 < 1000)
+      message(glue("    {bucket}: {length(keys)} objects ..."))
+    if (!more) break
+    if (length(keys) >= cap) { truncated <- TRUE; break }
+    marker <- k[length(k)]
+  }
+  if (truncated)
+    warning(glue("{bucket}: stopped at cap={cap}; directory pages will be INCOMPLETE"))
+  out <- data.frame(key = keys, size = sizes, stringsAsFactors = FALSE)
+  attr(out, "truncated") <- truncated
+  out
+}
