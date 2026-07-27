@@ -31,12 +31,34 @@ for f in "${FILES[@]}"; do
   [ -f "$SRC/$f" ] || { echo "missing $SRC/$f — run gen_ctd_lumped.R netcdf" >&2; exit 1; }
 done
 
+# `gcloud storage` is not in the default release track on every host (the CalCOFI
+# server only has it under `alpha`), so pick a working uploader once rather than
+# assuming. gsutil is the last resort — it takes content-type differently.
+if gcloud storage --help >/dev/null 2>&1;       then UPLOADER="gcloud-storage"
+elif gcloud alpha storage --help >/dev/null 2>&1; then UPLOADER="gcloud-alpha"
+elif command -v gsutil >/dev/null 2>&1;         then UPLOADER="gsutil"
+else echo "no gcloud storage / gsutil available" >&2; exit 1; fi
+echo "==> uploader: $UPLOADER"
+
+gcs_cp() {  # $1=local $2=gs:// dest $3=content-type [$4=cache-control]
+  local cc_args=()
+  case "$UPLOADER" in
+    gcloud-storage|gcloud-alpha)
+      local sub=(storage); [ "$UPLOADER" = gcloud-alpha ] && sub=(alpha storage)
+      cc_args=(--content-type="$3"); [ -n "${4:-}" ] && cc_args+=(--cache-control="$4")
+      gcloud "${sub[@]}" cp "${cc_args[@]}" "$1" "$2" ;;
+    gsutil)
+      local hdrs=(-h "Content-Type:$3"); [ -n "${4:-}" ] && hdrs+=(-h "Cache-Control:$4")
+      gsutil "${hdrs[@]}" cp "$1" "$2" ;;
+  esac
+}
+
 echo "==> uploading $(echo "${FILES[@]}" | wc -w) whole-dataset NetCDF -> $DEST"
 for f in "${FILES[@]}"; do
   base=$(basename "$f")
   sz=$(du -h "$SRC/$f" | cut -f1)
   echo "    $base ($sz)"
-  gcloud storage cp --content-type=application/x-netcdf "$SRC/$f" "$DEST/$base"
+  gcs_cp "$SRC/$f" "$DEST/$base" "application/x-netcdf"
 done
 
 # rows for the index, computed from what we just uploaded
@@ -101,8 +123,7 @@ headline table; <code>ctd_measurement</code> is the full-resolution record.
 </div></body></html>
 HTML
 
-gcloud storage cp --content-type=text/html --cache-control=no-cache \
-  "$TMP/index.html" "$DEST/index.html"
+gcs_cp "$TMP/index.html" "$DEST/index.html" "text/html" "no-cache"
 rm -rf "$TMP"
 
 echo
