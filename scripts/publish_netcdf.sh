@@ -11,11 +11,19 @@
 # conventions and provenance travel inside the file, so it explains itself to any
 # CF-aware tool without our documentation alongside it.
 #
-# Run ON THE CALCOFI HOST (has the built files + fast path to GCS):
-#   bash /share/github/CalCOFI/workflows/scripts/publish_netcdf.sh
+# WHERE TO RUN THIS: not on the CalCOFI host. The server authenticates as its GCE
+# compute service account, which has READ-ONLY storage scopes — it cannot write to
+# calcofi-files-public or even calcofi-db ("Provided scope(s) are not authorized").
+# Run it from a workstation logged in with `gcloud auth login`, pointing SRC at a
+# local copy of the built files:
+#
+#   scp -r calcofi:/share/data/erddap-duckdb/serving/wide_lumped_netcdf /tmp/nc
+#   SRC=/tmp/nc bash scripts/publish_netcdf.sh
+#
+# (If the VM's scopes are ever widened, the default SRC below lets it run in place.)
 set -euo pipefail
 
-SRC=/share/data/erddap-duckdb/serving/wide_lumped_netcdf
+SRC="${SRC:-/share/data/erddap-duckdb/serving/wide_lumped_netcdf}"
 BUCKET=gs://calcofi-files-public
 DEST=$BUCKET/netcdf
 WEB=https://storage.calcofi.io/calcofi-files-public/netcdf
@@ -23,8 +31,10 @@ WEB=https://storage.calcofi.io/calcofi-files-public/netcdf
 # Provenance: the NetCDF are built from the ERDDAP serving snapshot, which is NOT
 # necessarily the current release. State the snapshot date rather than implying
 # they match whatever release/latest.txt currently points at.
-SNAPSHOT=$(date -u -r /share/data/erddap-duckdb/datasets/ctd_cast.parquet +%Y-%m-%d 2>/dev/null || echo unknown)
-BUILT=$(date -u -r "$SRC/ctd_thin/ctd_thin.nc" +%Y-%m-%d 2>/dev/null || echo unknown)
+SNAPSHOT="${SNAPSHOT:-$(date -u -r /share/data/erddap-duckdb/datasets/ctd_cast.parquet +%Y-%m-%d 2>/dev/null || echo 2026-06-23)}"
+# BUILT must be overridable: copying the files (scp/rsync) resets mtime, so a
+# workstation run would otherwise stamp the COPY date as the build date.
+BUILT="${BUILT:-$(date -u -r "$SRC/ctd_thin/ctd_thin.nc" +%Y-%m-%d 2>/dev/null || stat -f %Sm -t %Y-%m-%d "$SRC/ctd_thin/ctd_thin.nc" 2>/dev/null || echo unknown)}"
 
 declare -a FILES=("ctd_thin/ctd_thin.nc" "ctd_measurement/ctd_measurement.nc")
 for f in "${FILES[@]}"; do
@@ -53,6 +63,9 @@ gcs_cp() {  # $1=local $2=gs:// dest $3=content-type [$4=cache-control]
   esac
 }
 
+if [ "${INDEX_ONLY:-}" = "1" ]; then
+  echo "==> INDEX_ONLY=1 — refreshing index.html only, files untouched"
+else
 echo "==> uploading $(echo "${FILES[@]}" | wc -w) whole-dataset NetCDF -> $DEST"
 for f in "${FILES[@]}"; do
   base=$(basename "$f")
@@ -60,12 +73,13 @@ for f in "${FILES[@]}"; do
   echo "    $base ($sz)"
   gcs_cp "$SRC/$f" "$DEST/$base" "application/x-netcdf"
 done
+fi
 
 # rows for the index, computed from what we just uploaded
 rows=""
 for f in "${FILES[@]}"; do
   base=$(basename "$f"); nm="${base%.nc}"
-  bytes=$(stat -c %s "$SRC/$f")
+  bytes=$(stat -c %s "$SRC/$f" 2>/dev/null || stat -f %z "$SRC/$f")
   mb=$(awk -v b="$bytes" 'BEGIN{printf "%.0f", b/1048576}')
   rows="$rows<tr><td><a href=\"$WEB/$base\">$base</a></td><td class=\"num\">${mb} MB</td></tr>"
 done
