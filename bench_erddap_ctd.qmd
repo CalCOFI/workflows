@@ -446,7 +446,15 @@ deployment is one path.
 ### 6.1 · One serving path: DuckDB views over the integrated release Parquet
 
 **Serve every dataset through `EDDTableFromDatabase` over DuckDB views on the
-CalCOFI integrated release Parquet, in long format.** Concretely:
+CalCOFI integrated release Parquet, in long format.**
+
+To be unambiguous, since "one serving path" invites the wrong reading: this means
+**one `datasetID` per source dataset**, exactly as now — CTD, bottle, zooplankton,
+ichthyoplankton, DIC each keep their own ERDDAP entry with their own title,
+abstract, citation, PIs and coverage. Per-dataset metadata is the point of a data
+portal and is not up for consolidation. What is standardized is the *plumbing*
+beneath those entries: one backend, one schema, one place the data comes from.
+**Not** a single merged `obs` dataset. Concretely:
 
 - **One backend.** A 274 KB `.db` of views on stock ERDDAP (only the DuckDB JDBC
   jar added). Nothing is copied or re-materialized — the views read the same
