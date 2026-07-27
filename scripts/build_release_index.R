@@ -174,6 +174,24 @@ release_page <- function(ver, is_latest, emit_child) {
          '<td class="num">{fmt_mb(sc$size[i])}</td></tr>'), character(1)),
     collapse = "\n") else '<tr><td colspan="2">(none)</td></tr>'
 
+  # A table published BOTH partitioned and as a single file looks like a mistake on
+  # a listing page. It is deliberate — say so here rather than leaving readers to
+  # guess (or "tidy up" the copy something depends on).
+  dup <- intersect(sub("[.]parquet$", "", tops[grepl("[.]parquet$", tops)]),
+                   tops[!grepl("[.]parquet$", tops)])
+  dup_note <- if (length(dup)) glue(
+    '<div class="note"><b>Why {paste(sprintf("<code>%s</code>", dup), collapse=", ")} ',
+    'appears twice.</b> Each is published both as a Hive-partitioned directory and ',
+    'as a single <code>.parquet</code> file, on purpose — they are the same rows.<br><br>',
+    'The <b>partitioned</b> form lets DuckDB, R and Python skip whole partitions when ',
+    'you filter on the partition column, so it is the faster choice for most analysis. ',
+    'The <b>single-file</b> form exists because plain HTTPS has no directory listing: ',
+    'browser DuckDB-WASM (which powers ',
+    '<a href="https://calcofi.io/db-query/">calcofi.io/db-query</a>) and other ',
+    'HTTPS-only consumers cannot expand a <code>/**/*.parquet</code> glob against ',
+    'cloud storage, so they need one addressable object. Removing either breaks a ',
+    'real consumer.</div>') else ""
+
   body <- glue('
 <div class="scroll"><table>
 <thead><tr><th>table</th><th style="text-align:right">rows</th><th style="text-align:right">size</th></tr></thead>
@@ -188,6 +206,8 @@ release_page <- function(ver, is_latest, emit_child) {
 <tbody>
 {sc_rows}
 </tbody></table></div>
+
+{dup_note}
 
 <div class="note">
 Read directly with DuckDB — no download needed. A single-file table:<br>
