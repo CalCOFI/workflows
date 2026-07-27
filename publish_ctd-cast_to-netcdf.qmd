@@ -1,0 +1,258 @@
+---
+title: "Publish CTD casts to CF NetCDF"
+subtitle: "A true CF Discrete-Sampling-Geometry profile dataset — one profile per cast, sensors as variables"
+author: "CalCOFI"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: true
+    code-tools: true
+    df-print: kable
+calcofi:
+  target_name: publish_ctd-cast_to-netcdf
+  workflow_type: publish
+  dependency:
+    - release_database
+  provider: calcofi
+  dataset: ctd-cast
+  output: data/netcdf/ctd-cast.nc
+  workflow_url: https://calcofi.io/workflows/publish_ctd-cast_to-netcdf.html
+editor_options:
+  chunk_output_type: console
+---
+
+## Overview
+
+Publish the CalCOFI CTD record as a **CF Discrete-Sampling-Geometry profile
+dataset**, downstream of `release_database`.
+
+This is the *simple* end of the publish range, and deliberately so — it is the
+counterpart to
+[`publish_ichthyo_to-netcdf`](https://calcofi.io/workflows/publish_ichthyo_to-netcdf.html),
+which handles the deeply nested case. CTD needs no netCDF-4 groups:
+
+| | ichthyo | **ctd-cast** |
+|---|---|---|
+| hierarchy | site → tow → net → occurrence → bin | **flat: cast → depth level** |
+| CF status | CF where it applies; groups elsewhere | **fully CF (`featureType=Profile`)** |
+| structure | netCDF-4 groups + `parent_index` | **contiguous ragged array (`rowSize`)** |
+
+A CTD cast *is* a CF profile: one instance, a vertical series of depth levels,
+each sensor its own variable. So this file is genuinely CF-compliant end to end —
+no caveat needed — and any CF-aware tool will read it without special handling.
+
+::: {.callout-note title="Why the widening still matters"}
+The database stores CTD in long form: one row per cast × depth ×
+`measurement_type`, 5.55 M rows over 15 sensor types. A single
+`measurement_value` column therefore mixes °C, PSU, mL/L and volts. CF requires
+one unit per variable, so each `measurement_type` becomes its own variable with
+its own `units` and `long_name`. That widening is what turns a queryable table
+into a self-documenting file.
+:::
+
+## Setup
+
+```{r}
+#| label: setup
+#| message: false
+#| warning: false
+
+librarian::shelf(DBI, duckdb, dplyr, glue, ncdf4, readr, jsonlite, digest,
+                 knitr, tibble, here, quiet = TRUE)
+here <- here::here
+source(here("libs/publish_netcdf.R"))
+
+DATASET     <- "ctd-cast"
+DATASET_KEY <- "calcofi_ctd-cast"
+RELEASE     <- cc_release_version()      # PROMOTED release, never a serving tree
+PQ          <- cc_release_parquet(RELEASE)
+OUT_DIR     <- here("data/netcdf"); dir.create(OUT_DIR, recursive = TRUE, showWarnings = FALSE)
+OUT_NC      <- file.path(OUT_DIR, glue("{DATASET}.nc"))
+PUBLISH     <- identical(Sys.getenv("CALCOFI_PUBLISH"), "true")
+
+cat(glue("release : {RELEASE}\nparquet : {PQ}\noutput  : {OUT_NC}\npublish : {PUBLISH}\n"))
+```
+
+```{r}
+#| label: connect
+con <- dbConnect(duckdb())
+for (s in c("INSTALL httpfs", "LOAD httpfs", "SET memory_limit='6GB'",
+            "SET enable_progress_bar=false")) try(dbExecute(con, s), silent = TRUE)
+q <- function(sql, ...) dbGetQuery(con, glue(sql, ..., .envir = parent.frame()))
+
+dbExecute(con, glue("
+  CREATE VIEW smp AS SELECT * FROM read_parquet('{PQ}/sample.parquet')
+                     WHERE dataset_key = '{DATASET_KEY}';
+  CREATE VIEW obs AS SELECT * FROM read_parquet('{PQ}/obs/dataset_key={DATASET_KEY}/data_0.parquet');"))
+```
+
+## Shape and integrity
+
+```{r}
+#| label: integrity
+shape <- q("
+  SELECT (SELECT count(*) FROM smp WHERE sample_type='cast')       AS casts_in_sample,
+         (SELECT count(DISTINCT sample_key) FROM obs)              AS casts_with_obs,
+         (SELECT count(*) FROM obs)                                AS obs_rows,
+         (SELECT count(DISTINCT measurement_type) FROM obs)        AS sensor_types")
+kable(shape)
+
+# A profile must have a well-defined depth axis: one value per (cast, depth,
+# measurement_type). Duplicates there would silently collapse in the pivot below,
+# so check rather than assume.
+dupes <- q("
+  SELECT count(*) AS n FROM (
+    SELECT sample_key, depth_min_m, measurement_type
+    FROM obs GROUP BY 1,2,3 HAVING count(*) > 1)")$n
+cat(glue("duplicate (cast, depth, measurement_type) triples: {dupes}\n"))
+```
+
+```{r}
+#| label: pivot
+# WIDEN: measurement_type -> one variable each, ordered by (cast, depth) so the
+# profiles are contiguous — which is what a CF contiguous ragged array requires.
+types <- q("SELECT DISTINCT measurement_type FROM obs ORDER BY 1")$measurement_type
+sel <- paste(sprintf(
+  "MAX(measurement_value) FILTER (WHERE measurement_type='%s')::DOUBLE AS \"%s\"",
+  types, types), collapse = ",\n    ")
+
+prof <- q("
+  SELECT o.sample_key                       AS profile_id,
+         any_value(s.cruise_key)            AS cruise_key,
+         any_value(s.grid_key)              AS grid_key,
+         epoch(any_value(s.datetime))::DOUBLE AS time,
+         any_value(s.latitude)::DOUBLE      AS latitude,
+         any_value(s.longitude)::DOUBLE     AS longitude,
+         o.depth_min_m::DOUBLE              AS depth,
+         {sel}
+  FROM obs o LEFT JOIN smp s ON s.sample_key = o.sample_key
+  GROUP BY o.sample_key, o.depth_min_m
+  ORDER BY o.sample_key, o.depth_min_m")
+
+cat(glue("wide rows (cast x depth): {nrow(prof)}\n"))
+cat(glue("sensor variables        : {length(types)}\n"))
+```
+
+## Write the CF profile file
+
+```{r}
+#| label: write-nc
+mt_meta <- cc_measurement_meta(here())
+
+prof_ids <- unique(prof$profile_id)
+row_size <- as.integer(table(factor(prof$profile_id, levels = prof_ids)))
+first_ix <- match(prof_ids, prof$profile_id)
+stopifnot(sum(row_size) == nrow(prof))
+
+STRLEN <- 64L
+FILL   <- 9.969209968386869e36
+d_prof <- ncdim_def("profile", "", seq_along(prof_ids), create_dimvar = FALSE)
+d_obs  <- ncdim_def("obs",     "", seq_len(nrow(prof)), create_dimvar = FALSE)
+d_str  <- ncdim_def("name_strlen", "", seq_len(STRLEN), create_dimvar = FALSE)
+
+v_pid  <- ncvar_def("profile_id", "", list(d_str, d_prof), prec = "char")
+v_cru  <- ncvar_def("cruise_key", "", list(d_str, d_prof), prec = "char")
+v_grd  <- ncvar_def("grid_key",   "", list(d_str, d_prof), prec = "char")
+v_time <- ncvar_def("time", "seconds since 1970-01-01T00:00:00Z", d_prof, prec = "double")
+v_lat  <- ncvar_def("latitude",  "degrees_north", d_prof, prec = "double")
+v_lon  <- ncvar_def("longitude", "degrees_east",  d_prof, prec = "double")
+v_rs   <- ncvar_def("rowSize",   "",              d_prof, prec = "integer")
+v_dep  <- ncvar_def("depth", "m", d_obs, prec = "double", missval = FILL)
+v_sens <- lapply(types, function(v) ncvar_def(
+  v, as.character(mt_meta[[v]]$units %||% ""), d_obs, prec = "double", missval = FILL))
+
+unlink(OUT_NC)
+nc <- nc_create(OUT_NC, c(list(v_pid, v_cru, v_grd, v_time, v_lat, v_lon, v_rs, v_dep),
+                          v_sens), force_v4 = TRUE)
+ncvar_put(nc, v_pid,  prof_ids)
+ncvar_put(nc, v_cru,  prof$cruise_key[first_ix])
+ncvar_put(nc, v_grd,  prof$grid_key[first_ix])
+ncvar_put(nc, v_time, prof$time[first_ix])
+ncvar_put(nc, v_lat,  prof$latitude[first_ix])
+ncvar_put(nc, v_lon,  prof$longitude[first_ix])
+ncvar_put(nc, v_rs,   row_size)
+ncvar_put(nc, v_dep,  prof$depth)
+for (i in seq_along(types)) ncvar_put(nc, v_sens[[i]], prof[[types[i]]])
+
+# CF DSG attributes — these are what make it a profile dataset rather than a
+# table that happens to be in netCDF.
+ncatt_put(nc, "profile_id", "cf_role", "profile_id")
+ncatt_put(nc, "profile_id", "long_name", "CTD cast identifier")
+ncatt_put(nc, "time", "standard_name", "time");      ncatt_put(nc, "time", "axis", "T")
+ncatt_put(nc, "latitude",  "standard_name", "latitude");  ncatt_put(nc, "latitude", "axis", "Y")
+ncatt_put(nc, "longitude", "standard_name", "longitude"); ncatt_put(nc, "longitude", "axis", "X")
+ncatt_put(nc, "depth", "standard_name", "depth"); ncatt_put(nc, "depth", "axis", "Z")
+ncatt_put(nc, "depth", "positive", "down")
+ncatt_put(nc, "rowSize", "long_name", "Number of observations for this profile")
+ncatt_put(nc, "rowSize", "sample_dimension", "obs")   # -> contiguous ragged array
+for (v in types) {
+  ncatt_put(nc, v, "long_name",
+            as.character(mt_meta[[v]]$long_name %||% gsub("_", " ", v)))
+  ncatt_put(nc, v, "coordinates", "time latitude longitude depth")
+  sn <- mt_meta[[v]]$standard_name %||% NA_character_
+  if (!is.na(sn) && nzchar(sn)) ncatt_put(nc, v, "standard_name", sn)
+}
+globals <- list(
+  title = "CalCOFI CTD casts — CF profile dataset",
+  summary = paste(
+    "CalCOFI CTD profiles as CF Discrete Sampling Geometry: one profile per cast,",
+    "depth levels stored as a contiguous ragged array, each canonical sensor its",
+    "own variable with its own units. Widened from the normalized long form in the",
+    glue("CalCOFI integrated database release {RELEASE}.")),
+  featureType = "profile", cdm_data_type = "Profile",
+  cdm_profile_variables = "profile_id, time, latitude, longitude, cruise_key, grid_key",
+  Conventions = "CF-1.10, COARDS, ACDD-1.3",
+  cf_scope = paste("Fully CF: a CTD cast is a CF profile, so this dataset needs no",
+                   "extension beyond the standard (contrast the nested net-tow datasets)."),
+  institution = "CalCOFI", source = glue("CalCOFI integrated database release {RELEASE}"),
+  db_release = RELEASE, dataset_key = DATASET_KEY,
+  references = "https://calcofi.io/workflows/publish_ctd-cast_to-netcdf.html",
+  license = "CC-BY 4.0", creator_name = "CalCOFI", creator_url = "https://calcofi.io",
+  date_created = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"))
+for (nm in names(globals)) ncatt_put(nc, 0, nm, globals[[nm]])
+nc_close(nc)
+
+cat(glue("wrote {OUT_NC} ({round(file.size(OUT_NC)/1048576, 1)} MB)\n"))
+```
+
+## Verify
+
+```{r}
+#| label: verify
+ncv <- nc_open(OUT_NC)
+rs  <- ncvar_get(ncv, "rowSize")
+chk <- tibble(
+  check = c("featureType", "cf_role set", "profiles", "obs levels",
+            "rowSize sums to obs", "sensor variables", "depths per profile (min/med/max)"),
+  value = c(
+    ncatt_get(ncv, 0, "featureType")$value,
+    ncatt_get(ncv, "profile_id", "cf_role")$value,
+    as.character(ncv$dim[["profile"]]$len),
+    as.character(ncv$dim[["obs"]]$len),
+    as.character(sum(rs) == ncv$dim[["obs"]]$len),
+    as.character(length(types)),
+    paste(min(rs), median(rs), max(rs), sep = " / ")))
+nc_close(ncv)
+kable(chk)
+```
+
+## Publish
+
+```{r}
+#| label: publish
+#| eval: !expr PUBLISH
+plan <- cc_netcdf_plan(OUT_NC, DATASET, RELEASE)
+man  <- cc_netcdf_manifest(plan, DATASET, RELEASE, RELEASE, file.size(OUT_NC),
+                           source_tables = c("sample", "obs"),
+                           cf_scope = globals$cf_scope)
+cat(glue("sha256: {substr(plan$sha256,1,16)}...  identical_to: {plan$identical_to}  upload: {plan$upload}\n"))
+jsonlite::write_json(man, file.path(OUT_DIR, "manifest_ctd-cast.json"),
+                     auto_unbox = TRUE, pretty = TRUE)
+```
+
+```{r}
+#| label: cleanup
+dbDisconnect(con, shutdown = TRUE)
+```
