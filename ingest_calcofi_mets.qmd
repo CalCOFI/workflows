@@ -1,0 +1,783 @@
+---
+title: "Ingest CalCOFI METS (Underway TSG/Meteorology)"
+calcofi:
+  target_name: ingest_calcofi_mets
+  workflow_type: ingest
+  dependency:
+    - ingest_swfsc_ichthyo
+  output: data/parquet/calcofi_mets/manifest.json
+  modifies:
+    - ship
+  provider: calcofi
+  dataset: mets
+  workflow_url: https://calcofi.io/workflows/ingest_calcofi_mets.html
+  dataset_meta:
+    dataset_name: CalCOFI METS (Underway TSG/Meteorology)
+    description: >
+      Shipboard underway thermosalinograph (TSG) and meteorology data,
+      ~1-minute resolution, recorded continuously along the cruise track.
+    citation_main: "CalCOFI. Underway (METS) TSG/Meteorology Data. CalCOFI.org."
+    link_calcofi_org: https://calcofi.org/data/oceanographic-data/underway-data/
+    link_data_source: https://calcofi.org/data/oceanographic-data/underway-data/
+    coverage_temporal: "TBD — spans at least 2006-2018 in files received so far"
+    coverage_spatial: "28-37°N, -125 to -117°W"
+  tables_owned:
+    - {table: mets_sample}
+    - {table: mets_measurement}
+    - {table: measurement_type, shared: true, note: "shared registry across bottle/ctd/dic/mets"}
+  erd:
+    color: "#cce5ff"
+---
+
+## Overview
+
+Ingest **METS** (shipboard underway TSG + meteorology data) from CalCOFI
+cruises. Unlike `ingest_calcofi_ctd-cast.qmd`, source files arrive by manual
+Drive upload per cruise rather than by scraping a download page, but the
+same **discover -> prioritize -> classify -> bind -> bridge -> pivot**
+shape applies, because the same problems show up: multiple files per
+cruise (raw vs. final), multiple source schemas across cruise eras, and
+a growing archive that should resume rather than re-process from scratch.
+
+- **Provider**: `calcofi`
+- **Dataset**: `mets`
+- **Source**: Per-cruise underway files (xlsx/csv) manually placed in
+  `dir_data/calcofi/mets/download/`, one row per ~1-minute sample.
+  Scope is the **"Final Underway Data"** era published at
+  calcofi.org/data/oceanographic-data/underway-data/ from 1203SH (2012)
+  onward — single-TSG (e.g. CC1704SH) and two dual-TSG variants (e.g.
+  CC1802SH, CC1611SR) — plus the one-off "Raw Underway Data" for 1207OS
+  (2012), schema confirmed via bundled explanation doc (`questions.csv`
+  mets_14, answered).
+  The earlier ~2004-2010 "Underway Data - SCIMS"/"Underway Data - SCS" era
+  and 0810NH specifically are **out of scope**: calcofi.org returns 403
+  Forbidden on those pages with no access route found (mets_01, mets_11-13,
+  closed `wontfix`).
+
+### Data Flow
+
+```{mermaid}
+graph LR
+  A[Per-cruise xlsx/csv in Drive, 4+ schemas] --> B[Classify + Prioritize per cruise]
+  B --> C[Read + Standardize per schema]
+  C --> D[Checkpoint]
+  D --> E[Cross-Dataset Bridge: ship_key/cruise_key]
+  E --> F[Dedup per cruise+timestamp]
+  F --> G[Pivot wide -> long measurement]
+  G --> H[Parquet Export]
+  H --> I[GCS Archive]
+  I --> J[Release Database]
+```
+
+## Setup
+
+```{r}
+#| label: setup
+
+knitr::knit_hooks$set(time_it = function(before, options) {
+  if (before) {
+    .time_it_t0 <<- Sys.time()
+  } else {
+    elapsed <- round(difftime(Sys.time(), .time_it_t0, units = "secs"), 1)
+    tnow <- format(Sys.time(), "%H:%M:%S")
+    message(glue::glue("R chunk {options$label}: {elapsed}s ~ {tnow}"))
+  }
+})
+knitr::opts_chunk$set(time_it = TRUE)
+
+devtools::load_all(here::here("../calcofi4db"))
+devtools::load_all(here::here("../calcofi4r"))
+librarian::shelf(
+  CalCOFI/calcofi4db,
+  CalCOFI/calcofi4r,
+  DBI, dplyr, DT, fs, glue,
+  here, janitor, jsonlite, knitr,
+  lubridate, purrr, readr, readxl, sf, stringr,
+  tibble, tidyr, units,
+  quiet = T)
+options(readr.show_col_types = F)
+options(DT.options = list(scrollX = TRUE))
+
+source(here("libs/ingest.R"))
+
+cc           <- read_calcofi_meta(here("ingest_calcofi_mets.qmd"))
+provider     <- cc$provider
+dataset      <- cc$dataset
+dataset_name <- cc$dataset_meta$dataset_name
+tables_owned <- cc$tables_owned
+dir_label    <- glue("{provider}_{dataset}")
+dir_dl       <- path_expand(glue("{dir_data}/{provider}/{dataset}/download"))
+dir_parquet  <- here(glue("data/parquet/{dir_label}"))
+db_path      <- here(glue("data/wrangling/{dir_label}.duckdb"))
+db_checkpoint <- here(glue("data/wrangling/{dir_label}_checkpoint.duckdb"))
+dir_tmp      <- here(glue("data/tmp/{dir_label}"))
+dir_meta     <- here(glue("metadata/{provider}/{dataset}"))
+
+if (overwrite) {
+  if (file_exists(db_path)) file_delete(db_path)
+  db_wal <- paste0(db_path, ".wal")
+  db_tmp <- paste0(db_path, ".tmp")
+  if (file_exists(db_wal)) file_delete(db_wal)
+  if (dir_exists(db_tmp))  dir_delete(db_tmp)
+  if (overwrite_all) {
+    if (dir_exists(dir_parquet))    dir_delete(dir_parquet)
+    if (file_exists(db_checkpoint)) file_delete(db_checkpoint)
+    message("Deleted parquet and checkpoint DB")
+  }
+}
+
+if (file_exists(db_checkpoint) && !file_exists(db_path)) {
+  file_copy(db_checkpoint, db_path, overwrite = TRUE)
+  message(glue("Restored from checkpoint: {db_checkpoint}"))
+}
+dir_create(c(dir_dl, dirname(db_path), dir_parquet, dir_tmp), recurse = TRUE)
+
+con <- get_duckdb_con(db_path)
+load_duckdb_extension(con, "spatial")
+load_duckdb_extension(con, "icu")
+
+mem_gb <- ps::ps_system_memory()$total / 1024^3 / 2 |> floor()
+dbExecute(con, glue("SET memory_limit = '{mem_gb}GB'"))
+dbExecute(con, glue("SET temp_directory = '{dir_tmp}'"))
+
+d_meas_type <- read_csv(here("metadata/measurement_type.csv"), show_col_types = F)
+d_flds_rd   <- read_csv(glue("{dir_meta}/flds_redefine.csv"), show_col_types = F)
+d_tbls_rd   <- read_csv(glue("{dir_meta}/tbls_redefine.csv"), show_col_types = F)
+```
+
+## Check for Resumable State
+
+```{r}
+#| label: check_resume
+
+parquet_complete <- FALSE
+manifest_path <- file.path(dir_parquet, "manifest.json")
+if (file_exists(manifest_path)) {
+  mf <- jsonlite::read_json(manifest_path)
+  parquet_ok <- all(vapply(mf$tables, function(tbl) {
+    file_exists(file.path(dir_parquet, paste0(tbl, ".parquet")))
+  }, logical(1)))
+  if (parquet_ok && !overwrite) {
+    parquet_complete <- TRUE
+    message(glue(
+      "Parquet output already complete ({length(mf$tables)} tables, ",
+      "{format(mf$total_rows, big.mark = ',')} rows) — ",
+      "skipping computation, resuming at upload"))
+  }
+}
+
+has_mets_raw <- FALSE
+if (!parquet_complete) {
+  has_mets_raw <- "mets_raw" %in% DBI::dbListTables(con)
+  if (has_mets_raw) {
+    n_raw <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM mets_raw")$n
+    message(glue(
+      "Checkpoint: mets_raw already loaded ({format(n_raw, big.mark = ',')} rows) — ",
+      "skipping read+classify+bind"))
+  }
+}
+
+skip_read_bind <- parquet_complete || has_mets_raw
+knitr::opts_chunk$set(eval = !skip_read_bind)
+```
+
+## Discover and Classify Source Files
+
+Scope, per the full archive (73 cruises, `mets_file_inventory.xlsx`):
+
+- **SCIMS** (~2004-2005, 8 cruises + 1 mislabeled orphan): header-less,
+  column identity still unconfirmed (`mets_01`). calcofi.org 403s on
+  fresh downloads, but these are already-archived files in Drive, so
+  **back in scope** (reverses the earlier `wontfix`).
+- **SCS**: still zero example files anywhere in the archive — still out
+  of scope (`mets_12`).
+- **1207OS Raw** (2012, one cruise): confirmed schema, see above.
+- **`mets_schema_final_txt_pst`** (0903JD, 2009, found inside a nested
+  zip): tab-separated, real header, explicit PST. Unknown how many other
+  cruises use this (`mets_18`).
+- **`mets_schema_final_csv_utc`** (37 cruises, the largest group): real
+  header, explicit UTC. Ships under two filename conventions
+  (`final_underway_data.csv` and `{cruise}_UnderwayFinaldt.csv`) that are
+  the same schema — confirmed by identical headers, not assumed.
+- **`mets_schema_single_tsg`/`dual_tsg_a`/`dual_tsg_b`** (24 cruises,
+  `.xlsx` only): as before.
+- **1MinData** (20 cruises): relationship to the official download still
+  unconfirmed (`mets_15`).
+- **20 cruises have no data file at all** — plots only.
+
+**cruise_key**: derived from the filename where the file encodes one, not
+blindly from the folder name — three real folder/filename mismatches were
+found in the archive (`mets_21`). Where filename and folder disagree, the
+file is flagged rather than silently assigned either value.
+
+```{r}
+#| label: d_files
+
+schema_signatures <- list(
+  mets_schema_single_tsg = c(
+    "ID","Cruise","DateTime","Lat","Lon","TSGTemp","TSGSal"),
+  mets_schema_dual_tsg_a = c(
+    "ID","Cruise","DateTime","Lat","Lon","TSG_Temp","TSG_Temp_2","USWFlow"),
+  mets_schema_dual_tsg_b = c(
+    "ID","Cruise","DateTime","Lat","Lon","TSG_Temp","TSG_Temp_2",
+    "BottomDepth","SW_pH"),
+  mets_schema_final_csv_utc = c(
+    "DATE_TIME_UTC","DATE_UTC","TIME_UTC","Latitude_N","Longitude_W",
+    "SST_degC","Salinity_PSU"),
+  mets_schema_final_txt_pst = c(
+    "DATE_PST","TIME_PST","LA","LO","ST","SA","CAL_T","CAL_S"))
+
+detect_schema <- function(file_name, header_cols) {
+  # SCIMS and Raw_Underway files are header-less — signature matching
+  # can't apply, so detect by filename first
+  if (str_detect(file_name, regex("scims|10mindata", ignore_case = T)))
+    return("mets_schema_scims")
+  if (str_detect(file_name, regex("^Raw_Underway", ignore_case = T)))
+    return("mets_schema_raw_2012")
+  scores <- purrr::map_int(schema_signatures, ~ sum(.x %in% header_cols))
+  best <- names(scores)[which.max(scores)]
+  if (max(scores) == 0) "mets_schema_unrecognized" else best
+}
+
+d_files <- tibble(
+  path = list.files(dir_dl, pattern = "\\.(xlsx|csv|txt)$",
+                     recursive = TRUE, full.names = TRUE)
+) |>
+  mutate(
+    file_name  = basename(path),
+    # cruise code from the FILENAME (not folder) where the file encodes one
+    fname_cruise = {
+      m <- str_match(file_name, "(?i)(?:CC)?(\\d{4})([A-Za-z]{2})(?![A-Za-z0-9])")
+      code <- str_to_upper(paste0(m[,2], m[,3]))
+      if_else(is.na(m[,2]) | str_to_upper(m[,3]) == "UW", NA_character_, code)
+    },
+    folder_cruise = str_extract(path, "(\\d{4}[A-Z]{2})(?=[^/]*$)|(\\d{4}[A-Z]{2})(?=/[^/]*$)") |>
+      str_to_upper(),
+    # prefer filename cruise code; fall back to folder; flag disagreement
+    cruise_key = coalesce(fname_cruise, folder_cruise),
+    cruise_key_mismatch = !is.na(fname_cruise) & !is.na(folder_cruise) &
+      fname_cruise != folder_cruise,
+    header = map2(path, file_name, \(p, fn) {
+      if (str_detect(fn, regex("scims|10mindata|^Raw_Underway", ignore_case = T)))
+        return(character(0))
+      if (str_detect(p, "\\.xlsx$")) {
+        tryCatch(names(readxl::read_excel(p, sheet = 1, n_max = 0)),
+                 error = function(e) character(0))
+      } else {
+        tryCatch(names(read_csv(p, n_max = 0, show_col_types = F)),
+                 error = function(e) character(0))
+      }
+    }),
+    schema_variant = map2_chr(file_name, header, detect_schema),
+    source_system = case_when(
+      str_detect(file_name, regex("scims|10mindata", ignore_case = T)) ~ "SCIMS",
+      str_detect(file_name, regex("^Raw_Underway", ignore_case = T)) ~ "Raw (1207OS)",
+      schema_variant == "mets_schema_final_txt_pst" ~ "Final (PST txt, 0903JD-style)",
+      str_detect(file_name, regex("final_underway|underwayfinaldt", ignore_case = T)) ~ "Final",
+      str_detect(file_name, regex("1min", ignore_case = T)) ~ "1MinData (unconfirmed provenance, see mets_15)",
+      TRUE ~ "unknown — flag for review")
+  ) |>
+  select(-header)
+
+stopifnot("cruise_key could not be determined for some files" =
+  all(!is.na(d_files$cruise_key)))
+
+n_mismatch <- sum(d_files$cruise_key_mismatch)
+if (n_mismatch > 0) {
+  message(glue(
+    "{n_mismatch} file(s) have a folder/filename cruise-code disagreement ",
+    "— see questions.csv mets_21. Using filename cruise code, NOT folder, ",
+    "for these: {paste(d_files$file_name[d_files$cruise_key_mismatch], collapse = ', ')}"))
+}
+
+# fail loudly rather than silently ingesting an unrecognized schema —
+# safer than CTD's stopifnot(!any(zip_type == "unknown")) since here a
+# false match would corrupt column meaning, not just miscategorize a file
+n_unrecognized <- sum(d_files$schema_variant == "mets_schema_unrecognized")
+if (n_unrecognized > 0) {
+  message(glue(
+    "{n_unrecognized} file(s) didn't match a known schema signature — ",
+    "add a schema_signatures entry once their real columns are known"))
+}
+
+d_files |>
+  dt(caption = "Files to ingest — every file kept, tagged by source system and schema variant",
+     fname   = "mets_files_to_ingest")
+```
+
+## Read and Standardize per Schema Variant
+
+```{r}
+#| label: read_files
+
+read_mets_file <- function(path, file_name) {
+  if (str_detect(file_name, regex("^Raw_Underway", ignore_case = T))) {
+    # confirmed header-less via bundled explanation doc: date, time, temp_c,
+    # conductivity, salinity_psu (Seabird TSG 45 only, no lat/lon)
+    d <- read_csv(path, col_names = c(
+      "col_1", "col_2", "col_3", "col_4", "col_5"), show_col_types = F)
+  } else if (str_detect(path, "\\.xlsx$")) {
+    d <- readxl::read_excel(path, sheet = 1)
+  } else {
+    d <- read_csv(path, show_col_types = F)
+  }
+  d |> clean_names(case = "none")  # preserve original case; flds_redefine maps exact names
+}
+
+d_files <- d_files |>
+  mutate(
+    data  = map2(path, file_name, \(p, fn) {
+      message(glue("Reading: {fn}"))
+      read_mets_file(p, fn)
+    }),
+    nrows = map_int(data, nrow)
+  )
+
+d_files |>
+  select(cruise_key, file_name, schema_variant, source_system, nrows) |>
+  dt(caption = "Rows read per file", fname = "mets_rows_per_file") |>
+  formatCurrency("nrows", currency = "", digits = 0, mark = ",")
+```
+
+## Bind per Schema Variant
+
+Each schema variant has a different column set, so bind within variant
+first (avoiding a single wide union of ~50 sparse columns), then stack
+with an explicit `schema_variant` tag for `flds_redefine.csv` to key off.
+
+```{r}
+#| label: d_bind
+
+d_bind <- d_files |>
+  select(cruise_key, file_name, schema_variant, data) |>
+  mutate(data = map(data, \(x) mutate(x, across(everything(), as.character)))) |>
+  unnest(data) |>
+  rename(`_source_file` = file_name)
+
+write_rds(d_bind, glue("{dir_tmp}/d_bind.rds"), compress = "gz")
+
+dbWriteTable(con, "mets_raw", d_bind, overwrite = TRUE)
+message(glue("Loaded {nrow(d_bind)} rows into mets_raw across ",
+             "{n_distinct(d_bind$schema_variant)} schema variants"))
+```
+
+## Save Checkpoint
+
+```{r}
+#| label: save_checkpoint
+
+if (!file_exists(db_checkpoint) || overwrite) {
+  close_duckdb(con)
+  file_copy(db_path, db_checkpoint, overwrite = TRUE)
+  con <- get_duckdb_con(db_path)
+  load_duckdb_extension(con, "spatial")
+  load_duckdb_extension(con, "icu")
+  message(glue("Saved checkpoint: {db_checkpoint}"))
+} else {
+  message(glue("Checkpoint already exists: {db_checkpoint}"))
+}
+```
+
+## Apply Field Renames (per schema variant)
+
+```{r}
+#| label: rename_fields
+
+mets_wide <- dbGetQuery(con, "SELECT * FROM mets_raw")
+
+mets_wide <- mets_wide |>
+  group_split(schema_variant) |>
+  map(\(d) {
+    sv <- d$schema_variant[1]
+    renames <- d_flds_rd |>
+      filter(tbl_old == sv, !is.na(fld_new), fld_new != "")
+    for (i in seq_len(nrow(renames))) {
+      old <- renames$fld_old[i]; new <- renames$fld_new[i]
+      if (old %in% names(d)) d <- d |> rename(!!new := !!old)
+    }
+    d
+  }) |>
+  list_rbind()
+
+# coerce numeric columns now that renaming is done (everything was read as
+# character to allow a uniform bind across variant-specific column sets)
+numeric_cols <- d_flds_rd |>
+  filter(type_new %in% c("double", "integer", "smallint")) |>
+  pull(fld_new) |> unique() |> intersect(names(mets_wide))
+mets_wide <- mets_wide |>
+  mutate(across(all_of(numeric_cols), as.numeric))
+
+# derive datetime_start_utc for the raw_2012 schema (date_mdy + time_hms_ms);
+# UTC vs local time unconfirmed -- see questions.csv mets_17
+if ("date_mdy" %in% names(mets_wide)) {
+  mets_wide <- mets_wide |>
+    mutate(datetime_start_utc = if_else(
+      schema_variant == "mets_schema_raw_2012" & !is.na(date_mdy),
+      mdy_hms(paste(date_mdy, time_hms_ms), tz = "UTC"),
+      datetime_start_utc))
+}
+
+# derive datetime_start_utc for final_txt_pst (0903JD-style): explicit PST
+# in the column name, assumed fixed -8:00 (not DST-aware) -- unconfirmed
+# for other dates, see questions.csv mets_19
+if ("date_pst" %in% names(mets_wide)) {
+  mets_wide <- mets_wide |>
+    mutate(datetime_start_utc = if_else(
+      schema_variant == "mets_schema_final_txt_pst" & !is.na(date_pst),
+      dmy_hms(paste(date_pst, time_pst), tz = "UTC") + hours(8),
+      datetime_start_utc))
+}
+
+# final_csv_utc already has a proper DATE_TIME_UTC column (renamed directly
+# to datetime_start_utc in flds_redefine.csv) -- just needs type coercion,
+# format is MM/DD/YYYY HH:MM:SS per the confirmed examples
+if ("datetime_start_utc" %in% names(mets_wide)) {
+  mets_wide <- mets_wide |>
+    mutate(datetime_start_utc = if_else(
+      schema_variant == "mets_schema_final_csv_utc" & is.character(datetime_start_utc),
+      as.character(mdy_hms(datetime_start_utc, tz = "UTC")),
+      as.character(datetime_start_utc))) |>
+    mutate(datetime_start_utc = as_datetime(datetime_start_utc, tz = "UTC"))
+}
+
+dbWriteTable(con, "mets_wide", mets_wide, overwrite = TRUE)
+```
+
+## Cross-Dataset Bridge
+
+Derive `ship_key`/full `cruise_key` and validate against the `ship`/`cruise`
+reference tables. Similar in spirit to `ingest_calcofi_ctd-cast.qmd` (same
+orphan-ship handling via `match_ships()`/`ensure_interim_ships()`), but not
+identical: `ctd-cast` derives `ship_key` directly (`RIGHT(cruise_key, 2)`)
+and leaves `cruise_key` in short filename form, whereas this uses
+`derive_cruise_key_on_casts()` to convert to a full key -- worth confirming
+with Ben that this is the right target format for `cruise.cruise_key`.
+
+```{r}
+#| label: cross_dataset_bridge
+
+modifies_tables <- c("ship")
+load_prior_tables(con = con, tables = modifies_tables,
+                   parquet_dir = here("data/parquet/swfsc_ichthyo"))
+load_prior_tables(con = con, tables = c("cruise", "grid"),
+                   parquet_dir = here("data/parquet/swfsc_ichthyo"), as_view = TRUE)
+
+modifies_pks <- list()
+for (tbl in modifies_tables) {
+  pk_col <- dbGetQuery(con, glue(
+    "SELECT column_name FROM information_schema.columns
+     WHERE table_name = '{tbl}' ORDER BY ordinal_position LIMIT 1"))$column_name
+  modifies_pks[[tbl]] <- list(
+    pk_col = pk_col,
+    keys   = dbGetQuery(con, glue("SELECT {pk_col} FROM {tbl}"))[[1]])
+}
+
+# short cruise code (e.g. "CC1704", "1704") -> full cruise_key via ship_renames
+# and derive_cruise_key_on_casts() -- same helper bottle.qmd uses, but CTD
+# does not call it (CTD keeps cruise_key in short form)
+derive_cruise_key_on_casts(con, table_name = "mets_wide",
+                            ship_renames_csv = here("metadata/ship_renames.csv"))
+
+mets_ships <- dbGetQuery(con, "SELECT DISTINCT ship_key FROM mets_wide")
+ref_ships  <- dbGetQuery(con, "SELECT ship_key FROM ship")
+orphan_ships <- setdiff(mets_ships$ship_key, ref_ships$ship_key)
+
+if (length(orphan_ships) > 0) {
+  message(glue("{length(orphan_ships)} ship_key(s) in METS not in ship table: ",
+               "{paste(orphan_ships, collapse = ', ')}"))
+  orphan_tbl <- dbGetQuery(con, glue(
+    "SELECT DISTINCT ship_key AS ship_code, NULL AS ship_name FROM mets_wide
+     WHERE ship_key IN ({paste(shQuote(orphan_ships, type = 'sh'), collapse = ', ')})"))
+  ship_result <- match_ships(
+    unmatched_ships  = orphan_tbl,
+    reference_ships  = dbReadTable(con, "ship"),
+    ship_renames_csv = here("metadata/ship_renames.csv"),
+    fetch_ices       = FALSE)
+  ensure_interim_ships(con, ship_result)
+} else {
+  message("All METS ship_keys found in ship reference table")
+}
+
+mets_cruises <- dbGetQuery(con, "SELECT DISTINCT cruise_key FROM mets_wide")
+ref_cruises  <- dbGetQuery(con, "SELECT cruise_key FROM cruise")
+orphan_cruises <- setdiff(mets_cruises$cruise_key, ref_cruises$cruise_key)
+if (length(orphan_cruises) > 0) {
+  message(glue("{length(orphan_cruises)} cruise_key(s) in METS not in cruise table: ",
+               "{paste(orphan_cruises, collapse = ', ')}"))
+} else {
+  message("All METS cruise_keys found in cruise reference table")
+}
+```
+
+## De-duplicate mets_sample
+
+Unlike CTD, a duplicate here means a genuine re-upload artifact (the same
+file appearing twice), **not** SCIMS vs. SCS — those are independent
+systems and both are expected to have real, distinct rows for the same
+cruise+timestamp (see `mets_13`). This step only catches literal
+duplicate rows within a single system/schema_variant; it must not collapse
+SCIMS against SCS.
+
+```{r}
+#| label: dedup_mets_sample
+
+n_before <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM mets_wide")$n
+dbExecute(con, "
+  CREATE OR REPLACE TABLE mets_sample AS
+  SELECT * FROM mets_wide
+  QUALIFY ROW_NUMBER() OVER (
+    -- schema_variant included so SCIMS and SCS (or any two distinct
+    -- systems) at the same cruise+timestamp are never collapsed together
+    PARTITION BY cruise_key, schema_variant, datetime_start_utc
+    ORDER BY \"_source_file\") = 1")
+n_after <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM mets_sample")$n
+cat(glue(
+  "mets_sample de-duplicated: removed {format(n_before - n_after, big.mark = ',')} ",
+  "duplicate-timestamp rows; {format(n_after, big.mark = ',')} remain"), "\n")
+
+assign_deterministic_uuids_md5(
+  con = con, table_name = "mets_sample", id_col = "mets_sample_uuid",
+  key_cols = c("cruise_key", "schema_variant", "datetime_start_utc"))
+
+dbExecute(con, "DROP TABLE IF EXISTS mets_wide")
+dbExecute(con, "DROP TABLE IF EXISTS mets_raw")
+```
+
+## Pivot Measurements
+
+```{r}
+#| label: pivot
+
+sensor_cols <- c(
+  "air_temp_c","rel_humidity_pct","wind_speed_ms","wind_dir_deg",
+  "atm_pressure_mb","atm_pressure_slc_mb","chl_fluor",
+  "tsg1_temp_c","tsg1_salinity_psu","tsg1_conductivity","tsg1_density","tsg1_sound_velocity",
+  "tsg2_temp_c","tsg2_salinity_psu","tsg2_conductivity","tsg2_density","tsg2_sound_velocity",
+  "long_wave_rad","short_wave_rad","uws_flow","par_surf",
+  "sst_c","sss_psu","sw_ph","oxygen","oxygen_sat_pct","oxygen_temp_c",
+  "bottom_depth_m","bottom_depth_mb_m","pred_temp_c","pred_sal_psu","pred_chl")
+sensor_cols <- intersect(sensor_cols, dbGetQuery(con,
+  "SELECT column_name FROM information_schema.columns
+   WHERE table_name = 'mets_sample'")$column_name)
+
+dbExecute(con, "DROP TABLE IF EXISTS mets_measurement")
+for (i in seq_along(sensor_cols)) {
+  col <- sensor_cols[i]
+  sql_select <- glue("
+    SELECT mets_sample_uuid, cruise_key,
+      '{col}' AS measurement_type,
+      CAST({col} AS DOUBLE) AS measurement_value
+    FROM mets_sample
+    WHERE {col} IS NOT NULL
+      AND {col} NOT IN (-99)
+      AND NOT isnan(CAST({col} AS DOUBLE))")
+  if (i == 1) {
+    dbExecute(con, glue("CREATE OR REPLACE TABLE mets_measurement AS {sql_select}"))
+  } else {
+    dbExecute(con, glue("INSERT INTO mets_measurement {sql_select}"))
+  }
+}
+n_meas <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM mets_measurement")$n
+message(glue("mets_measurement: {format(n_meas, big.mark = ',')} rows"))
+
+assign_deterministic_uuids_md5(
+  con = con, table_name = "mets_measurement", id_col = "mets_measurement_uuid",
+  key_cols = c("mets_sample_uuid", "measurement_type"))
+```
+
+## measurement_type reference table
+
+```{r}
+#| label: measurement_type
+
+dbWriteTable(con, "measurement_type", d_meas_type, overwrite = TRUE)
+
+mets_types_used <- dbGetQuery(con,
+  "SELECT DISTINCT measurement_type FROM mets_measurement")$measurement_type
+registered <- d_meas_type |>
+  filter(str_detect(`_source_datasets`, "calcofi_mets")) |>
+  pull(measurement_type)
+unregistered <- setdiff(mets_types_used, registered)
+stopifnot(
+  "all measurement_types used by calcofi_mets must be registered in _source_datasets" =
+    length(unregistered) == 0)
+```
+
+## Schema Diagram
+
+```{r}
+#| label: schema
+
+mets_rels <- list(
+  primary_keys = list(
+    mets_sample      = "mets_sample_uuid",
+    mets_measurement = "mets_measurement_uuid",
+    measurement_type = "measurement_type"),
+  foreign_keys = list(
+    list(table = "mets_measurement", column = "mets_sample_uuid",
+         ref_table = "mets_sample", ref_column = "mets_sample_uuid"),
+    list(table = "mets_measurement", column = "measurement_type",
+         ref_table = "measurement_type", ref_column = "measurement_type")))
+
+cc_erd(con, rels = mets_rels)
+```
+
+## Add Spatial
+
+`mets_schema_raw_2012` rows have no lat/lon at all (see questions.csv
+mets_16) — they'll get a NULL `geom`/`grid_key` here unless position is
+joined in from elsewhere before this step. `add_point_geom`/
+`assign_grid_key` presumably no-op or leave NULL on missing coordinates
+rather than error, but that's unverified against real behavior — worth
+checking on first run whether this schema's rows survive downstream
+validation with a NULL grid_key, or need excluding until mets_16 resolves.
+
+```{r}
+#| label: add_spatial
+
+add_point_geom(con, "mets_sample", lon_col = "longitude", lat_col = "latitude")
+assign_grid_key(con, "mets_sample")
+```
+
+## Load Dataset Metadata
+
+```{r}
+#| label: load-dataset-metadata
+
+d_dataset <- ingest_yaml_to_dataset_df(read_ingest_yaml(here()))
+dbWriteTable(con, "dataset", d_dataset, overwrite = TRUE)
+message(glue("dataset: {nrow(d_dataset)} datasets registered"))
+```
+
+## Questions for Data Providers
+
+```{r}
+#| label: provider-questions
+
+q_path <- glue("{dir_meta}/questions.csv")
+if (file_exists(q_path)) {
+  read_csv(q_path, show_col_types = F) |>
+    arrange(
+      factor(status,   c("blocker", "open", "asked", "answered", "wontfix")),
+      factor(priority, c("blocker", "high", "normal"))) |>
+    datatable(caption = "Follow-up questions for the data provider",
+              options = list(dom = "tp", pageLength = 10))
+}
+```
+
+## Validate and Enforce Types
+
+```{r}
+#| label: validate
+
+validate_for_release(con)
+enforce_column_types(con, d_flds_rd = d_flds_rd)
+```
+
+## Preview Tables
+
+```{r}
+#| label: preview
+#| results: asis
+
+preview_tables(con, tables = c("mets_sample", "mets_measurement", "measurement_type"))
+```
+
+## Write Parquet
+
+```{r}
+#| label: write_parquet
+
+mismatches <- list(
+  ships             = collect_ship_mismatches(con, "mets_sample"),
+  measurement_types = collect_measurement_type_mismatches(
+    con, here("metadata/measurement_type.csv")),
+  cruise_keys       = collect_cruise_key_mismatches(con, "mets_sample"))
+
+parquet_stats <- write_parquet_outputs(
+  con          = con,
+  output_dir   = dir_parquet,
+  tables       = c("mets_sample", "mets_measurement", "measurement_type"),
+  partition_by = list(mets_measurement = "cruise_key"),
+  sort_by      = list(
+    mets_measurement = c("measurement_type"),
+    mets_sample      = "hilbert:longitude,latitude"),
+  strip_provenance = FALSE,
+  mismatches       = mismatches)
+
+parquet_stats |> dt(fname = "mets_parquet_stats")
+```
+
+## Write Metadata JSON
+
+```{r}
+#| label: write_metadata
+
+metadata_path <- build_metadata_json(
+  con                  = con,
+  d_tbls_rd            = d_tbls_rd,
+  d_flds_rd            = d_flds_rd,
+  metadata_derived_csv = glue("{dir_meta}/metadata_derived.csv"),
+  output_dir           = dir_parquet,
+  tables               = parquet_stats$table,
+  provider             = provider,
+  dataset              = dataset,
+  workflow_url         = cc$workflow_url,
+  tables_owned         = tables_owned)
+
+build_relationships_json(
+  rels = mets_rels, output_dir = dir_parquet, provider = provider, dataset = dataset)
+```
+
+## Export Modified Dependency Deltas
+
+```{r}
+#| label: export_new_deltas
+
+for (tbl in modifies_tables) {
+  pk_col   <- modifies_pks[[tbl]]$pk_col
+  keys_old <- modifies_pks[[tbl]]$keys
+  keys_new <- dbGetQuery(con, glue("SELECT {pk_col} FROM {tbl}"))[[1]]
+  additions <- setdiff(keys_new, keys_old)
+  if (length(additions) > 0) {
+    pq_path <- file.path(dir_parquet, paste0(tbl, "_new.parquet"))
+    vals <- paste(shQuote(additions, "sh"), collapse = ", ")
+    export_parquet(con, glue("SELECT * FROM {tbl} WHERE {pk_col} IN ({vals})"), pq_path)
+    message(glue("{length(additions)} new {tbl} row(s) -> {tbl}_new.parquet"))
+  }
+}
+```
+
+## Upload to GCS
+
+```{r}
+#| label: upload_gcs
+#| eval: true
+
+knitr::opts_chunk$set(eval = TRUE)
+if (parquet_complete) {
+  message("Parquet unchanged — skipping GCS sync")
+} else {
+  sync_to_gcs(local_dir = dir_parquet, gcs_prefix = glue("ingest/{dir_label}"),
+              bucket = "calcofi-db", delete_stale = TRUE)
+}
+```
+
+## Cleanup
+
+```{r}
+#| label: cleanup
+
+close_duckdb(con)
+if (file_exists(db_checkpoint)) {
+  file_delete(db_checkpoint)
+  message(glue("Removed checkpoint: {db_checkpoint}"))
+}
+```
+
+::: {.callout-caution collapse="true"}
+## Session Info
+```{r session_info}
+devtools::session_info()
+```
+:::
