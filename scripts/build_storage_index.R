@@ -45,9 +45,13 @@ BUCKETS <- list(
        # a plain file listing written on top would silently destroy all of that.
        skip  = "^ducklake/releases(/|$)"),
   list(name  = "calcofi-files-public",
-       title = "Published files",
-       desc  = paste("Derived products published for download, including whole-dataset",
-                     "CF NetCDF files, spatial layers and sync manifests."),
+       title = "Source archive for reproducible ingests",
+       desc  = paste("Primarily a versioned archive of the INPUT files the database",
+                     "ingests read — largely CSVs synced from Google Drive — kept so",
+                     "any release can be rebuilt reproducibly from the exact inputs it",
+                     "was built from, rather than from whatever Drive holds today.",
+                     "Also carries published derived products, such as the",
+                     "whole-dataset CF NetCDF files."),
        # netcdf/ is owned by the per-dataset publish notebooks, which write a
        # curated page (provenance, CF structure, how to read it). A generic file
        # listing on top would erase that.
