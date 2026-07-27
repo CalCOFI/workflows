@@ -200,11 +200,27 @@ if (DRY) {
     d <- file.path(tmp, b$name)
     if (!dir.exists(d)) next
     message(glue("  uploading {b$name} pages ..."))
+    # `cp --recursive <dir>/.` returns 0 having copied only the top level — it
+    # reported success while every nested page silently stayed local. Glob the
+    # entries instead, then VERIFY, because a zero exit status has already proved
+    # not to mean the objects are there.
     res <- system2(gcloud, c(sub, "cp", "--recursive", "--content-type=text/html",
                              "--cache-control=no-cache",
-                             shQuote(file.path(d, ".")), shQuote(glue("gs://{b$name}/"))),
+                             Sys.glob(file.path(d, "*")), shQuote(glue("gs://{b$name}/"))),
                    stdout = TRUE, stderr = TRUE)
     if (!is.null(attr(res, "status"))) warning(glue("upload failed for {b$name}"))
+    # spot-check the deepest page we generated for this bucket
+    deep <- pages[vapply(pages, function(p) startsWith(p$file, paste0(b$name, "/")), logical(1))]
+    if (length(deep)) {
+      probe <- deep[[which.max(vapply(deep, function(p) lengths(regmatches(p$file,
+                 gregexpr("/", p$file))), integer(1)))]]
+      url <- sub("^gs://", "https://storage.googleapis.com/", probe$gcs)
+      code <- tryCatch({ con <- url(url, open = "rb"); close(con); 200L },
+                       error = function(e) 404L)
+      if (code != 200L)
+        warning(glue("VERIFY FAILED: {url} not readable after upload — nested pages may be missing"))
+      else message(glue("    verified deepest page: {probe$gcs}"))
+    }
   }
   cat(glue("\nuploaded {length(pages)} pages\n"))
   cat(glue("  root:   {SITE_URL}/\n"))
