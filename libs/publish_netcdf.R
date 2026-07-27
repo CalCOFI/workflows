@@ -57,7 +57,15 @@ cc_measurement_meta <- function(wf = getwd()) {
   )), mt$measurement_type)
 }
 
-`%||%` <- function(a, b) if (is.null(a) || length(a) == 0 || is.na(a) || identical(a, "")) b else a
+# Treats NULL / empty / NA / "" as absent. The NA and "" tests apply ONLY to a
+# length-1 atomic: calling is.na() on a list (var_meta[[col]] is a 4-element list)
+# returns a vector, and `||` rejects that in R >= 4.3 with
+# "'length = 4' in coercion to 'logical(1)'".
+`%||%` <- function(a, b) {
+  if (is.null(a) || length(a) == 0) return(b)
+  if (length(a) == 1 && is.atomic(a) && (is.na(a) || identical(as.character(a), ""))) return(b)
+  a
+}
 
 # ---- netCDF-4 group writing --------------------------------------------------
 
