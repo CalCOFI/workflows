@@ -1,11 +1,15 @@
 ---
-description: Scaffold a publish workflow for OBIS, ERDDAP, or EDI from CalCOFI data
+description: Scaffold a publish workflow (netCDF, OBIS, ERDDAP, or EDI) from CalCOFI data
 user_invocable: true
 ---
 
 # /publish-template
 
-Scaffold a new `publish_{dataset}_to_{portal}.qmd` Quarto notebook for publishing CalCOFI data to an external portal.
+Scaffold a new `publish_{dataset}_to-{format}.qmd` Quarto notebook for publishing CalCOFI data.
+
+**Naming**: `publish_{dataset}_to-{format}.qmd` — dataset only (no provider prefix), and a
+HYPHEN in `to-{format}`, e.g. `publish_ichthyo_to-netcdf.qmd`, `publish_ichthyo_to-obis.qmd`.
+The `calcofi.target_name` must match the filename stem so `build_targets_list()` wires it up.
 
 ## Usage
 
@@ -16,7 +20,7 @@ Scaffold a new `publish_{dataset}_to_{portal}.qmd` Quarto notebook for publishin
 ## Arguments
 
 - `dataset`: Dataset or subset identifier (e.g., `ichthyo-cephalopods`, `ctd`, `bottle`, `dic`, `zooplankton`, `seabird`, `mammals`)
-- `portal`: Target portal (`obis`, `erddap`, or `edi`)
+- `format`: Target format (`netcdf`, `obis`, `erddap`, or `edi`)
 
 ## Options
 
@@ -30,6 +34,7 @@ When the user invokes this skill:
 
 Select the appropriate template based on `{portal}`:
 
+- **netCDF** → `.claude/skills/templates/publish_netcdf_template.qmd`
 - **OBIS** → `.claude/skills/templates/publish_obis_template.qmd`
 - **ERDDAP** → `.claude/skills/templates/publish_erddap_template.qmd`
 - **EDI** → `.claude/skills/templates/publish_edi_template.qmd`
@@ -51,6 +56,47 @@ publish_{dataset}_to_{portal}.qmd
 ```
 
 ### 4. Portal-specific sections
+
+#### netCDF (whole-dataset CF file)
+
+Reference implementation: `publish_ichthyo_to-netcdf.qmd` (hardest case — full
+site → tow → net → occurrence → size/stage-bin nesting).
+
+1. **Overview** — hierarchy diagram, and WHY it is preserved rather than flattened
+2. **Setup** — resolve the release with `cc_release_version()`; opt-in `CALCOFI_PUBLISH`
+3. **Connect** — read the FROZEN release over HTTPS (`cc_release_parquet()`)
+4. **Data integrity** — duplicate keys and orphan children, BEFORE writing
+5. **Build the levels** — one data.frame per level, ordered so children are contiguous
+6. **Widen effort** — event-level `sample_measurement` → one CF variable per type
+7. **Parent index** — `match()` into the parent's ordered key vector
+8. **Write** — `nc_level_vars()` / `nc_level_put()` from `libs/publish_netcdf.R`
+9. **Verify** — re-open the file; confirm groups, counts, effort length, index range
+10. **Double-count demo** — show the inflation factor numerically
+11. **Publish** — `cc_netcdf_plan()` / `cc_netcdf_manifest()`
+
+**Five rules, each learned from a real failure:**
+
+- **Read the frozen release, never a serving tree.** The first published CalCOFI
+  NetCDF was built from `/share/data/erddap-duckdb/` and shipped a month-old
+  snapshot; nothing in the file said so.
+- **Verify key uniqueness before joining on a composite.** `obs` has no unique
+  natural key — in `swfsc_ichthyo`, 3 rows share
+  `(sample_key, taxon_key, life_stage)` with *different* abundance. Only `obs_id`
+  is unique. A composite join would have fanned out silently.
+- **Carry anomalies, do not launder them.** Orphan children get
+  `parent_index = -1`; duplicate and orphan counts go into global attributes with
+  a note that they originate upstream. Publishing is not the place to quietly
+  normalize a data problem away.
+- **Split bins that carry different units.** `body_length` (mm) and `stage`
+  (ordinal) cannot share a variable — that is the same mixed-units problem that
+  makes the normalized long form un-CF-able.
+- **Say what is and is not CF.** Set `cf_scope`. CF defines no feature type for a
+  tow → taxon → size-bin hierarchy; claiming blanket CF compliance is false.
+
+**Useful to know:** `ncdf4` exposes no group API (there is no `ncgrp_def`), which
+reads as "R cannot write netCDF-4 groups". It can — a slash-separated variable
+name (`"net/volume_sampled"`) creates a real group, confirmed with `ncdump` and
+`h5dump`.
 
 #### OBIS (Darwin Core Archive)
 Following the pattern from `publish_ichthyo_to_obis.qmd`:
