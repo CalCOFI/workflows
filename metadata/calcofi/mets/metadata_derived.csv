@@ -1,0 +1,10 @@
+table,column,name_long,units,description_md
+mets_sample,mets_sample_uuid,Sample UUID,,"Deterministic primary key (`assign_deterministic_uuids_md5()`), keyed on `cruise_key`+`schema_variant`+`datetime_start_utc`."
+mets_sample,cruise_key,Cruise Key,,Cruise natural key (YYYY-MM-NODC); FK to `cruise`. Derived via `derive_cruise_key_on_casts()` from the resolved short cruise code + ship code.
+mets_sample,ship_key,Ship Key,,NODC ship key; FK to `ship`. Resolved from the short cruise code's trailing ship code via `derive_cruise_key_on_casts()`.
+mets_sample,geom,Geometry,,Point geometry (WGS84) from longitude/latitude via `add_point_geom()`. NULL for schema variants with no position field (e.g. `mets_schema_raw_2012` -- see questions.csv mets_16).
+mets_sample,grid_key,Grid Key,,CalCOFI grid cell; FK to `grid`. Derived via `assign_grid_key()`; NULL wherever `geom` is NULL.
+mets_measurement,mets_measurement_uuid,Measurement UUID,,Deterministic primary key (`assign_deterministic_uuids_md5()`).
+mets_measurement,mets_sample_uuid,Sample UUID (FK),,FK to `mets_sample`.
+mets_measurement,measurement_type,Measurement Type,,Measurement type; FK to `measurement_type` (shared registry across bottle/ctd/dic/mets).
+mets_measurement,measurement_value,Measurement Value,,"Numeric value of the measurement; units carried by `measurement_type`, not here."
