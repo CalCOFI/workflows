@@ -1,0 +1,7 @@
+table,column,name_long,units,description_md
+mesopelagic_fish_tow,cruise_key,Cruise Key,,Cruise natural key (YYYY-MM-NODC); FK to `cruise`. Built directly from `CruiseID` as `20{YY}-{MM}-32NM` (single research vessel, ship key hardcoded — see questions.csv).
+mesopelagic_fish_tow,ship_key,Ship Key,,NODC ship key; FK to `ship`. Hardcoded to `32NM` (R/V New Horizon, this dataset's sole vessel).
+mesopelagic_fish_tow,hour_source_conflict,Hour Source Conflict Flag,,"Boolean; TRUE where `Sheet1` and `Original` disagree on tow start hour for cruise 1110 (15 rows). Unresolved — see questions.csv."
+mesopelagic_fish_tow,site_key,Site Key,,CalCOFI station key resolved via spatial match against `grid` on the tow's own lat/lon (same cell as `grid_key`), not parsed from the source `Station` field.
+mesopelagic_fish_tow,geom,Geometry,,Point geometry (WGS84) from longitude/latitude via `add_point_geom()`.
+mesopelagic_fish_tow,grid_key,Grid Key,,CalCOFI grid cell; FK to `grid`. Derived via `assign_grid_key()`.
