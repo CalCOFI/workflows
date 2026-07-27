@@ -353,8 +353,8 @@ man  <- cc_netcdf_manifest(plan, DATASET, RELEASE, RELEASE, file.size(OUT_NC),
 cat(glue("sha256      : {substr(plan$sha256, 1, 16)}...\n"))
 cat(glue("identical_to: {plan$identical_to}\n"))
 cat(glue("upload      : {plan$upload}\n"))
-jsonlite::write_json(man, file.path(OUT_DIR, "manifest.json"),
-                     auto_unbox = TRUE, pretty = TRUE)
+res <- cc_netcdf_publish(OUT_NC, DATASET, RELEASE, plan, man)
+cat(glue("published   : {res$url}\n"))
 ```
 
 ```{r}

@@ -201,7 +201,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <pre><code>release : v2026.07.17
 parquet : https://storage.googleapis.com/calcofi-db/ducklake/releases/v2026.07.17/parquet
 output  : /Users/bbest/Github/CalCOFI/workflows/data/netcdf/ctd-cast.nc
-publish : FALSE</code></pre>
+publish : TRUE</code></pre>
 </div>
 </div>
 <div class="cell">
@@ -465,15 +465,24 @@ publish : FALSE</code></pre>
 <span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>man  <span class="ot">&lt;-</span> <span class="fu">cc_netcdf_manifest</span>(plan, DATASET, RELEASE, RELEASE, <span class="fu">file.size</span>(OUT_NC),</span>
 <span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>                           <span class="at">source_tables =</span> <span class="fu">c</span>(<span class="st">"sample"</span>, <span class="st">"obs"</span>),</span>
 <span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>                           <span class="at">cf_scope =</span> globals<span class="sc">$</span>cf_scope)</span>
-<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"sha256: {substr(plan$sha256,1,16)}...  identical_to: {plan$identical_to}  upload: {plan$upload}</span><span class="sc">\n</span><span class="st">"</span>))</span>
-<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>jsonlite<span class="sc">::</span><span class="fu">write_json</span>(man, <span class="fu">file.path</span>(OUT_DIR, <span class="st">"manifest_ctd-cast.json"</span>),</span>
-<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>                     <span class="at">auto_unbox =</span> <span class="cn">TRUE</span>, <span class="at">pretty =</span> <span class="cn">TRUE</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"sha256: {substr(plan$sha256,1,16)}...  identical_to: {plan$identical_to}  upload: {plan$upload}</span><span class="sc">\n</span><span class="st">"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
+<div class="cell-output cell-output-stdout">
+<pre><code>sha256: 5787bd3387cf0d86...  identical_to: NA  upload: TRUE</code></pre>
+</div>
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb17"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>res <span class="ot">&lt;-</span> <span class="fu">cc_netcdf_publish</span>(OUT_NC, DATASET, RELEASE, plan, man)</span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"published: {res$url}</span><span class="sc">\n</span><span class="st">"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>published: https://storage.calcofi.io/calcofi-files-public/netcdf/ctd-cast/v2026.07.17/ctd-cast.nc</code></pre>
+</div>
 </div>
 <div class="cell">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="fu">dbDisconnect</span>(con, <span class="at">shutdown =</span> <span class="cn">TRUE</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb19"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="fu">dbDisconnect</span>(con, <span class="at">shutdown =</span> <span class="cn">TRUE</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 </div>
 <!-- -->
@@ -933,264 +942,264 @@ publish : FALSE</code></pre>
     }
   });
   </script><div class="modal fade" id="quarto-embedded-source-code-modal" tabindex="-1" aria-labelledby="quarto-embedded-source-code-modal-label" aria-hidden="true"><div class="modal-dialog modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><h5 class="modal-title" id="quarto-embedded-source-code-modal-label">Source Code</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="">
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb17" data-shortcodes="false"><pre class="sourceCode markdown code-with-copy"><code class="sourceCode markdown"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="co">---</span></span>
-<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="an">title:</span><span class="co"> "Publish CTD casts to CF NetCDF"</span></span>
-<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a><span class="an">subtitle:</span><span class="co"> "A true CF Discrete-Sampling-Geometry profile dataset — one profile per cast, sensors as variables"</span></span>
-<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a><span class="an">author:</span><span class="co"> "CalCOFI"</span></span>
-<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a><span class="an">date:</span><span class="co"> today</span></span>
-<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a><span class="an">format:</span></span>
-<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a><span class="co">  html:</span></span>
-<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a><span class="co">    toc: true</span></span>
-<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a><span class="co">    toc-depth: 3</span></span>
-<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a><span class="co">    code-fold: true</span></span>
-<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a><span class="co">    code-tools: true</span></span>
-<span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a><span class="co">    df-print: kable</span></span>
-<span id="cb17-13"><a href="#cb17-13" aria-hidden="true" tabindex="-1"></a><span class="an">calcofi:</span></span>
-<span id="cb17-14"><a href="#cb17-14" aria-hidden="true" tabindex="-1"></a><span class="co">  target_name: publish_ctd-cast_to-netcdf</span></span>
-<span id="cb17-15"><a href="#cb17-15" aria-hidden="true" tabindex="-1"></a><span class="co">  workflow_type: publish</span></span>
-<span id="cb17-16"><a href="#cb17-16" aria-hidden="true" tabindex="-1"></a><span class="co">  dependency:</span></span>
-<span id="cb17-17"><a href="#cb17-17" aria-hidden="true" tabindex="-1"></a><span class="co">    - release_database</span></span>
-<span id="cb17-18"><a href="#cb17-18" aria-hidden="true" tabindex="-1"></a><span class="co">  provider: calcofi</span></span>
-<span id="cb17-19"><a href="#cb17-19" aria-hidden="true" tabindex="-1"></a><span class="co">  dataset: ctd-cast</span></span>
-<span id="cb17-20"><a href="#cb17-20" aria-hidden="true" tabindex="-1"></a><span class="co">  output: data/netcdf/ctd-cast.nc</span></span>
-<span id="cb17-21"><a href="#cb17-21" aria-hidden="true" tabindex="-1"></a><span class="co">  workflow_url: https://calcofi.io/workflows/publish_ctd-cast_to-netcdf.html</span></span>
-<span id="cb17-22"><a href="#cb17-22" aria-hidden="true" tabindex="-1"></a><span class="an">editor_options:</span></span>
-<span id="cb17-23"><a href="#cb17-23" aria-hidden="true" tabindex="-1"></a><span class="co">  chunk_output_type: console</span></span>
-<span id="cb17-24"><a href="#cb17-24" aria-hidden="true" tabindex="-1"></a><span class="co">---</span></span>
-<span id="cb17-25"><a href="#cb17-25" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-26"><a href="#cb17-26" aria-hidden="true" tabindex="-1"></a><span class="fu">## Overview</span></span>
-<span id="cb17-27"><a href="#cb17-27" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-28"><a href="#cb17-28" aria-hidden="true" tabindex="-1"></a>Publish the CalCOFI CTD record as a **CF Discrete-Sampling-Geometry profile</span>
-<span id="cb17-29"><a href="#cb17-29" aria-hidden="true" tabindex="-1"></a>dataset**, downstream of <span class="in">`release_database`</span>.</span>
-<span id="cb17-30"><a href="#cb17-30" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-31"><a href="#cb17-31" aria-hidden="true" tabindex="-1"></a>This is the *simple* end of the publish range, and deliberately so — it is the</span>
-<span id="cb17-32"><a href="#cb17-32" aria-hidden="true" tabindex="-1"></a>counterpart to</span>
-<span id="cb17-33"><a href="#cb17-33" aria-hidden="true" tabindex="-1"></a><span class="co">[</span><span class="ot">`publish_ichthyo_to-netcdf`</span><span class="co">](https://calcofi.io/workflows/publish_ichthyo_to-netcdf.html)</span>,</span>
-<span id="cb17-34"><a href="#cb17-34" aria-hidden="true" tabindex="-1"></a>which handles the deeply nested case. CTD needs no netCDF-4 groups:</span>
-<span id="cb17-35"><a href="#cb17-35" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-36"><a href="#cb17-36" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="pp">|</span> ichthyo <span class="pp">|</span> **ctd-cast** <span class="pp">|</span></span>
-<span id="cb17-37"><a href="#cb17-37" aria-hidden="true" tabindex="-1"></a><span class="pp">|---|---|---|</span></span>
-<span id="cb17-38"><a href="#cb17-38" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> hierarchy <span class="pp">|</span> site → tow → net → occurrence → bin <span class="pp">|</span> **flat: cast → depth level** <span class="pp">|</span></span>
-<span id="cb17-39"><a href="#cb17-39" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> CF status <span class="pp">|</span> CF where it applies; groups elsewhere <span class="pp">|</span> **fully CF (`featureType=Profile`)** <span class="pp">|</span></span>
-<span id="cb17-40"><a href="#cb17-40" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> structure <span class="pp">|</span> netCDF-4 groups + <span class="in">`parent_index`</span> <span class="pp">|</span> **contiguous ragged array (`rowSize`)** <span class="pp">|</span></span>
-<span id="cb17-41"><a href="#cb17-41" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-42"><a href="#cb17-42" aria-hidden="true" tabindex="-1"></a>A CTD cast *is* a CF profile: one instance, a vertical series of depth levels,</span>
-<span id="cb17-43"><a href="#cb17-43" aria-hidden="true" tabindex="-1"></a>each sensor its own variable. So this file is genuinely CF-compliant end to end —</span>
-<span id="cb17-44"><a href="#cb17-44" aria-hidden="true" tabindex="-1"></a>no caveat needed — and any CF-aware tool will read it without special handling.</span>
-<span id="cb17-45"><a href="#cb17-45" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-46"><a href="#cb17-46" aria-hidden="true" tabindex="-1"></a>::: {.callout-note title="Why the widening still matters"}</span>
-<span id="cb17-47"><a href="#cb17-47" aria-hidden="true" tabindex="-1"></a>The database stores CTD in long form: one row per cast × depth ×</span>
-<span id="cb17-48"><a href="#cb17-48" aria-hidden="true" tabindex="-1"></a><span class="in">`measurement_type`</span>, 5.55 M rows over 15 sensor types. A single</span>
-<span id="cb17-49"><a href="#cb17-49" aria-hidden="true" tabindex="-1"></a><span class="in">`measurement_value`</span> column therefore mixes °C, PSU, mL/L and volts. CF requires</span>
-<span id="cb17-50"><a href="#cb17-50" aria-hidden="true" tabindex="-1"></a>one unit per variable, so each <span class="in">`measurement_type`</span> becomes its own variable with</span>
-<span id="cb17-51"><a href="#cb17-51" aria-hidden="true" tabindex="-1"></a>its own <span class="in">`units`</span> and <span class="in">`long_name`</span>. That widening is what turns a queryable table</span>
-<span id="cb17-52"><a href="#cb17-52" aria-hidden="true" tabindex="-1"></a>into a self-documenting file.</span>
-<span id="cb17-53"><a href="#cb17-53" aria-hidden="true" tabindex="-1"></a>:::</span>
-<span id="cb17-54"><a href="#cb17-54" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-55"><a href="#cb17-55" aria-hidden="true" tabindex="-1"></a><span class="fu">## Setup</span></span>
-<span id="cb17-56"><a href="#cb17-56" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-59"><a href="#cb17-59" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb17-60"><a href="#cb17-60" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: setup</span></span>
-<span id="cb17-61"><a href="#cb17-61" aria-hidden="true" tabindex="-1"></a><span class="co">#| message: false</span></span>
-<span id="cb17-62"><a href="#cb17-62" aria-hidden="true" tabindex="-1"></a><span class="co">#| warning: false</span></span>
-<span id="cb17-63"><a href="#cb17-63" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-64"><a href="#cb17-64" aria-hidden="true" tabindex="-1"></a>librarian<span class="sc">::</span><span class="fu">shelf</span>(DBI, duckdb, dplyr, glue, ncdf4, readr, jsonlite, digest,</span>
-<span id="cb17-65"><a href="#cb17-65" aria-hidden="true" tabindex="-1"></a>                 knitr, tibble, here, <span class="at">quiet =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb17-66"><a href="#cb17-66" aria-hidden="true" tabindex="-1"></a>here <span class="ot">&lt;-</span> here<span class="sc">::</span>here</span>
-<span id="cb17-67"><a href="#cb17-67" aria-hidden="true" tabindex="-1"></a><span class="fu">source</span>(<span class="fu">here</span>(<span class="st">"libs/publish_netcdf.R"</span>))</span>
-<span id="cb17-68"><a href="#cb17-68" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-69"><a href="#cb17-69" aria-hidden="true" tabindex="-1"></a>DATASET     <span class="ot">&lt;-</span> <span class="st">"ctd-cast"</span></span>
-<span id="cb17-70"><a href="#cb17-70" aria-hidden="true" tabindex="-1"></a>DATASET_KEY <span class="ot">&lt;-</span> <span class="st">"calcofi_ctd-cast"</span></span>
-<span id="cb17-71"><a href="#cb17-71" aria-hidden="true" tabindex="-1"></a>RELEASE     <span class="ot">&lt;-</span> <span class="fu">cc_release_version</span>()      <span class="co"># PROMOTED release, never a serving tree</span></span>
-<span id="cb17-72"><a href="#cb17-72" aria-hidden="true" tabindex="-1"></a>PQ          <span class="ot">&lt;-</span> <span class="fu">cc_release_parquet</span>(RELEASE)</span>
-<span id="cb17-73"><a href="#cb17-73" aria-hidden="true" tabindex="-1"></a>OUT_DIR     <span class="ot">&lt;-</span> <span class="fu">here</span>(<span class="st">"data/netcdf"</span>); <span class="fu">dir.create</span>(OUT_DIR, <span class="at">recursive =</span> <span class="cn">TRUE</span>, <span class="at">showWarnings =</span> <span class="cn">FALSE</span>)</span>
-<span id="cb17-74"><a href="#cb17-74" aria-hidden="true" tabindex="-1"></a>OUT_NC      <span class="ot">&lt;-</span> <span class="fu">file.path</span>(OUT_DIR, <span class="fu">glue</span>(<span class="st">"{DATASET}.nc"</span>))</span>
-<span id="cb17-75"><a href="#cb17-75" aria-hidden="true" tabindex="-1"></a>PUBLISH     <span class="ot">&lt;-</span> <span class="fu">identical</span>(<span class="fu">Sys.getenv</span>(<span class="st">"CALCOFI_PUBLISH"</span>), <span class="st">"true"</span>)</span>
-<span id="cb17-76"><a href="#cb17-76" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-77"><a href="#cb17-77" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"release : {RELEASE}</span><span class="sc">\n</span><span class="st">parquet : {PQ}</span><span class="sc">\n</span><span class="st">output  : {OUT_NC}</span><span class="sc">\n</span><span class="st">publish : {PUBLISH}</span><span class="sc">\n</span><span class="st">"</span>))</span>
-<span id="cb17-78"><a href="#cb17-78" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb17-79"><a href="#cb17-79" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-82"><a href="#cb17-82" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb17-83"><a href="#cb17-83" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: connect</span></span>
-<span id="cb17-84"><a href="#cb17-84" aria-hidden="true" tabindex="-1"></a>con <span class="ot">&lt;-</span> <span class="fu">dbConnect</span>(<span class="fu">duckdb</span>())</span>
-<span id="cb17-85"><a href="#cb17-85" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (s <span class="cf">in</span> <span class="fu">c</span>(<span class="st">"INSTALL httpfs"</span>, <span class="st">"LOAD httpfs"</span>, <span class="st">"SET memory_limit='6GB'"</span>,</span>
-<span id="cb17-86"><a href="#cb17-86" aria-hidden="true" tabindex="-1"></a>            <span class="st">"SET enable_progress_bar=false"</span>)) <span class="fu">try</span>(<span class="fu">dbExecute</span>(con, s), <span class="at">silent =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb17-87"><a href="#cb17-87" aria-hidden="true" tabindex="-1"></a>q <span class="ot">&lt;-</span> <span class="cf">function</span>(sql, ...) <span class="fu">dbGetQuery</span>(con, <span class="fu">glue</span>(sql, ..., <span class="at">.envir =</span> <span class="fu">parent.frame</span>()))</span>
-<span id="cb17-88"><a href="#cb17-88" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-89"><a href="#cb17-89" aria-hidden="true" tabindex="-1"></a><span class="fu">dbExecute</span>(con, <span class="fu">glue</span>(<span class="st">"</span></span>
-<span id="cb17-90"><a href="#cb17-90" aria-hidden="true" tabindex="-1"></a><span class="st">  CREATE VIEW smp AS SELECT * FROM read_parquet('{PQ}/sample.parquet')</span></span>
-<span id="cb17-91"><a href="#cb17-91" aria-hidden="true" tabindex="-1"></a><span class="st">                     WHERE dataset_key = '{DATASET_KEY}';</span></span>
-<span id="cb17-92"><a href="#cb17-92" aria-hidden="true" tabindex="-1"></a><span class="st">  CREATE VIEW obs AS SELECT * FROM read_parquet('{PQ}/obs/dataset_key={DATASET_KEY}/data_0.parquet');"</span>))</span>
-<span id="cb17-93"><a href="#cb17-93" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb17-94"><a href="#cb17-94" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-95"><a href="#cb17-95" aria-hidden="true" tabindex="-1"></a><span class="fu">## Shape and integrity</span></span>
-<span id="cb17-96"><a href="#cb17-96" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-99"><a href="#cb17-99" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb17-100"><a href="#cb17-100" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: integrity</span></span>
-<span id="cb17-101"><a href="#cb17-101" aria-hidden="true" tabindex="-1"></a>shape <span class="ot">&lt;-</span> <span class="fu">q</span>(<span class="st">"</span></span>
-<span id="cb17-102"><a href="#cb17-102" aria-hidden="true" tabindex="-1"></a><span class="st">  SELECT (SELECT count(*) FROM smp WHERE sample_type='cast')       AS casts_in_sample,</span></span>
-<span id="cb17-103"><a href="#cb17-103" aria-hidden="true" tabindex="-1"></a><span class="st">         (SELECT count(DISTINCT sample_key) FROM obs)              AS casts_with_obs,</span></span>
-<span id="cb17-104"><a href="#cb17-104" aria-hidden="true" tabindex="-1"></a><span class="st">         (SELECT count(*) FROM obs)                                AS obs_rows,</span></span>
-<span id="cb17-105"><a href="#cb17-105" aria-hidden="true" tabindex="-1"></a><span class="st">         (SELECT count(DISTINCT measurement_type) FROM obs)        AS sensor_types"</span>)</span>
-<span id="cb17-106"><a href="#cb17-106" aria-hidden="true" tabindex="-1"></a><span class="fu">kable</span>(shape)</span>
-<span id="cb17-107"><a href="#cb17-107" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-108"><a href="#cb17-108" aria-hidden="true" tabindex="-1"></a><span class="co"># A profile must have a well-defined depth axis: one value per (cast, depth,</span></span>
-<span id="cb17-109"><a href="#cb17-109" aria-hidden="true" tabindex="-1"></a><span class="co"># measurement_type). Duplicates there would silently collapse in the pivot below,</span></span>
-<span id="cb17-110"><a href="#cb17-110" aria-hidden="true" tabindex="-1"></a><span class="co"># so check rather than assume.</span></span>
-<span id="cb17-111"><a href="#cb17-111" aria-hidden="true" tabindex="-1"></a>dupes <span class="ot">&lt;-</span> <span class="fu">q</span>(<span class="st">"</span></span>
-<span id="cb17-112"><a href="#cb17-112" aria-hidden="true" tabindex="-1"></a><span class="st">  SELECT count(*) AS n FROM (</span></span>
-<span id="cb17-113"><a href="#cb17-113" aria-hidden="true" tabindex="-1"></a><span class="st">    SELECT sample_key, depth_min_m, measurement_type</span></span>
-<span id="cb17-114"><a href="#cb17-114" aria-hidden="true" tabindex="-1"></a><span class="st">    FROM obs GROUP BY 1,2,3 HAVING count(*) &gt; 1)"</span>)<span class="sc">$</span>n</span>
-<span id="cb17-115"><a href="#cb17-115" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"duplicate (cast, depth, measurement_type) triples: {dupes}</span><span class="sc">\n</span><span class="st">"</span>))</span>
-<span id="cb17-116"><a href="#cb17-116" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb17-117"><a href="#cb17-117" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-120"><a href="#cb17-120" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb17-121"><a href="#cb17-121" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: pivot</span></span>
-<span id="cb17-122"><a href="#cb17-122" aria-hidden="true" tabindex="-1"></a><span class="co"># WIDEN: measurement_type -&gt; one variable each, ordered by (cast, depth) so the</span></span>
-<span id="cb17-123"><a href="#cb17-123" aria-hidden="true" tabindex="-1"></a><span class="co"># profiles are contiguous — which is what a CF contiguous ragged array requires.</span></span>
-<span id="cb17-124"><a href="#cb17-124" aria-hidden="true" tabindex="-1"></a>types <span class="ot">&lt;-</span> <span class="fu">q</span>(<span class="st">"SELECT DISTINCT measurement_type FROM obs ORDER BY 1"</span>)<span class="sc">$</span>measurement_type</span>
-<span id="cb17-125"><a href="#cb17-125" aria-hidden="true" tabindex="-1"></a>sel <span class="ot">&lt;-</span> <span class="fu">paste</span>(<span class="fu">sprintf</span>(</span>
-<span id="cb17-126"><a href="#cb17-126" aria-hidden="true" tabindex="-1"></a>  <span class="st">"MAX(measurement_value) FILTER (WHERE measurement_type='%s')::DOUBLE AS </span><span class="sc">\"</span><span class="st">%s</span><span class="sc">\"</span><span class="st">"</span>,</span>
-<span id="cb17-127"><a href="#cb17-127" aria-hidden="true" tabindex="-1"></a>  types, types), <span class="at">collapse =</span> <span class="st">",</span><span class="sc">\n</span><span class="st">    "</span>)</span>
-<span id="cb17-128"><a href="#cb17-128" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-129"><a href="#cb17-129" aria-hidden="true" tabindex="-1"></a>prof <span class="ot">&lt;-</span> <span class="fu">q</span>(<span class="st">"</span></span>
-<span id="cb17-130"><a href="#cb17-130" aria-hidden="true" tabindex="-1"></a><span class="st">  SELECT o.sample_key                       AS profile_id,</span></span>
-<span id="cb17-131"><a href="#cb17-131" aria-hidden="true" tabindex="-1"></a><span class="st">         any_value(s.cruise_key)            AS cruise_key,</span></span>
-<span id="cb17-132"><a href="#cb17-132" aria-hidden="true" tabindex="-1"></a><span class="st">         any_value(s.grid_key)              AS grid_key,</span></span>
-<span id="cb17-133"><a href="#cb17-133" aria-hidden="true" tabindex="-1"></a><span class="st">         epoch(any_value(s.datetime))::DOUBLE AS time,</span></span>
-<span id="cb17-134"><a href="#cb17-134" aria-hidden="true" tabindex="-1"></a><span class="st">         any_value(s.latitude)::DOUBLE      AS latitude,</span></span>
-<span id="cb17-135"><a href="#cb17-135" aria-hidden="true" tabindex="-1"></a><span class="st">         any_value(s.longitude)::DOUBLE     AS longitude,</span></span>
-<span id="cb17-136"><a href="#cb17-136" aria-hidden="true" tabindex="-1"></a><span class="st">         o.depth_min_m::DOUBLE              AS depth,</span></span>
-<span id="cb17-137"><a href="#cb17-137" aria-hidden="true" tabindex="-1"></a><span class="st">         {sel}</span></span>
-<span id="cb17-138"><a href="#cb17-138" aria-hidden="true" tabindex="-1"></a><span class="st">  FROM obs o LEFT JOIN smp s ON s.sample_key = o.sample_key</span></span>
-<span id="cb17-139"><a href="#cb17-139" aria-hidden="true" tabindex="-1"></a><span class="st">  GROUP BY o.sample_key, o.depth_min_m</span></span>
-<span id="cb17-140"><a href="#cb17-140" aria-hidden="true" tabindex="-1"></a><span class="st">  ORDER BY o.sample_key, o.depth_min_m"</span>)</span>
-<span id="cb17-141"><a href="#cb17-141" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-142"><a href="#cb17-142" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"wide rows (cast x depth): {nrow(prof)}</span><span class="sc">\n</span><span class="st">"</span>))</span>
-<span id="cb17-143"><a href="#cb17-143" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"sensor variables        : {length(types)}</span><span class="sc">\n</span><span class="st">"</span>))</span>
-<span id="cb17-144"><a href="#cb17-144" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb17-145"><a href="#cb17-145" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-146"><a href="#cb17-146" aria-hidden="true" tabindex="-1"></a><span class="fu">## Write the CF profile file</span></span>
-<span id="cb17-147"><a href="#cb17-147" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-150"><a href="#cb17-150" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb17-151"><a href="#cb17-151" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: write-nc</span></span>
-<span id="cb17-152"><a href="#cb17-152" aria-hidden="true" tabindex="-1"></a>mt_meta <span class="ot">&lt;-</span> <span class="fu">cc_measurement_meta</span>(<span class="fu">here</span>())</span>
-<span id="cb17-153"><a href="#cb17-153" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-154"><a href="#cb17-154" aria-hidden="true" tabindex="-1"></a>prof_ids <span class="ot">&lt;-</span> <span class="fu">unique</span>(prof<span class="sc">$</span>profile_id)</span>
-<span id="cb17-155"><a href="#cb17-155" aria-hidden="true" tabindex="-1"></a>row_size <span class="ot">&lt;-</span> <span class="fu">as.integer</span>(<span class="fu">table</span>(<span class="fu">factor</span>(prof<span class="sc">$</span>profile_id, <span class="at">levels =</span> prof_ids)))</span>
-<span id="cb17-156"><a href="#cb17-156" aria-hidden="true" tabindex="-1"></a>first_ix <span class="ot">&lt;-</span> <span class="fu">match</span>(prof_ids, prof<span class="sc">$</span>profile_id)</span>
-<span id="cb17-157"><a href="#cb17-157" aria-hidden="true" tabindex="-1"></a><span class="fu">stopifnot</span>(<span class="fu">sum</span>(row_size) <span class="sc">==</span> <span class="fu">nrow</span>(prof))</span>
-<span id="cb17-158"><a href="#cb17-158" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-159"><a href="#cb17-159" aria-hidden="true" tabindex="-1"></a>STRLEN <span class="ot">&lt;-</span> <span class="dv">64</span>L</span>
-<span id="cb17-160"><a href="#cb17-160" aria-hidden="true" tabindex="-1"></a>FILL   <span class="ot">&lt;-</span> <span class="fl">9.969209968386869e36</span></span>
-<span id="cb17-161"><a href="#cb17-161" aria-hidden="true" tabindex="-1"></a>d_prof <span class="ot">&lt;-</span> <span class="fu">ncdim_def</span>(<span class="st">"profile"</span>, <span class="st">""</span>, <span class="fu">seq_along</span>(prof_ids), <span class="at">create_dimvar =</span> <span class="cn">FALSE</span>)</span>
-<span id="cb17-162"><a href="#cb17-162" aria-hidden="true" tabindex="-1"></a>d_obs  <span class="ot">&lt;-</span> <span class="fu">ncdim_def</span>(<span class="st">"obs"</span>,     <span class="st">""</span>, <span class="fu">seq_len</span>(<span class="fu">nrow</span>(prof)), <span class="at">create_dimvar =</span> <span class="cn">FALSE</span>)</span>
-<span id="cb17-163"><a href="#cb17-163" aria-hidden="true" tabindex="-1"></a>d_str  <span class="ot">&lt;-</span> <span class="fu">ncdim_def</span>(<span class="st">"name_strlen"</span>, <span class="st">""</span>, <span class="fu">seq_len</span>(STRLEN), <span class="at">create_dimvar =</span> <span class="cn">FALSE</span>)</span>
-<span id="cb17-164"><a href="#cb17-164" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-165"><a href="#cb17-165" aria-hidden="true" tabindex="-1"></a>v_pid  <span class="ot">&lt;-</span> <span class="fu">ncvar_def</span>(<span class="st">"profile_id"</span>, <span class="st">""</span>, <span class="fu">list</span>(d_str, d_prof), <span class="at">prec =</span> <span class="st">"char"</span>)</span>
-<span id="cb17-166"><a href="#cb17-166" aria-hidden="true" tabindex="-1"></a>v_cru  <span class="ot">&lt;-</span> <span class="fu">ncvar_def</span>(<span class="st">"cruise_key"</span>, <span class="st">""</span>, <span class="fu">list</span>(d_str, d_prof), <span class="at">prec =</span> <span class="st">"char"</span>)</span>
-<span id="cb17-167"><a href="#cb17-167" aria-hidden="true" tabindex="-1"></a>v_grd  <span class="ot">&lt;-</span> <span class="fu">ncvar_def</span>(<span class="st">"grid_key"</span>,   <span class="st">""</span>, <span class="fu">list</span>(d_str, d_prof), <span class="at">prec =</span> <span class="st">"char"</span>)</span>
-<span id="cb17-168"><a href="#cb17-168" aria-hidden="true" tabindex="-1"></a>v_time <span class="ot">&lt;-</span> <span class="fu">ncvar_def</span>(<span class="st">"time"</span>, <span class="st">"seconds since 1970-01-01T00:00:00Z"</span>, d_prof, <span class="at">prec =</span> <span class="st">"double"</span>)</span>
-<span id="cb17-169"><a href="#cb17-169" aria-hidden="true" tabindex="-1"></a>v_lat  <span class="ot">&lt;-</span> <span class="fu">ncvar_def</span>(<span class="st">"latitude"</span>,  <span class="st">"degrees_north"</span>, d_prof, <span class="at">prec =</span> <span class="st">"double"</span>)</span>
-<span id="cb17-170"><a href="#cb17-170" aria-hidden="true" tabindex="-1"></a>v_lon  <span class="ot">&lt;-</span> <span class="fu">ncvar_def</span>(<span class="st">"longitude"</span>, <span class="st">"degrees_east"</span>,  d_prof, <span class="at">prec =</span> <span class="st">"double"</span>)</span>
-<span id="cb17-171"><a href="#cb17-171" aria-hidden="true" tabindex="-1"></a>v_rs   <span class="ot">&lt;-</span> <span class="fu">ncvar_def</span>(<span class="st">"rowSize"</span>,   <span class="st">""</span>,              d_prof, <span class="at">prec =</span> <span class="st">"integer"</span>)</span>
-<span id="cb17-172"><a href="#cb17-172" aria-hidden="true" tabindex="-1"></a>v_dep  <span class="ot">&lt;-</span> <span class="fu">ncvar_def</span>(<span class="st">"depth"</span>, <span class="st">"m"</span>, d_obs, <span class="at">prec =</span> <span class="st">"double"</span>, <span class="at">missval =</span> FILL)</span>
-<span id="cb17-173"><a href="#cb17-173" aria-hidden="true" tabindex="-1"></a>v_sens <span class="ot">&lt;-</span> <span class="fu">lapply</span>(types, <span class="cf">function</span>(v) <span class="fu">ncvar_def</span>(</span>
-<span id="cb17-174"><a href="#cb17-174" aria-hidden="true" tabindex="-1"></a>  v, <span class="fu">as.character</span>(mt_meta[[v]]<span class="sc">$</span>units <span class="sc">%||%</span> <span class="st">""</span>), d_obs, <span class="at">prec =</span> <span class="st">"double"</span>, <span class="at">missval =</span> FILL))</span>
-<span id="cb17-175"><a href="#cb17-175" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-176"><a href="#cb17-176" aria-hidden="true" tabindex="-1"></a><span class="fu">unlink</span>(OUT_NC)</span>
-<span id="cb17-177"><a href="#cb17-177" aria-hidden="true" tabindex="-1"></a>nc <span class="ot">&lt;-</span> <span class="fu">nc_create</span>(OUT_NC, <span class="fu">c</span>(<span class="fu">list</span>(v_pid, v_cru, v_grd, v_time, v_lat, v_lon, v_rs, v_dep),</span>
-<span id="cb17-178"><a href="#cb17-178" aria-hidden="true" tabindex="-1"></a>                          v_sens), <span class="at">force_v4 =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb17-179"><a href="#cb17-179" aria-hidden="true" tabindex="-1"></a><span class="fu">ncvar_put</span>(nc, v_pid,  prof_ids)</span>
-<span id="cb17-180"><a href="#cb17-180" aria-hidden="true" tabindex="-1"></a><span class="fu">ncvar_put</span>(nc, v_cru,  prof<span class="sc">$</span>cruise_key[first_ix])</span>
-<span id="cb17-181"><a href="#cb17-181" aria-hidden="true" tabindex="-1"></a><span class="fu">ncvar_put</span>(nc, v_grd,  prof<span class="sc">$</span>grid_key[first_ix])</span>
-<span id="cb17-182"><a href="#cb17-182" aria-hidden="true" tabindex="-1"></a><span class="fu">ncvar_put</span>(nc, v_time, prof<span class="sc">$</span>time[first_ix])</span>
-<span id="cb17-183"><a href="#cb17-183" aria-hidden="true" tabindex="-1"></a><span class="fu">ncvar_put</span>(nc, v_lat,  prof<span class="sc">$</span>latitude[first_ix])</span>
-<span id="cb17-184"><a href="#cb17-184" aria-hidden="true" tabindex="-1"></a><span class="fu">ncvar_put</span>(nc, v_lon,  prof<span class="sc">$</span>longitude[first_ix])</span>
-<span id="cb17-185"><a href="#cb17-185" aria-hidden="true" tabindex="-1"></a><span class="fu">ncvar_put</span>(nc, v_rs,   row_size)</span>
-<span id="cb17-186"><a href="#cb17-186" aria-hidden="true" tabindex="-1"></a><span class="fu">ncvar_put</span>(nc, v_dep,  prof<span class="sc">$</span>depth)</span>
-<span id="cb17-187"><a href="#cb17-187" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (i <span class="cf">in</span> <span class="fu">seq_along</span>(types)) <span class="fu">ncvar_put</span>(nc, v_sens[[i]], prof[[types[i]]])</span>
-<span id="cb17-188"><a href="#cb17-188" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-189"><a href="#cb17-189" aria-hidden="true" tabindex="-1"></a><span class="co"># CF DSG attributes — these are what make it a profile dataset rather than a</span></span>
-<span id="cb17-190"><a href="#cb17-190" aria-hidden="true" tabindex="-1"></a><span class="co"># table that happens to be in netCDF.</span></span>
-<span id="cb17-191"><a href="#cb17-191" aria-hidden="true" tabindex="-1"></a><span class="fu">ncatt_put</span>(nc, <span class="st">"profile_id"</span>, <span class="st">"cf_role"</span>, <span class="st">"profile_id"</span>)</span>
-<span id="cb17-192"><a href="#cb17-192" aria-hidden="true" tabindex="-1"></a><span class="fu">ncatt_put</span>(nc, <span class="st">"profile_id"</span>, <span class="st">"long_name"</span>, <span class="st">"CTD cast identifier"</span>)</span>
-<span id="cb17-193"><a href="#cb17-193" aria-hidden="true" tabindex="-1"></a><span class="fu">ncatt_put</span>(nc, <span class="st">"time"</span>, <span class="st">"standard_name"</span>, <span class="st">"time"</span>);      <span class="fu">ncatt_put</span>(nc, <span class="st">"time"</span>, <span class="st">"axis"</span>, <span class="st">"T"</span>)</span>
-<span id="cb17-194"><a href="#cb17-194" aria-hidden="true" tabindex="-1"></a><span class="fu">ncatt_put</span>(nc, <span class="st">"latitude"</span>,  <span class="st">"standard_name"</span>, <span class="st">"latitude"</span>);  <span class="fu">ncatt_put</span>(nc, <span class="st">"latitude"</span>, <span class="st">"axis"</span>, <span class="st">"Y"</span>)</span>
-<span id="cb17-195"><a href="#cb17-195" aria-hidden="true" tabindex="-1"></a><span class="fu">ncatt_put</span>(nc, <span class="st">"longitude"</span>, <span class="st">"standard_name"</span>, <span class="st">"longitude"</span>); <span class="fu">ncatt_put</span>(nc, <span class="st">"longitude"</span>, <span class="st">"axis"</span>, <span class="st">"X"</span>)</span>
-<span id="cb17-196"><a href="#cb17-196" aria-hidden="true" tabindex="-1"></a><span class="fu">ncatt_put</span>(nc, <span class="st">"depth"</span>, <span class="st">"standard_name"</span>, <span class="st">"depth"</span>); <span class="fu">ncatt_put</span>(nc, <span class="st">"depth"</span>, <span class="st">"axis"</span>, <span class="st">"Z"</span>)</span>
-<span id="cb17-197"><a href="#cb17-197" aria-hidden="true" tabindex="-1"></a><span class="fu">ncatt_put</span>(nc, <span class="st">"depth"</span>, <span class="st">"positive"</span>, <span class="st">"down"</span>)</span>
-<span id="cb17-198"><a href="#cb17-198" aria-hidden="true" tabindex="-1"></a><span class="fu">ncatt_put</span>(nc, <span class="st">"rowSize"</span>, <span class="st">"long_name"</span>, <span class="st">"Number of observations for this profile"</span>)</span>
-<span id="cb17-199"><a href="#cb17-199" aria-hidden="true" tabindex="-1"></a><span class="fu">ncatt_put</span>(nc, <span class="st">"rowSize"</span>, <span class="st">"sample_dimension"</span>, <span class="st">"obs"</span>)   <span class="co"># -&gt; contiguous ragged array</span></span>
-<span id="cb17-200"><a href="#cb17-200" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (v <span class="cf">in</span> types) {</span>
-<span id="cb17-201"><a href="#cb17-201" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ncatt_put</span>(nc, v, <span class="st">"long_name"</span>,</span>
-<span id="cb17-202"><a href="#cb17-202" aria-hidden="true" tabindex="-1"></a>            <span class="fu">as.character</span>(mt_meta[[v]]<span class="sc">$</span>long_name <span class="sc">%||%</span> <span class="fu">gsub</span>(<span class="st">"_"</span>, <span class="st">" "</span>, v)))</span>
-<span id="cb17-203"><a href="#cb17-203" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ncatt_put</span>(nc, v, <span class="st">"coordinates"</span>, <span class="st">"time latitude longitude depth"</span>)</span>
-<span id="cb17-204"><a href="#cb17-204" aria-hidden="true" tabindex="-1"></a>  sn <span class="ot">&lt;-</span> mt_meta[[v]]<span class="sc">$</span>standard_name <span class="sc">%||%</span> <span class="cn">NA_character_</span></span>
-<span id="cb17-205"><a href="#cb17-205" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.na</span>(sn) <span class="sc">&amp;&amp;</span> <span class="fu">nzchar</span>(sn)) <span class="fu">ncatt_put</span>(nc, v, <span class="st">"standard_name"</span>, sn)</span>
-<span id="cb17-206"><a href="#cb17-206" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb17-207"><a href="#cb17-207" aria-hidden="true" tabindex="-1"></a>globals <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
-<span id="cb17-208"><a href="#cb17-208" aria-hidden="true" tabindex="-1"></a>  <span class="at">title =</span> <span class="st">"CalCOFI CTD casts — CF profile dataset"</span>,</span>
-<span id="cb17-209"><a href="#cb17-209" aria-hidden="true" tabindex="-1"></a>  <span class="at">summary =</span> <span class="fu">paste</span>(</span>
-<span id="cb17-210"><a href="#cb17-210" aria-hidden="true" tabindex="-1"></a>    <span class="st">"CalCOFI CTD profiles as CF Discrete Sampling Geometry: one profile per cast,"</span>,</span>
-<span id="cb17-211"><a href="#cb17-211" aria-hidden="true" tabindex="-1"></a>    <span class="st">"depth levels stored as a contiguous ragged array, each canonical sensor its"</span>,</span>
-<span id="cb17-212"><a href="#cb17-212" aria-hidden="true" tabindex="-1"></a>    <span class="st">"own variable with its own units. Widened from the normalized long form in the"</span>,</span>
-<span id="cb17-213"><a href="#cb17-213" aria-hidden="true" tabindex="-1"></a>    <span class="fu">glue</span>(<span class="st">"CalCOFI integrated database release {RELEASE}."</span>)),</span>
-<span id="cb17-214"><a href="#cb17-214" aria-hidden="true" tabindex="-1"></a>  <span class="at">featureType =</span> <span class="st">"profile"</span>, <span class="at">cdm_data_type =</span> <span class="st">"Profile"</span>,</span>
-<span id="cb17-215"><a href="#cb17-215" aria-hidden="true" tabindex="-1"></a>  <span class="at">cdm_profile_variables =</span> <span class="st">"profile_id, time, latitude, longitude, cruise_key, grid_key"</span>,</span>
-<span id="cb17-216"><a href="#cb17-216" aria-hidden="true" tabindex="-1"></a>  <span class="at">Conventions =</span> <span class="st">"CF-1.10, COARDS, ACDD-1.3"</span>,</span>
-<span id="cb17-217"><a href="#cb17-217" aria-hidden="true" tabindex="-1"></a>  <span class="at">cf_scope =</span> <span class="fu">paste</span>(<span class="st">"Fully CF: a CTD cast is a CF profile, so this dataset needs no"</span>,</span>
-<span id="cb17-218"><a href="#cb17-218" aria-hidden="true" tabindex="-1"></a>                   <span class="st">"extension beyond the standard (contrast the nested net-tow datasets)."</span>),</span>
-<span id="cb17-219"><a href="#cb17-219" aria-hidden="true" tabindex="-1"></a>  <span class="at">institution =</span> <span class="st">"CalCOFI"</span>, <span class="at">source =</span> <span class="fu">glue</span>(<span class="st">"CalCOFI integrated database release {RELEASE}"</span>),</span>
-<span id="cb17-220"><a href="#cb17-220" aria-hidden="true" tabindex="-1"></a>  <span class="at">db_release =</span> RELEASE, <span class="at">dataset_key =</span> DATASET_KEY,</span>
-<span id="cb17-221"><a href="#cb17-221" aria-hidden="true" tabindex="-1"></a>  <span class="at">references =</span> <span class="st">"https://calcofi.io/workflows/publish_ctd-cast_to-netcdf.html"</span>,</span>
-<span id="cb17-222"><a href="#cb17-222" aria-hidden="true" tabindex="-1"></a>  <span class="at">license =</span> <span class="st">"CC-BY 4.0"</span>, <span class="at">creator_name =</span> <span class="st">"CalCOFI"</span>, <span class="at">creator_url =</span> <span class="st">"https://calcofi.io"</span>,</span>
-<span id="cb17-223"><a href="#cb17-223" aria-hidden="true" tabindex="-1"></a>  <span class="at">date_created =</span> <span class="fu">format</span>(<span class="fu">Sys.time</span>(), <span class="st">"%Y-%m-%dT%H:%M:%SZ"</span>, <span class="at">tz =</span> <span class="st">"UTC"</span>))</span>
-<span id="cb17-224"><a href="#cb17-224" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (nm <span class="cf">in</span> <span class="fu">names</span>(globals)) <span class="fu">ncatt_put</span>(nc, <span class="dv">0</span>, nm, globals[[nm]])</span>
-<span id="cb17-225"><a href="#cb17-225" aria-hidden="true" tabindex="-1"></a><span class="fu">nc_close</span>(nc)</span>
-<span id="cb17-226"><a href="#cb17-226" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-227"><a href="#cb17-227" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"wrote {OUT_NC} ({round(file.size(OUT_NC)/1048576, 1)} MB)</span><span class="sc">\n</span><span class="st">"</span>))</span>
-<span id="cb17-228"><a href="#cb17-228" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb17-229"><a href="#cb17-229" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-230"><a href="#cb17-230" aria-hidden="true" tabindex="-1"></a><span class="fu">## Verify</span></span>
-<span id="cb17-231"><a href="#cb17-231" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-234"><a href="#cb17-234" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb17-235"><a href="#cb17-235" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: verify</span></span>
-<span id="cb17-236"><a href="#cb17-236" aria-hidden="true" tabindex="-1"></a>ncv <span class="ot">&lt;-</span> <span class="fu">nc_open</span>(OUT_NC)</span>
-<span id="cb17-237"><a href="#cb17-237" aria-hidden="true" tabindex="-1"></a>rs  <span class="ot">&lt;-</span> <span class="fu">ncvar_get</span>(ncv, <span class="st">"rowSize"</span>)</span>
-<span id="cb17-238"><a href="#cb17-238" aria-hidden="true" tabindex="-1"></a>chk <span class="ot">&lt;-</span> <span class="fu">tibble</span>(</span>
-<span id="cb17-239"><a href="#cb17-239" aria-hidden="true" tabindex="-1"></a>  <span class="at">check =</span> <span class="fu">c</span>(<span class="st">"featureType"</span>, <span class="st">"cf_role set"</span>, <span class="st">"profiles"</span>, <span class="st">"obs levels"</span>,</span>
-<span id="cb17-240"><a href="#cb17-240" aria-hidden="true" tabindex="-1"></a>            <span class="st">"rowSize sums to obs"</span>, <span class="st">"sensor variables"</span>, <span class="st">"depths per profile (min/med/max)"</span>),</span>
-<span id="cb17-241"><a href="#cb17-241" aria-hidden="true" tabindex="-1"></a>  <span class="at">value =</span> <span class="fu">c</span>(</span>
-<span id="cb17-242"><a href="#cb17-242" aria-hidden="true" tabindex="-1"></a>    <span class="fu">ncatt_get</span>(ncv, <span class="dv">0</span>, <span class="st">"featureType"</span>)<span class="sc">$</span>value,</span>
-<span id="cb17-243"><a href="#cb17-243" aria-hidden="true" tabindex="-1"></a>    <span class="fu">ncatt_get</span>(ncv, <span class="st">"profile_id"</span>, <span class="st">"cf_role"</span>)<span class="sc">$</span>value,</span>
-<span id="cb17-244"><a href="#cb17-244" aria-hidden="true" tabindex="-1"></a>    <span class="fu">as.character</span>(ncv<span class="sc">$</span>dim[[<span class="st">"profile"</span>]]<span class="sc">$</span>len),</span>
-<span id="cb17-245"><a href="#cb17-245" aria-hidden="true" tabindex="-1"></a>    <span class="fu">as.character</span>(ncv<span class="sc">$</span>dim[[<span class="st">"obs"</span>]]<span class="sc">$</span>len),</span>
-<span id="cb17-246"><a href="#cb17-246" aria-hidden="true" tabindex="-1"></a>    <span class="fu">as.character</span>(<span class="fu">sum</span>(rs) <span class="sc">==</span> ncv<span class="sc">$</span>dim[[<span class="st">"obs"</span>]]<span class="sc">$</span>len),</span>
-<span id="cb17-247"><a href="#cb17-247" aria-hidden="true" tabindex="-1"></a>    <span class="fu">as.character</span>(<span class="fu">length</span>(types)),</span>
-<span id="cb17-248"><a href="#cb17-248" aria-hidden="true" tabindex="-1"></a>    <span class="fu">paste</span>(<span class="fu">min</span>(rs), <span class="fu">median</span>(rs), <span class="fu">max</span>(rs), <span class="at">sep =</span> <span class="st">" / "</span>)))</span>
-<span id="cb17-249"><a href="#cb17-249" aria-hidden="true" tabindex="-1"></a><span class="fu">nc_close</span>(ncv)</span>
-<span id="cb17-250"><a href="#cb17-250" aria-hidden="true" tabindex="-1"></a><span class="fu">kable</span>(chk)</span>
-<span id="cb17-251"><a href="#cb17-251" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb17-252"><a href="#cb17-252" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-253"><a href="#cb17-253" aria-hidden="true" tabindex="-1"></a><span class="fu">## Publish</span></span>
-<span id="cb17-254"><a href="#cb17-254" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-257"><a href="#cb17-257" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb17-258"><a href="#cb17-258" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: publish</span></span>
-<span id="cb17-259"><a href="#cb17-259" aria-hidden="true" tabindex="-1"></a><span class="co">#| eval: !expr PUBLISH</span></span>
-<span id="cb17-260"><a href="#cb17-260" aria-hidden="true" tabindex="-1"></a>plan <span class="ot">&lt;-</span> <span class="fu">cc_netcdf_plan</span>(OUT_NC, DATASET, RELEASE)</span>
-<span id="cb17-261"><a href="#cb17-261" aria-hidden="true" tabindex="-1"></a>man  <span class="ot">&lt;-</span> <span class="fu">cc_netcdf_manifest</span>(plan, DATASET, RELEASE, RELEASE, <span class="fu">file.size</span>(OUT_NC),</span>
-<span id="cb17-262"><a href="#cb17-262" aria-hidden="true" tabindex="-1"></a>                           <span class="at">source_tables =</span> <span class="fu">c</span>(<span class="st">"sample"</span>, <span class="st">"obs"</span>),</span>
-<span id="cb17-263"><a href="#cb17-263" aria-hidden="true" tabindex="-1"></a>                           <span class="at">cf_scope =</span> globals<span class="sc">$</span>cf_scope)</span>
-<span id="cb17-264"><a href="#cb17-264" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"sha256: {substr(plan$sha256,1,16)}...  identical_to: {plan$identical_to}  upload: {plan$upload}</span><span class="sc">\n</span><span class="st">"</span>))</span>
-<span id="cb17-265"><a href="#cb17-265" aria-hidden="true" tabindex="-1"></a>jsonlite<span class="sc">::</span><span class="fu">write_json</span>(man, <span class="fu">file.path</span>(OUT_DIR, <span class="st">"manifest_ctd-cast.json"</span>),</span>
-<span id="cb17-266"><a href="#cb17-266" aria-hidden="true" tabindex="-1"></a>                     <span class="at">auto_unbox =</span> <span class="cn">TRUE</span>, <span class="at">pretty =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb17-267"><a href="#cb17-267" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb17-268"><a href="#cb17-268" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-271"><a href="#cb17-271" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb17-272"><a href="#cb17-272" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: cleanup</span></span>
-<span id="cb17-273"><a href="#cb17-273" aria-hidden="true" tabindex="-1"></a><span class="fu">dbDisconnect</span>(con, <span class="at">shutdown =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb17-274"><a href="#cb17-274" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb20" data-shortcodes="false"><pre class="sourceCode markdown code-with-copy"><code class="sourceCode markdown"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="co">---</span></span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a><span class="an">title:</span><span class="co"> "Publish CTD casts to CF NetCDF"</span></span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a><span class="an">subtitle:</span><span class="co"> "A true CF Discrete-Sampling-Geometry profile dataset — one profile per cast, sensors as variables"</span></span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a><span class="an">author:</span><span class="co"> "CalCOFI"</span></span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a><span class="an">date:</span><span class="co"> today</span></span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a><span class="an">format:</span></span>
+<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a><span class="co">  html:</span></span>
+<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a><span class="co">    toc: true</span></span>
+<span id="cb20-9"><a href="#cb20-9" aria-hidden="true" tabindex="-1"></a><span class="co">    toc-depth: 3</span></span>
+<span id="cb20-10"><a href="#cb20-10" aria-hidden="true" tabindex="-1"></a><span class="co">    code-fold: true</span></span>
+<span id="cb20-11"><a href="#cb20-11" aria-hidden="true" tabindex="-1"></a><span class="co">    code-tools: true</span></span>
+<span id="cb20-12"><a href="#cb20-12" aria-hidden="true" tabindex="-1"></a><span class="co">    df-print: kable</span></span>
+<span id="cb20-13"><a href="#cb20-13" aria-hidden="true" tabindex="-1"></a><span class="an">calcofi:</span></span>
+<span id="cb20-14"><a href="#cb20-14" aria-hidden="true" tabindex="-1"></a><span class="co">  target_name: publish_ctd_cast_to_netcdf</span></span>
+<span id="cb20-15"><a href="#cb20-15" aria-hidden="true" tabindex="-1"></a><span class="co">  workflow_type: publish</span></span>
+<span id="cb20-16"><a href="#cb20-16" aria-hidden="true" tabindex="-1"></a><span class="co">  dependency:</span></span>
+<span id="cb20-17"><a href="#cb20-17" aria-hidden="true" tabindex="-1"></a><span class="co">    - release_database</span></span>
+<span id="cb20-18"><a href="#cb20-18" aria-hidden="true" tabindex="-1"></a><span class="co">  provider: calcofi</span></span>
+<span id="cb20-19"><a href="#cb20-19" aria-hidden="true" tabindex="-1"></a><span class="co">  dataset: ctd-cast</span></span>
+<span id="cb20-20"><a href="#cb20-20" aria-hidden="true" tabindex="-1"></a><span class="co">  output: data/netcdf/ctd-cast.nc</span></span>
+<span id="cb20-21"><a href="#cb20-21" aria-hidden="true" tabindex="-1"></a><span class="co">  workflow_url: https://calcofi.io/workflows/publish_ctd-cast_to-netcdf.html</span></span>
+<span id="cb20-22"><a href="#cb20-22" aria-hidden="true" tabindex="-1"></a><span class="an">editor_options:</span></span>
+<span id="cb20-23"><a href="#cb20-23" aria-hidden="true" tabindex="-1"></a><span class="co">  chunk_output_type: console</span></span>
+<span id="cb20-24"><a href="#cb20-24" aria-hidden="true" tabindex="-1"></a><span class="co">---</span></span>
+<span id="cb20-25"><a href="#cb20-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-26"><a href="#cb20-26" aria-hidden="true" tabindex="-1"></a><span class="fu">## Overview</span></span>
+<span id="cb20-27"><a href="#cb20-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-28"><a href="#cb20-28" aria-hidden="true" tabindex="-1"></a>Publish the CalCOFI CTD record as a **CF Discrete-Sampling-Geometry profile</span>
+<span id="cb20-29"><a href="#cb20-29" aria-hidden="true" tabindex="-1"></a>dataset**, downstream of <span class="in">`release_database`</span>.</span>
+<span id="cb20-30"><a href="#cb20-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-31"><a href="#cb20-31" aria-hidden="true" tabindex="-1"></a>This is the *simple* end of the publish range, and deliberately so — it is the</span>
+<span id="cb20-32"><a href="#cb20-32" aria-hidden="true" tabindex="-1"></a>counterpart to</span>
+<span id="cb20-33"><a href="#cb20-33" aria-hidden="true" tabindex="-1"></a><span class="co">[</span><span class="ot">`publish_ichthyo_to-netcdf`</span><span class="co">](https://calcofi.io/workflows/publish_ichthyo_to-netcdf.html)</span>,</span>
+<span id="cb20-34"><a href="#cb20-34" aria-hidden="true" tabindex="-1"></a>which handles the deeply nested case. CTD needs no netCDF-4 groups:</span>
+<span id="cb20-35"><a href="#cb20-35" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-36"><a href="#cb20-36" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="pp">|</span> ichthyo <span class="pp">|</span> **ctd-cast** <span class="pp">|</span></span>
+<span id="cb20-37"><a href="#cb20-37" aria-hidden="true" tabindex="-1"></a><span class="pp">|---|---|---|</span></span>
+<span id="cb20-38"><a href="#cb20-38" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> hierarchy <span class="pp">|</span> site → tow → net → occurrence → bin <span class="pp">|</span> **flat: cast → depth level** <span class="pp">|</span></span>
+<span id="cb20-39"><a href="#cb20-39" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> CF status <span class="pp">|</span> CF where it applies; groups elsewhere <span class="pp">|</span> **fully CF (`featureType=Profile`)** <span class="pp">|</span></span>
+<span id="cb20-40"><a href="#cb20-40" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> structure <span class="pp">|</span> netCDF-4 groups + <span class="in">`parent_index`</span> <span class="pp">|</span> **contiguous ragged array (`rowSize`)** <span class="pp">|</span></span>
+<span id="cb20-41"><a href="#cb20-41" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-42"><a href="#cb20-42" aria-hidden="true" tabindex="-1"></a>A CTD cast *is* a CF profile: one instance, a vertical series of depth levels,</span>
+<span id="cb20-43"><a href="#cb20-43" aria-hidden="true" tabindex="-1"></a>each sensor its own variable. So this file is genuinely CF-compliant end to end —</span>
+<span id="cb20-44"><a href="#cb20-44" aria-hidden="true" tabindex="-1"></a>no caveat needed — and any CF-aware tool will read it without special handling.</span>
+<span id="cb20-45"><a href="#cb20-45" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-46"><a href="#cb20-46" aria-hidden="true" tabindex="-1"></a>::: {.callout-note title="Why the widening still matters"}</span>
+<span id="cb20-47"><a href="#cb20-47" aria-hidden="true" tabindex="-1"></a>The database stores CTD in long form: one row per cast × depth ×</span>
+<span id="cb20-48"><a href="#cb20-48" aria-hidden="true" tabindex="-1"></a><span class="in">`measurement_type`</span>, 5.55 M rows over 15 sensor types. A single</span>
+<span id="cb20-49"><a href="#cb20-49" aria-hidden="true" tabindex="-1"></a><span class="in">`measurement_value`</span> column therefore mixes °C, PSU, mL/L and volts. CF requires</span>
+<span id="cb20-50"><a href="#cb20-50" aria-hidden="true" tabindex="-1"></a>one unit per variable, so each <span class="in">`measurement_type`</span> becomes its own variable with</span>
+<span id="cb20-51"><a href="#cb20-51" aria-hidden="true" tabindex="-1"></a>its own <span class="in">`units`</span> and <span class="in">`long_name`</span>. That widening is what turns a queryable table</span>
+<span id="cb20-52"><a href="#cb20-52" aria-hidden="true" tabindex="-1"></a>into a self-documenting file.</span>
+<span id="cb20-53"><a href="#cb20-53" aria-hidden="true" tabindex="-1"></a>:::</span>
+<span id="cb20-54"><a href="#cb20-54" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-55"><a href="#cb20-55" aria-hidden="true" tabindex="-1"></a><span class="fu">## Setup</span></span>
+<span id="cb20-56"><a href="#cb20-56" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-59"><a href="#cb20-59" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb20-60"><a href="#cb20-60" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: setup</span></span>
+<span id="cb20-61"><a href="#cb20-61" aria-hidden="true" tabindex="-1"></a><span class="co">#| message: false</span></span>
+<span id="cb20-62"><a href="#cb20-62" aria-hidden="true" tabindex="-1"></a><span class="co">#| warning: false</span></span>
+<span id="cb20-63"><a href="#cb20-63" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-64"><a href="#cb20-64" aria-hidden="true" tabindex="-1"></a>librarian<span class="sc">::</span><span class="fu">shelf</span>(DBI, duckdb, dplyr, glue, ncdf4, readr, jsonlite, digest,</span>
+<span id="cb20-65"><a href="#cb20-65" aria-hidden="true" tabindex="-1"></a>                 knitr, tibble, here, <span class="at">quiet =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb20-66"><a href="#cb20-66" aria-hidden="true" tabindex="-1"></a>here <span class="ot">&lt;-</span> here<span class="sc">::</span>here</span>
+<span id="cb20-67"><a href="#cb20-67" aria-hidden="true" tabindex="-1"></a><span class="fu">source</span>(<span class="fu">here</span>(<span class="st">"libs/publish_netcdf.R"</span>))</span>
+<span id="cb20-68"><a href="#cb20-68" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-69"><a href="#cb20-69" aria-hidden="true" tabindex="-1"></a>DATASET     <span class="ot">&lt;-</span> <span class="st">"ctd-cast"</span></span>
+<span id="cb20-70"><a href="#cb20-70" aria-hidden="true" tabindex="-1"></a>DATASET_KEY <span class="ot">&lt;-</span> <span class="st">"calcofi_ctd-cast"</span></span>
+<span id="cb20-71"><a href="#cb20-71" aria-hidden="true" tabindex="-1"></a>RELEASE     <span class="ot">&lt;-</span> <span class="fu">cc_release_version</span>()      <span class="co"># PROMOTED release, never a serving tree</span></span>
+<span id="cb20-72"><a href="#cb20-72" aria-hidden="true" tabindex="-1"></a>PQ          <span class="ot">&lt;-</span> <span class="fu">cc_release_parquet</span>(RELEASE)</span>
+<span id="cb20-73"><a href="#cb20-73" aria-hidden="true" tabindex="-1"></a>OUT_DIR     <span class="ot">&lt;-</span> <span class="fu">here</span>(<span class="st">"data/netcdf"</span>); <span class="fu">dir.create</span>(OUT_DIR, <span class="at">recursive =</span> <span class="cn">TRUE</span>, <span class="at">showWarnings =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb20-74"><a href="#cb20-74" aria-hidden="true" tabindex="-1"></a>OUT_NC      <span class="ot">&lt;-</span> <span class="fu">file.path</span>(OUT_DIR, <span class="fu">glue</span>(<span class="st">"{DATASET}.nc"</span>))</span>
+<span id="cb20-75"><a href="#cb20-75" aria-hidden="true" tabindex="-1"></a>PUBLISH     <span class="ot">&lt;-</span> <span class="fu">identical</span>(<span class="fu">Sys.getenv</span>(<span class="st">"CALCOFI_PUBLISH"</span>), <span class="st">"true"</span>)</span>
+<span id="cb20-76"><a href="#cb20-76" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-77"><a href="#cb20-77" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"release : {RELEASE}</span><span class="sc">\n</span><span class="st">parquet : {PQ}</span><span class="sc">\n</span><span class="st">output  : {OUT_NC}</span><span class="sc">\n</span><span class="st">publish : {PUBLISH}</span><span class="sc">\n</span><span class="st">"</span>))</span>
+<span id="cb20-78"><a href="#cb20-78" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb20-79"><a href="#cb20-79" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-82"><a href="#cb20-82" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb20-83"><a href="#cb20-83" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: connect</span></span>
+<span id="cb20-84"><a href="#cb20-84" aria-hidden="true" tabindex="-1"></a>con <span class="ot">&lt;-</span> <span class="fu">dbConnect</span>(<span class="fu">duckdb</span>())</span>
+<span id="cb20-85"><a href="#cb20-85" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (s <span class="cf">in</span> <span class="fu">c</span>(<span class="st">"INSTALL httpfs"</span>, <span class="st">"LOAD httpfs"</span>, <span class="st">"SET memory_limit='6GB'"</span>,</span>
+<span id="cb20-86"><a href="#cb20-86" aria-hidden="true" tabindex="-1"></a>            <span class="st">"SET enable_progress_bar=false"</span>)) <span class="fu">try</span>(<span class="fu">dbExecute</span>(con, s), <span class="at">silent =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb20-87"><a href="#cb20-87" aria-hidden="true" tabindex="-1"></a>q <span class="ot">&lt;-</span> <span class="cf">function</span>(sql, ...) <span class="fu">dbGetQuery</span>(con, <span class="fu">glue</span>(sql, ..., <span class="at">.envir =</span> <span class="fu">parent.frame</span>()))</span>
+<span id="cb20-88"><a href="#cb20-88" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-89"><a href="#cb20-89" aria-hidden="true" tabindex="-1"></a><span class="fu">dbExecute</span>(con, <span class="fu">glue</span>(<span class="st">"</span></span>
+<span id="cb20-90"><a href="#cb20-90" aria-hidden="true" tabindex="-1"></a><span class="st">  CREATE VIEW smp AS SELECT * FROM read_parquet('{PQ}/sample.parquet')</span></span>
+<span id="cb20-91"><a href="#cb20-91" aria-hidden="true" tabindex="-1"></a><span class="st">                     WHERE dataset_key = '{DATASET_KEY}';</span></span>
+<span id="cb20-92"><a href="#cb20-92" aria-hidden="true" tabindex="-1"></a><span class="st">  CREATE VIEW obs AS SELECT * FROM read_parquet('{PQ}/obs/dataset_key={DATASET_KEY}/data_0.parquet');"</span>))</span>
+<span id="cb20-93"><a href="#cb20-93" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb20-94"><a href="#cb20-94" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-95"><a href="#cb20-95" aria-hidden="true" tabindex="-1"></a><span class="fu">## Shape and integrity</span></span>
+<span id="cb20-96"><a href="#cb20-96" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-99"><a href="#cb20-99" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb20-100"><a href="#cb20-100" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: integrity</span></span>
+<span id="cb20-101"><a href="#cb20-101" aria-hidden="true" tabindex="-1"></a>shape <span class="ot">&lt;-</span> <span class="fu">q</span>(<span class="st">"</span></span>
+<span id="cb20-102"><a href="#cb20-102" aria-hidden="true" tabindex="-1"></a><span class="st">  SELECT (SELECT count(*) FROM smp WHERE sample_type='cast')       AS casts_in_sample,</span></span>
+<span id="cb20-103"><a href="#cb20-103" aria-hidden="true" tabindex="-1"></a><span class="st">         (SELECT count(DISTINCT sample_key) FROM obs)              AS casts_with_obs,</span></span>
+<span id="cb20-104"><a href="#cb20-104" aria-hidden="true" tabindex="-1"></a><span class="st">         (SELECT count(*) FROM obs)                                AS obs_rows,</span></span>
+<span id="cb20-105"><a href="#cb20-105" aria-hidden="true" tabindex="-1"></a><span class="st">         (SELECT count(DISTINCT measurement_type) FROM obs)        AS sensor_types"</span>)</span>
+<span id="cb20-106"><a href="#cb20-106" aria-hidden="true" tabindex="-1"></a><span class="fu">kable</span>(shape)</span>
+<span id="cb20-107"><a href="#cb20-107" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-108"><a href="#cb20-108" aria-hidden="true" tabindex="-1"></a><span class="co"># A profile must have a well-defined depth axis: one value per (cast, depth,</span></span>
+<span id="cb20-109"><a href="#cb20-109" aria-hidden="true" tabindex="-1"></a><span class="co"># measurement_type). Duplicates there would silently collapse in the pivot below,</span></span>
+<span id="cb20-110"><a href="#cb20-110" aria-hidden="true" tabindex="-1"></a><span class="co"># so check rather than assume.</span></span>
+<span id="cb20-111"><a href="#cb20-111" aria-hidden="true" tabindex="-1"></a>dupes <span class="ot">&lt;-</span> <span class="fu">q</span>(<span class="st">"</span></span>
+<span id="cb20-112"><a href="#cb20-112" aria-hidden="true" tabindex="-1"></a><span class="st">  SELECT count(*) AS n FROM (</span></span>
+<span id="cb20-113"><a href="#cb20-113" aria-hidden="true" tabindex="-1"></a><span class="st">    SELECT sample_key, depth_min_m, measurement_type</span></span>
+<span id="cb20-114"><a href="#cb20-114" aria-hidden="true" tabindex="-1"></a><span class="st">    FROM obs GROUP BY 1,2,3 HAVING count(*) &gt; 1)"</span>)<span class="sc">$</span>n</span>
+<span id="cb20-115"><a href="#cb20-115" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"duplicate (cast, depth, measurement_type) triples: {dupes}</span><span class="sc">\n</span><span class="st">"</span>))</span>
+<span id="cb20-116"><a href="#cb20-116" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb20-117"><a href="#cb20-117" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-120"><a href="#cb20-120" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb20-121"><a href="#cb20-121" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: pivot</span></span>
+<span id="cb20-122"><a href="#cb20-122" aria-hidden="true" tabindex="-1"></a><span class="co"># WIDEN: measurement_type -&gt; one variable each, ordered by (cast, depth) so the</span></span>
+<span id="cb20-123"><a href="#cb20-123" aria-hidden="true" tabindex="-1"></a><span class="co"># profiles are contiguous — which is what a CF contiguous ragged array requires.</span></span>
+<span id="cb20-124"><a href="#cb20-124" aria-hidden="true" tabindex="-1"></a>types <span class="ot">&lt;-</span> <span class="fu">q</span>(<span class="st">"SELECT DISTINCT measurement_type FROM obs ORDER BY 1"</span>)<span class="sc">$</span>measurement_type</span>
+<span id="cb20-125"><a href="#cb20-125" aria-hidden="true" tabindex="-1"></a>sel <span class="ot">&lt;-</span> <span class="fu">paste</span>(<span class="fu">sprintf</span>(</span>
+<span id="cb20-126"><a href="#cb20-126" aria-hidden="true" tabindex="-1"></a>  <span class="st">"MAX(measurement_value) FILTER (WHERE measurement_type='%s')::DOUBLE AS </span><span class="sc">\"</span><span class="st">%s</span><span class="sc">\"</span><span class="st">"</span>,</span>
+<span id="cb20-127"><a href="#cb20-127" aria-hidden="true" tabindex="-1"></a>  types, types), <span class="at">collapse =</span> <span class="st">",</span><span class="sc">\n</span><span class="st">    "</span>)</span>
+<span id="cb20-128"><a href="#cb20-128" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-129"><a href="#cb20-129" aria-hidden="true" tabindex="-1"></a>prof <span class="ot">&lt;-</span> <span class="fu">q</span>(<span class="st">"</span></span>
+<span id="cb20-130"><a href="#cb20-130" aria-hidden="true" tabindex="-1"></a><span class="st">  SELECT o.sample_key                       AS profile_id,</span></span>
+<span id="cb20-131"><a href="#cb20-131" aria-hidden="true" tabindex="-1"></a><span class="st">         any_value(s.cruise_key)            AS cruise_key,</span></span>
+<span id="cb20-132"><a href="#cb20-132" aria-hidden="true" tabindex="-1"></a><span class="st">         any_value(s.grid_key)              AS grid_key,</span></span>
+<span id="cb20-133"><a href="#cb20-133" aria-hidden="true" tabindex="-1"></a><span class="st">         epoch(any_value(s.datetime))::DOUBLE AS time,</span></span>
+<span id="cb20-134"><a href="#cb20-134" aria-hidden="true" tabindex="-1"></a><span class="st">         any_value(s.latitude)::DOUBLE      AS latitude,</span></span>
+<span id="cb20-135"><a href="#cb20-135" aria-hidden="true" tabindex="-1"></a><span class="st">         any_value(s.longitude)::DOUBLE     AS longitude,</span></span>
+<span id="cb20-136"><a href="#cb20-136" aria-hidden="true" tabindex="-1"></a><span class="st">         o.depth_min_m::DOUBLE              AS depth,</span></span>
+<span id="cb20-137"><a href="#cb20-137" aria-hidden="true" tabindex="-1"></a><span class="st">         {sel}</span></span>
+<span id="cb20-138"><a href="#cb20-138" aria-hidden="true" tabindex="-1"></a><span class="st">  FROM obs o LEFT JOIN smp s ON s.sample_key = o.sample_key</span></span>
+<span id="cb20-139"><a href="#cb20-139" aria-hidden="true" tabindex="-1"></a><span class="st">  GROUP BY o.sample_key, o.depth_min_m</span></span>
+<span id="cb20-140"><a href="#cb20-140" aria-hidden="true" tabindex="-1"></a><span class="st">  ORDER BY o.sample_key, o.depth_min_m"</span>)</span>
+<span id="cb20-141"><a href="#cb20-141" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-142"><a href="#cb20-142" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"wide rows (cast x depth): {nrow(prof)}</span><span class="sc">\n</span><span class="st">"</span>))</span>
+<span id="cb20-143"><a href="#cb20-143" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"sensor variables        : {length(types)}</span><span class="sc">\n</span><span class="st">"</span>))</span>
+<span id="cb20-144"><a href="#cb20-144" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb20-145"><a href="#cb20-145" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-146"><a href="#cb20-146" aria-hidden="true" tabindex="-1"></a><span class="fu">## Write the CF profile file</span></span>
+<span id="cb20-147"><a href="#cb20-147" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-150"><a href="#cb20-150" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb20-151"><a href="#cb20-151" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: write-nc</span></span>
+<span id="cb20-152"><a href="#cb20-152" aria-hidden="true" tabindex="-1"></a>mt_meta <span class="ot">&lt;-</span> <span class="fu">cc_measurement_meta</span>(<span class="fu">here</span>())</span>
+<span id="cb20-153"><a href="#cb20-153" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-154"><a href="#cb20-154" aria-hidden="true" tabindex="-1"></a>prof_ids <span class="ot">&lt;-</span> <span class="fu">unique</span>(prof<span class="sc">$</span>profile_id)</span>
+<span id="cb20-155"><a href="#cb20-155" aria-hidden="true" tabindex="-1"></a>row_size <span class="ot">&lt;-</span> <span class="fu">as.integer</span>(<span class="fu">table</span>(<span class="fu">factor</span>(prof<span class="sc">$</span>profile_id, <span class="at">levels =</span> prof_ids)))</span>
+<span id="cb20-156"><a href="#cb20-156" aria-hidden="true" tabindex="-1"></a>first_ix <span class="ot">&lt;-</span> <span class="fu">match</span>(prof_ids, prof<span class="sc">$</span>profile_id)</span>
+<span id="cb20-157"><a href="#cb20-157" aria-hidden="true" tabindex="-1"></a><span class="fu">stopifnot</span>(<span class="fu">sum</span>(row_size) <span class="sc">==</span> <span class="fu">nrow</span>(prof))</span>
+<span id="cb20-158"><a href="#cb20-158" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-159"><a href="#cb20-159" aria-hidden="true" tabindex="-1"></a>STRLEN <span class="ot">&lt;-</span> <span class="dv">64</span>L</span>
+<span id="cb20-160"><a href="#cb20-160" aria-hidden="true" tabindex="-1"></a>FILL   <span class="ot">&lt;-</span> <span class="fl">9.969209968386869e36</span></span>
+<span id="cb20-161"><a href="#cb20-161" aria-hidden="true" tabindex="-1"></a>d_prof <span class="ot">&lt;-</span> <span class="fu">ncdim_def</span>(<span class="st">"profile"</span>, <span class="st">""</span>, <span class="fu">seq_along</span>(prof_ids), <span class="at">create_dimvar =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb20-162"><a href="#cb20-162" aria-hidden="true" tabindex="-1"></a>d_obs  <span class="ot">&lt;-</span> <span class="fu">ncdim_def</span>(<span class="st">"obs"</span>,     <span class="st">""</span>, <span class="fu">seq_len</span>(<span class="fu">nrow</span>(prof)), <span class="at">create_dimvar =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb20-163"><a href="#cb20-163" aria-hidden="true" tabindex="-1"></a>d_str  <span class="ot">&lt;-</span> <span class="fu">ncdim_def</span>(<span class="st">"name_strlen"</span>, <span class="st">""</span>, <span class="fu">seq_len</span>(STRLEN), <span class="at">create_dimvar =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb20-164"><a href="#cb20-164" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-165"><a href="#cb20-165" aria-hidden="true" tabindex="-1"></a>v_pid  <span class="ot">&lt;-</span> <span class="fu">ncvar_def</span>(<span class="st">"profile_id"</span>, <span class="st">""</span>, <span class="fu">list</span>(d_str, d_prof), <span class="at">prec =</span> <span class="st">"char"</span>)</span>
+<span id="cb20-166"><a href="#cb20-166" aria-hidden="true" tabindex="-1"></a>v_cru  <span class="ot">&lt;-</span> <span class="fu">ncvar_def</span>(<span class="st">"cruise_key"</span>, <span class="st">""</span>, <span class="fu">list</span>(d_str, d_prof), <span class="at">prec =</span> <span class="st">"char"</span>)</span>
+<span id="cb20-167"><a href="#cb20-167" aria-hidden="true" tabindex="-1"></a>v_grd  <span class="ot">&lt;-</span> <span class="fu">ncvar_def</span>(<span class="st">"grid_key"</span>,   <span class="st">""</span>, <span class="fu">list</span>(d_str, d_prof), <span class="at">prec =</span> <span class="st">"char"</span>)</span>
+<span id="cb20-168"><a href="#cb20-168" aria-hidden="true" tabindex="-1"></a>v_time <span class="ot">&lt;-</span> <span class="fu">ncvar_def</span>(<span class="st">"time"</span>, <span class="st">"seconds since 1970-01-01T00:00:00Z"</span>, d_prof, <span class="at">prec =</span> <span class="st">"double"</span>)</span>
+<span id="cb20-169"><a href="#cb20-169" aria-hidden="true" tabindex="-1"></a>v_lat  <span class="ot">&lt;-</span> <span class="fu">ncvar_def</span>(<span class="st">"latitude"</span>,  <span class="st">"degrees_north"</span>, d_prof, <span class="at">prec =</span> <span class="st">"double"</span>)</span>
+<span id="cb20-170"><a href="#cb20-170" aria-hidden="true" tabindex="-1"></a>v_lon  <span class="ot">&lt;-</span> <span class="fu">ncvar_def</span>(<span class="st">"longitude"</span>, <span class="st">"degrees_east"</span>,  d_prof, <span class="at">prec =</span> <span class="st">"double"</span>)</span>
+<span id="cb20-171"><a href="#cb20-171" aria-hidden="true" tabindex="-1"></a>v_rs   <span class="ot">&lt;-</span> <span class="fu">ncvar_def</span>(<span class="st">"rowSize"</span>,   <span class="st">""</span>,              d_prof, <span class="at">prec =</span> <span class="st">"integer"</span>)</span>
+<span id="cb20-172"><a href="#cb20-172" aria-hidden="true" tabindex="-1"></a>v_dep  <span class="ot">&lt;-</span> <span class="fu">ncvar_def</span>(<span class="st">"depth"</span>, <span class="st">"m"</span>, d_obs, <span class="at">prec =</span> <span class="st">"double"</span>, <span class="at">missval =</span> FILL)</span>
+<span id="cb20-173"><a href="#cb20-173" aria-hidden="true" tabindex="-1"></a>v_sens <span class="ot">&lt;-</span> <span class="fu">lapply</span>(types, <span class="cf">function</span>(v) <span class="fu">ncvar_def</span>(</span>
+<span id="cb20-174"><a href="#cb20-174" aria-hidden="true" tabindex="-1"></a>  v, <span class="fu">as.character</span>(mt_meta[[v]]<span class="sc">$</span>units <span class="sc">%||%</span> <span class="st">""</span>), d_obs, <span class="at">prec =</span> <span class="st">"double"</span>, <span class="at">missval =</span> FILL))</span>
+<span id="cb20-175"><a href="#cb20-175" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-176"><a href="#cb20-176" aria-hidden="true" tabindex="-1"></a><span class="fu">unlink</span>(OUT_NC)</span>
+<span id="cb20-177"><a href="#cb20-177" aria-hidden="true" tabindex="-1"></a>nc <span class="ot">&lt;-</span> <span class="fu">nc_create</span>(OUT_NC, <span class="fu">c</span>(<span class="fu">list</span>(v_pid, v_cru, v_grd, v_time, v_lat, v_lon, v_rs, v_dep),</span>
+<span id="cb20-178"><a href="#cb20-178" aria-hidden="true" tabindex="-1"></a>                          v_sens), <span class="at">force_v4 =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb20-179"><a href="#cb20-179" aria-hidden="true" tabindex="-1"></a><span class="fu">ncvar_put</span>(nc, v_pid,  prof_ids)</span>
+<span id="cb20-180"><a href="#cb20-180" aria-hidden="true" tabindex="-1"></a><span class="fu">ncvar_put</span>(nc, v_cru,  prof<span class="sc">$</span>cruise_key[first_ix])</span>
+<span id="cb20-181"><a href="#cb20-181" aria-hidden="true" tabindex="-1"></a><span class="fu">ncvar_put</span>(nc, v_grd,  prof<span class="sc">$</span>grid_key[first_ix])</span>
+<span id="cb20-182"><a href="#cb20-182" aria-hidden="true" tabindex="-1"></a><span class="fu">ncvar_put</span>(nc, v_time, prof<span class="sc">$</span>time[first_ix])</span>
+<span id="cb20-183"><a href="#cb20-183" aria-hidden="true" tabindex="-1"></a><span class="fu">ncvar_put</span>(nc, v_lat,  prof<span class="sc">$</span>latitude[first_ix])</span>
+<span id="cb20-184"><a href="#cb20-184" aria-hidden="true" tabindex="-1"></a><span class="fu">ncvar_put</span>(nc, v_lon,  prof<span class="sc">$</span>longitude[first_ix])</span>
+<span id="cb20-185"><a href="#cb20-185" aria-hidden="true" tabindex="-1"></a><span class="fu">ncvar_put</span>(nc, v_rs,   row_size)</span>
+<span id="cb20-186"><a href="#cb20-186" aria-hidden="true" tabindex="-1"></a><span class="fu">ncvar_put</span>(nc, v_dep,  prof<span class="sc">$</span>depth)</span>
+<span id="cb20-187"><a href="#cb20-187" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (i <span class="cf">in</span> <span class="fu">seq_along</span>(types)) <span class="fu">ncvar_put</span>(nc, v_sens[[i]], prof[[types[i]]])</span>
+<span id="cb20-188"><a href="#cb20-188" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-189"><a href="#cb20-189" aria-hidden="true" tabindex="-1"></a><span class="co"># CF DSG attributes — these are what make it a profile dataset rather than a</span></span>
+<span id="cb20-190"><a href="#cb20-190" aria-hidden="true" tabindex="-1"></a><span class="co"># table that happens to be in netCDF.</span></span>
+<span id="cb20-191"><a href="#cb20-191" aria-hidden="true" tabindex="-1"></a><span class="fu">ncatt_put</span>(nc, <span class="st">"profile_id"</span>, <span class="st">"cf_role"</span>, <span class="st">"profile_id"</span>)</span>
+<span id="cb20-192"><a href="#cb20-192" aria-hidden="true" tabindex="-1"></a><span class="fu">ncatt_put</span>(nc, <span class="st">"profile_id"</span>, <span class="st">"long_name"</span>, <span class="st">"CTD cast identifier"</span>)</span>
+<span id="cb20-193"><a href="#cb20-193" aria-hidden="true" tabindex="-1"></a><span class="fu">ncatt_put</span>(nc, <span class="st">"time"</span>, <span class="st">"standard_name"</span>, <span class="st">"time"</span>);      <span class="fu">ncatt_put</span>(nc, <span class="st">"time"</span>, <span class="st">"axis"</span>, <span class="st">"T"</span>)</span>
+<span id="cb20-194"><a href="#cb20-194" aria-hidden="true" tabindex="-1"></a><span class="fu">ncatt_put</span>(nc, <span class="st">"latitude"</span>,  <span class="st">"standard_name"</span>, <span class="st">"latitude"</span>);  <span class="fu">ncatt_put</span>(nc, <span class="st">"latitude"</span>, <span class="st">"axis"</span>, <span class="st">"Y"</span>)</span>
+<span id="cb20-195"><a href="#cb20-195" aria-hidden="true" tabindex="-1"></a><span class="fu">ncatt_put</span>(nc, <span class="st">"longitude"</span>, <span class="st">"standard_name"</span>, <span class="st">"longitude"</span>); <span class="fu">ncatt_put</span>(nc, <span class="st">"longitude"</span>, <span class="st">"axis"</span>, <span class="st">"X"</span>)</span>
+<span id="cb20-196"><a href="#cb20-196" aria-hidden="true" tabindex="-1"></a><span class="fu">ncatt_put</span>(nc, <span class="st">"depth"</span>, <span class="st">"standard_name"</span>, <span class="st">"depth"</span>); <span class="fu">ncatt_put</span>(nc, <span class="st">"depth"</span>, <span class="st">"axis"</span>, <span class="st">"Z"</span>)</span>
+<span id="cb20-197"><a href="#cb20-197" aria-hidden="true" tabindex="-1"></a><span class="fu">ncatt_put</span>(nc, <span class="st">"depth"</span>, <span class="st">"positive"</span>, <span class="st">"down"</span>)</span>
+<span id="cb20-198"><a href="#cb20-198" aria-hidden="true" tabindex="-1"></a><span class="fu">ncatt_put</span>(nc, <span class="st">"rowSize"</span>, <span class="st">"long_name"</span>, <span class="st">"Number of observations for this profile"</span>)</span>
+<span id="cb20-199"><a href="#cb20-199" aria-hidden="true" tabindex="-1"></a><span class="fu">ncatt_put</span>(nc, <span class="st">"rowSize"</span>, <span class="st">"sample_dimension"</span>, <span class="st">"obs"</span>)   <span class="co"># -&gt; contiguous ragged array</span></span>
+<span id="cb20-200"><a href="#cb20-200" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (v <span class="cf">in</span> types) {</span>
+<span id="cb20-201"><a href="#cb20-201" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ncatt_put</span>(nc, v, <span class="st">"long_name"</span>,</span>
+<span id="cb20-202"><a href="#cb20-202" aria-hidden="true" tabindex="-1"></a>            <span class="fu">as.character</span>(mt_meta[[v]]<span class="sc">$</span>long_name <span class="sc">%||%</span> <span class="fu">gsub</span>(<span class="st">"_"</span>, <span class="st">" "</span>, v)))</span>
+<span id="cb20-203"><a href="#cb20-203" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ncatt_put</span>(nc, v, <span class="st">"coordinates"</span>, <span class="st">"time latitude longitude depth"</span>)</span>
+<span id="cb20-204"><a href="#cb20-204" aria-hidden="true" tabindex="-1"></a>  sn <span class="ot">&lt;-</span> mt_meta[[v]]<span class="sc">$</span>standard_name <span class="sc">%||%</span> <span class="cn">NA_character_</span></span>
+<span id="cb20-205"><a href="#cb20-205" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.na</span>(sn) <span class="sc">&amp;&amp;</span> <span class="fu">nzchar</span>(sn)) <span class="fu">ncatt_put</span>(nc, v, <span class="st">"standard_name"</span>, sn)</span>
+<span id="cb20-206"><a href="#cb20-206" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb20-207"><a href="#cb20-207" aria-hidden="true" tabindex="-1"></a>globals <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
+<span id="cb20-208"><a href="#cb20-208" aria-hidden="true" tabindex="-1"></a>  <span class="at">title =</span> <span class="st">"CalCOFI CTD casts — CF profile dataset"</span>,</span>
+<span id="cb20-209"><a href="#cb20-209" aria-hidden="true" tabindex="-1"></a>  <span class="at">summary =</span> <span class="fu">paste</span>(</span>
+<span id="cb20-210"><a href="#cb20-210" aria-hidden="true" tabindex="-1"></a>    <span class="st">"CalCOFI CTD profiles as CF Discrete Sampling Geometry: one profile per cast,"</span>,</span>
+<span id="cb20-211"><a href="#cb20-211" aria-hidden="true" tabindex="-1"></a>    <span class="st">"depth levels stored as a contiguous ragged array, each canonical sensor its"</span>,</span>
+<span id="cb20-212"><a href="#cb20-212" aria-hidden="true" tabindex="-1"></a>    <span class="st">"own variable with its own units. Widened from the normalized long form in the"</span>,</span>
+<span id="cb20-213"><a href="#cb20-213" aria-hidden="true" tabindex="-1"></a>    <span class="fu">glue</span>(<span class="st">"CalCOFI integrated database release {RELEASE}."</span>)),</span>
+<span id="cb20-214"><a href="#cb20-214" aria-hidden="true" tabindex="-1"></a>  <span class="at">featureType =</span> <span class="st">"profile"</span>, <span class="at">cdm_data_type =</span> <span class="st">"Profile"</span>,</span>
+<span id="cb20-215"><a href="#cb20-215" aria-hidden="true" tabindex="-1"></a>  <span class="at">cdm_profile_variables =</span> <span class="st">"profile_id, time, latitude, longitude, cruise_key, grid_key"</span>,</span>
+<span id="cb20-216"><a href="#cb20-216" aria-hidden="true" tabindex="-1"></a>  <span class="at">Conventions =</span> <span class="st">"CF-1.10, COARDS, ACDD-1.3"</span>,</span>
+<span id="cb20-217"><a href="#cb20-217" aria-hidden="true" tabindex="-1"></a>  <span class="at">cf_scope =</span> <span class="fu">paste</span>(<span class="st">"Fully CF: a CTD cast is a CF profile, so this dataset needs no"</span>,</span>
+<span id="cb20-218"><a href="#cb20-218" aria-hidden="true" tabindex="-1"></a>                   <span class="st">"extension beyond the standard (contrast the nested net-tow datasets)."</span>),</span>
+<span id="cb20-219"><a href="#cb20-219" aria-hidden="true" tabindex="-1"></a>  <span class="at">institution =</span> <span class="st">"CalCOFI"</span>, <span class="at">source =</span> <span class="fu">glue</span>(<span class="st">"CalCOFI integrated database release {RELEASE}"</span>),</span>
+<span id="cb20-220"><a href="#cb20-220" aria-hidden="true" tabindex="-1"></a>  <span class="at">db_release =</span> RELEASE, <span class="at">dataset_key =</span> DATASET_KEY,</span>
+<span id="cb20-221"><a href="#cb20-221" aria-hidden="true" tabindex="-1"></a>  <span class="at">references =</span> <span class="st">"https://calcofi.io/workflows/publish_ctd-cast_to-netcdf.html"</span>,</span>
+<span id="cb20-222"><a href="#cb20-222" aria-hidden="true" tabindex="-1"></a>  <span class="at">license =</span> <span class="st">"CC-BY 4.0"</span>, <span class="at">creator_name =</span> <span class="st">"CalCOFI"</span>, <span class="at">creator_url =</span> <span class="st">"https://calcofi.io"</span>,</span>
+<span id="cb20-223"><a href="#cb20-223" aria-hidden="true" tabindex="-1"></a>  <span class="at">date_created =</span> <span class="fu">format</span>(<span class="fu">Sys.time</span>(), <span class="st">"%Y-%m-%dT%H:%M:%SZ"</span>, <span class="at">tz =</span> <span class="st">"UTC"</span>))</span>
+<span id="cb20-224"><a href="#cb20-224" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (nm <span class="cf">in</span> <span class="fu">names</span>(globals)) <span class="fu">ncatt_put</span>(nc, <span class="dv">0</span>, nm, globals[[nm]])</span>
+<span id="cb20-225"><a href="#cb20-225" aria-hidden="true" tabindex="-1"></a><span class="fu">nc_close</span>(nc)</span>
+<span id="cb20-226"><a href="#cb20-226" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-227"><a href="#cb20-227" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"wrote {OUT_NC} ({round(file.size(OUT_NC)/1048576, 1)} MB)</span><span class="sc">\n</span><span class="st">"</span>))</span>
+<span id="cb20-228"><a href="#cb20-228" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb20-229"><a href="#cb20-229" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-230"><a href="#cb20-230" aria-hidden="true" tabindex="-1"></a><span class="fu">## Verify</span></span>
+<span id="cb20-231"><a href="#cb20-231" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-234"><a href="#cb20-234" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb20-235"><a href="#cb20-235" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: verify</span></span>
+<span id="cb20-236"><a href="#cb20-236" aria-hidden="true" tabindex="-1"></a>ncv <span class="ot">&lt;-</span> <span class="fu">nc_open</span>(OUT_NC)</span>
+<span id="cb20-237"><a href="#cb20-237" aria-hidden="true" tabindex="-1"></a>rs  <span class="ot">&lt;-</span> <span class="fu">ncvar_get</span>(ncv, <span class="st">"rowSize"</span>)</span>
+<span id="cb20-238"><a href="#cb20-238" aria-hidden="true" tabindex="-1"></a>chk <span class="ot">&lt;-</span> <span class="fu">tibble</span>(</span>
+<span id="cb20-239"><a href="#cb20-239" aria-hidden="true" tabindex="-1"></a>  <span class="at">check =</span> <span class="fu">c</span>(<span class="st">"featureType"</span>, <span class="st">"cf_role set"</span>, <span class="st">"profiles"</span>, <span class="st">"obs levels"</span>,</span>
+<span id="cb20-240"><a href="#cb20-240" aria-hidden="true" tabindex="-1"></a>            <span class="st">"rowSize sums to obs"</span>, <span class="st">"sensor variables"</span>, <span class="st">"depths per profile (min/med/max)"</span>),</span>
+<span id="cb20-241"><a href="#cb20-241" aria-hidden="true" tabindex="-1"></a>  <span class="at">value =</span> <span class="fu">c</span>(</span>
+<span id="cb20-242"><a href="#cb20-242" aria-hidden="true" tabindex="-1"></a>    <span class="fu">ncatt_get</span>(ncv, <span class="dv">0</span>, <span class="st">"featureType"</span>)<span class="sc">$</span>value,</span>
+<span id="cb20-243"><a href="#cb20-243" aria-hidden="true" tabindex="-1"></a>    <span class="fu">ncatt_get</span>(ncv, <span class="st">"profile_id"</span>, <span class="st">"cf_role"</span>)<span class="sc">$</span>value,</span>
+<span id="cb20-244"><a href="#cb20-244" aria-hidden="true" tabindex="-1"></a>    <span class="fu">as.character</span>(ncv<span class="sc">$</span>dim[[<span class="st">"profile"</span>]]<span class="sc">$</span>len),</span>
+<span id="cb20-245"><a href="#cb20-245" aria-hidden="true" tabindex="-1"></a>    <span class="fu">as.character</span>(ncv<span class="sc">$</span>dim[[<span class="st">"obs"</span>]]<span class="sc">$</span>len),</span>
+<span id="cb20-246"><a href="#cb20-246" aria-hidden="true" tabindex="-1"></a>    <span class="fu">as.character</span>(<span class="fu">sum</span>(rs) <span class="sc">==</span> ncv<span class="sc">$</span>dim[[<span class="st">"obs"</span>]]<span class="sc">$</span>len),</span>
+<span id="cb20-247"><a href="#cb20-247" aria-hidden="true" tabindex="-1"></a>    <span class="fu">as.character</span>(<span class="fu">length</span>(types)),</span>
+<span id="cb20-248"><a href="#cb20-248" aria-hidden="true" tabindex="-1"></a>    <span class="fu">paste</span>(<span class="fu">min</span>(rs), <span class="fu">median</span>(rs), <span class="fu">max</span>(rs), <span class="at">sep =</span> <span class="st">" / "</span>)))</span>
+<span id="cb20-249"><a href="#cb20-249" aria-hidden="true" tabindex="-1"></a><span class="fu">nc_close</span>(ncv)</span>
+<span id="cb20-250"><a href="#cb20-250" aria-hidden="true" tabindex="-1"></a><span class="fu">kable</span>(chk)</span>
+<span id="cb20-251"><a href="#cb20-251" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb20-252"><a href="#cb20-252" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-253"><a href="#cb20-253" aria-hidden="true" tabindex="-1"></a><span class="fu">## Publish</span></span>
+<span id="cb20-254"><a href="#cb20-254" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-257"><a href="#cb20-257" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb20-258"><a href="#cb20-258" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: publish</span></span>
+<span id="cb20-259"><a href="#cb20-259" aria-hidden="true" tabindex="-1"></a><span class="co">#| eval: !expr PUBLISH</span></span>
+<span id="cb20-260"><a href="#cb20-260" aria-hidden="true" tabindex="-1"></a>plan <span class="ot">&lt;-</span> <span class="fu">cc_netcdf_plan</span>(OUT_NC, DATASET, RELEASE)</span>
+<span id="cb20-261"><a href="#cb20-261" aria-hidden="true" tabindex="-1"></a>man  <span class="ot">&lt;-</span> <span class="fu">cc_netcdf_manifest</span>(plan, DATASET, RELEASE, RELEASE, <span class="fu">file.size</span>(OUT_NC),</span>
+<span id="cb20-262"><a href="#cb20-262" aria-hidden="true" tabindex="-1"></a>                           <span class="at">source_tables =</span> <span class="fu">c</span>(<span class="st">"sample"</span>, <span class="st">"obs"</span>),</span>
+<span id="cb20-263"><a href="#cb20-263" aria-hidden="true" tabindex="-1"></a>                           <span class="at">cf_scope =</span> globals<span class="sc">$</span>cf_scope)</span>
+<span id="cb20-264"><a href="#cb20-264" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"sha256: {substr(plan$sha256,1,16)}...  identical_to: {plan$identical_to}  upload: {plan$upload}</span><span class="sc">\n</span><span class="st">"</span>))</span>
+<span id="cb20-265"><a href="#cb20-265" aria-hidden="true" tabindex="-1"></a>res <span class="ot">&lt;-</span> <span class="fu">cc_netcdf_publish</span>(OUT_NC, DATASET, RELEASE, plan, man)</span>
+<span id="cb20-266"><a href="#cb20-266" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"published: {res$url}</span><span class="sc">\n</span><span class="st">"</span>))</span>
+<span id="cb20-267"><a href="#cb20-267" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb20-268"><a href="#cb20-268" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-271"><a href="#cb20-271" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb20-272"><a href="#cb20-272" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: cleanup</span></span>
+<span id="cb20-273"><a href="#cb20-273" aria-hidden="true" tabindex="-1"></a><span class="fu">dbDisconnect</span>(con, <span class="at">shutdown =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb20-274"><a href="#cb20-274" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
 </code></pre></div><button title="Copy to Clipboard" class="code-copy-button" data-in-quarto-modal=""><i class="bi"></i></button></div>
 </div></div></div></div></div>
 </div> <!-- /content -->
