@@ -13,19 +13,22 @@ calcofi:
   dataset_meta:
     dataset_name: CCE-LTER Euphausiid Abundance
     description: >
-      Euphausiid (krill) abundance from CalCOFI / CCE-LTER net tows,
-      1951-2019, one row per tow. Provisional pending provider answers on
-      abundance units and taxonomic scope (see Questions for Data Providers).
+      Species- and life-stage-resolved euphausiid (krill) abundance from
+      CalCOFI / CCE-LTER net tows (BTEDB export), 1951-present, one row per
+      tow x species x life stage. Supersedes the prior single-Abundance-
+      column ingest, which had no taxonomic scope (Q02, now resolved) —
+      units remain provisional pending provider confirmation (Q01).
     citation_main: ""
     link_calcofi_org: ""
-    link_data_source: "https://portal.edirepository.org/ (EDI package TBD)"
+    link_data_source: "BTEDB (Bongo Tow Euphausiid Database) export"
     link_others: []
-    coverage_temporal: 1951-01 to 2019-04
+    coverage_temporal: 1951-01 to present
     coverage_spatial: "CalCOFI grid incl. Baja lines"
     license: ""
     pi_names: Rasmus Swalethorp; Linsey Sala
   tables_owned:
     - {table: euphausiids_tow}
+    - {table: euphausiids_taxon}
     - {table: euphausiids_measurement}
     - {table: euphausiids_summary}
     - {table: measurement_type, shared: true, note: "shared registry across datasets"}
@@ -37,26 +40,34 @@ editor_options:
 
 ## Overview
 
-**Source**: CCE-LTER euphausiid abundance time series (`data.csv`, ~1.2 MB,
-10,150 tows, 1951–2019), curated by CCE-LTER (Rasmus Swalethorp, Linsey Sala)
-and published on EDI.
+**Source**: BTEDB (Bongo Tow Euphausiid Database) export, `data.csv` — one row
+per net tow, 237 columns: 12 tow/position/time columns + 225
+`{Genus}_{species}_{life_stage}_Abundance` columns spanning 37 species across
+8 genera (*Euphausia*, *Nematobrachion*, *Nematoscelis*, *Nyctiphanes*,
+*Stylocheiron*, *Tessarabrachion*, *Thysanoessa*, *Thysanopoda*) and 16
+life-stage tokens (adult, juvenile, calyptopis + C1–C3, furcilia + F1–F7,
+larvae, metanauplius, damaged).
 
 - **Provider**: `cce-lter`
-- **Grain**: one row per net tow, with a single `Abundance` measurement
-- **Strategy**: load the source CSV into a tidy `euphausiids_tow` position
-  table; resolve `ship_key`, `cruise_key`, `site_key`, and `grid_key` against
-  the shared reference tables; pivot `Abundance` into long-format
-  `euphausiids_measurement`; summarize replicates into `euphausiids_summary`.
+- **Grain**: one row per net tow x species x life stage (long format)
+- **Strategy**: load the tow-level position columns into `euphausiids_tow`
+  exactly as before; build a small `euphausiids_taxon` reference table from
+  the distinct species named in the abundance columns; **pivot the 225 wide
+  columns into long format** (species + life_stage + value per tow) into
+  `euphausiids_measurement`; summarize into `euphausiids_summary`.
 
-This ingest **proceeds with documented best-guess decisions** for the open
-provider questions (units, taxonomic scope, coordinate/cruise/ship fixes); each
-decision is flagged inline and tracked, ranked by importance, in the
-*Questions for Data Providers* section at the end.
+**What changed from the prior ingest**: the previous version read a single
+pre-aggregated `Abundance` column with no species dimension at all — that
+was the entire content of open question Q02 ("no species column"). This
+version reads the species-resolved BTEDB export instead, which **resolves
+Q02** but does not change Q01 (units) or the ship/cruise/coordinate
+questions, which are unchanged from before and still open.
 
 ```{mermaid}
 graph LR
-  A[data.csv<br/>10,150 tows] --> B[euphausiids_tow<br/>position + keys]
-  B --> C[euphausiids_measurement<br/>long format]
+  A[data.csv<br/>7,482 tows x 225 species/stage cols] --> B[euphausiids_tow<br/>position + keys]
+  A --> T[euphausiids_taxon<br/>37 species]
+  A --> C[euphausiids_measurement<br/>long: tow x taxon x life_stage]
   C --> D[euphausiids_summary<br/>avg/stddev]
   B -.ship/cruise/grid.-> E[(shared refs)]
 ```
@@ -107,10 +118,9 @@ d_meas_type   <- read_csv(meas_type_csv)
 
 ## Read Source Data
 
-The source CSV currently lives at `{dir_data}/euphausiids/data.csv` (not under
-a `cce-lter/` subdirectory), so it is read directly rather than via
-`read_csv_files()`. Source columns are renamed to canonical names per
-`metadata/cce-lter/euphausiids/flds_redefine.csv`.
+The source CSV lives at `{dir_data}/euphausiids/data.csv`, read directly
+(not via `read_csv_files()`) same as before. Source columns are renamed to
+canonical names per `metadata/cce-lter/euphausiids/flds_redefine.csv`.
 
 ```{r}
 #| label: read-source
@@ -126,14 +136,19 @@ sync_to_gcs(
   exclude    = c(".DS_Store", "*.tmp", "*.gdoc"))  # .gdoc is a Drive stub
 
 d_raw <- read_csv(euph_csv)
+abund_cols <- names(d_raw) |> str_subset("_Abundance$")
+
 cat(glue("Read {format(nrow(d_raw), big.mark=',')} rows, ",
-         "{ncol(d_raw)} columns from {basename(euph_csv)}"), "\n")
+         "{ncol(d_raw)} columns from {basename(euph_csv)} ",
+         "({length(abund_cols)} species/stage abundance columns)"), "\n")
 ```
 
 ## Clean, Type-Cast, and Correct
 
-Apply the documented data-quality decisions (each tied to a ranked provider
-question). Canonical field names follow `metadata/field_dictionary.csv`.
+Same tow-level cleaning as the prior ingest (Q05/Q06 coordinate and
+tow-end-time fixes, unchanged) — this section only touches the 12
+non-abundance columns. Canonical field names follow
+`metadata/field_dictionary.csv`.
 
 ```{r}
 #| label: clean-data
@@ -150,20 +165,17 @@ d_clean <- d_raw |>
     datetime_start_utc = as_datetime(TowBegin),     # Q07: assumed already UTC
     datetime_end_utc   = as_datetime(TowEnd),
     latitude           = as.numeric(Latitude),
-    longitude          = as.numeric(Longitude),
-    abundance          = as.numeric(Abundance)) |>
+    longitude          = as.numeric(Longitude)) |>
   mutate(
-    # Q05: ~15 tows have positive longitudes (sign errors) -> flip to negative
+    # Q05: sign errors / garbage coordinates -> null out, same rule as before
     longitude = if_else(longitude > 0, -longitude, longitude),
-    # Q05: one garbage coordinate (lat 87.25, far outside survey) -> drop coords
     bad_coord = latitude > 51 | latitude < 20 | longitude < -135 | longitude > -105,
     latitude  = if_else(bad_coord, NA_real_, latitude),
     longitude = if_else(bad_coord, NA_real_, longitude),
-    # Q06: one TowEnd in year 2371 (typo) -> null out-of-range tow-end times
+    # Q06: out-of-range tow-end timestamps -> null
     datetime_end_utc = if_else(
       year(datetime_end_utc) > 2025 | year(datetime_end_utc) < 1949,
       as_datetime(NA), datetime_end_utc),
-    # canonical CalCOFI site_key "LLL.L SSS.S" from line + station
     site_key = if_else(
       is.na(line) | is.na(station), NA_character_,
       sprintf("%05.1f %05.1f", line, station)))
@@ -173,16 +185,83 @@ cat(glue("Cleaned {nrow(d_clean)} tows; ",
          "{sum(is.na(d_clean$datetime_end_utc))} tow-end null (incl. Q06)"), "\n")
 ```
 
+## Build Taxon Reference Table
+
+Parse the 225 abundance column names into genus/species/life_stage. Column
+pattern is `{Genus}_{species}_{life_stage}_Abundance`; life_stage itself may
+contain an underscore (e.g. `calyptopis_C1`, `furcilia_F6`), so the regex
+captures everything between the species token and the trailing `_Abundance`
+rather than assuming a fixed number of segments.
+
+```{r}
+#| label: parse-columns
+
+col_parts <- tibble(col = abund_cols) |>
+  mutate(
+    stem = str_remove(col, "_Abundance$"),
+    genus = str_extract(stem, "^[A-Za-z]+"),
+    rest  = str_remove(stem, "^[A-Za-z]+_"),
+    species    = str_extract(rest, "^[a-z]+"),
+    life_stage = str_remove(rest, "^[a-z]+_") |> str_replace_all("_", " "))
+
+n_species <- n_distinct(col_parts$genus, col_parts$species)
+cat(glue("Parsed {nrow(col_parts)} columns -> ",
+         "{n_species} distinct species x {n_distinct(col_parts$life_stage)} life-stage tokens"), "\n")
+
+# Question 09 (NEW): two species present in the canonical DB taxon list are absent
+# from this BTEDB export entirely (Bentheuphausia amblyops, Thysanopoda
+# cristata) — nothing to ingest for these until the provider confirms
+# whether BTEDB tracks them at all. Tracked below, not silently dropped.
+#
+# Question 10 (NEW): the DB's "Hansarsia" genus (atlantica, difficilis, gracilis,
+# microps, tenella) is a synonym for BTEDB's "Nematoscelis" — same 5
+# species, older vs. current genus name. Resolved here as a straight
+# rename (not flagged as missing), but the taxon-standardization step
+# downstream (calcofi4db::standardize_species()) should confirm the WoRMS
+# AphiaID resolves identically under either name.
+col_parts <- col_parts |>
+  mutate(scientific_name = glue("{genus} {species}"))
+
+euph_taxon <- col_parts |>
+  distinct(scientific_name, genus, species) |>
+  arrange(scientific_name) |>
+  mutate(taxon_id = row_number(), .before = 1)
+
+cat(glue("euphausiids_taxon: {nrow(euph_taxon)} species"), "\n")
+```
+
+## Pivot to Long Format
+
+Reshape the 225 wide columns into one row per tow x species x life_stage,
+dropping true zeros (a tow where a species/stage genuinely wasn't observed)
+from the fact table — same convention as `euphausiids_measurement` not
+storing NULLs before.
+
+```{r}
+#| label: pivot-long
+
+d_wide <- d_raw |>
+  transmute(tow_id = as.integer(RowNumber), across(all_of(abund_cols)))
+
+d_long <- d_wide |>
+  pivot_longer(-tow_id, names_to = "col", values_to = "abundance") |>
+  left_join(col_parts, by = "col") |>
+  left_join(euph_taxon |> select(taxon_id, scientific_name), by = "scientific_name") |>
+  filter(!is.na(abundance), abundance > 0) |>
+  select(tow_id, taxon_id, life_stage, abundance)
+
+cat(glue("Pivoted to {format(nrow(d_long), big.mark=',')} non-zero tow x species x stage rows ",
+         "(from {format(nrow(d_wide) * length(abund_cols), big.mark=',')} wide cells)"), "\n")
+```
+
 ## Resolve Ship and Cruise Keys
 
-Load shared reference tables, normalize the messy vessel names (Q04), resolve
-`ship_key`/`ship_nodc`, then derive `cruise_key` as `{YYYY}-{MM}-{ship_nodc}`
-(the CalCOFI natural-key form) and validate against the `cruise` table (Q03).
+Unchanged from the prior ingest — vessel name normalization (Q04) and
+`cruise_key` derivation (Q03), against the same shared reference tables.
 
 ```{r}
 #| label: resolve-keys
 
-# shared reference tables from the ichthyo ingest
 load_prior_tables(
   con,
   parquet_dir = here("data/parquet/swfsc_ichthyo"),
@@ -193,7 +272,6 @@ load_prior_tables(
 d_ship <- dbGetQuery(con, "SELECT ship_key, ship_name, ship_nodc FROM ship") |>
   mutate(ship_name_norm = ship_name |> str_to_upper() |> str_squish())
 
-# normalize euphausiids vessel names (strip 'R/V ', collapse spaces, upper-case)
 d_keys <- d_clean |>
   mutate(
     ship_name_norm = ship_name |>
@@ -202,13 +280,11 @@ d_keys <- d_clean |>
     d_ship |> select(ship_name_norm, ship_key, ship_nodc),
     by = "ship_name_norm") |>
   mutate(
-    # cruise_key = YYYY-MM-{ship_nodc} (NA when ship unresolved)
     cruise_key = if_else(
       is.na(ship_nodc), NA_character_,
       glue("{format(date, '%Y-%m')}-{ship_nodc}") |> as.character()))
 
 n_ship  <- sum(!is.na(d_keys$ship_key))
-# validate derived cruise_key exists in the cruise table
 valid_ck <- dbGetQuery(con, "SELECT DISTINCT cruise_key FROM cruise")$cruise_key
 d_keys <- d_keys |>
   mutate(cruise_key = if_else(cruise_key %in% valid_ck, cruise_key, NA_character_))
@@ -218,16 +294,9 @@ cat(glue(
   "Ship match: {n_ship}/{nrow(d_keys)} ({round(100*n_ship/nrow(d_keys),1)}%); ",
   "cruise_key match: {n_cruise}/{nrow(d_keys)} ",
   "({round(100*n_cruise/nrow(d_keys),1)}%)"), "\n")
-
-# report unresolved ship names for the provider follow-up (Q04)
-d_keys |> filter(is.na(ship_key)) |> count(ship_name, sort = TRUE) |>
-  datatable(caption = "Unresolved vessel names (Q04)")
 ```
 
 ## Load Tidy Tow Table
-
-`euphausiids_tow` carries position, time, and FK columns only — the
-`abundance` measurement is pivoted out in the next step.
 
 ```{r}
 #| label: load-tow
@@ -237,17 +306,10 @@ d_tow <- d_keys |>
     tow_id, cruise_key, ship_key, ship_name, cruise_orig,
     site_key, line, station, region,
     datetime_start_utc, datetime_end_utc,
-    latitude, longitude, abundance)
+    latitude, longitude)
 
-dbWriteTable(con, "euphausiids_tow_wide", d_tow, overwrite = TRUE)
-
-# tidy tow table: drop the raw measurement column
-dbExecute(con,
-  "CREATE OR REPLACE TABLE euphausiids_tow AS
-   SELECT tow_id, cruise_key, ship_key, ship_name, cruise_orig,
-          site_key, line, station, region,
-          datetime_start_utc, datetime_end_utc, latitude, longitude
-   FROM euphausiids_tow_wide")
+dbWriteTable(con, "euphausiids_tow", d_tow, overwrite = TRUE)
+dbWriteTable(con, "euphausiids_taxon", euph_taxon, overwrite = TRUE)
 
 cat(glue("euphausiids_tow: {dbGetQuery(con,'SELECT COUNT(*) FROM euphausiids_tow')[[1]]} rows"), "\n")
 ```
@@ -262,27 +324,30 @@ grid_stats <- assign_grid_key(con, "euphausiids_tow")
 grid_stats |> datatable(caption = "Grid assignment")
 ```
 
-## Pivot Measurement to Long Format
+## Load Measurement Table
 
-A single measurement type, `euphausiid_abundance`. **Q01 (units) and Q02
-(taxonomic scope) are unresolved** — registered provisionally and flagged.
+One measurement type, `euphausiid_abundance`, now dimensioned by
+`taxon_id` + `life_stage` instead of being a single undifferentiated value
+per tow — this is what resolves Q02.
 
 ```{r}
-#| label: pivot-measurement
+#| label: load-measurement
+
+dbWriteTable(con, "euph_long_staged", d_long, overwrite = TRUE)
 
 dbExecute(con,
   "CREATE OR REPLACE TABLE euphausiids_measurement AS
-   SELECT ROW_NUMBER() OVER (ORDER BY tow_id) AS euphausiids_measurement_id,
-          tow_id,
+   SELECT ROW_NUMBER() OVER (ORDER BY tow_id, taxon_id, life_stage) AS euphausiids_measurement_id,
+          tow_id, taxon_id, life_stage,
           'euphausiid_abundance' AS measurement_type,
           CAST(abundance AS DOUBLE) AS measurement_value,
           NULL::VARCHAR AS measurement_qual
-   FROM euphausiids_tow_wide
+   FROM euph_long_staged
    WHERE abundance IS NOT NULL
      AND NOT isnan(CAST(abundance AS DOUBLE))
      AND isfinite(CAST(abundance AS DOUBLE))")
 
-dbExecute(con, "DROP TABLE euphausiids_tow_wide")
+dbExecute(con, "DROP TABLE euph_long_staged")
 
 n_meas <- dbGetQuery(con, "SELECT COUNT(*) FROM euphausiids_measurement")[[1]]
 cat(glue("euphausiids_measurement: {format(n_meas, big.mark=',')} rows"), "\n")
@@ -290,8 +355,9 @@ cat(glue("euphausiids_measurement: {format(n_meas, big.mark=',')} rows"), "\n")
 
 ## Summarize Replicate Measurements
 
-Aggregate replicate tows at each unique position (site + datetime + type) into
-mean and standard deviation, following the `dic_summary`/`ctd_summary` pattern.
+Aggregate replicate tows at each unique position x species x life_stage
+into mean and standard deviation — same pattern as before, now with the
+taxon/stage dimension carried through.
 
 ```{r}
 #| label: measurement-summary
@@ -300,7 +366,7 @@ dbExecute(con,
   "CREATE OR REPLACE TABLE euphausiids_summary AS
    SELECT
      t.site_key, t.datetime_start_utc, t.latitude, t.longitude,
-     m.measurement_type,
+     m.taxon_id, m.life_stage, m.measurement_type,
      AVG(m.measurement_value) AS avg,
      CASE WHEN COUNT(*) = 1 THEN 0
           ELSE COALESCE(STDDEV_SAMP(m.measurement_value), 0) END AS stddev,
@@ -309,9 +375,9 @@ dbExecute(con,
    JOIN euphausiids_tow t USING (tow_id)
    WHERE NOT isnan(m.measurement_value) AND isfinite(m.measurement_value)
    GROUP BY t.site_key, t.datetime_start_utc, t.latitude, t.longitude,
-            m.measurement_type")
+            m.taxon_id, m.life_stage, m.measurement_type")
 
-cat(glue("euphausiids_summary: {dbGetQuery(con,'SELECT COUNT(*) FROM euphausiids_summary')[[1]]} positions"), "\n")
+cat(glue("euphausiids_summary: {dbGetQuery(con,'SELECT COUNT(*) FROM euphausiids_summary')[[1]]} rows"), "\n")
 ```
 
 ## Add Measurement Type
@@ -322,10 +388,10 @@ cat(glue("euphausiids_summary: {dbGetQuery(con,'SELECT COUNT(*) FROM euphausiids
 euph_types <- tibble(
   measurement_type   = "euphausiid_abundance",
   description        = paste(
-    "Euphausiid (krill) abundance per net tow. PROVISIONAL: units and",
-    "taxonomic scope unconfirmed (see questions Q01, Q02)."),
-  units              = "count/1000m3",   # Q01: PROVISIONAL best guess
-  `_source_column`   = "Abundance",
+    "Euphausiid (krill) abundance per net tow, by species and life stage.",
+    "PROVISIONAL: units unconfirmed (see question Q01)."),
+  units              = "count/1000m3",   # Q01: PROVISIONAL best guess, unchanged
+  `_source_column`   = "*_Abundance (pivoted; see euphausiids_taxon + life_stage)",
   `_source_table`    = "euphausiids_measurement",
   `_source_datasets` = "cce-lter_euphausiids",
   `_qual_column`     = NA_character_,
@@ -359,21 +425,25 @@ cat(glue("dataset: {nrow(d_dataset)} datasets registered"), "\n")
 euph_rels <- list(
   primary_keys = list(
     euphausiids_tow         = "tow_id",
+    euphausiids_taxon       = "taxon_id",
     euphausiids_measurement = "euphausiids_measurement_id",
     measurement_type        = "measurement_type"),
   foreign_keys = list(
     list(table = "euphausiids_measurement", column = "tow_id",
          ref_table = "euphausiids_tow", ref_column = "tow_id"),
+    list(table = "euphausiids_measurement", column = "taxon_id",
+         ref_table = "euphausiids_taxon", ref_column = "taxon_id"),
     list(table = "euphausiids_measurement", column = "measurement_type",
          ref_table = "measurement_type", ref_column = "measurement_type")))
 
 euph_tables <- c(
-  "euphausiids_tow", "euphausiids_measurement", "euphausiids_summary",
-  "measurement_type", "dataset")
+  "euphausiids_tow", "euphausiids_taxon", "euphausiids_measurement",
+  "euphausiids_summary", "measurement_type", "dataset")
 cc_erd(
   con, tables = euph_tables, rels = euph_rels,
   colors = list(
     lightblue   = c("euphausiids_tow", "euphausiids_measurement", "euphausiids_summary"),
+    lightgreen  = "euphausiids_taxon",
     lightyellow = "measurement_type",
     white       = "dataset"))
 
@@ -394,17 +464,12 @@ if (length(results$errors) > 0)
 if (length(results$warnings) > 0)
   cat("Warnings:\n", paste("-", results$warnings, collapse = "\n"), "\n")
 
-# NOTE: NULLs in the cross-dataset FK keys (cruise_key, ship_key, site_key,
-# grid_key) are the EXPECTED unmatched remainder of partial matching — the same
-# accepted behavior as calcofi_dic's nullable cast_id/bottle_id (issue #47).
-# They are tracked in questions Q03 (cruise) and Q04 (ship), not a hard failure.
 cat(glue(
   "\nMatch coverage (non-NULL): ",
   "ship_key {round(100*dbGetQuery(con,\"SELECT AVG(CASE WHEN ship_key IS NOT NULL THEN 1 ELSE 0 END) FROM euphausiids_tow\")[[1]],1)}%, ",
   "cruise_key {round(100*dbGetQuery(con,\"SELECT AVG(CASE WHEN cruise_key IS NOT NULL THEN 1 ELSE 0 END) FROM euphausiids_tow\")[[1]],1)}%, ",
   "grid_key {round(100*dbGetQuery(con,\"SELECT AVG(CASE WHEN grid_key IS NOT NULL THEN 1 ELSE 0 END) FROM euphausiids_tow\")[[1]],1)}%"), "\n")
 
-# composite-key duplicate check
 n_dup <- dbGetQuery(con,
   "SELECT COUNT(*) FROM (
      SELECT tow_id, COUNT(*) n FROM euphausiids_tow GROUP BY tow_id HAVING COUNT(*)>1)")[[1]]
@@ -414,44 +479,21 @@ cat(glue("euphausiids_tow tow_id duplicates: {n_dup}"), "\n")
 ## Data Preview
 
 ```{r}
-#| label: preview-tow
+#| label: preview-taxon
 
-tow_cols <- dbGetQuery(con,
-  "SELECT column_name FROM information_schema.columns
-   WHERE table_name='euphausiids_tow' AND data_type NOT LIKE 'GEOMETRY%'")$column_name
-dbGetQuery(con, glue("SELECT {paste(tow_cols, collapse=', ')} FROM euphausiids_tow LIMIT 100")) |>
-  datatable(caption = "euphausiids_tow — first 100 rows", rownames = FALSE, filter = "top")
+euph_taxon |> datatable(caption = "euphausiids_taxon — all species", rownames = FALSE)
 ```
 
 ```{r}
 #| label: preview-measurement
 
-dbGetQuery(con, "SELECT * FROM euphausiids_measurement LIMIT 100") |>
-  datatable(caption = "euphausiids_measurement — first 100 rows", rownames = FALSE)
+dbGetQuery(con, "
+  SELECT m.tow_id, t.scientific_name, m.life_stage, m.measurement_value
+  FROM euphausiids_measurement m
+  JOIN euphausiids_taxon t USING (taxon_id)
+  LIMIT 100") |>
+  datatable(caption = "euphausiids_measurement — first 100 rows (joined for readability)", rownames = FALSE)
 ```
-
-## Emit Core Tables
-
-Project this dataset into the shared consolidated core model
-(`design_env-bio-consolidation.md`) via `calcofi4db::emit_core_tables()` — the
-single source of truth for the per-dataset projection into `sample` / `obs` /
-`obs_freq` / `sample_measurement`, also used by `release_database.qmd` to
-assemble the authoritative cross-dataset release.
-
-```{r}
-#| label: emit_core
-
-core <- emit_core_tables(con, "cce-lter_euphausiids")
-cat(glue(
-  "core projection — sample={core$sample %||% 0} obs={core$obs %||% 0} ",
-  "obs_freq={core$obs_freq %||% 0} sample_measurement={core$sample_measurement %||% 0}\n"))
-
-# the frozen release assembles the authoritative cross-dataset core; keep this
-# ingest's parquet output per-dataset by dropping the local core projection here.
-for (tbl_core in c("obs", "obs_freq", "sample_measurement", "sample"))
-  dbExecute(con, glue("DROP TABLE IF EXISTS {tbl_core}"))
-```
-
 
 ## Write Parquet Outputs
 
@@ -468,7 +510,7 @@ mismatches <- list(
 parquet_stats <- write_parquet_outputs(
   con        = con,
   output_dir = dir_parquet,
-  tables     = c("euphausiids_tow", "euphausiids_measurement",
+  tables     = c("euphausiids_tow", "euphausiids_taxon", "euphausiids_measurement",
                  "euphausiids_summary", "measurement_type", "dataset"),
   sort_by    = list(euphausiids_summary = "measurement_type"),
   strip_provenance = FALSE,
@@ -491,7 +533,7 @@ metadata_path <- build_metadata_json(
   d_tbls_rd  = d_tbls_rd,
   d_flds_rd  = d_flds_rd,
   output_dir = dir_parquet,
-  tables     = c("euphausiids_tow", "euphausiids_measurement", "euphausiids_summary"),
+  tables     = c("euphausiids_tow", "euphausiids_taxon", "euphausiids_measurement", "euphausiids_summary"),
   set_comments = TRUE,
   provider   = provider,
   dataset    = dataset,
@@ -513,11 +555,10 @@ sync_to_gcs(
 ## Questions for Data Providers
 
 Follow-up questions for CCE-LTER (Rasmus Swalethorp, Linsey Sala), **ranked by
-importance**. This ingest proceeded with the documented provisional decisions
-noted above; `blocker`/`high` answers may change registered units, taxonomy, or
-matched rows on the next run. Tracked in
-`metadata/cce-lter/euphausiids/questions.csv`; aggregated per provider by
-`questions_email.qmd`.
+importance**. Q02 (taxonomic scope) is now resolved by this ingest — kept
+below with status `resolved` for record-keeping, not because it's still
+open. Questions 09/10 are new, arising directly from cross-checking this
+export against the DB's canonical euphausiid species list.
 
 ```{r}
 #| label: provider-questions

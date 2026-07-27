@@ -1,0 +1,448 @@
+---
+title: "Ingest CCE-LTER Picoplankton and Bacteria Abundance"
+calcofi:
+  target_name: ingest_cce-lter_picoplankton-bacteria
+  workflow_type: ingest
+  dependency:
+    - ingest_swfsc_ichthyo
+  output: data/parquet/cce-lter_picoplankton-bacteria/manifest.json
+  provider: cce-lter
+  dataset: picoplankton-bacteria
+  workflow_url: https://calcofi.io/workflows/ingest_cce-lter_picoplankton-bacteria.html
+  questions_file: metadata/cce-lter/picoplankton-bacteria/questions.csv
+  dataset_meta:
+    dataset_name: Picoplankton and Bacteria Abundance (CalCOFI Cruise)
+    description: >
+      Picophytoplankton (Prochlorococcus, Synechococcus, picoeukaryotes) and
+      heterotrophic bacteria abundances analyzed by flow cytometry (FCM) from
+      CCE-CalCOFI Augmented cruises in the California Current System,
+      2004-2023 (ongoing). Seawater collected from Niskin bottles at 3-8
+      depths per station; cells fixed shipboard with paraformaldehyde,
+      stained with a DNA-specific dye, and enumerated on an Altra flow
+      cytometer with dual argon-ion lasers.
+    citation_main: "Landry, M. (2004-2023). Picoplankton and Bacteria Abundance (CalCOFI Cruise). CCE LTER."
+    link_calcofi_org: ""
+    link_data_source: "https://oceaninformatics.ucsd.edu/datazoo/catalogs/ccelter/datasets/159"
+    link_others:
+      - "http://dx.doi.org/10.6073/pasta/bc2915c8448214d2841b064a7414064b"
+    coverage_temporal: 2004-11-02 to 2023-07-18 (ongoing)
+    coverage_spatial: "CalCOFI grid (California Current Ecosystem)"
+    license: ""
+    pi_names: Michael Landry
+  tables_owned:
+    - {table: picoplankton_bacteria_bottle}
+    - {table: picoplankton_bacteria_measurement}
+    - {table: measurement_type, shared: true, note: "shared registry across datasets"}
+  erd:
+    color: "#bbe0f0"
+editor_options:
+  chunk_output_type: console
+---
+
+## Overview
+
+**Source**: Datazoo table download (`https://oceaninformatics.ucsd.edu/datazoo/catalogs/ccelter/datasets/159/datatables/159/download`),
+16,017 rows, 16 columns (73 cruises, 2004-11-02 to 2023-07-18).
+
+- **Provider**: `cce-lter` (matches the existing provider group used by
+  `ingest_cce-lter_euphausiids`/`_zoodb`/`_zooscan` -- an earlier draft of
+  this notebook used the unhyphenated `ccelter`, which would have created a
+  duplicate, inconsistent provider group)
+- **Grain**: one row per bottle/depth per cast (station-level, multiple depths per cast)
+- **Scope decision**: no bounding-box filter applied -- source is already
+  scoped to CalCOFI/CCE cruises by the provider. `studyName` (e.g.
+  `2004-11-02-C-33RR`) is the cruise identifier used for key resolution, NOT
+  the `Cruise` column (which is a separate YYYYMM short code, e.g. `200411`
+  -- kept as a raw field but not used for joins).
+- **Completeness**: Depth, Heterotrophic Bacteria, Synechococcus, and
+  Picoeukaryotes are >99.9% populated. Prochlorococcus is ~80% populated
+  (3,228/16,017 blank) -- plausible non-detection at higher latitudes/depths,
+  not yet confirmed with the provider (see Questions, Q01). `Notes` is 100%
+  blank in the current export and is dropped. No literal-zero values appear
+  in any measurement column in this export (confirmed directly against the
+  raw file) -- unlike ZooDB, there is no analyzed-but-absent convention to
+  encode; blank simply means not measured.
+
+```{mermaid}
+graph LR
+  A[Datazoo table 159<br/>16,017 rows] --> B[rename + type-cast]
+  B --> C[picoplankton_bacteria_bottle<br/>position + depth, one row per bottle]
+  B --> D[picoplankton_bacteria_measurement<br/>long format: 4 measurement types]
+  C -.studyName -> cruise_key.-> E[(shared refs)]
+  D -.bottle_id.-> C
+```
+
+## Setup
+
+```{r}
+#| label: setup
+devtools::load_all(here::here("../calcofi4db"))
+devtools::load_all(here::here("../calcofi4r"))
+librarian::shelf(
+  CalCOFI/calcofi4db, CalCOFI/calcofi4r,
+  DBI, dplyr, DT, fs, glue, here, htmltools, janitor, jsonlite, knitr,
+  lubridate, purrr, readr, sf, stringr, tibble, tidyr, units,
+  quiet = T)
+options(readr.show_col_types = F)
+options(DT.options = list(scrollX = TRUE))
+
+source(here("libs/ingest.R"))
+cc <- read_calcofi_meta(here("ingest_cce-lter_picoplankton-bacteria.qmd"))
+provider <- cc$provider
+dataset <- cc$dataset
+dataset_name <- cc$dataset_meta$dataset_name
+tables_owned <- cc$tables_owned
+dir_label <- glue("{provider}_{dataset}")
+dir_parquet <- here(glue("data/parquet/{dir_label}"))
+db_path <- here(glue("data/wrangling/{dir_label}.duckdb"))
+meas_type_csv <- here("metadata/measurement_type.csv")
+d_meas_type <- read_csv(meas_type_csv)
+
+if (overwrite) {
+  if (file_exists(db_path)) file_delete(db_path)
+  if (file_exists(paste0(db_path, ".wal"))) file_delete(paste0(db_path, ".wal"))
+  if (dir_exists(paste0(db_path, ".tmp"))) dir_delete(paste0(db_path, ".tmp"))
+}
+dir_create(dirname(db_path))
+con <- get_duckdb_con(db_path)
+load_duckdb_extension(con, "spatial")
+```
+
+## Read Source Data
+
+Read from `{dir_data}/cce-lter/picoplankton-bacteria/`. Columns renamed per
+`metadata/cce-lter/picoplankton-bacteria/flds_redefine.csv`.
+
+```{r}
+#| label: read-source
+pico_csv <- path_expand(glue(
+  "{dir_data}/cce-lter/picoplankton-bacteria/PicoplanktonandBacteriaAbundance.csv"))
+stopifnot("picoplankton/bacteria CSV not found" = file_exists(pico_csv))
+
+sync_to_gcs(
+  local_dir = path_dir(pico_csv),
+  gcs_prefix = glue("archive/{provider}/{dataset}"),
+  bucket = "calcofi-files-public",
+  exclude = c(".DS_Store", "*.tmp", "*.gdoc"))
+
+d_raw <- read_csv(pico_csv, col_types = cols(.default = "c"))
+cat(glue("Read {format(nrow(d_raw), big.mark=',')} rows, {ncol(d_raw)} columns"), "\n")
+```
+
+## Clean, Type-Cast
+
+Canonical names from `metadata/cce-lter/picoplankton-bacteria/flds_redefine.csv`.
+`studyName` (the cruise identifier string, e.g. `2004-11-02-C-33RR`) is
+retained separately from `Cruise` (the YYYYMM short code) -- only the former
+is used for cruise-key resolution. The four measurement columns
+(Heterotrophic Bacteria, Prochlorococcus, Synechococcus, Picoeukaryotes) are
+NOT kept as wide columns -- they are pivoted to long format below, following
+the `bottle_measurement`/`zoodb_measurement` pattern used elsewhere in the
+integrated DB.
+
+```{r}
+#| label: clean-cast
+d_clean <- d_raw |>
+  transmute(
+    study_name       = studyName,
+    cruise_code      = Cruise,
+    datetime_utc     = as_datetime(`Datetime GMT`),
+    latitude         = suppressWarnings(as.numeric(`Latitude (º)`)),
+    longitude        = suppressWarnings(as.numeric(`Longitude (º)`)),
+    line             = suppressWarnings(as.numeric(Line)),
+    station          = suppressWarnings(as.numeric(Station)),
+    cast_number      = suppressWarnings(as.integer(`Cast Number`)),
+    bottle_number    = suppressWarnings(as.integer(`Bottle Number`)),
+    assoc_bottle_number = suppressWarnings(as.integer(`Associated Bottle Number`)),
+    depth_m          = suppressWarnings(as.numeric(`Depth (m)`)),
+    het_bacteria_n_ml    = suppressWarnings(as.numeric(`Heterotrophic Bacteria (number/ml)`)),
+    prochlorococcus_n_ml = suppressWarnings(as.numeric(`Prochlorococcus (number/ml)`)),
+    synechococcus_n_ml   = suppressWarnings(as.numeric(`Synechococcus (number/ml)`)),
+    picoeukaryotes_n_ml  = suppressWarnings(as.numeric(`Picoeukaryotes (number/ml)`)),
+    notes            = na_if(Notes, "")) |>
+  mutate(
+    site_key = if_else(
+      is.na(line) | is.na(station), NA_character_,
+      sprintf("%05.1f %05.1f", line, station)),
+    bottle_id = row_number())
+
+n_all <- nrow(d_clean)
+cat(glue("{format(n_all, big.mark=',')} rows read, no bounding-box filter applied ",
+         "(source pre-scoped to CalCOFI/CCE cruises)"), "\n")
+
+dbWriteTable(con, "picoplankton_bacteria_bottle", d_clean, overwrite = TRUE)
+```
+
+## Pivot Measurements to Long Format
+
+Unlike ZooDB, this source has no analyzed-but-absent convention -- every
+blank cell in the raw export is genuinely not measured (confirmed: zero
+literal `0` values appear in Heterotrophic Bacteria or Prochlorococcus,
+only blanks). So this pivot simply drops NA, with no explicit-zero
+retention logic needed.
+
+`measurement_type` codes are unit-less (`het_bacteria`, not
+`het_bacteria_n_ml`) -- units live in `measurement_type.csv`'s `units`
+column, matching the convention used by `bottle_measurement`/
+`zoodb_measurement` elsewhere in the DB. An earlier draft baked the unit
+into the type code itself; fixed here.
+
+```{r}
+#| label: pivot-long
+pb_meas_map <- tribble(
+  ~measurement_type,     ~value_col,
+  "het_bacteria",         "het_bacteria_n_ml",
+  "prochlorococcus",      "prochlorococcus_n_ml",
+  "synechococcus",        "synechococcus_n_ml",
+  "picoeukaryotes",       "picoeukaryotes_n_ml")
+
+sql_parts <- purrr::pmap_chr(pb_meas_map, function(measurement_type, value_col) {
+  glue(
+    "SELECT bottle_id, '{measurement_type}' AS measurement_type,
+     CAST({value_col} AS DOUBLE) AS measurement_value
+     FROM picoplankton_bacteria_bottle WHERE {value_col} IS NOT NULL")
+})
+
+sql_create <- glue(
+  "CREATE OR REPLACE TABLE picoplankton_bacteria_measurement AS
+   SELECT ROW_NUMBER() OVER (ORDER BY bottle_id, measurement_type) AS measurement_id, *
+   FROM (
+     {paste(sql_parts, collapse = '\nUNION ALL\n')}
+   ) sub")
+dbExecute(con, sql_create)
+
+n_meas <- dbGetQuery(con, "SELECT COUNT(*) FROM picoplankton_bacteria_measurement")[[1]]
+cat(glue("picoplankton_bacteria_measurement: {format(n_meas, big.mark=',')} rows"), "\n")
+
+for (col in pb_meas_map$value_col) {
+  tryCatch(
+    dbExecute(con, glue('ALTER TABLE picoplankton_bacteria_bottle DROP COLUMN "{col}"')),
+    error = function(e) NULL)
+}
+```
+
+## Register Measurement Types
+
+Registers the four new `measurement_type` codes into the shared
+`metadata/measurement_type.csv` and loads the `measurement_type` table into
+this connection -- an earlier draft referenced `measurement_type` as a FK
+target in Schema Documentation / Validate without ever creating it, which
+would fail. Pattern matches `ingest_calcofi_phyllosoma.qmd`'s `finalize` step.
+
+```{r}
+#| label: register-measurement-types
+pb_types <- tribble(
+  ~measurement_type, ~description,                              ~units,
+  "het_bacteria",     "Heterotrophic bacteria abundance (FCM)",  "number/ml",
+  "prochlorococcus",  "Prochlorococcus abundance (FCM); ~80% populated, see Q01", "number/ml",
+  "synechococcus",    "Synechococcus abundance (FCM)",           "number/ml",
+  "picoeukaryotes",   "Picoeukaryote abundance (FCM)",           "number/ml") |>
+  mutate(`_source_column` = case_when(
+           measurement_type == "het_bacteria"    ~ "Heterotrophic Bacteria (number/ml)",
+           measurement_type == "prochlorococcus" ~ "Prochlorococcus (number/ml)",
+           measurement_type == "synechococcus"   ~ "Synechococcus (number/ml)",
+           measurement_type == "picoeukaryotes"  ~ "Picoeukaryotes (number/ml)"),
+         `_source_table` = "picoplankton_bacteria_measurement",
+         `_source_datasets` = "cce-lter_picoplankton-bacteria",
+         `_qual_column` = NA_character_, `_prec_column` = NA_character_)
+
+new_types <- pb_types |> filter(!measurement_type %in% d_meas_type$measurement_type)
+if (nrow(new_types) > 0) {
+  d_meas_type <- bind_rows(d_meas_type, new_types)
+  write_csv(d_meas_type, meas_type_csv)
+}
+dbWriteTable(con, "measurement_type", d_meas_type, overwrite = TRUE)
+cat(glue("measurement_type: {nrow(d_meas_type)} types registered ({nrow(new_types)} new)"), "\n")
+```
+
+## Resolve Ship and Cruise Keys
+
+`cruise_key` in the shared `cruise` table is a natural key in format
+`YYYY-MM-NODC`, built by the real `calcofi4db::derive_cruise_key_on_casts()`
+function (confirmed from `ship.R`). That function needs a `ship_code` column
+(matched against `ship.ship_nodc`) and a `datetime_utc` column, and accepts
+the target table directly via `table_name=` (confirmed via
+`ingest_calcofi_mets.qmd`'s usage) -- no need to rename anything to `casts`.
+This source has no `ship_code` natively -- only `studyName` (e.g.
+`2004-11-02-C-33RR`), whose trailing code (`33RR`) is the ship code embedded
+in the string -- so extract that into a `ship_code` column, then call the
+real function against `picoplankton_bacteria_bottle` directly rather than
+reimplementing its SQL by hand (an earlier draft did this incorrectly).
+
+```{r}
+#| label: resolve-keys
+load_prior_tables(
+  con, parquet_dir = here("data/parquet/swfsc_ichthyo"),
+  tables = c("ship", "cruise", "grid"), geom_tables = c("grid"), as_view = TRUE)
+
+# extract trailing ship code from studyName (e.g. "2004-11-02-C-33RR" -> "33RR")
+# NOTE (Q02, resolved): verified against the live release DB for 3 sample
+# codes (33RR, 32NM, 31JD); all matched real casts.parquet rows. Still not
+# verified across all 73 distinct studyName formats in this dataset.
+dbExecute(con, "
+  ALTER TABLE picoplankton_bacteria_bottle ADD COLUMN IF NOT EXISTS ship_code VARCHAR")
+dbExecute(con, "
+  UPDATE picoplankton_bacteria_bottle
+  SET ship_code = regexp_extract(study_name, '[0-9A-Z]+$')")
+
+cruise_key_result <- derive_cruise_key_on_casts(
+  con, table_name = "picoplankton_bacteria_bottle", datetime_col = "datetime_utc")
+
+n_ck <- dbGetQuery(con, "SELECT COUNT(*) FROM picoplankton_bacteria_bottle WHERE cruise_key IS NOT NULL")[[1]]
+n_all <- dbGetQuery(con, "SELECT COUNT(*) FROM picoplankton_bacteria_bottle")[[1]]
+cat(glue("cruise_key match: {n_ck}/{n_all} ({round(100*n_ck/n_all,1)}%)"), "\n")
+```
+
+## Add Spatial
+
+```{r}
+#| label: spatial
+add_point_geom(con, "picoplankton_bacteria_bottle", lon_col = "longitude", lat_col = "latitude")
+assign_grid_key(con, "picoplankton_bacteria_bottle") |> datatable(caption = "Grid assignment")
+```
+
+## Load Dataset Metadata
+
+```{r}
+#| label: load-dataset-metadata
+d_dataset <- ingest_yaml_to_dataset_df(read_ingest_yaml(here()))
+dbWriteTable(con, "dataset", d_dataset, overwrite = TRUE)
+cat(glue("dataset: {nrow(d_dataset)} datasets registered"), "\n")
+```
+
+## Schema Documentation
+
+```{r}
+#| label: schema
+pb_rels <- list(
+  primary_keys = list(
+    picoplankton_bacteria_bottle = "bottle_id",
+    picoplankton_bacteria_measurement = "measurement_id",
+    measurement_type = "measurement_type"),
+  foreign_keys = list(
+    list(table = "picoplankton_bacteria_measurement", column = "bottle_id",
+         ref_table = "picoplankton_bacteria_bottle", ref_column = "bottle_id"),
+    list(table = "picoplankton_bacteria_measurement", column = "measurement_type",
+         ref_table = "measurement_type", ref_column = "measurement_type")))
+
+cc_erd(
+  con, tables = c("picoplankton_bacteria_bottle", "picoplankton_bacteria_measurement",
+                  "measurement_type", "dataset"),
+  rels = pb_rels,
+  colors = list(lightblue = c("picoplankton_bacteria_bottle", "picoplankton_bacteria_measurement"),
+                lightyellow = "measurement_type", white = "dataset"))
+
+build_relationships_json(
+  rels = pb_rels, output_dir = dir_parquet, provider = provider, dataset = dataset)
+```
+
+## Validate
+
+```{r}
+#| label: validate
+results <- validate_for_release(con, checks = "all", strict = FALSE)
+cat("Validation:", ifelse(results$passed, "PASSED", "FAILED"), "\n")
+if (length(results$errors) > 0)
+  cat("Errors:\n", paste("-", results$errors, collapse = "\n"), "\n")
+
+# NULL cruise_key is the expected unmatched remainder pending confirmation of
+# study_name -> cruise_key format (see Questions, Q02); not a hard failure.
+n_dup <- dbGetQuery(con,
+  "SELECT COUNT(*) FROM (SELECT bottle_id, COUNT(*) n FROM picoplankton_bacteria_bottle GROUP BY bottle_id HAVING COUNT(*)>1)")[[1]]
+cat(glue("picoplankton_bacteria_bottle bottle_id duplicates: {n_dup}"), "\n")
+
+n_orphan <- dbGetQuery(con,
+  "SELECT COUNT(*) FROM picoplankton_bacteria_measurement m
+   LEFT JOIN picoplankton_bacteria_bottle b ON m.bottle_id = b.bottle_id
+   WHERE b.bottle_id IS NULL")[[1]]
+cat(glue("Orphan measurements (no matching bottle): {n_orphan}"), "\n")
+
+n_orphan_type <- dbGetQuery(con,
+  "SELECT COUNT(*) FROM picoplankton_bacteria_measurement m
+   WHERE m.measurement_type NOT IN (SELECT measurement_type FROM measurement_type)")[[1]]
+cat(glue("Orphan measurement_types (not registered): {n_orphan_type}"), "\n")
+```
+
+## Data Preview
+
+```{r}
+#| label: preview
+cols <- dbGetQuery(con,
+  "SELECT column_name FROM information_schema.columns
+   WHERE table_name='picoplankton_bacteria_bottle' AND data_type NOT LIKE 'GEOMETRY%'")$column_name
+dbGetQuery(con, glue("SELECT {paste(cols, collapse=', ')} FROM picoplankton_bacteria_bottle LIMIT 100")) |>
+  datatable(caption = "picoplankton_bacteria_bottle — first 100 rows", rownames = FALSE, filter = "top")
+
+dbGetQuery(con, "SELECT * FROM picoplankton_bacteria_measurement LIMIT 100") |>
+  datatable(caption = "picoplankton_bacteria_measurement — first 100 rows", rownames = FALSE, filter = "top")
+```
+
+## Write Parquet Outputs
+
+```{r}
+#| label: write-parquet
+dir_create(dir_parquet)
+mismatches <- list(cruise_keys = collect_cruise_key_mismatches(con, "picoplankton_bacteria_bottle"))
+parquet_stats <- write_parquet_outputs(
+  con = con, output_dir = dir_parquet,
+  tables = c("picoplankton_bacteria_bottle", "picoplankton_bacteria_measurement",
+             "measurement_type", "dataset"),
+  strip_provenance = FALSE, mismatches = mismatches)
+parquet_stats |> mutate(file = basename(path)) |> select(-path) |>
+  datatable(caption = "Parquet export statistics")
+```
+
+## Write Metadata
+
+```{r}
+#| label: write-metadata
+d_tbls_rd <- read_csv(here("metadata/cce-lter/picoplankton-bacteria/tbls_redefine.csv"))
+d_flds_rd <- read_csv(here("metadata/cce-lter/picoplankton-bacteria/flds_redefine.csv"))
+metadata_path <- build_metadata_json(
+  con = con, d_tbls_rd = d_tbls_rd, d_flds_rd = d_flds_rd,
+  metadata_derived_csv = here("metadata/cce-lter/picoplankton-bacteria/metadata_derived.csv"),
+  output_dir = dir_parquet, tables = c("picoplankton_bacteria_bottle", "picoplankton_bacteria_measurement"),
+  set_comments = TRUE, provider = provider, dataset = dataset,
+  workflow_url = cc$workflow_url, tables_owned = tables_owned)
+```
+
+## Upload to GCS
+
+```{r}
+#| label: upload-gcs
+sync_to_gcs(local_dir = dir_parquet, gcs_prefix = glue("ingest/{dir_label}"), bucket = "calcofi-db")
+```
+
+## Questions for Data Providers
+
+Follow-up questions for CCE-LTER (Michael Landry), ranked by importance.
+Tracked in `metadata/cce-lter/picoplankton-bacteria/questions.csv`.
+
+```{r}
+#| label: provider-questions
+read_csv(here(glue("metadata/{provider}/{dataset}/questions.csv"))) |>
+  arrange(factor(priority, c("blocker", "high", "normal")), id) |>
+  select(priority, question, context, related_field, status) |>
+  datatable(caption = "Questions for data providers (ranked)",
+            options = list(dom = "t", pageLength = 20), rownames = FALSE)
+```
+
+## Cleanup
+
+```{r}
+#| label: cleanup
+close_duckdb(con)
+cat(glue("Parquet outputs written to: {dir_parquet}"), "\n")
+```
+
+## TODO
+
+- [ ] Core-table projection (`sample`/`obs`/`obs_freq`/`sample_measurement`)
+  is not yet wired up — per `design_env-bio-consolidation.md`, that's Phase 3
+  (`calcofi4db::append_sample()` / `append_obs()` / `append_obs_freq()` /
+  `append_sample_measurement()`, called after `build_sample_reference()`),
+  and Phase 2 (materializing the core tables at all) hasn't landed yet
+  either. `picoplankton_bacteria_bottle`/`_measurement` are a bottle-shaped
+  sample (leaf = `bottle_id`, parent = `cast_id`, same as `calcofi_bottle`)
+  with an `obs` headline of the four FCM measurement types — revisit once
+  the `append_*` helpers exist.
