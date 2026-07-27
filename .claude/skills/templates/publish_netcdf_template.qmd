@@ -1,0 +1,225 @@
+---
+title: "Publish {{dataset_name}} to CF NetCDF"
+subtitle: "One self-documenting file preserving the sampling hierarchy"
+author: "CalCOFI"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: true
+    code-tools: true
+    df-print: kable
+calcofi:
+  target_name: publish_{{dataset}}_to-netcdf
+  workflow_type: publish
+  dependency:
+    - release_database
+  provider: {{provider}}
+  dataset: {{dataset}}
+  output: data/netcdf/{{dataset}}.nc
+  workflow_url: https://calcofi.io/workflows/publish_{{dataset}}_to-netcdf.html
+editor_options:
+  chunk_output_type: console
+---
+
+## Overview
+
+Publish **{{dataset_name}}** as a single self-documenting netCDF-4 file,
+downstream of `release_database`.
+
+Two things distinguish this from a table dump:
+
+**1 · The hierarchy is preserved, not flattened.** {{hierarchy_prose}} Effort is
+measured at the event level; flatten the hierarchy and each event's effort value
+repeats onto every child row, so a naive `SUM()` silently over-counts. netCDF-4
+groups store each level once and link children to parents by explicit index.
+
+**2 · Variables are widened for CF.** The database is normalized — one row per
+observation with `measurement_type` naming the quantity and `measurement_value`
+holding the number — so one column mixes quantities with different units. CF
+requires one unit and one `standard_name` per variable, so each
+`measurement_type` becomes its own variable with units from
+`metadata/measurement_type.csv`.
+
+::: {.callout-note title="CF scope — state this honestly in every dataset"}
+CF covers profile and trajectory geometries cleanly. For a nested
+event → occurrence → bin hierarchy there is **no CF standard**. Say so in the
+`cf_scope` global attribute so a consumer is never misled into expecting full CF
+compliance. Do not claim "CF-compliant" for a structure CF does not define.
+:::
+
+## Setup
+
+```{r}
+#| label: setup
+#| message: false
+#| warning: false
+
+librarian::shelf(DBI, duckdb, dplyr, glue, ncdf4, readr, jsonlite, digest,
+                 knitr, tibble, here, quiet = TRUE)
+here <- here::here
+source(here("libs/publish_netcdf.R"))
+
+DATASET     <- "{{dataset}}"           # file/URL identity (no provider prefix)
+DATASET_KEY <- "{{provider}}_{{dataset}}"   # provenance stamp in the database
+RELEASE     <- cc_release_version()    # the PROMOTED release, never a local tree
+PQ          <- cc_release_parquet(RELEASE)
+OUT_DIR     <- here("data/netcdf"); dir.create(OUT_DIR, recursive = TRUE, showWarnings = FALSE)
+OUT_NC      <- file.path(OUT_DIR, glue("{DATASET}.nc"))
+PUBLISH     <- identical(Sys.getenv("CALCOFI_PUBLISH"), "true")   # opt-in upload
+
+cat(glue("release : {RELEASE}\nparquet : {PQ}\noutput  : {OUT_NC}\npublish : {PUBLISH}\n"))
+```
+
+```{r}
+#| label: connect
+con <- dbConnect(duckdb())
+for (s in c("INSTALL httpfs", "LOAD httpfs", "SET memory_limit='6GB'",
+            "SET enable_progress_bar=false")) try(dbExecute(con, s), silent = TRUE)
+
+# ALWAYS read the frozen release over HTTPS. Reading a local/serving tree is how
+# the first published NetCDF shipped a month-old snapshot without anyone noticing.
+q <- function(sql, ...) dbGetQuery(con, glue(sql, ..., .envir = parent.frame()))
+dbExecute(con, glue("
+  CREATE VIEW smp  AS SELECT * FROM read_parquet('{PQ}/sample.parquet')
+                      WHERE dataset_key = '{DATASET_KEY}';
+  CREATE VIEW obs  AS SELECT * FROM read_parquet('{PQ}/obs/dataset_key={DATASET_KEY}/data_0.parquet');
+  CREATE VIEW oatt AS SELECT * FROM read_parquet('{PQ}/obs_attribute.parquet')
+                      WHERE dataset_key = '{DATASET_KEY}';
+  CREATE VIEW smea AS SELECT * FROM read_parquet('{PQ}/sample_measurement.parquet')
+                      WHERE dataset_key = '{DATASET_KEY}';
+  CREATE VIEW tax  AS SELECT * FROM read_parquet('{PQ}/taxon.parquet');"))
+```
+
+## Data integrity — check BEFORE writing
+
+The release is the source of truth but is not assumed clean. Run these first so a
+structural problem surfaces here rather than as a silently wrong hierarchy inside
+a published product.
+
+```{r}
+#| label: integrity
+# `obs` has no unique NATURAL key. Verify before relying on any composite: in
+# swfsc_ichthyo, (sample_key, taxon_key, life_stage) repeats for 3 rows with
+# DIFFERENT values, so joining children on it would fan out. obs_id is unique.
+dup_obs <- q("
+  SELECT sample_key, taxon_key, life_stage, count(*) AS n,
+         string_agg(measurement_value::VARCHAR, ' | ') AS values
+  FROM obs GROUP BY 1,2,3 HAVING count(*) > 1 ORDER BY n DESC")
+
+# Children that match no parent are ORPHANS. Keep them with a missing parent
+# index — silently discarding measured data is worse than admitting it is
+# unparented — and report the count.
+orphan_n <- q("
+  SELECT count(*) AS n FROM oatt a
+  LEFT JOIN (SELECT DISTINCT sample_key, taxon_key, life_stage FROM obs) o
+    ON  o.sample_key = a.sample_key AND o.taxon_key = a.taxon_key
+    AND coalesce(o.life_stage,'') = coalesce(a.life_stage,'')
+  WHERE o.sample_key IS NULL")$n
+
+cat(glue("duplicate occurrence keys : {nrow(dup_obs)}\norphan attribute rows     : {orphan_n}\n"))
+if (nrow(dup_obs)) kable(dup_obs)
+```
+
+## Build the levels
+
+Adapt this section per dataset — it is the reason these are notebooks rather than
+one generic script. Each level is a data.frame ordered so children are
+contiguous; each child carries a 1-based `parent_index` into its parent.
+
+```{r}
+#| label: levels
+# {{levels_prose}}
+# Example (net-tow shape):
+#   site <- q("SELECT ... FROM smp WHERE sample_type='site' ORDER BY sample_key")
+#   tow  <- q("SELECT ... FROM smp WHERE sample_type='tow'  ORDER BY sample_key")
+#   net  <- q("SELECT ... FROM smp WHERE sample_type='net'  ORDER BY sample_key")
+
+# WIDEN event-level effort into variables on its level — this is what makes
+# double-counting structurally impossible rather than merely documented.
+eff_types <- q("SELECT DISTINCT measurement_type FROM smea ORDER BY 1")$measurement_type
+eff_sel <- paste(sprintf(
+  "MAX(measurement_value) FILTER (WHERE measurement_type='%s') AS \"%s\"",
+  eff_types, eff_types), collapse = ",\n    ")
+# event <- event |> left_join(q("SELECT sample_key, {eff_sel} FROM smea GROUP BY sample_key"),
+#                             by = "sample_key")
+```
+
+```{r}
+#| label: parent-index
+# match() on the parent's ORDERED key vector turns "these rows share a value"
+# into an explicit, checkable pointer.
+# child$parent_index <- match(child$parent_sample_key, parent$sample_key)
+# stopifnot(!anyNA(child$parent_index))
+```
+
+## Write the netCDF-4 file
+
+```{r}
+#| label: write-nc
+mt_meta <- cc_measurement_meta(here())
+
+# ncdf4 exposes NO group API, but a slash-separated variable name creates a REAL
+# netCDF-4 group — verified with ncdump AND h5dump, not by reading it back
+# through ncdf4 itself. nc_level_vars()/nc_level_put() rely on this.
+# d_<level> <- ncdim_def("<level>_n", "", seq_len(nrow(<level>)), create_dimvar = FALSE)
+# v_<level> <- nc_level_vars("<level>", drop_key(<level>), d_<level>,
+#                            d_<parent>, <level>$parent_index, mt_meta)
+
+CF_SCOPE <- paste(
+  "CF-1.10 where CF applies (coordinates, units, standard names, time).",
+  "The {{hierarchy_short}} hierarchy uses netCDF-4 groups with explicit",
+  "parent_index links; CF defines no feature type for this nesting.")
+# globals: title, summary, Conventions, cf_scope, institution, source,
+#          db_release, dataset_key, license, date_created, and the anomaly counts
+#          (n_duplicate_occurrence_keys, n_orphan_attributes) so nothing found in
+#          the integrity step is lost between the notebook and the file.
+```
+
+## Verify the written file
+
+A published file that merely *exists* is not evidence it is correct. Re-open it
+and confirm the hierarchy survived.
+
+```{r}
+#| label: verify
+# ncv <- nc_open(OUT_NC)
+#   - groups present
+#   - each level's dimension length matches its data.frame
+#   - effort variable length == event count (NOT child count)
+#   - parent_index within 1..nrow(parent)
+# nc_close(ncv)
+```
+
+```{r}
+#| label: double-count-demo
+# Show the payoff numerically rather than asserting it: effort summed at the
+# right level vs repeated onto children.
+# eff_once <- sum(event$volume_sampled, na.rm = TRUE)
+# eff_flat <- sum(event$volume_sampled[child$parent_index], na.rm = TRUE)
+```
+
+## Publish
+
+Versioned by DB release, bytes written once: if this build is byte-identical to
+an earlier release the folder still gets a manifest and index, but the file is not
+re-uploaded — `storage.calcofi.io` 302s the release-scoped `.nc` URL to the
+canonical object.
+
+```{r}
+#| label: publish
+#| eval: !expr PUBLISH
+plan <- cc_netcdf_plan(OUT_NC, DATASET, RELEASE)
+man  <- cc_netcdf_manifest(plan, DATASET, RELEASE, RELEASE, file.size(OUT_NC),
+                           source_tables = c("sample","obs","obs_attribute",
+                                             "sample_measurement","taxon"),
+                           cf_scope = CF_SCOPE)
+jsonlite::write_json(man, file.path(OUT_DIR, "manifest.json"),
+                     auto_unbox = TRUE, pretty = TRUE)
+```
+
+```{r}
+#| label: cleanup
+dbDisconnect(con, shutdown = TRUE)
+```
