@@ -26,6 +26,17 @@
 # Files are CF where CF applies and netCDF-4 convention elsewhere; the global
 # attribute `cf_scope` says which.
 librarian::shelf(dplyr, glue, jsonlite, ncdf4, readr, digest, quiet = TRUE)
+# page() / esc() / fmt_* : one skin across every generated page. Located by
+# search rather than sys.frame() introspection, which breaks depending on how the
+# file is sourced (knitr, Rscript, interactive).
+.cc_lib_dir <- local({
+  cands <- c("libs", file.path(getwd(), "libs"),
+             tryCatch(here::here("libs"), error = function(e) NULL))
+  hit <- Filter(function(p) !is.null(p) && file.exists(file.path(p, "gcs_index.R")), cands)
+  if (!length(hit)) stop("cannot locate libs/gcs_index.R")
+  hit[[1]]
+})
+source(file.path(.cc_lib_dir, "gcs_index.R"))
 
 GCS_BUCKET_DB  <- "calcofi-db"
 GCS_BUCKET_PUB <- "calcofi-files-public"
@@ -174,6 +185,101 @@ cc_netcdf_plan <- function(local_file, dataset, version) {
          canonical_url = glue("{NETCDF_SITE}/{dataset}/{version}/{dataset}.nc"),
          upload = TRUE)
   }
+}
+
+# ---- upload -----------------------------------------------------------------
+
+#' `gcloud storage` is not in the default release track everywhere (the CalCOFI
+#' server only has it under `alpha`), so probe once rather than assume.
+.gcloud_sub <- function() {
+  g <- Sys.which("gcloud")
+  if (!nzchar(g)) stop("gcloud not found — publishing needs write credentials")
+  if (system2(g, c("storage", "--help"), stdout = FALSE, stderr = FALSE) == 0)
+    "storage" else c("alpha", "storage")
+}
+
+cc_gcs_cp <- function(local, gcs, content_type, cache_control = NULL) {
+  g <- Sys.which("gcloud"); sub <- .gcloud_sub()
+  args <- c(sub, "cp", glue("--content-type={content_type}"))
+  if (!is.null(cache_control)) args <- c(args, glue("--cache-control={cache_control}"))
+  res <- system2(g, c(args, shQuote(local), shQuote(gcs)), stdout = TRUE, stderr = TRUE)
+  if (!is.null(attr(res, "status"))) stop(glue("upload failed: {gcs}\n{paste(res, collapse='\n')}"))
+  invisible(TRUE)
+}
+
+#' Publish one dataset's NetCDF for one release.
+#'
+#' Release-named paths so a URL always answers "which release is this?", with the
+#' BYTES written once: when the build is byte-identical to an earlier release the
+#' folder still gets a manifest and index, but the multi-hundred-MB file is not
+#' re-uploaded. Object storage has no symlinks, so storage.calcofi.io 302s the
+#' release-scoped .nc path to the canonical object.
+#'
+#' Always writes, even when nothing changed:
+#'   {ds}/{release}/manifest.json   what this release is, and what it points at
+#'   {ds}/{release}/index.html      human page naming the canonical download
+#'   {ds}/manifests.json            accumulated history (drives identity matching)
+#'   {ds}/latest.txt                the newest release for this dataset
+cc_netcdf_publish <- function(local_nc, dataset, release, plan, manifest,
+                              dry_run = FALSE) {
+  base_gs  <- glue("gs://{GCS_BUCKET_PUB}/netcdf/{dataset}")
+  base_web <- glue("{NETCDF_SITE}/{dataset}")
+  tmp <- tempdir()
+
+  # accumulate history BEFORE writing, so a re-run is idempotent
+  hist <- tryCatch(fromJSON(glue("{base_web}/manifests.json"), simplifyDataFrame = FALSE),
+                   error = function(e) list(releases = list()))
+  rel <- Filter(function(r) !identical(r$version, release), hist$releases %||% list())
+  rel <- c(rel, list(manifest))
+  ord <- order(vapply(rel, function(r) r$version, character(1)), decreasing = TRUE)
+  hist <- list(dataset = dataset, releases = rel[ord])
+
+  size_mb <- round(manifest$bytes / 1048576, 1)
+  ident   <- manifest$identical_to
+  body <- glue(
+    '<div class="scroll"><table><thead><tr><th>file</th>',
+    '<th style="text-align:right">size</th></tr></thead><tbody>',
+    '<tr><td><a href="{manifest$canonical_url}">{dataset}.nc</a></td>',
+    '<td class="num">{size_mb} MB</td></tr></tbody></table></div>',
+    if (!is.na(ident)) glue(
+      '<div class="note"><b>Identical to {ident}.</b> This release produced a ',
+      'byte-identical file, so the bytes are not duplicated — the download above ',
+      'points at the object published for <code>{ident}</code>. The ',
+      '<code>sha256</code> in <a href="{base_web}/{release}/manifest.json">',
+      'manifest.json</a> confirms they match.</div>') else "",
+    '<div class="note"><b>Provenance.</b> Built from CalCOFI integrated database ',
+    'release <b>{manifest$db_release}</b> on {substr(manifest$generated_utc,1,10)} ',
+    'from <code>{paste(manifest$source_tables, collapse="</code>, <code>")}</code>.',
+    '<br><br><b>CF scope.</b> {manifest$cf_scope}</div>')
+
+  page_html <- page(glue("{dataset} — {release}"),
+    glue("CF NetCDF · {size_mb} MB · database release {manifest$db_release}"),
+    body, crumb = glue('<p class="crumb"><a href="{NETCDF_SITE}/">netcdf</a> / ',
+                       '<a href="{base_web}/">{dataset}</a></p>'))
+
+  f_man  <- file.path(tmp, "manifest.json");  write_json(manifest, f_man, auto_unbox = TRUE, pretty = TRUE)
+  f_hist <- file.path(tmp, "manifests.json"); write_json(hist, f_hist, auto_unbox = TRUE, pretty = TRUE)
+  f_idx  <- file.path(tmp, "release.html");   writeLines(page_html, f_idx)
+  f_lat  <- file.path(tmp, "latest.txt");     writeLines(release, f_lat)
+
+  if (dry_run) {
+    message(glue("DRY RUN: would upload={plan$upload} to {base_gs}/{release}/"))
+    return(invisible(list(uploaded = FALSE, base = base_web)))
+  }
+
+  if (plan$upload) {
+    message(glue("  uploading {basename(local_nc)} ({size_mb} MB) ..."))
+    cc_gcs_cp(local_nc, glue("{base_gs}/{release}/{dataset}.nc"), "application/x-netcdf")
+  } else {
+    message(glue("  byte-identical to {ident} — not re-uploading {size_mb} MB"))
+  }
+  cc_gcs_cp(f_man,  glue("{base_gs}/{release}/manifest.json"), "application/json", "no-cache")
+  cc_gcs_cp(f_idx,  glue("{base_gs}/{release}/index.html"),    "text/html",        "no-cache")
+  cc_gcs_cp(f_hist, glue("{base_gs}/manifests.json"),          "application/json", "no-cache")
+  cc_gcs_cp(f_lat,  glue("{base_gs}/latest.txt"),              "text/plain",       "no-cache")
+
+  invisible(list(uploaded = plan$upload, base = base_web,
+                 url = manifest$canonical_url))
 }
 
 #' Per-release manifest written alongside every published file — including the
