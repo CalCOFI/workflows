@@ -8,3 +8,7 @@ mets_measurement,mets_measurement_uuid,Measurement UUID,,Deterministic primary k
 mets_measurement,mets_sample_uuid,Sample UUID (FK),,FK to `mets_sample`.
 mets_measurement,measurement_type,Measurement Type,,Measurement type; FK to `measurement_type` (shared registry across bottle/ctd/dic/mets).
 mets_measurement,measurement_value,Measurement Value,,"Numeric value of the measurement; units carried by `measurement_type`, not here."
+mets_sample,cruise_code,Cruise Code,,"Short cruise code as published in the source URL (YYMM plus an optional 2-character ship abbreviation, e.g. `1704SH`); the basis for `ship_key`/`cruise_key`."
+mets_sample,cruise_ym,Cruise Year-Month,,"`YYYY-MM` decoded from `cruise_code`; used to resolve a cruise for files whose name carries no ship abbreviation."
+mets_sample,schema_variant,Schema Family,,"Which of the five source families a row was read under; part of the de-duplication key so two systems sampling the same cruise+timestamp are never collapsed."
+mets_sample,_source_file,Source File,,File the row was read from; tie-breaker when the same cruise ships duplicate copies.
