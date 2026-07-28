@@ -124,8 +124,17 @@ for cell in "${CELLS[@]}"; do
   FDIR=$(grep -oE '<fileDir>[^<]+' "$BLOCK" | head -1 | sed 's/<fileDir>//')
   if [ -z "$FDIR" ]; then GRAN=view
   else
-    NF=$(find "$FDIR" -maxdepth 2 -type f \( -name '*.nc' -o -name '*.parquet' -o -name '*.csv' \) 2>/dev/null | wc -l)
-    [ "$NF" -le 1 ] && GRAN=lumped || GRAN=split
+    # fileDir is a CONTAINER path; we are counting files on the HOST. /datasets is
+    # bind-mounted from /share/erddap/datasets (the /share/data/... mounts are
+    # identity). Without this translation find() sees nothing and every file-backed
+    # dataset is mislabelled "lumped" — ctd_thin_nc's 96 per-cruise files reported
+    # as one.
+    HDIR="$FDIR"
+    case "$FDIR" in /datasets/*) HDIR="/share/erddap/datasets/${FDIR#/datasets/}";; esac
+    NF=$(find "$HDIR" -maxdepth 2 -type f \( -name '*.nc' -o -name '*.parquet' -o -name '*.csv' \) 2>/dev/null | wc -l)
+    if [ "$NF" -eq 0 ]; then GRAN=unknown
+    elif [ "$NF" -eq 1 ]; then GRAN=lumped
+    else GRAN=split; fi
   fi
   echo "======== CELL $cell (table=$TABLE $APP/$SCHEMA/$GRAN heap=$HEAP) ========"
   avail=$(free -m | awk '/Mem:/{print $7}')
