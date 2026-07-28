@@ -27,6 +27,14 @@ erDiagram
         varchar cruise_ym
         varchar cruise_key
     }
+    mets_thin {
+        varchar mets_measurement_uuid PK
+        varchar mets_sample_uuid FK
+        varchar cruise_key
+        varchar measurement_type FK
+        double measurement_value
+        varchar retained_reason
+    }
     mets_measurement {
         varchar mets_measurement_uuid PK
         varchar mets_sample_uuid FK
@@ -46,9 +54,11 @@ erDiagram
         varchar _prec_column
         varchar grain
     }
+    mets_sample ||--o{ mets_thin : "mets_sample_uuid"
+    measurement_type ||--o{ mets_thin : "measurement_type"
     mets_sample ||--o{ mets_measurement : "mets_sample_uuid"
     measurement_type ||--o{ mets_measurement : "measurement_type"
     classDef lightblue stroke:#ADD8E6,stroke-width:3px
-    class mets_sample,mets_measurement lightblue
+    class mets_sample,mets_thin,mets_measurement lightblue
     classDef lightyellow stroke:#FFFFE0,stroke-width:3px
     class measurement_type lightyellow
