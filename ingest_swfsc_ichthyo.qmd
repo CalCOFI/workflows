@@ -17,20 +17,21 @@ calcofi:
     link_calcofi_org: https://calcofi.org/data/biology/ichthyoplankton/
     coverage_temporal: 1951 to present
     coverage_spatial: "23-51°N, -170 to -117°W"
+  # publishes the consolidated core plus the shared reference tables this ingest
+  # owns for the whole database. The site/tow/net/ichthyo/species source shape is
+  # wrangled in the notebook and projected into sample / obs / obs_attribute /
+  # sample_measurement + the taxa refs; it survives as compat VIEWs over the core.
   tables_owned:
+    - {table: sample, shared: true, note: "core event dimension (site -> tow -> net adjacency list)"}
+    - {table: obs, shared: true, note: "core occurrence headline (bio, larval abundance)"}
+    - {table: obs_attribute, shared: true, note: "larval size + stage distributions"}
+    - {table: sample_measurement, shared: true, note: "net effort (volume filtered, haul factor, ...)"}
+    - {table: taxon, shared: true, note: "shared taxa reference (WoRMS/ITIS lineage)"}
+    - {table: dataset_taxon, shared: true, note: "species_id -> taxon_key crosswalk"}
     - {table: cruise}
     - {table: ship, shared: true, note: "ship registry; also modified by bottle/ctd ingests"}
-    - {table: site}
-    - {table: tow}
-    - {table: net}
-    - {table: ichthyo}
-    - {table: species}
-    - {table: taxon}
-    - {table: taxa_rank}
     - {table: lookup}
     - {table: grid, shared: true, note: "spatial grid referenced across datasets"}
-    - {table: segment}
-    - {table: invert, note: "SWFSC invertebrate (squid) counts, folded in from inverts.csv"}
   erd:
     color: "#cdebc6"
 ---
@@ -1271,23 +1272,57 @@ preview_tables(
 ## Emit Core Tables
 
 Project this dataset into the shared consolidated core model
-(`design_env-bio-consolidation.md`) via `calcofi4db::emit_core_tables()` — the
-single source of truth for the per-dataset projection into `sample` / `obs` /
-`obs_freq` / `sample_measurement`, also used by `release_database.qmd` to
-assemble the authoritative cross-dataset release.
+(`design_env-bio-consolidation.md`) via `calcofi4db::emit_core_tables()`. These
+core tables **are** this ingest's output: `release_database.qmd` concatenates the
+per-dataset shards rather than re-deriving the core, so there is exactly one
+projection to keep correct.
+
+Ichthyo is the deepest hierarchy in the model — `site` -> `tow` -> `net` — which
+`sample` carries as an adjacency list (`parent_sample_key` / `root_sample_key`),
+with `site_key`, `order_occ`, `grid_key` and `cruise_key` inherited down from the
+site and the net gear code on `tow_type`. Net effort (volume filtered, standard
+haul factor, …) becomes `sample_measurement`; the larval `size`/`stage`
+distributions become `obs_attribute` under the abundance headline in `obs`.
 
 ```{r}
 #| label: emit_core
 
-core <- emit_core_tables(con, "swfsc_ichthyo")
+mt_taxon <- read_csv(here("metadata/measurement_taxon.csv"), show_col_types = FALSE)
+tx_over  <- read_csv(here("metadata/taxon_override.csv"),    show_col_types = FALSE)
+
+core <- emit_core_tables(
+  con, "swfsc_ichthyo", measurement_taxon = mt_taxon, overrides = tx_over)
 cat(glue(
   "core projection — sample={core$sample %||% 0} obs={core$obs %||% 0} ",
-  "obs_freq={core$obs_freq %||% 0} sample_measurement={core$sample_measurement %||% 0}\n"))
+  "obs_attribute={core$obs_attribute %||% 0} ",
+  "sample_measurement={core$sample_measurement %||% 0} ",
+  "taxon={core$taxon %||% 0} dataset_taxon={core$dataset_taxon %||% 0}\n"))
 
-# the frozen release assembles the authoritative cross-dataset core; keep this
-# ingest's parquet output per-dataset by dropping the local core projection here.
-for (tbl_core in c("obs", "obs_freq", "sample_measurement", "sample"))
-  dbExecute(con, glue("DROP TABLE IF EXISTS {tbl_core}"))
+# the three event levels must each survive at their own grain, and the
+# abundance headline must not absorb the size/stage rows
+n_site <- dbGetQuery(con, "SELECT COUNT(*) FROM sample WHERE sample_type='site'")[[1]]
+n_tow  <- dbGetQuery(con, "SELECT COUNT(*) FROM sample WHERE sample_type='tow'")[[1]]
+n_net  <- dbGetQuery(con, "SELECT COUNT(*) FROM sample WHERE sample_type='net'")[[1]]
+stopifnot(
+  "sample must hold one row per site"  = n_site == dbGetQuery(con, "SELECT COUNT(DISTINCT site_uuid) FROM site")[[1]],
+  "sample must hold one row per tow"   = n_tow  == dbGetQuery(con, "SELECT COUNT(DISTINCT tow_uuid) FROM tow")[[1]],
+  "sample must hold one row per net"   = n_net  == dbGetQuery(con, "SELECT COUNT(DISTINCT net_uuid) FROM net")[[1]],
+  "obs must carry only the abundance headline" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM obs")[[1]] ==
+    dbGetQuery(con, "SELECT COUNT(*) FROM ichthyo i JOIN net n USING (net_uuid)
+                     JOIN tow t USING (tow_uuid) JOIN site s USING (site_uuid)
+                     WHERE i.measurement_type IS NULL AND s.grid_key IS NOT NULL")[[1]],
+  "the net -> tow -> site chain must resolve" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM sample c
+                     LEFT JOIN sample p ON c.parent_sample_key = p.sample_key
+                     WHERE c.parent_sample_key IS NOT NULL AND p.sample_key IS NULL")[[1]] == 0)
+cat(glue("sample: {format(n_site, big.mark=',')} sites / {format(n_tow, big.mark=',')} tows / ",
+         "{format(n_net, big.mark=',')} nets"), "\n")
+
+# serve the retired per-dataset names as VIEWs over the core (exact for every
+# column the core models; see ?create_compat_views)
+compat <- create_compat_views(con, "swfsc_ichthyo")
+cat(glue("compat views over core: {paste(compat, collapse = ', ')}"), "\n")
 ```
 
 
@@ -1305,13 +1340,18 @@ mismatches <- list(
 )
 
 # write parquet files with manifest
+# core shards + the shared reference tables this ingest owns for the whole
+# database (grid/cruise/ship/lookup). The per-dataset site/tow/net/ichthyo
+# tables are no longer written — they are VIEWs over the core now.
+tbls_out <- core_output_tables(
+  con, extra = c("grid", "cruise", "ship", "lookup", "dataset"))
 parquet_stats <- write_parquet_outputs(
   con              = con,
   output_dir       = dir_parquet,
-  tables           = dbListTables(con),
+  tables           = tbls_out,
   sort_by          = list(
-    ichthyo = c("species_id", "life_stage"),
-    site    = "hilbert:longitude,latitude"),
+    obs    = c("grid_key", "measurement_type"),
+    sample = "hilbert:longitude,latitude"),
   strip_provenance = FALSE,
   mismatches       = mismatches
 )
@@ -1333,11 +1373,12 @@ metadata_path <- build_metadata_json(
   con = con,
   d_tbls_rd = d$d_tbls_rd,
   d_flds_rd = d$d_flds_rd,
-  metadata_derived_csv = here(
-    "metadata/swfsc/ichthyo/metadata_derived.csv"
+  metadata_derived_csv = c(
+    here("metadata/core_dictionary.csv"),
+    here("metadata/swfsc/ichthyo/metadata_derived.csv")
   ),
   output_dir = dir_parquet,
-  tables = dbListTables(con),
+  tables = tbls_out,
   set_comments = TRUE,
   provider = provider,
   dataset = dataset,
@@ -1347,7 +1388,7 @@ metadata_path <- build_metadata_json(
 
 # write relationships.json sidecar with PKs/FKs
 build_relationships_json(
-  rels = ichthyo_rels,
+  rels = core_relationships(tbls_out),
   output_dir = dir_parquet,
   provider = provider,
   dataset = dataset

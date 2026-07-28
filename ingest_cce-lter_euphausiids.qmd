@@ -26,11 +26,13 @@ calcofi:
     coverage_spatial: "CalCOFI grid incl. Baja lines"
     license: ""
     pi_names: Rasmus Swalethorp; Linsey Sala
+  # publishes the consolidated core: the source shape is wrangled in the notebook
+  # and projected into the shared core tables.
   tables_owned:
-    - {table: euphausiids_tow}
-    - {table: euphausiids_taxon}
-    - {table: euphausiids_measurement}
-    - {table: euphausiids_summary}
+    - {table: sample, shared: true, note: "core event dimension (tow grain)"}
+    - {table: obs, shared: true, note: "core occurrence headline (bio, species x life stage)"}
+    - {table: taxon, shared: true, note: "shared taxa reference (37 BTEDB species)"}
+    - {table: dataset_taxon, shared: true, note: "BTEDB taxon_id -> taxon_key crosswalk"}
     - {table: measurement_type, shared: true, note: "shared registry across datasets"}
   erd:
     color: "#d2f0bb"
@@ -650,7 +652,11 @@ row per tow.
 ```{r}
 #| label: emit_core
 
-core <- emit_core_tables(con, "cce-lter_euphausiids")
+mt_taxon <- read_csv(here("metadata/measurement_taxon.csv"), show_col_types = FALSE)
+tx_over  <- read_csv(here("metadata/taxon_override.csv"),    show_col_types = FALSE)
+
+core <- emit_core_tables(
+  con, "cce-lter_euphausiids", measurement_taxon = mt_taxon, overrides = tx_over)
 cat(glue(
   "core projection — sample={core$sample %||% 0} obs={core$obs %||% 0} ",
   "obs_attribute={core$obs_attribute %||% 0} ",
@@ -669,10 +675,13 @@ stopifnot(
 cat(glue("obs parity: {format(n_obs, big.mark=',')} rows across ",
          "{n_stage} life stages"), "\n")
 
-# the frozen release assembles the authoritative cross-dataset core; keep this
-# ingest's parquet output per-dataset by dropping the local core projection here.
-for (tbl_core in c("obs", "obs_attribute", "sample_measurement", "sample"))
-  dbExecute(con, glue("DROP TABLE IF EXISTS {tbl_core}"))
+# the species x life-stage grain must survive into taxon_key, not collapse to
+# family Euphausiidae (which is what decomposing via measurement_taxon would do)
+stopifnot(
+  "euphausiid obs must resolve species-level taxon_key" =
+    dbGetQuery(con, "SELECT COUNT(DISTINCT taxon_key) FROM obs")[[1]] > 1)
+cat(glue("taxa resolved: ",
+         "{dbGetQuery(con, 'SELECT COUNT(DISTINCT taxon_key) FROM obs')[[1]]} distinct"), "\n")
 ```
 
 ## Write Parquet Outputs
@@ -687,14 +696,18 @@ mismatches <- list(
     con, here("metadata/measurement_type.csv")),
   cruise_keys       = collect_cruise_key_mismatches(con, "euphausiids_tow"))
 
+tbls_out <- core_output_tables(con, extra = c("measurement_type", "dataset"))
 parquet_stats <- write_parquet_outputs(
   con        = con,
   output_dir = dir_parquet,
-  tables     = c("euphausiids_tow", "euphausiids_taxon", "euphausiids_measurement",
-                 "euphausiids_summary", "measurement_type", "dataset"),
-  sort_by    = list(euphausiids_summary = "measurement_type"),
+  tables     = tbls_out,
+  sort_by    = list(obs = c("grid_key", "measurement_type")),
   strip_provenance = FALSE,
   mismatches = mismatches)
+
+build_relationships_json(
+  rels = core_relationships(tbls_out), output_dir = dir_parquet,
+  provider = provider, dataset = dataset)
 
 parquet_stats |> mutate(file = basename(path)) |> select(-path) |>
   datatable(caption = "Parquet export statistics")
@@ -712,8 +725,9 @@ metadata_path <- build_metadata_json(
   con        = con,
   d_tbls_rd  = d_tbls_rd,
   d_flds_rd  = d_flds_rd,
+  metadata_derived_csv = here("metadata/core_dictionary.csv"),
   output_dir = dir_parquet,
-  tables     = c("euphausiids_tow", "euphausiids_taxon", "euphausiids_measurement", "euphausiids_summary"),
+  tables     = tbls_out,
   set_comments = TRUE,
   provider   = provider,
   dataset    = dataset,

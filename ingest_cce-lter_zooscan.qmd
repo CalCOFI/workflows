@@ -29,10 +29,13 @@ calcofi:
     coverage_spatial: "CalCOFI lines 80, 87, 90 (Southern California)"
     license: ""
     pi_names: Mark D. Ohman; Marina Frants
+  # publishes the consolidated core: the sample/measurement/taxon source shape is
+  # wrangled in the notebook and projected into sample / obs + the taxa refs.
   tables_owned:
-    - {table: zooscan_sample}
-    - {table: zooscan_measurement}
-    - {table: zooscan_taxon}
+    - {table: sample, shared: true, note: "core event dimension (tow grain)"}
+    - {table: obs, shared: true, note: "core occurrence headline (bio, zooplankton abundance)"}
+    - {table: taxon, shared: true, note: "shared taxa reference"}
+    - {table: dataset_taxon, shared: true, note: "zooscan taxon_id -> taxon_key crosswalk"}
     - {table: measurement_type, shared: true, note: "shared registry across datasets"}
   erd:
     color: "#c2e8f0"
@@ -387,10 +390,9 @@ cc_erd(
     lightgreen  = "zooscan_taxon",
     lightyellow = "measurement_type",
     white       = "dataset"))
-
-build_relationships_json(
-  rels = zooscan_rels, output_dir = dir_parquet,
-  provider = provider, dataset = dataset)
+# the SOURCE shape above documents the wrangling; the published tables are the
+# consolidated core, so relationships.json is written with the parquet outputs
+# below, from core_relationships().
 ```
 
 ## Validate
@@ -458,23 +460,44 @@ dbGetQuery(con,
 ## Emit Core Tables
 
 Project this dataset into the shared consolidated core model
-(`design_env-bio-consolidation.md`) via `calcofi4db::emit_core_tables()` — the
-single source of truth for the per-dataset projection into `sample` / `obs` /
-`obs_freq` / `sample_measurement`, also used by `release_database.qmd` to
-assemble the authoritative cross-dataset release.
+(`design_env-bio-consolidation.md`) via `calcofi4db::emit_core_tables()`. These
+core tables **are** this ingest's output: `release_database.qmd` concatenates the
+per-dataset shards rather than re-deriving the core from per-dataset tables, so
+there is exactly one projection to keep correct.
 
 ```{r}
 #| label: emit_core
 
-core <- emit_core_tables(con, "cce-lter_zooscan")
+mt_taxon <- read_csv(here("metadata/measurement_taxon.csv"), show_col_types = FALSE)
+tx_over  <- read_csv(here("metadata/taxon_override.csv"),    show_col_types = FALSE)
+
+core <- emit_core_tables(
+  con, "cce-lter_zooscan", measurement_taxon = mt_taxon, overrides = tx_over)
 cat(glue(
   "core projection — sample={core$sample %||% 0} obs={core$obs %||% 0} ",
-  "obs_freq={core$obs_freq %||% 0} sample_measurement={core$sample_measurement %||% 0}\n"))
+  "taxon={core$taxon %||% 0} dataset_taxon={core$dataset_taxon %||% 0}\n"))
 
-# the frozen release assembles the authoritative cross-dataset core; keep this
-# ingest's parquet output per-dataset by dropping the local core projection here.
-for (tbl_core in c("obs", "obs_freq", "sample_measurement", "sample"))
-  dbExecute(con, glue("DROP TABLE IF EXISTS {tbl_core}"))
+# every grid-matched measurement must reach obs, and every obs must resolve a
+# sampling event; taxon_key coverage is reported (the source vocabulary may
+# include entries WoRMS does not resolve)
+n_obs <- dbGetQuery(con, "SELECT COUNT(*) FROM obs")[[1]]
+n_exp <- dbGetQuery(con, "
+  SELECT COUNT(*) FROM zooscan_measurement m JOIN zooscan_sample sp USING (sample_id)
+  WHERE sp.grid_key IS NOT NULL")[[1]]
+stopifnot(
+  "obs must be one row per grid-matched measurement" = n_obs == n_exp,
+  "every obs.sample_key must resolve in sample" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM obs o LEFT JOIN sample s USING (sample_key)
+                     WHERE s.sample_key IS NULL")[[1]] == 0)
+n_tax <- dbGetQuery(con, "SELECT COUNT(*) FROM obs WHERE taxon_key IS NOT NULL")[[1]]
+cat(glue("obs parity: {format(n_obs, big.mark = ',')} rows; ",
+         "{round(100 * n_tax / max(n_obs, 1), 1)}% taxon-resolved"), "\n")
+# serve the retired per-dataset table names as VIEWs over the core, so
+# in-notebook consumers and ad-hoc queries keep working against the old names
+# (exact for every column the core models; see ?create_compat_views)
+compat <- create_compat_views(con, "cce-lter_zooscan")
+cat(glue("compat views over core: {paste(compat, collapse = ', ')}"), "\n")
+
 ```
 
 
@@ -490,14 +513,18 @@ mismatches <- list(
     con, here("metadata/measurement_type.csv")),
   cruise_keys = collect_cruise_key_mismatches(con, "zooscan_sample"))
 
+tbls_out <- core_output_tables(con, extra = c("measurement_type", "dataset"))
 parquet_stats <- write_parquet_outputs(
   con        = con,
   output_dir = dir_parquet,
-  tables     = c("zooscan_sample", "zooscan_measurement", "zooscan_taxon",
-                 "measurement_type", "dataset"),
-  sort_by    = list(zooscan_measurement = "sample_id"),
+  tables     = tbls_out,
+  sort_by    = list(obs = c("grid_key", "measurement_type")),
   strip_provenance = FALSE,
   mismatches = mismatches)
+
+build_relationships_json(
+  rels = core_relationships(tbls_out), output_dir = dir_parquet,
+  provider = provider, dataset = dataset)
 
 parquet_stats |> mutate(file = basename(path)) |> select(-path) |>
   datatable(caption = "Parquet export statistics")
@@ -515,9 +542,10 @@ metadata_path <- build_metadata_json(
   con        = con,
   d_tbls_rd  = d_tbls_rd,
   d_flds_rd  = d_flds_rd,
-  metadata_derived_csv = here("metadata/cce-lter/zooscan/metadata_derived.csv"),
+  metadata_derived_csv = c(here("metadata/core_dictionary.csv"),
+                           here("metadata/cce-lter/zooscan/metadata_derived.csv")),
   output_dir = dir_parquet,
-  tables     = c("zooscan_sample", "zooscan_measurement", "zooscan_taxon"),
+  tables     = tbls_out,
   set_comments = TRUE,
   provider   = provider,
   dataset    = dataset,

@@ -12,3 +12,5 @@ mets_sample,cruise_code,Cruise Code,,"Short cruise code as published in the sour
 mets_sample,cruise_ym,Cruise Year-Month,,"`YYYY-MM` decoded from `cruise_code`; used to resolve a cruise for files whose name carries no ship abbreviation."
 mets_sample,schema_variant,Schema Family,,"Which of the five source families a row was read under; part of the de-duplication key so two systems sampling the same cruise+timestamp are never collapsed."
 mets_sample,_source_file,Source File,,File the row was read from; tie-breaker when the same cruise ships duplicate copies.
+mets_thin,retained_reason,Retained Reason,,"Why the row survived thinning: `grid` (nearest sample to an hour boundary) or `inflection` (Ramer-Douglas-Peucker kept it because conditions deviated beyond `rdp_eps`)."
+mets_thin,mets_measurement_uuid,Measurement UUID,,Same key as the `mets_measurement` row it subsets; `mets_thin` never mints new values.

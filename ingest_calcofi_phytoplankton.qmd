@@ -27,10 +27,14 @@ calcofi:
     coverage_spatial: "CalCOFI region (4 pooled sub-regions)"
     license: ""
     pi_names: Elizabeth L. Venrick
+  # publishes the consolidated core. Region-pooled: sample rows carry
+  # sample_type = region_pool with a NULL grid_key, and obs carries no datetime.
   tables_owned:
-    - {table: phyto_sample}
-    - {table: phyto_measurement}
-    - {table: phyto_taxon}
+    - {table: sample, shared: true, note: "core event dimension (region_pool grain, no grid_key)"}
+    - {table: obs, shared: true, note: "core occurrence headline (bio, cell abundance by taxon)"}
+    - {table: taxon, shared: true, note: "shared taxa reference"}
+    - {table: dataset_taxon, shared: true, note: "species_code -> taxon_key crosswalk"}
+    - {table: taxon_group, shared: true, note: "phytoplankton functional groups"}
     - {table: region}
     - {table: measurement_type, shared: true}
   erd:
@@ -230,15 +234,30 @@ assemble the authoritative cross-dataset release.
 ```{r}
 #| label: emit_core
 
-core <- emit_core_tables(con, "calcofi_phytoplankton")
+mt_taxon <- read_csv(here("metadata/measurement_taxon.csv"), show_col_types = FALSE)
+tx_over  <- read_csv(here("metadata/taxon_override.csv"),    show_col_types = FALSE)
+
+core <- emit_core_tables(
+  con, "calcofi_phytoplankton", measurement_taxon = mt_taxon, overrides = tx_over)
 cat(glue(
   "core projection — sample={core$sample %||% 0} obs={core$obs %||% 0} ",
   "obs_freq={core$obs_freq %||% 0} sample_measurement={core$sample_measurement %||% 0}\n"))
 
-# the frozen release assembles the authoritative cross-dataset core; keep this
-# ingest's parquet output per-dataset by dropping the local core projection here.
-for (tbl_core in c("obs", "obs_freq", "sample_measurement", "sample"))
-  dbExecute(con, glue("DROP TABLE IF EXISTS {tbl_core}"))
+# region-pooled: obs carries NULL grid_key and NULL datetime by design (the
+# grain is cruise x region, not station x time), so the usual grid_key filter
+# must NOT be applied here or every row would be dropped.
+n_obs <- dbGetQuery(con, "SELECT COUNT(*) FROM obs")[[1]]
+n_exp <- dbGetQuery(con, "SELECT COUNT(*) FROM phyto_measurement")[[1]]
+stopifnot(
+  "obs must be one row per phyto measurement"      = n_obs == n_exp,
+  "region-pooled obs carry no grid_key"            =
+    dbGetQuery(con, "SELECT COUNT(*) FROM obs WHERE grid_key IS NOT NULL")[[1]] == 0,
+  "every obs.sample_key must resolve in sample"    =
+    dbGetQuery(con, "SELECT COUNT(*) FROM obs o LEFT JOIN sample s USING (sample_key)
+                     WHERE s.sample_key IS NULL")[[1]] == 0)
+n_tax <- dbGetQuery(con, "SELECT COUNT(*) FROM obs WHERE taxon_key IS NOT NULL")[[1]]
+cat(glue("obs parity: {format(n_obs, big.mark = ',')} rows; ",
+         "{round(100 * n_tax / max(n_obs, 1), 1)}% taxon-resolved"), "\n")
 ```
 
 
@@ -271,20 +290,25 @@ cc_erd(con, tables = c("phyto_sample","phyto_measurement","phyto_taxon","region"
        colors = list(lightblue = c("phyto_sample","phyto_measurement"),
                      lightgreen = c("phyto_taxon","region"),
                      lightyellow = "measurement_type", white = "dataset"))
-build_relationships_json(rels = phyto_rels, output_dir = dir_parquet, provider = provider, dataset = dataset)
+# the SOURCE shape above documents the wrangling; relationships.json is written
+# with the parquet outputs below, from core_relationships().
 
 results <- validate_for_release(con, checks = "all", strict = FALSE)
 cat("Validation:", ifelse(results$passed, "PASSED", "FAILED"), "\n")
 
 dir_create(dir_parquet)
+tbls_out <- core_output_tables(con, extra = c("region", "measurement_type", "dataset"))
 write_parquet_outputs(con = con, output_dir = dir_parquet,
-  tables = c("phyto_sample","phyto_measurement","phyto_taxon","region","measurement_type","dataset"),
-  sort_by = list(phyto_measurement = "phyto_sample_id"), strip_provenance = FALSE)
+  tables = tbls_out,
+  sort_by = list(obs = c("cruise_key", "measurement_type")), strip_provenance = FALSE)
+build_relationships_json(rels = core_relationships(tbls_out), output_dir = dir_parquet,
+  provider = provider, dataset = dataset)
 d_tbls_rd <- read_csv(here("metadata/calcofi/phytoplankton/tbls_redefine.csv"))
 d_flds_rd <- read_csv(here("metadata/calcofi/phytoplankton/flds_redefine.csv"))
 build_metadata_json(con = con, d_tbls_rd = d_tbls_rd, d_flds_rd = d_flds_rd,
-  metadata_derived_csv = here("metadata/calcofi/phytoplankton/metadata_derived.csv"),
-  output_dir = dir_parquet, tables = c("phyto_sample","phyto_measurement","phyto_taxon","region"),
+  metadata_derived_csv = c(here("metadata/core_dictionary.csv"),
+                           here("metadata/calcofi/phytoplankton/metadata_derived.csv")),
+  output_dir = dir_parquet, tables = tbls_out,
   set_comments = TRUE, provider = provider, dataset = dataset,
   workflow_url = cc$workflow_url, tables_owned = tables_owned)
 sync_to_gcs(local_dir = dir_parquet, gcs_prefix = glue("ingest/{dir_label}"), bucket = "calcofi-db")

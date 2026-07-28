@@ -22,9 +22,13 @@ calcofi:
     link_data_source: https://calcofi.org/data/oceanographic-data/underway/
     coverage_temporal: 2004-01 to 2022-11
     coverage_spatial: "28-37°N, -125 to -117°W"
+  # publishes the consolidated core: the source shape is wrangled in the notebook
+  # and projected into the shared core tables. obs is fed by the THINNED series;
+  # the full ~1-minute mets_measurement ships alongside as supplemental.
   tables_owned:
-    - {table: mets_sample}
-    - {table: mets_measurement}
+    - {table: sample, shared: true, note: "core event dimension (underway grain)"}
+    - {table: obs, shared: true, note: "core observations (env, from mets_thin)"}
+    - {table: mets_measurement, supplemental: true, note: "full ~1-min series, not in the core"}
     - {table: measurement_type, shared: true, note: "shared registry across bottle/ctd/dic/mets"}
   erd:
     color: "#cce5ff"
@@ -826,7 +830,18 @@ mets_types <- d_flds_rd |>
     measurement_type   = fld_new,
     description        = coalesce(description, fld_new),
     units              = units,
-    is_canonical       = FALSE,
+    # canonical = the headline type per property, and what mets_thin keeps:
+    # primary TSG + independent surface sensors + core meteorology. Excluded are
+    # redundant units/sensors (tsg2/3/5, tsg2b), derived or duplicate forms
+    # (*_calibrated, *_corrected, conductivity/density/sound_velocity),
+    # model-predicted columns (pred_*), instrument state (dic_*, *_valve),
+    # navigation, and the positionally-unconfirmed SCIMS unknowns.
+    is_canonical       = measurement_type %in% c(
+      "tsg1_temp_c", "tsg1_salinity_psu", "sst_c", "sss_psu",
+      "air_temp_c", "rel_humidity_pct", "wind_speed_ms", "wind_dir_deg",
+      "atm_pressure_mb", "chl_fluor", "par_surf",
+      "short_wave_rad", "long_wave_rad", "oxygen", "sw_ph",
+      "bottom_depth_m", "uws_flow"),
     `_source_column`   = measurement_type,
     `_source_table`    = "mets_measurement",
     `_source_datasets` = "calcofi_mets",
@@ -837,6 +852,16 @@ mets_types <- d_flds_rd |>
 stopifnot(
   "every METS measurement_type must be described in flds_redefine.csv" =
     setequal(mets_types$measurement_type, mets_types_used))
+
+# METS-owned rows are REPLACED with the freshly-built definitions, not merely
+# left in place: on a re-run every type already exists, so an append-only upsert
+# would silently keep a stale is_canonical/units from the previous run and
+# mets_thin would find no canonical types at all.
+mets_owned <- d_meas_type |>
+  filter(measurement_type %in% mets_types$measurement_type,
+         str_squish(coalesce(`_source_datasets`, "")) == "calcofi_mets") |>
+  pull(measurement_type)
+d_meas_type <- d_meas_type |> filter(!measurement_type %in% mets_owned)
 
 # types another dataset already owns: append provenance instead of clobbering
 shared <- intersect(mets_types$measurement_type, d_meas_type$measurement_type)
@@ -859,6 +884,169 @@ cat(glue("measurement_type: {nrow(mets_types)} METS types registered ",
 dbWriteTable(con, "measurement_type", d_meas_type, overwrite = TRUE)
 ```
 
+## METS Thin
+
+`mets_thin` is an adaptively-thinned `mets_measurement` and is the **headline
+METS table**; full `mets_measurement` is retained as a supplemental output.
+Same shape as `ctd_thin` in `ingest_calcofi_ctd-cast.qmd`, with the time axis
+playing the role depth plays there:
+
+- **baseline grid** — the sample nearest each hour boundary, per cruise and
+  schema family. Underway data is recorded at ~1-minute resolution along a
+  track that is mostly steaming through slowly-varying water, so an hourly
+  baseline loses almost nothing over the long stretches.
+- **upsampled where conditions actually change** — a front, an eddy edge, or a
+  river plume crossing is exactly what an hourly grid would erase, so
+  Ramer-Douglas-Peucker line simplification is run over each cruise's canonical
+  variables and every retained inflection is added back. `rdp_eps` is the
+  tuning knob, in measurement units.
+
+Both steps are a pure **row subset** — values are never interpolated or
+averaged, so any row in `mets_thin` is byte-identical to its `mets_measurement`
+original.
+
+```{r}
+#| label: mets_thin
+
+# canonical types only: one per property, dropping redundant sensors (tsg2/3/5),
+# calibrated/corrected duplicates, and the model-predicted columns
+canon_types <- d_meas_type |>
+  filter(str_detect(coalesce(`_source_datasets`, ""), "calcofi_mets"),
+         is_canonical) |>
+  pull(measurement_type)
+stopifnot("no canonical METS measurement types registered" = length(canon_types) > 0)
+canon_in <- paste(dbQuoteString(con, canon_types), collapse = ", ")
+
+# --- baseline: sample nearest each hour boundary, per cruise + family ---------
+dbExecute(con, "
+  CREATE OR REPLACE TEMP TABLE _mets_grid AS
+  SELECT mets_sample_uuid
+  FROM (
+    SELECT mets_sample_uuid,
+           ROW_NUMBER() OVER (
+             PARTITION BY cruise_code, schema_variant,
+                          date_trunc('hour', datetime_start_utc)
+             ORDER BY abs(epoch(datetime_start_utc)
+                          - epoch(date_trunc('hour', datetime_start_utc)))) AS rn
+    FROM mets_sample
+    WHERE datetime_start_utc IS NOT NULL)
+  WHERE rn = 1")
+
+n_grid <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM _mets_grid")$n
+cat(glue("_mets_grid: {format(n_grid, big.mark = ',')} hourly baseline samples"), "\n")
+
+# --- upsample: RDP inflections per cruise on the canonical variables ----------
+rdp_keep <- function(x, y, eps) {
+  n <- length(x); keep <- rep(FALSE, n)
+  if (n == 0L) return(keep)
+  keep[c(1L, n)] <- TRUE
+  if (n <= 2L) return(keep)
+  stack <- list(c(1L, n))
+  while (length(stack) > 0L) {
+    seg <- stack[[length(stack)]]; stack[[length(stack)]] <- NULL
+    i <- seg[1L]; j <- seg[2L]
+    if (j - i < 2L) next
+    idx <- (i + 1L):(j - 1L)
+    dx <- x[j] - x[i]; dy <- y[j] - y[i]
+    den <- sqrt(dx * dx + dy * dy)
+    d <- if (den == 0) abs(y[idx] - y[i]) else
+      abs(dy * x[idx] - dx * y[idx] + x[j] * y[i] - y[j] * x[i]) / den
+    if (max(d) > eps) {
+      k <- idx[which.max(d)]; keep[k] <- TRUE
+      stack[[length(stack) + 1L]] <- c(i, k)
+      stack[[length(stack) + 1L]] <- c(k, j)
+    }
+  }
+  keep
+}
+
+# per-variable tolerance in measurement units. x is hours-since-cruise-start, so
+# its range (hundreds) far exceeds the y range (degrees / PSU) and the
+# perpendicular distance reduces to the vertical deviation — i.e. eps reads
+# directly as "keep any excursion bigger than this". Matches ctd_thin's values
+# for the equivalent properties.
+rdp_eps <- c(
+  tsg1_temp_c       = 0.2,   sst_c  = 0.2,
+  tsg1_salinity_psu = 0.04,  sss_psu = 0.04)
+rdp_vars <- intersect(names(rdp_eps), canon_types)
+
+thin_cruises <- dbGetQuery(con,
+  "SELECT DISTINCT cruise_code FROM mets_sample
+   WHERE datetime_start_utc IS NOT NULL")$cruise_code
+
+rdp_retained <- purrr::map(thin_cruises, function(ck) {
+  d_ts <- dbGetQuery(con, glue("
+    SELECT m.mets_sample_uuid, m.measurement_type,
+           epoch(s.datetime_start_utc) / 3600.0 AS t_hr,
+           m.measurement_value
+    FROM mets_measurement m
+    JOIN mets_sample s USING (mets_sample_uuid)
+    WHERE s.cruise_code = {dbQuoteString(con, ck)}
+      AND s.datetime_start_utc IS NOT NULL
+      AND m.measurement_type IN ({paste(dbQuoteString(con, rdp_vars), collapse = ', ')})
+      AND m.measurement_value IS NOT NULL"))
+  if (nrow(d_ts) == 0) return(NULL)
+  d_ts |>
+    arrange(measurement_type, t_hr) |>
+    group_by(measurement_type) |>
+    filter(rdp_keep(t_hr, measurement_value, eps = rdp_eps[[measurement_type[1]]])) |>
+    ungroup() |>
+    distinct(mets_sample_uuid)
+}) |>
+  purrr::list_rbind() |>
+  distinct(mets_sample_uuid)
+
+dbWriteTable(con, "_mets_rdp", rdp_retained, temporary = TRUE, overwrite = TRUE)
+cat(glue("_mets_rdp: {format(nrow(rdp_retained), big.mark = ',')} samples ",
+         "flagged as conditions-deviate inflections"), "\n")
+
+# --- union the two, then subset mets_measurement ------------------------------
+dbExecute(con, "
+  CREATE OR REPLACE TEMP TABLE _mets_retained AS
+  SELECT mets_sample_uuid, 'grid' AS retained_reason FROM _mets_grid
+  UNION
+  SELECT r.mets_sample_uuid, 'inflection' AS retained_reason
+  FROM _mets_rdp r
+  WHERE NOT EXISTS (
+    SELECT 1 FROM _mets_grid g WHERE g.mets_sample_uuid = r.mets_sample_uuid)")
+
+dbExecute(con, glue("
+  CREATE OR REPLACE TABLE mets_thin AS
+  SELECT m.mets_measurement_uuid, m.mets_sample_uuid, m.cruise_key,
+         m.measurement_type, m.measurement_value, rt.retained_reason
+  FROM mets_measurement m
+  JOIN _mets_retained rt USING (mets_sample_uuid)
+  WHERE m.measurement_type IN ({canon_in})
+  ORDER BY m.cruise_key, m.measurement_type, m.mets_sample_uuid"))
+
+n_thin <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM mets_thin")$n
+n_meas <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM mets_measurement")$n
+cat(glue(
+  "mets_thin: {format(n_thin, big.mark = ',')} rows ",
+  "({round(100 * n_thin / n_meas, 1)}% of mets_measurement's ",
+  "{format(n_meas, big.mark = ',')})"), "\n")
+
+dbGetQuery(con, "
+  SELECT retained_reason, COUNT(*) AS n_rows,
+         COUNT(DISTINCT mets_sample_uuid) AS n_samples
+  FROM mets_thin GROUP BY 1 ORDER BY 1") |>
+  dt(caption = "mets_thin retention: hourly baseline vs upsampled deviations",
+     fname = "mets_thin_retention")
+
+# thinning must be a pure subset — never interpolate or re-derive a value
+stopifnot(
+  "mets_thin must be a row subset of mets_measurement" =
+    dbGetQuery(con, "
+      SELECT COUNT(*) AS n FROM mets_thin t
+      LEFT JOIN mets_measurement m USING (mets_measurement_uuid)
+      WHERE m.mets_measurement_uuid IS NULL
+         OR m.measurement_value IS DISTINCT FROM t.measurement_value")$n == 0,
+  "mets_thin must only carry canonical types" =
+    dbGetQuery(con, glue("
+      SELECT COUNT(*) AS n FROM mets_thin
+      WHERE measurement_type NOT IN ({canon_in})"))$n == 0)
+```
+
 ## Schema Diagram
 
 ```{r}
@@ -867,9 +1055,14 @@ dbWriteTable(con, "measurement_type", d_meas_type, overwrite = TRUE)
 mets_rels <- list(
   primary_keys = list(
     mets_sample      = "mets_sample_uuid",
+    mets_thin        = "mets_measurement_uuid",
     mets_measurement = "mets_measurement_uuid",
     measurement_type = "measurement_type"),
   foreign_keys = list(
+    list(table = "mets_thin", column = "mets_sample_uuid",
+         ref_table = "mets_sample", ref_column = "mets_sample_uuid"),
+    list(table = "mets_thin", column = "measurement_type",
+         ref_table = "measurement_type", ref_column = "measurement_type"),
     list(table = "mets_measurement", column = "mets_sample_uuid",
          ref_table = "mets_sample", ref_column = "mets_sample_uuid"),
     list(table = "mets_measurement", column = "measurement_type",
@@ -883,10 +1076,10 @@ mets_rels <- list(
 # other ingest passes.
 cc_erd(
   con,
-  tables = c("mets_sample", "mets_measurement", "measurement_type"),
+  tables = c("mets_sample", "mets_thin", "mets_measurement", "measurement_type"),
   rels   = mets_rels,
   colors = list(
-    lightblue   = c("mets_sample", "mets_measurement"),
+    lightblue   = c("mets_sample", "mets_thin", "mets_measurement"),
     lightyellow = "measurement_type"))
 ```
 
@@ -905,6 +1098,44 @@ validation with a NULL grid_key, or need excluding until mets_16 resolves.
 
 add_point_geom(con, "mets_sample", lon_col = "longitude", lat_col = "latitude")
 assign_grid_key(con, "mets_sample")
+```
+
+## Emit Core Tables
+
+Project METS into the shared consolidated core model via
+`calcofi4db::emit_core_tables()`. The `underway` sample grain already exists —
+`swfsc_cufes` uses it — and `obs` is fed by **`mets_thin`**, the same pattern
+`calcofi_ctd-cast` follows (its `obs` carries `ctd_thin`, not the full scan
+set). Thinning is what makes this proportionate: the full ~1-minute series is
+20.5M rows and stays a supplemental output, while the thinned track lands in the
+database like any other dataset. `sample` carries only the samples `mets_thin`
+references, so the event dimension does not fill with rows that have no `obs`.
+
+```{r}
+#| label: emit_core
+
+core <- emit_core_tables(con, "calcofi_mets", taxa = FALSE)
+cat(glue(
+  "core projection — sample={core$sample %||% 0} obs={core$obs %||% 0} ",
+  "sample_measurement={core$sample_measurement %||% 0}\n"))
+
+n_obs <- dbGetQuery(con, "SELECT COUNT(*) FROM obs")[[1]]
+n_exp <- dbGetQuery(con,
+  "SELECT COUNT(*) FROM mets_thin t JOIN mets_sample s USING (mets_sample_uuid)
+   WHERE s.grid_key IS NOT NULL")[[1]]
+stopifnot(
+  "obs must be one row per grid-matched mets_thin measurement" = n_obs == n_exp,
+  "every obs.sample_key must resolve in sample" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM obs o
+                     LEFT JOIN sample s USING (sample_key)
+                     WHERE s.sample_key IS NULL")[[1]] == 0)
+cat(glue("obs parity: {format(n_obs, big.mark = ',')} rows"), "\n")
+
+# obs must carry the THINNED series, not the full one — that is the whole point
+# of mets_thin, and a regression here would silently 10x the core
+stopifnot(
+  "obs must be fed by mets_thin, not mets_measurement" =
+    n_obs < dbGetQuery(con, "SELECT COUNT(*) FROM mets_measurement")[[1]])
 ```
 
 ## Load Dataset Metadata
@@ -948,7 +1179,7 @@ enforce_column_types(con, d_flds_rd = d_flds_rd)
 #| label: preview
 #| results: asis
 
-preview_tables(con, tables = c("mets_sample", "mets_measurement", "measurement_type"))
+preview_tables(con, tables = c("mets_sample", "mets_thin", "measurement_type"))
 ```
 
 ## Write Parquet
@@ -962,16 +1193,21 @@ mismatches <- list(
     con, here("metadata/measurement_type.csv")),
   cruise_keys       = collect_cruise_key_mismatches(con, "mets_sample"))
 
+tbls_out <- core_output_tables(
+  con, extra = c("mets_measurement", "measurement_type", "dataset"))
 parquet_stats <- write_parquet_outputs(
   con          = con,
   output_dir   = dir_parquet,
-  tables       = c("mets_sample", "mets_measurement", "measurement_type"),
+  tables       = tbls_out,
   partition_by = list(mets_measurement = "cruise_key"),
   sort_by      = list(
-    mets_measurement = c("measurement_type"),
-    mets_sample      = "hilbert:longitude,latitude"),
+    obs              = c("grid_key", "measurement_type"),
+    mets_measurement = c("measurement_type")),
   strip_provenance = FALSE,
-  mismatches       = mismatches)
+  mismatches       = mismatches,
+  # the core (sample/obs) is the database; the full ~1-minute series ships
+  # alongside for anyone who needs between-the-hours resolution
+  supplemental     = c("mets_measurement"))
 
 parquet_stats |> dt(fname = "mets_parquet_stats")
 ```
@@ -994,7 +1230,8 @@ metadata_path <- build_metadata_json(
   tables_owned         = tables_owned)
 
 build_relationships_json(
-  rels = mets_rels, output_dir = dir_parquet, provider = provider, dataset = dataset)
+  rels = core_relationships(tbls_out), output_dir = dir_parquet,
+  provider = provider, dataset = dataset)
 ```
 
 ## Export Modified Dependency Deltas

@@ -25,9 +25,13 @@ calcofi:
     coverage_spatial: "CalCOFI region (underway)"
     license: ""
     pi_names: Noelle Bowlin
+  # publishes the consolidated core: the underway sample/measurement source shape
+  # is wrangled in the notebook and projected into sample / obs + the taxa refs.
   tables_owned:
-    - {table: cufes_sample}
-    - {table: cufes_measurement}
+    - {table: sample, shared: true, note: "core event dimension (underway grain)"}
+    - {table: obs, shared: true, note: "core occurrence headline (bio, egg counts by species)"}
+    - {table: taxon, shared: true, note: "shared taxa reference"}
+    - {table: dataset_taxon, shared: true, note: "egg-type -> taxon_key crosswalk"}
     - {table: measurement_type, shared: true}
   erd:
     color: "#f0e8bb"
@@ -170,23 +174,53 @@ cat(glue("added {nrow(new_types)} measurement types"), "\n")
 ## Emit Core Tables
 
 Project this dataset into the shared consolidated core model
-(`design_env-bio-consolidation.md`) via `calcofi4db::emit_core_tables()` — the
-single source of truth for the per-dataset projection into `sample` / `obs` /
-`obs_freq` / `sample_measurement`, also used by `release_database.qmd` to
-assemble the authoritative cross-dataset release.
+(`design_env-bio-consolidation.md`) via `calcofi4db::emit_core_tables()`. These
+core tables **are** this ingest's output: `release_database.qmd` concatenates the
+per-dataset shards rather than re-deriving the core, so there is exactly one
+projection to keep correct.
+
+CUFES bakes the taxon into the measurement type name (`sardine_eggs`,
+`anchovy_eggs`, …). `metadata/measurement_taxon.csv` decomposes each raw type
+into a real `taxon_key`, the canonical `measurement_type`, and `life_stage`, so
+the egg counts land in `obs` as ordinary taxon-resolved occurrences.
 
 ```{r}
 #| label: emit_core
 
-core <- emit_core_tables(con, "swfsc_cufes")
+mt_taxon <- read_csv(here("metadata/measurement_taxon.csv"), show_col_types = FALSE)
+tx_over  <- read_csv(here("metadata/taxon_override.csv"),    show_col_types = FALSE)
+
+core <- emit_core_tables(
+  con, "swfsc_cufes", measurement_taxon = mt_taxon, overrides = tx_over)
 cat(glue(
   "core projection — sample={core$sample %||% 0} obs={core$obs %||% 0} ",
-  "obs_freq={core$obs_freq %||% 0} sample_measurement={core$sample_measurement %||% 0}\n"))
+  "taxon={core$taxon %||% 0} dataset_taxon={core$dataset_taxon %||% 0}\n"))
 
-# the frozen release assembles the authoritative cross-dataset core; keep this
-# ingest's parquet output per-dataset by dropping the local core projection here.
-for (tbl_core in c("obs", "obs_freq", "sample_measurement", "sample"))
-  dbExecute(con, glue("DROP TABLE IF EXISTS {tbl_core}"))
+# every grid-matched measurement whose raw type is registered must reach obs,
+# with a real taxon_key — an unregistered raw type is dropped by the INNER join,
+# so assert the registry actually covers the vocabulary in the data
+n_obs <- dbGetQuery(con, "SELECT COUNT(*) FROM obs")[[1]]
+n_exp <- dbGetQuery(con, "
+  SELECT COUNT(*) FROM cufes_measurement m JOIN cufes_sample c USING (sample_id)
+  JOIN _measurement_taxon mx ON mx.raw_measurement_type = m.measurement_type
+                            AND mx.target = 'obs'
+  WHERE c.grid_key IS NOT NULL")[[1]]
+n_unreg <- dbGetQuery(con, "
+  SELECT COUNT(DISTINCT m.measurement_type) FROM cufes_measurement m
+  WHERE m.measurement_type NOT IN (
+    SELECT raw_measurement_type FROM _measurement_taxon)")[[1]]
+stopifnot(
+  "obs must be one row per registered grid-matched measurement" = n_obs == n_exp,
+  "every cufes measurement_type must be in measurement_taxon.csv" = n_unreg == 0,
+  "cufes obs must all carry a taxon_key" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM obs WHERE taxon_key IS NULL")[[1]] == 0)
+cat(glue("obs parity: {format(n_obs, big.mark = ',')} rows, all taxon-resolved"), "\n")
+# serve the retired per-dataset table names as VIEWs over the core, so
+# in-notebook consumers and ad-hoc queries keep working against the old names
+# (exact for every column the core models; see ?create_compat_views)
+compat <- create_compat_views(con, "swfsc_cufes")
+cat(glue("compat views over core: {paste(compat, collapse = ', ')}"), "\n")
+
 ```
 
 
@@ -202,22 +236,27 @@ cufes_rels <- list(
   foreign_keys = list(
     list(table="cufes_measurement", column="sample_id", ref_table="cufes_sample", ref_column="sample_id"),
     list(table="cufes_measurement", column="measurement_type", ref_table="measurement_type", ref_column="measurement_type")))
+# the SOURCE shape, documenting the wrangling above; the published tables are
+# the consolidated core, so relationships.json comes from core_relationships()
 cc_erd(con, tables = c("cufes_sample","cufes_measurement","measurement_type","dataset"), rels = cufes_rels,
        colors = list(lightblue = c("cufes_sample","cufes_measurement"), lightyellow = "measurement_type", white = "dataset"))
-build_relationships_json(rels = cufes_rels, output_dir = dir_parquet, provider = provider, dataset = dataset)
 
 results <- validate_for_release(con, checks = "all", strict = FALSE)
 cat("Validation:", ifelse(results$passed, "PASSED", "FAILED"), "\n")
 
 dir_create(dir_parquet)
+tbls_out <- core_output_tables(con, extra = c("measurement_type", "dataset"))
 write_parquet_outputs(con = con, output_dir = dir_parquet,
-  tables = c("cufes_sample","cufes_measurement","measurement_type","dataset"),
-  sort_by = list(cufes_measurement = "measurement_type"), strip_provenance = FALSE)
+  tables = tbls_out,
+  sort_by = list(obs = c("grid_key", "measurement_type")), strip_provenance = FALSE)
+build_relationships_json(rels = core_relationships(tbls_out), output_dir = dir_parquet,
+  provider = provider, dataset = dataset)
 d_tbls_rd <- read_csv(here("metadata/swfsc/cufes/tbls_redefine.csv"))
 d_flds_rd <- read_csv(here("metadata/swfsc/cufes/flds_redefine.csv"))
 build_metadata_json(con = con, d_tbls_rd = d_tbls_rd, d_flds_rd = d_flds_rd,
-  metadata_derived_csv = here("metadata/swfsc/cufes/metadata_derived.csv"),
-  output_dir = dir_parquet, tables = c("cufes_sample","cufes_measurement"),
+  metadata_derived_csv = c(here("metadata/core_dictionary.csv"),
+                           here("metadata/swfsc/cufes/metadata_derived.csv")),
+  output_dir = dir_parquet, tables = tbls_out,
   set_comments = TRUE, provider = provider, dataset = dataset,
   workflow_url = cc$workflow_url, tables_owned = tables_owned)
 sync_to_gcs(local_dir = dir_parquet, gcs_prefix = glue("ingest/{dir_label}"), bucket = "calcofi-db")

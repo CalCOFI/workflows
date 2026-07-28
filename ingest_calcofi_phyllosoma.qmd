@@ -24,9 +24,14 @@ calcofi:
     coverage_spatial: "CalCOFI region"
     license: ""
     pi_names: J. Anthony Koslow
+  # publishes the consolidated core: the tow/measurement source shape is wrangled
+  # in the notebook and projected into sample / obs / obs_attribute + taxa refs.
   tables_owned:
-    - {table: phyllosoma_tow}
-    - {table: phyllosoma_measurement}
+    - {table: sample, shared: true, note: "core event dimension (tow grain)"}
+    - {table: obs, shared: true, note: "core occurrence headline (total phyllosoma per tow)"}
+    - {table: obs_attribute, shared: true, note: "stage distribution within each occurrence"}
+    - {table: taxon, shared: true, note: "shared taxa reference"}
+    - {table: dataset_taxon, shared: true, note: "stage-type -> taxon_key crosswalk"}
     - {table: measurement_type, shared: true}
   erd:
     color: "#e0bbf0"
@@ -148,23 +153,52 @@ assign_grid_key(con, "phyllosoma_tow") |> datatable(caption = "Grid assignment")
 ## Emit Core Tables
 
 Project this dataset into the shared consolidated core model
-(`design_env-bio-consolidation.md`) via `calcofi4db::emit_core_tables()` — the
-single source of truth for the per-dataset projection into `sample` / `obs` /
-`obs_freq` / `sample_measurement`, also used by `release_database.qmd` to
-assemble the authoritative cross-dataset release.
+(`design_env-bio-consolidation.md`) via `calcofi4db::emit_core_tables()`. These
+core tables **are** this ingest's output: `release_database.qmd` concatenates the
+per-dataset shards rather than re-deriving the core, so there is exactly one
+projection to keep correct.
+
+The source is one column per stage plus a total. Only `total_phyllosoma` is an
+occurrence headline; the eleven `phyllosoma_stage_N` columns are a stage
+distribution *within* that occurrence, so they become `obs_attribute` rows
+(`measurement_type = 'stage'`, `bin_value = N`) rather than eleven separate
+observations. `metadata/measurement_taxon.csv` supplies the split and the
+`taxon_key` for *Panulirus interruptus*.
 
 ```{r}
 #| label: emit_core
 
-core <- emit_core_tables(con, "calcofi_phyllosoma")
+mt_taxon <- read_csv(here("metadata/measurement_taxon.csv"), show_col_types = FALSE)
+tx_over  <- read_csv(here("metadata/taxon_override.csv"),    show_col_types = FALSE)
+
+core <- emit_core_tables(
+  con, "calcofi_phyllosoma", measurement_taxon = mt_taxon, overrides = tx_over)
 cat(glue(
   "core projection — sample={core$sample %||% 0} obs={core$obs %||% 0} ",
-  "obs_freq={core$obs_freq %||% 0} sample_measurement={core$sample_measurement %||% 0}\n"))
+  "obs_attribute={core$obs_attribute %||% 0} ",
+  "taxon={core$taxon %||% 0} dataset_taxon={core$dataset_taxon %||% 0}\n"))
 
-# the frozen release assembles the authoritative cross-dataset core; keep this
-# ingest's parquet output per-dataset by dropping the local core projection here.
-for (tbl_core in c("obs", "obs_freq", "sample_measurement", "sample"))
-  dbExecute(con, glue("DROP TABLE IF EXISTS {tbl_core}"))
+# the headline must be the total only — one row per grid-matched tow — and the
+# stage bins must not leak into obs
+n_obs <- dbGetQuery(con, "SELECT COUNT(*) FROM obs")[[1]]
+n_exp <- dbGetQuery(con, "
+  SELECT COUNT(*) FROM phyllosoma_measurement m JOIN phyllosoma_tow tw USING (tow_id)
+  WHERE tw.grid_key IS NOT NULL AND m.measurement_type = 'total_phyllosoma'")[[1]]
+n_stage_in_obs <- dbGetQuery(con,
+  "SELECT COUNT(*) FROM obs WHERE measurement_type LIKE 'phyllosoma_stage%'")[[1]]
+stopifnot(
+  "obs must carry the total only, one row per grid-matched tow" = n_obs == n_exp,
+  "stage columns must go to obs_attribute, not obs"             = n_stage_in_obs == 0,
+  "phyllosoma obs must all carry a taxon_key" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM obs WHERE taxon_key IS NULL")[[1]] == 0)
+cat(glue("obs parity: {format(n_obs, big.mark = ',')} headline rows; ",
+         "{format(core$obs_attribute %||% 0, big.mark = ',')} stage bins"), "\n")
+# serve the retired per-dataset table names as VIEWs over the core, so
+# in-notebook consumers and ad-hoc queries keep working against the old names
+# (exact for every column the core models; see ?create_compat_views)
+compat <- create_compat_views(con, "calcofi_phyllosoma")
+cat(glue("compat views over core: {paste(compat, collapse = ', ')}"), "\n")
+
 ```
 
 
@@ -189,22 +223,27 @@ phyllo_rels <- list(
   foreign_keys = list(
     list(table="phyllosoma_measurement", column="tow_id", ref_table="phyllosoma_tow", ref_column="tow_id"),
     list(table="phyllosoma_measurement", column="measurement_type", ref_table="measurement_type", ref_column="measurement_type")))
+# the SOURCE shape, documenting the wrangling above; the published tables are
+# the consolidated core, so relationships.json comes from core_relationships()
 cc_erd(con, tables = c("phyllosoma_tow","phyllosoma_measurement","measurement_type","dataset"), rels = phyllo_rels,
        colors = list(lightblue = c("phyllosoma_tow","phyllosoma_measurement"), lightyellow = "measurement_type", white = "dataset"))
-build_relationships_json(rels = phyllo_rels, output_dir = dir_parquet, provider = provider, dataset = dataset)
 
 results <- validate_for_release(con, checks = "all", strict = FALSE)
 cat("Validation:", ifelse(results$passed, "PASSED", "FAILED"), "\n")
 
 dir_create(dir_parquet)
+tbls_out <- core_output_tables(con, extra = c("measurement_type", "dataset"))
 write_parquet_outputs(con = con, output_dir = dir_parquet,
-  tables = c("phyllosoma_tow","phyllosoma_measurement","measurement_type","dataset"),
-  sort_by = list(phyllosoma_measurement = "measurement_type"), strip_provenance = FALSE)
+  tables = tbls_out,
+  sort_by = list(obs = c("grid_key", "measurement_type")), strip_provenance = FALSE)
+build_relationships_json(rels = core_relationships(tbls_out), output_dir = dir_parquet,
+  provider = provider, dataset = dataset)
 d_tbls_rd <- read_csv(here("metadata/calcofi/phyllosoma/tbls_redefine.csv"))
 d_flds_rd <- read_csv(here("metadata/calcofi/phyllosoma/flds_redefine.csv"))
 build_metadata_json(con = con, d_tbls_rd = d_tbls_rd, d_flds_rd = d_flds_rd,
-  metadata_derived_csv = here("metadata/calcofi/phyllosoma/metadata_derived.csv"),
-  output_dir = dir_parquet, tables = c("phyllosoma_tow","phyllosoma_measurement"),
+  metadata_derived_csv = c(here("metadata/core_dictionary.csv"),
+                           here("metadata/calcofi/phyllosoma/metadata_derived.csv")),
+  output_dir = dir_parquet, tables = tbls_out,
   set_comments = TRUE, provider = provider, dataset = dataset,
   workflow_url = cc$workflow_url, tables_owned = tables_owned)
 sync_to_gcs(local_dir = dir_parquet, gcs_prefix = glue("ingest/{dir_label}"), bucket = "calcofi-db")

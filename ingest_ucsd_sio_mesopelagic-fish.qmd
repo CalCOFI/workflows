@@ -30,10 +30,13 @@ calcofi:
     coverage_spatial: "CalCOFI grid (7 cruises with MOHT tows)"
     license: "CC BY 4.0"
     pi_names: J. Anthony Koslow
+  # publishes the consolidated core: the source shape is wrangled in the notebook
+  # and projected into the shared core tables.
   tables_owned:
-    - {table: mesopelagic_fish_tow}
-    - {table: mesopelagic_fish_taxon}
-    - {table: mesopelagic_fish_measurement}
+    - {table: sample, shared: true, note: "core event dimension (tow grain)"}
+    - {table: obs, shared: true, note: "core occurrence headline (bio, per-tow tally)"}
+    - {table: taxon, shared: true, note: "shared taxa reference"}
+    - {table: dataset_taxon, shared: true, note: "scientific name -> taxon_key crosswalk"}
     - {table: measurement_type, shared: true}
   erd:
     color: "#bbe0f0"
@@ -412,7 +415,11 @@ rather than NULL, and `taxon_key` resolves through `dataset_taxon` from
 ```{r}
 #| label: emit_core
 
-core <- emit_core_tables(con, "ucsd_sio_mesopelagic-fish")
+mt_taxon <- read_csv(here("metadata/measurement_taxon.csv"), show_col_types = FALSE)
+tx_over  <- read_csv(here("metadata/taxon_override.csv"),    show_col_types = FALSE)
+
+core <- emit_core_tables(
+  con, "ucsd_sio_mesopelagic-fish", measurement_taxon = mt_taxon, overrides = tx_over)
 cat(glue(
   "core projection — sample={core$sample %||% 0} obs={core$obs %||% 0} ",
   "sample_measurement={core$sample_measurement %||% 0}\n"))
@@ -428,8 +435,16 @@ stopifnot(
 cat(glue("obs parity: {format(n_obs, big.mark=',')} rows; ",
          "{n_dt} sample rows with a real datetime"), "\n")
 
-for (tbl_core in c("obs", "obs_attribute", "sample_measurement", "sample"))
-  dbExecute(con, glue("DROP TABLE IF EXISTS {tbl_core}"))
+stopifnot(
+  "every obs.sample_key must resolve in sample" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM obs o LEFT JOIN sample s USING (sample_key)
+                     WHERE s.sample_key IS NULL")[[1]] == 0)
+# serve the retired per-dataset table names as VIEWs over the core, so
+# in-notebook consumers and ad-hoc queries keep working against the old names
+# (exact for every column the core models; see ?create_compat_views)
+compat <- create_compat_views(con, "ucsd_sio_mesopelagic-fish")
+cat(glue("compat views over core: {paste(compat, collapse = ', ')}"), "\n")
+
 ```
 
 ## Validate and Write Outputs
@@ -449,22 +464,26 @@ if (length(results$errors) > 0)
 # falls back to a dataset-local key via build_dataset_taxon()).
 
 dir_create(dir_parquet)
+tbls_out <- core_output_tables(con, extra = c("measurement_type", "dataset"))
 write_parquet_outputs(
   con        = con,
   output_dir = dir_parquet,
-  tables     = c("mesopelagic_fish_tow", "mesopelagic_fish_taxon",
-                 "mesopelagic_fish_measurement", "measurement_type", "dataset"),
-  sort_by    = list(mesopelagic_fish_measurement = "measurement_type"),
+  tables     = tbls_out,
+  sort_by    = list(obs = c("grid_key", "measurement_type")),
   strip_provenance = FALSE)
+
+build_relationships_json(
+  rels = core_relationships(tbls_out), output_dir = dir_parquet,
+  provider = provider, dataset = dataset)
 
 d_tbls_rd <- read_csv(here("metadata/ucsd_sio/mesopelagic-fish/tbls_redefine.csv"))
 d_flds_rd <- read_csv(here("metadata/ucsd_sio/mesopelagic-fish/flds_redefine.csv"))
 build_metadata_json(
   con = con, d_tbls_rd = d_tbls_rd, d_flds_rd = d_flds_rd,
-  metadata_derived_csv = here("metadata/ucsd_sio/mesopelagic-fish/metadata_derived.csv"),
+  metadata_derived_csv = c(here("metadata/core_dictionary.csv"),
+                           here("metadata/ucsd_sio/mesopelagic-fish/metadata_derived.csv")),
   output_dir = dir_parquet,
-  tables     = c("mesopelagic_fish_tow", "mesopelagic_fish_taxon",
-                 "mesopelagic_fish_measurement"),
+  tables     = tbls_out,
   set_comments = TRUE, provider = provider, dataset = dataset,
   workflow_url = cc$workflow_url, tables_owned = tables_owned)
 

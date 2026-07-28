@@ -21,11 +21,13 @@ calcofi:
     link_data_source: https://calcofi.org/downloads/database/CalCOFI_Database_194903-202105_csv_16October2023.zip
     coverage_temporal: 1949-03 to 2021-05
     coverage_spatial: "23-51°N, -170 to -117°W"
+  # publishes the consolidated core: the cast/bottle/measurement/condition source
+  # shape is wrangled in the notebook and projected into sample / obs /
+  # sample_measurement, surviving as compat VIEWs over the core.
   tables_owned:
-    - {table: casts}
-    - {table: bottle}
-    - {table: bottle_measurement}
-    - {table: cast_condition}
+    - {table: sample, shared: true, note: "core event dimension (cast -> bottle adjacency list)"}
+    - {table: obs, shared: true, note: "core observations (env, bottle hydrography)"}
+    - {table: sample_measurement, shared: true, note: "cast conditions + bottom depth"}
     - {table: measurement_type, shared: true, note: "shared registry across bottle/ctd/dic"}
   erd:
     color: "#f5cad9"
@@ -1173,152 +1175,6 @@ dbGetQuery(
   )
 ```
 
-## Emit Core Tables
-
-Project this dataset into the shared consolidated core model
-(`design_env-bio-consolidation.md`) via `calcofi4db::emit_core_tables()` — the
-single source of truth for the per-dataset projection into `sample` / `obs` /
-`obs_freq` / `sample_measurement`, also used by `release_database.qmd` to
-assemble the authoritative cross-dataset release.
-
-```{r}
-#| label: emit_core
-
-core <- emit_core_tables(con, "calcofi_bottle")
-cat(glue(
-  "core projection — sample={core$sample %||% 0} obs={core$obs %||% 0} ",
-  "obs_freq={core$obs_freq %||% 0} sample_measurement={core$sample_measurement %||% 0}\n"))
-
-# the frozen release assembles the authoritative cross-dataset core; keep this
-# ingest's parquet output per-dataset by dropping the local core projection here.
-for (tbl_core in c("obs", "obs_freq", "sample_measurement", "sample"))
-  dbExecute(con, glue("DROP TABLE IF EXISTS {tbl_core}"))
-```
-
-
-## Write Parquet Outputs
-
-Export tables to parquet files for downstream use.
-
-```{r}
-#| label: write_parquet
-
-# collect mismatches for manifest
-mismatches <- list(
-  ships = collect_ship_mismatches(con, "casts"),
-  measurement_types = collect_measurement_type_mismatches(
-    con,
-    here("metadata/measurement_type.csv")
-  ),
-  cruise_keys = collect_cruise_key_mismatches(con, "casts")
-)
-
-# write parquet files with manifest
-# export only tables this ingest creates (dependency _new deltas added later)
-own_tables <- c(
-  "casts",
-  "bottle",
-  "bottle_measurement",
-  "cast_condition",
-  "measurement_type",
-  "dataset"
-)
-
-parquet_stats <- write_parquet_outputs(
-  con              = con,
-  output_dir       = dir_parquet,
-  tables           = own_tables,
-  sort_by          = list(
-    bottle_measurement = "measurement_type",
-    casts              = "hilbert:longitude,latitude"),
-  strip_provenance = FALSE,
-  mismatches       = mismatches
-)
-
-parquet_stats |>
-  mutate(file = basename(path)) |>
-  select(-path) |>
-  datatable(caption = "Parquet export statistics")
-```
-
-## Write Metadata
-
-Build `metadata.json` sidecar file documenting all tables and columns in
-parquet outputs. DuckDB `COMMENT ON` does not propagate to parquet, so
-this provides the metadata externally.
-
-```{r}
-#| label: write_metadata
-
-metadata_path <- build_metadata_json(
-  con = con,
-  d_tbls_rd = d$d_tbls_rd,
-  d_flds_rd = d$d_flds_rd,
-  metadata_derived_csv = here(
-    "metadata/calcofi/bottle/metadata_derived.csv"
-  ),
-  output_dir = dir_parquet,
-  tables = db_tables(con),
-  set_comments = TRUE,
-  provider = provider,
-  dataset = dataset,
-  workflow_url = cc$workflow_url,
-  tables_owned = tables_owned
-)
-
-# write relationships.json sidecar with PKs/FKs
-build_relationships_json(
-  rels = bottle_rels,
-  output_dir = dir_parquet,
-  provider = provider,
-  dataset = dataset
-)
-
-# show metadata summary
-metadata <- jsonlite::fromJSON(metadata_path)
-tibble(
-  table = names(metadata$tables),
-  n_cols = map_int(
-    names(metadata$tables),
-    ~ sum(grepl(glue("^{.x}\\."), names(metadata$columns)))
-  ),
-  name_long = map_chr(metadata$tables, ~ .x$name_long)
-) |>
-  datatable(caption = "Table metadata summary")
-```
-
-```{r}
-#| label: show_metadata_json
-
-listviewer::jsonedit(
-  jsonlite::fromJSON(metadata_path, simplifyVector = FALSE),
-  mode = "view")
-```
-
-```{r}
-#| label: show_relationships_json
-
-listviewer::jsonedit(
-  jsonlite::fromJSON(
-    file.path(dir_parquet, "relationships.json"),
-    simplifyVector = FALSE),
-  mode = "view")
-```
-
-## Upload to GCS Archive
-
-Upload parquet files, manifest, and metadata sidecar to
-`gs://calcofi-db/ingest/{provider}_{dataset}/`.
-
-```{r}
-#| label: upload_gcs
-
-sync_to_gcs(
-  local_dir  = dir_parquet,
-  gcs_prefix = glue("ingest/{dir_label}"),
-  bucket     = "calcofi-db")
-```
-
 ## Cross-Dataset Integration
 
 Link bottle casts to SWFSC ship/cruise reference tables via ship matching
@@ -1469,68 +1325,173 @@ bridge_coverage |> datatable(caption = "Cruise bridge coverage")
 message("Cross-dataset validation complete")
 ```
 
-### Re-export Casts Parquet
 
-Update casts.parquet with the new ship_key and cruise_key columns.
+> **Ordering note.** The cruise bridge runs *before* the core projection: the
+> `sample` event dimension carries `cruise_key`, so it must be derived first.
+> This also retires the old `rewrite_casts_parquet` step, which existed only to
+> patch `ship_key`/`cruise_key` into a `casts.parquet` already written — parquet
+> is now written once, after every column is known.
+
+## Emit Core Tables
+
+Project this dataset into the shared consolidated core model
+(`design_env-bio-consolidation.md`) via `calcofi4db::emit_core_tables()`. These
+core tables **are** this ingest's output: `release_database.qmd` concatenates the
+per-dataset shards rather than re-deriving the core, so there is exactly one
+projection to keep correct.
+
+Bottle is a two-level hierarchy — `cast` -> `bottle` — carried in `sample` as an
+adjacency list. Cast conditions and the cast's `bottom_depth_m` become
+`sample_measurement` (they describe the event, not an observation); the long
+`bottle_measurement` values become `obs` at `realm = 'env'`.
 
 ```{r}
-#| label: rewrite_casts_parquet
+#| label: emit_core
 
-# re-export casts parquet (now includes ship_key, cruise_key)
-# also drop cruise_key_0 — interim rename used to avoid collision during
-# the bridge merge; canonical `cruise_key` (YYYY-MM-NODC) is what consumers
-# query against (see /query/_queries/browse/cruises.md and CLAUDE.md note
-# on identifier standardization)
-casts_pqt <- file.path(dir_parquet, "casts.parquet")
-cols <- DBI::dbGetQuery(
-  con,
-  glue(
-    "SELECT column_name FROM information_schema.columns
-   WHERE table_name = 'casts'"
-  )
-)$column_name
-prov_cols   <- c("_source_file", "_source_row", "_source_uuid", "_ingested_at")
-drop_cols   <- c(prov_cols, "cruise_key_0")
-export_cols <- setdiff(cols, drop_cols)
-DBI::dbExecute(
-  con,
-  glue(
-    "COPY (SELECT {paste(export_cols, collapse = ', ')} FROM casts)
-   TO '{casts_pqt}' (FORMAT PARQUET, COMPRESSION 'snappy')"
-  )
+core <- emit_core_tables(con, "calcofi_bottle")
+cat(glue(
+  "core projection — sample={core$sample %||% 0} obs={core$obs %||% 0} ",
+  "sample_measurement={core$sample_measurement %||% 0}\n"))
+
+n_cast <- dbGetQuery(con, "SELECT COUNT(*) FROM sample WHERE sample_type='cast'")[[1]]
+n_btl  <- dbGetQuery(con, "SELECT COUNT(*) FROM sample WHERE sample_type='bottle'")[[1]]
+stopifnot(
+  "sample must hold one row per cast"   = n_cast == dbGetQuery(con, "SELECT COUNT(DISTINCT cast_id) FROM casts")[[1]],
+  "sample must hold one row per bottle" = n_btl  == dbGetQuery(con, "SELECT COUNT(DISTINCT bottle_id) FROM bottle")[[1]],
+  "obs must be one row per grid-matched bottle measurement" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM obs")[[1]] ==
+    dbGetQuery(con, "SELECT COUNT(*) FROM bottle_measurement m JOIN bottle b USING (bottle_id)
+                     JOIN casts c USING (cast_id) WHERE c.grid_key IS NOT NULL")[[1]],
+  "every bottle must resolve to its cast" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM sample c LEFT JOIN sample p
+                     ON c.parent_sample_key = p.sample_key
+                     WHERE c.parent_sample_key IS NOT NULL AND p.sample_key IS NULL")[[1]] == 0,
+  "bottom_depth must reach sample_measurement" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM sample_measurement WHERE measurement_type='bottom_depth'")[[1]] > 0)
+cat(glue("sample: {format(n_cast, big.mark=',')} casts / {format(n_btl, big.mark=',')} bottles"), "\n")
+
+compat <- create_compat_views(con, "calcofi_bottle")
+cat(glue("compat views over core: {paste(compat, collapse = ', ')}"), "\n")
+```
+
+
+## Write Parquet Outputs
+
+Export tables to parquet files for downstream use.
+
+```{r}
+#| label: write_parquet
+
+# collect mismatches for manifest
+mismatches <- list(
+  ships = collect_ship_mismatches(con, "casts"),
+  measurement_types = collect_measurement_type_mismatches(
+    con,
+    here("metadata/measurement_type.csv")
+  ),
+  cruise_keys = collect_cruise_key_mismatches(con, "casts")
 )
-message("Re-exported casts.parquet with ship_key + cruise_key (cruise_key_0 dropped)")
 
-# sync the fixed casts.parquet back to GCS (the earlier sync_to_gcs ran
-# before the cruise bridge; without this push, the release would copy the
-# stale ingest/calcofi_bottle/casts.parquet that has cruise_key_0 only)
-put_gcs_file(
-  casts_pqt,
-  glue("gs://calcofi-db/ingest/{dir_label}/casts.parquet"))
-message("Re-uploaded casts.parquet to GCS ingest/")
+# write parquet files with manifest
+# export only tables this ingest creates (dependency _new deltas added later)
+# core shards + the shared refs this ingest owns; casts/bottle/bottle_measurement
+# /cast_condition are VIEWs over the core now, not stored bytes
+own_tables <- core_output_tables(con, extra = c("measurement_type", "dataset"))
 
-# export _new delta sidecars for modified dependency tables (from calcofi.modifies)
-# these are NOT in the manifest — picked up by build_release_table_registry()
-for (tbl in modifies_tables) {
-  pk_col <- modifies_pks[[tbl]]$pk_col
-  keys_old <- modifies_pks[[tbl]]$keys
-  keys_new <- dbGetQuery(con, glue("SELECT {pk_col} FROM {tbl}"))[[1]]
-  additions <- setdiff(keys_new, keys_old)
+parquet_stats <- write_parquet_outputs(
+  con              = con,
+  output_dir       = dir_parquet,
+  tables           = own_tables,
+  sort_by          = list(
+    obs    = c("grid_key", "measurement_type"),
+    sample = "hilbert:longitude,latitude"),
+  strip_provenance = FALSE,
+  mismatches       = mismatches
+)
 
-  if (length(additions) > 0) {
-    new_tbl <- paste0(tbl, "_new")
-    pq_path <- file.path(dir_parquet, paste0(new_tbl, ".parquet"))
-    vals <- paste(shQuote(additions, "sh"), collapse = ", ")
-    export_parquet(
-      con,
-      glue("SELECT * FROM {tbl} WHERE {pk_col} IN ({vals})"),
-      pq_path
-    )
-    message(glue("{length(additions)} new {tbl} row(s) -> {new_tbl}.parquet"))
-  } else {
-    message(glue("No new {tbl} rows — {tbl}_new not exported"))
-  }
-}
+parquet_stats |>
+  mutate(file = basename(path)) |>
+  select(-path) |>
+  datatable(caption = "Parquet export statistics")
+```
+
+## Write Metadata
+
+Build `metadata.json` sidecar file documenting all tables and columns in
+parquet outputs. DuckDB `COMMENT ON` does not propagate to parquet, so
+this provides the metadata externally.
+
+```{r}
+#| label: write_metadata
+
+metadata_path <- build_metadata_json(
+  con = con,
+  d_tbls_rd = d$d_tbls_rd,
+  d_flds_rd = d$d_flds_rd,
+  metadata_derived_csv = c(
+    here("metadata/core_dictionary.csv"),
+    here("metadata/calcofi/bottle/metadata_derived.csv")
+  ),
+  output_dir = dir_parquet,
+  tables = own_tables,
+  set_comments = TRUE,
+  provider = provider,
+  dataset = dataset,
+  workflow_url = cc$workflow_url,
+  tables_owned = tables_owned
+)
+
+# write relationships.json sidecar with PKs/FKs
+build_relationships_json(
+  rels = core_relationships(own_tables),
+  output_dir = dir_parquet,
+  provider = provider,
+  dataset = dataset
+)
+
+# show metadata summary
+metadata <- jsonlite::fromJSON(metadata_path)
+tibble(
+  table = names(metadata$tables),
+  n_cols = map_int(
+    names(metadata$tables),
+    ~ sum(grepl(glue("^{.x}\\."), names(metadata$columns)))
+  ),
+  name_long = map_chr(metadata$tables, ~ .x$name_long)
+) |>
+  datatable(caption = "Table metadata summary")
+```
+
+```{r}
+#| label: show_metadata_json
+
+listviewer::jsonedit(
+  jsonlite::fromJSON(metadata_path, simplifyVector = FALSE),
+  mode = "view")
+```
+
+```{r}
+#| label: show_relationships_json
+
+listviewer::jsonedit(
+  jsonlite::fromJSON(
+    file.path(dir_parquet, "relationships.json"),
+    simplifyVector = FALSE),
+  mode = "view")
+```
+
+## Upload to GCS Archive
+
+Upload parquet files, manifest, and metadata sidecar to
+`gs://calcofi-db/ingest/{provider}_{dataset}/`.
+
+```{r}
+#| label: upload_gcs
+
+sync_to_gcs(
+  local_dir  = dir_parquet,
+  gcs_prefix = glue("ingest/{dir_label}"),
+  bucket     = "calcofi-db")
 ```
 
 ## Cleanup

@@ -26,7 +26,7 @@ calcofi:
     license: ""
     pi_names: Rasmus Swalethorp; Ed Weber; Linsey Sala
   tables_owned:
-    - {table: zooplankton_tow}
+    - {table: sample, shared: true, note: "core event dimension (tow grain; effort/position only)"}
   erd:
     color: "#bbe0f0"
 editor_options:
@@ -249,8 +249,8 @@ cc_erd(
   con, tables = c("zooplankton_tow", "dataset"), rels = zoo_rels,
   colors = list(lightblue = "zooplankton_tow", white = "dataset"))
 
-build_relationships_json(
-  rels = zoo_rels, output_dir = dir_parquet, provider = provider, dataset = dataset)
+# the SOURCE shape above documents the wrangling; relationships.json is written
+# with the parquet outputs below, from core_relationships().
 ```
 
 ## Validate
@@ -300,8 +300,12 @@ cat(glue(
 
 # the frozen release assembles the authoritative cross-dataset core; keep this
 # ingest's parquet output per-dataset by dropping the local core projection here.
-for (tbl_core in c("obs", "obs_freq", "sample_measurement", "sample"))
-  dbExecute(con, glue("DROP TABLE IF EXISTS {tbl_core}"))
+# this source carries tow effort/position only — no measurements — so it
+# contributes `sample` and nothing else. Assert that, rather than let a silent
+# zero-row obs look like a projection bug.
+stopifnot(
+  "pic_zooplankton contributes sample rows" = (core$sample %||% 0) > 0,
+  "pic_zooplankton has no measurements to project" = is.null(core$obs))
 ```
 
 
@@ -312,10 +316,15 @@ for (tbl_core in c("obs", "obs_freq", "sample_measurement", "sample"))
 
 dir_create(dir_parquet)
 mismatches <- list(cruise_keys = collect_cruise_key_mismatches(con, "zooplankton_tow"))
+tbls_out <- core_output_tables(con, extra = "dataset")
 parquet_stats <- write_parquet_outputs(
   con = con, output_dir = dir_parquet,
-  tables = c("zooplankton_tow", "dataset"),
+  tables = tbls_out,
   strip_provenance = FALSE, mismatches = mismatches)
+
+build_relationships_json(
+  rels = core_relationships(tbls_out), output_dir = dir_parquet,
+  provider = provider, dataset = dataset)
 parquet_stats |> mutate(file = basename(path)) |> select(-path) |>
   datatable(caption = "Parquet export statistics")
 ```
@@ -329,8 +338,9 @@ d_tbls_rd <- read_csv(here("metadata/pic/zooplankton/tbls_redefine.csv"))
 d_flds_rd <- read_csv(here("metadata/pic/zooplankton/flds_redefine.csv"))
 metadata_path <- build_metadata_json(
   con = con, d_tbls_rd = d_tbls_rd, d_flds_rd = d_flds_rd,
-  metadata_derived_csv = here("metadata/pic/zooplankton/metadata_derived.csv"),
-  output_dir = dir_parquet, tables = c("zooplankton_tow"),
+  metadata_derived_csv = c(here("metadata/core_dictionary.csv"),
+                           here("metadata/pic/zooplankton/metadata_derived.csv")),
+  output_dir = dir_parquet, tables = tbls_out,
   set_comments = TRUE, provider = provider, dataset = dataset,
   workflow_url = cc$workflow_url, tables_owned = tables_owned)
 ```

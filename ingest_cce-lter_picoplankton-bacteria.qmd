@@ -29,9 +29,11 @@ calcofi:
     coverage_spatial: "CalCOFI grid (California Current Ecosystem)"
     license: ""
     pi_names: Michael Landry
+  # publishes the consolidated core: the source shape is wrangled in the notebook
+  # and projected into the shared core tables.
   tables_owned:
-    - {table: picoplankton_bacteria_bottle}
-    - {table: picoplankton_bacteria_measurement}
+    - {table: sample, shared: true, note: "core event dimension (bottle grain)"}
+    - {table: obs, shared: true, note: "core observations (env, flow-cytometry cell counts)"}
     - {table: measurement_type, shared: true, note: "shared registry across datasets"}
   erd:
     color: "#bbe0f0"
@@ -420,10 +422,16 @@ n_exp <- dbGetQuery(con,
 stopifnot("obs must be one row per grid-matched measurement" = n_obs == n_exp)
 cat(glue("obs parity: {format(n_obs, big.mark=',')} rows"), "\n")
 
-# the frozen release assembles the authoritative cross-dataset core; keep this
-# ingest's parquet output per-dataset by dropping the local core projection here.
-for (tbl_core in c("obs", "obs_attribute", "sample_measurement", "sample"))
-  dbExecute(con, glue("DROP TABLE IF EXISTS {tbl_core}"))
+stopifnot(
+  "every obs.sample_key must resolve in sample" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM obs o LEFT JOIN sample s USING (sample_key)
+                     WHERE s.sample_key IS NULL")[[1]] == 0)
+# serve the retired per-dataset table names as VIEWs over the core, so
+# in-notebook consumers and ad-hoc queries keep working against the old names
+# (exact for every column the core models; see ?create_compat_views)
+compat <- create_compat_views(con, "cce-lter_picoplankton-bacteria")
+cat(glue("compat views over core: {paste(compat, collapse = ', ')}"), "\n")
+
 ```
 
 ## Write Parquet Outputs
@@ -432,11 +440,16 @@ for (tbl_core in c("obs", "obs_attribute", "sample_measurement", "sample"))
 #| label: write-parquet
 dir_create(dir_parquet)
 mismatches <- list(cruise_keys = collect_cruise_key_mismatches(con, "picoplankton_bacteria_bottle"))
+tbls_out <- core_output_tables(con, extra = c("measurement_type", "dataset"))
 parquet_stats <- write_parquet_outputs(
   con = con, output_dir = dir_parquet,
-  tables = c("picoplankton_bacteria_bottle", "picoplankton_bacteria_measurement",
-             "measurement_type", "dataset"),
+  tables = tbls_out,
+  sort_by = list(obs = c("grid_key", "measurement_type")),
   strip_provenance = FALSE, mismatches = mismatches)
+
+build_relationships_json(
+  rels = core_relationships(tbls_out), output_dir = dir_parquet,
+  provider = provider, dataset = dataset)
 parquet_stats |> mutate(file = basename(path)) |> select(-path) |>
   datatable(caption = "Parquet export statistics")
 ```
@@ -449,8 +462,9 @@ d_tbls_rd <- read_csv(here("metadata/cce-lter/picoplankton-bacteria/tbls_redefin
 d_flds_rd <- read_csv(here("metadata/cce-lter/picoplankton-bacteria/flds_redefine.csv"))
 metadata_path <- build_metadata_json(
   con = con, d_tbls_rd = d_tbls_rd, d_flds_rd = d_flds_rd,
-  metadata_derived_csv = here("metadata/cce-lter/picoplankton-bacteria/metadata_derived.csv"),
-  output_dir = dir_parquet, tables = c("picoplankton_bacteria_bottle", "picoplankton_bacteria_measurement"),
+  metadata_derived_csv = c(here("metadata/core_dictionary.csv"),
+                           here("metadata/cce-lter/picoplankton-bacteria/metadata_derived.csv")),
+  output_dir = dir_parquet, tables = tbls_out,
   set_comments = TRUE, provider = provider, dataset = dataset,
   workflow_url = cc$workflow_url, tables_owned = tables_owned)
 ```
