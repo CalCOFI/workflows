@@ -6,7 +6,7 @@
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
-<meta name="dcterms.date" content="2026-07-28">
+<meta name="dcterms.date" content="2026-07-29">
 
 <title>Ingest Underway CUFES Fish Eggs</title>
 <style>
@@ -123,7 +123,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">2026-07-28</p>
+      <p class="date">2026-07-29</p>
     </div>
   </div>
   
@@ -303,8 +303,8 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a><span class="fu">assign_grid_key</span>(con, <span class="st">"cufes_sample"</span>) <span class="sc">|&gt;</span> <span class="fu">datatable</span>(<span class="at">caption =</span> <span class="st">"Grid assignment"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output-display">
-<div class="datatables html-widget html-fill-item" id="htmlwidget-487edcbefe81b942cbb7" style="width:100%;height:auto;"></div>
-<script type="application/json" data-for="htmlwidget-487edcbefe81b942cbb7">{"x":{"filter":"none","vertical":false,"caption":"<caption>Grid assignment<\/caption>","data":[["1","2"],["in_grid","not_in_grid"],[47241,2331]],"container":"<table class=\"display\">\n  <thead>\n    <tr>\n      <th> <\/th>\n      <th>status<\/th>\n      <th>n<\/th>\n    <\/tr>\n  <\/thead>\n<\/table>","options":{"scrollX":true,"columnDefs":[{"className":"dt-right","targets":2},{"orderable":false,"targets":0},{"name":" ","targets":0},{"name":"status","targets":1},{"name":"n","targets":2}],"order":[],"autoWidth":false,"orderClasses":false},"selection":{"mode":"multiple","selected":null,"target":"row","selectable":null}},"evals":[],"jsHooks":[]}</script>
+<div class="datatables html-widget html-fill-item" id="htmlwidget-544f85ebbf24a4b92294" style="width:100%;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-544f85ebbf24a4b92294">{"x":{"filter":"none","vertical":false,"caption":"<caption>Grid assignment<\/caption>","data":[["1","2"],["in_grid","not_in_grid"],[47241,2331]],"container":"<table class=\"display\">\n  <thead>\n    <tr>\n      <th> <\/th>\n      <th>status<\/th>\n      <th>n<\/th>\n    <\/tr>\n  <\/thead>\n<\/table>","options":{"scrollX":true,"columnDefs":[{"className":"dt-right","targets":2},{"orderable":false,"targets":0},{"name":" ","targets":0},{"name":"status","targets":1},{"name":"n","targets":2}],"order":[],"autoWidth":false,"orderClasses":false},"selection":{"mode":"multiple","selected":null,"target":"row","selectable":null}},"evals":[],"jsHooks":[]}</script>
 </div>
 </div>
 </section>
@@ -437,7 +437,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 3 taxon                 6      2084 /Users/bbest/Github/CalCOFI/wor… FALSE      
 4 dataset_taxon         6      1643 /Users/bbest/Github/CalCOFI/wor… FALSE      
 5 measurement_type    197      8813 /Users/bbest/Github/CalCOFI/wor… FALSE      
-6 dataset              15      9783 /Users/bbest/Github/CalCOFI/wor… FALSE      </code></pre>
+6 dataset              15      9591 /Users/bbest/Github/CalCOFI/wor… FALSE      </code></pre>
 </div>
 <details class="code-fold">
 <summary>Code</summary>
@@ -466,20 +466,18 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb38"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb38-1"><a href="#cb38-1" aria-hidden="true" tabindex="-1"></a><span class="fu">sync_to_gcs</span>(<span class="at">local_dir =</span> dir_parquet, <span class="at">gcs_prefix =</span> <span class="fu">glue</span>(<span class="st">"ingest/{dir_label}"</span>), <span class="at">bucket =</span> <span class="st">"calcofi-db"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code># A tibble: 11 × 4
-   file                      action      size reason        
-   &lt;chr&gt;                     &lt;chr&gt;      &lt;dbl&gt; &lt;chr&gt;         
- 1 cufes_measurement.parquet skipped   524924 checksum match
- 2 cufes_sample.parquet      skipped  3729643 checksum match
- 3 dataset_taxon.parquet     skipped     1643 checksum match
- 4 dataset.parquet           skipped     9783 checksum match
- 5 manifest.json             uploaded    2997 crc32c changed
- 6 measurement_type.parquet  skipped     8813 checksum match
- 7 metadata.json             uploaded   14424 crc32c changed
- 8 obs.parquet               skipped  3188738 checksum match
- 9 relationships.json        skipped     1218 checksum match
-10 sample.parquet            uploaded 1274520 crc32c changed
-11 taxon.parquet             skipped     2084 checksum match</code></pre>
+<pre><code># A tibble: 9 × 4
+  file                     action      size reason        
+  &lt;chr&gt;                    &lt;chr&gt;      &lt;dbl&gt; &lt;chr&gt;         
+1 dataset_taxon.parquet    skipped     1643 checksum match
+2 dataset.parquet          uploaded    9591 crc32c changed
+3 manifest.json            uploaded    2998 crc32c changed
+4 measurement_type.parquet skipped     8813 checksum match
+5 metadata.json            skipped    14424 checksum match
+6 obs.parquet              skipped  3188738 checksum match
+7 relationships.json       skipped     1218 checksum match
+8 sample.parquet           skipped  1274520 checksum match
+9 taxon.parquet            skipped     2084 checksum match</code></pre>
 </div>
 </div>
 </section>
@@ -494,8 +492,8 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb40-4"><a href="#cb40-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">datatable</span>(<span class="at">caption =</span> <span class="st">"Questions (ranked)"</span>, <span class="at">options =</span> <span class="fu">list</span>(<span class="at">dom=</span><span class="st">"t"</span>), <span class="at">rownames =</span> <span class="cn">FALSE</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output-display">
-<div class="datatables html-widget html-fill-item" id="htmlwidget-36f97251aaf704ae8985" style="width:100%;height:auto;"></div>
-<script type="application/json" data-for="htmlwidget-36f97251aaf704ae8985">{"x":{"filter":"none","vertical":false,"caption":"<caption>Questions (ranked)<\/caption>","data":[["high","normal"],["Are the egg counts raw per-sample totals or standardized (e.g. per m^3 / per area)?","Confirm wind_speed units (m/s vs knots) and pump_speed units on the ERDDAP feed."],["Determines whether to register the measurement as count vs a density.","ERDDAP variable metadata to be confirmed against erdCalCOFIcufes .das."],["open","open"]],"container":"<table class=\"display\">\n  <thead>\n    <tr>\n      <th>priority<\/th>\n      <th>question<\/th>\n      <th>context<\/th>\n      <th>status<\/th>\n    <\/tr>\n  <\/thead>\n<\/table>","options":{"scrollX":true,"dom":"t","columnDefs":[{"name":"priority","targets":0},{"name":"question","targets":1},{"name":"context","targets":2},{"name":"status","targets":3}],"order":[],"autoWidth":false,"orderClasses":false},"selection":{"mode":"multiple","selected":null,"target":"row","selectable":null}},"evals":[],"jsHooks":[]}</script>
+<div class="datatables html-widget html-fill-item" id="htmlwidget-595d76e046838c29bafa" style="width:100%;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-595d76e046838c29bafa">{"x":{"filter":"none","vertical":false,"caption":"<caption>Questions (ranked)<\/caption>","data":[["high","normal"],["Are the egg counts raw per-sample totals or standardized (e.g. per m^3 / per area)?","Confirm wind_speed units (m/s vs knots) and pump_speed units on the ERDDAP feed."],["Determines whether to register the measurement as count vs a density.","ERDDAP variable metadata to be confirmed against erdCalCOFIcufes .das."],["open","open"]],"container":"<table class=\"display\">\n  <thead>\n    <tr>\n      <th>priority<\/th>\n      <th>question<\/th>\n      <th>context<\/th>\n      <th>status<\/th>\n    <\/tr>\n  <\/thead>\n<\/table>","options":{"scrollX":true,"dom":"t","columnDefs":[{"name":"priority","targets":0},{"name":"question","targets":1},{"name":"context","targets":2},{"name":"status","targets":3}],"order":[],"autoWidth":false,"orderClasses":false},"selection":{"mode":"multiple","selected":null,"target":"row","selectable":null}},"evals":[],"jsHooks":[]}</script>
 </div>
 </div>
 <div class="cell">

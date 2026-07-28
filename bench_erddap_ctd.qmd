@@ -14,6 +14,10 @@ format:
 calcofi:
   target_name: bench_erddap_ctd
   workflow_type: reference
+  # every pipeline notebook must declare its output: build_targets_list() uses it
+  # as the target's file, and a missing key resolves to NA — which fails the whole
+  # run at resolution time with "missing files: NA", before anything executes.
+  output: _output/bench_erddap_ctd.html
   workflow_url: https://calcofi.io/workflows/bench_erddap_ctd.html
 editor_options:
   chunk_output_type: console
