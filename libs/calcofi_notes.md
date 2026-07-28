@@ -59,6 +59,269 @@
   - Table 'species' has 170 NULL values in required column 'gbif_id'
   ```
   
+## 2026-06-26 make db-viz-hex logging non-blocking 
+
+Let's fix the @../db-viz-hex logging to be non-blocking like with @../../MarineSensitivity/apps/species. The other Claude Opus 5 session that update the species app with logging using CalCOFI as a template (and custom R package @../../MarineSensitivity/msens) said this:
+
+> Two channels, neither costing the Shiny server a network request. CalCOFI's log_query() calls httr2::req_perform() synchronously, which blocks the reactive thread for the whole Apps Script round-trip — visible stall on every species pick. Instead the browser sends both legs: UI events never reach R, and server-side facts go out via msens::ms_track() over the already-open websocket. Batched (10 events / 15s / page-hide) so the Apps Script quota stays flat.
+> 
+> New in msens (v0.6.0, R/analytics.R, 56 tests): ga_js()/ga_head(), ms_track(), ms_event(), ms_log_header(), ms_apps_script() — so the two apps can't drift.
+>
+> I also confirmed the non-obvious one: sendCustomMessage does work from inside downloadHandler(content=), so CSV downloads are tracked — proven with a minimal harness, since the scores species table itself fails locally with a pre-existing Error in select: Can't select columns that don't exist (my diffs are pure additions, 203 lines, 0 deletions, nowhere near that query — worth a separate look).
+
+----
+
+←  ☒ Code home  ☒ Event scope  ☒ Sheet schema  ✔ Submit  →
+
+Review your answers
+
+ ● Where should the non-blocking analytics code live for db-viz-hex?
+   → calcofi4r package (mirror msens)
+ ● How much should I instrument beyond the existing log_query call sites?
+   → Existing sites + key UI events (Recommended)
+ ● The log Sheet's Apps Script must change anyway (single row → batched rows). What about its columns?
+   → Extend the existing header (Recommended)
+
+----
+
+Done. The blocking httr2::req_perform() is gone from db-viz-hex — both channels are now sent by the browser.
+
+What changed
+
+calcofi4r 1.4.0 — new R/analytics.R (the msens mirror, cc_ prefix), plus the package's first testthat suite (97 assertions, all green):
+
+┌────────────────────────────┬───────────────────────────────────────────────────────────────────────────────────────────┐
+│          function          │                                           role                                            │
+├────────────────────────────┼───────────────────────────────────────────────────────────────────────────────────────────┤
+│ cc_ga_head() / cc_ga_js()  │ the one <head> snippet: GA4 + a batched sendBeacon queue (10 events / 15 s / page-hide),  │
+│                            │ window.ccTrack(), and the ccTrack/ccTrackSession message handlers                         │
+├────────────────────────────┼───────────────────────────────────────────────────────────────────────────────────────────┤
+│ cc_track()                 │ server → browser over the session's open websocket — no HTTP                              │
+├────────────────────────────┼───────────────────────────────────────────────────────────────────────────────────────────┤
+│ cc_track_query()           │ times an expression, records n_rows/ms/status/error, re-raises errors; a lazy dbplyr      │
+│                            │ table passes through un-collected                                                         │
+├────────────────────────────┼───────────────────────────────────────────────────────────────────────────────────────────┤
+│ cc_track_session() /       │ pushes the IP + Shiny token JS can't read, so those columns survive the move              │
+│ cc_client_ip()             │                                                                                           │
+├────────────────────────────┼───────────────────────────────────────────────────────────────────────────────────────────┤
+│ cc_log_header() /          │ Sheet columns + generated Code.gs, so Sheet/script/client can't drift                     │
+│ cc_apps_script()           │                                                                                           │
+└────────────────────────────┴───────────────────────────────────────────────────────────────────────────────────────────┘
+
+db-viz-hex — app/logging.R and app/google-analytics.html deleted (staged as git rm, not committed). ui.R installs cc_ga_head("db-viz-hex", APP_VERSION); server.R gets a trk() helper and 13 events: session_start, select_tab, select_theme, open_filters/open_layers/open_transect, start_tour, select_layers, filter_submit, map_query_sp/map_query_env, filter_no_results, depth_profile_transect, download_bundle/download_integrated_bundle. analytics/README.md + generated Code.gs document the setup.
+
+Two judgment calls beyond what you picked, both flagged here: I added an app column (position 11, existing 1–10 untouched) so several apps can share the Sheet — without it a shared package writing to one Sheet is ambiguous. And global.R now only sets CALCOFI_LOG_URL when !debug, so an RStudio session no longer writes test rows into the production Sheet.
+
+Verified in Chrome, not assumed
+
+Ran the app locally against calcofi_v2026.07.15.duckdb with the beacon pointed at a dead host and navigator.sendBeacon intercepted. Confirmed rows carry all 16 columns with ip = 127.0.0.1 and the Shiny token (so cc_track_session works), and that these fire correctly: session_start, select_tab, select_theme, open_filters, open_layers, select_layers, open_transect, filter_submit (with the full taxon name), map_query_sp/map_query_env (ms 83.6 / 6.6, n_rows empty — correct, they stay lazy), filter_no_results, and download_bundle (n_rows 4, ms 231.9, products ts) — the last one fetched rather than clicked, which confirms sendCustomMessage does reach the browser from inside downloadHandler(content=). Not exercised: start_tour and download_integrated_bundle (heavy, hits GCS); both use the same proven trk() path.
+
+Two manual steps before this logs correctly
+
+1. Add six headers to the log Sheet at K1:P1 — app, client_id, session_id, page, referrer, user_agent.
+2. Paste db-viz-hex/analytics/Code.gs into the bound Apps Script and deploy a new version of the existing deployment (a new deployment would mint a new /exec URL). Then GET the URL — doGet() answers {"ok":true,...}.
+
+Deploy also needs remotes::install_github("calcofi/calcofi4r") in the rstudio container before restart.txt; I noted that in db-viz-hex/CLAUDE.md. Nothing is committed.
+
+✻ Baked for 29m 46s
+
+※ recap: Goal was making db-viz-hex logging non-blocking: that's built and verified in Chrome, with calcofi4r 1.4.0 holding the shared analytics code. Next, update the log Sheet headers and redeploy the Apps Script, then commit. (disable recaps in /config)
+
+❯ Ok, I did the 2 manual steps, but please check and proceed with updating the server
+
+----
+
+Both manual steps checked out, and the server is updated and live.
+
+Your two steps — verified
+
+- Sheet header — read back as exactly cc_log_header(): timestamp, ip, session, event, params, n_rows, ms, status, error, app_version, app, client_id, session_id, page, referrer, user_agent, on the db-viz-hex tab of calcofi.io apps log. That tab is first in the workbook, which matters — the script writes to getSheets()[0].
+- Apps Script — GET /exec answers {"ok":true,"endpoint":"calcofi-usage-log","rows":77}. That's the new doGet() on the unchanged URL, so CALCOFI_LOG_URL needed no edit.
+
+Deployed
+
+calcofi4r 1.4.0 and db-viz-hex pushed to main; on the server both clones pulled, calcofi4r reinstalled in the rstudio container (1.3.0 → 1.4.0, analytics functions confirmed present), then restart.txt touched.
+
+One real bug caught during deploy
+
+The live page came back with APP_VER = "latest" instead of a commit SHA. Cause: shiny-server runs the app as shiny while the clone is owned by bebest, so git rev-parse aborted with "detected dubious ownership" and silently fell through to the release-tag fallback — every live row would have logged an app_version that can't be tied to any commit. Fixed with -c safe.directory=* (commit 1758474), deployed, and the live page now serves var APP_VER = "1758474".
+
+End-to-end proof
+
+Loaded app.calcofi.io/db-viz-hex/, confirmed it renders (sardine time series, screenshot above), switched a tab, then read the Sheet: rows went 77 → 80, and the new rows carry all 16 columns — session_start and select_tab with app = db-viz-hex, app_version = 1758474, the params JSON, client_id/session_id, page and user agent. The first of those rows still says latest, which is the pre-fix load — a nice marker of exactly when the fix landed.
+
+Two things worth knowing, neither introduced by this change:
+
+- ip reads 127.0.0.1 for every live row. The proxy in front of shiny-server isn't passing X-Forwarded-For, so cc_client_ip() only ever sees the proxy. Every historical log_query() row shows the same, so nothing regressed — but if you want real client IPs it's an nginx/shiny-server config change, not an app change. Say the word and I'll look.
+- Timestamps in the new rows display as 7/27/2026 without the time in the Drive export, while older rows show H:mm:ss. The script writes a full new Date(iso), so the value has the time; if the Sheet displays it date-only, select column A → Format → Number → Date time.
+
+----
+
+Ah yes, let's fix the Caddy server to forward the actual IP address.
+
+### fix logging of actual IP address
+
+Fixed and live — though the fix wasn't in Caddy.
+
+Caddy was already correct
+
+I dropped a throwaway app on the server that dumped both requests R receives. The two hops disagree:
+
+┌─────────────────────────────────────────────────┬───────────────────┬─────────────┬─────────────────┐
+│                     request                     │  X-Forwarded-For  │ REMOTE_ADDR │    HTTP_HOST    │
+├─────────────────────────────────────────────────┼───────────────────┼─────────────┼─────────────────┤
+│ page GET (what ui sees)                         │ 194.116.23.209 ✅ │ 127.0.0.1   │ app.calcofi.io  │
+├─────────────────────────────────────────────────┼───────────────────┼─────────────┼─────────────────┤
+│ websocket handshake (what session$request sees) │ gone              │ 127.0.0.1   │ 127.0.0.1:37159 │
+└─────────────────────────────────────────────────┴───────────────────┴─────────────┴─────────────────┘
+
+reverse_proxy rstudio:3838 sets the header exactly as it should, and it arrives intact. shiny-server is what loses it: it doesn't proxy the upgrade, it opens a fresh localhost connection to the R worker — that HTTP_HOST 127.0.0.1:37159 is the worker's own port. Every original header is gone by then, so no Caddy directive (header_up, trusted_proxies, a cookie, anything) can survive the hop. I left the Caddyfile untouched.
+
+So the IP is captured where it still exists
+
+The page request is the only one that has it, which means grabbing it in the UI:
+
+- calcofi4r 1.4.1 — cc_ga_js()/cc_ga_head() take an ip that's baked into the snippet as SERVER_IP; cc_client_ip() now accepts a ui(req) as well as a session; and cc_track_session()'s IP became a fallback rather than an override — otherwise the websocket's 127.0.0.1 would clobber the good value right after the page set it. That last one has a regression test, since it would silently undo the whole fix.
+- db-viz-hex — ui is now function(req) passing ip = cc_client_ip(req). The About markdown moved to a startup constant so building the page per request costs nothing extra.
+
+104 tests green. Deployed: calcofi4r 1.4.1 installed in the container, app restarted, diagnostic app removed (/hdrtest/ → 404).
+
+Verified live
+
+The live page serves var SERVER_IP = "194.116.23.209", and the two newest Sheet rows — session_start and select_tab, app_version 5ce687f — both carry that real address instead of 127.0.0.1. Timestamps are showing full date-time again too (7/27/2026 20:14:53), so that earlier date-only rendering was an export artifact, not a lost value.
+
+Two things worth knowing:
+
+- Any other CalCOFI Shiny app that wants real IPs needs the same ui = function(req) change — the package half is already shared.
+- There are two Drive files named "calcofi.io apps log". The live one is 1fBUZlq8…; 1VQcfdP3… (in the CalCOFI Data Folder shared drive) is an empty leftover with the old 10-column header. Might be worth deleting the decoy before someone charts from it.
+
+----
+
+Scanned every Shiny app in the org — nothing else needs the change, and I've made none.
+
+Why nothing needs it
+
+ui = function(req) only earns its keep when an app records a server-side client IP. Grepping all 11 live apps plus the dev copies for session$request, REMOTE_ADDR, X_FORWARDED, cc_client_ip, cc_ga_head, cc_track, log_query returns exactly one repo: db-viz-hex. No other app reads the request at all, so none is silently logging 127.0.0.1 — there's no latent bug to fix.
+
+The apps that do have analytics have GA-only (google-analytics.html), and gtag runs in the browser, so Google resolves the client IP itself. That leg was never affected.
+
+What's actually deployed
+
+┌──────────────────────────────────────────┬───────────────────────────┬───────────────┬─────────────────────────────────┐
+│               served path                │           repo            │   analytics   │            ui shape             │
+├──────────────────────────────────────────┼───────────────────────────┼───────────────┼─────────────────────────────────┤
+│ db-viz-hex, int, int-app                 │ db-viz-hex/app            │ GA4 + Sheet   │ function(req) ✅                │
+│                                          │                           │ ✅            │                                 │
+├──────────────────────────────────────────┼───────────────────────────┼───────────────┼─────────────────────────────────┤
+│ ctd                                      │ apps/ctd-viz              │ none          │ function(request) — already     │
+│                                          │                           │               │ ready                           │
+├──────────────────────────────────────────┼───────────────────────────┼───────────────┼─────────────────────────────────┤
+│ oceano                                   │ apps/oceano               │ GA only       │ function(request) — already     │
+│                                          │                           │               │ ready                           │
+├──────────────────────────────────────────┼───────────────────────────┼───────────────┼─────────────────────────────────┤
+│ datacheck, db-viz-cruise                 │ apps/db-viz-cruise        │ none          │ static page_fillable(...)       │
+├──────────────────────────────────────────┼───────────────────────────┼───────────────┼─────────────────────────────────┤
+│ copernicus, dashboard                    │ apps/…                    │ GA only       │ static                          │
+├──────────────────────────────────────────┼───────────────────────────┼───────────────┼─────────────────────────────────┤
+│ marmam, pollutants, SaferSeafood,        │ own repos                 │ GA only       │ static                          │
+│ capstone                                 │                           │               │                                 │
+├──────────────────────────────────────────┼───────────────────────────┼───────────────┼─────────────────────────────────┤
+│ 2026-ucsb-larvae-dashboard               │ 2026-ucsb-viz-dashboard/… │ none          │ static build_ui                 │
+└──────────────────────────────────────────┴───────────────────────────┴───────────────┴─────────────────────────────────┘
+
+Two are already function(request) (for bookmarking) — Shiny passes the request regardless of the argument name, so those two could take ip = cc_client_ip(request) as a one-line change whenever they adopt the shared snippet.
+
+The real follow-up, if you want it
+
+The question worth deciding isn't the req wrapper — it's whether these apps should move from GA-only to the shared cc_ga_head() (GA4 on the same property plus the Sheet log with real IPs, per-app rows via the app column). That's ~4 lines each — swap includeHTML("google-analytics.html") for cc_ga_head(...), wrap ui, delete the old file — but it spans five repos, pulls calcofi4r in as a dependency for the four apps that don't already use it (a slower cold start, since its imports include sf/terra/stars), and means restarting each app. It'd also give page-level counts only; per-app event instrumentation like db-viz-hex's is a separate, larger job.
+
+Say the word and I'll do that rollout — either all of them, or just the CalCOFI-core ones (db-viz-cruise, ctd-viz, oceano, copernicus, dashboard) and leave the student-project repos alone.
+
+✻ Baked for 2m 22s
+
+※ recap: Goal was making db-viz-hex logging non-blocking; that's built, deployed live, and logging real client IPs. I scanned the other CalCOFI Shiny apps and none need the ui = function(req) change. Next: tell me whether to roll the shared analytics out to the other apps.
+
+❯ Rollout GA4 on the same property for all CalCOFI-core apps (db-viz-cruise, ctd-viz, oceano, copernicus, dashboard) plus own repos (marmam, pollutants, SaferSeafood, capstone) and 2026-ucsb-larvae-dashboard. Let's pass on doing the Sheet for the others just yet
+
+### TODO: ck ingest since publish_ichthyo_to-netcdf.qmd surfaced 3 duplicatee obs keys, 3K orphan attribute rows
+
+Task #7's exemplar is built, rendered, and verified end to end.
+
+publish_ichthyo_to-netcdf.qmd — working
+
+170.75 MB file, six real netCDF-4 groups, verified with ncdump on the actual output:
+
+site 61,104 → tow 75,506 → net 76,512 → occurrence 459,286 → length_bin 241,871
+                                                           → stage_bin  128,107
+
+┌────────────────────────────┬───────────────────────────────────────────────────┐
+│        verification        │                      result                       │
+├────────────────────────────┼───────────────────────────────────────────────────┤
+│ groups present             │ site, tow, net, occurrence, length_bin, stage_bin │
+├────────────────────────────┼───────────────────────────────────────────────────┤
+│ effort stored once per net │ 76,512 (= net count, not 459,286)                 │
+├────────────────────────────┼───────────────────────────────────────────────────┤
+│ parent_index in range      │ TRUE                                              │
+└────────────────────────────┴───────────────────────────────────────────────────┘
+
+The payoff, measured rather than asserted. volume_sampled summed correctly over nets is 21,054,883 m³; repeated onto occurrences as a flat table it becomes 181,489,941 m³ — an 8.6× over-count. That's the concrete case for the whole approach, and it's now a chunk in the notebook rather than a claim in prose.
+
+It reads the frozen release over HTTPS resolved from latest.txt, so the stale-snapshot failure that started this thread can't recur.
+
+What needs your attention
+
+Two anomalies in release v2026.07.17 that I carried through explicitly but did not fix:
+
+- 3 duplicate occurrence keys — same net, taxon and life stage with different abundance (11.0 vs 1.0). This means (sample_key, taxon_key, life_stage) isn't a key; only obs_id is.
+- 3,186 orphan attribute rows — size/stage bins with no parent abundance record.
+
+Both land in global attributes (n_duplicate_occurrence_keys, n_orphan_attributes) with a note that they originate upstream; orphans carry parent_index = -1. Nothing dropped, nothing merged. These look like ingest bugs worth tracing at source — the NetCDF shouldn't be where they get normalized away permanently.
+
+Remaining on task #7
+
+- .claude/skills/templates/publish_netcdf_template.qmd + the netCDF section in publish-template.md
+- publish_ctd-cast_to-netcdf.qmd
+- The Caddy 302 for release-scoped .nc URLs
+- _targets.R wiring (the notebook has its calcofi: block, so build_targets_list() will discover it — worth confirming with tar_visnetwork() before a full run)
+
+I stopped at one validated exemplar rather than propagating the pattern before its first successful render — the %||% bug it caught is exactly the kind of thing that would otherwise have been copied into every notebook. Nothing has been published; upload stays opt-in.
+
+----
+
+Both datasets are published and browsable. Everything is pushed to main.
+
+Live now
+
+┌───────────────────────────────────────────────────────────────────┬──────────────────────────────────────────────┐
+│                                                                   │                                              │
+├───────────────────────────────────────────────────────────────────┼──────────────────────────────────────────────┤
+│ netcdf/ (https://storage.calcofi.io/calcofi-files-public/netcdf/) │ dataset index, versioned                     │
+├───────────────────────────────────────────────────────────────────┼──────────────────────────────────────────────┤
+│ netcdf/ichthyo/v2026.07.17/ichthyo.nc                             │ 170.7 MB — remote size matches local exactly │
+├───────────────────────────────────────────────────────────────────┼──────────────────────────────────────────────┤
+│ netcdf/ctd-cast/v2026.07.17/ctd-cast.nc                           │ 54.5 MB — likewise                           │
+├───────────────────────────────────────────────────────────────────┼──────────────────────────────────────────────┤
+│ per-release manifest.json, index.html, manifests.json, latest.txt │ all 200                                      │
+└───────────────────────────────────────────────────────────────────┴──────────────────────────────────────────────┘
+
+The dataset pages show release history and mark which releases reused bytes, so the storage-saving reads as intentional rather than as a missing file.
+
+Two bugs caught before they shipped
+
+The publish chunk never uploaded. It computed a plan, printed a plausible sha256, wrote a local manifest, and reported success — with nothing reaching the bucket. That's the third no-op-reporting-success in this session, which is why I published CTD first and checked objects rather than the exit code.
+
+sys.frame()$ofile for locating the shared page skin resolves differently under knitr, Rscript and interactive use — it would have passed my testing and failed inside the targets pipeline. Replaced with an explicit search.
+
+One thing I did not do, deliberately
+
+The two legacy flat files are still there and now listed in their own labelled section rather than mixed in:
+
+- netcdf/ctd_thin.nc (55 MB) — genuinely superseded by ctd-cast/v2026.07.17/. Same data, two forms, which is the thing you objected to. Safe to delete.
+- netcdf/ctd_measurement.nc (686 MB) — not superseded. It's the full-resolution record (obs_ctd_full, 232 M rows); ctd-cast.nc is the thinned table. Deleting it would remove the only full-resolution netCDF with nothing replacing it.
+
+I stopped short of deleting either. The first is a one-line removal whenever you want; the second needs a publish_ctd-full_to-netcdf.qmd first — worth deciding whether the full-resolution record belongs in the netCDF products at all, given it's flagged supplemental in the release.
+
+Nothing to deploy on the server for this: publishing runs from a workstation because of the read-only GCS scopes, and the Caddy 302 was already deployed and verified.
 
 ## 2026-06-25.b CTD cast accdb
 
@@ -104,6 +367,136 @@ Reconciliation lands before the new ingest delibeoves which tables are actually 
 Two things I left as flags rather than solving: tM is the one Jackcess failure (inconsistent jointypes — needs hand recovery), and the 13 CROSS_TAB queries emit Access TRANSFORM…PIVOT, which DuckDB won't parse and will need manual translation.
 
 Working artifacts from the spike are in the scrat, queries_jackcess.csv, DumpQueries.java) — Phase0 says to lift the Java dumper rather than rewrite it. Want me to move the plan into libs/plans/ following your dated-filename convention, and start on Phase 0?
+
+----
+
+Both phases committed to main, working tree clean.
+
+Phase 0 — extraction (135f539)
+
+libs/extract_accdb.R + libs/java/DumpQueries.java + scripts/extract_accdb.sh, run end to end:
+
+- 65 tables, 10,509,889 rows, 0 failures → data/accdb/calcofi_hydro-master/ (163 MB, gitignored)
+- 155 query SQL files + catalogs → metadata/calcofi/hydro-master/accdb/ (812 KB, committed so the port is diffable)
+
+Phase 1 — triage (3c888e8)
+
+`explore_accdb_hydro-master.qmd` renders clean and emits `query_triage.csv`, the human review gate:
+
+┌────────────────────┬─────────────────────┐
+│      category      │          n          │
+├────────────────────┼─────────────────────┤
+│ validate           │ 52 (37 hazard-free) │
+├────────────────────┼─────────────────────┤
+│ derived-product    │ 35                  │
+├────────────────────┼─────────────────────┤
+│ correction-history │ 31                  │
+├────────────────────┼─────────────────────┤
+│ materialization    │ 16                  │
+├────────────────────┼─────────────────────┤
+│ unclassified       │ 13                  │
+├────────────────────┼─────────────────────┤
+│ export-or-info     │ 8                   │
+└────────────────────┴─────────────────────┘
+
+Categories come from the taxonomy the database documents about itself in 0-Query Info, not from my guesswork.
+
+Porting hazards scored — Access SQL isn't DuckDB SQL, and these mistranslate silently: 26 read other saved queries (dependency order matters), 19 hardcode a cruise, 13 use the ! member operator, 13 are TRANSFORM…PIVOT, 10 use Access-only functions.
+
+Two findings worth your attention
+
+**The Bottle satellites are 1:1, not 1:many.** I asserted this in-render rather than claiming it: Bottle_Q, Chl, Nuts, Rpt_Data and Prodo_Bottle are each exactly 909,076 rows with zero orphans on Btl_Cnt. The FK graph looks like 1:many, but it's an Access vertical partition — so they should collapse into long-format obs rows, not survive as six tables. That materially simplifies Phase 4.
+
+**Mermaid PNG rendering is broken on this machine**, and it will hit your pipeline notebooks, not just this one. Quarto picks your system Chrome, which hangs indefinitely on its profile lock (I measured 0.46s of CPU over 90s of wall clock before killing it); its own bundled Chromium is 91.0.4469.0 from 2021, too old for mermaid 11.x. I worked around it with mermaid-format: svg in this notebook only — I did not touch _quarto.yml, since your memory note says PNG is deliberate for lightbox zoom. Worth fixing properly before the next tar_make(), since the ingest notebooks' Schema Diagram sections and release_database.qmd's ERD use the same path.
+
+One judgement call is queued for review rather than decided by me: TQ - StationNameChecker compares Rpt_Line > "76.6" as a string, so line 100 sorts below line 76.6. That's a latent Access bug — port the bug or the intent?
+
+Next up is Phase 2 (metadata harvest — 0-Categories → field_dictionary.csv, 0-Measurements → method/accuracy provenance, Bottle_Q → the measurement_qual vocabulary), unless you'd rather I get the triage in front of a data manager first.
+
+----
+
+Phase 2 committed (115b41e). libs/build_hydro_master_metadata.R is re-runnable and idempotent; your unrelated edits to bench_erddap_ctd.qmd and libs/calcofi_notes.md were left untouched.
+
+What landed
+
+┌───────────────────────────────────────────────────────────────┬────────────────────────────────────────────────────────┐
+│                            Output                             │                        Contents                        │
+├───────────────────────────────────────────────────────────────┼────────────────────────────────────────────────────────┤
+│ metadata/measurement_qual.csv                                 │ The controlled vocabulary measurement_qual has never   │
+│                                                               │ had                                                    │
+├───────────────────────────────────────────────────────────────┼────────────────────────────────────────────────────────┤
+│ .../measurement_method.csv                                    │ 35 instrument/accuracy eras, 17 linked to canonical    │
+│                                                               │ types                                                  │
+├───────────────────────────────────────────────────────────────┼────────────────────────────────────────────────────────┤
+│ .../accdb_field_descriptions.csv                              │ 181 source fields across 19 tables                     │
+├───────────────────────────────────────────────────────────────┼────────────────────────────────────────────────────────┤
+│ .../accdb_field_crosswalk.csv                                 │ 35 matched → canonical, 146 unmatched, for review      │
+├───────────────────────────────────────────────────────────────┼────────────────────────────────────────────────────────┤
+│ .../change_log.csv                                            │ 280 dated entries, 2005-10-19 → 2023-10-16, 9          │
+│                                                               │ contributors                                           │
+├───────────────────────────────────────────────────────────────┼────────────────────────────────────────────────────────┤
+│ .../qual_code_observed.csv, station_code.csv,                 │ diagnostics + lookups                                  │
+│ ship_crosswalk.csv                                            │                                                        │
+└───────────────────────────────────────────────────────────────┴────────────────────────────────────────────────────────┘
+
+Three places I deviated from the plan
+
+The plan's Phase 2 assumed things that turned out not to be true, so I changed the approach rather than forcing the data into it:
+
+1. I merged nothing into field_dictionary.csv. Your CLAUDE.md says that registry is prescriptive; the Access tables are descriptive of a 1949-era schema. Injecting 181 names like T_degC/Cst_Cnt would have corrupted it. You get a crosswalk to review instead.
+2. 0-Measurements is one-to-many, so it couldn't become columns on measurement_type.csv. Temperature has 6 method eras, Chlorophyll and Phosphate 4 each. Flattening would have discarded exactly the instrument history that makes it valuable — the reversing-thermometer → CTD-thermistor changeover on 1993-08-11, phosphate across four instruments from 1949.
+3. Fuzzy matching found zero links, so I replaced it with an explicit seed map. "Sil", "PO4-P" and "O2" share no substring with silicate/phosphate/oxygen_ml_l, and any looser rule would mis-link silently. 17 of 35 mapped; genuinely ambiguous ones ("Primary Productivity", bare "Temperature") are left blank rather than guessed.
+
+The 14 queued questions — and one real discovery
+
+Everything went to questions.csv in your existing format rather than being resolved by guesswork. The two blockers are both quality-flag semantics:
+
+- T_qual uses codes 0–7 and P_qual uses 3/5/7, but only 6/8/9 are documented.
+- S_qual holds 253 distinct values — where O_qual has 3, SThtaq and O2Satq have 4, and T_qual has 10. The values cluster densely at 256–271, i.e. 256 plus a low nibble, which reads as bit 8 of a bitmask rather than a code. That's a genuine data-integrity finding, not just missing documentation.
+
+That last one is why I stopped short of the plan's "start interpreting the flag." Salinity quality can't be interpreted until someone says whether S_qual is a bitmask or a corrupted column, and any ported salinity QC rule built on the current values would be built on sand.
+
+Worth noting for sequencing: the blockers gate Phase 5 (the rule registry), not Phase 3. Reconciliation against the current release doesn't depend on flag semantics, so I can proceed there while the questions are out for review.
+
+----
+
+Phase 3 committed (a0d24eb). Your edits to bench_erddap_ctd.qmd, libs/calcofi_notes.md and scripts/bench_download.sh were left untouched.
+
+The headline: your pipeline is vindicated
+
+The release is a strict subset of the Access master, with zero release-only rows:
+
+┌────────┬─────────┬─────────┬─────────┬─────────────┬──────────────┐
+│        │ Access  │ Release │ Shared  │ Access-only │ Release-only │
+├────────┼─────────┼─────────┼─────────┼─────────────┼──────────────┤
+│ Cast   │ 36,217  │ 35,644  │ 35,644  │ 573         │ 0            │
+├────────┼─────────┼─────────┼─────────┼─────────────┼──────────────┤
+│ Bottle │ 909,076 │ 895,371 │ 895,371 │ 13,705      │ 0            │
+└────────┴─────────┴─────────┴─────────┴─────────────┴──────────────┘
+
+And across ~6.0 M shared bottle-measurement comparisons spanning all 13 measurement types, exactly one value differs by more than 1e-4 (oxygen_umol_kg, 3e-4). No nulls introduced in either direction. The Access→canonical mapping was derived from measurement_type.csv's _source_column rather than hand-listed, so it isn't circular.
+
+The Access-only rows are exactly 7 cruises, 202107–202304 — post-2021-05 data the release doesn't have, consistent with it being built from the published "through 2105" extract.
+
+Two things the plan had wrong
+
+The Bottle vs BottleData_194903_202304 gap is not "8 missing rows" as I'd characterized it. It's 93 out / 85 in, netting −8. And BottleData_194903_202304 isn't a plain extract at all — it's a denormalized Cast⨝Bottle export, 30 columns vs 13.
+
+The 93 are all cruise 202304 (mid-import). The 85 are bottles deleted from the master after the export was generated — and critically, they span 202105, which falls inside the release's coverage. That's a plausible path for withdrawn data to leak into a published release, so I checked it explicitly: zero of the 85 appear in bottle or bottle_measurement. Recorded as a negative result rather than left implicit.
+
+Phase 4 input is now defined
+
+All 65 tables classified, none left unclassified: 30 working copies/staging, 10 documentation, 8 covered by an existing dataset, 2 reconciled, and 15 net-new totalling 2,853,787 rows — Rpt_Data, Prodo_Bottle, Bottle_Q (909k each), Zooplankton, Weather, Prodo_Cast, the four HarmCoeff* tables, MLD_Sigma, NutClineDepth.
+
+One scope correction: Access DICs (2,142 rows) is a subset of the released calcofi_dic (4,391), so it isn't net-new — queued as a question, since it may still carry cast linkage that could help issue #47.
+
+Queue now at 17 items
+
+Three added (2 blocker, 7 high, 8 medium overall). The most consequential is recon_01: 573 casts / 13,705 bottles of 2021-07→2023-04 data exist in the master but not the release. That's the single largest data gain available from this port — but the filename says "Final through 2105", cruise 202304 has a staging table with an ImportErrors sibling, so I've flagged it as preliminary rather than assuming it's release-ready.
+
+I also deferred one plan item honestly rather than half-doing it: running the ported TR referential checks needs the rule registry, so it moves to Phase 5.
+
+**Phase 4 (ingest the 15 net-new tables)** is next and isn't blocked by the open questions — though recon_01's answer would change whether it also brings in the newer cruises.
 
 ## 2026-06-25 netCDF erddap parquet
 
@@ -214,6 +607,447 @@ Two loose ends for you:
 - erddap-ctd-netcdf is unmerged, and the host has those files checked out over main. I left it that way deliberately — reverting the host to main would restore the buggy erddap_netcdf.R, so a future regeneration would reintroduce single-point profiles. Want me to open a PR?
 - The bench doc still reports NetCDF measurements taken against the old grain. The granularity conclusion holds, but the NetCDF file sizes are now ~3× smaller, so those specific numbers are stale — worth a footnote before that page gets cited in the DMP thread.
 
+----
+
+Full results, at a 4 GB container cap / 2 GB heap:
+
+┌─────────────────┬─────────────┬───────┬────────┬──────────┬───────────┐
+│     dataset     │   format    │ 1 var │ 3 vars │ all vars │ peak anon │
+├─────────────────┼─────────────┼───────┼────────┼──────────┼───────────┤
+│ casts           │ parquet     │  ok   │   ok   │    ok    │    1.59 G │
+├─────────────────┼─────────────┼───────┼────────┼──────────┼───────────┤
+│ dic             │ parquet     │  ok   │   ok   │    ok    │    1.53 G │
+├─────────────────┼─────────────┼───────┼────────┼──────────┼───────────┤
+│ euphausiids     │ parquet     │  ok   │   ok   │    ok    │    1.52 G │
+├─────────────────┼─────────────┼───────┼────────┼──────────┼───────────┤
+│ zooplankton     │ parquet     │  ok   │   ok   │    ok    │    1.65 G │
+├─────────────────┼─────────────┼───────┼────────┼──────────┼───────────┤
+│ phytoplankton   │ parquet     │  ok   │   ok   │    ok    │    1.60 G │
+├─────────────────┼─────────────┼───────┼────────┼──────────┼───────────┤
+│ ctd_thin_nc     │ netcdf      │  ok   │   ok   │    ok    │    1.57 G │
+├─────────────────┼─────────────┼───────┼────────┼──────────┼───────────┤
+│ ctd_thin        │ duckdb long │  ok   │   ok   │   OOM    │    3.43 G │
+├─────────────────┼─────────────┼───────┼────────┼──────────┼───────────┤
+│ ctd_measurement │ duckdb long │  ok   │  OOM   │   OOM    │    3.90 G │
+└─────────────────┴─────────────┴───────┴────────┴──────────┴───────────┘
+
+Answering your question directly
+
+Yes — everything except full CTD measurements can be served safely, but with one correction: the thinned CTD is only safe in the right format.
+
+The same ctd_thin data serves a complete unconstrained download at a flat 1.57 GB as NetCDF, yet OOMs past 4 GB as the DuckDB long view. That's not a data-volume difference — it's the same rows. The file backends stream; EDDTableFromDatabase materializes the JDBC result set.
+
+The JVM heap never exceeded ~900 MB in any case, including both OOMs. So raising ERDDAP_MEMORY cannot fix this — the memory is DuckDB's off-heap allocation. That's why your original OOM was unfixable by the knob that looks like it should fix it.
+
+Practical recommendation: calcofi_ctd_thin_nc — the CF NetCDF dataset I deployed earlier — turns out to be the safe way to serve thinned CTD for bulk download. Keep the DuckDB long view for filtered queries (it's excellent there: one variable across 232 M rows in 4.8 s), but it should not be the path users hit when they press Submit unconstrained.
+
+Corrections to things I told you earlier
+
+- The regex hypothesis was wrong. I proposed that =~ couldn't be pushed to DuckDB and that caused the hang. The same 3-type regex completes in 4.7 s on ctd_thin and OOMs on ctd_measurement — so it's result volume, not the operator. Good thing it got tested rather than written up.
+- My "12 GB" figure was inflated. That was memory.current including reclaimable page cache. True allocation (anon) peaks at 3.4–3.9 GB.
+
+Two caveats on these numbers
+
+- This establishes pass/fail at 4 GB, not the minimum viable cap. For a real floor per dataset, sweep MEM_CAP at 1g/2g/3g — worth doing for ctd_thin_nc specifically, since 1.57 GB suggests it'd run comfortably in 2 GB.
+- One labelling bug in the output: ctd_thin_nc shows granularity=lumped but is actually 96 split files. The detector runs find on the container path (/datasets/...), which doesn't exist on the host, so it counted zero files. Cosmetic — no effect on the memory results — but I should fix it before this table goes in the paper.
+
+The qmd still needs the §3 matrix numbers and finding 1 refreshed from the re-run, which I stopped after the outage.
+
+----
+
+What if you expand the DuckDB memory to 5 or 6 GB? Does that allow the DuckDB long view to work? I think it will be confusing to serve the CTD dataset already in full and thinnned format, then in netCDF or DuckDB. Ideally, we use the same for all. And for netCDF, I think serving these for whole datasets outside of ERDDAP makes good sense. I am not yet sold on the argument that we should serve datasets via DuckDB AND netCDF -- too confusing.
+
+----
+
+The report rewrite is committed and pushed. Here's the story it now tells, with the evidence behind it.
+
+The recommendation
+
+One serving path: ERDDAP EDDTableFromDatabase over DuckDB views on the integrated release Parquet — long format, every dataset, no variants. NetCDF becomes dataset-level output outside ERDDAP. That's your architecture; the measurements support it.
+
+What the sweep established
+
+┌─────────────────────────────────────────────────────────┬───────────────┬──────┬──────┬───────────────┐
+│                         dataset                         │     4 GB      │ 5 GB │ 6 GB │ peak off-heap │
+├─────────────────────────────────────────────────────────┼───────────────┼──────┼──────┼───────────────┤
+│ casts / dic / euphausiids / zooplankton / phytoplankton │      ok       │  —   │  —   │  ~1.5–1.65 GB │
+├─────────────────────────────────────────────────────────┼───────────────┼──────┼──────┼───────────────┤
+│ ctd_thin (long)                                         │      OOM      │  ok  │  ok  │       4.08 GB │
+├─────────────────────────────────────────────────────────┼───────────────┼──────┼──────┼───────────────┤
+│ ctd_measurement (long)                                  │ OOM at 3 vars │ OOM  │ OOM  │       5.97 GB │
+└─────────────────────────────────────────────────────────┴───────────────┴──────┴──────┴───────────────┘
+
+Yes, more memory rescues the thinned CTD — it needs between 4 and 5 GB, completing a full ~1 GB download in ~90 s at a 5 GB cap. So long-format DuckDB works for it, and no wide variant or second backend is needed.
+
+No, it doesn't rescue the full table. ctd_measurement OOMs at three variables at 4, 5 and 6 GB. That's not a limit to raise — it's a ~10 GB result set. The report states it plainly: queryable but not bulk-downloadable, with bulk access routed to the Parquet release.
+
+The heap is never the constraint. It peaked at ~1.7 GB across every test including both OOMs. ERDDAP_MEMORY is the knob that looks like it should fix this and cannot — that's why your original OOM was baffling. The cap that matters is mem_limit on the container.
+
+Corrections folded into the doc
+
+- memory.current → anon. My earlier "12 GB" counted reclaimable page cache; true allocation is ~3× lower.
+- The five small datasets prove nothing. They're 0.4–23 MB event tables, not measurement tables at CTD scale. An earlier draft of my recommendation generalized from them — §5 now says so explicitly.
+- The regex hypothesis was wrong. Same =~ completes on ctd_thin, OOMs on ctd_measurement — it's volume, not the operator.
+- §6.4 records what was rejected: wide schema for CTD, dual NetCDF+DuckDB backends, single-file Parquet, and raising the heap.
+
+Still outstanding
+
+The §3 matrix NetCDF rows are still from the old grain — that re-run is in flight now (it inherits the 4 GB compose cap, so it's safe). Once it lands I'll refresh those four cells and re-render. Everything else in the document is current.
+
+One judgment call worth surfacing: §6.3 keeps NetCDF granularity as an open choice (per-cruise 96 files vs per-cast 14,290). Since it's no longer an ERDDAP dataset, that choice is now purely about what recipients prefer — say if you'd rather I just fix it at per-cast, which is the shape Lynn originally asked about.
+
+----
+
+Let's revise that email draft with this latest thinking and prescription. Let's also make clear that where netCDF really shines is its self-documenting nature that is otherwise lacking in parquet alone. Also, database normalized fields that transform observations to long format and may mix measurement types do not follow typical netCDF convention. We can handle this better by making whole dataset netCDF files available for download (I might aquiesce to subsetting via netCDF, but prefer not serving the same dataset via two slightly different methods, especially when either parquet or netCDF flavors can already be downloaded via ERDDAP from either -- tough to explain formatting and metadata reasons). I prefer serving the db normalized, fast query approach instead.
+
+Also re-render as needed
+
+----
+
+Done — report rewritten and re-rendered, email revised around your prescription.
+
+The email now argues
+
+netCDF's value is that it's self-documenting — units, standard names, coordinate conventions and provenance travel inside the file. Parquet carries data types, not scientific meaning: hand someone a Parquet file and they still need our docs to know a column is °C. That's framed as the case for netCDF, so Ben Gire's instinct is affirmed rather than deflected.
+
+Why the normalized DB can't just be dumped to netCDF. Long form puts many quantities with different units in one measurement_value column, and CF expects one unit and one standard name per variable. A direct export is technically netCDF but not meaningfully CF — losing exactly the self-documenting property that motivates it. So whole-dataset files are a transformation, not an export, which also answers Rasmus's effort question honestly.
+
+The three-point prescription: ERDDAP serves the normalized DB one way for everyone; whole-dataset CF netCDF published as downloads; explicitly not serving the same dataset twice. I included the reasoning you gave — ERDDAP already emits .nc from any dataset, so a parallel netCDF-backed copy is two entries with subtly different structure and metadata and an explanation nobody wants to read.
+
+I also wrote in that I'd retire calcofi_ctd_thin_nc, the netCDF-backed dataset I deployed earlier. It's still live — I haven't removed it, since that's a call for you. The email commits to the intent, so if you'd rather keep it I should edit that paragraph before sending.
+
+A finding that overturned earlier text
+
+The NetCDF matrix re-run changed Finding 1. With the corrected grain the lumped ctd_measurement NetCDF is 686 MB instead of 2.1 GB and now loads in 19 s at 1,079 MB — the config the paper said "times out." Split loads dropped from ~879–1,099 MB to 66 MB.
+
+So "lumped always fails" was an artefact of a file that shouldn't have been that big. Granularity still matters — proportionally to file size against the heap, which is what killed the 935 MB ctd_wide.parquet — but not as the intrinsic law the original claimed. Finding 1 is rewritten to say that.
+
+Render is clean: all four figures regenerated, including the new memory-sweep figure.
+
+Two things I'd flag before you send:
+
+- The email says the whole-dataset CF netCDF files are "published as downloads," but they aren't yet — they exist on the server at /share/data/erddap-duckdb/netcdf/ and aren't linked anywhere public. Either I publish them alongside the Parquet release first, or that sentence should read as intent.
+- calcofi_ctd_thin_nc is still serving, contradicting point 3.
+
+----
+
+I am seeing a lot of data_0.parquet in https://storage.googleapis.com/calcofi-db/ducklake/releases/v2026.07.17/index.html. And then "No such object" when clicking on links. There is not a preservation of the directory structure implied by the naming of these objects. And GCS does not automatically serve the index.html when visiting
+  https://storage.googleapis.com/calcofi-db/ducklake/releases/v2026.07.17/
+
+----
+
+Both confirmed, plus a third thing you should know about:
+
+- Links 404 — double-prefixed: the object key already contains ducklake/releases/... and I prepended a URL that also ends in /ducklake/releases.
+- data_0.parquet everywhere — obs and obs_ctd_full are hive-partitioned directories (11 and 96 parts). I listed all 123 keys and displayed basename(), collapsing them all to the same name.
+- obs is stored twice — as a single obs.parquet (225.3 MB) and as a partitioned obs/ directory (229.0 MB across 11 files). Same table, ~454 MB. That's in the release itself, not my page.
+
+Let me fix the generator to preserve structure:
+
+----
+
+Fixed and live — 51 pages uploaded, all links verified 200.
+
+The three defects
+
+1. **Every link 404'd**. Object keys from the XML listing are absolute from the bucket root and already contain ducklake/releases/…, but I appended them to a URL that also ends in /ducklake/releases. Double-prefixed. Links now build on the bucket root.
+2. **The `data_0.parquet` wall**. obs (11 parts, by dataset_key) and obs_ctd_full (96 parts, by cruise_key) are hive-partitioned directories. I listed all 123 keys and displayed basename(), so every partition rendered as the same name.
+3. **Structure discarded**. Now grouped by table, with partitioned ones rendering as obs_ctd_full/ + a 96 parts chip, linking to their own nested index page that lists each partition by full relative path — obs (https://storage.googleapis.com/calcofi-db/ducklake/releases/v2026.07.17/parquet/obs/index.html), obs_ctd_full (https://storage.googleapis.com/calcofi-db/ducklake/releases/v2026.07.17/parquet/obs_ctd_full/index.html).
+
+Each page now also shows the read_parquet() form that actually applies — a direct URL for single-file tables, and a /**/*.parquet glob with hive_partitioning = true for partitioned ones, which is what you'd want anyway rather than downloading 96 files.
+
+Two things for you, not fixable by me
+
+obs is stored twice in the release. Both as a single obs.parquet (225.3 MB) and as a partitioned obs/ directory (229.0 MB across 11 files) — the same table, ~454 MB total. The index now shows both because both genuinely exist. That looks like release_database.qmd writing it via two paths; worth checking whether the partitioned copy is intentional, since consumers reading the wrong one would silently get different partition-pruning behaviour.
+
+Bare folder URLs still 404, exactly as you observed — …/v2026.07.17/ won't serve index.html. GCS has no directory index and no MainPageSuffix unless the bucket is domain-named and reached by CNAME. The standing offer is the Caddy vhost (rewrite */ → */index.html + reverse_proxy storage.googleapis.com), which would make every folder URL work and give you one clean hostname instead of storage.googleapis.com/.... Say the word and it's a short change to the Caddyfile plus a DNS record.
+
+----
+
+Let's keep the **`obs`** partitioned by dataset and discard the other one, wherever that happens, presumably `release_database.qmd`.
+
+So our server would host the GCS files with a subdomain like file. or something new like gcs.?
+
+I am also reading the draft email and still a bit confused:
+- "ERDDAP serves the normalized database": are you suggesting serving obs across all datasets? That seems counter to serving per dataset, which is the more typical documented approach, and hence metadata according to per dataset, which I would prefer.
+- It would be good to mention that you can even run the queries against the parquet files in your web browser which loads DuckDB here: https://calcofi.io/db-query. Note the different forms that help you populate queries on the left, including one that is for a custom SQL **shell**. 
+
+----
+
+
+Email and report both fixed. On your three points:
+
+1. **`obs` duplication — please don't discard it**
+
+The single-file obs.parquet is deliberate and load-bearing. release_database.qmd:1106 says so:
+
+▎ "also a single-file obs.parquet: browser DuckDB-WASM (db-query/match.js) and plain-HTTPS consumers can't glob the Hive-partitioned obs/ dir over GCS"
+
+And db-query/lib/match.js reads ${base}/obs.parquet in two places. Since CLAUDE.md requires calcofi4r/R/match.R to stay byte-identical with that file, calcofi4r depends on it too. Deleting it breaks calcofi.io/db-query — the app you just asked me to feature in the email — and calcofi4r's matching helpers.
+
+The constraint is real: plain HTTPS has no directory listing, so read_parquet('…/obs/**/*.parquet') can't work from the browser.
+
+Three ways forward, if the ~225 MB (12% of the release) still bothers you:
+
+┌──────────────────────────────────────────┬─────────────────────────────────────────────────────────────────────────────┐
+│                  option                  │                                    cost                                     │
+├──────────────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────┤
+│ Keep both (recommended)                  │ 225 MB; zero risk; both consumers already work                              │
+├──────────────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────┤
+│ Keep partitioned only, pass an explicit  │ DuckDB accepts an array, so it works without globbing — but match.js +      │
+│ URL list to read_parquet                 │ match.R must build the list per release and stay in lockstep                │
+├──────────────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────┤
+│ Keep single-file only                    │ loses partition pruning for R/Python consumers filtering by dataset_key     │
+└──────────────────────────────────────────┴─────────────────────────────────────────────────────────────────────────────┘
+
+I'd keep both and instead make the intent visible on the index page, so it doesn't read as an accident. Tell me which you want.
+
+2. **Subdomain**
+
+Existing: api, app, erddap, file, h3t, pgadmin, rstudio, shiny, static, tile.
+
+file.calcofi.io is already Caddy file_server browse over local /share/public, so I'd not overload it — different backend, different semantics. I'd add a dedicated vhost reverse-proxying GCS with a */ → */index.html rewrite, so every folder URL works. On naming, data.calcofi.io is my pick — it's what the thing is to a user, and gcs. leaks the vendor (awkward if storage ever moves). It's ~6 lines of Caddyfile plus a DNS record; say the word.
+
+3. **Email — corrected**
+
+You read it right, and the wording was misleading. It now states explicitly that ERDDAP keeps one entry per dataset, each with its own title, abstract, citation, PIs and coverage, and that only the plumbing is standardized — "one technology and one schema, many properly documented datasets, not one giant merged table." I made the same clarification in §6.1 of the report, which had the identical ambiguity.
+
+I also added calcofi.io/db-query/ prominently, framed as no install, runs in your browser — noting the forms on the left for building queries without SQL and the custom SQL shell. That's likely the most persuasive item in the email for Ben Gire, so it sits right after the browsable release index rather than buried.
+
+Still outstanding from before: calcofi_ctd_thin_nc is live but the email says we'd retire it, and the whole-dataset netCDF files aren't published anywhere public yet. Both should be settled before you send.
+
+----
+
+1. **`obs` duplication**. Good find. Keep both. I like the explicit note to flag reasoning behind the duplicate.
+2. **Subdomain**. Go with "storage". This is reflective of Google Cloud Storage (now) or other most popular AWS S3. But we also have other buckets that this would benefit from: `calcofi-db`, `calcofi-files-public`, `calcofi-projects` (`calcofi-files-private` would probably be handled differently, but is only a placeholder for now)
+3. **Email** Yes, let's delete that calcofi_ctd_thin_nc from the ERDDAP and drop mention of it in the email.
+
+----
+
+All three done, but two need one command from you — both hit the same permission wall (/share/github/CalCOFI/erddap/content and the Caddy container are root-owned).
+
+! ssh calcofi 'cd /share/github/CalCOFI/workflows && git fetch -q origin main && git checkout origin/main -- scripts/retire_erddap_dataset.sh && sudo bash scripts/retire_erddap_dataset.sh calcofi_ctd_thin_nc --purge-files && git -C /share/github/CalCOFI/server pull --ff-only && docker exec caddy caddy reload --config /etc/caddy/Caddyfile'
+
+That retires the dataset, purges its 56 MB of files, and reloads Caddy to bring up storage.calcofi.io.
+
+A note on my earlier attempt: I tried removing the dataset block with an inline Python one-liner and it reported removed — but the file was never written. content/ is owned by another uid, and I had redirected stderr to /dev/null, so the PermissionError traceback was swallowed. Only the follow-up grep caught it. Suppressing stderr on a write like that was a mistake; the retire script validates the XML and prints what it actually changed.
+
+What each item became
+
+1. **`obs` duplication** — kept, and now explained. The release page carries a note stating both forms are the same rows on purpose: partitioned for pruning when filtering, single-file because plain HTTPS has no directory listing so DuckDB-WASM (powering db-query) can't expand a /**/*.parquet glob. Detection is generic rather than hardcoding obs, so any future duplicate self-documents.
+
+2. **`storage.calcofi.io`**. Good call on the name over gcs — it survives a move to S3. Wildcard DNS already resolves it, so no record needed. The vhost rewrites any folder URL to its index.html, so storage.calcofi.io/calcofi-db/ducklake/releases/ will finally work as a folder. Bucket access is an explicit allow-list (calcofi-db, calcofi-files-public, calcofi-projects) with everything else refused — so calcofi-files-private can't be reached through this host even by exact path, rather than relying on it merely not being linked. The fallback response lists the buckets.
+
+3. **`calcofi_ctd_thin_nc`**. Retire script written; email rewritten. Point 3 now states the principle — "one dataset, served one way" — without narrating the experiment.
+
+I also switched the email's bucket URLs to storage.calcofi.io, which is nicer to read and to say aloud. Those links won't work until the Caddy reload above runs — worth confirming before sending.
+
+----
+
+All three items are live and verified.
+
+┌──────────────────────────────────────────────────┬──────────────────────────────────────────┐
+│                      check                       │                  result                  │
+├──────────────────────────────────────────────────┼──────────────────────────────────────────┤
+│ storage.calcofi.io/calcofi-db/ducklake/releases/ │ 200, serves the index — folder URLs work │
+├──────────────────────────────────────────────────┼──────────────────────────────────────────┤
+│ …/v2026.07.17/                                   │ 200 — nested folders too                 │
+├──────────────────────────────────────────────────┼──────────────────────────────────────────┤
+│ …/latest.txt                                     │ 200 → v2026.07.17                        │
+├──────────────────────────────────────────────────┼──────────────────────────────────────────┤
+│ /calcofi-files-private/x                         │ 404 — allow-list blocks it               │
+├──────────────────────────────────────────────────┼──────────────────────────────────────────┤
+│ /                                                │ 404 + the bucket guide                   │
+├──────────────────────────────────────────────────┼──────────────────────────────────────────┤
+│ calcofi_ctd_thin_nc                              │ 404 — retired, 56 MB purged              │
+├──────────────────────────────────────────────────┼──────────────────────────────────────────┤
+│ calcofi_ctd_thin                                 │ 200 — untouched                          │
+└──────────────────────────────────────────────────┴──────────────────────────────────────────┘
+
+The erddap repo commit is pushed to GitHub (e67a3f1), so production config and git agree.
+
+Two loose ends worth a moment:
+
+- Two datasets.xml.bak.* files are now untracked in the erddap repo — one from the deploy, one from the retire. Harmless, but they'll clutter git status until removed or gitignored. Want me to add a *.bak.* ignore?
+- Caddy warned the Caddyfile isn't formatted (caddy fmt --overwrite). Pre-existing — the file mixes tabs and spaces from earlier edits, mine included. Cosmetic; happy to normalize it in a separate commit if you'd like it clean.
+
+The email is ready to send — but three things in it still describe intent rather than fact:
+
+1. It links storage.calcofi.io/... — now true.
+2. It says whole-dataset CF netCDF files are "published as downloads." They exist on the server at /share/data/erddap-duckdb/netcdf/ but aren't published anywhere public yet. That's the one claim in the email that isn't yet real. Publishing them under storage.calcofi.io/calcofi-files-public/netcdf/ would take one gcloud storage cp and close the gap.
+3. It invites Ben Gire to open a CTD netCDF file, but with the ERDDAP dataset retired there's no longer a link for him to click. Right now he'd have to take the format on faith — which weakens the strongest part of the message.
+
+Publishing those files would resolve both 2 and 3. Say the word and I'll upload them and add the link.
+
+----
+
+Yes, please take care of all these loose ends:
+- git ignore *.bak.* 
+- caddy fmt
+- 2. publish to storage.calcofi.io/calcofi-files-public/netcdf/
+- 3. fixed by 2
+
+----
+
+Fetching 777 MB — I'll publish and verify once it lands. Meanwhile, the other three loose ends are closed:
+
+┌───────────────────┬───────────────────────────────────────────────────────────────────────┐
+│       item        │                                status                                 │
+├───────────────────┼───────────────────────────────────────────────────────────────────────┤
+│ *.bak.* gitignore │ pushed (fcc9e01) — verified the pattern catches both existing backups │
+├───────────────────┼───────────────────────────────────────────────────────────────────────┤
+│ caddy fmt         │ committed on the server, config re-validated as Valid configuration   │
+├───────────────────┼───────────────────────────────────────────────────────────────────────┤
+│ netCDF publish    │ in flight                                                             │
+└───────────────────┴───────────────────────────────────────────────────────────────────────┘
+
+Two things worth flagging from this round:
+
+My local erddap clone was still on the stale add-phytoplankton-erddap branch, so the gitignore commit initially landed there and the push was rejected. Cherry-picked onto main, pushed, and deleted the stale branch — that's the same clone that misled me earlier into reporting the repo as "behind production," so it's now cleaned up properly.
+
+The server cannot write to GCS at all. Its GCE compute service account has read-only storage scopes — it failed on calcofi-files-public and on calcofi-db. So the publish has to run from a workstation with gcloud auth login credentials, which is why I'm routing the files through here. I've documented that constraint at the top of publish_netcdf.sh rather than leaving the next person to rediscover it, and made SRC overridable so it still works in place if the VM's scopes are ever widened.
+
+That last point may matter beyond this task: if release_database.qmd is ever run on the server rather than from a workstation, its GCS uploads would fail the same way.
+
+----
+
+Everything green. 743 MB of scratch cleaned up.
+
+Where this landed
+
+Serving architecture — one path, as you specified: ERDDAP keeps one entry per dataset over DuckDB views on the integrated release, long format. calcofi_ctd_thin_nc retired, so nothing is served two ways. NetCDF moved off ERDDAP entirely and became a download product.
+
+New infrastructure
+- storage.calcofi.io — folder-browsable front door to the three public buckets, explicit allow-list
+- Release index pages across all 17 releases, with nested pages preserving partition structure
+- Whole-dataset CF NetCDF published at storage.calcofi.io/calcofi-files-public/netcdf/
+- Bench container now hard-capped (mem_limit), and bench_download.sh refuses to run uncapped
+
+Answered, with measurements
+- DuckDB long serves ctd_thin fully at ≥5 GB; ctd_measurement OOMs at 4, 5 and 6 GB — the JVM heap never exceeded 1.7 GB, so ERDDAP_MEMORY was never the fix
+- CalCOFI has 14,290 casts, not 5.55 M — the old figure was the depth-scan count
+
+Things I got wrong and corrected
+- Shipped calcofi_ctd_thin_nc with single-point profiles (wrong grain key) — caught on verification, fixed, files 3× smaller
+- Took the server down with an uncapped benchmark
+- Generalized from five small event tables to conclude Parquet-for-everything
+- Broke every link on the first release index (double-prefixed), and collapsed 123 partition keys into identical names
+- Stamped the wrong build date on the NetCDF index
+
+The draft email is ready to send. Two open decisions, both yours:
+
+1. The NetCDF files are from the June snapshot, not v2026.07.17. The email calls them a format preview; regenerating against the current release (~30 min) would remove that caveat.
+2. obs stays duplicated by design, now explained on the release page.
+
+
+### TODO: install gcs on server
+
+One thing worth carrying forward beyond this session: **the server cannot write to GCS at all** — read-only scopes on its compute service account, failing on both buckets. Anything that uploads, including `release_database.qmd`, must run from a workstation with `gcloud auth login`. That's documented in `publish_netcdf.sh`, but it's a property of the server rather than of that script.
+
+----
+
+Ok, I want install necessary software and configure so we can write to GCS from the server. But let's do that later.
+
+The index for https://storage.calcofi.io/ could be much a similar skin as the rest of the index pages and HTML links directly to buckets with descriptions. Also there is no browsing yet of the other 2 buckets (calcofi-files-public, calcofi-projects) -- not sure where that would best live, but would be nice, especially since storage.calcofi.io/calcofi-files-public/netcdf/ lives underneath. Also https://storage.googleapis.com/calcofi-db/ (ie the bucket level file) shows XML but has no stylesheet so is not very browseable and odd compared to rest.
+
+Currently https://storage.calcofi.io/calcofi-files-public/netcdf/ only shows ctd_thin.nc and ctd_measurement.nc. And why were they built from the snapshot on 2026-06-23, when they should be built on the latest which is v2026.07.17. And they should also have a per dataset release versioning system. Where are the rest of the datasets? This is really a deploy step, after release but in the DAG and should reconstruct the complexity of the input datasets with one-to-many relationships (especially swfsc_icthyo) while widening variables for CF compliance. Since this will vary per dataset, it might be a good idea to do this as per-dataset publish_.qmd files. And add a new .claude/skills/*.md.
+
+
+----
+
+Now the design for the real deliverable, since that's the substantive part of your message.
+
+What the publish step should be
+
+You're right that this belongs in the DAG after release, not as a script against a stale serving tree. Proposed shape:
+
+release_database.qmd ──> publish_{provider}_{dataset}.qmd ──> storage.calcofi.io
+        (frozen release)          (one per dataset)            /calcofi-files-public
+                                                                /netcdf/{dataset}/{version}/
+
+Each notebook reads the frozen release (resolved from latest.txt), not /share/data/erddap-duckdb/, which is what caused the June-snapshot problem. Discovery via the calcofi: YAML block, same as the ingest notebooks, so build_targets_list() picks them up with no _targets.R edits.
+
+Two transformations per dataset, which is why they can't be one generic script:
+
+1. Widen for CF — pivot measurement_type/measurement_value into one variable per quantity, each with its own units, long_name, standard_name. The vocabulary comes from metadata/measurement_type.csv, so this part is largely mechanical.
+2. Reconstruct the one-to-many — this is the per-dataset part. For swfsc_ichthyo that's cruise → tow → net → taxon occurrence → length bin, encoded as netCDF-4 groups with ragged-array indices, so tow effort is stored once rather than repeated onto every length bin.
+
+Before I build twelve of these, three decisions are genuinely yours:
+
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+←  ☐ Versioning  ☐ Scope  ☐ CF fallback  ✔ Submit  →
+
+How should published NetCDF be versioned?
+
+❯ 1. Mirror the DB release version (Recommended)  │ calcofi-files-public/netcdf/                 │
+  1. Per-dataset semantic version                 │     v2026.07.16/swfsc_ichthyo.nc             │
+  2. Release version + content hash               │     latest.txt  -> v2026.07.17               │
+                                                  │   calcofi_ctd/                               │
+                                                  │     v2026.07.17/calcofi_ctd.nc               │
+                                                  └──────────────────────────────────────────────┘
+Note: For QMD use suffix \_netcdf, ie publish_{dataset}_netcdf.qmd.
+
+Review your answers
+
+ ● How should published NetCDF be versioned?
+   → (notes only)
+ ● Which datasets should get publish notebooks, and in what order?
+   → Start with 2 exemplars, then fan out (Recommended)
+ ● How should a dataset with no natural CF feature type be handled?
+   → CF where it applies, netCDF-4 groups elsewhere (Recommended)
+
+----
+
+Storage browsing is done and live. Stopping here to confirm the design before I write notebooks, since one of my three questions came back unanswered.
+
+Live now
+
+┌────────────────────────────────────────────────────────────┬──────────────────────────────────────────┐
+│                            URL                             │                                          │
+├────────────────────────────────────────────────────────────┼──────────────────────────────────────────┤
+│ https://storage.calcofi.io/                                │ styled root, bucket cards + descriptions │
+├────────────────────────────────────────────────────────────┼──────────────────────────────────────────┤
+│ /calcofi-db/ · /calcofi-files-public/ · /calcofi-projects/ │ all browsable, same skin                 │
+└────────────────────────────────────────────────────────────┴──────────────────────────────────────────┘
+
+That also fixes the raw-XML complaint — via storage.calcofi.io a bucket root now serves a real page. (storage.googleapis.com/calcofi-db/ will still show XML; nothing we control changes that, which is the argument for pointing people at the subdomain.)
+
+While refactoring I caught a repeat of the bug that 404'd every link last time: the new lib exported BUCKET_URL, the same name build_release_index.R uses for its bucket-scoped URL, and source() runs after that assignment — so the lib's host-only value would have silently overwritten it. Renamed to GCS_HOST and regression-tested that release links still return 200.
+
+Noted from your answers
+
+- Naming: publish_{dataset}_netcdf.qmd — so publish_swfsc_ichthyo_netcdf.qmd, publish_calcofi_ctd-cast_netcdf.qmd. The _netcdf suffix leaves room for _obis etc. later, which fits the existing publish_ichthyo_to_obis.qmd.
+- Two exemplars first: swfsc_ichthyo (hardest) and calcofi_ctd-cast (simplest).
+- CF where it applies, netCDF-4 groups elsewhere, stated in each file's global attributes.
+
+Still open: versioning
+
+No option came back on that one, and it determines the output path every notebook writes to, so I don't want to guess. The three were:
+
+1. Mirror the DB release — netcdf/{dataset}/v2026.07.17/{dataset}.nc + latest.txt. Every file traces to an exact release; republishes all datasets each release even when unchanged.
+2. Per-dataset semantic version — netcdf/{dataset}/v1.2/, bumped only when that dataset changes. Fewer copies; provenance moves inside the file.
+3. Release version + content hash — release-named paths, but skip republishing byte-identical tables.
+
+I'd take (1) — it's the only one where "which release is this file from?" is answerable from the URL alone, and that's the question the 2026-06-23 confusion arose from. Say the word (or pick another) and I'll build the skill plus the two exemplars.
+
+----
+
+Fix the browsing for `/calcofi-files-public/ ` and `/calcofi-projects/`. None of the links work, which are all to directories, eg first link at https://storage.calcofi.io/calcofi-files-public/ goes to https://storage.calcofi.io/calcofi-files-public/_index/, which says: 
+  ```xml
+  <Error>
+  <Code>NoSuchKey</Code>
+  <Message>The specified key does not exist.</Message>
+  <Details>No such object: calcofi-files-public/_index/index.html</Details>
+  </Error>
+  ```
+
+Let's use `publish_{dataset}_to_netcdf.qmd` not `publish_{provider}_{dataset}_to_netcdf.qmd`, so `publish_ichthyo_to-netcdf.qmd` and rename `publish_ichthyo_to_obis.qmd` to `publish_ichthyo_to-obis.qmd` (along with the _output/*.html).
+
+Can we have 1 & 3 so there's something like a symbolic link to the last byte-identitical nc?
+1. Mirror the DB release — netcdf/{dataset}/v2026.07.17/{dataset}.nc + latest.txt. Every file traces to an exact release; republishes all datasets each release even when unchanged.
+2. Release version + content hash — release-named paths, but skip republishing byte-identical tables.
+
+----
 
 ## 2026-07-2?
 

@@ -1,6 +1,6 @@
 generated: '2026-07-29'
-n_total: 46
-n_meta: 20
+n_total: 48
+n_meta: 22
 categories:
 - id: ingest
   title: Ingest
@@ -197,14 +197,22 @@ categories:
   title: Publish
   blurb: Push released tables out to external repositories (ERDDAP, OBIS).
   layout: cards
-  count: 2
+  count: 4
   groups:
   - label: ''
     items:
     - url: publish_calcofi_to_erddap.html
       title: publish_calcofi_to_erddap
-    - url: publish_ichthyo_to_obis.html
-      title: publish_ichthyo_to_obis
+    - url: publish_ctd-cast_to-netcdf.html
+      title: publish_ctd-cast_to-netcdf
+      coverage: 1998-01 to 2026-04
+      provider: calcofi
+    - url: publish_ichthyo_to-netcdf.html
+      title: publish_ichthyo_to-netcdf
+      coverage: 1951-01 to 2023-01
+      provider: swfsc
+    - url: publish_ichthyo_to-obis.html
+      title: publish_ichthyo_to-obis
 - id: release
   title: Release & pipeline
   blurb: Freeze a versioned release and the maintenance utilities that support the
@@ -304,6 +312,8 @@ dag_mermaid: |-
     ingest_swfsc_cufes(["ingest_swfsc_cufes"]):::c_ingest_swfsc_cufes
     ingest_swfsc_ichthyo(["ingest_swfsc_ichthyo"]):::c_ingest_swfsc_ichthyo
     ingest_ucsd_sio_mesopelagic_fish(["ingest_ucsd_sio_mesopelagic_fish"]):::c_ingest_ucsd_sio_mesopelagic_fish
+    publish_ctd_cast_to_netcdf(["publish_ctd_cast_to_netcdf"]):::publish
+    publish_ichthyo_to_netcdf(["publish_ichthyo_to_netcdf"]):::publish
     publish_ichthyo_to_obis(["publish_ichthyo_to_obis"]):::publish
     release_database(["release_database"]):::release
     ingest_swfsc_ichthyo --> ingest_calcofi_bird_mammal_census
@@ -320,6 +330,8 @@ dag_mermaid: |-
     ingest_swfsc_ichthyo --> ingest_pic_zooplankton
     ingest_swfsc_ichthyo --> ingest_swfsc_cufes
     ingest_swfsc_ichthyo --> ingest_ucsd_sio_mesopelagic_fish
+    release_database --> publish_ctd_cast_to_netcdf
+    release_database --> publish_ichthyo_to_netcdf
     release_database --> publish_ichthyo_to_obis
     ingest_calcofi_bird_mammal_census --> release_database
     ingest_calcofi_bottle --> release_database
