@@ -56,6 +56,31 @@ cc_release_parquet <- function(version = NULL) {
   glue("{RELEASES_URL}/{cc_release_version(version)}/parquet")
 }
 
+#' Explicit URLs for every partition of a hive-partitioned release table.
+#'
+#' `read_parquet('.../obs_ctd_full/**/*.parquet')` FAILS over plain HTTPS with a
+#' 404: expanding a glob requires a directory listing, and object storage has
+#' none. (Same constraint that forces a single-file obs.parquet for browser
+#' DuckDB-WASM.) So enumerate objects via the XML listing API and hand DuckDB an
+#' explicit vector of URLs, which it accepts wherever a glob would go.
+#'
+#' @return character vector of https URLs, one per partition file
+cc_release_partitions <- function(table, version = NULL) {
+  v   <- cc_release_version(version)
+  pre <- glue("ducklake/releases/{v}/parquet/{table}/")
+  u   <- glue("https://storage.googleapis.com/{GCS_BUCKET_DB}?prefix={pre}&max-keys=1000")
+  x   <- paste(readLines(url(u), warn = FALSE), collapse = "")
+  keys <- grep("\\.parquet$",
+               regmatches(x, gregexpr("(?<=<Key>)[^<]+", x, perl = TRUE))[[1]],
+               value = TRUE)
+  if (!length(keys)) stop(glue("no partitions found under {pre}"))
+  # a truncated listing would silently publish a PARTIAL dataset that still looks
+  # complete — refuse rather than warn
+  if (grepl("<IsTruncated>true", x, fixed = TRUE))
+    stop(glue("{table}: partition listing truncated at 1000 — would publish incomplete data"))
+  as.character(glue("https://storage.googleapis.com/{GCS_BUCKET_DB}/{keys}"))
+}
+
 #' measurement_type -> CF-ish variable metadata, from the canonical registry.
 #' @return named list keyed by measurement_type: units, long_name, standard_name
 cc_measurement_meta <- function(wf = getwd()) {
