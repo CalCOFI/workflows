@@ -875,7 +875,19 @@ mets_rels <- list(
     list(table = "mets_measurement", column = "measurement_type",
          ref_table = "measurement_type", ref_column = "measurement_type")))
 
-cc_erd(con, rels = mets_rels)
+# tables= is REQUIRED here, not optional: without it cc_erd() diagrams every
+# table in the connection — including the loaded ship/cruise/grid/dataset refs
+# and all ~50 columns of mets_sample. That graph is large enough to wedge the
+# headless-Chrome mermaid renderer indefinitely (no figure emitted, ~0% CPU),
+# which looks like a hang rather than a slow render. Same explicit list every
+# other ingest passes.
+cc_erd(
+  con,
+  tables = c("mets_sample", "mets_measurement", "measurement_type"),
+  rels   = mets_rels,
+  colors = list(
+    lightblue   = c("mets_sample", "mets_measurement"),
+    lightyellow = "measurement_type"))
 ```
 
 ## Add Spatial

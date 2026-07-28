@@ -1,13 +1,13 @@
 generated: '2026-07-28'
-n_total: 45
-n_meta: 19
+n_total: 46
+n_meta: 20
 categories:
 - id: ingest
   title: Ingest
   blurb: Acquire, standardize, and load a source dataset into the integrated database.
     Cards are grouped by data provider.
   layout: cards
-  count: 15
+  count: 16
   groups:
   - label: CalCOFI
     items:
@@ -50,6 +50,16 @@ categories:
       color: '#ffd2bb'
       link_calcofi_org: https://calcofi.org/data/oceanographic-data/dic/
       link_data_source: https://www.ncei.noaa.gov/access/metadata/landing-page/bin/iso?id=gov.noaa.nodc:0301029
+      provider: calcofi
+    - url: ingest_calcofi_mets.html
+      title: ingest_calcofi_mets
+      dataset_name: CalCOFI METS (Underway TSG/Meteorology)
+      description: Shipboard underway thermosalinograph (TSG) and meteorology data,
+        ~1-minute resolution, recorded continuously along the cruise track.
+      coverage: 2004-01 to 2022-11
+      color: '#cce5ff'
+      link_calcofi_org: https://calcofi.org/data/oceanographic-data/underway/
+      link_data_source: https://calcofi.org/data/oceanographic-data/underway/
       provider: calcofi
     - url: ingest_calcofi_phyllosoma.html
       title: ingest_calcofi_phyllosoma
@@ -282,6 +292,7 @@ dag_mermaid: |-
     ingest_calcofi_bottle(["ingest_calcofi_bottle"]):::c_ingest_calcofi_bottle
     ingest_calcofi_ctd_cast(["ingest_calcofi_ctd_cast"]):::c_ingest_calcofi_ctd_cast
     ingest_calcofi_dic(["ingest_calcofi_dic"]):::c_ingest_calcofi_dic
+    ingest_calcofi_mets(["ingest_calcofi_mets"]):::c_ingest_calcofi_mets
     ingest_calcofi_phyllosoma(["ingest_calcofi_phyllosoma"]):::c_ingest_calcofi_phyllosoma
     ingest_calcofi_phytoplankton(["ingest_calcofi_phytoplankton"]):::c_ingest_calcofi_phytoplankton
     ingest_cce_lter_euphausiids(["ingest_cce_lter_euphausiids"]):::c_ingest_cce_lter_euphausiids
@@ -299,6 +310,7 @@ dag_mermaid: |-
     ingest_swfsc_ichthyo --> ingest_calcofi_bottle
     ingest_swfsc_ichthyo --> ingest_calcofi_ctd_cast
     ingest_calcofi_bottle --> ingest_calcofi_dic
+    ingest_swfsc_ichthyo --> ingest_calcofi_mets
     ingest_swfsc_ichthyo --> ingest_calcofi_phyllosoma
     ingest_swfsc_ichthyo --> ingest_calcofi_phytoplankton
     ingest_swfsc_ichthyo --> ingest_cce_lter_euphausiids
@@ -313,6 +325,7 @@ dag_mermaid: |-
     ingest_calcofi_bottle --> release_database
     ingest_calcofi_ctd_cast --> release_database
     ingest_calcofi_dic --> release_database
+    ingest_calcofi_mets --> release_database
     ingest_calcofi_phyllosoma --> release_database
     ingest_calcofi_phytoplankton --> release_database
     ingest_cce_lter_euphausiids --> release_database
@@ -328,6 +341,7 @@ dag_mermaid: |-
     classDef c_ingest_calcofi_bottle fill:#f5cad9,stroke:#00000033,color:#10161c;
     classDef c_ingest_calcofi_ctd_cast fill:#e0ccf0,stroke:#00000033,color:#10161c;
     classDef c_ingest_calcofi_dic fill:#ffd2bb,stroke:#00000033,color:#10161c;
+    classDef c_ingest_calcofi_mets fill:#cce5ff,stroke:#00000033,color:#10161c;
     classDef c_ingest_calcofi_phyllosoma fill:#e0bbf0,stroke:#00000033,color:#10161c;
     classDef c_ingest_calcofi_phytoplankton fill:#b5e8b0,stroke:#00000033,color:#10161c;
     classDef c_ingest_cce_lter_euphausiids fill:#d2f0bb,stroke:#00000033,color:#10161c;
