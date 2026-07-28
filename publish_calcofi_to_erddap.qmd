@@ -43,10 +43,31 @@ con <- dbConnect(duckdb()); dbExecute(con, "INSTALL spatial; LOAD spatial")
 
 ## Curated Tables
 
-Tables that carry (or derive) `time`/`latitude`/`longitude` directly. Measurement
-tables keyed only by UUID+depth (e.g. `ctd_measurement`, `bottle_measurement`)
-are published via their coordinate-bearing companions (`ctd_wide`, joined views)
-in a later pass.
+Tables that carry (or derive) `time`/`latitude`/`longitude` directly.
+
+::: {.callout-warning}
+## Stale after the consolidated-core cut-over — this config needs rewriting
+
+Every `parquet` path below points at a **per-dataset table that ingests no longer
+publish**. Each ingest now emits its slice of the core (`sample` / `obs` /
+`obs_attribute` / `sample_measurement`) instead, so these files have been pruned
+and this notebook will fail until the config is repointed. The replacements:
+
+| was | now |
+|---|---|
+| `calcofi_ctd-cast/ctd_wide.parquet` | retired — CTD goes to ERDDAP via `EDDTableFromDatabase` over DuckDB views (`libs/erddap_duckdb.R`) plus the netCDF build, which is what fixed the whole-file heap OOM (`bench_erddap_ctd.qmd`) |
+| `calcofi_bottle/casts.parquet` | `sample.parquet` where `dataset_key='calcofi_bottle' AND sample_type='cast'` |
+| `calcofi_dic/dic_sample.parquet` | `sample.parquet` where `dataset_key='calcofi_dic'` |
+| `cce-lter_euphausiids/euphausiids_tow.parquet` | `sample.parquet` where `dataset_key='cce-lter_euphausiids'` |
+| `pic_zooplankton/zooplankton_tow.parquet` | `sample.parquet` where `dataset_key='pic_zooplankton'` |
+| `calcofi_phytoplankton/phyto_obs.parquet` | `obs.parquet` where `dataset_key='calcofi_phytoplankton'` (this path was already stale — the table was renamed before the cut-over) |
+
+`sample` carries `time`/`latitude`/`longitude`/`depth_min_m`/`depth_max_m`
+directly, so the coordinate-bearing-companion workaround this section describes
+is no longer needed: one config row per `dataset_key` over `sample`/`obs`
+replaces the per-table list. Left unconverted deliberately — repointing changes
+what is served to ERDDAP, which is a decision for whoever owns that contract.
+:::
 
 ```{r}
 #| label: config

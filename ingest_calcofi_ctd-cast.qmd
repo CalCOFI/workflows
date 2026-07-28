@@ -21,12 +21,15 @@ calcofi:
     link_data_source: https://calcofi.org/data/oceanographic-data/ctd-cast-files/
     coverage_temporal: 1993-01 to 2021-05
     coverage_spatial: "28-37°N, -125 to -117°W"
+  # publishes the consolidated core. obs carries the THINNED series (ctd_thin);
+  # the full scan set ships as the supplemental obs_ctd_full. ctd_wide is retired:
+  # ERDDAP now serves CTD through EDDTableFromDatabase over DuckDB views plus a
+  # separate netCDF build, so the 1 GB wide file has no consumer (its whole-file
+  # heap read is what OOM'd ERDDAP in the first place — see bench_erddap_ctd.qmd).
   tables_owned:
-    - {table: ctd_cast}
-    - {table: ctd_thin}
-    - {table: ctd_measurement}
-    - {table: ctd_summary}
-    - {table: ctd_wide}
+    - {table: sample, shared: true, note: "core event dimension (one row per physical cast)"}
+    - {table: obs, shared: true, note: "core observations (env, thinned CTD profile)"}
+    - {table: obs_ctd_full, supplemental: true, note: "full-resolution scans (~216M rows), opt-in"}
     - {table: measurement_type, shared: true, note: "shared registry across bottle/ctd/dic"}
   erd:
     color: "#e0ccf0"
@@ -1385,10 +1388,13 @@ for (i in seq_len(nrow(d_meas_ctd))) {
   meas_type <- row$measurement_type
   qual_col <- row$`_qual_column`
 
+  # a bare NULL is typed INT32 by DuckDB, so if the FIRST measurement type has no
+  # qual column the CREATE TABLE below makes measurement_qual an integer column —
+  # and the first later type that does have one fails inserting 'nan'. Type it.
   qual_expr <- if (!is.na(qual_col) && qual_col != "") {
     glue("CAST({qual_col} AS VARCHAR)")
   } else {
-    "NULL"
+    "CAST(NULL AS VARCHAR)"
   }
 
   sql_select <- glue(
@@ -2180,23 +2186,72 @@ preview_tables(
 ## Emit Core Tables
 
 Project this dataset into the shared consolidated core model
-(`design_env-bio-consolidation.md`) via `calcofi4db::emit_core_tables()` — the
-single source of truth for the per-dataset projection into `sample` / `obs` /
-`obs_freq` / `sample_measurement`, also used by `release_database.qmd` to
-assemble the authoritative cross-dataset release.
+(`design_env-bio-consolidation.md`) via `calcofi4db::emit_core_tables()`. These
+core tables **are** this ingest's output: `release_database.qmd` concatenates the
+per-dataset shards rather than re-deriving the core, so there is exactly one
+projection to keep correct.
+
+Two grains ship from here. The default `obs` carries the **thinned** `ctd_thin`
+series (~5.5M rows) at `realm = 'env'`, which is what every consumer reads. The
+full-resolution scan set becomes **`obs_ctd_full`** (~216M rows), a supplemental
+output that is hosted and catalogued but excluded from the default table list —
+`cc_get_db(supplemental = TRUE)` opts into it. Building it was previously the
+release's job, reaching back into this ingest's `ctd_measurement` parquet; it
+belongs here, with the dataset that produces it.
+
+`sample` is one row per **physical cast** (`cast_key`), not per scan: `ctd_cast`
+is per-scan, so the arm deduplicates to the cast before minting the event.
 
 ```{r}
 #| label: emit_core
 
-core <- emit_core_tables(con, "calcofi_ctd-cast")
+core <- emit_core_tables(con, "calcofi_ctd-cast", taxa = FALSE)
 cat(glue(
-  "core projection — sample={core$sample %||% 0} obs={core$obs %||% 0} ",
-  "obs_freq={core$obs_freq %||% 0} sample_measurement={core$sample_measurement %||% 0}\n"))
+  "core projection — sample={core$sample %||% 0} obs={core$obs %||% 0}\n"))
 
-# the frozen release assembles the authoritative cross-dataset core; keep this
-# ingest's parquet output per-dataset by dropping the local core projection here.
-for (tbl_core in c("obs", "obs_freq", "sample_measurement", "sample"))
-  dbExecute(con, glue("DROP TABLE IF EXISTS {tbl_core}"))
+n_obs <- dbGetQuery(con, "SELECT COUNT(*) FROM obs")[[1]]
+n_exp <- dbGetQuery(con,
+  "SELECT COUNT(*) FROM ctd_thin t JOIN ctd_cast cc ON t.ctd_cast_uuid = cc.ctd_cast_uuid
+   WHERE cc.grid_key IS NOT NULL")[[1]]
+n_cast <- dbGetQuery(con, "SELECT COUNT(DISTINCT cast_key) FROM ctd_cast")[[1]]
+stopifnot(
+  "obs must be one row per grid-matched thinned scan" = n_obs == n_exp,
+  "sample must be one row per PHYSICAL cast, not per scan" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM sample")[[1]] == n_cast,
+  "every obs.sample_key must resolve in sample" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM obs o LEFT JOIN sample s USING (sample_key)
+                     WHERE s.sample_key IS NULL")[[1]] == 0,
+  # the whole point of ctd_thin: obs must not silently become the full scan set
+  "obs must be fed by ctd_thin, not ctd_measurement" =
+    n_obs < dbGetQuery(con, "SELECT COUNT(*) FROM ctd_measurement")[[1]])
+cat(glue("obs parity: {format(n_obs, big.mark=',')} thinned rows across ",
+         "{format(n_cast, big.mark=',')} casts"), "\n")
+
+# --- obs_ctd_full: supplemental full-resolution scans -----------------------
+# heavy (~216M rows); set BUILD_OBS_CTD_FULL=FALSE for a fast structural render.
+build_obs_ctd_full <- as.logical(Sys.getenv("BUILD_OBS_CTD_FULL", "TRUE"))
+if (build_obs_ctd_full) {
+  n_full <- append_obs(con, obs_tbl = "obs_ctd_full", select_sql = "
+    SELECT 'env' realm, 'calcofi_ctd-cast' dataset_key,
+           'calcofi_ctd-cast:cast:' || CAST(cc.cast_key AS VARCHAR) sample_key,
+           cc.grid_key, cc.cruise_key, cc.latitude, cc.longitude,
+           CAST(cc.datetime_start_utc AS TIMESTAMP) datetime,
+           m.depth_m depth_min_m, m.depth_m depth_max_m,
+           NULL::VARCHAR taxon_key, NULL::VARCHAR life_stage,
+           m.measurement_type, m.measurement_value, m.measurement_qual,
+           NULL::DOUBLE measurement_prec
+    FROM ctd_measurement m
+    JOIN ctd_cast cc ON m.ctd_cast_uuid = cc.ctd_cast_uuid
+    WHERE cc.grid_key IS NOT NULL")
+  stopifnot(
+    "obs_ctd_full must cover every grid-matched scan" = n_full ==
+      dbGetQuery(con, "SELECT COUNT(*) FROM ctd_measurement m
+                       JOIN ctd_cast cc ON m.ctd_cast_uuid = cc.ctd_cast_uuid
+                       WHERE cc.grid_key IS NOT NULL")[[1]])
+  cat(glue("obs_ctd_full: {format(n_full, big.mark=',')} rows"), "\n")
+} else {
+  cat("obs_ctd_full skipped (BUILD_OBS_CTD_FULL=FALSE)\n")
+}
 ```
 
 
@@ -2212,23 +2267,25 @@ mismatches <- list(
     con, here("metadata/measurement_type.csv")),
   cruise_keys       = collect_cruise_key_mismatches(con, "ctd_cast"))
 
+# core shards + the supplemental outputs this dataset owns. ctd_cast/ctd_thin/
+# ctd_measurement/ctd_summary are superseded by sample/obs/obs_ctd_full, and
+# ctd_wide is retired (ERDDAP reads DuckDB views + netCDF now).
+tbls_out <- core_output_tables(
+  con, extra = c("obs_ctd_full", "measurement_type"))
 parquet_stats <- write_parquet_outputs(
   con          = con,
   output_dir   = dir_parquet,
-  tables       = c("ctd_cast", "ctd_measurement", "ctd_thin", "ctd_summary",
-                    "measurement_type", "ctd_wide"),
+  tables       = tbls_out,
   partition_by = list(
-    ctd_measurement = "cruise_key",
-    ctd_thin        = "cruise_key",
-    ctd_summary     = "cruise_key"),
+    obs          = "cruise_key",
+    obs_ctd_full = "cruise_key"),
   sort_by = list(
-    ctd_measurement = c("measurement_type", "depth_m"),
-    ctd_thin        = c("measurement_type", "depth_m"),
-    ctd_summary     = c("measurement_type", "depth_m"),
-    ctd_cast        = "hilbert:longitude,latitude"),
+    obs          = c("measurement_type", "depth_min_m"),
+    obs_ctd_full = c("measurement_type", "depth_min_m"),
+    sample       = "hilbert:longitude,latitude"),
   strip_provenance = FALSE,
   mismatches       = mismatches,
-  supplemental     = c("ctd_wide", "ctd_measurement")
+  supplemental     = c("obs_ctd_full")
 )
 
 parquet_stats |>
@@ -2244,9 +2301,10 @@ metadata_path <- build_metadata_json(
   con                  = con,
   d_tbls_rd            = d_tbls_rd,
   d_flds_rd            = d_flds_rd,
-  metadata_derived_csv = glue("{dir_meta}/metadata_derived.csv"),
+  metadata_derived_csv = c(here("metadata/core_dictionary.csv"),
+                           glue("{dir_meta}/metadata_derived.csv")),
   output_dir           = dir_parquet,
-  tables               = parquet_stats$table,
+  tables               = tbls_out,
   provider             = provider,
   dataset              = dataset,
   workflow_url         = cc$workflow_url,
@@ -2255,7 +2313,7 @@ metadata_path <- build_metadata_json(
 
 # write relationships.json sidecar with PKs/FKs
 build_relationships_json(
-  rels       = ctd_rels,
+  rels       = core_relationships(tbls_out),
   output_dir = dir_parquet,
   provider   = provider,
   dataset    = dataset
