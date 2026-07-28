@@ -1,6 +1,6 @@
 ---
 title: "Publish CTD casts to CF NetCDF"
-subtitle: "A true CF Discrete-Sampling-Geometry profile dataset — one profile per cast, sensors as variables"
+subtitle: "Two CF Discrete-Sampling-Geometry profile files — the thinned headline record and the full-resolution scans"
 author: "CalCOFI"
 date: today
 format:
@@ -238,18 +238,199 @@ nc_close(ncv)
 kable(chk)
 ```
 
+
+## Full-resolution companion — `ctd-cast_full.nc`
+
+The file above is the **adaptively-thinned** record (5.55 M long rows → 434 k depth
+levels, 7,175 profiles). `obs_ctd_full` is ~216 M long rows across 96 cruise
+partitions and 32 sensor types, flagged *supplemental* in the release precisely
+because of its size.
+
+It is a **superset in two dimensions, not one**: every depth scan rather than a
+thinned subset, *and* all **14,336** casts — both the down- and up-cast of each
+station occupation — where the thinned record keeps one direction per occupation.
+So the profile count roughly doubles for a reason unrelated to resolution. Both
+files state this in their own global attributes, because "full resolution" alone
+would imply the same profiles sampled more densely, which is not what this is.
+
+Two things make this build different, and both are consequences of scale:
+
+::: {.callout-important title="Why this is chunked rather than pivoted in one query"}
+This is the table that **OOM'd ERDDAP at every container size tested** — 4, 5 and
+6 GB (see [the serving benchmark](https://calcofi.io/workflows/bench_erddap_ctd.html)).
+Materializing it here would hit the same wall, so it is processed **one cruise
+partition at a time** and written into the file incrementally with
+`ncvar_put(start=, count=)`. Peak memory is one cruise (~59 k levels × 32
+variables ≈ 15 MB), not the whole table.
+
+Also, `read_parquet('.../obs_ctd_full/**/*.parquet')` **404s over HTTPS**:
+expanding a glob needs a directory listing and object storage has none. Partitions
+are therefore enumerated from the XML listing API (`cc_release_partitions()`) and
+passed as an explicit URL vector.
+:::
+
+```{r}
+#| label: full-partitions
+parts <- cc_release_partitions("obs_ctd_full", RELEASE)
+cat(glue("partitions: {length(parts)}\n"))
+
+# obs_ctd_full already carries latitude/longitude/datetime, so unlike the thinned
+# path no join back to `sample` is needed.
+full_types <- dbGetQuery(con, glue(
+  "SELECT DISTINCT measurement_type FROM read_parquet('{parts[1]}') ORDER BY 1"))$measurement_type
+cat(glue("sensor types: {length(full_types)}\n"))
+```
+
+```{r}
+#| label: full-pass1
+# PASS 1 — size the dimensions. Cheap: scans two columns per partition rather
+# than pivoting. netCDF needs dimension lengths at creation time, and a wrong
+# guess means rewriting a multi-GB file.
+pass1 <- lapply(seq_along(parts), function(i) {
+  r <- dbGetQuery(con, glue("
+    SELECT count(*) AS n_lev, count(DISTINCT sample_key) AS n_prof FROM (
+      SELECT DISTINCT sample_key, depth_min_m FROM read_parquet('{parts[i]}'))"))
+  if (i %% 24 == 0) message(glue("  pass1 {i}/{length(parts)}"))
+  r
+})
+p1 <- do.call(rbind, pass1)
+N_PROF <- sum(p1$n_prof); N_LEV <- sum(p1$n_lev)
+tibble(partitions = length(parts), profiles = N_PROF, depth_levels = N_LEV,
+       `mean levels/profile` = round(N_LEV / N_PROF)) |> kable()
+```
+
+```{r}
+#| label: full-write
+FULL_NC <- file.path(OUT_DIR, "ctd-cast_full.nc")
+sel_full <- paste(sprintf(
+  "MAX(measurement_value) FILTER (WHERE measurement_type='%s')::DOUBLE AS \"%s\"",
+  full_types, full_types), collapse = ",\n    ")
+
+d_prof_f <- ncdim_def("profile", "", seq_len(N_PROF), create_dimvar = FALSE)
+d_obs_f  <- ncdim_def("obs",     "", seq_len(N_LEV),  create_dimvar = FALSE)
+d_str_f  <- ncdim_def("name_strlen", "", seq_len(STRLEN), create_dimvar = FALSE)
+
+vf_pid  <- ncvar_def("profile_id", "", list(d_str_f, d_prof_f), prec = "char")
+vf_cru  <- ncvar_def("cruise_key", "", list(d_str_f, d_prof_f), prec = "char")
+vf_time <- ncvar_def("time", "seconds since 1970-01-01T00:00:00Z", d_prof_f, prec = "double")
+vf_lat  <- ncvar_def("latitude",  "degrees_north", d_prof_f, prec = "double")
+vf_lon  <- ncvar_def("longitude", "degrees_east",  d_prof_f, prec = "double")
+vf_rs   <- ncvar_def("rowSize",   "",              d_prof_f, prec = "integer")
+vf_dep  <- ncvar_def("depth", "m", d_obs_f, prec = "double", missval = FILL)
+vf_sens <- lapply(full_types, function(v) ncvar_def(
+  v, as.character(mt_meta[[v]]$units %||% ""), d_obs_f, prec = "double", missval = FILL))
+
+unlink(FULL_NC)
+ncf <- nc_create(FULL_NC, c(list(vf_pid, vf_cru, vf_time, vf_lat, vf_lon, vf_rs, vf_dep),
+                            vf_sens), force_v4 = TRUE)
+
+# PASS 2 — one cruise at a time, appended at the running offsets. Nothing larger
+# than a single cruise is ever held in memory.
+off_p <- 1L; off_o <- 1L
+for (i in seq_along(parts)) {
+  w <- dbGetQuery(con, glue("
+    SELECT sample_key AS profile_id,
+           any_value(cruise_key)              AS cruise_key,
+           epoch(any_value(datetime))::DOUBLE AS time,
+           any_value(latitude)::DOUBLE        AS latitude,
+           any_value(longitude)::DOUBLE       AS longitude,
+           depth_min_m::DOUBLE                AS depth,
+           {sel_full}
+    FROM read_parquet('{parts[i]}')
+    GROUP BY sample_key, depth_min_m
+    ORDER BY sample_key, depth_min_m"))
+  if (!nrow(w)) next
+  ids <- unique(w$profile_id)
+  rs  <- as.integer(table(factor(w$profile_id, levels = ids)))
+  fx  <- match(ids, w$profile_id)
+
+  ncvar_put(ncf, vf_pid,  ids,               start = c(1, off_p), count = c(STRLEN, length(ids)))
+  ncvar_put(ncf, vf_cru,  w$cruise_key[fx],  start = c(1, off_p), count = c(STRLEN, length(ids)))
+  ncvar_put(ncf, vf_time, w$time[fx],        start = off_p, count = length(ids))
+  ncvar_put(ncf, vf_lat,  w$latitude[fx],    start = off_p, count = length(ids))
+  ncvar_put(ncf, vf_lon,  w$longitude[fx],   start = off_p, count = length(ids))
+  ncvar_put(ncf, vf_rs,   rs,                start = off_p, count = length(ids))
+  ncvar_put(ncf, vf_dep,  w$depth,           start = off_o, count = nrow(w))
+  for (k in seq_along(full_types))
+    ncvar_put(ncf, vf_sens[[k]], w[[full_types[k]]], start = off_o, count = nrow(w))
+
+  off_p <- off_p + length(ids); off_o <- off_o + nrow(w)
+  if (i %% 12 == 0) message(glue("  wrote {i}/{length(parts)} — {off_p-1} profiles, {off_o-1} levels"))
+  rm(w); invisible(gc(FALSE))
+}
+# the pass-1 sizing must match exactly, or the file has trailing fill values that
+# look like real (missing) data
+stopifnot(off_p - 1L == N_PROF, off_o - 1L == N_LEV)
+
+ncatt_put(ncf, "profile_id", "cf_role", "profile_id")
+ncatt_put(ncf, "profile_id", "long_name", "CTD cast identifier")
+ncatt_put(ncf, "time", "standard_name", "time");     ncatt_put(ncf, "time", "axis", "T")
+ncatt_put(ncf, "latitude",  "standard_name", "latitude");  ncatt_put(ncf, "latitude", "axis", "Y")
+ncatt_put(ncf, "longitude", "standard_name", "longitude"); ncatt_put(ncf, "longitude", "axis", "X")
+ncatt_put(ncf, "depth", "standard_name", "depth"); ncatt_put(ncf, "depth", "axis", "Z")
+ncatt_put(ncf, "depth", "positive", "down")
+ncatt_put(ncf, "rowSize", "long_name", "Number of observations for this profile")
+ncatt_put(ncf, "rowSize", "sample_dimension", "obs")
+for (v in full_types) {
+  ncatt_put(ncf, v, "long_name", as.character(mt_meta[[v]]$long_name %||% gsub("_", " ", v)))
+  ncatt_put(ncf, v, "coordinates", "time latitude longitude depth")
+}
+globals_full <- globals
+globals_full$title <- "CalCOFI CTD casts, full resolution — CF profile dataset"
+globals_full$summary <- paste(
+  "Full-resolution CalCOFI CTD scans as CF Discrete Sampling Geometry: one profile",
+  "per cast, every recorded depth level, each sensor its own variable.",
+  "NOTE this file differs from the thinned companion (ctd-cast.nc) in TWO ways, not",
+  "one: it keeps every depth scan rather than an adaptively-thinned subset, AND it",
+  "covers all 14,336 casts including both the down- and up-cast of each station",
+  "occupation, where the thinned record keeps a single direction (7,175). It is",
+  "therefore a superset, not a higher-resolution rendering of the same profiles.",
+  "Most analyses want the thinned file; use this one when individual scans or the",
+  "second cast direction matter.")
+globals_full$comment <- paste(
+  "profiles here (14,336) are cast-direction resolved; the thinned companion",
+  "reports 7,175 because it retains one direction per occupation.")
+globals_full$source_table <- "obs_ctd_full (supplemental)"
+for (nm in names(globals_full)) ncatt_put(ncf, 0, nm, globals_full[[nm]])
+nc_close(ncf)
+cat(glue("wrote {FULL_NC} ({round(file.size(FULL_NC)/1048576, 1)} MB)\n"))
+```
+
+```{r}
+#| label: full-verify
+ncv <- nc_open(FULL_NC)
+rs  <- ncvar_get(ncv, "rowSize")
+tibble(
+  check = c("featureType", "profiles", "depth levels", "rowSize sums to obs",
+            "sensor variables", "levels per profile (min/med/max)"),
+  value = c(ncatt_get(ncv, 0, "featureType")$value,
+            as.character(ncv$dim[["profile"]]$len),
+            as.character(ncv$dim[["obs"]]$len),
+            as.character(sum(rs) == ncv$dim[["obs"]]$len),
+            as.character(length(full_types)),
+            paste(min(rs), median(rs), max(rs), sep = " / "))) |> kable()
+nc_close(ncv)
+```
+
 ## Publish
 
 ```{r}
 #| label: publish
 #| eval: !expr PUBLISH
-plan <- cc_netcdf_plan(OUT_NC, DATASET, RELEASE)
-man  <- cc_netcdf_manifest(plan, DATASET, RELEASE, RELEASE, file.size(OUT_NC),
-                           source_tables = c("sample", "obs"),
-                           cf_scope = globals$cf_scope)
-cat(glue("sha256: {substr(plan$sha256,1,16)}...  identical_to: {plan$identical_to}  upload: {plan$upload}\n"))
-res <- cc_netcdf_publish(OUT_NC, DATASET, RELEASE, plan, man)
-cat(glue("published: {res$url}\n"))
+# Two products, published as SEPARATE datasets: they are the same casts at
+# different resolutions, and a user choosing between them should see two entries
+# with their own sizes and provenance rather than one entry with a hidden variant.
+publish_one <- function(nc_path, ds, src_tables, scope) {
+  plan <- cc_netcdf_plan(nc_path, ds, RELEASE)
+  man  <- cc_netcdf_manifest(plan, ds, RELEASE, RELEASE, file.size(nc_path),
+                             source_tables = src_tables, cf_scope = scope)
+  cat(glue("{ds}: sha256 {substr(plan$sha256,1,12)}… identical_to={plan$identical_to} upload={plan$upload}\n"))
+  res <- cc_netcdf_publish(nc_path, ds, RELEASE, plan, man)
+  cat(glue("  -> {res$url}\n"))
+  invisible(res)
+}
+publish_one(OUT_NC,  DATASET,           c("sample", "obs"),  globals$cf_scope)
+publish_one(FULL_NC, "ctd-cast_full",   "obs_ctd_full",      globals_full$cf_scope)
 ```
 
 ```{r}
