@@ -25,11 +25,16 @@ calcofi:
     coverage_spatial: "CalCOFI region (California Current)"
     license: ""
     pi_names: Bill Sydeman
+  # this ingest publishes the consolidated core, not per-dataset tables: the
+  # transect/observation/species/behavior source shape is wrangled in the
+  # notebook and projected into sample / obs / obs_attribute + the taxa refs.
   tables_owned:
-    - {table: bird_mammal_transect}
-    - {table: bird_mammal_observation}
-    - {table: bird_mammal_species}
-    - {table: bird_mammal_behavior}
+    - {table: sample, shared: true, note: "core event dimension (transect grain)"}
+    - {table: obs, shared: true, note: "core occurrence headline (bio, per transect x species)"}
+    - {table: obs_attribute, shared: true, note: "behavior breakdown per occurrence"}
+    - {table: taxon, shared: true, note: "shared taxa reference (seabirds itis:, mammals worms:)"}
+    - {table: dataset_taxon, shared: true, note: "species_code -> taxon_key crosswalk"}
+    - {table: taxon_group, shared: true, note: "calcofi:seabirds / calcofi:marine_mammals"}
   erd:
     color: "#f0d2e8"
 editor_options:
@@ -206,11 +211,13 @@ bmc_rels <- list(
     list(table="bird_mammal_observation", column="gis_key",       ref_table="bird_mammal_transect", ref_column="gis_key"),
     list(table="bird_mammal_observation", column="species_code",  ref_table="bird_mammal_species",  ref_column="species_code"),
     list(table="bird_mammal_observation", column="behavior_code", ref_table="bird_mammal_behavior", ref_column="behavior_code")))
+# the SOURCE shape, documenting the wrangling below. The tables this ingest
+# actually publishes are the consolidated core (see "Emit Core Tables"), so
+# relationships.json is written there, from core_relationships().
 cc_erd(con, tables = c("bird_mammal_transect","bird_mammal_observation","bird_mammal_species","bird_mammal_behavior","dataset"),
        rels = bmc_rels,
        colors = list(lightblue = c("bird_mammal_transect","bird_mammal_observation"),
                      lightyellow = c("bird_mammal_species","bird_mammal_behavior"), white = "dataset"))
-build_relationships_json(rels = bmc_rels, output_dir = dir_parquet, provider = provider, dataset = dataset)
 ```
 
 ## Validate + Preview
@@ -246,46 +253,87 @@ read_csv(here(glue("metadata/{provider}/{dataset}/questions.csv"))) |>
   datatable(caption = "Questions (ranked)", options = list(dom="t", pageLength=10), rownames = FALSE)
 ```
 
-## Write Outputs + Upload
-
 ## Emit Core Tables
 
 Project this dataset into the shared consolidated core model
-(`design_env-bio-consolidation.md`) via `calcofi4db::emit_core_tables()` — the
-single source of truth for the per-dataset projection into `sample` / `obs` /
-`obs_freq` / `sample_measurement`, also used by `release_database.qmd` to
-assemble the authoritative cross-dataset release.
+(`design_env-bio-consolidation.md`) via `calcofi4db::emit_core_tables()`. These
+core tables **are** this ingest's output: `release_database.qmd` concatenates the
+per-dataset shards rather than re-deriving the core from per-dataset tables, so
+there is exactly one projection to keep correct.
+
+The seabird/mammal source records one row per (transect, species, **behavior**).
+The `obs` headline is one row per (transect, species) with `count` summed across
+behaviors — otherwise the same birds are counted once per behavior code — and the
+behavior breakdown becomes `obs_attribute` rows carrying the behavior label.
 
 ```{r}
 #| label: emit_core
 
-core <- emit_core_tables(con, "calcofi_bird_mammal_census")
+# registries that resolve taxon_key at ingest time (seabirds -> itis:, marine
+# mammals -> worms: via the override table)
+mt_taxon <- read_csv(here("metadata/measurement_taxon.csv"), show_col_types = FALSE)
+tx_over  <- read_csv(here("metadata/taxon_override.csv"),    show_col_types = FALSE)
+
+core <- emit_core_tables(
+  con, "calcofi_bird_mammal_census",
+  measurement_taxon = mt_taxon, overrides = tx_over)
 cat(glue(
   "core projection — sample={core$sample %||% 0} obs={core$obs %||% 0} ",
-  "obs_freq={core$obs_freq %||% 0} sample_measurement={core$sample_measurement %||% 0}\n"))
+  "obs_attribute={core$obs_attribute %||% 0} ",
+  "taxon={core$taxon %||% 0} dataset_taxon={core$dataset_taxon %||% 0}\n"))
 
-# the frozen release assembles the authoritative cross-dataset core; keep this
-# ingest's parquet output per-dataset by dropping the local core projection here.
-for (tbl_core in c("obs", "obs_freq", "sample_measurement", "sample"))
-  dbExecute(con, glue("DROP TABLE IF EXISTS {tbl_core}"))
+# the headline must collapse behaviors, and the attribution must add back up
+n_obs <- dbGetQuery(con, "SELECT COUNT(*) FROM obs")[[1]]
+# one headline row per (transect, species_code) — NOT per behavior, and NOT
+# collapsed by taxon_key (only 156 of 207 codes resolve; grouping on taxon_key
+# alone would merge every unresolved species into one row per transect)
+n_exp <- dbGetQuery(con, "
+  SELECT COUNT(*) FROM (
+    SELECT tr.gis_key, o.species_code
+    FROM bird_mammal_observation o JOIN bird_mammal_transect tr USING (gis_key)
+    WHERE tr.grid_key IS NOT NULL
+    GROUP BY 1, 2)")[[1]]
+n_mismatch <- dbGetQuery(con, "
+  WITH a AS (SELECT sample_key, taxon_key, SUM(count) s FROM obs_attribute
+             WHERE measurement_type = 'behavior' GROUP BY 1, 2),
+       o AS (SELECT sample_key, taxon_key, SUM(measurement_value) v FROM obs
+             GROUP BY 1, 2)
+  SELECT COUNT(*) FROM a JOIN o USING (sample_key, taxon_key) WHERE a.s <> o.v")[[1]]
+stopifnot(
+  "obs must be one row per (transect, species), not per behavior" = n_obs == n_exp,
+  "obs_attribute behavior counts must sum to the obs headline"    = n_mismatch == 0,
+  "every obs.sample_key must resolve in sample" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM obs o LEFT JOIN sample s USING (sample_key)
+                     WHERE s.sample_key IS NULL")[[1]] == 0)
+cat(glue("obs parity: {format(n_obs, big.mark = ',')} headline rows; ",
+         "behavior attribution reconciles"), "\n")
 ```
 
+## Write Outputs + Upload
 
 ```{r}
 #| label: outputs
 
 dir_create(dir_parquet)
+tbls_out <- core_output_tables(con, extra = "dataset")
 write_parquet_outputs(
-  con = con, output_dir = dir_parquet,
-  tables = c("bird_mammal_transect","bird_mammal_observation","bird_mammal_species","bird_mammal_behavior","dataset"),
+  con = con, output_dir = dir_parquet, tables = tbls_out,
+  sort_by = list(obs = c("grid_key", "measurement_type")),
   strip_provenance = FALSE)
+
+build_relationships_json(
+  rels = core_relationships(tbls_out), output_dir = dir_parquet,
+  provider = provider, dataset = dataset)
 
 d_tbls_rd <- read_csv(here("metadata/calcofi/bird_mammal_census/tbls_redefine.csv"))
 d_flds_rd <- read_csv(here("metadata/calcofi/bird_mammal_census/flds_redefine.csv"))
 build_metadata_json(
   con = con, d_tbls_rd = d_tbls_rd, d_flds_rd = d_flds_rd,
-  metadata_derived_csv = here("metadata/calcofi/bird_mammal_census/metadata_derived.csv"),
-  output_dir = dir_parquet, tables = c("bird_mammal_transect","bird_mammal_observation","bird_mammal_species","bird_mammal_behavior"),
+  # shared core descriptions first, this dataset's overrides second
+  metadata_derived_csv = c(
+    here("metadata/core_dictionary.csv"),
+    here("metadata/calcofi/bird_mammal_census/metadata_derived.csv")),
+  output_dir = dir_parquet, tables = tbls_out,
   set_comments = TRUE, provider = provider, dataset = dataset,
   workflow_url = cc$workflow_url, tables_owned = tables_owned)
 

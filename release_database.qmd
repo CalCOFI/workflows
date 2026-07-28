@@ -144,9 +144,18 @@ load_duckdb_extension(con_wdl, "spatial")
 # auto-discover table registry from all ingest manifests
 registry <- build_release_table_registry(here())
 
+# The consolidated core is now emitted per-dataset: every ingest writes its own
+# `sample`/`obs`/… shard. The registry marks the FIRST ingest supplying a table
+# name as canonical, which is correct for a genuinely shared reference (`grid`,
+# `cruise`) but would silently keep ONE dataset's `obs` and drop the other 14.
+# So the core is excluded here and assembled by union below (assemble_core()).
+core_shard_tables <- c(
+  "sample", "obs", "obs_attribute", "sample_measurement", "obs_ctd_full",
+  "taxon", "dataset_taxon", "taxon_group")
+
 # use only canonical, non-supplemental tables
 reg_canon <- registry |>
-  filter(canonical, !supplemental)
+  filter(canonical, !supplemental, !table %in% core_shard_tables)
 
 message(glue(
   "{nrow(reg_canon)} canonical tables from ",
@@ -379,12 +388,6 @@ per-dataset triples. Built with the `calcofi4db` model engine
 ```{r}
 #| label: core_tables
 
-# build obs_ctd_full (216M full-resolution CTD scans) is the heavy step; the
-# default `obs` carries CTD via the thinned ctd_thin (~5.5M). Defaults ON for the
-# full pipeline; set env BUILD_OBS_CTD_FULL=FALSE for a fast render (the
-# supplemental full-scan table is opt-in).
-build_obs_ctd_full <- as.logical(Sys.getenv("BUILD_OBS_CTD_FULL", "TRUE"))
-
 # measurement_type: authoritative from the metadata CSV (adds abundance, count,
 # body_length, and the event-level effort types), replacing any per-ingest VIEW
 # so the FK parity check below sees the current vocabulary.
@@ -398,241 +401,24 @@ dbExecute(con_wdl, glue(
           regexp_replace(split_part(_source_datasets, ';', 1), '^[^_]*_', '') AS dataset
    FROM read_csv_auto('{here('metadata/measurement_type.csv')}')"))
 
-# unified taxon references ------------------------------------------------------
-# taxon (one authoritative row per taxon, keyed worms:/itis:), dataset_taxon
-# (per-dataset vocabulary -> taxon_key crosswalk) and taxon_group (groupings),
-# replacing the ~7 per-dataset taxon tables. Coarse/composite taxa (cufes eggs,
-# phyllosoma stages, euphausiid family, phyto functional groups, seabird/mammal
-# species) resolve to real WoRMS/ITIS ids via two reviewable registries.
-mt_taxon  <- readr::read_csv(here("metadata/measurement_taxon.csv"), show_col_types = FALSE)
-tx_over   <- readr::read_csv(here("metadata/taxon_override.csv"),    show_col_types = FALSE)
-n_taxon   <- build_taxon_reference(con_wdl, measurement_taxon = mt_taxon, overrides = tx_over)
-n_ds_tax  <- build_dataset_taxon(con_wdl,   measurement_taxon = mt_taxon, overrides = tx_over)
-n_tx_grp  <- build_taxon_group(con_wdl,      measurement_taxon = mt_taxon, overrides = tx_over)
-# _measurement_taxon: the composite-decomposition map the bio obs arms join to
-# split "sardine_eggs"/"phyllosoma_stage_N" into (taxon_key, canonical type,
-# life_stage). taxon_key derived here (composites are non-bird -> worms:, itis fallback).
-dbExecute(con_wdl, glue(
-  "CREATE OR REPLACE TABLE _measurement_taxon AS
-   SELECT *, CASE WHEN worms_id IS NOT NULL THEN 'worms:' || CAST(worms_id AS BIGINT)
-                  WHEN itis_id  IS NOT NULL THEN 'itis:'  || CAST(itis_id  AS BIGINT) END AS taxon_key
-   FROM read_csv_auto('{here('metadata/measurement_taxon.csv')}')"))
-message(glue("taxon: {n_taxon} / dataset_taxon: {n_ds_tax} / taxon_group: {n_tx_grp}"))
+# --- assemble the core from the per-dataset shards --------------------------
+# Each ingest emits its own slice via calcofi4db::emit_core_tables(), which is
+# the single authoritative projection. This step only concatenates: it UNIONs the
+# shards, renumbers the surrogate ids globally (each ingest numbers from 1 within
+# its own shard), merges the `taxon` slices with source priority, and asserts
+# `sample_key` is globally unique. Nothing is re-derived here — that duplication
+# is exactly what let the release and the ingests drift apart.
+build_obs_ctd_full <- as.logical(Sys.getenv("BUILD_OBS_CTD_FULL", "TRUE"))
+core_n <- assemble_core(con_wdl, root = here(), supplemental = build_obs_ctd_full)
 
-# 1. sample dimension (adjacency list) from the per-dataset event tables --------
-n_sample <- build_sample_reference(con_wdl)
-message(glue("sample: {n_sample} rows"))
+tibble(
+  table = names(core_n),
+  rows  = unlist(core_n)) |>
+  datatable(caption = "Core tables assembled from per-dataset ingest shards")
+```
 
-# 2. obs — occurrence-headline long table --------------------------------------
-# shared DIC natural key (columns present in dic_measurement so obs aligns with
-# the `sample` dic arm); a DIC obs sharing a physical Niskin points at the bottle.
-dic_key <- "CASE WHEN dm.bottle_id IS NOT NULL
-                  AND dm.bottle_id IN (SELECT bottle_id FROM bottle)
-                 THEN 'calcofi_bottle:bottle:' || CAST(dm.bottle_id AS VARCHAR)
-                 ELSE 'calcofi_dic:bottle:' || md5(concat_ws('|', dm.expocode,
-                   CAST(dm.datetime_start_utc AS VARCHAR), CAST(dm.latitude AS VARCHAR),
-                   CAST(dm.longitude AS VARCHAR), CAST(dm.depth_m AS VARCHAR))) END"
-
-env_obs_arms <- list(
-  bottle = if (has("bottle_measurement", "bottle", "casts")) "
-    SELECT 'env' realm, 'calcofi_bottle' dataset_key,
-           'calcofi_bottle:bottle:' || CAST(b.bottle_id AS VARCHAR) sample_key,
-           c.grid_key, c.cruise_key, c.latitude, c.longitude,
-           CAST(c.datetime_start_utc AS TIMESTAMP) datetime, b.depth_m depth_min_m, b.depth_m depth_max_m,
-           NULL::VARCHAR taxon_key, NULL::VARCHAR life_stage,
-           m.measurement_type, m.measurement_value, m.measurement_qual, m.measurement_prec
-    FROM bottle_measurement m JOIN bottle b USING (bottle_id) JOIN casts c USING (cast_id)
-    WHERE c.grid_key IS NOT NULL",
-  # CTD via thinned ctd_thin; map each thin scan's ctd_cast_uuid to its physical cast_key
-  ctd = if (has("ctd_thin", "ctd_cast")) "
-    SELECT 'env', 'calcofi_ctd-cast',
-           'calcofi_ctd-cast:cast:' || CAST(cc.cast_key AS VARCHAR),
-           cc.grid_key, cc.cruise_key, cc.latitude, cc.longitude,
-           CAST(cc.datetime_start_utc AS TIMESTAMP), t.depth_m, t.depth_m,
-           NULL::VARCHAR, NULL::VARCHAR, t.measurement_type, t.measurement_value,
-           t.measurement_qual, NULL::DOUBLE
-    FROM ctd_thin t JOIN ctd_cast cc ON t.ctd_cast_uuid = cc.ctd_cast_uuid
-    WHERE cc.grid_key IS NOT NULL",
-  dic = if (has("dic_measurement", "bottle", "casts")) glue("
-    SELECT 'env', 'calcofi_dic', {dic_key},
-           c.grid_key, c.cruise_key, dm.latitude, dm.longitude,
-           CAST(dm.datetime_start_utc AS TIMESTAMP), dm.depth_m, dm.depth_m,
-           NULL::VARCHAR, NULL::VARCHAR, dm.measurement_type, dm.measurement_value,
-           dm.measurement_qual, NULL::DOUBLE
-    FROM dic_measurement dm JOIN casts c USING (cast_id)
-    WHERE c.grid_key IS NOT NULL"))
-
-# bio arms resolve the GLOBAL taxon_key: taxon-table datasets join `dataset_taxon`
-# on (dataset_key, ds_taxa_code); composite datasets (cufes/euphausiids/phyllosoma)
-# join `_measurement_taxon` (target='obs') to decompose the taxon out of the type
-# name into taxon_key + canonical measurement_type + life_stage.
-bio_obs_arms <- list(
-  # ichthyo base rows (measurement_type IS NULL) -> abundance headline; size/stage
-  # go to obs_attribute below.
-  ichthyo = if (has("ichthyo", "net", "tow", "site")) "
-    SELECT 'bio', 'swfsc_ichthyo', 'swfsc_ichthyo:net:' || CAST(i.net_uuid AS VARCHAR),
-           s.grid_key, s.cruise_key, s.latitude, s.longitude,
-           CAST(t.datetime_start_utc AS TIMESTAMP), NULL::DOUBLE, NULL::DOUBLE,
-           dt.taxon_key, i.life_stage,
-           'abundance', CAST(i.tally AS DOUBLE), NULL::VARCHAR, NULL::DOUBLE
-    FROM ichthyo i JOIN net n USING (net_uuid) JOIN tow t USING (tow_uuid) JOIN site s USING (site_uuid)
-    LEFT JOIN dataset_taxon dt ON dt.dataset_key = 'swfsc_ichthyo'
-                              AND dt.ds_taxa_code = CAST(i.species_id AS VARCHAR)
-    WHERE i.measurement_type IS NULL AND s.grid_key IS NOT NULL",
-  # cufes: taxon baked in the type name (sardine_eggs, ...) -> abundance + life_stage='egg'
-  cufes = if (has("cufes_measurement", "cufes_sample")) "
-    SELECT 'bio', 'swfsc_cufes', 'swfsc_cufes:underway:' || CAST(c.sample_id AS VARCHAR),
-           c.grid_key, c.cruise_key, c.latitude, c.longitude,
-           CAST(c.datetime_start_utc AS TIMESTAMP), 0::DOUBLE, 0::DOUBLE,
-           mx.taxon_key, mx.life_stage, mx.measurement_type, m.measurement_value, m.measurement_qual, NULL::DOUBLE
-    FROM cufes_measurement m JOIN cufes_sample c USING (sample_id)
-    JOIN _measurement_taxon mx ON mx.dataset_key = 'swfsc_cufes'
-                              AND mx.raw_measurement_type = m.measurement_type AND mx.target = 'obs'
-    WHERE c.grid_key IS NOT NULL",
-  euphausiids = if (has("euphausiids_measurement", "euphausiids_tow")) "
-    SELECT 'bio', 'cce-lter_euphausiids', 'cce-lter_euphausiids:tow:' || CAST(tw.tow_id AS VARCHAR),
-           tw.grid_key, tw.cruise_key, tw.latitude, tw.longitude,
-           CAST(tw.datetime_start_utc AS TIMESTAMP), NULL::DOUBLE, NULL::DOUBLE,
-           mx.taxon_key, mx.life_stage, mx.measurement_type, m.measurement_value, m.measurement_qual, NULL::DOUBLE
-    FROM euphausiids_measurement m JOIN euphausiids_tow tw USING (tow_id)
-    JOIN _measurement_taxon mx ON mx.dataset_key = 'cce-lter_euphausiids'
-                              AND mx.raw_measurement_type = m.measurement_type AND mx.target = 'obs'
-    WHERE tw.grid_key IS NOT NULL",
-  # phyllosoma: only total_phyllosoma is the obs headline (target='obs'); the
-  # phyllosoma_stage_N (target='attribute') go to obs_attribute below.
-  phyllosoma = if (has("phyllosoma_measurement", "phyllosoma_tow")) "
-    SELECT 'bio', 'calcofi_phyllosoma', 'calcofi_phyllosoma:tow:' || CAST(tw.tow_id AS VARCHAR),
-           tw.grid_key, tw.cruise_key, tw.latitude, tw.longitude,
-           CAST(tw.datetime_start_utc AS TIMESTAMP), 0::DOUBLE, tw.max_tow_depth_m,
-           mx.taxon_key, mx.life_stage, mx.measurement_type, m.measurement_value, m.measurement_qual, NULL::DOUBLE
-    FROM phyllosoma_measurement m JOIN phyllosoma_tow tw USING (tow_id)
-    JOIN _measurement_taxon mx ON mx.dataset_key = 'calcofi_phyllosoma'
-                              AND mx.raw_measurement_type = m.measurement_type AND mx.target = 'obs'
-    WHERE tw.grid_key IS NOT NULL",
-  zoodb = if (has("zoodb_measurement", "zoodb_sample")) "
-    SELECT 'bio', 'cce-lter_zoodb', 'cce-lter_zoodb:tow:' || CAST(sp.sample_id AS VARCHAR),
-           sp.grid_key, sp.cruise_key, sp.latitude, sp.longitude,
-           CAST(sp.datetime_start_utc AS TIMESTAMP), sp.min_depth_m, sp.max_depth_m,
-           dt.taxon_key, NULL::VARCHAR, m.measurement_type, m.measurement_value, NULL::VARCHAR, NULL::DOUBLE
-    FROM zoodb_measurement m JOIN zoodb_sample sp USING (sample_id)
-    LEFT JOIN dataset_taxon dt ON dt.dataset_key = 'cce-lter_zoodb'
-                              AND dt.ds_taxa_code = CAST(m.taxon_id AS VARCHAR)
-    WHERE sp.grid_key IS NOT NULL",
-  zooscan = if (has("zooscan_measurement", "zooscan_sample")) "
-    SELECT 'bio', 'cce-lter_zooscan', 'cce-lter_zooscan:tow:' || CAST(sp.sample_id AS VARCHAR),
-           sp.grid_key, sp.cruise_key, sp.latitude, sp.longitude,
-           CAST(sp.station_date AS TIMESTAMP), sp.min_depth_m, sp.max_depth_m,
-           dt.taxon_key, NULL::VARCHAR, m.measurement_type, m.measurement_value, NULL::VARCHAR, NULL::DOUBLE
-    FROM zooscan_measurement m JOIN zooscan_sample sp USING (sample_id)
-    LEFT JOIN dataset_taxon dt ON dt.dataset_key = 'cce-lter_zooscan'
-                              AND dt.ds_taxa_code = CAST(m.taxon_id AS VARCHAR)
-    WHERE sp.grid_key IS NOT NULL",
-  # phytoplankton: region-pooled (grid_key NULL, no datetime); taxon via dataset_taxon
-  phyto = if (has("phyto_measurement", "phyto_sample")) "
-    SELECT 'bio', 'calcofi_phytoplankton', 'calcofi_phytoplankton:region_pool:' || CAST(ps.phyto_sample_id AS VARCHAR),
-           NULL::VARCHAR, ps.cruise_key, ps.latitude, ps.longitude,
-           NULL::TIMESTAMP, 0::DOUBLE, 0::DOUBLE,
-           dt.taxon_key, NULL::VARCHAR, pm.measurement_type, pm.measurement_value, NULL::VARCHAR, NULL::DOUBLE
-    FROM phyto_measurement pm JOIN phyto_sample ps USING (phyto_sample_id)
-    LEFT JOIN dataset_taxon dt ON dt.dataset_key = 'calcofi_phytoplankton'
-                              AND dt.ds_taxa_code = CAST(pm.species_code AS VARCHAR)",
-  # bird_mammal headline: one row per (transect, species), count SUMmed across
-  # behaviors; the behavior breakdown goes to obs_attribute below.
-  bird_mammal = if (has("bird_mammal_observation", "bird_mammal_transect")) "
-    SELECT 'bio', 'calcofi_bird_mammal_census', 'calcofi_bird_mammal_census:transect:' || CAST(tr.gis_key AS VARCHAR),
-           tr.grid_key, tr.cruise_key, tr.latitude, tr.longitude,
-           CAST(tr.datetime_start_utc AS TIMESTAMP), 0::DOUBLE, 0::DOUBLE,
-           dt.taxon_key, NULL::VARCHAR, 'count', CAST(SUM(o.count) AS DOUBLE), NULL::VARCHAR, NULL::DOUBLE
-    FROM bird_mammal_observation o JOIN bird_mammal_transect tr USING (gis_key)
-    LEFT JOIN dataset_taxon dt ON dt.dataset_key = 'calcofi_bird_mammal_census'
-                              AND dt.ds_taxa_code = CAST(o.species_code AS VARCHAR)
-    WHERE tr.grid_key IS NOT NULL
-    GROUP BY tr.gis_key, tr.grid_key, tr.cruise_key, tr.latitude, tr.longitude,
-             tr.datetime_start_utc, dt.taxon_key")
-
-obs_arms <- Filter(Negate(is.null), c(env_obs_arms, bio_obs_arms))
-n_obs <- append_obs(con_wdl, paste(obs_arms, collapse = "\nUNION ALL\n"))
-message(glue("obs: {n_obs} rows"))
-
-# 3. obs_attribute — sub-occurrence attribution (length/stage frequency + behavior)
-attr_arms <- list(
-  # ichthyo size->body_length + stage frequency; taxon_key via dataset_taxon
-  ichthyo = if (has("ichthyo", "lookup")) "
-    SELECT 'swfsc_ichthyo' dataset_key, 'swfsc_ichthyo:net:' || CAST(i.net_uuid AS VARCHAR) sample_key,
-           dt.taxon_key, i.life_stage,
-           CASE i.measurement_type WHEN 'size' THEN 'body_length' ELSE i.measurement_type END measurement_type,
-           i.measurement_value bin_value,
-           CASE WHEN i.measurement_type = 'stage' THEN lk.description ELSE NULL END bin_label,
-           i.tally count, NULL::VARCHAR measurement_qual
-    FROM ichthyo i
-    LEFT JOIN dataset_taxon dt ON dt.dataset_key = 'swfsc_ichthyo' AND dt.ds_taxa_code = CAST(i.species_id AS VARCHAR)
-    LEFT JOIN lookup lk ON lk.lookup_type = i.life_stage || '_stage'
-                       AND lk.lookup_num = CAST(i.measurement_value AS INTEGER)
-    WHERE i.measurement_type IN ('stage','size')",
-  # phyllosoma stage-frequency: phyllosoma_stage_N -> ('stage', bin_value=N, count=value)
-  phyllosoma = if (has("phyllosoma_measurement", "phyllosoma_tow")) "
-    SELECT 'calcofi_phyllosoma' dataset_key, 'calcofi_phyllosoma:tow:' || CAST(tw.tow_id AS VARCHAR) sample_key,
-           mx.taxon_key, mx.life_stage, mx.measurement_type, mx.bin_value,
-           NULL::VARCHAR bin_label, CAST(m.measurement_value AS INTEGER) count, NULL::VARCHAR measurement_qual
-    FROM phyllosoma_measurement m JOIN phyllosoma_tow tw USING (tow_id)
-    JOIN _measurement_taxon mx ON mx.dataset_key = 'calcofi_phyllosoma'
-                              AND mx.raw_measurement_type = m.measurement_type AND mx.target = 'attribute'
-    WHERE tw.grid_key IS NOT NULL AND m.measurement_value > 0",
-  # bird_mammal behavior breakdown -> ('behavior', label from bird_mammal_behavior)
-  behavior = if (has("bird_mammal_observation", "bird_mammal_transect", "bird_mammal_behavior")) "
-    SELECT 'calcofi_bird_mammal_census' dataset_key, 'calcofi_bird_mammal_census:transect:' || CAST(tr.gis_key AS VARCHAR) sample_key,
-           dt.taxon_key, NULL::VARCHAR life_stage, 'behavior' measurement_type, NULL::DOUBLE bin_value,
-           bb.description bin_label, CAST(o.count AS INTEGER) count, NULL::VARCHAR measurement_qual
-    FROM bird_mammal_observation o JOIN bird_mammal_transect tr USING (gis_key)
-    LEFT JOIN dataset_taxon dt ON dt.dataset_key = 'calcofi_bird_mammal_census' AND dt.ds_taxa_code = CAST(o.species_code AS VARCHAR)
-    LEFT JOIN bird_mammal_behavior bb ON bb.behavior_code = o.behavior_code
-    WHERE tr.grid_key IS NOT NULL")
-attr_arms <- Filter(Negate(is.null), attr_arms)
-if (length(attr_arms)) {
-  n_attr <- append_obs_attribute(con_wdl, paste(attr_arms, collapse = "\nUNION ALL\n"))
-  message(glue("obs_attribute: {n_attr} rows"))
-}
-
-# 4. sample_measurement — event-level effort -----------------------------------
-sm_arms <- list(
-  # ichthyo net effort (canonical type names)
-  net = if (has("net")) "
-    SELECT 'swfsc_ichthyo:net:' || CAST(net_uuid AS VARCHAR) sample_key, 'swfsc_ichthyo' dataset_key,
-           mt measurement_type, mv measurement_value, NULL::VARCHAR measurement_qual
-    FROM (
-      SELECT net_uuid, 'volume_sampled' mt, volume_sampled mv FROM net UNION ALL
-      SELECT net_uuid, 'std_haul_factor', standard_haul_factor FROM net UNION ALL
-      SELECT net_uuid, 'prop_sorted', prop_sorted FROM net UNION ALL
-      SELECT net_uuid, 'small_plankton_biomass', smallplankton FROM net UNION ALL
-      SELECT net_uuid, 'total_plankton_biomass', totalplankton FROM net)
-    WHERE mv IS NOT NULL",
-  # bottle cast conditions (already event-level; condition_* -> measurement_*).
-  # cast_condition.cast_id is DOUBLE -> cast to BIGINT so the namespaced key
-  # matches casts.cast_id (INTEGER): 'calcofi_bottle:cast:5' not '...:5.0'.
-  cast_condition = if (has("cast_condition")) "
-    SELECT 'calcofi_bottle:cast:' || CAST(CAST(cast_id AS BIGINT) AS VARCHAR), 'calcofi_bottle',
-           condition_type, condition_value, NULL::VARCHAR
-    FROM cast_condition")
-sm_arms <- Filter(Negate(is.null), sm_arms)
-n_sm <- append_sample_measurement(con_wdl, paste(sm_arms, collapse = "\nUNION ALL\n"))
-message(glue("sample_measurement: {n_sm} rows"))
-
-# 5. obs_ctd_full — supplemental full-resolution CTD scans ----------------------
-if (build_obs_ctd_full && has("ctd_cast")) {
-  ctd_pd <- registry |> filter(table == "ctd_thin") |> slice(1) |> pull(parquet_dir)
-  ctd_meas_glob <- file.path(ctd_pd, "ctd_measurement", "**", "*.parquet")
-  n_full <- append_obs(con_wdl, obs_tbl = "obs_ctd_full", select_sql = glue("
-    SELECT 'env' realm, 'calcofi_ctd-cast' dataset_key,
-           'calcofi_ctd-cast:cast:' || CAST(cc.cast_key AS VARCHAR) sample_key,
-           cc.grid_key, cc.cruise_key, cc.latitude, cc.longitude,
-           CAST(cc.datetime_start_utc AS TIMESTAMP) datetime, m.depth_m depth_min_m, m.depth_m depth_max_m,
-           NULL::VARCHAR taxon_key, NULL::VARCHAR life_stage,
-           m.measurement_type, m.measurement_value, m.measurement_qual, NULL::DOUBLE measurement_prec
-    FROM read_parquet('{ctd_meas_glob}', hive_partitioning = true) m
-    JOIN ctd_cast cc ON m.ctd_cast_uuid = cc.ctd_cast_uuid
-    WHERE cc.grid_key IS NOT NULL"))
-  message(glue("obs_ctd_full: {n_full} rows"))
-}
+```{r}
+#| label: core_by_dataset
 
 dbGetQuery(con_wdl,
   "SELECT dataset_key, count(*) n_obs, count(DISTINCT sample_key) n_samples,
@@ -643,48 +429,54 @@ dbGetQuery(con_wdl,
 
 ### Core Table Parity Checks
 
-Hard assertions that the materialized core reproduces the per-dataset tables
-(see `design_env-bio-consolidation.md` Verification). A break fails the render.
+Hard assertions on the assembled core. The old checks compared it against the
+per-dataset tables (`net`, `casts`, `ctd_cast`, …), which the ingests no longer
+publish — and which was only meaningful while the core was re-derived here.
+Now that each ingest emits its own slice, the checks that matter are
+**conservation** (no shard silently dropped by the union), **global key
+uniqueness** after renumbering, and **referential integrity**. A break fails the
+render. See `design_env-bio-consolidation.md` Verification.
 
 ```{r}
 #| label: core_parity
 
 q <- function(sql) dbGetQuery(con_wdl, sql)$n
 
-# (A) sample-count parity per level ------------------------------------------
-sample_parity <- c(
-  "sample net"    = q("SELECT COUNT(*) n FROM sample WHERE sample_type='net'") ==
-                    q("SELECT COUNT(DISTINCT net_uuid) n FROM net"),
-  "sample tow"    = q("SELECT COUNT(*) n FROM sample WHERE sample_type='tow' AND dataset_key='swfsc_ichthyo'") ==
-                    q("SELECT COUNT(DISTINCT tow_uuid) n FROM tow"),
-  "sample site"   = q("SELECT COUNT(*) n FROM sample WHERE sample_type='site'") ==
-                    q("SELECT COUNT(DISTINCT site_uuid) n FROM site"),
-  "sample cast"   = q("SELECT COUNT(*) n FROM sample WHERE dataset_key='calcofi_bottle' AND sample_type='cast'") ==
-                    q("SELECT COUNT(DISTINCT cast_id) n FROM casts"),
-  "sample bottle" = q("SELECT COUNT(*) n FROM sample WHERE dataset_key='calcofi_bottle' AND sample_type='bottle'") ==
-                    q("SELECT COUNT(DISTINCT bottle_id) n FROM bottle"),
-  "sample ctd"    = q("SELECT COUNT(*) n FROM sample WHERE dataset_key='calcofi_ctd-cast'") ==
-                    q("SELECT COUNT(DISTINCT cast_key) n FROM ctd_cast"))
-stopifnot("sample-count parity" = all(sample_parity))
+# (A) shard conservation — the assembled core must contain exactly the rows the
+# ingests emitted. This replaces the old per-dataset assertions (which compared
+# against `net`/`casts`/`ctd_cast`, tables the ingests no longer publish) and is
+# a stronger check: it catches a shard silently dropped by the union, which the
+# canonical-first registry would otherwise do without complaint.
+shard_total <- function(tbl) {
+  paths <- core_shard_paths(tbl, root = here())
+  if (!length(paths)) return(0)
+  sum(vapply(paths, function(p) {
+    rd <- if (grepl("\\*\\*", p))
+      glue("read_parquet('{p}', hive_partitioning = true, union_by_name = true)") else
+      glue("read_parquet('{p}', union_by_name = true)")
+    as.numeric(dbGetQuery(con_wdl, glue("SELECT COUNT(*) AS n FROM {rd}"))$n)
+  }, numeric(1)))
+}
 
-# (B) env obs row-count parity — env arms are 1:1 with source (CTD via ctd_thin).
-# Bio arms intentionally aggregate (bird_mammal per transect x species) and
-# decompose (phyllosoma stages -> obs_attribute; phyto added), so bio is reported,
-# not asserted against the raw measurement counts.
-env_expected <-
-  q("SELECT COUNT(*) n FROM bottle_measurement m JOIN bottle b USING(bottle_id) JOIN casts c USING(cast_id) WHERE c.grid_key IS NOT NULL") +
-  q("SELECT COUNT(*) n FROM ctd_thin t JOIN ctd_cast cc ON t.ctd_cast_uuid=cc.ctd_cast_uuid WHERE cc.grid_key IS NOT NULL") +
-  q("SELECT COUNT(*) n FROM dic_measurement dm JOIN casts c USING(cast_id) WHERE c.grid_key IS NOT NULL")
-stopifnot("env obs row-count parity" = q("SELECT COUNT(*) n FROM obs WHERE realm='env'") == env_expected)
-message(glue("env obs parity OK: {env_expected} rows"))
-dbGetQuery(con_wdl, "SELECT dataset_key, count(*) n_obs, count(taxon_key) n_with_taxon
-                     FROM obs WHERE realm='bio' GROUP BY 1 ORDER BY 1") |> print()
+core_tbls <- intersect(
+  c("sample", "obs", "obs_attribute", "sample_measurement"), dbListTables(con_wdl))
+conservation <- tibble(
+  table    = core_tbls,
+  shards   = vapply(core_tbls, shard_total, numeric(1)),
+  assembled = vapply(core_tbls, function(t)
+    as.numeric(q(glue("SELECT COUNT(*) AS n FROM {t}"))), numeric(1))) |>
+  mutate(ok = shards == assembled)
+print(as.data.frame(conservation))
+stopifnot("every ingest shard must survive the union" = all(conservation$ok))
 
-if (build_obs_ctd_full && exists("n_full"))
-  stopifnot("obs_ctd_full parity" =
-    q("SELECT COUNT(*) n FROM obs_ctd_full") ==
-    q(glue("SELECT COUNT(*) n FROM read_parquet('{ctd_meas_glob}', hive_partitioning=true) m
-            JOIN ctd_cast cc ON m.ctd_cast_uuid=cc.ctd_cast_uuid WHERE cc.grid_key IS NOT NULL")))
+# (B) surrogate ids must be globally unique after renumbering ----------------
+id_dups <- c(
+  "obs.obs_id" = q("SELECT COUNT(*) n FROM (SELECT obs_id FROM obs GROUP BY 1 HAVING COUNT(*) > 1)"),
+  "obs_attribute.obs_attribute_id" = if ("obs_attribute" %in% dbListTables(con_wdl))
+    q("SELECT COUNT(*) n FROM (SELECT obs_attribute_id FROM obs_attribute GROUP BY 1 HAVING COUNT(*) > 1)") else 0,
+  "sample.sample_key" = q("SELECT COUNT(*) n FROM (SELECT sample_key FROM sample GROUP BY 1 HAVING COUNT(*) > 1)"))
+if (any(id_dups > 0)) print(id_dups[id_dups > 0])
+stopifnot("core surrogate keys must be globally unique" = all(id_dups == 0))
 
 # (C) FK validity — every core row resolves against its reference, INCLUDING the
 # unified taxon (obs/obs_attribute/dataset_taxon all key into taxon.taxon_key) ---
@@ -694,23 +486,36 @@ fk_bad <- c(
   "obs.grid_key"         = q("SELECT COUNT(*) n FROM obs WHERE grid_key IS NOT NULL AND grid_key NOT IN (SELECT grid_key FROM grid)"),
   "obs.measurement_type" = q("SELECT COUNT(*) n FROM obs WHERE measurement_type NOT IN (SELECT measurement_type FROM measurement_type)"),
   "obs.taxon_key"        = q("SELECT COUNT(*) n FROM obs WHERE taxon_key IS NOT NULL AND taxon_key NOT IN (SELECT taxon_key FROM taxon)"),
-  "obs_attribute.sample_key" = q("SELECT COUNT(*) n FROM obs_attribute WHERE sample_key NOT IN (SELECT sample_key FROM sample)"),
-  "obs_attribute.taxon_key"  = q("SELECT COUNT(*) n FROM obs_attribute WHERE taxon_key IS NOT NULL AND taxon_key NOT IN (SELECT taxon_key FROM taxon)"),
-  "obs_attribute.measurement_type" = q("SELECT COUNT(*) n FROM obs_attribute WHERE measurement_type NOT IN (SELECT measurement_type FROM measurement_type)"),
+  "sample.parent_sample_key" = q("SELECT COUNT(*) n FROM sample WHERE parent_sample_key IS NOT NULL AND parent_sample_key NOT IN (SELECT sample_key FROM sample)"),
+  "obs_attribute.sample_key" = if ("obs_attribute" %in% dbListTables(con_wdl))
+    q("SELECT COUNT(*) n FROM obs_attribute WHERE sample_key NOT IN (SELECT sample_key FROM sample)") else 0,
+  "obs_attribute.taxon_key"  = if ("obs_attribute" %in% dbListTables(con_wdl))
+    q("SELECT COUNT(*) n FROM obs_attribute WHERE taxon_key IS NOT NULL AND taxon_key NOT IN (SELECT taxon_key FROM taxon)") else 0,
   "dataset_taxon.taxon_key" = q("SELECT COUNT(*) n FROM dataset_taxon WHERE taxon_key NOT IN (SELECT taxon_key FROM taxon)"),
   "sample_measurement.sample_key" = q("SELECT COUNT(*) n FROM sample_measurement WHERE sample_key NOT IN (SELECT sample_key FROM sample)"))
 if (any(fk_bad > 0)) print(fk_bad[fk_bad > 0])
 stopifnot("core FK validity" = all(fk_bad == 0))
 
-# (D) obs_attribute stage sum vs abundance headline — reported (source may differ)
-attr_check <- dbGetQuery(con_wdl, "
-  WITH f AS (SELECT sample_key, taxon_key, life_stage, SUM(count) s FROM obs_attribute
-             WHERE measurement_type='stage' GROUP BY 1,2,3),
-       o AS (SELECT sample_key, taxon_key, life_stage, SUM(measurement_value) a FROM obs
-             WHERE measurement_type='abundance' GROUP BY 1,2,3)
-  SELECT count(*) n_occ, count(*) FILTER (WHERE f.s > o.a) n_stage_gt_headline
-  FROM f JOIN o USING (sample_key, taxon_key, life_stage)")
-message(glue("obs_attribute stage vs abundance: {attr_check$n_stage_gt_headline}/{attr_check$n_occ} occurrences exceed headline (source quirk)"))
+# (D) the DIC -> bottle dedup: DIC observations sharing a physical Niskin must
+# point at the bottle's event, not mint a second one
+n_dic_shared <- q("SELECT COUNT(*) n FROM obs
+                   WHERE dataset_key = 'calcofi_dic'
+                     AND sample_key LIKE 'calcofi_bottle:bottle:%'")
+message(glue("DIC observations sharing a bottle event: {format(n_dic_shared, big.mark = ',')}"))
+
+# (E) obs_attribute vs its headline — reported (sources are not always internally
+# consistent, so this is a signal, not an assertion)
+if ("obs_attribute" %in% dbListTables(con_wdl)) {
+  attr_check <- dbGetQuery(con_wdl, "
+    WITH f AS (SELECT sample_key, taxon_key, life_stage, SUM(count) s FROM obs_attribute
+               WHERE measurement_type='stage' GROUP BY 1,2,3),
+         o AS (SELECT sample_key, taxon_key, life_stage, SUM(measurement_value) a FROM obs
+               WHERE measurement_type='abundance' GROUP BY 1,2,3)
+    SELECT count(*) n_occ, count(*) FILTER (WHERE f.s > o.a) n_stage_gt_headline
+    FROM f JOIN o USING (sample_key, taxon_key, life_stage)")
+  message(glue("obs_attribute stage vs abundance: {attr_check$n_stage_gt_headline}/{attr_check$n_occ} occurrences exceed headline (source quirk)"))
+}
+
 
 message("Core parity checks passed.")
 ```

@@ -191,7 +191,60 @@ fd <- tribble(
 
   "volume_sampled", "DOUBLE", "m3", "measurement",
   "Volume of water filtered/sampled.",
-  "vol_sampled_m3", "", FALSE, ""
+  "vol_sampled_m3", "", FALSE, "",
+
+  # -- source provenance kept alongside the derived key -------------------------
+  "cruise_orig", "VARCHAR", "", "provenance",
+  "Cruise label exactly as the source provided it; cruise_key is derived from it.",
+  "Cruise;cruise_label", "", FALSE,
+  "keep when the source label does not round-trip from cruise_key.",
+
+  "study_name", "VARCHAR", "", "provenance",
+  "Provider study/cruise identifier string (e.g. CCE-LTER '2004-11-02-C-33RR').",
+  "studyName", "", FALSE,
+  "ship code is embedded in the trailing token; input to derive_cruise_key_on_casts().",
+
+  "cruise_code", "VARCHAR", "", "provenance",
+  "Provider short cruise code (e.g. YYYYMM '200411'); NOT a join key.",
+  "Cruise", "", FALSE, "use cruise_key for joins.",
+
+  "station_raw", "VARCHAR", "", "provenance",
+  "Packed line/station value kept verbatim from the source, never decomposed.",
+  "Station", "", FALSE,
+  "for sources whose packed station cannot be parsed unambiguously; site_key is resolved spatially instead.",
+
+  "source_row_id", "INTEGER", "", "provenance",
+  "Sequential row identifier within a single source file.",
+  "ID", "", FALSE, "only unique within a file, not across the dataset.",
+
+  "schema_variant", "VARCHAR", "", "provenance",
+  "Which source schema a row was read under, for datasets spanning multiple file formats.",
+  "", "", FALSE, "part of the de-duplication key for multi-schema archives.",
+
+  # -- bottle / cast grain ------------------------------------------------------
+  "cast_number", "INTEGER", "", "identifier",
+  "Provider's reference number for a CTD deployment within a cruise.",
+  "Cast Number", "", TRUE, "not globally unique; cast_id/cast_key are the keys.",
+
+  "bottle_number", "INTEGER", "", "identifier",
+  "Provider's reference number of a sample bottle on the rosette.",
+  "Bottle Number", "", TRUE, "not globally unique; bottle_id is the key.",
+
+  "assoc_bottle_number", "INTEGER", "", "identifier",
+  "Companion bottle number for matching to CTD bottle records for other data.",
+  "Associated Bottle Number", "", FALSE, "",
+
+  # -- per-dataset taxon reference ----------------------------------------------
+  "taxon_id", "INTEGER", "", "identifier",
+  "Dataset-local taxon key; crosswalks to the global taxon_key via dataset_taxon.",
+  "", "", TRUE,
+  "local only — never publish as a cross-dataset join key; use taxon_key.",
+
+  # -- QA flags -----------------------------------------------------------------
+  "hour_source_conflict", "BOOLEAN", "", "flag",
+  "TRUE where two source sheets disagree on a record's start hour.",
+  "", "", FALSE,
+  "ucsd_sio mesopelagic-fish cruise 1110; unresolved, defaults to the curated sheet."
 )
 
 out <- here("metadata/field_dictionary.csv")

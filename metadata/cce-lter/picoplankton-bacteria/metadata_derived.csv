@@ -1,0 +1,7 @@
+table,column,name_long,units,description_md
+picoplankton_bacteria_bottle,ship_code,Ship Code,,Trailing alphanumeric code extracted from source `studyName` (e.g. '33RR' from '2004-11-02-C-33RR'); input to `derive_cruise_key_on_casts()`.
+picoplankton_bacteria_bottle,cruise_key,Cruise Key,,Cruise natural key (YYYY-MM-NODC); FK to `cruise`. Derived via `calcofi4db::derive_cruise_key_on_casts()` against `ship_code` + `datetime_utc`.
+picoplankton_bacteria_bottle,site_key,Site Key,,"CalCOFI station key 'LLL.L SSS.S', derived as `sprintf('%05.1f %05.1f', line, station)` from the source's own Line/Station columns."
+picoplankton_bacteria_bottle,geom,Geometry,,Point geometry (WGS84) from longitude/latitude via `add_point_geom()`.
+picoplankton_bacteria_bottle,grid_key,Grid Key,,CalCOFI grid cell; FK to `grid`. Derived via `assign_grid_key()`.
+picoplankton_bacteria_bottle,bottle_id,Bottle ID,,Sequential primary key (`row_number()`).

@@ -1,13 +1,13 @@
-generated: '2026-07-28'
-n_total: 45
-n_meta: 19
+generated: '2026-07-29'
+n_total: 48
+n_meta: 22
 categories:
 - id: ingest
   title: Ingest
   blurb: Acquire, standardize, and load a source dataset into the integrated database.
     Cards are grouped by data provider.
   layout: cards
-  count: 13
+  count: 16
   groups:
   - label: CalCOFI
     items:
@@ -50,6 +50,16 @@ categories:
       color: '#ffd2bb'
       link_calcofi_org: https://calcofi.org/data/oceanographic-data/dic/
       link_data_source: https://www.ncei.noaa.gov/access/metadata/landing-page/bin/iso?id=gov.noaa.nodc:0301029
+      provider: calcofi
+    - url: ingest_calcofi_mets.html
+      title: ingest_calcofi_mets
+      dataset_name: CalCOFI METS (Underway TSG/Meteorology)
+      description: Shipboard underway thermosalinograph (TSG) and meteorology data,
+        ~1-minute resolution, recorded continuously along the cruise track.
+      coverage: 2004-01 to 2022-11
+      color: '#cce5ff'
+      link_calcofi_org: https://calcofi.org/data/oceanographic-data/underway/
+      link_data_source: https://calcofi.org/data/oceanographic-data/underway/
       provider: calcofi
     - url: ingest_calcofi_phyllosoma.html
       title: ingest_calcofi_phyllosoma
@@ -117,12 +127,27 @@ categories:
     - url: ingest_cce-lter_euphausiids.html
       title: ingest_cce-lter_euphausiids
       dataset_name: CCE-LTER Euphausiid Abundance
-      description: Euphausiid (krill) abundance from CalCOFI / CCE-LTER net tows,
-        1951-2019, one row per tow. Provisional pending provider answers on abundance
-        units and taxonomic scope (see Questions for Data Providers).
+      description: Species- and life-stage-resolved euphausiid (krill) abundance from
+        CalCOFI / CCE-LTER net tows (BTEDB export), 1951-present, one row per tow
+        x species x life stage. Supersedes the prior single-Abundance- column ingest,
+        which had no taxonomic scope (Q02, now resolved) — units remain provisional
+        pending provider confirmation (Q01).
       coverage: 1951-01 to 2019-04
       color: '#d2f0bb'
-      link_data_source: https://portal.edirepository.org/ (EDI package TBD)
+      link_data_source: BTEDB (Bongo Tow Euphausiid Database) export
+      provider: cce-lter
+    - url: ingest_cce-lter_picoplankton-bacteria.html
+      title: ingest_cce-lter_picoplankton-bacteria
+      dataset_name: Picoplankton and Bacteria Abundance (CalCOFI Cruise)
+      description: Picophytoplankton (Prochlorococcus, Synechococcus, picoeukaryotes)
+        and heterotrophic bacteria abundances analyzed by flow cytometry (FCM) from
+        CCE-CalCOFI Augmented cruises in the California Current System, 2004-2023
+        (ongoing). Seawater collected from Niskin bottles at 3-8 depths per station;
+        cells fixed shipboard with paraformaldehyde, stained with a DNA-specific dye,
+        and enumerated on an Altra flow cytometer with dual argon-ion lasers.
+      coverage: 2004-11-02 to 2023-07-18 (ongoing)
+      color: '#bbe0f0'
+      link_data_source: https://oceaninformatics.ucsd.edu/datazoo/catalogs/ccelter/datasets/159
       provider: cce-lter
     - url: ingest_cce-lter_zoodb.html
       title: ingest_cce-lter_zoodb
@@ -154,6 +179,20 @@ categories:
       link_calcofi_org: https://calcofi.org/data/marine-ecosystem-data/zooplankton/
       link_data_source: https://oceaninformatics.ucsd.edu/zooscandb/
       provider: cce-lter
+  - label: .na.character
+    items:
+    - url: ingest_ucsd_sio_mesopelagic-fish.html
+      title: ingest_ucsd_sio_mesopelagic-fish
+      dataset_name: UCSD SIO Mesopelagic Fish
+      description: Species-resolved mesopelagic fish counts (90 named species + 1
+        unidentified-fish catch-all) from MOHT (Matsuda-Oozeki-Hu Trawl) micronekton
+        net tows, 7 CalCOFI cruises 2010-2012, all on RV New Horizon (NODC 32NM).
+        Larval-fish counts in the same source file are a separate table, not included
+        here.
+      coverage: 2010-01 to 2012-02
+      color: '#bbe0f0'
+      link_data_source: https://library.ucsd.edu/dc/object/bb9217084g
+      provider: ucsd_sio
 - id: publish
   title: Publish
   blurb: Push released tables out to external repositories (ERDDAP, OBIS).
@@ -261,15 +300,18 @@ dag_mermaid: |-
     ingest_calcofi_bottle(["ingest_calcofi_bottle"]):::c_ingest_calcofi_bottle
     ingest_calcofi_ctd_cast(["ingest_calcofi_ctd_cast"]):::c_ingest_calcofi_ctd_cast
     ingest_calcofi_dic(["ingest_calcofi_dic"]):::c_ingest_calcofi_dic
+    ingest_calcofi_mets(["ingest_calcofi_mets"]):::c_ingest_calcofi_mets
     ingest_calcofi_phyllosoma(["ingest_calcofi_phyllosoma"]):::c_ingest_calcofi_phyllosoma
     ingest_calcofi_phytoplankton(["ingest_calcofi_phytoplankton"]):::c_ingest_calcofi_phytoplankton
     ingest_cce_lter_euphausiids(["ingest_cce_lter_euphausiids"]):::c_ingest_cce_lter_euphausiids
+    ingest_cce_lter_picoplankton_bacteria(["ingest_cce_lter_picoplankton_bacteria"]):::c_ingest_cce_lter_picoplankton_bacteria
     ingest_cce_lter_zoodb(["ingest_cce_lter_zoodb"]):::c_ingest_cce_lter_zoodb
     ingest_cce_lter_zooscan(["ingest_cce_lter_zooscan"]):::c_ingest_cce_lter_zooscan
     ingest_pic_zooplankton(["ingest_pic_zooplankton"]):::c_ingest_pic_zooplankton
     ingest_spatial(["ingest_spatial"]):::ingest
     ingest_swfsc_cufes(["ingest_swfsc_cufes"]):::c_ingest_swfsc_cufes
     ingest_swfsc_ichthyo(["ingest_swfsc_ichthyo"]):::c_ingest_swfsc_ichthyo
+    ingest_ucsd_sio_mesopelagic_fish(["ingest_ucsd_sio_mesopelagic_fish"]):::c_ingest_ucsd_sio_mesopelagic_fish
     publish_ctd_cast_to_netcdf(["publish_ctd_cast_to_netcdf"]):::publish
     publish_ichthyo_to_netcdf(["publish_ichthyo_to_netcdf"]):::publish
     publish_ichthyo_to_obis(["publish_ichthyo_to_obis"]):::publish
@@ -278,13 +320,16 @@ dag_mermaid: |-
     ingest_swfsc_ichthyo --> ingest_calcofi_bottle
     ingest_swfsc_ichthyo --> ingest_calcofi_ctd_cast
     ingest_calcofi_bottle --> ingest_calcofi_dic
+    ingest_swfsc_ichthyo --> ingest_calcofi_mets
     ingest_swfsc_ichthyo --> ingest_calcofi_phyllosoma
     ingest_swfsc_ichthyo --> ingest_calcofi_phytoplankton
     ingest_swfsc_ichthyo --> ingest_cce_lter_euphausiids
+    ingest_swfsc_ichthyo --> ingest_cce_lter_picoplankton_bacteria
     ingest_swfsc_ichthyo --> ingest_cce_lter_zoodb
     ingest_swfsc_ichthyo --> ingest_cce_lter_zooscan
     ingest_swfsc_ichthyo --> ingest_pic_zooplankton
     ingest_swfsc_ichthyo --> ingest_swfsc_cufes
+    ingest_swfsc_ichthyo --> ingest_ucsd_sio_mesopelagic_fish
     release_database --> publish_ctd_cast_to_netcdf
     release_database --> publish_ichthyo_to_netcdf
     release_database --> publish_ichthyo_to_obis
@@ -292,28 +337,34 @@ dag_mermaid: |-
     ingest_calcofi_bottle --> release_database
     ingest_calcofi_ctd_cast --> release_database
     ingest_calcofi_dic --> release_database
+    ingest_calcofi_mets --> release_database
     ingest_calcofi_phyllosoma --> release_database
     ingest_calcofi_phytoplankton --> release_database
     ingest_cce_lter_euphausiids --> release_database
+    ingest_cce_lter_picoplankton_bacteria --> release_database
     ingest_cce_lter_zoodb --> release_database
     ingest_cce_lter_zooscan --> release_database
     ingest_pic_zooplankton --> release_database
     ingest_spatial --> release_database
     ingest_swfsc_cufes --> release_database
     ingest_swfsc_ichthyo --> release_database
+    ingest_ucsd_sio_mesopelagic_fish --> release_database
     classDef c_ingest_calcofi_bird_mammal_census fill:#f0d2e8,stroke:#00000033,color:#10161c;
     classDef c_ingest_calcofi_bottle fill:#f5cad9,stroke:#00000033,color:#10161c;
     classDef c_ingest_calcofi_ctd_cast fill:#e0ccf0,stroke:#00000033,color:#10161c;
     classDef c_ingest_calcofi_dic fill:#ffd2bb,stroke:#00000033,color:#10161c;
+    classDef c_ingest_calcofi_mets fill:#cce5ff,stroke:#00000033,color:#10161c;
     classDef c_ingest_calcofi_phyllosoma fill:#e0bbf0,stroke:#00000033,color:#10161c;
     classDef c_ingest_calcofi_phytoplankton fill:#b5e8b0,stroke:#00000033,color:#10161c;
     classDef c_ingest_cce_lter_euphausiids fill:#d2f0bb,stroke:#00000033,color:#10161c;
+    classDef c_ingest_cce_lter_picoplankton_bacteria fill:#bbe0f0,stroke:#00000033,color:#10161c;
     classDef c_ingest_cce_lter_zoodb fill:#d9c2f0,stroke:#00000033,color:#10161c;
     classDef c_ingest_cce_lter_zooscan fill:#c2e8f0,stroke:#00000033,color:#10161c;
     classDef c_ingest_pic_zooplankton fill:#bbe0f0,stroke:#00000033,color:#10161c;
     classDef ingest fill:#cdd9e5,stroke:#00000033,color:#10161c;
     classDef c_ingest_swfsc_cufes fill:#f0e8bb,stroke:#00000033,color:#10161c;
     classDef c_ingest_swfsc_ichthyo fill:#cdebc6,stroke:#00000033,color:#10161c;
+    classDef c_ingest_ucsd_sio_mesopelagic_fish fill:#bbe0f0,stroke:#00000033,color:#10161c;
     classDef publish fill:#20c997,stroke:#00000033,color:#10161c;
     classDef release fill:#f06595,stroke:#00000033,color:#10161c;
 

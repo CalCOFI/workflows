@@ -1,0 +1,64 @@
+---
+config:
+  layout: elk
+---
+erDiagram
+    mets_sample {
+        varchar mets_sample_uuid PK
+        varchar cruise_code
+        varchar schema_variant
+        varchar _source_file
+        timestamp datetime_start_utc
+        double latitude
+        double longitude
+        double source_row_id
+        varchar cruise_orig
+        double course_over_ground_deg
+        double speed_over_ground_kt
+        double heading_deg
+        varchar date_ymd
+        varchar time_hms
+        double unknown_counter
+        varchar date_mdy
+        varchar time_hms_ms
+        varchar date_pst
+        varchar time_pst
+        varchar ship_key
+        varchar cruise_ym
+        varchar cruise_key
+    }
+    mets_thin {
+        varchar mets_measurement_uuid PK
+        varchar mets_sample_uuid FK
+        varchar cruise_key
+        varchar measurement_type FK
+        double measurement_value
+        varchar retained_reason
+    }
+    mets_measurement {
+        varchar mets_measurement_uuid PK
+        varchar mets_sample_uuid FK
+        varchar cruise_key
+        varchar measurement_type FK
+        double measurement_value
+    }
+    measurement_type {
+        varchar measurement_type PK
+        varchar description
+        varchar units
+        bool is_canonical
+        varchar _source_column
+        varchar _source_table
+        varchar _source_datasets
+        varchar _qual_column
+        varchar _prec_column
+        varchar grain
+    }
+    mets_sample ||--o{ mets_thin : "mets_sample_uuid"
+    measurement_type ||--o{ mets_thin : "measurement_type"
+    mets_sample ||--o{ mets_measurement : "mets_sample_uuid"
+    measurement_type ||--o{ mets_measurement : "measurement_type"
+    classDef lightblue stroke:#ADD8E6,stroke-width:3px
+    class mets_sample,mets_thin,mets_measurement lightblue
+    classDef lightyellow stroke:#FFFFE0,stroke-width:3px
+    class measurement_type lightyellow

@@ -24,10 +24,11 @@ calcofi:
     coverage_spatial: "28-37°N, -125 to -117°W"
     license: CC BY 4.0
     pi_names: Todd Martz; Aaron Mau
+  # publishes the consolidated core. DIC rows that share a physical Niskin with
+  # calcofi_bottle reuse that bottle's sample_key, so the two do not double-count.
   tables_owned:
-    - {table: dic_sample}
-    - {table: dic_measurement}
-    - {table: dic_summary}
+    - {table: sample, shared: true, note: "core event dimension (bottle grain; non-shared Niskins only)"}
+    - {table: obs, shared: true, note: "core observations (env, DIC + alkalinity)"}
     - {table: measurement_type, shared: true, note: "shared registry across bottle/ctd/dic"}
   erd:
     color: "#ffd2bb"
@@ -586,19 +587,6 @@ cc_erd(
     white       = "dataset"))
 ```
 
-### Write relationships.json
-
-```{r}
-#| label: write-relationships
-
-build_relationships_json(
-  rels       = dic_rels,
-  output_dir = dir_parquet,
-  provider   = provider,
-  dataset    = dataset
-)
-```
-
 ## Add Spatial
 
 ```{r}
@@ -649,23 +637,35 @@ dbGetQuery(con, "SELECT * FROM dic_summary LIMIT 100") |>
 ## Emit Core Tables
 
 Project this dataset into the shared consolidated core model
-(`design_env-bio-consolidation.md`) via `calcofi4db::emit_core_tables()` — the
-single source of truth for the per-dataset projection into `sample` / `obs` /
-`obs_freq` / `sample_measurement`, also used by `release_database.qmd` to
-assemble the authoritative cross-dataset release.
+(`design_env-bio-consolidation.md`) via `calcofi4db::emit_core_tables()`. These
+core tables **are** this ingest's output: `release_database.qmd` concatenates the
+per-dataset shards rather than re-deriving the core, so there is exactly one
+projection to keep correct.
+
+DIC observations that share a physical Niskin with `calcofi_bottle` point at that
+bottle's `sample_key`, so the two datasets deduplicate onto one event rather than
+double-counting the bottle.
 
 ```{r}
 #| label: emit_core
 
 core <- emit_core_tables(con, "calcofi_dic")
 cat(glue(
-  "core projection — sample={core$sample %||% 0} obs={core$obs %||% 0} ",
-  "obs_freq={core$obs_freq %||% 0} sample_measurement={core$sample_measurement %||% 0}\n"))
+  "core projection — sample={core$sample %||% 0} obs={core$obs %||% 0}\n"))
 
-# the frozen release assembles the authoritative cross-dataset core; keep this
-# ingest's parquet output per-dataset by dropping the local core projection here.
-for (tbl_core in c("obs", "obs_freq", "sample_measurement", "sample"))
-  dbExecute(con, glue("DROP TABLE IF EXISTS {tbl_core}"))
+n_obs <- dbGetQuery(con, "SELECT COUNT(*) FROM obs")[[1]]
+n_shared <- dbGetQuery(con,
+  "SELECT COUNT(*) FROM obs WHERE sample_key LIKE 'calcofi_bottle:bottle:%'")[[1]]
+stopifnot(
+  "obs must be one row per grid-matched DIC measurement" =
+    n_obs == dbGetQuery(con, "SELECT COUNT(*) FROM dic_measurement dm JOIN casts c USING (cast_id)
+                              WHERE c.grid_key IS NOT NULL")[[1]],
+  "every obs.sample_key must resolve in sample or in the bottle dataset" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM obs o LEFT JOIN sample s USING (sample_key)
+                     WHERE s.sample_key IS NULL
+                       AND o.sample_key NOT LIKE 'calcofi_bottle:bottle:%'")[[1]] == 0)
+cat(glue("obs: {format(n_obs, big.mark=',')} rows, {format(n_shared, big.mark=',')} ",
+         "sharing a Niskin with calcofi_bottle"), "\n")
 ```
 
 
@@ -682,17 +682,23 @@ mismatches <- list(
     con, here("metadata/measurement_type.csv")),
   cruise_keys       = collect_cruise_key_mismatches(con, "dic_sample"))
 
+tbls_out <- core_output_tables(con, extra = c("measurement_type", "dataset"))
 parquet_stats <- write_parquet_outputs(
   con              = con,
   output_dir       = dir_parquet,
-  tables           = c("dic_sample", "dic_measurement",
-                       "dic_summary", "measurement_type",
-                       "dataset"),
-  sort_by          = list(
-    dic_measurement = "measurement_type",
-    dic_summary     = "measurement_type"),
+  tables           = tbls_out,
+  sort_by          = list(obs = c("grid_key", "measurement_type")),
   strip_provenance = FALSE,
   mismatches       = mismatches
+)
+
+# relationships.json describes what is actually published (the core), so it is
+# written here, once core_output_tables() has determined the shard set
+build_relationships_json(
+  rels       = core_relationships(tbls_out),
+  output_dir = dir_parquet,
+  provider   = provider,
+  dataset    = dataset
 )
 
 parquet_stats |>
@@ -713,9 +719,9 @@ metadata_path <- build_metadata_json(
   con          = con,
   d_tbls_rd    = d_tbls_rd,
   d_flds_rd    = d_flds_rd,
+  metadata_derived_csv = here("metadata/core_dictionary.csv"),
   output_dir   = dir_parquet,
-  tables       = c("dic_sample", "dic_measurement",
-                   "dic_summary"),
+  tables       = tbls_out,
   set_comments = TRUE,
   provider     = provider,
   dataset      = dataset,
