@@ -1,0 +1,68 @@
+---
+config:
+  layout: elk
+---
+erDiagram
+    picoplankton_bacteria_bottle {
+        varchar study_name
+        varchar cruise_code
+        timestamp datetime_utc
+        double latitude
+        double longitude
+        double line
+        double station
+        int cast_number
+        int bottle_number
+        int assoc_bottle_number
+        double depth_m
+        varchar notes
+        varchar site_key
+        int bottle_id PK
+        varchar ship_code
+        varchar ship_key
+        varchar cruise_key
+        geometry geom
+        varchar grid_key
+    }
+    picoplankton_bacteria_measurement {
+        bigint measurement_id PK
+        int bottle_id FK
+        varchar measurement_type FK
+        double measurement_value
+    }
+    measurement_type {
+        varchar measurement_type PK
+        varchar description
+        varchar units
+        bool is_canonical
+        varchar _source_column
+        varchar _source_table
+        varchar _source_datasets
+        varchar _qual_column
+        varchar _prec_column
+        varchar grain
+    }
+    dataset {
+        varchar provider
+        varchar dataset
+        varchar dataset_name
+        varchar description
+        varchar citation_main
+        varchar citation_others
+        varchar link_calcofi_org
+        varchar link_data_source
+        varchar link_others
+        varchar tables
+        varchar coverage_temporal
+        varchar coverage_spatial
+        varchar license
+        varchar pi_names
+    }
+    picoplankton_bacteria_bottle ||--o{ picoplankton_bacteria_measurement : "bottle_id"
+    measurement_type ||--o{ picoplankton_bacteria_measurement : "measurement_type"
+    classDef lightblue stroke:#ADD8E6,stroke-width:3px
+    class picoplankton_bacteria_bottle,picoplankton_bacteria_measurement lightblue
+    classDef lightyellow stroke:#FFFFE0,stroke-width:3px
+    class measurement_type lightyellow
+    classDef white stroke:#FFFFFF,stroke-width:3px
+    class dataset white

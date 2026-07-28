@@ -1,7 +1,7 @@
 ---
 title: "Ingest UCSD SIO Mesopelagic Fish"
 calcofi:
-  target_name: ingest_ucsd_sio_mesopelagic-fish
+  target_name: ingest_ucsd_sio_mesopelagic_fish
   workflow_type: ingest
   dependency:
     - ingest_swfsc_ichthyo
@@ -32,6 +32,7 @@ calcofi:
     pi_names: J. Anthony Koslow
   tables_owned:
     - {table: mesopelagic_fish_tow}
+    - {table: mesopelagic_fish_taxon}
     - {table: mesopelagic_fish_measurement}
     - {table: measurement_type, shared: true}
   erd:
@@ -47,16 +48,6 @@ Diego Library Digital Collections. 102 tows, 7 cruises, 2010-01 to 2012-02.
 Provider `ucsd_sio` (SIO curates the dataset; CalCOFI is the sampling
 program, not the curating org).
 
-::: {.callout-warning}
-**Core-table projection isn't wired up yet.** Per `design_env-bio-consolidation.md`,
-that's Phase 3 (`calcofi4db::append_sample()` / `append_obs()` /
-`append_obs_freq()` / `append_sample_measurement()`, called after
-`build_sample_reference()`), and Phase 2 (materializing the core tables at
-all) hasn't landed yet either. This is a self-leaf sample (`obs` headline =
-species tally) once that lands -- not something fixable from `workflows`
-alone.
-:::
-
 ## Setup
 
 ```{r}
@@ -69,28 +60,56 @@ librarian::shelf(
   CalCOFI/calcofi4db, CalCOFI/calcofi4r,
   DBI, dplyr, DT, fs, glue, here, janitor, jsonlite, knitr, lubridate, purrr,
   readr, readxl, sf, stringr, tibble, tidyr, units, quiet = T)
-options(readr.show_col_types = F); options(DT.options = list(scrollX = TRUE))
+options(readr.show_col_types = F)
+options(DT.options = list(scrollX = TRUE))
+
 source(here("libs/ingest.R"))
-cc <- read_calcofi_meta(here("ingest_ucsd_sio_mesopelagic-fish.qmd"))
-provider <- cc$provider; dataset <- cc$dataset; tables_owned <- cc$tables_owned
-dir_label <- glue("{provider}_{dataset}")
-dir_parquet <- here(glue("data/parquet/{dir_label}")); db_path <- here(glue("data/wrangling/{dir_label}.duckdb"))
-if (overwrite && file_exists(db_path)) file_delete(db_path)
-dir_create(dirname(db_path)); con <- get_duckdb_con(db_path); load_duckdb_extension(con, "spatial")
-meas_type_csv <- here("metadata/measurement_type.csv"); d_meas_type <- read_csv(meas_type_csv)
+
+cc           <- read_calcofi_meta(here("ingest_ucsd_sio_mesopelagic-fish.qmd"))
+provider     <- cc$provider
+dataset      <- cc$dataset
+tables_owned <- cc$tables_owned
+dir_label    <- glue("{provider}_{dataset}")
+dir_parquet  <- here(glue("data/parquet/{dir_label}"))
+db_path      <- here(glue("data/wrangling/{dir_label}.duckdb"))
+
+if (overwrite) {
+  if (file_exists(db_path))                 file_delete(db_path)
+  if (file_exists(paste0(db_path, ".wal"))) file_delete(paste0(db_path, ".wal"))
+  if (dir_exists(paste0(db_path, ".tmp")))  dir_delete(paste0(db_path, ".tmp"))
+}
+dir_create(dirname(db_path))
+con <- get_duckdb_con(db_path)
+load_duckdb_extension(con, "spatial")
+
+meas_type_csv <- here("metadata/measurement_type.csv")
+d_meas_type   <- read_csv(meas_type_csv)
 ```
 
 ## Read Source
 
+Fetched reproducibly by `libs/download_mesopelagic_fish.R` from the UCSD Library
+Digital Collections object (`bb9217084g`), whose download URL is derived from
+the object id — no landing-page scraping.
+
 ```{r}
 #| label: read-source
 
-fish_xlsx <- path_expand(glue("{dir_data}/ucsd_sio/mesopelagic-fish/bb9217084g_1_1.xlsx"))
+source(here("libs/download_mesopelagic_fish.R"))
+fish_xlsx <- download_mesopelagic_fish(
+  path_expand(glue("{dir_data}/{provider}/{dataset}")),
+  overwrite = overwrite_all)
 stopifnot("mesopelagic fish xlsx not found" = file_exists(fish_xlsx))
-sync_to_gcs(local_dir = path_dir(fish_xlsx), gcs_prefix = glue("archive/{provider}/{dataset}"),
-            bucket = "calcofi-files-public", exclude = c(".DS_Store"))
+
+sync_to_gcs(
+  local_dir  = path_dir(fish_xlsx),
+  gcs_prefix = glue("archive/{provider}/{dataset}"),
+  bucket     = "calcofi-files-public",
+  exclude    = c(".DS_Store"))
+
 d_raw <- read_excel(fish_xlsx, sheet = "Sheet1")
-species_cols <- setdiff(names(d_raw), c("CruiseID", "Tow", "Station", "LatFinal", "LongFinal",
+species_cols <- setdiff(names(d_raw), c(
+  "CruiseID", "Tow", "Station", "LatFinal", "LongFinal",
   "Month", "Year", "Time", "CalDepth", "VolFilt", "DensityTotal", "Abundance"))
 cat(glue("Read {nrow(d_raw)} tows, {length(species_cols)} species columns"), "\n")
 
@@ -126,8 +145,9 @@ no longer depends on `calcofi_bottle` at runtime -- see Add Spatial).
 (e.g. `23.57` = 23:57), confirmed directly against that sheet -- but see
 below, a second sheet in the same workbook supersedes it for full
 datetime derivation. Species columns are raw individual counts
-("numbers in the sample" per Header Definitions), pivoted to `measurement_type
-= 'tally'`.
+("numbers in the sample" per Header Definitions), pivoted to
+`measurement_type = 'abundance'` — the shared registry's per-net
+specimen-count type, also used by `swfsc_ichthyo`.
 
 ```{r}
 #| label: build
@@ -207,15 +227,66 @@ d_tow <- d |>
     density_total_qc = as.numeric(DensityTotal), abundance_total_qc = as.numeric(Abundance))
 dbWriteTable(con, "mesopelagic_fish_tow", d_tow, overwrite = TRUE)
 
+# measurement_type is the shared registry's existing `abundance` -- "specimen
+# count per net tow", already the headline type for swfsc_ichthyo's `tally`
+# field, which is exactly this quantity. A dataset-local synonym (`tally`,
+# `count`) would fragment the cross-dataset measurement vocabulary; `count`
+# specifically is the bird/mammal transect type, a different sampling grain.
 d_meas <- d |>
   select(tow_id, all_of(species_cols)) |>
   pivot_longer(-tow_id, names_to = "scientific_name", values_to = "measurement_value") |>
   filter(!is.na(measurement_value), measurement_value != 0) |>
-  mutate(measurement_type = "tally",
-         scientific_name = if_else(scientific_name == "UnidentifiedFish", NA_character_, scientific_name),
-         mesopelagic_fish_measurement_id = row_number(), .before = 1)
+  mutate(
+    measurement_type = "abundance",
+    scientific_name  = if_else(
+      scientific_name == "UnidentifiedFish", NA_character_, scientific_name),
+    mesopelagic_fish_measurement_id = row_number(), .before = 1)
 dbWriteTable(con, "mesopelagic_fish_measurement", d_meas, overwrite = TRUE)
 cat(glue("mesopelagic_fish_tow {nrow(d_tow)}, mesopelagic_fish_measurement {nrow(d_meas)}"), "\n")
+```
+
+## Build Taxon Reference Table
+
+The source names taxa in its column headers, so the dataset has no local taxon
+code — `scientific_name` *is* the code. Resolve each of the 90 named species
+against WoRMS with `calcofi4db::standardize_species()` into
+`mesopelagic_fish_taxon`, which `build_dataset_taxon()` then crosswalks into the
+global `taxon` table so `obs.taxon_key` is populated at release time. The
+`UnidentifiedFish` catch-all column carries no name and is excluded here (its
+measurements survive with a NULL `scientific_name`).
+
+```{r}
+#| label: taxon-worms
+
+fish_taxon <- tibble(scientific_name = sort(setdiff(species_cols, "UnidentifiedFish"))) |>
+  mutate(taxon_id = row_number(), .before = 1)
+dbWriteTable(con, "mesopelagic_fish_taxon", fish_taxon, overwrite = TRUE)
+
+taxon_std <- standardize_species(
+  con, species_tbl = "mesopelagic_fish_taxon", id_col = "taxon_id",
+  sci_name_col = "scientific_name", update_in_place = TRUE, include_gbif = FALSE)
+
+# standardize_species() adds a gbif_id column on every run; with include_gbif =
+# FALSE it is entirely NULL, so drop it rather than publish an all-empty column
+if ("gbif_id" %in% dbListFields(con, "mesopelagic_fish_taxon")) {
+  n_gbif <- dbGetQuery(con, "SELECT COUNT(gbif_id) AS n FROM mesopelagic_fish_taxon")$n
+  if (n_gbif == 0)
+    dbExecute(con, "ALTER TABLE mesopelagic_fish_taxon DROP COLUMN gbif_id")
+}
+
+fish_taxon <- dbGetQuery(con, "SELECT * FROM mesopelagic_fish_taxon ORDER BY taxon_id")
+n_worms <- sum(!is.na(fish_taxon$worms_id))
+cat(glue("WoRMS resolved: {n_worms}/{nrow(fish_taxon)} species ",
+         "({round(100*n_worms/nrow(fish_taxon),1)}%)"), "\n")
+
+# name the unresolved species explicitly — these are the ones a curator has to
+# look at, and they would otherwise be invisible behind a percentage
+if (n_worms < nrow(fish_taxon))
+  cat(glue("Unresolved in WoRMS: ",
+           "{paste(fish_taxon$scientific_name[is.na(fish_taxon$worms_id)], collapse = '; ')}"), "\n")
+
+fish_taxon |> datatable(
+  caption = "mesopelagic_fish_taxon — species resolved to WoRMS", rownames = FALSE)
 ```
 
 ## Add Spatial
@@ -232,6 +303,11 @@ pointing at the same cell `grid_key` does, just carrying the human-readable
 `line`/`station` labels. `station_raw` is kept verbatim alongside it for
 anyone auditing against the original file (see questions.csv Q05).
 
+`site_key` is formatted `LLL.L SSS.S` (`printf('%05.1f %05.1f', line, station)`)
+— the same canonical form `euphausiids_tow`, `picoplankton_bacteria_bottle` and
+the rest of the DB use. A locally-invented format (e.g. `93.3,120`) would not
+join to any other dataset's `site_key`.
+
 ```{r}
 #| label: add-spatial
 load_prior_tables(con, parquet_dir = here("data/parquet/swfsc_ichthyo"),
@@ -244,69 +320,154 @@ dbExecute(con, "
   ALTER TABLE mesopelagic_fish_tow ADD COLUMN IF NOT EXISTS site_key VARCHAR")
 dbExecute(con, "
   UPDATE mesopelagic_fish_tow t SET site_key = (
-    SELECT CAST(g.line AS VARCHAR) || ',' || CAST(g.station AS VARCHAR)
+    SELECT printf('%05.1f %05.1f', g.line, g.station)
     FROM grid g WHERE g.grid_key = t.grid_key)")
+
+# canonical site_key form, shared across datasets. Offshore stations west of
+# the coast origin are negative in `grid` (e.g. '130.0 -20.0'), so the sign is
+# part of the valid form, not a defect.
+n_bad_sk <- dbGetQuery(con,
+  "SELECT COUNT(*) FROM mesopelagic_fish_tow
+   WHERE site_key IS NOT NULL
+     AND NOT regexp_matches(site_key, '^-?[0-9]+[.][0-9] -?[0-9]+[.][0-9]$')")[[1]]
+stopifnot("site_key must be printf('%05.1f %05.1f', line, station)" = n_bad_sk == 0)
 
 n_sk  <- dbGetQuery(con, "SELECT COUNT(*) FROM mesopelagic_fish_tow WHERE site_key IS NOT NULL")[[1]]
 n_all <- dbGetQuery(con, "SELECT COUNT(*) FROM mesopelagic_fish_tow")[[1]]
 cat(glue("site_key resolved via grid_key match: {n_sk}/{n_all} ({round(100*n_sk/n_all,1)}%)"), "\n")
 ```
 
-## Emit Core Tables
-
-## TODO
-
-- [ ] Core-table projection (`sample`/`obs`/`obs_freq`/`sample_measurement`)
-  is not yet wired up — per `design_env-bio-consolidation.md`, that's
-  Phase 3 (`calcofi4db::append_sample()` / `append_obs()` /
-  `append_obs_freq()` / `append_sample_measurement()`, called after
-  `build_sample_reference()`), and Phase 2 (materializing the core tables
-  at all) hasn't landed yet either. `sample.datetime` is populated now
-  (Q03 resolved, see Build Tow + Measurement Tables) so once the `append_*`
-  helpers exist this should project with real datetimes, not placeholder
-  NULLs. Self-leaf sample (`obs` headline = species tally) once it lands.
-
 ## Measurement Types + Finalize
 
-```{r}
-#| label: finalize
+The per-species counts reuse the shared registry's existing `abundance` type
+("specimen count per net tow", already the headline type for `swfsc_ichthyo`)
+rather than minting a dataset-local synonym; only its `_source_datasets`
+provenance is extended.
 
-fish_types <- tibble(measurement_type = "tally", description = "Raw count of individuals",
-  units = "count", `_source_column` = "tally", `_source_table` = "mesopelagic_fish_measurement",
-  `_source_datasets` = "ucsd_sio_mesopelagic-fish", `_qual_column` = NA_character_, `_prec_column` = NA_character_)
-new_types <- fish_types |> filter(!measurement_type %in% d_meas_type$measurement_type)
-if (nrow(new_types) > 0) { d_meas_type <- bind_rows(d_meas_type, new_types); write_csv(d_meas_type, meas_type_csv) }
+```{r}
+#| label: measurement-types
+
+stopifnot(
+  "shared 'abundance' measurement_type must already be registered" =
+    "abundance" %in% d_meas_type$measurement_type)
+
+# record this dataset as a source of `abundance` without duplicating the type
+d_meas_type <- d_meas_type |>
+  mutate(`_source_datasets` = if_else(
+    measurement_type == "abundance" &
+      !str_detect(coalesce(`_source_datasets`, ""), "ucsd_sio_mesopelagic-fish"),
+    str_replace(str_squish(paste(coalesce(`_source_datasets`, ""),
+                                 "ucsd_sio_mesopelagic-fish", sep = ";")), "^;", ""),
+    `_source_datasets`))
+write_csv(d_meas_type, meas_type_csv)
 dbWriteTable(con, "measurement_type", d_meas_type, overwrite = TRUE)
 
 d_dataset <- ingest_yaml_to_dataset_df(read_ingest_yaml(here()))
 dbWriteTable(con, "dataset", d_dataset, overwrite = TRUE)
+```
+
+## Schema Documentation
+
+```{r}
+#| label: schema
 
 fish_rels <- list(
-  primary_keys = list(mesopelagic_fish_tow = "tow_id",
-                      mesopelagic_fish_measurement = "mesopelagic_fish_measurement_id",
-                      measurement_type = "measurement_type"),
+  primary_keys = list(
+    mesopelagic_fish_tow         = "tow_id",
+    mesopelagic_fish_taxon       = "taxon_id",
+    mesopelagic_fish_measurement = "mesopelagic_fish_measurement_id",
+    measurement_type             = "measurement_type"),
   foreign_keys = list(
-    list(table="mesopelagic_fish_measurement", column="tow_id", ref_table="mesopelagic_fish_tow", ref_column="tow_id"),
-    list(table="mesopelagic_fish_measurement", column="measurement_type", ref_table="measurement_type", ref_column="measurement_type")))
-cc_erd(con, tables = c("mesopelagic_fish_tow","mesopelagic_fish_measurement","measurement_type","dataset"),
-       rels = fish_rels, colors = list(lightblue = c("mesopelagic_fish_tow","mesopelagic_fish_measurement"),
-       lightyellow = "measurement_type", white = "dataset"))
-build_relationships_json(rels = fish_rels, output_dir = dir_parquet, provider = provider, dataset = dataset)
+    list(table = "mesopelagic_fish_measurement", column = "tow_id",
+         ref_table = "mesopelagic_fish_tow", ref_column = "tow_id"),
+    list(table = "mesopelagic_fish_measurement", column = "scientific_name",
+         ref_table = "mesopelagic_fish_taxon", ref_column = "scientific_name"),
+    list(table = "mesopelagic_fish_measurement", column = "measurement_type",
+         ref_table = "measurement_type", ref_column = "measurement_type")))
+
+cc_erd(
+  con,
+  tables = c("mesopelagic_fish_tow", "mesopelagic_fish_taxon",
+             "mesopelagic_fish_measurement", "measurement_type", "dataset"),
+  rels   = fish_rels,
+  colors = list(
+    lightblue   = c("mesopelagic_fish_tow", "mesopelagic_fish_measurement"),
+    lightgreen  = "mesopelagic_fish_taxon",
+    lightyellow = "measurement_type",
+    white       = "dataset"))
+
+build_relationships_json(
+  rels = fish_rels, output_dir = dir_parquet, provider = provider, dataset = dataset)
+```
+
+## Emit Core Tables
+
+Project this dataset into the shared consolidated core model
+(`design_env-bio-consolidation.md`) via `calcofi4db::emit_core_tables()` — a
+self-leaf `tow` sample whose `obs` headline is the per-species count.
+`datetime_start_utc` is real (Q03 resolved), so `sample.datetime` is populated
+rather than NULL, and `taxon_key` resolves through `dataset_taxon` from
+`mesopelagic_fish_taxon` at release time.
+
+```{r}
+#| label: emit_core
+
+core <- emit_core_tables(con, "ucsd_sio_mesopelagic-fish")
+cat(glue(
+  "core projection — sample={core$sample %||% 0} obs={core$obs %||% 0} ",
+  "sample_measurement={core$sample_measurement %||% 0}\n"))
+
+n_obs <- dbGetQuery(con, "SELECT COUNT(*) FROM obs")[[1]]
+n_exp <- dbGetQuery(con,
+  "SELECT COUNT(*) FROM mesopelagic_fish_measurement m
+   JOIN mesopelagic_fish_tow t USING (tow_id) WHERE t.grid_key IS NOT NULL")[[1]]
+n_dt  <- dbGetQuery(con, "SELECT COUNT(*) FROM sample WHERE datetime IS NOT NULL")[[1]]
+stopifnot(
+  "obs must be one row per grid-matched measurement" = n_obs == n_exp,
+  "sample.datetime must be populated (Q03)"          = n_dt > 0)
+cat(glue("obs parity: {format(n_obs, big.mark=',')} rows; ",
+         "{n_dt} sample rows with a real datetime"), "\n")
+
+for (tbl_core in c("obs", "obs_attribute", "sample_measurement", "sample"))
+  dbExecute(con, glue("DROP TABLE IF EXISTS {tbl_core}"))
+```
+
+## Validate and Write Outputs
+
+```{r}
+#| label: finalize
 
 results <- validate_for_release(con, checks = "all", strict = FALSE)
 cat("Validation:", ifelse(results$passed, "PASSED", "FAILED"), "\n")
+if (length(results$errors) > 0)
+  cat("Errors:\n", paste("-", results$errors, collapse = "\n"), "\n")
+
+# NOTE: `FAILED` here is expected and non-blocking (strict = FALSE). The
+# remaining errors are NULL authority ids on mesopelagic_fish_taxon: species
+# WoRMS or ITIS does not carry. They are reported by name above so a curator can
+# act on them; nothing downstream requires a non-NULL worms_id (obs.taxon_key
+# falls back to a dataset-local key via build_dataset_taxon()).
 
 dir_create(dir_parquet)
-write_parquet_outputs(con = con, output_dir = dir_parquet,
-  tables = c("mesopelagic_fish_tow","mesopelagic_fish_measurement","measurement_type","dataset"),
-  sort_by = list(mesopelagic_fish_measurement = "measurement_type"), strip_provenance = FALSE)
+write_parquet_outputs(
+  con        = con,
+  output_dir = dir_parquet,
+  tables     = c("mesopelagic_fish_tow", "mesopelagic_fish_taxon",
+                 "mesopelagic_fish_measurement", "measurement_type", "dataset"),
+  sort_by    = list(mesopelagic_fish_measurement = "measurement_type"),
+  strip_provenance = FALSE)
+
 d_tbls_rd <- read_csv(here("metadata/ucsd_sio/mesopelagic-fish/tbls_redefine.csv"))
 d_flds_rd <- read_csv(here("metadata/ucsd_sio/mesopelagic-fish/flds_redefine.csv"))
-build_metadata_json(con = con, d_tbls_rd = d_tbls_rd, d_flds_rd = d_flds_rd,
+build_metadata_json(
+  con = con, d_tbls_rd = d_tbls_rd, d_flds_rd = d_flds_rd,
   metadata_derived_csv = here("metadata/ucsd_sio/mesopelagic-fish/metadata_derived.csv"),
-  output_dir = dir_parquet, tables = c("mesopelagic_fish_tow","mesopelagic_fish_measurement"),
+  output_dir = dir_parquet,
+  tables     = c("mesopelagic_fish_tow", "mesopelagic_fish_taxon",
+                 "mesopelagic_fish_measurement"),
   set_comments = TRUE, provider = provider, dataset = dataset,
   workflow_url = cc$workflow_url, tables_owned = tables_owned)
+
 sync_to_gcs(local_dir = dir_parquet, gcs_prefix = glue("ingest/{dir_label}"), bucket = "calcofi-db")
 ```
 

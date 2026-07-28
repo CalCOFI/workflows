@@ -1,7 +1,7 @@
 ---
 title: "Ingest CCE-LTER Picoplankton and Bacteria Abundance"
 calcofi:
-  target_name: ingest_cce-lter_picoplankton-bacteria
+  target_name: ingest_cce_lter_picoplankton_bacteria
   workflow_type: ingest
   dependency:
     - ingest_swfsc_ichthyo
@@ -58,7 +58,9 @@ editor_options:
   Picoeukaryotes are >99.9% populated. Prochlorococcus is ~80% populated
   (3,228/16,017 blank) -- plausible non-detection at higher latitudes/depths,
   not yet confirmed with the provider (see Questions, Q01). `Notes` is 100%
-  blank in the current export and is dropped. No literal-zero values appear
+  blank in the current export; it is read and normalized to `NA` rather than
+  dropped, so a future export that starts populating it flows through without a
+  schema change. No literal-zero values appear
   in any measurement column in this export (confirmed directly against the
   raw file) -- unlike ZooDB, there is no analyzed-but-absent convention to
   encode; blank simply means not measured.
@@ -110,13 +112,21 @@ load_duckdb_extension(con, "spatial")
 
 ## Read Source Data
 
-Read from `{dir_data}/cce-lter/picoplankton-bacteria/`. Columns renamed per
+Fetched reproducibly by `libs/download_picoplankton_bacteria.R` into
+`{dir_data}/cce-lter/picoplankton-bacteria/`. The dataset page links to the
+Datazoo table download, but that URL redirects to a *Login / Accept Data
+Agreement* form and so cannot be fetched unattended; EDI carries the same table
+(the Datazoo DOI resolves to `knb-lter-cce.159`), so we pull from there. The
+revision is deliberately unpinned — this series is ongoing — and the revision
+actually used is reported below. Columns are renamed per
 `metadata/cce-lter/picoplankton-bacteria/flds_redefine.csv`.
 
 ```{r}
 #| label: read-source
-pico_csv <- path_expand(glue(
-  "{dir_data}/cce-lter/picoplankton-bacteria/PicoplanktonandBacteriaAbundance.csv"))
+source(here("libs/download_picoplankton_bacteria.R"))
+pico_csv <- download_picoplankton_bacteria(
+  path_expand(glue("{dir_data}/{provider}/{dataset}")),
+  overwrite = overwrite_all)
 stopifnot("picoplankton/bacteria CSV not found" = file_exists(pico_csv))
 
 sync_to_gcs(
@@ -237,7 +247,9 @@ pb_types <- tribble(
   "prochlorococcus",  "Prochlorococcus abundance (FCM); ~80% populated, see Q01", "number/ml",
   "synechococcus",    "Synechococcus abundance (FCM)",           "number/ml",
   "picoeukaryotes",   "Picoeukaryote abundance (FCM)",           "number/ml") |>
-  mutate(`_source_column` = case_when(
+  mutate(is_canonical = TRUE,
+         grain        = "obs",
+         `_source_column` = case_when(
            measurement_type == "het_bacteria"    ~ "Heterotrophic Bacteria (number/ml)",
            measurement_type == "prochlorococcus" ~ "Prochlorococcus (number/ml)",
            measurement_type == "synechococcus"   ~ "Synechococcus (number/ml)",
@@ -246,11 +258,14 @@ pb_types <- tribble(
          `_source_datasets` = "cce-lter_picoplankton-bacteria",
          `_qual_column` = NA_character_, `_prec_column` = NA_character_)
 
-new_types <- pb_types |> filter(!measurement_type %in% d_meas_type$measurement_type)
-if (nrow(new_types) > 0) {
-  d_meas_type <- bind_rows(d_meas_type, new_types)
-  write_csv(d_meas_type, meas_type_csv)
-}
+# upsert so a units/description correction propagates on re-run, and keep the
+# registry sorted so its on-disk order is deterministic across ingests
+d_meas_type <- d_meas_type |>
+  filter(!measurement_type %in% pb_types$measurement_type) |>
+  bind_rows(pb_types) |>
+  arrange(measurement_type)
+new_types <- pb_types
+write_csv(d_meas_type, meas_type_csv)
 dbWriteTable(con, "measurement_type", d_meas_type, overwrite = TRUE)
 cat(glue("measurement_type: {nrow(d_meas_type)} types registered ({nrow(new_types)} new)"), "\n")
 ```
@@ -377,6 +392,40 @@ dbGetQuery(con, "SELECT * FROM picoplankton_bacteria_measurement LIMIT 100") |>
   datatable(caption = "picoplankton_bacteria_measurement — first 100 rows", rownames = FALSE, filter = "top")
 ```
 
+## Emit Core Tables
+
+Project this dataset into the shared consolidated core model
+(`design_env-bio-consolidation.md`) via `calcofi4db::emit_core_tables()`, the
+same projection `release_database.qmd` uses to assemble the cross-dataset
+release. This is a bottle-shaped sample — leaf grain `bottle_id`, and since the
+export carries no cast-level event table the bottle is its own root — with an
+`obs` headline of the four flow-cytometry counts. Those counts are an
+environmental measurement vocabulary rather than taxa, so the arm emits
+`realm = 'env'` with a NULL `taxon_key`.
+
+```{r}
+#| label: emit_core
+
+core <- emit_core_tables(con, "cce-lter_picoplankton-bacteria")
+cat(glue(
+  "core projection — sample={core$sample %||% 0} obs={core$obs %||% 0} ",
+  "sample_measurement={core$sample_measurement %||% 0}\n"))
+
+# every measurement on a grid-matched bottle must reach obs
+n_obs <- dbGetQuery(con, "SELECT COUNT(*) FROM obs")[[1]]
+n_exp <- dbGetQuery(con,
+  "SELECT COUNT(*) FROM picoplankton_bacteria_measurement m
+   JOIN picoplankton_bacteria_bottle b USING (bottle_id)
+   WHERE b.grid_key IS NOT NULL")[[1]]
+stopifnot("obs must be one row per grid-matched measurement" = n_obs == n_exp)
+cat(glue("obs parity: {format(n_obs, big.mark=',')} rows"), "\n")
+
+# the frozen release assembles the authoritative cross-dataset core; keep this
+# ingest's parquet output per-dataset by dropping the local core projection here.
+for (tbl_core in c("obs", "obs_attribute", "sample_measurement", "sample"))
+  dbExecute(con, glue("DROP TABLE IF EXISTS {tbl_core}"))
+```
+
 ## Write Parquet Outputs
 
 ```{r}
@@ -434,15 +483,3 @@ read_csv(here(glue("metadata/{provider}/{dataset}/questions.csv"))) |>
 close_duckdb(con)
 cat(glue("Parquet outputs written to: {dir_parquet}"), "\n")
 ```
-
-## TODO
-
-- [ ] Core-table projection (`sample`/`obs`/`obs_freq`/`sample_measurement`)
-  is not yet wired up — per `design_env-bio-consolidation.md`, that's Phase 3
-  (`calcofi4db::append_sample()` / `append_obs()` / `append_obs_freq()` /
-  `append_sample_measurement()`, called after `build_sample_reference()`),
-  and Phase 2 (materializing the core tables at all) hasn't landed yet
-  either. `picoplankton_bacteria_bottle`/`_measurement` are a bottle-shaped
-  sample (leaf = `bottle_id`, parent = `cast_id`, same as `calcofi_bottle`)
-  with an `obs` headline of the four FCM measurement types — revisit once
-  the `append_*` helpers exist.

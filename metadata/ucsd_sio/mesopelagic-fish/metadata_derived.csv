@@ -5,3 +5,6 @@ mesopelagic_fish_tow,hour_source_conflict,Hour Source Conflict Flag,,"Boolean; T
 mesopelagic_fish_tow,site_key,Site Key,,CalCOFI station key resolved via spatial match against `grid` on the tow's own lat/lon (same cell as `grid_key`), not parsed from the source `Station` field.
 mesopelagic_fish_tow,geom,Geometry,,Point geometry (WGS84) from longitude/latitude via `add_point_geom()`.
 mesopelagic_fish_tow,grid_key,Grid Key,,CalCOFI grid cell; FK to `grid`. Derived via `assign_grid_key()`.
+mesopelagic_fish_taxon,taxon_id,Taxon ID,,Sequential local key (`row_number()` over the sorted species names).
+mesopelagic_fish_taxon,scientific_name,Scientific Name,,"Species name verbatim from the source column header; also the `ds_taxa_code` used by `dataset_taxon` (the source has no local taxon code)."
+mesopelagic_fish_taxon,worms_id,WoRMS AphiaID,,Resolved via `calcofi4db::standardize_species()`; NULL where WoRMS returns no match.

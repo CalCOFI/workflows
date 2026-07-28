@@ -20,9 +20,19 @@ erDiagram
         geometry geom
         varchar grid_key
     }
+    euphausiids_taxon {
+        int taxon_id PK
+        varchar scientific_name
+        varchar genus
+        varchar species
+        int worms_id
+        int itis_id
+    }
     euphausiids_measurement {
         bigint euphausiids_measurement_id PK
         int tow_id FK
+        int taxon_id FK
+        varchar life_stage
         varchar measurement_type FK
         double measurement_value
         varchar measurement_qual
@@ -32,6 +42,8 @@ erDiagram
         timestamp datetime_start_utc
         double latitude
         double longitude
+        int taxon_id
+        varchar life_stage
         varchar measurement_type
         double avg
         double stddev
@@ -47,6 +59,7 @@ erDiagram
         varchar _source_datasets
         varchar _qual_column
         varchar _prec_column
+        varchar grain
     }
     dataset {
         varchar provider
@@ -65,9 +78,12 @@ erDiagram
         varchar pi_names
     }
     euphausiids_tow ||--o{ euphausiids_measurement : "tow_id"
+    euphausiids_taxon ||--o{ euphausiids_measurement : "taxon_id"
     measurement_type ||--o{ euphausiids_measurement : "measurement_type"
     classDef lightblue stroke:#ADD8E6,stroke-width:3px
     class euphausiids_tow,euphausiids_measurement,euphausiids_summary lightblue
+    classDef lightgreen stroke:#90EE90,stroke-width:3px
+    class euphausiids_taxon lightgreen
     classDef lightyellow stroke:#FFFFE0,stroke-width:3px
     class measurement_type lightyellow
     classDef white stroke:#FFFFFF,stroke-width:3px
