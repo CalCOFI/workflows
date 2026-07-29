@@ -277,14 +277,17 @@ them.
 ```{r}
 #| label: dataset_ref
 
-# dataset reference: dataset_key = provider_dataset (authoritative from the CSV,
-# replacing any per-ingest `dataset` VIEW assembled above)
+# dataset reference: dataset_key = provider_dataset, built from the ingest YAML
+# rather than metadata/dataset.csv. The YAML is authoritative (it deprecates the
+# CSV) and, more to the point, it cannot go stale: it is derived from the same
+# `calcofi:` blocks that define the pipeline, so every ingest is present by
+# construction. The CSV had drifted — it was missing calcofi_mets,
+# cce-lter_picoplankton-bacteria and ucsd_sio_mesopelagic-fish, which orphaned
+# 533,571 obs rows against the obs.dataset_key foreign key.
+d_dataset <- ingest_yaml_to_dataset_df(read_ingest_yaml(here())) |>
+  mutate(dataset_key = paste0(provider, "_", dataset), .before = 1)
 dbExecute(con_wdl, "DROP VIEW IF EXISTS dataset")
-dbExecute(con_wdl, glue(
-  "CREATE OR REPLACE TABLE dataset AS
-   SELECT provider || '_' || dataset AS dataset_key, provider, dataset, dataset_name,
-          description, citation_main, link_calcofi_org, link_data_source, license, pi_names
-   FROM read_csv_auto('{here('metadata/dataset.csv')}')"))
+dbWriteTable(con_wdl, "dataset", as.data.frame(d_dataset), overwrite = TRUE)
 
 dbGetQuery(con_wdl, "SELECT dataset_key, dataset_name FROM dataset ORDER BY 1") |>
   datatable(caption = "dataset reference")
@@ -411,7 +414,13 @@ fk_bad <- c(
   "obs_attribute.taxon_key"  = if ("obs_attribute" %in% dbListTables(con_wdl))
     q("SELECT COUNT(*) n FROM obs_attribute WHERE taxon_key IS NOT NULL AND taxon_key NOT IN (SELECT taxon_key FROM taxon)") else 0,
   "dataset_taxon.taxon_key" = q("SELECT COUNT(*) n FROM dataset_taxon WHERE taxon_key NOT IN (SELECT taxon_key FROM taxon)"),
-  "sample_measurement.sample_key" = q("SELECT COUNT(*) n FROM sample_measurement WHERE sample_key NOT IN (SELECT sample_key FROM sample)"))
+  "sample_measurement.sample_key" = q("SELECT COUNT(*) n FROM sample_measurement WHERE sample_key NOT IN (SELECT sample_key FROM sample)"),
+  # the measurement vocabulary must cover EVERY grain, not just obs: promoting
+  # bottom_depth_m into sample_measurement added a type that was not registered,
+  # and with only obs.measurement_type asserted it went unnoticed.
+  "sample_measurement.measurement_type" = q("SELECT COUNT(*) n FROM sample_measurement WHERE measurement_type NOT IN (SELECT measurement_type FROM measurement_type)"),
+  "obs_attribute.measurement_type" = if ("obs_attribute" %in% dbListTables(con_wdl))
+    q("SELECT COUNT(*) n FROM obs_attribute WHERE measurement_type NOT IN (SELECT measurement_type FROM measurement_type)") else 0)
 if (any(fk_bad > 0)) print(fk_bad[fk_bad > 0])
 stopifnot("core FK validity" = all(fk_bad == 0))
 
