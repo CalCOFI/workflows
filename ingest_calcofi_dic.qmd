@@ -285,15 +285,20 @@ to casts using `site_key` + `datetime_start_utc` (±3 day window).
 ```{r}
 #| label: load-casts
 
-# load casts and bottle from bottle workflow
-# include "casts" in geom_tables since it has GEOMETRY columns
+# `calcofi_bottle` publishes the consolidated core now, not `casts`/`bottle`, so
+# load its `sample` shard and rebuild the two event tables as VIEWs over it. The
+# shard is loaded under a distinct name: dic builds its OWN `sample` later in
+# emit_core_tables(), and these views must keep resolving after that happens.
 load_prior_tables(
   con         = con,
-  tables      = c("casts", "bottle"),
+  tables      = c("sample"),
   parquet_dir = here("data/parquet/calcofi_bottle"),
-  geom_tables = c("grid", "site", "segment", "casts"),
+  geom_tables = c("sample"),
   as_view     = TRUE
 )
+dbExecute(con, "ALTER VIEW sample RENAME TO _bottle_sample")
+compat <- create_compat_views(con, "calcofi_bottle", sample_tbl = "_bottle_sample")
+cat(glue("bottle event tables rebuilt from core: {paste(compat, collapse = ', ')}"), "\n")
 
 # station matching
 n_dic_sta <- dbGetQuery(
