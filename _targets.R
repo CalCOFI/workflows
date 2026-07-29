@@ -22,6 +22,19 @@ library(calcofi4db) # remotes::install_github("calcofi/calcofi4db"); remotes::in
 Sys.setenv(QUARTO_CHROMIUM_HEADLESS_MODE = "new")
 
 build_targets_list(
-  # exclude = c("ingest_calcofi_ctd-cast", "publish_ichthyo_to-obis")
-  exclude = c("publish_ichthyo_to-obis")
+  exclude = c(
+    "publish_ichthyo_to-obis",
+    # ctd-cast is ALREADY BUILT AND SYNCED for this run: sample (14,336),
+    # obs (5,551,551) and obs_ctd_full (216,427,608 rows / 4.9 GB / 96
+    # partitions) are on disk and mirrored to GCS. Its target record was lost
+    # when the previous run was killed mid-upload, so targets would otherwise
+    # redo ~2 h of work to reach the same bytes. release_database reads the
+    # shards straight off the filesystem (assemble_core() globs
+    # data/parquet/*/), so excluding the target does NOT drop CTD from the
+    # release. REMOVE THIS once the CTD source data changes.
+    "ingest_calcofi_ctd-cast",
+    # netCDF publishing is on hold — these already ran, and the whole-dataset
+    # recreation likely belongs at the ingest step rather than after the release.
+    "publish_ctd-cast_to-netcdf",
+    "publish_ichthyo_to-netcdf")
 )
