@@ -28,6 +28,26 @@ fmt_mb <- function(b) { b <- as.numeric(b)
       ifelse(b >= 1048576, sprintf("%.1f MB", b / 1048576),
         sprintf("%.0f KB", pmax(b / 1024, 1))))) }
 
+# GA4, site property — the same tag every CalCOFI page carries (canonical copy:
+# CalCOFI/analytics snippets/gtag-site.html). Built here as a plain string
+# rather than inline in page()'s glue template, because glue would try to
+# interpolate the `{ content_group: ... }` braces.
+#
+# NOTE this only ever counts BROWSING. These pages are the human front door to
+# buckets whose real traffic is machines fetching parquet/netcdf directly, which
+# runs no JavaScript. Request counts come from the Caddy access logs instead.
+GA_HTML <- paste0(
+  '<script>window.__CC_GA = location.hostname.endsWith("calcofi.io") && !navigator.webdriver;</script>\n',
+  '<script async src="https://www.googletagmanager.com/gtag/js?id=G-0HVK8TDMCF"></script>\n',
+  '<script>\n',
+  '  window.dataLayer = window.dataLayer || [];\n',
+  '  function gtag(){ dataLayer.push(arguments); }\n',
+  '  if (window.__CC_GA) {\n',
+  '    gtag("js", new Date());\n',
+  '    gtag("config", "G-0HVK8TDMCF", { content_group: "storage" });\n',
+  '  }\n',
+  '</script>')
+
 # --- shared page chrome -------------------------------------------------------
 # Self-contained: served straight off GCS, so no external CSS/font/script can be
 # referenced (and a strict reader may block them anyway). Light/dark via
@@ -40,6 +60,7 @@ page <- function(title, subtitle, body_html, crumb = "") glue('
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <title>{esc(title)}</title>
+{GA_HTML}
 <style>
   :root {{
     --bg:#ffffff; --fg:#1a1f24; --muted:#5b6670; --line:#e3e8ec;
