@@ -226,6 +226,25 @@ self-documenting; human review happens at every hand-off. Scaffolds come from
 - **Notebook chunks**: use `cat()` not `message()`; one `datatable()` call per
   preview (not a loop helper); section headings suffixed with `----` in long
   chunks.
+- **Quarto + mermaid = headless-Chrome hangs.** Any notebook with a `{mermaid}`
+  block or `cc_erd()` renders its diagrams through headless Chrome, which hangs
+  in two different ways. Always render with
+  `Sys.setenv(QUARTO_CHROMIUM_HEADLESS_MODE = "new")` +
+  `quarto::quarto_render()` (or `targets`), never the bare `quarto` CLI. When a
+  render sits at 0% CPU with no output, **check which hang it is before killing
+  anything** — `ls _output/{nb}_files/figure-html/ _output/{nb}.html`:
+  - **Figures AND html present → the render is DONE**; Chrome merely failed to
+    exit and Quarto is blocked on teardown. `kill` *only* the Chrome PID and
+    Quarto exits cleanly, losing nothing. Killing the whole render here throws
+    away every chunk (for METS that is ~15 min of work, and it cost four
+    rebuilds before the pattern was recognized).
+  - **No figures emitted → genuinely wedged**: the graph is too big to render.
+    Cause is almost always `cc_erd(con, rels = …)` *without* `tables =`, which
+    diagrams every table in the connection — including loaded
+    `ship`/`cruise`/`grid` refs and wide tables. **`tables =` is load-bearing,
+    not cosmetic.**
+  Slow-but-progressing mermaid renders are normal and can take minutes; the
+  distinguishing signal is whether any PNG has appeared, not elapsed time.
 
 ## Layout
 
