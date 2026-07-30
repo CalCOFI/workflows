@@ -82,7 +82,10 @@ cat("accdb_field_descriptions.csv:", nrow(d_fields), "fields across",
 
 # -- crosswalk source fields -> canonical registries ---------------------------
 d_dict <- read_csv(here("metadata/field_dictionary.csv"), show_col_types = FALSE)
-d_mt   <- read_csv(here("metadata/measurement_type.csv"), show_col_types = FALSE)
+# read_measurement_type(), never bare read_csv: the registry stores empty cells that a
+# plain reader turns into the literal string "NA", which then survives is.na() and
+# coalesce() checks. See CLAUDE.md, "the round-trip trap".
+d_mt   <- calcofi4db::read_measurement_type(here("metadata/measurement_type.csv"))
 
 lut_canon <- d_dict |>
   transmute(key = norm_id(fld_new), target = fld_new, match_type = "canonical_field")
@@ -401,8 +404,19 @@ ask("hydro_master_13",
     priority = "medium", related_table = "Bottle")
 
 # -- write questions -----------------------------------------------------------
-d_questions <- bind_rows(questions)
-write_csv(d_questions, file.path(dir_out, "questions.csv"), na = "")
+# questions.csv is the single review artifact, written by more than one script in this
+# port (Phase 2 here, Phase 3 in reconcile_hydro_master.R). Each owns only its own id
+# prefix and preserves everyone else's, so the two are re-runnable in any order.
+path_q      <- file.path(dir_out, "questions.csv")
+d_questions <- bind_rows(questions) |> mutate(across(everything(), as.character))
+
+if (file.exists(path_q)) {
+  d_foreign <- read_csv(path_q, show_col_types = FALSE, col_types = cols(.default = "c")) |>
+    filter(!str_starts(id, "hydro_master_"))
+  d_questions <- bind_rows(d_foreign, d_questions)
+}
+
+write_csv(d_questions, path_q, na = "")
 cat("questions.csv:", nrow(d_questions), "queued (",
     paste(glue("{names(table(d_questions$priority))}={as.integer(table(d_questions$priority))}"),
           collapse = ", "), ")\n")

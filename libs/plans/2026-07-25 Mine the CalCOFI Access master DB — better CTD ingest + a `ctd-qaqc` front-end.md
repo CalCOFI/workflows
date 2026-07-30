@@ -1,4 +1,4 @@
-# Port the CalCOFI Access master DB → DuckDB/Parquet + a `db-qaqc` front-end
+# Mine the CalCOFI Access master DB → better CTD ingest + a `ctd-qaqc` front-end
 
 ## Context
 
@@ -24,12 +24,29 @@ Today the pipeline ingests this database's *published outputs* (bottle CSVs) but
   the Access queries hold.
 
 The file is a **frozen archive**: it is being mined and retired, not replaced as a live
-authoring environment. So everything downstream is read-only, and no mutable multi-user
-store is needed.
+authoring environment.
 
-Outcome: reproducible extraction → enriched metadata registries → full reconciliation
-against the current release → the net-new tables ingested → a declarative QC rule
-registry that runs at release time → a `db-qaqc` front-end.
+### Purpose — and the hard boundary
+
+**No Access data is imported into the integrated database.** The master is a *knowledge*
+source, not a data source. It is being mined for exactly two things:
+
+1. **Metadata, processing rules and QA/QC logic that improve the CTD ingest from source
+   files** — the `-99` sentinel handling, the quality-code vocabulary, measurement
+   method/accuracy provenance, and canonical-variable identification. These change
+   `ingest_calcofi_ctd-cast.qmd` and the `metadata/` registries.
+2. **A `ctd-qaqc` front-end and its own database.** That app *does* need tables imported
+   from the master (harmonic climatology, station average depths, standard depths, station
+   codes) — into a **`ctd-qaqc`-specific database, never the release.**
+
+The distinction that matters: `HarmCoeff*` and friends are the **QC engine's reference
+inputs**, not published science tables. Phases 1–3 (extraction, triage, reconciliation)
+are already done and unaffected by this scoping; Phases 4–7 below were rewritten for it.
+
+Superseded by this scope: an earlier draft had Phase 4 ingesting 15 net-new Access tables
+into the release via a new `ingest_calcofi_hydro-master.qmd`. That is dropped. The
+reconciliation that produced the net-new list still stands as the evidence that nothing
+needs importing.
 
 ### Scope note
 
@@ -250,71 +267,136 @@ Two corrections to what this plan previously assumed:
 Deferred: running the ported `TR` checks against the release moves to Phase 5, since it
 needs the rule registry that phase builds.
 
-### Phase 4 — Ingest the net-new tables
+### Phase 4 — Feed the CTD ingest (metadata + processing + QA/QC)
 
-Only what Phase 3 proves is *not* already in the release. Expected: `Weather`,
-`Prodo_Cast`, `Prodo_Bottle`, `Rpt_Data`, `MLD_Sigma`, `NutClineDepth`, `HarmCoeff*`.
+**Nothing from the Access master enters the integrated database.** It is a knowledge
+source, not a data source. This phase spends that knowledge on
+`ingest_calcofi_ctd-cast.qmd` and the `metadata/` registries.
 
-- New `ingest_calcofi_hydro-master.qmd` with a `calcofi:` YAML block —
-  `provider: calcofi`, `dataset: hydro-master`, `dependency: [ingest_calcofi_bottle]`
-  (so it can reconcile and reuse `cast_id`/`bottle_id`), `tables_owned` listing only the
-  net-new tables. **Do not hand-edit `_targets.R`** — `build_targets_list()` discovers it
-  from the YAML.
-- Project into the core model rather than adding another per-dataset triple:
-  `Weather` → `sample_measurement` at cast grain; `Prodo_Bottle` → `obs`;
-  `Rpt_Data` → `obs` (derived: dynamic height, sigma-theta); `MLD_Sigma` /
-  `NutClineDepth` → `obs` at cast grain; `HarmCoeff*` → a `climatology_harmonic`
-  reference table.
-- Observe the key-suffix convention (`*_id` integer, `*_key` string) and end with
-  `finalize_ingest()`.
+**4a. Fix the `-99` sentinel — this is a live bug, do it first and independently.**
+The source uses `-99.00` as its missing-value marker across most numeric columns, but
+the ingest strips it from longitude/latitude only (`pseudoNA_values` at
+`ingest_calcofi_ctd-cast.qmd:724`). The `NOT isnan / isfinite` filter at `:1400` does
+not catch it because `-99` is finite. Currently in released `ctd_thin`:
 
-### Phase 5 — Declarative QC rule registry
+| measurement_type | rows = −99 | canonical? |
+|---|---|---|
+| `isus_v` | 40,479 | yes |
+| `ph` | 31,493 | yes |
+| `spar` | 6,189 | yes |
+| `oxygen_umol_kg_ave_sta_corr` | 4,294 | **yes** |
+| `oxygen_ml_l_ave_sta_corr` | 953 | **yes** |
+| `beam_attenuation` / `transmissometer` / `dynamic_height` / `specific_volume_anomaly` | 894 | yes |
 
-- New `metadata/qc_rules.csv`:
-  `rule_key, rule_type, dataset_key, table, column, sql, severity, description,
-  source_query, source_purpose, active`
-  with `rule_type ∈ {fk, lookup, range, unique, coverage, crosscheck, climatology}`.
-- New `calcofi4db::validate_rules(con, rules)`; extend `validate_dataset()`
-  (`R/validate.R:245`) with the new types and call it from `validate_for_release()`
-  (`R/freeze.R:230`) so rules run at release time. Per `CLAUDE.md` the logic lives in the
-  package with a testthat fixture per rule type; the notebook only calls it. Bump
-  `DESCRIPTION` `Version:` with a matching `NEWS.md` entry in the same change.
-- Port the ~48 `TR`/`TQ`/`TS`/`TV`/`QC` queries as rows, **rewriting Access SQL against the
-  core model** (`sample` / `obs` / `sample_measurement`), not Access table names. Keep
-  `source_query` on every row so provenance stays traceable.
-- The 30 `UPDATE` queries go into the change log and are **not executed** — one-time repairs
-  against the Access copy. Anything still needed becomes a correction CSV row following the
-  `metadata/calcofi/ctd-cast/cruise_key_corrections.csv` pattern.
+**84,302 rows** of headline data, including canonical oxygen, where a physically
+impossible sentinel is served as a real value. Any consumer mean, min, or anomaly is
+wrong by that much. Encode the sentinel policy as a **per-column registry** rather than
+one global vector — `dynamic_height` and `specific_volume_anomaly` are legitimately
+negative, so a blanket `value == -99 → NULL` needs per-variable review (a true
+`-99.00 dyn cm` is implausible but not impossible).
 
-### Phase 6 — Climatology / anomaly engine
+**4b. Interpret `measurement_qual` for CTD.** Phase 2 established the vocabulary
+(`6` = data OK but taken from CTD, `8` = suspect, `9` = missing) and it **transfers** —
+released `ctd_thin` contains exactly `8` and `9`. Two problems to settle:
+- Flags are stored as the strings `"9.0"` / `"8.0"` (a double→VARCHAR cast artifact).
+- **The headline physical variables carry no flags at all.** 8 of the 16 canonical CTD
+  types have no `_qual_column`, and they are the important ones: `temperature_ave`,
+  `salinity_ave_corr`, `oxygen_ml_l_ave_sta_corr`, `oxygen_umol_kg_ave_sta_corr`.
+  Source flags attach to the *component sensors* (`Temp1Q`, `Temp2Q`, `Salt1Q`, `Salt2Q`,
+  `Ox1Q`, `Ox2Q`); the canonical value is the *average*, so quality is lost in the mean.
+  Decide the propagation rule (worst-of? both-must-pass? a new "derived" code) — no
+  registry answers this today.
 
-- Publish `climatology_harmonic` as a release reference table: expected value and stdev per
-  station × depth × day-of-year → a z-score outlier test.
-- Add the `climatology` rule type: flag `|z| > k`, `k` configurable per measurement type.
-- **Recompute** the coefficients independently from the release and assert agreement with
-  the Access-era values — an excellent permanent regression fixture.
-- Reimplement the `MLD_Sigma`, `NutClineDepth`, `Anomalies` and `Isopycnal` recipes in the
-  same pass.
+**4c. Canonical-variable provenance.** `measurement_method.csv` (Phase 2) carries
+instrument, accuracy and date-era per measurement. Link the CTD types to it so each
+canonical choice is *documented*, and record the correction lineage that the bare
+suffixes `_corr` / `_cruise_corr` / `_sta_corr` currently leave implicit.
 
-### Phase 7 — `db-qaqc` front-end
+**4d. Decide the bottle-reference pairs.** The source ships bottle↔CTD matched pairs
+(`BTL_Temp`, `SaltB`, `OxB`, `Chl-a`, `NO3`, …) and all 10 are registered. Exactly one —
+`btl_ammonium` — is currently `is_canonical = TRUE` while the other nine are `FALSE`;
+that inconsistency looks unintended. Sensor-vs-Winkler/Portosal at matched depth is *the*
+classic CTD calibration check, so `ctd-qaqc` needs these; either promote them as a set or
+have `ctd-qaqc` read `ctd_measurement` instead of `ctd_thin`.
 
-- New `CalCOFI/db-qaqc` repo → calcofi.io/db-qaqc, Jekyll + GitHub Pages.
-  **Gotcha:** set Pages `build_type=workflow` (deploy `public/` from an action), not the
-  legacy branch source — this is what bit `db-viz-station`.
-- Lift `db-query/lib/duckdb.js` verbatim (dependency-free CDN singleton) and
-  `lib/options-sources.js` (cruise / measurement-type pickers). Reuse the
-  `_queries/<category>/<name>.md` frontmatter convention: parameters for cruise / line /
-  station / depth / year, inline Handlebars `sql:`, body = the Access purpose text. Keep
-  `render_with_liquid: false` on the collection.
-- Reuse `db-schema`'s sidecar-fetch pattern (`versions.json`, `latest.txt`,
-  `metadata.json`, `catalog.json`) for release selection and units, and
+Use `calcofi4db::read_measurement_type()` / `register_measurement_types()` for every
+registry touch — never bare `read_csv`/`write_csv` (sentinel-string round-trip trap).
+
+### Phase 5 — The `ctd-qaqc` reference database
+
+A **separate** DuckDB for the QA/QC app. These tables are the QC engine's reference
+inputs, not published science tables, and they do **not** go in the release:
+
+| from the Access master | role in `ctd-qaqc` |
+|---|---|
+| `HarmCoeff{Bottle,Chla,Sigma,LogZoo}` | expected value + stdev per station × depth → z-score test |
+| `CurrentStations` (`Avg_Depth`) | bottom-depth plausibility (the `TQ - BottomDepth_Vs_AvgBottomDepth` ±500 m rule) |
+| `StDepths` | canonical standard-depth grid |
+| `0-Sta_Code` | station-class filter the `TR`/`TQ` checks depend on |
+| `MLD_Sigma`, `NutClineDepth` | derived-product reference values to validate recomputation against |
+| `measurement_qual.csv`, `measurement_method.csv` | vocabularies from Phase 2 |
+
+If these should instead flow through pipeline machinery (Parquet + `metadata.json` + GCS)
+without entering the release, the mechanism already exists: a `calcofi:` block with
+**`in_release: false`** (see `CLAUDE.md`). That is the deliberate choice to make — a
+standalone app DB, or a staged non-released ingest.
+
+Also evaluate the **CTD final-QC databases** found alongside the master
+(`CTD downcast upcast - databases/`): 1 m bin-averaged, final-QC'd, 1993–2019, up- and
+downcast as separate ~4 GB products, plus a SQL Server Express backup. That is a curated
+CTD product the pipeline does not currently read — a validation target for `ctd_thin`, and
+possibly a better basis than DIY adaptive thinning. Note it **ends 2019** while the ingest
+reaches 2021-05, and the same harness (`libs/extract_accdb.R`) reads its Access form.
+
+### Phase 6 — CTD QC rule set
+
+Split by what can be ported versus what must be written:
+
+**Portable from the master** (~48 triaged `validate` queries, 37 hazard-free): referential
+(`TR`), coverage (`TS`), bottom-depth and station-name checks (`TQ`), value-range (`TV`).
+Rewrite against `ctd_cast` / `ctd_thin`, keeping `source_query` for provenance. Honour the
+Access-dialect hazards already scored in `query_triage.csv`.
+
+**Must be written — the master is bottle-grain and has no concept of these:**
+- spike / despiking on adjacent scans
+- density inversion (σθ must increase with depth)
+- pressure monotonicity and loop edits
+- sensor 1 vs sensor 2 disagreement
+- up- vs downcast disagreement (the source ships both; `ctd_thin` keeps one direction, so
+  this signal is currently discarded)
+- bottle-vs-sensor calibration offset at matched depth (Phase 4d)
+- climatology z-score, once `HarmCoeff*` is regridded from standard depths onto
+  `ctd_thin`'s 10 m grid
+
+**Emit QARTOD alongside the native codes.** CalCOFI publishes to erddap.calcofi.io where
+IOOS `1/2/3/4/9` flags are the convention; the Access `6/8/9` vocabulary is bespoke.
+
+Registry: `metadata/qc_rules.csv` (`rule_key, rule_type, dataset_key, table, column, sql,
+severity, description, source_query, active`). Logic in `calcofi4db` with a testthat
+fixture per rule type; bump `DESCRIPTION` + `NEWS.md` in the same change. The 30 `UPDATE`
+queries are documented history and are **never executed**.
+
+### Phase 7 — `ctd-qaqc` front-end
+
+New `CalCOFI/ctd-qaqc` repo. **Hugo, not Jekyll** — new CalCOFI static sites use Hugo for
+render speed, with the `analytics` repo as the reference implementation.
+
+- Client-side **DuckDB-WASM** over release Parquet, lifting `db-query/lib/duckdb.js`
+  (dependency-free CDN singleton) and `lib/options-sources.js` for cruise/type pickers.
+- One file per check, carrying its parameters and its *description* — the Access
+  `0-Query Info` purpose text is the seed. Keep build-time pre-rendering over runtime
+  parsing.
+- Reuse `db-schema`'s sidecar fetch (`versions.json`, `latest.txt`, `metadata.json`) and
   `db-viz-cruise`'s URL-query-string permalinks so a flagged cast is a shareable link.
-- **QC scorecard**: `release_database.qmd` emits a `qc_results.json` sidecar alongside the
-  existing ones, so every release publishes its own pass/fail dashboard.
-- Adopt db-query's `workflow_dispatch` `default_version` bump so the site never points at a
-  release that has not passed `test_release.qmd`.
-- Register the new site in `CalCOFI.github.io/_data/products.yml` and
-  `uptime/.upptimerc.yml` (the authoritative service list).
+- Deep-link into `apps/ctd-viz` for profile inspection rather than rebuilding plots.
+- **Pages gotcha:** `build_type=workflow`, not the legacy branch source (this bit
+  `db-viz-station`).
+- Register in `CalCOFI.github.io/_data/products.yml` and `uptime/.upptimerc.yml`.
+- **Open design question:** a QA/QC app for *ongoing* ingest implies mutable review state
+  (who flagged which cast, when, why, accepted or rejected). The "frozen archive" answer
+  settled the *Access* question, not the *app* question. Options: git-tracked correction
+  CSVs (the existing `cruise_key_corrections.csv` pattern), the Postgres already on the
+  server, or an embedded store. Decide before building, not during.
 
 ---
 
@@ -322,15 +404,17 @@ Only what Phase 3 proves is *not* already in the release. Expected: `Weather`,
 
 - `devtools::test()` in `calcofi4db` — a synthetic fixture per new rule type; a red test is
   a hard stop. Reinstall the package so notebooks pick up changes.
+- **4a regression fixture:** assert zero `measurement_value = -99` in `ctd_thin` after the
+  sentinel fix, per measurement_type. This is the permanent guard.
 - Re-run `scripts/extract_accdb.sh` from clean; assert the row counts in this document.
-- Diff Jackcess vs mdbtools SQL across all 155 queries; mdbtools must be a strict subset —
-  this is the guard against silently trusting the lossy extractor.
+- Diff Jackcess vs mdbtools SQL across all 155 queries; mdbtools must be a strict subset.
 - Render `explore_accdb_hydro-master.qmd`: 155 queries triaged, 12 relationships reproduced,
   the 1 known Jackcess failure explicitly listed.
 - Phase 3 reconciliation report has **zero unexplained deltas**.
-- `Rscript -e 'targets::tar_make()'` → the new ingest runs and `release_database.qmd`
-  executes the new rules; `test_release.qmd`'s consumer-contract suite must still pass
-  before `latest.txt` promotes.
+- `Rscript -e 'targets::tar_make()'` → the CTD ingest re-runs with the sentinel and flag
+  changes; `test_release.qmd`'s consumer-contract suite must still pass before `latest.txt`
+  promotes. **Expect the released `ctd_thin` values to change** — 84,302 sentinel rows
+  become NULL, so row counts and any cached aggregate shift.
 - Hand-check three ported rules against their Access originals (open the `.sql`, run both,
   compare row counts).
-- Load `db-qaqc` in a browser and confirm the checks execute against the current release.
+- Load `ctd-qaqc` in a browser and confirm the checks execute against the current release.

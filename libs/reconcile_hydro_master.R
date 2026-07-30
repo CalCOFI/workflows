@@ -4,8 +4,8 @@
 # what the pipeline currently ingests and releases.
 #
 # The question this answers: of the 65 Access tables, which are already faithfully
-# in the release, which differ, and which are genuinely net-new? Phase 4 ingests
-# only the last group, so this has to run first.
+# in the release, which differ, and which are genuinely net-new? NOTHING is imported into
+# the integrated DB — see the disposition section at the bottom for where each table goes.
 #
 # Every delta must resolve to one of: a release bug, an Access-era artifact, or a
 # documented intentional difference. Unexplained residue is a finding, not noise.
@@ -31,7 +31,33 @@ con <- calcofi4db::get_duckdb_con(":memory:")
 on.exit(try(dbDisconnect(con, shutdown = TRUE), silent = TRUE), add = TRUE)
 
 A <- function(t) glue("read_parquet('{dir_acc}/{t}.parquet')")
-R <- function(t) glue("read_parquet('{dir_rel}/{t}.parquet')")
+
+# The bottle ingest emits the CORE MODEL (obs / sample / sample_measurement) — the
+# per-dataset bottle.parquet / casts.parquet / bottle_measurement.parquet this script
+# originally compared against no longer exist. Re-expose the legacy shape so the
+# comparisons below are unchanged, and so the numbers stay comparable to the committed
+# Phase 3 findings (the migration preserved counts exactly: 895,371 bottles / 35,644 casts).
+#
+# sample_key is namespaced `dataset_key:sample_type:id`, so the source counter is
+# split_part(...,3). The obs filter on the bottle prefix is REQUIRED: cast-grain obs rows
+# would otherwise contribute ids that collide with bottle ids.
+R_sample <- function(sample_type, extra_cols = "") glue(
+  "(SELECT CAST(split_part(sample_key, ':', 3) AS BIGINT) AS id{extra_cols}
+    FROM read_parquet('{dir_rel}/sample.parquet')
+    WHERE sample_type = '{sample_type}')")
+
+R_obs <- glue(
+  "(SELECT CAST(split_part(sample_key, ':', 3) AS BIGINT) AS bottle_id,
+           measurement_type, measurement_value
+    FROM read_parquet('{dir_rel}/obs.parquet')
+    WHERE sample_key LIKE 'calcofi_bottle:bottle:%')")
+
+R <- function(t) switch(
+  t,
+  casts              = R_sample("cast",   ", cruise_key"),
+  bottle             = R_sample("bottle"),
+  bottle_measurement = R_obs,
+  stop("no core-model mapping for legacy table '", t, "'", call. = FALSE))
 
 norm_id <- function(x) {
   x |> str_replace_all("[µμ]", "u") |> str_to_lower() |> str_remove_all("[^a-z0-9]")
@@ -86,7 +112,7 @@ recon_numeric <- function(label, a_tbl, r_expr, a_key, r_key, a_col, r_col, tol 
 cat("== Phase 3 reconciliation ==\n\n")
 
 # -- 1. Cast <-> casts ---------------------------------------------------------
-k_cast <- recon_keys("Cast <-> casts", "Cast", "casts", "Cst_Cnt", "cast_id")
+k_cast <- recon_keys("Cast <-> casts", "Cast", "casts", "Cst_Cnt", "id")
 print(as.data.frame(k_cast), row.names = FALSE)
 
 # which cruises are Access-only? (expected: post-2021-05, since the release is
@@ -94,7 +120,7 @@ print(as.data.frame(k_cast), row.names = FALSE)
 d_cast_only <- dbGetQuery(con, glue("
   SELECT a.Cruise AS cruise, COUNT(*) AS n_casts
   FROM {A('Cast')} a
-  ANTI JOIN (SELECT CAST(cast_id AS BIGINT) k FROM {R('casts')}) r
+  ANTI JOIN (SELECT CAST(id AS BIGINT) k FROM {R('casts')}) r
     ON TRY_CAST(a.Cst_Cnt AS BIGINT) = r.k
   GROUP BY 1 ORDER BY 1")) |> as_tibble()
 write_csv(d_cast_only, file.path(dir_recon, "casts_only_in_accdb.csv"), na = "")
@@ -103,7 +129,7 @@ d_cast_only_rel <- dbGetQuery(con, glue("
   SELECT r.cruise_key, COUNT(*) AS n_casts
   FROM {R('casts')} r
   ANTI JOIN (SELECT TRY_CAST(Cst_Cnt AS BIGINT) k FROM {A('Cast')}) a
-    ON CAST(r.cast_id AS BIGINT) = a.k
+    ON CAST(r.id AS BIGINT) = a.k
   GROUP BY 1 ORDER BY 1")) |> as_tibble()
 write_csv(d_cast_only_rel, file.path(dir_recon, "casts_only_in_release.csv"), na = "")
 
@@ -114,7 +140,7 @@ cat("Release-only casts:", sum(d_cast_only_rel$n_casts), "across",
     nrow(d_cast_only_rel), "cruises\n\n")
 
 # -- 2. Bottle <-> bottle ------------------------------------------------------
-k_btl <- recon_keys("Bottle <-> bottle", "Bottle", "bottle", "Btl_Cnt", "bottle_id")
+k_btl <- recon_keys("Bottle <-> bottle", "Bottle", "bottle", "Btl_Cnt", "id")
 print(as.data.frame(k_btl), row.names = FALSE)
 cat("\n")
 
@@ -145,7 +171,10 @@ cat("\n")
 # derive the Access column <-> measurement_type mapping from the registry rather
 # than hand-listing it: _source_column for calcofi_bottle rows already holds the
 # snake_cased Access names (t_deg_c <- T_degC, oxy_umol_kg <- Oxy_µmol/Kg).
-d_mt <- read_csv(here("metadata/measurement_type.csv"), show_col_types = FALSE) |>
+# read_measurement_type(), never bare read_csv — see CLAUDE.md "round-trip trap":
+# a plain reader turns empty registry cells into the literal string "NA", which then
+# passes is.na() and coalesce() unnoticed.
+d_mt <- calcofi4db::read_measurement_type(here("metadata/measurement_type.csv")) |>
   filter(str_detect(coalesce(`_source_datasets`, ""), "calcofi_bottle"),
          !is.na(`_source_column`))
 
@@ -216,8 +245,8 @@ d_deleted <- dbGetQuery(con, glue("
   WITH d AS ({sql_deleted})
   SELECT d.Cruise                AS cruise,
          COUNT(*)                AS n_deleted_from_master,
-         COUNT(r.bottle_id)      AS n_still_in_release
-  FROM d LEFT JOIN {R('bottle')} r ON r.bottle_id = d.btl
+         COUNT(r.id)             AS n_still_in_release
+  FROM d LEFT JOIN {R('bottle')} r ON r.id = d.btl
   GROUP BY 1 ORDER BY 1")) |> as_tibble()
 
 write_csv(d_deleted, file.path(dir_meta, "reconciliation_deleted_bottles.csv"), na = "")
@@ -231,16 +260,24 @@ if (leaked == 0) {
   cat("-> WARNING:", leaked, "withdrawn bottles are still in the release\n")
 }
 
-# -- 6. table disposition: what is actually net-new for Phase 4 ----------------
+# -- 6. table disposition -------------------------------------------------------
+# NO Access table is imported into the integrated database. The master is a knowledge
+# source: tables are either mined into metadata registries, imported into the SEPARATE
+# ctd-qaqc reference database, or left in Parquet and merely documented as available.
 d_tbl <- read_csv(file.path(dir_meta, "accdb/tables.csv"), show_col_types = FALSE)
 
-verified   <- c("Bottle", "Cast")
-covered    <- c("Chl", "Nuts", "Cruises", "Station_ID", "CurrentStations",
-                "ShipCode", "ShipCode_Btl", "DICs")
-net_new    <- c("Weather", "Prodo_Cast", "Prodo_Bottle", "Rpt_Data", "Bottle_Q",
-                "MLD_Sigma", "NutClineDepth", "Zooplankton",
-                "HarmCoeffBottle", "HarmCoeffChla", "HarmCoeffSigma", "HarmCoeffLogZoo",
-                "StDepths", "St_Stations", "Bottles Per Cast")
+verified     <- c("Bottle", "Cast")
+covered      <- c("Chl", "Nuts", "Cruises", "Station_ID",
+                  "ShipCode", "ShipCode_Btl", "DICs")
+# QC engine reference inputs -> the ctd-qaqc database, never the release
+qc_reference <- c("HarmCoeffBottle", "HarmCoeffChla", "HarmCoeffSigma", "HarmCoeffLogZoo",
+                  "CurrentStations", "StDepths", "St_Stations",
+                  "MLD_Sigma", "NutClineDepth")
+# already mined into metadata/ registries in Phase 2
+metadata_only <- c("Bottle_Q")
+# real data with no release counterpart, deliberately NOT ingested — documented only
+not_ingested <- c("Weather", "Prodo_Cast", "Prodo_Bottle", "Rpt_Data", "Zooplankton",
+                  "Bottles Per Cast")
 # staging tables, dated snapshots, backups and import scratch — not data
 rx_working <- paste(
   "^Copy ", "ImportErrors", "^Paste Errors", "_test$", "_orig$", "_rcl$",
@@ -252,10 +289,12 @@ d_disp <- d_tbl |>
   transmute(
     table, n_row,
     disposition = case_when(
-      str_starts(table, "0-")        ~ "documentation (harvested in Phase 2)",
+      str_starts(table, "0-")        ~ "documentation — harvested into metadata/",
       table %in% verified            ~ "reconciled — release verified faithful",
       table %in% covered             ~ "covered by an existing release dataset",
-      table %in% net_new             ~ "NET-NEW — candidate for Phase 4 ingest",
+      table %in% qc_reference        ~ "QC reference — import into ctd-qaqc DB only",
+      table %in% metadata_only       ~ "metadata — harvested into metadata/",
+      table %in% not_ingested        ~ "documented, deliberately NOT ingested",
       str_detect(table, rx_working)  ~ "working copy / staging — skip",
       TRUE                           ~ "unclassified — needs review")) |>
   arrange(disposition, desc(n_row))
