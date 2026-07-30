@@ -42,7 +42,13 @@ jobs:
         continue-on-error: true
         run: |
           install.packages(
-            c("librarian", "rmarkdown", "yaml"),
+            # `here` and `readr` are used directly by the script (here::here,
+            # readr::write_csv) and were missing, so this step failed on EVERY push
+            # with "there is no package called 'here'". Being continue-on-error, it
+            # failed silently and the index only ever updated when someone committed
+            # it by hand — which is exactly the stale-cards failure it exists to
+            # prevent. `jsonlite` is shelf()'d at runtime for the release metadata.
+            c("librarian", "rmarkdown", "yaml", "here", "readr", "jsonlite"),
             repos = Sys.getenv("RSPM", "https://cloud.r-project.org"))
         shell: Rscript {0}
       - name: Build workflows index (_data/workflows.yml)
