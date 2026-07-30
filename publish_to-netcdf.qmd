@@ -1,0 +1,878 @@
+---
+title: "Publish every dataset to CF NetCDF"
+subtitle: "One dataset-agnostic notebook: the sampling hierarchy in the core decides the file's shape"
+author: "CalCOFI"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: true
+    code-tools: true
+    df-print: kable
+calcofi:
+  target_name: publish_to_netcdf
+  workflow_type: publish
+  dependency:
+    - release_database
+  output: data/netcdf/publish_plan.csv
+  workflow_url: https://calcofi.io/workflows/publish_to-netcdf.html
+editor_options:
+  chunk_output_type: console
+---
+
+## Overview
+
+Publish **every** dataset in the frozen release as a self-documenting CF NetCDF
+file. This one notebook replaces `publish_ctd-cast_to-netcdf.qmd` and
+`publish_ichthyo_to-netcdf.qmd`, which hardcoded their dataset's shape.
+
+That hardcoding is no longer necessary, and the old justification in
+`libs/publish_netcdf.R` — *"the nesting differs per dataset, which is why these
+are notebooks rather than one generic script"* — predates the consolidated core.
+Every ingest now projects into `sample` with `sample_type` and
+`parent_sample_key`, so **the nesting is data, not code**: an adjacency list that
+`calcofi4db::discover_sample_levels()` walks.
+
+Two transformations, and neither is dataset-specific any more:
+
+**1 · Widen for CF.** The database keeps every quantity in one
+`measurement_value` column, so a single column mixes °C, PSU, mL/L and counts. CF
+requires one unit and one `standard_name` per variable, so each
+`measurement_type` becomes its own variable carrying units from
+`metadata/measurement_type.csv`.
+
+**2 · Preserve the one-to-many.** Where a dataset nests (site → tow → net →
+occurrence → size bin), flattening repeats each net's effort onto every one of
+its size bins — for ichthyo, 76,512 real `volume_sampled` values become 369,978
+repeated ones, and a naive `SUM()` over-counts effort ~5×. netCDF-4 groups store
+each level once and link children by explicit index.
+
+### The shape is decided from the data, in four ways
+
+```{mermaid}
+graph TD
+  A["sample levels for this dataset_key"] --> B{"more than one level?"}
+  B -->|yes| G["<b>groups</b><br/>netCDF-4 + parent_index<br/>no CF feature type exists"]
+  B -->|no| C{"many depths per event?"}
+  C -->|"yes (median > 1)"| P["<b>profile</b><br/>featureType=profile<br/>contiguous ragged array"]
+  C -->|no| D{"sample_type = underway?"}
+  D -->|yes| T["<b>trajectory</b><br/>featureType=trajectory<br/>coords vary along track"]
+  D -->|no| N["<b>point</b><br/>featureType=point<br/>one flat dimension"]
+```
+
+::: {.callout-important title="Why not simply 'one level + a depth axis = profile'"}
+That was the original rule, and it held for the two datasets that had notebooks.
+Applied to all 15 it is wrong for 10 of them. **Every** CalCOFI dataset carries a
+depth on its observations, but only `calcofi_ctd-cast` has *many* depths per
+event (median **74**); a tow, a transect, an underway record and a region pool
+each carry exactly one. The rule would therefore have stamped
+`featureType=profile` on tows, transects, underway tracks and region pools.
+
+A file that claims a feature type it does not have is **worse** than one that
+claims none, because CF-aware tools act on the claim — a profile reader will
+treat 47,241 independent underway positions as one vertical cast. So the
+discriminator is `depths_per_instance`, reported in the plan table below, and
+`underway` is named explicitly as a moving platform because that is not
+inferable from row counts.
+:::
+
+## Setup
+
+```{r}
+#| label: setup
+#| message: false
+#| warning: false
+
+librarian::shelf(DBI, duckdb, dplyr, glue, ncdf4, readr, jsonlite, digest,
+                 knitr, tibble, here, quiet = TRUE)
+here <- here::here
+# devtools::install_local(here::here("../calcofi4db"), force = TRUE)
+devtools::load_all(here::here("../calcofi4db"))
+source(here("libs/publish_netcdf.R"))
+
+RELEASE <- cc_release_version()          # the PROMOTED release, never a local tree
+PQ      <- cc_release_parquet(RELEASE)
+OUT_DIR <- here("data/netcdf"); dir.create(OUT_DIR, recursive = TRUE, showWarnings = FALSE)
+PUBLISH <- identical(Sys.getenv("CALCOFI_PUBLISH"), "true")   # opt-in upload
+
+# comma-separated dataset_keys to restrict a run while iterating; empty = all
+ONLY <- Filter(nzchar, trimws(strsplit(Sys.getenv("CALCOFI_DATASETS", ""), ",")[[1]]))
+
+# obs_ctd_full is 212M rows across 96 partitions; skip it while iterating
+DO_SUPPLEMENTAL <- !identical(Sys.getenv("CALCOFI_SKIP_SUPPLEMENTAL"), "true")
+
+cat(glue("release      : {RELEASE}\n"))
+cat(glue("parquet      : {PQ}\n"))
+cat(glue("output       : {OUT_DIR}\n"))
+cat(glue("publish      : {PUBLISH} (set CALCOFI_PUBLISH=true to upload)\n"))
+cat(glue("supplemental : {DO_SUPPLEMENTAL}\n"))
+if (length(ONLY)) cat(glue("restricted to: {paste(ONLY, collapse=', ')}\n"))
+```
+
+```{r}
+#| label: connect
+con <- dbConnect(duckdb())
+for (s in c("INSTALL httpfs", "LOAD httpfs", "SET memory_limit='8GB'",
+            "SET enable_progress_bar=false")) try(dbExecute(con, s), silent = TRUE)
+q <- function(sql, ...) dbGetQuery(con, glue(sql, ..., .envir = parent.frame()))
+
+# Read the release over HTTPS rather than any local copy. The first NetCDF CalCOFI
+# published was built from the ERDDAP serving tree and silently shipped a
+# month-old snapshot; reading the promoted release makes that impossible.
+#
+# `sample` is materialized WITHOUT geom (the writers need lat/lon numerics, and a
+# CRS-tagged geometry column would force the spatial extension for nothing), and
+# `obs` is materialized as the four columns the PLANNER needs. The per-dataset
+# builds below read each dataset's own obs partition, so no build ever scans
+# another dataset's rows.
+t0 <- Sys.time()
+dbExecute(con, glue("
+  CREATE TABLE sample AS
+    SELECT sample_key, sample_type, parent_sample_key, root_sample_key, dataset_key,
+           grid_key, site_key, cruise_key, order_occ, latitude, longitude, datetime,
+           depth_min_m, depth_max_m, tow_type
+    FROM read_parquet('{PQ}/sample.parquet');
+  CREATE TABLE obs AS
+    SELECT dataset_key, sample_key, measurement_type, depth_min_m
+    FROM read_parquet('{PQ}/obs.parquet');
+  CREATE TABLE obs_attribute AS
+    SELECT * FROM read_parquet('{PQ}/obs_attribute.parquet');
+  CREATE TABLE sample_measurement AS
+    SELECT * FROM read_parquet('{PQ}/sample_measurement.parquet');
+  CREATE TABLE taxon AS
+    SELECT taxon_key, scientific_name, rank, worms_id, itis_id
+    FROM read_parquet('{PQ}/taxon.parquet');
+  CREATE TABLE dataset AS
+    SELECT *, provider || '_' || dataset AS dataset_key
+    FROM read_parquet('{PQ}/dataset.parquet');"))
+cat(glue("materialized planning tables in {round(difftime(Sys.time(), t0, units='secs'))}s\n"))
+
+# every obs partition, mapped to its dataset — a glob over HTTPS 404s because
+# expanding one needs a directory listing and object storage has none
+obs_parts <- cc_release_partitions("obs", RELEASE)
+obs_part_of <- setNames(obs_parts, sub(".*dataset_key=([^/]+)/.*", "\\1", obs_parts))
+cat(glue("obs partitions: {length(obs_parts)}\n"))
+```
+
+```{r}
+#| label: measurement-meta
+# units / long_name / standard_name per variable, read STRICTLY: a default
+# read_csv() turns the literal string "NA" back into NA, so a validator placed
+# after one could never see the registry corruption that shipped "NA" as a unit.
+mt <- read_measurement_type(here("metadata/measurement_type.csv"))
+var_meta <- measurement_var_meta(mt)
+cat(glue("measurement registry: {nrow(mt)} types, ",
+         "{sum(as.logical(mt$is_canonical), na.rm = TRUE)} canonical\n"))
+```
+
+## The plan — every dataset, before anything is written
+
+```{r}
+#| label: plan
+ds_all <- q("SELECT DISTINCT dataset_key FROM sample ORDER BY 1")$dataset_key
+ds_use <- if (length(ONLY)) intersect(ds_all, ONLY) else ds_all
+if (length(ONLY) && length(setdiff(ONLY, ds_all)))
+  cat(glue("NOTE requested but absent from the release: ",
+           "{paste(setdiff(ONLY, ds_all), collapse=', ')}\n"))
+
+plans <- setNames(lapply(ds_use, function(d) plan_dataset_netcdf(con, d)), ds_use)
+plan_tbl <- bind_rows(lapply(plans, summarise_netcdf_plan))
+write_csv(plan_tbl, file.path(OUT_DIR, "publish_plan.csv"), na = "")
+kable(plan_tbl, caption = glue("netCDF plan for {RELEASE} — {nrow(plan_tbl)} datasets"))
+```
+
+```{r}
+#| label: plan-notes
+# Datasets in the release registry with no core rows are reported rather than
+# passed over silently — `in_release: false` holdouts land here, and so would a
+# dataset whose projection failed.
+reg <- q("SELECT dataset_key, dataset_name FROM dataset ORDER BY 1")
+no_core <- setdiff(reg$dataset_key, ds_all)
+if (length(no_core))
+  cat(glue("in the release `dataset` table but with no core sample rows ",
+           "(nothing to publish): {paste(no_core, collapse=', ')}\n"))
+
+ext <- bind_rows(lapply(names(plans), function(d) {
+  lv <- plans[[d]]$levels
+  if (!nrow(lv)) return(NULL)
+  lv <- lv[lv$n_orphan > 0 | lv$n_external_parent > 0, ]
+  if (!nrow(lv)) return(NULL)
+  tibble(dataset_key = d, sample_type = lv$sample_type,
+         n_orphan = lv$n_orphan, n_external_parent = lv$n_external_parent)
+}))
+if (nrow(ext)) {
+  cat("\nlevels with unresolved or cross-dataset parents:\n")
+  kable(ext)
+}
+```
+
+::: {.callout-note title="Cross-dataset parents are not levels"}
+`sample_key` is globally unique, so a `parent_sample_key` can point into another
+dataset — `calcofi_dic` parents 6 of its bottles onto `calcofi_bottle` **casts**,
+which is how the DIC/bottle dedup works. Those rows are counted as
+`n_external_parent` and the level is treated as a root *of its own file*, because
+the parent's rows are not part of that dataset and so cannot be one of its
+groups. (This is also what used to crash the hierarchy walk with `subscript out
+of bounds`.)
+:::
+
+## Helpers
+
+```{r}
+#| label: helpers
+
+# Columns that are entirely NULL at a level carry no information but would be
+# written as a full variable of fill values, which reads as "measured, missing".
+nonnull_cols <- function(tbl, cands, where = "TRUE") {
+  cands <- intersect(cands, dbListFields(con, tbl))
+  if (!length(cands)) return(character())
+  sel <- paste(glue("COUNT({cands}) AS \"{cands}\""), collapse = ", ")
+  n   <- q("SELECT {sel} FROM {tbl} WHERE {where}")
+  names(n)[unlist(n) > 0]
+}
+
+# datetime -> CF numeric time. Kept as epoch seconds because that is what
+# `.NC_COORD_UNITS` declares in the units attribute.
+as_time <- function(col) glue("epoch({col})::DOUBLE")
+
+# obs-level columns that actually carry values for this dataset: a bio dataset
+# needs taxon_key/life_stage, an env dataset has neither.
+# `[[` on a named vector errors for a missing name rather than returning NULL, and
+# pic_zooplankton is a tow registry with samples but NO obs partition — so the
+# lookup must be explicitly absent-tolerant.
+obs_part <- function(ds) if (ds %in% names(obs_part_of)) obs_part_of[[ds]] else NULL
+
+obs_ident_cols <- function(ds) {
+  part <- obs_part(ds)
+  if (is.null(part)) return(character())
+  n <- q("SELECT COUNT(taxon_key) AS taxon_key, COUNT(life_stage) AS life_stage
+          FROM read_parquet('{part}')")
+  names(n)[unlist(n) > 0]
+}
+
+# Every dataset has `sample` rows; not every dataset has `obs` rows. A tow
+# registry (pic_zooplankton: 99,530 tows, zero observations) is still a real
+# dataset and still publishes — as a point collection of sampling events with no
+# measurement variables. Falling back to `sample` is what makes "publish every
+# dataset" true rather than "publish every dataset that has measurements".
+sample_as_wide <- function(ds) {
+  keep <- nonnull_cols("sample",
+    c("cruise_key", "grid_key", "site_key", "latitude", "longitude", "datetime",
+      "depth_min_m", "depth_max_m", "tow_type"), glue("dataset_key = '{ds}'"))
+  sel <- paste(c("sample_key", keep), collapse = ", ")
+  df <- q("SELECT {sel} FROM sample WHERE dataset_key = '{ds}' ORDER BY sample_key")
+  if ("datetime" %in% names(df)) { df$time <- as.numeric(df$datetime); df$datetime <- NULL }
+  if ("depth_min_m" %in% names(df)) names(df)[names(df) == "depth_min_m"] <- "depth"
+  df
+}
+
+# dataset_meta for the file's self-description, from the RELEASE's dataset table
+# (so the text always matches the data being published) merged with any
+# `calcofi.netcdf` override block from the ingest notebook.
+ingest_yaml <- read_ingest_yaml(here())
+dataset_meta_of <- function(ds) {
+  row <- reg_full[reg_full$dataset_key == ds, ]
+  dm <- if (nrow(row)) as.list(row[1, ]) else list()
+  dm <- dm[!vapply(dm, function(x) is.null(x) || (length(x) == 1 && is.na(x)), logical(1))]
+  ov <- ingest_yaml[[ds]]$netcdf
+  if (!is.null(ov)) dm <- modifyList(dm, ov)
+  dm
+}
+reg_full <- q("SELECT * FROM dataset")
+```
+
+## Build
+
+```{r}
+#| label: build
+#| results: asis
+
+# One row per file built, accumulated for the verify + publish steps below.
+built <- list()
+
+build_one <- function(ds, plan) {
+  shape <- plan$shape
+  part  <- obs_part(ds)
+  mts   <- plan$measurement_types
+  ident <- obs_ident_cols(ds)
+  nc_path <- file.path(OUT_DIR, glue("{ds}.nc"))
+  unlink(nc_path)
+
+  # ---- obs-derived wide frame, at the OCCURRENCE grain ------------------------
+  # Grouping by sample_key alone would collapse every taxon in a sample: 34,109
+  # zooscan occurrences over 23 taxa would become 1,483 rows, and the file would
+  # still look well-formed. obs_wide_sql() defends the grain.
+  wide <- NULL
+  if (!is.null(part) && shape != "groups") {
+    grain <- c("sample_key", "depth_min_m", ident)
+    carry <- intersect(c("cruise_key", "grid_key", "latitude", "longitude", "datetime"),
+                       dbGetQuery(con, glue("DESCRIBE SELECT * FROM read_parquet('{part}')"))$column_name)
+    sql <- obs_wide_sql(ds, mts, obs_tbl = glue("read_parquet('{part}')"),
+                        grain = grain, carry = carry, order_by = grain,
+                        count_col = "n_long")
+    wide <- dbGetQuery(con, sql)
+    # more long rows than measurement types inside one grain group means MAX()
+    # discarded a value — report it rather than let it vanish
+    dup_n <- sum(wide$n_long > length(mts))
+    wide$n_long <- NULL
+    if (dup_n) cat(glue("\n- `{ds}`: {dup_n} grain group(s) held more rows than ",
+                        "measurement types — duplicate values collapsed\n"))
+    if ("datetime" %in% names(wide)) {
+      wide$time <- as.numeric(wide$datetime); wide$datetime <- NULL
+    }
+    if ("depth_min_m" %in% names(wide)) {
+      names(wide)[names(wide) == "depth_min_m"] <- "depth"
+    }
+    if (length(ident) && nrow(wide)) {
+      tx <- q("SELECT taxon_key, scientific_name FROM taxon")
+      if ("taxon_key" %in% names(wide))
+        wide$scientific_name <- tx$scientific_name[match(wide$taxon_key, tx$taxon_key)]
+    }
+  } else if (shape != "groups") {
+    # samples but no observations — publish the events themselves
+    wide <- sample_as_wide(ds)
+    mts  <- character()
+  }
+
+  res <- switch(shape,
+    profile    = .build_ragged(ds, plan, wide, mts, ident, nc_path, "profile"),
+    trajectory = .build_ragged(ds, plan, wide, mts, ident, nc_path, "trajectory"),
+    point      = .build_point(ds, plan, wide, mts, ident, nc_path),
+    groups     = .build_groups(ds, plan, mts, nc_path))
+  if (is.null(res)) return(NULL)
+
+  # ---- global attributes, derived from dataset_meta ---------------------------
+  nc <- nc_open(nc_path, write = TRUE)
+  globals <- nc_global_atts(
+    ds, dataset_meta_of(ds), RELEASE,
+    # `shape` only distinguishes "has a CF feature type" from "has none"; the exact
+    # featureType / cdm_data_type come from the plan via `extra` below
+    shape = if (is.na(plan$feature_type)) "groups" else "profile",
+    cf_scope = res$cf_scope,
+    workflow_url = "https://calcofi.io/workflows/publish_to-netcdf.html",
+    extra = c(list(featureType = plan$feature_type, cdm_data_type = res$cdm),
+              res$extra))
+  globals <- globals[!vapply(globals, function(x) is.null(x) || all(is.na(x)), logical(1))]
+  for (nm in names(globals)) ncatt_put(nc, 0, nm, globals[[nm]])
+  nc_close(nc)
+
+  cat(glue("\n- **`{ds}`** ({shape}): {res$note}, ",
+           "{round(file.size(nc_path)/1048576, 1)} MB\n"))
+  tibble(dataset_key = ds, shape = shape, feature_type = plan$feature_type %||% NA,
+         path = nc_path, bytes = file.size(nc_path),
+         source_tables = paste(res$source_tables, collapse = ","),
+         cf_scope = res$cf_scope, note = res$note)
+}
+```
+
+```{r}
+#| label: build-ragged
+# profile and trajectory are the SAME contiguous ragged array and differ only in
+# which dimension the coordinates sit on — a profile's position is fixed per
+# instance, a trajectory's varies along the track. So one builder serves both.
+.build_ragged <- function(ds, plan, wide, mts, ident, nc_path, feature_type) {
+  if (is.null(wide) || !nrow(wide)) return(NULL)
+
+  if (feature_type == "profile") {
+    id_col   <- "sample_key"
+    obs_cols <- "depth"
+    inst_cols <- intersect(c("sample_key", "cruise_key", "grid_key",
+                             "time", "latitude", "longitude"), names(wide))
+    ord <- order(wide$sample_key, wide$depth)
+  } else {
+    # a trajectory instance is the CRUISE: the track is the ship's path through
+    # the cruise, ordered in time. cufes leaves 59,274 obs with no cruise_key —
+    # they go into an explicit 'unknown' trajectory rather than being dropped.
+    id_col <- "cruise_key"
+    if (!"cruise_key" %in% names(wide)) return(NULL)
+    n_nocruise <- sum(is.na(wide$cruise_key))
+    wide$cruise_key[is.na(wide$cruise_key)] <- "unknown"
+    if (n_nocruise)
+      cat(glue("\n  - `{ds}`: {n_nocruise} observation(s) with no cruise_key ",
+               "grouped as trajectory 'unknown'\n"))
+    obs_cols  <- intersect(c("time", "latitude", "longitude", "depth"), names(wide))
+    inst_cols <- "cruise_key"
+    ord <- order(wide$cruise_key, wide$time, na.last = TRUE)
+  }
+  wide <- wide[ord, , drop = FALSE]
+
+  # identifiers and taxon names ride the OBS dimension: they vary per observation
+  obs_chr <- setdiff(intersect(c("sample_key", ident, "scientific_name"), names(wide)),
+                     inst_cols)
+  ids  <- unique(wide[[id_col]])
+  prof <- wide[match(ids, wide[[id_col]]), inst_cols, drop = FALSE]
+
+  d <- nc_profile_def(length(ids), nrow(wide), prof, mts, var_meta,
+                      obs_cols = obs_cols)
+  # the char obs-dimension columns are not part of the DSG contract, so they are
+  # defined alongside as plain root variables on the obs dimension
+  v_chr <- if (length(obs_chr))
+    nc_level_vars("", wide[obs_chr], d$dims$obs, var_meta = var_meta) else list()
+
+  nc <- nc_create(nc_path, c(unname(d$vars), unname(v_chr)), force_v4 = TRUE)
+  n <- nc_profile_write(nc, d$vars, wide, inst_cols, mts,
+                        profile_id_col = id_col, obs_cols = obs_cols)
+  if (length(obs_chr)) nc_level_put(nc, "", wide[obs_chr], v_chr, var_meta = var_meta)
+  nc_profile_atts(nc, mts, var_meta, profile_vars = inst_cols,
+                  profile_id_var = id_col, feature_type = feature_type,
+                  obs_cols = obs_cols)
+  nc_close(nc)
+
+  list(note = glue("{n$n_profile} {feature_type} instances, {n$n_obs} ",
+                   "observations, {length(mts)} measurement variables"),
+       cdm = if (feature_type == "profile") "Profile" else "Trajectory",
+       source_tables = c("sample", "obs", if (length(ident)) "taxon"),
+       cf_scope = if (feature_type == "profile") paste(
+         "Fully CF: this dataset has one sampling level with many depths per",
+         "event, which is exactly a CF profile, so it needs no extension beyond",
+         "the standard.") else paste(
+         "Fully CF: an underway series on a moving platform is a CF trajectory.",
+         "One trajectory per cruise; time, latitude and longitude vary along the",
+         "observation dimension rather than being fixed per instance."),
+       extra = list(
+         n_instances = as.integer(n$n_profile),
+         n_observations = as.integer(n$n_obs)))
+}
+```
+
+```{r}
+#| label: build-point
+# A point collection is one flat dimension: no instances, so no ragged array and
+# no cf_role. nc_level_vars("") writes at the file root, which is exactly that.
+.build_point <- function(ds, plan, wide, mts, ident, nc_path) {
+  if (is.null(wide) || !nrow(wide)) return(NULL)
+  obs_cols <- intersect(c("time", "latitude", "longitude", "depth"), names(wide))
+  # drop an all-NA depth: CF's point feature does not require one, and a variable
+  # of pure fill values reads as "measured, missing"
+  if ("depth" %in% names(wide) && all(is.na(wide$depth))) {
+    wide$depth <- NULL; obs_cols <- setdiff(obs_cols, "depth")
+  }
+  keep <- c(intersect(c("sample_key", "cruise_key", "grid_key"), names(wide)),
+            obs_cols, ident, intersect("scientific_name", names(wide)), mts)
+  wide <- wide[, unique(keep), drop = FALSE]
+
+  d_obs <- ncdim_def("obs", "", seq_len(nrow(wide)), create_dimvar = FALSE)
+  v  <- nc_level_vars("", wide, d_obs, var_meta = var_meta)
+  nc <- nc_create(nc_path, unname(v), force_v4 = TRUE)
+  nc_level_put(nc, "", wide, v, var_meta = var_meta)
+  nc_profile_atts(nc, mts, var_meta, profile_vars = character(),
+                  profile_id_var = NULL, feature_type = "point",
+                  obs_cols = obs_cols)
+  nc_close(nc)
+
+  list(note = glue("{nrow(wide)} points, {length(mts)} measurement variables"),
+       cdm = "Point",
+       source_tables = c("sample", "obs", if (length(ident)) "taxon"),
+       cf_scope = paste(
+         "Fully CF: each row is an independent observation with its own time and",
+         "position, which is a CF point collection. Rows are at the OCCURRENCE",
+         "grain (event x taxon x life stage x depth), not the event grain, so a",
+         "sample with many taxa contributes many points.",
+         if (!"depth" %in% names(wide))
+           "This dataset records no observation depth; CF's point feature does not require one."
+         else ""),
+       extra = list(n_observations = nrow(wide)))
+}
+```
+
+```{r}
+#| label: build-groups
+# The nested case. Levels come from the adjacency list root-first, because a
+# child's parent_index points into its parent's dimension and so the parent must
+# already be defined.
+.build_groups <- function(ds, plan, mts, nc_path) {
+  lv <- plan$levels
+  if (!nrow(lv)) return(NULL)
+  part <- obs_part(ds)
+
+  SAMPLE_ATTRS <- c("grid_key", "site_key", "cruise_key", "order_occ",
+                    "latitude", "longitude", "datetime", "depth_min_m",
+                    "depth_max_m", "tow_type")
+  # ---- one data.frame per sampling level -------------------------------------
+  lvl <- list()
+  for (i in seq_len(nrow(lv))) {
+    st <- lv$sample_type[i]
+    keep <- nonnull_cols("sample", SAMPLE_ATTRS,
+                         glue("dataset_key = '{ds}' AND sample_type = '{st}'"))
+    sel <- paste(c("sample_key", "parent_sample_key", keep), collapse = ", ")
+    df  <- q("SELECT {sel} FROM sample
+              WHERE dataset_key = '{ds}' AND sample_type = '{st}'
+              ORDER BY sample_key")
+    if ("datetime" %in% names(df)) { df$time <- as.numeric(df$datetime); df$datetime <- NULL }
+    lvl[[st]] <- df
+  }
+  # ---- event-level effort, widened onto the level that owns the keys ----------
+  eff <- plan$effort_types
+  if (length(eff)) {
+    sel <- paste(sprintf(
+      "MAX(measurement_value) FILTER (WHERE measurement_type='%s') AS \"%s\"",
+      eff, eff), collapse = ",\n    ")
+    sm <- q("SELECT sample_key, {sel} FROM sample_measurement
+             WHERE dataset_key = '{ds}' GROUP BY sample_key")
+    for (st in names(lvl)) {
+      hit <- sum(sm$sample_key %in% lvl[[st]]$sample_key)
+      if (hit) lvl[[st]] <- left_join(lvl[[st]], sm, by = "sample_key")
+    }
+  }
+  # ---- parent_index per level -------------------------------------------------
+  pidx <- list()
+  for (i in seq_len(nrow(lv))) {
+    st <- lv$sample_type[i]; pt <- lv$parent_sample_type[i]
+    if (is.na(pt) || is.null(lvl[[pt]])) { pidx[[st]] <- NULL; next }
+    ix <- match(lvl[[st]]$parent_sample_key, lvl[[pt]]$sample_key)
+    ix[is.na(ix)] <- -1L                 # external/orphan: explicit, never dropped
+    pidx[[st]] <- as.integer(ix)
+  }
+  # ---- occurrence level, hung off whichever sample level obs points at --------
+  occ <- NULL; occ_parent <- NA_character_
+  if (!is.null(part)) {
+    ident <- obs_ident_cols(ds)
+    grain <- c("sample_key", "depth_min_m", ident)
+    occ <- dbGetQuery(con, obs_wide_sql(
+      ds, mts, obs_tbl = glue("read_parquet('{part}')"),
+      grain = grain, order_by = grain))
+    hits <- vapply(names(lvl), function(st)
+      sum(occ$sample_key %in% lvl[[st]]$sample_key), integer(1))
+    occ_parent <- names(lvl)[which.max(hits)]
+    occ$parent_index <- {
+      ix <- match(occ$sample_key, lvl[[occ_parent]]$sample_key)
+      ix[is.na(ix)] <- -1L; as.integer(ix)
+    }
+    if (length(ident) && "taxon_key" %in% names(occ)) {
+      tx <- q("SELECT taxon_key, scientific_name FROM taxon")
+      occ$scientific_name <- tx$scientific_name[match(occ$taxon_key, tx$taxon_key)]
+    }
+  }
+  # ---- sub-occurrence attributes, one group per measurement_type --------------
+  # body_length is millimetres and stage is an ordinal code: one variable cannot
+  # hold both, which is the same mixed-units problem that makes the long form
+  # un-CF-able in the first place.
+  att <- list()
+  for (a in plan$attribute_types) {
+    d <- q("SELECT sample_key, taxon_key, life_stage, bin_value, bin_label, count
+            FROM obs_attribute
+            WHERE dataset_key = '{ds}' AND measurement_type = '{a}'
+            ORDER BY sample_key, taxon_key, life_stage, bin_value")
+    if (!nrow(d) || is.null(occ)) next
+    key_occ <- paste(occ$sample_key, occ$taxon_key %||% "", occ$life_stage %||% "", sep = "|")
+    ix <- match(paste(d$sample_key, d$taxon_key, d$life_stage, sep = "|"), key_occ)
+    n_orph <- sum(is.na(ix)); ix[is.na(ix)] <- -1L
+    d$parent_index <- as.integer(ix)
+    if (n_orph)
+      cat(glue("\n  - `{ds}`/{a}: {n_orph} bin(s) with no parent occurrence, ",
+               "published with parent_index = -1\n"))
+    att[[a]] <- d
+  }
+
+  # ---- define and write -------------------------------------------------------
+  dims <- list(); vars <- list()
+  drop_keys <- function(df) df[, setdiff(names(df),
+    c("sample_key", "parent_sample_key", "parent_index")), drop = FALSE]
+
+  for (st in names(lvl)) {
+    dims[[st]] <- ncdim_def(glue("{st}_n"), "", seq_len(nrow(lvl[[st]])),
+                            create_dimvar = FALSE)
+  }
+  if (!is.null(occ) && nrow(occ))
+    dims[["occurrence"]] <- ncdim_def("occurrence_n", "", seq_len(nrow(occ)),
+                                      create_dimvar = FALSE)
+  for (a in names(att))
+    dims[[a]] <- ncdim_def(glue("{a}_n"), "", seq_len(nrow(att[[a]])),
+                           create_dimvar = FALSE)
+
+  for (i in seq_len(nrow(lv))) {
+    st <- lv$sample_type[i]; pt <- lv$parent_sample_type[i]
+    vars[[st]] <- nc_level_vars(
+      st, drop_keys(lvl[[st]]), dims[[st]],
+      if (!is.na(pt) && !is.null(dims[[pt]])) dims[[pt]] else NULL,
+      pidx[[st]], var_meta)
+  }
+  if (!is.null(occ) && nrow(occ))
+    vars[["occurrence"]] <- nc_level_vars(
+      "occurrence", drop_keys(occ), dims[["occurrence"]], dims[[occ_parent]],
+      occ$parent_index, var_meta)
+  for (a in names(att))
+    vars[[a]] <- nc_level_vars(a, drop_keys(att[[a]]), dims[[a]],
+                               dims[["occurrence"]], att[[a]]$parent_index, var_meta)
+
+  nc <- nc_create(nc_path, unlist(lapply(vars, unname), recursive = FALSE),
+                  force_v4 = TRUE)
+  for (i in seq_len(nrow(lv))) {
+    st <- lv$sample_type[i]; pt <- lv$parent_sample_type[i]
+    nc_level_put(nc, st, drop_keys(lvl[[st]]), vars[[st]], pidx[[st]], var_meta,
+                 if (is.na(pt)) NA_character_ else pt)
+  }
+  if (!is.null(occ) && nrow(occ))
+    nc_level_put(nc, "occurrence", drop_keys(occ), vars[["occurrence"]],
+                 occ$parent_index, var_meta, occ_parent)
+  for (a in names(att))
+    nc_level_put(nc, a, drop_keys(att[[a]]), vars[[a]], att[[a]]$parent_index,
+                 var_meta, "occurrence")
+  nc_close(nc)
+
+  rows <- c(vapply(lvl, nrow, integer(1)),
+            if (!is.null(occ)) c(occurrence = nrow(occ)),
+            vapply(att, nrow, integer(1)))
+  list(note = paste(names(rows), rows, sep = "=", collapse = " "),
+       cdm = NULL,
+       source_tables = c("sample", "obs", "obs_attribute", "sample_measurement",
+                         "taxon"),
+       cf_scope = paste(
+         "CF-1.10 where CF applies (coordinates, units, standard names, time).",
+         "The", paste(c(lv$sample_type, "occurrence"), collapse = " -> "),
+         "hierarchy uses netCDF-4 groups with explicit parent_index links;",
+         "CF defines no feature type for this nesting."),
+       extra = list(n_levels = nrow(lv),
+                    level_rows = paste(names(rows), rows, sep = "=", collapse = " ")))
+}
+```
+
+```{r}
+#| label: build-run
+#| results: asis
+built <- bind_rows(lapply(names(plans), function(d) {
+  out <- tryCatch(build_one(d, plans[[d]]), error = function(e) {
+    cat(glue("\n- **`{d}`**: FAILED — {conditionMessage(e)}\n")); NULL })
+  out
+}))
+cat("\n\n")
+```
+
+```{r}
+#| label: build-summary
+kable(built |> mutate(MB = round(bytes / 1048576, 1)) |>
+        select(dataset_key, shape, feature_type, MB, note),
+      caption = "Files built")
+```
+
+## Supplemental — full-resolution CTD scans
+
+`obs_ctd_full` is ~212 M long rows across 96 cruise partitions and 54 sensor
+types, flagged *supplemental* in the release precisely because of its size. It is
+a **superset in two dimensions, not one**: every depth scan rather than a thinned
+subset, *and* all 14,336 casts (both the down- and up-cast of each occupation)
+where the thinned record keeps one direction per occupation.
+
+::: {.callout-important title="Why this one is chunked"}
+This is the table that **OOM'd ERDDAP at every container size tested** — 4, 5 and
+6 GB (see [the serving benchmark](https://calcofi.io/workflows/bench_erddap_ctd.html)).
+Materializing the pivot here would hit the same wall, so it is processed **one
+cruise partition at a time** and written at advancing offsets. Peak memory is one
+cruise, not the whole table. The chunked and single-shot paths are now the same
+tested code in `nc_profile_write()`.
+
+The measurement-type list **must** be the union across all partitions. It once
+read partition 1 alone — the alphabetically-first cruise, 1998 — which carries
+only 32 of the table's 54 types because bottle nutrients were not folded into the
+CTD files until 2008. Every later-introduced type was silently absent from a file
+advertised as full resolution: 39 variables where there should have been 61.
+:::
+
+```{r}
+#| label: supplemental
+#| eval: !expr DO_SUPPLEMENTAL
+#| results: asis
+
+FULL_NC <- file.path(OUT_DIR, "calcofi_ctd-cast_full.nc")
+parts <- cc_release_partitions("obs_ctd_full", RELEASE)
+urls_all <- paste0("'", parts, "'", collapse = ", ")
+cat(glue("\n- partitions: {length(parts)}\n"))
+
+full_types <- q("SELECT DISTINCT measurement_type
+                 FROM read_parquet([{urls_all}], hive_partitioning = true,
+                                   union_by_name = true) ORDER BY 1")$measurement_type
+p1_types <- q("SELECT DISTINCT measurement_type FROM read_parquet('{parts[1]}')")$measurement_type
+cat(glue("\n- sensor types: {length(full_types)} (partition 1 alone would declare ",
+         "{length(p1_types)}; the union recovers {length(setdiff(full_types, p1_types))})\n"))
+stopifnot("full type list must not be a single partition's subset" =
+            length(full_types) >= length(p1_types))
+
+# PASS 1 — size the dimensions. netCDF needs them at creation time, and a wrong
+# guess means rewriting a multi-GB file. Cheap: two columns per partition.
+p1 <- bind_rows(lapply(seq_along(parts), function(i) {
+  r <- q("SELECT count(*) AS n_lev, count(DISTINCT sample_key) AS n_prof FROM (
+            SELECT DISTINCT sample_key, depth_min_m FROM read_parquet('{parts[i]}'))")
+  if (i %% 24 == 0) message(glue("  pass1 {i}/{length(parts)}"))
+  r
+}))
+N_PROF <- sum(p1$n_prof); N_LEV <- sum(p1$n_lev)
+cat(glue("\n- profiles: {N_PROF}, depth levels: {N_LEV}\n"))
+
+proto <- data.frame(sample_key = character(), cruise_key = character(),
+                    time = numeric(), latitude = numeric(), longitude = numeric(),
+                    stringsAsFactors = FALSE)
+INST <- names(proto)
+d <- nc_profile_def(N_PROF, N_LEV, proto, full_types, var_meta, obs_cols = "depth")
+ncf <- nc_create(FULL_NC, unname(d$vars), force_v4 = TRUE)
+
+off_p <- 1L; off_o <- 1L
+for (i in seq_along(parts)) {
+  w <- dbGetQuery(con, obs_wide_sql(
+    "calcofi_ctd-cast", full_types, obs_tbl = glue("read_parquet('{parts[i]}')"),
+    grain = c("sample_key", "depth_min_m"),
+    carry = c("cruise_key", "latitude", "longitude", "datetime"),
+    order_by = c("sample_key", "depth_min_m")))
+  if (!nrow(w)) next
+  w$time <- as.numeric(w$datetime); w$datetime <- NULL
+  names(w)[names(w) == "depth_min_m"] <- "depth"
+  n <- nc_profile_write(ncf, d$vars, w, INST, full_types,
+                        profile_id_col = "sample_key",
+                        start_profile = off_p, start_obs = off_o)
+  off_p <- off_p + n$n_profile; off_o <- off_o + n$n_obs
+  if (i %% 12 == 0) message(glue("  wrote {i}/{length(parts)} — {off_p-1} profiles, {off_o-1} levels"))
+  rm(w); invisible(gc(FALSE))
+}
+# a sizing mismatch leaves trailing fill values that read as real missing data
+stopifnot(off_p - 1L == N_PROF, off_o - 1L == N_LEV)
+
+nc_profile_atts(ncf, full_types, var_meta, profile_vars = INST,
+                profile_id_var = "sample_key", feature_type = "profile")
+gl <- nc_global_atts(
+  "calcofi_ctd-cast", modifyList(dataset_meta_of("calcofi_ctd-cast"), list(
+    title = "CalCOFI CTD casts, full resolution — CF profile dataset",
+    description = paste(
+      "Full-resolution CalCOFI CTD scans as CF Discrete Sampling Geometry.",
+      "This file differs from the thinned companion in TWO ways, not one: it keeps",
+      "every depth scan rather than an adaptively-thinned subset, AND it covers all",
+      "casts including both the down- and up-cast of each station occupation, where",
+      "the thinned record keeps a single direction. It is therefore a superset, not",
+      "a higher-resolution rendering of the same profiles. Most analyses want the",
+      "thinned file; use this one when individual scans or the second cast",
+      "direction matter."))),
+  RELEASE, "profile",
+  workflow_url = "https://calcofi.io/workflows/publish_to-netcdf.html",
+  extra = list(featureType = "profile", cdm_data_type = "Profile",
+               source_table = "obs_ctd_full (supplemental)",
+               n_instances = as.integer(N_PROF), n_observations = as.integer(N_LEV)))
+for (nm in names(gl)) ncatt_put(ncf, 0, nm, gl[[nm]])
+nc_close(ncf)
+cat(glue("\n- wrote `{basename(FULL_NC)}` ({round(file.size(FULL_NC)/1048576, 1)} MB)\n"))
+
+built <- bind_rows(built, tibble(
+  dataset_key = "calcofi_ctd-cast_full", shape = "profile", feature_type = "profile",
+  path = FULL_NC, bytes = file.size(FULL_NC),
+  source_tables = "obs_ctd_full", cf_scope = gl$cf_scope,
+  note = glue("{N_PROF} profiles, {N_LEV} levels, {length(full_types)} variables")))
+```
+
+## Verify
+
+A file that merely *exists* is not evidence it is correct. Every file is re-opened
+and checked against the shape it claims.
+
+```{r}
+#| label: verify
+att_chr <- function(o, v, nm) {
+  a <- ncatt_get(o, v, nm)
+  # ncatt_get returns value = 0 when the attribute is absent, and nzchar(0) is
+  # TRUE ("0"), so testing the value would report every missing attribute present
+  if (isTRUE(a$hasatt)) as.character(a$value) else NA_character_
+}
+
+verify_one <- function(row) {
+  o <- nc_open(row$path); on.exit(nc_close(o))
+  ft <- att_chr(o, 0, "featureType")
+  rs_ok <- NA
+  if ("rowSize" %in% names(o$var)) {
+    rs <- ncvar_get(o, "rowSize")
+    rs_ok <- sum(rs) == o$dim$obs$len
+  }
+  # a parent_index must land inside its parent's dimension, or the hierarchy is
+  # silently wrong rather than broken
+  pi_ok <- NA
+  pis <- grep("/parent_index$", names(o$var), value = TRUE)
+  if (length(pis)) {
+    pi_ok <- all(vapply(pis, function(v) {
+      x <- as.vector(ncvar_get(o, v)); x <- x[x != -1L]
+      inst <- att_chr(o, v, "instance_dimension")
+      dn <- paste0(inst, "_n")
+      !length(x) || (!is.na(inst) && dn %in% names(o$dim) &&
+                       all(x >= 1 & x <= o$dim[[dn]]$len))
+    }, logical(1)))
+  }
+  tibble(dataset_key = row$dataset_key, featureType = ft,
+         n_vars = length(o$var), n_dims = length(o$dim),
+         rowSize_sums = rs_ok, parent_index_in_range = pi_ok,
+         has_title = !is.na(att_chr(o, 0, "title")),
+         has_summary = !is.na(att_chr(o, 0, "summary")),
+         has_cf_scope = !is.na(att_chr(o, 0, "cf_scope")))
+}
+ver <- bind_rows(lapply(seq_len(nrow(built)), function(i) verify_one(built[i, ])))
+kable(ver, caption = "Round-trip verification")
+
+bad <- ver |> filter(!is.na(rowSize_sums) & !rowSize_sums |
+                     !is.na(parent_index_in_range) & !parent_index_in_range |
+                     !has_title | !has_summary)
+stopifnot("every published file must pass its own structural checks" = nrow(bad) == 0)
+```
+
+```{r}
+#| label: double-count-demo
+# The point of the nested form, made concrete: effort summed at the right level vs
+# the flat-table answer a naive join would give.
+demo <- built |> filter(shape == "groups") |> slice_head(n = 1)
+if (nrow(demo)) {
+  o <- nc_open(demo$path)
+  eff <- grep("^(net|tow|bottle|cast)/(volume_sampled|std_haul_factor)$",
+              names(o$var), value = TRUE)
+  occ_pi <- if ("occurrence/parent_index" %in% names(o$var))
+    as.vector(ncvar_get(o, "occurrence/parent_index")) else integer()
+  if (length(eff) && length(occ_pi)) {
+    x <- as.vector(ncvar_get(o, eff[1])); occ_pi <- occ_pi[occ_pi > 0]
+    tibble(
+      variable = eff[1],
+      `summed at its own level (correct)` = round(sum(x, na.rm = TRUE)),
+      `... if repeated onto occurrences` = round(sum(x[occ_pi], na.rm = TRUE)),
+      `inflation factor` = round(sum(x[occ_pi], na.rm = TRUE) / sum(x, na.rm = TRUE), 1)
+    ) |> kable(caption = glue("{demo$dataset_key}: why the levels are not flattened"))
+  }
+  nc_close(o)
+}
+```
+
+## Publish
+
+Versioned by **DB release**, with bytes written **once**: a build that is
+byte-identical to an earlier release still gets a manifest and index page, but the
+file is not re-uploaded, and `storage.calcofi.io` redirects the release-scoped
+`.nc` URL to the canonical object.
+
+```{r}
+#| label: publish
+#| eval: !expr PUBLISH
+#| results: asis
+pub <- lapply(seq_len(nrow(built)), function(i) {
+  r <- built[i, ]
+  # the published dataset id drops the provider prefix only where the file is the
+  # whole dataset; keeping dataset_key makes the URL self-describing
+  plan_i <- cc_netcdf_plan(r$path, r$dataset_key, RELEASE)
+  man <- cc_netcdf_manifest(plan_i, r$dataset_key, RELEASE, RELEASE, r$bytes,
+                            source_tables = strsplit(r$source_tables, ",")[[1]],
+                            cf_scope = r$cf_scope %||% "")
+  res <- cc_netcdf_publish(r$path, r$dataset_key, RELEASE, plan_i, man)
+  cat(glue("\n- `{r$dataset_key}`: upload={plan_i$upload} ",
+           "identical_to={plan_i$identical_to} -> {res$url}\n"))
+  res
+})
+```
+
+::: {.callout-warning title="cc_netcdf_publish() does not write the browse pages"}
+It writes the payload, the per-release `manifest.json`/`index.html`,
+`manifests.json` and `latest.txt`. The per-dataset and root listings come from
+`scripts/build_netcdf_index.R`, which **must be run after publishing** — skipping
+it makes correctly-published files look unpublished.
+:::
+
+```{r}
+#| label: index
+#| eval: !expr PUBLISH
+idx <- system2("Rscript", shQuote(here("scripts/build_netcdf_index.R")),
+               stdout = TRUE, stderr = TRUE)
+cat(tail(idx, 20), sep = "\n")
+```
+
+```{r}
+#| label: cleanup
+dbDisconnect(con, shutdown = TRUE)
+```

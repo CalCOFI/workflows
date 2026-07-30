@@ -1,0 +1,648 @@
+---
+title: "Publish every dataset to ERDDAP"
+subtitle: "One config row per dataset_key over the core, served from DuckDB views"
+author: "CalCOFI"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: true
+    code-tools: true
+    df-print: kable
+calcofi:
+  target_name: publish_to_erddap
+  workflow_type: publish
+  dependency:
+    - release_database
+  output: data/erddap/datasets_calcofi.xml
+  workflow_url: https://calcofi.io/workflows/publish_to-erddap.html
+editor_options:
+  chunk_output_type: console
+---
+
+## Overview
+
+Generate the ERDDAP configuration for **every** dataset in the frozen release,
+discovered from `dataset_key`'s presence in the core schema rather than from a
+hand-maintained table list.
+
+This replaces `publish_calcofi_to_erddap.qmd`, which was **already broken and
+already prescribed this design**. Its own callout said every `parquet` path in it
+pointed at a per-dataset table the ingests no longer publish, that it "will fail
+until the config is repointed", and that:
+
+> `sample` carries `time`/`latitude`/`longitude`/`depth_min_m`/`depth_max_m`
+> directly … **one config row per `dataset_key` over `sample`/`obs` replaces the
+> per-table list.**
+
+Two things changed besides the repointing:
+
+**1 · `EDDTableFromDatabase` over DuckDB, not `EDDTableFromParquetFiles`.** ERDDAP
+streams filtered results from DuckDB — predicate pushdown, partition pruning, disk
+spill — instead of loading whole Parquet files into the JVM heap. That is what
+fixed the OOM which killed `ctd_wide` at 4, 5 **and** 6 GB container sizes; see
+[the serving benchmark](https://calcofi.io/workflows/bench_erddap_ctd.html).
+
+**2 · Every view is executed locally before its XML is written.** The old config's
+failure mode was silent: paths that no longer existed, discovered only when ERDDAP
+logged "Bad line(s)". Here each view is run against the real release, its row count
+and coordinate coverage recorded, and **a view that returns nothing does not get a
+dataset block**.
+
+::: {.callout-note title="What gets served"}
+Per `dataset_key`, up to four ERDDAP datasets, each only when it has rows:
+
+| datasetID | grain | source |
+|---|---|---|
+| `{dataset_key}` | one row per observation (occurrence × measurement) | `obs` + `taxon` + `sample` |
+| `{dataset_key}_sample` | one row per sampling event, effort widened onto it | `sample` + `sample_measurement` |
+| `{dataset_key}_attribute` | sub-occurrence detail (length/stage bins) | `obs_attribute` + `sample` |
+| `{dataset_key}_full` | the full series *before* thinning | a supplemental table |
+
+The old datasetIDs (`calcofi_ctd`, `calcofi_casts`, `calcofi_ctd_thin`, …) are
+**not** preserved — these are `dataset_key`-based and self-describing. Deploy is
+manual and selective, so the changeover is a decision made at splice time, not
+here.
+:::
+
+## Setup
+
+```{r}
+#| label: setup
+#| message: false
+#| warning: false
+
+librarian::shelf(DBI, duckdb, dplyr, fs, glue, jsonlite, purrr, readr, stringr,
+                 tibble, tidyr, here, knitr, quiet = TRUE)
+here <- here::here
+options(readr.show_col_types = FALSE)
+devtools::load_all(here::here("../calcofi4db"))
+source(here("libs/erddap.R"))
+source(here("libs/erddap_duckdb.R"))
+source(here("libs/publish_netcdf.R"))   # cc_release_version(), cc_release_parquet()
+
+RELEASE <- cc_release_version()
+dir_erddap <- here("data/erddap"); dir_create(dir_erddap)
+
+# LOCAL release parquet — the same bytes as the promoted release, read from disk so
+# every view below can actually be executed before its config is written.
+PQ_LOCAL <- here(glue("data/releases/{RELEASE}/parquet"))
+
+# The path ERDDAP will see. A DuckDB view binds its parquet paths LITERALLY, so the
+# deployed .db must be built against the server's path, not this machine's — an
+# identity mount. Two .db files are therefore produced: one with local paths for
+# validation, one with server paths for deploy.
+ERDDAP_ROOT <- Sys.getenv("CALCOFI_ERDDAP_ROOT", "/share/erddap/data")
+PQ_SERVER   <- glue("{ERDDAP_ROOT}/release/{RELEASE}/parquet")
+ING_SERVER  <- glue("{ERDDAP_ROOT}/ingest")
+ING_LOCAL   <- here("data/parquet")
+
+cat(glue("release       : {RELEASE}\n"))
+cat(glue("local parquet : {PQ_LOCAL} ({ifelse(dir_exists(PQ_LOCAL), 'present', 'MISSING')})\n"))
+cat(glue("server parquet: {PQ_SERVER}\n"))
+cat(glue("output        : {dir_erddap}\n"))
+stopifnot("local release parquet is required to validate the views" = dir_exists(PQ_LOCAL))
+```
+
+```{r}
+#| label: connect
+con <- dbConnect(duckdb())
+for (s in c("SET memory_limit='8GB'", "SET enable_progress_bar=false"))
+  try(dbExecute(con, s), silent = TRUE)
+q <- function(sql, ...) dbGetQuery(con, glue(sql, ..., .envir = parent.frame()))
+pq <- function(root, tbl) if (dir_exists(file.path(PQ_LOCAL, tbl)))
+  glue("{root}/{tbl}/**/*.parquet") else glue("{root}/{tbl}.parquet")
+```
+
+## Discover what the core holds per dataset
+
+```{r}
+#| label: discover
+core_tbls <- c("sample", "obs", "obs_attribute", "sample_measurement")
+presence <- bind_rows(lapply(core_tbls, function(t) {
+  src <- pq(PQ_LOCAL, t)
+  q("SELECT '{t}' AS tbl, dataset_key, count(*) AS n
+     FROM read_parquet('{src}', hive_partitioning = true, union_by_name = true)
+     GROUP BY 1, 2")
+}))
+pres_wide <- presence |>
+  tidyr::pivot_wider(names_from = tbl, values_from = n, values_fill = 0) |>
+  arrange(dataset_key)
+kable(pres_wide, caption = glue("Core rows per dataset in {RELEASE}"))
+```
+
+```{r}
+#| label: discover-supplemental
+# A `_full` variant is whatever an ingest declares `supplemental: true` in its
+# `tables_owned` — the same YAML the netCDF publisher reads. Declared is not the
+# same as usable, so each one is checked below rather than trusted.
+iy <- read_ingest_yaml(here())
+supp <- bind_rows(lapply(names(iy), function(ds) {
+  to <- iy[[ds]]$tables_owned
+  if (is.null(to)) return(NULL)
+  hit <- Filter(function(t) isTRUE(t$supplemental), to)
+  if (!length(hit)) return(NULL)
+  tibble(dataset_key = ds, table = vapply(hit, function(t) t$table, character(1)),
+         note = vapply(hit, function(t) t$note %||% "", character(1)))
+}))
+supp <- supp |>
+  mutate(
+    in_release = dir_exists(file.path(PQ_LOCAL, table)) |
+                 file_exists(file.path(PQ_LOCAL, glue("{table}.parquet"))),
+    in_ingest  = dir_exists(file.path(ING_LOCAL, dataset_key, table)) |
+                 file_exists(file.path(ING_LOCAL, dataset_key, glue("{table}.parquet"))))
+kable(supp, caption = "Supplemental (pre-thinning) tables declared by the ingests")
+```
+
+```{r}
+#| label: supplemental-usability
+# ERDDAP is a tabular server keyed on time/latitude/longitude. A supplemental table
+# that carries neither its own coordinates nor a resolvable link to an event that
+# has them cannot be served, no matter that it is published.
+supp_check <- bind_rows(lapply(seq_len(nrow(supp)), function(i) {
+  r <- supp[i, ]
+  root <- if (r$in_release) PQ_LOCAL else file.path(ING_LOCAL, r$dataset_key)
+  src  <- if (dir_exists(file.path(root, r$table)))
+    glue("{root}/{r$table}/**/*.parquet") else glue("{root}/{r$table}.parquet")
+  if (!r$in_release && !r$in_ingest)
+    return(tibble(dataset_key = r$dataset_key, table = r$table, rows = NA_real_,
+                  has_coords = NA, servable = FALSE, why = "not found locally"))
+  cols <- q("DESCRIBE SELECT * FROM read_parquet('{src}', hive_partitioning = true,
+             union_by_name = true)")$column_name
+  has_coords <- all(c("latitude", "longitude", "datetime") %in% cols)
+  n <- q("SELECT count(*) AS n FROM read_parquet('{src}', hive_partitioning = true,
+          union_by_name = true)")$n
+  # no coordinates of its own: can the rows reach an event that has them?
+  linked <- NA_real_
+  if (!has_coords) {
+    fk <- grep("_uuid$|^sample_key$", cols, value = TRUE)
+    fk <- setdiff(fk, grep(glue("^{r$table}"), fk, value = TRUE))
+    if (length(fk)) {
+      st <- (iy[[r$dataset_key]]$netcdf$sample_type %||%
+               q("SELECT sample_type FROM read_parquet('{pq(PQ_LOCAL,\"sample\")}')
+                  WHERE dataset_key = '{r$dataset_key}' LIMIT 1")$sample_type)
+      linked <- q("
+        SELECT count(s.sample_key) AS n FROM (
+          SELECT DISTINCT {fk[1]} AS k FROM read_parquet('{src}',
+                 hive_partitioning = true, union_by_name = true)) m
+        LEFT JOIN (SELECT sample_key FROM read_parquet('{pq(PQ_LOCAL,\"sample\")}')
+                   WHERE dataset_key = '{r$dataset_key}') s
+          ON s.sample_key = '{r$dataset_key}:{st}:' || m.k")$n
+      tot <- q("SELECT count(DISTINCT {fk[1]}) AS n FROM read_parquet('{src}',
+                hive_partitioning = true, union_by_name = true)")$n
+      linked <- linked / tot
+    }
+  }
+  tibble(dataset_key = r$dataset_key, table = r$table, rows = as.numeric(n),
+         has_coords = has_coords,
+         servable = has_coords || (!is.na(linked) && linked > 0.99),
+         why = if (has_coords) "carries its own time/lat/lon"
+               else if (is.na(linked)) "no coordinates and no resolvable event link"
+               else glue("{round(100*linked, 1)}% of its events resolve in `sample`"))
+}))
+kable(supp_check, caption = "Can each supplemental table be served?")
+```
+
+::: {.callout-warning title="`mets_measurement` is published but not servable"}
+The full ~1-minute METS series carries **no coordinates of its own** — only
+`mets_sample_uuid`, `measurement_type`, `measurement_value`, `cruise_key` — and
+its event table was never published: the mets ingest emits
+`sample`/`obs`/`mets_measurement`, where `sample` holds only the **thinned**
+events. So of its **2,366,547** distinct underway events, just **77,795 (3.3%)**
+resolve to a `sample` row.
+
+A `calcofi_mets_full` dataset would therefore serve 20.6 M measurements of which
+96.7% had no time or position. It is **excluded**, and the fix is upstream: the
+mets ingest needs to publish the full underway event table (positions and times
+for all 2.37 M records), not only the thinned subset. Filed as a finding rather
+than worked around here, because inventing coordinates is worse than serving less.
+
+`obs_ctd_full` has the opposite property — it carries `latitude`/`longitude`/
+`datetime`/`cruise_key` denormalized on every row — so `calcofi_ctd-cast_full`
+serves fine.
+:::
+
+## Build the view definitions
+
+```{r}
+#| label: view-sql
+# One SQL builder per grain. `root` is substituted twice over: once with local
+# paths to VALIDATE, once with the server's paths to DEPLOY.
+mt_units <- {
+  mt <- read_measurement_type(here("metadata/measurement_type.csv"))
+  setNames(as.list(mt$units), mt$measurement_type)
+}
+
+sql_obs <- function(ds, root) glue("
+  SELECT o.sample_key, o.cruise_key, o.grid_key, s.site_key, s.sample_type,
+         o.datetime                  AS time,
+         o.latitude::DOUBLE          AS latitude,
+         o.longitude::DOUBLE         AS longitude,
+         o.depth_min_m::DOUBLE       AS depth,
+         o.depth_max_m::DOUBLE       AS depth_max_m,
+         o.taxon_key, t.scientific_name, o.life_stage,
+         o.measurement_type,
+         o.measurement_value::DOUBLE AS measurement_value,
+         o.measurement_qual
+  FROM read_parquet('{root}/obs/dataset_key={ds}/*.parquet') o
+  LEFT JOIN read_parquet('{root}/taxon.parquet') t USING (taxon_key)
+  LEFT JOIN (SELECT sample_key, site_key, sample_type
+             FROM read_parquet('{root}/sample.parquet')) s USING (sample_key)")
+
+sql_sample <- function(ds, root, eff = character()) {
+  # effort widened onto the event: one column per sample_measurement type is far
+  # more usable than a long table with no coordinates of its own
+  piv <- if (length(eff)) paste0(",\n         ", paste(glue(
+    "m.\"{eff}\""), collapse = ",\n         ")) else ""
+  jn <- if (length(eff)) {
+    sel <- paste(glue("MAX(measurement_value) FILTER (WHERE measurement_type = '{eff}')",
+                      "::DOUBLE AS \"{eff}\""), collapse = ",\n             ")
+    # paste0 the leading break on AFTER glue: glue's .trim strips a leading newline
+    # and indentation, which welded this clause onto the preceding alias
+    # (`... ) sLEFT JOIN ...`) and made both effort-bearing datasets fail to bind
+    paste0("\n  ", glue("
+  LEFT JOIN (SELECT sample_key,
+             {sel}
+             FROM read_parquet('{root}/sample_measurement.parquet')
+             WHERE dataset_key = '{ds}' GROUP BY sample_key) m USING (sample_key)"))
+  } else ""
+  glue("
+  SELECT s.sample_key, s.sample_type, s.parent_sample_key, s.cruise_key,
+         s.grid_key, s.site_key, s.order_occ,
+         s.datetime            AS time,
+         s.latitude::DOUBLE    AS latitude,
+         s.longitude::DOUBLE   AS longitude,
+         s.depth_min_m::DOUBLE AS depth,
+         s.depth_max_m::DOUBLE AS depth_max_m,
+         s.tow_type{piv}
+  FROM (SELECT sample_key, sample_type, parent_sample_key, cruise_key, grid_key,
+               site_key, order_occ, datetime, latitude, longitude, depth_min_m,
+               depth_max_m, tow_type
+        FROM read_parquet('{root}/sample.parquet')
+        WHERE dataset_key = '{ds}') s{jn}")
+}
+
+sql_attribute <- function(ds, root) glue("
+  SELECT a.sample_key, a.taxon_key, t.scientific_name, a.life_stage,
+         a.measurement_type, a.bin_value, a.bin_label, a.count, a.measurement_qual,
+         s.cruise_key, s.grid_key, s.site_key,
+         s.datetime            AS time,
+         s.latitude::DOUBLE    AS latitude,
+         s.longitude::DOUBLE   AS longitude,
+         s.depth_min_m::DOUBLE AS depth
+  FROM (SELECT * FROM read_parquet('{root}/obs_attribute.parquet')
+        WHERE dataset_key = '{ds}') a
+  LEFT JOIN read_parquet('{root}/taxon.parquet') t USING (taxon_key)
+  LEFT JOIN (SELECT sample_key, cruise_key, grid_key, site_key, datetime,
+                    latitude, longitude, depth_min_m
+             FROM read_parquet('{root}/sample.parquet')) s USING (sample_key)")
+
+sql_full <- function(ds, tbl, root) glue("
+  SELECT f.sample_key, f.cruise_key, f.grid_key,
+         f.datetime                  AS time,
+         f.latitude::DOUBLE          AS latitude,
+         f.longitude::DOUBLE         AS longitude,
+         f.depth_min_m::DOUBLE       AS depth,
+         f.measurement_type,
+         f.measurement_value::DOUBLE AS measurement_value,
+         f.measurement_qual
+  FROM read_parquet('{root}/{tbl}/**/*.parquet', hive_partitioning = true) f
+  WHERE f.dataset_key = '{ds}'")
+```
+
+```{r}
+#| label: plan
+ds_all <- sort(unique(presence$dataset_key))
+n_of <- function(ds, tbl) {
+  v <- pres_wide[[tbl]][pres_wide$dataset_key == ds]
+  if (!length(v)) 0 else v
+}
+eff_of <- function(ds) q("
+  SELECT DISTINCT measurement_type FROM read_parquet('{pq(PQ_LOCAL,\"sample_measurement\")}')
+  WHERE dataset_key = '{ds}' ORDER BY 1")$measurement_type
+
+cfg <- bind_rows(lapply(ds_all, function(ds) {
+  rows <- list()
+  if (n_of(ds, "obs") > 0)
+    rows <- c(rows, list(tibble(dataset_id = ds, grain = "obs",
+                                src_rows = n_of(ds, "obs"))))
+  if (n_of(ds, "sample") > 0)
+    rows <- c(rows, list(tibble(dataset_id = glue("{ds}_sample"), grain = "sample",
+                                src_rows = n_of(ds, "sample"))))
+  if (n_of(ds, "obs_attribute") > 0)
+    rows <- c(rows, list(tibble(dataset_id = glue("{ds}_attribute"),
+                                grain = "obs_attribute",
+                                src_rows = n_of(ds, "obs_attribute"))))
+  if (!length(rows)) return(NULL)
+  bind_rows(rows) |> mutate(dataset_key = ds, .before = 1)
+}))
+# servable supplemental tables only
+cfg <- bind_rows(cfg, supp_check |>
+  filter(servable) |>
+  transmute(dataset_key, dataset_id = glue("{dataset_key}_full"), grain = "full",
+            src_rows = rows, supp_table = table))
+cfg <- cfg |> arrange(dataset_key, grain)
+kable(cfg, caption = glue("{nrow(cfg)} ERDDAP datasets planned"))
+```
+
+## Validate every view against the real release
+
+```{r}
+#| label: validate
+# `root` is the release parquet; `ing_root` is where an ingest's own outputs live.
+# A supplemental table reads from whichever actually holds it, named explicitly
+# rather than derived by path arithmetic.
+build_sql <- function(r, root, ing_root = ING_LOCAL) {
+  supp_root <- function(tbl, ds) {
+    in_rel <- any(supp$in_release[supp$table == tbl], na.rm = TRUE)
+    if (in_rel) root else glue("{ing_root}/{ds}")
+  }
+  switch(r$grain,
+    obs           = sql_obs(r$dataset_key, root),
+    sample        = sql_sample(r$dataset_key, root, eff_of(r$dataset_key)),
+    obs_attribute = sql_attribute(r$dataset_key, root),
+    full          = sql_full(r$dataset_key, r$supp_table,
+                             supp_root(r$supp_table, r$dataset_key)))
+}
+
+val <- bind_rows(lapply(seq_len(nrow(cfg)), function(i) {
+  r <- cfg[i, ]
+  # the `full` grain reads a partitioned multi-GB table; count from a LIMIT-free
+  # aggregate but probe coordinates from a sample, so validation stays cheap
+  s <- build_sql(r, PQ_LOCAL)
+  out <- tryCatch({
+    d <- q("SELECT count(*) AS n, count(time) AS n_time, count(latitude) AS n_lat,
+                   min(epoch(time)) AS t0, max(epoch(time)) AS t1
+            FROM ({s})")
+    tibble(dataset_id = r$dataset_id, rows = as.numeric(d$n),
+           pct_time = round(100 * d$n_time / pmax(d$n, 1), 1),
+           pct_coord = round(100 * d$n_lat / pmax(d$n, 1), 1),
+           t_start = as.character(as.POSIXct(d$t0, origin = "1970-01-01", tz = "UTC")),
+           t_end   = as.character(as.POSIXct(d$t1, origin = "1970-01-01", tz = "UTC")),
+           ok = d$n > 0, err = NA_character_)
+  }, error = function(e) tibble(
+    dataset_id = r$dataset_id, rows = NA_real_, pct_time = NA_real_,
+    pct_coord = NA_real_, t_start = NA_character_, t_end = NA_character_,
+    ok = FALSE, err = conditionMessage(e)))
+  out
+}))
+kable(val, caption = "Every view executed against the local release parquet")
+
+# A view that returns nothing, or that errors, must not become a dataset block —
+# that is exactly how the previous config came to point at tables that no longer
+# existed and was only discovered from ERDDAP's own error log.
+if (any(!val$ok)) {
+  cat("\nEXCLUDED (empty or failing):\n")
+  for (i in which(!val$ok))
+    cat(glue("  - {val$dataset_id[i]}: {val$err[i] %||% 'zero rows'}\n"))
+}
+cfg <- cfg |> semi_join(val |> filter(ok) |> select(dataset_id), by = "dataset_id")
+```
+
+```{r}
+#| label: coord-warning
+low <- val |> filter(ok, pct_coord < 99 | pct_time < 99)
+if (nrow(low)) {
+  kable(low |> select(dataset_id, rows, pct_time, pct_coord),
+        caption = "Served, but with incomplete time or position — ERDDAP will drop these rows from spatial/temporal queries")
+}
+```
+
+## Build the DuckDB view database
+
+```{r}
+#| label: build-db
+# DuckDB validates a `read_parquet()` path when the VIEW IS CREATED — it needs the
+# schema — so a view bound to the server's path CANNOT be created on this machine.
+# That is why `libs/erddap_duckdb.R` documents an identity mount: the .db has to be
+# built where the data already sits at the path the views name.
+#
+# So this produces two artifacts instead of one impossible file:
+#   calcofi_local.db     — built and validated here, against the local release
+#   build_erddap_db.R    — the same view SQL, to run ON THE SERVER after the sync
+build_db <- function(db_path, root, ing_root) {
+  if (file_exists(db_path)) file_delete(db_path)
+  cx <- dbConnect(duckdb(), dbdir = db_path)
+  on.exit(dbDisconnect(cx, shutdown = TRUE))
+  for (i in seq_len(nrow(cfg))) {
+    r <- cfg[i, ]
+    dbExecute(cx, glue("CREATE OR REPLACE VIEW \"{r$dataset_id}\" AS
+                        {build_sql(r, root, ing_root)}"))
+  }
+  writeLines(as.character(dbGetQuery(cx, "SELECT version()")[[1]]),
+             file.path(dirname(db_path), "BUILD_VERSION.txt"))
+  dbGetQuery(cx, "SELECT view_name FROM duckdb_views() WHERE NOT internal")$view_name
+}
+v_local <- build_db(file.path(dir_erddap, "calcofi_local.db"), PQ_LOCAL, ING_LOCAL)
+cat(glue("validated views: {length(v_local)}\n"))
+cat(glue("duckdb engine  : {readLines(file.path(dir_erddap, 'BUILD_VERSION.txt'))[1]}\n"))
+stopifnot(setequal(v_local, cfg$dataset_id))
+```
+
+```{r}
+#| label: emit-server-script
+# The server script carries the SQL verbatim, so the deployed views are the ones
+# validated above rather than a hand-reimplementation of them.
+view_sql <- vapply(seq_len(nrow(cfg)), function(i)
+  build_sql(cfg[i, ], "{{PQ}}", "{{ING}}"), character(1))
+
+script <- c(
+  "#!/usr/bin/env Rscript",
+  "# build_erddap_db.R — GENERATED by publish_to-erddap.qmd. Do not hand-edit.",
+  "#",
+  glue("# release: {RELEASE}   datasets: {nrow(cfg)}"),
+  "#",
+  "# Run this ON THE CalCOFI SERVER, after the release parquet has been synced to",
+  "# the path below. DuckDB binds a view's parquet paths literally and validates",
+  "# them at CREATE time, so the .db must be built where the data actually is.",
+  "#",
+  "#   docker exec -i rstudio bash -lc \\",
+  "#     'cd /share/erddap/data && Rscript build_erddap_db.R'",
+  "",
+  "suppressMessages({library(DBI); library(duckdb)})",
+  glue("PQ  <- Sys.getenv('CALCOFI_ERDDAP_PQ',  '{PQ_SERVER}')"),
+  glue("ING <- Sys.getenv('CALCOFI_ERDDAP_ING', '{ING_SERVER}')"),
+  glue("DB  <- Sys.getenv('CALCOFI_ERDDAP_DB',  '{ERDDAP_ROOT}/calcofi.db')"),
+  "stopifnot('release parquet not found' = dir.exists(PQ))",
+  "if (file.exists(DB)) file.remove(DB)",
+  "con <- dbConnect(duckdb(), dbdir = DB)",
+  "views <- list(", 
+  paste0("  `", cfg$dataset_id, "` = ",
+         vapply(view_sql, function(x) paste0("r\"(", x, ")\""), character(1)),
+         c(rep(",", nrow(cfg) - 1), "")),
+  ")",
+  "for (nm in names(views)) {",
+  "  sql <- gsub('{{PQ}}', PQ, views[[nm]], fixed = TRUE)",
+  "  sql <- gsub('{{ING}}', ING, sql, fixed = TRUE)",
+  "  dbExecute(con, sprintf('CREATE OR REPLACE VIEW \"%s\" AS %s', nm, sql))",
+  "  n <- dbGetQuery(con, sprintf('SELECT count(*) n FROM \"%s\"', nm))$n",
+  "  cat(sprintf('%-42s %12s rows\\n', nm, format(n, big.mark = ',')))",
+  "}",
+  "dbDisconnect(con, shutdown = TRUE)",
+  "cat('wrote ', DB, '\\n', sep = '')")
+
+script_path <- file.path(dir_erddap, "build_erddap_db.R")
+writeLines(script, script_path)
+Sys.chmod(script_path, "0755")
+# a generated script that does not parse is worse than none
+invisible(parse(script_path))
+cat(glue("wrote {basename(script_path)} ({length(script)} lines, parses clean)\n"))
+```
+
+## Generate `datasets.xml`
+
+```{r}
+#| label: xml
+#| results: asis
+# Title and summary come from each ingest's `dataset_meta` YAML, which is
+# authoritative for dataset metadata (it is what the release `dataset` table is
+# built from), so ERDDAP, the database and the schema site cannot disagree.
+iy_meta <- function(ds) iy[[ds]]$dataset_meta %||% list()
+
+title_of <- function(r) {
+  dm <- iy_meta(r$dataset_key)
+  base <- dm$dataset_name %||% r$dataset_key
+  switch(r$grain,
+    obs           = glue("{base} — observations"),
+    sample        = glue("{base} — sampling events"),
+    obs_attribute = glue("{base} — length/stage frequency"),
+    full          = glue("{base} — full resolution (pre-thinning)"))
+}
+summary_of <- function(r) {
+  dm <- iy_meta(r$dataset_key)
+  desc <- gsub("[[:space:]]+", " ", trimws(dm$description %||% ""))
+  grain_txt <- switch(r$grain,
+    obs = paste("One row per observation: a measurement of one quantity at one",
+                "event, taxon and depth. `measurement_type` names the quantity and",
+                "`measurement_value` holds it, so filter on measurement_type."),
+    sample = paste("One row per sampling event, with event-level effort widened",
+                   "into its own columns. Use this for effort and station",
+                   "counting — summing effort over the observation table",
+                   "double-counts it."),
+    obs_attribute = paste("Sub-occurrence detail: length- and stage-frequency bins",
+                          "(`bin_value`, `bin_label`, `count`) under each",
+                          "occurrence. Coordinates are inherited from the event."),
+    full = paste("The full series before adaptive thinning. Much larger than the",
+                 "headline table and provided for scan-level work; most analyses",
+                 "want the thinned table."))
+  paste(c(desc, grain_txt, glue("Source: CalCOFI integrated database release {RELEASE}."),
+          if (nzchar(dm$citation_main %||% "")) glue("Citation: {dm$citation_main}.")),
+        collapse = " ")
+}
+# every view is a long table of independent rows carrying their own time and
+# position, which is ERDDAP's "Point"; the vertical/trajectory structure is
+# expressed in the netCDF products, not here
+CDM <- "Point"
+
+blocks <- character(0)
+for (i in seq_len(nrow(cfg))) {
+  r <- cfg[i, ]
+  cols <- q("DESCRIBE SELECT * FROM ({build_sql(r, PQ_LOCAL)})") |>
+    transmute(column = column_name, duckdb_type = column_type)
+  xml <- erddap_duckdb_dataset_xml(
+    staged        = as.data.frame(cols),
+    dataset_id    = r$dataset_id,
+    title         = title_of(r),
+    summary       = summary_of(r),
+    source_url    = glue("jdbc:duckdb:{ERDDAP_ROOT}/calcofi.db"),
+    table_name    = r$dataset_id,
+    # keyed by column name: this lands on the `{ds}_sample` views, whose widened
+    # effort columns ARE measurement_type names, and is inert elsewhere
+    units_lookup  = mt_units,
+    cdm_data_type = CDM,
+    global_atts   = list(
+      license   = iy_meta(r$dataset_key)$license %||% "CC-BY 4.0",
+      infoUrl   = iy_meta(r$dataset_key)$link_calcofi_org %||% "https://calcofi.org",
+      db_release = RELEASE, dataset_key = r$dataset_key,
+      references = "https://calcofi.io/workflows/publish_to-erddap.html"))
+  dir_create(file.path(dir_erddap, r$dataset_id))
+  writeLines(xml, file.path(dir_erddap, r$dataset_id, glue("{r$dataset_id}.xml")))
+  blocks <- c(blocks, xml)
+  cat(glue("\n- `{r$dataset_id}`: {ncol(cols)} cols, ",
+           "{val$rows[val$dataset_id == r$dataset_id]} rows\n"))
+}
+```
+
+```{r}
+#| label: assemble
+xml_all <- paste0(
+  "<!-- CalCOFI ERDDAP datasets — generated by publish_to-erddap.qmd\n",
+  glue("     release {RELEASE}, {length(blocks)} datasets, ",
+       "{format(Sys.time(), '%Y-%m-%d')}\n"),
+  "     EDDTableFromDatabase over DuckDB views; see the notebook for deploy. -->\n",
+  paste(blocks, collapse = "\n\n"))
+writeLines(xml_all, file.path(dir_erddap, "datasets_calcofi.xml"))
+write_csv(cfg |> left_join(val, by = "dataset_id"),
+          file.path(dir_erddap, "erddap_plan.csv"), na = "")
+cat(glue("wrote {length(blocks)} dataset blocks to data/erddap/datasets_calcofi.xml\n"))
+```
+
+## Deploy (manual)
+
+```{r}
+#| label: deploy
+#| echo: false
+#| results: asis
+cat(glue('
+The notebook writes config and a view database; it does **not** touch the server.
+
+1. **Sync the release parquet** to the identity-mounted path the views name. The
+   views bind `{PQ_SERVER}` literally, so this path must match exactly:
+
+   ```bash
+   rsync -av --delete data/releases/{RELEASE}/parquet/ \\
+     calcofi:{PQ_SERVER}/
+   ```
+
+2. **Build the view database on the server.** It cannot be built here: DuckDB
+   validates a view\'s parquet paths at `CREATE` time, so the views must be created
+   where the data already sits at the path they name. The generated script carries
+   the exact SQL validated above.
+
+   ```bash
+   rsync -av data/erddap/build_erddap_db.R calcofi:{ERDDAP_ROOT}/
+   ssh calcofi "docker exec -i rstudio bash -lc \\
+     \'cd {ERDDAP_ROOT} && Rscript build_erddap_db.R\'"
+   ```
+
+   It prints a row count per view — a zero there means the sync in step 1 is
+   incomplete, and is the cheapest place to catch it.
+
+3. **Splice the blocks** from `data/erddap/datasets_calcofi.xml` into
+   `CalCOFI/erddap/content/datasets.xml` at the
+   `<!-- add dataset definitions below -->` marker, then commit and push the
+   `CalCOFI/erddap` repo (it is bind-mounted into the container).
+
+4. **Reload** per dataset:
+
+   ```bash
+   touch {ERDDAP_ROOT}/flag/<datasetID>
+   ```
+
+5. **Verify** — a `.das` request is the cheapest end-to-end check:
+
+   ```bash
+   curl -s https://erddap.calcofi.io/erddap/tabledap/calcofi_ctd-cast.das | head
+   ```
+
+   and check `{ERDDAP_ROOT}/log.txt` for `WARNING: Bad line(s)`.
+
+**Requirements.** The DuckDB JDBC driver must be in ERDDAP\'s `WEB-INF/lib`
+(custom image: `CalCOFI/server/erddap/Dockerfile`), and its engine version must be
+>= the engine that wrote the views — this build used
+**{readLines(file.path(dir_erddap, "BUILD_VERSION.txt"))[1]}**.
+
+**Retiring the old datasetIDs.** The live server currently serves `calcofi_casts`,
+`calcofi_ctd_measurement`, `calcofi_ctd_thin`, `calcofi_dic`,
+`calcofi_euphausiids`, `calcofi_phytoplankton` and `calcofi_zooplankton`. None of
+those IDs appear above. Splicing this config *adds* the new ones; removing the old
+ones is a separate edit to `datasets.xml`, deliberately left to whoever owns that
+contract.
+'))
+```
+
+```{r}
+#| label: cleanup
+dbDisconnect(con, shutdown = TRUE)
+```

@@ -99,14 +99,31 @@ byte-identical with `db-query/lib/match.js` (verified in CI).
 ```
 Google Drive ──rclone──> GCS (gs://calcofi-files/) ──targets──> ingest_*.qmd
    └─ source CSVs                                                    │
-                                                                     ▼
-            Working DuckLake (gs://calcofi-db/ducklake/working/) <── finalize_ingest()
-                                                                     │
-                                          release_database.qmd ──────┘
-                                          (validate → freeze → upload)
-                                                                     ▼
-                                   Parquet + frozen release (gs://calcofi-db/)
+                                     write_parquet_outputs()         │
+                                   + build_metadata_json()   <────────┘
+                                   + sync_to_gcs()
+                                                     │
+       data/parquet/{provider}_{dataset}/ ───────────┘
+       (+ gs://calcofi-db/parquet/… mirror)
+                                                     │
+                          release_database.qmd ──────┘
+                          (assemble in-memory from the parquet shards,
+                           validate → freeze → upload)
+                                                     ▼
+                              Parquet + frozen release
+                              (gs://calcofi-db/ducklake/releases/{version}/)
 ```
+
+::: There is **no Working DuckLake**, and no ingest calls `finalize_ingest()`.
+Both appear in `README_PLAN.qmd` as design intent and were documented here as if
+built; verified 2026-07-30 — `gs://calcofi-db/ducklake/working/` holds **zero
+objects**, `grep -l finalize_ingest ingest_*.qmd` matches **nothing**, and
+`release_database.qmd`'s `con_wdl` is `get_duckdb_con(":memory:")` (the `wdl` in
+the name is vestigial). All 16 data ingests use the
+`write_parquet_outputs()` + `build_metadata_json()` + `sync_to_gcs()` trio above.
+Do not "migrate the laggards onto `finalize_ingest()`" — there are no laggards,
+and that function expresses neither the content-hash upload dedup nor the `_new`
+delta sidecars that the trio does. :::
 
 ### YAML-driven pipeline (no per-dataset `_targets.R` edits)
 
@@ -145,17 +162,27 @@ Two things do **not** follow automatically, so handle them in the notebook:
 
 Current holdout: `cdfw_dungeness-crab`.
 
-### Working DuckLake → frozen release
+### Parquet shards → frozen release
 
-- Each ingest notebook ends by calling `calcofi4db::finalize_ingest()`, which
-  pushes its tables (with provenance columns) into the **Working DuckLake** at
-  `gs://calcofi-db/ducklake/working/` and writes `data/parquet/{provider}_{dataset}/`
-  outputs + `manifest.json` + `relationships.json`.
+- Each ingest notebook ends with **three** calls, and every one of the 16 data
+  ingests does it the same way:
+  1. `write_parquet_outputs()` — writes `data/parquet/{provider}_{dataset}/` plus
+     `manifest.json`, and **content-hashes each table so an unchanged partition is
+     not re-uploaded**;
+  2. `build_metadata_json()` — the `metadata.json` sidecar (and it now reports its
+     own documentation gaps via `scan_metadata_gaps()`);
+  3. `sync_to_gcs()` — mirrors the directory, skipping unchanged objects.
+
+  An ingest that *modifies* a shared dependency table (`calcofi.modifies:`) also
+  exports a `{table}_new.parquet` **delta sidecar** — the rows it adds, keyed on the
+  PK — which `build_release_table_registry()` picks up and which is deliberately
+  **not** in the manifest.
 - `release_database.qmd` **auto-discovers** `data/parquet/*/relationships.json`
   and outputs (no manual `rels_paths` edits), merges `relationships_cross.csv`,
-  validates PK/FK/null/range across the assembled DB, then freezes and uploads a
-  versioned release. Read-only consumers use `calcofi4r::cc_get_db()` against the
-  frozen release, not the Working DuckLake.
+  assembles the core from those shards into an **in-memory** DuckDB, validates
+  PK/FK/null/range, then freezes and uploads a versioned release under
+  `gs://calcofi-db/ducklake/releases/{version}/`. Read-only consumers use
+  `calcofi4r::cc_get_db()` against the frozen release.
 
 ### Consolidated core model (`obs` / `sample` / …)
 

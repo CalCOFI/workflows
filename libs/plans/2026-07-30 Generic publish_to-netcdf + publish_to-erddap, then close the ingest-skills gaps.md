@@ -1,5 +1,93 @@
 # Generic `publish_to-netcdf.qmd` + `publish_to-erddap.qmd`, then close the ingest-skills gaps
 
+> **STATUS 2026-07-30 (later session): Tasks A, B and D are DONE. Task C is
+> WITHDRAWN — its premise was false.** Nothing below needs re-doing; the
+> "What actually shipped" section records outcomes and the three places this plan
+> was wrong. Publishing is still gated: `publish_to-netcdf` is excluded in
+> `_targets.R` and uploads only under `CALCOFI_PUBLISH=true`.
+
+## What actually shipped, and where this plan was wrong
+
+**Task A — `publish_to-netcdf.qmd` (done).** One notebook now builds all 15
+datasets. Parity with the two retired notebooks is exact: `calcofi_ctd-cast` =
+7,175 profiles / 465,428 levels / 16 variables; `swfsc_ichthyo` = the same
+site/tow/net/occurrence/bin counts and the same 3,186 orphan bins (40 + 3,146);
+`calcofi_ctd-cast_full` = 61 variables / 14,336 profiles / 6,082,688 levels,
+structurally identical to the file the old notebook produced.
+
+**The plan's two-shape rule was wrong, and would have shipped false CF metadata.**
+"One sampling level + a depth axis → profile" held for the two datasets that had
+notebooks and breaks on the other 13: *every* CalCOFI dataset carries a depth on
+its observations, but only `calcofi_ctd-cast` has many depths per event (median
+**74**) — a tow, a transect, an underway record and a region pool each carry one.
+The rule would have stamped `featureType=profile` on **10 of 15** datasets. The
+planner now decides four ways (`profile` / `trajectory` / `point` / `groups`) on
+`depths_per_instance` plus `sample_type`, and `calcofi_mets` + `swfsc_cufes`
+publish as CF **trajectories**.
+
+Two real bugs surfaced on real data and are fixed with regression tests:
+- `discover_sample_levels()` **crashed** (`subscript out of bounds`) on
+  `calcofi_dic`, whose 6 bottles parent onto `calcofi_bottle` casts — the parent
+  join was not dataset-scoped. Cross-dataset parents are now `n_external_parent`.
+- The obs→wide pivot must group at the **occurrence** grain. On `sample_key`
+  alone, `cce-lter_zooscan` collapses 34,109 occurrences over 23 taxa into 1,483
+  rows — 96% of the data — and the file still looks well-formed. Now
+  `obs_wide_sql()`, tested.
+
+Also: `nc_global_atts()` dates a file by its **release**, not `Sys.time()`. A
+wall-clock `date_created` put a fresh timestamp in every build, so no rebuild
+could ever be byte-identical and the publisher's "bytes written once" sha256
+check silently degraded to "always re-upload".
+
+**Task B — `publish_to-erddap.qmd` (done).** 33 datasets, `dataset_key`-driven:
+`{ds}` (obs), `{ds}_sample` (events + effort widened on), `{ds}_attribute`,
+`{ds}_full`. **Every view is executed against the real release before its XML is
+written** — that is what the old config lacked. Findings it surfaced:
+`calcofi_phytoplankton` has **0% time** coverage (region-pooled, no event time),
+`cce-lter_zoodb_sample` 69.4% time/coords, `calcofi_mets_sample` 94.7% coords.
+
+`calcofi_mets_full` is **excluded as unservable**: `mets_measurement` carries no
+coordinates of its own and only **77,795 of its 2,366,547** events (3.3%) resolve
+in `sample`, because the mets ingest publishes only the *thinned* events. Serving
+it would mean 20.6 M rows of which 96.7% had no time or position. **Upstream fix
+needed:** the mets ingest should publish the full underway event table.
+
+A `.db` bound to server paths **cannot** be built locally — DuckDB validates a
+view's parquet paths at `CREATE` time — so the notebook emits
+`data/erddap/build_erddap_db.R` to run on the server, carrying the validated SQL
+verbatim.
+
+**Task D — ingest-skills gaps (done, and the plan miscounted).**
+`scan_metadata_gaps()` is now called by `build_metadata_json()`, so every ingest
+reports its own gaps; it finds **29 tables and 395 columns with no description
+and 223 unit-less measurement columns** across the 16 sidecars. (Placed there,
+not in `finalize_ingest()`, which nothing calls — see Task C.) The plan said
+`check_data_integrity()`/`show_source_files()` were missing from "ctd-cast only";
+in fact only **bottle and ichthyo** have them, 16 notebooks do not — and that is
+**not a gap**: both take the `read_csv_files()` result object, which ctd-cast
+never produces, and ctd-cast already covers both purposes its own way. The skill
+doc now says so.
+
+**Task C — WITHDRAWN.** The plan says ichthyo/bottle/ctd-cast "hand-roll
+`write_parquet_outputs()` + `build_metadata_json()` + `sync_to_gcs()` instead of
+calling `calcofi4db::finalize_ingest()`". Verified 2026-07-30: **no ingest calls
+`finalize_ingest()`** (`grep -l` matches only `README_PLAN.qmd`), **no Working
+DuckLake exists** (`gs://calcofi-db/ducklake/working/` holds zero objects), and
+`release_database.qmd`'s `con_wdl` is `get_duckdb_con(":memory:")`. That trio is
+the **universal** pattern across all 16 ingests, not a 3-notebook holdout. Doing
+the swap would have made those three the only ones different *and* dropped the
+content-hash dedup and `_new` delta sidecars that `finalize_ingest()` does not
+express. `CLAUDE.md` has been corrected — it documented the DuckLake design as if
+it were built.
+
+**Open decision:** published netCDF ids are now `dataset_key`-based
+(`calcofi_ctd-cast`, `swfsc_ichthyo`) where the old ones were bare (`ctd-cast`,
+`ichthyo`). Enabling publication changes those public URLs, which is why
+`publish_to-netcdf` stays in the `_targets.R` exclude list until agreed.
+
+---
+
+
 Handoff from the 2026-07-30 session. Everything below is **remaining** work; the
 context section records what already shipped so a fresh session does not redo it.
 

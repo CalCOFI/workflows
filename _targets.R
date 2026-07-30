@@ -38,8 +38,13 @@ build_targets_list(
     # kept, so this restores ctd_raw and re-runs from the pivot rather than
     # re-downloading 62 GB.
     # "ingest_calcofi_ctd-cast",
-    # netCDF publishing is on hold — these already ran, and the whole-dataset
-    # recreation likely belongs at the ingest step rather than after the release.
-    "publish_ctd-cast_to-netcdf",
-    "publish_ichthyo_to-netcdf")
+    #
+    # publish_ctd-cast_to-netcdf and publish_ichthyo_to-netcdf are GONE — replaced
+    # by the single dataset-agnostic `publish_to-netcdf`, which covers all 15
+    # datasets. It is excluded here only because it uploads to a world-readable
+    # bucket: publishing is gated behind CALCOFI_PUBLISH=true, and the published
+    # dataset ids are now dataset_key-based (`calcofi_ctd-cast`, `swfsc_ichthyo`)
+    # rather than the old bare `ctd-cast` / `ichthyo`, so enabling it changes
+    # public URLs. Drop this entry once that rename is agreed.
+    "publish_to-netcdf")
 )

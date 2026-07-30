@@ -93,6 +93,18 @@ The notebook includes these sections (customize based on pattern):
    bucket = "calcofi-files-public")` instead.
 5. **Check data integrity** — `check_data_integrity()`, `render_integrity_message()`
 6. **Show source files** — `show_source_files()`
+
+   ::: Steps 5 and 6 apply to ingests that read their source through
+   `read_csv_files()`. Both take *that function's result object* —
+   `check_data_integrity()` calls `detect_csv_changes(d)`, and
+   `show_source_files()` reads `d$source_files` — so they cannot be bolted onto an
+   ingest with a different source shape, and their absence in such a notebook is
+   **not** a gap to close. `ingest_calcofi_ctd-cast.qmd` is the case in point: it
+   assembles its own file list from ~62 GB of zipped CTD files, and covers the same
+   two purposes its own way — a "Files to Ingest" + "rows read per file" table for
+   provenance, and `check_dupes` / `dedup_ctd_raw` / `ctd_thin_verify_pairing` /
+   `ctd_thin_verify` / `diag_ranges` for integrity. A non-CSV ingest owes the
+   *purpose* (show what was read; check it before loading), not these two calls. :::
 7. **Show tables/fields** — Redefinition display
 8. **Load into database** — `ingest_dataset()` or custom load
 9. **Schema documentation** — **two ERDs plus a mapping**, because they answer
@@ -385,34 +397,29 @@ Show the user:
   2. Run the notebook to test
   3. Run `/validate-ingest {provider} {dataset}` to verify
 
-### 10. Post-ingest metadata.json completeness scan
+### 10. Post-ingest metadata.json completeness scan — now automatic
 
-After the first successful render of the new ingest notebook (which runs
-`finalize_ingest()` → `build_metadata_json()`), scan the produced sidecar
-for empty descriptions and units. These ship verbatim to the release
-`metadata.json` and on to calcofi4r `cc_describe_table()` /
-`cc_db_catalog()`, so empties should be surfaced as TODOs, not ignored.
+`build_metadata_json()` calls `calcofi4db::scan_metadata_gaps()` on every write, so
+**every** ingest reports its own documentation gaps as part of the render. There is
+nothing to run by hand.
+
+This used to be the snippet below, which a human was expected to run once, after
+the first render, from memory. It never appeared in a single notebook
+(`grep description_md *.qmd` returned nothing), so in practice empty descriptions
+and units shipped unnoticed — verbatim into the release `metadata.json` and on to
+`calcofi4r::cc_describe_table()` / `cc_db_catalog()`, where they render as blank
+documentation.
+
+Read the scan's output in the render and **backfill
+`metadata/{provider}/{dataset}/flds_redefine.csv`**, then re-run. A missing `units`
+is only reported for columns where a unit could exist — keys, names, flags,
+timestamps and free text are exempt, because reporting them would bury the real
+gaps.
 
 ```r
-librarian::shelf(jsonlite, glue, here, quiet = T)
-provider <- "{provider}"; dataset <- "{dataset}"
-meta_path <- here(glue("data/parquet/{provider}_{dataset}/metadata.json"))
-m <- fromJSON(meta_path, simplifyVector = FALSE)
-
-empty_tbl_desc <- Filter(function(t) !nzchar(t$description_md %||% ""), m$tables)
-empty_col_desc <- Filter(function(c) !nzchar(c$description_md %||% ""), m$columns)
-empty_col_unit <- Filter(function(c) is.null(c$units),                   m$columns)
-
-cat(glue("\nmetadata.json gaps for {provider}_{dataset}:\n"))
-cat(glue("  tables with empty description_md: {length(empty_tbl_desc)}\n"))
-cat(glue("  columns with empty description_md: {length(empty_col_desc)}\n"))
-cat(glue("  columns with NULL units (review numeric only): {length(empty_col_unit)}\n"))
-if (length(empty_tbl_desc) > 0)
-  cat("  ", paste(names(empty_tbl_desc), collapse = ", "), "\n")
-if (length(empty_col_desc) > 0)
-  cat("  ", paste(head(names(empty_col_desc), 20), collapse = ", "),
-      if (length(empty_col_desc) > 20) glue(" (+{length(empty_col_desc)-20} more)") else "", "\n")
+# to scan an existing sidecar without re-running the ingest:
+calcofi4db::scan_metadata_gaps(
+  here::here(glue::glue("data/parquet/{provider}_{dataset}/metadata.json")))
 ```
 
-Report the counts back to the user along with the top offenders so they
-can backfill `flds_redefine.csv` and re-run.
+Report the counts back to the user along with the top offenders.

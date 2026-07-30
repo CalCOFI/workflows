@@ -81,18 +81,6 @@ cc_release_partitions <- function(table, version = NULL) {
   as.character(glue("https://storage.googleapis.com/{GCS_BUCKET_DB}/{keys}"))
 }
 
-#' measurement_type -> CF-ish variable metadata, from the canonical registry.
-#' @return named list keyed by measurement_type: units, long_name, standard_name
-cc_measurement_meta <- function(wf = getwd()) {
-  mt <- read_csv(file.path(wf, "metadata/measurement_type.csv"), show_col_types = FALSE)
-  setNames(lapply(seq_len(nrow(mt)), function(i) list(
-    units         = mt$units[i]         %||% "",
-    long_name     = mt$description[i]   %||% mt$measurement_type[i],
-    standard_name = if ("standard_name" %in% names(mt)) mt$standard_name[i] else NA_character_,
-    canonical     = isTRUE(mt$is_canonical[i]) || identical(mt$is_canonical[i], "TRUE")
-  )), mt$measurement_type)
-}
-
 # Treats NULL / empty / NA / "" as absent. The NA and "" tests apply ONLY to a
 # length-1 atomic: calling is.na() on a list (var_meta[[col]] is a 4-element list)
 # returns a vector, and `||` rejects that in R >= 4.3 with
@@ -103,86 +91,26 @@ cc_measurement_meta <- function(wf = getwd()) {
   a
 }
 
-# ---- netCDF-4 group writing --------------------------------------------------
-
-# GROUPS IN ncdf4 — verified 2026-07-28, ncdf4 1.24.
-# ncdf4 exposes NO group API (there is no ncgrp_def, no group arguments), which
-# reads as "R cannot write netCDF-4 groups". It can: a SLASH-SEPARATED variable
-# name creates a real group. Confirmed independently, not just by round-tripping
-# through ncdf4 itself —
-#   ncvar_def("tow/volume_sampled", ...)
-#   ncdump -h ->  group: tow { double volume_sampled(tow_n) ; }
-#   h5dump -n ->  group /tow ; dataset /tow/volume_sampled
-# so it is a true HDF5/netCDF-4 group, not a variable with a slash in its name.
-# Dimensions are defined at the root and referenced from any group, which is what
-# lets a child level index into its parent.
-
-#' Build the variable definitions for one level of a nested dataset.
-#'
-#' Each level becomes a netCDF-4 group. The link to the parent is an explicit
-#' index variable, NOT repetition of the parent's columns — that is the whole
-#' reason for using netCDF-4 here rather than a flat table: tow effort is stored
-#' once, and a length-frequency bin points at the tow it came from.
-#'
-#' @param group  group name, e.g. "tow", "occurrence", "length_bin"
-#' @param df     data.frame for this level, ordered so children are contiguous
-#' @param dim    the ncdim for this level (from nc_level_dim())
-#' @param parent_dim  parent level's ncdim, or NULL at the top
-#' @param parent_index 1-based index into the parent level, one per row of `df`
-#' @param var_meta named list: column -> list(units, long_name, standard_name)
-#' @return list of ncvar objects to pass to nc_create()
-nc_level_vars <- function(group, df, dim, parent_dim = NULL, parent_index = NULL,
-                          var_meta = list(), strlen = 64L) {
-  stopifnot(is.data.frame(df))
-  d_str <- ncdf4::ncdim_def(glue("{group}_strlen"), "", seq_len(strlen),
-                            create_dimvar = FALSE)
-  vars <- list()
-  for (nm in names(df)) {
-    x  <- df[[nm]]
-    md <- var_meta[[nm]] %||% list()
-    vars[[nm]] <- if (is.character(x) || is.factor(x)) {
-      ncdf4::ncvar_def(glue("{group}/{nm}"), "", list(d_str, dim), prec = "char")
-    } else if (is.integer(x)) {
-      ncdf4::ncvar_def(glue("{group}/{nm}"), as.character(md$units %||% ""), dim,
-                       prec = "integer", missval = -2147483647L)
-    } else {
-      ncdf4::ncvar_def(glue("{group}/{nm}"), as.character(md$units %||% ""), dim,
-                       prec = "double", missval = 9.969209968386869e36)
-    }
-  }
-  if (!is.null(parent_index) && !is.null(parent_dim))
-    vars[["__parent_index"]] <- ncdf4::ncvar_def(
-      glue("{group}/parent_index"), "", dim, prec = "integer")
-  vars
-}
-
-#' Write the data + attributes for one level previously defined by nc_level_vars().
-nc_level_put <- function(nc, group, df, vars, parent_index = NULL,
-                         var_meta = list(), parent_group = NA_character_) {
-  for (nm in names(df)) {
-    x <- df[[nm]]
-    ncdf4::ncvar_put(nc, vars[[nm]], if (is.factor(x)) as.character(x) else x)
-    md <- var_meta[[nm]] %||% list()
-    vn <- glue("{group}/{nm}")
-    ln <- as.character(md$long_name %||% gsub("_", " ", nm))
-    ncdf4::ncatt_put(nc, vn, "long_name", ln)
-    sn <- md$standard_name %||% NA_character_
-    if (!is.na(sn) && nzchar(sn)) ncdf4::ncatt_put(nc, vn, "standard_name", sn)
-  }
-  if (!is.null(parent_index) && !is.null(vars[["__parent_index"]])) {
-    ncdf4::ncvar_put(nc, vars[["__parent_index"]], as.integer(parent_index))
-    vn <- glue("{group}/parent_index")
-    ncdf4::ncatt_put(nc, vn, "long_name",
-      glue("1-based index into the {parent_group} group"))
-    ncdf4::ncatt_put(nc, vn, "comment", paste(
-      "Explicit parent link. Each row belongs to the", parent_group,
-      "record at this index; parent values are stored ONCE there rather than",
-      "repeated here, so summing a parent-level quantity over this group would",
-      "double-count."))
-    ncdf4::ncatt_put(nc, vn, "instance_dimension", parent_group)
-  }
-  invisible(TRUE)
-}
+# ---- netCDF-4 group + CF profile writing: MOVED to calcofi4db ---------------
+#
+# `nc_level_vars()` / `nc_level_put()` used to live here, alongside a hand-rolled
+# CF profile writer in each publish notebook. They are now
+# `calcofi4db::nc_level_vars()` / `nc_level_put()` / `nc_profile_def()` /
+# `nc_profile_write()` / `nc_profile_atts()`, with a testthat fixture per branch.
+#
+# They had to leave this file, not merely be duplicated: every publish notebook
+# does `devtools::load_all("../calcofi4db")` and THEN sources this file, so a
+# definition here silently shadows the package's. That is not hypothetical — the
+# first run of the generic notebook failed inside the old copy
+# (`ncvar_def("/sample_key")`), because this file's version predated the root-group
+# support that `group = ""` needs.
+#
+# `cc_measurement_meta()` is likewise superseded by
+# `calcofi4db::measurement_var_meta()`, which reads the registry through
+# `read_measurement_type()` and so cannot be handed a corrupted "NA" unit.
+#
+# What remains below is genuine deploy plumbing — GCS paths, upload, manifests and
+# the browse-page skin — which belongs to this repo, not to the package.
 
 # ---- versioning: release-named paths, bytes written once ---------------------
 
