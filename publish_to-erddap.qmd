@@ -17,6 +17,12 @@ calcofi:
     - release_database
   output: data/erddap/datasets_calcofi.xml
   workflow_url: https://calcofi.io/workflows/publish_to-erddap.html
+  description: >
+    Generates the ERDDAP configuration for every dataset in the frozen release,
+    discovered from each dataset_key's presence in the core rather than a
+    hand-maintained table list. Serves observations, sampling events, size/stage
+    frequencies and the pre-thinning full series through DuckDB views, and executes
+    every view against the real release before writing its config.
 editor_options:
   chunk_output_type: console
 ---

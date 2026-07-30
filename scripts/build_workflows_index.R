@@ -44,7 +44,7 @@ categories <- list(
                    blurb = "Acquire, standardize, and load a source dataset into the integrated database. Cards are grouped by data provider.",
                    layout = "cards", grouped = TRUE),
   publish   = list(title = "Publish",
-                   blurb = "Push released tables out to external repositories (ERDDAP, OBIS).",
+                   blurb = "Publish the released core to external services and formats \u2014 ERDDAP, CF NetCDF, OBIS. These are dataset-agnostic: one notebook covers every dataset in the release.",
                    layout = "cards", grouped = FALSE),
   release   = list(title = "Release & pipeline",
                    blurb = "Freeze a versioned release and the maintenance utilities that support the pipeline.",
@@ -166,7 +166,9 @@ recs <- lapply(htmls, function(h) {
     target      = oneline(cc$target_name %||% base),
     deps        = cc$dependency,
     dataset_name= oneline(dm$dataset_name %||% ""),
-    description = oneline(dm$description %||% ""),
+    # `dataset_meta` belongs to an ingest; a publish/release notebook is not a
+    # dataset and should not fake one, so fall back to a plain `calcofi.description`
+    description = oneline(dm$description %||% cc$description %||% ""),
     coverage    = oneline(cov),
     color       = cc$erd$color %||% "",
     link_calcofi_org = dm$link_calcofi_org %||% "",

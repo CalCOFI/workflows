@@ -213,7 +213,9 @@ categories:
       provider: ucsd_sio
 - id: publish
   title: Publish
-  blurb: Push released tables out to external repositories (ERDDAP, OBIS).
+  blurb: 'Publish the released core to external services and formats — ERDDAP, CF
+    NetCDF, OBIS. These are dataset-agnostic: one notebook covers every dataset in
+    the release.'
   layout: cards
   count: 3
   groups:
@@ -223,8 +225,17 @@ categories:
       title: publish_ichthyo_to-obis
     - url: publish_to-erddap.html
       title: publish_to-erddap
+      description: Generates the ERDDAP configuration for every dataset in the frozen
+        release, discovered from each dataset_key's presence in the core rather than
+        a hand-maintained table list. Serves observations, sampling events, size/stage
+        frequencies and the pre-thinning full series through DuckDB views, and executes
+        every view against the real release before writing its config.
     - url: publish_to-netcdf.html
       title: publish_to-netcdf
+      description: 'Publishes every dataset in the frozen release as a self-documenting
+        CF NetCDF file. Dataset-agnostic: the sampling hierarchy in the core decides
+        each file''s shape — CF profile, trajectory, point, or netCDF-4 groups — so
+        one notebook replaces the former per-dataset CTD and ichthyoplankton publishers.'
 - id: release
   title: Release & pipeline
   blurb: Freeze a versioned release and the maintenance utilities that support the
