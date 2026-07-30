@@ -76,7 +76,16 @@ meas_type_csv <- here("metadata/measurement_type.csv"); d_meas_type <- read_csv(
 dir_dl <- here(glue("data/cache/{dir_label}")); dir_create(dir_dl)
 phyllo_csv <- file.path(dir_dl, "phyllosoma.csv")
 edi_url <- "https://pasta.lternet.edu/package/data/eml/knb-lter-cce/188/4/2e66465fa17f78cdc15a2bfc9dce652d"
-if (overwrite || !file_exists(phyllo_csv)) download.file(edi_url, phyllo_csv, quiet = TRUE)
+# Gate on file existence, NOT on `overwrite`. libs/ingest.R states the contract
+# plainly -- "downloads are always skipped if files exist regardless of this flag"
+# -- but `if (overwrite || ...)` inverted it, and since overwrite defaults to TRUE
+# this re-downloaded from EDI on EVERY run. Three pipeline restarts inside ~40
+# minutes on 2026-07-30 got us rate-limited: pasta.lternet.edu stayed up (200 at
+# the host) while this data object returned 403, and the failed write left the
+# cache empty, so the ingest could no longer fall back to a local copy either.
+# `overwrite_all` is the flag that means "redo intermediates", so force-refresh
+# belongs there.
+if (overwrite_all || !file_exists(phyllo_csv)) download.file(edi_url, phyllo_csv, quiet = TRUE)
 d_raw <- read_csv(phyllo_csv, col_types = cols(.default = "c")) |> clean_names()
 cat(glue("Downloaded {nrow(d_raw)} phyllosoma tows"), "\n")
 sync_to_gcs(local_dir = dir_dl, gcs_prefix = glue("archive/{provider}/{dataset}"),

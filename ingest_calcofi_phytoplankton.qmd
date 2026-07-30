@@ -95,7 +95,7 @@ edi_ents <- c(
   definitions     = "97d8f56bf41502f60ca6fdd5d5da8edc")
 for (nm in names(edi_ents)) {
   f <- file.path(dir_dl, paste0(nm, ".xlsx"))
-  if (overwrite || !file_exists(f)) download.file(paste0(edi_base, "/", edi_ents[[nm]]), f, quiet = TRUE)
+  if (overwrite_all || !file_exists(f)) download.file(paste0(edi_base, "/", edi_ents[[nm]]), f, quiet = TRUE)
 }
 cat(glue("Downloaded {length(edi_ents)} EDI entities to {dir_dl}"), "\n")
 sync_to_gcs(local_dir = dir_dl, gcs_prefix = glue("archive/{provider}/{dataset}"),

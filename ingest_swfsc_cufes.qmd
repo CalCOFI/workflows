@@ -78,7 +78,7 @@ meas_type_csv <- here("metadata/measurement_type.csv"); d_meas_type <- read_csv(
 dir_dl  <- here(glue("data/cache/{dir_label}")); dir_create(dir_dl)
 cufes_csv <- file.path(dir_dl, "erdCalCOFIcufes.csv")
 erddap_url <- "https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFIcufes.csv"
-if (overwrite || !file_exists(cufes_csv))
+if (overwrite_all || !file_exists(cufes_csv))
   download.file(erddap_url, cufes_csv, quiet = TRUE)
 # ERDDAP CSV: row 1 = column names, row 2 = units, rows 3+ = data
 hdr   <- read_csv(cufes_csv, n_max = 0) |> names()
