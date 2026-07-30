@@ -2737,30 +2737,34 @@ if (file_exists(db_checkpoint)) {
 
 ## Appendix: Interactive Gantt Chart {.appendix}
 
+::: {.callout-note title="This appendix cannot fail the ingest"}
+`error: true` is deliberate. Everything above this point — the parquet outputs and
+the GCS sync — is the ingest's actual product, and it is all complete by the time
+this renders. On 2026-07-30 a stale path in this cosmetic chart aborted the whole
+target *after* a successful 15-minute run, so `targets` recorded a failure and
+`release_database` never started, over a chart. A decorative appendix should
+degrade to a visible error message, not discard finished work.
+:::
+
 ```{r}
 #| label: gantt_chart
+#| error: true
 
-# reconnect for gantt chart
-con_pq <- get_duckdb_con()
+# Read ctd_cast from the WRANGLING DB, not from parquet.
+#
+# This chunk used to read '{dir_parquet}/ctd_cast.parquet'. That file stopped
+# being written at the consolidated-core cut-over — Write Parquet now exports
+# sample / obs / obs_ctd_full / measurement_type, with ctd_cast, ctd_thin,
+# ctd_measurement and ctd_summary superseded. The breakage went unnoticed only
+# because this target was excluded from `_targets.R` for the whole period since,
+# so re-enabling it surfaced a latent failure: the ingest completed all of its
+# real work (parquet written, GCS synced) and then died in a cosmetic appendix.
+#
+# sample.parquet is the natural modern substitute but has no `data_stage`, and
+# the final-vs-preliminary split is the point of the chart. ctd_cast is still a
+# real table in the wrangling DB at render time, so read it there.
+con_pq <- get_duckdb_con(db_path)
 load_duckdb_extension(con_pq, "spatial")
-
-# read ctd_cast from parquet (exclude GEOMETRY columns for R driver compat)
-dbExecute(con_pq, glue("
-  CREATE OR REPLACE VIEW _ctd_probe AS
-  SELECT * FROM read_parquet('{dir_parquet}/ctd_cast.parquet') LIMIT 0"))
-pq_geom_cols <- dbGetQuery(con_pq,
-  "SELECT column_name FROM information_schema.columns
-   WHERE table_name = '_ctd_probe' AND data_type LIKE 'GEOMETRY%'")$column_name
-pq_all_cols <- dbGetQuery(con_pq,
-  "SELECT column_name FROM information_schema.columns
-   WHERE table_name = '_ctd_probe'
-   ORDER BY ordinal_position")$column_name
-pq_safe_cols <- setdiff(pq_all_cols, pq_geom_cols)
-dbExecute(con_pq, "DROP VIEW IF EXISTS _ctd_probe")
-dbExecute(con_pq, glue("
-  CREATE VIEW ctd_cast AS
-  SELECT {paste(pq_safe_cols, collapse = ', ')}
-  FROM read_parquet('{dir_parquet}/ctd_cast.parquet')"))
 
 cruise_spans <- tbl(con_pq, "ctd_cast") |>
   group_by(cruise_key, data_stage) |>
