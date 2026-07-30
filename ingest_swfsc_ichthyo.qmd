@@ -8,6 +8,7 @@ calcofi:
   provider: swfsc
   dataset: ichthyo
   workflow_url: https://calcofi.io/workflows/ingest_swfsc_ichthyo.html
+  questions_file: metadata/swfsc/ichthyo/questions.csv
   dataset_meta:
     dataset_name: SWFSC Ichthyoplankton
     description: >
@@ -1176,6 +1177,26 @@ message(glue("Total distance: {fmt(round(total_km))} km"))
 d_dataset <- ingest_yaml_to_dataset_df(read_ingest_yaml(here()))
 dbWriteTable(con, "dataset", d_dataset, overwrite = TRUE)
 message(glue("dataset: {nrow(d_dataset)} datasets registered"))
+```
+
+## Questions for Data Providers
+
+Open questions tracked in `metadata/swfsc/ichthyo/questions.csv`, surfaced here so
+they travel with the workflow rather than living in someone's inbox. The blocker
+is quantified by this notebook's own flagged-data sidecars: `orphan_species.csv`
+excludes **316,316 specimens** across 17 unresolvable `species_id` values, so
+every abundance total in the release is low by that amount until they resolve.
+
+```{r}
+#| label: provider-questions
+read_csv(here(cc$questions_file), show_col_types = FALSE) |>
+  arrange(factor(priority, c("blocker", "high", "normal", "low")), id) |>
+  select(priority, question, context, status) |>
+  datatable(
+    caption  = "Questions for the SWFSC ichthyoplankton data providers (ranked)",
+    rownames = FALSE,
+    options  = list(dom = "t", scrollX = TRUE,
+                    columnDefs = list(list(width = "70px", targets = 0))))
 ```
 
 ## Validate Local Database

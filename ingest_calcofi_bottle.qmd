@@ -11,6 +11,7 @@ calcofi:
   provider: calcofi
   dataset: bottle
   workflow_url: https://calcofi.io/workflows/ingest_calcofi_bottle.html
+  questions_file: metadata/calcofi/bottle/questions.csv
   dataset_meta:
     dataset_name: CalCOFI Bottle Database
     description: >
@@ -698,6 +699,27 @@ dbWriteTable(con, "dataset", d_dataset, overwrite = TRUE)
 message(glue("dataset: {nrow(d_dataset)} datasets registered"))
 ```
 
+## Questions for Data Providers
+
+Open questions tracked in `metadata/calcofi/bottle/questions.csv`. Both blockers
+concern **quality-flag semantics**, and they gate more than this notebook: with
+`measurement_qual` an uninterpreted pass-through, no downstream QC rule can act on
+it. `S_qual` alone holds 253 distinct values where every sibling column has 3-10.
+Two further questions cover ammonium left-censoring, where the flag's usage
+changes mid-record and filtering on it fabricates a trend.
+
+```{r}
+#| label: provider-questions
+read_csv(here(cc$questions_file), show_col_types = FALSE) |>
+  arrange(factor(priority, c("blocker", "high", "normal", "low")), id) |>
+  select(priority, question, context, status) |>
+  datatable(
+    caption  = "Questions for the CalCOFI bottle data providers (ranked)",
+    rownames = FALSE,
+    options  = list(dom = "t", scrollX = TRUE,
+                    columnDefs = list(list(width = "70px", targets = 0))))
+```
+
 ## Verify Primary Keys
 
 ```{r}
@@ -1341,9 +1363,14 @@ per-dataset shards rather than re-deriving the core, so there is exactly one
 projection to keep correct.
 
 Bottle is a two-level hierarchy — `cast` -> `bottle` — carried in `sample` as an
-adjacency list. Cast conditions and the cast's `bottom_depth_m` become
-`sample_measurement` (they describe the event, not an observation); the long
-`bottle_measurement` values become `obs` at `realm = 'env'`.
+adjacency list. Cast conditions become `sample_measurement` (they describe the
+event, not an observation); the long `bottle_measurement` values become `obs` at
+`realm = 'env'`.
+
+`bottom_depth` rides along in `cast_condition`: the pivot above turns the source
+`Bottom_D` column into a condition row and drops it from `casts`, so the cast's
+water depth reaches `sample_measurement` through the same arm as wind speed and
+sea state rather than needing one of its own.
 
 ```{r}
 #| label: emit_core
