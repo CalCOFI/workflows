@@ -175,6 +175,15 @@ for (tbl in tables) {
 }
 ```
 
+#### I0. Nullable-case reconciliation (do this before trusting the verdict)
+
+`validate_for_release()`'s null check flags every `_id`/`_key`/`_uuid` column, so a
+dataset with legitimately-nullable keys reports FAILED for non-defects. Do NOT
+summarise that as "all expected" — declare each case with its count and reason and
+hard-fail on anything undeclared or moved. See `ingest_cdfw_dungeness-crab.qmd`
+("Validate") for the pattern. A blanket "expected" is what let a completely empty
+`taxon` lineage sit unnoticed among 17 accepted null warnings.
+
 #### I2. Core Table Projection Parity (`core_parity`)
 ```r
 # every ingest emits the core tables (emit_core, RUNBOOK 3b) — assert its

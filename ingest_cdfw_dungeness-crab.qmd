@@ -13,8 +13,8 @@ calcofi:
   # parquet outputs — including its slice of the consolidated core — but every
   # release-side discovery step in release_database.qmd skips it
   # (calcofi4db::release_excluded_datasets()). The ONLY thing still holding it out
-  # is Q08: no licence, no citation, and permission to publish unconfirmed. Flip to
-  # `true` — or delete the key, since the flag is opt-out — once Q08 is answered,
+  # is Q01: no licence, no citation, and permission to publish unconfirmed. Flip to
+  # `true` — or delete the key, since the flag is opt-out — once Q01 is answered,
   # and move measurement_type_new.csv into the shared registry in the same change.
   in_release: false
   workflow_url: https://calcofi.io/workflows/ingest_cdfw_dungeness-crab.html
@@ -137,9 +137,9 @@ dcr_tbls <- c("dungeness_sample", "dungeness_measurement", "dungeness_carapace",
 
 # Other ingests archive their sources to gs://calcofi-files-public and their
 # outputs to gs://calcofi-db unconditionally. This one does NOT by default:
-# whether these files may be published is itself an open blocker (Q08 — no
+# whether these files may be published is itself an open blocker (Q01 — no
 # licence, no citation, and CDFW commissioned the work), and both buckets are
-# world-readable. Uploading is a one-way door, so it is opt-in until Q08 is
+# world-readable. Uploading is a one-way door, so it is opt-in until Q01 is
 # answered. Flip alongside `in_release: true`.
 publish_to_gcs <- FALSE
 ```
@@ -167,7 +167,7 @@ if (publish_to_gcs) {
               bucket = "calcofi-files-public", exclude = c(".DS_Store", "*.tmp"))
 } else {
   cat("publish_to_gcs is FALSE — sources NOT archived to gs://calcofi-files-public",
-      "(pending Q08: licence + permission to publish)\n")
+      "(pending Q01: licence + permission to publish)\n")
 }
 
 f_ts   <- file.path(dir_src, "Dungeness Time Series - Angela Klemmedson.xlsx")
@@ -431,7 +431,7 @@ d_sorting <- d_log |>
       is.na(yymm) | is.na(date), NA_character_,
       sprintf("%04d-%02d", 100L * (year(date) %/% 100L) + yy, mm)),
     # one row records longitude +138.483 where every other is negative; flag it
-    # rather than silently negating (Q07)
+    # rather than silently negating (Q08)
     longitude = if_else(!is.na(longitude) & longitude > 0, NA_real_, longitude)) |>
   left_join(d_ym_lookup, by = "cruise_ym") |>
   transmute(
@@ -573,7 +573,7 @@ Two modelling decisions worth review:
   `cast`, `net`, `region_pool`, `site`, `tow`, `transect`, `underway`). The grain
   genuinely is a lab subsample of an archived net catch — finer than the tow,
   since three station occupations were examined twice as separate removal vials —
-  so none of the existing values fits. Flagged as Q11.
+  so none of the existing values fits. Flagged as Q05.
 - **`parent_sample_key` points at the matched `swfsc_ichthyo` site occupation**, a
   deliberate cross-dataset edge in the `sample` adjacency list. This is the payoff
   of the station match: it makes crab larvae joinable to CTD and bottle
@@ -591,7 +591,7 @@ sorted/unsorted distinction becomes the presence or absence of an `obs` row:
 That distinction is the entire scientific content of the log, and encoding it this
 way means it needs no `sorting_status` column of its own — which is what lets this
 ingest publish the core and nothing else (see "Write Outputs"). Note the zeros are
-safe with respect to the open Q03: that question doubts the *positive* Reilly-era
+safe with respect to the open Q02: that question doubts the *positive* Reilly-era
 "Cancer magister" labels, not Jones's report of finding none.
 
 ```{r}
@@ -873,7 +873,7 @@ tribble(
   "Compiled Cruises", "Order_Occ", "sample", "order_occ",
     "matched to swfsc_ichthyo site occupation -> parent_sample_key",
   "Compiled Cruises", "Date + Time", "sample", "datetime",
-    "1904-epoch date + day-fraction time (tz unconfirmed, Q05)",
+    "1904-epoch date + day-fraction time (tz unconfirmed, Q04)",
   "Compiled Cruises", "Dungeness Crab Megalopae", "obs",
     "measurement_value", "measurement_type='abundance', taxon_key=worms:440388, life_stage='megalopa'",
   "Compiled Cruises", "Other Megalopae", "obs", "measurement_value",
@@ -891,7 +891,7 @@ tribble(
   "sorting log", "SampleDate + Month", "sample", "datetime",
     "day/year text recombined with the separate Month column",
   "sorting log", "Lat / Lon", "sample", "latitude / longitude",
-    "as given; one positive longitude nulled as a suspected sign error (Q07)",
+    "as given; one positive longitude nulled as a suspected sign error (Q08)",
   "sorting log", "Tow / MaxDepth", "sample", "tow_type / depth_max_m", "as given",
   "sorting log", "sorted vs unsorted", "obs", "(row presence)",
     "sorted -> one zero-valued M. magister obs; unsorted -> no obs at all",
@@ -902,7 +902,7 @@ tribble(
   "NOT PUBLISHED", "gear detail (Net, Mesh, Preservative), Expedition label",
     "—", "—", "beyond sample.tow_type the core does not model gear; archived source",
   "NOT PUBLISHED", "5-specimen ID verification (is_magister)", "—", "—",
-    "a taxonomic determination, not an abundance observation; see Overview + Q03"
+    "a taxonomic determination, not an abundance observation; see Overview + Q02"
 ) |>
   datatable(caption = "Source -> core mapping, including what is deliberately not published",
             options = list(dom = "t", pageLength = 25), rownames = FALSE)
@@ -946,13 +946,83 @@ cc_erd(con,
 #| label: validate
 
 results <- validate_for_release(con, checks = "all", strict = FALSE)
-cat("Validation:", ifelse(results$passed, "PASSED", "FAILED"), "\n")
-# the generic checker treats every *_key as required, so the expected-NULL cases
-# here (unmatched stations, a shipless sorting log, positions outside the grid)
-# are reported rather than silently passed over
-if (length(results$errors))
-  cat("Reported as errors, all expected for this dataset:\n  ",
-      paste(results$errors, collapse = "\n  "), "\n")
+
+# `validate_for_release()`'s null check treats EVERY column ending _id/_key/_uuid
+# as required, which is a heuristic, not this dataset's contract: `parent_taxon_key`
+# is legitimately NULL for a root taxon, `cruise_key` for a log entry that names no
+# ship, `grid_key` for a station outside the CalCOFI grid. So its verdict is
+# "FAILED" for reasons that are mostly not defects.
+#
+# Reporting that as "FAILED, but all expected" is worthless — it is exactly how a
+# real defect hides in a wall of accepted noise. Instead: every nullable case is
+# declared below WITH ITS COUNT AND REASON, and anything that is not on this list,
+# or whose count has moved, is a hard failure. That turns a vague verdict into a
+# contract that breaks when the data changes.
+nullable <- tribble(
+  ~table,                  ~column,             ~n,   ~reason,
+  "dungeness_sample",      "site_sample_key",   4L,   "no matching CalCOFI station occupation (Q09)",
+  "dungeness_sample",      "grid_key",          4L,   "same 4 samples: no position, so no grid cell",
+  "dungeness_sorting_log", "cruise_key",        1639L,"log records no ship; cruise resolves only where YYYY-MM is unambiguous",
+  "dungeness_sorting_log", "site_key",          77L,  "no line/station in the source row",
+  "dungeness_sorting_log", "grid_key",          77L,  "same 77 rows: north of or offshore from the CalCOFI grid",
+  "sample",                "parent_sample_key", 2015L,"2011 sorting-log tows are roots + the 4 unmatched subsamples",
+  "sample",                "site_key",          77L,  "inherited from the sorting log",
+  "sample",                "cruise_key",        1639L,"inherited from the sorting log",
+  "sample",                "grid_key",          81L,  "4 unmatched subsamples + 77 out-of-grid log tows",
+  "obs",                   "grid_key",          30L,  "16 from the 4 unmatched subsamples x 4 types + 14 out-of-grid absences",
+  "obs",                   "cruise_key",        87L,  "absence rows whose log entry has no resolvable cruise",
+  "obs",                   "hex_id",            16L,  "H3 needs a position; the 4 unmatched subsamples have none",
+  # taxon: two different situations, deliberately not lumped
+  "taxon",                 "ncbi_id",           3L,   "never populated by ANY dataset — the column exists, nothing fills it",
+  "taxon",                 "inat_id",           3L,   "never populated by ANY dataset",
+  "taxon",                 "itis_id",           3L,   "WoRMS could supply a cross-authority id; not fetched (see Not Yet Done)",
+  "taxon",                 "gbif_id",           3L,   "as itis_id",
+  "taxon",                 "parent_taxon_key",  3L,   "REAL GAP: no lineage built for measurement_taxon-resolved taxa (see Not Yet Done)")
+
+nulls <- results$checks |>
+  filter(check == "nulls", status != "PASS") |>
+  mutate(table = table,
+         column = str_match(message, "column '([^']+)'")[, 2],
+         n      = as.integer(str_match(message, "has (\\d+) NULL")[, 2])) |>
+  select(table, column, n)
+
+declared   <- nullable |> select(table, column, n_expected = n)
+reconciled <- full_join(nulls, declared, by = c("table", "column"))
+unexplained <- reconciled |> filter(is.na(n_expected))
+moved       <- reconciled |> filter(!is.na(n_expected), !is.na(n), n != n_expected)
+resolved    <- reconciled |> filter(!is.na(n_expected), is.na(n))
+
+if (nrow(unexplained))
+  print(unexplained)
+if (nrow(moved))
+  print(moved)
+stopifnot(
+  "a NULL appeared in a column with no declared reason — investigate, do not add it to the list reflexively" =
+    nrow(unexplained) == 0,
+  "a declared NULL count has changed — the data moved, so re-derive the reason" =
+    nrow(moved) == 0)
+if (nrow(resolved))
+  cat(glue("{nrow(resolved)} declared nullable case(s) no longer occur — ",
+           "prune them from `nullable`: ",
+           "{paste(resolved$table, resolved$column, sep = '.', collapse = ', ')}"), "\n")
+
+# The lineage gap is asserted rather than merely noted, so it cannot be quietly
+# forgotten: this fails the moment lineage IS populated, forcing the note in
+# "Not Yet Done" to be removed in the same change.
+n_taxon_no_lineage <- dbGetQuery(con, "
+  SELECT COUNT(*) FROM taxon WHERE rank IS NULL AND parent_taxon_key IS NULL")[[1]]
+stopifnot("taxon lineage gap has changed — update the note in Not Yet Done" =
+            n_taxon_no_lineage == 3)
+
+cat(glue("validate_for_release: {ifelse(results$passed, 'PASSED', 'FAILED')} ",
+         "— its null heuristic treats every *_id/_key column as required, so that ",
+         "verdict is not this dataset's contract. {nrow(nulls)} null case(s) ",
+         "reconciled against {nrow(nullable)} declared, 0 unexplained."), "\n")
+cat(glue("KNOWN GAP: all {n_taxon_no_lineage} taxa lack rank + parent_taxon_key, so ",
+         "hierarchy rollups (e.g. 'all Decapoda') will not work. NOT specific to this ",
+         "ingest — swfsc_cufes, calcofi_phyllosoma and cce-lter_euphausiids are all ",
+         "in the same state, because taxa resolved through measurement_taxon.csv get ",
+         "no lineage fetch. Only swfsc_ichthyo has it, from its own species table."), "\n")
 
 # referential integrity of the two FKs this ingest owns
 n_orphan_meas <- dbGetQuery(con, "
@@ -1096,9 +1166,13 @@ dbGetQuery(con, "SELECT * FROM dungeness_specimen ORDER BY specimen_num") |>
 
 read_csv(here(glue("metadata/{provider}/{dataset}/questions.csv"))) |>
   arrange(factor(priority, c("blocker", "high", "normal")), id) |>
-  select(priority, question, context, status) |>
-  datatable(caption = "Questions (ranked)", options = list(dom = "t", pageLength = 10),
-            rownames = FALSE)
+  # show the number, so "Q01" in the prose above points at something. Ids are
+  # assigned in priority order (blocker first) and the table is also sorted by
+  # priority, so the ordering stays right even after a priority changes.
+  mutate(`#` = str_replace(id, ".*_(\\d+)$", "Q\\1"), .before = 1) |>
+  select(`#`, priority, status, question, context, answer) |>
+  datatable(caption = "Questions for data providers, in priority order",
+            options = list(dom = "t", pageLength = 15), rownames = FALSE)
 ```
 
 ## Write Outputs + Upload
@@ -1182,21 +1256,33 @@ if (length(own(gap(m$columns, "description_md"))))
 
 This is a first pass. What remains, roughly in order:
 
-1. **Answer the one remaining blocker**, Q08 — permission to publish, a licence,
+1. **Answer the one remaining blocker**, Q01 — permission to publish, a licence,
    a citation, and whether CDFW or SIO is the citable custodian. It gates both
    the release and the GCS upload. Christy Juhasz (CDFW Marine Region) supplied
    the files and is the live contact; Laura Rogers-Bennett has retired.
-   (Q01, standardization, is answered — see the Notes sheet above.)
-2. **Review the two modelling choices** in "Emit Core Tables" (Q11): the new
+   (Q11, standardization, is answered — see the Notes sheet above.)
+2. **Review the two modelling choices** in "Emit Core Tables" (Q05): the new
    `sample_type = 'subsample'` vocabulary value, and pointing `parent_sample_key`
    at the matched `swfsc_ichthyo` site occupation.
-3. **Decide what the sorting log is for.** As absence/effort data it is the more
+3. **Populate the taxon lineage.** All three taxa have `rank` and
+   `parent_taxon_key` NULL, so they cannot participate in hierarchy rollups — a
+   query for "all Decapoda" will not find the *M. magister* records. This is **not
+   specific to this ingest**: every dataset whose taxa resolve through
+   `metadata/measurement_taxon.csv` is in the same state (`swfsc_cufes`,
+   `calcofi_phyllosoma`, `cce-lter_euphausiids`), because that path carries only
+   `worms_id` + `scientific_name` and no classification is fetched. Only
+   `swfsc_ichthyo` has lineage, from its own `species` table. The fix belongs in
+   `build_taxon_reference()` — fetch rank + classification from WoRMS for
+   crosswalk-resolved taxa — and is asserted in "Validate" so it fails here once
+   done. Note `ncbi_id`/`inat_id` are populated by no dataset at all, and `family`
+   by none including ichthyo.
+4. **Decide what the sorting log is for.** As absence/effort data it is the more
    scientifically useful of the two efforts — 2,011 samples over 60 years — but
-   only if Q03 settles which historic identifications stand, and Q04 settles
+   only if Q02 settles which historic identifications stand, and Q03 settles
    whether repeated rows are jars.
-4. **Parse the free-text identification notes** (Q06) into `obs_attribute` stage
+5. **Parse the free-text identification notes** (Q07) into `obs_attribute` stage
    and length bins.
-5. Move `measurement_type_new.csv` into `metadata/measurement_type.csv` and drop
+6. Move `measurement_type_new.csv` into `metadata/measurement_type.csv` and drop
    `in_release: false`, in one change.
 
 ```{r}

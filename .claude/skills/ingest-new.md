@@ -112,7 +112,29 @@ The notebook includes these sections (customize based on pattern):
   "Emit the core" below. An ingest that stops at per-dataset tables is not
   finished: the core is what `release_database.qmd` publishes and what every
   consumer reads.
-11. **Validate** — `validate_for_release()`, plus core parity assertions
+11. **Validate** — `validate_for_release()`, plus core parity assertions. **Never
+  report "FAILED, but all expected."** Its null check treats every column ending
+  `_id`/`_key`/`_uuid` as required, which is a heuristic, not your dataset's
+  contract — `parent_taxon_key` is legitimately NULL for a root taxon, `cruise_key`
+  for a record that names no ship. Accepting a wall of "expected" errors is how a
+  real defect hides in the noise; it hid a whole missing taxon lineage. Instead
+  declare each nullable case **with its count and reason** in a `tribble`, reconcile
+  against what the validator reports, and hard-fail on anything undeclared or whose
+  count has moved:
+
+  ```r
+  nullable <- tribble(~table, ~column, ~n, ~reason,
+    "sample", "cruise_key", 1639L, "log records no ship; resolves only where YYYY-MM is unambiguous",
+    ...)
+  # reconcile, then:
+  stopifnot("a NULL appeared with no declared reason" = nrow(unexplained) == 0,
+            "a declared NULL count has changed"       = nrow(moved) == 0)
+  ```
+
+  Report cases that no longer occur too, so the list gets pruned rather than
+  accumulating. And when a reconciled case turns out to be a genuine gap rather
+  than an expected null, **assert the gap's current size** so the assertion fails
+  once it is fixed and the note cannot outlive it.
 12. **Enforce column types** — `enforce_column_types()` (run this BEFORE any
   geometry column exists; DuckDB ≥ 1.5.1 cannot rewrite a table carrying
   `GEOMETRY`)
@@ -215,6 +237,13 @@ archived source, and the mapping table says so explicitly.
 Beware a statistic quietly changing meaning when you add rows like this: adding 216
 examined-but-empty samples moved an occurrence rate from 15/310 to 15/526. Both are
 true; report the scope.
+
+**Number questions by priority, and show the number.** Ids are referenced from
+prose, commit messages and provider emails, so they have to be visible in the
+rendered table — `select(priority, question, ...)` without the id leaves every "Q01"
+in the notebook pointing at nothing. Assign ids in priority order so the blocker is
+Q01 rather than whatever was written last, and sort the display by priority too, so
+the order stays right after a priority changes.
 
 Also keep the template's **Questions for Data Providers** section (renders
 `metadata/{provider}/{dataset}/questions.csv` as a `datatable()`, placed after
