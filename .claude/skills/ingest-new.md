@@ -97,17 +97,95 @@ The notebook includes these sections (customize based on pattern):
 8. **Load into database** — `ingest_dataset()` or custom load
 9. **Schema documentation** — Define PKs/FKs, color-code tables
   (`lightblue` = new tables, `lightyellow` = amended reference tables,
-  `white` = shared metadata), draw with `cc_erd()`, then write
-  `relationships.json` sidecar via `build_relationships_json()`
-10. **Validate** — `validate_for_release()`
-11. **Enforce column types** — `enforce_column_types()`
-12. **Data preview** — Individual `datatable()` calls per table (NOT
-  `preview_tables()` in a loop, which has DT rendering issues)
-13. **Write parquet** — `write_parquet_outputs()`
-14. **Write metadata** — `build_metadata_json()`
-15. **Show metadata** — `listviewer::jsonedit()` for interactive JSON viewer
-16. **Upload to GCS** — `sync_to_gcs()` for parquet outputs
-17. **Cleanup** — `close_duckdb(con)`
+  `white` = shared metadata), draw with `cc_erd()`. This ERD documents the
+  **source** shape; `relationships.json` is written later from
+  `core_relationships(tbls_out)`, since the core is what gets published. Always
+  pass `tables =` to `cc_erd()` — diagramming every table in the connection is
+  slow and unreadable.
+10. **Emit core tables** — **MANDATORY, and the point of the whole ingest.** See
+  "Emit the core" below. An ingest that stops at per-dataset tables is not
+  finished: the core is what `release_database.qmd` publishes and what every
+  consumer reads.
+11. **Validate** — `validate_for_release()`, plus core parity assertions
+12. **Enforce column types** — `enforce_column_types()` (run this BEFORE any
+  geometry column exists; DuckDB ≥ 1.5.1 cannot rewrite a table carrying
+  `GEOMETRY`)
+13. **Data preview** — Individual `datatable()` calls per table (NOT
+  `preview_tables()` in a loop, which has DT rendering issues). Prefer previewing
+  *through the core*, the way a consumer will read it.
+14. **Write parquet** — `write_parquet_outputs(tables = core_output_tables(con, extra = …))`
+15. **Write metadata** — `build_metadata_json()`, passing
+  `metadata_derived_csv = c(here("metadata/core_dictionary.csv"), <this dataset's>)`
+  — without `core_dictionary.csv` every core table and column ships with an empty
+  description
+16. **Show metadata** — `listviewer::jsonedit()` for interactive JSON viewer
+17. **Upload to GCS** — `sync_to_gcs()` for parquet outputs
+18. **Cleanup** — `close_duckdb(con)`
+
+#### Emit the core (step 10, in detail)
+
+Per-dataset tables (`{dataset}_sample` / `{dataset}_measurement` / …) are an
+**intermediate** wrangling shape, not the deliverable. Every ingest projects them
+into the shared core family and then serves the per-dataset names as compat VIEWs.
+Full pattern in `RUNBOOK.md` §3b and `templates/ingest_template.qmd`.
+
+**The projection SQL belongs in the notebook.** The `append_*` helpers all take an
+arbitrary `SELECT`, so adding a dataset needs **no `calcofi4db` change**:
+
+```r
+build_grid_reference(con)                  # idempotent shared grid
+append_sample(con, "<event SELECT>")       # namespaced sample_key
+append_obs(con, "<headline occurrence SELECT>")
+append_obs_attribute(con, "<bin/count SELECT or skip>")
+append_sample_measurement(con, "<event-effort SELECT or skip>")
+```
+
+Column contracts are **positional** (each helper wraps your SELECT in
+`AS src(...)`), so emit columns in the documented order — see each helper's
+roxygen. Then:
+
+```r
+# per-dataset names survive as VIEWs over the core (detail survives, bytes don't)
+dbExecute(con, "ALTER TABLE {ds}_measurement RENAME TO {ds}_measurement_src")
+dbExecute(con, "CREATE OR REPLACE VIEW {ds}_measurement AS
+                SELECT … FROM obs WHERE dataset_key = '{provider}_{dataset}'")
+```
+
+`emit_core_tables()` is a convenience wrapper whose `switch(dataset_key, …)` arms
+hold the already-migrated datasets' SQL. **Do not add an arm for a new dataset** —
+that is how ~450 lines of dataset-specific SQL accumulated inside a general-purpose
+module. Use the helpers above.
+
+**Taxon resolution.** `obs.taxon_key` is global (`worms:<id>`, or `itis:<id>` for
+birds). Datasets with a vocabulary table resolve through `dataset_taxon`; datasets
+that bake the taxon into a column name (`sardine_eggs`, `megalopae_magister`)
+resolve through `metadata/measurement_taxon.csv`, which maps each raw label to
+`(measurement_type, taxon_key, life_stage)`. **A taxon-bearing column name is never
+a `measurement_type`** — the quantity is `abundance`/`count`, the organism is
+`taxon_key`. Then:
+
+```r
+mt <- readr::read_csv(here("metadata/measurement_taxon.csv"),
+                      col_types = cols(worms_id = "i", itis_id = "i",
+                                       bin_value = "d", .default = "c")) |>
+  filter(dataset_key == ds_key)
+dbWriteTable(con, "_measurement_taxon", as.data.frame(mt), overwrite = TRUE)
+build_taxon_reference(con, mt, overrides); build_dataset_taxon(con, mt, overrides)
+```
+
+Read `worms_id`/`itis_id` as **integer**. Read as double, `CAST(… AS VARCHAR)`
+yields `"440388.0"`, every `taxon_key` silently joins to nothing, and a NOT-NULL
+check will not catch it.
+
+**Assert the projection, don't eyeball it.** At minimum: one core `sample` per
+source event; `obs` row count and value total equal the source; every
+`obs.sample_key` resolves in `sample`; every `obs.taxon_key` resolves **in
+`taxon`** (not merely non-NULL); every `obs.measurement_type` resolves in
+`measurement_type`; sub-occurrence counts reconcile to the headline.
+
+**Prune retired parquet.** When a table becomes a compat VIEW it must stop being
+written, and any stale `.parquet` left on disk is still picked up by directory
+scans and by `sync_to_gcs`. Delete files not in `tbls_out`.
 
 Also keep the template's **Questions for Data Providers** section (renders
 `metadata/{provider}/{dataset}/questions.csv` as a `datatable()`, placed after
@@ -146,6 +224,9 @@ Also keep the template's **Questions for Data Providers** section (renders
 - Example: DIC dataset pivots 4 types (dic, alkalinity, ctdtemp_its90,
   salinity_pss78) into `dic_measurement` — `dic_sample` has zero
   measurement columns.
+- **This triple is an intermediate, not the deliverable.** It gets projected into
+  the core (`sample` / `obs` / `obs_attribute` / `sample_measurement`) at step 10
+  and survives only as compat VIEWs. Do not finish an ingest at the triple.
 
 **Status output**: Use `cat()` (not `message()`) for user-facing status
 output in chunks. `message()` sends to stderr which Quarto may not
@@ -173,17 +254,21 @@ In the generated notebook, mark sections requiring manual implementation with:
 
 Every ingest notebook MUST include these two standard sections:
 
-**a. Load Dataset Metadata** — Load `metadata/dataset.csv` into the
-wrangling DB so it's included in the parquet output and flows into
-`release_database.qmd`:
+**a. Load Dataset Metadata** — build the `dataset` row from this notebook's own
+`calcofi.dataset_meta` YAML block. `metadata/dataset.csv` is **deprecated**: it
+drifted from the notebooks and orphaned obs rows against `obs.dataset_key`. The
+YAML cannot drift, because it is the same block that defines the pipeline:
 
 ```r
-d_dataset <- read_csv(here("metadata/dataset.csv"))
-dbWriteTable(con, "dataset", d_dataset, overwrite = TRUE)
+this_provider <- provider; this_dataset <- dataset  # also column names
+d_dataset <- ingest_yaml_to_dataset_df(read_ingest_yaml(here())) |>
+  filter(provider == this_provider, dataset == this_dataset)
+stopifnot(nrow(d_dataset) == 1)
+dbWriteTable(con, "dataset", as.data.frame(d_dataset), overwrite = TRUE)
 ```
 
 **b. CalCOFI.org page check** — Before ingesting, scrape the CalCOFI.org
-landing page for the dataset (from `link_calcofi_org` in `dataset.csv`)
+landing page for the dataset (from `link_calcofi_org` in the YAML block)
 to check for updated data, new download links, or changed metadata.
 
 **c. Update `release_database.qmd`** — `release_database.qmd` auto-discovers
@@ -210,7 +295,7 @@ not the data portal where it's hosted:
 | `sccoos` | SCCOOS | underway |
 
 Data portals (NCEI, EDI, ERDDAP) are recorded in `link_data_source`
-in `metadata/dataset.csv`, not in the provider name.
+in the notebook's `calcofi.dataset_meta` block, not in the provider name.
 
 ### 8. Update `_targets.R`
 

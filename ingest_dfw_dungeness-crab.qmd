@@ -10,11 +10,12 @@ calcofi:
   provider: dfw
   dataset: dungeness-crab
   # HELD OUT OF THE RELEASE. This ingest runs in the pipeline and writes its full
-  # parquet outputs, but every release-side discovery step in release_database.qmd
-  # skips it (calcofi4db::release_excluded_datasets()). Flip to `true` — or delete
-  # the key, since the flag is opt-out — once the blocker questions in
-  # metadata/dfw/dungeness-crab/questions.csv are answered and the dataset is
-  # projected into the consolidated core (see "Not yet done" below).
+  # parquet outputs — including its slice of the consolidated core — but every
+  # release-side discovery step in release_database.qmd skips it
+  # (calcofi4db::release_excluded_datasets()). The ONLY thing still holding it out
+  # is Q08: no licence, no citation, and permission to publish unconfirmed. Flip to
+  # `true` — or delete the key, since the flag is opt-out — once Q08 is answered,
+  # and move measurement_type_new.csv into the shared registry in the same change.
   in_release: false
   workflow_url: https://calcofi.io/workflows/ingest_dfw_dungeness-crab.html
   questions_file: metadata/dfw/dungeness-crab/questions.csv
@@ -39,11 +40,20 @@ calcofi:
     coverage_spatial: "California Current, San Francisco north to Washington"
     license: ""
     pi_names: Laura Rogers-Bennett
+  # publishes the consolidated core: the source shape is wrangled in the notebook
+  # and projected into sample / obs / obs_attribute / sample_measurement + the taxa
+  # refs via the generic append_* helpers. The three per-dataset tables the core
+  # does not model ride along; dungeness_measurement / dungeness_carapace survive
+  # as compat VIEWs over the core and are not written separately.
   tables_owned:
-    - {table: dungeness_sample, note: "one row per examined plankton sample (2008-2014 series)"}
-    - {table: dungeness_measurement, note: "larval decapod counts per examined sample, long form"}
-    - {table: dungeness_carapace, note: "per-individual M. magister carapace lengths"}
-    - {table: dungeness_sorting_log, note: "1949-2009 sorted/unsorted sample inventory"}
+    - {table: sample, shared: true, note: "core event dimension (examined subsamples + sorting-log tows)"}
+    - {table: obs, shared: true, note: "core occurrence headline (abundance x 4 resolved taxa)"}
+    - {table: obs_attribute, shared: true, note: "per-individual M. magister carapace lengths"}
+    - {table: sample_measurement, shared: true, note: "event-level effort (prop_sorted, settled volume)"}
+    - {table: taxon, shared: true, note: "shared taxa reference"}
+    - {table: dataset_taxon, shared: true, note: "raw count label -> taxon_key crosswalk"}
+    - {table: dungeness_sample, note: "source detail with no core home (cruise_orig, position_source, comments)"}
+    - {table: dungeness_sorting_log, note: "1949-2009 sorted/unsorted inventory; gear + status columns the core does not model"}
     - {table: dungeness_specimen, note: "5 specimens sent for independent species confirmation"}
   erd:
     color: "#f5d5b8"
@@ -506,12 +516,20 @@ d_spatial_cov |>
 
 ## Measurement Vocabulary + Dataset Metadata
 
-The four new measurement types are staged in
+The source's four count columns are **not** measurement types. Baking the taxon
+into the type name (`megalopae_magister`) is exactly the anti-pattern the core
+model exists to remove: in `obs` the quantity is `abundance` and the organism is
+`taxon_key`. So the four raw labels became entries in
+`metadata/measurement_taxon.csv`, which maps each to
+`(measurement_type, taxon_key, life_stage)` — see "Emit Core Tables" below.
+
+That leaves two genuinely new canonical quantities, staged in
 `metadata/dfw/dungeness-crab/measurement_type_new.csv` rather than appended to
-the shared `metadata/measurement_type.csv`. That registry is loaded wholesale
-into the release, so adding them there now would put four measurement types with
-no observations into a release that does not contain this dataset. **Move them
-into the shared registry in the same change that flips `in_release: true`.**
+the shared `metadata/measurement_type.csv`: that registry is loaded wholesale
+into the release, so adding them now would publish types with no observations
+into a release that excludes this dataset. **Move them into the shared registry
+in the same change that flips `in_release: true`.** The aliquot fraction maps onto
+the existing `prop_sorted`, so it needs nothing new.
 
 ```{r}
 #| label: meas-types
@@ -522,9 +540,7 @@ d_meas_type_new    <- read_csv(here(glue(
 
 stopifnot(
   "staged measurement types must not already be in the shared registry" =
-    !any(d_meas_type_new$measurement_type %in% d_meas_type_shared$measurement_type),
-  "every measurement_type used must be declared" =
-    all(unique(d_meas$measurement_type) %in% d_meas_type_new$measurement_type))
+    !any(d_meas_type_new$measurement_type %in% d_meas_type_shared$measurement_type))
 
 d_meas_type <- bind_rows(d_meas_type_shared, d_meas_type_new)
 dbWriteTable(con, "measurement_type", as.data.frame(d_meas_type), overwrite = TRUE)
@@ -536,12 +552,249 @@ stopifnot("this dataset must appear in the ingest YAML registry" = nrow(d_datase
 dbWriteTable(con, "dataset", as.data.frame(d_dataset), overwrite = TRUE)
 
 d_meas_type_new |>
-  select(measurement_type, description, units) |>
-  datatable(caption = "New measurement types (staged, not yet in the shared registry)",
+  select(measurement_type, description, units, grain) |>
+  datatable(caption = "New canonical measurement types (staged, not in the shared registry)",
             options = list(dom = "t"), rownames = FALSE)
 ```
 
+## Emit Core Tables
+
+Project this dataset into the shared consolidated core model (`RUNBOOK.md` §3b,
+`design_env-bio-consolidation.md`). These core tables **are** this ingest's
+published output — `release_database.qmd` concatenates per-dataset shards rather
+than re-deriving them — and the per-dataset tables survive as compat VIEWs.
+
+This uses the generic `append_*` helpers with plain SQL, so **no `calcofi4db`
+change is needed to add a dataset**. `emit_core_tables()` is a convenience wrapper
+whose `switch(dataset_key, …)` arms happen to hold the already-migrated datasets'
+SQL; a dataset's projection belongs in the notebook that owns it.
+
+Two modelling decisions worth review:
+
+- **`sample_type = 'subsample'` is new vocabulary** (existing values: `bottle`,
+  `cast`, `net`, `region_pool`, `site`, `tow`, `transect`, `underway`). The grain
+  genuinely is a lab subsample of an archived net catch — finer than the tow,
+  since three station occupations were examined twice as separate removal vials —
+  so none of the existing values fits. Flagged as Q11.
+- **`parent_sample_key` points at the matched `swfsc_ichthyo` site occupation**, a
+  deliberate cross-dataset edge in the `sample` adjacency list. This is the payoff
+  of the station match: it makes crab larvae joinable to CTD and bottle
+  environment through the shared physical station occupation instead of stranding
+  them on their own island.
+
+The 2,011-row sorting log also becomes `sample` rows (`sample_type = 'tow'`) with
+**no** `obs`. That is the whole point of it: it is absence/effort data, and the
+core `sample` dimension is where "we looked here and found nothing" becomes
+queryable. `pic_zooplankton` contributes `sample` only for the same reason.
+
+```{r}
+#| label: emit-core
+
+ds_key <- glue("{provider}_{dataset}")
+
+# the taxon crosswalk resolves each raw count label to (measurement_type,
+# taxon_key, life_stage). Restricted to this dataset so the helpers below build
+# only our slice of the shared taxa references.
+# worms_id/itis_id MUST be integer: read as double, CAST(... AS VARCHAR) yields
+# "440388.0" and every taxon_key silently fails to resolve against `taxon`
+mt_taxon <- read_csv(here("metadata/measurement_taxon.csv"),
+                     col_types = cols(worms_id = "i", itis_id = "i",
+                                      bin_value = "d", .default = "c")) |>
+  filter(dataset_key == ds_key)
+tx_over  <- read_csv(here("metadata/taxon_override.csv"))
+stopifnot("crosswalk must cover all four raw count labels" =
+            setequal(mt_taxon$raw_measurement_type[mt_taxon$target == "obs"],
+                     c("megalopae_magister", "megalopae_other",
+                       "zoea_cancer", "zoea_other")))
+dbWriteTable(con, "_measurement_taxon", as.data.frame(mt_taxon), overwrite = TRUE)
+
+# taxa references — generic helpers, driven by the crosswalk rather than by a
+# per-dataset vocabulary table
+n_taxon    <- build_taxon_reference(con, mt_taxon, tx_over)
+n_ds_taxon <- build_dataset_taxon(con,   mt_taxon, tx_over)
+n_tx_group <- build_taxon_group(con,     mt_taxon, tx_over)
+
+sub_key <- glue("'{ds_key}:subsample:' || CAST(dungeness_sample_id AS VARCHAR)")
+
+# 1. sample — examined subsamples, parented to the matched station occupation
+append_sample(con, glue("
+  SELECT {sub_key}, 'subsample', site_sample_key,
+         COALESCE(site_sample_key, {sub_key}),
+         '{ds_key}', grid_key, site_key, cruise_key, order_occ,
+         latitude, longitude, CAST(datetime_start_utc AS TIMESTAMP),
+         NULL::DOUBLE, NULL::DOUBLE, NULL::VARCHAR
+  FROM dungeness_sample"))
+
+# 1b. sample — sorting-log tows (effort/absence; no obs attach to these)
+append_sample(con, glue("
+  SELECT '{ds_key}:tow:' || CAST(dungeness_sorting_log_id AS VARCHAR),
+         'tow', NULL::VARCHAR,
+         '{ds_key}:tow:' || CAST(dungeness_sorting_log_id AS VARCHAR),
+         '{ds_key}', grid_key, site_key, cruise_key, NULL::INTEGER,
+         latitude, longitude, CAST(datetime_start_utc AS TIMESTAMP),
+         0::DOUBLE, max_depth_m, tow_type
+  FROM dungeness_sorting_log"))
+
+# 2. obs — occurrence headline. Because the taxon now lives in taxon_key, the
+#    four source columns collapse to ONE measurement_type across four
+#    taxon_key/life_stage combinations.
+append_obs(con, glue("
+  SELECT 'bio', '{ds_key}',
+         '{ds_key}:subsample:' || CAST(s.dungeness_sample_id AS VARCHAR),
+         s.grid_key, s.cruise_key, s.latitude, s.longitude,
+         CAST(s.datetime_start_utc AS TIMESTAMP),
+         NULL::DOUBLE, NULL::DOUBLE,
+         'worms:' || CAST(CAST(mx.worms_id AS BIGINT) AS VARCHAR),
+         mx.life_stage, mx.measurement_type, m.measurement_value,
+         m.measurement_qual, NULL::DOUBLE
+  FROM dungeness_measurement m
+  JOIN dungeness_sample s USING (dungeness_sample_id)
+  JOIN _measurement_taxon mx
+    ON mx.raw_measurement_type = m.measurement_type AND mx.target = 'obs'"))
+
+# 3. obs_attribute — per-individual carapace lengths within the M. magister
+#    occurrence: one row per measured megalopa, bin_value IS the length
+append_obs_attribute(con, glue("
+  SELECT '{ds_key}',
+         '{ds_key}:subsample:' || CAST(c.dungeness_sample_id AS VARCHAR),
+         'worms:' || CAST(CAST(mx.worms_id AS BIGINT) AS VARCHAR), mx.life_stage,
+         mx.measurement_type, c.carapace_length_mm,
+         NULL::VARCHAR, 1::BIGINT, NULL::VARCHAR
+  FROM dungeness_carapace c
+  CROSS JOIN (SELECT * FROM _measurement_taxon
+              WHERE target = 'attribute' AND measurement_type = 'carapace_length') mx"))
+
+# 4. sample_measurement — event-level effort/context for the examined subsamples
+append_sample_measurement(con, glue("
+  SELECT '{ds_key}:subsample:' || CAST(dungeness_sample_id AS VARCHAR),
+         '{ds_key}', mt, mv, NULL::VARCHAR
+  FROM (
+    SELECT dungeness_sample_id, 'prop_sorted' AS mt, aliquot AS mv FROM dungeness_sample
+    UNION ALL
+    SELECT dungeness_sample_id, 'settled_volume_ml', volume_ml FROM dungeness_sample)
+  WHERE mv IS NOT NULL"))
+
+core_n <- list(
+  sample             = dbGetQuery(con, "SELECT COUNT(*) FROM sample")[[1]],
+  obs                = dbGetQuery(con, "SELECT COUNT(*) FROM obs")[[1]],
+  obs_attribute      = dbGetQuery(con, "SELECT COUNT(*) FROM obs_attribute")[[1]],
+  sample_measurement = dbGetQuery(con, "SELECT COUNT(*) FROM sample_measurement")[[1]],
+  taxon              = n_taxon, dataset_taxon = n_ds_taxon, taxon_group = n_tx_group)
+cat(glue("core projection — ",
+         "{paste(names(core_n), unlist(core_n), sep = '=', collapse = '  ')}"), "\n")
+```
+
+The projection must be lossless and must not invent anything, so assert it rather
+than eyeball it:
+
+```{r}
+#| label: core-parity
+
+n_sub <- dbGetQuery(con, "SELECT COUNT(*) FROM sample WHERE sample_type='subsample'")[[1]]
+n_tow <- dbGetQuery(con, "SELECT COUNT(*) FROM sample WHERE sample_type='tow'")[[1]]
+stopifnot(
+  "one core sample per examined subsample" = n_sub == nrow(d_sample),
+  "one core sample per sorting-log tow"    = n_tow == nrow(d_sorting),
+  "sample_key must be unique within the shard" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM (SELECT sample_key FROM sample
+                     GROUP BY 1 HAVING COUNT(*) > 1)")[[1]] == 0,
+  "obs must carry every source count row" = core_n$obs == nrow(d_meas),
+  "obs totals must equal the source totals" =
+    dbGetQuery(con, "SELECT SUM(measurement_value) FROM obs")[[1]] ==
+    sum(d_meas$measurement_value, na.rm = TRUE),
+  "every obs must resolve a taxon_key" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM obs WHERE taxon_key IS NULL")[[1]] == 0,
+  # NOT-NULL is not enough: a numeric-typed worms_id renders as "440388.0", which
+  # is non-NULL and joins to nothing. Assert the FK actually resolves.
+  "every obs.taxon_key must resolve in taxon" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM obs o LEFT JOIN taxon t USING (taxon_key)
+                     WHERE t.taxon_key IS NULL")[[1]] == 0,
+  "every obs_attribute.taxon_key must resolve in taxon" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM obs_attribute a
+                     LEFT JOIN taxon t USING (taxon_key)
+                     WHERE t.taxon_key IS NULL")[[1]] == 0,
+  "every obs.measurement_type must resolve in measurement_type" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM obs o
+                     LEFT JOIN measurement_type t USING (measurement_type)
+                     WHERE t.measurement_type IS NULL")[[1]] == 0,
+  "every obs.sample_key must resolve in sample" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM obs o LEFT JOIN sample s USING (sample_key)
+                     WHERE s.sample_key IS NULL")[[1]] == 0,
+  "one obs_attribute row per measured individual" =
+    core_n$obs_attribute == nrow(d_carapace),
+  # the M. magister headline and its carapace attribution must agree per sample
+  "carapace individuals must match the magister count per sample" =
+    dbGetQuery(con, "
+      WITH a AS (SELECT sample_key, SUM(count) s FROM obs_attribute
+                 WHERE measurement_type='carapace_length' GROUP BY 1),
+           o AS (SELECT sample_key, SUM(measurement_value) v FROM obs
+                 WHERE taxon_key='worms:440388' AND measurement_type='abundance'
+                 GROUP BY 1)
+      SELECT COUNT(*) FROM a JOIN o USING (sample_key) WHERE a.s <> o.v")[[1]] == 0,
+  # the sorting log is effort only: it must contribute zero occurrences
+  "sorting-log tows must carry no obs" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM obs o JOIN sample s USING (sample_key)
+                     WHERE s.sample_type='tow'")[[1]] == 0)
+cat("core parity: all assertions passed\n")
+
+dbGetQuery(con, "
+  SELECT COALESCE(t.scientific_name, o.taxon_key) AS taxon, o.life_stage,
+         o.measurement_type, COUNT(*) AS n_obs, SUM(o.measurement_value) AS total
+  FROM obs o LEFT JOIN taxon t USING (taxon_key)
+  GROUP BY 1,2,3 ORDER BY total DESC") |>
+  datatable(caption = "obs by resolved taxon — the four source columns, collapsed",
+            options = list(dom = "t"), rownames = FALSE)
+```
+
+The two per-dataset tables the core fully models survive as VIEWs over it — detail
+survives, bytes don't — so the previews below and any ad-hoc query keep working
+against the names this notebook built. The originals are kept as `*_src` for the
+ERD above.
+
+Three tables stay real, because the core does not model them: `dungeness_sample`
+carries source columns with no core home (`cruise_orig`, `position_source`,
+`comments`); `dungeness_sorting_log` carries gear and sorting status (its *rows*
+are in `sample`, its columns are not); and `dungeness_specimen` is a taxonomic
+determination, not an abundance observation.
+
+```{r}
+#| label: compat-views
+
+for (t in c("dungeness_measurement", "dungeness_carapace")) {
+  invisible(dbExecute(con, glue("DROP TABLE IF EXISTS {t}_src")))
+  invisible(dbExecute(con, glue("ALTER TABLE {t} RENAME TO {t}_src")))
+}
+
+invisible(dbExecute(con, glue("
+  CREATE OR REPLACE VIEW dungeness_measurement AS
+  SELECT obs_id AS dungeness_measurement_id,
+         CAST(split_part(sample_key, ':', 3) AS INTEGER) AS dungeness_sample_id,
+         measurement_type, measurement_value, measurement_qual
+  FROM obs WHERE dataset_key = '{ds_key}'")))
+invisible(dbExecute(con, glue("
+  CREATE OR REPLACE VIEW dungeness_carapace AS
+  SELECT obs_attribute_id AS dungeness_carapace_id,
+         CAST(split_part(sample_key, ':', 3) AS INTEGER) AS dungeness_sample_id,
+         ROW_NUMBER() OVER (PARTITION BY sample_key ORDER BY obs_attribute_id)
+           AS individual_num,
+         bin_value AS carapace_length_mm
+  FROM obs_attribute
+  WHERE dataset_key = '{ds_key}' AND measurement_type = 'carapace_length'")))
+
+n_view <- dbGetQuery(con, "SELECT COUNT(*) FROM dungeness_measurement")[[1]]
+n_cara <- dbGetQuery(con, "SELECT COUNT(*) FROM dungeness_carapace")[[1]]
+stopifnot(
+  "compat view must expose every obs row"           = n_view == core_n$obs,
+  "compat view must expose every obs_attribute row" = n_cara == core_n$obs_attribute)
+cat(glue("compat views over core — dungeness_measurement {n_view} rows, ",
+         "dungeness_carapace {n_cara} rows"), "\n")
+```
+
 ## Schema
+
+The **source** shape, documenting the wrangling above. The tables this ingest
+publishes are the consolidated core, so `relationships.json` is written from
+`core_relationships()` in "Write Outputs".
 
 ```{r}
 #| label: schema
@@ -549,26 +802,25 @@ d_meas_type_new |>
 dcr_rels <- list(
   primary_keys = list(
     dungeness_sample      = "dungeness_sample_id",
-    dungeness_measurement = "dungeness_measurement_id",
-    dungeness_carapace    = "dungeness_carapace_id",
     dungeness_sorting_log = "dungeness_sorting_log_id",
-    dungeness_specimen = "specimen_num",
+    dungeness_specimen    = "specimen_num",
     measurement_type      = "measurement_type"),
   foreign_keys = list(
-    list(table = "dungeness_measurement", column = "dungeness_sample_id",
+    list(table = "dungeness_measurement_src", column = "dungeness_sample_id",
          ref_table = "dungeness_sample", ref_column = "dungeness_sample_id"),
-    list(table = "dungeness_carapace", column = "dungeness_sample_id",
-         ref_table = "dungeness_sample", ref_column = "dungeness_sample_id"),
-    list(table = "dungeness_measurement", column = "measurement_type",
-         ref_table = "measurement_type", ref_column = "measurement_type")))
+    list(table = "dungeness_carapace_src", column = "dungeness_sample_id",
+         ref_table = "dungeness_sample", ref_column = "dungeness_sample_id")))
 
-cc_erd(con, tables = c(dcr_tbls, "measurement_type", "dataset"), rels = dcr_rels,
+cc_erd(con,
+       tables = c("dungeness_sample", "dungeness_measurement_src",
+                  "dungeness_carapace_src", "dungeness_sorting_log",
+                  "dungeness_specimen", "dataset"),
+       rels = dcr_rels,
        colors = list(
-         lightblue   = c("dungeness_sample", "dungeness_measurement",
-                         "dungeness_carapace"),
-         lightgreen  = c("dungeness_sorting_log", "dungeness_specimen"),
-         lightyellow = "measurement_type",
-         white       = "dataset"))
+         lightblue  = c("dungeness_sample", "dungeness_measurement_src",
+                        "dungeness_carapace_src"),
+         lightgreen = c("dungeness_sorting_log", "dungeness_specimen"),
+         white      = "dataset"))
 ```
 
 ## Validate
@@ -615,15 +867,17 @@ cat("FK + PK integrity: OK\n")
 # — so the repeat at 1204OS/070.0 055.0/occ 45 (1 megalopa in each row) is a
 # second removal vial from one sample, not a duplicated row. The workbook's
 # "M. magister values" sheet aggregates the pair, which is why it lists 14.
+# asked of the CORE now, via taxon_key — the source's 'megalopae_magister' column
+# name no longer exists as a measurement_type, which is the point of the model
 mag <- dbGetQuery(con, "
   SELECT COUNT(*) AS n_samples,
-         COUNT(*) FILTER (WHERE measurement_value > 0) AS n_positive_rows,
-         COUNT(DISTINCT CASE WHEN measurement_value > 0
+         COUNT(*) FILTER (WHERE o.measurement_value > 0) AS n_positive_rows,
+         COUNT(DISTINCT CASE WHEN o.measurement_value > 0
                              THEN s.cruise_key || s.site_key || s.order_occ END)
            AS n_positive_stations,
-         SUM(measurement_value) AS n_megalopae
-  FROM dungeness_measurement m JOIN dungeness_sample s USING (dungeness_sample_id)
-  WHERE m.measurement_type = 'megalopae_magister'")
+         SUM(o.measurement_value) AS n_megalopae
+  FROM obs o JOIN sample s USING (sample_key)
+  WHERE o.taxon_key = 'worms:440388' AND o.life_stage = 'megalopa'")
 stopifnot(
   "24 M. magister megalopae in total"                 = mag$n_megalopae == 24,
   "15 positive rows / 14 positive station occupations" =
@@ -654,16 +908,22 @@ dbGetQuery(con, "
 
 ```{r}
 #| label: preview-positive
+# read through the CORE, the way a consumer would: obs joined to sample and taxon,
+# with the per-individual lengths from obs_attribute
 dbGetQuery(con, "
-  SELECT s.cruise_orig, s.cruise_key, s.site_key, s.order_occ, s.date,
-         s.latitude, s.longitude, s.aliquot, m.measurement_value AS n_magister,
-         (SELECT string_agg(CAST(c.carapace_length_mm AS VARCHAR), ', ')
-          FROM dungeness_carapace c
-          WHERE c.dungeness_sample_id = s.dungeness_sample_id) AS carapace_mm
-  FROM dungeness_sample s JOIN dungeness_measurement m USING (dungeness_sample_id)
-  WHERE m.measurement_type = 'megalopae_magister' AND m.measurement_value > 0
-  ORDER BY s.date") |>
-  datatable(caption = "The 14 samples containing M. magister megalopae",
+  SELECT s.cruise_key, s.site_key, s.order_occ, CAST(s.datetime AS DATE) AS date,
+         round(s.latitude, 3) AS lat, round(s.longitude, 3) AS lon,
+         t.scientific_name, o.life_stage, o.measurement_value AS n_magister,
+         (SELECT string_agg(CAST(a.bin_value AS VARCHAR), ', ' ORDER BY a.bin_value)
+          FROM obs_attribute a
+          WHERE a.sample_key = o.sample_key
+            AND a.measurement_type = 'carapace_length') AS carapace_mm
+  FROM obs o
+  JOIN sample s USING (sample_key)
+  LEFT JOIN taxon t USING (taxon_key)
+  WHERE o.taxon_key = 'worms:440388' AND o.measurement_value > 0
+  ORDER BY s.datetime") |>
+  datatable(caption = "The 15 removal vials (14 samples) containing M. magister megalopae, read from the core",
             rownames = FALSE)
 ```
 
@@ -704,20 +964,45 @@ read_csv(here(glue("metadata/{provider}/{dataset}/questions.csv"))) |>
 #| label: outputs
 
 dir_create(dir_parquet)
-tbls_out <- c(dcr_tbls, "measurement_type", "dataset")
+
+# the CORE is this ingest's published output — release_database.qmd concatenates
+# the per-dataset shards. The three per-dataset tables the core does not model
+# ride along as extras; the compat VIEWs are deliberately NOT written (they are
+# views over the core, so writing them would duplicate the same bytes).
+tbls_out <- core_output_tables(
+  con, extra = c("dungeness_sample", "dungeness_sorting_log", "dungeness_specimen",
+                 "measurement_type", "dataset"))
+cat(glue("publishing {length(tbls_out)} tables: {paste(tbls_out, collapse = ', ')}"), "\n")
+
 write_parquet_outputs(
   con = con, output_dir = dir_parquet, tables = tbls_out,
-  sort_by = list(dungeness_measurement = c("dungeness_sample_id", "measurement_type")),
+  sort_by = list(obs = c("grid_key", "measurement_type")),
   strip_provenance = FALSE)
 
+# prune parquet this ingest no longer publishes. Moving to the core retired
+# dungeness_measurement.parquet / dungeness_carapace.parquet (now compat VIEWs),
+# and a stale file left on disk is still picked up by directory scans and by
+# sync_to_gcs — so the output dir must match the manifest exactly.
+stale <- setdiff(
+  tools::file_path_sans_ext(basename(
+    list.files(dir_parquet, pattern = "[.]parquet$"))), tbls_out)
+if (length(stale)) {
+  file_delete(file.path(dir_parquet, paste0(stale, ".parquet")))
+  cat(glue("pruned {length(stale)} stale parquet: {paste(stale, collapse = ', ')}"), "\n")
+}
+
 build_relationships_json(
-  rels = dcr_rels, output_dir = dir_parquet,
+  rels = core_relationships(tbls_out), output_dir = dir_parquet,
   provider = provider, dataset = dataset)
 
 d_tbls_rd <- read_csv(here(glue("metadata/{provider}/{dataset}/tbls_redefine.csv")))
 build_metadata_json(
   con = con, d_tbls_rd = d_tbls_rd, d_flds_rd = d_flds_rd,
-  metadata_derived_csv = here(glue("metadata/{provider}/{dataset}/metadata_derived.csv")),
+  # shared core descriptions first, this dataset's overrides second — without
+  # core_dictionary.csv every core table/column ships with an empty description
+  metadata_derived_csv = c(
+    here("metadata/core_dictionary.csv"),
+    here(glue("metadata/{provider}/{dataset}/metadata_derived.csv"))),
   output_dir = dir_parquet, tables = tbls_out,
   set_comments = TRUE, provider = provider, dataset = dataset,
   workflow_url = cc$workflow_url, tables_owned = tables_owned)
@@ -735,12 +1020,13 @@ if (publish_to_gcs) {
 #| label: metadata-gaps
 
 # empty descriptions ship verbatim to consumers, so surface them as TODOs.
-# Scoped to the tables this ingest OWNS: `dataset` and `measurement_type` are
-# shared and carry no column descriptions in any ingest, so counting them here
-# would just be constant noise hiding the real gaps.
+# Scoped to every table this ingest PUBLISHES (core + per-dataset) except the two
+# shared registries `dataset` and `measurement_type`, which carry no column
+# descriptions in any ingest and would be constant noise hiding the real gaps.
 m   <- fromJSON(file.path(dir_parquet, "metadata.json"), simplifyVector = FALSE)
 gap <- function(x, f) names(Filter(function(e) !nzchar(e[[f]] %||% ""), x))
-own <- function(keys) keys[sub("[.].*$", "", keys) %in% dcr_tbls]
+checked <- setdiff(tbls_out, c("dataset", "measurement_type"))
+own <- function(keys) keys[sub("[.].*$", "", keys) %in% checked]
 
 cat(glue("metadata.json gaps in owned tables — tables missing description: ",
          "{length(own(gap(m$tables, 'description_md')))}; ",
@@ -759,13 +1045,9 @@ This is a first pass. What remains, roughly in order:
    the release and the GCS upload. Christy Juhasz (CDFW Marine Region) supplied
    the files and is the live contact; Laura Rogers-Bennett has retired.
    (Q01, standardization, is answered — see the Notes sheet above.)
-2. **Project into the consolidated core.** Every released dataset emits its slice
-   of `sample` / `obs` / `obs_attribute` via `calcofi4db::emit_core_tables()`,
-   which needs a new `dfw_dungeness-crab` arm in `calcofi4db/R/model.R` plus
-   `taxon_key` resolution — `Metacarcinus magister` for the headline, and coarse
-   entries for the "other megalopae" / "Cancer zoea" / "other zoea" categories
-   through `metadata/measurement_taxon.csv`. Until then this ingest publishes
-   per-dataset tables only, which is the other reason it is held out.
+2. **Review the two modelling choices** in "Emit Core Tables" (Q11): the new
+   `sample_type = 'subsample'` vocabulary value, and pointing `parent_sample_key`
+   at the matched `swfsc_ichthyo` site occupation.
 3. **Decide what the sorting log is for.** As absence/effort data it is the more
    scientifically useful of the two efforts — 2,011 samples over 60 years — but
    only if Q03 settles which historic identifications stand, and Q04 settles

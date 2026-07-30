@@ -188,7 +188,7 @@ for the schema) with `status=open` so the question travels with the dataset.
 Example: a `pH` column with no stated scale → "Is pH reported on the total or
 seawater scale? At what temperature?" (`priority=high`, `related_field=ph`).
 
-### 7. Register in `metadata/dataset.csv`
+### 7. Register in the ingest notebook's `calcofi.dataset_meta` YAML block
 
 Add a row to the unified `dataset` reference table with:
 
@@ -215,7 +215,7 @@ Show:
 - Table mapping summary
 - Field mapping summary with any that need manual review
 - Measurement types to add (if any)
-- Dataset metadata row added to `metadata/dataset.csv`
+- Dataset metadata captured in the notebook's `calcofi.dataset_meta` YAML block
 - Instructions for next steps:
   1. Review and edit `flds_redefine.csv` (rename decisions, type overrides)
   2. Add new entries to `metadata/measurement_type.csv` if needed

@@ -10,7 +10,7 @@ self-documenting. Human judgment stays in the loop at every hand-off.
 |---|---|
 | `metadata/field_dictionary.csv` | Canonical field names/types/units/aliases. **Prescriptive** — new datasets conform; consistency is linted against it. |
 | `metadata/measurement_type.csv` | Canonical measurement vocabulary (raw measured quantities). The dictionary links to it; never duplicate it. |
-| `metadata/dataset.csv` | Registry of datasets (citations, links, PIs, coverage). |
+| `metadata/dataset.csv` | **DEPRECATED** — superseded by each ingest's `calcofi.dataset_meta` YAML block, read via `ingest_yaml_to_dataset_df(read_ingest_yaml())`. The CSV drifted and orphaned obs rows. |
 | `metadata/dataset_status.csv` | Pipeline-stage tracker — one row per dataset. Each skill writes its stage column. |
 | `metadata/relationships_cross.csv` | Cross-dataset FKs (spanning ingests). Intra-dataset FKs live in each ingest's `relationships.json`. |
 | `metadata/{provider}/{dataset}/questions.csv` | Follow-up questions for the data provider; rendered in the workflow, aggregated by `questions_email.qmd`. |
@@ -32,7 +32,7 @@ Scaffold `tbls_redefine.csv` + `flds_redefine.csv`, **pre-filling `fld_new`/
 `type_new`/`units`/`fld_description` from `field_dictionary.csv`** (the
 dictionary wins — `lat_dec`→`latitude`, etc.). Flag unmatched columns as new
 canonical (add a dictionary row) or raw measurements (→ `measurement_type.csv`).
-Register the dataset in `dataset.csv`; run the hand-off completeness check;
+Register the dataset via its `calcofi:` YAML block (`dataset_meta`, `tables_owned`) — `metadata/dataset.csv` is deprecated; run the hand-off completeness check;
 append any ambiguity questions. → `metadata=done`, `stage=metadata`.
 
 ### 3. `/ingest-new {provider} {dataset}`
@@ -45,29 +45,49 @@ cross-dataset FK, add a row to `relationships_cross.csv`. No manual edit of
 `release_database.qmd` `rels_paths` is needed — it auto-discovers. →
 `ingest=done`, `stage=ingested`.
 
-### 3b. Emit core tables (`emit_core` block, Phase 3)
+### 3b. Emit core tables (`emit_core` block) — **not optional**
 
-After building its per-dataset tables, each ingest projects them into the shared
-**core** family (`sample` / `obs` / `obs_freq` / `sample_measurement`) via the
-`calcofi4db` model helpers, then the per-dataset tables become compat VIEWs. The
-canonical block (added before `write_parquet_outputs`):
+This is the step that makes an ingest useful. After building its per-dataset
+tables, each ingest projects them into the shared **core** family (`sample` /
+`obs` / `obs_attribute` / `sample_measurement` + the taxa refs), then the
+per-dataset tables become compat VIEWs. The core is what `release_database.qmd`
+publishes and what every consumer reads; per-dataset tables are an intermediate.
+
+**The projection SQL lives in the notebook, not in `calcofi4db`.** Every helper
+takes an arbitrary `SELECT`, so a new dataset needs no package change. Canonical
+block (before `write_parquet_outputs`):
 
 ```r
 build_grid_reference(con)                       # idempotent shared grid
 append_sample(con, "<this dataset's sample arm(s)>")          # namespaced sample_key
 append_sample_measurement(con, "<event-effort SELECT or skip>")
 append_obs(con, "<headline occurrence SELECT>")              # bio base rows -> 'abundance'
-append_obs_freq(con, "<bin/count SELECT or skip>")           # e.g. body_length / stage
+append_obs_attribute(con, "<bin/count SELECT or skip>")      # e.g. body_length / stage / behavior
 # per-dataset tables become VIEWs over the core (detail survives, bytes don't):
+dbExecute(con, "ALTER TABLE {ds}_measurement RENAME TO {ds}_measurement_src")
 dbExecute(con, "CREATE OR REPLACE VIEW {ds}_measurement AS SELECT ... FROM obs WHERE dataset_key='...'")
 ```
 
+Column contracts are **positional** — each helper wraps your SELECT in
+`AS src(...)` — so emit columns in the order given by the helper's roxygen.
+
 `sample_key` is namespaced `dataset_key:sample_type:id`. `obs` carries the
-occurrence headline (bio abundance = the count), `obs_freq` the (bin, count)
+occurrence headline (bio abundance = the count, organism in `taxon_key` — never
+baked into `measurement_type`), `obs_attribute` the (bin, count) or categorical
 detail, `sample_measurement` event-level effort. Env CTD rows come from `ctd_thin`
-(full scans → the supplemental `obs_ctd_full`). Until an ingest is migrated,
-`release_database.qmd` (`core_tables` chunk) materializes its slice centrally and
-`core_parity` asserts the counts match — so cut-over is per-ingest and safe.
+(full scans → the supplemental `obs_ctd_full`).
+
+`emit_core_tables()` is a convenience wrapper whose `switch(dataset_key, …)` arms
+hold the already-migrated datasets' projections. **Do not add an arm for a new
+dataset** — that is how ~450 lines of dataset-specific SQL ended up inside a
+general-purpose module. `release_database.qmd`'s `core_parity` chunk asserts shard
+counts, so cut-over stays safe.
+
+Assert the projection rather than eyeballing it: source-vs-`obs` row counts and
+value totals, `obs.sample_key` → `sample`, `obs.taxon_key` → **`taxon`** (resolving,
+not merely non-NULL), `obs.measurement_type` → `measurement_type`, and
+sub-occurrence counts reconciling to the headline. Also prune any `.parquet` for a
+table that has become a VIEW, or stale files linger in the output dir.
 
 ### 4. Run the notebook, then `/validate-ingest {provider} {dataset} [--strict]`
 PK/FK/null/range/duplicate checks, `summary` consistency, **`schema_lint`** (vs
@@ -105,7 +125,7 @@ each `questions.csv` (`status=answered`, fill `answer`/`answered_date`).
 ## Conventions (see CLAUDE.md)
 snake_case; `*_key`/`*_id`/`*_uuid` identifiers; unit suffixes; tidy long-format
 measurements (`measurement_type`/`measurement_value`/`measurement_qual`) that
-project into the **core** family (`sample`/`obs`/`obs_freq`/`sample_measurement`,
+project into the **core** family (`sample`/`obs`/`obs_attribute`/`sample_measurement`,
 namespaced `sample_key = dataset_key:sample_type:id`) via the `emit_core` block;
 `cat()` not `message()` in chunks; individual `datatable()` calls (not
 `preview_tables()` in a loop).

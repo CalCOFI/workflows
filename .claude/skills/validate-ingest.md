@@ -177,13 +177,13 @@ for (tbl in tables) {
 
 #### I2. Core Table Projection Parity (`core_parity`)
 ```r
-# once an ingest emits the core tables (emit_core / Phase 3), assert its
+# every ingest emits the core tables (emit_core, RUNBOOK 3b) — assert its
 # projection reproduces the per-dataset detail for this dataset_key:
 # - count(*) in obs for this dataset_key == the per-dataset headline count
 #   (bio base rows; env measurement rows — CTD counted via ctd_thin)
 # - sample counts per sample_type match the distinct source event ids
 # - every obs.sample_key resolves in sample; obs.measurement_type in the registry
-# - obs_freq stage bins SUM(count) == the abundance headline per occurrence
+# - obs_attribute stage bins SUM(count) == the abundance headline per occurrence
 #   (report as a warning — a staged subsample may legitimately differ)
 # The authoritative, cross-dataset version of these assertions runs in
 # release_database.qmd's `core_parity` chunk (hard stopifnot); mirror the

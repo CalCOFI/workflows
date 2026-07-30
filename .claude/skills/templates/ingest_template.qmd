@@ -310,17 +310,19 @@ build_relationships_json(
 
 ## Load Dataset Metadata
 
-Register this dataset in the `dataset` reference table, which tracks
-citations, source URLs, and CalCOFI.org landing pages for all ingested
-datasets. Ensure `metadata/dataset.csv` has a row for this dataset
-before running.
+Build the `dataset` reference row from this notebook's own
+`calcofi.dataset_meta` YAML block (citations, source URLs, CalCOFI.org landing
+page). `metadata/dataset.csv` is deprecated — the YAML is authoritative and
+cannot drift from the pipeline.
 
 ```{r}
 #| label: load-dataset-metadata
 
-d_dataset <- read_csv(here("metadata/dataset.csv"))
-dbWriteTable(con, "dataset", d_dataset, overwrite = TRUE)
-cat(glue("dataset: {nrow(d_dataset)} datasets registered"), "\n")
+this_provider <- provider; this_dataset <- dataset  # also column names
+d_dataset <- ingest_yaml_to_dataset_df(read_ingest_yaml(here())) |>
+  filter(provider == this_provider, dataset == this_dataset)
+stopifnot("this dataset must appear in the ingest YAML registry" = nrow(d_dataset) == 1)
+dbWriteTable(con, "dataset", as.data.frame(d_dataset), overwrite = TRUE)
 ```
 
 ## Questions for Data Providers
@@ -380,7 +382,7 @@ preview_tables(con)
 ## Emit Core Tables
 
 Project this dataset's per-dataset tables into the shared **core** family
-(`sample` / `obs` / `obs_freq` / `sample_measurement`) via the `calcofi4db` model
+(`sample` / `obs` / `obs_attribute` / `sample_measurement`) via the `calcofi4db` model
 helpers, then expose the per-dataset tables as compat VIEWs. See `RUNBOOK.md`
 (§3b) and `design_env-bio-consolidation.md`. `sample_key` is namespaced
 `dataset_key:sample_type:id`.
@@ -400,10 +402,10 @@ append_sample(con, glue("
          depth_min_m, depth_max_m
   FROM {event_tbl}"))
 
-# 2. obs — occurrence headline (bio abundance = the count); 3. obs_freq (bins);
+# 2. obs — occurrence headline (bio abundance = the count); 3. obs_attribute (bins);
 #    4. sample_measurement (event-level effort). Fill the SELECTs per dataset.
 append_obs(con, "<headline occurrence SELECT yielding the canonical obs columns>")
-# append_obs_freq(con, "<bin/count SELECT>")            # only if size/stage detail
+# append_obs_attribute(con, "<bin/count SELECT>")            # only if size/stage detail
 # append_sample_measurement(con, "<event-effort SELECT>")  # only if per-event effort
 
 # 5. per-dataset tables become VIEWs over the core (edit per dataset)
