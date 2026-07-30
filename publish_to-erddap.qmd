@@ -93,7 +93,14 @@ PQ_LOCAL <- here(glue("data/releases/{RELEASE}/parquet"))
 # deployed .db must be built against the server's path, not this machine's — an
 # identity mount. Two .db files are therefore produced: one with local paths for
 # validation, one with server paths for deploy.
-ERDDAP_ROOT <- Sys.getenv("CALCOFI_ERDDAP_ROOT", "/share/erddap/data")
+# Matches the live server's existing convention, not a guess: the running
+# calcofi_ctd_thin dataset binds
+# jdbc:duckdb:/share/data/erddap-duckdb/duckdb/calcofi_ctd.db over parquet under
+# /share/data/erddap-duckdb/datasets/. (/share/erddap/data is ERDDAP's own
+# bigParentDirectory — cache, flags, logs — and is not where data belongs.)
+ERDDAP_ROOT <- Sys.getenv("CALCOFI_ERDDAP_ROOT", "/share/data/erddap-duckdb")
+ERDDAP_FLAG <- Sys.getenv("CALCOFI_ERDDAP_FLAG", "/share/erddap/data/flag")
+ERDDAP_DB   <- glue("{ERDDAP_ROOT}/duckdb/calcofi.db")
 PQ_SERVER   <- glue("{ERDDAP_ROOT}/release/{RELEASE}/parquet")
 ING_SERVER  <- glue("{ERDDAP_ROOT}/ingest")
 ING_LOCAL   <- here("data/parquet")
@@ -463,7 +470,7 @@ script <- c(
   "suppressMessages({library(DBI); library(duckdb)})",
   glue("PQ  <- Sys.getenv('CALCOFI_ERDDAP_PQ',  '{PQ_SERVER}')"),
   glue("ING <- Sys.getenv('CALCOFI_ERDDAP_ING', '{ING_SERVER}')"),
-  glue("DB  <- Sys.getenv('CALCOFI_ERDDAP_DB',  '{ERDDAP_ROOT}/calcofi.db')"),
+  glue("DB  <- Sys.getenv('CALCOFI_ERDDAP_DB',  '{ERDDAP_DB}')"),
   "stopifnot('release parquet not found' = dir.exists(PQ))",
   "if (file.exists(DB)) file.remove(DB)",
   "con <- dbConnect(duckdb(), dbdir = DB)",
@@ -545,7 +552,7 @@ for (i in seq_len(nrow(cfg))) {
     dataset_id    = r$dataset_id,
     title         = title_of(r),
     summary       = summary_of(r),
-    source_url    = glue("jdbc:duckdb:{ERDDAP_ROOT}/calcofi.db"),
+    source_url    = glue("jdbc:duckdb:{ERDDAP_DB}"),
     table_name    = r$dataset_id,
     # keyed by column name: this lands on the `{ds}_sample` views, whose widened
     # effort columns ARE measurement_type names, and is inert elsewhere
@@ -617,7 +624,7 @@ The notebook writes config and a view database; it does **not** touch the server
 4. **Reload** per dataset:
 
    ```bash
-   touch {ERDDAP_ROOT}/flag/<datasetID>
+   touch {ERDDAP_FLAG}/<datasetID>
    ```
 
 5. **Verify** — a `.das` request is the cheapest end-to-end check:
@@ -626,7 +633,7 @@ The notebook writes config and a view database; it does **not** touch the server
    curl -s https://erddap.calcofi.io/erddap/tabledap/calcofi_ctd-cast.das | head
    ```
 
-   and check `{ERDDAP_ROOT}/log.txt` for `WARNING: Bad line(s)`.
+   and check `/share/erddap/data/logs/log.txt` for `WARNING: Bad line(s)`.
 
 **Requirements.** The DuckDB JDBC driver must be in ERDDAP\'s `WEB-INF/lib`
 (custom image: `CalCOFI/server/erddap/Dockerfile`), and its engine version must be

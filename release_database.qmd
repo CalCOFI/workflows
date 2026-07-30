@@ -20,6 +20,7 @@ calcofi:
     obs_attribute:           "#e8e8e8"
     sample_measurement: "#e8e8e8"
     obs_ctd_full:       "#e8e8e8"
+    obs_mets_full:      "#e8e8e8"
     _spatial:           "#cfe8ea"
     _spatial_attr:      "#cfe8ea"
 execute:
@@ -165,7 +166,7 @@ registry <- build_release_table_registry(here())
 # `cruise`) but would silently keep ONE dataset's `obs` and drop the other 14.
 # So the core is excluded here and assembled by union below (assemble_core()).
 core_shard_tables <- c(
-  "sample", "obs", "obs_attribute", "sample_measurement", "obs_ctd_full",
+  "sample", "obs", "obs_attribute", "sample_measurement", "obs_ctd_full", "obs_mets_full",
   "taxon", "dataset_taxon", "taxon_group")
 
 # use only canonical, non-supplemental tables
@@ -358,8 +359,15 @@ dbExecute(con_wdl, "DROP TABLE _measurement_type_reg")
 # its own shard), merges the `taxon` slices with source priority, and asserts
 # `sample_key` is globally unique. Nothing is re-derived here — that duplication
 # is exactly what let the release and the ingests drift apart.
-build_obs_ctd_full <- as.logical(Sys.getenv("BUILD_OBS_CTD_FULL", "TRUE"))
-core_n <- assemble_core(con_wdl, root = here(), supplemental = build_obs_ctd_full)
+# Supplemental full-resolution tables are DISCOVERED from the ingests' YAML, not
+# hardcoded — obs_ctd_full was the only one until calcofi_mets added obs_mets_full,
+# and a hardcoded name silently drops a new one from the release while the ingest
+# keeps writing it. BUILD_OBS_CTD_FULL=FALSE still skips them all for a fast run.
+build_supplemental <- as.logical(Sys.getenv("BUILD_OBS_CTD_FULL", "TRUE"))
+supp_tbls <- supplemental_core_tables(here(), build_supplemental)
+if (length(supp_tbls))
+  message(glue("supplemental tables: {paste(supp_tbls, collapse = ', ')}"))
+core_n <- assemble_core(con_wdl, root = here(), supplemental = supp_tbls)
 
 tibble(
   table = names(core_n),
@@ -714,7 +722,7 @@ core_keep <- c(
   "grid", "cruise", "ship", "measurement_type", "dataset", "region",         # refs
   "taxon", "dataset_taxon", "taxon_group", "lookup",                         # taxa + lookups
   "_spatial", "_spatial_attr")
-supplemental_keep <- c("obs_ctd_full")                                       # hosted, hidden by default
+supplemental_keep <- supp_tbls                    # hosted, hidden by default (from the ingests)
 # drop by the object's actual type (DROP VIEW on a TABLE — or vice versa — errors
 # even with IF EXISTS; some are parquet VIEWs, some are temp tables like cruise_ref)
 retire_objs <- DBI::dbGetQuery(con_wdl,
@@ -870,10 +878,10 @@ if ("obs" %in% dbListTables(con_wdl)) {
   export_parquet(con_wdl, glue("SELECT * FROM obs ORDER BY dataset_key, {core_sort}"),
     file.path(dir_frozen_pq, "obs.parquet"), compression = "zstd")
 }
-if (build_obs_ctd_full && "obs_ctd_full" %in% dbListTables(con_wdl))
+for (st in intersect(supp_tbls, dbListTables(con_wdl)))
   dbExecute(con_wdl, glue(
-    "COPY (SELECT * FROM obs_ctd_full ORDER BY cruise_key, {core_sort})
-     TO '{file.path(dir_frozen_pq, 'obs_ctd_full')}'
+    "COPY (SELECT * FROM {st} ORDER BY cruise_key, {core_sort})
+     TO '{file.path(dir_frozen_pq, st)}'
      (FORMAT PARQUET, COMPRESSION 'zstd', PARTITION_BY (cruise_key), OVERWRITE_OR_IGNORE)"))
 message(glue("Exported core tables: {paste(core_single, collapse=', ')}, obs (partitioned)"))
 
@@ -911,11 +919,21 @@ freeze_stats <- freeze_stats |>
     NA_character_, gcs_prefix))
 
 # add consolidated core + supplemental tables (gcs_prefix = NA → upload from local)
-core_spec <- tibble(
-  table       = c("sample", "obs", "obs_attribute", "sample_measurement", "obs_ctd_full",
-                  "dataset_taxon", "taxon_group"),
-  partitioned = c(FALSE,    TRUE,  FALSE,           FALSE,                TRUE,
-                  FALSE,           FALSE))
+#
+# `taxon` MUST be here. It is exported by `core_single` above and uploaded by the
+# filesystem sweep below, but the catalog is built from `freeze_stats` — so when it
+# was missing from this list it shipped as a published-but-uncatalogued table:
+# present in `metadata.json` (17 tables) and absent from `catalog.json` (16), which
+# is the file `cc_get_db()` reads. No ingest manifest declares it either, because
+# the unified taxon reference is rebuilt centrally here. The `catalog_covers_export`
+# assertion after the catalog is built now makes this drift impossible to ship.
+core_spec <- dplyr::bind_rows(
+  tibble(
+    table       = c("sample", "obs", "obs_attribute", "sample_measurement",
+                    "taxon", "dataset_taxon", "taxon_group"),
+    partitioned = c(FALSE,    TRUE,  FALSE,           FALSE,
+                    FALSE,    FALSE,           FALSE)),
+  tibble(table = supp_tbls, partitioned = TRUE))
 core_spec <- core_spec |>
   filter(table %in% dbListTables(con_wdl), !table %in% freeze_stats$table) |>
   mutate(
@@ -1103,6 +1121,24 @@ catalog <- list(
   total_rows   = sum(tables_df$rows, na.rm = TRUE),
   total_size   = total_bytes,
   tables       = tables_df)
+# GUARD: the catalog must describe everything that was actually published.
+# Uploads are driven by the FILESYSTEM (every .parquet file and partitioned dir in
+# dir_frozen_pq), while the catalog is assembled from hand-maintained lists — so
+# the two can drift silently, and did: `taxon` was exported and uploaded but never
+# catalogued, leaving it invisible to cc_get_db(). Compare the two directly rather
+# than trusting the lists to stay in step.
+exported_tbls <- c(
+  tools::file_path_sans_ext(basename(
+    list.files(dir_frozen_pq, pattern = "[.]parquet$"))),
+  basename(list.dirs(dir_frozen_pq, recursive = FALSE)))
+uncatalogued <- setdiff(unique(exported_tbls), tables_df$name)
+if (length(uncatalogued))
+  stop(glue(
+    "catalog.json would omit {length(uncatalogued)} published table(s): ",
+    "{paste(uncatalogued, collapse = ', ')}. They are uploaded from ",
+    "dir_frozen_pq but absent from freeze_stats — add them to `core_spec` ",
+    "(or `derived_tables`), or they ship invisible to cc_get_db()."))
+
 catalog_path <- file.path(dir_frozen, "catalog.json")
 jsonlite::write_json(catalog, catalog_path, auto_unbox = TRUE, pretty = TRUE)
 put_gcs_file(catalog_path,
