@@ -276,9 +276,34 @@ cat(glue("partitions: {length(parts)}\n"))
 
 # obs_ctd_full already carries latitude/longitude/datetime, so unlike the thinned
 # path no join back to `sample` is needed.
+#
+# The measurement_type list MUST be the union across ALL partitions. This
+# previously read `parts[1]` alone — the alphabetically-first cruise,
+# 1998-02-31JD — which carries only 32 of the table's 54 types, because bottle
+# nutrients were not folded into the CTD cast files until 2008. Every type
+# introduced after 1998 (all `btl_*` nutrients, including btl_ammonium) was
+# therefore silently absent from the published 1.6 GB file: 39 variables =
+# 7 coordinates + exactly partition-1's 32 sensors. Nothing failed; the file just
+# quietly lacked 40% of its variables.
+# Costs ~95 s over HTTPS (dictionary-encoded column across 96 partitions) — worth
+# it to not ship a truncated file.
+urls_all <- paste0("'", parts, "'", collapse = ", ")
 full_types <- dbGetQuery(con, glue(
-  "SELECT DISTINCT measurement_type FROM read_parquet('{parts[1]}') ORDER BY 1"))$measurement_type
-cat(glue("sensor types: {length(full_types)}\n"))
+  "SELECT DISTINCT measurement_type
+   FROM read_parquet([{urls_all}], hive_partitioning = true, union_by_name = true)
+   ORDER BY 1"))$measurement_type
+
+# regression guard: make the old single-partition answer visible so this cannot
+# silently regress to a subset again
+p1_types <- dbGetQuery(con, glue(
+  "SELECT DISTINCT measurement_type FROM read_parquet('{parts[1]}')"))$measurement_type
+cat(glue("sensor types (union of {length(parts)} partitions): {length(full_types)}\n"))
+cat(glue("  partition 1 alone would have declared      : {length(p1_types)}\n"))
+cat(glue("  types recovered by taking the union        : ",
+         "{length(setdiff(full_types, p1_types))}\n"))
+stopifnot(
+  "full netCDF type list must not be a single partition's subset" =
+    length(full_types) >= length(p1_types))
 ```
 
 ```{r}

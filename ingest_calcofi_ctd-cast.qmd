@@ -11,6 +11,7 @@ calcofi:
   provider: calcofi
   dataset: ctd-cast
   workflow_url: https://calcofi.io/workflows/ingest_calcofi_ctd-cast.html
+  questions_file: metadata/calcofi/ctd-cast/questions.csv
   dataset_meta:
     dataset_name: CalCOFI CTD Cast Files
     description: >
@@ -109,6 +110,15 @@ librarian::shelf(
 # common ingest settings (overwrite, dir_data)
 source(here("libs/ingest.R"))
 
+# say(): status output to STDOUT so it renders in the notebook.
+#
+# This notebook previously used message() for ~37 status lines. message() writes
+# to stderr, which Quarto does not reliably surface under `code-fold: true` — so
+# most of the diagnostics below were being computed and then never shown. The
+# repo convention is cat() (see .claude/skills/ingest-new.md), but cat() adds no
+# trailing newline, so this thin wrapper keeps message()'s line semantics.
+say <- function(...) cat(..., "\n", sep = "")
+
 # provider/dataset/metadata read from this file's authoritative YAML block
 cc           <- read_calcofi_meta(here("ingest_calcofi_ctd-cast.qmd"))
 provider     <- cc$provider
@@ -141,14 +151,14 @@ if (overwrite) {
     if (file_exists(db_checkpoint)) file_delete(db_checkpoint)
     rds_files <- list.files(dir_tmp, pattern = "\\.rds$", full.names = TRUE)
     if (length(rds_files) > 0) file_delete(rds_files)
-    message("Deleted parquet, checkpoint DB, and RDS intermediates")
+    say("Deleted parquet, checkpoint DB, and RDS intermediates")
   }
 }
 
 # restore from checkpoint DB if available (skips expensive read+bind+filter)
 if (file_exists(db_checkpoint) && !file_exists(db_path)) {
   file_copy(db_checkpoint, db_path, overwrite = TRUE)
-  message(glue("Restored from checkpoint: {db_checkpoint}"))
+  say(glue("Restored from checkpoint: {db_checkpoint}"))
 }
 dir_create(c(dir_dl, dirname(db_path), dir_parquet, dir_tmp), recurse = TRUE)
 
@@ -195,7 +205,7 @@ if (file_exists(manifest_path)) {
   }, logical(1)))
   if (parquet_ok && !overwrite) {
     parquet_complete <- TRUE
-    message(glue(
+    say(glue(
       "Parquet output already complete ({length(mf$tables)} tables, ",
       "{format(mf$total_rows, big.mark = ',')} rows) — ",
       "skipping computation, resuming at upload"))
@@ -208,7 +218,7 @@ if (!parquet_complete) {
   has_ctd_raw <- "ctd_raw" %in% DBI::dbListTables(con)
   if (has_ctd_raw) {
     n_raw <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM ctd_raw")$n
-    message(glue(
+    say(glue(
       "Checkpoint: ctd_raw already loaded ",
       "({format(n_raw, big.mark = ',')} rows) — ",
       "skipping read+bind+filter"))
@@ -257,12 +267,12 @@ d_zips <- tryCatch(
         )
       )
     write_csv(d, cache_csv)
-    message(glue("Scraped {nrow(d)} zip URLs from {url}"))
+    say(glue("Scraped {nrow(d)} zip URLs from {url}"))
     d
   },
   error = function(e) {
     if (file_exists(cache_csv)) {
-      message(glue("Website unavailable, using cached URLs from {cache_csv}"))
+      say(glue("Website unavailable, using cached URLs from {cache_csv}"))
       read_csv(cache_csv, show_col_types = FALSE)
     } else {
       stop(e)
@@ -313,10 +323,10 @@ prime_zips_from_gcs <- function(src, dest_dir) {
       stdout = TRUE, stderr = FALSE)),
     error = function(e) 0L)
   if (n_src == 0) {
-    message(glue("No zips at {src} — skipping GCS prime (will use calcofi.org)"))
+    say(glue("No zips at {src} — skipping GCS prime (will use calcofi.org)"))
     return(invisible(0L))
   }
-  message(glue("Priming {n_src} zip(s) from {src} → {dest_dir}"))
+  say(glue("Priming {n_src} zip(s) from {src} → {dest_dir}"))
   system2("rclone", c(
     "copy", src, dest_dir,
     "--include", "*.zip", "--max-depth", "1",
@@ -338,9 +348,9 @@ download_and_unzip <- function(url, dest_dir, zip_type, unzip = TRUE) {
   dir_unzip <- file.path(dest_dir, str_remove(file_zip, "\\.zip$"))
 
   if (file_exists(dest_file)) {
-    message(glue("Already exists: {file_zip}"))
+    say(glue("Already exists: {file_zip}"))
   } else {
-    message(glue("Downloading: {file_zip}"))
+    say(glue("Downloading: {file_zip}"))
     tryCatch(
       download.file(url, dest_file, mode = "wb"),
       error = function(e) {
@@ -355,14 +365,14 @@ download_and_unzip <- function(url, dest_dir, zip_type, unzip = TRUE) {
   }
 
   if (unzip && dir_exists(dir_unzip)) {
-    message(glue("Already unzipped: {file_zip}"))
+    say(glue("Already unzipped: {file_zip}"))
   } else {
     if (zip_type %in% c("final", "preliminary")) {
-      message(glue("Unzipping: {file_zip}"))
+      say(glue("Unzipping: {file_zip}"))
       dir_create(dir_unzip, recurse = TRUE)
       unzip(dest_file, exdir = dir_unzip)
     } else if (unzip) {
-      message(glue("Skipping unzip (not final/preliminary): {file_zip}"))
+      say(glue("Skipping unzip (not final/preliminary): {file_zip}"))
     }
   }
 }
@@ -372,7 +382,7 @@ d_zips |>
     download_and_unzip(url, dir_dl, zip_type, unzip = TRUE)
   })
 
-message("Download and extraction complete!")
+say("Download and extraction complete!")
 ```
 
 ## Find and Prioritize CTD Data Files
@@ -472,7 +482,7 @@ d_csv <- d_csv |>
   arrange(basename(path)) |>
   mutate(
     data = map2(path, seq_along(path), \(path, idx) {
-      message(glue("Reading {idx}/{nrow(d_csv)}: {basename(path)}"))
+      say(glue("Reading {idx}/{nrow(d_csv)}: {basename(path)}"))
 
       all_lines <- read_lines(path)
       header_line <- all_lines[1]
@@ -548,7 +558,7 @@ d_mismatches <- d_csv |>
   arrange(col_name, path)
 
 if (nrow(d_mismatches) > 0) {
-  message("Type mismatches detected - converting columns...")
+  say("Type mismatches detected - converting columns...")
 }
 
 # bind data, converting mismatched columns to expected type
@@ -579,7 +589,7 @@ d_bind <- d_csv |>
           na_generated <- na_after - na_before
 
           if (na_generated > 0) {
-            message(glue(
+            say(glue(
               "  {basename(p)}: {col} ({x_mismatches$col_type[i]} -> {expected}) generated {na_generated} NAs"
             ))
           }
@@ -1028,7 +1038,7 @@ d_filt <- d_filt |>
 
 # write raw table for pivoting
 dbWriteTable(con, "ctd_raw", d_filt, overwrite = TRUE)
-message(glue("Loaded {nrow(d_filt)} rows into ctd_raw"))
+say(glue("Loaded {nrow(d_filt)} rows into ctd_raw"))
 ```
 
 ## De-duplicate ctd_raw
@@ -1078,7 +1088,7 @@ cat(glue(
 # skipped, so write_parquet never runs yet downstream chunks expect its output.
 if (parquet_complete) {
   knitr::opts_chunk$set(eval = FALSE)
-  message("Parquet complete — skipping to upload")
+  say("Parquet complete — skipping to upload")
 } else {
   knitr::opts_chunk$set(eval = TRUE)
 }
@@ -1128,7 +1138,7 @@ for (i in seq_len(nrow(d_cruise_corrections))) {
     dbExecute(con, glue(
       "UPDATE ctd_raw SET cruise_key = '{d_cruise_corrections$cruise_key_correct[i]}'
        WHERE cruise_key = '{d_cruise_corrections$cruise_key_raw[i]}'"))
-    message(glue(
+    say(glue(
       "cruise_key correction: {d_cruise_corrections$cruise_key_raw[i]} → ",
       "{d_cruise_corrections$cruise_key_correct[i]} ({format(n_wrong, big.mark=',')} rows)"))
   }
@@ -1157,7 +1167,7 @@ if (!cruise_key_already_converted) {
   orphan_ships <- setdiff(ctd_ships$ship_key, ref_ships$ship_key)
 
   if (length(orphan_ships) > 0) {
-    message(glue(
+    say(glue(
       "{length(orphan_ships)} ship_key(s) in CTD not in ship table: ",
       "{paste(orphan_ships, collapse = ', ')}"
     ))
@@ -1194,7 +1204,7 @@ if (!cruise_key_already_converted) {
         fname = "ctd_orphan_ship_keys"
       )
   } else {
-    message("All CTD ship_keys found in ship reference table")
+    say("All CTD ship_keys found in ship reference table")
   }
 
   # convert cruise_key from YYMMKK → YYYY-MM-NODC format
@@ -1202,7 +1212,7 @@ if (!cruise_key_already_converted) {
   dbExecute(con, "ALTER TABLE ctd_raw DROP COLUMN cruise_key")
   dbExecute(con, "ALTER TABLE ctd_raw RENAME COLUMN cruise_key_new TO cruise_key")
 } else {
-  message("cruise_key already in YYYY-MM-NODC format (from checkpoint)")
+  say("cruise_key already in YYYY-MM-NODC format (from checkpoint)")
 }
 
 # validate cruise_key against cruise reference table
@@ -1211,7 +1221,7 @@ ref_cruises <- dbGetQuery(con, "SELECT cruise_key FROM cruise")
 orphan_cruises <- setdiff(ctd_cruises$cruise_key, ref_cruises$cruise_key)
 
 if (length(orphan_cruises) > 0) {
-  message(glue(
+  say(glue(
     "{length(orphan_cruises)} cruise_key(s) in CTD not in cruise table: ",
     "{paste(head(orphan_cruises, 10), collapse = ', ')}",
     "{if (length(orphan_cruises) > 10) '...' else ''}"
@@ -1231,7 +1241,7 @@ if (length(orphan_cruises) > 0) {
       fname = "ctd_orphan_cruise_keys"
     )
 } else {
-  message("All CTD cruise_keys found in cruise reference table")
+  say("All CTD cruise_keys found in cruise reference table")
 }
 ```
 
@@ -1248,18 +1258,33 @@ if (!file_exists(db_checkpoint) || overwrite) {
   con <- get_duckdb_con(db_path)
   load_duckdb_extension(con, "spatial")
   load_duckdb_extension(con, "icu")
-  message(glue("Saved checkpoint: {db_checkpoint}"))
+  say(glue("Saved checkpoint: {db_checkpoint}"))
 } else {
-  message(glue("Checkpoint already exists: {db_checkpoint}"))
+  say(glue("Checkpoint already exists: {db_checkpoint}"))
 }
 ```
 
-## Wide-Format Output (for ERDDAP)
+## Measurement Column Registry
 
-Create a wide-format table preserving the original column layout for serving into ERDDAP. This is a supplemental output — not part of the normalized database.
+Resolve which `ctd_raw` columns are **measurements** and which are their
+**quality flags**, from the shared `metadata/measurement_type.csv` registry. This
+split drives everything downstream: measurement columns pivot into
+`ctd_measurement`, and whatever is left over is by definition cast-level and
+becomes `ctd_cast`. Getting it wrong is how a per-scan column once leaked into
+`ctd_cast` and broke its primary key (workflows#53).
+
+::: {.callout-note title="`ctd_wide` was retired here"}
+This section used to also build `ctd_wide`, a ~1 GB wide-format copy of
+`ctd_raw` for ERDDAP. It has no consumer: ERDDAP now serves CTD through
+`EDDTableFromDatabase` over DuckDB views plus the netCDF files built below, and
+the wide file's whole-file heap read is what OOM'd ERDDAP in the first place
+(see [the serving benchmark](https://calcofi.io/workflows/bench_erddap_ctd.html)).
+The column-registry logic it carried is load-bearing, so it stays; the table
+itself is gone.
+:::
 
 ```{r}
-#| label: ctd_wide
+#| label: meas_col_registry
 
 # identify measurement and quality columns from measurement_type metadata
 d_meas_ctd <- d_meas_type |>
@@ -1268,31 +1293,36 @@ meas_cols <- d_meas_ctd$`_source_column`
 qual_cols <- d_meas_ctd$`_qual_column` |> na.omit() |> as.character()
 qual_cols <- qual_cols[qual_cols != ""]
 
-# get raw columns
 raw_cols <- dbGetQuery(
   con,
   "SELECT column_name FROM information_schema.columns WHERE table_name = 'ctd_raw'"
 )$column_name
 
-# wide-format: cast metadata + depth + all measurement/quality columns
-# exclude provenance and intermediate columns
-wide_keep <- intersect(
-  raw_cols,
-  c("cruise_key", "site_key", "cast_key", "cast_dir",
-    "datetime_start_utc", "longitude", "latitude", "ship_key",
-    "data_stage", "depth_m", meas_cols, qual_cols))
+# DIAGNOSTIC: a measurement column in the registry that is absent from ctd_raw is
+# a silent no-op in the pivot; a numeric ctd_raw column that is NOT registered
+# falls through to cast_cols and can break the ctd_cast PK. Report both.
+meas_missing <- setdiff(meas_cols, raw_cols)
+cast_leftover <- setdiff(raw_cols, c(meas_cols, qual_cols, "depth_m", "_source_file"))
 
-dbExecute(
-  con,
-  glue(
-    "CREATE OR REPLACE TABLE ctd_wide AS
-     SELECT {paste(wide_keep, collapse = ', ')}
-     FROM ctd_raw
-     ORDER BY cruise_key, site_key, cast_dir, depth_m")
-)
+cat(glue("registered measurement types : {nrow(d_meas_ctd)}\n"))
+cat(glue("  canonical (-> ctd_thin)    : {sum(d_meas_ctd$is_canonical, na.rm = TRUE)}\n"))
+cat(glue("  quality-flag columns       : {length(qual_cols)}\n"))
+cat(glue("registry columns absent from ctd_raw: {length(meas_missing)}",
+         if (length(meas_missing)) glue(" -> {paste(meas_missing, collapse = ', ')}") else "", "\n"))
+cat(glue("cast-level columns (-> ctd_cast)    : {length(cast_leftover)}\n"))
+```
 
-n_wide <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM ctd_wide")$n
-message(glue("ctd_wide: {format(n_wide, big.mark = ',')} rows (supplemental, for ERDDAP)"))
+```{r}
+#| label: meas_col_registry_tbl
+# the canonical set is what ctd_thin and the thinned netCDF carry, so show it
+# explicitly rather than leaving it implicit in a flag column
+d_meas_ctd |>
+  select(measurement_type, units, is_canonical, source_column = `_source_column`) |>
+  arrange(desc(is_canonical), measurement_type) |>
+  datatable(
+    rownames  = FALSE,
+    caption   = "CTD measurement registry — is_canonical drives ctd_thin membership",
+    options   = list(pageLength = 10, scrollX = TRUE, dom = "ftip"))
 ```
 
 ## Split into Tidy Tables
@@ -1302,7 +1332,7 @@ message(glue("ctd_wide: {format(n_wide, big.mark = ',')} rows (supplemental, for
 ```{r}
 #| label: ctd_cast
 
-# d_meas_ctd, meas_cols, qual_cols already defined in ctd_wide chunk above
+# d_meas_ctd, meas_cols, qual_cols come from the Measurement Column Registry above
 
 # use ctd_raw columns (includes ship_key and data_stage added via SQL)
 raw_cols <- dbGetQuery(
@@ -1336,7 +1366,7 @@ dbExecute(
 )
 
 n_cast <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM ctd_cast")$n
-message(glue("ctd_cast: {format(n_cast, big.mark = ',')} rows"))
+say(glue("ctd_cast: {format(n_cast, big.mark = ',')} rows"))
 
 # assign deterministic UUID from composite natural key (md5-based, DuckDB-native)
 assign_deterministic_uuids_md5(
@@ -1415,11 +1445,48 @@ for (i in seq_len(nrow(d_meas_ctd))) {
   } else {
     dbExecute(con, glue("INSERT INTO ctd_measurement {sql_select}"))
   }
-  message(glue("  {i}/{nrow(d_meas_ctd)}: {meas_type}"))
+  say(glue("  {i}/{nrow(d_meas_ctd)}: {meas_type}"))
 }
 
+n_meas_raw <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM ctd_measurement")$n
+say(glue("ctd_measurement (pre-sentinel): {format(n_meas_raw, big.mark = ',')} rows"))
+
+# --- strip the -99 missing-value sentinel from MEASUREMENTS -------------------
+# -99 is this source's documented missing marker. The notebook already knows that:
+# `pseudoNA_values <- c(-9.99e-29, -99)` in the fill_lonlat chunk strips it from
+# longitude/latitude. It was never applied to the measurement columns, so -99 has
+# been flowing through ctd_measurement -> ctd_thin -> obs as though it were a real
+# reading — 84,302 rows in release v2026.07.17, including CANONICAL oxygen
+# (oxygen_ml_l_ave_sta_corr 953, oxygen_umol_kg_ave_sta_corr 4,294) alongside
+# isus_v 40,479, ph 31,493 and spar 6,189.
+#
+# The NOT isnan / isfinite guard in the pivot above cannot catch it: -99 is a
+# perfectly finite double. A -99 mL/L oxygen silently corrupts any mean, minimum
+# or anomaly a consumer computes, which is why this is a DELETE and not merely a
+# report — a missing value has no business existing as a row in long format.
+#
+# Matched exactly (= -99, not a tolerance): every observed case is exactly -99.00,
+# and an exact test cannot swallow a real reading that merely rounds near it. The
+# two genuinely signed types (dynamic_height, specific_volume_anomaly) are
+# reported separately below so a real -99 there would be visible rather than
+# assumed away.
+SENTINEL <- -99
+
+sentinel_tally <- dbGetQuery(con, glue("
+  SELECT measurement_type, COUNT(*) AS n,
+         COUNT(DISTINCT ctd_cast_uuid) AS n_casts
+  FROM ctd_measurement WHERE measurement_value = {SENTINEL}
+  GROUP BY 1 ORDER BY n DESC"))
+
+n_sentinel <- sum(sentinel_tally$n)
+dbExecute(con, glue(
+  "DELETE FROM ctd_measurement WHERE measurement_value = {SENTINEL}"))
+
 n_meas <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM ctd_measurement")$n
-message(glue("ctd_measurement: {format(n_meas, big.mark = ',')} rows"))
+say(glue("-99 sentinel rows removed: {format(n_sentinel, big.mark = ',')} ",
+         "across {nrow(sentinel_tally)} measurement type(s)"))
+say(glue("ctd_measurement: {format(n_meas, big.mark = ',')} rows"))
+stopifnot("sentinel delete accounting" = n_meas_raw - n_sentinel == n_meas)
 
 # assign deterministic UUID (md5-based, DuckDB-native — single SQL, no R data transfer)
 assign_deterministic_uuids_md5(
@@ -1482,7 +1549,7 @@ dbExecute(
 )
 
 n_summ <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM ctd_summary")$n
-message(glue("ctd_summary: {format(n_summ, big.mark = ',')} rows"))
+say(glue("ctd_summary: {format(n_summ, big.mark = ',')} rows"))
 
 assign_deterministic_uuids_md5(
   con = con,
@@ -1498,7 +1565,7 @@ assign_deterministic_uuids_md5(
 #| label: measurement_type
 
 dbWriteTable(con, "measurement_type", d_meas_type, overwrite = TRUE)
-message(glue("measurement_type: {nrow(d_meas_type)} rows"))
+say(glue("measurement_type: {nrow(d_meas_type)} rows"))
 
 # validate: all measurement_types used by this dataset are registered
 ctd_types_used <- dbGetQuery(
@@ -1857,8 +1924,48 @@ cat(glue("_rdp_retained: {format(nrow(rdp_retained), big.mark = ',')} ",
 ```{r}
 #| label: ctd_thin_assemble
 
-# union the 10 m grid and the RDP inflection points (grid wins ties)
-dbExecute(con, "
+# Union three retention reasons, in precedence order: 10 m grid, RDP inflections,
+# then bottle-trip depths.
+#
+# The third is why this section changed. Thinning is designed for DENSE SENSOR
+# SCANS: the 10 m backbone and the RDP inflections are both derived from
+# temperature/salinity profiles, so a depth is kept because the *sensor* profile
+# bends there. Bottle values are not a profile — they are a handful of discrete,
+# lab-analysed samples per cast at depths chosen by the watch, and nothing about
+# the sensor profile knows where they are. Selecting depths by sensor geometry and
+# then subsetting bottle values to those depths silently discards most of them.
+#
+# Measured against release v2026.07.17: of 133,206 distinct (cast, depth) bottle
+# ammonium measurements, only 35,549 (26.7%) sit at a depth this logic retained.
+# Roughly half the loss is the cast-direction choice (by design); the rest was
+# depth thinning throwing away real lab samples. So flagging btl_ammonium as
+# canonical is necessary but NOT sufficient — without this clause it would have
+# landed about a quarter of the ammonium record in `obs` and looked like success.
+#
+# A bottle depth costs nothing to keep (a few rows per cast) and cannot be
+# reconstructed by interpolation, so retain every one carrying a canonical value.
+canon_btl <- d_meas_ctd |>
+  filter(is_canonical, str_starts(measurement_type, "btl_") |
+           measurement_type %in% c("salinity_btl", "oxygen_btl_ml_l",
+                                   "oxygen_btl_umol_kg")) |>
+  pull(measurement_type)
+say(glue("bottle-grain canonical types retained whole: ",
+         "{if (length(canon_btl)) paste(canon_btl, collapse = ', ') else '(none)'}"))
+
+btl_clause <- if (length(canon_btl)) glue("
+  UNION
+  SELECT cd.phys_cast_id, m.depth_m, 'bottle' AS retained_reason
+  FROM ctd_measurement m
+  JOIN _chosen_dir cd ON m.ctd_cast_uuid = cd.ctd_cast_uuid
+  WHERE m.measurement_type IN ({paste(sprintf(\"'%s'\", canon_btl), collapse = ', ')})
+    AND NOT EXISTS (
+      SELECT 1 FROM _grid_depths g
+      WHERE g.phys_cast_id = cd.phys_cast_id AND g.depth_m = m.depth_m)
+    AND NOT EXISTS (
+      SELECT 1 FROM _rdp_retained r
+      WHERE r.phys_cast_id = cd.phys_cast_id AND r.depth_m = m.depth_m)") else ""
+
+dbExecute(con, glue("
   CREATE OR REPLACE TEMP TABLE _retained_depths AS
   SELECT phys_cast_id, depth_m, 'grid' AS retained_reason FROM _grid_depths
   UNION
@@ -1866,7 +1973,8 @@ dbExecute(con, "
   FROM _rdp_retained r
   WHERE NOT EXISTS (
     SELECT 1 FROM _grid_depths g
-    WHERE g.phys_cast_id = r.phys_cast_id AND g.depth_m = r.depth_m)")
+    WHERE g.phys_cast_id = r.phys_cast_id AND g.depth_m = r.depth_m)
+  {btl_clause}"))
 
 # ctd_thin: ctd_measurement rows that are a canonical type, on the chosen
 # direction, at a retained depth — a pure row subset (values never interpolated).
@@ -1957,14 +2065,40 @@ stopifnot("ctd_thin rows not a faithful subset of ctd_measurement" =
         AND m.measurement_type  = t.measurement_type
         AND m.measurement_value IS NOT DISTINCT FROM t.measurement_value)")$n == 0)
 
-# 5. retained_reason populated with the two expected categories
+# 5. retained_reason populated with the expected categories. 'bottle' joins
+#    'grid'/'inflection' only when a canonical bottle-grain type exists (see the
+#    assemble chunk), so it is required conditionally rather than always.
 reason_breakdown <- dbGetQuery(con,
-  "SELECT retained_reason, COUNT(*) AS n FROM ctd_thin GROUP BY 1 ORDER BY 1")
+  "SELECT retained_reason, COUNT(*) AS n, COUNT(DISTINCT depth_m) AS n_depths
+   FROM ctd_thin GROUP BY 1 ORDER BY n DESC")
+expected_reasons <- c("grid", "inflection", if (length(canon_btl)) "bottle")
 stopifnot(
   "ctd_thin retained_reason has unexpected values" =
-    all(reason_breakdown$retained_reason %in% c("grid", "inflection")),
+    all(reason_breakdown$retained_reason %in% expected_reasons),
   "ctd_thin retained_reason missing a category" =
-    all(c("grid", "inflection") %in% reason_breakdown$retained_reason))
+    all(expected_reasons %in% reason_breakdown$retained_reason))
+# previously computed only for the assertion and never shown
+say("retained_reason breakdown:")
+print(reason_breakdown)
+
+# 5b. the point of the 'bottle' reason: every canonical bottle-grain measurement on
+#     a chosen-direction cast must survive thinning, not just those that happened to
+#     land on a sensor-derived depth. Assert 100% retention rather than trusting it.
+if (length(canon_btl)) {
+  btl_in <- paste(sprintf("'%s'", canon_btl), collapse = ", ")
+  btl_cov <- dbGetQuery(con, glue("
+    WITH avail AS (
+      SELECT m.ctd_cast_uuid, m.depth_m, m.measurement_type
+      FROM ctd_measurement m JOIN _chosen_dir cd USING (ctd_cast_uuid)
+      WHERE m.measurement_type IN ({btl_in}))
+    SELECT (SELECT COUNT(*) FROM avail) AS available,
+           (SELECT COUNT(*) FROM ctd_thin WHERE measurement_type IN ({btl_in})) AS retained"))
+  say(glue("bottle-grain canonical: {format(btl_cov$retained, big.mark = ',')} of ",
+           "{format(btl_cov$available, big.mark = ',')} retained ",
+           "({round(100 * btl_cov$retained / btl_cov$available, 1)}%)"))
+  stopifnot("every canonical bottle measurement on the chosen direction must be retained" =
+              btl_cov$retained == btl_cov$available)
+}
 
 # 6. one cast direction per physical cast; no physical cast dropped entirely
 coverage <- dbGetQuery(con, glue("
@@ -2158,7 +2292,158 @@ dbExecute(
 # dataset registry built from authoritative ingest_*.qmd YAML (was dataset.csv)
 d_dataset <- ingest_yaml_to_dataset_df(read_ingest_yaml(here()))
 dbWriteTable(con, "dataset", d_dataset, overwrite = TRUE)
-message(glue("dataset: {nrow(d_dataset)} datasets registered"))
+say(glue("dataset: {nrow(d_dataset)} datasets registered"))
+```
+
+## Questions for Data Providers
+
+Open questions on this dataset, tracked in
+`metadata/calcofi/ctd-cast/questions.csv` and surfaced here so they travel with
+the workflow rather than living in someone's inbox. Two are **blockers** — the
+`-99` sentinel and the physically impossible sensor extremes both currently reach
+`obs` as if they were measurements.
+
+```{r}
+#| label: provider-questions
+read_csv(here(cc$questions_file), show_col_types = FALSE) |>
+  arrange(factor(priority, c("blocker", "high", "normal", "low")), id) |>
+  select(priority, question, context, status) |>
+  datatable(
+    caption  = "Questions for the CalCOFI CTD data providers (ranked)",
+    rownames = FALSE,
+    options  = list(dom = "t", scrollX = TRUE,
+                    columnDefs = list(list(width = "70px", targets = 0))))
+```
+
+## Data Quality Diagnostics
+
+Range and sentinel audit over `ctd_measurement`. This exists because the
+`v2026.07.17` release shipped values that cannot be real — `salinity_ave_corr`
+spanning −45 to 1016 PSU, oxygen maxima around 1e9–1e10 — alongside `-99`
+sentinels that were ingested as genuine measurements. Nothing in the pipeline
+flagged either, so this section makes both visible at ingest time.
+
+::: {.callout-important title="`-99` is fixed at the source; the extremes are not"}
+**`-99` is handled.** The pivot above now deletes it, because the notebook already
+treated `-99` as this source's missing marker for longitude/latitude — the rule had
+simply never been extended to the measurement columns. The audit below should
+therefore report **zero** `-99` rows; if it does not, that fix has regressed.
+
+**The extremes are still only reported.** They do not `stopifnot()`: until the
+providers confirm whether values like 2.1e9 mL/L oxygen are bad scans or a units
+error (question 02), dropping them would be guessing.
+The plausible ranges below are a first pass and belong in
+`metadata/measurement_type.csv` as `valid_min`/`valid_max` once agreed — which
+would also let the CF netCDF writer emit them as real `valid_min`/`valid_max`
+variable attributes.
+:::
+
+```{r}
+#| label: diag_sentinel
+# audit trail for the -99 deletion in the pivot above
+if (nrow(sentinel_tally)) {
+  sentinel_tally |>
+    mutate(pct_of_removed = round(100 * n / sum(n), 1)) |>
+    datatable(
+      caption  = glue("-99 sentinel rows removed from ctd_measurement ",
+                      "({format(n_sentinel, big.mark = ',')} total)"),
+      rownames = FALSE,
+      options  = list(pageLength = 10, scrollX = TRUE, dom = "tip"))
+} else {
+  say("no -99 sentinel values found in ctd_measurement")
+}
+```
+
+```{r}
+#| label: diag_ranges
+
+# first-pass plausible physical ranges for oceanographic CTD sensors. Deliberately
+# generous: the point is to catch impossible values, not to police oceanography.
+plaus <- tribble(
+  ~measurement_type,              ~lo,    ~hi,
+  "temperature_ave",              -2,     40,
+  "temperature_1",                -2,     40,
+  "temperature_2",                -2,     40,
+  "potential_temperature_1",      -2,     40,
+  "potential_temperature_2",      -2,     40,
+  "btl_temperature",              -2,     40,
+  "salinity_ave_corr",             0,     45,
+  "salinity_1",                    0,     45,
+  "salinity_2",                    0,     45,
+  "salinity_1_corr",               0,     45,
+  "salinity_2_corr",               0,     45,
+  "salinity_btl",                  0,     45,
+  "pressure",                      0,   6500,
+  "ph",                            6,      9,
+  "sw_ph",                         6,      9,
+  "oxygen_ml_l_ave_sta_corr",      0,     15,
+  "oxygen_ml_l_1",                 0,     15,
+  "oxygen_btl_ml_l",               0,     15,
+  "oxygen_umol_kg_ave_sta_corr",   0,    700,
+  "oxygen_btl_umol_kg",            0,    700,
+  "sigma_theta_1",                15,     35,
+  "sigma_theta_2",                15,     35,
+  "btl_ammonium",                  0,    100,
+  "btl_nitrate",                   0,    100,
+  "btl_nitrite",                   0,     10,
+  "btl_phosphate",                 0,     10,
+  "btl_silicate",                  0,    300,
+  "btl_chlorophyll_a",             0,    100,
+  "btl_phaeopigment",              0,    100)
+
+diag_sql <- glue("
+  SELECT measurement_type,
+         COUNT(*)                                           AS n,
+         COUNT(*) FILTER (WHERE measurement_value = -99)     AS n_neg99,
+         COUNT(*) FILTER (WHERE isnan(measurement_value)
+                             OR NOT isfinite(measurement_value)) AS n_nonfinite,
+         MIN(measurement_value)                             AS v_min,
+         MAX(measurement_value)                             AS v_max
+  FROM ctd_measurement GROUP BY 1")
+d_diag <- dbGetQuery(con, diag_sql) |>
+  left_join(plaus, by = "measurement_type") |>
+  mutate(
+    pct_neg99   = round(100 * n_neg99 / n, 2),
+    # count out-of-range only where a plausible range is declared, and exclude the
+    # -99 sentinel so it is reported once (as a sentinel) rather than twice
+    has_range   = !is.na(lo),
+    out_of_range = NA_integer_)
+
+for (i in which(d_diag$has_range)) {
+  r <- d_diag[i, ]
+  d_diag$out_of_range[i] <- dbGetQuery(con, glue("
+    SELECT COUNT(*) AS n FROM ctd_measurement
+    WHERE measurement_type = '{r$measurement_type}'
+      AND measurement_value <> -99
+      AND (measurement_value < {r$lo} OR measurement_value > {r$hi})"))$n
+}
+
+say(glue("types audited                     : {nrow(d_diag)}"))
+say(glue("  with a declared plausible range : {sum(d_diag$has_range)}"))
+say(glue("  WITHOUT a range (unchecked)     : {sum(!d_diag$has_range)}"))
+say(glue("-99 sentinel values (all types)   : ",
+         "{format(sum(d_diag$n_neg99), big.mark = ',')}"))
+say(glue("out-of-range values (ranged types): ",
+         "{format(sum(d_diag$out_of_range, na.rm = TRUE), big.mark = ',')}"))
+```
+
+```{r}
+#| label: diag_ranges_tbl
+d_diag |>
+  transmute(
+    measurement_type, n,
+    `-99` = n_neg99, `%-99` = pct_neg99, `non-finite` = n_nonfinite,
+    min = signif(v_min, 4), max = signif(v_max, 4),
+    range = if_else(has_range, glue("{lo}..{hi}"), glue("—")),
+    `out of range` = out_of_range) |>
+  arrange(desc(`-99` + coalesce(`out of range`, 0L)), measurement_type) |>
+  datatable(
+    caption  = paste("ctd_measurement range + sentinel audit —",
+                     "rows with -99 or out-of-range values sort first"),
+    rownames = FALSE,
+    options  = list(pageLength = 12, scrollX = TRUE, dom = "ftip")) |>
+  formatStyle("-99",          color = styleInterval(0, c("inherit", "#d03b3b"))) |>
+  formatStyle("out of range", color = styleInterval(0, c("inherit", "#d03b3b")))
 ```
 
 ## Validate and Enforce Types
@@ -2172,15 +2457,62 @@ enforce_column_types(con, d_flds_rd = d_flds_rd)
 
 ## Preview Tables
 
-```{r}
-#| label: preview
-#| results: asis
+One `datatable()` per table, each in its own chunk — `preview_tables()` in a loop
+renders only the first DT widget (see `.claude/skills/ingest-new.md`), which is
+why several of these previews were previously invisible. Every preview is
+horizontally scrollable (`scrollX`) and column-capped: `ctd_cast` is ~40 columns
+wide and overflowed the page as a static table.
 
-preview_tables(
-  con,
-  tables = c("ctd_cast", "ctd_measurement", "ctd_thin", "ctd_summary",
-             "measurement_type", "ctd_wide")
-)
+```{r}
+#| label: preview_helper
+# shared preview: LIMIT in SQL (never collect a 216M-row table), scrollX so wide
+# tables scroll inside their own box instead of overflowing the article, and
+# geometry dropped (the R DuckDB driver cannot marshal GEOMETRY).
+preview_tbl <- function(tbl, n = 100, cols = NULL) {
+  all_cols <- dbGetQuery(con, glue(
+    "SELECT column_name, data_type FROM information_schema.columns
+      WHERE table_name = '{tbl}'"))
+  keep <- all_cols$column_name[all_cols$data_type != "GEOMETRY"]
+  if (!is.null(cols)) keep <- intersect(keep, cols)
+  n_row <- dbGetQuery(con, glue("SELECT COUNT(*) AS n FROM {tbl}"))$n
+  d <- dbGetQuery(con, glue(
+    "SELECT {paste(keep, collapse = ', ')} FROM {tbl} LIMIT {n}"))
+  datatable(
+    d, rownames = FALSE,
+    caption = glue("{tbl} — {format(n_row, big.mark = ',')} rows x ",
+                   "{nrow(all_cols)} cols (showing first {nrow(d)} rows",
+                   if (!is.null(cols)) ", selected cols" else "", ")"),
+    options = list(pageLength = 5, scrollX = TRUE, dom = "tip"))
+}
+```
+
+```{r}
+#| label: preview_ctd_cast
+# ~40 columns; show the identity + position core and let scrollX handle the rest
+preview_tbl("ctd_cast", cols = c(
+  "ctd_cast_uuid", "cruise_key", "site_key", "cast_key", "cast_dir",
+  "datetime_start_utc", "latitude", "longitude", "ship_key", "data_stage",
+  "ord_occ"))
+```
+
+```{r}
+#| label: preview_ctd_measurement
+preview_tbl("ctd_measurement")
+```
+
+```{r}
+#| label: preview_ctd_thin
+preview_tbl("ctd_thin")
+```
+
+```{r}
+#| label: preview_ctd_summary
+preview_tbl("ctd_summary")
+```
+
+```{r}
+#| label: preview_measurement_type
+preview_tbl("measurement_type")
 ```
 
 ## Emit Core Tables
@@ -2356,9 +2688,9 @@ for (tbl in modifies_tables) {
     vals <- paste(shQuote(additions, "sh"), collapse = ", ")
     export_parquet(con,
       glue("SELECT * FROM {tbl} WHERE {pk_col} IN ({vals})"), pq_path)
-    message(glue("{length(additions)} new {tbl} row(s) -> {tbl}_new.parquet"))
+    say(glue("{length(additions)} new {tbl} row(s) -> {tbl}_new.parquet"))
   } else {
-    message(glue("No new {tbl} rows — {tbl}_new not exported"))
+    say(glue("No new {tbl} rows — {tbl}_new not exported"))
   }
 }
 ```
@@ -2378,7 +2710,7 @@ knitr::opts_chunk$set(eval = TRUE)
 
 # skip sync if all parquet tables were unchanged (no re-write)
 if (parquet_complete) {
-  message("Parquet unchanged — skipping GCS sync")
+  say("Parquet unchanged — skipping GCS sync")
 } else {
   sync_to_gcs(
     local_dir    = dir_parquet,
@@ -2399,7 +2731,7 @@ close_duckdb(con)
 # remove checkpoint after successful completion (fresh next run)
 if (file_exists(db_checkpoint)) {
   file_delete(db_checkpoint)
-  message(glue("Removed checkpoint: {db_checkpoint}"))
+  say(glue("Removed checkpoint: {db_checkpoint}"))
 }
 ```
 

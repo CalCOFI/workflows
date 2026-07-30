@@ -876,7 +876,11 @@ d_meas_type <- d_meas_type |>
 d_meas_type <- d_meas_type |>
   bind_rows(mets_types |> filter(!measurement_type %in% shared)) |>
   arrange(measurement_type)
-write_csv(d_meas_type, here("metadata/measurement_type.csv"))
+# na = "" is load-bearing: write_csv's default writes the literal string "NA"
+# into every empty _qual_column/_prec_column, rewriting all ~198 rows on every
+# run. read_csv maps "NA" back to NA so it is functionally benign, but it buries
+# real registry edits (e.g. an is_canonical flip) under a whole-file diff.
+write_csv(d_meas_type, here("metadata/measurement_type.csv"), na = "")
 
 cat(glue("measurement_type: {nrow(mets_types)} METS types registered ",
          "({length(shared)} shared with other datasets)"), "\n")

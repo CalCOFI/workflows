@@ -24,15 +24,20 @@ Sys.setenv(QUARTO_CHROMIUM_HEADLESS_MODE = "new")
 build_targets_list(
   exclude = c(
     "publish_ichthyo_to-obis",
-    # ctd-cast is ALREADY BUILT AND SYNCED for this run: sample (14,336),
-    # obs (5,551,551) and obs_ctd_full (216,427,608 rows / 4.9 GB / 96
-    # partitions) are on disk and mirrored to GCS. Its target record was lost
-    # when the previous run was killed mid-upload, so targets would otherwise
-    # redo ~2 h of work to reach the same bytes. release_database reads the
-    # shards straight off the filesystem (assemble_core() globs
-    # data/parquet/*/), so excluding the target does NOT drop CTD from the
-    # release. REMOVE THIS once the CTD source data changes.
-    "ingest_calcofi_ctd-cast",
+    # RE-ENABLED 2026-07-30. The exclusion below was correct while the CTD
+    # outputs were byte-identical to what was already on disk, but the ingest
+    # LOGIC has now changed in three ways that require a real rebuild:
+    #   1. `-99` (the source's documented missing sentinel, previously stripped
+    #      only from longitude/latitude) is now removed from measurements — it
+    #      had been reaching obs as a real reading, 84,302 rows in v2026.07.17
+    #      including canonical oxygen.
+    #   2. btl_ammonium is now is_canonical = TRUE, so it enters ctd_thin/obs.
+    #   3. ctd_thin retains bottle-trip depths ('bottle' retained_reason);
+    #      without it only ~27% of bottle ammonium survived depth thinning.
+    # The checkpoint DB (data/wrangling/calcofi_ctd-cast_checkpoint.duckdb) is
+    # kept, so this restores ctd_raw and re-runs from the pivot rather than
+    # re-downloading 62 GB.
+    # "ingest_calcofi_ctd-cast",
     # netCDF publishing is on hold — these already ran, and the whole-dataset
     # recreation likely belongs at the ingest step rather than after the release.
     "publish_ctd-cast_to-netcdf",
