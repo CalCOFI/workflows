@@ -24,10 +24,13 @@ calcofi:
       Dungeness crab (Metacarcinus magister) megalopae and larval decapods
       picked from archived CalCOFI oblique-tow plankton samples, examined for the
       California Department of Fish and Wildlife. Two efforts: a 2008-2014 time
-      series of 310 sorted samples (A. Klemmedson) yielding 24 M. magister
-      megalopae, and a 1949-2009 master sorting log of 2,011 archived samples
-      (E. Jones, as of 2012-02-15) recording which had been examined. Sorting was
-      performed at the SIO Pelagic Invertebrate Collection.
+      series of 310 sorted samples (A. Klemmedson, 2015) yielding 24 M. magister
+      megalopae from 14 samples, and a 1949-2009 master sorting log of 2,011
+      archived samples (E. Jones, as of 2012-02-15) recording which had been
+      examined. Spring cruises, CalBOBL oblique tows, lines < 80 / stations < 90.
+      Counts are occurrence in the examined aliquot, not standardized density.
+      Sorting was performed at the SIO Pelagic Invertebrate Collection, where the
+      removed megalopae are archived in vials.
     citation_main: ""
     link_calcofi_org: ""
     link_data_source: ""
@@ -167,6 +170,7 @@ stopifnot(file_exists(f_ts), file_exists(f_log), file_exists(f_spec))
 d_ts   <- read_dungeness_timeseries(f_ts)
 d_log  <- read_dungeness_sorting_log(f_log)
 d_spec <- read_dungeness_specimens(f_spec)
+d_note <- read_dungeness_notes(f_ts)
 
 cat(glue("time series {nrow(d_ts)} samples ({format(min(d_ts$date))} to ",
          "{format(max(d_ts$date))}); sorting log {nrow(d_log)} samples; ",
@@ -180,6 +184,44 @@ stopifnot(
     sum(d_ts$n_mega_magister, na.rm = TRUE) == 24,
   "1904 epoch not applied — dates predate the 2008-2014 series" =
     min(d_ts$date) >= as.Date("2008-01-01"))
+```
+
+## Methods, in the Sorter's Own Words
+
+The workbook's `Notes` sheet is **empty to every spreadsheet reader** — its
+content is a floating text box, which lives in `xl/drawings/` rather than in any
+cell, so `read_excel()` returns 0×0. It is the most valuable single artifact here:
+Angela Klemmedson's dated statement of gear, magnification, measurement
+landmarks, station bounds, results, and her reasoning about aliquots. Recovering
+it answered three questions this ingest had open, so it is reproduced verbatim
+below rather than summarized.
+
+Three things it settles:
+
+1. **Counts are occurrence, not density, by the author's explicit choice** —
+   *"I am ignoring 'Aliq.' and 'Volume' because I am not measuring the density of
+   megalopae in a volume of water, simply the occurrence of megalopae in
+   samples… therefore I will not adjust the numbers of megalopae."* So the raw
+   counts this ingest stores are what the author intended, and the aliquot column
+   is context, not a correction factor.
+2. **"14 samples (15 total removal vials)"** — independent confirmation of the
+   15-rows / 14-occupations discrepancy found below, and its explanation: the
+   repeated station occupation is a second *removal vial*, not a duplicate row.
+3. **The non-Dungeness counts are lower-confidence** — *"Data beyond Dungeness
+   crab megalopae should be used more as a guideline… there is potential for
+   error in some of the identifications."* Carried into the column descriptions
+   so it reaches consumers.
+
+```{r}
+#| label: methods-note
+#| echo: false
+#| results: asis
+
+cat("::: {.callout-note appearance='simple' title='Notes sheet, ",
+    "\"Dungeness Time Series - Angela Klemmedson.xlsx\" (recovered from ",
+    "xl/drawings/drawing1.xml)'}\n\n", sep = "")
+cat(paste0("> ", gsub("\n", "\n> ", d_note)), "\n\n")
+cat(":::\n")
 ```
 
 ## Resolve Cruise + Position from the CalCOFI Reference
@@ -265,8 +307,10 @@ lengths are their own table: the source cell holds one length per megalopa found
 (`"6.0mm, 6.5mm, 7.0mm, 7.0mm"`), which is sub-occurrence detail, not a scalar.
 
 Counts are recorded **as found in the examined aliquot** and are deliberately
-*not* standardized here — the aliquot fraction is on `dungeness_sample`, but no
-filtered-water volume exists in the source to make a density (Q01).
+*not* standardized — which matches the author's stated choice (see the Notes
+sheet above): the aliquot is context for interpreting an absence, not a
+correction factor, and no filtered-water volume exists in the source to make a
+density anyway.
 
 ```{r}
 #| label: build-sample
@@ -566,10 +610,11 @@ stopifnot(
 cat("FK + PK integrity: OK\n")
 
 # the headline result of the whole dataset, asserted so a bad re-parse is loud.
-# 15 positive ROWS but 14 positive station OCCUPATIONS: three occupations appear
-# twice in the source as replicate subsamples, and 1204OS/070.0 055.0/occ 45 is
-# one of them (1 megalopa in each row). The workbook's own "M. magister values"
-# sheet aggregates those two rows into one, which is why it lists 14.
+# 15 positive ROWS but 14 positive station OCCUPATIONS. The Notes sheet states it
+# exactly — "M. magister megalopae found in 14 samples (15 total removal vials)"
+# — so the repeat at 1204OS/070.0 055.0/occ 45 (1 megalopa in each row) is a
+# second removal vial from one sample, not a duplicated row. The workbook's
+# "M. magister values" sheet aggregates the pair, which is why it lists 14.
 mag <- dbGetQuery(con, "
   SELECT COUNT(*) AS n_samples,
          COUNT(*) FILTER (WHERE measurement_value > 0) AS n_positive_rows,
@@ -709,8 +754,11 @@ if (length(own(gap(m$columns, "description_md"))))
 
 This is a first pass. What remains, roughly in order:
 
-1. **Answer the two blockers** (Q01 standardization factor, Q08 provider /
-   citation / licence). Q08 in particular gates publication.
+1. **Answer the one remaining blocker**, Q08 — permission to publish, a licence,
+   a citation, and whether CDFW or SIO is the citable custodian. It gates both
+   the release and the GCS upload. Christy Juhasz (CDFW Marine Region) supplied
+   the files and is the live contact; Laura Rogers-Bennett has retired.
+   (Q01, standardization, is answered — see the Notes sheet above.)
 2. **Project into the consolidated core.** Every released dataset emits its slice
    of `sample` / `obs` / `obs_attribute` via `calcofi4db::emit_core_tables()`,
    which needs a new `dfw_dungeness-crab` arm in `calcofi4db/R/model.R` plus

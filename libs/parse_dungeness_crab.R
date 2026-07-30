@@ -204,6 +204,41 @@ parse_sorting_log_date <- function(txt, month) {
   out
 }
 
+#' Read the workbook's "Notes" sheet — the authoritative methods statement
+#'
+#' The `Notes` sheet is **empty to every spreadsheet reader**: its content is a
+#' floating text box, which lives in `xl/drawings/` rather than in any cell, so
+#' `read_excel()` returns a 0x0 tibble. It is the most valuable single artifact in
+#' the whole dataset — Angela Klemmedson's dated (2015-10-22) statement of gear,
+#' magnification, measurement landmarks, station bounds, results, and her
+#' explicit decision **not** to adjust counts for aliquot or volume. Recovering it
+#' answered three of this ingest's open questions.
+#'
+#' Extracted by unzipping the xlsx and stripping tags from the drawing XML for
+#' sheet 1 (`Notes` -> `xl/drawings/drawing1.xml`, per
+#' `xl/worksheets/_rels/sheet1.xml.rels`).
+#'
+#' @param path path to "Dungeness Time Series - Angela Klemmedson.xlsx"
+#' @param drawing drawing XML part holding the text box
+#' @return single character string of the note text, or NA if absent
+read_dungeness_notes <- function(path,
+                                 drawing = "xl/drawings/drawing1.xml") {
+  parts <- tryCatch(utils::unzip(path, list = TRUE)$Name, error = function(e) character())
+  if (!drawing %in% parts) return(NA_character_)
+  xml <- paste(readLines(unz(path, drawing), warn = FALSE), collapse = "")
+  # <a:t> holds the runs of text; keep paragraph breaks as newlines
+  txt <- gsub("</a:p>", "\n", xml)
+  txt <- gsub("<[^>]*>", "", txt)
+  txt <- gsub("&amp;", "&", txt, fixed = TRUE)
+  txt <- gsub("&lt;", "<", txt, fixed = TRUE)
+  txt <- gsub("&gt;", ">", txt, fixed = TRUE)
+  # the leading run is the text box's numeric geometry, not prose
+  txt <- sub("^[\\s0-9]+", "", txt, perl = TRUE)
+  txt <- gsub("[ \t]+", " ", txt)
+  txt <- gsub("\n{2,}", "\n\n", txt)
+  str_trim(txt)
+}
+
 #' Read the specimen-verification sheet (5 megalopae mailed for ID, 2012-05-10)
 #'
 #' Emily Jones mailed five archived megalopae to CDFW so the identifications
