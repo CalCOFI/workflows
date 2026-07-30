@@ -26,10 +26,17 @@ dir.create(data_dir, showWarnings = FALSE, recursive = TRUE)
 oneline <- function(x) trimws(gsub("[[:space:]]+", " ", paste(x, collapse = " ")))
 
 # provider display labels + ordering within the ingest section ----
-provider_label <- c(calcofi = "CalCOFI", swfsc = "SWFSC", pic = "SIO PIC",
-                    `cce-lter` = "CCE-LTER", sccoos = "SCCOOS",
-                    ucsd_sio = "SIO", dfw = "CDFW")
-provider_order <- names(provider_label)
+# provider display labels come from metadata/provider.csv — a reviewable registry,
+# not a lookup buried in this script. A hardcoded vector silently yielded
+# NA_character_ (rendered as a literal ".na.character" heading on the live page)
+# for any provider nobody remembered to add; the registry is validated below
+# instead, so a missing org fails loudly at build time.
+provider_csv <- here::here("metadata/provider.csv")
+stopifnot("metadata/provider.csv not found" = file.exists(provider_csv))
+d_provider     <- readr::read_csv(provider_csv, show_col_types = FALSE)
+provider_label <- setNames(d_provider$provider_short, d_provider$provider)
+# display order within the ingest section follows the registry's row order
+provider_order <- d_provider$provider
 
 # category definitions, in display order ----
 categories <- list(
@@ -188,18 +195,28 @@ for (cid in names(categories)) {
 
   if (isTRUE(cdef$grouped)) {
     provs <- vapply(incat, function(r) r$provider %||% "other", "")
+
+    # FAIL LOUDLY, don't publish a broken heading. Every provider an ingest
+    # declares must be registered in metadata/provider.csv. The old hardcoded
+    # lookup degraded silently: an unregistered provider became NA_character_ and
+    # shipped as a literal ".na.character" group heading to the live page.
+    unregistered <- setdiff(unique(provs), c(names(provider_label), "other"))
+    if (length(unregistered))
+      stop("provider(s) not in metadata/provider.csv: ",
+           paste(unregistered, collapse = ", "),
+           "\n  Add a row (provider, provider_short, provider_name, url, status)",
+           " — provider = the organization CURATING the data, not the portal",
+           " hosting it and not the collection or lab within the org.",
+           call. = FALSE)
+
     ord   <- c(provider_order, setdiff(sort(unique(provs)), provider_order))
     groups <- list()
     for (p in ord) {
       pin <- incat[provs == p]
       if (length(pin) == 0) next
       pin <- pin[order(vapply(pin, function(r) tolower(r$title), ""))]
-      # `provider_label[p]` returns NA (not NULL) for an unmapped provider, which
-      # `%||%` does not catch — that shipped a literal ".na.character" group
-      # heading to the landing page. Fall back on the provider name itself.
-      lbl <- unname(provider_label[p])
       groups[[length(groups) + 1]] <- list(
-        label = if (is.na(lbl)) toupper(p) else lbl,
+        label = unname(provider_label[p]),
         items = lapply(pin, emit_item))
     }
     body <- list(groups = groups)

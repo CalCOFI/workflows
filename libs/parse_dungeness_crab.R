@@ -1,5 +1,5 @@
 # parse the CDFW Dungeness crab megalopae workbooks
-# source(here::here("libs/parse_dungeness_crab.R")) from ingest_dfw_dungeness-crab.qmd
+# source(here::here("libs/parse_dungeness_crab.R")) from ingest_cdfw_dungeness-crab.qmd
 #
 # Three hand-maintained Excel workbooks, none machine-friendly. The parsing is
 # committed here (rather than inline in the notebook) so it is re-runnable and

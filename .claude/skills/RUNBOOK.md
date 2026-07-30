@@ -11,6 +11,7 @@ self-documenting. Human judgment stays in the loop at every hand-off.
 | `metadata/field_dictionary.csv` | Canonical field names/types/units/aliases. **Prescriptive** — new datasets conform; consistency is linted against it. |
 | `metadata/measurement_type.csv` | Canonical measurement vocabulary (raw measured quantities). The dictionary links to it; never duplicate it. |
 | `metadata/dataset.csv` | **DEPRECATED** — superseded by each ingest's `calcofi.dataset_meta` YAML block, read via `ingest_yaml_to_dataset_df(read_ingest_yaml())`. The CSV drifted and orphaned obs rows. |
+| `metadata/provider.csv` | Registry of curating organizations (`provider` -> display label, name, url). Any provider an ingest declares must be registered; the landing-index build errors otherwise. |
 | `metadata/dataset_status.csv` | Pipeline-stage tracker — one row per dataset. Each skill writes its stage column. |
 | `metadata/relationships_cross.csv` | Cross-dataset FKs (spanning ingests). Intra-dataset FKs live in each ingest's `relationships.json`. |
 | `metadata/{provider}/{dataset}/questions.csv` | Follow-up questions for the data provider; rendered in the workflow, aggregated by `questions_email.qmd`. |

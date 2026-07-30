@@ -109,19 +109,6 @@ categories:
       color: '#cdebc6'
       link_calcofi_org: https://calcofi.org/data/biology/ichthyoplankton/
       provider: swfsc
-  - label: SIO PIC
-    items:
-    - url: ingest_pic_zooplankton.html
-      title: ingest_pic_zooplankton
-      dataset_name: SIO PIC Zooplankton Net Tows
-      description: Zooplankton net-tow sample registry from the SIO Pelagic Invertebrate
-        Collection, filtered to the CalCOFI region. Position, time, depth, and gear
-        metadata per tow. Biovolume measurements are not in the source file and are
-        pending from the provider (see Questions for Data Providers).
-      coverage: 1926-06 to 2024-04
-      color: '#bbe0f0'
-      link_data_source: SIO Pelagic Invertebrate Collection DB (CSV export)
-      provider: pic
   - label: CCE-LTER
     items:
     - url: ingest_cce-lter_euphausiids.html
@@ -179,6 +166,37 @@ categories:
       link_calcofi_org: https://calcofi.org/data/marine-ecosystem-data/zooplankton/
       link_data_source: https://oceaninformatics.ucsd.edu/zooscandb/
       provider: cce-lter
+  - label: CDFW
+    items:
+    - url: ingest_cdfw_dungeness-crab.html
+      title: ingest_cdfw_dungeness-crab
+      dataset_name: CDFW Dungeness Crab Megalopae
+      description: 'Dungeness crab (Metacarcinus magister) megalopae and larval decapods
+        picked from archived CalCOFI oblique-tow plankton samples, examined for the
+        California Department of Fish and Wildlife. Two efforts: a 2008-2014 time
+        series of 310 sorted samples (A. Klemmedson, 2015) yielding 24 M. magister
+        megalopae from 14 samples, and a 1949-2009 master sorting log of 2,011 archived
+        samples (E. Jones, as of 2012-02-15) recording which had been examined. Spring
+        cruises, CalBOBL oblique tows, lines < 80 / stations < 90. Counts are occurrence
+        in the examined aliquot, not standardized density. Sorting was performed at
+        the SIO Pelagic Invertebrate Collection, where the removed megalopae are archived
+        in vials.'
+      coverage: 1949 to 2014
+      color: '#f5d5b8'
+      provider: cdfw
+  - label: SIO PIC
+    items:
+    - url: ingest_pic_zooplankton.html
+      title: ingest_pic_zooplankton
+      dataset_name: SIO PIC Zooplankton Net Tows
+      description: Zooplankton net-tow sample registry from the SIO Pelagic Invertebrate
+        Collection, filtered to the CalCOFI region. Position, time, depth, and gear
+        metadata per tow. Biovolume measurements are not in the source file and are
+        pending from the provider (see Questions for Data Providers).
+      coverage: 1926-06 to 2024-04
+      color: '#bbe0f0'
+      link_data_source: SIO Pelagic Invertebrate Collection DB (CSV export)
+      provider: pic
   - label: SIO
     items:
     - url: ingest_ucsd_sio_mesopelagic-fish.html
@@ -193,24 +211,6 @@ categories:
       color: '#bbe0f0'
       link_data_source: https://library.ucsd.edu/dc/object/bb9217084g
       provider: ucsd_sio
-  - label: CDFW
-    items:
-    - url: ingest_dfw_dungeness-crab.html
-      title: ingest_dfw_dungeness-crab
-      dataset_name: CDFW Dungeness Crab Megalopae
-      description: 'Dungeness crab (Metacarcinus magister) megalopae and larval decapods
-        picked from archived CalCOFI oblique-tow plankton samples, examined for the
-        California Department of Fish and Wildlife. Two efforts: a 2008-2014 time
-        series of 310 sorted samples (A. Klemmedson, 2015) yielding 24 M. magister
-        megalopae from 14 samples, and a 1949-2009 master sorting log of 2,011 archived
-        samples (E. Jones, as of 2012-02-15) recording which had been examined. Spring
-        cruises, CalBOBL oblique tows, lines < 80 / stations < 90. Counts are occurrence
-        in the examined aliquot, not standardized density. Sorting was performed at
-        the SIO Pelagic Invertebrate Collection, where the removed megalopae are archived
-        in vials.'
-      coverage: 1949 to 2014
-      color: '#f5d5b8'
-      provider: dfw
 - id: publish
   title: Publish
   blurb: Push released tables out to external repositories (ERDDAP, OBIS).
@@ -329,7 +329,7 @@ dag_mermaid: |-
     ingest_cce_lter_picoplankton_bacteria(["ingest_cce_lter_picoplankton_bacteria"]):::c_ingest_cce_lter_picoplankton_bacteria
     ingest_cce_lter_zoodb(["ingest_cce_lter_zoodb"]):::c_ingest_cce_lter_zoodb
     ingest_cce_lter_zooscan(["ingest_cce_lter_zooscan"]):::c_ingest_cce_lter_zooscan
-    ingest_dfw_dungeness_crab(["ingest_dfw_dungeness_crab"]):::c_ingest_dfw_dungeness_crab
+    ingest_cdfw_dungeness_crab(["ingest_cdfw_dungeness_crab"]):::c_ingest_cdfw_dungeness_crab
     ingest_pic_zooplankton(["ingest_pic_zooplankton"]):::c_ingest_pic_zooplankton
     ingest_spatial(["ingest_spatial"]):::ingest
     ingest_swfsc_cufes(["ingest_swfsc_cufes"]):::c_ingest_swfsc_cufes
@@ -350,7 +350,7 @@ dag_mermaid: |-
     ingest_swfsc_ichthyo --> ingest_cce_lter_picoplankton_bacteria
     ingest_swfsc_ichthyo --> ingest_cce_lter_zoodb
     ingest_swfsc_ichthyo --> ingest_cce_lter_zooscan
-    ingest_swfsc_ichthyo --> ingest_dfw_dungeness_crab
+    ingest_swfsc_ichthyo --> ingest_cdfw_dungeness_crab
     ingest_swfsc_ichthyo --> ingest_pic_zooplankton
     ingest_swfsc_ichthyo --> ingest_swfsc_cufes
     ingest_swfsc_ichthyo --> ingest_ucsd_sio_mesopelagic_fish
@@ -368,7 +368,7 @@ dag_mermaid: |-
     ingest_cce_lter_picoplankton_bacteria --> release_database
     ingest_cce_lter_zoodb --> release_database
     ingest_cce_lter_zooscan --> release_database
-    ingest_dfw_dungeness_crab --> release_database
+    ingest_cdfw_dungeness_crab --> release_database
     ingest_pic_zooplankton --> release_database
     ingest_spatial --> release_database
     ingest_swfsc_cufes --> release_database
@@ -385,7 +385,7 @@ dag_mermaid: |-
     classDef c_ingest_cce_lter_picoplankton_bacteria fill:#bbe0f0,stroke:#00000033,color:#10161c;
     classDef c_ingest_cce_lter_zoodb fill:#d9c2f0,stroke:#00000033,color:#10161c;
     classDef c_ingest_cce_lter_zooscan fill:#c2e8f0,stroke:#00000033,color:#10161c;
-    classDef c_ingest_dfw_dungeness_crab fill:#f5d5b8,stroke:#00000033,color:#10161c;
+    classDef c_ingest_cdfw_dungeness_crab fill:#f5d5b8,stroke:#00000033,color:#10161c;
     classDef c_ingest_pic_zooplankton fill:#bbe0f0,stroke:#00000033,color:#10161c;
     classDef ingest fill:#cdd9e5,stroke:#00000033,color:#10161c;
     classDef c_ingest_swfsc_cufes fill:#f0e8bb,stroke:#00000033,color:#10161c;

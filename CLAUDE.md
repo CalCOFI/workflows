@@ -138,12 +138,12 @@ Two things do **not** follow automatically, so handle them in the notebook:
 - **New measurement types.** `metadata/measurement_type.csv` is loaded wholesale
   into the release, so appending there would add types with no observations.
   Stage them in `metadata/{provider}/{dataset}/measurement_type_new.csv` and
-  union in-memory (see `ingest_dfw_dungeness-crab.qmd`).
+  union in-memory (see `ingest_cdfw_dungeness-crab.qmd`).
 - **GCS uploads.** `sync_to_gcs()` targets world-readable buckets. If publication
   permission is itself unsettled, gate the calls behind a local flag rather than
   relying on `in_release: false`, which only governs the release.
 
-Current holdout: `dfw_dungeness-crab`.
+Current holdout: `cdfw_dungeness-crab`.
 
 ### Working DuckLake → frozen release
 
@@ -203,7 +203,8 @@ reviewable `metadata/measurement_taxon.csv` + `metadata/taxon_override.csv`.
 |---|---|
 | `field_dictionary.csv` | **Prescriptive** canonical field names/types/units/aliases. New datasets conform; consistency is linted against it. |
 | `measurement_type.csv` | Canonical measurement vocabulary (raw measured quantities). `is_canonical` flags the headline types. |
-| `dataset.csv` | Registry of datasets (citations, links, PIs, coverage). |
+| `provider.csv` | **Registry of curating organizations** — one row per `provider` slug with `provider_short` (display label), `provider_name`, `url`, `status`. Any provider an ingest declares MUST be here: `scripts/build_workflows_index.R` errors out otherwise. Replaced a hardcoded label vector in that script, which silently yielded `NA` and published a literal `.na.character` heading for unregistered orgs. |
+| `dataset.csv` | **DEPRECATED** — superseded by each ingest's `calcofi.dataset_meta` YAML block via `ingest_yaml_to_dataset_df(read_ingest_yaml())`. The CSV drifted from the notebooks and orphaned `obs` rows. |
 | `dataset_status.csv` | Pipeline-stage tracker, one row per dataset; each skill writes its stage column. |
 | `relationships_cross.csv` | Cross-dataset FKs (intra-dataset FKs live in each ingest's `relationships.json`). |
 | `metadata/{provider}/{dataset}/` | Per-dataset `tbls_redefine.csv`, `flds_redefine.csv`, `questions.csv`, corrections, etc. |
@@ -222,10 +223,22 @@ self-documenting; human review happens at every hand-off. Scaffolds come from
 
 ## Repo-specific conventions
 
-- **`provider` = the organization curating the data, not the portal that hosts
-  it.** CalCOFI program data is `calcofi` even when served from NCEI/EDI/ERDDAP;
-  the portal goes in `link_data_source`. Other providers: `swfsc`, `pic`,
-  `sccoos`, `cce-lter`.
+- **`provider` = the organization curating the data.** Not the portal that hosts
+  it, and not a collection or lab *within* the organization. CalCOFI program data
+  is `calcofi` even when served from NCEI/EDI/ERDDAP; the portal goes in
+  `link_data_source`. **Every provider must be registered in
+  `metadata/provider.csv`** — it carries the display label and full org name, and
+  `scripts/build_workflows_index.R` errors on an unregistered one rather than
+  publishing a broken heading.
+  - Two failure modes to avoid, both of which happened: an *agency abbreviation
+    that isn't the agency* (`dfw` → `cdfw`, California Department of Fish and
+    Wildlife), and *the collection standing in for the org* (`pic` → provider
+    `sio` with dataset `pic-zooplankton`, since the Pelagic Invertebrate
+    Collection is the dataset, SIO is the org). Likewise a redundant prefix:
+    `ucsd_sio` → `sio`.
+  - Where one org commissions and another performs the work, the provider is the
+    one that holds and can license the data — `cdfw_dungeness-crab` was sorted at
+    SIO but is CDFW's.
 - **Key-suffix convention (per `../docs/db.qmd`)**: `*_id` = **integer** key
   (surrogate/counter); `*_key` = **string** natural key; `*_seq` =
   auto-incrementing integer sequence. A character-valued identifier must use
@@ -253,25 +266,36 @@ self-documenting; human review happens at every hand-off. Scaffolds come from
 - **Notebook chunks**: use `cat()` not `message()`; one `datatable()` call per
   preview (not a loop helper); section headings suffixed with `----` in long
   chunks.
-- **Quarto + mermaid = headless-Chrome hangs.** Any notebook with a `{mermaid}`
-  block or `cc_erd()` renders its diagrams through headless Chrome, which hangs
-  in two different ways. Always render with
-  `Sys.setenv(QUARTO_CHROMIUM_HEADLESS_MODE = "new")` +
-  `quarto::quarto_render()` (or `targets`), never the bare `quarto` CLI. When a
-  render sits at 0% CPU with no output, **check which hang it is before killing
-  anything** — `ls _output/{nb}_files/figure-html/ _output/{nb}.html`:
-  - **Figures AND html present → the render is DONE**; Chrome merely failed to
-    exit and Quarto is blocked on teardown. `kill` *only* the Chrome PID and
-    Quarto exits cleanly, losing nothing. Killing the whole render here throws
-    away every chunk (for METS that is ~15 min of work, and it cost four
-    rebuilds before the pattern was recognized).
-  - **No figures emitted → genuinely wedged**: the graph is too big to render.
-    Cause is almost always `cc_erd(con, rels = …)` *without* `tables =`, which
-    diagrams every table in the connection — including loaded
-    `ship`/`cruise`/`grid` refs and wide tables. **`tables =` is load-bearing,
-    not cosmetic.**
-  Slow-but-progressing mermaid renders are normal and can take minutes; the
-  distinguishing signal is whether any PNG has appeared, not elapsed time.
+- **`mermaid-format: png` is DISABLED — leave it that way.** It is commented out
+  in `_quarto.yml`, so `{mermaid}` blocks and `cc_erd()` render client-side via
+  mermaid.js and **no browser is involved**. PNG bought zoomable lightbox
+  diagrams and cost far more than it was worth: it routed every diagram through
+  headless Chrome, which hangs *indefinitely and unpredictably*. `ingest_spatial`
+  wedged **3h15m** at 0.2% CPU on a single **60 KB** diagram that had rendered in
+  ~2 min on the previous run, ignored `SIGTERM`, and silently took down two
+  `tar_make()` runs — which were first misdiagnosed as external kills, because
+  the only symptom is a run that stops progressing. Do not re-enable it to get
+  the lightbox back without asking.
+
+  `Sys.setenv(QUARTO_CHROMIUM_HEADLESS_MODE = "new")` in `_targets.R` addresses a
+  *different* Chrome failure (≥132 dropped legacy `--headless`) and does **not**
+  prevent this hang. It is harmless to keep.
+
+  **If you meet a hung render anyway** (an explore notebook that sets
+  `mermaid-format: png` itself, say):
+  - `pgrep -f "headless=new"` gives Quarto's Chrome, parented to its `deno`.
+    **Check parentage before killing** — the user's real Chrome is a separate
+    tree under PID 1. Then `kill -9`; SIGTERM is ignored. Quarto exits.
+  - R chunks all run *before* the mermaid step, so parquet/GCS outputs survive;
+    only the HTML is lost. Do not assume a hang means the data work was lost.
+  - Every kill leaves a **stale targets lock and an orphaned `rmd.R`**. Clear
+    both (`targets::tar_unblock_process()`, `pgrep -f rmd.R`) before re-running,
+    or the next run contends with the orphan over the same wrangling DuckDB.
+  - Presence of figures is *not* a reliable "render finished" signal, and absence
+    is *not* reliably "graph too big": this hang produced no figures on a tiny
+    graph. Keep `tables =` on `cc_erd()` regardless — diagramming every table in
+    the connection (loaded `ship`/`cruise`/`grid` refs, wide tables) is slow and
+    unreadable even without Chrome in the path.
 
 ## Layout
 

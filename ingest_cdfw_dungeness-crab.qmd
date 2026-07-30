@@ -2,12 +2,12 @@
 title: "Ingest CDFW Dungeness Crab Megalopae"
 calcofi:
   # underscores: target_name must be a valid R symbol, unlike the filename
-  target_name: ingest_dfw_dungeness_crab
+  target_name: ingest_cdfw_dungeness_crab
   workflow_type: ingest
   dependency:
     - ingest_swfsc_ichthyo
-  output: data/parquet/dfw_dungeness-crab/manifest.json
-  provider: dfw
+  output: data/parquet/cdfw_dungeness-crab/manifest.json
+  provider: cdfw
   dataset: dungeness-crab
   # HELD OUT OF THE RELEASE. This ingest runs in the pipeline and writes its full
   # parquet outputs — including its slice of the consolidated core — but every
@@ -17,8 +17,8 @@ calcofi:
   # `true` — or delete the key, since the flag is opt-out — once Q08 is answered,
   # and move measurement_type_new.csv into the shared registry in the same change.
   in_release: false
-  workflow_url: https://calcofi.io/workflows/ingest_dfw_dungeness-crab.html
-  questions_file: metadata/dfw/dungeness-crab/questions.csv
+  workflow_url: https://calcofi.io/workflows/ingest_cdfw_dungeness-crab.html
+  questions_file: metadata/cdfw/dungeness-crab/questions.csv
   dataset_meta:
     dataset_name: CDFW Dungeness Crab Megalopae
     description: >
@@ -64,7 +64,7 @@ editor_options:
 ## Overview
 
 **Source**: three hand-maintained Excel workbooks plus correspondence, under
-`data-public/dfw/dungeness-crab/`. Provider `dfw` (California Department of Fish
+`data-public/cdfw/dungeness-crab/`. Provider `cdfw` (California Department of Fish
 and Wildlife), which commissioned the work; the sorting itself was done at the
 SIO Pelagic Invertebrate Collection.
 
@@ -116,14 +116,14 @@ options(DT.options = list(scrollX = TRUE))
 source(here("libs/ingest.R"))
 source(here("libs/parse_dungeness_crab.R"))
 
-cc           <- read_calcofi_meta(here("ingest_dfw_dungeness-crab.qmd"))
+cc           <- read_calcofi_meta(here("ingest_cdfw_dungeness-crab.qmd"))
 provider     <- cc$provider
 dataset      <- cc$dataset
 tables_owned <- cc$tables_owned
 dir_label    <- glue("{provider}_{dataset}")
 dir_parquet  <- here(glue("data/parquet/{dir_label}"))
 db_path      <- here(glue("data/wrangling/{dir_label}.duckdb"))
-dir_src      <- path_expand(glue("{dir_data}/dfw/dungeness-crab"))
+dir_src      <- path_expand(glue("{dir_data}/cdfw/dungeness-crab"))
 
 if (overwrite) {
   if (file_exists(db_path))                 file_delete(db_path)
@@ -524,7 +524,7 @@ model exists to remove: in `obs` the quantity is `abundance` and the organism is
 `(measurement_type, taxon_key, life_stage)` — see "Emit Core Tables" below.
 
 That leaves two genuinely new canonical quantities, staged in
-`metadata/dfw/dungeness-crab/measurement_type_new.csv` rather than appended to
+`metadata/cdfw/dungeness-crab/measurement_type_new.csv` rather than appended to
 the shared `metadata/measurement_type.csv`: that registry is loaded wholesale
 into the release, so adding them now would publish types with no observations
 into a release that excludes this dataset. **Move them into the shared registry
