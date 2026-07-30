@@ -415,14 +415,48 @@ rather than NULL, and `taxon_key` resolves through `dataset_taxon` from
 ```{r}
 #| label: emit_core
 
-mt_taxon <- read_csv(here("metadata/measurement_taxon.csv"), show_col_types = FALSE)
-tx_over  <- read_csv(here("metadata/taxon_override.csv"),    show_col_types = FALSE)
+ds_key <- "ucsd_sio_mesopelagic-fish"
+# filter the crosswalk to THIS dataset: emit_core_tables() did that internally, so
+# an unfiltered read leaks other datasets' taxa into this shard
+mt_taxon <- read_csv(here("metadata/measurement_taxon.csv"),
+                     col_types = cols(worms_id = "i", itis_id = "i",
+                                      bin_value = "d", .default = "c")) |>
+  filter(dataset_key == ds_key)
+tx_over  <- read_csv(here("metadata/taxon_override.csv"), show_col_types = FALSE)
 
-core <- emit_core_tables(
-  con, "ucsd_sio_mesopelagic-fish", measurement_taxon = mt_taxon, overrides = tx_over)
+# This projection lives here, in the notebook that owns the dataset, not in a
+# switch(dataset_key, ...) arm inside calcofi4db. The reusable SHAPES stay in the
+# package (sample_arm_self / compat_measurement_sql), so this is a declaration.
+n_taxon    <- build_taxon_reference(con, mt_taxon, tx_over)
+n_ds_taxon <- build_dataset_taxon(con,   mt_taxon, tx_over)
+
+append_sample(con, sample_arm_self(
+  ds_key, "mesopelagic_fish_tow", "tow_id", "tow", site_expr = "site_key",
+  depth_min = "0::DOUBLE", depth_max = "depth_m"))
+
+append_obs(con, glue("
+  SELECT 'bio', '{ds_key}', {ns_key(ds_key, 'tow', 'tw.tow_id')},
+         tw.grid_key, tw.cruise_key, tw.latitude, tw.longitude,
+         CAST(tw.datetime_start_utc AS TIMESTAMP), 0::DOUBLE, tw.depth_m,
+         dt.taxon_key, NULL::VARCHAR, m.measurement_type, m.measurement_value,
+         NULL::VARCHAR, NULL::DOUBLE
+  FROM mesopelagic_fish_measurement m JOIN mesopelagic_fish_tow tw USING (tow_id)
+  LEFT JOIN dataset_taxon dt ON dt.dataset_key = '{ds_key}'
+                            AND dt.ds_taxa_code = m.scientific_name
+  WHERE tw.grid_key IS NOT NULL"))
+
+# NOTE: no sample_measurement arm. emit_core_tables() never emitted one for this
+# dataset (.sample_measurement_arm_sql covers only calcofi_bottle and
+# swfsc_ichthyo), and its parquet has never contained the table. Adding one here
+# would be inventing data, not migrating it.
+
+core <- list(
+  sample = dbGetQuery(con, "SELECT COUNT(*) FROM sample")[[1]],
+  obs    = dbGetQuery(con, "SELECT COUNT(*) FROM obs")[[1]],
+  taxon  = n_taxon, dataset_taxon = n_ds_taxon)
 cat(glue(
   "core projection — sample={core$sample %||% 0} obs={core$obs %||% 0} ",
-  "sample_measurement={core$sample_measurement %||% 0}\n"))
+  "taxon={core$taxon %||% 0} dataset_taxon={core$dataset_taxon %||% 0}\n"))
 
 n_obs <- dbGetQuery(con, "SELECT COUNT(*) FROM obs")[[1]]
 n_exp <- dbGetQuery(con,
@@ -442,8 +476,13 @@ stopifnot(
 # serve the retired per-dataset table names as VIEWs over the core, so
 # in-notebook consumers and ad-hoc queries keep working against the old names
 # (exact for every column the core models; see ?create_compat_views)
-compat <- create_compat_views(con, "ucsd_sio_mesopelagic-fish")
-cat(glue("compat views over core: {paste(compat, collapse = ', ')}"), "\n")
+invisible(dbExecute(con, "DROP TABLE IF EXISTS mesopelagic_fish_measurement_src"))
+invisible(dbExecute(con, "ALTER TABLE mesopelagic_fish_measurement RENAME TO mesopelagic_fish_measurement_src"))
+invisible(dbExecute(con, glue(
+  "CREATE OR REPLACE VIEW mesopelagic_fish_measurement AS
+   {compat_measurement_sql(ds_key, 'tow', 'tow_id', 'measurement_id')}")))
+cat(glue("compat view mesopelagic_fish_measurement over obs: ",
+         "{dbGetQuery(con, 'SELECT COUNT(*) FROM mesopelagic_fish_measurement')[[1]]} rows"), "\n")
 
 ```
 
