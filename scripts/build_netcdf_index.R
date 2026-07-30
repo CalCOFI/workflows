@@ -57,8 +57,15 @@ for (d in dsets) {
     '<tr><td><a href="{SITE}/{d}/{r$version}/">{r$version}</a></td>',
     '<td>{substr(r$generated_utc, 1, 10)}</td>',
     '<td class="num">{fmt_mb(r$bytes)}</td>',
-    '<td>{if (is.null(r$identical_to) || is.na(r$identical_to)) "new bytes" else
-          paste0("identical to ", r$identical_to)}</td></tr>'), character(1)),
+    # `identical_to` arrives in three shapes across the accumulated history: a
+    # version string, a JSON null (-> NULL), and an empty JSON object (-> list(),
+    # written by older publishes). The length check is load-bearing: is.null() is
+    # FALSE for list() and is.na(list()) returns logical(0), so `if` errored with
+    # "argument is of length zero" and took the whole index build down — leaving
+    # freshly published files invisible on the browse pages.
+    '<td>{if (is.null(r$identical_to) || length(r$identical_to) == 0 ||
+              is.na(r$identical_to[[1]])) "new bytes" else
+          paste0("identical to ", r$identical_to[[1]])}</td></tr>'), character(1)),
     collapse = "\n")
   dpage <- page(glue("{d} — CF NetCDF releases"),
     glue("{n_rel} release(s) · latest {cur$version}"),
