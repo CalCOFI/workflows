@@ -27,7 +27,8 @@ oneline <- function(x) trimws(gsub("[[:space:]]+", " ", paste(x, collapse = " ")
 
 # provider display labels + ordering within the ingest section ----
 provider_label <- c(calcofi = "CalCOFI", swfsc = "SWFSC", pic = "SIO PIC",
-                    `cce-lter` = "CCE-LTER", sccoos = "SCCOOS")
+                    `cce-lter` = "CCE-LTER", sccoos = "SCCOOS",
+                    ucsd_sio = "SIO", dfw = "CDFW")
 provider_order <- names(provider_label)
 
 # category definitions, in display order ----
@@ -193,8 +194,12 @@ for (cid in names(categories)) {
       pin <- incat[provs == p]
       if (length(pin) == 0) next
       pin <- pin[order(vapply(pin, function(r) tolower(r$title), ""))]
+      # `provider_label[p]` returns NA (not NULL) for an unmapped provider, which
+      # `%||%` does not catch — that shipped a literal ".na.character" group
+      # heading to the landing page. Fall back on the provider name itself.
+      lbl <- unname(provider_label[p])
       groups[[length(groups) + 1]] <- list(
-        label = unname(provider_label[p]) %||% toupper(p),
+        label = if (is.na(lbl)) toupper(p) else lbl,
         items = lapply(pin, emit_item))
     }
     body <- list(groups = groups)

@@ -118,6 +118,33 @@ add the notebook with a `calcofi:` block (`target_name`, `dependency`, `output`,
 hand-edit the targets list. Use the `exclude =` argument in `_targets.R` to drop
 a target temporarily.
 
+### `in_release: false` — stage an ingest without releasing it
+
+An ingest that is not ready for consumers can set `in_release: false` in its
+`calcofi:` block. It still runs in the pipeline and writes its **full**
+`data/parquet/{provider}_{dataset}/` outputs (tables, `manifest.json`,
+`relationships.json`, `metadata.json`), but every release-side discovery step in
+`release_database.qmd` skips it: the table registry, the core shard union, the
+`dataset` reference table, the ERD, and the merged `relationships.json` /
+`metadata.json`. Use it while blocker questions are open or before the dataset
+has an `emit_core_tables()` arm.
+
+The flag is **opt-out** — no key means "in the release", so existing notebooks
+are unaffected. `calcofi4db::release_excluded_datasets()` is the single source of
+truth; `build_release_table_registry()`, `core_shard_paths()`/`assemble_core()`
+and `read_ingest_yaml(in_release_only = TRUE)` all consult it.
+
+Two things do **not** follow automatically, so handle them in the notebook:
+- **New measurement types.** `metadata/measurement_type.csv` is loaded wholesale
+  into the release, so appending there would add types with no observations.
+  Stage them in `metadata/{provider}/{dataset}/measurement_type_new.csv` and
+  union in-memory (see `ingest_dfw_dungeness-crab.qmd`).
+- **GCS uploads.** `sync_to_gcs()` targets world-readable buckets. If publication
+  permission is itself unsettled, gate the calls behind a local flag rather than
+  relying on `in_release: false`, which only governs the release.
+
+Current holdout: `dfw_dungeness-crab`.
+
 ### Working DuckLake → frozen release
 
 - Each ingest notebook ends by calling `calcofi4db::finalize_ingest()`, which

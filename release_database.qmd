@@ -72,9 +72,10 @@ node_grp <- ifelse(nodes == "release_database", "rel",
             ifelse(nodes == "test_release",     "test",
             ifelse(nodes == "corrections_csv",  "input", "ingest")))
 
-# emit Mermaid source; rendered to a zoomable PNG via the project-level
-# `mermaid-format: png` + `lightbox: true` (see _quarto.yml). release_database
-# (this notebook) is highlighted.
+# emit Mermaid source; rendered client-side by mermaid.js (the project-level
+# `mermaid-format: png` is disabled — it routed this through headless Chrome,
+# which hung intermittently; see _quarto.yml). release_database (this notebook)
+# is highlighted.
 mmd <- c(
   "flowchart LR",
   vapply(nodes, function(n) sprintf('  %s["%s"]', n, n), ""),
@@ -141,7 +142,21 @@ For tables appearing in multiple ingests, use the canonical (first) source.
 con_wdl <- get_duckdb_con(":memory:")
 load_duckdb_extension(con_wdl, "spatial")
 
-# auto-discover table registry from all ingest manifests
+# auto-discover table registry from all ingest manifests. An ingest that declares
+# `in_release: false` in its calcofi: YAML block is skipped everywhere below: it
+# still runs in the pipeline and writes its own data/parquet/{dataset}/ outputs,
+# but nothing of it reaches the frozen release. That is how a dataset under
+# review (currently dfw_dungeness-crab) is staged without leaking into a release.
+ds_excluded <- release_excluded_datasets(here())
+if (length(ds_excluded))
+  message(glue("Held out of this release (in_release: false): ",
+               "{paste(ds_excluded, collapse = ', ')}"))
+
+# keep only the data/parquet/* dirs that belong in the release — used by the
+# relationships.json / metadata.json / manifest.json globs further down
+in_release_dirs <- function(paths)
+  paths[!basename(dirname(paths)) %in% ds_excluded]
+
 registry <- build_release_table_registry(here())
 
 # The consolidated core is now emitted per-dataset: every ingest writes its own
@@ -163,7 +178,7 @@ message(glue(
 
 # --- authoritative dataset metadata + ERD coloring from ingest YAML ----
 # table -> provider_dataset(s) owned, from each ingest's calcofi.tables_owned
-ingest_yaml   <- read_ingest_yaml(here())
+ingest_yaml   <- read_ingest_yaml(here(), in_release_only = TRUE)
 table_dataset <- list()
 add_owner <- function(tbl, pd) {
   if (is.null(tbl)) return(invisible())
@@ -284,7 +299,7 @@ them.
 # construction. The CSV had drifted — it was missing calcofi_mets,
 # cce-lter_picoplankton-bacteria and ucsd_sio_mesopelagic-fish, which orphaned
 # 533,571 obs rows against the obs.dataset_key foreign key.
-d_dataset <- ingest_yaml_to_dataset_df(read_ingest_yaml(here())) |>
+d_dataset <- ingest_yaml_to_dataset_df(ingest_yaml) |>
   mutate(dataset_key = paste0(provider, "_", dataset), .before = 1)
 dbExecute(con_wdl, "DROP VIEW IF EXISTS dataset")
 dbWriteTable(con_wdl, "dataset", as.data.frame(d_dataset), overwrite = TRUE)
@@ -454,9 +469,9 @@ message("Core parity checks passed.")
 #| label: scan_mismatches
 
 # scan all ingest manifests for unresolved mismatches
-all_manifests <- list.files(
+all_manifests <- in_release_dirs(list.files(
   "data/parquet", "manifest.json",
-  recursive = TRUE, full.names = TRUE)
+  recursive = TRUE, full.names = TRUE))
 
 all_mismatches <- purrr::compact(lapply(all_manifests, function(mf) {
   m <- jsonlite::read_json(mf)
@@ -725,7 +740,8 @@ schema_tbls <- setdiff(
 # merge per-dataset relationships.json files (auto-discovered — every ingest
 # writes data/parquet/{provider}_{dataset}/relationships.json, so new datasets
 # are picked up without editing this list)
-rels_paths <- Sys.glob(here("data/parquet/*/relationships.json"))
+rels_paths <- in_release_dirs(
+  Sys.glob(here("data/parquet/*/relationships.json")))
 
 dir_frozen <- here(glue("data/releases/{release_version}"))
 dir.create(dir_frozen, recursive = TRUE, showWarnings = FALSE)
@@ -1094,7 +1110,7 @@ if (file.exists(rels_json))
 # build and upload metadata.json (table/column descriptions + units).
 # auto-discover every ingest's metadata.json (same as rels_paths) so newly added
 # datasets' tables/columns are merged in — not just a hardcoded set.
-meta_paths <- Sys.glob(here("data/parquet/*/metadata.json"))
+meta_paths <- in_release_dirs(Sys.glob(here("data/parquet/*/metadata.json")))
 
 meta_json_path <- file.path(dir_frozen, "metadata.json")
 if (length(meta_paths) > 0) {

@@ -1,0 +1,734 @@
+---
+title: "Ingest CDFW Dungeness Crab Megalopae"
+calcofi:
+  # underscores: target_name must be a valid R symbol, unlike the filename
+  target_name: ingest_dfw_dungeness_crab
+  workflow_type: ingest
+  dependency:
+    - ingest_swfsc_ichthyo
+  output: data/parquet/dfw_dungeness-crab/manifest.json
+  provider: dfw
+  dataset: dungeness-crab
+  # HELD OUT OF THE RELEASE. This ingest runs in the pipeline and writes its full
+  # parquet outputs, but every release-side discovery step in release_database.qmd
+  # skips it (calcofi4db::release_excluded_datasets()). Flip to `true` — or delete
+  # the key, since the flag is opt-out — once the blocker questions in
+  # metadata/dfw/dungeness-crab/questions.csv are answered and the dataset is
+  # projected into the consolidated core (see "Not yet done" below).
+  in_release: false
+  workflow_url: https://calcofi.io/workflows/ingest_dfw_dungeness-crab.html
+  questions_file: metadata/dfw/dungeness-crab/questions.csv
+  dataset_meta:
+    dataset_name: CDFW Dungeness Crab Megalopae
+    description: >
+      Dungeness crab (Metacarcinus magister) megalopae and larval decapods
+      picked from archived CalCOFI oblique-tow plankton samples, examined for the
+      California Department of Fish and Wildlife. Two efforts: a 2008-2014 time
+      series of 310 sorted samples (A. Klemmedson) yielding 24 M. magister
+      megalopae, and a 1949-2009 master sorting log of 2,011 archived samples
+      (E. Jones, as of 2012-02-15) recording which had been examined. Sorting was
+      performed at the SIO Pelagic Invertebrate Collection.
+    citation_main: ""
+    link_calcofi_org: ""
+    link_data_source: ""
+    link_others: []
+    coverage_temporal: 1949 to 2014
+    coverage_spatial: "California Current, San Francisco north to Washington"
+    license: ""
+    pi_names: Laura Rogers-Bennett
+  tables_owned:
+    - {table: dungeness_sample, note: "one row per examined plankton sample (2008-2014 series)"}
+    - {table: dungeness_measurement, note: "larval decapod counts per examined sample, long form"}
+    - {table: dungeness_carapace, note: "per-individual M. magister carapace lengths"}
+    - {table: dungeness_sorting_log, note: "1949-2009 sorted/unsorted sample inventory"}
+    - {table: dungeness_specimen, note: "5 specimens sent for independent species confirmation"}
+  erd:
+    color: "#f5d5b8"
+editor_options:
+  chunk_output_type: console
+---
+
+## Overview
+
+**Source**: three hand-maintained Excel workbooks plus correspondence, under
+`data-public/dfw/dungeness-crab/`. Provider `dfw` (California Department of Fish
+and Wildlife), which commissioned the work; the sorting itself was done at the
+SIO Pelagic Invertebrate Collection.
+
+| Workbook | Becomes | Rows |
+|---|---|---|
+| `Dungeness Time Series - Angela Klemmedson.xlsx` (`Compiled Cruises`) | `dungeness_sample` + `dungeness_measurement` + `dungeness_carapace` | 310 samples |
+| `Cancer Magister sorting update as of 02-15-12_EJones.xlsx` | `dungeness_sorting_log` | 2,011 samples |
+| `ScrippsArchivedMegalopae_sent_5_10_2012.xlsx` | `dungeness_specimen` | 5 specimens |
+
+The two PDFs and the `.docx` are the provenance for what the numbers mean and are
+archived alongside the data, not parsed.
+
+**Why this is interesting**: 24 *M. magister* megalopae in 310 samples over seven
+years — a near-absence record. The 2012 correspondence establishes that historic
+CalCOFI samples labelled *Cancer magister* are probably *C. productus*, so the
+`dungeness_specimen` verification table is load-bearing rather than trivia.
+
+**Held out of the release** — see `in_release: false` in the frontmatter and
+"Not yet done" at the end. This notebook writes its complete parquet outputs;
+`release_database.qmd` ignores them.
+
+```{mermaid}
+graph LR
+  X1[Compiled Cruises] --> S[dungeness_sample<br/>station + effort]
+  X1 --> M[dungeness_measurement<br/>counts, long]
+  X1 --> C[dungeness_carapace<br/>per individual]
+  X2[sorting log] --> L[dungeness_sorting_log<br/>sorted / unsorted]
+  X3[archived megalopae] --> V[dungeness_specimen<br/>ID verification]
+  M -.dungeness_sample_id.-> S
+  C -.dungeness_sample_id.-> S
+  M -.measurement_type.-> T[measurement_type]
+  S -.site_sample_key.-> I[(swfsc_ichthyo<br/>sample / ship / grid)]
+```
+
+## Setup
+
+```{r}
+#| label: setup
+#| message: false
+
+devtools::load_all(here::here("../calcofi4db"))
+devtools::load_all(here::here("../calcofi4r"))
+librarian::shelf(
+  CalCOFI/calcofi4db, CalCOFI/calcofi4r,
+  DBI, dplyr, DT, fs, glue, here, janitor, jsonlite, knitr,
+  lubridate, purrr, readr, sf, stringr, tibble, tidyr, quiet = T)
+options(readr.show_col_types = F)
+options(DT.options = list(scrollX = TRUE))
+source(here("libs/ingest.R"))
+source(here("libs/parse_dungeness_crab.R"))
+
+cc           <- read_calcofi_meta(here("ingest_dfw_dungeness-crab.qmd"))
+provider     <- cc$provider
+dataset      <- cc$dataset
+tables_owned <- cc$tables_owned
+dir_label    <- glue("{provider}_{dataset}")
+dir_parquet  <- here(glue("data/parquet/{dir_label}"))
+db_path      <- here(glue("data/wrangling/{dir_label}.duckdb"))
+dir_src      <- path_expand(glue("{dir_data}/dfw/dungeness-crab"))
+
+if (overwrite) {
+  if (file_exists(db_path))                 file_delete(db_path)
+  if (file_exists(paste0(db_path, ".wal"))) file_delete(paste0(db_path, ".wal"))
+}
+dir_create(dirname(db_path))
+con <- get_duckdb_con(db_path)
+load_duckdb_extension(con, "spatial")
+
+# the tables this ingest owns
+dcr_tbls <- c("dungeness_sample", "dungeness_measurement", "dungeness_carapace",
+              "dungeness_sorting_log", "dungeness_specimen")
+
+# Other ingests archive their sources to gs://calcofi-files-public and their
+# outputs to gs://calcofi-db unconditionally. This one does NOT by default:
+# whether these files may be published is itself an open blocker (Q08 — no
+# licence, no citation, and CDFW commissioned the work), and both buckets are
+# world-readable. Uploading is a one-way door, so it is opt-in until Q08 is
+# answered. Flip alongside `in_release: true`.
+publish_to_gcs <- FALSE
+```
+
+## Read Source Workbooks
+
+The workbook parsing lives in `libs/parse_dungeness_crab.R` so it is reviewable
+and re-runnable. Three quirks it absorbs, each of which silently corrupts the
+data if missed:
+
+- the time series workbook is saved with Excel's **1904 date epoch**
+  (`date1904="1"`), so every date read as text is four years early — the cruise
+  labels are what caught it (`1404SH` reading as 2010);
+- the sorting log lost the leading month from most `SampleDate` cells
+  (`/5/1988`), recoverable from its separate `Month` column;
+- the sorting log pads numbers with U+00A0, which defeats `as.numeric()`.
+
+```{r}
+#| label: read-source
+
+stopifnot("source dir not found" = dir_exists(dir_src))
+# archive the sources (including the PDF/DOCX provenance) — see publish_to_gcs
+if (publish_to_gcs) {
+  sync_to_gcs(local_dir = dir_src, gcs_prefix = glue("archive/{provider}/{dataset}"),
+              bucket = "calcofi-files-public", exclude = c(".DS_Store", "*.tmp"))
+} else {
+  cat("publish_to_gcs is FALSE — sources NOT archived to gs://calcofi-files-public",
+      "(pending Q08: licence + permission to publish)\n")
+}
+
+f_ts   <- file.path(dir_src, "Dungeness Time Series - Angela Klemmedson.xlsx")
+f_log  <- file.path(dir_src, "Cancer Magister sorting update as of 02-15-12_EJones.xlsx")
+f_spec <- file.path(dir_src, "ScrippsArchivedMegalopae_sent_5_10_2012.xlsx")
+stopifnot(file_exists(f_ts), file_exists(f_log), file_exists(f_spec))
+
+d_ts   <- read_dungeness_timeseries(f_ts)
+d_log  <- read_dungeness_sorting_log(f_log)
+d_spec <- read_dungeness_specimens(f_spec)
+
+cat(glue("time series {nrow(d_ts)} samples ({format(min(d_ts$date))} to ",
+         "{format(max(d_ts$date))}); sorting log {nrow(d_log)} samples; ",
+         "specimens {nrow(d_spec)}"), "\n")
+
+# the workbook's own "Plots" sheet summarises 310 samples / 24 M. magister; hold
+# the parse to that, so a re-export that changes the sheet fails loudly here
+stopifnot(
+  "expected 310 samples in 'Compiled Cruises'" = nrow(d_ts) == 310,
+  "expected 24 M. magister megalopae in total" =
+    sum(d_ts$n_mega_magister, na.rm = TRUE) == 24,
+  "1904 epoch not applied — dates predate the 2008-2014 series" =
+    min(d_ts$date) >= as.Date("2008-01-01"))
+```
+
+## Resolve Cruise + Position from the CalCOFI Reference
+
+The time series records a cruise label and a CalCOFI line/station/order-of-
+occupation, but **no coordinates**. Both are recoverable from the CalCOFI
+reference tables:
+
+- `cruise_key`: the label is `YYMM` + the two-letter CalCOFI ship abbreviation,
+  which is `ship.ship_key` — so `1404SH` → `2014-04-3322` (Bell M. Shimada).
+- position: join the resulting `(cruise_key, site_key, order_occ)` to the station
+  occupations in the `swfsc_ichthyo` core `sample` table. That triple identifies
+  a physical station occupation, so the match also links each sorted sample back
+  to the tows and nets it came from via `site_sample_key`.
+
+```{r}
+#| label: resolve-keys
+
+load_prior_tables(
+  con, parquet_dir = here("data/parquet/swfsc_ichthyo"),
+  tables = c("ship", "cruise", "grid", "sample"),
+  geom_tables = c("grid", "sample"), as_view = TRUE)
+
+d_ship  <- dbGetQuery(con, "SELECT ship_key, ship_nodc, ship_name FROM ship")
+valid_ck <- dbGetQuery(con, "SELECT DISTINCT cruise_key FROM cruise")$cruise_key
+
+d_cruise_lbl <- parse_cruise_label(unique(d_ts$cruise_orig)) |>
+  left_join(d_ship, by = "ship_key") |>
+  mutate(cruise_key = if_else(
+    is.na(year) | is.na(ship_nodc), NA_character_,
+    sprintf("%04d-%02d-%s", year, month, ship_nodc))) |>
+  mutate(cruise_key = if_else(cruise_key %in% valid_ck, cruise_key, NA_character_))
+
+stopifnot("every cruise label must resolve to a known cruise_key" =
+            !any(is.na(d_cruise_lbl$cruise_key)))
+d_cruise_lbl |>
+  select(cruise_orig, ship_key, ship_name, cruise_key) |>
+  datatable(caption = "Cruise label → cruise_key", options = list(dom = "t"),
+            rownames = FALSE)
+```
+
+```{r}
+#| label: match-sites
+
+# CalCOFI station occupations: one row per (cruise, station, order of occupation)
+d_site <- dbGetQuery(con, "
+  SELECT cruise_key, site_key, order_occ,
+         sample_key AS site_sample_key, latitude, longitude, datetime
+  FROM sample WHERE sample_type = 'site'")
+
+d_ts_keyed <- d_ts |>
+  left_join(select(d_cruise_lbl, cruise_orig, ship_key, cruise_key),
+            by = "cruise_orig") |>
+  left_join(d_site, by = c("cruise_key", "site_key", "order_occ")) |>
+  mutate(position_source = if_else(
+    is.na(site_sample_key), "unmatched", "swfsc_ichthyo:site"))
+
+n_matched <- sum(d_ts_keyed$position_source != "unmatched")
+cat(glue("station match: {n_matched}/{nrow(d_ts_keyed)} samples ",
+         "({round(100 * n_matched / nrow(d_ts_keyed), 1)}%)"), "\n")
+
+# an independent check on the match AND on the unconfirmed time zone: the source
+# date should agree with the matched occupation's own timestamp
+d_chk <- d_ts_keyed |>
+  filter(position_source != "unmatched") |>
+  mutate(d_days = as.integer(date - as.Date(datetime)))
+cat(glue("date agreement with matched occupation: ",
+         "{sum(d_chk$d_days == 0, na.rm = TRUE)}/{nrow(d_chk)} same day, ",
+         "{sum(abs(d_chk$d_days) <= 1, na.rm = TRUE)} within 1 day"), "\n")
+
+d_ts_keyed |>
+  filter(position_source == "unmatched") |>
+  select(cruise_orig, cruise_key, line, station, order_occ, date) |>
+  datatable(caption = "Samples with no matching CalCOFI station occupation (Q09)",
+            options = list(dom = "t"), rownames = FALSE)
+```
+
+## Build Sample + Measurement Tables
+
+Counts go long, one measurement per row, with the sorter's free-text
+identification note kept beside the count it describes. Per-individual carapace
+lengths are their own table: the source cell holds one length per megalopa found
+(`"6.0mm, 6.5mm, 7.0mm, 7.0mm"`), which is sub-occurrence detail, not a scalar.
+
+Counts are recorded **as found in the examined aliquot** and are deliberately
+*not* standardized here — the aliquot fraction is on `dungeness_sample`, but no
+filtered-water volume exists in the source to make a density (Q01).
+
+```{r}
+#| label: build-sample
+
+d_sample <- d_ts_keyed |>
+  mutate(dungeness_sample_id = row_number(), .before = 1) |>
+  transmute(
+    dungeness_sample_id, cruise_orig, cruise_key, ship_key,
+    line, station, site_key, order_occ = as.integer(order_occ),
+    date,
+    datetime_start_utc = as_datetime(date) + dseconds(coalesce(time_sec, 0L)),
+    latitude, longitude, position_source, site_sample_key,
+    aliquot, volume_ml,
+    sorted_by = "Angela Klemmedson",
+    comments)
+dbWriteTable(con, "dungeness_sample", as.data.frame(d_sample), overwrite = TRUE)
+cat(glue("dungeness_sample: {nrow(d_sample)} rows"), "\n")
+```
+
+```{r}
+#| label: build-measurement
+
+# (count column, free-text description column) -> canonical measurement_type
+meas_map <- tribble(
+  ~measurement_type,    ~n_col,             ~desc_col,
+  "megalopae_magister", "n_mega_magister",  NA_character_,
+  "megalopae_other",    "n_mega_other",     "mega_other_desc",
+  "zoea_cancer",        "n_zoea_cancer",    "zoea_cancer_desc",
+  "zoea_other",         "n_zoea_other",     "zoea_other_desc")
+
+d_meas <- pmap_dfr(meas_map, function(measurement_type, n_col, desc_col) {
+  tibble(
+    dungeness_sample_id = d_sample$dungeness_sample_id,
+    measurement_type    = measurement_type,
+    measurement_value   = d_ts_keyed[[n_col]],
+    taxa_description    = if (is.na(desc_col)) NA_character_
+                          else d_ts_keyed[[desc_col]])
+}) |>
+  # a blank source cell is "not recorded", which is not the same as a counted
+  # zero — keep the row and flag it rather than dropping or zero-filling it
+  mutate(measurement_qual = if_else(
+    is.na(measurement_value), "blank in source", NA_character_)) |>
+  arrange(dungeness_sample_id, measurement_type) |>
+  mutate(dungeness_measurement_id = row_number(), .before = 1)
+dbWriteTable(con, "dungeness_measurement", as.data.frame(d_meas), overwrite = TRUE)
+
+# nothing may be lost or invented in the pivot
+stopifnot(
+  "measurement rows must be samples x types" =
+    nrow(d_meas) == nrow(d_sample) * nrow(meas_map),
+  "pivoted counts must sum to the source totals" =
+    sum(d_meas$measurement_value, na.rm = TRUE) ==
+    sum(d_ts_keyed$n_mega_magister, d_ts_keyed$n_mega_other,
+        d_ts_keyed$n_zoea_cancer,   d_ts_keyed$n_zoea_other, na.rm = TRUE))
+cat(glue("dungeness_measurement: {nrow(d_meas)} rows ",
+         "({sum(!is.na(d_meas$measurement_qual))} blank in source)"), "\n")
+```
+
+```{r}
+#| label: build-carapace
+
+d_carapace <- parse_carapace_lengths(d_ts_keyed$carapace_len_txt) |>
+  mutate(dungeness_sample_id = d_sample$dungeness_sample_id[row_index]) |>
+  select(dungeness_sample_id, individual_num, carapace_length_mm) |>
+  arrange(dungeness_sample_id, individual_num) |>
+  mutate(dungeness_carapace_id = row_number(), .before = 1)
+dbWriteTable(con, "dungeness_carapace", as.data.frame(d_carapace), overwrite = TRUE)
+
+# one measured individual per megalopa counted — this is the check that the
+# carapace cell was split correctly rather than plausibly
+n_mag <- sum(d_ts_keyed$n_mega_magister, na.rm = TRUE)
+stopifnot("one carapace length per M. magister megalopa counted" =
+            nrow(d_carapace) == n_mag)
+cat(glue("dungeness_carapace: {nrow(d_carapace)} individuals, ",
+         "{min(d_carapace$carapace_length_mm)}-",
+         "{max(d_carapace$carapace_length_mm)} mm"), "\n")
+```
+
+## Build Sorting Log + Specimen Verification
+
+The sorting log is **effort, not counts**: which archived samples had been looked
+at as of 2012-02-15 and which had not. It carries its own coordinates, so no
+station matching is needed — but it reaches far north and offshore of the CalCOFI
+grid, so most rows get no `grid_key`.
+
+It records no ship, so `cruise_key` is assigned only where the parsed year-month
+matches exactly one cruise in the reference.
+
+```{r}
+#| label: build-sorting-log
+
+d_ym_lookup <- dbGetQuery(con, "
+  SELECT strftime(date_ym, '%Y-%m') AS cruise_ym, cruise_key
+  FROM cruise") |>
+  count(cruise_ym, cruise_key) |>
+  add_count(cruise_ym, name = "n_cruises") |>
+  filter(n_cruises == 1) |>
+  select(cruise_ym, cruise_key)
+
+d_sorting <- d_log |>
+  mutate(
+    # expedition labels are inconsistent ("8803", "CALCOFI 0404", "BODEGA BAY");
+    # take a trailing YYMM where one exists, otherwise no cruise at all
+    yymm      = str_match(expedition_orig, "(\\d{2})(\\d{2})[A-Z]?$")[, 1],
+    yy        = as.integer(str_sub(yymm, 1, 2)),
+    mm        = as.integer(str_sub(yymm, 3, 4)),
+    # this log spans 1949-2009: resolve the 2-digit year against the row's own
+    # date rather than a fixed pivot
+    cruise_ym = if_else(
+      is.na(yymm) | is.na(date), NA_character_,
+      sprintf("%04d-%02d", 100L * (year(date) %/% 100L) + yy, mm)),
+    # one row records longitude +138.483 where every other is negative; flag it
+    # rather than silently negating (Q07)
+    longitude = if_else(!is.na(longitude) & longitude > 0, NA_real_, longitude)) |>
+  left_join(d_ym_lookup, by = "cruise_ym") |>
+  transmute(
+    sorting_status, expedition_orig, cruise_ym, cruise_key,
+    line, station, site_key, latitude, longitude,
+    date,
+    datetime_start_utc = as_datetime(date) + dseconds(coalesce(time_start_sec, 0L)),
+    datetime_end_utc   = as_datetime(date) + dseconds(coalesce(time_end_sec, 0L)),
+    max_depth_m, net, mesh_mm, tow_type, preservative,
+    sorted_by = "Emily Jones") |>
+  arrange(date, site_key) |>
+  mutate(dungeness_sorting_log_id = row_number(), .before = 1)
+dbWriteTable(con, "dungeness_sorting_log", as.data.frame(d_sorting), overwrite = TRUE)
+
+cat(glue("dungeness_sorting_log: {nrow(d_sorting)} rows ",
+         "({sum(d_sorting$sorting_status == 'sorted')} sorted, ",
+         "{sum(d_sorting$sorting_status == 'unsorted')} unsorted); ",
+         "cruise_key resolved for {sum(!is.na(d_sorting$cruise_key))}; ",
+         "dates {format(min(d_sorting$date))} to {format(max(d_sorting$date))}"), "\n")
+```
+
+```{r}
+#| label: build-specimen
+
+d_specimen <- d_spec |>
+  transmute(
+    specimen_num, cruise_orig, line, station, site_key, date,
+    datetime_start_utc = as_datetime(date) + dseconds(coalesce(time_sec, 0L)),
+    is_magister, carapace_length_mm, notes)
+dbWriteTable(con, "dungeness_specimen", as.data.frame(d_specimen), overwrite = TRUE)
+cat(glue("dungeness_specimen: {nrow(d_specimen)} specimens, ",
+         "{sum(d_specimen$is_magister)} confirmed M. magister"), "\n")
+```
+
+## Enforce Column Types
+
+Before any geometry exists: `enforce_column_types()` rewrites columns, and a
+table carrying a `GEOMETRY` column is the one thing DuckDB ≥ 1.5.1 will not let
+you rewrite (see the known-bug note in `CLAUDE.md`).
+
+```{r}
+#| label: enforce-types
+
+d_flds_rd <- read_csv(here(glue("metadata/{provider}/{dataset}/flds_redefine.csv")))
+enforce_column_types(con, d_flds_rd = d_flds_rd, tables = dcr_tbls)
+```
+
+## Spatial
+
+`geom` and `grid_key` come last, so every other column value is already settled
+in R and nothing has to `UPDATE` a table that has geometry on it.
+
+```{r}
+#| label: spatial
+
+for (tbl in c("dungeness_sample", "dungeness_sorting_log")) {
+  add_point_geom(con, tbl, lon_col = "longitude", lat_col = "latitude")
+  assign_grid_key(con, tbl)
+}
+
+d_spatial_cov <- dbGetQuery(con, "
+  SELECT 'dungeness_sample'      AS tbl, COUNT(*) AS n,
+         COUNT(latitude)         AS n_positioned,
+         COUNT(grid_key)         AS n_in_grid FROM dungeness_sample
+  UNION ALL
+  SELECT 'dungeness_sorting_log', COUNT(*), COUNT(latitude), COUNT(grid_key)
+  FROM dungeness_sorting_log")
+
+# the borrowed swfsc_ichthyo reference VIEWs have done their job (cruise/ship
+# resolution, station match, grid assignment). Drop them so validation and the
+# metadata sidecar see only this dataset's tables — otherwise the checks below
+# report NULLs in ichthyo's 61k-row `sample`, which is not this ingest's business.
+for (v in c("sample", "ship", "cruise", "grid"))
+  dbExecute(con, glue("DROP VIEW IF EXISTS {v}"))
+
+d_spatial_cov |>
+  datatable(caption = "Position + grid coverage", options = list(dom = "t"),
+            rownames = FALSE)
+```
+
+## Measurement Vocabulary + Dataset Metadata
+
+The four new measurement types are staged in
+`metadata/dfw/dungeness-crab/measurement_type_new.csv` rather than appended to
+the shared `metadata/measurement_type.csv`. That registry is loaded wholesale
+into the release, so adding them there now would put four measurement types with
+no observations into a release that does not contain this dataset. **Move them
+into the shared registry in the same change that flips `in_release: true`.**
+
+```{r}
+#| label: meas-types
+
+d_meas_type_shared <- read_csv(here("metadata/measurement_type.csv"))
+d_meas_type_new    <- read_csv(here(glue(
+  "metadata/{provider}/{dataset}/measurement_type_new.csv")))
+
+stopifnot(
+  "staged measurement types must not already be in the shared registry" =
+    !any(d_meas_type_new$measurement_type %in% d_meas_type_shared$measurement_type),
+  "every measurement_type used must be declared" =
+    all(unique(d_meas$measurement_type) %in% d_meas_type_new$measurement_type))
+
+d_meas_type <- bind_rows(d_meas_type_shared, d_meas_type_new)
+dbWriteTable(con, "measurement_type", as.data.frame(d_meas_type), overwrite = TRUE)
+
+this_provider <- provider; this_dataset <- dataset   # `provider`/`dataset` are also column names
+d_dataset <- ingest_yaml_to_dataset_df(read_ingest_yaml(here())) |>
+  filter(provider == this_provider, dataset == this_dataset)
+stopifnot("this dataset must appear in the ingest YAML registry" = nrow(d_dataset) == 1)
+dbWriteTable(con, "dataset", as.data.frame(d_dataset), overwrite = TRUE)
+
+d_meas_type_new |>
+  select(measurement_type, description, units) |>
+  datatable(caption = "New measurement types (staged, not yet in the shared registry)",
+            options = list(dom = "t"), rownames = FALSE)
+```
+
+## Schema
+
+```{r}
+#| label: schema
+
+dcr_rels <- list(
+  primary_keys = list(
+    dungeness_sample      = "dungeness_sample_id",
+    dungeness_measurement = "dungeness_measurement_id",
+    dungeness_carapace    = "dungeness_carapace_id",
+    dungeness_sorting_log = "dungeness_sorting_log_id",
+    dungeness_specimen = "specimen_num",
+    measurement_type      = "measurement_type"),
+  foreign_keys = list(
+    list(table = "dungeness_measurement", column = "dungeness_sample_id",
+         ref_table = "dungeness_sample", ref_column = "dungeness_sample_id"),
+    list(table = "dungeness_carapace", column = "dungeness_sample_id",
+         ref_table = "dungeness_sample", ref_column = "dungeness_sample_id"),
+    list(table = "dungeness_measurement", column = "measurement_type",
+         ref_table = "measurement_type", ref_column = "measurement_type")))
+
+cc_erd(con, tables = c(dcr_tbls, "measurement_type", "dataset"), rels = dcr_rels,
+       colors = list(
+         lightblue   = c("dungeness_sample", "dungeness_measurement",
+                         "dungeness_carapace"),
+         lightgreen  = c("dungeness_sorting_log", "dungeness_specimen"),
+         lightyellow = "measurement_type",
+         white       = "dataset"))
+```
+
+## Validate
+
+```{r}
+#| label: validate
+
+results <- validate_for_release(con, checks = "all", strict = FALSE)
+cat("Validation:", ifelse(results$passed, "PASSED", "FAILED"), "\n")
+# the generic checker treats every *_key as required, so the expected-NULL cases
+# here (unmatched stations, a shipless sorting log, positions outside the grid)
+# are reported rather than silently passed over
+if (length(results$errors))
+  cat("Reported as errors, all expected for this dataset:\n  ",
+      paste(results$errors, collapse = "\n  "), "\n")
+
+# referential integrity of the two FKs this ingest owns
+n_orphan_meas <- dbGetQuery(con, "
+  SELECT COUNT(*) FROM dungeness_measurement m
+  LEFT JOIN dungeness_sample s USING (dungeness_sample_id)
+  WHERE s.dungeness_sample_id IS NULL")[[1]]
+n_orphan_cara <- dbGetQuery(con, "
+  SELECT COUNT(*) FROM dungeness_carapace c
+  LEFT JOIN dungeness_sample s USING (dungeness_sample_id)
+  WHERE s.dungeness_sample_id IS NULL")[[1]]
+n_orphan_type <- dbGetQuery(con, "
+  SELECT COUNT(*) FROM dungeness_measurement m
+  LEFT JOIN measurement_type t USING (measurement_type)
+  WHERE t.measurement_type IS NULL")[[1]]
+# primary keys must be unique
+n_dup_pk <- dbGetQuery(con, "
+  SELECT COUNT(*) FROM (SELECT dungeness_sample_id FROM dungeness_sample
+                        GROUP BY 1 HAVING COUNT(*) > 1)")[[1]]
+stopifnot(
+  "dungeness_measurement.dungeness_sample_id must resolve" = n_orphan_meas == 0,
+  "dungeness_carapace.dungeness_sample_id must resolve"    = n_orphan_cara == 0,
+  "dungeness_measurement.measurement_type must resolve"    = n_orphan_type == 0,
+  "dungeness_sample_id must be unique"                     = n_dup_pk == 0)
+cat("FK + PK integrity: OK\n")
+
+# the headline result of the whole dataset, asserted so a bad re-parse is loud.
+# 15 positive ROWS but 14 positive station OCCUPATIONS: three occupations appear
+# twice in the source as replicate subsamples, and 1204OS/070.0 055.0/occ 45 is
+# one of them (1 megalopa in each row). The workbook's own "M. magister values"
+# sheet aggregates those two rows into one, which is why it lists 14.
+mag <- dbGetQuery(con, "
+  SELECT COUNT(*) AS n_samples,
+         COUNT(*) FILTER (WHERE measurement_value > 0) AS n_positive_rows,
+         COUNT(DISTINCT CASE WHEN measurement_value > 0
+                             THEN s.cruise_key || s.site_key || s.order_occ END)
+           AS n_positive_stations,
+         SUM(measurement_value) AS n_megalopae
+  FROM dungeness_measurement m JOIN dungeness_sample s USING (dungeness_sample_id)
+  WHERE m.measurement_type = 'megalopae_magister'")
+stopifnot(
+  "24 M. magister megalopae in total"                 = mag$n_megalopae == 24,
+  "15 positive rows / 14 positive station occupations" =
+    mag$n_positive_rows == 15 && mag$n_positive_stations == 14)
+cat(glue("M. magister: {mag$n_megalopae} megalopae in {mag$n_positive_rows} of ",
+         "{mag$n_samples} examined samples ",
+         "({round(100 * mag$n_positive_rows / mag$n_samples, 1)}% occurrence), ",
+         "at {mag$n_positive_stations} distinct station occupations"), "\n")
+
+# replicate subsamples of one station occupation — the reason the sample PK is a
+# sequential id rather than (cruise, station, order_occ)
+dbGetQuery(con, "
+  SELECT cruise_orig, site_key, order_occ, COUNT(*) AS n_rows
+  FROM dungeness_sample GROUP BY 1, 2, 3 HAVING COUNT(*) > 1 ORDER BY 1, 2") |>
+  datatable(caption = "Station occupations examined more than once (replicate subsamples)",
+            options = list(dom = "t"), rownames = FALSE)
+```
+
+## Preview
+
+```{r}
+#| label: preview-sample
+dbGetQuery(con, "
+  SELECT * EXCLUDE (geom) FROM dungeness_sample
+  ORDER BY dungeness_sample_id LIMIT 100") |>
+  datatable(caption = "dungeness_sample — first 100", rownames = FALSE, filter = "top")
+```
+
+```{r}
+#| label: preview-positive
+dbGetQuery(con, "
+  SELECT s.cruise_orig, s.cruise_key, s.site_key, s.order_occ, s.date,
+         s.latitude, s.longitude, s.aliquot, m.measurement_value AS n_magister,
+         (SELECT string_agg(CAST(c.carapace_length_mm AS VARCHAR), ', ')
+          FROM dungeness_carapace c
+          WHERE c.dungeness_sample_id = s.dungeness_sample_id) AS carapace_mm
+  FROM dungeness_sample s JOIN dungeness_measurement m USING (dungeness_sample_id)
+  WHERE m.measurement_type = 'megalopae_magister' AND m.measurement_value > 0
+  ORDER BY s.date") |>
+  datatable(caption = "The 14 samples containing M. magister megalopae",
+            rownames = FALSE)
+```
+
+```{r}
+#| label: preview-sorting
+dbGetQuery(con, "
+  SELECT sorting_status, COUNT(*) AS n_samples,
+         COUNT(DISTINCT expedition_orig) AS n_expeditions,
+         MIN(date) AS date_min, MAX(date) AS date_max,
+         COUNT(grid_key) AS n_in_calcofi_grid
+  FROM dungeness_sorting_log GROUP BY 1 ORDER BY 1") |>
+  datatable(caption = "dungeness_sorting_log — effort by status",
+            options = list(dom = "t"), rownames = FALSE)
+```
+
+```{r}
+#| label: preview-specimen
+dbGetQuery(con, "SELECT * FROM dungeness_specimen ORDER BY specimen_num") |>
+  datatable(caption = "dungeness_specimen — independent species confirmation",
+            options = list(dom = "t"), rownames = FALSE)
+```
+
+## Questions for Data Providers
+
+```{r}
+#| label: provider-questions
+
+read_csv(here(glue("metadata/{provider}/{dataset}/questions.csv"))) |>
+  arrange(factor(priority, c("blocker", "high", "normal")), id) |>
+  select(priority, question, context, status) |>
+  datatable(caption = "Questions (ranked)", options = list(dom = "t", pageLength = 10),
+            rownames = FALSE)
+```
+
+## Write Outputs + Upload
+
+```{r}
+#| label: outputs
+
+dir_create(dir_parquet)
+tbls_out <- c(dcr_tbls, "measurement_type", "dataset")
+write_parquet_outputs(
+  con = con, output_dir = dir_parquet, tables = tbls_out,
+  sort_by = list(dungeness_measurement = c("dungeness_sample_id", "measurement_type")),
+  strip_provenance = FALSE)
+
+build_relationships_json(
+  rels = dcr_rels, output_dir = dir_parquet,
+  provider = provider, dataset = dataset)
+
+d_tbls_rd <- read_csv(here(glue("metadata/{provider}/{dataset}/tbls_redefine.csv")))
+build_metadata_json(
+  con = con, d_tbls_rd = d_tbls_rd, d_flds_rd = d_flds_rd,
+  metadata_derived_csv = here(glue("metadata/{provider}/{dataset}/metadata_derived.csv")),
+  output_dir = dir_parquet, tables = tbls_out,
+  set_comments = TRUE, provider = provider, dataset = dataset,
+  workflow_url = cc$workflow_url, tables_owned = tables_owned)
+
+if (publish_to_gcs) {
+  sync_to_gcs(local_dir = dir_parquet, gcs_prefix = glue("ingest/{dir_label}"),
+              bucket = "calcofi-db")
+} else {
+  cat("publish_to_gcs is FALSE — parquet kept local, NOT synced to",
+      glue("gs://calcofi-db/ingest/{dir_label}"), "\n")
+}
+```
+
+```{r}
+#| label: metadata-gaps
+
+# empty descriptions ship verbatim to consumers, so surface them as TODOs.
+# Scoped to the tables this ingest OWNS: `dataset` and `measurement_type` are
+# shared and carry no column descriptions in any ingest, so counting them here
+# would just be constant noise hiding the real gaps.
+m   <- fromJSON(file.path(dir_parquet, "metadata.json"), simplifyVector = FALSE)
+gap <- function(x, f) names(Filter(function(e) !nzchar(e[[f]] %||% ""), x))
+own <- function(keys) keys[sub("[.].*$", "", keys) %in% dcr_tbls]
+
+cat(glue("metadata.json gaps in owned tables — tables missing description: ",
+         "{length(own(gap(m$tables, 'description_md')))}; ",
+         "columns missing description: ",
+         "{length(own(gap(m$columns, 'description_md')))}"), "\n")
+if (length(own(gap(m$columns, "description_md"))))
+  cat("  ", paste(own(gap(m$columns, "description_md")), collapse = ", "), "\n")
+```
+
+## Not Yet Done
+
+This is a first pass. What remains, roughly in order:
+
+1. **Answer the two blockers** (Q01 standardization factor, Q08 provider /
+   citation / licence). Q08 in particular gates publication.
+2. **Project into the consolidated core.** Every released dataset emits its slice
+   of `sample` / `obs` / `obs_attribute` via `calcofi4db::emit_core_tables()`,
+   which needs a new `dfw_dungeness-crab` arm in `calcofi4db/R/model.R` plus
+   `taxon_key` resolution — `Metacarcinus magister` for the headline, and coarse
+   entries for the "other megalopae" / "Cancer zoea" / "other zoea" categories
+   through `metadata/measurement_taxon.csv`. Until then this ingest publishes
+   per-dataset tables only, which is the other reason it is held out.
+3. **Decide what the sorting log is for.** As absence/effort data it is the more
+   scientifically useful of the two efforts — 2,011 samples over 60 years — but
+   only if Q03 settles which historic identifications stand, and Q04 settles
+   whether repeated rows are jars.
+4. **Parse the free-text identification notes** (Q06) into `obs_attribute` stage
+   and length bins.
+5. Move `measurement_type_new.csv` into `metadata/measurement_type.csv` and drop
+   `in_release: false`, in one change.
+
+```{r}
+#| label: cleanup
+close_duckdb(con)
+cat(glue("Parquet outputs written to: {dir_parquet}"), "\n")
+```

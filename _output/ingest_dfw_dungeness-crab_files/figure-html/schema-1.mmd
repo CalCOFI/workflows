@@ -1,0 +1,115 @@
+---
+config:
+  layout: elk
+---
+erDiagram
+    dungeness_sample {
+        int dungeness_sample_id PK
+        varchar cruise_orig
+        varchar cruise_key
+        varchar ship_key
+        double line
+        double station
+        varchar site_key
+        smallint order_occ
+        date date
+        timestamp datetime_start_utc
+        double latitude
+        double longitude
+        varchar position_source
+        varchar site_sample_key
+        double aliquot
+        double volume_ml
+        varchar sorted_by
+        varchar comments
+        geometry geom
+        varchar grid_key
+    }
+    dungeness_measurement {
+        int dungeness_measurement_id PK
+        int dungeness_sample_id FK
+        varchar measurement_type FK
+        double measurement_value
+        varchar taxa_description
+        varchar measurement_qual
+    }
+    dungeness_carapace {
+        int dungeness_carapace_id PK
+        int dungeness_sample_id FK
+        int individual_num
+        double carapace_length_mm
+    }
+    dungeness_sorting_log {
+        int dungeness_sorting_log_id PK
+        varchar sorting_status
+        varchar expedition_orig
+        varchar cruise_ym
+        varchar cruise_key
+        double line
+        double station
+        varchar site_key
+        double latitude
+        double longitude
+        date date
+        timestamp datetime_start_utc
+        timestamp datetime_end_utc
+        double max_depth_m
+        varchar net
+        double mesh_mm
+        varchar tow_type
+        varchar preservative
+        varchar sorted_by
+        geometry geom
+        varchar grid_key
+    }
+    dungeness_specimen {
+        int specimen_num PK
+        varchar cruise_orig
+        double line
+        double station
+        varchar site_key
+        date date
+        timestamp datetime_start_utc
+        bool is_magister
+        double carapace_length_mm
+        varchar notes
+    }
+    measurement_type {
+        varchar measurement_type PK
+        varchar description
+        varchar units
+        bool is_canonical
+        varchar _source_column
+        varchar _source_table
+        varchar _source_datasets
+        varchar _qual_column
+        varchar _prec_column
+        varchar grain
+    }
+    dataset {
+        varchar provider
+        varchar dataset
+        varchar dataset_name
+        varchar description
+        varchar citation_main
+        varchar citation_others
+        varchar link_calcofi_org
+        varchar link_data_source
+        varchar link_others
+        varchar tables
+        varchar coverage_temporal
+        varchar coverage_spatial
+        varchar license
+        varchar pi_names
+    }
+    dungeness_sample ||--o{ dungeness_measurement : "dungeness_sample_id"
+    dungeness_sample ||--o{ dungeness_carapace : "dungeness_sample_id"
+    measurement_type ||--o{ dungeness_measurement : "measurement_type"
+    classDef lightblue stroke:#ADD8E6,stroke-width:3px
+    class dungeness_sample,dungeness_measurement,dungeness_carapace lightblue
+    classDef lightgreen stroke:#90EE90,stroke-width:3px
+    class dungeness_sorting_log,dungeness_specimen lightgreen
+    classDef lightyellow stroke:#FFFFE0,stroke-width:3px
+    class measurement_type lightyellow
+    classDef white stroke:#FFFFFF,stroke-width:3px
+    class dataset white
