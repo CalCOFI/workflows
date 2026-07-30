@@ -112,6 +112,16 @@ options(DT.options = list(scrollX = TRUE))
 # common ingest settings (overwrite, dir_data)
 source(here("libs/ingest.R"))
 
+# say(): status output to STDOUT so it renders in the notebook.
+#
+# This notebook had 37 message() calls against 5 cat() — the worst ratio in the
+# repo. message() writes to stderr, which Quarto does not reliably surface under
+# `code-fold: true`, so most of the diagnostics below were being computed and then
+# never shown. The repo convention is cat() (see .claude/skills/ingest-new.md),
+# but cat() adds no trailing newline, so this thin wrapper keeps message()'s line
+# semantics. Matches the same helper in ingest_calcofi_ctd-cast.qmd.
+say <- function(...) cat(..., "\n", sep = "")
+
 # provider/dataset/metadata read from this file's authoritative YAML block
 cc           <- read_calcofi_meta(here("ingest_calcofi_bottle.qmd"))
 provider     <- cc$provider
@@ -174,8 +184,8 @@ d <- read_csv_files(
 )
 
 # show source files summary
-message(glue("Loaded {nrow(d$source_files)} tables from {d$paths$dir_csv}"))
-message(glue("Total rows: {sum(d$source_files$nrow)}"))
+say(glue("Loaded {nrow(d$source_files)} tables from {d$paths$dir_csv}"))
+say(glue("Total rows: {sum(d$source_files$nrow)}"))
 ```
 
 ## Check for any mismatched tables and fields
@@ -290,7 +300,7 @@ for (i in seq_len(nrow(d_ship_renames))) {
   )
 
   if (n_updated > 0) {
-    message(glue(
+    say(glue(
       "Updated {n_updated} casts: ",
       "'{old_name}' [{old_code}] -> '{new_name}' [{new_code}]"
     ))
@@ -298,7 +308,7 @@ for (i in seq_len(nrow(d_ship_renames))) {
   n_updated_total <- n_updated_total + n_updated
 }
 
-message(glue("\nTotal casts updated: {n_updated_total}"))
+say(glue("\nTotal casts updated: {n_updated_total}"))
 ```
 
 ## Column Naming Rationale
@@ -351,7 +361,7 @@ if ("date" %in% casts_cols && "time" %in% casts_cols) {
         ELSE CAST(\"date\" AS TIMESTAMP)
       END"
   )
-  message(glue(
+  say(glue(
     "Created datetime_start_utc: {dbGetQuery(con, 'SELECT COUNT(*) FROM casts WHERE datetime_start_utc IS NOT NULL')[[1]]} non-null values"
   ))
 
@@ -371,9 +381,9 @@ if ("date" %in% casts_cols && "time" %in% casts_cols) {
       error = function(e) NULL)
   }
   n_after <- length(dbListFields(con, "casts"))
-  message(glue("casts columns: {n_before} -> {n_after} (dropped {n_before - n_after})"))
+  say(glue("casts columns: {n_before} -> {n_after} (dropped {n_before - n_after})"))
 } else {
-  message("casts already consolidated (datetime_start_utc exists, date/time dropped)")
+  say("casts already consolidated (datetime_start_utc exists, date/time dropped)")
 }
 ```
 
@@ -474,7 +484,7 @@ n_types <- dbGetQuery(
   con,
   "SELECT COUNT(DISTINCT measurement_type) FROM bottle_measurement"
 )[[1]]
-message(glue(
+say(glue(
   "bottle_measurement: {format(n_meas, big.mark = ',')} rows, {n_types} measurement types"
 ))
 
@@ -497,7 +507,7 @@ for (col in cols_to_drop) {
 dbExecute(con, 'ALTER TABLE bottle RENAME COLUMN p_qual TO depth_qual')
 
 n_after <- length(dbListFields(con, "bottle"))
-message(glue(
+say(glue(
   "bottle columns: {n_before} -> {n_after} (dropped {n_before - n_after})"
 ))
 ```
@@ -590,7 +600,7 @@ n_types <- dbGetQuery(
   con,
   "SELECT COUNT(DISTINCT condition_type) FROM cast_condition"
 )[[1]]
-message(glue(
+say(glue(
   "cast_condition: {format(n_cond, big.mark = ',')} rows, {n_types} condition types"
 ))
 
@@ -603,7 +613,7 @@ for (col in cast_cond_map$source_col) {
   )
 }
 n_after <- length(dbListFields(con, "casts"))
-message(glue(
+say(glue(
   "casts columns: {n_before} -> {n_after} (dropped {n_before - n_after})"
 ))
 ```
@@ -661,7 +671,7 @@ stopifnot(
     0
 )
 
-message(glue(
+say(glue(
   "measurement_type: {nrow(d_meas_type)} types loaded, FK checks passed"
 ))
 
@@ -696,7 +706,7 @@ stopifnot(
 # dataset registry built from authoritative ingest_*.qmd YAML (was dataset.csv)
 d_dataset <- ingest_yaml_to_dataset_df(read_ingest_yaml(here()))
 dbWriteTable(con, "dataset", d_dataset, overwrite = TRUE)
-message(glue("dataset: {nrow(d_dataset)} datasets registered"))
+say(glue("dataset: {nrow(d_dataset)} datasets registered"))
 ```
 
 ## Questions for Data Providers
@@ -729,13 +739,13 @@ read_csv(here(cc$questions_file), show_col_types = FALSE) |>
 cast_keys <- tbl(con, "casts") |> pull(cast_id)
 n_dup_cast <- sum(duplicated(cast_keys))
 stopifnot("cast_id must be unique in casts" = n_dup_cast == 0)
-message(glue("casts.cast_id: {length(cast_keys)} unique values, 0 duplicates"))
+say(glue("casts.cast_id: {length(cast_keys)} unique values, 0 duplicates"))
 
 # verify bottle_id uniqueness in bottle
 btl_keys <- tbl(con, "bottle") |> pull(bottle_id)
 n_dup_btl <- sum(duplicated(btl_keys))
 stopifnot("bottle_id must be unique in bottle" = n_dup_btl == 0)
-message(glue(
+say(glue(
   "bottle.bottle_id: {length(btl_keys)} unique values, 0 duplicates"
 ))
 
@@ -749,7 +759,7 @@ orphan_bottles <- tbl(con, "bottle") |>
 stopifnot(
   "all bottle.cast_id must exist in casts.cast_id" = nrow(orphan_bottles) == 0
 )
-message(glue(
+say(glue(
   "FK integrity: all {length(btl_keys)} bottle.cast_id ",
   "found in casts.cast_id"
 ))
@@ -765,7 +775,7 @@ n_dup_bm_id <- dbGetQuery(
     HAVING COUNT(*) > 1)"
 )[[1]]
 stopifnot("bottle_measurement_id must be unique" = n_dup_bm_id == 0)
-message(glue("bottle_measurement.bottle_measurement_id: unique, 0 duplicates"))
+say(glue("bottle_measurement.bottle_measurement_id: unique, 0 duplicates"))
 
 # verify composite PK: bottle_measurement (bottle_id, measurement_type)
 n_dup_meas <- dbGetQuery(
@@ -781,7 +791,7 @@ stopifnot(
   "bottle_measurement (bottle_id, measurement_type) must be unique" = n_dup_meas ==
     0
 )
-message(glue("bottle_measurement: composite key unique, 0 duplicates"))
+say(glue("bottle_measurement: composite key unique, 0 duplicates"))
 
 # verify FK: bottle_measurement.bottle_id -> bottle.bottle_id
 n_orphan_meas <- dbGetQuery(
@@ -793,7 +803,7 @@ n_orphan_meas <- dbGetQuery(
 stopifnot(
   "all bottle_measurement.bottle_id must exist in bottle" = n_orphan_meas == 0
 )
-message(glue("bottle_measurement FK: all bottle_ids found in bottle"))
+say(glue("bottle_measurement FK: all bottle_ids found in bottle"))
 
 # verify cast_condition_id uniqueness
 n_dup_cc_id <- dbGetQuery(
@@ -806,7 +816,7 @@ n_dup_cc_id <- dbGetQuery(
     HAVING COUNT(*) > 1)"
 )[[1]]
 stopifnot("cast_condition_id must be unique" = n_dup_cc_id == 0)
-message(glue("cast_condition.cast_condition_id: unique, 0 duplicates"))
+say(glue("cast_condition.cast_condition_id: unique, 0 duplicates"))
 
 # verify composite PK: cast_condition (cast_id, condition_type)
 n_dup_cond <- dbGetQuery(
@@ -821,7 +831,7 @@ n_dup_cond <- dbGetQuery(
 stopifnot(
   "cast_condition (cast_id, condition_type) must be unique" = n_dup_cond == 0
 )
-message(glue("cast_condition: composite key unique, 0 duplicates"))
+say(glue("cast_condition: composite key unique, 0 duplicates"))
 
 # verify FK: cast_condition.cast_id -> casts.cast_id
 n_orphan_cond <- dbGetQuery(
@@ -831,7 +841,7 @@ n_orphan_cond <- dbGetQuery(
   WHERE cast_id NOT IN (SELECT cast_id FROM casts)"
 )[[1]]
 stopifnot("all cast_condition.cast_id must exist in casts" = n_orphan_cond == 0)
-message(glue("cast_condition FK: all cast_ids found in casts"))
+say(glue("cast_condition FK: all cast_ids found in casts"))
 ```
 
 ## Schema Documentation
@@ -1003,7 +1013,7 @@ dbExecute(
     REPLACE(REPLACE(site_key, '.', ''), ' ', '')   AS db_sta_key
   FROM casts"
 )
-message("Created casts_derived VIEW with derived temporal/coordinate columns")
+say("Created casts_derived VIEW with derived temporal/coordinate columns")
 ```
 
 ### Map Cast Locations
@@ -1077,11 +1087,11 @@ year_range <- dbGetQuery(
 )
 
 fmt <- function(x, ...) format(x, big.mark = ",", ...)
-message(glue("Total casts: {fmt(n_casts)}"))
-message(glue("Total bottles: {fmt(n_bottles)}"))
-message(glue("Total bottle measurements: {fmt(n_meas)}"))
-message(glue("Total cast conditions: {fmt(n_cond)}"))
-message(glue("Year range: {year_range$yr_min} - {year_range$yr_max}"))
+say(glue("Total casts: {fmt(n_casts)}"))
+say(glue("Total bottles: {fmt(n_bottles)}"))
+say(glue("Total bottle measurements: {fmt(n_meas)}"))
+say(glue("Total cast conditions: {fmt(n_cond)}"))
+say(glue("Year range: {year_range$yr_min} - {year_range$yr_max}"))
 ```
 
 ## Validate Local Database
@@ -1097,7 +1107,7 @@ update the Working DuckLake.
 validation <- validate_for_release(con)
 
 if (validation$passed) {
-  message("Validation passed!")
+  say("Validation passed!")
   if (nrow(validation$checks) > 0) {
     validation$checks |>
       filter(status != "pass") |>
@@ -1154,7 +1164,7 @@ dbExecute(
     REPLACE(REPLACE(site_key, '.', ''), ' ', '')   AS db_sta_key
   FROM casts"
 )
-message("Recreated casts_derived VIEW after column type enforcement")
+say("Recreated casts_derived VIEW after column type enforcement")
 ```
 
 ## Data Preview
@@ -1281,7 +1291,7 @@ if (nrow(bridge_result$unmatched_report) > 0) {
   bridge_result$unmatched_report |>
     datatable(caption = "Unmatched ship codes (no ship_key)")
 } else {
-  message("All ship codes matched!")
+  say("All ship codes matched!")
 }
 ```
 
@@ -1310,7 +1320,7 @@ if ("grid_key" %in% casts_cols && "grid_key" %in% grid_cols) {
      WHERE c.grid_key IS NOT NULL
        AND c.grid_key NOT IN (SELECT grid_key FROM grid)"
   )$n
-  message(glue("Grid key orphans in casts: {grid_orphans}"))
+  say(glue("Grid key orphans in casts: {grid_orphans}"))
 }
 
 # ship PK uniqueness
@@ -1344,7 +1354,7 @@ bridge_coverage <- dbGetQuery(
 )
 bridge_coverage |> datatable(caption = "Cruise bridge coverage")
 
-message("Cross-dataset validation complete")
+say("Cross-dataset validation complete")
 ```
 
 
@@ -1528,12 +1538,12 @@ sync_to_gcs(
 
 # close local wrangling database connection
 close_duckdb(con)
-message("Local wrangling database connection closed")
+say("Local wrangling database connection closed")
 
 # note: parquet outputs are in data/parquet/calcofi_bottle/
 # these can be used to update the Working DuckLake in a separate workflow
-message(glue("Parquet outputs written to: {dir_parquet}"))
-message(glue("GCS outputs at: gs://calcofi-db/ingest/{dir_label}/"))
+say(glue("Parquet outputs written to: {dir_parquet}"))
+say(glue("GCS outputs at: gs://calcofi-db/ingest/{dir_label}/"))
 ```
 
 ## TODO
