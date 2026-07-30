@@ -176,9 +176,13 @@ dbExecute(con, glue("SET temp_directory = '{dir_tmp}'"))
 # sync_to_gcs() through the GD FUSE mount
 
 # load metadata
-d_meas_type <- read_csv(
-  here("metadata/measurement_type.csv"),
-  show_col_types = F
+# read_measurement_type(), NOT read_csv(): the registry stores empty cells that a
+# default read turns back into the literal string "NA", which then survives the
+# na.omit() in the measurement-column registry below and becomes a phantom
+# quality-flag column name. It also validates the file on the way in, so a
+# corrupted write fails here rather than reaching the release. See CLAUDE.md.
+d_meas_type <- calcofi4db::read_measurement_type(
+  here("metadata/measurement_type.csv")
 )
 d_flds_rd <- read_csv(glue("{dir_meta}/flds_redefine.csv"), show_col_types = F)
 d_tbls_rd <- read_csv(glue("{dir_meta}/tbls_redefine.csv"), show_col_types = F)
@@ -1421,8 +1425,15 @@ for (i in seq_len(nrow(d_meas_ctd))) {
   # a bare NULL is typed INT32 by DuckDB, so if the FIRST measurement type has no
   # qual column the CREATE TABLE below makes measurement_qual an integer column —
   # and the first later type that does have one fails inserting 'nan'. Type it.
+  #
+  # The source stores these codes in DOUBLE columns, so a plain cast yields "9.0"
+  # rather than "9" and no longer matches the controlled vocabulary in
+  # metadata/measurement_qual.csv (codes 6 / 8 / 9). Strip a trailing ".0" TEXTUALLY
+  # rather than casting through INTEGER: a numeric cast would silently round an
+  # unexpected "9.5" to 9, whereas this leaves anything non-integral verbatim so it
+  # shows up in the audit below instead of being quietly normalized away.
   qual_expr <- if (!is.na(qual_col) && qual_col != "") {
-    glue("CAST({qual_col} AS VARCHAR)")
+    glue("regexp_replace(CAST({qual_col} AS VARCHAR), '\\.0+$', '')")
   } else {
     "CAST(NULL AS VARCHAR)"
   }
@@ -1585,6 +1596,82 @@ stopifnot(
     0
 )
 ```
+
+### Measurement provenance — instrument and accuracy eras
+
+Which instrument produced a value, to what stated accuracy, and over which years.
+Recovered from the CalCOFI hydrographic master's `0-Measurements` table into
+`metadata/calcofi/hydro-master/measurement_method.csv`; the pipeline had no
+equivalent. It matters most where a method changed mid-record — water temperature
+switches from reversing thermometer (through 1993-04-15) to CTD thermistor (from
+1993-08-11), which is the boundary this dataset begins at, and phosphate crosses
+four instruments from 1949.
+
+The registry is **one-to-many** by design (Temperature has 6 eras), so it is joined
+by *property* rather than by exact type: CTD types carry sensor and correction
+suffixes (`temperature_1`, `salinity_ave_corr`, `oxygen_ml_l_ave_sta_corr`) that
+the era table knows nothing about, so those are stripped back to the base property
+before matching.
+
+```{r}
+#| label: meas_provenance
+
+path_method <- here("metadata/calcofi/hydro-master/measurement_method.csv")
+
+d_method <- read_csv(path_method, show_col_types = F) |>
+  filter(!is.na(measurement_type)) |>
+  select(property = measurement_type, method, accuracy, year_started, year_ended)
+
+# strip sensor/correction suffixes and the bottle marker to reach the base property:
+#   temperature_ave  -> temperature ; oxygen_ml_l_ave_sta_corr -> oxygen_ml_l
+#   btl_temperature  -> temperature ; salinity_btl            -> salinity
+#   oxygen_btl_ml_l  -> oxygen_ml_l  (the marker is INFIX here, not a prefix/suffix —
+#                                     the three positions are why this is not one regex)
+base_property <- function(x) {
+  x |>
+    str_remove("^btl_") |>
+    str_remove("_btl$") |>
+    str_replace("_btl_", "_") |>
+    str_remove("_(cruise|sta)_corr$") |>
+    str_remove("_corr$") |>
+    str_remove("_ave$") |>
+    str_remove("_[12]$")
+}
+
+d_prov <- d_meas_ctd |>
+  transmute(measurement_type, units, is_canonical,
+            property = base_property(measurement_type)) |>
+  inner_join(d_method, by = "property", relationship = "many-to-many") |>
+  arrange(desc(is_canonical), measurement_type, year_started)
+
+n_typ <- n_distinct(d_prov$measurement_type)
+say(glue("CTD types with instrument provenance: {n_typ} of {nrow(d_meas_ctd)} ",
+         "({n_distinct(d_prov$property)} distinct properties, ",
+         "{nrow(d_prov)} type x era rows)"))
+say(glue("  unmatched (no era recorded): ",
+         "{paste(setdiff(d_meas_ctd$measurement_type, d_prov$measurement_type) |> head(8), collapse = ', ')}",
+         if (nrow(d_meas_ctd) - n_typ > 8) " ..." else ""))
+```
+
+```{r}
+#| label: meas_provenance_tbl
+d_prov |>
+  transmute(measurement_type, canonical = is_canonical, units,
+            method, accuracy, from = year_started, to = year_ended) |>
+  datatable(
+    caption  = paste("CTD measurement provenance — instrument, stated accuracy and",
+                     "era, from the CalCOFI hydrographic master's 0-Measurements"),
+    rownames = FALSE,
+    options  = list(pageLength = 10, scrollX = TRUE, dom = "ftip"))
+```
+
+::: {.callout-note title="Documentation only, for now"}
+This table is rendered, not written into `metadata.json`. Promoting it into the
+sidecar so consumers get instrument provenance alongside units is a follow-up
+that belongs in `calcofi4db::build_metadata_json()`, and 18 of the 35 era rows
+still need a data manager to confirm their mapping to canonical types
+(`hydro_master_06`).
+:::
 
 ### Drop intermediate table
 
@@ -2357,39 +2444,18 @@ if (nrow(sentinel_tally)) {
 ```{r}
 #| label: diag_ranges
 
-# first-pass plausible physical ranges for oceanographic CTD sensors. Deliberately
-# generous: the point is to catch impossible values, not to police oceanography.
-plaus <- tribble(
-  ~measurement_type,              ~lo,    ~hi,
-  "temperature_ave",              -2,     40,
-  "temperature_1",                -2,     40,
-  "temperature_2",                -2,     40,
-  "potential_temperature_1",      -2,     40,
-  "potential_temperature_2",      -2,     40,
-  "btl_temperature",              -2,     40,
-  "salinity_ave_corr",             0,     45,
-  "salinity_1",                    0,     45,
-  "salinity_2",                    0,     45,
-  "salinity_1_corr",               0,     45,
-  "salinity_2_corr",               0,     45,
-  "salinity_btl",                  0,     45,
-  "pressure",                      0,   6500,
-  "ph",                            6,      9,
-  "sw_ph",                         6,      9,
-  "oxygen_ml_l_ave_sta_corr",      0,     15,
-  "oxygen_ml_l_1",                 0,     15,
-  "oxygen_btl_ml_l",               0,     15,
-  "oxygen_umol_kg_ave_sta_corr",   0,    700,
-  "oxygen_btl_umol_kg",            0,    700,
-  "sigma_theta_1",                15,     35,
-  "sigma_theta_2",                15,     35,
-  "btl_ammonium",                  0,    100,
-  "btl_nitrate",                   0,    100,
-  "btl_nitrite",                   0,     10,
-  "btl_phosphate",                 0,     10,
-  "btl_silicate",                  0,    300,
-  "btl_chlorophyll_a",             0,    100,
-  "btl_phaeopigment",              0,    100)
+# Plausible physical ranges now come from the REGISTRY, not a tribble local to this
+# chunk — `metadata/measurement_type.csv` columns valid_min / valid_max, populated by
+# libs/build_ctd_measurement_registry.R. Same values as the inline table they replace;
+# declaring them once means they are reviewable in a diff, emittable by the CF netCDF
+# writer as real valid_min/valid_max variable attributes, and available to any QC rule
+# rather than only to this audit.
+#
+# Still deliberately generous, and still report-only: they catch impossible values,
+# they are not the agreed oceanographic ranges, and nothing below drops a row.
+plaus <- d_meas_type |>
+  filter(!is.na(valid_min) | !is.na(valid_max)) |>
+  select(measurement_type, lo = valid_min, hi = valid_max)
 
 diag_sql <- glue("
   SELECT measurement_type,
@@ -2444,6 +2510,86 @@ d_diag |>
     options  = list(pageLength = 12, scrollX = TRUE, dom = "ftip")) |>
   formatStyle("-99",          color = styleInterval(0, c("inherit", "#d03b3b"))) |>
   formatStyle("out of range", color = styleInterval(0, c("inherit", "#d03b3b")))
+```
+
+### Quality flags — decoded against the controlled vocabulary
+
+`measurement_qual` was a verbatim pass-through for years: carried through every
+table, never interpreted, with no vocabulary anywhere in the repo. There is one
+now — `metadata/measurement_qual.csv`, recovered from the CalCOFI hydrographic
+master's own field documentation (`6` = data OK but taken from CTD, `8` = value
+is suspect, `9` = missing data) and confirmed to apply to CTD, whose flags use
+the same codes.
+
+::: {.callout-warning title="Decoded and reported — deliberately not acted on"}
+Nothing here drops or rewrites a flagged value. Three questions are open with the
+data providers (`metadata/calcofi/hydro-master/questions.csv`, two of them
+blockers): what the undocumented single-digit codes mean, whether a NULL flag
+means "good" or "never assessed", and whether `S_qual`'s 253 distinct values in
+the bottle master indicate a bitmask or a corrupted column. Acting on a flag
+whose semantics are unconfirmed would be guessing with released data.
+
+**The headline variables carry no flags at all**, and that is the more important
+gap: source flags attach to the *component sensors* (`Temp1Q`, `Salt1Q`, `Ox1Q`,
+`Ox2Q`), while the canonical types are the *averages* — so quality information is
+lost in the mean. Deciding that propagation rule (worst-of? both-must-pass?) is
+`ctd-qaqc` work, not something to invent here.
+:::
+
+```{r}
+#| label: diag_qual
+
+# qual_code is forced to character: every value in the vocabulary is numeric, so a
+# type-guessing read makes it a double, and joining that to the VARCHAR
+# measurement_qual is a hard error rather than a silent miss.
+d_qual_vocab <- read_csv(
+  here("metadata/measurement_qual.csv"),
+  col_types = cols(qual_code = col_character(), .default = col_guess())) |>
+  select(measurement_qual = qual_code, label, description, is_documented)
+
+d_qual_obs <- dbGetQuery(con, "
+  SELECT measurement_qual, COUNT(*) AS n,
+         COUNT(DISTINCT measurement_type) AS n_types
+  FROM ctd_measurement
+  WHERE measurement_qual IS NOT NULL
+  GROUP BY 1 ORDER BY n DESC") |>
+  left_join(d_qual_vocab, by = "measurement_qual") |>
+  mutate(
+    label         = coalesce(label, "UNRECOGNIZED"),
+    is_documented = coalesce(is_documented, FALSE))
+
+n_flagged   <- sum(d_qual_obs$n)
+n_unrecog   <- sum(d_qual_obs$n[d_qual_obs$label == "UNRECOGNIZED"])
+n_canon_flg <- dbGetQuery(con, glue("
+  SELECT COUNT(DISTINCT measurement_type) AS n FROM ctd_measurement
+  WHERE measurement_qual IS NOT NULL
+    AND measurement_type IN ({canon_in})"))$n
+
+say(glue("flagged measurements        : {format(n_flagged, big.mark = ',')}"))
+say(glue("  codes seen                : {nrow(d_qual_obs)}"))
+say(glue("  NOT in the vocabulary     : {format(n_unrecog, big.mark = ',')}"))
+say(glue("canonical types carrying any flag: {n_canon_flg} of {length(canon_types)}"))
+
+# a code outside the vocabulary is a finding, not noise — surface it loudly rather
+# than letting a left_join quietly render it as NA in the table below
+if (n_unrecog > 0) {
+  say(glue("  unrecognized code(s): ",
+           "{paste(d_qual_obs$measurement_qual[d_qual_obs$label == 'UNRECOGNIZED'], collapse = ', ')}"))
+}
+```
+
+```{r}
+#| label: diag_qual_tbl
+d_qual_obs |>
+  transmute(code = measurement_qual, label, description,
+            documented = is_documented, n, `types` = n_types) |>
+  datatable(
+    caption  = paste("ctd_measurement quality flags decoded against",
+                     "metadata/measurement_qual.csv"),
+    rownames = FALSE,
+    options  = list(pageLength = 10, scrollX = TRUE, dom = "tip")) |>
+  formatStyle("documented",
+              color = styleEqual(c(TRUE, FALSE), c("inherit", "#d03b3b")))
 ```
 
 ## Validate and Enforce Types
@@ -2537,7 +2683,42 @@ is per-scan, so the arm deduplicates to the cast before minting the event.
 ```{r}
 #| label: emit_core
 
-core <- emit_core_tables(con, "calcofi_ctd-cast", taxa = FALSE)
+ds_key <- "calcofi_ctd-cast"
+
+# This projection lives here, in the notebook that owns the dataset, rather than in
+# a switch(dataset_key, …) arm inside calcofi4db. No taxa: CTD is the env realm.
+#
+# 1. sample — one row per PHYSICAL cast. ctd_cast is per-scan, so the QUALIFY is
+#    load-bearing: without it `sample` would get one row per scan (see the
+#    scan-grain gotcha in CLAUDE.md).
+append_sample(con, glue("
+  SELECT * FROM (
+    SELECT {ns_key(ds_key, 'cast', 'cast_key')} AS sample_key, 'cast' AS sample_type,
+           NULL::VARCHAR AS parent_sample_key,
+           {ns_key(ds_key, 'cast', 'cast_key')} AS root_sample_key,
+           '{ds_key}' AS dataset_key, grid_key, site_key, cruise_key,
+           TRY_CAST(ord_occ AS INTEGER) AS order_occ, latitude, longitude,
+           CAST(datetime_start_utc AS TIMESTAMP) AS datetime,
+           NULL::DOUBLE AS depth_min_m, NULL::DOUBLE AS depth_max_m,
+           NULL::VARCHAR AS tow_type
+    FROM ctd_cast
+  ) q QUALIFY row_number() OVER (PARTITION BY sample_key ORDER BY datetime) = 1"))
+
+# 2. obs — the THINNED scan set is the headline (ctd_thin, not ctd_measurement);
+#    full resolution goes to the supplemental obs_ctd_full below.
+append_obs(con, glue("
+  SELECT 'env', '{ds_key}',
+         {ns_key(ds_key, 'cast', 'cc.cast_key')},
+         cc.grid_key, cc.cruise_key, cc.latitude, cc.longitude,
+         CAST(cc.datetime_start_utc AS TIMESTAMP), t.depth_m, t.depth_m,
+         NULL::VARCHAR, NULL::VARCHAR, t.measurement_type, t.measurement_value,
+         t.measurement_qual, NULL::DOUBLE
+  FROM ctd_thin t JOIN ctd_cast cc ON t.ctd_cast_uuid = cc.ctd_cast_uuid
+  WHERE cc.grid_key IS NOT NULL"))
+
+core <- list(
+  sample = dbGetQuery(con, "SELECT COUNT(*) FROM sample")[[1]],
+  obs    = dbGetQuery(con, "SELECT COUNT(*) FROM obs")[[1]])
 cat(glue(
   "core projection — sample={core$sample %||% 0} obs={core$obs %||% 0}\n"))
 

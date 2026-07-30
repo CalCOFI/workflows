@@ -142,10 +142,14 @@ DuckDB-WASM; and it would be the org's only SQLite (the sole current hits are *d
 entries in `api-h3t/sql_validate.py`). The one use that could have justified it — a
 writable multi-user review ledger — is moot now that the Access file is a frozen archive.
 
-**Front-end: a new `CalCOFI/db-qaqc` repo**, Jekyll + DuckDB-WASM on GitHub Pages, modelled
-on `db-query` but with its own audience and domain. An Access "saved query with a documented
-Purpose" maps 1:1 onto a `_queries/<category>/<name>.md`, with the `0-Query Info` purpose
-text as the body.
+**Front-end: a Shiny app, `apps/ctd-qaqc`**, sibling to `apps/ctd-viz`. An earlier draft
+proposed a static DuckDB-WASM site modelled on `db-query`; that was wrong for this job.
+A QA/QC tool must *run* checks in the background, persist mutable review state, and query
+a 212 M-row table — none of which a static page does. Full reasoning in Phase 7.
+
+The Turso question above is unchanged by this: server-side Shiny means review state has a
+natural home (the Postgres already on the server, or git-tracked correction CSVs), so it
+still buys nothing.
 
 **Windows: not required.** Everything scientific is reachable from macOS/Ubuntu; the only
 unreachable content is 2 utility VBA modules and 1 data-entry form, which is not worth
@@ -267,60 +271,69 @@ Two corrections to what this plan previously assumed:
 Deferred: running the ported `TR` checks against the release moves to Phase 5, since it
 needs the rule registry that phase builds.
 
-### Phase 4 — Feed the CTD ingest (metadata + processing + QA/QC)
+### Phase 4 — Feed the CTD ingest (metadata + processing + QA/QC) ✅ MOSTLY DONE
 
 **Nothing from the Access master enters the integrated database.** It is a knowledge
-source, not a data source. This phase spends that knowledge on
-`ingest_calcofi_ctd-cast.qmd` and the `metadata/` registries.
+source. This phase spends that knowledge on `ingest_calcofi_ctd-cast.qmd` and the
+`metadata/` registries.
 
-**4a. Fix the `-99` sentinel — this is a live bug, do it first and independently.**
-The source uses `-99.00` as its missing-value marker across most numeric columns, but
-the ingest strips it from longitude/latitude only (`pseudoNA_values` at
-`ingest_calcofi_ctd-cast.qmd:724`). The `NOT isnan / isfinite` filter at `:1400` does
-not catch it because `-99` is finite. Currently in released `ctd_thin`:
+**4a. `-99` sentinel — DONE and verified.** The source's missing marker was stripped from
+longitude/latitude only, so it flowed through `ctd_measurement` → `ctd_thin` → `obs` as a
+real reading (84,302 rows in v2026.07.17, including canonical oxygen). Now deleted in the
+pivot, exact-match rather than tolerance, with an accounting `stopifnot`. Placed before
+`ctd_summary` and `ctd_thin` derive from it, so the fix propagates; `ctd_wide` — the one
+output built earlier — is retired. **Verified empirically: zero `-99` in `obs`
+(5.94 M rows) and `obs_ctd_full` (212 M rows).**
 
-| measurement_type | rows = −99 | canonical? |
-|---|---|---|
-| `isus_v` | 40,479 | yes |
-| `ph` | 31,493 | yes |
-| `spar` | 6,189 | yes |
-| `oxygen_umol_kg_ave_sta_corr` | 4,294 | **yes** |
-| `oxygen_ml_l_ave_sta_corr` | 953 | **yes** |
-| `beam_attenuation` / `transmissometer` / `dynamic_height` / `specific_volume_anomaly` | 894 | yes |
+**4b. `measurement_qual` — decoded, deliberately not acted on.** The vocabulary from
+Phase 2 (`6` = data OK but taken from CTD, `8` = suspect, `9` = missing) is now joined and
+reported in a Data Quality Diagnostics subsection, with unrecognized codes surfaced loudly
+rather than left as a silent `NA` from the join. The `"9.0"` cast artifact is fixed at the
+source — stripped **textually** (`regexp_replace(…, '\.0+$', '')`) rather than via an
+INTEGER cast, so an unexpected `"9.5"` stays visible instead of being rounded to 9.
 
-**84,302 rows** of headline data, including canonical oxygen, where a physically
-impossible sentinel is served as a real value. Any consumer mean, min, or anomaly is
-wrong by that much. Encode the sentinel policy as a **per-column registry** rather than
-one global vector — `dynamic_height` and `specific_volume_anomaly` are legitimately
-negative, so a blanket `value == -99 → NULL` needs per-variable review (a true
-`-99.00 dyn cm` is implausible but not impossible).
+Nothing drops or rewrites a flagged value: questions 02 / 02b / 05 are open, two of them
+blockers, and acting on unconfirmed semantics would be guessing with released data.
+**The real gap remains** — 8 of the now-27 canonical types carry no flag at all, because
+source flags attach to component sensors (`Temp1Q`, `Salt1Q`, `Ox1Q`) while the canonical
+value is the *average*. That propagation rule (worst-of? both-must-pass?) is `ctd-qaqc`
+work.
 
-**4b. Interpret `measurement_qual` for CTD.** Phase 2 established the vocabulary
-(`6` = data OK but taken from CTD, `8` = suspect, `9` = missing) and it **transfers** —
-released `ctd_thin` contains exactly `8` and `9`. Two problems to settle:
-- Flags are stored as the strings `"9.0"` / `"8.0"` (a double→VARCHAR cast artifact).
-- **The headline physical variables carry no flags at all.** 8 of the 16 canonical CTD
-  types have no `_qual_column`, and they are the important ones: `temperature_ave`,
-  `salinity_ave_corr`, `oxygen_ml_l_ave_sta_corr`, `oxygen_umol_kg_ave_sta_corr`.
-  Source flags attach to the *component sensors* (`Temp1Q`, `Temp2Q`, `Salt1Q`, `Salt2Q`,
-  `Ox1Q`, `Ox2Q`); the canonical value is the *average*, so quality is lost in the mean.
-  Decide the propagation rule (worst-of? both-must-pass? a new "derived" code) — no
-  registry answers this today.
+**4c. Instrument provenance — DONE (rendered).** `measurement_method.csv` is joined by
+*base property*, stripping sensor/correction suffixes (`temperature_ave` → `temperature`,
+`oxygen_ml_l_ave_sta_corr` → `oxygen_ml_l`, `oxygen_btl_ml_l` → `oxygen_ml_l` — the bottle
+marker appears as prefix, suffix **and infix**, which is why it is three rules not one).
+24 of 54 CTD types now carry instrument, stated accuracy and era. The payoff case:
+`temperature_ave` shows both the reversing thermometer (through 1993-04-15) and the CTD
+thermistor (from 1993-08-11) — the changeover this dataset begins at.
 
-**4c. Canonical-variable provenance.** `measurement_method.csv` (Phase 2) carries
-instrument, accuracy and date-era per measurement. Link the CTD types to it so each
-canonical choice is *documented*, and record the correction lineage that the bare
-suffixes `_corr` / `_cruise_corr` / `_sta_corr` currently leave implicit.
+Still a table, not a sidecar: promoting it into `metadata.json` belongs in
+`calcofi4db::build_metadata_json()`, and 18 of 35 era rows await mapping confirmation
+(`hydro_master_06`).
 
-**4d. Decide the bottle-reference pairs.** The source ships bottle↔CTD matched pairs
-(`BTL_Temp`, `SaltB`, `OxB`, `Chl-a`, `NO3`, …) and all 10 are registered. Exactly one —
-`btl_ammonium` — is currently `is_canonical = TRUE` while the other nine are `FALSE`;
-that inconsistency looks unintended. Sensor-vs-Winkler/Portosal at matched depth is *the*
-classic CTD calibration check, so `ctd-qaqc` needs these; either promote them as a set or
-have `ctd-qaqc` read `ctd_measurement` instead of `ctd_thin`.
+**4d. Bottle-reference pairs — DONE.** All 12 `btl_*` / `*_btl` types are now
+`is_canonical`, not just `btl_ammonium` (which read as a stray edit). These are the
+reference side of the sensor-vs-Winkler/Portosal calibration check that `ctd-qaqc` is
+built around. Thinning correctly does **not** apply to them: a bottle fires at a few
+discrete depths that no interpolation reconstructs, and subsetting them to the 10 m grid
+discarded ~73% of real lab samples when `btl_ammonium` was first promoted. The ingest's
+`canon_btl` / `btl_clause` (`retained_reason = 'bottle'`) already handles this and is
+prefix-based, so the whole group is covered automatically.
 
-Use `calcofi4db::read_measurement_type()` / `register_measurement_types()` for every
-registry touch — never bare `read_csv`/`write_csv` (sentinel-string round-trip trap).
+**Also done:** `valid_min` / `valid_max` moved out of the `plaus` tribble that lived inline
+in one diagnostics chunk and into the registry, exactly as that chunk's comment asked —
+same values, now reviewable in a diff, emittable by the CF netCDF writer as real variable
+attributes, and available to any QC rule. Still report-only; they catch impossible values
+and are not the agreed oceanographic ranges.
+
+The registry is now read with `calcofi4db::read_measurement_type()` rather than bare
+`read_csv` — the round-trip trap, which mattered here because line ~1293 does `na.omit()`
+on `_qual_column` and a literal `"NA"` string would have become a phantom flag column.
+
+Applied by `libs/build_ctd_measurement_registry.R` (idempotent).
+
+**Not yet done:** re-run the ingest so the release reflects 4b/4c/4d. Expect `ctd_thin` /
+`obs` to grow — 11 more canonical types, each retained whole at bottle depths.
 
 ### Phase 5 — The `ctd-qaqc` reference database
 
@@ -376,27 +389,38 @@ severity, description, source_query, active`). Logic in `calcofi4db` with a test
 fixture per rule type; bump `DESCRIPTION` + `NEWS.md` in the same change. The 30 `UPDATE`
 queries are documented history and are **never executed**.
 
-### Phase 7 — `ctd-qaqc` front-end
+### Phase 7 — `ctd-qaqc` front-end (Shiny)
 
-New `CalCOFI/ctd-qaqc` repo. **Hugo, not Jekyll** — new CalCOFI static sites use Hugo for
-render speed, with the `analytics` repo as the reference implementation.
+New Shiny app, as a sibling in the **`apps/` monorepo** alongside `ctd-viz` — not a
+static site. A QA/QC tool is a different animal from a query playground, and three of
+its requirements rule out DuckDB-WASM on GitHub Pages:
 
-- Client-side **DuckDB-WASM** over release Parquet, lifting `db-query/lib/duckdb.js`
-  (dependency-free CDN singleton) and `lib/options-sources.js` for cruise/type pickers.
-- One file per check, carrying its parameters and its *description* — the Access
-  `0-Query Info` purpose text is the seed. Keep build-time pre-rendering over runtime
-  parsing.
-- Reuse `db-schema`'s sidecar fetch (`versions.json`, `latest.txt`, `metadata.json`) and
-  `db-viz-cruise`'s URL-query-string permalinks so a flagged cast is a shareable link.
-- Deep-link into `apps/ctd-viz` for profile inspection rather than rebuilding plots.
-- **Pages gotcha:** `build_type=workflow`, not the legacy branch source (this bit
-  `db-viz-station`).
+- **It has to *run* checks, not just read results.** WASM can only query pre-computed
+  Parquet. Shiny's `ExtendedTask` / `promises` / `callr` can kick off a rule sweep, a
+  climatology refit, or a re-ingest of one cruise in the background and stream progress.
+- **Review state is mutable.** Who flagged which cast, when, why, accepted or rejected —
+  that is write traffic, and server-side makes it a non-issue rather than a design
+  problem. (This is what the "frozen archive" answer settled for *Access* but not for the
+  *app*.) Persist to the Postgres already running on the server, or to git-tracked
+  correction CSVs following the `cruise_key_corrections.csv` pattern.
+- **Scale.** `obs_ctd_full` is 212 M rows — hostile to WASM, routine for server-side
+  DuckDB, which `apps/ctd-viz` already does via `prep_db.R`.
+
+Reuse rather than rebuild:
+
+- `apps/ctd-viz/prep_db.R` is the model for materializing a local DuckDB from the
+  release (it already stages `ctd_thin`, `ctd_summary`, `ctd_cast`, `measurement_type`).
+  `ctd-qaqc` needs the same plus the Phase 5 reference tables.
+- `enableBookmarking(store = "url")` / the `db-viz-cruise` query-string convention so a
+  flagged cast is a shareable link.
+- Deep-link into `apps/ctd-viz` for profile inspection instead of duplicating plots.
+- Deploy is the existing path: clone under `/share/github/CalCOFI/apps`, symlink into
+  `/srv/shiny-server/`, `touch restart.txt`. No new hosting, no Pages workflow.
 - Register in `CalCOFI.github.io/_data/products.yml` and `uptime/.upptimerc.yml`.
-- **Open design question:** a QA/QC app for *ongoing* ingest implies mutable review state
-  (who flagged which cast, when, why, accepted or rejected). The "frozen archive" answer
-  settled the *Access* question, not the *app* question. Options: git-tracked correction
-  CSVs (the existing `cruise_key_corrections.csv` pattern), the Postgres already on the
-  server, or an embedded store. Decide before building, not during.
+
+The tradeoff, stated plainly: it is down when the server is, and it loses the frictionless
+public link a static site gives. `db-query` already covers ad-hoc SQL against the release,
+so that gap is already filled and does not need duplicating.
 
 ---
 
@@ -404,8 +428,12 @@ render speed, with the `analytics` repo as the reference implementation.
 
 - `devtools::test()` in `calcofi4db` — a synthetic fixture per new rule type; a red test is
   a hard stop. Reinstall the package so notebooks pick up changes.
-- **4a regression fixture:** assert zero `measurement_value = -99` in `ctd_thin` after the
-  sentinel fix, per measurement_type. This is the permanent guard.
+- **4a regression guard (in place):** the ingest asserts sentinel-delete accounting
+  (`n_meas_raw - n_sentinel == n_meas`) and the diagnostics chunk reports zero `-99`; a
+  regression shows up as a non-zero row in that audit rather than silently.
+- **Re-run the CTD ingest** so the release reflects 4b/4c/4d. Expect `ctd_thin` / `obs` to
+  GROW: 11 newly-canonical bottle-reference types, each retained whole at bottle depths
+  rather than thinned to the 10 m grid.
 - Re-run `scripts/extract_accdb.sh` from clean; assert the row counts in this document.
 - Diff Jackcess vs mdbtools SQL across all 155 queries; mdbtools must be a strict subset.
 - Render `explore_accdb_hydro-master.qmd`: 155 queries triaged, 12 relationships reproduced,
@@ -417,4 +445,5 @@ render speed, with the `analytics` repo as the reference implementation.
   become NULL, so row counts and any cached aggregate shift.
 - Hand-check three ported rules against their Access originals (open the `.sql`, run both,
   compare row counts).
-- Load `ctd-qaqc` in a browser and confirm the checks execute against the current release.
+- Launch `apps/ctd-qaqc` locally against a prepped DuckDB and confirm a check runs in the
+  background and its verdict persists across a session restart.
