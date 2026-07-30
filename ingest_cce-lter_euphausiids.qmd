@@ -115,7 +115,7 @@ load_duckdb_extension(con, "spatial")
 
 # load unified measurement_type reference
 meas_type_csv <- here("metadata/measurement_type.csv")
-d_meas_type   <- read_csv(meas_type_csv)
+d_meas_type   <- read_measurement_type(meas_type_csv)
 ```
 
 ## Read Source Data
@@ -535,7 +535,7 @@ d_meas_type <- d_meas_type |>
   filter(measurement_type != "euphausiid_abundance") |>
   bind_rows(euph_types) |>
   arrange(measurement_type)
-write_csv(d_meas_type, meas_type_csv)
+write_csv(d_meas_type, meas_type_csv, na = "")
 cat(glue("Registered euphausiid_abundance (units = {euph_types$units})"), "\n")
 
 dbWriteTable(con, "measurement_type", d_meas_type, overwrite = TRUE)

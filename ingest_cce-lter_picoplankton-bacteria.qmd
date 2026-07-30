@@ -100,7 +100,7 @@ dir_label <- glue("{provider}_{dataset}")
 dir_parquet <- here(glue("data/parquet/{dir_label}"))
 db_path <- here(glue("data/wrangling/{dir_label}.duckdb"))
 meas_type_csv <- here("metadata/measurement_type.csv")
-d_meas_type <- read_csv(meas_type_csv)
+d_meas_type <- read_measurement_type(meas_type_csv)
 
 if (overwrite) {
   if (file_exists(db_path)) file_delete(db_path)
@@ -267,7 +267,7 @@ d_meas_type <- d_meas_type |>
   bind_rows(pb_types) |>
   arrange(measurement_type)
 new_types <- pb_types
-write_csv(d_meas_type, meas_type_csv)
+write_csv(d_meas_type, meas_type_csv, na = "")
 dbWriteTable(con, "measurement_type", d_meas_type, overwrite = TRUE)
 cat(glue("measurement_type: {nrow(d_meas_type)} types registered ({nrow(new_types)} new)"), "\n")
 ```

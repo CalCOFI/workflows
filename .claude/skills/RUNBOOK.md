@@ -9,7 +9,7 @@ self-documenting. Human judgment stays in the loop at every hand-off.
 | Artifact | Role |
 |---|---|
 | `metadata/field_dictionary.csv` | Canonical field names/types/units/aliases. **Prescriptive** — new datasets conform; consistency is linted against it. |
-| `metadata/measurement_type.csv` | Canonical measurement vocabulary (raw measured quantities). The dictionary links to it; never duplicate it. |
+| `metadata/measurement_type.csv` | Canonical measurement vocabulary (raw measured quantities). The dictionary links to it; never duplicate it. Read via `calcofi4db::read_measurement_type()`, append via `register_measurement_types()` — a bare `write_csv()` defaults to `na = "NA"` and ships literal `"NA"` to the release. |
 | `metadata/dataset.csv` | **DEPRECATED** — superseded by each ingest's `calcofi.dataset_meta` YAML block, read via `ingest_yaml_to_dataset_df(read_ingest_yaml())`. The CSV drifted and orphaned obs rows. |
 | `metadata/provider.csv` | Registry of curating organizations (`provider` -> display label, name, url). Any provider an ingest declares must be registered; the landing-index build errors otherwise. |
 | `metadata/dataset_status.csv` | Pipeline-stage tracker — one row per dataset. Each skill writes its stage column. |

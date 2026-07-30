@@ -165,7 +165,7 @@ sync_to_gcs(
 
 # load unified measurement_type reference
 meas_type_csv <- here("metadata/measurement_type.csv")
-d_meas_type   <- read_csv(meas_type_csv)
+d_meas_type   <- read_measurement_type(meas_type_csv)
 ```
 
 ## Read Source Data
@@ -519,7 +519,7 @@ if (nrow(new_types) > 0) {
   cat(glue("Adding {nrow(new_types)} new measurement types: ",
            "{paste(new_types$measurement_type, collapse = ', ')}"), "\n")
   d_meas_type <- bind_rows(d_meas_type, new_types)
-  write_csv(d_meas_type, meas_type_csv)
+  write_csv(d_meas_type, meas_type_csv, na = "")
 } else {
   cat("All measurement types already registered\n")
 }

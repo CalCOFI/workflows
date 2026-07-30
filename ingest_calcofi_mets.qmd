@@ -161,7 +161,7 @@ mem_gb <- ps::ps_system_memory()$total / 1024^3 / 2 |> floor()
 dbExecute(con, glue("SET memory_limit = '{mem_gb}GB'"))
 dbExecute(con, glue("SET temp_directory = '{dir_tmp}'"))
 
-d_meas_type <- read_csv(here("metadata/measurement_type.csv"), show_col_types = F)
+d_meas_type <- read_measurement_type(here("metadata/measurement_type.csv"))
 d_flds_rd   <- read_csv(glue("{dir_meta}/flds_redefine.csv"), show_col_types = F)
 d_tbls_rd   <- read_csv(glue("{dir_meta}/tbls_redefine.csv"), show_col_types = F)
 ```

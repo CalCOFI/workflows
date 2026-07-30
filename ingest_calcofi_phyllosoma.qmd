@@ -65,7 +65,7 @@ dir_label <- glue("{provider}_{dataset}")
 dir_parquet <- here(glue("data/parquet/{dir_label}")); db_path <- here(glue("data/wrangling/{dir_label}.duckdb"))
 if (overwrite && file_exists(db_path)) file_delete(db_path)
 dir_create(dirname(db_path)); con <- get_duckdb_con(db_path); load_duckdb_extension(con, "spatial")
-meas_type_csv <- here("metadata/measurement_type.csv"); d_meas_type <- read_csv(meas_type_csv)
+meas_type_csv <- here("metadata/measurement_type.csv"); d_meas_type <- read_measurement_type(meas_type_csv)
 ```
 
 ## Download from EDI
@@ -220,7 +220,7 @@ phyllo_types <- tibble(
   units = "count", `_source_column` = new_names, `_source_table` = "phyllosoma_measurement",
   `_source_datasets` = "calcofi_phyllosoma", `_qual_column` = NA_character_, `_prec_column` = NA_character_)
 new_types <- phyllo_types |> filter(!measurement_type %in% d_meas_type$measurement_type)
-if (nrow(new_types) > 0) { d_meas_type <- bind_rows(d_meas_type, new_types); write_csv(d_meas_type, meas_type_csv) }
+if (nrow(new_types) > 0) { d_meas_type <- bind_rows(d_meas_type, new_types); write_csv(d_meas_type, meas_type_csv, na = "") }
 dbWriteTable(con, "measurement_type", d_meas_type, overwrite = TRUE)
 
 d_dataset <- ingest_yaml_to_dataset_df(read_ingest_yaml(here()))

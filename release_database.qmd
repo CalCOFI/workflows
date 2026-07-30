@@ -329,14 +329,27 @@ duplication is gone.
 # body_length, and the event-level effort types), replacing any per-ingest VIEW
 # so the FK parity check below sees the current vocabulary.
 dbExecute(con_wdl, "DROP VIEW IF EXISTS measurement_type")
+
+# Read the registry through calcofi4db::read_measurement_type() rather than
+# DuckDB's read_csv_auto. This used to be a direct read_csv_auto, and that is how
+# the release shipped literal "NA" strings: an ingest wrote the registry with
+# readr's default `na = "NA"`, which is invisible to read_csv() but NOT to
+# read_csv_auto, whose default nullstr is the empty string only. 161 rows of
+# `_qual_column` and 192 of `_prec_column` were affected, plus `is_canonical`.
+# The helper reads strictly (na = "") and ERRORS on sentinel strings, so a
+# corrupted registry now fails the release instead of being published by it.
+d_meas_type_reg <- read_measurement_type(here("metadata/measurement_type.csv"))
+dbWriteTable(con_wdl, "_measurement_type_reg", as.data.frame(d_meas_type_reg),
+             overwrite = TRUE)
 # derive provider/dataset from _source_datasets (first source) so the schema site
 # + query app ("browse measurement types") keep their provider/dataset columns.
-dbExecute(con_wdl, glue(
+dbExecute(con_wdl,
   "CREATE OR REPLACE TABLE measurement_type AS
    SELECT *,
           split_part(split_part(_source_datasets, ';', 1), '_', 1)          AS provider,
           regexp_replace(split_part(_source_datasets, ';', 1), '^[^_]*_', '') AS dataset
-   FROM read_csv_auto('{here('metadata/measurement_type.csv')}')"))
+   FROM _measurement_type_reg")
+dbExecute(con_wdl, "DROP TABLE _measurement_type_reg")
 
 # --- assemble the core from the per-dataset shards --------------------------
 # Each ingest emits its own slice via calcofi4db::emit_core_tables(), which is

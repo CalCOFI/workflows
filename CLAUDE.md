@@ -202,7 +202,7 @@ reviewable `metadata/measurement_taxon.csv` + `metadata/taxon_override.csv`.
 | File | Role |
 |---|---|
 | `field_dictionary.csv` | **Prescriptive** canonical field names/types/units/aliases. New datasets conform; consistency is linted against it. |
-| `measurement_type.csv` | Canonical measurement vocabulary (raw measured quantities). `is_canonical` flags the headline types. |
+| `measurement_type.csv` | Canonical measurement vocabulary (raw measured quantities). `is_canonical` flags the headline types. **Read it with `calcofi4db::read_measurement_type()` and append with `register_measurement_types()`, never with bare `read_csv`/`write_csv`** — see the round-trip trap below. |
 | `provider.csv` | **Registry of curating organizations** — one row per `provider` slug with `provider_short` (display label), `provider_name`, `url`, `status`. Any provider an ingest declares MUST be here: `scripts/build_workflows_index.R` errors out otherwise. Replaced a hardcoded label vector in that script, which silently yielded `NA` and published a literal `.na.character` heading for unregistered orgs. |
 | `dataset.csv` | **DEPRECATED** — superseded by each ingest's `calcofi.dataset_meta` YAML block via `ingest_yaml_to_dataset_df(read_ingest_yaml())`. The CSV drifted from the notebooks and orphaned `obs` rows. |
 | `dataset_status.csv` | Pipeline-stage tracker, one row per dataset; each skill writes its stage column. |
@@ -258,6 +258,17 @@ self-documenting; human review happens at every hand-off. Scaffolds come from
 - **Records lacking a cast/cruise FK**: use the `calcofi4db` helpers
   `match_by_site_datetime()` then `match_nearest_by_depth()` — do not hand-write
   the matching SQL.
+- **Never `write_csv()` a shared registry without `na = ""`.** `readr`'s default is
+  `na = "NA"`, so an empty cell round-trips to the two-character string `"NA"`.
+  This is invisible from R — `read_csv()` reads `"NA"` straight back to `NA` — but
+  DuckDB's `read_csv_auto` has a default `nullstr` of the empty string only, so the
+  literal value reaches the release. It did: 161 rows of `_qual_column`, 192 of
+  `_prec_column`, plus `units`, `is_canonical` and `grain` shipped as `"NA"`. Nine
+  ingest notebooks had the bug; one didn't. Use
+  `calcofi4db::read_measurement_type()` (strict read + validation) and
+  `register_measurement_types()` (append-only, always `na = ""`); the generic guard
+  is `check_registry_na_strings()`. A validator placed *after* a default `read_csv`
+  can never catch this, which is why the strict read is part of the helper.
 - **DuckDB**: always open via `calcofi4db::get_duckdb_con()` (sets
   `storage_compatibility_version=latest` so CRS-tagged geometry round-trips);
   never strip the geometry column. Known bug: `UPDATE`/`CREATE INDEX` on a table
