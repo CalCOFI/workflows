@@ -408,10 +408,33 @@ environmental measurement vocabulary rather than taxa, so the arm emits
 ```{r}
 #| label: emit_core
 
-core <- emit_core_tables(con, "cce-lter_picoplankton-bacteria")
+ds_key <- "cce-lter_picoplankton-bacteria"
+# no taxa: the four FCM types ARE the measurement vocabulary, not organisms, so
+# this dataset has no measurement_taxon rows and emits no taxon/dataset_taxon
+
+# This projection lives here, in the notebook that owns the dataset, not in a
+# switch(dataset_key, ...) arm inside calcofi4db. The reusable SHAPES stay in the
+# package (sample_arm_self / compat_measurement_sql), so this is a declaration.
+append_sample(con, sample_arm_self(
+  ds_key, "picoplankton_bacteria_bottle", "bottle_id", "bottle",
+  dt_col = "datetime_utc", site_expr = "site_key",
+  depth_min = "depth_m", depth_max = "depth_m"))
+
+append_obs(con, glue("
+  SELECT 'env', '{ds_key}', {ns_key(ds_key, 'bottle', 'b.bottle_id')},
+         b.grid_key, b.cruise_key, b.latitude, b.longitude,
+         CAST(b.datetime_utc AS TIMESTAMP), b.depth_m, b.depth_m,
+         NULL::VARCHAR, NULL::VARCHAR, m.measurement_type, m.measurement_value,
+         NULL::VARCHAR, NULL::DOUBLE
+  FROM picoplankton_bacteria_measurement m
+  JOIN picoplankton_bacteria_bottle b USING (bottle_id)
+  WHERE b.grid_key IS NOT NULL"))
+
+core <- list(
+  sample = dbGetQuery(con, "SELECT COUNT(*) FROM sample")[[1]],
+  obs    = dbGetQuery(con, "SELECT COUNT(*) FROM obs")[[1]])
 cat(glue(
-  "core projection — sample={core$sample %||% 0} obs={core$obs %||% 0} ",
-  "sample_measurement={core$sample_measurement %||% 0}\n"))
+  "core projection — sample={core$sample %||% 0} obs={core$obs %||% 0}\n"))
 
 # every measurement on a grid-matched bottle must reach obs
 n_obs <- dbGetQuery(con, "SELECT COUNT(*) FROM obs")[[1]]
@@ -429,8 +452,13 @@ stopifnot(
 # serve the retired per-dataset table names as VIEWs over the core, so
 # in-notebook consumers and ad-hoc queries keep working against the old names
 # (exact for every column the core models; see ?create_compat_views)
-compat <- create_compat_views(con, "cce-lter_picoplankton-bacteria")
-cat(glue("compat views over core: {paste(compat, collapse = ', ')}"), "\n")
+invisible(dbExecute(con, "DROP TABLE IF EXISTS picoplankton_bacteria_measurement_src"))
+invisible(dbExecute(con, "ALTER TABLE picoplankton_bacteria_measurement RENAME TO picoplankton_bacteria_measurement_src"))
+invisible(dbExecute(con, glue(
+  "CREATE OR REPLACE VIEW picoplankton_bacteria_measurement AS
+   {compat_measurement_sql(ds_key, 'bottle', 'bottle_id', 'measurement_id')}")))
+cat(glue("compat view picoplankton_bacteria_measurement over obs: ",
+         "{dbGetQuery(con, 'SELECT COUNT(*) FROM picoplankton_bacteria_measurement')[[1]]} rows"), "\n")
 
 ```
 

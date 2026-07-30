@@ -187,11 +187,41 @@ the egg counts land in `obs` as ordinary taxon-resolved occurrences.
 ```{r}
 #| label: emit_core
 
-mt_taxon <- read_csv(here("metadata/measurement_taxon.csv"), show_col_types = FALSE)
-tx_over  <- read_csv(here("metadata/taxon_override.csv"),    show_col_types = FALSE)
+ds_key <- "swfsc_cufes"
+# filter the crosswalk to THIS dataset: emit_core_tables() did that internally, so
+# an unfiltered read leaks other datasets' taxa into this shard
+mt_taxon <- read_csv(here("metadata/measurement_taxon.csv"),
+                     col_types = cols(worms_id = "i", itis_id = "i",
+                                      bin_value = "d", .default = "c")) |>
+  filter(dataset_key == ds_key)
+tx_over  <- read_csv(here("metadata/taxon_override.csv"), show_col_types = FALSE)
 
-core <- emit_core_tables(
-  con, "swfsc_cufes", measurement_taxon = mt_taxon, overrides = tx_over)
+# This projection lives here, in the notebook that owns the dataset, not in a
+# switch(dataset_key, ...) arm inside calcofi4db. The reusable SHAPES stay in the
+# package (sample_arm_self / compat_measurement_sql), so this is a declaration.
+n_taxon    <- build_taxon_reference(con, mt_taxon, tx_over)
+n_ds_taxon <- build_dataset_taxon(con,   mt_taxon, tx_over)
+dbWriteTable(con, "_measurement_taxon", as.data.frame(mt_taxon), overwrite = TRUE)
+
+append_sample(con, sample_arm_self(ds_key, "cufes_sample", "sample_id", "underway"))
+
+append_obs(con, glue("
+  SELECT 'bio', '{ds_key}', {ns_key(ds_key, 'underway', 'c.sample_id')},
+         c.grid_key, c.cruise_key, c.latitude, c.longitude,
+         CAST(c.datetime_start_utc AS TIMESTAMP), 0::DOUBLE, 0::DOUBLE,
+         mx.taxon_key, mx.life_stage, mx.measurement_type, m.measurement_value,
+         m.measurement_qual, NULL::DOUBLE
+  FROM cufes_measurement m JOIN cufes_sample c USING (sample_id)
+  JOIN _measurement_taxon mx ON mx.dataset_key = '{ds_key}'
+                            AND mx.raw_measurement_type = m.measurement_type
+                            AND mx.target = 'obs'
+  WHERE c.grid_key IS NOT NULL"))
+
+core <- list(
+  sample        = dbGetQuery(con, "SELECT COUNT(*) FROM sample")[[1]],
+  obs           = dbGetQuery(con, "SELECT COUNT(*) FROM obs")[[1]],
+  taxon         = n_taxon,
+  dataset_taxon = n_ds_taxon)
 cat(glue(
   "core projection — sample={core$sample %||% 0} obs={core$obs %||% 0} ",
   "taxon={core$taxon %||% 0} dataset_taxon={core$dataset_taxon %||% 0}\n"))
@@ -218,8 +248,13 @@ cat(glue("obs parity: {format(n_obs, big.mark = ',')} rows, all taxon-resolved")
 # serve the retired per-dataset table names as VIEWs over the core, so
 # in-notebook consumers and ad-hoc queries keep working against the old names
 # (exact for every column the core models; see ?create_compat_views)
-compat <- create_compat_views(con, "swfsc_cufes")
-cat(glue("compat views over core: {paste(compat, collapse = ', ')}"), "\n")
+invisible(dbExecute(con, "DROP TABLE IF EXISTS cufes_measurement_src"))
+invisible(dbExecute(con, "ALTER TABLE cufes_measurement RENAME TO cufes_measurement_src"))
+invisible(dbExecute(con, glue(
+  "CREATE OR REPLACE VIEW cufes_measurement AS
+   {compat_measurement_sql(ds_key, 'underway', 'sample_id', 'cufes_measurement_id')}")))
+cat(glue("compat view cufes_measurement over obs: ",
+         "{dbGetQuery(con, 'SELECT COUNT(*) FROM cufes_measurement')[[1]]} rows"), "\n")
 
 ```
 
