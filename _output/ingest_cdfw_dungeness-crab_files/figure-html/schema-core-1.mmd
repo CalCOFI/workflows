@@ -1,0 +1,120 @@
+---
+config:
+  layout: elk
+---
+erDiagram
+    sample {
+        varchar sample_key PK
+        varchar sample_type
+        varchar parent_sample_key FK
+        varchar root_sample_key FK
+        varchar dataset_key
+        varchar grid_key
+        varchar site_key
+        varchar cruise_key
+        int order_occ
+        double latitude
+        double longitude
+        timestamp datetime
+        double depth_min_m
+        double depth_max_m
+        varchar tow_type
+        geometry geom
+    }
+    obs {
+        bigint obs_id PK
+        varchar realm
+        varchar dataset_key
+        varchar sample_key FK
+        varchar grid_key
+        varchar cruise_key
+        double latitude
+        double longitude
+        timestamp datetime
+        double depth_min_m
+        double depth_max_m
+        varchar taxon_key FK
+        varchar life_stage
+        varchar measurement_type FK
+        double measurement_value
+        varchar measurement_qual
+        double measurement_prec
+        ubigint hex_id
+    }
+    obs_attribute {
+        bigint obs_attribute_id PK
+        varchar dataset_key
+        varchar sample_key FK
+        varchar taxon_key FK
+        varchar life_stage
+        varchar measurement_type FK
+        double bin_value
+        varchar bin_label
+        int count
+        varchar measurement_qual
+    }
+    sample_measurement {
+        bigint sample_measurement_id PK
+        varchar sample_key FK
+        varchar dataset_key
+        varchar measurement_type FK
+        double measurement_value
+        varchar measurement_qual
+    }
+    taxon {
+        varchar taxon_key PK
+        int worms_id
+        bool itis_id
+        bool gbif_id
+        int ncbi_id
+        int inat_id
+        varchar scientific_name
+        bool common_name
+        bool rank
+        int rank_order
+        bool taxonomic_status
+        varchar parent_taxon_key FK
+        bool kingdom
+        bool phylum
+        bool class
+        bool order_taxon
+        bool family
+    }
+    dataset_taxon {
+        varchar ds_taxon_key PK
+        varchar dataset_key
+        varchar taxon_key FK
+        varchar ds_scientific_name
+        varchar ds_common_name
+        varchar ds_taxa_code
+    }
+    measurement_type {
+        varchar measurement_type PK
+        varchar description
+        varchar units
+        bool is_canonical
+        varchar _source_column
+        varchar _source_table
+        varchar _source_datasets
+        varchar _qual_column
+        varchar _prec_column
+        varchar grain
+    }
+    sample ||--o{ sample : "parent_sample_key"
+    sample ||--o{ sample : "root_sample_key"
+    sample ||--o{ obs : "sample_key"
+    taxon ||--o{ obs : "taxon_key"
+    measurement_type ||--o{ obs : "measurement_type"
+    sample ||--o{ obs_attribute : "sample_key"
+    taxon ||--o{ obs_attribute : "taxon_key"
+    measurement_type ||--o{ obs_attribute : "measurement_type"
+    sample ||--o{ sample_measurement : "sample_key"
+    measurement_type ||--o{ sample_measurement : "measurement_type"
+    taxon ||--o{ dataset_taxon : "taxon_key"
+    taxon ||--o{ taxon : "parent_taxon_key"
+    classDef lightblue stroke:#ADD8E6,stroke-width:3px
+    class sample,obs lightblue
+    classDef lightgreen stroke:#90EE90,stroke-width:3px
+    class obs_attribute,sample_measurement lightgreen
+    classDef lightyellow stroke:#FFFFE0,stroke-width:3px
+    class taxon,dataset_taxon,measurement_type lightyellow

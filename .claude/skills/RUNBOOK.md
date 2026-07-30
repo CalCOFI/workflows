@@ -84,6 +84,17 @@ dataset** — that is how ~450 lines of dataset-specific SQL ended up inside a
 general-purpose module. `release_database.qmd`'s `core_parity` chunk asserts shard
 counts, so cut-over stays safe.
 
+**Publish the core only.** `tbls_out = core_output_tables(con, extra =
+c("measurement_type", "dataset"))` — no per-dataset source table reaches parquet.
+The sources are archived already, so a copy is redundant and consumers must not have
+to choose between two representations. Where a source column matters but has no core
+home, give it one (the Dungeness sorting log's sorted/unsorted became zero-valued
+`obs` vs no `obs`) rather than publishing the source table to carry it.
+
+**Document what you publish.** The notebook needs an ERD of the CORE
+(`core_relationships()`), not just the source shape, plus a source→core mapping
+table that also names what is deliberately not published.
+
 Assert the projection rather than eyeballing it: source-vs-`obs` row counts and
 value totals, `obs.sample_key` → `sample`, `obs.taxon_key` → **`taxon`** (resolving,
 not merely non-NULL), `obs.measurement_type` → `measurement_type`, and

@@ -95,7 +95,13 @@ The notebook includes these sections (customize based on pattern):
 6. **Show source files** — `show_source_files()`
 7. **Show tables/fields** — Redefinition display
 8. **Load into database** — `ingest_dataset()` or custom load
-9. **Schema documentation** — Define PKs/FKs, color-code tables
+9. **Schema documentation** — **two ERDs plus a mapping**, because they answer
+  different questions: what the source looks like, what the ingest *publishes*
+  (`cc_erd(con, tables = core_tbls, rels = core_relationships(core_tbls))`), and
+  how one becomes the other. A source-only ERD is not sufficient — a reader cannot
+  tell what a consumer will see. The source→core mapping is a table of
+  `source table.field → core table.field → transform`, and it must also list what
+  is **deliberately not published** and why. Define PKs/FKs, color-code tables
   (`lightblue` = new tables, `lightyellow` = amended reference tables,
   `white` = shared metadata), draw with `cc_erd()`. This ERD documents the
   **source** shape; `relationships.json` is written later from
@@ -113,7 +119,9 @@ The notebook includes these sections (customize based on pattern):
 13. **Data preview** — Individual `datatable()` calls per table (NOT
   `preview_tables()` in a loop, which has DT rendering issues). Prefer previewing
   *through the core*, the way a consumer will read it.
-14. **Write parquet** — `write_parquet_outputs(tables = core_output_tables(con, extra = …))`
+14. **Write parquet** — **the core and nothing else**:
+  `write_parquet_outputs(tables = core_output_tables(con, extra = c("measurement_type", "dataset")))`.
+  Do NOT publish per-dataset source tables (see "Publish the core only" below).
 15. **Write metadata** — `build_metadata_json()`, passing
   `metadata_derived_csv = c(here("metadata/core_dictionary.csv"), <this dataset's>)`
   — without `core_dictionary.csv` every core table and column ships with an empty
@@ -186,6 +194,27 @@ source event; `obs` row count and value total equal the source; every
 **Prune retired parquet.** When a table becomes a compat VIEW it must stop being
 written, and any stale `.parquet` left on disk is still picked up by directory
 scans and by `sync_to_gcs`. Delete files not in `tbls_out`.
+
+**Publish the core only.** `tbls_out` is `core_output_tables(con, extra =
+c("measurement_type", "dataset"))`. No per-dataset source table goes to parquet:
+the source files are already archived to
+`gs://calcofi-files-public/archive/{provider}/{dataset}/`, so a per-dataset copy is
+redundant, and publishing both gives consumers two representations of the same data
+to choose between. Compat VIEWs are views over the core, so writing them would
+duplicate the same bytes under a second name.
+
+If a source column carries real information with no core home, **give it a core
+home** — do not use that as a reason to publish the source table. Worked example:
+the Dungeness sorting log's `sorted`/`unsorted` status looked like it needed its own
+column, but "examined, found none" is an occurrence with `measurement_value = 0`,
+and "not examined" is the absence of an `obs` row. Encoding it that way made the
+status column unnecessary and turned an inventory into queryable absence data.
+Free-text notes and gear detail the core genuinely does not model stay in the
+archived source, and the mapping table says so explicitly.
+
+Beware a statistic quietly changing meaning when you add rows like this: adding 216
+examined-but-empty samples moved an occurrence rate from 15/310 to 15/526. Both are
+true; report the scope.
 
 Also keep the template's **Questions for Data Providers** section (renders
 `metadata/{provider}/{dataset}/questions.csv` as a `datatable()`, placed after
