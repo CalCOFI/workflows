@@ -101,8 +101,13 @@ PQ_LOCAL <- here(glue("data/releases/{RELEASE}/parquet"))
 ERDDAP_ROOT <- Sys.getenv("CALCOFI_ERDDAP_ROOT", "/share/data/erddap-duckdb")
 ERDDAP_FLAG <- Sys.getenv("CALCOFI_ERDDAP_FLAG", "/share/erddap/data/flag")
 ERDDAP_DB   <- glue("{ERDDAP_ROOT}/duckdb/calcofi.db")
-PQ_SERVER   <- glue("{ERDDAP_ROOT}/release/{RELEASE}/parquet")
-ING_SERVER  <- glue("{ERDDAP_ROOT}/ingest")
+# BOTH must sit under `datasets/`: the erddap container bind-mounts only
+# {datasets,duckdb,tmp} from ERDDAP_ROOT (identity mounts), so a path anywhere else
+# resolves on the host and is invisible to ERDDAP's DuckDB — the views build and
+# count rows fine from the rstudio container, then every query 500s with
+# "No files found that match the pattern".
+PQ_SERVER   <- glue("{ERDDAP_ROOT}/datasets/release/{RELEASE}/parquet")
+ING_SERVER  <- glue("{ERDDAP_ROOT}/datasets/ingest")
 ING_LOCAL   <- here("data/parquet")
 
 cat(glue("release       : {RELEASE}\n"))
@@ -349,7 +354,14 @@ cfg <- bind_rows(cfg, supp_check |>
   filter(servable) |>
   transmute(dataset_key, dataset_id = glue("{dataset_key}_full"), grain = "full",
             src_rows = rows, supp_table = table))
-cfg <- cfg |> arrange(dataset_key, grain)
+# ERDDAP writes `FROM <tableName>` UNQUOTED (only column names honour
+# <columnNameQuotes>), so a datasetID containing a hyphen — cce-lter_zooscan,
+# calcofi_ctd-cast, ucsd_sio_mesopelagic-fish — produces SQL DuckDB parses as a
+# subtraction: `syntax error at or near "-"`. The datasetID keeps the hyphen (it is
+# the public identity, and dataset_key has one); the VIEW gets a SQL-safe name.
+cfg <- cfg |>
+  arrange(dataset_key, grain) |>
+  mutate(view_name = gsub("[^A-Za-z0-9_]", "_", dataset_id))
 kable(cfg, caption = glue("{nrow(cfg)} ERDDAP datasets planned"))
 ```
 
@@ -434,7 +446,7 @@ build_db <- function(db_path, root, ing_root) {
   on.exit(dbDisconnect(cx, shutdown = TRUE))
   for (i in seq_len(nrow(cfg))) {
     r <- cfg[i, ]
-    dbExecute(cx, glue("CREATE OR REPLACE VIEW \"{r$dataset_id}\" AS
+    dbExecute(cx, glue("CREATE OR REPLACE VIEW \"{r$view_name}\" AS
                         {build_sql(r, root, ing_root)}"))
   }
   writeLines(as.character(dbGetQuery(cx, "SELECT version()")[[1]]),
@@ -444,7 +456,7 @@ build_db <- function(db_path, root, ing_root) {
 v_local <- build_db(file.path(dir_erddap, "calcofi_local.db"), PQ_LOCAL, ING_LOCAL)
 cat(glue("validated views: {length(v_local)}\n"))
 cat(glue("duckdb engine  : {readLines(file.path(dir_erddap, 'BUILD_VERSION.txt'))[1]}\n"))
-stopifnot(setequal(v_local, cfg$dataset_id))
+stopifnot(setequal(v_local, cfg$view_name))
 ```
 
 ```{r}
@@ -475,7 +487,7 @@ script <- c(
   "if (file.exists(DB)) file.remove(DB)",
   "con <- dbConnect(duckdb(), dbdir = DB)",
   "views <- list(", 
-  paste0("  `", cfg$dataset_id, "` = ",
+  paste0("  `", cfg$view_name, "` = ",
          vapply(view_sql, function(x) paste0("r\"(", x, ")\""), character(1)),
          c(rep(",", nrow(cfg) - 1), "")),
   ")",
@@ -553,7 +565,7 @@ for (i in seq_len(nrow(cfg))) {
     title         = title_of(r),
     summary       = summary_of(r),
     source_url    = glue("jdbc:duckdb:{ERDDAP_DB}"),
-    table_name    = r$dataset_id,
+    table_name    = r$view_name,
     # keyed by column name: this lands on the `{ds}_sample` views, whose widened
     # effort columns ARE measurement_type names, and is inert elsewhere
     units_lookup  = mt_units,
@@ -598,8 +610,13 @@ The notebook writes config and a view database; it does **not** touch the server
    views bind `{PQ_SERVER}` literally, so this path must match exactly:
 
    ```bash
-   rsync -av --delete data/releases/{RELEASE}/parquet/ \\
-     calcofi:{PQ_SERVER}/
+   # rsync is NOT installed on the server, and the release is already on GCS,
+   # so pull it server-side rather than pushing 2 GB from a laptop. Its gcloud
+   # needs the alpha track; gsutil is simpler:
+   ssh calcofi "mkdir -p {ERDDAP_ROOT}/datasets/release/{RELEASE} \\
+     && gsutil -m cp -r gs://calcofi-db/ducklake/releases/{RELEASE}/parquet \\
+          {ERDDAP_ROOT}/datasets/release/{RELEASE}/ \\
+     && gsutil -m cp -r gs://calcofi-db/ingest/calcofi_mets {ERDDAP_ROOT}/datasets/ingest/" 
    ```
 
 2. **Build the view database on the server.** It cannot be built here: DuckDB
@@ -608,7 +625,7 @@ The notebook writes config and a view database; it does **not** touch the server
    the exact SQL validated above.
 
    ```bash
-   rsync -av data/erddap/build_erddap_db.R calcofi:{ERDDAP_ROOT}/
+   scp data/erddap/build_erddap_db.R calcofi:{ERDDAP_ROOT}/
    ssh calcofi "docker exec -i rstudio bash -lc \\
      \'cd {ERDDAP_ROOT} && Rscript build_erddap_db.R\'"
    ```
