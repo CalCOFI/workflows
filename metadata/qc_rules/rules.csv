@@ -1,0 +1,16 @@
+rule_key,rule_type,severity,target,description,sql_file,params,requires_types,active,source_query,notes
+ctd_sentinel_neg99,sentinel,error,obs,-99 missing-value sentinel served as a real measurement,ctd_sentinel_neg99.sql,,,TRUE,,regression guard for the ingest fix; expected count is 0
+ctd_obs_orphan_sample,fk,error,obs,obs row references a sample_key absent from sample,ctd_obs_orphan_sample.sql,,,TRUE,TR - <name>,ported from the Access TR family (table-linkage tests)
+ctd_cast_missing_position,completeness,error,sample,cast with NULL longitude or latitude,ctd_cast_missing_position.sql,,,TRUE,,ingest asserts none remain; a hit means that guard regressed
+ctd_value_out_of_range,range,warning,obs,measurement outside its declared valid_min/valid_max,ctd_value_out_of_range.sql,,,TRUE,TV - <name>,ranges live in measurement_type.csv; generous by design
+ctd_qual_unrecognized,lookup,warning,obs,quality code absent from the controlled vocabulary,ctd_qual_unrecognized.sql,,,TRUE,,vocabulary recovered from the Access master in Phase 2
+ctd_bottle_sensor_offset_temperature,crosscheck,warning,obs,bottle vs sensor temperature offset at matched depth,ctd_bottle_sensor_offset.sql,bottle_type=btl_temperature;sensor_type=temperature_ave;threshold=0.5;units=degC,"btl_temperature,temperature_ave",TRUE,,enabled by making btl_* canonical
+ctd_bottle_sensor_offset_salinity,crosscheck,warning,obs,bottle vs sensor salinity offset at matched depth,ctd_bottle_sensor_offset.sql,bottle_type=salinity_btl;sensor_type=salinity_ave_corr;threshold=0.05;units=PSS-78,"salinity_btl,salinity_ave_corr",TRUE,,Portosal is the reference
+ctd_bottle_sensor_offset_oxygen,crosscheck,warning,obs,bottle vs sensor oxygen offset at matched depth,ctd_bottle_sensor_offset.sql,bottle_type=oxygen_btl_ml_l;sensor_type=oxygen_ml_l_ave_sta_corr;threshold=0.3;units=ml/L,"oxygen_btl_ml_l,oxygen_ml_l_ave_sta_corr",TRUE,,Winkler is the reference
+ctd_density_inversion,profile,warning,obs,sigma-theta decreases with depth,ctd_density_inversion.sql,threshold=0.05,sigma_theta_1,TRUE,,CTD-specific; no counterpart in the bottle-era master
+ctd_bottom_depth_vs_station,crosscheck,warning,sample,cast bottom depth deviates >500 m from the station average,,,,FALSE,TQ - BottomDepth_Vs_AvgBottomDepth,BLOCKED on Phase 5 — needs CurrentStations.Avg_Depth in the ctd-qaqc reference DB
+ctd_climatology_anomaly,climatology,warning,obs,value exceeds |z| against the station x depth x day-of-year climatology,,,,FALSE,Anomalies <name>,BLOCKED on Phase 5/6 — needs HarmCoeff* regridded from standard depths onto the 10 m grid
+ctd_sensor1_vs_sensor2,crosscheck,warning,obs,dual-sensor disagreement beyond tolerance,,,,FALSE,,TODO Phase 6 — thresholds per property not yet agreed
+ctd_updown_disagreement,crosscheck,warning,obs,up- vs downcast disagreement at matched depth,,,,FALSE,,TODO Phase 6 — ctd_thin keeps one direction; needs obs_ctd_full
+ctd_pressure_monotonic,profile,warning,obs,pressure not monotonic within a cast direction (loop edit),,,,FALSE,,TODO Phase 6
+ctd_spike,profile,warning,obs,adjacent-scan spike beyond tolerance,,,,FALSE,,TODO Phase 6 — needs obs_ctd_full at full scan resolution
