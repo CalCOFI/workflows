@@ -226,35 +226,88 @@ cat(glue("phyto_taxon {nrow(phyto_taxon)} ({sum(!is.na(phyto_taxon$aphia_id))} W
 ## Emit Core Tables
 
 Project this dataset into the shared consolidated core model
-(`design_env-bio-consolidation.md`) via `calcofi4db::emit_core_tables()` — the
-single source of truth for the per-dataset projection into `sample` / `obs` /
-`obs_freq` / `sample_measurement`, also used by `release_database.qmd` to
-assemble the authoritative cross-dataset release.
+(`design_env-bio-consolidation.md`). These core tables **are** this ingest's
+output: `release_database.qmd` concatenates the per-dataset shards rather than
+re-deriving the core, so there is exactly one projection to keep correct.
+
+This dataset is **region-pooled**: the grain is cruise × region, not station ×
+time, so `sample_type = 'region_pool'` and both `grid_key` and `datetime` are
+NULL *by design*. The usual `WHERE grid_key IS NOT NULL` guard every other arm
+carries must therefore **not** be applied here, or every row is dropped.
 
 ```{r}
 #| label: emit_core
 
-mt_taxon <- read_csv(here("metadata/measurement_taxon.csv"), show_col_types = FALSE)
-tx_over  <- read_csv(here("metadata/taxon_override.csv"),    show_col_types = FALSE)
+ds_key <- "calcofi_phytoplankton"
+# filter the crosswalk to THIS dataset -- an unfiltered read leaks other datasets'
+# taxa into this shard (the retired emit_core_tables() wrapper filtered internally)
+mt_taxon <- read_csv(here("metadata/measurement_taxon.csv"),
+                     col_types = cols(worms_id = "i", itis_id = "i",
+                                      bin_value = "d", .default = "c")) |>
+  filter(dataset_key == ds_key)
+tx_over  <- read_csv(here("metadata/taxon_override.csv"), show_col_types = FALSE)
 
-core <- emit_core_tables(
-  con, "calcofi_phytoplankton", measurement_taxon = mt_taxon, overrides = tx_over)
+# This projection lives here, in the notebook that owns the dataset, not in a
+# switch(dataset_key, ...) arm inside calcofi4db. The reusable SHAPES stay in the
+# package (sample_arm_self / compat_measurement_sql), so this is a declaration.
+# The coarse functional groups (NULL aphia_id) resolve via taxon_override.csv,
+# keyed on phyto_taxon.taxa — hence tx_over is required, not optional.
+# lineage: fetch each taxon's WoRMS/ITIS classification (cached in
+# metadata/taxon_lineage.csv, so a re-run costs no API calls) and stage it as the
+# `taxon` hierarchy build_taxon_reference() reads. Without it a crosswalk- or
+# vocabulary-resolved taxon reaches the release with a key and a name and NOTHING
+# else — no rank, no parent_taxon_key, no classification — so hierarchy rollups
+# ("all Decapoda") silently match nothing and no error is raised anywhere.
+ensure_taxon_lineage(con, mt_taxon, tx_over,
+                     cache_csv = here("metadata/taxon_lineage.csv"))
+n_taxon    <- build_taxon_reference(con, mt_taxon, tx_over)
+n_ds_taxon <- build_dataset_taxon(con,   mt_taxon, tx_over)
+n_tx_group <- build_taxon_group(con,     mt_taxon, tx_over)
+
+append_sample(con, sample_arm_self(
+  ds_key, "phyto_sample", "phyto_sample_id", "region_pool",
+  dt_col = "NULL", grid_expr = "NULL::VARCHAR"))
+
+append_obs(con, glue("
+  SELECT 'bio', '{ds_key}', {ns_key(ds_key, 'region_pool', 'ps.phyto_sample_id')},
+         NULL::VARCHAR, ps.cruise_key, ps.latitude, ps.longitude,
+         NULL::TIMESTAMP, 0::DOUBLE, 0::DOUBLE,
+         dt.taxon_key, NULL::VARCHAR, pm.measurement_type, pm.measurement_value,
+         NULL::VARCHAR, NULL::DOUBLE
+  FROM phyto_measurement pm JOIN phyto_sample ps USING (phyto_sample_id)
+  LEFT JOIN dataset_taxon dt ON dt.dataset_key = '{ds_key}'
+                            AND dt.ds_taxa_code = CAST(pm.species_code AS VARCHAR)"))
+
+core <- list(
+  sample        = dbGetQuery(con, "SELECT COUNT(*) FROM sample")[[1]],
+  obs           = dbGetQuery(con, "SELECT COUNT(*) FROM obs")[[1]],
+  taxon         = n_taxon,
+  dataset_taxon = n_ds_taxon,
+  taxon_group   = n_tx_group)
 cat(glue(
   "core projection — sample={core$sample %||% 0} obs={core$obs %||% 0} ",
-  "obs_freq={core$obs_freq %||% 0} sample_measurement={core$sample_measurement %||% 0}\n"))
+  "taxon={core$taxon %||% 0} dataset_taxon={core$dataset_taxon %||% 0} ",
+  "taxon_group={core$taxon_group %||% 0}\n"))
 
 # region-pooled: obs carries NULL grid_key and NULL datetime by design (the
 # grain is cruise x region, not station x time), so the usual grid_key filter
 # must NOT be applied here or every row would be dropped.
-n_obs <- dbGetQuery(con, "SELECT COUNT(*) FROM obs")[[1]]
+n_obs <- core$obs
 n_exp <- dbGetQuery(con, "SELECT COUNT(*) FROM phyto_measurement")[[1]]
 stopifnot(
   "obs must be one row per phyto measurement"      = n_obs == n_exp,
   "region-pooled obs carry no grid_key"            =
     dbGetQuery(con, "SELECT COUNT(*) FROM obs WHERE grid_key IS NOT NULL")[[1]] == 0,
+  "region-pooled sample carries no grid_key"       =
+    dbGetQuery(con, "SELECT COUNT(*) FROM sample WHERE grid_key IS NOT NULL")[[1]] == 0,
+  "sample must be region_pool grain"               =
+    dbGetQuery(con, "SELECT COUNT(*) FROM sample WHERE sample_type <> 'region_pool'")[[1]] == 0,
   "every obs.sample_key must resolve in sample"    =
     dbGetQuery(con, "SELECT COUNT(*) FROM obs o LEFT JOIN sample s USING (sample_key)
-                     WHERE s.sample_key IS NULL")[[1]] == 0)
+                     WHERE s.sample_key IS NULL")[[1]] == 0,
+  "every obs.taxon_key must RESOLVE in taxon (not merely be non-NULL)" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM obs o LEFT JOIN taxon t USING (taxon_key)
+                     WHERE o.taxon_key IS NOT NULL AND t.taxon_key IS NULL")[[1]] == 0)
 n_tax <- dbGetQuery(con, "SELECT COUNT(*) FROM obs WHERE taxon_key IS NOT NULL")[[1]]
 cat(glue("obs parity: {format(n_obs, big.mark = ',')} rows; ",
          "{round(100 * n_tax / max(n_obs, 1), 1)}% taxon-resolved"), "\n")

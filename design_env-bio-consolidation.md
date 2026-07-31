@@ -10,6 +10,17 @@ sampling-event counting and the `site→tow→net` hierarchy, and a **three-grai
 measurement model** (`sample_measurement` / `obs` / `obs_freq`) that honors the
 biological structure ichthyo exposed.*
 
+> **Status note (2026-07-30).** This document is the design record; the model it
+> describes is built and shipping. Two API names below are historical: the
+> Phase-1 `v_obs_*` views are **deleted**, and **`build_sample_reference()` no
+> longer exists** — it, `emit_core_tables()` and `create_compat_views()` were
+> removed in calcofi4db 3.0.0 because they carried a `switch(dataset_key, …)` arm
+> per core table that the release duplicated and then drifted from. Each dataset's
+> projection now lives in its own `ingest_*.qmd` ("Emit Core Tables"), declared
+> against the generic `append_*()` / `sample_arm_self()` / `compat_event_sql()`
+> helpers; `release_database.qmd` is a pure union of the resulting shards. Read
+> `CLAUDE.md` → "Consolidated core model" for the current shape.
+
 ## Motivation
 
 The integrated DB currently models observations as **per-dataset triples** —
@@ -173,9 +184,9 @@ grain is preserved; `root_sample_key` gives the station-occupation event for fre
 | calcofi_dic | `bottle_id`\* (bottle) | `cast_id` (cast) | `cast_id` |
 | swfsc_ichthyo | `net_uuid` (net) | `tow_uuid` (tow) | `site_uuid` |
 | swfsc_cufes | `sample_id` (underway) | — | self |
-| euphausiids / phyllosoma / pic_zooplankton | `tow_id` (tow) | — | self |
+| euphausiids / phyllosoma / sio_pic-zooplankton | `tow_id` (tow) | — | self |
 | cce-lter_zoodb / zooscan | `sample_id` (tow) | — | self |
-| calcofi_bird_mammal_census | `gis_key` (transect) | — | self |
+| farallon_bird-mammal | `gis_key` (transect) | — | self |
 | calcofi_phytoplankton | `phyto_sample_id` (region_pool) | — | self (grid_key NULL) |
 
 \*DIC shares the bottle's physical Niskin `sample_key` where the

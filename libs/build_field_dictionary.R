@@ -244,7 +244,7 @@ fd <- tribble(
   "hour_source_conflict", "BOOLEAN", "", "flag",
   "TRUE where two source sheets disagree on a record's start hour.",
   "", "", FALSE,
-  "ucsd_sio mesopelagic-fish cruise 1110; unresolved, defaults to the curated sheet."
+  "sio mesopelagic-fish cruise 1110; unresolved, defaults to the curated sheet."
 )
 
 out <- here("metadata/field_dictionary.csv")

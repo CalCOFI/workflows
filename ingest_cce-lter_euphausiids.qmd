@@ -639,7 +639,8 @@ dbGetQuery(con, "
 ## Emit Core Tables
 
 Project this dataset into the shared consolidated core model
-(`design_env-bio-consolidation.md`) via `calcofi4db::emit_core_tables()` — the
+(`design_env-bio-consolidation.md`). The projection below is owned by this
+notebook — the
 single source of truth for the per-dataset projection into `sample` / `obs` /
 `obs_attribute` / `sample_measurement`, also used by `release_database.qmd` to
 assemble the authoritative cross-dataset release.
@@ -653,8 +654,8 @@ row per tow.
 #| label: emit_core
 
 ds_key <- "cce-lter_euphausiids"
-# filter the crosswalk to THIS dataset: emit_core_tables() did that internally, so
-# an unfiltered read leaks other datasets' taxa into this shard
+# filter the crosswalk to THIS dataset -- an unfiltered read leaks other datasets'
+# taxa into this shard (the retired emit_core_tables() wrapper filtered internally)
 mt_taxon <- read_csv(here("metadata/measurement_taxon.csv"),
                      col_types = cols(worms_id = "i", itis_id = "i",
                                       bin_value = "d", .default = "c")) |>
@@ -664,9 +665,22 @@ tx_over  <- read_csv(here("metadata/taxon_override.csv"), show_col_types = FALSE
 # This projection lives here, in the notebook that owns the dataset, not in a
 # switch(dataset_key, ...) arm inside calcofi4db. The reusable SHAPES stay in the
 # package (sample_arm_self / compat_measurement_sql), so this is a declaration.
+# lineage: fetch each taxon's WoRMS/ITIS classification (cached in
+# metadata/taxon_lineage.csv, so a re-run costs no API calls) and stage it as the
+# `taxon` hierarchy build_taxon_reference() reads. Without it a crosswalk- or
+# vocabulary-resolved taxon reaches the release with a key and a name and NOTHING
+# else — no rank, no parent_taxon_key, no classification — so hierarchy rollups
+# ("all Decapoda") silently match nothing and no error is raised anywhere.
+ensure_taxon_lineage(con, mt_taxon, tx_over,
+                     cache_csv = here("metadata/taxon_lineage.csv"))
 n_taxon    <- build_taxon_reference(con, mt_taxon, tx_over)
 n_ds_taxon <- build_dataset_taxon(con,   mt_taxon, tx_over)
-dbWriteTable(con, "_measurement_taxon", as.data.frame(mt_taxon), overwrite = TRUE)
+# NOTE: no `_measurement_taxon` staging. The crosswalk's euphausiid rows describe
+# the OLD single-`Abundance` export, where the taxon was baked into the type name.
+# The BTEDB export is species- AND life-stage-resolved, so taxon_key comes from
+# dataset_taxon and life_stage rides the headline — decomposing through the
+# crosswalk here is exactly the bug that collapsed all 37 species to
+# worms:110513 (Euphausiidae) and nulled life_stage in the old release arm.
 
 append_sample(con, sample_arm_self(
   ds_key, "euphausiids_tow", "tow_id", "tow", site_expr = "site_key",

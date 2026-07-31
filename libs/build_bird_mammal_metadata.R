@@ -1,11 +1,11 @@
 # build_bird_mammal_metadata.R
-# scaffold metadata/calcofi/bird_mammal_census/ for the #29/#30 ingest.
+# scaffold metadata/farallon/bird-mammal/ for the #29/#30 ingest.
 # Source: whales-seabirds-turtles/bird-mammal-census/ (CCE-LTER DataZoo 255, Sydeman).
 # 4 tables: transect (effort) + observation (counts) + species + behavior lookups.
 # fld_new conforms to metadata/field_dictionary.csv. re-runnable & idempotent.
 
 suppressMessages({library(readr); library(tibble); library(dplyr); library(here); library(fs)})
-dir_meta <- here("metadata/calcofi/bird_mammal_census")
+dir_meta <- here("metadata/farallon/bird-mammal")
 dir_create(dir_meta)
 
 tbls <- tribble(

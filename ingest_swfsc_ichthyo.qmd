@@ -1293,10 +1293,9 @@ preview_tables(
 ## Emit Core Tables
 
 Project this dataset into the shared consolidated core model
-(`design_env-bio-consolidation.md`) via `calcofi4db::emit_core_tables()`. These
-core tables **are** this ingest's output: `release_database.qmd` concatenates the
-per-dataset shards rather than re-deriving the core, so there is exactly one
-projection to keep correct.
+(`design_env-bio-consolidation.md`). These core tables **are** this ingest's
+output: `release_database.qmd` concatenates the per-dataset shards rather than
+re-deriving the core, so there is exactly one projection to keep correct.
 
 Ichthyo is the deepest hierarchy in the model — `site` -> `tow` -> `net` — which
 `sample` carries as an adjacency list (`parent_sample_key` / `root_sample_key`),
@@ -1308,42 +1307,212 @@ distributions become `obs_attribute` under the abundance headline in `obs`.
 ```{r}
 #| label: emit_core
 
-mt_taxon <- read_csv(here("metadata/measurement_taxon.csv"), show_col_types = FALSE)
-tx_over  <- read_csv(here("metadata/taxon_override.csv"),    show_col_types = FALSE)
+ds_key <- "swfsc_ichthyo"
+# filter the crosswalk to THIS dataset -- an unfiltered read leaks other datasets'
+# taxa into this shard (the retired emit_core_tables() wrapper filtered internally)
+mt_taxon <- read_csv(here("metadata/measurement_taxon.csv"),
+                     col_types = cols(worms_id = "i", itis_id = "i",
+                                      bin_value = "d", .default = "c")) |>
+  filter(dataset_key == ds_key)
+tx_over  <- read_csv(here("metadata/taxon_override.csv"), show_col_types = FALSE)
 
-core <- emit_core_tables(
-  con, "swfsc_ichthyo", measurement_taxon = mt_taxon, overrides = tx_over)
+# This projection lives here, in the notebook that owns the dataset, not in a
+# switch(dataset_key, ...) arm inside calcofi4db. The reusable SHAPES stay in the
+# package (compat_event_sql / ns_key / prune_taxon_shard), so this is a declaration.
+#
+# taxa: build_taxon_reference() reads the WoRMS lineage `taxon` table built above
+# (build_taxon_hierarchy()) as the authority for rank/parent/classification, then
+# OVERWRITES `taxon` with the unified shape. prune_taxon_shard() trims it back to
+# the transitive parent closure of this dataset's vocabulary — the hierarchy is
+# broader than the taxa these observations reach, and ancestors must survive
+# because descendant expansion walks parent_taxon_key.
+# lineage: fetch each taxon's WoRMS/ITIS classification (cached in
+# metadata/taxon_lineage.csv, so a re-run costs no API calls) and stage it as the
+# `taxon` hierarchy build_taxon_reference() reads. Without it a crosswalk- or
+# vocabulary-resolved taxon reaches the release with a key and a name and NOTHING
+# else — no rank, no parent_taxon_key, no classification — so hierarchy rollups
+# ("all Decapoda") silently match nothing and no error is raised anywhere.
+ensure_taxon_lineage(con, mt_taxon, tx_over,
+                     cache_csv = here("metadata/taxon_lineage.csv"))
+n_taxon    <- build_taxon_reference(con, mt_taxon, tx_over)
+n_ds_taxon <- build_dataset_taxon(con,   mt_taxon, tx_over)
+n_pruned   <- prune_taxon_shard(con, ds_key)
+
+# sample — three chained levels. `site` has no datetime of its own, so it takes
+# the earliest tow time; `tow` and `net` inherit site_key/order_occ/grid_key/
+# cruise_key from the site, and both carry the net gear code as tow_type.
+append_sample(con, glue("
+  SELECT {ns_key(ds_key, 'site', 's.site_uuid')} AS sample_key, 'site' AS sample_type,
+         NULL::VARCHAR AS parent_sample_key,
+         {ns_key(ds_key, 'site', 's.site_uuid')} AS root_sample_key,
+         '{ds_key}' AS dataset_key,
+         s.grid_key, s.site_key, s.cruise_key, CAST(s.order_occ AS INTEGER) AS order_occ,
+         s.latitude, s.longitude,
+         CAST(td.dt AS TIMESTAMP) AS datetime,
+         NULL::DOUBLE AS depth_min_m, NULL::DOUBLE AS depth_max_m,
+         NULL::VARCHAR AS tow_type
+  FROM site s
+  LEFT JOIN (SELECT site_uuid, min(datetime_start_utc) AS dt FROM tow GROUP BY 1) td
+         ON td.site_uuid = s.site_uuid"))
+append_sample(con, glue("
+  SELECT {ns_key(ds_key, 'tow', 't.tow_uuid')} AS sample_key, 'tow' AS sample_type,
+         {ns_key(ds_key, 'site', 't.site_uuid')} AS parent_sample_key,
+         {ns_key(ds_key, 'site', 't.site_uuid')} AS root_sample_key,
+         '{ds_key}' AS dataset_key, s.grid_key, s.site_key, s.cruise_key,
+         CAST(s.order_occ AS INTEGER) AS order_occ, s.latitude, s.longitude,
+         CAST(t.datetime_start_utc AS TIMESTAMP) AS datetime,
+         0::DOUBLE AS depth_min_m, NULL::DOUBLE AS depth_max_m,
+         t.tow_type_key AS tow_type
+  FROM tow t JOIN site s USING (site_uuid)"))
+append_sample(con, glue("
+  SELECT {ns_key(ds_key, 'net', 'n.net_uuid')} AS sample_key, 'net' AS sample_type,
+         {ns_key(ds_key, 'tow', 'n.tow_uuid')} AS parent_sample_key,
+         {ns_key(ds_key, 'site', 't.site_uuid')} AS root_sample_key,
+         '{ds_key}' AS dataset_key, s.grid_key, s.site_key, s.cruise_key,
+         CAST(s.order_occ AS INTEGER) AS order_occ, s.latitude, s.longitude,
+         CAST(t.datetime_start_utc AS TIMESTAMP) AS datetime,
+         0::DOUBLE AS depth_min_m, NULL::DOUBLE AS depth_max_m,
+         t.tow_type_key AS tow_type
+  FROM net n JOIN tow t USING (tow_uuid) JOIN site s USING (site_uuid)"))
+
+# obs — the abundance headline: BASE rows only (measurement_type IS NULL in the
+# source long table). taxon_key resolves through dataset_taxon on species_id —
+# the global worms:/itis: key, not the dataset-local species_id.
+append_obs(con, glue("
+  SELECT 'bio', '{ds_key}', {ns_key(ds_key, 'net', 'i.net_uuid')},
+         s.grid_key, s.cruise_key, s.latitude, s.longitude,
+         CAST(t.datetime_start_utc AS TIMESTAMP), NULL::DOUBLE, NULL::DOUBLE,
+         dt.taxon_key, i.life_stage,
+         'abundance', CAST(i.tally AS DOUBLE), NULL::VARCHAR, NULL::DOUBLE
+  FROM ichthyo i JOIN net n USING (net_uuid) JOIN tow t USING (tow_uuid)
+                 JOIN site s USING (site_uuid)
+  LEFT JOIN dataset_taxon dt ON dt.dataset_key = '{ds_key}'
+                            AND dt.ds_taxa_code = CAST(i.species_id AS VARCHAR)
+  WHERE i.measurement_type IS NULL AND s.grid_key IS NOT NULL"))
+
+# obs_attribute — the size and stage distributions UNDER that headline. `size`
+# takes the canonical name `body_length`; a `stage` bin also carries the human
+# label from `lookup`.
+append_obs_attribute(con, glue("
+  SELECT '{ds_key}', {ns_key(ds_key, 'net', 'i.net_uuid')},
+         dt.taxon_key, i.life_stage,
+         CASE i.measurement_type WHEN 'size' THEN 'body_length' ELSE i.measurement_type END,
+         i.measurement_value,
+         CASE WHEN i.measurement_type = 'stage' THEN lk.description ELSE NULL END,
+         i.tally, NULL::VARCHAR
+  FROM ichthyo i
+  LEFT JOIN dataset_taxon dt ON dt.dataset_key = '{ds_key}'
+                            AND dt.ds_taxa_code = CAST(i.species_id AS VARCHAR)
+  LEFT JOIN lookup lk ON lk.lookup_type = i.life_stage || '_stage'
+                     AND lk.lookup_num = CAST(i.measurement_value AS INTEGER)
+  WHERE i.measurement_type IN ('stage','size')"))
+
+# sample_measurement — the five net-level effort quantities, long-formatted
+append_sample_measurement(con, glue("
+  SELECT {ns_key(ds_key, 'net', 'net_uuid')}, '{ds_key}',
+         mt, mv, NULL::VARCHAR
+  FROM (
+    SELECT net_uuid, 'volume_sampled' mt, volume_sampled mv FROM net UNION ALL
+    SELECT net_uuid, 'std_haul_factor', standard_haul_factor FROM net UNION ALL
+    SELECT net_uuid, 'prop_sorted', prop_sorted FROM net UNION ALL
+    SELECT net_uuid, 'small_plankton_biomass', smallplankton FROM net UNION ALL
+    SELECT net_uuid, 'total_plankton_biomass', totalplankton FROM net)
+  WHERE mv IS NOT NULL"))
+
+core <- list(
+  sample             = dbGetQuery(con, "SELECT COUNT(*) FROM sample")[[1]],
+  obs                = dbGetQuery(con, "SELECT COUNT(*) FROM obs")[[1]],
+  obs_attribute      = dbGetQuery(con, "SELECT COUNT(*) FROM obs_attribute")[[1]],
+  sample_measurement = dbGetQuery(con, "SELECT COUNT(*) FROM sample_measurement")[[1]],
+  taxon              = n_pruned$taxon,
+  dataset_taxon      = n_pruned$dataset_taxon)
 cat(glue(
   "core projection — sample={core$sample %||% 0} obs={core$obs %||% 0} ",
   "obs_attribute={core$obs_attribute %||% 0} ",
   "sample_measurement={core$sample_measurement %||% 0} ",
   "taxon={core$taxon %||% 0} dataset_taxon={core$dataset_taxon %||% 0}\n"))
+cat(glue("taxa shard: {n_taxon} taxon rows built, {core$taxon} kept after pruning ",
+         "to this dataset's vocabulary + its lineage ancestors"), "\n")
 
 # the three event levels must each survive at their own grain, and the
 # abundance headline must not absorb the size/stage rows
 n_site <- dbGetQuery(con, "SELECT COUNT(*) FROM sample WHERE sample_type='site'")[[1]]
 n_tow  <- dbGetQuery(con, "SELECT COUNT(*) FROM sample WHERE sample_type='tow'")[[1]]
 n_net  <- dbGetQuery(con, "SELECT COUNT(*) FROM sample WHERE sample_type='net'")[[1]]
+d_attr <- dbGetQuery(con, "
+  SELECT measurement_type, COUNT(*) n FROM obs_attribute GROUP BY 1 ORDER BY 1")
 stopifnot(
   "sample must hold one row per site"  = n_site == dbGetQuery(con, "SELECT COUNT(DISTINCT site_uuid) FROM site")[[1]],
   "sample must hold one row per tow"   = n_tow  == dbGetQuery(con, "SELECT COUNT(DISTINCT tow_uuid) FROM tow")[[1]],
   "sample must hold one row per net"   = n_net  == dbGetQuery(con, "SELECT COUNT(DISTINCT net_uuid) FROM net")[[1]],
+  "sample_key must be globally unique" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM (SELECT sample_key FROM sample
+                     GROUP BY 1 HAVING COUNT(*) > 1)")[[1]] == 0,
   "obs must carry only the abundance headline" =
-    dbGetQuery(con, "SELECT COUNT(*) FROM obs")[[1]] ==
+    core$obs ==
     dbGetQuery(con, "SELECT COUNT(*) FROM ichthyo i JOIN net n USING (net_uuid)
                      JOIN tow t USING (tow_uuid) JOIN site s USING (site_uuid)
                      WHERE i.measurement_type IS NULL AND s.grid_key IS NOT NULL")[[1]],
+  "obs must carry no size/stage rows" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM obs
+                     WHERE measurement_type <> 'abundance'")[[1]] == 0,
+  "obs_attribute must hold exactly body_length + stage" =
+    setequal(d_attr$measurement_type, c("body_length", "stage")),
   "the net -> tow -> site chain must resolve" =
     dbGetQuery(con, "SELECT COUNT(*) FROM sample c
                      LEFT JOIN sample p ON c.parent_sample_key = p.sample_key
-                     WHERE c.parent_sample_key IS NOT NULL AND p.sample_key IS NULL")[[1]] == 0)
+                     WHERE c.parent_sample_key IS NOT NULL AND p.sample_key IS NULL")[[1]] == 0,
+  "every sample_measurement.sample_key must resolve in sample" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM sample_measurement m
+                     LEFT JOIN sample s USING (sample_key)
+                     WHERE s.sample_key IS NULL")[[1]] == 0,
+  "every obs.taxon_key must RESOLVE in taxon (not merely be non-NULL)" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM obs o LEFT JOIN taxon t USING (taxon_key)
+                     WHERE o.taxon_key IS NOT NULL AND t.taxon_key IS NULL")[[1]] == 0,
+  "every taxon.parent_taxon_key must resolve (the lineage chain)" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM taxon c LEFT JOIN taxon p
+                     ON c.parent_taxon_key = p.taxon_key
+                     WHERE c.parent_taxon_key IS NOT NULL AND p.taxon_key IS NULL")[[1]] == 0)
 cat(glue("sample: {format(n_site, big.mark=',')} sites / {format(n_tow, big.mark=',')} tows / ",
-         "{format(n_net, big.mark=',')} nets"), "\n")
+         "{format(n_net, big.mark=',')} nets; obs_attribute ",
+         "{paste(sprintf('%s=%s', d_attr$measurement_type, format(d_attr$n, big.mark=',')), collapse=', ')}"), "\n")
 
-# serve the retired per-dataset names as VIEWs over the core (exact for every
-# column the core models; see ?create_compat_views)
-compat <- create_compat_views(con, "swfsc_ichthyo")
-cat(glue("compat views over core: {paste(compat, collapse = ', ')}"), "\n")
+# serve the retired per-dataset names as VIEWs over the core: the source id comes
+# back out of the namespaced sample_key, the containment FK out of
+# parent_sample_key, and the net effort columns by pivoting sample_measurement
+# back out of long form. Exact for every column the core models, lossy for the
+# rest (net.side, tow.tow_number, the legacy site columns) — which the release
+# drops anyway. The real tables are DROPped: they are 213k/459k rows and are no
+# longer written to parquet.
+compat <- list(
+  site = compat_event_sql(ds_key, "site", "site_uuid", NULL,
+    c(order_occ = "order_occ", longitude = "longitude", latitude = "latitude",
+      cruise_key = "cruise_key", geom = "geom", grid_key = "grid_key",
+      site_key = "site_key")),
+  tow = compat_event_sql(ds_key, "tow", "tow_uuid", "site_uuid",
+    c(tow_type_key = "tow_type", datetime_start_utc = "datetime")),
+  net = compat_event_sql(ds_key, "net", "net_uuid", "tow_uuid", character(),
+    c(standard_haul_factor = "std_haul_factor", volume_sampled = "volume_sampled",
+      prop_sorted = "prop_sorted", smallplankton = "small_plankton_biomass",
+      totalplankton = "total_plankton_biomass")))
+for (nm in names(compat)) {
+  # DROP has to know which it is: DuckDB refuses "DROP TABLE" on a view (and
+  # vice versa), and a re-run inside one session finds the view already there
+  t <- dbGetQuery(con, glue(
+    "SELECT table_type FROM information_schema.tables WHERE table_name = '{nm}'"))
+  if (nrow(t)) {
+    kind <- if (grepl("VIEW", t$table_type[1], ignore.case = TRUE)) "VIEW" else "TABLE"
+    invisible(dbExecute(con, glue('DROP {kind} IF EXISTS "{nm}"')))
+  }
+  invisible(dbExecute(con, glue("CREATE OR REPLACE VIEW {nm} AS {compat[[nm]]}")))
+}
+n_compat <- sapply(names(compat), function(nm)
+  dbGetQuery(con, glue("SELECT COUNT(*) FROM {nm}"))[[1]])
+stopifnot(
+  "compat views must reconstruct the source grains exactly" =
+    all(n_compat[c("site", "tow", "net")] == c(n_site, n_tow, n_net)))
+cat(glue("compat views over core: ",
+         "{paste(sprintf('%s=%s', names(n_compat), format(n_compat, big.mark=',')), collapse=', ')}"), "\n")
 ```
 
 

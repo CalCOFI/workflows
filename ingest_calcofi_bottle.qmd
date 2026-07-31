@@ -1367,10 +1367,9 @@ say("Cross-dataset validation complete")
 ## Emit Core Tables
 
 Project this dataset into the shared consolidated core model
-(`design_env-bio-consolidation.md`) via `calcofi4db::emit_core_tables()`. These
-core tables **are** this ingest's output: `release_database.qmd` concatenates the
-per-dataset shards rather than re-deriving the core, so there is exactly one
-projection to keep correct.
+(`design_env-bio-consolidation.md`). These core tables **are** this ingest's
+output: `release_database.qmd` concatenates the per-dataset shards rather than
+re-deriving the core, so there is exactly one projection to keep correct.
 
 Bottle is a two-level hierarchy — `cast` -> `bottle` — carried in `sample` as an
 adjacency list. Cast conditions become `sample_measurement` (they describe the
@@ -1380,35 +1379,150 @@ event, not an observation); the long `bottle_measurement` values become `obs` at
 `bottom_depth` rides along in `cast_condition`: the pivot above turns the source
 `Bottom_D` column into a condition row and drops it from `casts`, so the cast's
 water depth reaches `sample_measurement` through the same arm as wind speed and
-sea state rather than needing one of its own.
+sea state rather than needing one of its own. An added
+`UNION ALL SELECT bottom_depth_m FROM casts` would be both redundant *and* a
+binder error — that column no longer exists by the time this runs.
+
+::: {.callout-important}
+## This section must run AFTER Cross-Dataset Integration
+
+`sample` carries `cruise_key`, and `cruise_key` is only resolved on `casts` by
+the ship match + `derive_cruise_key()` above. If the projection runs first,
+`cruise_key` is silently NULL on all 895,371 bottles instead of 99.93% populated
+— no error, just a column of NULLs in the release.
+:::
 
 ```{r}
 #| label: emit_core
 
-core <- emit_core_tables(con, "calcofi_bottle")
+ds_key <- "calcofi_bottle"
+
+# This projection lives here, in the notebook that owns the dataset, not in a
+# switch(dataset_key, ...) arm inside calcofi4db. Bottle is env-only: no taxa
+# references, no taxon_key on obs.
+#
+# sample — two levels: cast (root) and bottle (leaf, parent = its cast). The
+# bottle inherits the cast's position/time/grid/cruise; only depth is its own.
+append_sample(con, glue("
+  SELECT {ns_key(ds_key, 'cast', 'cast_id')} AS sample_key, 'cast' AS sample_type,
+         NULL::VARCHAR AS parent_sample_key,
+         {ns_key(ds_key, 'cast', 'cast_id')} AS root_sample_key,
+         '{ds_key}' AS dataset_key, grid_key, site_key, cruise_key,
+         CAST(order_occ AS INTEGER) AS order_occ,
+         latitude, longitude, CAST(datetime_start_utc AS TIMESTAMP) AS datetime,
+         NULL::DOUBLE AS depth_min_m, NULL::DOUBLE AS depth_max_m,
+         NULL::VARCHAR AS tow_type
+  FROM casts"))
+append_sample(con, glue("
+  SELECT {ns_key(ds_key, 'bottle', 'b.bottle_id')} AS sample_key, 'bottle' AS sample_type,
+         {ns_key(ds_key, 'cast', 'b.cast_id')} AS parent_sample_key,
+         {ns_key(ds_key, 'cast', 'b.cast_id')} AS root_sample_key,
+         '{ds_key}' AS dataset_key, c.grid_key, b.site_key, c.cruise_key,
+         CAST(c.order_occ AS INTEGER) AS order_occ, c.latitude, c.longitude,
+         CAST(c.datetime_start_utc AS TIMESTAMP) AS datetime,
+         b.depth_m AS depth_min_m, b.depth_m AS depth_max_m,
+         NULL::VARCHAR AS tow_type
+  FROM bottle b JOIN casts c USING (cast_id)"))
+
+# obs — the long bottle measurements, at realm = 'env'
+append_obs(con, glue("
+  SELECT 'env', '{ds_key}', {ns_key(ds_key, 'bottle', 'b.bottle_id')},
+         c.grid_key, c.cruise_key, c.latitude, c.longitude,
+         CAST(c.datetime_start_utc AS TIMESTAMP), b.depth_m, b.depth_m,
+         NULL::VARCHAR, NULL::VARCHAR,
+         m.measurement_type, m.measurement_value, m.measurement_qual, m.measurement_prec
+  FROM bottle_measurement m JOIN bottle b USING (bottle_id) JOIN casts c USING (cast_id)
+  WHERE c.grid_key IS NOT NULL"))
+
+# sample_measurement — event-level cast conditions (wind, sea state, bottom
+# depth, …). `cast_id` is DOUBLE in cast_condition, so cast through BIGINT first
+# or every key comes out as '…:cast:5.0' and orphans against sample.
+append_sample_measurement(con, glue("
+  SELECT {ns_key(ds_key, 'cast', 'CAST(cast_id AS BIGINT)')}, '{ds_key}',
+         condition_type, condition_value, NULL::VARCHAR
+  FROM cast_condition"))
+
+core <- list(
+  sample             = dbGetQuery(con, "SELECT COUNT(*) FROM sample")[[1]],
+  obs                = dbGetQuery(con, "SELECT COUNT(*) FROM obs")[[1]],
+  sample_measurement = dbGetQuery(con, "SELECT COUNT(*) FROM sample_measurement")[[1]])
 cat(glue(
   "core projection — sample={core$sample %||% 0} obs={core$obs %||% 0} ",
   "sample_measurement={core$sample_measurement %||% 0}\n"))
 
 n_cast <- dbGetQuery(con, "SELECT COUNT(*) FROM sample WHERE sample_type='cast'")[[1]]
 n_btl  <- dbGetQuery(con, "SELECT COUNT(*) FROM sample WHERE sample_type='bottle'")[[1]]
+n_bd   <- dbGetQuery(con, "SELECT COUNT(*) FROM sample_measurement WHERE measurement_type='bottom_depth'")[[1]]
+n_ck   <- dbGetQuery(con, "SELECT COUNT(*) FROM sample WHERE sample_type='bottle' AND cruise_key IS NOT NULL")[[1]]
 stopifnot(
   "sample must hold one row per cast"   = n_cast == dbGetQuery(con, "SELECT COUNT(DISTINCT cast_id) FROM casts")[[1]],
   "sample must hold one row per bottle" = n_btl  == dbGetQuery(con, "SELECT COUNT(DISTINCT bottle_id) FROM bottle")[[1]],
+  "sample_key must be globally unique" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM (SELECT sample_key FROM sample
+                     GROUP BY 1 HAVING COUNT(*) > 1)")[[1]] == 0,
   "obs must be one row per grid-matched bottle measurement" =
-    dbGetQuery(con, "SELECT COUNT(*) FROM obs")[[1]] ==
+    core$obs ==
     dbGetQuery(con, "SELECT COUNT(*) FROM bottle_measurement m JOIN bottle b USING (bottle_id)
                      JOIN casts c USING (cast_id) WHERE c.grid_key IS NOT NULL")[[1]],
   "every bottle must resolve to its cast" =
     dbGetQuery(con, "SELECT COUNT(*) FROM sample c LEFT JOIN sample p
                      ON c.parent_sample_key = p.sample_key
                      WHERE c.parent_sample_key IS NOT NULL AND p.sample_key IS NULL")[[1]] == 0,
-  "bottom_depth must reach sample_measurement" =
-    dbGetQuery(con, "SELECT COUNT(*) FROM sample_measurement WHERE measurement_type='bottom_depth'")[[1]] > 0)
-cat(glue("sample: {format(n_cast, big.mark=',')} casts / {format(n_btl, big.mark=',')} bottles"), "\n")
+  "sample_measurement must be one row per cast condition, not duplicated" =
+    core$sample_measurement == dbGetQuery(con, "SELECT COUNT(*) FROM cast_condition")[[1]],
+  "every sample_measurement.sample_key must resolve in sample (the DOUBLE cast_id trap)" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM sample_measurement m
+                     LEFT JOIN sample s USING (sample_key)
+                     WHERE s.sample_key IS NULL")[[1]] == 0,
+  "bottom_depth must reach sample_measurement" = n_bd > 0,
+  # guards the chunk-order constraint above: cruise_key comes from the
+  # Cross-Dataset Integration section, which must already have run
+  "cruise_key must be resolved on nearly every bottle" = n_ck > 0.99 * n_btl)
+cat(glue("sample: {format(n_cast, big.mark=',')} casts / {format(n_btl, big.mark=',')} bottles ",
+         "({round(100 * n_ck / max(n_btl, 1), 2)}% with cruise_key); ",
+         "{format(n_bd, big.mark=',')} bottom_depth rows"), "\n")
 
-compat <- create_compat_views(con, "calcofi_bottle")
-cat(glue("compat views over core: {paste(compat, collapse = ', ')}"), "\n")
+# serve the retired per-dataset table names as VIEWs over the core, so
+# in-notebook consumers (casts_derived, the mismatch collectors) and ad-hoc
+# queries keep working against the old names. The real tables are DROPped rather
+# than kept as `_src`: bottle_measurement is 11M rows and the wrangling DB is
+# file-backed, so retaining a second copy is not free.
+compat <- c(
+  casts = "
+    SELECT CAST(split_part(s.sample_key, ':', 3) AS BIGINT) AS cast_id,
+           s.site_key, s.grid_key, s.cruise_key, s.order_occ,
+           s.latitude, s.longitude, s.datetime AS datetime_start_utc, s.geom
+    FROM sample s
+    WHERE s.dataset_key = 'calcofi_bottle' AND s.sample_type = 'cast'",
+  bottle = "
+    SELECT CAST(split_part(s.sample_key, ':', 3) AS BIGINT) AS bottle_id,
+           CAST(split_part(s.parent_sample_key, ':', 3) AS BIGINT) AS cast_id,
+           s.site_key, s.depth_min_m AS depth_m
+    FROM sample s
+    WHERE s.dataset_key = 'calcofi_bottle' AND s.sample_type = 'bottle'",
+  cast_condition = "
+    SELECT sample_measurement_id AS cast_condition_id,
+           CAST(split_part(sample_key, ':', 3) AS BIGINT) AS cast_id,
+           measurement_type AS condition_type, measurement_value AS condition_value
+    FROM sample_measurement
+    WHERE dataset_key = 'calcofi_bottle'",
+  bottle_measurement = "
+    SELECT obs_id AS bottle_measurement_id,
+           CAST(split_part(sample_key, ':', 3) AS BIGINT) AS bottle_id,
+           measurement_type, measurement_value, measurement_qual, measurement_prec
+    FROM obs WHERE dataset_key = 'calcofi_bottle'")
+for (nm in names(compat)) {
+  # DROP has to know which it is: DuckDB refuses "DROP TABLE" on a view (and
+  # vice versa), and a re-run inside one session finds the view already there
+  t <- dbGetQuery(con, glue(
+    "SELECT table_type FROM information_schema.tables WHERE table_name = '{nm}'"))
+  if (nrow(t)) {
+    kind <- if (grepl("VIEW", t$table_type[1], ignore.case = TRUE)) "VIEW" else "TABLE"
+    invisible(dbExecute(con, glue('DROP {kind} IF EXISTS "{nm}"')))
+  }
+  invisible(dbExecute(con, glue("CREATE OR REPLACE VIEW {nm} AS {compat[[nm]]}")))
+}
+cat(glue("compat views over core: {paste(names(compat), collapse = ', ')}"), "\n")
 ```
 
 

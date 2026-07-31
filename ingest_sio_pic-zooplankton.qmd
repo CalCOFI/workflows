@@ -1,15 +1,15 @@
 ---
 title: "Ingest SIO PIC Zooplankton Net Tows"
 calcofi:
-  target_name: ingest_pic_zooplankton
+  target_name: ingest_sio_pic_zooplankton
   workflow_type: ingest
   dependency:
     - ingest_swfsc_ichthyo
-  output: data/parquet/pic_zooplankton/manifest.json
-  provider: pic
-  dataset: zooplankton
-  workflow_url: https://calcofi.io/workflows/ingest_pic_zooplankton.html
-  questions_file: metadata/pic/zooplankton/questions.csv
+  output: data/parquet/sio_pic-zooplankton/manifest.json
+  provider: sio
+  dataset: pic-zooplankton
+  workflow_url: https://calcofi.io/workflows/ingest_sio_pic-zooplankton.html
+  questions_file: metadata/sio/pic-zooplankton/questions.csv
   dataset_meta:
     dataset_name: SIO PIC Zooplankton Net Tows
     description: >
@@ -74,7 +74,7 @@ options(DT.options = list(scrollX = TRUE))
 
 source(here("libs/ingest.R"))
 
-cc           <- read_calcofi_meta(here("ingest_pic_zooplankton.qmd"))
+cc           <- read_calcofi_meta(here("ingest_sio_pic-zooplankton.qmd"))
 provider     <- cc$provider
 dataset      <- cc$dataset
 dataset_name <- cc$dataset_meta$dataset_name
@@ -98,7 +98,7 @@ load_duckdb_extension(con, "spatial")
 
 Read directly from `{dir_data}/calcofi/zooplankton/` (the file is not under a
 `pic/` subdirectory). Columns renamed per
-`metadata/pic/zooplankton/flds_redefine.csv`.
+`metadata/sio/pic-zooplankton/flds_redefine.csv`.
 
 ```{r}
 #| label: read-source
@@ -285,27 +285,46 @@ dbGetQuery(con, glue("SELECT {paste(cols, collapse=', ')} FROM zooplankton_tow L
 ## Emit Core Tables
 
 Project this dataset into the shared consolidated core model
-(`design_env-bio-consolidation.md`) via `calcofi4db::emit_core_tables()` — the
-single source of truth for the per-dataset projection into `sample` / `obs` /
-`obs_freq` / `sample_measurement`, also used by `release_database.qmd` to
-assemble the authoritative cross-dataset release.
+(`design_env-bio-consolidation.md`). These core tables **are** this ingest's
+output: `release_database.qmd` concatenates the per-dataset shards rather than
+re-deriving the core from per-dataset tables, so there is exactly one projection
+to keep correct.
+
+This source carries tow effort and position only — **no measurements** — so it
+contributes `sample` and nothing else.
 
 ```{r}
 #| label: emit_core
 
-core <- emit_core_tables(con, "pic_zooplankton")
-cat(glue(
-  "core projection — sample={core$sample %||% 0} obs={core$obs %||% 0} ",
-  "obs_freq={core$obs_freq %||% 0} sample_measurement={core$sample_measurement %||% 0}\n"))
+ds_key <- "sio_pic-zooplankton"
 
-# the frozen release assembles the authoritative cross-dataset core; keep this
-# ingest's parquet output per-dataset by dropping the local core projection here.
-# this source carries tow effort/position only — no measurements — so it
-# contributes `sample` and nothing else. Assert that, rather than let a silent
-# zero-row obs look like a projection bug.
+# This projection lives here, in the notebook that owns the dataset, not in a
+# switch(dataset_key, ...) arm inside calcofi4db. The reusable SHAPE stays in the
+# package (sample_arm_self), so this is a declaration.
+append_sample(con, sample_arm_self(
+  ds_key, "zooplankton_tow", "tow_id", "tow",
+  site_expr = "site_key", ord_expr = "CAST(order_occ AS INTEGER)",
+  depth_min = "depth_min_m", depth_max = "depth_max_m"))
+
+core <- list(sample = dbGetQuery(con, "SELECT COUNT(*) FROM sample")[[1]])
+cat(glue("core projection — sample={core$sample %||% 0}"), "\n")
+
+# one sample row per source tow, and the cross-dataset columns must survive the
+# projection (site_key/order_occ are how `site` is rebuilt from the core).
+# Assert the no-measurement case explicitly, rather than let a silent zero-row
+# obs look like a projection bug.
+n_tow <- dbGetQuery(con, "SELECT COUNT(*) FROM zooplankton_tow")[[1]]
+n_site <- dbGetQuery(con, "SELECT COUNT(*) FROM sample WHERE site_key IS NOT NULL")[[1]]
+n_ord  <- dbGetQuery(con, "SELECT COUNT(*) FROM sample WHERE order_occ IS NOT NULL")[[1]]
 stopifnot(
-  "pic_zooplankton contributes sample rows" = (core$sample %||% 0) > 0,
-  "pic_zooplankton has no measurements to project" = is.null(core$obs))
+  "sample must be one row per source tow"          = core$sample == n_tow,
+  "sio_pic-zooplankton contributes sample rows"        = core$sample > 0,
+  "sio_pic-zooplankton has no measurements to project" = !"obs" %in% dbListTables(con),
+  "sample must carry site_key for most tows"       = n_site > 0,
+  "sample must carry order_occ where the source has it" = n_ord > 0)
+cat(glue("sample parity: {format(core$sample, big.mark = ',')} tows; ",
+         "{format(n_site, big.mark = ',')} with site_key, ",
+         "{format(n_ord, big.mark = ',')} with order_occ"), "\n")
 ```
 
 
@@ -334,12 +353,12 @@ parquet_stats |> mutate(file = basename(path)) |> select(-path) |>
 ```{r}
 #| label: write-metadata
 
-d_tbls_rd <- read_csv(here("metadata/pic/zooplankton/tbls_redefine.csv"))
-d_flds_rd <- read_csv(here("metadata/pic/zooplankton/flds_redefine.csv"))
+d_tbls_rd <- read_csv(here("metadata/sio/pic-zooplankton/tbls_redefine.csv"))
+d_flds_rd <- read_csv(here("metadata/sio/pic-zooplankton/flds_redefine.csv"))
 metadata_path <- build_metadata_json(
   con = con, d_tbls_rd = d_tbls_rd, d_flds_rd = d_flds_rd,
   metadata_derived_csv = c(here("metadata/core_dictionary.csv"),
-                           here("metadata/pic/zooplankton/metadata_derived.csv")),
+                           here("metadata/sio/pic-zooplankton/metadata_derived.csv")),
   output_dir = dir_parquet, tables = tbls_out,
   set_comments = TRUE, provider = provider, dataset = dataset,
   workflow_url = cc$workflow_url, tables_owned = tables_owned)
@@ -358,7 +377,7 @@ sync_to_gcs(local_dir = dir_parquet, gcs_prefix = glue("ingest/{dir_label}"), bu
 Follow-up questions for SIO PIC (Rasmus Swalethorp, Ed Weber, Linsey Sala),
 **ranked by importance**. The headline blocker (Q01) is that biovolume is absent
 from the provided file, so only the tow registry is ingested here. Tracked in
-`metadata/pic/zooplankton/questions.csv`; aggregated by `questions_email.qmd`.
+`metadata/sio/pic-zooplankton/questions.csv`; aggregated by `questions_email.qmd`.
 
 ```{r}
 #| label: provider-questions

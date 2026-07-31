@@ -22,7 +22,7 @@ erDiagram
     cruise {
         uuid cruise_uuid
         date date_ym
-        varchar ship_key FK
+        varchar ship_key
         varchar _source_file
         int _source_row
         timestamp _ingested_at
@@ -44,13 +44,18 @@ erDiagram
         varchar dataset_name
         varchar description
         varchar citation_main
+        varchar citation_others
         varchar link_calcofi_org
         varchar link_data_source
+        varchar link_others
+        varchar tables
+        varchar coverage_temporal
+        varchar coverage_spatial
         varchar license
         varchar pi_names
     }
     dataset_taxon {
-        varchar ds_taxon_key
+        varchar ds_taxon_key PK
         varchar dataset_key FK
         varchar taxon_key FK
         varchar ds_scientific_name
@@ -70,7 +75,7 @@ erDiagram
         geometry geom_ctr
     }
     lookup {
-        int lookup_id PK
+        int lookup_id
         varchar lookup_type
         int lookup_num
         varchar lookup_chr
@@ -84,16 +89,18 @@ erDiagram
         varchar measurement_type PK
         varchar description
         varchar units
-        bool is_canonical
+        varchar is_canonical
         varchar _source_column
         varchar _source_table
         varchar _source_datasets
         varchar _qual_column
         varchar _prec_column
         varchar grain
+        varchar provider
+        varchar dataset
     }
     obs {
-        bigint obs_id
+        bigint obs_id PK
         varchar realm
         varchar dataset_key FK
         varchar sample_key FK
@@ -113,7 +120,7 @@ erDiagram
         ubigint hex_id
     }
     obs_attribute {
-        bigint obs_attribute_id
+        bigint obs_attribute_id PK
         varchar dataset_key
         varchar sample_key FK
         varchar taxon_key FK
@@ -133,22 +140,25 @@ erDiagram
         varchar station_codes
     }
     sample {
-        varchar sample_key
+        varchar sample_key PK
         varchar sample_type
         varchar parent_sample_key FK
-        varchar root_sample_key
+        varchar root_sample_key FK
         varchar dataset_key FK
         varchar grid_key FK
+        varchar site_key
         varchar cruise_key FK
+        int order_occ
         double latitude
         double longitude
         timestamp datetime
         double depth_min_m
         double depth_max_m
+        varchar tow_type
         geometry geom
     }
     sample_measurement {
-        bigint sample_measurement_id
+        bigint sample_measurement_id PK
         varchar sample_key FK
         varchar dataset_key FK
         varchar measurement_type FK
@@ -165,7 +175,7 @@ erDiagram
         varchar _source_uuid
     }
     taxon {
-        varchar taxon_key
+        varchar taxon_key PK
         int worms_id
         int itis_id
         int gbif_id
@@ -188,7 +198,23 @@ erDiagram
         varchar description
         varchar taxon_key FK
     }
-    ship ||--o{ cruise : "ship_key"
+    sample ||--o{ sample : "parent_sample_key"
+    sample ||--o{ sample : "root_sample_key"
+    sample ||--o{ obs : "sample_key"
+    taxon ||--o{ obs : "taxon_key"
+    sample ||--o{ obs_attribute : "sample_key"
+    taxon ||--o{ obs_attribute : "taxon_key"
+    taxon ||--o{ dataset_taxon : "taxon_key"
+    taxon ||--o{ taxon_group : "taxon_key"
+    taxon ||--o{ taxon : "parent_taxon_key"
+    measurement_type ||--o{ obs : "measurement_type"
+    sample ||--o{ sample_measurement : "sample_key"
+    measurement_type ||--o{ sample_measurement : "measurement_type"
+    measurement_type ||--o{ obs_attribute : "measurement_type"
+    grid ||--o{ sample : "grid_key"
+    cruise ||--o{ sample : "cruise_key"
+    grid ||--o{ obs : "grid_key"
+    cruise ||--o{ obs : "cruise_key"
     sample ||--o{ obs : "sample_key"
     dataset ||--o{ obs : "dataset_key"
     grid ||--o{ obs : "grid_key"
@@ -209,21 +235,14 @@ erDiagram
     dataset ||--o{ dataset_taxon : "dataset_key"
     taxon ||--o{ taxon_group : "taxon_key"
     taxon ||--o{ taxon : "parent_taxon_key"
-    classDef _f0d2e8 stroke:#f0d2e8,stroke-width:3px
-    classDef _f5cad9 stroke:#f5cad9,stroke-width:3px
     classDef _e8e8e8 stroke:#e8e8e8,stroke-width:3px
-    class measurement_type,cruise,dataset,sample,obs,obs_attribute,sample_measurement _e8e8e8
-    classDef _e0ccf0 stroke:#e0ccf0,stroke-width:3px
-    classDef _ffd2bb stroke:#ffd2bb,stroke-width:3px
-    classDef _e0bbf0 stroke:#e0bbf0,stroke-width:3px
+    class sample,obs,obs_attribute,sample_measurement,measurement_type,cruise,dataset _e8e8e8
+    classDef _dcdcdc stroke:#dcdcdc,stroke-width:3px
+    class taxon,dataset_taxon,taxon_group _dcdcdc
+    classDef _cce5ff stroke:#cce5ff,stroke-width:3px
     classDef _b5e8b0 stroke:#b5e8b0,stroke-width:3px
     class region _b5e8b0
-    classDef _d2f0bb stroke:#d2f0bb,stroke-width:3px
-    classDef _d9c2f0 stroke:#d9c2f0,stroke-width:3px
-    classDef _c2e8f0 stroke:#c2e8f0,stroke-width:3px
-    classDef _bbe0f0 stroke:#bbe0f0,stroke-width:3px
-    classDef _f0e8bb stroke:#f0e8bb,stroke-width:3px
     classDef _cdebc6 stroke:#cdebc6,stroke-width:3px
-    class ship,taxon,lookup,grid _cdebc6
+    class ship,lookup,grid _cdebc6
     classDef _cfe8ea stroke:#cfe8ea,stroke-width:3px
     class _spatial,_spatial_attr _cfe8ea

@@ -1,7 +1,7 @@
 # libs/download_mesopelagic_fish.R
 # -----------------------------------------------------------------------------
 # Reproducible acquisition of the SIO mesopelagic-fish (MOHT micronekton trawl)
-# workbook used by ingest_ucsd_sio_mesopelagic-fish.qmd.
+# workbook used by ingest_sio_mesopelagic-fish.qmd.
 #
 # Source: UC San Diego Library Digital Collections object bb9217084g,
 # "CalCOFI Trawl Data" (Koslow, J. Anthony, 2016), https://doi.org/10.6075/J0BZ64DH.
@@ -12,7 +12,7 @@
 # "Final Data") and the `Original` raw field log that supplies the per-tow date,
 # integer start hour/minute, and explicit PST/PDT time zone.
 #
-# Sourced + invoked from ingest_ucsd_sio_mesopelagic-fish.qmd (guarded so it
+# Sourced + invoked from ingest_sio_mesopelagic-fish.qmd (guarded so it
 # only hits the library when the xlsx is missing or overwrite = TRUE).
 
 #' Download the CalCOFI trawl (mesopelagic fish) workbook from UCSD Library DC

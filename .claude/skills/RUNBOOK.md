@@ -78,11 +78,22 @@ baked into `measurement_type`), `obs_attribute` the (bin, count) or categorical
 detail, `sample_measurement` event-level effort. Env CTD rows come from `ctd_thin`
 (full scans → the supplemental `obs_ctd_full`).
 
-`emit_core_tables()` is a convenience wrapper whose `switch(dataset_key, …)` arms
-hold the already-migrated datasets' projections. **Do not add an arm for a new
-dataset** — that is how ~450 lines of dataset-specific SQL ended up inside a
-general-purpose module. `release_database.qmd`'s `core_parity` chunk asserts shard
-counts, so cut-over stays safe.
+**There is no arm to add.** `calcofi4db` once held a `switch(dataset_key, …)` per
+core table — ~600 lines of dataset-specific SQL in a general-purpose module —
+plus `emit_core_tables()` / `build_sample_reference()` / `create_compat_views()`
+over them. All deleted in calcofi4db 3.0.0. The package keeps only generic
+shapes; each dataset's projection lives in the notebook that owns it. Not for
+tidiness: `release_database.qmd` kept a second copy of every arm, and the two
+drifted into four silent data errors before anyone compared them. The release is
+now a pure union of shards, and its `core_parity` chunk asserts shard counts, so
+cut-over stays safe.
+
+**Fetch the taxon lineage.** After `build_taxon_reference()` /
+`build_dataset_taxon()`, a taxon has a key and a name and — unless a lineage
+hierarchy is in the connection — nothing else. Call
+`ensure_taxon_lineage(con, mt_taxon, tx_over, cache_csv = here("metadata/taxon_lineage.csv"))`
+*before* the builders, or hierarchy rollups silently return nothing for your
+dataset and no error is raised anywhere.
 
 **Publish the core only.** `tbls_out = core_output_tables(con, extra =
 c("measurement_type", "dataset"))` — no per-dataset source table reaches parquet.

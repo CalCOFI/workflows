@@ -1,15 +1,15 @@
 ---
 title: "Ingest UCSD SIO Mesopelagic Fish"
 calcofi:
-  target_name: ingest_ucsd_sio_mesopelagic_fish
+  target_name: ingest_sio_mesopelagic_fish
   workflow_type: ingest
   dependency:
     - ingest_swfsc_ichthyo
-  output: data/parquet/ucsd_sio_mesopelagic-fish/manifest.json
-  provider: ucsd_sio
+  output: data/parquet/sio_mesopelagic-fish/manifest.json
+  provider: sio
   dataset: mesopelagic-fish
-  workflow_url: https://calcofi.io/workflows/ingest_ucsd_sio_mesopelagic-fish.html
-  questions_file: metadata/ucsd_sio/mesopelagic-fish/questions.csv
+  workflow_url: https://calcofi.io/workflows/ingest_sio_mesopelagic-fish.html
+  questions_file: metadata/sio/mesopelagic-fish/questions.csv
   dataset_meta:
     dataset_name: UCSD SIO Mesopelagic Fish
     description: >
@@ -48,7 +48,7 @@ editor_options:
 
 **Source**: `bb9217084g_1_1.xlsx`, sheet `Sheet1` ("Final Data"), UC San
 Diego Library Digital Collections. 102 tows, 7 cruises, 2010-01 to 2012-02.
-Provider `ucsd_sio` (SIO curates the dataset; CalCOFI is the sampling
+Provider `sio` (SIO curates the dataset; CalCOFI is the sampling
 program, not the curating org).
 
 ## Setup
@@ -68,7 +68,7 @@ options(DT.options = list(scrollX = TRUE))
 
 source(here("libs/ingest.R"))
 
-cc           <- read_calcofi_meta(here("ingest_ucsd_sio_mesopelagic-fish.qmd"))
+cc           <- read_calcofi_meta(here("ingest_sio_mesopelagic-fish.qmd"))
 provider     <- cc$provider
 dataset      <- cc$dataset
 tables_owned <- cc$tables_owned
@@ -358,9 +358,9 @@ stopifnot(
 d_meas_type <- d_meas_type |>
   mutate(`_source_datasets` = if_else(
     measurement_type == "abundance" &
-      !str_detect(coalesce(`_source_datasets`, ""), "ucsd_sio_mesopelagic-fish"),
+      !str_detect(coalesce(`_source_datasets`, ""), "sio_mesopelagic-fish"),
     str_replace(str_squish(paste(coalesce(`_source_datasets`, ""),
-                                 "ucsd_sio_mesopelagic-fish", sep = ";")), "^;", ""),
+                                 "sio_mesopelagic-fish", sep = ";")), "^;", ""),
     `_source_datasets`))
 write_csv(d_meas_type, meas_type_csv, na = "")
 dbWriteTable(con, "measurement_type", d_meas_type, overwrite = TRUE)
@@ -406,7 +406,7 @@ build_relationships_json(
 ## Emit Core Tables
 
 Project this dataset into the shared consolidated core model
-(`design_env-bio-consolidation.md`) via `calcofi4db::emit_core_tables()` — a
+(`design_env-bio-consolidation.md`) — a
 self-leaf `tow` sample whose `obs` headline is the per-species count.
 `datetime_start_utc` is real (Q03 resolved), so `sample.datetime` is populated
 rather than NULL, and `taxon_key` resolves through `dataset_taxon` from
@@ -415,9 +415,9 @@ rather than NULL, and `taxon_key` resolves through `dataset_taxon` from
 ```{r}
 #| label: emit_core
 
-ds_key <- "ucsd_sio_mesopelagic-fish"
-# filter the crosswalk to THIS dataset: emit_core_tables() did that internally, so
-# an unfiltered read leaks other datasets' taxa into this shard
+ds_key <- "sio_mesopelagic-fish"
+# filter the crosswalk to THIS dataset -- an unfiltered read leaks other datasets'
+# taxa into this shard (the retired emit_core_tables() wrapper filtered internally)
 mt_taxon <- read_csv(here("metadata/measurement_taxon.csv"),
                      col_types = cols(worms_id = "i", itis_id = "i",
                                       bin_value = "d", .default = "c")) |>
@@ -427,6 +427,14 @@ tx_over  <- read_csv(here("metadata/taxon_override.csv"), show_col_types = FALSE
 # This projection lives here, in the notebook that owns the dataset, not in a
 # switch(dataset_key, ...) arm inside calcofi4db. The reusable SHAPES stay in the
 # package (sample_arm_self / compat_measurement_sql), so this is a declaration.
+# lineage: fetch each taxon's WoRMS/ITIS classification (cached in
+# metadata/taxon_lineage.csv, so a re-run costs no API calls) and stage it as the
+# `taxon` hierarchy build_taxon_reference() reads. Without it a crosswalk- or
+# vocabulary-resolved taxon reaches the release with a key and a name and NOTHING
+# else — no rank, no parent_taxon_key, no classification — so hierarchy rollups
+# ("all Decapoda") silently match nothing and no error is raised anywhere.
+ensure_taxon_lineage(con, mt_taxon, tx_over,
+                     cache_csv = here("metadata/taxon_lineage.csv"))
 n_taxon    <- build_taxon_reference(con, mt_taxon, tx_over)
 n_ds_taxon <- build_dataset_taxon(con,   mt_taxon, tx_over)
 
@@ -445,7 +453,7 @@ append_obs(con, glue("
                             AND dt.ds_taxa_code = m.scientific_name
   WHERE tw.grid_key IS NOT NULL"))
 
-# NOTE: no sample_measurement arm. emit_core_tables() never emitted one for this
+# NOTE: no sample_measurement arm. This dataset never had one --
 # dataset (.sample_measurement_arm_sql covers only calcofi_bottle and
 # swfsc_ichthyo), and its parquet has never contained the table. Adding one here
 # would be inventing data, not migrating it.
@@ -475,7 +483,7 @@ stopifnot(
                      WHERE s.sample_key IS NULL")[[1]] == 0)
 # serve the retired per-dataset table names as VIEWs over the core, so
 # in-notebook consumers and ad-hoc queries keep working against the old names
-# (exact for every column the core models; see ?create_compat_views)
+# (exact for every column the core models, lossy for the rest)
 invisible(dbExecute(con, "DROP TABLE IF EXISTS mesopelagic_fish_measurement_src"))
 invisible(dbExecute(con, "ALTER TABLE mesopelagic_fish_measurement RENAME TO mesopelagic_fish_measurement_src"))
 invisible(dbExecute(con, glue(
@@ -515,12 +523,12 @@ build_relationships_json(
   rels = core_relationships(tbls_out), output_dir = dir_parquet,
   provider = provider, dataset = dataset)
 
-d_tbls_rd <- read_csv(here("metadata/ucsd_sio/mesopelagic-fish/tbls_redefine.csv"))
-d_flds_rd <- read_csv(here("metadata/ucsd_sio/mesopelagic-fish/flds_redefine.csv"))
+d_tbls_rd <- read_csv(here("metadata/sio/mesopelagic-fish/tbls_redefine.csv"))
+d_flds_rd <- read_csv(here("metadata/sio/mesopelagic-fish/flds_redefine.csv"))
 build_metadata_json(
   con = con, d_tbls_rd = d_tbls_rd, d_flds_rd = d_flds_rd,
   metadata_derived_csv = c(here("metadata/core_dictionary.csv"),
-                           here("metadata/ucsd_sio/mesopelagic-fish/metadata_derived.csv")),
+                           here("metadata/sio/mesopelagic-fish/metadata_derived.csv")),
   output_dir = dir_parquet,
   tables     = tbls_out,
   set_comments = TRUE, provider = provider, dataset = dataset,

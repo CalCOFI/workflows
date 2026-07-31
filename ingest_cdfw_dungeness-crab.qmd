@@ -563,9 +563,10 @@ published output — `release_database.qmd` concatenates per-dataset shards rath
 than re-deriving them — and the per-dataset tables survive as compat VIEWs.
 
 This uses the generic `append_*` helpers with plain SQL, so **no `calcofi4db`
-change is needed to add a dataset**. `emit_core_tables()` is a convenience wrapper
-whose `switch(dataset_key, …)` arms happen to hold the already-migrated datasets'
-SQL; a dataset's projection belongs in the notebook that owns it.
+change is needed to add a dataset** — a dataset's projection belongs in the
+notebook that owns it. The package used to carry a `switch(dataset_key, …)` arm
+per core table; those were deleted in calcofi4db 3.0.0, because the release kept a
+second copy of every arm and the two drifted into four silent data errors.
 
 Two modelling decisions worth review:
 
@@ -613,13 +614,24 @@ stopifnot("crosswalk must cover all four raw count labels" =
             setequal(mt_taxon$raw_measurement_type[mt_taxon$target == "obs"],
                      c("megalopae_magister", "megalopae_other",
                        "zoea_cancer", "zoea_other")))
-dbWriteTable(con, "_measurement_taxon", as.data.frame(mt_taxon), overwrite = TRUE)
-
 # taxa references — generic helpers, driven by the crosswalk rather than by a
 # per-dataset vocabulary table
+# lineage: fetch each taxon's WoRMS/ITIS classification (cached in
+# metadata/taxon_lineage.csv, so a re-run costs no API calls) and stage it as the
+# `taxon` hierarchy build_taxon_reference() reads. Without it a crosswalk- or
+# vocabulary-resolved taxon reaches the release with a key and a name and NOTHING
+# else — no rank, no parent_taxon_key, no classification — so hierarchy rollups
+# ("all Decapoda") silently match nothing and no error is raised anywhere.
+ensure_taxon_lineage(con, mt_taxon, tx_over,
+                     cache_csv = here("metadata/taxon_lineage.csv"))
 n_taxon    <- build_taxon_reference(con, mt_taxon, tx_over)
 n_ds_taxon <- build_dataset_taxon(con,   mt_taxon, tx_over)
 n_tx_group <- build_taxon_group(con,     mt_taxon, tx_over)
+# stage the crosswalk WITH its derived taxon_key, rather than dbWriteTable()-ing
+# the raw CSV (which has no taxon_key column) and hand-rolling
+# 'worms:' || worms_id in each arm — that inline string mis-keys any
+# ITIS-resolved taxon and silently produces a taxon_key that joins to nothing
+ensure_measurement_taxon(con, mt_taxon, dataset_key = ds_key)
 
 sub_key <- glue("'{ds_key}:subsample:' || CAST(dungeness_sample_id AS VARCHAR)")
 
@@ -651,7 +663,7 @@ append_obs(con, glue("
          s.grid_key, s.cruise_key, s.latitude, s.longitude,
          CAST(s.datetime_start_utc AS TIMESTAMP),
          NULL::DOUBLE, NULL::DOUBLE,
-         'worms:' || CAST(CAST(mx.worms_id AS BIGINT) AS VARCHAR),
+         mx.taxon_key,
          mx.life_stage, mx.measurement_type, m.measurement_value,
          m.measurement_qual, NULL::DOUBLE
   FROM dungeness_measurement m
@@ -668,7 +680,7 @@ append_obs(con, glue("
          l.grid_key, l.cruise_key, l.latitude, l.longitude,
          CAST(l.datetime_start_utc AS TIMESTAMP),
          0::DOUBLE, l.max_depth_m,
-         'worms:' || CAST(CAST(mx.worms_id AS BIGINT) AS VARCHAR),
+         mx.taxon_key,
          mx.life_stage, mx.measurement_type, 0::DOUBLE,
          'examined, none found (E. Jones sorting log, as of 2012-02-15)',
          NULL::DOUBLE
@@ -682,7 +694,7 @@ append_obs(con, glue("
 append_obs_attribute(con, glue("
   SELECT '{ds_key}',
          '{ds_key}:subsample:' || CAST(c.dungeness_sample_id AS VARCHAR),
-         'worms:' || CAST(CAST(mx.worms_id AS BIGINT) AS VARCHAR), mx.life_stage,
+         mx.taxon_key, mx.life_stage,
          mx.measurement_type, c.carapace_length_mm,
          NULL::VARCHAR, 1::BIGINT, NULL::VARCHAR
   FROM dungeness_carapace c
@@ -972,12 +984,15 @@ nullable <- tribble(
   "obs",                   "grid_key",          30L,  "16 from the 4 unmatched subsamples x 4 types + 14 out-of-grid absences",
   "obs",                   "cruise_key",        87L,  "absence rows whose log entry has no resolvable cruise",
   "obs",                   "hex_id",            16L,  "H3 needs a position; the 4 unmatched subsamples have none",
-  # taxon: two different situations, deliberately not lumped
-  "taxon",                 "ncbi_id",           3L,   "never populated by ANY dataset — the column exists, nothing fills it",
-  "taxon",                 "inat_id",           3L,   "never populated by ANY dataset",
-  "taxon",                 "itis_id",           3L,   "WoRMS could supply a cross-authority id; not fetched (see Not Yet Done)",
-  "taxon",                 "gbif_id",           3L,   "as itis_id",
-  "taxon",                 "parent_taxon_key",  3L,   "REAL GAP: no lineage built for measurement_taxon-resolved taxa (see Not Yet Done)")
+  # taxon: 17 rows, not 3 — ensure_taxon_lineage() adds this dataset's 3 taxa
+  # PLUS their 14 WoRMS lineage ancestors, which have to be rows of their own or
+  # parent_taxon_key chains dead-end and "all Decapoda" matches nothing.
+  # `rank`/classification are no longer on this list: the lineage fetch fills them.
+  "taxon",                 "ncbi_id",           17L,  "never populated by ANY dataset — the column exists, nothing fills it",
+  "taxon",                 "inat_id",           17L,  "never populated by ANY dataset",
+  "taxon",                 "itis_id",           17L,  "WoRMS could supply a cross-authority id; the lineage fetch does not ask for one",
+  "taxon",                 "gbif_id",           17L,  "as itis_id",
+  "taxon",                 "parent_taxon_key",  1L,   "the root of the lineage (Biota) has no parent — 0 dangling parents below it")
 
 nulls <- results$checks |>
   filter(check == "nulls", status != "PASS") |>
@@ -1006,23 +1021,32 @@ if (nrow(resolved))
            "prune them from `nullable`: ",
            "{paste(resolved$table, resolved$column, sep = '.', collapse = ', ')}"), "\n")
 
-# The lineage gap is asserted rather than merely noted, so it cannot be quietly
-# forgotten: this fails the moment lineage IS populated, forcing the note in
-# "Not Yet Done" to be removed in the same change.
+# The lineage gap this ingest used to assert (all 3 taxa with rank and
+# parent_taxon_key NULL, so "all Decapoda" matched nothing) is FIXED:
+# ensure_taxon_lineage() fetches the WoRMS classification above. Assert the fix
+# rather than the gap — including that Metacarcinus magister is reachable from
+# Decapoda, which is the rollup that was broken.
 n_taxon_no_lineage <- dbGetQuery(con, "
   SELECT COUNT(*) FROM taxon WHERE rank IS NULL AND parent_taxon_key IS NULL")[[1]]
-stopifnot("taxon lineage gap has changed — update the note in Not Yet Done" =
-            n_taxon_no_lineage == 3)
+n_decapoda <- dbGetQuery(con, "
+  WITH RECURSIVE d AS (
+    SELECT taxon_key FROM taxon WHERE scientific_name = 'Decapoda'
+    UNION ALL
+    SELECT t.taxon_key FROM taxon t JOIN d ON t.parent_taxon_key = d.taxon_key)
+  SELECT COUNT(*) FROM d")[[1]]
+stopifnot(
+  "every taxon must carry rank + parent_taxon_key (the lineage fetch)" =
+    n_taxon_no_lineage == 0,
+  "M. magister must be reachable from Decapoda by walking parent_taxon_key" =
+    n_decapoda > 1)
 
 cat(glue("validate_for_release: {ifelse(results$passed, 'PASSED', 'FAILED')} ",
          "— its null heuristic treats every *_id/_key column as required, so that ",
          "verdict is not this dataset's contract. {nrow(nulls)} null case(s) ",
          "reconciled against {nrow(nullable)} declared, 0 unexplained."), "\n")
-cat(glue("KNOWN GAP: all {n_taxon_no_lineage} taxa lack rank + parent_taxon_key, so ",
-         "hierarchy rollups (e.g. 'all Decapoda') will not work. NOT specific to this ",
-         "ingest — swfsc_cufes, calcofi_phyllosoma and cce-lter_euphausiids are all ",
-         "in the same state, because taxa resolved through measurement_taxon.csv get ",
-         "no lineage fetch. Only swfsc_ichthyo has it, from its own species table."), "\n")
+cat(glue("taxon lineage: {n_taxon_no_lineage} taxa without rank/parent_taxon_key; ",
+         "{n_decapoda} taxa reachable from Decapoda by walking parent_taxon_key ",
+         "(the rollup that used to return nothing)."), "\n")
 
 # referential integrity of the two FKs this ingest owns
 n_orphan_meas <- dbGetQuery(con, "
@@ -1264,18 +1288,20 @@ This is a first pass. What remains, roughly in order:
 2. **Review the two modelling choices** in "Emit Core Tables" (Q05): the new
    `sample_type = 'subsample'` vocabulary value, and pointing `parent_sample_key`
    at the matched `swfsc_ichthyo` site occupation.
-3. **Populate the taxon lineage.** All three taxa have `rank` and
-   `parent_taxon_key` NULL, so they cannot participate in hierarchy rollups — a
-   query for "all Decapoda" will not find the *M. magister* records. This is **not
-   specific to this ingest**: every dataset whose taxa resolve through
-   `metadata/measurement_taxon.csv` is in the same state (`swfsc_cufes`,
-   `calcofi_phyllosoma`, `cce-lter_euphausiids`), because that path carries only
-   `worms_id` + `scientific_name` and no classification is fetched. Only
-   `swfsc_ichthyo` has lineage, from its own `species` table. The fix belongs in
-   `build_taxon_reference()` — fetch rank + classification from WoRMS for
-   crosswalk-resolved taxa — and is asserted in "Validate" so it fails here once
-   done. Note `ncbi_id`/`inat_id` are populated by no dataset at all, and `family`
-   by none including ichthyo.
+3. ~~**Populate the taxon lineage.**~~ **DONE.** All three taxa had `rank` and
+   `parent_taxon_key` NULL, so a query for "all Decapoda" did not find the
+   *M. magister* records — and that was true of every dataset whose taxa resolve
+   through `metadata/measurement_taxon.csv` (`swfsc_cufes`, `calcofi_phyllosoma`,
+   `cce-lter_euphausiids`), because that path carried only `worms_id` +
+   `scientific_name`. `ensure_taxon_lineage()` (called in "Emit Core Tables") now
+   fetches the WoRMS classification, caches it in `metadata/taxon_lineage.csv`,
+   and stages it as the hierarchy `build_taxon_reference()` reads — which also
+   fills `kingdom`/`phylum`/`class`/`order_taxon`/`family`, populated by no
+   dataset before, not even ichthyo. "Validate" now asserts the fix (0 taxa
+   without lineage, and *M. magister* reachable from Decapoda) rather than the
+   gap. Still empty: `ncbi_id`/`inat_id`, which no source supplies — kept as
+   declared-but-NULL columns so the release schema does not shift under
+   consumers.
 4. **Decide what the sorting log is for.** As absence/effort data it is the more
    scientifically useful of the two efforts — 2,011 samples over 60 years — but
    only if Q02 settles which historic identifications stand, and Q03 settles

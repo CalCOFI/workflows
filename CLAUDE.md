@@ -44,6 +44,22 @@ Rscript -e 'remotes::install_github("calcofi/calcofi4db"); remotes::install_gith
 Rscript scripts/build_workflows_index.R
 ```
 
+**Editing a `.qmd` does NOT make its target outdated — you must invalidate it.**
+`build_targets_list()` builds each command as
+`{ deps…; quarto::quarto_render("ingest_x.qmd"); "output/path" }`, so the filename
+is a *literal inside the command* and the notebook's contents are not a tracked
+dependency. `tar_outdated()` will not list a notebook you just rewrote, and
+`tar_make()` reports "skipped". Always `tar_invalidate()` first, and confirm the
+render actually happened (`_output/*.html` mtime, or the run log) before believing
+a hash comparison — an unchanged output hash means "did not run" just as readily
+as "ran and matched".
+
+**`tar_make()` / `tar_invalidate()` take a tidyselect expression, not a string
+variable.** `for (t in targets) tar_make(t)` makes tidyselect look for a *column*
+named `t` and fails with ``Column `t` doesn't exist`` — for every target, so the
+whole loop is a no-op that looks like a pass if you only check exit codes. Use
+`tar_make(names = tidyselect::all_of(t))`.
+
 There is no test suite or linter in this repo; correctness is enforced by the
 `/validate-ingest` checks and the validation chunks inside `release_database.qmd`.
 `release_database.qmd` promotes `latest.txt` only after `test_release.qmd`'s
@@ -190,9 +206,23 @@ Per `design_env-bio-consolidation.md`, the ~40 per-dataset triples collapse into
 small **core** family that every consumer reads (built by the `calcofi4db` model
 engine, `R/model.R`):
 
+**The projection into these tables lives in the ingest notebook that owns the
+dataset**, in its "Emit Core Tables" section — never in `calcofi4db`. The package
+holds only *generic shapes* (`append_*()`, `sample_arm_self()`,
+`compat_event_sql()`, `compat_measurement_sql()`, `ns_key()`,
+`ensure_measurement_taxon()`, `prune_taxon_shard()`); a notebook declares against
+them. The ~600 lines of `switch(dataset_key, …)` arms that used to live in
+`R/model.R` were deleted in calcofi4db 3.0.0, along with `emit_core_tables()`,
+`build_sample_reference()` and `create_compat_views()`. Do not reintroduce them:
+the release re-derived the core from its own inline copy of those arms, the two
+copies drifted, and each divergence was a silent data error (euphausiids
+flattened 37 species to one family key, bird_mammal merged every unresolved
+species into one row per transect, phytoplankton emitted zero observations, cufes
+and phyllosoma lost their taxa). Copy the pattern from any migrated notebook.
+
 | core table | grain | built by |
 |---|---|---|
-| `sample` | one row per physical sampling event (site/tow/net/cast/bottle/underway/transect/region_pool); adjacency list via `parent_sample_key` + `root_sample_key` | `build_sample_reference()` |
+| `sample` | one row per physical sampling event (site/tow/net/cast/bottle/underway/transect/region_pool); adjacency list via `parent_sample_key` + `root_sample_key` | `append_sample()` (+ `sample_arm_self()` for the single-level case) |
 | `obs` | occurrence-headline long table (`realm` env\|bio, one scalar/row); bio taxon via `taxon_key` (global, `worms:`/`itis:`); env CTD via `ctd_thin` | `append_obs()` |
 | `obs_attribute` | sub-occurrence attribution — length/stage frequency (`bin_value`/`bin_label`/`count`) **+ categorical behavior** (was `obs_freq`) | `append_obs_attribute()` |
 | `sample_measurement` | event-level effort (net `volume_sampled`/`std_haul_factor`/… ; bottle cast conditions) | `append_sample_measurement()` |
@@ -208,6 +238,23 @@ by `build_taxon_reference()` / `build_dataset_taxon()` / `build_taxon_group()`.
 Coarse/composite taxa (cufes eggs, phyllosoma stages, euphausiid family, phyto
 functional groups, seabirds/mammals) resolve to real WoRMS/ITIS ids via the
 reviewable `metadata/measurement_taxon.csv` + `metadata/taxon_override.csv`.
+
+**Lineage is not free — call `ensure_taxon_lineage()` before the builders.**
+`build_taxon_reference()` takes `rank` / `parent_taxon_key` / classification from
+a DwC-shaped hierarchy table named `taxon` in the connection. Exactly one ingest
+built one (`swfsc_ichthyo`, via `build_taxon_hierarchy()`), so every other
+dataset's taxa reached the release with a key and a name and **nothing else** —
+0 ranks, 0 parents, no classification — and hierarchy rollups ("all Decapoda")
+silently matched nothing with no error anywhere.
+`ensure_taxon_lineage(con, mt_taxon, tx_over, cache_csv = here("metadata/taxon_lineage.csv"))`
+fetches each taxon's WoRMS (or ITIS, for Aves) classification, caches it in
+`metadata/taxon_lineage.csv` so re-runs cost no API calls, and stages it as that
+same `taxon` table — plus the flattened `kingdom`/`phylum`/`class`/`order_taxon`/
+`family`, which no dataset ever populated. Ancestors become `taxon` rows too, so
+`parent_taxon_key` chains resolve; `prune_taxon_shard()` keeps the transitive
+parent closure when trimming a shard. `ncbi_id`/`inat_id` stay declared-but-NULL:
+no source supplies them, and dropping the columns would change the release schema
+under consumers.
 
 - **Namespaced keys**: every `sample_key` is `dataset_key:sample_type:id` (globally
   unique across datasets *and* event levels; makes the DIC→bottle dedup fall out).
@@ -234,6 +281,9 @@ reviewable `metadata/measurement_taxon.csv` + `metadata/taxon_override.csv`.
 | `dataset.csv` | **DEPRECATED** — superseded by each ingest's `calcofi.dataset_meta` YAML block via `ingest_yaml_to_dataset_df(read_ingest_yaml())`. The CSV drifted from the notebooks and orphaned `obs` rows. |
 | `dataset_status.csv` | Pipeline-stage tracker, one row per dataset; each skill writes its stage column. |
 | `relationships_cross.csv` | Cross-dataset FKs (intra-dataset FKs live in each ingest's `relationships.json`). |
+| `measurement_taxon.csv` | Decomposes a taxon-bearing `measurement_type` name (`sardine_eggs`, `phyllosoma_stage_3`) into (taxon, canonical type, `life_stage`, `bin_value`, target grain). **Stage it with `ensure_measurement_taxon()`, never `dbWriteTable()`** — the CSV has no `taxon_key` column, so a raw write makes every `mx.taxon_key` reference a binder error, and hand-rolling `'worms:' \|\| worms_id` mis-keys ITIS-resolved taxa. Filter it to the emitting `dataset_key`. |
+| `taxon_override.csv` | Manual id resolution for source taxa with no clean id (phyto functional groups, marine mammals), matched on a named source column. |
+| `taxon_lineage.csv` | **Generated cache** of WoRMS/ITIS classification chains, one row per (requested taxon, ancestor-or-self). Written by `ensure_taxon_lineage()`; safe to delete (it refetches, slowly). Not hand-maintained. |
 | `metadata/{provider}/{dataset}/` | Per-dataset `tbls_redefine.csv`, `flds_redefine.csv`, `questions.csv`, corrections, etc. |
 
 ### The ingest skills loop (`.claude/skills/`, see `RUNBOOK.md`)

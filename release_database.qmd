@@ -298,7 +298,7 @@ them.
 # CSV) and, more to the point, it cannot go stale: it is derived from the same
 # `calcofi:` blocks that define the pipeline, so every ingest is present by
 # construction. The CSV had drifted — it was missing calcofi_mets,
-# cce-lter_picoplankton-bacteria and ucsd_sio_mesopelagic-fish, which orphaned
+# cce-lter_picoplankton-bacteria and sio_mesopelagic-fish, which orphaned
 # 533,571 obs rows against the obs.dataset_key foreign key.
 d_dataset <- ingest_yaml_to_dataset_df(ingest_yaml) |>
   mutate(dataset_key = paste0(provider, "_", dataset), .before = 1)
@@ -316,8 +316,9 @@ keyed by a namespaced `sample_key` (`dataset_key:sample_type:id`) and stamped
 with a computed H3 `hex_id`. See `design_env-bio-consolidation.md`.
 
 This step **concatenates, it does not derive.** Each ingest projects itself into
-the core via `calcofi4db::emit_core_tables()` — the single authoritative
-projection — and writes its slice as parquet. `assemble_core()` unions those
+the core in its own notebook ("Emit Core Tables") — the single authoritative
+projection, owned by the notebook that owns the dataset — and writes its slice as
+parquet. `assemble_core()` unions those
 shards, renumbers the surrogate ids globally (every ingest numbers from 1 within
 its own shard) and merges the `taxon` slices by source priority. Deriving the
 core here as well is what let the two projections drift apart, so that
@@ -353,8 +354,8 @@ dbExecute(con_wdl,
 dbExecute(con_wdl, "DROP TABLE _measurement_type_reg")
 
 # --- assemble the core from the per-dataset shards --------------------------
-# Each ingest emits its own slice via calcofi4db::emit_core_tables(), which is
-# the single authoritative projection. This step only concatenates: it UNIONs the
+# Each ingest emits its own slice from its own notebook, which is the single
+# authoritative projection (calcofi4db holds only the generic shapes). This step only concatenates: it UNIONs the
 # shards, renumbers the surrogate ids globally (each ingest numbers from 1 within
 # its own shard), merges the `taxon` slices with source priority, and asserts
 # `sample_key` is globally unique. Nothing is re-derived here — that duplication

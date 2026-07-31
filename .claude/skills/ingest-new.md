@@ -193,10 +193,20 @@ dbExecute(con, "CREATE OR REPLACE VIEW {ds}_measurement AS
                 SELECT … FROM obs WHERE dataset_key = '{provider}_{dataset}'")
 ```
 
-`emit_core_tables()` is a convenience wrapper whose `switch(dataset_key, …)` arms
-hold the already-migrated datasets' SQL. **Do not add an arm for a new dataset** —
-that is how ~450 lines of dataset-specific SQL accumulated inside a general-purpose
-module. Use the helpers above.
+**There is no `switch(dataset_key, …)` to add an arm to, and there must not be
+one again.** `calcofi4db` used to hold one per core table — ~600 lines of
+dataset-specific SQL in a general-purpose module — plus `emit_core_tables()` /
+`build_sample_reference()` / `create_compat_views()` over them. All deleted in
+calcofi4db 3.0.0. The package now exposes only *generic shapes*
+(`append_obs()` / `append_obs_attribute()` / `append_sample()` /
+`append_sample_measurement()` / `sample_arm_self()` / `compat_event_sql()` /
+`compat_measurement_sql()` / `ns_key()` / `ensure_measurement_taxon()` /
+`prune_taxon_shard()`), and each dataset's projection lives in its own notebook.
+The reason is not tidiness: `release_database.qmd` kept a second copy of every
+arm, the two drifted, and each divergence was a silent data error (37 euphausiid
+species flattened to one family key; every unresolved seabird on a transect
+merged into one row; phytoplankton emitting zero observations; cufes and
+phyllosoma losing their taxa). Copy the pattern from any `ingest_*.qmd`.
 
 **Taxon resolution.** `obs.taxon_key` is global (`worms:<id>`, or `itis:<id>` for
 birds). Datasets with a vocabulary table resolve through `dataset_taxon`; datasets

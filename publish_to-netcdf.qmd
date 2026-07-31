@@ -244,7 +244,7 @@ as_time <- function(col) glue("epoch({col})::DOUBLE")
 # obs-level columns that actually carry values for this dataset: a bio dataset
 # needs taxon_key/life_stage, an env dataset has neither.
 # `[[` on a named vector errors for a missing name rather than returning NULL, and
-# pic_zooplankton is a tow registry with samples but NO obs partition — so the
+# sio_pic-zooplankton is a tow registry with samples but NO obs partition — so the
 # lookup must be explicitly absent-tolerant.
 obs_part <- function(ds) if (ds %in% names(obs_part_of)) obs_part_of[[ds]] else NULL
 
@@ -257,7 +257,7 @@ obs_ident_cols <- function(ds) {
 }
 
 # Every dataset has `sample` rows; not every dataset has `obs` rows. A tow
-# registry (pic_zooplankton: 99,530 tows, zero observations) is still a real
+# registry (sio_pic-zooplankton: 99,530 tows, zero observations) is still a real
 # dataset and still publishes — as a point collection of sampling events with no
 # measurement variables. Falling back to `sample` is what makes "publish every
 # dataset" true rather than "publish every dataset that has measurements".

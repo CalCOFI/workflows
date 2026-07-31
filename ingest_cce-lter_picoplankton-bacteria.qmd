@@ -397,7 +397,7 @@ dbGetQuery(con, "SELECT * FROM picoplankton_bacteria_measurement LIMIT 100") |>
 ## Emit Core Tables
 
 Project this dataset into the shared consolidated core model
-(`design_env-bio-consolidation.md`) via `calcofi4db::emit_core_tables()`, the
+(`design_env-bio-consolidation.md`), the
 same projection `release_database.qmd` uses to assemble the cross-dataset
 release. This is a bottle-shaped sample — leaf grain `bottle_id`, and since the
 export carries no cast-level event table the bottle is its own root — with an
@@ -451,7 +451,7 @@ stopifnot(
                      WHERE s.sample_key IS NULL")[[1]] == 0)
 # serve the retired per-dataset table names as VIEWs over the core, so
 # in-notebook consumers and ad-hoc queries keep working against the old names
-# (exact for every column the core models; see ?create_compat_views)
+# (exact for every column the core models, lossy for the rest)
 invisible(dbExecute(con, "DROP TABLE IF EXISTS picoplankton_bacteria_measurement_src"))
 invisible(dbExecute(con, "ALTER TABLE picoplankton_bacteria_measurement RENAME TO picoplankton_bacteria_measurement_src"))
 invisible(dbExecute(con, glue(

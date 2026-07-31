@@ -287,8 +287,9 @@ to casts using `site_key` + `datetime_start_utc` (±3 day window).
 
 # `calcofi_bottle` publishes the consolidated core now, not `casts`/`bottle`, so
 # load its `sample` shard and rebuild the two event tables as VIEWs over it. The
-# shard is loaded under a distinct name: dic builds its OWN `sample` later in
-# emit_core_tables(), and these views must keep resolving after that happens.
+# shard is loaded under a distinct name: dic builds its OWN `sample` in the
+# "Emit Core Tables" section below, and these views must keep resolving after
+# that happens — hence `_bottle_sample`, not `sample`.
 load_prior_tables(
   con         = con,
   tables      = c("sample"),
@@ -297,8 +298,32 @@ load_prior_tables(
   as_view     = TRUE
 )
 dbExecute(con, "ALTER VIEW sample RENAME TO _bottle_sample")
-compat <- create_compat_views(con, "calcofi_bottle", sample_tbl = "_bottle_sample")
-cat(glue("bottle event tables rebuilt from core: {paste(compat, collapse = ', ')}"), "\n")
+
+# rebuild `casts` + `bottle` from bottle's core shard: the source id comes back
+# out of the namespaced sample_key ('<dataset_key>:<sample_type>:<id>' -> field 3)
+# and the cast FK out of parent_sample_key. Matching below joins on these, so
+# they must come back from the core rather than from a retired parquet table.
+dbExecute(con, "
+  CREATE OR REPLACE VIEW casts AS
+  SELECT CAST(split_part(s.sample_key, ':', 3) AS BIGINT) AS cast_id,
+         s.site_key, s.grid_key, s.cruise_key, s.order_occ,
+         s.latitude, s.longitude, s.datetime AS datetime_start_utc, s.geom
+  FROM _bottle_sample s
+  WHERE s.dataset_key = 'calcofi_bottle' AND s.sample_type = 'cast'")
+dbExecute(con, "
+  CREATE OR REPLACE VIEW bottle AS
+  SELECT CAST(split_part(s.sample_key, ':', 3) AS BIGINT) AS bottle_id,
+         CAST(split_part(s.parent_sample_key, ':', 3) AS BIGINT) AS cast_id,
+         s.site_key, s.depth_min_m AS depth_m
+  FROM _bottle_sample s
+  WHERE s.dataset_key = 'calcofi_bottle' AND s.sample_type = 'bottle'")
+n_casts  <- dbGetQuery(con, "SELECT COUNT(*) FROM casts")[[1]]
+n_bottle <- dbGetQuery(con, "SELECT COUNT(*) FROM bottle")[[1]]
+stopifnot(
+  "bottle's core shard must yield cast rows"   = n_casts  > 0,
+  "bottle's core shard must yield bottle rows" = n_bottle > 0)
+cat(glue("bottle event tables rebuilt from core: casts ",
+         "{format(n_casts, big.mark = ',')}, bottle {format(n_bottle, big.mark = ',')}"), "\n")
 
 # station matching
 n_dic_sta <- dbGetQuery(
@@ -642,33 +667,94 @@ dbGetQuery(con, "SELECT * FROM dic_summary LIMIT 100") |>
 ## Emit Core Tables
 
 Project this dataset into the shared consolidated core model
-(`design_env-bio-consolidation.md`) via `calcofi4db::emit_core_tables()`. These
-core tables **are** this ingest's output: `release_database.qmd` concatenates the
-per-dataset shards rather than re-deriving the core, so there is exactly one
-projection to keep correct.
+(`design_env-bio-consolidation.md`). These core tables **are** this ingest's
+output: `release_database.qmd` concatenates the per-dataset shards rather than
+re-deriving the core, so there is exactly one projection to keep correct.
 
 DIC observations that share a physical Niskin with `calcofi_bottle` point at that
 bottle's `sample_key`, so the two datasets deduplicate onto one event rather than
-double-counting the bottle.
+double-counting the bottle. Only a DIC sample on a Niskin that `calcofi_bottle`
+does **not** carry mints its own `calcofi_dic:bottle:<md5>` key — and that md5
+must be spelled identically in the `sample` and `obs` arms, or `obs` orphans.
 
 ```{r}
 #| label: emit_core
 
-core <- emit_core_tables(con, "calcofi_dic")
+ds_key <- "calcofi_dic"
+
+# the DIC natural key, for Niskins that calcofi_bottle does not carry. Defined
+# ONCE and interpolated into both arms: the sample and obs arms must agree
+# byte-for-byte or obs.sample_key resolves to nothing. Columns are the ones
+# dic_sample and dic_measurement share, so the two spellings align.
+dic_md5 <- function(a) glue("md5(concat_ws('|', {a}.expocode,
+    CAST({a}.datetime_start_utc AS VARCHAR), CAST({a}.latitude AS VARCHAR),
+    CAST({a}.longitude AS VARCHAR), CAST({a}.depth_m AS VARCHAR)))")
+
+# This projection lives here, in the notebook that owns the dataset, not in a
+# switch(dataset_key, ...) arm inside calcofi4db.
+#
+# sample — bottle-shaped leaf events, minting ONLY the Niskins calcofi_bottle
+# does not already publish (the shared ones reuse bottle's sample_key in obs
+# below). Parented to the matched cast where one was found.
+append_sample(con, glue("
+  SELECT * FROM (
+    SELECT 'calcofi_dic:bottle:' || {dic_md5('d')} AS sample_key, 'bottle' AS sample_type,
+           CASE WHEN c.cast_id IS NULL THEN NULL
+                ELSE 'calcofi_bottle:cast:' || CAST(c.cast_id AS VARCHAR) END AS parent_sample_key,
+           COALESCE(
+             CASE WHEN c.cast_id IS NULL THEN NULL
+                  ELSE 'calcofi_bottle:cast:' || CAST(c.cast_id AS VARCHAR) END,
+             'calcofi_dic:bottle:' || {dic_md5('d')}) AS root_sample_key,
+           '{ds_key}' AS dataset_key, c.grid_key, d.site_key, c.cruise_key,
+           CAST(c.order_occ AS INTEGER) AS order_occ,
+           d.latitude, d.longitude, CAST(d.datetime_start_utc AS TIMESTAMP) AS datetime,
+           d.depth_m AS depth_min_m, d.depth_m AS depth_max_m,
+           NULL::VARCHAR AS tow_type
+    FROM dic_sample d LEFT JOIN casts c ON d.cast_id = c.cast_id
+    WHERE d.bottle_id IS NULL OR d.bottle_id NOT IN (SELECT bottle_id FROM bottle)
+  ) q QUALIFY row_number() OVER (PARTITION BY sample_key) = 1"))
+
+# obs — dedup onto calcofi_bottle: a DIC row sharing a physical Niskin points at
+# that bottle's sample_key; only the non-shared Niskins use the minted DIC key
+append_obs(con, glue("
+  SELECT 'env', '{ds_key}',
+         CASE WHEN dm.bottle_id IS NOT NULL AND dm.bottle_id IN (SELECT bottle_id FROM bottle)
+              THEN 'calcofi_bottle:bottle:' || CAST(dm.bottle_id AS VARCHAR)
+              ELSE 'calcofi_dic:bottle:' || {dic_md5('dm')} END,
+         c.grid_key, c.cruise_key, dm.latitude, dm.longitude,
+         CAST(dm.datetime_start_utc AS TIMESTAMP), dm.depth_m, dm.depth_m,
+         NULL::VARCHAR, NULL::VARCHAR, dm.measurement_type, dm.measurement_value,
+         dm.measurement_qual, NULL::DOUBLE
+  FROM dic_measurement dm JOIN casts c USING (cast_id)
+  WHERE c.grid_key IS NOT NULL"))
+
+core <- list(
+  sample = dbGetQuery(con, "SELECT COUNT(*) FROM sample")[[1]],
+  obs    = dbGetQuery(con, "SELECT COUNT(*) FROM obs")[[1]])
 cat(glue(
   "core projection — sample={core$sample %||% 0} obs={core$obs %||% 0}\n"))
 
-n_obs <- dbGetQuery(con, "SELECT COUNT(*) FROM obs")[[1]]
+n_obs <- core$obs
 n_shared <- dbGetQuery(con,
   "SELECT COUNT(*) FROM obs WHERE sample_key LIKE 'calcofi_bottle:bottle:%'")[[1]]
+n_dup <- dbGetQuery(con, "
+  SELECT COUNT(*) FROM (SELECT sample_key FROM sample GROUP BY 1 HAVING COUNT(*) > 1)")[[1]]
 stopifnot(
   "obs must be one row per grid-matched DIC measurement" =
     n_obs == dbGetQuery(con, "SELECT COUNT(*) FROM dic_measurement dm JOIN casts c USING (cast_id)
                               WHERE c.grid_key IS NOT NULL")[[1]],
+  "sample_key must be unique (the md5 dedup)" = n_dup == 0,
+  "some DIC obs must dedup onto calcofi_bottle" = n_shared > 0,
   "every obs.sample_key must resolve in sample or in the bottle dataset" =
     dbGetQuery(con, "SELECT COUNT(*) FROM obs o LEFT JOIN sample s USING (sample_key)
                      WHERE s.sample_key IS NULL
-                       AND o.sample_key NOT LIKE 'calcofi_bottle:bottle:%'")[[1]] == 0)
+                       AND o.sample_key NOT LIKE 'calcofi_bottle:bottle:%'")[[1]] == 0,
+  # the md5 must be spelled the same in both arms: a DIC-keyed obs row whose key
+  # is absent from sample means the two spellings drifted
+  "every minted DIC obs key must resolve in this dataset's sample" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM obs o LEFT JOIN sample s USING (sample_key)
+                     WHERE o.sample_key LIKE 'calcofi_dic:bottle:%'
+                       AND s.sample_key IS NULL")[[1]] == 0)
 cat(glue("obs: {format(n_obs, big.mark=',')} rows, {format(n_shared, big.mark=',')} ",
          "sharing a Niskin with calcofi_bottle"), "\n")
 ```

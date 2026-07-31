@@ -1,11 +1,11 @@
 # build_zooplankton_metadata.R
-# scaffold metadata/pic/zooplankton/ for the #27 ingest (SIO PIC net-tow registry).
+# scaffold metadata/sio/pic-zooplankton/ for the #27 ingest (SIO PIC net-tow registry).
 # fld_new conforms to metadata/field_dictionary.csv. biovolume measurement is NOT
 # in the source file (blocker Q01) -> only the tow/sample table is built for now.
 # re-runnable & idempotent.
 
 suppressMessages({library(readr); library(tibble); library(dplyr); library(here); library(fs)})
-dir_meta <- here("metadata/pic/zooplankton")
+dir_meta <- here("metadata/sio/pic-zooplankton")
 dir_create(dir_meta)
 
 tbls <- tribble(

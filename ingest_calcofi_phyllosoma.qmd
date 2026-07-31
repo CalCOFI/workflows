@@ -162,10 +162,9 @@ assign_grid_key(con, "phyllosoma_tow") |> datatable(caption = "Grid assignment")
 ## Emit Core Tables
 
 Project this dataset into the shared consolidated core model
-(`design_env-bio-consolidation.md`) via `calcofi4db::emit_core_tables()`. These
-core tables **are** this ingest's output: `release_database.qmd` concatenates the
-per-dataset shards rather than re-deriving the core, so there is exactly one
-projection to keep correct.
+(`design_env-bio-consolidation.md`). These core tables **are** this ingest's
+output: `release_database.qmd` concatenates the per-dataset shards rather than
+re-deriving the core, so there is exactly one projection to keep correct.
 
 The source is one column per stage plus a total. Only `total_phyllosoma` is an
 occurrence headline; the eleven `phyllosoma_stage_N` columns are a stage
@@ -177,11 +176,70 @@ observations. `metadata/measurement_taxon.csv` supplies the split and the
 ```{r}
 #| label: emit_core
 
-mt_taxon <- read_csv(here("metadata/measurement_taxon.csv"), show_col_types = FALSE)
-tx_over  <- read_csv(here("metadata/taxon_override.csv"),    show_col_types = FALSE)
+ds_key <- "calcofi_phyllosoma"
+# filter the crosswalk to THIS dataset -- an unfiltered read leaks other datasets'
+# taxa into this shard (the retired emit_core_tables() wrapper filtered internally)
+mt_taxon <- read_csv(here("metadata/measurement_taxon.csv"),
+                     col_types = cols(worms_id = "i", itis_id = "i",
+                                      bin_value = "d", .default = "c")) |>
+  filter(dataset_key == ds_key)
+tx_over  <- read_csv(here("metadata/taxon_override.csv"), show_col_types = FALSE)
 
-core <- emit_core_tables(
-  con, "calcofi_phyllosoma", measurement_taxon = mt_taxon, overrides = tx_over)
+# This projection lives here, in the notebook that owns the dataset, not in a
+# switch(dataset_key, ...) arm inside calcofi4db. The reusable SHAPES stay in the
+# package (sample_arm_self / compat_measurement_sql), so this is a declaration.
+# lineage: fetch each taxon's WoRMS/ITIS classification (cached in
+# metadata/taxon_lineage.csv, so a re-run costs no API calls) and stage it as the
+# `taxon` hierarchy build_taxon_reference() reads. Without it a crosswalk- or
+# vocabulary-resolved taxon reaches the release with a key and a name and NOTHING
+# else — no rank, no parent_taxon_key, no classification — so hierarchy rollups
+# ("all Decapoda") silently match nothing and no error is raised anywhere.
+ensure_taxon_lineage(con, mt_taxon, tx_over,
+                     cache_csv = here("metadata/taxon_lineage.csv"))
+n_taxon    <- build_taxon_reference(con, mt_taxon, tx_over)
+n_ds_taxon <- build_dataset_taxon(con,   mt_taxon, tx_over)
+# stage the crosswalk WITH its derived taxon_key — never dbWriteTable() the raw
+# CSV, which has no taxon_key column at all (and a 'worms:' || worms_id string
+# built inline would mis-key any ITIS-resolved taxon)
+ensure_measurement_taxon(con, mt_taxon, dataset_key = ds_key)
+
+append_sample(con, sample_arm_self(
+  ds_key, "phyllosoma_tow", "tow_id", "tow", site_expr = "site_key",
+  depth_min = "0::DOUBLE", depth_max = "max_tow_depth_m"))
+
+# obs — the occurrence headline is ONLY total_phyllosoma (target='obs'); the
+# INNER join to the crosswalk is what excludes the per-stage columns
+append_obs(con, glue("
+  SELECT 'bio', '{ds_key}', {ns_key(ds_key, 'tow', 'tw.tow_id')},
+         tw.grid_key, tw.cruise_key, tw.latitude, tw.longitude,
+         CAST(tw.datetime_start_utc AS TIMESTAMP), 0::DOUBLE, tw.max_tow_depth_m,
+         mx.taxon_key, mx.life_stage, mx.measurement_type, m.measurement_value,
+         m.measurement_qual, NULL::DOUBLE
+  FROM phyllosoma_measurement m JOIN phyllosoma_tow tw USING (tow_id)
+  JOIN _measurement_taxon mx ON mx.dataset_key = '{ds_key}'
+                            AND mx.raw_measurement_type = m.measurement_type
+                            AND mx.target = 'obs'
+  WHERE tw.grid_key IS NOT NULL"))
+
+# obs_attribute — stage frequency: phyllosoma_stage_N -> ('stage', bin_value=N,
+# count). Zero-count stages are dropped: a stage column of 0 within a tow that
+# did catch phyllosoma is an absence already implied by the headline.
+append_obs_attribute(con, glue("
+  SELECT '{ds_key}', {ns_key(ds_key, 'tow', 'tw.tow_id')},
+         mx.taxon_key, mx.life_stage, mx.measurement_type, mx.bin_value,
+         NULL::VARCHAR, CAST(m.measurement_value AS INTEGER), NULL::VARCHAR
+  FROM phyllosoma_measurement m JOIN phyllosoma_tow tw USING (tow_id)
+  JOIN _measurement_taxon mx ON mx.dataset_key = '{ds_key}'
+                            AND mx.raw_measurement_type = m.measurement_type
+                            AND mx.target = 'attribute'
+  WHERE tw.grid_key IS NOT NULL AND m.measurement_value > 0"))
+
+core <- list(
+  sample        = dbGetQuery(con, "SELECT COUNT(*) FROM sample")[[1]],
+  obs           = dbGetQuery(con, "SELECT COUNT(*) FROM obs")[[1]],
+  obs_attribute = dbGetQuery(con, "SELECT COUNT(*) FROM obs_attribute")[[1]],
+  taxon         = n_taxon,
+  dataset_taxon = n_ds_taxon)
 cat(glue(
   "core projection — sample={core$sample %||% 0} obs={core$obs %||% 0} ",
   "obs_attribute={core$obs_attribute %||% 0} ",
@@ -189,24 +247,40 @@ cat(glue(
 
 # the headline must be the total only — one row per grid-matched tow — and the
 # stage bins must not leak into obs
-n_obs <- dbGetQuery(con, "SELECT COUNT(*) FROM obs")[[1]]
+n_obs <- core$obs
 n_exp <- dbGetQuery(con, "
   SELECT COUNT(*) FROM phyllosoma_measurement m JOIN phyllosoma_tow tw USING (tow_id)
   WHERE tw.grid_key IS NOT NULL AND m.measurement_type = 'total_phyllosoma'")[[1]]
 n_stage_in_obs <- dbGetQuery(con,
   "SELECT COUNT(*) FROM obs WHERE measurement_type LIKE 'phyllosoma_stage%'")[[1]]
+d_bins <- dbGetQuery(con, "
+  SELECT MIN(bin_value) AS lo, MAX(bin_value) AS hi, COUNT(DISTINCT bin_value) AS n
+  FROM obs_attribute WHERE measurement_type = 'stage'")
 stopifnot(
   "obs must carry the total only, one row per grid-matched tow" = n_obs == n_exp,
   "stage columns must go to obs_attribute, not obs"             = n_stage_in_obs == 0,
   "phyllosoma obs must all carry a taxon_key" =
-    dbGetQuery(con, "SELECT COUNT(*) FROM obs WHERE taxon_key IS NULL")[[1]] == 0)
+    dbGetQuery(con, "SELECT COUNT(*) FROM obs WHERE taxon_key IS NULL")[[1]] == 0,
+  "every obs.taxon_key must RESOLVE in taxon (not merely be non-NULL)" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM obs o LEFT JOIN taxon t USING (taxon_key)
+                     WHERE t.taxon_key IS NULL")[[1]] == 0,
+  "stage bins must span 1-11"  = d_bins$lo == 1 && d_bins$hi == 11,
+  "every obs.sample_key must resolve in sample" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM obs o LEFT JOIN sample s USING (sample_key)
+                     WHERE s.sample_key IS NULL")[[1]] == 0)
 cat(glue("obs parity: {format(n_obs, big.mark = ',')} headline rows; ",
-         "{format(core$obs_attribute %||% 0, big.mark = ',')} stage bins"), "\n")
+         "{format(core$obs_attribute, big.mark = ',')} stage bins ",
+         "across {d_bins$n} stages ({d_bins$lo}-{d_bins$hi})"), "\n")
 # serve the retired per-dataset table names as VIEWs over the core, so
 # in-notebook consumers and ad-hoc queries keep working against the old names
-# (exact for every column the core models; see ?create_compat_views)
-compat <- create_compat_views(con, "calcofi_phyllosoma")
-cat(glue("compat views over core: {paste(compat, collapse = ', ')}"), "\n")
+# (exact for every column the core models)
+invisible(dbExecute(con, "DROP TABLE IF EXISTS phyllosoma_measurement_src"))
+invisible(dbExecute(con, "ALTER TABLE phyllosoma_measurement RENAME TO phyllosoma_measurement_src"))
+invisible(dbExecute(con, glue(
+  "CREATE OR REPLACE VIEW phyllosoma_measurement AS
+   {compat_measurement_sql(ds_key, 'tow', 'tow_id', 'phyllosoma_measurement_id')}")))
+cat(glue("compat view phyllosoma_measurement over obs: ",
+         "{dbGetQuery(con, 'SELECT COUNT(*) FROM phyllosoma_measurement')[[1]]} rows"), "\n")
 
 ```
 
