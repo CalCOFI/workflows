@@ -36,6 +36,7 @@ SELECT
     round(v, 3) || ' between ' || round(v_above, 3) || ' and ' ||
     round(v_below, 3)                                              AS detail,
   cruise_key, depth_min_m, datetime,
+  '{{measurement_type}}'                                           AS measurement_type,
   round(v, 4)                                                      AS value,
   round(v_above, 4)                                                AS value_above,
   round(v_below, 4)                                                AS value_below,

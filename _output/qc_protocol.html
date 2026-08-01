@@ -262,6 +262,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </tbody>
 </table>
 <p>That last row is the single most important convention here.</p>
+<p>Every rule returns at least <code>subject_key</code> (what is flagged — the unit of review) and <code>detail</code> (one sentence naming the problem). A rule whose finding concerns a particular <strong>scan</strong> rather than a whole cast also returns <code>depth_min_m</code> and <code>measurement_type</code>. Those two are a contract rather than a habit: they are what lets a reviewer click a finding in <code>ctd-qaqc</code> and land on the right profile at the right depth, without the app needing to know anything about the rule that produced it. The two cast-level rules below (<code>ctd_cast_deeper_than_seafloor</code>, <code>ctd_cast_position_vs_station</code>) correctly return neither — they are about the cast, not about a reading.</p>
 <div class="callout callout-style-default callout-important callout-titled" title="`skip` is not `pass`, and this is not hypothetical">
 <div class="callout-header d-flex align-content-center">
 <div class="callout-icon-container">
@@ -584,8 +585,8 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>              <span class="at">color =</span> <span class="fu">styleEqual</span>(<span class="fu">c</span>(<span class="cn">TRUE</span>, <span class="cn">FALSE</span>), <span class="fu">c</span>(<span class="st">"inherit"</span>, <span class="st">"#d03b3b"</span>)))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output-display">
-<div class="datatables html-widget html-fill-item" id="htmlwidget-81c148a0d2d3a9b00d0f" style="width:100%;height:auto;"></div>
-<script type="application/json" data-for="htmlwidget-81c148a0d2d3a9b00d0f">{"x":{"filter":"none","vertical":false,"caption":"<caption>metadata/measurement_qual.csv — the controlled vocabulary<\/caption>","data":[["6","8","9","0","1","2","3","4","5","7"],["ok_from_ctd","suspect","missing","UNDOCUMENTED","UNDOCUMENTED","UNDOCUMENTED","UNDOCUMENTED","UNDOCUMENTED","UNDOCUMENTED","UNDOCUMENTED"],["Data OK but taken from CTD","Value is suspect","Missing data","Observed in Bottle_Q but absent from the source documentation","Observed in Bottle_Q but absent from the source documentation","Observed in Bottle_Q but absent from the source documentation","Observed in Bottle_Q but absent from the source documentation","Observed in Bottle_Q but absent from the source documentation","Observed in Bottle_Q but absent from the source documentation","Observed in Bottle_Q but absent from the source documentation"],[true,true,true,false,false,false,false,false,false,false],[148618,8667,1160706,170,118,2030,529,54,138,464]],"container":"<table class=\"display\">\n  <thead>\n    <tr>\n      <th>code<\/th>\n      <th>label<\/th>\n      <th>description<\/th>\n      <th>documented<\/th>\n      <th>n_observed<\/th>\n    <\/tr>\n  <\/thead>\n<\/table>","options":{"pageLength":12,"scrollX":true,"dom":"tip","columnDefs":[{"className":"dt-right","targets":4},{"name":"code","targets":0},{"name":"label","targets":1},{"name":"description","targets":2},{"name":"documented","targets":3},{"name":"n_observed","targets":4}],"order":[],"autoWidth":false,"orderClasses":false,"lengthMenu":[10,12,25,50,100],"rowCallback":"function(row, data, displayNum, displayIndex, dataIndex) {\nvar value=data[3]; $(this.api().cell(row, 3).node()).css({'color':value == true ? \"inherit\" : value == false ? \"#d03b3b\" : null});\n}"},"selection":{"mode":"multiple","selected":null,"target":"row","selectable":null}},"evals":["options.rowCallback"],"jsHooks":[]}</script>
+<div class="datatables html-widget html-fill-item" id="htmlwidget-b8a20a0715062823b721" style="width:100%;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-b8a20a0715062823b721">{"x":{"filter":"none","vertical":false,"caption":"<caption>metadata/measurement_qual.csv — the controlled vocabulary<\/caption>","data":[["6","8","9","0","1","2","3","4","5","7"],["ok_from_ctd","suspect","missing","UNDOCUMENTED","UNDOCUMENTED","UNDOCUMENTED","UNDOCUMENTED","UNDOCUMENTED","UNDOCUMENTED","UNDOCUMENTED"],["Data OK but taken from CTD","Value is suspect","Missing data","Observed in Bottle_Q but absent from the source documentation","Observed in Bottle_Q but absent from the source documentation","Observed in Bottle_Q but absent from the source documentation","Observed in Bottle_Q but absent from the source documentation","Observed in Bottle_Q but absent from the source documentation","Observed in Bottle_Q but absent from the source documentation","Observed in Bottle_Q but absent from the source documentation"],[true,true,true,false,false,false,false,false,false,false],[148618,8667,1160706,170,118,2030,529,54,138,464]],"container":"<table class=\"display\">\n  <thead>\n    <tr>\n      <th>code<\/th>\n      <th>label<\/th>\n      <th>description<\/th>\n      <th>documented<\/th>\n      <th>n_observed<\/th>\n    <\/tr>\n  <\/thead>\n<\/table>","options":{"pageLength":12,"scrollX":true,"dom":"tip","columnDefs":[{"className":"dt-right","targets":4},{"name":"code","targets":0},{"name":"label","targets":1},{"name":"description","targets":2},{"name":"documented","targets":3},{"name":"n_observed","targets":4}],"order":[],"autoWidth":false,"orderClasses":false,"lengthMenu":[10,12,25,50,100],"rowCallback":"function(row, data, displayNum, displayIndex, dataIndex) {\nvar value=data[3]; $(this.api().cell(row, 3).node()).css({'color':value == true ? \"inherit\" : value == false ? \"#d03b3b\" : null});\n}"},"selection":{"mode":"multiple","selected":null,"target":"row","selectable":null}},"evals":["options.rowCallback"],"jsHooks":[]}</script>
 </div>
 </div>
 <p>Three questions are open with the providers, two of them blockers: what the undocumented single-digit codes mean (<code>hydro_master_02</code>), whether a NULL flag means “good” or “never assessed” (<code>hydro_master_05</code>), and whether <code>S_qual</code>’s <strong>253 distinct values</strong> in the bottle master — clustered at 256–271, which looks like bit 8 of a bitmask — indicate a bitmask or a corrupted column (<code>hydro_master_02b</code>). Every other quality column has 3–10 distinct values.</p>
@@ -605,8 +606,8 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>              <span class="at">color =</span> <span class="fu">styleEqual</span>(<span class="fu">c</span>(<span class="cn">TRUE</span>, <span class="cn">FALSE</span>), <span class="fu">c</span>(<span class="st">"inherit"</span>, <span class="st">"#6e7781"</span>)))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output-display">
-<div class="datatables html-widget html-fill-item" id="htmlwidget-24e7410b73ab41a5509b" style="width:100%;height:auto;"></div>
-<script type="application/json" data-for="htmlwidget-24e7410b73ab41a5509b">{"x":{"filter":"none","vertical":false,"caption":"<caption>The registry: metadata/qc_rules/rules.csv<\/caption>","data":[["ctd_climatology_anomaly","ctd_cast_missing_position","ctd_bottle_sensor_offset_oxygen","ctd_bottle_sensor_offset_salinity","ctd_bottle_sensor_offset_temperature","ctd_cast_deeper_than_seafloor","ctd_cast_position_vs_station","ctd_updown_disagreement","ctd_obs_orphan_sample","ctd_qual_unrecognized","ctd_density_inversion","ctd_pressure_monotonic","ctd_spike_salinity","ctd_spike_temperature","ctd_value_out_of_range","ctd_sentinel_neg99","ctd_bottom_depth_vs_station","ctd_sensor1_vs_sensor2"],[true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,false,false],["warning","error","warning","warning","warning","warning","warning","warning","error","warning","warning","warning","warning","warning","warning","error","warning","warning"],["climatology","completeness","crosscheck","crosscheck","crosscheck","crosscheck","crosscheck","crosscheck","fk","lookup","profile","profile","profile","profile","range","sentinel","crosscheck","crosscheck"],["obs","sample","obs","obs","obs","sample","sample","obs_ctd_full","obs","obs","obs","obs_ctd_full","obs_ctd_full","obs_ctd_full","obs","obs","sample","obs"],["all","all","all","all","all","all","all","cruise","all","all","all","cruise","cruise","cruise","all","all","all","all"],["value exceeds |z| against the station x depth x day-of-year climatology","cast with NULL longitude or latitude","bottle vs sensor oxygen offset at matched depth","bottle vs sensor salinity offset at matched depth","bottle vs sensor temperature offset at matched depth","cast measures below the GEBCO seafloor at its position","seafloor at the recorded position disagrees with the station average","down- and upcast disagree at the same depth","obs row references a sample_key absent from sample","quality code absent from the controlled vocabulary","sigma-theta decreases with depth","depth reverses within a cast direction (loop edit)","single-scan salinity spike against a locally smooth profile","single-scan temperature spike against a locally smooth profile","measurement outside its declared valid_min/valid_max","-99 missing-value sentinel served as a real measurement","cast bottom depth deviates &gt;500 m from the station average","dual-sensor disagreement beyond tolerance"]],"container":"<table class=\"display\">\n  <thead>\n    <tr>\n      <th>rule_key<\/th>\n      <th>active<\/th>\n      <th>severity<\/th>\n      <th>type<\/th>\n      <th>target<\/th>\n      <th>scope<\/th>\n      <th>description<\/th>\n    <\/tr>\n  <\/thead>\n<\/table>","options":{"pageLength":20,"scrollX":true,"dom":"tip","columnDefs":[{"name":"rule_key","targets":0},{"name":"active","targets":1},{"name":"severity","targets":2},{"name":"type","targets":3},{"name":"target","targets":4},{"name":"scope","targets":5},{"name":"description","targets":6}],"order":[],"autoWidth":false,"orderClasses":false,"lengthMenu":[10,20,25,50,100],"rowCallback":"function(row, data, displayNum, displayIndex, dataIndex) {\nvar value=data[1]; $(this.api().cell(row, 1).node()).css({'color':value == true ? \"inherit\" : value == false ? \"#6e7781\" : null});\n}"},"selection":{"mode":"multiple","selected":null,"target":"row","selectable":null}},"evals":["options.rowCallback"],"jsHooks":[]}</script>
+<div class="datatables html-widget html-fill-item" id="htmlwidget-0f996a73a270d98f6bb7" style="width:100%;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-0f996a73a270d98f6bb7">{"x":{"filter":"none","vertical":false,"caption":"<caption>The registry: metadata/qc_rules/rules.csv<\/caption>","data":[["ctd_climatology_anomaly","ctd_cast_missing_position","ctd_bottle_sensor_offset_oxygen","ctd_bottle_sensor_offset_salinity","ctd_bottle_sensor_offset_temperature","ctd_cast_deeper_than_seafloor","ctd_cast_position_vs_station","ctd_updown_disagreement","ctd_obs_orphan_sample","ctd_qual_unrecognized","ctd_density_inversion","ctd_pressure_monotonic","ctd_spike_salinity","ctd_spike_temperature","ctd_value_out_of_range","ctd_sentinel_neg99","ctd_bottom_depth_vs_station","ctd_sensor1_vs_sensor2"],[true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,false,false],["warning","error","warning","warning","warning","warning","warning","warning","error","warning","warning","warning","warning","warning","warning","error","warning","warning"],["climatology","completeness","crosscheck","crosscheck","crosscheck","crosscheck","crosscheck","crosscheck","fk","lookup","profile","profile","profile","profile","range","sentinel","crosscheck","crosscheck"],["obs","sample","obs","obs","obs","sample","sample","obs_ctd_full","obs","obs","obs","obs_ctd_full","obs_ctd_full","obs_ctd_full","obs","obs","sample","obs"],["all","all","all","all","all","all","all","cruise","all","all","all","cruise","cruise","cruise","all","all","all","all"],["value exceeds |z| against the station x depth x day-of-year climatology","cast with NULL longitude or latitude","bottle vs sensor oxygen offset at matched depth","bottle vs sensor salinity offset at matched depth","bottle vs sensor temperature offset at matched depth","cast measures below the GEBCO seafloor at its position","seafloor at the recorded position disagrees with the station average","down- and upcast disagree at the same depth","obs row references a sample_key absent from sample","quality code absent from the controlled vocabulary","sigma-theta decreases with depth","depth reverses within a cast direction (loop edit)","single-scan salinity spike against a locally smooth profile","single-scan temperature spike against a locally smooth profile","measurement outside its declared valid_min/valid_max","-99 missing-value sentinel served as a real measurement","cast bottom depth deviates &gt;500 m from the station average","dual-sensor disagreement beyond tolerance"]],"container":"<table class=\"display\">\n  <thead>\n    <tr>\n      <th>rule_key<\/th>\n      <th>active<\/th>\n      <th>severity<\/th>\n      <th>type<\/th>\n      <th>target<\/th>\n      <th>scope<\/th>\n      <th>description<\/th>\n    <\/tr>\n  <\/thead>\n<\/table>","options":{"pageLength":20,"scrollX":true,"dom":"tip","columnDefs":[{"name":"rule_key","targets":0},{"name":"active","targets":1},{"name":"severity","targets":2},{"name":"type","targets":3},{"name":"target","targets":4},{"name":"scope","targets":5},{"name":"description","targets":6}],"order":[],"autoWidth":false,"orderClasses":false,"lengthMenu":[10,20,25,50,100],"rowCallback":"function(row, data, displayNum, displayIndex, dataIndex) {\nvar value=data[1]; $(this.api().cell(row, 1).node()).css({'color':value == true ? \"inherit\" : value == false ? \"#6e7781\" : null});\n}"},"selection":{"mode":"multiple","selected":null,"target":"row","selectable":null}},"evals":["options.rowCallback"],"jsHooks":[]}</script>
 </div>
 </div>
 </section>
@@ -912,14 +913,17 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a>    b.depth_min_m <span class="op">||</span> <span class="st">' m'</span>                                      <span class="kw">AS</span> detail,</span>
 <span id="cb13-15"><a href="#cb13-15" aria-hidden="true" tabindex="-1"></a>  o.cruise_key,</span>
 <span id="cb13-16"><a href="#cb13-16" aria-hidden="true" tabindex="-1"></a>  b.depth_min_m,</span>
-<span id="cb13-17"><a href="#cb13-17" aria-hidden="true" tabindex="-1"></a>  b.v_bottle,</span>
-<span id="cb13-18"><a href="#cb13-18" aria-hidden="true" tabindex="-1"></a>  s.v_sensor,</span>
-<span id="cb13-19"><a href="#cb13-19" aria-hidden="true" tabindex="-1"></a>  <span class="fu">round</span>(b.v_bottle <span class="op">-</span> s.v_sensor, <span class="dv">4</span>)                            <span class="kw">AS</span> offset_bottle_minus_sensor</span>
-<span id="cb13-20"><a href="#cb13-20" aria-hidden="true" tabindex="-1"></a><span class="kw">FROM</span> b</span>
-<span id="cb13-21"><a href="#cb13-21" aria-hidden="true" tabindex="-1"></a><span class="kw">JOIN</span> s <span class="kw">USING</span> (sample_key, depth_min_m)</span>
-<span id="cb13-22"><a href="#cb13-22" aria-hidden="true" tabindex="-1"></a><span class="kw">JOIN</span> (<span class="kw">SELECT</span> <span class="kw">DISTINCT</span> sample_key, cruise_key <span class="kw">FROM</span> obs</span>
-<span id="cb13-23"><a href="#cb13-23" aria-hidden="true" tabindex="-1"></a>      <span class="kw">WHERE</span> dataset_key <span class="op">=</span> <span class="st">'calcofi_ctd-cast'</span>) o <span class="kw">USING</span> (sample_key)</span>
-<span id="cb13-24"><a href="#cb13-24" aria-hidden="true" tabindex="-1"></a><span class="kw">WHERE</span> <span class="fu">abs</span>(b.v_bottle <span class="op">-</span> s.v_sensor) <span class="op">&gt;</span> {{threshold}}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb13-17"><a href="#cb13-17" aria-hidden="true" tabindex="-1"></a>  <span class="co">-- the SENSOR type, not the bottle one: a bottle value is a single discrete</span></span>
+<span id="cb13-18"><a href="#cb13-18" aria-hidden="true" tabindex="-1"></a>  <span class="co">-- point, so the profile a reviewer needs to see is the sensor's</span></span>
+<span id="cb13-19"><a href="#cb13-19" aria-hidden="true" tabindex="-1"></a>  <span class="st">'{{sensor_type}}'</span>                                            <span class="kw">AS</span> measurement_type,</span>
+<span id="cb13-20"><a href="#cb13-20" aria-hidden="true" tabindex="-1"></a>  b.v_bottle,</span>
+<span id="cb13-21"><a href="#cb13-21" aria-hidden="true" tabindex="-1"></a>  s.v_sensor,</span>
+<span id="cb13-22"><a href="#cb13-22" aria-hidden="true" tabindex="-1"></a>  <span class="fu">round</span>(b.v_bottle <span class="op">-</span> s.v_sensor, <span class="dv">4</span>)                            <span class="kw">AS</span> offset_bottle_minus_sensor</span>
+<span id="cb13-23"><a href="#cb13-23" aria-hidden="true" tabindex="-1"></a><span class="kw">FROM</span> b</span>
+<span id="cb13-24"><a href="#cb13-24" aria-hidden="true" tabindex="-1"></a><span class="kw">JOIN</span> s <span class="kw">USING</span> (sample_key, depth_min_m)</span>
+<span id="cb13-25"><a href="#cb13-25" aria-hidden="true" tabindex="-1"></a><span class="kw">JOIN</span> (<span class="kw">SELECT</span> <span class="kw">DISTINCT</span> sample_key, cruise_key <span class="kw">FROM</span> obs</span>
+<span id="cb13-26"><a href="#cb13-26" aria-hidden="true" tabindex="-1"></a>      <span class="kw">WHERE</span> dataset_key <span class="op">=</span> <span class="st">'calcofi_ctd-cast'</span>) o <span class="kw">USING</span> (sample_key)</span>
+<span id="cb13-27"><a href="#cb13-27" aria-hidden="true" tabindex="-1"></a><span class="kw">WHERE</span> <span class="fu">abs</span>(b.v_bottle <span class="op">-</span> s.v_sensor) <span class="op">&gt;</span> {{threshold}}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 </div>
 </div>
@@ -1335,13 +1339,15 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb18-15"><a href="#cb18-15" aria-hidden="true" tabindex="-1"></a>  d.cast_base <span class="op">||</span> <span class="st">'d'</span>                                               <span class="kw">AS</span> subject_key,</span>
 <span id="cb18-16"><a href="#cb18-16" aria-hidden="true" tabindex="-1"></a>  <span class="st">'{{measurement_type}} differs by '</span> <span class="op">||</span> <span class="fu">round</span>(<span class="fu">abs</span>(d.v <span class="op">-</span> u.v), <span class="dv">3</span>) <span class="op">||</span></span>
 <span id="cb18-17"><a href="#cb18-17" aria-hidden="true" tabindex="-1"></a>    <span class="st">' between down- and upcast at '</span> <span class="op">||</span> d.depth_m <span class="op">||</span> <span class="st">' m'</span>           <span class="kw">AS</span> detail,</span>
-<span id="cb18-18"><a href="#cb18-18" aria-hidden="true" tabindex="-1"></a>  d.cruise_key, d.depth_m,</span>
-<span id="cb18-19"><a href="#cb18-19" aria-hidden="true" tabindex="-1"></a>  <span class="fu">round</span>(d.v, <span class="dv">4</span>)                                                    <span class="kw">AS</span> value_down,</span>
-<span id="cb18-20"><a href="#cb18-20" aria-hidden="true" tabindex="-1"></a>  <span class="fu">round</span>(u.v, <span class="dv">4</span>)                                                    <span class="kw">AS</span> value_up,</span>
-<span id="cb18-21"><a href="#cb18-21" aria-hidden="true" tabindex="-1"></a>  <span class="fu">round</span>(d.v <span class="op">-</span> u.v, <span class="dv">4</span>)                                              <span class="kw">AS</span> difference</span>
-<span id="cb18-22"><a href="#cb18-22" aria-hidden="true" tabindex="-1"></a><span class="kw">FROM</span>      (<span class="kw">SELECT</span> <span class="op">*</span> <span class="kw">FROM</span> b <span class="kw">WHERE</span> cast_dir <span class="op">=</span> <span class="st">'d'</span>) d</span>
-<span id="cb18-23"><a href="#cb18-23" aria-hidden="true" tabindex="-1"></a><span class="kw">JOIN</span>      (<span class="kw">SELECT</span> <span class="op">*</span> <span class="kw">FROM</span> b <span class="kw">WHERE</span> cast_dir <span class="op">=</span> <span class="st">'u'</span>) u <span class="kw">USING</span> (cast_base, depth_m)</span>
-<span id="cb18-24"><a href="#cb18-24" aria-hidden="true" tabindex="-1"></a><span class="kw">WHERE</span> <span class="fu">abs</span>(d.v <span class="op">-</span> u.v) <span class="op">&gt;</span> {{threshold}}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb18-18"><a href="#cb18-18" aria-hidden="true" tabindex="-1"></a>  d.cruise_key,</span>
+<span id="cb18-19"><a href="#cb18-19" aria-hidden="true" tabindex="-1"></a>  d.depth_m                                                        <span class="kw">AS</span> depth_min_m,</span>
+<span id="cb18-20"><a href="#cb18-20" aria-hidden="true" tabindex="-1"></a>  <span class="st">'{{measurement_type}}'</span>                                           <span class="kw">AS</span> measurement_type,</span>
+<span id="cb18-21"><a href="#cb18-21" aria-hidden="true" tabindex="-1"></a>  <span class="fu">round</span>(d.v, <span class="dv">4</span>)                                                    <span class="kw">AS</span> value_down,</span>
+<span id="cb18-22"><a href="#cb18-22" aria-hidden="true" tabindex="-1"></a>  <span class="fu">round</span>(u.v, <span class="dv">4</span>)                                                    <span class="kw">AS</span> value_up,</span>
+<span id="cb18-23"><a href="#cb18-23" aria-hidden="true" tabindex="-1"></a>  <span class="fu">round</span>(d.v <span class="op">-</span> u.v, <span class="dv">4</span>)                                              <span class="kw">AS</span> difference</span>
+<span id="cb18-24"><a href="#cb18-24" aria-hidden="true" tabindex="-1"></a><span class="kw">FROM</span>      (<span class="kw">SELECT</span> <span class="op">*</span> <span class="kw">FROM</span> b <span class="kw">WHERE</span> cast_dir <span class="op">=</span> <span class="st">'d'</span>) d</span>
+<span id="cb18-25"><a href="#cb18-25" aria-hidden="true" tabindex="-1"></a><span class="kw">JOIN</span>      (<span class="kw">SELECT</span> <span class="op">*</span> <span class="kw">FROM</span> b <span class="kw">WHERE</span> cast_dir <span class="op">=</span> <span class="st">'u'</span>) u <span class="kw">USING</span> (cast_base, depth_m)</span>
+<span id="cb18-26"><a href="#cb18-26" aria-hidden="true" tabindex="-1"></a><span class="kw">WHERE</span> <span class="fu">abs</span>(d.v <span class="op">-</span> u.v) <span class="op">&gt;</span> {{threshold}}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 </div>
 </div>
@@ -1546,11 +1552,13 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb21-15"><a href="#cb21-15" aria-hidden="true" tabindex="-1"></a>  sample_key                                                   <span class="kw">AS</span> subject_key,</span>
 <span id="cb21-16"><a href="#cb21-16" aria-hidden="true" tabindex="-1"></a>  <span class="st">'sigma-theta drops '</span> <span class="op">||</span> <span class="fu">round</span>(sigma_above <span class="op">-</span> sigma, <span class="dv">3</span>) <span class="op">||</span></span>
 <span id="cb21-17"><a href="#cb21-17" aria-hidden="true" tabindex="-1"></a>    <span class="st">' kg/m3 between '</span> <span class="op">||</span> depth_above <span class="op">||</span> <span class="st">' and '</span> <span class="op">||</span> depth_min_m <span class="op">||</span> <span class="st">' m'</span> <span class="kw">AS</span> detail,</span>
-<span id="cb21-18"><a href="#cb21-18" aria-hidden="true" tabindex="-1"></a>  cruise_key, depth_above, depth_min_m, sigma_above, sigma,</span>
-<span id="cb21-19"><a href="#cb21-19" aria-hidden="true" tabindex="-1"></a>  <span class="fu">round</span>(sigma_above <span class="op">-</span> sigma, <span class="dv">4</span>)                                <span class="kw">AS</span> inversion_magnitude</span>
-<span id="cb21-20"><a href="#cb21-20" aria-hidden="true" tabindex="-1"></a><span class="kw">FROM</span> p</span>
-<span id="cb21-21"><a href="#cb21-21" aria-hidden="true" tabindex="-1"></a><span class="kw">WHERE</span> sigma_above <span class="kw">IS</span> <span class="kw">NOT</span> <span class="kw">NULL</span></span>
-<span id="cb21-22"><a href="#cb21-22" aria-hidden="true" tabindex="-1"></a>  <span class="kw">AND</span> sigma_above <span class="op">-</span> sigma <span class="op">&gt;</span> {{threshold}}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb21-18"><a href="#cb21-18" aria-hidden="true" tabindex="-1"></a>  cruise_key, depth_above, depth_min_m,</span>
+<span id="cb21-19"><a href="#cb21-19" aria-hidden="true" tabindex="-1"></a>  <span class="st">'sigma_theta_1'</span>                                              <span class="kw">AS</span> measurement_type,</span>
+<span id="cb21-20"><a href="#cb21-20" aria-hidden="true" tabindex="-1"></a>  sigma_above, sigma,</span>
+<span id="cb21-21"><a href="#cb21-21" aria-hidden="true" tabindex="-1"></a>  <span class="fu">round</span>(sigma_above <span class="op">-</span> sigma, <span class="dv">4</span>)                                <span class="kw">AS</span> inversion_magnitude</span>
+<span id="cb21-22"><a href="#cb21-22" aria-hidden="true" tabindex="-1"></a><span class="kw">FROM</span> p</span>
+<span id="cb21-23"><a href="#cb21-23" aria-hidden="true" tabindex="-1"></a><span class="kw">WHERE</span> sigma_above <span class="kw">IS</span> <span class="kw">NOT</span> <span class="kw">NULL</span></span>
+<span id="cb21-24"><a href="#cb21-24" aria-hidden="true" tabindex="-1"></a>  <span class="kw">AND</span> sigma_above <span class="op">-</span> sigma <span class="op">&gt;</span> {{threshold}}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 </div>
 </div>
@@ -1634,12 +1642,13 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb22-16"><a href="#cb22-16" aria-hidden="true" tabindex="-1"></a>    <span class="fu">round</span>(depth_prev, <span class="dv">1</span>) <span class="op">||</span> <span class="st">' to '</span> <span class="op">||</span> <span class="fu">round</span>(depth_min_m, <span class="dv">1</span>) <span class="op">||</span> <span class="st">' m)'</span> <span class="kw">AS</span> detail,</span>
 <span id="cb22-17"><a href="#cb22-17" aria-hidden="true" tabindex="-1"></a>  cruise_key, cast_dir, datetime_prev, datetime,</span>
 <span id="cb22-18"><a href="#cb22-18" aria-hidden="true" tabindex="-1"></a>  <span class="fu">round</span>(depth_prev, <span class="dv">1</span>)                                             <span class="kw">AS</span> depth_prev_m,</span>
-<span id="cb22-19"><a href="#cb22-19" aria-hidden="true" tabindex="-1"></a>  <span class="fu">round</span>(depth_min_m, <span class="dv">1</span>)                                            <span class="kw">AS</span> depth_m,</span>
-<span id="cb22-20"><a href="#cb22-20" aria-hidden="true" tabindex="-1"></a>  <span class="fu">round</span>(<span class="fu">abs</span>(depth_prev <span class="op">-</span> depth_min_m), <span class="dv">1</span>)                          <span class="kw">AS</span> reversal_m</span>
-<span id="cb22-21"><a href="#cb22-21" aria-hidden="true" tabindex="-1"></a><span class="kw">FROM</span> x</span>
-<span id="cb22-22"><a href="#cb22-22" aria-hidden="true" tabindex="-1"></a><span class="kw">WHERE</span> depth_prev <span class="kw">IS</span> <span class="kw">NOT</span> <span class="kw">NULL</span></span>
-<span id="cb22-23"><a href="#cb22-23" aria-hidden="true" tabindex="-1"></a>  <span class="kw">AND</span> (   (cast_dir <span class="op">=</span> <span class="st">'d'</span> <span class="kw">AND</span> depth_prev <span class="op">-</span> depth_min_m <span class="op">&gt;</span> {{min_reversal_m}})</span>
-<span id="cb22-24"><a href="#cb22-24" aria-hidden="true" tabindex="-1"></a>       <span class="kw">OR</span> (cast_dir <span class="op">=</span> <span class="st">'u'</span> <span class="kw">AND</span> depth_min_m <span class="op">-</span> depth_prev <span class="op">&gt;</span> {{min_reversal_m}}))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb22-19"><a href="#cb22-19" aria-hidden="true" tabindex="-1"></a>  <span class="fu">round</span>(depth_min_m, <span class="dv">1</span>)                                            <span class="kw">AS</span> depth_min_m,</span>
+<span id="cb22-20"><a href="#cb22-20" aria-hidden="true" tabindex="-1"></a>  <span class="st">'pressure'</span>                                                       <span class="kw">AS</span> measurement_type,</span>
+<span id="cb22-21"><a href="#cb22-21" aria-hidden="true" tabindex="-1"></a>  <span class="fu">round</span>(<span class="fu">abs</span>(depth_prev <span class="op">-</span> depth_min_m), <span class="dv">1</span>)                          <span class="kw">AS</span> reversal_m</span>
+<span id="cb22-22"><a href="#cb22-22" aria-hidden="true" tabindex="-1"></a><span class="kw">FROM</span> x</span>
+<span id="cb22-23"><a href="#cb22-23" aria-hidden="true" tabindex="-1"></a><span class="kw">WHERE</span> depth_prev <span class="kw">IS</span> <span class="kw">NOT</span> <span class="kw">NULL</span></span>
+<span id="cb22-24"><a href="#cb22-24" aria-hidden="true" tabindex="-1"></a>  <span class="kw">AND</span> (   (cast_dir <span class="op">=</span> <span class="st">'d'</span> <span class="kw">AND</span> depth_prev <span class="op">-</span> depth_min_m <span class="op">&gt;</span> {{min_reversal_m}})</span>
+<span id="cb22-25"><a href="#cb22-25" aria-hidden="true" tabindex="-1"></a>       <span class="kw">OR</span> (cast_dir <span class="op">=</span> <span class="st">'u'</span> <span class="kw">AND</span> depth_min_m <span class="op">-</span> depth_prev <span class="op">&gt;</span> {{min_reversal_m}}))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 </div>
 </div>
@@ -1729,15 +1738,16 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb24-15"><a href="#cb24-15" aria-hidden="true" tabindex="-1"></a>    <span class="fu">round</span>(v, <span class="dv">3</span>) <span class="op">||</span> <span class="st">' between '</span> <span class="op">||</span> <span class="fu">round</span>(v_above, <span class="dv">3</span>) <span class="op">||</span> <span class="st">' and '</span> <span class="op">||</span></span>
 <span id="cb24-16"><a href="#cb24-16" aria-hidden="true" tabindex="-1"></a>    <span class="fu">round</span>(v_below, <span class="dv">3</span>)                                              <span class="kw">AS</span> detail,</span>
 <span id="cb24-17"><a href="#cb24-17" aria-hidden="true" tabindex="-1"></a>  cruise_key, depth_min_m, datetime,</span>
-<span id="cb24-18"><a href="#cb24-18" aria-hidden="true" tabindex="-1"></a>  <span class="fu">round</span>(v, <span class="dv">4</span>)                                                      <span class="kw">AS</span> <span class="fu">value</span>,</span>
-<span id="cb24-19"><a href="#cb24-19" aria-hidden="true" tabindex="-1"></a>  <span class="fu">round</span>(v_above, <span class="dv">4</span>)                                                <span class="kw">AS</span> value_above,</span>
-<span id="cb24-20"><a href="#cb24-20" aria-hidden="true" tabindex="-1"></a>  <span class="fu">round</span>(v_below, <span class="dv">4</span>)                                                <span class="kw">AS</span> value_below,</span>
-<span id="cb24-21"><a href="#cb24-21" aria-hidden="true" tabindex="-1"></a>  <span class="fu">round</span>(<span class="fu">abs</span>(v <span class="op">-</span> (v_above <span class="op">+</span> v_below) <span class="op">/</span> <span class="dv">2</span>), <span class="dv">4</span>)                       <span class="kw">AS</span> excursion,</span>
-<span id="cb24-22"><a href="#cb24-22" aria-hidden="true" tabindex="-1"></a>  <span class="fu">round</span>(<span class="fu">abs</span>(v_above <span class="op">-</span> v_below), <span class="dv">4</span>)                                 <span class="kw">AS</span> neighbour_gap</span>
-<span id="cb24-23"><a href="#cb24-23" aria-hidden="true" tabindex="-1"></a><span class="kw">FROM</span> x</span>
-<span id="cb24-24"><a href="#cb24-24" aria-hidden="true" tabindex="-1"></a><span class="kw">WHERE</span> v_above <span class="kw">IS</span> <span class="kw">NOT</span> <span class="kw">NULL</span> <span class="kw">AND</span> v_below <span class="kw">IS</span> <span class="kw">NOT</span> <span class="kw">NULL</span></span>
-<span id="cb24-25"><a href="#cb24-25" aria-hidden="true" tabindex="-1"></a>  <span class="kw">AND</span> <span class="fu">abs</span>(v <span class="op">-</span> (v_above <span class="op">+</span> v_below) <span class="op">/</span> <span class="dv">2</span>) <span class="op">&gt;</span> {{spike_threshold}}</span>
-<span id="cb24-26"><a href="#cb24-26" aria-hidden="true" tabindex="-1"></a>  <span class="kw">AND</span> <span class="fu">abs</span>(v_above <span class="op">-</span> v_below)           <span class="op">&lt;</span> {{neighbour_tol}}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb24-18"><a href="#cb24-18" aria-hidden="true" tabindex="-1"></a>  <span class="st">'{{measurement_type}}'</span>                                           <span class="kw">AS</span> measurement_type,</span>
+<span id="cb24-19"><a href="#cb24-19" aria-hidden="true" tabindex="-1"></a>  <span class="fu">round</span>(v, <span class="dv">4</span>)                                                      <span class="kw">AS</span> <span class="fu">value</span>,</span>
+<span id="cb24-20"><a href="#cb24-20" aria-hidden="true" tabindex="-1"></a>  <span class="fu">round</span>(v_above, <span class="dv">4</span>)                                                <span class="kw">AS</span> value_above,</span>
+<span id="cb24-21"><a href="#cb24-21" aria-hidden="true" tabindex="-1"></a>  <span class="fu">round</span>(v_below, <span class="dv">4</span>)                                                <span class="kw">AS</span> value_below,</span>
+<span id="cb24-22"><a href="#cb24-22" aria-hidden="true" tabindex="-1"></a>  <span class="fu">round</span>(<span class="fu">abs</span>(v <span class="op">-</span> (v_above <span class="op">+</span> v_below) <span class="op">/</span> <span class="dv">2</span>), <span class="dv">4</span>)                       <span class="kw">AS</span> excursion,</span>
+<span id="cb24-23"><a href="#cb24-23" aria-hidden="true" tabindex="-1"></a>  <span class="fu">round</span>(<span class="fu">abs</span>(v_above <span class="op">-</span> v_below), <span class="dv">4</span>)                                 <span class="kw">AS</span> neighbour_gap</span>
+<span id="cb24-24"><a href="#cb24-24" aria-hidden="true" tabindex="-1"></a><span class="kw">FROM</span> x</span>
+<span id="cb24-25"><a href="#cb24-25" aria-hidden="true" tabindex="-1"></a><span class="kw">WHERE</span> v_above <span class="kw">IS</span> <span class="kw">NOT</span> <span class="kw">NULL</span> <span class="kw">AND</span> v_below <span class="kw">IS</span> <span class="kw">NOT</span> <span class="kw">NULL</span></span>
+<span id="cb24-26"><a href="#cb24-26" aria-hidden="true" tabindex="-1"></a>  <span class="kw">AND</span> <span class="fu">abs</span>(v <span class="op">-</span> (v_above <span class="op">+</span> v_below) <span class="op">/</span> <span class="dv">2</span>) <span class="op">&gt;</span> {{spike_threshold}}</span>
+<span id="cb24-27"><a href="#cb24-27" aria-hidden="true" tabindex="-1"></a>  <span class="kw">AND</span> <span class="fu">abs</span>(v_above <span class="op">-</span> v_below)           <span class="op">&lt;</span> {{neighbour_tol}}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 </div>
 </div>
@@ -2739,344 +2749,354 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb37-69"><a href="#cb37-69" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb37-70"><a href="#cb37-70" aria-hidden="true" tabindex="-1"></a>That last row is the single most important convention here.</span>
 <span id="cb37-71"><a href="#cb37-71" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-72"><a href="#cb37-72" aria-hidden="true" tabindex="-1"></a>::: {.callout-important title="<span class="in">`skip`</span> is not <span class="in">`pass`</span>, and this is not hypothetical"}</span>
-<span id="cb37-73"><a href="#cb37-73" aria-hidden="true" tabindex="-1"></a>A rule whose input is missing returns zero rows — which is indistinguishable from</span>
-<span id="cb37-74"><a href="#cb37-74" aria-hidden="true" tabindex="-1"></a>"the data is clean" unless something says otherwise. The three bottle-vs-sensor</span>
-<span id="cb37-75"><a href="#cb37-75" aria-hidden="true" tabindex="-1"></a>calibration rules did exactly that against release <span class="in">`v2026.07.30`</span>, which predates</span>
-<span id="cb37-76"><a href="#cb37-76" aria-hidden="true" tabindex="-1"></a>the change making the bottle reference types canonical: they reported no findings</span>
-<span id="cb37-77"><a href="#cb37-77" aria-hidden="true" tabindex="-1"></a>while comparing nothing at all.</span>
-<span id="cb37-78"><a href="#cb37-78" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-79"><a href="#cb37-79" aria-hidden="true" tabindex="-1"></a>The engine therefore treats an unmet precondition as <span class="in">`skip`</span> with a stated reason,</span>
-<span id="cb37-80"><a href="#cb37-80" aria-hidden="true" tabindex="-1"></a>and the same principle governs reference data — <span class="in">`calcofi4db::qc_stage_reference()`</span></span>
-<span id="cb37-81"><a href="#cb37-81" aria-hidden="true" tabindex="-1"></a>leaves a missing input as a **missing table** so its rules error visibly, rather</span>
-<span id="cb37-82"><a href="#cb37-82" aria-hidden="true" tabindex="-1"></a>than creating an empty one whose rules would quietly pass.</span>
-<span id="cb37-83"><a href="#cb37-83" aria-hidden="true" tabindex="-1"></a>:::</span>
-<span id="cb37-84"><a href="#cb37-84" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-85"><a href="#cb37-85" aria-hidden="true" tabindex="-1"></a>Results carry one of five statuses:</span>
-<span id="cb37-86"><a href="#cb37-86" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-87"><a href="#cb37-87" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> status <span class="pp">|</span> meaning <span class="pp">|</span></span>
-<span id="cb37-88"><a href="#cb37-88" aria-hidden="true" tabindex="-1"></a><span class="pp">|---|---|</span></span>
-<span id="cb37-89"><a href="#cb37-89" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="in">`pass`</span> <span class="pp">|</span> ran, found nothing <span class="pp">|</span></span>
-<span id="cb37-90"><a href="#cb37-90" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="in">`flag`</span> <span class="pp">|</span> ran, found something a human should look at (<span class="in">`severity = warning`</span>) <span class="pp">|</span></span>
-<span id="cb37-91"><a href="#cb37-91" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="in">`FAIL`</span> <span class="pp">|</span> ran, found something that should not be possible (<span class="in">`severity = error`</span>) <span class="pp">|</span></span>
-<span id="cb37-92"><a href="#cb37-92" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="in">`skip`</span> <span class="pp">|</span> **did not run** — a precondition was unmet <span class="pp">|</span></span>
-<span id="cb37-93"><a href="#cb37-93" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="in">`ERROR`</span> <span class="pp">|</span> could not run (missing reference table, bad SQL) <span class="pp">|</span></span>
+<span id="cb37-72"><a href="#cb37-72" aria-hidden="true" tabindex="-1"></a>Every rule returns at least <span class="in">`subject_key`</span> (what is flagged — the unit of review)</span>
+<span id="cb37-73"><a href="#cb37-73" aria-hidden="true" tabindex="-1"></a>and <span class="in">`detail`</span> (one sentence naming the problem). A rule whose finding concerns a</span>
+<span id="cb37-74"><a href="#cb37-74" aria-hidden="true" tabindex="-1"></a>particular **scan** rather than a whole cast also returns <span class="in">`depth_min_m`</span> and</span>
+<span id="cb37-75"><a href="#cb37-75" aria-hidden="true" tabindex="-1"></a><span class="in">`measurement_type`</span>. Those two are a contract rather than a habit: they are what</span>
+<span id="cb37-76"><a href="#cb37-76" aria-hidden="true" tabindex="-1"></a>lets a reviewer click a finding in <span class="in">`ctd-qaqc`</span> and land on the right profile at the</span>
+<span id="cb37-77"><a href="#cb37-77" aria-hidden="true" tabindex="-1"></a>right depth, without the app needing to know anything about the rule that produced</span>
+<span id="cb37-78"><a href="#cb37-78" aria-hidden="true" tabindex="-1"></a>it. The two cast-level rules below (<span class="in">`ctd_cast_deeper_than_seafloor`</span>,</span>
+<span id="cb37-79"><a href="#cb37-79" aria-hidden="true" tabindex="-1"></a><span class="in">`ctd_cast_position_vs_station`</span>) correctly return neither — they are about the cast,</span>
+<span id="cb37-80"><a href="#cb37-80" aria-hidden="true" tabindex="-1"></a>not about a reading.</span>
+<span id="cb37-81"><a href="#cb37-81" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-82"><a href="#cb37-82" aria-hidden="true" tabindex="-1"></a>::: {.callout-important title="<span class="in">`skip`</span> is not <span class="in">`pass`</span>, and this is not hypothetical"}</span>
+<span id="cb37-83"><a href="#cb37-83" aria-hidden="true" tabindex="-1"></a>A rule whose input is missing returns zero rows — which is indistinguishable from</span>
+<span id="cb37-84"><a href="#cb37-84" aria-hidden="true" tabindex="-1"></a>"the data is clean" unless something says otherwise. The three bottle-vs-sensor</span>
+<span id="cb37-85"><a href="#cb37-85" aria-hidden="true" tabindex="-1"></a>calibration rules did exactly that against release <span class="in">`v2026.07.30`</span>, which predates</span>
+<span id="cb37-86"><a href="#cb37-86" aria-hidden="true" tabindex="-1"></a>the change making the bottle reference types canonical: they reported no findings</span>
+<span id="cb37-87"><a href="#cb37-87" aria-hidden="true" tabindex="-1"></a>while comparing nothing at all.</span>
+<span id="cb37-88"><a href="#cb37-88" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-89"><a href="#cb37-89" aria-hidden="true" tabindex="-1"></a>The engine therefore treats an unmet precondition as <span class="in">`skip`</span> with a stated reason,</span>
+<span id="cb37-90"><a href="#cb37-90" aria-hidden="true" tabindex="-1"></a>and the same principle governs reference data — <span class="in">`calcofi4db::qc_stage_reference()`</span></span>
+<span id="cb37-91"><a href="#cb37-91" aria-hidden="true" tabindex="-1"></a>leaves a missing input as a **missing table** so its rules error visibly, rather</span>
+<span id="cb37-92"><a href="#cb37-92" aria-hidden="true" tabindex="-1"></a>than creating an empty one whose rules would quietly pass.</span>
+<span id="cb37-93"><a href="#cb37-93" aria-hidden="true" tabindex="-1"></a>:::</span>
 <span id="cb37-94"><a href="#cb37-94" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-95"><a href="#cb37-95" aria-hidden="true" tabindex="-1"></a><span class="fu">## Where these rules came from</span></span>
+<span id="cb37-95"><a href="#cb37-95" aria-hidden="true" tabindex="-1"></a>Results carry one of five statuses:</span>
 <span id="cb37-96"><a href="#cb37-96" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-97"><a href="#cb37-97" aria-hidden="true" tabindex="-1"></a>Two sources, deliberately combined: the checks CalCOFI has been running for</span>
-<span id="cb37-98"><a href="#cb37-98" aria-hidden="true" tabindex="-1"></a>decades, and the checks that only make sense on CTD data.</span>
-<span id="cb37-99"><a href="#cb37-99" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-100"><a href="#cb37-100" aria-hidden="true" tabindex="-1"></a><span class="fu">### Mining the CalCOFI hydrographic master</span></span>
-<span id="cb37-101"><a href="#cb37-101" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-102"><a href="#cb37-102" aria-hidden="true" tabindex="-1"></a>The program's working database is an MS Access file carrying the bottle record</span>
-<span id="cb37-103"><a href="#cb37-103" aria-hidden="true" tabindex="-1"></a>from 1949, and — more valuably — **155 saved queries**, a self-documenting field</span>
-<span id="cb37-104"><a href="#cb37-104" aria-hidden="true" tabindex="-1"></a>dictionary, an instrument/accuracy registry, a 280-row dated change log, and a</span>
-<span id="cb37-105"><a href="#cb37-105" aria-hidden="true" tabindex="-1"></a>fitted seasonal climatology. Three decades of institutional QA logic lived there</span>
-<span id="cb37-106"><a href="#cb37-106" aria-hidden="true" tabindex="-1"></a>and nowhere else.</span>
-<span id="cb37-107"><a href="#cb37-107" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-108"><a href="#cb37-108" aria-hidden="true" tabindex="-1"></a>It was extracted reproducibly on macOS/Linux (<span class="in">`libs/extract_accdb.R`</span>,</span>
-<span id="cb37-109"><a href="#cb37-109" aria-hidden="true" tabindex="-1"></a><span class="in">`scripts/extract_accdb.sh`</span>) with **two engines on purpose**: <span class="in">`mdbtools`</span> for bulk</span>
-<span id="cb37-110"><a href="#cb37-110" aria-hidden="true" tabindex="-1"></a>table export, and Jackcess for the saved-query SQL, which is authoritative.</span>
-<span id="cb37-111"><a href="#cb37-111" aria-hidden="true" tabindex="-1"></a><span class="in">`mdb-queries`</span> reconstructs the stored parse tree only partially — it silently drops</span>
-<span id="cb37-112"><a href="#cb37-112" aria-hidden="true" tabindex="-1"></a>JOIN clauses, GROUP BY, HAVING and aliases. The output looks plausible and is</span>
-<span id="cb37-113"><a href="#cb37-113" aria-hidden="true" tabindex="-1"></a>wrong: a LEFT JOIN find-unmatched query degrades into a cross join, which inverts</span>
-<span id="cb37-114"><a href="#cb37-114" aria-hidden="true" tabindex="-1"></a>the meaning of the QA check it encodes. Both engines are run and diffed so a</span>
-<span id="cb37-115"><a href="#cb37-115" aria-hidden="true" tabindex="-1"></a>regression in either surfaces instead of silently corrupting a ported rule.</span>
-<span id="cb37-116"><a href="#cb37-116" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-117"><a href="#cb37-117" aria-hidden="true" tabindex="-1"></a>Of the 155 queries, only one family is standing QA: the <span class="in">`TQ -`</span> / <span class="in">`TR -`</span> / <span class="in">`TV -`</span></span>
-<span id="cb37-118"><a href="#cb37-118" aria-hidden="true" tabindex="-1"></a>tests and the <span class="in">`Anomalies`</span> family. The rest are corrections, materializations and</span>
-<span id="cb37-119"><a href="#cb37-119" aria-hidden="true" tabindex="-1"></a>derived products.</span>
-<span id="cb37-120"><a href="#cb37-120" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-123"><a href="#cb37-123" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb37-124"><a href="#cb37-124" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: triage</span></span>
-<span id="cb37-125"><a href="#cb37-125" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-126"><a href="#cb37-126" aria-hidden="true" tabindex="-1"></a><span class="fu">read_csv</span>(<span class="fu">here</span>(<span class="st">"metadata/calcofi/hydro-master/query_triage.csv"</span>),</span>
-<span id="cb37-127"><a href="#cb37-127" aria-hidden="true" tabindex="-1"></a>         <span class="at">show_col_types =</span> <span class="cn">FALSE</span>) <span class="sc">|&gt;</span></span>
-<span id="cb37-128"><a href="#cb37-128" aria-hidden="true" tabindex="-1"></a>  <span class="fu">count</span>(category, <span class="at">sort =</span> <span class="cn">TRUE</span>) <span class="sc">|&gt;</span></span>
-<span id="cb37-129"><a href="#cb37-129" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="st">`</span><span class="at">what it is</span><span class="st">`</span> <span class="ot">=</span> <span class="fu">recode</span>(category,</span>
-<span id="cb37-130"><a href="#cb37-130" aria-hidden="true" tabindex="-1"></a>    <span class="at">validate           =</span> <span class="st">"QA checks — the family ported here"</span>,</span>
-<span id="cb37-131"><a href="#cb37-131" aria-hidden="true" tabindex="-1"></a>    <span class="st">`</span><span class="at">derived-product</span><span class="st">`</span>  <span class="ot">=</span> <span class="st">"computed products (MLD, nutricline, anomalies)"</span>,</span>
-<span id="cb37-132"><a href="#cb37-132" aria-hidden="true" tabindex="-1"></a>    <span class="st">`</span><span class="at">correction-history</span><span class="st">`</span> <span class="ot">=</span> <span class="st">"one-off UPDATE/DELETE repairs, dated and initialled"</span>,</span>
-<span id="cb37-133"><a href="#cb37-133" aria-hidden="true" tabindex="-1"></a>    <span class="at">materialization    =</span> <span class="st">"make-table steps feeding other queries"</span>,</span>
-<span id="cb37-134"><a href="#cb37-134" aria-hidden="true" tabindex="-1"></a>    <span class="st">`</span><span class="at">export-or-info</span><span class="st">`</span>   <span class="ot">=</span> <span class="st">"extracts for outside consumers"</span>,</span>
-<span id="cb37-135"><a href="#cb37-135" aria-hidden="true" tabindex="-1"></a>    <span class="at">unclassified       =</span> <span class="st">"not confidently categorized"</span>)) <span class="sc">|&gt;</span></span>
-<span id="cb37-136"><a href="#cb37-136" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kable</span>(<span class="at">caption =</span> <span class="st">"The 155 Access saved queries, triaged"</span>)</span>
-<span id="cb37-137"><a href="#cb37-137" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb37-138"><a href="#cb37-138" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-139"><a href="#cb37-139" aria-hidden="true" tabindex="-1"></a>**A faithful port is not always the right port.** Two of the Access checks could</span>
-<span id="cb37-140"><a href="#cb37-140" aria-hidden="true" tabindex="-1"></a>not be carried over as written, and both are documented on the rules that replaced</span>
-<span id="cb37-141"><a href="#cb37-141" aria-hidden="true" tabindex="-1"></a>them: <span class="in">`TQ - BottomDepth_Vs_AvgBottomDepth`</span> compares the ship's echosounder to the</span>
-<span id="cb37-142"><a href="#cb37-142" aria-hidden="true" tabindex="-1"></a>station average, but CTD casts carry no reported bottom depth at all</span>
-<span id="cb37-143"><a href="#cb37-143" aria-hidden="true" tabindex="-1"></a>(<span class="in">`bottom_depth`</span> exists in <span class="in">`sample_measurement`</span> for 33,363 **bottle** casts and for</span>
-<span id="cb37-144"><a href="#cb37-144" aria-hidden="true" tabindex="-1"></a>**0** of 14,336 CTD casts) — so the ported form tests position plausibility against</span>
-<span id="cb37-145"><a href="#cb37-145" aria-hidden="true" tabindex="-1"></a>bathymetry instead, which is a different question. And</span>
-<span id="cb37-146"><a href="#cb37-146" aria-hidden="true" tabindex="-1"></a><span class="in">`TQ - StationNameChecker`</span> compares <span class="in">`Rpt_Line &gt; "76.6"`</span> as a **string**, so line 100</span>
-<span id="cb37-147"><a href="#cb37-147" aria-hidden="true" tabindex="-1"></a>sorts below line 76.6 and has been silently excluded from that check for twenty</span>
-<span id="cb37-148"><a href="#cb37-148" aria-hidden="true" tabindex="-1"></a>years; whether to port the bug or the intent is question <span class="in">`hydro_master_09`</span>.</span>
-<span id="cb37-149"><a href="#cb37-149" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-150"><a href="#cb37-150" aria-hidden="true" tabindex="-1"></a><span class="fu">### The climatology, and why two properties are excluded</span></span>
-<span id="cb37-151"><a href="#cb37-151" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-152"><a href="#cb37-152" aria-hidden="true" tabindex="-1"></a><span class="in">`HarmCoeffBottle`</span> holds a fitted annual harmonic per station × standard depth ×</span>
-<span id="cb37-153"><a href="#cb37-153" aria-hidden="true" tabindex="-1"></a>property — mean, amplitude, frequency, phase, and a residual standard deviation.</span>
-<span id="cb37-154"><a href="#cb37-154" aria-hidden="true" tabindex="-1"></a>That turns "is this value plausible" from a fixed global range into a *local,</span>
-<span id="cb37-155"><a href="#cb37-155" aria-hidden="true" tabindex="-1"></a>seasonal* question, which nothing in the pipeline could ask before.</span>
-<span id="cb37-156"><a href="#cb37-156" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-157"><a href="#cb37-157" aria-hidden="true" tabindex="-1"></a>The providers have not confirmed the fitting procedure (question</span>
-<span id="cb37-158"><a href="#cb37-158" aria-hidden="true" tabindex="-1"></a><span class="in">`hydro_master_12`</span>), so the reconstruction form was **determined empirically**:</span>
-<span id="cb37-159"><a href="#cb37-159" aria-hidden="true" tabindex="-1"></a>candidate forms were scored against the 200,640 bottle observations the</span>
-<span id="cb37-160"><a href="#cb37-160" aria-hidden="true" tabindex="-1"></a>coefficients were derived from.</span>
+<span id="cb37-97"><a href="#cb37-97" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> status <span class="pp">|</span> meaning <span class="pp">|</span></span>
+<span id="cb37-98"><a href="#cb37-98" aria-hidden="true" tabindex="-1"></a><span class="pp">|---|---|</span></span>
+<span id="cb37-99"><a href="#cb37-99" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="in">`pass`</span> <span class="pp">|</span> ran, found nothing <span class="pp">|</span></span>
+<span id="cb37-100"><a href="#cb37-100" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="in">`flag`</span> <span class="pp">|</span> ran, found something a human should look at (<span class="in">`severity = warning`</span>) <span class="pp">|</span></span>
+<span id="cb37-101"><a href="#cb37-101" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="in">`FAIL`</span> <span class="pp">|</span> ran, found something that should not be possible (<span class="in">`severity = error`</span>) <span class="pp">|</span></span>
+<span id="cb37-102"><a href="#cb37-102" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="in">`skip`</span> <span class="pp">|</span> **did not run** — a precondition was unmet <span class="pp">|</span></span>
+<span id="cb37-103"><a href="#cb37-103" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="in">`ERROR`</span> <span class="pp">|</span> could not run (missing reference table, bad SQL) <span class="pp">|</span></span>
+<span id="cb37-104"><a href="#cb37-104" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-105"><a href="#cb37-105" aria-hidden="true" tabindex="-1"></a><span class="fu">## Where these rules came from</span></span>
+<span id="cb37-106"><a href="#cb37-106" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-107"><a href="#cb37-107" aria-hidden="true" tabindex="-1"></a>Two sources, deliberately combined: the checks CalCOFI has been running for</span>
+<span id="cb37-108"><a href="#cb37-108" aria-hidden="true" tabindex="-1"></a>decades, and the checks that only make sense on CTD data.</span>
+<span id="cb37-109"><a href="#cb37-109" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-110"><a href="#cb37-110" aria-hidden="true" tabindex="-1"></a><span class="fu">### Mining the CalCOFI hydrographic master</span></span>
+<span id="cb37-111"><a href="#cb37-111" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-112"><a href="#cb37-112" aria-hidden="true" tabindex="-1"></a>The program's working database is an MS Access file carrying the bottle record</span>
+<span id="cb37-113"><a href="#cb37-113" aria-hidden="true" tabindex="-1"></a>from 1949, and — more valuably — **155 saved queries**, a self-documenting field</span>
+<span id="cb37-114"><a href="#cb37-114" aria-hidden="true" tabindex="-1"></a>dictionary, an instrument/accuracy registry, a 280-row dated change log, and a</span>
+<span id="cb37-115"><a href="#cb37-115" aria-hidden="true" tabindex="-1"></a>fitted seasonal climatology. Three decades of institutional QA logic lived there</span>
+<span id="cb37-116"><a href="#cb37-116" aria-hidden="true" tabindex="-1"></a>and nowhere else.</span>
+<span id="cb37-117"><a href="#cb37-117" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-118"><a href="#cb37-118" aria-hidden="true" tabindex="-1"></a>It was extracted reproducibly on macOS/Linux (<span class="in">`libs/extract_accdb.R`</span>,</span>
+<span id="cb37-119"><a href="#cb37-119" aria-hidden="true" tabindex="-1"></a><span class="in">`scripts/extract_accdb.sh`</span>) with **two engines on purpose**: <span class="in">`mdbtools`</span> for bulk</span>
+<span id="cb37-120"><a href="#cb37-120" aria-hidden="true" tabindex="-1"></a>table export, and Jackcess for the saved-query SQL, which is authoritative.</span>
+<span id="cb37-121"><a href="#cb37-121" aria-hidden="true" tabindex="-1"></a><span class="in">`mdb-queries`</span> reconstructs the stored parse tree only partially — it silently drops</span>
+<span id="cb37-122"><a href="#cb37-122" aria-hidden="true" tabindex="-1"></a>JOIN clauses, GROUP BY, HAVING and aliases. The output looks plausible and is</span>
+<span id="cb37-123"><a href="#cb37-123" aria-hidden="true" tabindex="-1"></a>wrong: a LEFT JOIN find-unmatched query degrades into a cross join, which inverts</span>
+<span id="cb37-124"><a href="#cb37-124" aria-hidden="true" tabindex="-1"></a>the meaning of the QA check it encodes. Both engines are run and diffed so a</span>
+<span id="cb37-125"><a href="#cb37-125" aria-hidden="true" tabindex="-1"></a>regression in either surfaces instead of silently corrupting a ported rule.</span>
+<span id="cb37-126"><a href="#cb37-126" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-127"><a href="#cb37-127" aria-hidden="true" tabindex="-1"></a>Of the 155 queries, only one family is standing QA: the <span class="in">`TQ -`</span> / <span class="in">`TR -`</span> / <span class="in">`TV -`</span></span>
+<span id="cb37-128"><a href="#cb37-128" aria-hidden="true" tabindex="-1"></a>tests and the <span class="in">`Anomalies`</span> family. The rest are corrections, materializations and</span>
+<span id="cb37-129"><a href="#cb37-129" aria-hidden="true" tabindex="-1"></a>derived products.</span>
+<span id="cb37-130"><a href="#cb37-130" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-133"><a href="#cb37-133" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb37-134"><a href="#cb37-134" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: triage</span></span>
+<span id="cb37-135"><a href="#cb37-135" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-136"><a href="#cb37-136" aria-hidden="true" tabindex="-1"></a><span class="fu">read_csv</span>(<span class="fu">here</span>(<span class="st">"metadata/calcofi/hydro-master/query_triage.csv"</span>),</span>
+<span id="cb37-137"><a href="#cb37-137" aria-hidden="true" tabindex="-1"></a>         <span class="at">show_col_types =</span> <span class="cn">FALSE</span>) <span class="sc">|&gt;</span></span>
+<span id="cb37-138"><a href="#cb37-138" aria-hidden="true" tabindex="-1"></a>  <span class="fu">count</span>(category, <span class="at">sort =</span> <span class="cn">TRUE</span>) <span class="sc">|&gt;</span></span>
+<span id="cb37-139"><a href="#cb37-139" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="st">`</span><span class="at">what it is</span><span class="st">`</span> <span class="ot">=</span> <span class="fu">recode</span>(category,</span>
+<span id="cb37-140"><a href="#cb37-140" aria-hidden="true" tabindex="-1"></a>    <span class="at">validate           =</span> <span class="st">"QA checks — the family ported here"</span>,</span>
+<span id="cb37-141"><a href="#cb37-141" aria-hidden="true" tabindex="-1"></a>    <span class="st">`</span><span class="at">derived-product</span><span class="st">`</span>  <span class="ot">=</span> <span class="st">"computed products (MLD, nutricline, anomalies)"</span>,</span>
+<span id="cb37-142"><a href="#cb37-142" aria-hidden="true" tabindex="-1"></a>    <span class="st">`</span><span class="at">correction-history</span><span class="st">`</span> <span class="ot">=</span> <span class="st">"one-off UPDATE/DELETE repairs, dated and initialled"</span>,</span>
+<span id="cb37-143"><a href="#cb37-143" aria-hidden="true" tabindex="-1"></a>    <span class="at">materialization    =</span> <span class="st">"make-table steps feeding other queries"</span>,</span>
+<span id="cb37-144"><a href="#cb37-144" aria-hidden="true" tabindex="-1"></a>    <span class="st">`</span><span class="at">export-or-info</span><span class="st">`</span>   <span class="ot">=</span> <span class="st">"extracts for outside consumers"</span>,</span>
+<span id="cb37-145"><a href="#cb37-145" aria-hidden="true" tabindex="-1"></a>    <span class="at">unclassified       =</span> <span class="st">"not confidently categorized"</span>)) <span class="sc">|&gt;</span></span>
+<span id="cb37-146"><a href="#cb37-146" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kable</span>(<span class="at">caption =</span> <span class="st">"The 155 Access saved queries, triaged"</span>)</span>
+<span id="cb37-147"><a href="#cb37-147" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb37-148"><a href="#cb37-148" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-149"><a href="#cb37-149" aria-hidden="true" tabindex="-1"></a>**A faithful port is not always the right port.** Two of the Access checks could</span>
+<span id="cb37-150"><a href="#cb37-150" aria-hidden="true" tabindex="-1"></a>not be carried over as written, and both are documented on the rules that replaced</span>
+<span id="cb37-151"><a href="#cb37-151" aria-hidden="true" tabindex="-1"></a>them: <span class="in">`TQ - BottomDepth_Vs_AvgBottomDepth`</span> compares the ship's echosounder to the</span>
+<span id="cb37-152"><a href="#cb37-152" aria-hidden="true" tabindex="-1"></a>station average, but CTD casts carry no reported bottom depth at all</span>
+<span id="cb37-153"><a href="#cb37-153" aria-hidden="true" tabindex="-1"></a>(<span class="in">`bottom_depth`</span> exists in <span class="in">`sample_measurement`</span> for 33,363 **bottle** casts and for</span>
+<span id="cb37-154"><a href="#cb37-154" aria-hidden="true" tabindex="-1"></a>**0** of 14,336 CTD casts) — so the ported form tests position plausibility against</span>
+<span id="cb37-155"><a href="#cb37-155" aria-hidden="true" tabindex="-1"></a>bathymetry instead, which is a different question. And</span>
+<span id="cb37-156"><a href="#cb37-156" aria-hidden="true" tabindex="-1"></a><span class="in">`TQ - StationNameChecker`</span> compares <span class="in">`Rpt_Line &gt; "76.6"`</span> as a **string**, so line 100</span>
+<span id="cb37-157"><a href="#cb37-157" aria-hidden="true" tabindex="-1"></a>sorts below line 76.6 and has been silently excluded from that check for twenty</span>
+<span id="cb37-158"><a href="#cb37-158" aria-hidden="true" tabindex="-1"></a>years; whether to port the bug or the intent is question <span class="in">`hydro_master_09`</span>.</span>
+<span id="cb37-159"><a href="#cb37-159" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-160"><a href="#cb37-160" aria-hidden="true" tabindex="-1"></a><span class="fu">### The climatology, and why two properties are excluded</span></span>
 <span id="cb37-161"><a href="#cb37-161" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-162"><a href="#cb37-162" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> form <span class="pp">|</span> RMSE <span class="pp">|</span> vs mean-only <span class="pp">|</span></span>
-<span id="cb37-163"><a href="#cb37-163" aria-hidden="true" tabindex="-1"></a><span class="pp">|---|---|---|</span></span>
-<span id="cb37-164"><a href="#cb37-164" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="in">`Mean`</span> (null) <span class="pp">|</span> 1.269 <span class="pp">|</span> — <span class="pp">|</span></span>
-<span id="cb37-165"><a href="#cb37-165" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> **`Mean + Ampl·sin(Freq·(doy − Phase))`** | **0.949** | **+25.2%** <span class="pp">|</span></span>
-<span id="cb37-166"><a href="#cb37-166" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="in">`Mean + Ampl·cos(Freq·(doy − Phase))`</span> <span class="pp">|</span> 2.113 <span class="pp">|</span> −66.4% <span class="pp">|</span></span>
-<span id="cb37-167"><a href="#cb37-167" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="in">`Mean + Ampl·cos(Freq·doy − Phase_deg)`</span> <span class="pp">|</span> 1.800 <span class="pp">|</span> −41.8% <span class="pp">|</span></span>
-<span id="cb37-168"><a href="#cb37-168" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="in">`Mean + Ampl·sin(2π(doy − Phase)/365)`</span> <span class="pp">|</span> 1.474 <span class="pp">|</span> −16.1% <span class="pp">|</span></span>
-<span id="cb37-169"><a href="#cb37-169" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-170"><a href="#cb37-170" aria-hidden="true" tabindex="-1"></a>Every cosine variant is *worse than using the mean alone*. Two independent checks</span>
-<span id="cb37-171"><a href="#cb37-171" aria-hidden="true" tabindex="-1"></a>agree with the winner: physically, the seasonal signal is strongest at the surface</span>
-<span id="cb37-172"><a href="#cb37-172" aria-hidden="true" tabindex="-1"></a>(42% RMSE reduction at 0 m) and decays monotonically to ~5% by 150–500 m, which is</span>
-<span id="cb37-173"><a href="#cb37-173" aria-hidden="true" tabindex="-1"></a>what seasonal heating does and what a wrong form would not show; statistically,</span>
-<span id="cb37-174"><a href="#cb37-174" aria-hidden="true" tabindex="-1"></a>residuals divided by <span class="in">`StDev`</span> are near-standard-normal (mean −0.06, sd 1.14),</span>
-<span id="cb37-175"><a href="#cb37-175" aria-hidden="true" tabindex="-1"></a>confirming <span class="in">`StDev`</span> is the residual scale a z-score needs.</span>
-<span id="cb37-176"><a href="#cb37-176" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-177"><a href="#cb37-177" aria-hidden="true" tabindex="-1"></a>Each property was then scored the same way, and **only those that passed are used**:</span>
-<span id="cb37-178"><a href="#cb37-178" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-179"><a href="#cb37-179" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> property <span class="pp">|</span> RMSE gain <span class="pp">|</span> sd(z) <span class="pp">|</span> verdict <span class="pp">|</span></span>
-<span id="cb37-180"><a href="#cb37-180" aria-hidden="true" tabindex="-1"></a><span class="pp">|---|---|---|---|</span></span>
-<span id="cb37-181"><a href="#cb37-181" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Temp <span class="pp">|</span> 25.2% <span class="pp">|</span> 1.14 <span class="pp">|</span> use <span class="pp">|</span></span>
-<span id="cb37-182"><a href="#cb37-182" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> SiO3 <span class="pp">|</span> 11.6% <span class="pp">|</span> 1.12 <span class="pp">|</span> use <span class="pp">|</span></span>
-<span id="cb37-183"><a href="#cb37-183" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> NO3 <span class="pp">|</span> 10.3% <span class="pp">|</span> 1.40 <span class="pp">|</span> use <span class="pp">|</span></span>
-<span id="cb37-184"><a href="#cb37-184" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> PO4 <span class="pp">|</span> 9.7% <span class="pp">|</span> 1.26 <span class="pp">|</span> use <span class="pp">|</span></span>
-<span id="cb37-185"><a href="#cb37-185" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> O2 <span class="pp">|</span> 9.3% <span class="pp">|</span> 1.29 <span class="pp">|</span> use <span class="pp">|</span></span>
-<span id="cb37-186"><a href="#cb37-186" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Sig <span class="pp">|</span> 2.4% <span class="pp">|</span> 4.80 <span class="pp">|</span> **exclude** <span class="pp">|</span></span>
-<span id="cb37-187"><a href="#cb37-187" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Sal <span class="pp">|</span> 0.5% <span class="pp">|</span> 6.73 <span class="pp">|</span> **exclude** <span class="pp">|</span></span>
-<span id="cb37-188"><a href="#cb37-188" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> NO2 <span class="pp">|</span> 5.0% <span class="pp">|</span> 5.4e12 <span class="pp">|</span> **exclude** <span class="pp">|</span></span>
-<span id="cb37-189"><a href="#cb37-189" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Chla <span class="pp">|</span> 4.3% <span class="pp">|</span> 1.2e11 <span class="pp">|</span> **exclude** <span class="pp">|</span></span>
-<span id="cb37-190"><a href="#cb37-190" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-191"><a href="#cb37-191" aria-hidden="true" tabindex="-1"></a>Salinity and sigma-theta are excluded on evidence, not taste. A seasonal harmonic</span>
-<span id="cb37-192"><a href="#cb37-192" aria-hidden="true" tabindex="-1"></a>explains almost none of their variance here — Southern California salinity is</span>
-<span id="cb37-193"><a href="#cb37-193" aria-hidden="true" tabindex="-1"></a>advection-driven, not seasonally heated — and the tabulated <span class="in">`StDev`</span> is 5–7× smaller</span>
-<span id="cb37-194"><a href="#cb37-194" aria-hidden="true" tabindex="-1"></a>than the actual residual, so it is measuring something other than residual spread.</span>
-<span id="cb37-195"><a href="#cb37-195" aria-hidden="true" tabindex="-1"></a>A z-score built on it would be wildly over-dispersed and would flag thousands of</span>
-<span id="cb37-196"><a href="#cb37-196" aria-hidden="true" tabindex="-1"></a>ordinary values. NO2 and Chla fail differently: a handful of station × depth cells</span>
-<span id="cb37-197"><a href="#cb37-197" aria-hidden="true" tabindex="-1"></a>carry a near-zero <span class="in">`StDev`</span>, which makes z explode (one nitrite cell produced</span>
-<span id="cb37-198"><a href="#cb37-198" aria-hidden="true" tabindex="-1"></a>z = 3.5e12), so they are left out rather than patched.</span>
-<span id="cb37-199"><a href="#cb37-199" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-200"><a href="#cb37-200" aria-hidden="true" tabindex="-1"></a><span class="fu">### Reference data the rules join against</span></span>
-<span id="cb37-201"><a href="#cb37-201" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-202"><a href="#cb37-202" aria-hidden="true" tabindex="-1"></a>None of this is part of the release. It is the QC engine's *input*, staged onto a</span>
-<span id="cb37-203"><a href="#cb37-203" aria-hidden="true" tabindex="-1"></a>connection by <span class="in">`calcofi4db::qc_stage_reference()`</span>.</span>
-<span id="cb37-204"><a href="#cb37-204" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-207"><a href="#cb37-207" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb37-208"><a href="#cb37-208" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: reference_inputs</span></span>
+<span id="cb37-162"><a href="#cb37-162" aria-hidden="true" tabindex="-1"></a><span class="in">`HarmCoeffBottle`</span> holds a fitted annual harmonic per station × standard depth ×</span>
+<span id="cb37-163"><a href="#cb37-163" aria-hidden="true" tabindex="-1"></a>property — mean, amplitude, frequency, phase, and a residual standard deviation.</span>
+<span id="cb37-164"><a href="#cb37-164" aria-hidden="true" tabindex="-1"></a>That turns "is this value plausible" from a fixed global range into a *local,</span>
+<span id="cb37-165"><a href="#cb37-165" aria-hidden="true" tabindex="-1"></a>seasonal* question, which nothing in the pipeline could ask before.</span>
+<span id="cb37-166"><a href="#cb37-166" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-167"><a href="#cb37-167" aria-hidden="true" tabindex="-1"></a>The providers have not confirmed the fitting procedure (question</span>
+<span id="cb37-168"><a href="#cb37-168" aria-hidden="true" tabindex="-1"></a><span class="in">`hydro_master_12`</span>), so the reconstruction form was **determined empirically**:</span>
+<span id="cb37-169"><a href="#cb37-169" aria-hidden="true" tabindex="-1"></a>candidate forms were scored against the 200,640 bottle observations the</span>
+<span id="cb37-170"><a href="#cb37-170" aria-hidden="true" tabindex="-1"></a>coefficients were derived from.</span>
+<span id="cb37-171"><a href="#cb37-171" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-172"><a href="#cb37-172" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> form <span class="pp">|</span> RMSE <span class="pp">|</span> vs mean-only <span class="pp">|</span></span>
+<span id="cb37-173"><a href="#cb37-173" aria-hidden="true" tabindex="-1"></a><span class="pp">|---|---|---|</span></span>
+<span id="cb37-174"><a href="#cb37-174" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="in">`Mean`</span> (null) <span class="pp">|</span> 1.269 <span class="pp">|</span> — <span class="pp">|</span></span>
+<span id="cb37-175"><a href="#cb37-175" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> **`Mean + Ampl·sin(Freq·(doy − Phase))`** | **0.949** | **+25.2%** <span class="pp">|</span></span>
+<span id="cb37-176"><a href="#cb37-176" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="in">`Mean + Ampl·cos(Freq·(doy − Phase))`</span> <span class="pp">|</span> 2.113 <span class="pp">|</span> −66.4% <span class="pp">|</span></span>
+<span id="cb37-177"><a href="#cb37-177" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="in">`Mean + Ampl·cos(Freq·doy − Phase_deg)`</span> <span class="pp">|</span> 1.800 <span class="pp">|</span> −41.8% <span class="pp">|</span></span>
+<span id="cb37-178"><a href="#cb37-178" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="in">`Mean + Ampl·sin(2π(doy − Phase)/365)`</span> <span class="pp">|</span> 1.474 <span class="pp">|</span> −16.1% <span class="pp">|</span></span>
+<span id="cb37-179"><a href="#cb37-179" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-180"><a href="#cb37-180" aria-hidden="true" tabindex="-1"></a>Every cosine variant is *worse than using the mean alone*. Two independent checks</span>
+<span id="cb37-181"><a href="#cb37-181" aria-hidden="true" tabindex="-1"></a>agree with the winner: physically, the seasonal signal is strongest at the surface</span>
+<span id="cb37-182"><a href="#cb37-182" aria-hidden="true" tabindex="-1"></a>(42% RMSE reduction at 0 m) and decays monotonically to ~5% by 150–500 m, which is</span>
+<span id="cb37-183"><a href="#cb37-183" aria-hidden="true" tabindex="-1"></a>what seasonal heating does and what a wrong form would not show; statistically,</span>
+<span id="cb37-184"><a href="#cb37-184" aria-hidden="true" tabindex="-1"></a>residuals divided by <span class="in">`StDev`</span> are near-standard-normal (mean −0.06, sd 1.14),</span>
+<span id="cb37-185"><a href="#cb37-185" aria-hidden="true" tabindex="-1"></a>confirming <span class="in">`StDev`</span> is the residual scale a z-score needs.</span>
+<span id="cb37-186"><a href="#cb37-186" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-187"><a href="#cb37-187" aria-hidden="true" tabindex="-1"></a>Each property was then scored the same way, and **only those that passed are used**:</span>
+<span id="cb37-188"><a href="#cb37-188" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-189"><a href="#cb37-189" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> property <span class="pp">|</span> RMSE gain <span class="pp">|</span> sd(z) <span class="pp">|</span> verdict <span class="pp">|</span></span>
+<span id="cb37-190"><a href="#cb37-190" aria-hidden="true" tabindex="-1"></a><span class="pp">|---|---|---|---|</span></span>
+<span id="cb37-191"><a href="#cb37-191" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Temp <span class="pp">|</span> 25.2% <span class="pp">|</span> 1.14 <span class="pp">|</span> use <span class="pp">|</span></span>
+<span id="cb37-192"><a href="#cb37-192" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> SiO3 <span class="pp">|</span> 11.6% <span class="pp">|</span> 1.12 <span class="pp">|</span> use <span class="pp">|</span></span>
+<span id="cb37-193"><a href="#cb37-193" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> NO3 <span class="pp">|</span> 10.3% <span class="pp">|</span> 1.40 <span class="pp">|</span> use <span class="pp">|</span></span>
+<span id="cb37-194"><a href="#cb37-194" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> PO4 <span class="pp">|</span> 9.7% <span class="pp">|</span> 1.26 <span class="pp">|</span> use <span class="pp">|</span></span>
+<span id="cb37-195"><a href="#cb37-195" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> O2 <span class="pp">|</span> 9.3% <span class="pp">|</span> 1.29 <span class="pp">|</span> use <span class="pp">|</span></span>
+<span id="cb37-196"><a href="#cb37-196" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Sig <span class="pp">|</span> 2.4% <span class="pp">|</span> 4.80 <span class="pp">|</span> **exclude** <span class="pp">|</span></span>
+<span id="cb37-197"><a href="#cb37-197" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Sal <span class="pp">|</span> 0.5% <span class="pp">|</span> 6.73 <span class="pp">|</span> **exclude** <span class="pp">|</span></span>
+<span id="cb37-198"><a href="#cb37-198" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> NO2 <span class="pp">|</span> 5.0% <span class="pp">|</span> 5.4e12 <span class="pp">|</span> **exclude** <span class="pp">|</span></span>
+<span id="cb37-199"><a href="#cb37-199" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Chla <span class="pp">|</span> 4.3% <span class="pp">|</span> 1.2e11 <span class="pp">|</span> **exclude** <span class="pp">|</span></span>
+<span id="cb37-200"><a href="#cb37-200" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-201"><a href="#cb37-201" aria-hidden="true" tabindex="-1"></a>Salinity and sigma-theta are excluded on evidence, not taste. A seasonal harmonic</span>
+<span id="cb37-202"><a href="#cb37-202" aria-hidden="true" tabindex="-1"></a>explains almost none of their variance here — Southern California salinity is</span>
+<span id="cb37-203"><a href="#cb37-203" aria-hidden="true" tabindex="-1"></a>advection-driven, not seasonally heated — and the tabulated <span class="in">`StDev`</span> is 5–7× smaller</span>
+<span id="cb37-204"><a href="#cb37-204" aria-hidden="true" tabindex="-1"></a>than the actual residual, so it is measuring something other than residual spread.</span>
+<span id="cb37-205"><a href="#cb37-205" aria-hidden="true" tabindex="-1"></a>A z-score built on it would be wildly over-dispersed and would flag thousands of</span>
+<span id="cb37-206"><a href="#cb37-206" aria-hidden="true" tabindex="-1"></a>ordinary values. NO2 and Chla fail differently: a handful of station × depth cells</span>
+<span id="cb37-207"><a href="#cb37-207" aria-hidden="true" tabindex="-1"></a>carry a near-zero <span class="in">`StDev`</span>, which makes z explode (one nitrite cell produced</span>
+<span id="cb37-208"><a href="#cb37-208" aria-hidden="true" tabindex="-1"></a>z = 3.5e12), so they are left out rather than patched.</span>
 <span id="cb37-209"><a href="#cb37-209" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-210"><a href="#cb37-210" aria-hidden="true" tabindex="-1"></a>tibble<span class="sc">::</span><span class="fu">tribble</span>(</span>
-<span id="cb37-211"><a href="#cb37-211" aria-hidden="true" tabindex="-1"></a>  <span class="sc">~</span>table,                  <span class="sc">~</span>source,                                        <span class="sc">~</span>role,</span>
-<span id="cb37-212"><a href="#cb37-212" aria-hidden="true" tabindex="-1"></a>  <span class="st">"measurement_type"</span>,      <span class="st">"metadata/measurement_type.csv"</span>,                <span class="st">"valid_min/valid_max per type — the registry, not a release, because it moves ahead of releases"</span>,</span>
-<span id="cb37-213"><a href="#cb37-213" aria-hidden="true" tabindex="-1"></a>  <span class="st">"measurement_qual"</span>,      <span class="st">"metadata/measurement_qual.csv"</span>,                <span class="st">"the quality-code vocabulary, recovered from the Access field documentation"</span>,</span>
-<span id="cb37-214"><a href="#cb37-214" aria-hidden="true" tabindex="-1"></a>  <span class="st">"climatology_harmonic"</span>,  <span class="st">"hydro-master/reference/climatology_harmonic.csv"</span>, <span class="st">"fitted seasonal expectation per station x depth x property"</span>,</span>
-<span id="cb37-215"><a href="#cb37-215" aria-hidden="true" tabindex="-1"></a>  <span class="st">"station"</span>,               <span class="st">"hydro-master/reference/station.csv"</span>,           <span class="st">"the 75 current standard stations and their average bottom depth"</span>,</span>
-<span id="cb37-216"><a href="#cb37-216" aria-hidden="true" tabindex="-1"></a>  <span class="st">"standard_depth"</span>,        <span class="st">"hydro-master/reference/standard_depth.csv"</span>,    <span class="st">"the standard depth grid"</span>,</span>
-<span id="cb37-217"><a href="#cb37-217" aria-hidden="true" tabindex="-1"></a>  <span class="st">"sample_seafloor"</span>,       <span class="st">"GEBCO 2025 crop (apps/ctd-viz)"</span>,               <span class="st">"seafloor depth at each cast position — the only bottom-depth reference CTD casts have"</span>) <span class="sc">|&gt;</span></span>
-<span id="cb37-218"><a href="#cb37-218" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kable</span>(<span class="at">caption =</span> <span class="st">"QC reference inputs, none of which ship in the release"</span>)</span>
-<span id="cb37-219"><a href="#cb37-219" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb37-220"><a href="#cb37-220" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-221"><a href="#cb37-221" aria-hidden="true" tabindex="-1"></a><span class="fu">### The quality-code vocabulary</span></span>
-<span id="cb37-222"><a href="#cb37-222" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-223"><a href="#cb37-223" aria-hidden="true" tabindex="-1"></a><span class="in">`measurement_qual`</span> was a verbatim pass-through for years: carried through every</span>
-<span id="cb37-224"><a href="#cb37-224" aria-hidden="true" tabindex="-1"></a>table, never interpreted, with no vocabulary anywhere in the repo. There is one</span>
-<span id="cb37-225"><a href="#cb37-225" aria-hidden="true" tabindex="-1"></a>now, recovered from the hydrographic master's own field documentation — but it is</span>
-<span id="cb37-226"><a href="#cb37-226" aria-hidden="true" tabindex="-1"></a>**incomplete, and the gaps are blockers**.</span>
-<span id="cb37-227"><a href="#cb37-227" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-230"><a href="#cb37-230" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb37-231"><a href="#cb37-231" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: qual_vocab</span></span>
+<span id="cb37-210"><a href="#cb37-210" aria-hidden="true" tabindex="-1"></a><span class="fu">### Reference data the rules join against</span></span>
+<span id="cb37-211"><a href="#cb37-211" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-212"><a href="#cb37-212" aria-hidden="true" tabindex="-1"></a>None of this is part of the release. It is the QC engine's *input*, staged onto a</span>
+<span id="cb37-213"><a href="#cb37-213" aria-hidden="true" tabindex="-1"></a>connection by <span class="in">`calcofi4db::qc_stage_reference()`</span>.</span>
+<span id="cb37-214"><a href="#cb37-214" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-217"><a href="#cb37-217" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb37-218"><a href="#cb37-218" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: reference_inputs</span></span>
+<span id="cb37-219"><a href="#cb37-219" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-220"><a href="#cb37-220" aria-hidden="true" tabindex="-1"></a>tibble<span class="sc">::</span><span class="fu">tribble</span>(</span>
+<span id="cb37-221"><a href="#cb37-221" aria-hidden="true" tabindex="-1"></a>  <span class="sc">~</span>table,                  <span class="sc">~</span>source,                                        <span class="sc">~</span>role,</span>
+<span id="cb37-222"><a href="#cb37-222" aria-hidden="true" tabindex="-1"></a>  <span class="st">"measurement_type"</span>,      <span class="st">"metadata/measurement_type.csv"</span>,                <span class="st">"valid_min/valid_max per type — the registry, not a release, because it moves ahead of releases"</span>,</span>
+<span id="cb37-223"><a href="#cb37-223" aria-hidden="true" tabindex="-1"></a>  <span class="st">"measurement_qual"</span>,      <span class="st">"metadata/measurement_qual.csv"</span>,                <span class="st">"the quality-code vocabulary, recovered from the Access field documentation"</span>,</span>
+<span id="cb37-224"><a href="#cb37-224" aria-hidden="true" tabindex="-1"></a>  <span class="st">"climatology_harmonic"</span>,  <span class="st">"hydro-master/reference/climatology_harmonic.csv"</span>, <span class="st">"fitted seasonal expectation per station x depth x property"</span>,</span>
+<span id="cb37-225"><a href="#cb37-225" aria-hidden="true" tabindex="-1"></a>  <span class="st">"station"</span>,               <span class="st">"hydro-master/reference/station.csv"</span>,           <span class="st">"the 75 current standard stations and their average bottom depth"</span>,</span>
+<span id="cb37-226"><a href="#cb37-226" aria-hidden="true" tabindex="-1"></a>  <span class="st">"standard_depth"</span>,        <span class="st">"hydro-master/reference/standard_depth.csv"</span>,    <span class="st">"the standard depth grid"</span>,</span>
+<span id="cb37-227"><a href="#cb37-227" aria-hidden="true" tabindex="-1"></a>  <span class="st">"sample_seafloor"</span>,       <span class="st">"GEBCO 2025 crop (apps/ctd-viz)"</span>,               <span class="st">"seafloor depth at each cast position — the only bottom-depth reference CTD casts have"</span>) <span class="sc">|&gt;</span></span>
+<span id="cb37-228"><a href="#cb37-228" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kable</span>(<span class="at">caption =</span> <span class="st">"QC reference inputs, none of which ship in the release"</span>)</span>
+<span id="cb37-229"><a href="#cb37-229" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb37-230"><a href="#cb37-230" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-231"><a href="#cb37-231" aria-hidden="true" tabindex="-1"></a><span class="fu">### The quality-code vocabulary</span></span>
 <span id="cb37-232"><a href="#cb37-232" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-233"><a href="#cb37-233" aria-hidden="true" tabindex="-1"></a><span class="fu">read_csv</span>(<span class="fu">here</span>(<span class="st">"metadata/measurement_qual.csv"</span>),</span>
-<span id="cb37-234"><a href="#cb37-234" aria-hidden="true" tabindex="-1"></a>         <span class="at">col_types =</span> <span class="fu">cols</span>(<span class="at">qual_code =</span> <span class="fu">col_character</span>(), <span class="at">.default =</span> <span class="fu">col_guess</span>())) <span class="sc">|&gt;</span></span>
-<span id="cb37-235"><a href="#cb37-235" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(<span class="at">code =</span> qual_code, label, description, <span class="at">documented =</span> is_documented,</span>
-<span id="cb37-236"><a href="#cb37-236" aria-hidden="true" tabindex="-1"></a>         n_observed) <span class="sc">|&gt;</span></span>
-<span id="cb37-237"><a href="#cb37-237" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(<span class="fu">desc</span>(documented), code) <span class="sc">|&gt;</span></span>
-<span id="cb37-238"><a href="#cb37-238" aria-hidden="true" tabindex="-1"></a>  <span class="fu">datatable</span>(</span>
-<span id="cb37-239"><a href="#cb37-239" aria-hidden="true" tabindex="-1"></a>    <span class="at">caption  =</span> <span class="st">"metadata/measurement_qual.csv — the controlled vocabulary"</span>,</span>
-<span id="cb37-240"><a href="#cb37-240" aria-hidden="true" tabindex="-1"></a>    <span class="at">rownames =</span> <span class="cn">FALSE</span>,</span>
-<span id="cb37-241"><a href="#cb37-241" aria-hidden="true" tabindex="-1"></a>    <span class="at">options  =</span> <span class="fu">list</span>(<span class="at">pageLength =</span> <span class="dv">12</span>, <span class="at">scrollX =</span> <span class="cn">TRUE</span>, <span class="at">dom =</span> <span class="st">"tip"</span>)) <span class="sc">|&gt;</span></span>
-<span id="cb37-242"><a href="#cb37-242" aria-hidden="true" tabindex="-1"></a>  <span class="fu">formatStyle</span>(<span class="st">"documented"</span>,</span>
-<span id="cb37-243"><a href="#cb37-243" aria-hidden="true" tabindex="-1"></a>              <span class="at">color =</span> <span class="fu">styleEqual</span>(<span class="fu">c</span>(<span class="cn">TRUE</span>, <span class="cn">FALSE</span>), <span class="fu">c</span>(<span class="st">"inherit"</span>, <span class="st">"#d03b3b"</span>)))</span>
-<span id="cb37-244"><a href="#cb37-244" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb37-245"><a href="#cb37-245" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-246"><a href="#cb37-246" aria-hidden="true" tabindex="-1"></a>Three questions are open with the providers, two of them blockers: what the</span>
-<span id="cb37-247"><a href="#cb37-247" aria-hidden="true" tabindex="-1"></a>undocumented single-digit codes mean (<span class="in">`hydro_master_02`</span>), whether a NULL flag means</span>
-<span id="cb37-248"><a href="#cb37-248" aria-hidden="true" tabindex="-1"></a>"good" or "never assessed" (<span class="in">`hydro_master_05`</span>), and whether <span class="in">`S_qual`</span>'s **253</span>
-<span id="cb37-249"><a href="#cb37-249" aria-hidden="true" tabindex="-1"></a>distinct values** in the bottle master — clustered at 256–271, which looks like bit</span>
-<span id="cb37-250"><a href="#cb37-250" aria-hidden="true" tabindex="-1"></a>8 of a bitmask — indicate a bitmask or a corrupted column (<span class="in">`hydro_master_02b`</span>).</span>
-<span id="cb37-251"><a href="#cb37-251" aria-hidden="true" tabindex="-1"></a>Every other quality column has 3–10 distinct values.</span>
-<span id="cb37-252"><a href="#cb37-252" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-253"><a href="#cb37-253" aria-hidden="true" tabindex="-1"></a>**Nothing in this protocol acts on a flag.** Acting on one whose semantics are</span>
-<span id="cb37-254"><a href="#cb37-254" aria-hidden="true" tabindex="-1"></a>unconfirmed would be guessing with released data.</span>
+<span id="cb37-233"><a href="#cb37-233" aria-hidden="true" tabindex="-1"></a><span class="in">`measurement_qual`</span> was a verbatim pass-through for years: carried through every</span>
+<span id="cb37-234"><a href="#cb37-234" aria-hidden="true" tabindex="-1"></a>table, never interpreted, with no vocabulary anywhere in the repo. There is one</span>
+<span id="cb37-235"><a href="#cb37-235" aria-hidden="true" tabindex="-1"></a>now, recovered from the hydrographic master's own field documentation — but it is</span>
+<span id="cb37-236"><a href="#cb37-236" aria-hidden="true" tabindex="-1"></a>**incomplete, and the gaps are blockers**.</span>
+<span id="cb37-237"><a href="#cb37-237" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-240"><a href="#cb37-240" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb37-241"><a href="#cb37-241" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: qual_vocab</span></span>
+<span id="cb37-242"><a href="#cb37-242" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-243"><a href="#cb37-243" aria-hidden="true" tabindex="-1"></a><span class="fu">read_csv</span>(<span class="fu">here</span>(<span class="st">"metadata/measurement_qual.csv"</span>),</span>
+<span id="cb37-244"><a href="#cb37-244" aria-hidden="true" tabindex="-1"></a>         <span class="at">col_types =</span> <span class="fu">cols</span>(<span class="at">qual_code =</span> <span class="fu">col_character</span>(), <span class="at">.default =</span> <span class="fu">col_guess</span>())) <span class="sc">|&gt;</span></span>
+<span id="cb37-245"><a href="#cb37-245" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(<span class="at">code =</span> qual_code, label, description, <span class="at">documented =</span> is_documented,</span>
+<span id="cb37-246"><a href="#cb37-246" aria-hidden="true" tabindex="-1"></a>         n_observed) <span class="sc">|&gt;</span></span>
+<span id="cb37-247"><a href="#cb37-247" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(<span class="fu">desc</span>(documented), code) <span class="sc">|&gt;</span></span>
+<span id="cb37-248"><a href="#cb37-248" aria-hidden="true" tabindex="-1"></a>  <span class="fu">datatable</span>(</span>
+<span id="cb37-249"><a href="#cb37-249" aria-hidden="true" tabindex="-1"></a>    <span class="at">caption  =</span> <span class="st">"metadata/measurement_qual.csv — the controlled vocabulary"</span>,</span>
+<span id="cb37-250"><a href="#cb37-250" aria-hidden="true" tabindex="-1"></a>    <span class="at">rownames =</span> <span class="cn">FALSE</span>,</span>
+<span id="cb37-251"><a href="#cb37-251" aria-hidden="true" tabindex="-1"></a>    <span class="at">options  =</span> <span class="fu">list</span>(<span class="at">pageLength =</span> <span class="dv">12</span>, <span class="at">scrollX =</span> <span class="cn">TRUE</span>, <span class="at">dom =</span> <span class="st">"tip"</span>)) <span class="sc">|&gt;</span></span>
+<span id="cb37-252"><a href="#cb37-252" aria-hidden="true" tabindex="-1"></a>  <span class="fu">formatStyle</span>(<span class="st">"documented"</span>,</span>
+<span id="cb37-253"><a href="#cb37-253" aria-hidden="true" tabindex="-1"></a>              <span class="at">color =</span> <span class="fu">styleEqual</span>(<span class="fu">c</span>(<span class="cn">TRUE</span>, <span class="cn">FALSE</span>), <span class="fu">c</span>(<span class="st">"inherit"</span>, <span class="st">"#d03b3b"</span>)))</span>
+<span id="cb37-254"><a href="#cb37-254" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
 <span id="cb37-255"><a href="#cb37-255" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-258"><a href="#cb37-258" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb37-259"><a href="#cb37-259" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: rules_index</span></span>
-<span id="cb37-260"><a href="#cb37-260" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-261"><a href="#cb37-261" aria-hidden="true" tabindex="-1"></a>rules_all <span class="sc">|&gt;</span></span>
-<span id="cb37-262"><a href="#cb37-262" aria-hidden="true" tabindex="-1"></a>  <span class="fu">transmute</span>(rule_key, active, severity, <span class="at">type =</span> rule_type, target,</span>
-<span id="cb37-263"><a href="#cb37-263" aria-hidden="true" tabindex="-1"></a>            <span class="at">scope =</span> <span class="fu">coalesce</span>(scope, <span class="st">"all"</span>), description) <span class="sc">|&gt;</span></span>
-<span id="cb37-264"><a href="#cb37-264" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(<span class="fu">desc</span>(active), type, rule_key) <span class="sc">|&gt;</span></span>
-<span id="cb37-265"><a href="#cb37-265" aria-hidden="true" tabindex="-1"></a>  <span class="fu">datatable</span>(</span>
-<span id="cb37-266"><a href="#cb37-266" aria-hidden="true" tabindex="-1"></a>    <span class="at">caption  =</span> <span class="st">"The registry: metadata/qc_rules/rules.csv"</span>,</span>
-<span id="cb37-267"><a href="#cb37-267" aria-hidden="true" tabindex="-1"></a>    <span class="at">rownames =</span> <span class="cn">FALSE</span>,</span>
-<span id="cb37-268"><a href="#cb37-268" aria-hidden="true" tabindex="-1"></a>    <span class="at">options  =</span> <span class="fu">list</span>(<span class="at">pageLength =</span> <span class="dv">20</span>, <span class="at">scrollX =</span> <span class="cn">TRUE</span>, <span class="at">dom =</span> <span class="st">"tip"</span>)) <span class="sc">|&gt;</span></span>
-<span id="cb37-269"><a href="#cb37-269" aria-hidden="true" tabindex="-1"></a>  <span class="fu">formatStyle</span>(<span class="st">"active"</span>,</span>
-<span id="cb37-270"><a href="#cb37-270" aria-hidden="true" tabindex="-1"></a>              <span class="at">color =</span> <span class="fu">styleEqual</span>(<span class="fu">c</span>(<span class="cn">TRUE</span>, <span class="cn">FALSE</span>), <span class="fu">c</span>(<span class="st">"inherit"</span>, <span class="st">"#6e7781"</span>)))</span>
-<span id="cb37-271"><a href="#cb37-271" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb37-272"><a href="#cb37-272" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-273"><a href="#cb37-273" aria-hidden="true" tabindex="-1"></a><span class="fu"># The rules {#the-rules}</span></span>
-<span id="cb37-274"><a href="#cb37-274" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-275"><a href="#cb37-275" aria-hidden="true" tabindex="-1"></a>Grouped by what kind of question each asks. Rules that share a query — the three</span>
-<span id="cb37-276"><a href="#cb37-276" aria-hidden="true" tabindex="-1"></a>bottle-vs-sensor calibration checks, the two spike checks — show the SQL once, under</span>
-<span id="cb37-277"><a href="#cb37-277" aria-hidden="true" tabindex="-1"></a>the first of them.</span>
-<span id="cb37-278"><a href="#cb37-278" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-281"><a href="#cb37-281" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb37-282"><a href="#cb37-282" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: rules_active</span></span>
-<span id="cb37-283"><a href="#cb37-283" aria-hidden="true" tabindex="-1"></a><span class="co">#| output: asis</span></span>
+<span id="cb37-256"><a href="#cb37-256" aria-hidden="true" tabindex="-1"></a>Three questions are open with the providers, two of them blockers: what the</span>
+<span id="cb37-257"><a href="#cb37-257" aria-hidden="true" tabindex="-1"></a>undocumented single-digit codes mean (<span class="in">`hydro_master_02`</span>), whether a NULL flag means</span>
+<span id="cb37-258"><a href="#cb37-258" aria-hidden="true" tabindex="-1"></a>"good" or "never assessed" (<span class="in">`hydro_master_05`</span>), and whether <span class="in">`S_qual`</span>'s **253</span>
+<span id="cb37-259"><a href="#cb37-259" aria-hidden="true" tabindex="-1"></a>distinct values** in the bottle master — clustered at 256–271, which looks like bit</span>
+<span id="cb37-260"><a href="#cb37-260" aria-hidden="true" tabindex="-1"></a>8 of a bitmask — indicate a bitmask or a corrupted column (<span class="in">`hydro_master_02b`</span>).</span>
+<span id="cb37-261"><a href="#cb37-261" aria-hidden="true" tabindex="-1"></a>Every other quality column has 3–10 distinct values.</span>
+<span id="cb37-262"><a href="#cb37-262" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-263"><a href="#cb37-263" aria-hidden="true" tabindex="-1"></a>**Nothing in this protocol acts on a flag.** Acting on one whose semantics are</span>
+<span id="cb37-264"><a href="#cb37-264" aria-hidden="true" tabindex="-1"></a>unconfirmed would be guessing with released data.</span>
+<span id="cb37-265"><a href="#cb37-265" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-268"><a href="#cb37-268" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb37-269"><a href="#cb37-269" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: rules_index</span></span>
+<span id="cb37-270"><a href="#cb37-270" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-271"><a href="#cb37-271" aria-hidden="true" tabindex="-1"></a>rules_all <span class="sc">|&gt;</span></span>
+<span id="cb37-272"><a href="#cb37-272" aria-hidden="true" tabindex="-1"></a>  <span class="fu">transmute</span>(rule_key, active, severity, <span class="at">type =</span> rule_type, target,</span>
+<span id="cb37-273"><a href="#cb37-273" aria-hidden="true" tabindex="-1"></a>            <span class="at">scope =</span> <span class="fu">coalesce</span>(scope, <span class="st">"all"</span>), description) <span class="sc">|&gt;</span></span>
+<span id="cb37-274"><a href="#cb37-274" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(<span class="fu">desc</span>(active), type, rule_key) <span class="sc">|&gt;</span></span>
+<span id="cb37-275"><a href="#cb37-275" aria-hidden="true" tabindex="-1"></a>  <span class="fu">datatable</span>(</span>
+<span id="cb37-276"><a href="#cb37-276" aria-hidden="true" tabindex="-1"></a>    <span class="at">caption  =</span> <span class="st">"The registry: metadata/qc_rules/rules.csv"</span>,</span>
+<span id="cb37-277"><a href="#cb37-277" aria-hidden="true" tabindex="-1"></a>    <span class="at">rownames =</span> <span class="cn">FALSE</span>,</span>
+<span id="cb37-278"><a href="#cb37-278" aria-hidden="true" tabindex="-1"></a>    <span class="at">options  =</span> <span class="fu">list</span>(<span class="at">pageLength =</span> <span class="dv">20</span>, <span class="at">scrollX =</span> <span class="cn">TRUE</span>, <span class="at">dom =</span> <span class="st">"tip"</span>)) <span class="sc">|&gt;</span></span>
+<span id="cb37-279"><a href="#cb37-279" aria-hidden="true" tabindex="-1"></a>  <span class="fu">formatStyle</span>(<span class="st">"active"</span>,</span>
+<span id="cb37-280"><a href="#cb37-280" aria-hidden="true" tabindex="-1"></a>              <span class="at">color =</span> <span class="fu">styleEqual</span>(<span class="fu">c</span>(<span class="cn">TRUE</span>, <span class="cn">FALSE</span>), <span class="fu">c</span>(<span class="st">"inherit"</span>, <span class="st">"#6e7781"</span>)))</span>
+<span id="cb37-281"><a href="#cb37-281" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb37-282"><a href="#cb37-282" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-283"><a href="#cb37-283" aria-hidden="true" tabindex="-1"></a><span class="fu"># The rules {#the-rules}</span></span>
 <span id="cb37-284"><a href="#cb37-284" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-285"><a href="#cb37-285" aria-hidden="true" tabindex="-1"></a>md_active <span class="ot">&lt;-</span> <span class="fu">qc_protocol_markdown</span>(</span>
-<span id="cb37-286"><a href="#cb37-286" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(rules_act, rule_type, rule_key), <span class="at">group_by =</span> <span class="st">"rule_type"</span>)</span>
-<span id="cb37-287"><a href="#cb37-287" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(md_active)</span>
-<span id="cb37-288"><a href="#cb37-288" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb37-289"><a href="#cb37-289" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-290"><a href="#cb37-290" aria-hidden="true" tabindex="-1"></a><span class="fu"># Parked rules</span></span>
-<span id="cb37-291"><a href="#cb37-291" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-292"><a href="#cb37-292" aria-hidden="true" tabindex="-1"></a>Registered, documented, and deliberately **not running**. They are kept in the</span>
-<span id="cb37-293"><a href="#cb37-293" aria-hidden="true" tabindex="-1"></a>registry rather than deleted so that the reason survives — a rule that quietly</span>
-<span id="cb37-294"><a href="#cb37-294" aria-hidden="true" tabindex="-1"></a>disappears looks like a rule that was never considered.</span>
-<span id="cb37-295"><a href="#cb37-295" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-298"><a href="#cb37-298" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb37-299"><a href="#cb37-299" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: rules_parked</span></span>
-<span id="cb37-300"><a href="#cb37-300" aria-hidden="true" tabindex="-1"></a><span class="co">#| output: asis</span></span>
+<span id="cb37-285"><a href="#cb37-285" aria-hidden="true" tabindex="-1"></a>Grouped by what kind of question each asks. Rules that share a query — the three</span>
+<span id="cb37-286"><a href="#cb37-286" aria-hidden="true" tabindex="-1"></a>bottle-vs-sensor calibration checks, the two spike checks — show the SQL once, under</span>
+<span id="cb37-287"><a href="#cb37-287" aria-hidden="true" tabindex="-1"></a>the first of them.</span>
+<span id="cb37-288"><a href="#cb37-288" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-291"><a href="#cb37-291" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb37-292"><a href="#cb37-292" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: rules_active</span></span>
+<span id="cb37-293"><a href="#cb37-293" aria-hidden="true" tabindex="-1"></a><span class="co">#| output: asis</span></span>
+<span id="cb37-294"><a href="#cb37-294" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-295"><a href="#cb37-295" aria-hidden="true" tabindex="-1"></a>md_active <span class="ot">&lt;-</span> <span class="fu">qc_protocol_markdown</span>(</span>
+<span id="cb37-296"><a href="#cb37-296" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(rules_act, rule_type, rule_key), <span class="at">group_by =</span> <span class="st">"rule_type"</span>)</span>
+<span id="cb37-297"><a href="#cb37-297" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(md_active)</span>
+<span id="cb37-298"><a href="#cb37-298" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb37-299"><a href="#cb37-299" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-300"><a href="#cb37-300" aria-hidden="true" tabindex="-1"></a><span class="fu"># Parked rules</span></span>
 <span id="cb37-301"><a href="#cb37-301" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-302"><a href="#cb37-302" aria-hidden="true" tabindex="-1"></a>rules_off <span class="ot">&lt;-</span> <span class="fu">filter</span>(rules_all, <span class="sc">!</span>active)</span>
-<span id="cb37-303"><a href="#cb37-303" aria-hidden="true" tabindex="-1"></a>md_parked <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="fu">nrow</span>(rules_off))</span>
-<span id="cb37-304"><a href="#cb37-304" aria-hidden="true" tabindex="-1"></a>  <span class="fu">qc_protocol_markdown</span>(rules_off, <span class="at">group_by =</span> <span class="cn">NULL</span>) <span class="cf">else</span></span>
-<span id="cb37-305"><a href="#cb37-305" aria-hidden="true" tabindex="-1"></a>    <span class="st">"*No parked rules.*</span><span class="sc">\n</span><span class="st">"</span></span>
-<span id="cb37-306"><a href="#cb37-306" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(md_parked)</span>
-<span id="cb37-307"><a href="#cb37-307" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb37-308"><a href="#cb37-308" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-309"><a href="#cb37-309" aria-hidden="true" tabindex="-1"></a><span class="fu"># Standards and prior art</span></span>
-<span id="cb37-310"><a href="#cb37-310" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-311"><a href="#cb37-311" aria-hidden="true" tabindex="-1"></a>This protocol is deliberately small and CalCOFI-specific. It is not a</span>
-<span id="cb37-312"><a href="#cb37-312" aria-hidden="true" tabindex="-1"></a>reimplementation of the community standards, and where it diverges from them that</span>
-<span id="cb37-313"><a href="#cb37-313" aria-hidden="true" tabindex="-1"></a>is worth stating.</span>
-<span id="cb37-314"><a href="#cb37-314" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-315"><a href="#cb37-315" aria-hidden="true" tabindex="-1"></a><span class="fu">### QARTOD</span></span>
-<span id="cb37-316"><a href="#cb37-316" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-317"><a href="#cb37-317" aria-hidden="true" tabindex="-1"></a>The IOOS *Manual for Real-Time Quality Control of In-situ Temperature and Salinity</span>
-<span id="cb37-318"><a href="#cb37-318" aria-hidden="true" tabindex="-1"></a>Observations* (and its dissolved-oxygen and ocean-optics companions) is the</span>
-<span id="cb37-319"><a href="#cb37-319" aria-hidden="true" tabindex="-1"></a>community reference for profile QC, and its <span class="in">`1`</span> / <span class="in">`2`</span> / <span class="in">`3`</span> / <span class="in">`4`</span> / <span class="in">`9`</span> flags</span>
-<span id="cb37-320"><a href="#cb37-320" aria-hidden="true" tabindex="-1"></a>(pass / not evaluated / suspect / fail / missing) are what an ERDDAP consumer</span>
-<span id="cb37-321"><a href="#cb37-321" aria-hidden="true" tabindex="-1"></a>expects to find. Several tests here have direct QARTOD counterparts — gross range</span>
-<span id="cb37-322"><a href="#cb37-322" aria-hidden="true" tabindex="-1"></a>(QARTOD test 6), spike (9), rate of change (10), flat line (11), density inversion</span>
-<span id="cb37-323"><a href="#cb37-323" aria-hidden="true" tabindex="-1"></a>(15) — though the thresholds are ours and derived from this dataset rather than</span>
-<span id="cb37-324"><a href="#cb37-324" aria-hidden="true" tabindex="-1"></a>adopted from the manual.</span>
-<span id="cb37-325"><a href="#cb37-325" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-326"><a href="#cb37-326" aria-hidden="true" tabindex="-1"></a>CalCOFI CTD is published to <span class="in">`erddap.calcofi.io`</span>, where the native codes currently</span>
-<span id="cb37-327"><a href="#cb37-327" aria-hidden="true" tabindex="-1"></a>pass through uninterpreted, and one of them (<span class="in">`6`</span> = "data OK but taken from CTD</span>
-<span id="cb37-328"><a href="#cb37-328" aria-hidden="true" tabindex="-1"></a>sensor") is meaningless for a CTD dataset. **Emitting QARTOD flags alongside the</span>
-<span id="cb37-329"><a href="#cb37-329" aria-hidden="true" tabindex="-1"></a>native codes is question <span class="in">`calcofi_ctd-cast_11`</span>**, and is the natural home for the</span>
-<span id="cb37-330"><a href="#cb37-330" aria-hidden="true" tabindex="-1"></a>results of these rules once the flag semantics above are settled.</span>
-<span id="cb37-331"><a href="#cb37-331" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-332"><a href="#cb37-332" aria-hidden="true" tabindex="-1"></a><span class="fu">### `oce` — Dan Kelley</span></span>
-<span id="cb37-333"><a href="#cb37-333" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-334"><a href="#cb37-334" aria-hidden="true" tabindex="-1"></a>The reference R package for oceanographic data, and the closest prior art for the</span>
-<span id="cb37-335"><a href="#cb37-335" aria-hidden="true" tabindex="-1"></a>profile rules here: <span class="in">`read.ctd()`</span>, <span class="in">`ctdTrim()`</span> (removes the soak and the upcast),</span>
-<span id="cb37-336"><a href="#cb37-336" aria-hidden="true" tabindex="-1"></a><span class="in">`despike()`</span>, and <span class="in">`ctdDecimate()`</span> (bins a profile to standard depths). Anyone</span>
-<span id="cb37-337"><a href="#cb37-337" aria-hidden="true" tabindex="-1"></a>implementing these checks should read the *oce* CTD vignette and</span>
-<span id="cb37-338"><a href="#cb37-338" aria-hidden="true" tabindex="-1"></a>*Analysis of Oceanographic Data* alongside this document.</span>
-<span id="cb37-339"><a href="#cb37-339" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-340"><a href="#cb37-340" aria-hidden="true" tabindex="-1"></a>Two deliberate differences. <span class="in">`ctdTrim()`</span> discards the upcast; we keep it, in</span>
-<span id="cb37-341"><a href="#cb37-341" aria-hidden="true" tabindex="-1"></a><span class="in">`obs_ctd_full`</span>, precisely so the down/up comparison is available as a check — the</span>
-<span id="cb37-342"><a href="#cb37-342" aria-hidden="true" tabindex="-1"></a>disagreement is signal about sensor lag and fouling, not noise to be trimmed.</span>
-<span id="cb37-343"><a href="#cb37-343" aria-hidden="true" tabindex="-1"></a>And <span class="in">`ctdDecimate()`</span> resamples onto a regular grid by interpolation, whereas</span>
-<span id="cb37-344"><a href="#cb37-344" aria-hidden="true" tabindex="-1"></a><span class="in">`ctd_thin`</span> *selects real scans* and never interpolates, so a thinned value is</span>
-<span id="cb37-345"><a href="#cb37-345" aria-hidden="true" tabindex="-1"></a>always a measurement that was actually taken.</span>
-<span id="cb37-346"><a href="#cb37-346" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-347"><a href="#cb37-347" aria-hidden="true" tabindex="-1"></a><span class="fu">### `castr` — Jean-Olivier Irisson</span></span>
-<span id="cb37-348"><a href="#cb37-348" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-349"><a href="#cb37-349" aria-hidden="true" tabindex="-1"></a>Cast-oriented profile utilities: smoothing, despiking, and detection of the mixed</span>
-<span id="cb37-350"><a href="#cb37-350" aria-hidden="true" tabindex="-1"></a>layer depth, deep chlorophyll maximum and thermocline. Relevant twice over — as a</span>
-<span id="cb37-351"><a href="#cb37-351" aria-hidden="true" tabindex="-1"></a>comparison for the despiking approach, and because the Access master's <span class="in">`MLD_Sigma`</span></span>
-<span id="cb37-352"><a href="#cb37-352" aria-hidden="true" tabindex="-1"></a>and <span class="in">`NutClineDepth`</span> tables are exactly the derived products <span class="in">`castr`</span> computes. Those</span>
-<span id="cb37-353"><a href="#cb37-353" aria-hidden="true" tabindex="-1"></a>two tables are committed under</span>
-<span id="cb37-354"><a href="#cb37-354" aria-hidden="true" tabindex="-1"></a><span class="in">`metadata/calcofi/hydro-master/reference/`</span> unused, so that any reimplementation can</span>
-<span id="cb37-355"><a href="#cb37-355" aria-hidden="true" tabindex="-1"></a>be validated against the Access-era numbers rather than trusted.</span>
+<span id="cb37-302"><a href="#cb37-302" aria-hidden="true" tabindex="-1"></a>Registered, documented, and deliberately **not running**. They are kept in the</span>
+<span id="cb37-303"><a href="#cb37-303" aria-hidden="true" tabindex="-1"></a>registry rather than deleted so that the reason survives — a rule that quietly</span>
+<span id="cb37-304"><a href="#cb37-304" aria-hidden="true" tabindex="-1"></a>disappears looks like a rule that was never considered.</span>
+<span id="cb37-305"><a href="#cb37-305" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-308"><a href="#cb37-308" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb37-309"><a href="#cb37-309" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: rules_parked</span></span>
+<span id="cb37-310"><a href="#cb37-310" aria-hidden="true" tabindex="-1"></a><span class="co">#| output: asis</span></span>
+<span id="cb37-311"><a href="#cb37-311" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-312"><a href="#cb37-312" aria-hidden="true" tabindex="-1"></a>rules_off <span class="ot">&lt;-</span> <span class="fu">filter</span>(rules_all, <span class="sc">!</span>active)</span>
+<span id="cb37-313"><a href="#cb37-313" aria-hidden="true" tabindex="-1"></a>md_parked <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="fu">nrow</span>(rules_off))</span>
+<span id="cb37-314"><a href="#cb37-314" aria-hidden="true" tabindex="-1"></a>  <span class="fu">qc_protocol_markdown</span>(rules_off, <span class="at">group_by =</span> <span class="cn">NULL</span>) <span class="cf">else</span></span>
+<span id="cb37-315"><a href="#cb37-315" aria-hidden="true" tabindex="-1"></a>    <span class="st">"*No parked rules.*</span><span class="sc">\n</span><span class="st">"</span></span>
+<span id="cb37-316"><a href="#cb37-316" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(md_parked)</span>
+<span id="cb37-317"><a href="#cb37-317" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb37-318"><a href="#cb37-318" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-319"><a href="#cb37-319" aria-hidden="true" tabindex="-1"></a><span class="fu"># Standards and prior art</span></span>
+<span id="cb37-320"><a href="#cb37-320" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-321"><a href="#cb37-321" aria-hidden="true" tabindex="-1"></a>This protocol is deliberately small and CalCOFI-specific. It is not a</span>
+<span id="cb37-322"><a href="#cb37-322" aria-hidden="true" tabindex="-1"></a>reimplementation of the community standards, and where it diverges from them that</span>
+<span id="cb37-323"><a href="#cb37-323" aria-hidden="true" tabindex="-1"></a>is worth stating.</span>
+<span id="cb37-324"><a href="#cb37-324" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-325"><a href="#cb37-325" aria-hidden="true" tabindex="-1"></a><span class="fu">### QARTOD</span></span>
+<span id="cb37-326"><a href="#cb37-326" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-327"><a href="#cb37-327" aria-hidden="true" tabindex="-1"></a>The IOOS *Manual for Real-Time Quality Control of In-situ Temperature and Salinity</span>
+<span id="cb37-328"><a href="#cb37-328" aria-hidden="true" tabindex="-1"></a>Observations* (and its dissolved-oxygen and ocean-optics companions) is the</span>
+<span id="cb37-329"><a href="#cb37-329" aria-hidden="true" tabindex="-1"></a>community reference for profile QC, and its <span class="in">`1`</span> / <span class="in">`2`</span> / <span class="in">`3`</span> / <span class="in">`4`</span> / <span class="in">`9`</span> flags</span>
+<span id="cb37-330"><a href="#cb37-330" aria-hidden="true" tabindex="-1"></a>(pass / not evaluated / suspect / fail / missing) are what an ERDDAP consumer</span>
+<span id="cb37-331"><a href="#cb37-331" aria-hidden="true" tabindex="-1"></a>expects to find. Several tests here have direct QARTOD counterparts — gross range</span>
+<span id="cb37-332"><a href="#cb37-332" aria-hidden="true" tabindex="-1"></a>(QARTOD test 6), spike (9), rate of change (10), flat line (11), density inversion</span>
+<span id="cb37-333"><a href="#cb37-333" aria-hidden="true" tabindex="-1"></a>(15) — though the thresholds are ours and derived from this dataset rather than</span>
+<span id="cb37-334"><a href="#cb37-334" aria-hidden="true" tabindex="-1"></a>adopted from the manual.</span>
+<span id="cb37-335"><a href="#cb37-335" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-336"><a href="#cb37-336" aria-hidden="true" tabindex="-1"></a>CalCOFI CTD is published to <span class="in">`erddap.calcofi.io`</span>, where the native codes currently</span>
+<span id="cb37-337"><a href="#cb37-337" aria-hidden="true" tabindex="-1"></a>pass through uninterpreted, and one of them (<span class="in">`6`</span> = "data OK but taken from CTD</span>
+<span id="cb37-338"><a href="#cb37-338" aria-hidden="true" tabindex="-1"></a>sensor") is meaningless for a CTD dataset. **Emitting QARTOD flags alongside the</span>
+<span id="cb37-339"><a href="#cb37-339" aria-hidden="true" tabindex="-1"></a>native codes is question <span class="in">`calcofi_ctd-cast_11`</span>**, and is the natural home for the</span>
+<span id="cb37-340"><a href="#cb37-340" aria-hidden="true" tabindex="-1"></a>results of these rules once the flag semantics above are settled.</span>
+<span id="cb37-341"><a href="#cb37-341" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-342"><a href="#cb37-342" aria-hidden="true" tabindex="-1"></a><span class="fu">### `oce` — Dan Kelley</span></span>
+<span id="cb37-343"><a href="#cb37-343" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-344"><a href="#cb37-344" aria-hidden="true" tabindex="-1"></a>The reference R package for oceanographic data, and the closest prior art for the</span>
+<span id="cb37-345"><a href="#cb37-345" aria-hidden="true" tabindex="-1"></a>profile rules here: <span class="in">`read.ctd()`</span>, <span class="in">`ctdTrim()`</span> (removes the soak and the upcast),</span>
+<span id="cb37-346"><a href="#cb37-346" aria-hidden="true" tabindex="-1"></a><span class="in">`despike()`</span>, and <span class="in">`ctdDecimate()`</span> (bins a profile to standard depths). Anyone</span>
+<span id="cb37-347"><a href="#cb37-347" aria-hidden="true" tabindex="-1"></a>implementing these checks should read the *oce* CTD vignette and</span>
+<span id="cb37-348"><a href="#cb37-348" aria-hidden="true" tabindex="-1"></a>*Analysis of Oceanographic Data* alongside this document.</span>
+<span id="cb37-349"><a href="#cb37-349" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-350"><a href="#cb37-350" aria-hidden="true" tabindex="-1"></a>Two deliberate differences. <span class="in">`ctdTrim()`</span> discards the upcast; we keep it, in</span>
+<span id="cb37-351"><a href="#cb37-351" aria-hidden="true" tabindex="-1"></a><span class="in">`obs_ctd_full`</span>, precisely so the down/up comparison is available as a check — the</span>
+<span id="cb37-352"><a href="#cb37-352" aria-hidden="true" tabindex="-1"></a>disagreement is signal about sensor lag and fouling, not noise to be trimmed.</span>
+<span id="cb37-353"><a href="#cb37-353" aria-hidden="true" tabindex="-1"></a>And <span class="in">`ctdDecimate()`</span> resamples onto a regular grid by interpolation, whereas</span>
+<span id="cb37-354"><a href="#cb37-354" aria-hidden="true" tabindex="-1"></a><span class="in">`ctd_thin`</span> *selects real scans* and never interpolates, so a thinned value is</span>
+<span id="cb37-355"><a href="#cb37-355" aria-hidden="true" tabindex="-1"></a>always a measurement that was actually taken.</span>
 <span id="cb37-356"><a href="#cb37-356" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-357"><a href="#cb37-357" aria-hidden="true" tabindex="-1"></a>::: {.callout-warning title="The CRAN package named <span class="in">`CTD`</span> is not oceanographic"}</span>
-<span id="cb37-358"><a href="#cb37-358" aria-hidden="true" tabindex="-1"></a><span class="in">`CTD`</span> on CRAN is "Connecting The Dots" — a weighted-graph pattern-discovery method</span>
-<span id="cb37-359"><a href="#cb37-359" aria-hidden="true" tabindex="-1"></a>for metabolomics. It has nothing to do with conductivity-temperature-depth</span>
-<span id="cb37-360"><a href="#cb37-360" aria-hidden="true" tabindex="-1"></a>profiles. It is an easy citation to make by name-matching and a hard one to notice</span>
-<span id="cb37-361"><a href="#cb37-361" aria-hidden="true" tabindex="-1"></a>afterwards, so: do not cite it here.</span>
-<span id="cb37-362"><a href="#cb37-362" aria-hidden="true" tabindex="-1"></a>:::</span>
-<span id="cb37-363"><a href="#cb37-363" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-364"><a href="#cb37-364" aria-hidden="true" tabindex="-1"></a><span class="fu"># What is not checked</span></span>
-<span id="cb37-365"><a href="#cb37-365" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-366"><a href="#cb37-366" aria-hidden="true" tabindex="-1"></a>Stated so that a clean run is not over-read.</span>
-<span id="cb37-367"><a href="#cb37-367" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-368"><a href="#cb37-368" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**The headline variables carry no quality flags at all.** Source flags attach to</span>
-<span id="cb37-369"><a href="#cb37-369" aria-hidden="true" tabindex="-1"></a>  the component sensors (<span class="in">`Temp1Q`</span>, <span class="in">`Salt1Q`</span>, <span class="in">`Ox1Q`</span>, <span class="in">`Ox2Q`</span>); the canonical types</span>
-<span id="cb37-370"><a href="#cb37-370" aria-hidden="true" tabindex="-1"></a>  are the *averages* of them, so the flag is lost in the mean. Only 8 of 27</span>
-<span id="cb37-371"><a href="#cb37-371" aria-hidden="true" tabindex="-1"></a>  published types carry any flag, over 0.05% of rows. How a sensor flag should</span>
-<span id="cb37-372"><a href="#cb37-372" aria-hidden="true" tabindex="-1"></a>  qualify an average of two is question <span class="in">`calcofi_ctd-cast_09`</span> — a blocker.</span>
-<span id="cb37-373"><a href="#cb37-373" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Range coverage is partial.** 18 of the 27 published types have a declared</span>
-<span id="cb37-374"><a href="#cb37-374" aria-hidden="true" tabindex="-1"></a>  <span class="in">`valid_min`</span>/<span class="in">`valid_max`</span>; the rest — mostly raw voltages and derived quantities</span>
-<span id="cb37-375"><a href="#cb37-375" aria-hidden="true" tabindex="-1"></a>  with no agreed bound — are never range-checked.</span>
-<span id="cb37-376"><a href="#cb37-376" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**The profile rules are sampled, not swept.** Spike, loop-edit and up/down</span>
-<span id="cb37-377"><a href="#cb37-377" aria-hidden="true" tabindex="-1"></a>  disagreement run one cruise at a time against <span class="in">`obs_ctd_full`</span>; a whole-archive</span>
-<span id="cb37-378"><a href="#cb37-378" aria-hidden="true" tabindex="-1"></a>  sweep is the <span class="in">`ctd-qaqc`</span> app's job, not this document's.</span>
-<span id="cb37-379"><a href="#cb37-379" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Dual-sensor disagreement is parked.** The thresholds per property are not</span>
-<span id="cb37-380"><a href="#cb37-380" aria-hidden="true" tabindex="-1"></a>  agreed, and a rule with a guessed threshold is worse than a rule that says it is</span>
-<span id="cb37-381"><a href="#cb37-381" aria-hidden="true" tabindex="-1"></a>  not running.</span>
-<span id="cb37-382"><a href="#cb37-382" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**No rule drops, rewrites or interpolates a value.** Every result is a report.</span>
-<span id="cb37-383"><a href="#cb37-383" aria-hidden="true" tabindex="-1"></a>  Two blocker questions remain open with the data providers, and acting on them</span>
-<span id="cb37-384"><a href="#cb37-384" aria-hidden="true" tabindex="-1"></a>  before they are answered would be guessing with released data.</span>
-<span id="cb37-385"><a href="#cb37-385" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-386"><a href="#cb37-386" aria-hidden="true" tabindex="-1"></a><span class="fu"># Coverage {#coverage}</span></span>
-<span id="cb37-387"><a href="#cb37-387" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-388"><a href="#cb37-388" aria-hidden="true" tabindex="-1"></a>The build fails if a rule that runs is not described here, or carries no rationale</span>
-<span id="cb37-389"><a href="#cb37-389" aria-hidden="true" tabindex="-1"></a>in its SQL header. A protocol that silently omits a check is worse than no</span>
-<span id="cb37-390"><a href="#cb37-390" aria-hidden="true" tabindex="-1"></a>protocol, because it reads as completeness.</span>
-<span id="cb37-391"><a href="#cb37-391" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-394"><a href="#cb37-394" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb37-395"><a href="#cb37-395" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: coverage_check</span></span>
-<span id="cb37-396"><a href="#cb37-396" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-397"><a href="#cb37-397" aria-hidden="true" tabindex="-1"></a><span class="fu">qc_protocol_check</span>(rules_all, <span class="fu">paste</span>(md_active, md_parked))</span>
-<span id="cb37-398"><a href="#cb37-398" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-399"><a href="#cb37-399" aria-hidden="true" tabindex="-1"></a><span class="fu">say</span>(<span class="fu">glue</span>(<span class="st">"active rules documented : {nrow(rules_act)}/{nrow(rules_act)}"</span>))</span>
-<span id="cb37-400"><a href="#cb37-400" aria-hidden="true" tabindex="-1"></a><span class="fu">say</span>(<span class="fu">glue</span>(<span class="st">"parked rules documented : {nrow(rules_off)}/{nrow(rules_off)}"</span>))</span>
-<span id="cb37-401"><a href="#cb37-401" aria-hidden="true" tabindex="-1"></a><span class="fu">say</span>(<span class="fu">glue</span>(<span class="st">"every active rule carries a rationale in its SQL header: yes"</span>))</span>
-<span id="cb37-402"><a href="#cb37-402" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb37-403"><a href="#cb37-403" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-404"><a href="#cb37-404" aria-hidden="true" tabindex="-1"></a><span class="fu">## Where results appear</span></span>
-<span id="cb37-405"><a href="#cb37-405" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-406"><a href="#cb37-406" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**[`ctd-qaqc`](https://github.com/CalCOFI/apps/tree/main/ctd-qaqc)** — runs this</span>
-<span id="cb37-407"><a href="#cb37-407" aria-hidden="true" tabindex="-1"></a>  registry interactively against a release, one rule or one cruise at a time, and</span>
-<span id="cb37-408"><a href="#cb37-408" aria-hidden="true" tabindex="-1"></a>  records review verdicts.</span>
-<span id="cb37-409"><a href="#cb37-409" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**[`ingest_calcofi_ctd-cast.qmd`](https://calcofi.io/workflows/ingest_calcofi_ctd-cast.html#findings)**</span>
-<span id="cb37-410"><a href="#cb37-410" aria-hidden="true" tabindex="-1"></a>  — runs the same registry over the parquet each ingest writes, so the notebook</span>
-<span id="cb37-411"><a href="#cb37-411" aria-hidden="true" tabindex="-1"></a>  reports the condition of the data it just published.</span>
-<span id="cb37-412"><a href="#cb37-412" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-413"><a href="#cb37-413" aria-hidden="true" tabindex="-1"></a>Both call <span class="in">`calcofi4db::qc_run_all()`</span>. There is one engine and one registry: a</span>
-<span id="cb37-414"><a href="#cb37-414" aria-hidden="true" tabindex="-1"></a>number in the app and a number in the notebook cannot disagree.</span>
+<span id="cb37-357"><a href="#cb37-357" aria-hidden="true" tabindex="-1"></a><span class="fu">### `castr` — Jean-Olivier Irisson</span></span>
+<span id="cb37-358"><a href="#cb37-358" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-359"><a href="#cb37-359" aria-hidden="true" tabindex="-1"></a>Cast-oriented profile utilities: smoothing, despiking, and detection of the mixed</span>
+<span id="cb37-360"><a href="#cb37-360" aria-hidden="true" tabindex="-1"></a>layer depth, deep chlorophyll maximum and thermocline. Relevant twice over — as a</span>
+<span id="cb37-361"><a href="#cb37-361" aria-hidden="true" tabindex="-1"></a>comparison for the despiking approach, and because the Access master's <span class="in">`MLD_Sigma`</span></span>
+<span id="cb37-362"><a href="#cb37-362" aria-hidden="true" tabindex="-1"></a>and <span class="in">`NutClineDepth`</span> tables are exactly the derived products <span class="in">`castr`</span> computes. Those</span>
+<span id="cb37-363"><a href="#cb37-363" aria-hidden="true" tabindex="-1"></a>two tables are committed under</span>
+<span id="cb37-364"><a href="#cb37-364" aria-hidden="true" tabindex="-1"></a><span class="in">`metadata/calcofi/hydro-master/reference/`</span> unused, so that any reimplementation can</span>
+<span id="cb37-365"><a href="#cb37-365" aria-hidden="true" tabindex="-1"></a>be validated against the Access-era numbers rather than trusted.</span>
+<span id="cb37-366"><a href="#cb37-366" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-367"><a href="#cb37-367" aria-hidden="true" tabindex="-1"></a>::: {.callout-warning title="The CRAN package named <span class="in">`CTD`</span> is not oceanographic"}</span>
+<span id="cb37-368"><a href="#cb37-368" aria-hidden="true" tabindex="-1"></a><span class="in">`CTD`</span> on CRAN is "Connecting The Dots" — a weighted-graph pattern-discovery method</span>
+<span id="cb37-369"><a href="#cb37-369" aria-hidden="true" tabindex="-1"></a>for metabolomics. It has nothing to do with conductivity-temperature-depth</span>
+<span id="cb37-370"><a href="#cb37-370" aria-hidden="true" tabindex="-1"></a>profiles. It is an easy citation to make by name-matching and a hard one to notice</span>
+<span id="cb37-371"><a href="#cb37-371" aria-hidden="true" tabindex="-1"></a>afterwards, so: do not cite it here.</span>
+<span id="cb37-372"><a href="#cb37-372" aria-hidden="true" tabindex="-1"></a>:::</span>
+<span id="cb37-373"><a href="#cb37-373" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-374"><a href="#cb37-374" aria-hidden="true" tabindex="-1"></a><span class="fu"># What is not checked</span></span>
+<span id="cb37-375"><a href="#cb37-375" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-376"><a href="#cb37-376" aria-hidden="true" tabindex="-1"></a>Stated so that a clean run is not over-read.</span>
+<span id="cb37-377"><a href="#cb37-377" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-378"><a href="#cb37-378" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**The headline variables carry no quality flags at all.** Source flags attach to</span>
+<span id="cb37-379"><a href="#cb37-379" aria-hidden="true" tabindex="-1"></a>  the component sensors (<span class="in">`Temp1Q`</span>, <span class="in">`Salt1Q`</span>, <span class="in">`Ox1Q`</span>, <span class="in">`Ox2Q`</span>); the canonical types</span>
+<span id="cb37-380"><a href="#cb37-380" aria-hidden="true" tabindex="-1"></a>  are the *averages* of them, so the flag is lost in the mean. Only 8 of 27</span>
+<span id="cb37-381"><a href="#cb37-381" aria-hidden="true" tabindex="-1"></a>  published types carry any flag, over 0.05% of rows. How a sensor flag should</span>
+<span id="cb37-382"><a href="#cb37-382" aria-hidden="true" tabindex="-1"></a>  qualify an average of two is question <span class="in">`calcofi_ctd-cast_09`</span> — a blocker.</span>
+<span id="cb37-383"><a href="#cb37-383" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Range coverage is partial.** 18 of the 27 published types have a declared</span>
+<span id="cb37-384"><a href="#cb37-384" aria-hidden="true" tabindex="-1"></a>  <span class="in">`valid_min`</span>/<span class="in">`valid_max`</span>; the rest — mostly raw voltages and derived quantities</span>
+<span id="cb37-385"><a href="#cb37-385" aria-hidden="true" tabindex="-1"></a>  with no agreed bound — are never range-checked.</span>
+<span id="cb37-386"><a href="#cb37-386" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**The profile rules are sampled, not swept.** Spike, loop-edit and up/down</span>
+<span id="cb37-387"><a href="#cb37-387" aria-hidden="true" tabindex="-1"></a>  disagreement run one cruise at a time against <span class="in">`obs_ctd_full`</span>; a whole-archive</span>
+<span id="cb37-388"><a href="#cb37-388" aria-hidden="true" tabindex="-1"></a>  sweep is the <span class="in">`ctd-qaqc`</span> app's job, not this document's.</span>
+<span id="cb37-389"><a href="#cb37-389" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Dual-sensor disagreement is parked.** The thresholds per property are not</span>
+<span id="cb37-390"><a href="#cb37-390" aria-hidden="true" tabindex="-1"></a>  agreed, and a rule with a guessed threshold is worse than a rule that says it is</span>
+<span id="cb37-391"><a href="#cb37-391" aria-hidden="true" tabindex="-1"></a>  not running.</span>
+<span id="cb37-392"><a href="#cb37-392" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**No rule drops, rewrites or interpolates a value.** Every result is a report.</span>
+<span id="cb37-393"><a href="#cb37-393" aria-hidden="true" tabindex="-1"></a>  Two blocker questions remain open with the data providers, and acting on them</span>
+<span id="cb37-394"><a href="#cb37-394" aria-hidden="true" tabindex="-1"></a>  before they are answered would be guessing with released data.</span>
+<span id="cb37-395"><a href="#cb37-395" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-396"><a href="#cb37-396" aria-hidden="true" tabindex="-1"></a><span class="fu"># Coverage {#coverage}</span></span>
+<span id="cb37-397"><a href="#cb37-397" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-398"><a href="#cb37-398" aria-hidden="true" tabindex="-1"></a>The build fails if a rule that runs is not described here, or carries no rationale</span>
+<span id="cb37-399"><a href="#cb37-399" aria-hidden="true" tabindex="-1"></a>in its SQL header. A protocol that silently omits a check is worse than no</span>
+<span id="cb37-400"><a href="#cb37-400" aria-hidden="true" tabindex="-1"></a>protocol, because it reads as completeness.</span>
+<span id="cb37-401"><a href="#cb37-401" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-404"><a href="#cb37-404" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb37-405"><a href="#cb37-405" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: coverage_check</span></span>
+<span id="cb37-406"><a href="#cb37-406" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-407"><a href="#cb37-407" aria-hidden="true" tabindex="-1"></a><span class="fu">qc_protocol_check</span>(rules_all, <span class="fu">paste</span>(md_active, md_parked))</span>
+<span id="cb37-408"><a href="#cb37-408" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-409"><a href="#cb37-409" aria-hidden="true" tabindex="-1"></a><span class="fu">say</span>(<span class="fu">glue</span>(<span class="st">"active rules documented : {nrow(rules_act)}/{nrow(rules_act)}"</span>))</span>
+<span id="cb37-410"><a href="#cb37-410" aria-hidden="true" tabindex="-1"></a><span class="fu">say</span>(<span class="fu">glue</span>(<span class="st">"parked rules documented : {nrow(rules_off)}/{nrow(rules_off)}"</span>))</span>
+<span id="cb37-411"><a href="#cb37-411" aria-hidden="true" tabindex="-1"></a><span class="fu">say</span>(<span class="fu">glue</span>(<span class="st">"every active rule carries a rationale in its SQL header: yes"</span>))</span>
+<span id="cb37-412"><a href="#cb37-412" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb37-413"><a href="#cb37-413" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-414"><a href="#cb37-414" aria-hidden="true" tabindex="-1"></a><span class="fu">## Where results appear</span></span>
 <span id="cb37-415"><a href="#cb37-415" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-416"><a href="#cb37-416" aria-hidden="true" tabindex="-1"></a><span class="fu">## Session Info</span></span>
-<span id="cb37-417"><a href="#cb37-417" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-420"><a href="#cb37-420" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb37-421"><a href="#cb37-421" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: session_info</span></span>
-<span id="cb37-422"><a href="#cb37-422" aria-hidden="true" tabindex="-1"></a><span class="co">#| code-fold: true</span></span>
-<span id="cb37-423"><a href="#cb37-423" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb37-424"><a href="#cb37-424" aria-hidden="true" tabindex="-1"></a>sessioninfo<span class="sc">::</span><span class="fu">session_info</span>()</span>
-<span id="cb37-425"><a href="#cb37-425" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb37-416"><a href="#cb37-416" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**[`ctd-qaqc`](https://github.com/CalCOFI/apps/tree/main/ctd-qaqc)** — runs this</span>
+<span id="cb37-417"><a href="#cb37-417" aria-hidden="true" tabindex="-1"></a>  registry interactively against a release, one rule or one cruise at a time, and</span>
+<span id="cb37-418"><a href="#cb37-418" aria-hidden="true" tabindex="-1"></a>  records review verdicts.</span>
+<span id="cb37-419"><a href="#cb37-419" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**[`ingest_calcofi_ctd-cast.qmd`](https://calcofi.io/workflows/ingest_calcofi_ctd-cast.html#findings)**</span>
+<span id="cb37-420"><a href="#cb37-420" aria-hidden="true" tabindex="-1"></a>  — runs the same registry over the parquet each ingest writes, so the notebook</span>
+<span id="cb37-421"><a href="#cb37-421" aria-hidden="true" tabindex="-1"></a>  reports the condition of the data it just published.</span>
+<span id="cb37-422"><a href="#cb37-422" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-423"><a href="#cb37-423" aria-hidden="true" tabindex="-1"></a>Both call <span class="in">`calcofi4db::qc_run_all()`</span>. There is one engine and one registry: a</span>
+<span id="cb37-424"><a href="#cb37-424" aria-hidden="true" tabindex="-1"></a>number in the app and a number in the notebook cannot disagree.</span>
+<span id="cb37-425"><a href="#cb37-425" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-426"><a href="#cb37-426" aria-hidden="true" tabindex="-1"></a><span class="fu">## Session Info</span></span>
+<span id="cb37-427"><a href="#cb37-427" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-430"><a href="#cb37-430" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb37-431"><a href="#cb37-431" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: session_info</span></span>
+<span id="cb37-432"><a href="#cb37-432" aria-hidden="true" tabindex="-1"></a><span class="co">#| code-fold: true</span></span>
+<span id="cb37-433"><a href="#cb37-433" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-434"><a href="#cb37-434" aria-hidden="true" tabindex="-1"></a>sessioninfo<span class="sc">::</span><span class="fu">session_info</span>()</span>
+<span id="cb37-435"><a href="#cb37-435" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
 </code></pre></div><button title="Copy to Clipboard" class="code-copy-button" data-in-quarto-modal=""><i class="bi"></i></button></div>
 </div></div></div></div></div>
 </div> <!-- /content -->

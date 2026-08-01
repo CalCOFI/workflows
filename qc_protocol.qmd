@@ -67,6 +67,16 @@ Each rule declares four things that decide how a result should be read.
 
 That last row is the single most important convention here.
 
+Every rule returns at least `subject_key` (what is flagged — the unit of review)
+and `detail` (one sentence naming the problem). A rule whose finding concerns a
+particular **scan** rather than a whole cast also returns `depth_min_m` and
+`measurement_type`. Those two are a contract rather than a habit: they are what
+lets a reviewer click a finding in `ctd-qaqc` and land on the right profile at the
+right depth, without the app needing to know anything about the rule that produced
+it. The two cast-level rules below (`ctd_cast_deeper_than_seafloor`,
+`ctd_cast_position_vs_station`) correctly return neither — they are about the cast,
+not about a reading.
+
 ::: {.callout-important title="`skip` is not `pass`, and this is not hypothetical"}
 A rule whose input is missing returns zero rows — which is indistinguishable from
 "the data is clean" unless something says otherwise. The three bottle-vs-sensor

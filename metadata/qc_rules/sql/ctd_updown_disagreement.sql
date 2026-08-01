@@ -34,7 +34,9 @@ SELECT
   d.cast_base || 'd'                                               AS subject_key,
   '{{measurement_type}} differs by ' || round(abs(d.v - u.v), 3) ||
     ' between down- and upcast at ' || d.depth_m || ' m'           AS detail,
-  d.cruise_key, d.depth_m,
+  d.cruise_key,
+  d.depth_m                                                        AS depth_min_m,
+  '{{measurement_type}}'                                           AS measurement_type,
   round(d.v, 4)                                                    AS value_down,
   round(u.v, 4)                                                    AS value_up,
   round(d.v - u.v, 4)                                              AS difference

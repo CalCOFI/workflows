@@ -49,6 +49,9 @@ SELECT
     b.depth_min_m || ' m'                                      AS detail,
   o.cruise_key,
   b.depth_min_m,
+  -- the SENSOR type, not the bottle one: a bottle value is a single discrete
+  -- point, so the profile a reviewer needs to see is the sensor's
+  '{{sensor_type}}'                                            AS measurement_type,
   b.v_bottle,
   s.v_sensor,
   round(b.v_bottle - s.v_sensor, 4)                            AS offset_bottle_minus_sensor

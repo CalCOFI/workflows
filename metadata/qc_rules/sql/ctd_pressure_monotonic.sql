@@ -46,7 +46,8 @@ SELECT
     round(depth_prev, 1) || ' to ' || round(depth_min_m, 1) || ' m)' AS detail,
   cruise_key, cast_dir, datetime_prev, datetime,
   round(depth_prev, 1)                                             AS depth_prev_m,
-  round(depth_min_m, 1)                                            AS depth_m,
+  round(depth_min_m, 1)                                            AS depth_min_m,
+  'pressure'                                                       AS measurement_type,
   round(abs(depth_prev - depth_min_m), 1)                          AS reversal_m
 FROM x
 WHERE depth_prev IS NOT NULL

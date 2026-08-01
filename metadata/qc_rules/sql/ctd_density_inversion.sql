@@ -38,7 +38,9 @@ SELECT
   sample_key                                                   AS subject_key,
   'sigma-theta drops ' || round(sigma_above - sigma, 3) ||
     ' kg/m3 between ' || depth_above || ' and ' || depth_min_m || ' m' AS detail,
-  cruise_key, depth_above, depth_min_m, sigma_above, sigma,
+  cruise_key, depth_above, depth_min_m,
+  'sigma_theta_1'                                              AS measurement_type,
+  sigma_above, sigma,
   round(sigma_above - sigma, 4)                                AS inversion_magnitude
 FROM p
 WHERE sigma_above IS NOT NULL
