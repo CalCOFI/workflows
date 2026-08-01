@@ -20,8 +20,12 @@ calcofi:
     citation_main: "CalCOFI. (2023). CalCOFI CTD Cast Files. CalCOFI.org."
     link_calcofi_org: https://calcofi.org/data/oceanographic-data/ctd-cast-files/
     link_data_source: https://calcofi.org/data/oceanographic-data/ctd-cast-files/
-    coverage_temporal: 1993-01 to 2021-05
-    coverage_spatial: "28-37°N, -125 to -117°W"
+    # measured from the published `sample` shard, not asserted: the previous values
+    # (1993-01 to 2021-05; 28-37°N, -125 to -117°W) predated several years of
+    # cruises and understated the western extent, and they ship to consumers via
+    # the release's `dataset` table and the schema site.
+    coverage_temporal: 1998-01 to 2026-04
+    coverage_spatial: "29.8-37.8°N, -126.5 to -117.3°W"
   # publishes the consolidated core. obs carries the THINNED series (ctd_thin);
   # the full scan set ships as the supplemental obs_ctd_full. ctd_wide is retired:
   # ERDDAP now serves CTD through EDDTableFromDatabase over DuckDB views plus a
@@ -61,6 +65,8 @@ This notebook ingests CalCOFI CTD data from <https://calcofi.org/data/oceanograp
     -   `measurement_type`: reference table for measurement codes
 
 5.  **Standardized Workflow**: follows patterns from `ingest_calcofi_bottle.qmd` — deterministic UUIDs, GCS parquet uploads, metadata sidecars, calcofi4db utilities
+
+6.  **[Findings](#findings)**: the report at the end — what is known to be wrong with this data, measured from the parquet that was just written and checked by the same QC rule registry `apps/ctd-qaqc` runs. It renders even when the heavy path is skipped (see [Check for Resumable State]), so it can be revised without an hour of recomputation.
 
 ## Setup
 
@@ -134,42 +140,12 @@ dir_tmp <- here(glue("data/tmp/{dir_label}"))
 url <- "https://calcofi.org/data/oceanographic-data/ctd-cast-files/"
 dir_meta <- here(glue("metadata/{provider}/{dataset}"))
 
-# overwrite: rebuild the wrangling DB, but keep checkpoint DB + downloads and
-# (importantly) keep dir_parquet so write_parquet_outputs can content-hash
-# dedup against the prior run — only changed partitions get re-written/uploaded.
-# overwrite_all: also delete parquet, checkpoint DB, and RDS intermediates.
-if (overwrite) {
-  if (file_exists(db_path)) file_delete(db_path)
-  # clear any stale WAL/tmp from an interrupted run so the restored checkpoint
-  # DB opens cleanly (avoids "WAL checkpoint iteration does not match" errors)
-  db_wal <- paste0(db_path, ".wal")
-  db_tmp <- paste0(db_path, ".tmp")
-  if (file_exists(db_wal)) file_delete(db_wal)
-  if (dir_exists(db_tmp))  dir_delete(db_tmp)
-  if (overwrite_all) {
-    if (dir_exists(dir_parquet))   dir_delete(dir_parquet)
-    if (file_exists(db_checkpoint)) file_delete(db_checkpoint)
-    rds_files <- list.files(dir_tmp, pattern = "\\.rds$", full.names = TRUE)
-    if (length(rds_files) > 0) file_delete(rds_files)
-    say("Deleted parquet, checkpoint DB, and RDS intermediates")
-  }
-}
-
-# restore from checkpoint DB if available (skips expensive read+bind+filter)
-if (file_exists(db_checkpoint) && !file_exists(db_path)) {
-  file_copy(db_checkpoint, db_path, overwrite = TRUE)
-  say(glue("Restored from checkpoint: {db_checkpoint}"))
-}
 dir_create(c(dir_dl, dirname(db_path), dir_parquet, dir_tmp), recurse = TRUE)
 
-con <- get_duckdb_con(db_path)
-load_duckdb_extension(con, "spatial")
-load_duckdb_extension(con, "icu")
-
-# limit memory to half of system RAM so DuckDB spills to disk instead of consuming all RAM
-mem_gb <- ps::ps_system_memory()$total / 1024^3 / 2 |> floor()
-dbExecute(con, glue("SET memory_limit = '{mem_gb}GB'"))
-dbExecute(con, glue("SET temp_directory = '{dir_tmp}'"))
+# NOTE: nothing destructive happens here, and no connection is opened. Both wait
+# for the resume decision below, which needs the scraped zip list to fingerprint
+# the inputs — deleting the wrangling DB before knowing whether the heavy path
+# will run would throw away the one table the Gantt appendix reads.
 
 # source archival handled by sync_gd_to_gcs.qmd (rclone)
 # the ctd-cast download/ dir is 62GB+ — too large for inline
@@ -190,51 +166,12 @@ d_cruise_corrections <- read_csv(
   glue("{dir_meta}/cruise_key_corrections.csv"), show_col_types = F)
 ```
 
-## Check for Resumable State
-
-```{r}
-#| label: check_resume
-
-# detect if parquet outputs are already complete (e.g. prior run failed
-# only during GCS upload). If overwrite=TRUE, always rebuild.
-parquet_complete <- FALSE
-manifest_path <- file.path(dir_parquet, "manifest.json")
-if (file_exists(manifest_path)) {
-  mf <- jsonlite::read_json(manifest_path)
-  expected <- setdiff(mf$tables, unlist(mf$supplemental))
-  parquet_ok <- all(vapply(expected, function(tbl) {
-    p <- file.path(dir_parquet, paste0(tbl, ".parquet"))
-    d <- file.path(dir_parquet, tbl)
-    file_exists(p) || dir_exists(d)
-  }, logical(1)))
-  if (parquet_ok && !overwrite) {
-    parquet_complete <- TRUE
-    say(glue(
-      "Parquet output already complete ({length(mf$tables)} tables, ",
-      "{format(mf$total_rows, big.mark = ',')} rows) — ",
-      "skipping computation, resuming at upload"))
-  }
-}
-
-# if parquet not complete, check for checkpoint (ctd_raw pre-computed)
-has_ctd_raw <- FALSE
-if (!parquet_complete) {
-  has_ctd_raw <- "ctd_raw" %in% DBI::dbListTables(con)
-  if (has_ctd_raw) {
-    n_raw <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM ctd_raw")$n
-    say(glue(
-      "Checkpoint: ctd_raw already loaded ",
-      "({format(n_raw, big.mark = ',')} rows) — ",
-      "skipping read+bind+filter"))
-  }
-}
-
-# set eval for read+bind+filter chunks
-skip_read_bind <- parquet_complete || has_ctd_raw
-knitr::opts_chunk$set(eval = !skip_read_bind)
-```
-
 ## Scrape CTD Download Links
+
+This runs on **every** render, ahead of the resume decision below, because the set
+of published `.zip` URLs is one of the two things that decide whether there is
+anything to recompute. It costs one HTTP GET and falls back to the cached list
+when calcofi.org is unreachable.
 
 ```{r}
 #| label: d_zips
@@ -296,6 +233,138 @@ d_zips |>
     fname = "ctd_zip_files",
     escape = F
   )
+```
+
+## Check for Resumable State
+
+The heavy path here — download, parse, pivot — is about an hour, and this notebook
+is re-rendered mostly for reasons that have nothing to do with its inputs: a
+narrative edit, a new diagnostic, a corrected sentence. Paying an hour to prove
+that nothing changed is what stops a pipeline notebook being usable as a living
+document, so the decision is made on evidence rather than on a flag: **skip the
+heavy path when the parquet outputs are complete and the inputs they were built
+from still fingerprint the same.**
+
+The inputs are the published zip URL list scraped above, plus the metadata
+registries that steer the pivot. `calcofi4db::input_fingerprint()` hashes them and
+records the result beside the wrangling database; a *missing* input hashes as
+`<missing>` rather than being skipped, so deleting a corrections file invalidates
+the outputs instead of reading as "no change".
+
+When the heavy path is skipped, **every chunk from here to the GCS upload is
+displayed but not evaluated** — their code is still the record of how the tables
+were built, but the tables themselves are not rebuilt, so those sections show no
+output. The [Findings](#findings) section at the end reads the **parquet** rather
+than the wrangling database and therefore always runs; that is what makes this
+worth doing, and what keeps a skipped render honest rather than merely quiet.
+
+```{r}
+#| label: check_resume
+
+# `overwrite` in libs/ingest.R is TRUE for every ingest and cannot be flipped
+# globally — the comment there records that trying it broke a different notebook,
+# because the skip path is not uniformly safe. So this notebook decides for itself.
+# CTD_FORCE_REBUILD=TRUE (or overwrite_all) runs the heavy path regardless.
+fingerprint_path <- here(glue("data/wrangling/{dir_label}_inputs.json"))
+
+# kept OUT of dir_parquet on purpose: sync_to_gcs() mirrors that directory to a
+# world-readable bucket, and this is local state about one machine's outputs.
+fp <- input_fingerprint(
+  files = c(
+    here("metadata/measurement_type.csv"),
+    here("metadata/measurement_qual.csv"),
+    here("metadata/core_dictionary.csv"),
+    file.path(dir_meta, "flds_redefine.csv"),
+    file.path(dir_meta, "tbls_redefine.csv"),
+    file.path(dir_meta, "cruise_key_corrections.csv"),
+    file.path(dir_meta, "metadata_derived.csv")),
+  values = sort(d_zips$url))
+fp_prior <- read_input_fingerprint(fingerprint_path)
+fp_same  <- !is.null(fp_prior) && identical(fp_prior$hash, fp$hash)
+
+# parquet is "complete" when every non-supplemental manifest table is on disk
+parquet_ok    <- FALSE
+manifest_path <- file.path(dir_parquet, "manifest.json")
+if (file_exists(manifest_path)) {
+  mf       <- jsonlite::read_json(manifest_path)
+  expected <- setdiff(mf$tables, unlist(mf$supplemental))
+  parquet_ok <- all(vapply(expected, function(tbl) {
+    file_exists(file.path(dir_parquet, paste0(tbl, ".parquet"))) ||
+      dir_exists(file.path(dir_parquet, tbl))
+  }, logical(1)))
+}
+
+force_rebuild <- overwrite_all ||
+  isTRUE(as.logical(Sys.getenv("CTD_FORCE_REBUILD", "FALSE")))
+parquet_complete <- parquet_ok && fp_same && !force_rebuild
+
+if (parquet_complete) {
+  say(glue(
+    "Inputs unchanged and parquet complete ({length(mf$tables)} tables, ",
+    "{format(mf$total_rows, big.mark = ',')} rows) — ",
+    "skipping download/parse/pivot"))
+  say(glue("  fingerprint {substr(fp$hash, 1, 12)}, recorded {fp_prior$recorded_at}"))
+} else if (force_rebuild) {
+  say("Rebuilding: forced (CTD_FORCE_REBUILD / overwrite_all)")
+} else if (parquet_ok && !fp_same) {
+  say("Rebuilding: inputs changed since the recorded fingerprint —")
+  for (f in changed_inputs(fp, fp_prior)) say(glue("  {f}"))
+} else {
+  say("Rebuilding: no complete parquet output found")
+}
+
+# --- only now touch anything -------------------------------------------------
+# overwrite keeps the checkpoint DB, the downloads, and (importantly) dir_parquet,
+# so write_parquet_outputs() can content-hash dedup against the prior run and only
+# changed partitions are re-written and re-uploaded.
+if (overwrite && !parquet_complete) {
+  if (file_exists(db_path)) file_delete(db_path)
+  # clear any stale WAL/tmp from an interrupted run so the restored checkpoint
+  # DB opens cleanly (avoids "WAL checkpoint iteration does not match" errors)
+  db_wal <- paste0(db_path, ".wal")
+  db_tmp <- paste0(db_path, ".tmp")
+  if (file_exists(db_wal)) file_delete(db_wal)
+  if (dir_exists(db_tmp))  dir_delete(db_tmp)
+  if (overwrite_all) {
+    if (dir_exists(dir_parquet))    dir_delete(dir_parquet)
+    if (file_exists(db_checkpoint)) file_delete(db_checkpoint)
+    rds_files <- list.files(dir_tmp, pattern = "\\.rds$", full.names = TRUE)
+    if (length(rds_files) > 0) file_delete(rds_files)
+    say("Deleted parquet, checkpoint DB, and RDS intermediates")
+  }
+}
+
+# restore from checkpoint DB if available (skips expensive read+bind+filter)
+if (!parquet_complete && file_exists(db_checkpoint) && !file_exists(db_path)) {
+  file_copy(db_checkpoint, db_path, overwrite = TRUE)
+  say(glue("Restored from checkpoint: {db_checkpoint}"))
+}
+
+con <- get_duckdb_con(db_path)
+load_duckdb_extension(con, "spatial")
+load_duckdb_extension(con, "icu")
+
+# limit memory to half of system RAM so DuckDB spills to disk instead of consuming all RAM
+mem_gb <- ps::ps_system_memory()$total / 1024^3 / 2 |> floor()
+dbExecute(con, glue("SET memory_limit = '{mem_gb}GB'"))
+dbExecute(con, glue("SET temp_directory = '{dir_tmp}'"))
+
+# a second, cheaper resume: ctd_raw already pivoted from a prior interrupted run
+has_ctd_raw <- FALSE
+if (!parquet_complete) {
+  has_ctd_raw <- "ctd_raw" %in% DBI::dbListTables(con)
+  if (has_ctd_raw) {
+    n_raw <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM ctd_raw")$n
+    say(glue(
+      "Checkpoint: ctd_raw already loaded ",
+      "({format(n_raw, big.mark = ',')} rows) — ",
+      "skipping read+bind+filter"))
+  }
+}
+
+# set eval for read+bind+filter chunks
+skip_read_bind <- parquet_complete || has_ctd_raw
+knitr::opts_chunk$set(eval = !skip_read_bind)
 ```
 
 ## Prime Downloads from GCS Source (optional)
@@ -2382,26 +2451,6 @@ dbWriteTable(con, "dataset", d_dataset, overwrite = TRUE)
 say(glue("dataset: {nrow(d_dataset)} datasets registered"))
 ```
 
-## Questions for Data Providers
-
-Open questions on this dataset, tracked in
-`metadata/calcofi/ctd-cast/questions.csv` and surfaced here so they travel with
-the workflow rather than living in someone's inbox. Two are **blockers** — the
-`-99` sentinel and the physically impossible sensor extremes both currently reach
-`obs` as if they were measurements.
-
-```{r}
-#| label: provider-questions
-read_csv(here(cc$questions_file), show_col_types = FALSE) |>
-  arrange(factor(priority, c("blocker", "high", "normal", "low")), id) |>
-  select(priority, question, context, status) |>
-  datatable(
-    caption  = "Questions for the CalCOFI CTD data providers (ranked)",
-    rownames = FALSE,
-    options  = list(dom = "t", scrollX = TRUE,
-                    columnDefs = list(list(width = "70px", targets = 0))))
-```
-
 ## Data Quality Diagnostics
 
 Range and sentinel audit over `ctd_measurement`. This exists because the
@@ -2409,6 +2458,17 @@ Range and sentinel audit over `ctd_measurement`. This exists because the
 spanning −45 to 1016 PSU, oxygen maxima around 1e9–1e10 — alongside `-99`
 sentinels that were ingested as genuine measurements. Nothing in the pipeline
 flagged either, so this section makes both visible at ingest time.
+
+::: {.callout-note title="Empty on a fast re-render — see Findings instead"}
+This section audits the **intermediate** `ctd_measurement` table, which only exists
+when the heavy path ran. On a re-render with unchanged inputs its chunks are shown
+but not evaluated, so they have no output (see [Check for Resumable State]).
+
+That is not a gap in coverage: the equivalent checks over the **published** `obs`
+and `obs_ctd_full` are in [Findings](#findings), which reads the parquet and
+therefore always runs. This section is the *pre-write* audit; that one is the
+*as-shipped* report.
+:::
 
 ::: {.callout-important title="`-99` is fixed at the source; the extremes are not"}
 **`-99` is handled.** The pivot above now deletes it, because the notebook already
@@ -2664,8 +2724,7 @@ preview_tbl("measurement_type")
 ## Emit Core Tables
 
 Project this dataset into the shared consolidated core model
-(`design_env-bio-consolidation.md`) via `calcofi4db::emit_core_tables()`. These
-core tables **are** this ingest's output: `release_database.qmd` concatenates the
+(`design_env-bio-consolidation.md`). These core tables **are** this ingest's output: `release_database.qmd` concatenates the
 per-dataset shards rather than re-deriving the core, so there is exactly one
 projection to keep correct.
 
@@ -2833,22 +2892,36 @@ build_relationships_json(
 )
 ```
 
+Both sidecars are read back **from disk** rather than from the objects the chunk
+above returned, and both viewers always evaluate. They describe files that exist in
+either mode, so gating them on the heavy path would have silently dropped two of
+this notebook's published outputs from a fast render — which is exactly the kind of
+quiet degradation a skip path must not introduce.
+
 ```{r}
 #| label: show_metadata_json
+#| eval: true
 
-listviewer::jsonedit(
-  jsonlite::fromJSON(metadata_path, simplifyVector = FALSE),
-  mode = "view")
+path_meta_json <- file.path(dir_parquet, "metadata.json")
+if (file_exists(path_meta_json)) {
+  listviewer::jsonedit(
+    jsonlite::fromJSON(path_meta_json, simplifyVector = FALSE), mode = "view")
+} else {
+  say(glue("metadata.json not found at {path_meta_json}"))
+}
 ```
 
 ```{r}
 #| label: show_relationships_json
+#| eval: true
 
-listviewer::jsonedit(
-  jsonlite::fromJSON(
-    file.path(dir_parquet, "relationships.json"),
-    simplifyVector = FALSE),
-  mode = "view")
+path_rels_json <- file.path(dir_parquet, "relationships.json")
+if (file_exists(path_rels_json)) {
+  listviewer::jsonedit(
+    jsonlite::fromJSON(path_rels_json, simplifyVector = FALSE), mode = "view")
+} else {
+  say(glue("relationships.json not found at {path_rels_json}"))
+}
 ```
 
 ## Export Modified Dependency Deltas
@@ -2902,6 +2975,603 @@ if (parquet_complete) {
 }
 ```
 
+## Findings {#findings}
+
+What this ingest just published, and the condition it is in. The sections above
+are the *build*; this is the *report* — the place a reader should be able to learn
+what is known to be wrong with CalCOFI CTD data without opening an app, a rule
+file or a release.
+
+Three things make it worth having here rather than only in `ctd-qaqc`:
+
+- it reads the **parquet that was just written**, not the wrangling database, so it
+  is checking what shipped rather than what was in memory before shipping;
+- it runs the **same rule registry** (`metadata/qc_rules/`) through the same engine
+  (`calcofi4db::qc_run_all()`) that the app runs, so a number here and a number
+  there cannot disagree;
+- it renders on a **fast re-run** (see [Check for Resumable State]), so the
+  narrative can be revised without an hour of recomputation.
+
+It sits after the GCS upload deliberately. Everything above is the ingest's actual
+product and is already delivered by the time this runs; a broken diagnostic must
+not be able to discard it — the lesson the Gantt appendix records.
+
+```{r}
+#| label: findings_setup
+
+# in-memory DuckDB with VIEWS over this run's parquet. Views cost nothing until
+# queried, and reading the outputs rather than the wrangling tables is what makes
+# this section render identically on a full run and on a fast re-run.
+fcon <- get_duckdb_con(":memory:")
+dbExecute(fcon, "SET threads TO 4")
+
+pq_view <- function(tbl, path) {
+  if (!file_exists(path) && !dir_exists(path)) return(FALSE)
+  src <- if (dir_exists(path))
+    glue("read_parquet('{path}/**/*.parquet', hive_partitioning = true)") else
+      glue("read_parquet('{path}')")
+  dbExecute(fcon, glue("CREATE OR REPLACE VIEW {tbl} AS SELECT * FROM {src}"))
+  TRUE
+}
+has_obs  <- pq_view("obs",          file.path(dir_parquet, "obs"))
+has_smp  <- pq_view("sample",       file.path(dir_parquet, "sample.parquet"))
+has_full <- pq_view("obs_ctd_full", file.path(dir_parquet, "obs_ctd_full"))
+stopifnot("no obs/sample parquet to report on" = has_obs && has_smp)
+
+# Reference inputs the rules join against — the quality vocabulary, the harmonic
+# climatology and station bottom depths mined from the Access master, and a
+# seafloor depth per cast from the GEBCO crop that apps/ctd-viz already commits.
+# None of it is part of the release. A missing input is left as a MISSING TABLE so
+# its rules ERROR rather than returning zero rows and reading as clean.
+gebco_tif <- normalizePath(
+  file.path(here(), "..", "apps/ctd-viz/data/gebco_calcofi.tif"), mustWork = FALSE)
+say("QC reference data staged:")
+qc_ref <- qc_stage_reference(fcon, here(), gebco_tif = gebco_tif)
+```
+
+```{r}
+#| label: findings_headline
+
+f_head <- dbGetQuery(fcon, "
+  SELECT COUNT(*)                                       AS n_obs,
+         COUNT(DISTINCT sample_key)                     AS n_casts,
+         COUNT(DISTINCT cruise_key)                     AS n_cruises,
+         COUNT(DISTINCT measurement_type)               AS n_types,
+         CAST(MIN(datetime) AS DATE)                    AS d0,
+         CAST(MAX(datetime) AS DATE)                    AS d1,
+         COUNT(*) FILTER (WHERE measurement_value = -99) AS n_neg99
+  FROM obs")
+n_smp  <- dbGetQuery(fcon, "SELECT COUNT(*) AS n FROM sample")$n
+f_full <- if (has_full) dbGetQuery(fcon,
+  "SELECT COUNT(*) AS n, COUNT(*) FILTER (WHERE measurement_value = -99) AS n_neg99
+   FROM obs_ctd_full") else NULL
+
+say(glue("obs           : {format(f_head$n_obs, big.mark = ',')} rows, ",
+         "{f_head$n_types} measurement types, ",
+         "{format(f_head$n_casts, big.mark = ',')} casts, ",
+         "{f_head$n_cruises} cruises, {f_head$d0} to {f_head$d1}"))
+say(glue("sample        : {format(n_smp, big.mark = ',')} cast events"))
+if (!is.null(f_full))
+  say(glue("obs_ctd_full  : {format(f_full$n, big.mark = ',')} rows (supplemental)"))
+```
+
+### The `-99` sentinel — fixed at the source, and now guarded
+
+`-99` is this source's documented missing marker. The notebook had always known
+that — `pseudoNA_values <- c(-9.99e-29, -99)` strips it from longitude and latitude
+— but the rule was never extended to the measurement columns, so `-99` flowed
+through `ctd_measurement` → `ctd_thin` → `obs` as though it were a reading.
+Release `v2026.07.17` shipped **84,302** of them, including canonical oxygen
+(`oxygen_ml_l_ave_sta_corr` 953, `oxygen_umol_kg_ave_sta_corr` 4,294) alongside
+`isus_v` 40,479, `ph` 31,493 and `spar` 6,189.
+
+The `NOT isnan / isfinite` guard in the pivot could never catch it: `-99` is a
+perfectly finite double. A `-99` mL/L oxygen silently corrupts any mean, minimum
+or anomaly a consumer computes, which is why the pivot now **deletes** the rows
+rather than reporting them — a missing value has no business existing as a row in
+long format.
+
+The count below is an assertion, not a statistic: it is the regression guard for
+that fix, and the `ctd_sentinel_neg99` rule is the same test run from the registry.
+
+```{r}
+#| label: findings_sentinel
+
+say(glue("-99 in obs          : {f_head$n_neg99}   (was 84,302 in v2026.07.17)"))
+if (!is.null(f_full))
+  say(glue("-99 in obs_ctd_full : {f_full$n_neg99}"))
+
+stopifnot(
+  "the -99 sentinel is back in obs — the pivot fix has regressed" =
+    f_head$n_neg99 == 0,
+  "the -99 sentinel is back in obs_ctd_full" =
+    is.null(f_full) || f_full$n_neg99 == 0)
+```
+
+### `btl_*` promoted to canonical — and the depth-thinning trap
+
+The CTD cast files ship the bottle values taken on the same cast: nutrients,
+chlorophyll, and the lab references (`BTL_Temp`, `SaltB`, `OxB`) that sensor
+calibration is judged against. Eleven of those twelve types were registered but
+flagged `is_canonical = FALSE`, so they were excluded from `ctd_thin` and therefore
+from `obs` — only `btl_ammonium` was canonical, which read like a stray edit rather
+than a decision. Making the rest canonical is what enables the bottle-vs-sensor
+calibration rules below; without the reference side, those rules have nothing to
+compare and (correctly) report `skip`, not `pass`.
+
+::: {.callout-important title="Flagging them canonical was necessary but not sufficient"}
+Thinning is designed for **dense sensor scans**: the ~10 m backbone and the RDP
+inflections are both derived from the temperature/salinity profile, so a depth is
+kept because *the sensor profile bends there*. Bottle values are not a profile —
+they are a handful of discrete lab samples at depths chosen by the watch, and
+nothing about the sensor profile knows where they are.
+
+Selecting depths by sensor geometry and then subsetting bottle values to those
+depths silently discards most of them. Measured against `v2026.07.17`: of 133,206
+distinct (cast, depth) bottle ammonium measurements, only **35,549 (26.7%)** sat at
+a retained depth. So promoting the types alone would have landed about a quarter of
+the bottle record in `obs` and looked like a success.
+
+`ctd_thin` therefore keeps a third retention reason — `bottle` — that retains every
+depth carrying a canonical bottle-grain value. The table below verifies it: within
+the cast direction `obs` covers, retention must be **100%**.
+:::
+
+```{r}
+#| label: findings_bottle
+
+# bottle-grain types carry the marker as a prefix (btl_ammonium), a suffix
+# (salinity_btl) or an infix (oxygen_btl_ml_l) — three positions, hence two LIKEs
+btl_where <- "(measurement_type LIKE 'btl\\_%' ESCAPE '\\'
+               OR measurement_type LIKE '%\\_btl%' ESCAPE '\\')"
+
+f_btl <- dbGetQuery(fcon, glue("
+  SELECT COUNT(*) FILTER (WHERE {btl_where}) AS n_btl, COUNT(*) AS n FROM obs"))
+say(glue("bottle-grain rows in obs: {format(f_btl$n_btl, big.mark = ',')} of ",
+         "{format(f_btl$n, big.mark = ',')} ",
+         "({round(100 * f_btl$n_btl / f_btl$n, 1)}%)"))
+
+# retention WITHIN the direction obs keeps. The other direction is not loss: the
+# source duplicates every bottle value onto both cast records (question 05), so
+# comparing against the full scan set would report a 50% "loss" that is really the
+# duplicate copy being dropped.
+if (has_full) {
+  f_ret <- dbGetQuery(fcon, glue("
+    WITH chosen AS (SELECT DISTINCT sample_key FROM obs),
+    f AS (SELECT DISTINCT sample_key, depth_min_m, measurement_type
+          FROM obs_ctd_full
+          WHERE {btl_where} AND sample_key IN (SELECT sample_key FROM chosen)),
+    t AS (SELECT DISTINCT sample_key, depth_min_m, measurement_type
+          FROM obs WHERE {btl_where})
+    SELECT COUNT(*) AS n_avail,
+           COUNT(*) FILTER (WHERE t.sample_key IS NOT NULL) AS n_kept
+    FROM f LEFT JOIN t USING (sample_key, depth_min_m, measurement_type)"))
+  say(glue("bottle values retained by thinning: ",
+           "{format(f_ret$n_kept, big.mark = ',')} of ",
+           "{format(f_ret$n_avail, big.mark = ',')} on the chosen direction ",
+           "({round(100 * f_ret$n_kept / f_ret$n_avail, 1)}%)"))
+  stopifnot(
+    "depth thinning is dropping bottle values again (retained_reason = 'bottle')" =
+      f_ret$n_kept == f_ret$n_avail)
+}
+```
+
+```{r}
+#| label: findings_bottle_tbl
+
+dbGetQuery(fcon, glue("
+  SELECT measurement_type, COUNT(*) AS n,
+         COUNT(DISTINCT sample_key) AS n_casts,
+         ROUND(MIN(measurement_value), 3) AS v_min,
+         ROUND(MAX(measurement_value), 3) AS v_max
+  FROM obs WHERE {btl_where} GROUP BY 1 ORDER BY n DESC")) |>
+  datatable(
+    caption  = paste("Bottle-grain measurement types now carried in the default",
+                     "obs — the reference side of every calibration check"),
+    rownames = FALSE,
+    options  = list(pageLength = 12, scrollX = TRUE, dom = "tip"))
+```
+
+### One direction per physical cast: half of `sample` carries no `obs`
+
+`sample` is one row per `cast_key`, and `cast_key` carries the direction suffix
+(`…d` / `…u`) — so a station occupation that recorded both a down- and an upcast
+contributes **two** `sample` rows. `obs` carries `ctd_thin`, which by design keeps
+one direction per physical cast. The consequence is arithmetic, but it is not
+stated anywhere a consumer would look: roughly half of the CTD rows in the release's
+`sample` have no observations attached to them in the default tier.
+
+That is not data loss — the other direction is in the supplemental
+`obs_ctd_full` — but a consumer counting casts from `sample` and a consumer
+counting casts from `obs` will get answers that differ by about a factor of two,
+and neither is wrong. Which direction should be authoritative is question
+`calcofi_ctd-cast_06`.
+
+```{r}
+#| label: findings_direction
+
+f_dir <- dbGetQuery(fcon, "
+  SELECT COUNT(*) AS n_sample,
+         COUNT(*) FILTER (
+           WHERE sample_key IN (SELECT DISTINCT sample_key FROM obs)) AS n_with_obs
+  FROM sample")
+say(glue("sample rows                 : {format(f_dir$n_sample, big.mark = ',')}"))
+say(glue("  with any obs (default tier): {format(f_dir$n_with_obs, big.mark = ',')} ",
+         "({round(100 * f_dir$n_with_obs / f_dir$n_sample, 1)}%)"))
+say(glue("  no obs (other direction)   : ",
+         "{format(f_dir$n_sample - f_dir$n_with_obs, big.mark = ',')}"))
+```
+
+### Quality codes, as published
+
+`measurement_qual` was a verbatim pass-through for years — carried through every
+table, never interpreted, with no vocabulary anywhere in the repo. There is one
+now: `metadata/measurement_qual.csv`, recovered from the CalCOFI hydrographic
+master's own field documentation (`6` = data OK but taken from CTD, `8` = value is
+suspect, `9` = missing data) and confirmed to apply to CTD, whose flags use the
+same codes. The codes were also being stored as `"9.0"` by a double→string cast, so
+none of them matched the vocabulary; stripping that textually (not via an `INTEGER`
+cast, which would round an unexpected `"9.5"`) turned 3,860 spurious
+"unrecognized code" hits into zero.
+
+Two things below are worth a reader's attention, and both are open with the
+providers rather than acted on here:
+
+1. **The headline variables carry no flags at all.** Source flags attach to the
+   *component sensors* (`Temp1Q`, `Salt1Q`, `Ox1Q`, `Ox2Q`) while the canonical
+   types are the *averages*, so the quality information is lost in the mean. A
+   consumer cannot currently tell whether a headline CTD value is trustworthy
+   (question `calcofi_ctd-cast_09`).
+2. **Every row flagged `9` = "missing data" carries a value** — including
+   physically impossible ones. Either the flag or the value is wrong, and nothing
+   in the source says which (question `calcofi_ctd-cast_13`).
+
+```{r}
+#| label: findings_qual
+
+f_qual <- dbGetQuery(fcon, "
+  SELECT o.measurement_qual AS code, q.label, q.description,
+         COUNT(*) AS n,
+         COUNT(o.measurement_value)              AS n_with_value,
+         COUNT(DISTINCT o.measurement_type)      AS n_types,
+         ROUND(MIN(o.measurement_value), 3)      AS v_min,
+         ROUND(MAX(o.measurement_value), 3)      AS v_max
+  FROM obs o LEFT JOIN measurement_qual q ON o.measurement_qual = q.qual_code
+  WHERE o.measurement_qual IS NOT NULL
+  GROUP BY 1, 2, 3 ORDER BY n DESC")
+
+n_typed <- dbGetQuery(fcon, "
+  SELECT COUNT(DISTINCT measurement_type) AS n_all,
+         COUNT(DISTINCT measurement_type) FILTER (
+           WHERE measurement_qual IS NOT NULL) AS n_flagged FROM obs")
+
+say(glue("flagged obs rows       : {format(sum(f_qual$n), big.mark = ',')} of ",
+         "{format(f_head$n_obs, big.mark = ',')} ",
+         "({round(100 * sum(f_qual$n) / f_head$n_obs, 3)}%)"))
+say(glue("measurement types with any flag: {n_typed$n_flagged} of {n_typed$n_all}"))
+n_missing_flag <- sum(f_qual$n_with_value[f_qual$code == "9"])
+if (length(n_missing_flag) && n_missing_flag > 0)
+  say(glue("rows flagged 9 = 'missing data' that nonetheless carry a value: ",
+           "{format(n_missing_flag, big.mark = ',')}"))
+```
+
+```{r}
+#| label: findings_qual_tbl
+
+f_qual |>
+  mutate(label = coalesce(label, "UNRECOGNIZED")) |>
+  datatable(
+    caption  = paste("Quality codes in the published obs, decoded against",
+                     "metadata/measurement_qual.csv"),
+    rownames = FALSE,
+    options  = list(pageLength = 10, scrollX = TRUE, dom = "tip")) |>
+  formatStyle("label",
+              color = styleEqual("UNRECOGNIZED", "#d03b3b", default = "inherit"))
+```
+
+### QC rules over this ingest's output
+
+The rules are **data**, not code: `metadata/qc_rules/rules.csv` plus one
+`sql/*.sql` file per rule, versioned with the pipeline that produces the data they
+check, so a data manager can review one in a diff. They are executed here by
+`calcofi4db::qc_run_all()` — the same engine `apps/ctd-qaqc` uses, moved into the
+package once it had two callers so the app and this notebook cannot report
+different numbers for the same rule.
+
+Every rule targets `obs` / `sample`, never a per-dataset table. That is what lets
+the identical registry run against a release, against this parquet, and (next)
+against an uploaded file.
+
+::: {.callout-note title="`skip` is not `pass`"}
+A rule whose input is absent returns zero rows, which is indistinguishable from
+"the data is clean". The engine therefore reports `skip` with a reason, never a
+silent pass — this is not hypothetical: the three bottle-vs-sensor rules did
+exactly that against `v2026.07.30`, which predates the `btl_*` promotion above.
+Rules scoped to a single cruise (they read the full-resolution `obs_ctd_full`) skip
+here too, and are run separately below.
+:::
+
+```{r}
+#| label: findings_rules
+
+dir_rules <- here("metadata/qc_rules")
+rules_all <- qc_read_rules(dir_rules, active_only = FALSE)
+rules_act <- filter(rules_all, active)
+rules_now <- filter(rules_act, coalesce(scope, "all") == "all")
+
+f_types <- qc_present_types(fcon, "calcofi_ctd-cast")
+qc_res  <- qc_run_all(fcon, rules_now, limit = 500L, present_types = f_types)
+qc_sum  <- qc_summarize(qc_res, rules_now)
+
+say(glue("rules in registry : {nrow(rules_all)} ",
+         "({nrow(rules_act)} active, {nrow(rules_all) - nrow(rules_act)} parked)"))
+say(glue("run here          : {nrow(rules_now)} release-wide ",
+         "(+{nrow(rules_act) - nrow(rules_now)} cruise-scoped, below)"))
+for (s in c("FAIL", "ERROR", "flag", "skip", "pass")) {
+  n <- sum(qc_sum$status == s)
+  if (n > 0) say(glue("  {format(s, width = 6)}: {n}"))
+}
+say(glue("total findings    : ",
+         "{format(sum(qc_sum$n, na.rm = TRUE), big.mark = ',')}"))
+```
+
+```{r}
+#| label: findings_rules_tbl
+
+qc_sum |>
+  transmute(rule_key, status, findings = n, severity, type = rule_type, target,
+            description, `sec` = elapsed_s, note) |>
+  datatable(
+    caption  = paste("QC rule results over this ingest's parquet —",
+                     "registry metadata/qc_rules/, engine calcofi4db::qc_run_all()"),
+    rownames = FALSE,
+    options  = list(pageLength = 15, scrollX = TRUE, dom = "tip")) |>
+  formatStyle(
+    "status",
+    color = styleEqual(c("pass", "flag", "FAIL", "ERROR", "skip"),
+                       c("#1a7f37", "#b06000", "#d03b3b", "#d03b3b", "#6e7781")),
+    fontWeight = styleEqual(c("FAIL", "ERROR"), c("bold", "bold"),
+                            default = "normal"))
+```
+
+#### Values outside their declared range
+
+Ranges live in `metadata/measurement_type.csv` (`valid_min` / `valid_max`), moved
+there from an inline tribble so they are reviewable in a diff, emittable by the CF
+netCDF writer as real variable attributes, and usable by any rule rather than only
+by this notebook. They are deliberately generous: they catch values that cannot be
+real, they do not police oceanography. Nothing below is dropped.
+
+```{r}
+#| label: findings_range_tbl
+
+f_range <- dbGetQuery(fcon, "
+  SELECT o.measurement_type,
+         COUNT(*)                                    AS n_bad,
+         COUNT(DISTINCT o.cruise_key)                AS n_cruises,
+         ROUND(MIN(o.measurement_value), 3)          AS v_min,
+         ROUND(MAX(o.measurement_value), 3)          AS v_max,
+         m.valid_min, m.valid_max
+  FROM obs o JOIN measurement_type m USING (measurement_type)
+  WHERE m.valid_min IS NOT NULL
+    AND (o.measurement_value < m.valid_min OR o.measurement_value > m.valid_max)
+  GROUP BY 1, 6, 7 ORDER BY n_bad DESC")
+
+f_range |>
+  left_join(
+    dbGetQuery(fcon, "SELECT measurement_type, COUNT(*) AS n_total FROM obs GROUP BY 1"),
+    by = "measurement_type") |>
+  transmute(measurement_type, n_bad, n_total,
+            `% bad` = round(100 * n_bad / n_total, 2),
+            n_cruises, v_min, v_max,
+            range = glue("{valid_min}..{valid_max}")) |>
+  datatable(
+    caption  = "Published values outside their declared plausible range",
+    rownames = FALSE,
+    options  = list(pageLength = 15, scrollX = TRUE, dom = "tip"))
+```
+
+#### Impossible temperatures
+
+The single finding most worth a provider's time. `temperature_ave` reaches
+**60.4 °C** in the published product, and this is not a sensor warming on deck:
+most of the values above the 40 °C ceiling are at depth, they span more than two
+decades and more than one ship, and where a bottle thermometer sampled the same
+cast at the same depth it disagrees by 30–40 °C. Three independent lines — the
+range rule, the depth distribution, and the bottle reference — say the same thing,
+which is why this is stated as a finding rather than a suspicion.
+
+```{r}
+#| label: findings_temp
+
+f_t <- dbGetQuery(fcon, "
+  SELECT COUNT(*) FILTER (WHERE measurement_value > 40)                       AS n_hot,
+         COUNT(*) FILTER (WHERE measurement_value > 40 AND depth_min_m > 2)   AS n_hot_deep,
+         COUNT(*) FILTER (WHERE measurement_value < -2)                       AS n_cold,
+         COUNT(DISTINCT cruise_key) FILTER (
+           WHERE measurement_value > 40 OR measurement_value < -2)            AS n_cruises
+  FROM obs WHERE measurement_type = 'temperature_ave'")
+say(glue("temperature_ave > 40 degC : {f_t$n_hot} ",
+         "({f_t$n_hot_deep} of them deeper than 2 m — not a deck warm-up)"))
+say(glue("temperature_ave < -2 degC : {f_t$n_cold}"))
+say(glue("cruises affected          : {f_t$n_cruises}"))
+```
+
+```{r}
+#| label: findings_temp_tbl
+
+dbGetQuery(fcon, "
+  SELECT cruise_key,
+         COUNT(*)                             AS n,
+         COUNT(DISTINCT sample_key)           AS n_casts,
+         ROUND(MIN(depth_min_m), 1)           AS depth_min,
+         ROUND(MAX(depth_min_m), 1)           AS depth_max,
+         ROUND(MIN(measurement_value), 2)     AS t_min,
+         ROUND(MAX(measurement_value), 2)     AS t_max
+  FROM obs
+  WHERE measurement_type = 'temperature_ave'
+    AND (measurement_value > 40 OR measurement_value < -2)
+  GROUP BY 1 ORDER BY n DESC") |>
+  datatable(
+    caption  = paste("Physically impossible temperature_ave by cruise —",
+                     "the table to send with question calcofi_ctd-cast_02"),
+    rownames = FALSE,
+    options  = list(pageLength = 15, scrollX = TRUE, dom = "tip"))
+```
+
+```{r}
+#| label: findings_temp_btl_tbl
+
+# the corroboration: where a bottle thermometer sampled the same cast at the same
+# depth, what did IT read? This is only possible because btl_temperature is now
+# canonical (above) — before that the reference side was not in obs at all.
+f_tbtl <- dbGetQuery(fcon, "
+  WITH hot AS (
+    SELECT sample_key, cruise_key, depth_min_m, measurement_value AS v_sensor
+    FROM obs
+    WHERE measurement_type = 'temperature_ave' AND measurement_value > 40)
+  SELECT h.cruise_key,
+         COUNT(*)                              AS n_pairs,
+         ROUND(MIN(h.depth_min_m), 1)          AS depth_min,
+         ROUND(MAX(h.depth_min_m), 1)          AS depth_max,
+         ROUND(MIN(b.measurement_value), 2)    AS bottle_min,
+         ROUND(MAX(b.measurement_value), 2)    AS bottle_max,
+         ROUND(MIN(h.v_sensor), 2)             AS sensor_min,
+         ROUND(MAX(h.v_sensor), 2)             AS sensor_max
+  FROM hot h
+  JOIN obs b ON b.sample_key = h.sample_key AND b.depth_min_m = h.depth_min_m
+            AND b.measurement_type = 'btl_temperature'
+  GROUP BY 1 ORDER BY n_pairs DESC")
+
+if (nrow(f_tbtl)) {
+  datatable(
+    f_tbtl,
+    caption  = paste("Bottle thermometer vs sensor on the same cast and depth,",
+                     "where the sensor reads above 40 degC"),
+    rownames = FALSE,
+    options  = list(pageLength = 10, scrollX = TRUE, dom = "tip"))
+} else {
+  say("no bottle temperature at the same cast+depth as any >40 degC sensor value")
+}
+```
+
+#### Negative pH, clustered by cruise
+
+Not previously reported, and the largest single range violation in the release:
+`ph` accounts for the great majority of out-of-range values, and the bad values are
+not scattered — they cluster tightly *within* a cruise, often thousands of rows
+sitting in a narrow band around −2.5 to −3. Scattered impossible values look like
+bad scans; a whole cruise pinned at −2.7 looks like a column that was never
+converted from sensor voltage to pH units. The dataset has two explicit voltage
+columns (`isus_v`, `fluorescence_v`) but no `ph_v` twin, so a raw-voltage `ph`
+would have nowhere else to go. That is a hypothesis for the providers, not a
+conclusion (question `calcofi_ctd-cast_12`).
+
+```{r}
+#| label: findings_ph_tbl
+
+dbGetQuery(fcon, "
+  SELECT cruise_key,
+         COUNT(*)                                                        AS n_bad,
+         ROUND(MIN(measurement_value), 2)                                AS v_min,
+         ROUND(MAX(measurement_value), 2)                                AS v_max,
+         COUNT(*) FILTER (WHERE measurement_value < 0)                   AS n_negative,
+         ROUND(MAX(measurement_value) - MIN(measurement_value), 2)       AS spread
+  FROM obs
+  WHERE measurement_type = 'ph' AND (measurement_value < 6 OR measurement_value > 9)
+  GROUP BY 1 ORDER BY n_bad DESC") |>
+  datatable(
+    caption  = paste("Out-of-range pH by cruise — a narrow `spread` on thousands",
+                     "of rows is the signature of an unconverted column"),
+    rownames = FALSE,
+    options  = list(pageLength = 10, scrollX = TRUE, dom = "tip"))
+```
+
+#### Full-resolution profile rules, one cruise at a time
+
+Spikes, loop edits and up/down disagreement are invisible in `obs`: thinning keeps
+one direction and roughly one sample per 10 m, which is exactly the structure these
+rules examine. They read the supplemental `obs_ctd_full` instead, which is
+hive-partitioned by `cruise_key` so a scoped query prunes to one cruise rather than
+scanning 212M rows.
+
+The cruise below is chosen by evidence, not by recency: it is the one with the most
+out-of-range canonical values, so the profile rules run where there is most reason
+to look. This is a **sample, not a sweep** — the remaining cruises are the app's job.
+
+```{r}
+#| label: findings_cruise_rules
+
+rules_cruise <- filter(rules_act, coalesce(scope, "all") == "cruise")
+
+if (has_full && nrow(rules_cruise)) {
+  worst_cruise <- dbGetQuery(fcon, "
+    SELECT o.cruise_key, COUNT(*) AS n
+    FROM obs o JOIN measurement_type m USING (measurement_type)
+    WHERE m.valid_min IS NOT NULL
+      AND (o.measurement_value < m.valid_min OR o.measurement_value > m.valid_max)
+    GROUP BY 1 ORDER BY n DESC LIMIT 1")$cruise_key
+  say(glue("cruise scoped to: {worst_cruise} (most out-of-range values)"))
+
+  qc_res_cr <- qc_run_all(
+    fcon, rules_cruise, limit = 500L, present_types = f_types,
+    scope_values = list(cruise_key = worst_cruise))
+  qc_sum_cr <- qc_summarize(qc_res_cr, rules_cruise)
+} else {
+  worst_cruise <- NA_character_
+  qc_sum_cr    <- NULL
+  say("obs_ctd_full not present — the profile rules are SKIPPED, not passed")
+}
+```
+
+```{r}
+#| label: findings_cruise_rules_tbl
+
+if (!is.null(qc_sum_cr)) {
+  qc_sum_cr |>
+    transmute(rule_key, status, findings = n, severity, type = rule_type,
+              description, `sec` = elapsed_s, note) |>
+    datatable(
+      caption  = glue("Profile rules over obs_ctd_full for cruise {worst_cruise}"),
+      rownames = FALSE,
+      options  = list(pageLength = 10, scrollX = TRUE, dom = "t")) |>
+    formatStyle(
+      "status",
+      color = styleEqual(c("pass", "flag", "FAIL", "ERROR", "skip"),
+                         c("#1a7f37", "#b06000", "#d03b3b", "#d03b3b", "#6e7781")))
+} else {
+  say("no cruise-scoped rule results this render")
+}
+```
+
+### Questions for Data Providers
+
+Open questions on this dataset, tracked in
+`metadata/calcofi/ctd-cast/questions.csv` and surfaced here so they travel with the
+workflow rather than living in someone's inbox. Everything above that could not be
+resolved from the data alone is written down here, with the measured evidence that
+raised it, so that asking is a matter of sending a link rather than reconstructing
+an investigation.
+
+```{r}
+#| label: provider-questions
+
+read_csv(here(cc$questions_file), show_col_types = FALSE) |>
+  arrange(factor(priority, c("blocker", "high", "normal", "low")), id) |>
+  select(id, priority, question, context, status) |>
+  datatable(
+    caption  = "Questions for the CalCOFI CTD data providers (ranked)",
+    rownames = FALSE,
+    options  = list(dom = "t", scrollX = TRUE,
+                    columnDefs = list(list(width = "70px", targets = 1))))
+```
+
+```{r}
+#| label: findings_close
+
+close_duckdb(fcon)
+```
+
 ## Cleanup
 
 ```{r}
@@ -2913,6 +3583,15 @@ close_duckdb(con)
 if (file_exists(db_checkpoint)) {
   file_delete(db_checkpoint)
   say(glue("Removed checkpoint: {db_checkpoint}"))
+}
+
+# record the input fingerprint LAST, and only when this run actually rebuilt.
+# Written any earlier, a run that died mid-pivot would leave a fingerprint saying
+# "these inputs produced those outputs" for outputs that were never finished — and
+# the next render would skip the heavy path on the strength of it.
+if (!parquet_complete) {
+  write_input_fingerprint(fingerprint_path, fp)
+  say(glue("Recorded input fingerprint {substr(fp$hash, 1, 12)} → {fingerprint_path}"))
 }
 ```
 
@@ -2928,8 +3607,26 @@ degrade to a visible error message, not discard finished work.
 :::
 
 ```{r}
+#| label: gantt_guard
+
+# On a fast re-render (inputs unchanged) the heavy path never ran, so ctd_cast was
+# never built in the wrangling DB. Gate the chart on its presence rather than
+# letting a cosmetic appendix throw — the ingest's real product is already done.
+con_pq <- get_duckdb_con(db_path)
+load_duckdb_extension(con_pq, "spatial")
+has_ctd_cast <- "ctd_cast" %in% DBI::dbListTables(con_pq)
+if (!has_ctd_cast) {
+  close_duckdb(con_pq)
+  say(paste0(
+    "ctd_cast not materialized (inputs unchanged, heavy path skipped) — no Gantt ",
+    "chart this render. Re-run with CTD_FORCE_REBUILD=TRUE to rebuild it."))
+}
+```
+
+```{r}
 #| label: gantt_chart
 #| error: true
+#| eval: !expr has_ctd_cast
 
 # Read ctd_cast from the WRANGLING DB, not from parquet.
 #
@@ -2943,10 +3640,8 @@ degrade to a visible error message, not discard finished work.
 #
 # sample.parquet is the natural modern substitute but has no `data_stage`, and
 # the final-vs-preliminary split is the point of the chart. ctd_cast is still a
-# real table in the wrangling DB at render time, so read it there.
-con_pq <- get_duckdb_con(db_path)
-load_duckdb_extension(con_pq, "spatial")
-
+# real table in the wrangling DB at render time, so read it there — the connection
+# is opened by the guard chunk above.
 cruise_spans <- tbl(con_pq, "ctd_cast") |>
   group_by(cruise_key, data_stage) |>
   summarize(
