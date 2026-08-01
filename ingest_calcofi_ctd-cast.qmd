@@ -278,7 +278,11 @@ fp <- input_fingerprint(
     file.path(dir_meta, "tbls_redefine.csv"),
     file.path(dir_meta, "cruise_key_corrections.csv"),
     file.path(dir_meta, "metadata_derived.csv")),
-  values = sort(d_zips$url))
+  # the engine version is an input too: a change to calcofi4db's projection or
+  # parsing would otherwise leave the fingerprint identical and keep outputs that
+  # the current code would no longer produce
+  values = c(sort(d_zips$url),
+             paste0("calcofi4db ", as.character(packageVersion("calcofi4db")))))
 fp_prior <- read_input_fingerprint(fingerprint_path)
 fp_same  <- !is.null(fp_prior) && identical(fp_prior$hash, fp$hash)
 
