@@ -270,9 +270,12 @@ fingerprint_path <- here(glue("data/wrangling/{dir_label}_inputs.json"))
 # kept OUT of dir_parquet on purpose: sync_to_gcs() mirrors that directory to a
 # world-readable bucket, and this is local state about one machine's outputs.
 fp <- input_fingerprint(
+  # ONLY inputs that can change the OUTPUTS belong here. measurement_qual.csv is
+  # deliberately absent: it is a vocabulary the diagnostics decode against, never
+  # something the pivot reads, so hashing it would force an hour of rebuild for a
+  # documentation edit that cannot alter a single row.
   files = c(
     here("metadata/measurement_type.csv"),
-    here("metadata/measurement_qual.csv"),
     here("metadata/core_dictionary.csv"),
     file.path(dir_meta, "flds_redefine.csv"),
     file.path(dir_meta, "tbls_redefine.csv"),
@@ -1501,7 +1504,7 @@ for (i in seq_len(nrow(d_meas_ctd))) {
   #
   # The source stores these codes in DOUBLE columns, so a plain cast yields "9.0"
   # rather than "9" and no longer matches the controlled vocabulary in
-  # metadata/measurement_qual.csv (codes 6 / 8 / 9). Strip a trailing ".0" TEXTUALLY
+  # metadata/measurement_qual.csv (the CTD set: 0/1/2/8/9). Strip a trailing ".0" TEXTUALLY
   # rather than casting through INTEGER: a numeric cast would silently round an
   # unexpected "9.5" to 9, whereas this leaves anything non-integral verbatim so it
   # shows up in the audit below instead of being quietly normalized away.
@@ -3271,6 +3274,66 @@ f_qual |>
     options  = list(pageLength = 10, scrollX = TRUE, dom = "tip")) |>
   formatStyle("label",
               color = styleEqual("UNRECOGNIZED", "#d03b3b", default = "inherit"))
+```
+
+### What the source documentation says about these numbers
+
+Each source zip ships its own documentation (`CTD-CSV-Format.pdf`,
+`CTD Data Files.pdf`, `FilenamingAndAscHeaderNotes.txt`, and a
+`PreliminaryDataReadme.txt` on preliminary cruises). Combed 2026-08-01; the full
+account is in the [QA/QC protocol](https://calcofi.io/workflows/qc_protocol.html).
+Four points change how a consumer should read what this ingest publishes.
+
+**The canonical types are the providers' own recommendation, not our preference.**
+Every property is published three times — SBE-processed, `_CruiseCorr` (one
+regression per cruise, from 4-second averages against ~1400 bottles) and
+`_StaCorr` (a regression per cast, from 1 m bin averages against that cast's ~20
+bottles). The source states station-corrected data are the best, particularly for
+nitrate, which is why `*_sta_corr` are the types flagged canonical here. Salinity
+is corrected separately, from **bottle salinities below 350 m**, applied at all
+depths.
+
+**A missing `*_sta_corr` is often correct.** Station correction needs a 500 m cast
+with roughly ten or more bottles. On winter and spring cruises, lines north of
+76.7 may be occupied with as few as 0–12 bottles and receive cruise-corrected
+values only. Counting nulls as defects will mis-read a whole class of casts.
+
+**Values are 1 m bin averages, not raw scans.** `obs_ctd_full` is full *published*
+resolution. That is also why the loop-edit rule's 1 m threshold is a noise floor
+rather than a tolerance.
+
+::: {.callout-warning title="`data_stage` does not survive into the release"}
+The source is explicit that preliminary data are **for non-publication use**, and
+specific about what moves: *"Temperature and salinities may change very little but
+oxygen, nitrate and chlorophyll data may change significantly after post-cruise
+calibrations."*
+
+This notebook knows which cruises are which — `data_stage` is `final` or
+`preliminary` on `ctd_cast`, and the appendix charts it. **The released `sample`
+carries no such column**, so a consumer reading the release cannot tell a
+final cruise from a preliminary one, and the caveat above cannot reach them. That
+is a gap in the core model rather than in this ingest, and it is filed as question
+`calcofi_ctd-cast_14`.
+:::
+
+```{r}
+#| label: findings_stage
+
+# how much of what we publish is preliminary? Read from the wrangling DB when the
+# heavy path ran; otherwise say so rather than guessing.
+if ("ctd_cast" %in% DBI::dbListTables(con)) {
+  dbGetQuery(con, "
+    SELECT data_stage, COUNT(DISTINCT cruise_key) AS n_cruises,
+           COUNT(DISTINCT cast_key) AS n_casts
+    FROM ctd_cast GROUP BY 1 ORDER BY n_casts DESC") |>
+    datatable(
+      caption = paste("Final vs preliminary in this ingest — a distinction the",
+                      "released `sample` cannot currently express"),
+      rownames = FALSE, options = list(dom = "t"))
+} else {
+  say(paste("data_stage not available on a fast re-render (ctd_cast is not",
+            "materialized); it is charted in the Gantt appendix on a full run."))
+}
 ```
 
 ### QC rules over this ingest's output

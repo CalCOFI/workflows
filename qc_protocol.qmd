@@ -153,6 +153,93 @@ bathymetry instead, which is a different question. And
 sorts below line 76.6 and has been silently excluded from that check for twenty
 years; whether to port the bug or the intent is question `hydro_master_09`.
 
+### What the source documentation actually says
+
+Every CTD source zip ships its own documentation — `CTD-CSV-Format.pdf`,
+`CTD Data Files.pdf`, `FilenamingAndAscHeaderNotes.txt`, and a
+`PreliminaryDataReadme.txt` on preliminary cruises. It answers several questions
+this project had open, and it constrains how the released values may be read.
+Combed 2026-08-01; what follows is from those files, not inferred.
+
+#### The processing chain, and the three versions of every sensor value
+
+Raw frames are processed with **SBE Data Processing** (Seasoft) tuned for the
+CalCOFI 911/911+, then by SIO-CalCOFI's own **`BtlVsCTD`** against the cast's
+bottle samples. The published CSV therefore carries the *same property three
+times*, and the column suffix is the only thing that distinguishes them:
+
+| suffix | what it is | fitted from |
+|---|---|---|
+| *(none)* | SBE-processed, **no bottle correction** | — |
+| `_CruiseCorr` | corrected with one regression for the whole cruise | 4-second-averaged sensor data vs **all** the cruise's bottles (n ≈ 1400, fliers omitted) |
+| `_StaCorr` | corrected with a regression fitted **per cast** | 1 m bin-averaged sensor data vs that cast's bottles (n ≈ 20, fliers omitted) |
+
+The providers state that **station-corrected data are the best**, particularly for
+estimated nitrate — which is the basis on which `*_sta_corr` types are the
+canonical ones in this pipeline. That choice was previously undocumented here; it
+follows the source's own recommendation.
+
+Salinity is corrected differently again: offsets are derived from **bottle
+salinities below 350 m** and applied to all depths, separately for the primary and
+secondary sensors.
+
+#### Four caveats that change how a value may be used
+
+::: {.callout-warning title="Read these before drawing a conclusion from a corrected value"}
+1. **Upcast bottles correct the downcast too.** The source says so explicitly, and
+   volunteers the objection: *"This practice may be debated due to internal waves
+   and hysteresis. If you disagree with bottle-correcting downcast sensor data,
+   use the SBE-processed data."* Any down-vs-up comparison — including the
+   `ctd_updown_disagreement` rule below — is therefore comparing two series that
+   share a correction derived from one of them.
+2. **`_StaCorr` is missing by design, not by error.** It requires a 500 m cast with
+   roughly ten or more bottles; shallower stations need several. On winter and
+   spring cruises, lines north of 76.7 may be occupied with **0–12 bottles** and
+   get cruise-corrected values only. A completeness check that treats a null
+   `*_sta_corr` as a defect will be wrong for a whole class of casts.
+3. **Estimated chlorophyll is only computed for 0–200 m.** `EstChl_*` comes from
+   applying the fluorometer regression to the 1 m bin-averaged voltage over that
+   range alone.
+4. **Preliminary data are explicitly non-publication.** The readme is specific
+   about which variables move: *"Temperature and salinities may change very little
+   but oxygen, nitrate and chlorophyll data may change significantly after
+   post-cruise calibrations."* Final data are annotated `FinalQC`.
+:::
+
+#### Grain
+
+The published values are **1 m bin averages**, not raw scans — so `obs_ctd_full`
+is full *published* resolution, and the spike and loop-edit rules operate on
+bin-averaged data. That is why the loop-edit threshold is a 1 m noise floor.
+(Cruise-correction regressions use a 4-second average instead; the two grains are
+not interchangeable.)
+
+#### Documented but unused: three metadata families
+
+Every cruise's `metadata/` folder carries files the pipeline does not read. They
+are listed here because each answers a question this protocol currently has open:
+
+| file | what is in it | what it would settle |
+|---|---|---|
+| `YYMM_span_###-###.csv` | per **cast**, the min and max of every variable, recorded by the processor | a per-cast range check grounded in the instrument rather than in our invented `valid_min`/`valid_max` (question `calcofi_ctd-cast_02`) |
+| `YYMM_DBcoeff_###-###.csv` | per cast: `Salt1Offset`, `Salt1_SD`, the oxygen regression polynomials and their residual SDs | the **uncertainty of each correction**, which is exactly what the core's declared-but-empty `measurement_prec` is for |
+| `YYMM_xmlcoeff_###-###.csv` | per cast, per channel: sensor serial number and calibration date | per-cast instrument provenance, far finer than the decade-scale eras in `measurement_method.csv` |
+
+#### Smaller points
+
+- **Time and position mean different things by direction.** For a downcast they are
+  the cast start; for an upcast they are the moment the **first bottle tripped**.
+- **Voltage channels are relabelled.** SeaSave writes `V0`…`V7`; CalCOFI renames
+  them to `TRANSV`, `FLUORV`, `ISUSV`, `PARV`, `OX1V`, `PHV`, `ALTV`, `RINKOV` so
+  the sensor is identifiable. Unrelabelled originals are kept under
+  `original_asc-hdr-btl/`, and each cast's `.hdr` records the configuration.
+- **Filename grammar**: `YY-YYMMSS_LLLLSSSS_###D`, where line and station are ×10
+  (`0767` = 76.7, `1000` = 100.0) and `D`/`U` is the direction.
+- **The `Comment` column in the spec does not exist in the files.** The format
+  document lists 82 columns ending in `Comment`; the shipped CSVs have 82 columns
+  and no comment field. Nothing is being dropped — the spec is simply ahead of, or
+  behind, the writer.
+
 ### The climatology, and why two properties are excluded
 
 `HarmCoeffBottle` holds a fitted annual harmonic per station × standard depth ×
@@ -225,18 +312,40 @@ tibble::tribble(
 ### The quality-code vocabulary
 
 `measurement_qual` was a verbatim pass-through for years: carried through every
-table, never interpreted, with no vocabulary anywhere in the repo. There is one
-now, recovered from the hydrographic master's own field documentation — but it is
-**incomplete, and the gaps are blockers**.
+table, never interpreted, with no vocabulary anywhere in the repo.
+
+There are now **two**, and conflating them was a real error. The first was
+recovered from the hydrographic master — the **bottle** database. The CTD files
+use a different set, documented all along in the `CTD-CSV-Format.pdf` that ships
+inside every source zip:
+
+| code | CTD meaning |
+|---|---|
+| `0` or blank | **good** — "if no data code is displayed then sensors were operating normally" |
+| `1` | **use the primary sensor** of the dual pair |
+| `2` | **use the secondary sensor** — the primary is failing or the pump is bio-fouled |
+| `8` | data questionable |
+| `9` | **bad or missing** sensor data |
+
+Two consequences. `1` and `2` are **not quality grades at all** — they are
+sensor-selection instructions, so ranking them somewhere between "good" and
+"suspect" is a category error. And `9` means bad *or* missing, which resolves what
+looked like a contradiction: a row flagged `9` that still carries a number is bad
+data, correctly flagged.
+
+`metadata/measurement_qual.csv` therefore carries a `code_set` column
+(`ctd` / `bottle`) and the rule below filters to the CTD set — joining the whole
+file would let a bottle-only code mask an unrecognized CTD one. The **bottle**
+vocabulary remains incomplete, and those gaps are still blockers.
 
 ```{r}
 #| label: qual_vocab
 
 read_csv(here("metadata/measurement_qual.csv"),
          col_types = cols(qual_code = col_character(), .default = col_guess())) |>
-  select(code = qual_code, label, description, documented = is_documented,
-         n_observed) |>
-  arrange(desc(documented), code) |>
+  select(set = code_set, code = qual_code, label, description,
+         documented = is_documented, n_observed) |>
+  arrange(set, code) |>
   datatable(
     caption  = "metadata/measurement_qual.csv — the controlled vocabulary",
     rownames = FALSE,
@@ -245,12 +354,17 @@ read_csv(here("metadata/measurement_qual.csv"),
               color = styleEqual(c(TRUE, FALSE), c("inherit", "#d03b3b")))
 ```
 
-Three questions are open with the providers, two of them blockers: what the
-undocumented single-digit codes mean (`hydro_master_02`), whether a NULL flag means
-"good" or "never assessed" (`hydro_master_05`), and whether `S_qual`'s **253
-distinct values** in the bottle master — clustered at 256–271, which looks like bit
-8 of a bitmask — indicate a bitmask or a corrupted column (`hydro_master_02b`).
-Every other quality column has 3–10 distinct values.
+Questions remain open on the **bottle** side, two of them blockers: what the
+undocumented single-digit codes mean there (`hydro_master_02` — the CTD
+documentation now supplies `0`/`1`/`2`, but whether the bottle master uses them
+the same way is unconfirmed), and whether `S_qual`'s **253 distinct values** —
+clustered at 256–271, which looks like bit 8 of a bitmask — indicate a bitmask or
+a corrupted column (`hydro_master_02b`). Every other quality column has 3–10
+distinct values.
+
+`hydro_master_05` — whether a NULL flag means "good" or "never assessed" — is
+**answered for CTD**: the source states that no code displayed means the sensors
+were operating normally. It remains open for the bottle master.
 
 **Nothing in this protocol acts on a flag.** Acting on one whose semantics are
 unconfirmed would be guessing with released data.

@@ -1,8 +1,29 @@
 -- Quality codes absent from the controlled vocabulary.
--- The vocabulary (metadata/measurement_qual.csv) was recovered from the CalCOFI
--- hydrographic master: 6 = data OK but taken from CTD, 8 = suspect, 9 = missing.
--- A code outside it means either an undocumented convention or corruption, and
--- must not be silently treated as "some flag".
+--
+-- THE VOCABULARY IS DATASET-SCOPED, and getting that wrong was a real error here.
+-- It was first recovered from the CalCOFI hydrographic master (the BOTTLE
+-- database: 6 = data OK but taken from CTD, 8 = suspect, 9 = missing), and the
+-- CTD files use a DIFFERENT set — documented all along in CTD-CSV-Format.pdf,
+-- which ships inside every source zip:
+--
+--   0 or blank  good data ("if no data code is displayed then sensors were
+--               operating normally")
+--   1           USE PRIMARY sensor data      <- a sensor-selection instruction,
+--   2           USE SECONDARY sensor data       NOT a quality grade
+--   8           data questionable
+--   9           bad OR missing sensor data
+--
+-- Two consequences worth stating. Codes 1 and 2 do not rank a value at all — they
+-- say which half of a dual-sensor pair to believe, so treating them as "mildly
+-- good" is a category error. And 9 means bad *or* missing, so a row flagged 9 that
+-- carries a number is bad data rather than the contradiction it first looks like.
+--
+-- `measurement_qual.csv` therefore carries a `code_set` column, and this rule
+-- filters to the CTD set. Joining the whole file would let a bottle-only code
+-- mask a genuinely unrecognized CTD one.
+--
+-- A code outside the set means either an undocumented convention or corruption,
+-- and must not be silently treated as "some flag".
 --
 -- A PASS HERE IS ALMOST EMPTY OF MEANING, and that is the finding. Only 8 of the
 -- 27 published measurement types carry any flag at all (isus_v, ph, par,
@@ -23,7 +44,8 @@ SELECT
     || o.measurement_type                                      AS detail,
   o.cruise_key, o.measurement_type, o.depth_min_m, o.measurement_qual
 FROM obs o
-LEFT JOIN measurement_qual q ON o.measurement_qual = q.qual_code
+LEFT JOIN (SELECT * FROM measurement_qual WHERE code_set = 'ctd') q
+       ON o.measurement_qual = q.qual_code
 WHERE o.dataset_key = 'calcofi_ctd-cast'
   AND o.measurement_qual IS NOT NULL
   AND q.qual_code IS NULL
