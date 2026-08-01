@@ -18,6 +18,15 @@
 -- Measured reversals per cruise: 2 (2023-11-33P4), 10 (1998-07-32NM),
 -- 19 (2013-01-3322); largest single reversal 59 m.
 --
+-- min_reversal_m = 1 is a NOISE FLOOR, not a tolerance for real heave. The source
+-- is ~1 m bin-averaged, so successive scans differ by about a metre anyway and a
+-- threshold below that would report the binning itself as a loop edit. Anything
+-- surviving 1 m is a reversal larger than the data's own resolution.
+--
+-- WHAT IT CANNOT SEE: heave smaller than the bin size, and any loop that Seasoft
+-- already removed — which is most of them. A low count is therefore the expected
+-- result and not evidence that the package never moved.
+--
 -- params: {{cruise_key}} {{min_reversal_m}}
 WITH x AS (
   SELECT

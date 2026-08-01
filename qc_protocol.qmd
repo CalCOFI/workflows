@@ -1,0 +1,407 @@
+---
+title: "CalCOFI CTD QA/QC Protocol"
+subtitle: "What every check does, where its threshold came from, and what it cannot see"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    number-sections: false
+    code-fold: true
+    code-tools: true
+calcofi:
+  target_name: qc_protocol
+  workflow_type: reference
+  # every pipeline notebook must declare its output: build_targets_list() uses it
+  # as the target's file, and a missing key fails the whole run at resolution time
+  output: _output/qc_protocol.html
+  workflow_url: https://calcofi.io/workflows/qc_protocol.html
+editor_options:
+  chunk_output_type: console
+---
+
+## What this document is
+
+The reference for CalCOFI CTD quality control: every check that runs, stated
+plainly enough that a data manager can agree or disagree with it without reading
+SQL, and specific enough that a reviewer looking at a flagged cast knows what the
+flag means.
+
+**It is generated from the rules themselves.** The per-rule sections below are
+assembled at render time from `metadata/qc_rules/` — `rules.csv` for the index,
+`sql/*.sql` for the check and for the reasoning its author recorded in the file's
+header comment. Nothing here is a separate description that could drift from the
+code: change a threshold and this page changes with it, and a rule that runs
+without a rationale [fails this document's build](#coverage).
+
+```{r}
+#| label: setup
+
+devtools::load_all(here::here("../calcofi4db"))
+librarian::shelf(
+  calcofi4db, dplyr, DT, glue, here, knitr, purrr, readr, stringr,
+  quiet = T)
+
+source(here("libs/build_qc_protocol.R"))
+
+dir_rules <- here("metadata/qc_rules")
+rules_all <- qc_read_rules(dir_rules, active_only = FALSE)
+rules_act <- filter(rules_all, active)
+
+say <- function(...) cat(..., "\n", sep = "")
+say(glue("rules: {nrow(rules_all)} registered, {nrow(rules_act)} active, ",
+         "{nrow(rules_all) - nrow(rules_act)} parked"))
+say(glue("SQL files: {length(unique(na.omit(rules_all$sql_file)))}"))
+```
+
+### How to read a rule
+
+Each rule declares four things that decide how a result should be read.
+
+| field | what it changes |
+|---|---|
+| **severity** | `error` means the pipeline is broken and the finding is a defect in *our* processing. `warning` means the data looks wrong and a human must decide. No rule drops or rewrites a value. |
+| **target** | `sample` (one row per cast), `obs` (the thinned, published profile) or `obs_ctd_full` (the full-resolution scans, supplemental). A rule on `obs` cannot see what thinning removed. |
+| **scope** | `all` runs over the whole dataset. `cruise` rules read the 212M-row `obs_ctd_full` and are run one cruise at a time — they are a *sample*, never a sweep, and the app is where the remaining cruises get covered. |
+| **requires** | measurement types that must be present. If one is absent the rule reports **`skip`**, never `pass`. |
+
+That last row is the single most important convention here.
+
+::: {.callout-important title="`skip` is not `pass`, and this is not hypothetical"}
+A rule whose input is missing returns zero rows — which is indistinguishable from
+"the data is clean" unless something says otherwise. The three bottle-vs-sensor
+calibration rules did exactly that against release `v2026.07.30`, which predates
+the change making the bottle reference types canonical: they reported no findings
+while comparing nothing at all.
+
+The engine therefore treats an unmet precondition as `skip` with a stated reason,
+and the same principle governs reference data — `calcofi4db::qc_stage_reference()`
+leaves a missing input as a **missing table** so its rules error visibly, rather
+than creating an empty one whose rules would quietly pass.
+:::
+
+Results carry one of five statuses:
+
+| status | meaning |
+|---|---|
+| `pass` | ran, found nothing |
+| `flag` | ran, found something a human should look at (`severity = warning`) |
+| `FAIL` | ran, found something that should not be possible (`severity = error`) |
+| `skip` | **did not run** — a precondition was unmet |
+| `ERROR` | could not run (missing reference table, bad SQL) |
+
+## Where these rules came from
+
+Two sources, deliberately combined: the checks CalCOFI has been running for
+decades, and the checks that only make sense on CTD data.
+
+### Mining the CalCOFI hydrographic master
+
+The program's working database is an MS Access file carrying the bottle record
+from 1949, and — more valuably — **155 saved queries**, a self-documenting field
+dictionary, an instrument/accuracy registry, a 280-row dated change log, and a
+fitted seasonal climatology. Three decades of institutional QA logic lived there
+and nowhere else.
+
+It was extracted reproducibly on macOS/Linux (`libs/extract_accdb.R`,
+`scripts/extract_accdb.sh`) with **two engines on purpose**: `mdbtools` for bulk
+table export, and Jackcess for the saved-query SQL, which is authoritative.
+`mdb-queries` reconstructs the stored parse tree only partially — it silently drops
+JOIN clauses, GROUP BY, HAVING and aliases. The output looks plausible and is
+wrong: a LEFT JOIN find-unmatched query degrades into a cross join, which inverts
+the meaning of the QA check it encodes. Both engines are run and diffed so a
+regression in either surfaces instead of silently corrupting a ported rule.
+
+Of the 155 queries, only one family is standing QA: the `TQ -` / `TR -` / `TV -`
+tests and the `Anomalies` family. The rest are corrections, materializations and
+derived products.
+
+```{r}
+#| label: triage
+
+read_csv(here("metadata/calcofi/hydro-master/query_triage.csv"),
+         show_col_types = FALSE) |>
+  count(category, sort = TRUE) |>
+  mutate(`what it is` = recode(category,
+    validate           = "QA checks — the family ported here",
+    `derived-product`  = "computed products (MLD, nutricline, anomalies)",
+    `correction-history` = "one-off UPDATE/DELETE repairs, dated and initialled",
+    materialization    = "make-table steps feeding other queries",
+    `export-or-info`   = "extracts for outside consumers",
+    unclassified       = "not confidently categorized")) |>
+  kable(caption = "The 155 Access saved queries, triaged")
+```
+
+**A faithful port is not always the right port.** Two of the Access checks could
+not be carried over as written, and both are documented on the rules that replaced
+them: `TQ - BottomDepth_Vs_AvgBottomDepth` compares the ship's echosounder to the
+station average, but CTD casts carry no reported bottom depth at all
+(`bottom_depth` exists in `sample_measurement` for 33,363 **bottle** casts and for
+**0** of 14,336 CTD casts) — so the ported form tests position plausibility against
+bathymetry instead, which is a different question. And
+`TQ - StationNameChecker` compares `Rpt_Line > "76.6"` as a **string**, so line 100
+sorts below line 76.6 and has been silently excluded from that check for twenty
+years; whether to port the bug or the intent is question `hydro_master_09`.
+
+### The climatology, and why two properties are excluded
+
+`HarmCoeffBottle` holds a fitted annual harmonic per station × standard depth ×
+property — mean, amplitude, frequency, phase, and a residual standard deviation.
+That turns "is this value plausible" from a fixed global range into a *local,
+seasonal* question, which nothing in the pipeline could ask before.
+
+The providers have not confirmed the fitting procedure (question
+`hydro_master_12`), so the reconstruction form was **determined empirically**:
+candidate forms were scored against the 200,640 bottle observations the
+coefficients were derived from.
+
+| form | RMSE | vs mean-only |
+|---|---|---|
+| `Mean` (null) | 1.269 | — |
+| **`Mean + Ampl·sin(Freq·(doy − Phase))`** | **0.949** | **+25.2%** |
+| `Mean + Ampl·cos(Freq·(doy − Phase))` | 2.113 | −66.4% |
+| `Mean + Ampl·cos(Freq·doy − Phase_deg)` | 1.800 | −41.8% |
+| `Mean + Ampl·sin(2π(doy − Phase)/365)` | 1.474 | −16.1% |
+
+Every cosine variant is *worse than using the mean alone*. Two independent checks
+agree with the winner: physically, the seasonal signal is strongest at the surface
+(42% RMSE reduction at 0 m) and decays monotonically to ~5% by 150–500 m, which is
+what seasonal heating does and what a wrong form would not show; statistically,
+residuals divided by `StDev` are near-standard-normal (mean −0.06, sd 1.14),
+confirming `StDev` is the residual scale a z-score needs.
+
+Each property was then scored the same way, and **only those that passed are used**:
+
+| property | RMSE gain | sd(z) | verdict |
+|---|---|---|---|
+| Temp | 25.2% | 1.14 | use |
+| SiO3 | 11.6% | 1.12 | use |
+| NO3 | 10.3% | 1.40 | use |
+| PO4 | 9.7% | 1.26 | use |
+| O2 | 9.3% | 1.29 | use |
+| Sig | 2.4% | 4.80 | **exclude** |
+| Sal | 0.5% | 6.73 | **exclude** |
+| NO2 | 5.0% | 5.4e12 | **exclude** |
+| Chla | 4.3% | 1.2e11 | **exclude** |
+
+Salinity and sigma-theta are excluded on evidence, not taste. A seasonal harmonic
+explains almost none of their variance here — Southern California salinity is
+advection-driven, not seasonally heated — and the tabulated `StDev` is 5–7× smaller
+than the actual residual, so it is measuring something other than residual spread.
+A z-score built on it would be wildly over-dispersed and would flag thousands of
+ordinary values. NO2 and Chla fail differently: a handful of station × depth cells
+carry a near-zero `StDev`, which makes z explode (one nitrite cell produced
+z = 3.5e12), so they are left out rather than patched.
+
+### Reference data the rules join against
+
+None of this is part of the release. It is the QC engine's *input*, staged onto a
+connection by `calcofi4db::qc_stage_reference()`.
+
+```{r}
+#| label: reference_inputs
+
+tibble::tribble(
+  ~table,                  ~source,                                        ~role,
+  "measurement_type",      "metadata/measurement_type.csv",                "valid_min/valid_max per type — the registry, not a release, because it moves ahead of releases",
+  "measurement_qual",      "metadata/measurement_qual.csv",                "the quality-code vocabulary, recovered from the Access field documentation",
+  "climatology_harmonic",  "hydro-master/reference/climatology_harmonic.csv", "fitted seasonal expectation per station x depth x property",
+  "station",               "hydro-master/reference/station.csv",           "the 75 current standard stations and their average bottom depth",
+  "standard_depth",        "hydro-master/reference/standard_depth.csv",    "the standard depth grid",
+  "sample_seafloor",       "GEBCO 2025 crop (apps/ctd-viz)",               "seafloor depth at each cast position — the only bottom-depth reference CTD casts have") |>
+  kable(caption = "QC reference inputs, none of which ship in the release")
+```
+
+### The quality-code vocabulary
+
+`measurement_qual` was a verbatim pass-through for years: carried through every
+table, never interpreted, with no vocabulary anywhere in the repo. There is one
+now, recovered from the hydrographic master's own field documentation — but it is
+**incomplete, and the gaps are blockers**.
+
+```{r}
+#| label: qual_vocab
+
+read_csv(here("metadata/measurement_qual.csv"),
+         col_types = cols(qual_code = col_character(), .default = col_guess())) |>
+  select(code = qual_code, label, description, documented = is_documented,
+         n_observed) |>
+  arrange(desc(documented), code) |>
+  datatable(
+    caption  = "metadata/measurement_qual.csv — the controlled vocabulary",
+    rownames = FALSE,
+    options  = list(pageLength = 12, scrollX = TRUE, dom = "tip")) |>
+  formatStyle("documented",
+              color = styleEqual(c(TRUE, FALSE), c("inherit", "#d03b3b")))
+```
+
+Three questions are open with the providers, two of them blockers: what the
+undocumented single-digit codes mean (`hydro_master_02`), whether a NULL flag means
+"good" or "never assessed" (`hydro_master_05`), and whether `S_qual`'s **253
+distinct values** in the bottle master — clustered at 256–271, which looks like bit
+8 of a bitmask — indicate a bitmask or a corrupted column (`hydro_master_02b`).
+Every other quality column has 3–10 distinct values.
+
+**Nothing in this protocol acts on a flag.** Acting on one whose semantics are
+unconfirmed would be guessing with released data.
+
+```{r}
+#| label: rules_index
+
+rules_all |>
+  transmute(rule_key, active, severity, type = rule_type, target,
+            scope = coalesce(scope, "all"), description) |>
+  arrange(desc(active), type, rule_key) |>
+  datatable(
+    caption  = "The registry: metadata/qc_rules/rules.csv",
+    rownames = FALSE,
+    options  = list(pageLength = 20, scrollX = TRUE, dom = "tip")) |>
+  formatStyle("active",
+              color = styleEqual(c(TRUE, FALSE), c("inherit", "#6e7781")))
+```
+
+# The rules {#the-rules}
+
+Grouped by what kind of question each asks. Rules that share a query — the three
+bottle-vs-sensor calibration checks, the two spike checks — show the SQL once, under
+the first of them.
+
+```{r}
+#| label: rules_active
+#| output: asis
+
+md_active <- qc_protocol_markdown(
+  arrange(rules_act, rule_type, rule_key), group_by = "rule_type")
+cat(md_active)
+```
+
+# Parked rules
+
+Registered, documented, and deliberately **not running**. They are kept in the
+registry rather than deleted so that the reason survives — a rule that quietly
+disappears looks like a rule that was never considered.
+
+```{r}
+#| label: rules_parked
+#| output: asis
+
+rules_off <- filter(rules_all, !active)
+md_parked <- if (nrow(rules_off))
+  qc_protocol_markdown(rules_off, group_by = NULL) else
+    "*No parked rules.*\n"
+cat(md_parked)
+```
+
+# Standards and prior art
+
+This protocol is deliberately small and CalCOFI-specific. It is not a
+reimplementation of the community standards, and where it diverges from them that
+is worth stating.
+
+### QARTOD
+
+The IOOS *Manual for Real-Time Quality Control of In-situ Temperature and Salinity
+Observations* (and its dissolved-oxygen and ocean-optics companions) is the
+community reference for profile QC, and its `1` / `2` / `3` / `4` / `9` flags
+(pass / not evaluated / suspect / fail / missing) are what an ERDDAP consumer
+expects to find. Several tests here have direct QARTOD counterparts — gross range
+(QARTOD test 6), spike (9), rate of change (10), flat line (11), density inversion
+(15) — though the thresholds are ours and derived from this dataset rather than
+adopted from the manual.
+
+CalCOFI CTD is published to `erddap.calcofi.io`, where the native codes currently
+pass through uninterpreted, and one of them (`6` = "data OK but taken from CTD
+sensor") is meaningless for a CTD dataset. **Emitting QARTOD flags alongside the
+native codes is question `calcofi_ctd-cast_11`**, and is the natural home for the
+results of these rules once the flag semantics above are settled.
+
+### `oce` — Dan Kelley
+
+The reference R package for oceanographic data, and the closest prior art for the
+profile rules here: `read.ctd()`, `ctdTrim()` (removes the soak and the upcast),
+`despike()`, and `ctdDecimate()` (bins a profile to standard depths). Anyone
+implementing these checks should read the *oce* CTD vignette and
+*Analysis of Oceanographic Data* alongside this document.
+
+Two deliberate differences. `ctdTrim()` discards the upcast; we keep it, in
+`obs_ctd_full`, precisely so the down/up comparison is available as a check — the
+disagreement is signal about sensor lag and fouling, not noise to be trimmed.
+And `ctdDecimate()` resamples onto a regular grid by interpolation, whereas
+`ctd_thin` *selects real scans* and never interpolates, so a thinned value is
+always a measurement that was actually taken.
+
+### `castr` — Jean-Olivier Irisson
+
+Cast-oriented profile utilities: smoothing, despiking, and detection of the mixed
+layer depth, deep chlorophyll maximum and thermocline. Relevant twice over — as a
+comparison for the despiking approach, and because the Access master's `MLD_Sigma`
+and `NutClineDepth` tables are exactly the derived products `castr` computes. Those
+two tables are committed under
+`metadata/calcofi/hydro-master/reference/` unused, so that any reimplementation can
+be validated against the Access-era numbers rather than trusted.
+
+::: {.callout-warning title="The CRAN package named `CTD` is not oceanographic"}
+`CTD` on CRAN is "Connecting The Dots" — a weighted-graph pattern-discovery method
+for metabolomics. It has nothing to do with conductivity-temperature-depth
+profiles. It is an easy citation to make by name-matching and a hard one to notice
+afterwards, so: do not cite it here.
+:::
+
+# What is not checked
+
+Stated so that a clean run is not over-read.
+
+- **The headline variables carry no quality flags at all.** Source flags attach to
+  the component sensors (`Temp1Q`, `Salt1Q`, `Ox1Q`, `Ox2Q`); the canonical types
+  are the *averages* of them, so the flag is lost in the mean. Only 8 of 27
+  published types carry any flag, over 0.05% of rows. How a sensor flag should
+  qualify an average of two is question `calcofi_ctd-cast_09` — a blocker.
+- **Range coverage is partial.** 18 of the 27 published types have a declared
+  `valid_min`/`valid_max`; the rest — mostly raw voltages and derived quantities
+  with no agreed bound — are never range-checked.
+- **The profile rules are sampled, not swept.** Spike, loop-edit and up/down
+  disagreement run one cruise at a time against `obs_ctd_full`; a whole-archive
+  sweep is the `ctd-qaqc` app's job, not this document's.
+- **Dual-sensor disagreement is parked.** The thresholds per property are not
+  agreed, and a rule with a guessed threshold is worse than a rule that says it is
+  not running.
+- **No rule drops, rewrites or interpolates a value.** Every result is a report.
+  Two blocker questions remain open with the data providers, and acting on them
+  before they are answered would be guessing with released data.
+
+# Coverage {#coverage}
+
+The build fails if a rule that runs is not described here, or carries no rationale
+in its SQL header. A protocol that silently omits a check is worse than no
+protocol, because it reads as completeness.
+
+```{r}
+#| label: coverage_check
+
+qc_protocol_check(rules_all, paste(md_active, md_parked))
+
+say(glue("active rules documented : {nrow(rules_act)}/{nrow(rules_act)}"))
+say(glue("parked rules documented : {nrow(rules_off)}/{nrow(rules_off)}"))
+say(glue("every active rule carries a rationale in its SQL header: yes"))
+```
+
+## Where results appear
+
+- **[`ctd-qaqc`](https://github.com/CalCOFI/apps/tree/main/ctd-qaqc)** — runs this
+  registry interactively against a release, one rule or one cruise at a time, and
+  records review verdicts.
+- **[`ingest_calcofi_ctd-cast.qmd`](https://calcofi.io/workflows/ingest_calcofi_ctd-cast.html#findings)**
+  — runs the same registry over the parquet each ingest writes, so the notebook
+  reports the condition of the data it just published.
+
+Both call `calcofi4db::qc_run_all()`. There is one engine and one registry: a
+number in the app and a number in the notebook cannot disagree.
+
+## Session Info
+
+```{r}
+#| label: session_info
+#| code-fold: true
+
+sessioninfo::session_info()
+```

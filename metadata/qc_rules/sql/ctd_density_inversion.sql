@@ -5,6 +5,21 @@
 -- A CTD-specific test with no counterpart in the bottle-era Access master, whose
 -- checks are all range- and linkage-based at bottle grain.
 --
+-- THE 0.05 kg/m3 THRESHOLD IS OURS, not a CalCOFI or QARTOD standard, and it is
+-- set from the observed distribution rather than from theory. Across the thinned
+-- profiles the overwhelming majority of successive sigma-theta differences are
+-- positive; of the negative ones, almost all are smaller than 0.01 kg/m3, which is
+-- the scale of rounding and of the sensor's own resolution on a near-neutral
+-- layer. 0.05 sits an order of magnitude above that floor, so it selects
+-- inversions that no amount of rounding explains — 1,072 of 495,537 sigma-theta
+-- observations, ~0.2%.
+--
+-- WHAT IT CANNOT SEE: this runs on ctd_thin, which retains roughly one sample per
+-- 10 m. A genuine single-scan density inversion between retained depths is
+-- invisible here; the profile rules on obs_ctd_full are where that would surface.
+-- Nor does a pass mean the water column is stable — only that it is monotonic at
+-- the depths retained.
+--
 -- params: {{threshold}}
 WITH p AS (
   SELECT
