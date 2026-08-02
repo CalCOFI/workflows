@@ -192,10 +192,32 @@ Two things worth carrying forward:
   falls back to `kable()` when `knitr::is_html_output()` is FALSE; the quality-code
   vocabulary and the rule registry would otherwise be blank space in Word.
 
-**Phase 3 — QC additions (D3).**
-Per-cast residual/offset rule from `btl_*` vs sensor; profile-span panel in the
-app; decide whether to ingest span/DBcoeff/xmlcoeff (a new `ingest` step or a
-`libs/` builder).
+**Phase 3 — QC additions (D3).** ✅ **DONE 2026-08-02.** Registry is now 22 rules,
+19 active.
+
+- **`ctd_cast_correction_residual_{oxygen,salinity}`** — per-cast mean
+  bottle-minus-sensor residual. The threshold is *not* a percentile pick: the
+  `_StaCorr` fit zeroes this quantity by construction, and **83.1% of 5,330 casts
+  sit within 1e-4 mL/L of zero**, so 0.1 mL/L lands in the gap above that spike
+  (flags 229 casts). Salinity is checked **below 350 m only**, where the source
+  derives its offset — p50 0.0021, p95 0.0148, so 0.02 flags 137. Checked the
+  MEDIAN as an alternative and it destroys the signal (0.6% within 1e-4 vs
+  83.1%), which confirms the fit zeroes the mean. `residual_sd` is reported as
+  the `measurement_prec` candidate and **acted on nowhere** until DBcoeff lands.
+- **`ctd_value_outside_type_depth_range`** — registry-driven, names no type.
+  Reports **zero**, and that is the point: `est_chlorophyll_a_*` maxes out at
+  exactly 200.0 m with 0 values below, so the documented restriction is honoured
+  precisely and this is a standing regression guard. `est_nitrate_*` is 60% below
+  200 m to 3,498 m and correctly declares no range.
+- **Cast-span panel** in `ctd-qaqc`, labelled review context, not a check —
+  recomputing a span from the values we published cannot disagree with itself.
+- **D3 decision, recorded on question Q15 as `proposed`:** ingest **DBcoeff**
+  first (135 files, **1 distinct header**, and it carries the residual SDs),
+  **span** second (70 headers → needs a long melt; unblocks the parked
+  `ctd_value_outside_cast_span`, the only non-circular range check), **xmlcoeff**
+  not yet (40 headers, three degenerate files, no rule needs it). Via a `libs/`
+  builder called from the CTD ingest, **not** a new `ingest_*.qmd` — these are
+  per-cruise sidecars of `calcofi_ctd-cast`, not a dataset.
 
 **Phase 4 — full rebuild + release.** ⚠️ multi-hour, outward-facing.
 `CTD_FORCE_REBUILD=TRUE` + `targets::tar_make()` for every notebook, then

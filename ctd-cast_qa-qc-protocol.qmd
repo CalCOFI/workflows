@@ -355,6 +355,22 @@ are listed here because each answers a question this protocol currently has open
 | `YYMM_DBcoeff_###-###.csv` | per cast: `Salt1Offset`, `Salt1_SD`, the oxygen regression polynomials and their residual SDs | the **uncertainty of each correction**, which is exactly what the core's declared-but-empty `measurement_prec` is for |
 | `YYMM_xmlcoeff_###-###.csv` | per cast, per channel: sensor serial number and calibration date | per-cast instrument provenance, far finer than the decade-scale eras in `measurement_method.csv` |
 
+All three were surveyed across the 85 cruises in hand on 2026-08-02, and they are
+**not equally ready to depend on** — which is the substance of the recommendation
+now recorded on question `calcofi_ctd-cast_15`:
+
+| file | files | rows | distinct headers | verdict |
+|---|---|---|---|---|
+| `DBcoeff` | 135 | 15,703 | **1** (43 columns, no variation at all) | **ingest first** — stable, and it carries the residual SDs `measurement_prec` wants |
+| `span` | 136 | 16,254 | 70 (61–79 columns; the set follows each cruise's sensor suite) | **ingest second**, as a long `(cast, variable, min, max)` melt |
+| `xmlcoeff` | 136 | 16,394 | 40 (1–198 columns; three files have a single column) | **not yet** — no rule needs it and the shape costs the most to make reliable |
+
+They would land through a `libs/` builder called from the CTD ingest, **not** a
+new `ingest_*.qmd`: these are per-cruise sidecars of `calcofi_ctd-cast`, not a
+separate dataset, and a new notebook would mint a `dataset_key` and a release
+shard for something that is not one. The per-cast scalars belong in
+`sample_measurement`, the event-level grain that already holds cast conditions.
+
 #### Smaller points
 
 - **Time and position mean different things by direction.** For a downcast they are
