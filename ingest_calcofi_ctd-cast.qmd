@@ -396,10 +396,19 @@ prime_zips_from_gcs <- function(src, dest_dir) {
   # skip if disabled or rclone unavailable
   if (src == "" || Sys.which("rclone") == "")
     return(invisible(0L))
-  # only act if the source actually exposes zips (else fall back to scraping)
+  # system2() does NOT quote its args — it pastes them into a shell command — and
+  # dest_dir is under "~/My Drive/…", so an unquoted path split on the space and
+  # rclone saw three positional arguments instead of two:
+  #   Command copy needs 2 arguments maximum: you provided 3 non flag arguments:
+  #   ["gcs-calcofi:…/download" "/Users/bbest/My" "Drive/projects/…/download"]
+  # It then failed SILENTLY, because the exit status was never checked: the run
+  # printed "Priming N zip(s)", primed nothing, and fell through to scraping
+  # calcofi.org. Harmless where the zips are already local; a slow surprise on a
+  # fresh machine.
   n_src <- tryCatch(
     length(system2(
-      "rclone", c("lsf", src, "--include", "*.zip", "--max-depth", "1"),
+      "rclone", c("lsf", shQuote(src), "--include", shQuote("*.zip"),
+                  "--max-depth", "1"),
       stdout = TRUE, stderr = FALSE)),
     error = function(e) 0L)
   if (n_src == 0) {
@@ -407,10 +416,15 @@ prime_zips_from_gcs <- function(src, dest_dir) {
     return(invisible(0L))
   }
   say(glue("Priming {n_src} zip(s) from {src} → {dest_dir}"))
-  system2("rclone", c(
-    "copy", src, dest_dir,
-    "--include", "*.zip", "--max-depth", "1",
+  status <- system2("rclone", c(
+    "copy", shQuote(src), shQuote(dest_dir),
+    "--include", shQuote("*.zip"), "--max-depth", "1",
     "--transfers", "8", "--checkers", "16"))
+  if (!identical(status, 0L)) {
+    say(glue("GCS prime FAILED (rclone exit {status}) — falling back to ",
+             "scraping calcofi.org. This is slower but not fatal."))
+    return(invisible(0L))
+  }
   invisible(n_src)
 }
 
