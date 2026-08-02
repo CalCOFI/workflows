@@ -2,6 +2,16 @@ darwincore
 larvae
 parquet
 wrangling
+# `wrangling` above catches data/wrangling/*.duckdb, but ingest_spatial.qmd used
+# to drop a 27 MB scratch DB at THIS level, where that rule cannot see it. The
+# step is gone (nothing ever read the file — the release builds `_spatial` from
+# the parquet shard); this keeps a stale copy, or a re-added one, out of git.
+calcofi_wrangling.duckdb
+# PMTiles are a BUILD ARTIFACT here. ingest_spatial.qmd uploads them to
+# gs://calcofi-files-public/_spatial/, which is where db-viz-hex reads them from
+# — nothing resolves them out of a clone. 34 MB across 17 files, every one
+# rewritten in full on each run.
+pmtiles/
 # generated download cache and erddap dataset outputs (synced via rclone, not git)
 cache
 erddap

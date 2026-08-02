@@ -11,11 +11,21 @@ editor_options:
 
 ## Overview
 
-Process spatial boundary datasets for:
+Process spatial boundary datasets into **two outputs, both uploaded to GCS**:
 
-1. **Map overlay** — PMTiles served via `file.calcofi.io/_spatial/`
-2. **Spatial queries** — `_spatial` + `_spatial_attr` tables in CalCOFI DuckDB
-3. **Future summarization** — aggregate CalCOFI data into boundary features
+1. **PMTiles** for map overlay — one per dataset group, served from
+   `gs://calcofi-files-public/_spatial/` (which is where `db-viz-hex` reads
+   them; the local `data/pmtiles/` copy is a build artifact, not a channel).
+2. **`_spatial` + `_spatial_attr` parquet** for spatial queries — the ingest
+   shard `release_database.qmd` picks up like every other, from
+   `data/parquet/spatial/`.
+
+This notebook used to end by loading that same parquet into a
+`data/calcofi_wrangling.duckdb` at the repo root. Nothing ever read it: the
+release builds `_spatial` from the parquet shard directly, and a repo-wide grep
+found the file referenced by this notebook alone. It was a 27 MB binary,
+rewritten in full on every run and tracked in git, left over from the pre-shard
+pipeline. Removed 2026-08-02.
 
 **Source**: `~/My Drive/projects/calcofi/data-public/_spatial/`
 ([US Maritime Limits](https://nauticalcharts.noaa.gov/data/us-maritime-limits-and-boundaries.html),
@@ -32,9 +42,8 @@ graph LR
   B --> C["clean_names + id/layer/name"]
   C --> D["_spatial + _spatial_attr Parquet"]
   C --> E["GeoJSON → tippecanoe → PMTiles"]
-  D --> F[DuckDB Tables]
-  E --> G[GCS Upload]
-  G --> H["file.calcofi.io/_spatial/"]
+  D --> F["gs://calcofi-db/ingest/spatial/<br/>→ release_database.qmd"]
+  E --> G["gs://calcofi-files-public/_spatial/<br/>→ db-viz-hex"]
 ```
 
 ### Pre-processing
@@ -606,55 +615,6 @@ sync_to_gcs(
   gcs_prefix = gcs_ingest_prefix,
   bucket = gcs_ingest_bucket
 )
-```
-
-## Load into DuckDB
-
-```{r}
-#| label: load-duckdb
-
-db_path <- here("data/calcofi_wrangling.duckdb")
-con <- dbConnect(duckdb(dbdir = db_path))
-dbExecute(con, "INSTALL spatial; LOAD spatial;")
-
-pq_spatial <- path(dir_parquet, "_spatial.parquet")
-pq_spatial_attr <- path(dir_parquet, "_spatial_attr.parquet")
-
-# load _spatial with EPSG:4326
-dbExecute(
-  con,
-  glue(
-    "CREATE OR REPLACE TABLE _spatial AS
-   SELECT id, layer, name,
-          ST_GeomFromWKB(ST_AsWKB(geom)) AS geom
-   FROM read_parquet('{pq_spatial}')"
-  )
-)
-
-n_spatial <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM _spatial")$n
-message(glue("_spatial: {n_spatial} rows"))
-
-# load _spatial_attr (no geometry)
-dbExecute(
-  con,
-  glue(
-    "CREATE OR REPLACE TABLE _spatial_attr AS
-   SELECT * FROM read_parquet('{pq_spatial_attr}')"
-  )
-)
-
-n_attr <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM _spatial_attr")$n
-message(glue("_spatial_attr: {n_attr} rows"))
-
-# drop old spatial_* tables if they exist
-old_tbls <- dbListTables(con)
-old_spatial <- old_tbls[grepl("^spatial_", old_tbls)]
-for (tbl in old_spatial) {
-  dbExecute(con, glue("DROP TABLE IF EXISTS {tbl}"))
-  message(glue("Dropped old table: {tbl}"))
-}
-
-dbDisconnect(con, shutdown = TRUE)
 ```
 
 ## Write manifest
