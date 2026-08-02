@@ -1,5 +1,10 @@
 ## TODO
-- [ ] for pic, ask Ed about cod end and sample type (ethanol or alcohol) missing fields for matching
+- [ ] for sio_pic-zooplankton, ask Ed about cod end and sample type (ethanol or alcohol) missing fields for matching
+- [ ] db-schema cleanup:
+  - [ ] mv _spatial -> spatial, _spatial_attr -> spatial_attribute; link via id -> spatial_id
+  - [ ] lookup <- region | ship | taxon_group
+- [ ] db-viz-hex: ALL data queryable?
+- [ ] db-viz-hex: spatial data summaries?
 - [ ] check GDrive and GCS sync on server, per [rclone](https://github.com/CalCOFI/server/tree/main/rclone)
 - [ ] Drop vestigial `calcofi4db::get_working_ducklake()`
   Admin "Working DuckLake" (calcofi4db::get_working_ducklake()) — despite the name, it's a
@@ -30,6 +35,201 @@ Per previous Claude session:
 - I don't understand your comment:
   > Fix all Phase 4 is blocked: tar_make() fails for every target because of target_name: ingest_sio_sio_pic-zooplankton (doubled sio_, plus a hyphen — not a valid R symbol). That needs fixing before any full rebuild.
   The notebook was renamed to `ingest_sio_pic-zooplankton.qmd` with target_name `ingest_sio_pic_zooplankton`.
+
+----
+
+Phase 1 is complete. Everything is uncommitted across three repos.
+
+First, your correction stands
+
+The plan's Phase 4 blocker was wrong. ingest_sio_pic-zooplankton.qmd:4 reads target_name: ingest_sio_pic_zooplankton, and tar_manifest() builds all 23 targets clean. I struck it from the plan and noted the re-verification.
+
+What shipped (calcofi4db 3.4.0, 528 tests pass)
+
+D1 — data_stage on core sample. append_sample() now takes 15 or 16 columns; the 16th is data_stage, a 15-column arm gets NULL. A 14- or 17-column arm fails with a named error instead of DuckDB's "N columns but M names were given". .ensure_sample_schema() also ALTERs an existing table, since each ingest's wrangling DB survives across runs. Release assembly needed nothing — assemble_core_table() unions BY NAME. ingest_calcofi_ctd-cast.qmd supplies final/preliminary and asserts every row carries one; the callout that said the flag dies at the notebook now says the opposite.
+
+D4 — depth range + derivation. measurement_type.csv gains valid_depth_min_m / valid_depth_max_m / derivation; est_chlorophyll_a_* gets 0/200, and 18 CTD types get grounded derivation text (the _CruiseCorr vs _StaCorr scheme, salinity's below-350 m offsets). merge_metadata_json() carries all five into the release sidecar, omitting empty cells — an emitted "valid_max": null reads as "no upper bound", an assertion the registry never made. Note valid_min/valid_max were added after v2026.07.30 was frozen, so none of these have shipped yet.
+
+D5 — one question registry. read_questions() + questions_datatable() + question_statuses()/question_priorities(). All 136 questions across 17 CSVs migrated: label first, proposed_answer added, resolved→answered, medium→normal. All 16 notebooks now make one call — ingest_calcofi_dic.qmd had a 5-question CSV and no section at all, so it gained both. questions_email.qmd sends open and proposed (marked [PROPOSED], with the answer inline) and now pulls PI names from the ingest YAML rather than the deprecated dataset.csv. Propagated to CLAUDE.md, four skills and the template.
+
+D2 — settled from the data, not left dangling. Read all 245 *CTDBTL*.csv (85 cruises, 1998-02→2025-04) against the one CTD-CSV-Format.pdf version in all 84 copies. It is not a spec off-by-one: the lists agree positionally through field 74 (OxB), then the files insert undocumented OxBuM at 75, shifting everything after by one, so file-82 = SIL and the spec's Comment has no counterpart. Both total 82, which is why a column count never caught it. Recorded in the protocol, filed as calcofi_ctd-cast_18 (proposed, low). One outlier surfaced: 20-1804SH_…_UResid.csv has 84 columns adding per-sensor bottle-minus-CTD O₂ residuals — it sits outside db_csvs so it isn't ingested, but it's exactly the residual Q15/measurement_prec wants.
+
+Doc fix. design_env-bio-consolidation.md: obs_freq→obs_attribute throughout, plus taxon_id→taxon_key, and the sub-occurrence grain now describes behavior rows rather than claiming ichthyo is the only populator.
+
+Also done, per your db-schema note: recorded "hidden behind a toggle" as the D7 decision. The ctd-qaqc Profile header now shows a final/preliminary badge, guarded by an information_schema check so it degrades to no badge against a pre-v2026.08 release rather than taking the tab down; both app tests pass.
+
+Carried forward, not silently dropped
+
+- D4's _StaCorr completeness rule and a depth-range rule over the new columns — both are QC rules, so they belong with Phase 3.
+- D6 (pre-answering the other ~130 questions) is untouched; 3 are proposed.
+
+Phase 2 (protocol rename + docx + workflow diagram) is next unless you want the D6 pass first.
+
+----
+
+Phase 2 is done. Still uncommitted.
+
+The rename
+
+qc_protocol.qmd → ctd-cast_qa-qc-protocol.qmd (via git mv, so history follows). Updated target_name: ctd_cast_qa_qc_protocol, output, workflow_url, the ctd-qaqc Rules-tab link, the ingest cross-reference, libs/build_qc_protocol.R's header, and CLAUDE.md. tar_manifest() still resolves all 23 targets. The tracked _output/qc_protocol.* are git rm'd. I left the dated entries in libs/calcofi_notes.md alone — rewriting a chronological log to match the present would be falsifying it.
+
+The function names keep their qc_protocol_ prefix: they're about the protocol as a thing, not the file it lives in.
+
+docx, and two traps it walked into
+
+format: html + docx, both rendered. Two things had to be handled rather than assumed:
+
+The mermaid block is HTML-only, deliberately. Quarto renders mermaid for non-HTML formats through headless Chrome — precisely the hang _quarto.yml disables. I put the diagram behind content-visible when-format="html" with a numbered-prose equivalent for Word, then checked empirically rather than trusting it: the docx contains three PNGs and all three are 32×32 callout icons, no diagram image, and no Chrome process appeared during the 60-second render. The guard carries a comment saying why, so nobody "simplifies" it away.
+
+DT::datatable() renders as nothing at all in Word. The quality-code vocabulary and the rule registry would have been blank space in the one format meant for review. A tbl() switch in setup falls back to kable() when knitr::is_html_output() is FALSE. Verified in the extracted document.xml: both tables present, no mermaid source leaked.
+
+The diagram
+
+First render was defective and I rebuilt it: mermaid's default subgraph fill is dark and renders its own title illegibly against itself, and final|preliminary came out as "finallpreliminary" — the pipe was eaten. Now: no subgraphs, grouping carried by classDef colour and stated in the caption, 14 nodes / 18 edges, verified in the browser rather than assumed from the HTML source (mermaid is client-side, so the HTML tells you nothing about whether it parses).
+
+It makes the two things the prose then leans on visible: thinning, which is why a rule on obs is blind to most scans, and the one-direction-per-cast choice, which is why half of every physical cast has no published observation.
+
+Also added
+
+A "How to comment on this document" section — the docx is a rendering, not a source, so it routes each kind of edit to the file that owns it (a threshold → that rule's SQL header comment; whether a rule runs → rules.csv; a depth range → measurement_type.csv; something only the providers can settle → questions.csv, cite the Q label). The diagram already cites Q15 using the Phase-1 label convention.
+
+Verified the coverage guard still fires: the real document passes, and a doctored render errors with active rule(s) absent from the protocol: ctd_sentinel_neg99, ….
+
+Phase 3 (the per-cast residual rule from btl_* vs sensor, the profile-span panel, and the ingest decision on span/DBcoeff/xmlcoeff) is next — and D2 turned up a useful lead for it: 20-1804SH ships a …UResid.csv with per-sensor bottle-minus-CTD oxygen residuals already computed.
+
+----
+
+Commit phases to main and continue to Phase 3
+
+----
+
+Left uncommitted, all pre-existing from before this session — I didn't sweep them in: _quarto.yml (the mermaid-PNG disable), explore_accdb_hydro-master.qmd, libs/calcofi_notes.md, data/flagged/invalid_egg_stages.csv, the 2926-06-24 → 2026-06-24 plan-date rename, and the untracked 1.6 GB data/releases/v2026.07.30/. The _quarto.yml one matters: a fresh clone would re-enable the Chrome hang.
+
+----
+
+Let's not re-enable the Chrome hang with _quarto.yml and evaluate all uncommitted - we need to clean up. I know we don't want to commit 1.6 GB in data/releases/v2026.07.30/, but also is that the place to put on the local machine git ignored?
+
+----
+
+· `data/calcofi_wrangling.duckdb` (27 MB) and `data/pmtiles/*` (34 MB, 17 files) are tracked, and both are regenerated by `ingest_spatial.qmd` — so they churn a full rewrite into history on every run (~12 and ~11 revisions each so far, roughly 700 MB of the 2.1 GB `.git`). I verified nothing reads them from a clone: `db-viz-hex` fetches pmtiles from `storage.googleapis.com/calcofi-files-public/_spatial`, and the wrangling DB has exactly one reference in the repo — `ingest_spatial.qmd`, which writes it. `data/.gitignore` already ignores every sibling (`parquet`, `wrangling`, `cache`, `erddap`, `accdb`); the root-level `calcofi_wrangling.duckdb` just escapes the `wrangling` rule by sitting one level up. Untrack them? 
+  → Untrack both and remove from git history. Also revise ingest_spatial.qmd since it should only spit out PMTiles and parquet files. The wrangling db is vestigial from old processes and its presence confusing for the repo (even if untracked)
+
+· `data/releases/` holds 41 GB locally across 20 releases — including three superseded ones at ~11 GB each (v2026.03.14, v2026.03.25, v2026.04.02) and three at ~1.9 GB (v2026.07.15/16/17). All are on `gs://calcofi-db/ducklake/releases/{version}/`, and their small sidecars stay in git regardless. Phase 4 will add another ~2 GB. Delete any local parquet?
+  → Delete the three ~11 GB ones (Recommended)
+
+----
+
+Everything is pushed and in sync across all three repos.
+
+Cleanup
+
+The Chrome hang can no longer come back. _quarto.yml's mermaid-format: png disable was only ever in your working tree — a fresh clone would have re-enabled it and rediscovered the 3h15m wedge. Committed, along with the explore_accdb_hydro-master.qmd comment that first diagnosed it.
+
+data/releases/ was already the right place — it just wasn't named. Unlike its siblings it can't be ignored wholesale: the small sidecars (catalog.json, metadata.json, relationships*, RELEASE_NOTES.md, …) are the provenance record and 18 releases' worth are deliberately tracked. So only releases/*/parquet/ is ignored. Nothing had ever been committed by accident — 0 parquet files were tracked — but every release left a multi-GB directory in git status, one git add -A from history. The v2026.07.30 sidecars are now in. Deleted the three ~11 GB superseded parquet dirs: 41 GB → 7.4 GB local.
+
+The wrangling DB was worse than churn — it was a lie about the pipeline. You were right that it's vestigial: ingest_spatial.qmd wrote it and nothing read it, because the release builds _spatial from the parquet shard. Section removed, notebook now states its two real outputs, file deleted from disk.
+
+History rewrite done and published. data/calcofi_wrangling.duckdb + data/pmtiles/ purged from all 424 commits — I verified beforehand that the rewritten tip is byte-identical to old origin/main apart from the purge, and that no commit subject was lost. Both superseded branches deleted after confirming their work is on main (including the station-portal dispatch at test_release.qmd:441, the one item that wasn't obviously merged).
+
+A fresh clone is 385 MB, down from ~2.1 GB.
+
+Two things I did not touch and you should know about:
+- /Users/bbest/Github/CalCOFI/workflows-main is now stale — it sits on cc580bc, which no longer exists. It needs a re-clone, as does any server checkout.
+- GitHub flagged two more large files during the push: _output/sync_gd_to_gcs.html (52 MB, live at HEAD) and data/darwincore/larvae_2026-01-09.zip (76 MB, history only — the path is gitignored now). Purging those would need a second rewrite; I didn't start one on my own initiative.
+
+I also over-fetched mid-operation and reported 386 MB when a git fetch had already pushed it back to 962 MB — the number only became real once the remote was rewritten.
+
+Phase 3
+
+**Two correction-residual rules, and the threshold isn't a guess**. The _StaCorr fit zeroes the per-cast mean residual by construction, and the archive confirms it: 83.1% of 5,330 casts sit within 1e-4 mL/L of zero. The distribution is bimodal — a spike at machine zero and a tail — so 0.1 mL/L lands in the gap (229 casts). A flag therefore means the correction did not take, which is far stronger than "these disagree". Salinity is checked below 350 m only, where the source derives its offset (p95 0.0148 → threshold 0.02, 137 casts). I tried the median as the more obvious robust choice and it's wrong here: 0.6% within 1e-4 versus 83.1% by mean. The rule immediately catches the known impossible-oxygen cast by an independent route.
+
+residual_sd is reported as the measurement_prec candidate and acted on nowhere — filling a declared-but-empty column from an unvalidated reconstruction would be worse than leaving it NULL.
+
+**A depth-range guard that reports zero, which is the point**. Driven off the Phase-1 valid_depth_* columns, naming no type. est_chlorophyll_a_* maxes out at exactly 200.0 m across 4.2M values with none below — the documented restriction is honoured precisely, which retroactively validates the 0/200 I wrote into the registry. est_nitrate_* runs 60% below 200 m to 3,498 m and correctly declares no range.
+
+**Cast-span panel** in ctd-qaqc, labelled orientation rather than a check — it's recomputed from what we published, so it can't disagree with itself.
+
+**The D3 decision, on Q15 as `proposed`**: the three families are not equally ready. DBcoeff has exactly one header across all 135 files and carries the residual SDs → ingest first. span has 70 headers → second, as a long melt; it unblocks the only non-circular range check. xmlcoeff has 40 headers and three degenerate files → not yet. Via a libs/ builder from the CTD ingest, not a new notebook — these are sidecars of calcofi_ctd-cast, not a dataset.
+
+Phase 4 is the multi-hour full rebuild and release. Say the word and I'll start it.
+
+----
+
+I am pretty sure you can and should delete workflows-main (`rm -rf ../workflows-main`).
+
+It looks like `sync_gd_to_gcs.html` is huge because of the DT table of "rclone dry-run actions" with 322,976 entries. Is this notebook safe to delete altogether since superseded by other processes? 
+
+Either way, let's purge the 52 MB version (and any others over 1 MB) from git history. If keeping notebook, then update `sync_gd_to_gcs.qmd` to only output the first and last 100 records to the table with caption to "rclone dry-run actions" extended to indicate size of results and rerender.
+
+Yes, remove `data/darwincore/larvae_2026-01-09.zip` (76 MB) from git history.
+
+Then kick off Phase 4.
+
+----
+
+Phase 4 is running. While it works, here's where things stand:
+
+Your questions answered
+
+workflows-main — deleted. Verified first: 0 uncommitted, 0 stashes, nothing unpushed, and 0 commit subjects unique to it — its HEAD content lives in the rewritten history as a5f7b61. 3.8 GB freed.
+
+**`sync_gd_to_gcs.qmd`** — no, not safe to delete. It isn't superseded. scripts/sync_gdrive_to_gcs.sh targets a different destination: the versioned calcofi-files-public/-private bucket roots, with public|private and service-account support. The notebook maintains the _sync/ living-mirror tier — the other half of the documented two-tier design (_sync/ mirrors and deletes; archive/ keeps immutable snapshots). It's stale w.r.t. the Shared-Drive migration (still names gdrive-ecoquants), but that's a fix, not a reason to delete. So I took your other branch and fixed the table.
+
+The table. You had it exactly right — 322,976 rclone verbose lines in one DT. A DT is client-side, so every row is embedded as JSON. Both action tables now go through one dt_head_tail() helper: first 100 + last 100, with the real total in the caption — "first 100 and last 100 of 322,976; the full listing is in the rclone log". Silently showing 200 of 322,976 would be worse than the big table, because it reads as the whole answer. Under 200 rows it shows everything and says "all N". Tested at all three sizes: 59 KB instead of 52 MB.
+
+I did not re-render it, deliberately. The sync chunk has no eval: false and runs a real rclone sync which — in the notebook's own words — "deletes files in GCS that no longer exist in GD". Rendering it mutates a public bucket. That's not something to fire off to shrink an HTML; the next genuine sync run will produce the small file.
+
+Purge
+
+Removed from all 426 commits: _output/sync_gd_to_gcs.html (52 MB) and all seven data/darwincore/*.zip (268 MB — you named the 76 MB one, and the six siblings at 25–38 MB sit in an already-gitignored directory, so the directory was the sensible unit). Force-pushed.
+
+.git: 2.1 GB → 573 MB → 104 MB. Nothing over 20 MB left in history.
+
+### TODO: cleanup (`load_sanctuaries` 12 MB, `ingest_calcofi_ctd-cast` ~10 MB × 5 versions, sync_gd_to_gcs_2026-04-09_173559.log 14 MB)
+
+Two things I left alone rather than assume:
+- 142 other blobs >1 MB, ~610 MB total — almost entirely _output/*.html renders of the published site (`load_sanctuaries` 12 MB, `ingest_calcofi_ctd-cast` ~10 MB × 5 versions). Purging those is a real decision about the site's history, not implied by your ask.
+- `data/logs/sync_gd_to_gcs_2026-04-09_173559.log`, 14 MB — same sync's output, but data/.gitignore says the archived sync logs there are deliberately tracked.
+
+Phase 4
+
+All 23 targets invalidated (editing a .qmd doesn't outdate its target — the filename is a literal in the command), running with CTD_FORCE_REBUILD=TRUE. Logging to data/logs/phase4_tar_make_*.log; I'm monitoring for per-target completions and errors and will report as it goes. The release step gates latest.txt promotion behind test_release.qmd's consumer-contract suite, so a schema drift fails the release rather than the apps.
+
+----
+
+release_columns.csv is fixed and committed — and it was worse than the obs_freq rows suggested.
+
+Removed the core-table rows entirely (obs, sample, sample_measurement, obs_freq). They duplicated core_dictionary.csv incompletely and with stale names: obs listed taxon_id (renamed taxon_key in the taxon consolidation), obs_freq has been obs_attribute since calcofi4db 3.0.0, and sample carried only 13 of its 17 columns. I checked core_dictionary against the actual parquet first — obs 18/18, sample 17/17, sample_measurement 6/6, obs_attribute 10/10 — so nothing is lost by deleting the duplicates, and the file goes back to its documented purpose: release-only columns.
+
+The three tables that remain were stale too — the obs_freq rows had been drawing attention away from them:
+
+- _spatial listed feature_id; the table has id and name.
+- _spatial_attr listed feature_id/attr_name/attr_value — none of which exist. It's an entity-attribute-value table with id/fld and five typed val_* columns, exactly one populated per row. That one was actively misleading: anyone writing a query from the schema site would have got nothing back.
+- cruise documented 9 of 16 columns.
+
+All three now match the parquet exactly, verified both directions — nothing documented that's absent, nothing present that's undocumented.
+
+Landing it mid-run was the right call rather than a compromise: release_database is the caboose, so it reads the file hours from now and the fix ships in this release instead of the next.
+
+One thing the log turned up
+
+### TODO: **`prime_zips_from_gcs` is broken and fails silently in `ingest_calcofi_ctd-cast.qmd`**
+ingest_calcofi_ctd-cast.qmd:410 calls system2("rclone", c("copy", src, dest_dir, …)), and system2 doesn't quote its arguments — so ~/My Drive/… splits on the space:
+
+Command copy needs 2 arguments maximum: you provided 3 non flag arguments:
+["gcs-calcofi:…/download" "/Users/bbest/My" "Drive/projects/…/download"]
+
+It printed "Priming N zip(s)", failed, and moved on, because the exit status is never checked. Non-fatal here — the zips are already local so the next chunk took 0.2s — but on a fresh machine it silently falls back to scraping calcofi.org. **Needs `shQuote()` on both paths plus a status check**.
+
+I've queued it rather than fixed it: that notebook is being rendered right now, and editing a .qmd mid-render isn't worth the risk to a multi-hour run.
+
+Phase 4
+
+Running, chunk ~22/177 of the CTD ingest (the forced heavy path). I'll report per-target completions and any errors as they arrive.
+
+----
+
+
 
 
 ## 2026-07-30 Move core-projection SQL from calcofi4db into ingest notebooks + fix taxon matching.md

@@ -89,7 +89,12 @@ erDiagram
         varchar measurement_type PK
         varchar description
         varchar units
-        varchar is_canonical
+        double valid_min
+        double valid_max
+        double valid_depth_min_m
+        double valid_depth_max_m
+        varchar derivation
+        bool is_canonical
         varchar _source_column
         varchar _source_table
         varchar _source_datasets
@@ -155,6 +160,7 @@ erDiagram
         double depth_min_m
         double depth_max_m
         varchar tow_type
+        varchar data_stage
         geometry geom
     }
     sample_measurement {
@@ -201,16 +207,16 @@ erDiagram
     sample ||--o{ sample : "parent_sample_key"
     sample ||--o{ sample : "root_sample_key"
     sample ||--o{ obs : "sample_key"
-    taxon ||--o{ obs : "taxon_key"
-    sample ||--o{ obs_attribute : "sample_key"
-    taxon ||--o{ obs_attribute : "taxon_key"
-    taxon ||--o{ dataset_taxon : "taxon_key"
-    taxon ||--o{ taxon_group : "taxon_key"
-    taxon ||--o{ taxon : "parent_taxon_key"
     measurement_type ||--o{ obs : "measurement_type"
     sample ||--o{ sample_measurement : "sample_key"
     measurement_type ||--o{ sample_measurement : "measurement_type"
+    taxon ||--o{ obs : "taxon_key"
+    sample ||--o{ obs_attribute : "sample_key"
+    taxon ||--o{ obs_attribute : "taxon_key"
     measurement_type ||--o{ obs_attribute : "measurement_type"
+    taxon ||--o{ dataset_taxon : "taxon_key"
+    taxon ||--o{ taxon : "parent_taxon_key"
+    taxon ||--o{ taxon_group : "taxon_key"
     grid ||--o{ sample : "grid_key"
     cruise ||--o{ sample : "cruise_key"
     grid ||--o{ obs : "grid_key"
@@ -236,10 +242,9 @@ erDiagram
     taxon ||--o{ taxon_group : "taxon_key"
     taxon ||--o{ taxon : "parent_taxon_key"
     classDef _e8e8e8 stroke:#e8e8e8,stroke-width:3px
-    class sample,obs,obs_attribute,sample_measurement,measurement_type,cruise,dataset _e8e8e8
+    class sample,obs,sample_measurement,measurement_type,obs_attribute,cruise,dataset _e8e8e8
     classDef _dcdcdc stroke:#dcdcdc,stroke-width:3px
     class taxon,dataset_taxon,taxon_group _dcdcdc
-    classDef _cce5ff stroke:#cce5ff,stroke-width:3px
     classDef _b5e8b0 stroke:#b5e8b0,stroke-width:3px
     class region _b5e8b0
     classDef _cdebc6 stroke:#cdebc6,stroke-width:3px

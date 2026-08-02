@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 <meta name="author" content="CalCOFI (B. Best) — for Lynn DeWitt &amp; the ERDDAP community">
-<meta name="dcterms.date" content="2026-07-29">
+<meta name="dcterms.date" content="2026-08-02">
 
 <title>Serving large CalCOFI CTD profiles on ERDDAP: format × schema × granularity</title>
 <style>
@@ -130,7 +130,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">2026-07-29</p>
+      <p class="date">2026-08-02</p>
     </div>
   </div>
   
@@ -956,7 +956,8 @@ Figure&nbsp;4: Peak OFF-HEAP allocation (cgroup <code>anon</code>) as a request 
 <p>The benchmarks above explore a wide space, but the operational answer is deliberately <strong>narrow</strong>. Every additional way of serving the same table is a question a user has to answer before they can start (“full or thinned? DuckDB or NetCDF? wide or long?”), and that cost is paid by every user forever, while the performance difference is paid once by us. So the axes are evidence; the deployment is one path.</p>
 <section id="one-serving-path-duckdb-views-over-the-integrated-release-parquet" class="level3">
 <h3 class="anchored" data-anchor-id="one-serving-path-duckdb-views-over-the-integrated-release-parquet">6.1 · One serving path: DuckDB views over the integrated release Parquet</h3>
-<p><strong>Serve every dataset through <code>EDDTableFromDatabase</code> over DuckDB views on the CalCOFI integrated release Parquet, in long format.</strong> Concretely:</p>
+<p><strong>Serve every dataset through <code>EDDTableFromDatabase</code> over DuckDB views on the CalCOFI integrated release Parquet, in long format.</strong></p>
+<p>To be unambiguous, since “one serving path” invites the wrong reading: this means <strong>one <code>datasetID</code> per source dataset</strong>, exactly as now — CTD, bottle, zooplankton, ichthyoplankton, DIC each keep their own ERDDAP entry with their own title, abstract, citation, PIs and coverage. Per-dataset metadata is the point of a data portal and is not up for consolidation. What is standardized is the <em>plumbing</em> beneath those entries: one backend, one schema, one place the data comes from. <strong>Not</strong> a single merged <code>obs</code> dataset. Concretely:</p>
 <ul>
 <li><strong>One backend.</strong> A 274 KB <code>.db</code> of views on stock ERDDAP (only the DuckDB JDBC jar added). Nothing is copied or re-materialized — the views read the same release Parquet that <code>calcofi4r</code> and <code>calcofi.io/query</code> read, so ERDDAP cannot drift from the published release.</li>
 <li><strong>One schema — long.</strong> <code>measurement_type</code> / <code>measurement_value</code> matches the integrated database, which is long and clustered by measurement type. A wide variant for CTD alone would make the largest dataset the odd one out, and the wide pivot view is <em>slower</em> on broad cross-cruise scans anyway (§3, Finding 2).</li>
@@ -2874,124 +2875,132 @@ Figure&nbsp;4: Peak OFF-HEAP allocation (cgroup <code>anon</code>) as a request 
 <span id="cb15-472"><a href="#cb15-472" aria-hidden="true" tabindex="-1"></a><span class="fu">### 6.1 · One serving path: DuckDB views over the integrated release Parquet</span></span>
 <span id="cb15-473"><a href="#cb15-473" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb15-474"><a href="#cb15-474" aria-hidden="true" tabindex="-1"></a>**Serve every dataset through <span class="in">`EDDTableFromDatabase`</span> over DuckDB views on the</span>
-<span id="cb15-475"><a href="#cb15-475" aria-hidden="true" tabindex="-1"></a>CalCOFI integrated release Parquet, in long format.** Concretely:</span>
+<span id="cb15-475"><a href="#cb15-475" aria-hidden="true" tabindex="-1"></a>CalCOFI integrated release Parquet, in long format.**</span>
 <span id="cb15-476"><a href="#cb15-476" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-477"><a href="#cb15-477" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**One backend.** A 274 KB <span class="in">`.db`</span> of views on stock ERDDAP (only the DuckDB JDBC</span>
-<span id="cb15-478"><a href="#cb15-478" aria-hidden="true" tabindex="-1"></a>  jar added). Nothing is copied or re-materialized — the views read the same</span>
-<span id="cb15-479"><a href="#cb15-479" aria-hidden="true" tabindex="-1"></a>  release Parquet that <span class="in">`calcofi4r`</span> and <span class="in">`calcofi.io/query`</span> read, so ERDDAP cannot</span>
-<span id="cb15-480"><a href="#cb15-480" aria-hidden="true" tabindex="-1"></a>  drift from the published release.</span>
-<span id="cb15-481"><a href="#cb15-481" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**One schema — long.** <span class="in">`measurement_type`</span> / <span class="in">`measurement_value`</span> matches the</span>
-<span id="cb15-482"><a href="#cb15-482" aria-hidden="true" tabindex="-1"></a>  integrated database, which is long and clustered by measurement type. A wide</span>
-<span id="cb15-483"><a href="#cb15-483" aria-hidden="true" tabindex="-1"></a>  variant for CTD alone would make the largest dataset the odd one out, and the</span>
-<span id="cb15-484"><a href="#cb15-484" aria-hidden="true" tabindex="-1"></a>  wide pivot view is *slower* on broad cross-cruise scans anyway (§3, Finding 2).</span>
-<span id="cb15-485"><a href="#cb15-485" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**No per-dataset special cases.** The five non-CTD datasets already serve this</span>
-<span id="cb15-486"><a href="#cb15-486" aria-hidden="true" tabindex="-1"></a>  way in effect; folding CTD in removes the exception rather than adding one.</span>
-<span id="cb15-487"><a href="#cb15-487" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-488"><a href="#cb15-488" aria-hidden="true" tabindex="-1"></a>**Size the container, not the heap.** From §5, the JVM heap never exceeds</span>
-<span id="cb15-489"><a href="#cb15-489" aria-hidden="true" tabindex="-1"></a>~1.7 GB, so <span class="in">`-Xmx`</span> is the wrong dial; the requirement is DuckDB's off-heap</span>
-<span id="cb15-490"><a href="#cb15-490" aria-hidden="true" tabindex="-1"></a>allocation. Give the ERDDAP container **≥ 5 GB** (<span class="in">`mem_limit`</span>, with</span>
-<span id="cb15-491"><a href="#cb15-491" aria-hidden="true" tabindex="-1"></a><span class="in">`memswap_limit`</span> equal so the cap is real). At 4 GB the thinned CTD full download</span>
-<span id="cb15-492"><a href="#cb15-492" aria-hidden="true" tabindex="-1"></a>OOMs; at 5 GB it completes using ~4.2 GB.</span>
-<span id="cb15-493"><a href="#cb15-493" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-494"><a href="#cb15-494" aria-hidden="true" tabindex="-1"></a><span class="fu">### 6.2 · The one scale limit, stated plainly</span></span>
+<span id="cb15-477"><a href="#cb15-477" aria-hidden="true" tabindex="-1"></a>To be unambiguous, since "one serving path" invites the wrong reading: this means</span>
+<span id="cb15-478"><a href="#cb15-478" aria-hidden="true" tabindex="-1"></a>**one `datasetID` per source dataset**, exactly as now — CTD, bottle, zooplankton,</span>
+<span id="cb15-479"><a href="#cb15-479" aria-hidden="true" tabindex="-1"></a>ichthyoplankton, DIC each keep their own ERDDAP entry with their own title,</span>
+<span id="cb15-480"><a href="#cb15-480" aria-hidden="true" tabindex="-1"></a>abstract, citation, PIs and coverage. Per-dataset metadata is the point of a data</span>
+<span id="cb15-481"><a href="#cb15-481" aria-hidden="true" tabindex="-1"></a>portal and is not up for consolidation. What is standardized is the *plumbing*</span>
+<span id="cb15-482"><a href="#cb15-482" aria-hidden="true" tabindex="-1"></a>beneath those entries: one backend, one schema, one place the data comes from.</span>
+<span id="cb15-483"><a href="#cb15-483" aria-hidden="true" tabindex="-1"></a>**Not** a single merged <span class="in">`obs`</span> dataset. Concretely:</span>
+<span id="cb15-484"><a href="#cb15-484" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-485"><a href="#cb15-485" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**One backend.** A 274 KB <span class="in">`.db`</span> of views on stock ERDDAP (only the DuckDB JDBC</span>
+<span id="cb15-486"><a href="#cb15-486" aria-hidden="true" tabindex="-1"></a>  jar added). Nothing is copied or re-materialized — the views read the same</span>
+<span id="cb15-487"><a href="#cb15-487" aria-hidden="true" tabindex="-1"></a>  release Parquet that <span class="in">`calcofi4r`</span> and <span class="in">`calcofi.io/query`</span> read, so ERDDAP cannot</span>
+<span id="cb15-488"><a href="#cb15-488" aria-hidden="true" tabindex="-1"></a>  drift from the published release.</span>
+<span id="cb15-489"><a href="#cb15-489" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**One schema — long.** <span class="in">`measurement_type`</span> / <span class="in">`measurement_value`</span> matches the</span>
+<span id="cb15-490"><a href="#cb15-490" aria-hidden="true" tabindex="-1"></a>  integrated database, which is long and clustered by measurement type. A wide</span>
+<span id="cb15-491"><a href="#cb15-491" aria-hidden="true" tabindex="-1"></a>  variant for CTD alone would make the largest dataset the odd one out, and the</span>
+<span id="cb15-492"><a href="#cb15-492" aria-hidden="true" tabindex="-1"></a>  wide pivot view is *slower* on broad cross-cruise scans anyway (§3, Finding 2).</span>
+<span id="cb15-493"><a href="#cb15-493" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**No per-dataset special cases.** The five non-CTD datasets already serve this</span>
+<span id="cb15-494"><a href="#cb15-494" aria-hidden="true" tabindex="-1"></a>  way in effect; folding CTD in removes the exception rather than adding one.</span>
 <span id="cb15-495"><a href="#cb15-495" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-496"><a href="#cb15-496" aria-hidden="true" tabindex="-1"></a><span class="in">`ctd_measurement`</span> (232 M rows) is **queryable but not bulk-downloadable** through</span>
-<span id="cb15-497"><a href="#cb15-497" aria-hidden="true" tabindex="-1"></a>ERDDAP. A single variable across the whole record works (309 MB in ~18 s); three</span>
-<span id="cb15-498"><a href="#cb15-498" aria-hidden="true" tabindex="-1"></a>variables or all variables OOM **even at a 6 GB cap**. This is not a format</span>
-<span id="cb15-499"><a href="#cb15-499" aria-hidden="true" tabindex="-1"></a>problem to engineer around — it is a 10-GB-class result set, and no memory limit</span>
-<span id="cb15-500"><a href="#cb15-500" aria-hidden="true" tabindex="-1"></a>we would sensibly grant ERDDAP changes that.</span>
+<span id="cb15-496"><a href="#cb15-496" aria-hidden="true" tabindex="-1"></a>**Size the container, not the heap.** From §5, the JVM heap never exceeds</span>
+<span id="cb15-497"><a href="#cb15-497" aria-hidden="true" tabindex="-1"></a>~1.7 GB, so <span class="in">`-Xmx`</span> is the wrong dial; the requirement is DuckDB's off-heap</span>
+<span id="cb15-498"><a href="#cb15-498" aria-hidden="true" tabindex="-1"></a>allocation. Give the ERDDAP container **≥ 5 GB** (<span class="in">`mem_limit`</span>, with</span>
+<span id="cb15-499"><a href="#cb15-499" aria-hidden="true" tabindex="-1"></a><span class="in">`memswap_limit`</span> equal so the cap is real). At 4 GB the thinned CTD full download</span>
+<span id="cb15-500"><a href="#cb15-500" aria-hidden="true" tabindex="-1"></a>OOMs; at 5 GB it completes using ~4.2 GB.</span>
 <span id="cb15-501"><a href="#cb15-501" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-502"><a href="#cb15-502" aria-hidden="true" tabindex="-1"></a>That is fine, because bulk access already has a better answer: the **versioned</span>
-<span id="cb15-503"><a href="#cb15-503" aria-hidden="true" tabindex="-1"></a>Parquet release**, browsable at</span>
-<span id="cb15-504"><a href="#cb15-504" aria-hidden="true" tabindex="-1"></a><span class="co">[</span><span class="ot">`…/ducklake/releases/index.html`</span><span class="co">](https://storage.googleapis.com/calcofi-db/ducklake/releases/index.html)</span>,</span>
-<span id="cb15-505"><a href="#cb15-505" aria-hidden="true" tabindex="-1"></a>readable in place without downloading:</span>
-<span id="cb15-506"><a href="#cb15-506" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-507"><a href="#cb15-507" aria-hidden="true" tabindex="-1"></a><span class="in">```sql</span></span>
-<span id="cb15-508"><a href="#cb15-508" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> <span class="op">*</span> <span class="kw">FROM</span> read_parquet(</span>
-<span id="cb15-509"><a href="#cb15-509" aria-hidden="true" tabindex="-1"></a>  <span class="st">'https://storage.googleapis.com/calcofi-db/ducklake/releases/v2026.07.17/parquet/obs.parquet'</span>)</span>
-<span id="cb15-510"><a href="#cb15-510" aria-hidden="true" tabindex="-1"></a><span class="kw">WHERE</span> measurement_type <span class="op">=</span> <span class="st">'temperature_ave'</span> <span class="kw">LIMIT</span> <span class="dv">10</span>;</span>
-<span id="cb15-511"><a href="#cb15-511" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb15-512"><a href="#cb15-512" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-513"><a href="#cb15-513" aria-hidden="true" tabindex="-1"></a>The right guidance for users is therefore: **ERDDAP for subsetting, Parquet for</span>
-<span id="cb15-514"><a href="#cb15-514" aria-hidden="true" tabindex="-1"></a>bulk** — one sentence, no format menu.</span>
-<span id="cb15-515"><a href="#cb15-515" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-516"><a href="#cb15-516" aria-hidden="true" tabindex="-1"></a><span class="fu">### 6.3 · NetCDF as dataset-level output, not a second live backend</span></span>
-<span id="cb15-517"><a href="#cb15-517" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-518"><a href="#cb15-518" aria-hidden="true" tabindex="-1"></a>Generate **CF NetCDF per dataset, outside ERDDAP**, published alongside the</span>
-<span id="cb15-519"><a href="#cb15-519" aria-hidden="true" tabindex="-1"></a>Parquet release rather than mounted as a parallel <span class="in">`EDDTableFromNcCFFiles`</span></span>
-<span id="cb15-520"><a href="#cb15-520" aria-hidden="true" tabindex="-1"></a>dataset. Rationale:</span>
-<span id="cb15-521"><a href="#cb15-521" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-522"><a href="#cb15-522" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>It serves the audience that actually wants it (ocean/climate modellers, CF</span>
-<span id="cb15-523"><a href="#cb15-523" aria-hidden="true" tabindex="-1"></a>  tooling) without making every other user choose a format.</span>
-<span id="cb15-524"><a href="#cb15-524" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>It is the only representation that can carry a dataset's **one-to-many</span>
-<span id="cb15-525"><a href="#cb15-525" aria-hidden="true" tabindex="-1"></a>  structure** — <span class="in">`sample`</span> → <span class="in">`obs`</span> → <span class="in">`obs_attribute`</span> plus event-level effort — in a</span>
-<span id="cb15-526"><a href="#cb15-526" aria-hidden="true" tabindex="-1"></a>  single self-describing file. ERDDAP's tabledap can only ever return one flat</span>
-<span id="cb15-527"><a href="#cb15-527" aria-hidden="true" tabindex="-1"></a>  table, so a relational dataset must be either denormalized (repeating effort on</span>
-<span id="cb15-528"><a href="#cb15-528" aria-hidden="true" tabindex="-1"></a>  every row, inviting double-counting) or split across several datasets the user</span>
-<span id="cb15-529"><a href="#cb15-529" aria-hidden="true" tabindex="-1"></a>  re-joins by hand. NetCDF-4 groups and ragged arrays avoid both.</span>
-<span id="cb15-530"><a href="#cb15-530" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>The generator already exists (<span class="in">`libs/erddap_netcdf.R`</span>); only the destination</span>
-<span id="cb15-531"><a href="#cb15-531" aria-hidden="true" tabindex="-1"></a>  changes. Cost is ~740 MB per full regeneration (687 MB <span class="in">`ctd_measurement`</span> +</span>
-<span id="cb15-532"><a href="#cb15-532" aria-hidden="true" tabindex="-1"></a>  56 MB <span class="in">`ctd_thin`</span>).</span>
-<span id="cb15-533"><a href="#cb15-533" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>Caveat worth stating to any recipient: CF covers the profile/trajectory case</span>
-<span id="cb15-534"><a href="#cb15-534" aria-hidden="true" tabindex="-1"></a>  cleanly, but there is **no CF standard** for a tow → net → taxon → size-bin</span>
-<span id="cb15-535"><a href="#cb15-535" aria-hidden="true" tabindex="-1"></a>  hierarchy. Such files are CF-compliant where CF applies and netCDF-4 elsewhere.</span>
-<span id="cb15-536"><a href="#cb15-536" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-537"><a href="#cb15-537" aria-hidden="true" tabindex="-1"></a>Granularity is a free choice here: **per-cruise (96 files)** or **per-cast</span>
-<span id="cb15-538"><a href="#cb15-538" aria-hidden="true" tabindex="-1"></a>(14,290 files)** — both are ordinary collection sizes (§1 grain correction).</span>
-<span id="cb15-539"><a href="#cb15-539" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-540"><a href="#cb15-540" aria-hidden="true" tabindex="-1"></a><span class="fu">### 6.4 · What we are deliberately *not* doing</span></span>
-<span id="cb15-541"><a href="#cb15-541" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-542"><a href="#cb15-542" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> rejected <span class="pp">|</span> why <span class="pp">|</span></span>
-<span id="cb15-543"><a href="#cb15-543" aria-hidden="true" tabindex="-1"></a><span class="pp">|---|---|</span></span>
-<span id="cb15-544"><a href="#cb15-544" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Wide schema for CTD <span class="pp">|</span> makes the largest dataset the only wide one; slower on broad scans (§3) <span class="pp">|</span></span>
-<span id="cb15-545"><a href="#cb15-545" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> NetCDF *and* DuckDB as live ERDDAP backends <span class="pp">|</span> same table served two ways — the confusion cost exceeds the benefit <span class="pp">|</span></span>
-<span id="cb15-546"><a href="#cb15-546" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="in">`EDDTableFromParquetFiles`</span> on one large file <span class="pp">|</span> whole-file on-heap reads; this is what OOM'd the original <span class="in">`ctd_wide`</span> (§3, Finding 1) <span class="pp">|</span></span>
-<span id="cb15-547"><a href="#cb15-547" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Raising <span class="in">`ERDDAP_MEMORY`</span> to fix OOMs <span class="pp">|</span> the heap is not the constraint (§5); it cannot work <span class="pp">|</span></span>
-<span id="cb15-548"><a href="#cb15-548" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-549"><a href="#cb15-549" aria-hidden="true" tabindex="-1"></a><span class="fu">## 7 · Reproduce</span></span>
-<span id="cb15-550"><a href="#cb15-550" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-551"><a href="#cb15-551" aria-hidden="true" tabindex="-1"></a>Everything runs in the CalCOFI server containers (<span class="in">`../server/`</span>), reading from and</span>
-<span id="cb15-552"><a href="#cb15-552" aria-hidden="true" tabindex="-1"></a>writing to the shared **`/share/data/erddap-duckdb`** tree, mounted identically into</span>
-<span id="cb15-553"><a href="#cb15-553" aria-hidden="true" tabindex="-1"></a><span class="in">`rstudio`</span> (build), the live <span class="in">`erddap`</span>, and the bench <span class="in">`erddap_bench`</span> — no</span>
-<span id="cb15-554"><a href="#cb15-554" aria-hidden="true" tabindex="-1"></a>host-specific paths.</span>
-<span id="cb15-555"><a href="#cb15-555" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-556"><a href="#cb15-556" aria-hidden="true" tabindex="-1"></a>**Code** (all in <span class="co">[</span><span class="ot">CalCOFI/workflows</span><span class="co">](https://github.com/CalCOFI/workflows)</span>):</span>
-<span id="cb15-557"><a href="#cb15-557" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-558"><a href="#cb15-558" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> file <span class="pp">|</span> role <span class="pp">|</span></span>
-<span id="cb15-559"><a href="#cb15-559" aria-hidden="true" tabindex="-1"></a><span class="pp">|---|---|</span></span>
-<span id="cb15-560"><a href="#cb15-560" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="co">[</span><span class="ot">`libs/erddap_netcdf.R`</span><span class="co">](https://github.com/CalCOFI/workflows/blob/main/libs/erddap_netcdf.R)</span> <span class="pp">|</span> per-cruise + lumped CF NetCDF builders + <span class="in">`EDDTableFromNcCFFiles`</span> XML <span class="pp">|</span></span>
-<span id="cb15-561"><a href="#cb15-561" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="co">[</span><span class="ot">`libs/erddap_duckdb.R`</span><span class="co">](https://github.com/CalCOFI/workflows/blob/main/libs/erddap_duckdb.R)</span> <span class="pp">|</span> <span class="in">`.db`</span> view builder + <span class="in">`EDDTableFromDatabase`</span> XML <span class="pp">|</span></span>
-<span id="cb15-562"><a href="#cb15-562" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="co">[</span><span class="ot">`libs/erddap.R`</span><span class="co">](https://github.com/CalCOFI/workflows/blob/main/libs/erddap.R)</span> <span class="pp">|</span> shared dataVariable / type / units helpers <span class="pp">|</span></span>
-<span id="cb15-563"><a href="#cb15-563" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="co">[</span><span class="ot">`scripts/gen_ctd_netcdf.R`</span><span class="co">](https://github.com/CalCOFI/workflows/blob/main/scripts/gen_ctd_netcdf.R)</span> · <span class="co">[</span><span class="ot">`gen_ctd_wide.R`</span><span class="co">](https://github.com/CalCOFI/workflows/blob/main/scripts/gen_ctd_wide.R)</span> · <span class="co">[</span><span class="ot">`gen_ctd_lumped.R`</span><span class="co">](https://github.com/CalCOFI/workflows/blob/main/scripts/gen_ctd_lumped.R)</span> <span class="pp">|</span> build the split/lumped, wide/long serving artifacts <span class="pp">|</span></span>
-<span id="cb15-564"><a href="#cb15-564" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="co">[</span><span class="ot">`scripts/gen_bench_datasets.R`</span><span class="co">](https://github.com/CalCOFI/workflows/blob/main/scripts/gen_bench_datasets.R)</span> <span class="pp">|</span> emit the per-cell <span class="in">`&lt;dataset&gt;`</span> blocks (datasetID = cell) <span class="pp">|</span></span>
-<span id="cb15-565"><a href="#cb15-565" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="co">[</span><span class="ot">`scripts/bench_erddap.sh`</span><span class="co">](https://github.com/CalCOFI/workflows/blob/main/scripts/bench_erddap.sh)</span> <span class="pp">|</span> the format×schema×granularity matrix → <span class="in">`results_all.csv`</span> <span class="pp">|</span></span>
-<span id="cb15-566"><a href="#cb15-566" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="co">[</span><span class="ot">`scripts/bench_parquet_layout.sh`</span><span class="co">](https://github.com/CalCOFI/workflows/blob/main/scripts/bench_parquet_layout.sh)</span> <span class="pp">|</span> the partitioning/ordering experiment → <span class="in">`layout_results.csv`</span> <span class="pp">|</span></span>
-<span id="cb15-567"><a href="#cb15-567" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="co">[</span><span class="ot">`server/erddap/Dockerfile`</span><span class="co">](https://github.com/CalCOFI/server/blob/main/erddap/Dockerfile)</span> · <span class="co">[</span><span class="ot">`docker-compose.bench.yml`</span><span class="co">](https://github.com/CalCOFI/server/blob/main/docker-compose.bench.yml)</span> <span class="pp">|</span> ERDDAP + <span class="in">`duckdb_jdbc`</span>; isolated bench instance <span class="pp">|</span></span>
-<span id="cb15-568"><a href="#cb15-568" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-569"><a href="#cb15-569" aria-hidden="true" tabindex="-1"></a>**Data &amp; artifacts** are browsable / downloadable via the Caddy file server at</span>
-<span id="cb15-570"><a href="#cb15-570" aria-hidden="true" tabindex="-1"></a><span class="co">[</span><span class="ot">**file.calcofi.io/erddap-ctd**</span><span class="co">](https://file.calcofi.io/erddap-ctd/)</span>. Live datasets:</span>
-<span id="cb15-571"><a href="#cb15-571" aria-hidden="true" tabindex="-1"></a><span class="ot">&lt;https://erddap.calcofi.io/erddap/tabledap/calcofi_ctd_thin.html&gt;</span> ·</span>
-<span id="cb15-572"><a href="#cb15-572" aria-hidden="true" tabindex="-1"></a><span class="ot">&lt;https://erddap.calcofi.io/erddap/tabledap/calcofi_ctd_measurement.html&gt;</span>.</span>
-<span id="cb15-573"><a href="#cb15-573" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-576"><a href="#cb15-576" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb15-577"><a href="#cb15-577" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: data-files</span></span>
-<span id="cb15-578"><a href="#cb15-578" aria-hidden="true" tabindex="-1"></a><span class="fu">read_csv</span>(<span class="st">"data/bench_erddap/results_all.csv"</span>, <span class="at">show_col_types =</span> <span class="cn">FALSE</span>) <span class="sc">|&gt;</span> <span class="fu">kable</span>(<span class="at">caption =</span> <span class="st">"results_all.csv (the full grid)"</span>)</span>
-<span id="cb15-579"><a href="#cb15-579" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.null</span>(lay)) <span class="fu">kable</span>(lay, <span class="at">caption =</span> <span class="st">"layout_results.csv"</span>)</span>
-<span id="cb15-580"><a href="#cb15-580" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb15-502"><a href="#cb15-502" aria-hidden="true" tabindex="-1"></a><span class="fu">### 6.2 · The one scale limit, stated plainly</span></span>
+<span id="cb15-503"><a href="#cb15-503" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-504"><a href="#cb15-504" aria-hidden="true" tabindex="-1"></a><span class="in">`ctd_measurement`</span> (232 M rows) is **queryable but not bulk-downloadable** through</span>
+<span id="cb15-505"><a href="#cb15-505" aria-hidden="true" tabindex="-1"></a>ERDDAP. A single variable across the whole record works (309 MB in ~18 s); three</span>
+<span id="cb15-506"><a href="#cb15-506" aria-hidden="true" tabindex="-1"></a>variables or all variables OOM **even at a 6 GB cap**. This is not a format</span>
+<span id="cb15-507"><a href="#cb15-507" aria-hidden="true" tabindex="-1"></a>problem to engineer around — it is a 10-GB-class result set, and no memory limit</span>
+<span id="cb15-508"><a href="#cb15-508" aria-hidden="true" tabindex="-1"></a>we would sensibly grant ERDDAP changes that.</span>
+<span id="cb15-509"><a href="#cb15-509" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-510"><a href="#cb15-510" aria-hidden="true" tabindex="-1"></a>That is fine, because bulk access already has a better answer: the **versioned</span>
+<span id="cb15-511"><a href="#cb15-511" aria-hidden="true" tabindex="-1"></a>Parquet release**, browsable at</span>
+<span id="cb15-512"><a href="#cb15-512" aria-hidden="true" tabindex="-1"></a><span class="co">[</span><span class="ot">`…/ducklake/releases/index.html`</span><span class="co">](https://storage.googleapis.com/calcofi-db/ducklake/releases/index.html)</span>,</span>
+<span id="cb15-513"><a href="#cb15-513" aria-hidden="true" tabindex="-1"></a>readable in place without downloading:</span>
+<span id="cb15-514"><a href="#cb15-514" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-515"><a href="#cb15-515" aria-hidden="true" tabindex="-1"></a><span class="in">```sql</span></span>
+<span id="cb15-516"><a href="#cb15-516" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> <span class="op">*</span> <span class="kw">FROM</span> read_parquet(</span>
+<span id="cb15-517"><a href="#cb15-517" aria-hidden="true" tabindex="-1"></a>  <span class="st">'https://storage.googleapis.com/calcofi-db/ducklake/releases/v2026.07.17/parquet/obs.parquet'</span>)</span>
+<span id="cb15-518"><a href="#cb15-518" aria-hidden="true" tabindex="-1"></a><span class="kw">WHERE</span> measurement_type <span class="op">=</span> <span class="st">'temperature_ave'</span> <span class="kw">LIMIT</span> <span class="dv">10</span>;</span>
+<span id="cb15-519"><a href="#cb15-519" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb15-520"><a href="#cb15-520" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-521"><a href="#cb15-521" aria-hidden="true" tabindex="-1"></a>The right guidance for users is therefore: **ERDDAP for subsetting, Parquet for</span>
+<span id="cb15-522"><a href="#cb15-522" aria-hidden="true" tabindex="-1"></a>bulk** — one sentence, no format menu.</span>
+<span id="cb15-523"><a href="#cb15-523" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-524"><a href="#cb15-524" aria-hidden="true" tabindex="-1"></a><span class="fu">### 6.3 · NetCDF as dataset-level output, not a second live backend</span></span>
+<span id="cb15-525"><a href="#cb15-525" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-526"><a href="#cb15-526" aria-hidden="true" tabindex="-1"></a>Generate **CF NetCDF per dataset, outside ERDDAP**, published alongside the</span>
+<span id="cb15-527"><a href="#cb15-527" aria-hidden="true" tabindex="-1"></a>Parquet release rather than mounted as a parallel <span class="in">`EDDTableFromNcCFFiles`</span></span>
+<span id="cb15-528"><a href="#cb15-528" aria-hidden="true" tabindex="-1"></a>dataset. Rationale:</span>
+<span id="cb15-529"><a href="#cb15-529" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-530"><a href="#cb15-530" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>It serves the audience that actually wants it (ocean/climate modellers, CF</span>
+<span id="cb15-531"><a href="#cb15-531" aria-hidden="true" tabindex="-1"></a>  tooling) without making every other user choose a format.</span>
+<span id="cb15-532"><a href="#cb15-532" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>It is the only representation that can carry a dataset's **one-to-many</span>
+<span id="cb15-533"><a href="#cb15-533" aria-hidden="true" tabindex="-1"></a>  structure** — <span class="in">`sample`</span> → <span class="in">`obs`</span> → <span class="in">`obs_attribute`</span> plus event-level effort — in a</span>
+<span id="cb15-534"><a href="#cb15-534" aria-hidden="true" tabindex="-1"></a>  single self-describing file. ERDDAP's tabledap can only ever return one flat</span>
+<span id="cb15-535"><a href="#cb15-535" aria-hidden="true" tabindex="-1"></a>  table, so a relational dataset must be either denormalized (repeating effort on</span>
+<span id="cb15-536"><a href="#cb15-536" aria-hidden="true" tabindex="-1"></a>  every row, inviting double-counting) or split across several datasets the user</span>
+<span id="cb15-537"><a href="#cb15-537" aria-hidden="true" tabindex="-1"></a>  re-joins by hand. NetCDF-4 groups and ragged arrays avoid both.</span>
+<span id="cb15-538"><a href="#cb15-538" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>The generator already exists (<span class="in">`libs/erddap_netcdf.R`</span>); only the destination</span>
+<span id="cb15-539"><a href="#cb15-539" aria-hidden="true" tabindex="-1"></a>  changes. Cost is ~740 MB per full regeneration (687 MB <span class="in">`ctd_measurement`</span> +</span>
+<span id="cb15-540"><a href="#cb15-540" aria-hidden="true" tabindex="-1"></a>  56 MB <span class="in">`ctd_thin`</span>).</span>
+<span id="cb15-541"><a href="#cb15-541" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>Caveat worth stating to any recipient: CF covers the profile/trajectory case</span>
+<span id="cb15-542"><a href="#cb15-542" aria-hidden="true" tabindex="-1"></a>  cleanly, but there is **no CF standard** for a tow → net → taxon → size-bin</span>
+<span id="cb15-543"><a href="#cb15-543" aria-hidden="true" tabindex="-1"></a>  hierarchy. Such files are CF-compliant where CF applies and netCDF-4 elsewhere.</span>
+<span id="cb15-544"><a href="#cb15-544" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-545"><a href="#cb15-545" aria-hidden="true" tabindex="-1"></a>Granularity is a free choice here: **per-cruise (96 files)** or **per-cast</span>
+<span id="cb15-546"><a href="#cb15-546" aria-hidden="true" tabindex="-1"></a>(14,290 files)** — both are ordinary collection sizes (§1 grain correction).</span>
+<span id="cb15-547"><a href="#cb15-547" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-548"><a href="#cb15-548" aria-hidden="true" tabindex="-1"></a><span class="fu">### 6.4 · What we are deliberately *not* doing</span></span>
+<span id="cb15-549"><a href="#cb15-549" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-550"><a href="#cb15-550" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> rejected <span class="pp">|</span> why <span class="pp">|</span></span>
+<span id="cb15-551"><a href="#cb15-551" aria-hidden="true" tabindex="-1"></a><span class="pp">|---|---|</span></span>
+<span id="cb15-552"><a href="#cb15-552" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Wide schema for CTD <span class="pp">|</span> makes the largest dataset the only wide one; slower on broad scans (§3) <span class="pp">|</span></span>
+<span id="cb15-553"><a href="#cb15-553" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> NetCDF *and* DuckDB as live ERDDAP backends <span class="pp">|</span> same table served two ways — the confusion cost exceeds the benefit <span class="pp">|</span></span>
+<span id="cb15-554"><a href="#cb15-554" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="in">`EDDTableFromParquetFiles`</span> on one large file <span class="pp">|</span> whole-file on-heap reads; this is what OOM'd the original <span class="in">`ctd_wide`</span> (§3, Finding 1) <span class="pp">|</span></span>
+<span id="cb15-555"><a href="#cb15-555" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Raising <span class="in">`ERDDAP_MEMORY`</span> to fix OOMs <span class="pp">|</span> the heap is not the constraint (§5); it cannot work <span class="pp">|</span></span>
+<span id="cb15-556"><a href="#cb15-556" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-557"><a href="#cb15-557" aria-hidden="true" tabindex="-1"></a><span class="fu">## 7 · Reproduce</span></span>
+<span id="cb15-558"><a href="#cb15-558" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-559"><a href="#cb15-559" aria-hidden="true" tabindex="-1"></a>Everything runs in the CalCOFI server containers (<span class="in">`../server/`</span>), reading from and</span>
+<span id="cb15-560"><a href="#cb15-560" aria-hidden="true" tabindex="-1"></a>writing to the shared **`/share/data/erddap-duckdb`** tree, mounted identically into</span>
+<span id="cb15-561"><a href="#cb15-561" aria-hidden="true" tabindex="-1"></a><span class="in">`rstudio`</span> (build), the live <span class="in">`erddap`</span>, and the bench <span class="in">`erddap_bench`</span> — no</span>
+<span id="cb15-562"><a href="#cb15-562" aria-hidden="true" tabindex="-1"></a>host-specific paths.</span>
+<span id="cb15-563"><a href="#cb15-563" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-564"><a href="#cb15-564" aria-hidden="true" tabindex="-1"></a>**Code** (all in <span class="co">[</span><span class="ot">CalCOFI/workflows</span><span class="co">](https://github.com/CalCOFI/workflows)</span>):</span>
+<span id="cb15-565"><a href="#cb15-565" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-566"><a href="#cb15-566" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> file <span class="pp">|</span> role <span class="pp">|</span></span>
+<span id="cb15-567"><a href="#cb15-567" aria-hidden="true" tabindex="-1"></a><span class="pp">|---|---|</span></span>
+<span id="cb15-568"><a href="#cb15-568" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="co">[</span><span class="ot">`libs/erddap_netcdf.R`</span><span class="co">](https://github.com/CalCOFI/workflows/blob/main/libs/erddap_netcdf.R)</span> <span class="pp">|</span> per-cruise + lumped CF NetCDF builders + <span class="in">`EDDTableFromNcCFFiles`</span> XML <span class="pp">|</span></span>
+<span id="cb15-569"><a href="#cb15-569" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="co">[</span><span class="ot">`libs/erddap_duckdb.R`</span><span class="co">](https://github.com/CalCOFI/workflows/blob/main/libs/erddap_duckdb.R)</span> <span class="pp">|</span> <span class="in">`.db`</span> view builder + <span class="in">`EDDTableFromDatabase`</span> XML <span class="pp">|</span></span>
+<span id="cb15-570"><a href="#cb15-570" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="co">[</span><span class="ot">`libs/erddap.R`</span><span class="co">](https://github.com/CalCOFI/workflows/blob/main/libs/erddap.R)</span> <span class="pp">|</span> shared dataVariable / type / units helpers <span class="pp">|</span></span>
+<span id="cb15-571"><a href="#cb15-571" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="co">[</span><span class="ot">`scripts/gen_ctd_netcdf.R`</span><span class="co">](https://github.com/CalCOFI/workflows/blob/main/scripts/gen_ctd_netcdf.R)</span> · <span class="co">[</span><span class="ot">`gen_ctd_wide.R`</span><span class="co">](https://github.com/CalCOFI/workflows/blob/main/scripts/gen_ctd_wide.R)</span> · <span class="co">[</span><span class="ot">`gen_ctd_lumped.R`</span><span class="co">](https://github.com/CalCOFI/workflows/blob/main/scripts/gen_ctd_lumped.R)</span> <span class="pp">|</span> build the split/lumped, wide/long serving artifacts <span class="pp">|</span></span>
+<span id="cb15-572"><a href="#cb15-572" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="co">[</span><span class="ot">`scripts/gen_bench_datasets.R`</span><span class="co">](https://github.com/CalCOFI/workflows/blob/main/scripts/gen_bench_datasets.R)</span> <span class="pp">|</span> emit the per-cell <span class="in">`&lt;dataset&gt;`</span> blocks (datasetID = cell) <span class="pp">|</span></span>
+<span id="cb15-573"><a href="#cb15-573" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="co">[</span><span class="ot">`scripts/bench_erddap.sh`</span><span class="co">](https://github.com/CalCOFI/workflows/blob/main/scripts/bench_erddap.sh)</span> <span class="pp">|</span> the format×schema×granularity matrix → <span class="in">`results_all.csv`</span> <span class="pp">|</span></span>
+<span id="cb15-574"><a href="#cb15-574" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="co">[</span><span class="ot">`scripts/bench_parquet_layout.sh`</span><span class="co">](https://github.com/CalCOFI/workflows/blob/main/scripts/bench_parquet_layout.sh)</span> <span class="pp">|</span> the partitioning/ordering experiment → <span class="in">`layout_results.csv`</span> <span class="pp">|</span></span>
+<span id="cb15-575"><a href="#cb15-575" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="co">[</span><span class="ot">`server/erddap/Dockerfile`</span><span class="co">](https://github.com/CalCOFI/server/blob/main/erddap/Dockerfile)</span> · <span class="co">[</span><span class="ot">`docker-compose.bench.yml`</span><span class="co">](https://github.com/CalCOFI/server/blob/main/docker-compose.bench.yml)</span> <span class="pp">|</span> ERDDAP + <span class="in">`duckdb_jdbc`</span>; isolated bench instance <span class="pp">|</span></span>
+<span id="cb15-576"><a href="#cb15-576" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-577"><a href="#cb15-577" aria-hidden="true" tabindex="-1"></a>**Data &amp; artifacts** are browsable / downloadable via the Caddy file server at</span>
+<span id="cb15-578"><a href="#cb15-578" aria-hidden="true" tabindex="-1"></a><span class="co">[</span><span class="ot">**file.calcofi.io/erddap-ctd**</span><span class="co">](https://file.calcofi.io/erddap-ctd/)</span>. Live datasets:</span>
+<span id="cb15-579"><a href="#cb15-579" aria-hidden="true" tabindex="-1"></a><span class="ot">&lt;https://erddap.calcofi.io/erddap/tabledap/calcofi_ctd_thin.html&gt;</span> ·</span>
+<span id="cb15-580"><a href="#cb15-580" aria-hidden="true" tabindex="-1"></a><span class="ot">&lt;https://erddap.calcofi.io/erddap/tabledap/calcofi_ctd_measurement.html&gt;</span>.</span>
 <span id="cb15-581"><a href="#cb15-581" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-582"><a href="#cb15-582" aria-hidden="true" tabindex="-1"></a>The per-cruise NetCDF builder and the benchmark harness, in full:</span>
-<span id="cb15-583"><a href="#cb15-583" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-586"><a href="#cb15-586" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb15-587"><a href="#cb15-587" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: embed-netcdf</span></span>
-<span id="cb15-588"><a href="#cb15-588" aria-hidden="true" tabindex="-1"></a><span class="co">#| eval: false</span></span>
-<span id="cb15-589"><a href="#cb15-589" aria-hidden="true" tabindex="-1"></a><span class="co">#| file: libs/erddap_netcdf.R</span></span>
-<span id="cb15-590"><a href="#cb15-590" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb15-584"><a href="#cb15-584" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb15-585"><a href="#cb15-585" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: data-files</span></span>
+<span id="cb15-586"><a href="#cb15-586" aria-hidden="true" tabindex="-1"></a><span class="fu">read_csv</span>(<span class="st">"data/bench_erddap/results_all.csv"</span>, <span class="at">show_col_types =</span> <span class="cn">FALSE</span>) <span class="sc">|&gt;</span> <span class="fu">kable</span>(<span class="at">caption =</span> <span class="st">"results_all.csv (the full grid)"</span>)</span>
+<span id="cb15-587"><a href="#cb15-587" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.null</span>(lay)) <span class="fu">kable</span>(lay, <span class="at">caption =</span> <span class="st">"layout_results.csv"</span>)</span>
+<span id="cb15-588"><a href="#cb15-588" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb15-589"><a href="#cb15-589" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-590"><a href="#cb15-590" aria-hidden="true" tabindex="-1"></a>The per-cruise NetCDF builder and the benchmark harness, in full:</span>
 <span id="cb15-591"><a href="#cb15-591" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb15-594"><a href="#cb15-594" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb15-595"><a href="#cb15-595" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: embed-bench</span></span>
+<span id="cb15-595"><a href="#cb15-595" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: embed-netcdf</span></span>
 <span id="cb15-596"><a href="#cb15-596" aria-hidden="true" tabindex="-1"></a><span class="co">#| eval: false</span></span>
-<span id="cb15-597"><a href="#cb15-597" aria-hidden="true" tabindex="-1"></a><span class="co">#| file: scripts/bench_erddap.sh</span></span>
+<span id="cb15-597"><a href="#cb15-597" aria-hidden="true" tabindex="-1"></a><span class="co">#| file: libs/erddap_netcdf.R</span></span>
 <span id="cb15-598"><a href="#cb15-598" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb15-599"><a href="#cb15-599" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-602"><a href="#cb15-602" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb15-603"><a href="#cb15-603" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: embed-bench</span></span>
+<span id="cb15-604"><a href="#cb15-604" aria-hidden="true" tabindex="-1"></a><span class="co">#| eval: false</span></span>
+<span id="cb15-605"><a href="#cb15-605" aria-hidden="true" tabindex="-1"></a><span class="co">#| file: scripts/bench_erddap.sh</span></span>
+<span id="cb15-606"><a href="#cb15-606" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
 </code></pre></div><button title="Copy to Clipboard" class="code-copy-button" data-in-quarto-modal=""><i class="bi"></i></button></div>
 </div></div></div></div></div>
 </div> <!-- /content -->
