@@ -13,8 +13,15 @@ format:
     code-fold: true
     code-tools: true
     embed-resources: false
-    mermaid-format: png    # PNG so diagrams are zoomable via lightbox
-    lightbox: true
+    # mermaid-format: png  # DISABLED — PNG made diagrams zoomable via lightbox,
+    #   but it routes every {mermaid} block and cc_erd() through headless Chrome,
+    #   which hangs intermittently and unpredictably. Observed: ingest_spatial
+    #   wedged for 3h15m on ONE small (60 KB) diagram that had rendered in ~2 min
+    #   on a previous run, ignored SIGTERM, and needed SIGKILL — taking down two
+    #   pipeline runs before the cause was identified. Default (JS, client-side)
+    #   mermaid needs no browser, so renders cannot hang this way. Diagrams lose
+    #   the lightbox zoom; that is the trade.
+    lightbox: true         # still applies to images/plots, just not mermaid
 execute:
   echo: true
   warning: false
