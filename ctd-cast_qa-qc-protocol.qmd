@@ -9,13 +9,26 @@ format:
     number-sections: false
     code-fold: true
     code-tools: true
+  # docx so the CTD team can suggest edits in track-changes. Code is echoed off
+  # rather than folded — Word has no fold, and a reviewer reading a protocol does
+  # not want R between the paragraphs. The DT tables degrade to nothing in docx,
+  # so anything a reviewer must SEE goes through the `tbl()` switch in `setup`.
+  docx:
+    toc: true
+    toc-depth: 3
+    number-sections: false
+    echo: false
 calcofi:
-  target_name: qc_protocol
+  target_name: ctd_cast_qa_qc_protocol
   workflow_type: reference
   # every pipeline notebook must declare its output: build_targets_list() uses it
   # as the target's file, and a missing key fails the whole run at resolution time
-  output: _output/qc_protocol.html
-  workflow_url: https://calcofi.io/workflows/qc_protocol.html
+  output: _output/ctd-cast_qa-qc-protocol.html
+  workflow_url: https://calcofi.io/workflows/ctd-cast_qa-qc-protocol.html
+  description: >
+    Every CTD quality check that runs, where its threshold came from, and what
+    it cannot see — generated from metadata/qc_rules/ so it cannot drift from
+    the rules. Also published as .docx for track-changes review.
 editor_options:
   chunk_output_type: console
 ---
@@ -52,7 +65,124 @@ say <- function(...) cat(..., "\n", sep = "")
 say(glue("rules: {nrow(rules_all)} registered, {nrow(rules_act)} active, ",
          "{nrow(rules_all) - nrow(rules_act)} parked"))
 say(glue("SQL files: {length(unique(na.omit(rules_all$sql_file)))}"))
+
+# This document renders to HTML and to **docx** — the latter so the CTD team can
+# suggest edits in track-changes. A DT::datatable() is an htmlwidget and becomes
+# nothing at all in Word, so any table a reviewer must actually see goes through
+# this switch rather than straight to datatable(). Sorting/paging is a luxury;
+# a blank space where the quality-code vocabulary should be is a defect.
+tbl <- function(d, caption, page_length = 12, ...) {
+  if (knitr::is_html_output())
+    datatable(d, caption = caption, rownames = FALSE,
+              options = list(pageLength = page_length, scrollX = TRUE, dom = "tip"),
+              ...)
+  else kable(d, caption = caption)
+}
 ```
+
+### The pipeline these rules watch
+
+Quality control here is not a stage bolted on at the end — it reads the same
+tables consumers read, at the point they are published. So the shape of the
+pipeline determines what a rule *can* see, and two steps in particular decide it:
+**thinning**, which is why a rule targeting `obs` is blind to most scans, and the
+**cast-direction choice**, which is why half of every physical cast carries no
+published observation at all.
+
+::: {.content-visible when-format="html"}
+<!-- HTML ONLY, deliberately. Quarto renders mermaid for non-HTML formats by
+     shelling out to headless Chrome, which on this project hangs indefinitely
+     and unpredictably (see CLAUDE.md — a 60 KB diagram wedged a render for 3h15m
+     and ignored SIGTERM). The docx branch below states the same pipeline in
+     prose. Do not "simplify" by deleting this guard. -->
+```{mermaid}
+%%| label: fig-pipeline
+%%| fig-cap: "From the source zips to the tables the rules read. Blue = source; grey = intermediate, never published; green = the published core; amber = the rule registry and the two places it runs. Dotted edges are what the rules read, not what the pipeline writes."
+%% No `subgraph` on purpose: mermaid's default cluster fill is dark and renders
+%% its own title illegibly against itself. Grouping is carried by classDef colour
+%% and stated in the caption instead.
+flowchart TD
+  Z["<b>CTDBTL CSVs</b> — calcofi.org, one zip per cruise<br/>82 cols · <b>1 m bin averages, not raw scans</b><br/>one file per cast per direction"]
+  D["<i>CTD-CSV-Format.pdf</i> · <i>PreliminaryDataReadme.txt</i><br/>ships in every zip"]
+  M["<i>span</i> · <i>DBcoeff</i> · <i>xmlcoeff</i><br/>per-cruise metadata, not yet read"]
+
+  Z --> R["<b>ctd_raw</b><br/>read · standardize · rename<br/>−99 sentinel deleted, not ingested<br/>distance filter · de-duplicate"]
+  R --> C["<b>ctd_cast</b> — cast metadata<br/>+ <i>data_stage</i> = final / preliminary"]
+  R --> ME["<b>ctd_measurement</b> — long<br/>type · value · qual · ~216 M scans"]
+
+  ME --> T["<b>ctd_thin</b> — adaptive thinning<br/>1. one direction per physical cast<br/>2. canonical types only<br/>3. ~10 m grid + RDP inflections<br/>4. + every bottle-trip depth"]
+
+  C --> S["<b>sample</b><br/>one row per <b>physical</b> cast"]
+  T --> O["<b>obs</b> — the headline<br/>~7 M rows · realm = env"]
+  ME --> F["<b>obs_ctd_full</b> — supplemental<br/>~212 M scans, opt-in"]
+
+  S --> REL["frozen release<br/>gs://calcofi-db/ducklake/releases/"]
+  O --> REL
+  F --> REL
+
+  S -.-> RULES["<b>metadata/qc_rules/</b><br/>rules.csv + sql/*.sql<br/><i>one engine, one registry</i>"]
+  O -.-> RULES
+  F -.->|"one cruise at a time"| RULES
+  D -.->|"thresholds · caveats"| RULES
+  M -.->|"question Q15"| RULES
+
+  RULES --> N["ingest notebook — <i>Findings</i>"]
+  RULES --> A["<b>ctd-qaqc</b> app<br/>+ ad-hoc .btl upload"]
+
+  classDef src  fill:#eef3fb,stroke:#4a6fa5,color:#12243a
+  classDef core fill:#e7f6ec,stroke:#3f8f5a,color:#0f2a1a
+  classDef mid  fill:#f6f7f9,stroke:#8b95a3,color:#1c222b
+  classDef qc   fill:#fdf3e7,stroke:#b06000,color:#3a2400
+  class Z,D,M src
+  class R,C,ME,T mid
+  class S,O,F,REL core
+  class RULES,N,A qc
+```
+:::
+
+::: {.content-visible unless-format="html"}
+The pipeline, in the order a value travels it:
+
+1. **Source.** One zip per cruise from calcofi.org. The data are the
+   `*CTDBTL*.csv` files — 82 columns, **1 m bin averages** rather than raw
+   scans, one file per cast per direction. Each zip also ships its own
+   documentation (`CTD-CSV-Format.pdf`, `PreliminaryDataReadme.txt`) and three
+   per-cruise metadata families (`span`, `DBcoeff`, `xmlcoeff`) that the
+   pipeline does not yet read.
+2. **`ctd_raw`.** Read, standardized and renamed; the `-99` sentinel is deleted
+   rather than ingested as a value; points far from their station are filtered
+   and duplicates removed.
+3. **Split.** `ctd_cast` carries the cast metadata (including `data_stage`,
+   `final` or `preliminary`); `ctd_measurement` carries every scan in long form
+   — roughly 216 million of them.
+4. **`ctd_thin`.** The adaptive thinning that produces the headline series:
+   one direction per physical cast, canonical measurement types only, a ~10 m
+   depth grid with thermocline/halocline inflections preserved by
+   Ramer–Douglas–Peucker simplification, **plus every bottle-trip depth**.
+5. **The published core.** `sample` (one row per *physical* cast), `obs` (the
+   thinned series, ~7 M rows, `realm = env`) and the supplemental
+   `obs_ctd_full` (~212 M scans) are frozen into a versioned release.
+6. **The rules.** `metadata/qc_rules/` runs against `sample`, `obs` and
+   `obs_ctd_full` — from the ingest notebook's *Findings* section, from the
+   `ctd-qaqc` app, and against an ad-hoc `.btl` upload. One engine, one
+   registry.
+:::
+
+Three consequences of that shape run through everything below.
+
+**A rule on `obs` cannot see what thinning removed.** `obs` is `ctd_thin`, not
+`ctd_measurement`. Spikes, loop edits and down-vs-up disagreement are properties
+of the dense scan set, so those rules target `obs_ctd_full` and are run one
+cruise at a time — a sample, never a sweep.
+
+**Half of every physical cast has no published `obs`.** Step ① keeps one
+direction. `sample` is one row per *physical* cast, so a completeness rule that
+expects an observation per cast direction would be wrong by construction.
+
+**Nothing here is a filter.** Every rule returns a report. No rule drops,
+rewrites or interpolates a value, and two blocker questions remain open with the
+providers — acting on them before they are answered would be guessing with
+released data.
 
 ### How to read a rule
 
@@ -235,10 +365,30 @@ are listed here because each answers a question this protocol currently has open
   `original_asc-hdr-btl/`, and each cast's `.hdr` records the configuration.
 - **Filename grammar**: `YY-YYMMSS_LLLLSSSS_###D`, where line and station are ×10
   (`0767` = 76.7, `1000` = 100.0) and `D`/`U` is the direction.
-- **The `Comment` column in the spec does not exist in the files.** The format
-  document lists 82 columns ending in `Comment`; the shipped CSVs have 82 columns
-  and no comment field. Nothing is being dropped — the spec is simply ahead of, or
-  behind, the writer.
+- **The spec's `Comment` column does not exist in the files, and the files have a
+  column the spec does not document.** Settled by reading every `*CTDBTL*.csv`
+  shipped in the zips — **245 files across 85 cruises, 1998-02 to 2025-04** —
+  against the single `CTD-CSV-Format.pdf` version that all 84 copies of the spec
+  contain. The two lists agree **positionally through field 74 (`OxB`)**. The
+  files then carry **`OxBuM`** (bottle oxygen, µmol/kg) at 75, which the spec
+  never mentions; everything after shifts by one, so the file's 82nd column is
+  `SIL` (the spec's 81st) and the spec's `Comment` has no counterpart at all.
+
+  So this is **not** an off-by-one in the spec: it is one undocumented column
+  added and one documented column absent, which happen to cancel to the same
+  total of 82. Nothing is being dropped by this pipeline — `OxBuM` is ingested
+  as `oxygen_btl_umol_kg` — but a reader who trusts the spec's field numbering
+  will mis-read every column from 75 on. Raised as `calcofi_ctd-cast_18` so the
+  spec can be corrected at source.
+
+  One file departs from all of this: `20-1804SH_CTDFinalQC/Metadata/`
+  `20-1804SH_CTDBTL_001-103UResid.csv` has **84** columns, adding `BO2-SCO21`
+  and `BO2-SCO22` — per-sensor bottle-minus-CTD oxygen residuals. It is a
+  diagnostic left in a `Metadata/` folder, not a data file, and the ingest's
+  `data_stage` selector requires `Final|Prelim.*db[_-]csv` in the path, so it is
+  filtered out rather than pivoted. It is worth noticing for a different reason:
+  it is the residual that `measurement_prec` wants (question
+  `calcofi_ctd-cast_15`), already computed by the provider for one cruise.
 
 ### The climatology, and why two properties are excluded
 
@@ -341,17 +491,17 @@ vocabulary remains incomplete, and those gaps are still blockers.
 ```{r}
 #| label: qual_vocab
 
-read_csv(here("metadata/measurement_qual.csv"),
+d_qual <- read_csv(here("metadata/measurement_qual.csv"),
          col_types = cols(qual_code = col_character(), .default = col_guess())) |>
   select(set = code_set, code = qual_code, label, description,
          documented = is_documented, n_observed) |>
-  arrange(set, code) |>
-  datatable(
-    caption  = "metadata/measurement_qual.csv — the controlled vocabulary",
-    rownames = FALSE,
-    options  = list(pageLength = 12, scrollX = TRUE, dom = "tip")) |>
-  formatStyle("documented",
-              color = styleEqual(c(TRUE, FALSE), c("inherit", "#d03b3b")))
+  arrange(set, code)
+
+w <- tbl(d_qual, "metadata/measurement_qual.csv — the controlled vocabulary")
+if (knitr::is_html_output())
+  w <- formatStyle(w, "documented",
+                   color = styleEqual(c(TRUE, FALSE), c("inherit", "#d03b3b")))
+w
 ```
 
 Questions remain open on the **bottle** side, two of them blockers: what the
@@ -372,16 +522,16 @@ unconfirmed would be guessing with released data.
 ```{r}
 #| label: rules_index
 
-rules_all |>
+d_rules <- rules_all |>
   transmute(rule_key, active, severity, type = rule_type, target,
             scope = coalesce(scope, "all"), description) |>
-  arrange(desc(active), type, rule_key) |>
-  datatable(
-    caption  = "The registry: metadata/qc_rules/rules.csv",
-    rownames = FALSE,
-    options  = list(pageLength = 20, scrollX = TRUE, dom = "tip")) |>
-  formatStyle("active",
-              color = styleEqual(c(TRUE, FALSE), c("inherit", "#6e7781")))
+  arrange(desc(active), type, rule_key)
+
+w <- tbl(d_rules, "The registry: metadata/qc_rules/rules.csv", page_length = 20)
+if (knitr::is_html_output())
+  w <- formatStyle(w, "active",
+                   color = styleEqual(c(TRUE, FALSE), c("inherit", "#6e7781")))
+w
 ```
 
 # The rules {#the-rules}
@@ -513,13 +663,36 @@ say(glue("every active rule carries a rationale in its SQL header: yes"))
 
 - **[`ctd-qaqc`](https://github.com/CalCOFI/apps/tree/main/ctd-qaqc)** — runs this
   registry interactively against a release, one rule or one cruise at a time, and
-  records review verdicts.
+  records review verdicts. It also runs the registry against an ad-hoc `.btl`
+  upload, so a cast can be checked before it is anywhere near a release.
 - **[`ingest_calcofi_ctd-cast.qmd`](https://calcofi.io/workflows/ingest_calcofi_ctd-cast.html#findings)**
   — runs the same registry over the parquet each ingest writes, so the notebook
   reports the condition of the data it just published.
 
 Both call `calcofi4db::qc_run_all()`. There is one engine and one registry: a
 number in the app and a number in the notebook cannot disagree.
+
+## How to comment on this document
+
+It renders to two formats from one source:
+[HTML](https://calcofi.io/workflows/ctd-cast_qa-qc-protocol.html) and
+[`.docx`](https://calcofi.io/workflows/ctd-cast_qa-qc-protocol.docx). The Word
+version exists so the CalCOFI CTD team can suggest edits in track-changes; it is
+a **rendering, not a source**, so edits come back as comments to be applied to
+`metadata/qc_rules/` rather than merged into the document.
+
+Where the change belongs depends on what it is:
+
+| what you want to change | where it actually lives |
+|---|---|
+| a threshold, or the reasoning behind one | the header comment of that rule's `metadata/qc_rules/sql/*.sql` — it is harvested into this document verbatim |
+| whether a rule runs at all | `active` in `metadata/qc_rules/rules.csv` |
+| the value or depth range a type is valid over | `metadata/measurement_type.csv` |
+| what a quality code means | `metadata/measurement_qual.csv` |
+| something only the data providers can settle | `metadata/calcofi/ctd-cast/questions.csv` — cite the `Q` label |
+
+Anything else — the prose, the diagram, what is deliberately not checked — is in
+`ctd-cast_qa-qc-protocol.qmd` itself.
 
 ## Session Info
 

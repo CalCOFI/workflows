@@ -22,7 +22,9 @@
 # an active rule missing from the rendered document, or carrying no rationale at
 # all, fails the build rather than shipping an undocumented check.
 #
-# Sourced from qc_protocol.qmd. Pure text assembly — no database, no network.
+# Sourced from ctd-cast_qa-qc-protocol.qmd. Pure text assembly — no database, no
+# network. Function names keep the `qc_protocol_` prefix: they are about the
+# protocol document as a thing, not about the file it is written in.
 
 suppressMessages({
   library(dplyr); library(stringr); library(glue); library(purrr)

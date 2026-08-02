@@ -19,7 +19,7 @@ done and recorded below so nothing needs rediscovering.
 |---|---|
 | `calcofi4db` 3.3.0 | QC rule engine (`qc_*`), input fingerprinting, `qc_cast_profile()`, the CTD upload path (`read_ctd_upload()` + `ctd_upload_to_core()` + `qc_upload_con()`). 508 tests pass. |
 | `ingest_calcofi_ctd-cast.qmd` | `## Findings` section (reads parquet, renders in ~6 s), input-fingerprint fast path, source-documentation narrative |
-| `qc_protocol.qmd` | generated from `metadata/qc_rules/`; build fails on an undocumented rule |
+| `qc_protocol.qmd` | generated from `metadata/qc_rules/`; build fails on an undocumented rule. **Renamed `ctd-cast_qa-qc-protocol.qmd` in Phase 2** |
 | `apps/ctd-qaqc` | Profile tab (down/up overlay, finding → ringed scan, cruise map), Upload tab, two `testServer` wiring tests |
 | `metadata/` | `measurement_qual.csv` now dataset-scoped (`code_set`), `sbe_name_map.csv`, 19 QC rules (16 active, 3 parked) |
 
@@ -137,9 +137,10 @@ from the documentation comb.
 `app.js` already knows about `supplemental` (lines 542, 579) and chips it. The ask
 is stronger: **exclude supplemental tables from the core schema view entirely** —
 the ERD, the Tables list and the Columns list — with an opt-in toggle to show
-them. Applies to `obs_ctd_full` and `mets_*` full. Confirm whether they should be
-*hidden behind a toggle* (recommended) or *removed entirely* (loses discoverability
-of a hosted product).
+them. Applies to `obs_ctd_full` and `mets_*` full.
+
+**Decided 2026-08-02: hidden behind a toggle**, not removed — a hosted product
+that nothing links to is one nobody finds.
 
 ### D8. db-schema UI (item 12)
 
@@ -156,20 +157,40 @@ of a hosted product).
 
 Ordered so each phase is releasable and nothing blocks on a long render.
 
-**Phase 1 — schema + registry (no render).**
-D1 `data_stage` (calcofi4db + arity test + ctd-cast); D4 `measurement_type.csv`
-columns; D5 question-registry convention + `CLAUDE.md` + skills + all 17 CSVs +
-all 16 notebooks; D2 Comment; fix `design_env-bio-consolidation.md` for
-`obs_freq` → `obs_attribute`.
+**Phase 1 — schema + registry (no render).** ✅ **DONE 2026-08-02** (calcofi4db
+3.4.0). D1 `data_stage` (calcofi4db + arity test + ctd-cast + a defensive
+`ctd-qaqc` badge); D4 `measurement_type.csv` columns + `merge_metadata_json()`
+carries them into the sidecar; D5 question-registry convention
+(`read_questions()` / `questions_datatable()` + `CLAUDE.md` + 4 skills + the
+template + all 17 CSVs + all 16 notebooks + `questions_email.qmd`); D2 Comment
+(settled from the data, filed as `calcofi_ctd-cast_18`); fixed
+`design_env-bio-consolidation.md` for `obs_freq` → `obs_attribute` (and
+`taxon_id` → `taxon_key`).
 
-**Phase 2 — protocol document.**
-Rename `qc_protocol.qmd` → **`ctd-cast_qa-qc-protocol.qmd`** (update
-`calcofi:` `target_name`/`output`/`workflow_url`, the app's Rules-tab link, the
-ingest cross-reference, and `scripts/build_workflows_index.R` output); add
-`format: html + docx`; author the **mermaid workflow diagram** (raw CTD → thinned
-`obs`) plus the explanatory opening that ties together the diagram, the rule sets,
-the notebooks/scripts, the app and the provider questions. Re-render; prune the
-old `_output/qc_protocol.*`.
+Carried forward, not done in Phase 1:
+- **D4's `_StaCorr` completeness rule** — a QC rule, so it belongs with Phase 3.
+- **A depth-range rule** over the new `valid_depth_*` columns — same reason.
+- **D6** (pre-answering the other ~130 questions) is untouched; 3 are `proposed`.
+
+**Phase 2 — protocol document.** ✅ **DONE 2026-08-02.**
+Renamed `qc_protocol.qmd` → **`ctd-cast_qa-qc-protocol.qmd`** (`target_name:
+ctd_cast_qa_qc_protocol`, output/URL, the app's Rules-tab link, the ingest
+cross-reference, `libs/build_qc_protocol.R`'s header, `CLAUDE.md`); added
+`format: html + docx`; authored the **mermaid pipeline diagram** and the
+"pipeline these rules watch" opening; added a "How to comment on this document"
+section routing each kind of edit to the file that actually owns it. Re-rendered
+both formats and pruned the tracked `_output/qc_protocol.*`.
+
+Two things worth carrying forward:
+
+- **The mermaid block is HTML-only, behind `content-visible when-format="html"`,
+  with a prose equivalent for docx.** Quarto renders mermaid for non-HTML formats
+  through headless Chrome — the exact hang `_quarto.yml` disables. Verified
+  empirically: the docx render produced no diagram image (only the three 32×32
+  callout icons) and no Chrome process. Do not remove the guard.
+- **`DT::datatable()` is invisible in docx.** A `tbl()` switch in `setup`
+  falls back to `kable()` when `knitr::is_html_output()` is FALSE; the quality-code
+  vocabulary and the rule registry would otherwise be blank space in Word.
 
 **Phase 3 — QC additions (D3).**
 Per-cast residual/offset rule from `btl_*` vs sensor; profile-span panel in the
@@ -180,10 +201,17 @@ app; decide whether to ingest span/DBcoeff/xmlcoeff (a new `ingest` step or a
 `CTD_FORCE_REBUILD=TRUE` + `targets::tar_make()` for every notebook, then
 `release_database.qmd` → validate → freeze → upload → `test_release.qmd` →
 promote `latest.txt`.
-**Known blocker:** `tar_make()` is blocked for *every* target by
-`target_name: ingest_sio_sio_pic-zooplankton` in `ingest_sio_pic-zooplankton.qmd`
-— doubled `sio_` and a hyphen make it an invalid R symbol. Fix to
-`ingest_sio_pic_zooplankton` first.
+
+~~**Known blocker:** `target_name: ingest_sio_sio_pic-zooplankton`~~ — **this was
+wrong and is struck.** `ingest_sio_pic-zooplankton.qmd:4` reads
+`target_name: ingest_sio_pic_zooplankton`, which is valid, and `tar_manifest()`
+builds all 23 targets clean (re-verified 2026-08-02). Nothing blocks Phase 4.
+
+This release **changes the schema**, so re-check the consumers before promoting
+`latest.txt`: `sample` gains `data_stage`, and `measurement_type` gains
+`valid_depth_min_m` / `valid_depth_max_m` / `derivation` on top of the
+`valid_min` / `valid_max` that were added after v2026.07.30 was frozen and so
+have never actually shipped. All five are additive.
 
 **Phase 5 — consumers.**
 `db-schema` (D7 + D8, then it rebuilds on push); `ctd-qaqc` deploy on the server
