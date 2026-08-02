@@ -15,6 +15,7 @@ sample,datetime,Datetime,,Event start time (UTC).
 sample,depth_min_m,Depth Min,m,Shallowest depth sampled by this event.
 sample,depth_max_m,Depth Max,m,Deepest depth sampled by this event.
 sample,tow_type,Tow Type,,"Net gear code where the dataset records one (C1/CB/CV/PV oblique or vertical, MT manta); NULL for gears and datasets without one. Needed to compute gear-appropriate CPUE."
+sample,data_stage,Data Stage,,"The source's own processing state for this event: `final` (post-cruise calibrations applied) or `preliminary` (**not for publication** — the source warns that oxygen, nitrate and chlorophyll may change significantly once calibrated). Populated by `calcofi_ctd-cast`; NULL where the dataset draws no such distinction, which is not a claim that the data are final."
 sample,geom,Geometry,,Point geometry minted from `longitude`/`latitude` (OGC:CRS84).
 obs,,Observation,,"The occurrence-headline long table: one scalar measurement per row, environmental (`realm = 'env'`) and biological (`realm = 'bio'`) together. Biological taxon is the global `taxon_key`; sub-occurrence detail (length/stage bins, behavior) lives in `obs_attribute`, and event-level effort in `sample_measurement`."
 obs,obs_id,Observation ID,,"Surrogate key, renumbered globally when the release concatenates the per-dataset shards."

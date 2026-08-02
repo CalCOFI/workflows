@@ -794,21 +794,19 @@ sync_to_gcs(
 ## Questions for Data Providers
 
 Follow-up questions for CCE-LTER (Rasmus Swalethorp, Linsey Sala), **ranked by
-importance**. Q02 (taxonomic scope) is now resolved by this ingest — kept
-below with status `resolved` for record-keeping, not because it's still
+importance**. Q02 (taxonomic scope) is now settled by this ingest — kept
+below with status `answered` for record-keeping, not because it's still
 open. Questions 09/10 are new, arising directly from cross-checking this
 export against the DB's canonical euphausiid species list.
 
 ```{r}
 #| label: provider-questions
 
-q_path <- here(glue("metadata/{provider}/{dataset}/questions.csv"))
-read_csv(q_path) |>
-  arrange(factor(priority, c("blocker", "high", "normal")), id) |>
-  select(priority, question, context, related_field, status) |>
-  datatable(
-    caption = "Questions for data providers (ranked by importance)",
-    options = list(dom = "t", pageLength = 20), rownames = FALSE)
+# one validated read + render for every ingest: the vocabulary and the column
+# order live in calcofi4db, not in 16 hand-written factor() calls
+questions_datatable(
+  here(cc$questions_file),
+  caption = "Questions for the CCE-LTER euphausiid data providers (ranked)")
 ```
 
 ## Cleanup

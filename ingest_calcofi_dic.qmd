@@ -9,6 +9,7 @@ calcofi:
   provider: calcofi
   dataset: dic
   workflow_url: https://calcofi.io/workflows/ingest_calcofi_dic.html
+  questions_file: metadata/calcofi/dic/questions.csv
   dataset_meta:
     dataset_name: CalCOFI DIC
     description: >
@@ -848,6 +849,22 @@ sync_to_gcs(
   local_dir  = dir_parquet,
   gcs_prefix = glue("ingest/{dir_label}"),
   bucket     = "calcofi-db")
+```
+
+## Questions for Data Providers
+
+Open questions on this dataset, tracked in `metadata/calcofi/dic/questions.csv`
+and surfaced here so they travel with the workflow rather than living in
+someone's inbox.
+
+```{r}
+#| label: provider-questions
+
+# one validated read + render for every ingest: the vocabulary and the column
+# order live in calcofi4db, not in 16 hand-written factor() calls
+questions_datatable(
+  here(cc$questions_file),
+  caption = "Questions for the CalCOFI DIC data providers (ranked)")
 ```
 
 ## Cleanup

@@ -382,11 +382,11 @@ from the provided file, so only the tow registry is ingested here. Tracked in
 ```{r}
 #| label: provider-questions
 
-read_csv(here(glue("metadata/{provider}/{dataset}/questions.csv"))) |>
-  arrange(factor(priority, c("blocker", "high", "normal")), id) |>
-  select(priority, question, context, related_field, status) |>
-  datatable(caption = "Questions for data providers (ranked)",
-            options = list(dom = "t", pageLength = 20), rownames = FALSE)
+# one validated read + render for every ingest: the vocabulary and the column
+# order live in calcofi4db, not in 16 hand-written factor() calls
+questions_datatable(
+  here(cc$questions_file),
+  caption = "Questions for the SIO PIC zooplankton data providers (ranked)")
 ```
 
 ## Cleanup

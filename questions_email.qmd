@@ -9,12 +9,21 @@ editor_options:
 Aggregates the per-dataset `metadata/{provider}/{dataset}/questions.csv` files
 (seeded during `/explore-dataset` and `/generate-metadata`, rendered inside each
 `ingest_*`/`publish_*` workflow) into **one draft email per provider** for the
-data team to review and send. Open (`open`/`asked`) questions only; `answered`
-and `wontfix` are excluded. Nothing is sent — this produces copy-paste drafts.
+data team to review and send. Nothing is sent — this produces copy-paste drafts.
+
+Two statuses go out, and they ask for different things:
+
+- **`open`** — a question we cannot answer ourselves.
+- **`proposed`** — we have already built or reasoned an answer and want it
+  **confirmed**. `proposed_answer` goes into the email, so the provider is
+  approving a solution rather than being handed a problem.
+
+`answered` and `wontfix` are excluded.
 
 ```{r setup}
 #| message: false
-librarian::shelf(dplyr, glue, here, purrr, readr, stringr, knitr, quiet = T)
+librarian::shelf(
+  calcofi4db, dplyr, glue, here, purrr, readr, stringr, knitr, quiet = T)
 options(readr.show_col_types = FALSE)
 ```
 
@@ -23,43 +32,49 @@ options(readr.show_col_types = FALSE)
 ```{r collect}
 q_files <- Sys.glob(here("metadata/*/*/questions.csv"))
 
+# read_questions() enforces the controlled vocabulary, so a registry that
+# invents a status fails HERE rather than quietly dropping out of the email —
+# which is what a hand-written `filter(status %in% ...)` used to do.
 questions <- map_dfr(q_files, function(f) {
   rel   <- str_replace(f, "^.*/metadata/", "")        # provider/dataset/questions.csv
   parts <- str_split(rel, "/", simplify = TRUE)
-  read_csv(f, col_types = cols(.default = "c")) |>
+  read_questions(f) |>
     mutate(provider = parts[1], dataset = parts[2], .before = 1)
 })
 
-d_dataset <- read_csv(here("metadata/dataset.csv")) |>
+# dataset metadata comes from each ingest's `calcofi:` YAML — metadata/dataset.csv
+# is deprecated and had already drifted from the notebooks
+d_dataset <- ingest_yaml_to_dataset_df(read_ingest_yaml(here())) |>
   select(provider, dataset, dataset_name, pi_names)
 
 open_q <- questions |>
-  filter(status %in% c("open", "asked")) |>
+  filter(status %in% c("open", "proposed")) |>
   left_join(d_dataset, by = c("provider", "dataset")) |>
   mutate(
-    priority = factor(priority, c("blocker", "high", "normal")),
+    priority     = factor(priority, question_priorities()),
     dataset_name = coalesce(dataset_name, glue("{provider}/{dataset}")))
 
 cat(glue(
-  "{nrow(open_q)} open questions across ",
+  "{nrow(open_q)} questions to send across ",
   "{n_distinct(open_q$provider)} providers ",
-  "({sum(open_q$priority == 'blocker', na.rm = TRUE)} blockers)"), "\n")
+  "({sum(open_q$priority == 'blocker', na.rm = TRUE)} blockers, ",
+  "{sum(open_q$status == 'proposed')} awaiting confirmation)"), "\n")
 ```
 
 ## Summary
 
 ```{r summary}
 open_q |>
-  count(provider, dataset, priority, .drop = FALSE) |>
+  count(provider, dataset, status, priority, .drop = FALSE) |>
   filter(n > 0) |>
-  arrange(provider, dataset, priority) |>
+  arrange(provider, dataset, status, priority) |>
   kable()
 ```
 
 ## Draft Emails
 
-One draft per provider. Recipients are drawn from `pi_names` in `dataset.csv`;
-fill in the bracketed placeholders before sending.
+One draft per provider. Recipients are drawn from `pi_names` in each ingest's
+`calcofi.dataset_meta` YAML; fill in the bracketed placeholders before sending.
 
 ```{r emails}
 #| results: asis
@@ -88,19 +103,26 @@ for (prov in providers) {
     "As we integrate your data into the CalCOFI database we have a few ",
     "follow-up questions. Answers will improve how the data are matched, ",
     "documented, and published. Questions marked [BLOCKER] are gating ",
-    "publication. Thank you!"), width = 78), "\n")
+    "publication. Items marked [PROPOSED] already have an answer from us — ",
+    "we only need you to confirm or correct it. Thank you!"), width = 78), "\n")
 
   for (ds in sort(unique(pq$dataset))) {
     dq <- pq |> filter(dataset == ds)
     cat(glue("\n\n{unique(dq$dataset_name)}:\n"))
     for (i in seq_len(nrow(dq))) {
-      tag <- if (!is.na(dq$priority[i]) && dq$priority[i] == "blocker")
-        " [BLOCKER]" else ""
+      tag <- paste0(
+        if (!is.na(dq$priority[i]) && dq$priority[i] == "blocker") " [BLOCKER]" else "",
+        if (dq$status[i] == "proposed") " [PROPOSED]" else "")
       field <- if (!is.na(dq$related_field[i]) && nzchar(dq$related_field[i]))
         glue(" (re: {dq$related_field[i]})") else ""
-      cat(glue("\n  {i}.{tag} {dq$question[i]}{field}\n"))
+      # the durable label, not the loop counter: "Q15" in the email must be the
+      # same Q15 the notebook and the protocol document cite
+      cat(glue("\n  {dq$label[i]}.{tag} {dq$question[i]}{field}\n"))
       if (!is.na(dq$context[i]) && nzchar(dq$context[i]))
         cat(str_wrap(glue("      Context: {dq$context[i]}"),
+                     width = 76, exdent = 9), "\n")
+      if (!is.na(dq$proposed_answer[i]) && nzchar(dq$proposed_answer[i]))
+        cat(str_wrap(glue("      We propose: {dq$proposed_answer[i]}"),
                      width = 76, exdent = 9), "\n")
     }
   }

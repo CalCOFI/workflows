@@ -184,9 +184,16 @@ Report which measurements already exist and which need to be added.
 For any measurement column whose unit, method, or mapping is ambiguous — or
 any source column that did not match the field dictionary (step 4) — append a
 row to `metadata/{provider}/{dataset}/questions.csv` (see `/explore-dataset`
-for the schema) with `status=open` so the question travels with the dataset.
-Example: a `pH` column with no stated scale → "Is pH reported on the total or
-seawater scale? At what temperature?" (`priority=high`, `related_field=ph`).
+for the schema) so the question travels with the dataset. Example: a `pH` column
+with no stated scale → "Is pH reported on the total or seawater scale? At what
+temperature?" (`priority=high`, `related_field=ph`).
+
+Use `status=open` only when you genuinely cannot answer it. If the data, the
+source documentation, or work already done in this repo supports an answer,
+write it into `proposed_answer` and use **`status=proposed`** instead — the
+provider then confirms a solution rather than being handed a problem, which is
+a far cheaper thing to ask of them. Read the file back with
+`calcofi4db::read_questions()`, which validates the vocabulary.
 
 ### 7. Register in the ingest notebook's `calcofi.dataset_meta` YAML block
 

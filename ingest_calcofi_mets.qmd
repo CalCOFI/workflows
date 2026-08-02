@@ -1273,15 +1273,11 @@ cat(glue("dataset: {nrow(d_dataset)} datasets registered"), "\n")
 ```{r}
 #| label: provider-questions
 
-q_path <- glue("{dir_meta}/questions.csv")
-if (file_exists(q_path)) {
-  read_csv(q_path, show_col_types = F) |>
-    arrange(
-      factor(status,   c("blocker", "open", "asked", "answered", "wontfix")),
-      factor(priority, c("blocker", "high", "normal"))) |>
-    datatable(caption = "Follow-up questions for the data provider",
-              options = list(dom = "tp", pageLength = 10))
-}
+# one validated read + render for every ingest: the vocabulary and the column
+# order live in calcofi4db, not in 16 hand-written factor() calls
+questions_datatable(
+  here(cc$questions_file),
+  caption = "Questions for the CalCOFI METS data providers (ranked)")
 ```
 
 ## Validate and Enforce Types

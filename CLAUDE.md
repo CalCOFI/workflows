@@ -276,7 +276,7 @@ under consumers.
 | File | Role |
 |---|---|
 | `field_dictionary.csv` | **Prescriptive** canonical field names/types/units/aliases. New datasets conform; consistency is linted against it. |
-| `measurement_type.csv` | Canonical measurement vocabulary (raw measured quantities). `is_canonical` flags the headline types. **Read it with `calcofi4db::read_measurement_type()` and append with `register_measurement_types()`, never with bare `read_csv`/`write_csv`** — see the round-trip trap below. |
+| `measurement_type.csv` | Canonical measurement vocabulary (raw measured quantities). `is_canonical` flags the headline types; `valid_min`/`valid_max` bound the value and `valid_depth_min_m`/`valid_depth_max_m` the **depth over which the type is defined** (`est_chlorophyll_a_*` is computed for 0–200 m alone, so a null below that is by construction, not missing data); `derivation` is free text saying how a *derived* type was produced (the `_cruise_corr` vs `_sta_corr` distinction is not something a consumer should have to guess). **Read it with `calcofi4db::read_measurement_type()` and append with `register_measurement_types()`, never with bare `read_csv`/`write_csv`** — see the round-trip trap below. |
 | `provider.csv` | **Registry of curating organizations** — one row per `provider` slug with `provider_short` (display label), `provider_name`, `url`, `status`. Any provider an ingest declares MUST be here: `scripts/build_workflows_index.R` errors out otherwise. Replaced a hardcoded label vector in that script, which silently yielded `NA` and published a literal `.na.character` heading for unregistered orgs. |
 | `dataset.csv` | **DEPRECATED** — superseded by each ingest's `calcofi.dataset_meta` YAML block via `ingest_yaml_to_dataset_df(read_ingest_yaml())`. The CSV drifted from the notebooks and orphaned `obs` rows. |
 | `dataset_status.csv` | Pipeline-stage tracker, one row per dataset; each skill writes its stage column. |
@@ -285,6 +285,33 @@ under consumers.
 | `taxon_override.csv` | Manual id resolution for source taxa with no clean id (phyto functional groups, marine mammals), matched on a named source column. |
 | `taxon_lineage.csv` | **Generated cache** of WoRMS/ITIS classification chains, one row per (requested taxon, ancestor-or-self). Written by `ensure_taxon_lineage()`; safe to delete (it refetches, slowly). Not hand-maintained. |
 | `metadata/{provider}/{dataset}/` | Per-dataset `tbls_redefine.csv`, `flds_redefine.csv`, `questions.csv`, corrections, etc. |
+| `metadata/{provider}/{dataset}/questions.csv` | **Provider-question registry** — 17 files, one per dataset. Read with `calcofi4db::read_questions()` and render with `questions_datatable()`; never a bare `read_csv()` + hand-written `factor(priority, …)` (see below). |
+
+#### The question registry convention
+
+Two identifiers, deliberately: **`id`** (`calcofi_ctd-cast_15`) is the durable
+globally-unique key an issue or another dataset cites; **`label`** (`Q15`) is the
+short display form, unique *within* the dataset, rendered first so "see Q15" in
+prose resolves for a reader. (`calcofi/hydro-master` is the one registry whose
+ids span two namespaces — `hydro_master_*` and `recon_*`, both cited by name in
+`ctd-cast_qa-qc-protocol.qmd`, `ingest_calcofi_ctd-cast.qmd` and `libs/*.R` — so its recon
+labels take an `R`: `QR01`. `label` is authored, not derived from `id`.)
+
+`status` is **`open` | `proposed` | `answered` | `wontfix`** and `priority` is
+**`blocker` | `high` | `normal` | `low`**. `proposed` is the one that matters:
+it means *we have already built or reasoned an answer and want it confirmed* —
+`proposed_answer` holds it, `questions_email.qmd` puts it in the draft marked
+`[PROPOSED]`, and the provider approves a solution rather than being handed a
+problem. Pre-answer everything the repo can settle before asking.
+
+All 16 ingest notebooks used to read this file with their own `read_csv()` +
+`arrange(factor(priority, …))` + `select(…)`, each listing different levels and
+different columns — `ingest_calcofi_mets.qmd` ranked by a vector containing
+`"blocker"` and `"asked"`, neither of which is a status, so anything outside its
+list sorted silently to the bottom. Four spellings of "done" (`open`/`answered`/
+`resolved`/`wontfix`) and two of "normal" accumulated across 136 questions.
+`read_questions()` now holds the vocabulary and **errors** on anything outside
+it; `questions_datatable()` is the one render.
 
 ### The ingest skills loop (`.claude/skills/`, see `RUNBOOK.md`)
 

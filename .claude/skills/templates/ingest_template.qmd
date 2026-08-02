@@ -327,27 +327,20 @@ dbWriteTable(con, "dataset", as.data.frame(d_dataset), overwrite = TRUE)
 
 ## Questions for Data Providers
 
-Open and resolved follow-up questions for the provider, tracked in
+Follow-up questions for the provider, tracked in
 `metadata/{provider}/{dataset}/questions.csv`. Seed new questions during
-`/explore-dataset` and `/generate-metadata`; `questions_email.qmd` aggregates
-open ones into a draft email per provider. A `blocker` question still `open`
-fails `/validate-ingest --strict`.
+`/explore-dataset` and `/generate-metadata`; `questions_email.qmd` aggregates the
+`open` and `proposed` ones into a draft email per provider. A `blocker` question
+still `open` fails `/validate-ingest --strict`.
 
 ```{r}
 #| label: provider-questions
 
-q_path <- here(glue("metadata/{provider}/{dataset}/questions.csv"))
-if (file.exists(q_path)) {
-  read_csv(q_path) |>
-    arrange(
-      factor(status,   c("blocker", "open", "asked", "answered", "wontfix")),
-      factor(priority, c("blocker", "high", "normal"))) |>
-    datatable(
-      caption = "Follow-up questions for the data provider",
-      options = list(dom = "tp", pageLength = 10))
-} else {
-  cat("No questions.csv yet — run /explore-dataset to seed one.\n")
-}
+# one validated read + render for every ingest: the vocabulary and the column
+# order live in calcofi4db, not in 16 hand-written factor() calls
+questions_datatable(
+  here(cc$questions_file),
+  caption = "Questions for the {{provider}} {{dataset}} data providers (ranked)")
 ```
 
 ## Validate

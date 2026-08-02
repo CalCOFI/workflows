@@ -260,16 +260,27 @@ q_path <- here(glue("metadata/{provider}/{dataset}/questions.csv"))
 if (!file.exists(q_path)) {
   report_warning("questions", dataset, "no questions.csv — run /explore-dataset to seed one")
 } else {
-  q <- readr::read_csv(q_path, show_col_types = F)
+  # read_questions() enforces the controlled vocabulary (open | proposed |
+  # answered | wontfix; blocker | high | normal | low) and the label rules, so a
+  # registry that invents a status fails here rather than dropping out of the
+  # filter below unnoticed
+  q <- calcofi4db::read_questions(q_path)
   open_blockers <- dplyr::filter(q, status == "open", priority == "blocker")
   if (nrow(open_blockers) > 0)
     report_warning("questions blocker-open", dataset,  # error under --strict
-      glue("{nrow(open_blockers)} blocker question(s) still open: {paste(open_blockers$id, collapse=', ')}"))
+      glue("{nrow(open_blockers)} blocker question(s) still open: {paste(open_blockers$label, collapse=', ')}"))
+  # `proposed` is NOT open — we have an answer awaiting confirmation — but it is
+  # not settled either, so report the count rather than letting it read as done
+  n_prop <- sum(q$status == "proposed")
+  if (n_prop > 0)
+    cat(glue("questions proposed | {dataset} | {n_prop} awaiting provider ",
+             "confirmation: {paste(q$label[q$status == 'proposed'], collapse=', ')}\n"))
 }
 ```
 
 Under `--strict`, an open `blocker` question is an **error** (gates release);
-otherwise a warning. Include the open-question list in the report.
+otherwise a warning. A `proposed` question never gates. Include both lists in
+the report.
 
 ### 3. Cross-dataset validation
 

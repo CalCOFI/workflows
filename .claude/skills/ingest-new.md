@@ -260,16 +260,26 @@ Beware a statistic quietly changing meaning when you add rows like this: adding 
 examined-but-empty samples moved an occurrence rate from 15/310 to 15/526. Both are
 true; report the scope.
 
-**Number questions by priority, and show the number.** Ids are referenced from
+**Number questions by priority, and show the number.** Labels are referenced from
 prose, commit messages and provider emails, so they have to be visible in the
-rendered table — `select(priority, question, ...)` without the id leaves every "Q01"
-in the notebook pointing at nothing. Assign ids in priority order so the blocker is
-Q01 rather than whatever was written last, and sort the display by priority too, so
-the order stays right after a priority changes.
+rendered table — a `select()` without `label` leaves every "Q01" in the notebook
+pointing at nothing. Assign ids in priority order so the blocker is Q01 rather
+than whatever was written last.
 
-Also keep the template's **Questions for Data Providers** section (renders
-`metadata/{provider}/{dataset}/questions.csv` as a `datatable()`, placed after
-"Load Dataset Metadata", before "Validate"). Every ingest workflow carries it.
+Keep the template's **Questions for Data Providers** section (placed after
+"Load Dataset Metadata", before "Validate"). Every ingest workflow carries it,
+and every one of them renders it the same way:
+
+```r
+questions_datatable(here(cc$questions_file), caption = "Questions for the … (ranked)")
+```
+
+Do **not** hand-write a `read_csv() |> arrange(factor(priority, …)) |> select(…)`
+chain. All 16 notebooks used to, each with its own factor level vector and its own
+column list; a status nobody's vector listed sorted silently to the bottom and was
+never seen again — `ingest_calcofi_mets.qmd` ranked by a vector containing
+"blocker" and "asked", neither of which is a status. `calcofi4db::read_questions()`
+holds the vocabulary and errors on anything outside it.
 
 #### Conditional sections:
 - **Cross-dataset loading** — `load_prior_tables()` (if depends on prior ingest)

@@ -14,7 +14,7 @@ self-documenting. Human judgment stays in the loop at every hand-off.
 | `metadata/provider.csv` | Registry of curating organizations (`provider` -> display label, name, url). Any provider an ingest declares must be registered; the landing-index build errors otherwise. |
 | `metadata/dataset_status.csv` | Pipeline-stage tracker — one row per dataset. Each skill writes its stage column. |
 | `metadata/relationships_cross.csv` | Cross-dataset FKs (spanning ingests). Intra-dataset FKs live in each ingest's `relationships.json`. |
-| `metadata/{provider}/{dataset}/questions.csv` | Follow-up questions for the data provider; rendered in the workflow, aggregated by `questions_email.qmd`. |
+| `metadata/{provider}/{dataset}/questions.csv` | Follow-up questions for the data provider; rendered in the workflow by `calcofi4db::questions_datatable()`, aggregated by `questions_email.qmd`. Read it with `calcofi4db::read_questions()` — never a bare `read_csv()`. `label` (`Q15`, dataset-scoped) is what prose cites; `id` (`{provider}_{dataset}_15`) is the durable key. `status`: `open` \| `proposed` \| `answered` \| `wontfix`; `priority`: `blocker` \| `high` \| `normal` \| `low`. |
 
 ## The loop
 
@@ -142,8 +142,12 @@ questions section. → set the matching `publish_*` column in `dataset_status.cs
 
 ## Provider outreach
 Render `questions_email.qmd` to produce one draft email per provider (grouped by
-`pi_names`) covering all open questions. Review and send; record answers back in
-each `questions.csv` (`status=answered`, fill `answer`/`answered_date`).
+`pi_names` from each ingest's `calcofi.dataset_meta` YAML). It covers both
+`open` questions and `proposed` ones — the latter carry a `proposed_answer` and
+ask the provider to **confirm a solution** rather than handing over a problem,
+which is what you should aim for before sending: pre-answer everything the repo
+can already settle. Review and send; record answers back in each
+`questions.csv` (`status=answered`, fill `answer`/`answered_date`).
 
 ## Conventions (see CLAUDE.md)
 snake_case; `*_key`/`*_id`/`*_uuid` identifiers; unit suffixes; tidy long-format

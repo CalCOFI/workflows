@@ -88,19 +88,32 @@ When the user invokes this skill, run the R script `scripts/explore_dataset.R` a
    provider). Schema:
 
    ```csv
-   id,question,context,status,priority,answer,asked_date,answered_date,who,related_table,related_field
+   label,id,question,context,status,priority,proposed_answer,answer,asked_date,answered_date,who,related_table,related_field
    ```
-   - `id`: `{provider}_{dataset}_NN` (zero-padded, stable).
-   - `status`: `open` | `asked` | `answered` | `wontfix`.
-   - `priority`: `blocker` (cannot publish without an answer) | `high` | `normal`.
+   - `id`: `{provider}_{dataset}_NN` (zero-padded, stable). The **durable**
+     globally-unique key — what an issue or another dataset cites.
+   - `label`: the short display form, `Q01`, unique *within* the dataset. This
+     is what prose says, and `questions_datatable()` renders it first, so
+     "see Q01" resolves for a reader.
+   - `status`: `open` | `proposed` | `answered` | `wontfix`.
+     **`proposed` means we already have an answer and want it confirmed** —
+     fill `proposed_answer` so the provider approves a solution rather than
+     being handed a problem.
+   - `priority`: `blocker` (cannot publish without an answer) | `high` |
+     `normal` | `low`.
    - `context`: why it matters / what is ambiguous.
    - `related_table` / `related_field`: link the question to a specific column
      so it surfaces next to that field.
 
+   Never write this file with a bare `write_csv()` — readr's default
+   `na = "NA"` puts literal `"NA"` strings in every empty cell. Read it back
+   with `calcofi4db::read_questions()`, which validates the vocabulary and
+   fails on that corruption.
+
    Seed one row per genuine ambiguity surfaced during profiling. Example:
    ```csv
-   id,question,context,status,priority,answer,asked_date,answered_date,who,related_table,related_field
-   calcofi_euphausiids_01,Which net mesh and tow type produced these counts?,Standardization to abundance needs mesh+tow,open,high,,,,,euphausiids_tow,
+   label,id,question,context,status,priority,proposed_answer,answer,asked_date,answered_date,who,related_table,related_field
+   Q01,cce-lter_euphausiids_01,Which net mesh and tow type produced these counts?,Standardization to abundance needs mesh+tow,open,high,,,,,,euphausiids_tow,
    ```
 
 8. **Output**: Display the markdown report directly in the conversation, and

@@ -7,7 +7,7 @@ the non-destructive Phase-1 realization of the target described here.*
 *Revision (2026-07): the target is now a **single `obs`** table (not the earlier
 `obs_env`/`obs_bio` split), a **unified `sample` dimension** that restores
 sampling-event counting and the `site→tow→net` hierarchy, and a **three-grain
-measurement model** (`sample_measurement` / `obs` / `obs_freq`) that honors the
+measurement model** (`sample_measurement` / `obs` / `obs_attribute`) that honors the
 biological structure ichthyo exposed.*
 
 > **Status note (2026-07-30).** This document is the design record; the model it
@@ -60,14 +60,14 @@ types), CTD (`ctd_measurement ⨝ ctd_cast`), DIC; bio = ichthyo (826 K obs / 75
 taxa, with `life_stage`), zoodb, zooscan, cufes, euphausiids, phyllosoma,
 bird_mammal. This proves the model with **zero re-ingest**. `v_obs` (the common
 union) is the Phase-1 proxy for the future single `obs` table; the target below
-extends it with `taxon_id` + `life_stage` + `sample_key`.
+extends it with `taxon_key` + `life_stage` + `sample_key`.
 
 ## Target model — one `obs` + a three-grain measurement family
 
 The target is a small **core** set of tables that every consumer reads, plus a
 handful of shared references. The intellectual core is that a *measurement is not
 one flat long triple* — there are **three grains**, each its own core table, all
-keyed off `sample_key` (and, for biology, `taxon_id` / `life_stage`) so that a
+keyed off `sample_key` (and, for biology, `taxon_key` / `life_stage`) so that a
 taxon-occurrence's effort, count, and size distribution stay linked by shared
 keys.
 
@@ -77,31 +77,32 @@ keys.
 |---|---|---|---|
 | **event / effort** | `sample_measurement` | scalars about the *sampling event*; apply to all taxa in it | net `volume_sampled`, `std_haul_factor`, `prop_sorted`, plankton biomass; bottle `cast_condition` |
 | **occurrence headline** | `obs` | one scalar per (sample, [taxon, life_stage], measurement_type) | env: `temperature`, `salinity`; bio: **`abundance`** (count), `biomass` |
-| **sub-occurrence bin** | `obs_freq` | a (bin, count) distribution of an attribute *within* an occurrence | ichthyo length-frequency (`body_length`), stage-frequency (`stage`) |
+| **sub-occurrence attribution** | `obs_attribute` | a (bin, count) distribution of an attribute *within* an occurrence, or a categorical attribution of it | ichthyo length-frequency (`body_length`), stage-frequency (`stage`); bird/mammal `behavior` |
 
 This is what "how is `life_stage` handled when there are associated volume and
 length measurements?" resolves to: `life_stage` is a column at the occurrence
-grain (`obs` / `obs_freq`); **volume** is event-level (`sample_measurement`,
+grain (`obs` / `obs_attribute`); **volume** is event-level (`sample_measurement`,
 stored once per net — not repeated per taxon); **length** is sub-occurrence
-binned detail (`obs_freq`). Ichthyo is the only dataset that populates `obs_freq`
-today (its `size`/`stage` are genuine (bin, count) frequency distributions,
-unique among the bio datasets), but `obs_freq` is a **core** table generalized
-for future size-spectra datasets — not a dataset-specific sidecar.
+binned detail (`obs_attribute`). Ichthyo `size`/`stage` are genuine (bin, count)
+frequency distributions, unique among the bio datasets; `farallon_bird-mammal`
+adds the categorical case (`behavior`), which is what the rename from `obs_freq`
+recognises. It is a **core** table generalized for future size-spectra datasets
+— not a dataset-specific sidecar.
 
 ### `obs` — occurrence-headline long table
 
 One scalar per row. Env rows set `depth_min_m = depth_max_m` (a point) and leave
-`taxon_id` / `life_stage` NULL; bio rows carry the taxon dimension and a depth
+`taxon_key` / `life_stage` NULL; bio rows carry the taxon dimension and a depth
 range.
 
 `obs_id` PK · `realm` (`'env'`|`'bio'`) · `dataset_key`→dataset ·
 **`sample_key`→sample** · `grid_key`→grid (nullable; phyto) · `cruise_key`→cruise ·
 `latitude` · `longitude` · `datetime` · `depth_min_m` · `depth_max_m` ·
-`taxon_id`→taxa (nullable) · `life_stage` (nullable) ·
+`taxon_key`→taxon (nullable) · `life_stage` (nullable) ·
 `measurement_type`→measurement_type · `measurement_value` · `measurement_qual`
 (nullable) · `measurement_prec` (nullable) · `hex_id` (computed).
 
-> This equals today's `v_obs` common columns **plus** `taxon_id` + `life_stage` +
+> This equals today's `v_obs` common columns **plus** `taxon_key` + `life_stage` +
 > `sample_key`. `grid_key` / `cruise_key` stay **denormalized** on `obs` so the
 > hex / station / cruise rollups `GROUP BY` them on the big table without joining
 > `sample`. Ichthyo base rows (today `measurement_type = NULL`) become an explicit
@@ -109,12 +110,14 @@ range.
 > standardized abundance is derivable via `std_haul_factor` in
 > `sample_measurement`.
 
-### `obs_freq` — generalized (bin, count) frequency distributions
+### `obs_attribute` — generalized sub-occurrence attribution
 
-A distribution of counts over a binned attribute, *within* a taxon-occurrence.
+A distribution of counts over a binned attribute, *within* a taxon-occurrence —
+or a categorical attribution of it, which is why the table is `obs_attribute`
+rather than the originally-drafted `obs_freq`.
 
-`obs_freq_id` PK · `dataset_key`→dataset · **`sample_key`→sample** ·
-`taxon_id`→taxa (nullable) · `life_stage` (nullable) ·
+`obs_attribute_id` PK · `dataset_key`→dataset · **`sample_key`→sample** ·
+`taxon_key`→taxon (nullable) · `life_stage` (nullable) ·
 `measurement_type`→measurement_type (the *binned attribute*: `body_length`,
 `stage`, …) · `bin_value` (DOUBLE — length in mm, or stage number) · `bin_label`
 (VARCHAR, nullable — e.g. `preflexion`, via `lookup`) · `count` (INTEGER —
@@ -124,7 +127,7 @@ individuals in the bin) · `measurement_qual` (nullable).
 > → `measurement_type = 'stage'` (`bin_value` = stage number, `bin_label` from
 > `lookup`). Kept lean — join `sample` for space/time. Links to its `obs`
 > abundance headline and its net's `sample_measurement` by shared
-> (`sample_key`, `taxon_id`, `life_stage`).
+> (`sample_key`, `taxon_key`, `life_stage`).
 
 ### `sample_measurement` — event / effort long table
 
@@ -207,7 +210,7 @@ default — opt-in for deep CTD work. The default `obs` carries CTD via the thin
 
 ### Shared references
 
-`grid`, `cruise`, `ship`, `measurement_type`, **`taxa`** (unified), `dataset`.
+`grid`, `cruise`, `ship`, `measurement_type`, the unified taxon references, `dataset`.
 
 > **Implemented (2026-07-16):** the unified taxon shipped as **three** tables, not
 > one — **`taxon`** (one authoritative row per taxon, `taxon_key` = lowercase
@@ -216,8 +219,11 @@ default — opt-in for deep CTD work. The default `obs` carries CTD via the thin
 > self-FK, lineage), **`dataset_taxon`** (per-dataset vocabulary → `taxon_key`
 > crosswalk; `obs.taxon_key` is resolved by joining it on `(dataset_key,
 > ds_taxa_code)`), and **`taxon_group`** (groupings, many `taxon_key` per group).
-> `obs.taxon_id`→`obs.taxon_key`; `obs_freq`→`obs_attribute` (adds categorical
-> behavior). Coarse/composite taxa (cufes eggs, phyllosoma stages, euphausiid
+> Two renames from the original draft of this document are now reflected
+> throughout it: `obs.taxon_id` became **`obs.taxon_key`**, and `obs_freq` became
+> **`obs_attribute`** — same columns, plus categorical behavior rows, which is
+> why the table is no longer named for frequency.
+> Coarse/composite taxa (cufes eggs, phyllosoma stages, euphausiid
 > family, phyto functional groups, seabird/mammal species) resolve to real
 > WoRMS/ITIS ids via the reviewable `metadata/measurement_taxon.csv` +
 > `metadata/taxon_override.csv`. `obs_ctd_full` is a **supplemental** table
@@ -236,7 +242,7 @@ single query surface. The revision removes the volume argument at its root:
   `obs_ctd_full`, the default `obs` is ≈ 20 M rows (bottle 11 M + ctd_thin 5.5 M
   + dic + all bio few M). One partition/sort/serve strategy fits it comfortably;
   the CTD bulk keeps its own file.
-- **The residual merge cost is cheap.** Env rows carry `taxon_id` / `life_stage`
+- **The residual merge cost is cheap.** Env rows carry `taxon_key` / `life_stage`
   as NULLs; under zstd/RLE that is near-free, and a `realm` discriminator +
   `WHERE realm = 'env'|'bio'` compat views (`v_obs_env` / `v_obs_bio`) retain the
   ergonomic env/bio split for consumers who want it.
@@ -294,7 +300,7 @@ not stored data.
 **Ingestion.** After building its per-dataset tables, each ingest projects into
 the core family via `calcofi4db` helpers (peers of `finalize_ingest()`):
 `build_sample_reference()` / `append_sample()`, `append_obs()`,
-`append_obs_freq()`, `append_sample_measurement()`. These standardize the
+`append_obs_attribute()`, `append_sample_measurement()`. These standardize the
 projection already encoded in the Phase-1 `v_obs_*` views.
 
 **Querying — one surface, two grains.** With `sample_key` on `obs`, the *same*
@@ -328,8 +334,8 @@ SELECT grid_key, avg(measurement_value) FROM obs
  GROUP BY grid_key;
 
 -- length-frequency of a species in a net (sub-occurrence bins) + that net's volume (effort)
-SELECT bin_value AS length_mm, count FROM obs_freq
- WHERE sample_key = :net_key AND taxon_id = :sp AND measurement_type = 'body_length';
+SELECT bin_value AS length_mm, count FROM obs_attribute
+ WHERE sample_key = :net_key AND taxon_key = :sp AND measurement_type = 'body_length';
 SELECT measurement_value AS vol_m3 FROM sample_measurement
  WHERE sample_key = :net_key AND measurement_type = 'volume_sampled';
 
@@ -346,7 +352,7 @@ SELECT grid_key, dataset_key, count(*) AS n_obs,
 FROM obs GROUP BY grid_key, dataset_key;
 ```
 
-`calcofi4r` read helpers expose `obs` / `obs_freq` / `sample` / `obs_ctd_full`.
+`calcofi4r` read helpers expose `obs` / `obs_attribute` / `sample` / `obs_ctd_full`.
 
 ## Migration path (phased, non-destructive)
 
@@ -360,14 +366,15 @@ FROM obs GROUP BY grid_key, dataset_key;
    compute `count(DISTINCT sample_key)` / `count(DISTINCT root_sample_key)`
    immediately — event-counting on the consolidated surface with zero re-ingest.
 2. **Phase 2.** Promote `grid` (`build_grid_reference()`); unify taxon tables →
-   `taxa`; add `build_sample_reference()`. Materialize the core fact family —
-   `sample`, `obs`, `obs_freq`, `sample_measurement` (each `CREATE TABLE AS SELECT`
+   `taxon` / `dataset_taxon` / `taxon_group`; add `build_sample_reference()`.
+   Materialize the core fact family —
+   `sample`, `obs`, `obs_attribute`, `sample_measurement` (each `CREATE TABLE AS SELECT`
    over the per-dataset tables / `sample_key`-bearing views) — plus the
    supplemental `obs_ctd_full`. Validate parity (see Verification).
 3. **Phase 3.** Cut each ingest over to write the core tables directly
    (`append_*` helpers); per-dataset event/measurement tables + `cast_condition` +
    ichthyo `size`/`stage` become VIEWs over `sample` / `obs` / `sample_measurement`
-   / `obs_freq`.
+   / `obs_attribute`.
 4. **Phase 4.** Repoint the three apps + `calcofi4r`. `build_stations.sql` →
    `GROUP BY grid_key, dataset_key` over `obs`; `cruise_summary`
    (`release_database.qmd` L519-565) → `count(DISTINCT root_sample_key)` per
@@ -382,9 +389,9 @@ FROM obs GROUP BY grid_key, dataset_key;
   rows carry `grid_key` NULL (add a nullable `region_key`→region if a region join
   is needed). Intentionally excluded from the grid-keyed Phase-1 views.
 - **Euphausiids** lack per-species resolution in the DB (only total
-  `euphausiid_abundance`) → `obs.taxon_id` NULL until re-ingested with species.
+  `euphausiid_abundance`) → `obs.taxon_key` NULL until re-ingested with species.
 - **Taxon baked into `measurement_type`** (cufes eggs-by-species, phyllosoma
-  stages, bird_mammal): `obs.taxon_id` NULL, the taxon encoded in the type name.
+  stages, bird_mammal): `obs.taxon_key` NULL, the taxon encoded in the type name.
   Their tows/transects still count via `sample_key`.
 - **Datasets carrying both env + catch** (e.g. cufes records surface T/S): route
   environmental readings to `obs` `realm='env'`, catch to `realm='bio'`, both
@@ -392,7 +399,7 @@ FROM obs GROUP BY grid_key, dataset_key;
 - **`_qual` / `_prec`**: carry `measurement_qual` (+ `measurement_prec` for
   bottle) into `obs`; bio rarely has qual.
 - **Geometry**: `geom` lives on `sample` (and shared refs like `grid`), NOT on
-  `obs` / `obs_freq` — avoids per-measurement geometry bloat and the known CRS
+  `obs` / `obs_attribute` — avoids per-measurement geometry bloat and the known CRS
   `UPDATE`/`CREATE INDEX` bug. `obs` carries `latitude`/`longitude` doubles; join
   `sample`/`grid` for polygons.
 - **CTD volume**: handled by `obs` (via `ctd_thin`) + `obs_ctd_full` (full scans,
@@ -428,13 +435,13 @@ erDiagram
   sample           ||--o{ sample             : parent_sample_key
   sample           ||--o{ sample_measurement : sample_key
   sample           ||--o{ obs                : sample_key
-  sample           ||--o{ obs_freq           : sample_key
+  sample           ||--o{ obs_attribute      : sample_key
   sample           ||--o{ obs_ctd_full       : sample_key
   dataset          ||--o{ obs                : dataset_key
-  taxa             ||--o{ obs                : taxon_id
-  taxa             ||--o{ obs_freq           : taxon_id
+  taxon            ||--o{ obs                : taxon_key
+  taxon            ||--o{ obs_attribute      : taxon_key
   measurement_type ||--o{ obs                : measurement_type
-  measurement_type ||--o{ obs_freq           : measurement_type
+  measurement_type ||--o{ obs_attribute      : measurement_type
   measurement_type ||--o{ sample_measurement : measurement_type
 ```
 
@@ -445,8 +452,8 @@ remain as detail VIEWs, not shown.)
 
 ## `measurement_type` vocabulary changes
 
-- Ichthyo `size` → **`body_length`** (the binned attribute in `obs_freq`).
-- Ichthyo `stage` stays `stage` (binned attribute in `obs_freq`, labeled via
+- Ichthyo `size` → **`body_length`** (the binned attribute in `obs_attribute`).
+- Ichthyo `stage` stays `stage` (binned attribute in `obs_attribute`, labeled via
   `lookup`).
 - Drop the `tally`-as-a-type registry entry: ichthyo base rows become
   `measurement_type = 'abundance'` in `obs` (the count is the value).
@@ -458,19 +465,19 @@ remain as detail VIEWs, not shown.)
 
 - **Table count: ~40–50 → ~10 core.** Today ≈ 13 datasets × (sample + measurement
   + summary) + per-dataset taxon/lookup/event tables + shared refs. After: four
-  core fact/dimension tables (`obs`, `obs_freq`, `sample`, `sample_measurement`)
+  core fact/dimension tables (`obs`, `obs_attribute`, `sample`, `sample_measurement`)
   + six shared refs (`dataset`, `grid`, `cruise`, `ship`, `measurement_type`,
-  `taxa`), plus the supplemental `obs_ctd_full` — a ~4–5× reduction. Critically,
+  `taxon`), plus the supplemental `obs_ctd_full` — a ~4–5× reduction. Critically,
   `sample` *replaces* the ~10 per-dataset event tables (and consolidates their
   scattered `geom`) rather than adding to them; per-dataset detail survives only
   as VIEWs.
 - **Row count: unchanged** (same observations). Default `obs` ≈ 20 M rows
   (bottle 11 M + ctd_thin 5.5 M + dic + bio few M); `obs_ctd_full` ≈ 216 M rows;
   `sample` is small (low single-digit M — one row per physical event, *not* per
-  scan); `obs_freq` is a small ichthyo-only table today.
+  scan); `obs_attribute` is small (ichthyo size/stage bins + bird/mammal behavior).
 - **Storage: modestly smaller, plus a big serving win.** `{ds}_summary` tables
   become VIEWs (drop their bytes); N per-dataset taxon tables merge into one
-  `taxa`; homogeneous sorted long columns compress better under zstd; the 216 M
+  `taxon`; homogeneous sorted long columns compress better under zstd; the 216 M
   CTD bulk leaves the default DB entirely (opt-in `obs_ctd_full`). The headline
   win is **schema simplicity + one query surface + a lean default DB**.
 
@@ -511,7 +518,7 @@ Grounded in `bench_erddap_ctd.qmd` (216 M-row CTD benchmark on a 2 GB ERDDAP hea
 - **`obs` row-count parity**: `obs` count == Σ per-dataset headline measurement
   counts (CTD counted via `ctd_thin`, not `ctd_measurement`); `obs_ctd_full`
   count == `ctd_measurement`.
-- **`obs_freq` sum-of-bins parity**: per occurrence (`sample_key`, `taxon_id`,
+- **`obs_attribute` sum-of-bins parity**: per occurrence (`sample_key`, `taxon_key`,
   `life_stage`), `SUM(count)` over `stage` bins == the `abundance` total in `obs`;
   over `body_length` bins ≤ the total (length is a measured subsample).
 - **Every row has a valid** `dataset_key` (FK `dataset`), `grid_key` (FK `grid`,

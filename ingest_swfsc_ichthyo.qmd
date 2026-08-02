@@ -1189,14 +1189,12 @@ every abundance total in the release is low by that amount until they resolve.
 
 ```{r}
 #| label: provider-questions
-read_csv(here(cc$questions_file), show_col_types = FALSE) |>
-  arrange(factor(priority, c("blocker", "high", "normal", "low")), id) |>
-  select(priority, question, context, status) |>
-  datatable(
-    caption  = "Questions for the SWFSC ichthyoplankton data providers (ranked)",
-    rownames = FALSE,
-    options  = list(dom = "t", scrollX = TRUE,
-                    columnDefs = list(list(width = "70px", targets = 0))))
+
+# one validated read + render for every ingest: the vocabulary and the column
+# order live in calcofi4db, not in 16 hand-written factor() calls
+questions_datatable(
+  here(cc$questions_file),
+  caption = "Questions for the SWFSC ichthyoplankton data providers (ranked)")
 ```
 
 ## Validate Local Database

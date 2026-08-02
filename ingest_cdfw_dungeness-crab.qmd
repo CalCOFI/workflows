@@ -1188,15 +1188,11 @@ dbGetQuery(con, "SELECT * FROM dungeness_specimen ORDER BY specimen_num") |>
 ```{r}
 #| label: provider-questions
 
-read_csv(here(glue("metadata/{provider}/{dataset}/questions.csv"))) |>
-  arrange(factor(priority, c("blocker", "high", "normal")), id) |>
-  # show the number, so "Q01" in the prose above points at something. Ids are
-  # assigned in priority order (blocker first) and the table is also sorted by
-  # priority, so the ordering stays right even after a priority changes.
-  mutate(`#` = str_replace(id, ".*_(\\d+)$", "Q\\1"), .before = 1) |>
-  select(`#`, priority, status, question, context, answer) |>
-  datatable(caption = "Questions for data providers, in priority order",
-            options = list(dom = "t", pageLength = 15), rownames = FALSE)
+# one validated read + render for every ingest: the vocabulary and the column
+# order live in calcofi4db, not in 16 hand-written factor() calls
+questions_datatable(
+  here(cc$questions_file),
+  caption = "Questions for the CDFW Dungeness crab data providers (ranked)")
 ```
 
 ## Write Outputs + Upload

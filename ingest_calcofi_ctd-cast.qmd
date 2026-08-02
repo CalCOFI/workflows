@@ -2757,6 +2757,10 @@ ds_key <- "calcofi_ctd-cast"
 # 1. sample — one row per PHYSICAL cast. ctd_cast is per-scan, so the QUALIFY is
 #    load-bearing: without it `sample` would get one row per scan (see the
 #    scan-grain gotcha in CLAUDE.md).
+#    16 columns, not 15: `data_stage` is append_sample()'s optional trailing
+#    column, so the final/preliminary distinction the source insists on ("for
+#    non-publication use") reaches consumers instead of dying here (question
+#    calcofi_ctd-cast_14).
 append_sample(con, glue("
   SELECT * FROM (
     SELECT {ns_key(ds_key, 'cast', 'cast_key')} AS sample_key, 'cast' AS sample_type,
@@ -2766,7 +2770,7 @@ append_sample(con, glue("
            TRY_CAST(ord_occ AS INTEGER) AS order_occ, latitude, longitude,
            CAST(datetime_start_utc AS TIMESTAMP) AS datetime,
            NULL::DOUBLE AS depth_min_m, NULL::DOUBLE AS depth_max_m,
-           NULL::VARCHAR AS tow_type
+           NULL::VARCHAR AS tow_type, data_stage
     FROM ctd_cast
   ) q QUALIFY row_number() OVER (PARTITION BY sample_key ORDER BY datetime) = 1"))
 
@@ -2800,6 +2804,13 @@ stopifnot(
   "every obs.sample_key must resolve in sample" =
     dbGetQuery(con, "SELECT COUNT(*) FROM obs o LEFT JOIN sample s USING (sample_key)
                      WHERE s.sample_key IS NULL")[[1]] == 0,
+  # ctd_cast is filtered to final|preliminary upstream, so a NULL here means the
+  # 16th positional column silently fell off the arm rather than that a cast has
+  # no stage
+  "every sample row must carry data_stage (final|preliminary)" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM sample
+                     WHERE data_stage NOT IN ('final','preliminary')
+                        OR data_stage IS NULL")[[1]] == 0,
   # the whole point of ctd_thin: obs must not silently become the full scan set
   "obs must be fed by ctd_thin, not ctd_measurement" =
     n_obs < dbGetQuery(con, "SELECT COUNT(*) FROM ctd_measurement")[[1]])
@@ -3281,7 +3292,8 @@ f_qual |>
 Each source zip ships its own documentation (`CTD-CSV-Format.pdf`,
 `CTD Data Files.pdf`, `FilenamingAndAscHeaderNotes.txt`, and a
 `PreliminaryDataReadme.txt` on preliminary cruises). Combed 2026-08-01; the full
-account is in the [QA/QC protocol](https://calcofi.io/workflows/qc_protocol.html).
+account is in the
+[QA/QC protocol](https://calcofi.io/workflows/ctd-cast_qa-qc-protocol.html).
 Four points change how a consumer should read what this ingest publishes.
 
 **The canonical types are the providers' own recommendation, not our preference.**
@@ -3302,18 +3314,19 @@ values only. Counting nulls as defects will mis-read a whole class of casts.
 resolution. That is also why the loop-edit rule's 1 m threshold is a noise floor
 rather than a tolerance.
 
-::: {.callout-warning title="`data_stage` does not survive into the release"}
+::: {.callout-note title="`data_stage` now reaches the release"}
 The source is explicit that preliminary data are **for non-publication use**, and
 specific about what moves: *"Temperature and salinities may change very little but
 oxygen, nitrate and chlorophyll data may change significantly after post-cruise
 calibrations."*
 
-This notebook knows which cruises are which — `data_stage` is `final` or
-`preliminary` on `ctd_cast`, and the appendix charts it. **The released `sample`
-carries no such column**, so a consumer reading the release cannot tell a
-final cruise from a preliminary one, and the caveat above cannot reach them. That
-is a gap in the core model rather than in this ingest, and it is filed as question
-`calcofi_ctd-cast_14`.
+Until v2026.08 the released `sample` carried no such column, so a consumer could
+not tell a final cruise from a preliminary one and the caveat above could not
+reach them — question `calcofi_ctd-cast_14`. Core `sample` now has
+**`data_stage`**, supplied by this ingest as the optional trailing column of
+`append_sample()` (calcofi4db 3.4.0). It is `final` or `preliminary` here; the
+other 15 ingests, none of which draw the distinction, leave it `NULL` rather than
+having to change.
 :::
 
 ```{r}
@@ -3327,8 +3340,8 @@ if ("ctd_cast" %in% DBI::dbListTables(con)) {
            COUNT(DISTINCT cast_key) AS n_casts
     FROM ctd_cast GROUP BY 1 ORDER BY n_casts DESC") |>
     datatable(
-      caption = paste("Final vs preliminary in this ingest — a distinction the",
-                      "released `sample` cannot currently express"),
+      caption = paste("Final vs preliminary in this ingest — carried into the",
+                      "release on `sample.data_stage`"),
       rownames = FALSE, options = list(dom = "t"))
 } else {
   say(paste("data_stage not available on a fast re-render (ctd_cast is not",
@@ -3623,14 +3636,11 @@ an investigation.
 ```{r}
 #| label: provider-questions
 
-read_csv(here(cc$questions_file), show_col_types = FALSE) |>
-  arrange(factor(priority, c("blocker", "high", "normal", "low")), id) |>
-  select(id, priority, question, context, status) |>
-  datatable(
-    caption  = "Questions for the CalCOFI CTD data providers (ranked)",
-    rownames = FALSE,
-    options  = list(dom = "t", scrollX = TRUE,
-                    columnDefs = list(list(width = "70px", targets = 1))))
+# one validated read + render for every ingest: the vocabulary and the column
+# order live in calcofi4db, not in 16 hand-written factor() calls
+questions_datatable(
+  here(cc$questions_file),
+  caption = "Questions for the CalCOFI CTD data providers (ranked)")
 ```
 
 ```{r}
