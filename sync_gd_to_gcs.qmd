@@ -55,6 +55,35 @@ librarian::shelf(
 )
 options(DT.options = list(scrollX = TRUE))
 
+# A DT is a CLIENT-SIDE widget: every row is embedded in the HTML as JSON, so a
+# table of rclone's verbose output is as large as the sync is. One render of the
+# dry run put **322,976** lines into a single datatable() and produced a 52 MB
+# _output/sync_gd_to_gcs.html — which was then committed, and GitHub warned about
+# it on every push. The full listing is not lost: rclone writes it to
+# data/logs/sync_gd_to_gcs_*.log, which is what to read when you need all of it.
+#
+# So show the head and tail only, and say so in the caption rather than silently
+# truncating — a table that quietly shows 200 of 322,976 rows is worse than a
+# big one, because it reads as the whole answer.
+DT_N <- 100L
+
+dt_head_tail <- function(x, what, n = DT_N) {
+  if (!length(x)) return(invisible(NULL))
+  total <- length(x)
+  if (total <= 2L * n) {
+    d   <- tibble(row = seq_len(total), message = x)
+    cap <- glue("{what} — all {format(total, big.mark = ',')}")
+  } else {
+    i   <- c(seq_len(n), seq.int(total - n + 1L, total))
+    d   <- tibble(row = i, message = x[i])
+    cap <- glue(
+      "{what} — first {n} and last {n} of ",
+      "{format(total, big.mark = ',')}; the full listing is in the rclone log")
+  }
+  datatable(d, caption = cap, rownames = FALSE,
+            options = list(pageLength = 10, scrollX = TRUE, dom = "tip"))
+}
+
 # rclone remote paths — override via env vars for server deployment
 # e.g. CALCOFI_GD_REMOTE="gdrive-server:projects/calcofi/data-public"
 gd_remote <- Sys.getenv(
@@ -102,13 +131,7 @@ dry_out <- system2(
 actions <- dry_out[grepl("NOTICE|INFO|Copied|Deleted", dry_out)]
 cat(glue("{length(actions)} actions would be taken"), "\n\n")
 
-if (length(actions) > 0) {
-  tibble(message = actions) |>
-    datatable(
-      caption = "rclone dry-run actions",
-      rownames = FALSE
-    )
-}
+dt_head_tail(actions, "rclone dry-run actions")
 ```
 
 ## Sync
@@ -178,11 +201,7 @@ if (length(stats_lines) > 0) {
 # parse copied/deleted file actions for a table
 action_lines <- sync_out[grepl("INFO.*Copied|INFO.*Deleted", sync_out)]
 if (length(action_lines) > 0) {
-  tibble(message = action_lines) |>
-    datatable(
-      caption = glue("{length(action_lines)} files transferred or deleted"),
-      rownames = FALSE
-    )
+  dt_head_tail(action_lines, "files transferred or deleted")
 } else {
   cat("no files changed — GCS already in sync with GD\n")
 }
