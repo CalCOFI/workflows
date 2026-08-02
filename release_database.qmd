@@ -21,8 +21,8 @@ calcofi:
     sample_measurement: "#e8e8e8"
     obs_ctd_full:       "#e8e8e8"
     obs_mets_full:      "#e8e8e8"
-    _spatial:           "#cfe8ea"
-    _spatial_attr:      "#cfe8ea"
+    spatial:            "#cfe8ea"
+    spatial_attribute:  "#cfe8ea"
 execute:
   echo: true
   message: true
@@ -217,7 +217,7 @@ color_map <- cc_erd_color_map(
 
 # create VIEWs on local parquet for each canonical table
 # _new delta tables handled separately for merging
-all_geom_tables <- c("grid", "site", "segment", "casts", "ctd_cast", "_spatial")
+all_geom_tables <- c("grid", "site", "segment", "casts", "ctd_cast", "spatial")
 main_tables <- reg_canon |> filter(!grepl("_new$", table))
 new_tables  <- registry |> filter(grepl("_new$", table))
 
@@ -722,7 +722,7 @@ core_keep <- c(
   "obs", "sample", "obs_attribute", "sample_measurement",                    # core facts
   "grid", "cruise", "ship", "measurement_type", "dataset", "region",         # refs
   "taxon", "dataset_taxon", "taxon_group", "lookup",                         # taxa + lookups
-  "_spatial", "_spatial_attr")
+  "spatial", "spatial_attribute")
 supplemental_keep <- supp_tbls                    # hosted, hidden by default (from the ingests)
 # drop by the object's actual type (DROP VIEW on a TABLE — or vice versa — errors
 # even with IF EXISTS; some are parquet VIEWs, some are temp tables like cruise_ref)

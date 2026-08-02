@@ -16,13 +16,13 @@ Process spatial boundary datasets into **two outputs, both uploaded to GCS**:
 1. **PMTiles** for map overlay — one per dataset group, served from
    `gs://calcofi-files-public/_spatial/` (which is where `db-viz-hex` reads
    them; the local `data/pmtiles/` copy is a build artifact, not a channel).
-2. **`_spatial` + `_spatial_attr` parquet** for spatial queries — the ingest
+2. **`spatial` + `spatial_attribute` parquet** for spatial queries — the ingest
    shard `release_database.qmd` picks up like every other, from
    `data/parquet/spatial/`.
 
 This notebook used to end by loading that same parquet into a
 `data/calcofi_wrangling.duckdb` at the repo root. Nothing ever read it: the
-release builds `_spatial` from the parquet shard directly, and a repo-wide grep
+release builds `spatial` from the parquet shard directly, and a repo-wide grep
 found the file referenced by this notebook alone. It was a 27 MB binary,
 rewritten in full on every run and tracked in git, left over from the pre-shard
 pipeline. Removed 2026-08-02.
@@ -40,7 +40,7 @@ dataset grouping, styling, filter expressions, and source file paths.
 graph LR
   A[Source Shapefiles] --> B[Read + Reproject 4326]
   B --> C["clean_names + id/layer/name"]
-  C --> D["_spatial + _spatial_attr Parquet"]
+  C --> D["spatial + spatial_attribute Parquet"]
   C --> E["GeoJSON → tippecanoe → PMTiles"]
   D --> F["gs://calcofi-db/ingest/spatial/<br/>→ release_database.qmd"]
   E --> G["gs://calcofi-files-public/_spatial/<br/>→ db-viz-hex"]
@@ -264,7 +264,7 @@ apply_filter_expr <- function(sf_data, filter_expr_json) {
   }
 }
 
-# build _spatial_attr rows from an sf object
+# build spatial_attribute rows from an sf object
 build_spatial_attr <- function(sf_data, layer_name) {
   # exclude core columns and geometry
   geom_col <- attr(sf_data, "sf_column")
@@ -281,6 +281,13 @@ build_spatial_attr <- function(sf_data, layer_name) {
     cls <- class(vals)[1]
 
     base <- tibble(
+      # spatial_key is the JOIN key, not `id`. `id` is per-layer sequential, so
+      # joining on it alone silently mixes features across layers — a county and
+      # a sanctuary both have id 1. Namespaced the same way sample_key is, and
+      # named `_key` per the repo convention (string natural key; `_id` is an
+      # integer surrogate). `id` and `layer` are kept because both are still
+      # meaningful on their own.
+      spatial_key = paste0(layer_name, ":", sf_data$id),
       layer = layer_name,
       id = sf_data$id,
       fld = col,
@@ -313,7 +320,7 @@ build_spatial_attr <- function(sf_data, layer_name) {
 ## Process datasets
 
 For each dataset group: read source, add `id`/`layer`/`name` columns,
-generate PMTiles, and accumulate data for consolidated `_spatial` tables.
+generate PMTiles, and accumulate data for consolidated `spatial` tables.
 
 ```{r}
 #| label: process-datasets
@@ -395,7 +402,7 @@ for (i in seq_len(nrow(d_groups))) {
         relocate(id, layer, name)
     }
 
-    # accumulate for _spatial tables
+    # accumulate for spatial tables
     geom_col_name <- attr(sf_data, "sf_column")
     all_spatial[[layer_name]] <- sf_data |>
       select(id, layer, name, all_of(geom_col_name))
@@ -516,17 +523,17 @@ for (i in seq_len(nrow(d_groups))) {
 }
 ```
 
-## Build consolidated `_spatial` + `_spatial_attr` parquet
+## Build consolidated `spatial` + `spatial_attribute` parquet
 
 ```{r}
 #| label: build-spatial-parquet
 
-pq_spatial <- path(dir_parquet, "_spatial.parquet")
-pq_spatial_attr <- path(dir_parquet, "_spatial_attr.parquet")
+pq_spatial <- path(dir_parquet, "spatial.parquet")
+pq_spatial_attr <- path(dir_parquet, "spatial_attribute.parquet")
 
 # skip if parquet already exists and no new layers were processed
 if (length(all_spatial) == 0 && file_exists(pq_spatial)) {
-  message("_spatial parquet already exists, skipping rebuild")
+  message("spatial parquet already exists, skipping rebuild")
   # read back for downstream references
   con_tmp <- dbConnect(duckdb())
   dbExecute(con_tmp, "INSTALL spatial; LOAD spatial;")
@@ -537,21 +544,28 @@ if (length(all_spatial) == 0 && file_exists(pq_spatial)) {
   attr_combined <- arrow::read_parquet(pq_spatial_attr)
   dbDisconnect(con_tmp, shutdown = TRUE)
 } else {
-  # combine all layers into single sf
+  # combine all layers into single sf. spatial_key namespaces the per-layer `id`
+  # so it is unique across the whole table and safe to join on by itself — see
+  # the note in build_spatial_attr().
   spatial_combined <- bind_rows(all_spatial) |>
-    st_as_sf()
+    st_as_sf() |>
+    mutate(spatial_key = paste0(layer, ":", id)) |>
+    relocate(spatial_key)
+  stopifnot(
+    "spatial_key must be unique across all layers" =
+      !any(duplicated(spatial_combined$spatial_key)))
   message(glue(
-    "_spatial: {nrow(spatial_combined)} features across ",
+    "spatial: {nrow(spatial_combined)} features across ",
     "{length(unique(spatial_combined$layer))} layers"
   ))
 
   # combine all attributes
   attr_combined <- bind_rows(all_spatial_attr)
-  message(glue("_spatial_attr: {nrow(attr_combined)} rows"))
+  message(glue("spatial_attribute: {nrow(attr_combined)} rows"))
 
   # remove old per-dataset parquet files
   old_parquets <- dir_ls(dir_parquet, glob = "*.parquet")
-  old_parquets <- old_parquets[!grepl("^_spatial", basename(old_parquets))]
+  old_parquets <- old_parquets[!grepl("^spatial", basename(old_parquets))]
   if (length(old_parquets) > 0) {
     file_delete(old_parquets)
     message(glue(
@@ -559,7 +573,7 @@ if (length(all_spatial) == 0 && file_exists(pq_spatial)) {
     ))
   }
 
-  # write _spatial via DuckDB (preserves geometry as WKB in parquet)
+  # write spatial via DuckDB (preserves geometry as WKB in parquet)
   spatial_geojson <- tempfile(fileext = ".geojson")
   st_write(spatial_combined, spatial_geojson, delete_dsn = TRUE, quiet = TRUE)
   con_tmp <- dbConnect(duckdb())
@@ -574,12 +588,12 @@ if (length(all_spatial) == 0 && file_exists(pq_spatial)) {
   dbDisconnect(con_tmp, shutdown = TRUE)
   unlink(spatial_geojson)
 
-  # write _spatial_attr as plain parquet
+  # write spatial_attribute as plain parquet
   arrow::write_parquet(attr_combined, pq_spatial_attr)
 
   message(glue(
-    "Wrote _spatial.parquet ({file_size(pq_spatial)}) ",
-    "and _spatial_attr.parquet ({file_size(pq_spatial_attr)})"
+    "Wrote spatial.parquet ({file_size(pq_spatial)}) ",
+    "and spatial_attribute.parquet ({file_size(pq_spatial_attr)})"
   ))
 } # end else (rebuild)
 ```
@@ -653,8 +667,8 @@ dir_ls(dir_parquet, glob = "*.parquet") |>
 
 cat(glue(
   "\n### Database Tables\n\n",
-  "- `_spatial`: {nrow(spatial_combined)} features, ",
+  "- `spatial`: {nrow(spatial_combined)} features, ",
   "{length(unique(spatial_combined$layer))} layers\n",
-  "- `_spatial_attr`: {nrow(attr_combined)} attribute rows\n"
+  "- `spatial_attribute`: {nrow(attr_combined)} attribute rows\n"
 ))
 ```

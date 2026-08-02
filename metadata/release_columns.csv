@@ -15,15 +15,17 @@ cruise,_source_file,Source File,,Provenance: the source file this row was read f
 cruise,_source_row,Source Row,,"Provenance: 1-based row number within _source_file, so a value can be traced back to its line."
 cruise,_source_uuid,Source UUID,,Provenance: the UUID the source record carried where it minted one.
 cruise,_ingested_at,Ingested At,,Provenance: UTC timestamp of the ingest run that produced this row.
-_spatial,id,Feature ID,,"Per-layer sequential integer feature id. Unique WITHIN a layer, not across layers — join _spatial_attr on (layer, id), never on id alone."
-_spatial,layer,Layer,,Spatial layer slug from metadata/spatial_layers.csv (e.g. ca_county_boundaries).
-_spatial,name,Name,,"Per-feature label taken from the layer's name_field, or the layer name itself for dissolved layers."
-_spatial,geom,Geometry,,Feature geometry in WGS84 (EPSG:4326).
-_spatial_attr,id,Feature ID,,Feature id matching _spatial.id within the same layer.
-_spatial_attr,layer,Layer,,Spatial layer slug matching _spatial.layer.
-_spatial_attr,fld,Field,,"Name of the source attribute column this row carries. The table is entity-attribute-value — one row per (feature, source column) — so layers with entirely unrelated attribute schemas share one table."
-_spatial_attr,val_dbl,Value (double),,"Value when the source column was numeric; NULL otherwise. Exactly ONE val_* column is populated per row, chosen by the source column's R type, so read the one matching fld or COALESCE across them as text."
-_spatial_attr,val_int,Value (integer),,Value when the source column was integer; NULL otherwise.
-_spatial_attr,val_chr,Value (text),,Value when the source column was character or factor; NULL otherwise. Also the fallback for any type with no dedicated column.
-_spatial_attr,val_date,Value (date),,Value when the source column was a Date; NULL otherwise.
-_spatial_attr,val_lgl,Value (logical),,Value when the source column was logical; NULL otherwise.
+spatial,spatial_key,Spatial Key,,"Primary key, `layer:id` (e.g. `ca_county_boundaries:1`). Join `spatial_attribute` on THIS, not on `id` — `id` is per-layer sequential, so a county and a sanctuary both have id 1 and joining on it alone silently mixes layers."
+spatial,id,Feature ID,,Per-layer sequential integer feature id. Kept because it is still meaningful within a layer; it is NOT unique across the table.
+spatial,layer,Layer,,Spatial layer slug from metadata/spatial_layers.csv (e.g. ca_county_boundaries).
+spatial,name,Name,,"Per-feature label taken from the layer's name_field, or the layer name itself for dissolved layers."
+spatial,geom,Geometry,,Feature geometry in WGS84 (EPSG:4326).
+spatial_attribute,spatial_key,Spatial Key,,FK to spatial.spatial_key — the feature this attribute belongs to.
+spatial_attribute,id,Feature ID,,Per-layer feature id matching spatial.id within the same layer. Redundant with spatial_key; kept for readability.
+spatial_attribute,layer,Layer,,Spatial layer slug matching spatial.layer.
+spatial_attribute,fld,Field,,"Name of the source attribute column this row carries. The table is entity-attribute-value — one row per (feature, source column) — so layers with entirely unrelated attribute schemas share one table."
+spatial_attribute,val_dbl,Value (double),,"Value when the source column was numeric; NULL otherwise. Exactly ONE val_* column is populated per row, chosen by the source column's R type, so read the one matching fld or COALESCE across them as text."
+spatial_attribute,val_int,Value (integer),,Value when the source column was integer; NULL otherwise.
+spatial_attribute,val_chr,Value (text),,Value when the source column was character or factor; NULL otherwise. Also the fallback for any type with no dedicated column.
+spatial_attribute,val_date,Value (date),,Value when the source column was a Date; NULL otherwise.
+spatial_attribute,val_lgl,Value (logical),,Value when the source column was logical; NULL otherwise.
