@@ -820,6 +820,62 @@ cc_erd(
   colors    = color_map)
 ```
 
+## Normalize geometry CRS
+
+Every geometry column in the release is tagged **EPSG:4326**, here, at the last
+point before the freeze — so the guarantee holds regardless of what any
+individual ingest produced.
+
+It did not hold before. v2026.08.02 shipped `spatial.geom` as `EPSG:4326` but
+`sample.geom` and both `grid` geometries as `OGC:CRS84`, because they are minted
+differently: `ST_Read()` over GeoJSON tags one thing and `ST_Point(lon, lat)`
+tags another. The two label the *same* coordinates — WGS 84 lon/lat — but
+**DuckDB refuses `ST_Intersects` across differing CRS tags**, so a spatial join
+between `sample` and `spatial` simply errored, which is how this was found.
+
+`ST_SetCRS` relabels without transforming, which is what is wanted: nothing here
+is being reprojected, the tags are being made to agree. (Pedantically EPSG:4326
+declares lat/lon axis order while all of this is lon/lat, so `OGC:CRS84` is the
+more literal label — but EPSG:4326 is the conventional one, is what
+`calcofi4r::cc_tbl()` assigns to consumers, and is what the ingests already
+document.)
+
+Doing it at release time rather than only at source means a fix does not require
+re-running all 16 ingests, and a future ingest that mints geometry some third way
+cannot reintroduce the mismatch.
+
+```{r}
+#| label: normalize_crs
+
+geom_cols <- DBI::dbGetQuery(con_wdl, "
+  SELECT table_name, column_name
+  FROM information_schema.columns
+  WHERE table_schema = 'main' AND data_type LIKE 'GEOMETRY%'
+  ORDER BY table_name, column_name")
+
+for (i in seq_len(nrow(geom_cols))) {
+  tb <- geom_cols$table_name[i]; cl <- geom_cols$column_name[i]
+  # CREATE OR REPLACE ... SELECT * REPLACE rather than UPDATE: mutating a
+  # CRS-tagged GEOMETRY column in place hits the DuckDB checkpoint bug that
+  # CLAUDE.md documents (GeoColumnData::GetChildStats, through >= v1.5.1).
+  DBI::dbExecute(con_wdl, glue(
+    "CREATE OR REPLACE TABLE {tb} AS
+     SELECT * REPLACE (ST_SetCRS({cl}, 'EPSG:4326') AS {cl}) FROM {tb}"))
+}
+cat(glue("normalized {nrow(geom_cols)} geometry column(s) to EPSG:4326: ",
+         "{paste(sprintf('%s.%s', geom_cols$table_name, geom_cols$column_name), collapse=', ')}"), "\n")
+
+# assert it took — a silent partial normalization would put us straight back to
+# a join that errors only for some pairs
+still_off <- DBI::dbGetQuery(con_wdl, "
+  SELECT table_name || '.' || column_name AS col
+  FROM information_schema.columns
+  WHERE table_schema = 'main' AND data_type LIKE 'GEOMETRY%'
+    AND data_type NOT LIKE '%EPSG%'")
+stopifnot("every geometry column must be tagged EPSG:4326" = nrow(still_off) == 0)
+cat("all geometry columns tagged EPSG:4326\n")
+```
+
 ## Create Frozen Release
 
 Strip provenance columns and export clean parquet files for public
@@ -1096,6 +1152,34 @@ for (d in derived_dirs) {
   if ((attr(res, "status") %||% 0L) != 0)
     stop(glue("GCS copy failed for derived partitioned {tbl}: {paste(res, collapse='\n')}"))
   message(glue("  {tbl}: uploaded (derived, partitioned)"))
+}
+
+# 2b. PRUNE objects that are no longer part of this release.
+# Uploads add and overwrite but never delete, so re-cutting a version after a
+# table is renamed leaves the old object behind — outside the catalog, untracked,
+# and still readable by anyone who knows the old path. That happened: renaming
+# _spatial -> spatial left BOTH _spatial.parquet and spatial.parquet under
+# v2026.08.02, and the stale 26 MB copy had to be removed by hand.
+#
+# Prune against what was actually exported/copied, not against a hand-maintained
+# list, since that is the drift this is guarding against in the first place.
+gcs_expected <- c(
+  tools::file_path_sans_ext(basename(list.files(dir_frozen_pq, pattern = "[.]parquet$"))),
+  basename(list.dirs(dir_frozen_pq, recursive = FALSE)),
+  copy_rows$table)
+gcs_have <- system2(gcloud, c("storage", "ls",
+  glue("gs://{gcs_bucket}/{gcs_release}/parquet/")), stdout = TRUE, stderr = FALSE)
+gcs_have_tbl <- sub("[.]parquet$", "", basename(sub("/$", "", gcs_have)))
+orphans <- setdiff(gcs_have_tbl[nzchar(gcs_have_tbl)], gcs_expected)
+if (length(orphans)) {
+  for (o in orphans) {
+    uri <- grep(glue("/{o}(\\.parquet)?/?$"), gcs_have, value = TRUE)[1]
+    if (is.na(uri)) next
+    system2(gcloud, c("storage", "rm", "-r", uri), stdout = TRUE, stderr = TRUE)
+    message(glue("  pruned orphan no longer in this release: {o}"))
+  }
+} else {
+  message("  no orphaned objects to prune")
 }
 
 # 3. build and upload catalog.json (needed by cc_get_db())

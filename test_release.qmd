@@ -302,6 +302,30 @@ rp <- function(t) glue("read_parquet('{rel_base}/{t}.parquet')")
 # assert) | SQL returning a single column `n`
 contract <- tibble::tribble(
   ~name, ~expect, ~sql,
+  # The spatial tables had NO contract coverage at all until 2026-08-03, which is
+  # why renaming _spatial -> spatial and _spatial_attr -> spatial_attribute could
+  # not have been caught by the gate that exists to catch exactly that. These read
+  # them the way a consumer does — including the JOIN KEY, since `id` is per-layer
+  # and joining on it alone silently mixes layers.
+  "consumer: spatial layer with attributes (joined on spatial_key)", "nonzero", glue(
+    "SELECT count(*) n FROM {rp('spatial')} s
+       JOIN {rp('spatial_attribute')} a USING (spatial_key)
+     WHERE s.layer = 'Marine Protected Areas'"),
+  "integrity: every spatial_attribute row resolves to a spatial feature", "zero", glue(
+    "SELECT count(*) n FROM {rp('spatial_attribute')} a
+     WHERE NOT EXISTS (SELECT 1 FROM {rp('spatial')} s WHERE s.spatial_key = a.spatial_key)"),
+  "integrity: spatial_key is unique", "zero", glue(
+    "SELECT count(*) n FROM (SELECT spatial_key FROM {rp('spatial')}
+                             GROUP BY 1 HAVING count(*) > 1)"),
+  # a sample-to-polygon join is the thing consumers actually do, and it ERRORS
+  # outright when CRS tags disagree — which they did until v2026.08.03
+  "consumer: sample joins spatial (CRS tags must agree)", "nonzero", glue(
+    "SELECT count(*) n FROM (SELECT geom FROM {rp('sample')}
+                             WHERE geom IS NOT NULL LIMIT 20000) s
+       JOIN {rp('spatial')} sp ON ST_Intersects(sp.geom, s.geom)"),
+  "integrity: no non-finite coordinates in sample", "zero", glue(
+    "SELECT count(*) n FROM {rp('sample')}
+     WHERE isnan(latitude) OR isnan(longitude) OR isinf(latitude) OR isinf(longitude)"),
   "consumer: match env (bottle temperature)", "nonzero", glue(
     "SELECT count(*) n FROM {rp('obs')}
      WHERE realm='env' AND dataset_key='calcofi_bottle' AND measurement_type='temperature'"),
