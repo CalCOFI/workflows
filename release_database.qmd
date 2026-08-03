@@ -874,22 +874,35 @@ if (n_nonfinite > 0) {
 }
 
 geom_cols <- DBI::dbGetQuery(con_wdl, "
-  SELECT table_name, column_name
-  FROM information_schema.columns
-  WHERE table_schema = 'main' AND data_type LIKE 'GEOMETRY%'
-  ORDER BY table_name, column_name")
+  SELECT c.table_name, c.column_name, t.table_type
+  FROM information_schema.columns c
+  JOIN information_schema.tables  t
+    ON t.table_schema = c.table_schema AND t.table_name = c.table_name
+  WHERE c.table_schema = 'main' AND c.data_type LIKE 'GEOMETRY%'
+  ORDER BY c.table_name, c.column_name")
 
-for (i in seq_len(nrow(geom_cols))) {
-  tb <- geom_cols$table_name[i]; cl <- geom_cols$column_name[i]
-  # CREATE OR REPLACE ... SELECT * REPLACE rather than UPDATE: mutating a
-  # CRS-tagged GEOMETRY column in place hits the DuckDB checkpoint bug that
-  # CLAUDE.md documents (GeoColumnData::GetChildStats, through >= v1.5.1).
+# One pass per TABLE, not per column: `grid` carries both `geom` and `geom_ctr`,
+# and rewriting the table once per column would do the work twice.
+#
+# Several of these are VIEWs over the ingest parquet (load_prior_tables(as_view =
+# TRUE)), and DuckDB refuses `CREATE OR REPLACE TABLE` over a view — so
+# materialize to a temp name, drop the original as whatever type it actually is,
+# then rename. That also converts the view into a real table, which is required
+# anyway: a view would just re-read the un-normalized parquet underneath.
+for (tb in unique(geom_cols$table_name)) {
+  cols <- geom_cols[geom_cols$table_name == tb, ]
+  repl <- paste(sprintf("ST_SetCRS(%s, 'EPSG:4326') AS %s",
+                        cols$column_name, cols$column_name), collapse = ", ")
+  tmp  <- paste0("_crsnorm_", tb)
   DBI::dbExecute(con_wdl, glue(
-    "CREATE OR REPLACE TABLE {tb} AS
-     SELECT * REPLACE (ST_SetCRS({cl}, 'EPSG:4326') AS {cl}) FROM {tb}"))
+    "CREATE OR REPLACE TABLE {tmp} AS SELECT * REPLACE ({repl}) FROM {tb}"))
+  kind <- if (grepl("VIEW", cols$table_type[1], ignore.case = TRUE)) "VIEW" else "TABLE"
+  DBI::dbExecute(con_wdl, glue('DROP {kind} IF EXISTS "{tb}"'))
+  DBI::dbExecute(con_wdl, glue('ALTER TABLE {tmp} RENAME TO "{tb}"'))
+  cat(glue("  {tb}: {nrow(cols)} geometry column(s) -> EPSG:4326 (was a {kind})"), "\n")
 }
-cat(glue("normalized {nrow(geom_cols)} geometry column(s) to EPSG:4326: ",
-         "{paste(sprintf('%s.%s', geom_cols$table_name, geom_cols$column_name), collapse=', ')}"), "\n")
+cat(glue("normalized {nrow(geom_cols)} geometry column(s) across ",
+         "{length(unique(geom_cols$table_name))} table(s)"), "\n")
 
 # assert it took — a silent partial normalization would put us straight back to
 # a join that errors only for some pairs
