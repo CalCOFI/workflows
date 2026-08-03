@@ -1199,11 +1199,18 @@ derived_dirs <- list.dirs(dir_frozen_pq, recursive = FALSE)
 for (d in derived_dirs) {
   tbl <- basename(d)
   dst <- glue("gs://{gcs_bucket}/{gcs_release}/parquet/{tbl}")
-  res <- system2(gcloud, c("storage", "cp", "-r", paste0(d, "/*"), dst),
+  # rsync, not cp: obs_ctd_full is ~10 GB across ~96 partitions and uploads at a
+  # few MiB/s, so this leg takes over an hour — and `cp` restarts it from zero
+  # every time. A single transient failure near the end therefore cost the whole
+  # upload (observed: 88 of 96 partitions landed, then the run died and a retry
+  # would have re-sent all 88). rsync skips what already matches, so a retry costs
+  # only what is actually missing.
+  res <- system2(gcloud, c("storage", "rsync", "-r", d, dst),
                  stdout = TRUE, stderr = TRUE)
   if ((attr(res, "status") %||% 0L) != 0)
-    stop(glue("GCS copy failed for derived partitioned {tbl}: {paste(res, collapse='\n')}"))
-  message(glue("  {tbl}: uploaded (derived, partitioned)"))
+    stop(glue("GCS rsync failed for derived partitioned {tbl}: ",
+              "{paste(utils::tail(res, 20), collapse='\n')}"))
+  message(glue("  {tbl}: synced (derived, partitioned)"))
 }
 
 # 2b. PRUNE objects that are no longer part of this release.
