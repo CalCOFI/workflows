@@ -373,6 +373,30 @@ self-documenting; human review happens at every hand-off. Scaffolds come from
   `register_measurement_types()` (append-only, always `na = ""`); the generic guard
   is `check_registry_na_strings()`. A validator placed *after* a default `read_csv`
   can never catch this, which is why the strict read is part of the helper.
+- **All released geometry is tagged `EPSG:4326`**, normalized in
+  `release_database.qmd` immediately before the freeze — not left to whatever each
+  ingest happened to mint. `ST_Point(lon, lat)` tags `OGC:CRS84` while `ST_Read()`
+  over GeoJSON tags `EPSG:4326`; they label the same WGS 84 lon/lat, but **DuckDB
+  refuses `ST_Intersects` across differing tags**, so a `sample`→`spatial` join
+  errored outright until v2026.08.03. `ST_SetCRS` relabels without transforming.
+  Two traps this walked into, both worth remembering:
+  - **Normalizing in the connection is not enough.** Most tables are uploaded by a
+    GCS server-side copy straight from the ingest bucket and never pass through
+    `con_wdl`, so the check passed while the published `grid.parquet` stayed
+    `OGC:CRS84`. Any CRS-normalized table must also be exported locally and marked
+    `gcs_prefix = NA` so the uploader takes the local copy.
+  - **A consumer that coerces one side to match the other will break on the next
+    release.** Normalize *both* sides of a spatial join (`db-viz-hex/prep_db.R`).
+- **`NaN` is not `NULL`, and it corrupts spatial queries — not just its own row.**
+  A `NaN` coordinate survives `IS NOT NULL`, and `ST_Point(NaN, NaN)` returns a
+  real non-NULL `GEOMETRY` that survives `geom IS NOT NULL` too. Worse, its
+  presence makes `ST_Intersects` return **different counts at different thread
+  counts**, dropping valid unrelated pairs: v2026.08.02 shipped 1,590 such rows and
+  every spatial join over it silently under-counted by a different amount on every
+  machine. `append_sample()` (calcofi4db ≥ 3.4.2) normalizes `NaN`/`Inf` to `NULL`
+  before minting geometry, and `release_database.qmd` does the same at release time
+  so a fix does not require re-running all 16 ingests. Test `isnan()`/`isinf()`
+  explicitly; never trust `IS NOT NULL` for a coordinate.
 - **DuckDB**: always open via `calcofi4db::get_duckdb_con()` (sets
   `storage_compatibility_version=latest` so CRS-tagged geometry round-trips);
   never strip the geometry column. Known bug: `UPDATE`/`CREATE INDEX` on a table
