@@ -847,6 +847,32 @@ cannot reintroduce the mismatch.
 ```{r}
 #| label: normalize_crs
 
+# Non-finite coordinates first: NaN is not NULL, so it survives IS NOT NULL, and
+# ST_Point(NaN, NaN) is a real non-NULL GEOMETRY that survives `geom IS NOT NULL`
+# too. Its presence does not merely add junk rows — it makes ST_Intersects return
+# a DIFFERENT NUMBER OF MATCHES at different thread counts, dropping valid
+# unrelated pairs, so every spatial join over v2026.08.02 silently under-counted
+# by a different amount on every machine. calcofi4db 3.4.2 stops them being
+# minted; normalizing here as well means the release is clean without re-running
+# all 16 ingests for shards written before that.
+n_nonfinite <- DBI::dbGetQuery(con_wdl, "
+  SELECT COUNT(*) AS n FROM sample
+  WHERE isnan(latitude) OR isnan(longitude) OR isinf(latitude) OR isinf(longitude)")$n
+if (n_nonfinite > 0) {
+  DBI::dbExecute(con_wdl, "
+    CREATE OR REPLACE TABLE sample AS
+    SELECT * REPLACE (
+      CASE WHEN isnan(latitude)  OR isinf(latitude)  THEN NULL ELSE latitude  END AS latitude,
+      CASE WHEN isnan(longitude) OR isinf(longitude) THEN NULL ELSE longitude END AS longitude,
+      CASE WHEN isnan(latitude) OR isinf(latitude) OR isnan(longitude) OR isinf(longitude)
+           THEN NULL ELSE geom END AS geom)
+    FROM sample")
+  cat(glue("normalized {n_nonfinite} non-finite coordinate(s) in sample to NULL ",
+           "(and dropped their geometry)"), "\n")
+} else {
+  cat("no non-finite coordinates in sample\n")
+}
+
 geom_cols <- DBI::dbGetQuery(con_wdl, "
   SELECT table_name, column_name
   FROM information_schema.columns
