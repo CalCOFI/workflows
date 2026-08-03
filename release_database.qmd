@@ -900,6 +900,15 @@ still_off <- DBI::dbGetQuery(con_wdl, "
     AND data_type NOT LIKE '%EPSG%'")
 stopifnot("every geometry column must be tagged EPSG:4326" = nrow(still_off) == 0)
 cat("all geometry columns tagged EPSG:4326\n")
+
+# THE ASSERTION ABOVE IS NOT ENOUGH ON ITS OWN. Most tables are uploaded by a GCS
+# server-side copy straight from the ingest bucket, never passing through this
+# connection — so normalizing here would leave the connection clean, the assertion
+# green, and the PUBLISHED grid.parquet still tagged OGC:CRS84. Force every table
+# whose geometry was touched to be exported locally and uploaded from there.
+crs_local_tables <- unique(geom_cols$table_name)
+cat(glue("these will be uploaded from the LOCAL export, not GCS-copied: ",
+         "{paste(crs_local_tables, collapse=', ')}"), "\n")
 ```
 
 ## Create Frozen Release
@@ -943,8 +952,11 @@ for (tbl in setdiff(derived_tables, "cruise")) {
 # measurement_type are plain); obs / obs_ctd_full are Hive-partitioned + sorted
 # for compression + predicate pushdown (see design "Parquet partitioning").
 core_single <- intersect(
-  c("sample", "obs_attribute", "sample_measurement", "measurement_type",
-    "taxon", "dataset_taxon", "taxon_group"),   # unified taxa refs, rebuilt here
+  unique(c("sample", "obs_attribute", "sample_measurement", "measurement_type",
+           "taxon", "dataset_taxon", "taxon_group",  # unified taxa refs, rebuilt here
+           # every CRS-normalized table (grid, spatial, …): the normalization only
+           # reaches the release if the LOCAL copy is what gets uploaded
+           crs_local_tables)),
   dbListTables(con_wdl))
 for (tbl in core_single)
   export_parquet(con_wdl, tbl,
@@ -998,7 +1010,8 @@ for (dt in derived_tables) {
 # parquet (esp. the old ichthyo `taxon` hierarchy the new `taxon` replaces).
 freeze_stats <- freeze_stats |>
   mutate(gcs_prefix = if_else(
-    table %in% c("measurement_type", "cruise", "taxon", "dataset_taxon", "taxon_group"),
+    table %in% c("measurement_type", "cruise", "taxon", "dataset_taxon", "taxon_group",
+                 crs_local_tables),
     NA_character_, gcs_prefix))
 
 # add consolidated core + supplemental tables (gcs_prefix = NA → upload from local)
