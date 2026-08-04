@@ -47,7 +47,7 @@ categories <- list(
                    blurb = "Publish the released core to external services and formats \u2014 ERDDAP, CF NetCDF, OBIS. These are dataset-agnostic: one notebook covers every dataset in the release.",
                    layout = "cards", grouped = FALSE),
   release   = list(title = "Release & pipeline",
-                   blurb = "Freeze a versioned release and the maintenance utilities that support the pipeline.",
+                   blurb = "Freeze a versioned release, validate it against the consumer contract, deploy it to the apps and services that read it, and the maintenance utilities that support the pipeline.",
                    layout = "list", grouped = FALSE),
   reference = list(title = "Reference & plans",
                    blurb = "Planning and reference notebooks. (Candidate to fold into calcofi.io/docs/.)",
@@ -61,7 +61,12 @@ classify <- function(base, cc) {
   if (!is.null(cc)) {
     if (wt %in% c("ingest", "spatial")) return("ingest")
     if (wt == "publish") return("publish")
-    if (wt == "release") return("release")
+    # `test` and `deploy` belong with `release`: they are the steps immediately
+    # before and after freezing one. Without them here they fell through to
+    # "Other notebooks", which is where test_release had been sitting — listed
+    # among exploratory scratch work rather than as the gate that promotes
+    # latest.txt.
+    if (wt %in% c("release", "test", "deploy")) return("release")
     if (wt == "reference") return("reference")
   }
   if (grepl("^publish_", base)) return("publish")

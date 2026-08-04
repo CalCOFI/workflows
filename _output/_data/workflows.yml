@@ -1,6 +1,6 @@
-generated: '2026-08-02'
+generated: '2026-08-04'
 n_total: 51
-n_meta: 24
+n_meta: 25
 categories:
 - id: ingest
   title: Ingest
@@ -120,7 +120,7 @@ categories:
         Collection, filtered to the CalCOFI region. Position, time, depth, and gear
         metadata per tow. Biovolume measurements are not in the source file and are
         pending from the provider (see Questions for Data Providers).
-      coverage: 1926 to present (CalCOFI-region subset)
+      coverage: 1926-06 to 2024-04
       color: '#bbe0f0'
       link_data_source: SIO Pelagic Invertebrate Collection DB (CSV export)
       provider: sio
@@ -207,7 +207,7 @@ categories:
       description: Bird and mammal observations along CalCOFI (and NMFS, CPR) cruise
         transects, 1987-2021. Transect effort + counts + species/behavior lookups.
         Curated via CCE-LTER DataZoo 255 (PI Bill Sydeman).
-      coverage: 1987 to 2021
+      coverage: 1987-05 to 2021-08
       color: '#f0d2e8'
       link_data_source: https://oceaninformatics.ucsd.edu/datazoo/catalogs/ccelter/datasets/255
       provider: farallon
@@ -238,21 +238,28 @@ categories:
         one notebook replaces the former per-dataset CTD and ichthyoplankton publishers.'
 - id: release
   title: Release & pipeline
-  blurb: Freeze a versioned release and the maintenance utilities that support the
-    pipeline.
+  blurb: Freeze a versioned release, validate it against the consumer contract, deploy
+    it to the apps and services that read it, and the maintenance utilities that support
+    the pipeline.
   layout: list
-  count: 6
+  count: 7
   groups:
   - label: ''
     items:
     - url: clean_db.html
       title: clean_db
+    - url: deploy_consumers.html
+      title: deploy_consumers
+      description: Reports which release each consumer is actually serving, and —
+        when CALCOFI_DEPLOY=true — brings the server-side ones (db-viz-hex, db-viz-cruise,
+        the h3t tile API) onto the promoted release. Runs after test_release, so it
+        can only ever deploy a version that passed the consumer-contract suite.
     - url: load_views.html
       title: load_views
     - url: release_database.html
       title: release_database
-    - url: sync_gd_to_gcs.html
-      title: sync_gd_to_gcs
+    - url: test_release.html
+      title: test_release
     - url: update_datasets-sitemap.html
       title: update_datasets-sitemap
     - url: update_taxa.html
@@ -278,7 +285,7 @@ categories:
   title: Other notebooks
   blurb: Exploratory analyses and legacy load scripts, kept for reference.
   layout: list
-  count: 22
+  count: 21
   groups:
   - label: ''
     items:
@@ -324,10 +331,9 @@ categories:
       title: load_field-labels
     - url: load_sanctuaries.html
       title: load_sanctuaries
-    - url: test_release.html
-      title: test_release
 dag_mermaid: |-
   graph LR
+    deploy_consumers(["deploy_consumers"]):::release
     ingest_calcofi_bottle(["ingest_calcofi_bottle"]):::c_ingest_calcofi_bottle
     ingest_calcofi_ctd_cast(["ingest_calcofi_ctd_cast"]):::c_ingest_calcofi_ctd_cast
     ingest_calcofi_dic(["ingest_calcofi_dic"]):::c_ingest_calcofi_dic
@@ -349,6 +355,8 @@ dag_mermaid: |-
     publish_to_erddap(["publish_to_erddap"]):::publish
     publish_to_netcdf(["publish_to_netcdf"]):::publish
     release_database(["release_database"]):::release
+    test_release(["test_release"]):::release
+    test_release --> deploy_consumers
     ingest_swfsc_ichthyo --> ingest_calcofi_bottle
     ingest_swfsc_ichthyo --> ingest_calcofi_ctd_cast
     ingest_calcofi_bottle --> ingest_calcofi_dic
@@ -384,6 +392,8 @@ dag_mermaid: |-
     ingest_spatial --> release_database
     ingest_swfsc_cufes --> release_database
     ingest_swfsc_ichthyo --> release_database
+    release_database --> test_release
+    classDef release fill:#f06595,stroke:#00000033,color:#10161c;
     classDef c_ingest_calcofi_bottle fill:#f5cad9,stroke:#00000033,color:#10161c;
     classDef c_ingest_calcofi_ctd_cast fill:#e0ccf0,stroke:#00000033,color:#10161c;
     classDef c_ingest_calcofi_dic fill:#ffd2bb,stroke:#00000033,color:#10161c;
@@ -402,5 +412,4 @@ dag_mermaid: |-
     classDef c_ingest_swfsc_cufes fill:#f0e8bb,stroke:#00000033,color:#10161c;
     classDef c_ingest_swfsc_ichthyo fill:#cdebc6,stroke:#00000033,color:#10161c;
     classDef publish fill:#20c997,stroke:#00000033,color:#10161c;
-    classDef release fill:#f06595,stroke:#00000033,color:#10161c;
 
