@@ -2883,9 +2883,21 @@ parquet_stats <- write_parquet_outputs(
   partition_by = list(
     obs          = "cruise_key",
     obs_ctd_full = "cruise_key"),
+  # Sort key MUST match `core_sort` in release_database.qmd, so the shard the
+  # release reads is already clustered the way it re-exports it. Two parts
+  # matter and both were measured, not guessed:
+  #   grid_key FIRST co-locates every column that is a function of the cast —
+  #     sample_key, hex_id, latitude, longitude, datetime — which is most of the
+  #     row width. measurement_type-first clusters one 54-value column and
+  #     scatters the rest: 4.61 GB vs 1.22 GB for obs_ctd_full.
+  #   datetime LAST is not decoration. (grid_key, depth_min_m, measurement_type)
+  #     leaves large tie groups, and rows inside a tie land in arbitrary order,
+  #     scattering lat/lon/datetime again. Adding the tiebreak made a partition
+  #     27.55 -> 20.20 MB (CTD) and 23.22 -> 16.95 MB (mets), i.e. ~27% below
+  #     what the release's own re-export produced. Do not drop it.
   sort_by = list(
     obs          = c("measurement_type", "depth_min_m"),
-    obs_ctd_full = c("measurement_type", "depth_min_m"),
+    obs_ctd_full = c("grid_key", "depth_min_m", "measurement_type", "datetime"),
     sample       = "hilbert:longitude,latitude"),
   strip_provenance = FALSE,
   mismatches       = mismatches,

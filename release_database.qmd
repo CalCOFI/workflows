@@ -975,7 +975,13 @@ for (tbl in core_single)
   export_parquet(con_wdl, tbl,
     file.path(dir_frozen_pq, paste0(tbl, ".parquet")), compression = "zstd")
 
-core_sort <- "grid_key NULLS LAST, depth_min_m NULLS LAST, measurement_type"
+# The trailing `datetime` is a tiebreak, not decoration: without it the first
+# three columns leave large tie groups whose rows land in arbitrary order,
+# scattering latitude/longitude/datetime and defeating delta encoding. Measured
+# on one partition: 27.55 -> 20.20 MB (CTD), 23.22 -> 16.95 MB (mets).
+# The supplemental ingests sort by this same key, so the shard the release reads
+# is already clustered the way it wants — keep the two in step.
+core_sort <- "grid_key NULLS LAST, depth_min_m NULLS LAST, measurement_type, datetime"
 if ("obs" %in% dbListTables(con_wdl)) {
   dbExecute(con_wdl, glue(
     "COPY (SELECT * FROM obs ORDER BY dataset_key, {core_sort})
@@ -986,6 +992,13 @@ if ("obs" %in% dbListTables(con_wdl)) {
   export_parquet(con_wdl, glue("SELECT * FROM obs ORDER BY dataset_key, {core_sort}"),
     file.path(dir_frozen_pq, "obs.parquet"), compression = "zstd")
 }
+# Supplementals are exported and uploaded from here, like every other released
+# table. A GCS server-side copy from the ingest bucket was measured and rejected:
+# it removes ~1.5 GB from the upload, but only stays correct while the ingest
+# shard, the assembled core and the published release agree — and nothing tracks
+# that they do. A stale source would publish stale data behind a green release.
+# Pushing from one place keeps the release self-consistent; see the `core_sort`
+# note above for the change that actually shrank this leg.
 for (st in intersect(supp_tbls, dbListTables(con_wdl)))
   dbExecute(con_wdl, glue(
     "COPY (SELECT * FROM {st} ORDER BY cruise_key, {core_sort})
@@ -1156,6 +1169,7 @@ gcloud      <- find_gcloud()
 
 # 1. GCS server-side copy for ingest tables (auto-discovered from registry)
 copy_rows <- freeze_stats |> filter(!is.na(gcs_prefix))
+
 message(glue("Copying {nrow(copy_rows)} tables from ingest/ to releases/ on GCS..."))
 
 for (i in seq_len(nrow(copy_rows))) {
@@ -1199,12 +1213,11 @@ derived_dirs <- list.dirs(dir_frozen_pq, recursive = FALSE)
 for (d in derived_dirs) {
   tbl <- basename(d)
   dst <- glue("gs://{gcs_bucket}/{gcs_release}/parquet/{tbl}")
-  # rsync, not cp: obs_ctd_full is ~10 GB across ~96 partitions and uploads at a
-  # few MiB/s, so this leg takes over an hour — and `cp` restarts it from zero
-  # every time. A single transient failure near the end therefore cost the whole
-  # upload (observed: 88 of 96 partitions landed, then the run died and a retry
-  # would have re-sent all 88). rsync skips what already matches, so a retry costs
-  # only what is actually missing.
+  # rsync, not cp: a partitioned upload at a few MiB/s takes a long time, and
+  # `cp` restarts it from zero every time. A single transient failure near the
+  # end therefore cost the whole upload (observed on obs_ctd_full: 88 of 96
+  # partitions landed, then the run died and a retry would have re-sent all 88).
+  # rsync skips what already matches, so a retry costs only what is missing.
   res <- system2(gcloud, c("storage", "rsync", "-r", d, dst),
                  stdout = TRUE, stderr = TRUE)
   if ((attr(res, "status") %||% 0L) != 0)

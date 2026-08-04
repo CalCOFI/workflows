@@ -58,7 +58,15 @@ as "ran and matched".
 variable.** `for (t in targets) tar_make(t)` makes tidyselect look for a *column*
 named `t` and fails with ``Column `t` doesn't exist`` — for every target, so the
 whole loop is a no-op that looks like a pass if you only check exit codes. Use
-`tar_make(names = tidyselect::all_of(t))`.
+`tar_make(names = tidyselect::all_of(tgt))`.
+
+**…and do not name that loop variable `t`.** `tidyselect::all_of(t)` resolves `t`
+to **`base::t`**, the matrix-transpose function, and fails with ``Subscript must
+be numeric or character, not a function`` — so the documented workaround breaks
+in exactly the loop it is meant to fix. Same trap for `c`, `df`, `data`. Use
+`tgt`. Verify the run actually happened (output mtime/size), because this error
+surfaces *after* `tar_invalidate()` has already succeeded, which makes it look
+like the target was reprocessed when nothing was rewritten.
 
 There is no test suite or linter in this repo; correctness is enforced by the
 `/validate-ingest` checks and the validation chunks inside `release_database.qmd`.
