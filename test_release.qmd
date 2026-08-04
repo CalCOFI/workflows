@@ -493,6 +493,37 @@ if (nzchar(gh_bin)) {
   else
     message("dispatched CalCOFI/db-viz-station refresh workflow")
 }
+
+# server-side consumers: db-viz-hex, db-viz-cruise and the h3t tile API.
+#
+# The three dispatches above reach GitHub-hosted consumers, which redeploy
+# themselves. The ones living on the CalCOFI server cannot — they need their
+# local DuckDB rebuilt from the new release and their processes restarted, and
+# every one of them drifted at least once because that lived only as prose in a
+# runbook. scripts/deploy_consumers.sh does it, and documents which failures are
+# silent (the h3t API holds the old database file open across a symlink flip; a
+# Shiny app keeps its handle until restart.txt is touched).
+#
+# Gated: a normal `tar_make()` builds and promotes but does not touch the
+# server. Set CALCOFI_DEPLOY=true (in ~/.Renviron to make it the default) and
+# every release syncs its consumers automatically.
+if (identical(Sys.getenv("CALCOFI_DEPLOY"), "true")) {
+  dep <- system2("bash", c(here::here("scripts", "deploy_consumers.sh"),
+                           "--release", release_version),
+                 stdout = TRUE, stderr = TRUE)
+  cat(paste(dep, collapse = "\n"), "\n")
+  if ((attr(dep, "status") %||% 0L) != 0)
+    warning(glue(
+      "consumer deploy FAILED for {release_version}. latest.txt is promoted and ",
+      "correct, so calcofi4r and the hosted sites are fine — but db-viz-hex, ",
+      "db-viz-cruise or the h3t API may still be serving the previous release. ",
+      "Re-run: bash scripts/deploy_consumers.sh"))
+  else
+    message(glue("server-side consumers deployed for {release_version}"))
+} else {
+  message("CALCOFI_DEPLOY is not 'true' — server-side consumers NOT deployed ",
+          "(db-viz-hex, db-viz-cruise, h3t API still on the previous release)")
+}
 ```
 
 ## Cleanup
