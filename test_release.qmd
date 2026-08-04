@@ -438,6 +438,30 @@ message(glue(
   "PROMOTED {release_version}: {n_pass} passed, {n_skip} skipped, ",
   "0 failed. latest.txt is now {release_version}."))
 
+# regenerate the browsable release index so the public listing cannot lag the
+# bucket. `versions.json` and `latest.txt` are written by the release itself and
+# were always current, but the HTML at
+# storage.calcofi.io/calcofi-db/ducklake/releases/ is a STATIC page built by
+# scripts/build_release_index.R -- which nothing called. It was last run by hand
+# on 2026-07-29, so it advertised "16 releases, latest v2026.07.17" while the
+# bucket held 20 and had long since promoted past it. Data consumers were
+# unaffected (they read latest.txt); it was humans who were misinformed.
+#
+# Runs AFTER the promotion above, because the index reads latest.txt to mark the
+# "latest" badge. Non-fatal for the same reason as the dispatch below: a stale
+# index is a documentation bug, not a reason to fail a validated release.
+idx_script <- here::here("scripts", "build_release_index.R")
+if (file.exists(idx_script)) {
+  idx_rc <- system2(file.path(R.home("bin"), "Rscript"), idx_script,
+                    stdout = TRUE, stderr = TRUE)
+  if ((attr(idx_rc, "status") %||% 0L) != 0) {
+    warning(glue("release index rebuild FAILED (latest.txt is still correct): ",
+                 "{paste(utils::tail(idx_rc, 5), collapse = ' | ')}"))
+  } else {
+    message("release index rebuilt")
+  }
+}
+
 # nudge the query site to adopt the new default_version now (previously a
 # 6-hourly cron poll): dispatch CalCOFI/db-query's bump-default-version workflow,
 # which mirrors latest.txt -> _config.yml and triggers a Pages redeploy. Gated

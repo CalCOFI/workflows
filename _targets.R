@@ -23,7 +23,6 @@ Sys.setenv(QUARTO_CHROMIUM_HEADLESS_MODE = "new")
 
 build_targets_list(
   exclude = c(
-    "publish_ichthyo_to-obis",
     # RE-ENABLED 2026-07-30. The exclusion below was correct while the CTD
     # outputs were byte-identical to what was already on disk, but the ingest
     # LOGIC has now changed in three ways that require a real rebuild:
@@ -41,10 +40,15 @@ build_targets_list(
     #
     # publish_ctd-cast_to-netcdf and publish_ichthyo_to-netcdf are GONE — replaced
     # by the single dataset-agnostic `publish_to-netcdf`, which covers all 15
-    # datasets. It is excluded here only because it uploads to a world-readable
-    # bucket: publishing is gated behind CALCOFI_PUBLISH=true, and the published
-    # dataset ids are now dataset_key-based (`calcofi_ctd-cast`, `swfsc_ichthyo`)
-    # rather than the old bare `ctd-cast` / `ichthyo`, so enabling it changes
-    # public URLs. Drop this entry once that rename is agreed.
-    "publish_to-netcdf")
+    # datasets.
+    #
+    # RE-ENABLED 2026-08-04. It had been excluded pending agreement on the
+    # dataset-id rename (bare `ctd-cast`/`ichthyo` -> dataset_key-based
+    # `calcofi_ctd-cast`/`swfsc_ichthyo`), because publishing changes public
+    # URLs. The rename is now accepted as canonical. Note it had already
+    # half-happened: the 2026-07-30 run published under the NEW ids while the
+    # old directories stayed behind, so gs://calcofi-files-public/netcdf/ has
+    # been serving both generations, with the old set frozen and orphaned.
+    # Publishing is still gated behind CALCOFI_PUBLISH=true.
+    "publish_ichthyo_to-obis")
 )
