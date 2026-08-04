@@ -1,6 +1,6 @@
-# CalCOFI Database Release v2026.08.02
+# CalCOFI Database Release v2026.08.03
 
-**Release Date**: 2026-08-02
+**Release Date**: 2026-08-03
 
 ## Tables Included
 
@@ -52,7 +52,7 @@ con <- dbConnect(duckdb())
 dbExecute(con, 'INSTALL httpfs; LOAD httpfs;')
 dbGetQuery(con, "
   SELECT * FROM read_parquet(
-    'https://storage.googleapis.com/calcofi-db/ducklake/releases/v2026.08.02/parquet/ichthyo.parquet')
+    'https://storage.googleapis.com/calcofi-db/ducklake/releases/v2026.08.03/parquet/ichthyo.parquet')
   LIMIT 10")
 ```
 
@@ -60,6 +60,6 @@ Or use calcofi4r:
 
 ```r
 library(calcofi4r)
-con <- cc_get_db(version = 'v2026.08.02')
+con <- cc_get_db(version = 'v2026.08.03')
 ```
 

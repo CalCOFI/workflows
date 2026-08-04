@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 <meta name="author" content="CalCOFI">
-<meta name="dcterms.date" content="2026-08-02">
+<meta name="dcterms.date" content="2026-08-03">
 
 <title>Publish every dataset to ERDDAP</title>
 <style>
@@ -117,7 +117,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">2026-08-02</p>
+      <p class="date">2026-08-03</p>
     </div>
   </div>
   
@@ -235,21 +235,21 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"release       : {RELEASE}</span><span class="sc">\n</span><span class="st">"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>release       : v2026.08.02</code></pre>
+<pre><code>release       : v2026.08.03</code></pre>
 </div>
 <details class="code-fold">
 <summary>Code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"local parquet : {PQ_LOCAL} ({ifelse(dir_exists(PQ_LOCAL), 'present', 'MISSING')})</span><span class="sc">\n</span><span class="st">"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>local parquet : /Users/bbest/Github/CalCOFI/workflows/data/releases/v2026.08.02/parquet (present)</code></pre>
+<pre><code>local parquet : /Users/bbest/Github/CalCOFI/workflows/data/releases/v2026.08.03/parquet (present)</code></pre>
 </div>
 <details class="code-fold">
 <summary>Code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"server parquet: {PQ_SERVER}</span><span class="sc">\n</span><span class="st">"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>server parquet: /share/data/erddap-duckdb/datasets/release/v2026.08.02/parquet</code></pre>
+<pre><code>server parquet: /share/data/erddap-duckdb/datasets/release/v2026.08.03/parquet</code></pre>
 </div>
 <details class="code-fold">
 <summary>Code</summary>
@@ -294,7 +294,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </details>
 <div class="cell-output-display">
 <table class="caption-top table table-sm table-striped small">
-<caption>Core rows per dataset in v2026.08.02</caption>
+<caption>Core rows per dataset in v2026.08.03</caption>
 <colgroup>
 <col style="width: 38%">
 <col style="width: 8%">
@@ -1393,7 +1393,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: left;">swfsc_cufes_sample</td>
 <td style="text-align: right;">49572</td>
 <td style="text-align: right;">100.0</td>
-<td style="text-align: right;">100.0</td>
+<td style="text-align: right;">96.8</td>
 <td style="text-align: left;">1996-03-15 23:40:00</td>
 <td style="text-align: left;">2022-04-27 10:00:04</td>
 <td style="text-align: left;">TRUE</td>
@@ -1491,6 +1491,12 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">69.4</td>
 </tr>
 <tr class="odd">
+<td style="text-align: left;">swfsc_cufes_sample</td>
+<td style="text-align: right;">49572</td>
+<td style="text-align: right;">100.0</td>
+<td style="text-align: right;">96.8</td>
+</tr>
+<tr class="even">
 <td style="text-align: left;">swfsc_ichthyo_sample</td>
 <td style="text-align: right;">213122</td>
 <td style="text-align: right;">98.5</td>
@@ -1698,11 +1704,11 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <h2 data-number="8" class="anchored" data-anchor-id="deploy-manual"><span class="header-section-number">8</span> Deploy (manual)</h2>
 <p>The notebook writes config and a view database; it does <strong>not</strong> touch the server.</p>
 <ol type="1">
-<li><p><strong>Sync the release parquet</strong> to the identity-mounted path the views name. The views bind <code>/share/data/erddap-duckdb/datasets/release/v2026.08.02/parquet</code> literally, so this path must match exactly:</p>
+<li><p><strong>Sync the release parquet</strong> to the identity-mounted path the views name. The views bind <code>/share/data/erddap-duckdb/datasets/release/v2026.08.03/parquet</code> literally, so this path must match exactly:</p>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb29"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a><span class="co"># rsync is NOT installed on the server, and the release is already on GCS,</span></span>
 <span id="cb29-2"><a href="#cb29-2" aria-hidden="true" tabindex="-1"></a><span class="co"># so pull it server-side rather than pushing 2 GB from a laptop. Its gcloud</span></span>
 <span id="cb29-3"><a href="#cb29-3" aria-hidden="true" tabindex="-1"></a><span class="co"># needs the alpha track; gsutil is simpler:</span></span>
-<span id="cb29-4"><a href="#cb29-4" aria-hidden="true" tabindex="-1"></a><span class="fu">ssh</span> calcofi <span class="st">"mkdir -p /share/data/erddap-duckdb/datasets/release/v2026.08.02      &amp;&amp; gsutil -m cp -r gs://calcofi-db/ducklake/releases/v2026.08.02/parquet           /share/data/erddap-duckdb/datasets/release/v2026.08.02/      &amp;&amp; gsutil -m cp -r gs://calcofi-db/ingest/calcofi_mets /share/data/erddap-duckdb/datasets/ingest/"</span> </span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div></li>
+<span id="cb29-4"><a href="#cb29-4" aria-hidden="true" tabindex="-1"></a><span class="fu">ssh</span> calcofi <span class="st">"mkdir -p /share/data/erddap-duckdb/datasets/release/v2026.08.03      &amp;&amp; gsutil -m cp -r gs://calcofi-db/ducklake/releases/v2026.08.03/parquet           /share/data/erddap-duckdb/datasets/release/v2026.08.03/      &amp;&amp; gsutil -m cp -r gs://calcofi-db/ingest/calcofi_mets /share/data/erddap-duckdb/datasets/ingest/"</span> </span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div></li>
 <li><p><strong>Build the view database on the server.</strong> It cannot be built here: DuckDB validates a view’s parquet paths at <code>CREATE</code> time, so the views must be created where the data already sits at the path they name. The generated script carries the exact SQL validated above.</p>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb30"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a><span class="fu">scp</span> data/erddap/build_erddap_db.R calcofi:/share/data/erddap-duckdb/</span>
 <span id="cb30-2"><a href="#cb30-2" aria-hidden="true" tabindex="-1"></a><span class="fu">ssh</span> calcofi <span class="st">"docker exec -i rstudio bash -lc      'cd /share/data/erddap-duckdb &amp;&amp; Rscript build_erddap_db.R'"</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>

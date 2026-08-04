@@ -3,22 +3,6 @@ config:
   layout: elk
 ---
 erDiagram
-    _spatial {
-        int id
-        varchar layer
-        varchar name
-        geometry geom
-    }
-    _spatial_attr {
-        varchar layer
-        int id
-        varchar fld
-        double val_dbl
-        int val_int
-        varchar val_chr
-        date val_date
-        bool val_lgl
-    }
     cruise {
         uuid cruise_uuid
         date date_ym
@@ -180,6 +164,24 @@ erDiagram
         timestamp _ingested_at
         varchar _source_uuid
     }
+    spatial {
+        varchar spatial_key
+        int id
+        varchar layer
+        varchar name
+        geometry geom
+    }
+    spatial_attribute {
+        varchar spatial_key
+        varchar layer
+        int id
+        varchar fld
+        double val_dbl
+        int val_int
+        varchar val_chr
+        date val_date
+        bool val_lgl
+    }
     taxon {
         varchar taxon_key PK
         int worms_id
@@ -250,4 +252,4 @@ erDiagram
     classDef _cdebc6 stroke:#cdebc6,stroke-width:3px
     class ship,lookup,grid _cdebc6
     classDef _cfe8ea stroke:#cfe8ea,stroke-width:3px
-    class _spatial,_spatial_attr _cfe8ea
+    class spatial,spatial_attribute _cfe8ea

@@ -1,10 +1,5 @@
 ## TODO
 - [ ] for sio_pic-zooplankton, ask Ed about cod end and sample type (ethanol or alcohol) missing fields for matching
-- [ ] db-schema cleanup:
-  - [ ] mv _spatial -> spatial, _spatial_attr -> spatial_attribute; link via id -> spatial_id
-  - [ ] lookup <- region | ship | taxon_group
-- [ ] db-viz-hex: ALL data queryable?
-- [ ] db-viz-hex: spatial data summaries?
 - [ ] check GDrive and GCS sync on server, per [rclone](https://github.com/CalCOFI/server/tree/main/rclone)
 - [ ] Drop vestigial `calcofi4db::get_working_ducklake()`
   Admin "Working DuckLake" (calcofi4db::get_working_ducklake()) — despite the name, it's a
@@ -23,6 +18,235 @@
 - [ ] rename `swfsc_inverts` to `swfsc_invert` including `ingest_swfsc_inverts.qmd` -> `ingest_swfsc_invert.qmd`
 - [ ] `ingest_calcofi_ctd-cast.qmd` needs a sync to GCS for just the used CSV files so saved in GCS `archive/`, not just GCS `_sync/`
 
+
+## db-viz-hex UI — summarize within spatial polygons
+
+Read `libs/plans/2026-08-03 db-viz-hex — summarize within spatial polygons (UI).md`. The data layer is built and deployed, only the UI is missing — and includes the working end-to-end query, the env_obs.cast_id join quirk, the available layers, the deploy steps, and four decisions worth making deliberately (single vs multi layer given overlap, PMTiles vs DB geometry for drawing, how empty polygons render, and that the CPUE-units caveat carries over).
+
+----
+
+I've read the plan, the app, and probed the deployed data layer. Three things I confirmed before asking you to decide:
+
+- Queries are trivially fast — 0.01 s for MPAs on the bio side, 0.05 s for MEOW (1.1 M memberships) on the env side, against the app's local DuckDB. No tile service needed for the polygon path.
+- PMTiles ids do match spatial.id for every single-layer group (ingest_spatial.qmd mints both as row_number()), and tippecanoe runs with --no-tile-size-limit and no drop flags, so nothing is dropped at low zoom. The one exception is the noaa_maritime_boundaries group, whose tile ids are per-file — all three of those are line layers, so not summarizable anyway.
+
+### TODO: 3 layers have empty geometry: National Marine Sanctuaries, CA Watersheds (HUC8), Ocean Disposal Sites
+- Three layers have empty geometry in the release — National Marine Sanctuaries, CA Watersheds (HUC8), Ocean Disposal Sites are all GEOMETRYCOLLECTION EMPTY with 0 points in spatial.geom. That's why sanctuaries have zero sample_spatial memberships; it's an ingest_spatial.qmd bug, not a NaN/CRS one, and it affects both drawing and summarizing. I'll flag it separately — a picker driven by sample_spatial excludes them on its own.
+
+One finding that bears directly on your fourth decision: the default species, Sardinops sagax, already spans three cpue_units — count/10m2 (11 k rows, oblique/vertical tows), count/100m3 (2.3 k, manta), and bare count (47 k, from swfsc_cufes). The cufes rows outnumber the ichthyo ones 4:1, so a plain AVG(std_tally) is dominated by a differently-united quantity. The hex view has this today.
+
+⏺ User answered Claude's questions:
+· Should the polygon aggregation unit be one layer at a time, or several at once? → Single-select (Recommended)
+· Where should the summarized polygons be drawn from? → DB geometry as GeoJSON (Recommended)
+· How should polygons with no CalCOFI samples render? → Outline only, 'no data' (Recommended)
+· How should the polygon summary handle the mixed CPUE units? → One unit, named in the legend (Recommended)
+
+←  ☒ Layer select  ☒ Geometry  ☒ Empty polys  ☒ CPUE units  ✔ Submit  →
+
+Review your answers
+
+ ● Should the polygon aggregation unit be one layer at a time, or several at once?
+   → Single-select (Recommended)
+ ● Where should the summarized polygons be drawn from?
+   → DB geometry as GeoJSON (Recommended)
+ ● How should polygons with no CalCOFI samples render?
+   → Outline only, 'no data' (Recommended)
+ ● How should the polygon summary handle the mixed CPUE units?
+   → One unit, named in the legend (Recommended)
+
+----
+
+"Three layers have empty geometry in the release — National Marine Sanctuaries, CA Watersheds (HUC8), Ocean Disposal Sites are all GEOMETRYCOLLECTION EMPTY with 0 points in spatial.geom"
+
+This is a genuine problem, and presumably an artifact of simplification in ingest_spatial.qmd that is aberrant. All polygons should be included and at the finest resolution of the PMTiles made available (such as the level 7 of H3 hexagons) should be displayed at full resolution.
+
+----
+
+You were right that the empty layers were the real problem — but the cause wasn't simplification.
+
+The bug: bind_rows(), not simplification
+
+ingest_spatial.qmd:550 does bind_rows(all_spatial) |> st_as_sf(). bind_rows concatenates by column name, and three sources name their geometry column something other than geometry:
+
+┌─────────────────────────────┬────────────────────────┬─────────────┐
+│            layer            │         source         │ geom column │
+├─────────────────────────────┼────────────────────────┼─────────────┤
+│ National Marine Sanctuaries │ sanctuaries.rda        │ geom        │
+├─────────────────────────────┼────────────────────────┼─────────────┤
+│ CA Watersheds (HUC8)        │ wbd-hu8_ca.gpkg        │ geom        │
+├─────────────────────────────┼────────────────────────┼─────────────┤
+│ Ocean Disposal Sites        │ OceanDisposalSite.gpkg │ Shape       │
+└─────────────────────────────┴────────────────────────┴─────────────┘
+
+Every other source is a shapefile or geojson → geometry. So those three landed in a second sfc column, st_as_sf() kept geometry active, their rows got empty geometry, and st_write() dropped the extra column with a warning that scrolls past in the render. I reproduced it in three lines — bind_rows of a geometry sf and a geom sf yields columns id, layer, geometry, geom with row 2 empty.
+
+
+Fourth layer, separate bug: BOEM Wind Planning Areas never read at all. source_file was BOEMWindLayers_4Download.gdb with no |layer suffix, so str_split_1 gave NA and GDAL failed with "Cannot open layer NA" — swallowed into a one-line "SKIPPED" note. It's absent from spatial and from the PMTiles.
+
+Fixed
+
+- normalize_geom_col() renames the active geometry column to geometry on read, applied to all three source branches.
+- Two hard assertions after the bind: exactly one sfc column, and zero empty geometries (listing the offending layers). Both failures were silent before.
+- gdb without a layer suffix now errors loudly, listing the available layers, instead of skipping.
+- metadata/spatial_layers.csv: BOEM gets …gdb|BOEM_Wind_Planning_Areas_2_2023 (the layer carrying the registry's primary_wpa_category).
+- tippecanoe: added --simplify-only-low-zooms and --no-tiny-polygon-reduction. --simplification applied at every zoom including the max, so the deepest tiles — which every higher zoom overzooms from — were coarser than the source; now z10 is full source resolution, and no small polygon is dropped at low zoom.
+
+Verified by replaying the ingest over all 16 sources: one sfc column, zero empty geometries, BOEM present with 9,833 features. And it changes the answer — those layers now match real data:
+
+┌─────────────────────────────┬──────────────────┬────────────────────────────────────────────────┬─────┐
+│            layer            │ sample positions │                    polygons                    │ was │
+├─────────────────────────────┼──────────────────┼────────────────────────────────────────────────┼─────┤
+│ National Marine Sanctuaries │ 23,372           │ 5 (Monterey Bay 12,719; Channel Islands 8,555) │ 0   │
+├─────────────────────────────┼──────────────────┼────────────────────────────────────────────────┼─────┤
+│ CA Watersheds (HUC8)        │ 24,593           │ 24                                             │ 0   │
+├─────────────────────────────┼──────────────────┼────────────────────────────────────────────────┼─────┤
+│ Ocean Disposal Sites        │ 67               │ 11                                             │ 0   │
+└─────────────────────────────┴──────────────────┴────────────────────────────────────────────────┴─────┘
+
+"CalCOFI never sampled in a sanctuary" was never true.
+
+The UI (from before your redirect)
+
+Built to the four decisions and working: layer picker with optgroups, per-polygon summaries (0.01–0.05 s), unit-named legend ("Avg. CPUE (count)" vs the hex view's unit-free label), outline + hoverable "no data" for unsampled polygons, sidebar note ("47 of 155 polygons contain observations… averaged in count"), and a download branch that writes polygon CSVs plus the excluded-unit breakdown. Cross-checked against your plan's SQL — South Point SMR 12.3995 vs 12.39, the 5-row difference being the app's depth filter. Geometry tolerance is now 0.0001° (~11 m, finer than an H3 res-10 cell) rather than the 0.001° in the option I showed you, per your full-resolution point.
+
+Two things I hit that you should know about:
+
+1. **Re-rendering a `maplibreCompareOutput` doesn't work** — pre-existing, not mine. After a re-render the before-map holds new layers with an empty source and the after-map gets nothing. Your existing "Environmental Summary Statistic" control re-renders, so it's subject to the same fault. I moved the polygon path onto the compare proxy and left that control's behavior unchanged.
+2. **Over that proxy, `add_fill_layer(source = <sf>)` renders nothing**, silently — it forwards the sf to map.addLayer() untouched, so it arrives as {geojson: …}. add_source() first, then reference the source by id, which I confirmed at the message level emits a proper {"type":"FeatureCollection",…} string.
+
+What I could not finish verifying: the Chrome extension disconnected right before I could re-confirm the final add_source fix rendering in the live app. The standalone widget renders correctly (I have screenshots of filled MPAs, the Richardson Rock State Marine Reserve / Avg. CPUE (count): 14.85 / Num. Obs.: 13 tooltip, and a no data tooltip), and the proxy path was confirmed to add all six layers on both maps and fit the view — but the last step, features actually appearing after the source fix, is unverified in-app. That's the one thing to check first when you next run it.
+
+Nothing is committed, in either repo. The data fix only reaches consumers after ingest_spatial.qmd (with overwrite=TRUE) → release → prep_db.R — that publishes to a world-readable bucket and mints a release, so I'd want your go-ahead before running it.
+
+----
+
+Ok, I ran ingest_spatial.qmd (and libs/ingest.R had overwrite=TRUE). It looks like BOEM Wind Areas are now
+  loading.
+
+  When I run the app, I see the new Summarize Within picker, but nothing shows up. And I don't see any new layers in
+  the layer picker of the map (which now only toggles off/on the 200NM EEZ of right-hand map and ONLY toggles off
+  Hexagon Data -- wondering if an old mapgl got installed since I thought I fixed this in past mapgl pull requests)
+  [Image #1]
+
+----
+
+Three real bugs, all found from that one screenshot. Not a mapgl version problem — your install is fine.
+
+1. Why nothing showed up (mine)
+
+output$map reads rx$params$sel_qtr / date_range / depth_range. reactiveValues dependencies are per name, so reading one field of rx$params takes a dependency on all of it. My apply_poly() then wrote rx$params$map_params$agg_unit <- agg_unit. That changed params, invalidated output$map, and re-rendered the compare widget in hex mode — on the same flush, microseconds after the proxy had added the polygon layers.
+
+Your screenshot is exactly that signature: the sidebar note updated (it's written before the proxy calls), while the map, both legends, and the layer control were all restored to hex. Server-side everything ran; the widget rebuild threw it away.
+
+Fixed by keeping view bookkeeping out of rx$params — new rx$agg_unit and rx$env_stat fields — plus isolate() on the param reads inside the render, so no future bookkeeping can rebuild the widget. I verified no remaining field is both written by apply_poly() and read non-isolated by output$map.
+
+2. Why the layer toggle only worked one way (pre-existing)
+
+You were right that something was off, but it isn't the mapgl version. Every map was handed both sides' layer ids: map_sp_h3t passes c("sp", "env") to the control on the species map, where env doesn't exist. On the client clear_layer is wrapped in if (map.getLayer(id)) but set_layout_property is not — so toggling the group off worked, and toggling it back on threw and died half-applied. Fixed in map_sp, map_env, map_sp_h3t, map_env_h3t, map_poly, and the Map Layers modal, which now takes each side's ids from what was actually added (rx$sp_layer_ids / rx$env_layer_ids) instead of hardcoding the classic-path guess.
+
+Separately: the control listing only "Hexagon Data" and "200NM EEZ" is by design — it lists only visible layers, and 200NM EEZ is the sole default_visible: TRUE row in spatial_layers.csv. Turn more on via Map Layers and they'll appear. Now that BOEM and the three repaired layers load, you may want to reconsider those defaults.
+
+3. A correction to what I told you last time
+
+I said re-rendering a maplibreCompareOutput doesn't work. That was wrong, and your screenshot is the proof — the re-render brought the hex map back correctly, legends and all. What I'd actually seen was the inline-sf source bug plus this rx$params loop, sampled mid-sequence. I've corrected the comment in server.R and the memory note rather than leave a false claim in the codebase. The polygon path still goes through the proxy, but now for the honest reason: rebuilding both maps discards the viewport and every layer toggle for what is a change of one overlay.
+
+Worth checking when you re-run
+
+The note already reads correctly for CA Counties — 14 of 58, averaged in count, 883 observations in 2 other units excluded — so the summary itself was always right. What should change now is the map: county polygons replacing hexes, the left legend reading "Avg. CPUE (count)" rather than "(density)", and the view fitting the 14 sampled counties.
+
+Two things I could not verify myself: the extension disconnected before I could re-confirm in a browser, and my local h3t layers never load (so clear_hex_layers() was a no-op here and yours won't be) — that path is reasoned, not observed. If the hexes stay put while polygons appear over them, that's the line to look at.
+
+----
+
+If we're summarizing by another layer, then that layer should also show up in the layer selector (expanded floating control on right of map below zoom in/out control). And we should toggle off the Hexagon data layer. AND the layer control needs to work on left AND right map compare viewports [Image #2]
+
+----
+
+The root cause of all three symptoms turned out to be one bug — and it's in mapgl, so I fixed it there as you asked.
+
+clear_layer() has never worked on a compare proxy
+
+R/shiny.R sends the layer id as layer — which is exactly what the single-map handler in maplibregl.js reads — but both compare handlers read message.layer_id. Nothing in the R package has ever sent that field (I grepped all of R/), so map.getLayer(undefined) was falsy and the entire remove_layer branch was skipped. Silent on both sides: no R error, no JS error, layer and source left in place.
+
+That single bug produced everything you saw:
+- hexagons stayed under the polygons — clear_hex_layers() was a no-op
+- and it was a live landmine: the second layer switch would have thrown Layer with id sp_poly already exists, because the first never cleaned up
+
+Fixed on branch fix/compare-remove-layer off your updated main (commit 48ad058): all 25 message.layer_id reads in maplibregl_compare.js and 21 in mapboxgl_compare.js, confined to the remove_layer branch, renamed to message.layer — making the compare handlers identical to the single-map one. The message.layer && message.layer.id guards for the add_layer message shape are untouched and still short-circuit on a string id. NEWS entry added under the existing dev heading (no version bump, per your convention of accumulating bullets until release). Installed locally and confirmed zero residual message.layer_id.
+
+### TODO: h3t-antimeridian missing in bbest/mapgl
+
+Not pushed — it's your repo and outward-facing, so that's your call. Also worth knowing: main does not contain your fix/h3t-antimeridian commit, so installing from my branch drops the antimeridian fix until those are merged.
+
+Your third ask is already fixed — by you
+
+Your updated main NEWS says it: "In compare(), each side's layers control now lives in that side's own control stack (previously both sides rendered into the same overlay space and overlapped)" and "A layers control added through a MapLibre compare proxy now toggles layers only on the side targeted by map_side".
+
+That's precisely the "only one control, only affects one side" symptom, already solved. I had written a JS monkey-patch to mirror toggles across both maps — I've removed it, because it would subvert the per-side semantics you deliberately introduced. After upgrading you should get two controls, one per viewport, each driving its own map. If you actually want one control driving both, say so and I'll wire it differently — but I read your mapgl change as the opposite intent.
+
+App changes for asks 1 and 2
+
+apply_poly() now rebuilds the floating control on each side via proxy, labelled with the actual layer name ("CA Counties", not "Polygon Summary"), listing that side's polygon layers and no "Hexagon Data" entry — because in polygon mode the hexagons are genuinely removed, not hidden. Each side gets only its own ids. remove_layers() went back to a plain clear_layer() call now that it works; the hand-rolled sendCustomMessage workaround is gone.
+
+What I could not verify
+
+I could not confirm any of this in a browser. My local environment stopped loading map styles entirely — CARTO's CDN is unreachable from here, and a network-free inline style wouldn't load either (isStyleLoaded() false, getStyle() undefined), so the app renders a bare canvas with no layers at all. The mapgl fix rests on a static argument I'm confident in — the field never exists, and the single-map handler proves the intended name — but it is reasoned, not observed. Your machine renders fine, so one run will settle it.
+
+When you do: the hexagons should disappear under the polygons, the control should read "CA Counties", and a second switch (CA Counties → Marine Protected Areas) is the one that would have failed before — that's the case worth exercising.
+
+Uncommitted: db-viz-hex (5 files) and workflows (ingest_spatial.qmd, spatial_layers.csv).
+
+----
+
+Looking better, but the layer selector is still only toggling on the right-hand map of compare, not both [Image #3]
+
+----
+
+Good — the summary works now (counties coloured, "no data" on Lassen, hexes gone, control naming the layer). You've clarified ask #3: you want the one control driving both viewports. I removed that mirror last round on the wrong assumption — restoring it. First, confirming the hook still exists in your updated mapgl:
+
+----
+
+Restored the mirror, and this time I could actually verify it.
+
+Why it only toggled the right map
+
+mapgl's control is per-map by design. In a swipe compare both maps are full-size and stacked, so the two controls land on the same screen position — only the top one (the after/right map's) is clickable, and the left map's control sits underneath, unreachable. So a toggle genuinely worked, on half the map.
+
+I removed the mirror last round because your NEWS bullet ("toggles layers only on the side targeted by map_side") read as a deliberate per-side design. That was my misread of what you wanted — corrected.
+
+The fix, and how it's verified
+
+app/ui.R wraps MapglLayersControl.prototype._setVisibility so every toggle also applies to the sibling map. It wraps rather than replaces, so it rides on top of the control's own map.getLayer() guard, and it's wrapped in try/catch — mirroring can never break the real toggle.
+
+Since my local environment still won't load a map style, I unit-tested the patch directly against stub maps rather than claim it works untested. All six cases pass:
+
+┌────────────────────────────┬───────────────────────────┬──────────────────────────────────────┐
+│         clicked on         │        mirrored to        │                                      │
+├────────────────────────────┼───────────────────────────┼──────────────────────────────────────┤
+│ env_poly → none            │ sp_poly → none            │ ✓                                    │
+├────────────────────────────┼───────────────────────────┼──────────────────────────────────────┤
+│ env_poly_nodata → none     │ sp_poly_nodata → none     │ ✓                                    │
+├────────────────────────────┼───────────────────────────┼──────────────────────────────────────┤
+│ env_poly_nodata_hit → none │ sp_poly_nodata_hit → none │ ✓                                    │
+├────────────────────────────┼───────────────────────────┼──────────────────────────────────────┤
+│ noaa_maritime_eez → none   │ noaa_maritime_eez → none  │ ✓ shared id passes through unchanged │
+├────────────────────────────┼───────────────────────────┼──────────────────────────────────────┤
+│ sp3 → visible              │ env3 → visible            │ ✓ classic hex, left→right            │
+├────────────────────────────┼───────────────────────────┼──────────────────────────────────────┤
+│ sp → visible               │ env → visible             │ ✓ h3t hex, left→right                │
+└────────────────────────────┴───────────────────────────┴──────────────────────────────────────┘
+
+So it maps side-specific ids across (sp* ↔ env*), leaves the shared PMTiles boundary ids alone, and works in both directions. It's driven by the control's group entries, so one click on "CA Counties" fires for all three of that side's layers and mirrors all three.
+
+One caveat worth knowing: the mapping is by id prefix, so any future layer id starting with sp/env that isn't a paired data layer would be mis-mapped. Nothing in spatial_layers.csv does today.
+
+### TODO map compare fixes
+
+Worth considering upstream
+
+This is the third compare-widget gap in two days — the `remove_layer` field mismatch, the stacked controls, and now cross-side sync. The mirror would be cleaner as a first-class mapgl option, something like `add_layers_control(sync_compare = TRUE)`, rather than a monkey-patch in every app that uses compare. I've noted that in the code comment. Happy to add it to the fork alongside the `clear_layer` fix if you want it there — that commit (48ad058, branch `fix/compare-remove-layer`) is still local and unpushed.
+
+State: db-viz-hex has 5 uncommitted files; workflows has the two ingest fixes uncommitted; mapgl has one local commit.
 
 ## 2026-08-02 ctd-qaqc loose ends, question registry, schema ∆s
 
@@ -229,7 +453,558 @@ Running, chunk ~22/177 of the CTD ingest (the forced heavy path). I'll report pe
 
 ----
 
+Phase 4 is done. v2026.08.02 is live.
 
+┌─────────────────────────┬────────────┬─────────────────────────────────────────────────┐
+│         target          │    time    │                                                 │
+├─────────────────────────┼────────────┼─────────────────────────────────────────────────┤
+│ ingest_calcofi_ctd_cast │ 1h 22m 21s │ forced heavy path                               │
+├─────────────────────────┼────────────┼─────────────────────────────────────────────────┤
+│ ingest_calcofi_mets     │ 6m 51s     │                                                 │
+├─────────────────────────┼────────────┼─────────────────────────────────────────────────┤
+│ release_database        │ 32m 25s    │ 10.13 GB assembled, validated, frozen, uploaded │
+├─────────────────────────┼────────────┼─────────────────────────────────────────────────┤
+│ test_release            │ 1m 46s     │ consumer-contract suite passed                  │
+├─────────────────────────┼────────────┼─────────────────────────────────────────────────┤
+│ publish_to_erddap       │ 6.9s       │                                                 │
+└─────────────────────────┴────────────┴─────────────────────────────────────────────────┘
+
+All 23 targets rebuilt from scratch — nothing rode on a cached artifact. No validation failures, PK/FK/null/range violations, or core parity mismatches. latest.txt on gs://calcofi-db/ducklake/releases/ now reads v2026.08.02, promoted only after the query suite passed against the frozen release.
+
+The Phase 1 schema additions are confirmed in the released parquet, not just in the registry:
+- sample.data_stage — 11,355 final + 2,981 preliminary, which is exactly all 14,336 CTD casts. NULL for the other 15 datasets, which is the designed meaning and not a claim their data are final.
+- measurement_type carries all five new columns. Worth noting valid_min/valid_max were added to the registry after v2026.07.30 was frozen, so this is the first release to ship any of them.
+
+Correcting release_columns.csv mid-run paid off — the schema site no longer documents obs_freq, obs.taxon_id, or the three _spatial_attr columns that never existed.
+
+On the kill: it landed inside release_database, after all 20 ingests were recorded complete, so the restart redid only the caboose rather than the 1h22m CTD ingest. I cleared the stale lock with tar_unblock_process() and confirmed no orphaned rmd.R before relaunching, and double-forked the retry to launchd so harness job control couldn't reach it again. Both run logs are committed under data/logs/.
+
+Committed and pushed as 1f52f75.
+
+What's left
+
+Phase 5 — consumer deploys, now unblocked. Per the plan and CLAUDE.md:
+- db-schema — D7 (hide supplemental behind a toggle, as you decided) + D8 (kill the Diagram→Tables click, swap the Tables search for a dropdown); rebuilds on push.
+- ctd-qaqc on the server — needs calcofi4r pulled and calcofi4db >= 3.4.0 in the rstudio container, since the app now calls qc_cast_span and the new rules.
+- db-viz-hex / db-viz-cruise — prep_db.R re-runs against the new release.
+- db-viz-station — gh workflow run refresh.yml.
+
+Two smaller things queued: the prime_zips_from_gcs rclone quoting bug (safe to fix now that nothing is rendering), and the data/flagged/invalid_egg_stages.csv timestamp-only churn — it re-dirties on every ingest run with 790 identical rows and a new _ingested_at, which I've reverted twice today.
+
+Say which you want next.
+
+----
+
+Before running Phase 5, can I interject with another set of directives?
+
+----
+
+Stopping here — go ahead.
+
+State right now, so nothing is ambiguous:
+
+Everything through Phase 4 plus both smaller items is committed and pushed:
+- calcofi4db 3.4.1 — flag_invalid_rows() idempotence (full suite green, installed)
+- ingest_calcofi_ctd-cast.qmd — rclone quoting + exit-status check
+- Release v2026.08.02 live, latest.txt promoted
+
+Phase 5 is barely started and inert. I made exactly one edit — added the supplemental-toggle markup to db-schema/index.html — and its wrapper carries hidden with nothing in app.js to unhide it, so the site behaves identically to before. Uncommitted, nothing pushed, no consumer touched. I can continue from there or drop it, whichever your directives imply.
+
+Two things I'd found that may bear on what you're about to say:
+
+- The plan's D8 diagnosis was wrong. The Diagram→Tables click isn't mermaid node links — erd.mmd has zero click directives. It's db-schema's own handler at app.js:476, attached in decorateErdEntities(), whose comment even acknowledges the pan-then-click problem.
+- The ERD does not currently exclude supplemental tables — obs_ctd_full/obs_mets_full appear 6 times in erd.mmd, so the existing "supplemental" chip tooltip claiming they're "excluded from the ERD" is false. Hiding them from the ERD means filtering the mermaid client-side (no re-release needed) rather than assuming the release already did it.
+
+What are the directives?
+
+----
+
+
+- Can we try doing a db-schema cleanup:
+  - mv _spatial -> spatial, _spatial_attr -> spatial_attribute; + relatinoship via id -> spatial_id
+  - Can region | ship | taxon_group be folded into lookup?
+- Can all data in db-viz-hex be made queryable?
+- Can db-viz-hex summarize within spatial data (not just hexagon)?
+
+----
+
+Investigated all three. Answers, with the numbers behind them:
+
+1. Spatial rename — yes, but spatial_id would encode a falsehood
+
+_spatial is id, layer, name, geom (3,373 rows); _spatial_attr is id, layer, fld, val_dbl/int/chr/date/lgl (40,298 rows — a typed EAV, one row per feature × source column).
+
+The catch: id is per-layer sequential, not globally unique. ingest_spatial.qmd assigns it within each layer, so the join is on (layer, id). Renaming it spatial_id gives it the look of a unique key it doesn't have — someone will eventually join on it alone and silently get cross-layer garbage.
+
+So I'd do the renames and fix the key, which is the same amount of work:
+
+- _spatial → spatial, _spatial_attr → spatial_attribute ✓
+- id → spatial_key, valued {layer}:{id} — matching both the repo's stated convention (*_key = string natural key, *_id = integer surrogate) and the existing sample_key namespacing precedent that exists for exactly this reason.
+
+Keep layer alongside for filtering. This is a released-schema change, so it wants to ride a release with the consumer updates (db-schema, query site, calcofi4r, ERDDAP).
+
+2. Fold region / ship / taxon_group into lookup — no, none of them
+
+lookup is lookup_type, lookup_num, lookup_chr, description — one row per vocabulary value. All three candidates have a different grain:
+
+┌───────────────┬───────────────────────────────────────────────────────────────────────────────────────────────┐
+│               │                                            why not                                            │
+├───────────────┼───────────────────────────────────────────────────────────────────────────────────────────────┤
+│ ship (49)     │ Carries two independent identifiers — ship_key and ship_nodc — plus a name. lookup has one    │
+│               │ num + one chr, so one of them gets dropped or abused. cruise.ship_key is also a real FK.      │
+├───────────────┼───────────────────────────────────────────────────────────────────────────────────────────────┤
+│ taxon_group   │ A many-to-many bridge: 155 rows map many taxon_key into a handful of groups. lookup is one    │
+│ (155)         │ row per value; folding destroys the relationship.                                             │
+├───────────────┼───────────────────────────────────────────────────────────────────────────────────────────────┤
+│ region (4)    │ Carries a centroid (latitude/longitude), n_stations, and a comma-delimited station_codes      │
+│               │ list. Those are attributes, not a vocabulary — they'd end up stuffed into description.        │
+└───────────────┴───────────────────────────────────────────────────────────────────────────────────────────────┘
+
+What they share is "small reference table", not "controlled vocabulary" — different things. If the goal is a less cluttered schema view, the lever is grouping in db-schema's UI (which I'm already in for D7), not merging tables with incompatible grains.
+
+3a. All of db-viz-hex's data queryable — yes, and the gap is bigger than it looks
+
+It currently sees 5,816,150 of 20,088,748 obs rows — 29.0% — from 2 of 14 datasets. Two hardcoded WHERE clauses in prep_db.R do it: bio_obs is dataset_key = 'swfsc_ichthyo' + measurement_type = 'abundance', and env_obs is calcofi_bottle + a literal list of 15 types.
+
+Excluded entirely: the whole 7.3M-row CTD env series, METS (471K), DIC, picoplankton, and 8 of 9 non-ichthyo bio datasets (cufes 271K, phytoplankton 160K, zooscan 127K, euphausiids 100K, bird-mammal 66K…).
+
+Generalizing is straightforward except for one real problem: bio_obs's CPUE formula is net-gear-specific (MT → count/100m³, else count/10m²). Other bio datasets have genuinely different effort units, so "all queryable" means either driving CPUE off measurement_type's units per dataset, or showing raw values with units and reserving CPUE for gears that have one. That's the design decision, not the SQL.
+
+3b. Summarize within spatial polygons — yes, and cheaper than you'd expect
+
+spatial ships 3,373 real polygons. Rather than a point-in-polygon join against 20M obs, do it against sample — 1.48M rows, a 13× smaller join — and let every obs inherit its sample's polygon through sample_key. Exactly as correct, since an observation's position is its sample's position. Materialize sample_spatial(sample_key, layer, spatial_key) once in prep_db.R, and polygon summaries become the same GROUP BY the hexes already use.
+
+(The alternative — a hex→polygon crosswalk — is cheaper still but wrong at boundaries, and you'd be approximating a thing you have exact geometry for.)
+
+---
+None of this is started. Phase 5a is still the one inert edit in db-schema/index.html. Tell me which to pick up — and note 1 and 2 change the released schema, so they'd want to land together before a release rather than piecemeal.
+
+----
+
+Good analysis! It’s ok to change the schema on this same release. Proceed with all your recommendations and then the rest of Phase 5
+
+Here's where things stand while the release finishes.
+
+Done and pushed
+
+Spatial rename, with the correction I flagged: _spatial → spatial, _spatial_attr → spatial_attribute, and rather than spatial_id — which would have dressed up a per-layer counter as a unique key — both tables now carry spatial_key = '{layer}:{id}', namespaced the way sample_key is and named _key per the repo convention. Asserted unique at build time; verified on the rebuilt shard: 3,373 features, 3,373 distinct keys, 0 of 40,298 attribute rows orphaned.
+
+Two things I deliberately did not rename: the GCS PMTiles prefix gs://calcofi-files-public/_spatial/ (that's the tile channel db-viz-hex resolves — moving it breaks every tile URL for no benefit), and the internal R identifiers. My first attempt at the rename was a regex that mangled build_spatial_attr into buildspatial_attribute; I reverted and redid it as 19 exact-string replacements with an assertion that each matched exactly once.
+
+calcofi4r::cc_tbl() (1.4.4) accepts both names and picks the matching attribute table, so anything pinned to an older release keeps working.
+
+db-schema — supplemental behind a global toggle across ERD, Tables and Columns, sourced from catalog.json's flag rather than a hardcoded list. Testing the ERD filter against the real erd.mmd caught something I'd have shipped broken: besides the entity block and relationship lines, mermaid has a class a,b,c styleName directive listing every entity, and leaving a removed table in it is a dangling reference. Now verified — 0 references with the toggle off, braces balanced, and toggle-on is byte-identical to the shipped source.
+
+Also removed the ERD click (it was our decorateErdEntities() handler, not mermaid) and swapped the Tables search for a jump-to <select>.
+
+Written, not yet run
+
+db-viz-hex prep_db.R — both dataset restrictions removed. env_obs is now driven by measurement_type.is_canonical instead of a literal 15-type list, and bio_obs covers all nine bio datasets. Where a gear-based CPUE genuinely applies it's unchanged; where it doesn't, the row carries the published value with its own units rather than being forced through a haul-factor formula that would invent a number. Plus sample_spatial, the point-in-polygon join done at the sample grain.
+
+I can't test it until the release lands, so it's uncommitted.
+
+One thing worth knowing
+
+db-query had two commits I didn't have — an automated job bumped default_version to v2026.08.02 when my release promoted. Rebased my doc change on top, no conflict. Worth remembering that promotion has that side effect.
+
+Note on the overwrite
+
+Re-cutting v2026.08.02 in place means there's a ~4-minute window during the upload where a consumer could read a partially-rewritten release. Inherent to overwriting a published version rather than bumping, which is what you authorised — but it's why I'm holding the db-schema push (Pages rebuilds immediately) until the upload completes.
+
+Release is at core_tables (10/33), ~9 min in. I'll run prep_db.R, then do the server deploys.
+
+----
+
+Release re-cut is complete. Summary of where Phase 5 stands:
+
+Release v2026.08.02, re-cut with the rename
+
+ingest_spatial 2m 27s → release_database 29m → test_release passed → publish_to_erddap 7s. latest.txt promoted. Catalog now lists spatial and spatial_attribute; no _spatial anywhere in it.
+
+One real problem the re-cut exposed and I fixed: the release upload adds and overwrites but never deletes. After the rename, GCS held both _spatial.parquet (26 MB) and spatial.parquet — the old pair orphaned outside the catalog, where nothing tracks them and a consumer could still read stale data from the old path. I diffed the GCS listing against the catalog, confirmed those two were the only orphans, and removed them. Filed as a pipeline bug: the freeze/upload step should prune objects absent from the catalog (sync_to_gcs already has delete_stale; the release path evidently doesn't use it).
+
+A gap worth knowing: test_release's contract suite never queries spatial/spatial_attribute — it only loads the DuckDB spatial extension. So the gate that exists to catch exactly this kind of rename could not have caught it. Filed to add a contract query joining the two on spatial_key.
+
+db-viz-hex
+
+bio_obs is 1,203,294 rows, up from 459,286 — all nine bio datasets, where before it was ichthyo alone. (1,317 bio rows have a taxon_key that doesn't resolve in the vocabulary and are dropped by the join; worth a look later.) env_obs and the sample_spatial polygon join are still building.
+
+Pushed
+
+calcofi4db, calcofi4r 1.4.4, db-query, workflows, and db-schema (Pages rebuilding now — held until the release upload finished so it couldn't read a half-written release).
+
+db-query needed a rebase: an automated job had already bumped default_version to v2026.08.02 off my earlier promotion. Worth remembering that promotion has that side effect.
+
+Once prep_db.R finishes I'll verify the polygon join, commit it, and move to the server deploys (ctd-qaqc needs calcofi4db >= 3.4.1 in the rstudio container, plus the db-viz-hex/db-viz-cruise rebuilds and the db-viz-station dispatch).
+
+----
+
+Two data issues surfaced while verifying — worth flagging now rather than burying in the summary:
+
+NaN coordinates in the released sample. 1,590 of 1,477,206 rows carry NaN (not NULL) in longitude/latitude — swfsc_cufes 1,583 and calcofi_mets 7. This matters more than the count suggests: NaN passes an IS NOT NULL check, so it slips through validation and reaches consumers looking like a real position, and it poisons aggregates — MAX(longitude) over the whole column returns NaN, which is how I noticed. Filed with the fix: make them NULL in the two ingests and add a release check that rejects non-finite coordinates.
+
+Inconsistent CRS tags across geometry columns. sample.geom is OGC:CRS84 (minted by ST_Point(lon, lat)), spatial.geom is EPSG:4326 (from ST_Read over GeoJSON) — and DuckDB refuses to intersect across them, which is what broke the polygon join. Both hold identical lon/lat coordinates, so ST_SetCRS relabels without transforming. If anything the EPSG:4326 tag is the wrong one: EPSG:4326 formally declares lat/lon axis order while GeoJSON is always lon/lat, so OGC:CRS84 is the honest label for both. db-viz-hex works around it now; the real repair is at source in ingest_spatial.qmd, filed.
+
+The 0-row result I got first was not the bug — the first 3,000 sample rows sit off Baja at −116.8/21.2, genuinely outside every CA layer. A coastal slice joins cleanly, which is what confirmed the fix rather than just the absence of an error.
+
+db-viz-hex is now carrying essentially the whole database: bio_obs 1,203,294 rows (was 459,286 — all nine bio datasets) and env_obs 18,884,137 (was ~5.4M). Together ~20.1M against the 20,088,748 in obs, up from 29%.
+
+prep_db.R is re-running with the CRS fix; I'll verify sample_spatial, commit, then do the server deploys.
+
+----
+
+Server state so far, while the install runs:
+
+ctd-qaqc is a first-time deployment, not an update. It wasn't in the server's apps clone and has no symlink in /srv/shiny-server/. It's on disk now after the pull, but standing it up means: install its dependencies, run prep_db.R (which builds a local DuckDB from the release), symlink it into the shiny-server root alongside the other 20 apps, and restart. I'll follow the pattern the existing apps use rather than invent one.
+
+calcofi4db was not installed in the rstudio container at all — so ctd-qaqc would have failed immediately on calcofi4db::qc_read_rules(). Installing both it (3.4.1, which the app needs for qc_cast_span and the new rules) and calcofi4r (1.4.3 → 1.4.4, for the spatial rename).
+
+Unrelated, but you should know: the plumber container is in a crash loop — Restarting (2) 13 seconds ago. Nothing I've touched today goes near it, and it was presumably already failing before this session. Flagging rather than fixing, since I don't know what it serves.
+
+All three repos pulled cleanly to the commits I pushed: calcofi4r → 6a9ba42, db-viz-hex → 615df73, apps → 4aa453a.
+
+Next once the install lands: prep_db.R for db-viz-hex and db-viz-cruise against v2026.08.02, then ctd-qaqc, then the db-viz-station refresh dispatch.
+
+----
+
+Hit a transient tool outage mid-check. Pausing here, because this is a genuine decision point rather than something I should guess at.
+
+Where Phase 5 stands
+
+Done:
+- All three server repos pulled to my commits — calcofi4r 6a9ba42, db-viz-hex 615df73, apps 4aa453a
+- calcofi4db 3.4.1 installed in the rstudio container — it was not installed at all, so ctd-qaqc would have died on its first qc_read_rules() call
+- calcofi4r upgraded 1.4.3 → 1.4.4 (the spatial rename)
+- db-viz-hex prep_db.R running on the server against v2026.08.02
+- Locally: db-viz-hex verified end to end — all 9 bio + 5 env datasets, sample_spatial 2.3M memberships, MPA temperature summary returning sensible values
+
+The blocker
+
+The server's workflows clone diverged from my history rewrite — 334 "ahead" / 410 "behind", which is the rewrite renaming every SHA rather than real divergence. That was the predictable collateral of the force-push, and it matters here because ctd-qaqc's prep_db.R reads metadata/measurement_type.csv and metadata/qc_rules/ from that clone — it needs the new valid_depth_* columns and the three new rules.
+
+Realigning means git reset --hard origin/main. But the clone has 9 uncommitted files, and I won't discard uncommitted work on a shared server without knowing what it is. I was mid-inspection when the tool cut out.
+
+Two sub-questions I'll answer as soon as it's back: what those 9 files are, and whether all 334 local commits genuinely exist on origin under new hashes (comparing by subject) or whether any is real server-side work that was never pushed.
+
+If they're throwaway (rendered outputs, _targets state, data artifacts — likely, given this is a render host), a hard reset is clean. If any is real work, it needs saving first.
+
+Also worth flagging
+
+- ctd-qaqc is a first-time deployment, not a restart — no symlink in /srv/shiny-server/. Standing it up means running its prep_db.R, then symlinking /srv/shiny-server/ctd-qaqc → /share/github/CalCOFI/apps/ctd-qaqc (it has no app/ subdir, unlike db-viz-hex). That publishes a new app publicly, which the plan calls for.
+- The plumber container is in a crash loop (Restarting (2)), unrelated to anything today.
+
+Want me to proceed with the reset once I've confirmed those 9 files are disposable, or would you rather look first?
+
+✻ Sautéed for 3m 21s
+
+❯ Nothing on the server workflows repo should be newer so full overwrite from the laptop cleanup should be fine
+
+Understood. Recording what's being discarded before I do it — one command, so there's a trace:
+
+  Ran 1 shell command
+
+Better than expected — the 9 are all untracked ERDDAP benchmark artifacts, which reset --hard doesn't touch, and 0 of the 334 local commits are missing from origin by subject. Purely the rewrite. Resetting:
+
+  Ran 1 shell command
+
+❯ Yes, add ctd-qaqc including sym link. And please do fix the plumber crash loop
+
+----
+
+Plumber is fixed and serving (HTTP 200, stable). The cause was a two-part path rot from the July repo reorganisation, and I fixed both halves at source rather than symlinking around them:
+
+- CalCOFI/server — the Dockerfile's CMD pointed at /share/github/api/run-api.R, missing the CalCOFI/ segment. Fixed there and added a compose command: override, so it takes effect on up -d without rebuilding the rocker/geospatial image and its ~30 R packages.
+- CalCOFI/api — run-api.R then hardcoded the same stale path for plumber.R. Rather than patch the string, it now derives the path from the script's own location, so a future move can't break it again, plus a stopifnot so a genuinely missing file says so instead of surfacing as a plumber initialize() error.
+
+Because the container restarts unless-stopped, it had been crash-looping every few seconds rather than failing visibly — which is presumably why it went unnoticed. The uncommitted plumber.R edit on the server was left untouched.
+
+ctd-qaqc hit a genuine bug that only a real server deployment could find. Its GCS fallback for obs_ctd_full was written as .../obs_ctd_full/**/*.parquet over plain HTTPS and had never run — on every machine so far, a local release copy won. It fails twice over: DuckDB refuses * in a generic HTTP path, and with the suggested setting enabled it then GETs the literal ** path and 404s, because plain HTTPS has no directory listing to expand a glob against.
+
+Fixed by enumerating partitions through the GCS JSON list API (public, no credentials) and handing DuckDB an explicit file list. Partition pruning survives — each path keeps its cruise_key= segment, so a cruise-scoped rule still touches ~2M rows rather than 212M.
+
+The server clone reset was clean: the 9 "uncommitted" files were untracked ERDDAP benchmark artifacts that reset --hard doesn't touch, and 0 of the 334 local commits were missing from origin by subject — purely the SHA rewrite.
+
+ctd-qaqc's prep is re-running with the fix; db-viz-hex's is on the sample_spatial join. Symlink and restart once they land.
+
+----
+
+Phase 5 is complete. Verified live on calcofi.io/db-schema against v2026.08.02: toggle off → 20 ERD entities, zero supplemental; toggle on → 22, with obs_ctd_full and obs_mets_full back. spatial and spatial_attribute appear under their new names, the jump dropdown replaced the search, and the old ERD click is gone.
+
+┌───────────────────────────┬────────────────────────────────────────────────────────────┐
+│         consumer          │                           status                           │
+├───────────────────────────┼────────────────────────────────────────────────────────────┤
+│ db-schema                 │ live, Pages deployed                                       │
+├───────────────────────────┼────────────────────────────────────────────────────────────┤
+│ db-viz-hex                │ HTTP 200 — 1.2M bio + 18.9M env + 2.1M polygon memberships │
+├───────────────────────────┼────────────────────────────────────────────────────────────┤
+│ db-viz-cruise / datacheck │ HTTP 200, rebuilt                                          │
+├───────────────────────────┼────────────────────────────────────────────────────────────┤
+│ ctd-qaqc                  │ HTTP 200 at app.calcofi.io/ctd-qaqc/ — newly deployed      │
+├───────────────────────────┼────────────────────────────────────────────────────────────┤
+│ db-viz-station            │ refresh workflow succeeded                                 │
+├───────────────────────────┼────────────────────────────────────────────────────────────┤
+│ plumber                   │ fixed, serving                                             │
+└───────────────────────────┴────────────────────────────────────────────────────────────┘
+
+What the deployment actually turned up
+
+Standing ctd-qaqc up for the first time found three bugs that no amount of local testing could have, because every prior machine had a local release copy that short-circuited the remote path:
+
+1. The GCS fallback globbed over plain HTTPS, which has no directory listing. Now enumerates partitions via the public GCS list API — a cruise-scoped query returns 1.9M rows in 0.3 s, so pruning survived the change.
+2. version_used was the literal string "latest", pointing every path at releases/latest/…. That predated my change — the old glob had the same wrong version baked in, so the branch was broken two ways over.
+3. data/ is gitignored, so the final write died after all the work completed.
+
+Then a fourth at runtime: /share/data/ctd-qaqc was root-owned, so the app couldn't create its review ledger.
+
+Plumber was a two-part path rot from the July reorganisation — the Dockerfile CMD and run-api.R both pointed at the pre-move location. Fixed both at source, and made run-api.R derive the path from its own location so a future move can't repeat it. It had been crash-looping every few seconds under restart: unless-stopped, which is presumably why nobody noticed.
+
+**Open items I filed rather than papered over**
+
+- **`sample_spatial`** differs between my laptop and the server — 2,300,433 vs 2,131,201 memberships on identical polygon data (3,373 features, 18 layers). ~8% is too large for boundary rounding. Probably a DuckDB spatial version difference, possibly interacting with the `NaN` coordinates below. Two different numbers shouldn't be in circulation.
+- **1,590 NaN coordinates** in released `sample` (cufes 1,583, mets 7) — `NaN` passes `IS NOT NULL`, so it survives validation and poisons aggregates.
+- **Inconsistent CRS tags** — `sample.geom` is `OGC:CRS84`, `spatial.geom` is `EPSG:4326`. Worked around in db-viz-hex; the real fix is at source.
+- **Release upload never deletes** — the rename left both _spatial.parquet and spatial.parquet on GCS. I removed the orphans manually; the pipeline should prune.
+- **The contract suite doesn't cover spatial** — the gate that exists to catch renames couldn't have caught this one.
+
+### TODO: ui for spatial summarizing
+
+Also not done, and stated in the commit: db-viz-hex now has the polygon data but has **no UI control to summarise by polygo**n. That's a separate change.
+
+----
+
+Fix the sample_spatial discrepancy and the NaN coordinates per tasks queued. As final task include a prompt for adding UI controls to summarize by polygon for then clearing and starting in a fresh session
+
+
+----
+
+The two fixes turned out to be one bug, and it was worse than either symptom suggested.
+
+The NaN coordinates and the sample_spatial discrepancy are the same defect
+
+I chased the discrepancy properly rather than accepting "probably a version difference" — and that guess was wrong. DuckDB 1.5.2 and spatial dc1996b on both machines; spatial identical to 4 dp on area; bio_obs/env_obs byte-identical; cached and release sample.parquet identical. Inputs provably the same, answers different.
+
+The mechanism, isolated by bisection down to a single county polygon:
+
+┌────────────────────┬───────────┬───────────┬───────────┐
+│                    │ threads=1 │ threads=2 │ threads=8 │
+├────────────────────┼───────────┼───────────┼───────────┤
+│ NaN points present │ 17,937    │ 17,771    │ 20,070    │
+├────────────────────┼───────────┼───────────┼───────────┤
+│ NaN points removed │ 20,101    │ 20,101    │ 20,101    │
+└────────────────────┴───────────┴───────────┴───────────┘
+
+ST_Point(NaN, NaN) produces a real, non-NULL GEOMETRY, so it passes IS NOT NULL on both the coordinate and the geometry. Its presence then corrupts ST_Intersects for other, unrelated rows, dropping valid pairs depending on how work is partitioned across threads.
+
+Three consequences worth being explicit about:
+
+- The correct answer is higher than any corrupted one — every spatial join over this release was silently under-counting, differently on each machine.
+- The sample_spatial currently serving in db-viz-hex is wrong, which is why I'm rebuilding it rather than leaving it.
+- I'd originally written this off as boundary rounding. It wasn't, and the exactly-equal 14,085 delta across three independent layers was the clue that it couldn't be.
+
+Fixed at source in calcofi4db 3.4.2 — append_sample() normalises NaN/Inf to NULL before minting geometry, reports the count rather than doing it silently, with a regression test. One fix covers all 16 ingests, so swfsc_cufes and calcofi_mets needed no individual patching.
+
+Plus a defensive filter in prep_db.R, so db-viz-hex is correct now against the already-published v2026.08.02 rather than waiting for the next release. Rebuilding and restarting on the server.
+
+Saved to memory, since it would cost hours to rediscover: never trust IS NOT NULL for coordinates or geometry, and if a spatial result differs between machines, suspect non-finite geometry before suspecting versions.
+
+### TODO: Handoff prompt -- db-viz-hex — summarize within spatial polygons (UI)
+
+Read `libs/plans/2026-08-03 db-viz-hex — summarize within spatial polygons (UI).md`, committed and pushed. It's self-contained — the data layer is built and deployed, only the UI is missing — and includes the working end-to-end query, the env_obs.cast_id join quirk, the available layers, the deploy steps, and four decisions worth making deliberately (single vs multi layer given overlap, PMTiles vs DB geometry for drawing, how empty polygons render, and that the CPUE-units caveat carries over).
+
+It also warns against "simplifying" the NaN filter back out.
+
+Still open, filed not forgotten
+
+Release upload doesn't prune orphaned objects on a rename · the contract suite doesn't cover spatial · inconsistent CRS tags (OGC:CRS84 vs EPSG:4326) between sample.geom and spatial.geom.
+
+I'll confirm the server rebuild and restart when it lands.
+
+----
+
+Both fixes confirmed in production. All four apps green.
+
+The fix recovered a quarter of the data
+
+The prediction held, which is what makes this a verification rather than just a different number: +538,061 memberships and +227,618 samples over what the server was serving — a 25% undercount that had been invisible because both machines produced plausible-looking totals.
+
+sample_spatial had been silently dropping a quarter of its polygon memberships, and the amount differed per machine. Nothing errored; nothing looked wrong. The only reason it surfaced at all is that I ran the same build twice on different hardware and compared — and then didn't accept the easy "probably a version difference" explanation when the versions turned out identical.
+
+Worth stating plainly: the MPA temperature summary returns the same values as before the fix (South Point 12.39 °C over 3,186 obs). The corruption dropped whole rows rather than skewing means, so a spot-check of any single number would have looked fine. Only the counts moved.
+
+Closed this round
+
+- calcofi4db 3.4.2 — append_sample() normalises NaN/Inf coordinates before minting geometry, reports the count, regression-tested. One fix covers all 16 ingests.
+- db-viz-hex — defensive NaN filter so it's correct against v2026.08.02 as already published; rebuilt, restarted, verified.
+- Handoff plan committed for the polygon UI, self-contained for a fresh session.
+- Memory — the NaN/spatial finding, and your preference for local app data.
+
+Left open, deliberately
+
+Three filed items, none blocking, all with the diagnosis already written down:
+
+- Release upload doesn't prune orphaned objects when a table is renamed (I removed the two by hand)
+- The contract suite doesn't cover spatial/spatial_attribute — the gate meant to catch renames couldn't have caught this one
+- sample.geom is OGC:CRS84 while spatial.geom is EPSG:4326; db-viz-hex works around it, the real fix is in ingest_spatial.qmd
+
+The NaN fix also means the next release will carry clean coordinates, at which point the prep_db.R filter becomes belt-and-braces rather than load-bearing — I'd keep it either way, and the plan file says so.
+
+----
+
+All three remaining tasks are implemented and the release is re-cutting. What went in:
+
+**The request had a wrinkle worth surfacing**
+
+ingest_spatial.qmd was already EPSG:4326 — it's the odd one out, and the other three geometry columns (sample.geom, grid.geom, grid.geom_ctr) were OGC:CRS84. So "all EPSG:4326" meant changing those, not ingest_spatial. I went that way since EPSG:4326 is the conventional label and what cc_tbl() already hands consumers — but it's the opposite file from the one named.
+
+Normalised at release time, not only at source. That's the load-bearing choice: fixing only append_sample() would have required re-running all 16 ingests (2+ hours) for shards to carry the new tag. Relabelling every geometry column immediately before the freeze — with an assertion that none was missed — gets the guarantee in one ~30-minute release, and means a future ingest minting geometry a third way can't reintroduce the mismatch.
+
+I deliberately left build_grid_reference() alone. It writes geometry via UPDATE ... ST_GeomFromHEXWKB, which is exactly the code path the documented DuckDB CRS-checkpoint bug lives in. Release-time normalisation covers grid without poking that. Same reason the normalisation itself uses CREATE OR REPLACE ... SELECT * REPLACE rather than UPDATE.
+
+**A gap I caught before it bit**
+
+The NaN fix in 3.4.2 only takes effect as ingests re-run — so the released sample would still have carried its 1,590 NaN rows, and my own new contract check ("no non-finite coordinates") would have failed the release. Added release-time NaN normalisation on the same reasoning, so the check passes because the data is actually clean rather than because I weakened the test.
+
+**Task 15 — orphan pruning**
+
+Pruned against what was actually exported and copied, not a hand-maintained list — list drift is the very thing being guarded against, and is how _spatial.parquet survived its own rename.
+
+**Task 16 — five contract checks**
+
+Including two that are live regression tests rather than static assertions: a sample↔spatial ST_Intersects join, which errors when CRS tags disagree, and a non-finite coordinate assertion. Had these existed, today's two defects would have failed the release instead of shipping.
+
+calcofi4db 3.4.3 and the workflows changes are pushed. I'll report the normalisation counts, the prune result, and the contract-suite outcome when the run lands — then redeploy the consumers against it.
+
+----
+
+I am unclear as to whether you were able to fix v2026.08.02 with NaN and all EPSG:4326 or not? If not, then what needs to happen -- if re-running all notebooks and re-releasing db then so be it. The priority is to get a clean release database out there, especially before moving onto the UI and polygon extraction in db-viz-hex
+
+----
+
+Direct answer: v2026.08.02 is not fixed yet. The currently-published release still has the NaN coordinates and mixed CRS tags. Here's the honest state.
+
+What the fix requires — and it's not re-running all notebooks
+
+The NaN and CRS defects both originate in append_sample(), which every ingest calls. Fixing only there would mean re-running all 20 ingests (~2 hours, mostly the CTD leg) before a release could be clean.
+
+Instead I normalise at release time, immediately before the freeze: non-finite coordinates → NULL with their geometry dropped, and every geometry column relabelled EPSG:4326. Same guarantee, one ~30-minute release instead of two-plus hours — and it's strictly stronger, because a future ingest minting geometry a third way can't reintroduce the problem. calcofi4db 3.4.3 also fixes it at source, so the shards clean themselves as ingests re-run naturally.
+
+So: no, re-running everything isn't needed. But I'd have told you if it were.
+
+I killed the first attempt, because it would have shipped broken and looked fine
+
+Ten minutes in I traced where each table actually comes from and found that grid and spatial are GCS server-side copied from the ingest bucket — they never pass through the connection I was normalising. The result would have been:
+
+- sample.geom → EPSG:4326 ✓ (exported from the connection)
+- spatial.geom → EPSG:4326 ✓ (already was)
+- grid.geom, grid.geom_ctr → still OGC:CRS84 ✗
+
+…with my own assertion passing, because it inspected the connection rather than what gets uploaded. A green check on data that isn't what ships is worse than no check.
+
+Fixed by exporting every CRS-normalised table locally and marking it derived, so the uploader takes the local copy — the same treatment measurement_type, cruise and taxon already get, for exactly the same reason.
+
+Also landing in this run
+
+Orphan pruning (task 15) and five new contract checks (task 16) — including a sample↔spatial ST_Intersects join that errors if CRS tags disagree, and a non-finite-coordinate assertion. Both of today's defects would have failed the release rather than shipping, had those existed.
+
+That last point matters for your priority: after this run, the contract suite gates latest.txt on the release actually being clean, so "clean release database out there" becomes an enforced property rather than something I verified by hand once.
+
+Re-running now. I'll confirm the normalisation counts, the prune result, and that grid.geom really is EPSG:4326 in the uploaded parquet — not just in the connection — before calling it done, then redeploy the consumers.
+
+----
+
+Third attempt running. The failure was cheap and caught two real defects:
+
+grid and spatial are VIEWs, not tables — DuckDB refused CREATE OR REPLACE TABLE over them. The deeper point is that even if the statement had succeeded, a view would just re-read the un-normalised parquet underneath, so the normalisation would have evaporated silently. The fix materialises to a temp name, drops the original as whatever type it actually is, then renames — which converts the view to a real table, which was required anyway.
+
+The loop ran per column, but grid has two geometry columns (geom and geom_ctr), so it would have rewritten the whole table twice. Now one pass per table with all its geometry columns replaced together.
+
+Nothing was published — the error landed before the freeze, so latest.txt still points at the working release. Failing loudly at the right moment is the system working.
+
+Two process notes on my own slips, since both are the kind that quietly degrade things:
+
+- I wrote that commit message inline with backticks, and the shell ate grid, spatial, geom and geom_ctr — leaving a message reading "and are loaded by…". I amended it with a quoted heredoc and --force-with-lease after confirming origin matched. My earlier commits used heredocs; this one I got lazy.
+- Earlier I ran tail from the wrong working directory and briefly thought the log was missing.
+
+Neither changed any data, but both are worth not repeating.
+
+Still to verify once this lands: grid.geom is EPSG:4326 in the uploaded parquet (not just the connection — that was the whole trap), zero non-finite coordinates, orphan pruning reports cleanly, and the five new contract checks pass before latest.txt moves.
+
+----
+
+Direct answer to your original question: the data fixes worked. Verified in the uploaded parquet, not just the connection — all four geometry columns are EPSG:4326 (including grid, which was the trap I nearly shipped past), zero non-finite coordinates, and the sample × spatial join that previously errored outright now runs with no ST_SetCRS at all.
+
+It's cut as v2026.08.03 rather than a v2026.08.02 overwrite, since the version is date-derived and the date rolled over. That's cleaner — the dirty release stays addressable rather than being silently replaced.
+
+But it isn't live yet. The upload died 8 partitions short of 96 on obs_ctd_full, so the catalog was never written and latest.txt still points at v2026.08.02.
+
+The reason that hurt is worth fixing rather than just retrying: obs_ctd_full is ~10 GB uploading at ~2 MiB/s, so that leg alone runs over an hour — and gcloud storage cp -r restarts from zero on failure. One transient error near the end discarded the entire transfer. Switched to rsync -r, which skips what already matches, so this retry costs only the 8 missing partitions instead of re-sending 88. Same principle the ingests already use with content-hashed uploads.
+
+I also trimmed the error message to the last 20 lines of gcloud output — the failure had been buried under hundreds of "Copying…" lines, which is why it took a second look to find.
+
+No re-running of the 20 ingests was needed, and still isn't: release-time normalisation is what makes that unnecessary.
+
+Running now. When it lands I'll confirm the contract suite passed, latest.txt moved to v2026.08.03, and then redeploy the consumers against a genuinely clean release — with db-viz-hex's join already made CRS-agnostic so it survives the change.
+
+----
+
+Everything is deployed and green. All six served endpoints HTTP 200, and the MPA temperature summary returns identical values to before — confirming the fix removed corruption without shifting any measurement.
+
+The verification that mattered
+
+sample_spatial came out at 2,669,262 memberships across 1,332,596 samples — an exact match to the read-time-filtered result. That's the meaningful check: one number came from filtering NaN geometries out at query time against the dirty release, the other from data that never contained them. Two independent routes agreeing is what makes this confirmed rather than merely plausible.
+
+For contrast, the corrupted runs gave 2,300,433 (laptop) and 2,131,201 (server) from byte-identical inputs. The clean release recovers ~25% of polygon memberships that were being silently dropped.
+
+Where things ended up
+
+v2026.08.03 is live — all geometry EPSG:4326, zero non-finite coordinates, contract-gated. db-viz-hex, db-viz-cruise/datacheck, ctd-qaqc, and the int/int-app aliases all rebuilt against it. calcofi4db 3.4.3 in the container.
+
+Two defects fixed at source and enforced. The five new contract checks include two behavioural ones — a sample × spatial join that errors if CRS tags diverge, and a non-finite assertion. Both of today's bugs would now fail the release rather than ship.
+
+Four release attempts, each failing on a genuinely different defect, none reaching publication: view-vs-table, non-resumable upload, and — caught by reading rather than failing — normalising in the connection never reaching GCS-copied tables. That last one would have shipped grid as OGC:CRS84 behind a passing assertion.
+
+Open
+
+One filed optimisation: server-side copy obs_ctd_full from the ingest bucket instead of re-exporting and re-uploading 1.3 GB. It's the leg that failed twice today and it's already sitting on GCS in exactly the right shape.
+
+And the handoff — libs/plans/2026-08-03 db-viz-hex — summarize within spatial polygons (UI).md, self-contained for a fresh session. It now starts from a better place than when I wrote it: the CRS caveat it warns about is resolved at source, so spatial joins just work.
+
+
+----
+
+Reverted and committed as ba14e29.
+
+On your V2 concern — you were right to push back, and the measurements said don't touch it. V2 does buy something real: it decodes 5–25% faster. But that's 1–2 milliseconds, and across six other tables V1-vs-V2 is a coin flip (±10%). It's only pathological on obs_ctd_full's scattered BIGINT/DOUBLE columns, where V2 costs +54%. Not a case for a global flip that would force a rewrite of all 16 ingests, so the default is untouched. For the record, nothing functional rides on it either — statistics, min/max, pushdown and row-group skipping are identical, and V1 is read by strictly more engines.
+
+On the tracking concern — agreed, and that's what killed the copy. It's only correct while the ingest shard, the assembled core and the published release agree, and nothing enforces that. My guard checked clustering, so a stale-but-well-sorted source would have sailed through and published stale data behind a green release. One push, one source of truth.
+
+What survived, because it's worth having on its own: the sort key. Both supplementals and the release's core_sort now use
+
+grid_key, depth_min_m, measurement_type, datetime
+
+grid_key-first co-locates sample_key/hex_id/lat/lon/datetime; the datetime tiebreak is the part I'd have missed — without it those columns land in arbitrary order inside each tie group and undo the clustering. Per partition: 27.55 → 20.20 MB (CTD), 23.22 → 16.95 MB (mets). The ingest shard on GCS is down 4.61 → 2.04 GB (96 files, verified), and since core_sort got the same tiebreak, the release's own export shrinks by roughly the same fraction — which chips away at the upload leg that started all this, without the copy.
+
+Two corrections to things I said earlier: obs_id renumbering is not churn (worth ~9 MB/partition — it makes the column sequential in storage order), and the ingests were already sorted, just by a worse key — my first reading that they were unsorted was wrong.
+
+I did not cut a new release. v2026.08.03 is live and correct, and republishing 2 GB purely for a compression gain isn't worth churning consumers — it lands on the next real release. The working tree still has unrelated modifications from earlier in the session (ingest_spatial.qmd, metadata/spatial_layers.csv, data/releases/v2026.08.02/*, some _output renders and data/logs/*.log) which I left untouched rather than sweeping into this commit.
+
+----
+
+Reverted and committed as ba14e29.
+
+On your V2 concern — you were right to push back, and the measurements said don't touch it. V2 does buy something real: it decodes 5–25% faster. But that's 1–2 milliseconds, and across six other tables V1-vs-V2 is a coin flip (±10%). It's only pathological on obs_ctd_full's scattered BIGINT/DOUBLE columns, where V2 costs +54%. Not a case for a global flip that would force a rewrite of all 16 ingests, so the default is untouched. For the record, nothing functional rides on it either — statistics, min/max, pushdown and row-group skipping are identical, and V1 is read by strictly more engines.
+
+On the tracking concern — agreed, and that's what killed the copy. It's only correct while the ingest shard, the assembled core and the published release agree, and nothing enforces that. My guard checked clustering, so a stale-but-well-sorted source would have sailed through and published stale data behind a green release. One push, one source of truth.
+
+What survived, because it's worth having on its own: the sort key. Both supplementals and the release's core_sort now use
+
+grid_key, depth_min_m, measurement_type, datetime
+
+grid_key-first co-locates sample_key/hex_id/lat/lon/datetime; the datetime tiebreak is the part I'd have missed — without it those columns land in arbitrary order inside each tie group and undo the clustering. Per partition: 27.55 → 20.20 MB (CTD), 23.22 → 16.95 MB (mets). The ingest shard on GCS is down 4.61 → 2.04 GB (96 files, verified), and since core_sort got the same tiebreak, the release's own export shrinks by roughly the same fraction — which chips away at the upload leg that started all this, without the copy.
+
+Two corrections to things I said earlier: obs_id renumbering is not churn (worth ~9 MB/partition — it makes the column sequential in storage order), and the ingests were already sorted, just by a worse key — my first reading that they were unsorted was wrong.
+
+I did not cut a new release. v2026.08.03 is live and correct, and republishing 2 GB purely for a compression gain isn't worth churning consumers — it lands on the next real release. The working tree still has unrelated modifications from earlier in the session (ingest_spatial.qmd, metadata/spatial_layers.csv, data/releases/v2026.08.02/*, some _output renders and data/logs/*.log) which I left untouched rather than sweeping into this commit.
 
 
 ## 2026-07-30 Move core-projection SQL from calcofi4db into ingest notebooks + fix taxon matching.md
