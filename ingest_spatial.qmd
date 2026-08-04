@@ -211,6 +211,36 @@ if (!file_exists(cacurrent_usaeez_geo) || overwrite) {
 ```{r}
 #| label: helpers
 
+# rename whatever the source calls its geometry column to `geometry`
+#
+# NOT cosmetic. `bind_rows()` in build-spatial-parquet concatenates the per-layer
+# sf objects by column NAME, so a source whose geometry sits in `geom` or `Shape`
+# lands in a SECOND sfc column. `st_as_sf()` then keeps `geometry` as the active
+# one, every row from that source gets an EMPTY geometry, and `st_write()` drops
+# the extra column with a warning that scrolls past in the render. The layer
+# reaches the release as GEOMETRYCOLLECTION EMPTY — present in `spatial`, with a
+# name and an id and no shape.
+#
+# That is exactly how National Marine Sanctuaries (`geom`, .rda), CA Watersheds
+# (`geom`, .gpkg) and Ocean Disposal Sites (`Shape`, .gpkg) shipped in
+# v2026.08.02: drawable nowhere, and matching ZERO samples in the
+# point-in-polygon join that feeds db-viz-hex's polygon summaries — so the
+# failure looked like "no CalCOFI sampling in sanctuaries", which is false.
+# Shapefiles all read as `geometry`, which is why every shp-sourced layer was
+# fine and the bug looked format-specific rather than name-specific.
+normalize_geom_col <- function(sf_data) {
+  if (is.null(sf_data)) {
+    return(NULL)
+  }
+  geom_col <- attr(sf_data, "sf_column")
+  if (is.null(geom_col) || geom_col == "geometry") {
+    return(sf_data)
+  }
+  names(sf_data)[names(sf_data) == geom_col] <- "geometry"
+  st_geometry(sf_data) <- "geometry"
+  sf_data
+}
+
 # read source spatial data from various formats
 read_spatial_source <- function(
   source_folder,
@@ -223,22 +253,41 @@ read_spatial_source <- function(
     load(path(dir_spatial, source_folder, source_file), envir = e)
     for (nm in ls(e)) {
       if (inherits(get(nm, envir = e), "sf")) {
-        return(get(nm, envir = e) |> select(where(~ !is.list(.))))
+        return(
+          get(nm, envir = e) |>
+            select(where(~ !is.list(.))) |>
+            normalize_geom_col()
+        )
       }
     }
     return(NULL)
   } else if (source_format == "gdb") {
+    # `source_file` must be "<file>.gdb|<layer>" — a .gdb holds many layers and
+    # there is no sensible default. Without the suffix `parts[2]` is NA and GDAL
+    # fails with "Cannot open layer NA", which the caller's tryCatch turns into a
+    # one-line SKIPPED note; BOEM Wind Planning Areas was absent from `spatial`
+    # AND from the PMTiles for exactly this reason. Fail loudly instead.
     parts <- str_split_1(source_file, "\\|")
+    if (length(parts) < 2 || is.na(parts[2]) || parts[2] == "") {
+      stop(glue(
+        "source_format 'gdb' needs source_file '<file>.gdb|<layer>'; ",
+        "got '{source_file}'. Layers: ",
+        paste(st_layers(path(dir_spatial, source_folder, parts[1]))$name,
+              collapse = ", ")
+      ))
+    }
     st_read(
       path(dir_spatial, source_folder, parts[1]),
       layer = parts[2],
       quiet = TRUE
-    )
+    ) |>
+      normalize_geom_col()
   } else {
     st_read(
       path(dir_spatial, source_folder, source_file),
       quiet = TRUE
-    )
+    ) |>
+      normalize_geom_col()
   }
 }
 
@@ -500,6 +549,18 @@ for (i in seq_len(nrow(d_groups))) {
     "-z10",
     "-Z0",
     "--simplification=10",
+    # `--simplification` applies at EVERY zoom by default, including the maximum
+    # — so the deepest tiles were coarser than the source, and since every zoom
+    # above z10 overzooms from z10, no view anywhere in the app ever showed the
+    # real boundary. Restricting simplification to the low zooms keeps z10 (and
+    # therefore every overzoomed view above it) at full source resolution, while
+    # the far-out views stay small.
+    "--simplify-only-low-zooms",
+    # keep every polygon. tippecanoe otherwise merges or drops "tiny" polygons at
+    # low zoom, which quietly removes small features — a pocket MPA, a disposal
+    # site — at exactly the zooms where the whole layer is in view and a user
+    # would be counting them.
+    "--no-tiny-polygon-reduction",
     "--no-tile-size-limit",
     "-l",
     dataset_group,
@@ -554,6 +615,30 @@ if (length(all_spatial) == 0 && file_exists(pq_spatial)) {
   stopifnot(
     "spatial_key must be unique across all layers" =
       !any(duplicated(spatial_combined$spatial_key)))
+
+  # Every feature ships with a shape, or the ingest fails here.
+  #
+  # Both checks exist because the failure mode they catch is SILENT: a second
+  # sfc column means some source's geometry column escaped normalize_geom_col(),
+  # and its rows are about to be written with no geometry at all. That shipped
+  # once (3 layers, 2,304 features in v2026.08.02) and was only found from the
+  # consumer end, when db-viz-hex could not summarize within a sanctuary.
+  sfc_cols <- names(spatial_combined)[
+    vapply(spatial_combined, inherits, logical(1), "sfc")]
+  stopifnot(
+    "exactly one geometry column — a second means a source escaped normalize_geom_col()" =
+      length(sfc_cols) == 1)
+
+  empty_by_layer <- spatial_combined[st_is_empty(spatial_combined), ] |>
+    st_drop_geometry() |>
+    count(layer)
+  if (nrow(empty_by_layer) > 0) {
+    stop(glue(
+      "{sum(empty_by_layer$n)} features have empty geometry, in: ",
+      paste(glue("{empty_by_layer$layer} ({empty_by_layer$n})"),
+            collapse = ", ")))
+  }
+
   message(glue(
     "spatial: {nrow(spatial_combined)} features across ",
     "{length(unique(spatial_combined$layer))} layers"
