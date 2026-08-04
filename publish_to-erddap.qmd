@@ -80,7 +80,7 @@ here.
 #| warning: false
 
 librarian::shelf(DBI, duckdb, dplyr, fs, glue, jsonlite, purrr, readr, stringr,
-                 tibble, tidyr, here, knitr, quiet = TRUE)
+                 tibble, tidyr, here, knitr, xml2, quiet = TRUE)
 here <- here::here
 options(readr.show_col_types = FALSE)
 devtools::load_all(here::here("../calcofi4db"))
@@ -603,74 +603,100 @@ write_csv(cfg |> left_join(val, by = "dataset_id"),
 cat(glue("wrote {length(blocks)} dataset blocks to data/erddap/datasets_calcofi.xml\n"))
 ```
 
-## Deploy (manual)
+## Deploy
 
 ```{r}
 #| label: deploy
-#| echo: false
-#| results: asis
-cat(glue('
-The notebook writes config and a view database; it does **not** touch the server.
+#| message: false
+source(here("libs/erddap_deploy.R"))
 
-1. **Sync the release parquet** to the identity-mounted path the views name. The
-   views bind `{PQ_SERVER}` literally, so this path must match exactly:
+# Gated, like CALCOFI_PUBLISH=true in the netCDF publisher: `tar_make()` keeps
+# GENERATING config on every release, but pushing to a public production service
+# stays a deliberate act. Set CALCOFI_ERDDAP_DEPLOY=true to actually deploy.
+DEPLOY      <- identical(Sys.getenv("CALCOFI_ERDDAP_DEPLOY"), "true")
+SSH_HOST    <- Sys.getenv("CALCOFI_SSH_HOST", "calcofi")
+ERDDAP_REPO <- Sys.getenv("CALCOFI_ERDDAP_REPO", here("../erddap"))
+ERDDAP_REMOTE_REPO <- Sys.getenv("CALCOFI_ERDDAP_REMOTE_REPO",
+                                 "/share/github/CalCOFI/erddap")
+ERDDAP_URL  <- Sys.getenv("CALCOFI_ERDDAP_URL", "https://erddap.calcofi.io")
 
-   ```bash
-   # rsync is NOT installed on the server, and the release is already on GCS,
-   # so pull it server-side rather than pushing 2 GB from a laptop. Its gcloud
-   # needs the alpha track; gsutil is simpler:
-   ssh calcofi "mkdir -p {ERDDAP_ROOT}/datasets/release/{RELEASE} \\
-     && gsutil -m cp -r gs://calcofi-db/ducklake/releases/{RELEASE}/parquet \\
-          {ERDDAP_ROOT}/datasets/release/{RELEASE}/ \\
-     && gsutil -m cp -r gs://calcofi-db/ingest/calcofi_mets {ERDDAP_ROOT}/datasets/ingest/" 
-   ```
-
-2. **Build the view database on the server.** It cannot be built here: DuckDB
-   validates a view\'s parquet paths at `CREATE` time, so the views must be created
-   where the data already sits at the path they name. The generated script carries
-   the exact SQL validated above.
-
-   ```bash
-   scp data/erddap/build_erddap_db.R calcofi:{ERDDAP_ROOT}/
-   ssh calcofi "docker exec -i rstudio bash -lc \\
-     \'cd {ERDDAP_ROOT} && Rscript build_erddap_db.R\'"
-   ```
-
-   It prints a row count per view — a zero there means the sync in step 1 is
-   incomplete, and is the cheapest place to catch it.
-
-3. **Splice the blocks** from `data/erddap/datasets_calcofi.xml` into
-   `CalCOFI/erddap/content/datasets.xml` at the
-   `<!-- add dataset definitions below -->` marker, then commit and push the
-   `CalCOFI/erddap` repo (it is bind-mounted into the container).
-
-4. **Reload** per dataset:
-
-   ```bash
-   touch {ERDDAP_FLAG}/<datasetID>
-   ```
-
-5. **Verify** — a `.das` request is the cheapest end-to-end check:
-
-   ```bash
-   curl -s https://erddap.calcofi.io/erddap/tabledap/calcofi_ctd-cast.das | head
-   ```
-
-   and check `/share/erddap/data/logs/log.txt` for `WARNING: Bad line(s)`.
-
-**Requirements.** The DuckDB JDBC driver must be in ERDDAP\'s `WEB-INF/lib`
-(custom image: `CalCOFI/server/erddap/Dockerfile`), and its engine version must be
->= the engine that wrote the views — this build used
-**{readLines(file.path(dir_erddap, "BUILD_VERSION.txt"))[1]}**.
-
-**Retiring the old datasetIDs.** The live server currently serves `calcofi_casts`,
-`calcofi_ctd_measurement`, `calcofi_ctd_thin`, `calcofi_dic`,
-`calcofi_euphausiids`, `calcofi_phytoplankton` and `calcofi_zooplankton`. None of
-those IDs appear above. Splicing this config *adds* the new ones; removing the old
-ones is a separate edit to `datasets.xml`, deliberately left to whoever owns that
-contract.
-'))
+cat(glue("deploy: {DEPLOY} (set CALCOFI_ERDDAP_DEPLOY=true to push to {ERDDAP_URL})\n"))
 ```
+
+```{r}
+#| label: deploy-run
+#| eval: !expr DEPLOY
+#| message: false
+
+n_pq <- erddap_sync_parquet(SSH_HOST, ERDDAP_ROOT, RELEASE)
+cat(glue("1. synced {n_pq} parquet files to {ERDDAP_ROOT}/datasets/release/{RELEASE}\n"))
+
+built <- erddap_build_db(SSH_HOST, ERDDAP_ROOT, script_path)
+cat(glue("2. built view db ({sum(grepl('rows$', built))} views, none empty)\n"))
+
+ids <- erddap_splice_config(ERDDAP_REPO, file.path(dir_erddap, "datasets_calcofi.xml"))
+cat(glue("3. spliced {length(ids$all)} generated + {length(ids$kept_outside)} hand-maintained; ",
+         "added {length(ids$added)}, retiring {length(ids$retired)}\n"))
+if (length(ids$retired))
+  cat(glue("   RETIRING (public URLs stop resolving): {paste(ids$retired, collapse = ', ')}\n"))
+erddap_push_config(SSH_HOST, ERDDAP_REPO, ERDDAP_REMOTE_REPO, RELEASE)
+
+erddap_flag(SSH_HOST, ERDDAP_FLAG, ids$all, ids$retired)
+cat("4. flagged for reload\n")
+
+# ERDDAP reloads asynchronously, so give it a moment before asking.
+Sys.sleep(30)
+ver <- erddap_verify(ERDDAP_URL, expect_present = ids$all, expect_absent = ids$retired)
+kable(ver, caption = "5. Live verification (the flag directory is not a reliable signal)")
+stopifnot("live ERDDAP does not match the deployed config" = all(ver$ok))
+```
+
+::: {.callout-note title="What deploying does, and the traps it encodes"}
+The five steps are in `libs/erddap_deploy.R`, one function each: sync the release
+parquet server-side, build the DuckDB views **on the server** (DuckDB validates a
+view's parquet paths at `CREATE` time, so they cannot be built here), splice this
+config into `CalCOFI/erddap`, flag every dataset for reload, and verify against
+the live service.
+
+Four failure modes are handled there because every one of them fails *silently*:
+
+- **`sudo git pull` cannot work** — root has no GitHub credentials. The fetch runs
+  as the ssh user, the merge as root. A bare `git pull` prints `Updating <a>..<b>`
+  and then dies on the write, so its first line reads like success.
+- **Ownership is captured and restored.** The checkout is owned by uids that are
+  not the ssh user; a root merge re-owns the tree and breaks the *next*
+  unprivileged fetch.
+- **The flag directory proves nothing.** It is `drwxrws---` under a group the ssh
+  user is not in, so an unprivileged `ls` reports zero either way, and ERDDAP
+  deletes each flag as it consumes it. Verification reads the live service.
+- **Splicing at the wrong marker duplicates everything.** `datasets.xml` carries
+  both an `add dataset definitions below` marker and a `BEGIN/END generated`
+  pair; only replacing between BEGIN/END is idempotent. Appending at the former
+  would add a second copy of all 34 datasets.
+:::
+
+::: {.callout-warning title="Retiring datasetIDs changes public URLs"}
+Datasets are keyed on `dataset_key`, so a provider-slug correction renames a
+**public** ERDDAP endpoint. Anything present in the previous generated block but
+absent from this one is reported as `retired` above and hard-flagged, so ERDDAP
+forgets it and its URL 404s.
+
+Old ids are retired rather than kept as aliases: they are no longer generated, so
+leaving them would freeze them at the previous release's definitions while the
+data underneath moved on — a duplicate that silently drifts is worse than a clean
+404. Datasets **outside** the generated block (`calcofi_casts`, `calcofi_ctd`,
+`calcofi_ctd_thin`, `calcofi_ctd_measurement`, `calcofi_euphausiids`,
+`calcofi_zooplankton`, and the `_old` pair) are hand-maintained and untouched.
+
+`v2026.08.04` retired six: `calcofi_bird_mammal_census{,_attribute,_sample}` →
+`farallon_bird-mammal*`, `ucsd_sio_mesopelagic-fish{,_sample}` →
+`sio_mesopelagic-fish*`, and `pic_zooplankton_sample` →
+`sio_pic-zooplankton_sample`.
+:::
+
+**Requirements.** The DuckDB JDBC driver must be in ERDDAP's `WEB-INF/lib`
+(custom image: `CalCOFI/server/erddap/Dockerfile`), and its engine version must be
+>= the engine that wrote the views.
 
 ```{r}
 #| label: cleanup
