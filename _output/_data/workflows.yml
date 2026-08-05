@@ -1,4 +1,4 @@
-generated: '2026-08-04'
+generated: '2026-08-05'
 n_total: 51
 n_meta: 25
 categories:
@@ -117,9 +117,11 @@ categories:
       title: ingest_sio_pic-zooplankton
       dataset_name: SIO PIC Zooplankton Net Tows
       description: Zooplankton net-tow sample registry from the SIO Pelagic Invertebrate
-        Collection, filtered to the CalCOFI region. Position, time, depth, and gear
-        metadata per tow. Biovolume measurements are not in the source file and are
-        pending from the provider (see Questions for Data Providers).
+        Collection, scoped to CalCOFI-program expeditions. Position, time, depth,
+        and gear metadata per tow. Includes the historical grid (1950s-80s inshore,
+        Gulf of California and Baja lines), not just the modern pattern. Biovolume
+        measurements are not in the source file and are pending from the provider
+        (see Questions for Data Providers).
       coverage: 1926-06 to 2024-04
       color: '#bbe0f0'
       link_data_source: SIO Pelagic Invertebrate Collection DB (CSV export)
@@ -250,10 +252,11 @@ categories:
       title: clean_db
     - url: deploy_consumers.html
       title: deploy_consumers
-      description: Reports which release each consumer is actually serving, and —
-        when CALCOFI_DEPLOY=true — brings the server-side ones (db-viz-hex, db-viz-cruise,
-        the h3t tile API) onto the promoted release. Runs after test_release, so it
-        can only ever deploy a version that passed the consumer-contract suite.
+      description: Brings the server-side consumers (db-viz-hex, db-viz-cruise, the
+        h3t tile API) onto the promoted release, and reports which release each is
+        actually serving before and after. Runs after test_release, so it can only
+        ever deploy a version that passed the consumer-contract suite. Deploying is
+        the default; CALCOFI_DEPLOY=false makes it a read-only drift report.
     - url: load_views.html
       title: load_views
     - url: release_database.html

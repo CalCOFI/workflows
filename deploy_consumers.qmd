@@ -18,10 +18,11 @@ calcofi:
   output: _output/deploy_consumers.html
   workflow_url: https://calcofi.io/workflows/deploy_consumers.html
   description: >
-    Reports which release each consumer is actually serving, and — when
-    CALCOFI_DEPLOY=true — brings the server-side ones (db-viz-hex, db-viz-cruise,
-    the h3t tile API) onto the promoted release. Runs after test_release, so it
-    can only ever deploy a version that passed the consumer-contract suite.
+    Brings the server-side consumers (db-viz-hex, db-viz-cruise, the h3t tile
+    API) onto the promoted release, and reports which release each is actually
+    serving before and after. Runs after test_release, so it can only ever
+    deploy a version that passed the consumer-contract suite. Deploying is the
+    default; CALCOFI_DEPLOY=false makes it a read-only drift report.
 editor_options:
   chunk_output_type: console
 ---
@@ -56,7 +57,19 @@ slowest leg and is worth running independently.
 librarian::shelf(dplyr, glue, here, knitr, tibble, quiet = TRUE)
 here <- here::here
 
-DEPLOY   <- identical(Sys.getenv("CALCOFI_DEPLOY"), "true")
+# Deploying is the DEFAULT. A release that consumers never receive is not a
+# release, and every drift this notebook exists to prevent came from a deploy
+# step that had to be remembered. Opting OUT is the unusual case, so it is what
+# takes a flag:
+#
+#   CALCOFI_DEPLOY=false   report consumer state and change nothing (dry run)
+#
+# The earlier design had this backwards -- deploy required CALCOFI_DEPLOY=true,
+# which meant the normal path silently did nothing, AND (because targets marks a
+# skipped render as done) setting the flag afterwards would not re-trigger it
+# without a tar_invalidate. Two ways to get a stale consumer set while every
+# target reported success.
+DEPLOY   <- !identical(tolower(Sys.getenv("CALCOFI_DEPLOY", "true")), "false")
 SSH_HOST <- Sys.getenv("CALCOFI_SSH_HOST", "calcofi")
 `%||%`   <- function(x, y) if (is.null(x) || length(x) == 0 || !nzchar(x)) y else x
 
@@ -67,7 +80,8 @@ RELEASE <- tryCatch(
   error = function(e) NA_character_)
 
 cat(glue("promoted release : {RELEASE}\n"))
-cat(glue("deploy enabled   : {DEPLOY} (CALCOFI_DEPLOY)\n"))
+cat(glue("deploy           : {DEPLOY} ",
+         "({ifelse(DEPLOY, 'default; set CALCOFI_DEPLOY=false for a dry run', 'CALCOFI_DEPLOY=false')})\n"))
 cat(glue("ssh host         : {SSH_HOST}\n"))
 ```
 
@@ -116,6 +130,30 @@ h3t_serving <- function() {
   if (length(hit)) f[hit[1]] else glue("(unmatched mtime {mt})")
 }
 
+fetch <- function(url) paste(suppressWarnings(system2(
+  "curl", c("-sL", "--max-time", "60", shQuote(url)), stdout = TRUE)), collapse = "")
+
+# db-query is GitHub Pages, and its bump workflow committed _config.yml with the
+# default GITHUB_TOKEN -- which does NOT trigger other workflows, so the Pages
+# deploy never fired. The repo said v2026.08.04 while the site served
+# v2026.08.02, and the bump run was green. So the probe compares the LIVE PAGE
+# against the config, not the config against latest.txt: the config was right.
+dbquery_serving <- function() {
+  cfg <- fetch("https://raw.githubusercontent.com/CalCOFI/db-query/main/_config.yml")
+  want <- sub(".*default_version:[ ]*([^\n#]+).*", "\\1", cfg)
+  want <- trimws(sub("\n.*", "", want))
+  live <- fetch("https://calcofi.io/db-query/")
+  if (!nzchar(want) || !grepl("^v20", want)) return("(config unreadable)")
+  if (grepl(want, live, fixed = TRUE)) want else glue("{want} in config, NOT on the live page")
+}
+
+# the browsable release listing: a static page that is rebuilt on promote
+idx_serving <- function() {
+  h <- fetch("https://storage.calcofi.io/calcofi-db/ducklake/releases/index.html")
+  v <- regmatches(h, gregexpr("v20[0-9]{2}\\.[0-9]{2}\\.[0-9]{2}", h))[[1]]
+  if (!length(v)) "(unreadable)" else max(v)
+}
+
 consumer_status <- function() {
   tibble::tribble(
     ~consumer,        ~serving,                                                       ~probe,
@@ -126,11 +164,17 @@ consumer_status <- function() {
     "ERDDAP",         ssh_out("grep -om1 'release v2026[0-9.]*' /share/github/CalCOFI/erddap/content/datasets.xml"),
                       "datasets.xml summary text",
     "db-viz-cruise",  ssh_out("stat -c %y /share/data/db-viz-cruise/db-viz-cruise.duckdb 2>/dev/null | cut -c1-16"),
-                      "database mtime (carries no version)") |>
+                      "database mtime (carries no version)",
+    "db-query site",  dbquery_serving(),
+                      "live page vs _config.yml default_version",
+    "releases index", idx_serving(),
+                      "storage.calcofi.io releases/index.html") |>
     mutate(http = c(http_code("https://app.calcofi.io/db-viz-hex/"),
                     http_code("https://h3t.calcofi.io/h3t/health"),
                     http_code("https://erddap.calcofi.io/erddap/info/index.json"),
-                    http_code("https://app.calcofi.io/db-viz-cruise/")))
+                    http_code("https://app.calcofi.io/db-viz-cruise/"),
+                    http_code("https://calcofi.io/db-query/"),
+                    http_code("https://storage.calcofi.io/calcofi-db/ducklake/releases/")))
 }
 
 before <- consumer_status()
@@ -144,11 +188,10 @@ kable(before, caption = glue("Consumer state BEFORE (promoted release: {RELEASE}
 #| results: asis
 if (!DEPLOY) {
   cat(glue(
-    "**Not deployed.** `CALCOFI_DEPLOY` is not `\"true\"`, so this target ",
-    "reported state and changed nothing.\n\n",
-    "The server-side consumers above may still be serving a previous release. ",
-    "To deploy, set `CALCOFI_DEPLOY=true` (in `~/.Renviron` to make it the ",
-    "default for every release) and re-run:\n\n",
+    "**Dry run — nothing deployed.** `CALCOFI_DEPLOY=false` is set, so this ",
+    "target reported the state above and changed nothing.\n\n",
+    "The server-side consumers may therefore be serving a previous release. ",
+    "Unset the variable (deploying is the default) and re-run:\n\n",
     "```r\n",
     "targets::tar_invalidate(names = tidyselect::any_of(\"deploy_consumers\"))\n",
     "targets::tar_make(names = tidyselect::any_of(\"deploy_consumers\"))\n",

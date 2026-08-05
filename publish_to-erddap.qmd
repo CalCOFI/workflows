@@ -613,19 +613,20 @@ source(here("libs/erddap_deploy.R"))
 # Gated, like CALCOFI_PUBLISH=true in the netCDF publisher: `tar_make()` keeps
 # GENERATING config on every release, but pushing to a public production service
 # stays a deliberate act. Set CALCOFI_ERDDAP_DEPLOY=true to actually deploy.
-# One flag for the whole post-release chain: CALCOFI_DEPLOY=true also drives the
-# server-side consumer sync from test_release.qmd. CALCOFI_ERDDAP_DEPLOY remains
-# for deploying ERDDAP alone (it is the slowest leg — a ~1.6 GB server-side
-# parquet pull — so it is worth being able to run it on its own).
-DEPLOY      <- identical(Sys.getenv("CALCOFI_ERDDAP_DEPLOY"), "true") ||
-               identical(Sys.getenv("CALCOFI_DEPLOY"), "true")
+# Deploying is the DEFAULT, matching deploy_consumers.qmd: a release consumers
+# never receive is not a release. CALCOFI_DEPLOY=false turns the whole
+# post-release chain into a dry run; CALCOFI_ERDDAP_DEPLOY=false skips only this
+# leg, which is worth having because it is the slowest (a ~1.6 GB server-side
+# parquet pull).
+DEPLOY      <- !identical(tolower(Sys.getenv("CALCOFI_DEPLOY", "true")), "false") &&
+               !identical(tolower(Sys.getenv("CALCOFI_ERDDAP_DEPLOY", "true")), "false")
 SSH_HOST    <- Sys.getenv("CALCOFI_SSH_HOST", "calcofi")
 ERDDAP_REPO <- Sys.getenv("CALCOFI_ERDDAP_REPO", here("../erddap"))
 ERDDAP_REMOTE_REPO <- Sys.getenv("CALCOFI_ERDDAP_REMOTE_REPO",
                                  "/share/github/CalCOFI/erddap")
 ERDDAP_URL  <- Sys.getenv("CALCOFI_ERDDAP_URL", "https://erddap.calcofi.io")
 
-cat(glue("deploy: {DEPLOY} (set CALCOFI_DEPLOY=true, or CALCOFI_ERDDAP_DEPLOY=true for ERDDAP alone, to push to {ERDDAP_URL})\n"))
+cat(glue("deploy: {DEPLOY} -> {ERDDAP_URL} (default; CALCOFI_DEPLOY=false for a dry run, CALCOFI_ERDDAP_DEPLOY=false to skip just this leg)\n"))
 ```
 
 ```{r}
