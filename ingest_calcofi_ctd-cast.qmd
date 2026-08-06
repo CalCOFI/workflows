@@ -3424,20 +3424,55 @@ knitr::opts_chunk$set(eval = TRUE)
 ```
 
 ```{r}
+#| label: record_fingerprint
+#| eval: true
+
+# Record the fingerprint as soon as the OUTPUTS are complete — after parquet,
+# metadata and the delta sidecars, and BEFORE the upload.
+#
+# It used to be written last, after the GCS sync and the appendices, to avoid
+# claiming "these inputs produced those outputs" for a run that died mid-pivot.
+# That reasoning is right; the placement was too conservative. The outputs are
+# finished HERE, and the upload is a separate concern that can fail for reasons
+# having nothing to do with them — as it did: a 2 h 45 m run wrote every table
+# correctly, then lost one object of a 3.2 GB transfer to a slow link, and threw
+# away the whole rebuild because the fingerprint had not been reached yet. The
+# identical upload succeeded by hand a minute later.
+#
+# Writing it here is still honest, because `parquet_ok` in [check_resume] does
+# not take this file's word for anything: it independently verifies that every
+# non-supplemental table named in the manifest is actually on disk. And the sync
+# is no longer gated on the rebuild, so a fingerprint written before a failed
+# upload cannot leave the mirror stale.
+if (!parquet_complete) {
+  write_input_fingerprint(fingerprint_path, fp)
+  say(glue("Recorded input fingerprint {substr(fp$hash, 1, 12)} → {fingerprint_path}"))
+}
+```
+
+```{r}
 #| label: upload_gcs
 
-# skip sync if all parquet tables were unchanged (no re-write)
-if (parquet_complete) {
-  say("Parquet unchanged — skipping GCS sync")
-} else {
-  sync_to_gcs(
-    local_dir    = dir_stage,
-    sidecar_dir  = dir_parquet,
-    gcs_prefix   = glue("ingest/{dir_label}"),
-    bucket       = "calcofi-db",
-    delete_stale = TRUE
-  )
-}
+# ALWAYS sync, even when the parquet was unchanged.
+#
+# This used to be gated on `!parquet_complete`, which coupled two independent
+# facts: "the outputs were rebuilt" and "GCS matches the outputs". A run that
+# rebuilt everything and then lost the upload to a network blip left GCS stale,
+# and the *next* run — seeing complete parquet and an unchanged fingerprint —
+# skipped the sync too, so the mirror stayed stale indefinitely with nothing
+# reporting it.
+#
+# rsync is the right shape for this: it compares before it transfers, so a sync
+# over an unchanged directory is a listing and no bytes. Paying that on every
+# render is far cheaper than a silently stale mirror, and it makes the upload
+# idempotent — safe to re-run after any failure.
+sync_to_gcs(
+  local_dir    = dir_stage,
+  sidecar_dir  = dir_parquet,
+  gcs_prefix   = glue("ingest/{dir_label}"),
+  bucket       = "calcofi-db",
+  delete_stale = TRUE
+)
 ```
 
 ## Findings {#findings}
@@ -4120,14 +4155,8 @@ if (file_exists(db_checkpoint)) {
   say(glue("Removed checkpoint: {db_checkpoint}"))
 }
 
-# record the input fingerprint LAST, and only when this run actually rebuilt.
-# Written any earlier, a run that died mid-pivot would leave a fingerprint saying
-# "these inputs produced those outputs" for outputs that were never finished — and
-# the next render would skip the heavy path on the strength of it.
-if (!parquet_complete) {
-  write_input_fingerprint(fingerprint_path, fp)
-  say(glue("Recorded input fingerprint {substr(fp$hash, 1, 12)} → {fingerprint_path}"))
-}
+# the fingerprint is recorded in [record_fingerprint], immediately after the
+# outputs are complete and before the GCS upload — see the reasoning there
 ```
 
 ## Appendix: Interactive Gantt Chart {.appendix}
