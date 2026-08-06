@@ -421,7 +421,18 @@ d_dataset_cov <- d_dataset |>
     coverage_spatial  = coalesce(coverage_spatial_observed,  coverage_spatial)) |>
   select(all_of(names(d_dataset)))
 
-dbExecute(con_wdl, "DROP VIEW IF EXISTS dataset")
+# `dataset` is written as a TABLE at [dataset_table] above, so the drop has to
+# match that type. DuckDB's `DROP VIEW IF EXISTS` does NOT no-op on a type
+# mismatch — it raises "Existing object dataset is of type Table, trying to drop
+# type View" — so the unconditional DROP VIEW here failed every release run.
+# Ask the catalog rather than assume, since a compat VIEW of the same name is a
+# legitimate state for this connection to be in.
+ds_type <- dbGetQuery(con_wdl, "
+  SELECT table_type FROM information_schema.tables
+  WHERE table_name = 'dataset'")$table_type
+if (length(ds_type))
+  dbExecute(con_wdl, if (identical(ds_type[1], "VIEW"))
+    "DROP VIEW IF EXISTS dataset" else "DROP TABLE IF EXISTS dataset")
 dbWriteTable(con_wdl, "dataset", as.data.frame(d_dataset_cov), overwrite = TRUE)
 
 # report which half of which dataset fell back, so a silent gap cannot hide as a
