@@ -19,8 +19,9 @@ calcofi:
       and other sensors at standard depths. 1 m-binned final data for 1993-2002
       come from the SIO-CalCOFI Technical Group's own archive (J. Wilkinson),
       which covers the decade calcofi.org does not publish finals for; 1998 and
-      2003 onward come from calcofi.org. The two are byte-identical where they
-      overlap.
+      2003 onward come from calcofi.org. Where both publish the same cruise,
+      calcofi.org is used; the two agree on 130 of 140 comparable files, and the
+      four cruises that differ are recorded in question calcofi_ctd-cast_20.
     citation_main: "CalCOFI. (2023). CalCOFI CTD Cast Files. CalCOFI.org."
     link_calcofi_org: https://calcofi.org/data/oceanographic-data/ctd-cast-files/
     link_data_source: https://calcofi.org/data/oceanographic-data/ctd-cast-files/
@@ -170,22 +171,123 @@ d_flds_rd <- read_csv(glue("{dir_meta}/flds_redefine.csv"), show_col_types = F)
 d_tbls_rd <- read_csv(glue("{dir_meta}/tbls_redefine.csv"), show_col_types = F)
 d_cruise_corrections <- read_csv(
   glue("{dir_meta}/cruise_key_corrections.csv"), show_col_types = F)
+
+# the `data_stage` vocabulary, MOST ADVANCED FIRST — this ordering IS the
+# supersession rule (Final 1m-Binned supersedes Preliminary CTD & Bottle 1m-Binned
+# supersedes Preliminary CTD 1m-Binned), so `match()` against it gives the priority
+# and no second list can drift out of step with it. Declared here because five
+# places downstream need it: the classifier, the per-cruise precedence filter, the
+# emit guard, the findings table and the coverage Gantt.
+CTD_DATA_STAGES <- c(
+  "final", "preliminary_with_bottle", "preliminary_without_bottle")
+CTD_STAGE_LABELS <- c(
+  final                      = "Final 1m-Binned",
+  preliminary_with_bottle    = "Preliminary CTD & Bottle 1m-Binned",
+  preliminary_without_bottle = "Preliminary CTD 1m-Binned")
 ```
 
-## Scrape CTD Download Links
+## Prime Downloads from the Object Store
 
-This runs on **every** render, ahead of the resume decision below, because the set
-of published `.zip` URLs is one of the two things that decide whether there is
-anything to recompute. It costs one HTTP GET and falls back to the cached list
-when calcofi.org is unreachable.
+The authoritative source for the CTD `.zip` files is the organization Shared Drive
+("CalCOFI Data Folder"), mirrored to
+`gs://calcofi-files-public/_sync/calcofi/ctd-cast/download/` by
+`scripts/sync_gdrive_to_gcs.sh` (per-cruise `CTDCast`/`CTDPrelim` drops) and
+`scripts/sync_jrw_ctd_to_gcs.sh` (Jim Wilkinson's `_CTDFinalDB.zip` final archive,
+1993-08 onward). Copy anything new into `dir_dl` so the inventory below can see it.
+
+**This must run before the inventory, not after.** It used to sit after both the
+scrape and the resume decision, which made a Drive-only zip structurally invisible:
+`d_zips` was built purely from calcofi.org, so nothing ever unzipped it and the
+fingerprint never noticed it. `20-2607SH_CTDPrelim.zip` sat on GCS and on disk for
+over a week that way. Set `CTD_ZIP_SOURCE=""` to disable, or override it to point
+elsewhere.
+
+```{r}
+#| label: prime_zips_from_gcs
+
+# authoritative zip source (gdrive→gcs); empty string disables priming
+ctd_zip_source <- Sys.getenv(
+  "CTD_ZIP_SOURCE",
+  "gcs-calcofi:calcofi-files-public/_sync/calcofi/ctd-cast/download")
+
+prime_zips_from_gcs <- function(src, dest_dir) {
+  # skip if disabled or rclone unavailable
+  if (src == "" || Sys.which("rclone") == "")
+    return(invisible(0L))
+  # system2() does NOT quote its args — it pastes them into a shell command — and
+  # dest_dir is under "~/My Drive/…", so an unquoted path split on the space and
+  # rclone saw three positional arguments instead of two:
+  #   Command copy needs 2 arguments maximum: you provided 3 non flag arguments:
+  #   ["gcs-calcofi:…/download" "/Users/bbest/My" "Drive/projects/…/download"]
+  # It then failed SILENTLY, because the exit status was never checked: the run
+  # printed "Priming N zip(s)", primed nothing, and fell through to scraping
+  # calcofi.org. Harmless where the zips are already local; a slow surprise on a
+  # fresh machine.
+  n_src <- tryCatch(
+    length(system2(
+      "rclone", c("lsf", shQuote(src), "--include", shQuote("*.zip"),
+                  "--max-depth", "1"),
+      stdout = TRUE, stderr = FALSE)),
+    error = function(e) 0L)
+  if (n_src == 0) {
+    say(glue("No zips at {src} — skipping GCS prime (will use calcofi.org)"))
+    return(invisible(0L))
+  }
+  say(glue("Priming {n_src} zip(s) from {src} → {dest_dir}"))
+  status <- system2("rclone", c(
+    "copy", shQuote(src), shQuote(dest_dir),
+    "--include", shQuote("*.zip"), "--max-depth", "1",
+    "--transfers", "8", "--checkers", "16"))
+  if (!identical(status, 0L)) {
+    say(glue("GCS prime FAILED (rclone exit {status}) — falling back to ",
+             "scraping calcofi.org. This is slower but not fatal."))
+    return(invisible(0L))
+  }
+  invisible(n_src)
+}
+
+prime_zips_from_gcs(ctd_zip_source, dir_dl)
+```
+
+## Build the Zip Inventory {#zip-inventory}
+
+The inventory is the **union of two sources**, not the web scrape alone:
+
+- **`web`** — the `.zip` links published on calcofi.org. One HTTP GET, falling back
+  to the cached list when the site is unreachable.
+- **`gcs`** — zips that reached `dir_dl` from the Shared Drive but are *not* on
+  calcofi.org. Two kinds today: a preliminary drop that has not been published yet
+  (`20-2607SH_CTDPrelim.zip`), and Jim Wilkinson's `_CTDFinalDB.zip` final archive,
+  which is not on calcofi.org at all.
+
+This runs on **every** render, ahead of the resume decision below, because the zip
+set is one of the two things that decide whether there is anything to recompute.
 
 ```{r}
 #| label: d_zips
 
+# a zip's cruise and processing kind are both encoded in its filename, identically
+# whichever source it came from. `19-9308NH_CTDFinalDB.zip` → cruise_key 9308NH,
+# zip_type final; `20-2607SH_CTDPrelim.zip` → 2607SH, preliminary. Declared once so
+# the two sources cannot drift into classifying the same name differently.
+add_zip_meta <- function(d) {
+  d |>
+    mutate(
+      cruise_key = str_extract(
+        file_zip, "\\d{2}-(\\d{4}[A-Z0-9]{2,4})", group = 1),
+      zip_type = case_when(
+        str_detect(file_zip, "CTDFinal")         ~ "final",
+        str_detect(file_zip, "CTDPrelim")        ~ "preliminary",
+        str_detect(file_zip, "CTDCast|CTD_Cast") ~ "raw",
+        str_detect(file_zip, "CTDTest")          ~ "test",
+        TRUE                                     ~ "unknown"))
+}
+
+# --- source 1: calcofi.org ----------------------------------------------------
 # read web page, extract all .zip download links; cache to CSV
 cache_csv <- file.path(dir_meta, "ctd_zip_urls.csv")
 
-d_zips <- tryCatch(
+d_zips_web <- tryCatch(
   {
     d <- read_html(url) |>
       html_nodes("a[href$='.zip']") |>
@@ -198,21 +300,12 @@ d_zips <- tryCatch(
           paste0("https://calcofi.org", url)
         ),
         file_zip = basename(url),
+        # year comes from the URL directory (/downloads/2026/), which is
+        # authoritative for a published zip; month from the cruise code
         year = str_extract(url, "/(\\d{4})/", group = 1) |> as.integer(),
-        month = str_extract(url, "-\\d{2}(\\d{2})", group = 1) |> as.integer(),
-        cruise_key = str_extract(
-          file_zip,
-          "\\d{2}-(\\d{4}[A-Z0-9]{2,4})",
-          group = 1
-        ),
-        zip_type = case_when(
-          str_detect(file_zip, "CTDFinal") ~ "final",
-          str_detect(file_zip, "CTDPrelim") ~ "preliminary",
-          str_detect(file_zip, "CTDCast|CTD_Cast") ~ "raw",
-          str_detect(file_zip, "CTDTest") ~ "test",
-          TRUE ~ "unknown"
-        )
-      )
+        month = str_extract(url, "-\\d{2}(\\d{2})", group = 1) |> as.integer()
+      ) |>
+      add_zip_meta()
     write_csv(d, cache_csv)
     say(glue("Scraped {nrow(d)} zip URLs from {url}"))
     d
@@ -225,17 +318,48 @@ d_zips <- tryCatch(
       stop(e)
     }
   }
-)
+) |>
+  mutate(source = "web")
+
+# --- source 2: zips on disk that calcofi.org does not publish ------------------
+# `url` is deliberately NA: there is nothing to download, the file is already in
+# dir_dl (put there by prime_zips_from_gcs above, or by hand). download_and_unzip()
+# reads that NA as "already local, unzip only".
+#
+# year/month are parsed from the FILENAME here rather than a URL path. The two
+# agree wherever both exist (20-2601RL → /downloads/2026/, 2026-01), but a local
+# zip has no URL to read them from. Web rows keep the URL derivation so no
+# currently-published value changes.
+d_zips_local <- tibble(
+  file_zip = list.files(dir_dl, pattern = "\\.zip$")) |>
+  anti_join(d_zips_web, by = "file_zip") |>
+  add_zip_meta() |>
+  mutate(
+    url    = NA_character_,
+    # "19-" / "20-" gives the century, "YYMM" the rest
+    year   = as.integer(str_extract(file_zip, "^(\\d{2})", group = 1)) * 100L +
+             as.integer(str_extract(file_zip, "^\\d{2}-(\\d{2})", group = 1)),
+    month  = as.integer(str_extract(file_zip, "^\\d{2}-\\d{2}(\\d{2})", group = 1)),
+    source = "gcs") |>
+  select(url, file_zip, year, month, cruise_key, zip_type, source)
+
+d_zips <- bind_rows(d_zips_web, d_zips_local) |>
+  arrange(desc(year), desc(month), file_zip)
 
 stopifnot(!any(d_zips$zip_type == "unknown"))
 
+say(glue("Zip inventory: {nrow(d_zips)} ",
+         "({sum(d_zips$source == 'web')} calcofi.org, ",
+         "{sum(d_zips$source == 'gcs')} Shared Drive only)"))
+
 d_zips |>
   mutate(
-    file_zip = glue("<a href={url}>{file_zip}</a>")
+    file_zip = if_else(
+      is.na(url), file_zip, glue("<a href={url}>{file_zip}</a>"))
   ) |>
   select(-url) |>
   dt(
-    caption = "All zip files to download",
+    caption = "All zip files in the inventory",
     fname = "ctd_zip_files",
     escape = F
   )
@@ -290,7 +414,12 @@ fp <- input_fingerprint(
   # the engine version is an input too: a change to calcofi4db's projection or
   # parsing would otherwise leave the fingerprint identical and keep outputs that
   # the current code would no longer produce
-  values = c(sort(d_zips$url),
+  #
+  # keyed on source+filename, NOT on `url`: a Shared-Drive-only zip has no URL, so
+  # hashing `d_zips$url` would let the whole Wilkinson archive (and 2607SH) arrive
+  # without invalidating anything — the run would report "inputs unchanged" and
+  # skip the rebuild that was the entire point.
+  values = c(sort(paste(d_zips$source, d_zips$file_zip)),
              paste0("calcofi4db ", as.character(packageVersion("calcofi4db")))))
 fp_prior <- read_input_fingerprint(fingerprint_path)
 fp_same  <- !is.null(fp_prior) && identical(fp_prior$hash, fp$hash)
@@ -381,61 +510,78 @@ skip_read_bind <- parquet_complete || has_ctd_raw
 knitr::opts_chunk$set(eval = !skip_read_bind)
 ```
 
-## Prime Downloads from GCS Source (optional)
+## Choose Which Archives to Read
 
-The authoritative source for the CTD `.zip` files is the organization Shared Drive
-("CalCOFI Data Folder"), mirrored to
-`gs://calcofi-files-public/_sync/calcofi/ctd-cast/download/` by
-`scripts/sync_gdrive_to_gcs.sh`. If that source exposes zips, copy them into
-`dir_dl` so the next chunk simply unzips them rather than re-scraping calcofi.org.
-This is a no-op (falls back to calcofi.org) until the GCS source is populated; set
-`CTD_ZIP_SOURCE=""` to disable, or override it to point elsewhere.
+Jim Wilkinson's archive and calcofi.org overlap on 66 cruises, and **130 of the 140
+comparable files are identical** — `20-0302JD_CTDBTL_001-100D.csv` from
+`20-0302JD_CTDFinalDB.zip` is md5-identical to calcofi.org's copy inside
+`20-0302JD_CTDFinalQC.zip`, and so are the great majority of the rest. But **8 files
+across 4 cruises are not** (`1810SR`, `1501NH`, `1604SH`, `1607OS`), so this is a
+preference, not an equivalence.
+
+`calcofi.org wins where both publish a final.` It is the citable published source,
+it is what the existing 66 cruises in the release were already built from, and
+switching them would rewrite years of released data on the strength of an
+undocumented difference. The Shared Drive archive is read **only** for the cruises
+calcofi.org has no final for — which is also what keeps the ~1 hr heavy path from
+doubling to parse duplicates.
+
+The archive is still mirrored **completely** to GCS (0.89 GB): it is the basis for
+any future backfill of calcofi.org, and for answering the question below.
+
+::: {.callout-important title="Where the two sources disagree, and why it is a provider question"}
+The `jrw_overlap_report` chunk below compares every overlapping archive and lists
+the disagreements rather than asserting they cannot happen — an earlier draft
+asserted byte-identity and was wrong.
+
+The clearest case is **1810SR**, where the Shared Drive copy is **2.1× the size**:
+same 74 casts and the same 82 columns, but 59,726 rows against 29,863, and its
+timestamps carry **seconds** (`14-Oct-2018 18:00:17`) where calcofi.org's are
+truncated to the minute (`10/14/2018 18:00`). On that evidence the Shared Drive copy
+looks like the *fuller* product, not a stale one.
+
+That matters mostly for `obs_ctd_full` — `ctd_thin` reduces to a ~10 m grid either
+way — but `datetime_start_utc` is part of the de-duplication key, so it is not
+purely cosmetic. Which copy is authoritative for 2003–2019 is the provider's call,
+not this notebook's: see question `calcofi_ctd-cast_20`. Until it is answered the
+release keeps what it already had.
+:::
 
 ```{r}
-#| label: prime_zips_from_gcs
+#| label: pick_archives
 
-# authoritative zip source (gdrive→gcs); empty string disables priming
-ctd_zip_source <- Sys.getenv(
-  "CTD_ZIP_SOURCE",
-  "gcs-calcofi:calcofi-files-public/_sync/calcofi/ctd-cast/download")
+# a GCS-only final is redundant when calcofi.org already publishes a final for that
+# cruise. Everything else — every preliminary, every raw, and every final for a
+# cruise calcofi.org has no final for — is read.
+cruises_web_final <- d_zips |>
+  filter(source == "web", zip_type == "final") |>
+  pull(cruise_key) |>
+  unique()
 
-prime_zips_from_gcs <- function(src, dest_dir) {
-  # skip if disabled or rclone unavailable
-  if (src == "" || Sys.which("rclone") == "")
-    return(invisible(0L))
-  # system2() does NOT quote its args — it pastes them into a shell command — and
-  # dest_dir is under "~/My Drive/…", so an unquoted path split on the space and
-  # rclone saw three positional arguments instead of two:
-  #   Command copy needs 2 arguments maximum: you provided 3 non flag arguments:
-  #   ["gcs-calcofi:…/download" "/Users/bbest/My" "Drive/projects/…/download"]
-  # It then failed SILENTLY, because the exit status was never checked: the run
-  # printed "Priming N zip(s)", primed nothing, and fell through to scraping
-  # calcofi.org. Harmless where the zips are already local; a slow surprise on a
-  # fresh machine.
-  n_src <- tryCatch(
-    length(system2(
-      "rclone", c("lsf", shQuote(src), "--include", shQuote("*.zip"),
-                  "--max-depth", "1"),
-      stdout = TRUE, stderr = FALSE)),
-    error = function(e) 0L)
-  if (n_src == 0) {
-    say(glue("No zips at {src} — skipping GCS prime (will use calcofi.org)"))
-    return(invisible(0L))
-  }
-  say(glue("Priming {n_src} zip(s) from {src} → {dest_dir}"))
-  status <- system2("rclone", c(
-    "copy", shQuote(src), shQuote(dest_dir),
-    "--include", shQuote("*.zip"), "--max-depth", "1",
-    "--transfers", "8", "--checkers", "16"))
-  if (!identical(status, 0L)) {
-    say(glue("GCS prime FAILED (rclone exit {status}) — falling back to ",
-             "scraping calcofi.org. This is slower but not fatal."))
-    return(invisible(0L))
-  }
-  invisible(n_src)
-}
+d_zips_skip <- d_zips |>
+  filter(source == "gcs", zip_type == "final", cruise_key %in% cruises_web_final)
 
-prime_zips_from_gcs(ctd_zip_source, dir_dl)
+d_zips_read <- d_zips |>
+  anti_join(d_zips_skip, by = "file_zip")
+
+d_zips_new_final <- d_zips_read |>
+  filter(source == "gcs", zip_type == "final")
+
+say(glue(
+  "Archives to read: {nrow(d_zips_read)} of {nrow(d_zips)} ",
+  "({nrow(d_zips_skip)} GCS finals skipped as duplicates of calcofi.org; ",
+  "{nrow(d_zips_new_final)} GCS finals are new coverage)"))
+
+d_zips_skip |>
+  select(file_zip, cruise_key, year, month) |>
+  arrange(year, month) |>
+  dt(
+    caption = glue(
+      "Skipped: {nrow(d_zips_skip)} Shared-Drive final archives whose cruise ",
+      "calcofi.org already publishes a final for (byte-identical; mirrored to ",
+      "GCS but not parsed)"),
+    fname = "ctd_zips_skipped"
+  )
 ```
 
 ## Download and Unzip Files
@@ -443,13 +589,20 @@ prime_zips_from_gcs(ctd_zip_source, dir_dl)
 ```{r}
 #| label: download_and_unzip
 
-download_and_unzip <- function(url, dest_dir, zip_type, unzip = TRUE) {
-  file_zip <- basename(url)
+# `url` is NA for a Shared-Drive-only zip: there is nothing to fetch, the file is
+# already in dest_dir (prime_zips_from_gcs put it there). file_zip is passed
+# explicitly rather than derived as basename(url), which would be NA for those.
+download_and_unzip <- function(url, file_zip, dest_dir, zip_type, unzip = TRUE) {
   dest_file <- file.path(dest_dir, file_zip)
   dir_unzip <- file.path(dest_dir, str_remove(file_zip, "\\.zip$"))
 
   if (file_exists(dest_file)) {
     say(glue("Already exists: {file_zip}"))
+  } else if (is.na(url)) {
+    # primed source vanished between the prime and here — do not silently proceed
+    # with a missing archive
+    warning(glue("Expected primed zip is missing: {file_zip}"))
+    return(invisible(NULL))
   } else {
     say(glue("Downloading: {file_zip}"))
     tryCatch(
@@ -478,15 +631,127 @@ download_and_unzip <- function(url, dest_dir, zip_type, unzip = TRUE) {
   }
 }
 
-d_zips |>
+d_zips_read |>
   pwalk(function(url, file_zip, zip_type, ...) {
-    download_and_unzip(url, dir_dl, zip_type, unzip = TRUE)
+    download_and_unzip(url, file_zip, dir_dl, zip_type, unzip = TRUE)
   })
 
 say("Download and extraction complete!")
 ```
 
+### Overlap guard {#jrw-overlap-guard}
+
+Skipping an archive is a claim that nothing is lost by skipping it, so measure the
+claim on **every** overlapping cruise rather than trusting one sample. This reads
+the zip *directory* (`unzip -l`, no extraction) and compares each top-level
+`_CTDBTL_*.csv` against calcofi.org's copy of the same filename by uncompressed
+size — a few seconds for all 66, where md5 would mean unpacking ~2 GB.
+
+Size equality is a screen, not a proof; what it reliably catches is the case that
+matters, a Shared-Drive copy holding materially more (or less) than the published
+one. It does **not** halt the render: a difference here is a question for the
+provider, not a defect in this pipeline, and the release keeps what it already had
+either way.
+
+```{r}
+#| label: jrw_overlap_report
+
+# JRW ships the db CSVs at the archive TOP LEVEL; calcofi.org buries the same
+# filenames under db_csv(s)/ inside the _CTDFinalQC archive. Match on basename —
+# several cruises split a cruise across separate runs (013-074, 044-060, ...) so
+# the file SETS are not always the same shape and a positional compare would lie.
+web_btl <- tibble(
+  path = list.files(
+    dir_dl, pattern = "_CTDBTL_.*\\.csv$", full.names = TRUE, recursive = TRUE)) |>
+  filter(str_detect(path, "_CTDFinalQC/db[_-]csvs?/")) |>
+  mutate(file_csv = basename(path), web_bytes = as.numeric(file_size(path))) |>
+  select(file_csv, web_bytes) |>
+  distinct(file_csv, .keep_all = TRUE)
+
+# uncompressed sizes straight out of the zip directory — no extraction.
+#
+# utils::unzip, NOT the bare name: this notebook shelves the `zip` package, whose
+# unzip() masks base R's and takes no `list` argument, so `unzip(list = TRUE)`
+# fails with "unused argument (list = TRUE)". Everywhere else in this notebook
+# unzip() is called only to EXTRACT, where the two signatures happen to agree —
+# which is why the masking had never surfaced before.
+jrw_btl <- d_zips_skip$file_zip |>
+  set_names() |>
+  map_dfr(\(fz) {
+    z <- utils::unzip(file.path(dir_dl, fz), list = TRUE)
+    tibble(file_csv = basename(z$Name), depth = str_count(z$Name, "/"),
+           jrw_bytes = z$Length) |>
+      filter(str_detect(file_csv, "_CTDBTL_.*\\.csv$"), depth == 0)
+  }, .id = "file_zip") |>
+  select(-depth)
+
+d_overlap <- jrw_btl |>
+  left_join(web_btl, by = "file_csv") |>
+  mutate(
+    cruise_key = str_extract(file_zip, "\\d{2}-(\\d{4}[A-Z0-9]{2,4})", group = 1),
+    ratio  = round(jrw_bytes / web_bytes, 3),
+    status = case_when(
+      is.na(web_bytes)        ~ "no matching filename on calcofi.org",
+      jrw_bytes == web_bytes  ~ "identical size",
+      TRUE                    ~ "DIFFERENT size")) |>
+  relocate(cruise_key, file_csv, status, ratio, jrw_bytes, web_bytes)
+
+n_same <- sum(d_overlap$status == "identical size")
+n_diff <- sum(d_overlap$status == "DIFFERENT size")
+n_none <- sum(d_overlap$status == "no matching filename on calcofi.org")
+
+say(glue(
+  "Overlap comparison across {n_distinct(d_overlap$cruise_key)} cruises / ",
+  "{nrow(d_overlap)} files: {n_same} identical, {n_diff} different, ",
+  "{n_none} with no same-named counterpart (split runs)"))
+
+# Not a hard stop — but a WHOLESALE mismatch would mean the wrong folder was
+# synced or the layout changed, which is a defect rather than a data question.
+stopifnot(
+  "no comparable overlap files at all — check the sync and the archive layout" =
+    nrow(d_overlap) > 0,
+  "the two sources agree on almost nothing — this is a sync/layout problem, not a data question" =
+    n_same >= 0.5 * (n_same + n_diff))
+
+d_overlap |>
+  filter(status != "identical size") |>
+  arrange(desc(ratio)) |>
+  dt(
+    caption = glue(
+      "Shared-Drive vs calcofi.org finals that do NOT match ({n_diff} different ",
+      "size, {n_none} split-run). calcofi.org is used for all of these; see ",
+      "question calcofi_ctd-cast_20"),
+    fname = "ctd_jrw_overlap_diffs"
+  )
+```
+
 ## Find and Prioritize CTD Data Files
+
+CalCOFI's [CTD Cast Files](https://calcofi.org/data/oceanographic-data/ctd-cast-files/)
+page names six categories across its header row, three of which are 1 m-binned
+products that supersede one another:
+
+**Preliminary CTD 1m-Binned → Preliminary CTD & Bottle 1m-Binned → Final 1m-Binned**
+
+but each cruise offers a **single** `_CTDPrelim.zip`, replaced in place as processing
+advances, so the two preliminary tiers are invisible from the zip name. The
+discriminator is the CSV filename *inside* the archive — `_CTDBTL_` once the bottle
+merge has happened, plain `_CTD_` before it:
+
+| archive | CSV | `data_stage` |
+|---|---|---|
+| `_CTDFinalQC.zip` (calcofi.org) | `db_csvs/…_CTDBTL_…csv` | `final` |
+| `_CTDFinalDB.zip` (Shared Drive) | `…_CTDBTL_…csv` at top level | `final` |
+| `_CTDPrelim.zip` | `db-csvs/…_CTDBTL_…csv` | `preliminary_with_bottle` |
+| `_CTDPrelim.zip` | `…_CTD_…csv` | `preliminary_without_bottle` |
+
+This matters well beyond labelling. Only the *station-corrected* salinity and oxygen
+are canonical — following the provider's own guidance that "station-corrected data
+are the best" — and those wait on the bottle merge. A `preliminary_without_bottle`
+cruise therefore carries **no corrected salinity or oxygen at all**, which used to
+be indistinguishable from a `preliminary_with_bottle` cruise that has them.
+Splitting the tier is what lets a consumer tell "not measured" from "not merged
+yet".
 
 ```{r}
 #| label: d_csv
@@ -509,34 +774,56 @@ d_csv <- tibble(
       group = 1
     ),
     data_stage = case_when(
+      # final, calcofi.org: db_csv(s)/ inside a *Final* archive
       str_detect(path_unzip, "Final.*db[_|-]csv")  ~ "final",
-      str_detect(path_unzip, "Prelim.*db[_|-]csv") ~ "preliminary",
-      # prelim CSVs directly in unzipped dir (no db-csv subfolder)
+      # final, Shared Drive: JRW's *_CTDFinalDB archives put the db CSVs at the
+      # TOP LEVEL. The top-level restriction is load-bearing — these archives also
+      # carry orig/, orig_dbcsvs/, SeparateRuns_Fl/ and south-north/ copies of the
+      # same casts. Without it both copies classify `final`, and which one survives
+      # falls to the `ORDER BY length("_source_file")` tiebreak in dedup_ctd_raw:
+      # correct by accident, and only until a path length changes.
+      str_detect(dir_unzip, "CTDFinalDB$") &
+        path_unzip == paste0(dir_unzip, "/", file_csv) ~ "final",
+      # preliminary, bottle-merged: _CTDBTL_ means the bottle merge has run
       str_detect(dir_unzip, "Prelim") &
-        path_unzip == paste0(dir_unzip, "/", file_csv) ~ "preliminary",
-      # edge case: 2111SR has CSVs only in csvs-plots subfolder
-      cruise_key == "2111SR" &
-        str_detect(
-          path_unzip,
-          "Prelim.*csvs-plots.*2111SR.*csv"
-        ) ~ "preliminary",
+        str_detect(file_csv, "_CTDBTL_") ~ "preliminary_with_bottle",
+      # preliminary, sensor only: _CTD_ (no BTL) — corrected salinity/oxygen and
+      # every bottle column are empty in these
+      str_detect(dir_unzip, "Prelim") &
+        str_detect(file_csv, "_CTD_") ~ "preliminary_without_bottle",
+      # NOTE: the hardcoded `cruise_key == "2111SR"` arm that used to sit here is
+      # gone, and deliberately. 2111SR puts its db CSVs in csvs-plots/ rather than
+      # db-csvs/, so the old *directory*-based rules missed it and it needed a
+      # cruise-specific path regex. The rules above key on the FILENAME token and
+      # do not care how deep the file sits, so
+      # 20-2111SR_CTDPrelim/20-2111SRCTDPrelim/csvs-plots/20-2111SR_CTDBTL_001-075D.csv
+      # now classifies as preliminary_with_bottle on its own — which is also
+      # accurate than the old arm, which could only say "preliminary". Verified
+      # against the archive on disk; a regression would trip the content
+      # assertion in [emit_core].
       .default = NA_character_
     ),
     cast_dir = case_when(
       str_detect(file_csv, regex("U\\.csv$", ignore_case = T)) ~ "U",
       str_detect(file_csv, regex("D\\.csv$", ignore_case = T)) ~ "D"
     ),
-    priority = case_when(
-      data_stage == "final" ~ 1,
-      data_stage == "preliminary" ~ 2,
-      TRUE ~ 3
-    )
+    # supersession order, straight off CTD_DATA_STAGES so a new stage cannot be
+    # added to the vocabulary without also being ranked (an unranked stage would
+    # otherwise sort last and be silently discarded by the filter below)
+    priority = match(data_stage, CTD_DATA_STAGES)
   ) |>
   relocate(cruise_key, path_unzip) |>
   arrange(cruise_key, path_unzip) |>
-  filter(data_stage %in% c("final", "preliminary"))
+  filter(data_stage %in% CTD_DATA_STAGES) |>
+  # An archive skipped in [pick_archives] is never unzipped — but this chunk globs
+  # the download directory, not the inventory, so a copy left behind by an earlier
+  # run (before the skip existed, or from a run where it was disabled) would still
+  # be found here and would compete with calcofi.org's identical copy. Drop them by
+  # their unzip directory so the skip decision holds regardless of what is on disk.
+  filter(!dir_unzip %in% str_remove(d_zips_skip$file_zip, "\\.zip$"))
 
-# for each cruise, keep only final if available, otherwise preliminary
+# for each cruise keep only the most-advanced stage available:
+# final > preliminary_with_bottle > preliminary_without_bottle
 d_priority <- d_csv |>
   group_by(cruise_key) |>
   summarize(
@@ -917,23 +1204,93 @@ d_bind |>
 
 max_dist_dec_lnst_km <- 10
 
-pts <- d_bind |>
-  st_as_sf(coords = c("longitude", "latitude"), remove = F, crs = 4326) |>
+# THIS USED TO MATERIALIZE EVERY SCAN AS AN sf OBJECT WITH TWO GEOMETRY COLUMNS.
+# With 45 more cruises that stopped fitting: `pts` reached the machine's 24 GB
+# ceiling and `filter_pts` died with "vector memory limit of 24.0 Gb reached"
+# after the distance step alone had run for 74 minutes. Both symptoms came from
+# doing point work at the wrong grain, so fix the grain rather than the limit —
+# raising mem.maxVSize on a 24 GB machine only buys swapping, and DuckDB is
+# already holding half of RAM.
+#
+# Three changes, none of which alters a single output value:
+#
+#  1. The nominal line/station coordinate takes ~200 distinct values in the whole
+#     dataset — one per CalCOFI grid station — but `purrr::map2(st_point)` built
+#     one sfg per SCAN, i.e. ~30M R-level closure calls to produce ~200 distinct
+#     points. Build the lookup once and join it on.
+#  2. Run per cruise. Every operation here is row-wise (distance by_element) or a
+#     point-in-polygon against a static grid, so there is no cross-cruise
+#     dependency and batching is exactly equivalent — it just bounds peak memory
+#     to one cruise instead of the whole archive.
+#  3. Return PLAIN TIBBLES. Nothing downstream wants geometry: `d_filt` already
+#     did `st_drop_geometry() |> select(-geom_lnst)`, and the two map previews
+#     below rebuild it from lon/lat on a ~100-point sample.
+
+grid_ref <- calcofi4r::cc_grid |>
+  rename(any_of(c(site_key = "sta_key"))) |>
+  select(grid_site = site_key)
+
+# ~200 rows: the distinct nominal station coordinates, as points, built once
+lnst_ref <- d_bind |>
+  distinct(lon_lnst, lat_lnst) |>
+  filter(!is.na(lon_lnst), !is.na(lat_lnst)) |>
   mutate(
     geom_lnst = purrr::map2(lon_lnst, lat_lnst, \(x, y) st_point(c(x, y))) |>
-      st_sfc(crs = 4326),
-    dist_dec_lnst_km = st_distance(geometry, geom_lnst, by_element = T) |>
+      st_sfc(crs = 4326))
+
+say(glue("Distance filter: {nrow(lnst_ref)} distinct station coordinates ",
+         "across {format(nrow(d_bind), big.mark = ',')} scans"))
+
+# compute the three derived columns for one cruise, and only those columns — the
+# batch results are bound and joined back, so d_bind is never duplicated
+dist_one_cruise <- function(d) {
+  s <- d |>
+    select(.row_id, longitude, latitude, lon_lnst, lat_lnst) |>
+    left_join(lnst_ref, by = c("lon_lnst", "lat_lnst")) |>
+    st_as_sf(coords = c("longitude", "latitude"), remove = FALSE, crs = 4326)
+
+  # a scan with no nominal coordinate gets NA distance, exactly as st_distance
+  # against an empty geometry did before
+  s$dist_dec_lnst_km <- rep(NA_real_, nrow(s))
+  has <- !st_is_empty(s$geom_lnst) & !is.na(s$lon_lnst)
+  if (any(has))
+    s$dist_dec_lnst_km[has] <- st_distance(
+      st_geometry(s)[has], s$geom_lnst[has], by_element = TRUE) |>
       units::set_units(km) |>
-      units::drop_units(),
-    is_dist_dec_lnst_within_max = dist_dec_lnst_km <= max_dist_dec_lnst_km
-  ) |>
-  st_join(
-    calcofi4r::cc_grid |>
-      rename(any_of(c(site_key = "sta_key"))) |>
-      select(grid_site = site_key),
-    join = st_intersects
-  )
-st_agr(pts) <- "constant"
+      units::drop_units()
+
+  s$is_dist_dec_lnst_within_max <- s$dist_dec_lnst_km <= max_dist_dec_lnst_km
+  s$geom_lnst <- NULL
+  st_agr(s) <- "constant"
+
+  s |>
+    st_join(grid_ref, join = st_intersects) |>
+    st_drop_geometry() |>
+    select(.row_id, dist_dec_lnst_km, is_dist_dec_lnst_within_max, grid_site)
+}
+
+d_bind <- d_bind |> mutate(.row_id = row_number())
+
+# The batch results are three columns plus an id — assign them into d_bind by
+# column rather than joining. A `right_join` back would allocate a second copy of
+# the whole ~30M-row frame, which on a 24 GB machine is the very thing that
+# killed the previous run.
+d_dist <- d_bind |>
+  group_split(cruise_key) |>
+  purrr::map(dist_one_cruise) |>
+  bind_rows() |>
+  arrange(.row_id)
+
+stopifnot(
+  "distance batches must cover every scan exactly once, in order" =
+    identical(d_dist$.row_id, d_bind$.row_id))
+
+d_bind$dist_dec_lnst_km            <- d_dist$dist_dec_lnst_km
+d_bind$is_dist_dec_lnst_within_max <- d_dist$is_dist_dec_lnst_within_max
+d_bind$grid_site                   <- d_dist$grid_site
+rm(d_dist)
+
+pts <- d_bind |> select(-.row_id)
 ```
 
 ### View sample cruise with excess distance points
@@ -942,10 +1299,25 @@ st_agr(pts) <- "constant"
 #| label: view_badcr
 
 badcr_id <- "1507OC"
+
+# `pts` is a plain tibble now (see pts_distance_from_lnst) — geometry is rebuilt
+# here, on the sampled subset this map actually draws, rather than being carried
+# on all ~30M scans just so two previews can use it
+as_pts_sf <- function(d) st_as_sf(
+  d, coords = c("longitude", "latitude"), remove = FALSE, crs = 4326)
+
+# the extent from the lon/lat COLUMNS. st_bbox() would have to build geometry for
+# every row first, which is the allocation this chunk exists to avoid — and the
+# bounding box of a point set is just four numbers.
+pts_bbox <- function(d) st_bbox(
+  c(xmin = min(d$longitude, na.rm = TRUE), ymin = min(d$latitude, na.rm = TRUE),
+    xmax = max(d$longitude, na.rm = TRUE), ymax = max(d$latitude, na.rm = TRUE)),
+  crs = st_crs(4326))
+
 pts_badcr <- pts |>
   filter(cruise_key == badcr_id)
 
-bb_badcr <- st_bbox(pts_badcr) |> st_as_sfc()
+bb_badcr <- pts_badcr |> pts_bbox() |> st_as_sfc()
 
 mapView(bb_badcr) +
   mapView(
@@ -956,6 +1328,7 @@ mapView(bb_badcr) +
         pts_badcr |>
           filter(!is_dist_dec_lnst_within_max)
       ) |>
+      as_pts_sf() |>
       select(
         cruise_key,
         datetime_start_utc,
@@ -982,7 +1355,6 @@ mapView(bb_badcr) +
 #| label: filter_pts
 
 d_pts_cruise_filt_smry <- pts |>
-  st_drop_geometry() |>
   group_by(cruise_key) |>
   filter(any(!is_dist_dec_lnst_within_max)) |>
   summarize(
@@ -1041,7 +1413,7 @@ d_pts_cruise_filt_smry |>
 ```{r}
 #| label: view_pts_filt
 
-bb_cr <- st_bbox(pts_filt) |> st_as_sfc()
+bb_cr <- pts_filt |> pts_bbox() |> st_as_sfc()
 
 mapView(bb_cr) +
   mapView(
@@ -1049,6 +1421,7 @@ mapView(bb_cr) +
       group_by(cruise_key) |>
       slice_sample(n = 100) |>
       ungroup() |>
+      as_pts_sf() |>
       select(
         cruise_key,
         longitude,
@@ -1071,7 +1444,6 @@ mapView(bb_cr) +
 #| label: check_dupes
 
 d_dupes <- pts_filt |>
-  st_drop_geometry() |>
   select(datetime_start_utc, depth) |>
   group_by(datetime_start_utc, depth) |>
   summarize(n = n(), .groups = "drop") |>
@@ -1079,7 +1451,6 @@ d_dupes <- pts_filt |>
   arrange(desc(n))
 
 n_distinct_dtime_depth <- pts_filt |>
-  st_drop_geometry() |>
   select(datetime_start_utc, depth) |>
   n_distinct()
 
@@ -1107,9 +1478,9 @@ renames <- d_flds_rd |>
   filter(fld_old != fld_new) |>
   select(fld_old, fld_new)
 
-d_filt <- pts_filt |>
-  st_drop_geometry() |>
-  select(-geom_lnst)
+# `pts_filt` is already a plain tibble and geom_lnst no longer exists — the
+# distance chunk drops both rather than carrying geometry across ~30M scans
+d_filt <- pts_filt
 
 for (i in seq_len(nrow(renames))) {
   old <- renames$fld_old[i]
@@ -2825,18 +3196,60 @@ stopifnot(
   "every obs.sample_key must resolve in sample" =
     dbGetQuery(con, "SELECT COUNT(*) FROM obs o LEFT JOIN sample s USING (sample_key)
                      WHERE s.sample_key IS NULL")[[1]] == 0,
-  # ctd_cast is filtered to final|preliminary upstream, so a NULL here means the
+  # ctd_cast is filtered to CTD_DATA_STAGES upstream, so a NULL here means the
   # 16th positional column silently fell off the arm rather than that a cast has
   # no stage
-  "every sample row must carry data_stage (final|preliminary)" =
-    dbGetQuery(con, "SELECT COUNT(*) FROM sample
-                     WHERE data_stage NOT IN ('final','preliminary')
-                        OR data_stage IS NULL")[[1]] == 0,
+  "every sample row must carry a known data_stage" =
+    dbGetQuery(con, glue(
+      "SELECT COUNT(*) FROM sample
+       WHERE data_stage NOT IN ({stages_sql}) OR data_stage IS NULL",
+      stages_sql = paste0("'", CTD_DATA_STAGES, "'", collapse = ", ")))[[1]] == 0,
   # the whole point of ctd_thin: obs must not silently become the full scan set
   "obs must be fed by ctd_thin, not ctd_measurement" =
     n_obs < dbGetQuery(con, "SELECT COUNT(*) FROM ctd_measurement")[[1]])
 cat(glue("obs parity: {format(n_obs, big.mark=',')} thinned rows across ",
          "{format(n_cast, big.mark=',')} casts"), "\n")
+
+# --- data_stage is classified by FILENAME; verify it against CONTENT ----------
+# The `_CTDBTL_` / `_CTD_` token is a convention, not a guarantee, and 2111SR is
+# classified by a hardcoded cruise rule that no token supports at all. What
+# actually distinguishes the tiers is whether the bottle merge has run, so test
+# that directly: a `preliminary_without_bottle` cast must have NO bottle-derived
+# or bottle-corrected observations, and the other two tiers must have some.
+#
+# This is what catches a re-organized or mis-named archive — a case the filename
+# rule cannot see, and which would otherwise reach consumers as a cruise silently
+# missing its salinity and oxygen.
+bottle_dependent <- c(
+  "salinity_ave_corr", "oxygen_ml_l_ave_sta_corr", "oxygen_umol_kg_ave_sta_corr",
+  "salinity_btl", "oxygen_btl_ml_l", "btl_depth")
+
+d_stage_content <- dbGetQuery(con, glue("
+  SELECT s.data_stage,
+         COUNT(DISTINCT s.sample_key)                             AS n_casts,
+         COUNT(*) FILTER (WHERE o.measurement_type IN ({btl_sql})) AS n_bottle_obs
+  FROM sample s LEFT JOIN obs o USING (sample_key)
+  GROUP BY s.data_stage",
+  btl_sql = paste0("'", bottle_dependent, "'", collapse = ", ")))
+
+stopifnot(
+  "a preliminary_without_bottle cast must carry NO bottle-merged measurement" =
+    all(d_stage_content$n_bottle_obs[
+      d_stage_content$data_stage == "preliminary_without_bottle"] == 0),
+  "final and preliminary_with_bottle casts must carry bottle-merged values" =
+    all(d_stage_content$n_bottle_obs[
+      d_stage_content$data_stage %in%
+        c("final", "preliminary_with_bottle")] > 0))
+
+d_stage_content |>
+  mutate(stage_label = CTD_STAGE_LABELS[data_stage]) |>
+  arrange(match(data_stage, CTD_DATA_STAGES)) |>
+  dt(
+    caption = paste(
+      "`data_stage` verified against content: bottle-merged observations are",
+      "present in the two merged tiers and absent from the sensor-only tier"),
+    fname = "ctd_data_stage_content"
+  )
 
 # --- obs_ctd_full: supplemental full-resolution scans -----------------------
 # heavy (~216M rows); set BUILD_OBS_CTD_FULL=FALSE for a fast structural render.
@@ -3358,9 +3771,16 @@ Until v2026.08 the released `sample` carried no such column, so a consumer could
 not tell a final cruise from a preliminary one and the caveat above could not
 reach them — question `calcofi_ctd-cast_14`. Core `sample` now has
 **`data_stage`**, supplied by this ingest as the optional trailing column of
-`append_sample()` (calcofi4db 3.4.0). It is `final` or `preliminary` here; the
-other 15 ingests, none of which draw the distinction, leave it `NULL` rather than
-having to change.
+`append_sample()` (calcofi4db 3.4.0). The other 15 ingests, none of which draw the
+distinction, leave it `NULL` rather than having to change.
+
+It carries **three** values, not two, matching the provider's own published
+progression — `final` ← `preliminary_with_bottle` ← `preliminary_without_bottle`.
+The split matters most for exactly the quantities the caveat names: oxygen and
+chlorophyll are *bottle-corrected*, so a `preliminary_without_bottle` cruise has
+not merely provisional values for them but **none at all**. Collapsing both
+preliminary tiers into one label made that indistinguishable from a cruise whose
+sensors failed.
 :::
 
 ```{r}
@@ -3372,9 +3792,13 @@ if ("ctd_cast" %in% DBI::dbListTables(con)) {
   dbGetQuery(con, "
     SELECT data_stage, COUNT(DISTINCT cruise_key) AS n_cruises,
            COUNT(DISTINCT cast_key) AS n_casts
-    FROM ctd_cast GROUP BY 1 ORDER BY n_casts DESC") |>
+    FROM ctd_cast GROUP BY 1") |>
+    # ordered by processing stage, not by size: the point of the table is where a
+    # cruise sits in the progression
+    arrange(match(data_stage, CTD_DATA_STAGES)) |>
+    mutate(stage_label = CTD_STAGE_LABELS[data_stage], .after = data_stage) |>
     datatable(
-      caption = paste("Final vs preliminary in this ingest — carried into the",
+      caption = paste("Processing stage in this ingest — carried into the",
                       "release on `sample.data_stage`"),
       rownames = FALSE, options = list(dom = "t"))
 } else {
@@ -3796,7 +4220,12 @@ cruise_spans <- cruise_spans |>
   ungroup() |>
   arrange(adj_beg_date)
 
-colors <- c("final" = "#23d355ff", "preliminary" = "#A23B72")
+# green = done, warm = in progress; the two preliminary tiers share a hue so the
+# eye reads "not final yet" first and the tier second
+colors <- c(
+  final                  = "#23d355ff",
+  preliminary_with_bottle = "#A23B72",
+  preliminary_without_bottle        = "#E8862E")
 
 p <- plot_ly()
 
@@ -3819,25 +4248,22 @@ for (i in 1:nrow(cruise_spans)) {
     )
 }
 
-p <- p |>
-  add_trace(
-    type = "scatter",
-    mode = "lines",
-    x = c(NA, NA),
-    y = c(NA, NA),
-    line = list(color = colors["final"], width = 8),
-    name = "Final",
-    showlegend = TRUE
-  ) |>
-  add_trace(
-    type = "scatter",
-    mode = "lines",
-    x = c(NA, NA),
-    y = c(NA, NA),
-    line = list(color = colors["preliminary"], width = 8),
-    name = "Preliminary",
-    showlegend = TRUE
-  )
+# one legend entry per stage actually present, in processing order — hand-written
+# traces drifted from `colors` when the third tier was added
+for (stg in CTD_DATA_STAGES) {
+  if (!stg %in% cruise_spans$stage_label) next
+  p <- p |>
+    add_trace(
+      type = "scatter",
+      mode = "lines",
+      x = c(NA, NA),
+      y = c(NA, NA),
+      line = list(color = colors[[stg]], width = 8),
+      name = CTD_STAGE_LABELS[[stg]],
+      legendgroup = stg,
+      showlegend = TRUE
+    )
+}
 
 p <- p |>
   layout(

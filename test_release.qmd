@@ -338,6 +338,36 @@ contract <- tibble::tribble(
     "SELECT count(*) n FROM {rp('obs')} o
      WHERE o.taxon_key IS NOT NULL
        AND NOT EXISTS (SELECT 1 FROM {rp('taxon')} t WHERE t.taxon_key=o.taxon_key)"),
+  # db-viz-hex::get_sp() picks taxa by worms_id and walks the WoRMS hierarchy for
+  # children. Seabirds and marine mammals key `itis:` (WoRMS bird taxonomy lags),
+  # and nothing populated their worms_id COLUMN — so every one of them returned
+  # ZERO rows: 59,858 of 64,956 Farallon obs, 92.2% of the dataset, with no error
+  # anywhere. Resolving a taxon and making it REACHABLE are different things;
+  # assert the second.
+  "consumer: seabird/mammal taxa reachable by worms_id (db-viz-hex get_sp)", "nonzero", glue(
+    "SELECT count(*) n FROM {rp('obs')} o
+       JOIN {rp('taxon')} t ON t.taxon_key = o.taxon_key
+     WHERE o.dataset_key='farallon_bird-mammal' AND t.worms_id IS NOT NULL"),
+  # `o.taxon_key IS NOT NULL` is load-bearing, not defensive: 1,316 of this
+  # dataset's 66,272 obs carry NO taxon at all — species codes the source marks
+  # Include=0 (fish, and non-target sightings) — and a LEFT JOIN reports those as
+  # a NULL worms_id too. Without the filter this asserts "every observation has a
+  # taxon", which is a different (and false) claim than the one intended.
+  "integrity: no farallon obs left unreachable by worms_id", "zero", glue(
+    "SELECT count(*) n FROM {rp('obs')} o
+       LEFT JOIN {rp('taxon')} t ON t.taxon_key = o.taxon_key
+     WHERE o.dataset_key='farallon_bird-mammal'
+       AND o.taxon_key IS NOT NULL AND t.worms_id IS NULL"),
+  # an itis:-keyed taxon must KEEP its itis: key once worms_id is filled — the
+  # cross-reference is not a licence to re-key onto the lagging authority
+  "integrity: seabirds still key itis:, not worms:", "nonzero", glue(
+    "SELECT count(*) n FROM {rp('dataset_taxon')} dt
+     WHERE dt.dataset_key='farallon_bird-mammal' AND dt.taxon_key LIKE 'itis:%'"),
+  # taxonomic_status was the literal string "accepted" on all 2,090 taxa, stamped
+  # rather than fetched. A single distinct value means it has regressed to that.
+  "integrity: taxonomic_status is fetched, not stamped", "nonzero", glue(
+    "SELECT count(*) n FROM (
+       SELECT 1 FROM {rp('taxon')} WHERE status_checked IS NOT NULL LIMIT 1)"),
   "consumer: station coverage rollup (obs GROUP BY grid,dataset)", "nonzero", glue(
     "SELECT count(*) n FROM (
        SELECT grid_key, dataset_key, count(*), count(DISTINCT sample_key), count(DISTINCT cruise_key)
@@ -468,30 +498,31 @@ if (file.exists(idx_script)) {
 # here on the all-pass promotion, so the site never points at a release whose
 # queries haven't been validated. Non-fatal — a missing gh just means the bump
 # waits for a manual `gh workflow run`.
-gh_bin <- Sys.which("gh")
-if (nzchar(gh_bin)) {
-  disp <- system2(gh_bin,
-    c("workflow", "run", "bump-default-version.yml", "--repo", "CalCOFI/db-query"),
-    stdout = TRUE, stderr = TRUE)
-  if (!identical(attr(disp, "status") %||% 0L, 0L))
-    warning(glue("query bump dispatch failed: {paste(disp, collapse = '; ')}"))
-  else
-    message("dispatched CalCOFI/db-query bump-default-version workflow")
-} else {
-  message("gh not found; CalCOFI/db-query default_version needs a manual bump dispatch")
-}
+# Declared as a table rather than one if-block per consumer: the first two were
+# copy-pasted and had already drifted (only one warned when `gh` was missing), and
+# each new static consumer would add another copy of the same eight lines.
+gh_dispatch <- tribble(
+  ~repo,                      ~workflow,                     ~what,
+  "CalCOFI/db-query",         "bump-default-version.yml",    "query-site default_version bump",
+  "CalCOFI/db-viz-station",   "refresh.yml",                 "station-portal coverage refresh",
+  # rebuilds the per-(line, cruise) section shards from the new release
+  "CalCOFI/ctd-transects",    "refresh.yml",                 "CTD transect sections refresh")
 
-# also refresh the station data portal: rebuild its prebuilt per-station coverage
-# JSON (public/data/*.json) from the new release's ingest parquet, then redeploy.
-# Same gating + non-fatal pattern as the db-query bump above.
-if (nzchar(gh_bin)) {
-  disp2 <- system2(gh_bin,
-    c("workflow", "run", "refresh.yml", "--repo", "CalCOFI/db-viz-station"),
-    stdout = TRUE, stderr = TRUE)
-  if (!identical(attr(disp2, "status") %||% 0L, 0L))
-    warning(glue("station-portal refresh dispatch failed: {paste(disp2, collapse = '; ')}"))
-  else
-    message("dispatched CalCOFI/db-viz-station refresh workflow")
+gh_bin <- Sys.which("gh")
+if (!nzchar(gh_bin)) {
+  message(glue(
+    "gh not found; these need a manual `gh workflow run`: ",
+    "{paste(gh_dispatch$repo, collapse = ', ')}"))
+} else {
+  pwalk(gh_dispatch, function(repo, workflow, what) {
+    disp <- system2(gh_bin,
+      c("workflow", "run", workflow, "--repo", repo),
+      stdout = TRUE, stderr = TRUE)
+    if (!identical(attr(disp, "status") %||% 0L, 0L))
+      warning(glue("{what} dispatch failed: {paste(disp, collapse = '; ')}"))
+    else
+      message(glue("dispatched {repo} {workflow} ({what})"))
+  })
 }
 
 # Server-side consumers (db-viz-hex, db-viz-cruise, the h3t tile API) are NOT
