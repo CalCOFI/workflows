@@ -1,0 +1,96 @@
+{
+  "schema_version": "1.0",
+  "provider": "swfsc",
+  "dataset": "ichthyo",
+  "primary_keys": {
+    "sample": "sample_key",
+    "obs": "obs_id",
+    "obs_attribute": "obs_attribute_id",
+    "sample_measurement": "sample_measurement_id",
+    "taxon": "taxon_key",
+    "dataset_taxon": "ds_taxon_key",
+    "grid": "grid_key",
+    "cruise": "cruise_key",
+    "ship": "ship_key"
+  },
+  "foreign_keys": [
+    {
+      "table": "sample",
+      "column": "parent_sample_key",
+      "ref_table": "sample",
+      "ref_column": "sample_key"
+    },
+    {
+      "table": "sample",
+      "column": "root_sample_key",
+      "ref_table": "sample",
+      "ref_column": "sample_key"
+    },
+    {
+      "table": "sample",
+      "column": "grid_key",
+      "ref_table": "grid",
+      "ref_column": "grid_key"
+    },
+    {
+      "table": "sample",
+      "column": "cruise_key",
+      "ref_table": "cruise",
+      "ref_column": "cruise_key"
+    },
+    {
+      "table": "obs",
+      "column": "sample_key",
+      "ref_table": "sample",
+      "ref_column": "sample_key"
+    },
+    {
+      "table": "obs",
+      "column": "taxon_key",
+      "ref_table": "taxon",
+      "ref_column": "taxon_key"
+    },
+    {
+      "table": "obs",
+      "column": "grid_key",
+      "ref_table": "grid",
+      "ref_column": "grid_key"
+    },
+    {
+      "table": "obs",
+      "column": "cruise_key",
+      "ref_table": "cruise",
+      "ref_column": "cruise_key"
+    },
+    {
+      "table": "obs_attribute",
+      "column": "sample_key",
+      "ref_table": "sample",
+      "ref_column": "sample_key"
+    },
+    {
+      "table": "obs_attribute",
+      "column": "taxon_key",
+      "ref_table": "taxon",
+      "ref_column": "taxon_key"
+    },
+    {
+      "table": "sample_measurement",
+      "column": "sample_key",
+      "ref_table": "sample",
+      "ref_column": "sample_key"
+    },
+    {
+      "table": "dataset_taxon",
+      "column": "taxon_key",
+      "ref_table": "taxon",
+      "ref_column": "taxon_key"
+    },
+    {
+      "table": "taxon",
+      "column": "parent_taxon_key",
+      "ref_table": "taxon",
+      "ref_column": "taxon_key"
+    }
+  ]
+}

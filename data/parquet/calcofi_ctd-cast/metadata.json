@@ -1,0 +1,352 @@
+{
+  "schema_version": "1.1",
+  "provider": "calcofi",
+  "dataset": "ctd-cast",
+  "workflow": "https://calcofi.io/workflows/ingest_calcofi_ctd-cast.html",
+  "tables": {
+    "sample": {
+      "name_long": "Sample",
+      "description_md": "One row per physical sampling event at its native grain (site, tow, net, cast, bottle, underway, transect, region pool). An adjacency list: `parent_sample_key` points at the containing event and `root_sample_key` at the top of the chain, so counting distinct events at any level is a single `GROUP BY`."
+    },
+    "obs": {
+      "name_long": "Observation",
+      "description_md": "The occurrence-headline long table: one scalar measurement per row, environmental (`realm = 'env'`) and biological (`realm = 'bio'`) together. Biological taxon is the global `taxon_key`; sub-occurrence detail (length/stage bins, behavior) lives in `obs_attribute`, and event-level effort in `sample_measurement`."
+    },
+    "obs_ctd_full": {
+      "name_long": "Observation (Full CTD)",
+      "description_md": "Supplemental full-resolution CTD scans, identical in shape to `obs`. Excluded from the default table list and the ERD because of its size; opt in with `cc_get_db(supplemental = TRUE)`. The default `obs` carries CTD via the adaptively thinned `ctd_thin`."
+    },
+    "measurement_type": {
+      "name_long": "Measurement Type",
+      "description_md": "reference table for CTD measurement types with units and descriptions"
+    }
+  },
+  "columns": {
+    "measurement_type.measurement_type": {
+      "name_long": "Measurement Type",
+      "description_md": "PK: measurement type code"
+    },
+    "measurement_type.description": {
+      "name_long": "Description",
+      "description_md": "human-readable description"
+    },
+    "measurement_type.units": {
+      "name_long": "Units",
+      "description_md": "measurement units"
+    },
+    "measurement_type.valid_min": {
+      "name_long": "Valid Min",
+      "units": null,
+      "description_md": ""
+    },
+    "measurement_type.valid_max": {
+      "name_long": "Valid Max",
+      "units": null,
+      "description_md": ""
+    },
+    "measurement_type.valid_depth_min_m": {
+      "name_long": "Valid Depth Min M",
+      "units": null,
+      "description_md": ""
+    },
+    "measurement_type.valid_depth_max_m": {
+      "name_long": "Valid Depth Max M",
+      "units": null,
+      "description_md": ""
+    },
+    "measurement_type.derivation": {
+      "name_long": "Derivation",
+      "units": null,
+      "description_md": ""
+    },
+    "measurement_type.is_canonical": {
+      "name_long": "Is Canonical",
+      "description_md": "TRUE for canonical measurement types kept in ctd_thin and ctd_summary"
+    },
+    "measurement_type._source_column": {
+      "name_long": "Source Column",
+      "description_md": "original column name in wide-format CTD CSV"
+    },
+    "measurement_type._source_table": {
+      "name_long": "Source Table",
+      "description_md": "provenance: wide-format DuckDB table the measurement was pivoted from"
+    },
+    "measurement_type._source_datasets": {
+      "name_long": "Source Datasets",
+      "description_md": "provenance: semicolon-delimited list of datasets that produce this measurement type"
+    },
+    "measurement_type._qual_column": {
+      "name_long": "Quality Column",
+      "description_md": "provenance: quality flag column name in source wide-format table (blank if none)"
+    },
+    "measurement_type._prec_column": {
+      "name_long": "Precision Column",
+      "description_md": "provenance: precision column name in source wide-format table (blank if none)"
+    },
+    "measurement_type.grain": {
+      "name_long": "Grain",
+      "units": null,
+      "description_md": ""
+    },
+    "obs.obs_id": {
+      "name_long": "Observation ID",
+      "description_md": "Surrogate key, renumbered globally when the release concatenates the per-dataset shards."
+    },
+    "obs.realm": {
+      "name_long": "Realm",
+      "description_md": "`env` for physical/chemical measurements, `bio` for organism observations."
+    },
+    "obs.dataset_key": {
+      "name_long": "Dataset Key",
+      "description_md": "Provenance stamp: `provider_dataset`."
+    },
+    "obs.sample_key": {
+      "name_long": "Sample Key",
+      "description_md": "The sampling event this observation came from; joins `sample`."
+    },
+    "obs.grid_key": {
+      "name_long": "Grid Key",
+      "description_md": "CalCOFI station grid cell, denormalized from `sample` so rollups need no join. NULL for region-pooled data."
+    },
+    "obs.cruise_key": {
+      "name_long": "Cruise Key",
+      "description_md": "Cruise, denormalized from `sample` so rollups need no join."
+    },
+    "obs.latitude": {
+      "name_long": "Latitude",
+      "units": "decimal degrees",
+      "description_md": "Observation latitude (WGS84)."
+    },
+    "obs.longitude": {
+      "name_long": "Longitude",
+      "units": "decimal degrees",
+      "description_md": "Observation longitude (WGS84)."
+    },
+    "obs.datetime": {
+      "name_long": "Datetime",
+      "description_md": "Observation time (UTC). NULL for region-pooled data with no event time."
+    },
+    "obs.depth_min_m": {
+      "name_long": "Depth Min",
+      "units": "m",
+      "description_md": "Shallowest depth this observation represents."
+    },
+    "obs.depth_max_m": {
+      "name_long": "Depth Max",
+      "units": "m",
+      "description_md": "Deepest depth this observation represents; equal to `depth_min_m` for point measurements (bottle, CTD scan)."
+    },
+    "obs.taxon_key": {
+      "name_long": "Taxon Key",
+      "description_md": "Global taxon key, `worms:<AphiaID>` or `itis:<TSN>` for birds. NULL for `env` rows. Joins `taxon`."
+    },
+    "obs.life_stage": {
+      "name_long": "Life Stage",
+      "description_md": "Life stage where the source resolves one (larva, adult, juvenile, egg, phyllosoma)."
+    },
+    "obs.measurement_type": {
+      "name_long": "Measurement Type",
+      "description_md": "Measured quantity; joins the `measurement_type` vocabulary."
+    },
+    "obs.measurement_value": {
+      "name_long": "Measurement Value",
+      "description_md": "The measured value, in the units `measurement_type` declares."
+    },
+    "obs.measurement_qual": {
+      "name_long": "Measurement Qualifier",
+      "description_md": "Source quality flag, verbatim."
+    },
+    "obs.measurement_prec": {
+      "name_long": "Measurement Precision",
+      "description_md": "Source-reported precision where available."
+    },
+    "obs.hex_id": {
+      "name_long": "Hex ID",
+      "description_md": "H3 cell at resolution 10, stored as UBIGINT. Aggregate coarser at query time with `h3_cell_to_parent(hex_id, res)` — there is no per-resolution column ladder."
+    },
+    "obs_ctd_full.obs_id": {
+      "name_long": "Obs Id",
+      "units": null,
+      "description_md": ""
+    },
+    "obs_ctd_full.realm": {
+      "name_long": "Realm",
+      "units": null,
+      "description_md": ""
+    },
+    "obs_ctd_full.dataset_key": {
+      "name_long": "Dataset Key",
+      "units": null,
+      "description_md": ""
+    },
+    "obs_ctd_full.sample_key": {
+      "name_long": "Sample Key",
+      "units": null,
+      "description_md": ""
+    },
+    "obs_ctd_full.grid_key": {
+      "name_long": "Grid Key",
+      "units": null,
+      "description_md": ""
+    },
+    "obs_ctd_full.cruise_key": {
+      "name_long": "Cruise Key",
+      "units": null,
+      "description_md": ""
+    },
+    "obs_ctd_full.latitude": {
+      "name_long": "Latitude",
+      "units": null,
+      "description_md": ""
+    },
+    "obs_ctd_full.longitude": {
+      "name_long": "Longitude",
+      "units": null,
+      "description_md": ""
+    },
+    "obs_ctd_full.datetime": {
+      "name_long": "Datetime",
+      "units": null,
+      "description_md": ""
+    },
+    "obs_ctd_full.depth_min_m": {
+      "name_long": "Depth Min M",
+      "units": null,
+      "description_md": ""
+    },
+    "obs_ctd_full.depth_max_m": {
+      "name_long": "Depth Max M",
+      "units": null,
+      "description_md": ""
+    },
+    "obs_ctd_full.taxon_key": {
+      "name_long": "Taxon Key",
+      "units": null,
+      "description_md": ""
+    },
+    "obs_ctd_full.life_stage": {
+      "name_long": "Life Stage",
+      "units": null,
+      "description_md": ""
+    },
+    "obs_ctd_full.measurement_type": {
+      "name_long": "Measurement Type",
+      "units": null,
+      "description_md": ""
+    },
+    "obs_ctd_full.measurement_value": {
+      "name_long": "Measurement Value",
+      "units": null,
+      "description_md": ""
+    },
+    "obs_ctd_full.measurement_qual": {
+      "name_long": "Measurement Qual",
+      "units": null,
+      "description_md": ""
+    },
+    "obs_ctd_full.measurement_prec": {
+      "name_long": "Measurement Prec",
+      "units": null,
+      "description_md": ""
+    },
+    "obs_ctd_full.hex_id": {
+      "name_long": "Hex Id",
+      "units": null,
+      "description_md": ""
+    },
+    "sample.sample_key": {
+      "name_long": "Sample Key",
+      "description_md": "Globally unique event key, namespaced `dataset_key:sample_type:id` so the same integer id in two datasets — or at two event levels in one dataset — never collides."
+    },
+    "sample.sample_type": {
+      "name_long": "Sample Type",
+      "description_md": "Event grain: `site`, `tow`, `net`, `cast`, `bottle`, `underway`, `transect` or `region_pool`."
+    },
+    "sample.parent_sample_key": {
+      "name_long": "Parent Sample Key",
+      "description_md": "The containing event (net → tow → site; bottle → cast). NULL at the top of the chain. Flat adjacency list: attributes are not inherited."
+    },
+    "sample.root_sample_key": {
+      "name_long": "Root Sample Key",
+      "description_md": "Top of this event's containment chain; equals `sample_key` for single-level datasets. Use `count(DISTINCT root_sample_key)` to count stations/casts irrespective of grain."
+    },
+    "sample.dataset_key": {
+      "name_long": "Dataset Key",
+      "description_md": "Provenance stamp: `provider_dataset`."
+    },
+    "sample.grid_key": {
+      "name_long": "Grid Key",
+      "description_md": "CalCOFI station grid cell. NULL where the dataset has no station assignment (region-pooled phytoplankton)."
+    },
+    "sample.site_key": {
+      "name_long": "Site Key",
+      "description_md": "CalCOFI station natural key as the source records it (line/station, e.g. `090.0 060.0`). Present on 13 of the 18 source event tables, so it is carried on the event dimension rather than lost to consolidation; `grid_key` is the derived grid cell, this is the source's own station id."
+    },
+    "sample.cruise_key": {
+      "name_long": "Cruise Key",
+      "description_md": "CalCOFI cruise natural key `YYYY-MM-NODC`."
+    },
+    "sample.order_occ": {
+      "name_long": "Order of Occupation",
+      "description_md": "Order in which the station was occupied on the cruise. Source spelling varies (`order_occ`, `ord_occ`) and CTD stores it as text; normalised to an integer here."
+    },
+    "sample.latitude": {
+      "name_long": "Latitude",
+      "units": "decimal degrees",
+      "description_md": "Event latitude (WGS84)."
+    },
+    "sample.longitude": {
+      "name_long": "Longitude",
+      "units": "decimal degrees",
+      "description_md": "Event longitude (WGS84)."
+    },
+    "sample.datetime": {
+      "name_long": "Datetime",
+      "description_md": "Event start time (UTC)."
+    },
+    "sample.depth_min_m": {
+      "name_long": "Depth Min",
+      "units": "m",
+      "description_md": "Shallowest depth sampled by this event."
+    },
+    "sample.depth_max_m": {
+      "name_long": "Depth Max",
+      "units": "m",
+      "description_md": "Deepest depth sampled by this event."
+    },
+    "sample.tow_type": {
+      "name_long": "Tow Type",
+      "description_md": "Net gear code where the dataset records one (C1/CB/CV/PV oblique or vertical, MT manta); NULL for gears and datasets without one. Needed to compute gear-appropriate CPUE."
+    },
+    "sample.data_stage": {
+      "name_long": "Data Stage",
+      "description_md": "The source's own processing state for this event: `final` (post-cruise calibrations applied) or `preliminary` (**not for publication** — the source warns that oxygen, nitrate and chlorophyll may change significantly once calibrated). Populated by `calcofi_ctd-cast`; NULL where the dataset draws no such distinction, which is not a claim that the data are final."
+    },
+    "sample.geom": {
+      "name_long": "Geometry",
+      "description_md": "Point geometry minted from `longitude`/`latitude` (OGC:CRS84)."
+    }
+  },
+  "contributions": {
+    "sample": {
+      "rows": 14336,
+      "owned": true,
+      "shared": true
+    },
+    "obs": {
+      "rows": 7310636,
+      "owned": true,
+      "shared": true
+    },
+    "obs_ctd_full": {
+      "rows": 212444287,
+      "owned": true,
+      "shared": false
+    },
+    "measurement_type": {
+      "rows": 198,
+      "owned": true,
+      "shared": true
+    }
+  }
+}

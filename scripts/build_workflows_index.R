@@ -82,24 +82,50 @@ find_source <- function(base) {
   NA_character_
 }
 
-# DB-derived temporal coverage from the latest frozen release's metadata.json
-# (dataset_key -> "YYYY-MM to YYYY-MM"), computed in release_database.qmd from the
-# real obs/sample datetimes. Best-effort: falls back to static coverage if the
-# release sidecar can't be fetched (e.g. offline CI).
+# DB-derived coverage from the latest frozen release's metadata.json, computed
+# in release_database.qmd by calcofi4db::observed_coverage() from the real
+# obs/sample rows: temporal as "YYYY-MM to YYYY-MM" and spatial as a formatted
+# bbox ("29.8–37.8°N, 126.5–117.3°W"). Best-effort: falls back to whatever the
+# QMD front-matter still asserts if the sidecar can't be fetched (offline CI).
+#
+# Only two datasets still assert coverage — calcofi_phytoplankton is
+# region-pooled and has no datetime to measure, and cdfw_dungeness-crab is
+# `in_release: false` so the release never sees it. Everything else measures.
+# The sidecar is the ONLY source for these numbers. Measuring them here from the
+# local data/parquet working tree instead would put an extent on the card that
+# is not in the release the card links to — the same "confident string nobody
+# can check" problem this whole change removes. A card gains its bbox when a
+# release carrying one is promoted, and not before.
+#
+# CALCOFI_RELEASE_META overrides the source with a path or URL to a
+# metadata.json, so a freshly frozen release can be previewed on the index
+# before test_release.qmd promotes latest.txt.
 observed_coverage <- tryCatch({
   suppressWarnings(librarian::shelf(jsonlite, quiet = TRUE))
   base_url <- "https://storage.googleapis.com/calcofi-db/ducklake/releases"
-  ver  <- trimws(readLines(url(file.path(base_url, "latest.txt")), warn = FALSE)[1])
-  meta <- jsonlite::fromJSON(file.path(base_url, ver, "metadata.json"), simplifyVector = FALSE)
-  obs  <- list()
-  for (k in names(meta$datasets)) {
-    o <- meta$datasets[[k]]$coverage_temporal_observed
-    if (!is.null(o) && nzchar(o)) obs[[k]] <- o
+  override <- Sys.getenv("CALCOFI_RELEASE_META", "")
+  if (nzchar(override)) {
+    ver <- override
+  } else {
+    ver <- trimws(readLines(url(file.path(base_url, "latest.txt")), warn = FALSE)[1])
   }
-  cat(sprintf("observed temporal coverage for %d datasets from release %s\n", length(obs), ver))
+  meta <- jsonlite::fromJSON(
+    if (nzchar(override)) override else file.path(base_url, ver, "metadata.json"),
+    simplifyVector = FALSE)
+  obs  <- list(); n_t <- 0L; n_s <- 0L
+  for (k in names(meta$datasets)) {
+    d <- meta$datasets[[k]]
+    e <- list(temporal = d$coverage_temporal_observed %||% "",
+              spatial  = d$coverage_spatial_observed  %||% "")
+    n_t <- n_t + nzchar(e$temporal); n_s <- n_s + nzchar(e$spatial)
+    obs[[k]] <- e
+  }
+  cat(sprintf("observed coverage from release %s: %d temporal, %d spatial\n",
+              ver, n_t, n_s))
   obs
 }, error = function(e) {
-  message("observed coverage unavailable (", conditionMessage(e), ") — using static coverage_temporal")
+  message("observed coverage unavailable (", conditionMessage(e),
+          ") — falling back to asserted coverage_* in the front-matter")
   list()
 })
 
@@ -157,9 +183,11 @@ recs <- lapply(htmls, function(h) {
 
   prov   <- tolower(cc$provider %||% (if (cat_id == "ingest") "calcofi" else ""))
   ds_key <- if (nzchar(prov) && !is.null(cc$dataset)) paste0(prov, "_", cc$dataset) else ""
-  # DB-derived temporal extent (from the frozen release) beats the static
-  # coverage_temporal in the QMD front-matter; fall back to the static string.
-  cov <- observed_coverage[[ds_key]] %||% dm$coverage_temporal %||% ""
+  # DB-derived extent (from the frozen release) beats anything the QMD
+  # front-matter asserts; fall back to the asserted string only if measurement
+  # is impossible or the sidecar was unreachable.
+  cov  <- observed_coverage[[ds_key]]$temporal %||% dm$coverage_temporal %||% ""
+  bbox <- observed_coverage[[ds_key]]$spatial  %||% dm$coverage_spatial  %||% ""
 
   list(
     base        = base,
@@ -175,6 +203,7 @@ recs <- lapply(htmls, function(h) {
     # dataset and should not fake one, so fall back to a plain `calcofi.description`
     description = oneline(dm$description %||% cc$description %||% ""),
     coverage    = oneline(cov),
+    bbox        = oneline(bbox),
     color       = cc$erd$color %||% "",
     link_calcofi_org = dm$link_calcofi_org %||% "",
     link_data_source = dm$link_data_source %||% "",
@@ -187,6 +216,7 @@ emit_item <- function(r) {
   if (nzchar(r$dataset_name))     it$dataset_name     <- r$dataset_name
   if (nzchar(r$description))      it$description       <- r$description
   if (nzchar(r$coverage))         it$coverage          <- r$coverage
+  if (nzchar(r$bbox))             it$bbox              <- r$bbox
   if (nzchar(r$color))            it$color             <- r$color
   if (nzchar(r$link_calcofi_org)) it$link_calcofi_org  <- r$link_calcofi_org
   if (nzchar(r$link_data_source)) it$link_data_source  <- r$link_data_source

@@ -36,6 +36,13 @@ calcofi:
     link_calcofi_org: ""
     link_data_source: ""
     link_others: []
+    # ASSERTED, and the other of the two left in the repo. Coverage is measured
+    # at release time by calcofi4db::observed_coverage() from the assembled
+    # core — but this dataset is `in_release: false`, so it never reaches the
+    # core and the release cannot measure it. Its card on calcofi.io/workflows
+    # would otherwise go blank. DELETE BOTH KEYS when Q01 is answered and this
+    # flips into the release; the measured values are then 1949-04 to 2014-05
+    # and 33.5-51.0°N, 164.1-118.6°W.
     coverage_temporal: 1949 to 2014
     coverage_spatial: "California Current, San Francisco north to Washington"
     license: ""
@@ -120,6 +127,7 @@ dataset      <- cc$dataset
 tables_owned <- cc$tables_owned
 dir_label    <- glue("{provider}_{dataset}")
 dir_parquet  <- here(glue("data/parquet/{dir_label}"))
+dir_stage  <- cc_stage_path("parquet", dir_label, create = TRUE)
 db_path      <- here(glue("data/wrangling/{dir_label}.duckdb"))
 dir_src      <- path_expand(glue("{dir_data}/cdfw/dungeness-crab"))
 
@@ -249,7 +257,7 @@ reference tables:
 #| label: resolve-keys
 
 load_prior_tables(
-  con, parquet_dir = here("data/parquet/swfsc_ichthyo"),
+  con, parquet_dir = cc_stage_path("parquet", "swfsc_ichthyo"),
   tables = c("ship", "cruise", "grid", "sample"),
   geom_tables = c("grid", "sample"), as_view = TRUE)
 
@@ -1221,9 +1229,9 @@ write_parquet_outputs(
 # sync_to_gcs — so the output dir must match the manifest exactly.
 stale <- setdiff(
   tools::file_path_sans_ext(basename(
-    list.files(dir_parquet, pattern = "[.]parquet$"))), tbls_out)
+    list.files(dir_stage, pattern = "[.]parquet$"))), tbls_out)
 if (length(stale)) {
-  file_delete(file.path(dir_parquet, paste0(stale, ".parquet")))
+  file_delete(file.path(dir_stage, paste0(stale, ".parquet")))
   cat(glue("pruned {length(stale)} stale parquet: {paste(stale, collapse = ', ')}"), "\n")
 }
 
@@ -1244,7 +1252,7 @@ build_metadata_json(
   workflow_url = cc$workflow_url, tables_owned = tables_owned)
 
 if (publish_to_gcs) {
-  sync_to_gcs(local_dir = dir_parquet, gcs_prefix = glue("ingest/{dir_label}"),
+  sync_to_gcs(local_dir = dir_stage, sidecar_dir = dir_parquet, gcs_prefix = glue("ingest/{dir_label}"),
               bucket = "calcofi-db")
 } else {
   cat("publish_to_gcs is FALSE — parquet kept local, NOT synced to",

@@ -16,16 +16,21 @@ calcofi:
     dataset_name: CalCOFI CTD Cast Files
     description: >
       CTD downcast profiles with temperature, salinity, oxygen, fluorescence,
-      and other sensors at standard depths.
+      and other sensors at standard depths. 1 m-binned final data for 1993-2002
+      come from the SIO-CalCOFI Technical Group's own archive (J. Wilkinson),
+      which covers the decade calcofi.org does not publish finals for; 1998 and
+      2003 onward come from calcofi.org. The two are byte-identical where they
+      overlap.
     citation_main: "CalCOFI. (2023). CalCOFI CTD Cast Files. CalCOFI.org."
     link_calcofi_org: https://calcofi.org/data/oceanographic-data/ctd-cast-files/
     link_data_source: https://calcofi.org/data/oceanographic-data/ctd-cast-files/
-    # measured from the published `sample` shard, not asserted: the previous values
-    # (1993-01 to 2021-05; 28-37°N, -125 to -117°W) predated several years of
-    # cruises and understated the western extent, and they ship to consumers via
-    # the release's `dataset` table and the schema site.
-    coverage_temporal: 1998-01 to 2026-04
-    coverage_spatial: "29.8-37.8°N, -126.5 to -117.3°W"
+    # coverage_temporal / coverage_spatial are deliberately absent: they are
+    # MEASURED at release time by calcofi4db::observed_coverage() from the real
+    # obs + sample rows. Hand-measuring them into this block was the right
+    # instinct but the wrong home — the value goes stale the next time a cruise
+    # lands (this one had already been rewritten twice), and it ships to
+    # consumers via the release `dataset` table and the schema site while
+    # looking authoritative.
   # publishes the consolidated core. obs carries the THINNED series (ctd_thin);
   # the full scan set ships as the supplemental obs_ctd_full. ctd_wide is retired:
   # ERDDAP now serves CTD through EDDTableFromDatabase over DuckDB views plus a
@@ -134,13 +139,14 @@ tables_owned <- cc$tables_owned
 dir_label <- glue("{provider}_{dataset}")
 dir_dl <- path_expand(glue("{dir_data}/{provider}/{dataset}/download"))
 dir_parquet <- here(glue("data/parquet/{dir_label}"))
+dir_stage <- cc_stage_path("parquet", dir_label, create = TRUE)
 db_path <- here(glue("data/wrangling/{dir_label}.duckdb"))
 db_checkpoint <- here(glue("data/wrangling/{dir_label}_checkpoint.duckdb"))
 dir_tmp <- here(glue("data/tmp/{dir_label}"))
 url <- "https://calcofi.org/data/oceanographic-data/ctd-cast-files/"
 dir_meta <- here(glue("metadata/{provider}/{dataset}"))
 
-dir_create(c(dir_dl, dirname(db_path), dir_parquet, dir_tmp), recurse = TRUE)
+dir_create(c(dir_dl, dirname(db_path), dir_parquet, dir_stage, dir_tmp), recurse = TRUE)
 
 # NOTE: nothing destructive happens here, and no connection is opened. Both wait
 # for the resume decision below, which needs the scraped zip list to fingerprint
@@ -296,8 +302,8 @@ if (file_exists(manifest_path)) {
   mf       <- jsonlite::read_json(manifest_path)
   expected <- setdiff(mf$tables, unlist(mf$supplemental))
   parquet_ok <- all(vapply(expected, function(tbl) {
-    file_exists(file.path(dir_parquet, paste0(tbl, ".parquet"))) ||
-      dir_exists(file.path(dir_parquet, tbl))
+    file_exists(file.path(dir_stage, paste0(tbl, ".parquet"))) ||
+      dir_exists(file.path(dir_stage, tbl))
   }, logical(1)))
 }
 
@@ -334,6 +340,7 @@ if (overwrite && !parquet_complete) {
   if (dir_exists(db_tmp))  dir_delete(db_tmp)
   if (overwrite_all) {
     if (dir_exists(dir_parquet))    dir_delete(dir_parquet)
+    if (dir_exists(dir_stage))      dir_delete(dir_stage)
     if (file_exists(db_checkpoint)) file_delete(db_checkpoint)
     rds_files <- list.files(dir_tmp, pattern = "\\.rds$", full.names = TRUE)
     if (length(rds_files) > 0) file_delete(rds_files)
@@ -1200,13 +1207,13 @@ modifies_tables <- c("ship")  # from calcofi.modifies in YAML frontmatter
 load_prior_tables(
   con         = con,
   tables      = modifies_tables,
-  parquet_dir = here("data/parquet/swfsc_ichthyo")
+  parquet_dir = cc_stage_path("parquet", "swfsc_ichthyo")
 )
 # cruise + grid as VIEWs (read-only: cruise used for JOIN, grid for assign_grid_key)
 load_prior_tables(
   con         = con,
   tables      = c("cruise", "grid"),
-  parquet_dir = here("data/parquet/swfsc_ichthyo"),
+  parquet_dir = cc_stage_path("parquet", "swfsc_ichthyo"),
   as_view     = TRUE
 )
 
@@ -2982,7 +2989,7 @@ for (tbl in modifies_tables) {
   additions <- setdiff(keys_new, keys_old)
 
   if (length(additions) > 0) {
-    pq_path <- file.path(dir_parquet, paste0(tbl, "_new.parquet"))
+    pq_path <- file.path(dir_stage, paste0(tbl, "_new.parquet"))
     vals <- paste(shQuote(additions, "sh"), collapse = ", ")
     export_parquet(con,
       glue("SELECT * FROM {tbl} WHERE {pk_col} IN ({vals})"), pq_path)
@@ -3011,7 +3018,8 @@ if (parquet_complete) {
   say("Parquet unchanged — skipping GCS sync")
 } else {
   sync_to_gcs(
-    local_dir    = dir_parquet,
+    local_dir    = dir_stage,
+    sidecar_dir  = dir_parquet,
     gcs_prefix   = glue("ingest/{dir_label}"),
     bucket       = "calcofi-db",
     delete_stale = TRUE
@@ -3057,9 +3065,9 @@ pq_view <- function(tbl, path) {
   dbExecute(fcon, glue("CREATE OR REPLACE VIEW {tbl} AS SELECT * FROM {src}"))
   TRUE
 }
-has_obs  <- pq_view("obs",          file.path(dir_parquet, "obs"))
-has_smp  <- pq_view("sample",       file.path(dir_parquet, "sample.parquet"))
-has_full <- pq_view("obs_ctd_full", file.path(dir_parquet, "obs_ctd_full"))
+has_obs  <- pq_view("obs",          file.path(dir_stage, "obs"))
+has_smp  <- pq_view("sample",       file.path(dir_stage, "sample.parquet"))
+has_full <- pq_view("obs_ctd_full", file.path(dir_stage, "obs_ctd_full"))
 stopifnot("no obs/sample parquet to report on" = has_obs && has_smp)
 
 # Reference inputs the rules join against — the quality vocabulary, the harmonic

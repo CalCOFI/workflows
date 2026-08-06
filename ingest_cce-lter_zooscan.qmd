@@ -25,8 +25,6 @@ calcofi:
     link_calcofi_org: "https://calcofi.org/data/marine-ecosystem-data/zooplankton/"
     link_data_source: "https://oceaninformatics.ucsd.edu/zooscandb/"
     link_others: []
-    coverage_temporal: 2005-07 to 2026-04
-    coverage_spatial: "CalCOFI lines 80, 87, 90 (Southern California)"
     license: ""
     pi_names: Mark D. Ohman; Marina Frants
   # publishes the consolidated core: the sample/measurement/taxon source shape is
@@ -99,6 +97,7 @@ tables_owned <- cc$tables_owned
 dir_label    <- glue("{provider}_{dataset}")
 
 dir_parquet  <- here(glue("data/parquet/{dir_label}"))
+dir_stage  <- cc_stage_path("parquet", dir_label, create = TRUE)
 db_path      <- here(glue("data/wrangling/{dir_label}.duckdb"))
 
 if (overwrite) {
@@ -246,7 +245,7 @@ stopifnot("sample_key not unique over sample attributes" =
             n_distinct(d_sample0$sample_key) == nrow(d_sample0))
 
 load_prior_tables(
-  con, parquet_dir = here("data/parquet/swfsc_ichthyo"),
+  con, parquet_dir = cc_stage_path("parquet", "swfsc_ichthyo"),
   tables = c("ship", "cruise", "grid"), geom_tables = c("grid"), as_view = TRUE)
 
 d_ship <- dbGetQuery(con, "SELECT ship_key, ship_nodc, ship_name FROM ship")
@@ -602,7 +601,8 @@ metadata_path <- build_metadata_json(
 #| label: upload-gcs
 
 sync_to_gcs(
-  local_dir  = dir_parquet,
+  local_dir   = dir_stage,
+  sidecar_dir = dir_parquet,
   gcs_prefix = glue("ingest/{dir_label}"),
   bucket     = "calcofi-db")
 ```

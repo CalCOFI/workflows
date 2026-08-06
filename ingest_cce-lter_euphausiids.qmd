@@ -22,8 +22,6 @@ calcofi:
     link_calcofi_org: ""
     link_data_source: "BTEDB (Bongo Tow Euphausiid Database) export"
     link_others: []
-    coverage_temporal: 1951-01 to present
-    coverage_spatial: "CalCOFI grid incl. Baja lines"
     license: ""
     pi_names: Rasmus Swalethorp; Linsey Sala
   # publishes the consolidated core: the source shape is wrangled in the notebook
@@ -102,6 +100,7 @@ tables_owned <- cc$tables_owned
 dir_label    <- glue("{provider}_{dataset}")
 
 dir_parquet  <- here(glue("data/parquet/{dir_label}"))
+dir_stage  <- cc_stage_path("parquet", dir_label, create = TRUE)
 db_path      <- here(glue("data/wrangling/{dir_label}.duckdb"))
 
 if (overwrite) {
@@ -366,7 +365,7 @@ here, so a miss is non-blocking (Q03/Q04 both downgraded to low priority).
 
 load_prior_tables(
   con,
-  parquet_dir = here("data/parquet/swfsc_ichthyo"),
+  parquet_dir = cc_stage_path("parquet", "swfsc_ichthyo"),
   tables      = c("ship", "cruise", "grid"),
   geom_tables = c("grid"),
   as_view     = TRUE)
@@ -786,7 +785,8 @@ metadata_path <- build_metadata_json(
 #| label: upload-gcs
 
 sync_to_gcs(
-  local_dir  = dir_parquet,
+  local_dir   = dir_stage,
+  sidecar_dir = dir_parquet,
   gcs_prefix = glue("ingest/{dir_label}"),
   bucket     = "calcofi-db")
 ```

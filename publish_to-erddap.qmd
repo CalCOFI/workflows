@@ -114,7 +114,7 @@ ERDDAP_DB   <- glue("{ERDDAP_ROOT}/duckdb/calcofi.db")
 # "No files found that match the pattern".
 PQ_SERVER   <- glue("{ERDDAP_ROOT}/datasets/release/{RELEASE}/parquet")
 ING_SERVER  <- glue("{ERDDAP_ROOT}/datasets/ingest")
-ING_LOCAL   <- here("data/parquet")
+ING_LOCAL   <- cc_stage_path("parquet")   # bulk parquet stages outside the repo
 
 cat(glue("release       : {RELEASE}\n"))
 cat(glue("local parquet : {PQ_LOCAL} ({ifelse(dir_exists(PQ_LOCAL), 'present', 'MISSING')})\n"))

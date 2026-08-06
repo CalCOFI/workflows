@@ -20,8 +20,6 @@ calcofi:
     link_calcofi_org: ""
     link_data_source: "https://portal.edirepository.org/nis/mapbrowse?packageid=knb-lter-cce.188.4"
     link_others: []
-    coverage_temporal: 1951 to 2008
-    coverage_spatial: "CalCOFI region"
     license: ""
     pi_names: J. Anthony Koslow
   # publishes the consolidated core: the tow/measurement source shape is wrangled
@@ -62,7 +60,8 @@ source(here("libs/ingest.R"))
 cc <- read_calcofi_meta(here("ingest_calcofi_phyllosoma.qmd"))
 provider <- cc$provider; dataset <- cc$dataset; tables_owned <- cc$tables_owned
 dir_label <- glue("{provider}_{dataset}")
-dir_parquet <- here(glue("data/parquet/{dir_label}")); db_path <- here(glue("data/wrangling/{dir_label}.duckdb"))
+dir_parquet <- here(glue("data/parquet/{dir_label}"))
+dir_stage <- cc_stage_path("parquet", dir_label, create = TRUE)
 if (overwrite && file_exists(db_path)) file_delete(db_path)
 dir_create(dirname(db_path)); con <- get_duckdb_con(db_path); load_duckdb_extension(con, "spatial")
 meas_type_csv <- here("metadata/measurement_type.csv"); d_meas_type <- read_measurement_type(meas_type_csv)
@@ -137,7 +136,7 @@ cat(glue("phyllosoma_tow {nrow(d_tow)}, phyllosoma_measurement {nrow(d_meas)}"),
 ```{r}
 #| label: keys-spatial
 
-load_prior_tables(con, parquet_dir = here("data/parquet/swfsc_ichthyo"),
+load_prior_tables(con, parquet_dir = cc_stage_path("parquet", "swfsc_ichthyo"),
                   tables = c("ship","cruise","grid"), geom_tables = c("grid"), as_view = TRUE)
 # source "Ship" is a NODC ship code (e.g. 31PT), not a name -> join on ship_nodc
 d_ship <- dbGetQuery(con, "SELECT ship_key, ship_nodc FROM ship")
@@ -329,7 +328,7 @@ build_metadata_json(con = con, d_tbls_rd = d_tbls_rd, d_flds_rd = d_flds_rd,
   output_dir = dir_parquet, tables = tbls_out,
   set_comments = TRUE, provider = provider, dataset = dataset,
   workflow_url = cc$workflow_url, tables_owned = tables_owned)
-sync_to_gcs(local_dir = dir_parquet, gcs_prefix = glue("ingest/{dir_label}"), bucket = "calcofi-db")
+sync_to_gcs(local_dir = dir_stage, sidecar_dir = dir_parquet, gcs_prefix = glue("ingest/{dir_label}"), bucket = "calcofi-db")
 ```
 
 ## Questions for Data Providers

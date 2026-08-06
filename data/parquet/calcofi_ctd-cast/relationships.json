@@ -1,0 +1,36 @@
+{
+  "schema_version": "1.0",
+  "provider": "calcofi",
+  "dataset": "ctd-cast",
+  "primary_keys": {
+    "sample": "sample_key",
+    "obs": "obs_id",
+    "measurement_type": "measurement_type"
+  },
+  "foreign_keys": [
+    {
+      "table": "sample",
+      "column": "parent_sample_key",
+      "ref_table": "sample",
+      "ref_column": "sample_key"
+    },
+    {
+      "table": "sample",
+      "column": "root_sample_key",
+      "ref_table": "sample",
+      "ref_column": "sample_key"
+    },
+    {
+      "table": "obs",
+      "column": "sample_key",
+      "ref_table": "sample",
+      "ref_column": "sample_key"
+    },
+    {
+      "table": "obs",
+      "column": "measurement_type",
+      "ref_table": "measurement_type",
+      "ref_column": "measurement_type"
+    }
+  ]
+}

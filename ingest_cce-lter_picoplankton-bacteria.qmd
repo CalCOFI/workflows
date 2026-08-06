@@ -25,8 +25,6 @@ calcofi:
     link_data_source: "https://oceaninformatics.ucsd.edu/datazoo/catalogs/ccelter/datasets/159"
     link_others:
       - "http://dx.doi.org/10.6073/pasta/bc2915c8448214d2841b064a7414064b"
-    coverage_temporal: 2004-11-02 to 2023-07-18 (ongoing)
-    coverage_spatial: "CalCOFI grid (California Current Ecosystem)"
     license: ""
     pi_names: Michael Landry
   # publishes the consolidated core: the source shape is wrangled in the notebook
@@ -98,6 +96,7 @@ dataset_name <- cc$dataset_meta$dataset_name
 tables_owned <- cc$tables_owned
 dir_label <- glue("{provider}_{dataset}")
 dir_parquet <- here(glue("data/parquet/{dir_label}"))
+dir_stage <- cc_stage_path("parquet", dir_label, create = TRUE)
 db_path <- here(glue("data/wrangling/{dir_label}.duckdb"))
 meas_type_csv <- here("metadata/measurement_type.csv")
 d_meas_type <- read_measurement_type(meas_type_csv)
@@ -289,7 +288,7 @@ reimplementing its SQL by hand (an earlier draft did this incorrectly).
 ```{r}
 #| label: resolve-keys
 load_prior_tables(
-  con, parquet_dir = here("data/parquet/swfsc_ichthyo"),
+  con, parquet_dir = cc_stage_path("parquet", "swfsc_ichthyo"),
   tables = c("ship", "cruise", "grid"), geom_tables = c("grid"), as_view = TRUE)
 
 # extract trailing ship code from studyName (e.g. "2004-11-02-C-33RR" -> "33RR")
@@ -501,7 +500,7 @@ metadata_path <- build_metadata_json(
 
 ```{r}
 #| label: upload-gcs
-sync_to_gcs(local_dir = dir_parquet, gcs_prefix = glue("ingest/{dir_label}"), bucket = "calcofi-db")
+sync_to_gcs(local_dir = dir_stage, sidecar_dir = dir_parquet, gcs_prefix = glue("ingest/{dir_label}"), bucket = "calcofi-db")
 ```
 
 ## Questions for Data Providers

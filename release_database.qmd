@@ -386,6 +386,64 @@ dbGetQuery(con_wdl,
   datatable(caption = "obs: consolidated observations by dataset")
 ```
 
+### Observed Coverage
+
+Each dataset's temporal and spatial extent, **measured from the assembled core
+rather than asserted**. These overwrite the `dataset` table's
+`coverage_temporal` / `coverage_spatial`, which used to carry a hand-written
+string from each ingest's `calcofi.dataset_meta` YAML.
+
+Those strings could not help going stale — authored once, with the data growing
+underneath them. At `v2026.08.06` seven of fifteen were wrong: `cce-lter_zoodb`
+claimed coverage through 2021-05 when its data ends 2015-04, `calcofi_phyllosoma`
+stopped a year short of its own rows, and three said "present" while in fact
+stalling in 2019, 2022 and 2023. The YAML keys are now gone; the only ones left
+are where the data genuinely cannot answer (see `coverage_fallback` below), and
+each carries a comment saying so.
+
+```{r}
+#| label: dataset_coverage
+
+# measured, not asserted. observed_coverage() filters coordinates with
+# isfinite() rather than IS NOT NULL: NaN survives a nullity test and min()/max()
+# propagate it, so one poisoned row would blow a dataset's whole bbox out to NaN
+# with every check still passing.
+d_cov <- observed_coverage(con_wdl)
+
+# fall back to a declared static value ONLY where the data cannot answer.
+# calcofi_phytoplankton is region-pooled: it carries real coordinates but no
+# datetime at all, so it measures spatially and not temporally. Held-out
+# datasets (in_release: false) never reach the core, so they never appear here.
+d_dataset_cov <- d_dataset |>
+  left_join(d_cov, by = "dataset_key") |>
+  mutate(
+    coverage_temporal = coalesce(coverage_temporal_observed, coverage_temporal),
+    coverage_spatial  = coalesce(coverage_spatial_observed,  coverage_spatial)) |>
+  select(all_of(names(d_dataset)))
+
+dbExecute(con_wdl, "DROP VIEW IF EXISTS dataset")
+dbWriteTable(con_wdl, "dataset", as.data.frame(d_dataset_cov), overwrite = TRUE)
+
+# report which half of which dataset fell back, so a silent gap cannot hide as a
+# confidently-rendered string on the schema site
+coverage_fallback <- d_dataset |>
+  left_join(d_cov, by = "dataset_key") |>
+  filter(is.na(coverage_temporal_observed) | is.na(coverage_spatial_observed)) |>
+  transmute(dataset_key,
+            temporal = if_else(is.na(coverage_temporal_observed),
+                               paste("asserted:", coverage_temporal), "measured"),
+            spatial  = if_else(is.na(coverage_spatial_observed),
+                               paste("asserted:", coverage_spatial), "measured"))
+cat(glue(
+  "coverage measured for {sum(!is.na(d_cov$coverage_temporal_observed))} datasets ",
+  "temporally, {sum(!is.na(d_cov$coverage_spatial_observed))} spatially; ",
+  "{nrow(coverage_fallback)} fell back to an asserted value\n"))
+
+d_cov |>
+  select(dataset_key, coverage_temporal_observed, coverage_spatial_observed) |>
+  datatable(caption = "observed coverage, measured from obs + sample")
+```
+
 ### Core Table Parity Checks
 
 Hard assertions on the assembled core. The old checks compared it against the
@@ -1391,19 +1449,23 @@ if (length(meta_paths) > 0) {
         workflow         = unname(ds_workflow[by_ds$dataset_key[i]]))))
   }
 
-  # observed temporal extent per dataset from the real data (obs + sample),
-  # replacing the static coverage_temporal from QMD frontmatter on the cards.
-  obs_time <- DBI::dbGetQuery(con_wdl,
-    "SELECT dataset_key, strftime(min(datetime), '%Y-%m') AS t_min,
-            strftime(max(datetime), '%Y-%m') AS t_max
-     FROM (SELECT dataset_key, datetime FROM obs WHERE datetime IS NOT NULL
-           UNION ALL SELECT dataset_key, datetime FROM sample WHERE datetime IS NOT NULL)
-     GROUP BY 1")
-  for (i in seq_len(nrow(obs_time))) {
-    k <- obs_time$dataset_key[i]
-    if (k %in% names(meta$datasets))
+  # observed temporal AND spatial extent per dataset, measured in the
+  # dataset_coverage chunk above from the real data (obs + sample). These drive
+  # the calcofi.io/workflows cards and the schema site; `coverage_bbox` carries
+  # the same box numerically so a map consumer does not have to parse the label.
+  for (i in seq_len(nrow(d_cov))) {
+    k <- d_cov$dataset_key[i]
+    if (!k %in% names(meta$datasets)) next
+    if (!is.na(d_cov$coverage_temporal_observed[i]))
       meta$datasets[[k]]$coverage_temporal_observed <-
-        paste(obs_time$t_min[i], "to", obs_time$t_max[i])
+        d_cov$coverage_temporal_observed[i]
+    if (!is.na(d_cov$coverage_spatial_observed[i])) {
+      meta$datasets[[k]]$coverage_spatial_observed <-
+        d_cov$coverage_spatial_observed[i]
+      meta$datasets[[k]]$coverage_bbox <- list(
+        lat_min = d_cov$lat_min[i], lat_max = d_cov$lat_max[i],
+        lon_min = d_cov$lon_min[i], lon_max = d_cov$lon_max[i])
+    }
   }
 
   # retire per-dataset tables from metadata.json too (core_keep + supplemental

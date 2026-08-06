@@ -86,7 +86,9 @@ source(here("libs/ingest.R"))
 
 dir_spatial <- path_expand(glue("{dir_data}/_spatial"))
 dir_pmtiles <- here("data/pmtiles")
+# sidecars (manifest.json) stay in the repo; the parquet bytes stage outside it
 dir_parquet <- here("data/parquet/spatial")
+dir_stage   <- cc_stage_path("parquet", "spatial", create = TRUE)
 gcs_bucket <- "calcofi-files-public"
 gcs_prefix <- "_spatial"
 
@@ -589,8 +591,8 @@ for (i in seq_len(nrow(d_groups))) {
 ```{r}
 #| label: build-spatial-parquet
 
-pq_spatial <- path(dir_parquet, "spatial.parquet")
-pq_spatial_attr <- path(dir_parquet, "spatial_attribute.parquet")
+pq_spatial <- path(dir_stage, "spatial.parquet")
+pq_spatial_attr <- path(dir_stage, "spatial_attribute.parquet")
 
 # skip if parquet already exists and no new layers were processed
 if (length(all_spatial) == 0 && file_exists(pq_spatial)) {
@@ -649,7 +651,7 @@ if (length(all_spatial) == 0 && file_exists(pq_spatial)) {
   message(glue("spatial_attribute: {nrow(attr_combined)} rows"))
 
   # remove old per-dataset parquet files
-  old_parquets <- dir_ls(dir_parquet, glob = "*.parquet")
+  old_parquets <- dir_ls(dir_stage, glob = "*.parquet")
   old_parquets <- old_parquets[!grepl("^spatial", basename(old_parquets))]
   if (length(old_parquets) > 0) {
     file_delete(old_parquets)
@@ -710,7 +712,8 @@ cat(glue(
 ))
 
 sync_to_gcs(
-  local_dir = dir_parquet,
+  local_dir = dir_stage,
+  sidecar_dir = dir_parquet,
   gcs_prefix = gcs_ingest_prefix,
   bucket = gcs_ingest_bucket
 )
@@ -721,7 +724,7 @@ sync_to_gcs(
 ```{r}
 #| label: manifest
 
-write_spatial_manifest(dir_parquet)
+write_spatial_manifest(parquet_dir = dir_stage, output_dir = dir_parquet)
 ```
 
 ## Output summary
@@ -741,7 +744,7 @@ dir_ls(dir_pmtiles, glob = "*.pmtiles") |>
   knitr::kable()
 
 cat("\n### Consolidated Parquet\n\n")
-dir_ls(dir_parquet, glob = "*.parquet") |>
+dir_ls(dir_stage, glob = "*.parquet") |>
   tibble(path = _) |>
   mutate(
     file = path_file(path),

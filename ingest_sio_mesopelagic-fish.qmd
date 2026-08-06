@@ -26,8 +26,6 @@ calcofi:
     link_calcofi_org: ""
     link_data_source: "https://library.ucsd.edu/dc/object/bb9217084g"
     link_others: ["https://doi.org/10.1016/j.pocean.2013.05.013"]
-    coverage_temporal: 2010-01 to 2012-02
-    coverage_spatial: "CalCOFI grid (7 cruises with MOHT tows)"
     license: "CC BY 4.0"
     pi_names: J. Anthony Koslow
   # publishes the consolidated core: the source shape is wrangled in the notebook
@@ -74,6 +72,7 @@ dataset      <- cc$dataset
 tables_owned <- cc$tables_owned
 dir_label    <- glue("{provider}_{dataset}")
 dir_parquet  <- here(glue("data/parquet/{dir_label}"))
+dir_stage  <- cc_stage_path("parquet", dir_label, create = TRUE)
 db_path      <- here(glue("data/wrangling/{dir_label}.duckdb"))
 
 if (overwrite) {
@@ -313,7 +312,7 @@ join to any other dataset's `site_key`.
 
 ```{r}
 #| label: add-spatial
-load_prior_tables(con, parquet_dir = here("data/parquet/swfsc_ichthyo"),
+load_prior_tables(con, parquet_dir = cc_stage_path("parquet", "swfsc_ichthyo"),
                    tables = "grid", geom_tables = "grid", as_view = TRUE)
 
 add_point_geom(con, "mesopelagic_fish_tow", lon_col = "longitude", lat_col = "latitude")
@@ -534,7 +533,7 @@ build_metadata_json(
   set_comments = TRUE, provider = provider, dataset = dataset,
   workflow_url = cc$workflow_url, tables_owned = tables_owned)
 
-sync_to_gcs(local_dir = dir_parquet, gcs_prefix = glue("ingest/{dir_label}"), bucket = "calcofi-db")
+sync_to_gcs(local_dir = dir_stage, sidecar_dir = dir_parquet, gcs_prefix = glue("ingest/{dir_label}"), bucket = "calcofi-db")
 ```
 
 ## Questions for Data Providers

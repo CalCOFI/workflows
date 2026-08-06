@@ -1,7 +1,25 @@
 darwincore
 larvae
-parquet
 wrangling
+
+# data/parquet/ is now HALF of an ingest's output, not all of it.
+#
+# The bulk parquet moved out of the working tree entirely — it stages under
+# $CALCOFI_STAGE_DIR (calcofi4db::cc_stage_dir(), default ~/_big/calcofi) on its
+# way to gs://calcofi-db/. What stays here is the reviewable half: each ingest's
+# manifest.json, metadata.json and relationships.json — kilobytes, diffable, and
+# the schema/provenance record the release reads. Those are TRACKED.
+#
+# The old rule was a blanket `parquet`, which was the only practical option when
+# 24 GB of bytes shared the directory — and it swept the sidecars out of version
+# control as collateral. Nothing under data/parquet/ was tracked at all.
+#
+# Keep the .parquet guard anyway: a run with CALCOFI_STAGE_DIR misconfigured, or
+# an older notebook, would otherwise drop gigabytes here one `git add -A` from
+# history.
+parquet/**/*.parquet
+# _old/ is a 21 GB stale snapshot predating the split; not part of the pipeline.
+parquet/_old/
 # `wrangling` above catches data/wrangling/*.duckdb, but ingest_spatial.qmd used
 # to drop a 27 MB scratch DB at THIS level, where that rule cannot see it. The
 # step is gone (nothing ever read the file — the release builds `_spatial` from

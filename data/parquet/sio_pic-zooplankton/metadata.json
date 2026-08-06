@@ -1,0 +1,167 @@
+{
+  "schema_version": "1.1",
+  "provider": "sio",
+  "dataset": "pic-zooplankton",
+  "workflow": "https://calcofi.io/workflows/ingest_sio_pic-zooplankton.html",
+  "tables": {
+    "sample": {
+      "name_long": "Sample",
+      "description_md": "One row per physical sampling event at its native grain (site, tow, net, cast, bottle, underway, transect, region pool). An adjacency list: `parent_sample_key` points at the containing event and `root_sample_key` at the top of the chain, so counting distinct events at any level is a single `GROUP BY`."
+    },
+    "dataset": {
+      "name_long": "Dataset",
+      "description_md": ""
+    }
+  },
+  "columns": {
+    "dataset.provider": {
+      "name_long": "Provider",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.dataset": {
+      "name_long": "Dataset",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.dataset_name": {
+      "name_long": "Dataset Name",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.description": {
+      "name_long": "Description",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.citation_main": {
+      "name_long": "Citation Main",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.citation_others": {
+      "name_long": "Citation Others",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.link_calcofi_org": {
+      "name_long": "Link Calcofi Org",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.link_data_source": {
+      "name_long": "Link Data Source",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.link_others": {
+      "name_long": "Link Others",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.tables": {
+      "name_long": "Tables",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.coverage_temporal": {
+      "name_long": "Coverage Temporal",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.coverage_spatial": {
+      "name_long": "Coverage Spatial",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.license": {
+      "name_long": "License",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.pi_names": {
+      "name_long": "Pi Names",
+      "units": null,
+      "description_md": ""
+    },
+    "sample.sample_key": {
+      "name_long": "Sample Key",
+      "description_md": "Globally unique event key, namespaced `dataset_key:sample_type:id` so the same integer id in two datasets — or at two event levels in one dataset — never collides."
+    },
+    "sample.sample_type": {
+      "name_long": "Sample Type",
+      "description_md": "Event grain: `site`, `tow`, `net`, `cast`, `bottle`, `underway`, `transect` or `region_pool`."
+    },
+    "sample.parent_sample_key": {
+      "name_long": "Parent Sample Key",
+      "description_md": "The containing event (net → tow → site; bottle → cast). NULL at the top of the chain. Flat adjacency list: attributes are not inherited."
+    },
+    "sample.root_sample_key": {
+      "name_long": "Root Sample Key",
+      "description_md": "Top of this event's containment chain; equals `sample_key` for single-level datasets. Use `count(DISTINCT root_sample_key)` to count stations/casts irrespective of grain."
+    },
+    "sample.dataset_key": {
+      "name_long": "Dataset Key",
+      "description_md": "Provenance stamp: `provider_dataset`."
+    },
+    "sample.grid_key": {
+      "name_long": "Grid Key",
+      "description_md": "CalCOFI station grid cell. NULL where the dataset has no station assignment (region-pooled phytoplankton)."
+    },
+    "sample.site_key": {
+      "name_long": "Site Key",
+      "description_md": "CalCOFI station natural key as the source records it (line/station, e.g. `090.0 060.0`). Present on 13 of the 18 source event tables, so it is carried on the event dimension rather than lost to consolidation; `grid_key` is the derived grid cell, this is the source's own station id."
+    },
+    "sample.cruise_key": {
+      "name_long": "Cruise Key",
+      "description_md": "CalCOFI cruise natural key `YYYY-MM-NODC`."
+    },
+    "sample.order_occ": {
+      "name_long": "Order of Occupation",
+      "description_md": "Order in which the station was occupied on the cruise. Source spelling varies (`order_occ`, `ord_occ`) and CTD stores it as text; normalised to an integer here."
+    },
+    "sample.latitude": {
+      "name_long": "Latitude",
+      "units": "decimal degrees",
+      "description_md": "Event latitude (WGS84)."
+    },
+    "sample.longitude": {
+      "name_long": "Longitude",
+      "units": "decimal degrees",
+      "description_md": "Event longitude (WGS84)."
+    },
+    "sample.datetime": {
+      "name_long": "Datetime",
+      "description_md": "Event start time (UTC)."
+    },
+    "sample.depth_min_m": {
+      "name_long": "Depth Min",
+      "units": "m",
+      "description_md": "Shallowest depth sampled by this event."
+    },
+    "sample.depth_max_m": {
+      "name_long": "Depth Max",
+      "units": "m",
+      "description_md": "Deepest depth sampled by this event."
+    },
+    "sample.tow_type": {
+      "name_long": "Tow Type",
+      "description_md": "Net gear code where the dataset records one (C1/CB/CV/PV oblique or vertical, MT manta); NULL for gears and datasets without one. Needed to compute gear-appropriate CPUE."
+    },
+    "sample.data_stage": {
+      "name_long": "Data Stage",
+      "description_md": "The source's own processing state for this event: `final` (post-cruise calibrations applied) or `preliminary` (**not for publication** — the source warns that oxygen, nitrate and chlorophyll may change significantly once calibrated). Populated by `calcofi_ctd-cast`; NULL where the dataset draws no such distinction, which is not a claim that the data are final."
+    },
+    "sample.geom": {
+      "name_long": "Geometry",
+      "description_md": "Point geometry minted from `longitude`/`latitude` (OGC:CRS84)."
+    }
+  },
+  "contributions": {
+    "sample": {
+      "rows": 82343,
+      "owned": true,
+      "shared": true
+    }
+  }
+}

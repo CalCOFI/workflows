@@ -20,8 +20,6 @@ calcofi:
     citation_main: "CalCOFI. Underway (METS) TSG/Meteorology Data. CalCOFI.org."
     link_calcofi_org: https://calcofi.org/data/oceanographic-data/underway/
     link_data_source: https://calcofi.org/data/oceanographic-data/underway/
-    coverage_temporal: 2004-01 to 2022-11
-    coverage_spatial: "28-37°N, -125 to -117°W"
   # publishes the consolidated core: the source shape is wrangled in the notebook
   # and projected into the shared core tables. obs is fed by the THINNED series;
   # the full ~1-minute series ships alongside as the supplemental obs_mets_full,
@@ -132,6 +130,7 @@ tables_owned <- cc$tables_owned
 dir_label    <- glue("{provider}_{dataset}")
 dir_dl       <- path_expand(glue("{dir_data}/{provider}/{dataset}/download"))
 dir_parquet  <- here(glue("data/parquet/{dir_label}"))
+dir_stage  <- cc_stage_path("parquet", dir_label, create = TRUE)
 db_path      <- here(glue("data/wrangling/{dir_label}.duckdb"))
 db_checkpoint <- here(glue("data/wrangling/{dir_label}_checkpoint.duckdb"))
 dir_tmp      <- here(glue("data/tmp/{dir_label}"))
@@ -145,6 +144,7 @@ if (overwrite) {
   if (dir_exists(db_tmp))  dir_delete(db_tmp)
   if (overwrite_all) {
     if (dir_exists(dir_parquet))    dir_delete(dir_parquet)
+    if (dir_exists(dir_stage))      dir_delete(dir_stage)
     if (file_exists(db_checkpoint)) file_delete(db_checkpoint)
     cat("Deleted parquet and checkpoint DB", "\n")
   }
@@ -154,7 +154,7 @@ if (file_exists(db_checkpoint) && !file_exists(db_path)) {
   file_copy(db_checkpoint, db_path, overwrite = TRUE)
   cat(glue("Restored from checkpoint: {db_checkpoint}"), "\n")
 }
-dir_create(c(dir_dl, dirname(db_path), dir_parquet, dir_tmp), recurse = TRUE)
+dir_create(c(dir_dl, dirname(db_path), dir_parquet, dir_stage, dir_tmp), recurse = TRUE)
 
 con <- get_duckdb_con(db_path)
 load_duckdb_extension(con, "spatial")
@@ -179,7 +179,7 @@ manifest_path <- file.path(dir_parquet, "manifest.json")
 if (file_exists(manifest_path)) {
   mf <- jsonlite::read_json(manifest_path)
   parquet_ok <- all(vapply(mf$tables, function(tbl) {
-    file_exists(file.path(dir_parquet, paste0(tbl, ".parquet")))
+    file_exists(file.path(dir_stage, paste0(tbl, ".parquet")))
   }, logical(1)))
   if (parquet_ok && !overwrite) {
     parquet_complete <- TRUE
@@ -591,9 +591,9 @@ reported rather than guessed.
 
 modifies_tables <- c("ship")
 load_prior_tables(con = con, tables = modifies_tables,
-                   parquet_dir = here("data/parquet/swfsc_ichthyo"))
+                   parquet_dir = cc_stage_path("parquet", "swfsc_ichthyo"))
 load_prior_tables(con = con, tables = c("cruise", "grid"),
-                   parquet_dir = here("data/parquet/swfsc_ichthyo"), as_view = TRUE)
+                   parquet_dir = cc_stage_path("parquet", "swfsc_ichthyo"), as_view = TRUE)
 
 modifies_pks <- list()
 for (tbl in modifies_tables) {
@@ -1377,7 +1377,7 @@ for (tbl in modifies_tables) {
   keys_new <- dbGetQuery(con, glue("SELECT {pk_col} FROM {tbl}"))[[1]]
   additions <- setdiff(keys_new, keys_old)
   if (length(additions) > 0) {
-    pq_path <- file.path(dir_parquet, paste0(tbl, "_new.parquet"))
+    pq_path <- file.path(dir_stage, paste0(tbl, "_new.parquet"))
     vals <- paste(dbQuoteString(con, additions), collapse = ", ")
     export_parquet(con, glue("SELECT * FROM {tbl} WHERE {pk_col} IN ({vals})"), pq_path)
     cat(glue("{length(additions)} new {tbl} row(s) -> {tbl}_new.parquet"), "\n")
@@ -1395,7 +1395,7 @@ knitr::opts_chunk$set(eval = TRUE)
 if (parquet_complete) {
   cat("Parquet unchanged — skipping GCS sync", "\n")
 } else {
-  sync_to_gcs(local_dir = dir_parquet, gcs_prefix = glue("ingest/{dir_label}"),
+  sync_to_gcs(local_dir = dir_stage, sidecar_dir = dir_parquet, gcs_prefix = glue("ingest/{dir_label}"),
               bucket = "calcofi-db", delete_stale = TRUE)
 }
 ```

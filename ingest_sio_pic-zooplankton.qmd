@@ -14,15 +14,15 @@ calcofi:
     dataset_name: SIO PIC Zooplankton Net Tows
     description: >
       Zooplankton net-tow sample registry from the SIO Pelagic Invertebrate
-      Collection, filtered to the CalCOFI region. Position, time, depth, and gear
-      metadata per tow. Biovolume measurements are not in the source file and are
-      pending from the provider (see Questions for Data Providers).
+      Collection, scoped to CalCOFI-program expeditions. Position, time, depth,
+      and gear metadata per tow. Includes the historical grid (1950s-80s inshore,
+      Gulf of California and Baja lines), not just the modern pattern. Biovolume
+      measurements are not in the source file and are pending from the provider
+      (see Questions for Data Providers).
     citation_main: ""
     link_calcofi_org: ""
     link_data_source: "SIO Pelagic Invertebrate Collection DB (CSV export)"
     link_others: []
-    coverage_temporal: 1926 to present (CalCOFI-region subset)
-    coverage_spatial: "CalCOFI grid (~23-51N, -135 to -117W incl. Baja)"
     license: ""
     pi_names: Rasmus Swalethorp; Ed Weber; Linsey Sala
   tables_owned:
@@ -82,6 +82,7 @@ tables_owned <- cc$tables_owned
 dir_label    <- glue("{provider}_{dataset}")
 
 dir_parquet  <- here(glue("data/parquet/{dir_label}"))
+dir_stage  <- cc_stage_path("parquet", dir_label, create = TRUE)
 db_path      <- here(glue("data/wrangling/{dir_label}.duckdb"))
 
 if (overwrite) {
@@ -184,7 +185,7 @@ dbWriteTable(con, "zooplankton_tow", d_cc, overwrite = TRUE)
 #| label: resolve-keys
 
 load_prior_tables(
-  con, parquet_dir = here("data/parquet/swfsc_ichthyo"),
+  con, parquet_dir = cc_stage_path("parquet", "swfsc_ichthyo"),
   tables = c("ship", "cruise", "grid"), geom_tables = c("grid"), as_view = TRUE)
 
 d_ship <- dbGetQuery(con, "SELECT ship_key, ship_name, ship_nodc FROM ship") |>
@@ -369,7 +370,7 @@ metadata_path <- build_metadata_json(
 ```{r}
 #| label: upload-gcs
 
-sync_to_gcs(local_dir = dir_parquet, gcs_prefix = glue("ingest/{dir_label}"), bucket = "calcofi-db")
+sync_to_gcs(local_dir = dir_stage, sidecar_dir = dir_parquet, gcs_prefix = glue("ingest/{dir_label}"), bucket = "calcofi-db")
 ```
 
 ## Questions for Data Providers

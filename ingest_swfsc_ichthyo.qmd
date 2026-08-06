@@ -16,8 +16,6 @@ calcofi:
       tows on CalCOFI cruises, processed by SWFSC.
     citation_main: "NOAA Fisheries SWFSC. CalCOFI Ichthyoplankton Database."
     link_calcofi_org: https://calcofi.org/data/biology/ichthyoplankton/
-    coverage_temporal: 1951 to present
-    coverage_spatial: "23-51°N, -170 to -117°W"
   # publishes the consolidated core plus the shared reference tables this ingest
   # owns for the whole database. The site/tow/net/ichthyo/species source shape is
   # wrangled in the notebook and projected into sample / obs / obs_attribute /
@@ -128,6 +126,7 @@ dataset_name <- cc$dataset_meta$dataset_name
 tables_owned <- cc$tables_owned
 dir_label <- glue("{provider}_{dataset}")
 dir_parquet <- here(glue("data/parquet/{dir_label}"))
+dir_stage <- cc_stage_path("parquet", dir_label, create = TRUE)
 db_path <- here(glue("data/wrangling/{dir_label}.duckdb"))
 
 if (overwrite) {
@@ -1625,7 +1624,8 @@ gcs_bucket <- "calcofi-db"
 
 # sync to GCS — only uploads new or changed files
 sync_results <- sync_to_gcs(
-  local_dir = dir_parquet,
+  local_dir = dir_stage,
+  sidecar_dir = dir_parquet,
   gcs_prefix = gcs_ingest_prefix,
   bucket = gcs_bucket
 )

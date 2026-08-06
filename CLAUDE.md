@@ -127,8 +127,9 @@ Google Drive ──rclone──> GCS (gs://calcofi-files/) ──targets──> 
                                    + build_metadata_json()   <────────┘
                                    + sync_to_gcs()
                                                      │
-       data/parquet/{provider}_{dataset}/ ───────────┘
-       (+ gs://calcofi-db/parquet/… mirror)
+   $CALCOFI_STAGE_DIR/parquet/{provider}_{dataset}/  ┘   <- bulk .parquet
+       data/parquet/{provider}_{dataset}/*.json          <- sidecars, in git
+       (+ gs://calcofi-db/parquet/… mirror of both)
                                                      │
                           release_database.qmd ──────┘
                           (assemble in-memory from the parquet shards,
@@ -186,16 +187,71 @@ Two things do **not** follow automatically, so handle them in the notebook:
 
 Current holdout: `cdfw_dungeness-crab`.
 
+### Coverage is measured, never asserted
+
+**Do not add `coverage_temporal` / `coverage_spatial` to a `dataset_meta`
+block.** `calcofi4db::observed_coverage()` measures both from the assembled core
+in `release_database.qmd`'s `dataset_coverage` chunk, writes them into the
+release `dataset` table and into `metadata.json` as
+`coverage_temporal_observed` / `coverage_spatial_observed` / `coverage_bbox`,
+and `scripts/build_workflows_index.R` puts them on the calcofi.io/workflows
+cards.
+
+A hand-written extent is authored once while the data grows underneath it. At
+`v2026.08.06` seven of fifteen were wrong: `cce-lter_zoodb` claimed data through
+2021-05 that ends 2015-04, `calcofi_phyllosoma` stopped a year short of its own
+rows, `calcofi_bottle` was a month late at the start, and three said `"present"`
+while stalling in 2019, 2022 and 2023. `ingest_calcofi_ctd-cast.qmd` had already
+been hand-corrected twice and was stale again.
+
+**Two exceptions remain, and both carry a comment saying why.**
+`calcofi_phytoplankton` is region-pooled — real coordinates, zero datetimes — so
+it asserts `coverage_temporal` only and measures the spatial half like everyone
+else. `cdfw_dungeness-crab` is `in_release: false`, so the release never sees it
+to measure; delete both its keys when it enters the release. If you add a third,
+the bar is "the data provably cannot answer", not "I know the answer".
+
+The measurement is honest about what it finds, which means it surfaces
+coordinate bugs the prose hid — `calcofi_mets` measures `125.8°W–124.9°E` (a
+dropped minus sign) and `swfsc_ichthyo` reaches latitude `0.0` (null island).
+Fix those at the source; do not paper over them by re-asserting a tidy bbox.
+
 ### Parquet shards → frozen release
+
+**An ingest's output lives in two places, and the split is deliberate.** The
+bulk `.parquet` stages **outside the repo** at `$CALCOFI_STAGE_DIR` (see
+`calcofi4db::cc_stage_dir()`, default `~/_big/calcofi`) on its way to
+`gs://calcofi-db/`; the JSON sidecars — `manifest.json`, `metadata.json`,
+`relationships.json` — stay in `data/parquet/{provider}_{dataset}/` **and are
+tracked in git**, because they are the reviewable schema/provenance record the
+release reads.
+
+In each notebook: `dir_parquet` is the repo sidecar dir, `dir_stage` is the
+staging dir. `write_parquet_outputs(output_dir = dir_parquet)` routes bytes to
+the stage by default — you do not pass `parquet_dir` unless you want them
+colocated. Anything that touches an actual `.parquet` file (a `file.path(...,
+"x.parquet")`, a `dir_ls(glob = "*.parquet")`, a hive-partition directory) must
+use `dir_stage`; anything naming a `*.json` uses `dir_parquet`.
+
+Previously all 24 GB sat inside the git working tree, which forced a blanket
+`parquet` ignore rule in `data/.gitignore` — and that rule swept the sidecars
+out of version control as collateral, so **nothing** under `data/parquet/` was
+tracked. The rule is now `parquet/**/*.parquet`, a guard against a misconfigured
+run rather than the primary mechanism.
 
 - Each ingest notebook ends with **three** calls, and every one of the 16 data
   ingests does it the same way:
-  1. `write_parquet_outputs()` — writes `data/parquet/{provider}_{dataset}/` plus
-     `manifest.json`, and **content-hashes each table so an unchanged partition is
-     not re-uploaded**;
+  1. `write_parquet_outputs()` — parquet to `$CALCOFI_STAGE_DIR/parquet/{provider}_{dataset}/`,
+     `manifest.json` to the repo sidecar dir, and **content-hashes each table so
+     an unchanged partition is not re-uploaded** (the manifest is the dedup
+     ledger, so it is read from the sidecar dir, not from beside the bytes);
   2. `build_metadata_json()` — the `metadata.json` sidecar (and it now reports its
      own documentation gaps via `scan_metadata_gaps()`);
-  3. `sync_to_gcs()` — mirrors the directory, skipping unchanged objects.
+  3. `sync_to_gcs(local_dir = dir_stage, sidecar_dir = dir_parquet)` — mirrors
+     **both** roots to one `gcs_prefix`, skipping unchanged objects. Sidecars are
+     exempt from `delete_stale`: they are not under `local_dir`, so an unguarded
+     `--delete-unmatched-destination-objects` would delete the release's whole
+     schema record on every sync.
 
   An ingest that *modifies* a shared dependency table (`calcofi.modifies:`) also
   exports a `{table}_new.parquet` **delta sidecar** — the rows it adds, keyed on the
@@ -450,7 +506,8 @@ self-documenting; human review happens at every hand-off. Scaffolds come from
   is the assembler/release step.
 - `explore_*.qmd|.Rmd` — exploratory analyses, not part of the pipeline.
 - `metadata/` — the registries above.
-- `data/` — local working artifacts: `data/parquet/{dataset}/` ingest outputs,
+- `data/` — local working artifacts: `data/parquet/{dataset}/` ingest **sidecars**
+  (`*.json`, tracked; the bulk parquet stages at `$CALCOFI_STAGE_DIR`),
   `calcofi_wrangling.duckdb`, caches. Source CSVs live on GCS/Drive, not in git.
 - `scripts/` — `sync_gdrive_to_gcs.sh` (rclone), `build_workflows_index.R`,
   pipeline runners, benchmark generators.

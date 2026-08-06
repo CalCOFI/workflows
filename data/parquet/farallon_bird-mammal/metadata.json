@@ -1,0 +1,441 @@
+{
+  "schema_version": "1.1",
+  "provider": "farallon",
+  "dataset": "bird-mammal",
+  "workflow": "https://calcofi.io/workflows/ingest_farallon_bird-mammal.html",
+  "tables": {
+    "sample": {
+      "name_long": "Sample",
+      "description_md": "One row per physical sampling event at its native grain (site, tow, net, cast, bottle, underway, transect, region pool). An adjacency list: `parent_sample_key` points at the containing event and `root_sample_key` at the top of the chain, so counting distinct events at any level is a single `GROUP BY`."
+    },
+    "obs": {
+      "name_long": "Observation",
+      "description_md": "The occurrence-headline long table: one scalar measurement per row, environmental (`realm = 'env'`) and biological (`realm = 'bio'`) together. Biological taxon is the global `taxon_key`; sub-occurrence detail (length/stage bins, behavior) lives in `obs_attribute`, and event-level effort in `sample_measurement`."
+    },
+    "obs_attribute": {
+      "name_long": "Observation Attribute",
+      "description_md": "Sub-occurrence attribution: the breakdown *within* an `obs` headline row. Covers numeric frequency distributions (length bins, stage numbers) and categorical breakdowns (seabird behavior). Counts here sum to the headline where the source is internally consistent."
+    },
+    "taxon": {
+      "name_long": "Taxon",
+      "description_md": "One authoritative row per taxon, keyed by `taxon_key` = `worms:<AphiaID>` (or `itis:<TSN>` for birds). Replaces the per-dataset taxon tables; duplicates across datasets collapse to one row, with names and lineage coalesced by source priority."
+    },
+    "dataset_taxon": {
+      "name_long": "Dataset Taxon",
+      "description_md": "Crosswalk from each dataset's own taxon vocabulary to the global `taxon_key`. `obs` resolves its taxon by joining this on (`dataset_key`, `ds_taxa_code`), so a dataset can keep its local codes without leaking them into the shared model."
+    },
+    "taxon_group": {
+      "name_long": "Taxon Group",
+      "description_md": "Portable groupings of taxa (phytoplankton functional groups, seabirds, marine mammals). Many taxa per group; a taxon may belong to several."
+    },
+    "dataset": {
+      "name_long": "Dataset",
+      "description_md": ""
+    }
+  },
+  "columns": {
+    "dataset.provider": {
+      "name_long": "Provider",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.dataset": {
+      "name_long": "Dataset",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.dataset_name": {
+      "name_long": "Dataset Name",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.description": {
+      "name_long": "Description",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.citation_main": {
+      "name_long": "Citation Main",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.citation_others": {
+      "name_long": "Citation Others",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.link_calcofi_org": {
+      "name_long": "Link Calcofi Org",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.link_data_source": {
+      "name_long": "Link Data Source",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.link_others": {
+      "name_long": "Link Others",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.tables": {
+      "name_long": "Tables",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.coverage_temporal": {
+      "name_long": "Coverage Temporal",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.coverage_spatial": {
+      "name_long": "Coverage Spatial",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.license": {
+      "name_long": "License",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.pi_names": {
+      "name_long": "Pi Names",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset_taxon.ds_taxon_key": {
+      "name_long": "Dataset Taxon Key",
+      "description_md": "Key of this crosswalk row, `<dataset-or-known-list>:<local code>`."
+    },
+    "dataset_taxon.dataset_key": {
+      "name_long": "Dataset Key",
+      "description_md": "The dataset whose vocabulary this row belongs to."
+    },
+    "dataset_taxon.taxon_key": {
+      "name_long": "Taxon Key",
+      "description_md": "The global taxon it resolves to; joins `taxon`."
+    },
+    "dataset_taxon.ds_scientific_name": {
+      "name_long": "Dataset Scientific Name",
+      "description_md": "Scientific name as the source dataset spells it."
+    },
+    "dataset_taxon.ds_common_name": {
+      "name_long": "Dataset Common Name",
+      "description_md": "Common name as the source dataset spells it."
+    },
+    "dataset_taxon.ds_taxa_code": {
+      "name_long": "Dataset Taxa Code",
+      "description_md": "The dataset's own code, as stored on its measurement rows."
+    },
+    "obs.obs_id": {
+      "name_long": "Observation ID",
+      "description_md": "Surrogate key, renumbered globally when the release concatenates the per-dataset shards."
+    },
+    "obs.realm": {
+      "name_long": "Realm",
+      "description_md": "`env` for physical/chemical measurements, `bio` for organism observations."
+    },
+    "obs.dataset_key": {
+      "name_long": "Dataset Key",
+      "description_md": "Provenance stamp: `provider_dataset`."
+    },
+    "obs.sample_key": {
+      "name_long": "Sample Key",
+      "description_md": "The sampling event this observation came from; joins `sample`."
+    },
+    "obs.grid_key": {
+      "name_long": "Grid Key",
+      "description_md": "CalCOFI station grid cell, denormalized from `sample` so rollups need no join. NULL for region-pooled data."
+    },
+    "obs.cruise_key": {
+      "name_long": "Cruise Key",
+      "description_md": "Cruise, denormalized from `sample` so rollups need no join."
+    },
+    "obs.latitude": {
+      "name_long": "Latitude",
+      "units": "decimal degrees",
+      "description_md": "Observation latitude (WGS84)."
+    },
+    "obs.longitude": {
+      "name_long": "Longitude",
+      "units": "decimal degrees",
+      "description_md": "Observation longitude (WGS84)."
+    },
+    "obs.datetime": {
+      "name_long": "Datetime",
+      "description_md": "Observation time (UTC). NULL for region-pooled data with no event time."
+    },
+    "obs.depth_min_m": {
+      "name_long": "Depth Min",
+      "units": "m",
+      "description_md": "Shallowest depth this observation represents."
+    },
+    "obs.depth_max_m": {
+      "name_long": "Depth Max",
+      "units": "m",
+      "description_md": "Deepest depth this observation represents; equal to `depth_min_m` for point measurements (bottle, CTD scan)."
+    },
+    "obs.taxon_key": {
+      "name_long": "Taxon Key",
+      "description_md": "Global taxon key, `worms:<AphiaID>` or `itis:<TSN>` for birds. NULL for `env` rows. Joins `taxon`."
+    },
+    "obs.life_stage": {
+      "name_long": "Life Stage",
+      "description_md": "Life stage where the source resolves one (larva, adult, juvenile, egg, phyllosoma)."
+    },
+    "obs.measurement_type": {
+      "name_long": "Measurement Type",
+      "description_md": "Measured quantity; joins the `measurement_type` vocabulary."
+    },
+    "obs.measurement_value": {
+      "name_long": "Measurement Value",
+      "description_md": "The measured value, in the units `measurement_type` declares."
+    },
+    "obs.measurement_qual": {
+      "name_long": "Measurement Qualifier",
+      "description_md": "Source quality flag, verbatim."
+    },
+    "obs.measurement_prec": {
+      "name_long": "Measurement Precision",
+      "description_md": "Source-reported precision where available."
+    },
+    "obs.hex_id": {
+      "name_long": "Hex ID",
+      "description_md": "H3 cell at resolution 10, stored as UBIGINT. Aggregate coarser at query time with `h3_cell_to_parent(hex_id, res)` — there is no per-resolution column ladder."
+    },
+    "obs_attribute.obs_attribute_id": {
+      "name_long": "Observation Attribute ID",
+      "description_md": "Surrogate key."
+    },
+    "obs_attribute.dataset_key": {
+      "name_long": "Dataset Key",
+      "description_md": "Provenance stamp: `provider_dataset`."
+    },
+    "obs_attribute.sample_key": {
+      "name_long": "Sample Key",
+      "description_md": "The sampling event; joins `sample`."
+    },
+    "obs_attribute.taxon_key": {
+      "name_long": "Taxon Key",
+      "description_md": "Global taxon key; joins `taxon`."
+    },
+    "obs_attribute.life_stage": {
+      "name_long": "Life Stage",
+      "description_md": "Life stage the attribution applies to."
+    },
+    "obs_attribute.measurement_type": {
+      "name_long": "Measurement Type",
+      "description_md": "The attribute being broken down: `body_length`, `stage` or `behavior`."
+    },
+    "obs_attribute.bin_value": {
+      "name_long": "Bin Value",
+      "description_md": "Numeric bin — length in mm, stage number. NULL for categorical attributes."
+    },
+    "obs_attribute.bin_label": {
+      "name_long": "Bin Label",
+      "description_md": "Category label — stage description, behavior name. NULL for purely numeric bins."
+    },
+    "obs_attribute.count": {
+      "name_long": "Count",
+      "units": "individuals",
+      "description_md": "Number of individuals in this bin."
+    },
+    "obs_attribute.measurement_qual": {
+      "name_long": "Measurement Qualifier",
+      "description_md": "Source quality flag, verbatim."
+    },
+    "sample.sample_key": {
+      "name_long": "Sample Key",
+      "description_md": "Globally unique event key, namespaced `dataset_key:sample_type:id` so the same integer id in two datasets — or at two event levels in one dataset — never collides."
+    },
+    "sample.sample_type": {
+      "name_long": "Sample Type",
+      "description_md": "Event grain: `site`, `tow`, `net`, `cast`, `bottle`, `underway`, `transect` or `region_pool`."
+    },
+    "sample.parent_sample_key": {
+      "name_long": "Parent Sample Key",
+      "description_md": "The containing event (net → tow → site; bottle → cast). NULL at the top of the chain. Flat adjacency list: attributes are not inherited."
+    },
+    "sample.root_sample_key": {
+      "name_long": "Root Sample Key",
+      "description_md": "Top of this event's containment chain; equals `sample_key` for single-level datasets. Use `count(DISTINCT root_sample_key)` to count stations/casts irrespective of grain."
+    },
+    "sample.dataset_key": {
+      "name_long": "Dataset Key",
+      "description_md": "Provenance stamp: `provider_dataset`."
+    },
+    "sample.grid_key": {
+      "name_long": "Grid Key",
+      "description_md": "CalCOFI station grid cell. NULL where the dataset has no station assignment (region-pooled phytoplankton)."
+    },
+    "sample.site_key": {
+      "name_long": "Site Key",
+      "description_md": "CalCOFI station natural key as the source records it (line/station, e.g. `090.0 060.0`). Present on 13 of the 18 source event tables, so it is carried on the event dimension rather than lost to consolidation; `grid_key` is the derived grid cell, this is the source's own station id."
+    },
+    "sample.cruise_key": {
+      "name_long": "Cruise Key",
+      "description_md": "CalCOFI cruise natural key `YYYY-MM-NODC`."
+    },
+    "sample.order_occ": {
+      "name_long": "Order of Occupation",
+      "description_md": "Order in which the station was occupied on the cruise. Source spelling varies (`order_occ`, `ord_occ`) and CTD stores it as text; normalised to an integer here."
+    },
+    "sample.latitude": {
+      "name_long": "Latitude",
+      "units": "decimal degrees",
+      "description_md": "Event latitude (WGS84)."
+    },
+    "sample.longitude": {
+      "name_long": "Longitude",
+      "units": "decimal degrees",
+      "description_md": "Event longitude (WGS84)."
+    },
+    "sample.datetime": {
+      "name_long": "Datetime",
+      "description_md": "Event start time (UTC)."
+    },
+    "sample.depth_min_m": {
+      "name_long": "Depth Min",
+      "units": "m",
+      "description_md": "Shallowest depth sampled by this event."
+    },
+    "sample.depth_max_m": {
+      "name_long": "Depth Max",
+      "units": "m",
+      "description_md": "Deepest depth sampled by this event."
+    },
+    "sample.tow_type": {
+      "name_long": "Tow Type",
+      "description_md": "Net gear code where the dataset records one (C1/CB/CV/PV oblique or vertical, MT manta); NULL for gears and datasets without one. Needed to compute gear-appropriate CPUE."
+    },
+    "sample.data_stage": {
+      "name_long": "Data Stage",
+      "description_md": "The source's own processing state for this event: `final` (post-cruise calibrations applied) or `preliminary` (**not for publication** — the source warns that oxygen, nitrate and chlorophyll may change significantly once calibrated). Populated by `calcofi_ctd-cast`; NULL where the dataset draws no such distinction, which is not a claim that the data are final."
+    },
+    "sample.geom": {
+      "name_long": "Geometry",
+      "description_md": "Point geometry minted from `longitude`/`latitude` (OGC:CRS84)."
+    },
+    "taxon.taxon_key": {
+      "name_long": "Taxon Key",
+      "description_md": "Global taxon key: lowercase authority prefix plus id, `worms:127023` or `itis:176754`."
+    },
+    "taxon.worms_id": {
+      "name_long": "WoRMS ID",
+      "description_md": "WoRMS AphiaID."
+    },
+    "taxon.itis_id": {
+      "name_long": "ITIS ID",
+      "description_md": "ITIS Taxonomic Serial Number."
+    },
+    "taxon.gbif_id": {
+      "name_long": "GBIF ID",
+      "description_md": "GBIF backbone taxon key."
+    },
+    "taxon.ncbi_id": {
+      "name_long": "NCBI ID",
+      "description_md": "NCBI Taxonomy id."
+    },
+    "taxon.inat_id": {
+      "name_long": "iNaturalist ID",
+      "description_md": "iNaturalist taxon id."
+    },
+    "taxon.scientific_name": {
+      "name_long": "Scientific Name",
+      "description_md": "Accepted scientific name."
+    },
+    "taxon.common_name": {
+      "name_long": "Common Name",
+      "description_md": "Common name where one is recorded."
+    },
+    "taxon.rank": {
+      "name_long": "Rank",
+      "description_md": "Taxonomic rank."
+    },
+    "taxon.rank_order": {
+      "name_long": "Rank Order",
+      "description_md": "Ordinal for sorting ranks from kingdom down."
+    },
+    "taxon.taxonomic_status": {
+      "name_long": "Taxonomic Status",
+      "description_md": "Status as fetched from the keying authority (accepted, unaccepted, superseded combination, ...). Read it with `status_checked` — before v2026.08.05 this column was the literal string \"accepted\" on every row, stamped rather than fetched."
+    },
+    "taxon.status_checked": {
+      "name_long": "Status Checked",
+      "description_md": "Date `taxonomic_status` was last confirmed against the authority. A status with no check date is not a fact."
+    },
+    "taxon.parent_taxon_key": {
+      "name_long": "Parent Taxon Key",
+      "description_md": "Lineage parent; walk this to expand a taxon to its descendants."
+    },
+    "taxon.kingdom": {
+      "name_long": "Kingdom",
+      "description_md": "Kingdom."
+    },
+    "taxon.phylum": {
+      "name_long": "Phylum",
+      "description_md": "Phylum."
+    },
+    "taxon.class": {
+      "name_long": "Class",
+      "description_md": "Class."
+    },
+    "taxon.order_taxon": {
+      "name_long": "Order",
+      "description_md": "Order (named `order_taxon` because `order` is a SQL keyword)."
+    },
+    "taxon.family": {
+      "name_long": "Family",
+      "description_md": "Family."
+    },
+    "taxon.notes": {
+      "name_long": "Notes",
+      "description_md": "Append-only provenance log, one datestamped line per entry: how each id was resolved and any re-key onto an authority-accepted id (e.g. `itis:174553` Puffinus griseus -> `itis:1255050` Ardenna grisea). The dataset's own original code and name stay in `dataset_taxon`."
+    },
+    "taxon_group.taxon_group_key": {
+      "name_long": "Taxon Group Key",
+      "description_md": "Group key, `<dataset-or-known-list>:<group>`."
+    },
+    "taxon_group.description": {
+      "name_long": "Description",
+      "description_md": "Human-readable description of the group."
+    },
+    "taxon_group.taxon_key": {
+      "name_long": "Taxon Key",
+      "description_md": "A member taxon; joins `taxon`."
+    }
+  },
+  "contributions": {
+    "sample": {
+      "rows": 60715,
+      "owned": true,
+      "shared": true
+    },
+    "obs": {
+      "rows": 66272,
+      "owned": true,
+      "shared": true
+    },
+    "obs_attribute": {
+      "rows": 82338,
+      "owned": true,
+      "shared": true
+    },
+    "taxon": {
+      "rows": 259,
+      "owned": true,
+      "shared": true
+    },
+    "dataset_taxon": {
+      "rows": 156,
+      "owned": true,
+      "shared": true
+    },
+    "taxon_group": {
+      "rows": 127,
+      "owned": true,
+      "shared": true
+    }
+  }
+}

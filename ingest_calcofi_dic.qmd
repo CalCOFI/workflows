@@ -21,8 +21,6 @@ calcofi:
     link_data_source: https://www.ncei.noaa.gov/access/metadata/landing-page/bin/iso?id=gov.noaa.nodc:0301029
     link_others:
       - https://doi.org/10.25921/3w9f-jd72
-    coverage_temporal: 1983-03 to 2021-07
-    coverage_spatial: "28-37°N, -125 to -117°W"
     license: CC BY 4.0
     pi_names: Todd Martz; Aaron Mau
   # publishes the consolidated core. DIC rows that share a physical Niskin with
@@ -142,6 +140,7 @@ tables_owned <- cc$tables_owned
 dir_label    <- glue("{provider}_{dataset}")
 
 dir_parquet <- here(glue("data/parquet/{dir_label}"))
+dir_stage <- cc_stage_path("parquet", dir_label, create = TRUE)
 db_path     <- here(glue("data/wrangling/{dir_label}.duckdb"))
 
 # clean slate if overwrite (keep dir_parquet for content-hash dedup)
@@ -294,7 +293,7 @@ to casts using `site_key` + `datetime_start_utc` (±3 day window).
 load_prior_tables(
   con         = con,
   tables      = c("sample"),
-  parquet_dir = here("data/parquet/calcofi_bottle"),
+  parquet_dir = cc_stage_path("parquet", "calcofi_bottle"),
   geom_tables = c("sample"),
   as_view     = TRUE
 )
@@ -846,7 +845,8 @@ listviewer::jsonedit(
 #| label: upload-gcs
 
 sync_to_gcs(
-  local_dir  = dir_parquet,
+  local_dir   = dir_stage,
+  sidecar_dir = dir_parquet,
   gcs_prefix = glue("ingest/{dir_label}"),
   bucket     = "calcofi-db")
 ```

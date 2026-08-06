@@ -36,7 +36,8 @@ layout: default
         <h3><a href="{{ item.url | relative_url }}">{{ item.title | escape }}</a></h3>
         <div class="wf-meta">
           {%- if item.provider %}<span class="chip">{{ item.provider | escape }}</span>{% endif -%}
-          {%- if item.coverage %}<span class="wf-cov">{{ item.coverage | escape }}</span>{% endif -%}
+          {%- if item.coverage %}<span class="wf-cov" title="Temporal extent, measured from the released data">{{ item.coverage | escape }}</span>{% endif -%}
+          {%- if item.bbox %}<span class="wf-bbox" title="Spatial extent, measured from the released data">{{ item.bbox | escape }}</span>{% endif -%}
         </div>
         {%- if item.dataset_name %}<div class="wf-dsname">{{ item.dataset_name | escape }}</div>{% endif -%}
         {%- if item.description %}<p class="wf-desc">{{ item.description | escape }}</p>{% endif -%}

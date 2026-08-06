@@ -21,8 +21,6 @@ calcofi:
     link_calcofi_org: ""
     link_data_source: "https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFIcufes.html"
     link_others: []
-    coverage_temporal: 1996 to present
-    coverage_spatial: "CalCOFI region (underway)"
     license: ""
     pi_names: Noelle Bowlin
   # publishes the consolidated core: the underway sample/measurement source shape
@@ -64,6 +62,7 @@ cc <- read_calcofi_meta(here("ingest_swfsc_cufes.qmd"))
 provider <- cc$provider; dataset <- cc$dataset; tables_owned <- cc$tables_owned
 dir_label <- glue("{provider}_{dataset}")
 dir_parquet <- here(glue("data/parquet/{dir_label}"))
+dir_stage <- cc_stage_path("parquet", dir_label, create = TRUE)
 db_path <- here(glue("data/wrangling/{dir_label}.duckdb"))
 if (overwrite && file_exists(db_path)) file_delete(db_path)
 dir_create(dirname(db_path)); con <- get_duckdb_con(db_path); load_duckdb_extension(con, "spatial")
@@ -130,7 +129,7 @@ cat(glue("cufes_sample {nrow(d_sample)}, cufes_measurement {nrow(d_meas)}"), "\n
 ```{r}
 #| label: keys-spatial
 
-load_prior_tables(con, parquet_dir = here("data/parquet/swfsc_ichthyo"),
+load_prior_tables(con, parquet_dir = cc_stage_path("parquet", "swfsc_ichthyo"),
                   tables = c("ship","cruise","grid"), geom_tables = c("grid"), as_view = TRUE)
 d_ship <- dbGetQuery(con, "SELECT ship_key, ship_name, ship_nodc FROM ship") |>
   mutate(ship_name_norm = ship_name |> str_to_upper() |> str_squish())
@@ -305,7 +304,7 @@ build_metadata_json(con = con, d_tbls_rd = d_tbls_rd, d_flds_rd = d_flds_rd,
   output_dir = dir_parquet, tables = tbls_out,
   set_comments = TRUE, provider = provider, dataset = dataset,
   workflow_url = cc$workflow_url, tables_owned = tables_owned)
-sync_to_gcs(local_dir = dir_parquet, gcs_prefix = glue("ingest/{dir_label}"), bucket = "calcofi-db")
+sync_to_gcs(local_dir = dir_stage, sidecar_dir = dir_parquet, gcs_prefix = glue("ingest/{dir_label}"), bucket = "calcofi-db")
 ```
 
 ## Questions for Data Providers

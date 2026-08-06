@@ -23,8 +23,13 @@ calcofi:
     link_calcofi_org: "https://calcofi.org/data/marine-ecosystem-data/phytoplankton-bacterioplankton/"
     link_data_source: "https://portal.edirepository.org/nis/mapbrowse?packageid=knb-lter-cce.254.4"
     link_others: []
+    # ASSERTED, and one of only two left in the repo. Every other dataset's
+    # coverage is measured at release time by calcofi4db::observed_coverage();
+    # this one is region-pooled, so its `sample` rows carry real coordinates but
+    # NO datetime at all (409 of 409 null). The spatial half is therefore
+    # measured like everyone else's and is absent here on purpose; only the
+    # temporal half cannot be derived and has to be claimed.
     coverage_temporal: 1996 to 2022
-    coverage_spatial: "CalCOFI region (4 pooled sub-regions)"
     license: ""
     pi_names: Elizabeth L. Venrick
   # publishes the consolidated core. Region-pooled: sample rows carry
@@ -75,6 +80,7 @@ cc <- read_calcofi_meta(here("ingest_calcofi_phytoplankton.qmd"))
 provider <- cc$provider; dataset <- cc$dataset; tables_owned <- cc$tables_owned
 dir_label   <- glue("{provider}_{dataset}")
 dir_parquet <- here(glue("data/parquet/{dir_label}"))
+dir_stage <- cc_stage_path("parquet", dir_label, create = TRUE)
 db_path     <- here(glue("data/wrangling/{dir_label}.duckdb"))
 if (overwrite && file_exists(db_path)) file_delete(db_path)
 dir_create(dirname(db_path)); con <- get_duckdb_con(db_path); load_duckdb_extension(con, "spatial")
@@ -162,7 +168,7 @@ datatable(region, caption = "Pooled regions + provisional centroids")
 #| label: sample
 
 # cruise registry (year-month -> cruise_key, unique months only)
-load_prior_tables(con, parquet_dir = here("data/parquet/swfsc_ichthyo"),
+load_prior_tables(con, parquet_dir = cc_stage_path("parquet", "swfsc_ichthyo"),
                   tables = c("cruise","ship","grid"), geom_tables = c("grid"), as_view = TRUE)
 cr <- dbGetQuery(con, "SELECT cruise_key, date_ym FROM cruise") |>
   mutate(ym = format(as.Date(date_ym), "%Y%m"))
@@ -364,7 +370,7 @@ build_metadata_json(con = con, d_tbls_rd = d_tbls_rd, d_flds_rd = d_flds_rd,
   output_dir = dir_parquet, tables = tbls_out,
   set_comments = TRUE, provider = provider, dataset = dataset,
   workflow_url = cc$workflow_url, tables_owned = tables_owned)
-sync_to_gcs(local_dir = dir_parquet, gcs_prefix = glue("ingest/{dir_label}"), bucket = "calcofi-db")
+sync_to_gcs(local_dir = dir_stage, sidecar_dir = dir_parquet, gcs_prefix = glue("ingest/{dir_label}"), bucket = "calcofi-db")
 ```
 
 ## Questions for Data Providers
