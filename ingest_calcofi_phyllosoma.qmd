@@ -62,6 +62,7 @@ provider <- cc$provider; dataset <- cc$dataset; tables_owned <- cc$tables_owned
 dir_label <- glue("{provider}_{dataset}")
 dir_parquet <- here(glue("data/parquet/{dir_label}"))
 dir_stage <- cc_stage_path("parquet", dir_label, create = TRUE)
+db_path <- here(glue("data/wrangling/{dir_label}.duckdb"))
 if (overwrite && file_exists(db_path)) file_delete(db_path)
 dir_create(dirname(db_path)); con <- get_duckdb_con(db_path); load_duckdb_extension(con, "spatial")
 meas_type_csv <- here("metadata/measurement_type.csv"); d_meas_type <- read_measurement_type(meas_type_csv)
