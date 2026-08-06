@@ -1035,9 +1035,25 @@ pattern.
 #| label: freeze_release
 
 dir_frozen <- here(glue("data/releases/{release_version}"))
-dir_frozen_pq <- file.path(dir_frozen, "parquet")
-dir.create(dir_frozen_pq, recursive = TRUE, showWarnings = FALSE)
+
+# BULK PARQUET STAGES OUTSIDE THE REPO, sidecars stay in it — the same split
+# 146da92 applied to ingest outputs, which stopped one step short of the release.
+# Each frozen release drops 1.6-11 GB of parquet, and `data/.gitignore` had to
+# name `releases/*/parquet/` explicitly to keep 41 GB of it out of history: a
+# guard against something that should not have been in the working tree at all.
+# The sidecars beside it (catalog.json, metadata.json, relationships*.json/csv,
+# RELEASE_NOTES.md, erd.mmd, test_results.json) are small, diffable and the
+# provenance record, so they remain tracked under data/releases/{version}/.
+#
+# Nothing downstream needs editing: the GCS upload and the orphan prune both
+# discover tables with list.files()/list.dirs() over this directory rather than
+# from a hand-maintained list.
+dir_frozen_pq <- cc_stage_path("releases", release_version, "parquet",
+                               create = TRUE)
+dir.create(dir_frozen, recursive = TRUE, showWarnings = FALSE)
 message(glue("Creating frozen release: {release_version}"))
+message(glue("  sidecars -> {dir_frozen}"))
+message(glue("  parquet  -> {dir_frozen_pq}"))
 
 # `cruise` is enriched (derived) in this notebook — export locally
 # all other tables are GCS-copied from ingest/ (including provenance columns)

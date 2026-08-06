@@ -40,12 +40,16 @@ accdb
 # Frozen releases. Unlike every sibling above, this one CANNOT be ignored
 # wholesale: the small sidecars beside the data (catalog.json, metadata.json,
 # relationships*.json/csv, RELEASE_NOTES.md, erd.mmd, test_results.json) are the
-# provenance record and are deliberately tracked — 18 releases' worth of them.
-# Only `parquet/` is bulk: 1.6-11 GB per release, 41 GB locally at the time of
-# writing, and it lives on gs://calcofi-db/ducklake/releases/{version}/ which is
-# what consumers actually read.
+# provenance record and are deliberately tracked — 21 releases' worth of them,
+# 2.3 MB in total. Consumers read the bulk from
+# gs://calcofi-db/ducklake/releases/{version}/, never from here.
 #
-# It was never listed here, so nothing was ever committed by accident — but every
-# release left a multi-GB directory sitting in `git status` as untracked, one
-# `git add -A` away from entering history. Naming it is the guard.
+# The bulk no longer lands here at all: release_database.qmd writes it to
+# cc_stage_path("releases", {version}, "parquet") under CALCOFI_STAGE_DIR, the
+# same split 146da92 applied to ingest outputs. 17.4 GB across 21 releases was
+# moved out on 2026-08-06; `data/releases/` went from 16 GB to 2.3 MB.
+#
+# The rule stays as a backstop, exactly like `parquet/**/*.parquet` above: a run
+# with CALCOFI_STAGE_DIR misconfigured would otherwise drop 1.6-11 GB back into
+# the working tree, one `git add -A` away from entering history.
 releases/*/parquet/
