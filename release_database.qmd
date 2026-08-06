@@ -543,6 +543,48 @@ if ("obs_attribute" %in% dbListTables(con_wdl)) {
 message("Core parity checks passed.")
 ```
 
+### Taxon Authority Coverage
+
+A taxon that reaches the release without an authority id is invisible to any
+consumer that filters or joins on one, and until v2026.08.05 nothing said so:
+all 128 Farallon taxa and 64,956 observations were unreachable through
+`db-viz-hex::get_sp()`'s `worms_id` join while every check here passed.
+
+`check_taxon_ids()` **fails the release** on a dataset-local `taxon_key` that is
+not declared below. The allowlist is deliberately one key at a time — these are
+non-taxonomic operational classes the source records as data, not lookup
+failures — so a *new* unresolved taxon can never hide among the known ones.
+
+```{r}
+#| label: taxon_authority_coverage
+
+# non-taxonomic classes: real categories in the source that no authority can key.
+# Anything NOT on this list that resolves to a dataset-local key fails the render.
+TAXON_LOCAL_ALLOW <- c(
+  # ZooScan operational classes (Q03 in cce-lter/zooscan/questions.csv)
+  "cce-lter_zooscan:13",   # eggs
+  "cce-lter_zooscan:15",   # multiples (several organisms in one vignette)
+  "cce-lter_zooscan:16",   # nauplii (crustacean naupliar stage, not a taxon)
+  "cce-lter_zooscan:18",   # others
+  # phytoplankton: "other" buckets + codes absent from the source Definitions
+  # sheet (Q05 in calcofi/phytoplankton/questions.csv)
+  paste0("calcofi_phytoplankton:",
+         c("4", "40", "59", "218", "229", "231", "232", "300", "337",
+           "454", "532", "540", "596", "597")))
+
+tx_cover <- check_taxon_ids(con_wdl, allow = TAXON_LOCAL_ALLOW, halt = TRUE)
+
+tx_cover |>
+  datatable(caption = paste(
+    "Taxon authority coverage by dataset.",
+    "`n_local_key` counts taxa no authority resolved (all allowlisted, or this",
+    "chunk would have failed); `n_no_worms` is reported, not gated — WoRMS",
+    "legitimately lacks a few taxa, and an itis:-keyed bird is correctly keyed",
+    "either way. `n_no_rank_order` should be 0: it was every ITIS-keyed taxon",
+    "until the rank vocabulary moved out of a single ingest's connection into",
+    "calcofi4db::taxa_rank_reference()."))
+```
+
 ## Scan Manifests for Mismatches
 
 ```{r}

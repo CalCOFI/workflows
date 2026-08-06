@@ -180,19 +180,103 @@ cat(glue("bird_mammal_observation: {nrow(d_observation)} rows"), "\n")
 
 ## Resolve cruise_key + Spatial
 
+The source records a **survey label** (`CAC1987_05`), not a cruise, and carries no
+ship column — so `cruise_key` has to be recovered from where the observers
+actually were. Parsing year-month out of the label is not enough: it is ambiguous
+whenever several ships sailed in one month (1998-10 had four), and it is wrong
+outright for a survey straddling a month boundary (`CAC2014_01` ran 2014-01-29 →
+02-04 and belongs to `2014-02-3322`). See Q02.
+
+The observers ride a CalCOFI ship, so each transect sits on that day's station
+track. `match_cruise_by_track()` matches every transect to the nearest station
+occupied the same day, then takes the **majority vote per survey label** — one
+label is one cruise — and applies the winner to all of that label's transects.
+
+The reference track is the `swfsc_ichthyo` sample shard (already this notebook's
+declared dependency). That choice matters for referential integrity: its
+`cruise_key`s are exactly the `cruise` reference table's, so every key emitted
+here resolves. Tracks assembled from other shards include cruises absent from
+`cruise` (e.g. `2021-07-33P4`), which would ship a dangling FK.
+
 ```{r}
 #| label: spatial-cruise
 
-# cruise_key: best-effort YYYY-MM from cruise_label/date (no ship column -> Q02).
-# leave NULL for now; record format for the provider question.
-dbExecute(con, "ALTER TABLE bird_mammal_transect ADD COLUMN IF NOT EXISTS cruise_key VARCHAR")
-
 # geometry + grid from the transect midpoint
-load_prior_tables(con, parquet_dir = here("data/parquet/swfsc_ichthyo"),
+load_prior_tables(con, parquet_dir = cc_stage_path("parquet", "swfsc_ichthyo"),
                   tables = c("grid"), geom_tables = c("grid"), as_view = TRUE)
 add_point_geom(con, "bird_mammal_transect", lon_col = "longitude", lat_col = "latitude")
 assign_grid_key(con, "bird_mammal_transect") |> datatable(caption = "Grid assignment")
+
+# cruise track: one row per (cruise, day, station position). matched on `date`,
+# not datetime_start_utc, since the source timezone is unconfirmed (Q01) and the
+# observer is aboard for the whole day regardless.
+dbExecute(con, glue(
+  "CREATE OR REPLACE VIEW cruise_track AS
+   SELECT DISTINCT cruise_key, datetime, latitude, longitude
+   FROM read_parquet('{cc_stage_path('parquet','swfsc_ichthyo','sample.parquet')}')
+   WHERE cruise_key IS NOT NULL AND datetime IS NOT NULL"))
+
+cruise_match <- match_cruise_by_track(
+  con, "bird_mammal_transect", "cruise_track",
+  datetime_col     = "date",     lon_col = "longitude", lat_col = "latitude",
+  ref_datetime_col = "datetime",
+  group_col        = "cruise_label")
+
+cat(glue("cruise_key resolved on {cruise_match$matched}/{cruise_match$total} ",
+         "transects ({cruise_match$pct}%)"), "\n")
 ```
+
+```{r}
+#| label: cruise-match-review
+
+# surveys with no cruise sit at the top: they are the ones to eyeball, not the
+# 100%-unanimous majority
+cruise_match$groups |>
+  datatable(caption = "Survey label -> cruise_key (vote share; NULL = unresolved)",
+            rownames = FALSE, filter = "top") |>
+  formatPercentage("share", 1)
+```
+
+```{r}
+#| label: cruise-match-validate
+
+grp <- cruise_match$groups
+n_unresolved <- sum(is.na(grp$cruise_key))
+
+# a survey is one cruise on one ship, so two labels claiming the same cruise
+# would mean the vote collapsed two distinct surveys together
+dupe <- grp$cruise_key[!is.na(grp$cruise_key)]
+dupe <- dupe[duplicated(dupe)]
+
+stopifnot(
+  "cruise_key must resolve on >95% of transects" =
+    cruise_match$pct > 95,
+  "every survey label must resolve to a distinct cruise_key" =
+    length(dupe) == 0,
+  "resolved cruise_key must exist in the cruise reference (no dangling FK)" =
+    dbGetQuery(con, "
+      SELECT COUNT(*) FROM bird_mammal_transect t
+      WHERE t.cruise_key IS NOT NULL AND t.cruise_key NOT IN (
+        SELECT cruise_key FROM cruise_track)")[[1]] == 0)
+
+cat(glue(
+  "{nrow(grp) - n_unresolved}/{nrow(grp)} survey labels resolved; ",
+  "{n_unresolved} left NULL: ",
+  "{paste(grp$cruise_label[is.na(grp$cruise_key)], collapse=', ')}"), "\n")
+```
+
+The unresolved labels are correct as NULL, not gaps to be filled:
+
+- **`Fronts_0711`** (2011-06-21 → 07-16) is a CCE-LTER *Fronts* process cruise;
+  no CalCOFI cruise sailed in that window (2011-04 ended 04-27, the next began
+  07-27), so there is no CalCOFI cruise to point at.
+- **`CAC2021_7`** (2021-07-19 → 08-02) *did* ride a CalCOFI cruise —
+  `2021-07-33P4`, an exact date-range match — but that cruise is missing from the
+  `cruise` reference table, which is built from the ichthyo source alone.
+  Assigning it would ship a dangling FK. It resolves for free once `cruise`
+  covers every cruise the other datasets reference (workflows#75 — 296 of 987
+  referenced keys are missing, so that gap is worth closing on its own merits
+  rather than for this one survey).
 
 ## Load Dataset Metadata + Schema
 
@@ -283,6 +367,18 @@ tx_over  <- read_csv(here("metadata/taxon_override.csv"), show_col_types = FALSE
 # This projection lives here, in the notebook that owns the dataset, not in a
 # switch(dataset_key, ...) arm inside calcofi4db. The reusable SHAPE stays in the
 # package (sample_arm_self), so this is a declaration.
+
+# cross-reference: resolve each taxon against BOTH authorities (cached in
+# metadata/taxon_xref.csv, so a re-run costs no API calls). This fills the
+# `worms_id` COLUMN on itis:-keyed taxa without touching their key — a consumer
+# joining on worms_id used to match ZERO rows for every seabird and marine
+# mammal — backfills `itis_id` the other way, replaces an id its authority has
+# deprecated so the key is always an accepted id, and fetches the real
+# `taxonomic_status` with the date it was checked. Must precede the lineage
+# fetch, which should ask about the accepted id, not the deprecated one.
+ensure_taxon_xref(con, mt_taxon, tx_over,
+                  cache_csv = here("metadata/taxon_xref.csv"))
+
 # lineage: fetch each taxon's WoRMS/ITIS classification (cached in
 # metadata/taxon_lineage.csv, so a re-run costs no API calls) and stage it as the
 # `taxon` hierarchy build_taxon_reference() reads. Without it a crosswalk- or

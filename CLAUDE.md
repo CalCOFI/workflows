@@ -68,6 +68,22 @@ in exactly the loop it is meant to fix. Same trap for `c`, `df`, `data`. Use
 surfaces *after* `tar_invalidate()` has already succeeded, which makes it look
 like the target was reprocessed when nothing was rewritten.
 
+**…and `tidyselect::all_of(tgt)` does NOT work from inside an `Rscript`.**
+`targets` evaluates `names` in its own environment, not the caller's, so a loop
+that works when pasted into an interactive console fails from a script with
+``object 'tgt' not found`` — instantly, for every target. Ten "runs" completed in
+11 seconds and every notebook was untouched. **Substitute the value into the
+call** rather than passing the variable:
+
+```r
+for (tgt in tgts)
+  eval(bquote(targets::tar_make(names = tidyselect::all_of(.(tgt)))))
+```
+
+The failure mode is the same each time and is what makes this family of bugs
+expensive: the loop reports success and rewrites nothing. Always confirm against
+`_output/*.html` mtimes, never against exit codes or a hash comparison.
+
 There is no test suite or linter in this repo; correctness is enforced by the
 `/validate-ingest` checks and the validation chunks inside `release_database.qmd`.
 `release_database.qmd` promotes `latest.txt` only after `test_release.qmd`'s
@@ -320,6 +336,67 @@ parent closure when trimming a shard. `ncbi_id`/`inat_id` stay declared-but-NULL
 no source supplies them, and dropping the columns would change the release schema
 under consumers.
 
+**The key authority and the id columns are different questions — call
+`ensure_taxon_xref()` before the lineage fetch.** Birds key `itis:` because WoRMS
+bird taxonomy lags (it still says *Oceanodroma*, *Puffinus*, *Phalacrocorax*), and
+that rule is right. But nothing populated the `worms_id` **column** for them, so a
+consumer joining on `worms_id` matched **zero rows for every seabird and marine
+mammal** — 59,858 of the Farallon census's 64,956 `obs` rows, 92.2% of the
+dataset, with no error anywhere.
+`ensure_taxon_xref(con, mt_taxon, tx_over, cache_csv = here("metadata/taxon_xref.csv"))`
+crosswalks TSN→AphiaID with `worrms::wm_record_by_external(type = "tsn")` — an
+**exact id crosswalk, not a name match** (91 of the 92 Farallon bird TSNs resolve
+through it) — backfills `itis_id` the other way via `wm_external()`, and falls
+back to `wm_records_name()` on `clean_taxon_name()` output for taxa carrying
+neither id. Three things to keep straight:
+- **A key must be an *accepted* id; a cross-reference is whatever the authority
+  links.** A deprecated ITIS TSN is re-keyed (`itis:174553` *Puffinus griseus* →
+  `itis:1255050` *Ardenna grisea*) and the event lands in the append-only
+  `taxon.notes`; the TSN `wm_external()` returns for an AphiaID is stored verbatim.
+- **`clean_taxon_name()` output is the lookup query, never `ds_taxa_code`.** For
+  `sio_mesopelagic-fish` the local code *is* the verbatim spreadsheet header
+  (`Bathophilus sp.`) and is the join key from `obs` — rewriting it orphans every
+  observation of that taxon.
+- **`taxonomic_status` was fabricated.** It was the literal string `"accepted"`
+  stamped by `ensure_taxon_lineage()` onto all 2,090 taxa, including 28 whose ITIS
+  TSN is demonstrably deprecated. It is now fetched, and carries `status_checked` —
+  read the two together, a status with no check date is not a fact.
+
+`release_database.qmd`'s `taxon_authority_coverage` chunk gates this:
+`check_taxon_ids()` **fails the release** on a dataset-local `taxon_key` that is
+not in its explicit allowlist, so the 18 genuinely non-taxonomic classes (zooscan
+eggs/multiples/nauplii/others, phyto "other"/"undefined code") are declared one
+key at a time and a new unresolved taxon cannot hide among them.
+
+**Lineage ancestors are first-class taxa, and rank ordering is not one dataset's
+job.** Two gaps that looked unrelated turned out to share a cause — a taxon was
+treated as second-class because of *how it entered the release* rather than what
+it is:
+- `rank_order` came from a `taxa_rank` table built by an inline vector inside
+  `build_taxon_hierarchy()`, which only `swfsc_ichthyo` calls. It existed in that
+  one connection and nowhere else, so **100% of ITIS-keyed taxa** and 252
+  WoRMS-keyed ones released with the column NULL. It is now
+  `calcofi4db::taxa_rank_reference()` — the single vocabulary, covering both
+  authorities' rank sets (including `Section`/`Subsection`, which WoRMS nests
+  *below* Infraorder for decapods, not between order and family as in botany).
+- `.lineage_flat()` emitted one row per *requested* id, so an ancestor arrived
+  with a key, a name, a rank and no classification — 430 of ichthyo's taxa at or
+  below family rank had neither `family` nor `kingdom`, in both authorities
+  alike. It now emits one row per distinct taxon, deriving each node's
+  classification from its own ancestors-or-self. No API call: the chains already
+  contain them.
+
+When asserting coverage, **split by rank position**. `family` is legitimately
+NULL above family rank (a phylum has no family) and `kingdom` is NULL for
+`worms:1` Biota (rank Superdomain, above Kingdom). A blanket non-NULL assertion
+is wrong and will be "fixed" by someone inventing data.
+
+Ancestor ids are topped up by `ensure_taxon_lineage()`, not `ensure_taxon_xref()`
+— the xref step must run *first* (so the lineage fetch asks about the accepted
+id) and therefore only ever sees the dataset's own vocabulary. `.apply_xref()`
+takes `rekey = FALSE` there: an ancestor's key comes from the chain it was
+fetched in, so its ids may be filled but never replaced.
+
 - **Namespaced keys**: every `sample_key` is `dataset_key:sample_type:id` (globally
   unique across datasets *and* event levels; makes the DIC→bottle dedup fall out).
   `obs.sample_key` FKs into `sample`; `grid_key`/`cruise_key` stay **denormalized**
@@ -346,8 +423,9 @@ under consumers.
 | `dataset_status.csv` | Pipeline-stage tracker, one row per dataset; each skill writes its stage column. |
 | `relationships_cross.csv` | Cross-dataset FKs (intra-dataset FKs live in each ingest's `relationships.json`). |
 | `measurement_taxon.csv` | Decomposes a taxon-bearing `measurement_type` name (`sardine_eggs`, `phyllosoma_stage_3`) into (taxon, canonical type, `life_stage`, `bin_value`, target grain). **Stage it with `ensure_measurement_taxon()`, never `dbWriteTable()`** — the CSV has no `taxon_key` column, so a raw write makes every `mx.taxon_key` reference a binder error, and hand-rolling `'worms:' \|\| worms_id` mis-keys ITIS-resolved taxa. Filter it to the emitting `dataset_key`. |
-| `taxon_override.csv` | Manual id resolution for source taxa with no clean id (phyto functional groups, marine mammals), matched on a named source column. |
+| `taxon_override.csv` | Manual id resolution for source taxa with no clean id (phyto functional groups, marine mammals, "(species group)" codes), matched on the source column named in its own `match_column`. **Generic since calcofi4db 3.6.0** — every arm consults it, and a row naming an unknown `dataset_key` or a `match_column` the source does not expose now **errors**. Before that, `match_column` was never read anywhere in `R/` and only 2 of 7 arms consulted the file, so a row for any other dataset was parsed and silently dropped. |
 | `taxon_lineage.csv` | **Generated cache** of WoRMS/ITIS classification chains, one row per (requested taxon, ancestor-or-self). Written by `ensure_taxon_lineage()`; safe to delete (it refetches, slowly). Not hand-maintained. |
+| `taxon_xref.csv` | **Generated cache** of the WoRMS↔ITIS cross-reference, one row per (`query_type`, `query_value`). Written by `ensure_taxon_xref()`, which must run *before* `ensure_taxon_lineage()`. Fills `worms_id` on `itis:`-keyed taxa and `itis_id` on `worms:`-keyed ones, re-keys onto the authority-accepted id, and fetches the real `taxonomic_status` + `status_checked`. `notes` is append-only. Safe to delete; `scripts/warm_taxon_xref.R` repopulates it. |
 | `metadata/{provider}/{dataset}/` | Per-dataset `tbls_redefine.csv`, `flds_redefine.csv`, `questions.csv`, corrections, etc. |
 | `metadata/{provider}/{dataset}/questions.csv` | **Provider-question registry** — 17 files, one per dataset. Read with `calcofi4db::read_questions()` and render with `questions_datatable()`; never a bare `read_csv()` + hand-written `factor(priority, …)` (see below). |
 

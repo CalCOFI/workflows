@@ -41,16 +41,17 @@ Collection (PI: Rasmus Swalethorp, Ed Weber, Linsey Sala).
 
 - **Provider**: `pic`
 - **Grain**: one row per zooplankton net tow (sample metadata only)
-- **Scope decision**: ingest tows within the **CalCOFI region** bounding box
-  (~23–51°N, −135→−117°W incl. Baja); this also drops the antimeridian
-  coordinate errors (Q04).
+- **Scope decision**: ingest **CalCOFI-program tows only**, selected by
+  `Expedition_Type_pnt == "CalCOFI"` (Q02). This replaced a CalCOFI-region
+  *bounding box*, which was a proxy for the program and was wrong in both
+  directions — see below.
 - **Biovolume is NOT in this file** — only the tow/sample registry is built here
   as `zooplankton_tow`; the biovolume measurement table is pending from the
   provider (blocker Q01) and will be added as `zooplankton_measurement`.
 
 ```{mermaid}
 graph LR
-  A[PNTtable.csv<br/>148,129 tows] --> B[filter CalCOFI bbox]
+  A[PNTtable.csv<br/>148,129 tows] --> B[filter Expedition_Type = CalCOFI]
   B --> C[zooplankton_tow<br/>position + gear + keys]
   C -.ship/cruise/grid.-> D[(shared refs)]
   C -.biovolume pending.-> E[zooplankton_measurement]
@@ -118,12 +119,38 @@ d_raw <- read_csv(zoo_csv, col_types = cols(.default = "c"))  # read all as text
 cat(glue("Read {format(nrow(d_raw), big.mark=',')} tows, {ncol(d_raw)} columns"), "\n")
 ```
 
-## Clean, Type-Cast, and Filter to CalCOFI Region
+## Clean, Type-Cast, and Filter to CalCOFI Cruises
 
-Canonical names from `metadata/field_dictionary.csv`. Tows are filtered to the
-CalCOFI bounding box (the scope decision); this also excludes the |lon|>180
-coordinate errors (Q04). Datetimes are built from date (MM/DD/YYYY) + HHMM time
-(treated as given pending the timezone answer, Q03).
+Canonical names from `metadata/field_dictionary.csv`. Datetimes are built from
+date (MM/DD/YYYY) + HHMM time (treated as given pending the timezone answer,
+Q03).
+
+The scope filter is the **program**, `Expedition_Type_pnt == "CalCOFI"`, not a
+CalCOFI-region bounding box. The flag is trustworthy: it agrees with `"CALCOFI"`
+appearing in `EXPEDITION_pnt` on all 148,129 source rows, with zero disagreement
+either way.
+
+The bounding box it replaces was a proxy for the program, and it was wrong in
+both directions:
+
+| | tows | resolve to a CalCOFI cruise |
+|---|---:|---:|
+| in bbox, **not** CalCOFI — now dropped | 32,719 | 35.5% |
+| CalCOFI, **outside** bbox — now restored | 15,532 | 83.2% |
+| CalCOFI and in bbox — kept either way | 66,811 | 81.8% |
+
+The 15,532 restored tows are not coordinate errors — the CalCOFI subset contains
+**zero** missing, impossible or `NaN` coordinates, so Q04's antimeridian problem
+lives entirely in the non-CalCOFI holdings. They are the historical grid: 1950s–80s
+inshore stations, the Gulf of California, and the Baja lines down to 19.9°N. That
+they resolve to a CalCOFI cruise *more* often than the average tow (83.2%) is the
+evidence they belong.
+
+The dropped tows (CWPA Squid Survey, RACER, SOSO, Huntington Beach, CCE-LTER
+process cruises …) matter more than their count suggests: 11,613 of them carried a
+`cruise_key`, but that key is derived from ship + year-month, so a non-CalCOFI
+cruise sharing a vessel and month with a real CalCOFI cruise was being stamped with
+it. Dropping them removes false attributions, not just out-of-scope rows.
 
 ```{r}
 #| label: clean-filter
@@ -160,21 +187,37 @@ d_clean <- d_raw |>
     preservative    = PRESERVATIVE_pnt)
 
 n_all <- nrow(d_clean)
-# scope filter: CalCOFI region bounding box (incl. Baja); drops global + bad coords
+# scope filter: the CalCOFI program (Q02), not a region. the coordinate guard is
+# a validity check only -- it rejects impossible/NaN positions (Q04) rather than
+# clipping the historical grid to the modern one.
 d_cc <- d_clean |>
+  filter(expedition_type == "CalCOFI") |>
   filter(!is.na(latitude), !is.na(longitude),
-         latitude  >= 23, latitude  <= 51,
-         longitude >= -135, longitude <= -117) |>
+         !is.nan(latitude), !is.nan(longitude),
+         abs(latitude) <= 90, abs(longitude) <= 180) |>
   mutate(
     site_key = if_else(
       is.na(line) | is.na(station), NA_character_,
       sprintf("%05.1f %05.1f", line, station)),
     tow_id = row_number())
 
+n_cc     <- sum(d_clean$expedition_type == "CalCOFI", na.rm = TRUE)
+n_badpos <- n_cc - nrow(d_cc)
 cat(glue(
-  "CalCOFI-region filter: {format(nrow(d_cc), big.mark=',')}/",
-  "{format(n_all, big.mark=',')} tows retained ",
-  "({round(100*nrow(d_cc)/n_all, 1)}%)"), "\n")
+  "CalCOFI-program filter: {format(n_cc, big.mark=',')}/",
+  "{format(n_all, big.mark=',')} tows are CalCOFI ",
+  "({round(100*n_cc/n_all, 1)}%); ",
+  "{n_badpos} dropped for an invalid position; ",
+  "{format(nrow(d_cc), big.mark=',')} retained"), "\n")
+
+# the program flag must agree with the expedition name, or the scope is not what
+# it claims -- this is the assumption the whole filter rests on
+disagree <- d_clean |>
+  filter(xor(coalesce(expedition_type, "") == "CalCOFI",
+             str_detect(coalesce(expedition, ""), regex("calcofi", ignore_case = TRUE))))
+stopifnot(
+  "Expedition_Type must agree with CALCOFI in the expedition name" = nrow(disagree) == 0,
+  "CalCOFI subset must have no invalid positions (Q04 is non-CalCOFI only)" = n_badpos == 0)
 
 dbWriteTable(con, "zooplankton_tow", d_cc, overwrite = TRUE)
 ```

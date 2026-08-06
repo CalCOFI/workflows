@@ -66,13 +66,15 @@ taxon,scientific_name,Scientific Name,,Accepted scientific name.
 taxon,common_name,Common Name,,Common name where one is recorded.
 taxon,rank,Rank,,Taxonomic rank.
 taxon,rank_order,Rank Order,,Ordinal for sorting ranks from kingdom down.
-taxon,taxonomic_status,Taxonomic Status,,"WoRMS status (accepted, unaccepted, ...)."
+taxon,taxonomic_status,Taxonomic Status,,"Status as fetched from the keying authority (accepted, unaccepted, superseded combination, ...). Read it with `status_checked` — before v2026.08.05 this column was the literal string ""accepted"" on every row, stamped rather than fetched."
+taxon,status_checked,Status Checked,,"Date `taxonomic_status` was last confirmed against the authority. A status with no check date is not a fact."
 taxon,parent_taxon_key,Parent Taxon Key,,Lineage parent; walk this to expand a taxon to its descendants.
 taxon,kingdom,Kingdom,,Kingdom.
 taxon,phylum,Phylum,,Phylum.
 taxon,class,Class,,Class.
 taxon,order_taxon,Order,,Order (named `order_taxon` because `order` is a SQL keyword).
 taxon,family,Family,,Family.
+taxon,notes,Notes,,"Append-only provenance log, one datestamped line per entry: how each id was resolved and any re-key onto an authority-accepted id (e.g. `itis:174553` Puffinus griseus -> `itis:1255050` Ardenna grisea). The dataset's own original code and name stay in `dataset_taxon`."
 dataset_taxon,,Dataset Taxon,,"Crosswalk from each dataset's own taxon vocabulary to the global `taxon_key`. `obs` resolves its taxon by joining this on (`dataset_key`, `ds_taxa_code`), so a dataset can keep its local codes without leaking them into the shared model."
 dataset_taxon,ds_taxon_key,Dataset Taxon Key,,"Key of this crosswalk row, `<dataset-or-known-list>:<local code>`."
 dataset_taxon,dataset_key,Dataset Key,,The dataset whose vocabulary this row belongs to.

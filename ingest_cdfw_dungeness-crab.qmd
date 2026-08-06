@@ -624,6 +624,18 @@ stopifnot("crosswalk must cover all four raw count labels" =
                        "zoea_cancer", "zoea_other")))
 # taxa references — generic helpers, driven by the crosswalk rather than by a
 # per-dataset vocabulary table
+
+# cross-reference: resolve each taxon against BOTH authorities (cached in
+# metadata/taxon_xref.csv, so a re-run costs no API calls). This fills the
+# `worms_id` COLUMN on itis:-keyed taxa without touching their key — a consumer
+# joining on worms_id used to match ZERO rows for every seabird and marine
+# mammal — backfills `itis_id` the other way, replaces an id its authority has
+# deprecated so the key is always an accepted id, and fetches the real
+# `taxonomic_status` with the date it was checked. Must precede the lineage
+# fetch, which should ask about the accepted id, not the deprecated one.
+ensure_taxon_xref(con, mt_taxon, tx_over,
+                  cache_csv = here("metadata/taxon_xref.csv"))
+
 # lineage: fetch each taxon's WoRMS/ITIS classification (cached in
 # metadata/taxon_lineage.csv, so a re-run costs no API calls) and stage it as the
 # `taxon` hierarchy build_taxon_reference() reads. Without it a crosswalk- or
@@ -998,8 +1010,14 @@ nullable <- tribble(
   # `rank`/classification are no longer on this list: the lineage fetch fills them.
   "taxon",                 "ncbi_id",           17L,  "never populated by ANY dataset — the column exists, nothing fills it",
   "taxon",                 "inat_id",           17L,  "never populated by ANY dataset",
-  "taxon",                 "itis_id",           17L,  "WoRMS could supply a cross-authority id; the lineage fetch does not ask for one",
-  "taxon",                 "gbif_id",           17L,  "as itis_id",
+  # 17 -> 15 -> 6. Nothing asked WoRMS for a cross-authority id at all; then
+  # ensure_taxon_xref() asked for this dataset's own taxa; then (calcofi4db
+  # 3.8.0) ensure_taxon_lineage() started topping the cross-reference up for the
+  # lineage ANCESTORS it discovers, which the xref step runs too early to see.
+  # The 6 that remain are taxa WoRMS links no TSN for — mostly the ranks ITIS
+  # does not share (Section, Subsection, Superclass).
+  "taxon",                 "itis_id",           6L,   "WoRMS links no ITIS TSN for these — ranks ITIS does not carry (Section/Subsection) or unmatched nodes",
+  "taxon",                 "gbif_id",           17L,  "nothing asks GBIF — unlike itis_id, there is no GBIF crosswalk in the xref",
   "taxon",                 "parent_taxon_key",  1L,   "the root of the lineage (Biota) has no parent — 0 dangling parents below it")
 
 nulls <- results$checks |>

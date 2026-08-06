@@ -664,6 +664,18 @@ tx_over  <- read_csv(here("metadata/taxon_override.csv"), show_col_types = FALSE
 # This projection lives here, in the notebook that owns the dataset, not in a
 # switch(dataset_key, ...) arm inside calcofi4db. The reusable SHAPES stay in the
 # package (sample_arm_self / compat_measurement_sql), so this is a declaration.
+
+# cross-reference: resolve each taxon against BOTH authorities (cached in
+# metadata/taxon_xref.csv, so a re-run costs no API calls). This fills the
+# `worms_id` COLUMN on itis:-keyed taxa without touching their key — a consumer
+# joining on worms_id used to match ZERO rows for every seabird and marine
+# mammal — backfills `itis_id` the other way, replaces an id its authority has
+# deprecated so the key is always an accepted id, and fetches the real
+# `taxonomic_status` with the date it was checked. Must precede the lineage
+# fetch, which should ask about the accepted id, not the deprecated one.
+ensure_taxon_xref(con, mt_taxon, tx_over,
+                  cache_csv = here("metadata/taxon_xref.csv"))
+
 # lineage: fetch each taxon's WoRMS/ITIS classification (cached in
 # metadata/taxon_lineage.csv, so a re-run costs no API calls) and stage it as the
 # `taxon` hierarchy build_taxon_reference() reads. Without it a crosswalk- or
