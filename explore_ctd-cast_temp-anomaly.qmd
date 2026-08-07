@@ -1,0 +1,372 @@
+---
+title: "Summer CTD temperature anomalies, 1993–2026"
+subtitle: "Worked example: pulling CalCOFI CTD temperature from R and differencing it against a 1993–2013 baseline"
+author: "Ben Best (EcoQuants) for Rasmus Swalethorp (SIO)"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: false
+    df-print: paged
+execute:
+  warning: false
+  message: false
+editor_options:
+  chunk_output_type: console
+---
+
+## Why this notebook
+
+Rasmus asked, for CCIEA:
+
+> I am hoping to try and connect to your database via R and extract all the
+> summer cruise temperature data to generate some anomaly plots using **1993–2013
+> as the baseline** (or 1998–2013 if you are still working on getting the older
+> data ingested).
+
+**1993–2013 is now available.** Until the August 2026 release, the 1 m-binned CTD
+record jumped straight from **1998 to 2003** — calcofi.org publishes *Final*
+1 m-binned products for 1998 and for 2003 onward, and only raw cast files before
+that. Jim Wilkinson's archive filled the gap: 45 cruises covering **1993-08
+through 2002** are now in the database, so a 1993–2013 baseline means what it
+says instead of quietly meaning "1998, plus 2003–2013".
+
+This notebook is meant to be **copied and edited**, not just read. Every step
+runs against the public release with no credentials, and the transect,
+climatology and anomaly functions are exported from `calcofi4r` so nothing here
+is bespoke to this document.
+
+## Setup
+
+`cc_get_db()` opens a read-only DuckDB connection to the current public release
+and caches it locally on first use. Nothing is downloaded twice.
+
+```{r}
+#| label: setup
+
+librarian::shelf(
+  calcofi4r, dplyr, DT, ggplot2, glue, purrr, scales, stringr, tidyr,
+  quiet = TRUE)
+
+# `version = "latest"` resolves the promoted release; pin a version string here
+# to freeze an analysis against one snapshot.
+con <- cc_get_db()
+
+# which release "latest" resolved to, stated so a rerun is comparable
+release <- readLines(
+  "https://storage.googleapis.com/calcofi-db/ducklake/releases/latest.txt",
+  warn = FALSE) |> trimws()
+
+cat(glue("release: {release}\n",
+         "tables : {length(DBI::dbListTables(con))}\n"))
+```
+
+### Two knobs, stated once
+
+Everything downstream reads these. They are deliberately at the top rather than
+buried in a call, because the choice of baseline is the single assumption a
+reader of an anomaly plot most needs to see.
+
+```{r}
+#| label: knobs
+
+BASELINE   <- c(1993, 2013)   # inclusive
+SUMMER     <- 7:8             # CalCOFI's summer occupation runs Jul–Aug
+LINE       <- 93.3            # the line off San Diego; every core line works
+VAR        <- "temperature_ave"
+DEPTH_MAX  <- 500
+MIN_N      <- 3               # baseline cells thinner than this are dropped
+```
+
+## What "summer" covers
+
+CalCOFI occupies the grid roughly quarterly. Before treating a month filter as
+"summer", look at what is actually there — the pattern is not uniform across
+three decades, and a couple of years have no summer occupation at all.
+
+```{r}
+#| label: cruise-inventory
+
+cruises <- tbl(con, "sample") |>
+  filter(dataset_key == "calcofi_ctd-cast", sample_type == "cast") |>
+  mutate(yr = as.integer(strftime(datetime, "%Y")),
+         mo = as.integer(strftime(datetime, "%m"))) |>
+  count(cruise_key, yr, mo, data_stage, name = "n_casts") |>
+  collect() |>
+  arrange(desc(cruise_key))
+
+summer <- cruises |> filter(mo %in% SUMMER)
+
+cat(glue(
+  "{nrow(cruises)} CTD cruises, {min(cruises$yr)}–{max(cruises$yr)}\n",
+  "{nrow(summer)} of them in months {paste(SUMMER, collapse = '/')} ",
+  "({length(unique(summer$yr))} distinct years)\n",
+  "baseline window {BASELINE[1]}–{BASELINE[2]}: ",
+  "{sum(summer$yr >= BASELINE[1] & summer$yr <= BASELINE[2])} summer cruises\n"))
+```
+
+```{r}
+#| label: summer-gaps
+
+yrs_all    <- seq(min(summer$yr), max(summer$yr))
+yrs_missed <- setdiff(yrs_all, summer$yr)
+
+cat(if (length(yrs_missed))
+      glue("years with NO summer CTD occupation: ",
+           "{paste(yrs_missed, collapse = ', ')}\n")
+    else "every year in range has a summer occupation\n")
+```
+
+### Processing stage matters for the most recent cruises
+
+The database records which CTD product each cruise came from, and the two
+preliminary tiers are not interchangeable. A **`preliminary_without_bottle`**
+cruise has not been through the bottle merge, so its bottle-corrected salinity,
+oxygen and chlorophyll *do not exist* — but its **temperature is unaffected**,
+because temperature is not bottle-corrected. That is what makes temperature the
+right variable to run on the newest data.
+
+```{r}
+#| label: stage-table
+
+summer |>
+  count(data_stage, name = "n_cruises") |>
+  arrange(desc(n_cruises)) |>
+  datatable(
+    rownames = FALSE,
+    caption  = "Processing stage of summer CTD cruises",
+    options  = list(dom = "t", pageLength = 10))
+```
+
+## The one-cruise case: a section and its anomaly
+
+Start with a single line and cruise, since everything larger is this repeated.
+Five `calcofi4r` calls, no SQL:
+
+```{r}
+#| label: one-section
+
+cruise_recent <- summer |> filter(yr == max(yr)) |> slice(1) |> pull(cruise_key)
+
+sta <- cc_transect_stations(con, LINE, cruise_recent)
+sec <- cc_transect_section(
+  con, LINE, cruise_recent, variables = VAR, depth_max = DEPTH_MAX)
+
+clim <- cc_climatology(
+  con, variables = VAR, years = BASELINE, depth_max = DEPTH_MAX, min_n = MIN_N)
+
+anom <- cc_anomaly(sec, clim, sta)
+
+cat(glue(
+  "cruise {cruise_recent}: {nrow(sta)} stations, {nrow(sec)} binned values\n",
+  "baseline: {nrow(clim)} (station, depth, month) cells\n",
+  "{round(100 * mean(!is.na(anom$anomaly)))}% of this section has a baseline\n"))
+```
+
+```{r}
+#| label: fig-section-anomaly
+#| fig-height: 4.5
+#| fig-cap: !expr glue("Temperature anomaly on line {LINE}, cruise {cruise_recent}, relative to the {BASELINE[1]}–{BASELINE[2]} mean for the same station, depth and calendar month.")
+
+# The diverging scale is pinned so zero is the neutral colour. Left to autoscale,
+# a uniformly warm section would paint its least-warm part blue.
+lim <- max(abs(anom$anomaly), na.rm = TRUE)
+
+ggplot(anom, aes(dist_km, depth_m, fill = anomaly)) +
+  geom_raster(interpolate = TRUE) +
+  scale_fill_gradient2(
+    low = "#0d366b", mid = "#f0efec", high = "#7d1b28",
+    midpoint = 0, limits = c(-lim, lim), na.value = "transparent",
+    name = "Δ °C") +
+  scale_y_reverse(expand = c(0, 0)) +
+  scale_x_continuous(expand = c(0, 0)) +
+  labs(x = "Distance offshore (km)", y = "Depth (m)",
+       title = glue("Line {LINE} · {cruise_recent} · temperature anomaly")) +
+  theme_minimal(base_size = 11)
+```
+
+## All summer cruises: an upper-ocean anomaly time series
+
+The headline CCIEA-style figure. Rather than sectioning every cruise, difference
+**every summer observation** against the same baseline and average over the upper
+ocean, so each year contributes one number per depth layer.
+
+Two choices worth stating:
+
+- **Average the anomalies, not the values.** Averaging temperatures first and
+  differencing after would let a year that sampled more nearshore stations look
+  cold purely from where it sampled. Differencing per station and depth removes
+  the station's own climate before any averaging happens.
+- **Only cells with a real baseline count.** A station newly added to the grid has
+  no 1993–2013 history, and treating its absence as zero would drag every mean
+  toward zero by an amount nobody can see.
+
+```{r}
+#| label: summer-anomaly-series
+
+# every summer observation, binned exactly as the climatology is
+obs_summer <- tbl(con, "obs") |>
+  filter(
+    dataset_key      == "calcofi_ctd-cast",
+    measurement_type == VAR,
+    !is.na(measurement_value), !is.na(depth_min_m), !is.na(datetime),
+    depth_min_m      <= DEPTH_MAX) |>
+  mutate(
+    yr  = as.integer(strftime(datetime, "%Y")),
+    mon = as.integer(strftime(datetime, "%m"))) |>
+  filter(mon %in% SUMMER) |>
+  mutate(depth_m = round(depth_min_m / 5) * 5) |>
+  select(grid_key, cruise_key, yr, mon, depth_m,
+         variable = measurement_type, value = measurement_value) |>
+  collect()
+
+anom_summer <- obs_summer |>
+  inner_join(clim, by = c("grid_key", "mon" = "month", "depth_m", "variable")) |>
+  mutate(anomaly = value - clim_mean)
+
+cat(glue(
+  "{nrow(obs_summer)} summer observations; ",
+  "{nrow(anom_summer)} ({round(100*nrow(anom_summer)/nrow(obs_summer))}%) ",
+  "have a {BASELINE[1]}–{BASELINE[2]} baseline\n"))
+```
+
+```{r}
+#| label: fig-anomaly-series
+#| fig-height: 4
+#| fig-cap: !expr glue("Summer (month {paste(SUMMER, collapse='/')}) temperature anomaly by year and depth layer, relative to the {BASELINE[1]}–{BASELINE[2]} mean for each station, depth and calendar month. Grey band marks the baseline window.")
+
+layers <- tribble(
+  ~layer,          ~lo, ~hi,
+  "0–50 m",     0,  50,
+  "50–100 m",  50, 100,
+  "100–200 m", 100, 200,
+  "200–500 m", 200, 500)
+
+series <- anom_summer |>
+  mutate(layer = cut(depth_m, c(-1, 50, 100, 200, 500),
+                     labels = layers$layer)) |>
+  filter(!is.na(layer)) |>
+  summarize(anomaly = mean(anomaly), n = n(), .by = c(yr, layer))
+
+ggplot(series, aes(yr, anomaly, colour = layer)) +
+  annotate("rect", xmin = BASELINE[1] - .5, xmax = BASELINE[2] + .5,
+           ymin = -Inf, ymax = Inf, fill = "grey70", alpha = .16) +
+  geom_hline(yintercept = 0, linewidth = .4, colour = "grey40") +
+  geom_line(linewidth = .7) +
+  geom_point(size = 1.6) +
+  scale_colour_manual(values = c("#e34948", "#3987e5", "#256abf", "#0d366b"),
+                      name = NULL) +
+  scale_x_continuous(breaks = scales::pretty_breaks(8)) +
+  labs(x = NULL, y = "Temperature anomaly (°C)",
+       title = glue("CalCOFI summer CTD temperature anomaly, ",
+                    "{BASELINE[1]}–{BASELINE[2]} baseline")) +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom")
+```
+
+```{r}
+#| label: series-table
+
+series |>
+  mutate(anomaly = round(anomaly, 2)) |>
+  pivot_wider(id_cols = yr, names_from = layer, values_from = anomaly) |>
+  arrange(desc(yr)) |>
+  datatable(
+    rownames = FALSE,
+    caption  = glue("Summer temperature anomaly (°C) by depth layer, ",
+                    "{BASELINE[1]}–{BASELINE[2]} baseline"),
+    options  = list(pageLength = 15, dom = "tip"))
+```
+
+## Reading it honestly
+
+Four caveats that belong beside any use of these numbers.
+
+**The baseline is 21 years, not a 30-year WMO normal.** CalCOFI's 1 m-binned CTD
+record does not reach back far enough for one without splicing in ship
+hydrocast data of a different vintage. 1993–2013 does span both the 1997–98
+El Niño and the 1998–99 La Niña, and it ends before the 2014–16 marine heatwave —
+so the heatwave and everything since read as departures rather than being folded
+into the normal.
+
+**Coverage is not constant.** Line 93.3 has not been sampled past station 90 since
+January 2025, though 113 of the 130 cruises before that reached station 120. A
+spatial mean over "the line" therefore covers different ocean in different years.
+The per-station differencing above removes each station's own climate, which is
+most of the problem — but a year that skipped the offshore stations still has no
+offshore signal in it.
+
+**Some cells have no baseline.** They are dropped, not zero-filled; the percentage
+retained is printed above so you can see how much was dropped rather than
+inferring it.
+
+**Preliminary cruises are fine for temperature and not for the corrected series.**
+Temperature is not bottle-corrected, so `preliminary_without_bottle` cruises carry
+the same temperature they always will. Salinity, oxygen and chlorophyll on those
+cruises are a different matter — the corrected forms do not exist yet, and the
+uncorrected sensor series (`salinity_1`, `oxygen_ml_l_1`) are what is available.
+
+## Doing this for another line, variable or baseline
+
+Everything above is parameterised. To rerun for a different line, change `LINE`;
+for a different baseline, change `BASELINE` — including to `c(1998, 2013)` if you
+want to compare against what would have been possible before the backfill.
+
+```{r}
+#| label: sensitivity-1998
+
+clim_98 <- cc_climatology(
+  con, variables = VAR, years = c(1998, 2013),
+  depth_max = DEPTH_MAX, min_n = MIN_N)
+
+cmp <- anom_summer |>
+  select(grid_key, mon, depth_m, variable, yr, value) |>
+  inner_join(clim_98, by = c("grid_key", "mon" = "month", "depth_m", "variable"),
+             suffix = c("", "_98")) |>
+  mutate(anomaly_98 = value - clim_mean) |>
+  filter(depth_m <= 50) |>
+  summarize(anomaly_98 = mean(anomaly_98), .by = yr)
+
+comparison <- series |>
+  filter(layer == "0–50 m") |>
+  select(yr, anomaly_9313 = anomaly) |>
+  inner_join(cmp, by = "yr") |>
+  mutate(difference = round(anomaly_9313 - anomaly_98, 3))
+
+cat(glue(
+  "0–50 m summer anomaly, 1993–2013 vs 1998–2013 baseline:\n",
+  "  median absolute difference {round(median(abs(comparison$difference)), 3)} °C\n",
+  "  maximum                    {round(max(abs(comparison$difference)), 3)} °C\n"))
+```
+
+```{r}
+#| label: sensitivity-table
+
+comparison |>
+  mutate(across(c(anomaly_9313, anomaly_98), \(x) round(x, 2))) |>
+  arrange(desc(yr)) |>
+  datatable(
+    rownames  = FALSE,
+    colnames  = c("Year", "1993–2013", "1998–2013", "Difference"),
+    caption   = "Sensitivity of the 0–50 m summer anomaly to the baseline window",
+    options   = list(pageLength = 12, dom = "tip"))
+```
+
+## Where the definitions live
+
+Nothing in this notebook is private to it:
+
+| What | Where |
+|---|---|
+| `cc_get_db()`, `cc_transect_*()`, `cc_climatology()`, `cc_anomaly()` | [`calcofi4r/R/transect.R`](https://github.com/CalCOFI/calcofi4r/blob/main/R/transect.R) |
+| The same climatology in SQL, for the static app | [`ctd-transects/scripts/build_sections.sql`](https://github.com/CalCOFI/ctd-transects/blob/main/scripts/build_sections.sql) |
+| How the CTD data is ingested | [`ingest_calcofi_ctd-cast.qmd`](https://calcofi.io/workflows/ingest_calcofi_ctd-cast.html) |
+| Interactive sections and anomalies | [calcofi.io/ctd-transects](https://calcofi.io/ctd-transects/) |
+| Table and column reference | [calcofi.io/schema](https://calcofi.io/schema/) |
+
+```{r}
+#| label: cleanup
+#| include: false
+
+DBI::dbDisconnect(con, shutdown = TRUE)
+```
