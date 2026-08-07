@@ -1881,6 +1881,54 @@ dbExecute(
     AND r.datetime_start_utc = c.datetime_start_utc"
 )
 
+# --- repair TempAve, which the SOURCE averaged with its own missing marker ----
+#
+# The source ships a pre-computed TempAve. Where only one temperature sensor was
+# fitted it averaged the good sensor with the -99 missing marker:
+#
+#   Depth 3.0 | Temp1 20.8951 | Temp2 -99.0 | TempAve -39.0525
+#
+# and (20.8951 + -99)/2 = -39.0525 exactly — verified on 29,596 of 29,596 such
+# rows in 9308NH, the first cruise of the Technical Group archive.
+#
+# NEITHER existing guard can catch this, and it is worth being precise about why:
+# the `= -99` DELETE below is applied to every cruise uniformly, but by this point
+# the sentinel has been ARITHMETICALLY ABSORBED — the value is -39.05, not -99.
+# The isfinite/isnan guard misses it for the same reason: -39.05 is a perfectly
+# finite double. A sentinel that has been averaged is invisible to any test for
+# the sentinel.
+#
+# Recompute rather than discard: every poisoned row in 9308NH has a valid Temp1
+# beside it (4.8-22.1 degC), so range-filtering alone would throw away that
+# cruise's ENTIRE temperature record — 29,596 rows — while recomputing recovers
+# all of it. This is what the column already means; the source simply did not
+# handle a missing sensor.
+n_tav_bad <- dbGetQuery(con, "
+  SELECT COUNT(*) n FROM ctd_raw
+  WHERE temp_ave IS NOT NULL AND (temp_ave < -2 OR temp_ave > 40)")$n
+
+# BETWEEN yields NULL on a NULL operand, which is falsy in CASE, so each arm
+# doubles as its own presence test.
+dbExecute(con, "
+  UPDATE ctd_raw SET temp_ave = CASE
+    -- both sensors good: the honest average
+    WHEN temp1 BETWEEN -2 AND 40 AND temp2 BETWEEN -2 AND 40
+      THEN (temp1 + temp2) / 2.0
+    -- one sensor good: that sensor IS the average
+    WHEN temp1 BETWEEN -2 AND 40 THEN temp1
+    WHEN temp2 BETWEEN -2 AND 40 THEN temp2
+    -- neither usable: missing, not a number
+    ELSE NULL
+  END
+  WHERE temp_ave IS NOT NULL AND (temp_ave < -2 OR temp_ave > 40)")
+
+n_tav_after <- dbGetQuery(con, "
+  SELECT COUNT(*) n FROM ctd_raw
+  WHERE temp_ave IS NOT NULL AND (temp_ave < -2 OR temp_ave > 40)")$n
+say(glue("TempAve repaired: {format(n_tav_bad, big.mark = ',')} out-of-range ",
+         "values recomputed from the sensors; {n_tav_after} remain"))
+stopifnot("TempAve repair must leave no out-of-range values" = n_tav_after == 0)
+
 # pivot wide-to-long one measurement type at a time to avoid OOM
 dbExecute(con, "DROP TABLE IF EXISTS ctd_measurement")
 
@@ -1966,6 +2014,53 @@ say(glue("-99 sentinel rows removed: {format(n_sentinel, big.mark = ',')} ",
          "across {nrow(sentinel_tally)} measurement type(s)"))
 say(glue("ctd_measurement: {format(n_meas, big.mark = ',')} rows"))
 stopifnot("sentinel delete accounting" = n_meas_raw - n_sentinel == n_meas)
+
+# --- enforce the registry's declared physical bounds -------------------------
+# metadata/measurement_type.csv has carried valid_min/valid_max since the CTD
+# registry was built, and NOTHING applied them — not here, not at release time.
+# So v2026.08.07 shipped ~31k impossible values: ph down to -10, oxygen_ml_l_1 to
+# -79.5, salinity_2 up to 46.3, sigma_theta_1 to -50.8, temperature_ave to -47.6.
+#
+# The -99 DELETE above only catches the sentinel ITSELF. It cannot catch a
+# sentinel that has been scaled, offset or averaged upstream, and it says nothing
+# about a genuinely wild reading. A declared bound is the general guard, and the
+# bounds are deliberately GENEROUS — impossible, not merely unusual — so this
+# drops nothing an oceanographer would want to see.
+#
+# DELETE rather than flag, for the same reason as the sentinel: in long format a
+# row IS an assertion that a value was measured. A -10 pH silently corrupts any
+# mean, minimum or anomaly a consumer computes, and the anomaly case is exactly
+# what this data is being used for.
+d_bounds <- d_meas_type |>
+  filter(!is.na(valid_min), !is.na(valid_max)) |>
+  select(measurement_type, valid_min, valid_max)
+
+dbWriteTable(con, "meas_bounds", as.data.frame(d_bounds), overwrite = TRUE)
+
+oob_tally <- dbGetQuery(con, "
+  SELECT m.measurement_type, COUNT(*) AS n,
+         MIN(m.measurement_value) AS v_min, MAX(m.measurement_value) AS v_max
+  FROM ctd_measurement m JOIN meas_bounds b USING (measurement_type)
+  WHERE m.measurement_value < b.valid_min OR m.measurement_value > b.valid_max
+  GROUP BY 1 ORDER BY n DESC")
+
+n_oob <- dbExecute(con, "
+  DELETE FROM ctd_measurement WHERE rowid IN (
+    SELECT m.rowid FROM ctd_measurement m JOIN meas_bounds b USING (measurement_type)
+    WHERE m.measurement_value < b.valid_min OR m.measurement_value > b.valid_max)")
+dbExecute(con, "DROP TABLE IF EXISTS meas_bounds")
+
+say(glue("out-of-range rows removed: {format(n_oob, big.mark = ',')} ",
+         "across {nrow(oob_tally)} type(s), against ",
+         "{nrow(d_bounds)} declared bound(s)"))
+
+if (nrow(oob_tally))
+  oob_tally |>
+    dt(caption = paste(
+      "Values outside the registry's declared valid_min/valid_max, removed.",
+      "These are IMPOSSIBLE readings, not unusual ones — the bounds are",
+      "deliberately generous."),
+      fname = "ctd_out_of_range_removed")
 
 # assign deterministic UUID (md5-based, DuckDB-native — single SQL, no R data transfer)
 assign_deterministic_uuids_md5(
