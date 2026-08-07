@@ -306,6 +306,23 @@ the same temperature they always will. Salinity, oxygen and chlorophyll on those
 cruises are a different matter — the corrected forms do not exist yet, and the
 uncorrected sensor series (`salinity_1`, `oxygen_ml_l_1`) are what is available.
 
+**The two-sensor averages are recomputed, not taken as shipped.** The source CSVs
+carry pre-computed averages — `TempAve`, `SaltAve_Corr`, `OxAve_StaCorr`,
+`OxAveuM_StaCorr` — and where one of the two sensors is missing or has failed,
+those sometimes fold the bad sensor in rather than falling back to the good one.
+The obvious form averages in the `-99` missing marker: `(20.90 + −99)/2 = −39.05`.
+The dangerous form does not: on 2607SH `Temp2` reads −32 to +33 °C while `Temp1`
+sits at a steady ~20 °C, so `TempAve` comes out at **0.77 °C** — arithmetically
+correct, inside any plausible range, and worth an 18 °C cold anomaly.
+
+The ingest applies one rule to all four: **a sensor outside its declared physical
+bounds is treated as absent, and the average is taken over whatever remains** —
+one good sensor averages to itself, no good sensor gives null rather than a
+number. The `-99` sentinel is filtered before anything is averaged. So the
+numbers below are the repaired ones; reading the source CSVs directly gives you
+the unrepaired values. See
+[Q21](https://calcofi.io/workflows/ingest_calcofi_ctd-cast.html#questions-for-data-providers).
+
 ## Doing this for another line, variable or baseline
 
 Everything above is parameterised. To rerun for a different line, change `LINE`;
