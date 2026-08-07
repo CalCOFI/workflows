@@ -1881,19 +1881,22 @@ dbExecute(
     AND r.datetime_start_utc = c.datetime_start_utc"
 )
 
-# --- recompute TempAve from sensors that are individually valid ---------------
+# --- recompute the two-sensor averages from sensors that are individually valid
 #
-# The source ships a PRE-COMPUTED TempAve, and its arithmetic is faithful — what
-# it does not do is check whether each sensor is worth averaging. Two failure
-# modes, and the second is why validating the average is not enough:
+# The source ships PRE-COMPUTED averages — TempAve, SaltAve_Corr, OxAve_StaCorr,
+# OxAveuM_StaCorr — and their arithmetic is faithful. What it does not do,
+# consistently, is check whether each sensor is worth averaging. Two failure
+# modes, and the second is why validating the AVERAGE is not enough:
 #
-#  1. MISSING SENSOR. Only one temperature sensor fitted, so the source averaged
-#     the good one with its -99 missing marker:
+#  1. MISSING SENSOR. Only one sensor fitted, so the good one is averaged with
+#     the -99 missing marker:
 #       Depth 3.0 | Temp1 20.8951 | Temp2 -99.0    | TempAve -39.0525
-#     Exact on 29,596 of 29,596 such rows in 9308NH. Lands far out of range.
+#     Exact on 29,596 of 29,596 such rows in 9308NH. Lands far out of range, so
+#     the bounds guard below would at least DELETE it — but deleting throws away
+#     a perfectly good Temp1 reading to fix a bad average.
 #
-#  2. FAILED SENSOR. Temp2 reading nonsense but not a sentinel — on 2607SH it
-#     ranges -31.95 to 32.64 degC while Temp1 sits at a steady 20.15:
+#  2. FAILED SENSOR. A sensor reading nonsense without being a sentinel — on
+#     2607SH Temp2 ranges -31.95 to 32.64 degC while Temp1 sits at a steady 20.15:
 #       Depth 3.0 | Temp1 20.1499 | Temp2 -18.607  | TempAve 0.7714
 #     The mean is arithmetically correct and lands INSIDE the valid range, so
 #     neither the -99 filter nor a bounds check on the average can see it. 407
@@ -1901,46 +1904,73 @@ dbExecute(
 #     temperature" produces an 18 degC cold anomaly, which is precisely the
 #     quantity this data is being used to compute.
 #
-# So the test belongs on each SENSOR, using the bounds the registry already
-# declares for temperature_1 / temperature_2, and the average is rebuilt from
-# whichever sensors pass. Recompute rather than discard: every poisoned row has a
-# valid Temp1 beside it, so dropping instead would throw away 9308NH's entire
-# temperature record (29,661 rows) to fix it.
-t_lo <- d_meas_type$valid_min[d_meas_type$measurement_type == "temperature_1"]
-t_hi <- d_meas_type$valid_max[d_meas_type$measurement_type == "temperature_1"]
-stopifnot("temperature_1 must declare bounds for the TempAve repair" =
-            length(t_lo) == 1 && !is.na(t_lo) && !is.na(t_hi))
+# THIS IS NOT A TEMPERATURE-ONLY PROBLEM, though temperature is the worst of it.
+# Across a 14-cruise sample, of the rows where one sensor is out of bounds the
+# source fell back to the good sensor 73,438 times for TempAve but took the naive
+# mean 14,750 times; for oxygen the proportion inverts — OxAve_StaCorr took the
+# naive mean on 348 of 457, OxAveuM_StaCorr on 245 of 252. Salinity is the well
+# behaved one (5 of 105,403), so a temperature-only fix would have left oxygen
+# wrong in the same way and looked complete.
+#
+# THE RULE: a sensor outside its declared bounds is ABSENT, and the average of
+# what remains is the average — one good sensor averages to itself, no good
+# sensor averages to NULL. That is `avg()`'s own NULL semantics, so it is
+# written as list_avg() over the nulled-out sensors rather than a CASE ladder:
+# the expression then IS the rule, and cannot drift from it.
+#   https://duckdb.org/docs/stable/sql/functions/aggregates#avgarg
+#
+# Bounds come from the registry entry for the SENSOR series (temperature_1 etc.),
+# so tightening them there tightens this too.
+ave_repair <- tribble(
+  ~ave_col,             ~s1_col,            ~s2_col,            ~bound_type,
+  "temp_ave",           "temp1",            "temp2",            "temperature_1",
+  "salt_ave_corr",      "salt1_corr",       "salt2_corr",       "salinity_1",
+  "ox_ave_sta_corr",    "ox1_sta_corr",     "ox2_sta_corr",     "oxygen_ml_l_1",
+  "ox_aveu_m_sta_corr", "ox1u_m_sta_corr",  "ox2u_m_sta_corr",  "oxygen_umol_kg_1")
 
-n_tav_bad <- dbGetQuery(con, glue("
-  SELECT COUNT(*) n FROM ctd_raw
-  WHERE (temp1 IS NOT NULL AND temp1 NOT BETWEEN {t_lo} AND {t_hi})
-     OR (temp2 IS NOT NULL AND temp2 NOT BETWEEN {t_lo} AND {t_hi})
-     OR (temp_ave IS NOT NULL AND temp_ave NOT BETWEEN {t_lo} AND {t_hi})"))$n
+raw_cols <- dbListFields(con, "ctd_raw")
 
-# BETWEEN yields NULL on a NULL operand, which is falsy in CASE, so each arm
-# doubles as its own presence test.
-dbExecute(con, glue("
-  UPDATE ctd_raw SET temp_ave = CASE
-    -- both sensors good: the honest average
-    WHEN temp1 BETWEEN {t_lo} AND {t_hi} AND temp2 BETWEEN {t_lo} AND {t_hi}
-      THEN (temp1 + temp2) / 2.0
-    -- one sensor good: that sensor IS the average
-    WHEN temp1 BETWEEN {t_lo} AND {t_hi} THEN temp1
-    WHEN temp2 BETWEEN {t_lo} AND {t_hi} THEN temp2
-    -- neither usable: missing, not a number
-    ELSE NULL
-  END
-  WHERE (temp1 IS NOT NULL AND temp1 NOT BETWEEN {t_lo} AND {t_hi})
-     OR (temp2 IS NOT NULL AND temp2 NOT BETWEEN {t_lo} AND {t_hi})
-     OR (temp_ave IS NOT NULL AND temp_ave NOT BETWEEN {t_lo} AND {t_hi})"))
+ave_report <- pmap_dfr(ave_repair, function(ave_col, s1_col, s2_col, bound_type) {
+  # a stage that does not ship a column (sensor-only cruises have no *_corr) is
+  # skipped, not an error
+  if (!all(c(ave_col, s1_col, s2_col) %in% raw_cols))
+    return(tibble(measure = ave_col, n_repaired = NA_integer_,
+                  n_still_oob = NA_integer_, note = "column absent"))
 
-n_tav_after <- dbGetQuery(con, glue("
-  SELECT COUNT(*) n FROM ctd_raw
-  WHERE temp_ave IS NOT NULL AND temp_ave NOT BETWEEN {t_lo} AND {t_hi}"))$n
-say(glue("TempAve recomputed where a sensor was invalid: ",
-         "{format(n_tav_bad, big.mark = ',')} row(s); ",
-         "{n_tav_after} out-of-range average(s) remain"))
-stopifnot("TempAve repair must leave no out-of-range average" = n_tav_after == 0)
+  lo <- d_meas_type$valid_min[d_meas_type$measurement_type == bound_type]
+  hi <- d_meas_type$valid_max[d_meas_type$measurement_type == bound_type]
+  stopifnot("sensor series must declare bounds for the average repair" =
+              length(lo) == 1 && !is.na(lo) && !is.na(hi))
+
+  # BETWEEN yields NULL on a NULL operand, so `NOT BETWEEN` is NULL — hence the
+  # explicit IS NOT NULL on each arm: a genuinely absent sensor is not "bad".
+  suspect <- glue(
+    "({s1_col} IS NOT NULL AND {s1_col} NOT BETWEEN {lo} AND {hi})
+     OR ({s2_col} IS NOT NULL AND {s2_col} NOT BETWEEN {lo} AND {hi})
+     OR ({ave_col} IS NOT NULL AND {ave_col} NOT BETWEEN {lo} AND {hi})")
+
+  n_bad <- dbGetQuery(con, glue(
+    "SELECT COUNT(*) n FROM ctd_raw WHERE {suspect}"))$n
+
+  dbExecute(con, glue("
+    UPDATE ctd_raw SET {ave_col} = list_avg([
+        CASE WHEN {s1_col} BETWEEN {lo} AND {hi} THEN {s1_col} END,
+        CASE WHEN {s2_col} BETWEEN {lo} AND {hi} THEN {s2_col} END])
+    WHERE {suspect}"))
+
+  n_after <- dbGetQuery(con, glue(
+    "SELECT COUNT(*) n FROM ctd_raw
+     WHERE {ave_col} IS NOT NULL AND {ave_col} NOT BETWEEN {lo} AND {hi}"))$n
+
+  tibble(measure = ave_col, n_repaired = n_bad, n_still_oob = n_after,
+         note = glue("bounds {lo}–{hi} from {bound_type}"))
+})
+
+say(glue("two-sensor averages recomputed where a sensor was invalid: ",
+         "{format(sum(ave_report$n_repaired, na.rm = TRUE), big.mark = ',')} row(s) ",
+         "across {sum(!is.na(ave_report$n_repaired))} measure(s)"))
+stopifnot("average repair must leave no out-of-range average" =
+            all(ave_report$n_still_oob == 0, na.rm = TRUE))
 
 # pivot wide-to-long one measurement type at a time to avoid OOM
 dbExecute(con, "DROP TABLE IF EXISTS ctd_measurement")
