@@ -4222,7 +4222,25 @@ if (has_full && nrow(rules_cruise)) {
     WHERE m.valid_min IS NOT NULL
       AND (o.measurement_value < m.valid_min OR o.measurement_value > m.valid_max)
     GROUP BY 1 ORDER BY n DESC LIMIT 1")$cruise_key
-  say(glue("cruise scoped to: {worst_cruise} (most out-of-range values)"))
+
+  # Since the two-sensor average repair and the bounds guard landed, there is
+  # routinely NO out-of-range cruise — the query returns zero rows and
+  # `$cruise_key` is character(0). That is the good outcome, and it used to
+  # abort the render: character(0) reached qc_run_rule()'s scope guard, where
+  # `&&` on a zero-length operand yields NA and `if (NA)` stops the chunk.
+  #
+  # "Nothing is out of range" is not a reason to skip the profile rules. They
+  # test spike, gradient, density inversion and stuck-sensor shapes, none of
+  # which a range check can see — so fall back to the cruise with the most
+  # full-resolution scans, i.e. the most to look at.
+  scope_reason <- "most out-of-range values"
+  if (!length(worst_cruise) || is.na(worst_cruise[1])) {
+    worst_cruise <- dbGetQuery(fcon, "
+      SELECT cruise_key, COUNT(*) AS n FROM obs_ctd_full
+      GROUP BY 1 ORDER BY n DESC LIMIT 1")$cruise_key
+    scope_reason <- "no cruise has out-of-range values; most full-resolution scans"
+  }
+  say(glue("cruise scoped to: {worst_cruise} ({scope_reason})"))
 
   qc_res_cr <- qc_run_all(
     fcon, rules_cruise, limit = 500L, present_types = f_types,
