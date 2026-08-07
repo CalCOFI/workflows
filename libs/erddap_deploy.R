@@ -129,7 +129,16 @@ erddap_splice_config <- function(repo_dir, generated_xml) {
 #' next unprivileged fetch.
 erddap_push_config <- function(host, repo_dir, remote_repo, release, msg = NULL) {
   git <- function(...) {
-    out <- system2("git", c("-C", repo_dir, ...), stdout = TRUE, stderr = TRUE)
+    # shQuote each argument: system2() does NOT quote — it pastes its args into a
+    # shell command — so any argument containing a space is split into several.
+    # The commit message always contains spaces, so
+    #   git commit -q -m datasets: repoint at release v2026.08.07
+    # reached git as `-m datasets:` plus four bogus pathspecs, and the deploy died
+    # with "pathspec 'repoint' did not match any file(s) known to git".
+    # (Same trap as prime_zips_from_gcs() in ingest_calcofi_ctd-cast.qmd, where an
+    # unquoted "~/My Drive/..." path split on its space.)
+    args <- c("-C", repo_dir, ...)
+    out <- system2("git", shQuote(args), stdout = TRUE, stderr = TRUE)
     if ((attr(out, "status") %||% 0L) != 0)
       stop("git ", paste(..., collapse = " "), " failed: ", paste(out, collapse = " "))
     out
