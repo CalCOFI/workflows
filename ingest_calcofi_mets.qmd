@@ -864,6 +864,15 @@ mets_owned <- d_meas_type |>
   filter(measurement_type %in% mets_types$measurement_type,
          str_squish(coalesce(`_source_datasets`, "")) == "calcofi_mets") |>
   pull(measurement_type)
+
+# capture curated columns BEFORE the drop — they exist only in the CSV, and the
+# rebuild below cannot reconstruct them (see the rows_patch note further down)
+curated_cols <- c("valid_min", "valid_max",
+                  "valid_depth_min_m", "valid_depth_max_m", "derivation")
+prior_curated <- d_meas_type |>
+  filter(measurement_type %in% mets_owned) |>
+  select(measurement_type, any_of(curated_cols))
+
 d_meas_type <- d_meas_type |> filter(!measurement_type %in% mets_owned)
 
 # types another dataset already owns: append provenance instead of clobbering
@@ -879,6 +888,27 @@ d_meas_type <- d_meas_type |>
 d_meas_type <- d_meas_type |>
   bind_rows(mets_types |> filter(!measurement_type %in% shared)) |>
   arrange(measurement_type)
+
+# CARRY CURATED COLUMNS ACROSS THE DROP-AND-RE-ADD.
+#
+# `mets_types` declares identity (name, units, source column) but not curation:
+# valid_min/valid_max and the depth bounds are human or registry-script
+# judgements about what the value MEANS, and they live only in the CSV. Dropping
+# an owned row and rebuilding it from mets_types therefore silently erased them.
+#
+# It did: `sw_ph` carries a plausible pH range of 6-9, asserted by
+# libs/build_ctd_measurement_registry.R, and this chunk cleared it on every run.
+# The two writers then flipped that row back and forth forever — which also meant
+# metadata/measurement_type.csv changed on EVERY pipeline run, permanently
+# invalidating the input fingerprint of every ingest that hashes it (ctd-cast
+# rebuilt for ~1 h each time as a result). The oscillation was the bug; the
+# fingerprint was correctly reporting it.
+#
+# rows_patch() fills only what is NA in the rebuilt row, so a genuine change in
+# mets_types still wins.
+if (length(mets_owned) && nrow(prior_curated))
+  d_meas_type <- d_meas_type |>
+    rows_patch(prior_curated, by = "measurement_type", unmatched = "ignore")
 # na = "" is load-bearing: write_csv's default writes the literal string "NA"
 # into every empty _qual_column/_prec_column, rewriting all ~198 rows on every
 # run. read_csv maps "NA" back to NA so it is functionally benign, but it buries
