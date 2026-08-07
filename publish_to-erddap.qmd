@@ -93,7 +93,12 @@ dir_erddap <- here("data/erddap"); dir_create(dir_erddap)
 
 # LOCAL release parquet — the same bytes as the promoted release, read from disk so
 # every view below can actually be executed before its config is written.
-PQ_LOCAL <- here(glue("data/releases/{RELEASE}/parquet"))
+#
+# Under the staging root, not the repo: release_database.qmd writes bulk parquet to
+# cc_stage_path("releases", {version}, "parquet") and keeps only the JSON sidecars
+# in data/releases/{version}/. Reading it from the old in-repo location failed here
+# with "local release parquet is required to validate the views".
+PQ_LOCAL <- cc_stage_path("releases", RELEASE, "parquet")
 
 # The path ERDDAP will see. A DuckDB view binds its parquet paths LITERALLY, so the
 # deployed .db must be built against the server's path, not this machine's — an

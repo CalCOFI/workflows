@@ -22,9 +22,16 @@ cache_csv <- here("metadata/taxon_xref.csv")
 con <- calcofi4db::get_duckdb_con(":memory:")
 on.exit(calcofi4db::close_duckdb(con))
 
+# the release's taxon shard now stages outside the repo, and the version is read
+# rather than hardcoded — this pointed at a literal v2026.08.04 under
+# data/releases/, which both moved and went stale.
+release_taxon <- calcofi4db::cc_stage_path(
+  "releases", readLines(here("data/releases/latest.txt"), warn = FALSE)[1],
+  "parquet", "taxon.parquet")
+
 ids <- DBI::dbGetQuery(con, glue("
   WITH t AS (
-    SELECT * FROM '{here('data/releases/v2026.08.04/parquet/taxon.parquet')}'
+    SELECT * FROM '{release_taxon}'
     UNION ALL BY NAME
     SELECT * FROM '{here('data/parquet/*/taxon.parquet')}'
   )
