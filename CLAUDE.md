@@ -44,6 +44,33 @@ Rscript -e 'remotes::install_github("calcofi/calcofi4db"); remotes::install_gith
 Rscript scripts/build_workflows_index.R
 ```
 
+**A target's `output:` must be a single file that target alone writes — never a
+directory.** Every target is `format = "file"`, so `targets` hashes whatever path
+the command returns. Claim a directory and *anything* later written underneath it
+moves that hash, leaving the target outdated forever.
+
+`release_database` declared `data/releases` and was in exactly that state.
+`test_release` writes `data/releases/{version}/test_results.json` — as a **side
+effect**, not as its declared output, so no comparison of the `output:` fields
+could have related the two. On v2026.08.08 the release's own files landed
+16:46–17:06 and `test_results.json` at 17:08:47, so the target went stale the
+instant the pipeline finished and every later `tar_make()` on it *or anything
+downstream* re-ran a ~40 min freeze and a multi-GB re-upload of an
+already-promoted release. Nothing was wrong with the data; the pipeline just
+could not tell it was done. The directory was also the accumulator of every
+release ever cut, so pruning an old local release invalidated the current one.
+
+It now declares `data/releases/_release_stamp.json`, written last by the
+`cleanup` chunk: version + `n_tables`/`n_rows` + an md5 of the frozen
+`catalog.json`. **Deterministic on purpose** — no wall clock — so a re-run over
+unchanged inputs reproduces it byte-for-byte and leaves `test_release` skipped
+rather than cascading. `calcofi4db:::check_nested_outputs()` fails
+`build_targets_list()` on any directory `output:` (and on statically nested
+ones), so this cannot come back silently.
+
+The general rule: **when a target looks permanently outdated, ask what else
+writes inside its declared output** before assuming its inputs changed.
+
 **Editing a `.qmd` does NOT make its target outdated — you must invalidate it.**
 `build_targets_list()` builds each command as
 `{ deps…; quarto::quarto_render("ingest_x.qmd"); "output/path" }`, so the filename
@@ -83,6 +110,20 @@ for (tgt in tgts)
 The failure mode is the same each time and is what makes this family of bugs
 expensive: the loop reports success and rewrites nothing. Always confirm against
 `_output/*.html` mtimes, never against exit codes or a hash comparison.
+
+**…and `tar_invalidate()` errors on a target that has never run.** It operates on
+recorded metadata, so a target with no `tar_meta()` entry — one that was
+invalidated but whose run then failed, which is exactly the state a re-run is
+trying to recover from — fails with ``Element `x` doesn't exist`` and takes the
+whole loop down before anything builds. Filter the invalidate list, never the
+make list:
+
+```r
+known <- targets::tar_meta()$name
+for (tgt in intersect(tgts, known))
+  eval(bquote(targets::tar_invalidate(names = tidyselect::all_of(.(tgt)))))
+eval(bquote(targets::tar_make(names = tidyselect::all_of(.(tgts)))))  # all of them
+```
 
 There is no test suite or linter in this repo; correctness is enforced by the
 `/validate-ingest` checks and the validation chunks inside `release_database.qmd`.

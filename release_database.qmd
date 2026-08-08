@@ -5,7 +5,10 @@ calcofi:
   workflow_type: release
   dependency:
     - auto
-  output: data/releases
+  # a small file ONLY this notebook writes — never the data/releases
+  # directory, which test_release.qmd also writes into (see the `cleanup`
+  # chunk); that shared ownership made this target permanently outdated.
+  output: data/releases/_release_stamp.json
   # cross-dataset foreign keys (relationships spanning ingests) are authored in
   # metadata/relationships_cross.csv; intra-dataset FKs live in each ingest's
   # relationships.json. both are merged below into the release relationships.json.
@@ -1749,6 +1752,40 @@ message(glue(
 
 ```{r}
 #| label: cleanup
+
+# --- the target's declared output -------------------------------------------
+# `output:` used to be the `data/releases` DIRECTORY. Two things were wrong with
+# that, and together they made this target permanently outdated:
+#
+#  1. It is not exclusively ours. `test_release.qmd` — a target DOWNSTREAM of
+#     this one — writes `data/releases/{version}/test_results.json` into it. So
+#     the directory hash targets recorded when this target finished no longer
+#     matched a few minutes later, and `release_database` reported itself
+#     outdated the instant the pipeline completed. Verified on v2026.08.08: our
+#     files landed 16:46-17:06, test_results.json at 17:08:47. Every subsequent
+#     `tar_make()` on this target or anything downstream of it re-ran a ~40 min
+#     freeze + multi-GB re-upload of an already-promoted release.
+#  2. It accumulates every release ever cut, so the hash also covered ~136
+#     historical sidecars. Pruning an old local release would invalidate the
+#     current one, and the hash grows without bound.
+#
+# So the output is now a small file that ONLY this chunk writes. It is
+# deterministic — version plus a digest of the frozen catalog, no wall clock —
+# so a re-run over unchanged inputs reproduces it byte-for-byte and leaves
+# `test_release` skipped rather than cascading.
+stamp_path <- here("data/releases/_release_stamp.json")
+jsonlite::write_json(
+  list(
+    release_version = release_version,
+    n_tables        = nrow(freeze_stats),
+    n_rows          = sum(freeze_stats$rows, na.rm = TRUE),
+    # the catalog is written by freeze_release() and summarises every table in
+    # the release, so its digest changes exactly when the release content does.
+    # tools::md5sum() is base R — no dependency to add to the shelf() call above.
+    catalog_md5     = unname(tools::md5sum(
+      file.path(dir_frozen, "catalog.json")))),
+  stamp_path, auto_unbox = TRUE, pretty = TRUE)
+cat(glue("release stamp: {stamp_path}\n"))
 
 # close in-memory DuckDB connection
 close_duckdb(con_wdl)

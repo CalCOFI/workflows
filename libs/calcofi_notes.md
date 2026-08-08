@@ -94,6 +94,41 @@ I held back publish_to_erddap, publish_to_netcdf, and deploy_consumers — those
 
 ----
 
+All done — v2026.08.08 is released, published, deployed, and everything is committed and pushed to main across all four repos, working trees clean.
+
+┌────────────────┬─────────┬───────────────────────────────────────────────────────────────┐
+│      Repo      │  HEAD   │                                                               │
+├────────────────┼─────────┼───────────────────────────────────────────────────────────────┤
+│ calcofi4db     │ 3495703 │ bounds engine (5 new exports, 52 registry tests, suite green) │
+├────────────────┼─────────┼───────────────────────────────────────────────────────────────┤
+│ workflows      │ a3acbfa │ pipeline + skills + questions + publish/deploy                │
+├────────────────┼─────────┼───────────────────────────────────────────────────────────────┤
+│ ctd-transects  │ 9b321b1 │ Pages SHA fix                                                 │
+├────────────────┼─────────┼───────────────────────────────────────────────────────────────┤
+│ db-viz-station │ fdc85ba │ Pages SHA fix                                                 │
+└────────────────┴─────────┴───────────────────────────────────────────────────────────────┘
+
+Publish + deploy: ERDDAP XML regenerated; 6.9 GB of CF NetCDF written (correctly gitignored); db-viz-hex and db-viz-cruise rebuilt against calcofi_v2026.08.08.duckdb and restarted — both serving 200. Server stayed healthy throughout (load 3.67, prep_db.R peaked ~3.3 GB of 15 GB — well clear of the OOM that wedged it previously).
+
+Three judgement calls worth surfacing:
+
+**I stopped tar_make on the publish targets and rendered the three notebooks directly**. `release_database`'s tracked output is the data/releases directory it writes, so it reports itself outdated the instant it succeeds — every downstream target drags it into a redundant ~40 min re-freeze and re-upload. Re-running it against an already-promoted release was pure risk for no change. That self-invalidation is a real pipeline quirk still worth fixing.
+
+**Both Pages repos had bot commits ahead of me**. Rebased rather than forced — the incoming work was pure public/data/** refreshes against my .github/workflows/*.yml changes, no overlap. One of those was triggered by the v2026.08.08 promotion, and it happened to resolve the SHA correctly, consistent with the race being intermittent rather than fixed by luck. The fix is live for future runs.
+
+**I left `data/releases/latest.txt` alone**. It's tracked and says v2026.02 — six months behind the GCS latest.txt it shadows. Nothing reads it as far as I can tell, but it's either vestigial and should go, or it's a consumer contract that's been silently stale since February. Worth deciding which.
+
+Also unresolved, and not mine to settle: the 77 undeclared bounds are now all proposed questions awaiting providers, with `ctd-cast` **Q24** (derived oxygen corrections at 6.4e10 µmol/kg) and `mets` **Q26** (-99 across 14 channels, 65500 on temperatures) as the two that most need answers before those bounds can be declared and enforced.
+
+----
+
+Search across local repos in @../CalCOFI/* for anything that might reference `@data/releases/latest.txt`. Fix if found. Delete vestigial file.
+
+Fix this self-invalidation problem in pipeline with `release_database`. Think through systematically. We want to run this smoothly and often.
+
+
+
+
 ## 2026-08-07 db-viz-hex: datasets popover 
 
 In the @../db-viz-hex app, let's reduce the visual real estate of the Dataset selection under the Taxa tab of the Filter modal by implementing it as a popover.

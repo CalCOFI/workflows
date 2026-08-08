@@ -22,12 +22,43 @@ cache_csv <- here("metadata/taxon_xref.csv")
 con <- calcofi4db::get_duckdb_con(":memory:")
 on.exit(calcofi4db::close_duckdb(con))
 
-# the release's taxon shard now stages outside the repo, and the version is read
-# rather than hardcoded — this pointed at a literal v2026.08.04 under
-# data/releases/, which both moved and went stale.
+# The release's taxon shard stages outside the repo, and the version is resolved
+# from the AUTHORITATIVE GCS `latest.txt` — the same file calcofi4r, db-query and
+# libs/publish_netcdf.R read.
+#
+# This previously read an in-repo `data/releases/latest.txt`. That file was last
+# written in 2026-02 and had drifted six months behind the real `latest.txt`, so
+# the script resolved to v2026.02 and warmed the cache from a release predating
+# most of the taxa in it. It did not error — the old shard is still staged — it
+# just quietly under-warmed, and every ingest then paid live WoRMS/ITIS calls for
+# taxa the current release already knew. A stale pointer that still resolves is
+# worse than one that breaks. The file is deleted; do not reintroduce a local copy.
+RELEASES_URL <- "https://storage.googleapis.com/calcofi-db/ducklake/releases"
+release <- trimws(readLines(glue("{RELEASES_URL}/latest.txt"), warn = FALSE)[1])
+stopifnot("could not resolve latest release from GCS" =
+            grepl("^v[0-9]{4}[.][0-9]{2}", release))
 release_taxon <- calcofi4db::cc_stage_path(
-  "releases", readLines(here("data/releases/latest.txt"), warn = FALSE)[1],
-  "parquet", "taxon.parquet")
+  "releases", release, "parquet", "taxon.parquet")
+
+# The promoted release is not always staged on this machine (a fresh clone, or a
+# release cut elsewhere). Fall back to the newest local one rather than failing:
+# this script only harvests ids, so an older shard is a smaller warm, not a wrong
+# one — but say which was used, because a silent fallback is how the stale
+# pointer went unnoticed for six months.
+if (!file.exists(release_taxon)) {
+  staged <- sort(basename(Sys.glob(calcofi4db::cc_stage_path("releases", "v*"))))
+  staged <- staged[file.exists(calcofi4db::cc_stage_path(
+    "releases", staged, "parquet", "taxon.parquet"))]
+  if (!length(staged))
+    stop("no staged release carries parquet/taxon.parquet; stage ", release,
+         " or run release_database.qmd first")
+  cat(glue("{release} is not staged locally; falling back to ",
+           "{tail(staged, 1)}"), "\n")
+  release       <- tail(staged, 1)
+  release_taxon <- calcofi4db::cc_stage_path(
+    "releases", release, "parquet", "taxon.parquet")
+}
+cat(glue("warming from release {release}"), "\n")
 
 ids <- DBI::dbGetQuery(con, glue("
   WITH t AS (
