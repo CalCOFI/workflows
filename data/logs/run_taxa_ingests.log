@@ -1,0 +1,1619 @@
+
+========================================================
+RUN ingest_swfsc_ichthyo 2026-08-05 21:36:58 
+========================================================
+
+Attaching package: ‘calcofi4db’
+
+The following object is masked from ‘package:stats’:
+
+    dt
+
+Excluded 1 target(s): publish_ichthyo_to_obis
+Parsed 24 pipeline workflows:
+  bench_erddap_ctd (reference) -> _output/bench_erddap_ctd.html
+  ctd_cast_qa_qc_protocol (reference) -> _output/ctd-cast_qa-qc-protocol.html
+  deploy_consumers (deploy) -> _output/deploy_consumers.html [deps: test_release]
+  ingest_calcofi_bottle (ingest) -> data/parquet/calcofi_bottle/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_ctd_cast (ingest) -> data/parquet/calcofi_ctd-cast/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_dic (ingest) -> data/parquet/calcofi_dic/manifest.json [deps: ingest_calcofi_bottle]
+  ingest_calcofi_mets (ingest) -> data/parquet/calcofi_mets/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_phyllosoma (ingest) -> data/parquet/calcofi_phyllosoma/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_phytoplankton (ingest) -> data/parquet/calcofi_phytoplankton/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_euphausiids (ingest) -> data/parquet/cce-lter_euphausiids/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_picoplankton_bacteria (ingest) -> data/parquet/cce-lter_picoplankton-bacteria/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_zoodb (ingest) -> data/parquet/cce-lter_zoodb/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_zooscan (ingest) -> data/parquet/cce-lter_zooscan/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cdfw_dungeness_crab (ingest) -> data/parquet/cdfw_dungeness-crab/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_farallon_bird_mammal (ingest) -> data/parquet/farallon_bird-mammal/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_sio_mesopelagic_fish (ingest) -> data/parquet/sio_mesopelagic-fish/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_sio_pic_zooplankton (ingest) -> data/parquet/sio_pic-zooplankton/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_spatial (spatial) -> data/parquet/spatial/manifest.json
+  ingest_swfsc_cufes (ingest) -> data/parquet/swfsc_cufes/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_swfsc_ichthyo (ingest) -> data/parquet/swfsc_ichthyo/manifest.json
+  publish_to_erddap (publish) -> data/erddap/datasets_calcofi.xml [deps: release_database]
+  publish_to_netcdf (publish) -> data/netcdf/publish_plan.csv [deps: release_database]
+  release_database (release) -> data/releases [deps: auto]
+  test_release (test) -> _output/test_release.html [deps: release_database]
++ ingest_swfsc_ichthyo dispatched
+[31m
+
+processing file: ingest_swfsc_ichthyo.qmd
+[39m1/91                              
+2/91 [overview]                   
+3/91                              
+4/91 [setup]                      
+5/91                              
+6/91 [data_integrity_checkpoint]  
+7/91                              
+8/91 [source-files]               
+9/91                              
+10/91 [tbls_in]                    
+11/91                              
+12/91 [flds_in]                    
+13/91                              
+14/91 [tbls_rd]                    
+15/91                              
+16/91 [flds_rd]                    
+17/91                              
+18/91 [load_tbls_to_db]            
+19/91                              
+20/91 [create_cruise_key]          
+21/91                              
+22/91 [propagate_cruise_key]       
+23/91                              
+24/91 [create_lookup_table]        
+25/91                              
+26/91 [consolidate_ichthyo_diagram]
+27/91                              
+28/91 [consolidate_ichthyo]        
+29/91                              
+30/91 [ichthyo_summary]            
+31/91                              
+32/91 [apply_corrections]          
+33/91                              
+34/91 [validate_integrity]         
+35/91                              
+36/91 [delete_flagged]             
+37/91                              
+38/91 [drop_deprecated]            
+39/91                              
+40/91 [standardize_species]        
+41/91                              
+42/91 [build_taxon]                
+43/91                              
+44/91 [taxonomy_stats]             
+45/91                              
+46/91 [erd_tbls]                   
+47/91                              
+48/91 [erd_fk]                     
+49/91                              
+50/91 [mk_site_pts]                
+51/91                              
+52/91 [mk_grid_v2]                 
+53/91                              
+54/91 [grid_to_db]                 
+55/91                              
+56/91 [update_site_from_grid]      
+57/91                              
+58/91 [mk_segment]                 
+59/91                              
+60/91 [view_segment]               
+61/91                              
+62/91 [show_latest]                
+63/91                              
+64/91 [effort_stats]               
+65/91                              
+66/91 [load-dataset-metadata]      
+67/91                              
+68/91 [provider-questions]         
+69/91                              
+70/91 [validate]                   
+71/91                              
+72/91 [enforce_types]              
+73/91                              
+74/91 [preview_tables]             
+75/91                              
+76/91 [emit_core]                  
+77/91                              
+78/91 [write_parquet]              
+79/91                              
+80/91 [write_metadata]             
+81/91                              
+82/91 [show_metadata_json]         
+83/91                              
+84/91 [show_relationships_json]    
+85/91                              
+86/91 [upload_gcs]                 
+87/91                              
+88/91 [cleanup]                    
+89/91                              
+90/91 [session_info]               
+91/91                              
+[31moutput file: ingest_swfsc_ichthyo.knit.md
+
+[39m[1mpandoc [22m
+  to: html
+  output-file: ingest_swfsc_ichthyo.html
+  standalone: true
+  embed-resources: false
+  section-divs: true
+  html-math-method: mathjax
+  wrap: none
+  default-image-extension: png
+  toc: true
+  toc-depth: 4
+  number-sections: true
+  variables: {}
+  
+[1mmetadata[22m
+  document-css: false
+  link-citations: true
+  lang: en
+  date: now
+  date-format: iso
+  editor:
+    mode: source
+    markdown:
+      wrap: 72
+    canonical: true
+  editor_options:
+    chunk_output_type: console
+  search: false
+  toc-expand: 1
+  lightbox: true
+  title: Ingest NOAA CalCOFI Database
+  calcofi:
+    target_name: ingest_swfsc_ichthyo
+    workflow_type: ingest
+    dependency: []
+    output: data/parquet/swfsc_ichthyo/manifest.json
+    provider: swfsc
+    dataset: ichthyo
+    workflow_url: https://calcofi.io/workflows/ingest_swfsc_ichthyo.html
+    questions_file: metadata/swfsc/ichthyo/questions.csv
+    dataset_meta:
+      dataset_name: SWFSC Ichthyoplankton
+      description: |
+        Ichthyoplankton (fish eggs and larvae) collected by bongo and manta net tows on CalCOFI cruises, processed by SWFSC.
+      citation_main: NOAA Fisheries SWFSC. CalCOFI Ichthyoplankton Database.
+      link_calcofi_org: https://calcofi.org/data/biology/ichthyoplankton/
+      coverage_temporal: 1951 to present
+      coverage_spatial: 23-51°N, -170 to -117°W
+    tables_owned:
+      - table: sample
+        shared: true
+        note: core event dimension (site -> tow -> net adjacency list)
+      - table: obs
+        shared: true
+        note: core occurrence headline (bio, larval abundance)
+      - table: obs_attribute
+        shared: true
+        note: larval size + stage distributions
+      - table: sample_measurement
+        shared: true
+        note: net effort (volume filtered, haul factor, ...)
+      - table: taxon
+        shared: true
+        note: shared taxa reference (WoRMS/ITIS lineage)
+      - table: dataset_taxon
+        shared: true
+        note: species_id -> taxon_key crosswalk
+      - table: cruise
+      - table: ship
+        shared: true
+        note: ship registry; also modified by bottle/ctd ingests
+      - table: lookup
+      - table: grid
+        shared: true
+        note: spatial grid referenced across datasets
+    erd:
+      color: '#cdebc6'
+  
+Output created: _output/ingest_swfsc_ichthyo.html
+
+✔ ingest_swfsc_ichthyo completed [49s, 4.89 kB]
+✔ ended pipeline [49.1s, 1 completed, 1 skipped]
+OK   ingest_swfsc_ichthyo 2026-08-05 21:37:49 
+
+========================================================
+RUN ingest_farallon_bird_mammal 2026-08-05 21:37:49 
+========================================================
+
+Attaching package: ‘calcofi4db’
+
+The following object is masked from ‘package:stats’:
+
+    dt
+
+Excluded 1 target(s): publish_ichthyo_to_obis
+Parsed 24 pipeline workflows:
+  bench_erddap_ctd (reference) -> _output/bench_erddap_ctd.html
+  ctd_cast_qa_qc_protocol (reference) -> _output/ctd-cast_qa-qc-protocol.html
+  deploy_consumers (deploy) -> _output/deploy_consumers.html [deps: test_release]
+  ingest_calcofi_bottle (ingest) -> data/parquet/calcofi_bottle/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_ctd_cast (ingest) -> data/parquet/calcofi_ctd-cast/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_dic (ingest) -> data/parquet/calcofi_dic/manifest.json [deps: ingest_calcofi_bottle]
+  ingest_calcofi_mets (ingest) -> data/parquet/calcofi_mets/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_phyllosoma (ingest) -> data/parquet/calcofi_phyllosoma/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_phytoplankton (ingest) -> data/parquet/calcofi_phytoplankton/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_euphausiids (ingest) -> data/parquet/cce-lter_euphausiids/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_picoplankton_bacteria (ingest) -> data/parquet/cce-lter_picoplankton-bacteria/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_zoodb (ingest) -> data/parquet/cce-lter_zoodb/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_zooscan (ingest) -> data/parquet/cce-lter_zooscan/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cdfw_dungeness_crab (ingest) -> data/parquet/cdfw_dungeness-crab/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_farallon_bird_mammal (ingest) -> data/parquet/farallon_bird-mammal/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_sio_mesopelagic_fish (ingest) -> data/parquet/sio_mesopelagic-fish/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_sio_pic_zooplankton (ingest) -> data/parquet/sio_pic-zooplankton/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_spatial (spatial) -> data/parquet/spatial/manifest.json
+  ingest_swfsc_cufes (ingest) -> data/parquet/swfsc_cufes/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_swfsc_ichthyo (ingest) -> data/parquet/swfsc_ichthyo/manifest.json
+  publish_to_erddap (publish) -> data/erddap/datasets_calcofi.xml [deps: release_database]
+  publish_to_netcdf (publish) -> data/netcdf/publish_plan.csv [deps: release_database]
+  release_database (release) -> data/releases [deps: auto]
+  test_release (test) -> _output/test_release.html [deps: release_database]
++ ingest_farallon_bird_mammal dispatched
+[31m
+
+processing file: ingest_farallon_bird-mammal.qmd
+[39m1/33                        
+2/33 [unnamed-chunk-1]      
+3/33                        
+4/33 [setup]                
+5/33                        
+6/33 [read-source]          
+7/33                        
+8/33 [lookups]              
+9/33                        
+10/33 [transect]             
+11/33                        
+12/33 [observation]          
+13/33                        
+14/33 [spatial-cruise]       
+15/33                        
+16/33 [cruise-match-review]  
+17/33                        
+18/33 [cruise-match-validate]
+19/33                        
+20/33 [meta-schema]          
+21/33                        
+22/33 [validate]             
+23/33                        
+24/33 [preview]              
+25/33                        
+26/33 [provider-questions]   
+27/33                        
+28/33 [emit_core]            
+29/33                        
+30/33 [outputs]              
+31/33                        
+32/33 [cleanup]              
+33/33                        
+[31moutput file: ingest_farallon_bird-mammal.knit.md
+
+[39m[1mpandoc [22m
+  to: html
+  output-file: ingest_farallon_bird-mammal.html
+  standalone: true
+  embed-resources: false
+  section-divs: true
+  html-math-method: mathjax
+  wrap: none
+  default-image-extension: png
+  toc: true
+  toc-depth: 4
+  number-sections: true
+  variables: {}
+  
+[1mmetadata[22m
+  document-css: false
+  link-citations: true
+  lang: en
+  date: now
+  date-format: iso
+  editor:
+    mode: source
+    markdown:
+      wrap: 72
+    canonical: true
+  editor_options:
+    chunk_output_type: console
+  search: false
+  toc-expand: 1
+  lightbox: true
+  title: Ingest Farallon Institute Bird & Mammal Census
+  calcofi:
+    target_name: ingest_farallon_bird_mammal
+    workflow_type: ingest
+    dependency:
+      - ingest_swfsc_ichthyo
+    output: data/parquet/farallon_bird-mammal/manifest.json
+    provider: farallon
+    dataset: bird-mammal
+    workflow_url: https://calcofi.io/workflows/ingest_farallon_bird-mammal.html
+    questions_file: metadata/farallon/bird-mammal/questions.csv
+    dataset_meta:
+      dataset_name: CalCOFI Bird & Mammal Census
+      description: |
+        Bird and mammal observations along CalCOFI (and NMFS, CPR) cruise transects, 1987-2021. Transect effort + counts + species/behavior lookups. Curated via CCE-LTER DataZoo 255 (PI Bill Sydeman).
+      citation_main: ''
+      link_calcofi_org: ''
+      link_data_source: https://oceaninformatics.ucsd.edu/datazoo/catalogs/ccelter/datasets/255
+      link_others:
+        - http://dx.doi.org/10.6073/pasta/4ee1bd702acb11786277192a41626800
+      coverage_temporal: 1987 to 2021
+      coverage_spatial: CalCOFI region (California Current)
+      license: ''
+      pi_names: Bill Sydeman
+    tables_owned:
+      - table: sample
+        shared: true
+        note: core event dimension (transect grain)
+      - table: obs
+        shared: true
+        note: core occurrence headline (bio, per transect x species)
+      - table: obs_attribute
+        shared: true
+        note: behavior breakdown per occurrence
+      - table: taxon
+        shared: true
+        note: shared taxa reference (seabirds itis:, mammals worms:)
+      - table: dataset_taxon
+        shared: true
+        note: species_code -> taxon_key crosswalk
+      - table: taxon_group
+        shared: true
+        note: calcofi:seabirds / calcofi:marine_mammals
+    erd:
+      color: '#f0d2e8'
+  
+Output created: _output/ingest_farallon_bird-mammal.html
+
+✔ ingest_farallon_bird_mammal completed [38.4s, 3.41 kB]
+✔ ended pipeline [38.5s, 1 completed, 2 skipped]
+OK   ingest_farallon_bird_mammal 2026-08-05 21:38:29 
+
+========================================================
+RUN ingest_sio_mesopelagic_fish 2026-08-05 21:38:29 
+========================================================
+
+Attaching package: ‘calcofi4db’
+
+The following object is masked from ‘package:stats’:
+
+    dt
+
+Excluded 1 target(s): publish_ichthyo_to_obis
+Parsed 24 pipeline workflows:
+  bench_erddap_ctd (reference) -> _output/bench_erddap_ctd.html
+  ctd_cast_qa_qc_protocol (reference) -> _output/ctd-cast_qa-qc-protocol.html
+  deploy_consumers (deploy) -> _output/deploy_consumers.html [deps: test_release]
+  ingest_calcofi_bottle (ingest) -> data/parquet/calcofi_bottle/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_ctd_cast (ingest) -> data/parquet/calcofi_ctd-cast/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_dic (ingest) -> data/parquet/calcofi_dic/manifest.json [deps: ingest_calcofi_bottle]
+  ingest_calcofi_mets (ingest) -> data/parquet/calcofi_mets/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_phyllosoma (ingest) -> data/parquet/calcofi_phyllosoma/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_phytoplankton (ingest) -> data/parquet/calcofi_phytoplankton/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_euphausiids (ingest) -> data/parquet/cce-lter_euphausiids/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_picoplankton_bacteria (ingest) -> data/parquet/cce-lter_picoplankton-bacteria/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_zoodb (ingest) -> data/parquet/cce-lter_zoodb/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_zooscan (ingest) -> data/parquet/cce-lter_zooscan/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cdfw_dungeness_crab (ingest) -> data/parquet/cdfw_dungeness-crab/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_farallon_bird_mammal (ingest) -> data/parquet/farallon_bird-mammal/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_sio_mesopelagic_fish (ingest) -> data/parquet/sio_mesopelagic-fish/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_sio_pic_zooplankton (ingest) -> data/parquet/sio_pic-zooplankton/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_spatial (spatial) -> data/parquet/spatial/manifest.json
+  ingest_swfsc_cufes (ingest) -> data/parquet/swfsc_cufes/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_swfsc_ichthyo (ingest) -> data/parquet/swfsc_ichthyo/manifest.json
+  publish_to_erddap (publish) -> data/erddap/datasets_calcofi.xml [deps: release_database]
+  publish_to_netcdf (publish) -> data/netcdf/publish_plan.csv [deps: release_database]
+  release_database (release) -> data/releases [deps: auto]
+  test_release (test) -> _output/test_release.html [deps: release_database]
++ ingest_sio_mesopelagic_fish dispatched
+[31m
+
+processing file: ingest_sio_mesopelagic-fish.qmd
+[39m1/23                     
+2/23 [setup]             
+3/23                     
+4/23 [read-source]       
+5/23                     
+6/23 [build]             
+7/23                     
+8/23 [taxon-worms]       
+9/23                     
+10/23 [add-spatial]       
+11/23                     
+12/23 [measurement-types] 
+13/23                     
+14/23 [schema]            
+15/23                     
+16/23 [emit_core]         
+17/23                     
+18/23 [finalize]          
+19/23                     
+20/23 [provider-questions]
+21/23                     
+22/23 [cleanup]           
+23/23                     
+[31moutput file: ingest_sio_mesopelagic-fish.knit.md
+
+[39m[1mpandoc [22m
+  to: html
+  output-file: ingest_sio_mesopelagic-fish.html
+  standalone: true
+  embed-resources: false
+  section-divs: true
+  html-math-method: mathjax
+  wrap: none
+  default-image-extension: png
+  toc: true
+  toc-depth: 4
+  number-sections: true
+  variables: {}
+  
+[1mmetadata[22m
+  document-css: false
+  link-citations: true
+  lang: en
+  date: now
+  date-format: iso
+  editor:
+    mode: source
+    markdown:
+      wrap: 72
+    canonical: true
+  editor_options:
+    chunk_output_type: console
+  search: false
+  toc-expand: 1
+  lightbox: true
+  title: Ingest UCSD SIO Mesopelagic Fish
+  calcofi:
+    target_name: ingest_sio_mesopelagic_fish
+    workflow_type: ingest
+    dependency:
+      - ingest_swfsc_ichthyo
+    output: data/parquet/sio_mesopelagic-fish/manifest.json
+    provider: sio
+    dataset: mesopelagic-fish
+    workflow_url: https://calcofi.io/workflows/ingest_sio_mesopelagic-fish.html
+    questions_file: metadata/sio/mesopelagic-fish/questions.csv
+    dataset_meta:
+      dataset_name: UCSD SIO Mesopelagic Fish
+      description: |
+        Species-resolved mesopelagic fish counts (90 named species + 1 unidentified-fish catch-all) from MOHT (Matsuda-Oozeki-Hu Trawl) micronekton net tows, 7 CalCOFI cruises 2010-2012, all on RV New Horizon (NODC 32NM). Larval-fish counts in the same source file are a separate table, not included here.
+      citation_main: |
+        Koslow, J. Anthony (2016). CalCOFI Trawl Data. In California Cooperative Oceanic Fisheries Investigations (CalCOFI): Acoustic and Trawl Data. UC San Diego Library Digital Collections. https://doi.org/10.6075/J0BZ64DH
+      link_calcofi_org: ''
+      link_data_source: https://library.ucsd.edu/dc/object/bb9217084g
+      link_others:
+        - https://doi.org/10.1016/j.pocean.2013.05.013
+      coverage_temporal: 2010-01 to 2012-02
+      coverage_spatial: CalCOFI grid (7 cruises with MOHT tows)
+      license: CC BY 4.0
+      pi_names: J. Anthony Koslow
+    tables_owned:
+      - table: sample
+        shared: true
+        note: core event dimension (tow grain)
+      - table: obs
+        shared: true
+        note: core occurrence headline (bio, per-tow tally)
+      - table: taxon
+        shared: true
+        note: shared taxa reference
+      - table: dataset_taxon
+        shared: true
+        note: scientific name -> taxon_key crosswalk
+      - table: measurement_type
+        shared: true
+    erd:
+      color: '#bbe0f0'
+  
+Output created: _output/ingest_sio_mesopelagic-fish.html
+
+✔ ingest_sio_mesopelagic_fish completed [3m 14.9s, 3.24 kB]
+✔ ended pipeline [3m 14.9s, 1 completed, 2 skipped]
+OK   ingest_sio_mesopelagic_fish 2026-08-05 21:41:45 
+
+========================================================
+RUN ingest_calcofi_phytoplankton 2026-08-05 21:41:45 
+========================================================
+
+Attaching package: ‘calcofi4db’
+
+The following object is masked from ‘package:stats’:
+
+    dt
+
+Excluded 1 target(s): publish_ichthyo_to_obis
+Parsed 24 pipeline workflows:
+  bench_erddap_ctd (reference) -> _output/bench_erddap_ctd.html
+  ctd_cast_qa_qc_protocol (reference) -> _output/ctd-cast_qa-qc-protocol.html
+  deploy_consumers (deploy) -> _output/deploy_consumers.html [deps: test_release]
+  ingest_calcofi_bottle (ingest) -> data/parquet/calcofi_bottle/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_ctd_cast (ingest) -> data/parquet/calcofi_ctd-cast/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_dic (ingest) -> data/parquet/calcofi_dic/manifest.json [deps: ingest_calcofi_bottle]
+  ingest_calcofi_mets (ingest) -> data/parquet/calcofi_mets/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_phyllosoma (ingest) -> data/parquet/calcofi_phyllosoma/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_phytoplankton (ingest) -> data/parquet/calcofi_phytoplankton/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_euphausiids (ingest) -> data/parquet/cce-lter_euphausiids/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_picoplankton_bacteria (ingest) -> data/parquet/cce-lter_picoplankton-bacteria/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_zoodb (ingest) -> data/parquet/cce-lter_zoodb/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_zooscan (ingest) -> data/parquet/cce-lter_zooscan/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cdfw_dungeness_crab (ingest) -> data/parquet/cdfw_dungeness-crab/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_farallon_bird_mammal (ingest) -> data/parquet/farallon_bird-mammal/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_sio_mesopelagic_fish (ingest) -> data/parquet/sio_mesopelagic-fish/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_sio_pic_zooplankton (ingest) -> data/parquet/sio_pic-zooplankton/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_spatial (spatial) -> data/parquet/spatial/manifest.json
+  ingest_swfsc_cufes (ingest) -> data/parquet/swfsc_cufes/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_swfsc_ichthyo (ingest) -> data/parquet/swfsc_ichthyo/manifest.json
+  publish_to_erddap (publish) -> data/erddap/datasets_calcofi.xml [deps: release_database]
+  publish_to_netcdf (publish) -> data/netcdf/publish_plan.csv [deps: release_database]
+  release_database (release) -> data/releases [deps: auto]
+  test_release (test) -> _output/test_release.html [deps: release_database]
++ ingest_calcofi_phytoplankton dispatched
+[31m
+
+processing file: ingest_calcofi_phytoplankton.qmd
+[39m1/21                     
+2/21 [setup]             
+3/21                     
+4/21 [download]          
+5/21                     
+6/21 [parse]             
+7/21                     
+8/21 [region]            
+9/21                     
+10/21 [sample]            
+11/21                     
+12/21 [taxon-measurement] 
+13/21                     
+14/21 [emit_core]         
+15/21                     
+16/21 [finalize]          
+17/21                     
+18/21 [provider-questions]
+19/21                     
+20/21 [cleanup]           
+21/21                     
+[31moutput file: ingest_calcofi_phytoplankton.knit.md
+
+[39m[1mpandoc [22m
+  to: html
+  output-file: ingest_calcofi_phytoplankton.html
+  standalone: true
+  embed-resources: false
+  section-divs: true
+  html-math-method: mathjax
+  wrap: none
+  default-image-extension: png
+  toc: true
+  toc-depth: 4
+  number-sections: true
+  variables: {}
+  
+[1mmetadata[22m
+  document-css: false
+  link-citations: true
+  lang: en
+  date: now
+  date-format: iso
+  editor:
+    mode: source
+    markdown:
+      wrap: 72
+    canonical: true
+  editor_options:
+    chunk_output_type: console
+  search: false
+  toc-expand: 1
+  lightbox: true
+  title: Ingest CalCOFI Phytoplankton (Venrick)
+  calcofi:
+    target_name: ingest_calcofi_phytoplankton
+    workflow_type: ingest
+    dependency:
+      - ingest_swfsc_ichthyo
+    output: data/parquet/calcofi_phytoplankton/manifest.json
+    provider: calcofi
+    dataset: phytoplankton
+    workflow_url: https://calcofi.io/workflows/ingest_calcofi_phytoplankton.html
+    questions_file: metadata/calcofi/phytoplankton/questions.csv
+    dataset_meta:
+      dataset_name: CalCOFI Phytoplankton (Venrick)
+      description: |
+        Abundance and species composition of phytoplankton (385 taxonomic categories) in the California Current, 1996-2022, by inverted-microscope counts (E. Venrick). Samples from the near-surface "second depth" are pooled across stations into four regions (NE, SE, Alley, Offshore; Hayward & Venrick 1998) before counting, so the grain is cruise x region, not per-station. Source: EDI knb-lter-cce.254.4.
+      citation_main: ''
+      link_calcofi_org: https://calcofi.org/data/marine-ecosystem-data/phytoplankton-bacterioplankton/
+      link_data_source: https://portal.edirepository.org/nis/mapbrowse?packageid=knb-lter-cce.254.4
+      link_others: []
+      coverage_temporal: 1996 to 2022
+      coverage_spatial: CalCOFI region (4 pooled sub-regions)
+      license: ''
+      pi_names: Elizabeth L. Venrick
+    tables_owned:
+      - table: sample
+        shared: true
+        note: core event dimension (region_pool grain, no grid_key)
+      - table: obs
+        shared: true
+        note: core occurrence headline (bio, cell abundance by taxon)
+      - table: taxon
+        shared: true
+        note: shared taxa reference
+      - table: dataset_taxon
+        shared: true
+        note: species_code -> taxon_key crosswalk
+      - table: taxon_group
+        shared: true
+        note: phytoplankton functional groups
+      - table: region
+      - table: measurement_type
+        shared: true
+    erd:
+      color: '#b5e8b0'
+  
+Output created: _output/ingest_calcofi_phytoplankton.html
+
+✔ ingest_calcofi_phytoplankton completed [25.2s, 3.73 kB]
+✔ ended pipeline [25.3s, 1 completed, 2 skipped]
+OK   ingest_calcofi_phytoplankton 2026-08-05 21:42:11 
+
+========================================================
+RUN ingest_cce_lter_zooscan 2026-08-05 21:42:11 
+========================================================
+
+Attaching package: ‘calcofi4db’
+
+The following object is masked from ‘package:stats’:
+
+    dt
+
+Excluded 1 target(s): publish_ichthyo_to_obis
+Parsed 24 pipeline workflows:
+  bench_erddap_ctd (reference) -> _output/bench_erddap_ctd.html
+  ctd_cast_qa_qc_protocol (reference) -> _output/ctd-cast_qa-qc-protocol.html
+  deploy_consumers (deploy) -> _output/deploy_consumers.html [deps: test_release]
+  ingest_calcofi_bottle (ingest) -> data/parquet/calcofi_bottle/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_ctd_cast (ingest) -> data/parquet/calcofi_ctd-cast/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_dic (ingest) -> data/parquet/calcofi_dic/manifest.json [deps: ingest_calcofi_bottle]
+  ingest_calcofi_mets (ingest) -> data/parquet/calcofi_mets/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_phyllosoma (ingest) -> data/parquet/calcofi_phyllosoma/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_phytoplankton (ingest) -> data/parquet/calcofi_phytoplankton/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_euphausiids (ingest) -> data/parquet/cce-lter_euphausiids/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_picoplankton_bacteria (ingest) -> data/parquet/cce-lter_picoplankton-bacteria/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_zoodb (ingest) -> data/parquet/cce-lter_zoodb/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_zooscan (ingest) -> data/parquet/cce-lter_zooscan/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cdfw_dungeness_crab (ingest) -> data/parquet/cdfw_dungeness-crab/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_farallon_bird_mammal (ingest) -> data/parquet/farallon_bird-mammal/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_sio_mesopelagic_fish (ingest) -> data/parquet/sio_mesopelagic-fish/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_sio_pic_zooplankton (ingest) -> data/parquet/sio_pic-zooplankton/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_spatial (spatial) -> data/parquet/spatial/manifest.json
+  ingest_swfsc_cufes (ingest) -> data/parquet/swfsc_cufes/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_swfsc_ichthyo (ingest) -> data/parquet/swfsc_ichthyo/manifest.json
+  publish_to_erddap (publish) -> data/erddap/datasets_calcofi.xml [deps: release_database]
+  publish_to_netcdf (publish) -> data/netcdf/publish_plan.csv [deps: release_database]
+  release_database (release) -> data/releases [deps: auto]
+  test_release (test) -> _output/test_release.html [deps: release_database]
++ ingest_cce_lter_zooscan dispatched
+[31m
+
+processing file: ingest_cce-lter_zooscan.qmd
+[39m1/45                        
+2/45 [unnamed-chunk-1]      
+3/45                        
+4/45 [setup]                
+5/45                        
+6/45 [acquire]              
+7/45                        
+8/45 [clean]                
+9/45                        
+10/45 [taxon]                
+11/45                        
+12/45 [sample-keys]          
+13/45                        
+14/45 [spatial]              
+15/45                        
+16/45 [measurement]          
+17/45                        
+18/45 [add-measurement-type] 
+19/45                        
+20/45 [load-dataset-metadata]
+21/45                        
+22/45 [schema]               
+23/45                        
+24/45 [validate]             
+25/45                        
+26/45 [preview-sample]       
+27/45                        
+28/45 [preview-measurement]  
+29/45                        
+30/45 [preview-taxon]        
+31/45                        
+32/45 [emit_core]            
+33/45                        
+34/45 [write-parquet]        
+35/45                        
+36/45 [write-metadata]       
+37/45                        
+38/45 [upload-gcs]           
+39/45                        
+40/45 [provider-questions]   
+41/45                        
+42/45 [cleanup]              
+43/45                        
+44/45 [session_info]         
+45/45                        
+[31moutput file: ingest_cce-lter_zooscan.knit.md
+
+[39m[1mpandoc [22m
+  to: html
+  output-file: ingest_cce-lter_zooscan.html
+  standalone: true
+  embed-resources: false
+  section-divs: true
+  html-math-method: mathjax
+  wrap: none
+  default-image-extension: png
+  toc: true
+  toc-depth: 4
+  number-sections: true
+  variables: {}
+  
+[1mmetadata[22m
+  document-css: false
+  link-citations: true
+  lang: en
+  date: now
+  date-format: iso
+  editor:
+    mode: source
+    markdown:
+      wrap: 72
+    canonical: true
+  editor_options:
+    chunk_output_type: console
+  search: false
+  toc-expand: 1
+  lightbox: true
+  title: Ingest CCE-LTER ZooScan PRPOOS
+  calcofi:
+    target_name: ingest_cce_lter_zooscan
+    workflow_type: ingest
+    dependency:
+      - ingest_swfsc_ichthyo
+    output: data/parquet/cce-lter_zooscan/manifest.json
+    provider: cce-lter
+    dataset: zooscan
+    workflow_url: https://calcofi.io/workflows/ingest_cce-lter_zooscan.html
+    questions_file: metadata/cce-lter/zooscan/questions.csv
+    dataset_meta:
+      dataset_name: ZooScan PRPOOS Zooplankton
+      description: |
+        Zooplankton abundance, carbon biomass, and size (Feret diameter, individual carbon content) from ZooScan optical imaging of CalCOFI / CCE-LTER PRPOOS net tows on lines 80, 87 and 90, 2005-present, machine-classified into 23 bioclasses (copepod groups, euphausiids, chaetognaths, appendicularians, salps, doliolids, pteropods, rhizaria and more). One row per (sample, taxon, measurement_type); per-station tows. Source: SIO Ocean Informatics ZooScan portal (Ohman Lab; interface by Marina Frants).
+      citation_main: ''
+      citation_others: Plankton sample analysis supported by NSF grants to M.D. Ohman and the CCE-LTER site.
+      link_calcofi_org: https://calcofi.org/data/marine-ecosystem-data/zooplankton/
+      link_data_source: https://oceaninformatics.ucsd.edu/zooscandb/
+      link_others: []
+      coverage_temporal: 2005-07 to 2026-04
+      coverage_spatial: CalCOFI lines 80, 87, 90 (Southern California)
+      license: ''
+      pi_names: Mark D. Ohman; Marina Frants
+    tables_owned:
+      - table: sample
+        shared: true
+        note: core event dimension (tow grain)
+      - table: obs
+        shared: true
+        note: core occurrence headline (bio, zooplankton abundance)
+      - table: taxon
+        shared: true
+        note: shared taxa reference
+      - table: dataset_taxon
+        shared: true
+        note: zooscan taxon_id -> taxon_key crosswalk
+      - table: measurement_type
+        shared: true
+        note: shared registry across datasets
+    erd:
+      color: '#c2e8f0'
+  
+Output created: _output/ingest_cce-lter_zooscan.html
+
+✔ ingest_cce_lter_zooscan completed [24.1s, 3.44 kB]
+✔ ended pipeline [24.2s, 1 completed, 2 skipped]
+OK   ingest_cce_lter_zooscan 2026-08-05 21:42:37 
+
+========================================================
+RUN ingest_cce_lter_zoodb 2026-08-05 21:42:37 
+========================================================
+
+Attaching package: ‘calcofi4db’
+
+The following object is masked from ‘package:stats’:
+
+    dt
+
+Excluded 1 target(s): publish_ichthyo_to_obis
+Parsed 24 pipeline workflows:
+  bench_erddap_ctd (reference) -> _output/bench_erddap_ctd.html
+  ctd_cast_qa_qc_protocol (reference) -> _output/ctd-cast_qa-qc-protocol.html
+  deploy_consumers (deploy) -> _output/deploy_consumers.html [deps: test_release]
+  ingest_calcofi_bottle (ingest) -> data/parquet/calcofi_bottle/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_ctd_cast (ingest) -> data/parquet/calcofi_ctd-cast/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_dic (ingest) -> data/parquet/calcofi_dic/manifest.json [deps: ingest_calcofi_bottle]
+  ingest_calcofi_mets (ingest) -> data/parquet/calcofi_mets/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_phyllosoma (ingest) -> data/parquet/calcofi_phyllosoma/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_phytoplankton (ingest) -> data/parquet/calcofi_phytoplankton/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_euphausiids (ingest) -> data/parquet/cce-lter_euphausiids/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_picoplankton_bacteria (ingest) -> data/parquet/cce-lter_picoplankton-bacteria/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_zoodb (ingest) -> data/parquet/cce-lter_zoodb/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_zooscan (ingest) -> data/parquet/cce-lter_zooscan/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cdfw_dungeness_crab (ingest) -> data/parquet/cdfw_dungeness-crab/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_farallon_bird_mammal (ingest) -> data/parquet/farallon_bird-mammal/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_sio_mesopelagic_fish (ingest) -> data/parquet/sio_mesopelagic-fish/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_sio_pic_zooplankton (ingest) -> data/parquet/sio_pic-zooplankton/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_spatial (spatial) -> data/parquet/spatial/manifest.json
+  ingest_swfsc_cufes (ingest) -> data/parquet/swfsc_cufes/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_swfsc_ichthyo (ingest) -> data/parquet/swfsc_ichthyo/manifest.json
+  publish_to_erddap (publish) -> data/erddap/datasets_calcofi.xml [deps: release_database]
+  publish_to_netcdf (publish) -> data/netcdf/publish_plan.csv [deps: release_database]
+  release_database (release) -> data/releases [deps: auto]
+  test_release (test) -> _output/test_release.html [deps: release_database]
++ ingest_cce_lter_zoodb dispatched
+[31m
+
+processing file: ingest_cce-lter_zoodb.qmd
+[39m1/47                        
+2/47 [unnamed-chunk-1]      
+3/47                        
+4/47 [setup]                
+5/47                        
+6/47 [acquire]              
+7/47                        
+8/47 [read-source]          
+9/47                        
+10/47 [clean]                
+11/47                        
+12/47 [taxon]                
+13/47                        
+14/47 [sample-keys]          
+15/47                        
+16/47 [spatial]              
+17/47                        
+18/47 [measurement]          
+19/47                        
+20/47 [add-measurement-type] 
+21/47                        
+22/47 [load-dataset-metadata]
+23/47                        
+24/47 [schema]               
+25/47                        
+26/47 [validate]             
+27/47                        
+28/47 [preview-sample]       
+29/47                        
+30/47 [preview-measurement]  
+31/47                        
+32/47 [preview-taxon]        
+33/47                        
+34/47 [emit_core]            
+35/47                        
+36/47 [write-parquet]        
+37/47                        
+38/47 [write-metadata]       
+39/47                        
+40/47 [upload-gcs]           
+41/47                        
+42/47 [provider-questions]   
+43/47                        
+44/47 [cleanup]              
+45/47                        
+46/47 [session_info]         
+47/47                        
+[31moutput file: ingest_cce-lter_zoodb.knit.md
+
+[39m[1mpandoc [22m
+  to: html
+  output-file: ingest_cce-lter_zoodb.html
+  standalone: true
+  embed-resources: false
+  section-divs: true
+  html-math-method: mathjax
+  wrap: none
+  default-image-extension: png
+  toc: true
+  toc-depth: 4
+  number-sections: true
+  variables: {}
+  
+[1mmetadata[22m
+  document-css: false
+  link-citations: true
+  lang: en
+  date: now
+  date-format: iso
+  editor:
+    mode: source
+    markdown:
+      wrap: 72
+    canonical: true
+  editor_options:
+    chunk_output_type: console
+  search: false
+  toc-expand: 1
+  lightbox: true
+  title: Ingest CCE-LTER ZooDB Holoplankton
+  calcofi:
+    target_name: ingest_cce_lter_zoodb
+    workflow_type: ingest
+    dependency:
+      - ingest_swfsc_ichthyo
+    output: data/parquet/cce-lter_zoodb/manifest.json
+    provider: cce-lter
+    dataset: zoodb
+    workflow_url: https://calcofi.io/workflows/ingest_cce-lter_zoodb.html
+    questions_file: metadata/cce-lter/zoodb/questions.csv
+    dataset_meta:
+      dataset_name: ZooDB Holoplankton Community
+      description: |
+        Holoplankton abundance and carbon biomass by 33 higher taxa (copepods to family, plus amphipods, chaetognaths, salps, pyrosomes, pteropods, ostracods, foraminifera, radiolaria and more) from CalCOFI net tows, 1951-2021, enumerated by microscopy (Ohman Lab / SIO Pelagic Invertebrate Collection). One row per (sample, taxon, measurement_type); unpooled tows are station-resolved, pooled samples are per-cruise regional composites. Raw (uncorrected) abundance per 1000 m3 and per m2, plus biomass mg C/m2.
+      citation_main: ''
+      citation_others: Plankton sample analysis supported by NSF grants to M.D. Ohman and the CCE-LTER site, and by the SIO Pelagic Invertebrate Collection.
+      link_calcofi_org: https://calcofi.org/data/marine-ecosystem-data/zooplankton/
+      link_data_source: https://oceaninformatics.ucsd.edu/zoodb/
+      link_others: []
+      coverage_temporal: 1951-03 to 2021-05
+      coverage_spatial: CalCOFI lines 60-93 (Southern + Central California)
+      license: ''
+      pi_names: Mark D. Ohman; Bertha Lavaniegos; Linsey Sala
+    tables_owned:
+      - table: sample
+        shared: true
+        note: core event dimension (tow grain)
+      - table: obs
+        shared: true
+        note: core occurrence headline (bio, zooplankton abundance)
+      - table: taxon
+        shared: true
+        note: shared taxa reference
+      - table: dataset_taxon
+        shared: true
+        note: zoodb taxon_id -> taxon_key crosswalk
+      - table: measurement_type
+        shared: true
+        note: shared registry across datasets
+    erd:
+      color: '#d9c2f0'
+  
+Output created: _output/ingest_cce-lter_zoodb.html
+
+✔ ingest_cce_lter_zoodb completed [23.8s, 3.42 kB]
+✔ ended pipeline [23.9s, 1 completed, 2 skipped]
+OK   ingest_cce_lter_zoodb 2026-08-05 21:43:02 
+
+========================================================
+RUN ingest_cce_lter_euphausiids 2026-08-05 21:43:02 
+========================================================
+
+Attaching package: ‘calcofi4db’
+
+The following object is masked from ‘package:stats’:
+
+    dt
+
+Excluded 1 target(s): publish_ichthyo_to_obis
+Parsed 24 pipeline workflows:
+  bench_erddap_ctd (reference) -> _output/bench_erddap_ctd.html
+  ctd_cast_qa_qc_protocol (reference) -> _output/ctd-cast_qa-qc-protocol.html
+  deploy_consumers (deploy) -> _output/deploy_consumers.html [deps: test_release]
+  ingest_calcofi_bottle (ingest) -> data/parquet/calcofi_bottle/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_ctd_cast (ingest) -> data/parquet/calcofi_ctd-cast/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_dic (ingest) -> data/parquet/calcofi_dic/manifest.json [deps: ingest_calcofi_bottle]
+  ingest_calcofi_mets (ingest) -> data/parquet/calcofi_mets/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_phyllosoma (ingest) -> data/parquet/calcofi_phyllosoma/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_phytoplankton (ingest) -> data/parquet/calcofi_phytoplankton/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_euphausiids (ingest) -> data/parquet/cce-lter_euphausiids/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_picoplankton_bacteria (ingest) -> data/parquet/cce-lter_picoplankton-bacteria/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_zoodb (ingest) -> data/parquet/cce-lter_zoodb/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_zooscan (ingest) -> data/parquet/cce-lter_zooscan/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cdfw_dungeness_crab (ingest) -> data/parquet/cdfw_dungeness-crab/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_farallon_bird_mammal (ingest) -> data/parquet/farallon_bird-mammal/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_sio_mesopelagic_fish (ingest) -> data/parquet/sio_mesopelagic-fish/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_sio_pic_zooplankton (ingest) -> data/parquet/sio_pic-zooplankton/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_spatial (spatial) -> data/parquet/spatial/manifest.json
+  ingest_swfsc_cufes (ingest) -> data/parquet/swfsc_cufes/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_swfsc_ichthyo (ingest) -> data/parquet/swfsc_ichthyo/manifest.json
+  publish_to_erddap (publish) -> data/erddap/datasets_calcofi.xml [deps: release_database]
+  publish_to_netcdf (publish) -> data/netcdf/publish_plan.csv [deps: release_database]
+  release_database (release) -> data/releases [deps: auto]
+  test_release (test) -> _output/test_release.html [deps: release_database]
++ ingest_cce_lter_euphausiids dispatched
+[31m
+
+processing file: ingest_cce-lter_euphausiids.qmd
+[39m1/51                        
+2/51 [unnamed-chunk-1]      
+3/51                        
+4/51 [setup]                
+5/51                        
+6/51 [read-source]          
+7/51                        
+8/51 [clean-data]           
+9/51                        
+10/51 [parse-columns]        
+11/51                        
+12/51 [taxon-worms]          
+13/51                        
+14/51 [pivot-long]           
+15/51                        
+16/51 [resolve-keys]         
+17/51                        
+18/51 [load-tow]             
+19/51                        
+20/51 [spatial]              
+21/51                        
+22/51 [load-measurement]     
+23/51                        
+24/51 [measurement-summary]  
+25/51                        
+26/51 [add-measurement-type] 
+27/51                        
+28/51 [load-dataset-metadata]
+29/51                        
+30/51 [schema]               
+31/51                        
+32/51 [validate]             
+33/51                        
+34/51 [preview-taxon]        
+35/51                        
+36/51 [preview-measurement]  
+37/51                        
+38/51 [emit_core]            
+39/51                        
+40/51 [write-parquet]        
+41/51                        
+42/51 [write-metadata]       
+43/51                        
+44/51 [upload-gcs]           
+45/51                        
+46/51 [provider-questions]   
+47/51                        
+48/51 [cleanup]              
+49/51                        
+50/51 [session_info]         
+51/51                        
+[31moutput file: ingest_cce-lter_euphausiids.knit.md
+
+[39m[1mpandoc [22m
+  to: html
+  output-file: ingest_cce-lter_euphausiids.html
+  standalone: true
+  embed-resources: false
+  section-divs: true
+  html-math-method: mathjax
+  wrap: none
+  default-image-extension: png
+  toc: true
+  toc-depth: 4
+  number-sections: true
+  variables: {}
+  
+[1mmetadata[22m
+  document-css: false
+  link-citations: true
+  lang: en
+  date: now
+  date-format: iso
+  editor:
+    mode: source
+    markdown:
+      wrap: 72
+    canonical: true
+  editor_options:
+    chunk_output_type: console
+  search: false
+  toc-expand: 1
+  lightbox: true
+  title: Ingest CCE-LTER Euphausiids
+  calcofi:
+    target_name: ingest_cce_lter_euphausiids
+    workflow_type: ingest
+    dependency:
+      - ingest_swfsc_ichthyo
+    output: data/parquet/cce-lter_euphausiids/manifest.json
+    provider: cce-lter
+    dataset: euphausiids
+    workflow_url: https://calcofi.io/workflows/ingest_cce-lter_euphausiids.html
+    questions_file: metadata/cce-lter/euphausiids/questions.csv
+    dataset_meta:
+      dataset_name: CCE-LTER Euphausiid Abundance
+      description: |
+        Species- and life-stage-resolved euphausiid (krill) abundance from CalCOFI / CCE-LTER net tows (BTEDB export), 1951-present, one row per tow x species x life stage. Supersedes the prior single-Abundance- column ingest, which had no taxonomic scope (Q02, now resolved) — units remain provisional pending provider confirmation (Q01).
+      citation_main: ''
+      link_calcofi_org: ''
+      link_data_source: BTEDB (Bongo Tow Euphausiid Database) export
+      link_others: []
+      coverage_temporal: 1951-01 to present
+      coverage_spatial: CalCOFI grid incl. Baja lines
+      license: ''
+      pi_names: Rasmus Swalethorp; Linsey Sala
+    tables_owned:
+      - table: sample
+        shared: true
+        note: core event dimension (tow grain)
+      - table: obs
+        shared: true
+        note: core occurrence headline (bio, species x life stage)
+      - table: taxon
+        shared: true
+        note: shared taxa reference (37 BTEDB species)
+      - table: dataset_taxon
+        shared: true
+        note: BTEDB taxon_id -> taxon_key crosswalk
+      - table: measurement_type
+        shared: true
+        note: shared registry across datasets
+    erd:
+      color: '#d2f0bb'
+  
+Output created: _output/ingest_cce-lter_euphausiids.html
+
+✔ ingest_cce_lter_euphausiids completed [1m 42.2s, 3.51 kB]
+✔ ended pipeline [1m 42.3s, 1 completed, 2 skipped]
+OK   ingest_cce_lter_euphausiids 2026-08-05 21:44:45 
+
+========================================================
+RUN ingest_calcofi_phyllosoma 2026-08-05 21:44:45 
+========================================================
+
+Attaching package: ‘calcofi4db’
+
+The following object is masked from ‘package:stats’:
+
+    dt
+
+Excluded 1 target(s): publish_ichthyo_to_obis
+Parsed 24 pipeline workflows:
+  bench_erddap_ctd (reference) -> _output/bench_erddap_ctd.html
+  ctd_cast_qa_qc_protocol (reference) -> _output/ctd-cast_qa-qc-protocol.html
+  deploy_consumers (deploy) -> _output/deploy_consumers.html [deps: test_release]
+  ingest_calcofi_bottle (ingest) -> data/parquet/calcofi_bottle/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_ctd_cast (ingest) -> data/parquet/calcofi_ctd-cast/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_dic (ingest) -> data/parquet/calcofi_dic/manifest.json [deps: ingest_calcofi_bottle]
+  ingest_calcofi_mets (ingest) -> data/parquet/calcofi_mets/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_phyllosoma (ingest) -> data/parquet/calcofi_phyllosoma/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_phytoplankton (ingest) -> data/parquet/calcofi_phytoplankton/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_euphausiids (ingest) -> data/parquet/cce-lter_euphausiids/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_picoplankton_bacteria (ingest) -> data/parquet/cce-lter_picoplankton-bacteria/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_zoodb (ingest) -> data/parquet/cce-lter_zoodb/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_zooscan (ingest) -> data/parquet/cce-lter_zooscan/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cdfw_dungeness_crab (ingest) -> data/parquet/cdfw_dungeness-crab/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_farallon_bird_mammal (ingest) -> data/parquet/farallon_bird-mammal/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_sio_mesopelagic_fish (ingest) -> data/parquet/sio_mesopelagic-fish/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_sio_pic_zooplankton (ingest) -> data/parquet/sio_pic-zooplankton/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_spatial (spatial) -> data/parquet/spatial/manifest.json
+  ingest_swfsc_cufes (ingest) -> data/parquet/swfsc_cufes/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_swfsc_ichthyo (ingest) -> data/parquet/swfsc_ichthyo/manifest.json
+  publish_to_erddap (publish) -> data/erddap/datasets_calcofi.xml [deps: release_database]
+  publish_to_netcdf (publish) -> data/netcdf/publish_plan.csv [deps: release_database]
+  release_database (release) -> data/releases [deps: auto]
+  test_release (test) -> _output/test_release.html [deps: release_database]
++ ingest_calcofi_phyllosoma dispatched
+[31m
+
+processing file: ingest_calcofi_phyllosoma.qmd
+[39m1/17                     
+2/17 [setup]             
+3/17                     
+4/17 [download]          
+5/17                     
+6/17 [build]             
+7/17                     
+8/17 [keys-spatial]      
+9/17                     
+10/17 [emit_core]         
+11/17                     
+12/17 [finalize]          
+13/17                     
+14/17 [provider-questions]
+15/17                     
+16/17 [cleanup]           
+17/17                     
+[31moutput file: ingest_calcofi_phyllosoma.knit.md
+
+[39m[1mpandoc [22m
+  to: html
+  output-file: ingest_calcofi_phyllosoma.html
+  standalone: true
+  embed-resources: false
+  section-divs: true
+  html-math-method: mathjax
+  wrap: none
+  default-image-extension: png
+  toc: true
+  toc-depth: 4
+  number-sections: true
+  variables: {}
+  
+[1mmetadata[22m
+  document-css: false
+  link-citations: true
+  lang: en
+  date: now
+  date-format: iso
+  editor:
+    mode: source
+    markdown:
+      wrap: 72
+    canonical: true
+  editor_options:
+    chunk_output_type: console
+  search: false
+  toc-expand: 1
+  lightbox: true
+  title: Ingest CalCOFI Lobster Phyllosoma
+  calcofi:
+    target_name: ingest_calcofi_phyllosoma
+    workflow_type: ingest
+    dependency:
+      - ingest_swfsc_ichthyo
+    output: data/parquet/calcofi_phyllosoma/manifest.json
+    provider: calcofi
+    dataset: phyllosoma
+    workflow_url: https://calcofi.io/workflows/ingest_calcofi_phyllosoma.html
+    questions_file: metadata/calcofi/phyllosoma/questions.csv
+    dataset_meta:
+      dataset_name: CalCOFI Lobster Phyllosoma
+      description: |
+        Spiny lobster (Panulirus interruptus) phyllosoma larvae counts by developmental stage from CalCOFI net tows, 1951-2008. Source: EDI knb-lter-cce.188.4 (Koslow).
+      citation_main: ''
+      link_calcofi_org: ''
+      link_data_source: https://portal.edirepository.org/nis/mapbrowse?packageid=knb-lter-cce.188.4
+      link_others: []
+      coverage_temporal: 1951 to 2008
+      coverage_spatial: CalCOFI region
+      license: ''
+      pi_names: J. Anthony Koslow
+    tables_owned:
+      - table: sample
+        shared: true
+        note: core event dimension (tow grain)
+      - table: obs
+        shared: true
+        note: core occurrence headline (total phyllosoma per tow)
+      - table: obs_attribute
+        shared: true
+        note: stage distribution within each occurrence
+      - table: taxon
+        shared: true
+        note: shared taxa reference
+      - table: dataset_taxon
+        shared: true
+        note: stage-type -> taxon_key crosswalk
+      - table: measurement_type
+        shared: true
+    erd:
+      color: '#e0bbf0'
+  
+Output created: _output/ingest_calcofi_phyllosoma.html
+
+✔ ingest_calcofi_phyllosoma completed [23.7s, 3.62 kB]
+✔ ended pipeline [23.8s, 1 completed, 2 skipped]
+OK   ingest_calcofi_phyllosoma 2026-08-05 21:45:10 
+
+========================================================
+RUN ingest_swfsc_cufes 2026-08-05 21:45:10 
+========================================================
+
+Attaching package: ‘calcofi4db’
+
+The following object is masked from ‘package:stats’:
+
+    dt
+
+Excluded 1 target(s): publish_ichthyo_to_obis
+Parsed 24 pipeline workflows:
+  bench_erddap_ctd (reference) -> _output/bench_erddap_ctd.html
+  ctd_cast_qa_qc_protocol (reference) -> _output/ctd-cast_qa-qc-protocol.html
+  deploy_consumers (deploy) -> _output/deploy_consumers.html [deps: test_release]
+  ingest_calcofi_bottle (ingest) -> data/parquet/calcofi_bottle/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_ctd_cast (ingest) -> data/parquet/calcofi_ctd-cast/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_dic (ingest) -> data/parquet/calcofi_dic/manifest.json [deps: ingest_calcofi_bottle]
+  ingest_calcofi_mets (ingest) -> data/parquet/calcofi_mets/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_phyllosoma (ingest) -> data/parquet/calcofi_phyllosoma/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_phytoplankton (ingest) -> data/parquet/calcofi_phytoplankton/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_euphausiids (ingest) -> data/parquet/cce-lter_euphausiids/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_picoplankton_bacteria (ingest) -> data/parquet/cce-lter_picoplankton-bacteria/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_zoodb (ingest) -> data/parquet/cce-lter_zoodb/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_zooscan (ingest) -> data/parquet/cce-lter_zooscan/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cdfw_dungeness_crab (ingest) -> data/parquet/cdfw_dungeness-crab/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_farallon_bird_mammal (ingest) -> data/parquet/farallon_bird-mammal/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_sio_mesopelagic_fish (ingest) -> data/parquet/sio_mesopelagic-fish/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_sio_pic_zooplankton (ingest) -> data/parquet/sio_pic-zooplankton/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_spatial (spatial) -> data/parquet/spatial/manifest.json
+  ingest_swfsc_cufes (ingest) -> data/parquet/swfsc_cufes/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_swfsc_ichthyo (ingest) -> data/parquet/swfsc_ichthyo/manifest.json
+  publish_to_erddap (publish) -> data/erddap/datasets_calcofi.xml [deps: release_database]
+  publish_to_netcdf (publish) -> data/netcdf/publish_plan.csv [deps: release_database]
+  release_database (release) -> data/releases [deps: auto]
+  test_release (test) -> _output/test_release.html [deps: release_database]
++ ingest_swfsc_cufes dispatched
+[31m
+
+processing file: ingest_swfsc_cufes.qmd
+[39m1/19                     
+2/19 [setup]             
+3/19                     
+4/19 [download]          
+5/19                     
+6/19 [build]             
+7/19                     
+8/19 [keys-spatial]      
+9/19                     
+10/19 [meas-types]        
+11/19                     
+12/19 [emit_core]         
+13/19                     
+14/19 [finalize]          
+15/19                     
+16/19 [provider-questions]
+17/19                     
+18/19 [cleanup]           
+19/19                     
+[31moutput file: ingest_swfsc_cufes.knit.md
+
+[39m[1mpandoc [22m
+  to: html
+  output-file: ingest_swfsc_cufes.html
+  standalone: true
+  embed-resources: false
+  section-divs: true
+  html-math-method: mathjax
+  wrap: none
+  default-image-extension: png
+  toc: true
+  toc-depth: 4
+  number-sections: true
+  variables: {}
+  
+[1mmetadata[22m
+  document-css: false
+  link-citations: true
+  lang: en
+  date: now
+  date-format: iso
+  editor:
+    mode: source
+    markdown:
+      wrap: 72
+    canonical: true
+  editor_options:
+    chunk_output_type: console
+  search: false
+  toc-expand: 1
+  lightbox: true
+  title: Ingest Underway CUFES Fish Eggs
+  calcofi:
+    target_name: ingest_swfsc_cufes
+    workflow_type: ingest
+    dependency:
+      - ingest_swfsc_ichthyo
+    output: data/parquet/swfsc_cufes/manifest.json
+    provider: swfsc
+    dataset: cufes
+    workflow_url: https://calcofi.io/workflows/ingest_swfsc_cufes.html
+    questions_file: metadata/swfsc/cufes/questions.csv
+    dataset_meta:
+      dataset_name: CalCOFI Underway CUFES Fish Eggs
+      description: |
+        Continuous Underway Fish Egg Sampler (CUFES) egg counts (sardine, anchovy, jack mackerel, hake, squid, other) with underway environmental conditions, from CalCOFI cruises (1996-present). Source: NOAA CoastWatch ERDDAP erdCalCOFIcufes.
+      citation_main: ''
+      link_calcofi_org: ''
+      link_data_source: https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFIcufes.html
+      link_others: []
+      coverage_temporal: 1996 to present
+      coverage_spatial: CalCOFI region (underway)
+      license: ''
+      pi_names: Noelle Bowlin
+    tables_owned:
+      - table: sample
+        shared: true
+        note: core event dimension (underway grain)
+      - table: obs
+        shared: true
+        note: core occurrence headline (bio, egg counts by species)
+      - table: taxon
+        shared: true
+        note: shared taxa reference
+      - table: dataset_taxon
+        shared: true
+        note: egg-type -> taxon_key crosswalk
+      - table: measurement_type
+        shared: true
+    erd:
+      color: '#f0e8bb'
+  
+Output created: _output/ingest_swfsc_cufes.html
+
+✔ ingest_swfsc_cufes completed [26.7s, 3.20 kB]
+✔ ended pipeline [26.8s, 1 completed, 2 skipped]
+OK   ingest_swfsc_cufes 2026-08-05 21:45:38 
+
+========================================================
+RUN ingest_cdfw_dungeness_crab 2026-08-05 21:45:38 
+========================================================
+
+Attaching package: ‘calcofi4db’
+
+The following object is masked from ‘package:stats’:
+
+    dt
+
+Excluded 1 target(s): publish_ichthyo_to_obis
+Parsed 24 pipeline workflows:
+  bench_erddap_ctd (reference) -> _output/bench_erddap_ctd.html
+  ctd_cast_qa_qc_protocol (reference) -> _output/ctd-cast_qa-qc-protocol.html
+  deploy_consumers (deploy) -> _output/deploy_consumers.html [deps: test_release]
+  ingest_calcofi_bottle (ingest) -> data/parquet/calcofi_bottle/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_ctd_cast (ingest) -> data/parquet/calcofi_ctd-cast/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_dic (ingest) -> data/parquet/calcofi_dic/manifest.json [deps: ingest_calcofi_bottle]
+  ingest_calcofi_mets (ingest) -> data/parquet/calcofi_mets/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_phyllosoma (ingest) -> data/parquet/calcofi_phyllosoma/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_phytoplankton (ingest) -> data/parquet/calcofi_phytoplankton/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_euphausiids (ingest) -> data/parquet/cce-lter_euphausiids/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_picoplankton_bacteria (ingest) -> data/parquet/cce-lter_picoplankton-bacteria/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_zoodb (ingest) -> data/parquet/cce-lter_zoodb/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_zooscan (ingest) -> data/parquet/cce-lter_zooscan/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cdfw_dungeness_crab (ingest) -> data/parquet/cdfw_dungeness-crab/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_farallon_bird_mammal (ingest) -> data/parquet/farallon_bird-mammal/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_sio_mesopelagic_fish (ingest) -> data/parquet/sio_mesopelagic-fish/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_sio_pic_zooplankton (ingest) -> data/parquet/sio_pic-zooplankton/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_spatial (spatial) -> data/parquet/spatial/manifest.json
+  ingest_swfsc_cufes (ingest) -> data/parquet/swfsc_cufes/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_swfsc_ichthyo (ingest) -> data/parquet/swfsc_ichthyo/manifest.json
+  publish_to_erddap (publish) -> data/erddap/datasets_calcofi.xml [deps: release_database]
+  publish_to_netcdf (publish) -> data/netcdf/publish_plan.csv [deps: release_database]
+  release_database (release) -> data/releases [deps: auto]
+  test_release (test) -> _output/test_release.html [deps: release_database]
++ ingest_cdfw_dungeness_crab dispatched
+[31m
+
+processing file: ingest_cdfw_dungeness-crab.qmd
+[39m1/59                     
+2/59 [unnamed-chunk-1]   
+3/59                     
+4/59 [setup]             
+5/59                     
+6/59 [read-source]       
+7/59                     
+8/59 [methods-note]      
+9/59                     
+10/59 [resolve-keys]      
+11/59                     
+12/59 [match-sites]       
+13/59                     
+14/59 [build-sample]      
+15/59                     
+16/59 [build-measurement] 
+17/59                     
+18/59 [build-carapace]    
+19/59                     
+20/59 [build-sorting-log] 
+21/59                     
+22/59 [build-specimen]    
+23/59                     
+24/59 [enforce-types]     
+25/59                     
+26/59 [spatial]           
+27/59                     
+28/59 [meas-types]        
+29/59                     
+30/59 [emit-core]         
+31/59                     
+32/59 [core-parity]       
+33/59                     
+34/59 [compat-views]      
+35/59                     
+36/59 [schema-core]       
+37/59                     
+38/59 [source-to-core]    
+39/59                     
+40/59 [schema]            
+41/59                     
+42/59 [validate]          
+[31mError:
+! a declared NULL count has changed — the data moved, so re-derive the reason
+Backtrace:
+    ▆
+ 1. └─base::stopifnot(...)
+[39m[31m
+Quitting from ingest_cdfw_dungeness-crab.qmd:969-1146 [validate]
+[39m[31mExecution halted
+[39m[33mWARN: Error encountered when rendering files[39m
+✖ ingest_cdfw_dungeness_crab errored
+✖ errored pipeline [13.1s, 0 completed, 2 skipped]
+!! FAILED: Error in tar_make():
+  ! Error running quarto CLI from R.
+Caused by error in `quarto::quarto_render()`:
+✖ Error returned by quarto CLI.
+  -----------------------------
+  
+  
+  processing file: ingest_cdfw_dungeness-crab.qmd
+  1/59
+  2/59 [unnamed-chunk-1]
+  3/59
+  4/59 [setup]
+  5/59
+  6/59 [read-source]
+  7/59
+  8/59 [methods-note]
+  9/59
+  10/59 [resolve-keys]
+  11/59
+  12/59 [match-sites]
+  13/59
+  14/59 [build-sample]
+  15/59
+  16/59 [build-measurement]
+  17/59
+  18/59 [build-carapace]
+  19/59
+  20/59 [build-sorting-log]
+  21/59
+  22/59 [build-specimen]
+  23/59
+  24/59 [enforce-types]
+  25/59
+  26/59 [spatial]
+  27/59
+  28/59 [meas-types]
+  29/59
+  30/59 [emit-core]
+  31/59
+  32/59 [core-parity]
+  33/59
+  34/59 [compat-views]
+  35/59
+  36/59 [schema-core]
+  37/59
+  38/59 [source-to-core]
+  39/59
+  40/59 [schema]
+  41/59
+  42/59 [validate]
+  [31mError:[39m
+  ! a declared NULL count has changed — the data moved, so re-derive the reason
+  Backtrace:
+  ▆
+  1. └─base::stopifnot(...)
+  
+  Quitting from ingest_cdfw_dungeness-crab.qmd:969-1146 [validate]
+  [31mExecution halted[39m
+  [33mWARN: Error encountered when rendering files[39m
+  
+Caused by error:
+! System command 'quarto' failed
+  See https://books.ropensci.org/targets/debugging.html 
+FAIL ingest_cdfw_dungeness_crab 2026-08-05 21:45:52 
+
+================ RENDERS THAT ACTUALLY RAN ================
+  ingest_calcofi_phyllosoma.html                       21:45:10
+  ingest_calcofi_phytoplankton.html                    21:42:11
+  ingest_cce-lter_euphausiids.html                     21:44:45
+  ingest_cce-lter_zoodb.html                           21:43:02
+  ingest_cce-lter_zooscan.html                         21:42:36
+  ingest_farallon_bird-mammal.html                     21:38:29
+  ingest_sio_mesopelagic-fish.html                     21:41:45
+  ingest_swfsc_cufes.html                              21:45:38
+  ingest_swfsc_ichthyo.html                            21:37:49
+
+================ TARGET ERRORS ================
+                        name
+1 ingest_cdfw_dungeness_crab
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               error
+1 ! Error running quarto CLI from R. Caused by error in `quarto::quarto_render()`: ✖ Error returned by quarto CLI.   -----------------------------         processing file: ingest_cdfw_dungeness-crab.qmd   1/59   2/59 [unnamed-chunk-1]   3/59   4/59 [setup]   5/59   6/59 [read-source]   7/59   8/59 [methods-note]   9/59   10/59 [resolve-keys]   11/59   12/59 [match-sites]   13/59   14/59 [build-sample]   15/59   16/59 [build-measurement]   17/59   18/59 [build-carapace]   19/59   20/59 [build-sorting-log]   21/59   22/59 [build-specimen]   23/59   24/59 [enforce-types]   25/59   26/59 [spatial]   27/59   28/59 [meas-types]   29/59   30/59 [emit-core]   31/59   32/59 [core-parity]   33/59   34/59 [compat-views]   35/59   36/59 [schema-core]   37/59   38/59 [source-to-core]   39/59   40/59 [schema]   41/59   42/59 [validate]   Error:   ! a declared NULL count has changed — the data moved, so re-derive the reason   Backtrace:   ▆   1. └─base::stopifnot(...)      Quitting from ingest_cdfw_dungeness-crab.qmd:969-1146 [validate]   Execution halted   WARN: Error encountered when rendering files    Caused by error: ! System command 'quarto' failed

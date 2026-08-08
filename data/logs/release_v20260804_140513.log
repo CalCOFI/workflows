@@ -1,0 +1,408 @@
+14:05 pipeline start
+
+Attaching package: ‘calcofi4db’
+
+The following object is masked from ‘package:stats’:
+
+    dt
+
+Excluded 2 target(s): publish_ichthyo_to_obis, publish_to_netcdf
+Parsed 22 pipeline workflows:
+  bench_erddap_ctd (reference) -> _output/bench_erddap_ctd.html
+  ctd_cast_qa_qc_protocol (reference) -> _output/ctd-cast_qa-qc-protocol.html
+  ingest_calcofi_bottle (ingest) -> data/parquet/calcofi_bottle/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_ctd_cast (ingest) -> data/parquet/calcofi_ctd-cast/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_dic (ingest) -> data/parquet/calcofi_dic/manifest.json [deps: ingest_calcofi_bottle]
+  ingest_calcofi_mets (ingest) -> data/parquet/calcofi_mets/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_phyllosoma (ingest) -> data/parquet/calcofi_phyllosoma/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_phytoplankton (ingest) -> data/parquet/calcofi_phytoplankton/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_euphausiids (ingest) -> data/parquet/cce-lter_euphausiids/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_picoplankton_bacteria (ingest) -> data/parquet/cce-lter_picoplankton-bacteria/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_zoodb (ingest) -> data/parquet/cce-lter_zoodb/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_zooscan (ingest) -> data/parquet/cce-lter_zooscan/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cdfw_dungeness_crab (ingest) -> data/parquet/cdfw_dungeness-crab/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_farallon_bird_mammal (ingest) -> data/parquet/farallon_bird-mammal/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_sio_mesopelagic_fish (ingest) -> data/parquet/sio_mesopelagic-fish/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_sio_pic_zooplankton (ingest) -> data/parquet/sio_pic-zooplankton/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_spatial (spatial) -> data/parquet/spatial/manifest.json
+  ingest_swfsc_cufes (ingest) -> data/parquet/swfsc_cufes/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_swfsc_ichthyo (ingest) -> data/parquet/swfsc_ichthyo/manifest.json
+  publish_to_erddap (publish) -> data/erddap/datasets_calcofi.xml [deps: release_database]
+  release_database (release) -> data/releases [deps: auto]
+  test_release (test) -> _output/test_release.html [deps: release_database]
++ ingest_spatial dispatched
+[31m
+
+processing file: ingest_spatial.qmd
+[39m1/21                        
+2/21 [unnamed-chunk-1]      
+3/21                        
+4/21 [setup]                
+5/21                        
+6/21 [arcgis-rest]          
+7/21                        
+8/21 [clip-layers]          
+9/21                        
+10/21 [helpers]              
+11/21                        
+12/21 [process-datasets]     
+13/21                        
+14/21 [build-spatial-parquet]
+15/21                        
+16/21 [upload-gcs]           
+17/21                        
+18/21 [manifest]             
+19/21                        
+20/21 [summary]              
+21/21                        
+[31moutput file: ingest_spatial.knit.md
+
+[39m[1mpandoc [22m
+  to: html
+  output-file: ingest_spatial.html
+  standalone: true
+  embed-resources: false
+  section-divs: true
+  html-math-method: mathjax
+  wrap: none
+  default-image-extension: png
+  toc: true
+  toc-depth: 4
+  number-sections: true
+  variables: {}
+  
+[1mmetadata[22m
+  document-css: false
+  link-citations: true
+  lang: en
+  date: now
+  date-format: iso
+  editor:
+    mode: source
+    markdown:
+      wrap: 72
+    canonical: true
+  editor_options:
+    chunk_output_type: console
+  search: false
+  toc-expand: 1
+  lightbox: true
+  title: Ingest Spatial Boundaries
+  calcofi:
+    target_name: ingest_spatial
+    workflow_type: spatial
+    dependency: []
+    output: data/parquet/spatial/manifest.json
+  
+Output created: _output/ingest_spatial.html
+
+✔ ingest_spatial completed [2m 39.7s, 472 B]
++ release_database dispatched
+[31m
+
+processing file: release_database.qmd
+[39m1/35                   
+2/35 [gen_fig_workflow]
+3/35                   
+4/35 [setup]           
+5/35                   
+6/35 [assemble_working]
+7/35                   
+8/35 [dataset_ref]     
+9/35                   
+10/35 [core_tables]     
+11/35                   
+12/35 [core_by_dataset] 
+13/35                   
+14/35 [core_parity]     
+15/35                   
+16/35 [scan_mismatches] 
+17/35                   
+18/35 [validate]        
+19/35                   
+20/35 [unnamed-chunk-1] 
+21/35                   
+22/35 [combined_schema] 
+23/35                   
+24/35 [normalize_crs]   
+25/35                   
+26/35 [freeze_release]  
+27/35                   
+28/35 [release_notes]   
+29/35                   
+30/35 [upload_frozen]   
+[31mCopying file:///Users/bbest/Github/CalCOFI/workflows/data/releases/v2026.08.04/parquet/cruise.parquet to gs://calcofi-db/ducklake/releases/v2026.08.04/parquet/cruise.parquet
+[39m[31m  
+[39m[31m.......
+[39m[31mCopying file:///Users/bbest/Github/CalCOFI/workflows/data/releases/v2026.08.04/parquet/dataset_taxon.parquet to gs://calcofi-db/ducklake/releases/v2026.08.04/parquet/dataset_taxon.parquet
+[39m[31m  
+[39m[31m........
+[39m[31mCopying file:///Users/bbest/Github/CalCOFI/workflows/data/releases/v2026.08.04/parquet/grid.parquet to gs://calcofi-db/ducklake/releases/v2026.08.04/parquet/grid.parquet
+[39m[31m  
+[39m[31m........
+[39m[31mCopying file:///Users/bbest/Github/CalCOFI/workflows/data/releases/v2026.08.04/parquet/measurement_type.parquet to gs://calcofi-db/ducklake/releases/v2026.08.04/parquet/measurement_type.parquet
+[39m[31m  
+[39m[31m.......
+[39m[31mCopying file:///Users/bbest/Github/CalCOFI/workflows/data/releases/v2026.08.04/parquet/obs_attribute.parquet to gs://calcofi-db/ducklake/releases/v2026.08.04/parquet/obs_attribute.parquet
+[39m[31m  
+[39m[31m.....................
+[39m[31mCopying file:///Users/bbest/Github/CalCOFI/workflows/data/releases/v2026.08.04/parquet/obs.parquet to gs://calcofi-db/ducklake/releases/v2026.08.04/parquet/obs.parquet
+[39m[31m  
+[39m[31m.............................................................................................................................................................................................................................................................................................
+[39m[31m
+Average throughput: 5.3MiB/s
+[39m[31mCopying file:///Users/bbest/Github/CalCOFI/workflows/data/releases/v2026.08.04/parquet/sample_measurement.parquet to gs://calcofi-db/ducklake/releases/v2026.08.04/parquet/sample_measurement.parquet
+[39m[31m  
+[39m[31m...............
+[39m[31mCopying file:///Users/bbest/Github/CalCOFI/workflows/data/releases/v2026.08.04/parquet/sample.parquet to gs://calcofi-db/ducklake/releases/v2026.08.04/parquet/sample.parquet
+[39m[31m  
+[39m[31m..........................................................................................
+[39m[31m
+Average throughput: 3.8MiB/s
+[39m[31mCopying file:///Users/bbest/Github/CalCOFI/workflows/data/releases/v2026.08.04/parquet/ship.parquet to gs://calcofi-db/ducklake/releases/v2026.08.04/parquet/ship.parquet
+[39m[31m  
+[39m[31m.......
+[39m[31mCopying file:///Users/bbest/Github/CalCOFI/workflows/data/releases/v2026.08.04/parquet/spatial.parquet to gs://calcofi-db/ducklake/releases/v2026.08.04/parquet/spatial.parquet
+[39m[31m  
+[39m[31m.......................................................................................................................................................................................
+[39m[31m
+Average throughput: 2.1MiB/s
+[39m[31mCopying file:///Users/bbest/Github/CalCOFI/workflows/data/releases/v2026.08.04/parquet/taxon_group.parquet to gs://calcofi-db/ducklake/releases/v2026.08.04/parquet/taxon_group.parquet
+[39m[31m  
+[39m[31m.......
+[39m[31mCopying file:///Users/bbest/Github/CalCOFI/workflows/data/releases/v2026.08.04/parquet/taxon.parquet to gs://calcofi-db/ducklake/releases/v2026.08.04/parquet/taxon.parquet
+[39m[31m  
+[39m[31m........
+[39m[31mCopying file:///Users/bbest/Github/CalCOFI/workflows/data/releases/v2026.08.04/catalog.json to gs://calcofi-db/ducklake/releases/v2026.08.04/catalog.json
+[39m[31m  
+[39m[31m.........
+[39m[31mCopying file:///Users/bbest/Github/CalCOFI/workflows/data/releases/v2026.08.04/RELEASE_NOTES.md to gs://calcofi-db/ducklake/releases/v2026.08.04/RELEASE_NOTES.md
+[39m[31m  
+[39m[31m........
+[39m[31mCopying file:///Users/bbest/Github/CalCOFI/workflows/data/releases/v2026.08.04/relationships.json to gs://calcofi-db/ducklake/releases/v2026.08.04/relationships.json
+[39m[31m  
+[39m[31m.......
+[39m[31mCopying file:///Users/bbest/Github/CalCOFI/workflows/data/releases/v2026.08.04/metadata.json to gs://calcofi-db/ducklake/releases/v2026.08.04/metadata.json
+[39m[31m  
+[39m[31m.........
+[39m[31mCopying file:///Users/bbest/Github/CalCOFI/workflows/data/releases/v2026.08.04/erd.mmd to gs://calcofi-db/ducklake/releases/v2026.08.04/erd.mmd
+[39m[31m  
+[39m[31m........
+[39m[31mCopying file:///var/folders/xj/0t97bxlx4ng6s_zbmkkcfzg40000gn/T/Rtmp4DgqR9/file65a437386b45.json to gs://calcofi-db/ducklake/releases/versions.json
+[39m[31m  
+[39m[31m........
+[39m31/35                   
+32/35 [cleanup]         
+33/35                   
+34/35 [session_info]    
+35/35                   
+[31moutput file: release_database.knit.md
+
+[39m[1mpandoc [22m
+  to: html
+  output-file: release_database.html
+  standalone: true
+  embed-resources: false
+  section-divs: true
+  html-math-method: mathjax
+  wrap: none
+  default-image-extension: png
+  toc: true
+  toc-depth: 4
+  number-sections: true
+  variables: {}
+  
+[1mmetadata[22m
+  document-css: false
+  link-citations: true
+  lang: en
+  date: now
+  date-format: iso
+  editor:
+    mode: source
+    markdown:
+      wrap: 72
+    canonical: true
+  editor_options:
+    chunk_output_type: console
+  search: false
+  toc-expand: 1
+  lightbox: true
+  title: Release CalCOFI Database
+  calcofi:
+    target_name: release_database
+    workflow_type: release
+    dependency:
+      - auto
+    output: data/releases
+    erd_overrides:
+      dataset: '#e8e8e8'
+      measurement_type: '#e8e8e8'
+      cruise: '#e8e8e8'
+      sample: '#e8e8e8'
+      obs: '#e8e8e8'
+      obs_attribute: '#e8e8e8'
+      sample_measurement: '#e8e8e8'
+      obs_ctd_full: '#e8e8e8'
+      obs_mets_full: '#e8e8e8'
+      spatial: '#cfe8ea'
+      spatial_attribute: '#cfe8ea'
+  
+Output created: _output/release_database.html
+
+✔ release_database completed [31m 7.2s, 14.00 GB]
++ test_release dispatched
+[31m
+
+processing file: test_release.qmd
+[39m1/17                    
+2/17 [setup]            
+3/17                    
+4/17 [render_helpers]   
+5/17                    
+6/17 [execute]          
+7/17                    
+8/17 [consumer_contract]
+9/17                    
+10/17 [save_results]     
+[31mCopying file:///Users/bbest/Github/CalCOFI/workflows/data/releases/v2026.08.04/test_results.json to gs://calcofi-db/ducklake/releases/v2026.08.04/test_results.json
+[39m[31m  
+[39m[31m.......
+[39m11/17                    
+12/17 [promote]          
+[31mCopying file:///var/folders/xj/0t97bxlx4ng6s_zbmkkcfzg40000gn/T/RtmpIfalHG/filec71a28e0bb04 to gs://calcofi-db/ducklake/releases/latest.txt
+[39m[31m  
+[39m[31m.......
+[39m13/17                    
+14/17 [cleanup]          
+15/17                    
+16/17 [session_info]     
+17/17                    
+[31moutput file: test_release.knit.md
+
+[39m[1mpandoc [22m
+  to: html
+  output-file: test_release.html
+  standalone: true
+  embed-resources: false
+  section-divs: true
+  html-math-method: mathjax
+  wrap: none
+  default-image-extension: png
+  toc: true
+  toc-depth: 4
+  number-sections: true
+  variables: {}
+  
+[1mmetadata[22m
+  document-css: false
+  link-citations: true
+  lang: en
+  date: now
+  date-format: iso
+  editor:
+    mode: source
+    markdown:
+      wrap: 72
+    canonical: true
+  editor_options:
+    chunk_output_type: console
+  search: false
+  toc-expand: 1
+  lightbox: true
+  title: Test Release — gate latest.txt on query suite
+  calcofi:
+    target_name: test_release
+    workflow_type: test
+    dependency:
+      - release_database
+    output: _output/test_release.html
+  
+Output created: _output/test_release.html
+
+✔ test_release completed [1m 46.3s, 205.83 kB]
++ publish_to_erddap dispatched
+[31m
+
+processing file: publish_to-erddap.qmd
+[39m1/31                         
+2/31 [setup]                 
+3/31                         
+4/31 [connect]               
+5/31                         
+6/31 [discover]              
+7/31                         
+8/31 [discover-supplemental] 
+9/31                         
+10/31 [supplemental-usability]
+11/31                         
+12/31 [view-sql]              
+13/31                         
+14/31 [plan]                  
+15/31                         
+16/31 [validate]              
+17/31                         
+18/31 [coord-warning]         
+19/31                         
+20/31 [build-db]              
+21/31                         
+22/31 [emit-server-script]    
+23/31                         
+24/31 [xml]                   
+25/31                         
+26/31 [assemble]              
+27/31                         
+28/31 [deploy]                
+29/31                         
+30/31 [cleanup]               
+31/31                         
+[31moutput file: publish_to-erddap.knit.md
+
+[39m[1mpandoc [22m
+  to: html
+  output-file: publish_to-erddap.html
+  standalone: true
+  embed-resources: false
+  section-divs: true
+  html-math-method: mathjax
+  wrap: none
+  default-image-extension: png
+  toc: true
+  toc-depth: 3
+  number-sections: true
+  variables: {}
+  
+[1mmetadata[22m
+  document-css: false
+  link-citations: true
+  lang: en
+  date: today
+  date-format: iso
+  editor:
+    mode: source
+    markdown:
+      wrap: 72
+    canonical: true
+  editor_options:
+    chunk_output_type: console
+  search: false
+  toc-expand: 1
+  lightbox: true
+  title: Publish every dataset to ERDDAP
+  subtitle: One config row per dataset_key over the core, served from DuckDB views
+  author: CalCOFI
+  calcofi:
+    target_name: publish_to_erddap
+    workflow_type: publish
+    dependency:
+      - release_database
+    output: data/erddap/datasets_calcofi.xml
+    workflow_url: https://calcofi.io/workflows/publish_to-erddap.html
+    description: |
+      Generates the ERDDAP configuration for every dataset in the frozen release, discovered from each dataset_key's presence in the core rather than a hand-maintained table list. Serves observations, sampling events, size/stage frequencies and the pre-thinning full series through DuckDB views, and executes every view against the real release before writing its config.
+  
+Output created: _output/publish_to-erddap.html
+
+✔ publish_to_erddap completed [7.2s, 236.07 kB]
+✔ ended pipeline [35m 50.1s, 4 completed, 19 skipped]
+14:41 PIPELINE EXIT OK

@@ -14,19 +14,19 @@
 - ship (         49 rows)
 - lookup (         26 rows)
 - sample (  1,465,189 rows)
-- obs ( 26,290,615 rows)
+- obs ( 26,266,514 rows)
 - obs_attribute (    452,682 rows)
 - sample_measurement (    588,986 rows)
 - taxon (      2,121 rows)
 - dataset_taxon (      1,907 rows)
 - taxon_group (        154 rows)
-- obs_ctd_full (275,193,507 rows)
+- obs_ctd_full (274,857,168 rows)
 - obs_mets_full ( 19,936,073 rows)
 
 ## Total
 
 - **Tables**: 18
-- **Total Rows**: 324,094,102
+- **Total Rows**: 323,733,662
 
 ## Data Sources
 

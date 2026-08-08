@@ -1,0 +1,1001 @@
+
+Attaching package: ‘calcofi4db’
+
+The following object is masked from ‘package:stats’:
+
+    dt
+
+Excluded 1 target(s): publish_ichthyo_to_obis
+Parsed 24 pipeline workflows:
+  bench_erddap_ctd (reference) -> _output/bench_erddap_ctd.html
+  ctd_cast_qa_qc_protocol (reference) -> _output/ctd-cast_qa-qc-protocol.html
+  deploy_consumers (deploy) -> _output/deploy_consumers.html [deps: test_release]
+  ingest_calcofi_bottle (ingest) -> data/parquet/calcofi_bottle/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_ctd_cast (ingest) -> data/parquet/calcofi_ctd-cast/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_dic (ingest) -> data/parquet/calcofi_dic/manifest.json [deps: ingest_calcofi_bottle]
+  ingest_calcofi_mets (ingest) -> data/parquet/calcofi_mets/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_phyllosoma (ingest) -> data/parquet/calcofi_phyllosoma/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_calcofi_phytoplankton (ingest) -> data/parquet/calcofi_phytoplankton/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_euphausiids (ingest) -> data/parquet/cce-lter_euphausiids/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_picoplankton_bacteria (ingest) -> data/parquet/cce-lter_picoplankton-bacteria/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_zoodb (ingest) -> data/parquet/cce-lter_zoodb/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cce_lter_zooscan (ingest) -> data/parquet/cce-lter_zooscan/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_cdfw_dungeness_crab (ingest) -> data/parquet/cdfw_dungeness-crab/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_farallon_bird_mammal (ingest) -> data/parquet/farallon_bird-mammal/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_sio_mesopelagic_fish (ingest) -> data/parquet/sio_mesopelagic-fish/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_sio_pic_zooplankton (ingest) -> data/parquet/sio_pic-zooplankton/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_spatial (spatial) -> data/parquet/spatial/manifest.json
+  ingest_swfsc_cufes (ingest) -> data/parquet/swfsc_cufes/manifest.json [deps: ingest_swfsc_ichthyo]
+  ingest_swfsc_ichthyo (ingest) -> data/parquet/swfsc_ichthyo/manifest.json
+  publish_to_erddap (publish) -> data/erddap/datasets_calcofi.xml [deps: release_database]
+  publish_to_netcdf (publish) -> data/netcdf/publish_plan.csv [deps: release_database]
+  release_database (release) -> data/releases [deps: auto]
+  test_release (test) -> _output/test_release.html [deps: release_database]
++ ingest_calcofi_ctd_cast dispatched
+[31m
+
+processing file: ingest_calcofi_ctd-cast.qmd
+[39m1/177                            
+2/177 [setup]                    
+3/177                            
+4/177 [d_zips]                   
+[31mR chunk d_zips: 3.9s ~ 22:04:08
+[39m5/177                            
+6/177 [check_resume]             
+[31mR chunk check_resume: 0.4s ~ 22:04:08
+[39m7/177                            
+8/177 [prime_zips_from_gcs]      
+[31mR chunk prime_zips_from_gcs: 2.5s ~ 22:04:11
+[39m9/177                            
+10/177 [download_and_unzip]       
+[31mR chunk download_and_unzip: 0.2s ~ 22:04:11
+[39m11/177                            
+12/177 [d_csv]                    
+[31mR chunk d_csv: 4.6s ~ 22:04:15
+[39m13/177                            
+14/177 [read_csv]                 
+[31mR chunk read_csv: 200.9s ~ 22:07:36
+[39m15/177                            
+16/177 [d_bind]                   
+[31mR chunk d_bind: 101.1s ~ 22:09:17
+[39m17/177                            
+18/177 [format_datetime]          
+[31mR chunk format_datetime: 172.3s ~ 22:12:10
+[39m19/177                            
+20/177 [fill_lonlat]              
+[31mR chunk fill_lonlat: 165.1s ~ 22:14:55
+[39m21/177                            
+22/177 [pts_distance_from_lnst]   
+[31mR chunk pts_distance_from_lnst: 522s ~ 22:23:37
+[39m23/177                            
+24/177 [view_badcr]               
+[31mR chunk view_badcr: 1s ~ 22:23:38
+[39m25/177                            
+26/177 [filter_pts]               
+[31mR chunk filter_pts: 83.3s ~ 22:25:01
+[39m27/177                            
+28/177 [view_pts_filt]            
+[31mR chunk view_pts_filt: 5.6s ~ 22:25:07
+[39m29/177                            
+30/177 [check_dupes]              
+[31mR chunk check_dupes: 78.1s ~ 22:26:25
+[39m31/177                            
+32/177 [rename_fields]            
+[31mR chunk rename_fields: 18.1s ~ 22:26:43
+[39m33/177                            
+34/177 [dedup_ctd_raw]            
+[31mR chunk dedup_ctd_raw: 9.2s ~ 22:26:52
+[39m35/177                            
+36/177 [restore_eval]             
+[31mR chunk restore_eval: 0s ~ 22:26:52
+[39m37/177                            
+38/177 [cross_dataset_bridge]     
+[31mR chunk cross_dataset_bridge: 0.6s ~ 22:26:53
+[39m39/177                            
+40/177 [save_checkpoint]          
+[31mR chunk save_checkpoint: 1.6s ~ 22:26:55
+[39m41/177                            
+42/177 [meas_col_registry]        
+[31mR chunk meas_col_registry: 0s ~ 22:26:55
+[39m43/177                            
+44/177 [meas_col_registry_tbl]    
+[31mR chunk meas_col_registry_tbl: 0s ~ 22:26:55
+[39m45/177                            
+46/177 [ctd_cast]                 
+[31mR chunk ctd_cast: 3.3s ~ 22:26:58
+[39m47/177                            
+48/177 [ctd_measurement]          
+[31mR chunk ctd_measurement: 199.4s ~ 22:30:17
+[39m49/177                            
+50/177 [ctd_summary]              
+[31mR chunk ctd_summary: 165.5s ~ 22:33:03
+[39m51/177                            
+52/177 [measurement_type]         
+[31mR chunk measurement_type: 0.5s ~ 22:33:03
+[39m53/177                            
+54/177 [meas_provenance]          
+[31mR chunk meas_provenance: 0.2s ~ 22:33:04
+[39m55/177                            
+56/177 [meas_provenance_tbl]      
+[31mR chunk meas_provenance_tbl: 0.1s ~ 22:33:04
+[39m57/177                            
+58/177 [drop_ctd_raw]             
+[31mR chunk drop_ctd_raw: 0s ~ 22:33:04
+[39m59/177                            
+60/177 [freq_table_sizes]         
+[31mR chunk freq_table_sizes: 0.1s ~ 22:33:04
+[39m61/177                            
+62/177 [freq_depth_resolution]    
+[31mR chunk freq_depth_resolution: 0.9s ~ 22:33:05
+[39m63/177                            
+64/177 [freq_cast_direction]      
+[31mR chunk freq_cast_direction: 0.1s ~ 22:33:05
+[39m65/177                            
+66/177 [freq_measurement_types]   
+[31mR chunk freq_measurement_types: 51s ~ 22:33:56
+[39m67/177                            
+68/177 [ctd_thin_verify_pairing]  
+[31mR chunk ctd_thin_verify_pairing: 0.2s ~ 22:33:56
+[39m69/177                            
+70/177 [ctd_thin_chosen_dir]      
+[31mR chunk ctd_thin_chosen_dir: 1s ~ 22:33:57
+[39m71/177                            
+72/177 [ctd_thin_grid]            
+[31mR chunk ctd_thin_grid: 8.2s ~ 22:34:05
+[39m73/177                            
+74/177 [ctd_thin_rdp]             
+[31mR chunk ctd_thin_rdp: 61.6s ~ 22:35:07
+[39m75/177                            
+76/177 [ctd_thin_assemble]        
+[31mR chunk ctd_thin_assemble: 12.1s ~ 22:35:19
+[39m77/177                            
+78/177 [ctd_thin_verify]          
+[31mR chunk ctd_thin_verify: 10.6s ~ 22:35:29
+[39m79/177                            
+80/177 [ctd_thin_spotcheck]       
+[31mR chunk ctd_thin_spotcheck: 2.4s ~ 22:35:32
+[39m81/177                            
+82/177 [schema]                   
+[31mR chunk schema: 2.6s ~ 22:35:35
+[39m83/177                            
+84/177 [add_spatial]              
+[31mR chunk add_spatial: 43s ~ 22:36:17
+[39m85/177                            
+86/177 [derived_view]             
+[31mR chunk derived_view: 0s ~ 22:36:18
+[39m87/177                            
+88/177 [load-dataset-metadata]    
+[31mR chunk load-dataset-metadata: 0.3s ~ 22:36:18
+[39m89/177                            
+90/177 [diag_sentinel]            
+[31mR chunk diag_sentinel: 0s ~ 22:36:18
+[39m91/177                            
+92/177 [diag_ranges]              
+[31mR chunk diag_ranges: 1.7s ~ 22:36:20
+[39m93/177                            
+94/177 [diag_ranges_tbl]          
+[31mR chunk diag_ranges_tbl: 0.1s ~ 22:36:20
+[39m95/177                            
+96/177 [diag_qual]                
+[31mR chunk diag_qual: 0.8s ~ 22:36:20
+[39m97/177                            
+98/177 [diag_qual_tbl]            
+[31mR chunk diag_qual_tbl: 0s ~ 22:36:20
+[39m99/177                            
+100/177 [validate]                 
+[31mR chunk validate: 2.4s ~ 22:36:23
+[39m101/177                            
+102/177 [preview_helper]           
+[31mR chunk preview_helper: 0s ~ 22:36:23
+[39m103/177                            
+104/177 [preview_ctd_cast]         
+[31mR chunk preview_ctd_cast: 0.1s ~ 22:36:23
+[39m105/177                            
+106/177 [preview_ctd_measurement]  
+[31mR chunk preview_ctd_measurement: 0.1s ~ 22:36:23
+[39m107/177                            
+108/177 [preview_ctd_thin]         
+[31mR chunk preview_ctd_thin: 0s ~ 22:36:23
+[39m109/177                            
+110/177 [preview_ctd_summary]      
+[31mR chunk preview_ctd_summary: 0.1s ~ 22:36:23
+[39m111/177                            
+112/177 [preview_measurement_type] 
+[31mR chunk preview_measurement_type: 0s ~ 22:36:23
+[39m113/177                            
+114/177 [emit_core]                
+[31mR chunk emit_core: 265.3s ~ 22:40:48
+[39m115/177                            
+116/177 [write_parquet]            
+[31mR chunk write_parquet: 804.8s ~ 22:54:13
+[39m117/177                            
+118/177 [write_metadata]           
+[31mR chunk write_metadata: 0.8s ~ 22:54:14
+[39m119/177                            
+120/177 [show_metadata_json]       
+[31mR chunk show_metadata_json: 0.2s ~ 22:54:14
+[39m121/177                            
+122/177 [show_relationships_json]  
+[31mR chunk show_relationships_json: 0s ~ 22:54:14
+[39m123/177                            
+124/177 [export_new_deltas]        
+[31mR chunk export_new_deltas: 0.1s ~ 22:54:14
+[39m125/177                            
+126/177 [resume_for_upload]        
+[31mR chunk resume_for_upload: 0s ~ 22:54:15
+[39m127/177                            
+128/177 [upload_gcs]               
+[31mR chunk upload_gcs: 645.9s ~ 23:05:00
+[39m129/177                            
+130/177 [findings_setup]           
+[31mR chunk findings_setup: 2.3s ~ 23:05:03
+[39m131/177                            
+132/177 [findings_headline]        
+[31mR chunk findings_headline: 1.4s ~ 23:05:04
+[39m133/177                            
+134/177 [findings_sentinel]        
+[31mR chunk findings_sentinel: 0s ~ 23:05:04
+[39m135/177                            
+136/177 [findings_bottle]          
+[31mR chunk findings_bottle: 1.2s ~ 23:05:05
+[39m137/177                            
+138/177 [findings_bottle_tbl]      
+[31mR chunk findings_bottle_tbl: 0.1s ~ 23:05:06
+[39m139/177                            
+140/177 [findings_direction]       
+[31mR chunk findings_direction: 0s ~ 23:05:06
+[39m141/177                            
+142/177 [findings_qual]            
+[31mR chunk findings_qual: 0.1s ~ 23:05:06
+[39m143/177                            
+144/177 [findings_qual_tbl]        
+[31mR chunk findings_qual_tbl: 0s ~ 23:05:06
+[39m145/177                            
+146/177 [findings_stage]           
+[31mR chunk findings_stage: 0.1s ~ 23:05:06
+[39m147/177                            
+148/177 [findings_rules]           
+[31mR chunk findings_rules: 2.2s ~ 23:05:08
+[39m149/177                            
+150/177 [findings_rules_tbl]       
+[31mR chunk findings_rules_tbl: 0s ~ 23:05:08
+[39m151/177                            
+152/177 [findings_range_tbl]       
+[31mR chunk findings_range_tbl: 0.1s ~ 23:05:08
+[39m153/177                            
+154/177 [findings_temp]            
+[31mR chunk findings_temp: 0s ~ 23:05:08
+[39m155/177                            
+156/177 [findings_temp_tbl]        
+[31mR chunk findings_temp_tbl: 0.1s ~ 23:05:08
+[39m157/177                            
+158/177 [findings_temp_btl_tbl]    
+[31mR chunk findings_temp_btl_tbl: 0.1s ~ 23:05:08
+[39m159/177                            
+160/177 [findings_ph_tbl]          
+[31mR chunk findings_ph_tbl: 0s ~ 23:05:08
+[39m161/177                            
+162/177 [findings_cruise_rules]    
+[31mR chunk findings_cruise_rules: 0.3s ~ 23:05:09
+[39m163/177                            
+164/177 [findings_cruise_rules_tbl]
+[31mR chunk findings_cruise_rules_tbl: 0.1s ~ 23:05:09
+[39m165/177                            
+166/177 [provider-questions]       
+[31mR chunk provider-questions: 0s ~ 23:05:09
+[39m167/177                            
+168/177 [findings_close]           
+[31mR chunk findings_close: 0s ~ 23:05:09
+[39m169/177                            
+170/177 [cleanup]                  
+[31mR chunk cleanup: 0.8s ~ 23:05:10
+[39m171/177                            
+172/177 [gantt_guard]              
+[31mR chunk gantt_guard: 0.1s ~ 23:05:10
+[39m173/177                            
+174/177 [gantt_chart]              
+[31mR chunk gantt_chart: 4.5s ~ 23:05:14
+[39m175/177                            
+176/177 [session_info]             
+[31mR chunk session_info: 1.2s ~ 23:05:15
+[39m177/177                            
+[31moutput file: ingest_calcofi_ctd-cast.knit.md
+
+[39m[1mpandoc [22m
+  to: html
+  output-file: ingest_calcofi_ctd-cast.html
+  standalone: true
+  embed-resources: false
+  section-divs: true
+  html-math-method: mathjax
+  wrap: none
+  default-image-extension: png
+  toc: true
+  toc-depth: 4
+  number-sections: true
+  variables: {}
+  
+[1mmetadata[22m
+  document-css: false
+  link-citations: true
+  lang: en
+  date: now
+  date-format: iso
+  editor:
+    mode: source
+    markdown:
+      wrap: 72
+    canonical: true
+  editor_options:
+    chunk_output_type: console
+  search: false
+  toc-expand: 1
+  lightbox: true
+  title: Ingest CalCOFI CTD Cast Data
+  calcofi:
+    target_name: ingest_calcofi_ctd_cast
+    workflow_type: ingest
+    dependency:
+      - ingest_swfsc_ichthyo
+    output: data/parquet/calcofi_ctd-cast/manifest.json
+    modifies:
+      - ship
+    provider: calcofi
+    dataset: ctd-cast
+    workflow_url: https://calcofi.io/workflows/ingest_calcofi_ctd-cast.html
+    questions_file: metadata/calcofi/ctd-cast/questions.csv
+    dataset_meta:
+      dataset_name: CalCOFI CTD Cast Files
+      description: |
+        CTD downcast profiles with temperature, salinity, oxygen, fluorescence, and other sensors at standard depths.
+      citation_main: CalCOFI. (2023). CalCOFI CTD Cast Files. CalCOFI.org.
+      link_calcofi_org: https://calcofi.org/data/oceanographic-data/ctd-cast-files/
+      link_data_source: https://calcofi.org/data/oceanographic-data/ctd-cast-files/
+      coverage_temporal: 1998-01 to 2026-04
+      coverage_spatial: 29.8-37.8°N, -126.5 to -117.3°W
+    tables_owned:
+      - table: sample
+        shared: true
+        note: core event dimension (one row per physical cast)
+      - table: obs
+        shared: true
+        note: core observations (env, thinned CTD profile)
+      - table: obs_ctd_full
+        supplemental: true
+        note: full-resolution scans (~216M rows), opt-in
+      - table: measurement_type
+        shared: true
+        note: shared registry across bottle/ctd/dic
+    erd:
+      color: '#e0ccf0'
+  
+Output created: _output/ingest_calcofi_ctd-cast.html
+
+✔ ingest_calcofi_ctd_cast completed [1h 19m 42.9s, 93.31 kB]
++ ingest_calcofi_mets dispatched
+[31m
+
+processing file: ingest_calcofi_mets.qmd
+[39m1/59                        
+2/59 [unnamed-chunk-1]      
+3/59                        
+4/59 [setup]                
+5/59                        
+6/59 [check_resume]         
+[31mR chunk check_resume: 0s ~ 23:23:46
+[39m7/59                        
+8/59 [acquire]              
+[31mR chunk acquire: 30.9s ~ 23:24:17
+[39m9/59                        
+10/59 [d_files]              
+[31mR chunk d_files: 0.3s ~ 23:24:17
+[39m11/59                        
+12/59 [read_files]           
+[31mR chunk read_files: 19.6s ~ 23:24:37
+[39m13/59                        
+14/59 [d_bind]               
+[31mR chunk d_bind: 52.2s ~ 23:25:29
+[39m15/59                        
+16/59 [save_checkpoint]      
+[31mR chunk save_checkpoint: 0.3s ~ 23:25:29
+[39m17/59                        
+18/59 [restore_eval]         
+[31mR chunk restore_eval: 0s ~ 23:25:29
+[39m19/59                        
+20/59 [rename_fields]        
+[31mR chunk rename_fields: 46.6s ~ 23:26:16
+[39m21/59                        
+22/59 [cross_dataset_bridge] 
+[31mR chunk cross_dataset_bridge: 0.4s ~ 23:26:16
+[39m23/59                        
+24/59 [dedup_mets_sample]    
+[31mR chunk dedup_mets_sample: 5.3s ~ 23:26:22
+[39m25/59                        
+26/59 [pivot]                
+[31mR chunk pivot: 14.6s ~ 23:26:36
+[39m27/59                        
+28/59 [measurement_type]     
+[31mR chunk measurement_type: 0.1s ~ 23:26:36
+[39m29/59                        
+30/59 [mets_thin]            
+[31mR chunk mets_thin: 9.7s ~ 23:26:46
+[39m31/59                        
+32/59 [schema]               
+[31mR chunk schema: 2s ~ 23:26:48
+[39m33/59                        
+34/59 [add_spatial]          
+[31mR chunk add_spatial: 43s ~ 23:27:31
+[39m35/59                        
+36/59 [emit_core]            
+[31mR chunk emit_core: 0.8s ~ 23:27:32
+[39m37/59                        
+38/59 [emit_obs_full]        
+[31mR chunk emit_obs_full: 28.4s ~ 23:28:00
+[39m39/59                        
+40/59 [load-dataset-metadata]
+[31mR chunk load-dataset-metadata: 4s ~ 23:28:04
+[39m41/59                        
+42/59 [provider-questions]   
+[31mR chunk provider-questions: 0s ~ 23:28:04
+[39m43/59                        
+44/59 [validate]             
+[31mR chunk validate: 0.2s ~ 23:28:04
+[39m45/59                        
+46/59 [preview]              
+[31mR chunk preview: 0.1s ~ 23:28:04
+[39m47/59                        
+48/59 [write_parquet]        
+[31mR chunk write_parquet: 10.1s ~ 23:28:15
+[39m49/59                        
+50/59 [write_metadata]       
+[31mR chunk write_metadata: 0s ~ 23:28:15
+[39m51/59                        
+52/59 [export_new_deltas]    
+[31mR chunk export_new_deltas: 0s ~ 23:28:15
+[39m53/59                        
+54/59 [upload_gcs]           
+[31mR chunk upload_gcs: 93.3s ~ 23:29:48
+[39m55/59                        
+56/59 [cleanup]              
+[31mR chunk cleanup: 0.3s ~ 23:29:48
+[39m57/59                        
+58/59 [session_info]         
+[31mR chunk session_info: 0.3s ~ 23:29:49
+[39m59/59                        
+[31moutput file: ingest_calcofi_mets.knit.md
+
+[39m[1mpandoc [22m
+  to: html
+  output-file: ingest_calcofi_mets.html
+  standalone: true
+  embed-resources: false
+  section-divs: true
+  html-math-method: mathjax
+  wrap: none
+  default-image-extension: png
+  toc: true
+  toc-depth: 4
+  number-sections: true
+  variables: {}
+  
+[1mmetadata[22m
+  document-css: false
+  link-citations: true
+  lang: en
+  date: now
+  date-format: iso
+  editor:
+    mode: source
+    markdown:
+      wrap: 72
+    canonical: true
+  editor_options:
+    chunk_output_type: console
+  search: false
+  toc-expand: 1
+  lightbox: true
+  title: Ingest CalCOFI METS (Underway TSG/Meteorology)
+  calcofi:
+    target_name: ingest_calcofi_mets
+    workflow_type: ingest
+    dependency:
+      - ingest_swfsc_ichthyo
+    output: data/parquet/calcofi_mets/manifest.json
+    modifies:
+      - ship
+    provider: calcofi
+    dataset: mets
+    workflow_url: https://calcofi.io/workflows/ingest_calcofi_mets.html
+    questions_file: metadata/calcofi/mets/questions.csv
+    dataset_meta:
+      dataset_name: CalCOFI METS (Underway TSG/Meteorology)
+      description: |
+        Shipboard underway thermosalinograph (TSG) and meteorology data, ~1-minute resolution, recorded continuously along the cruise track.
+      citation_main: CalCOFI. Underway (METS) TSG/Meteorology Data. CalCOFI.org.
+      link_calcofi_org: https://calcofi.org/data/oceanographic-data/underway/
+      link_data_source: https://calcofi.org/data/oceanographic-data/underway/
+      coverage_temporal: 2004-01 to 2022-11
+      coverage_spatial: 28-37°N, -125 to -117°W
+    tables_owned:
+      - table: sample
+        shared: true
+        note: core event dimension (underway grain)
+      - table: obs
+        shared: true
+        note: core observations (env, from mets_thin)
+      - table: obs_mets_full
+        supplemental: true
+        note: full ~1-min series (~20.6M rows), opt-in
+      - table: measurement_type
+        shared: true
+        note: shared registry across bottle/ctd/dic/mets
+    erd:
+      color: '#cce5ff'
+  
+Output created: _output/ingest_calcofi_mets.html
+
+✔ ingest_calcofi_mets completed [6m 13.5s, 23.44 kB]
++ ingest_cce_lter_picoplankton_bacteria dispatched
+[31m
+
+processing file: ingest_cce-lter_picoplankton-bacteria.qmd
+[39m1/37                             
+2/37 [unnamed-chunk-1]           
+3/37                             
+4/37 [setup]                     
+5/37                             
+6/37 [read-source]               
+7/37                             
+8/37 [clean-cast]                
+9/37                             
+10/37 [pivot-long]                
+11/37                             
+12/37 [register-measurement-types]
+13/37                             
+14/37 [resolve-keys]              
+15/37                             
+16/37 [spatial]                   
+17/37                             
+18/37 [load-dataset-metadata]     
+19/37                             
+20/37 [schema]                    
+21/37                             
+22/37 [validate]                  
+23/37                             
+24/37 [preview]                   
+25/37                             
+26/37 [emit_core]                 
+27/37                             
+28/37 [write-parquet]             
+29/37                             
+30/37 [write-metadata]            
+31/37                             
+32/37 [upload-gcs]                
+33/37                             
+34/37 [provider-questions]        
+35/37                             
+36/37 [cleanup]                   
+37/37                             
+[31moutput file: ingest_cce-lter_picoplankton-bacteria.knit.md
+
+[39m[1mpandoc [22m
+  to: html
+  output-file: ingest_cce-lter_picoplankton-bacteria.html
+  standalone: true
+  embed-resources: false
+  section-divs: true
+  html-math-method: mathjax
+  wrap: none
+  default-image-extension: png
+  toc: true
+  toc-depth: 4
+  number-sections: true
+  variables: {}
+  
+[1mmetadata[22m
+  document-css: false
+  link-citations: true
+  lang: en
+  date: now
+  date-format: iso
+  editor:
+    mode: source
+    markdown:
+      wrap: 72
+    canonical: true
+  editor_options:
+    chunk_output_type: console
+  search: false
+  toc-expand: 1
+  lightbox: true
+  title: Ingest CCE-LTER Picoplankton and Bacteria Abundance
+  calcofi:
+    target_name: ingest_cce_lter_picoplankton_bacteria
+    workflow_type: ingest
+    dependency:
+      - ingest_swfsc_ichthyo
+    output: data/parquet/cce-lter_picoplankton-bacteria/manifest.json
+    provider: cce-lter
+    dataset: picoplankton-bacteria
+    workflow_url: https://calcofi.io/workflows/ingest_cce-lter_picoplankton-bacteria.html
+    questions_file: metadata/cce-lter/picoplankton-bacteria/questions.csv
+    dataset_meta:
+      dataset_name: Picoplankton and Bacteria Abundance (CalCOFI Cruise)
+      description: |
+        Picophytoplankton (Prochlorococcus, Synechococcus, picoeukaryotes) and heterotrophic bacteria abundances analyzed by flow cytometry (FCM) from CCE-CalCOFI Augmented cruises in the California Current System, 2004-2023 (ongoing). Seawater collected from Niskin bottles at 3-8 depths per station; cells fixed shipboard with paraformaldehyde, stained with a DNA-specific dye, and enumerated on an Altra flow cytometer with dual argon-ion lasers.
+      citation_main: Landry, M. (2004-2023). Picoplankton and Bacteria Abundance (CalCOFI Cruise). CCE LTER.
+      link_calcofi_org: ''
+      link_data_source: https://oceaninformatics.ucsd.edu/datazoo/catalogs/ccelter/datasets/159
+      link_others:
+        - http://dx.doi.org/10.6073/pasta/bc2915c8448214d2841b064a7414064b
+      coverage_temporal: 2004-11-02 to 2023-07-18 (ongoing)
+      coverage_spatial: CalCOFI grid (California Current Ecosystem)
+      license: ''
+      pi_names: Michael Landry
+    tables_owned:
+      - table: sample
+        shared: true
+        note: core event dimension (bottle grain)
+      - table: obs
+        shared: true
+        note: core observations (env, flow-cytometry cell counts)
+      - table: measurement_type
+        shared: true
+        note: shared registry across datasets
+    erd:
+      color: '#bbe0f0'
+  
+Output created: _output/ingest_cce-lter_picoplankton-bacteria.html
+
+✔ ingest_cce_lter_picoplankton_bacteria completed [34.8s, 2.67 kB]
++ ingest_calcofi_dic dispatched
+[31m
+
+processing file: ingest_calcofi_dic.qmd
+[39m1/55                          
+2/55 [unnamed-chunk-1]        
+3/55                          
+4/55 [setup]                  
+5/55                          
+6/55 [read-source]            
+7/55                          
+8/55 [clean-data]             
+9/55                          
+10/55 [load-to-db]             
+11/55                          
+12/55 [load-casts]             
+13/55                          
+14/55 [match-casts]            
+15/55                          
+16/55 [match-bottles]          
+17/55                          
+18/55 [pivot-measurements]     
+19/55                          
+20/55 [dic-measurement-summary]
+21/55                          
+22/55 [load-dataset-metadata]  
+23/55                          
+24/55 [add-measurement-types]  
+25/55                          
+26/55 [verify-pks]             
+27/55                          
+28/55 [schema]                 
+29/55                          
+30/55 [spatial]                
+31/55                          
+32/55 [preview-dic-sample]     
+33/55                          
+34/55 [preview-dic-measurement]
+35/55                          
+36/55 [preview-dic-summary]    
+37/55                          
+38/55 [emit_core]              
+39/55                          
+40/55 [write-parquet]          
+41/55                          
+42/55 [write-metadata]         
+43/55                          
+44/55 [show_metadata_json]     
+45/55                          
+46/55 [show_relationships_json]
+47/55                          
+48/55 [upload-gcs]             
+49/55                          
+50/55 [provider-questions]     
+51/55                          
+52/55 [cleanup]                
+53/55                          
+54/55 [session_info]           
+55/55                          
+[31moutput file: ingest_calcofi_dic.knit.md
+
+[39m[1mpandoc [22m
+  to: html
+  output-file: ingest_calcofi_dic.html
+  standalone: true
+  embed-resources: false
+  section-divs: true
+  html-math-method: mathjax
+  wrap: none
+  default-image-extension: png
+  toc: true
+  toc-depth: 4
+  number-sections: true
+  variables: {}
+  
+[1mmetadata[22m
+  document-css: false
+  link-citations: true
+  lang: en
+  date: now
+  date-format: iso
+  editor:
+    mode: source
+    markdown:
+      wrap: 72
+    canonical: true
+  editor_options:
+    chunk_output_type: console
+  search: false
+  toc-expand: 1
+  lightbox: true
+  title: Ingest DIC
+  calcofi:
+    target_name: ingest_calcofi_dic
+    workflow_type: ingest
+    dependency:
+      - ingest_calcofi_bottle
+    output: data/parquet/calcofi_dic/manifest.json
+    provider: calcofi
+    dataset: dic
+    workflow_url: https://calcofi.io/workflows/ingest_calcofi_dic.html
+    questions_file: metadata/calcofi/dic/questions.csv
+    dataset_meta:
+      dataset_name: CalCOFI DIC
+      description: |
+        Discrete profile dissolved inorganic carbon (DIC) and total alkalinity (TA) from CalCOFI Niskin bottle samples, quality-controlled using WOCE flagging.
+      citation_main: Keeling, C.D.; Lueker, T.J.; Emanuele, G.; Dickson, A.G.; Martz, T.R.; Wolfe, W.H.; Mau, A. (2025). Discrete profile dissolved inorganic carbon, total alkalinity, water temperature and salinity measurements for CalCOFI (NCEI Accession 0301029). NOAA NCEI. https://doi.org/10.25921/3w9f-jd72
+      link_calcofi_org: https://calcofi.org/data/oceanographic-data/dic/
+      link_data_source: https://www.ncei.noaa.gov/access/metadata/landing-page/bin/iso?id=gov.noaa.nodc:0301029
+      link_others:
+        - https://doi.org/10.25921/3w9f-jd72
+      coverage_temporal: 1983-03 to 2021-07
+      coverage_spatial: 28-37°N, -125 to -117°W
+      license: CC BY 4.0
+      pi_names: Todd Martz; Aaron Mau
+    tables_owned:
+      - table: sample
+        shared: true
+        note: core event dimension (bottle grain; non-shared Niskins only)
+      - table: obs
+        shared: true
+        note: core observations (env, DIC + alkalinity)
+      - table: measurement_type
+        shared: true
+        note: shared registry across bottle/ctd/dic
+    erd:
+      color: '#ffd2bb'
+  
+Output created: _output/ingest_calcofi_dic.html
+
+✔ ingest_calcofi_dic completed [23.5s, 2.48 kB]
++ release_database dispatched
+[31m
+
+processing file: release_database.qmd
+[39m1/37                           
+2/37 [gen_fig_workflow]        
+3/37                           
+4/37 [setup]                   
+5/37                           
+6/37 [assemble_working]        
+7/37                           
+8/37 [dataset_ref]             
+9/37                           
+10/37 [core_tables]             
+11/37                           
+12/37 [core_by_dataset]         
+13/37                           
+14/37 [core_parity]             
+15/37                           
+16/37 [taxon_authority_coverage]
+17/37                           
+18/37 [scan_mismatches]         
+19/37                           
+20/37 [validate]                
+21/37                           
+22/37 [unnamed-chunk-1]         
+23/37                           
+24/37 [combined_schema]         
+25/37                           
+26/37 [normalize_crs]           
+27/37                           
+28/37 [freeze_release]          
+29/37                           
+30/37 [release_notes]           
+31/37                           
+32/37 [upload_frozen]           
+[31mCopying file:///Users/bbest/Github/CalCOFI/workflows/data/releases/v2026.08.05/parquet/cruise.parquet to gs://calcofi-db/ducklake/releases/v2026.08.05/parquet/cruise.parquet
+[39m[31m  
+[39m[31m........
+[39m[31mCopying file:///Users/bbest/Github/CalCOFI/workflows/data/releases/v2026.08.05/parquet/dataset_taxon.parquet to gs://calcofi-db/ducklake/releases/v2026.08.05/parquet/dataset_taxon.parquet
+[39m[31m  
+[39m[31m........
+[39m[31mCopying file:///Users/bbest/Github/CalCOFI/workflows/data/releases/v2026.08.05/parquet/grid.parquet to gs://calcofi-db/ducklake/releases/v2026.08.05/parquet/grid.parquet
+[39m[31m  
+[39m[31m........
+[39m[31mCopying file:///Users/bbest/Github/CalCOFI/workflows/data/releases/v2026.08.05/parquet/measurement_type.parquet to gs://calcofi-db/ducklake/releases/v2026.08.05/parquet/measurement_type.parquet
+[39m[31m  
+[39m[31m.......
+[39m[31mCopying file:///Users/bbest/Github/CalCOFI/workflows/data/releases/v2026.08.05/parquet/obs_attribute.parquet to gs://calcofi-db/ducklake/releases/v2026.08.05/parquet/obs_attribute.parquet
+[39m[31m  
+[39m[31m...............
+[39m[31mCopying file:///Users/bbest/Github/CalCOFI/workflows/data/releases/v2026.08.05/parquet/obs.parquet to gs://calcofi-db/ducklake/releases/v2026.08.05/parquet/obs.parquet
+[39m[31m  
+[39m[31m..................................................................................................................................................................................................................................................................................................................
+[39m[31m
+Average throughput: 4.9MiB/s
+[39m[31mCopying file:///Users/bbest/Github/CalCOFI/workflows/data/releases/v2026.08.05/parquet/sample_measurement.parquet to gs://calcofi-db/ducklake/releases/v2026.08.05/parquet/sample_measurement.parquet
+[39m[31m  
+[39m[31m...............
+[39m[31mCopying file:///Users/bbest/Github/CalCOFI/workflows/data/releases/v2026.08.05/parquet/sample.parquet to gs://calcofi-db/ducklake/releases/v2026.08.05/parquet/sample.parquet
+[39m[31m  
+[39m[31m................................................................................................
+[39m[31m
+Average throughput: 3.3MiB/s
+[39m[31mCopying file:///Users/bbest/Github/CalCOFI/workflows/data/releases/v2026.08.05/parquet/ship.parquet to gs://calcofi-db/ducklake/releases/v2026.08.05/parquet/ship.parquet
+[39m[31m  
+[39m[31m.......
+[39m[31mCopying file:///Users/bbest/Github/CalCOFI/workflows/data/releases/v2026.08.05/parquet/spatial.parquet to gs://calcofi-db/ducklake/releases/v2026.08.05/parquet/spatial.parquet
+[39m[31m  
+[39m[31m.......................................................................................................................................................................................
+[39m[31m
+Average throughput: 1.9MiB/s
+[39m[31mCopying file:///Users/bbest/Github/CalCOFI/workflows/data/releases/v2026.08.05/parquet/taxon_group.parquet to gs://calcofi-db/ducklake/releases/v2026.08.05/parquet/taxon_group.parquet
+[39m[31m  
+[39m[31m......
+[39m[31mCopying file:///Users/bbest/Github/CalCOFI/workflows/data/releases/v2026.08.05/parquet/taxon.parquet to gs://calcofi-db/ducklake/releases/v2026.08.05/parquet/taxon.parquet
+[39m[31m  
+[39m[31m.......
+[39m[31mCopying file:///Users/bbest/Github/CalCOFI/workflows/data/releases/v2026.08.05/catalog.json to gs://calcofi-db/ducklake/releases/v2026.08.05/catalog.json
+[39m[31m  
+[39m[31m.......
+[39m[31mCopying file:///Users/bbest/Github/CalCOFI/workflows/data/releases/v2026.08.05/RELEASE_NOTES.md to gs://calcofi-db/ducklake/releases/v2026.08.05/RELEASE_NOTES.md
+[39m[31m  
+[39m[31m......
+[39m[31mCopying file:///Users/bbest/Github/CalCOFI/workflows/data/releases/v2026.08.05/relationships.json to gs://calcofi-db/ducklake/releases/v2026.08.05/relationships.json
+[39m[31m  
+[39m[31m......
+[39m[31mCopying file:///Users/bbest/Github/CalCOFI/workflows/data/releases/v2026.08.05/metadata.json to gs://calcofi-db/ducklake/releases/v2026.08.05/metadata.json
+[39m[31m  
+[39m[31m........
+[39m[31mCopying file:///Users/bbest/Github/CalCOFI/workflows/data/releases/v2026.08.05/erd.mmd to gs://calcofi-db/ducklake/releases/v2026.08.05/erd.mmd
+[39m[31m  
+[39m[31m.......
+[39m[31mCopying file:///var/folders/xj/0t97bxlx4ng6s_zbmkkcfzg40000gn/T/RtmpGXRYsF/file10f423dfbc855.json to gs://calcofi-db/ducklake/releases/versions.json
+[39m[31m  
+[39m[31m.......
+[39m33/37                           
+34/37 [cleanup]                 
+35/37                           
+36/37 [session_info]            
+37/37                           
+[31moutput file: release_database.knit.md
+
+[39m[1mpandoc [22m
+  to: html
+  output-file: release_database.html
+  standalone: true
+  embed-resources: false
+  section-divs: true
+  html-math-method: mathjax
+  wrap: none
+  default-image-extension: png
+  toc: true
+  toc-depth: 4
+  number-sections: true
+  variables: {}
+  
+[1mmetadata[22m
+  document-css: false
+  link-citations: true
+  lang: en
+  date: now
+  date-format: iso
+  editor:
+    mode: source
+    markdown:
+      wrap: 72
+    canonical: true
+  editor_options:
+    chunk_output_type: console
+  search: false
+  toc-expand: 1
+  lightbox: true
+  title: Release CalCOFI Database
+  calcofi:
+    target_name: release_database
+    workflow_type: release
+    dependency:
+      - auto
+    output: data/releases
+    erd_overrides:
+      dataset: '#e8e8e8'
+      measurement_type: '#e8e8e8'
+      cruise: '#e8e8e8'
+      sample: '#e8e8e8'
+      obs: '#e8e8e8'
+      obs_attribute: '#e8e8e8'
+      sample_measurement: '#e8e8e8'
+      obs_ctd_full: '#e8e8e8'
+      obs_mets_full: '#e8e8e8'
+      spatial: '#cfe8ea'
+      spatial_attribute: '#cfe8ea'
+  
+Output created: _output/release_database.html
+
+✔ release_database completed [28m 13.8s, 15.71 GB]
++ test_release dispatched
+[31m
+
+processing file: test_release.qmd
+[39m1/17                    
+2/17 [setup]            
+3/17                    
+4/17 [render_helpers]   
+5/17                    
+6/17 [execute]          
+7/17                    
+8/17 [consumer_contract]
+9/17                    
+10/17 [save_results]     
+[31mCopying file:///Users/bbest/Github/CalCOFI/workflows/data/releases/v2026.08.05/test_results.json to gs://calcofi-db/ducklake/releases/v2026.08.05/test_results.json
+[39m[31m  
+[39m[31m.......
+[39m11/17                    
+12/17 [promote]          
+[31mError:
+! 1 query(ies) failed against v2026.08.05. latest.txt NOT updated.
+[39m[31m
+Quitting from test_release.qmd:439-529 [promote]
+[39m[31mExecution halted
+[39m[33mWARN: Error encountered when rendering files[39m
+✖ test_release errored
+✖ errored pipeline [1h 57m 21.7s, 5 completed, 16 skipped]
+Error:
+! Error in tar_make():
+  ! Error running quarto CLI from R.
+Caused by error in `quarto::quarto_render()`:
+✖ Error returned by quarto CLI.
+  -----------------------------
+  
+  
+  processing file: test_release.qmd
+  1/17
+  2/17 [setup]
+  3/17
+  4/17 [render_helpers]
+  5/17
+  6/17 [execute]
+  7/17
+  8/17 [consumer_contract]
+  9/17
+  10/17 [save_results]
+  [31mCopying[39m
+  [31mfile:///Users/bbest/Github/CalCOFI/workflows/data/releases/v2026.08.05/test_results.json[39m
+  [31mto gs://calcofi-db/ducklake/releases/v2026.08.05/test_results.json[39m
+  
+  [31m.......[39m
+  11/17
+  12/17 [promote]
+  [31mError:[39m
+  ! 1 query(ies) failed against v2026.08.05. latest.txt NOT updated.
+  
+  Quitting from test_release.qmd:439-529 [promote]
+  [31mExecution halted[39m
+  [33mWARN: Error encountered when rendering files[39m
+  
+Caused by error:
+! System command 'quarto' failed
+  See https://books.ropensci.org/targets/debugging.html
+Execution halted
