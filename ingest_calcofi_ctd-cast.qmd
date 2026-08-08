@@ -2066,44 +2066,26 @@ stopifnot("sentinel delete accounting" = n_meas_raw - n_sentinel == n_meas)
 #
 # The -99 DELETE above only catches the sentinel ITSELF. It cannot catch a
 # sentinel that has been scaled, offset or averaged upstream, and it says nothing
-# about a genuinely wild reading. A declared bound is the general guard, and the
-# bounds are deliberately GENEROUS — impossible, not merely unusual — so this
-# drops nothing an oceanographer would want to see.
+# about a genuinely wild reading. A declared bound is the general guard.
 #
-# DELETE rather than flag, for the same reason as the sentinel: in long format a
-# row IS an assertion that a value was measured. A -10 pH silently corrupts any
-# mean, minimum or anomaly a consumer computes, and the anomaly case is exactly
-# what this data is being used for.
-d_bounds <- d_meas_type |>
-  filter(!is.na(valid_min), !is.na(valid_max)) |>
-  select(measurement_type, valid_min, valid_max)
+# This was ~40 lines of inline SQL that ran for this dataset alone. It is now
+# calcofi4db::check_measurement_bounds() / drop_out_of_bounds(), which every
+# ingest calls and release_database.qmd re-checks — because the same defect was
+# live in calcofi_mets.sw_ph (494 values at -99, 16.6% of the type) with its
+# bounds declared and equally unread.
+bounds_pre <- check_measurement_bounds(
+  con, "ctd_measurement", mt = d_meas_type)
 
-dbWriteTable(con, "meas_bounds", as.data.frame(d_bounds), overwrite = TRUE)
+# report BEFORE deleting: `undeclared` is a finding too, and the 9 CTD types with
+# no bound are the ones still to take to the provider (spar spans -3.07e17..2.01e16)
+bounds_datatable(bounds_pre)
 
-oob_tally <- dbGetQuery(con, "
-  SELECT m.measurement_type, COUNT(*) AS n,
-         MIN(m.measurement_value) AS v_min, MAX(m.measurement_value) AS v_max
-  FROM ctd_measurement m JOIN meas_bounds b USING (measurement_type)
-  WHERE m.measurement_value < b.valid_min OR m.measurement_value > b.valid_max
-  GROUP BY 1 ORDER BY n DESC")
+oob_tally <- drop_out_of_bounds(con, "ctd_measurement", mt = d_meas_type)
 
-n_oob <- dbExecute(con, "
-  DELETE FROM ctd_measurement WHERE rowid IN (
-    SELECT m.rowid FROM ctd_measurement m JOIN meas_bounds b USING (measurement_type)
-    WHERE m.measurement_value < b.valid_min OR m.measurement_value > b.valid_max)")
-dbExecute(con, "DROP TABLE IF EXISTS meas_bounds")
-
-say(glue("out-of-range rows removed: {format(n_oob, big.mark = ',')} ",
+say(glue("out-of-range rows removed: {format(sum(oob_tally$n_bad), big.mark = ',')} ",
          "across {nrow(oob_tally)} type(s), against ",
-         "{nrow(d_bounds)} declared bound(s)"))
-
-if (nrow(oob_tally))
-  oob_tally |>
-    dt(caption = paste(
-      "Values outside the registry's declared valid_min/valid_max, removed.",
-      "These are IMPOSSIBLE readings, not unusual ones — the bounds are",
-      "deliberately generous."),
-      fname = "ctd_out_of_range_removed")
+         "{sum(bounds_pre$status != 'undeclared')} declared bound(s); ",
+         "{sum(bounds_pre$status == 'undeclared')} type(s) still undeclared"))
 
 # assign deterministic UUID (md5-based, DuckDB-native — single SQL, no R data transfer)
 assign_deterministic_uuids_md5(
@@ -3411,6 +3393,24 @@ if (build_obs_ctd_full) {
                        JOIN ctd_cast cc ON m.ctd_cast_uuid = cc.ctd_cast_uuid
                        WHERE cc.grid_key IS NOT NULL")[[1]])
   cat(glue("obs_ctd_full: {format(n_full, big.mark=',')} rows"), "\n")
+
+  # Verify the bounds guard reached the SUPPLEMENTAL table too. It should — this
+  # is built from the same `ctd_measurement` the guard cleaned — but "should"
+  # is exactly what went unchecked: v2026.08.07 published an obs_ctd_full whose
+  # `ph` ran to -2.98 (5,963 values below the declared floor) while the staged
+  # ingest output for the same partition was clean. The released bytes and the
+  # ingest's own bytes disagreed and nothing compared them.
+  #
+  # Assert rather than report: if this table ever stops deriving from the guarded
+  # table, that is a silent regression across 216M published rows.
+  b_full <- check_measurement_bounds(con, "obs_ctd_full", mt = d_meas_type)
+  bounds_datatable(b_full)
+  cat(glue("obs_ctd_full bounds: {sum(b_full$status == 'ok')} ok, ",
+           "{sum(b_full$status == 'undeclared')} undeclared ",
+           "(the derived _sta_corr/_cruise_corr oxygen types — Q24)"), "\n")
+  stopifnot(
+    "obs_ctd_full must inherit the bounds guard applied to ctd_measurement" =
+      sum(b_full$status == "out_of_range") == 0)
 } else {
   cat("obs_ctd_full skipped (BUILD_OBS_CTD_FULL=FALSE)\n")
 }

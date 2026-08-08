@@ -6,7 +6,7 @@
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
-<meta name="dcterms.date" content="2026-08-07">
+<meta name="dcterms.date" content="2026-08-08">
 
 <title>Ingest Underway CUFES Fish Eggs</title>
 <style>
@@ -123,7 +123,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">2026-08-07</p>
+      <p class="date">2026-08-08</p>
     </div>
   </div>
   
@@ -302,8 +302,8 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a><span class="fu">assign_grid_key</span>(con, <span class="st">"cufes_sample"</span>) <span class="sc">|&gt;</span> <span class="fu">datatable</span>(<span class="at">caption =</span> <span class="st">"Grid assignment"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output-display">
-<div class="datatables html-widget html-fill-item" id="htmlwidget-e7f580034ffb50bc29ed" style="width:100%;height:auto;"></div>
-<script type="application/json" data-for="htmlwidget-e7f580034ffb50bc29ed">{"x":{"filter":"none","vertical":false,"caption":"<caption>Grid assignment<\/caption>","data":[["1","2"],["in_grid","not_in_grid"],[47241,2331]],"container":"<table class=\"display\">\n  <thead>\n    <tr>\n      <th> <\/th>\n      <th>status<\/th>\n      <th>n<\/th>\n    <\/tr>\n  <\/thead>\n<\/table>","options":{"scrollX":true,"columnDefs":[{"className":"dt-right","targets":2},{"orderable":false,"targets":0},{"name":" ","targets":0},{"name":"status","targets":1},{"name":"n","targets":2}],"order":[],"autoWidth":false,"orderClasses":false},"selection":{"mode":"multiple","selected":null,"target":"row","selectable":null}},"evals":[],"jsHooks":[]}</script>
+<div class="datatables html-widget html-fill-item" id="htmlwidget-d51bba785940012b8f85" style="width:100%;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-d51bba785940012b8f85">{"x":{"filter":"none","vertical":false,"caption":"<caption>Grid assignment<\/caption>","data":[["1","2"],["not_in_grid","in_grid"],[2331,47241]],"container":"<table class=\"display\">\n  <thead>\n    <tr>\n      <th> <\/th>\n      <th>status<\/th>\n      <th>n<\/th>\n    <\/tr>\n  <\/thead>\n<\/table>","options":{"scrollX":true,"columnDefs":[{"className":"dt-right","targets":2},{"orderable":false,"targets":0},{"name":" ","targets":0},{"name":"status","targets":1},{"name":"n","targets":2}],"order":[],"autoWidth":false,"orderClasses":false},"selection":{"mode":"multiple","selected":null,"target":"row","selectable":null}},"evals":[],"jsHooks":[]}</script>
 </div>
 </div>
 </section>
@@ -494,8 +494,8 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 2 obs              270593   3188738 /Users/bbest/_big/calcofi/parqu… FALSE      
 3 taxon                33      4846 /Users/bbest/_big/calcofi/parqu… FALSE      
 4 dataset_taxon         6      1643 /Users/bbest/_big/calcofi/parqu… FALSE      
-5 measurement_type    198     11740 measurement_type.parquet         FALSE      
-6 dataset              16      9977 dataset.parquet                  FALSE      </code></pre>
+5 measurement_type    198     11868 measurement_type.parquet         FALSE      
+6 dataset              16      9977 /Users/bbest/_big/calcofi/parqu… FALSE      </code></pre>
 </div>
 <details class="code-fold">
 <summary>Code</summary>
@@ -531,14 +531,13 @@ measurement columns with no units: 22    dataset.citation_main, dataset.citation
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb39"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb39-1"><a href="#cb39-1" aria-hidden="true" tabindex="-1"></a><span class="fu">sync_to_gcs</span>(<span class="at">local_dir =</span> dir_stage, <span class="at">sidecar_dir =</span> dir_parquet, <span class="at">gcs_prefix =</span> <span class="fu">glue</span>(<span class="st">"ingest/{dir_label}"</span>), <span class="at">bucket =</span> <span class="st">"calcofi-db"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code># A tibble: 5 × 4
+<pre><code># A tibble: 4 × 4
   file    action    size reason        
   &lt;chr&gt;   &lt;chr&gt;    &lt;dbl&gt; &lt;chr&gt;         
 1 &lt;rsync&gt; uploaded    NA parallel rsync
 2 &lt;rsync&gt; uploaded    NA parallel rsync
 3 &lt;rsync&gt; uploaded    NA parallel rsync
-4 &lt;rsync&gt; uploaded    NA parallel rsync
-5 &lt;rsync&gt; uploaded    NA parallel rsync</code></pre>
+4 &lt;rsync&gt; uploaded    NA parallel rsync</code></pre>
 </div>
 </div>
 </section>
@@ -554,8 +553,8 @@ measurement columns with no units: 22    dataset.citation_main, dataset.citation
 <span id="cb41-5"><a href="#cb41-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">caption =</span> <span class="st">"Questions for the SWFSC CUFES data providers (ranked)"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output-display">
-<div class="datatables html-widget html-fill-item" id="htmlwidget-a203e35c3d57885350f5" style="width:100%;height:auto;"></div>
-<script type="application/json" data-for="htmlwidget-a203e35c3d57885350f5">{"x":{"filter":"none","vertical":false,"caption":"<caption>Questions for the SWFSC CUFES data providers (ranked)<\/caption>","data":[["Q01","Q02"],["high","normal"],["open","open"],["Are the egg counts raw per-sample totals or standardized (e.g. per m^3 / per area)?","Confirm wind_speed units (m/s vs knots) and pump_speed units on the ERDDAP feed."],["Determines whether to register the measurement as count vs a density.","ERDDAP variable metadata to be confirmed against erdCalCOFIcufes .das."],["cufes_measurement","cufes_sample"],["measurement_value","start_wind_speed"]],"container":"<table class=\"display\">\n  <thead>\n    <tr>\n      <th>label<\/th>\n      <th>priority<\/th>\n      <th>status<\/th>\n      <th>question<\/th>\n      <th>context<\/th>\n      <th>related_table<\/th>\n      <th>related_field<\/th>\n    <\/tr>\n  <\/thead>\n<\/table>","options":{"scrollX":true,"pageLength":25,"dom":"tip","columnDefs":[{"width":"60px","targets":0},{"name":"label","targets":0},{"name":"priority","targets":1},{"name":"status","targets":2},{"name":"question","targets":3},{"name":"context","targets":4},{"name":"related_table","targets":5},{"name":"related_field","targets":6}],"order":[],"autoWidth":false,"orderClasses":false},"selection":{"mode":"multiple","selected":null,"target":"row","selectable":null}},"evals":[],"jsHooks":[]}</script>
+<div class="datatables html-widget html-fill-item" id="htmlwidget-a2b0f211ff8d4fff274f" style="width:100%;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-a2b0f211ff8d4fff274f">{"x":{"filter":"none","vertical":false,"caption":"<caption>Questions for the SWFSC CUFES data providers (ranked)<\/caption>","data":[["Q01","Q02","Q03"],["high","normal","normal"],["open","open","proposed"],["Are the egg counts raw per-sample totals or standardized (e.g. per m^3 / per area)?","Confirm wind_speed units (m/s vs knots) and pump_speed units on the ERDDAP feed.","Please confirm the plausible-value bounds declared for swfsc_cufes's 1 measurement type(s)."],["Determines whether to register the measurement as count vs a density.","ERDDAP variable metadata to be confirmed against erdCalCOFIcufes .das.","metadata/measurement_type.csv now carries valid_min/valid_max for this dataset's types; calcofi4db::check_measurement_bounds() enforces them at ingest and release_database.qmd re-checks before freezing. Bounds are used ONLY to reject the impossible, never to police unusual-but-real values, so they are deliberately generous. Declared: abundance 0..(no max)."],[null,null,"Bounds declared as listed and enforced; no published value violates them. Confirm or correct the limits."],["cufes_measurement","cufes_sample","obs"],["measurement_value","start_wind_speed","measurement_value"]],"container":"<table class=\"display\">\n  <thead>\n    <tr>\n      <th>label<\/th>\n      <th>priority<\/th>\n      <th>status<\/th>\n      <th>question<\/th>\n      <th>context<\/th>\n      <th>proposed_answer<\/th>\n      <th>related_table<\/th>\n      <th>related_field<\/th>\n    <\/tr>\n  <\/thead>\n<\/table>","options":{"scrollX":true,"pageLength":25,"dom":"tip","columnDefs":[{"width":"60px","targets":0},{"name":"label","targets":0},{"name":"priority","targets":1},{"name":"status","targets":2},{"name":"question","targets":3},{"name":"context","targets":4},{"name":"proposed_answer","targets":5},{"name":"related_table","targets":6},{"name":"related_field","targets":7}],"order":[],"autoWidth":false,"orderClasses":false},"selection":{"mode":"multiple","selected":null,"target":"row","selectable":null}},"evals":[],"jsHooks":[]}</script>
 </div>
 </div>
 <div class="cell">

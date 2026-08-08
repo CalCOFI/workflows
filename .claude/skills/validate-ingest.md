@@ -123,6 +123,75 @@ spatial_checks <- list(
 )
 ```
 
+#### D2. Declared measurement bounds (`ranges`)
+
+The bounds check every dataset runs. Compares each measured value against the
+`valid_min` / `valid_max` in `metadata/measurement_type.csv` **and reports the
+types that declare no bound at all**, which is the majority case and the reason
+this belongs here rather than only in `release_database.qmd`.
+
+This check was listed in `--checks` for months without a section implementing it,
+which is the same defect it exists to catch: a constraint that is declared,
+displayed, and never applied. At v2026.08.07 that cost ~31k impossible CTD values
+(pH to -10, oxygen to -79.5 ml/l) plus a `-99` sentinel sitting in
+`calcofi_mets.sw_ph` at 16.6% of its rows — with the bound *declared* and unread.
+
+```r
+b <- calcofi4db::check_measurement_bounds(
+  con,
+  tbl = glue("{dataset}_measurement"),   # or "obs" once the core is emitted
+  mt  = here("metadata/measurement_type.csv"))
+
+oob <- dplyr::filter(b, status == "out_of_range")
+und <- dplyr::filter(b, status == "undeclared")
+
+# an out-of-range value is an ERROR: a bound was agreed and the data breaks it
+for (i in seq_len(nrow(oob)))
+  report_error("bounds out_of_range", oob$measurement_type[i], oob$finding[i])
+
+# an undeclared type is a WARNING (error under --strict): nothing was checked,
+# so a clean report here means nothing
+for (i in seq_len(nrow(und)))
+  report_warning("bounds undeclared", und$measurement_type[i], und$finding[i])
+```
+
+Render a `### Declared Bounds` table straight from `bounds_datatable(b)`, then
+resolve every non-`ok` row one of two ways — **neither of which is "note it and
+move on"**:
+
+1. **Declare the bound** via `declare_measurement_bounds()` when the plausible
+   range is known — `register_measurement_types()` only *appends*, so it cannot
+   put a bound on a type that is already registered without one. Bounds are deliberately generous: they catch the impossible,
+   they do not police oceanography. A one-sided `valid_min = 0` for a count,
+   abundance or biomass is the common case and worth declaring even with no
+   meaningful ceiling — it is what catches a negative sentinel.
+2. **File a provider question** when it is not ours to decide. Append to
+   `metadata/{provider}/{dataset}/questions.csv` using the `finding` column as
+   the `context` verbatim — it already carries the counts and the observed range:
+
+   ```r
+   # status = "proposed", not "open": pre-answer everything the repo can settle,
+   # so the provider confirms a bound rather than being handed a problem
+   tibble::tibble(
+     label           = "Q07",                       # next free label in this file
+     id              = glue("{provider}_{dataset}_07"),
+     question        = glue("What is the physically possible range for ",
+                            "`{und$measurement_type[1]}`?"),
+     context         = und$finding[1],
+     status          = "proposed",
+     priority        = if (grepl("^-9+$", und$v_min[1])) "high" else "normal",
+     proposed_answer = "Propose valid_min = 0 (a negative abundance is impossible)",
+     asked_date      = Sys.Date())
+   ```
+
+   Write it back with `readr::write_csv(q, q_path, na = "")` — never the default
+   `na = "NA"` — and re-read with `read_questions()` so a malformed row fails
+   here rather than in the notebook that renders it.
+
+A value at exactly `-99` / `-999` / `-9999` is a sentinel until proven otherwise;
+raise it as `priority = high` and say so in the question rather than quietly
+declaring a bound that deletes it.
+
 #### E. Date Ranges (`temporal`)
 ```r
 # check dates are within reasonable CalCOFI range (1949-present)
@@ -331,6 +400,13 @@ Format results as a structured markdown report:
 ### NULL Analysis
 | Table | Column | NULL % | Status |
 |-------|--------|--------|--------|
+
+### Declared Bounds
+| Measurement Type | Status | Rows | Out of Range | % | Observed | Declared |
+|------------------|--------|------|--------------|---|----------|----------|
+
+Report `undeclared` rows in this table too — a bounds section listing only
+violations reads as "checked and clean" when most types were never checked.
 
 ### Spatial Checks
 | Table | Column | Min | Max | Out of Range | Status |

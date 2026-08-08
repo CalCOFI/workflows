@@ -9,7 +9,7 @@ self-documenting. Human judgment stays in the loop at every hand-off.
 | Artifact | Role |
 |---|---|
 | `metadata/field_dictionary.csv` | Canonical field names/types/units/aliases. **Prescriptive** — new datasets conform; consistency is linted against it. |
-| `metadata/measurement_type.csv` | Canonical measurement vocabulary (raw measured quantities). The dictionary links to it; never duplicate it. Read via `calcofi4db::read_measurement_type()`, append via `register_measurement_types()` — a bare `write_csv()` defaults to `na = "NA"` and ships literal `"NA"` to the release. |
+| `metadata/measurement_type.csv` | Canonical measurement vocabulary (raw measured quantities). The dictionary links to it; never duplicate it. Read via `calcofi4db::read_measurement_type()`, append via `register_measurement_types()` — a bare `write_csv()` defaults to `na = "NA"` and ships literal `"NA"` to the release. Give every new type a `valid_min`/`valid_max` proposal in the same change; they are enforced by `check_measurement_bounds()` at step 3. |
 | `metadata/dataset.csv` | **DEPRECATED** — superseded by each ingest's `calcofi.dataset_meta` YAML block, read via `ingest_yaml_to_dataset_df(read_ingest_yaml())`. The CSV drifted and orphaned obs rows. |
 | `metadata/provider.csv` | Registry of curating organizations (`provider` -> display label, name, url). Any provider an ingest declares must be registered; the landing-index build errors otherwise. |
 | `metadata/dataset_status.csv` | Pipeline-stage tracker — one row per dataset. Each skill writes its stage column. |
@@ -112,11 +112,23 @@ not merely non-NULL), `obs.measurement_type` → `measurement_type`, and
 sub-occurrence counts reconciling to the headline. Also prune any `.parquet` for a
 table that has become a VIEW, or stale files linger in the output dir.
 
+**Check the declared bounds before you leave the notebook.**
+`check_measurement_bounds(con, "{ds}_measurement", mt = d_meas_type)` against
+`metadata/measurement_type.csv`, rendered with `bounds_datatable()`. Resolve every
+non-`ok` row either by declaring the bound (`declare_measurement_bounds()` for a
+type already in the registry, `register_measurement_types()` for a brand-new one;
+a one-sided `valid_min = 0` is fine and usually right) or by filing a `proposed`
+question with the row's `finding` as its `context` — an `undeclared` type is a
+finding, not a pass. Enforce with `drop_out_of_bounds()` once the bound is agreed.
+This is the only stage where the provider can still be asked; `release_database.qmd`
+re-checks but can only fail.
+
 ### 4. Run the notebook, then `/validate-ingest {provider} {dataset} [--strict]`
-PK/FK/null/range/duplicate checks, `summary` consistency, **`schema_lint`** (vs
+PK/FK/null/`ranges`/duplicate checks, `summary` consistency, **`schema_lint`** (vs
 the dictionary), **`questions`** (no open `blocker`), and metadata.json
-completeness. Resolve errors; under `--strict` an open blocker question or a
-lint error gates the release. → `validate=done`, `stage=validated`.
+completeness. Resolve errors; under `--strict` an open blocker question, a lint
+error, or an `undeclared` measurement bound gates the release.
+→ `validate=done`, `stage=validated`.
 
 ### 5. `release_database.qmd`
 Auto-discovers `data/parquet/*/relationships.json` + outputs, merges

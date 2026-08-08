@@ -174,12 +174,57 @@ header — `build_metadata_json()` expects a `column` field and will error
 If the dataset contains measurement columns, check against the existing `metadata/measurement_type.csv`:
 
 ```r
-mt <- readr::read_csv(here("metadata/measurement_type.csv"))
-# list existing measurement types
+# read_measurement_type(), never a bare read_csv() — it refuses a registry
+# corrupted by the write_csv(na = "NA") round trip, which a default read cannot see
+mt <- calcofi4db::read_measurement_type(here("metadata/measurement_type.csv"))
 cat(paste(mt$measurement_type, collapse = "\n"))
 ```
 
 Report which measurements already exist and which need to be added.
+
+**Every new type gets a `valid_min` / `valid_max` proposal in the same change.**
+This is the cheapest moment to set a bound — the source documentation is open and
+the observed range is one query away — and it is the only thing that makes the
+`ranges` check in `/validate-ingest` and the release-time guard able to say
+anything. At v2026.08.07, 166 of 198 registered types had neither bound, so 67% of
+released observations were unbounded and unbounded-by-default is what let a `-99`
+sentinel reach production in `calcofi_mets.sw_ph`.
+
+```r
+# the observed range is the starting point for the proposal, NOT the bound itself:
+# a bound tracks what is physically possible, so it must sit outside the data,
+# or the next cruise's legitimate record becomes a violation
+dbGetQuery(con, glue(
+  "SELECT measurement_type, COUNT(*) n,
+          MIN(measurement_value) v_min, MAX(measurement_value) v_max
+   FROM {dataset}_measurement GROUP BY 1 ORDER BY 1"))
+
+# register_measurement_types() for a NEW type; declare_measurement_bounds() to put
+# a bound on one that is already registered without one (it only appends, so it
+# cannot update — which is why 73 types sat unbounded)
+calcofi4db::register_measurement_types(
+  tibble::tibble(
+    measurement_type = "zooplankton_biomass_carbon",
+    description      = "Carbon biomass of the zooplankton sample",
+    units            = "mg C m-3",
+    valid_min        = 0,        # one-sided is fine and often right
+    valid_max        = NA),      # no defensible ceiling — leave it empty
+  here("metadata/measurement_type.csv"))
+```
+
+Guidance for the proposal:
+
+- A **one-sided `valid_min = 0`** covers most counts, abundances, biomasses and
+  concentrations. Declare it even with no meaningful ceiling: it is what catches a
+  negative sentinel, and it costs nothing to agree.
+- Bounds are **generous** — impossible, not merely unusual. If a bound would drop
+  a value an oceanographer wants to look at, the bound is wrong.
+- If you cannot defend a number, **do not invent one**: file it as a `proposed`
+  question instead (below) with the observed range as `context`. An undeclared
+  type is a visible finding in `/validate-ingest`; a wrong bound silently deletes
+  real data.
+- Leave the cell **empty**, never the string `"NA"` — `register_measurement_types()`
+  writes `na = ""` for exactly this reason.
 
 For any measurement column whose unit, method, or mapping is ambiguous — or
 any source column that did not match the field dictionary (step 4) — append a

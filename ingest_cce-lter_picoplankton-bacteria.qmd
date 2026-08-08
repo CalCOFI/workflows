@@ -261,10 +261,11 @@ pb_types <- tribble(
 
 # upsert so a units/description correction propagates on re-run, and keep the
 # registry sorted so its on-disk order is deterministic across ingests
-d_meas_type <- d_meas_type |>
-  filter(!measurement_type %in% pb_types$measurement_type) |>
-  bind_rows(pb_types) |>
-  arrange(measurement_type)
+# upsert, not delete-and-replace: the literal below carries no valid_min/
+# valid_max, and the naive `filter(!= x) |> bind_rows()` destroyed those
+# curated bounds on every re-run (it silently un-declared euphausiid_abundance
+# and the picoplankton types mid-release, failing the bounds gate).
+d_meas_type <- upsert_measurement_types(d_meas_type, pb_types)
 new_types <- pb_types
 write_csv(d_meas_type, meas_type_csv, na = "")
 dbWriteTable(con, "measurement_type", d_meas_type, overwrite = TRUE)

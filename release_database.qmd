@@ -596,6 +596,95 @@ tx_cover |>
     "calcofi4db::taxa_rank_reference()."))
 ```
 
+## Declared Measurement Bounds
+
+The backstop for the per-dataset bounds check that each ingest runs (see
+`check_measurement_bounds()` in every `ingest_*.qmd`). The ingest is where a
+finding is *actionable* — the source is open, the provider can be asked, and a
+question lands in `questions.csv`. This chunk exists so that a notebook which
+skipped the check, or a `measurement_type.csv` bound edited after an ingest last
+ran, cannot ship an impossible value to consumers.
+
+The two halves are gated differently, on purpose:
+
+* **`out_of_range` fails the release.** A bound was agreed and the data breaks it.
+  There is no reading of that which should reach a consumer.
+* **`undeclared` is reported, not gated.** 73 of 98 (dataset, type) pairs and 67%
+  of `obs` rows had no bound at v2026.08.07, so gating on it would block every
+  release rather than fix anything. `BOUNDS_UNDECLARED_MAX` ratchets: it is the
+  count on the day this landed, and it may only ever go **down**. A new
+  undeclared type therefore fails the release even though the backlog does not.
+
+```{r}
+#| label: bounds_coverage
+
+# ratchet, not a target. Lower it whenever bounds are declared; never raise it.
+# Raising it to make a release pass is how the backlog became 73 in the first
+# place — take the finding to the ingest and declare the bound there.
+#
+# 73 -> 30 for `obs` at v2026.08.08: every type whose live values already
+# satisfied a defensible bound got one, reusing the vocabulary the registry had
+# already agreed for the same quantity under its other name (btl_temperature
+# -2..40, salinity_* 0..45, oxygen umol/kg 0..700, ...). What remains is where
+# the defensible bound is VIOLATED by published data — i.e. the findings — each
+# a `proposed` question in its dataset's questions.csv. Declaring those before
+# the provider answers would delete real observations.
+#
+# The count covers `obs` AND the supplemental tables from v2026.08.08, so it
+# jumped when they were first checked rather than because anything regressed.
+# Set from the measured value on the day; it may only ever go DOWN.
+BOUNDS_UNDECLARED_MAX <- 77L
+
+d_bounds <- purrr::map_dfr(
+  dbGetQuery(con_wdl, "SELECT DISTINCT dataset_key FROM obs ORDER BY 1")$dataset_key,
+  \(dk) check_measurement_bounds(con_wdl, "obs", dataset_key = dk) |>
+    mutate(table = "obs", dataset_key = dk, .before = 1))
+
+# The SUPPLEMENTAL tables are published and were not checked here until
+# v2026.08.08. That gap was not theoretical: v2026.08.07's `obs_ctd_full` shipped
+# 5,963 `ph` values below the declared floor (to -2.98) that the CTD ingest had
+# already removed from its own output — the released bytes did not match the
+# staged ones, and every check in this notebook looked only at `obs`, so nothing
+# anywhere disagreed. Checking `obs` alone certifies a third of the release.
+#
+# Cost is not a reason to skip them: 216M rows of obs_ctd_full check in ~20s,
+# because the work is a GROUP BY per type over a column DuckDB reads lazily.
+d_bounds <- bind_rows(d_bounds, purrr::map_dfr(
+  intersect(supp_tbls, dbListTables(con_wdl)),
+  \(tb) check_measurement_bounds(con_wdl, tb) |>
+    mutate(table = tb, dataset_key = paste0("(supplemental) ", tb), .before = 1)))
+
+n_oob <- sum(d_bounds$status == "out_of_range")
+n_und <- sum(d_bounds$status == "undeclared")
+cat(glue("bounds: {n_oob} out-of-range type(s), {n_und} undeclared ",
+         "(ratchet {BOUNDS_UNDECLARED_MAX}), ",
+         "{sum(d_bounds$status == 'ok')} ok, across ",
+         "{n_distinct(d_bounds$table)} table(s) and ",
+         "{format(sum(d_bounds$n_total), big.mark = ',')} values\n"))
+
+d_bounds |>
+  filter(status != "ok") |>
+  select(table, dataset_key, measurement_type, status, n_total, n_bad, pct_bad,
+         v_min, v_max, valid_min, valid_max) |>
+  datatable(caption = paste(
+    "Measured values against metadata/measurement_type.csv, across `obs` AND the",
+    "supplemental full-resolution tables.",
+    "`out_of_range` fails this render; `undeclared` is the coverage backlog —",
+    "nothing was checked for those types, so their absence from the",
+    "out_of_range list means nothing."))
+
+# `stopifnot` rather than a warning: a warning here is indistinguishable from the
+# ~40 benign ones a full release render emits, which is how the CTD values shipped
+stopifnot(
+  "values outside declared valid_min/valid_max — fix at the ingest, not here" =
+    n_oob == 0,
+  "a measurement type lost its bounds; declare it in the owning ingest" =
+    n_und <= BOUNDS_UNDECLARED_MAX)
+
+if (n_und < BOUNDS_UNDECLARED_MAX)
+  cat(glue("\nBOUNDS_UNDECLARED_MAX can be tightened to {n_und}.\n"))
+```
+
 ## Scan Manifests for Mismatches
 
 ```{r}

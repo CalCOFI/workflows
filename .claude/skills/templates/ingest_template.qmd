@@ -175,6 +175,73 @@ ingest_dataset(con, d)
 ```
 <!-- {{pivot_section_end}} -->
 
+<!-- {{bounds_section_start}} -->
+## Check Declared Bounds
+
+Every long-format measurement table is checked against the `valid_min` /
+`valid_max` declared in `metadata/measurement_type.csv`. This section is **not
+optional** — it is where an impossible value is caught while the provider can
+still be asked about it.
+
+The check reports two findings, and the second is usually the bigger one:
+
+* **`out_of_range`** — a bound is declared and the data breaks it. Almost always
+  an unconverted sentinel (`-99`, `-999`) or a scaling error.
+* **`undeclared`** — no bound is declared, so nothing was checked. At
+  v2026.08.07 this was 73 of 98 (dataset, type) pairs and 67% of all `obs` rows,
+  which is why a release-time guard alone is not enough: it can only enforce what
+  someone declared during an ingest.
+
+Every row that is not `ok` gets resolved one of two ways, and neither is
+"leave it":
+
+1. **Declare a bound** with `declare_measurement_bounds()` when the plausible
+   range is known (`register_measurement_types()` only *appends*, so it cannot
+   set a bound on a type that already exists). Bounds are *generous* — impossible, not merely unusual. A
+   one-sided `valid_min = 0` for a count or an abundance is the common case and
+   is worth declaring even when there is no meaningful ceiling.
+2. **Ask the provider** — add a row to
+   `metadata/{{provider}}/{{dataset}}/questions.csv` with the `finding` column as
+   its `context`. Use `status = proposed` and put the bound you intend to apply
+   in `proposed_answer`, so the provider confirms a decision rather than being
+   handed a problem.
+
+```{r}
+#| label: bounds-check
+
+d_bounds <- check_measurement_bounds(
+  con,
+  tbl = "{{dataset}}_measurement",
+  mt  = here("metadata/measurement_type.csv"))
+
+bounds_datatable(d_bounds)
+```
+
+```{r}
+#| label: bounds-findings
+
+# the copy-paste source for a questions.csv `context` cell
+d_bounds |>
+  filter(status != "ok") |>
+  select(measurement_type, status, finding) |>
+  dt(caption = "Bounds findings to declare or ask about",
+     fname   = "{{dataset}}_bounds_findings")
+```
+
+```{r}
+#| label: bounds-enforce
+
+# TODO: enable once the bounds are agreed. DELETE rather than flag, because in a
+# long-format table a row IS an assertion that a value was measured — a -10 pH
+# left in place silently corrupts every mean, minimum and anomaly downstream, and
+# there is no in-band way to mark it as not-a-value.
+#
+# drop_out_of_bounds(
+#   con, tbl = "{{dataset}}_measurement",
+#   mt = here("metadata/measurement_type.csv"))
+```
+<!-- {{bounds_section_end}} -->
+
 <!-- {{measurement_summary_section_start}} -->
 ## Summarize Replicate Measurements
 

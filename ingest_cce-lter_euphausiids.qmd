@@ -530,10 +530,11 @@ euph_types <- tibble(
   `_prec_column`     = NA_character_,
   grain              = "obs")
 
-d_meas_type <- d_meas_type |>
-  filter(measurement_type != "euphausiid_abundance") |>
-  bind_rows(euph_types) |>
-  arrange(measurement_type)
+# upsert, not delete-and-replace: the literal below carries no valid_min/
+# valid_max, and the naive `filter(!= x) |> bind_rows()` destroyed those
+# curated bounds on every re-run (it silently un-declared euphausiid_abundance
+# and the picoplankton types mid-release, failing the bounds gate).
+d_meas_type <- upsert_measurement_types(d_meas_type, euph_types)
 write_csv(d_meas_type, meas_type_csv, na = "")
 cat(glue("Registered euphausiid_abundance (units = {euph_types$units})"), "\n")
 

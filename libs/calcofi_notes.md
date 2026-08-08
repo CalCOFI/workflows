@@ -20,6 +20,80 @@
 - [ ] rename `swfsc_inverts` to `swfsc_invert` including `ingest_swfsc_inverts.qmd` -> `ingest_swfsc_invert.qmd`
 - [ ] `ingest_calcofi_ctd-cast.qmd` needs a sync to GCS for just the used CSV files so saved in GCS `archive/`, not just GCS `_sync/`
 
+## 2026-08-08 ctd-transects GH Pages race, db  `valid_min`/`valid_max` for ALL ingest_*.qmd + supplemental obs_ctd_full/obs_mets_full
+
+- **The ctd-transects Pages race**. `refresh.yml` pushes and immediately dispatches `pages.yml`, which checks out the pre-push tree — so the site gets a fresh last-modified header wrapping stale bytes, and the run goes green. I fixed today's instance by redeploying manually, but it will recur on every refresh. The fix is probably to have pages.yml deploy from the pushed SHA, or to have refresh.yml wait.
+- `release_database.qmd` enforces registry bounds nowhere. The guard I added lives only in the CTD ingest, so the other 15 datasets have `valid_min`/`valid_max` declared and never checked. Today's defect would have been caught a stage earlier by a release-time guard, and it'd protect everything rather than one notebook.
+
+Better than waiting until the end of ingesting all datasets, ie `release_database.qmd`, it would be much preferred to standardize validation of min/max bounds per dataset, so these can also get flagged for Data Provider Questions. Update @.claude/skills and CLAUDE.md accordingly. Of course having both in place is a good idea.
+
+Both loose ends are closed, and the second one turned out to rest on a wrong premise worth correcting.
+
+1. The ctd-transects Pages race — confirmed and fixed
+
+Reproduced from the run history rather than assumed. Refresh run 31184322676 started on 3baec71, pushed 2dccd93, and the pages.yml run it dispatched 81 s later checked out 3baec71 — its own pre-push SHA, uploaded the stale tree, and went green.
+
+It's a race, not a deterministic bug: the 04:34 run the same day resolved correctly. That's worse, since it passes either way and the only symptom is data that quietly stops updating.
+
+Fix: pages.yml takes a sha input and checks out ${{ inputs.sha || github.sha }}; refresh.yml captures git rev-parse HEAD after the push and passes it. --ref main still selects the workflow file; the input selects the tree. Applied to db-viz-station too, which carries the identical pattern. YAML validated (the first cut had an unquoted description containing :  — caught and fixed).
+
+One caveat: the Pages deployment stays attributed to the dispatch-time SHA. Content is right; the environment label may name the older commit.
+
+2. Bounds enforcement — the premise was off
+
+You said the other 15 datasets "have valid_min/valid_max declared and never checked." Measured against the release: 166 of 198 registered types declare neither bound. Bounds are essentially CTD-only (31 of 32). In obs, 73 of 98 (dataset, type) pairs and 17.6M of 26.3M rows — 67% — are unbounded. A release-time guard alone would have covered a third of the release and gone silent on the rest.
+
+So the check reports both failure modes, and undeclared is the bigger one. Built as calcofi4db 3.10.0 (check_measurement_bounds(), bounds_datatable(), drop_out_of_bounds() — enforcement deliberately separate so a bound must be agreed before it deletes). Supports one-sided bounds, since valid_min = 0 for a count is agreeable without knowing a ceiling and is what catches a negative sentinel. 36 new tests; full suite 779 passing.
+
+It immediately found a live defect: calcofi_mets.sw_ph ships 492 values at exactly -99 plus 2 at ~-72.15 (a -99 partially averaged with a real reading — the CTD TempAve shape) — 494 of 2,967, 16.6% of the type, outside its declared 6–9, with the bound present and unread. The ingest's SENTINEL_99 list covers only the depth columns, correctly, since -99 is real for radiation — which is exactly why a per-type declared bound is the right mechanism. Guard added to ingest_calcofi_mets.qmd; questions Q26/Q27 filed as proposed with the evidence.
+
+Wired in: template + validate-ingest (which listed ranges in --checks with no section implementing it — the same declared-never-enforced pattern), generate-metadata, RUNBOOK, CLAUDE.md, and a bounds_coverage backstop in release_database.qmd where out_of_range fails the release and undeclared is ratcheted at 73 so a new gap fails while the backlog doesn't. CTD's ~40 lines of inline SQL now call the shared function.
+
+Verified end-to-end against v2026.08.07: gate fails now → mets fix drops exactly 494 rows → gate passes.
+
+Not done, deliberately: the other 14 ingests don't yet call the check — that's 14 notebooks plus re-renders, and each one's undeclared types need real bounds decisions or provider questions, not a mechanical sweep. The release ratchet makes that backlog visible and one-way. I haven't committed anything; four working trees have changes.
+
+----
+
+mets is verified and the release is running. Summary while it completes:
+
+mets re-run: succeeded (6m 13s; ingest_swfsc_ichthyo rebuilt first as a declared dependency). Verified against the output parquet, not just the log — sw_ph went from 2,967 values spanning −99..8.83 with 492 exact sentinels to 2,473 values spanning 8.27..8.83, zero out of bounds. Exactly 494 removed, matching the pre-run tally.
+
+One thing the re-run surfaced that I got slightly wrong. The notebook reported "46 of 54 types still declare no bound," which doesn't match Q27's 9. Both numbers are right but measure different tables: mets_measurement is the full ~1-minute underway series (54 types) feeding the supplemental obs_mets_full, while only 17 types survive thinning into obs — 9 of them undeclared, which is what Q27 describes. I've made the notebook message say which it means.
+
+That distinction exposes a real gap in the release gate I built: it checks obs only, so the supplemental obs_ctd_full and obs_mets_full are unbounded and unchecked even though they're published. That's ~237M rows carrying types no bound applies to. I have not changed it mid-release — extending the gate would need another full release run — but it's the next thing worth doing, and it means "0 out_of_range" currently certifies the headline table, not the supplemental ones.
+
+Final state of the bounds work:
+
+- 40 types / 43 dataset-type pairs declared; undeclared 73 → 30, ok 24 → 68
+- 15 of 15 measurement-bearing datasets carry a proposed bounds question; the 2 registries without one own no measurements
+- 4 high-priority questions hold the genuine findings (bottle oxygen −8,741 µmol/kg, sigma_theta 250.8, spar ±10¹⁷, mets sst_c 9,895 °C) — deliberately not declared, since applying those bounds would delete published data before the provider answers
+- declare_measurement_bounds() added to close the gap where register_measurement_types() (append-only) couldn't declare a bound on the 73 existing types; full calcofi4db suite green
+
+Still uncommitted across four working trees. I'll report the release outcome — including whether test_release.qmd promoted latest.txt — when the chain finishes.
+
+----
+
+Full re-render launched and being watched. Where things stand:
+
+Supplemental checks — done, and they found what you suspected. The check is cheap (216M rows in ~20 s — it's a GROUP BY per type over one lazily-read column), so there was never a cost reason to skip them.
+
+The headline finding: v2026.08.07's published obs_ctd_full contained 5,963 ph values below the declared floor (down to −2.98) that the CTD ingest had already removed from its own staged output. The released bytes and the ingest's bytes disagreed, and nothing compared them because every check looked at obs. Both ingests now assert out_of_range == 0 on their supplemental table rather than reporting it — a violation there means the derivation link from the guarded table has silently broken — and the release gate covers obs plus every table in supp_tbls.
+
+Two errors of mine that checking supplemental tables exposed. I declared isus_v (0..10) and dynamic_height (±50) validating against obs alone; both are violated in obs_ctd_full. For isus_v the bound was simply wrong — a −0.042 V sensor offset is normal, and I'd already treated fluorescence_v as −1..15 for that exact reason; it's now −1. For dynamic_height, −2,884 dyn m is genuinely impossible, so those 126 rows are correctly dropped. I've written the rule into CLAUDE.md: validate a proposed bound against every table the type appears in, because the headline table's observed range is not the observed range.
+
+Methodical range report: 321,052,108 values across 17 dataset-tables. After this round of declarations — 129 ok / 1 out_of_range / 77 undeclared (up from 110/2/95). The single remaining violation is that dynamic_height, which this re-render drops. BOUNDS_UNDECLARED_MAX is set to 77, matching the measured value.
+
+New findings raised as proposed questions:
+- ctd-cast Q24 (high) — the derived oxygen corrections in obs_ctd_full reach 6.4e10 µmol/kg. The pattern indicts the correction step, not the sensors: _sta_corr blows up hardest, _cruise_corr less, and the uncorrected channels are clean. No bound declared yet — declaring one would delete millions of published values before the provider sees them.
+- mets Q26 (extended) — -99 is pervasive across 14 full-series channels, not just the two depth columns the ingest's SENTINEL_99 list covers, and pred_temp_c/tsg2_temp_c top out at 65,500 (16-bit 0xFFFF fill).
+
+18 more bounds declared from the supplemental data (registry now 90 of 198 types bounded).
+
+I held back publish_to_erddap, publish_to_netcdf, and deploy_consumers — those push to the ERDDAP host and restart the Shiny apps, which is a separate external action from re-rendering the pipeline. Say the word and I'll run them once the release lands. I'll report the outcome, including whether test_release.qmd promoted latest.txt.
+
+----
+
 ## 2026-08-07 db-viz-hex: datasets popover 
 
 In the @../db-viz-hex app, let's reduce the visual real estate of the Dataset selection under the Taxa tab of the Filter modal by implementing it as a popover.
@@ -838,7 +912,26 @@ I'll hold at step 1 if anything fails rather than releasing on top of it.
 
 ----
 
-let
+I see unfinished Tasks, but seems like we're all done here. What's left?
+1 skill available
+
+----
+
+All four tasks are genuinely done — I'd left them open. Marked complete, and all repos are now clean and pushed (I'd been sitting on 54 uncommitted files in workflows: today's re-rendered notebooks and sidecars. Also discarded my local ctd-transects build, since public/data is CI-owned and refresh.yml's commit is authoritative).
+
+What's actually left — three things, none blocking:
+
+1. The email is drafted, not sent. That's yours to send. Draft r-6251943872425449070.
+
+2. **Two loose ends I found but didn't fix**, deliberately:
+
+- **The ctd-transects Pages race**. `refresh.yml` pushes and immediately dispatches `pages.yml`, which checks out the pre-push tree — so the site gets a fresh last-modified header wrapping stale bytes, and the run goes green. I fixed today's instance by redeploying manually, but it will recur on every refresh. The fix is probably to have pages.yml deploy from the pushed SHA, or to have refresh.yml wait.
+- `release_database.qmd` enforces registry bounds nowhere. The guard I added lives only in the CTD ingest, so the other 15 datasets have `valid_min`/`valid_max` declared and never checked. Today's defect would have been caught a stage earlier by a release-time guard, and it'd protect everything rather than one notebook.
+
+3. **Q21 and Q22 await provider answers** — the two-sensor averaging rule and the 18 soak-artifact readings. Both filed proposed with answers the pipeline already implements, so they're confirmations rather than open problems.
+
+One thing worth flagging for the Tuesday meeting: the release version is date-derived, so today's re-cut overwrote v2026.08.07 in place rather than minting a new version. It worked out — every consumer rebuilt — but a consumer that cached the morning's bytes had no signal to refetch. If a same-day re-cut happens again with less supervision, that's where it would bite.
+
 
 ## 2026-08-05 db-viz-hex: old hex joins? speed up?
 

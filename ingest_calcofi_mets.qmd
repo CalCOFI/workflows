@@ -793,6 +793,33 @@ stopifnot(
   "every schema variant must contribute at least one measurement" =
     all(var_cover$n_meas > 0))
 
+# --- enforce the registry's declared bounds ----------------------------------
+# SENTINEL_99 above is deliberately narrow, and rightly so: -99 is a real reading
+# for long_wave_rad and air temperature, so a blanket sentinel rule would delete
+# good data. But that left `sw_ph` holding 492 values at exactly -99 plus 2 at
+# ~-72.15 (a -99 partially averaged with a real reading, the same shape as the
+# CTD TempAve bug), and v2026.08.07 published all 494 — 16.6% of the type — with
+# its 6..9 bound sitting in measurement_type.csv, declared and never read.
+#
+# A declared bound is the per-type version of the sentinel rule: -99 is
+# impossible for pH and ordinary for radiation, and the registry already knows
+# which is which. Nothing here needs a hand-maintained column list.
+bounds_pre <- check_measurement_bounds(con, "mets_measurement", mt = d_meas_type)
+bounds_datatable(bounds_pre)
+
+drop_out_of_bounds(con, "mets_measurement", mt = d_meas_type)
+
+n_meas <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM mets_measurement")$n
+# Count against THIS table, which is the full ~1-min series feeding the
+# supplemental obs_mets_full — not the thinned subset that reaches `obs`. Q27
+# covers the 9 undeclared types in the released `obs`; the wider count here is
+# larger because most of the full series never becomes a headline observation,
+# and release_database.qmd's bounds gate only sees `obs`.
+cat(glue("mets_measurement after bounds: {format(n_meas, big.mark = ',')} rows; ",
+         "{sum(bounds_pre$status == 'undeclared')} of {nrow(bounds_pre)} type(s) ",
+         "in the FULL series declare no bound ",
+         "(of which the 9 that reach `obs` are Q27)"), "\n")
+
 assign_deterministic_uuids_md5(
   con = con, table_name = "mets_measurement", id_col = "mets_measurement_uuid",
   key_cols = c("mets_sample_uuid", "measurement_type"))
@@ -1276,6 +1303,19 @@ if (build_obs_mets_full) {
       dbGetQuery(con, "SELECT COUNT(*) FROM obs_mets_full
                        WHERE latitude IS NULL OR longitude IS NULL")[[1]] == 0,
     "obs_mets_full must be strictly larger than the thinned obs" = n_full > n_obs)
+
+  # the supplemental table gets the same bounds assertion as `obs` — it is
+  # published, and until v2026.08.08 nothing checked it. It derives from the
+  # guarded mets_measurement, so a violation here means that link is broken.
+  b_full <- check_measurement_bounds(con, "obs_mets_full", mt = d_meas_type)
+  bounds_datatable(b_full)
+  cat(glue("obs_mets_full bounds: {sum(b_full$status == 'ok')} ok, ",
+           "{sum(b_full$status == 'undeclared')} undeclared — the full series ",
+           "carries far more sensor channels than the thinned `obs`, and most ",
+           "still show the -99 marker (Q26/Q27)"), "\n")
+  stopifnot(
+    "obs_mets_full must inherit the bounds guard applied to mets_measurement" =
+      sum(b_full$status == "out_of_range") == 0)
 
   n_evt <- dbGetQuery(con,
     "SELECT COUNT(DISTINCT sample_key) FROM obs_mets_full")[[1]]
