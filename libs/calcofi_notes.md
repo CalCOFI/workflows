@@ -177,6 +177,45 @@ Two things still outdated in targets' view, and it's my doing: publish_to_netcdf
 Yes, run tar_make to confirm ALL works correctly
 
 
+----
+
+Fixed — the 404 is gone. https://calcofi.io/analytics/ctd-transects/ now returns 200.
+
+To answer directly: no, usage had never been set up. It was half-wired, which is why it 404'd rather than showing an empty page — two independent pieces were missing:
+
+1. The app emitted nothing. ctd-transects shipped with no analytics code at all. Even a correctly registered page would have been permanently blank.
+2. It was never registered. The analytics site generates one page per product from data/registry.yml, and ctd-transects wasn't in it — while calcofi.io's card already declared usage: ctd-transects and linked there. build.py's own docstring names this exact case: the site must build "so every /analytics/<slug>/ URL that a calcofi.io card links to resolves from day one."
+
+Meanwhile uptime and the calcofi.io card were both already correct — so of the three-slug contract, only the analytics leg was missing.
+
+Both fixed and deployed:
+
+┌─────────────────────────────────┬─────────────────────────────────────────────────┐
+│              piece              │                      state                      │
+├─────────────────────────────────┼─────────────────────────────────────────────────┤
+│ app (calcofi.io/ctd-transects/) │ 200 — gtag live, content_group: 'ctd-transects' │
+├─────────────────────────────────┼─────────────────────────────────────────────────┤
+│ usage page                      │ 200 — "no data yet"                             │
+├─────────────────────────────────┼─────────────────────────────────────────────────┤
+│ uptime slug                     │ present                                         │
+├─────────────────────────────────┼─────────────────────────────────────────────────┤
+│ calcofi.io card                 │ present                                         │
+└─────────────────────────────────┴─────────────────────────────────────────────────┘
+
+The snippet is byte-identical to analytics/snippets/gtag-site.html apart from the content-group value, keeping both guards (hostname, and navigator.webdriver so our own screenshot tooling doesn't count as visitors). Registered like db-viz-station — property: site with an explicit host and path prefix, since it's served from calcofi.io rather than app.calcofi.io and otherwise can't be separated from general site traffic.
+
+Data will appear after traffic accumulates and refresh.yml pulls GA4; until then the page correctly stays off the index comparison table (has_data filter).
+
+**One thing I deliberately did not commit**. Running build.py locally also rewrote the other ten data/usage/*.json. That wasn't new data — it recomputed the 28-day window against CSVs last pulled 2026-07-28, so the window slid and numbers dropped (calcofi4r 70 → 51 active users). Those files belong to refresh.yml; publishing them would have shown a phantom decline across every product. Reverted, kept only the new one.
+
+Also worth a glance sometime: db-viz-station's copy of the snippet has the placeholder substituted inside the comment, so it reads "Change only db-viz-station" — harmless, but the instruction no longer says anything. I kept the literal token in the new copy.
+
+----
+
+Be sure to clean up the local repo. Then check, are all repos commited, pushed and on main?
+
+
+
 ## 2026-08-07 db-viz-hex: datasets popover 
 
 In the @../db-viz-hex app, let's reduce the visual real estate of the Dataset selection under the Taxa tab of the Filter modal by implementing it as a popover.
