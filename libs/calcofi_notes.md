@@ -126,7 +126,55 @@ Search across local repos in @../CalCOFI/* for anything that might reference `@d
 
 Fix this self-invalidation problem in pipeline with `release_database`. Think through systematically. We want to run this smoothly and often.
 
+----
 
+Both jobs done, verified end-to-end, committed and pushed.
+
+The self-invalidation fix — proven in the real pipeline
+
+┌─────────────────────────────────┬────────────────────────────────────────────────┬──────────────────────────────────────┐
+│                                 │                     before                     │                after                 │
+├─────────────────────────────────┼────────────────────────────────────────────────┼──────────────────────────────────────┤
+│ recorded path                   │ data/releases (the directory)                  │ data/releases/_release_stamp.json    │
+├─────────────────────────────────┼────────────────────────────────────────────────┼──────────────────────────────────────┤
+│ tar_outdated() after a clean    │ release_database, test_release, +3             │ both gone                            │
+│ run                             │                                                │                                      │
+├─────────────────────────────────┼────────────────────────────────────────────────┼──────────────────────────────────────┤
+│ second tar_make()               │ would re-run a ~40 min release                 │ 19 skipped, re-ran nothing           │
+├─────────────────────────────────┼────────────────────────────────────────────────┼──────────────────────────────────────┤
+│ tar_make("publish_to_erddap")   │ dragged in a full re-freeze + multi-GB         │ 38.8 s, 18 skipped, release          │
+│                                 │ re-upload                                      │ untouched                            │
+└─────────────────────────────────┴────────────────────────────────────────────────┴──────────────────────────────────────┘
+
+test_release still writes test_results.json into data/releases exactly as before — it just no longer touches the release target's declared output. Stamp: v2026.08.08, 18 tables, 309,122,838 rows. GCS latest.txt still v2026.08.08; the re-release was idempotent.
+
+Guarded against recurrence by check_nested_outputs() (calcofi4db 3.11.0), which fails build_targets_list() on any directory output: — verified to accept the fixed config and reject the old one.
+
+Worth repeating because it shaped the fix: my first guard compared declared output: paths for nesting and passed the real broken pipeline. test_release declares _output/test_release.html and writes into data/releases as a side effect, so no static comparison of those fields could ever relate the two. The inspectable fault was that a target claimed a directory at all.
+
+data/releases/latest.txt — deleted, one consumer fixed
+
+Exactly one reader across all local repos: scripts/warm_taxon_xref.R. It didn't error — the v2026.02 shard is still staged — it silently warmed the taxon xref cache from a six-month-old release, so ingests then paid live WoRMS/ITIS calls for ids the current release already knew. Now reads the GCS latest.txt like every other consumer, with a logged fallback to the newest staged release. Everything else already pointed at GCS.
+
+Final state
+
+┌────────────────────────────────┬───────────────────┬─────────────────────────────────────┐
+│              repo              │       HEAD        │                                     │
+├────────────────────────────────┼───────────────────┼─────────────────────────────────────┤
+│ calcofi4db                     │ d0a4f4b           │ 3.11.0, suite green                 │
+├────────────────────────────────┼───────────────────┼─────────────────────────────────────┤
+│ workflows                      │ 26eba06           │ stamp fix verified, latest.txt gone │
+├────────────────────────────────┼───────────────────┼─────────────────────────────────────┤
+│ ctd-transects / db-viz-station │ 9b321b1 / fdc85ba │ Pages SHA fix                       │
+└────────────────────────────────┴───────────────────┴─────────────────────────────────────┘
+
+All clean and in sync.
+
+Two things still outdated in targets' view, and it's my doing: publish_to_netcdf and deploy_consumers show outdated because I rendered them directly earlier to dodge the redundant re-release. Their artifacts are current and deployed — consumers are serving v2026.08.08 — but targets has no matching record. Now that the release settles properly, running them through tar_make would sync the metadata cheaply (netCDF ~25 min, deploy ~15 min) without dragging the release. Say the word.
+
+----
+
+Yes, run tar_make to confirm ALL works correctly
 
 
 ## 2026-08-07 db-viz-hex: datasets popover 
