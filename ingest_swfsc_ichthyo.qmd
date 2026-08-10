@@ -1397,7 +1397,7 @@ append_obs(con, glue("
                  JOIN site s USING (site_uuid)
   LEFT JOIN dataset_taxon dt ON dt.dataset_key = '{ds_key}'
                             AND dt.ds_taxa_code = CAST(i.species_id AS VARCHAR)
-  WHERE i.measurement_type IS NULL AND s.grid_key IS NOT NULL"))
+  WHERE i.measurement_type IS NULL"))
 
 # obs_attribute — the size and stage distributions UNDER that headline. `size`
 # takes the canonical name `body_length`; a `stage` bin also carries the human
@@ -1461,7 +1461,7 @@ stopifnot(
     core$obs ==
     dbGetQuery(con, "SELECT COUNT(*) FROM ichthyo i JOIN net n USING (net_uuid)
                      JOIN tow t USING (tow_uuid) JOIN site s USING (site_uuid)
-                     WHERE i.measurement_type IS NULL AND s.grid_key IS NOT NULL")[[1]],
+                     WHERE i.measurement_type IS NULL")[[1]],
   "obs must carry no size/stage rows" =
     dbGetQuery(con, "SELECT COUNT(*) FROM obs
                      WHERE measurement_type <> 'abundance'")[[1]] == 0,

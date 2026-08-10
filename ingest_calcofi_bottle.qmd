@@ -1314,8 +1314,7 @@ if ("grid_key" %in% casts_cols && "grid_key" %in% grid_cols) {
   grid_orphans <- dbGetQuery(
     con,
     "SELECT COUNT(*) AS n FROM casts c
-     WHERE c.grid_key IS NOT NULL
-       AND c.grid_key NOT IN (SELECT grid_key FROM grid)"
+     WHERE c.grid_key NOT IN (SELECT grid_key FROM grid)"
   )$n
   say(glue("Grid key orphans in casts: {grid_orphans}"))
 }
@@ -1428,8 +1427,7 @@ append_obs(con, glue("
          CAST(c.datetime_start_utc AS TIMESTAMP), b.depth_m, b.depth_m,
          NULL::VARCHAR, NULL::VARCHAR,
          m.measurement_type, m.measurement_value, m.measurement_qual, m.measurement_prec
-  FROM bottle_measurement m JOIN bottle b USING (bottle_id) JOIN casts c USING (cast_id)
-  WHERE c.grid_key IS NOT NULL"))
+  FROM bottle_measurement m JOIN bottle b USING (bottle_id) JOIN casts c USING (cast_id)"))
 
 # sample_measurement — event-level cast conditions (wind, sea state, bottom
 # depth, …). `cast_id` is DOUBLE in cast_condition, so cast through BIGINT first
@@ -1457,10 +1455,10 @@ stopifnot(
   "sample_key must be globally unique" =
     dbGetQuery(con, "SELECT COUNT(*) FROM (SELECT sample_key FROM sample
                      GROUP BY 1 HAVING COUNT(*) > 1)")[[1]] == 0,
-  "obs must be one row per grid-matched bottle measurement" =
+  "obs must be one row per bottle measurement" =
     core$obs ==
     dbGetQuery(con, "SELECT COUNT(*) FROM bottle_measurement m JOIN bottle b USING (bottle_id)
-                     JOIN casts c USING (cast_id) WHERE c.grid_key IS NOT NULL")[[1]],
+                     JOIN casts c USING (cast_id)")[[1]],
   "every bottle must resolve to its cast" =
     dbGetQuery(con, "SELECT COUNT(*) FROM sample c LEFT JOIN sample p
                      ON c.parent_sample_key = p.sample_key

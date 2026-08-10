@@ -461,8 +461,7 @@ append_obs(con, glue("
          NULL::VARCHAR, NULL::DOUBLE
   FROM mesopelagic_fish_measurement m JOIN mesopelagic_fish_tow tw USING (tow_id)
   LEFT JOIN dataset_taxon dt ON dt.dataset_key = '{ds_key}'
-                            AND dt.ds_taxa_code = m.scientific_name
-  WHERE tw.grid_key IS NOT NULL"))
+                            AND dt.ds_taxa_code = m.scientific_name"))
 
 # NOTE: no sample_measurement arm. This dataset never had one --
 # dataset (.sample_measurement_arm_sql covers only calcofi_bottle and
@@ -480,10 +479,10 @@ cat(glue(
 n_obs <- dbGetQuery(con, "SELECT COUNT(*) FROM obs")[[1]]
 n_exp <- dbGetQuery(con,
   "SELECT COUNT(*) FROM mesopelagic_fish_measurement m
-   JOIN mesopelagic_fish_tow t USING (tow_id) WHERE t.grid_key IS NOT NULL")[[1]]
+   JOIN mesopelagic_fish_tow t USING (tow_id)")[[1]]
 n_dt  <- dbGetQuery(con, "SELECT COUNT(*) FROM sample WHERE datetime IS NOT NULL")[[1]]
 stopifnot(
-  "obs must be one row per grid-matched measurement" = n_obs == n_exp,
+  "obs must be one row per measurement" = n_obs == n_exp,
   "sample.datetime must be populated (Q03)"          = n_dt > 0)
 cat(glue("obs parity: {format(n_obs, big.mark=',')} rows; ",
          "{n_dt} sample rows with a real datetime"), "\n")

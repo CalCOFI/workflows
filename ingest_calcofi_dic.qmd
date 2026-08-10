@@ -725,8 +725,7 @@ append_obs(con, glue("
          CAST(dm.datetime_start_utc AS TIMESTAMP), dm.depth_m, dm.depth_m,
          NULL::VARCHAR, NULL::VARCHAR, dm.measurement_type, dm.measurement_value,
          dm.measurement_qual, NULL::DOUBLE
-  FROM dic_measurement dm JOIN casts c USING (cast_id)
-  WHERE c.grid_key IS NOT NULL"))
+  FROM dic_measurement dm JOIN casts c USING (cast_id)"))
 
 core <- list(
   sample = dbGetQuery(con, "SELECT COUNT(*) FROM sample")[[1]],
@@ -740,9 +739,8 @@ n_shared <- dbGetQuery(con,
 n_dup <- dbGetQuery(con, "
   SELECT COUNT(*) FROM (SELECT sample_key FROM sample GROUP BY 1 HAVING COUNT(*) > 1)")[[1]]
 stopifnot(
-  "obs must be one row per grid-matched DIC measurement" =
-    n_obs == dbGetQuery(con, "SELECT COUNT(*) FROM dic_measurement dm JOIN casts c USING (cast_id)
-                              WHERE c.grid_key IS NOT NULL")[[1]],
+  "obs must be one row per DIC measurement" =
+    n_obs == dbGetQuery(con, "SELECT COUNT(*) FROM dic_measurement dm JOIN casts c USING (cast_id)")[[1]],
   "sample_key must be unique (the md5 dedup)" = n_dup == 0,
   "some DIC obs must dedup onto calcofi_bottle" = n_shared > 0,
   "every obs.sample_key must resolve in sample or in the bottle dataset" =

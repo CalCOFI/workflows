@@ -762,6 +762,50 @@ if (length(tighten))
             collapse = ', ')}\n"))
 ```
 
+## Ungridded Observations — Released, and Asked About
+
+From v2026.08.11 `obs` carries observations that resolve no CalCOFI grid cell.
+Every ingest used to filter `WHERE grid_key IS NOT NULL` in its core projection
+while the `sample` arm did not, so an off-grid event kept its sample row and lost
+every observation under it — which is how four `calcofi_mets` cruises reached
+v2026.08.08 as 11,762 underway samples with zero observations.
+
+The exclusion also contradicted this pipeline's own reasoning: `obs_mets_full`
+was already gated on *a position* rather than on `grid_key` because "a ship on
+transit is legitimately outside the CalCOFI station grid", and
+`calcofi_phytoplankton` is region-pooled and has emitted ungridded `obs` from the
+start.
+
+Not dropping them puts the burden here instead: an ungridded observation is an
+off-grid position, a coarser spatial notion, or **a coordinate error**, and
+nothing in the pipeline can tell those apart. The sign-flipped `Longitude_W` that
+put five CalCOFI cruises in the Taiwan Strait was invisible precisely *because*
+being off-grid removed the rows silently. So this reports rather than gates, and
+each dataset with a non-zero share owes a `questions.csv` entry — the `finding`
+column is written to be pasted straight into one.
+
+```{r}
+#| label: ungridded_obs
+
+d_ungridded <- check_ungridded_obs(con_wdl)
+
+d_ungridded |>
+  select(dataset_key, n_obs, n_ungridded, pct_ungridded, n_no_position) |>
+  datatable(caption = paste(
+    "Observations resolving no CalCOFI grid cell, per dataset.",
+    "`n_no_position` is the subset carrying no latitude/longitude at all —",
+    "the distinction a provider needs in order to answer.")) |>
+  formatCurrency(c("n_obs", "n_ungridded", "n_no_position"),
+                 currency = "", digits = 0, mark = ",")
+
+d_ungridded |>
+  filter(!is.na(finding)) |>
+  select(dataset_key, finding) |>
+  datatable(caption = paste(
+    "Paste each finding into that dataset's questions.csv as `context`,",
+    "with status `open` until the provider says which of the three it is."))
+```
+
 ## Scan Manifests for Mismatches
 
 ```{r}

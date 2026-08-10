@@ -543,6 +543,50 @@ Fixed and pushed (f681ff5): renamed to d_cruise_cov in both notebooks. The CTD i
 
 Release relaunched at 16:50, already at core_tables. The freeze re-runs from scratch — there's no resume guard on it, and that's the honest cost of the mistake.
 
+----
+
+Verified in the published release. calcofi_ctd-cast is off the orphan list entirely (was 9 cruises), and calcofi_mets is down to 1 — the position-less 1207OS, ungridded by design. The rest is the documented backlog, now ratcheted.
+
+┌─────────────────────┬─────────────┬───────────────┐
+│                     │ v2026.08.08 │  v2026.08.10  │
+├─────────────────────┼─────────────┼───────────────┤
+│ CTD cruises in obs  │         133 │           142 │
+├─────────────────────┼─────────────┼───────────────┤
+│ CTD obs rows        │  12,614,758 │    13,488,402 │
+├─────────────────────┼─────────────┼───────────────┤
+│ mets obs rows       │     470,882 │       501,582 │
+├─────────────────────┼─────────────┼───────────────┤
+│ CTD orphan cruises  │           9 │             0 │
+├─────────────────────┼─────────────┼───────────────┤
+│ mets orphan cruises │           5 │ 1 (by design) │
+└─────────────────────┴─────────────┴───────────────┘
+
+  Pushed to main, ran 1 shell command
+
+Release A is done and published. Timeline for the hour you asked about:
+
+- 16:50 relaunched after the d_cov fix
+- 17:38 release_database completed (48m 48s) — froze and uploaded v2026.08.10
+- 17:45 test_release passed (6m 32s) and promoted latest.txt
+- 17:47 verified against the published parquet, committed and pushed (cc3e21d)
+
+The promotion happened the right way round: the consumer-contract suite ran against the frozen release before latest.txt moved, so a schema drift would have failed the release rather than the apps.
+
+obs is now 26,296,720 rows; obs_ctd_full 274,857,042.
+
+Consumers are still on the old data — they cache locally and need refreshing. That's the deploy-consumers skill's job (the one I created an hour ago from the section I cut out of CLAUDE.md — it gets its first real use). It needs ssh calcofi, so I'd be touching the CalCOFI server: git pull in three repos, two prep_db.R rebuilds inside the rstudio container, touch restart.txt, plus gh workflow run refresh.yml for db-viz-station.
+
+Want me to run the consumer deploys now? Two things worth knowing before I do:
+
+1. db-viz-hex's prep_db.R has form here — memory records it exhausting 16 GB plus swap on the spatial join and wedging shiny-server, to the point ssh died. I'd background it with docker exec -d and tail the log rather than fire and forget.
+2. ctd-transects is your tree right now (921 uncommitted files of GEBCO work). Its refresh is a GitHub Action that rebuilds shards from the release, so running it would collide with what you're doing locally. I'd skip that one and leave it to you.
+
+Separately, Release B is queued and unstarted: obs carrying ungridded observations across 11 ingests, with the per-dataset findings and provider questions you asked for, plus the consumer audit. That's the several-hour piece — say when.
+
+----
+
+I already finished with commit/push/deploy of ctd-transects local/remote, so ok to run again. Yes, do full consumer deploys
+
 ## 2026-08-08 ctd-transects GH Pages race, db  `valid_min`/`valid_max` for ALL ingest_*.qmd + supplemental obs_ctd_full/obs_mets_full
 
 - **The ctd-transects Pages race**. `refresh.yml` pushes and immediately dispatches `pages.yml`, which checks out the pre-push tree — so the site gets a fresh last-modified header wrapping stale bytes, and the run goes green. I fixed today's instance by redeploying manually, but it will recur on every refresh. The fix is probably to have pages.yml deploy from the pushed SHA, or to have refresh.yml wait.

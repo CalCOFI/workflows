@@ -236,8 +236,7 @@ append_obs(con, glue("
   FROM cufes_measurement m JOIN cufes_sample c USING (sample_id)
   JOIN _measurement_taxon mx ON mx.dataset_key = '{ds_key}'
                             AND mx.raw_measurement_type = m.measurement_type
-                            AND mx.target = 'obs'
-  WHERE c.grid_key IS NOT NULL"))
+                            AND mx.target = 'obs'"))
 
 core <- list(
   sample        = dbGetQuery(con, "SELECT COUNT(*) FROM sample")[[1]],
@@ -248,21 +247,20 @@ cat(glue(
   "core projection — sample={core$sample %||% 0} obs={core$obs %||% 0} ",
   "taxon={core$taxon %||% 0} dataset_taxon={core$dataset_taxon %||% 0}\n"))
 
-# every grid-matched measurement whose raw type is registered must reach obs,
+# every measurement whose raw type is registered must reach obs,
 # with a real taxon_key — an unregistered raw type is dropped by the INNER join,
 # so assert the registry actually covers the vocabulary in the data
 n_obs <- dbGetQuery(con, "SELECT COUNT(*) FROM obs")[[1]]
 n_exp <- dbGetQuery(con, "
   SELECT COUNT(*) FROM cufes_measurement m JOIN cufes_sample c USING (sample_id)
   JOIN _measurement_taxon mx ON mx.raw_measurement_type = m.measurement_type
-                            AND mx.target = 'obs'
-  WHERE c.grid_key IS NOT NULL")[[1]]
+                            AND mx.target = 'obs'")[[1]]
 n_unreg <- dbGetQuery(con, "
   SELECT COUNT(DISTINCT m.measurement_type) FROM cufes_measurement m
   WHERE m.measurement_type NOT IN (
     SELECT raw_measurement_type FROM _measurement_taxon)")[[1]]
 stopifnot(
-  "obs must be one row per registered grid-matched measurement" = n_obs == n_exp,
+  "obs must be one row per registered measurement" = n_obs == n_exp,
   "every cufes measurement_type must be in measurement_taxon.csv" = n_unreg == 0,
   "cufes obs must all carry a taxon_key" =
     dbGetQuery(con, "SELECT COUNT(*) FROM obs WHERE taxon_key IS NULL")[[1]] == 0)

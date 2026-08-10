@@ -1,45 +1,65 @@
 ---
 name: deploy-consumers
-description: Refresh the read-only CalCOFI consumers after a release is frozen, uploaded and promoted to `latest` — Shiny apps on the CalCOFI server (git pull, prep_db.R in the rstudio container, restart.txt) and the static/hosted consumers that redeploy themselves. Use after cutting a release, or when an app is serving stale data.
+description: Refresh the read-only CalCOFI consumers after a release is frozen, uploaded and promoted to `latest`. Runs scripts/deploy_consumers.sh, which handles the h3t API's held-open database and the Varnish tile cache that hand-deploys forget. Use after cutting a release, or when an app is serving stale data.
 ---
 
+# Deploy the consumers
 
-After a new release is frozen, uploaded, and promoted to `latest`, the read-only
-consumers must be refreshed. They fall in two buckets:
-
-**Shiny apps** live on the CalCOFI server (`ssh calcofi`). Source repos are cloned
-to `/share/github/CalCOFI/{repo}`; `shiny-server` runs inside the **`rstudio`**
-Docker container and serves them from `/srv/shiny-server/{app}`, which are symlinks
-into those repos (e.g. `db-viz-hex → …/db-viz-hex/app`, `datacheck` +
-`db-viz-cruise → …/apps/db-viz-cruise`). Deploy per app:
+**Run the script. Do not do this by hand.**
 
 ```bash
-ssh calcofi                                            # documented in ../server/README.md
-# 1. pull source (and calcofi4r, since prep_db.R does devtools::load_all("../calcofi4r"))
-git -C /share/github/CalCOFI/calcofi4r  pull --ff-only
-git -C /share/github/CalCOFI/db-viz-hex pull --ff-only
-git -C /share/github/CalCOFI/apps       pull --ff-only
-# 2. rebuild each app's local DuckDB from the new release — MUST run in the
-#    rstudio container (it has R + the pkg deps + network to the public GCS bucket)
-docker exec -d rstudio bash -lc 'cd /share/github/CalCOFI/db-viz-hex        && Rscript prep_db.R'
-docker exec -d rstudio bash -lc 'cd /share/github/CalCOFI/apps/db-viz-cruise && Rscript prep_db.R TRUE'  # TRUE = force rebuild (else skips if db exists)
-# 3. restart the app(s) — touch restart.txt in the served app dir
-touch /share/github/CalCOFI/db-viz-hex/app/restart.txt
-touch /share/github/CalCOFI/apps/db-viz-cruise/restart.txt
+bash scripts/deploy_consumers.sh                 # from the workflows repo
+bash scripts/deploy_consumers.sh --skip-prep     # app databases already rebuilt
+bash scripts/deploy_consumers.sh --release v2026.08.10   # pin, else reads latest.txt
 ```
 
-Notes: `prep_db.R` is heavy (downloads the release parquet + materializes H3 /
-join tables), so background it with `docker exec -d` and tail the log. Apps that
-read the release **at runtime** (e.g. `apps/cruises`) have no `prep_db.R` and need
-only `git pull` + `restart.txt`. Ports 5432-forward warnings from `ssh calcofi`
-are harmless.
+It resolves the release from `latest.txt`, then: pulls sources → rebuilds the two
+app databases inside the `rstudio` container → restarts the h3t API and bans the
+cached tiles → touches `restart.txt` → **verifies all three endpoints return 200
+and prints which file the h3t API actually has open.** It is `set -euo pipefail`
+and exits non-zero on the first real failure, because a half-deployed consumer
+set is worse than an obviously failed one.
 
-**Static / hosted consumers** redeploy themselves on push or on release dispatch:
-the **station portal** (`db-viz-station`; the archived 2026 UCSB student capstone
-`2026-ucsb-station-data-portal` was forked here) rebuilds its coverage
-JSON from the DB via GitHub Actions — `gh workflow run refresh.yml --ref main -R CalCOFI/db-viz-station`
-(also runs weekly + on release dispatch); **`calcofi.io/query`** and
-**`calcofi.io/schema`** are GitHub Pages and rebuild on push. `calcofi4r` reads
-`latest` directly, so it needs no deploy — but keep `calcofi4r/R/match.R`
-byte-identical with `db-query/lib/match.js` (verified in CI).
+`test_release.qmd` invokes it automatically when `CALCOFI_DEPLOY=true`, so a
+normal `tar_make()` still only builds and promotes — deploying stays one
+deliberate flag.
 
+## Why not by hand
+
+The script exists because every consumer here drifted at least once when its
+update lived only as prose. Two steps are invisible until someone reports stale
+data, and both were missed in a by-hand deploy on 2026-08-10 that otherwise
+looked completely successful:
+
+- **The h3t API opens `calcofi_latest.duckdb` and HOLDS IT OPEN.** `prep_db.R`
+  advances that symlink, but the running container keeps serving the old inode.
+  Nothing errors — the map is just quietly on the previous release. Step 5's
+  health check prints `db_mtime`, the only field that reveals which file is
+  actually open, which is why the script verifies rather than assuming.
+- **Varnish keys tiles on a URL carrying the release tag**, so anything already
+  cached survives the new data until it is banned.
+
+Restart the h3t container with `docker compose restart`, never `up -d`: restart
+reuses the same container so its docker IP is unchanged and Varnish keeps
+resolving it. Recreating it would need Varnish restarted too.
+
+## What the script does not cover
+
+Hosted consumers redeploy themselves and are not in the script:
+
+```bash
+gh workflow run refresh.yml --ref main -R CalCOFI/db-viz-station    # coverage JSON
+gh workflow run refresh.yml --ref main -R CalCOFI/ctd-transects     # section shards
+```
+
+`calcofi.io/query` and `calcofi.io/schema` are GitHub Pages and rebuild on push.
+`calcofi4r` reads `latest` directly and needs no deploy — but keep
+`calcofi4r/R/match.R` byte-identical with `db-query/lib/match.js` (CI verifies).
+
+## If `db-viz-hex`'s `prep_db.R` is OOM-killed
+
+Symptom: `exit 137`, log truncated mid-layer with **no error text**, app keeps
+serving its previous `data/calcofi_v*.duckdb`. The spatial join is not spillable,
+so `memory_limit` cannot contain it. See that repo's `prep_db.R` for the vertex
+subdivision and the `CC_SPATIAL_BUCKETS` / `CC_SPATIAL_BATCH` knobs; restarting
+ERDDAP first frees ~4.8 GB of the 16 GB box.

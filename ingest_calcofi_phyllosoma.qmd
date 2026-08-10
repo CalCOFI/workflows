@@ -230,8 +230,7 @@ append_obs(con, glue("
   FROM phyllosoma_measurement m JOIN phyllosoma_tow tw USING (tow_id)
   JOIN _measurement_taxon mx ON mx.dataset_key = '{ds_key}'
                             AND mx.raw_measurement_type = m.measurement_type
-                            AND mx.target = 'obs'
-  WHERE tw.grid_key IS NOT NULL"))
+                            AND mx.target = 'obs'"))
 
 # obs_attribute — stage frequency: phyllosoma_stage_N -> ('stage', bin_value=N,
 # count). Zero-count stages are dropped: a stage column of 0 within a tow that
@@ -244,7 +243,7 @@ append_obs_attribute(con, glue("
   JOIN _measurement_taxon mx ON mx.dataset_key = '{ds_key}'
                             AND mx.raw_measurement_type = m.measurement_type
                             AND mx.target = 'attribute'
-  WHERE tw.grid_key IS NOT NULL AND m.measurement_value > 0"))
+  WHERE m.measurement_value > 0"))
 
 core <- list(
   sample        = dbGetQuery(con, "SELECT COUNT(*) FROM sample")[[1]],
@@ -257,19 +256,19 @@ cat(glue(
   "obs_attribute={core$obs_attribute %||% 0} ",
   "taxon={core$taxon %||% 0} dataset_taxon={core$dataset_taxon %||% 0}\n"))
 
-# the headline must be the total only — one row per grid-matched tow — and the
+# the headline must be the total only — one row per tow — and the
 # stage bins must not leak into obs
 n_obs <- core$obs
 n_exp <- dbGetQuery(con, "
   SELECT COUNT(*) FROM phyllosoma_measurement m JOIN phyllosoma_tow tw USING (tow_id)
-  WHERE tw.grid_key IS NOT NULL AND m.measurement_type = 'total_phyllosoma'")[[1]]
+  WHERE m.measurement_type = 'total_phyllosoma'")[[1]]
 n_stage_in_obs <- dbGetQuery(con,
   "SELECT COUNT(*) FROM obs WHERE measurement_type LIKE 'phyllosoma_stage%'")[[1]]
 d_bins <- dbGetQuery(con, "
   SELECT MIN(bin_value) AS lo, MAX(bin_value) AS hi, COUNT(DISTINCT bin_value) AS n
   FROM obs_attribute WHERE measurement_type = 'stage'")
 stopifnot(
-  "obs must carry the total only, one row per grid-matched tow" = n_obs == n_exp,
+  "obs must carry the total only, one row per tow" = n_obs == n_exp,
   "stage columns must go to obs_attribute, not obs"             = n_stage_in_obs == 0,
   "phyllosoma obs must all carry a taxon_key" =
     dbGetQuery(con, "SELECT COUNT(*) FROM obs WHERE taxon_key IS NULL")[[1]] == 0,

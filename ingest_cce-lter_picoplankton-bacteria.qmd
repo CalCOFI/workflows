@@ -427,8 +427,7 @@ append_obs(con, glue("
          NULL::VARCHAR, NULL::VARCHAR, m.measurement_type, m.measurement_value,
          NULL::VARCHAR, NULL::DOUBLE
   FROM picoplankton_bacteria_measurement m
-  JOIN picoplankton_bacteria_bottle b USING (bottle_id)
-  WHERE b.grid_key IS NOT NULL"))
+  JOIN picoplankton_bacteria_bottle b USING (bottle_id)"))
 
 core <- list(
   sample = dbGetQuery(con, "SELECT COUNT(*) FROM sample")[[1]],
@@ -436,13 +435,12 @@ core <- list(
 cat(glue(
   "core projection — sample={core$sample %||% 0} obs={core$obs %||% 0}\n"))
 
-# every measurement on a grid-matched bottle must reach obs
+# every measurement on a bottle must reach obs
 n_obs <- dbGetQuery(con, "SELECT COUNT(*) FROM obs")[[1]]
 n_exp <- dbGetQuery(con,
   "SELECT COUNT(*) FROM picoplankton_bacteria_measurement m
-   JOIN picoplankton_bacteria_bottle b USING (bottle_id)
-   WHERE b.grid_key IS NOT NULL")[[1]]
-stopifnot("obs must be one row per grid-matched measurement" = n_obs == n_exp)
+   JOIN picoplankton_bacteria_bottle b USING (bottle_id)")[[1]]
+stopifnot("obs must be one row per measurement" = n_obs == n_exp)
 cat(glue("obs parity: {format(n_obs, big.mark=',')} rows"), "\n")
 
 stopifnot(

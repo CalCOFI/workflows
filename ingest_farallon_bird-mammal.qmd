@@ -417,7 +417,6 @@ append_obs(con, glue("
   FROM bird_mammal_observation o JOIN bird_mammal_transect tr USING (gis_key)
   LEFT JOIN dataset_taxon dt ON dt.dataset_key = '{ds_key}'
                             AND dt.ds_taxa_code = CAST(o.species_code AS VARCHAR)
-  WHERE tr.grid_key IS NOT NULL
   GROUP BY tr.gis_key, tr.grid_key, tr.cruise_key, tr.latitude, tr.longitude,
            tr.datetime_start_utc, o.species_code, dt.taxon_key"))
 
@@ -431,8 +430,7 @@ append_obs_attribute(con, glue("
   FROM bird_mammal_observation o JOIN bird_mammal_transect tr USING (gis_key)
   LEFT JOIN dataset_taxon dt ON dt.dataset_key = '{ds_key}'
                             AND dt.ds_taxa_code = CAST(o.species_code AS VARCHAR)
-  LEFT JOIN bird_mammal_behavior bb ON bb.behavior_code = o.behavior_code
-  WHERE tr.grid_key IS NOT NULL"))
+  LEFT JOIN bird_mammal_behavior bb ON bb.behavior_code = o.behavior_code"))
 
 core <- list(
   sample        = dbGetQuery(con, "SELECT COUNT(*) FROM sample")[[1]],
@@ -456,7 +454,6 @@ n_exp <- dbGetQuery(con, "
   SELECT COUNT(*) FROM (
     SELECT tr.gis_key, o.species_code
     FROM bird_mammal_observation o JOIN bird_mammal_transect tr USING (gis_key)
-    WHERE tr.grid_key IS NOT NULL
     GROUP BY 1, 2)")[[1]]
 n_mismatch <- dbGetQuery(con, "
   WITH a AS (SELECT sample_key, taxon_key, SUM(count) s FROM obs_attribute

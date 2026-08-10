@@ -3366,8 +3366,7 @@ append_obs(con, glue("
          CAST(cc.datetime_start_utc AS TIMESTAMP), t.depth_m, t.depth_m,
          NULL::VARCHAR, NULL::VARCHAR, t.measurement_type, t.measurement_value,
          t.measurement_qual, NULL::DOUBLE
-  FROM ctd_thin t JOIN ctd_cast cc ON t.ctd_cast_uuid = cc.ctd_cast_uuid
-  WHERE cc.grid_key IS NOT NULL"))
+  FROM ctd_thin t JOIN ctd_cast cc ON t.ctd_cast_uuid = cc.ctd_cast_uuid"))
 
 core <- list(
   sample = dbGetQuery(con, "SELECT COUNT(*) FROM sample")[[1]],
@@ -3377,11 +3376,10 @@ cat(glue(
 
 n_obs <- dbGetQuery(con, "SELECT COUNT(*) FROM obs")[[1]]
 n_exp <- dbGetQuery(con,
-  "SELECT COUNT(*) FROM ctd_thin t JOIN ctd_cast cc ON t.ctd_cast_uuid = cc.ctd_cast_uuid
-   WHERE cc.grid_key IS NOT NULL")[[1]]
+  "SELECT COUNT(*) FROM ctd_thin t JOIN ctd_cast cc ON t.ctd_cast_uuid = cc.ctd_cast_uuid")[[1]]
 n_cast <- dbGetQuery(con, "SELECT COUNT(DISTINCT cast_key) FROM ctd_cast")[[1]]
 stopifnot(
-  "obs must be one row per grid-matched thinned scan" = n_obs == n_exp,
+  "obs must be one row per thinned scan" = n_obs == n_exp,
   "sample must be one row per PHYSICAL cast, not per scan" =
     dbGetQuery(con, "SELECT COUNT(*) FROM sample")[[1]] == n_cast,
   "every obs.sample_key must resolve in sample" =
@@ -3456,13 +3454,11 @@ if (build_obs_ctd_full) {
            m.measurement_type, m.measurement_value, m.measurement_qual,
            NULL::DOUBLE measurement_prec
     FROM ctd_measurement m
-    JOIN ctd_cast cc ON m.ctd_cast_uuid = cc.ctd_cast_uuid
-    WHERE cc.grid_key IS NOT NULL")
+    JOIN ctd_cast cc ON m.ctd_cast_uuid = cc.ctd_cast_uuid")
   stopifnot(
-    "obs_ctd_full must cover every grid-matched scan" = n_full ==
+    "obs_ctd_full must cover every scan" = n_full ==
       dbGetQuery(con, "SELECT COUNT(*) FROM ctd_measurement m
-                       JOIN ctd_cast cc ON m.ctd_cast_uuid = cc.ctd_cast_uuid
-                       WHERE cc.grid_key IS NOT NULL")[[1]])
+                       JOIN ctd_cast cc ON m.ctd_cast_uuid = cc.ctd_cast_uuid")[[1]])
   cat(glue("obs_ctd_full: {format(n_full, big.mark=',')} rows"), "\n")
 
   # Verify the bounds guard reached the SUPPLEMENTAL table too. It should — this

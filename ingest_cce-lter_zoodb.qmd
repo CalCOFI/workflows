@@ -553,7 +553,7 @@ append_sample(con, sample_arm_self(
   ds_key, "zoodb_sample", "sample_id", "tow",
   site_expr = "site_key", depth_min = "min_depth_m", depth_max = "max_depth_m"))
 
-# 2. obs — one row per grid-matched measurement; taxon via dataset_taxon
+# 2. obs — one row per measurement; taxon via dataset_taxon
 append_obs(con, glue("
   SELECT 'bio', '{ds_key}', {ns_key(ds_key, 'tow', 'sp.sample_id')},
          sp.grid_key, sp.cruise_key, sp.latitude, sp.longitude,
@@ -562,8 +562,7 @@ append_obs(con, glue("
          NULL::VARCHAR, NULL::DOUBLE
   FROM zoodb_measurement m JOIN zoodb_sample sp USING (sample_id)
   LEFT JOIN dataset_taxon dt ON dt.dataset_key = '{ds_key}'
-                            AND dt.ds_taxa_code = CAST(m.taxon_id AS VARCHAR)
-  WHERE sp.grid_key IS NOT NULL"))
+                            AND dt.ds_taxa_code = CAST(m.taxon_id AS VARCHAR)"))
 
 core <- list(
   sample        = dbGetQuery(con, "SELECT COUNT(*) FROM sample")[[1]],
@@ -574,15 +573,14 @@ cat(glue(
   "core projection — sample={core$sample %||% 0} obs={core$obs %||% 0} ",
   "taxon={core$taxon %||% 0} dataset_taxon={core$dataset_taxon %||% 0}\n"))
 
-# every grid-matched measurement must reach obs, and every obs must resolve a
+# every measurement must reach obs, and every obs must resolve a
 # sampling event; taxon_key coverage is reported (the source vocabulary may
 # include entries WoRMS does not resolve)
 n_obs <- dbGetQuery(con, "SELECT COUNT(*) FROM obs")[[1]]
 n_exp <- dbGetQuery(con, "
-  SELECT COUNT(*) FROM zoodb_measurement m JOIN zoodb_sample sp USING (sample_id)
-  WHERE sp.grid_key IS NOT NULL")[[1]]
+  SELECT COUNT(*) FROM zoodb_measurement m JOIN zoodb_sample sp USING (sample_id)")[[1]]
 stopifnot(
-  "obs must be one row per grid-matched measurement" = n_obs == n_exp,
+  "obs must be one row per measurement" = n_obs == n_exp,
   "every obs.sample_key must resolve in sample" =
     dbGetQuery(con, "SELECT COUNT(*) FROM obs o LEFT JOIN sample s USING (sample_key)
                      WHERE s.sample_key IS NULL")[[1]] == 0)

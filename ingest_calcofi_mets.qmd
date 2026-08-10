@@ -1165,13 +1165,21 @@ schema eras**, and nothing negated the unsigned form: **169,124 samples across 5
 cruises** carried longitudes of **+117.18 to +124.91** — the CalCOFI grid
 reflected into the eastern hemisphere.
 
-Reflected coordinates match no grid cell, and `append_obs()` below filters
-`WHERE s.grid_key IS NOT NULL` while the `sample` arm does not. So four of those
-cruises (`2013-01-3322`, `2013-04-3322`, `2014-02-3322`, `2014-04-32I1`) reached
-release v2026.08.08 as **11,762 underway samples with zero observations**, with
-1,728,548 measurements and 1,147,814 `obs_mets_full` rows behind them. The fifth,
+Reflected coordinates match no grid cell, and `append_obs()` used to filter on
+`grid_key IS NOT NULL` while the `sample` arm did not. So four of those cruises
+(`2013-01-3322`, `2013-04-3322`, `2014-02-3322`, `2014-04-32I1`) reached release
+v2026.08.08 as **11,762 underway samples with zero observations**, with 1,728,548
+measurements and 1,147,814 `obs_mets_full` rows behind them. The fifth,
 `2015-10-32OC`, lost 1,441 samples *inside an otherwise healthy cruise* — invisible
 to any cruise-level check, since the rest of its track grids normally.
+
+The sign repair is still the right fix — a positive longitude here is simply
+**wrong**, not merely ungridded. But that filter is gone as of v2026.08.11:
+`obs` now carries ungridded observations, extending to the headline table the
+argument this notebook already made for `obs_mets_full` below (a ship on transit
+is legitimately outside the station grid). Being outside the grid no longer
+deletes an observation anywhere, so a coordinate error like this one can no
+longer hide as an absence.
 
 This is repaired rather than asked, because the alternative is not a place a
 CalCOFI ship has been: +117° to +125° E at 29–37° N is inland China and the
@@ -1274,8 +1282,7 @@ append_obs(con, glue("
          CAST(s.datetime_start_utc AS TIMESTAMP), 0::DOUBLE, 0::DOUBLE,
          NULL::VARCHAR, NULL::VARCHAR, t.measurement_type, t.measurement_value,
          NULL::VARCHAR, NULL::DOUBLE
-  FROM mets_thin t JOIN mets_sample s USING (mets_sample_uuid)
-  WHERE s.grid_key IS NOT NULL"))
+  FROM mets_thin t JOIN mets_sample s USING (mets_sample_uuid)"))
 
 core <- list(
   sample = dbGetQuery(con, "SELECT COUNT(*) FROM sample")[[1]],
@@ -1285,13 +1292,12 @@ cat(glue(
 
 n_obs <- core$obs
 n_exp <- dbGetQuery(con,
-  "SELECT COUNT(*) FROM mets_thin t JOIN mets_sample s USING (mets_sample_uuid)
-   WHERE s.grid_key IS NOT NULL")[[1]]
+  "SELECT COUNT(*) FROM mets_thin t JOIN mets_sample s USING (mets_sample_uuid)")[[1]]
 n_smp_exp <- dbGetQuery(con,
   "SELECT COUNT(*) FROM mets_sample s
    WHERE EXISTS (SELECT 1 FROM mets_thin t WHERE t.mets_sample_uuid = s.mets_sample_uuid)")[[1]]
 stopifnot(
-  "obs must be one row per grid-matched mets_thin measurement" = n_obs == n_exp,
+  "obs must be one row per mets_thin measurement" = n_obs == n_exp,
   "sample must carry only the samples mets_thin references"    = core$sample == n_smp_exp,
   "underway is the only sample grain here" =
     dbGetQuery(con, "SELECT COUNT(*) FROM sample WHERE sample_type <> 'underway'")[[1]] == 0,
@@ -1359,7 +1365,7 @@ if (build_obs_mets_full) {
     JOIN mets_sample s USING (mets_sample_uuid)
     WHERE s.latitude IS NOT NULL AND s.longitude IS NOT NULL")[[1]]
   stopifnot(
-    "obs_mets_full must cover every grid-matched measurement" = n_full == n_exp_full,
+    "obs_mets_full must cover every measurement" = n_full == n_exp_full,
     # the whole point: unlike mets_measurement, this stands alone
     "obs_mets_full must carry a position on every row" =
       dbGetQuery(con, "SELECT COUNT(*) FROM obs_mets_full

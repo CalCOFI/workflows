@@ -706,8 +706,7 @@ append_obs(con, glue("
          m.measurement_qual, NULL::DOUBLE
   FROM euphausiids_measurement m JOIN euphausiids_tow tw USING (tow_id)
   LEFT JOIN dataset_taxon dt ON dt.dataset_key = '{ds_key}'
-                            AND dt.ds_taxa_code = CAST(m.taxon_id AS VARCHAR)
-  WHERE tw.grid_key IS NOT NULL"))
+                            AND dt.ds_taxa_code = CAST(m.taxon_id AS VARCHAR)"))
 
 core <- list(
   sample        = dbGetQuery(con, "SELECT COUNT(*) FROM sample")[[1]],
@@ -724,7 +723,7 @@ cat(glue(
 n_obs   <- dbGetQuery(con, "SELECT COUNT(*) FROM obs")[[1]]
 n_meas  <- dbGetQuery(con,
   "SELECT COUNT(*) FROM euphausiids_measurement m JOIN euphausiids_tow t
-   USING (tow_id) WHERE t.grid_key IS NOT NULL")[[1]]
+   USING (tow_id)")[[1]]
 n_stage <- dbGetQuery(con, "SELECT COUNT(DISTINCT life_stage) FROM obs")[[1]]
 stopifnot(
   "obs must be one row per measurement (tow x taxon x life_stage)" = n_obs == n_meas,
