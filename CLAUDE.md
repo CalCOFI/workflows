@@ -549,6 +549,15 @@ Each skill updates the shared tracking artifacts above so the loop is
 self-documenting; human review happens at every hand-off. Scaffolds come from
 `.claude/skills/templates/`.
 
+**A skill is a `<name>/SKILL.md` directory whose front-matter carries BOTH `name`
+and `description` — anything else is an inert file.** All five of these lived as
+bare `.claude/skills/<name>.md` with no `name:` key until 2026-08-10, so none of
+them ever loaded and none of the slash commands above resolved, while this
+section documented the loop as if it worked. Nothing errors in that state: a
+directory with no `SKILL.md` and a stray `.md` beside one are both simply
+skipped. `RUNBOOK.md` and `templates/` are deliberately neither — they are read
+by path, so they stay as files.
+
 ## Repo-specific conventions
 
 - **`provider` = the organization curating the data.** Not the portal that hosts

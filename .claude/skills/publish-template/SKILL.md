@@ -1,4 +1,5 @@
 ---
+name: publish-template
 description: Scaffold a publish workflow (netCDF, OBIS, ERDDAP, or EDI) from CalCOFI data
 user_invocable: true
 ---

@@ -1,4 +1,5 @@
 ---
+name: explore-dataset
 description: Profile a new CSV or ERDDAP dataset before ingestion into the CalCOFI database
 user_invocable: true
 ---

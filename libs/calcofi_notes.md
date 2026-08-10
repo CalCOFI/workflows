@@ -20,6 +20,283 @@
 - [ ] rename `swfsc_inverts` to `swfsc_invert` including `ingest_swfsc_inverts.qmd` -> `ingest_swfsc_invert.qmd`
 - [ ] `ingest_calcofi_ctd-cast.qmd` needs a sync to GCS for just the used CSV files so saved in GCS `archive/`, not just GCS `_sync/`
 
+
+## 2026-08-10 fix .claude/skills
+
+/doctor
+
+----
+
+Running the health check now — Release A continues in the background and the monitor will notify me when it lands.
+
+  Listed 1 directory, ran 10 shell commands
+
+Health check complete. Release A is still assembling in the background (chunk 10/43).
+
+Summary
+
+Your setup is in good shape — the install is clean, everything parses, auto mode is already your default, and you're on the latest version. The only real weight is this project's CLAUDE.md at ~11.8k est. tokens every session, of which I'd cut about 800; plus two extensions and two connectors you haven't touched in 11 days. Everything below is reversible.
+
+Component: CalCOFI/workflows/CLAUDE.md
+Type: memory
+Scope: project
+Uses (total since install): n/a
+Used in window?: always loaded
+Est. resident tokens: ~11,834
+Verdict: trim ~808
+────────────────────────────────────────
+Component: Github/CLAUDE.md
+Type: memory
+Scope: parent dir
+Uses (total since install): n/a
+Used in window?: always loaded
+Est. resident tokens: ~895
+Verdict: already lean
+────────────────────────────────────────
+Component: claude-in-chrome
+Type: MCP server
+Scope: connector
+Uses (total since install): n/a (no counter)
+Used in window?: yes — 1,348 calls
+Est. resident tokens: deferred
+Verdict: keep
+────────────────────────────────────────
+Component: claude_ai_Gmail
+Type: MCP server
+Scope: connector
+Uses (total since install): n/a (no counter)
+Used in window?: yes — 34 calls
+Est. resident tokens: deferred
+Verdict: keep
+────────────────────────────────────────
+Component: claude_ai_Google_Drive
+Type: MCP server
+Scope: connector
+Uses (total since install): n/a (no counter)
+Used in window?: yes — 20 calls
+Est. resident tokens: deferred
+Verdict: keep
+────────────────────────────────────────
+Component: claude_ai_Google_Calendar
+Type: MCP server
+Scope: connector
+Uses (total since install): n/a (no counter)
+Used in window?: no — 0 calls
+Est. resident tokens: deferred
+Verdict: remove
+────────────────────────────────────────
+Component: claude_ai_Microsoft_365
+Type: MCP server
+Scope: connector
+Uses (total since install): n/a (no counter)
+Used in window?: no — 0 calls
+Est. resident tokens: deferred
+Verdict: remove
+────────────────────────────────────────
+Component: frontend-design@claude-plugins-official
+Type: plugin
+Scope: user
+Uses (total since install): 1
+Used in window?: no (last ~Jun 22)
+Est. resident tokens: ~50
+Verdict: remove
+────────────────────────────────────────
+Component: find-skills
+Type: skill
+Scope: user
+Uses (total since install): 0
+Used in window?: no
+Est. resident tokens: ~45
+Verdict: remove
+
+Scan window: 50 session files across 11 project directories, 2026-07-30 → 2026-08-10 (11 days, 328 startups lifetime).
+
+Proposed actions
+
+Check 0 — install health: nothing to fix. Native install at ~/.local/bin/claude → 2.1.226, PATH resolves it, installMethod agrees, no npm-global or ~/.claude/local leftovers, all five settings/config files parse, no agent definitions to collide.
+
+Check 1 — unused extensions
+- ~/.claude/settings.json: set "enabledPlugins": {"frontend-design@claude-plugins-official": false} (enabled at user scope, so the false belongs there).
+- ~/.claude/settings.json: add "skillOverrides": {"find-skills": "off"} (it lives in ~/.claude/skills).
+- Google Calendar and Microsoft 365 are claude.ai connectors, not local config — I can't disable them by editing a file, and I won't guess at their configured names. Run /mcp and disable them there. Note /mcp disable is per-project, so repeat it in other projects if you want them off everywhere. Their tools are deferred, so this buys no tokens — it's two fewer connections to authenticate and maintain.
+
+Check 2 — local memory dedup: nothing to do. You have no ~/.claude/CLAUDE.md and no CLAUDE.local.md anywhere in the tree, so there's nothing to deduplicate or contradict.
+
+Check 3 — trim derivable content from CLAUDE.md
+
+Cut the ## Layout section (14 lines, 773 chars, ~193 est. tokens). It's a directory listing ls already answers — and it has drifted: it says "one notebook per dataset (12 of them)" when there are 18 ingest_*.qmd files. Verbatim, so you can restore it:
+
+## Layout
+
+- `ingest_*.qmd` — one notebook per dataset (12 of them); `release_database.qmd`
+  is the assembler/release step.
+- `explore_*.qmd|.Rmd` — exploratory analyses, not part of the pipeline.
+- `metadata/` — the registries above.
+- `data/` — local working artifacts: `data/parquet/{dataset}/` ingest **sidecars**
+  (`*.json`, tracked; the bulk parquet stages at `$CALCOFI_STAGE_DIR`),
+  `calcofi_wrangling.duckdb`, caches. Source CSVs live on GCS/Drive, not in git.
+- `scripts/` — `sync_gdrive_to_gcs.sh` (rclone), `build_workflows_index.R`,
+  pipeline runners, benchmark generators.
+- `_output/` — rendered Quarto HTML + Jekyll landing index, published at
+  <https://calcofi.github.io/workflows/>.
+- `README_PLAN.qmd` — full design doc (Primary Key Strategy, etc.).
+
+That is the only section I'd cut. I went through all 710 lines: ## Architecture alone is 28.7k chars and is almost entirely failure contracts and design rationale — the mermaid-PNG hang, the tar_invalidate traps, the NaN geometry corruption, the na = "" registry trap. None of that is derivable from the code, and several entries would cost hours to rediscover. This is an unusually well-written memory file; I'm not going to thin it for the sake of a number.
+
+Check 4 — migrate to lazy loading
+
+Move ## Deploy (release → consumers) (41 lines, 2,460 chars, ~615 est. tokens) to .claude/skills/deploy-consumers/SKILL.md. It's a pure procedure — ssh, git pull, docker exec … prep_db.R, touch restart.txt, plus the GitHub Actions redeploys — needed only at the end of a release, which is exactly what on-demand loading is for. Only its one-line description stays resident. It contains no "never do X" rules, so nothing safety-critical moves out of always-loaded context.
+
+Net effect: CLAUDE.md 47,334 → ~44,100 chars. Worth being straight with you: that's still over the ~40,000-char floor that trips the large-memory-file warning on 200k-context models, though under the ~50,000 threshold for the 1M-context model this session is running. The bulk that remains is genuinely not derivable.
+
+Check 7 — version: up to date. 2.1.226 installed, 2.1.226 is latest on the latest channel. autoUpdates is false in ~/.claude.json, so background updates are off — that's usually a deliberate choice and you're current anyway, so nothing to propose. Worth knowing it's why you could drift later; claude update is the manual path.
+
+Warnings
+
+Check 5 — hooks: healthy. Two PostToolUse hooks ran 87 times in the window; worst case 259 ms (Edit) and 207 ms (Write), well under the 2s threshold for per-tool-call events. They aren't in your settings files, so they come from a plugin or built-in.
+
+Check 6 — context weight. Dominated by CalCOFI/workflows/CLAUDE.md (~11.8k est.), then Github/CLAUDE.md (~895 est.). Every MCP server you have is deferred — tool names only, schemas fetched on demand — so the five connectors cost roughly nothing resident despite claude-in-chrome being your heaviest-used tool by far. The skill listing is well inside its ~1% budget. Run /context for the exact live figures; mine are disk estimates.
+
+One observation outside the checks
+
+.claude/skills/ holds explore-dataset.md, generate-metadata.md, ingest-new.md, validate-ingest.md as bare .md files. Claude Code loads skills from <name>/SKILL.md directories, so none of these are registered — they don't appear in my available-skills list, and /explore-dataset won't resolve. Your CLAUDE.md and RUNBOOK.md document them as an invocable loop (/explore-dataset {path} → /generate-metadata …). So either the docs are aspirational, or these were meant to be skills and the directory structure never happened. Not something I'd change under /doctor — but you'd want to know before relying on that workflow.
+
+Check 9 — no permission rules proposed. You had 68 denials in the window, but not one is safe to pre-approve: 29 are claude-in-chrome tools (computer, browser_batch, navigate, javascript_tool — these click, type, and execute arbitrary JS), and the Bash denials are duckdb -c (executes arbitrary SQL, can write files) and ssh -o (remote execution). None pass the read-only bar. Check 8 needs nothing either — permissions.defaultMode is already "auto" in ~/.claude/settings.json, with no project override. So there's no permission question to ask.
+
+----
+
+
+Apply the cleanup? It's 4 changes: disable 1 unused plugin and 1 unused skill, cut the stale Layout section from CLAUDE.md, and move the Deploy runbook into an on-demand skill. → Clean up everything (recommended)
+
+----
+
+All four applied. Here's exactly what changed and how to undo each.
+
+~/.claude/settings.json — backup saved at ~/.claude/settings.json.doctor-backup
+- enabledPlugins["frontend-design@claude-plugins-official"] = false
+- skillOverrides["find-skills"] = "off"
+
+Undo: set the plugin back to true (or use /plugin), and delete the skillOverrides entry.
+
+CLAUDE.md — 47,334 → 44,405 chars, 710 → 661 lines (−53 lines, +4)
+- ## Layout deleted outright — quoted verbatim in the report above if you want it back.
+- ## Deploy (release → consumers) replaced by a 4-line pointer to the new skill.
+
+Undo: git checkout CLAUDE.md. It's an ordinary working-tree edit — review it in git diff; I haven't committed it.
+
+.claude/skills/deploy-consumers/SKILL.md — new, untracked. Carries the full deploy procedure verbatim under name/description frontmatter. It registered immediately — it's already in my available-skills list this session.
+
+Undo: rm -rf .claude/skills/deploy-consumers and restore the section from git.
+
+Still on you: Google Calendar and Microsoft 365 are claude.ai connectors, so I can't disable them from a settings file. Run /mcp and turn them off there — and repeat it per project, since that toggle is project-scoped.
+
+Two things I did not do, both deliberate: no permission changes (auto mode is already your default, and none of your 68 denials clear the read-only bar — they're browser control, duckdb -c, and ssh), and no further CLAUDE.md trimming. I read all 710 lines; the remaining 44k chars are failure contracts and design rationale that would cost hours to rediscover, and thinning that to improve a number would be the wrong trade.
+
+Worth revisiting separately: .claude/skills/ holds explore-dataset.md, generate-metadata.md, ingest-new.md and validate-ingest.md as bare .md files rather than <name>/SKILL.md directories, so none of them load — /explore-dataset won't resolve, even though CLAUDE.md and RUNBOOK.md document that loop as invocable. The deploy-consumers skill I just created is the working shape if you want them converted.
+
+Release A is still on core_tables (chunk 10/43) — assembling the core from all 16 shards is the long pole before the freeze. I'll report when it lands.
+
+----
+
+YES! Revise .claude/skills/ to properly read. I didn't realize they needed to be of form `<name>/SKILL.md` directories
+
+----
+
+Both problems at once: wrong shape and no name in the frontmatter. Checking for path references before moving anything:
+
+----
+
+All references are repo-root-relative, so moving the files won't break them. Converting:
+
+  Ran 2 shell commands
+5 skills available
+
+All five registered — they're in my available-skills list now. Adding a note to CLAUDE.md so this can't silently regress:
+
+⏺ Update(CLAUDE.md)
+Added 9 lines
+self-documenting; human review happens at every hand-off. Scaffolds com
+e from
+`.claude/skills/templates/`.
+
+```md
+**A skill is a `<name>/SKILL.md` directory whose front-matter carries B
+OTH `name`
+and `description` — anything else is an inert file.** All five of these
+ lived as
+bare `.claude/skills/<name>.md` with no `name:` key until 2026-08-10, s
+o none of
+them ever loaded and none of the slash commands above resolved, while t
+his
+section documented the loop as if it worked. Nothing errors in that sta
+te: a
+directory with no `SKILL.md` and a stray `.md` beside one are both simp
+ly
+skipped. `RUNBOOK.md` and `templates/` are deliberately neither — they
+are read
+by path, so they stay as files.
+
+## Repo-specific conventions
+
+- **`provider` = the organization curating the data.** Not the portal t
+hat hosts
+1 skill available
+```
+
+Release worker is at 167% CPU on core_tables — assembling the core from 16 shards, working hard, not stuck.
+
+.claude/skills/ fixed — all six now load
+
+Two things were wrong, and either alone would have been enough to keep them inert:
+
+1. Shape — they were bare .claude/skills/<name>.md files; Claude Code only reads <name>/SKILL.md.
+2. Frontmatter — every one had description and user_invocable: true but no name: key, which is required.
+
+Converted with git mv so history follows the rename, and added the missing name: to each. All five now appear in my available-skills list — you can see them registering in real time as I made each edit:
+
+┌───────────────────┬───────┐
+│       skill       │ lines │
+├───────────────────┼───────┤
+│ explore-dataset   │   148 │
+├───────────────────┼───────┤
+│ generate-metadata │   329 │
+├───────────────────┼───────┤
+│ ingest-new        │   445 │
+├───────────────────┼───────┤
+│ publish-template  │   217 │
+├───────────────────┼───────┤
+│ validate-ingest   │   506 │
+└───────────────────┴───────┘
+
+`/explore-dataset → /generate-metadata → /ingest-new → /validate-ingest` now actually resolves, as `CLAUDE.md` has been claiming.
+
+Left as files, deliberately: RUNBOOK.md and templates/ — they're read by path, not invoked, so a SKILL.md wrapper would be wrong. A directory without SKILL.md is simply skipped, so templates/ sitting among the skill directories is harmless.
+
+Path references updated: the skills use repo-root-relative paths internally, so the move broke nothing, but three notebook comments pointed at .claude/skills/ingest-new.md and now point at .../ingest-new/SKILL.md. I left the stale mentions in libs/calcofi_notes_pre-2026-07-01.md alone — that's an archived session transcript, and rewriting history there would be wrong.
+
+And a note in CLAUDE.md so it can't regress, since the striking part is that nothing errors: a directory with no SKILL.md, and a stray .md beside one, are both silently skipped. The docs described a working loop for months while none of it loaded — the same failure shape as the CTD bug, one layer up.
+
+Everything is uncommitted and ready for git diff — including the /doctor edits, which I'm leaving for you to review rather than committing myself. CLAUDE.md net: 47,334 → 44,992 chars.
+
+Commit and push based on task
+
+## 2026-08-10 fix GEBCO bathymetry sampling in transect visualization
+
+There's an issue with @../ctd-transects/ and @../apps/ctd-viz/ in which the seafloor,
+  ie bottom depth extracted from GEBCO, is only sampled for the given sample, and not
+  in between. Ideally, the underlying functions in @
+
+←  ☒ Raster source  ☒ Interval  ☒ Land crossings  ✔ Submit  →
+
+Review your answers
+
+ ● calcofi4r has no bathymetry raster. Where should `cc_transect_bathy()` get GEBCO from?
+   → Publish crop to GCS + cache (Recommended)
+ ● Default `interval_m` for the along-track sampling?
+   → 500 m (Recommended)
+ ● In ctd-viz the transect follows the ship track (`ord_occ` order) over a user-picked run of casts, so densifying between casts can cross land — which is exactly why the current code refuses to. How should that render?
+   → Draw land, flag it (Recommended)
+
 ## 2026-08-10 ctd-transects: fix contour lines and labels
 
 The contour lines and labels are sometimes obscured presumably because of plotting order in @../ctd-transects [Image #2]

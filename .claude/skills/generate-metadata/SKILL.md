@@ -1,4 +1,5 @@
 ---
+name: generate-metadata
 description: Create metadata redefinition files for a new CalCOFI dataset ingestion
 user_invocable: true
 ---

@@ -1,4 +1,5 @@
 ---
+name: validate-ingest
 description: Run post-ingest validation checks on a CalCOFI wrangling database
 user_invocable: true
 ---

@@ -1,4 +1,5 @@
 ---
+name: ingest-new
 description: Scaffold a new CalCOFI dataset ingest workflow from template
 user_invocable: true
 ---
@@ -169,7 +170,7 @@ The notebook includes these sections (customize based on pattern):
 Per-dataset tables (`{dataset}_sample` / `{dataset}_measurement` / …) are an
 **intermediate** wrangling shape, not the deliverable. Every ingest projects them
 into the shared core family and then serves the per-dataset names as compat VIEWs.
-Full pattern in `RUNBOOK.md` §3b and `templates/ingest_template.qmd`.
+Full pattern in `RUNBOOK.md` §3b and `.claude/skills/templates/ingest_template.qmd`.
 
 **The projection SQL belongs in the notebook.** The `append_*` helpers all take an
 arbitrary `SELECT`, so adding a dataset needs **no `calcofi4db` change**:
