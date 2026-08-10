@@ -133,6 +133,38 @@ options(DT.options = list(scrollX = TRUE))
 # release version
 release_version <- format(Sys.Date(), "v%Y.%m.%d")
 message(glue("Release version: {release_version}"))
+
+# --- refuse to re-cut the version consumers are currently reading -------------
+#
+# The version is the DATE, so two runs on one day reuse the tag — and the second
+# overwrites `gs://…/releases/{version}/` in place. That is how v2026.08.10 was
+# republished on 2026-08-11 with data that then FAILED test_release: promotion
+# was correctly withheld, but promotion was never needed, because `latest.txt`
+# already pointed at the path being overwritten. Consumers reading `latest` got
+# unverified data without a single byte of `latest.txt` changing.
+#
+# The gate everyone relies on ("a failing release is not promoted") silently does
+# not hold when the version does not change. So: if this run would overwrite the
+# currently-promoted release, stop. Re-cutting a version nobody is reading is
+# fine and stays unguarded.
+#
+# Override deliberately with CALCOFI_ALLOW_REPUBLISH=TRUE when the intent really
+# is to replace a promoted release in place (and accept that consumers see the
+# new bytes before any test has passed).
+promoted <- tryCatch(
+  trimws(readLines(
+    "https://storage.googleapis.com/calcofi-db/ducklake/releases/latest.txt",
+    warn = FALSE))[1],
+  error = function(e) NA_character_)
+
+if (!is.na(promoted) && identical(promoted, release_version) &&
+    !isTRUE(as.logical(Sys.getenv("CALCOFI_ALLOW_REPUBLISH", "FALSE"))))
+  stop(glue(
+    "release {release_version} is the version `latest.txt` currently points at, ",
+    "so cutting it again would overwrite what consumers are reading — before any ",
+    "test has run against the new bytes.\n",
+    "  Wait for the date to roll over, or set CALCOFI_ALLOW_REPUBLISH=TRUE if ",
+    "replacing the promoted release in place is genuinely what you want."))
 ```
 
 ## Assemble from Ingest Outputs

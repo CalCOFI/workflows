@@ -6,7 +6,7 @@
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
-<meta name="dcterms.date" content="2026-08-08">
+<meta name="dcterms.date" content="2026-08-10">
 
 <title>Ingest Underway CUFES Fish Eggs</title>
 <style>
@@ -123,7 +123,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">2026-08-08</p>
+      <p class="date">2026-08-10</p>
     </div>
   </div>
   
@@ -302,8 +302,8 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a><span class="fu">assign_grid_key</span>(con, <span class="st">"cufes_sample"</span>) <span class="sc">|&gt;</span> <span class="fu">datatable</span>(<span class="at">caption =</span> <span class="st">"Grid assignment"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output-display">
-<div class="datatables html-widget html-fill-item" id="htmlwidget-d51bba785940012b8f85" style="width:100%;height:auto;"></div>
-<script type="application/json" data-for="htmlwidget-d51bba785940012b8f85">{"x":{"filter":"none","vertical":false,"caption":"<caption>Grid assignment<\/caption>","data":[["1","2"],["not_in_grid","in_grid"],[2331,47241]],"container":"<table class=\"display\">\n  <thead>\n    <tr>\n      <th> <\/th>\n      <th>status<\/th>\n      <th>n<\/th>\n    <\/tr>\n  <\/thead>\n<\/table>","options":{"scrollX":true,"columnDefs":[{"className":"dt-right","targets":2},{"orderable":false,"targets":0},{"name":" ","targets":0},{"name":"status","targets":1},{"name":"n","targets":2}],"order":[],"autoWidth":false,"orderClasses":false},"selection":{"mode":"multiple","selected":null,"target":"row","selectable":null}},"evals":[],"jsHooks":[]}</script>
+<div class="datatables html-widget html-fill-item" id="htmlwidget-be198d1de902485f69bd" style="width:100%;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-be198d1de902485f69bd">{"x":{"filter":"none","vertical":false,"caption":"<caption>Grid assignment<\/caption>","data":[["1","2"],["not_in_grid","in_grid"],[2331,47241]],"container":"<table class=\"display\">\n  <thead>\n    <tr>\n      <th> <\/th>\n      <th>status<\/th>\n      <th>n<\/th>\n    <\/tr>\n  <\/thead>\n<\/table>","options":{"scrollX":true,"columnDefs":[{"className":"dt-right","targets":2},{"orderable":false,"targets":0},{"name":" ","targets":0},{"name":"status","targets":1},{"name":"n","targets":2}],"order":[],"autoWidth":false,"orderClasses":false},"selection":{"mode":"multiple","selected":null,"target":"row","selectable":null}},"evals":[],"jsHooks":[]}</script>
 </div>
 </div>
 </section>
@@ -389,45 +389,43 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb23-49"><a href="#cb23-49" aria-hidden="true" tabindex="-1"></a><span class="st">  FROM cufes_measurement m JOIN cufes_sample c USING (sample_id)</span></span>
 <span id="cb23-50"><a href="#cb23-50" aria-hidden="true" tabindex="-1"></a><span class="st">  JOIN _measurement_taxon mx ON mx.dataset_key = '{ds_key}'</span></span>
 <span id="cb23-51"><a href="#cb23-51" aria-hidden="true" tabindex="-1"></a><span class="st">                            AND mx.raw_measurement_type = m.measurement_type</span></span>
-<span id="cb23-52"><a href="#cb23-52" aria-hidden="true" tabindex="-1"></a><span class="st">                            AND mx.target = 'obs'</span></span>
-<span id="cb23-53"><a href="#cb23-53" aria-hidden="true" tabindex="-1"></a><span class="st">  WHERE c.grid_key IS NOT NULL"</span>))</span>
-<span id="cb23-54"><a href="#cb23-54" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb23-55"><a href="#cb23-55" aria-hidden="true" tabindex="-1"></a>core <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
-<span id="cb23-56"><a href="#cb23-56" aria-hidden="true" tabindex="-1"></a>  <span class="at">sample        =</span> <span class="fu">dbGetQuery</span>(con, <span class="st">"SELECT COUNT(*) FROM sample"</span>)[[<span class="dv">1</span>]],</span>
-<span id="cb23-57"><a href="#cb23-57" aria-hidden="true" tabindex="-1"></a>  <span class="at">obs           =</span> <span class="fu">dbGetQuery</span>(con, <span class="st">"SELECT COUNT(*) FROM obs"</span>)[[<span class="dv">1</span>]],</span>
-<span id="cb23-58"><a href="#cb23-58" aria-hidden="true" tabindex="-1"></a>  <span class="at">taxon         =</span> n_taxon,</span>
-<span id="cb23-59"><a href="#cb23-59" aria-hidden="true" tabindex="-1"></a>  <span class="at">dataset_taxon =</span> n_ds_taxon)</span>
-<span id="cb23-60"><a href="#cb23-60" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(</span>
-<span id="cb23-61"><a href="#cb23-61" aria-hidden="true" tabindex="-1"></a>  <span class="st">"core projection — sample={core$sample %||% 0} obs={core$obs %||% 0} "</span>,</span>
-<span id="cb23-62"><a href="#cb23-62" aria-hidden="true" tabindex="-1"></a>  <span class="st">"taxon={core$taxon %||% 0} dataset_taxon={core$dataset_taxon %||% 0}</span><span class="sc">\n</span><span class="st">"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb23-52"><a href="#cb23-52" aria-hidden="true" tabindex="-1"></a><span class="st">                            AND mx.target = 'obs'"</span>))</span>
+<span id="cb23-53"><a href="#cb23-53" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-54"><a href="#cb23-54" aria-hidden="true" tabindex="-1"></a>core <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
+<span id="cb23-55"><a href="#cb23-55" aria-hidden="true" tabindex="-1"></a>  <span class="at">sample        =</span> <span class="fu">dbGetQuery</span>(con, <span class="st">"SELECT COUNT(*) FROM sample"</span>)[[<span class="dv">1</span>]],</span>
+<span id="cb23-56"><a href="#cb23-56" aria-hidden="true" tabindex="-1"></a>  <span class="at">obs           =</span> <span class="fu">dbGetQuery</span>(con, <span class="st">"SELECT COUNT(*) FROM obs"</span>)[[<span class="dv">1</span>]],</span>
+<span id="cb23-57"><a href="#cb23-57" aria-hidden="true" tabindex="-1"></a>  <span class="at">taxon         =</span> n_taxon,</span>
+<span id="cb23-58"><a href="#cb23-58" aria-hidden="true" tabindex="-1"></a>  <span class="at">dataset_taxon =</span> n_ds_taxon)</span>
+<span id="cb23-59"><a href="#cb23-59" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(</span>
+<span id="cb23-60"><a href="#cb23-60" aria-hidden="true" tabindex="-1"></a>  <span class="st">"core projection — sample={core$sample %||% 0} obs={core$obs %||% 0} "</span>,</span>
+<span id="cb23-61"><a href="#cb23-61" aria-hidden="true" tabindex="-1"></a>  <span class="st">"taxon={core$taxon %||% 0} dataset_taxon={core$dataset_taxon %||% 0}</span><span class="sc">\n</span><span class="st">"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>core projection — sample=49572 obs=270593 taxon=33 dataset_taxon=6</code></pre>
+<pre><code>core projection — sample=49572 obs=284097 taxon=33 dataset_taxon=6</code></pre>
 </div>
 <details class="code-fold">
 <summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb25"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a><span class="co"># every grid-matched measurement whose raw type is registered must reach obs,</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb25"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a><span class="co"># every measurement whose raw type is registered must reach obs,</span></span>
 <span id="cb25-2"><a href="#cb25-2" aria-hidden="true" tabindex="-1"></a><span class="co"># with a real taxon_key — an unregistered raw type is dropped by the INNER join,</span></span>
 <span id="cb25-3"><a href="#cb25-3" aria-hidden="true" tabindex="-1"></a><span class="co"># so assert the registry actually covers the vocabulary in the data</span></span>
 <span id="cb25-4"><a href="#cb25-4" aria-hidden="true" tabindex="-1"></a>n_obs <span class="ot">&lt;-</span> <span class="fu">dbGetQuery</span>(con, <span class="st">"SELECT COUNT(*) FROM obs"</span>)[[<span class="dv">1</span>]]</span>
 <span id="cb25-5"><a href="#cb25-5" aria-hidden="true" tabindex="-1"></a>n_exp <span class="ot">&lt;-</span> <span class="fu">dbGetQuery</span>(con, <span class="st">"</span></span>
 <span id="cb25-6"><a href="#cb25-6" aria-hidden="true" tabindex="-1"></a><span class="st">  SELECT COUNT(*) FROM cufes_measurement m JOIN cufes_sample c USING (sample_id)</span></span>
 <span id="cb25-7"><a href="#cb25-7" aria-hidden="true" tabindex="-1"></a><span class="st">  JOIN _measurement_taxon mx ON mx.raw_measurement_type = m.measurement_type</span></span>
-<span id="cb25-8"><a href="#cb25-8" aria-hidden="true" tabindex="-1"></a><span class="st">                            AND mx.target = 'obs'</span></span>
-<span id="cb25-9"><a href="#cb25-9" aria-hidden="true" tabindex="-1"></a><span class="st">  WHERE c.grid_key IS NOT NULL"</span>)[[<span class="dv">1</span>]]</span>
-<span id="cb25-10"><a href="#cb25-10" aria-hidden="true" tabindex="-1"></a>n_unreg <span class="ot">&lt;-</span> <span class="fu">dbGetQuery</span>(con, <span class="st">"</span></span>
-<span id="cb25-11"><a href="#cb25-11" aria-hidden="true" tabindex="-1"></a><span class="st">  SELECT COUNT(DISTINCT m.measurement_type) FROM cufes_measurement m</span></span>
-<span id="cb25-12"><a href="#cb25-12" aria-hidden="true" tabindex="-1"></a><span class="st">  WHERE m.measurement_type NOT IN (</span></span>
-<span id="cb25-13"><a href="#cb25-13" aria-hidden="true" tabindex="-1"></a><span class="st">    SELECT raw_measurement_type FROM _measurement_taxon)"</span>)[[<span class="dv">1</span>]]</span>
-<span id="cb25-14"><a href="#cb25-14" aria-hidden="true" tabindex="-1"></a><span class="fu">stopifnot</span>(</span>
-<span id="cb25-15"><a href="#cb25-15" aria-hidden="true" tabindex="-1"></a>  <span class="st">"obs must be one row per registered grid-matched measurement"</span> <span class="ot">=</span> n_obs <span class="sc">==</span> n_exp,</span>
-<span id="cb25-16"><a href="#cb25-16" aria-hidden="true" tabindex="-1"></a>  <span class="st">"every cufes measurement_type must be in measurement_taxon.csv"</span> <span class="ot">=</span> n_unreg <span class="sc">==</span> <span class="dv">0</span>,</span>
-<span id="cb25-17"><a href="#cb25-17" aria-hidden="true" tabindex="-1"></a>  <span class="st">"cufes obs must all carry a taxon_key"</span> <span class="ot">=</span></span>
-<span id="cb25-18"><a href="#cb25-18" aria-hidden="true" tabindex="-1"></a>    <span class="fu">dbGetQuery</span>(con, <span class="st">"SELECT COUNT(*) FROM obs WHERE taxon_key IS NULL"</span>)[[<span class="dv">1</span>]] <span class="sc">==</span> <span class="dv">0</span>)</span>
-<span id="cb25-19"><a href="#cb25-19" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"obs parity: {format(n_obs, big.mark = ',')} rows, all taxon-resolved"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb25-8"><a href="#cb25-8" aria-hidden="true" tabindex="-1"></a><span class="st">                            AND mx.target = 'obs'"</span>)[[<span class="dv">1</span>]]</span>
+<span id="cb25-9"><a href="#cb25-9" aria-hidden="true" tabindex="-1"></a>n_unreg <span class="ot">&lt;-</span> <span class="fu">dbGetQuery</span>(con, <span class="st">"</span></span>
+<span id="cb25-10"><a href="#cb25-10" aria-hidden="true" tabindex="-1"></a><span class="st">  SELECT COUNT(DISTINCT m.measurement_type) FROM cufes_measurement m</span></span>
+<span id="cb25-11"><a href="#cb25-11" aria-hidden="true" tabindex="-1"></a><span class="st">  WHERE m.measurement_type NOT IN (</span></span>
+<span id="cb25-12"><a href="#cb25-12" aria-hidden="true" tabindex="-1"></a><span class="st">    SELECT raw_measurement_type FROM _measurement_taxon)"</span>)[[<span class="dv">1</span>]]</span>
+<span id="cb25-13"><a href="#cb25-13" aria-hidden="true" tabindex="-1"></a><span class="fu">stopifnot</span>(</span>
+<span id="cb25-14"><a href="#cb25-14" aria-hidden="true" tabindex="-1"></a>  <span class="st">"obs must be one row per registered measurement"</span> <span class="ot">=</span> n_obs <span class="sc">==</span> n_exp,</span>
+<span id="cb25-15"><a href="#cb25-15" aria-hidden="true" tabindex="-1"></a>  <span class="st">"every cufes measurement_type must be in measurement_taxon.csv"</span> <span class="ot">=</span> n_unreg <span class="sc">==</span> <span class="dv">0</span>,</span>
+<span id="cb25-16"><a href="#cb25-16" aria-hidden="true" tabindex="-1"></a>  <span class="st">"cufes obs must all carry a taxon_key"</span> <span class="ot">=</span></span>
+<span id="cb25-17"><a href="#cb25-17" aria-hidden="true" tabindex="-1"></a>    <span class="fu">dbGetQuery</span>(con, <span class="st">"SELECT COUNT(*) FROM obs WHERE taxon_key IS NULL"</span>)[[<span class="dv">1</span>]] <span class="sc">==</span> <span class="dv">0</span>)</span>
+<span id="cb25-18"><a href="#cb25-18" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"obs parity: {format(n_obs, big.mark = ',')} rows, all taxon-resolved"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>obs parity: 270,593 rows, all taxon-resolved </code></pre>
+<pre><code>obs parity: 284,097 rows, all taxon-resolved </code></pre>
 </div>
 <details class="code-fold">
 <summary>Code</summary>
@@ -443,7 +441,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb27-10"><a href="#cb27-10" aria-hidden="true" tabindex="-1"></a>         <span class="st">"{dbGetQuery(con, 'SELECT COUNT(*) FROM cufes_measurement')[[1]]} rows"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>compat view cufes_measurement over obs: 270593 rows </code></pre>
+<pre><code>compat view cufes_measurement over obs: 284097 rows </code></pre>
 </div>
 </div>
 <div class="cell">
@@ -491,10 +489,10 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   table              rows file_size path                             partitioned
   &lt;chr&gt;             &lt;dbl&gt;     &lt;dbl&gt; &lt;chr&gt;                            &lt;lgl&gt;      
 1 sample            49572   1272041 /Users/bbest/_big/calcofi/parqu… FALSE      
-2 obs              270593   3188738 /Users/bbest/_big/calcofi/parqu… FALSE      
+2 obs              284097   4499768 obs.parquet                      FALSE      
 3 taxon                33      4846 /Users/bbest/_big/calcofi/parqu… FALSE      
 4 dataset_taxon         6      1643 /Users/bbest/_big/calcofi/parqu… FALSE      
-5 measurement_type    198     11868 measurement_type.parquet         FALSE      
+5 measurement_type    198     11872 measurement_type.parquet         FALSE      
 6 dataset              16      9977 /Users/bbest/_big/calcofi/parqu… FALSE      </code></pre>
 </div>
 <details class="code-fold">
@@ -531,13 +529,14 @@ measurement columns with no units: 22    dataset.citation_main, dataset.citation
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb39"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb39-1"><a href="#cb39-1" aria-hidden="true" tabindex="-1"></a><span class="fu">sync_to_gcs</span>(<span class="at">local_dir =</span> dir_stage, <span class="at">sidecar_dir =</span> dir_parquet, <span class="at">gcs_prefix =</span> <span class="fu">glue</span>(<span class="st">"ingest/{dir_label}"</span>), <span class="at">bucket =</span> <span class="st">"calcofi-db"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code># A tibble: 4 × 4
+<pre><code># A tibble: 5 × 4
   file    action    size reason        
   &lt;chr&gt;   &lt;chr&gt;    &lt;dbl&gt; &lt;chr&gt;         
 1 &lt;rsync&gt; uploaded    NA parallel rsync
 2 &lt;rsync&gt; uploaded    NA parallel rsync
 3 &lt;rsync&gt; uploaded    NA parallel rsync
-4 &lt;rsync&gt; uploaded    NA parallel rsync</code></pre>
+4 &lt;rsync&gt; uploaded    NA parallel rsync
+5 &lt;rsync&gt; uploaded    NA parallel rsync</code></pre>
 </div>
 </div>
 </section>
@@ -553,8 +552,8 @@ measurement columns with no units: 22    dataset.citation_main, dataset.citation
 <span id="cb41-5"><a href="#cb41-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">caption =</span> <span class="st">"Questions for the SWFSC CUFES data providers (ranked)"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output-display">
-<div class="datatables html-widget html-fill-item" id="htmlwidget-a2b0f211ff8d4fff274f" style="width:100%;height:auto;"></div>
-<script type="application/json" data-for="htmlwidget-a2b0f211ff8d4fff274f">{"x":{"filter":"none","vertical":false,"caption":"<caption>Questions for the SWFSC CUFES data providers (ranked)<\/caption>","data":[["Q01","Q02","Q03"],["high","normal","normal"],["open","open","proposed"],["Are the egg counts raw per-sample totals or standardized (e.g. per m^3 / per area)?","Confirm wind_speed units (m/s vs knots) and pump_speed units on the ERDDAP feed.","Please confirm the plausible-value bounds declared for swfsc_cufes's 1 measurement type(s)."],["Determines whether to register the measurement as count vs a density.","ERDDAP variable metadata to be confirmed against erdCalCOFIcufes .das.","metadata/measurement_type.csv now carries valid_min/valid_max for this dataset's types; calcofi4db::check_measurement_bounds() enforces them at ingest and release_database.qmd re-checks before freezing. Bounds are used ONLY to reject the impossible, never to police unusual-but-real values, so they are deliberately generous. Declared: abundance 0..(no max)."],[null,null,"Bounds declared as listed and enforced; no published value violates them. Confirm or correct the limits."],["cufes_measurement","cufes_sample","obs"],["measurement_value","start_wind_speed","measurement_value"]],"container":"<table class=\"display\">\n  <thead>\n    <tr>\n      <th>label<\/th>\n      <th>priority<\/th>\n      <th>status<\/th>\n      <th>question<\/th>\n      <th>context<\/th>\n      <th>proposed_answer<\/th>\n      <th>related_table<\/th>\n      <th>related_field<\/th>\n    <\/tr>\n  <\/thead>\n<\/table>","options":{"scrollX":true,"pageLength":25,"dom":"tip","columnDefs":[{"width":"60px","targets":0},{"name":"label","targets":0},{"name":"priority","targets":1},{"name":"status","targets":2},{"name":"question","targets":3},{"name":"context","targets":4},{"name":"proposed_answer","targets":5},{"name":"related_table","targets":6},{"name":"related_field","targets":7}],"order":[],"autoWidth":false,"orderClasses":false},"selection":{"mode":"multiple","selected":null,"target":"row","selectable":null}},"evals":[],"jsHooks":[]}</script>
+<div class="datatables html-widget html-fill-item" id="htmlwidget-2ea6f43acbbc01907915" style="width:100%;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-2ea6f43acbbc01907915">{"x":{"filter":"none","vertical":false,"caption":"<caption>Questions for the SWFSC CUFES data providers (ranked)<\/caption>","data":[["Q01","Q02","Q03"],["high","normal","normal"],["open","open","proposed"],["Are the egg counts raw per-sample totals or standardized (e.g. per m^3 / per area)?","Confirm wind_speed units (m/s vs knots) and pump_speed units on the ERDDAP feed.","Please confirm the plausible-value bounds declared for swfsc_cufes's 1 measurement type(s)."],["Determines whether to register the measurement as count vs a density.","ERDDAP variable metadata to be confirmed against erdCalCOFIcufes .das.","metadata/measurement_type.csv now carries valid_min/valid_max for this dataset's types; calcofi4db::check_measurement_bounds() enforces them at ingest and release_database.qmd re-checks before freezing. Bounds are used ONLY to reject the impossible, never to police unusual-but-real values, so they are deliberately generous. Declared: abundance 0..(no max)."],[null,null,"Bounds declared as listed and enforced; no published value violates them. Confirm or correct the limits."],["cufes_measurement","cufes_sample","obs"],["measurement_value","start_wind_speed","measurement_value"]],"container":"<table class=\"display\">\n  <thead>\n    <tr>\n      <th>label<\/th>\n      <th>priority<\/th>\n      <th>status<\/th>\n      <th>question<\/th>\n      <th>context<\/th>\n      <th>proposed_answer<\/th>\n      <th>related_table<\/th>\n      <th>related_field<\/th>\n    <\/tr>\n  <\/thead>\n<\/table>","options":{"scrollX":true,"pageLength":25,"dom":"tip","columnDefs":[{"width":"60px","targets":0},{"name":"label","targets":0},{"name":"priority","targets":1},{"name":"status","targets":2},{"name":"question","targets":3},{"name":"context","targets":4},{"name":"proposed_answer","targets":5},{"name":"related_table","targets":6},{"name":"related_field","targets":7}],"order":[],"autoWidth":false,"orderClasses":false},"selection":{"mode":"multiple","selected":null,"target":"row","selectable":null}},"evals":[],"jsHooks":[]}</script>
 </div>
 </div>
 <div class="cell">
@@ -1261,105 +1260,103 @@ measurement columns with no units: 22    dataset.citation_main, dataset.citation
 <span id="cb44-248"><a href="#cb44-248" aria-hidden="true" tabindex="-1"></a><span class="st">  FROM cufes_measurement m JOIN cufes_sample c USING (sample_id)</span></span>
 <span id="cb44-249"><a href="#cb44-249" aria-hidden="true" tabindex="-1"></a><span class="st">  JOIN _measurement_taxon mx ON mx.dataset_key = '{ds_key}'</span></span>
 <span id="cb44-250"><a href="#cb44-250" aria-hidden="true" tabindex="-1"></a><span class="st">                            AND mx.raw_measurement_type = m.measurement_type</span></span>
-<span id="cb44-251"><a href="#cb44-251" aria-hidden="true" tabindex="-1"></a><span class="st">                            AND mx.target = 'obs'</span></span>
-<span id="cb44-252"><a href="#cb44-252" aria-hidden="true" tabindex="-1"></a><span class="st">  WHERE c.grid_key IS NOT NULL"</span>))</span>
-<span id="cb44-253"><a href="#cb44-253" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb44-254"><a href="#cb44-254" aria-hidden="true" tabindex="-1"></a>core <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
-<span id="cb44-255"><a href="#cb44-255" aria-hidden="true" tabindex="-1"></a>  <span class="at">sample        =</span> <span class="fu">dbGetQuery</span>(con, <span class="st">"SELECT COUNT(*) FROM sample"</span>)[[<span class="dv">1</span>]],</span>
-<span id="cb44-256"><a href="#cb44-256" aria-hidden="true" tabindex="-1"></a>  <span class="at">obs           =</span> <span class="fu">dbGetQuery</span>(con, <span class="st">"SELECT COUNT(*) FROM obs"</span>)[[<span class="dv">1</span>]],</span>
-<span id="cb44-257"><a href="#cb44-257" aria-hidden="true" tabindex="-1"></a>  <span class="at">taxon         =</span> n_taxon,</span>
-<span id="cb44-258"><a href="#cb44-258" aria-hidden="true" tabindex="-1"></a>  <span class="at">dataset_taxon =</span> n_ds_taxon)</span>
-<span id="cb44-259"><a href="#cb44-259" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(</span>
-<span id="cb44-260"><a href="#cb44-260" aria-hidden="true" tabindex="-1"></a>  <span class="st">"core projection — sample={core$sample %||% 0} obs={core$obs %||% 0} "</span>,</span>
-<span id="cb44-261"><a href="#cb44-261" aria-hidden="true" tabindex="-1"></a>  <span class="st">"taxon={core$taxon %||% 0} dataset_taxon={core$dataset_taxon %||% 0}</span><span class="sc">\n</span><span class="st">"</span>))</span>
-<span id="cb44-262"><a href="#cb44-262" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb44-263"><a href="#cb44-263" aria-hidden="true" tabindex="-1"></a><span class="co"># every grid-matched measurement whose raw type is registered must reach obs,</span></span>
-<span id="cb44-264"><a href="#cb44-264" aria-hidden="true" tabindex="-1"></a><span class="co"># with a real taxon_key — an unregistered raw type is dropped by the INNER join,</span></span>
-<span id="cb44-265"><a href="#cb44-265" aria-hidden="true" tabindex="-1"></a><span class="co"># so assert the registry actually covers the vocabulary in the data</span></span>
-<span id="cb44-266"><a href="#cb44-266" aria-hidden="true" tabindex="-1"></a>n_obs <span class="ot">&lt;-</span> <span class="fu">dbGetQuery</span>(con, <span class="st">"SELECT COUNT(*) FROM obs"</span>)[[<span class="dv">1</span>]]</span>
-<span id="cb44-267"><a href="#cb44-267" aria-hidden="true" tabindex="-1"></a>n_exp <span class="ot">&lt;-</span> <span class="fu">dbGetQuery</span>(con, <span class="st">"</span></span>
-<span id="cb44-268"><a href="#cb44-268" aria-hidden="true" tabindex="-1"></a><span class="st">  SELECT COUNT(*) FROM cufes_measurement m JOIN cufes_sample c USING (sample_id)</span></span>
-<span id="cb44-269"><a href="#cb44-269" aria-hidden="true" tabindex="-1"></a><span class="st">  JOIN _measurement_taxon mx ON mx.raw_measurement_type = m.measurement_type</span></span>
-<span id="cb44-270"><a href="#cb44-270" aria-hidden="true" tabindex="-1"></a><span class="st">                            AND mx.target = 'obs'</span></span>
-<span id="cb44-271"><a href="#cb44-271" aria-hidden="true" tabindex="-1"></a><span class="st">  WHERE c.grid_key IS NOT NULL"</span>)[[<span class="dv">1</span>]]</span>
-<span id="cb44-272"><a href="#cb44-272" aria-hidden="true" tabindex="-1"></a>n_unreg <span class="ot">&lt;-</span> <span class="fu">dbGetQuery</span>(con, <span class="st">"</span></span>
-<span id="cb44-273"><a href="#cb44-273" aria-hidden="true" tabindex="-1"></a><span class="st">  SELECT COUNT(DISTINCT m.measurement_type) FROM cufes_measurement m</span></span>
-<span id="cb44-274"><a href="#cb44-274" aria-hidden="true" tabindex="-1"></a><span class="st">  WHERE m.measurement_type NOT IN (</span></span>
-<span id="cb44-275"><a href="#cb44-275" aria-hidden="true" tabindex="-1"></a><span class="st">    SELECT raw_measurement_type FROM _measurement_taxon)"</span>)[[<span class="dv">1</span>]]</span>
-<span id="cb44-276"><a href="#cb44-276" aria-hidden="true" tabindex="-1"></a><span class="fu">stopifnot</span>(</span>
-<span id="cb44-277"><a href="#cb44-277" aria-hidden="true" tabindex="-1"></a>  <span class="st">"obs must be one row per registered grid-matched measurement"</span> <span class="ot">=</span> n_obs <span class="sc">==</span> n_exp,</span>
-<span id="cb44-278"><a href="#cb44-278" aria-hidden="true" tabindex="-1"></a>  <span class="st">"every cufes measurement_type must be in measurement_taxon.csv"</span> <span class="ot">=</span> n_unreg <span class="sc">==</span> <span class="dv">0</span>,</span>
-<span id="cb44-279"><a href="#cb44-279" aria-hidden="true" tabindex="-1"></a>  <span class="st">"cufes obs must all carry a taxon_key"</span> <span class="ot">=</span></span>
-<span id="cb44-280"><a href="#cb44-280" aria-hidden="true" tabindex="-1"></a>    <span class="fu">dbGetQuery</span>(con, <span class="st">"SELECT COUNT(*) FROM obs WHERE taxon_key IS NULL"</span>)[[<span class="dv">1</span>]] <span class="sc">==</span> <span class="dv">0</span>)</span>
-<span id="cb44-281"><a href="#cb44-281" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"obs parity: {format(n_obs, big.mark = ',')} rows, all taxon-resolved"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
-<span id="cb44-282"><a href="#cb44-282" aria-hidden="true" tabindex="-1"></a><span class="co"># serve the retired per-dataset table names as VIEWs over the core, so</span></span>
-<span id="cb44-283"><a href="#cb44-283" aria-hidden="true" tabindex="-1"></a><span class="co"># in-notebook consumers and ad-hoc queries keep working against the old names</span></span>
-<span id="cb44-284"><a href="#cb44-284" aria-hidden="true" tabindex="-1"></a><span class="co"># (exact for every column the core models, lossy for the rest)</span></span>
-<span id="cb44-285"><a href="#cb44-285" aria-hidden="true" tabindex="-1"></a><span class="fu">invisible</span>(<span class="fu">dbExecute</span>(con, <span class="st">"DROP TABLE IF EXISTS cufes_measurement_src"</span>))</span>
-<span id="cb44-286"><a href="#cb44-286" aria-hidden="true" tabindex="-1"></a><span class="fu">invisible</span>(<span class="fu">dbExecute</span>(con, <span class="st">"ALTER TABLE cufes_measurement RENAME TO cufes_measurement_src"</span>))</span>
-<span id="cb44-287"><a href="#cb44-287" aria-hidden="true" tabindex="-1"></a><span class="fu">invisible</span>(<span class="fu">dbExecute</span>(con, <span class="fu">glue</span>(</span>
-<span id="cb44-288"><a href="#cb44-288" aria-hidden="true" tabindex="-1"></a>  <span class="st">"CREATE OR REPLACE VIEW cufes_measurement AS</span></span>
-<span id="cb44-289"><a href="#cb44-289" aria-hidden="true" tabindex="-1"></a><span class="st">   {compat_measurement_sql(ds_key, 'underway', 'sample_id', 'cufes_measurement_id')}"</span>)))</span>
-<span id="cb44-290"><a href="#cb44-290" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"compat view cufes_measurement over obs: "</span>,</span>
-<span id="cb44-291"><a href="#cb44-291" aria-hidden="true" tabindex="-1"></a>         <span class="st">"{dbGetQuery(con, 'SELECT COUNT(*) FROM cufes_measurement')[[1]]} rows"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb44-251"><a href="#cb44-251" aria-hidden="true" tabindex="-1"></a><span class="st">                            AND mx.target = 'obs'"</span>))</span>
+<span id="cb44-252"><a href="#cb44-252" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb44-253"><a href="#cb44-253" aria-hidden="true" tabindex="-1"></a>core <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
+<span id="cb44-254"><a href="#cb44-254" aria-hidden="true" tabindex="-1"></a>  <span class="at">sample        =</span> <span class="fu">dbGetQuery</span>(con, <span class="st">"SELECT COUNT(*) FROM sample"</span>)[[<span class="dv">1</span>]],</span>
+<span id="cb44-255"><a href="#cb44-255" aria-hidden="true" tabindex="-1"></a>  <span class="at">obs           =</span> <span class="fu">dbGetQuery</span>(con, <span class="st">"SELECT COUNT(*) FROM obs"</span>)[[<span class="dv">1</span>]],</span>
+<span id="cb44-256"><a href="#cb44-256" aria-hidden="true" tabindex="-1"></a>  <span class="at">taxon         =</span> n_taxon,</span>
+<span id="cb44-257"><a href="#cb44-257" aria-hidden="true" tabindex="-1"></a>  <span class="at">dataset_taxon =</span> n_ds_taxon)</span>
+<span id="cb44-258"><a href="#cb44-258" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(</span>
+<span id="cb44-259"><a href="#cb44-259" aria-hidden="true" tabindex="-1"></a>  <span class="st">"core projection — sample={core$sample %||% 0} obs={core$obs %||% 0} "</span>,</span>
+<span id="cb44-260"><a href="#cb44-260" aria-hidden="true" tabindex="-1"></a>  <span class="st">"taxon={core$taxon %||% 0} dataset_taxon={core$dataset_taxon %||% 0}</span><span class="sc">\n</span><span class="st">"</span>))</span>
+<span id="cb44-261"><a href="#cb44-261" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb44-262"><a href="#cb44-262" aria-hidden="true" tabindex="-1"></a><span class="co"># every measurement whose raw type is registered must reach obs,</span></span>
+<span id="cb44-263"><a href="#cb44-263" aria-hidden="true" tabindex="-1"></a><span class="co"># with a real taxon_key — an unregistered raw type is dropped by the INNER join,</span></span>
+<span id="cb44-264"><a href="#cb44-264" aria-hidden="true" tabindex="-1"></a><span class="co"># so assert the registry actually covers the vocabulary in the data</span></span>
+<span id="cb44-265"><a href="#cb44-265" aria-hidden="true" tabindex="-1"></a>n_obs <span class="ot">&lt;-</span> <span class="fu">dbGetQuery</span>(con, <span class="st">"SELECT COUNT(*) FROM obs"</span>)[[<span class="dv">1</span>]]</span>
+<span id="cb44-266"><a href="#cb44-266" aria-hidden="true" tabindex="-1"></a>n_exp <span class="ot">&lt;-</span> <span class="fu">dbGetQuery</span>(con, <span class="st">"</span></span>
+<span id="cb44-267"><a href="#cb44-267" aria-hidden="true" tabindex="-1"></a><span class="st">  SELECT COUNT(*) FROM cufes_measurement m JOIN cufes_sample c USING (sample_id)</span></span>
+<span id="cb44-268"><a href="#cb44-268" aria-hidden="true" tabindex="-1"></a><span class="st">  JOIN _measurement_taxon mx ON mx.raw_measurement_type = m.measurement_type</span></span>
+<span id="cb44-269"><a href="#cb44-269" aria-hidden="true" tabindex="-1"></a><span class="st">                            AND mx.target = 'obs'"</span>)[[<span class="dv">1</span>]]</span>
+<span id="cb44-270"><a href="#cb44-270" aria-hidden="true" tabindex="-1"></a>n_unreg <span class="ot">&lt;-</span> <span class="fu">dbGetQuery</span>(con, <span class="st">"</span></span>
+<span id="cb44-271"><a href="#cb44-271" aria-hidden="true" tabindex="-1"></a><span class="st">  SELECT COUNT(DISTINCT m.measurement_type) FROM cufes_measurement m</span></span>
+<span id="cb44-272"><a href="#cb44-272" aria-hidden="true" tabindex="-1"></a><span class="st">  WHERE m.measurement_type NOT IN (</span></span>
+<span id="cb44-273"><a href="#cb44-273" aria-hidden="true" tabindex="-1"></a><span class="st">    SELECT raw_measurement_type FROM _measurement_taxon)"</span>)[[<span class="dv">1</span>]]</span>
+<span id="cb44-274"><a href="#cb44-274" aria-hidden="true" tabindex="-1"></a><span class="fu">stopifnot</span>(</span>
+<span id="cb44-275"><a href="#cb44-275" aria-hidden="true" tabindex="-1"></a>  <span class="st">"obs must be one row per registered measurement"</span> <span class="ot">=</span> n_obs <span class="sc">==</span> n_exp,</span>
+<span id="cb44-276"><a href="#cb44-276" aria-hidden="true" tabindex="-1"></a>  <span class="st">"every cufes measurement_type must be in measurement_taxon.csv"</span> <span class="ot">=</span> n_unreg <span class="sc">==</span> <span class="dv">0</span>,</span>
+<span id="cb44-277"><a href="#cb44-277" aria-hidden="true" tabindex="-1"></a>  <span class="st">"cufes obs must all carry a taxon_key"</span> <span class="ot">=</span></span>
+<span id="cb44-278"><a href="#cb44-278" aria-hidden="true" tabindex="-1"></a>    <span class="fu">dbGetQuery</span>(con, <span class="st">"SELECT COUNT(*) FROM obs WHERE taxon_key IS NULL"</span>)[[<span class="dv">1</span>]] <span class="sc">==</span> <span class="dv">0</span>)</span>
+<span id="cb44-279"><a href="#cb44-279" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"obs parity: {format(n_obs, big.mark = ',')} rows, all taxon-resolved"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb44-280"><a href="#cb44-280" aria-hidden="true" tabindex="-1"></a><span class="co"># serve the retired per-dataset table names as VIEWs over the core, so</span></span>
+<span id="cb44-281"><a href="#cb44-281" aria-hidden="true" tabindex="-1"></a><span class="co"># in-notebook consumers and ad-hoc queries keep working against the old names</span></span>
+<span id="cb44-282"><a href="#cb44-282" aria-hidden="true" tabindex="-1"></a><span class="co"># (exact for every column the core models, lossy for the rest)</span></span>
+<span id="cb44-283"><a href="#cb44-283" aria-hidden="true" tabindex="-1"></a><span class="fu">invisible</span>(<span class="fu">dbExecute</span>(con, <span class="st">"DROP TABLE IF EXISTS cufes_measurement_src"</span>))</span>
+<span id="cb44-284"><a href="#cb44-284" aria-hidden="true" tabindex="-1"></a><span class="fu">invisible</span>(<span class="fu">dbExecute</span>(con, <span class="st">"ALTER TABLE cufes_measurement RENAME TO cufes_measurement_src"</span>))</span>
+<span id="cb44-285"><a href="#cb44-285" aria-hidden="true" tabindex="-1"></a><span class="fu">invisible</span>(<span class="fu">dbExecute</span>(con, <span class="fu">glue</span>(</span>
+<span id="cb44-286"><a href="#cb44-286" aria-hidden="true" tabindex="-1"></a>  <span class="st">"CREATE OR REPLACE VIEW cufes_measurement AS</span></span>
+<span id="cb44-287"><a href="#cb44-287" aria-hidden="true" tabindex="-1"></a><span class="st">   {compat_measurement_sql(ds_key, 'underway', 'sample_id', 'cufes_measurement_id')}"</span>)))</span>
+<span id="cb44-288"><a href="#cb44-288" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"compat view cufes_measurement over obs: "</span>,</span>
+<span id="cb44-289"><a href="#cb44-289" aria-hidden="true" tabindex="-1"></a>         <span class="st">"{dbGetQuery(con, 'SELECT COUNT(*) FROM cufes_measurement')[[1]]} rows"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb44-290"><a href="#cb44-290" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb44-291"><a href="#cb44-291" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
 <span id="cb44-292"><a href="#cb44-292" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb44-293"><a href="#cb44-293" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb44-294"><a href="#cb44-294" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb44-295"><a href="#cb44-295" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb44-298"><a href="#cb44-298" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb44-299"><a href="#cb44-299" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: finalize</span></span>
-<span id="cb44-300"><a href="#cb44-300" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb44-301"><a href="#cb44-301" aria-hidden="true" tabindex="-1"></a>d_dataset <span class="ot">&lt;-</span> <span class="fu">ingest_yaml_to_dataset_df</span>(<span class="fu">read_ingest_yaml</span>(<span class="fu">here</span>()))</span>
-<span id="cb44-302"><a href="#cb44-302" aria-hidden="true" tabindex="-1"></a><span class="fu">dbWriteTable</span>(con, <span class="st">"dataset"</span>, d_dataset, <span class="at">overwrite =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb44-303"><a href="#cb44-303" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb44-304"><a href="#cb44-304" aria-hidden="true" tabindex="-1"></a>cufes_rels <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
-<span id="cb44-305"><a href="#cb44-305" aria-hidden="true" tabindex="-1"></a>  <span class="at">primary_keys =</span> <span class="fu">list</span>(<span class="at">cufes_sample =</span> <span class="st">"sample_id"</span>, <span class="at">cufes_measurement =</span> <span class="st">"cufes_measurement_id"</span>,</span>
-<span id="cb44-306"><a href="#cb44-306" aria-hidden="true" tabindex="-1"></a>                      <span class="at">measurement_type =</span> <span class="st">"measurement_type"</span>),</span>
-<span id="cb44-307"><a href="#cb44-307" aria-hidden="true" tabindex="-1"></a>  <span class="at">foreign_keys =</span> <span class="fu">list</span>(</span>
-<span id="cb44-308"><a href="#cb44-308" aria-hidden="true" tabindex="-1"></a>    <span class="fu">list</span>(<span class="at">table=</span><span class="st">"cufes_measurement"</span>, <span class="at">column=</span><span class="st">"sample_id"</span>, <span class="at">ref_table=</span><span class="st">"cufes_sample"</span>, <span class="at">ref_column=</span><span class="st">"sample_id"</span>),</span>
-<span id="cb44-309"><a href="#cb44-309" aria-hidden="true" tabindex="-1"></a>    <span class="fu">list</span>(<span class="at">table=</span><span class="st">"cufes_measurement"</span>, <span class="at">column=</span><span class="st">"measurement_type"</span>, <span class="at">ref_table=</span><span class="st">"measurement_type"</span>, <span class="at">ref_column=</span><span class="st">"measurement_type"</span>)))</span>
-<span id="cb44-310"><a href="#cb44-310" aria-hidden="true" tabindex="-1"></a><span class="co"># the SOURCE shape, documenting the wrangling above; the published tables are</span></span>
-<span id="cb44-311"><a href="#cb44-311" aria-hidden="true" tabindex="-1"></a><span class="co"># the consolidated core, so relationships.json comes from core_relationships()</span></span>
-<span id="cb44-312"><a href="#cb44-312" aria-hidden="true" tabindex="-1"></a><span class="fu">cc_erd</span>(con, <span class="at">tables =</span> <span class="fu">c</span>(<span class="st">"cufes_sample"</span>,<span class="st">"cufes_measurement"</span>,<span class="st">"measurement_type"</span>,<span class="st">"dataset"</span>), <span class="at">rels =</span> cufes_rels,</span>
-<span id="cb44-313"><a href="#cb44-313" aria-hidden="true" tabindex="-1"></a>       <span class="at">colors =</span> <span class="fu">list</span>(<span class="at">lightblue =</span> <span class="fu">c</span>(<span class="st">"cufes_sample"</span>,<span class="st">"cufes_measurement"</span>), <span class="at">lightyellow =</span> <span class="st">"measurement_type"</span>, <span class="at">white =</span> <span class="st">"dataset"</span>))</span>
-<span id="cb44-314"><a href="#cb44-314" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb44-315"><a href="#cb44-315" aria-hidden="true" tabindex="-1"></a>results <span class="ot">&lt;-</span> <span class="fu">validate_for_release</span>(con, <span class="at">checks =</span> <span class="st">"all"</span>, <span class="at">strict =</span> <span class="cn">FALSE</span>)</span>
-<span id="cb44-316"><a href="#cb44-316" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"Validation:"</span>, <span class="fu">ifelse</span>(results<span class="sc">$</span>passed, <span class="st">"PASSED"</span>, <span class="st">"FAILED"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
-<span id="cb44-317"><a href="#cb44-317" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb44-318"><a href="#cb44-318" aria-hidden="true" tabindex="-1"></a><span class="fu">dir_create</span>(dir_parquet)</span>
-<span id="cb44-319"><a href="#cb44-319" aria-hidden="true" tabindex="-1"></a>tbls_out <span class="ot">&lt;-</span> <span class="fu">core_output_tables</span>(con, <span class="at">extra =</span> <span class="fu">c</span>(<span class="st">"measurement_type"</span>, <span class="st">"dataset"</span>))</span>
-<span id="cb44-320"><a href="#cb44-320" aria-hidden="true" tabindex="-1"></a><span class="fu">write_parquet_outputs</span>(<span class="at">con =</span> con, <span class="at">output_dir =</span> dir_parquet,</span>
-<span id="cb44-321"><a href="#cb44-321" aria-hidden="true" tabindex="-1"></a>  <span class="at">tables =</span> tbls_out,</span>
-<span id="cb44-322"><a href="#cb44-322" aria-hidden="true" tabindex="-1"></a>  <span class="at">sort_by =</span> <span class="fu">list</span>(<span class="at">obs =</span> <span class="fu">c</span>(<span class="st">"grid_key"</span>, <span class="st">"measurement_type"</span>)), <span class="at">strip_provenance =</span> <span class="cn">FALSE</span>)</span>
-<span id="cb44-323"><a href="#cb44-323" aria-hidden="true" tabindex="-1"></a><span class="fu">build_relationships_json</span>(<span class="at">rels =</span> <span class="fu">core_relationships</span>(tbls_out), <span class="at">output_dir =</span> dir_parquet,</span>
-<span id="cb44-324"><a href="#cb44-324" aria-hidden="true" tabindex="-1"></a>  <span class="at">provider =</span> provider, <span class="at">dataset =</span> dataset)</span>
-<span id="cb44-325"><a href="#cb44-325" aria-hidden="true" tabindex="-1"></a>d_tbls_rd <span class="ot">&lt;-</span> <span class="fu">read_csv</span>(<span class="fu">here</span>(<span class="st">"metadata/swfsc/cufes/tbls_redefine.csv"</span>))</span>
-<span id="cb44-326"><a href="#cb44-326" aria-hidden="true" tabindex="-1"></a>d_flds_rd <span class="ot">&lt;-</span> <span class="fu">read_csv</span>(<span class="fu">here</span>(<span class="st">"metadata/swfsc/cufes/flds_redefine.csv"</span>))</span>
-<span id="cb44-327"><a href="#cb44-327" aria-hidden="true" tabindex="-1"></a><span class="fu">build_metadata_json</span>(<span class="at">con =</span> con, <span class="at">d_tbls_rd =</span> d_tbls_rd, <span class="at">d_flds_rd =</span> d_flds_rd,</span>
-<span id="cb44-328"><a href="#cb44-328" aria-hidden="true" tabindex="-1"></a>  <span class="at">metadata_derived_csv =</span> <span class="fu">c</span>(<span class="fu">here</span>(<span class="st">"metadata/core_dictionary.csv"</span>),</span>
-<span id="cb44-329"><a href="#cb44-329" aria-hidden="true" tabindex="-1"></a>                           <span class="fu">here</span>(<span class="st">"metadata/swfsc/cufes/metadata_derived.csv"</span>)),</span>
-<span id="cb44-330"><a href="#cb44-330" aria-hidden="true" tabindex="-1"></a>  <span class="at">output_dir =</span> dir_parquet, <span class="at">tables =</span> tbls_out,</span>
-<span id="cb44-331"><a href="#cb44-331" aria-hidden="true" tabindex="-1"></a>  <span class="at">set_comments =</span> <span class="cn">TRUE</span>, <span class="at">provider =</span> provider, <span class="at">dataset =</span> dataset,</span>
-<span id="cb44-332"><a href="#cb44-332" aria-hidden="true" tabindex="-1"></a>  <span class="at">workflow_url =</span> cc<span class="sc">$</span>workflow_url, <span class="at">tables_owned =</span> tables_owned)</span>
-<span id="cb44-333"><a href="#cb44-333" aria-hidden="true" tabindex="-1"></a><span class="fu">sync_to_gcs</span>(<span class="at">local_dir =</span> dir_stage, <span class="at">sidecar_dir =</span> dir_parquet, <span class="at">gcs_prefix =</span> <span class="fu">glue</span>(<span class="st">"ingest/{dir_label}"</span>), <span class="at">bucket =</span> <span class="st">"calcofi-db"</span>)</span>
-<span id="cb44-334"><a href="#cb44-334" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb44-293"><a href="#cb44-293" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb44-296"><a href="#cb44-296" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb44-297"><a href="#cb44-297" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: finalize</span></span>
+<span id="cb44-298"><a href="#cb44-298" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb44-299"><a href="#cb44-299" aria-hidden="true" tabindex="-1"></a>d_dataset <span class="ot">&lt;-</span> <span class="fu">ingest_yaml_to_dataset_df</span>(<span class="fu">read_ingest_yaml</span>(<span class="fu">here</span>()))</span>
+<span id="cb44-300"><a href="#cb44-300" aria-hidden="true" tabindex="-1"></a><span class="fu">dbWriteTable</span>(con, <span class="st">"dataset"</span>, d_dataset, <span class="at">overwrite =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb44-301"><a href="#cb44-301" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb44-302"><a href="#cb44-302" aria-hidden="true" tabindex="-1"></a>cufes_rels <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
+<span id="cb44-303"><a href="#cb44-303" aria-hidden="true" tabindex="-1"></a>  <span class="at">primary_keys =</span> <span class="fu">list</span>(<span class="at">cufes_sample =</span> <span class="st">"sample_id"</span>, <span class="at">cufes_measurement =</span> <span class="st">"cufes_measurement_id"</span>,</span>
+<span id="cb44-304"><a href="#cb44-304" aria-hidden="true" tabindex="-1"></a>                      <span class="at">measurement_type =</span> <span class="st">"measurement_type"</span>),</span>
+<span id="cb44-305"><a href="#cb44-305" aria-hidden="true" tabindex="-1"></a>  <span class="at">foreign_keys =</span> <span class="fu">list</span>(</span>
+<span id="cb44-306"><a href="#cb44-306" aria-hidden="true" tabindex="-1"></a>    <span class="fu">list</span>(<span class="at">table=</span><span class="st">"cufes_measurement"</span>, <span class="at">column=</span><span class="st">"sample_id"</span>, <span class="at">ref_table=</span><span class="st">"cufes_sample"</span>, <span class="at">ref_column=</span><span class="st">"sample_id"</span>),</span>
+<span id="cb44-307"><a href="#cb44-307" aria-hidden="true" tabindex="-1"></a>    <span class="fu">list</span>(<span class="at">table=</span><span class="st">"cufes_measurement"</span>, <span class="at">column=</span><span class="st">"measurement_type"</span>, <span class="at">ref_table=</span><span class="st">"measurement_type"</span>, <span class="at">ref_column=</span><span class="st">"measurement_type"</span>)))</span>
+<span id="cb44-308"><a href="#cb44-308" aria-hidden="true" tabindex="-1"></a><span class="co"># the SOURCE shape, documenting the wrangling above; the published tables are</span></span>
+<span id="cb44-309"><a href="#cb44-309" aria-hidden="true" tabindex="-1"></a><span class="co"># the consolidated core, so relationships.json comes from core_relationships()</span></span>
+<span id="cb44-310"><a href="#cb44-310" aria-hidden="true" tabindex="-1"></a><span class="fu">cc_erd</span>(con, <span class="at">tables =</span> <span class="fu">c</span>(<span class="st">"cufes_sample"</span>,<span class="st">"cufes_measurement"</span>,<span class="st">"measurement_type"</span>,<span class="st">"dataset"</span>), <span class="at">rels =</span> cufes_rels,</span>
+<span id="cb44-311"><a href="#cb44-311" aria-hidden="true" tabindex="-1"></a>       <span class="at">colors =</span> <span class="fu">list</span>(<span class="at">lightblue =</span> <span class="fu">c</span>(<span class="st">"cufes_sample"</span>,<span class="st">"cufes_measurement"</span>), <span class="at">lightyellow =</span> <span class="st">"measurement_type"</span>, <span class="at">white =</span> <span class="st">"dataset"</span>))</span>
+<span id="cb44-312"><a href="#cb44-312" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb44-313"><a href="#cb44-313" aria-hidden="true" tabindex="-1"></a>results <span class="ot">&lt;-</span> <span class="fu">validate_for_release</span>(con, <span class="at">checks =</span> <span class="st">"all"</span>, <span class="at">strict =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb44-314"><a href="#cb44-314" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"Validation:"</span>, <span class="fu">ifelse</span>(results<span class="sc">$</span>passed, <span class="st">"PASSED"</span>, <span class="st">"FAILED"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb44-315"><a href="#cb44-315" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb44-316"><a href="#cb44-316" aria-hidden="true" tabindex="-1"></a><span class="fu">dir_create</span>(dir_parquet)</span>
+<span id="cb44-317"><a href="#cb44-317" aria-hidden="true" tabindex="-1"></a>tbls_out <span class="ot">&lt;-</span> <span class="fu">core_output_tables</span>(con, <span class="at">extra =</span> <span class="fu">c</span>(<span class="st">"measurement_type"</span>, <span class="st">"dataset"</span>))</span>
+<span id="cb44-318"><a href="#cb44-318" aria-hidden="true" tabindex="-1"></a><span class="fu">write_parquet_outputs</span>(<span class="at">con =</span> con, <span class="at">output_dir =</span> dir_parquet,</span>
+<span id="cb44-319"><a href="#cb44-319" aria-hidden="true" tabindex="-1"></a>  <span class="at">tables =</span> tbls_out,</span>
+<span id="cb44-320"><a href="#cb44-320" aria-hidden="true" tabindex="-1"></a>  <span class="at">sort_by =</span> <span class="fu">list</span>(<span class="at">obs =</span> <span class="fu">c</span>(<span class="st">"grid_key"</span>, <span class="st">"measurement_type"</span>)), <span class="at">strip_provenance =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb44-321"><a href="#cb44-321" aria-hidden="true" tabindex="-1"></a><span class="fu">build_relationships_json</span>(<span class="at">rels =</span> <span class="fu">core_relationships</span>(tbls_out), <span class="at">output_dir =</span> dir_parquet,</span>
+<span id="cb44-322"><a href="#cb44-322" aria-hidden="true" tabindex="-1"></a>  <span class="at">provider =</span> provider, <span class="at">dataset =</span> dataset)</span>
+<span id="cb44-323"><a href="#cb44-323" aria-hidden="true" tabindex="-1"></a>d_tbls_rd <span class="ot">&lt;-</span> <span class="fu">read_csv</span>(<span class="fu">here</span>(<span class="st">"metadata/swfsc/cufes/tbls_redefine.csv"</span>))</span>
+<span id="cb44-324"><a href="#cb44-324" aria-hidden="true" tabindex="-1"></a>d_flds_rd <span class="ot">&lt;-</span> <span class="fu">read_csv</span>(<span class="fu">here</span>(<span class="st">"metadata/swfsc/cufes/flds_redefine.csv"</span>))</span>
+<span id="cb44-325"><a href="#cb44-325" aria-hidden="true" tabindex="-1"></a><span class="fu">build_metadata_json</span>(<span class="at">con =</span> con, <span class="at">d_tbls_rd =</span> d_tbls_rd, <span class="at">d_flds_rd =</span> d_flds_rd,</span>
+<span id="cb44-326"><a href="#cb44-326" aria-hidden="true" tabindex="-1"></a>  <span class="at">metadata_derived_csv =</span> <span class="fu">c</span>(<span class="fu">here</span>(<span class="st">"metadata/core_dictionary.csv"</span>),</span>
+<span id="cb44-327"><a href="#cb44-327" aria-hidden="true" tabindex="-1"></a>                           <span class="fu">here</span>(<span class="st">"metadata/swfsc/cufes/metadata_derived.csv"</span>)),</span>
+<span id="cb44-328"><a href="#cb44-328" aria-hidden="true" tabindex="-1"></a>  <span class="at">output_dir =</span> dir_parquet, <span class="at">tables =</span> tbls_out,</span>
+<span id="cb44-329"><a href="#cb44-329" aria-hidden="true" tabindex="-1"></a>  <span class="at">set_comments =</span> <span class="cn">TRUE</span>, <span class="at">provider =</span> provider, <span class="at">dataset =</span> dataset,</span>
+<span id="cb44-330"><a href="#cb44-330" aria-hidden="true" tabindex="-1"></a>  <span class="at">workflow_url =</span> cc<span class="sc">$</span>workflow_url, <span class="at">tables_owned =</span> tables_owned)</span>
+<span id="cb44-331"><a href="#cb44-331" aria-hidden="true" tabindex="-1"></a><span class="fu">sync_to_gcs</span>(<span class="at">local_dir =</span> dir_stage, <span class="at">sidecar_dir =</span> dir_parquet, <span class="at">gcs_prefix =</span> <span class="fu">glue</span>(<span class="st">"ingest/{dir_label}"</span>), <span class="at">bucket =</span> <span class="st">"calcofi-db"</span>)</span>
+<span id="cb44-332"><a href="#cb44-332" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb44-333"><a href="#cb44-333" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb44-334"><a href="#cb44-334" aria-hidden="true" tabindex="-1"></a><span class="fu">## Questions for Data Providers</span></span>
 <span id="cb44-335"><a href="#cb44-335" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb44-336"><a href="#cb44-336" aria-hidden="true" tabindex="-1"></a><span class="fu">## Questions for Data Providers</span></span>
-<span id="cb44-337"><a href="#cb44-337" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb44-340"><a href="#cb44-340" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb44-341"><a href="#cb44-341" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: provider-questions</span></span>
-<span id="cb44-342"><a href="#cb44-342" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb44-343"><a href="#cb44-343" aria-hidden="true" tabindex="-1"></a><span class="co"># one validated read + render for every ingest: the vocabulary and the column</span></span>
-<span id="cb44-344"><a href="#cb44-344" aria-hidden="true" tabindex="-1"></a><span class="co"># order live in calcofi4db, not in 16 hand-written factor() calls</span></span>
-<span id="cb44-345"><a href="#cb44-345" aria-hidden="true" tabindex="-1"></a><span class="fu">questions_datatable</span>(</span>
-<span id="cb44-346"><a href="#cb44-346" aria-hidden="true" tabindex="-1"></a>  <span class="fu">here</span>(cc<span class="sc">$</span>questions_file),</span>
-<span id="cb44-347"><a href="#cb44-347" aria-hidden="true" tabindex="-1"></a>  <span class="at">caption =</span> <span class="st">"Questions for the SWFSC CUFES data providers (ranked)"</span>)</span>
-<span id="cb44-348"><a href="#cb44-348" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb44-349"><a href="#cb44-349" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb44-352"><a href="#cb44-352" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb44-353"><a href="#cb44-353" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: cleanup</span></span>
-<span id="cb44-354"><a href="#cb44-354" aria-hidden="true" tabindex="-1"></a><span class="fu">close_duckdb</span>(con); <span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"Parquet outputs written to: {dir_parquet}"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
-<span id="cb44-355"><a href="#cb44-355" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb44-338"><a href="#cb44-338" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb44-339"><a href="#cb44-339" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: provider-questions</span></span>
+<span id="cb44-340"><a href="#cb44-340" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb44-341"><a href="#cb44-341" aria-hidden="true" tabindex="-1"></a><span class="co"># one validated read + render for every ingest: the vocabulary and the column</span></span>
+<span id="cb44-342"><a href="#cb44-342" aria-hidden="true" tabindex="-1"></a><span class="co"># order live in calcofi4db, not in 16 hand-written factor() calls</span></span>
+<span id="cb44-343"><a href="#cb44-343" aria-hidden="true" tabindex="-1"></a><span class="fu">questions_datatable</span>(</span>
+<span id="cb44-344"><a href="#cb44-344" aria-hidden="true" tabindex="-1"></a>  <span class="fu">here</span>(cc<span class="sc">$</span>questions_file),</span>
+<span id="cb44-345"><a href="#cb44-345" aria-hidden="true" tabindex="-1"></a>  <span class="at">caption =</span> <span class="st">"Questions for the SWFSC CUFES data providers (ranked)"</span>)</span>
+<span id="cb44-346"><a href="#cb44-346" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb44-347"><a href="#cb44-347" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb44-350"><a href="#cb44-350" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb44-351"><a href="#cb44-351" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: cleanup</span></span>
+<span id="cb44-352"><a href="#cb44-352" aria-hidden="true" tabindex="-1"></a><span class="fu">close_duckdb</span>(con); <span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"Parquet outputs written to: {dir_parquet}"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb44-353"><a href="#cb44-353" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
 </code></pre></div><button title="Copy to Clipboard" class="code-copy-button" data-in-quarto-modal=""><i class="bi"></i></button></div>
 </div></div></div></div></div>
 </div> <!-- /content -->

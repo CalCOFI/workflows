@@ -1,6 +1,6 @@
 # CalCOFI Database Release v2026.08.10
 
-**Release Date**: 2026-08-10
+**Release Date**: 2026-08-11
 
 ## Tables Included
 
@@ -14,8 +14,8 @@
 - ship (         49 rows)
 - lookup (         26 rows)
 - sample (  1,465,189 rows)
-- obs ( 26,296,720 rows)
-- obs_attribute (    452,682 rows)
+- obs ( 26,453,863 rows)
+- obs_attribute (    452,765 rows)
 - sample_measurement (    588,986 rows)
 - taxon (      2,121 rows)
 - dataset_taxon (      1,907 rows)
@@ -26,7 +26,7 @@
 ## Total
 
 - **Tables**: 18
-- **Total Rows**: 323,755,138
+- **Total Rows**: 323,912,364
 
 ## Data Sources
 
