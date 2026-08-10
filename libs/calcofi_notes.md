@@ -169,7 +169,15 @@ The mets ingest is chained to start the moment the CTD target releases the targe
 
 One thing the investigation turned up that changes a number I gave you earlier: **`calcofi_mets` will floor at 1 orphan cruise, not 0**. `2012-07-32I1` is cruise `1207OS`, whose raw underway files carry **no lat/lon at all** — and mets_16 is already answered "skip the spatial join, leave geom/grid_key NULL for this schema". So it stays ungridded by design.
 
-That surfaces a real design tension worth your call, separate from anything I've changed: the answer to mets_16 says those rows "still ingest with their TSG measurements", and they do — into mets_measurement and the published obs_mets_full — but append_obs()'s WHERE grid_key IS NOT NULL means 193,578 samples' worth of temperature, conductivity and salinity never appear in the headline obs table. grid_key is denormalized onto obs for rollups and would tolerate a NULL. So the question is whether obs should carry ungridded observations at all, or whether "no grid cell" is a legitimate reason to exclude an observation from the table every consumer reads. I haven't touched it — changing that filter is a schema-contract decision across several ingests, not a bug fix.
+That surfaces a real design tension worth your call, separate from anything I've changed: the answer to mets_16 says those rows "still ingest with their TSG measurements", and they do — into mets_measurement and the published obs_mets_full — but `append_obs()`'s `WHERE grid_key IS NOT NULL` means 193,578 samples' worth of temperature, conductivity and salinity never appear in the headline obs table. grid_key is denormalized onto obs for rollups and would tolerate a NULL. So the question is whether obs should carry ungridded observations at all, or whether "no grid cell" is a legitimate reason to exclude an observation from the table every consumer reads. I haven't touched it — changing that filter is a schema-contract decision across several ingests, not a bug fix.
+
+----
+
+The `obs` should include observations without `grid_key`, whether outside the CalCOFI grid or having a more vague spatial notion.
+
+We should prominently report and question `obs` without a `grid_key` for data providers, but not exclude it
+
+----
 
 
 
