@@ -738,22 +738,27 @@ ORPHAN_CRUISES_MAX <- c(
   "calcofi_mets"         =  1L,
   "cce-lter_euphausiids" =  1L)
 
-d_cov <- check_cruise_coverage(con_wdl, max_orphan_cruises = ORPHAN_CRUISES_MAX)
+# NOT `d_cov` — that name is live from the `dataset_coverage` chunk above and is
+# read again in `upload_frozen` (d_cov$coverage_temporal_observed). Reusing it
+# here silently replaced that data frame and killed a 50-minute release run at
+# the very last chunk, after the freeze and most of the upload had completed.
+d_cruise_cov <- check_cruise_coverage(
+  con_wdl, max_orphan_cruises = ORPHAN_CRUISES_MAX)
 
-d_cov |>
+d_cruise_cov |>
   datatable(caption = paste(
     "Cruises carrying samples with no observations, per dataset.",
     "`emits_obs = FALSE` marks a registry-only dataset, exempt by design.",
     "Anything above its ratchet fails this render."))
 
-tighten <- d_cov$dataset_key[
-  d_cov$dataset_key %in% names(ORPHAN_CRUISES_MAX) &
-    d_cov$cruises_no_obs < ORPHAN_CRUISES_MAX[d_cov$dataset_key]]
+tighten <- d_cruise_cov$dataset_key[
+  d_cruise_cov$dataset_key %in% names(ORPHAN_CRUISES_MAX) &
+    d_cruise_cov$cruises_no_obs < ORPHAN_CRUISES_MAX[d_cruise_cov$dataset_key]]
 if (length(tighten))
   cat(glue(
     "ORPHAN_CRUISES_MAX can be tightened: ",
     "{paste(sprintf('%s -> %d', tighten,
-                    d_cov$cruises_no_obs[match(tighten, d_cov$dataset_key)]),
+                    d_cruise_cov$cruises_no_obs[match(tighten, d_cruise_cov$dataset_key)]),
             collapse = ', ')}\n"))
 ```
 

@@ -3506,9 +3506,12 @@ observations (one row per cast **per direction**, against one direction kept in
 ```{r}
 #| label: assert_cruise_coverage
 
-cov <- check_cruise_coverage(con, max_orphan_cruises = 0L)
+# `d_cruise_cov`, never `cov` — that shadows stats::cov for the rest of the
+# render, and a short name is exactly how the release chunk clobbered its own
+# `d_cov` and died after a 50-minute freeze.
+d_cruise_cov <- check_cruise_coverage(con, max_orphan_cruises = 0L)
 
-cov |>
+d_cruise_cov |>
   dt(
     caption = "Cruise coverage: cruises carrying samples with no observations",
     fname   = "ctd_cruise_coverage")
