@@ -161,6 +161,18 @@ Backlog investigated — of the 79 orphan cruises across five other datasets: ca
 
 In flight — CTD ingest at write_parquet, past the new zero-orphan gate. Then release_database → test_release (which promotes latest.txt only if the consumer-contract suite passes).
 
+----
+
+**CTD is verified and restored**. The staged output and GCS both carry 142 cruises again, obs is back to 13,488,402 rows (+873,644), every one of the 10 cruises matches its v2026.08.07 row count exactly, and no cruise has casts without observations. Only the HTML render is still finishing (pandoc, 22 min on a 15 MB document — the data work and GCS sync completed and were independently verified).
+
+The mets ingest is chained to start the moment the CTD target releases the targets lock.
+
+One thing the investigation turned up that changes a number I gave you earlier: **`calcofi_mets` will floor at 1 orphan cruise, not 0**. `2012-07-32I1` is cruise `1207OS`, whose raw underway files carry **no lat/lon at all** — and mets_16 is already answered "skip the spatial join, leave geom/grid_key NULL for this schema". So it stays ungridded by design.
+
+That surfaces a real design tension worth your call, separate from anything I've changed: the answer to mets_16 says those rows "still ingest with their TSG measurements", and they do — into mets_measurement and the published obs_mets_full — but append_obs()'s WHERE grid_key IS NOT NULL means 193,578 samples' worth of temperature, conductivity and salinity never appear in the headline obs table. grid_key is denormalized onto obs for rollups and would tolerate a NULL. So the question is whether obs should carry ungridded observations at all, or whether "no grid cell" is a legitimate reason to exclude an observation from the table every consumer reads. I haven't touched it — changing that filter is a schema-contract decision across several ingests, not a bug fix.
+
+
+
 ## 2026-08-08 ctd-transects GH Pages race, db  `valid_min`/`valid_max` for ALL ingest_*.qmd + supplemental obs_ctd_full/obs_mets_full
 
 - **The ctd-transects Pages race**. `refresh.yml` pushes and immediately dispatches `pages.yml`, which checks out the pre-push tree — so the site gets a fresh last-modified header wrapping stale bytes, and the run goes green. I fixed today's instance by redeploying manually, but it will recur on every refresh. The fix is probably to have pages.yml deploy from the pushed SHA, or to have refresh.yml wait.
