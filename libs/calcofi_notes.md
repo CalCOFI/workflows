@@ -80,8 +80,86 @@ I haven't touched the pipeline — finding where the rows went is a separate job
 
 Yes, dig deep and find the best solution. Permitting these cruises to drop altogether is unacceptable. Think hard and work systematically through the problem
 
+----
 
+Diagnosis is complete and the fix is in; the verification re-run is in flight. Interim report:
 
+Root cause
+
+Not the fingerprint fast path I guessed earlier. It's Google Drive, and it took two of its behaviours combining.
+
+The CTD ingest's download directory is ~/My Drive/projects/calcofi/data-public/calcofi/ctd-cast/download. Drive:
+
+1. Evicts synced files to cloud-only placeholders. 19-9501JD_CTDBTL_001-646D.csv reports its full 12,254,953 bytes to list.files(), ls -lO marks it compressed,dataless, reading it times out at the filesystem, and readr::read_csv() returns a 0-row tibble raising nothing. On the v2026.08.08 run, 20 files across 14 cruises read 0 rows — the notebook printed the counts in a table and moved on.
+2. Leaves conflict copies named … 2.csv holding the only materialized bytes. unzip -l on the archives proves no zip contains one — Drive made them.
+
+cast_dir was read off the filename with a case_when() that had no .default. "…001-646D 2.csv" ends in " 2.csv", matched neither arm, and came through NA. From there it's mechanical, and the two halves failed differently:
+
+- ctd_measurement's UPDATE joins r.cast_dir = c.cast_dir, and NULL = NULL is never true → 4 all-NA cruises lost measurements outright, obs_ctd_full included.
+- ctd_thin needs a downcast → the 6 NA+U cruises emitted nothing.
+
+Then write_parquet_outputs() deletes a partition that has left the data, sync_to_gcs() mirrors the deletion, and the release assembles from GCS. Every foreign key still resolved the whole way.
+
+Why nothing caught it: FK validation runs child → parent. Every surviving obs row still had a parent cast; a parent with no children violates no constraint. The bounds backstop only inspects obs, which those cruises had entirely left.
+
+Fixed
+
+calcofi4db 3.12.0 (8921f36) and workflows (f908d93), pushed:
+
+- cast_dir reads the direction letter off the filename stem with a copy marker stripped; a file resolving no direction is now dropped and listed rather than carried as NA (4 such …noQC/…no001b files had been adding 112,245 cast rows that could hold no measurement).
+- Every cruise must keep a downcast — asserted at the inventory.
+- A CSV that reads 0 rows fails the render, naming the dataless cause. This is the guard that would have stopped it at the source.
+- check_cruise_coverage() — new, tested (10 assertions, suite green at 827) — in the ingest at zero and in release_database.qmd as a per-dataset ratchet. Grain is the cruise, not the sample (half of CTD's cast rows legitimately have no obs — one row per direction); joins through sample_key, never the denormalized obs.cruise_key (NULL on 59,274 cufes rows); and a dataset emitting no obs at all is exempt, so sio_pic-zooplankton's 587 registry-only cruises don't fail. calcofi_ctd-cast is deliberately not in the ratchet.
+- libs/repair_ctd_download_cache.R — re-extracts unreadable files from the local zips, then removes the conflict copies. Already applied: 32 copies removed, every placeholder recovered, all 141 cruise archives resolve a downcast, no ingested CSV is empty.
+
+I swept the rest of the Drive tree: 100 more placeholders exist, but all are in abandoned … 2 directory copies except three in cce-lter/ZooDB — and that ingest reads one named file, not a glob. The hazard was confined to CTD.
+
+Running now
+
+CTD ingest re-running (started 13:15, read_csv passed the new zero-row guard in 4.6 min, worker at 99% CPU). I'll verify all 142 cruises come back with observations.
+
+One decision for you: restoring the data in the release means re-cutting v2026.08.09 — ~40 min freeze, multi-GB upload, latest.txt promoted, then the consumer redeploys in CLAUDE.md. Want me to run that once the ingest verifies, or stop after the ingest and leave the release cut to you?
+
+Two things I did not do, both your call: moving dir_dl off Drive (the durable fix — the zips are mirrored to gs://calcofi-files/, but dir_data is shared by every ingest), and investigating the ratcheted orphan-cruise backlog in five other datasets (cce-lter_zoodb 41 of 76, swfsc_ichthyo 20, calcofi_mets 5, swfsc_cufes 3, cce-lter_euphausiids 1) — a different cause from this one, and none of them investigated yet.
+
+----
+
+Yes, re-release db after verifying CTD ingest and also first investigating
+  these other "ratcheted orphan-cruise backlog" datasets
+
+----
+
+The backlog investigation is complete. Three of the five are real losses; two are not.
+
+**`calcofi_mets`** — 5 cruises, 11,762 samples — REAL LOSS. The data exists at every stage: 1,728,548 mets_measurement rows, 38,474 thinned records, and 1,147,814 rows in the published obs_mets_full — but zero in obs. Cause: append_obs filters WHERE s.grid_key IS NOT NULL while the sample arm does not, and grid_key is NULL for 100% of those cruises. Why they don't grid is the finding CLAUDE.md already half-records: four of them carry positive longitudes (+117.18 to +124.91) where CalCOFI is 117–125°W — a dropped minus sign — and the fifth (2012-07-32I1, 193,578 samples) has no coordinates at all.
+
+**`swfsc_ichthyo`** — 20 cruises — two classes. Fifteen have sites and zero tows/nets/ichthyo rows in the source: nothing was lost, there are no plankton tows for them (though 2018-06-33P4 and 2023-04-3322 are recent enough that the tow data may simply not be published yet). The other five — 1987-10-31JD, 1987-10-31M4, 1988-10-31JD, 1992-10-31M4, 2002-10-31M4 — hold 1,977 ichthyo rows that reach nothing, with two independent defects: every one of their sites has grid_key NULL, and measurement_type is NULL on all 1,977 rows. Taxa resolve fine (256 of 256).
+
+**`cce-lter_zoodb`** — 41 cruises, 45 samples (156 orphan samples in total). Every orphan has NULL datetime, NULL latitude and NULL grid_key — position-less tow records hitting the same gate.
+
+**`swfsc_cufes`** (3 cruises, 1,475 samples) and cce-lter_euphausiids (1 cruise, 4 tows) are NOT losses. Those samples have zero rows in their source measurement tables: the provider recorded the sampling event and no counts. Worth a provider question, not a pipeline fix.
+
+So the shared root across the three real ones is one asymmetry: the `obs` arm filters on `grid_key IS NOT NULL` and the `sample` arm doesn't, so any event that fails to grid — missing coordinates, or a sign-flipped longitude — lands in sample with nothing underneath. That is a different bug from the CTD one, in three separate ingests, and each needs its own fix (the mets longitudes in particular are a provider question, not something to silently negate).
+
+That is exactly what the ratchet is for, so I've left ORPHAN_CRUISES_MAX as measured — it will now fail if any of these grows, and each can be driven down as its ingest is fixed.
+
+CTD ingest: at write_parquet (chunk 122/185, 55 min elapsed) — and it cleared chunk 120, assert_cruise_coverage, so the new zero-orphan gate passed on the rebuilt data. I'll verify the cruise count and then cut the release.
+
+----
+
+For `calcofi_mets` the "positive longitudes (+117.18 to +124.91) where CalCOFI is 117–125°W" is something we want to proactively fix by making negative since we know that makes sense (and the possibility of actually surveying +117.18 to +124.91 is impossible). Update the questions accordingly with the proposed solution implemented.
+
+----
+
+Both scripts are staged. Waiting on the ingest — I'll verify and cut the release as soon as it lands.
+
+Summary of where things stand:
+
+Done and pushed — root cause found (Google Drive cloud-only placeholders reading as 0 rows, plus conflict copies that broke the filename-derived cast_dir), four guards added at the points that could each have caught it, check_cruise_coverage() shipped in calcofi4db 3.12.0 with tests, and the download tree healed by a committed repair script.
+
+Backlog investigated — of the 79 orphan cruises across five other datasets: calcofi_mets (5 cruises, sign-flipped longitudes) and swfsc_ichthyo (5 of its 20, ungridded sites + NULL measurement types) are real losses through a different bug — the obs arm filters grid_key IS NOT NULL where the sample arm doesn't; cce-lter_zoodb's are position-less tows hitting the same gate; swfsc_cufes and cce-lter_euphausiids are not losses at all (their sources record zero measurements). Left ratcheted rather than fixed, since each needs its own ingest work and the mets longitudes are a provider question.
+
+In flight — CTD ingest at write_parquet, past the new zero-orphan gate. Then release_database → test_release (which promotes latest.txt only if the consumer-contract suite passes).
 
 ## 2026-08-08 ctd-transects GH Pages race, db  `valid_min`/`valid_max` for ALL ingest_*.qmd + supplemental obs_ctd_full/obs_mets_full
 

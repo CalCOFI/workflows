@@ -1157,6 +1157,68 @@ rather than error, but that's unverified against real behavior — worth
 checking on first run whether this schema's rows survive downstream
 validation with a NULL grid_key, or need excluding until mets_16 resolves.
 
+### `Longitude_W` is unsigned in some eras — negate it before gridding
+
+`mets_20` asks whether the `_W` suffix means "already signed negative" or "west
+as an unsigned magnitude". The answer turns out to be **both, across different
+schema eras**, and nothing negated the unsigned form: **169,124 samples across 5
+cruises** carried longitudes of **+117.18 to +124.91** — the CalCOFI grid
+reflected into the eastern hemisphere.
+
+Reflected coordinates match no grid cell, and `append_obs()` below filters
+`WHERE s.grid_key IS NOT NULL` while the `sample` arm does not. So four of those
+cruises (`2013-01-3322`, `2013-04-3322`, `2014-02-3322`, `2014-04-32I1`) reached
+release v2026.08.08 as **11,762 underway samples with zero observations**, with
+1,728,548 measurements and 1,147,814 `obs_mets_full` rows behind them. The fifth,
+`2015-10-32OC`, lost 1,441 samples *inside an otherwise healthy cruise* — invisible
+to any cruise-level check, since the rest of its track grids normally.
+
+This is repaired rather than asked, because the alternative is not a place a
+CalCOFI ship has been: +117° to +125° E at 29–37° N is inland China and the
+Taiwan Strait. The guard is deliberately narrow — only the mirrored CalCOFI
+window is touched — so a genuine eastern-hemisphere coordinate would survive to
+fail the assertion rather than be silently reflected.
+
+```{r}
+#| label: fix_lon_sign
+
+# NOTE: must run BEFORE add_point_geom(). DuckDB fails an UPDATE on a table
+# carrying a CRS-tagged GEOMETRY column (through >= v1.5.1), and `geom` does not
+# exist yet at this point.
+lon_flip <- dbGetQuery(con, "
+  SELECT cruise_key, COUNT(*) AS n,
+         ROUND(MIN(longitude), 3) AS lon_min, ROUND(MAX(longitude), 3) AS lon_max
+  FROM mets_sample
+  WHERE longitude > 0 AND NOT isnan(longitude)
+    AND longitude BETWEEN 110 AND 130
+  GROUP BY 1 ORDER BY 1")
+
+if (nrow(lon_flip) > 0) {
+  dbExecute(con, "
+    UPDATE mets_sample SET longitude = -longitude
+    WHERE longitude > 0 AND NOT isnan(longitude)
+      AND longitude BETWEEN 110 AND 130")
+  cat(glue(
+    "Longitude sign repaired: {format(sum(lon_flip$n), big.mark = ',')} sample(s) ",
+    "across {nrow(lon_flip)} cruise(s) negated\n"))
+  lon_flip |>
+    dt(caption = paste(
+      "Unsigned `Longitude_W` values negated before gridding — see mets_20.",
+      "Ranges shown are as-published (positive)."),
+      fname = "mets_longitude_sign_repair")
+} else {
+  cat("Longitude sign: nothing to repair\n")
+}
+
+# `isnan()` explicitly: NaN > 0 is TRUE in DuckDB, so a NaN coordinate would
+# otherwise read as a positive longitude here and again in the assertion.
+stopifnot(
+  "a positive longitude survived the sign repair — outside the CalCOFI window?" =
+    dbGetQuery(con, "
+      SELECT COUNT(*) AS n FROM mets_sample
+      WHERE longitude > 0 AND NOT isnan(longitude)")[[1]] == 0)
+```
+
 ```{r}
 #| label: add_spatial
 
