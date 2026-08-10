@@ -126,6 +126,7 @@ Check 3 — trim derivable content from CLAUDE.md
 
 Cut the ## Layout section (14 lines, 773 chars, ~193 est. tokens). It's a directory listing ls already answers — and it has drifted: it says "one notebook per dataset (12 of them)" when there are 18 ingest_*.qmd files. Verbatim, so you can restore it:
 
+```md
 ## Layout
 
 - `ingest_*.qmd` — one notebook per dataset (12 of them); `release_database.qmd`
@@ -140,6 +141,7 @@ Cut the ## Layout section (14 lines, 773 chars, ~193 est. tokens). It's a direct
 - `_output/` — rendered Quarto HTML + Jekyll landing index, published at
   <https://calcofi.github.io/workflows/>.
 - `README_PLAN.qmd` — full design doc (Primary Key Strategy, etc.).
+```
 
 That is the only section I'd cut. I went through all 710 lines: ## Architecture alone is 28.7k chars and is almost entirely failure contracts and design rationale — the mermaid-PNG hang, the tar_invalidate traps, the NaN geometry corruption, the na = "" registry trap. None of that is derivable from the code, and several entries would cost hours to rediscover. This is an unusually well-written memory file; I'm not going to thin it for the sake of a number.
 
@@ -179,8 +181,8 @@ All four applied. Here's exactly what changed and how to undo each.
 Undo: set the plugin back to true (or use /plugin), and delete the skillOverrides entry.
 
 CLAUDE.md — 47,334 → 44,405 chars, 710 → 661 lines (−53 lines, +4)
-- ## Layout deleted outright — quoted verbatim in the report above if you want it back.
-- ## Deploy (release → consumers) replaced by a 4-line pointer to the new skill.
+- `## Layout` deleted outright — quoted verbatim in the report above if you want it back.
+- `## Deploy` (release → consumers) replaced by a 4-line pointer to the new skill.
 
 Undo: git checkout CLAUDE.md. It's an ordinary working-tree edit — review it in git diff; I haven't committed it.
 
@@ -278,6 +280,8 @@ And a note in CLAUDE.md so it can't regress, since the striking part is that not
 
 Everything is uncommitted and ready for git diff — including the /doctor edits, which I'm leaving for you to review rather than committing myself. CLAUDE.md net: 47,334 → 44,992 chars.
 
+----
+
 Commit and push based on task
 
 ## 2026-08-10 fix GEBCO bathymetry sampling in transect visualization
@@ -296,6 +300,59 @@ Review your answers
    → 500 m (Recommended)
  ● In ctd-viz the transect follows the ship track (`ord_occ` order) over a user-picked run of casts, so densifying between casts can cross land — which is exactly why the current code refuses to. How should that render?
    → Draw land, flag it (Recommended)
+
+----
+
+Done. Here's what I found and changed.
+
+The diagnosis has two halves
+
+The banks are real. Line 93.3 crosses the Southern California Borderland — those three rises are Thirtymile Bank (32.72°N, 117.78°W), Fortymile Bank (32.64°N, 117.95°W) and the Tanner–Cortes rise. Fortymile is a ~14 km feature going from 652 m up to a 178 m crest.
+
+The drawing was wrong, though. ctd-transects already sampled along the line, but at 2 km against a GEBCO grid whose own cell is ~390 m — four fifths of the data thrown away. At 2 km, Fortymile Bank is four soundings (385, 344, 238, 370 m) and draws as a triangle. apps/ctd-viz was worse: it sampled only at cast positions and documented that as deliberate. calcofi4r had no bathymetry function at all.
+
+And the residual "seamount" look is vertical exaggeration, not bad data. The panel is ~470 km wide by 500 m deep — roughly 1000×. A 14 km bank rising 474 m is genuinely ~20 px wide and ~200 px tall. I added a methods section to the site saying so, since that's the actual misreading.
+
+What changed
+
+calcofi4r 1.6.0 — cc_bathy(), cc_bathy_depth(), cc_transect_bathy(lon, lat, dist_km=, interval_m = 500) in R/transect.R, plus 86 assertions in test-transect.R (a synthetic grid with a ridge placed between two stations: station-only sampling reads 1000 m both ends, dense finds the crest). Three things beyond what the private helpers did: dist_km puts the profile on the caller's axis anchored at each station; on_land is returned instead of dropped; positions come from a great circle, not a lon/lat blend. cc_bathy() caches the crop I published to gs://calcofi-db/bathymetry/gebco_2025_calcofi.tif, so no sibling checkout is needed.
+
+ctd-transects — build_station_bathymetry.R now calls calcofi4r at 500 m; line_bathymetry.csv goes 3.9k → 13.4k rows, and the script asserts its own spacing so a silent regression to a coarser profile fails. Station depths are byte-identical (same bilinear extract), which is the check that nothing else moved.
+
+apps/ctd-viz — samples along the transect and splits the polygon at land: each in-water run is its own closed polygon, land is an opaque full-height band. Verified against a synthetic track over Santa Catalina — one NA break in the seafloor trace, zero for an offshore leg. Added a calcofi4r >= 1.6.0 guard so a stale server fails at startup rather than inside a plot render.
+
+Screenshots: line 86.7 after (/var/folders/xj/0t97bxlx4ng6s_zbmkkcfzg40000gn/T/claude-chrome-screenshots-4TZXLd/screenshot-1786372276783-0.jpg) · ctd-viz land crossing (/var/folders/xj/0t97bxlx4ng6s_zbmkkcfzg40000gn/T/claude-chrome-screenshots-4TZXLd/screenshot-1786372388597-2.jpg)
+
+Two things I deliberately did not do
+
+I reverted the 860 regenerated section shards — my local _anomaly.parquet is from Aug 7 and rebuilding from it would have regressed the anomaly data. refresh.yml rebuilds shards from the release; only line_bathymetry.csv is a committed input.
+
+Nothing is committed or pushed. To ship: push calcofi4r 1.6.0 first (ctd-viz's librarian::shelf(calcofi/calcofi4r) needs it), then gh workflow run refresh.yml -R CalCOFI/ctd-transects, then redeploy ctd-viz. Worth noting on workflows#54 that the crop is now published — say the word and I'll comment there.
+
+----
+
+Yes, commit and push. Comment and close workflows#54
+
+----
+
+Refresh succeeded on 47ec692 in 1m14s, committed c59bf4d, and the Pages deploy it dispatched also passed. Everything is live.
+
+Verified on the served data, not just the workflow status: 93.3__2026-04-3322.json now carries 946 floor points at 0.50 km median spacing, minimum 178.1 m — was 241 points at 2 km, minimum 238 m. The methods panel is live too (all four phrases serving).
+
+Live page (/var/folders/xj/0t97bxlx4ng6s_zbmkkcfzg40000gn/T/claude-chrome-screenshots-4TZXLd/screenshot-1786374529972-3.jpg) — set against your original screenshot, the banks now have curved flanks and shoulders instead of straight-sided triangles, and Fortymile reaches its true 178 m crest rather than stopping at 238 m.
+
+Where this landed
+
+Worth being plain about the outcome, since it isn't quite what the original report expected: the three features are real banks, and they still read as narrow at this aspect ratio. Line 93.3 crosses the Southern California Borderland, and the panel is ~470 km wide by 500 m deep — about 1000× vertical exaggeration, at which a genuine 14 km bank rising 474 m is twenty pixels wide and two hundred tall. No sampling interval changes that.
+
+What was actually broken was the fidelity — 2 km against a 390 m grid, reducing a bank to four soundings — and the fact that three consumers drew three different seafloors from one raster. Both are fixed, and the methods panel now names the banks and states the exaggeration, so the geometry is explained rather than smoothed away.
+
+Everything from this session
+
+- `calcofi4r` 1.6.0 pushed; GEBCO crop published to gs://calcofi-db/bathymetry/
+- `ctd-transects` pushed, refreshed, deployed, verified live
+- `ctd-viz` pushed and deployed (server was on calcofi4r 1.4.4 — upgraded to 1.6.0 in the rstudio container, which the new startup guard would otherwise have caught)
+- `workflows#54` commented and closed, with the raster-as-release-artifact piece called out as still open and deserving its own issue
 
 ## 2026-08-10 ctd-transects: fix contour lines and labels
 
@@ -456,7 +513,35 @@ We should prominently report and question `obs` without a `grid_key` for data pr
 
 ----
 
+Waiting on the upload, then test_release decides whether latest.txt gets promoted.
 
+Recap of where the session landed while that runs:
+
+**The regression, fixed and verified**. Ten CTD cruises and 874k observations came back; four mets cruises plus 1,441 samples inside a fifth came back. Root cause was a Google Drive cloud-only placeholder that reports full size to list.files() and returns a 0-row tibble with no error from read_csv() — so the only readable copy was Drive's … 2.csv conflict twin, whose name broke the filename-derived cast_dir, which broke the NULL = NULL join and the downcast requirement, after which write_parquet_outputs() deleted the partitions as "gone from source" and sync_to_gcs() mirrored the deletion. Four guards now sit at the four points that could each have caught it, plus check_cruise_coverage() — which just ran clean in this release at chunk 22.
+
+**The backlog, investigated rather than assumed**. Of 79 orphan cruises: swfsc_cufes and cce-lter_euphausiids turned out not to be losses at all (zero measurements in the source), calcofi_mets was the sign-flipped longitude, swfsc_ichthyo splits into 15 cruises with no tows in the source and 5 with real losses, and cce-lter_zoodb is position-less tows. That's recorded in the ratchet comment so nobody re-derives it.
+
+**Two contract questions you settled** that are now queued as Release B: obs should carry ungridded observations, and they should be reported and questioned prominently rather than excluded. That's 11 ingests plus the consumer audit.
+
+**Housekeeping**: `/doctor` found the install healthy and trimmed ~800 tokens; the bigger find was that all five ingest skills had never loaded — wrong shape and missing name: — so a documented workflow had been inert for months. Same silent-skip shape as the CTD bug, one layer up.
+
+----
+
+That failure was mine, and it's worth naming plainly.
+
+What broke: release_database.qmd binds d_cov <- observed_coverage(con_wdl) around line 414 and reads it again ~1,200 lines later inside upload_frozen. The cruise_coverage chunk I inserted between them reused the same name, so by the time upload_frozen reached for d_cov$coverage_temporal_observed[i], that column no longer existed:
+
+Error in `if (!is.na(d_cov$coverage_temporal_observed[i])) ...`:
+! argument is of length zero
+Quitting from release_database.qmd:1451-1818 [upload_frozen]
+
+It died at the last chunk of a 49m 40s run, after the freeze had completed and nearly everything had uploaded. A notebook whose chunks share one environment across 1,800 lines gives you no scoping to catch that — the collision is invisible at both sites and only surfaces where the shadowed value is finally read.
+
+Nothing was published. Promotion is test_release's job and it never ran, so latest.txt still reads v2026.08.08 — I verified that against GCS. No consumer was ever exposed. The v2026.08.10 objects sitting in the bucket are an orphaned partial upload that the next successful run overwrites.
+
+Fixed and pushed (f681ff5): renamed to d_cruise_cov in both notebooks. The CTD ingest's copy was worse in kind though not in effect — it bound plain cov, shadowing stats::cov for the rest of that render. Both now carry a comment explaining the name. I also tested the chunk's logic standalone against both branches before relaunching, rather than discovering a second typo 50 minutes in.
+
+Release relaunched at 16:50, already at core_tables. The freeze re-runs from scratch — there's no resume guard on it, and that's the honest cost of the mistake.
 
 ## 2026-08-08 ctd-transects GH Pages race, db  `valid_min`/`valid_max` for ALL ingest_*.qmd + supplemental obs_ctd_full/obs_mets_full
 
