@@ -719,10 +719,23 @@ re-run fails here rather than republishing the loss.
 # has cruises with no observations; none has been shown to be legitimate. Lower
 # an entry whenever one is resolved at its ingest; never raise one.
 ORPHAN_CRUISES_MAX <- c(
+  # every orphan is a position-less or mis-positioned event whose measurements
+  # exist but are held out of `obs` by the `grid_key IS NOT NULL` filter in each
+  # ingest's core projection. Investigated 2026-08-10; the causes differ:
+  #   cce-lter_zoodb  156 tows with NULL datetime/latitude/grid_key
+  #   swfsc_ichthyo   15 cruises have no tows in the source at all (nothing
+  #                   lost); the other 5 hold 1,977 ichthyo rows behind
+  #                   ungridded sites AND a NULL measurement_type
+  #   calcofi_mets    1207OS publishes no lat/lon (mets_16, answered "skip the
+  #                   spatial join") — ungridded by design, not by defect. Was 5
+  #                   until the Longitude_W sign repair landed the other four.
+  #   swfsc_cufes     1,475 samples with ZERO rows in cufes_measurement
+  #   cce-lter_euph.  4 tows with ZERO rows in euphausiids_measurement
+  # The last two are not losses: the provider recorded the event and no counts.
   "cce-lter_zoodb"       = 41L,
   "swfsc_ichthyo"        = 20L,
-  "calcofi_mets"         =  5L,
   "swfsc_cufes"          =  3L,
+  "calcofi_mets"         =  1L,
   "cce-lter_euphausiids" =  1L)
 
 d_cov <- check_cruise_coverage(con_wdl, max_orphan_cruises = ORPHAN_CRUISES_MAX)
