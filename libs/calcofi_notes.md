@@ -20,6 +20,69 @@
 - [ ] rename `swfsc_inverts` to `swfsc_invert` including `ingest_swfsc_inverts.qmd` -> `ingest_swfsc_invert.qmd`
 - [ ] `ingest_calcofi_ctd-cast.qmd` needs a sync to GCS for just the used CSV files so saved in GCS `archive/`, not just GCS `_sync/`
 
+## 2026-08-10 ctd-transects: fix contour lines and labels
+
+The contour lines and labels are sometimes obscured presumably because of plotting order in @../ctd-transects [Image #2]
+
+----
+
+Excellent! That is a vast improvement. Please commit and push
+
+Also update screenshot on calcofi.io card (get the whole page with x-axis labels that got previously clipped)
+
+And what happened to 2026-07? That cruise used to be there, but maybe disappeared with latest db update and filtering functions [Image #3]
+
+----
+
+Both done, plus an answer on 2026-07 — which turned out to be a real data problem, not filtering.
+
+**Card screenshot** — CalCOFI.github.io@7064c01, pushed. The card CSS is `aspect-ratio: 16/10; object-fit: cover; object-position: top`, so the old 1176×621 viewport crop could never show the x-axis — it cut off at ~300 m depth. New shot is the full page at 16:10 (1600×1000, headless Chrome at 2× then downscaled), with the header, controls, stage badge, the complete section including **Distance offshore (km)**, and the map card. Also drops the stray mouse cursor the old one had, and shows the fixed contours.
+
+**ctd-transects** — 4a5be3b pushed, Pages deploy succeeded in 19s, so calcofi.io/ctd-transects is live with the fix.
+
+### 2026-07 + 9 other cruises dropped
+
+**`2026-07`: not filtering** — the release lost it. Cruise 2026-07-3322 had 6 line shards under v2026.08.07 and zero under v2026.08.08. Its cast rows are still there (122 casts, 46 stations) but every obs row is gone — 54,255 rows across all 18 measurement types in v07, 0 in v08. The app builds shards from obs, so it correctly has nothing to draw.
+
+It isn't alone. Ten cruises dropped between the two releases, none added:
+
+┌──────────────┬─────────┬─────────┬───────────┐
+│    cruise    │ obs v07 │ obs v08 │ casts v08 │
+├──────────────┼─────────┼─────────┼───────────┤
+│ 1995-01-31JD │  93,099 │       0 │       134 │
+├──────────────┼─────────┼─────────┼───────────┤
+│ 1995-07-31JD │  90,077 │     235 │       130 │
+├──────────────┼─────────┼─────────┼───────────┤
+│ 1996-02-31JD │  88,350 │       0 │       132 │
+├──────────────┼─────────┼─────────┼───────────┤
+│ 1996-08-32NM │  92,234 │       0 │       132 │
+├──────────────┼─────────┼─────────┼───────────┤
+│ 1997-02-31JD │  94,099 │       0 │       140 │
+├──────────────┼─────────┼─────────┼───────────┤
+│ 1999-08-32NM │  94,272 │       0 │       136 │
+├──────────────┼─────────┼─────────┼───────────┤
+│ 1999-10-32NM │  97,508 │       0 │       134 │
+├──────────────┼─────────┼─────────┼───────────┤
+│ 2001-04-31JD │  79,942 │       0 │       126 │
+├──────────────┼─────────┼─────────┼───────────┤
+│ 2002-07-32NM │  90,043 │       0 │       130 │
+├──────────────┼─────────┼─────────┼───────────┤
+│ 2026-07-3322 │  54,255 │       0 │       122 │
+└──────────────┴─────────┴─────────┴───────────┘
+
+~874,000 observations, and release-wide 1,186 of 19,506 CTD casts now have zero `obs`. Nine of the ten sit in 1995–2002, the window the Wilkinson backfill added; the tenth is the newest cruise.
+
+Nothing flagged it, and the reason is structural: PK/FK validation runs child→parent, so every surviving `obs` row still has a parent cast — a parent with no children violates no constraint, and the bounds backstop only inspects `obs`, which these cruises have left entirely.
+
+I haven't touched the pipeline — finding where the rows went is a separate job, and the ingest's input-fingerprint fast path is the first thing I'd check, since "samples emitted, observations not" is what a skipped heavy path over incomplete staged parquet would produce. Want me to dig into that, and add an orphan-cast assertion to `release_database.qmd` so a cruise with casts and no `obs` fails the release?
+
+----
+
+Yes, dig deep and find the best solution. Permitting these cruises to drop altogether is unacceptable. Think hard and work systematically through the problem
+
+
+
+
 ## 2026-08-08 ctd-transects GH Pages race, db  `valid_min`/`valid_max` for ALL ingest_*.qmd + supplemental obs_ctd_full/obs_mets_full
 
 - **The ctd-transects Pages race**. `refresh.yml` pushes and immediately dispatches `pages.yml`, which checks out the pre-push tree — so the site gets a fresh last-modified header wrapping stale bytes, and the run goes green. I fixed today's instance by redeploying manually, but it will recur on every refresh. The fix is probably to have pages.yml deploy from the pushed SHA, or to have refresh.yml wait.
@@ -214,7 +277,47 @@ Also worth a glance sometime: db-viz-station's copy of the snippet has the place
 
 Be sure to clean up the local repo. Then check, are all repos commited, pushed and on main?
 
+----
 
+Done. Two corrections in this round, one of which matters a lot.
+
+I was wrong about query and schema — do not delete them
+
+They're deliberate GitHub Pages redirect stubs, not junk. Each holds one index.html:
+
+<meta http-equiv="refresh" content="0; url=https://calcofi.io/db-query/">
+<link rel="canonical" href="https://calcofi.io/db-query/">
+
+committed on the rename date with the message redirect to /db-query. The repo rename forwards github.com/CalCOFI/query, but not the published site at calcofi.io/query/ — these stubs are what keep those URLs alive, and both currently return 200. What I measured as "the redirect is broken" was the stub working exactly as designed. Deleting them would break every old link to the query and schema sites. Recommendation retracted.
+
+You were also right that they aren't local — I was reporting the GitHub org inventory, not your filesystem. They're 0 KB, so there'd never be a reason to clone them.
+
+What I did
+
+- Global gitignore — ~/.gitignore_global with .DS_Store and ._*, wired to core.excludesfile. Verified it suppresses new files even in archived repos I can't push a .gitignore to.
+- skip-worktree on the 11 already-tracked .DS_Store files across the 4 archived repos. The global ignore only covers untracked files, so those would still have gone dirty whenever Finder rewrote them — this is the local-only fix for repos that are read-only on GitHub.
+- No history rewrite, per my recommendation: 6 of the 11 affected repos are archived (unpushable), and 4 of the remaining 5 are cloned on the production server which deploys via git pull --ff-only — a force-push breaks those deploys to reclaim a few KB. Say the word if you want it anyway; git filter-repo plus the server remediation is ready to script.
+- apps_dev and 2026-ucsb-station-data-portal_b were already gone — you'd removed them.
+
+Second correction: I committed a file I shouldn't have
+
+A git add -A swept .claude/settings.local.json into a commit. That's Claude Code's per-machine settings file (its paths are /Users/bbest/**, hence the .local suffix). Untracked and gitignored now. No secrets — permission allow-lists only — so I untracked it going forward rather than rewriting a pushed commit. The .claude/skills/ files are correctly tracked and untouched.
+
+Final state: all 30 repos clean, committed, pushed, on their default branch.
+
+Still awaiting your call on the deletion candidates — minus query/schema, which should stay:
+
+- Fork/duplicate to resolve: 2026-ucla-ca-ocean-monitoring-map (fork, 2 MB, not archived) vs 2026-ucla-cal-ocean-coastal-monitoring-map (60 MB, archived)
+- Archived capstones: larvae-dashboard, station-data-portal, ucla-cal-ocean-coastal-monitoring-map, marmam-app, SaferSeafood, hypoxia-story
+- Stale (18+ months): larvae-cinms (2020), CalCOFI_3yr_Review, habs_phytoplankton, viz-gallery, Capstone-CalCOFI-2023, OceanView, prj-mgt, CalCOFI_map, rCRUX, CalCOFI_eDNA
+
+----
+
+```bash
+rm -rf apps_dev 
+rm -rf 2026-ucsb-station-data-portal_b 
+rm -rf 2026-ucla-ca-ocean-monitoring-map 
+```
 
 ## 2026-08-07 db-viz-hex: datasets popover 
 

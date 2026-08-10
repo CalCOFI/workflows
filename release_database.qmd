@@ -688,6 +688,62 @@ if (n_und < BOUNDS_UNDECLARED_MAX)
   cat(glue("\nBOUNDS_UNDECLARED_MAX can be tightened to {n_und}.\n"))
 ```
 
+## Cruise Coverage — Samples With No Observations
+
+The one shape of loss that every other check here is blind to, by construction.
+
+PK/FK validation runs **child → parent**: it asks whether each `obs` row has a
+parent in `sample`. A cruise whose observations vanish entirely leaves its casts
+behind as parents with no children, which violates nothing. The bounds check above
+inspects `obs`, which such a cruise has left. So `v2026.08.08` published 10
+`calcofi_ctd-cast` cruises holding all 1,186 of their casts and none of their
+874,000 observations, and every check in this notebook passed.
+
+The grain is the **cruise**, not the sample: a CTD `sample` row is one physical
+cast *per direction* while `obs` keeps one direction, so ~half of that dataset's
+cast rows legitimately carry no observations. A dataset that emits no observations
+at all is exempt — `sio_pic-zooplankton` is a net-tow registry whose biovolumes are
+pending from the provider, so its 587 `sample`-only cruises are its designed state,
+not 587 failures.
+
+`ORPHAN_CRUISES_MAX` ratchets exactly like `BOUNDS_UNDECLARED_MAX`: it is the
+per-dataset backlog measured on the day this landed, and it may only ever go
+**down**. `calcofi_ctd-cast` is deliberately **not** in it — its correct value is
+zero and the ingest now asserts that, so a release cut before the CTD ingest is
+re-run fails here rather than republishing the loss.
+
+```{r}
+#| label: cruise_coverage
+
+# ratchet, not a target. Each of these is an open question about a dataset that
+# has cruises with no observations; none has been shown to be legitimate. Lower
+# an entry whenever one is resolved at its ingest; never raise one.
+ORPHAN_CRUISES_MAX <- c(
+  "cce-lter_zoodb"       = 41L,
+  "swfsc_ichthyo"        = 20L,
+  "calcofi_mets"         =  5L,
+  "swfsc_cufes"          =  3L,
+  "cce-lter_euphausiids" =  1L)
+
+d_cov <- check_cruise_coverage(con_wdl, max_orphan_cruises = ORPHAN_CRUISES_MAX)
+
+d_cov |>
+  datatable(caption = paste(
+    "Cruises carrying samples with no observations, per dataset.",
+    "`emits_obs = FALSE` marks a registry-only dataset, exempt by design.",
+    "Anything above its ratchet fails this render."))
+
+tighten <- d_cov$dataset_key[
+  d_cov$dataset_key %in% names(ORPHAN_CRUISES_MAX) &
+    d_cov$cruises_no_obs < ORPHAN_CRUISES_MAX[d_cov$dataset_key]]
+if (length(tighten))
+  cat(glue(
+    "ORPHAN_CRUISES_MAX can be tightened: ",
+    "{paste(sprintf('%s -> %d', tighten,
+                    d_cov$cruises_no_obs[match(tighten, d_cov$dataset_key)]),
+            collapse = ', ')}\n"))
+```
+
 ## Scan Manifests for Mismatches
 
 ```{r}

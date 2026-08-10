@@ -803,9 +803,20 @@ d_csv <- tibble(
       # assertion in [emit_core].
       .default = NA_character_
     ),
+    # The direction letter is the LAST character of the name — and "last" has to
+    # survive a copy marker. `dir_dl` sits inside Google Drive, which names a
+    # conflict copy `19-9501JD_CTDBTL_001-646D 2.csv`; that ends in " 2.csv",
+    # matched neither arm of the old `…D\\.csv$` test, and came through as NA.
+    # Not cosmetic: [ctd_measurement] joins on cast_dir and NULL = NULL is never
+    # true, and [ctd_thin] needs a downcast. Strip the marker, then read the
+    # letter off the stem.
+    file_stem = file_csv |>
+      str_remove("\\.csv$") |>
+      str_remove("\\s*\\(\\d+\\)$") |>          # "name (2).csv"
+      str_remove("\\s+\\d+$"),                  # "name 2.csv"
     cast_dir = case_when(
-      str_detect(file_csv, regex("U\\.csv$", ignore_case = T)) ~ "U",
-      str_detect(file_csv, regex("D\\.csv$", ignore_case = T)) ~ "D"
+      str_detect(file_stem, regex("U$", ignore_case = T)) ~ "U",
+      str_detect(file_stem, regex("D$", ignore_case = T)) ~ "D"
     ),
     # supersession order, straight off CTD_DATA_STAGES so a new stage cannot be
     # added to the vocabulary without also being ranked (an unranked stage would
@@ -835,6 +846,45 @@ d_csv <- d_csv |>
   inner_join(d_priority, by = "cruise_key") |>
   filter(priority == best_priority) |>
   select(-best_priority)
+
+# A file whose name does not END in a direction letter is not a db product this
+# ingest reads. Four exist — `…084IDnoQC.csv` and `…067Dno001b.csv` pairs — and
+# they sit beside the canonical D/U pair inside the same archive. Carrying them
+# with `cast_dir = NA` was strictly worse than dropping them: [ctd_measurement]
+# joins on cast_dir, `NULL = NULL` is never true, so they became 112,245 cast
+# rows that could hold no measurement and still reached `sample` as casts with
+# nothing under them. Drop them, and say which.
+d_csv_nodir <- d_csv |> filter(is.na(cast_dir))
+d_csv       <- d_csv |> filter(!is.na(cast_dir))
+
+if (nrow(d_csv_nodir) > 0)
+  d_csv_nodir |>
+    select(cruise_key, file_csv, data_stage) |>
+    arrange(cruise_key, file_csv) |>
+    dt(
+      caption = glue(
+        "Skipped: {nrow(d_csv_nodir)} file(s) whose name resolves no cast ",
+        "direction (alternate renderings beside the canonical D/U pair)"),
+      fname = "ctd_files_no_cast_direction")
+
+# Every cruise must keep a downcast. [ctd_thin] takes one direction per physical
+# cast and prefers D, so a cruise with no D produces no thin rows and therefore
+# no `obs` — and because write_parquet_outputs() DELETES a partition that has
+# left the data, and sync_to_gcs() mirrors the deletion, the cruise then leaves
+# the release entirely while its casts survive in `sample`. That is precisely how
+# v2026.08.08 lost 10 cruises and 874,000 observations with no error anywhere.
+cruises_no_downcast <- d_csv |>
+  group_by(cruise_key) |>
+  summarize(has_downcast = any(cast_dir == "D"), .groups = "drop") |>
+  filter(!has_downcast) |>
+  pull(cruise_key)
+
+if (length(cruises_no_downcast) > 0)
+  stop(glue(
+    "{length(cruises_no_downcast)} cruise(s) have no downcast file: ",
+    "{paste(cruises_no_downcast, collapse = ', ')}.\n",
+    "ctd_thin cannot emit a headline profile for them, so they would reach the ",
+    "release as casts with no observations."))
 
 cruises_csv_notzip <- setdiff(
   unique(d_csv$cruise_key),
@@ -902,6 +952,27 @@ d_csv |>
     fname = "ctd_rows_per_file"
   ) |>
   formatCurrency("nrows", currency = "", digits = 0, mark = ",")
+
+# A file that reads zero rows is a failure, not an observation — and it is the
+# one failure this pipeline could not see.
+#
+# `dir_dl` sits inside Google Drive, which evicts a synced file to a cloud-only
+# placeholder. `list.files()` still reports the full size (12,254,953 bytes for
+# 19-9501JD_CTDBTL_001-646D.csv) and `ls -lO` marks it `dataless`, but reading it
+# times out at the filesystem and `read_csv()` returns a **0-row tibble with no
+# error**. On the v2026.08.08 run 20 files across 14 cruises read 0 rows exactly
+# this way, and the only copy holding data was the `… 2.csv` conflict copy Drive
+# had made beside each one. Nothing downstream distinguishes "this cruise has no
+# downcast" from "the downcast file was empty".
+d_csv_empty <- d_csv |> filter(nrows == 0)
+
+if (nrow(d_csv_empty) > 0)
+  stop(glue(
+    "{nrow(d_csv_empty)} CSV(s) read 0 rows:\n",
+    paste0("  ", d_csv_empty$path_unzip, collapse = "\n"), "\n",
+    "A CTD db CSV is never legitimately empty. Check for a Google Drive ",
+    "cloud-only placeholder (`ls -lO` reports `dataless`) and materialize it ",
+    "with `cat file > /dev/null`, or move the download directory off Drive."))
 ```
 
 ## Detect and Correct Column Type Mismatches
@@ -3416,6 +3487,32 @@ if (build_obs_ctd_full) {
 }
 ```
 
+### No cruise may leave `obs` and keep its casts
+
+The guards above are upstream and specific — an empty read, a name with no
+direction letter, a cruise with no downcast. This one is downstream and general:
+whatever the cause, a cruise that reaches this point with casts and **no
+observations** must not be written, because `write_parquet_outputs()` deletes the
+partition that has left the data and `sync_to_gcs()` mirrors the deletion, so the
+cruise disappears from the release while its casts remain in `sample`. Every
+foreign key still resolves — FK validation runs child → parent, and a parent with
+no children breaks nothing — which is why v2026.08.08 published the loss.
+
+The correct count for this dataset is zero, so it is asserted rather than
+ratcheted. `sample` legitimately carries about half its cast rows without
+observations (one row per cast **per direction**, against one direction kept in
+`obs`), which is why the grain is the cruise and not the sample.
+
+```{r}
+#| label: assert_cruise_coverage
+
+cov <- check_cruise_coverage(con, max_orphan_cruises = 0L)
+
+cov |>
+  dt(
+    caption = "Cruise coverage: cruises carrying samples with no observations",
+    fname   = "ctd_cruise_coverage")
+```
 
 ## Write Parquet
 
