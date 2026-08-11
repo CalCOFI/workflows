@@ -690,6 +690,63 @@ Now the CUFES change. Your framing is right — it samples a segment, so let me 
 
 Median segment length is 8.71 km — so the start point isn't a rounding detail, it's ~4.4 km from the sample's centre. On a grid whose cells and hexes are of that order, the midpoint is materially more correct. Implementing:
 
+----
+
+Answering your question properly, with the work committed:
+
+**The `+proj=calcofi` transform — added, and honest about its reach
+
+cc_calcofi_to_lonlat() / cc_lonlat_to_calcofi() in calcofi4db 3.14.0 (4c633e3), 861 tests green. You were right that it's a projection, not a lookup — which is strictly better, because a grid lookup only resolves stations present in the grid table, while the transform resolves any pair, including historical inshore stations and the Gulf of California / Baja lines the modern pattern dropped. It round-trips exactly (90/60 → −119.9593, 32.41795 → 90/60).
+
+The inverse returns the continuous position deliberately — 90.7 is a real answer, and rounding it inside the helper would silently move a sample onto a station it wasn't taken at.
+
+But I measured the scope rather than assuming it, and it's small: exactly 5 rows across every ingest carry line/station without a position (1 euphausiid tow, 4 dungeness — the latter not in the release). The three large position-less populations each fail for their own reason: mets 1207OS publishes TSG-only files (no position, no station), CUFES has no line/station columns at all, and zoodb's 155 are source = "pooled" with line/station genuinely NA. The helper is worth having; it just doesn't unlock this population.
+
+**CUFES midpoint — the more consequential change**
+
+Your instinct was right, and the measurement backs it: the segment ends are a median 8.71 km apart, so the start point sat ~4.4 km from the sample's centre — enough to place samples in the wrong grid cell on a grid of that scale. Position is now the midpoint, with latitude_start/longitude_start and latitude_stop/longitude_stop both preserved so the segment survives and can be drawn. It also recovers the 20 samples with a NaN start but a good stop (60ecafb).
+
+Not yet re-run — a release is mid-freeze against the current staged parquet, and re-running CUFES now would move data underneath it. It goes in the next cycle.
+
+Meanwhile release_database is re-freezing v2026.08.11 (10/45). The earlier failure was purely a network timeout at 644 kiB/s; the resumed upload finished clean at 3.8 MiB/s.
+
+----
+
+let's ensure that v2026.08.11 has these fixes applied
+
+----
+
+Right — the current freeze is building from staged parquet that predates the CUFES midpoint change, so it would produce a v2026.08.11 without it. Stopping it now rather than wasting the remaining ~45 min of freeze:
+
+----
+
+Good catch — that freeze would have produced a v2026.08.11 without the midpoint fix, and I'd have had to redo the whole thing. Killed it ~10 minutes in rather than burning the remaining ~45.
+
+Done carefully, per the repo's own warning that a killed render leaves debris:
+- stopped the Rscript, quarto render and orphaned rmd.R processes
+- cleared the stale targets lock with tar_unblock_process()
+- deleted the partial v2026.08.11 from both the staging root and data/releases, so a half-frozen directory can't later be mistaken for a real release
+
+Relaunched at 10:17 as cufes → release_database → test_release. CUFES is already through emit_core and into finalize, so v2026.08.11 will carry:
+
+┌─────────────────────────────────────────────────┬───────────────────────────────┐
+│                       fix                       │        in this release        │
+├─────────────────────────────────────────────────┼───────────────────────────────┤
+│ ungridded obs released across 14 ingests        │ ✅                            │
+├─────────────────────────────────────────────────┼───────────────────────────────┤
+│ append_obs() NaN/Inf → NULL (calcofi4db 3.13.1) │ ✅                            │
+├─────────────────────────────────────────────────┼───────────────────────────────┤
+│ mets position gate rejects NaN                  │ ✅                            │
+├─────────────────────────────────────────────────┼───────────────────────────────┤
+│ CUFES segment midpoint + 20 stop-end recoveries │ ✅                            │
+├─────────────────────────────────────────────────┼───────────────────────────────┤
+│ CTD's 10 cruises, mets longitude sign           │ ✅ (carried from v2026.08.10) │
+└─────────────────────────────────────────────────┴───────────────────────────────┘
+
+The +proj=calcofi helpers ship in calcofi4db 3.14.0 but aren't wired into any ingest yet — there are only 5 rows to apply them to, and one of those datasets isn't in the release. I'd rather add that as a deliberate follow-up than slip it into a release that's already fixing four things.
+
+Persistent monitor armed on the completion marker this time — that's the lapse that cost the overnight window, and I'm not repeating it.
+
 ## 2026-08-08 ctd-transects GH Pages race, db  `valid_min`/`valid_max` for ALL ingest_*.qmd + supplemental obs_ctd_full/obs_mets_full
 
 - **The ctd-transects Pages race**. `refresh.yml` pushes and immediately dispatches `pages.yml`, which checks out the pre-push tree — so the site gets a fresh last-modified header wrapping stale bytes, and the run goes green. I fixed today's instance by redeploying manually, but it will recur on every refresh. The fix is probably to have pages.yml deploy from the pushed SHA, or to have refresh.yml wait.

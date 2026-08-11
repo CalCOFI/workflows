@@ -119,32 +119,52 @@ d <- d_raw |>
 # position we hold. NaN is tested explicitly because it passes IS NOT NULL and
 # would otherwise poison the mean (see calcofi4db 3.13.1).
 ok <- function(x) !is.na(x) & !is.nan(x) & is.finite(x)
+
+# A position is a PAIR. Resolving latitude and longitude with independent rules
+# lets a row keep a latitude while its longitude resolves to nothing — 11 samples
+# here publish `latitude 42` with a NaN longitude at BOTH ends, and taking them
+# separately faithfully reproduces that half-position (66 obs rows with a
+# latitude and no hex_id). Worse, independent rules could in principle pair a
+# latitude from one end with a longitude from the other, inventing a place the
+# ship never was.
+#
+# So choose the SOURCE first — midpoint, else start, else stop — and require both
+# components of that source to be real. Otherwise the position is NULL, which is
+# the honest answer and what check_ungridded_obs()'s n_no_position counts.
 d_sample <- d |>
+  mutate(
+    .use_mid   = ok(latitude) & ok(longitude) & ok(stop_latitude) & ok(stop_longitude),
+    .use_start = !.use_mid & ok(latitude) & ok(longitude),
+    .use_stop  = !.use_mid & !.use_start & ok(stop_latitude) & ok(stop_longitude)) |>
   transmute(
     sample_id, cruise_orig = cruise, ship_name = ship, ship_code,
     sample_number = suppressWarnings(as.integer(sample_number)),
     datetime_start_utc, datetime_end_utc,
     latitude_start = latitude, longitude_start = longitude,
     latitude_stop = stop_latitude, longitude_stop = stop_longitude,
-    # mean of the ends where both are real; otherwise whichever end we have
     latitude = case_when(
-      ok(latitude_start) & ok(latitude_stop) ~ (latitude_start + latitude_stop) / 2,
-      ok(latitude_start)                     ~ latitude_start,
-      ok(latitude_stop)                      ~ latitude_stop,
-      .default = NA_real_),
+      .use_mid   ~ (latitude + stop_latitude) / 2,
+      .use_start ~ latitude,
+      .use_stop  ~ stop_latitude,
+      .default   = NA_real_),
     longitude = case_when(
-      ok(longitude_start) & ok(longitude_stop) ~ (longitude_start + longitude_stop) / 2,
-      ok(longitude_start)                      ~ longitude_start,
-      ok(longitude_stop)                       ~ longitude_stop,
-      .default = NA_real_),
+      .use_mid   ~ (longitude + stop_longitude) / 2,
+      .use_start ~ longitude,
+      .use_stop  ~ stop_longitude,
+      .default   = NA_real_),
     start_temperature, start_salinity, start_wind_speed, start_wind_direction, start_pump_speed,
     stop_temperature, stop_salinity, stop_wind_speed, stop_wind_direction, stop_pump_speed)
 
 cat(glue(
-  "position: {sum(ok(d_sample$latitude))} of {nrow(d_sample)} samples positioned ",
-  "({sum(ok(d_sample$latitude_start) & ok(d_sample$latitude_stop))} from a segment ",
-  "midpoint, {sum(!ok(d_sample$latitude_start) & ok(d_sample$latitude_stop))} recovered ",
-  "from the stop end alone)"), "\n")
+  "position: {sum(ok(d_sample$latitude) & ok(d_sample$longitude))} of ",
+  "{nrow(d_sample)} samples positioned; ",
+  "{sum(!ok(d_sample$latitude) | !ok(d_sample$longitude))} have none ",
+  "(a half-position is not a position)"), "\n")
+
+# no row may keep one coordinate without the other
+stopifnot(
+  "latitude and longitude must be present together or not at all" =
+    sum(ok(d_sample$latitude) != ok(d_sample$longitude)) == 0)
 
 dbWriteTable(con, "cufes_sample", d_sample, overwrite = TRUE)
 
