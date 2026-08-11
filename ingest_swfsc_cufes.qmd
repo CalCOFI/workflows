@@ -102,14 +102,50 @@ d <- d_raw |>
              stop_temperature, stop_salinity, stop_wind_speed, stop_wind_direction, stop_pump_speed),
            ~ suppressWarnings(as.numeric(.x))))
 
+# A CUFES sample is a SEGMENT, not a point: the pump runs while the ship steams,
+# and the source records where the sample started and where it stopped. Those
+# ends are a median 8.71 km apart, so `latitude`/`longitude` — which every
+# downstream step treats as *the* position, and from which `grid_key` and
+# `hex_id` are derived — was reporting a point ~4.4 km from the sample's centre.
+# On a grid whose cells are of that order, that is enough to place a sample in
+# the wrong one.
+#
+# So the position is the MIDPOINT of the segment, with the ends preserved as
+# `latitude_start`/`longitude_start` and `latitude_stop`/`longitude_stop` so the
+# segment itself is not lost and a consumer can still draw it.
+#
+# The midpoint also recovers 20 samples whose START coordinate is NaN while the
+# STOP is good: taking whichever end exists is strictly better than discarding a
+# position we hold. NaN is tested explicitly because it passes IS NOT NULL and
+# would otherwise poison the mean (see calcofi4db 3.13.1).
+ok <- function(x) !is.na(x) & !is.nan(x) & is.finite(x)
 d_sample <- d |>
   transmute(
     sample_id, cruise_orig = cruise, ship_name = ship, ship_code,
     sample_number = suppressWarnings(as.integer(sample_number)),
-    datetime_start_utc, datetime_end_utc, latitude, longitude,
+    datetime_start_utc, datetime_end_utc,
+    latitude_start = latitude, longitude_start = longitude,
     latitude_stop = stop_latitude, longitude_stop = stop_longitude,
+    # mean of the ends where both are real; otherwise whichever end we have
+    latitude = case_when(
+      ok(latitude_start) & ok(latitude_stop) ~ (latitude_start + latitude_stop) / 2,
+      ok(latitude_start)                     ~ latitude_start,
+      ok(latitude_stop)                      ~ latitude_stop,
+      .default = NA_real_),
+    longitude = case_when(
+      ok(longitude_start) & ok(longitude_stop) ~ (longitude_start + longitude_stop) / 2,
+      ok(longitude_start)                      ~ longitude_start,
+      ok(longitude_stop)                       ~ longitude_stop,
+      .default = NA_real_),
     start_temperature, start_salinity, start_wind_speed, start_wind_direction, start_pump_speed,
     stop_temperature, stop_salinity, stop_wind_speed, stop_wind_direction, stop_pump_speed)
+
+cat(glue(
+  "position: {sum(ok(d_sample$latitude))} of {nrow(d_sample)} samples positioned ",
+  "({sum(ok(d_sample$latitude_start) & ok(d_sample$latitude_stop))} from a segment ",
+  "midpoint, {sum(!ok(d_sample$latitude_start) & ok(d_sample$latitude_stop))} recovered ",
+  "from the stop end alone)"), "\n")
+
 dbWriteTable(con, "cufes_sample", d_sample, overwrite = TRUE)
 
 # pivot egg counts -> long measurement

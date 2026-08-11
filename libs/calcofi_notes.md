@@ -601,6 +601,95 @@ I verified only those two datasets have NaN coordinates, so the re-run is scoped
 
 Consumer exposure while this runs: local-copy consumers (db-viz-hex, db-viz-cruise, h3t) are on their own databases and unaffected; calcofi4r and direct parquet readers currently see the +157k rows including the 9,030 NaN-coordinate ones. Those are real observations with a bad position field, not corruption — and the fix is ~70 minutes out.
 
+----
+
+The fix is verified in the staged output, before the freeze:
+
+┌──────────────┬──────────┬─────────┬─────────────────────┬───────────────────┐
+│   dataset    │ obs rows │ NaN/Inf │ lat/lon without hex │ NULL lat (honest) │
+├──────────────┼──────────┼─────────┼─────────────────────┼───────────────────┤
+│ swfsc_cufes  │  284,097 │       0 │                   0 │             8,950 │
+├──────────────┼──────────┼─────────┼─────────────────────┼───────────────────┤
+│ calcofi_mets │  511,459 │       0 │                   0 │             9,022 │
+└──────────────┴──────────┴─────────┴─────────────────────┴───────────────────┘
+
+The contract violation is gone at the source: no row carries coordinates without a hex_id. The former NaN rows now hold NULL — an honest "no known position" — and check_ungridded_obs() counts them in n_no_position, which is exactly the number the provider questions will quote.
+
+calcofi_mets's 9,022 NULL-latitude rows are mostly 1207OS, the cruise whose raw underway files carry no lat/lon at all (answered in mets_16). Those observations are now in the release for the first time — previously the grid_key filter deleted them, and before that they were only reachable via obs_mets_full.
+
+release_database is at core_tables. The persistent monitor is armed on the completion marker this time, so I'll catch the outcome whenever it lands.
+
+----
+
+For these data without lon/lat, do they have line and station that can be used to transform from CalCOFI to geographic coordinates?
+
+And then hex and grid identifiers can also be assigned
+
+----
+
+Good question — that would recover real positions rather than leaving them NULL. Let me check whether those rows actually carry line/station:
+
+Neither has a line/station column — only grid_key, which is derived from lat/lon and so is NULL for exactly these rows. But let me check the raw sources rather than the wrangled tables, since a column could have been dropped in between:
+
+CUFES has no line/station — but it has something better: stop_latitude/stop_longitude. Each sample records a start and stop position. Checking whether the rows with a bad start have a usable stop:
+
+Only 20 of 1,583 bad-start CUFES samples have a usable stop position — real but marginal (~113 obs rows). The bigger question is your general one: which position-less rows carry line/station, and is there a transform? Checking both:
+
+No explicit transform function, but cc_grid / cc_grid_ctrs give the grid with station centres — so a (line, station) pair can be looked up to a grid_key and its centre coordinates directly, then hex_id from those. That's the mechanism, in reverse of assign_grid_key(). The question becomes: which position-less rows actually carry line/station?
+
+But there is easy transformation from CalCOFI line/station coordinate system to geographic, eg https://github.com/CalCOFI/calcofi4r/blob/36a685625981a792ad220680df69c15e1687054d/data-raw/cc_grid.R#L25-L27:
+  ```r
+  st_as_sf(
+      coords = c("lin", "pos"), remove = F,
+      crs = st_crs("+proj=calcofi"))
+  ```
+
+----
+
+Thank you — that's better than what I proposed. +proj=calcofi is a real PROJ projection, so it's a direct st_transform, not a grid lookup, and it works for off-grid line/station too. Let me re-check the position-less rows properly rather than trusting my column-name heuristic:
+
+The freeze succeeded (2.1 GB local) and 1.8 GB of 169 objects already uploaded — only the tail timed out at 644 kiB/s. That's resumable, not a re-freeze. Restarting the upload in the background:
+
+Comprehensive answer across every ingest — the transform is the right tool, but there's almost nothing in this population to apply it to:
+
+┌──────────────────────┬───────────────────────┬───────┬───────────┬────────────────┐
+│       dataset        │         table         │ rows  │    no     │      has       │
+│                      │                       │       │ position  │  line/station  │
+├──────────────────────┼───────────────────────┼───────┼───────────┼────────────────┤
+│ cce-lter_euphausiids │ euphausiids_tow       │ 7,482 │         1 │              1 │
+├──────────────────────┼───────────────────────┼───────┼───────────┼────────────────┤
+│ cdfw_dungeness-crab  │ dungeness_sample      │   310 │         4 │     4 (not in  │
+│                      │                       │       │           │       release) │
+├──────────────────────┼───────────────────────┼───────┼───────────┼────────────────┤
+│ cce-lter_zoodb       │ zoodb_sample          │   506 │       155 │              0 │
+├──────────────────────┼───────────────────────┼───────┼───────────┼────────────────┤
+│ cdfw_dungeness-crab  │ dungeness_sorting_log │ 2,011 │         1 │              0 │
+└──────────────────────┴───────────────────────┴───────┴───────────┴────────────────┘
+
+Total recoverable via +proj=calcofi: 5 rows, 1 of them in a released dataset.
+
+The three large position-less populations each fail for a different reason:
+
+- calcofi_mets 1207OS (~9,022 obs) — the raw underway files are TSG-only: date, time, temp, conductivity, salinity. No position, no line/station. That's mets_16, already answered "skip the spatial join".
+- swfsc_cufes (~8,950 obs from 1,583 samples) — the ERDDAP source has no line/station columns at all. But it does carry stop_latitude/stop_longitude, and 20 of those samples have a valid stop despite a NaN start — recoverable that way, ~113 obs.
+- cce-lter_zoodb (155 samples) — source = "pooled", region-level (SC, CC), line/station genuinely NA. A coarser spatial notion by construction, exactly the second case the provider question asks about.
+
+So I'd propose two follow-ups, neither of which I'll bolt onto the release now that it's mid-flight: a `+proj=calcofi` helper in calcofi4db (worth having regardless — it's the correct transform and currently nothing in the pipeline uses it), and a CUFES start→stop position fallback. Say the word and I'll do both after this release lands.
+
+Meanwhile the upload is resuming — the release_database failure was a network timeout, not a data or code fault: Connection aborted / The write operation timed out at 644 kiB/s, after the freeze had completed. 1.8 GB of 2.1 GB was already up, so gcloud storage rsync is finishing the remainder rather than re-freezing.
+
+----
+
+yep, add helper fxns to translate from/to calcofi coord sys + CUFES  fallback (which
+  looks like useful info to have and generate segments, not just points, so perhaps the
+  offical sample point should be the midpoint between start and stop positions?)
+
+----
+
+Now the CUFES change. Your framing is right — it samples a segment, so let me measure what moving to the midpoint actually does before changing it:
+
+Median segment length is 8.71 km — so the start point isn't a rounding detail, it's ~4.4 km from the sample's centre. On a grid whose cells and hexes are of that order, the midpoint is materially more correct. Implementing:
+
 ## 2026-08-08 ctd-transects GH Pages race, db  `valid_min`/`valid_max` for ALL ingest_*.qmd + supplemental obs_ctd_full/obs_mets_full
 
 - **The ctd-transects Pages race**. `refresh.yml` pushes and immediately dispatches `pages.yml`, which checks out the pre-push tree — so the site gets a fresh last-modified header wrapping stale bytes, and the run goes green. I fixed today's instance by redeploying manually, but it will recur on every refresh. The fix is probably to have pages.yml deploy from the pushed SHA, or to have refresh.yml wait.
