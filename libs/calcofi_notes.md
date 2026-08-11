@@ -587,6 +587,20 @@ Separately, Release B is queued and unstarted: obs carrying ungridded observatio
 
 I already finished with commit/push/deploy of ctd-transects local/remote, so ok to run again. Yes, do full consumer deploys
 
+----
+
+Fix is running. Summary of what happened and what I did about it:
+
+test_release did its job. It failed the obs.hex_id present where lat/lng contract — 9,030 rows carrying a position but no hex — and refused to promote.
+
+**But a second failure sat underneath it, and it's the serious one**. The release version is the date, so _**this run reused v2026.08.10 and overwrote the promoted release in place**_. `latest.txt` never needed to change, so consumers reading latest got unverified data anyway. The gate everyone relies on — "a failing release isn't promoted" — silently doesn't hold when the version doesn't change. That's a write-path problem, not a promotion problem, and it needed a write-path guard. `release_database.qmd` now refuses to cut the version latest.txt points at (e5e035b).
+
+**Root cause of the contract failure: NaN coordinates**. `swfsc_cufes` (9,016) and `calcofi_mets` (14) carry NaN lat/lon. Those rows were invisible before because a NaN coordinate can't grid, so the grid_key IS NOT NULL filter hid them — removing the filter exposed a pre-existing defect rather than creating one. append_sample() has normalized NaN→NULL since 3.4.2; append_obs() never did. Fixed in calcofi4db 3.13.1 (cd4f21a), 844 tests green, with the normalization in an inner query so hex_id derives from the normalized values rather than relying on DuckDB's lateral alias resolution.
+
+I verified only those two datasets have NaN coordinates, so the re-run is scoped to cufes + mets + release + test. Today's date makes the next release v2026.08.11, which differs from latest.txt, so the new guard won't block it.
+
+Consumer exposure while this runs: local-copy consumers (db-viz-hex, db-viz-cruise, h3t) are on their own databases and unaffected; calcofi4r and direct parquet readers currently see the +157k rows including the 9,030 NaN-coordinate ones. Those are real observations with a bad position field, not corruption — and the fix is ~70 minutes out.
+
 ## 2026-08-08 ctd-transects GH Pages race, db  `valid_min`/`valid_max` for ALL ingest_*.qmd + supplemental obs_ctd_full/obs_mets_full
 
 - **The ctd-transects Pages race**. `refresh.yml` pushes and immediately dispatches `pages.yml`, which checks out the pre-push tree — so the site gets a fresh last-modified header wrapping stale bytes, and the run goes green. I fixed today's instance by redeploying manually, but it will recur on every refresh. The fix is probably to have pages.yml deploy from the pushed SHA, or to have refresh.yml wait.

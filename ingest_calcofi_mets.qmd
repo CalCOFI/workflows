@@ -1358,12 +1358,24 @@ if (build_obs_mets_full) {
            NULL::VARCHAR measurement_qual, NULL::DOUBLE measurement_prec
     FROM mets_measurement m
     JOIN mets_sample s USING (mets_sample_uuid)
-    WHERE s.latitude IS NOT NULL AND s.longitude IS NOT NULL"))
+    WHERE s.latitude IS NOT NULL AND s.longitude IS NOT NULL
+      -- NaN passes IS NOT NULL, and append_obs() normalises it to NULL
+      -- (calcofi4db 3.13.1) — so a NaN row would enter here as 'positioned'
+      -- and land with a NULL position, failing the assertion below. A NaN is
+      -- not a resolvable position, which is exactly what this gate means.
+      AND NOT isnan(s.latitude)  AND NOT isinf(s.latitude)
+      AND NOT isnan(s.longitude) AND NOT isinf(s.longitude)"))
 
   n_exp_full <- dbGetQuery(con, "
     SELECT COUNT(*) FROM mets_measurement m
     JOIN mets_sample s USING (mets_sample_uuid)
-    WHERE s.latitude IS NOT NULL AND s.longitude IS NOT NULL")[[1]]
+    WHERE s.latitude IS NOT NULL AND s.longitude IS NOT NULL
+      -- NaN passes IS NOT NULL, and append_obs() normalises it to NULL
+      -- (calcofi4db 3.13.1) — so a NaN row would enter here as 'positioned'
+      -- and land with a NULL position, failing the assertion below. A NaN is
+      -- not a resolvable position, which is exactly what this gate means.
+      AND NOT isnan(s.latitude)  AND NOT isinf(s.latitude)
+      AND NOT isnan(s.longitude) AND NOT isinf(s.longitude)")[[1]]
   stopifnot(
     "obs_mets_full must cover every measurement" = n_full == n_exp_full,
     # the whole point: unlike mets_measurement, this stands alone
