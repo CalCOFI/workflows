@@ -747,6 +747,28 @@ The +proj=calcofi helpers ship in calcofi4db 3.14.0 but aren't wired into any in
 
 Persistent monitor armed on the completion marker this time — that's the lapse that cost the overnight window, and I'm not repeating it.
 
+----
+
+Clean. The staged CUFES output now has:
+
+┌───────────────────────────────────────────────────┬────────┬───────┐
+│                       check                       │ before │  now  │
+├───────────────────────────────────────────────────┼────────┼───────┤
+│ half-positions (one coordinate without the other) │     66 │     0 │
+├───────────────────────────────────────────────────┼────────┼───────┤
+│ latitude with no hex_id                           │     66 │     0 │
+├───────────────────────────────────────────────────┼────────┼───────┤
+│ NaN/Inf coordinates                               │  9,016 │     0 │
+├───────────────────────────────────────────────────┼────────┼───────┤
+│ honest "no position" (NULL both)                  │      — │ 8,897 │
+└───────────────────────────────────────────────────┴────────┴───────┘
+
+Every row now either has a complete position with a hex_id, or no position at all — which is what n_no_position reports to the provider.
+
+release_database is at core_tables, building from this corrected data. That's the ~50 minute freeze, then upload, then test_release runs the consumer-contract suite and promotes latest.txt if it passes. Monitor is armed.
+
+Once it lands I'll finish the remaining sequence: write the questions.csv entries against the measured check_ungridded_obs() counts, commit the release artifacts, and run scripts/deploy_consumers.sh plus the two hosted refreshes.
+
 ## 2026-08-08 ctd-transects GH Pages race, db  `valid_min`/`valid_max` for ALL ingest_*.qmd + supplemental obs_ctd_full/obs_mets_full
 
 - **The ctd-transects Pages race**. `refresh.yml` pushes and immediately dispatches `pages.yml`, which checks out the pre-push tree — so the site gets a fresh last-modified header wrapping stale bytes, and the run goes green. I fixed today's instance by redeploying manually, but it will recur on every refresh. The fix is probably to have pages.yml deploy from the pushed SHA, or to have refresh.yml wait.

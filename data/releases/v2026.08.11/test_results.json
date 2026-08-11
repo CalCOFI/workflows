@@ -1,0 +1,229 @@
+{
+  "release_version": "v2026.08.11",
+  "tested_at": "2026-08-11T09:08:38Z",
+  "n_pass": 28,
+  "n_fail": 0,
+  "n_skip": 4,
+  "results": [
+    {
+      "query": "bio-env-matching/by-name.md",
+      "label": "by scientific name",
+      "status": "skip",
+      "reason": "sql_builder=matchIchthyoByName"
+    },
+    {
+      "query": "bio-env-matching/by-taxon.md",
+      "label": "by taxon",
+      "status": "skip",
+      "reason": "sql_builder=matchIchthyoByTaxon"
+    },
+    {
+      "query": "bio-env-matching/custom.md",
+      "label": "custom (bio + env)",
+      "status": "skip",
+      "reason": "sql_builder=matchBioEnv"
+    },
+    {
+      "query": "bio-env-matching/zoo-biomass.md",
+      "label": "zooplankton biomass",
+      "status": "skip",
+      "reason": "sql_builder=matchZooplanktonBiomass"
+    },
+    {
+      "query": "browse/cruises.md",
+      "label": "cruises",
+      "status": "pass",
+      "rows": 200,
+      "ms": 3969.6
+    },
+    {
+      "query": "browse/measurement-types.md",
+      "label": "measurement types",
+      "status": "pass",
+      "rows": 170,
+      "ms": 800.3
+    },
+    {
+      "query": "browse/species.md",
+      "label": "species",
+      "status": "pass",
+      "rows": 1,
+      "ms": 1219.1
+    },
+    {
+      "query": "datasets/bottle.md",
+      "label": "bottle measurements",
+      "status": "pass",
+      "rows": 500,
+      "ms": 30134.4
+    },
+    {
+      "query": "datasets/ichthyo.md",
+      "label": "ichthyoplankton",
+      "status": "pass",
+      "rows": 300,
+      "ms": 9130.3
+    },
+    {
+      "query": "quick-facts/release.md",
+      "label": "release facts",
+      "status": "pass",
+      "rows": 10,
+      "ms": 15965.5
+    },
+    {
+      "query": "spatial/bbox.md",
+      "label": "casts in bbox",
+      "status": "pass",
+      "rows": 288,
+      "ms": 3762.6
+    },
+    {
+      "query": "sql-shell/shell.md",
+      "label": "shell",
+      "status": "pass",
+      "rows": 1,
+      "ms": 310.1
+    },
+    {
+      "query": "temporal/date-range.md",
+      "label": "casts in date range",
+      "status": "pass",
+      "rows": 294,
+      "ms": 584
+    },
+    {
+      "query": "consumer: spatial layer with attributes (joined on spatial_key)",
+      "label": "consumer-contract",
+      "status": "pass",
+      "rows": 1705,
+      "ms": 2938.3
+    },
+    {
+      "query": "integrity: every spatial_attribute row resolves to a spatial feature",
+      "label": "consumer-contract",
+      "status": "pass",
+      "rows": 0,
+      "ms": 572
+    },
+    {
+      "query": "integrity: spatial_key is unique",
+      "label": "consumer-contract",
+      "status": "pass",
+      "rows": 0,
+      "ms": 282.9
+    },
+    {
+      "query": "consumer: sample joins spatial (CRS tags must agree)",
+      "label": "consumer-contract",
+      "status": "pass",
+      "rows": 7632,
+      "ms": 14468.2
+    },
+    {
+      "query": "integrity: no non-finite coordinates in sample",
+      "label": "consumer-contract",
+      "status": "pass",
+      "rows": 0,
+      "ms": 1885
+    },
+    {
+      "query": "consumer: match env (bottle temperature)",
+      "label": "consumer-contract",
+      "status": "pass",
+      "rows": 884402,
+      "ms": 1224.9
+    },
+    {
+      "query": "consumer: match/download bio (ichthyo abundance x taxon x effort)",
+      "label": "consumer-contract",
+      "status": "pass",
+      "rows": 482250,
+      "ms": 710.9
+    },
+    {
+      "query": "integrity: every non-null obs.taxon_key resolves to taxon",
+      "label": "consumer-contract",
+      "status": "pass",
+      "rows": 0,
+      "ms": 4305.7
+    },
+    {
+      "query": "consumer: seabird/mammal taxa reachable by worms_id (db-viz-hex get_sp)",
+      "label": "consumer-contract",
+      "status": "pass",
+      "rows": 65028,
+      "ms": 879.7
+    },
+    {
+      "query": "integrity: no farallon obs left unreachable by worms_id",
+      "label": "consumer-contract",
+      "status": "pass",
+      "rows": 0,
+      "ms": 476.4
+    },
+    {
+      "query": "integrity: seabirds still key itis:, not worms:",
+      "label": "consumer-contract",
+      "status": "pass",
+      "rows": 113,
+      "ms": 810.8
+    },
+    {
+      "query": "integrity: taxonomic_status is fetched, not stamped",
+      "label": "consumer-contract",
+      "status": "pass",
+      "rows": 1,
+      "ms": 224.2
+    },
+    {
+      "query": "consumer: station coverage rollup (obs GROUP BY grid,dataset)",
+      "label": "consumer-contract",
+      "status": "pass",
+      "rows": 1210,
+      "ms": 6318.4
+    },
+    {
+      "query": "consumer: sample event grain (bottle cast)",
+      "label": "consumer-contract",
+      "status": "pass",
+      "rows": 35644,
+      "ms": 228.3
+    },
+    {
+      "query": "consumer: cruise enriched per-dataset counts",
+      "label": "consumer-contract",
+      "status": "pass",
+      "rows": 691,
+      "ms": 218.8
+    },
+    {
+      "query": "consumer: obs single-file readable over HTTPS (browser match.js)",
+      "label": "consumer-contract",
+      "status": "pass",
+      "rows": 1253892,
+      "ms": 237.7
+    },
+    {
+      "query": "contract: obs.measurement_type all in registry",
+      "label": "consumer-contract",
+      "status": "pass",
+      "rows": 0,
+      "ms": 3982.9
+    },
+    {
+      "query": "contract: obs.sample_key resolves in sample",
+      "label": "consumer-contract",
+      "status": "pass",
+      "rows": 0,
+      "ms": 11319
+    },
+    {
+      "query": "contract: obs.hex_id present where lat/lng",
+      "label": "consumer-contract",
+      "status": "pass",
+      "rows": 0,
+      "ms": 11344.8
+    }
+  ]
+}
