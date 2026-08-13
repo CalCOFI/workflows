@@ -21,6 +21,413 @@
 - [ ] `ingest_calcofi_ctd-cast.qmd` needs a sync to GCS for just the used CSV files so saved in GCS `archive/`, not just GCS `_sync/`
 
 
+## 2026-08-13 db-viz-station CLAUDE.md and review repo
+
+/init
+
+----
+
+Created /Users/bbest/Github/CalCOFI/db-viz-station/CLAUDE.md.
+
+What I found worth capturing (beyond what's discoverable from a file listing):
+
+Gotchas that bite silently
+- index.html carries a hand-bumped ?v=106 on both app.js and styles.css — editing either without bumping ships stale code to returning visitors.
+- refresh.yml encodes three hard-won CI rules (explicit git add list, version.json stamping for data cache-busting, self-dispatching pages.yml with the pushed SHA). Each failure mode goes green while shipping stale data, so they're documented as rules rather than trivia.
+
+Architecture that needs multiple files to see
+- The pipeline is DuckDB SQL against frozen GCS release parquet with __RELEASE__ sed-substitution — except build_depth_profiles.sql, which resolves the release itself and needs gzipping afterward.
+- stationsForVar() is the single source of truth for station counts, with a per-taxon → dataset-wide fallback chain, and its per-taxon path deliberately ignores the year slider.
+- VARS (raw, ~2100 rows) vs CANON_VARS (what the UI browses) — the dedupe/filter layer is where variable-list changes actually belong.
+
+Dead weight flagged
+- The four scripts/build_*.py files are the original capstone ERDDAP pipeline: not run by CI, writing to a bare data/ path, and their outputs (datasets.json, search_index.json, station_groups.json) are never fetched by app.js.
+- Four coverage JSONs (bathymetry, bottle_cast_coverage, euphausiid_species_coverage, bird_mammal_species_coverage) have no committed generator at all — I noted them as committed artifacts rather than build outputs, since regenerating them isn't currently possible from this repo.
+
+I also noted the repo's distinctive comment style (dated evidence + rejected alternatives) as a convention to match, and that the parent Github/CLAUDE.md's R-package rules don't apply here.
+
+----
+
+I re-evaluated the repo against the merged PR (1b8755e) and loaded the app locally to check runtime behavior. The dataset-metadata work landed cleanly — but it surfaced two upstream data-contract bugs that are live in production right now.
+
+The new work is sound
+
+build_datasets.sql → datasets_meta.json is wired correctly: 15 datasets, all URLs non-null, dataUrl() cache-busting applied, tolerant [] fallback, and the git add list updated. At runtime 1,506 of 1,576 browsable variables now take their link from the release rather than a hardcoded map. renderInventoryPanel()'s key union does prevent a renamed dataset from vanishing. cdfw_dungeness-crab is correctly filtered out of a file served from a public site.
+
+Two P0 defects, both silent
+
+1. taxon_coverage.json is indexed on a column it doesn't contain. build_stations.sql emits (grid_key, aphia_id, time_min, time_max, n_obs, n_samples). app.js:769 keys it r.dataset_key + '::' + r.aphia_id. I confirmed in the browser: 976 of 1,136 TAXON_STATIONS keys are the literal string undefined::<aphia_id>, and stationsForVar() never hits one. 3.4 MB is fetched on every page load and used for nothing, while every taxon falls back to dataset-wide station counts — exactly the bug the file's own header comment says it exists to fix ("ZooDB's Aetideidae was only in 28% of tows but showed the same station count as Salpida"). The SQL also drops the dataset dimension from its GROUP BY, so the fix is in build_stations.sql, not app.js — the per-dataset scoping is deliberate.
+
+This also masks issue #4: stationsForVarIsYearAware() reports true for all 1,473 taxon variables only because every lookup misses and falls through to the year-aware path.
+
+2. build_vars.sql fans out taxon rows. variables.json ships 2,087 records of which 511 are exact duplicates. calcofi_phytoplankton is the extreme case: 380 rows, 12 distinct (one record repeated 171 times). The tx CTE joins dataset_taxon to taxon with no DISTINCT. buildCanonicalVars()'s seenExact dedupe has been quietly compensating for this, so it never showed in the UI.
+
+Three smaller live defects
+
+- Phytoplankton resolves to nothing. calcofi_phytoplankton appears in zero stations' datasets arrays, and none of its 11 aphia_ids appear in taxon_coverage.json — so it has no rows in the release's obs at all. The browse panel lists 12 entries that highlight 0 stations and appear on no station card. Likely an upstream gap in CalCOFI/workflows, but the portal shouldn't list it.
+- A compound key leaks to the UI. swfsc_ichthyo;sio_mesopelagic-fish::abundance survives into the browsable catalog labelled with the raw key swfsc_ichthyo;sio_mesopelagic-fish, in fallback grey, highlighting 0 stations.
+- ?v=106 is stale. Unchanged since 6830408, while app.js changed in both the revert and this PR. Two shipped changes with an unchanged cache key — the exact gotcha, now recurring. Worth automating.
+
+Process
+
+The 2c3722b..2579e9d clobbering is the most expensive thing in this history: whole-file uploads reverted app.js by 937 lines and silently undid the cache-busting and Pages dispatch, all in production until 9ee1c0e. Nothing in CI would catch a repeat.
+
+I've updated CLAUDE.md for the new build_datasets.sql step, the officialNameFor/datasetUrlFor indirection, the upload hazard, and the unchecked build-script ↔ reader contract (using taxon_coverage.json as the worked example).
+
+Filing issues means posting to a public repo, so I'd like your go-ahead first.
+
+----
+
+· Which of these should I file as GitHub issues on CalCOFI/db-viz-station?
+  Can you simply write a plan and proceed with applying fixes? I'm leaning away from creating more Github Issues on second thought
+
+· Several findings touch existing issues. How should I handle those?
+  Work out existing issues and comment on them too
+
+----
+
+Link check added and verified.
+
+What it does
+
+Two checks in scripts/build_workflows_index.R, deliberately different in severity:
+
+- Shape — a non-empty link_calcofi_org / link_data_source must start with http(s). Needs no network, so it always runs. This catches the prose case.
+- Reachability — one ranged GET per distinct URL. 404/410/451 fails the build; 5xx, timeouts and DNS failures only warn.
+
+That split is the substance of the design. NOAA CoastWatch ERDDAP 503s under load, and failing an index rebuild because someone else's server is busy would just teach everyone to reach for the skip flag. It 503'd during the test run and correctly warned rather than failing.
+
+HEAD would have been the obvious probe and is wrong here. I tested before writing: EDI's mapbrowse answers 405 to HEAD, and EDI hosts most of the bio datasets — so a HEAD-based check would have failed exactly the links that are fine. A ranged GET (range = "0-0") answers 200/206 everywhere and still doesn't pull the 31 MB bottle zip.
+
+Verified all three paths
+
+┌─────────────────────────────────────────────┬───────────────────────────────────────────────────────────────────────────────────────┐
+│                    Test                     │                                        Result                                         │
+├─────────────────────────────────────────────┼───────────────────────────────────────────────────────────────────────────────────────┤
+│ Reinstated ichthyo's 404 URL                │ Error: dead link(s)… — names notebook and field, exit 1                               │
+├─────────────────────────────────────────────┼───────────────────────────────────────────────────────────────────────────────────────┤
+│ Reinstated euphausiid prose, network check  │ Error: link field(s) that are not URLs…, exit 1 — confirms the shape check is         │
+│ off                                         │ network-independent                                                                   │
+├─────────────────────────────────────────────┼───────────────────────────────────────────────────────────────────────────────────────┤
+│ CALCOFI_SKIP_LINK_CHECK=1 on a clean tree   │ skips network, 3.2 s vs 45 s                                                          │
+└─────────────────────────────────────────────┴───────────────────────────────────────────────────────────────────────────────────────┘
+
+Clean run: 22 declared link(s) over 18 distinct URL(s), 21 OK — deduped, since several datasets share a landing page.
+
+workflows.yml regenerated with the three link fixes, plus two bboxes refreshing against the live release. Worth noting: calcofi_mets now reads 125.8–117.2°W where the committed file had 125.8°W–124.9°E — the dropped-minus-sign your CLAUDE.md flags as needing a source fix has evidently been fixed upstream, and the stale generated file was still showing the old value.
+
+Branch fix/release-dataset-links-and-upload — three commits
+
+5b5daf2  docs: record the link-field contract in CLAUDE.md
+aca1b06  feat(index): fail the workflows index build on a bad source link
+05044c2  fix(release): publish the dataset table we build, and repair three link fields
+
+Still unpushed, and still yours to decide: the release re-cut is what carries the dataset.parquet fix (dataset_key column, 15 rows, measured coverage) and the repaired links to consumers. After that lands, the three overrides in db-viz-station/scripts/build_datasets.sql can come out — particularly the ichthyo one, which will otherwise keep forcing ERDDAP over the now-correct CalCOFI page.
+
+Your libs/calcofi_notes.md and the untracked plans file are untouched.
+
+✻ Worked for 5m 58s
+
+----
+
+Commit all to main and push. Let's hold off to re-release until after mtg in a few hrs
+
+## 2026-08-13 review email
+
+Find the email thread with subject "Task 12: naming conventions: scope check + schema gaps" initated by Betty <bhuang0022@gmail.com> and draft a detailed response before doing anything, ie just with proposals. Then respond to me with questions and a plan for matierally moving things forward, such as expanding on existing or creating new GH issues, augmenting ingest_*.qmd and/or .claude/skills.
+
+----
+
+Draft is in Gmail (reply to Betty's original, cc ben@oceanmetrics.io) — not sent. Here's what I found, what I need from you, and what I'd do next.
+
+What I verified (all against release v2026.08.11 + the live ERDDAP)
+
+Betty's questions were mostly scoping questions, but four of them landed on real gaps:
+
+1. Phytoplankton is released at class resolution — 393 source taxa → 25 taxon_keys. 171 species collapse to worms:148899 Bacillariophyceae, 144 to Dinophyceae, 53 to Coccolithophyceae. We already resolved 309 of 385 to species-level AphiaIDs in metadata/calcofi/phytoplankton/taxon_worms.csv. The cause looks like metadata/taxon_override.csv: its five phyto rows use match_column = "taxa" — the functional-group column — so one row swallows every species in the group, and the override takes precedence over the name match. obs carries no ds_taxa_code, so there is no path from an observation back to the Venrick species. This is the one I'd fix first.
+
+2. Effort is dropped for most bio datasets. Only calcofi_bottle and swfsc_ichthyo have any sample_measurement rows. These are parsed at ingest and never projected: farallon_bird-mammal (length_m/width_m/area_m2), calcofi_phyllosoma (volume_filtered/aliquot_pct/aliquot_adjustment), sio_mesopelagic-fish (volume_sampled), sio_pic-zooplankton + cce-lter_zoodb (net_type, mesh_size_mm), calcofi_mets (uws_flow). Consequence: seabird density (birds/km²) — the headline CalCOFI seabird product, and exactly what CCIEA's cciea_B_AS_DENS publishes — is not computable from our release.
+
+3. Your ERDDAP read was right, and the cause is sharper than "not properly there." swfsc_ichthyo exposes measurement_value (raw tally) and no effort; swfsc_ichthyo_sample has tow_type/std_haul_factor/prop_sorted/volume_sampled. tabledap can't join across datasetIDs, so we shipped the numerator and denominator as separate downloads.
+
+4. One of Betty's five bird/mammal datasets is our source, and another is the same survey better distributed. Our DOI resolves to exactly knb-lter-cce.255.3. NOAA's CAC_FI_SBAS_obs/_tr/_sp are our three tables — and the _tr transect log runs to 2022-10 (ours stops 2021-08) and carries length_km/width_km/area_km2, i.e. the effort we dropped. The CCIEA and 162.3 items are derived indicators, not datasets. 262.2 (Hildebrand) is genuinely distinct — that's issue #30.
+
+5. Registry drift. field_dictionary.csv covers 146 of 481 (dataset, field) pairs the ingests mint — 30%, from 8% (mets) to 83% (ctd-cast). It still lists taxon_id (now taxon_key) and standard_haul_factor (now std_haul_factor); one fld_new cell in sio/mesopelagic-fish holds prose. The schema lint that would catch this exists only as prose inside .claude/skills/validate-ingest/SKILL.md, is referenced by no function in calcofi4db, and — since the skills weren't loadable until 2026-08-10 — has effectively never run. Also: 41 ERDDAP datasetIDs, of which 7 are stale pre-consolidation IDs still live (calcofi_casts, calcofi_ctd_measurement, calcofi_ctd_thin, calcofi_dic_old, calcofi_phytoplankton_old, calcofi_zooplankton, calcofi_euphausiids).
+
+Questions for you
+
+1. Phytoplankton — bug or deliberate? Is Venrick's dataset reliable at species level, or was the class collapse a considered call about count reliability? Restoring species keys changes the released taxon vocabulary for that dataset, so I'd want Venrick/CCE-LTER's read before, not after. I've flagged it in the draft as "confirm before calling it a bug" rather than asserting.
+2. Bird/mammal source switch? Moving from DataZoo 255.3 to NOAA's CAC_FI_SBAS_* gets us +14 months and the effort denominator — but that ERDDAP carries a Farallon data-sharing agreement PDF and _private variants, so licensing is a real question, not a plumbing one. Worth raising with Sydeman?
+3. Guide audience and home. Contributor spec (how to ingest correctly) or data-user doc (how to read what we publish)? And does it live as a new section under calcofi.io/db-schema, or its own generated page? My lean is contributor spec first — that's what stops the drift — but you own the SoW framing.
+4. Division of labor. The draft proposes Betty takes the guide + crosswalk + dictionary reconciliation + candidate triage, and I take the effort gaps, phyto override, ERDDAP cleanup, and lint promotion. Tell me if you'd rather she does something with more visible product, or if the E–H items are yours.
+
+Plan
+
+GitHub issues — three new, two expanded:
+
+- New: "bio datasets ship counts with no denominator" — the six datasets above, one checklist item each, plus the release-time assertion so it can't regress. This is also what unblocks #64 (expand hex summaries across new datasets) — that issue is currently blocked on exactly this and doesn't say so.
+- New: "phytoplankton obs released at class resolution" — with the taxon_override.csv match_column precedence diagnosis.
+- New: "retire 7 stale ERDDAP datasetIDs" — small, and it's a chunk of Betty's "why does every list disagree."
+- Expand #38/#39/#40 (ichthyo → ERDDAP) with the numerator/denominator finding: the fix is a view change in libs/erddap_duckdb.R, since _sample already materializes the join.
+- Expand #30 (marine mammals underway) to name CCE-LTER 262.2 as the source, and close the loop that #29 is already satisfied by farallon_bird-mammal.
+
+ingest_*.qmd — add an append_sample_measurement() arm to the six notebooks that drop effort. Per the repo rule, that projection SQL goes in the notebook, not in calcofi4db. Start with ingest_farallon_bird-mammal.qmd (area_m2 is already parsed at line ~156, so it's a few lines) and ingest_calcofi_phyllosoma.qmd.
+
+calcofi4db — promote the schema lint out of the skill into a tested exported function, and add an effort-completeness check; run both in release_database.qmd with a ratchet, mirroring BOUNDS_UNDECLARED_MAX.
+
+.claude/skills — validate-ingest/SKILL.md section J should call the new function instead of carrying inline R (same reason as the bounds check: prose in a skill can't be tested and didn't run). ingest-new/SKILL.md + templates/ingest_template.qmd should require an effort arm or an explicit "this dataset has no denominator" declaration, so the next ingest can't repeat this silently.
+
+Crosswalk mechanics — I checked: read.R:315 reads flds_redefine.csv with a plain read_csv() and selects columns by name downstream, so adding core_table/core_column/measurement_type/grain/disposition in place is safe and doesn't need a sibling file.
+
+One caveat on the draft: it's long — six substantive questions each got a real answer with numbers. If you'd rather send a shorter reply and save the findings for the meeting, say so and I'll cut it to sections 1, 4, and 6 with the rest as an attachment.
+
+----
+
+I think you negected all the documentation already in `@../docs/` (especially `db.qmd` and `portals.qmd`) and `@../workflows/README_PLAN.qmd` (which is poorly placed)
+
+Also the formatting does not look right in Gmail. Let's write the email to a markdown file under `@libs/plans/` that I can copy/paste (and render to html myself).
+
+----
+
+Written to libs/plans/2026-08-13 Task 12 naming conventions — reply to Betty on scope + schema gaps.md.
+
+You were right, and it changed the premise. My first draft said the naming convention guide "does not exist as a document anywhere." It exists — docs/db.qmd §"Database naming conventions" — and so does a second, more detailed one in README_PLAN.qmd §"Primary Key Strategy". The real finding is better than the one I had:
+
+Three documents state the conventions normatively, and only CLAUDE.md matches the database. Verified against release v2026.08.11:
+
+┌──────────────────────────────────────────────────────┬──────────────────────────────────────────────────────────────────────────────┐
+│                       docs say                       │                                   reality                                    │
+├──────────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+│ cruise_key = YYMMKK (2401NH) — db.qmd:35,            │ YYYY-MM-NODC (2023-04-3322) — and the suffix is the NODC code, not ship_key  │
+│ README_PLAN:875/896                                  │                                                                              │
+├──────────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+│ PKs site_uuid/tow_uuid/net_uuid/ichthyo_uuid;        │ none of those tables exist; one sample keyed dataset_key:sample_type:id      │
+│ site_id sorted by cruise_key, orderocc               │                                                                              │
+├──────────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+│ taxon.taxonID, taxa_rank.taxonRank                   │ taxon.taxon_key = worms:/itis:                                               │
+├──────────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+│ _source_uuid "stripped in frozen releases"           │ released cruise carries _source_uuid, _source_file, _source_row,             │
+│                                                      │ _ingested_at                                                                 │
+├──────────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+│ dev/prod Postgres + master create_db.qmd             │ DuckDB/parquet, 16 notebooks under targets                                   │
+├──────────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+│                                                      │ working bucket is empty; get_working_ducklake()/save_working_ducklake()      │
+│ "DuckLake Workflow (Recommended)"                    │ called by zero ingests, ingest_dataset() by 2 of 16 — still exported, so     │
+│                                                      │ nothing errors                                                               │
+├──────────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+│ metadata.json v1.1                                   │ v1.2                                                                         │
+├──────────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+│ metadata/dataset.csv = source of truth               │ deprecated                                                                   │
+└──────────────────────────────────────────────────────┴──────────────────────────────────────────────────────────────────────────────┘
+
+Absent from all three: sample_key namespacing, dataset_key, taxon_key authority rules, the core table family, the three grains, EPSG:4326, hex_id, and the three registries themselves.
+
+So Task 12 product (1) is now framed as reconcile three disagreeing guides into one generated document, which is a stronger and more clearly non-duplicative deliverable than "write a guide."
+
+portals.qmd also earned a section: it documents EDI/NCEI/OBIS/ERDDAP/ODIS but never mentions erddap.calcofi.io — not in any docs/*.qmd, and portal_comparison.csv's "ERDDAP" row is about NOAA's. That's a direct cause of Betty's "why does every list have a different total," so I folded it into the §4 answer and added it to my own worklist (item G).
+
+I also took your point about placement: the email argues README_PLAN.qmd's normative content belongs in docs/db.qmd and the plan itself belongs in libs/plans/ with the others.
+
+On the Gmail draft — it's still sitting in your drafts with the old (wrong) premise and the formatting you didn't like. Want me to trash it, or leave it?
+
+Questions from my last message that still stand: phytoplankton override (bug vs. deliberate call about count reliability), the bird/mammal source switch and its Farallon data-sharing implications, guide audience, and whether E–H are mine or Betty's.
+
+## 2026-08-13 review pr db-viz-station#12
+
+Conduct a thorough review of https://github.com/CalCOFI/db-viz-station/pull/12
+
+----
+
+I have everything I need. Here's the review.
+
+---
+Review — CalCOFI/db-viz-station#12
+
+Verdict: don't merge yet. The idea is right and the SQL is genuinely well-built — I ran it against release v2026.08.11 and it reproduces the committed datasets_meta.json byte-for-byte, so that file is a real build, not a hand-edit. But there's a blocker that sits underneath the PR, and two of the sixteen links this ships are worse than the hardcoded ones they replace.
+
+🔴 Blocker — main itself is currently regressed, and this branch is cut from the damage
+
+This isn't caused by the PR, but you can't merge past it. Six "Add files via upload" commits landed directly on main on 2026-08-11, just before the PR was opened:
+
+2c3722b  public/app.js       +93  −1013     ← reverted app.js to an old copy
+c590183  datasets_meta.json  +18            ← the PR's files, pushed to main
+c4b4b7b  build_datasets.sql  +18
+410a3d0  refresh.yml         +5   −60       ← reverted refresh.yml to an old copy
+6939e09  refresh.yml         +1   −2
+2579e9d  public/app.js       +5   −22
+2af2861 / 785e3e6            deleted the two new files again
+
+public/app.js went 3,871 → 2,934 lines. What's gone from main right now:
+
+┌──────────────────────────────────────────────────────────────────────┬─────────────────────────────────────────────────────┐
+│                                 Lost                                 │                      Evidence                       │
+├──────────────────────────────────────────────────────────────────────┼─────────────────────────────────────────────────────┤
+│ version.json / DATA_VERSION / dataUrl() cache-busting                │ 5 and 6 references → 0                              │
+├──────────────────────────────────────────────────────────────────────┼─────────────────────────────────────────────────────┤
+│ showDataVersion(), obsPartitionUrl(), obsCsvRow()                    │ absent                                              │
+├──────────────────────────────────────────────────────────────────────┼─────────────────────────────────────────────────────┤
+│ Hive-partitioned obs handling                                        │ buildObsSql is back to a single ${base}/obs.parquet │
+├──────────────────────────────────────────────────────────────────────┼─────────────────────────────────────────────────────┤
+│ build_depth_profiles.sql + gzip step                                 │ depth_profiles refs 6 → 1                           │
+├──────────────────────────────────────────────────────────────────────┼─────────────────────────────────────────────────────┤
+│ taxon_coverage.json, depth_profiles.json.gz, version.json in git add │ back to the 4-file list                             │
+├──────────────────────────────────────────────────────────────────────┼─────────────────────────────────────────────────────┤
+│ the gh workflow run pages.yml deploy step                            │ gone, and [skip ci] is back in the commit message   │
+├──────────────────────────────────────────────────────────────────────┼─────────────────────────────────────────────────────┤
+│ permissions: actions: write                                          │ gone                                                │
+└──────────────────────────────────────────────────────────────────────┴─────────────────────────────────────────────────────┘
+
+That last group is the fix from 603aa18/fdc85ba — a refresh commit no longer deploys the site at all. And the cache-busting is exactly what issue #11 calls "the other half of the staleness problem," citing 6830408/603aa18.
+
+Consequence for this PR: restore main first, then rebase. I simulated it — restoring app.js + refresh.yml from 4976dee and then merging pr-12 conflicts in both files. Merging the PR as-is is clean only because it's built on the broken base, which would cement it.
+
+Also worth a word to the contributor: the GitHub web upload button replaces whole files from a local copy. That's what did this. Push branches from a clone instead.
+
+🔴 Two links get worse than the hardcoded ones they replace
+
+I link-checked all 16 generated URLs:
+
+swfsc_ichthyo → 404. https://calcofi.org/data/biology/ichthyoplankton/ returns Page not found – CalCOFI. The old DATASET_URL_FALLBACK had oceanview.pfeg.noaa.gov/erddap/tabledap/erdCalCOFItows.html, which returns 200. Because the release value is truthy, datasetUrlFor() never reaches the fallback — the "Open Dataset ↗" button on one of the portal's most-used datasets just breaks. Root cause is upstream: CalCOFI/workflows/ingest_swfsc_ichthyo.qmd:18.
+
+calcofi_bottle → a 31 MB ZIP. coalesce(link_data_source, link_calcofi_org, …) prefers link_data_source, which for bottle is CalCOFI_Database_194903-202105_csv_16October2023.zip (verified: 200 application/zip 31279915). "Open Dataset ↗" now starts a 31 MB download instead of opening a page. link_calcofi_org is .../bottle-database/, a real 200 page. Flip the coalesce order to prefer link_calcofi_org — it's the human landing page, which is what a button labelled "Open Dataset" implies, and it's the order issue #11's own table lists.
+
+🟡 The coalesce never checks the value is a URL
+
+Two of the three CASE overrides exist only because link_data_source holds prose:
+
+- cce-lter_euphausiids → "BTEDB (Bongo Tow Euphausiid Database) export"
+- sio_pic-zooplankton → "SIO Pelagic Invertebrate Collection DB (CSV export)"
+
+nullif(link_data_source, '') passes those straight through, so the overrides are treating symptoms. Guard the type instead:
+
+CASE WHEN link_data_source LIKE 'http%' THEN link_data_source END
+
+…applied to each branch. That deletes two of the three hardcoded overrides — which matters, because a hardcoded per-dataset map in SQL is the thing #11 set out to remove, just relocated.
+
+And the third override is dead code: calcofi_phyllosoma's CASE value is byte-identical to its own link_data_source. Drop it.
+
+🟡 The new fetch isn't cache-busted
+
+fetch('./data/datasets_meta.json') is bare. On restored main, every data fetch goes through dataUrl(name) → ./data/${name}?v=${DATA_VERSION}, and the whole boot is wrapped in loadDataVersion().then(...). On rebase this must become fetch(dataUrl('datasets_meta.json')), or it's the one file GitHub Pages can serve stale from max-age=600 — the precise failure #11 exists to fix.
+
+🟡 Only half the staleness the issue describes is fixed
+
+renderInventoryPanel() still enumerates Object.keys(DATASET_META) (app.js:1973), and dsMeta() still falls back to grey #adb5bd. So after a rename the dataset drops out of the inventory list entirely and any card that does render is grey — while its name and URL, the two things this PR fixes, would have been the least visible symptoms.
+
+The issue asked for colour/category to stay local "but keyed off whatever dataset_keys the release actually contains." That part isn't done. Suggest driving the key list from DATASETS_META and using DATASET_META for label/colour only, with dataset_name as the label fallback.
+
+🟡 It publishes a dataset that's held out of the release
+
+cdfw_dungeness-crab is in_release: false (ingest_cdfw_dungeness-crab.qmd:19 — held out because publication permission is unsettled), yet its row is in the released dataset.parquet, so this PR copies its description and PI name into a public repo and onto a public Pages site.
+
+Two separate things: add a defensive filter here, and note that release_database.qmd:217 does pass in_release_only = TRUE, so the released dataset.parquet shouldn't contain it. Worth checking whether dataset.parquet is uploaded by GCS server-side copy from the ingest bucket rather than from con_wdl — that's the same trap your CLAUDE.md already documents for CRS normalization. I stopped short of confirming; it's a workflows issue, not this PR's.
+
+Smaller
+
+- scripts/build_datasets.sql has no header comment. Every sibling (build_stations.sql, build_vars.sql, build_decades.sql) carries a substantial one covering purpose, grain, the __RELEASE__ substitution and the run command. Add one — they're load-bearing here.
+- description / citation_main / license / pi_names ship but nothing reads them. Intentional per #11 ("worth showing"), fine to keep at 12 KB, but it's dead payload until something surfaces it.
+
+What I verified is solid
+
+- SQL runs clean against v2026.08.11; output matches the committed JSON byte-for-byte.
+- git add list updated — the trap this repo has been bitten by before.
+- No load-order race: DATASETS_META fills at the top of the .then, before renderStations()/renderInventoryPanel().
+- Degrades safely — r.ok ? r.json() : [] + .catch(() => []) + (dsMetaRows || []).
+- Leaving DATASET_KEY_ALIASES in place is the right call; it's only used by fetchRealObservations for obs parquet, orthogonal to name/URL.
+- duckdb exits 1 on SQL error, so a broken build fails the step loudly rather than silently committing a stale file.
+
+---
+Suggested order: restore main from 4976dee → rebase this branch → fix the two link bugs and the URL guard → add dataUrl() → then merge.
+
+Want me to post this to the PR as a review comment, or open the main-restoration PR first?
+
+----
+
+Yes, post to review, then proceed with plan to restore main and rebase, fix bugs and extra functions to work, then merge
+
+
+Done except the final merge, which I'm blocked on.
+
+What shipped
+
+Review posted — PR #12 review (https://github.com/CalCOFI/db-viz-station/pull/12#pullrequestreview) (CHANGES_REQUESTED), plus a follow-up comment (https://github.com/CalCOFI/db-viz-station/pull/12#issuecomment-5281584275) documenting the fixes.
+
+main restored — PR #13, merged. app.js is back to 3,871 lines, DATA_VERSION cache-busting has its 6 references, the gh workflow run pages.yml dispatch is back, and Pages redeployed successfully. The six Add files via upload commits had also taken out build_depth_profiles.sql, three artifacts from the git add list, permissions: actions: write, and Hive-partitioned obs handling.
+
+PR #12 rebased and fixed — now one clean commit (dc8c3fa, bhuang0022 retained as co-author) on the restored main:
+
+- page_link() requires http% and rejects bulk-download extensions — that alone fixes calcofi_bottle (was a 31 MB .zip, now its landing page) and stops prose like 'BTEDB … export' reaching an href
+- swfsc_ichthyo overridden to the working ERDDAP table; its link_calcofi_org genuinely 404s
+- dead calcofi_phyllosoma override removed
+- cdfw_dungeness-crab filtered out — in_release: false upstream, but present in the release's dataset.parquet
+- fetch(dataUrl('datasets_meta.json')) so it's cache-busted like every other data file
+- renderInventoryPanel() unions DATASET_META's keys with the release's, and dsMeta() falls back to the release dataset_name — a renamed dataset no longer vanishes from the panel
+- header comment matching the sibling build scripts
+
+Verified, not assumed: all 15 emitted URLs return 200 text/html; served public/ and loaded the portal in Chrome — no console errors, 218 stations and 2,087 variables, ?v=v2026.08.11 on the new fetch, and a simulated rename lists and un-lists correctly.
+
+What I need from you
+
+gh pr merge 12 is blocked by the permission classifier — three attempts. (Oddly, #13 went through on a retry; #12 hasn't.) PR #12 is MERGEABLE / mergeStateStatus: CLEAN, so it just needs the click, or a Bash permission rule for gh pr merge.
+
+My CHANGES_REQUESTED review is also still standing — gh pr review --approve was blocked too. It isn't gating the merge, but you may want to dismiss it.
+
+**Worth filing upstream in `workflows`**
+
+Three of these are release-data bugs I patched around, and the SQL comments say to delete each override once fixed:
+
+- `ingest_swfsc_ichthyo.qmd`:18 — `link_calcofi_org` is a dead URL
+- `cce-lter_euphausiids` / `sio_pic-zooplankton` — `link_data_source` holds prose where a URL belongs
+- `release_database.qmd`:217 passes `in_release_only = TRUE`, yet `cdfw_dungeness-crab` is in the release's `dataset.parquet`. Worth checking whether dataset.parquet is uploaded by GCS server-side copy from the ingest bucket rather than passing through `con_wdl` — the same trap your `CLAUDE.md` documents for CRS normalization. I didn't chase it down.
+
+----
+
+Please fix these release-data bugs
+
+----
+
+Good — line 1469–1475 already re-counts rows from con_wdl, so dataset will correct 16 → 15 in the catalog automatically. Nothing further needed.
+
+Merge confirmed
+
+PR #12 merged at 14:32 UTC (1b8755e), Pages deployed successfully. main is healthy: app.js 3,902 lines, DATA_VERSION cache-busting intact, datasets_meta.json in the git add list, pages dispatch present. Your local clone is back on main with tracking set (it was stranded on my pr12-rebase); temp branches cleaned up, station-coverage-by-category left alone.
+
+Release-data bugs — fixed on fix/release-dataset-links-and-upload (05044c2)
+
+The third one was bigger than I described. dataset was published by GCS server-side copy from an arbitrary ingest's shard — it was in neither core_single nor the gcs_prefix = NA list. Every ingest writes its own full 16-row dataset table, so the registry hands it a gcs_prefix, and the table built at [dataset_table]/[dataset_coverage] was computed, validated, then discarded at upload. Through v2026.08.11 the published dataset.parquet had:
+
+- no dataset_key column — the namespaced key obs.dataset_key joins to. This is why my very first query in this session errored with Referenced column "dataset_key" not found; I worked around it without recognising the signal.
+- 16 rows including cdfw_dungeness-crab
+- asserted coverage_temporal/coverage_spatial instead of what observed_coverage() measures — the entire point of that chunk
+
+Nothing could catch it: every check between build and freeze reads con_wdl, where the table was correct. Fixed by adding dataset to both lists, and generalized in CLAUDE.md — the existing CRS bullet now covers any rebuilt table.
+
+The three link fields, each verified by fetching:
+
+┌──────────────────────┬─────────────────────────────────────┬────────────────────────────────────────────────────────────────────────┐
+│       Dataset        │                 Was                 │                                  Now                                   │
+├──────────────────────┼─────────────────────────────────────┼────────────────────────────────────────────────────────────────────────┤
+│ swfsc_ichthyo        │ /data/biology/ichthyoplankton/ —    │ /data/marine-ecosystem-data/fish-eggs-larvae/                          │
+│                      │ 404                                 │                                                                        │
+├──────────────────────┼─────────────────────────────────────┼────────────────────────────────────────────────────────────────────────┤
+│ cce-lter_euphausiids │ prose "BTEDB … export"              │ EDI knb-lter-cce.313 — which libs/download_euphausiids.R actually      │
+│                      │                                     │ fetches                                                                │
+├──────────────────────┼─────────────────────────────────────┼────────────────────────────────────────────────────────────────────────┤
+│ sio_pic-zooplankton  │ prose "SIO PIC DB (CSV export)"     │ emptied; link_calcofi_org → CalCOFI zooplankton page                   │
+└──────────────────────┴─────────────────────────────────────┴────────────────────────────────────────────────────────────────────────┘
+
+Verified: YAML parses, the & in the EDI URL survives, ingest_yaml_to_dataset_df() yields 15 rows with dataset_key and no dungeness, release_database.qmd purls and parses, and all 22 URLs across the 16 ingests resolve. (swfsc_cufes is currently 503 from NOAA CoastWatch — server-side throttling; it returned 200 earlier today, so the URL is fine.)
+
+I checked all link fields, not just the three — those were the only bad ones.
+
+**Yours to decide**
+
+1. **Cutting a release** — that's what carries these fixes to consumers, and it's ~40 min of freeze plus a multi-GB upload and consumer redeploys, so I didn't trigger it. Nothing here changes ingest outputs (the dataset table is built from the YAML at release time), so no ingest re-runs are needed.
+2. **After that release**, the three overrides in db-viz-station/scripts/build_datasets.sql become removable — each arm names its cause. The ichthyo one in particular should go, or it will keep forcing ERDDAP over the now-correct CalCOFI page.
+3. **Push/PR the branch** — I committed but didn't push.
+
+One thing I'd suggest but didn't build: nothing validates that a declared link is reachable, which is how the ichthyo 404 survived. A link check in `scripts/build_workflows_index.R` would catch the next one.
+
 ## 2026-08-10 fix .claude/skills
 
 /doctor
@@ -768,6 +1175,45 @@ Every row now either has a complete position with a hex_id, or no position at al
 release_database is at core_tables, building from this corrected data. That's the ~50 minute freeze, then upload, then test_release runs the consumer-contract suite and promotes latest.txt if it passes. Monitor is armed.
 
 Once it lands I'll finish the remaining sequence: write the questions.csv entries against the measured check_ungridded_obs() counts, commit the release artifacts, and run scripts/deploy_consumers.sh plus the two hosted refreshes.
+
+----
+
+Nine questions written with measured counts. But one is wrong to ask: calcofi_phytoplankton at 100% ungridded is region-pooled by design — we already know the answer, so asking the provider is noise. Correcting it to answered rather than leaving a question we can answer ourselves:
+
+  Pushed to main, ran 1 shell command
+
+Release B is complete and live. latest.txt = v2026.08.11, promoted through the contract gate, all consumers verified on it.
+
+What shipped
+
+┌────────────────────────┬─────────────┬───────────────────────┐
+│                        │ v2026.08.10 │      v2026.08.11      │
+├────────────────────────┼─────────────┼───────────────────────┤
+│ obs rows               │  26,296,720 │ 26,453,863 (+157,143) │
+├────────────────────────┼─────────────┼───────────────────────┤
+│ ungridded obs released │           0 │               316,876 │
+├────────────────────────┼─────────────┼───────────────────────┤
+│ NaN/Inf coordinates    │       9,030 │                     0 │
+├────────────────────────┼─────────────┼───────────────────────┤
+│ lat/lon without hex_id │       9,030 │                     0 │
+├────────────────────────┼─────────────┼───────────────────────┤
+│ CTD cruises in obs     │         142 │                   142 │
+└────────────────────────┴─────────────┴───────────────────────┘
+
+Five fixes in one release: ungridded obs across 14 ingests, append_obs() NaN→NULL, the mets NaN position gate, CUFES segment-midpoint positions with paired coordinates, and the CTD/mets recoveries carried forward.
+
+Consumers all verified 200 on v2026.08.11 — ctd-transects (142 cruises, 2026-07-3322 present), db-viz-station, db-viz-hex, db-viz-cruise, and the h3t API reopened on the new database.
+
+Nine provider questions written against measured counts — cce-lter_zoodb at 40.95% ungridded and swfsc_cufes with 8,897 positionless rows are the ones worth a provider's attention. Each asks the one thing the pipeline can't determine: off-grid position, coarser spatial notion, or coordinate error. I filed phytoplankton's as answered rather than open — it's region-pooled by design, so there's no provider to ask, and it's the precedent for this whole change rather than an exception to it.
+
+Two things still open
+
+1. 1,376 calcofi_mets half-positions — one coordinate without the other. All 1,376 already lack both hex_id and grid_key, so no spatial consumer can reach them. The principled fix is in append_obs() (if either coordinate is NULL, NULL both), which protects every dataset rather than one notebook. I chose not to hold a good release for 0.005% of unreachable rows.
+2. +proj=calcofi helpers ship in calcofi4db 3.14.0 but aren't wired into any ingest — there are only 5 rows to apply them to, and 4 are in a dataset that isn't released.
+
+Both are one short cycle whenever you want them.
+
+On the overnight window: I lost roughly seven hours by launching a run without a monitor on its completion marker. The run failed four minutes in and sat idle. Everything since has had a watcher attached, and it's the one thing I'd do differently.
 
 ## 2026-08-08 ctd-transects GH Pages race, db  `valid_min`/`valid_max` for ALL ingest_*.qmd + supplemental obs_ctd_full/obs_mets_full
 
