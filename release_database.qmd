@@ -612,11 +612,19 @@ TAXON_LOCAL_ALLOW <- c(
   "cce-lter_zooscan:15",   # multiples (several organisms in one vignette)
   "cce-lter_zooscan:16",   # nauplii (crustacean naupliar stage, not a taxon)
   "cce-lter_zooscan:18",   # others
-  # phytoplankton: "other" buckets + codes absent from the source Definitions
-  # sheet (Q05 in calcofi/phytoplankton/questions.csv)
+  # phytoplankton: two different things, kept apart on purpose (Q05 in
+  # calcofi/phytoplankton/questions.csv). Nine codes are absent from the source
+  # Definitions sheet altogether, so there is no name to resolve; 232 is present
+  # and named (*Danasphaera indica*) but has no WoRMS record, fuzzy included.
+  #
+  # This list was 14 and is now 10. The other four (40, 231, 337, 597) were
+  # never unnameable — they carry real names in the Definitions sheet and only
+  # fell through because their `taxa` is "other", which no functional-group
+  # override row matches. They now resolve to accepted genera via
+  # `species_code` rows in metadata/taxon_override.csv. An allowlist is for taxa
+  # no authority CAN key, not for ones our own join missed.
   paste0("calcofi_phytoplankton:",
-         c("4", "40", "59", "218", "229", "231", "232", "300", "337",
-           "454", "532", "540", "596", "597")))
+         c("4", "59", "218", "229", "232", "300", "454", "532", "540", "596")))
 
 tx_cover <- check_taxon_ids(con_wdl, allow = TAXON_LOCAL_ALLOW, halt = TRUE)
 
