@@ -573,6 +573,25 @@ by path, so they stay as files.
     `sio` with dataset `pic-zooplankton`, since the Pelagic Invertebrate
     Collection is the dataset, SIO is the org). Likewise a redundant prefix:
     `ucsd_sio` → `sio`.
+- **A link field must contain a link, and `build_workflows_index.R` now enforces
+  it.** `link_calcofi_org` / `link_data_source` are rendered as an `href` — by the
+  calcofi.io/workflows cards and, via the release `dataset` table, by
+  db-viz-station. Two things fail the index build: a non-empty field that is not
+  `http(s)` (`link_data_source` held the prose `"BTEDB (Bongo Tow Euphausiid
+  Database) export"` and `"SIO Pelagic Invertebrate Collection DB (CSV export)"`),
+  and a URL answering **404/410/451** (`swfsc_ichthyo` pointed at
+  `/data/biology/ichthyoplankton/`, dead, for months). 5xx/timeout/DNS only
+  **warn** — NOAA CoastWatch ERDDAP 503s under load, and failing a rebuild over
+  someone else's busy server just teaches people to skip the check.
+  - **Probe with a ranged GET, never HEAD.** EDI's `mapbrowse` answers `405` to
+    HEAD and EDI hosts most of the bio datasets, so a HEAD-based check fails
+    exactly the links that are fine. `curl::new_handle(range = "0-0")` answers
+    200/206 everywhere and does not pull the 31 MB bottle zip.
+  - If the source genuinely has no portal URL (a private collection DB export),
+    leave the field **empty** and put the provenance in `description` — do not
+    describe the source in a link field.
+  - `CALCOFI_SKIP_LINK_CHECK=1` skips the network half (~3 s vs ~40 s); the shape
+    check always runs.
   - Where one org commissions and another performs the work, the provider is the
     one that holds and can license the data — `cdfw_dungeness-crab` was sorted at
     SIO but is CDFW's.
