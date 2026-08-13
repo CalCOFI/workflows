@@ -12,7 +12,7 @@
 # (could later be wired into the targets pipeline as a release_database caboose
 # chunk, or into .github/workflows/jekyll-gh-pages.yml before the Jekyll build.)
 
-librarian::shelf(rmarkdown, yaml, quiet = TRUE)
+librarian::shelf(rmarkdown, yaml, curl, quiet = TRUE)
 
 # resolve workflows dir (expects to run from repo root, or one level up) ----
 wd <- getwd()
@@ -209,6 +209,86 @@ recs <- lapply(htmls, function(h) {
     link_data_source = dm$link_data_source %||% "",
     source_qmd  = if (is.na(src)) "" else basename(src))
 })
+
+# declared source links must BE links, and must still resolve ----
+# The cards on calcofi.io/workflows link straight to these, and so does
+# db-viz-station, which reads them out of the release's `dataset.parquet`
+# into an href. Both failure modes below have already shipped:
+#   * prose in a link field — `link_data_source` held "BTEDB (Bongo Tow
+#     Euphausiid Database) export" and "SIO Pelagic Invertebrate Collection DB
+#     (CSV export)", which reach a consumer as a broken link and forced a
+#     hardcoded per-dataset override downstream to work around;
+#   * a URL that rotted — swfsc_ichthyo's `link_calcofi_org` 404'd while looking
+#     perfectly plausible in the YAML, and became the portal's only link to the
+#     single most-used dataset in the release.
+# The shape check costs nothing and always runs. Reachability needs the network,
+# so it separates "this link is wrong" (404/410/451 — fail, do not publish a card
+# pointing at it) from "this server is unhappy right now" (5xx, timeout, DNS —
+# warn only; NOAA CoastWatch ERDDAP 503s under load and that is not our bug).
+# Set CALCOFI_SKIP_LINK_CHECK=1 to skip the network half.
+links <- do.call(rbind, lapply(recs, function(r) {
+  out <- NULL
+  for (f in c("link_calcofi_org", "link_data_source")) {
+    v <- trimws(r[[f]] %||% "")
+    if (!nzchar(v)) next
+    out <- rbind(out, data.frame(
+      notebook = if (nzchar(r$source_qmd)) r$source_qmd else r$base,
+      field = f, url = v, stringsAsFactors = FALSE))
+  }
+  out
+}))
+
+if (!is.null(links) && nrow(links) > 0) {
+  fmt <- function(d, extra = "")
+    paste0("  ", d$notebook, "  ", d$field, ": ", extra, d$url, collapse = "\n")
+
+  not_url <- links[!grepl("^https?://", links$url), , drop = FALSE]
+  if (nrow(not_url) > 0)
+    stop("link field(s) that are not URLs:\n", fmt(not_url),
+         "\n  A link field is rendered as an href. Provenance prose belongs in",
+         " `description`; leave the link field empty when the source has no",
+         " portal URL.", call. = FALSE)
+
+  if (nzchar(Sys.getenv("CALCOFI_SKIP_LINK_CHECK"))) {
+    message("link check: ", nrow(links),
+            " declared link(s), reachability skipped (CALCOFI_SKIP_LINK_CHECK)")
+  } else {
+    # HEAD is not usable: EDI's mapbrowse answers 405 to it, and EDI hosts most
+    # of the bio datasets — so a HEAD-based check would fail exactly the links
+    # that are fine. A one-byte ranged GET answers 200/206 on every host we link
+    # to and still does not pull the 31 MB bottle zip.
+    status_of <- function(u) tryCatch(
+      curl::curl_fetch_memory(u, handle = curl::new_handle(
+        range = "0-0", followlocation = TRUE, timeout = 30, connecttimeout = 10,
+        useragent = "calcofi-workflows link check"))$status_code,
+      error = function(e) NA_integer_)
+
+    # one request per distinct URL — several datasets share a landing page
+    u_uniq <- unique(links$url)
+    st     <- vapply(u_uniq, function(u) as.integer(status_of(u)), integer(1))
+    links$status <- unname(st[links$url])
+
+    dead <- links[!is.na(links$status) & links$status %in% c(404L, 410L, 451L), , drop = FALSE]
+    iffy <- links[is.na(links$status) |
+                  (links$status >= 400L & !links$status %in% c(404L, 410L, 451L)), , drop = FALSE]
+
+    # warn before stopping, so one dead link does not hide the rest
+    if (nrow(iffy) > 0)
+      message("link check: ", nrow(iffy), " link(s) did not answer cleanly ",
+              "(not failing the build — retry before treating as broken):\n",
+              fmt(iffy, extra = paste0(
+                ifelse(is.na(iffy$status), "unreachable", iffy$status), "  ")))
+    if (nrow(dead) > 0)
+      stop("dead link(s) — the server says the page is gone:\n",
+           fmt(dead, extra = paste0(dead$status, "  ")),
+           "\n  Fix the `calcofi.dataset_meta` link in the notebook listed. The",
+           " release `dataset` table is built from this YAML at release time, so",
+           " a release re-cut is what carries the fix to consumers.", call. = FALSE)
+
+    message("link check: ", nrow(links), " declared link(s) over ", length(u_uniq),
+            " distinct URL(s), ", sum(!is.na(links$status) & links$status < 400L), " OK")
+  }
+}
 
 # assemble the grouped, ordered structure for Liquid ----
 emit_item <- function(r) {
