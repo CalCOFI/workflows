@@ -618,6 +618,19 @@ by path, so they stay as files.
     `con_wdl`, so the check passed while the published `grid.parquet` stayed
     `OGC:CRS84`. Any CRS-normalized table must also be exported locally and marked
     `gcs_prefix = NA` so the uploader takes the local copy.
+
+    **This generalizes past CRS: anything `release_database.qmd` rebuilds in
+    `con_wdl` must appear in BOTH `core_single` (so a local parquet exists) and the
+    `gcs_prefix = NA` list (so the uploader takes it). One without the other either
+    ships the ingest's copy or fails the upload.** `dataset` had neither through
+    `v2026.08.11`: every ingest writes its own full `dataset` shard, so the registry
+    handed the table a `gcs_prefix` and the release copied one arbitrary ingest's
+    version — publishing 16 rows instead of 15 (`cdfw_dungeness-crab` is
+    `in_release: false`), **no `dataset_key` column at all**, and the *asserted*
+    `coverage_temporal`/`coverage_spatial` rather than the values
+    `observed_coverage()` measures. Nothing caught it, because every check between
+    the build and the freeze reads `con_wdl`, where the table was correct. The
+    published bytes are the only thing worth asserting on.
   - **A consumer that coerces one side to match the other will break on the next
     release.** Normalize *both* sides of a spatial join (`db-viz-hex/prep_db.R`).
 - **`NaN` is not `NULL`, and it corrupts spatial queries — not just its own row.**

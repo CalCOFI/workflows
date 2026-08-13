@@ -1336,6 +1336,12 @@ for (tbl in setdiff(derived_tables, "cruise")) {
 core_single <- intersect(
   unique(c("sample", "obs_attribute", "sample_measurement", "measurement_type",
            "taxon", "dataset_taxon", "taxon_group",  # unified taxa refs, rebuilt here
+           # `dataset` is rebuilt here too — from the ingest YAML, filtered to
+           # in_release, keyed, and with coverage measured rather than asserted.
+           # It must be exported locally for the same reason as the taxa refs:
+           # the gcs_prefix = NA below only helps if there is a local file to
+           # upload instead. See the note there for what shipped without it.
+           "dataset",
            # every CRS-normalized table (grid, spatial, …): the normalization only
            # reaches the release if the LOCAL copy is what gets uploaded
            crs_local_tables)),
@@ -1403,10 +1409,26 @@ for (dt in derived_tables) {
 # taxon_group, rebuilt from the per-dataset taxon tables) are derived + exported
 # locally here, so upload the local copy rather than GCS-copying the stale ingest
 # parquet (esp. the old ichthyo `taxon` hierarchy the new `taxon` replaces).
+#
+# `dataset` belongs here for exactly the same reason, and did not have it. Every
+# ingest writes its own full 16-row `dataset` shard, so `build_release_table_registry()`
+# hands this table a `gcs_prefix` and the release server-side-copied one arbitrary
+# ingest's copy — discarding the one built at [dataset_table] / [dataset_coverage]
+# above. Three things were wrong in every release through v2026.08.11 as a result,
+# none of them visible to any check here, because everything downstream of
+# `con_wdl` saw the correct table:
+#   * no `dataset_key` column at all, so the namespaced key that `obs.dataset_key`
+#     is supposed to join to did not exist in the published reference table;
+#   * 16 rows, not 15 — `cdfw_dungeness-crab` is `in_release: false` because
+#     permission to publish is unsettled, and `read_ingest_yaml(in_release_only =
+#     TRUE)` correctly drops it, but the ingest shards predate that filter;
+#   * `coverage_temporal`/`coverage_spatial` as *asserted* in the YAML rather than
+#     the values `observed_coverage()` measures from the assembled core, which is
+#     the whole point of the `dataset_coverage` chunk.
 freeze_stats <- freeze_stats |>
   mutate(gcs_prefix = if_else(
-    table %in% c("measurement_type", "cruise", "taxon", "dataset_taxon", "taxon_group",
-                 crs_local_tables),
+    table %in% c("dataset", "measurement_type", "cruise", "taxon", "dataset_taxon",
+                 "taxon_group", crs_local_tables),
     NA_character_, gcs_prefix))
 
 # add consolidated core + supplemental tables (gcs_prefix = NA → upload from local)
