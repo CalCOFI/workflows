@@ -208,7 +208,14 @@ Two things do **not** follow automatically, so handle them in the notebook:
   permission is itself unsettled, gate the calls behind a local flag rather than
   relying on `in_release: false`, which only governs the release.
 
-Current holdout: `cdfw_dungeness-crab`.
+**No current holdouts.** `cdfw_dungeness-crab` was the only one and entered the
+release on 2026-08-14, once CDFW confirmed permission, a CC BY 4.0 licence and a
+citation (its Q01). Worth reading that notebook's diff as the worked example of
+what "entering the release" costs beyond the flag itself: the two staged
+measurement types moved into the shared registry (and the notebook's
+`stopifnot()` had to flip from "must not already be there" to "must be there"),
+the asserted `coverage_*` keys were deleted so coverage is measured, and
+`publish_to_gcs` flipped. The flag is one line; the change is not.
 
 ### Coverage is measured, never asserted
 
@@ -227,12 +234,12 @@ rows, `calcofi_bottle` was a month late at the start, and three said `"present"`
 while stalling in 2019, 2022 and 2023. `ingest_calcofi_ctd-cast.qmd` had already
 been hand-corrected twice and was stale again.
 
-**Two exceptions remain, and both carry a comment saying why.**
+**One exception remains, and it carries a comment saying why.**
 `calcofi_phytoplankton` is region-pooled — real coordinates, zero datetimes — so
 it asserts `coverage_temporal` only and measures the spatial half like everyone
-else. `cdfw_dungeness-crab` is `in_release: false`, so the release never sees it
-to measure; delete both its keys when it enters the release. If you add a third,
-the bar is "the data provably cannot answer", not "I know the answer".
+else. (`cdfw_dungeness-crab` was the second; both its keys were deleted when it
+entered the release on 2026-08-14, exactly as this section said to.) If you add
+another, the bar is "the data provably cannot answer", not "I know the answer".
 
 The measurement is honest about what it finds, which means it surfaces
 coordinate bugs the prose hid — `calcofi_mets` measures `125.8°W–124.9°E` (a
@@ -644,8 +651,10 @@ by path, so they stay as files.
     ships the ingest's copy or fails the upload.** `dataset` had neither through
     `v2026.08.11`: every ingest writes its own full `dataset` shard, so the registry
     handed the table a `gcs_prefix` and the release copied one arbitrary ingest's
-    version — publishing 16 rows instead of 15 (`cdfw_dungeness-crab` is
-    `in_release: false`), **no `dataset_key` column at all**, and the *asserted*
+    version — publishing 16 rows instead of 15 (`cdfw_dungeness-crab` was
+    `in_release: false` then; it entered the release 2026-08-14, so the correct
+    count is now 16 for a different reason), **no `dataset_key` column at all**,
+    and the *asserted*
     `coverage_temporal`/`coverage_spatial` rather than the values
     `observed_coverage()` measures. Nothing caught it, because every check between
     the build and the freeze reads `con_wdl`, where the table was correct. The

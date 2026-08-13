@@ -9,14 +9,12 @@ calcofi:
   output: data/parquet/cdfw_dungeness-crab/manifest.json
   provider: cdfw
   dataset: dungeness-crab
-  # HELD OUT OF THE RELEASE. This ingest runs in the pipeline and writes its full
-  # parquet outputs — including its slice of the consolidated core — but every
-  # release-side discovery step in release_database.qmd skips it
-  # (calcofi4db::release_excluded_datasets()). The ONLY thing still holding it out
-  # is Q01: no licence, no citation, and permission to publish unconfirmed. Flip to
-  # `true` — or delete the key, since the flag is opt-out — once Q01 is answered,
-  # and move measurement_type_new.csv into the shared registry in the same change.
-  in_release: false
+  # IN THE RELEASE as of 2026-08-14. Q01 — permission, licence, citation — was
+  # answered by CDFW via E. Satterthwaite (2026-08-13): the data may be published
+  # under CC BY 4.0. `in_release` is opt-out, so the key is simply gone rather
+  # than set to `true`. The same change moved measurement_type_new.csv into the
+  # shared registry, deleted the asserted coverage_* keys so coverage is measured
+  # like every other dataset, and flipped publish_to_gcs.
   workflow_url: https://calcofi.io/workflows/ingest_cdfw_dungeness-crab.html
   questions_file: metadata/cdfw/dungeness-crab/questions.csv
   dataset_meta:
@@ -32,20 +30,26 @@ calcofi:
       Counts are occurrence in the examined aliquot, not standardized density.
       Sorting was performed at the SIO Pelagic Invertebrate Collection, where the
       removed megalopae are archived in vials.
-    citation_main: ""
+    # Per CDFW via E. Satterthwaite, 2026-08-13. Laura Rogers-Bennett is the
+    # primary data provider; the sorters are credited because the examination
+    # effort IS the dataset. CDFW is the current citable custodian even though
+    # the work originated under CFG in 2012 — the agency was renamed, and the
+    # current name is the one a reader can act on.
+    citation_main: >
+      Rogers-Bennett, L.; Jones, E.; Klemmedson, A. (2026). CDFW Dungeness Crab
+      Megalopae from archived CalCOFI plankton samples (1949-2014). California
+      Department of Fish and Wildlife, published through CalCOFI / Scripps
+      Institution of Oceanography.
     link_calcofi_org: ""
     link_data_source: ""
     link_others: []
-    # ASSERTED, and the other of the two left in the repo. Coverage is measured
-    # at release time by calcofi4db::observed_coverage() from the assembled
-    # core — but this dataset is `in_release: false`, so it never reaches the
-    # core and the release cannot measure it. Its card on calcofi.io/workflows
-    # would otherwise go blank. DELETE BOTH KEYS when Q01 is answered and this
-    # flips into the release; the measured values are then 1949-04 to 2014-05
-    # and 33.5-51.0°N, 164.1-118.6°W.
-    coverage_temporal: 1949 to 2014
-    coverage_spatial: "California Current, San Francisco north to Washington"
-    license: ""
+    # coverage_temporal / coverage_spatial deliberately absent: measured at
+    # release time by calcofi4db::observed_coverage() now that this dataset
+    # reaches the core. Do not re-assert them — see "Coverage is measured, never
+    # asserted" in CLAUDE.md. The measured extent runs to 164.1°W, well outside
+    # the survey area; that is the known positive-longitude / off-grid-station
+    # pair (Q07, Q08), still open with the provider, not a new bug.
+    license: CC BY 4.0
     pi_names: Laura Rogers-Bennett
   # publishes the consolidated core AND NOTHING ELSE. The source shape is wrangled
   # in the notebook and projected into sample / obs / obs_attribute /
@@ -87,9 +91,11 @@ years — a near-absence record. The 2012 correspondence establishes that histor
 CalCOFI samples labelled *Cancer magister* are probably *C. productus*, so the
 `dungeness_specimen` verification table is load-bearing rather than trivia.
 
-**Held out of the release** — see `in_release: false` in the frontmatter and
-"Not yet done" at the end. This notebook writes its complete parquet outputs;
-`release_database.qmd` ignores them.
+**In the release** as of 2026-08-14. It was held out from first ingest until
+CDFW confirmed permission, a licence and a citation (Q01, answered 2026-08-13 —
+CC BY 4.0). Nothing about the outputs changed when it entered: this notebook
+always wrote its complete parquet, including its slice of the consolidated
+core, and `release_database.qmd` simply stopped skipping it.
 
 ```{mermaid}
 graph LR
@@ -143,13 +149,13 @@ load_duckdb_extension(con, "spatial")
 dcr_tbls <- c("dungeness_sample", "dungeness_measurement", "dungeness_carapace",
               "dungeness_sorting_log", "dungeness_specimen")
 
-# Other ingests archive their sources to gs://calcofi-files-public and their
-# outputs to gs://calcofi-db unconditionally. This one does NOT by default:
-# whether these files may be published is itself an open blocker (Q01 — no
-# licence, no citation, and CDFW commissioned the work), and both buckets are
-# world-readable. Uploading is a one-way door, so it is opt-in until Q01 is
-# answered. Flip alongside `in_release: true`.
-publish_to_gcs <- FALSE
+# Both buckets are world-readable and uploading is a one-way door, so this was
+# opt-in while permission to publish was itself the open blocker (Q01). CDFW
+# answered on 2026-08-13 — CC BY 4.0, see the citation in the front-matter — so
+# this ingest now archives and syncs like every other one. The flag stays as a
+# named switch rather than being deleted: it is the thing to flip if a future
+# dataset arrives under the same unsettled-permission conditions.
+publish_to_gcs <- TRUE
 ```
 
 ## Read Source Workbooks
@@ -529,26 +535,29 @@ model exists to remove: in `obs` the quantity is `abundance` and the organism is
 `metadata/measurement_taxon.csv`, which maps each to
 `(measurement_type, taxon_key, life_stage)` — see "Emit Core Tables" below.
 
-That leaves two genuinely new canonical quantities, staged in
-`metadata/cdfw/dungeness-crab/measurement_type_new.csv` rather than appended to
-the shared `metadata/measurement_type.csv`: that registry is loaded wholesale
-into the release, so adding them now would publish types with no observations
-into a release that excludes this dataset. **Move them into the shared registry
-in the same change that flips `in_release: true`.** The aliquot fraction maps onto
-the existing `prop_sorted`, so it needs nothing new.
+That leaves two genuinely new canonical quantities, `carapace_length` and
+`settled_volume_ml`. They were staged in
+`metadata/cdfw/dungeness-crab/measurement_type_new.csv` while this dataset was
+held out — the shared registry ships wholesale into the release, so appending
+them early would have published two types with no observations behind them. They
+moved into `metadata/measurement_type.csv` on 2026-08-14, in the change that put
+this dataset in the release, and the staging file is gone. The aliquot fraction
+maps onto the existing `prop_sorted`, so it needs nothing new.
 
 ```{r}
 #| label: meas-types
 
-d_meas_type_shared <- read_measurement_type(here("metadata/measurement_type.csv"))
-d_meas_type_new    <- read_csv(here(glue(
-  "metadata/{provider}/{dataset}/measurement_type_new.csv")))
-
+# `carapace_length` and `settled_volume_ml` were staged in
+# measurement_type_new.csv while this dataset was held out of the release, since
+# the shared registry ships wholesale and would have published two types with no
+# observations. They moved into metadata/measurement_type.csv (via
+# register_measurement_types(), which is append-only and always writes na = "")
+# in the change that put this dataset in the release, so there is nothing left to
+# union — the shared registry is now the whole story.
+d_meas_type <- read_measurement_type(here("metadata/measurement_type.csv"))
 stopifnot(
-  "staged measurement types must not already be in the shared registry" =
-    !any(d_meas_type_new$measurement_type %in% d_meas_type_shared$measurement_type))
-
-d_meas_type <- bind_rows(d_meas_type_shared, d_meas_type_new)
+  "the two formerly-staged types must now be in the shared registry" =
+    all(c("carapace_length", "settled_volume_ml") %in% d_meas_type$measurement_type))
 dbWriteTable(con, "measurement_type", as.data.frame(d_meas_type), overwrite = TRUE)
 
 this_provider <- provider; this_dataset <- dataset   # `provider`/`dataset` are also column names
@@ -557,9 +566,10 @@ d_dataset <- ingest_yaml_to_dataset_df(read_ingest_yaml(here())) |>
 stopifnot("this dataset must appear in the ingest YAML registry" = nrow(d_dataset) == 1)
 dbWriteTable(con, "dataset", as.data.frame(d_dataset), overwrite = TRUE)
 
-d_meas_type_new |>
+d_meas_type |>
+  filter(`_source_datasets` == glue("{provider}_{dataset}")) |>
   select(measurement_type, description, units, grain) |>
-  datatable(caption = "New canonical measurement types (staged, not in the shared registry)",
+  datatable(caption = "Canonical measurement types contributed by this dataset",
             options = list(dom = "t"), rownames = FALSE)
 ```
 
@@ -1302,11 +1312,17 @@ if (length(own(gap(m$columns, "description_md"))))
 
 This is a first pass. What remains, roughly in order:
 
-1. **Answer the one remaining blocker**, Q01 — permission to publish, a licence,
-   a citation, and whether CDFW or SIO is the citable custodian. It gates both
-   the release and the GCS upload. Christy Juhasz (CDFW Marine Region) supplied
-   the files and is the live contact; Laura Rogers-Bennett has retired.
-   (Q11, standardization, is answered — see the Notes sheet above.)
+1. ~~**Answer the one remaining blocker**, Q01.~~ **DONE, 2026-08-13.** CDFW
+   (C. Juhasz, via E. Satterthwaite) confirmed the data may be published under
+   **CC BY 4.0**, with Laura Rogers-Bennett as primary data provider and CDFW as
+   the current citable custodian — the agency was CFG when the 2012 work was
+   commissioned, but the current name is the one a reader can act on. The
+   sorters, E. Jones and A. Klemmedson, are credited in the citation because the
+   examination effort is the dataset. This unblocked both the release and the
+   GCS upload. (Q11, standardization, was already answered — see the Notes sheet
+   above.) Separately, Erin is pursuing publication through the
+   [CNRA data portal](https://data.cnra.ca.gov/dataset) so there is a citable
+   repository copy to pull from; that is additive and does not gate anything here.
 2. **Review the two modelling choices** in "Emit Core Tables" (Q05): the new
    `sample_type = 'subsample'` vocabulary value, and pointing `parent_sample_key`
    at the matched `swfsc_ichthyo` site occupation.
@@ -1330,8 +1346,10 @@ This is a first pass. What remains, roughly in order:
    whether repeated rows are jars.
 5. **Parse the free-text identification notes** (Q07) into `obs_attribute` stage
    and length bins.
-6. Move `measurement_type_new.csv` into `metadata/measurement_type.csv` and drop
-   `in_release: false`, in one change.
+6. ~~Move `measurement_type_new.csv` into `metadata/measurement_type.csv` and
+   drop `in_release: false`.~~ **DONE, 2026-08-14**, in one change, alongside
+   deleting the asserted `coverage_*` keys so coverage is measured like every
+   other dataset and flipping `publish_to_gcs`.
 
 ```{r}
 #| label: cleanup
