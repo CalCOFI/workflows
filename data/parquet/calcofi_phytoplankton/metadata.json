@@ -26,7 +26,7 @@
     },
     "region": {
       "name_long": "Region",
-      "description_md": "The 4 pooled regions defined on the CalCOFI grid (Hayward & Venrick 1998), with member station codes and a provisional centroid (Q01)."
+      "description_md": "The 4 pooled regions defined on the CalCOFI grid (Hayward & Venrick 1998), with the member station codes the source declares and a POLYGON derived from them: each declared station claims the water nearest to it, clipped to the convex hull of all 34 stations and dissolved by region, so the four tile their pooled domain with no overlap and no gaps. Stations are placed by the `+proj=calcofi` transform rather than a grid lookup, which is what lets the six intermediate inshore stations with no cell in the regularized grid resolve. latitude/longitude is an interior representative point, not a centroid (the regions are concave). Land is not erased. See questions Q01."
     },
     "measurement_type": {
       "name_long": "Measurement Type",
@@ -50,6 +50,21 @@
     },
     "dataset.dataset_name": {
       "name_long": "Dataset Name",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.dataset_name_short": {
+      "name_long": "Dataset Name Short",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.category": {
+      "name_long": "Category",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.color": {
+      "name_long": "Color",
       "units": null,
       "description_md": ""
     },
@@ -309,6 +324,11 @@
       "name_long": "Station Codes",
       "description_md": "Member CalCOFI line.station codes (Hayward & Venrick 1998)."
     },
+    "region.geom": {
+      "name_long": "Geom",
+      "units": null,
+      "description_md": ""
+    },
     "sample.sample_key": {
       "name_long": "Sample Key",
       "description_md": "Globally unique event key, namespaced `dataset_key:sample_type:id` so the same integer id in two datasets — or at two event levels in one dataset — never collides."
@@ -482,7 +502,7 @@
       "shared": true
     },
     "taxon": {
-      "rows": 64,
+      "rows": 60,
       "owned": true,
       "shared": true
     },
@@ -492,7 +512,7 @@
       "shared": true
     },
     "taxon_group": {
-      "rows": 27,
+      "rows": 24,
       "owned": true,
       "shared": true
     },
@@ -502,7 +522,7 @@
       "shared": false
     },
     "measurement_type": {
-      "rows": 198,
+      "rows": 200,
       "owned": true,
       "shared": true
     }
