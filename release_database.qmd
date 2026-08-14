@@ -421,6 +421,20 @@ if (length(supp_tbls))
   message(glue("supplemental tables: {paste(supp_tbls, collapse = ', ')}"))
 core_n <- assemble_core(con_wdl, root = here(), supplemental = supp_tbls)
 
+# Vernacular names, applied ONCE to the merged `taxon` rather than in each of the
+# 10 taxa-emitting ingests. `common_name` only ever came from a dataset's own
+# vocabulary, so every taxon resolved through measurement_taxon.csv /
+# taxon_override.csv arrived with none — 57% of them at v2026.08.14, including
+# worms:440388 Metacarcinus magister, whose missing "Dungeness crab" in
+# db-viz-hex surfaced this.
+#
+# Central for the same reason `dataset` and the observed coverage columns are:
+# the shards are MERGED here, not rebuilt, so one application cannot drift across
+# ten of them. A dataset's own common name always wins — it is what the provider
+# publishes. A taxon whose WoRMS vernaculars are ambiguous stays NULL until a
+# human picks one in the registry; see metadata/taxon_common.csv.
+n_common <- apply_taxon_common(con_wdl, here("metadata/taxon_common.csv"))
+
 tibble(
   table = names(core_n),
   rows  = unlist(core_n)) |>
