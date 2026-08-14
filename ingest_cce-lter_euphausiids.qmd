@@ -451,6 +451,46 @@ cat(glue("euphausiids_tow: {dbGetQuery(con,'SELECT COUNT(*) FROM euphausiids_tow
 ```{r}
 #| label: spatial
 
+# Recover a position from CalCOFI line/station where the source carries none.
+#
+# The station plan IS a coordinate system — PROJ ships it as `+proj=calcofi` — so
+# this is a PROJECTION, not a lookup against `grid`. That matters here: a lookup
+# resolves only stations present in the grid table, while the transform resolves
+# any line/station pair, including the historical inshore stations and the Gulf
+# of California / Baja lines the modern pattern dropped.
+#
+# One tow qualifies today (2015-04-32NM, line 86.7 station 33 -> -118.49, 33.89,
+# in the Southern California Bight). Small, but it is a real position we were
+# holding and discarding, and the rule protects future rows for free. It runs
+# BEFORE add_point_geom()/assign_grid_key() so a recovered row gets its geometry,
+# grid_key and hex_id like any other — recovering the coordinate is only half the
+# job if the row still lands ungridded.
+#
+# Must also precede add_point_geom() for a second reason: DuckDB fails an UPDATE
+# on a table carrying a CRS-tagged GEOMETRY column, and `geom` does not exist yet.
+d_nopos <- dbGetQuery(con, "
+  SELECT tow_id, line, station FROM euphausiids_tow
+  WHERE (latitude IS NULL OR isnan(latitude)
+      OR longitude IS NULL OR isnan(longitude))
+    AND line IS NOT NULL AND station IS NOT NULL")
+
+if (nrow(d_nopos) > 0) {
+  ll <- cc_calcofi_to_lonlat(d_nopos$line, d_nopos$station)
+  d_nopos$latitude_new  <- ll$latitude
+  d_nopos$longitude_new <- ll$longitude
+  dbWriteTable(con, "_pos_recover", d_nopos, overwrite = TRUE)
+  n_fix <- dbExecute(con, "
+    UPDATE euphausiids_tow t
+    SET latitude = r.latitude_new, longitude = r.longitude_new
+    FROM _pos_recover r
+    WHERE r.tow_id = t.tow_id AND r.latitude_new IS NOT NULL")
+  dbExecute(con, "DROP TABLE _pos_recover")
+  cat(glue("recovered {n_fix} position(s) from CalCOFI line/station ",
+           "via +proj=calcofi"), "\n")
+} else {
+  cat("no positions to recover from line/station\n")
+}
+
 add_point_geom(con, "euphausiids_tow", lon_col = "longitude", lat_col = "latitude")
 grid_stats <- assign_grid_key(con, "euphausiids_tow")
 grid_stats |> datatable(caption = "Grid assignment")

@@ -1,4 +1,5 @@
 ## TODO
+- [ ] hash tables like msens COGs, so storing less; virtual ref via storage. to show actual names
 - [ ] for sio_pic-zooplankton, ask Ed about cod end and sample type (ethanol or alcohol) missing fields for matching
 - [ ] check GDrive and GCS sync on server, per [rclone](https://github.com/CalCOFI/server/tree/main/rclone)
 - [ ] check enforcement/flagging of valid_min/valid_max in `release_database.qmd` or better yet in all the individual ingest notebooks (and skills) to flag for data providers
@@ -19,6 +20,69 @@
 - [ ] note missing relationships: *_summary tables, grid, places, segments
 - [ ] rename `swfsc_inverts` to `swfsc_invert` including `ingest_swfsc_inverts.qmd` -> `ingest_swfsc_invert.qmd`
 - [ ] `ingest_calcofi_ctd-cast.qmd` needs a sync to GCS for just the used CSV files so saved in GCS `archive/`, not just GCS `_sync/`
+
+
+## 2026-08-14 publish cdfw_dungeness-crab
+
+We just got the OK to publish @ingest_cdfw_dungeness-crab.qmd per the high priority Q. See thread
+  with subject "Fwd: FW: CalCOFI megalopae Identification 2012 & 2015" and Erin's latest email for
+  details. Proceed with as many fixes as possible and get this dataset folded into this release all
+  the way to consumers, including @../db-viz-station/ and @../db-viz-hex/
+
+----
+
+Orphan cleared, DAG healthy and now on ingest_calcofi_bottle (parented to the runner, as it should be).
+
+Dungeness crab is folded in
+
+Erin's thread confirms it cleanly: CDFW (via Christy Juhasz) "are down for us to publish" — CC BY 4.0, Laura Rogers-Bennett as primary data provider, CDFW as current citable custodian. I credited the sorters Emily Jones and Amanda Klemmedson in the citation, since the examination effort is the dataset — 310 sorted samples and a 2,011-sample log are a record of looking, not just of finding.
+
+The flag was one line; the change was not. The notebook's own comments enumerated the rest, and all of it was load-bearing:
+
+┌────────────────────────────────┬──────────────────────────────────────────────────────────────┐
+│             Change             │                    Why it wasn't optional                    │
+├────────────────────────────────┼──────────────────────────────────────────────────────────────┤
+│ in_release key deleted         │ opt-out, so absence = in release                             │
+├────────────────────────────────┼──────────────────────────────────────────────────────────────┤
+│ 2 staged measurement types →   │ 198 → 200, via register_measurement_types()                  │
+│ shared registry                │                                                              │
+├────────────────────────────────┼──────────────────────────────────────────────────────────────┤
+│ the notebook's stopifnot       │ it asserted the types must not already be in the registry —  │
+│ inverted                       │ false the moment they move                                   │
+├────────────────────────────────┼──────────────────────────────────────────────────────────────┤
+│ asserted coverage_* deleted    │ coverage now measured, per the rule this repo already had    │
+├────────────────────────────────┼──────────────────────────────────────────────────────────────┤
+│ publish_to_gcs FALSE → TRUE    │ sources + parquet now actually upload                        │
+└────────────────────────────────┴──────────────────────────────────────────────────────────────┘
+
+That inverted guard is the interesting one: a check written for the staging state would have failed the very change it existed to survive.
+
+Q01 and Q02 are answered in the registry. Q02 is "keep as is" — the historic Reilly-era Cancer magister identifications stand as recorded, with the 2012 mislabelling caveat documented rather than applied. Q06/Q08/Q09 drew "unsure, may need to follow back up", so they stay open; I didn't invent resolution. Worth knowing: measured extent reaches 164.1°W, well outside the survey area — that's the known positive-longitude row and four off-grid stations, flagged in the front-matter so nobody re-discovers it as a new bug.
+
+Consumers
+
+- db-viz-station (8e7fa48) — dropped the exclusion filter exactly as its own comment instructed, added DATASET_META + DATASET_CATEGORY. Without those it renders a grey card labelled with the raw key. Colour is a darker orange than ichthyo's, since both are larval plankton and adjacent in the inventory.
+- db-viz-hex (638710b) — label only. Nothing else needed changing, which is the design working: it already falls through to the release's dataset_name, and which datasets it offers is measured from bio_obs, never listed. CPUE correctly shows the raw count rather than a fabricated density, because these are lab subsamples with no tow_type.
+
+Two things to flag
+
+I disturbed the other session's branch, then fixed it. db-viz-station is a shared clone and had fix/taxon-coverage-keying checked out; my rebase rewrote it. I reset it to match origin, moved my commit to main, and — now that you've merged — left the clone on an up-to-date main at 8e7fa48. That local branch ref is stale (merged by rebase, so it isn't an ancestor) and is safe to delete.
+
+Something keeps spawning hung renders. Three orphans so far — publish_native.qmd, then release_marine-atlas.qmd twice — all parented to PID 1, all at 0.0% CPU, none of them DAG targets. One had been wedged 3h05m before I started. My suspicion is the VS Code Quarto extension auto-rendering open .qmd files; they'd contend for the wrangling DuckDB if they ever unstuck. Worth checking your editor settings.
+
+The run is at 6:21 with 4 outputs rebuilt, now on the ingests. The 20-minute heartbeat is live and will report through release → test → publish → deploy_consumers, committing sidecars as they land.
+
+----
+
+Can we setup both apps to automatically pull from the data, rather than these fragile individual dataset assignments. It's much preferred to add a short name to the calcofi frontmatter of the ingest_*.qmd rather than these setttings
+
+----
+
+That's the right call — I just did the fragile thing by hand, twice, which is the argument for it.
+
+This means editing all 16 notebooks' front-matter, so I need to stop the run first — editing a .qmd while the renderer may open it is the same hazard as the shared registry.
+
+`erd.color` won't serve — those are ERD fill pastels, and three datasets share #bbe0f0. Duplicates are fine for a diagram, fatal for a legend. So display colour needs its own key.
 
 
 ## 2026-08-13 db-viz-station CLAUDE.md and review repo
@@ -86,51 +150,30 @@ Filing issues means posting to a public repo, so I'd like your go-ahead first.
 
 ----
 
-Link check added and verified.
+Folded into PR #14 (https://github.com/CalCOFI/db-viz-station/pull/14) as ee78ed7. CI green.
 
-What it does
+Driven by the release, not a hardcoded key. build_datasets.sql now emits sample_types per dataset from sample.parquet, so isRegionPooled() reads the actual grain — a second region-pooled dataset would label itself with no JS change. region_pool is unique to phytoplankton across all 8 sample types today.
 
-Two checks in scripts/build_workflows_index.R, deliberately different in severity:
+Three surfaces, each of which would otherwise show or imply a zero:
 
-- Shape — a non-empty link_calcofi_org / link_data_source must start with http(s). Needs no network, so it always runs. This catches the prose case.
-- Reachability — one ranged GET per distinct URL. 404/410/451 fails the build; 5xx, timeouts and DNS failures only warn.
+┌─────────────┬────────────────────────────────┬───────────────────────────────────────────────┐
+│   surface   │             before             │                     after                     │
+├─────────────┼────────────────────────────────┼───────────────────────────────────────────────┤
+│ variable    │ "Collected at 0 stations"      │ "Pooled by region — no per-station coverage"  │
+│ panel       │                                │ + reason                                      │
+├─────────────┼────────────────────────────────┼───────────────────────────────────────────────┤
+│ panel       │ "Select a highlighted station" │ "Pooled across stations into 4 regions"       │
+│ subtitle    │                                │                                               │
+├─────────────┼────────────────────────────────┼───────────────────────────────────────────────┤
+│ search      │ "0 stations with Phytoplankton │ "Phytoplankton is pooled by region — no       │
+│ banner      │  coverage"                     │ per-station coverage"                         │
+└─────────────┴────────────────────────────────┴───────────────────────────────────────────────┘
 
-That split is the substance of the design. NOAA CoastWatch ERDDAP 503s under load, and failing an index rebuild because someone else's server is busy would just teach everyone to reach for the skip flag. It 503'd during the test run and correctly warned rather than failing.
+The map change is the one I'd flag for review. applyStyles() was dimming all 218 markers for a pooled selection, which asserts "none of these stations have it" — a claim the data doesn't support. It now leaves the map in its neutral state: the map has no opinion here, so it expresses none. Verified 2 dimmed markers (the unfiltered baseline) for phytoplankton vs 217 for a normal single-station variable. If you'd rather it still visibly respond to the selection, that's an easy adjustment.
 
-HEAD would have been the obvious probe and is wrong here. I tested before writing: EDI's mapbrowse answers 405 to HEAD, and EDI hosts most of the bio datasets — so a HEAD-based check would have failed exactly the links that are fine. A ranged GET (range = "0-0") answers 200/206 everywhere and still doesn't pull the 31 MB bottle zip.
+check_data_contract.py requires sample_types — without it isRegionPooled() silently returns false and the zero quietly returns, which is exactly the failure mode this branch exists to stop.
 
-Verified all three paths
-
-┌─────────────────────────────────────────────┬───────────────────────────────────────────────────────────────────────────────────────┐
-│                    Test                     │                                        Result                                         │
-├─────────────────────────────────────────────┼───────────────────────────────────────────────────────────────────────────────────────┤
-│ Reinstated ichthyo's 404 URL                │ Error: dead link(s)… — names notebook and field, exit 1                               │
-├─────────────────────────────────────────────┼───────────────────────────────────────────────────────────────────────────────────────┤
-│ Reinstated euphausiid prose, network check  │ Error: link field(s) that are not URLs…, exit 1 — confirms the shape check is         │
-│ off                                         │ network-independent                                                                   │
-├─────────────────────────────────────────────┼───────────────────────────────────────────────────────────────────────────────────────┤
-│ CALCOFI_SKIP_LINK_CHECK=1 on a clean tree   │ skips network, 3.2 s vs 45 s                                                          │
-└─────────────────────────────────────────────┴───────────────────────────────────────────────────────────────────────────────────────┘
-
-Clean run: 22 declared link(s) over 18 distinct URL(s), 21 OK — deduped, since several datasets share a landing page.
-
-workflows.yml regenerated with the three link fixes, plus two bboxes refreshing against the live release. Worth noting: calcofi_mets now reads 125.8–117.2°W where the committed file had 125.8°W–124.9°E — the dropped-minus-sign your CLAUDE.md flags as needing a source fix has evidently been fixed upstream, and the stale generated file was still showing the old value.
-
-Branch fix/release-dataset-links-and-upload — three commits
-
-5b5daf2  docs: record the link-field contract in CLAUDE.md
-aca1b06  feat(index): fail the workflows index build on a bad source link
-05044c2  fix(release): publish the dataset table we build, and repair three link fields
-
-Still unpushed, and still yours to decide: the release re-cut is what carries the dataset.parquet fix (dataset_key column, 15 rows, measured coverage) and the repaired links to consumers. After that lands, the three overrides in db-viz-station/scripts/build_datasets.sql can come out — particularly the ichthyo one, which will otherwise keep forcing ERDDAP over the now-correct CalCOFI page.
-
-Your libs/calcofi_notes.md and the untracked plans file are untouched.
-
-✻ Worked for 5m 58s
-
-----
-
-Commit all to main and push. Let's hold off to re-release until after mtg in a few hrs
+Two small things picked up along the way: I also fixed "1 stations" in the search banner (pre-existing, surfaced in my own test output), and the phytoplankton taxa show "No description available" — their description is null in the release, which is cosmetic but visible in the screenshot if you want it on the upstream list alongside the 14 unnamed taxon records.
 
 ## 2026-08-13 review email
 
@@ -422,11 +465,127 @@ I checked all link fields, not just the three — those were the only bad ones.
 
 **Yours to decide**
 
+### TODO: re-release and update consumers
+
 1. **Cutting a release** — that's what carries these fixes to consumers, and it's ~40 min of freeze plus a multi-GB upload and consumer redeploys, so I didn't trigger it. Nothing here changes ingest outputs (the dataset table is built from the YAML at release time), so no ingest re-runs are needed.
 2. **After that release**, the three overrides in db-viz-station/scripts/build_datasets.sql become removable — each arm names its cause. The ichthyo one in particular should go, or it will keep forcing ERDDAP over the now-correct CalCOFI page.
 3. **Push/PR the branch** — I committed but didn't push.
 
 One thing I'd suggest but didn't build: nothing validates that a declared link is reachable, which is how the ichthyo 404 survived. A link check in `scripts/build_workflows_index.R` would catch the next one.
+
+----
+
+Yes, add link check in `scripts/build_workflows_index.R`
+
+----
+
+Link check added and verified.
+
+What it does
+
+Two checks in scripts/build_workflows_index.R, deliberately different in severity:
+
+- Shape — a non-empty link_calcofi_org / link_data_source must start with http(s). Needs no network, so it always runs. This catches the prose case.
+- Reachability — one ranged GET per distinct URL. 404/410/451 fails the build; 5xx, timeouts and DNS failures only warn.
+
+That split is the substance of the design. NOAA CoastWatch ERDDAP 503s under load, and failing an index rebuild because someone else's server is busy would just teach everyone to reach for the skip flag. It 503'd during the test run and correctly warned rather than failing.
+
+HEAD would have been the obvious probe and is wrong here. I tested before writing: EDI's mapbrowse answers 405 to HEAD, and EDI hosts most of the bio datasets — so a HEAD-based check would have failed exactly the links that are fine. A ranged GET (range = "0-0") answers 200/206 everywhere and still doesn't pull the 31 MB bottle zip.
+
+Verified all three paths
+
+┌─────────────────────────────────────────────┬───────────────────────────────────────────────────────────────────────────────────────┐
+│                    Test                     │                                        Result                                         │
+├─────────────────────────────────────────────┼───────────────────────────────────────────────────────────────────────────────────────┤
+│ Reinstated ichthyo's 404 URL                │ Error: dead link(s)… — names notebook and field, exit 1                               │
+├─────────────────────────────────────────────┼───────────────────────────────────────────────────────────────────────────────────────┤
+│ Reinstated euphausiid prose, network check  │ Error: link field(s) that are not URLs…, exit 1 — confirms the shape check is         │
+│ off                                         │ network-independent                                                                   │
+├─────────────────────────────────────────────┼───────────────────────────────────────────────────────────────────────────────────────┤
+│ CALCOFI_SKIP_LINK_CHECK=1 on a clean tree   │ skips network, 3.2 s vs 45 s                                                          │
+└─────────────────────────────────────────────┴───────────────────────────────────────────────────────────────────────────────────────┘
+
+Clean run: 22 declared link(s) over 18 distinct URL(s), 21 OK — deduped, since several datasets share a landing page.
+
+workflows.yml regenerated with the three link fixes, plus two bboxes refreshing against the live release. Worth noting: calcofi_mets now reads 125.8–117.2°W where the committed file had 125.8°W–124.9°E — the dropped-minus-sign your CLAUDE.md flags as needing a source fix has evidently been fixed upstream, and the stale generated file was still showing the old value.
+
+Branch fix/release-dataset-links-and-upload — three commits
+
+5b5daf2  docs: record the link-field contract in CLAUDE.md
+aca1b06  feat(index): fail the workflows index build on a bad source link
+05044c2  fix(release): publish the dataset table we build, and repair three link fields
+
+Still unpushed, and still yours to decide: the release re-cut is what carries the dataset.parquet fix (dataset_key column, 15 rows, measured coverage) and the repaired links to consumers. After that lands, the three overrides in db-viz-station/scripts/build_datasets.sql can come out — particularly the ichthyo one, which will otherwise keep forcing ERDDAP over the now-correct CalCOFI page.
+
+Your libs/calcofi_notes.md and the untracked plans file are untouched.
+
+✻ Worked for 5m 58s
+
+----
+
+Commit all to main and push. Let's hold off to re-release until after mtg in a few hrs
+
+----
+
+Committed (6f9ac50, not pushed). Here's where it lands.
+
+On the correction
+
+Fair, and I'll carry the corrected framing: the 380→12 was a file change. seenExact already collapsed the duplicates, so DATASET_VAR_COUNTS was 12 before and after — what changed is that the file stopped shipping 368 byte-identical rows. Unqualified, "380 → 12" would read as the fix deleting coverage. It didn't.
+
+The 14 unresolved taxa were two unrelated problems filed as one
+
+Five are in the source Definitions sheet, with real names. They failed because their taxa is "other" — and all six rows in taxon_override.csv key on the functional groups (diatom centric/pennate, dinoflagellate thecate/athecate, coccolithophore, silicoflagellate). Nothing matches "other", so they fell through to a dataset-local key. Four now resolve, keyed on species_code:
+
+┌──────┬────────────────────────────┬───────────────────────────────────────────────────────────┐
+│ code │        source name         │                             →                             │
+├──────┼────────────────────────────┼───────────────────────────────────────────────────────────┤
+│ 231  │ Pterosperma sp. a          │ worms:160595 Pterosperma (Genus)                          │
+├──────┼────────────────────────────┼───────────────────────────────────────────────────────────┤
+│ 597  │ indistinguished            │ worms:160595                                              │
+│      │ Pterosperma spp.           │                                                           │
+├──────┼────────────────────────────┼───────────────────────────────────────────────────────────┤
+│ 40   │ Pterosperma pentagonum     │ worms:160595 — no WoRMS record for the species, fuzzy     │
+│      │                            │ included · review=TRUE                                    │
+├──────┼────────────────────────────┼───────────────────────────────────────────────────────────┤
+│ 337  │ Phaeocystis cf pouchetti   │ worms:115088 Phaeocystis (Genus) · review=TRUE            │
+└──────┴────────────────────────────┴───────────────────────────────────────────────────────────┘
+
+I keyed 337 to the genus rather than worms:115106 (P. pouchetii) because a cf determination is a comparison, not a species assertion — recording the species would assert more than the analyst did. That's 1,684 of the 3,590 obs.
+
+The other ten are genuinely unresolvable, for two different reasons — now stated separately in TAXON_LOCAL_ALLOW, which shrinks 14 → 10. Nine are absent from the Definitions sheet entirely (that's Q05, and its "nine" was always correct — it counts the definitions join, a different set from the five override misses). One, code 232 Danasphaera indica, is present and named but has no WoRMS record at all.
+
+So of your item: about half was ours, half is the provider's. The allowlist is for taxa no authority can key — not for ones our own join missed.
+
+Yes, the region geometries exist — in a source we already download
+
+definitions.xlsx (the same EDI package) has a Regions sheet, citing Hayward & Venrick 1998, defining each region as an explicit list of CalCOFI grid stations:
+
+- NE (Northern Inshore) — 83.41, 83.51, 87.40, 90.30, 90.37
+- SE (Southern inshore) — 93.30, 93.40, 93.50, 93.60
+- Alley (California Current) — 77.51, 77.60, 77.70, 80.51, 80.60, 80.70, 83.60, 87.50, 87.60, 90.53
+- Offshore (Central Pacific) — 15 stations, 77.80 through 93.90
+
+But don't implement it naively. I checked all 34 against the released grid: 28 resolve, 6 don't — 83.41, 83.51, 90.37, 77.51, 80.51, 90.53, all intermediate inshore stations outside the regularized 218-cell pattern. They're concentrated in NE, which resolves only 2 of its 5. A hull over those two would place NE materially wrong. Offshore and SE are complete.
+
+Q01 has been an open blocker since ingest and is now proposed, with the lists and that caveat in the proposed answer rather than buried — so the provider confirms a solution instead of receiving a problem. dataset_status.csv still reads "region centroids provisional (Q01)", which is now accurate rather than merely true.
+
+I also fixed the registry's id/label convention, which was inverted — labels read QQ01–QQ07, ids Q01–Q06 plus a malformed Q01_07, none namespaced. Audited all 17 registries; this was the only broken one.
+
+On the full DAG run
+
+Two things before you green-light it:
+
+1. This needs the phytoplankton ingest re-run, not just a release re-cut. taxon_override.csv is consumed by build_taxon_reference()/build_dataset_taxon() inside the notebook. And per your CLAUDE.md, editing the .qmd/metadata doesn't invalidate the target — tar_invalidate() first, then verify against _output/*.html mtimes, not exit codes.
+2. Region geometry is a schema decision I deliberately didn't make. Does sample.geom become a polygon? Does grid_key stay NULL? That changes what consumers see, and with NE at 2/5 I'd hold it for the provider's answer rather than ship a wrong NE.
+
+Everything else — the dataset.parquet upload fix, the three link fields, these taxa — is ready and wants exactly one full run. You said hold until after the meeting, so I've left it. Say the word and I'll run it; it's several hours and ends with a latest.txt promotion plus consumer redeploys, so it wants to start when you can watch it land.
+
+----
+
+Push commits to main. Create a workflow issue for phytoplankton geometry with this detailed info. Ideally add image of map generated from stations into the issue. Pose options as Qs for meeting with Erin and Betty. Mention all the other fixes that will be implemented from new db release (visit commits since last release) in issue
+
+
 
 ## 2026-08-10 fix .claude/skills
 
@@ -1214,6 +1373,15 @@ Two things still open
 Both are one short cycle whenever you want them.
 
 On the overnight window: I lost roughly seven hours by launching a run without a monitor on its completion marker. The run failed four minutes in and sat idle. Everything since has had a watcher attached, and it's the one thing I'd do differently.
+
+----
+
+yes, fix both open things. have a full DAG running now in other session. ideally any fixes get folded in
+
+----
+
+
+
 
 ## 2026-08-08 ctd-transects GH Pages race, db  `valid_min`/`valid_max` for ALL ingest_*.qmd + supplemental obs_ctd_full/obs_mets_full
 
