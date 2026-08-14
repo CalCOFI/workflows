@@ -252,7 +252,18 @@ color_map <- cc_erd_color_map(
 
 # create VIEWs on local parquet for each canonical table
 # _new delta tables handled separately for merging
-all_geom_tables <- c("grid", "site", "segment", "casts", "ctd_cast", "spatial")
+#
+# A table carrying geometry MUST be listed here, and the cost of omitting it is
+# silent: `load_prior_tables()` only converts the parquet's WKB BLOB back to
+# GEOMETRY for the tables named, so an omitted one arrives as a BLOB, the CRS
+# normalization below (which selects on `data_type LIKE 'GEOMETRY%'`) never sees
+# it, it never joins `crs_local_tables`, and it is therefore GCS-copied straight
+# from the ingest bucket with whatever tag the ingest happened to mint. Nothing
+# fails; a consumer's ST_Intersects against `sample.geom` does, later.
+# `region` gained a POLYGON when the phytoplankton pooling regions stopped being
+# provisional centroids (workflows#76).
+all_geom_tables <- c("grid", "site", "segment", "casts", "ctd_cast", "spatial",
+                     "region")
 main_tables <- reg_canon |> filter(!grepl("_new$", table))
 new_tables  <- registry |> filter(grepl("_new$", table))
 
