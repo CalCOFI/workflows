@@ -783,19 +783,13 @@ ORPHAN_CRUISES_MAX <- c(
   #   swfsc_cufes     1,475 samples with ZERO rows in cufes_measurement
   #   cce-lter_euph.  4 tows with ZERO rows in euphausiids_measurement
   # The last two are not losses: the provider recorded the event and no counts.
-  #   cdfw_dungeness-crab  entered the release 2026-08-14 (Q01 answered) and
-  #                   arrived with 14 of 32 cruises carrying tows and no obs —
-  #                   found by this gate on its first release, which is what the
-  #                   gate is for. Investigated: observations attach to the
-  #                   `subsample` grain (the sorted aliquots, 310 of them), not
-  #                   to `tow`. Those 14 cruises logged 243 tows and had NO
-  #                   subsample sorted, so there are no counts to lose — the
-  #                   cufes/euphausiid pattern of effort recorded without counts.
-  #                   Keeping the tows in `sample` is right: dropping them would
-  #                   hide real sampling effort.
+  # cdfw_dungeness-crab is deliberately ABSENT: its 14 orphan cruises are an
+  # inventory grain, not a loss, and that is expressed by EFFORT_ONLY_TYPES below
+  # rather than by an allowance. An allowance of 14 would also hide the next 14
+  # real losses in that dataset; the exemption hides none, because its observing
+  # sample types stay held to zero.
   "cce-lter_zoodb"       = 41L,
   "swfsc_ichthyo"        = 20L,
-  "cdfw_dungeness-crab"  = 14L,
   "swfsc_cufes"          =  3L,
   "calcofi_mets"         =  1L,
   "cce-lter_euphausiids" =  1L)
@@ -804,8 +798,17 @@ ORPHAN_CRUISES_MAX <- c(
 # read again in `upload_frozen` (d_cov$coverage_temporal_observed). Reusing it
 # here silently replaced that data frame and killed a 50-minute release run at
 # the very last chunk, after the freeze and most of the upload had completed.
+# Sample types that record EFFORT or INVENTORY rather than an analyzed event, so
+# a cruise made only of them is not a finding. cdfw_dungeness-crab's 2,011 `tow`
+# rows are a 60-year sorting log of which archived jars exist — only 216 were
+# ever examined — while its 310 `subsample` rows are the lab-examined aliquots
+# and every one yields obs. Keyed by dataset because `tow` IS an observing type
+# for the net-tow ingests.
+EFFORT_ONLY_TYPES <- c("cdfw_dungeness-crab" = "tow")
+
 d_cruise_cov <- check_cruise_coverage(
-  con_wdl, max_orphan_cruises = ORPHAN_CRUISES_MAX)
+  con_wdl, max_orphan_cruises = ORPHAN_CRUISES_MAX,
+  effort_only_types = EFFORT_ONLY_TYPES)
 
 d_cruise_cov |>
   datatable(caption = paste(
