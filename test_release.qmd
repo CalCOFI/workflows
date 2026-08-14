@@ -459,11 +459,19 @@ if (n_fail > 0) {
     "latest.txt NOT updated."))
 }
 
-# all green — promote
-latest_local <- tempfile()
-writeLines(release_version, latest_local)
-put_gcs_file(latest_local,
-  glue("gs://{gcs_bucket}/ducklake/releases/latest.txt"))
+# All green — but a green suite is NOT sufficient to promote, and on 2026-08-14
+# that distinction cost an hour of broken consumers. `release_database` died at
+# `upload_frozen` with the parquet uploaded and the JSON sidecars not; this suite
+# then passed 28/28 against that parquet — correctly, the data was fine — and
+# moved `latest.txt` to a release with no catalog.json, the file `cc_get_db()`
+# opens. The queries test the DATA; they cannot see whether the release is
+# READABLE, because they never open the catalog.
+#
+# promote_release() answers the second question first: it refuses to move the
+# pointer unless catalog.json / metadata.json / relationships.json are all
+# present, and writes the object with Cache-Control: no-cache so the change
+# reaches consumers immediately instead of up to an hour later.
+promote_release(release_version, bucket = gcs_bucket)
 message(glue(
   "PROMOTED {release_version}: {n_pass} passed, {n_skip} skipped, ",
   "0 failed. latest.txt is now {release_version}."))

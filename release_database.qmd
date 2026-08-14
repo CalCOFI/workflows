@@ -151,11 +151,16 @@ message(glue("Release version: {release_version}"))
 # Override deliberately with CALCOFI_ALLOW_REPUBLISH=TRUE when the intent really
 # is to replace a promoted release in place (and accept that consumers see the
 # new bytes before any test has passed).
-promoted <- tryCatch(
-  trimws(readLines(
-    "https://storage.googleapis.com/calcofi-db/ducklake/releases/latest.txt",
-    warn = FALSE))[1],
-  error = function(e) NA_character_)
+# Read the pointer through the authenticated API, NOT
+# https://storage.googleapis.com/.../latest.txt — that URL is CDN-cached, and
+# this guard consumed it for months. On 2026-08-14 the cache made it wrong in
+# both directions within an hour: it false-fired on a re-cut after a rollback
+# (harmless), and — the direction that matters — for an hour after any promotion
+# the cache still shows the PREVIOUS version, so this comparison concludes
+# `latest.txt` points elsewhere and lets a run overwrite the release consumers
+# are actively reading. A guard that fails open for an hour after every
+# promotion is worse than no guard, because it reads as protection.
+promoted <- calcofi4db::read_promoted_release(bucket = "calcofi-db")
 
 if (!is.na(promoted) && identical(promoted, release_version) &&
     !isTRUE(as.logical(Sys.getenv("CALCOFI_ALLOW_REPUBLISH", "FALSE"))))

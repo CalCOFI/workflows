@@ -73,11 +73,12 @@ DEPLOY   <- !identical(tolower(Sys.getenv("CALCOFI_DEPLOY", "true")), "false")
 SSH_HOST <- Sys.getenv("CALCOFI_SSH_HOST", "calcofi")
 `%||%`   <- function(x, y) if (is.null(x) || length(x) == 0 || !nzchar(x)) y else x
 
-RELEASE <- tryCatch(
-  trimws(readLines(
-    "https://storage.googleapis.com/calcofi-db/ducklake/releases/latest.txt",
-    warn = FALSE)[1]),
-  error = function(e) NA_character_)
+# Authenticated read, not the CDN-cached https URL. This target runs seconds
+# after `test_release` promotes, which is exactly the window where the public URL
+# still serves the PREVIOUS version — so reading it there would deploy consumers
+# against the release we just replaced, and do it silently. Same reason
+# release_database.qmd's republish guard was changed (2026-08-14).
+RELEASE <- calcofi4db::read_promoted_release(bucket = "calcofi-db")
 
 cat(glue("promoted release : {RELEASE}\n"))
 cat(glue("deploy           : {DEPLOY} ",
