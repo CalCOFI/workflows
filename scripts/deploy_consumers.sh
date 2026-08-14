@@ -51,12 +51,39 @@ echo "==> deploying consumers for $RELEASE (host: $HOST)"
 
 # 1. sources ---------------------------------------------------------------
 # calcofi4r included: db-viz-hex's prep_db.R does devtools::load_all("../calcofi4r"),
-# so a stale checkout there silently builds against old package code.
+# so a stale checkout there silently builds against old package code. The apps
+# load the INSTALLED package instead — see step 1b, which is the other half.
 echo "==> 1/5 pulling sources"
 for r in calcofi4r db-viz-hex apps; do
   printf '    %-12s ' "$r"
   sshq "git -C $GH/$r pull --ff-only" | tail -1
 done
+
+# 1b. calcofi4r into the container -----------------------------------------
+# Pulling the checkout above is NOT enough, and the gap is invisible. prep_db.R
+# reads calcofi4r through devtools::load_all(), so it picks up the pull — but the
+# APPS load it with library(), i.e. the INSTALLED package, which a git pull never
+# touches. On 2026-08-14 the server sat on calcofi4r 1.6.0 while the checkout was
+# 1.7.0: prep_db.R built correctly, every endpoint returned 200, the deploy looked
+# completely clean, and the fix in 1.7.0 (cc_ts_gaps) was simply absent from the
+# running app. It was caught only by reading the rendered Highcharts series.
+#
+# Version-compared rather than installed unconditionally, because installing is
+# ~40 s and most deploys do not touch the package.
+echo "==> 1b/5 checking calcofi4r in the rstudio container"
+SRC_VER=$(sshq "grep '^Version:' $GH/calcofi4r/DESCRIPTION | awk '{print \$2}'" | tail -1 | tr -d '[:space:]')
+INS_VER=$(sshq "docker exec rstudio Rscript -e 'cat(as.character(packageVersion(\"calcofi4r\")))'" | tail -1 | tr -d '[:space:]')
+printf '    checkout %s | installed %s ' "${SRC_VER:-?}" "${INS_VER:-none}"
+if [ -n "$SRC_VER" ] && [ "$SRC_VER" != "$INS_VER" ]; then
+  echo "-> installing"
+  sshq "docker exec rstudio Rscript -e 'devtools::install(\"$GH/calcofi4r\", quiet=TRUE, upgrade=FALSE, dependencies=FALSE)'" | tail -2 | sed 's/^/    /'
+  NEW_VER=$(sshq "docker exec rstudio Rscript -e 'cat(as.character(packageVersion(\"calcofi4r\")))'" | tail -1 | tr -d '[:space:]')
+  [ "$NEW_VER" = "$SRC_VER" ] || {
+    echo "    calcofi4r install did not take: wanted $SRC_VER, have $NEW_VER" >&2; exit 1; }
+  echo "    installed calcofi4r $NEW_VER"
+else
+  echo "-> up to date"
+fi
 
 # 2. app databases ---------------------------------------------------------
 # Must run INSIDE the rstudio container: it has R, the package deps, and network
