@@ -783,8 +783,19 @@ ORPHAN_CRUISES_MAX <- c(
   #   swfsc_cufes     1,475 samples with ZERO rows in cufes_measurement
   #   cce-lter_euph.  4 tows with ZERO rows in euphausiids_measurement
   # The last two are not losses: the provider recorded the event and no counts.
+  #   cdfw_dungeness-crab  entered the release 2026-08-14 (Q01 answered) and
+  #                   arrived with 14 of 32 cruises carrying tows and no obs —
+  #                   found by this gate on its first release, which is what the
+  #                   gate is for. Investigated: observations attach to the
+  #                   `subsample` grain (the sorted aliquots, 310 of them), not
+  #                   to `tow`. Those 14 cruises logged 243 tows and had NO
+  #                   subsample sorted, so there are no counts to lose — the
+  #                   cufes/euphausiid pattern of effort recorded without counts.
+  #                   Keeping the tows in `sample` is right: dropping them would
+  #                   hide real sampling effort.
   "cce-lter_zoodb"       = 41L,
   "swfsc_ichthyo"        = 20L,
+  "cdfw_dungeness-crab"  = 14L,
   "swfsc_cufes"          =  3L,
   "calcofi_mets"         =  1L,
   "cce-lter_euphausiids" =  1L)
