@@ -64,6 +64,8 @@ This notebook ingests CalCOFI CTD data from <https://calcofi.org/data/oceanograp
     -   Downloads all .zip files for archival completeness
     -   Only unzips `final` and `preliminary` files
     -   Skips raw/cast/test files
+    -   Archives are kept on Google Drive; their contents are extracted to local
+        scratch under `cc_stage_dir()` (see [Setup]) and never written back
 
 3.  **Priority-based Selection**:
     -   For each cruise, selects final if available, otherwise preliminary
@@ -144,7 +146,18 @@ dataset      <- cc$dataset
 dataset_name <- cc$dataset_meta$dataset_name
 tables_owned <- cc$tables_owned
 dir_label <- glue("{provider}_{dataset}")
+# ARCHIVES live on Google Drive; EXTRACTED FILES do not. dir_dl holds `.zip` and
+# nothing else — Drive is the durable, shareable home for ~370 archives and it
+# syncs them fine. Unzipping into it is what Drive cannot survive: the 151
+# final/preliminary archives expand to ~124,000 files and ~45 GB, which the Drive
+# client never finishes syncing, and mid-sync it evicts files to cloud-only
+# placeholders (silently read as 0 rows, see [d_csv]) and mints ` 2.csv` conflict
+# copies beside them. That cost release v2026.08.08 ten cruises and needed a
+# repair script to undo. Extraction now lands under cc_stage_dir(), outside both
+# Drive and the repo, where it is disposable: delete it and the next render
+# re-extracts from the archives.
 dir_dl <- path_expand(glue("{dir_data}/{provider}/{dataset}/download"))
+dir_ext <- cc_stage_path("ctd-cast", "unzip", create = TRUE)
 dir_parquet <- here(glue("data/parquet/{dir_label}"))
 dir_stage <- cc_stage_path("parquet", dir_label, create = TRUE)
 db_path <- here(glue("data/wrangling/{dir_label}.duckdb"))
@@ -153,16 +166,30 @@ dir_tmp <- here(glue("data/tmp/{dir_label}"))
 url <- "https://calcofi.org/data/oceanographic-data/ctd-cast-files/"
 dir_meta <- here(glue("metadata/{provider}/{dataset}"))
 
-dir_create(c(dir_dl, dirname(db_path), dir_parquet, dir_stage, dir_tmp), recurse = TRUE)
+dir_create(
+  c(dir_dl, dir_ext, dirname(db_path), dir_parquet, dir_stage, dir_tmp),
+  recurse = TRUE)
+
+# Guard the split rather than merely documenting it: an extracted directory left
+# in dir_dl by an older run is not inert. [d_csv] globs the extraction root only,
+# so those CSVs no longer reach the pivot, but Drive still tries to sync them —
+# which is the problem this split exists to solve. Names the offenders and stops.
+dirs_in_dl <- list.dirs(dir_dl, recursive = FALSE, full.names = FALSE)
+if (length(dirs_in_dl) > 0)
+  stop(glue(
+    "{length(dirs_in_dl)} extracted director(ies) found in dir_dl:\n",
+    paste0("  ", head(dirs_in_dl, 10), collapse = "\n"),
+    if (length(dirs_in_dl) > 10) "\n  ..." else "", "\n",
+    "dir_dl holds .zip archives only — extraction belongs in {dir_ext}. ",
+    "Remove them with `Rscript scripts/prune_ctd_extracts_from_drive.R`."))
 
 # NOTE: nothing destructive happens here, and no connection is opened. Both wait
 # for the resume decision below, which needs the scraped zip list to fingerprint
 # the inputs — deleting the wrangling DB before knowing whether the heavy path
 # will run would throw away the one table the Gantt appendix reads.
 
-# source archival handled by sync_gd_to_gcs.qmd (rclone)
-# the ctd-cast download/ dir is 62GB+ — too large for inline
-# sync_to_gcs() through the GD FUSE mount
+# source archival handled by sync_gd_to_gcs.qmd (rclone): ~18 GB of archives is
+# still too large to push through the GD FUSE mount with sync_to_gcs()
 
 # load metadata
 # read_measurement_type(), NOT read_csv(): the registry stores empty cells that a
@@ -192,6 +219,29 @@ CTD_STAGE_LABELS <- c(
   preliminary_without_bottle = "Preliminary CTD 1m-Binned")
 ```
 
+### Archives on Drive, contents on local scratch {#dirs}
+
+| | path | holds | synced? |
+|---|---|---|---|
+| `dir_dl` | `~/My Drive/…/calcofi/ctd-cast/download/` | `.zip` **only** | yes — Drive → `gs://calcofi-files-public/_sync/…` |
+| `dir_ext` | `~/_big/calcofi/ctd-cast/unzip/` (`cc_stage_dir()`, overridable with `$CALCOFI_STAGE_DIR`) | everything unzipped | no — local, disposable |
+
+Roughly 370 archives sync to Drive without trouble. Their *contents* do not: the
+151 `final`/`preliminary` archives expand to about **124,000 files and 45 GB**,
+and extracting them into the Drive folder — which is what this notebook did until
+2026-08-16 — gave the Drive client a sync job it never finished. The failures were
+not merely slow, they were silent and they reached the release: Drive evicts a
+file it has synced to a cloud-only placeholder that still reports its full size
+but reads as an empty CSV, and it mints ` 2.csv` conflict copies whose names no
+longer end in a cast-direction letter. Release v2026.08.08 lost ten cruises that
+way and needed a repair script to walk the tree putting it back.
+
+So the archive and its contents now live on different filesystems. Nothing under
+`dir_ext` is precious — delete any part of it and the next render re-extracts
+that part from `dir_dl`, which is the copy actually worth keeping and the only
+one worth syncing. [Setup] stops the render if an extracted directory reappears
+in `dir_dl`.
+
 ## Prime Downloads from the Object Store
 
 The authoritative source for the CTD `.zip` files is the organization Shared Drive
@@ -199,7 +249,9 @@ The authoritative source for the CTD `.zip` files is the organization Shared Dri
 `gs://calcofi-files-public/_sync/calcofi/ctd-cast/download/` by
 `scripts/sync_gdrive_to_gcs.sh` (per-cruise `CTDCast`/`CTDPrelim` drops) and
 `scripts/sync_jrw_ctd_to_gcs.sh` (Jim Wilkinson's `_CTDFinalDB.zip` final archive,
-1993-08 onward). Copy anything new into `dir_dl` so the inventory below can see it.
+1993-08 onward). Copy anything new into `dir_dl` so the inventory below can see it
+— the archive, not its contents (see [Archives on Drive, contents on local
+scratch](#dirs)).
 
 **This must run before the inventory, not after.** It used to sit after both the
 scrape and the resume decision, which made a Drive-only zip structurally invisible:
@@ -598,9 +650,13 @@ d_zips_skip |>
 # `url` is NA for a Shared-Drive-only zip: there is nothing to fetch, the file is
 # already in dest_dir (prime_zips_from_gcs put it there). file_zip is passed
 # explicitly rather than derived as basename(url), which would be NA for those.
-download_and_unzip <- function(url, file_zip, dest_dir, zip_type, unzip = TRUE) {
+#
+# dest_dir (the archive) and ext_dir (its contents) are separate arguments and
+# separate filesystems on purpose — see the dir_dl/dir_ext note in [setup].
+download_and_unzip <- function(url, file_zip, dest_dir, ext_dir, zip_type,
+                               unzip = TRUE) {
   dest_file <- file.path(dest_dir, file_zip)
-  dir_unzip <- file.path(dest_dir, str_remove(file_zip, "\\.zip$"))
+  dir_unzip <- file.path(ext_dir, str_remove(file_zip, "\\.zip$"))
 
   if (file_exists(dest_file)) {
     say(glue("Already exists: {file_zip}"))
@@ -624,25 +680,46 @@ download_and_unzip <- function(url, file_zip, dest_dir, zip_type, unzip = TRUE) 
     if (!file_exists(dest_file)) return(invisible(NULL))
   }
 
-  if (unzip && dir_exists(dir_unzip)) {
-    say(glue("Already unzipped: {file_zip}"))
+  if (!unzip || !zip_type %in% c("final", "preliminary")) {
+    if (unzip) say(glue("Skipping unzip (not final/preliminary): {file_zip}"))
+    return(invisible(NULL))
+  }
+
+  # "the directory exists" was the whole completeness test, which reads an
+  # INTERRUPTED extraction as a finished one — and the extraction root is now
+  # disposable local scratch, so a half-written tree is a routine outcome (a
+  # cancelled render, a full disk) rather than a rare one. Compare the file count
+  # on disk against the archive's own member count instead. That count comes from
+  # the zip's central directory (utils::unzip, NOT the masked `zip::unzip` — see
+  # [jrw_overlap_report]), so it costs a seek, not an extraction, per archive.
+  # `<`, not `!=`: an archive may legitimately be over-populated (an older run of
+  # a since-shrunk archive), and re-extracting on that is churn, not repair.
+  n_members <- sum(!str_detect(utils::unzip(dest_file, list = TRUE)$Name, "/$"))
+  n_on_disk <- if (dir_exists(dir_unzip)) {
+    length(list.files(dir_unzip, recursive = TRUE, all.files = TRUE,
+                      no.. = TRUE))
+  } else 0L
+
+  if (n_on_disk >= n_members) {
+    say(glue("Already unzipped: {file_zip} ({n_on_disk} files)"))
   } else {
-    if (zip_type %in% c("final", "preliminary")) {
-      say(glue("Unzipping: {file_zip}"))
-      dir_create(dir_unzip, recurse = TRUE)
-      unzip(dest_file, exdir = dir_unzip)
-    } else if (unzip) {
-      say(glue("Skipping unzip (not final/preliminary): {file_zip}"))
-    }
+    say(glue(
+      "Unzipping: {file_zip} ({n_members} files",
+      if (n_on_disk > 0) glue(", {n_on_disk} already present") else "", ")"))
+    dir_create(dir_unzip, recurse = TRUE)
+    # overwrite = TRUE so a partial extraction is completed rather than skipped
+    # around; unzip()'s default leaves an existing (possibly truncated) file be.
+    unzip(dest_file, exdir = dir_unzip, overwrite = TRUE)
   }
 }
 
 d_zips_read |>
   pwalk(function(url, file_zip, zip_type, ...) {
-    download_and_unzip(url, file_zip, dir_dl, zip_type, unzip = TRUE)
+    download_and_unzip(url, file_zip, dir_dl, dir_ext, zip_type, unzip = TRUE)
   })
 
-say("Download and extraction complete!")
+say(glue("Download and extraction complete: archives in {dir_dl}, ",
+         "extracted files in {dir_ext}"))
 ```
 
 ### Overlap guard {#jrw-overlap-guard}
@@ -668,7 +745,8 @@ either way.
 # the file SETS are not always the same shape and a positional compare would lie.
 web_btl <- tibble(
   path = list.files(
-    dir_dl, pattern = "_CTDBTL_.*\\.csv$", full.names = TRUE, recursive = TRUE)) |>
+    dir_ext, pattern = "_CTDBTL_.*\\.csv$", full.names = TRUE,
+    recursive = TRUE)) |>
   filter(str_detect(path, "_CTDFinalQC/db[_-]csvs?/")) |>
   mutate(file_csv = basename(path), web_bytes = as.numeric(file_size(path))) |>
   select(file_csv, web_bytes) |>
@@ -764,7 +842,7 @@ yet".
 
 d_csv <- tibble(
   path = list.files(
-    dir_dl,
+    dir_ext,
     pattern = "\\.csv$",
     recursive = TRUE,
     full.names = TRUE
@@ -772,7 +850,7 @@ d_csv <- tibble(
 ) |>
   mutate(
     file_csv = basename(path),
-    path_unzip = str_replace(path, glue("{dir_dl}/"), ""),
+    path_unzip = str_replace(path, glue("{dir_ext}/"), ""),
     dir_unzip = str_extract(path_unzip, "^[^/]+"),
     cruise_key = str_extract(
       path_unzip,
@@ -810,12 +888,14 @@ d_csv <- tibble(
       .default = NA_character_
     ),
     # The direction letter is the LAST character of the name — and "last" has to
-    # survive a copy marker. `dir_dl` sits inside Google Drive, which names a
-    # conflict copy `19-9501JD_CTDBTL_001-646D 2.csv`; that ends in " 2.csv",
-    # matched neither arm of the old `…D\\.csv$` test, and came through as NA.
-    # Not cosmetic: [ctd_measurement] joins on cast_dir and NULL = NULL is never
-    # true, and [ctd_thin] needs a downcast. Strip the marker, then read the
-    # letter off the stem.
+    # survive a copy marker. Extraction used to land inside Google Drive, which
+    # named a conflict copy `19-9501JD_CTDBTL_001-646D 2.csv`; that ends in
+    # " 2.csv", matched neither arm of the old `…D\\.csv$` test, and came through
+    # as NA. Not cosmetic: [ctd_measurement] joins on cast_dir and NULL = NULL is
+    # never true, and [ctd_thin] needs a downcast. Extraction has since moved to
+    # `dir_ext`, off Drive, so nothing mints these any more — the stripping stays
+    # because it is two regexes against a filename and the archives themselves
+    # are not guaranteed free of a name Drive once produced.
     file_stem = file_csv |>
       str_remove("\\.csv$") |>
       str_remove("\\s*\\(\\d+\\)$") |>          # "name (2).csv"
@@ -833,10 +913,11 @@ d_csv <- tibble(
   arrange(cruise_key, path_unzip) |>
   filter(data_stage %in% CTD_DATA_STAGES) |>
   # An archive skipped in [pick_archives] is never unzipped — but this chunk globs
-  # the download directory, not the inventory, so a copy left behind by an earlier
-  # run (before the skip existed, or from a run where it was disabled) would still
-  # be found here and would compete with calcofi.org's identical copy. Drop them by
-  # their unzip directory so the skip decision holds regardless of what is on disk.
+  # the extraction directory, not the inventory, so a copy left behind by an
+  # earlier run (before the skip existed, or from a run where it was disabled)
+  # would still be found here and would compete with calcofi.org's identical copy.
+  # Drop them by their unzip directory so the skip decision holds regardless of
+  # what is on disk.
   filter(!dir_unzip %in% str_remove(d_zips_skip$file_zip, "\\.zip$"))
 
 # for each cruise keep only the most-advanced stage available:
@@ -962,23 +1043,28 @@ d_csv |>
 # A file that reads zero rows is a failure, not an observation — and it is the
 # one failure this pipeline could not see.
 #
-# `dir_dl` sits inside Google Drive, which evicts a synced file to a cloud-only
-# placeholder. `list.files()` still reports the full size (12,254,953 bytes for
-# 19-9501JD_CTDBTL_001-646D.csv) and `ls -lO` marks it `dataless`, but reading it
-# times out at the filesystem and `read_csv()` returns a **0-row tibble with no
-# error**. On the v2026.08.08 run 20 files across 14 cruises read 0 rows exactly
-# this way, and the only copy holding data was the `… 2.csv` conflict copy Drive
-# had made beside each one. Nothing downstream distinguishes "this cruise has no
+# Extraction used to land inside Google Drive, which evicts a synced file to a
+# cloud-only placeholder. `list.files()` still reported the full size (12,254,953
+# bytes for 19-9501JD_CTDBTL_001-646D.csv) and `ls -lO` marked it `dataless`, but
+# reading it timed out at the filesystem and `read_csv()` returned a **0-row
+# tibble with no error**. On the v2026.08.08 run 20 files across 14 cruises read 0
+# rows exactly this way. Nothing downstream distinguishes "this cruise has no
 # downcast" from "the downcast file was empty".
+#
+# `dir_ext` is now plain local disk, so that specific cause is gone — but the
+# assertion stays, because what it really tests is that the bytes reaching the
+# pivot are the bytes in the archive, and a truncated extraction says the same
+# thing. The remedy just changed: delete the archive's extraction directory and
+# re-render, rather than coaxing a file back out of Drive.
 d_csv_empty <- d_csv |> filter(nrows == 0)
 
 if (nrow(d_csv_empty) > 0)
   stop(glue(
     "{nrow(d_csv_empty)} CSV(s) read 0 rows:\n",
     paste0("  ", d_csv_empty$path_unzip, collapse = "\n"), "\n",
-    "A CTD db CSV is never legitimately empty. Check for a Google Drive ",
-    "cloud-only placeholder (`ls -lO` reports `dataless`) and materialize it ",
-    "with `cat file > /dev/null`, or move the download directory off Drive."))
+    "A CTD db CSV is never legitimately empty — its extraction is incomplete. ",
+    "Delete the offending director(ies) under {dir_ext} and re-render; ",
+    "[download_and_unzip] re-extracts from the archive in {dir_dl}."))
 ```
 
 ## Detect and Correct Column Type Mismatches

@@ -671,6 +671,30 @@ by path, so they stay as files.
   before minting geometry, and `release_database.qmd` does the same at release time
   so a fix does not require re-running all 16 ingests. Test `isnan()`/`isinf()`
   explicitly; never trust `IS NOT NULL` for a coordinate.
+- **Archives live on Drive; never unzip into it.** `dir_data` (Google Drive) is
+  the durable home for source files, and it syncs a few hundred `.zip` fine. It
+  does not survive their *contents*: `ingest_calcofi_ctd-cast.qmd` extracted 151
+  archives into `dir_dl` — ~124,000 files, ~45 GB — and the Drive client never
+  finished syncing them. Mid-sync it does two things that no plain directory
+  does, and both are silent: it **evicts** a file to a cloud-only placeholder
+  (full size to `list.files()`, `dataless` in `ls -lO`, and `read_csv()` returns
+  a **0-row tibble with no error**), and it mints ` 2.csv` **conflict copies**
+  holding the only materialized bytes. That combination cost release
+  v2026.08.08 ten cruises, because `cast_dir` is read off the last character of
+  the filename and `"…646D 2.csv"` resolved to `NA`.
+
+  Since 2026-08-16 the notebook extracts to `cc_stage_path("ctd-cast", "unzip")`
+  — outside Drive, outside the repo, disposable — and **fails the render if an
+  extracted directory reappears in `dir_dl`**;
+  `scripts/prune_ctd_extracts_from_drive.R` is what that error tells you to run
+  (dry-run by default; it refuses to delete a directory holding any file its
+  sibling archive cannot give back). Extraction completeness is checked against
+  the archive's own member count, not `dir_exists()`, so an interrupted run
+  re-extracts instead of reading as finished.
+
+  The generalization: **an ingest's bulk inputs belong under `cc_stage_dir()`
+  for the same reason its bulk outputs do.** Drive keeps the one artifact worth
+  keeping — the archive — and everything derived from it is local scratch.
 - **DuckDB**: always open via `calcofi4db::get_duckdb_con()` (sets
   `storage_compatibility_version=latest` so CRS-tagged geometry round-trips);
   never strip the geometry column. Known bug: `UPDATE`/`CREATE INDEX` on a table

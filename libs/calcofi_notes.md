@@ -22,6 +22,63 @@
 - [ ] `ingest_calcofi_ctd-cast.qmd` needs a sync to GCS for just the used CSV files so saved in GCS `archive/`, not just GCS `_sync/`
 
 
+## 2026-08-16 move CTD extraction off Google Drive
+
+> The @ingest_calcofi_ctd-cast.qmd is murdering my Google Drive. It opens every zip with hundreds
+> (or more) of files and then proceeds to sync on GDrive which never finishes. Can we keep only the
+> zips and setup the code to unzip them to @~/_big/calcofi/ctd-cast/ for reading? And clean up
+> existing Google Drive folder `@~My Drive/projects/calcofi/data-public/calcofi/ctd-cast/download/`
+
+Done — this is the "durable fix" left open on 2026-08-10 (see the v2026.08.08 ten-lost-cruises
+entry below, which ends "Two things I did not do, both your call: moving `dir_dl` off Drive…").
+
+The split, and why it is a split rather than a move:
+
+| | path | holds | synced |
+|---|---|---|---|
+| `dir_dl` | `~/My Drive/…/calcofi/ctd-cast/download/` | 368 `.zip`, 18 GB | yes, Drive → `gs://calcofi-files-public/_sync/…` |
+| `dir_ext` | `~/_big/calcofi/ctd-cast/unzip/` (`cc_stage_dir()`) | 151 extracted archives, ~70,000 files | no — local, disposable |
+
+Drive syncs 368 archives fine. What it cannot do is sync what is *inside* them, and the failure is
+silent in both directions — placeholders that read as 0-row CSVs, and ` 2.csv` conflict copies whose
+names no longer end in a cast-direction letter. So Drive keeps the one artifact worth keeping and
+everything derived from it is local scratch that the next render rebuilds.
+
+Changes:
+
+- `ingest_calcofi_ctd-cast.qmd` — `dir_ext <- cc_stage_path("ctd-cast", "unzip")`; `download_and_unzip()`
+  takes `dest_dir` (archive) and `ext_dir` (contents) separately; `[d_csv]` and the JRW overlap
+  guard glob `dir_ext`. New `### Archives on Drive, contents on local scratch` section documents it.
+- **Completeness is now measured, not assumed.** The old test was `dir_exists(dir_unzip)`, which
+  reads an interrupted extraction as a finished one — a routine outcome now that the target is
+  disposable scratch. It compares the file count on disk against the archive's member count (from
+  the zip central directory, so a seek rather than an extraction) and re-extracts with
+  `overwrite = TRUE` when short. `<` not `!=`, so an over-populated directory is churn-free.
+- **The split is guarded, not just documented.** `[setup]` stops the render if any directory
+  reappears in `dir_dl`, naming them and pointing at the pruner. Without that this silently
+  regresses the first time someone unzips by hand.
+- `scripts/prune_ctd_extracts_from_drive.R` — dry-run by default. Deletes a Drive extraction
+  directory only when (1) its sibling `.zip` exists *and its central directory reads*, and (2) every
+  file on disk is a member of that archive. An unmatched file — a hand-added file, or a conflict
+  copy holding the only readable bytes — skips the whole directory and is named, rather than being
+  deleted with a warning.
+- `libs/repair_ctd_download_cache.R` **deleted**. Its entire job was repairing extracted CSVs inside
+  Drive; that directory now holds none, so it would scan zero files and report success — worse than
+  absent. Git history keeps it.
+- The 0-row-CSV assertion stays, with the remedy rewritten: delete the archive's extraction
+  directory and re-render, rather than coaxing a file back out of Drive. What it really tests is
+  that the bytes reaching the pivot are the bytes in the archive, and a truncated extraction says
+  the same thing a placeholder did.
+
+One thing worth recording about the migration itself. The archive set to extract is `d_zips_read`
+(final/preliminary, minus the Wilkinson archives superseded by a calcofi.org final), which is
+computed from a live scrape. Reproducing that rule offline from local filenames gave 141 archives;
+Drive held 151. The extra 10 are `_CTDFinalDB` directories left from before the skip existed —
+exactly what `[d_csv]`'s `filter(!dir_unzip %in% d_zips_skip)` guard anticipates. Extracted the
+superset of 151 anyway: an unneeded directory is filtered at render time, a missing one is a lost
+cruise, and the two are not symmetric.
+
+
 ## 2026-08-14 publish cdfw_dungeness-crab
 
 We just got the OK to publish @ingest_cdfw_dungeness-crab.qmd per the high priority Q. See thread
