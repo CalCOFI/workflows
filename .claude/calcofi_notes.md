@@ -22,6 +22,10 @@
 - [ ] `ingest_calcofi_ctd-cast.qmd` needs a sync to GCS for just the used CSV files so saved in GCS `archive/`, not just GCS `_sync/`
 
 
+## 2026-08-17 setup pg, pgadmin, ssh for rasmus, ben g, kelsey
+
+The CTD cast team would like to use PostgreSQL for their CTD QA/QC work since it allows for multi-user read/write of a common db. We already have an instance running, per @../server, but it should be updated. There is also a pgadmin web interface, which I was only able to manually set. I would like to have user accounts setup for them so they can SSH (and SFTP) onto the host server, especially the /share folder, for upload/download and for accessing the db via SSH tunnel. We will need to provide explicit instructions for them on how to connect via Windows (eg Putty) and Mac (Terminal). We should also upgrade all related software instances of postgres, pgadmin4. And we need to confirm that backup works, but rather than pushing to fragile Google Drive, we should push (and cleanup) to a dedicated GCS bucket for db backups.
+
 ## 2026-08-16 move CTD extraction off Google Drive
 
 > The @ingest_calcofi_ctd-cast.qmd is murdering my Google Drive. It opens every zip with hundreds
@@ -447,6 +451,37 @@ This needed a full data reprep (new bio_obs column) — that ran clean, hex_rc=0
 
 Reload and the legend should read Avg. count for the crab with the note beneath the aggregation selector. If it doesn't, tell me and I'll check the running session rather than guess again.
 
+----
+
+Verified on the live server database this time, not inferred.
+
+What the app will now show:
+
+┌──────────────┬───────────────────────┬───────────────────────────────────────────────────────┐
+│  selection   │        legend         │                         note                          │
+├──────────────┼───────────────────────┼───────────────────────────────────────────────────────┤
+│ Dungeness    │ Avg. count            │ one unit, "as published by the source, not            │
+│ crab         │                       │ effort-standardized"                                  │
+├──────────────┼───────────────────────┼───────────────────────────────────────────────────────┤
+│ Sardine      │ Avg. value (3 mixed   │ mixed-units warning + per-unit breakdown              │
+│              │ units)                │                                                       │
+└──────────────┴───────────────────────┴───────────────────────────────────────────────────────┘
+
+Sardine is more interesting than either of us assumed: it spans three units — count/10m² (11,065, standardized), count/100m³ (2,261, standardized), and a bare count (49,572, not standardized, from CUFES). The unstandardized rows outnumber the standardized ones 4:1. So "Avg. CPUE" was wrong for sardine too, not just for the crab.
+
+Why you saw "Avg. value" with no note
+
+Two bugs, both mine:
+
+Scope. I computed rx$sp_units inside output$map, but df_sp is a local of the startup observer and out of scope there. Every render raised "object df_sp not found" — and my own tryCatch swallowed it, returning an empty tibble. That produced the empty-case label and a NULL note, indistinguishable from a genuinely empty selection and invisible in the log.
+
+That's the same masking failure that made a DuckDB error surface as object 'ord' not found this morning. I diagnosed that one and then wrote the same pattern myself hours later. It now warns instead of silently returning empty, and sp_units is computed beside rx$df_sp in both loading observers so it can't drift from what's mapped.
+
+Duplicated rule. I'd re-derived "was this standardized?" in the app as tow_type AND (std_haul_factor OR volume_sampled) — which misreports any non-manta tow carrying a volume, since prep_db.R only standardizes by volume for manta. That's precisely the brittleness you objected to, reintroduced one layer down. prep_db.R now emits cpue_standardized from the same CASE that produces cpue_unit, and the app just reads it. One rule, one place.
+
+This needed a full data reprep (new bio_obs column) — that ran clean, hex_rc=0, all endpoints 200.
+
+Reload and the legend should read Avg. count for the crab with the note beneath the aggregation selector. If it doesn't, tell me and I'll check the running session rather than guess again.
 
 ## 2026-08-13 db-viz-station CLAUDE.md and review repo
 
@@ -579,7 +614,41 @@ Fix the defects
 
 ----
 
+Both asks are done, deployed, and verified.
 
+Deploy script
+
+Step 1b ran for real and printed exactly what it should:
+
+==> 1b/5 checking calcofi4r in the rstudio container
+    checkout 1.7.0 | installed 1.7.0 -> up to date
+
+It compares the checkout's DESCRIPTION against the installed version, installs only on a difference, and verifies the install took — an install that silently failed would put us right back in the state that caused this. The gap was that prep_db.R reads calcofi4r via load_all() (a pull suffices) while the apps use library() — the installed package a pull never touches. That's why the earlier deploy looked clean with the fix absent.
+
+Vernacular picks — live
+
+App database now has 1,020 of 1,389 species named (was 999):
+
+Metacarcinus magister  →  Dungeness crab
+Merluccius gayi        →  South Pacific hake
+Euphausiacea           →  krill
+Euphausiidae           →  euphausiids
+
+That last pair is the deliberate split — order vs family — so they don't both render as "krill".
+
+The release went 917 → 1,147 named taxa, with zero left awaiting a choice and candidates_en intact throughout, so every pick is reviewable.
+
+Five to look at when you have a taxonomist handy — marked PARTIAL in the registry's notes because no candidate WoRMS offered actually covers the taxon:
+
+- Balaenoptera → "finback whales" (genus is properly the rorquals)
+- Procellariidae → "shearwaters" (omits fulmars, petrels, prions)
+- Anomura → "hermit crabs" (omits porcelain crabs, squat lobsters)
+- Cyanobacteria → "blue-green algae" (they're bacteria)
+- Ochrophyta → "brown algae" (omits diatoms, golden algae)
+
+All pushed: workflows def5c29, calcofi4db 4240d05, calcofi4r 174dd6b, db-viz-hex 1c3ee24. All three endpoints 200, h3t reopened the new file.
+
+One note on cost, since it shaped what I did: because taxon is merged from shards rather than rebuilt, this only ever needed release_database re-run (~34 min each), not the ten taxa-emitting ingests. That's the reason apply_taxon_common() lives centrally.
 
 ## 2026-08-13 review email
 
