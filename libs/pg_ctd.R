@@ -146,7 +146,9 @@ pg_ctd_build_parquet <- function(files, dir_out, overwrite = FALSE, progress = T
     # archive in the name: JRW's *_CTDFinalDB.zip and calcofi.org's *_CTDFinalQC.zip hold files
     # with IDENTICAL inner names (20-0001NH_CTDBTL_001-066D.csv), which once silently overwrote
     # each other here and left 37 files with no scans (caught by the completeness check)
-    stem <- paste0(tools::file_path_sans_ext(f$archive), "__", tools::file_path_sans_ext(basename(f$path)))
+    # …and the SAME archive can hold the same filename in two subdirectories (2204SH: csvs-plots/
+    # and db-csvs/), so the parquet name is the whole member path
+    stem <- gsub("/", "__", tools::file_path_sans_ext(f$path))
     out  <- file.path(dir_out, paste0("study=", f$study), paste0(stem, ".parquet"))
     outi <- file.path(dir_out, "_issues", paste0("study=", f$study), paste0(stem, ".parquet"))   # sibling tree: scan globs never see it
     dir.create(dirname(out), recursive = TRUE, showWarnings = FALSE); dir.create(dirname(outi), recursive = TRUE, showWarnings = FALSE)
