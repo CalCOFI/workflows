@@ -1,6 +1,10 @@
 # calcofi4py — Python parity for release + PostgreSQL access
 
-**Status:** draft follow-on plan (from `2026-08-17 CTD team PostgreSQL…` WS6), not started.
+**Status:** DONE 2026-08-19/20 — https://github.com/CalCOFI/calcofi4py (0.1.0, public, CI green
+on Python 3.10–3.13; 10 tests incl. the live PG pair verified through a real tunnel against the
+production `calcofi` database). Docs updated: `server-access.qmd` + `data-access.qmd` Python
+sections now lead with it. Departures from the draft: repo created directly on `main` (user said
+"proceed"), no PyPI publish yet (`pip install git+…`).
 The CTD team works in R *and* Python; today the docs hand Python users raw `duckdb` /
 `psycopg` snippets (`docs/server-access.qmd`, `docs/data-access.qmd`). This plan gives them
 a pip-installable package with the same three verbs as `calcofi4r`.
