@@ -451,7 +451,7 @@ verified), 4 (`pgadmin4.db.prev.bak`), 2 (disk snapshot restore).
 
 - **Marina's superuser roles** (`mfrants`, `root`) — fine to keep, but the new DB should not
   inherit "everyone is superuser". Ask her before revoking on `gis`.
-- **`ro_user` / `ROPASS`** — who uses it (`plumber`? old apps?). Audit before removing.
+- **`ro_user` / `ROPASS`** — who uses it (`plumber`? old apps?). *Audited 2026-08-19 with `log_connections=on`: in 8 h of traffic, zero `ro_user` connections — everything on `gis` connects as `admin` (909 conns: tileserv/plumber/pgadmin). Safe to retire `ro_user` after a longer observation window; the bigger cleanup is that the services share the superuser.*
 - **`plumber` api.calcofi.io** is documented as superseded but runs against `gis` — the PG18
   restore keeps it alive; decide separately whether to retire it.
 - **Email/SMTP** — pgAdmin password resets and (if we skip healthchecks.io) backup alerts
