@@ -69,6 +69,93 @@ Looks great! I reviewed D1-D12 and only changed D6 to hold off on upgrading SSD 
   frequent raw backups available locally (better to manage on GCS anyways, but have at least enough
   space to conduct a db backup and restore). Please proceed
 
+
+----
+
+**EXECUTED 2026-08-19** (plan approved; D6 changed to keep the 200 GB ssd). Everything below is
+live and verified; per-repo commits reference this session.
+
+Server findings that reordered the work (all three found by read-only inspection before touching
+anything): (1) the nightly Drive backup had been failing with `storageQuotaExceeded` **every night
+since 2025-02-02** — no off-site DB copy for 18 months; (2) the Postgres data lived in an
+**anonymous** Docker volume (compose mounted `/var/lib/postgresql`, the 17 image's VOLUME is
+`…/data`) — a `compose down && up` would have started an empty database; (3) Debian 11 LTS ends
+2026-08-31.
+
+What landed, in order:
+
+- **Backups → GCS** (`gs://calcofi-backups`, private, versioned, lifecycle): nightly ship at
+  00:30 UTC (`rclone/backup.sh`, allow-list of daily/weekly/monthly + manual/ + pgadmin4.db),
+  weekly **restore drill from the off-site copy** (Sun 03:15, `gis` 138/138 tables + row counts in
+  166 s, `calcofi` too), hourly health flag at https://file.calcofi.io/status/pg_backup.json and a
+  `db-backup` upptime check on the `.ok` flag. Legacy 2022 dumps moved out of the PUBLIC
+  calcofi-db bucket; `_old/` archived to `postgres/legacy-2024/`. Gotcha for posterity: the first
+  ship was a whole-prefix `rclone sync` and **deleted** the bucket-only `legacy-*` objects —
+  recovered from noncurrent versions (that is exactly what the 90-day versioning is for), and the
+  sync is now an allow-list.
+- **Host**: in-place Debian 11→12 (kernel 6.1), Docker 29.7.2/Compose 5.5.0, reboot, all 11
+  containers + public endpoints verified; `default-allow-rdp` firewall rule deleted.
+- **PostgreSQL 17.1→18.6 + PostGIS 3.6.4** by dump/restore (`scripts/pg_upgrade_18.sh`): fresh
+  dumps taken with pg_dump 18 *against the 17 server* and verified off-site BEFORE the swap;
+  restore 0 errors, table list identical, 20 largest row counts equal; data now in the NAMED
+  volume (18's VOLUME is `/var/lib/postgresql`, PGDATA `…/18/docker`); config finally real via
+  `-c` flags (the old `postgis/postgresql.conf` bind-mount was a no-op — 128 MB shared_buffers on
+  a 15 GB box; now 2 GB + sane rest); 5432/8088 bound to 127.0.0.1. Old anonymous volume
+  `7ea47db1…` kept for rollback — `docker volume rm` it when comfortable (6.4 GB).
+- **pg_duckdb 1.1.1** baked into `calcofi-postgis:18-3.6-duckdb` (postgis/Dockerfile copies the
+  .so from the official pgduckdb image; both bookworm/PG18): `read_parquet('https://…release…')`
+  works INSIDE Postgres next to PostGIS; `release.{cruise,ship,dataset}` views
+  (postgis/init/50_release_views.sql, version-pinned, re-run per release);
+  `duckdb.postgres_role=calcofi_reader`.
+- **`calcofi` database**: roles calcofi_reader/writer/curator/loader/admin (+pipeline/app),
+  schemas `ctd` / `work` / per-user, default privileges so colleagues can read what you make
+  (postgis/init/10,20,30).
+- **Accounts** (users/users.csv + scripts/add_user.sh, idempotent): rswalethorp 1004, bmgire 1005,
+  kdvogel 1006, bhuang 1007, esatterthwaite 1008 (+ bebest 1003) — host login key-only in group
+  `calcofi` (NO sudo/docker), `/share/data/ctd/{incoming,archive,exports}` setgid, DB role +
+  personal schema, generated password living ONLY in each `~/.pgpass` on the server (they ssh in
+  and `cat ~/.pgpass`), same password on their pgAdmin account and their mirrored rstudio-container
+  account (rstudio.calcofi.io works with host="postgis", zero config — verified as rswalethorp).
+  **Waiting on their SSH public keys** → users/keys/<u>.pub, re-run add_user.sh.
+- **pgAdmin 9.17** (pinned): six accounts, shared servers "calcofi (CTD QA/QC)" + "gis (legacy
+  2022)". Google sign-in is plumbed via PGADMIN_CONFIG_* but needs the OAuth client created in the
+  Cloud Console (I stopped at the Google password prompt — README "pgAdmin" has the 3 steps; put
+  id/secret + PGADMIN_AUTH_SOURCES in .env and `docker compose up -d pgadmin`).
+- **Docs**: new chapter https://calcofi.io/docs/server-access.html (Mac/PowerShell/PuTTY tabs,
+  pgAdmin-desktop SSH-tunnel tab as the easy Windows GUI, .pgpass, R/Python/DuckDB, the ctd schema
+  + first-flag walkthrough, etiquette); db.qmd Postgres section brought current.
+- **calcofi4r 1.8.0**: `cc_pg_connect()` (host/role/password all defaulted — .pgpass, PGHOST,
+  server detection), `cc_pg_tunnel()`/`_close()` (processx over the ~/.ssh/config alias),
+  `cc_pg_attach()` (DuckDB postgres ext; release + PG in one query). Live-tested from this laptop
+  through a 15432 tunnel.
+- **The CTD archive is IN the database** (schema `ctd`, server/postgis/init/40_ctd.sql +
+  workflows/libs/pg_ctd.R + load_pg_ctd.qmd, rendered): **409 db-CSV files → 10,812,360 scans,
+  all 82 source columns verbatim** (blanks NULL, `-99` kept — 1.4 M sentinel positions), each row
+  traceable to (archive, path, line); 2,558 untypable cells (bottle comments in numeric columns
+  etc.) preserved verbatim in `ctd.scan_issue`; `ctd.file.is_best_stage` picks ONE archive+dir per
+  study×direction (final > prelim+btl > prelim; calcofi.org over JRW; db-csvs/ over csvs-plots/);
+  24,928 casts (20,521 best) 1993-08-11 → 2026-07-13, 142 studies all mapped to release
+  `cruise_key`s; `ctd.flag` ledger (IODE codes) with RLS — anyone proposes, curators
+  (rswalethorp/bmgire/kdvogel/esatterthwaite) accept/reject, every change audited; generated
+  `v_scan_qc` (originals + `<var>_qc`/`<var>_fix`) and `v_scan_clean`; immutability enforced by
+  trigger (verified: even the owner cannot UPDATE ctd.scan). calcofi db = 5.9 GB. Parquet mirror
+  `gs://calcofi-db/pg/ctd_scan_raw/` + manifest `data/pg/ctd_scan_raw_files.csv`.
+- **Round trip**: nightly 01:20 UTC `scripts/pg_flag_snapshot.sh` → public
+  `gs://calcofi-db/qc/ctd/{flag_accepted,flag_ledger}.parquet` + `flag_meta.json` — the ingest can
+  apply accepted flags as `measurement_qual` with no live PG dependency (that ingest change is
+  deliberately deferred until the team accepts real flags).
+- Q25 (flag vocabulary + curator list) and Q26 (the 2,558 issue cells) filed as `proposed` in
+  metadata/calcofi/ctd-cast/questions.csv for the team.
+
+Loader bugs worth remembering: identical inner filenames across JRW's `_CTDFinalDB.zip` and
+calcofi.org's `_CTDFinalQC.zip` (and even within ONE archive: 2204SH has csvs-plots/ AND db-csvs/
+copies) silently overwrote each other's parquet until the parquet name became the full member
+path — caught both times by the per-file completeness check (scan rows == file n_rows), which is
+why that check exists. Seven cruises use `MM/DD/YYYY HH:MM` datetimes instead of `DD-Mon-YYYY
+HH:MM:SS`; strptime takes a format LIST. And `sha256` is NOT unique across archives (JRW and
+calcofi.org ship byte-identical files) — file identity is (archive, path).
+
+
 ## 2026-08-16 move CTD extraction off Google Drive
 
 > The @ingest_calcofi_ctd-cast.qmd is murdering my Google Drive. It opens every zip with hundreds
