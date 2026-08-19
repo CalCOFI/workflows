@@ -24,7 +24,50 @@
 
 ## 2026-08-17 setup pg, pgadmin, ssh for rasmus, ben g, kelsey
 
-The CTD cast team would like to use PostgreSQL for their CTD QA/QC work since it allows for multi-user read/write of a common db. We already have an instance running, per @../server, but it should be updated. There is also a pgadmin web interface, which I was only able to manually set. I would like to have user accounts setup for them so they can SSH (and SFTP) onto the host server, especially the /share folder, for upload/download and for accessing the db via SSH tunnel. We will need to provide explicit instructions for them on how to connect via Windows (eg Putty) and Mac (Terminal). We should also upgrade all related software instances of postgres, pgadmin4. And we need to confirm that backup works, but rather than pushing to fragile Google Drive, we should push (and cleanup) to a dedicated GCS bucket for db backups.
+The CTD cast team would like to use PostgreSQL for their CTD QA/QC work since it allows for multi-user read/write of a common db. We already have an instance running, per @../server, but it should be updated. There is also a pgadmin web interface, which I was only able to manually set. I would like to have user accounts setup for them so they can SSH (and SFTP) onto the host server, especially the /share folder, for upload/download and for accessing the db via SSH tunnel. We will need to provide explicit instructions for them on how to connect via Windows (eg Putty) and Mac (Terminal), which should probably go into @../docs. We should also upgrade all related software instances of postgres, pgadmin4. And we need to confirm that backup works, but rather than pushing to fragile Google Drive, we should push (and cleanup) to a dedicated GCS bucket for db backups. We need to enable the following users access:
+
+Rasmus Swalethorp <rswalethorp@ucsd.edu>
+Benjamin Gire <bmgire@ucsd.edu>
+Kelsey Vogel <kdvogel@ucsd.edu>
+Betty Huang <bhuang0022@gmail.com>
+Erin Satterthwaite <esatterthwaite@ucsd.edu>
+Betty Huang <bhuang0022@gmail.com>
+Ben Best <bebest@ucsd.edu>
+
+Use email prefix for all, except use bhuang (not bhuang0022) for Betty.
+
+First write a plan to ./claude/plans/ for me to review. It might remind me of other aspects we need to cover. Be thorough and try to keep setup and usage as simple as possible for users. They will use R (and @../calcofi4r), but also Python (and ideally someday a Python helper module like calcofi4py to replicate latest access to full db like calcofi4r).
+
+We would also like to enable bidirectional communication with our integrated DuckDB db. I know DuckDB has a Postgres extension, and understand pg_duckdb exists. So very interested in enabling this. This group wants to have the entire CTD cast archive in the db. I am hoping to encourage them to upload the entirety of the original data into the system, and then use extra columns to flag problematic data and propose fixes, without altering the original data. From there they can derive variations, like 1 meter binned averages, etc.
+
+----
+
+The plan is written to .claude/plans/2026-08-17 CTD team PostgreSQL — accounts, upgrades, GCS backups, DuckDB bridge.md (the repo's existing plans dir; I read it as the ./claude/plans/ you meant). Nothing on the server was changed — every check was read-only.
+
+What you should know before reading it
+
+Inspecting the live server turned up three things that reorder the work, all independent of the CTD ask:
+
+1. Off-site DB backups have been failing since 2025-02-02. Every nightly rclone sync … remote:db_backups dies with Drive storageQuotaExceeded (35,854 such log lines). For 18 months the only copies have lived on the same VM disk as the database. The GCS bucket goes first.
+2. The Postgres data is in an anonymous Docker volume. Compose mounts postgis_data:/var/lib/postgresql, but the ≤17 image declares VOLUME …/data, so PGDATA got auto-volume 7ea47db1… (6.4 GB); the named volume holds 16 KB. A docker compose down && up would start an empty database. It has survived only because up --force-recreate happens to reuse anonymous volumes. Fixed as part of the PG 18 upgrade (whose image moves the volume to exactly the path we already mount), with a verified dump in hand first.
+3. Debian 11 LTS ends 2026-08-31 — two weeks from now — and Docker/Compose are mid-2022. We're about to hand out five SSH accounts on it; the plan bundles an in-place bookworm upgrade into the same window (your call, D5).
+
+Smaller ones: the postgis/postgresql.conf bind-mount is a no-op (SHOW config_file points at PGDATA; you're on 128 MB shared_buffers); two 2022 SQL dumps sit in the public gs://calcofi-db/ root; port 5432 is already unreachable from the internet (tunnel-only holds); and local users + authorized_keys coexist with OS Login (that's how your bebest logs in), which is what makes the short usernames possible.
+
+Shape of the plan
+
+- §1 — 12 decisions with defaults (PG 18 now vs 17.x; new calcofi DB vs schemas in gis; pgAdmin Google-login vs internal accounts; disk resize; which "original data" first — the 8 GB db-CSV products vs the 32.7 GB .asc full-rate files; separate flag ledger vs literal extra columns; RStudio Server accounts too; bucket name; no sudo/docker for users).
+- §3 — nine workstreams: safety net (snapshots + manual off-box dump today), backups→GCS with a weekly restore drill and heartbeat, PG 18 + fixed volume + real config + roles/schemas, pgAdmin 9.17, host accounts via a registry + idempotent add_user.sh (DB password never leaves the server — it lands in the user's ~/.pgpass), the docs/server-access.qmd chapter (Mac/Windows-PowerShell/PuTTY, pgAdmin-desktop's built-in SSH tab as the easy GUI, R, Python, DuckDB), calcofi4r::cc_pg_connect()/cc_pg_tunnel()/cc_pg_attach() with a calcofi4py scaffold as follow-on, the DuckDB↔PG bridge in two phases (postgres extension now; postgis + pg_duckdb image second — I verified the images share a bookworm base and PG 18 tags exist for everything), and the CTD archive schema (ctd.file/scan/cast immutable and provenance-stamped, ctd.flag ledger with RLS + audit, v_scan_qc presenting "the wide table with _qc/_fix columns", scan_1m materialized, hooks for the ctd-qaqc rules and a nightly accepted-flags → GCS → ingest round trip).
+- §4 sequencing/effort/downtime, §5 things it may remind you of (Marina's superuser roles, ro_user, plumber on gis, no SMTP, Betty's gmail under OAuth, the flat /share/data), §6 file-by-file per repo, §7 the exact first commands for WS0, §8 what I verified against which sources.
+
+Answer the D1–D12 lines inline (or just say "defaults") and I'll start with WS0 + the bucket.
+
+----
+
+Looks great! I reviewed D1-D12 and only changed D6 to hold off on upgrading SSD since Rasmus
+  seemed conscientious about server expenses, but understand that means holding off on as many
+  frequent raw backups available locally (better to manage on GCS anyways, but have at least enough
+  space to conduct a db backup and restore). Please proceed
 
 ## 2026-08-16 move CTD extraction off Google Drive
 

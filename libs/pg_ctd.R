@@ -183,14 +183,15 @@ pg_ctd_duck <- function(pg_dsn, remote = FALSE) {
 }
 
 #' load parquet (local dir or s3://calcofi-db/... prefix) into ctd.file + ctd.scan.
-#' Idempotent on sha256: files already in ctd.file are skipped.
+#' Idempotent on (archive, path): files already in ctd.file are skipped.
 pg_ctd_load <- function(files, parquet_root, pg_dsn, gcs_uri_root = NULL, cruise_keys = NULL, batch_studies = 10) {
   remote <- grepl("^s3://", parquet_root)
   con <- pg_ctd_duck(pg_dsn, remote = remote)
   on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
   cols <- pg_ctd_columns()
-  existing <- DBI::dbGetQuery(con, "SELECT sha256 FROM pg.ctd.file")$sha256
-  new <- files[!files$sha256 %in% existing, ]
+  # identity is (archive, path): the same bytes can sit in two archives (JRW + calcofi.org)
+  existing <- DBI::dbGetQuery(con, "SELECT archive || '|' || path AS k FROM pg.ctd.file")$k
+  new <- files[!paste0(files$archive, "|", files$path) %in% existing, ]
   cat(sprintf("ctd.file: %d already loaded, %d new\n", nrow(files) - nrow(new), nrow(new)))
   if (nrow(new) == 0) return(invisible(NULL))
   new$cruise_key <- if (is.null(cruise_keys)) NA_character_ else unname(cruise_keys[new$study])
