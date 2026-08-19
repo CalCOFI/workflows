@@ -1,0 +1,190 @@
+---
+title: "Load the CTD cast archive into PostgreSQL (`ctd` schema)"
+subtitle: "originals verbatim → `ctd.file` / `ctd.scan`; flags and products live beside them"
+format:
+  html:
+    toc: true
+    code-fold: show
+params:
+  build_parquet: true      # laptop: db-CSV files -> typed parquet (one per file)
+  upload_parquet: true     # laptop: parquet -> gs://calcofi-db/pg/ctd_scan_raw/
+  run_load: true           # parquet -> PostgreSQL (through the tunnel from a laptop, or on the server)
+  pg_port: 15432           # local end of the SSH tunnel (5432 if free; server: 5432 with host postgis)
+  pg_host: "localhost"
+---
+
+## Overview
+
+This notebook puts the **entire calcofi.org CTD db-CSV archive** — every final and
+preliminary cast file, every one of its 82 columns, verbatim — into the CTD team's
+multi-user PostgreSQL database (`calcofi`, schema `ctd`; DDL in
+[`server/postgis/init/40_ctd.sql`](https://github.com/CalCOFI/server/blob/main/postgis/init/40_ctd.sql)).
+It is the *originals* layer of the QA/QC design: nothing here is cleaned, deduplicated or
+thinned. `-99` sentinels, `NaN`s and superseded preliminary files all go in, each row
+traceable to (archive, path, line). Problems become rows in `ctd.flag`; the release
+ingest ([`ingest_calcofi_ctd-cast.qmd`](ingest_calcofi_ctd-cast.html)) keeps doing the
+cleaning for the public release.
+
+Three stages, each resumable and idempotent on the file's sha256:
+
+1. **discover + build parquet** (laptop, where the archives are extracted under
+   `cc_stage_path("ctd-cast", "unzip")`): one typed parquet per cast file;
+2. **upload** the parquet to `gs://calcofi-db/pg/ctd_scan_raw/` (public bucket — this is
+   calcofi.org's public data), so the load can run anywhere;
+3. **load** into `ctd.file` + `ctd.scan` with DuckDB's `postgres` extension, then
+   `ctd.refresh_derived()` (best-stage flags, `ctd.cast`, the `v_scan_qc` / `v_scan_clean`
+   views) and the data dictionary (`ctd.scan_column` from `metadata/measurement_type.csv`).
+
+Run the load **on the server** for speed (`host=postgis`, no tunnel) — see the last
+section — or from a laptop through `cc_pg_tunnel()`; both use the same functions in
+[`libs/pg_ctd.R`](https://github.com/CalCOFI/workflows/blob/main/libs/pg_ctd.R).
+
+## Setup
+
+```{r}
+#| label: setup
+librarian::shelf(
+  calcofi/calcofi4db, calcofi/calcofi4r,
+  DBI, digest, dplyr, DT, duckdb, fs, glue, here, RPostgres, stringr, tibble, tidyr,
+  quiet = TRUE)
+source(here("libs/pg_ctd.R"))
+
+dir_ext   <- calcofi4db::cc_stage_path("ctd-cast", "unzip")     # archives extracted by the ingest
+dir_pq    <- calcofi4db::cc_stage_path("pg", "ctd_scan_raw")    # typed parquet, one per file
+gcs_pq    <- "gs://calcofi-db/pg/ctd_scan_raw"                  # public mirror of dir_pq
+s3_pq     <- "s3://calcofi-db/pg/ctd_scan_raw"                  # same, as DuckDB reads it (anonymous)
+gcs_zips  <- "gs://calcofi-files-public/_sync/calcofi/ctd-cast/download"  # where the archives live off-box
+pg_user   <- if (nzchar(Sys.getenv("PGUSER"))) Sys.getenv("PGUSER") else "bebest"
+pg_dsn    <- glue("dbname=calcofi host={params$pg_host} port={params$pg_port} user={pg_user}")
+
+dir_create(dir_pq)
+cat(glue("archives: {dir_ext}\nparquet:  {dir_pq}\npg:       {pg_dsn}\n"))
+```
+
+## 1. Discover the db-CSV cast files
+
+Same rules as the ingest's file discovery (final > preliminary-with-bottle >
+preliminary-without-bottle, direction from the last character of the file stem) — but
+**no** per-cruise "best stage" filter here: everything is loaded; `ctd.file.is_best_stage`
+records which file wins per study.
+
+```{r}
+#| label: discover
+files <- pg_ctd_discover_files(dir_ext, compute_sha = TRUE)
+cat(glue("{nrow(files)} files, {round(sum(files$n_bytes)/1e9, 2)} GB, {n_distinct(files$study)} studies\n"))
+files |> count(data_stage, cast_dir) |> datatable(caption = "files by stage × direction", options = list(dom = "t"))
+```
+
+```{r}
+#| label: cruise_keys
+# study (9709NH) -> release cruise_key (1997-09-32NM) via the release cruise table
+cruise_keys <- pg_ctd_cruise_keys(unique(files$study))
+unmapped <- names(cruise_keys)[is.na(cruise_keys)]
+cat(glue("{sum(!is.na(cruise_keys))} of {length(cruise_keys)} studies map to a release cruise_key",
+         if (length(unmapped)) glue("; unmapped: {paste(unmapped, collapse = ', ')}") else ""), "\n")
+```
+
+## 2. Build typed parquet (one per file)
+
+Every column is kept. Types: text for the identifiers, `timestamp` for the two date-times
+(`20-Sep-1997 10:43:30` in most files; `01/29/2015 05:55` / `9/9/2026 9:05` in seven
+cruises — all parsed), `smallint` for the `*Q` flag columns, `double` for everything else.
+Blanks → NULL. A non-blank cell that still cannot be typed — bottle comments such as `DIC`
+or `POSSIBLY 85;LEAKY BTM VLV` sitting in `OxBuM` (1210NH), concatenations like
+`15.86-99.0` (9803SP), `NaN` in a flag column — goes **verbatim** into a sibling
+`_issues` parquet and then into `ctd.scan_issue`, keyed to the exact (file, row, column);
+the `ctd.scan` cell is NULL. Nothing from the files is dropped; the report below is what
+the QC team should look at first.
+
+```{r}
+#| label: build_parquet
+#| eval: !expr params$build_parquet
+files <- pg_ctd_build_parquet(files, dir_pq, overwrite = FALSE)
+cat(glue("{format(sum(files$n_rows), big.mark = ',')} scan rows across {nrow(files)} files; parquet {round(sum(file_size(files$parquet))/1e9, 2)} GB\n"))
+cf <- attr(files, "cast_failures")
+if (is.null(cf) || nrow(cf) == 0) {
+  cat("untypable cells: none — every non-blank value typed cleanly\n")
+} else {
+  cat(glue("{format(sum(cf$n_failed), big.mark = ',')} untypable cells in {n_distinct(cf$path)} files → ctd.scan_issue\n"))
+  cf |> group_by(column_name) |> summarise(files = n(), cells = sum(n_failed), .groups = "drop") |> arrange(desc(cells)) |>
+    datatable(caption = "untypable source cells by column (kept verbatim in ctd.scan_issue; NULL in ctd.scan)", options = list(dom = "t"))
+}
+```
+
+## 3. Upload the parquet to GCS
+
+```{r}
+#| label: upload
+#| eval: !expr params$upload_parquet
+cmd <- glue("gcloud storage rsync -r --quiet '{dir_pq}' '{gcs_pq}'")
+cat(cmd, "\n"); status <- system(cmd)
+stopifnot(status == 0)
+cat("uploaded\n")
+```
+
+## 4. Load into PostgreSQL
+
+Through the tunnel from a laptop (`params$pg_host = localhost`, `pg_port` = the local end)
+or on the server (`pg_host = postgis`, `pg_port = 5432`). Files already in `ctd.file` (by
+sha256) are skipped; scans are inserted per study batch so an interrupted run resumes.
+
+```{r}
+#| label: load
+#| eval: !expr params$run_load
+if (params$pg_host == "localhost") calcofi4r::cc_pg_tunnel(local_port = params$pg_port)
+n <- pg_ctd_load(files, parquet_root = dir_pq, pg_dsn = pg_dsn, gcs_uri_root = gcs_zips, cruise_keys = cruise_keys)
+```
+
+```{r}
+#| label: finish
+#| eval: !expr params$run_load
+res <- pg_ctd_finish(pg_dsn, measurement_type_csv = here("metadata/measurement_type.csv"))
+print(res)
+if (params$pg_host == "localhost") calcofi4r::cc_pg_tunnel_close(local_port = params$pg_port)
+```
+
+## What landed
+
+```{r}
+#| label: summary
+#| eval: !expr params$run_load
+if (params$pg_host == "localhost") calcofi4r::cc_pg_tunnel(local_port = params$pg_port)
+con <- calcofi4r::cc_pg_connect(port = params$pg_port, host = params$pg_host)
+dbGetQuery(con, "
+  SELECT data_stage, cast_dir, count(*) AS files, sum(n_rows) AS scans, count(*) FILTER (WHERE is_best_stage) AS best
+  FROM ctd.file GROUP BY 1,2 ORDER BY 1,2") |> datatable(caption = "ctd.file by stage × direction", options = list(dom = "t"))
+dbGetQuery(con, "
+  SELECT min(datetime_utc)::date AS first_cast, max(datetime_utc)::date AS last_cast, count(*) AS casts,
+         count(DISTINCT study) AS studies, count(*) FILTER (WHERE geom IS NULL) AS casts_without_position
+  FROM ctd.cast WHERE is_best_stage") |> datatable(caption = "ctd.cast (best stage)", options = list(dom = "t"))
+dbGetQuery(con, "
+  SELECT column_name, count(*) AS cells, count(DISTINCT file_id) AS files, min(raw_value) AS example
+  FROM ctd.scan_issue GROUP BY 1 ORDER BY 2 DESC") |> datatable(caption = "ctd.scan_issue — untypable source cells, verbatim", options = list(dom = "t"))
+dbGetQuery(con, "
+  SELECT column_name, source_header, kind, qual_column, measurement_type, units
+  FROM ctd.scan_column ORDER BY ordinal") |> datatable(caption = "ctd.scan_column — the data dictionary")
+dbDisconnect(con)
+if (params$pg_host == "localhost") calcofi4r::cc_pg_tunnel_close(local_port = params$pg_port)
+```
+
+## Running the load on the server
+
+```bash
+# on the server, inside the rstudio container (has R + duckdb + RPostgres; reaches postgis by name)
+docker exec -u bebest -w /home/bebest rstudio Rscript -e '
+  source("/share/github/CalCOFI/workflows/libs/pg_ctd.R")
+  files <- readRDS("/share/data/ctd/exports/pg_ctd_files.rds")   # written by this notebook (see below)
+  pg_ctd_load(files, parquet_root = "s3://calcofi-db/pg/ctd_scan_raw",
+              pg_dsn = "dbname=calcofi host=postgis port=5432 user=bebest",
+              gcs_uri_root = "gs://calcofi-files-public/_sync/calcofi/ctd-cast/download")
+  pg_ctd_finish("dbname=calcofi host=postgis port=5432 user=bebest")'
+```
+
+```{r}
+#| label: export_manifest
+# the file manifest (paths, stages, sha256, n_rows, cruise_key) for a server-side load or audit
+files_out <- files |> mutate(cruise_key = unname(cruise_keys[study])) |> select(-path_abs, -parquet)
+dir_create(here("data/pg"))
+readr::write_csv(files_out, here("data/pg/ctd_scan_raw_files.csv"), na = "")
+cat(glue("manifest: data/pg/ctd_scan_raw_files.csv ({nrow(files_out)} files)\n"))
+```
