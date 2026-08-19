@@ -108,6 +108,15 @@ echo "==> 3/5 reopening the h3t database + flushing tiles"
 sshq "cd $GH/server && sudo docker compose restart h3t_api_py" | tail -1
 sshq "sudo docker exec varnish varnishadm ban 'obj.http.X-Url ~ \"^/h3t/\"'" | tail -1
 
+# 3b. PostgreSQL release.* views -------------------------------------------
+# The CTD team's calcofi database exposes the release through pg_duckdb views
+# (server/postgis/init/50_release_views.sql), pinned to a version string in the
+# read_parquet() URLs. Re-point them at $RELEASE by literal substitution — the
+# repo file stays canonical (and pinned to whatever release it was last committed
+# against); the live views always track the promoted release.
+echo "==> 3b/5 re-pointing PostgreSQL release.* views at $RELEASE"
+sshq "sed -E 's|/releases/v[0-9.]+/|/releases/$RELEASE/|g' $GH/server/postgis/init/50_release_views.sql | sudo docker exec -i postgis psql -U admin -d calcofi -v ON_ERROR_STOP=1 -q -f - >/dev/null 2>&1 && sudo docker exec postgis psql -U admin -d calcofi -tAc 'SELECT count(*) FROM release.cruise' | sed 's/^/    release.cruise rows: /'" | tail -1
+
 # 4. shiny apps ------------------------------------------------------------
 echo "==> 4/5 restarting apps"
 sshq "touch $GH/db-viz-hex/app/restart.txt $GH/apps/db-viz-cruise/restart.txt && echo ok" | tail -1
