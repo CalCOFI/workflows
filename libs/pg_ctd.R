@@ -192,28 +192,35 @@ pg_ctd_load <- function(files, parquet_root, pg_dsn, gcs_uri_root = NULL, cruise
   # identity is (archive, path): the same bytes can sit in two archives (JRW + calcofi.org)
   existing <- DBI::dbGetQuery(con, "SELECT archive || '|' || path AS k FROM pg.ctd.file")$k
   new <- files[!paste0(files$archive, "|", files$path) %in% existing, ]
-  cat(sprintf("ctd.file: %d already loaded, %d new\n", nrow(files) - nrow(new), nrow(new)))
-  if (nrow(new) == 0) return(invisible(NULL))
-  new$cruise_key <- if (is.null(cruise_keys)) NA_character_ else unname(cruise_keys[new$study])
-  new$gcs_uri    <- if (is.null(gcs_uri_root)) NA_character_ else file.path(gcs_uri_root, new$archive)
-  DBI::dbWriteTable(con, "new_files", as.data.frame(new[, c("archive","path","study","cruise_key","data_stage","cast_dir","sha256","n_bytes","n_rows","gcs_uri")]), overwrite = TRUE)
-  DBI::dbExecute(con, "
-    INSERT INTO pg.ctd.file (archive, path, study, cruise_key, data_stage, cast_dir, sha256, n_bytes, n_rows, gcs_uri)
-    SELECT archive, path, study, cruise_key, data_stage, cast_dir, sha256, n_bytes::BIGINT, n_rows::INTEGER, gcs_uri FROM new_files")
-  # file ids back from PG (small), then scans per study batch so a failure is resumable
-  DBI::dbExecute(con, "CREATE OR REPLACE TABLE file_ids AS SELECT file_id, archive, path FROM pg.ctd.file")
-  col_list <- paste(cols$column_name, collapse = ", ")
-  studies  <- unique(new$study)
+  cat(sprintf("ctd.file: %d already registered, %d new\n", nrow(files) - nrow(new), nrow(new)))
+  if (nrow(new) > 0) {
+    new$cruise_key <- if (is.null(cruise_keys)) NA_character_ else unname(cruise_keys[new$study])
+    new$gcs_uri    <- if (is.null(gcs_uri_root)) NA_character_ else file.path(gcs_uri_root, new$archive)
+    DBI::dbWriteTable(con, "new_files", as.data.frame(new[, c("archive","path","study","cruise_key","data_stage","cast_dir","sha256","n_bytes","n_rows","gcs_uri")]), overwrite = TRUE)
+    DBI::dbExecute(con, "
+      INSERT INTO pg.ctd.file (archive, path, study, cruise_key, data_stage, cast_dir, sha256, n_bytes, n_rows, gcs_uri)
+      SELECT archive, path, study, cruise_key, data_stage, cast_dir, sha256, n_bytes::BIGINT, n_rows::INTEGER, gcs_uri FROM new_files")
+  }
+  # scans: every registered file that has no scans yet (resumable after an interrupted run)
+  DBI::dbExecute(con, "CREATE OR REPLACE TABLE file_ids AS SELECT file_id, archive, path, study FROM pg.ctd.file")
+  DBI::dbExecute(con, "CREATE OR REPLACE TABLE pending AS
+    SELECT f.file_id, f.archive, f.path, f.study FROM pg.ctd.file f
+    WHERE NOT EXISTS (SELECT 1 FROM pg.ctd.scan s WHERE s.file_id = f.file_id)")
+  pend <- DBI::dbGetQuery(con, "SELECT study, count(*) AS n FROM pending GROUP BY 1 ORDER BY 1")
+  cat(sprintf("ctd.scan: %d files pending in %d studies\n", sum(pend$n), nrow(pend)))
+  if (nrow(pend) == 0) return(invisible(0))
+  col_list   <- paste(cols$column_name, collapse = ", ")
+  col_list_p <- paste0("p.", cols$column_name, collapse = ", ")
+  studies  <- pend$study
   t0 <- Sys.time(); n_total <- 0
   for (chunk in split(studies, ceiling(seq_along(studies) / batch_studies))) {
     globs <- sprintf("'%s/study=%s/*.parquet'", sub("/$", "", parquet_root), chunk)
     n <- DBI::dbExecute(con, sprintf("
       INSERT INTO pg.ctd.scan (file_id, row_num, %s)
-      SELECT f.file_id, p.row_num::INTEGER, %s
+      SELECT pf.file_id, p.row_num::INTEGER, %s
       FROM read_parquet([%s]) p
-      JOIN file_ids f USING (archive, path)
-      JOIN new_files nf USING (archive, path)
-      ORDER BY f.file_id, p.row_num", col_list, col_list, paste(globs, collapse = ", ")))
+      JOIN pending pf ON pf.archive = p.archive AND pf.path = p.path
+      ORDER BY pf.file_id, p.row_num", col_list, col_list_p, paste(globs, collapse = ", ")))
     n_total <- n_total + n
     cat(sprintf("  %s: +%s rows (%s total, %.0f s)\n", paste(range(chunk), collapse = ".."),
       format(n, big.mark = ","), format(n_total, big.mark = ","),
@@ -224,9 +231,9 @@ pg_ctd_load <- function(files, parquet_root, pg_dsn, gcs_uri_root = NULL, cruise
     globs <- sprintf("'%s/_issues/study=%s/*.parquet'", sub("/$", "", parquet_root), chunk)
     DBI::dbExecute(con, sprintf("
       INSERT INTO pg.ctd.scan_issue (file_id, row_num, column_name, raw_value)
-      SELECT f.file_id, p.row_num::INTEGER, p.column_name, p.raw_value
-      FROM read_parquet([%s]) p JOIN file_ids f USING (archive, path) JOIN new_files nf USING (archive, path)
-      ORDER BY f.file_id, p.row_num, p.column_name", paste(globs, collapse = ", ")))
+      SELECT pf.file_id, p.row_num::INTEGER, p.column_name, p.raw_value
+      FROM read_parquet([%s]) p JOIN pending pf ON pf.archive = p.archive AND pf.path = p.path
+      ORDER BY pf.file_id, p.row_num, p.column_name", paste(globs, collapse = ", ")))
   }
   # per-file completeness: rows in scan == n_rows recorded from the parquet
   chk <- DBI::dbGetQuery(con, "
