@@ -268,7 +268,7 @@ pg_ctd_finish <- function(pg_dsn, measurement_type_csv = NULL) {
     DBI::dbExecute(con, "DROP TABLE work._scan_column_meta")
   }
   DBI::dbExecute(con, "SELECT ctd.refresh_derived()")
-  DBI::dbExecute(con, "ANALYZE ctd.scan; ANALYZE ctd.file;")
+  for (q in c("ANALYZE ctd.scan", "ANALYZE ctd.file", "ANALYZE ctd.scan_issue", "ANALYZE ctd.flag")) DBI::dbExecute(con, q)
   DBI::dbGetQuery(con, "
     SELECT (SELECT count(*) FROM ctd.file) AS files, (SELECT count(*) FROM ctd.scan) AS scans, (SELECT count(*) FROM ctd.scan_issue) AS issue_cells,
            (SELECT count(*) FROM ctd.cast) AS casts, (SELECT count(*) FROM ctd.file WHERE is_best_stage) AS best_files,
