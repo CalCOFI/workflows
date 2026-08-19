@@ -257,10 +257,15 @@ pg_ctd_finish <- function(pg_dsn, measurement_type_csv = NULL) {
     user = sub(".*user=([^ ]+).*", "\\1", pg_dsn))
   on.exit(DBI::dbDisconnect(con))
   if (!is.null(measurement_type_csv) && file.exists(measurement_type_csv)) {
+    # the registry's _source_column is janitor-snake-cased (Ox1_CruiseCorr -> ox1_cruise_corr),
+    # so match through the same transformation of the raw headers
+    cols <- pg_ctd_columns() |>
+      dplyr::mutate(source_clean = janitor::make_clean_names(source_header))
     mt <- calcofi4db::read_measurement_type(measurement_type_csv) |>
       dplyr::filter(!is.na(`_source_column`), `_source_column` != "") |>
-      dplyr::transmute(source_header = `_source_column`, measurement_type, description, units) |>
-      dplyr::distinct(source_header, .keep_all = TRUE)
+      dplyr::distinct(`_source_column`, .keep_all = TRUE) |>
+      dplyr::inner_join(cols, by = c("_source_column" = "source_clean")) |>
+      dplyr::transmute(source_header, measurement_type, description, units)
     DBI::dbWriteTable(con, DBI::Id(schema = "work", table = "_scan_column_meta"), as.data.frame(mt), overwrite = TRUE, temporary = FALSE)
     DBI::dbExecute(con, "
       UPDATE ctd.scan_column c SET measurement_type = m.measurement_type, description = coalesce(c.description, m.description), units = coalesce(c.units, m.units)
