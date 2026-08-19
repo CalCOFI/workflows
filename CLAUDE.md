@@ -565,6 +565,27 @@ directory with no `SKILL.md` and a stray `.md` beside one are both simply
 skipped. `RUNBOOK.md` and `templates/` are deliberately neither — they are read
 by path, so they stay as files.
 
+## The CTD team's PostgreSQL database (working store, not the release)
+
+Since 2026-08-19 a multi-user **PostgreSQL 18 + PostGIS + pg_duckdb** database `calcofi` runs on
+the CalCOFI server for the CTD team's QA/QC (plan: `.claude/plans/2026-08-17 CTD team
+PostgreSQL — …`). It is a *working* store beside the frozen releases, never a consumer of-record:
+
+- Schema `ctd` holds the **entire db-CSV cast archive verbatim** — `ctd.file` / `ctd.scan`
+  (10.8 M scans, all 82 source columns, `-99` sentinels included) are **immutable by trigger**;
+  untypable source cells live verbatim in `ctd.scan_issue`; problems/fixes are rows in the
+  `ctd.flag` ledger (IODE codes, RLS: writers propose, curators accept), presented through the
+  generated `ctd.v_scan_qc` / `ctd.v_scan_clean`. DDL: `CalCOFI/server` `postgis/init/*.sql`;
+  loader: `libs/pg_ctd.R` + `load_pg_ctd.qmd` (idempotent on `(archive, path)` — sha256 is NOT
+  unique, JRW and calcofi.org ship byte-identical files).
+- **This ingest repo must never depend on a live PG during a pipeline run.** The bridge is the
+  nightly snapshot `gs://calcofi-db/qc/ctd/flag_accepted.parquet` (server cron
+  `pg_flag_snapshot.sh`); when the team starts accepting flags, `ingest_calcofi_ctd-cast.qmd`
+  applies that file as `measurement_qual` — read it, do not `cc_pg_connect()` from a notebook
+  that `targets` runs.
+- Access for humans: https://calcofi.io/docs/server-access.html (SSH tunnel; `calcofi4r::
+  cc_pg_connect()` / `cc_pg_tunnel()` / `cc_pg_attach()`).
+
 ## Repo-specific conventions
 
 - **`provider` = the organization curating the data.** Not the portal that hosts
