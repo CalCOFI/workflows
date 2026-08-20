@@ -20,6 +20,42 @@ preliminary file. Cleaning here never edits a value: you **propose flags** into 
 derived products like the 1 m bins are **recomputed from originals + accepted flags** —
 so any product can be regenerated, and any decision can be revisited.
 
+@fig-flow is the whole loop: raw files land once in immutable tables; rules propose,
+humans decide, and every output is derived — each arrow is a section below with the code
+that runs it.
+
+```{mermaid}
+%%| label: fig-flow
+%%| fig-cap: "The QA/QC loop. Originals (navy) are loaded once and never edited; automated rules propose rows into the flag ledger (yellow); curators accept or reject; the QC views apply only accepted verdicts, so every product (right) can be regenerated — and accepted flags flow nightly into the public database release."
+flowchart LR
+  A["calcofi.org cast-file archive<br/>409 db-CSV files, 1993 → present"]
+  A -->|"load_pg_ctd.qmd<br/>verbatim, one-time"| B
+
+  subgraph PG["PostgreSQL calcofi — schema ctd"]
+    direction TB
+    B[("ctd.file / ctd.scan / ctd.scan_issue<br/>ORIGINALS — immutable by trigger<br/>10.8M scans x 82 columns")]
+    F[("ctd.flag — the ledger<br/>proposed → accepted / rejected<br/>every change audited")]
+    V["ctd.v_scan_qc / ctd.v_scan_clean<br/>originals + ACCEPTED flags only"]
+    B --- V
+    F -->|"curators accept / reject<br/>pgAdmin or one UPDATE (Sec. 6)"| V
+  end
+
+  B -->|"automated QC rules (Sec. 4)<br/>cc_qc_spike / sensor_pair / range"| P["flag candidates<br/>evidence + triage (Sec. 5)"]
+  P -->|"cc_propose_flags (Sec. 6)<br/>idempotent"| F
+  V -->|"cc_bin_1m (Sec. 7)"| W[("work.clean_1m_*<br/>regenerable products")]
+  F -->|"nightly export"| G["gs://calcofi-db/qc/ctd/<br/>flag_accepted.parquet"]
+  G -.->|"applied as measurement_qual"| R["public DB release<br/>(ingest_calcofi_ctd-cast)"]
+
+  classDef orig fill:#193E6D,color:#fff,stroke:#2A4F7C
+  classDef ledger fill:#F4D530,color:#193E6D,stroke:#c9ad13
+  classDef derived fill:#dbe7f3,color:#193E6D,stroke:#2A4F7C
+  classDef ext fill:#f4f4f4,color:#333,stroke:#bbb
+  class B orig
+  class F ledger
+  class V,W derived
+  class A,P,G,R ext
+```
+
 The QC checks are the same SQL rules the [ctd-qaqc app](https://app.calcofi.io/ctd-qaqc/)
 runs ([`metadata/qc_rules/`](https://github.com/CalCOFI/workflows/tree/main/metadata/qc_rules)),
 ported into documented [calcofi4py](https://calcofi.io/calcofi4py/) helpers — SQL is SQL,
