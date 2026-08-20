@@ -68,8 +68,6 @@ Looks great! I reviewed D1-D12 and only changed D6 to hold off on upgrading SSD 
   seemed conscientious about server expenses, but understand that means holding off on as many
   frequent raw backups available locally (better to manage on GCS anyways, but have at least enough
   space to conduct a db backup and restore). Please proceed
-
-
 ----
 
 **EXECUTED 2026-08-19** (plan approved; D6 changed to keep the 200 GB ssd). Everything below is
@@ -154,6 +152,64 @@ path — caught both times by the per-file completeness check (scan rows == file
 why that check exists. Seven cruises use `MM/DD/YYYY HH:MM` datetimes instead of `DD-Mon-YYYY
 HH:MM:SS`; strptime takes a format LIST. And `sha256` is NOT unique across archives (JRW and
 calcofi.org ship byte-identical files) — file identity is (archive, path).
+
+----
+
+Great! Can you proceed with creating thin Python client calcofi4py. Update docs/server-access.html too
+
+Can you also setup documentation website for calcofi4py (ideally via GH Action into gh-pages branch like pkgdown for calcofi4py). Add card to this documentation website to calcofi.io
+
+----
+
+Overnight wrap-up (loop ended, 01:25 UTC)
+
+Everything the plan could advance without you is done, verified, committed, and pushed.
+
+Tonight's automated chain — all three crons ran unattended and were verified:
+- 00:03 dump: calcofi-20260820.sql.gz 1.24 GB (first nightly capture of the 10.8 M-scan archive; yesterday's placeholder was 1 KB) + gis 1.04 GB, rotation clean
+- 00:31 ship: both off-site in gs://calcofi-backups/postgres/daily/, status JSON healthy → db-backup upptime check green
+- 01:20 flag snapshot: ledger exported to gs://calcofi-db/qc/ctd/ (empty until the team starts flagging; checksum-skip worked as designed)
+
+Since you went to sleep:
+- calcofi4py shipped: https://github.com/CalCOFI/calcofi4py (0.1.0) — cc_get_db/cc_query over the release Parquet + cc_pg_connect/cc_pg_tunnel/cc_pg_attach; 10/10 tests incl. a live PG pair through a real tunnel; CI green on Python 3.10–3.13
+- Docs site: calcofi.io/calcofi4py (https://calcofi.io/calcofi4py/) — mkdocs-material + mkdocstrings, auto-deployed to gh-pages on every push (the pkgdown pattern), HTTPS enforced
+- calcofi.io card: live in the developer section (screenshot, tech: [Python], three-slug contract: uptime check calcofi4py added)
+- Docs: server-access + data-access Python sections now lead with calcofi4py
+- Earlier in the night: load_pg_ctd.html published to calcofi.io/workflows; release.dataset view fixed; deploy_consumers.sh step 3b re-points release.* views per release; Q25/Q26 filed; CLAUDE.md/README/memory/plan/notes all updated; ro_user audit (zero connections — services all connect as admin)
+
+Waiting on you (all in the plan's Progress table): the pgAdmin Google OAuth client (README "pgAdmin", ~15 min), the team's SSH public keys → users/keys/ → add_user.sh --all, optional docker volume rm 7ea47db1… (frees 6.4 GB), and the 32 GB memory decision. Weekly restore drill runs Sunday 03:15 UTC on both databases.
+
+----
+
+If I understand the rules in @../apps/ctd-qaqc/ correctly, they are all written in SQL, so portable for running in Python, ideally with a helper function in calcofi4py. Rather than having the Shiny app, the CTD team seems more comfortable having their own notebook written with Python chunks that they can tweak for doing QA/QC. Write an example of such a notebook in @../workflows that is a parameterized Quarto notebook accepting cruise and variable as input parameters, eg clean_ctd_cruise-var.qmd. Start with temperature on the most recent 2026-07 cruise. Create helper functions in Python that generate station maps, depth profiles with up and down casts and other useful visualizations. Demonstrate writing to the pg database from the notebook a set of flags into the pg db and subsequent derivation of clean 1m binned averages from the raw data. Create helper functions along the way with documentation.
+
+Find the email thread with subject "Re: data management plan and link to supporting documentation" and draft a follow-up email succinctly explaining all these new creations with links and next steps for Rasmus, Ben G and Kelsey. Mention that this was a co-creation with Claude.
+
+While you're at it, can you also include in this update an improvement to @../ctd-transects/ that calculates the climatological anomoly per variable using the same parameters as @../calcofi4r/vignettes/ctd-temperature-anomalies.Rmd.
+
+**2026-08-20 continuation (same session): the Python QA/QC loop.**
+
+- **calcofi4py 0.2.0**: `ctd.py` module — `cc_ctd_casts/scans`, portable QC rules ported from
+  `metadata/qc_rules/sql/` onto `ctd.v_scan_best` (`cc_qc_spike` with the neighbour-agreement
+  trick, `cc_qc_sensor_pair`, `cc_qc_range`), **idempotent** `cc_propose_flags` (skips any scan
+  already carrying a proposed/accepted flag for that variable), `cc_flags`, `cc_bin_1m`
+  (writes `work.<table>` via COPY), plotly `cc_station_map/cc_profile_plot/cc_section_plot`.
+  Column names validated by `_ident()` (SQL-injection guard); 16 tests + live pair green.
+- **Docs site**: mkdocs-material + mkdocstrings → gh-pages via GH Action, live at
+  calcofi.io/calcofi4py (HTTPS enforced); **calcofi.io card** added (developer section,
+  light-theme screenshot, three-slug contract incl. upptime check `calcofi4py`).
+- **`clean_ctd_cruise-var.qmd`**: parameterized (papermill-tagged cell: `study`, `variable`)
+  Python notebook; rendered live on **2607SH × tempave** through the tunnel — 144 casts /
+  56,993 scans; **414 spike + 160 out-of-bounds flags proposed** into `ctd.flag` (37 overlaps
+  skipped by idempotency — 197 oob candidates, 37 already spike-flagged), clean 1 m bins →
+  `work.clean_1m_2607sh_tempave` (28,479 rows). 59% of spikes on upcasts. Published at
+  calcofi.io/workflows/clean_ctd_cruise-var.html.
+- **Email drafted** (not sent) as a reply in the DMP thread (`19f90164e6691021`, reply to Ben's
+  8/12 PostgreSQL message): To Rasmus/Ben G/Kelsey, CC Erin/Betty — what's live, SSH-key ask,
+  Q25/Q26 decisions, the 574 proposed flags awaiting curator review; notes the co-creation
+  with Claude. Draft id r4873026592947077178.
+- Gotchas: `COMMENT ON` takes no bind params (psycopg `sql.Literal`); Quarto+jupyter params =
+  a `tags: [parameters]` cell (`-P study:…`); `cc_bin_1m` COPY needs NaN→None per row.
 
 
 ## 2026-08-16 move CTD extraction off Google Drive
