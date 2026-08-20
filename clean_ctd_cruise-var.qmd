@@ -58,18 +58,29 @@ pd.options.display.max_rows = 12
 
 ## The cruise at a glance
 
+Every station occupation is a numbered **`cast_seq`** (extracted from `cast_id`:
+`"2607_001d"` → 1) with a down- and an upcast at the same position — that number is the
+key to cross-reference between the map (@fig-map), the profiles (@fig-profiles), the
+section (@fig-section) and the flag triage (@fig-triage).
+
 ```{python}
 casts = cc.cc_ctd_casts(con, study)
-print(f"{study}: {len(casts)} casts ({(casts.cast_dir == 'D').sum()} down / "
-      f"{(casts.cast_dir == 'U').sum()} up), "
+occ = casts.groupby("cast_seq").size()
+print(f"{study} (cruise_key {casts.cruise_key.iloc[0]}): "
+      f"{casts.cast_seq.nunique()} station occupations (cast_seq "
+      f"{int(casts.cast_seq.min())}-{int(casts.cast_seq.max())}), "
+      f"{len(casts)} casts ({(casts.cast_dir == 'D').sum()} down / {(casts.cast_dir == 'U').sum()} up; "
+      f"{(occ == 2).sum()} complete down+up pairs), "
       f"{casts.datetime_utc.min():%Y-%m-%d} to {casts.datetime_utc.max():%Y-%m-%d}, "
-      f"max depth {casts.depth_max.max():.0f} m, cruise_key {casts.cruise_key.iloc[0]}")
-casts.head(6)
+      f"max depth {casts.depth_max.max():.0f} m, "
+      f"{casts.n_scans.sum():,} scans total")
+casts.head(4)
 ```
 
 ```{python}
-#| fig-cap: "Cast positions (hover for station, time, depth). Casts whose source files carry `-99` positions are absent from the map but present in every table."
-cc.cc_station_map(casts, title=f"{study} — cast positions")
+#| label: fig-map
+#| fig-cap: "Station occupations, one labeled marker per `cast_seq` (the down/up pair collapses to one point; hover for station, time, both directions' scan counts). Occupations whose source files carry `-99` positions are absent here but present in every table."
+cc.cc_station_map(casts, title=f"{study} — station occupations by cast_seq")
 ```
 
 ```{python}
@@ -79,13 +90,8 @@ print(f"{len(scans):,} scans; accepted-QC columns come along: "
 ```
 
 ```{python}
-#| fig-cap: "All profiles, down- and upcasts distinguished. The envelope is the cruise; one errant trace is where to look."
-cc.cc_profile_plot(scans, variable, units=units,
-                   title=f"{study} — {variable}, all casts")
-```
-
-```{python}
-#| fig-cap: "Quick-look section: casts in time order × depth, colored by value (each stripe is one downcast — not an interpolated product)."
+#| label: fig-section
+#| fig-cap: "Quick-look section: `cast_seq` × depth, colored by value (each vertical stripe is one downcast's scans — not an interpolated product). The x axis is the same `cast_seq` as @fig-map."
 cc.cc_section_plot(scans, casts, variable, units=units,
                    title=f"{study} — {variable} section")
 ```
@@ -125,14 +131,45 @@ oob = cc.cc_qc_range(con, study, variable, valid_min=-3, valid_max=40)
 print(f"{len(oob)} values outside [-3, 40] {units}")
 ```
 
-Look before flagging — the worst-offending cast, spikes marked:
+## Triage: which casts most need a human
+
+Flags rolled up per `cast_seq` — depth span, value range, share of the cast's scans.
+Casts absent from the table have no flags.
 
 ```{python}
-#| fig-cap: "The cast with the most spike candidates; flagged scans are red ×. Up- and downcast of the same station should roughly agree — a one-sided excursion is instrument, not ocean."
-worst = spikes.cast_id.value_counts().index[0]
-pair_of = {worst[:-1] + "d", worst[:-1] + "u"}          # its up/down sibling
-cc.cc_profile_plot(scans, variable, cast_ids=pair_of, flags=spikes, units=units,
-                   title=f"{study} {worst[:-1]}* — {variable} with spike candidates")
+#| label: tbl-triage
+#| tbl-cap: "Proposed + accepted flags per cast_seq (sorted by count) — the inspection worklist."
+candidates = pd.concat([
+    spikes[["scan_id", "depth"]].assign(rule_key="ctd_spike_v1"),
+    oob[["scan_id", "depth"]].assign(rule_key="ctd_value_out_of_range_v1"),
+]).assign(flag_id=lambda d: range(len(d)))
+triage = cc.cc_flag_summary(candidates, scans, variable)
+worst = int(triage.cast_seq.iloc[0])
+triage
+```
+
+```{python}
+#| label: fig-triage
+#| fig-cap: "The same triage visually: flag candidates per `cast_seq`, stacked by rule. A tall bar is a cast to open in @fig-profiles; compare against its neighbours in @fig-section."
+import plotly.express as px
+bar = (candidates.merge(scans[["scan_id", "cast_seq"]], on="scan_id")
+       .groupby(["cast_seq", "rule_key"]).size().rename("n").reset_index())
+fig = px.bar(bar, x="cast_seq", y="n", color="rule_key", height=340,
+             labels={"cast_seq": "cast_seq", "n": "flag candidates"},
+             title=f"{study} — {variable} flag candidates by cast")
+fig.update_xaxes(dtick=5)
+fig
+```
+
+Cast `{python} worst` dominates — open it (@fig-profiles selects it by default; use the
+dropdown for any other `cast_seq`). Up- and downcast of the same occupation should
+roughly agree: a one-sided excursion is instrument, not ocean.
+
+```{python}
+#| label: fig-profiles
+#| fig-cap: "Depth profiles with a dropdown per `cast_seq` (default: the worst cast from @tbl-triage; 'all casts' shows the cruise envelope). Down = blue, up = orange, flag candidates = red ×."
+cc.cc_profile_explorer(scans, variable, flags=candidates, units=units, default=worst,
+                       title=f"{study} — {variable} profiles")
 ```
 
 ## Propose flags into the ledger
@@ -191,18 +228,19 @@ bins.head(4)
 ```
 
 ```{python}
-#| fig-cap: "Raw downcast scans (grey) vs the clean 1 m binned product (blue) for the worst-offending cast. Until curators accept flags the two coincide; each acceptance moves only the blue line — the grey is immutable."
+#| label: fig-clean
+#| fig-cap: "Raw downcast scans (grey) vs the clean 1 m binned product (blue) for the worst cast of @tbl-triage. Until curators accept flags the two coincide; each acceptance moves only the blue line — the grey is immutable."
 import plotly.graph_objects as go
 
-w = worst[:-1] + "d"
-raw = scans.query("cast_id == @w and tempave.notna()")
+w = scans.query("cast_seq == @worst and cast_dir == 'D'").cast_id.iloc[0]
+raw = scans.query("cast_id == @w").dropna(subset=[variable])
 bw  = bins.query("cast_id == @w")
 fig = go.Figure()
 fig.add_scatter(x=raw[variable], y=raw.depth, mode="markers", name="raw scans",
                 marker=dict(size=3, color="lightgrey"))
 fig.add_scatter(x=bw.value, y=bw.depth_m, mode="lines", name="clean 1 m bins",
                 line=dict(color="#1f77b4", width=2))
-fig.update_layout(height=600, title=f"{study} {w} — raw vs clean 1 m {variable}",
+fig.update_layout(height=600, title=f"{study} cast {worst} — raw vs clean 1 m {variable}",
                   xaxis_title=f"{variable} ({units})", yaxis_title="depth (m)")
 fig.update_yaxes(autorange="reversed")
 fig
