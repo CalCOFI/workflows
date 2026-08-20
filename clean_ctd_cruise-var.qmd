@@ -231,6 +231,8 @@ import plotly.express as px
 bar = (candidates.merge(scans[["scan_id", "cast_seq"]], on="scan_id")
        .groupby(["cast_seq", "rule_key"]).size().rename("n").reset_index())
 fig = px.bar(bar, x="cast_seq", y="n", color="rule_key", height=340,
+             color_discrete_map={"ctd_spike_v1": "#2A4F7C",
+                                 "ctd_value_out_of_range_v1": "#F4D530"},
              labels={"cast_seq": "cast_seq", "n": "flag candidates"},
              title=f"{study} — {variable} flag candidates by cast")
 fig.update_xaxes(dtick=5)
@@ -243,7 +245,7 @@ roughly agree: a one-sided excursion is instrument, not ocean.
 
 ```{python}
 #| label: fig-profiles
-#| fig-cap: "Depth profiles with a dropdown per `cast_seq` (default: the worst cast from @tbl-triage; 'all casts' shows the cruise envelope). Down = blue, up = orange, flag candidates = red ×."
+#| fig-cap: "Depth profiles with a dropdown per `cast_seq` (default: the worst cast from @tbl-triage; 'all casts' shows the cruise envelope). Down = blue, up = orange, flag candidates = violet ×."
 cc.cc_profile_explorer(scans, variable, flags=candidates, units=units, default=worst,
                        title=f"{study} — {variable} profiles")
 ```
