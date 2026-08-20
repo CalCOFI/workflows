@@ -89,6 +89,28 @@ print(f"{len(scans):,} scans; accepted-QC columns come along: "
       f"{[c for c in scans.columns if c.endswith(('_qc', '_fix'))]}")
 ```
 
+The source files use `-99` as a missing-position sentinel, kept verbatim in `ctd.scan`
+(only the derived `ctd.cast` positions NULL it). @tbl-nopos is the accounting: any
+occupation missing from @fig-map appears here with how many of its scans carry the
+sentinel.
+
+```{python}
+#| label: tbl-nopos
+#| tbl-cap: "Occupations whose source files carry `-99` positions (scan-level counts; `on_map` = whether a usable position remains for @fig-map)."
+pos = (scans.assign(no_pos=(scans.lat_dec == -99) | (scans.lon_dec == -99))
+       .groupby("cast_seq")
+       .agg(n_scans=("scan_id", "count"), n_scans_neg99=("no_pos", "sum")))
+mapped = casts.dropna(subset=["lat", "lon"]).cast_seq.unique()
+nopos = (pos[pos.n_scans_neg99 > 0]
+         .assign(pct=lambda d: (100 * d.n_scans_neg99 / d.n_scans).round(1),
+                 on_map=lambda d: d.index.isin(mapped))
+         .reset_index())
+if len(nopos):
+    display(nopos)
+else:
+    print(f"none — all {pos.index.nunique()} occupations carry real positions on every scan")
+```
+
 ```{python}
 #| label: fig-section
 #| fig-cap: "Quick-look section: `cast_seq` × depth, colored by value (each vertical stripe is one downcast's scans — not an interpolated product). The x axis is the same `cast_seq` as @fig-map."
