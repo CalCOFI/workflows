@@ -33,6 +33,17 @@ pip install "calcofi4py[viz] @ git+https://github.com/CalCOFI/calcofi4py" jupyte
 quarto render clean_ctd_cruise-var.qmd -P study:2607SH -P variable:tempave
 ```
 
+**Rendering as a cleaning archive.** The rendered HTML is a complete, self-contained
+record of one cleaning pass — parameters, evidence, what was proposed, and (in the
+[Reproducibility](#sec-repro) accordion at the end) the exact software and rule versions
+that produced it. Name the output per cruise × variable and keep it:
+
+```bash
+quarto render clean_ctd_cruise-var.qmd \
+  -P study:2607SH -P variable:tempave \
+  --output clean_ctd_2607SH_tempave.html      # lands in _output/ next to the default name
+```
+
 Parameters (the cell below; override with `-P`):
 
 ```{python}
@@ -53,6 +64,7 @@ import pandas as pd
 import calcofi4py as cc
 
 con = cc.cc_pg_connect(tunnel=True)
+pg_version = con.execute("SHOW server_version").fetchone()[0]
 pd.options.display.max_rows = 12
 ```
 
@@ -272,6 +284,30 @@ fig
 con.close()
 cc.cc_pg_tunnel_close()
 ```
+
+## Reproducibility {#sec-repro}
+
+If this rendered page is kept as the archive of a cleaning pass, the block below is its
+provenance: the software (above all `calcofi4py`), the git commit of the QC rule registry
+this repo carries (`metadata/qc_rules/` — with a loud note if the working tree had
+uncommitted rule changes), and the database server it ran against.
+
+::: {.callout-note collapse="true" title="Session info — software and rule versions behind this archive"}
+
+```{python}
+print(cc.cc_session_info(
+    repos={
+        "workflows": (".", None),                     # this repo (the notebook + registries)
+        "qc_rules":  (".", "metadata/qc_rules"),      # the QC rule definitions specifically
+    },
+    extra={
+        "postgresql": pg_version,
+        "database":   "calcofi @ ssh.calcofi.io (schema ctd)",
+        "release":    cc.cc_resolve_version("latest"),
+    }))
+```
+
+:::
 
 ## Where to go from here
 
