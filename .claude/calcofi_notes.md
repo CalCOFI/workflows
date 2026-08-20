@@ -222,6 +222,19 @@ While you're at it, can you also include in this update an improvement to @../ct
   calcofi.io card reshot. WebGL canvases capture BLANK in programmatic screenshots
   (preserveDrawingBuffer=false) — user saw markers while my captures showed none; verify
   map rendering with queryRenderedFeatures or ask, never trust the screenshot.
+- **Round 4 (label regression)**: the two-trace map "fix" was WRONG and inverted — plotly 3.7
+  never creates the symbol layer for a `mode="text"` scattermap trace (live layer census:
+  markers trace = fill/line/circle/symbol, text trace = fill/line/circle only), so the
+  labels silently vanished. The WORKING configuration is ONE `markers+text` trace with
+  STRING labels (the original 0.3.1 fix; int text → binary typed array → treated as icon
+  names → "Image -15"). calcofi4py 0.3.4 reverts to it + violet (#9467bd) flag markers per
+  user ("red is alarming") + triage bars in the calcofi palette. Verified via
+  queryRenderedFeatures (51 label glyphs) — screenshots of MapLibre WebGL are unreliable
+  BOTH ways here (blank captures of drawn maps AND a wedged-renderer tab after a CDP
+  timeout); the render-event canvas capture in a FRESH tab is the only dependable export.
+  Email: user sent it before the images landed in the draft (remote figs were 404 until the
+  Pages deploy) — recipients have the links, and the published figure URLs now carry the
+  corrected versions (map labeled, new colors).
 - **Round 3 (diagram + email)**: process-flow mermaid in the notebook intro — took three passes:
   LR layout compresses text to illegibility (user caught it twice); final = `flowchart TB`,
   TERSE node labels with the full description in the fig-cap, `%%| echo: false` (mermaid cells
