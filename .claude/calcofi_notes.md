@@ -1,4 +1,7 @@
 ## TODO
+
+- [ ] out of date ():
+  * db-query: 
 - [ ] hash tables like msens COGs, so storing less; virtual ref via storage. to show actual names
 - [ ] for sio_pic-zooplankton, ask Ed about cod end and sample type (ethanol or alcohol) missing fields for matching
 - [ ] check GDrive and GCS sync on server, per [rclone](https://github.com/CalCOFI/server/tree/main/rclone)
@@ -208,8 +211,46 @@ While you're at it, can you also include in this update an improvement to @../ct
   8/12 PostgreSQL message): To Rasmus/Ben G/Kelsey, CC Erin/Betty — what's live, SSH-key ask,
   Q25/Q26 decisions, the 574 proposed flags awaiting curator review; notes the co-creation
   with Claude. Draft id r4873026592947077178.
+- **Notebook v2** (user feedback): `cast_seq` (int from `cast_id`, SQL-side in both readers) is
+  now the cross-figure key — auto-numbered figures with @fig-/@tbl- crossrefs; station map is one
+  labeled marker per occupation (down/up pair collapsed); `cc_profile_explorer` = dropdown per
+  cast_seq over 151 traces (default = worst cast); `cc_flag_summary` triage table (per cast_seq:
+  n by rule, depth span, value range, pct scans) + stacked-bar overview; section x-axis =
+  cast_seq. calcofi4py **0.3.0** (also: `cc_flags` now returns `scan_id`). Triage on 2607SH:
+  casts 5+6 hold 546/574 candidates (values to −10.9 °C — instrument), cast 1 = 23 heave spikes.
 - Gotchas: `COMMENT ON` takes no bind params (psycopg `sql.Literal`); Quarto+jupyter params =
   a `tags: [parameters]` cell (`-P study:…`); `cc_bin_1m` COPY needs NaN→None per row.
+
+----
+
+Everything is deployed and verified. Final wrap-up of this batch:
+
+The Python QA/QC loop — delivered
+
+calcofi4py 0.2.0 (repo (https://github.com/CalCOFI/calcofi4py) · docs (https://calcofi.io/calcofi4py/reference/), CI green): a ctd module of documented helpers —
+- readers cc_ctd_casts() / cc_ctd_scans() (QC columns come along)
+- the rule-registry SQL ported to Python: cc_qc_spike() (with the neighbour-agreement trick and its measured rationale in the docstring), cc_qc_sensor_pair(), cc_qc_range()
+- cc_propose_flags() — idempotent ledger writes (re-runs never stack duplicates), cc_flags() to read the ledger
+- cc_bin_1m() — clean 1 m bins from ctd.v_scan_clean, optionally published as a real work.* table
+- viz: cc_station_map(), cc_profile_plot() (up/down casts + flag overlay), cc_section_plot()
+
+clean_ctd_cruise-var (https://calcofi.io/workflows/clean_ctd_cruise-var.html) — parameterized (-P study:… -P variable:…) Python Quarto notebook, rendered live against production on 2607SH × temperature: 144 casts / 56,993 scans → station map, profile envelope, section, three QC checks → 414 spike + 160 out-of-bounds flags proposed into ctd.flag (now awaiting curator review; 59 % of spikes are on upcasts — ship heave, discussed in the notebook) → 28,479 clean 1 m bins written to work.clean_1m_2607sh_tempave, with a raw-vs-clean overlay showing exactly what an accepted flag will move.
+
+Email draft created (not sent) as a reply in the DMP thread, following your 8/12 PostgreSQL message — To Rasmus/Ben G/Kelsey, CC Erin/Betty: what's live, the SSH-key ask, Q25/Q26 decisions, the 574 flags awaiting review, and the Claude co-creation note. It's in your Gmail drafts — one click to send after you look it over.
+
+Notes/memory updated and everything pushed. The one loose end from before stands: the pgAdmin OAuth client and the team's SSH keys are yours.
+
+----
+
+The clean_ctd_cruise-var is looking good, but a few things to consider changing/adding:
+
+- Automatic figure numbering (and referencing in text)
+- Cast positions map. Every cast has up and down, and all ups plot over all downs. Instead show overall stats and label with new `cast_seq`: eg `1` extracted from cast_id `"2607_001d"`. Cross ref `cast_seq` throughout, eg x-axis of "Quick-look section" figure.
+- All profiles, down- and upcasts distinguished. This figure has it all, but is way too dense to parse. Is it possible to have a drop-down selector for `cast_seq` to view an individual up/down cast value?
+- Can we have a summary table of flags per `cast_seq` with range of values? Perhaps with a visual overview to flag casts in greatest need of inspection
+
+----
+
 
 
 ## 2026-08-16 move CTD extraction off Google Drive
