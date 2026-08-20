@@ -1,0 +1,232 @@
+---
+title: "Clean a CTD cruise × variable"
+subtitle: "propose flags in PostgreSQL, curators review, clean 1 m bins fall out — originals untouched"
+format:
+  html:
+    toc: true
+    code-fold: false
+    code-tools: true
+jupyter: python3
+---
+
+## What this is
+
+A **parameterized QA/QC notebook** for one cruise × one variable, written in Python for
+the CTD team to copy and tweak. It runs against the multi-user PostgreSQL database
+(`calcofi`, schema `ctd`) where the **entire cast-file archive lives verbatim and
+immutable** — every one of the 82 source columns, every `-99`, every superseded
+preliminary file. Cleaning here never edits a value: you **propose flags** into the
+`ctd.flag` ledger, curators (Rasmus, Ben G, Kelsey, Erin) accept or reject them, and
+derived products like the 1 m bins are **recomputed from originals + accepted flags** —
+so any product can be regenerated, and any decision can be revisited.
+
+The QC checks are the same SQL rules the [ctd-qaqc app](https://app.calcofi.io/ctd-qaqc/)
+runs ([`metadata/qc_rules/`](https://github.com/CalCOFI/workflows/tree/main/metadata/qc_rules)),
+ported into documented [calcofi4py](https://calcofi.io/calcofi4py/) helpers — SQL is SQL,
+so they run identically from Python, R, or psql.
+
+**To run it yourself** you need an account ([Server Access](https://calcofi.io/docs/server-access.html)
+walks through the SSH key, tunnel and `~/.pgpass`), then:
+
+```bash
+pip install "calcofi4py[viz] @ git+https://github.com/CalCOFI/calcofi4py" jupyter
+quarto render clean_ctd_cruise-var.qmd -P study:2607SH -P variable:tempave
+```
+
+Parameters (the cell below; override with `-P`):
+
+```{python}
+#| tags: [parameters]
+study    = "2607SH"     # source cruise id — the most recent, Jul 2026, R/V Bell M. Shimada
+variable = "tempave"    # a ctd.scan measurement column (see ctd.scan_column)
+units    = "degC"
+sensor_pair = ("temp1", "temp2")   # the redundant pair behind the averaged variable
+```
+
+## Connect
+
+`cc_pg_connect(tunnel=True)` opens `ssh -N calcofi` for you and authenticates from
+`~/.pgpass` — no password appears in this notebook, ever.
+
+```{python}
+import pandas as pd
+import calcofi4py as cc
+
+con = cc.cc_pg_connect(tunnel=True)
+pd.options.display.max_rows = 12
+```
+
+## The cruise at a glance
+
+```{python}
+casts = cc.cc_ctd_casts(con, study)
+print(f"{study}: {len(casts)} casts ({(casts.cast_dir == 'D').sum()} down / "
+      f"{(casts.cast_dir == 'U').sum()} up), "
+      f"{casts.datetime_utc.min():%Y-%m-%d} to {casts.datetime_utc.max():%Y-%m-%d}, "
+      f"max depth {casts.depth_max.max():.0f} m, cruise_key {casts.cruise_key.iloc[0]}")
+casts.head(6)
+```
+
+```{python}
+#| fig-cap: "Cast positions (hover for station, time, depth). Casts whose source files carry `-99` positions are absent from the map but present in every table."
+cc.cc_station_map(casts, title=f"{study} — cast positions")
+```
+
+```{python}
+scans = cc.cc_ctd_scans(con, study, columns=[variable, *sensor_pair])
+print(f"{len(scans):,} scans; accepted-QC columns come along: "
+      f"{[c for c in scans.columns if c.endswith(('_qc', '_fix'))]}")
+```
+
+```{python}
+#| fig-cap: "All profiles, down- and upcasts distinguished. The envelope is the cruise; one errant trace is where to look."
+cc.cc_profile_plot(scans, variable, units=units,
+                   title=f"{study} — {variable}, all casts")
+```
+
+```{python}
+#| fig-cap: "Quick-look section: casts in time order × depth, colored by value (each stripe is one downcast — not an interpolated product)."
+cc.cc_section_plot(scans, casts, variable, units=units,
+                   title=f"{study} — {variable} section")
+```
+
+## Run the QC checks
+
+Three portable rules, straight from the registry. Each returns a DataFrame of suspect
+scans — evidence first, flags second.
+
+**Spikes** — a scan that leaps away from the midpoint of its neighbours *while the
+neighbours agree with each other*. That second clause is the whole trick: without it,
+every steep-but-smooth thermocline gradient fires (on the reference cruise: 92 naive
+hits, 19 with neighbour agreement — the other 73 were real gradients).
+
+```{python}
+spikes = cc.cc_qc_spike(con, study, variable, spike_threshold=0.5, neighbour_tol=0.5)
+print(f"{len(spikes)} spike candidates on {spikes.cast_id.nunique()} casts "
+      f"({(spikes.cast_dir == 'U').mean():.0%} on upcasts)")
+spikes.sort_values("excursion", ascending=False).head(6)
+```
+
+**Sensor pair** — the two temperature sensors disagreeing beyond calibration tolerance.
+The source's own `*Q` codes 1/2 ("use primary"/"use secondary") exist precisely because
+one of a pair misbehaves; a persistent gap is how that is caught early.
+
+```{python}
+pair = cc.cc_qc_sensor_pair(con, study, *sensor_pair, threshold=0.05)
+print(f"{len(pair)} scans with |{sensor_pair[0]} - {sensor_pair[1]}| > 0.05 {units}")
+pair.head(4)
+```
+
+**Declared bounds** — the impossible, not the unusual (an unconverted sentinel, a
+scaling error). Bounds are generous on purpose.
+
+```{python}
+oob = cc.cc_qc_range(con, study, variable, valid_min=-3, valid_max=40)
+print(f"{len(oob)} values outside [-3, 40] {units}")
+```
+
+Look before flagging — the worst-offending cast, spikes marked:
+
+```{python}
+#| fig-cap: "The cast with the most spike candidates; flagged scans are red ×. Up- and downcast of the same station should roughly agree — a one-sided excursion is instrument, not ocean."
+worst = spikes.cast_id.value_counts().index[0]
+pair_of = {worst[:-1] + "d", worst[:-1] + "u"}          # its up/down sibling
+cc.cc_profile_plot(scans, variable, cast_ids=pair_of, flags=spikes, units=units,
+                   title=f"{study} {worst[:-1]}* — {variable} with spike candidates")
+```
+
+## Propose flags into the ledger
+
+`cc_propose_flags()` writes one `ctd.flag` row per scan × variable with IODE code **4
+(bad)**, your username, a reason, and the rule that found it. It is **idempotent** — a
+scan already carrying a proposed or accepted flag for this variable is skipped, so
+re-running this notebook never stacks duplicates. Nothing you propose changes any data:
+that takes a curator's `accepted`.
+
+```{python}
+n_sp = cc.cc_propose_flags(
+    con, spikes.scan_id, variable, qual_code=4,
+    reason=f"single-scan spike >0.5 {units}, neighbours agree within 0.5",
+    rule_key="ctd_spike_v1")
+n_ob = cc.cc_propose_flags(
+    con, oob.scan_id, variable, qual_code=9,
+    reason="outside declared physical bounds [-3, 40] — sentinel or conversion error",
+    rule_key="ctd_value_out_of_range_v1")
+print(f"proposed: {n_sp} spike + {n_ob} out-of-bounds flags "
+      f"(0s mean an earlier run already proposed them)")
+```
+
+The ledger as it now stands for this cruise — every row carries proposer, timestamp,
+and, once reviewed, the reviewer and verdict (full history in `ctd.flag_audit`):
+
+```{python}
+ledger = cc.cc_flags(con, study=study)
+print(ledger.status.value_counts().to_dict())
+ledger.tail(6)
+```
+
+**Curators**: accepting is one UPDATE, from psql, pgAdmin, R or here —
+
+```python
+# curators only (calcofi_curator role); everyone else gets a clean permission error
+con.execute("""
+  UPDATE ctd.flag SET status = 'accepted', review_note = 'agree — heave spikes'
+  WHERE flag_id = ANY(%s)""", ([1234, 1235],))
+con.commit()
+```
+
+## Derive the clean 1 m bins
+
+`ctd.v_scan_clean` is the originals with **accepted** fixes substituted and
+accepted-bad values NULLed — the ledger's verdicts, nothing else. Binning it gives the
+product; anyone can regenerate it at any time, which is the point of never editing
+originals. `write_table=` also publishes it as a real table in the shared `work`
+schema, so colleagues (R, Python, pgAdmin) can query it by name.
+
+```{python}
+tbl = f"clean_1m_{study.lower()}_{variable}"
+bins = cc.cc_bin_1m(con, study, variable, cast_dir="D", write_table=tbl)
+print(f"{len(bins):,} (cast × 1 m depth) bins -> work.{tbl}")
+bins.head(4)
+```
+
+```{python}
+#| fig-cap: "Raw downcast scans (grey) vs the clean 1 m binned product (blue) for the worst-offending cast. Until curators accept flags the two coincide; each acceptance moves only the blue line — the grey is immutable."
+import plotly.graph_objects as go
+
+w = worst[:-1] + "d"
+raw = scans.query("cast_id == @w and tempave.notna()")
+bw  = bins.query("cast_id == @w")
+fig = go.Figure()
+fig.add_scatter(x=raw[variable], y=raw.depth, mode="markers", name="raw scans",
+                marker=dict(size=3, color="lightgrey"))
+fig.add_scatter(x=bw.value, y=bw.depth_m, mode="lines", name="clean 1 m bins",
+                line=dict(color="#1f77b4", width=2))
+fig.update_layout(height=600, title=f"{study} {w} — raw vs clean 1 m {variable}",
+                  xaxis_title=f"{variable} ({units})", yaxis_title="depth (m)")
+fig.update_yaxes(autorange="reversed")
+fig
+```
+
+```{python}
+con.close()
+cc.cc_pg_tunnel_close()
+```
+
+## Where to go from here
+
+- **Change the parameters**: any cruise in `ctd.file` (142 studies, 1993→present), any
+  measurement column in `ctd.scan_column` — salinity (`salt1`; `saltave_corr` is empty
+  in sensor-only preliminary tiers like this one), oxygen (`ox1`), fluorescence
+  (`fluorv`), …
+- **Tune the thresholds** — the rule registry's values are starting points; Q25 in
+  [`questions.csv`](https://github.com/CalCOFI/workflows/blob/main/metadata/calcofi/ctd-cast/questions.csv)
+  asks the team to confirm the flag vocabulary and the curator list.
+- **Review**: proposed flags wait in `ctd.flag` (`SELECT * FROM ctd.flag WHERE status =
+  'proposed'`, or the ledger table above) — accept, reject, or propose better values
+  (`qual_code = 5` + `proposed_value`).
+- **Everything downstream is automatic**: accepted flags flow into `ctd.v_scan_qc` /
+  `ctd.v_scan_clean` immediately, and each night the ledger is published to
+  [`gs://calcofi-db/qc/ctd/`](https://storage.calcofi.io/calcofi-db/qc/ctd/) so the
+  public release ingest can apply it — no live database dependency.
+- API docs for every helper used here: [calcofi.io/calcofi4py](https://calcofi.io/calcofi4py/reference/).
