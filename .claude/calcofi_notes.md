@@ -1,7 +1,7 @@
 ## TODO
 
-- [ ] out of date ():
-  * db-query: 
+- [ ] out of date (db-schema: v2026.08.14) as of 2026-08-20:
+  * db-query: v2026.08.11
 - [ ] hash tables like msens COGs, so storing less; virtual ref via storage. to show actual names
 - [ ] for sio_pic-zooplankton, ask Ed about cod end and sample type (ethanol or alcohol) missing fields for matching
 - [ ] check GDrive and GCS sync on server, per [rclone](https://github.com/CalCOFI/server/tree/main/rclone)
@@ -67,10 +67,8 @@ Answer the D1–D12 lines inline (or just say "defaults") and I'll start with WS
 
 ----
 
-Looks great! I reviewed D1-D12 and only changed D6 to hold off on upgrading SSD since Rasmus
-  seemed conscientious about server expenses, but understand that means holding off on as many
-  frequent raw backups available locally (better to manage on GCS anyways, but have at least enough
-  space to conduct a db backup and restore). Please proceed
+Looks great! I reviewed D1-D12 and only changed D6 to hold off on upgrading SSD since Rasmus seemed conscientious about server expenses, but understand that means holding off on as many frequent raw backups available locally (better to manage on GCS anyways, but have at least enough space to conduct a db backup and restore). Please proceed
+
 ----
 
 **EXECUTED 2026-08-19** (plan approved; D6 changed to keep the 200 GB ssd). Everything below is
@@ -211,13 +209,19 @@ While you're at it, can you also include in this update an improvement to @../ct
   8/12 PostgreSQL message): To Rasmus/Ben G/Kelsey, CC Erin/Betty — what's live, SSH-key ask,
   Q25/Q26 decisions, the 574 proposed flags awaiting curator review; notes the co-creation
   with Claude. Draft id r4873026592947077178.
-- **Notebook v2** (user feedback): `cast_seq` (int from `cast_id`, SQL-side in both readers) is
-  now the cross-figure key — auto-numbered figures with @fig-/@tbl- crossrefs; station map is one
-  labeled marker per occupation (down/up pair collapsed); `cc_profile_explorer` = dropdown per
-  cast_seq over 151 traces (default = worst cast); `cc_flag_summary` triage table (per cast_seq:
-  n by rule, depth span, value range, pct scans) + stacked-bar overview; section x-axis =
-  cast_seq. calcofi4py **0.3.0** (also: `cc_flags` now returns `scan_id`). Triage on 2607SH:
-  casts 5+6 hold 546/574 candidates (values to −10.9 °C — instrument), cast 1 = 23 heave spikes.
+- **Notebook v3 + docs polish** (user feedback round 2): `tbl-nopos` (-99-position accounting,
+  all-clear on 2607SH); map fixed — int `text` serialized as a BINARY typed array plotly.js
+  drops (empty map), and markers+text in ONE scattermap trace goes through MapLibre sprite
+  icons ("Image -15") → labels are now a separate text-only glyph trace; dropdown moved
+  top-left (hover modebar owns top-right) — open/select verified in-browser via JS
+  (queryRenderedFeatures/updatemenu clicks); `cc_session_info()` (0.3.2) = Python
+  session_info incl. qc_rules commit + dirty-tree warning, in a collapsed Reproducibility
+  accordion; `--output clean_ctd_2607SH_tempave.html` archive pattern documented up top.
+  calcofi4py docs: dark default, squircle logo (calcofi4r palette: #193E6D/#2A4F7C/#F4D530),
+  API functions h3+indent under sections (heading_level: 3, show_root_full_path: false);
+  calcofi.io card reshot. WebGL canvases capture BLANK in programmatic screenshots
+  (preserveDrawingBuffer=false) — user saw markers while my captures showed none; verify
+  map rendering with queryRenderedFeatures or ask, never trust the screenshot.
 - Gotchas: `COMMENT ON` takes no bind params (psycopg `sql.Literal`); Quarto+jupyter params =
   a `tags: [parameters]` cell (`-P study:…`); `cc_bin_1m` COPY needs NaN→None per row.
 
@@ -248,6 +252,31 @@ The clean_ctd_cruise-var is looking good, but a few things to consider changing/
 - Cast positions map. Every cast has up and down, and all ups plot over all downs. Instead show overall stats and label with new `cast_seq`: eg `1` extracted from cast_id `"2607_001d"`. Cross ref `cast_seq` throughout, eg x-axis of "Quick-look section" figure.
 - All profiles, down- and upcasts distinguished. This figure has it all, but is way too dense to parse. Is it possible to have a drop-down selector for `cast_seq` to view an individual up/down cast value?
 - Can we have a summary table of flags per `cast_seq` with range of values? Perhaps with a visual overview to flag casts in greatest need of inspection
+
+----
+
+Confirmed: the v2 notebook is live at https://calcofi.io/workflows/clean_ctd_cruise-var.html (42 cast_seq occurrences in the served HTML, Pages run green). Everything from this iteration is deployed:
+
+- numbered, cross-referenced figures (Figure 1–5, Table 1)
+- station map: one labeled marker per cast_seq, occupation-level stats
+- profile explorer with the per-cast dropdown, opening on worst cast 6 with its flags marked
+- flag-triage table + stacked-bar overview (casts 5 & 6 = 546 of 574 candidates, values to −10.9 °C)
+- section on the cast_seq axis
+- calcofi4py 0.3.0 with all of it as documented helpers (API reference (https://calcofi.io/calcofi4py/reference/) updated)
+
+The Gmail draft to Rasmus, Ben G and Kelsey links to this same URL, so it now shows the improved version — ready to send whenever you've reviewed it.
+
+----
+
+Can we also get a summary table of "Occupations whose source files carry -99 positions"?
+
+I am not seeing ANY cast_seq positions in Figure 1 [img]
+
+The cast selector (eg "cast 6") in Figure 4 [img] is impossible to change because the plotly menu shows on hover [img]
+
+Let's also print out the equivalent of `devtools::session_info()` for Python (as an accordion) so if rendered notebook used as an archive of cleaning process, software used (especially `calcofi4py` and perhaps commit version of `@../workflows/metadata/qc_rules`) is reproducible.
+
+Show up top how `quarto render clean_ctd_cruise-var.qmd` can be output to a differently named file, such as by cruise and var for using as just such a cleaning archive.
 
 ----
 
