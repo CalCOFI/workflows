@@ -222,6 +222,21 @@ While you're at it, can you also include in this update an improvement to @../ct
   calcofi.io card reshot. WebGL canvases capture BLANK in programmatic screenshots
   (preserveDrawingBuffer=false) — user saw markers while my captures showed none; verify
   map rendering with queryRenderedFeatures or ask, never trust the screenshot.
+- **Round 3 (diagram + email)**: process-flow mermaid in the notebook intro — took three passes:
+  LR layout compresses text to illegibility (user caught it twice); final = `flowchart TB`,
+  TERSE node labels with the full description in the fig-cap, `%%| echo: false` (mermaid cells
+  print their source otherwise). Email figures: kaleido AND Plotly.toImage both fail on
+  scattermap ("Map error"); the working exports were (a) mermaid SVG → canvas → PNG after
+  inlining computed styles with style.setProperty(...,'important') — presentation attributes
+  lose to mermaid's CSS, edges vanish otherwise; (b) MapLibre `m.once('render') →
+  getCanvas().toDataURL()` after `triggerRepaint()`. The extension blocks returning base64
+  from JS ("[BLOCKED]") — shipped bytes out via fetch POST to a localhost CORS receiver.
+  Figures published at calcofi.io/workflows/figs/clean_ctd_2607SH/ and referenced remotely in
+  the email (300KB of inline base64 through a tool call = wasteful). **Gmail update_draft
+  DETACHES a draft from its thread** (no replyToMessageId; new threadId returned) — had to
+  re-create via create_draft(replyToMessageId=…); the orphan can't be trashed (no
+  gmail.modify scope), so it's edited to "[DISCARD — superseded duplicate]". The threaded
+  draft to send: r-7818460158184519383.
 - Gotchas: `COMMENT ON` takes no bind params (psycopg `sql.Literal`); Quarto+jupyter params =
   a `tags: [parameters]` cell (`-P study:…`); `cc_bin_1m` COPY needs NaN→None per row.
 
@@ -278,9 +293,45 @@ Let's also print out the equivalent of `devtools::session_info()` for Python (as
 
 Show up top how `quarto render clean_ctd_cruise-var.qmd` can be output to a differently named file, such as by cruise and var for using as just such a cleaning archive.
 
+Can you also snazz up the `calcofi4py` documentation with a dark theme and add a logo similar to calcofi4r (with a different shape other than hexagon) and distinguish (eg with indent and/or smaller font) the sections from the functions in the API Reference 
+
 ----
 
+While that final verification runs, here's the state of this round:
 
+**Reproducibility** (your first ask)
+- cc_session_info() (calcofi4py 0.3.2) — the Python devtools::session_info(): Python/platform, package versions, the git commit of any data-rule path (e.g. metadata/qc_rules → d68738f 2026-08-02) with a loud +uncommitted-changes warning if the tree was dirty, plus extras like the PostgreSQL server version (captured while the connection was open) and the pinned release.
+- The notebook ends with a collapsed "Reproducibility" accordion printing it, and the header now documents the archive pattern:
+quarto render clean_ctd_cruise-var.qmd -P study:2607SH -P variable:tempave \
+  --output clean_ctd_2607SH_tempave.html
+
+**Docs facelift** (your second ask)
+- Dark by default (light one toggle away), header in the calcofi4r navy.
+- Squircle logo — same family as the calcofi4r hex (navy #193E6D, border #2A4F7C, yellow #F4D530 compass rose) on a different shape; in the header, favicon, homepage, and the GitHub README.
+- API reference hierarchy: functions are now short names (cc_get_db, not calcofi4py.release.cc_get_db) at h3, indented with a left rule under the section headings — verified live in the screenshot above.
+- calcofi.io card reshot to match the new dark look.
+
+Also from earlier in this round: the map bug is properly fixed (labels as a separate glyph trace — the int-text/binary-array and sprite-icon traps are both documented in the helper), and the dropdown was click-verified at its new top-left spot ("cast 12" isolates down 12+up 12).
+
+Everything from this round is live and verified:
+
+- https://calcofi.io/workflows/clean_ctd_cruise-var.html — now serving v3 with the archive-render instructions up top, the −99-position accounting table, the fixed labeled map, the usable top-left cast selector, and the collapsed Reproducibility accordion (calcofi4py 0.3.2, qc_rules @ d68738f 2026-08-02, PostgreSQL 18.6, release v2026.08.14).
+- calcofi.io/calcofi4py (https://calcofi.io/calcofi4py/) — dark by default, squircle logo everywhere, hierarchical API reference.
+- calcofi.io card refreshed; notes committed; all three repos pushed.
+
+The one durable lesson recorded in the notes: WebGL map canvases capture blank in programmatic screenshots, so map rendering gets verified via queryRenderedFeatures/your eyes, never my screenshots. Nothing else pending — the Gmail draft to the team remains ready to send whenever you are.
+
+----
+
+Lastly, the introduction could benefit from an overall process mermaid diagram describing the flow of raw data into the pg db, automated flagging, review, approval and output tables that gets described in more detail with code in sections below.
+
+Then redraft the email response and insert screenshots of the most relevant figures, including this process diagram.
+
+----
+
+Shoot, diagram is illegible (text way too tiny). Can we expand it to full width in Quarto? [Image #13]
+
+The vertical layout is better, but the text is still too long. Perhaps shorter text labels in diagram with fuller descriptions in the Figure caption? [Image #14]
 
 ## 2026-08-16 move CTD extraction off Google Drive
 
