@@ -24,28 +24,32 @@ so any product can be regenerated, and any decision can be revisited.
 humans decide, and every output is derived — each arrow is a section below with the code
 that runs it.
 
+::: {.column-page}
+
 ```{mermaid}
 %%| label: fig-flow
-%%| fig-cap: "The QA/QC loop. Originals (navy) are loaded once and never edited; automated rules propose rows into the flag ledger (yellow); curators accept or reject; the QC views apply only accepted verdicts, so every product (right) can be regenerated — and accepted flags flow nightly into the public database release."
-flowchart LR
-  A["calcofi.org cast-file archive<br/>409 db-CSV files, 1993 → present"]
-  A -->|"load_pg_ctd.qmd<br/>verbatim, one-time"| B
+%%| echo: false
+%%| fig-width: 10
+%%| fig-cap: "The QA/QC loop. **Originals** (navy — `ctd.file` / `ctd.scan` / `ctd.scan_issue`, all 82 source columns, immutable by trigger) are loaded once from the calcofi.org cast-file archive by `load_pg_ctd.qmd`. Automated **QC rules** (§4: `cc_qc_spike`, `cc_qc_sensor_pair`, `cc_qc_range`) produce evidence and triage tables (§5), which `cc_propose_flags()` writes idempotently into the **ledger** (yellow — `ctd.flag`, every change audited). **Curators** accept or reject (§6, one UPDATE in pgAdmin or SQL); the **clean views** (`ctd.v_scan_qc` / `ctd.v_scan_clean`) apply only accepted verdicts, so every product — like the 1 m bins `cc_bin_1m()` writes to `work.clean_1m_*` (§7) — can be regenerated at any time. Each night the accepted flags are published to `gs://calcofi-db/qc/ctd/flag_accepted.parquet`, where the public database release applies them as `measurement_qual`."
+flowchart TB
+  A["calcofi.org archive<br/>409 files, 1993 → now"]
+  A -->|"load once, verbatim"| B
 
-  subgraph PG["PostgreSQL calcofi — schema ctd"]
-    direction TB
-    B[("ctd.file / ctd.scan / ctd.scan_issue<br/>ORIGINALS — immutable by trigger<br/>10.8M scans x 82 columns")]
-    F[("ctd.flag — the ledger<br/>proposed → accepted / rejected<br/>every change audited")]
-    V["ctd.v_scan_qc / ctd.v_scan_clean<br/>originals + ACCEPTED flags only"]
-    B --- V
-    F -->|"curators accept / reject<br/>pgAdmin or one UPDATE (Sec. 6)"| V
+  subgraph PG["PostgreSQL — schema ctd"]
+    B[("ORIGINALS<br/>10.8M scans<br/>immutable")]
+    F[("the LEDGER<br/>ctd.flag")]
+    V["clean QC views"]
   end
 
-  B -->|"automated QC rules (Sec. 4)<br/>cc_qc_spike / sensor_pair / range"| P["flag candidates<br/>evidence + triage (Sec. 5)"]
-  P -->|"cc_propose_flags (Sec. 6)<br/>idempotent"| F
-  V -->|"cc_bin_1m (Sec. 7)"| W[("work.clean_1m_*<br/>regenerable products")]
-  F -->|"nightly export"| G["gs://calcofi-db/qc/ctd/<br/>flag_accepted.parquet"]
-  G -.->|"applied as measurement_qual"| R["public DB release<br/>(ingest_calcofi_ctd-cast)"]
+  B -->|"QC rules (§4)"| P["flag candidates (§5)"]
+  P -->|"propose (§6)"| F
+  F -->|"curators review (§6)"| V
+  B --> V
+  V -->|"1 m bins (§7)"| W[("work.clean_1m_*")]
+  F -->|"nightly export"| G["flag_accepted.parquet<br/>(public GCS)"]
+  G -.->|"measurement_qual"| R["public DB release"]
 
+  style PG fill:#f4f8fc,stroke:#2A4F7C,color:#193E6D
   classDef orig fill:#193E6D,color:#fff,stroke:#2A4F7C
   classDef ledger fill:#F4D530,color:#193E6D,stroke:#c9ad13
   classDef derived fill:#dbe7f3,color:#193E6D,stroke:#2A4F7C
@@ -55,6 +59,8 @@ flowchart LR
   class V,W derived
   class A,P,G,R ext
 ```
+
+:::
 
 The QC checks are the same SQL rules the [ctd-qaqc app](https://app.calcofi.io/ctd-qaqc/)
 runs ([`metadata/qc_rules/`](https://github.com/CalCOFI/workflows/tree/main/metadata/qc_rules)),
