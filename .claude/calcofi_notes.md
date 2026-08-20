@@ -178,6 +178,8 @@ Since you went to sleep:
 - Docs: server-access + data-access Python sections now lead with calcofi4py
 - Earlier in the night: load_pg_ctd.html published to calcofi.io/workflows; release.dataset view fixed; deploy_consumers.sh step 3b re-points release.* views per release; Q25/Q26 filed; CLAUDE.md/README/memory/plan/notes all updated; ro_user audit (zero connections — services all connect as admin)
 
+### TODO: pgAdmin Google OAuth client (README "pgAdmin", ~15 min)
+
 Waiting on you (all in the plan's Progress table): the pgAdmin Google OAuth client (README "pgAdmin", ~15 min), the team's SSH public keys → users/keys/ → add_user.sh --all, optional docker volume rm 7ea47db1… (frees 6.4 GB), and the 32 GB memory decision. Weekly restore drill runs Sunday 03:15 UTC on both databases.
 
 ----
@@ -222,19 +224,6 @@ While you're at it, can you also include in this update an improvement to @../ct
   calcofi.io card reshot. WebGL canvases capture BLANK in programmatic screenshots
   (preserveDrawingBuffer=false) — user saw markers while my captures showed none; verify
   map rendering with queryRenderedFeatures or ask, never trust the screenshot.
-- **Round 4 (label regression)**: the two-trace map "fix" was WRONG and inverted — plotly 3.7
-  never creates the symbol layer for a `mode="text"` scattermap trace (live layer census:
-  markers trace = fill/line/circle/symbol, text trace = fill/line/circle only), so the
-  labels silently vanished. The WORKING configuration is ONE `markers+text` trace with
-  STRING labels (the original 0.3.1 fix; int text → binary typed array → treated as icon
-  names → "Image -15"). calcofi4py 0.3.4 reverts to it + violet (#9467bd) flag markers per
-  user ("red is alarming") + triage bars in the calcofi palette. Verified via
-  queryRenderedFeatures (51 label glyphs) — screenshots of MapLibre WebGL are unreliable
-  BOTH ways here (blank captures of drawn maps AND a wedged-renderer tab after a CDP
-  timeout); the render-event canvas capture in a FRESH tab is the only dependable export.
-  Email: user sent it before the images landed in the draft (remote figs were 404 until the
-  Pages deploy) — recipients have the links, and the published figure URLs now carry the
-  corrected versions (map labeled, new colors).
 - **Round 3 (diagram + email)**: process-flow mermaid in the notebook intro — took three passes:
   LR layout compresses text to illegibility (user caught it twice); final = `flowchart TB`,
   TERSE node labels with the full description in the fig-cap, `%%| echo: false` (mermaid cells
@@ -345,6 +334,18 @@ Then redraft the email response and insert screenshots of the most relevant figu
 Shoot, diagram is illegible (text way too tiny). Can we expand it to full width in Quarto? [Image #13]
 
 The vertical layout is better, but the text is still too long. Perhaps shorter text labels in diagram with fuller descriptions in the Figure caption? [Image #14]
+
+https://github.com/CalCOFI/calcofi4py
+
+----
+
+Everything is live and verified:
+
+- Notebook (https://calcofi.io/workflows/clean_ctd_cruise-var.html): the map's markers+text trace is in the served HTML — cast_seq labels restored, flags violet, triage bars in the CalCOFI palette.
+- fig_map.jpg (https://calcofi.io/workflows/figs/clean_ctd_2607SH/fig_map.jpg): now the labeled version (46 KB, 200) — the URL your sent email links to, so recipients see the corrected figure.
+- calcofi4py 0.3.4 pushed with the inverted-lesson documented in the docstring; notes corrected.
+
+That closes the loop on the CTD team deliverables. Outstanding items remain only the ones waiting on people: the team's SSH keys, the pgAdmin OAuth client, curator review of the 574 proposed flags, and Q25/Q26.
 
 ## 2026-08-16 move CTD extraction off Google Drive
 
