@@ -25,7 +25,7 @@
 - [ ] `ingest_calcofi_ctd-cast.qmd` needs a sync to GCS for just the used CSV files so saved in GCS `archive/`, not just GCS `_sync/`
 
 
-## 2026-08-21 calcofi4py: fix examples/install, add vignette, install on server
+## 2026-08-21 + bmgire ssh; calcofi4py: fix examples/install, add vignette, install on server
 
 Scope: 2026-08-21, from the bmgire key onward (the notebook diagram / email-figure work was 2026-08-20).
 
@@ -38,7 +38,7 @@ Scope: 2026-08-21, from the bmgire key onward (the notebook diagram / email-figu
   `LocalForward` colliding with a tunnel already up — harmless.
 - Same one-liner for each further key: drop in `users/keys/<u>.pub`, push, run `add_user.sh <u>`.
 
-**2. README flag example was wrong (Ben G caught it) → calcofi4py 0.3.5**
+**2. README flag example was wrong (Ben B caught it) → calcofi4py 0.3.5**
 
 - Old example flagged `depth=57` on cast `2304_001d`, which samples 3–42 m: `INSERT … SELECT`
   matched nothing and said nothing; also mixed casts and raised pandas' SQLAlchemy warning.
@@ -135,12 +135,6 @@ Scope: 2026-08-21, from the bmgire key onward (the notebook diagram / email-figu
   kdvogel, bhuang, esatterthwaite; pgAdmin Google OAuth client; curator review of the 574
   proposed 2607SH flags; Q25/Q26; `docker volume rm 7ea47db1…` once comfortable; 32 GB
   decision; optionally amend `a8ff895` if the notes draft was not meant to be committed.
-
-
-
-## 2026-08-21 add bmgire ssh 
-
-(see §1 of the summary above)
 
 ## 2026-08-17 setup pg, pgadmin, ssh for rasmus, ben g, kelsey
 
