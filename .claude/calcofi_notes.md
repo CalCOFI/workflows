@@ -68,6 +68,21 @@ and proof running in Python Console on rstudio.calcofi.io:
 
 Good catch on both counts — the example flags a depth that cast never reached (silently inserting zero rows), and there's no check-before / undo. Let me look at the ledger's actual rules (RLS, statuses, uniqueness) before rewriting it:
 
+**Outcome (Claude, 2026-08-21)**
+
+- `bmgire` activated: `users/keys/bmgire.pub` → `sudo scripts/add_user.sh bmgire` (idempotent; the
+  "bind 5432" noise is the local `calcofi` alias's LocalForward colliding with a tunnel already up).
+- calcofi4py **0.3.5**: `cc_withdraw_flags()` = undo. The ledger is append-only — RLS lets writers
+  UPDATE only their own `proposed` rows to `withdrawn`, never DELETE; `flag_guard` allows the
+  proposer or a curator, and leaves `review_note` free for the reason.
+- README/docs example rewritten: `cc_ctd_scans()` (no SQLAlchemy warning) → SELECT what the WHERE
+  hits and `assert len(hit) == 1` → `INSERT … RETURNING flag_id` (commit vs rollback) →
+  `cc_withdraw_flags()`. Executed verbatim on the live DB: scan 6730404 @ 20 m → flag 994 →
+  withdrawn. Lesson: a doc example that writes to a shared table must look first, return a
+  handle, and show the undo — `INSERT … SELECT` matching nothing is silent.
+- The two original live tests had never run (gated) and assumed a tunnel was up; they now open
+  it themselves. New round-trip test (propose → withdraw, rolled back) leaves no residue. 20 pass.
+
 ## 2026-08-17 setup pg, pgadmin, ssh for rasmus, ben g, kelsey
 
 The CTD cast team would like to use PostgreSQL for their CTD QA/QC work since it allows for multi-user read/write of a common db. We already have an instance running, per @../server, but it should be updated. There is also a pgadmin web interface, which I was only able to manually set. I would like to have user accounts setup for them so they can SSH (and SFTP) onto the host server, especially the /share folder, for upload/download and for accessing the db via SSH tunnel. We will need to provide explicit instructions for them on how to connect via Windows (eg Putty) and Mac (Terminal), which should probably go into @../docs. We should also upgrade all related software instances of postgres, pgadmin4. And we need to confirm that backup works, but rather than pushing to fragile Google Drive, we should push (and cleanup) to a dedicated GCS bucket for db backups. We need to enable the following users access:
