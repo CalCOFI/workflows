@@ -25,80 +25,122 @@
 - [ ] `ingest_calcofi_ctd-cast.qmd` needs a sync to GCS for just the used CSV files so saved in GCS `archive/`, not just GCS `_sync/`
 
 
-## 2026-08-21 calcofi4py: fix examples, install on server
+## 2026-08-21 calcofi4py: fix examples/install, add vignette, install on server
+
+Scope: 2026-08-21, from the bmgire key onward (the notebook diagram / email-figure work was 2026-08-20).
+
+**1. First team account activated (bmgire)**
+
+- `server/users/keys/bmgire.pub` committed → `sudo scripts/add_user.sh bmgire` on the server
+  (idempotent). Result: host user uid 1005 / group `calcofi`, key in `authorized_keys`, PG role with
+  `calcofi_curator` + personal schema + existing `~/.pgpass` kept, RStudio user, pgAdmin account.
+- "bind [127.0.0.1]:5432: Address already in use" during `ssh calcofi` = the local alias's
+  `LocalForward` colliding with a tunnel already up — harmless.
+- Same one-liner for each further key: drop in `users/keys/<u>.pub`, push, run `add_user.sh <u>`.
+
+**2. README flag example was wrong (Ben G caught it) → calcofi4py 0.3.5**
+
+- Old example flagged `depth=57` on cast `2304_001d`, which samples 3–42 m: `INSERT … SELECT`
+  matched nothing and said nothing; also mixed casts and raised pandas' SQLAlchemy warning.
+- New `cc_withdraw_flags(con, flag_ids, note=None)` — the undo. Ledger is append-only by RLS:
+  writers INSERT and may UPDATE only their own `proposed` rows to `withdrawn`; curators
+  accept/reject; nobody deletes; `flag_guard` lets proposer-or-curator withdraw and leaves
+  `review_note` free.
+- Example now: `cc_ctd_scans()` read → SELECT what the WHERE hits + `assert len(hit) == 1` →
+  `INSERT … RETURNING flag_id` (commit vs rollback) → `cc_flags()` → `cc_withdraw_flags()`.
+  Executed verbatim against the live DB: scan 6730404 @ 20 m → flag 994 → withdrawn.
+- Tests: the two original live tests had never run (gated) and assumed a tunnel — now open their
+  own; new propose→withdraw round-trip inside a rolled-back transaction leaves no residue.
+  20 pass with `CALCOFI_PG_TEST=1 PGPORT=15432`.
+- Flags 997/998 (bebest, from running the new example on rstudio.calcofi.io before 0.3.5 was
+  there — insert landed, `cc_withdraw_flags` raised) → withdrawn with an explanatory note.
+- RStudio gotcha: reticulate embeds Python once per R session; `exit` + re-`import` returns the
+  stale module → *Session → Restart R*. Server `/opt/venv` had 0.3.5 by then (Terminal `pip install`).
+- Claude's `git add` swept an in-progress notes draft (43 lines) into commit `a8ff895`; revertable.
+
+**3. "Both at once" section rewritten**
+
+- Old query used `f.study` / `f.cruise_key` — not columns of `ctd.flag` (would error) — and never
+  joined the two stores.
+- New: paragraph on what the two stores are (public immutable release vs. the team's live working
+  state), why `cruise_key` (`YYYY-MM-NODC`) joins them, how DuckDB bridges them (`cc_get_db()`
+  views + `cc_pg_attach()` catalog `pg`, libpq via tunnel + `~/.pgpass`, read-only default).
+  Commented query `pg.ctd.flag ⋈ pg.ctd.file` LEFT JOIN release `sample` → verified live:
+  2607SH 574 proposed / 0 accepted / 122 casts public; 2304SH 0 / 0 / 226. Note on
+  `read_only=False` for the write direction.
+- DuckDB's "wrong" count was right — that's how 997/998 were found.
+
+**4. Article = pre-computed vignette** → https://calcofi.io/calcofi4py/articles/ctd-qaqc/
+
+- Source `articles/ctd-qaqc.qmd`; `scripts/render_articles.sh` executes it **locally** (jupytext →
+  nbconvert, through the author's tunnel + `~/.pgpass`) into `docs/articles/ctd-qaqc.ipynb`;
+  mkdocs-jupyter publishes stored outputs with `execute: false`. **No GitHub secrets for DB auth,
+  by design** — Pages never touches the server; the committed notebook was audited for every
+  `.pgpass` password: zero.
+- Read-only: casts → map → section → spike/sensor-pair/range → triage → profile explorer → ledger
+  (read) → `cc_bin_1m()` with no `write_table` → cross-store query → session info.
+  `cc_propose_flags` / `write_table` shown as code, not run. Prints `calcofi4py 0.3.5` first.
+- Traps hit: `quarto render --to ipynb` pipes outputs through pandoc, which truncates pandas'
+  `<div><style>…<table>` to `</div>` (every DataFrame vanished); DuckDB draws an ipywidgets
+  progress bar per query in Jupyter (`SET enable_progress_bar = false`); nbconvert resolved a
+  user-level `python3` kernelspec (`JUPYTER_DATA_DIR` → venv share, venv `bin` first on PATH
+  because the kernelspec's argv is literally `python`); `|| true` after a piped nbconvert hid a
+  failed execution as "no errors"; jupytext keeps YAML front matter inside the first markdown
+  cell (dropped it); plotly in static pages via `HTML(fig.to_html(include_plotlyjs="cdn",
+  full_html=False))`; diagram embedded with `IPython.display.Image` + `hide-input` tag. WebGL
+  (`scattergl`, scattermap) is blank in screenshots — verified by DOM.
+- Wiring: `docs` extra in `pyproject.toml`, `docs.yml` → `pip install -e ".[docs]"`, nav
+  "Articles", `.gitignore` (+`.cache/`, `site/`, `articles/*.ipynb`).
+
+**5. Server image + deploy procedure**
+
+- `CalCOFI/server` `rstudio/Dockerfile` now bakes `calcofi4py[viz]` into `/opt/venv`
+  (reticulate's Python). Takes effect at the next image rebuild — **not rebuilt** (restarts
+  RStudio for everyone).
+- `calcofi4py/scripts/deploy_server.sh [ref]` upgrades the running container between rebuilds.
+- New `calcofi4py/CLAUDE.md`: release checklist (bump in 3 places, push, **tag**,
+  **deploy_server.sh**, tell sessions to Restart R), no-secrets / no-CI-credentials rules,
+  examples-that-write must look-first / RETURNING / undo, test conventions, plotly + render gotchas.
+
+**6. Version visible everywhere**
+
+- `hooks/version.py` (mkdocs hook) → header/titles read **calcofi4py v0.3.5** from the installed
+  package; `{{ calcofi4py_version }}` placeholder available.
+- Shields dynamic-TOML badge (reads `pyproject.toml` on `main`) under the H1; both examples open
+  with `cc.__version__  # '0.3.5' …`; `tests/test_docs.py` fails if README/docs quote a stale
+  version or `pyproject` ≠ `__init__`.
+
+**7. Install / update semantics (measured in a scratch venv)**
+
+- Install line is now `pip install "calcofi4py[viz] @ git+https://github.com/CalCOFI/calcofi4py"`
+  — every example needs pandas + plotly; extras go inside the quotes with the git URL.
+- `pip install 'calcofi4py[viz]'` on an existing install = **no-op** ("Requirement already
+  satisfied" — not on PyPI). Update = `pip install --upgrade "calcofi4py[viz] @ git+…"`
+  (verified 0.3.4 → 0.3.5). Pin = `@v0.3.5`.
+- **First release tag ever**: `v0.3.5` on `dc004cf8`; earlier versions reachable only by SHA.
+  Docs have an "Updating and pinning" block + Restart R note.
+
+**Working-habit lessons**
+
+- Multi-repo Bash one-liners: a `cd` persists for the rest of the command → absolute paths /
+  `git -C` (bit twice on the notes commit).
+- `grep` inside `$(…)` inside a double-quoted `echo`: `\"pattern\"` matches literal quotes →
+  false negatives; pygments splits tokens, so grep rendered HTML for single tokens.
+- A doc example that writes to a shared table gets executed verbatim before publishing, and
+  leaves nothing `proposed` behind.
+
+**Open / Ben**
+
+- Rebuild the `rstudio` image when convenient (bakes calcofi4py); keys from rswalethorp,
+  kdvogel, bhuang, esatterthwaite; pgAdmin Google OAuth client; curator review of the 574
+  proposed 2607SH flags; Q25/Q26; `docker volume rm 7ea47db1…` once comfortable; 32 GB
+  decision; optionally amend `a8ff895` if the notes draft was not meant to be committed.
 
 
-This example Python snippet on homepage of calcofi4py is flawed in that the depth does not exist for given study and cast_id. There should also be code to roll back and/or check setting first, ie undo.
 
-  ```py
-  import calcofi4py as cc
+## 2026-08-21 add bmgire ssh 
 
-  con = cc.cc_pg_connect(tunnel=True)        # opens ssh -N calcofi for you; ~/.pgpass auth
-  con.execute("SELECT count(*) FROM ctd.cast WHERE is_best_stage").fetchone()
-
-  import pandas as pd
-  casts = pd.read_sql("SELECT * FROM ctd.v_scan_qc WHERE study = '2304SH' AND cast_id = '2304_020d'", con)
-
-  propose a QC flag (curators accept/reject in pgAdmin or SQL)
-
-  con.execute("""
-    INSERT INTO ctd.flag (scan_id, variable, qual_code, reason)
-    SELECT scan_id, 'temp1', 4, 'spike vs neighbours'
-    FROM ctd.v_scan_best WHERE study=%s AND cast_id=%s AND depth=%s
-  """, ("2304SH", "2304_001d", 57))
-  con.commit()
-  cc.cc_pg_tunnel_close()
-  ```
-
-and proof running in Python Console on rstudio.calcofi.io:
-
-  ```py
-  import calcofi4py as cc
-  con = cc.cc_pg_connect(tunnel=True)
-
-  pd.read_sql("SELECT MAX(depth) AS depth_max FROM ctd.v_scan_best WHERE study='2304SH' AND cast_id='2304_001d'", con)
-  ```
-  ```
-  <string>:1: UserWarning: pandas only supports SQLAlchemy connectable (engine/connection) or database string URI or sqlite3 DBAPI2 connection. Other DBAPI2 objects are not tested. Please consider using SQLAlchemy.
-     depth_max
-  0       42.0
-  ```
-
-----
-
-Good catch on both counts — the example flags a depth that cast never reached (silently inserting zero rows), and there's no check-before / undo. Let me look at the ledger's actual rules (RLS, statuses, uniqueness) before rewriting it:
-
-**Outcome (Claude, 2026-08-21)**
-
-- `bmgire` activated: `users/keys/bmgire.pub` → `sudo scripts/add_user.sh bmgire` (idempotent; the
-  "bind 5432" noise is the local `calcofi` alias's LocalForward colliding with a tunnel already up).
-- calcofi4py **0.3.5**: `cc_withdraw_flags()` = undo. The ledger is append-only — RLS lets writers
-  UPDATE only their own `proposed` rows to `withdrawn`, never DELETE; `flag_guard` allows the
-  proposer or a curator, and leaves `review_note` free for the reason.
-- README/docs example rewritten: `cc_ctd_scans()` (no SQLAlchemy warning) → SELECT what the WHERE
-  hits and `assert len(hit) == 1` → `INSERT … RETURNING flag_id` (commit vs rollback) →
-  `cc_withdraw_flags()`. Executed verbatim on the live DB: scan 6730404 @ 20 m → flag 994 →
-  withdrawn. Lesson: a doc example that writes to a shared table must look first, return a
-  handle, and show the undo — `INSERT … SELECT` matching nothing is silent.
-- The two original live tests had never run (gated) and assumed a tunnel was up; they now open
-  it themselves. New round-trip test (propose → withdraw, rolled back) leaves no residue. 20 pass.
-- **Article = pre-computed vignette** (calcofi.io/calcofi4py/articles/ctd-qaqc/): source
-  `articles/ctd-qaqc.qmd`, executed LOCALLY by `scripts/render_articles.sh` (jupytext → nbconvert
-  through the author's tunnel + ~/.pgpass) into `docs/articles/*.ipynb`; mkdocs-jupyter publishes
-  stored outputs with `execute: false` → **no GitHub secrets for DB auth, by design**. Read-only:
-  no `cc_propose_flags`, no `write_table`. Traps: `quarto render --to ipynb` pipes outputs through
-  pandoc, which truncates pandas' `<div><style>…<table>` to `</div>` (every DataFrame vanished);
-  DuckDB draws an ipywidgets progress bar per query in Jupyter (`SET enable_progress_bar=false`);
-  nbconvert picked a user-level `python3` kernelspec → set `JUPYTER_DATA_DIR` to the venv's share
-  and put the venv bin first on PATH (the kernelspec's argv is literally `python`); `|| true` after
-  a piped nbconvert hid a failed execution as "no errors". Also: server `rstudio/Dockerfile` now
-  bakes calcofi4py into /opt/venv; `scripts/deploy_server.sh` upgrades it between rebuilds;
-  calcofi4py/CLAUDE.md makes that part of every release.
-- **pip + git installs**: `pip install 'calcofi4py[viz]'` on an existing install is a no-op
-  ("Requirement already satisfied") — not on PyPI. Update = re-run the git URL with
-  `--upgrade` (verified 0.3.4 → 0.3.5 in a scratch venv); pin = `@v0.3.5` (tags exist from
-  v0.3.5 on; CLAUDE.md release checklist tags from now). Docs: site header shows the installed
-  version (mkdocs hook), examples open with `cc.__version__  # '0.3.5'`, test_docs.py fails on drift.
+(see §1 of the summary above)
 
 ## 2026-08-17 setup pg, pgadmin, ssh for rasmus, ben g, kelsey
 
