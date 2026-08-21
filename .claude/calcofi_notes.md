@@ -94,6 +94,11 @@ Good catch on both counts — the example flags a depth that cast never reached 
   a piped nbconvert hid a failed execution as "no errors". Also: server `rstudio/Dockerfile` now
   bakes calcofi4py into /opt/venv; `scripts/deploy_server.sh` upgrades it between rebuilds;
   calcofi4py/CLAUDE.md makes that part of every release.
+- **pip + git installs**: `pip install 'calcofi4py[viz]'` on an existing install is a no-op
+  ("Requirement already satisfied") — not on PyPI. Update = re-run the git URL with
+  `--upgrade` (verified 0.3.4 → 0.3.5 in a scratch venv); pin = `@v0.3.5` (tags exist from
+  v0.3.5 on; CLAUDE.md release checklist tags from now). Docs: site header shows the installed
+  version (mkdocs hook), examples open with `cc.__version__  # '0.3.5'`, test_docs.py fails on drift.
 
 ## 2026-08-17 setup pg, pgadmin, ssh for rasmus, ben g, kelsey
 
