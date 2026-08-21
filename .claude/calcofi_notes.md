@@ -25,6 +25,49 @@
 - [ ] `ingest_calcofi_ctd-cast.qmd` needs a sync to GCS for just the used CSV files so saved in GCS `archive/`, not just GCS `_sync/`
 
 
+## 2026-08-21 calcofi4py: fix example, install on server
+
+
+This example Python snippet on homepage of calcofi4py is flawed in that the depth does not exist for given study and cast_id. There should also be code to roll back and/or check setting first, ie undo.
+
+  ```py
+  import calcofi4py as cc
+
+  con = cc.cc_pg_connect(tunnel=True)        # opens ssh -N calcofi for you; ~/.pgpass auth
+  con.execute("SELECT count(*) FROM ctd.cast WHERE is_best_stage").fetchone()
+
+  import pandas as pd
+  casts = pd.read_sql("SELECT * FROM ctd.v_scan_qc WHERE study = '2304SH' AND cast_id = '2304_020d'", con)
+
+  propose a QC flag (curators accept/reject in pgAdmin or SQL)
+
+  con.execute("""
+    INSERT INTO ctd.flag (scan_id, variable, qual_code, reason)
+    SELECT scan_id, 'temp1', 4, 'spike vs neighbours'
+    FROM ctd.v_scan_best WHERE study=%s AND cast_id=%s AND depth=%s
+  """, ("2304SH", "2304_001d", 57))
+  con.commit()
+  cc.cc_pg_tunnel_close()
+  ```
+
+and proof running in Python Console on rstudio.calcofi.io:
+
+  ```py
+  import calcofi4py as cc
+  con = cc.cc_pg_connect(tunnel=True)
+
+  pd.read_sql("SELECT MAX(depth) AS depth_max FROM ctd.v_scan_best WHERE study='2304SH' AND cast_id='2304_001d'", con)
+  ```
+  ```
+  <string>:1: UserWarning: pandas only supports SQLAlchemy connectable (engine/connection) or database string URI or sqlite3 DBAPI2 connection. Other DBAPI2 objects are not tested. Please consider using SQLAlchemy.
+     depth_max
+  0       42.0
+  ```
+
+----
+
+Good catch on both counts — the example flags a depth that cast never reached (silently inserting zero rows), and there's no check-before / undo. Let me look at the ledger's actual rules (RLS, statuses, uniqueness) before rewriting it:
+
 ## 2026-08-17 setup pg, pgadmin, ssh for rasmus, ben g, kelsey
 
 The CTD cast team would like to use PostgreSQL for their CTD QA/QC work since it allows for multi-user read/write of a common db. We already have an instance running, per @../server, but it should be updated. There is also a pgadmin web interface, which I was only able to manually set. I would like to have user accounts setup for them so they can SSH (and SFTP) onto the host server, especially the /share folder, for upload/download and for accessing the db via SSH tunnel. We will need to provide explicit instructions for them on how to connect via Windows (eg Putty) and Mac (Terminal), which should probably go into @../docs. We should also upgrade all related software instances of postgres, pgadmin4. And we need to confirm that backup works, but rather than pushing to fragile Google Drive, we should push (and cleanup) to a dedicated GCS bucket for db backups. We need to enable the following users access:
