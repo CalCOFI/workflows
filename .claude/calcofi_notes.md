@@ -25,7 +25,7 @@
 - [ ] `ingest_calcofi_ctd-cast.qmd` needs a sync to GCS for just the used CSV files so saved in GCS `archive/`, not just GCS `_sync/`
 
 
-## 2026-08-21 calcofi4py: fix example, install on server
+## 2026-08-21 calcofi4py: fix examples, install on server
 
 
 This example Python snippet on homepage of calcofi4py is flawed in that the depth does not exist for given study and cast_id. There should also be code to roll back and/or check setting first, ie undo.
@@ -82,6 +82,18 @@ Good catch on both counts — the example flags a depth that cast never reached 
   handle, and show the undo — `INSERT … SELECT` matching nothing is silent.
 - The two original live tests had never run (gated) and assumed a tunnel was up; they now open
   it themselves. New round-trip test (propose → withdraw, rolled back) leaves no residue. 20 pass.
+- **Article = pre-computed vignette** (calcofi.io/calcofi4py/articles/ctd-qaqc/): source
+  `articles/ctd-qaqc.qmd`, executed LOCALLY by `scripts/render_articles.sh` (jupytext → nbconvert
+  through the author's tunnel + ~/.pgpass) into `docs/articles/*.ipynb`; mkdocs-jupyter publishes
+  stored outputs with `execute: false` → **no GitHub secrets for DB auth, by design**. Read-only:
+  no `cc_propose_flags`, no `write_table`. Traps: `quarto render --to ipynb` pipes outputs through
+  pandoc, which truncates pandas' `<div><style>…<table>` to `</div>` (every DataFrame vanished);
+  DuckDB draws an ipywidgets progress bar per query in Jupyter (`SET enable_progress_bar=false`);
+  nbconvert picked a user-level `python3` kernelspec → set `JUPYTER_DATA_DIR` to the venv's share
+  and put the venv bin first on PATH (the kernelspec's argv is literally `python`); `|| true` after
+  a piped nbconvert hid a failed execution as "no errors". Also: server `rstudio/Dockerfile` now
+  bakes calcofi4py into /opt/venv; `scripts/deploy_server.sh` upgrades it between rebuilds;
+  calcofi4py/CLAUDE.md makes that part of every release.
 
 ## 2026-08-17 setup pg, pgadmin, ssh for rasmus, ben g, kelsey
 
