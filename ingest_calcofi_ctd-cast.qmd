@@ -99,6 +99,12 @@ knitr::knit_hooks$set(time_it = function(before, options) {
 })
 knitr::opts_chunk$set(time_it = TRUE)
 
+# archives this notebook has to fetch from calcofi.org are 25-125 MB and the
+# server delivers ~0.4 MB/s; R's default `timeout` of 60 s aborts every one of
+# them at 15-25 MB (run of 2026-08-24: seven consecutive truncations, then the
+# render failed on the archives that never arrived). One hour per file.
+options(timeout = max(3600, getOption("timeout")))
+
 devtools::load_all(here::here("../calcofi4db"))
 devtools::load_all(here::here("../calcofi4r"))
 librarian::shelf(
@@ -1347,6 +1353,36 @@ d_bind <- d_bind |>
     longitude = if_else(is.na(longitude), lon_lnst, longitude),
     latitude = if_else(is.na(latitude), lat_lnst, latitude)
   )
+
+# A scan with no position AND no CalCOFI line/station to derive one from cannot
+# be placed, so it cannot enter `sample`/`obs` (both key on a position). Until
+# 2026-08-24 this was a bare hard stop, which held for years because every such
+# scan had a line/station. Then calcofi.org's 19-9604JD and 19-9608NH FinalQC
+# archives (fetched for the first time that day; JRW's FinalDB copies omit them)
+# brought 9,225 scans from the "RATHBURN CORE STN" canyon site: lat/lon -99 and
+# the station NAME in the line/sta columns. Those are not CalCOFI grid casts
+# (questions.csv Q, "Rathburn"). Report them by file and drop them; the assertion
+# below still holds for everything placeable, and the drop is bounded so an
+# archive that loses its positions wholesale fails loudly rather than vanishing.
+CTD_UNPLACED_MAX_PCT <- 0.2   # 9,225 of 9,135,263 = 0.10% at 2026-08-24; only ever DOWN
+
+d_unplaced <- d_bind |>
+  filter(is.na(longitude) | is.na(latitude))
+if (nrow(d_unplaced) > 0) {
+  d_unplaced |>
+    count(cruise_key, `_source_file`, line, sta, name = "n_scans") |>
+    arrange(desc(n_scans)) |>
+    dt(
+      caption = glue(
+        "{format(nrow(d_unplaced), big.mark = ',')} scans DROPPED: no position and ",
+        "no line/station to derive one from"),
+      fname = "ctd_scans_unplaced")
+}
+stopifnot(
+  "unplaceable scans exceed the ratchet: a source lost its positions; investigate before dropping" =
+    100 * nrow(d_unplaced) / nrow(d_bind) <= CTD_UNPLACED_MAX_PCT)
+d_bind <- d_bind |>
+  filter(!is.na(longitude), !is.na(latitude))
 
 stopifnot(sum(is.na(d_bind$longitude)) == 0)
 stopifnot(sum(is.na(d_bind$latitude)) == 0)
