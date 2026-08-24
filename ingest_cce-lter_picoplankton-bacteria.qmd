@@ -308,8 +308,19 @@ dbExecute(con, "
   UPDATE picoplankton_bacteria_bottle
   SET ship_code = regexp_extract(study_name, '[0-9A-Z]+$')")
 
+# the study's own designation ("2004-11-02-C-33RR" -> 200411, the cruise START
+# month) is the fallback when no reference cruise's date span holds the sample
+dbExecute(con, "
+  ALTER TABLE picoplankton_bacteria_bottle ADD COLUMN IF NOT EXISTS cruise_ym VARCHAR")
+dbExecute(con, "
+  UPDATE picoplankton_bacteria_bottle
+  SET cruise_ym = regexp_replace(study_name, '^(\\d{4})-(\\d{2}).*$', '\\1\\2')")
+
 cruise_key_result <- derive_cruise_key_on_casts(
-  con, table_name = "picoplankton_bacteria_bottle", datetime_col = "datetime_utc")
+  con, table_name = "picoplankton_bacteria_bottle", datetime_col = "datetime_utc",
+  cruise_ym_col = "cruise_ym")
+cruise_key_result$key_stats |>
+  datatable(caption = "cruise_key resolution: span > source designation > month")
 
 n_ck <- dbGetQuery(con, "SELECT COUNT(*) FROM picoplankton_bacteria_bottle WHERE cruise_key IS NOT NULL")[[1]]
 n_all <- dbGetQuery(con, "SELECT COUNT(*) FROM picoplankton_bacteria_bottle")[[1]]

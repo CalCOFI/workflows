@@ -148,12 +148,14 @@ load_prior_tables(con, parquet_dir = cc_stage_path("parquet", "swfsc_ichthyo"),
 # source "Ship" is a NODC ship code (e.g. 31PT), not a name -> join on ship_nodc
 d_ship <- dbGetQuery(con, "SELECT ship_key, ship_nodc FROM ship")
 zt <- dbGetQuery(con, "SELECT tow_id, ship_name AS ship_nodc, date FROM phyllosoma_tow") |>
-  left_join(d_ship, by = "ship_nodc") |>
-  mutate(cruise_key = if_else(is.na(ship_nodc)|is.na(date), NA_character_,
-                              as.character(glue("{format(date,'%Y-%m')}-{ship_nodc}"))))
-valid_ck <- dbGetQuery(con, "SELECT DISTINCT cruise_key FROM cruise")$cruise_key
-zt <- zt |> mutate(cruise_key = if_else(cruise_key %in% valid_ck, cruise_key, NA_character_))
-dbWriteTable(con, "zk", zt |> select(tow_id, ship_key, cruise_key), overwrite = TRUE)
+  left_join(d_ship, by = "ship_nodc")
+# cruise_key: the reference cruise whose date span holds the tow, else its month,
+# keys not in `cruise` left NULL (calcofi4db::resolve_cruise_key) — the old
+# month rule put a tow in the first days of a month on the NEXT cruise
+dbWriteTable(con, "zk", zt |> select(tow_id, ship_key, datetime = date), overwrite = TRUE)
+resolve_cruise_key(con, "zk", datetime_col = "datetime", require_in_cruise = TRUE) |>
+  datatable(caption = "cruise_key resolution method")
+zt <- zt |> left_join(dbGetQuery(con, "SELECT tow_id, cruise_key FROM zk"), by = "tow_id")
 dbExecute(con, "ALTER TABLE phyllosoma_tow ADD COLUMN IF NOT EXISTS ship_key VARCHAR")
 dbExecute(con, "ALTER TABLE phyllosoma_tow ADD COLUMN IF NOT EXISTS cruise_key VARCHAR")
 dbExecute(con, "UPDATE phyllosoma_tow t SET ship_key=z.ship_key, cruise_key=z.cruise_key FROM zk z WHERE t.tow_id=z.tow_id")

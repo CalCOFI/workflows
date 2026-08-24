@@ -400,20 +400,23 @@ d_keys <- d_clean |>
     ship_name_norm = coalesce(SHIP_ALIASES[ship_name_norm], ship_name_norm)) |>
   left_join(
     d_ship |> select(ship_name_norm, ship_key, ship_nodc),
-    by = "ship_name_norm") |>
-  mutate(
-    cruise_key = if_else(
-      is.na(ship_nodc), NA_character_,
-      glue("{format(date, '%Y-%m')}-{ship_nodc}") |> as.character()))
+    by = "ship_name_norm")
+
+# cruise_key: the reference cruise whose date span holds the tow, else its month,
+# keys not in `cruise` left NULL (calcofi4db::resolve_cruise_key) — the old
+# month rule put a tow in the first days of a month on the NEXT cruise
+dbWriteTable(con, "zk", d_keys |> select(tow_id, ship_key, datetime = date), overwrite = TRUE)
+resolve_cruise_key(con, "zk", datetime_col = "datetime", require_in_cruise = TRUE) |>
+  datatable(caption = "cruise_key resolution method")
+d_keys <- d_keys |>
+  left_join(dbGetQuery(con, "SELECT tow_id, cruise_key FROM zk"), by = "tow_id")
+dbExecute(con, "DROP TABLE zk")
 
 n_raw_ships  <- n_distinct(d_clean$ship_name)
 n_norm_ships <- n_distinct(d_keys$ship_name_norm)
 cat(glue("Q04: {n_raw_ships} raw vessel names -> {n_norm_ships} canonical"), "\n")
 
-n_ship  <- sum(!is.na(d_keys$ship_key))
-valid_ck <- dbGetQuery(con, "SELECT DISTINCT cruise_key FROM cruise")$cruise_key
-d_keys <- d_keys |>
-  mutate(cruise_key = if_else(cruise_key %in% valid_ck, cruise_key, NA_character_))
+n_ship   <- sum(!is.na(d_keys$ship_key))
 n_cruise <- sum(!is.na(d_keys$cruise_key))
 
 cat(glue(

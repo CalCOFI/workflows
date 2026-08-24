@@ -25,6 +25,101 @@
 - [ ] `ingest_calcofi_ctd-cast.qmd` needs a sync to GCS for just the used CSV files so saved in GCS `archive/`, not just GCS `_sync/`
 
 
+## 2026-08-24 find errant CTD plot
+
+Find the email thread with "Fwd: Input on app to easily find data collected on the CalCOFI platform -- by Aug 28th" that includes Erin and Ben Gire. Evaluate the attached image for the errant plot going down to 2310 meters. Is this actually in the original data, the integrated database, and/or is a problem with digestion for the visualized app at https://calcofi.io/db-viz-station/?
+
+I would also like to encourage Ben G to use the new calcofi4py. The Postgres database access (https://calcofi.io/docs/server-access.html), Python package (https://calcofi.io/calcofi4py/) and Quarto notebook (https://calcofi.io/workflows/clean_ctd_cruise-var.html) for QA/QC were meant to provide starting materials that could help their ingestion process, which is much more complicated than what I know.
+
+----
+
+Nothing further to fetch — everything is traced. Here's the write-up.
+
+The cast behind Ralf's screenshot (station 080.0 160.0, "Oxygen" = oxygen_umol_kg)
+
+┌────────────┬──────────────────────────────────────────────────────────────────────────────────┐
+│            │                                    identifier                                    │
+├────────────┼──────────────────────────────────────────────────────────────────────────────────┤
+│ Source     │ 5508BD, R/V Black Douglas — Cruise 195508, Cruise_ID 1955-08-07-C-31BD           │
+│ cruise     │                                                                                  │
+├────────────┼──────────────────────────────────────────────────────────────────────────────────┤
+│ Source     │ Cst_Cnt 7644, Cast_ID 19-5508BD-HY-246-2012-07901560, Sta 079.0 156.0, 31.15 N   │
+│ cast       │ 127.80 W, 1955-09-03 20:12, bottom 4389 m                                        │
+├────────────┼──────────────────────────────────────────────────────────────────────────────────┤
+│ Integrated │ sample_key calcofi_bottle:cast:7644, cruise_key 1955-09-31BD, grid_key           │
+│  DB        │ st160-ln80_hist (which is why the app labels it 080.0 160.0)                     │
+├────────────┼──────────────────────────────────────────────────────────────────────────────────┤
+│            │ 17-bottle hydrocast 600 → 2312 m (R_Depth 2339). Real. Deep hydrocasts to 2–5 km │
+│ Depth      │  were routine 1949–1976 (~60 cruises with samples below 2000 m) and recur to     │
+│            │ 3500 m through 2016.                                                             │
+├────────────┼──────────────────────────────────────────────────────────────────────────────────┤
+│            │ Btl_Cnt 198640 @ 1144 m: O2 2.18 ml/L / 94.8 µmol/kg between neighbours at 0.95  │
+│ The spike  │ (1100 m) and 1.00 (1200 m); salinity also off (34.45 vs 34.52/34.55). A second   │
+│            │ one at 198643 @ 1398 m (1.45 ml/L).                                              │
+└────────────┴──────────────────────────────────────────────────────────────────────────────────┘
+
+Where the fault lies, layer by layer
+
+- Original data — the value is there, and it is already flagged O_qual = 8 (suspect), along with O2Satq = 8 and S_qual = 8, in 194903-202105_Bottle.csv. Same for the 1398 m bottle. Not a new discovery for the bottle DB.
+- Integrated DB (v2026.08.14) — the flag arrives as measurement_qual = 8 on oxygen_ml_l and oxygen_saturation, but not on oxygen_umol_kg / r_oxygen_umol_kg: metadata/measurement_type.csv has no _qual_column for those two, so the flag is dropped on exactly the form the app plots. That one is mine to fix (and worth auditing every other *_umol_kg/derived type).
+- App — db-viz-station/scripts/build_depth_profiles.sql AVGs every value per 5 m bin and never reads measurement_qual, so even where the flag exists it is ignored. Small fix for Betty: exclude or hollow-out qual IN (8, 9).
+
+So: not a digestion error, and nothing for Ben G to fix at the source for this point — it's a case of an existing flag not being honoured downstream.
+
+### TODO: fix calcofi4db::derive_cruise_key_on_casts() to not erroneously split cruises by month; check erroneous depth
+
+Two extra things the trace turned up
+
+1. **`cruise_key` splits cruises that cross a month boundary**. `calcofi4db::derive_cruise_key_on_casts()` (R/ship.R) builds `YYYY-MM` from each cast's `datetime`, not the source Cruise (YYYYMM). Cruise 195508 is released as `1955-08-31BD` (24 casts) + `1955-09-31BD` (32 casts); 184 of 664 source bottle cruises span two months and are split the same way. Likely affects `ctd-cast`/`dic` too.
+
+2. **One CTD cast at 14,671 m** in the release: calcofi_ctd-cast:cast:0010_001d (cruise_key 2000-10-32NM, datetime 1992-04-18, scans at 71/3449/14671 m) traces to JRW's test cast 20-0010NH_CTDFinalQC/asc-hdr_btl/20-0010NH_09330267_001da.* ("First Cast - switch fluorometer"), which is not in the FinalDB CSVs. `check_measurement_bounds()` bounds values, **not the depth coordinate**, so nothing catches it.
+
+Done / for you
+
+- Gmail draft created (reply-all to Ben G's message, thread "Fwd: Input on app…") — gives him the cruise/cast IDs, the layer-by-layer answer, and the calcofi4py / PostgreSQL / clean_ctd_cruise-var pitch framed as starting materials, noting his bmgire account exists and asking for his SSH key. Not sent; review and send when you're happy.
+- Saved the findings to memory (project_bottle_qual_and_cruise_split.md).
+- Not done (your call): map `o_qual` onto the umol/kg types in `measurement_type.csv`; PR to db-viz-station's build_depth_profiles.sql; open issues for the cruise-split derivation and the depth-coordinate bound.
+
+----
+
+Let's definitely fix those two extra things with cruise_key getting wrongly split (check all ingest_*.qmd notebooks and calcofi4db functions). 2) the reasonable depth bounds, especially since we now have
+  seafloor being extracted per location (perhaps with some tolerance like 10 m allowance). Let's also be consistent with applying fixes to all "consumers", not just db-viz-station, but also db-viz-hex, etc. And (3) let's apply reasonable fixes across all relevant apps
+
+----
+
+Both clear: the calcofi_notes.md diff is the session hook logging this conversation (not mine to revert), and test_release.qmd pins no exact column sets, so the additive sample.seafloor_depth_m / cruise.date_min|date_max columns are safe. Everything that can be done without re-running the pipeline is done and verified; here's the recap.
+
+What was fixed (nothing committed yet — all working-tree changes)
+
+1. cruise_key month-split — calcofi4db 3.20.0 (R/cruise.R, R/ship.R)
+- add_cruise_date_span() stamps date_min/date_max on the reference cruise from its own tows (ichthyo ingest; 0 same-ship overlaps across 691 cruises, so containment is unambiguous).
+- resolve_cruise_key() resolves span ± 3 d → source designation (YYYYMM) → event month, recording cruise_key_method; ties go to the nearest span. It errors on a cruise table without spans rather than regressing.
+- derive_cruise_key_on_casts() gains cruise_ym_col and delegates. Notebooks: ichthyo (span chunk), bottle (stops deleting source Cruise; passes it; reports designation disagreements — the reference wins, e.g. ichthyo 8403 vs bottle 8402), picoplankton (studyName designation), and cufes / pic-zooplankton / euphausiids / zoodb / zooscan / phyllosoma moved off format(date,'%Y-%m').
+- Measured stakes: 664 source bottle cruises → 799 release keys; 5,941 of 35,644 casts on a key their source disagrees with.
+
+2. Depth bounds — calcofi4db R/depth.R
+- CC_DEPTH_MAX_M = 6500 + check_depth_bounds() (NaN/negative/over-ceiling → fails the release).
+- sample_seafloor() / add_sample_seafloor() stamp seafloor_depth_m on sample from the local GEBCO 2025 master ($CALCOFI_GEBCO_TIF); check_depth_vs_seafloor() compares each root sample's deepest attributed depth to the deepest GEBCO cell within one cell + 10 m (your tolerance) — calibrated on the release: 695 of 412,640 fail, one absurd (14,671 m) and the rest ≤1.2 km over on slopes/canyons with minute-rounded 1949–75 positions → report + ratchet (DEPTH_SEAFLOOR_OVER_MAX = 695), never delete. New depth_coverage chunk in release_database.qmd; D3 section in /validate-ingest.
+- Root cause of the 14,671 m cast: ingest_calcofi_ctd-cast.qmd matched db-csvs/orig/ by substring. Now excludes orig*/uncorrected/ — proven over all 16,576 CSVs on disk that the only casts lost are the two copies of test dip 0010_001, and that "top-level only" would have been wrong (20-1104SH/separate_runs/ holds six casts found nowhere else).
+
+3. Quality flags across consumers
+- Registry: _qual_column added for oxygen_umol_kg (← o_qual) and six CTD siblings; bottle ingest now writes 8 not 8.0; bottle Q09 filed (r_* flags, P_qual meaning).
+- One NULL-safe predicate per language: calcofi4r::cc_qual_ok_sql() (1.9.0, also applied in cc_match_bio_env, cc_transect_section, cc_climatology), calcofi4py.qual_ok_sql() (0.3.7), db-query qualOkSQL(); applied in db-viz-station build_depth_profiles.sql, db-viz-hex prep_db.R + download-bundle twins, ctd-transects build_sections.sql, db-query bottle.md/custom.md, ctd-viz plot builders, docs callout. On the current release it drops 35,587 bottle / 6,138 CTD / 51 DIC rows.
+
+Verification: calcofi4db full suite 1004/1004; calcofi4r qual+transect green; calcofi4py test_qual.py green; every edited R/JS/SQL file parse-checked; check_data_contract.py OK; packages installed locally.
+
+What's left (your call, in order)
+
+1. Pipeline re-run from ichthyo (tar_invalidate all edited ingests — the .qmd edits aren't tracked) → release_database → test_release → /deploy-consumers. Downstream ingests will error by design until the ichthyo shard carries spans. Set DEPTH_SEAFLOOR_OVER_MAX from the measured value on the day.
+2. Commit the 10 repos (git status inventory above); db-viz-hex/ctd-viz need prep_db.R re-runs on the server.
+3. Open: ERDDAP flag_values/flag_meanings on measurement_qual; netCDF *_qc companion variables; the draft reply to Ben G is still sitting in Gmail Drafts.
+
+---- 
+
+Yes, re-run pipeline and commit repos
+
+
+
 ## 2026-08-21 + bmgire ssh; calcofi4py: fix examples/install, add vignette, install on server
 
 Scope: 2026-08-21, from the bmgire key onward (the notebook diagram / email-figure work was 2026-08-20).

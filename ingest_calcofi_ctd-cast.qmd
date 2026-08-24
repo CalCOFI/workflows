@@ -858,8 +858,21 @@ d_csv <- tibble(
       group = 1
     ),
     data_stage = case_when(
-      # final, calcofi.org: db_csv(s)/ inside a *Final* archive
-      str_detect(path_unzip, "Final.*db[_|-]csv")  ~ "final",
+      # final, calcofi.org: db_csv(s)/ inside a *Final* archive — EXCEPT the
+      # superseded exports some archives keep beside the canonical file:
+      # db-csvs/orig/, orig-csvs/, orig_dbcsvs/, uncorrected/. Every cast in those
+      # is also in the top-level file (verified over all 16,576 CSVs on disk,
+      # 2026-08-24) — except one: 20-0010NH/db-csvs/orig/ carries cast 001, JRW's
+      # "First Cast - switch fluorometer" test dip with a 1992 timestamp and scans
+      # to 17,178 m, which the canonical file rightly omits. The old unanchored
+      # match classified it `final`; casts 002-074 lost to the shorter canonical
+      # path in dedup, cast 001 had no competitor, and v2026.08.14 released it at
+      # 14,671 m. NOT "top level only": 20-1104SH's db_csvs/separate_runs/ holds
+      # casts 031-036 that exist nowhere else, so subfolders that are not
+      # superseded exports stay in and dedup picks the canonical copy.
+      str_detect(path_unzip, "Final.*db[_|-]csvs?/") &
+        !str_detect(path_unzip, regex("db[_|-]csvs?/(orig|uncorrected)[^/]*/",
+                                      ignore_case = TRUE)) ~ "final",
       # final, Shared Drive: JRW's *_CTDFinalDB archives put the db CSVs at the
       # TOP LEVEL. The top-level restriction is load-bearing — these archives also
       # carry orig/, orig_dbcsvs/, SeparateRuns_Fl/ and south-north/ copies of the

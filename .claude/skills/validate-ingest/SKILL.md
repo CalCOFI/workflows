@@ -23,7 +23,7 @@ Run comprehensive post-ingest validation on a DuckDB wrangling database or parqu
 
 - `--strict`: Treat warnings as errors (fail on any issue)
 - `--checks={check_list}`: Comma-separated list of checks to run (default: `all`)
-  - Available: `pks`, `fks`, `nulls`, `ranges`, `counts`, `orphans`, `duplicates`, `spatial`, `temporal`, `schema_lint`, `questions`
+  - Available: `pks`, `fks`, `nulls`, `ranges`, `depth`, `counts`, `orphans`, `duplicates`, `spatial`, `temporal`, `schema_lint`, `questions`
 
 ## Instructions
 
@@ -192,6 +192,41 @@ move on"**:
 A value at exactly `-99` / `-999` / `-9999` is a sentinel until proven otherwise;
 raise it as `priority = high` and say so in the question rather than quietly
 declaring a bound that deletes it.
+
+#### D3. Depth coordinates (`depth`)
+
+A depth is a coordinate, and `check_measurement_bounds()` bounds **values**: the
+CTD ingest deleted a 17,964 dbar `pressure` by its bound and shipped the 14,671 m
+depth derived from it (v2026.08.14, cast `0010_001d`, over a 101 m seafloor).
+Two checks, two consequences:
+
+```r
+# 1. absolute range — an ERROR. NaN, negative, or beyond CC_DEPTH_MAX_M (6,500 m)
+d <- calcofi4db::check_depth_bounds(con, tbls = c("sample", "obs"))
+for (i in which(d$status != "ok"))
+  report_error("depth out_of_range", glue("{d$table[i]}.{d$depth_col[i]}"),
+               glue("{d$n_nan[i]} NaN, {d$n_below[i]} < 0, {d$n_above[i]} > {CC_DEPTH_MAX_M} m"))
+
+# 2. seafloor — a WARNING to take to the provider, never a delete. The deepest
+#    depth attributed to each root sample against the deepest GEBCO cell within
+#    one cell of its position, +10 m. Off-raster positions are `unknown`.
+gebco <- Sys.getenv("CALCOFI_GEBCO_TIF",
+  "~/_big/gebco_2025_sub_ice_topo_geotiff/gebco_2025_sub_ice_n90.0_s0.0_w-180.0_e-90.0.tif")
+v <- calcofi4db::check_depth_vs_seafloor(con, path.expand(gebco), tolerance_m = 10)
+for (i in seq_len(min(nrow(v), 20)))
+  report_warning("deeper than seafloor", v$sample_key[i],
+                 glue("{v$depth_m[i]} m at ({v$longitude[i]}, {v$latitude[i]}); ",
+                      "seafloor {v$seafloor_max3x3_m[i]} m (+{round(v$excess_m[i])})"))
+```
+
+Why the second is a warning: across the v2026.08.14 release 695 of 412,640 root
+samples fail it, and all but the CTD cast are within 1.2 km — 1949–1975 casts
+and tows on the slope and in canyons with minute-rounded positions. That is a
+position-precision finding for a `questions.csv` row (`priority = normal`, with
+the worst cases as `context`), not a row to drop: the measurement is fine, the
+place is imprecise. `release_database.qmd`'s `depth_coverage` chunk fails a
+release on check 1 and ratchets check 2 (`DEPTH_SEAFLOOR_OVER_MAX`, only ever
+down), and stamps `seafloor_depth_m` on `sample` so consumers can look.
 
 #### E. Date Ranges (`temporal`)
 ```r

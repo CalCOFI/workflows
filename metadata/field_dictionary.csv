@@ -52,3 +52,7 @@ bottle_number,INTEGER,,identifier,Provider's reference number of a sample bottle
 assoc_bottle_number,INTEGER,,identifier,Companion bottle number for matching to CTD bottle records for other data.,Associated Bottle Number,,FALSE,
 taxon_id,INTEGER,,identifier,Dataset-local taxon key; crosswalks to the global taxon_key via dataset_taxon.,,,TRUE,local only — never publish as a cross-dataset join key; use taxon_key.
 hour_source_conflict,BOOLEAN,,flag,TRUE where two source sheets disagree on a record's start hour.,,,FALSE,"sio mesopelagic-fish cruise 1110; unresolved, defaults to the curated sheet."
+seafloor_depth_m,DOUBLE,m,spatial,"Seafloor depth at the sample position from GEBCO 2025 (bilinear; positive down; 0 on land; NULL outside the raster). Stamped on sample at release by calcofi4db::add_sample_seafloor(); compare with depth_max_m, allowing for the ~460 m GEBCO cell and minute-rounded historical positions.",,,FALSE,release-derived; not an ingest field
+date_min,DATE,,temporal,First event date observed for a cruise (from its own tows); with date_max the span calcofi4db::resolve_cruise_key() matches events against.,,,FALSE,on cruise; written by add_cruise_date_span() in the ichthyo ingest
+date_max,DATE,,temporal,Last event date observed for a cruise (from its own tows).,,,FALSE,on cruise; see date_min
+cruise_key_method,VARCHAR,,identifier,"How resolve_cruise_key() settled the row: span (reference cruise date span), source (the source designation YYYYMM), month (event month).",,,FALSE,wrangling-only column; not released

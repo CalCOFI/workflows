@@ -758,6 +758,64 @@ if (n_und < BOUNDS_UNDECLARED_MAX)
   cat(glue("\nBOUNDS_UNDECLARED_MAX can be tightened to {n_und}.\n"))
 ```
 
+### Depth coverage
+
+```{r}
+#| label: depth_coverage
+
+# A depth is a COORDINATE, and until v2026.08.14 nothing bounded one: that
+# release shipped a CTD cast with scans at 14,671 m over a 101 m seafloor. The
+# `pressure` value it was derived from (17,964 dbar) was deleted by its declared
+# bound; the depth was not, because drop_out_of_bounds() cannot see a coordinate
+# column. Two checks with two consequences:
+#  - the ABSOLUTE ceiling, CC_DEPTH_MAX_M (6,500 m; nothing in the region is
+#    deeper, and it is the ceiling already declared on `pressure`): an error,
+#    fails this render;
+#  - the SEAFLOOR at the position, +10 m over the deepest GEBCO cell within one
+#    cell of it: also impossible in principle, but the bottom we know is a ~460 m
+#    cell and 1949-1975 positions are rounded to the minute, so on a slope or a
+#    canyon a real cast reads deeper than the cell. Measured at v2026.08.14: 695
+#    of 412,640 root samples, all but that CTD cast within 1.2 km. Those are
+#    position-precision findings for the owning ingests — reported and ratcheted
+#    here, never deleted.
+# `seafloor_depth_m` (bilinear GEBCO 2025, positive down, land 0, NA outside the
+# raster) is stamped on `sample` so every consumer can make the same comparison.
+DEPTH_SEAFLOOR_OVER_MAX <- 695L  # ratchet: set from the measured value; only ever DOWN
+
+gebco_tif <- path.expand(Sys.getenv(
+  "CALCOFI_GEBCO_TIF",
+  "~/_big/gebco_2025_sub_ice_topo_geotiff/gebco_2025_sub_ice_n90.0_s0.0_w-180.0_e-90.0.tif"))
+stopifnot("GEBCO tif not found; set CALCOFI_GEBCO_TIF" = file.exists(gebco_tif))
+
+d_depth <- check_depth_bounds(
+  con_wdl, tbls = c("sample", "obs", intersect(supp_tbls, dbListTables(con_wdl))))
+cat(glue("depth bounds: {sum(d_depth$status != 'ok')} of {nrow(d_depth)} ",
+         "(table, dataset, column) groups outside 0..{CC_DEPTH_MAX_M} m or NaN\n"))
+d_depth |>
+  filter(status != "ok") |>
+  datatable(caption = glue(
+    "Depth coordinates outside 0..{CC_DEPTH_MAX_M} m, or NaN — fails this render"))
+
+sf_sample <- sample_seafloor(con_wdl, gebco_tif)
+add_sample_seafloor(con_wdl, gebco_tif, seafloor = sf_sample)
+d_over <- check_depth_vs_seafloor(con_wdl, sf_sample, tolerance_m = 10)
+attr(d_over, "summary") |>
+  datatable(caption = paste(
+    "Root samples deeper than the seafloor (+10 m over the deepest GEBCO cell",
+    "within one cell of the position), by dataset. `n_unknown` = outside the raster."))
+d_over |>
+  head(200) |>
+  datatable(caption = "Worst 200 — fix position or depth at the owning ingest")
+
+stopifnot(
+  "a depth coordinate is NaN, negative or beyond CC_DEPTH_MAX_M — fix at the ingest" =
+    all(d_depth$status == "ok"),
+  "more samples below the seafloor than the ratchet allows — fix at the ingest, never raise it" =
+    nrow(d_over) <= DEPTH_SEAFLOOR_OVER_MAX)
+if (nrow(d_over) < DEPTH_SEAFLOOR_OVER_MAX)
+  cat(glue("\nDEPTH_SEAFLOOR_OVER_MAX can be tightened to {nrow(d_over)}.\n"))
+```
+
 ## Cruise Coverage — Samples With No Observations
 
 The one shape of loss that every other check here is blind to, by construction.

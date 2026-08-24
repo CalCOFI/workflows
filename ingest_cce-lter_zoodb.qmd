@@ -284,13 +284,16 @@ d_sample <- d_sample0 |>
            str_replace("^R/?V\\.?\\s+", "") |> str_to_upper() |> str_squish()) |>
   left_join(d_ship |> select(ship_name_norm, ship_key, ship_nodc),
             by = "ship_name_norm") |>
-  mutate(
-    ym = format(date, "%Y%m"),
-    cruise_key_ship = if_else(
-      is.na(ship_nodc), NA_character_,
-      as.character(glue("{format(date, '%Y-%m')}-{ship_nodc}"))),
-    cruise_key_ship = if_else(cruise_key_ship %in% valid_ck,
-                              cruise_key_ship, NA_character_)) |>
+  mutate(ym = format(date, "%Y%m"))
+# ship path: the reference cruise whose date span holds the sample, else its
+# month, keys not in `cruise` left NULL (calcofi4db::resolve_cruise_key) — the
+# old month rule put a sample in the first days of a month on the NEXT cruise
+dbWriteTable(con, "zk", d_sample |> select(sample_key, ship_key, datetime = date), overwrite = TRUE)
+resolve_cruise_key(con, "zk", datetime_col = "datetime", require_in_cruise = TRUE) |>
+  datatable(caption = "cruise_key resolution method (ship path)")
+d_sample <- d_sample |>
+  left_join(dbGetQuery(con, "SELECT sample_key, cruise_key AS cruise_key_ship FROM zk"),
+            by = "sample_key") |>
   left_join(cr_ym, by = "ym") |>
   mutate(cruise_key = coalesce(cruise_key_ship, cruise_key_ym)) |>
   arrange(source, date, cruise_orig, region, line, station, sample_key) |>

@@ -257,13 +257,18 @@ load_prior_tables(
 d_ship <- dbGetQuery(con, "SELECT ship_key, ship_nodc, ship_name FROM ship")
 valid_ck <- dbGetQuery(con, "SELECT DISTINCT cruise_key FROM cruise")$cruise_key
 
+# cruise_key: the reference cruise whose date span holds the station date, else
+# the source's own year/month designation, keys not in `cruise` left NULL
+# (calcofi4db::resolve_cruise_key)
+dbWriteTable(con, "zk", d_sample0 |>
+  transmute(sample_key, ship_key, datetime = station_date,
+            cruise_ym = sprintf("%04d%02d", year, month)), overwrite = TRUE)
+resolve_cruise_key(con, "zk", datetime_col = "datetime", cruise_ym_col = "cruise_ym",
+                   require_in_cruise = TRUE) |>
+  datatable(caption = "cruise_key resolution method")
 d_sample <- d_sample0 |>
   left_join(d_ship, by = "ship_key") |>
-  mutate(
-    cruise_key = if_else(
-      is.na(ship_nodc), NA_character_,
-      sprintf("%04d-%02d-%s", year, month, ship_nodc)),
-    cruise_key = if_else(cruise_key %in% valid_ck, cruise_key, NA_character_)) |>
+  left_join(dbGetQuery(con, "SELECT sample_key, cruise_key FROM zk"), by = "sample_key") |>
   arrange(cruise_orig, line, station, station_date) |>
   mutate(sample_id = row_number(), .before = 1)
 

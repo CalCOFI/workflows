@@ -315,6 +315,40 @@ tbl(con, "site") |>
   datatable(caption = "Sample site rows with cruise_key")
 ```
 
+### Cruise date spans
+
+Every downstream ingest keys its events to a cruise. Until calcofi4db 3.20.0
+that was done by the event's calendar month, and a CalCOFI cruise routinely
+straddles one (5508BD ran 7 Aug – 25 Sep 1955; 184 of the 664 bottle cruises span
+two months) — the shorn-off casts landed on the *next* cruise of the same ship
+without any FK ever failing (v2026.08.14: 664 bottle cruises released as 799
+keys). `calcofi4db::resolve_cruise_key()` now matches an event to the cruise whose
+observed **date span** contains it, and this is where the span comes from: each
+cruise's own tows. It rides on the `cruise` shard, so nothing downstream needs a
+new input.
+
+```{r}
+#| label: cruise_date_span
+
+d_span <- add_cruise_date_span(
+  con,
+  event_sql = "SELECT s.cruise_key, t.datetime_start_utc AS datetime
+               FROM tow t JOIN site s USING (site_uuid)")
+
+# an overlap between two cruises of one ship would make span matching
+# ambiguous; it is a reference-data error, not a tolerance to widen
+stopifnot("cruise date spans of one ship overlap" = !any(d_span$overlaps))
+
+cat(glue(
+  "{sum(!is.na(d_span$date_min))}/{nrow(d_span)} cruises have a span; ",
+  "{sum(d_span$spills_month, na.rm = TRUE)} extend outside their designated ",
+  "month — expected, and exactly why the span exists\n"))
+d_span |>
+  filter(spills_month) |>
+  select(cruise_key, date_ym, date_min, date_max, n_events) |>
+  datatable(caption = "Cruises whose tows extend outside their designated month")
+```
+
 ## Create Lookup Table
 
 Create unified lookup table from vocabularies for egg stages, larva stages, and tow types.

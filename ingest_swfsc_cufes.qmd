@@ -197,12 +197,15 @@ d_ship <- dbGetQuery(con, "SELECT ship_key, ship_name, ship_nodc FROM ship") |>
   mutate(ship_name_norm = ship_name |> str_to_upper() |> str_squish())
 zt <- dbGetQuery(con, "SELECT sample_id, ship_name, datetime_start_utc FROM cufes_sample") |>
   mutate(ship_name_norm = ship_name |> str_replace("^R/?V\\.?\\s+","") |> str_to_upper() |> str_squish()) |>
-  left_join(d_ship |> select(ship_name_norm, ship_key, ship_nodc), by = "ship_name_norm") |>
-  mutate(cruise_key = if_else(is.na(ship_nodc) | is.na(datetime_start_utc), NA_character_,
-                              as.character(glue("{format(datetime_start_utc,'%Y-%m')}-{ship_nodc}"))))
-valid_ck <- dbGetQuery(con, "SELECT DISTINCT cruise_key FROM cruise")$cruise_key
-zt <- zt |> mutate(cruise_key = if_else(cruise_key %in% valid_ck, cruise_key, NA_character_))
-dbWriteTable(con, "zk", zt |> select(sample_id, ship_key, cruise_key), overwrite = TRUE)
+  left_join(d_ship |> select(ship_name_norm, ship_key, ship_nodc), by = "ship_name_norm")
+# cruise_key: the reference cruise whose date span holds the sample, else its
+# month, keys not in `cruise` left NULL (calcofi4db::resolve_cruise_key). A
+# sample in the first days of a month belongs to the cruise that began the month
+# before — the old month rule put it on the NEXT cruise of the same ship.
+dbWriteTable(con, "zk", zt |> select(sample_id, ship_key, datetime = datetime_start_utc), overwrite = TRUE)
+resolve_cruise_key(con, "zk", datetime_col = "datetime", require_in_cruise = TRUE) |>
+  datatable(caption = "cruise_key resolution method")
+zt <- zt |> left_join(dbGetQuery(con, "SELECT sample_id, cruise_key FROM zk"), by = "sample_id")
 dbExecute(con, "ALTER TABLE cufes_sample ADD COLUMN IF NOT EXISTS ship_key VARCHAR")
 dbExecute(con, "ALTER TABLE cufes_sample ADD COLUMN IF NOT EXISTS cruise_key VARCHAR")
 dbExecute(con, "UPDATE cufes_sample s SET ship_key=z.ship_key, cruise_key=z.cruise_key FROM zk z WHERE s.sample_id=z.sample_id")

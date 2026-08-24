@@ -217,6 +217,89 @@ measurement types moved into the shared registry (and the notebook's
 the asserted `coverage_*` keys were deleted so coverage is measured, and
 `publish_to_gcs` flipped. The flag is one line; the change is not.
 
+### `cruise_key` is the cruise's designated month, resolved by date span
+
+`cruise_key` is `YYYY-MM-NODC`, and the `YYYY-MM` is the month SWFSC *designates*
+for the whole cruise — never the month a cast or tow happened to fall in. A
+CalCOFI cruise routinely straddles a calendar boundary (5508BD ran 7 Aug – 25 Sep
+1955; 184 of the 664 bottle cruises span two months), and the neighbouring month
+is usually a **real** cruise of the same ship, so keying by event month moved
+casts onto the wrong cruise with no FK ever failing: v2026.08.14 released 664
+source bottle cruises as 799 keys and 5,941 of 35,644 casts on a key their own
+source disagrees with. Seven more ingests had the same `format(date, '%Y-%m')`
+rule (cufes, pic-zooplankton, euphausiids, zoodb, zooscan, phyllosoma,
+picoplankton).
+
+Since calcofi4db 3.20.0 the ichthyo ingest stamps each reference cruise's observed
+`date_min`/`date_max` (`add_cruise_date_span()`, from its own tows; the `cruise`
+shard carries them) and every other ingest keys events with
+`resolve_cruise_key()` — **span containment first** (same ship, ± 3 days; no two
+cruises of one ship overlap), then the **source's own designation** where it has
+one (`cruise_ym_col`: bottle's `Cruise` = YYYYMM, zooscan's year/month), then the
+event month as a last resort, recorded in `cruise_key_method`.
+`derive_cruise_key_on_casts()` delegates to it. Two rules that fell out:
+- **The reference wins when sources disagree.** Ichthyo designates the 9 Feb –
+  29 Mar 1984 Jordan cruise 8403; the bottle database says 8402. Every dataset
+  joins to the reference, so agreeing with it is what makes the join mean anything
+  — the bottle notebook reports these disagreements rather than "fixing" them.
+- **Do not drop a source cruise column as "derivable".** The bottle ingest deleted
+  `Cruise` and re-derived it as `STRFTIME(datetime, '%Y%m')` in `casts_derived`
+  for years; that was the bug.
+
+A `cruise` reference without spans makes `resolve_cruise_key()` **error**, so an
+ingest run against a stale ichthyo shard fails instead of quietly regressing to
+the month rule.
+
+### Depth is a coordinate; bound it as one
+
+`check_measurement_bounds()` bounds a **value**. v2026.08.14 shipped a CTD cast
+with scans at 14,671 m over a 101 m seafloor: the 17,964 dbar `pressure` was
+deleted by its bound and the depth derived from it was not, because
+`drop_out_of_bounds()` cannot see a coordinate column. (The cast was JRW's
+fluorometer test dip from `20-0010NH_CTDFinalQC/db-csvs/orig/`, a superseded
+export the tier classifier matched by substring; it now excludes `orig*` and
+`uncorrected/` folders — but **not** every subfolder: `20-1104SH`'s
+`separate_runs/` holds six casts that exist nowhere else.)
+
+`release_database.qmd`'s `depth_coverage` chunk (calcofi4db ≥ 3.20.0):
+- `check_depth_bounds()` — NaN, negative, or beyond **`CC_DEPTH_MAX_M` (6,500 m,
+  the `pressure` ceiling)** on `sample`, `obs` and the supplementals **fails the
+  release**.
+- `add_sample_seafloor()` stamps `seafloor_depth_m` (bilinear GEBCO 2025,
+  positive down, land 0, NA outside the raster) on `sample` — the raster is the
+  local master at `$CALCOFI_GEBCO_TIF`; consumers get the column, not the raster.
+- `check_depth_vs_seafloor()` — each root sample's deepest attributed depth
+  against the deepest GEBCO cell within one cell of its position **+ 10 m** is a
+  **report and a ratchet** (`DEPTH_SEAFLOOR_OVER_MAX`, only ever down), never a
+  delete: 695 of 412,640 root samples fail it and all but the CTD cast are within
+  1.2 km, on slopes and canyons with minute-rounded 1949–1975 positions. The
+  measurement is fine; the place is imprecise. That is a `questions.csv` row for
+  the owning ingest, filed from `/validate-ingest`'s D3 section.
+
+### Quality flags reach consumers only if consumers apply them
+
+`obs.measurement_qual` is each dataset's **own** vocabulary, uninterpreted
+(bottle 6 = ok-from-CTD, 8 = suspect, 9 = missing; CTD 1/2 = use primary/secondary
+sensor, 8 = questionable, 9 = bad/missing; DIC WOCE 2 good, 3 questionable, 4 bad,
+9 missing — `metadata/measurement_qual.csv`). In Aug 2026 Ralf Goericke reported a
+2.18 ml/L oxygen spike at 1,144 m on station 080.0 160.0 in db-viz-station: bottle
+198640 of cast 7644 (5508BD, 3 Sep 1955), flagged `O_qual = 8` in the source since
+1955. Two gaps let it through:
+- the registry mapped `o_qual` onto `oxygen_ml_l` and `oxygen_saturation` but not
+  `oxygen_umol_kg` — the form the app plots — so the flag was dropped at ingest.
+  Fixed for it and the six CTD unit-conversion siblings (`oxygen_umol_kg_1/2`,
+  `oxygen_saturation_1/2`, `potential_temperature_1/2`). The `r_*` pre-QC types
+  deliberately stay unflagged (bottle Q09): code 6 describes a substitution made
+  *during* QC. The bottle ingest now writes `8`, not `8.0`, like the CTD ingest.
+- **no consumer filtered on the column** — not the station portal, db-viz-hex,
+  ctd-transects, ctd-viz's plots, calcofi4r's matchers, db-query, nor ERDDAP.
+  One predicate now exists in each language — `calcofi4r::cc_qual_ok_sql()`,
+  `calcofi4py.qual_ok_sql()`, db-query's `qualOkSQL()` — NULL-safe (an unflagged
+  row is kept) and tolerant of `"8.0"`; the build SQL of every static consumer
+  and `prep_db.R` of every Shiny one apply it. ERDDAP still exports the column as
+  a plain string (no `flag_values`/`flag_meanings`) and the netCDFs cannot express
+  it at all — both open.
+
 ### Coverage is measured, never asserted
 
 **Do not add `coverage_temporal` / `coverage_spatial` to a `dataset_meta`

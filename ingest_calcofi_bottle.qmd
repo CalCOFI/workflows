@@ -375,7 +375,10 @@ if ("date" %in% casts_cols && "time" %in% casts_cols) {
     "year", "month", "quarter", "julian_day", "julian_date",
     "time_zone", "lat_deg", "lat_min", "lat_hem",
     "lon_deg", "lon_min", "lon_hem",
-    "cruise", "cruz_sta", "db_sta_key", "cruz_num",
+    # NOT `cruise`: the source's YYYYMM designation is the cruise's identity and is
+    # not derivable from a cast's date — 5508BD ran 7 Aug - 25 Sep 1955, and
+    # STRFTIME(datetime, '%Y%m') put its September casts on cruise 5509BD
+    "cruz_sta", "db_sta_key", "cruz_num",
     "date", "time"
   )
 
@@ -468,7 +471,7 @@ sql_parts <- purrr::pmap_chr(
       "SELECT bottle_id, '{measurement_type}' AS measurement_type,
        CAST({value_col} AS DOUBLE) AS measurement_value,
        CAST({prec_expr} AS DOUBLE) AS measurement_prec,
-       CAST({qual_expr} AS VARCHAR) AS measurement_qual
+       regexp_replace(CAST({qual_expr} AS VARCHAR), '\\.0+$', '') AS measurement_qual
      FROM bottle WHERE {value_col} IS NOT NULL"
     )
   }
@@ -1012,7 +1015,6 @@ dbExecute(
     FLOOR(ABS(longitude))::SMALLINT                AS lon_deg,
     (ABS(longitude) - FLOOR(ABS(longitude))) * 60    AS lon_min,
     CASE WHEN longitude >= 0 THEN 'E' ELSE 'W' END AS lon_hem,
-    STRFTIME(datetime_start_utc, '%Y%m')                AS cruise,
     REPLACE(REPLACE(site_key, '.', ''), ' ', '')   AS db_sta_key
   FROM casts"
 )
@@ -1163,7 +1165,6 @@ dbExecute(
     FLOOR(ABS(longitude))::SMALLINT                AS lon_deg,
     (ABS(longitude) - FLOOR(ABS(longitude))) * 60    AS lon_min,
     CASE WHEN longitude >= 0 THEN 'E' ELSE 'W' END AS lon_hem,
-    STRFTIME(datetime_start_utc, '%Y%m')                AS cruise,
     REPLACE(REPLACE(site_key, '.', ''), ' ', '')   AS db_sta_key
   FROM casts"
 )
@@ -1258,12 +1259,33 @@ for (tbl in modifies_tables) {
 ```{r}
 #| label: derive_cruise_key
 
+# cruise_key = YYYY-MM-NODC where YYYY-MM is the cruise's DESIGNATED month:
+# resolved by the reference cruise whose date span holds the cast, then by the
+# source's own `cruise` (YYYYMM), and only last by the cast's month. Before
+# calcofi4db 3.20.0 only the last rule ran, which split every cruise that
+# straddled a month boundary (184 of 664) onto two keys — and onto a REAL
+# neighbouring cruise of the same ship, so no FK ever objected.
 bridge_result <- derive_cruise_key_on_casts(
   con = con,
   ship_renames_csv = here("metadata/ship_renames.csv"),
   fetch_ices = TRUE,
-  datetime_col = "datetime_start_utc"
+  datetime_col = "datetime_start_utc",
+  cruise_ym_col = "cruise"
 )
+bridge_result$key_stats |>
+  datatable(caption = "cruise_key resolution: span (reference date span) > source (Cruise YYYYMM) > month")
+
+# the source designation and the resolved key disagree only where the reference
+# cruise designates the cruise differently (ichthyo calls the 9 Feb - 29 Mar 1984
+# Jordan cruise 8403, this database 8402) — the reference wins, every dataset
+# joins to it. Report the disagreements; a large count means a ship-code problem.
+dbGetQuery(con, "
+  SELECT cruise, cruise_key, cruise_key_method, COUNT(*) AS n_casts
+  FROM casts
+  WHERE cruise_key IS NOT NULL
+    AND SUBSTR(cruise_key, 1, 4) || SUBSTR(cruise_key, 6, 2) <> cruise
+  GROUP BY 1, 2, 3 ORDER BY n_casts DESC") |>
+  datatable(caption = "Casts whose resolved cruise month differs from the source Cruise designation")
 
 # insert interim entries for still-unmatched ships (ship_nodc = "?XX?")
 ensure_interim_ships(con, bridge_result$ship_matches)
