@@ -24,7 +24,14 @@ calcofi:
       CCE-LTER DataZoo 255 (PI Bill Sydeman).
     citation_main: ""
     link_calcofi_org: ""
-    link_data_source: "https://oceaninformatics.ucsd.edu/datazoo/catalogs/ccelter/datasets/255"
+    # the PFEG ERDDAP table, not the Datazoo catalog page (which still answers
+    # 200 but is on its way out; it survives as prose in `description` above) —
+    # per the 2026-08 db-viz-station feedback round (db-viz-station#15). On the
+    # oceanview host: coastwatch serves the same CAC_FI_SBAS_obs dataset but was
+    # unreachable outright when checked (2026-08-24), and oceanview is the host
+    # the ichthyo tow links already use. Once a release carries this, delete the
+    # matching override arm in db-viz-station scripts/build_datasets.sql.
+    link_data_source: "https://oceanview.pfeg.noaa.gov/erddap/tabledap/CAC_FI_SBAS_obs.html"
     link_others:
       - http://dx.doi.org/10.6073/pasta/4ee1bd702acb11786277192a41626800
     license: ""
