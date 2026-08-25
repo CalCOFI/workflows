@@ -245,11 +245,96 @@ version for at least two release cycles after all consumers above are migrated.
 
 ### Open questions for review
 
-- Canonical object key: `content_hash` (semantic; two identical-content writes never store twice)
-  vs `sha256` (bytes; simpler to verify). Plan says `content_hash` with sha256 recorded — confirm.
-- Compat window: two release cycles after all consumers migrate, or a calendar date?
-- `storage.calcofi.io` currently proxies bytes through the VM (egress cost); a 302 to
-  `storage.googleapis.com` for canonical objects would avoid that — acceptable given `robots.txt`
-  and the allow-list, or keep the proxy for the browse pages only?
-- Should `RELEASES.md` also carry the per-table `since` list automatically (generated), or stay
-  purely narrative with the appendix holding the mechanics? (Plan: appendix.)
+Each of these changes what gets built. For each: what it is, the options, what each costs, and
+what I recommend.
+
+#### Q1 — What names a canonical object: the row-signature hash or the byte hash?
+
+Every table (and every partition of a partitioned table) will be stored **once** under
+`ducklake/tables/{table}/{KEY}/…`, and each release's `catalog.json` points at the objects it
+uses. The question is what `{KEY}` is.
+
+- **Option A — `content_hash` (the row signature).** calcofi4db already computes this at ingest:
+  an order-independent checksum of the *values* (`.table_content_hash()`), so two exports of the
+  same rows get the same key even if the parquet bytes differ (a DuckDB upgrade, a different
+  row-group size, a non-deterministic write). Consequence: identical *content* is never stored
+  twice, ever. Cost: the key does not verify the bytes — you cannot check a downloaded file
+  against its name; you verify against the recorded `sha256`/`crc32c` in the catalog instead.
+- **Option B — `sha256` of the bytes.** The file's name *is* its checksum: download it, hash it,
+  compare. Simplest possible verification and what most content-addressed stores do. Cost: the
+  same rows written twice with different bytes are two objects — which is exactly the situation
+  measured today (every table differs byte-for-byte between releases even when nothing changed),
+  so B only works once the byte-ordering policy (3.1) is in force and stays in force; any future
+  writer change silently doubles storage until the old objects are pruned.
+
+**Recommendation: A**, with `sha256` and `crc32c` recorded per object in the catalog for
+verification. The row signature is the identity we actually care about ("did the data change?");
+bytes are an implementation detail we are about to make deterministic but cannot promise forever.
+If you prefer B for its verify-by-name simplicity, the plan works unchanged except that a writer
+change must be treated as a "re-store everything" event.
+
+#### Q2 — How long do legacy `releases/{v}/parquet/{table}.parquet` URLs keep working on `storage.googleapis.com`?
+
+Today every consumer builds that URL by string concatenation (§3.4). After Level 2 the bytes
+live under `tables/…`, and a `releases/{v}/parquet/…` URL only works where we keep a **compat
+copy** (a real duplicate object, made by GCS server-side copy so it costs storage but no upload).
+Two decisions inside this one:
+
+- **Which versions get compat copies?** Plan: the promoted version and the six consolidated ones.
+  Every other version's legacy URLs stop working on `storage.googleapis.com` (they still work on
+  `storage.calcofi.io`, see Q3). That is the same set Part 2 keeps anyway, so no extra storage.
+- **For how long after consumers are migrated?** Anyone who copied a URL from `docs/data-access.qmd`
+  or the release index into their own script is a consumer we cannot see. Options: (i) **two
+  release cycles** after the last repo in §3.4 is migrated — bounded by our own cadence, so the
+  window is short if we release often; (ii) **a calendar date** (say 2026-12-31), announced in
+  `RELEASES.md` and on the index page — predictable for outsiders regardless of our cadence;
+  (iii) **indefinitely for consolidated versions** (their compat copies cost ~2 GB each and are
+  kept by Part 2 anyway), dropping only for retired versions.
+
+**Recommendation: (iii) + (ii)** — keep compat copies for consolidated versions indefinitely (it
+is what the thinning policy retains anyway, so the legacy URL of any version we still serve keeps
+working), and set a calendar date only for the *non-consolidated* versions' legacy paths, which
+Part 2 deletes. Announce both in `RELEASES.md` and `data-access.qmd`.
+
+#### Q3 — Should `storage.calcofi.io` redirect to `storage.googleapis.com`, or keep proxying bytes?
+
+`storage.calcofi.io` is a Caddy vhost on our VM that reverse-proxies to
+`storage.googleapis.com` so that folder URLs can serve `index.html` (GCS itself has no directory
+listing). Because it *proxies*, every byte a client downloads through it passes through the VM
+and is billed as **VM egress** — which is why `robots.txt` there already tells crawlers not to
+fetch `*.parquet`/`*.nc`. Level 2 needs `storage.calcofi.io` to resolve a legacy path to its
+canonical object; it can do that two ways:
+
+- **302 redirect** to `https://storage.googleapis.com/calcofi-db/ducklake/tables/…`: the VM
+  answers with one small header and the bytes flow straight from GCS. No egress on the VM, and
+  the client sees the canonical URL (which it can cache/pin). Caveat to test (T4): DuckDB's
+  `httpfs` must follow the redirect; if it does not, R/Python users reading a legacy URL through
+  `storage.calcofi.io` would fail. (Browsers and `curl -L` follow it fine.)
+- **Rewrite + proxy**: the VM fetches the canonical object from GCS and streams it — transparent
+  to every client, but every gigabyte read through `storage.calcofi.io` costs VM egress, which is
+  the cost the domain was supposed to avoid for bulk data.
+
+**Recommendation: 302** for parquet objects; keep the proxy only for the browse pages
+(`index.html`) it exists for. If T4 shows `httpfs` does not follow redirects, fall back to
+rewrite+proxy for `*.parquet` only and document that bulk reads should use
+`storage.googleapis.com` (which is what every consumer in §3.4 uses today anyway).
+
+#### Q4 — Does `RELEASES.md` stay hand-written, or also carry a generated "what changed" list?
+
+With Level 2 the catalog knows, per object, the first version that shipped it (`since`) — so we
+could generate "in this release the following tables/partitions changed: …" automatically.
+Where should that appear?
+
+- **In the appendix only** (the generated part of each version's `RELEASE_NOTES.md`, alongside
+  the tables/rows/validation lines). `RELEASES.md` stays purely narrative and hand-written; the
+  machine-derived facts live in the machine-derived section. Keeps the two kinds of content
+  separate and the file readable.
+- **Also inserted into `RELEASES.md`** under each version (e.g. a trailing "Changed tables:"
+  line written by `promote_unreleased()`). Makes the changelog self-contained when read on GitHub
+  or from `ducklake/releases/RELEASES.md` without the per-version files — but it means a script
+  edits the narrative file, and re-publishing an old version cannot regenerate a line that was
+  computed at cut time.
+
+**Recommendation: appendix only**, with `RELEASES.md` staying human-authored. The narrative
+should say *why* a table changed; the appendix can say *which* ones did, and it is regenerated
+from the catalog whenever the notes are re-published.
