@@ -1,6 +1,6 @@
 # Consistent dark/light theme, nav back-link & favicon across every calcofi.io product
 
-**Status:** draft for review · **Date:** 2026-08-25 · **Scale:** ~17 repos, 7 phases; Phases 0–1
+**Status:** executed 2026-08-25 (all eight decisions as recommended; see the session recap and `CLAUDE.md` § The brand contract) · **Date:** 2026-08-25 · **Scale:** ~17 repos, 7 phases; Phases 0–1
 are the enabling work and ship first, everything after is per-product adoption that can land in
 any order.
 
