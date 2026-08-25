@@ -138,10 +138,14 @@ sshq "touch $GH/db-viz-hex/app/restart.txt $GH/apps/db-viz-cruise/restart.txt $G
 # a stale release, and `db_mtime` is the only field that reveals which file the
 # API actually has open.
 echo "==> 5/5 verifying"
+# canonical short URLs since the 2026-08-25 app-naming pass; the old
+# /db-viz-hex//db-viz-cruise/ paths now 308 to these, so follow redirects (-L)
+# rather than treat a 308 as a failure. ctd-viz is here because this script now
+# rebuilds it (it silently served a May database through three releases).
 fail=0
-for u in https://app.calcofi.io/db-viz-hex/ https://app.calcofi.io/db-viz-cruise/ \
-         https://h3t.calcofi.io/h3t/health; do
-  code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 90 "$u" || echo 000)
+for u in https://app.calcofi.io/hex/ https://app.calcofi.io/cruise/ \
+         https://app.calcofi.io/ctd/ https://h3t.calcofi.io/h3t/health; do
+  code=$(curl -sL -o /dev/null -w '%{http_code}' --max-time 90 "$u" || echo 000)
   printf '    %-46s %s\n' "$u" "$code"
   [ "$code" = "200" ] || fail=1
 done
