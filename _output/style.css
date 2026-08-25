@@ -1,31 +1,7 @@
 /* CalCOFI Workflows — style.css
-   Shares the palette and header/footer idiom with CalCOFI/schema and /query so
-   the sites read as siblings. Dark default; light overrides at the bottom. */
-
-:root {
-  --bg:       #1b1d20;
-  --panel:    #24272b;
-  --panel-2:  #2c3035;
-  --border:   #3a3f44;
-  --fg:       #e6e9ed;
-  --muted:    #9aa0a6;
-  --accent:   #4dabf7;
-  --accent-d: #339af0;
-  --mono:     ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
-  --sans:     system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  color-scheme: dark;
-}
-:root[data-theme="light"] {
-  --bg:       #ffffff;
-  --panel:    #f8f9fa;
-  --panel-2:  #ffffff;
-  --border:   #dee2e6;
-  --fg:       #212529;
-  --muted:    #6c757d;
-  --accent:   #2780e3;
-  --accent-d: #1c69bf;
-  color-scheme: light;
-}
+   Tokens, header and footer come from https://calcofi.io/brand/v1/theme.css (the
+   contract every CalCOFI product shares; linked before this file in
+   _layouts/default.html). This file is only what is specific to this site. */
 
 * { box-sizing: border-box; }
 
@@ -45,33 +21,6 @@ code, .mono { font-family: var(--mono); font-size: 0.9em; }
 
 #layout { display: grid; grid-template-rows: auto 1fr; min-height: 100vh; }
 
-header.app-header {
-  position: sticky; top: 0; z-index: 10;
-  display: flex; align-items: center; gap: 0.85rem;
-  padding: 0.55rem 1rem;
-  background: var(--panel);
-  border-bottom: 1px solid var(--border);
-  font-size: 0.9rem;
-}
-header.app-header .app-logo { display: inline-flex; align-items: center; height: 32px; }
-header.app-header .app-logo img { height: 32px; width: auto; display: block; }
-:root[data-theme="dark"]  header.app-header .logo-light,
-:root:not([data-theme="light"]) header.app-header .logo-light { display: none; }
-:root[data-theme="light"] header.app-header .logo-dark  { display: none; }
-
-header.app-header h1 { margin: 0; font-size: 1.05rem; font-weight: 700; letter-spacing: 0.01em; }
-header.app-header .spacer { flex: 1; }
-
-.header-links { display: inline-flex; gap: 0.85rem; font-family: var(--mono); font-size: 0.82rem; }
-.header-links a { color: var(--muted); }
-.header-links a:hover { color: var(--accent); text-decoration: none; }
-
-header.app-header button#theme-toggle {
-  background: transparent; border: 1px solid var(--border);
-  color: var(--fg); font: inherit; cursor: pointer;
-  border-radius: 4px; padding: 0.2rem 0.55rem;
-}
-header.app-header button#theme-toggle:hover { background: var(--panel-2); }
 
 main#panel { padding: 1.25rem 1.5rem 4rem; max-width: 1180px; width: 100%; margin: 0 auto; }
 
@@ -156,15 +105,6 @@ main#panel { padding: 1.25rem 1.5rem 4rem; max-width: 1180px; width: 100%; margi
 .wf-row a { font-family: var(--mono); font-size: 0.84rem; }
 .wf-row .wf-row-desc { display: block; color: var(--muted); font-size: 0.78rem; }
 
-/* ── footer ──────────────────────────────────────────────────────────────── */
-
-.app-footer {
-  margin-top: 3rem; padding-top: 1rem;
-  border-top: 1px solid var(--border);
-  color: var(--muted); font-size: 0.82rem;
-}
-.app-footer a { color: var(--muted); }
-.app-footer a:hover { color: var(--accent); }
 
 /* ── pipeline DAG ─────────────────────────────────────────────────────────── */
 .wf-dag { margin: 2.5rem 0; }

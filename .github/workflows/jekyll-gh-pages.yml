@@ -55,6 +55,10 @@ jobs:
         shell: Rscript {0}
       - name: Build workflows index (_data/workflows.yml)
         run: Rscript scripts/build_workflows_index.R
+      # notebooks rendered before the brand contract (2026-08-25) get the same
+      # head/header snippets a fresh render includes; idempotent, marker-guarded
+      - name: Inject brand chrome into rendered notebooks
+        run: Rscript scripts/brand_inject_html.R
       - name: Setup Pages
         uses: actions/configure-pages@v5
       - name: Build with Jekyll
