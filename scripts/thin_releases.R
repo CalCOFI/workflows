@@ -31,8 +31,19 @@ pin_files <- c(
   list.files(here("../docs"), pattern = "[.](qmd|md|R|py|yml)$", recursive = TRUE, full.names = TRUE),
   here("../db-query/_config.yml"), here("../server/postgis/init/50_release_views.sql"))
 pin_files <- pin_files[file.exists(pin_files) & !grepl("/_site/|/_freeze/|/node_modules/", pin_files)]
+# A version NAME in prose ("released v2026.06.08 … 44 tables") is not a data
+# dependency: thinning keeps every version's catalog.json / metadata.json /
+# relationships.json / RELEASE_NOTES.md and only removes its parquet/. So flag a
+# pin only where the version appears on a line that ALSO reads its parquet — a
+# `read_parquet(...releases/{v}/parquet...)` or bare `{v}/parquet` — the thing
+# that actually breaks when the bytes go. (Sidecar/`cc_get_db("{v}")`/`#erd?v={v}`
+# references keep working; a retired {v} makes cc_get_db error by design.)
 pinned <- lapply(cand$version, function(v) {
-  hit <- vapply(pin_files, function(f) any(grepl(v, readLines(f, warn = FALSE), fixed = TRUE)), TRUE)
+  hit <- vapply(pin_files, function(f) {
+    ls <- readLines(f, warn = FALSE)
+    hits <- grepl(v, ls, fixed = TRUE)
+    any(hits & grepl("parquet", ls, ignore.case = TRUE))
+  }, TRUE)
   names(hit)[hit]
 })
 names(pinned) <- cand$version
