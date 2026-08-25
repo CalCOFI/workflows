@@ -166,6 +166,12 @@ consumer_status <- function() {
                       "datasets.xml summary text",
     "db-viz-cruise",  ssh_out("stat -c %y /share/data/db-viz-cruise/db-viz-cruise.duckdb 2>/dev/null | cut -c1-16"),
                       "database mtime (carries no version)",
+    # both were outside the deploy until 2026-08-25; ctd-viz had served a
+    # 2026-05-15 database through three releases with nothing here to say so
+    "ctd-viz",        ssh_out("stat -c %y /share/data/ctd-viz/ctd-viz.duckdb 2>/dev/null | cut -c1-16"),
+                      "database mtime (carries no version)",
+    "ctd-qaqc",       ssh_out("stat -c %y /share/data/ctd-qaqc/ctd-qaqc.duckdb 2>/dev/null | cut -c1-16"),
+                      "database mtime (carries no version)",
     "db-query site",  dbquery_serving(),
                       "live page vs _config.yml default_version",
     "releases index", idx_serving(),
@@ -174,6 +180,8 @@ consumer_status <- function() {
                     http_code("https://h3t.calcofi.io/h3t/health"),
                     http_code("https://erddap.calcofi.io/erddap/info/index.json"),
                     http_code("https://app.calcofi.io/db-viz-cruise/"),
+                    http_code("https://app.calcofi.io/ctd/"),
+                    http_code("https://app.calcofi.io/ctd-qaqc/"),
                     http_code("https://calcofi.io/db-query/"),
                     http_code("https://storage.calcofi.io/calcofi-db/ducklake/releases/")))
 }

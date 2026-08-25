@@ -93,7 +93,13 @@ if [ "$SKIP_PREP" -eq 0 ]; then
   echo "==> 2/5 rebuilding app databases (slow)"
   sshq "docker exec rstudio bash -lc 'cd $GH/db-viz-hex && Rscript prep_db.R' > /tmp/deploy_prep_hex.log 2>&1; echo hex_rc=\$?" | tail -1
   sshq "docker exec rstudio bash -lc 'cd $GH/apps/db-viz-cruise && Rscript prep_db.R TRUE' > /tmp/deploy_prep_cruise.log 2>&1; echo cruise_rc=\$?" | tail -1
-  for f in /tmp/deploy_prep_hex.log /tmp/deploy_prep_cruise.log; do
+  # ctd-viz and ctd-qaqc were NOT here until 2026-08-25: ctd-viz served its
+  # 2026-05-15 database (v2026.05.14) through three releases with nothing
+  # reporting it, and ctd-qaqc its 2026-08-03 one. Both skip when their db exists
+  # unless forced — 'latest TRUE' is the force.
+  sshq "docker exec rstudio bash -lc 'cd $GH/apps/ctd-viz && Rscript prep_db.R latest TRUE' > /tmp/deploy_prep_ctd-viz.log 2>&1; echo ctdviz_rc=\$?" | tail -1
+  sshq "docker exec rstudio bash -lc 'cd $GH/apps/ctd-qaqc && Rscript prep_db.R latest TRUE' > /tmp/deploy_prep_ctd-qaqc.log 2>&1; echo ctdqaqc_rc=\$?" | tail -1
+  for f in /tmp/deploy_prep_hex.log /tmp/deploy_prep_cruise.log /tmp/deploy_prep_ctd-viz.log /tmp/deploy_prep_ctd-qaqc.log; do
     sshq "grep -iE '^Error|Execution halted|Killed' $f | head -3" | sed 's/^/    /'
   done
 else
@@ -119,7 +125,7 @@ sshq "sed -E 's|/releases/v[0-9.]+/|/releases/$RELEASE/|g' $GH/server/postgis/in
 
 # 4. shiny apps ------------------------------------------------------------
 echo "==> 4/5 restarting apps"
-sshq "touch $GH/db-viz-hex/app/restart.txt $GH/apps/db-viz-cruise/restart.txt && echo ok" | tail -1
+sshq "touch $GH/db-viz-hex/app/restart.txt $GH/apps/db-viz-cruise/restart.txt $GH/apps/ctd-viz/restart.txt $GH/apps/ctd-qaqc/restart.txt && echo ok" | tail -1
 
 # 5. verify ----------------------------------------------------------------
 # The h3t check is the load-bearing one: it is the consumer that silently served
