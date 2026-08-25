@@ -49,14 +49,40 @@ ssh_run <- function(host, cmd, what = "remote command") {
 #'
 #' Pulled server-side from GCS rather than pushed: rsync is absent on the server
 #' and the bytes are already in the bucket, so a laptop upload is pure waste.
+#'
+#' Manifest-driven since v2026.09: the release is content-addressed, so the
+#' objects are copied from the catalog's `objects[]` (canonical `tables/…`
+#' paths) INTO the same server layout the ERDDAP views expect —
+#' `{root}/datasets/release/{v}/parquet/{table}.parquet` or
+#' `…/{table}/{col}={val}/data_0.parquet` — rather than `cp -r` of a version
+#' prefix that only exists for promoted/consolidated versions. Unchanged
+#' objects (same size on disk) are skipped.
 erddap_sync_parquet <- function(host, erddap_root, release, gcs_bucket = "calcofi-db") {
+  cat_ <- calcofi4r::cc_catalog(release)
+  pairs <- unlist(lapply(cat_$tables, function(t) {
+    src <- calcofi4r::cc_release_sources(cat_, t$name)
+    if (any(startsWith(src$urls, "s3://")))
+      stop(glue::glue("{t$name}: legacy catalog without objects[]; cannot build the copy manifest"))
+    dst <- if (isTRUE(t$partitioned)) {
+      vapply(t$objects, function(o)
+        sprintf("%s/%s=%s/data_0.parquet", t$name, o$partition_by, o$partition_value), "")
+    } else sprintf("%s.parquet", t$name)
+    gs <- sub("^https://storage.googleapis.com/", "gs://", src$urls)
+    sprintf("%s %s/datasets/release/%s/parquet/%s", gs, erddap_root, release, dst)
+  }))
+  manifest <- tempfile(fileext = ".txt"); writeLines(pairs, manifest)
+  remote <- sprintf("/tmp/erddap_sync_%s.txt", release)
+  system2("scp", c("-q", manifest, sprintf("%s:%s", host, remote)))
   cmd <- sprintf(paste(
-    "mkdir -p %s/datasets/release/%s",
-    "&& gsutil -m cp -r gs://%s/ducklake/releases/%s/parquet %s/datasets/release/%s/",
+    "mkdir -p %s/datasets/release/%s/parquet",
+    # one line per object: skip when the destination already has bytes, else
+    # mkdir its partition dir and copy; 8 in flight
+    "&& (while read -r src dst; do",
+    "     [ -s \"$dst\" ] && continue; mkdir -p \"$(dirname \"$dst\")\"; echo \"$src $dst\"; done < %s",
+    "   | xargs -P 8 -n 2 sh -c 'gsutil -q cp \"$0\" \"$1\"')",
     "&& gsutil -m cp -r gs://%s/ingest/calcofi_mets %s/datasets/ingest/"),
-    erddap_root, release, gcs_bucket, release, erddap_root, release,
-    gcs_bucket, erddap_root)
-  ssh_run(host, cmd, "parquet sync")
+    erddap_root, release, remote, gcs_bucket, erddap_root)
+  ssh_run(host, cmd, sprintf("parquet sync (%d objects)", length(pairs)))
   n <- ssh_run(host, sprintf(
     "find %s/datasets/release/%s -name '*.parquet' | wc -l", erddap_root, release))
   n <- as.integer(utils::tail(n, 1))

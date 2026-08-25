@@ -1,6 +1,6 @@
 # CalCOFI integrated database release v2026.06.08
 
-**Release date:** 2026-06-07
+**Release date:** 2026-06-08
 *Documented with v2026.06.07 – v2026.06.08 (2026-06-07 … 2026-06-08).*
 
 Phytoplankton (Venrick, region-pooled) added; 44 tables; full ingest + release re-run with

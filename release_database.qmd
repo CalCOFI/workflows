@@ -132,6 +132,22 @@ options(DT.options = list(scrollX = TRUE))
 
 # release version
 release_version <- format(Sys.Date(), "v%Y.%m.%d")
+
+# where the release goes and how its objects are laid out. Both are env-driven so
+# a STAGING run (CALCOFI_RELEASE_PREFIX=ducklake-staging/releases) exercises the
+# whole freeze/upload path against a scratch prefix before the real one changes;
+# see .claude/plans/2026-08-25 … content-addressed release tables.md, tests T1-T7.
+release_prefix <- Sys.getenv("CALCOFI_RELEASE_PREFIX", "ducklake/releases")
+tables_prefix  <- Sys.getenv("CALCOFI_TABLES_PREFIX",  "ducklake/tables")
+release_layout <- match.arg(Sys.getenv("CALCOFI_RELEASE_LAYOUT", "compat"),
+                            c("compat", "canonical"))
+staging <- release_prefix != "ducklake/releases"
+# a STAGING run must not touch the real release's local record: its sidecars and
+# parquet land under *-staging roots keyed by the same date-derived version
+sidecar_root <- if (staging) "data/releases-staging" else "data/releases"
+stage_root   <- if (staging) "releases-staging" else "releases"
+if (staging)
+  message(glue("STAGING release: prefix {release_prefix}, layout {release_layout}, sidecars {sidecar_root}"))
 message(glue("Release version: {release_version}"))
 
 # --- refuse to re-cut the version consumers are currently reading -------------
@@ -160,7 +176,7 @@ message(glue("Release version: {release_version}"))
 # `latest.txt` points elsewhere and lets a run overwrite the release consumers
 # are actively reading. A guard that fails open for an hour after every
 # promotion is worse than no guard, because it reads as protection.
-promoted <- calcofi4db::read_promoted_release(bucket = "calcofi-db")
+promoted <- calcofi4db::read_promoted_release(bucket = "calcofi-db", prefix = release_prefix)
 
 if (!is.na(promoted) && identical(promoted, release_version) &&
     !isTRUE(as.logical(Sys.getenv("CALCOFI_ALLOW_REPUBLISH", "FALSE"))))
@@ -990,6 +1006,13 @@ Cross-dataset validation to ensure data integrity before freezing.
 ```{r}
 #| label: validate
 
+# core primary keys: HARD gate. v2026.08.25 shipped `sample` with 4,855 keys twice
+# (a seafloor-stamp join bug) while this chunk only warned on ship/cruise; every
+# count or join keyed on sample over-counted those rows 2x until the next release.
+pk_res <- check_core_pk_unique(con_wdl, c(core_tbls, "taxon", "dataset_taxon", "cruise",
+                                          "ship", "grid", "dataset", "measurement_type"))
+cat(glue("core primary keys unique: {paste(pk_res$table, collapse = ', ')}\n"))
+
 # grid_key integrity: casts.grid_key should all be in grid.grid_key
 tbls <- DBI::dbListTables(con_wdl)
 
@@ -1172,7 +1195,7 @@ tryCatch(
 ```{r}
 
 # dir_frozen used later; define early so ERD can reference it
-dir_frozen <- here(glue("data/releases/{release_version}"))
+dir_frozen <- here(glue("{sidecar_root}/{release_version}"))
 dir.create(dir_frozen, recursive = TRUE, showWarnings = FALSE)
 
 # --- retire the per-dataset event/measurement/summary + per-dataset taxon tables
@@ -1228,7 +1251,7 @@ schema_tbls <- setdiff(
 rels_paths <- in_release_dirs(
   Sys.glob(here("data/parquet/*/relationships.json")))
 
-dir_frozen <- here(glue("data/releases/{release_version}"))
+dir_frozen <- here(glue("{sidecar_root}/{release_version}"))
 dir.create(dir_frozen, recursive = TRUE, showWarnings = FALSE)
 rels_merged_path <- file.path(dir_frozen, "relationships.json")
 
@@ -1406,9 +1429,11 @@ pattern.
 # reconstructed afterwards. A non-empty `# Unreleased` becomes this version's
 # section; an empty one with no existing section stops the render.
 releases_md_path <- here("RELEASES.md")
-releases_md <- promote_unreleased(
-  readLines(releases_md_path, warn = FALSE), release_version, Sys.Date())
-writeLines(releases_md, releases_md_path)
+releases_md <- readLines(releases_md_path, warn = FALSE)
+if (!staging) {
+  releases_md <- promote_unreleased(releases_md, release_version, Sys.Date())
+  writeLines(releases_md, releases_md_path)
+} else message("staging run: RELEASES.md left untouched (# Unreleased not promoted)")
 notes_section <- release_notes_section(releases_md, release_version)
 stopifnot("RELEASES.md has no section for this release" = !is.null(notes_section))
 cat(glue("RELEASES.md: # {notes_section$heading}\n"))
@@ -1417,7 +1442,7 @@ cat(glue("RELEASES.md: # {notes_section$heading}\n"))
 ```{r}
 #| label: freeze_release
 
-dir_frozen <- here(glue("data/releases/{release_version}"))
+dir_frozen <- here(glue("{sidecar_root}/{release_version}"))
 
 # BULK PARQUET STAGES OUTSIDE THE REPO, sidecars stay in it — the same split
 # 146da92 applied to ingest outputs, which stopped one step short of the release.
@@ -1431,7 +1456,7 @@ dir_frozen <- here(glue("data/releases/{release_version}"))
 # Nothing downstream needs editing: the GCS upload and the orphan prune both
 # discover tables with list.files()/list.dirs() over this directory rather than
 # from a hand-maintained list.
-dir_frozen_pq <- cc_stage_path("releases", release_version, "parquet",
+dir_frozen_pq <- cc_stage_path(stage_root, release_version, "parquet",
                                create = TRUE)
 dir.create(dir_frozen, recursive = TRUE, showWarnings = FALSE)
 message(glue("Creating frozen release: {release_version}"))
@@ -1448,68 +1473,11 @@ if (nrow(new_tables) > 0) {
 }
 
 # export only derived/merged tables to local parquet
-export_parquet(con_wdl, "cruise",
-  file.path(dir_frozen_pq, "cruise.parquet"), compression = "zstd")
-message("Exported cruise.parquet")
-
-# export merged tables (e.g., ship with _new additions)
-for (tbl in setdiff(derived_tables, "cruise")) {
-  export_parquet(con_wdl, tbl,
-    file.path(dir_frozen_pq, paste0(tbl, ".parquet")), compression = "zstd")
-  message(glue("Exported {tbl}.parquet (merged)"))
-}
-
-# --- consolidated core tables (derived here in Phase 2) ---------------------
-# single-file exports (sample carries geom as GeoParquet; the long tables +
-# measurement_type are plain); obs / obs_ctd_full are Hive-partitioned + sorted
-# for compression + predicate pushdown (see design "Parquet partitioning").
-core_single <- intersect(
-  unique(c("sample", "obs_attribute", "sample_measurement", "measurement_type",
-           "taxon", "dataset_taxon", "taxon_group",  # unified taxa refs, rebuilt here
-           # `dataset` is rebuilt here too — from the ingest YAML, filtered to
-           # in_release, keyed, and with coverage measured rather than asserted.
-           # It must be exported locally for the same reason as the taxa refs:
-           # the gcs_prefix = NA below only helps if there is a local file to
-           # upload instead. See the note there for what shipped without it.
-           "dataset",
-           # every CRS-normalized table (grid, spatial, …): the normalization only
-           # reaches the release if the LOCAL copy is what gets uploaded
-           crs_local_tables)),
-  dbListTables(con_wdl))
-for (tbl in core_single)
-  export_parquet(con_wdl, tbl,
-    file.path(dir_frozen_pq, paste0(tbl, ".parquet")), compression = "zstd")
-
-# The trailing `datetime` is a tiebreak, not decoration: without it the first
-# three columns leave large tie groups whose rows land in arbitrary order,
-# scattering latitude/longitude/datetime and defeating delta encoding. Measured
-# on one partition: 27.55 -> 20.20 MB (CTD), 23.22 -> 16.95 MB (mets).
-# The supplemental ingests sort by this same key, so the shard the release reads
-# is already clustered the way it wants — keep the two in step.
-core_sort <- "grid_key NULLS LAST, depth_min_m NULLS LAST, measurement_type, datetime"
-if ("obs" %in% dbListTables(con_wdl)) {
-  dbExecute(con_wdl, glue(
-    "COPY (SELECT * FROM obs ORDER BY dataset_key, {core_sort})
-     TO '{file.path(dir_frozen_pq, 'obs')}'
-     (FORMAT PARQUET, COMPRESSION 'zstd', PARTITION_BY (dataset_key), OVERWRITE_OR_IGNORE)"))
-  # also a single-file obs.parquet: browser DuckDB-WASM (db-query/match.js) and
-  # plain-HTTPS consumers can't glob the Hive-partitioned obs/ dir over GCS.
-  export_parquet(con_wdl, glue("SELECT * FROM obs ORDER BY dataset_key, {core_sort}"),
-    file.path(dir_frozen_pq, "obs.parquet"), compression = "zstd")
-}
-# Supplementals are exported and uploaded from here, like every other released
-# table. A GCS server-side copy from the ingest bucket was measured and rejected:
-# it removes ~1.5 GB from the upload, but only stays correct while the ingest
-# shard, the assembled core and the published release agree — and nothing tracks
-# that they do. A stale source would publish stale data behind a green release.
-# Pushing from one place keeps the release self-consistent; see the `core_sort`
-# note above for the change that actually shrank this leg.
-for (st in intersect(supp_tbls, dbListTables(con_wdl)))
-  dbExecute(con_wdl, glue(
-    "COPY (SELECT * FROM {st} ORDER BY cruise_key, {core_sort})
-     TO '{file.path(dir_frozen_pq, st)}'
-     (FORMAT PARQUET, COMPRESSION 'zstd', PARTITION_BY (cruise_key), OVERWRITE_OR_IGNORE)"))
-message(glue("Exported core tables: {paste(core_single, collapse=', ')}, obs (partitioned)"))
+# Exports happen once freeze_stats is final (end of this chunk), through ONE
+# writer — export_release_parquet() — so every released table is byte-stable
+# and content-hashed. The per-table export calls that used to sit here, and the
+# GCS copies of lookup/spatial_attribute from the ingest bucket, are gone: a
+# release is written from the assembled database and nowhere else.
 
 # build freeze stats from registry (auto-discovered)
 # exclude _new delta tables (intermediate) and supplemental
@@ -1606,6 +1574,74 @@ freeze_stats <- freeze_stats |>
 
 freeze_stats |>
   datatable(caption = glue("Frozen release {release_version} — {nrow(freeze_stats)} core+ref tables"))
+
+# --- deterministic export of every released table ---------------------------
+# ORDER BY a unique key + a single writer thread + pinned writer options: the
+# same rows always give the same bytes (measured 2026-08-25: a total ORDER BY
+# alone was NOT byte-stable at default threads). Provenance columns are
+# stripped: `_ingested_at` changed on every ingest and would have made every
+# table look changed to the content hash below.
+sort_keys <- release_sort_keys()
+missing_key <- setdiff(freeze_stats$table, names(sort_keys))
+if (length(missing_key))
+  stop(glue("no sort key registered for released table(s): ",
+            "{paste(missing_key, collapse = ', ')} — add to calcofi4db::release_sort_keys()"))
+missing_tbl <- setdiff(freeze_stats$table, dbListTables(con_wdl))
+if (length(missing_tbl))
+  stop(glue("released table(s) not in the assembled database: {paste(missing_tbl, collapse = ', ')}"))
+if (dir.exists(dir_frozen_pq)) unlink(dir_frozen_pq, recursive = TRUE)
+dir.create(dir_frozen_pq, recursive = TRUE)
+
+export_files <- list()
+for (tbl in freeze_stats$table) {
+  sk <- sort_keys[[tbl]]
+  part <- if (isTRUE(freeze_stats$partitioned[freeze_stats$table == tbl])) sk$partition_by else NULL
+  t0 <- Sys.time()
+  if (!is.null(part)) {
+    export_files[[tbl]] <- export_release_parquet(
+      con_wdl, tbl, file.path(dir_frozen_pq, tbl), sk$order_by, partition_by = part)
+    # obs is ALSO published as one file: browser DuckDB-WASM (db-query) and other
+    # plain-HTTPS consumers cannot expand a Hive glob over GCS
+    if (tbl == "obs")
+      export_files[["obs.parquet"]] <- export_release_parquet(
+        con_wdl, tbl, file.path(dir_frozen_pq, "obs.parquet"), sk$order_by)
+  } else {
+    export_files[[tbl]] <- export_release_parquet(
+      con_wdl, tbl, file.path(dir_frozen_pq, paste0(tbl, ".parquet")), sk$order_by)
+  }
+  message(glue("  exported {tbl}: {nrow(export_files[[tbl]])} file(s), ",
+               "{round(sum(export_files[[tbl]]$bytes) / 1e6, 1)} MB, ",
+               "{round(as.numeric(difftime(Sys.time(), t0, units = 'secs')))} s"))
+}
+
+# --- the previous release's catalog is the reuse ledger ---------------------
+prev_version <- calcofi4db::read_promoted_release(bucket = "calcofi-db", prefix = release_prefix)
+prev_catalog <- NULL
+if (!is.na(prev_version) && prev_version != release_version) {
+  prev_catalog <- tryCatch(
+    jsonlite::fromJSON(glue(
+      "https://storage.googleapis.com/calcofi-db/{release_prefix}/{prev_version}/catalog.json"),
+      simplifyVector = TRUE),
+    error = function(e) { message(glue("no previous catalog readable ({conditionMessage(e)})")); NULL })
+}
+message(glue("previous release for reuse: {if (is.null(prev_catalog)) 'none' else prev_version}"))
+
+# one row per parquet object: bytes, sha256, content_hash, since
+release_objs <- dplyr::bind_rows(lapply(freeze_stats$table, function(tbl) {
+  sk <- sort_keys[[tbl]]
+  part <- if (isTRUE(freeze_stats$partitioned[freeze_stats$table == tbl])) sk$partition_by else NULL
+  o <- release_objects(con_wdl, tbl, dir_frozen_pq, export_files[[tbl]], release_version,
+                       partition_by = part, prev_catalog = prev_catalog)
+  if (tbl == "obs")
+    o <- dplyr::bind_rows(o, release_objects(con_wdl, "obs", dir_frozen_pq,
+                                              export_files[["obs.parquet"]], release_version,
+                                              prev_catalog = prev_catalog))
+  o
+}))
+release_objs |>
+  dplyr::count(table, since, wt = bytes, name = "bytes") |>
+  dplyr::mutate(mb = round(bytes / 1e6, 1)) |>
+  datatable(caption = "Release objects by table and the release that first carried their content (`since`)")
 ```
 
 ## Release Notes
@@ -1651,140 +1687,56 @@ cat(release_notes)
 #| label: upload_frozen
 
 gcs_bucket  <- "calcofi-db"
-gcs_release <- glue("ducklake/releases/{release_version}")
+gcs_release <- glue("{release_prefix}/{release_version}")
 gcloud      <- find_gcloud()
 
 # 1. GCS server-side copy for ingest tables (auto-discovered from registry)
-copy_rows <- freeze_stats |> filter(!is.na(gcs_prefix))
+# 1. plan: upload only what changed; reuse the rest ----
+# compat layout: an object whose content_hash matches the previous release is
+# GCS server-side COPIED from there (no upload bytes). canonical layout: it
+# already exists under tables/ and the catalog just points at it; a compat
+# copy under this release's parquet/ keeps every legacy URL working.
+plan <- freeze_plan(release_objs, prev_catalog, release_version,
+                    layout = release_layout, release_prefix = release_prefix)
+if (release_layout == "canonical" && tables_prefix != CC_TABLES_PREFIX)
+  plan$path <- sub(paste0("^", CC_TABLES_PREFIX, "/"), paste0(tables_prefix, "/"), plan$path)
+plan |>
+  dplyr::count(action, wt = bytes, name = "bytes") |>
+  dplyr::mutate(n = as.vector(table(plan$action)[action]), mb = round(bytes / 1e6, 1)) |>
+  datatable(caption = glue("Freeze plan for {release_version} ({release_layout} layout)"))
+upload_release_objects(plan, dir_frozen_pq, gcs_bucket, compat = TRUE)
 
-message(glue("Copying {nrow(copy_rows)} tables from ingest/ to releases/ on GCS..."))
-
-for (i in seq_len(nrow(copy_rows))) {
-  tbl  <- copy_rows$table[i]
-  pfx  <- copy_rows$gcs_prefix[i]
-  part <- copy_rows$partitioned[i]
-
-  if (part) {
-    # partitioned: copy directory
-    src <- glue("gs://{gcs_bucket}/{pfx}/{tbl}")
-    dst <- glue("gs://{gcs_bucket}/{gcs_release}/parquet/{tbl}")
-    res <- system2(gcloud, c("storage", "cp", "-r",
-      paste0(src, "/*"), dst), stdout = TRUE, stderr = TRUE)
-  } else {
-    src <- glue("gs://{gcs_bucket}/{pfx}/{tbl}.parquet")
-    dst <- glue("gs://{gcs_bucket}/{gcs_release}/parquet/{tbl}.parquet")
-    res <- system2(gcloud, c("storage", "cp",
-      src, dst), stdout = TRUE, stderr = TRUE)
-  }
-  rc <- attr(res, "status") %||% 0L
-  if (rc != 0) {
-    stop(glue("GCS copy failed for {tbl}: {src} -> {dst}\n",
-              "  exit code {rc}: {paste(res, collapse = '\n')}"))
-  }
-  message(glue("  {tbl}: copied from {pfx}"))
-}
-
-# 2. upload derived tables from local parquet — single files (cruise,
-# measurement_type, sample, obs_attribute, sample_measurement) AND partitioned dirs
-# (obs, obs_ctd_full: Hive-partitioned, uploaded recursively).
-derived_local <- list.files(dir_frozen_pq, pattern = "[.]parquet$",
-                            full.names = TRUE)
-for (pq in derived_local) {
-  tbl <- tools::file_path_sans_ext(basename(pq))
-  gcs_path <- glue("gs://{gcs_bucket}/{gcs_release}/parquet/{tbl}.parquet")
-  put_gcs_file(pq, gcs_path)
-  message(glue("  {tbl}: uploaded (derived)"))
-}
-# partitioned derived dirs (obs, obs_ctd_full)
-derived_dirs <- list.dirs(dir_frozen_pq, recursive = FALSE)
-for (d in derived_dirs) {
-  tbl <- basename(d)
-  dst <- glue("gs://{gcs_bucket}/{gcs_release}/parquet/{tbl}")
-  # rsync, not cp: a partitioned upload at a few MiB/s takes a long time, and
-  # `cp` restarts it from zero every time. A single transient failure near the
-  # end therefore cost the whole upload (observed on obs_ctd_full: 88 of 96
-  # partitions landed, then the run died and a retry would have re-sent all 88).
-  # rsync skips what already matches, so a retry costs only what is missing.
-  res <- system2(gcloud, c("storage", "rsync", "-r", d, dst),
-                 stdout = TRUE, stderr = TRUE)
-  if ((attr(res, "status") %||% 0L) != 0)
-    stop(glue("GCS rsync failed for derived partitioned {tbl}: ",
-              "{paste(utils::tail(res, 20), collapse='\n')}"))
-  message(glue("  {tbl}: synced (derived, partitioned)"))
-}
-
-# 2b. PRUNE objects that are no longer part of this release.
+# 2. PRUNE objects under this release's parquet/ that are not in the plan.
 # Uploads add and overwrite but never delete, so re-cutting a version after a
 # table is renamed leaves the old object behind — outside the catalog, untracked,
-# and still readable by anyone who knows the old path. That happened: renaming
-# _spatial -> spatial left BOTH _spatial.parquet and spatial.parquet under
-# v2026.08.02, and the stale 26 MB copy had to be removed by hand.
-#
-# Prune against what was actually exported/copied, not against a hand-maintained
-# list, since that is the drift this is guarding against in the first place.
-gcs_expected <- c(
-  tools::file_path_sans_ext(basename(list.files(dir_frozen_pq, pattern = "[.]parquet$"))),
-  basename(list.dirs(dir_frozen_pq, recursive = FALSE)),
-  copy_rows$table)
-gcs_have <- system2(gcloud, c("storage", "ls",
-  glue("gs://{gcs_bucket}/{gcs_release}/parquet/")), stdout = TRUE, stderr = FALSE)
-gcs_have_tbl <- sub("[.]parquet$", "", basename(sub("/$", "", gcs_have)))
-orphans <- setdiff(gcs_have_tbl[nzchar(gcs_have_tbl)], gcs_expected)
+# and still readable by anyone who knows the old path (it happened: _spatial and
+# spatial both sat under v2026.08.02). Prune against the plan, not a hand list.
+gcs_have <- system2(gcloud, c("storage", "ls", "-r",
+  glue("gs://{gcs_bucket}/{gcs_release}/parquet/**")), stdout = TRUE, stderr = FALSE)
+gcs_have <- sub(glue("^gs://{gcs_bucket}/"), "", gcs_have[grepl("[.]parquet$", gcs_have)])
+orphans <- setdiff(gcs_have, plan$compat_path)
 if (length(orphans)) {
-  for (o in orphans) {
-    uri <- grep(glue("/{o}(\\.parquet)?/?$"), gcs_have, value = TRUE)[1]
-    if (is.na(uri)) next
-    system2(gcloud, c("storage", "rm", "-r", uri), stdout = TRUE, stderr = TRUE)
-    message(glue("  pruned orphan no longer in this release: {o}"))
-  }
-} else {
-  message("  no orphaned objects to prune")
-}
+  for (o in orphans) system2(gcloud, c("storage", "rm", glue("gs://{gcs_bucket}/{o}")),
+                             stdout = TRUE, stderr = TRUE)
+  message(glue("  pruned {length(orphans)} orphan object(s) no longer in this release"))
+} else message("  no orphaned objects to prune")
 
-# 3. build and upload catalog.json (needed by cc_get_db())
+# 3. build and upload catalog.json (needed by cc_get_db()) ----
 tables_df <- freeze_stats |>
   mutate(supplemental = dplyr::coalesce(supplemental, FALSE)) |>
   select(name = table, rows, partitioned, supplemental)
-
-# sum bytes of the uploaded parquet tree on GCS
-du_out <- system2(
-  gcloud,
-  c("storage", "du", "--summarize",
-    glue("gs://{gcs_bucket}/{gcs_release}/parquet/")),
-  stdout = TRUE, stderr = TRUE)
-total_bytes <- suppressWarnings(
-  as.numeric(sub("\\s.*$", "", trimws(du_out[1]))))
-if (is.na(total_bytes)) {
-  warning(glue("Could not parse gcloud storage du output: {paste(du_out, collapse='; ')}"))
-  total_bytes <- 0
-}
-
-catalog <- list(
-  version      = release_version,
-  release_date = as.character(Sys.Date()),
-  total_rows   = sum(tables_df$rows, na.rm = TRUE),
-  total_size   = total_bytes,
-  tables       = tables_df)
-# GUARD: the catalog must describe everything that was actually published.
-# Uploads are driven by the FILESYSTEM (every .parquet file and partitioned dir in
-# dir_frozen_pq), while the catalog is assembled from hand-maintained lists — so
-# the two can drift silently, and did: `taxon` was exported and uploaded but never
-# catalogued, leaving it invisible to cc_get_db(). Compare the two directly rather
-# than trusting the lists to stay in step.
-exported_tbls <- c(
-  tools::file_path_sans_ext(basename(
-    list.files(dir_frozen_pq, pattern = "[.]parquet$"))),
-  basename(list.dirs(dir_frozen_pq, recursive = FALSE)))
-uncatalogued <- setdiff(unique(exported_tbls), tables_df$name)
-if (length(uncatalogued))
-  stop(glue(
-    "catalog.json would omit {length(uncatalogued)} published table(s): ",
-    "{paste(uncatalogued, collapse = ', ')}. They are uploaded from ",
-    "dir_frozen_pq but absent from freeze_stats — add them to `core_spec` ",
-    "(or `derived_tables`), or they ship invisible to cc_get_db()."))
-
+# GUARD: the catalog must describe everything that was actually published, and
+# nothing else — `taxon` once shipped uncatalogued and was invisible to
+# cc_get_db(). The plan is derived from the exported files, the catalog from
+# freeze_stats; they must name the same tables.
+if (!setequal(unique(plan$table), tables_df$name))
+  stop(glue("catalog/plan table mismatch: only in plan = ",
+            "{paste(setdiff(unique(plan$table), tables_df$name), collapse = ', ')}; ",
+            "only in catalog = {paste(setdiff(tables_df$name, unique(plan$table)), collapse = ', ')}"))
+catalog <- build_release_catalog(release_version, tables_df, plan, layout = release_layout)
+total_bytes <- catalog$total_size
 catalog_path <- file.path(dir_frozen, "catalog.json")
-jsonlite::write_json(catalog, catalog_path, auto_unbox = TRUE, pretty = TRUE)
+jsonlite::write_json(catalog, catalog_path, auto_unbox = TRUE, pretty = TRUE, digits = NA)
 put_gcs_file(catalog_path,
   glue("gs://{gcs_bucket}/{gcs_release}/catalog.json"))
 
@@ -1795,7 +1747,7 @@ if (file.exists(notes_path))
     glue("gs://{gcs_bucket}/{gcs_release}/RELEASE_NOTES.md"))
 # the running changelog every version's notes are cut from
 put_gcs_file(releases_md_path,
-  glue("gs://{gcs_bucket}/ducklake/releases/RELEASES.md"))
+  glue("gs://{gcs_bucket}/{release_prefix}/RELEASES.md"))
 
 # upload relationships.json
 rels_json <- file.path(dir_frozen, "relationships.json")
@@ -1963,34 +1915,26 @@ if (length(meta_paths) > 0) {
 }
 
 # 4. update versions.json (latest.txt promotion is deferred to test_release.qmd)
-# discover all releases from GCS and rebuild versions.json
-gcs_ls <- system2(gcloud, c("storage", "ls",
-  glue("gs://{gcs_bucket}/ducklake/releases/")),
-  stdout = TRUE, stderr = TRUE)
-release_vers <- regmatches(gcs_ls,
-  regexpr("v[0-9]{4}[.][0-9]{2}[.]*[0-9]*", gcs_ls))
-https_base <- glue("https://storage.googleapis.com/{gcs_bucket}/ducklake/releases")
-
-all_versions <- purrr::compact(lapply(release_vers, function(v) {
-  tryCatch({
-    cat_data <- jsonlite::fromJSON(glue("{https_base}/{v}/catalog.json"))
-    list(
-      version      = cat_data$version,
-      release_date = cat_data$release_date %||% NA_character_,
-      tables       = if (is.data.frame(cat_data$tables)) nrow(cat_data$tables)
-                     else length(cat_data$tables),
-      total_rows   = as.integer(cat_data$total_rows %||% 0),
-      size_mb      = round((cat_data$total_size %||% 0) / 1024 / 1024, 1))
-  }, error = function(e) NULL)
-}))
-all_versions <- all_versions[order(
-  sapply(all_versions, `[[`, "version"), decreasing = TRUE)]
+# rebuilt from every catalog.json under the prefix by calcofi4db::build_versions_json(),
+# which also stamps the archive-policy fields: `consolidated` from
+# metadata/release_policy.yml and `retired` from a thinned version's retired.json
+# (scripts/thin_releases.R). This release's own record comes from the catalog
+# just built, so a stale cached copy on GCS cannot win.
+release_policy <- yaml::read_yaml(here("metadata/release_policy.yml"))
+all_versions <- build_versions_json(
+  gcs_bucket, release_prefix, consolidated = release_policy$consolidated,
+  current = list(
+    version      = release_version,
+    release_date = catalog$release_date,
+    tables       = length(catalog$tables),
+    total_rows   = as.numeric(catalog$total_rows %||% 0),
+    size_mb      = round((catalog$total_size %||% 0) / 1024 / 1024, 1)))
 
 versions_local <- tempfile(fileext = ".json")
 jsonlite::write_json(list(versions = all_versions), versions_local,
   auto_unbox = TRUE, pretty = TRUE)
 put_gcs_file(versions_local,
-  glue("gs://{gcs_bucket}/ducklake/releases/versions.json"))
+  glue("gs://{gcs_bucket}/{release_prefix}/versions.json"))
 
 # the schema site (calcofi.io/db-schema) fetches these JSON/mmd sidecars at runtime
 # and they are OVERWRITTEN in place when a release is re-run (e.g. to fix a bug).
@@ -1998,13 +1942,13 @@ put_gcs_file(versions_local,
 # stays masked by browser/CDN caches for up to an hour. Tag the mutable sidecars
 # `no-cache` (revalidate-always; cheap 304s) so a re-render is visible immediately.
 sidecar_urls <- c(
-  glue("gs://{gcs_bucket}/ducklake/releases/versions.json"),
+  glue("gs://{gcs_bucket}/{release_prefix}/versions.json"),
   glue("gs://{gcs_bucket}/{gcs_release}/catalog.json"),
   glue("gs://{gcs_bucket}/{gcs_release}/metadata.json"),
   glue("gs://{gcs_bucket}/{gcs_release}/relationships.json"),
   glue("gs://{gcs_bucket}/{gcs_release}/erd.mmd"),
   glue("gs://{gcs_bucket}/{gcs_release}/RELEASE_NOTES.md"),
-  glue("gs://{gcs_bucket}/ducklake/releases/RELEASES.md"))
+  glue("gs://{gcs_bucket}/{release_prefix}/RELEASES.md"))
 cc_res <- system2(gcloud,
   c("storage", "objects", "update", "--cache-control=no-cache", sidecar_urls),
   stdout = TRUE, stderr = TRUE)
@@ -2045,7 +1989,7 @@ message(glue(
 # deterministic — version plus a digest of the frozen catalog, no wall clock —
 # so a re-run over unchanged inputs reproduces it byte-for-byte and leaves
 # `test_release` skipped rather than cascading.
-stamp_path <- here("data/releases/_release_stamp.json")
+stamp_path <- here(glue("{sidecar_root}/_release_stamp.json"))
 jsonlite::write_json(
   list(
     release_version = release_version,

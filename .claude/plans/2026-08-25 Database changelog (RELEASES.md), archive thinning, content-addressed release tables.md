@@ -338,3 +338,32 @@ Where should that appear?
 **Recommendation: appendix only**, with `RELEASES.md` staying human-authored. The narrative
 should say *why* a table changed; the appendix can say *which* ones did, and it is regenerated
 from the catalog whenever the notes are re-published.
+
+## Status (2026-08-25, evening)
+
+Done, committed locally (not pushed):
+- **Level 1 + Level 2 engine** — calcofi4db 3.22–3.23.2: `export_release_parquet()` (total order,
+  one thread, pinned writer), `release_objects()` / `freeze_plan()` / `upload_release_objects()` /
+  `build_release_catalog()` (per-object `compat_path`), `build_versions_json()` (stamps
+  `consolidated`/`retired`), `thin_plan()`; tests green (72). `get_duckdb_con()` creates the
+  DuckDB temp dir (spill under memory pressure failed three staging runs).
+- **Notebook** — `release_database.qmd` freezes through the plan, supports `CALCOFI_RELEASE_PREFIX`
+  / `CALCOFI_RELEASE_LAYOUT` staging; `test_release.qmd` resolves the contract suite through the
+  catalog and substitutes `__TBL:table[:col=val]__` tokens.
+- **Resolvers** — calcofi4r 1.11.0 (`cc_catalog()`, `cc_release_sources()` incl. the `single_file`
+  twin rule, `cc_read_parquet_sql()`, retired-version error, `.cc_match_con()` S3 settings);
+  calcofi4py 0.4.0 (same, `RetiredVersionError`); shared fixtures.
+- **Consumers migrated** (one commit each, on main): db-query (`lib/release.js`, `__TBL:` tokens in
+  every query), db-viz-station + ctd-transects (`scripts/resolve_release.py` renders the SQL,
+  `tables.json` for the app), db-schema (`since`/hash chips, consolidated/retired), apps
+  (db-viz-cruise, ctd-qaqc), db-viz-hex (manifest provenance), docs (data-access/db/server-access),
+  workflows libs (`publish_netcdf.R`, `pg_ctd.R`, `erddap_deploy.R` manifest copy,
+  `render_release_views.R` for the PostgreSQL views, warm scripts, index builders).
+- **Part 2 machinery** — `metadata/release_policy.yml`, `scripts/thin_releases.R` (dry-run default;
+  retired.json, reachability sweep of `tables/`, versions.json + index rebuild), index badges.
+- **Caddy** — `server/caddy/Caddyfile` 404→302 map + `scripts/build_release_redirects.R`;
+  `scripts/verify_storage_redirects.sh` (T4) written; not yet deployed.
+
+Pending, in order: staging run on the compat layout (T6) → `verify_release_objects.R` (T3) → second
+staging run showing `copy` → canonical-layout staging run → deploy Caddy + T4 → push all repos →
+first real release → `thin_releases.R` dry-run (T7) → `--execute`.

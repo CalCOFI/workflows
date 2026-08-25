@@ -97,7 +97,9 @@ devtools::load_all(here::here("../calcofi4db"))
 source(here("libs/publish_netcdf.R"))
 
 RELEASE <- cc_release_version()          # the PROMOTED release, never a local tree
-PQ      <- cc_release_parquet(RELEASE)
+# table -> URL through the release catalog (content-addressed since v2026.09);
+# never concatenate releases/{v}/parquet/… by hand
+PQ      <- function(tbl) cc_release_parquet(tbl, RELEASE)
 OUT_DIR <- here("data/netcdf"); dir.create(OUT_DIR, recursive = TRUE, showWarnings = FALSE)
 PUBLISH <- identical(Sys.getenv("CALCOFI_PUBLISH"), "true")   # opt-in upload
 
@@ -108,7 +110,7 @@ ONLY <- Filter(nzchar, trimws(strsplit(Sys.getenv("CALCOFI_DATASETS", ""), ",")[
 DO_SUPPLEMENTAL <- !identical(Sys.getenv("CALCOFI_SKIP_SUPPLEMENTAL"), "true")
 
 cat(glue("release      : {RELEASE}\n"))
-cat(glue("parquet      : {PQ}\n"))
+cat(glue("parquet      : {PQ('sample')} (+ catalog-resolved siblings)\n"))
 cat(glue("output       : {OUT_DIR}\n"))
 cat(glue("publish      : {PUBLISH} (set CALCOFI_PUBLISH=true to upload)\n"))
 cat(glue("supplemental : {DO_SUPPLEMENTAL}\n"))
@@ -137,20 +139,20 @@ dbExecute(con, glue("
     SELECT sample_key, sample_type, parent_sample_key, root_sample_key, dataset_key,
            grid_key, site_key, cruise_key, order_occ, latitude, longitude, datetime,
            depth_min_m, depth_max_m, tow_type
-    FROM read_parquet('{PQ}/sample.parquet');
+    FROM read_parquet('{PQ('sample')}');
   CREATE TABLE obs AS
     SELECT dataset_key, sample_key, measurement_type, depth_min_m
-    FROM read_parquet('{PQ}/obs.parquet');
+    FROM read_parquet('{PQ('obs')}');
   CREATE TABLE obs_attribute AS
-    SELECT * FROM read_parquet('{PQ}/obs_attribute.parquet');
+    SELECT * FROM read_parquet('{PQ('obs_attribute')}');
   CREATE TABLE sample_measurement AS
-    SELECT * FROM read_parquet('{PQ}/sample_measurement.parquet');
+    SELECT * FROM read_parquet('{PQ('sample_measurement')}');
   CREATE TABLE taxon AS
     SELECT taxon_key, scientific_name, rank, worms_id, itis_id
-    FROM read_parquet('{PQ}/taxon.parquet');
+    FROM read_parquet('{PQ('taxon')}');
   CREATE TABLE dataset AS
     SELECT *, provider || '_' || dataset AS dataset_key
-    FROM read_parquet('{PQ}/dataset.parquet');"))
+    FROM read_parquet('{PQ('dataset')}');"))
 cat(glue("materialized planning tables in {round(difftime(Sys.time(), t0, units='secs'))}s\n"))
 
 # every obs partition, mapped to its dataset — a glob over HTTPS 404s because

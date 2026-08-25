@@ -1,6 +1,6 @@
 # CalCOFI integrated database release v2026.05.20
 
-**Release date:** 2026-05-14
+**Release date:** 2026-05-20
 *Documented with v2026.05.14 – v2026.05.20 (2026-05-14 … 2026-05-20).*
 
 `ctd_thin` introduced as the headline CTD series (one direction, canonical types, 10 m grid +

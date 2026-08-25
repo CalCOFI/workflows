@@ -90,17 +90,18 @@ pg_ctd_discover_files <- function(dir_ext, compute_sha = TRUE) {
 
 #' study (9709NH) -> release cruise_key (1997-09-32NM) via the release cruise table
 pg_ctd_cruise_keys <- function(studies, release = "latest") {
-  if (identical(release, "latest"))
-    release <- readLines("https://storage.googleapis.com/calcofi-db/ducklake/releases/latest.txt", warn = FALSE)[1]
+  # resolved through the release catalog (content-addressed since v2026.09):
+  # never concatenate releases/{v}/parquet/… by hand
+  cat_ <- calcofi4r::cc_catalog(release)
   con <- DBI::dbConnect(duckdb::duckdb())
   on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
   DBI::dbExecute(con, "INSTALL httpfs; LOAD httpfs;")
   cr <- DBI::dbGetQuery(con, glue::glue(
-    "SELECT cruise_key, date_ym, ship_key FROM read_parquet(
-       'https://storage.googleapis.com/calcofi-db/ducklake/releases/{release}/parquet/cruise.parquet')"))
+    "SELECT cruise_key, date_ym, ship_key FROM ",
+    calcofi4r::cc_read_parquet_sql(calcofi4r::cc_release_sources(cat_, "cruise"))))
   sh <- DBI::dbGetQuery(con, glue::glue(
-    "SELECT ship_key, ship_nodc FROM read_parquet(
-       'https://storage.googleapis.com/calcofi-db/ducklake/releases/{release}/parquet/ship.parquet')"))
+    "SELECT ship_key, ship_nodc FROM ",
+    calcofi4r::cc_read_parquet_sql(calcofi4r::cc_release_sources(cat_, "ship"))))
   yy <- as.integer(substr(studies, 1, 2)); mm <- as.integer(substr(studies, 3, 4))
   yr <- ifelse(yy >= 49, 1900L + yy, 2000L + yy)
   key <- tibble::tibble(study = studies,

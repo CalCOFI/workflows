@@ -116,12 +116,18 @@ sshq "sudo docker exec varnish varnishadm ban 'obj.http.X-Url ~ \"^/h3t/\"'" | t
 
 # 3b. PostgreSQL release.* views -------------------------------------------
 # The CTD team's calcofi database exposes the release through pg_duckdb views
-# (server/postgis/init/50_release_views.sql), pinned to a version string in the
-# read_parquet() URLs. Re-point them at $RELEASE by literal substitution — the
-# repo file stays canonical (and pinned to whatever release it was last committed
-# against); the live views always track the promoted release.
+# (server/postgis/init/50_release_views.sql). The repo file stays pinned to the
+# release it was last authored against; scripts/render_release_views.R rewrites
+# every read_parquet() URL THROUGH THE CATALOG of $RELEASE (content-addressed
+# since v2026.09) and fails loudly if a table cannot be resolved. The previous
+# `sed` on the version string would have matched nothing once the path shape
+# changed and left the live views silently frozen.
 echo "==> 3b/5 re-pointing PostgreSQL release.* views at $RELEASE"
-sshq "sed -E 's|/releases/v[0-9.]+/|/releases/$RELEASE/|g' $GH/server/postgis/init/50_release_views.sql | sudo docker exec -i postgis psql -U admin -d calcofi -v ON_ERROR_STOP=1 -q -f - >/dev/null 2>&1 && sudo docker exec postgis psql -U admin -d calcofi -tAc 'SELECT count(*) FROM release.cruise' | sed 's/^/    release.cruise rows: /'" | tail -1
+VIEWS_SQL=$(Rscript scripts/render_release_views.R "$RELEASE" ../server/postgis/init/50_release_views.sql) || {
+  echo "    render_release_views.R failed" >&2; exit 1; }
+printf '%s\n' "$VIEWS_SQL" | ssh "$HOST" "sudo docker exec -i postgis psql -U admin -d calcofi -v ON_ERROR_STOP=1 -q -f - >/dev/null" 2>/dev/null || {
+  echo "    applying release views failed" >&2; exit 1; }
+sshq "sudo docker exec postgis psql -U admin -d calcofi -tAc 'SELECT count(*) FROM release.cruise' | sed 's/^/    release.cruise rows: /'" | tail -1
 
 # 4. shiny apps ------------------------------------------------------------
 echo "==> 4/5 restarting apps"

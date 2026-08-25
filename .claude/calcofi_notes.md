@@ -25,6 +25,174 @@
 - [ ] `ingest_calcofi_ctd-cast.qmd` needs a sync to GCS for just the used CSV files so saved in GCS `archive/`, not just GCS `_sync/`
 
 
+## 2026-08-25 dark/light
+
+Can we achieve consistency with dark/light themes + nav bar across products, including Shiny apps, web apps, packages, and docs?
+
+For instance, currently the ctd-transects image stands out as white background on calcofi.io, whereas most other apps are black background. Also white are erddap, storage, docs, calcofi4r.
+
+Ideally, we can switch all to either dark or light theme with the same url suffix, and store _light and _dark screenshots for each, so when switching calcofi.io between light/dark it switchs card images too.
+
+I would also like to see a link back to CalCOFI.io in the far left nav with a common logo in the favicon, except where specifically designed like calcofi4r and calcofi4py.
+
+Write a plan to .claude/plans/ for review before we proceed.
+
+## 2026-08-25 app rename
+
+Yes — the fix addresses part 1 of that email, with one honest caveat worth relaying. Erin's part 1 was "update the data link on the app to go to the bird datasets on ERDDAP (not DataZoo)." That's done and live: the Data Finder's "Open Dataset ↗" for Seabirds & Marine Mammals now opens the CAC_FI_SBAS_obs ERDDAP table, and the same URL is fixed upstream in the ingest YAML so the next database release carries it into every consumer. Two nuances: (a) it points at oceanview, not the coastwatch host in Erin's link — coastwatch is still down as of this morning (I re-probed: timeout vs oceanview 206), and oceanview serves the identical dataset; (b) the link changed but the app's underlying bird/mammal data still comes from the DataZoo-derived ingest through 2021 — Bill's real complaint ("Datazoo is not up to date") is only fully solved by switching the ingest source to the ERDDAP feed, which is a separate task I posed as a question to Bill in the draft (noting his CPR caveat: those subpolar surveys are off the CalCOFI grid, so the app loses nothing visible).
+
+Naming proposal (grounded in _data/products.yml — titles only; keys, URLs, and the uptime/analytics slug contract untouched):
+
+┌─────────────────┬────────────────┬──────────────────┐
+│ Apps card (key) │ current title  │     proposed     │
+├─────────────────┼────────────────┼──────────────────┤
+│ db-viz-station  │ db-viz-station │ Data Finder      │
+├─────────────────┼────────────────┼──────────────────┤
+│ db-viz-hex      │ db-viz-hex     │ Hexagon Explorer │
+├─────────────────┼────────────────┼──────────────────┤
+│ db-viz-cruise   │ db-viz-cruise  │ Cruise Explorer  │
+├─────────────────┼────────────────┼──────────────────┤
+│ ctd-viz         │ ctd-viz        │ CTD Viewer       │
+├─────────────────┼────────────────┼──────────────────┤
+│ ctd-transects   │ ctd-transects  │ CTD Transects    │
+├─────────────────┼────────────────┼──────────────────┤
+│ pollutants      │ pollutants     │ Pollutants Map   │
+└─────────────────┴────────────────┴──────────────────┘
+
+The names mirror the section's own blurb ("oriented by station, hexagon or cruise"), and I'd drop the "CalCOFI" prefix on cards (everything on calcofi.io is CalCOFI) while the app's browser tab keeps "CalCOFI Data Finder". Repo slugs would survive as small print on each card so the name↔repo mapping isn't lost. Student Contributions already have friendly titles, so it's organization: retitle the header "🎓 Student Projects", sort newest first, drop the "App" suffixes ("SaferSeafood", "Marine Mammals"), and give the archived "Station Data Portal" card a visible "continued as → Data Finder" pointer — that's the three-name tangle from your email resolved by lineage rather than renaming history. Developer/Services sections keep their slugs (calcofi4r is the name for that audience).
+
+The follow-up email is drafted in Gmail — a reply on the same thread to Erin (cc Betty and m4gold), covering the part-1 status, the caveat/question for Bill, and the naming proposal, closing with "I'll make the calcofi.io changes this week if it looks good." Review and send when ready; I haven't applied any products.yml changes pending Erin's reaction.
+
+----
+
+Ok, let's rename title and URLs (with redirects from old on Caddy, including with any GET URL params):
+
+- Apps, by spatial unit
+  - repo: db-viz-station
+    - title: Station Explorer
+    - url: https://app.calcofi.io/station
+  - repo: db-viz-hex
+    - title: Hexagon Explorer
+    - url: https://app.calcofi.io/hex
+  - repo: db-viz-cruise
+    - title: Cruise Explorer
+    - url: https://app.calcofi.io/cruise
+  - repo: oceano
+    - title: Contour Explorer [superseded]
+    - url: https://calcofi.io/contour
+- Apps, dataset-specific
+  - repo: ctd-viz
+    - title: CTD Explorer
+    - url: https://app.calcofi.io/ctd
+  - repo: ctd-transects
+    - title: CTD Transects
+    - url: https://calcofi.io/ctd-transects
+
+If it's an application, then it already is visualizing and now the precedent is to derive data from the database, so the "db-viz-" prefix is generally redundant for the Shiny apps. New app headers are suggested to divide between those with a dominant summarizing "spatial unit" (is there a better term here?) versus those that are specific to a dataset.
+
+----
+
+Everything is renamed, live, and verified end to end. Summary:
+
+Live now
+- Canonical URLs: app.calcofi.io/station (Station Explorer), /hex (Hexagon Explorer), /cruise (Cruise Explorer), /contour (Contour Explorer), /ctd (CTD Explorer, unchanged), calcofi.io/ctd-transects (CTD Transects, unchanged). All probe 200.
+- Redirects: old paths (db-viz-hex, db-viz-cruise, oceano, plus legacy int, int-app, datacheck) 308 on Caddy with sub-path and query string preserved — verified e.g. /db-viz-cruise?cruise=2015-01-SH&datasets=bottle → /cruise/?cruise=…&datasets=…. The old Pages URL calcofi.io/db-viz-station/ can't redirect server-side (that host is GitHub Pages, not Caddy), so its index.html now carries an early inline guard that bounces to app.calcofi.io/station preserving path, query, and hash — live on both old hosts.
+- calcofi.io: Apps split into "🔭 Apps — by Spatial Unit" and "🎯 Apps — Dataset-Specific", all Title Case, keys and uptime/usage slugs untouched per the three-slug contract; the old Station Data Portal card's badge auto-updated to "superseded by Station Explorer". The app itself is rebranded Station Explorer (tab, header, About, README). Uptime monitors the new URLs.
+
+Two deviations from your spec, both deliberate
+1. oceano is at app.calcofi.io/contour, not calcofi.io/contour — calcofi.io resolves to GitHub Pages, which can't host a Shiny app; I read that line as a typo. One-word Caddyfile change if you meant something else.
+2. /hex was already taken — a 2023 dev symlink to apps_dev/hex_density. I repointed it at db-viz-hex; the old dev app is unlinked but not deleted.
+
+Mechanics worth knowing: /station is served by Caddy (file_server) from the server's db-viz-station clone, kept fresh by a new 30-minute git pull in bebest's crontab — that clone had been silently stale since Aug 10, which this also fixes for static.calcofi.io. And one Caddy gotcha now in memory: inside a handle, directive order runs redir before uri strip_prefix (first deploy redirected /db-viz-hex/?x to /hex/db-viz-hex/?x); wrapping the pair in route {} fixes it.
+
+On a better term than "spatial unit": I shipped your phrasing. "Spatial grain" is the more precise term of art (and what the db docs already use), but it's jargon, and a cruise is as much temporal as spatial. If you want friendlier, I'd go concrete over abstract: "Explore by Station, Hexagon, or Cruise" — the examples are the explanation. It's a one-line edit in _data/products.yml sections.
+
+The Gmail draft is updated to reflect all of this as done (Station Explorer scheme, new URLs, old-link redirects), keeps the ERDDAP part-1 answer with the source-of-record question for Bill, and leaves only the Student Contributions ordering as a proposal for Erin. Ready to send.
+
+----
+
+The titles within app should also match, eg Integrated App -> Hexagon Explorer. Beware of other session working on dark/light theme
+
+
+## 2026-08-25 Expand Release notes; hash parquet tables
+
+We need to document changes between db versions, like a NEWS.md with version and
+  what's changed since. There is Release notes showing in db-schema, but that is rather simple from
+  JSON. Wondering if we can have something more expository and capturing actual work done between
+  versions like sent in this email. This would have to be baked into CLAUDE.md and the db release,
+  and should get updated until final test approval with any other fixes along way. Ideally past
+  versions could also be updated. I imagine also thinning the GCS archive so these could be
+  consolidated between consolidated versions. Would also like to hash all the parquet tables and use
+  pointers (perhaps through storage.calcofi.io) to hashed tables, so if table does not change
+  between versions, then no need to upload and store redundancy
+
+All three reports are in. Here is my assessment and a proposed design, then three decisions I need from you before building.
+
+What exists today (the surprising parts)
+
+- Release notes carry no narrative. RELEASE_NOTES.md is a paste0() template in release_database.qmd:1606-1655: ~55 of 65 lines are a hard-coded string that still lists 4 datasets (16 ship) and tables retired in July. The only live content is the table/row list, which catalog.json already has. db-schema renders it client-side in a modal (app.js:294-338), and calcofi4r::cc_release_notes() fetches it — so the delivery path is fine; only the content is empty.
+- The narrative already exists, in three places: calcofi4db/calcofi4r NEWS.md (mechanism + numbers, written in exactly the register you want), the workflows commit subjects (the only source spanning every release; the 08.07→08.08→08.10 arc is legible only there), and .claude/calcofi_notes.md (motive: who asked, what the provider said, what was deliberately not done). The agent reconstructed per-version summaries from v2026.07.15 → v2026.08.25 from those, so backfill is feasible now.
+- Storage: 157 GB across 28 GCS versions; the six March/April releases (old per-dataset schema) are 100 GB = 60%; the eleven August releases total 22 GB.
+- Byte-level dedup would save almost nothing today: between v2026.08.14 and v2026.08.25 only 52 MB of 2.09 GB is byte-identical — even obs_mets_full, taxon, cruise differ byte-for-byte with identical row counts, because the release COPY … PARTITION_BY and export_parquet() write with no ORDER BY. The row-signature hash calcofi4db already computes at ingest (.table_content_hash() / .partition_content_hashes()) is the right primitive; deterministic exports are the prerequisite for byte hashes to mean anything.
+- Object storage has no symlinks, and every consumer hardcodes {version}/parquet/{table}.parquet on storage.googleapis.com (calcofi4r, calcofi4py, db-query's .md queries, db-viz-station SQL, ctd-transects, ERDDAP's gsutil cp -r, the postgis views). storage.calcofi.io (Caddy) can 302 a legacy path to a canonical object — there's a working precedent for netCDF in Caddyfile:79-96 + publish_netcdf.R — but storage.googleapis.com cannot.
+
+Proposed design
+
+1. RELEASES.md — a database NEWS file (workflows root, uploaded to ducklake/releases/RELEASES.md)
+- Same rule as CLAUDE.md's NEWS rule: every change that alters release content adds a bullet under ## Unreleased in the same change; release_database.qmd fails if the section for release_version is missing. Headings are declarative sentences (calcofi4db style), bodies carry the why, the numbers, the provider questions, and the package versions.
+- Per-version RELEASE_NOTES.md = that section + an auto-generated appendix (tables/rows from catalog, gates from test_results.json, package versions) — db-schema keeps working unchanged.
+- A notes-only publisher (calcofi4db::publish_release_notes(version) / a release_notes target) re-renders and re-uploads RELEASE_NOTES.md for any version at any time — that is how notes get updated until test_release approves, and how past versions get backfilled. Notes are not data, so the republish guard doesn't apply.
+- Backfill v2026.07.15 → v2026.08.25 in full from the reconstruction; thinner entries (catalog deltas + commit subjects) for v2026.02 → v2026.06.26.
+
+1. Archive thinning — "consolidated versions"
+- Mark versions consolidated: true in versions.json. Non-consolidated versions keep their sidecars + RELEASE_NOTES.md (so history stays documented) and gain a retired.json pointing at the next consolidated version; their parquet is deleted (bucket has a 7-day soft-delete, so billing drops a week later).
+- Candidate keep list: v2026.04.08 (last of the old schema), v2026.05.14 (docs examples pin it), v2026.06.26, v2026.07.17, v2026.08.14, v2026.08.25, plus always the latest and the one before it → deletes ~130 GB.
+
+1. Content-addressed tables — two levels
+- Level 1 (no consumer breakage): make release exports deterministic (ORDER BY primary key, fixed row-group/compression); store content_hash + bytes per table and per partition in catalog.json; on freeze, any table/partition whose hash matches the previous release is GCS server-side copied instead of uploaded (zero upload bytes — the big win is obs_ctd_full, partitioned by cruise: ~130 of 142 cruise partitions don't change between releases, ~1.2 GB). Storage is still per-version, but thinning (2) bounds that.
+- Level 2 (later): a canonical store ducklake/tables/{table}/{hash}/…, catalog.json path pointers, consumers migrated to catalog-driven URLs (calcofi4r/py/db-schema already fetch the catalog; db-query/db-viz-station/ctd-transects/ERDDAP/postgis need edits), storage.calcofi.io 302s for legacy paths. Only then does storage itself dedup.
+
+----
+
+←  ☒ Notes file  ☒ Thinning  ☒ Dedup  ✔ Submit  →
+
+Review your answers
+
+ │ ● Where should the expository database changelog live and how strict should the gate be?
+   → workflows/RELEASES.md, release fails without a section (Recommended)
+ │ ● Which archive-thinning policy should I implement (parquet deleted, sidecars + notes kept, retired.json pointer)?
+   → Keep 6 consolidated + latest two (Recommended)
+ ● How far should the content-hash dedup go in this pass?
+   → Do full migration of Level 1 + Level 2, calcofi4r/calcofi4py/db-schema  and ALL consumers. This should be explored further, so please write a plan to .claude/plans/ so I can review and accept. I want to see some default policy about byte-ordering so we don't push duplicate parquet tables unnecessarily and some testing, including with any redirects from storage, to ensure it works before proceeding.
+
+----
+
+Nothing further to request — all work items are complete. Here's where things stand.
+
+Done now — Part 1, expository release notes
+
+- workflows/RELEASES.md — the database's NEWS file, backfilled for all 31 versions (full narrative from v2026.07.15 on, condensed earlier), with # Unreleased at the top. Convention documented in CLAUDE.md ("RELEASES.md is not optional").
+- calcofi4db 3.21.0 (cc3d098, main): release_notes_section(), promote_unreleased(), render_release_notes(), publish_release_notes() — 30 tests green.
+- Gate: release_database.qmd now stops before the freeze if RELEASES.md has no section for the version (non-empty # Unreleased is promoted automatically). test_release.qmd re-publishes the promoted version's notes with the validation result.
+- Update-until-approval / backfill: Rscript scripts/publish_release_notes.R [version | --all | --dry-run] — notes-only, no republish guard. Already run: all 28 GCS versions now serve narrative notes (RELEASE_NOTES.md = section + generated appendix of tables/rows/datasets/validation/software), RELEASES.md is at ducklake/releases/RELEASES.md, and the release index links it. db-schema's "release notes" modal and cc_release_notes() pick this up with no change.
+- workflows 3808960 on main.
+
+For your review — Parts 2–3
+
+.claude/plans/2026-08-25 Database changelog (RELEASES.md), archive thinning, content-addressed release tables.md. The parts that need your acceptance before anything runs:
+
+- Thinning (destructive): keep v2026.04.08 / .05.14 / .06.26 / .07.17 / .08.14 / .08.25 + latest two; delete the other versions' parquet (~130 of 157 GB) while keeping their sidecars, notes and a retired.json pointer.
+- Byte-ordering policy (measured on the real tables): a total ORDER BY alone is not deterministic at default threads; total order + SET threads = 1 is byte-identical, at ~3× write cost (26 M rows: 18.6 s vs 6.4 s). Identity is the row-signature hash; bytes are the storage key; unchanged objects are reused even across a DuckDB upgrade.
+- Layout + consumers: canonical ducklake/tables/{table}/{hash}/…, catalog.json gains objects[] with paths/hashes/since, every consumer (13 listed with file:line) migrates to catalog-resolved paths, compat objects kept for promoted/consolidated versions, storage.calcofi.io 302s legacy paths (netCDF precedent).
+- Tests T1–T7 gate the rollout, including redirect tests and a full staging-prefix release before the real prefix changes.
+- Four open questions at the end of the plan (canonical key = content hash vs sha256; compat window; whether storage.calcofi.io should 302 to storage.googleapis.com to avoid VM egress; whether the per-table since list goes into RELEASES.md or stays in the appendix).
+
+----
+
+Great, please proceed with the plan using all your recommendations for the 4 Qs
+
+
+
 ## 2026-08-24 find errant CTD plot
 
 Find the email thread with "Fwd: Input on app to easily find data collected on the CalCOFI platform -- by Aug 28th" that includes Erin and Ben Gire. Evaluate the attached image for the errant plot going down to 2310 meters. Is this actually in the original data, the integrated database, and/or is a problem with digestion for the visualized app at https://calcofi.io/db-viz-station/?
@@ -118,7 +286,72 @@ What's left (your call, in order)
 
 Yes, re-run pipeline and commit repos
 
+----
 
+Final summary — everything through consumers is done
+
+Release v2026.08.25 is promoted and live everywhere. Pipeline ran 3 h 29 m (21 targets, test_release passed), then every consumer moved onto it.
+
+What was fixed
+
+Area: cruise_key split
+Change: calcofi4db 3.20.x resolve_cruise_key() (span ± 3 d → source designation → month) +
+add_cruise_date_span() in the ichthyo ingest; bottle keeps its source Cruise;
+picoplankton/cufes/pic-zoo/euphausiids/zoodb/zooscan/phyllosoma re-keyed. Bottle: 799 → 657  keys;
+cast 7644 → 1955-08-31BD; 5508BD/5509BD now 34/22 casts = source.
+────────────────────────────────────────
+Area: Depth as a coordinate
+Change: CC_DEPTH_MAX_M 6,500 m (hard fail, 0 violations); sample.seafloor_depth_m stamped from GEBCO;
+seafloor check at +10 m over the 3×3-deepest cell = 694 samples, ratcheted (never deleted). The
+14,671 m CTD test cast (0010_001d) is gone — the ingest now excludes superseded orig*/uncorrected/
+exports.
+────────────────────────────────────────
+Area: Quality flags
+Change: _qual_column mapped for oxygen_umol_kg + six CTD siblings (bottle 198640 now carries 8 on all
+three oxygen forms); one NULL-safe predicate in calcofi4r 1.9.0 / calcofi4py 0.3.7 / db-query,
+applied in db-viz-station, db-viz-hex, ctd-transects, ctd-viz plots, calcofi4r matchers/transects,
+docs. Live station 080.0 160.0 has no 1,145 m spike.
+────────────────────────────────────────
+Area: Consumers
+Change: All ten repos merged to main + pushed. deploy_consumers moved db-viz-hex, h3t API,
+db-viz-cruise, ERDDAP, db-query, releases index; db-viz-station + ctd-transects rebuilt (after
+fixing their DuckDB installer step: | sh → | bash); ctd-viz migrated onto core sample/obs (it had
+served a May database through three releases) and rebuilt with ctd-qaqc — both now in
+deploy_consumers.sh and its status report.
+
+The four runs
+
+1. Stopped: bottle's Cruise column was DOUBLE ('195508.0') → designation step matched nothing (fixed, 3.20.1).
+2. Failed: two newly fetched calcofi.org archives carry 9,225 position-less "RATHBURN CORE STN" scans → now reported/dropped under a 0.2 % ratchet (Q27); plus R's 60 s download timeout → 1 h.
+3. Killed by the harness → relaunched detached.
+4. Success.
+
+Still open (your call)
+
+- ERDDAP flag_values/flag_meanings for measurement_qual; netCDF *_qc companions.
+- Provider questions filed: bottle Q09 (r_* flags / P_qual meaning), ctd-cast Q27 (Rathburn casts).
+- apps/ctd-viz/data/gebco_calcofi.tif regenerated locally, uncommitted; the server kept its existing crop (no GEBCO master there).
+- The Gmail draft replying to Ben G is still unsent.
+
+----
+
+Can you draft a reply to this email thread "Fwd: Input on app to easily find data collected on the CalCOFI platform -- by Aug 28th" explaining how the apps have been updated to use these quality flags, with some questions flagged for further investigation? You'll see from that thread that I did already reply to Ben G, so is not unsent in Gmail draft
+
+----
+
+Only the new draft exists — yesterday's one is gone (you sent it as your Aug 24 reply), so nothing to clean up.
+
+Drafted (in Gmail Drafts, threaded under your Aug 24 message, reply-all to Erin, Ben G, Rasmus; cc Betty, Mark). It covers:
+
+- What changed — release v2026.08.25 is live; the flags (bottle 6/8/9, CTD 8/9, DIC 3/4/9) are now applied by db-viz-station, db-viz-hex, ctd-transects, ctd-viz, db-query, calcofi4r/calcofi4py; the dropped oxygen_umol_kg flag is restored; the station 080.0 160.0 spike is gone; nothing deleted, flagged values remain queryable.
+- Two fixes found along the way — cruises no longer split at month boundaries (799 → 657 bottle cruise keys), and the depth check that caught the 14,671 m fluorometer test dip (plus the new sample.seafloor_depth_m).
+- Six questions for investigation, addressed by person:
+  - (a) whether the pre-QC R_* columns should inherit quality codes, and whether P_qual is pressure or phosphate
+  - (b) the Rathburn core-station casts with -99 positions — position or exclude?
+  - (c) confirmation of the archive folder conventions (orig//uncorrected/ superseded; separate_runs/ unique)
+  - (d) CTD codes 1/2 as sensor-selection hints, not quality grades
+  - (e) 694 events below the GEBCO seafloor — better historical positions anywhere?
+  - (f) which cruise designation is canonical when SWFSC and the bottle DB disagree (8403 vs 8402)
 
 ## 2026-08-21 + bmgire ssh; calcofi4py: fix examples/install, add vignette, install on server
 

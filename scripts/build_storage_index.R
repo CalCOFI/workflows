@@ -84,7 +84,10 @@ most tools can read it in place without downloading. For the Parquet releases:<b
 <br><br>
 Resolve <code>latest-version</code> from
 <a href="{SITE_URL}/calcofi-db/ducklake/releases/latest.txt">latest.txt</a>, which
-always holds the promoted release. Prefer a form? Try the browser query app at
+always holds the promoted release. That <code>parquet/</code> path is kept for the promoted and
+consolidated versions; every version\'s <code>catalog.json</code> lists its tables\' objects
+(<code>objects[].path</code>, under <code>ducklake/tables/</code>) — the durable way to address a
+table, and what <code>calcofi4r::cc_get_db()</code> / <code>calcofi4py.cc_get_db()</code> use. Prefer a form? Try the browser query app at
 <a href="https://calcofi.io/db-query/">calcofi.io/db-query</a>, or
 <a href="https://erddap.calcofi.io">erddap.calcofi.io</a> for filtered subsets.
 </div>

@@ -1,6 +1,6 @@
 # CalCOFI integrated database release v2026.08.05
 
-**Release date:** 2026-08-04
+**Release date:** 2026-08-05
 *Documented with v2026.08.04 – v2026.08.06 (2026-08-04 … 2026-08-06).*
 
 Three closely spaced releases while consumer deployment became part of the pipeline: consumers

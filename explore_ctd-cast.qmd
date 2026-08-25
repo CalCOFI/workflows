@@ -90,7 +90,9 @@ here <- here::here
 source(here("libs/publish_netcdf.R"))
 
 RELEASE <- "v2026.07.17"
-PQ      <- cc_release_parquet(RELEASE)
+# table -> URL through the release catalog (content-addressed since v2026.09);
+# never concatenate releases/{v}/parquet/… by hand
+PQ      <- function(tbl) cc_release_parquet(tbl, RELEASE)
 CACHE   <- here("data/cache"); dir.create(CACHE, recursive = TRUE, showWarnings = FALSE)
 
 NC_URL   <- glue("https://storage.calcofi.io/calcofi-files-public/netcdf/ctd-cast/{RELEASE}/ctd-cast.nc")
@@ -99,7 +101,7 @@ NC_PATH  <- file.path(CACHE, "ctd-cast.nc")
 NCF_PATH <- file.path(CACHE, "ctd-cast_full.nc")
 
 cat(glue("release : {RELEASE}
-          parquet : {PQ}
+          parquet : {PQ('sample')} (+ catalog-resolved siblings)
           cache   : {CACHE}\n"))
 ```
 

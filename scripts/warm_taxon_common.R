@@ -39,9 +39,11 @@ con <- calcofi4db::get_duckdb_con(":memory:")
 on.exit(calcofi4db::close_duckdb(con))
 DBI::dbExecute(con, "INSTALL httpfs; LOAD httpfs;")
 
+# resolved through the catalog (content-addressed since v2026.09)
+taxon_sql <- calcofi4r::cc_read_parquet_sql(
+  calcofi4r::cc_release_sources(calcofi4r::cc_catalog(rel), "taxon"))
 taxa <- DBI::dbGetQuery(con, glue(
-  "SELECT taxon_key, scientific_name, worms_id, common_name
-   FROM read_parquet('https://storage.googleapis.com/calcofi-db/ducklake/releases/{rel}/parquet/taxon.parquet')"))
+  "SELECT taxon_key, scientific_name, worms_id, common_name FROM {taxon_sql}"))
 
 # Only ask about taxa that need a name AND have a WoRMS id to ask with. A taxon
 # that already carries its provider's own common name is left alone: that is the

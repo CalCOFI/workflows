@@ -1,6 +1,6 @@
 # CalCOFI integrated database release v2026.04.06
 
-**Release date:** 2026-04-02
+**Release date:** 2026-04-06
 *Documented with v2026.04.02 – v2026.04.08 (2026-04-02 … 2026-04-08).*
 
 Invertebrates folded into ichthyo; spatial tables consolidated and uploaded to GCS; pipeline

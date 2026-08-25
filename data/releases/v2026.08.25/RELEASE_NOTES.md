@@ -1,6 +1,6 @@
 # CalCOFI integrated database release v2026.08.25
 
-**Release date:** 2026-08-25
+**Release date:** 2026-08-25 · **promoted** (`latest.txt`)
 
 ## A quality flag now reaches every consumer, not just the database
 

@@ -8,6 +8,65 @@ versions). Conventions: see `CLAUDE.md` § "RELEASES.md is not optional".
 
 # Unreleased
 
+## 4,855 samples were released twice in v2026.08.25, and the gate that should have caught it now exists
+
+`sample` in v2026.08.25 held 1,472,100 rows for 1,467,245 distinct `sample_key`s: 3,345 bottles,
+150 casts, 133 ichthyo sites and 13 underway samples appeared twice, identical except for a
+`seafloor_depth_m` differing in the 11th decimal. The seafloor stamp (new in that release) collapsed
+positions with `unique()` but joined them back with `merge()`, which compares coordinates as
+15-significant-digit strings — two positions differing past that digit both matched every sample at
+either. Nothing checked `sample` for uniqueness; the release only warned on `ship` and `cruise`.
+76,320 `obs` rows (35,047 bottle, 31,057 CTD, 6,032 zooscan, 1,482 ichthyo, …) joined twice through
+those samples, so any count or join keyed on `sample` over-counted them by exactly 2×.
+
+- `sample` is unique on `sample_key` again (calcofi4db 3.23.3 maps positions back by exact index and
+  errors on a duplicate), and `check_core_pk_unique()` **fails the release** on any core table that is
+  not unique on its primary key.
+- **Consumers:** anything built from v2026.08.25 (the cruise, hex and CTD apps' local databases, the
+  station portal's derived JSON) over-counted those 4,855 samples until rebuilt on this release.
+
+## Release tables are content-addressed, and written deterministically
+
+Between v2026.08.14 and v2026.08.25 only 52 MB of the 2.09 GB release was byte-identical, and
+tables whose row counts had not changed (`obs_mets_full`, `taxon`, `cruise`, `measurement_type`)
+still differed byte-for-byte: the release writes carried no total order and ran multi-threaded.
+Every released table is now written by one function with a unique `ORDER BY`, a single writer
+thread and pinned parquet options, so the same rows always give the same bytes.
+
+- **Schema:** the provenance columns (`_source_file`, `_source_row`, `_source_uuid`,
+  `_ingested_at`) that `cruise`, `ship`, `lookup` and a few reference tables still carried are
+  no longer in the release — `_ingested_at` changed on every ingest and would have made every
+  table look changed. `lookup` and `spatial_attribute` are exported from the assembled
+  database like every other table instead of being copied from the ingest bucket.
+- **`catalog.json`** keeps `name`/`rows`/`partitioned`/`supplemental` and adds, per table,
+  `content_hash`, `bytes` and `objects[]` — one entry per parquet object with its `path`,
+  `bytes`, `sha256`, `content_hash` and `since` (the first release that shipped that content;
+  for partitioned tables, per partition). Consumers that only read table names are unaffected.
+- **Uploads:** an object whose content is unchanged since the previous release is reused (GCS
+  server-side copy) rather than uploaded; a release's upload is now its delta.
+- **Where the bytes live.** Each object is stored once, under
+  `gs://calcofi-db/ducklake/tables/{table}/{content_hash}/{table}.parquet` (partitioned tables:
+  `…/{table}/{col}={value}/{content_hash}/data_0.parquet`), and every release whose catalog
+  points at it shares it. The familiar `releases/{version}/parquet/{table}.parquet` path is a
+  real copy **only for the promoted version and the consolidated ones** (below); on
+  `https://storage.calcofi.io/calcofi-db/…` a legacy path that has no copy redirects (302) to the
+  canonical object while it exists. Resolve tables through `catalog.json` `objects[].path` —
+  `calcofi4r::cc_release_sources()` (1.11.0), `calcofi4py.release_sources()` (0.4.0), and the
+  same rule in db-query, db-viz-station, ctd-transects, db-viz-hex, the apps, ERDDAP's parquet
+  sync and the PostgreSQL `release.*` views — rather than building the path by hand.
+
+## Archive thinning: consolidated and retired versions
+
+28 releases held 157 GB, most of it byte-identical tables re-uploaded under a new version
+directory. `versions.json` now says which versions keep their parquet: `consolidated: true` for
+v2026.04.08 (last per-dataset schema), v2026.05.14 (docs examples pin it), v2026.06.26,
+v2026.07.17, v2026.08.14 and v2026.08.25, plus always the promoted version and the one before
+it (`metadata/release_policy.yml`). Every other version keeps its `catalog.json`,
+`metadata.json`, `relationships.json` and `RELEASE_NOTES.md` — the record stays complete — and
+loses its `parquet/`; its entry carries `retired: {retired_utc, to, reason}` naming the nearest
+kept version, `cc_get_db()` and `cc_get_db` (py) refuse it with that name, and its release page
+says so. Pin a consolidated version for reproducibility; pin any other and plan to move.
+
 # v2026.08.25 (2026-08-25)
 
 ## A quality flag now reaches every consumer, not just the database

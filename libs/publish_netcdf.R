@@ -50,23 +50,30 @@ cc_release_version <- function(version = NULL) {
   trimws(readLines(glue("{RELEASES_URL}/latest.txt"), warn = FALSE)[1])
 }
 
-#' Base URL of a release's parquet. Tables are read straight over HTTPS so the
-#' notebook cannot silently diverge from what was published.
-cc_release_parquet <- function(version = NULL) {
-  glue("{RELEASES_URL}/{cc_release_version(version)}/parquet")
+#' Parquet URL(s) of a release table, resolved through the release catalog.
+#'
+#' Since v2026.09 the release is content-addressed: `catalog.json` lists each
+#' table's objects under `ducklake/tables/{table}/{hash}/…`, and the legacy
+#' `releases/{v}/parquet/{table}.parquet` path is only guaranteed for the
+#' promoted and consolidated versions. `calcofi4r::cc_release_sources()` is the
+#' one resolver (it also handles pre-v2026.09 catalogs); never concatenate the
+#' path here. Tables are read straight over HTTPS so the notebook cannot
+#' silently diverge from what was published.
+#'
+#' @return character vector of https URLs — one for a single-file table, one
+#'   per partition for a hive-partitioned table (explicit, because expanding a
+#'   `**` glob needs a directory listing and object storage over https has none)
+cc_release_table <- function(table, version = NULL) {
+  v   <- cc_release_version(version)
+  cat_ <- cc_release_catalog(v)
+  src <- calcofi4r::cc_release_sources(cat_, table)
+  # a pre-v2026.09 catalog has no objects[]: enumerate the partition objects
+  # through the XML listing API as before (kept only for those versions)
+  if (any(startsWith(src$urls, "s3://"))) return(.cc_list_partitions_legacy(table, v))
+  as.character(src$urls)
 }
 
-#' Explicit URLs for every partition of a hive-partitioned release table.
-#'
-#' `read_parquet('.../obs_ctd_full/**/*.parquet')` FAILS over plain HTTPS with a
-#' 404: expanding a glob requires a directory listing, and object storage has
-#' none. (Same constraint that forces a single-file obs.parquet for browser
-#' DuckDB-WASM.) So enumerate objects via the XML listing API and hand DuckDB an
-#' explicit vector of URLs, which it accepts wherever a glob would go.
-#'
-#' @return character vector of https URLs, one per partition file
-cc_release_partitions <- function(table, version = NULL) {
-  v   <- cc_release_version(version)
+.cc_list_partitions_legacy <- function(table, v) {
   pre <- glue("ducklake/releases/{v}/parquet/{table}/")
   u   <- glue("https://storage.googleapis.com/{GCS_BUCKET_DB}?prefix={pre}&max-keys=1000")
   x   <- paste(readLines(url(u), warn = FALSE), collapse = "")
@@ -79,6 +86,32 @@ cc_release_partitions <- function(table, version = NULL) {
   if (grepl("<IsTruncated>true", x, fixed = TRUE))
     stop(glue("{table}: partition listing truncated at 1000 — would publish incomplete data"))
   as.character(glue("https://storage.googleapis.com/{GCS_BUCKET_DB}/{keys}"))
+}
+
+# one catalog fetch per (session, version)
+.release_catalogs <- new.env(parent = emptyenv())
+cc_release_catalog <- function(version) {
+  if (is.null(.release_catalogs[[version]]))
+    .release_catalogs[[version]] <- jsonlite::fromJSON(
+      glue("{RELEASES_URL}/{version}/catalog.json"), simplifyVector = FALSE)
+  .release_catalogs[[version]]
+}
+
+#' Every partition of a hive-partitioned release table, as explicit URLs.
+#' Kept as the name the notebooks call; the enumeration is the catalog's
+#' `objects[]` now, not a listing-API walk (which could silently truncate).
+cc_release_partitions <- function(table, version = NULL) {
+  urls <- cc_release_table(table, version)
+  if (!length(urls)) stop(glue("no objects for {table}"))
+  urls
+}
+
+#' Single-file table URL. `cc_release_parquet()` used to return a base to
+#' concatenate onto; callers now name the table.
+cc_release_parquet <- function(table, version = NULL) {
+  urls <- cc_release_table(table, version)
+  if (length(urls) != 1) stop(glue("{table} is partitioned ({length(urls)} objects); use cc_release_partitions()"))
+  urls
 }
 
 # Treats NULL / empty / NA / "" as absent. The NA and "" tests apply ONLY to a

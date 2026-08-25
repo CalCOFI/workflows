@@ -172,9 +172,46 @@ render_template <- function(template, params) {
   # site.default_version %}). Used in free-form defaults like sql-shell/shell.md.
   if (!is.null(params$version)) {
     txt <- gsub("__VERSION__", as.character(params$version), txt, fixed = TRUE)
+    # query-app convention since the content-addressed releases: __TBL:obs__ (or
+    # __TBL:obs:dataset_key=calcofi_bottle__ for one partition) -> the
+    # read_parquet(...) resolved through that version's catalog, mirroring
+    # db-query lib/release.js. Never a hand-built releases/{v}/parquet path.
+    tbl_pat <- "__TBL:([A-Za-z0-9_]+)(?::([A-Za-z0-9_]+)=([^_]+(?:_[^_]+)*?))?__"
+    repeat {
+      m <- regexpr(tbl_pat, txt, perl = TRUE)
+      if (m == -1) break
+      full <- regmatches(txt, m)
+      tb   <- sub(tbl_pat, "\\1", full, perl = TRUE)
+      col  <- sub(tbl_pat, "\\2", full, perl = TRUE)
+      val  <- sub(tbl_pat, "\\3", full, perl = TRUE)
+      txt <- sub(full, tbl_sql(as.character(params$version), tb,
+                               if (nzchar(col)) col else NULL, if (nzchar(val)) val else NULL),
+                 txt, fixed = TRUE)
+    }
   }
 
   txt
+}
+
+# read_parquet(...) for a table (or one partition of it) in a release, through
+# the catalog; one catalog fetch per version. objects[].path is bucket-relative,
+# so the staging prefix resolves the same way.
+.tbl_cats <- new.env(parent = emptyenv())
+tbl_sql <- function(version, table, col = NULL, val = NULL) {
+  if (is.null(.tbl_cats[[version]])) {
+    pre <- Sys.getenv("CALCOFI_RELEASE_PREFIX", "ducklake/releases")
+    .tbl_cats[[version]] <- jsonlite::fromJSON(
+      glue("https://storage.googleapis.com/calcofi-db/{pre}/{version}/catalog.json"),
+      simplifyVector = FALSE)
+  }
+  src <- calcofi4r::cc_release_sources(.tbl_cats[[version]], table)
+  if (!is.null(col)) {
+    keep <- grepl(glue("/{col}={val}/"), src$urls, fixed = TRUE)
+    if (isTRUE(src$canonical) && any(keep)) src$urls <- src$urls[keep]
+    else if (!isTRUE(src$canonical))          # legacy layout: the partition's own path
+      src$urls <- sub("/\\*\\*/\\*\\.parquet$", glue("/{col}={val}/*.parquet"), src$urls)
+  }
+  calcofi4r::cc_read_parquet_sql(src)
 }
 
 # parse YAML front-matter + body from a query .md file
@@ -294,9 +331,14 @@ server-side against the frozen release, and feed the same promote gate.
 ```{r}
 #| label: consumer_contract
 
-rel_base <- glue(
-  "https://storage.googleapis.com/calcofi-db/ducklake/releases/{release_version}/parquet")
-rp <- function(t) glue("read_parquet('{rel_base}/{t}.parquet')")
+# tables resolved through this release's catalog (content-addressed since
+# v2026.09; objects[].path is bucket-relative, so the staging prefix works too),
+# exactly as calcofi4r::cc_get_db() and every migrated consumer resolve them
+rel_prefix <- Sys.getenv("CALCOFI_RELEASE_PREFIX", "ducklake/releases")
+rel_cat <- jsonlite::fromJSON(
+  glue("https://storage.googleapis.com/calcofi-db/{rel_prefix}/{release_version}/catalog.json"),
+  simplifyVector = FALSE)
+rp <- function(t) calcofi4r::cc_read_parquet_sql(calcofi4r::cc_release_sources(rel_cat, t))
 
 # name | expect ('nonzero' rows for a consumer read, or 'zero' for an integrity
 # assert) | SQL returning a single column `n`
@@ -471,7 +513,8 @@ if (n_fail > 0) {
 # pointer unless catalog.json / metadata.json / relationships.json are all
 # present, and writes the object with Cache-Control: no-cache so the change
 # reaches consumers immediately instead of up to an hour later.
-promote_release(release_version, bucket = gcs_bucket)
+promote_release(release_version, bucket = gcs_bucket,
+                prefix = Sys.getenv("CALCOFI_RELEASE_PREFIX", "ducklake/releases"))
 message(glue(
   "PROMOTED {release_version}: {n_pass} passed, {n_skip} skipped, ",
   "0 failed. latest.txt is now {release_version}."))

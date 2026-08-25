@@ -73,7 +73,11 @@ list_objects <- function(ver) {
 # "data_0.parquet" rows and threw away the structure the names imply. So: group by
 # the first path segment under parquet/, render a single row per table, and give
 # each partitioned table its OWN nested index page listing its parts.
-release_page <- function(ver, is_latest, emit_child) {
+status_chips <- function(rec) paste0(
+  if (isTRUE(rec$consolidated)) ' <span class="chip">consolidated</span>' else "",
+  if (!is.null(rec$retired)) ' <span class="chip">retired</span>' else "")
+
+release_page <- function(ver, is_latest, emit_child, rec = list()) {
   objs <- list_objects(ver)
   ctl <- tryCatch(fromJSON(glue("{HTTPS}/{ver}/catalog.json"), simplifyDataFrame = TRUE),
                   error = function(e) NULL)
@@ -107,6 +111,40 @@ release_page <- function(ver, is_latest, emit_child) {
     }
   }, character(1)), collapse = "\n") else '<tr><td colspan="3">(none)</td></tr>'
 
+  # content-addressed releases (catalog objects[], calcofi4db >= 3.22): the
+  # catalog is the listing — one row per object with where it lives, when its
+  # content first shipped and its hash. The parquet/ listing above may be empty
+  # for a version whose compat copies were never made or have been thinned.
+  obj_rows <- ""
+  ctl_l <- tryCatch(fromJSON(glue("{HTTPS}/{ver}/catalog.json"), simplifyVector = FALSE),
+                    error = function(e) NULL)
+  if (!is.null(ctl_l) && any(vapply(ctl_l$tables, function(t) length(t$objects) > 0, TRUE))) {
+    obj_rows <- paste0(unlist(lapply(ctl_l$tables, function(t) {
+      chip <- if (isTRUE(t$supplemental)) ' <span class="chip">supplemental</span>' else ""
+      vapply(t$objects, function(o) {
+        part <- if (!is.null(o$partition_by)) glue("{o$partition_by}={o$partition_value}") else ""
+        since_chip <- if (identical(o$since, ver)) ' <span class="chip">new</span>' else ""
+        glue('<tr><td>{esc(t$name)}{chip}</td><td>{esc(part)}</td>',
+             '<td><a href="{BUCKET_URL}/{o$path}">{substr(o$content_hash, 1, 12)}</a></td>',
+             '<td>{esc(o$since %||% "")}{since_chip}</td>',
+             '<td class="num">{fmt_mb(o$bytes %||% NA)}</td></tr>')
+      }, character(1))
+    })), collapse = "\n")
+    obj_rows <- glue('
+<h1 style="font-size:1.1rem;margin:2rem 0 .2rem">Objects (content-addressed)</h1>
+<p class="sub">One immutable object per table or partition under <code>ducklake/tables/</code>,
+shared by every release whose catalog points at it. <b>since</b> is the first release that
+shipped this exact content; <b>new</b> marks what changed in {ver}. Resolve tables through
+<code>catalog.json</code> <code>objects[].path</code> (e.g. <code>calcofi4r::cc_release_sources()</code>,
+<code>calcofi4py.release_sources()</code>) rather than the <code>parquet/</code> path, which is kept
+only for the promoted and consolidated versions.</p>
+<div class="scroll"><table>
+<thead><tr><th>table</th><th>partition</th><th>object (hash)</th><th>since</th><th style="text-align:right">size</th></tr></thead>
+<tbody>
+{obj_rows}
+</tbody></table></div>')
+  }
+
   sc_rows <- if (nrow(sc)) paste0(vapply(seq_len(nrow(sc)), function(i)
     glue('<tr><td><a href="{BUCKET_URL}/{sc$key[i]}">{esc(basename(sc$key[i]))}</a></td>',
          '<td class="num">{fmt_mb(sc$size[i])}</td></tr>'), character(1)),
@@ -137,6 +175,7 @@ release_page <- function(ver, is_latest, emit_child) {
 {pq_rows}
 </tbody></table></div>
 
+{obj_rows}
 <h1 style="font-size:1.1rem;margin:2rem 0 .2rem">Sidecars</h1>
 <p class="sub">Machine-readable descriptions of this release.</p>
 <div class="scroll"><table>
@@ -160,6 +199,17 @@ hive_partitioning = true) LIMIT 10;</code>
   sub <- glue('{ctl$release_date %||% ""} · {length(tops)} tables · ',
               '{fmt_n(ctl$total_rows %||% 0)} rows · {fmt_mb(ctl$total_size %||% NA)}',
               '{if (is_latest) " · <span class=\\"chip\\">latest</span>" else ""}')
+  # archive thinning (metadata/release_policy.yml): the parquet of a retired
+  # version is gone; its notes and sidecars stay, and the banner says where to go
+  if (!is.null(rec$retired)) {
+    r <- rec$retired
+    body <- paste0(glue('<div class="callout" style="border-left:4px solid #c60;padding:.6rem 1rem;margin:0 0 1.5rem">
+<b>Data retired {substr(r$retired_utc %||% "", 1, 10)}</b> — the parquet of {ver} was removed from the archive; ',
+      'read <a href="{HTTPS}/{r$to}/index.html">{r$to}</a> (the nearest consolidated release) or ',
+      '<code>latest.txt</code> instead. The catalog, metadata and release notes below remain the record of this version.
+</div>'), body)
+  }
+  sub <- paste0(sub, status_chips(rec))
   page(glue("CalCOFI release {ver}"), sub, body,
        crumb = glue('<p class="crumb"><a href="{HTTPS}/index.html">← all releases</a></p>'))
 }
@@ -195,7 +245,7 @@ hive_partitioning = true) LIMIT 10;</code>
 root_rows <- paste0(vapply(versions, function(v) {
   is_l <- identical(v$version, latest)
   glue('<tr><td><a href="{HTTPS}/{v$version}/index.html">{esc(v$version)}</a>',
-       '{if (is_l) " <span class=\\"chip\\">latest</span>" else ""}</td>',
+       '{if (is_l) " <span class=\\"chip\\">latest</span>" else ""}{status_chips(v)}</td>',
        '<td>{esc(v$release_date %||% "")}</td>',
        '<td class="num">{v$tables %||% "—"}</td>',
        '<td class="num">{fmt_n(v$total_rows %||% 0)}</td>',
@@ -243,7 +293,7 @@ for (v in versions) {
       gcs = glue("gs://{BUCKET}/{PREFIX}/{ver}/parquet/{tp}/index.html"))
   }
   f <- file.path(tmp, glue("{v$version}.html"))
-  writeLines(release_page(v$version, identical(v$version, latest), emit_child), f)
+  writeLines(release_page(v$version, identical(v$version, latest), emit_child, rec = v), f)
   targets[[length(targets) + 1]] <- list(local = f,
     gcs = glue("gs://{BUCKET}/{PREFIX}/{v$version}/index.html"))
   message(glue("  rendered {v$version}"))
