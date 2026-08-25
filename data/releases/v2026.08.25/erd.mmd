@@ -125,6 +125,46 @@ erDiagram
         int count
         varchar measurement_qual
     }
+    obs_ctd_full {
+        bigint obs_id
+        varchar realm
+        varchar dataset_key FK
+        varchar sample_key FK
+        varchar grid_key
+        double latitude
+        double longitude
+        timestamp datetime
+        double depth_min_m
+        double depth_max_m
+        varchar taxon_key
+        varchar life_stage
+        varchar measurement_type FK
+        double measurement_value
+        varchar measurement_qual
+        double measurement_prec
+        ubigint hex_id
+        varchar cruise_key
+    }
+    obs_mets_full {
+        bigint obs_id
+        varchar realm
+        varchar dataset_key
+        varchar sample_key
+        varchar grid_key
+        double latitude
+        double longitude
+        timestamp datetime
+        double depth_min_m
+        double depth_max_m
+        varchar taxon_key
+        varchar life_stage
+        varchar measurement_type
+        double measurement_value
+        varchar measurement_qual
+        double measurement_prec
+        ubigint hex_id
+        varchar cruise_key
+    }
     region {
         varchar region_key PK
         varchar description
@@ -246,6 +286,9 @@ erDiagram
     sample ||--o{ sample_measurement : "sample_key"
     dataset ||--o{ sample_measurement : "dataset_key"
     measurement_type ||--o{ sample_measurement : "measurement_type"
+    sample ||--o{ obs_ctd_full : "sample_key"
+    dataset ||--o{ obs_ctd_full : "dataset_key"
+    measurement_type ||--o{ obs_ctd_full : "measurement_type"
     taxon ||--o{ obs : "taxon_key"
     taxon ||--o{ obs_attribute : "taxon_key"
     taxon ||--o{ dataset_taxon : "taxon_key"
@@ -253,7 +296,7 @@ erDiagram
     taxon ||--o{ taxon_group : "taxon_key"
     taxon ||--o{ taxon : "parent_taxon_key"
     classDef _e8e8e8 stroke:#e8e8e8,stroke-width:3px
-    class sample,obs,sample_measurement,measurement_type,obs_attribute,cruise,dataset _e8e8e8
+    class sample,obs,sample_measurement,measurement_type,obs_ctd_full,obs_mets_full,obs_attribute,cruise,dataset _e8e8e8
     classDef _dcdcdc stroke:#dcdcdc,stroke-width:3px
     class taxon,dataset_taxon,taxon_group _dcdcdc
     classDef _b5e8b0 stroke:#b5e8b0,stroke-width:3px
