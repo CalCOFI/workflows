@@ -23,7 +23,7 @@ if (all_v) {
   if (!dry) {
     # only versions that exist on GCS: three early versions are local-only and
     # publishing notes for them would mint stray prefixes with no data behind them
-    on_gcs <- system2(find_gcloud(), c("storage", "ls", "gs://calcofi-db/ducklake/releases/"),
+    on_gcs <- system2(calcofi4db:::find_gcloud(), c("storage", "ls", "gs://calcofi-db/ducklake/releases/"),
                       stdout = TRUE)
     on_gcs <- basename(sub("/$", "", on_gcs[grepl("/v20", on_gcs)]))
     vers_local <- setdiff(vers, on_gcs)

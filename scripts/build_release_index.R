@@ -212,7 +212,7 @@ root_body <- glue('
 
 <div class="note">
 <b>What changed between versions?</b> <a href="{HTTPS}/RELEASES.md">RELEASES.md</a> is
-the running changelog (newest first); each version's <code>RELEASE_NOTES.md</code> is its
+the running changelog (newest first); the <code>RELEASE_NOTES.md</code> of each version is its
 section plus a generated appendix.<br><br>
 <b>Which version should I use?</b> <code>{HTTPS}/latest.txt</code> holds the
 promoted version — currently <b>{latest}</b>. Resolve it, then build the path:<br>
