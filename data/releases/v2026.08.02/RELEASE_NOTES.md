@@ -1,65 +1,50 @@
-# CalCOFI Database Release v2026.08.02
+# CalCOFI integrated database release v2026.08.02
 
-**Release Date**: 2026-08-02
+**Release date:** 2026-08-02
 
-## Tables Included
+## A full rebuild on the core-only model
 
-- measurement_type (        198 rows)
-- dataset (         15 rows)
-- region (          4 rows)
-- spatial_attribute (     40,298 rows)
-- spatial (      3,373 rows)
-- grid (        218 rows)
-- cruise (        691 rows)
-- ship (         49 rows)
-- lookup (         26 rows)
-- sample (  1,477,206 rows)
-- obs ( 20,088,748 rows)
-- obs_attribute (    452,682 rows)
-- sample_measurement (    588,986 rows)
-- taxon (      2,118 rows)
-- dataset_taxon (      1,908 rows)
-- taxon_group (        155 rows)
-- obs_ctd_full (212,444,287 rows)
-- obs_mets_full ( 19,936,073 rows)
+Every dataset's core projection SQL moved out of calcofi4db into the ingest notebook that owns it
+(calcofi4db 3.2.0 deleted the `switch(dataset_key, …)` arms — the release had re-derived the core
+from its own inline copy and the two copies drifted, each divergence a silent data error).
+`obs_mets_full` and `taxon` are catalogued; spatial tables renamed. `obs` 18.7 M → 20.1 M.
 
-## Total
+## Contents (generated)
 
-- **Tables**: 18
-- **Total Rows**: 255,037,035
+| table | rows | |
+|---|---:|---|
+| `cruise` | 691 |  |
+| `dataset` | 15 |  |
+| `dataset_taxon` | 1,908 |  |
+| `grid` | 218 |  |
+| `lookup` | 26 |  |
+| `measurement_type` | 198 |  |
+| `obs` | 20,088,748 | partitioned |
+| `obs_attribute` | 452,682 |  |
+| `region` | 4 |  |
+| `sample` | 1,477,206 |  |
+| `sample_measurement` | 588,986 |  |
+| `ship` | 49 |  |
+| `spatial` | 3,373 |  |
+| `spatial_attribute` | 40,298 |  |
+| `taxon` | 2,118 |  |
+| `taxon_group` | 155 |  |
+| `obs_ctd_full` | 212,444,287 | supplemental |
+| `obs_mets_full` | 19,936,073 | supplemental |
 
-## Data Sources
+**18 tables, 255,037,035 rows, 2.19 GB.**
 
-- `ingest_swfsc_ichthyo.qmd` - Ichthyo tables (cruise, ship, site, tow, net, species, ichthyo, grid, segment, lookup, taxon, taxa_rank)
-- `ingest_calcofi_bottle.qmd` - Bottle/cast tables (casts, bottle, bottle_measurement, cast_condition, measurement_type)
-- `ingest_calcofi_ctd-cast.qmd` - CTD tables (ctd_cast, ctd_thin, ctd_summary, measurement_type; full ctd_measurement available as supplemental)
-- `ingest_calcofi_dic.qmd` - DIC/alkalinity tables (dic_sample, dic_measurement, dic_summary, dataset)
+**Datasets (15):** `calcofi_bottle`, `calcofi_ctd-cast`, `calcofi_dic`, `calcofi_mets`, `calcofi_phyllosoma`, `calcofi_phytoplankton`, `cce-lter_euphausiids`, `cce-lter_picoplankton-bacteria`, `cce-lter_zoodb`, `cce-lter_zooscan`, `farallon_bird-mammal`, `sio_mesopelagic-fish`, `sio_pic-zooplankton`, `swfsc_cufes`, `swfsc_ichthyo`
 
-## Cross-Dataset Integration
-
-- **Ship matching**: Reconciled ship codes between bottle casts and swfsc ship reference
-- **Cruise bridge**: Derived cruise_key (YYYY-MM-NODC) for bottle casts via ship matching + datetime
-- **Taxonomy**: Standardized species with WoRMS AphiaID, ITIS TSN, GBIF backbone key
-- **Taxon hierarchy**: Built taxon + taxa_rank tables from WoRMS/ITIS classification
+**Validation:** 19 pass / 0 fail / 4 skip (consumer-contract suite, 2026-08-02T16:51:59Z).
 
 ## Access
 
-Parquet files can be queried directly from GCS:
-
 ```r
-library(duckdb)
-con <- dbConnect(duckdb())
-dbExecute(con, 'INSTALL httpfs; LOAD httpfs;')
-dbGetQuery(con, "
-  SELECT * FROM read_parquet(
-    'https://storage.googleapis.com/calcofi-db/ducklake/releases/v2026.08.02/parquet/ichthyo.parquet')
-  LIMIT 10")
+con <- calcofi4r::cc_get_db(version = "v2026.08.02")
 ```
-
-Or use calcofi4r:
-
-```r
-library(calcofi4r)
-con <- cc_get_db(version = 'v2026.08.02')
+```python
+con = calcofi4py.cc_get_db("v2026.08.02")
 ```
-
+Parquet: `https://storage.googleapis.com/calcofi-db/ducklake/releases/v2026.08.02/parquet/{table}.parquet`; 
+full history: [RELEASES.md](https://storage.googleapis.com/calcofi-db/ducklake/releases/RELEASES.md).

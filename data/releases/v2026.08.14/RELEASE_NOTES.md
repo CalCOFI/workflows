@@ -1,65 +1,76 @@
-# CalCOFI Database Release v2026.08.14
+# CalCOFI integrated database release v2026.08.14
 
-**Release Date**: 2026-08-14
+**Release date:** 2026-08-14
 
-## Tables Included
+## CDFW Dungeness crab megalopae enter the release
 
-- measurement_type (        200 rows)
-- dataset (         16 rows)
-- region (          4 rows)
-- spatial_attribute (    148,461 rows)
-- spatial (     13,206 rows)
-- grid (        218 rows)
-- cruise (        691 rows)
-- ship (         49 rows)
-- lookup (         26 rows)
-- sample (  1,466,254 rows)
-- obs ( 25,624,046 rows)
-- obs_attribute (    452,789 rows)
-- sample_measurement (    589,603 rows)
-- taxon (      2,125 rows)
-- dataset_taxon (      1,910 rows)
-- taxon_group (        151 rows)
-- obs_ctd_full (259,309,891 rows)
-- obs_mets_full ( 19,927,416 rows)
+Held out since 2026-07-30 behind `in_release: false` while permission was open; CDFW confirmed
+publication (CC BY 4.0, Laura Rogers-Bennett primary provider, CDFW citable custodian), so
+`cdfw_dungeness-crab` is the 16th dataset — 310 sorted samples and a 2,011-sample sorting log,
+with the sorters credited in the citation ("a record of looking, not just of finding"). Its two
+staged measurement types moved into the shared registry; its 14 orphan cruises are exempted as an
+inventory grain rather than allowed.
 
-## Total
+## Phytoplankton regions have real geometry, derived not invented
 
-- **Tables**: 18
-- **Total Rows**: 307,537,056
+The four Venrick pooling regions are now polygons derived from the station-membership list
+(`+proj=calcofi` places all 34 stations; convex hulls were measured and rejected), which resolves
+phytoplankton Q01. Four taxa the join had missed now resolve.
 
-## Data Sources
+## Vernacular names, dataset display metadata, and a readable promotion
 
-- `ingest_swfsc_ichthyo.qmd` - Ichthyo tables (cruise, ship, site, tow, net, species, ichthyo, grid, segment, lookup, taxon, taxa_rank)
-- `ingest_calcofi_bottle.qmd` - Bottle/cast tables (casts, bottle, bottle_measurement, cast_condition, measurement_type)
-- `ingest_calcofi_ctd-cast.qmd` - CTD tables (ctd_cast, ctd_thin, ctd_summary, measurement_type; full ctd_measurement available as supplemental)
-- `ingest_calcofi_dic.qmd` - DIC/alkalinity tables (dic_sample, dic_measurement, dic_summary, dataset)
+- `common_name` reached the release only from a dataset's own vocabulary — 1,208 of 2,125 taxa
+  (57 %) had none. WoRMS returns an unordered bag of vernaculars with no preferred flag, so names
+  are chosen only when unambiguous (43 picked); *Dungeness crab* is the worked example.
+- Dataset display metadata (name, short name, description, links) is authored once in each
+  ingest's front-matter; `metadata/dataset.csv` is deprecated.
+- Promotion (`latest.txt`) is now gated on a *readable* release: `check_release_complete()`
+  requires `catalog.json`/`metadata.json`/`relationships.json`, and the pointer is read through
+  the authenticated API rather than the CDN, after 2026-08-14 promoted a release with no catalog.
+- The workflows index build fails on a dead or non-URL `link_data_source`; `swfsc_ichthyo` had
+  pointed at a 404 for months.
 
-## Cross-Dataset Integration
+**Rows:** `obs` 26.45 M → 25.62 M and `obs_ctd_full` 274.9 M → 259.3 M as the CTD archive moved
+off Google Drive to local scratch and the extraction completeness check began comparing member
+counts (a Drive placeholder reads as an empty file with no error). **Packages:** calcofi4db
+3.15.0–3.19.0, calcofi4r 1.7.0 (a time-series gap is drawn as a gap, not a measured zero).
 
-- **Ship matching**: Reconciled ship codes between bottle casts and swfsc ship reference
-- **Cruise bridge**: Derived cruise_key (YYYY-MM-NODC) for bottle casts via ship matching + datetime
-- **Taxonomy**: Standardized species with WoRMS AphiaID, ITIS TSN, GBIF backbone key
-- **Taxon hierarchy**: Built taxon + taxa_rank tables from WoRMS/ITIS classification
+## Contents (generated)
+
+| table | rows | |
+|---|---:|---|
+| `cruise` | 691 |  |
+| `dataset` | 16 |  |
+| `dataset_taxon` | 1,910 |  |
+| `grid` | 218 |  |
+| `lookup` | 26 |  |
+| `measurement_type` | 200 |  |
+| `obs` | 25,624,046 | partitioned |
+| `obs_attribute` | 452,789 |  |
+| `region` | 4 |  |
+| `sample` | 1,466,254 |  |
+| `sample_measurement` | 589,603 |  |
+| `ship` | 49 |  |
+| `spatial` | 13,206 |  |
+| `spatial_attribute` | 148,461 |  |
+| `taxon` | 2,125 |  |
+| `taxon_group` | 151 |  |
+| `obs_ctd_full` | 259,309,891 | supplemental |
+| `obs_mets_full` | 19,927,416 | supplemental |
+
+**18 tables, 307,537,056 rows, 2.02 GB.**
+
+**Datasets (16):** `calcofi_bottle`, `calcofi_ctd-cast`, `calcofi_dic`, `calcofi_mets`, `calcofi_phyllosoma`, `calcofi_phytoplankton`, `cce-lter_euphausiids`, `cce-lter_picoplankton-bacteria`, `cce-lter_zoodb`, `cce-lter_zooscan`, `cdfw_dungeness-crab`, `farallon_bird-mammal`, `sio_mesopelagic-fish`, `sio_pic-zooplankton`, `swfsc_cufes`, `swfsc_ichthyo`
+
+**Validation:** 28 pass / 0 fail / 4 skip (consumer-contract suite, 2026-08-14T06:25:47Z).
 
 ## Access
 
-Parquet files can be queried directly from GCS:
-
 ```r
-library(duckdb)
-con <- dbConnect(duckdb())
-dbExecute(con, 'INSTALL httpfs; LOAD httpfs;')
-dbGetQuery(con, "
-  SELECT * FROM read_parquet(
-    'https://storage.googleapis.com/calcofi-db/ducklake/releases/v2026.08.14/parquet/ichthyo.parquet')
-  LIMIT 10")
+con <- calcofi4r::cc_get_db(version = "v2026.08.14")
 ```
-
-Or use calcofi4r:
-
-```r
-library(calcofi4r)
-con <- cc_get_db(version = 'v2026.08.14')
+```python
+con = calcofi4py.cc_get_db("v2026.08.14")
 ```
-
+Parquet: `https://storage.googleapis.com/calcofi-db/ducklake/releases/v2026.08.14/parquet/{table}.parquet`; 
+full history: [RELEASES.md](https://storage.googleapis.com/calcofi-db/ducklake/releases/RELEASES.md).

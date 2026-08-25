@@ -1,69 +1,54 @@
-# CalCOFI Database Release v2026.07.15
+# CalCOFI integrated database release v2026.07.15
 
-**Release Date**: 2026-07-15
+**Release date:** 2026-07-15
 
-## Tables Included
+## The consolidated core model
 
-- bird_mammal_species (        200 rows)
-- bird_mammal_behavior (          4 rows)
-- dataset (          7 rows)
-- measurement_type (        106 rows)
-- phyto_taxon (        399 rows)
-- region (          4 rows)
-- zoodb_taxon (         33 rows)
-- zooscan_taxon (         23 rows)
-- _spatial_attr (     40,298 rows)
-- _spatial (      3,373 rows)
-- cruise (        691 rows)
-- grid (        218 rows)
-- lookup (         26 rows)
-- ship (         48 rows)
-- species (      1,167 rows)
-- taxa_rank (         41 rows)
-- taxon (      3,385 rows)
-- sample (  1,385,959 rows)
-- obs ( 17,582,015 rows)
-- obs_freq (    369,978 rows)
-- sample_measurement (    555,623 rows)
-- obs_ctd_full (216,427,608 rows)
+The ~40 per-dataset triples (`{dataset}_sample` / `_measurement` / `_summary`) collapse into
+`sample` (one row per sampling event, adjacency list via `parent_sample_key`), `obs` (one scalar
+per row, `realm` env|bio), `sample_measurement` (event-level effort) and the supplemental
+`obs_ctd_full` (full-resolution CTD scans, ~216 M rows, opt-in). Per-dataset tables survive as
+compat views. Namespaced `sample_key` = `dataset_key:sample_type:id`; `hex_id` (H3 res 10) on
+`obs`. `obs_ctd_full` complete for the first time.
 
-## Total
+## Contents (generated)
 
-- **Tables**: 22
-- **Total Rows**: 236,371,206
+| table | rows | |
+|---|---:|---|
+| `_spatial` | 3,373 |  |
+| `_spatial_attr` | 40,298 |  |
+| `bird_mammal_behavior` | 4 |  |
+| `bird_mammal_species` | 200 |  |
+| `cruise` | 691 |  |
+| `dataset` | 7 |  |
+| `grid` | 218 |  |
+| `lookup` | 26 |  |
+| `measurement_type` | 106 |  |
+| `obs` | 17,582,015 | partitioned |
+| `obs_ctd_full` | 216,427,608 | partitioned |
+| `obs_freq` | 369,978 |  |
+| `phyto_taxon` | 399 |  |
+| `region` | 4 |  |
+| `sample` | 1,385,959 |  |
+| `sample_measurement` | 555,623 |  |
+| `ship` | 48 |  |
+| `species` | 1,167 |  |
+| `taxa_rank` | 41 |  |
+| `taxon` | 3,385 |  |
+| `zoodb_taxon` | 33 |  |
+| `zooscan_taxon` | 23 |  |
 
-## Data Sources
+**22 tables, 236,371,206 rows, 5.74 GB.**
 
-- `ingest_swfsc_ichthyo.qmd` - Ichthyo tables (cruise, ship, site, tow, net, species, ichthyo, grid, segment, lookup, taxon, taxa_rank)
-- `ingest_calcofi_bottle.qmd` - Bottle/cast tables (casts, bottle, bottle_measurement, cast_condition, measurement_type)
-- `ingest_calcofi_ctd-cast.qmd` - CTD tables (ctd_cast, ctd_thin, ctd_summary, measurement_type; full ctd_measurement available as supplemental)
-- `ingest_calcofi_dic.qmd` - DIC/alkalinity tables (dic_sample, dic_measurement, dic_summary, dataset)
-
-## Cross-Dataset Integration
-
-- **Ship matching**: Reconciled ship codes between bottle casts and swfsc ship reference
-- **Cruise bridge**: Derived cruise_key (YYYY-MM-NODC) for bottle casts via ship matching + datetime
-- **Taxonomy**: Standardized species with WoRMS AphiaID, ITIS TSN, GBIF backbone key
-- **Taxon hierarchy**: Built taxon + taxa_rank tables from WoRMS/ITIS classification
+**Datasets (12):** `calcofi_bird_mammal_census`, `calcofi_bottle`, `calcofi_ctd-cast`, `calcofi_dic`, `calcofi_phyllosoma`, `calcofi_phytoplankton`, `cce-lter_euphausiids`, `cce-lter_zoodb`, `cce-lter_zooscan`, `pic_zooplankton`, `swfsc_cufes`, `swfsc_ichthyo`
 
 ## Access
 
-Parquet files can be queried directly from GCS:
-
 ```r
-library(duckdb)
-con <- dbConnect(duckdb())
-dbExecute(con, 'INSTALL httpfs; LOAD httpfs;')
-dbGetQuery(con, "
-  SELECT * FROM read_parquet(
-    'https://storage.googleapis.com/calcofi-db/ducklake/releases/v2026.07.15/parquet/ichthyo.parquet')
-  LIMIT 10")
+con <- calcofi4r::cc_get_db(version = "v2026.07.15")
 ```
-
-Or use calcofi4r:
-
-```r
-library(calcofi4r)
-con <- cc_get_db(version = 'v2026.07.15')
+```python
+con = calcofi4py.cc_get_db("v2026.07.15")
 ```
-
+Parquet: `https://storage.googleapis.com/calcofi-db/ducklake/releases/v2026.07.15/parquet/{table}.parquet`; 
+full history: [RELEASES.md](https://storage.googleapis.com/calcofi-db/ducklake/releases/RELEASES.md).

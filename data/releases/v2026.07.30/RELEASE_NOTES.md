@@ -1,63 +1,58 @@
-# CalCOFI Database Release v2026.07.30
+# CalCOFI integrated database release v2026.07.30
 
-**Release Date**: 2026-07-30
+**Release date:** 2026-07-30
 
-## Tables Included
+## Four new datasets, the CTD QA/QC engine, and generic publishing
 
-- dataset (         15 rows)
-- measurement_type (        198 rows)
-- region (          4 rows)
-- _spatial_attr (     40,298 rows)
-- _spatial (      3,373 rows)
-- grid (        218 rows)
-- cruise (        691 rows)
-- ship (         49 rows)
-- lookup (         26 rows)
-- sample (  1,477,204 rows)
-- obs ( 18,718,710 rows)
-- obs_attribute (    452,682 rows)
-- sample_measurement (    588,986 rows)
-- obs_ctd_full (212,444,287 rows)
-- dataset_taxon (      1,908 rows)
-- taxon_group (        155 rows)
+- **Datasets 12 → 15:** CCE-LTER euphausiids, CCE-LTER picoplankton/bacteria, SIO mesopelagic
+  fish, and the METS underway series (`obs_mets_full`, 19.9 M rows). CDFW Dungeness crab is
+  ingested but held out of the release behind a new `in_release: false` flag pending permission.
+- **CTD QA/QC engine:** a declarative rule registry (`metadata/qc_rules/`), climatology-anomaly,
+  seafloor-bathymetry and full-resolution profile rules, a Findings report with an input-fingerprint
+  fast path, and a generated QA/QC protocol document.
+- **Publishing:** one dataset-agnostic `publish_to-netcdf` + `publish_to-erddap` for every
+  dataset; whole-dataset CF NetCDF to `calcofi-files-public`; `storage.calcofi.io` browsing.
+- **Registries:** the hydro-master Access database reconciled against the release; a
+  write-round-trip bug that let nine ingests corrupt `measurement_type.csv` with literal `"NA"`
+  fixed; `-99` sentinels stripped from CTD; `data_stage` on `sample`; one question registry
+  convention (`questions.csv`, `read_questions()`).
 
-## Total
+**Packages:** calcofi4db 2.11.0 → 3.4.0; calcofi4r 1.4.0–1.4.3 (non-blocking usage analytics).
 
-- **Tables**: 16
-- **Total Rows**: 233,728,804
+## Contents (generated)
 
-## Data Sources
+| table | rows | |
+|---|---:|---|
+| `_spatial` | 3,373 |  |
+| `_spatial_attr` | 40,298 |  |
+| `cruise` | 691 |  |
+| `dataset` | 15 |  |
+| `dataset_taxon` | 1,908 |  |
+| `grid` | 218 |  |
+| `lookup` | 26 |  |
+| `measurement_type` | 198 |  |
+| `obs` | 18,718,710 | partitioned |
+| `obs_attribute` | 452,682 |  |
+| `region` | 4 |  |
+| `sample` | 1,477,204 |  |
+| `sample_measurement` | 588,986 |  |
+| `ship` | 49 |  |
+| `taxon_group` | 155 |  |
+| `obs_ctd_full` | 212,444,287 | supplemental |
 
-- `ingest_swfsc_ichthyo.qmd` - Ichthyo tables (cruise, ship, site, tow, net, species, ichthyo, grid, segment, lookup, taxon, taxa_rank)
-- `ingest_calcofi_bottle.qmd` - Bottle/cast tables (casts, bottle, bottle_measurement, cast_condition, measurement_type)
-- `ingest_calcofi_ctd-cast.qmd` - CTD tables (ctd_cast, ctd_thin, ctd_summary, measurement_type; full ctd_measurement available as supplemental)
-- `ingest_calcofi_dic.qmd` - DIC/alkalinity tables (dic_sample, dic_measurement, dic_summary, dataset)
+**16 tables, 233,728,804 rows, 1.79 GB.**
 
-## Cross-Dataset Integration
+**Datasets (15):** `calcofi_bird_mammal_census`, `calcofi_bottle`, `calcofi_ctd-cast`, `calcofi_dic`, `calcofi_mets`, `calcofi_phyllosoma`, `calcofi_phytoplankton`, `cce-lter_euphausiids`, `cce-lter_picoplankton-bacteria`, `cce-lter_zoodb`, `cce-lter_zooscan`, `pic_zooplankton`, `swfsc_cufes`, `swfsc_ichthyo`, `ucsd_sio_mesopelagic-fish`
 
-- **Ship matching**: Reconciled ship codes between bottle casts and swfsc ship reference
-- **Cruise bridge**: Derived cruise_key (YYYY-MM-NODC) for bottle casts via ship matching + datetime
-- **Taxonomy**: Standardized species with WoRMS AphiaID, ITIS TSN, GBIF backbone key
-- **Taxon hierarchy**: Built taxon + taxa_rank tables from WoRMS/ITIS classification
+**Validation:** 19 pass / 0 fail / 4 skip (consumer-contract suite, 2026-07-30T04:38:51Z).
 
 ## Access
 
-Parquet files can be queried directly from GCS:
-
 ```r
-library(duckdb)
-con <- dbConnect(duckdb())
-dbExecute(con, 'INSTALL httpfs; LOAD httpfs;')
-dbGetQuery(con, "
-  SELECT * FROM read_parquet(
-    'https://storage.googleapis.com/calcofi-db/ducklake/releases/v2026.07.30/parquet/ichthyo.parquet')
-  LIMIT 10")
+con <- calcofi4r::cc_get_db(version = "v2026.07.30")
 ```
-
-Or use calcofi4r:
-
-```r
-library(calcofi4r)
-con <- cc_get_db(version = 'v2026.07.30')
+```python
+con = calcofi4py.cc_get_db("v2026.07.30")
 ```
-
+Parquet: `https://storage.googleapis.com/calcofi-db/ducklake/releases/v2026.07.30/parquet/{table}.parquet`; 
+full history: [RELEASES.md](https://storage.googleapis.com/calcofi-db/ducklake/releases/RELEASES.md).

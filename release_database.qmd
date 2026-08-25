@@ -1394,6 +1394,26 @@ access. See
 [Frozen DuckLake](https://ducklake.select/2025/10/24/frozen-ducklake/)
 pattern.
 
+### Release narrative (RELEASES.md)
+
+```{r}
+#| label: release_notes_narrative
+
+# RELEASES.md is the database's NEWS file (CLAUDE.md § "RELEASES.md is not
+# optional"). A release with no section for itself is refused HERE, before the
+# freeze, for the same reason the packages refuse a version bump without a NEWS
+# entry: the notes are written by the change that made them necessary, not
+# reconstructed afterwards. A non-empty `# Unreleased` becomes this version's
+# section; an empty one with no existing section stops the render.
+releases_md_path <- here("RELEASES.md")
+releases_md <- promote_unreleased(
+  readLines(releases_md_path, warn = FALSE), release_version, Sys.Date())
+writeLines(releases_md, releases_md_path)
+notes_section <- release_notes_section(releases_md, release_version)
+stopifnot("RELEASES.md has no section for this release" = !is.null(notes_section))
+cat(glue("RELEASES.md: # {notes_section$heading}\n"))
+```
+
 ```{r}
 #| label: freeze_release
 
@@ -1594,68 +1614,34 @@ freeze_stats |>
 #| label: release_notes
 #| results: asis
 
-# build release notes
-tables_list <- paste0(
-  "- ",
-  freeze_stats$table,
-  " (",
-  format(freeze_stats$rows, big.mark = ","),
-  " rows)"
-)
-
-release_notes <- paste0(
-  "# CalCOFI Database Release ",
-  release_version,
-  "\n\n",
-  "**Release Date**: ",
-  Sys.Date(),
-  "\n\n",
-  "## Tables Included\n\n",
-  paste(tables_list, collapse = "\n"),
-  "\n\n",
-  "## Total\n\n",
-  "- **Tables**: ",
-  nrow(freeze_stats),
-  "\n",
-  "- **Total Rows**: ",
-  format(sum(freeze_stats$rows, na.rm = TRUE), big.mark = ","),
-  "\n\n",
-  "## Data Sources\n\n",
-  "- `ingest_swfsc_ichthyo.qmd` - Ichthyo tables (cruise, ship, site, tow, net, species, ichthyo, grid, segment, lookup, taxon, taxa_rank)\n",
-  "- `ingest_calcofi_bottle.qmd` - Bottle/cast tables (casts, bottle, bottle_measurement, cast_condition, measurement_type)\n",
-  "- `ingest_calcofi_ctd-cast.qmd` - CTD tables (ctd_cast, ctd_thin, ctd_summary, measurement_type; full ctd_measurement available as supplemental)\n",
-  "- `ingest_calcofi_dic.qmd` - DIC/alkalinity tables (dic_sample, dic_measurement, dic_summary, dataset)\n\n",
-  "## Cross-Dataset Integration\n\n",
-  "- **Ship matching**: Reconciled ship codes between bottle casts and swfsc ship reference\n",
-  "- **Cruise bridge**: Derived cruise_key (YYYY-MM-NODC) for bottle casts via ship matching + datetime\n",
-  "- **Taxonomy**: Standardized species with WoRMS AphiaID, ITIS TSN, GBIF backbone key\n",
-  "- **Taxon hierarchy**: Built taxon + taxa_rank tables from WoRMS/ITIS classification\n\n",
-  "## Access\n\n",
-  "Parquet files can be queried directly from GCS:\n\n",
-  "```r\n",
-  "library(duckdb)\n",
-  "con <- dbConnect(duckdb())\n",
-  "dbExecute(con, 'INSTALL httpfs; LOAD httpfs;')\n",
-  "dbGetQuery(con, \"\n",
-  "  SELECT * FROM read_parquet(\n",
-  "    'https://storage.googleapis.com/calcofi-db/ducklake/releases/",
-  release_version,
-  "/parquet/ichthyo.parquet')\n",
-  "  LIMIT 10\")\n",
-  "```\n\n",
-  "Or use calcofi4r:\n\n",
-  "```r\n",
-  "library(calcofi4r)\n",
-  "con <- cc_get_db(version = '",
-  release_version,
-  "')\n",
-  "```\n"
-)
-
+# narrative from RELEASES.md + a generated appendix. catalog.json is not written
+# until upload_frozen, so the appendix is built from freeze_stats here and the
+# notes are re-published by test_release.qmd with the real catalog (total size)
+# and the validation result once the version is promoted.
+pkg_versions <- c(
+  calcofi4db = as.character(packageVersion("calcofi4db")),
+  calcofi4r  = as.character(packageVersion("calcofi4r")))
+py_toml <- here("../calcofi4py/pyproject.toml")
+if (file.exists(py_toml)) {
+  v_py <- sub('^version = "(.*)"$', "\\1",
+              grep('^version = ', readLines(py_toml, warn = FALSE), value = TRUE)[1])
+  if (!is.na(v_py) && nzchar(v_py)) pkg_versions <- c(pkg_versions, calcofi4py = v_py)
+}
+catalog_pre <- list(
+  version      = release_version,
+  release_date = as.character(Sys.Date()),
+  total_size   = NULL,
+  tables       = freeze_stats |>
+    mutate(supplemental = dplyr::coalesce(supplemental, FALSE)) |>
+    select(name = table, rows, partitioned, supplemental))
+release_notes <- render_release_notes(
+  release_version, readLines(releases_md_path, warn = FALSE),
+  catalog      = catalog_pre,
+  metadata     = NULL,
+  test_results = NULL,
+  pkg_versions = pkg_versions,
+  promoted     = FALSE)
 writeLines(release_notes, file.path(dir_frozen, "RELEASE_NOTES.md"))
-message(glue(
-  "Release notes written to {file.path(dir_frozen, 'RELEASE_NOTES.md')}"
-))
 cat(release_notes)
 ```
 
@@ -1807,6 +1793,9 @@ notes_path <- file.path(dir_frozen, "RELEASE_NOTES.md")
 if (file.exists(notes_path))
   put_gcs_file(notes_path,
     glue("gs://{gcs_bucket}/{gcs_release}/RELEASE_NOTES.md"))
+# the running changelog every version's notes are cut from
+put_gcs_file(releases_md_path,
+  glue("gs://{gcs_bucket}/ducklake/releases/RELEASES.md"))
 
 # upload relationships.json
 rels_json <- file.path(dir_frozen, "relationships.json")
@@ -2014,7 +2003,8 @@ sidecar_urls <- c(
   glue("gs://{gcs_bucket}/{gcs_release}/metadata.json"),
   glue("gs://{gcs_bucket}/{gcs_release}/relationships.json"),
   glue("gs://{gcs_bucket}/{gcs_release}/erd.mmd"),
-  glue("gs://{gcs_bucket}/{gcs_release}/RELEASE_NOTES.md"))
+  glue("gs://{gcs_bucket}/{gcs_release}/RELEASE_NOTES.md"),
+  glue("gs://{gcs_bucket}/ducklake/releases/RELEASES.md"))
 cc_res <- system2(gcloud,
   c("storage", "objects", "update", "--cache-control=no-cache", sidecar_urls),
   stdout = TRUE, stderr = TRUE)

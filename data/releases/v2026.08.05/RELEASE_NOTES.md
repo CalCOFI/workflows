@@ -1,65 +1,52 @@
-# CalCOFI Database Release v2026.08.05
+# CalCOFI integrated database release v2026.08.05
 
-**Release Date**: 2026-08-05
+**Release date:** 2026-08-04
+*Documented with v2026.08.04 – v2026.08.06 (2026-08-04 … 2026-08-06).*
 
-## Tables Included
+Three closely spaced releases while consumer deployment became part of the pipeline: consumers
+sync automatically on promotion, `deploy_consumers` is a real target that reports which release
+each consumer is *actually* serving (the h3t API held its old database file open across a symlink
+flip), ERDDAP deploys from `publish_to-erddap.qmd`, and the public release index is regenerated on
+promotion. Spatial layers gained attributes (`spatial` 3,373 → 13,206 features; `spatial_attribute`
+40k → 148k). v2026.08.05 dropped 17,187 duplicate/invalid `sample` rows. Four WoRMS/taxonomic-status
+gates added (28 → 32).
 
-- measurement_type (        198 rows)
-- dataset (         15 rows)
-- region (          4 rows)
-- spatial_attribute (    148,461 rows)
-- spatial (     13,206 rows)
-- grid (        218 rows)
-- cruise (        691 rows)
-- ship (         49 rows)
-- lookup (         26 rows)
-- sample (  1,460,019 rows)
-- obs ( 20,088,748 rows)
-- obs_attribute (    452,682 rows)
-- sample_measurement (    588,986 rows)
-- taxon (      2,121 rows)
-- dataset_taxon (      1,907 rows)
-- taxon_group (        154 rows)
-- obs_ctd_full (212,444,287 rows)
-- obs_mets_full ( 19,936,073 rows)
+## Contents (generated)
 
-## Total
+| table | rows | |
+|---|---:|---|
+| `cruise` | 691 |  |
+| `dataset` | 15 |  |
+| `dataset_taxon` | 1,907 |  |
+| `grid` | 218 |  |
+| `lookup` | 26 |  |
+| `measurement_type` | 198 |  |
+| `obs` | 20,088,748 | partitioned |
+| `obs_attribute` | 452,682 |  |
+| `region` | 4 |  |
+| `sample` | 1,460,019 |  |
+| `sample_measurement` | 588,986 |  |
+| `ship` | 49 |  |
+| `spatial` | 13,206 |  |
+| `spatial_attribute` | 148,461 |  |
+| `taxon` | 2,121 |  |
+| `taxon_group` | 154 |  |
+| `obs_ctd_full` | 212,444,287 | supplemental |
+| `obs_mets_full` | 19,936,073 | supplemental |
 
-- **Tables**: 18
-- **Total Rows**: 255,137,845
+**18 tables, 255,137,845 rows, 1.72 GB.**
 
-## Data Sources
+**Datasets (15):** `calcofi_bottle`, `calcofi_ctd-cast`, `calcofi_dic`, `calcofi_mets`, `calcofi_phyllosoma`, `calcofi_phytoplankton`, `cce-lter_euphausiids`, `cce-lter_picoplankton-bacteria`, `cce-lter_zoodb`, `cce-lter_zooscan`, `farallon_bird-mammal`, `sio_mesopelagic-fish`, `sio_pic-zooplankton`, `swfsc_cufes`, `swfsc_ichthyo`
 
-- `ingest_swfsc_ichthyo.qmd` - Ichthyo tables (cruise, ship, site, tow, net, species, ichthyo, grid, segment, lookup, taxon, taxa_rank)
-- `ingest_calcofi_bottle.qmd` - Bottle/cast tables (casts, bottle, bottle_measurement, cast_condition, measurement_type)
-- `ingest_calcofi_ctd-cast.qmd` - CTD tables (ctd_cast, ctd_thin, ctd_summary, measurement_type; full ctd_measurement available as supplemental)
-- `ingest_calcofi_dic.qmd` - DIC/alkalinity tables (dic_sample, dic_measurement, dic_summary, dataset)
-
-## Cross-Dataset Integration
-
-- **Ship matching**: Reconciled ship codes between bottle casts and swfsc ship reference
-- **Cruise bridge**: Derived cruise_key (YYYY-MM-NODC) for bottle casts via ship matching + datetime
-- **Taxonomy**: Standardized species with WoRMS AphiaID, ITIS TSN, GBIF backbone key
-- **Taxon hierarchy**: Built taxon + taxa_rank tables from WoRMS/ITIS classification
+**Validation:** 27 pass / 1 fail / 4 skip (consumer-contract suite, 2026-08-05T22:01:13Z).
 
 ## Access
 
-Parquet files can be queried directly from GCS:
-
 ```r
-library(duckdb)
-con <- dbConnect(duckdb())
-dbExecute(con, 'INSTALL httpfs; LOAD httpfs;')
-dbGetQuery(con, "
-  SELECT * FROM read_parquet(
-    'https://storage.googleapis.com/calcofi-db/ducklake/releases/v2026.08.05/parquet/ichthyo.parquet')
-  LIMIT 10")
+con <- calcofi4r::cc_get_db(version = "v2026.08.05")
 ```
-
-Or use calcofi4r:
-
-```r
-library(calcofi4r)
-con <- cc_get_db(version = 'v2026.08.05')
+```python
+con = calcofi4py.cc_get_db("v2026.08.05")
 ```
-
+Parquet: `https://storage.googleapis.com/calcofi-db/ducklake/releases/v2026.08.05/parquet/{table}.parquet`; 
+full history: [RELEASES.md](https://storage.googleapis.com/calcofi-db/ducklake/releases/RELEASES.md).

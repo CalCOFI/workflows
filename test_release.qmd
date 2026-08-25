@@ -476,6 +476,19 @@ message(glue(
   "PROMOTED {release_version}: {n_pass} passed, {n_skip} skipped, ",
   "0 failed. latest.txt is now {release_version}."))
 
+# re-publish this version's RELEASE_NOTES.md now that catalog.json (with its
+# total size) and test_results.json exist and latest.txt points here — the
+# appendix carries the validation result and the "promoted" mark. Notes are not
+# data, so a failure here is a warning, never an un-promotion.
+tryCatch(
+  publish_release_notes(
+    release_version, here::here("RELEASES.md"), here::here("data/releases"),
+    bucket = gcs_bucket,
+    pkg_versions = c(
+      calcofi4db = as.character(packageVersion("calcofi4db")),
+      calcofi4r  = as.character(packageVersion("calcofi4r")))),
+  error = function(e) warning(glue("release notes not re-published: {conditionMessage(e)}")))
+
 # regenerate the browsable release index so the public listing cannot lag the
 # bucket. `versions.json` and `latest.txt` are written by the release itself and
 # were always current, but the HTML at

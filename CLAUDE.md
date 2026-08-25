@@ -132,6 +132,36 @@ consumer-contract query suite passes (it exercises the app/`calcofi4r` query
 shapes against the frozen release, so a schema drift that would break a consumer
 fails the release rather than the app).
 
+## RELEASES.md is not optional (the database's NEWS file)
+
+`RELEASES.md` at the repo root documents **what changed between database releases and
+why** — one `# vYYYY.MM.DD (date)` section per release, newest first, with `# Unreleased`
+collecting changes until the next cut. It is uploaded to
+`gs://calcofi-db/ducklake/releases/RELEASES.md`, and each version's `RELEASE_NOTES.md`
+(what db-schema's "release notes" modal and `calcofi4r::cc_release_notes()` show) is its
+section plus a **generated appendix** (tables/rows from `catalog.json`, datasets, the
+consumer-contract result, package versions). Before 2026-08-25 `RELEASE_NOTES.md` was a
+`paste0()` template whose only live content was row counts; it listed four datasets while
+sixteen shipped and named tables retired months earlier.
+
+- **Every change that alters release content adds to `# Unreleased` in the same commit**
+  — a schema column, a key derivation, a validation gate, a dataset entering or leaving, a
+  data fix. Headings are declarative sentences ("Depth is a coordinate, and it is now
+  bounded"), bodies say what was wrong, what is true now, by how much, and which
+  provider question it raised; consumer-facing breakage gets a `**Consumers:**` line.
+- `release_database.qmd`'s `release_notes_narrative` chunk (before the freeze) renames a
+  non-empty `# Unreleased` to the release and **stops the release** if no section for
+  `release_version` exists — `calcofi4db::promote_unreleased()`. Do not bypass it by
+  writing a one-line section; the packages' `NEWS.md` rule has the same intent.
+- Notes are not data. `Rscript scripts/publish_release_notes.R [version | --all]`
+  (`calcofi4db::publish_release_notes()`) re-renders and re-uploads `RELEASE_NOTES.md` for
+  any version at any time — an edit between the freeze and `test_release`, a correction to
+  a promoted version, or the full backfill — without touching parquet, `catalog.json` or
+  `latest.txt`. `test_release.qmd` re-publishes the promoted version's notes so the
+  appendix carries the validation result.
+- A range heading (`# v2026.08.04 – v2026.08.06`) documents several closely spaced
+  releases at once; each of those versions' `RELEASE_NOTES.md` says so.
+
 ## Deploy (release → consumers)
 
 The per-app procedure — the Shiny apps on the CalCOFI server (`git pull`,

@@ -211,6 +211,9 @@ root_body <- glue('
 </tbody></table></div>
 
 <div class="note">
+<b>What changed between versions?</b> <a href="{HTTPS}/RELEASES.md">RELEASES.md</a> is
+the running changelog (newest first); each version's <code>RELEASE_NOTES.md</code> is its
+section plus a generated appendix.<br><br>
 <b>Which version should I use?</b> <code>{HTTPS}/latest.txt</code> holds the
 promoted version — currently <b>{latest}</b>. Resolve it, then build the path:<br>
 <code>V=$(curl -s {HTTPS}/latest.txt); curl -O {HTTPS}/$V/parquet/obs.parquet</code>

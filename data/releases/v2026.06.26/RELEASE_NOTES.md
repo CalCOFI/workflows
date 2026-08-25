@@ -1,97 +1,78 @@
-# CalCOFI Database Release v2026.06.26
+# CalCOFI integrated database release v2026.06.26
 
-**Release Date**: 2026-06-26
+**Release date:** 2026-06-26
 
-## Tables Included
+CCE-LTER ZooDB holoplankton and ZooScan PRPOOS ingested with reproducible acquisition scripts;
+`measurement_type` → dataset membership derived rather than asserted.
 
-- bird_mammal_transect (     60,715 rows)
-- bird_mammal_observation (     82,418 rows)
-- bird_mammal_species (        200 rows)
-- bird_mammal_behavior (          4 rows)
-- dataset (          7 rows)
-- casts (     35,644 rows)
-- bottle (    895,371 rows)
-- bottle_measurement ( 11,135,600 rows)
-- cast_condition (    235,513 rows)
-- measurement_type (        106 rows)
-- ctd_cast (  5,550,014 rows)
-- ctd_thin (  5,551,551 rows)
-- ctd_summary (108,390,249 rows)
-- dic_sample (      4,391 rows)
-- dic_measurement (     16,391 rows)
-- dic_summary (     15,786 rows)
-- phyllosoma_tow (      1,859 rows)
-- phyllosoma_measurement (     22,308 rows)
-- phyto_sample (        409 rows)
-- phyto_measurement (    159,804 rows)
-- phyto_taxon (        399 rows)
-- region (          4 rows)
-- euphausiids_tow (     10,150 rows)
-- euphausiids_measurement (     10,150 rows)
-- euphausiids_summary (     10,145 rows)
-- zoodb_sample (        506 rows)
-- zoodb_measurement (     30,948 rows)
-- zoodb_taxon (         33 rows)
-- zooscan_sample (      1,483 rows)
-- zooscan_measurement (    126,692 rows)
-- zooscan_taxon (         23 rows)
-- zooplankton_tow (     99,530 rows)
-- _spatial_attr (     40,298 rows)
-- _spatial (      3,373 rows)
-- cufes_sample (     49,572 rows)
-- cufes_measurement (    284,097 rows)
-- cruise (        691 rows)
-- grid (        218 rows)
-- ichthyo (    852,228 rows)
-- invert (      9,223 rows)
-- lookup (         26 rows)
-- net (     76,512 rows)
-- segment (     60,413 rows)
-- ship (         48 rows)
-- site (     61,104 rows)
-- species (      1,167 rows)
-- taxa_rank (         41 rows)
-- taxon (      3,385 rows)
-- tow (     75,506 rows)
-- cruise_summary (        691 rows)
+## Contents (generated)
 
-## Total
+| table | rows | |
+|---|---:|---|
+| `_spatial` | 3,373 |  |
+| `_spatial_attr` | 40,298 |  |
+| `bird_mammal_behavior` | 4 |  |
+| `bird_mammal_observation` | 82,418 |  |
+| `bird_mammal_species` | 200 |  |
+| `bird_mammal_transect` | 60,715 |  |
+| `bottle` | 895,371 |  |
+| `bottle_measurement` | 11,135,600 |  |
+| `cast_condition` | 235,513 |  |
+| `casts` | 35,644 |  |
+| `cruise` | 691 |  |
+| `cruise_summary` | 691 |  |
+| `ctd_cast` | 5,550,014 |  |
+| `ctd_summary` | 108,390,249 | partitioned |
+| `ctd_thin` | 5,551,551 | partitioned |
+| `cufes_measurement` | 284,097 |  |
+| `cufes_sample` | 49,572 |  |
+| `dataset` | 7 |  |
+| `dic_measurement` | 16,391 |  |
+| `dic_sample` | 4,391 |  |
+| `dic_summary` | 15,786 |  |
+| `euphausiids_measurement` | 10,150 |  |
+| `euphausiids_summary` | 10,145 |  |
+| `euphausiids_tow` | 10,150 |  |
+| `grid` | 218 |  |
+| `ichthyo` | 852,228 |  |
+| `invert` | 9,223 |  |
+| `lookup` | 26 |  |
+| `measurement_type` | 106 |  |
+| `net` | 76,512 |  |
+| `phyllosoma_measurement` | 22,308 |  |
+| `phyllosoma_tow` | 1,859 |  |
+| `phyto_measurement` | 159,804 |  |
+| `phyto_sample` | 409 |  |
+| `phyto_taxon` | 399 |  |
+| `region` | 4 |  |
+| `segment` | 60,413 |  |
+| `ship` | 48 |  |
+| `site` | 61,104 |  |
+| `species` | 1,167 |  |
+| `taxa_rank` | 41 |  |
+| `taxon` | 3,385 |  |
+| `tow` | 75,506 |  |
+| `zoodb_measurement` | 30,948 |  |
+| `zoodb_sample` | 506 |  |
+| `zoodb_taxon` | 33 |  |
+| `zooplankton_tow` | 99,530 |  |
+| `zooscan_measurement` | 126,692 |  |
+| `zooscan_sample` | 1,483 |  |
+| `zooscan_taxon` | 23 |  |
 
-- **Tables**: 50
-- **Total Rows**: 133,966,996
+**50 tables, 133,966,996 rows, 3.73 GB.**
 
-## Data Sources
+**Datasets (12):** `calcofi_bird_mammal_census`, `calcofi_bottle`, `calcofi_ctd-cast`, `calcofi_dic`, `calcofi_phyllosoma`, `calcofi_phytoplankton`, `cce-lter_euphausiids`, `cce-lter_zoodb`, `cce-lter_zooscan`, `pic_zooplankton`, `swfsc_cufes`, `swfsc_ichthyo`
 
-- `ingest_swfsc_ichthyo.qmd` - Ichthyo tables (cruise, ship, site, tow, net, species, ichthyo, grid, segment, lookup, taxon, taxa_rank)
-- `ingest_calcofi_bottle.qmd` - Bottle/cast tables (casts, bottle, bottle_measurement, cast_condition, measurement_type)
-- `ingest_calcofi_ctd-cast.qmd` - CTD tables (ctd_cast, ctd_thin, ctd_summary, measurement_type; full ctd_measurement available as supplemental)
-- `ingest_calcofi_dic.qmd` - DIC/alkalinity tables (dic_sample, dic_measurement, dic_summary, dataset)
-
-## Cross-Dataset Integration
-
-- **Ship matching**: Reconciled ship codes between bottle casts and swfsc ship reference
-- **Cruise bridge**: Derived cruise_key (YYYY-MM-NODC) for bottle casts via ship matching + datetime
-- **Taxonomy**: Standardized species with WoRMS AphiaID, ITIS TSN, GBIF backbone key
-- **Taxon hierarchy**: Built taxon + taxa_rank tables from WoRMS/ITIS classification
+**Validation:** 9 pass / 0 fail / 4 skip (consumer-contract suite, 2026-06-26T18:01:51Z).
 
 ## Access
 
-Parquet files can be queried directly from GCS:
-
 ```r
-library(duckdb)
-con <- dbConnect(duckdb())
-dbExecute(con, 'INSTALL httpfs; LOAD httpfs;')
-dbGetQuery(con, "
-  SELECT * FROM read_parquet(
-    'https://storage.googleapis.com/calcofi-db/ducklake/releases/v2026.06.26/parquet/ichthyo.parquet')
-  LIMIT 10")
+con <- calcofi4r::cc_get_db(version = "v2026.06.26")
 ```
-
-Or use calcofi4r:
-
-```r
-library(calcofi4r)
-con <- cc_get_db(version = 'v2026.06.26')
+```python
+con = calcofi4py.cc_get_db("v2026.06.26")
 ```
-
+Parquet: `https://storage.googleapis.com/calcofi-db/ducklake/releases/v2026.06.26/parquet/{table}.parquet`; 
+full history: [RELEASES.md](https://storage.googleapis.com/calcofi-db/ducklake/releases/RELEASES.md).

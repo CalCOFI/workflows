@@ -1,65 +1,63 @@
-# CalCOFI Database Release v2026.08.08
+# CalCOFI integrated database release v2026.08.08
 
-**Release Date**: 2026-08-08
+**Release date:** 2026-08-08
 
-## Tables Included
+## Declared bounds are enforced, and 31k impossible values leave
 
-- measurement_type (        198 rows)
-- dataset (         15 rows)
-- region (          4 rows)
-- spatial_attribute (    148,461 rows)
-- spatial (     13,206 rows)
-- grid (        218 rows)
-- cruise (        691 rows)
-- ship (         49 rows)
-- lookup (         26 rows)
-- sample (  1,465,189 rows)
-- obs ( 25,392,376 rows)
-- obs_attribute (    452,682 rows)
-- sample_measurement (    588,986 rows)
-- taxon (      2,121 rows)
-- dataset_taxon (      1,907 rows)
-- taxon_group (        154 rows)
-- obs_ctd_full (261,129,086 rows)
-- obs_mets_full ( 19,927,469 rows)
+`valid_min`/`valid_max` in `metadata/measurement_type.csv` had been emitted as netCDF attributes
+and shown on the schema site for months while nothing compared a value to them. v2026.08.07
+shipped ~31k impossible CTD values (pH to −10, `oxygen_ml_l_1` to −79.5, `temperature_ave` to
+−47.6) — the fallout of METS erasing curated bounds from the shared registry on its write-back.
+`check_measurement_bounds()` now runs per dataset at ingest and across `obs` *and* the
+supplemental tables at release; `out_of_range` fails the release, `undeclared` is ratcheted
+(73 → 30 of 98 (dataset, type) pairs declared a bound at this release). Enforcement is a separate
+`drop_out_of_bounds()` so a bound must be agreed before it deletes.
 
-## Total
+## Two-sensor averages are repaired, not averaged with −99
 
-- **Tables**: 18
-- **Total Rows**: 309,122,838
+`TempAve` was averaged with the −99 missing marker when one sensor failed (Q21, cruise 2607SH);
+each sensor is validated individually and the repair generalised to every two-sensor average.
+Q22 records the surface-soak artifact.
 
-## Data Sources
+**Rows:** `obs` 26.27 M → 25.39 M, `obs_ctd_full` 274.9 M → 261.1 M (the impossible values).
+**Packages:** calcofi4db 3.10.0 (`declare_measurement_bounds()`), 3.11.0 (no directory outputs).
 
-- `ingest_swfsc_ichthyo.qmd` - Ichthyo tables (cruise, ship, site, tow, net, species, ichthyo, grid, segment, lookup, taxon, taxa_rank)
-- `ingest_calcofi_bottle.qmd` - Bottle/cast tables (casts, bottle, bottle_measurement, cast_condition, measurement_type)
-- `ingest_calcofi_ctd-cast.qmd` - CTD tables (ctd_cast, ctd_thin, ctd_summary, measurement_type; full ctd_measurement available as supplemental)
-- `ingest_calcofi_dic.qmd` - DIC/alkalinity tables (dic_sample, dic_measurement, dic_summary, dataset)
+## Contents (generated)
 
-## Cross-Dataset Integration
+| table | rows | |
+|---|---:|---|
+| `cruise` | 691 |  |
+| `dataset` | 15 |  |
+| `dataset_taxon` | 1,907 |  |
+| `grid` | 218 |  |
+| `lookup` | 26 |  |
+| `measurement_type` | 198 |  |
+| `obs` | 25,392,376 | partitioned |
+| `obs_attribute` | 452,682 |  |
+| `region` | 4 |  |
+| `sample` | 1,465,189 |  |
+| `sample_measurement` | 588,986 |  |
+| `ship` | 49 |  |
+| `spatial` | 13,206 |  |
+| `spatial_attribute` | 148,461 |  |
+| `taxon` | 2,121 |  |
+| `taxon_group` | 154 |  |
+| `obs_ctd_full` | 261,129,086 | supplemental |
+| `obs_mets_full` | 19,927,469 | supplemental |
 
-- **Ship matching**: Reconciled ship codes between bottle casts and swfsc ship reference
-- **Cruise bridge**: Derived cruise_key (YYYY-MM-NODC) for bottle casts via ship matching + datetime
-- **Taxonomy**: Standardized species with WoRMS AphiaID, ITIS TSN, GBIF backbone key
-- **Taxon hierarchy**: Built taxon + taxa_rank tables from WoRMS/ITIS classification
+**18 tables, 309,122,838 rows, 2.04 GB.**
+
+**Datasets (15):** `calcofi_bottle`, `calcofi_ctd-cast`, `calcofi_dic`, `calcofi_mets`, `calcofi_phyllosoma`, `calcofi_phytoplankton`, `cce-lter_euphausiids`, `cce-lter_picoplankton-bacteria`, `cce-lter_zoodb`, `cce-lter_zooscan`, `farallon_bird-mammal`, `sio_mesopelagic-fish`, `sio_pic-zooplankton`, `swfsc_cufes`, `swfsc_ichthyo`
+
+**Validation:** 28 pass / 0 fail / 4 skip (consumer-contract suite, 2026-08-08T21:44:49Z).
 
 ## Access
 
-Parquet files can be queried directly from GCS:
-
 ```r
-library(duckdb)
-con <- dbConnect(duckdb())
-dbExecute(con, 'INSTALL httpfs; LOAD httpfs;')
-dbGetQuery(con, "
-  SELECT * FROM read_parquet(
-    'https://storage.googleapis.com/calcofi-db/ducklake/releases/v2026.08.08/parquet/ichthyo.parquet')
-  LIMIT 10")
+con <- calcofi4r::cc_get_db(version = "v2026.08.08")
 ```
-
-Or use calcofi4r:
-
-```r
-library(calcofi4r)
-con <- cc_get_db(version = 'v2026.08.08')
+```python
+con = calcofi4py.cc_get_db("v2026.08.08")
 ```
-
+Parquet: `https://storage.googleapis.com/calcofi-db/ducklake/releases/v2026.08.08/parquet/{table}.parquet`; 
+full history: [RELEASES.md](https://storage.googleapis.com/calcofi-db/ducklake/releases/RELEASES.md).
