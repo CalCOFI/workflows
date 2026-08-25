@@ -8,9 +8,12 @@ versions). Conventions: see `CLAUDE.md` § "RELEASES.md is not optional".
 
 # Unreleased
 
-## 4,855 samples were released twice in v2026.08.25, and the gate that should have caught it now exists
 
-`sample` in v2026.08.25 held 1,472,100 rows for 1,467,245 distinct `sample_key`s: 3,345 bottles,
+# v2026.08.25 (2026-08-25)
+
+## `sample` is unique on its key — the 4,855-duplicate bug is fixed, and a gate now guards it
+
+An earlier same-day cut of v2026.08.25 shipped `sample` with 1,472,100 rows for 1,467,245 distinct `sample_key`s — 3,345 bottles,
 150 casts, 133 ichthyo sites and 13 underway samples appeared twice, identical except for a
 `seafloor_depth_m` differing in the 11th decimal. The seafloor stamp (new in that release) collapsed
 positions with `unique()` but joined them back with `merge()`, which compares coordinates as
@@ -67,7 +70,6 @@ loses its `parquet/`; its entry carries `retired: {retired_utc, to, reason}` nam
 kept version, `cc_get_db()` and `cc_get_db` (py) refuse it with that name, and its release page
 says so. Pin a consolidated version for reproducibility; pin any other and plan to move.
 
-# v2026.08.25 (2026-08-25)
 
 ## A quality flag now reaches every consumer, not just the database
 
