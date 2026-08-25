@@ -6,8 +6,10 @@
 # storage.calcofi.io root), and they must LOOK like one site — so the skin and the
 # object-listing helper live here rather than being re-typed per script.
 #
-# Self-contained by necessity: served straight off a bucket, so no external CSS,
-# font or script can be referenced. Light/dark via prefers-color-scheme; wide
+# The chrome is the calcofi.io brand contract (https://calcofi.io/brand/v1/):
+# favicons, theme.css + theme.js hotlinked from calcofi.io (a bucket-served page
+# may reference them; only the listing styles are inline), dark by default with
+# light via <html data-theme="light">, the shared .cc-header / .cc-footer. Wide
 # tables scroll inside their own container rather than forcing the page sideways.
 librarian::shelf(glue, quiet = TRUE)
 
@@ -49,61 +51,107 @@ GA_HTML <- paste0(
   '</script>')
 
 # --- shared page chrome -------------------------------------------------------
-# Self-contained: served straight off GCS, so no external CSS/font/script can be
-# referenced (and a strict reader may block them anyway). Light/dark via
-# prefers-color-scheme; wide tables scroll inside their own container.
+# Brand head block pasted verbatim from brand/v1/head.html (favicon set, the
+# inline pre-paint theme snippet so the first paint is already the right colour,
+# theme.css, theme.js), then the page's own listing styles. The token block
+# mirrors theme.css so the page still reads if calcofi.io is unreachable.
+BRAND_URL  <- "https://calcofi.io/brand/v1"
+BRAND_HEAD <- paste0(
+  '<link rel="icon" type="image/x-icon" href="', BRAND_URL, '/favicon.ico">\n',
+  '<link rel="icon" type="image/png" sizes="32x32" href="', BRAND_URL, '/favicon-32x32.png">\n',
+  '<link rel="icon" type="image/png" sizes="16x16" href="', BRAND_URL, '/favicon-16x16.png">\n',
+  '<link rel="apple-touch-icon" sizes="180x180" href="', BRAND_URL, '/apple-touch-icon.png">\n',
+  '<script>(function(){var m=/[?&]theme=(dark|light)\\b/.exec(location.search),',
+  'c=/(?:^|;\\s*)cc_theme=(dark|light)/.exec(document.cookie),s=null;',
+  'try{s=localStorage.getItem("theme")}catch(e){}',
+  'var t=(m&&m[1])||(c&&c[1])||(s==="light"||s==="dark"?s:null)||"dark",d=document.documentElement;',
+  'd.dataset.theme=t;d.setAttribute("data-bs-theme",t);',
+  'd.setAttribute("data-md-color-scheme",t==="dark"?"slate":"default");d.style.colorScheme=t})();</script>\n',
+  '<link rel="stylesheet" href="', BRAND_URL, '/theme.css">\n',
+  '<script defer src="', BRAND_URL, '/theme.js"></script>')
+
+# logo -> calcofi.io, title -> the storage front door, the site's own links,
+# the theme toggle (theme.js wires it). Absolute hrefs: release pages are also
+# reachable under storage.googleapis.com/<bucket>/..., where "/" is not ours.
+BRAND_HEADER <- glue('
+<header class="cc-header">
+  <a class="cc-home" href="https://calcofi.io" aria-label="CalCOFI.io home">
+    <img class="cc-logo-dark"  src="{BRAND_URL}/logo_calcofi.svg"       alt="CalCOFI" width="32" height="32">
+    <img class="cc-logo-light" src="{BRAND_URL}/logo_calcofi_light.svg" alt="CalCOFI" width="32" height="32">
+  </a>
+  <a class="cc-title" href="{SITE_URL}/">storage</a>
+  <span class="cc-spacer"></span>
+  <nav class="cc-links">
+    <a href="{SITE_URL}/calcofi-db/ducklake/releases/">releases</a>
+    <a href="{SITE_URL}/calcofi-files-public/netcdf/">netcdf</a>
+    <a href="https://calcofi.io/docs/">docs</a>
+  </nav>
+  <button class="cc-theme-toggle" type="button" aria-label="Toggle dark / light theme">🌓</button>
+</header>')
+
+# the script rendering the page, for the footer (Rscript passes --file=; falls
+# back to the release generator when sourced interactively)
+GENERATOR <- local({
+  f <- sub("^--file=", "", grep("^--file=", commandArgs(), value = TRUE))
+  if (length(f)) file.path("scripts", basename(f[1])) else "scripts/build_release_index.R" })
+
 page <- function(title, subtitle, body_html, crumb = "") glue('
 <!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="light dark">
 <title>{esc(title)}</title>
+{BRAND_HEAD}
 {GA_HTML}
 <style>
   :root {{
-    --bg:#ffffff; --fg:#1a1f24; --muted:#5b6670; --line:#e3e8ec;
-    --accent:#1b6ec2; --chip:#eef4fa; --head:#f6f8fa;
+    --bg:#1b1d20; --panel:#24272b; --panel-2:#2c3035; --border:#3a3f44;
+    --fg:#e6e9ed; --muted:#9aa0a6; --accent:#4dabf7; --accent-d:#339af0;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+    color-scheme:dark;
   }}
-  @media (prefers-color-scheme: dark) {{
-    :root {{
-      --bg:#12171c; --fg:#e6edf3; --muted:#9aa7b2; --line:#26303a;
-      --accent:#6cb6ff; --chip:#182430; --head:#182028;
-    }}
+  :root[data-theme="light"] {{
+    --bg:#ffffff; --panel:#f8f9fa; --panel-2:#ffffff; --border:#dee2e6;
+    --fg:#212529; --muted:#6c757d; --accent:#2780e3; --accent-d:#1c69bf;
+    color-scheme:light;
   }}
   * {{ box-sizing:border-box; }}
-  body {{ margin:0; padding:2rem 1.25rem 4rem; background:var(--bg); color:var(--fg);
-    font:16px/1.55 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif; }}
-  .wrap {{ max-width:60rem; margin:0 auto; }}
+  body {{ margin:0; background:var(--bg); color:var(--fg); font:16px/1.55 var(--sans); }}
+  .wrap {{ max-width:60rem; margin:0 auto; padding:2rem 1.25rem 4rem; }}
   h1 {{ font-size:1.5rem; margin:0 0 .2rem; letter-spacing:-.01em; }}
   .sub {{ color:var(--muted); margin:0 0 1.5rem; font-size:.95rem; }}
   .crumb {{ font-size:.85rem; color:var(--muted); margin:0 0 1rem; }}
   a {{ color:var(--accent); text-decoration:none; }}
-  a:hover {{ text-decoration:underline; }}
-  .scroll {{ overflow-x:auto; border:1px solid var(--line); border-radius:8px; }}
+  a:hover {{ color:var(--accent-d); text-decoration:underline; }}
+  .scroll {{ overflow-x:auto; border:1px solid var(--border); border-radius:8px; }}
   table {{ border-collapse:collapse; width:100%; font-size:.92rem; }}
-  th, td {{ text-align:left; padding:.5rem .7rem; border-bottom:1px solid var(--line); white-space:nowrap; }}
-  th {{ background:var(--head); font-weight:600; font-size:.82rem; text-transform:uppercase;
+  th, td {{ text-align:left; padding:.5rem .7rem; border-bottom:1px solid var(--border); white-space:nowrap; }}
+  th {{ background:var(--panel); font-weight:600; font-size:.82rem; text-transform:uppercase;
         letter-spacing:.04em; color:var(--muted); }}
   tr:last-child td {{ border-bottom:none; }}
   td.num {{ text-align:right; font-variant-numeric:tabular-nums; }}
-  .chip {{ display:inline-block; background:var(--chip); color:var(--accent);
+  .chip {{ display:inline-block; background:var(--panel-2); color:var(--accent); border:1px solid var(--border);
     border-radius:999px; padding:.05rem .5rem; font-size:.75rem; font-weight:600; }}
-  .note {{ background:var(--chip); border:1px solid var(--line); border-radius:8px;
+  .note {{ background:var(--panel); border:1px solid var(--border); border-radius:8px;
     padding:.8rem 1rem; font-size:.88rem; margin:1.5rem 0; color:var(--muted); }}
-  .note code, code {{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.85em; }}
-  footer {{ margin-top:2.5rem; font-size:.82rem; color:var(--muted); }}
+  .note code, code {{ font-family:var(--mono); font-size:.85em; }}
 </style>
 </head>
-<body><div class="wrap">
+<body>
+{BRAND_HEADER}
+<div class="wrap">
 {crumb}
 <h1>{esc(title)}</h1>
 <p class="sub">{subtitle}</p>
 {body_html}
-<footer>Generated by <code>scripts/build_release_index.R</code> in
+<footer class="cc-footer"><p>Generated by <code>{GENERATOR}</code> in
 <a href="https://github.com/CalCOFI/workflows">CalCOFI/workflows</a>.
-Objects are served directly from Google Cloud Storage.</footer>
+Objects are served directly from Google Cloud Storage.</p>
+<p><a href="https://calcofi.io">calcofi.io</a>
+· <a href="https://github.com/CalCOFI">github.com/CalCOFI</a>
+· <a href="https://status.calcofi.io">status</a></p></footer>
 </div></body></html>')
 
 
