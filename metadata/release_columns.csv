@@ -29,3 +29,43 @@ spatial_attribute,val_int,Value (integer),,Value when the source column was inte
 spatial_attribute,val_chr,Value (text),,Value when the source column was character or factor; NULL otherwise. Also the fallback for any type with no dedicated column.
 spatial_attribute,val_date,Value (date),,Value when the source column was a Date; NULL otherwise.
 spatial_attribute,val_lgl,Value (logical),,Value when the source column was logical; NULL otherwise.
+sample_root,root_id,Root ID,,"Dense integer id of a root sampling event (`sample` with no parent), numbered deterministically over `sample_key`; the join key shared by `obs_bio`, `obs_env` and `sample_spatial`."
+sample_root,root_sample_key,Root Sample Key,,The `sample.sample_key` this root id stands for.
+sample_root,seafloor_depth_m,Seafloor Depth,m,"GEBCO seafloor depth at the root sample's position (positive down), from `sample`."
+sample_spatial,root_id,Root ID,,Root sampling event (`sample_root.root_id`).
+sample_spatial,root_sample_key,Root Sample Key,,The root `sample.sample_key`.
+sample_spatial,layer,Layer,,Spatial layer name (`spatial.layer`); polygon layers only — boundary lines and ports never hold a sample.
+sample_spatial,spatial_key,Spatial Key,,"The polygon (`spatial.spatial_key`) the root sample's position falls in; exact `ST_Intersects`, computed once at release."
+sample_spatial,spatial_name,Spatial Name,,Display name of the polygon (`spatial.name`).
+obs_bio,obs_id,Observation ID,,`obs.obs_id` — the row this slim copy stands for.
+obs_env,obs_id,Observation ID,,`obs.obs_id` — the row this slim copy stands for.
+obs_bio,root_id,Root ID,,Root sampling event (`sample_root.root_id`).
+obs_env,root_id,Root ID,,Root sampling event (`sample_root.root_id`).
+obs_bio,year,Year,,Calendar year of `datetime`.
+obs_env,year,Year,,Calendar year of `datetime`.
+obs_bio,quarter,Quarter,,Calendar quarter (1–4) of `datetime`.
+obs_env,quarter,Quarter,,Calendar quarter (1–4) of `datetime`.
+obs_bio,depth_bin,Depth Bin,m,"`floor(depth_min_m / 10) * 10`; the observation's depth, falling back to its sample's and its root's."
+obs_env,depth_bin,Depth Bin,m,"`floor(depth_min_m / 10) * 10`; the observation's depth, falling back to its sample's and its root's."
+obs_bio,units,Units,,`measurement_type.units` of `value`.
+obs_env,units,Units,,`measurement_type.units` of `value`.
+obs_bio,value,Value,,`obs.measurement_value`.
+obs_env,value,Value,,`obs.measurement_value`.
+obs_bio,qual_ok,Quality OK,,"`calcofi4r::cc_qual_ok_sql()` evaluated at release: FALSE for a dataset's own bad/missing codes (bottle & CTD 8, 9; DIC 3, 4, 9), TRUE otherwise, NULL never."
+obs_env,qual_ok,Quality OK,,"`calcofi4r::cc_qual_ok_sql()` evaluated at release: FALSE for a dataset's own bad/missing codes (bottle & CTD 8, 9; DIC 3, 4, 9), TRUE otherwise, NULL never."
+obs_bio,tow_type,Tow Type,,"Gear of the observation's own sample (`sample.tow_type`: C1/CB/CV/PV oblique–vertical, MT manta)."
+obs_env,tow_type,Tow Type,,"Gear of the observation's own sample (`sample.tow_type`: C1/CB/CV/PV oblique–vertical, MT manta)."
+obs_bio,std_haul_factor,Standard Haul Factor,,Effort of the observation's own sample (`sample_measurement`).
+obs_env,std_haul_factor,Standard Haul Factor,,Effort of the observation's own sample (`sample_measurement`).
+obs_bio,prop_sorted,Proportion Sorted,,Effort of the observation's own sample (`sample_measurement`); 0 or NULL means all of it was sorted.
+obs_env,prop_sorted,Proportion Sorted,,Effort of the observation's own sample (`sample_measurement`); 0 or NULL means all of it was sorted.
+obs_bio,volume_sampled_m3,Volume Sampled,m3,Effort of the observation's own sample (`sample_measurement.volume_sampled`).
+obs_env,volume_sampled_m3,Volume Sampled,m3,Effort of the observation's own sample (`sample_measurement.volume_sampled`).
+obs_bio,density_per_10m2,Density per 10 m²,count/10m2,"Areal, depth-integrated: `count × std_haul_factor / prop_sorted` for C1/CB/CV/PV tows, published per-m² × 10; NULL where the effort is not in the release (`calcofi4r::cc_density_sql()`)."
+obs_env,density_per_10m2,Density per 10 m²,count/10m2,"Areal, depth-integrated: `count × std_haul_factor / prop_sorted` for C1/CB/CV/PV tows, published per-m² × 10; NULL where the effort is not in the release (`calcofi4r::cc_density_sql()`)."
+obs_bio,density_per_1000m3,Density per 1000 m³,count/1000m3,"Volumetric: `count / prop_sorted / volume_sampled_m3 × 1000` for any tow with a volume, published per-1000 m³ as is; never converted from the areal density."
+obs_env,density_per_1000m3,Density per 1000 m³,count/1000m3,"Volumetric: `count / prop_sorted / volume_sampled_m3 × 1000` for any tow with a volume, published per-1000 m³ as is; never converted from the areal density."
+obs_bio,effort_class,Effort Class,,"`count_with_effort` | `raw_count_no_effort` | `density_as_published` | `other_unit` — what the row can be standardized to; rows without effort are an ingest task, not a UI caveat."
+obs_env,effort_class,Effort Class,,"`count_with_effort` | `raw_count_no_effort` | `density_as_published` | `other_unit` — what the row can be standardized to; rows without effort are an ingest task, not a UI caveat."
+obs_bio,hex7,H3 Cell (res 7),,"One `UBIGINT` H3 cell at resolution 7 (parent of `obs.hex_id`); coarser parents are bit arithmetic (`calcofi4db::h3_parent_sql()`), no extension needed."
+obs_env,hex7,H3 Cell (res 7),,"One `UBIGINT` H3 cell at resolution 7 (parent of `obs.hex_id`); coarser parents are bit arithmetic (`calcofi4db::h3_parent_sql()`), no extension needed."

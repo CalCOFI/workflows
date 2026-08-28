@@ -365,6 +365,28 @@ contract <- tibble::tribble(
     "SELECT count(*) n FROM (SELECT geom FROM {rp('sample')}
                              WHERE geom IS NOT NULL LIMIT 20000) s
        JOIN {rp('spatial')} sp ON ST_Intersects(sp.geom, s.geom)"),
+  # browser-shaped objects (Explorer plan D4, Phase 1): the app fetches these whole and aggregates in
+  # the browser; every consumer inherits the exact polygon membership and the D8 densities
+  "consumer: obs_bio carries the D8 densities for the default taxon (sardine larvae per 10 m2)", "nonzero", glue(
+    "SELECT count(*) n FROM {rp('obs_bio')}
+     WHERE taxon_key = 'worms:217452' AND life_stage = 'larva' AND density_per_10m2 IS NOT NULL"),
+  "integrity: obs_bio effort_class is the D8 vocabulary", "zero", glue(
+    "SELECT count(*) n FROM {rp('obs_bio')}
+     WHERE effort_class NOT IN ('count_with_effort', 'raw_count_no_effort', 'density_as_published', 'other_unit')"),
+  "integrity: obs_bio never derives a density without effort", "zero", glue(
+    "SELECT count(*) n FROM {rp('obs_bio')}
+     WHERE effort_class = 'raw_count_no_effort' AND (density_per_10m2 IS NOT NULL OR density_per_1000m3 IS NOT NULL)"),
+  "consumer: one env variable is one object (temperature, quality-filtered)", "nonzero", glue(
+    "SELECT count(*) n FROM {rp('obs_env')} WHERE measurement_type = 'temperature' AND qual_ok"),
+  "integrity: every sample_spatial root resolves to sample_root", "zero", glue(
+    "SELECT count(*) n FROM {rp('sample_spatial')} ss
+     WHERE NOT EXISTS (SELECT 1 FROM {rp('sample_root')} r WHERE r.root_id = ss.root_id)"),
+  "integrity: sample_spatial (root_id, spatial_key) is unique", "zero", glue(
+    "SELECT count(*) n FROM (SELECT root_id, spatial_key FROM {rp('sample_spatial')}
+                             GROUP BY 1, 2 HAVING count(*) > 1)"),
+  "consumer: a region summary joins obs_bio to sample_spatial on root_id", "nonzero", glue(
+    "SELECT count(*) n FROM {rp('obs_bio')} o JOIN {rp('sample_spatial')} s USING (root_id)
+     WHERE s.layer = 'National Marine Sanctuaries'"),
   "integrity: no non-finite coordinates in sample", "zero", glue(
     "SELECT count(*) n FROM {rp('sample')}
      WHERE isnan(latitude) OR isnan(longitude) OR isinf(latitude) OR isinf(longitude)"),

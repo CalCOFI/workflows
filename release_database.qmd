@@ -26,6 +26,11 @@ calcofi:
     obs_mets_full:      "#e8e8e8"
     spatial:            "#cfe8ea"
     spatial_attribute:  "#cfe8ea"
+    # browser-shaped objects (Explorer plan D4; chunk browser_objects)
+    sample_spatial:     "#cfe8ea"
+    sample_root:        "#e8e8e8"
+    obs_bio:            "#e8e8e8"
+    obs_env:            "#e8e8e8"
 execute:
   echo: true
   message: true
@@ -1420,6 +1425,66 @@ pattern.
 ### Release narrative (RELEASES.md)
 
 ```{r}
+#| label: browser_objects
+# --- browser-shaped release objects (CalCOFI Explorer plan D4; calcofi4db >= 3.24.0) ----------------
+# One object per lens, fetched whole by the browser and aggregated there: `obs_bio` (the bio realm,
+# ~22 MB), `obs_env/measurement_type=*` (one variable = one object), `sample_root` (the dense integer
+# join key + the cruise tracks) and `sample_spatial` (exact polygon membership per root sample,
+# computed ONCE here, chunked per layer, instead of per app on the 16 GB server), plus
+# `coverage.json` for the first paint before DuckDB-WASM wakes up. The quality predicate and the
+# density expression are calcofi4r's — cc_qual_ok_sql(), cc_density_sql() — so there is one copy of
+# each (D8 rule 2); the picker defaults (rule 4) are cc_default_stage()/cc_default_denominator().
+# Built after normalize_crs so non-finite coordinates are already NULL.
+qual_sql <- calcofi4r::cc_qual_ok_sql("o")
+dens_sql <- calcofi4r::cc_density_sql()
+n_root <- build_sample_root(con_wdl)
+n_bio  <- build_obs_slim(con_wdl, "bio", qual_ok_sql = qual_sql, density_sql = dens_sql)
+n_env  <- build_obs_slim(con_wdl, "env", qual_ok_sql = qual_sql, density_sql = dens_sql)
+ss     <- build_sample_spatial(con_wdl)
+cat(glue("sample_root {n_root} · obs_bio {n_bio} · obs_env {n_env} rows\n"))
+datatable(ss, caption = "sample_spatial — exact per-root-sample membership, one layer at a time (n_polys = 0: a line or point layer, skipped)")
+
+# what the picker shows for the default taxon (Pacific sardine): dataset × stage × effort class
+datatable(dbGetQuery(con_wdl, "
+  SELECT dataset_key, life_stage, effort_class, tow_type, count(*) AS n,
+         count(density_per_10m2) AS n_10m2, count(density_per_1000m3) AS n_1000m3
+  FROM obs_bio WHERE taxon_key = 'worms:217452' GROUP BY ALL ORDER BY 1, 2, 3, 4"),
+  caption = "obs_bio · worms:217452 (Pacific sardine) · the D8 rule-2 columns")
+
+# depth and hex coverage of the bio rows per dataset — a dataset with n_depth = 0 carries no tow
+# span anywhere in `sample` (swfsc_ichthyo Q08, cce-lter_euphausiids): an ingest gap, not a cut gap
+datatable(dbGetQuery(con_wdl, "
+  SELECT dataset_key, count(*) AS n, count(depth_max_m) AS n_depth, count(hex7) AS n_hex,
+         count(*) FILTER (WHERE qual_ok) AS n_qual_ok, count(DISTINCT effort_class) AS n_classes
+  FROM obs_bio GROUP BY 1 ORDER BY 1"), caption = "obs_bio — depth, hex and quality coverage per dataset")
+
+cov <- build_coverage(con_wdl, release_version)
+coverage_path <- file.path(dir_frozen, "coverage.json")
+jsonlite::write_json(cov, coverage_path, auto_unbox = TRUE, digits = NA)
+# the per-station year x month card, its own sidecar so the first paint stays small
+coverage_stations_path <- file.path(dir_frozen, "coverage_stations.json")
+jsonlite::write_json(build_coverage_stations(con_wdl, release_version), coverage_stations_path, auto_unbox = TRUE, digits = NA)
+# the two GeoJSON sidecars the map draws without a spatial extension: grid cells + centroids, and the
+# polygon layers (simplified for display; membership is exact and lives in sample_spatial)
+grid_geojson_path    <- file.path(dir_frozen, "grid.geojson")
+spatial_geojson_path <- file.path(dir_frozen, "spatial.geojson")
+unlink(c(grid_geojson_path, spatial_geojson_path))
+dbExecute(con_wdl, glue("COPY (SELECT grid_key, station, line, shore, pattern, zone, ST_X(geom_ctr) AS lon_ctr, ST_Y(geom_ctr) AS lat_ctr,
+                                ST_GeomFromWKB(ST_AsWKB(geom)) AS geom FROM grid)
+                         TO '{grid_geojson_path}' WITH (FORMAT GDAL, DRIVER 'GeoJSON')"))
+dbExecute(con_wdl, glue("COPY (SELECT spatial_key, layer, name, ST_SimplifyPreserveTopology(ST_GeomFromWKB(ST_AsWKB(geom)), 0.002) AS geom
+                                FROM spatial WHERE ST_GeometryType(geom) IN ('POLYGON', 'MULTIPOLYGON'))
+                         TO '{spatial_geojson_path}' WITH (FORMAT GDAL, DRIVER 'GeoJSON')"))
+cat(glue("coverage.json {round(file.size(coverage_path) / 1e3)} KB · coverage_stations.json {round(file.size(coverage_stations_path) / 1e3)} KB · ",
+         "grid.geojson {round(file.size(grid_geojson_path) / 1e3)} KB · spatial.geojson {round(file.size(spatial_geojson_path) / 1e6, 1)} MB\n"))
+
+# sample_spatial is a core relationship table (ERD + default table list); the three browser objects
+# are supplemental — hosted and catalogued, hidden from cc_get_db() by default like obs_ctd_full
+core_keep         <- c(core_keep, "sample_spatial")
+supplemental_keep <- c(supplemental_keep, "sample_root", "obs_bio", "obs_env")
+```
+
+```{r}
 #| label: release_notes_narrative
 
 # RELEASES.md is the database's NEWS file (CLAUDE.md § "RELEASES.md is not
@@ -1433,7 +1498,12 @@ releases_md <- readLines(releases_md_path, warn = FALSE)
 if (!staging) {
   releases_md <- promote_unreleased(releases_md, release_version, Sys.Date())
   writeLines(releases_md, releases_md_path)
-} else message("staging run: RELEASES.md left untouched (# Unreleased not promoted)")
+} else {
+  # a staging run renders its notes by the same rule (so an empty `# Unreleased` still stops it),
+  # but promotes in memory only — RELEASES.md on disk is never touched by a staging run
+  releases_md <- promote_unreleased(releases_md, release_version, Sys.Date())
+  message("staging run: RELEASES.md left untouched (# Unreleased promoted in memory only)")
+}
 notes_section <- release_notes_section(releases_md, release_version)
 stopifnot("RELEASES.md has no section for this release" = !is.null(notes_section))
 cat(glue("RELEASES.md: # {notes_section$heading}\n"))
@@ -1544,6 +1614,9 @@ core_spec <- dplyr::bind_rows(
                     "taxon", "dataset_taxon", "taxon_group"),
     partitioned = c(FALSE,    TRUE,  FALSE,           FALSE,
                     FALSE,    FALSE,           FALSE)),
+  # browser-shaped objects built in [browser_objects]; obs_env is one object per variable
+  tibble(table       = c("sample_spatial", "sample_root", "obs_bio", "obs_env"),
+         partitioned = c(FALSE,            FALSE,         FALSE,     TRUE)),
   tibble(table = supp_tbls, partitioned = TRUE))
 core_spec <- core_spec |>
   filter(table %in% dbListTables(con_wdl), !table %in% freeze_stats$table) |>
@@ -1670,8 +1743,10 @@ catalog_pre <- list(
   tables       = freeze_stats |>
     mutate(supplemental = dplyr::coalesce(supplemental, FALSE)) |>
     select(name = table, rows, partitioned, supplemental))
+# `releases_md` is the promoted text from [release_notes_narrative] — on disk for a real release,
+# in memory only for a staging run (whose date has no section on disk)
 release_notes <- render_release_notes(
-  release_version, readLines(releases_md_path, warn = FALSE),
+  release_version, releases_md,
   catalog      = catalog_pre,
   metadata     = NULL,
   test_results = NULL,
@@ -1739,6 +1814,9 @@ catalog_path <- file.path(dir_frozen, "catalog.json")
 jsonlite::write_json(catalog, catalog_path, auto_unbox = TRUE, pretty = TRUE, digits = NA)
 put_gcs_file(catalog_path,
   glue("gs://{gcs_bucket}/{gcs_release}/catalog.json"))
+# the coverage cube behind the explorer's first paint (built in [browser_objects])
+for (f in c(coverage_path, coverage_stations_path, grid_geojson_path, spatial_geojson_path))
+  put_gcs_file(f, glue("gs://{gcs_bucket}/{gcs_release}/{basename(f)}"))
 
 # upload RELEASE_NOTES.md
 notes_path <- file.path(dir_frozen, "RELEASE_NOTES.md")
@@ -1945,6 +2023,10 @@ sidecar_urls <- c(
   glue("gs://{gcs_bucket}/{release_prefix}/versions.json"),
   glue("gs://{gcs_bucket}/{gcs_release}/catalog.json"),
   glue("gs://{gcs_bucket}/{gcs_release}/metadata.json"),
+  glue("gs://{gcs_bucket}/{gcs_release}/coverage.json"),
+  glue("gs://{gcs_bucket}/{gcs_release}/coverage_stations.json"),
+  glue("gs://{gcs_bucket}/{gcs_release}/grid.geojson"),
+  glue("gs://{gcs_bucket}/{gcs_release}/spatial.geojson"),
   glue("gs://{gcs_bucket}/{gcs_release}/relationships.json"),
   glue("gs://{gcs_bucket}/{gcs_release}/erd.mmd"),
   glue("gs://{gcs_bucket}/{gcs_release}/RELEASE_NOTES.md"),

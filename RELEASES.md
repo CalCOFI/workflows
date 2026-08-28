@@ -8,6 +8,49 @@ versions). Conventions: see `CLAUDE.md` § "RELEASES.md is not optional".
 
 # Unreleased
 
+## The release now cuts browser-shaped objects, and effort travels with every bio observation
+
+Four new tables and one sidecar, built at release time by calcofi4db 3.24.0 for the CalCOFI Explorer
+(plan `2026-08-28 CalCOFI Explorer …`, D4/D8), and available to every consumer:
+
+- **`obs_bio`** (supplemental, one ~22 MB object) — the bio realm of `obs`, slim, with `root_id`,
+  `year`/`quarter`/`depth_bin`, `units`, `qual_ok` (`cc_qual_ok_sql()` evaluated at release), the gear
+  and effort of the observation's own sample (`tow_type`, `std_haul_factor`, `prop_sorted`,
+  `volume_sampled_m3`), and **two canonical densities derived once and named** —
+  `density_per_10m2` (areal: `count × std_haul_factor / prop_sorted` for C1/CB/CV/PV tows, published
+  per-m² × 10) and `density_per_1000m3` (volumetric: `count / prop_sorted / volume_sampled × 1000` for
+  any tow with a volume, published per-1000 m³ as is) — plus `effort_class`
+  (`count_with_effort` 482 k rows, 1 dataset · `raw_count_no_effort` 355 k, 5 datasets ·
+  `density_as_published` 155 k · `other_unit` 263 k). Areal and volumetric are never converted into
+  each other. The expression is `calcofi4r::cc_density_sql()` ≡ `calcofi4py.density_sql()` ≡ the
+  explorer's `sql/density.sql`, fixture-pinned byte for byte. `hex7` is one `UBIGINT` H3 cell at res 7;
+  coarser parents are bit arithmetic (`h3_parent_sql()`), so a browser needs no `h3` extension.
+- **`obs_env`** (supplemental, hive-partitioned by `measurement_type`: 84 objects, ≤ 10 MB each, 287 MB
+  in all) — the env realm with the same columns, so one variable is one fetch.
+- **`sample_root`** (supplemental) — one row per root sampling event with a dense, deterministic
+  integer `root_id`; the join key the three objects share, and the cruise tracks.
+- **`sample_spatial`** (core) — exact per-root-sample polygon membership for every polygon layer of
+  `spatial`, computed once, chunked per layer (≈1 M memberships over 15 polygon layers; the four
+  maritime-limit/port layers are lines and points and hold nothing). Replaces the per-app spatial join
+  that exhausted the 16 GB server.
+- **`coverage.json`** — n obs and root samples by dataset, dataset × station × year, dataset × year and
+  dataset × variable (181 KB): the explorer's first paint and Task 14's variable-based inventory.
+
+`metadata/measurement_type.csv` gains **`denominator`** (`area` | `volume` | `none`) so the vocabulary
+is registry-owned. The default view of a taxon is the denominator that covers the most datasets *with
+effort* — never largest-n (`cc_default_stage()` / `cc_default_denominator()`): Pacific sardine opens as
+larva · per 10 m² · swfsc_ichthyo (6,158 rows; 1,262 manta rows excluded, available per 1000 m³), not
+one number averaged over 62,898 rows in three units.
+
+**Missing effort is an ingest task, and is now filed** — `swfsc_cufes` Q05 (pump volume), `calcofi_phyllosoma`
+Q05 (volume filtered, proposed), `sio_mesopelagic-fish` Q08 (VolFilt, proposed), `farallon_bird-mammal` Q08
+(transect area → a per-km² denominator, proposed), `cdfw_dungeness-crab` Q13; until they land those rows are
+`raw_count_no_effort` and the app says so. **Also found by the cut:** every `swfsc_ichthyo` tow/net sample
+has `depth_max_m = NULL`, so a net tow cannot be drawn as the integrated span it is (`swfsc_ichthyo` Q08).
+
+**Consumers:** `cc_get_db()` gets `sample_spatial` by default; `obs_bio`/`obs_env`/`sample_root` are
+`supplemental = TRUE` (opt in). `test_release.qmd` gains seven contract rows over the new objects.
+
 
 # v2026.08.25 (2026-08-25)
 
