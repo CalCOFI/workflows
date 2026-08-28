@@ -592,7 +592,7 @@ Screenshots (one per lens, cold, plus env section with anomaly, warm hex morph, 
 ### Phases 1–2 — executed (2026-08-28, same day; `CalCOFI/explore` created and pushed, Pages live at calcofi.io/explore/)
 
 **Phase 1 (release additions) — calcofi4db 3.24.0, calcofi4r 1.13.0, calcofi4py 0.5.0, workflows wiring; a
-staging release run (`ducklake-staging/`) is proving the chunk end-to-end.**
+staging release run (`ducklake-staging/releases/v2026.08.28`, canonical) proved the chunk end-to-end: 22-table catalog, the four sidecars served, every new contract query passes (6,158 · 0 · 883,827 · 0 · 0 · 69,501), `RELEASE_NOTES.md` rendered from `# Unreleased`; committed to workflows.**
 
 - `R/explore.R`: `build_sample_root()` (dense deterministic `root_id`), `build_obs_slim(con, realm, qual_ok_sql,
   density_sql)` → `obs_bio` / `obs_env` (one schema; `hex7` UBIGINT; depth = obs → sample → root), `h3_parent_sql()`
