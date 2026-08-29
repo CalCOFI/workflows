@@ -549,6 +549,35 @@ D19, then the GitHub-issue step of U4b.
   have a NULL `taxon_key` — dropped from the list (they never matched a selection anyway). Verified: `npm run build`
   clean; `scripts/verify.mjs --only=u0` — 12 states at 1280 × 800, no overflow, every control in view, no page
   errors (`shots/u0/`).
+- **U1 · shipped 2026-08-29, `explore@5a9d50a`.** D11 as specified: `src/panels.tsx` (Rail · MaxPanel · FloatCard ·
+  PillRow · Sheet · Sparkline, 210 lines, no library); the three rails fold to state pills ("⁚⁚ 🐟 Pacific sardine ·
+  larva · per 10 m²" vertical, "Depth 0–500 m" / "Depth · integrated tows" muted, "Years 1949–2026" + a 60-px
+  sparkline), maximize with a backdrop + Esc (the years strip as a full-width series; the depth strip as a wide
+  profile with one dotted median line per dataset from the new `depth_strip_ds.sql`), and the select rail resizes
+  260–440 px on a gutter (localStorage). Station coverage and SQL & timing left the rail and the map's corner for
+  floating cards; cards minimize to the map's top-left pill row, drag within the map box (position in localStorage
+  per card, reset on a viewport change), and default to slots that cover neither the legend (moved top-left) nor
+  the attribution; the ⚙ is gone. `hide=` / `max=` in the URL, written only when they differ from the viewport
+  default (≥ 1200 px all open; 900–1200 depth folded — verified at 1000 × 700). The two layering bugs are fixed by
+  one rule — `.map { z-index: 0 }` makes the map a stacking context, so MapLibre's z:2 control container (where the
+  deck.gl canvas also lives) can never paint above a card — plus the scale in `:root` (`--z-pills 10 · --z-cards 20 ·
+  --z-max 30 · --z-menu 35 · --z-modal 40 · --z-tour 50`). Depth-axis rule 1: the rail shows the honest sentence,
+  the folded pill goes muted, and an axis *appearing* while folded pulses the pill once; nothing moves. Two things the
+  plan did not know: Plotly's `responsive: true` only watches the window, so `usePlot` now has a `ResizeObserver`
+  (and waits for a ≥ 40-px box — a rail mid-transition is 28 px and Plotly laid out `Infinity` into it); and the
+  phone header overflowed 390 px, which made mobile Chrome zoom the whole page out to a 473 × 1024 layout viewport
+  (the sheet was off-screen) — the title, chip and ⋯ now fit in 382 px. **D18** ships in the same commit: < 900 px the
+  map is the page; the select rail is a bottom sheet with three detents (peek 104 px = selection + lens strip · half
+  50 % · full 90 %; pointer drag with a flick, ↑↓ on the handle); depth and years are pills on the map's edge that
+  open as sheets; a lens's card and a station's card open as sheets; the combobox is full-screen; the header keeps
+  logo · title · chip · ⋯ · theme. Verified: `npm run build` clean; `scripts/verify.mjs --only="^(u1|p)_"` — 18
+  desktop states at 1280 × 800 (folds by URL and by click round-tripping `hide=`, maximize + Esc round-tripping
+  `max=`, Ben's two bug URLs, minimize → pill, a 300-px card drag staying in the box, 1000 px default, light) and 10
+  phone states at 390 × 844 (peek 105 px · half 422 · full 760, a 300-px touch drag, Sections via the lens strip,
+  the depth and years sheets, the full-screen organism picker, hexagons, light): no horizontal overflow, every
+  control in view or in a scroll box, no page errors (`shots/u1/`). **Real-device gate: not yet run by a person** —
+  `vite preview --host` is serving the GCS-dev build at `http://192.168.178.173:5179/` for a phone on the LAN; the
+  emulated viewport is a layout check, not a phone, and that check is Ben's to tap through before 9/8.
 
 ## Layout, drawn
 
