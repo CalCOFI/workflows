@@ -710,6 +710,10 @@ D19, then the GitHub-issue step of U4b.
   the slice effect prunes the filter to the picker's datasets (a realm switch drops it), `lensReady` keys
   `preSlice`, the domain always comes from the lens's own rows, and an empty result says "nothing in the
   selection — the filters (…) leave no observation · all datasets". Three verify states reproduce both screenshots.
+  **U7c** (Ben: "the list is overwhelming"): both pickers now **open on the Browse tree** — every category folded to
+  one row (glyph · items · span · log bar), the pick's category open to the pick + "… N more", a header click opens
+  a category in full; typing searches within the tree; the Search tab (flat list) is a per-open choice, never
+  remembered. `explore@` (see git log) — verify u7_picker_tree*, u7_variable_tree.
 
 ## Layout, drawn
 
