@@ -636,6 +636,19 @@ catalog-shaped copy of them at `gs://calcofi-db/explore-dev-root/explore-dev/` b
 else; a per-dataset (or per-taxon-rank) split of the bio object would let the default open on ~60 % of it.
 Cruise's first switch pays the lazy 11 MB `sample_root` (0.8–2.3 s): ship per-cruise tracks.
 
+**2026-08-29 follow-ups (Ben's review of the live site):** the env pills after a bio→variable switch showed
+stale ichthyo rows (orphaned DOM from duplicate React keys while the new slice loaded) — fixed; clicking a
+dataset pill now toggles a `?datasets=` filter applied in `_filters.sql` (rule 4's "filtering to datasets").
+**A variable is not a measurement type:** the CTD headline series are keyed `temperature_ave`,
+`salinity_ave_corr`, `oxygen_ml_l_ave_sta_corr`, `oxygen_umol_kg_ave_sta_corr`, `sigma_theta_1` (1993–2026)
+while bottle uses the bare names (1949–2021), so "temperature" was bottle-only and stopped in 2021 although the
+release holds CTD casts to 2026-07. The explorer now carries a crosswalk (`src/variables.ts`: one variable =
+the comparable bottle + CTD headline types, union of their objects, dataset pills bottle/CTD) — **this belongs
+in `metadata/measurement_type.csv` as a `variable` column, registry-owned like `denominator`** (Phase-1
+follow-up; the CTD `btl_*` types are the CTD's own bottle samples and must stay separate or they double-count).
+The year range now comes from `coverage.json` (an open-ended `years` in the URL closes at the release's last
+year), never a constant.
+
 **Left for the next session:** merge the two PRs after review; cut the real release (the chunk is proven by
 the staging run — see `release_database-staging-p1.html`) and flip Pages to `ducklake/releases`; `/station`
 308; effort ingests once the providers answer; Phase 3 (Cruise/Region parity, notebooks, "Copy as…", SQL parity
