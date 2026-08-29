@@ -1,5 +1,5 @@
-generated: '2026-08-13'
-n_total: 51
+generated: '2026-08-29'
+n_total: 56
 n_meta: 25
 categories:
 - id: ingest
@@ -81,7 +81,7 @@ categories:
         before counting, so the grain is cruise x region, not per-station. Source:
         EDI knb-lter-cce.254.4.'
       coverage: 1996 to 2022
-      bbox: 32.3–33.9°N, 121.6–118.6°W
+      bbox: 32.4–33.6°N, 121.7–118.8°W
       color: '#b5e8b0'
       link_calcofi_org: https://calcofi.org/data/marine-ecosystem-data/phytoplankton-bacterioplankton/
       link_data_source: https://portal.edirepository.org/nis/mapbrowse?packageid=knb-lter-cce.254.4
@@ -217,8 +217,8 @@ categories:
         in the examined aliquot, not standardized density. Sorting was performed at
         the SIO Pelagic Invertebrate Collection, where the removed megalopae are archived
         in vials.'
-      coverage: 1949 to 2014
-      bbox: California Current, San Francisco north to Washington
+      coverage: 1949-04 to 2014-05
+      bbox: 33.5–51.0°N, 164.1–118.6°W
       color: '#f5d5b8'
       provider: cdfw
   - label: Farallon Institute
@@ -232,7 +232,7 @@ categories:
       coverage: 1987-05 to 2021-08
       bbox: 29.8–37.8°N, 126.5–117.2°W
       color: '#f0d2e8'
-      link_data_source: https://oceaninformatics.ucsd.edu/datazoo/catalogs/ccelter/datasets/255
+      link_data_source: https://oceanview.pfeg.noaa.gov/erddap/tabledap/CAC_FI_SBAS_obs.html
       provider: farallon
 - id: publish
   title: Publish
@@ -265,10 +265,12 @@ categories:
     it to the apps and services that read it, and the maintenance utilities that support
     the pipeline.
   layout: list
-  count: 7
+  count: 11
   groups:
   - label: ''
     items:
+    - url: clean_ctd_cruise-var.html
+      title: clean_ctd_cruise-var
     - url: clean_db.html
       title: clean_db
     - url: deploy_consumers.html
@@ -282,6 +284,12 @@ categories:
       title: load_views
     - url: release_database.html
       title: release_database
+    - url: release_database-staging.html
+      title: release_database-staging
+    - url: release_database-staging-canon.html
+      title: release_database-staging-canon
+    - url: release_database-staging-p1.html
+      title: release_database-staging-p1
     - url: test_release.html
       title: test_release
     - url: update_datasets-sitemap.html
@@ -309,7 +317,7 @@ categories:
   title: Other notebooks
   blurb: Exploratory analyses and legacy load scripts, kept for reference.
   layout: list
-  count: 21
+  count: 22
   groups:
   - label: ''
     items:
@@ -353,6 +361,8 @@ categories:
       title: load_bottle-stations
     - url: load_field-labels.html
       title: load_field-labels
+    - url: load_pg_ctd.html
+      title: load_pg_ctd
     - url: load_sanctuaries.html
       title: load_sanctuaries
 dag_mermaid: |-

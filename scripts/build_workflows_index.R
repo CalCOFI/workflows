@@ -35,6 +35,11 @@ provider_csv <- here::here("metadata/provider.csv")
 stopifnot("metadata/provider.csv not found" = file.exists(provider_csv))
 d_provider     <- readr::read_csv(provider_csv, show_col_types = FALSE)
 provider_label <- setNames(d_provider$provider_short, d_provider$provider)
+# the category vocabulary is a registry too (metadata/category.csv; explorer UI plan D14): an ingest's
+# `category:` was free text, so a typo made a category of one on the schema site and in the explorer's Browse
+category_csv <- here::here("metadata/category.csv")
+stopifnot("metadata/category.csv not found" = file.exists(category_csv))
+d_category    <- readr::read_csv(category_csv, show_col_types = FALSE)
 # display order within the ingest section follows the registry's row order
 provider_order <- d_provider$provider
 
@@ -205,6 +210,7 @@ recs <- lapply(htmls, function(h) {
     coverage    = oneline(cov),
     bbox        = oneline(bbox),
     color       = cc$erd$color %||% "",
+    dataset_category = dm$category %||% NA_character_,   # the dataset's category (metadata/category.csv), not the site's section
     link_calcofi_org = dm$link_calcofi_org %||% "",
     link_data_source = dm$link_data_source %||% "",
     source_qmd  = if (is.na(src)) "" else basename(src))
@@ -317,6 +323,12 @@ for (cid in names(categories)) {
     # declares must be registered in metadata/provider.csv. The old hardcoded
     # lookup degraded silently: an unregistered provider became NA_character_ and
     # shipped as a literal ".na.character" group heading to the live page.
+    cats <- unique(unlist(lapply(incat, function(r) r$dataset_category)))
+    bad_cat <- setdiff(cats[!is.na(cats)], d_category$category)
+    if (length(bad_cat))
+      stop("category(ies) not in metadata/category.csv: ", paste(bad_cat, collapse = ", "),
+           "\n  Every ingest's `category:` must be one of the registered categories (the explorer's Browse",
+           " tab and the schema site group by them); add a row there first if it is genuinely new.", call. = FALSE)
     unregistered <- setdiff(unique(provs), c(names(provider_label), "other"))
     if (length(unregistered))
       stop("provider(s) not in metadata/provider.csv: ",

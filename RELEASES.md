@@ -8,6 +8,19 @@ versions). Conventions: see `CLAUDE.md` § "RELEASES.md is not optional".
 
 # Unreleased
 
+## `coverage.json` carries taxa and categories, and `measurement_type` says which category and variable a type belongs to
+
+The explorer's organism list waited on a 22 MB download and its variables were grouped by a keyword rule
+ported from the station app. `coverage.json` (`calcofi4db::build_coverage()` ≥ 3.25.0) now carries
+`taxa[]` — one row per taxon of the bio realm with names, rank, class, `n_obs`, year span, life stages and
+its datasets — and `variables[].category` / `.variable` from two new `metadata/measurement_type.csv`
+columns: **`category`** (one of the twelve in the new **`metadata/category.csv`** registry, which
+`build_workflows_index.R` now enforces on every ingest's `category:`) and **`variable`** (the
+cross-dataset crosswalk: the bottle's `temperature` and the CTD's `temperature_ave` are one variable).
+Both are set with `calcofi4db::declare_measurement_fields()`, never a bare `write_csv`.
+
+**Consumers:** additive — `coverage.json` gains keys, `measurement_type` gains two nullable columns.
+
 ## The release now cuts browser-shaped objects, and effort travels with every bio observation
 
 Four new tables and one sidecar, built at release time by calcofi4db 3.24.0 for the CalCOFI Explorer

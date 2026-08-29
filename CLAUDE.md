@@ -174,7 +174,12 @@ Every CalCOFI product wears one theme, one header and one favicon, and the rule 
   `<html>` and fires `cc:theme`; maps, Plotly and Mermaid restyle on it. Never key on
   `prefers-color-scheme`.
 - `.cc-header`: logo far left → `https://calcofi.io`; the product's title beside it → its own
-  root (that is how the two links stay distinguishable); 🌓 toggle at the right. Where a
+  root (that is how the two links stay distinguishable); the theme toggle at the right — a sun while
+  the page is dark, a moon-in-sun while it is light, i.e. what a click switches *to* (MDI `brightness-7`/`-4`,
+  calcofi4py's pair; fleet-wide since 2026-08-29, replacing 🌓 — `theme.js` draws it over the snippet's `🌓`
+  fallback, `theme.css` exports the masks as `--cc-icon-sun`/`--cc-icon-moon`, and docs' `brand-head.html` /
+  the packages' `_pkgdown.yml` dress the framework toggles with them; the Shiny apps' bslib switch is not yet
+  switched). Where a
   framework owns the bar (Quarto, pkgdown, mkdocs, bslib `page_navbar`) the logo goes in its
   brand slot and its native toggle is bridged — never two bars, never two toggles.
 - The CalCOFI favicon set, except `calcofi4r` (hex) and `calcofi4py` (squircle).
@@ -577,6 +582,7 @@ fetched in, so its ids may be filled but never replaced.
 |---|---|
 | `field_dictionary.csv` | **Prescriptive** canonical field names/types/units/aliases. New datasets conform; consistency is linted against it. |
 | `measurement_type.csv` | Canonical measurement vocabulary (raw measured quantities). `is_canonical` flags the headline types; `valid_min`/`valid_max` bound the value and `valid_depth_min_m`/`valid_depth_max_m` the **depth over which the type is defined** (`est_chlorophyll_a_*` is computed for 0–200 m alone, so a null below that is by construction, not missing data); `derivation` is free text saying how a *derived* type was produced (the `_cruise_corr` vs `_sta_corr` distinction is not something a consumer should have to guess). **Read it with `calcofi4db::read_measurement_type()` and append with `register_measurement_types()`, never with bare `read_csv`/`write_csv`** — see the round-trip trap below. Bounds are **enforced per dataset at ingest time**, see below. |
+| `category.csv` | **Registry of the twelve data categories** (`category, order, realm, icon, description`) — what an ingest's `calcofi.dataset_meta.category` and `measurement_type.category` must be one of (`build_workflows_index.R` errors on an unregistered one); the explorer's *Browse* tab, the schema site and the calcofi.io cards group by it, and `icon` is the brand sprite id (`calcofi.io/brand/v1/icons/`). Set a type's `category` / `variable` with `calcofi4db::declare_measurement_fields()`, never a bare `write_csv` (`scripts/declare_measurement_fields.R` seeds them). |
 | `provider.csv` | **Registry of curating organizations** — one row per `provider` slug with `provider_short` (display label), `provider_name`, `url`, `status`. Any provider an ingest declares MUST be here: `scripts/build_workflows_index.R` errors out otherwise. Replaced a hardcoded label vector in that script, which silently yielded `NA` and published a literal `.na.character` heading for unregistered orgs. |
 | `dataset.csv` | **DEPRECATED** — superseded by each ingest's `calcofi.dataset_meta` YAML block via `ingest_yaml_to_dataset_df(read_ingest_yaml())`. The CSV drifted from the notebooks and orphaned `obs` rows. |
 | `dataset_status.csv` | Pipeline-stage tracker, one row per dataset; each skill writes its stage column. |
