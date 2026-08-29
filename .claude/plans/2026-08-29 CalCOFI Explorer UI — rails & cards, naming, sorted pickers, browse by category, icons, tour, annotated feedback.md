@@ -596,6 +596,27 @@ D19, then the GitHub-issue step of U4b.
   help); `scripts/verify.mjs --only="^(u3|p3)_"` — welcome shown at `?tour=on`, not shown again after *Explore*,
   About with 16 dataset rows, the issue link, and `walkTour()`: all ten steps highlight an on-screen element with a
   popover on both 1280 × 800 and 390 × 844 (`shots/u3/u3_tour_00–09.png`, `p3_tour_00–09.png`).
+- **U6 · shipped 2026-08-29, `explore@ce4b85f`.** D20 as specified, the three gestures kept apart: brush = filter
+  (`years=`, month-resolved as `years=2015-04:2016-10` once the strip is zoomed in; `_filters.sql` compares
+  `year::INTEGER * 100 + month(datetime)` — `year` is a SMALLINT and `* 100` overflowed INT16 on the first run),
+  wheel / pinch = zoom (`yview=`, in fractional years so the Gantt's date axis shares it; never the filter),
+  double-click = reset (the strip with a real mouse; also the context bar and a ⤡ header button, because CDP
+  synthesizes no `dblclick` from `clickCount: 2` and Plotly counts its own from mousedown timing — the button is
+  what the check proves), ⤢ on the brush zooms to the selection and ✕ clears it, a context bar pans when zoomed.
+  Level of detail: month bins at ≤ 15 years (`years.sql {{bin}}`, queried on demand) — the zoomed temperature
+  series shows the seasonal cycle instead of fatter bars; the `season` chip (`q=`) is the quarter sibling.
+  **Cruises mode**: one bar per cruise from `t0` to `t1` in lanes by ship (36 ships from the `cruise` reference,
+  first-appearance order; no two cruises of one ship overlap), coloured by the summary stat with `n` as opacity;
+  at 140 px a lane is ~3 px, so the labels hide ("35 ships", the ship in the hover) and reappear maximized; codes
+  appear only where a bar is ≥ 40 px (a 3-week cruise needs a window under ~1 year on the strip), click picks the
+  cruise. The first version looped: the label pass `relayout`s annotations, which fires `plotly_relayout` again —
+  now only a changed set is written and only a zoom/pan re-labels. Verified: `npm run build` clean;
+  `scripts/verify.mjs --only="^(u6|p6)_"` — 14 states: `yview=` by URL draws month bins (> 100 bars), wheel →
+  `yview=`, double-click on the context bar and the reset button clear it, a brush → whole-year `years=` + the
+  handle, zoom-to-selection keeps the filter, a brush at 5 years → month-resolved `years=`, the season chip,
+  the Gantt (> 100 bars in 35 lanes, a labelled code at 0.8 years, a pick 2009-04-OIFS → 2008-04-31JD),
+  maximized, light, the phone years sheet (`shots/u6/`). Not done: the optional *season* mode (12 month bins over
+  all years) — "waits for a request", as the plan says.
 
 ## Layout, drawn
 
