@@ -635,6 +635,23 @@ D19, then the GitHub-issue step of U4b.
   non-background; `shots/u4/u4_capture_export.png`), 11 panel figures all non-blank / stamped / with rows and
   named to the pattern, the maximized size, the phone Share menu. Tracking is wired (`src/track.ts`) but the page
   carries no gtag yet — U4b adds the fleet's GA4 snippet.
+- **U4b · shipped 2026-08-29, `explore@3d7813d` + `calcofi4r@71da4de` (1.14.0).** D17 as specified: the annotator
+  (`src/annotate.tsx`: arrow · circle · rectangle · pen · text, accent + warn colours, undo, clear, pointer events);
+  the dialog (`src/feedback.tsx`: capture on open, thumbnail with edit / retake / include, text, optional email, the
+  plain sentence about what is sent and where, **Send** · **Open as GitHub issue myself**); the endpoint
+  (`calcofi4r::cc_feedback_script()` + `cc_feedback_header()`, 26 tests): per submission Drive image → Sheet row →
+  mail to the `recipients` tab (Ben + Erin + Betty to start; edit a cell, no redeploy) → public `CalCOFI/explore`
+  issue with the screenshot committed under `feedback/<id>.png`, never the email; honeypot + hourly cap;
+  `GITHUB_TOKEN` optional. Tracking: the fleet's GA4 snippet is in `index.html` now (webdriver browsers excluded),
+  and share / export / feedback fire through `src/track.ts`. The build reads `VITE_FEEDBACK_URL` from a Pages
+  **repository variable**, so the deploy needs no commit. Verified: `scripts/verify.mjs --only="^(u4b|p4b)_"` — the
+  dialog with a thumbnail and Send disabled without an endpoint, the annotator ("2 marks"), a mocked endpoint
+  receiving `app=explore · text · v2026.08.25 · 1280×800 · dark · a 362 KB annotated PNG · website ""` and the
+  thanks with the issue link, the phone dialog via ⋯ (`shots/u4b/`). **Not done — needs Ben's Google account:**
+  create the *CalCOFI app feedback* Sheet (`feedback` + `recipients` tabs), paste `cat(calcofi4r::cc_feedback_script())`,
+  deploy as a web app (execute as me · anyone), add `GITHUB_TOKEN` (fine-grained, contents + issues on
+  `CalCOFI/explore`) as a script property, set the `/exec` URL as the `VITE_FEEDBACK_URL` repository variable and
+  re-run the Pages workflow; until then the dialog offers the prefilled public issue only, and says so.
 
 ## Layout, drawn
 
