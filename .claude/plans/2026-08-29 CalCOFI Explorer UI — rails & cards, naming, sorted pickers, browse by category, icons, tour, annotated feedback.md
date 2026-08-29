@@ -676,6 +676,35 @@ D19, then the GitHub-issue step of U4b.
   `npm run build` clean; the **whole suite** (79 states) green in five chunks — one headed Chrome loses its tab after
   ~30 states (`detached Frame`), which `verify.mjs` now survives by opening a fresh one.
 
+- **U7 · shipped 2026-08-29, `explore@2b02804` + `calcofi4r@005529d` (1.14.1).** Ben's cleanup pass after the seven
+  slices. Header: the query / schema / docs links are gone (About's credits keep them) and the release chip sits at
+  the right with the tools; the phone's ⋯ is About · Feedback. **The URL now carries the map extent**
+  (`map=lon,lat,zoom`, written on every settled pan or zoom, absent at the grid's home view; `MapView` takes
+  `view` / `onView` and eases to an external view) — Share → Copy link said "folds and zoom included" while the
+  map's zoom was not in it (only the year strip's `yview=`), and a feedback report reopened at the home view; the
+  hint now lists what the link carries. The map has its own ⬇ beside the status chip (`.map-tr`): PNG = the map box
+  captured at 2× without the floating cards, CSV = the table the lens draws (station / hexagon / region summary,
+  the samples along a cruise track); no SVG — WebGL. `captureView()` gained `hide` and pins the clone root only when
+  it is absolutely positioned (the map box is `relative` and is its children's containing block — pinning it broke
+  the capture). Annotator: the **text tool never worked** — the input mounted and focused inside `pointerdown`, then
+  the browser's own mousedown moved focus to the canvas and the input blurred empty; `preventDefault()` on the
+  placement, a `key` on the input so a second placement remounts, and Done paints the pending text itself; a third
+  colour, hot pink (`#ff2d95`), which no viridis dot wears. Rail clutter: `Group` is a disclosure (`open` /
+  `onToggle`, `data-group=`) and FILTERS + EXPORT start folded — folded FILTERS still says what is in force
+  (`1990–2005 · Q1 Q2 · 0–200 m · ichthyo`), EXPORT says `data · code · share`; the DuckDB footer sentence is gone
+  (the header carries the lens title). The **denominator** is one line — which is in force, for whom, how many
+  excluded — that opens to the three radios with their formulas (`DEN_HOW`: per 10 m² = count × standard haul
+  factor ÷ proportion sorted; per 1000 m³ = count ÷ proportion sorted ÷ volume strained × 1000; raw = as counted)
+  and `SHF_NOTE`: the standard haul factor (10 × tow depth ÷ volume strained, SWFSC's per-tow multiplier,
+  `obs_bio.std_haul_factor`) **is what per 10 m² applies, not a fourth denominator** — Ed Weber's metric is the
+  first radio, now labelled as such; the ⚠ pill rule ("gear known AND some effort measure present") is untouched.
+  The tour expands the folded groups for their steps. Mail: `cc_feedback_script()` 1.14.1 embeds the screenshot
+  inline (`MailApp` `inlineImages`, `cid:shot`, linked to the view URL), gated on the Drive copy; **redeploy the Apps
+  Script** to pick it up. Verified: `tsc` clean; `verify.mjs` `u7_*` (header, folded denominator + formulas, folded
+  FILTERS summary, `map=` written and reopened, map PNG 1452×1250 / CSV 1,050 lines, text in hot pink) + the
+  touched U0/U1/U4/U4b/U6/p4 states green; `test-feedback.R` 30 expectations green (testthat had to be installed
+  for R 4.6.1 — devtools still is not).
+
 ## Layout, drawn
 
 Desktop, everything open (≥ 1200 px):
