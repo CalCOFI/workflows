@@ -703,7 +703,13 @@ D19, then the GitHub-issue step of U4b.
   Script** to pick it up. Verified: `tsc` clean; `verify.mjs` `u7_*` (header, folded denominator + formulas, folded
   FILTERS summary, `map=` written and reopened, map PNG 1452×1250 / CSV 1,050 lines, text in hot pink) + the
   touched U0/U1/U4/U4b/U6/p4 states green; `test-feedback.R` 30 expectations green (testthat had to be installed
-  for R 4.6.1 — devtools still is not).
+  for R 4.6.1 — devtools still is not). **U7b** (after Ben's first look at the deploy): a dataset filter set under
+  Biology rode into an Environment view (`datasets=swfsc_ichthyo` against bottle + CTD → 0 observations), and once
+  cleared the legend stayed on the pre-engine "root samples · coverage.json" text with a count-mode colour domain —
+  on a non-station lens the station table is fetched once at open, and `preSlice` was keyed on it being empty. Now
+  the slice effect prunes the filter to the picker's datasets (a realm switch drops it), `lensReady` keys
+  `preSlice`, the domain always comes from the lens's own rows, and an empty result says "nothing in the
+  selection — the filters (…) leave no observation · all datasets". Three verify states reproduce both screenshots.
 
 ## Layout, drawn
 
