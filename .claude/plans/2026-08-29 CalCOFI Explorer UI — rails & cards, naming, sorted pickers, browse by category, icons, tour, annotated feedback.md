@@ -652,6 +652,29 @@ D19, then the GitHub-issue step of U4b.
   deploy as a web app (execute as me · anyone), add `GITHUB_TOKEN` (fine-grained, contents + issues on
   `CalCOFI/explore`) as a script property, set the `/exec` URL as the `VITE_FEEDBACK_URL` repository variable and
   re-run the Pages workflow; until then the dialog offers the prefilled public issue only, and says so.
+- **U2 · shipped 2026-08-29, `explore@6c356ef` + `calcofi4db@8669e23` (3.25.0) + `workflows@4167386` +
+  `CalCOFI.github.io@eb911f0` + `db-viz-station@68897cb`.** D14 registry half: `metadata/category.csv` (12 rows,
+  `category · order · realm · icon · description`; `build_workflows_index.R` errors on an unregistered
+  `dataset_meta.category`), `measurement_type.csv` gains `category` (all 200 types — the env types by the station
+  app's keyword rule ported verbatim, the bio types from their dataset) and `variable` (the five-variable
+  bottle/CTD crosswalk), both set through the new `calcofi4db::declare_measurement_fields()` by
+  `scripts/declare_measurement_fields.R`; `build_coverage()` puts `taxa[]` (1,212 rows: names, rank, class,
+  n_obs, year span, life stages, datasets with n_obs) and `variables[].category / .variable` on `coverage.json`
+  (144 tests green; `RELEASES.md § Unreleased` written). The registry does not need a release to reach the
+  explorer today: `explore/scripts/dev_coverage.R` regenerated the dev catalog's `coverage.json` (573 KB) and
+  uploaded it to `explore-dev`, so the Pages build reads it now; the real release will carry the same. Browse
+  tab as drawn: by category (the registry's, with the glyphs) or by dataset, counts · year spans · dataset dots
+  · bars, click → select; the organism list opens before the engine is warm (1,212 organisms listed with
+  `taxa.sql` not yet answered); the variables' categories are the registry's, the crosswalk the release's when
+  present. D15: `brand/v1/icons/calcofi-icons.svg` (48 `<symbol>`s: `cat-*` · `lens-*` · `realm-*` · `ui-*`) +
+  `icons.css` (`--cc-icon-<id>` masks + `.cc-i`), generated from `explore/src/icon-paths.ts` by
+  `scripts/build_icons.mjs` with a contact sheet checked at 16 / 24 / 40 px in both themes; `theme.css` gains
+  `.cc-icon-button`; README "Changes within v1"; db-viz-station's `CATEGORY_ICON` is the masks (one function, one
+  `<link>`). The explorer keeps rendering the same paths inline (a cross-origin `<use>` does not work) — the
+  sprite is for everyone else. Not done: the picker's "class" grouping comes from `taxon.class` as planned, but
+  Picoplankton & Bacteria has no taxon-keyed observations, so Browse shows six bio categories, not seven. Verified:
+  `npm run build` clean; the **whole suite** (79 states) green in five chunks — one headed Chrome loses its tab after
+  ~30 states (`detached Frame`), which `verify.mjs` now survives by opening a fresh one.
 
 ## Layout, drawn
 
