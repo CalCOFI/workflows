@@ -578,6 +578,24 @@ D19, then the GitHub-issue step of U4b.
   control in view or in a scroll box, no page errors (`shots/u1/`). **Real-device gate: not yet run by a person** —
   `vite preview --host` is serving the GCS-dev build at `http://192.168.178.173:5179/` for a phone on the LAN; the
   emulated viewport is a layout check, not a phone, and that check is Ben's to tap through before 9/8.
+- **U3 · shipped 2026-08-29, `explore@5fa0853`.** D16 as specified: the header cluster is four `.cc-icon-button`s in
+  the toggle's style (help · about · feedback · theme; on a phone About and Feedback fold behind ⋯ with the links,
+  and the title shortens to *Explorer* — the `?` button had pushed the bar to 422 px, which `overflow: clip` now hides
+  but the map's width still reports); a one-paragraph welcome card on the first visit (`localStorage.explore_welcome`;
+  `?tour=on` forces it, `?tour=off` never shows it — the brand screenshots keep passing); the About modal with the
+  release chip, "why one frozen release", the 16 datasets (category glyph · colour dot · provider · years and
+  observations from `coverage.json` · calcofi.org / source / cite), keyboard, credits and the allowed "better on a
+  computer" line; `driver.js` 1.8 (6 KB gz) over `data-tour` anchors with ten steps and `before()` hooks — Lenses
+  plays the morph to Hexagons (not under reduced motion), Depth and Years unfold a folded rail, the phone steps move
+  the sheet — plus a snapshot/restore so lens, folds and sheet return to what they were; `?` starts it. Feedback is
+  the D17 "open a GitHub issue myself" half for now (public `CalCOFI/explore` issue prefilled with the view URL,
+  release, viewport, theme); U4b replaces it with the capture + annotate dialog. Two things found: driver's
+  `scrollIntoView` scrolled the phone page — an `overflow: hidden` body is still programmatically scrollable, so it
+  is `overflow: clip` now; and an anchor selector must pick the first *visible* match, because the phone keeps the
+  hidden header buttons in the DOM ahead of ⋯. Verified: `npm run build` clean (bundle +17 KB gz for driver.js +
+  help); `scripts/verify.mjs --only="^(u3|p3)_"` — welcome shown at `?tour=on`, not shown again after *Explore*,
+  About with 16 dataset rows, the issue link, and `walkTour()`: all ten steps highlight an on-screen element with a
+  popover on both 1280 × 800 and 390 × 844 (`shots/u3/u3_tour_00–09.png`, `p3_tour_00–09.png`).
 
 ## Layout, drawn
 
