@@ -617,6 +617,24 @@ D19, then the GitHub-issue step of U4b.
   the Gantt (> 100 bars in 35 lanes, a labelled code at 0.8 years, a pick 2009-04-OIFS → 2008-04-31JD),
   maximized, light, the phone years sheet (`shots/u6/`). Not done: the optional *season* mode (12 month bins over
   all years) — "waits for a request", as the plan says.
+- **U4a · shipped 2026-08-29, `explore@a38e596`.** The capture spike decided for **one `html-to-image` composite** of
+  the app root: a `foreignObject` rasterized by the browser (so `color-mix()` works, Plotly's SVGs ride along as
+  DOM) with both WebGL canvases as images — MapLibre needed `canvasContextAttributes.preserveDrawingBuffer` (its
+  option name in v5), deck.gl 9 preserves its buffer by default — so neither `interleaved: true` nor the Screen
+  Capture API fallback was needed; the brand's cross-origin `theme.css` only mattered for `skipFonts` (the fonts
+  are the system stack). D19: every rail, card, maximized panel and phone sheet header has ⬇ PNG · SVG · CSV
+  (`src/export.ts`; Plotly PNG at 2× on the theme background, SVG with the footer as text, the panel's own table
+  — month rows when zoomed, the Gantt rows in cruises mode, per-dataset depth rows when maximized; the station
+  card as a DOM capture — which came out blank until the cloned card was pinned at 0,0, since a positioned root
+  keeps its `top/right` in the clone); the maximized panel exports at its size (2,476 × 1,412). Share ▾ has Copy
+  link · Copy image · Download PNG · Send feedback; the footer stamp is shared (`selection · release ·
+  calcofi.io/explore + URL`). `luminanceStats()` replaced the plan's "mean luminance ≠ background" check: a dark
+  map and a blank dark canvas share a mean (42 vs 29), so the check is spread + non-background fraction. Verified:
+  `npm run build` clean (bundle 732 KB gz, +28 KB over U0's start: driver.js ≈ 6, html-to-image ≈ 12, the rest is
+  the app); `scripts/verify.mjs --only="^(u4|p4)_"` — whole-view captures in dark and light (sd 30 / 44, 45 % / 26 %
+  non-background; `shots/u4/u4_capture_export.png`), 11 panel figures all non-blank / stamped / with rows and
+  named to the pattern, the maximized size, the phone Share menu. Tracking is wired (`src/track.ts`) but the page
+  carries no gtag yet — U4b adds the fleet's GA4 snippet.
 
 ## Layout, drawn
 
