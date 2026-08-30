@@ -902,8 +902,10 @@ found three things, all shipped the same day (explore `src/charts.tsx`, `sql/sli
   ≥ 1 row of any taxon gets a `value = 0` row per life stage the dataset records this taxon at (`obs_id` NULL,
   `qual_ok` TRUE, the density columns 0 where the tow's own rows can standardize, NULL otherwise). Datasets that
   ship their own zeros (cufes, zooscan, zoodb, phyllosoma) are untouched; the bundle README says what an
-  `obs_id` NULL row is. Every template downstream (years, hex, station, region, cruise, section) is unchanged,
-  as is the D10 parity. Provider question `swfsc_ichthyo_09` (Q09) asks whether an absent row is a zero or an
+  `obs_id` NULL row is. **Counts are records, statistics see the zeros**: every template's `n` is `count(obs_id)`
+  (a zero-filled row has none) and `n_samples` the tows sampled, so the observation bars, the pills and "in view"
+  read exactly as before while mean / se / median run over all sampled tows — Ben's first look at the filled
+  version had the counts inflated (6,158 → 52,741), which was never the intent. The D10 parity is unchanged. Provider question `swfsc_ichthyo_09` (Q09) asks whether an absent row is a zero or an
   unsorted tow: two 1982 cruises carry 2–3 taxa, and 6,907 of 61,104 tows have no row of any taxon.
 - **The ship-lane Gantt was faint by construction.** A median cruise is 8.2 days = 0.55 px on the 78-year axis
   (54 of 473 are one tow-day), the median stat sat at 6 % of a 5–95 % linear viridis ramp — dark purple on navy —
