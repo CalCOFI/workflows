@@ -885,3 +885,33 @@ against the index when the sprite is built. Datasets map to categories through t
 - Dev catalog `~/_big/calcofi/explore-spike/data2/explore-dev/` — `dataset`, `taxon`, `obs_bio`, `coverage.json`
   (counts above); `metadata/measurement_type.csv` header; ingest `calcofi:` blocks (`category`, `color`).
 - https://calcofi.org/data/oceanographic-data/ and …/marine-ecosystem-data/ (inline SVGs, fetched 2026-08-29).
+
+## Addendum 2026-08-30 — D20's cruises mode is a calendar, and the bio slice is zero-filled
+
+Ben's first look at the sardine-larvae series (`?lens=station&taxon=worms:217452&stage=larva&den=per_10m2`)
+found three things, all shipped the same day (explore `src/charts.tsx`, `sql/slice_bio.sql`):
+
+- **The `mean ± se` band drew slivers across every gap.** plotly joins the segments of a `tonexty` fill with a
+  straight line, so a band with null gaps filled the gap as a wedge (1965 → 2010). The band is now one closed
+  `toself` polygon per contiguous run; an n = 1 bin (no se) passes through at zero width; `customdata` is built
+  beside the gap nulls so the hover's n stays aligned.
+- **Positive-only datasets made "mean per 10 m²" a mean over positive tows.** `swfsc_ichthyo` has 0 zero-valued
+  rows of 482,250 (euphausiids, bird-mammal and mesopelagic-fish likewise), so 2001 read 1,192 per 10 m² (197
+  zero-filled) and 1982 / 2020 — surveyed, no sardine row — drew as gaps identical to 1970–76, when no survey ran.
+  `slice_bio.sql` now zero-fills: for each dataset in the slice whose release rows carry no zeros, every tow with
+  ≥ 1 row of any taxon gets a `value = 0` row per life stage the dataset records this taxon at (`obs_id` NULL,
+  `qual_ok` TRUE, the density columns 0 where the tow's own rows can standardize, NULL otherwise). Datasets that
+  ship their own zeros (cufes, zooscan, zoodb, phyllosoma) are untouched; the bundle README says what an
+  `obs_id` NULL row is. Every template downstream (years, hex, station, region, cruise, section) is unchanged,
+  as is the D10 parity. Provider question `swfsc_ichthyo_09` (Q09) asks whether an absent row is a zero or an
+  unsorted tow: two 1982 cruises carry 2–3 taxa, and 6,907 of 61,104 tows have no row of any taxon.
+- **The ship-lane Gantt was faint by construction.** A median cruise is 8.2 days = 0.55 px on the 78-year axis
+  (54 of 473 are one tow-day), the median stat sat at 6 % of a 5–95 % linear viridis ramp — dark purple on navy —
+  with `n` as opacity on top, and the folded strip gave 35 lanes 3 px each. Cruises mode is now a **year × month
+  calendar**: one cell per cruise at (year, month of its first sample) spanning the months it ran, cruises that
+  start in one month sharing the year's column, coloured by the summary stat on a **log ramp** between its 5–95 %
+  quantiles with a floor at 15 % of the ramp; ≤ 15 years the cell becomes the cruise's true date span on the same
+  month row (a 2.5 px minimum), codes appear once a cell is ≥ 40 px, click picks, the ship is in the hover.
+  Every cruise is a ≥ 10 px target even folded (12 rows × 23 px columns), and the seasonal pattern, the triennial
+  1970s and the 2020 gap read at a glance. Month-resolved x ticks are whole years (month starts under 2.5 years);
+  `.0f` on a half-year tick repeated its neighbour. `verify.mjs` u6_cruises asserts the month rows.
