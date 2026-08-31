@@ -591,6 +591,33 @@ sample of shipped tiles straight from the source — 12/12 byte-identical — an
   unlisted folder gets an empty cell, and re-rendered. The optional `gcloud/tmp/` lifecycle rule was NOT added (Ben
   already deleted `gcloud/` outright; add it if the orphaned-chunk pattern returns).
 
+### Slice 2 · executed 2026-08-31 (Ben: "Push and proceed to next slice")
+
+`explore@6e6fb04` on main (fast-forwarded onto Ben's climatology `f64d011`; Pages deploys it). The real
+implementation, not the spike: **`src/basemap.ts`** composes CARTO's style ⊕ the sea floor into one object and
+`MapView` applies it with `setStyle({ diff: true })` — the map still boots from CARTO's plain URL, the composed style
+lands right after `load`, and every theme/bathy change recomposes (a stale async compose is sequence-guarded). Spike
+decisions baked in: two `raster-dem` sources (custom 1 m core + far, from `gs://calcofi-db/bathymetry/`,
+`VITE_BATHY_URL` overrides), `igor`, ramp transparent at exactly 0 m with the dark ramp ending on the shallow colour,
+contours 0.15 α dark / 0.30 light. URL per Appendix A: `bathy=off | relief,depth,contours`, `bathyo=` (defaults 0.7
+dark / 1 light, absent from the URL). The Layers card (sea-floor half): a `.map-tr` button on desktop
+(`ui-map-layers`, MDI layers-triple), a **pill → sheet on the phone** — the full-width legend covers the map corner
+there, which the first verify run caught by clicking a buried button. Legend row "sea floor · GEBCO 2025", About
+paragraph, map-stamp credit (D27).
+
+**Acceptance:** all 7 new verify states green on the second run — both themes' pixel probes (dark basin 43,65,89 vs
+bare water 44,53,60 · land 16,16,16; light land 250,250,248), the theme flip both directions, `?bathy=off`
+pixel-exact to today's map with no gebco layers and no legend row, the card round-trips `bathy=relief,depth` and back
+to an absent default, `bathyo=0.40` reaches both the slider and the live paint, the phone sheet holds all 4
+checkboxes. `first_paint` 294–341 ms across the timing runs (main's baseline 414/339/427) — well inside the +50 ms
+budget. Full suite otherwise green except two **pre-existing** failures, verified identical on a plain-main build:
+`u2_prewarm` (its `#organism-list li[role=option]` selector is stale since U7c opened the picker on the Browse tree)
+and the `warm` timing run's `grain_switch` timeout — both belong to a verify-suite cleanup, not this slice.
+The first slice-2 run also caught a real one: `{card("layers")}` was never rendered — the button toggled state at a
+card that didn't exist. Two shots for the record: `shots/slice2/layers_card.png`, `phone_layers_sheet.png` in the
+worktree. Card shots for calcofi.io are re-taken from the deployed app (below). Slice 3 (boundaries + symbology +
+order) is next; the spike branch `spike/bathy-layers` stays local as reference.
+
 ## Risks and what bounds them
 
 - **A theme flip drops the layers.** Today's `setStyle(STYLE[theme])` would silently remove anything added after
