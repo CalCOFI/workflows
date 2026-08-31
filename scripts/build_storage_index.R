@@ -38,7 +38,23 @@ BUCKETS <- list(
        desc  = paste("Versioned Parquet releases of the integrated CalCOFI database —",
                      "observations, samples, taxonomy and reference tables, plus",
                      "machine-readable catalog/metadata sidecars for each release."),
-       entry = "ducklake/releases/",
+       # entry = "" on purpose (D30): the card lands on the bucket's OWN listing.
+       # It used to jump straight to ducklake/releases/, which made every other
+       # top-level folder (bathymetry/, ingest/, qc/, ...) look non-existent.
+       entry = "",
+       start = "ducklake/releases/",   # the "start here" link the card text keeps
+       # One-line notes for the bucket-root listing's third column (D30). A folder
+       # not named here simply gets an empty cell, so new folders never break this.
+       folders = c(
+         "ducklake"   = "releases + the content-addressed tables/ store — start at releases/",
+         "bathymetry" = "GEBCO 2025: the consumers' crop, the terrain + contour PMTiles, gebco_2025.json",
+         "ingest"     = "per-dataset parquet shards + JSON sidecars, mirrored from the ingests",
+         "parquet"    = "per-dataset parquet shards + JSON sidecars (current layout)",
+         "erddap"     = "datasets served by erddap.calcofi.io",
+         "publish"    = "published derived products (netCDF and friends)",
+         "qc"         = "working QC snapshots (e.g. the CTD team's accepted flags)",
+         "pg"         = "PostgreSQL backups for the CTD team's working database",
+         "gcloud"     = "gcloud's own scratch (tmp/ upload chunks; safe to prune)"),
        # Directories with their OWN richer generator. The generic walker must not
        # emit pages here: build_release_index.R publishes per-release pages with
        # row counts, catalog data and the partitioned/single-file explanation, and
@@ -64,10 +80,12 @@ BUCKETS <- list(
 
 # --- root page ----------------------------------------------------------------
 root_cards <- paste0(vapply(BUCKETS, function(b) {
-  href <- glue("{SITE_URL}/{b$name}/{b$entry}")
+  href  <- glue("{SITE_URL}/{b$name}/{b$entry}")
+  start <- if (!is.null(b$start))
+    glue(' Start at <a href="{SITE_URL}/{b$name}/{b$start}"><code>{esc(b$start)}</code></a>.') else ""
   glue('<tr><td><a href="{href}"><code>{esc(b$name)}</code></a><br>',
        '<span style="font-size:.9em">{esc(b$title)}</span></td>',
-       '<td style="white-space:normal">{esc(b$desc)}</td></tr>')
+       '<td style="white-space:normal">{esc(b$desc)}{start}</td></tr>')
 }, character(1)), collapse = "\n")
 
 root_body <- glue('
@@ -142,17 +160,35 @@ for (b in BUCKETS) {
     agg  <- do.call(rbind, lapply(sort(unique(top)), function(tp) {
       sel <- top == tp
       data.frame(name = tp, dir = any(isd[sel]), n = sum(sel),
-                 size = sum(here$size[sel]), stringsAsFactors = FALSE)
+                 size = sum(here$size[sel]),
+                 # a folder shows its NEWEST object's LastModified; `since` is its
+                 # oldest — for write-once objects, when the folder was started.
+                 # (The XML API has no timeCreated, so "since" is the honest name.)
+                 modified = max(here$modified[sel]),
+                 since    = min(here$modified[sel]), stringsAsFactors = FALSE)
     }))
     agg <- agg[order(!agg$dir, agg$name), , drop = FALSE]   # folders first
+    notes <- if (!nzchar(d) && !is.null(b$folders)) b$folders else NULL
     rows <- paste0(vapply(seq_len(nrow(agg)), function(i) {
       a <- agg[i, ]
       href <- if (a$dir) glue("{SITE_URL}/{b$name}/{pre}{a$name}/")
               else       glue("{GCS_HOST}/{b$name}/{pre}{a$name}")
       lbl  <- if (a$dir) glue("{esc(a$name)}/") else esc(a$name)
       cnt  <- if (a$dir) glue(' <span class="chip">{fmt_n(a$n)}</span>') else ""
-      glue('<tr><td><a href="{href}">{lbl}</a>{cnt}</td>',
-           '<td class="num">{fmt_mb(a$size)}</td></tr>')
+      note <- if (is.null(notes)) "" else {
+        # notes[missing] is NA_character_, which %||% does NOT catch — the first
+        # run published a literal "NA" for ducklake-staging/ (the provider.csv
+        # failure mode all over again). An unlisted folder gets an empty cell.
+        v <- notes[a$name]; if (is.na(v)) v <- ""
+        glue('<td style="white-space:normal;font-size:.9em">{esc(v)}</td>')
+      }
+      # a folder's cell says modified (newest object) and, muted, since (oldest)
+      when <- if (a$dir && substr(a$since, 1, 10) != substr(a$modified, 1, 10))
+        glue('{fmt_dt(a$modified)}<br><span style="font-size:.85em;opacity:.65">since {substr(a$since, 1, 10)}</span>')
+      else fmt_dt(a$modified)
+      glue('<tr><td><a href="{href}">{lbl}</a>{cnt}</td>{note}',
+           '<td class="num">{fmt_mb(a$size)}</td>',
+           '<td class="num" title="oldest {esc(a$since)} · newest {esc(a$modified)}">{when}</td></tr>')
     }, character(1)), collapse = "\n")
 
     # breadcrumb back up through every ancestor
@@ -163,9 +199,10 @@ for (b in BUCKETS) {
       acc <- if (nzchar(acc)) paste0(acc, "/", s) else s
       crumb <- glue('{crumb} / <a href="{SITE_URL}/{b$name}/{acc}/">{esc(s)}</a>')
     }
+    note_th <- if (is.null(notes)) "" else '<th style="white-space:normal">contents</th>'
     body <- glue('
 <div class="scroll"><table>
-<thead><tr><th>name</th><th style="text-align:right">size</th></tr></thead>
+<thead><tr><th>name</th>{note_th}<th style="text-align:right">size</th><th style="text-align:right">modified</th></tr></thead>
 <tbody>
 {rows}
 </tbody></table></div>')

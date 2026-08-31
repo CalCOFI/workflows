@@ -193,7 +193,7 @@ gcs_upload <- function(local, gcs, content_type = "text/html",
 #' a truncated listing produces index pages that omit files without saying so.
 #' @return data.frame(key, size) plus attr(, "truncated")
 gcs_list_all <- function(bucket, cap = 250000, quiet = FALSE) {
-  keys <- character(); sizes <- numeric(); marker <- NULL; truncated <- FALSE
+  keys <- character(); sizes <- numeric(); mods <- character(); marker <- NULL; truncated <- FALSE
   repeat {
     u <- glue("{GCS_HOST}/{bucket}?max-keys=1000")
     if (!is.null(marker)) u <- glue("{u}&marker={utils::URLencode(marker, reserved = TRUE)}")
@@ -201,9 +201,11 @@ gcs_list_all <- function(bucket, cap = 250000, quiet = FALSE) {
                   error = function(e) "")
     k <- regmatches(x, gregexpr("(?<=<Key>)[^<]+", x, perl = TRUE))[[1]]
     s <- regmatches(x, gregexpr("(?<=<Size>)[0-9]+", x, perl = TRUE))[[1]]
+    m <- regmatches(x, gregexpr("(?<=<LastModified>)[^<]+", x, perl = TRUE))[[1]]
     if (!length(k)) break
-    n <- min(length(k), length(s))
+    n <- min(length(k), length(s), length(m))
     keys <- c(keys, k[seq_len(n)]); sizes <- c(sizes, as.numeric(s[seq_len(n)]))
+    mods <- c(mods, m[seq_len(n)])
     more <- grepl("<IsTruncated>true", x, fixed = TRUE)
     if (!quiet && length(keys) %% 10000 < 1000)
       message(glue("    {bucket}: {length(keys)} objects ..."))
@@ -213,7 +215,13 @@ gcs_list_all <- function(bucket, cap = 250000, quiet = FALSE) {
   }
   if (truncated)
     warning(glue("{bucket}: stopped at cap={cap}; directory pages will be INCOMPLETE"))
-  out <- data.frame(key = keys, size = sizes, stringsAsFactors = FALSE)
+  # LastModified rides along from the same XML — zero extra requests (D30);
+  # ISO 8601 UTC strings, so lexicographic min/max ARE oldest/newest
+  out <- data.frame(key = keys, size = sizes, modified = mods, stringsAsFactors = FALSE)
   attr(out, "truncated") <- truncated
   out
 }
+
+# render an ISO LastModified for a listing cell: "2026-08-31 17:05Z"
+fmt_dt <- function(iso) ifelse(is.na(iso) | !nzchar(iso), "",
+                               paste0(substr(gsub("T", " ", iso), 1, 16), "Z"))
