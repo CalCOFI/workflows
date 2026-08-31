@@ -618,6 +618,36 @@ card that didn't exist. Two shots for the record: `shots/slice2/layers_card.png`
 worktree. Card shots for calcofi.io are re-taken from the deployed app (below). Slice 3 (boundaries + symbology +
 order) is next; the spike branch `spike/bathy-layers` stays local as reference.
 
+### Slice 3 · executed 2026-08-31 (Ben: "Proceed with Slice 3")
+
+`explore@3f48347` on main (fast-forwarded, Pages deploys it); `calcofi4db@8c39a9f` (3.28.0) pushed.
+
+- **The sidecar exists at every level.** `calcofi4db::build_spatial_layers()` (+ testthat over the synthetic core)
+  joins the registry with the release: per layer `n_features`, `bbox`, sorted `names` when ≤ 200 (the by-name
+  palette; `noaa_ocean_disposal` and `meow_ecoregions` exceed it and exercise the id-hash fallback), and
+  `n_memberships` from `sample_spatial` — 15 of 19 layers carry memberships, and that list now drives the Regions
+  lens' layer picker instead of the `LAYERS` constant. Wired into `release_database.qmd`'s `browser_objects` +
+  the upload lists (+ a `# Unreleased` entry); until a release ships it, `scripts/dev_spatial_layers.R` writes the
+  dev catalog's copy (uploaded to `explore-dev`) and regenerates the bundled `src/spatial_layers.fallback.ts`.
+  `built` = the `ingest_spatial` manifest's mtime (2026-08-24), so archive/registry skew is visible.
+- **Symbology + order live in the URL** (Appendix A grammar, exactly): `layers=` entries are the draw order, first
+  on top; unknown slugs survive parsing and draw nothing. The card's *On the map* list reorders by drag (a pointer
+  handler, no library) or ▲ ▼ (keyboard + the phone sheet); a new layer lands on top; each row expands into one
+  colour (10 registry-family swatches + any colour) or **pal1–3** — one validated 8-hue set per theme
+  (dataviz six-checks run against the MAP surfaces `#d4dadc`/`#2C353C`; pal2/pal3 are rotations of pal1's
+  validated ordering, which preserves its adjacency set — the one new pair, red↔blue, passes) — fill opacity,
+  line width, reset. The legend gains the layers block (swatch, or a six-swatch strip + "by name · N").
+- **Acceptance, all green on the run that counts:** the by-name fill is a 313-entry match over the 155 MPA names
+  (14 rendered in the Channel Islands view); **the reorder pixel flip** — an MPA centroid inside the sanctuary
+  reads 212,37,107 with MPAs on top and 40,95,183 after ▲ moves the sanctuaries up, and the URL entry order flips
+  with it; the Regions-lens outline rule zeroes the background fill of the lens's own layer; hover reads
+  "Gull Island Federal Marine Reserve · Marine Protected Areas" through deck's null branch; the stamped map PNG
+  carries the legend rows; the phone reorders with ▲ ▼ in the sheet. Full suite: only the two pre-existing
+  failures (`u2_prewarm`, warm `grain_switch`); `first_paint` 308–449 ms. One process note: a `cd` into the main
+  checkout inside an earlier tool call wrote two files into Ben's tree — caught by `git status`, moved onto the
+  branch, his tree left clean.
+- Out of scope, unchanged: `test_release` (the sidecar is not a table); slice 4 (3-D) stays optional and unspent.
+
 ## Risks and what bounds them
 
 - **A theme flip drops the layers.** Today's `setStyle(STYLE[theme])` would silently remove anything added after
