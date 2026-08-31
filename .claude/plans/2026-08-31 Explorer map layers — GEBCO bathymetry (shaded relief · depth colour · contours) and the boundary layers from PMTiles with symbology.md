@@ -671,6 +671,34 @@ order) is next; the spike branch `spike/bathy-layers` stays local as reference.
   branch, his tree left clean.
 - Out of scope, unchanged: `test_release` (the sidecar is not a table); slice 4 (3-D) stays optional and unspent.
 
+### Slice 4 · executed 2026-08-31 (D28 reshaped; Ben: "Yes to your rec … going with the 3D curtain plot!")
+
+`explore@ecfa473` on main (rebased over a feedback-pipeline screenshot commit; Pages deploys it). `view=3d` on an env
+section hangs the **curtain** under a **deck-only** 3-D sea floor — one camera for everything, so the co-registration
+risk that killed pitch-only 3-D never arises. The floor is one `SimpleMeshLayer` built in-page from the published
+terrain PMTiles (z7 tiles, custom 1 m decoding — deck's `elevationDecoder` is literally the encoding), coloured by
+the validated ramp via a 1-D texture; the curtain is textured from the lens's own cells with the panel's exact
+colour scales. `exag=` (default ×60) scales floor and curtain together. Findings the build surfaced, each now
+handled in code:
+
+- **A bottle cast is stripes without interpolation** — discrete standard depths left the curtain as separated
+  bands; per-station interpolation between valued bins (the 2-D panel's `zsmooth`, made explicit) fills it, and
+  never extrapolates past the deepest datum.
+- **The abyss at ×60 is a 240 km tower** — the stage's floor is clipped a little below the curtain's depth window
+  (a flat plinth), keeping the shelf and banks the curtain hangs over honest.
+- **The anomaly ramp's midpoint is the panel's background — which here is the terrain**: a near-normal curtain
+  would vanish, and a cruise whose calendar month never cleared the climatology's ≥ 3-cruise floor has **no
+  baseline anywhere** (September, mostly — the default 1950-09 cruise proved it, `painted: 0`). A hairline frame
+  always shows the curtain's extent, and the scene says why an anomaly curtain is blank.
+- The camera was **chosen from a sweep, not tuned blind** (`shots/slice4/cam_*.png` in the worktree): the ribbon's
+  face, slightly oblique, centre pulled toward the camera so the below-surface curtain fills the frame.
+
+Verify: `curtain_3d` (painted-texel + blank-scene + MapLibre-unmounted gates; 15 stations · 307 cells · 762 texels ·
+393 k terrain vertices), `curtain_exag_url`, `curtain_off_and_bio_guard` (the bio section — station × year — never
+gets a curtain; `?view=` absent reproduces the lens untouched). Full suite: only the two pre-existing failures;
+`first_paint` 320–397 ms. Fence diagrams (two lines at once) are the noted follow-on. **Observed in passing:** the
+section cruise picker says "newest first" but lists 1950-09-31CR on top — a pre-existing ordering oddity worth a look.
+
 ## Risks and what bounds them
 
 - **A theme flip drops the layers.** Today's `setStyle(STYLE[theme])` would silently remove anything added after
