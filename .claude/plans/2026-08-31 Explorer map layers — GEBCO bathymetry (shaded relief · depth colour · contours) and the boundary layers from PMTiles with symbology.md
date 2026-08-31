@@ -275,15 +275,38 @@ the GEBCO citation/DOI and licence (from the build JSON) and a link to `metadata
 figure's footer stamp (`stampFor("map")`) appends `· sea floor: GEBCO 2025` while the bathymetry is on, since the
 compact attribution is collapsed in a capture.
 
-### D28 · True 3-D — optional, spike-gated, last
+### D28 · Sections as curtains — a deck-only 3-D scene (reshaped 2026-08-31; pitch-only CLOSED)
 
-MapLibre `setTerrain({ source: "gebco", exaggeration })` over the same DEM gives a pitched sea-floor view for
-free (land at 0, basins × 10–20). The unknown is deck.gl: in non-interleaved mode the overlay projects with the
-map's 2-D camera, so under pitch the station dots (at the sea surface, z = 0) and the terrain-displaced basemap
-may not agree, and `interleaved: true` changes how every existing layer composites. Phase 4 is a 1-day spike with
-an acceptance test (pitch 45°: the dots sit on the sea surface above their station's seafloor, hexagons draw
-without z-fighting, the morph still runs); it ships as a `view=3d` toggle only if that passes, otherwise the
-finding is recorded and the item closed. Not in the core estimate.
+**The original D28** (MapLibre `setTerrain` + pitch behind a `view=3d` toggle) is **closed without the spike** —
+Ben, 2026-08-31: *"might be worth it if sections could be visualized in a 3D view of the map, but if just adding
+pitch probably not."* Pitch alone is the same map at an angle, bought against a real risk (deck's non-interleaved
+overlay projects with the map's 2-D camera and does not know MapLibre's terrain).
+
+**The reshaped slice 4 — approved same day** — is the oceanographer's **curtain plot**, and it sidesteps that risk
+entirely by leaving MapLibre out: a **deck-only 3-D scene** as `view=3d` inside the **Sections lens** (env realm —
+the bio section is station × year, not depth, so it has no curtain):
+
+- **Sea floor:** deck.gl 9.3's `TerrainLayer` (already a dependency) over the SAME published terrain PMTiles —
+  its `elevationDecoder {rScaler, gScaler, bScaler, offset}` is literally the custom encoding
+  (65536 / 256 / 1 / −10000), fed through a small pmtiles fetch shim (the mechanism the Phase-0 spike proved for
+  maplibre-contour). Coloured by the validated depth ramp; **vertical exaggeration rides the decoder's scalers**
+  (~×60 default — 500 m over 700 km is invisible at ×1), one slider shared with the curtain.
+- **The curtain:** a `SimpleMeshLayer` vertical ribbon along the line's station track — the lens's own
+  `sectionCells` grid (or its climatology **anomaly**) rendered to a canvas texture with the panel's exact colour
+  scale, hanging from the surface; texels with no cell value are transparent, so the curtain ends where the data
+  does and the terrain mesh shows the real floor beneath. Station dots at z = 0; the selected cruise's track on
+  the surface.
+- **One deck camera** for everything (pitched MapView, rotate enabled) — nothing can mis-register, which was the
+  whole D28 risk. No CARTO labels in the scene (deck-only): acceptable for an inspector view; a thin coastline can
+  ride along later. `view=3d` (and a non-default `exag=`) live in the URL like all view state (D26). Desktop-first;
+  the phone keeps the 2-D section.
+- **Fence diagrams** — two lines' curtains at once (80 + 90 across the Bight) — are the natural follow-on once one
+  curtain hangs; not in the first cut.
+
+**Acceptance:** line 90 · temperature · a July cruise: the curtain hangs under the surface with the panel's exact
+colours and its bottom edge tracking the deepest data per station; the anomaly toggle re-textures; the
+exaggeration slider moves terrain and curtain together; `view=3d` round-trips; `?view=` absent reproduces today's
+lens untouched; the 2-D verify suite stays green.
 
 ### D29 · The consumers' crop covers every observation — and an off-raster point is never a silent `NA`
 
@@ -413,7 +436,7 @@ through verbatim); NEWS + version bump.
 | **1** | **Bathymetry build + the crop + the index** (D21 · D29 · D30) | `build_bathymetry_tiles.py` (terrain core + far, contours, the re-cut crop COG, the full-tile COG, `gebco_2025.json`) + upload; the calcofi4r patch (`cc_bathy()` refresh / `remote =`, `cc_bathy_depth()` warning, tests, NEWS); the release `depth_coverage` fallback + NULL-by-cause report; `build_storage_index.R` `entry = ""` + folder notes, re-run; `CLAUDE.md` section; `verify_bathymetry_tiles` (re-run reproduces the archive's tile count and a sample of tile sha256s) | `pmtiles show` + `pmtiles verify` clean; the JSON complete; a `pmtiles://` source from GCS renders in a plain MapLibre page; `cc_bathy_depth()` reads a finite depth at every released bottle/PIC/CUFES/dungeness position (0 `NA`), and warns on the ichthyo far field; ctd-transects' `build_station_bathymetry.R` reproduces `line_bathymetry.csv` byte-for-byte on the new crop; `storage.calcofi.io/` → `calcofi-db` card → the bucket listing with `bathymetry/` on it, every row dated | 15 |
 | **2** | **Explorer · sea floor** (D21 · D22 · D26 · D27) | `basemap.ts`, composed styles, the `bathy`/`bathyo` params, the Sea-floor half of the Layers card, the legend row, attribution + About + stamp, verify states, two card shots re-taken (`card_shots.mjs`) | both themes pass the luminance and known-pixel probes (Santa Cruz Basin vs the shelf vs flat water); `first_paint` within +50 ms of today; the phone states pass; `?bathy=off` reproduces today's map | 12 |
 | **3** | **Explorer · boundaries + symbology + order** (D23 · D24 · D25) | `build_spatial_layers()` + release wiring + `dev_spatial_layers.R` + fallback; the `layers=` grammar; the *On the map* list with drag / ▲ ▼ reorder and the *Add a layer* groups; palettes; hover; the region-lens outline rule; the data-driven region list; tour step; verify states | every registry layer draws from its archive; a `layers=` round-trip is exact, order included; dragging a row flips which fill wins in an overlap (pixel probe) and rewrites the URL; the legend block and the map PNG match; the sheet works on the 390-px states with ▲ ▼; `test_release` untouched (the sidecar is not a table) | 18 |
-| **4** | **3-D** (optional, D28) | a `view=3d` spike branch: `setTerrain`, exaggeration control, pitch; the deck alignment test | pass → ship behind the toggle; fail → a *Measured* note and the item closed | 8 |
+| **4** | **Curtains** (D28 reshaped) | `view=3d` in the Sections lens: deck-only scene — TerrainLayer over the published PMTiles + the section as a textured curtain, shared exaggeration | the acceptance in D28; 2-D suite untouched | ~16 |
 
 Order: 0 → 1 → 2 → 3 (→ 4). Slice 2 is useful on its own — the sea floor under every lens — and slice 3 needs
 nothing from a release to ship (the fallback snapshot carries the registry until `spatial_layers.json` is cut).
@@ -705,6 +728,9 @@ Reviewed the same day — *"Looks great!"* — then three additions, all folded 
 3. **The index:** `storage.calcofi.io/` → `calcofi-db` should show the bucket's actual contents, and every listing
    should carry a datetime stamp — D30 (which also dates the 19.6 GB of orphaned upload chunks under `gcloud/tmp/`:
    safe to delete).
+
+**Slice 4 decided (Ben, 2026-08-31, after slices 1–3 shipped):** *"Yes to your rec of closing D28 and going with
+the 3D curtain plot!"* — pitch-only 3-D closed, D28 reshaped to the section-curtain scene above.
 
 His earlier review question — several layers at once, ordered by dragging a layer up or down — is D24 *Draw
 order* / D25's *On the map* list. The open questions above were not answered and stand on their recommended
