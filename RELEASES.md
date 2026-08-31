@@ -8,6 +8,37 @@ versions). Conventions: see `CLAUDE.md` § "RELEASES.md is not optional".
 
 # Unreleased
 
+## One climatology for every anomaly
+
+Two products drew the same section — line 90, July 2026, temperature — and disagreed by the whole
+signal: [ctd-transects](https://calcofi.io/ctd-transects/) showed +1 to +3.9 °C through the upper
+100 m, the [Explorer](https://calcofi.io/explore/?lens=section) looked like nothing. The ocean was
+not the reason. Each product computed its own baseline: ctd-transects a 1993–2013 monthly mean at 5 m
+over *one arbitrary cast per grid cell*; the Explorer a mean over **all calendar months** of whatever
+year range the slider held — a map of the seasonal cycle (line 90 surface: January 15.2, July 18.3,
+annual 16.8 °C), which hid 1–1.5 °C of the winter and spring warmth outright; and
+`calcofi4r::cc_climatology()` a third copy. The Explorer also painted +2 °C **blue**: Plotly's built-in
+`RdBu` runs blue → red, the reverse of the ColorBrewer scale its name suggests.
+
+The release now ships **`climatology`** (`calcofi4db::build_climatology()` ≥ 3.26.0): a plain mean of
+the env realm of `obs` per **dataset × station × calendar month × 10 m floor depth bin × measurement
+type** over **1993–2013** (Rasmus Swalethorp's CCIEA window; both phases of the 1997–99 ENSO inside it,
+ends before the 2014–16 heatwave; stamped on every row as `clim_yr_min`/`clim_yr_max`), kept only where
+**≥ 3 distinct cruises** contribute (`n_cruises` — a floor in observations is met by one cruise's four
+casts in a nearshore cell), with `clim_n` and `clim_sd`. Partitioned by `measurement_type` like
+`obs_env`. Why 10 m and not 5: `obs` carries the *thinned* CTD series (10 m grid + inflection points),
+so at 5 m the off-grid bins held a third of the casts, sampled exactly where the profile bends, and
+their means sat visibly off their neighbours' (station 60, July: 14.27 °C between 15.39 and 15.04).
+ctd-transects, the Explorer's Sections lens and `cc_climatology()` all subtract this table now; a cell
+that is absent has no baseline and its anomaly is blank, never zero. Under it the three products agree:
+July 2026 on line 90 is +1.3 to +1.4 °C in the upper 50 m and +0.6 °C at 200–500 m by every reading.
+
+**Consumers:** additive — one new default table with FKs to `grid`, `dataset` and `measurement_type`;
+`cc_climatology()` returns the table's cells (with `n_cruises`) when the release has one and bins depth
+by 10 m floor bins (was 5 m rounded) — `cc_transect_section()` follows. Not yet fixed: both section
+products key a station on `grid_key`, and nearshore cells hold 2–4 real stations (`st30-ln90` = 90.30,
+90.28, 90.27.7, 88.5/30.1); `sample.site_key` is the station and the sections will move to it.
+
 ## `coverage.json` carries taxa and categories, and `measurement_type` says which category and variable a type belongs to
 
 The explorer's organism list waited on a 22 MB download and its variables were grouped by a keyword rule

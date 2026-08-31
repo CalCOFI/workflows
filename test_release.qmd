@@ -442,6 +442,16 @@ contract <- tibble::tribble(
     "SELECT count(*) n FROM {rp('cruise')} WHERE ichthyo IS NOT NULL"),
   "consumer: obs single-file readable over HTTPS (browser match.js)", "nonzero", glue(
     "SELECT count(*) n FROM {rp('obs')} WHERE realm='bio' LIMIT 1"),
+  # the one baseline every anomaly subtracts (2026-08-31): read the way ctd-transects and the
+  # Explorer's Sections lens do — the cast's month-matched cell for the CTD headline series
+  "consumer: climatology month-matched cell (line 90 st 60, July, 0 m, temperature_ave)", "nonzero", glue(
+    "SELECT count(*) n FROM {rp('climatology')}
+     WHERE dataset_key = 'calcofi_ctd-cast' AND measurement_type = 'temperature_ave'
+       AND grid_key = 'st60-ln90' AND month = 7 AND depth_bin = 0 AND n_cruises >= 3"),
+  "integrity: climatology carries one window, stamped on every row", "zero", glue(
+    "SELECT count(*) - 1 AS n FROM (SELECT DISTINCT clim_yr_min, clim_yr_max FROM {rp('climatology')})"),
+  "integrity: climatology depth_bin is a 10 m floor bin within 0-500", "zero", glue(
+    "SELECT count(*) n FROM {rp('climatology')} WHERE depth_bin % 10 <> 0 OR depth_bin < 0 OR depth_bin > 500"),
   "contract: obs.measurement_type all in registry", "zero", glue(
     "SELECT count(*) n FROM {rp('obs')}
      WHERE measurement_type NOT IN (SELECT measurement_type FROM {rp('measurement_type')})"),

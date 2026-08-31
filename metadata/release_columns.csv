@@ -69,3 +69,14 @@ obs_bio,effort_class,Effort Class,,"`count_with_effort` | `raw_count_no_effort` 
 obs_env,effort_class,Effort Class,,"`count_with_effort` | `raw_count_no_effort` | `density_as_published` | `other_unit` — what the row can be standardized to; rows without effort are an ingest task, not a UI caveat."
 obs_bio,hex7,H3 Cell (res 7),,"One `UBIGINT` H3 cell at resolution 7 (parent of `obs.hex_id`); coarser parents are bit arithmetic (`calcofi4db::h3_parent_sql()`), no extension needed."
 obs_env,hex7,H3 Cell (res 7),,"One `UBIGINT` H3 cell at resolution 7 (parent of `obs.hex_id`); coarser parents are bit arithmetic (`calcofi4db::h3_parent_sql()`), no extension needed."
+climatology,dataset_key,Dataset Key,,"Dataset the baseline is built from (`dataset.dataset_key`); one row per dataset so a CTD-only consumer filters and a cross-dataset one pools weighted by `clim_n` (`sum(clim_mean * clim_n) / sum(clim_n)` is exactly the mean over the pooled observations)."
+climatology,grid_key,Grid Key,,"CalCOFI grid cell (`grid.grid_key`). Nearshore cells hold several real stations (`st30-ln90` holds 90.30, 90.28, 90.27.7 and 88.5/30.1), which is why the floor is in cruises."
+climatology,month,Month,,Calendar month 1–12 of the observations' `datetime`. The anomaly of a cast is its value minus the cell of the cast's own calendar month.
+climatology,depth_bin,Depth Bin,m,"10 m floor bin of `obs.depth_min_m` (`floor(depth_min_m / 10) * 10`, the `obs_env.depth_bin` convention), labelled by its shallow edge; 0–500."
+climatology,measurement_type,Measurement Type,,The measured quantity (`measurement_type.measurement_type`); the table's partition column.
+climatology,clim_mean,Climatological Mean,,Mean of the quality-passing (`cc_qual_ok_sql()`) finite values in the cell over `clim_yr_min`–`clim_yr_max`; in the type's own units.
+climatology,clim_sd,Climatological SD,,"Sample standard deviation of the same values; NULL when `clim_n` = 1. `anomaly / clim_sd` expresses a departure in baseline standard deviations."
+climatology,clim_n,N Observations,,Observations in the cell.
+climatology,n_cruises,N Cruises,,Distinct cruises in the cell; a cell needs at least 3 to exist.
+climatology,clim_yr_min,Window Start,,First year of the baseline window (inclusive); stamped on every row so the parquet alone says what the mean is a mean of.
+climatology,clim_yr_max,Window End,,Last year of the baseline window (inclusive).

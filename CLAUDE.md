@@ -367,6 +367,36 @@ sensor, 8 = questionable, 9 = bad/missing; DIC WOCE 2 good, 3 questionable, 4 ba
   a plain string (no `flag_values`/`flag_meanings`) and the netCDFs cannot express
   it at all — both open.
 
+### One climatology for every anomaly (`climatology`, calcofi4db ≥ 3.26.0)
+
+An anomaly is only as good as the baseline it subtracts, and until 2026-08-31 three
+products each computed their own: ctd-transects (1993–2013 monthly mean, 5 m bins, one
+arbitrary cast per grid cell), the Explorer's Sections lens (**all calendar months** of the
+year-slider range — a seasonal-cycle map, not an anomaly: line 90 surface is 15.2 °C in
+January, 18.3 in July, 16.8 annually, so a January cruise lost 1–1.5 °C of warming) and
+`calcofi4r::cc_climatology()`. The same July 2026 section read +1.4 °C in one and ~0 in
+another. `release_database.qmd`'s `browser_objects` chunk now builds **`climatology`** with
+`calcofi4db::build_climatology()` — a plain mean per **dataset × `grid_key` × calendar month ×
+10 m floor `depth_bin` × measurement type** over **1993–2013**, kept where **≥ 3 distinct
+cruises** contribute, the window stamped on every row — partitioned by `measurement_type`
+like `obs_env`. Every consumer subtracts that table: ctd-transects (`__TBL:climatology__`,
+with `scripts/climatology_fallback.sql` for a release that predates it), explore
+(`sql/section_clim.sql`, pooling a variable's member types weighted by `clim_n`),
+`cc_climatology()` (reads it when the connection has it). Rules that fell out:
+
+- **Month-matched, always.** A cast's anomaly is its value minus the cell of *its own*
+  calendar month. Pooling months is never an option, whatever the UI's season filter says.
+- **10 m floor bins, not 5.** `obs` carries the *thinned* CTD series (10 m grid + RDP
+  inflection points + bottle depths); at 5 m the off-grid bins hold a third of the casts,
+  sampled where the profile bends, and their means sit visibly off their neighbours'.
+- **A floor in cruises, not observations.** Nearshore grid cells hold 2–4 real stations
+  (`st30-ln90` = 90.30, 90.28, 90.27.7, 88.5/30.1), so one cruise supplies four casts.
+  That same fact means the sections should key on `sample.site_key`, not `grid_key` —
+  ctd-transects currently keeps whichever cast the ship hit first, explore averages them.
+  **Open** (2026-08-31); fixing it moves the climatology's grain to `site_key` too.
+- **Plotly's built-in `"RdBu"` runs blue → red** (`0 = rgb(5,10,172)`). Pass an explicit
+  ramp — both apps share ctd-transects' five stops — and check the sign in a screenshot.
+
 ### Coverage is measured, never asserted
 
 **Do not add `coverage_temporal` / `coverage_spatial` to a `dataset_meta`
