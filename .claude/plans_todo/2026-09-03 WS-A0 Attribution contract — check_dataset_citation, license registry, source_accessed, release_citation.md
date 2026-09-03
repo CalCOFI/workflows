@@ -110,3 +110,24 @@ release time, without re-running any ingest.
 
 The finding table for the 16 datasets, the new column list, the `RELEASES.md` entry text, and one
 *Measured* line for the umbrella plan.
+
+## Measured (WS-A0, Fable, 2026-09-03)
+
+- Pre-A1 YAML (4ba51f2), structural half: **8 `missing_citation`, 13 `missing_license`, 3
+  `license_unregistered`** (`"CC BY 4.0"`: dic, crab, mesopelagic), 2 `no_year` (mets, ichthyo), 2
+  `no_locator` (crab, ichthyo) — the gate's 8 + 13, plus the free-text licenses.
+- Merged YAML (A1 + C), network on: **0 blocking**, 4 `ok` (phyllosoma, phytoplankton, euphausiids,
+  crab), **14 exempt** under A1's `proposed` rows + one new (mets **Q31**: no year, calcofi.org states
+  no publication date), **2 `authority_drift` warnings** (dic vs NCEI "Cite as": abbreviated author
+  names; mesopelagic vs DataCite APA: initials + `[Dataset]`). 7 `citation_authority.json` caches.
+- Resolvers: EDI cite service 200 with a revision; **PASTA `listDataPackageRevisions` and search
+  answer 403 to public access** (the brief's newest-revision route) → newest found by probing the
+  cite service (rev+1 answers 400). NCEI landing page carries "Cite as" + DOI; ERDDAP `.das` has
+  no `citation` global for Farallon/CUFES; DataCite `rightsList` is empty for EDI DOIs, SPDX
+  `cc-by-4.0` for NCEI; doi.org content negotiation needs the redirect followed (302 →
+  data.crosscite.org). Zenodo: the tree-identifier query works only URL-encoded (bare `"` → 400);
+  `related_identifiers` scheme `url`, relation `isSupplementTo`, resource_type `software`; without
+  `.zenodo.json` the version came from the tag.
+- `source_accessed` (sidecar_commit): 15 datasets 2026-08-25 (3ee7479, the v2026.08.25 run), crab
+  2026-09-03 (b0cd895) — "when the ingest last ran", not the download date.
+- Zenodo's legacy `.zenodo.json` creator schema has no ROR field → none written.

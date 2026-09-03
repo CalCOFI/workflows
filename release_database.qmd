@@ -509,6 +509,38 @@ d_dataset_cov <- d_dataset |>
     coverage_spatial  = coalesce(coverage_spatial_observed,  coverage_spatial)) |>
   select(all_of(names(d_dataset)))
 
+# source_accessed: measured, never asserted (calcofi4db >= 3.30.0, R/citation.R).
+# When an ingest stamped its own reads (stamp_source_access() -> metadata.json
+# sources[]) that stamp wins (method download / file_mtime); otherwise the last
+# commit of its manifest.json sidecar stands in (method sidecar_commit) — the
+# ingest rewrites that file every run, so its history is when the source was
+# last read, and no ingest has to re-run to say so. Both land on `dataset`.
+d_src <- resolve_source_accessed(here("data/parquet", d_dataset$dataset_key))
+d_dataset_cov <- d_dataset_cov |>
+  left_join(select(d_src, dataset_key, source_accessed, source_accessed_method),
+            by = "dataset_key")
+src_methods <- table(d_src$source_accessed_method)
+cat(sprintf("source_accessed: %d of %d datasets (%s)\n",
+            sum(!is.na(d_src$source_accessed)), nrow(d_src),
+            paste(names(src_methods), src_methods, sep = " = ", collapse = ", ")))
+
+# the attribution contract, enforced here as well as by the index build:
+# check_dataset_citation() — a citation with a year and a locator, a license from
+# metadata/license.csv (`custom` with a URL), a bare DOI that resolves, and the
+# source's own authority (EDI / NCEI / ERDDAP / DataCite, cached in
+# metadata/{provider}/{dataset}/citation_authority.json) compared for drift.
+# Error findings stop the release unless an open/proposed questions.csv row on
+# related_table = dataset covers the field; drift only warns. The network half
+# follows CALCOFI_SKIP_LINK_CHECK like the link check does.
+d_cit <- check_dataset_citation(
+  ingest_yaml, network = !nzchar(Sys.getenv("CALCOFI_SKIP_LINK_CHECK")),
+  cache_dir = here("metadata"))
+assert_dataset_citation(d_cit)
+d_cit |>
+  filter(finding != "ok") |>
+  select(dataset_key, finding, level, exempt, question, authority, checked, detail) |>
+  datatable(caption = "citation check: findings (error rows are exempt only while a provider question is open/proposed)")
+
 # `dataset` is written as a TABLE at [dataset_table] above, so the drop has to
 # match that type. DuckDB's `DROP VIEW IF EXISTS` does NOT no-op on a type
 # mismatch — it raises "Existing object dataset is of type Table, trying to drop
@@ -1781,19 +1813,21 @@ if (file.exists(py_toml)) {
               grep('^version = ', readLines(py_toml, warn = FALSE), value = TRUE)[1])
   if (!is.na(v_py) && nzchar(v_py)) pkg_versions <- c(pkg_versions, calcofi4py = v_py)
 }
-catalog_pre <- list(
+catalog_pre <- add_release_citation(list(
   version      = release_version,
   release_date = as.character(Sys.Date()),
   total_size   = NULL,
   tables       = freeze_stats |>
     mutate(supplemental = dplyr::coalesce(supplemental, FALSE)) |>
-    select(name = table, rows, partitioned, supplemental))
+    select(name = table, rows, partitioned, supplemental)))
 # `releases_md` is the promoted text from [release_notes_narrative] — on disk for a real release,
-# in memory only for a staging run (whose date has no section on disk)
+# in memory only for a staging run (whose date has no section on disk). The datasets block
+# feeds the appendix's "How to cite" (each dataset's citation_main · license) before
+# metadata.json exists; test_release.qmd re-publishes from the real sidecars.
 release_notes <- render_release_notes(
   release_version, releases_md,
   catalog      = catalog_pre,
-  metadata     = NULL,
+  metadata     = list(datasets = d_dataset_cov),
   test_results = NULL,
   pkg_versions = pkg_versions,
   promoted     = FALSE)
@@ -1854,6 +1888,11 @@ if (!setequal(unique(plan$table), tables_df$name))
             "{paste(setdiff(unique(plan$table), tables_df$name), collapse = ', ')}; ",
             "only in catalog = {paste(setdiff(tables_df$name, unique(plan$table)), collapse = ', ')}"))
 catalog <- build_release_catalog(release_version, tables_df, plan, layout = release_layout)
+# the release cites itself: `citation` (decided wording, three partners) + the
+# Zenodo `concept_doi`; the version `doi` arrives after WS-F's tag + GitHub release
+# mints it, and publish_release_notes() writes it into this catalog then
+# (objects untouched). Until then the citation resolves to db-schema for the version.
+catalog <- add_release_citation(catalog)
 total_bytes <- catalog$total_size
 catalog_path <- file.path(dir_frozen, "catalog.json")
 jsonlite::write_json(catalog, catalog_path, auto_unbox = TRUE, pretty = TRUE, digits = NA)

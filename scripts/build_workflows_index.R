@@ -296,6 +296,32 @@ if (!is.null(links) && nrow(links) > 0) {
   }
 }
 
+# a dataset's citation and license are a contract too, checked like its links ----
+# calcofi4db::check_dataset_citation() (>= 3.30.0): the structural half always runs
+# — a non-empty citation_main with a year and a locator, a license that is an
+# active id in metadata/license.csv (`custom` with a license_url), a bare DOI —
+# and the network half (behind the same CALCOFI_SKIP_LINK_CHECK) asks the
+# source's own authority (EDI cite service, NCEI landing page, ERDDAP .das,
+# DataCite) and caches it in metadata/{provider}/{dataset}/citation_authority.json.
+# An error-level finding fails the build unless the dataset's questions.csv holds
+# an open/proposed row on related_table = dataset naming the field; drift and an
+# unreachable authority only warn. Nothing is written into a notebook's YAML.
+# CALCOFI4DB_DIR loads a development checkout instead of the installed package.
+suppressPackageStartupMessages(
+  if (nzchar(Sys.getenv("CALCOFI4DB_DIR"))) {
+    devtools::load_all(Sys.getenv("CALCOFI4DB_DIR"), quiet = TRUE)
+  } else library(calcofi4db))
+cit <- calcofi4db::check_dataset_citation(
+  calcofi4db::read_ingest_yaml(wd),
+  network   = !nzchar(Sys.getenv("CALCOFI_SKIP_LINK_CHECK")),
+  cache_dir = here::here("metadata"))
+calcofi4db::assert_dataset_citation(cit)
+message("citation check: ", length(unique(cit$dataset_key)), " dataset(s); ",
+        sum(cit$finding == "ok"), " ok, ",
+        sum(cit$level == "error" & cit$exempt), " exempt (question open/proposed), ",
+        sum(cit$level == "warn"), " warning(s)",
+        if (nzchar(Sys.getenv("CALCOFI_SKIP_LINK_CHECK"))) " — authorities not fetched (CALCOFI_SKIP_LINK_CHECK)" else "")
+
 # assemble the grouped, ordered structure for Liquid ----
 emit_item <- function(r) {
   it <- list(url = r$url, title = r$title)
