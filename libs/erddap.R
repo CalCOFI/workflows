@@ -91,8 +91,21 @@ stage_table_for_erddap <- function(
 #' Build one <dataVariable> block.
 #' @param actual_range optional length-2 numeric c(min,max). EDDTableFromDatabase
 #'   does NOT auto-compute ranges, so set this to get min/max + sliders on the form.
+#' @param flag_values,flag_meanings CF flag attributes for a coded column (e.g.
+#'   `measurement_qual`): `flag_values` is the space-separated codes in the
+#'   dataset's own quality vocabulary (`metadata/measurement_qual.csv`),
+#'   `flag_meanings` the matching space-separated (underscore-joined) labels, same
+#'   order, same count. Either both are set or neither is (a mismatched pair is a
+#'   caller bug, not something to paper over here).
+#' @param sdn_parameter_urn NERC P01 URN (`metadata/measurement_type.csv`'s
+#'   `nerc_p01`) for a column whose values are ALWAYS the one named quantity — a
+#'   `_sample` grain's pivoted effort column (`std_haul_factor`, …), never a long
+#'   `measurement_type`/`measurement_value` pair, which mixes quantities and so
+#'   cannot carry one URN.
 .erddap_datavar_xml <- function(col, dtype, units = "", long_name = "", standard_name = "",
-                                comment = "", actual_range = NULL) {
+                                comment = "", actual_range = NULL,
+                                flag_values = NULL, flag_meanings = NULL,
+                                sdn_parameter_urn = NULL) {
   a <- if (col %in% names(.erddap_coord_attrs)) .erddap_coord_attrs[[col]] else
     list(dataType = .duckdb_to_erddap_type(dtype),
          ioos_category = .erddap_ioos_category(col),
@@ -100,6 +113,13 @@ stage_table_for_erddap <- function(
   if (nzchar(units) && is.null(a$units)) a$units <- units
   if (nzchar(standard_name) && is.null(a$standard_name)) a$standard_name <- standard_name
   if (nzchar(comment)) a$comment <- comment
+  if (!is.null(flag_values) && !is.null(flag_meanings) &&
+      nzchar(flag_values) && nzchar(flag_meanings)) {
+    a$flag_values   <- flag_values
+    a$flag_meanings <- flag_meanings
+  }
+  if (!is.null(sdn_parameter_urn) && nzchar(sdn_parameter_urn))
+    a$sdn_parameter_urn <- sdn_parameter_urn
   atts <- a[setdiff(names(a), "dataType")]
   att_xml <- paste0('      <att name="', names(atts), '">', .xml_escape(unlist(atts)), "</att>", collapse = "\n")
   if (!is.null(actual_range) && length(actual_range) == 2 && all(is.finite(actual_range)))

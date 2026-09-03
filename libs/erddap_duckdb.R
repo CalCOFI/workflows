@@ -51,13 +51,22 @@ build_ctd_duckdb <- function(db_path, data_dir,
 #' EDDTableFromDatabase <dataset> block for a DuckDB view.
 #' @param staged data.frame(column, duckdb_type) — the view's columns.
 #' @param conn_props named character of JDBC connection properties (DuckDB config).
+#' @param flagvalues_lookup,flagmeanings_lookup column -> CF `flag_values` /
+#'   `flag_meanings` (space-separated strings, same order, same count) — set
+#'   together for a coded column (`measurement_qual`), from the dataset's own
+#'   quality vocabulary.
+#' @param urn_lookup column -> NERC P01 URN (`sdn_parameter_urn`), keyed by
+#'   column name so it only ever lands on a column that IS one measurement_type
+#'   (a `_sample` grain's pivoted effort column), never on a long
+#'   `measurement_type`/`measurement_value` pair.
 erddap_duckdb_dataset_xml <- function(
     staged, dataset_id, title, summary, source_url, table_name,
     conn_props = c(`duckdb.read_only` = "true", memory_limit = "1500MB",
                    threads = "2", temp_directory = "/share/data/erddap-duckdb/tmp"),
     subset_vars = NULL, cdm_data_type = "Point", institution = "CalCOFI",
     units_lookup = list(), longname_lookup = list(), comment_lookup = list(),
-    range_lookup = list(), global_atts = list(), reload_minutes = 10080, order_by = NULL) {
+    range_lookup = list(), flagvalues_lookup = list(), flagmeanings_lookup = list(),
+    urn_lookup = list(), global_atts = list(), reload_minutes = 10080, order_by = NULL) {
 
   if (is.null(subset_vars))
     subset_vars <- intersect(c("cruise_key", "site_key", "measurement_type", "cast_dir"),
@@ -69,7 +78,10 @@ erddap_duckdb_dataset_xml <- function(
       units     = as.character(units_lookup[[col]]    %||% ""),
       long_name = as.character(longname_lookup[[col]] %||% ""),
       comment   = as.character(comment_lookup[[col]]  %||% ""),
-      actual_range = range_lookup[[col]])
+      actual_range      = range_lookup[[col]],
+      flag_values       = flagvalues_lookup[[col]],
+      flag_meanings     = flagmeanings_lookup[[col]],
+      sdn_parameter_urn = urn_lookup[[col]])
   }, character(1))
 
   glob <- c(

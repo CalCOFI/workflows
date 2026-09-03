@@ -203,6 +203,46 @@ where the remote view over the hive partitions returned it last; a direct reader
 next. Known direct readers of `obs` to migrate: db-query (8 files), `apps/` (7), db-viz-station (5),
 ctd-transects (2), db-viz-hex (2), `libs/publish_netcdf.R`, `scripts/render_release_views.R`.
 
+### ERDDAP gains the effort denominator (D-S3)
+
+`publish_to-erddap.qmd`'s `{dataset_key}` grain (`sql_obs()`) read `obs` + `taxon` + `sample`: a bare
+count, no effort, no density — the reason erddap.calcofi.io looked "woefully absent" next to
+CoastWatch's `erdCalCOFIlrvcnt`/`erdCalCOFIlrvstg` (`volume_sampled`, `standard_haul_factor`,
+`percent_sorted`, `larvae_10m2`, `larvae_1000m3`), whose effort sat on the separate, un-joinable
+`{dataset_key}_sample` grain. It now reads `obs_bio` (bio datasets) or `obs_env` (env datasets) —
+each `dataset_key` is cleanly one realm (measured on the H1-schema rebuild of staging v2026.08.28: no
+dataset splits bio/env) — **through the release catalog**
+(`calcofi4r::cc_release_sources(catalog, "obs_bio"/"obs_env")`, resolved via
+`libs/publish_netcdf.R`'s `cc_release_catalog()`), never a hand-built `releases/{v}/parquet` path.
+Every existing column is kept; `tow_type`, `std_haul_factor`, `prop_sorted`, `volume_sampled_m3`,
+`density_per_10m2`, `density_per_1000m3`, `effort_class`, `units` and `qual_ok` are added, already
+computed onto the pair at release time — no join to `sample_measurement` here.
+
+- **Falls back cleanly when a release predates D-S1.** The promoted v2026.08.25 has no `obs_bio`/
+  `obs_env` in its catalog, so `HAS_OBS_PAIR` is `FALSE` and the grain reads the deprecated `obs`
+  objects as before (verified live against v2026.08.25's real catalog — `cc_release_sources()`
+  correctly errors "not in the catalog" and the notebook `cat()`s the fallback rather than failing).
+- **New `datasets.xml` attributes**: `long_name`/`units`/`comment` on the new columns (the density
+  and `effort_class` comments paraphrase `calcofi4r::cc_density_sql()`'s own documentation);
+  `flag_values`/`flag_meanings` on `measurement_qual`, matched from `metadata/measurement_qual.csv`'s
+  `code_set` (today only `bottle` and `ctd` are registered — matched by substring against
+  `dataset_key`, so `swfsc_ichthyo` and the rest correctly get none rather than an invented one);
+  `sdn_parameter_urn` from a `nerc_p01` column in `metadata/measurement_type.csv`, keyed by
+  measurement_type name so it only ever lands on a `_sample` grain's pivoted effort column (never on
+  a long `measurement_type`/`measurement_value` pair, which mixes quantities) — **inert today** (H2
+  has not landed `nerc_p01` yet), mechanism verified with a synthetic value.
+- **Investigated and NOT migrated**: `libs/publish_netcdf.R` itself has no literal `obs` reference
+  (it is generic release-catalog plumbing, called with whatever table name a caller passes); the
+  actual `obs` reads RELEASES.md flagged live in `publish_to-netcdf.qmd` (`CREATE TABLE obs AS …` and
+  `obs_parts <- cc_release_partitions("obs", RELEASE)`, keyed by `dataset_key` from the partition
+  path). Migrating it is **not mechanical**: `obs_bio` is a single unpartitioned file and `obs_env`
+  is partitioned by `measurement_type`, not `dataset_key`, so the "read this dataset's one partition"
+  strategy the whole ~800-line notebook is built around no longer holds for any env dataset (it would
+  have to scan all 84 `obs_env` objects per dataset instead of one). Left for a dedicated follow-on.
+  `scripts/render_release_views.R` also has no literal `obs` reference — its table names come from
+  `../server/postgis/init/50_release_views.sql` (a sibling repo outside this brief); today it still
+  resolves `obs` fine since the deprecated objects ship this release.
+
 ## The boundary layers describe themselves (`spatial_layers.json`)
 
 The release gains one sidecar beside `coverage.json`: the boundary-layer registry
