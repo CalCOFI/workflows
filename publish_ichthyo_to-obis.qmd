@@ -214,6 +214,16 @@ measurement_unit_vocab <- tibble(
     "http://vocab.nerc.ac.uk/collection/P06/current/ULAA/" # meters
   )
 )
+
+# P01 measurementTypeID, from the registry (WS-H2, pre-release decision D-S2) ----
+# metadata/measurement_type.csv is the single place a NERC P01 concept is decided, and it is
+# filled only on an exact vocabulary match. So type_id() returning NA is a fact — "BODC has no
+# concept that means a CalCOFI standard haul factor" — not a stub waiting to be filled here.
+# Before this, every eMoF row below wrote measurementTypeID = NA_character_ because there was
+# nowhere for an id to live.
+d_meas_type <- read_measurement_type(here("metadata/measurement_type.csv"))
+type_id <- function(measurement_type)
+  d_meas_type$nerc_p01[match(measurement_type, d_meas_type$measurement_type)]
 ```
 
 ## Build Event Hierarchy
@@ -488,7 +498,12 @@ d_emof_net <- d_net_events_full |>
       meas_type == "smallplankton" ~ "small plankton biomass",
       meas_type == "totalplankton" ~ "total plankton biomass"
     ),
-    measurementTypeID = NA_character_,
+    measurementTypeID = type_id(case_when(
+      meas_type == "std_haul_factor" ~ "std_haul_factor",
+      meas_type == "prop_sorted"     ~ "prop_sorted",
+      meas_type == "smallplankton"   ~ "small_plankton_biomass",
+      meas_type == "totalplankton"   ~ "total_plankton_biomass"
+    )),
     measurementUnit = case_when(
       meas_type == "std_haul_factor" ~ "dimensionless",
       meas_type == "prop_sorted" ~ "dimensionless",
@@ -557,7 +572,7 @@ d_emof_stage <- d_ichthyo |>
     eventID = occ_eventID,
     measurementID = as.character(ichthyo_uuid),
     measurementType = "abundance by life stage",
-    measurementTypeID = NA_character_,
+    measurementTypeID = type_id("abundance"),
     meas_val = tally,
     measurementValueID = NA_character_,
     measurementUnit = "individuals",
@@ -597,7 +612,7 @@ d_emof_length <- d_ichthyo |>
     eventID = occ_eventID,
     measurementID = as.character(ichthyo_uuid),
     measurementType = "body length",
-    measurementTypeID = NA_character_,
+    measurementTypeID = type_id("body_length"),
     meas_val = measurement_value,
     measurementValueID = NA_character_,
     measurementUnit = "millimeters",
