@@ -244,9 +244,59 @@ fd <- tribble(
   "hour_source_conflict", "BOOLEAN", "", "flag",
   "TRUE where two source sheets disagree on a record's start hour.",
   "", "", FALSE,
-  "sio mesopelagic-fish cruise 1110; unresolved, defaults to the curated sheet."
+  "sio mesopelagic-fish cruise 1110; unresolved, defaults to the curated sheet.",
+
+  # -- release-derived / reference-table fields ---------------------------------
+  # these four reached the CSV by hand and were missing here, so re-running this
+  # "re-runnable" script would have silently deleted them (WS-H2, 2026-09-03)
+  "seafloor_depth_m", "DOUBLE", "m", "spatial",
+  paste0("Seafloor depth at the sample position from GEBCO 2025 (bilinear; positive down; 0 on land; ",
+         "NULL outside the raster). Stamped on sample at release by calcofi4db::add_sample_seafloor(); ",
+         "compare with depth_max_m, allowing for the ~460 m GEBCO cell and minute-rounded historical positions."),
+  "", "", FALSE, "release-derived; not an ingest field",
+
+  "date_min", "DATE", "", "temporal",
+  paste0("First event date observed for a cruise (from its own tows); with date_max the span ",
+         "calcofi4db::resolve_cruise_key() matches events against."),
+  "", "", FALSE, "on cruise; written by add_cruise_date_span() in the ichthyo ingest",
+
+  "date_max", "DATE", "", "temporal",
+  "Last event date observed for a cruise (from its own tows).",
+  "", "", FALSE, "on cruise; see date_min",
+
+  "cruise_key_method", "VARCHAR", "", "identifier",
+  paste0("How resolve_cruise_key() settled the row: span (reference cruise date span), ",
+         "source (the source designation YYYYMM), month (event month)."),
+  "", "", FALSE, "wrangling-only column; not released"
 )
+
+# -- Darwin Core terms (WS-H2, pre-release decision D-S2) -----------------------
+# The DwC term a field publishes as, filled only where ONE term means exactly this
+# field. A field Darwin Core SPLITS (depth_m -> minimum/maximumDepthInMeters) or has
+# no term for (measurement_qual, seafloor_depth_m, standard_haul_factor — the last two
+# are eMoF measurements, not Event or Occurrence terms) stays empty; docs/db.qmd's
+# "Darwin Core / OBIS ENV-DATA mapping" section carries the reasoning and the
+# constructions a single term cannot express (scientificNameID from taxon_key, the
+# eventID hierarchy from sample_key/parent_sample_key).
+dwc <- c(
+  site_key           = "locationID",       # "an identifier for the set of location information"
+  latitude           = "decimalLatitude",
+  longitude          = "decimalLongitude",
+  geom               = "footprintWKT",     # a point geometry is a valid footprint
+  datetime_start_utc = "eventDate",        # a tow publishes as the start/end interval; this is the start
+  scientific_name    = "scientificName",
+  common_name        = "vernacularName",
+  life_stage         = "lifeStage",        # controlled label + NERC S11 id in metadata/life_stage.csv
+  tally              = "organismQuantity", # with organismQuantityType = the denominator
+  volume_sampled     = "sampleSizeValue",  # with sampleSizeUnit = cubic metre
+  measurement_type   = "measurementType",  # eMoF; measurementTypeID in metadata/measurement_type.csv
+  measurement_value  = "measurementValue")
+fd$dwc_term <- ifelse(
+  fd$fld_new %in% names(dwc),
+  paste0("http://rs.tdwg.org/dwc/terms/", dwc[match(fd$fld_new, names(dwc))]), "")
+stopifnot("every dwc name must match a field" = all(names(dwc) %in% fd$fld_new))
 
 out <- here("metadata/field_dictionary.csv")
 write_csv(fd, out, na = "")
-cat("wrote", nrow(fd), "canonical fields to", out, "\n")
+cat("wrote", nrow(fd), "canonical fields to", out, "-",
+    sum(nzchar(fd$dwc_term)), "with a Darwin Core term\n")

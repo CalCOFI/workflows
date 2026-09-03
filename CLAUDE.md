@@ -534,9 +534,11 @@ an ingest, `R/taxa.R` or a taxon metadata CSV):
 
 | File | Role |
 |---|---|
-| `field_dictionary.csv` | **Prescriptive** canonical field names/types/units/aliases. New datasets conform; consistency is linted against it. |
-| `measurement_type.csv` | Canonical measurement vocabulary (raw measured quantities). `is_canonical` flags the headline types; `valid_min`/`valid_max` bound the value and `valid_depth_min_m`/`valid_depth_max_m` the **depth over which the type is defined** (`est_chlorophyll_a_*` is computed for 0–200 m alone, so a null below that is by construction, not missing data); `derivation` is free text saying how a *derived* type was produced (the `_cruise_corr` vs `_sta_corr` distinction is not something a consumer should have to guess). **Read it with `calcofi4db::read_measurement_type()` and append with `register_measurement_types()`, never with bare `read_csv`/`write_csv`** — see the round-trip trap below. Bounds are **enforced per dataset at ingest time**, see below. |
+| `field_dictionary.csv` | **Prescriptive** canonical field names/types/units/aliases. New datasets conform; consistency is linted against it. `dwc_term` is the Darwin Core term URI the field publishes as, on the 12 of 57 fields one term means exactly. Authored by `libs/build_field_dictionary.R`, which regenerates the whole CSV — **add a row there, not to the CSV**, or the next run deletes it (four rows had already drifted out by 2026-09-03). |
+| `measurement_type.csv` | Canonical measurement vocabulary (raw measured quantities). `is_canonical` flags the headline types; `valid_min`/`valid_max` bound the value and `valid_depth_min_m`/`valid_depth_max_m` the **depth over which the type is defined** (`est_chlorophyll_a_*` is computed for 0–200 m alone, so a null below that is by construction, not missing data); `derivation` is free text saying how a *derived* type was produced (the `_cruise_corr` vs `_sta_corr` distinction is not something a consumer should have to guess). **Read it with `calcofi4db::read_measurement_type()` and append with `register_measurement_types()`, never with bare `read_csv`/`write_csv`** — see the round-trip trap below. Bounds are **enforced per dataset at ingest time**, see below. `nerc_p01` / `units_nerc_p06` are the NERC concept URIs a Darwin Core / OBIS eMoF export emits as `measurementTypeID` / `measurementUnitID` — set with `declare_measurement_fields()` (`scripts/declare_measurement_vocab.R` seeds them), never a bare `write_csv`. |
 | `category.csv` | **Registry of the twelve data categories** (`category, order, realm, icon, description`) — what an ingest's `calcofi.dataset_meta.category` and `measurement_type.category` must be one of (`build_workflows_index.R` errors on an unregistered one); the explorer's *Browse* tab, the schema site and the calcofi.io cards group by it, and `icon` is the brand sprite id (`calcofi.io/brand/v1/icons/`). Set a type's `category` / `variable` with `calcofi4db::declare_measurement_fields()`, never a bare `write_csv` (`scripts/declare_measurement_fields.R` seeds them). |
+| `life_stage.csv` | **Registry of life stages** (`life_stage, dwc_lifeStage, nerc_s11, life_stage_parent, datasets, note`) — every distinct `obs.life_stage` value, with the DwC label and NERC S11 concept URI where one is exact, and `life_stage_parent` for a substage S11 does not carve (`furcilia F1` → `furcilia`). Two values are recorded as **not life stages** (euphausiid `damaged`, ichthyo `invert`); do not emit those as `lifeStage`. |
+| `gear.csv` | **Registry of net gear** (`tow_type, gear_name, dwc_samplingProtocol, nerc_l22, datasets, note`) — every `sample.tow_type` code with the sentence a DwC `samplingProtocol` needs and the NERC L22 *device* URI where one is exact. L22 is a device catalogue: `DC` (a 600 m oblique) shares `CB`'s bongo id because the depth is protocol, not gear. |
 | `provider.csv` | **Registry of curating organizations** — one row per `provider` slug with `provider_short` (display label), `provider_name`, `url`, `status`. Any provider an ingest declares MUST be here: `scripts/build_workflows_index.R` errors out otherwise. Replaced a hardcoded label vector in that script, which silently yielded `NA` and published a literal `.na.character` heading for unregistered orgs. |
 | `license.csv` | **Registry of dataset licenses** (`license, name, url, status, notes`): the SPDX-style ids an ingest's `calcofi.dataset_meta.license` may carry — `CC-BY-4.0`, `CC0-1.0`, `CC-BY-NC-4.0`, `CC-BY-SA-4.0`, `US-PD`, `custom` (needs `license_url`), `unknown`. Read with `calcofi4db::read_license_registry()`; `check_dataset_citation()` fails the index and the release on a value outside it (see § "Attribution is a contract"). |
 | `{provider}/{dataset}/citation_authority.json` | **Generated cache** of what the source's own authority says (EDI / NCEI / ERDDAP / DataCite: `authority, url, citation, license, creator, title, checked, doi, doi_status`). Written by `check_dataset_citation()`; safe to delete (it refetches); `refresh = TRUE` refetches in place. A proposal, never the record — nothing copies it into the YAML. |
@@ -549,6 +551,26 @@ an ingest, `R/taxa.R` or a taxon metadata CSV):
 | `taxon_xref.csv` | **Generated cache** of the WoRMS↔ITIS cross-reference, one row per (`query_type`, `query_value`). Written by `ensure_taxon_xref()`, which must run *before* `ensure_taxon_lineage()`. Fills `worms_id` on `itis:`-keyed taxa and `itis_id` on `worms:`-keyed ones, re-keys onto the authority-accepted id, and fetches the real `taxonomic_status` + `status_checked`. `notes` is append-only. Safe to delete; `scripts/warm_taxon_xref.R` repopulates it. |
 | `metadata/{provider}/{dataset}/` | Per-dataset `tbls_redefine.csv`, `flds_redefine.csv`, `questions.csv`, corrections, etc. |
 | `metadata/{provider}/{dataset}/questions.csv` | **Provider-question registry** — 17 files, one per dataset. Read with `calcofi4db::read_questions()` and render with `questions_datatable()`; never a bare `read_csv()` + hand-written `factor(priority, …)` (see below). |
+
+#### A controlled-vocabulary id is filled only on an exact match
+
+The four registries above carry the ids a Darwin Core / OBIS ENV-DATA export needs —
+`measurement_type.nerc_p01` / `units_nerc_p06` (BODC P01 / P06),
+`life_stage.nerc_s11`, `gear.nerc_l22`, `field_dictionary.dwc_term`. **An id is written
+only when a concept states exactly what the row is**: every facet the concept names —
+quantity, matrix, phase, method — has to be something this registry or the dataset's
+documented protocol actually supplies. A *generic* concept is an exact match at coarser
+specificity (P01 `TEMPPR01`, *Temperature of the water body*, for a QC'd bottle
+temperature); a concept that adds a facet nobody recorded is not (`IRRDUV01` pins PAR to a
+cosine-collector radiometer). **An empty cell therefore means "no concept says exactly
+this", never "not looked at"** — inventing an id to fill the column is the same mistake as
+inventing a bound to quiet `check_measurement_bounds()`, and it is worse in one way: a
+wrong bound deletes data visibly, a wrong id misdescribes it at a portal that will never
+ask. At v2026.09 that is 115/200 types with a P01, 174/200 with a P06 unit, 10/23 life
+stages with an S11, 4/11 gear codes with an L22, 12/57 fields with a DwC term; the empties
+and why are in `RELEASES.md` and `docs/db.qmd` § *Darwin Core / OBIS ENV-DATA mapping*.
+Resolve concepts against the NVS SPARQL endpoint (`https://vocab.nerc.ac.uk/sparql/sparql`)
+and exclude deprecated ones.
 
 #### Declared bounds are checked per dataset, at ingest time
 

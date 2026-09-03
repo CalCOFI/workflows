@@ -394,6 +394,90 @@ were emailed 2026-08-24 but never filed — Q30 (the `orig*`/`uncorrected/` excl
 proposed at > 500 m or > 25% beyond the deepest neighbouring cell, per the ratchet in `CLAUDE.md`
 § *Depth is a coordinate*).
 
+## `measurement_type` carries the controlled-vocabulary ids a portal export needs
+
+A CalCOFI measurement has always said what it is in CalCOFI's own words — `nitrate`, `umol/L`.
+Every export to a portal that speaks Darwin Core or OBIS ENV-DATA then had to guess the
+corresponding controlled term, and `publish_ichthyo_to-obis.qmd` did not guess: it wrote
+`measurementTypeID = NA_character_` on all three of its extended-measurement blocks, because
+there was nowhere in the repo for the id to live. Now there is, and it is the same registry the
+release publishes (pre-release plan decision D-S2; `calcofi4db::declare_measurement_fields()`
+sets them, never a bare `write_csv()`).
+
+- **`measurement_type` gains `nerc_p01` and `units_nerc_p06`** — full NERC concept URIs for
+  OBIS/DwC eMoF's `measurementTypeID` (BODC Parameter Usage Vocabulary P01) and
+  `measurementUnitID` (P06). **115 of 200 types carry a P01 id; 174 of 200 carry a P06 unit id**
+  (resolved against the live NVS SPARQL endpoint, 2026-09-03, deprecated concepts excluded).
+- **Empty means "no concept says exactly this", never "not looked at".** An id is written only
+  on an *exact* vocabulary match: a concept every one of whose stated facets — quantity, matrix,
+  phase, method — this registry or the dataset's documented protocol actually supplies. A generic
+  concept is an exact match at coarser specificity (`TEMPPR01`, *Temperature of the water body*,
+  for a QC'd bottle temperature); one that adds a facet nobody recorded is not, which is why PAR
+  is empty (`IRRDUV01` pins it to a cosine-collector radiometer) and shortwave/longwave radiation
+  are empty (P01 separates downwelling from upwelling; the mets registry says only "radiation").
+  `nerc_uri_prefixes()` rejects a P06 URI pasted into the P01 column.
+- **The 85 types with no P01 are mostly not gaps.** **29** are taxon-bearing abundance, biomass or
+  size types, where P01 encodes the taxon *in the concept* and CalCOFI carries it in `taxon_key` —
+  a per-type id there would be wrong, not missing. **8** are event-level effort and sub-occurrence
+  attributes (`std_haul_factor`, `prop_sorted`, `volume_sampled`, the two displacement-volume
+  biomasses, `settled_volume_ml`, `stage`, `behavior`) that BODC does not model as parameters.
+  The remainder split three ways: **derived or raw-instrument series** the vocabulary does not
+  describe (`dynamic_height`, `specific_volume_anomaly`, `r_salinity_sva`, the `pred_*` model
+  outputs, the `est_*` corrected estimates, the `*_v` sensor voltages, `dic_valve`,
+  `unknown_measurement_1`/`_2`); **quantities P01 simply lacks** (dynamic height, specific volume
+  anomaly, and the `c14_*` production types whose mgC/m³/half-light-day time base P06 has no unit
+  for); and **quantities under-documented at the source**, which is where the useful questions are —
+  the transmissometer (wavelength and path length unrecorded), `atm_pressure_slc_mb` (P01's
+  sea-level-corrected concepts all name a barometer), `wave_height` / `wave_period` (P01 has only
+  *significant* height and WMO-coded period), `long_wave_rad` / `short_wave_rad` (up- or
+  downwelling not recorded), `het_bacteria` and `picoeukaryotes` (the flow-cytometry gating is not
+  recorded), and `bottom_depth` (P01's sea-floor depth concepts all name an echo sounder).
+- **One finding worth a provider's eye.** `r_ammonium` and `btl_ammonium` take P01 `AMONZZXX`
+  (ammonium, NH4+) because their source columns say ammonium; the QC'd `ammonia` is left **empty**,
+  because its source column is the bottle database's `NH3uM`, "Micromoles Ammonia per liter of
+  seawater", and P01 keeps ammonia (NH3) and ammonium (NH4+) as separate concepts. The three are
+  the same measurement, so one of the two source labels is wrong — visible now instead of resolved
+  by assumption. Relates to `calcofi_bottle` Q05.
+
+## Two new vocabulary registries: `metadata/life_stage.csv` and `metadata/gear.csv`
+
+Neither is released as a table; both are the reference an export reads, and both follow the same
+exact-match rule.
+
+- **`life_stage.csv`** covers all **23** distinct `obs.life_stage` values, with the DwC `lifeStage`
+  label and the NERC S11 concept URI where one exists (**10 of 23**), plus `life_stage_parent` for
+  a substage S11 does not carve (`furcilia F1`–`F7` roll up to `furcilia`, `calyptopis C1`–`C3` to
+  `calyptopis`). Two values are recorded as **not life stages at all**: euphausiid `damaged`
+  (specimens too damaged to stage — `occurrenceRemarks`) and ichthyo `invert` (a provenance flag
+  for the merged SWFSC invertebrate counts). `phyllosoma` has no S11 concept. And the release
+  ships both `larva` (ichthyo) and `larvae` (euphausiids) for the same concept — a normalization
+  gap on the euphausiid vocabulary, now visible in the registry rather than in the data alone.
+- **`gear.csv`** covers all **11** `sample.tow_type` codes with a `dwc_samplingProtocol` sentence
+  and the NERC L22 device URI where one is exact (**4 of 11**): `C1` → *1-metre ring net*, whose
+  L22 concept states the same 1-m diameter **and** 0.8 m² mouth area the SWFSC lookup does;
+  `CB` and `DC` → the generic *Bongo net* (L22 is a device catalogue, so the 600 m `DC` protocol
+  does not change the device); `MT` → *Manta net*. `CV` and `PV` (the CalVET / PairoVET vertical
+  egg nets) have no L22 concept at all, and `OBLIQUE` on the crab dataset is a tow geometry with
+  the gear unrecorded.
+
+## `field_dictionary` says which Darwin Core term each canonical field publishes as
+
+`dwc_term` holds the full DwC term URI for the **12 of 57** fields one term means exactly
+(`decimalLatitude`, `decimalLongitude`, `locationID`, `footprintWKT`, `eventDate`,
+`scientificName`, `vernacularName`, `lifeStage`, `organismQuantity`, `sampleSizeValue`,
+`measurementType`, `measurementValue`); a field Darwin Core *splits* (`depth_m` →
+`minimum`/`maximumDepthInMeters`) or has no term for stays empty, and `docs/db.qmd`'s new
+"Darwin Core / OBIS ENV-DATA mapping" section carries the constructions no single term can
+express — `scientificNameID` from `taxon_key`, the `eventID`/`parentEventID` hierarchy from
+`sample_key`/`parent_sample_key`, `organismQuantityType` from the density denominator.
+
+Fixed on the way: `libs/build_field_dictionary.R` calls itself re-runnable but had drifted four
+rows behind the CSV (`seafloor_depth_m`, `date_min`, `date_max`, `cruise_key_method` were added by
+hand), so running it would have silently deleted them. It is true again.
+
+**Consumers:** additive only — two columns on the released `measurement_type` table, and two new
+files under `metadata/` that no release table reads. Nothing is renamed or dropped.
+
 
 # v2026.08.25 (2026-08-25)
 
