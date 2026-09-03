@@ -467,6 +467,33 @@ supplemental `obs_ctd_full` — with their grains and the `append_*()` helper th
 builds each are specified in `design_env-bio-consolidation.md` and calcofi4db's
 `R/model.R` documentation.
 
+### `obs_bio` + `obs_env` are the observation store; `obs` is a catalog view (D-S1, calcofi4db ≥ 3.31.0)
+
+The ingests still `append_obs()` into `obs` — that is the assembly grain — but what the
+**release publishes** is the bifurcated pair `release_database.qmd`'s `browser_objects` chunk cuts
+from it (`build_obs_slim()`): `obs_bio` (one object, the bio realm with its sample's gear, effort
+and the D8 densities inline) and `obs_env` (one object per `measurement_type`). Since 2026-09-03
+each carries `sample_key`, `measurement_prec` and `hex_id` too, so it is a strict superset of
+`obs` under a name mapping (`realm` = the table, `value` = `measurement_value`), both are **core**,
+and `obs` is a **view** the catalog carries (`catalog.json` `views.obs`, the token SQL from
+`calcofi4db::obs_view_sql()`; `release_views()` is the registry `build_release_catalog()` consults).
+Rules that fell out:
+- **The pair must reproduce `obs`, and the release proves it.** `check_obs_pair_parity()` compares
+  per `(realm, dataset_key)` the row count, distinct `obs_id`s and a `bit_xor(hash(...))` signature
+  of every non-depth column, and errors on any mismatch or on a non-NULL depth that changed.
+  The one allowed difference is the depth *fallback* (a bio row with no depth in `obs` carries its
+  tow's span; 482,250 ichthyo rows) — reported, never hidden.
+- **`obs` still ships its own objects for one release, `deprecated`.** `cc_get_db()` (R, Python)
+  and db-query's `__TBL:obs__` serve `obs` through the view whenever `obs_bio` + `obs_env` load,
+  and read the deprecated objects only when they do not; `test_release.qmd` runs every `obs`
+  contract row three ways (objects, view, pair). Next release drops the objects
+  (`removed_in: "next"` — versions are dates, so the next one is not knowable at freeze time).
+- **Do not rename `value`, `root_id` or `hex7`** on the pair: every Explorer SQL template reads
+  them. New columns are appended; the view maps names, consumers never do.
+- **A `{{table}}` token, never a path, in a catalog view.** Each resolver substitutes its own
+  reader (`cc_view_sql(catalog, name, rp)` / `view_sql()` / `viewSql()`), so the same SQL serves a
+  connection that has the tables and a browser that has only https objects.
+
 Shared taxonomy refs — `taxon` (one row per taxon, `taxon_key` = `worms:<id>`, or
 `itis:<id>` for birds/Aves), `dataset_taxon` (per-dataset vocabulary → `taxon_key`;
 `obs` joins it on `(dataset_key, ds_taxa_code)`) and `taxon_group` — are built by
