@@ -87,3 +87,70 @@ Read: `publish_to-erddap.qmd` (`sql_obs()` l.260, `sql_sample()` l.276, the cfg 
 4. `RELEASES.md # Unreleased` line under H1's heading; the ERDDAP row in `docs/db.qmd` § publishing.
 
 Gate: `erddap.calcofi.io/erddap/tabledap/swfsc_ichthyo.das` (staging) lists `density_per_10m2`.
+
+## Measured (H2, Opus 5 · medium, 2026-09-03)
+
+Concepts resolved against the live NVS SPARQL endpoint (`https://vocab.nerc.ac.uk/sparql/sparql`),
+deprecated concepts excluded. Branches: workflows `ws-h2`, calcofi4db `ws-h2` (`# calcofi4db 3.32.0`
+NEWS heading, DESCRIPTION not bumped), docs `ws-h2`.
+
+**The gate — types with and without a P01 id:** of **200** measurement types, **115 carry
+`nerc_p01`** and **85 do not**; **174 carry `units_nerc_p06`** and **26 do not**. The other three
+registries: `life_stage.csv` **23** stages, **10** with a NERC S11 id; `gear.csv` **11**
+`tow_type` codes, **4** with a NERC L22 device id; `field_dictionary.csv` **57** fields, **12**
+with a `dwc_term`.
+
+The 85 without a P01 break down as: **29 taxon-bearing** abundance / biomass / size types (P01
+encodes the taxon in the concept; CalCOFI carries it in `taxon_key`, so an id there would be
+*wrong*, not missing), **8** event-level effort and sub-occurrence attributes BODC does not model
+as parameters (`std_haul_factor`, `prop_sorted`, `volume_sampled`, both displacement-volume
+biomasses, `settled_volume_ml`, `stage`, `behavior`), and 48 split between derived/raw-instrument
+series the vocabulary does not describe (`pred_*`, `est_*`, the `*_v` voltages, `dic_valve`,
+`unknown_measurement_1/2`, `r_salinity_sva`), quantities P01 lacks (`dynamic_height`,
+`specific_volume_anomaly`, the `c14_*` types whose mgC/m³/half-light-day time base has no P06
+unit), and — the useful residue — **quantities under-documented at the source**: the
+transmissometer (wavelength and path length unrecorded), `atm_pressure_slc_mb` (P01's
+sea-level-corrected concepts all name a barometer), `wave_height` / `wave_period` (P01 has only
+*significant* height and WMO-coded period), `long_wave_rad` / `short_wave_rad` (up- or downwelling
+not recorded), `het_bacteria` / `picoeukaryotes` (flow-cytometry gating not recorded), and
+`bottom_depth` (P01's sea-floor depth concepts all name an echo sounder).
+
+The 26 units without a P06: 16 types have no `units` at all, then `mgC/m3/hld` (4), `dyn m` (2),
+`count/1000m3`, `feet`, `oktas`, `Forel-Ule`.
+
+**One finding for a provider.** `r_ammonium` and `btl_ammonium` take P01 `AMONZZXX` (ammonium,
+NH4+) because their source columns say ammonium; the QC'd **`ammonia` is deliberately empty**,
+because its source column is the bottle database's `NH3uM`, *"Micromoles Ammonia per liter of
+seawater"*, and P01 keeps ammonia (NH3) and ammonium (NH4+) as separate concepts. All three are
+the same measurement, so one of the two source labels is wrong. Relates to `calcofi_bottle` Q05;
+not filed as a new question (Q05 is DG's).
+
+**Second finding, in the data rather than the vocabulary.** The release ships both `larva`
+(swfsc_ichthyo, 379,962 rows) and `larvae` (cce-lter_euphausiids, 145 rows) for the same concept.
+Both map to S11 `larva`; the two spellings are a normalization gap on the euphausiid vocabulary.
+
+**Fixed on the way (not in the brief).** `libs/build_field_dictionary.R` calls itself
+"re-runnable: regenerates the CSV" but had drifted **four rows** behind
+`metadata/field_dictionary.csv` (`seafloor_depth_m`, `date_min`, `date_max`,
+`cruise_key_method` were added by hand), so running it would have silently deleted them. Added
+to the tribble; the rebuild now reproduces all 57 rows byte-for-byte plus the new column.
+
+**Tests / renders.** calcofi4db `devtools::test()` **1635 passed / 0 failed / 0 error** (adds one
+`test-registry.R` block: the two columns set, empty stays empty and not `"NA"`, a P06 URI in the
+P01 column rejected, a bare code rejected, a URI missing its trailing slash rejected, overwrite
+discipline). `scripts/declare_measurement_vocab.R` is idempotent (second run: "unchanged") and
+validates all three registries. `quarto render db.qmd` in the docs worktree passes: 7 `##`
+sections, 17 `###`, 100 internal links, **0 broken**, 5 tables, callout rendered.
+
+**Not done / left open.** `publish_ichthyo_to-obis.qmd` was edited but **not rendered** (per the
+rules); only 1 of the 6 registry types its three eMoF blocks name resolves to a P01
+(`body_length` → `OBSINDLX`), which is the honest outcome — the effort types have no concept.
+The follow-on stub is `.claude/plans_todo/2026-09-03 Follow-on — generic publish_to-obis over the
+core.md`.
+
+**Note for H3.** `nerc_p01` holds the **concept URI**
+(`http://vocab.nerc.ac.uk/collection/P01/current/TEMPPR01/`), because that is what an OBIS eMoF
+`measurementTypeID` takes and what the brief specified. ERDDAP's `sdn_parameter_urn` wants the
+URN form: derive it, do not add a column —
+`sub("^.*/collection/(P01)/current/([^/]+)/$", "SDN:\\1::\\2", nerc_p01)`. Same shape for
+`units_nerc_p06` → `sdn_uom_urn`.
