@@ -340,6 +340,31 @@ with `scripts/climatology_fallback.sql` for a release that predates it), explore
 - **Plotly's built-in `"RdBu"` runs blue → red** (`0 = rgb(5,10,172)`). Pass an explicit
   ramp — both apps share ctd-transects' five stops — and check the sign in a screenshot.
 
+### Attribution is a contract, checked like links
+
+**Every dataset's `citation_main`, `license` and `doi` are checked, not trusted** —
+by `scripts/build_workflows_index.R` and by `release_database.qmd`'s
+`dataset_coverage` chunk, both through `calcofi4db::check_dataset_citation()`
+(≥ 3.30.0). A citation needs a year and a locator; `license` must be an active id in
+**`metadata/license.csv`** (`custom` requires `license_url`; `unknown` or empty fails
+unless a question is open); `doi` is bare and must resolve. The network half asks
+the source's own authority (EDI cite service, NCEI "Cite as", ERDDAP `.das`,
+DataCite) behind `CALCOFI_SKIP_LINK_CHECK`, caches it in
+`metadata/{provider}/{dataset}/citation_authority.json`, and reports drift — **it
+never writes into a notebook's YAML**; the author's string is the record. An error
+is exempt only while an `open`/`proposed` `questions.csv` row on `related_table =
+dataset` names the field, so a gap is fixed or on record with the provider. A value
+is written only with evidence (a `# source: <url>, checked <date>` comment);
+**never invent a license**. `source_accessed` is measured at release time
+(`resolve_source_accessed()`: the ingest's `stamp_source_access()` record, else the
+sidecar's last commit), never authored. The release cites itself
+(`release_citation()` → `catalog.json` `citation`/`concept_doi`/`doi`, the notes'
+"How to cite", `.zenodo.json` + `CITATION.cff` from
+`scripts/build_citation_files.R`); the Zenodo version DOI is written in by
+`publish_release_notes()` after WS-F's tag. Findings, resolvers, the Zenodo flow and
+what was measured are in the **`attribution` skill** — load it before touching a
+`dataset_meta` citation/license key, `R/citation.R` or the release citation.
+
 ### Coverage is measured, never asserted
 
 **Do not add `coverage_temporal` / `coverage_spatial` to a `dataset_meta`
@@ -486,6 +511,8 @@ an ingest, `R/taxa.R` or a taxon metadata CSV):
 | `measurement_type.csv` | Canonical measurement vocabulary (raw measured quantities). `is_canonical` flags the headline types; `valid_min`/`valid_max` bound the value and `valid_depth_min_m`/`valid_depth_max_m` the **depth over which the type is defined** (`est_chlorophyll_a_*` is computed for 0–200 m alone, so a null below that is by construction, not missing data); `derivation` is free text saying how a *derived* type was produced (the `_cruise_corr` vs `_sta_corr` distinction is not something a consumer should have to guess). **Read it with `calcofi4db::read_measurement_type()` and append with `register_measurement_types()`, never with bare `read_csv`/`write_csv`** — see the round-trip trap below. Bounds are **enforced per dataset at ingest time**, see below. |
 | `category.csv` | **Registry of the twelve data categories** (`category, order, realm, icon, description`) — what an ingest's `calcofi.dataset_meta.category` and `measurement_type.category` must be one of (`build_workflows_index.R` errors on an unregistered one); the explorer's *Browse* tab, the schema site and the calcofi.io cards group by it, and `icon` is the brand sprite id (`calcofi.io/brand/v1/icons/`). Set a type's `category` / `variable` with `calcofi4db::declare_measurement_fields()`, never a bare `write_csv` (`scripts/declare_measurement_fields.R` seeds them). |
 | `provider.csv` | **Registry of curating organizations** — one row per `provider` slug with `provider_short` (display label), `provider_name`, `url`, `status`. Any provider an ingest declares MUST be here: `scripts/build_workflows_index.R` errors out otherwise. Replaced a hardcoded label vector in that script, which silently yielded `NA` and published a literal `.na.character` heading for unregistered orgs. |
+| `license.csv` | **Registry of dataset licenses** (`license, name, url, status, notes`): the SPDX-style ids an ingest's `calcofi.dataset_meta.license` may carry — `CC-BY-4.0`, `CC0-1.0`, `CC-BY-NC-4.0`, `CC-BY-SA-4.0`, `US-PD`, `custom` (needs `license_url`), `unknown`. Read with `calcofi4db::read_license_registry()`; `check_dataset_citation()` fails the index and the release on a value outside it (see § "Attribution is a contract"). |
+| `{provider}/{dataset}/citation_authority.json` | **Generated cache** of what the source's own authority says (EDI / NCEI / ERDDAP / DataCite: `authority, url, citation, license, creator, title, checked, doi, doi_status`). Written by `check_dataset_citation()`; safe to delete (it refetches); `refresh = TRUE` refetches in place. A proposal, never the record — nothing copies it into the YAML. |
 | `dataset.csv` | **DEPRECATED** — superseded by each ingest's `calcofi.dataset_meta` YAML block via `ingest_yaml_to_dataset_df(read_ingest_yaml())`. The CSV drifted from the notebooks and orphaned `obs` rows. |
 | `dataset_status.csv` | Pipeline-stage tracker, one row per dataset; each skill writes its stage column. |
 | `relationships_cross.csv` | Cross-dataset FKs (intra-dataset FKs live in each ingest's `relationships.json`). |
