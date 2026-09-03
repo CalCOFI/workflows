@@ -128,6 +128,51 @@ has `depth_max_m = NULL`, so a net tow cannot be drawn as the integrated span it
 **Consumers:** `cc_get_db()` gets `sample_spatial` by default; `obs_bio`/`obs_env`/`sample_root` are
 `supplemental = TRUE` (opt in). `test_release.qmd` gains seven contract rows over the new objects.
 
+## The bottle's reported (`r_*`) series are interpolated, and say so
+
+The bottle's six pre-QC `r_*` measurement types (`r_ammonium`, `r_depth`, `r_dynamic_height`,
+`r_oxygen_umol_kg`, `r_salinity_sva`, `r_temperature`) carried an empty `derivation` and
+`is_canonical = TRUE`, so nothing on the released type itself said they were anything other than
+another canonical series a consumer could compare or interpolate from. Rasmus Swalethorp (SIO CTD
+data team) confirmed 2026-09-01 (`metadata/calcofi/bottle/questions.csv` Q09): the `r_*` columns
+are values *already* interpolated to standard depths in decodr, pre-QC and unflagged by design —
+"when we do any kinds of data interpolations ... we should not use already interpolated data points
+from the bottle database." `measurement_type.csv` now records that as `derivation` on all six types
+and flips `is_canonical` to `FALSE`; `release_database.qmd` gates the release on no `r_*` type ever
+carrying a `variable` crosswalk entry (the mechanism a consumer would use to compare it across
+datasets in the first place).
+
+**Consumers:** `is_canonical` flips TRUE → FALSE on `r_ammonium`, `r_depth`, `r_dynamic_height`,
+`r_oxygen_umol_kg`, `r_salinity_sva`, `r_temperature` — any query selecting the default/canonical
+`measurement_type` set for `calcofi_bottle` stops returning these six; they remain in `obs` under
+an explicit `measurement_type` filter, now documented as pre-QC and not for further interpolation.
+
+## Accepted CTD QC flags have a bridge to the release (unrun this round)
+
+`ingest_calcofi_ctd-cast.qmd` gains an `apply_accepted_flags` chunk: it downloads the CTD team's
+nightly-snapshotted, curator-accepted flag ledger (`gs://calcofi-db/qc/ctd/flag_accepted.parquet`,
+from the PostgreSQL `ctd.flag` table — see `CLAUDE.md` § *The CTD team's PostgreSQL database*),
+joins each flag to the scan it names via `(archive, _source_file, cast_key, depth_m)`, and
+overwrites `ctd_measurement.measurement_qual` for the match; `release_database.qmd` gains a
+warn-only `qc_flags_pending` chunk reporting the gap between the snapshot and what the last CTD
+ingest render applied. **This chunk ships unrun**: the snapshot is a 600-byte header-only parquet
+(0 accepted flags, last modified 2026-08-19) — the CTD team has not accepted a flag through the
+ledger yet, and the CTD ingest is not re-run this round (128 min; see the "Avoiding the CTD
+ingest" plan). It takes effect at the next CTD ingest render.
+
+## Rasmus's other CTD/bottle answers become registry facts
+
+`metadata/calcofi/bottle/questions.csv` Q09 (R_* quality-code inheritance) is `answered` — R_*
+stays unflagged, and the P_qual-vs-phosphate half is split into its own row (Q12, still open, for
+Ben G). `metadata/calcofi/ctd-cast/questions.csv`: Q27 (Rathburn core-station casts) is `answered`
+— continue to exclude; Q09 (sensor-selection codes 1/2) is `answered` on the codes' meaning
+(matches `metadata/measurement_qual.csv`), leaving the averaged-canonical-type propagation policy
+as unimplemented follow-on work, not a further provider question; two new rows record answers that
+were emailed 2026-08-24 but never filed — Q30 (the `orig*`/`uncorrected/` exclusion and
+`separate_runs/` retention, answered) and Q31 (the seafloor-vs-GEBCO "large discrepancy" threshold,
+proposed at > 500 m or > 25% beyond the deepest neighbouring cell, per the ratchet in `CLAUDE.md`
+§ *Depth is a coordinate*).
+
 
 # v2026.08.25 (2026-08-25)
 

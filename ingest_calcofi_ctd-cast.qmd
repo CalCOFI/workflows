@@ -2332,6 +2332,173 @@ if (n_orphan > 0) {
 }
 ```
 
+## Apply Accepted QC Flags
+
+The CTD team's PostgreSQL QA/QC database (`server/postgis/init/40_ctd.sql`, schema
+`ctd`) is a *working* store beside this release, never a dependency this
+pipeline connects to live — the bridge is a nightly snapshot,
+`gs://calcofi-db/qc/ctd/flag_accepted.parquet`
+(`server/scripts/pg_flag_snapshot.R`, cron `pg_flag_snapshot.sh`), of every
+`ctd.flag` row a curator has accepted. This chunk downloads that snapshot,
+joins each accepted flag to the scan it names, and overwrites
+`ctd_measurement.measurement_qual` for the match.
+
+**Join key.** `ctd.file.archive` is the zip filename and `.path` is the member
+path inside it (`libs/pg_ctd.R::pg_ctd_discover_files()`:
+`archive = paste0(dir_unzip, ".zip")`, `path = rel`) — byte-identical to this
+notebook's own `` `_source_file` `` (the `d_csv` chunk's `path_unzip`), so
+`archive` reconstructs from it as the text before the first `/` plus `.zip`.
+Within one file, `ctd.scan.cast_id` / `.depth` are the *verbatim* source
+`Cast_ID` / `Depth` columns — `flds_redefine.csv` renames those to this
+notebook's `cast_key` / `depth_m`, so `(archive, _source_file, cast_key,
+depth_m)` is the same identity as `(archive, path, cast_id, depth)` in the
+snapshot. `ctd.flag.variable` is a `ctd.scan` **column name** (e.g.
+`salt1_corr`), not a `measurement_type` — mapped through `` `_source_column` ``
+on `d_meas_ctd` (built above in "Measurement Column Registry").
+
+**Two flag shapes.** A scan-level flag carries `depth`/`cast_id` (from the
+snapshot's `LEFT JOIN ctd.scan`); a file/cast-level flag (`ctd.flag.scan_id IS
+NULL`, the whole file or cast is being marked) does not, and applies to every
+scan in that file — for `variable = '*'` that means every measurement type,
+not one.
+
+```{r}
+#| label: apply_accepted_flags
+
+flag_url   <- "https://storage.googleapis.com/calcofi-db/qc/ctd/flag_accepted.parquet"
+flag_cache_dir <- here("data/cache/ctd-cast")
+dir_create(flag_cache_dir)
+flag_cache_path <- file.path(flag_cache_dir, "flag_accepted.parquet")
+
+# download-first, skip when unchanged: a HEAD request's Content-Length is
+# compared to the cached file's size before spending the GET. A size collision
+# with genuinely different content is not a concern here — the snapshot is
+# COPY'd fresh each night (server/scripts/pg_flag_snapshot.R), never edited in
+# place, so "same size" only happens when the file legitimately did not change.
+flag_head <- tryCatch(httr::HEAD(flag_url), error = function(e) NULL)
+remote_size <- if (!is.null(flag_head) && httr::status_code(flag_head) == 200)
+  suppressWarnings(as.numeric(httr::headers(flag_head)[["content-length"]])) else NA_real_
+remote_last_modified <- if (!is.null(flag_head))
+  httr::headers(flag_head)[["last-modified"]] else NA_character_
+
+local_size <- if (file_exists(flag_cache_path)) as.numeric(file_size(flag_cache_path)) else NA_real_
+
+need_download <- is.na(local_size) ||
+  (!is.na(remote_size) && local_size != remote_size)
+
+if (need_download) {
+  stopifnot("could not reach flag_accepted.parquet and no local cache exists" =
+              !is.null(flag_head) && httr::status_code(flag_head) == 200)
+  utils::download.file(flag_url, flag_cache_path, mode = "wb", quiet = TRUE)
+  say(glue("Downloaded flag_accepted.parquet ({round(file_size(flag_cache_path) / 1024, 1)} KB, ",
+           "last modified {remote_last_modified %||% 'unknown'})"))
+} else {
+  say(glue("flag_accepted.parquet unchanged ({round(local_size / 1024, 1)} KB) — using cache"))
+}
+
+d_flags <- dbGetQuery(con, glue("SELECT * FROM read_parquet('{flag_cache_path}')"))
+n_flags <- nrow(d_flags)
+
+if (n_flags == 0) {
+
+  say(glue("0 accepted flags in snapshot (last modified {remote_last_modified %||% 'unknown'})"))
+
+} else {
+
+  # variable (a ctd.scan column name, e.g. "salt1_corr") -> measurement_type,
+  # via the same crosswalk the pivot above used (d_meas_ctd$`_source_column`)
+  d_var_xwalk <- d_meas_ctd |>
+    select(variable = `_source_column`, measurement_type) |>
+    filter(!is.na(variable), variable != "")
+  dbWriteTable(con, "_flag_var_xwalk", d_var_xwalk, overwrite = TRUE)
+  dbWriteTable(con, "_flags_accepted", d_flags, overwrite = TRUE)
+
+  # the same (archive, _source_file, cast_key, depth_m) identity as ctd.file /
+  # ctd.scan (see the section prose above), one row per physical scan
+  dbExecute(con, "
+    CREATE OR REPLACE TABLE _ctd_raw_keys AS
+    SELECT DISTINCT ctd_cast_uuid, depth_m, cast_key, \"_source_file\",
+           regexp_extract(\"_source_file\", '^([^/]+)', 1) || '.zip' AS archive
+    FROM ctd_raw")
+  stopifnot("(archive, _source_file, cast_key, depth_m) is not a unique scan key in ctd_raw" =
+    dbGetQuery(con, "
+      SELECT COUNT(*) - COUNT(DISTINCT archive || '|' || \"_source_file\" || '|' || cast_key || '|' || depth_m) AS n
+      FROM _ctd_raw_keys")$n == 0)
+
+  # scan-level flags: exact (archive, path, cast_id, depth) match
+  dbExecute(con, "
+    CREATE OR REPLACE TABLE _flags_scan_matched AS
+    SELECT f.flag_id, f.qual_code, f.variable, k.ctd_cast_uuid, k.depth_m
+    FROM _flags_accepted f
+    JOIN _ctd_raw_keys k
+      ON k.archive = f.archive AND k.\"_source_file\" = f.path
+     AND k.cast_key = f.cast_id AND k.depth_m = f.depth
+    WHERE f.depth IS NOT NULL")
+
+  # file/cast-level flags (no scan_id in the ledger — every scan in the file)
+  dbExecute(con, "
+    CREATE OR REPLACE TABLE _flags_file_matched AS
+    SELECT f.flag_id, f.qual_code, f.variable, k.ctd_cast_uuid, k.depth_m
+    FROM _flags_accepted f
+    JOIN _ctd_raw_keys k
+      ON k.archive = f.archive AND k.\"_source_file\" = f.path
+    WHERE f.depth IS NULL")
+
+  n_scan_flags <- dbGetQuery(con, "SELECT COUNT(DISTINCT flag_id) AS n FROM _flags_accepted WHERE depth IS NOT NULL")$n
+  n_file_flags <- n_flags - n_scan_flags
+  n_scan_matched_flags <- dbGetQuery(con, "SELECT COUNT(DISTINCT flag_id) AS n FROM _flags_scan_matched")$n
+  n_file_matched_flags <- dbGetQuery(con, "SELECT COUNT(DISTINCT flag_id) AS n FROM _flags_file_matched")$n
+  n_unmatched <- (n_scan_flags - n_scan_matched_flags) + (n_file_flags - n_file_matched_flags)
+
+  stopifnot(
+    "accepted flag(s) in the snapshot find no scan in ctd_raw — a broken (archive, path, cast_id, depth) bridge" =
+      n_unmatched == 0)
+
+  # apply: named-variable rows go through the crosswalk; '*' applies to every
+  # measurement_type recorded for that (ctd_cast_uuid, depth_m)
+  dbExecute(con, "
+    UPDATE ctd_measurement m
+    SET measurement_qual = CAST(x.qual_code AS VARCHAR)
+    FROM (
+      SELECT fm.ctd_cast_uuid, fm.depth_m, w.measurement_type, fm.qual_code
+      FROM (SELECT * FROM _flags_scan_matched UNION ALL SELECT * FROM _flags_file_matched) fm
+      JOIN _flag_var_xwalk w ON w.variable = fm.variable
+      WHERE fm.variable != '*'
+      UNION ALL
+      SELECT fm.ctd_cast_uuid, fm.depth_m, m2.measurement_type, fm.qual_code
+      FROM (SELECT * FROM _flags_scan_matched UNION ALL SELECT * FROM _flags_file_matched) fm
+      JOIN ctd_measurement m2
+        ON m2.ctd_cast_uuid = fm.ctd_cast_uuid AND m2.depth_m = fm.depth_m
+      WHERE fm.variable = '*'
+    ) x
+    WHERE m.ctd_cast_uuid = x.ctd_cast_uuid AND m.depth_m = x.depth_m
+      AND m.measurement_type = x.measurement_type")
+
+  n_scans_affected <- dbGetQuery(con, "
+    SELECT COUNT(DISTINCT ctd_cast_uuid || '|' || depth_m) AS n
+    FROM (SELECT * FROM _flags_scan_matched UNION ALL SELECT * FROM _flags_file_matched)")$n
+
+  say(glue("accepted CTD QC flags applied: {format(n_flags, big.mark = ',')} flag(s) · ",
+           "{format(n_scans_affected, big.mark = ',')} scan(s) affected · 0 unmatched"))
+
+  n_flags_applied <- n_flags  # exported into metadata.json below, for release_database.qmd's n_flags_pending
+  dbExecute(con, "DROP TABLE _flag_var_xwalk")
+  dbExecute(con, "DROP TABLE _flags_accepted")
+  dbExecute(con, "DROP TABLE _ctd_raw_keys")
+  dbExecute(con, "DROP TABLE _flags_scan_matched")
+  dbExecute(con, "DROP TABLE _flags_file_matched")
+}
+```
+
+::: {.callout-note}
+This chunk is shipping **unrun** this round (2026-09-03): the snapshot is a
+600-byte header-only parquet with zero accepted rows (last modified
+2026-08-19), so the CTD team has not yet accepted a flag through the ledger.
+It first has an effect at the next CTD ingest render after the team accepts
+one. `RELEASES.md` gets an entry only once `n_flags_applied` > 0 — a
+zero-effect chunk shipping is not itself a release-content change.
+:::
+
 ### ctd_summary — summary stats across cast directions
 
 ```{r}
@@ -3729,6 +3896,15 @@ build_relationships_json(
   provider   = provider,
   dataset    = dataset
 )
+
+# n_flags_applied (from "Apply Accepted QC Flags" above) is not a
+# build_metadata_json() field, so it is patched onto the written sidecar
+# rather than widening that helper's signature for one dataset's one number.
+# release_database.qmd's qc_flags_pending chunk reads it to report how many of
+# the snapshot's accepted flags this release does NOT yet reflect.
+d_metadata_json <- jsonlite::read_json(metadata_path)
+d_metadata_json$n_flags_applied <- if (exists("n_flags_applied")) n_flags_applied else 0L
+jsonlite::write_json(d_metadata_json, metadata_path, auto_unbox = TRUE, pretty = TRUE, null = "null")
 ```
 
 Both sidecars are read back **from disk** rather than from the objects the chunk

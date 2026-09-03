@@ -427,6 +427,20 @@ dbExecute(con_wdl,
    FROM _measurement_type_reg")
 dbExecute(con_wdl, "DROP TABLE _measurement_type_reg")
 
+# r_* types are the bottle's pre-QC, interpolated-to-standard-depth series
+# (Rasmus Swalethorp, 2026-09-01, WS-G: "we should not use already interpolated
+# data points from the bottle database" for any further interpolation). A
+# `variable` crosswalk entry is exactly that reuse — it tells a consumer this
+# type is comparable to, and poolable with, another dataset's canonical series —
+# so no r_* type may ever carry one. is_canonical is set FALSE on all six at the
+# registry (metadata/measurement_type.csv); this is the second, structural gate.
+d_r_star_variable <- dbGetQuery(con_wdl,
+  "SELECT measurement_type, variable FROM measurement_type
+   WHERE measurement_type LIKE 'r\\_%' ESCAPE '\\' AND variable IS NOT NULL")
+stopifnot(
+  "an r_* (pre-QC, interpolated) measurement_type carries a `variable` crosswalk entry - it must not, see WS-G 2026-09-03" =
+    nrow(d_r_star_variable) == 0)
+
 # --- assemble the core from the per-dataset shards --------------------------
 # Each ingest emits its own slice from its own notebook, which is the single
 # authoritative projection (calcofi4db holds only the generic shapes). This step only concatenates: it UNIONs the
@@ -856,6 +870,57 @@ stopifnot(
     nrow(d_over) <= DEPTH_SEAFLOOR_OVER_MAX)
 if (nrow(d_over) < DEPTH_SEAFLOOR_OVER_MAX)
   cat(glue("\nDEPTH_SEAFLOOR_OVER_MAX can be tightened to {nrow(d_over)}.\n"))
+```
+
+### CTD accepted QC flags pending
+
+`ingest_calcofi_ctd-cast.qmd`'s `apply_accepted_flags` chunk applies every
+*accepted* row of the CTD team's PostgreSQL QA/QC ledger
+(`gs://calcofi-db/qc/ctd/flag_accepted.parquet`, a nightly snapshot — see
+`CLAUDE.md` § *The CTD team's PostgreSQL database*) and records how many it
+applied in that ingest's `metadata.json` (`n_flags_applied`). This chunk
+compares the snapshot's current count to that stamp: a gap means flags were
+accepted by the team **after** the CTD ingest last rendered, so this release
+still ships the pre-acceptance `measurement_qual`. **Warn only** — the CTD
+ingest is 128 minutes and this round deliberately does not re-run it (§
+*Avoiding the CTD ingest*, 2026-09-03 pre-release plan).
+
+```{r}
+#| label: qc_flags_pending
+
+flag_snapshot_url <- "https://storage.googleapis.com/calcofi-db/qc/ctd/flag_accepted.parquet"
+n_flags_snapshot <- tryCatch({
+  tmp <- tempfile(fileext = ".parquet")
+  utils::download.file(flag_snapshot_url, tmp, mode = "wb", quiet = TRUE)
+  n <- dbGetQuery(con_wdl, glue("SELECT COUNT(*) AS n FROM read_parquet('{tmp}')"))$n
+  unlink(tmp)
+  n
+}, error = function(e) {
+  warning("could not reach flag_accepted.parquet: ", conditionMessage(e))
+  NA_integer_
+})
+
+ctd_meta_path <- here("data/parquet/calcofi_ctd-cast/metadata.json")
+n_flags_applied <- if (file.exists(ctd_meta_path)) {
+  m <- jsonlite::read_json(ctd_meta_path)
+  if (!is.null(m$n_flags_applied)) as.integer(m$n_flags_applied) else 0L
+} else 0L
+
+n_flags_pending <- if (is.na(n_flags_snapshot)) NA_integer_ else
+  max(0L, n_flags_snapshot - n_flags_applied)
+
+if (is.na(n_flags_pending)) {
+  cat("n_flags_pending: could not be measured (snapshot unreachable) — not fatal, warn only\n")
+} else {
+  cat(glue(
+    "CTD accepted QC flags: {n_flags_snapshot} in snapshot · ",
+    "{n_flags_applied} reflected in this release's calcofi_ctd-cast shard · ",
+    "{n_flags_pending} pending (not yet applied)\n"))
+  if (n_flags_pending > 0)
+    warning(glue(
+      "{n_flags_pending} accepted CTD QC flag(s) are not yet reflected in this release — ",
+      "the CTD ingest has not rendered since they were accepted. Not fatal (warn only)."))
+}
 ```
 
 ## Cruise Coverage — Samples With No Observations

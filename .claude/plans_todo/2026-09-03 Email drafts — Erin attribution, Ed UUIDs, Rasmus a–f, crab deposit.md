@@ -92,9 +92,12 @@ Thanks — that settles most of it. What we're doing with each:
 - (a) R_* columns stay unflagged, and we'll now record in the registry that they are interpolated to
   standard depths (pre-QC) and must not feed further interpolation — neither the transect tool nor the
   Explorer sections use them (they interpolate CTD profiles), and a release check will keep it that
-  way. One thing for Ben G, since it follows from your answer: we can list casts where every T_degC is
-  flagged bad yet R_Temp values exist, if that's useful for Kraken. Still open from my list: whether
-  P_qual is the pressure/depth code or the phosphate one.
+  way. One thing for Ben G, since it follows from your answer: we checked casts where every T_degC is
+  flagged 8 (suspect) or 9 (missing) yet R_Temp values still exist — **zero casts** in v2026.08.25 meet
+  that description (every cast with any bad-temperature bottle also has at least one good one), so this
+  particular gap does not currently manifest in the released database; the check now exists if a future
+  release needs re-checking. Still open from my list: whether P_qual is the pressure/depth code or the
+  phosphate one.
 - (b)/(c) Rathburn casts stay excluded; `orig/` and `uncorrected/` are treated as superseded copies and
   excluded; the `separate_runs/` folder inside a FinalQC archive is kept since those casts exist nowhere
   else (20-1104SH 031–036).
@@ -110,6 +113,31 @@ Thanks — that settles most of it. What we're doing with each:
   wins for every dataset so the join means one thing — which matches "follow the NOAA designation" for
   the Jordan cruises. For the nine SIO-ship cases, should the bottle designation win instead? (The
   bottle's own designation is kept on its cast table either way.) I'll send the 14 as a table.
+
+| Bottle designation (YYYY-MM) | Resolved `cruise_key` | Ship | casts |
+|---|---|---|---|
+| 1984-02 | 1984-03-31JD | David Starr Jordan | 310 |
+| 1967-07 | 1967-06-31EB | Ellen B. Scripps | 158 |
+| 1975-10 | 1975-11-31JD | David Starr Jordan | 125 |
+| 1981-08 | 1981-07-31JD | David Starr Jordan | 71 |
+| 1962-04 | 1962-03-31HO | Horizon | 56 |
+| 1982-08 | 1982-03-90PN | Poseydon | 25 |
+| 1975-06 | 1975-05-31JD | David Starr Jordan | 20 |
+| 1989-08 | 1989-07-32NM | New Horizon | 12 |
+| 1953-07 | 1953-06-31ES | E. W. Scripps | 11 |
+| 1962-04 | 1962-03-31BD | Black Douglas | 11 |
+| 1953-05 | 1953-04-31ES | E. W. Scripps | 10 |
+| 1960-02 | 1960-01-31HO | Horizon | 10 |
+| 1975-06 | 1975-07-31JD | David Starr Jordan | 9 |
+| 1959-06 | 1959-05-31OR | Orca | 1 |
+
+14 rows, 829 casts total — reproduced from `_output/ingest_calcofi_bottle.html`'s rendered
+"Casts whose resolved cruise month differs from the source Cruise designation" widget (684 rows as
+rendered pre-fix), filtered client-side to the rows where `cruise` and `cruise_key` disagree as
+integers rather than as the DOUBLE-vs-VARCHAR text the notebook's query used to compare — the same
+670 rows the notebook's own comparison bug was dropping in are excluded here too, so this table and
+the corrected notebook query agree. Ship names joined from the release `ship` table
+(`calcofi4r::cc_get_db("v2026.08.25")`) on `ship_nodc`.
 
 Cheers, Ben
 
