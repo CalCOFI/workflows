@@ -518,6 +518,41 @@ hand), so running it would have silently deleted them. It is true again.
 **Consumers:** additive only — two columns on the released `measurement_type` table, and two new
 files under `metadata/` that no release table reads. Nothing is renamed or dropped.
 
+## The provider's own identifiers are columns, and the cruise key is checked against the cruise
+
+Ed Weber asked (2026-09-02) that the integrated database adopt NOAA's UUIDs. It carries them now
+as typed columns beside the namespaced keys it joins on: `sample.source_uuid` — the SWFSC site,
+tow or net UUID exactly as the export ships it (NULL for the 15 datasets that mint none);
+`sample.station_uuid` + `station_uuid_method` — the SWFSC station occupation any event belongs to
+(ichthyo's own site/tow/net rows: their own site, `self`; a foreign row parented directly to an
+ichthyo site, e.g. the Dungeness crab's examined subsamples: `parent`; every other dataset's root
+sample: matched on cruise + station + occupation order (`order_occ`), or on a unique occupation
+within 24 h (`datetime`) — measured at v2026.08.25, 78.0% of 35,644 bottle casts and 80.3% of
+19,242 CTD casts resolve; the rest are pre-1951 or cruises the export has no stations for);
+`cruise.cruise_uuid` documented as the public join key to NOAA's database (it already shipped,
+691/691 populated — only its `field_dictionary.csv` note was wrong).
+
+The `cruise` reference is completed by the release (691 → 843 rows: 152 cruises the bottle, CTD,
+METS and picoplankton sources designate that the SWFSC export has no stations for — 1949–1950 and
+2016–2026 mostly — stamped `cruise_key_method = 'derived'` with the datasets that carry them,
+`cruise.cruise_key_datasets`), so every `sample.cruise_key` now names a cruise; before this,
+153,306 sample rows and 3.8M observations keyed cruises the reference lacked, and nothing failed.
+The Bold Horizon July 2019 cruise had been released as `cruise_key = "2019-07-"` (the source ship
+lookup has no NODC code for it, and the correction that patches it used to run *after* the cruise
+key was minted; 2,255 rows in five datasets) and is now `2019-07-39C2`
+(`metadata/swfsc/ichthyo/questions.csv` Q14).
+
+`calcofi4db::check_cruise_key_integrity()` fails the release on a malformed `cruise_key`, a key
+naming no `cruise` row, a NODC that is not the cruise's ship, a `date_ym` that disagrees with the
+key, an ichthyo site whose `cruise_uuid` and `cruise_key` disagree, or an event more than 31 days
+outside its cruise's span (seven `calcofi_ctd-cast` casts with 1997 and 2012 timestamps inside
+1999 and 2013 archives are named exceptions — `metadata/calcofi/ctd-cast/questions.csv` Q32) — plus
+three ratchets (derived-row count, span overlaps between two cruises of one ship, and the
+per-dataset `NULL cruise_key` backlog, largest for `calcofi_dic`, whose unmatched Niskins carry no
+cruise designation at all — `metadata/calcofi/dic/questions.csv` Q07). **Consumers:** additive —
+`source_uuid` + `station_uuid` + `station_uuid_method` on `sample`, `cruise_key_method` +
+`cruise_key_datasets` on `cruise`, 152 new `cruise` rows; `cruise_key` values change only for Bold
+Horizon 2019-07.
 
 # v2026.08.25 (2026-08-25)
 

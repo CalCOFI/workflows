@@ -533,7 +533,20 @@ contract <- tibble::tribble(
   "integrity: climatology carries one window, stamped on every row", "zero", glue(
     "SELECT count(*) - 1 AS n FROM (SELECT DISTINCT clim_yr_min, clim_yr_max FROM {rp('climatology')})"),
   "integrity: climatology depth_bin is a 10 m floor bin within 0-500", "zero", glue(
-    "SELECT count(*) n FROM {rp('climatology')} WHERE depth_bin % 10 <> 0 OR depth_bin < 0 OR depth_bin > 500"))
+    "SELECT count(*) n FROM {rp('climatology')} WHERE depth_bin % 10 <> 0 OR depth_bin < 0 OR depth_bin > 500"),
+  # station_uuid (WS-B / Ed Weber's ask, calcofi4db >= 3.32.0): the SWFSC station
+  # occupation each event belongs to. Read the way a consumer would — obs -> its
+  # sample -> the ichthyo site sample.station_uuid names — and require a real
+  # majority of bottle casts to resolve (measured 78.0% of 35,644 at v2026.08.25;
+  # 25,000 is a conservative floor a schema regression would trip well before).
+  "consumer: obs -> sample.station_uuid resolves to an ichthyo site (bottle)", "nonzero", glue(
+    "SELECT CASE WHEN count(DISTINCT s.sample_key) >= 25000
+                 THEN count(DISTINCT s.sample_key) ELSE 0 END AS n
+     FROM {rp('obs')} o
+     JOIN {rp('sample')} s ON s.sample_key = o.sample_key
+     JOIN {rp('sample')} i ON i.source_uuid = s.station_uuid
+     WHERE o.dataset_key = 'calcofi_bottle' AND s.station_uuid IS NOT NULL
+       AND i.dataset_key = 'swfsc_ichthyo' AND i.sample_type = 'site'"))
 
 # obs three ways — the deprecated table's own objects, the catalog view, the pair directly — so the
 # contract covers every path a consumer can take through the deprecation window (D-S1)

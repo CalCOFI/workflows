@@ -18,7 +18,7 @@ fd <- tribble(
   "cruise_uuid", "UUID", "", "identifier",
   "Stable UUID for a cruise (SWFSC source tables).",
   "cruise_id", "", TRUE,
-  "internal to swfsc source; cruise_key is the public join key.",
+  "NOAA CruiseId; public join key to NOAA's CalCOFI database; released on cruise.",
 
   "ship_key", "VARCHAR", "", "identifier",
   "NODC ship code key; primary key of ship.",
@@ -265,9 +265,49 @@ fd <- tribble(
   "", "", FALSE, "on cruise; see date_min",
 
   "cruise_key_method", "VARCHAR", "", "identifier",
-  paste0("How resolve_cruise_key() settled the row: span (reference cruise date span), ",
-         "source (the source designation YYYYMM), month (event month)."),
-  "", "", FALSE, "wrangling-only column; not released"
+  paste0("Two distinct uses of one name, at two grains. (1) On a per-event staging table ",
+         "(casts, sample, ...): how resolve_cruise_key() settled THAT ROW's cruise_key -- span ",
+         "(reference cruise date span), source (the source's own YYYYMM designation), month ",
+         "(event month); wrangling-only, not released. (2) On the released cruise reference ",
+         "table itself (calcofi4db >= 3.32.0, WS-B / complete_cruise_reference()): how THAT ",
+         "CRUISE ROW entered the reference -- swfsc (a real SWFSC ichthyo station-occupation ",
+         "cruise) or derived (added at release because some other dataset designates it and ",
+         "the SWFSC export has no station row for it); IS released, on cruise."),
+  "", "", FALSE,
+  paste0("on staging event tables: wrangling-only, not released, vocabulary span|source|month. ",
+         "on cruise: released, vocabulary swfsc|derived."),
+
+  # -- provider identifiers (WS-B, calcofi4db >= 3.32.0, 2026-09-03) -------------
+  # released beside the namespaced keys, never in place of them
+  "source_uuid", "UUID", "", "identifier",
+  paste0("The provider's own identifier for this event as shipped (SWFSC ichthyo site_uuid / ",
+         "tow_uuid / net_uuid, verbatim); NULL where the source mints none -- 15 of 16 datasets."),
+  "", "", TRUE,
+  paste0("on sample; calcofi4db >= 3.32.0 (WS-B, append_sample()'s 17th column). Not a public ",
+         "join key on its own -- the SAME provider UUID appears again as station_uuid wherever ",
+         "another dataset's event matches that ichthyo station occupation."),
+
+  "station_uuid", "UUID", "", "identifier",
+  paste0("The SWFSC station-occupation UUID (= ichthyo site.source_uuid) this event belongs to: ",
+         "the row's own site for ichthyo itself, matched for every other dataset. See ",
+         "station_uuid_method for how."),
+  "", "", TRUE,
+  paste0("on sample, every row (not just roots -- copied down from the matched/owning root via ",
+         "root_sample_key); calcofi4db >= 3.32.0 (WS-B, match_station_occupation()). NULL when ",
+         "unmatched."),
+
+  "station_uuid_method", "VARCHAR", "", "identifier",
+  paste0("How station_uuid was determined: self (this row IS the ichthyo site), parent (a ",
+         "foreign row parented DIRECTLY to an ichthyo site, e.g. the crab's examined subsamples), ",
+         "order_occ (matched on cruise_key + site_key + order_occ), datetime (matched on ",
+         "cruise_key + site_key + a unique occupation within tolerance). NULL when station_uuid ",
+         "is NULL."),
+  "", "", FALSE, "on sample; calcofi4db >= 3.32.0 (WS-B, match_station_occupation()).",
+
+  "cruise_key_datasets", "VARCHAR", "", "identifier",
+  paste0("Comma-separated, sorted list of dataset_key values whose sample rows carry this ",
+         "cruise_key -- which datasets designate or observe the cruise."),
+  "", "", FALSE, "on cruise; calcofi4db >= 3.32.0 (WS-B, complete_cruise_reference()); released."
 )
 
 # -- Darwin Core terms (WS-H2, pre-release decision D-S2) -----------------------
