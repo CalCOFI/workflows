@@ -30,12 +30,15 @@ calcofi:
       picked from archived CalCOFI oblique-tow plankton samples, examined for the
       California Department of Fish and Wildlife. Two efforts: a 2008-2014 time
       series of 310 sorted samples (A. Klemmedson, 2015) yielding 24 M. magister
-      megalopae from 14 samples, and a 1949-2009 master sorting log of 2,011
-      archived samples (E. Jones, as of 2012-02-15) recording which had been
-      examined. Spring cruises, CalBOBL oblique tows, lines < 80 / stations < 90.
-      Counts are occurrence in the examined aliquot, not standardized density.
-      Sorting was performed at the SIO Pelagic Invertebrate Collection, where the
-      removed megalopae are archived in vials.
+      megalopae from 14 samples, and 216 archived samples from the 1949-2009
+      sorting log that were examined and found free of M. magister (1984-2009,
+      E. Jones, as of 2012-02-15). Only examined samples are published — the
+      log's remaining unsorted rows are a fact of the archive's inventory, not a
+      sample of this dataset. Spring cruises, CalBOBL oblique tows, lines < 80 /
+      stations < 90. Counts are occurrence in the examined aliquot, not
+      standardized density. Sorting was performed at the SIO Pelagic
+      Invertebrate Collection, where the removed megalopae are archived in
+      vials.
     # Per CDFW via E. Satterthwaite, 2026-08-13. Laura Rogers-Bennett is the
     # primary data provider; the sorters are credited because the examination
     # effort IS the dataset. CDFW is the current citable custodian even though
@@ -47,14 +50,17 @@ calcofi:
       Department of Fish and Wildlife, published through CalCOFI / Scripps
       Institution of Oceanography.
     link_calcofi_org: ""
-    link_data_source: ""
+    # placeholder until the UCSD Library RDC deposit (2026-08-27) is minted — see Q14
+    link_data_source: "https://library.ucsd.edu/dc/search?q=CalCOFI+Dungeness+crab+megalopae"
     link_others: []
     # coverage_temporal / coverage_spatial deliberately absent: measured at
     # release time by calcofi4db::observed_coverage() now that this dataset
     # reaches the core. Do not re-assert them — see "Coverage is measured, never
-    # asserted" in CLAUDE.md. The measured extent runs to 164.1°W, well outside
-    # the survey area; that is the known positive-longitude / off-grid-station
-    # pair (Q07, Q08), still open with the provider, not a new bug.
+    # asserted" in CLAUDE.md. Now that only the 216 EXAMINED sorting-log tows
+    # publish, the measured extent is 132.25-120.675 W / 33.46-51.05 N — the
+    # sorting log's most extreme west/north rows (to ~164 W) were unsorted and
+    # are no longer part of this dataset. Still genuinely offshore/north of the
+    # CalCOFI grid (see "Build Sorting Log"), not a defect.
     # normalized to SPDX id (was "CC BY 4.0"); source: CDFW via E. Satterthwaite,
     # 2026-08-13 (see comment on citation_main above). WS-A1 normalization only
     # — WS-C owns the rest of this notebook.
@@ -67,8 +73,8 @@ calcofi:
   # is redundant and would give consumers two representations to choose between.
   # dungeness_* survive as compat VIEWs inside the notebook only.
   tables_owned:
-    - {table: sample, shared: true, note: "core event dimension (310 examined subsamples + 2,011 sorting-log tows)"}
-    - {table: obs, shared: true, note: "core occurrence headline: counts x 4 resolved taxa, plus 216 zero-valued absences from the sorting log"}
+    - {table: sample, shared: true, note: "core event dimension (526 events: 310 examined subsamples + 216 examined sorting-log tows; the 1,795 unsorted log rows are not published)"}
+    - {table: obs, shared: true, note: "core occurrence headline: counts x 4 resolved taxa, plus 216 zero-valued absences from the examined sorting-log tows"}
     - {table: obs_attribute, shared: true, note: "per-individual M. magister carapace lengths"}
     - {table: sample_measurement, shared: true, note: "event-level effort (prop_sorted, settled volume)"}
     - {table: taxon, shared: true, note: "shared taxa reference"}
@@ -608,18 +614,22 @@ Two modelling decisions worth review:
   environment through the shared physical station occupation instead of stranding
   them on their own island.
 
-The 2,011-row sorting log becomes `sample` rows (`sample_type = 'tow'`), and the
-sorted/unsorted distinction becomes the presence or absence of an `obs` row:
+Only the **216 sorted** rows of the 2,011-row sorting log become `sample` rows
+(`sample_type = 'tow'`), each with one `obs` row for *M. magister* with
+`measurement_value = 0` — "examined, none found" is a real observation, and a
+zero is how you record it. The **1,795 unsorted** rows are dropped from the
+core entirely: an archived jar nobody has looked at yet is a fact of the
+deposit's sorting-log inventory, not a sample of *this* dataset — there is
+nothing to observe, and "no `obs` row" would be indistinguishable from every
+other reason a sample might carry none. `dungeness_sorting_log` keeps all
+2,011 rows as this notebook's working table (see "Preview") so the inventory
+and its unsorted backlog stay visible; only the examined subset is published.
 
-- **216 sorted** → one `obs` row for *M. magister* with `measurement_value = 0`.
-  "Examined, none found" is a real observation, and a zero is how you record it.
-- **1,795 unsorted** → `sample` row, no `obs`. We have not looked, which is not
-  the same as looking and finding nothing.
-
-That distinction is the entire scientific content of the log, and encoding it this
-way means it needs no `sorting_status` column of its own — which is what lets this
-ingest publish the core and nothing else (see "Write Outputs"). Note the zeros are
-safe with respect to the open Q02: that question doubts the *positive* Reilly-era
+That distinction is the entire scientific content of the sorted subset, and
+encoding it this way means it needs no `sorting_status` column of its own in
+the core — which is what lets this ingest publish the core and nothing else
+(see "Write Outputs"). Note the zeros are safe with respect to the open Q02:
+that question doubts the *positive* Reilly-era
 "Cancer magister" labels, not Jones's report of finding none.
 
 ```{r}
@@ -683,7 +693,10 @@ append_sample(con, glue("
          NULL::DOUBLE, NULL::DOUBLE, NULL::VARCHAR
   FROM dungeness_sample"))
 
-# 1b. sample — sorting-log tows (effort/absence; no obs attach to these)
+# 1b. sample — EXAMINED sorting-log tows only (each carries a zero-valued
+#     absence obs, arm 2b). The 1,795 unsorted rows never entered this dataset:
+#     an unexamined archived jar is a fact of the deposit's sorting log, not a
+#     sample of this dataset (see "Emit Core Tables" above).
 append_sample(con, glue("
   SELECT '{ds_key}:tow:' || CAST(dungeness_sorting_log_id AS VARCHAR),
          'tow', NULL::VARCHAR,
@@ -691,7 +704,8 @@ append_sample(con, glue("
          '{ds_key}', grid_key, site_key, cruise_key, NULL::INTEGER,
          latitude, longitude, CAST(datetime_start_utc AS TIMESTAMP),
          0::DOUBLE, max_depth_m, tow_type
-  FROM dungeness_sorting_log"))
+  FROM dungeness_sorting_log
+  WHERE sorting_status = 'sorted'"))
 
 # 2. obs — occurrence headline. Because the taxon now lives in taxon_key, the
 #    four source columns collapse to ONE measurement_type across four
@@ -768,23 +782,32 @@ than eyeball it:
 
 n_sub <- dbGetQuery(con, "SELECT COUNT(*) FROM sample WHERE sample_type='subsample'")[[1]]
 n_tow <- dbGetQuery(con, "SELECT COUNT(*) FROM sample WHERE sample_type='tow'")[[1]]
+n_log_sorted <- sum(d_sorting$sorting_status == "sorted")
 stopifnot(
   "one core sample per examined subsample" = n_sub == nrow(d_sample),
-  "one core sample per sorting-log tow"    = n_tow == nrow(d_sorting),
+  # only EXAMINED (sorted) log rows become sample rows — the 1,795 unsorted
+  # rows are dropped from the core entirely (see "Emit Core Tables")
+  "one core sample per EXAMINED sorting-log tow, and no more" = n_tow == n_log_sorted,
+  "the core publishes 526 events total" = (n_sub + n_tow) == 526,
   "sample_key must be unique within the shard" =
     dbGetQuery(con, "SELECT COUNT(*) FROM (SELECT sample_key FROM sample
                      GROUP BY 1 HAVING COUNT(*) > 1)")[[1]] == 0,
   # the time series' counts, plus one zero-valued absence per sorted log sample
   "obs must carry every source count row plus the sorting-log absences" =
-    core_n$obs == nrow(d_meas) + sum(d_sorting$sorting_status == "sorted"),
+    core_n$obs == nrow(d_meas) + n_log_sorted,
   "obs totals must equal the source totals (absences add zero)" =
     dbGetQuery(con, "SELECT SUM(measurement_value) FROM obs")[[1]] ==
     sum(d_meas$measurement_value, na.rm = TRUE),
   "every sorted log sample must have exactly one absence obs" =
     dbGetQuery(con, "
       SELECT COUNT(*) FROM obs o JOIN sample s USING (sample_key)
-      WHERE s.sample_type = 'tow'")[[1]] ==
-      sum(d_sorting$sorting_status == "sorted"),
+      WHERE s.sample_type = 'tow'")[[1]] == n_log_sorted,
+  "unsorted log rows must not appear in sample at all" =
+    dbGetQuery(con, glue("
+      SELECT COUNT(*) FROM sample
+      WHERE sample_key IN (
+        SELECT '{ds_key}:tow:' || CAST(dungeness_sorting_log_id AS VARCHAR)
+        FROM dungeness_sorting_log WHERE sorting_status = 'unsorted')"))[[1]] == 0,
   "unsorted log samples must carry no obs" =
     dbGetQuery(con, glue("
       SELECT COUNT(*) FROM obs o
@@ -1013,15 +1036,25 @@ nullable <- tribble(
   ~table,                  ~column,             ~n,   ~reason,
   "dungeness_sample",      "site_sample_key",   4L,   "no matching CalCOFI station occupation (Q09)",
   "dungeness_sample",      "grid_key",          4L,   "same 4 samples: no position, so no grid cell",
-  "dungeness_sorting_log", "cruise_key",        1639L,"log records no ship; cruise resolves only where YYYY-MM is unambiguous",
+  # 1639 -> 1776: the ichthyo `cruise` reference this joins against has grown
+  # more designated cruises since this count was last measured (2026-08-14),
+  # so more (year, month) pairs are now ambiguous between two cruises of the
+  # same ship and resolve_cruise_key()'s "unambiguous YYYY-MM only" rule
+  # excludes more rows than before. Working table, still all 2,011 rows.
+  "dungeness_sorting_log", "cruise_key",        1776L,"log records no ship; cruise resolves only where YYYY-MM is unambiguous (count drifts with the ichthyo cruise reference)",
   "dungeness_sorting_log", "site_key",          77L,  "no line/station in the source row",
   "dungeness_sorting_log", "grid_key",          77L,  "same 77 rows: north of or offshore from the CalCOFI grid",
-  "sample",                "parent_sample_key", 2015L,"2011 sorting-log tows are roots + the 4 unmatched subsamples",
-  "sample",                "site_key",          77L,  "inherited from the sorting log",
-  "sample",                "cruise_key",        1639L,"inherited from the sorting log",
-  "sample",                "grid_key",          81L,  "4 unmatched subsamples + 77 out-of-grid log tows",
+  # sample now holds only the 216 EXAMINED (sorted) log tows, not all 2,011 —
+  # the four sample.* rows below are recomputed on that smaller set
+  "sample",                "parent_sample_key", 220L, "the 216 examined sorting-log tows are roots + the 4 unmatched subsamples",
+  # dropped: sample.site_key is no longer nullable. All 77 no-line/station log
+  # rows turned out to be among the 1,795 UNSORTED rows dropped from the core,
+  # not the 216 examined ones — verified by the "no longer occurs" reconciler
+  # below rather than assumed.
+  "sample",                "cruise_key",        97L,  "inherited from the sorting log, scoped to the 216 examined tows (same ambiguous-cruise-reference cause as dungeness_sorting_log.cruise_key)",
+  "sample",                "grid_key",          18L,  "4 unmatched subsamples + 14 out-of-grid EXAMINED log tows (the matching 77 out-of-grid rows above include 63 unsorted ones, dropped from the core)",
   "obs",                   "grid_key",          30L,  "16 from the 4 unmatched subsamples x 4 types + 14 out-of-grid absences",
-  "obs",                   "cruise_key",        87L,  "absence rows whose log entry has no resolvable cruise",
+  "obs",                   "cruise_key",        97L,  "absence rows whose log entry has no resolvable cruise (drifts with the ichthyo cruise reference, same cause as dungeness_sorting_log.cruise_key)",
   "obs",                   "hex_id",            16L,  "H3 needs a position; the 4 unmatched subsamples have none",
   # taxon: 17 rows, not 3 — ensure_taxon_lineage() adds this dataset's 3 taxa
   # PLUS their 14 WoRMS lineage ancestors, which have to be rows of their own or

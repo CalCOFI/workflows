@@ -164,6 +164,31 @@ has `depth_max_m = NULL`, so a net tow cannot be drawn as the integrated span it
 **Consumers:** `cc_get_db()` gets `sample_spatial` by default; `obs_bio`/`obs_env`/`sample_root` are
 `supplemental = TRUE` (opt in). `test_release.qmd` gains seven contract rows over the new objects.
 
+## The Dungeness crab dataset is the examined samples
+
+`cdfw_dungeness-crab` published its 1949–2009 sorting log's full 2,011 rows as effort-only `sample`
+rows — 216 examined (sorted, each with a zero-valued *M. magister* absence `obs`) and 1,795 never
+looked at. An unexamined archived jar is a fact of the deposit's sorting-log inventory, not a sample
+of this dataset, so the 1,795 unsorted rows are now dropped from the core entirely rather than
+carried as "sample row, no `obs`" — that shape was indistinguishable from every other reason a
+sample might carry no observation. `sample` drops from 2,321 to **526** events (310 sorted
+2008–2014 time-series subsamples + the 216 examined sorting-log tows); `obs` (1,456) is unchanged,
+since the sorting log's absence rows were already scoped to examined tows only.
+`coverage_temporal_observed` moves from a 1949 start (the full log's span) to the true examined
+span, **1984-05-17 to 2014-05-03**; `coverage_spatial_observed`'s westward extent tightens from
+164.1°W to 132.25°W, since the sorting log's most extreme west/north rows were all unsorted.
+
+The California Digital Collections / UCSD Library Research Data Curation program deposited this
+dataset on 2026-08-27, ahead of a minted DOI. `link_data_source` carries a placeholder Library
+search URL (`https://library.ucsd.edu/dc/search?q=CalCOFI+Dungeness+crab+megalopae`, answers 200)
+with a YAML comment marking it as a placeholder; `metadata/cdfw/dungeness-crab/questions.csv` Q14
+tracks the DOI/object-URL ask, with the swap to `citation_main` + `link_data_source` proposed for
+when it mints. The deposit's README reportedly corrects the sorting log's one positive-longitude
+row (Q08) — that row is one of the dropped unsorted rows regardless, so it does not affect what
+ships here; the sign fix will be applied once the deposit zips are in hand.
+
+**Consumers:** `sample` row count and the dataset's temporal/spatial coverage change as above; no
+schema change.
 
 # v2026.08.25 (2026-08-25)
 
