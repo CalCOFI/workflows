@@ -365,6 +365,26 @@ sidecar's last commit), never authored. The release cites itself
 what was measured are in the **`attribution` skill** — load it before touching a
 `dataset_meta` citation/license key, `R/citation.R` or the release citation.
 
+**A citation reaches a user only if a consumer shows it** — the same shape as the
+quality-flag gap above. The Explorer (`CalCOFI/explore`, WS-A3) is the worked
+example: the welcome card's primary button is the promise to cite
+(`explore_cite_ack`; a promise, not a gate), a **Sources** line under the dataset
+pills names every dataset the view *pools* — pooling is exactly why each of them
+must be cited, and the copy that said "nothing averaged across … datasets" was
+wrong on that term — every figure footer carries a third line `Data: <dataset_key,
+…> · cite: calcofi.io/explore → Cite this data`, every panel CSV carries a
+`dataset_key` column (a **column**, never a `#` comment line: a comment breaks
+`read.csv`, pandas and `read_csv_auto` alike), **Cite this data** copies the release
+citation plus each dataset's as text or BibTeX, and `?modal=sources` opens **Data
+Sources & Attribution** — one row per *dataset*, never per taxon or variable (Pooh
+Venrick's point about the phytoplankton headings). All of it reads the release's own
+`dataset` rows and `catalog.json` through one builder (`src/cite.ts`); nothing is
+fetched. **Every column A0 adds is optional at the UI** — `doi`, `license_url`,
+`acknowledgement`, `contact`, `source_accessed`, a `provider` table and
+`catalog.citation` each have a stated fallback (explore's README § Attribution) —
+because the Explorer reads its dev catalog until WS-F flips `VITE_RELEASE_PREFIX`,
+and that catalog has none of them.
+
 ### Coverage is measured, never asserted
 
 **Do not add `coverage_temporal` / `coverage_spatial` to a `dataset_meta`
