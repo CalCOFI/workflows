@@ -8,6 +8,71 @@ versions). Conventions: see `CLAUDE.md` § "RELEASES.md is not optional".
 
 # Unreleased
 
+## `dataset_taxon` says what the source claimed; the bird rule reads the classification; common names have one written order
+
+Three things about taxa change under consumers, all from the taxon crosswalk plan
+(`.claude/plans/2026-09-02 Taxon crosswalk — …md`, Phase 1, calcofi4db 3.29.0). None of them
+moves a key for a taxon released today — the Phase 1 gate staged the Farallon vocabulary through
+the new path and reproduced its v2026.08.25 `dataset_taxon` slice 156/156 rows, key for key.
+
+- **`dataset_taxon` gains one column, `ds_source_json`** — a JSON object of whatever ids and rank
+  the *source* supplied for that local taxon (`{"itis_id":174715}`,
+  `{"worms_id":217452,"itis_id":161729,"gbif_id":2415428}`; NULL where it supplied nothing).
+  It sits beside `taxon.worms_id` / `itis_id`, which are what the *authority* says, so the two
+  can be audited against each other (`json_extract(ds_source_json, '$.itis_id')`). Nothing is
+  dropped or renamed. The column is populated as each taxon-bearing ingest re-runs; a shard that
+  predates it carries NULL.
+- **Birds key `itis:` because their class is Aves, not because a source flag said so.**
+  The rule is now stated once, in `calcofi4db::taxon_key_of()`: `itis:<tsn>` exactly when the
+  taxon's class (from the cached WoRMS/ITIS lineage) is Aves and an accepted TSN resolves,
+  otherwise `worms:<aphia>`, otherwise a dataset-local key the release refuses. Before, only the
+  Farallon census carried an `is_bird` column, so an Aves taxon reaching the release through any
+  other dataset would have keyed `worms:` and one species could have carried two keys. Every
+  released bird already satisfies the new rule (113 of 113 `itis:` vocabulary taxa are class Aves;
+  no `worms:` vocabulary taxon is), so no key changes; a bird with no accepted TSN would now key
+  `worms:` with a note in `taxon.notes` rather than silently.
+- **`common_name` follows one written precedence, applied at the release:** a human choice in
+  `metadata/taxon_common.csv` (now tagged `source = "manual"`, 44 rows) > the CalCOFI species
+  list's own name (`swfsc_ichthyo`) > WoRMS when it offers exactly one English vernacular > any
+  other dataset's own name, in `dataset_key` order > empty. Until now the order was whichever
+  ingest's shard happened to win the merge. **Consumers:** measured against v2026.08.25 with the
+  new `apply_taxon_common()`, **50 of 2,125 taxa change `common_name`** — 48 that had none gain
+  the vernacular their dataset publishes (20 `cce-lter_zoodb` group labels such as "COPEPODA
+  CALANOIDA CALANIDAE", 8 `cce-lter_zooscan` operational classes, 20 `calcofi_phytoplankton`
+  functional-group labels including "other" — see the open question below), and two are renamed
+  by the tie-break for two codes of one dataset sharing a key: the code whose name *is* the
+  taxon's accepted name wins, then `ds_taxon_key`. So `itis:562561` *Pterodroma sandwichensis*
+  becomes "Hawaiian Petrel" (Farallon HAPE) rather than the old trinomial's "Dark-Rumped Petrel"
+  (DRPE), and `worms:275218` *Syngnathus californiensis* becomes "Kelp pipefish" (ichthyo 792)
+  rather than "Bay pipefish" (ichthyo 788, *S. leptorhynchus*, which carries the kelp pipefish's
+  AphiaID in the species list — swfsc/ichthyo Q13). `worms:126175` *Sebastes* keeps
+  "Rockfishes" under the same rule (Phase 0's plain `ds_taxon_key` order would have made it
+  "Sunset rockfish"). Per rank: 44 manual, 790 `swfsc_ichthyo`, 186 WoRMS single, 175 other
+  datasets, 930 empty.
+- **`taxon_group` comes from a registry.** `metadata/taxon_group.csv` declares
+  `calcofi:seabirds` = every observed taxon of class Aves, `calcofi:marine_mammals` = class
+  Mammalia, and the eight phytoplankton functional groups by `ds_common_name`. **Consumers:**
+  `calcofi:marine_mammals` loses the two sea turtles (*Chelonia mydas* `worms:137206`,
+  *Lepidochelys olivacea* `worms:220293`) that the Farallon arm's "not a bird" rule put there;
+  `calcofi:seabirds` is unchanged (94).
+
+Two findings from the Phase 1 measurement that this entry does *not* fix, because each changes
+released keys and needs a decision:
+
+- **Phytoplankton species identity is collapsed in every release since the ingest.** The source
+  vocabulary carries an AphiaID for 309 of its 393 codes (294 distinct — *Coscinodiscus
+  curvatulus*, *Prorocentrum micans*, …), but `metadata/taxon_override.csv`'s six functional-group
+  rows match on `taxa` and an override replaces the id a row already has, so 171 codes key the
+  class Bacillariophyceae `worms:148899`, 144 key Dinophyceae `worms:19542`, 53 Coccolithophyceae,
+  4 Dictyochophyceae: **22 distinct `taxon_key`s for 393 codes**, and the functional-group
+  `taxon_group` rows hold one taxon each. The fix is the override rows (match the nine idless
+  codes on `species_code`, not the group on `taxa`) or the override rule (fill, never replace),
+  and it belongs with the phytoplankton ingest's move to `append_dataset_taxon()` (Phase 3).
+- Rank 4 of the common-name order publishes `calcofi_phytoplankton`'s functional-group label as
+  a `common_name` ("other" for 8 taxa, "undefined (code not in source definitions; Q05)" for 9).
+  The label is what that ingest put in `ds_common_name`; whether it should be there is the
+  ingest's question, not the precedence's.
+
 ## Every dataset carries a checked citation and a registered license, and the release cites itself
 
 Nothing validated attribution before this release: 8 of 16 datasets shipped `citation_main`
