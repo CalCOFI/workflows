@@ -38,9 +38,13 @@ calcofi:
     # datasets but was unreachable when last checked (2026-08-24), and oceanview
     # is the host the ichthyo tow links already use. Behavior lookup CONFIRMED
     # not on ERDDAP (CAC_FI_SBAS_beh checked directly on oceanview 2026-09-02 —
-    # 404) and stays DataZoo/local-sourced — see Read Source Data below and Q0x
-    # (new, pending addition to questions.csv). Once a release carries this, delete the
-    # matching override arm in db-viz-station scripts/build_datasets.sql.
+    # 404) and stays DataZoo/local-sourced — see Read Source Data below and Q10.
+    # The ERDDAP tables are downloaded first (data/cache/, archived to GCS) so a
+    # run reads bytes it can name; the species vocabulary is staged through
+    # calcofi4db::append_dataset_taxon() with DataZoo's TSNs riding along as the
+    # audit value (Q10); the observations table carries no 2021 rows (Q11).
+    # Once a release carries this, delete the matching override arm in
+    # db-viz-station scripts/build_datasets.sql.
     link_data_source: "https://oceanview.pfeg.noaa.gov/erddap/tabledap/CAC_FI_SBAS_obs.html"
     link_others:
       - https://oceanview.pfeg.noaa.gov/erddap/tabledap/CAC_FI_SBAS_tr.html
@@ -71,22 +75,33 @@ editor_options:
 
 ## Overview
 
-**Source**: transect (effort), observation (count), and species tables are read
-live from NOAA ERDDAP (`CAC_FI_SBAS_tr` / `CAC_FI_SBAS_obs` / `CAC_FI_SBAS_sp`,
+**Source**: transect (effort), observation (count), and species tables come from
+NOAA ERDDAP (`CAC_FI_SBAS_tr` / `CAC_FI_SBAS_obs` / `CAC_FI_SBAS_sp`,
 oceanview.pfeg.noaa.gov) as of 2026-08-25 — back online per Ben, superseding the
 CCE-LTER DataZoo 255 local export (`whales-seabirds-turtles/bird-mammal-census/`)
-for these three tables. Behavior lookup CONFIRMED not on ERDDAP (checked
-directly against oceanview, 404) and stays DataZoo/local-sourced (see Read
-Source Data). Bird & mammal observations along CalCOFI/NMFS/CPR cruise transects,
-1987-present — ERDDAP's transect table now runs through 2022, a year later than
-DataZoo's static 1987-2021 export; confirm that's expected before trusting the
-extra year downstream.
+for these three tables. They are **downloaded first** into `data/cache/` and
+archived to GCS, so a run reads a file it can hash and diff rather than a live
+query (see Read Source Data). Behavior lookup CONFIRMED not on ERDDAP (checked
+directly against oceanview, 404) and stays DataZoo/local-sourced. Bird & mammal
+observations along CalCOFI/NMFS/CPR cruise transects, 1987–2022.
+
+What the switch changes in the rows (measured 2026-09-03 against the DataZoo
+export): the two sources are **identical for 1987–2018** (60,715 shared
+transects, every observation row equal); ERDDAP **adds 2019, 2020 and 2022**
+(3,216 transects, 6,020 observation rows); ERDDAP **has no observations at all
+for 2021** although it carries 956 transects for the two 2021 cruises, and
+DataZoo published 625 observations for `CAC2021_7` — filed as Q11 and taken as
+served, not patched from DataZoo.
 
 - **Provider**: `calcofi` (tentative — curated via CCE-LTER; see questions)
-- **Tables**: `bird_mammal_transect` (effort, **live ERDDAP**) ⨝
-  `bird_mammal_observation` (counts, **live ERDDAP**) on `gis_key`, plus
-  `bird_mammal_species` (**live ERDDAP**, ITIS id dropped — see Build Lookups)
-  and `bird_mammal_behavior` (**local**) lookups.
+- **Tables**: `bird_mammal_transect` (effort, **ERDDAP**) ⨝
+  `bird_mammal_observation` (counts, **ERDDAP**) on `gis_key`, plus
+  `bird_mammal_species` (**ERDDAP** `_sp`, with the ITIS TSN and include /
+  unidentified flags joined back from the committed DataZoo list — see Build
+  Lookups) and `bird_mammal_behavior` (**local**) lookups.
+- **Taxonomy**: the species vocabulary is *declared* here with
+  `calcofi4db::append_dataset_taxon()` and *resolved* by the package against
+  WoRMS/ITIS (taxon plan D1–D3, calcofi4db ≥ 3.29.0); see Emit Core Tables.
 
 ```{mermaid}
 graph LR
@@ -121,10 +136,21 @@ dir_label    <- glue("{provider}_{dataset}")
 dir_parquet  <- here(glue("data/parquet/{dir_label}"))
 dir_stage  <- cc_stage_path("parquet", dir_label, create = TRUE)
 db_path      <- here(glue("data/wrangling/{dir_label}.duckdb"))
-# now only holds the behavior lookup synced from DataZoo -- transect,
-# observation, and species data come straight from ERDDAP, not this local dir
-# (see Read Source Data)
+# the DataZoo 255 export on Drive: the behavior lookup is read from it, and its
+# archived species list is what metadata/farallon/bird-mammal/
+# species_itis_datazoo.csv was derived from -- transect, observation and species
+# data come from ERDDAP, not this dir (see Read Source Data)
 dir_src      <- path_expand(glue("{dir_data}/whales-seabirds-turtles/bird-mammal-census"))
+# ERDDAP snapshots land here first (gitignored; archived to GCS below), so the
+# notebook reads bytes it can name and hash rather than a live query: a re-run
+# reuses them, `overwrite_all` (libs/ingest.R) refetches
+dir_dl       <- here(glue("data/cache/{dir_label}")); dir_create(dir_dl)
+# DataZoo's species list, committed once: the ITIS TSN per code plus the
+# include / unidentified flags that ERDDAP's species table dropped (Build Lookups)
+f_datazoo    <- here("metadata/farallon/bird-mammal/species_itis_datazoo.csv")
+# GCS uploads (source archive + parquet mirror). Flip to FALSE to render without
+# publishing -- a review render, or a machine without gcloud credentials.
+publish_to_gcs <- TRUE
 
 if (overwrite) {
   if (file_exists(db_path))                 file_delete(db_path)
@@ -140,46 +166,75 @@ load_duckdb_extension(con, "spatial")
 ```{r}
 #| label: read-source
 
-# transects + observations: live ERDDAP, not the DataZoo local export (Ben,
-# 2026-08-25 — "the recently ascribed source dataset ... appears to be back
+# transects + observations + species: NOAA ERDDAP, not the DataZoo local export
+# (Ben, 2026-08-25 — "the recently ascribed source dataset ... appears to be back
 # online"). oceanview is the host already used by dataset_meta.link_data_source
-# and by the ichthyo tow links; coastwatch serves the same two datasets but was
+# and by the ichthyo tow links; coastwatch serves the same datasets but was
 # unreachable outright when last checked (2026-08-24). Column names/order/
 # units-row shape confirmed 2026-09-02 against real rows pulled from oceanview.
+#
+# Download-first: each table is fetched into dir_dl once (skipped while the file
+# exists; overwrite_all refetches), archived to GCS beside the DataZoo export,
+# and read from disk. A live read_csv(url) leaves nothing to diff when the
+# provider changes something upstream -- and they do (Q11).
 erddap_host <- "https://oceanview.pfeg.noaa.gov/erddap/tabledap"
+erddap_ids  <- c(tr = "CAC_FI_SBAS_tr", obs = "CAC_FI_SBAS_obs", sp = "CAC_FI_SBAS_sp")
+erddap_urls <- setNames(as.character(glue("{erddap_host}/{erddap_ids}.csv")), names(erddap_ids))
+erddap_csvs <- setNames(file.path(dir_dl, glue("{erddap_ids}.csv")), names(erddap_ids))
+downloaded  <- character()
+for (k in names(erddap_ids)) {
+  if (overwrite_all || !file_exists(erddap_csvs[[k]])) {
+    download.file(erddap_urls[[k]], erddap_csvs[[k]], quiet = TRUE)
+    downloaded <- c(downloaded, k)
+  }
+}
+# when the bytes came down: the cached file's mtime IS the download time, for a
+# fetch in this run (`download`) as much as for one a previous run made
+# (`file_mtime`); the recorded source is the URL, not a path on this machine.
+# build_metadata_json(sources = ) writes it to metadata.json as sources[] and
+# the release takes the newest stamp as this dataset's measured source_accessed.
+src_stamp <- stamp_source_access(files = c(unname(erddap_csvs), file.path(
+  dir_src, "CalCOFI_bird-mammal-census_behaviorcodes.csv"))) |>
+  mutate(source = c(unname(erddap_urls),
+                    "gs://calcofi-files-public/archive/farallon/bird-mammal/CalCOFI_bird-mammal-census_behaviorcodes.csv"),
+         method = c(ifelse(names(erddap_ids) %in% downloaded, "download", "file_mtime"), "file_mtime"))
+cat(glue("ERDDAP: {length(downloaded)} table(s) downloaded this run, ",
+         "{length(erddap_ids) - length(downloaded)} reused from {dir_dl}"), "\n")
 
-read_erddap <- function(dataset_id) {
+read_erddap <- function(f) {
   # ERDDAP's .csv puts a units row directly under the header; drop it. Reading
   # by name (not position) so a column reorder on the provider's end doesn't
   # silently misalign fields the way a positional/.csv0 read would.
-  read_csv(glue("{erddap_host}/{dataset_id}.csv"),
-           col_types = cols(.default = "c")) |>
-    slice(-1)
+  read_csv(f, col_types = cols(.default = "c")) |> slice(-1)
 }
-d_tr <- read_erddap("CAC_FI_SBAS_tr")   # time, latitude, longitude, gis_key,
-                                         # transect, bin, date, datedate,
-                                         # numeric_time, length_km, width_km,
-                                         # area_km2, year, month, cruise,
-                                         # season, core
-d_ob <- read_erddap("CAC_FI_SBAS_obs")  # idnum, gis_key, behavior, species, count
+d_tr <- read_erddap(erddap_csvs[["tr"]])   # time, latitude, longitude, gis_key,
+                                            # transect, bin, date, datedate,
+                                            # numeric_time, length_km, width_km,
+                                            # area_km2, year, month, cruise,
+                                            # season, core
+d_ob <- read_erddap(erddap_csvs[["obs"]])  # idnum, gis_key, behavior, species, count
 
-# species lookup: CAC_FI_SBAS_sp, confirmed 2026-09-02 against oceanview --
-# species/type/common_name/scientific_name, and 210 of 211 distinct species
-# codes actually seen in CAC_FI_SBAS_obs matched an entry here (see the MEGU
-# gap noted in Build Lookups below). Replaces the local allspecieslist file.
-#
-# The source has a couple of junk rows after the units row (one fully blank,
-# one with only `type` populated as "b") -- filtered out below rather than
-# assumed to be exactly one extra row, in case the count varies on a re-pull.
-d_sp <- read_erddap("CAC_FI_SBAS_sp") |> filter(!is.na(species) & species != "")
+# species lookup: CAC_FI_SBAS_sp -- species / type / common_name /
+# scientific_name, and no ids. Replaces the local allspecieslist file as the
+# vocabulary; what that file carried and this one does not (the ITIS TSN, the
+# include / unidentified flags) is joined back in Build Lookups. The source has
+# a couple of junk rows after the units row (one fully blank, one with only
+# `type` populated as "b") -- filtered on `species` rather than assumed to be
+# exactly two, in case the count varies on a re-pull.
+d_sp <- read_erddap(erddap_csvs[["sp"]]) |> filter(!is.na(species) & species != "")
 
 # behavior lookup: CONFIRMED not on ERDDAP (checked directly against oceanview
 # 2026-09-02: CAC_FI_SBAS_beh -> 404 "Currently unknown datasetID"). Stays
-# DataZoo/local-sourced -- this is a real, permanent gap, not just an untested
-# guess, and worth a provider question if Farallon Institute could publish one.
+# DataZoo/local-sourced -- a real, permanent gap, asked as Q10 (d).
 stopifnot("source dir not found" = dir_exists(dir_src))
-sync_to_gcs(local_dir = dir_src, gcs_prefix = glue("archive/{provider}/{dataset}"),
-            bucket = "calcofi-files-public", exclude = c(".DS_Store", "*.tmp", "*.gdoc"))
+if (publish_to_gcs) {
+  sync_to_gcs(local_dir = dir_src, gcs_prefix = glue("archive/{provider}/{dataset}"),
+              bucket = "calcofi-files-public", exclude = c(".DS_Store", "*.tmp", "*.gdoc"))
+  sync_to_gcs(local_dir = dir_dl, gcs_prefix = glue("archive/{provider}/{dataset}/erddap"),
+              bucket = "calcofi-files-public")
+} else {
+  cat("publish_to_gcs is FALSE -- sources NOT archived to gs://calcofi-files-public\n")
+}
 
 d_bh <- read_csv(file.path(dir_src, "CalCOFI_bird-mammal-census_behaviorcodes.csv"),
                  col_types = cols(.default = "c")) |> clean_names()
@@ -191,36 +246,77 @@ cat("transect column names:", paste(names(d_tr), collapse=", "), "\n")
 ## Build Lookups (species, behavior)
 
 ```{r}
+#| label: species-datazoo
+
+# DataZoo 255's species list carried what ERDDAP's CAC_FI_SBAS_sp does not: an
+# ITIS TSN per code and the include / unidentified flags. It is committed ONCE
+# as metadata/farallon/bird-mammal/species_itis_datazoo.csv, derived from the
+# archived CalCOFI_bird-mammal-census_allspecieslist.csv (the file the wrangling
+# database's bird_mammal_species was built from until 2026-08-25; also at
+# gs://calcofi-files-public/archive/farallon/bird-mammal/). Regenerated here only
+# if the file is missing, so the derivation stays reproducible without the
+# Drive archive being needed for a run. The TSNs are what the taxon crosswalk
+# keys on (they resolve exactly, where a name may not); the include flag is the
+# provider's "this is a taxon worth analysing" (land birds, fish, sharks and the
+# coarsest "unidentified bird / mammal / fish" classes are not).
+if (!file_exists(f_datazoo)) {
+  read_csv(file.path(dir_src, "CalCOFI_bird-mammal-census_allspecieslist.csv"),
+           col_types = cols(.default = "c")) |>
+    transmute(
+      species_code    = Species,
+      common_name     = `Common Name`,
+      scientific_name = `Latin Name`,
+      itis_id         = suppressWarnings(as.integer(ITIS)),
+      is_bird         = Bird == "1", is_mammal = Mammal == "1", is_fish = Fish == "1",
+      is_unidentified = Unidentified == "1",
+      include_flag    = Include == "1") |>
+    arrange(species_code) |>
+    write_csv(f_datazoo, na = "")
+}
+d_datazoo <- read_csv(f_datazoo, col_types = cols(
+  itis_id = "i", is_bird = "l", is_mammal = "l", is_fish = "l",
+  is_unidentified = "l", include_flag = "l", .default = "c"))
+stopifnot("species_code must be unique in the DataZoo list" = !anyDuplicated(d_datazoo$species_code))
+cat(glue("DataZoo species list: {nrow(d_datazoo)} codes, ",
+         "{sum(!is.na(d_datazoo$itis_id))} with a TSN, ",
+         "{sum(d_datazoo$include_flag)} include_flag, ",
+         "{sum(d_datazoo$is_unidentified & d_datazoo$include_flag)} of those unidentified"), "\n")
+```
+
+```{r}
 #| label: lookups
 
-b01 <- function(x) !is.na(x) & x %in% c("1","TRUE","true","Y","y")
-
-# ERDDAP's CAC_FI_SBAS_sp is thinner than the old local allspecieslist: no
-# itis_id, is_large_bird, is_unidentified, include_flag, or nmfs_code/comment.
-# Dropped rather than backfilled -- none of them feed taxon_key resolution
-# downstream (that reads metadata/measurement_taxon.csv + taxon_override.csv,
-# not this table), so this is a metadata-richness loss, not a functional one.
-# Flag as a provider question if the ITIS ids specifically are still wanted
-# here for reference. `type` (bird/fish/mammal/turtle) replaces the old
-# per-species boolean columns.
+# ERDDAP's CAC_FI_SBAS_sp is thinner than DataZoo's allspecieslist: no itis_id,
+# is_unidentified or include_flag (nor is_large_bird / nmfs_code / comment).
+# `type` (bird / fish / mammal / turtle) replaces the per-species booleans. The
+# three columns the taxon crosswalk needs are joined back from the committed
+# DataZoo list (species-datazoo above) -- NA for a code DataZoo never listed.
 #
-# KNOWN GAP (confirmed 2026-09-02 against the full distinct species list from
-# observations, 211 codes): `MEGU` (Mew Gull) appears in observations but has
-# NO entry in CAC_FI_SBAS_sp. The table has `SBIG` twice instead -- once for
-# "Mew Gull", once for "Short-billed gull" (likely the 2021 AOS Mew Gull/
-# Short-billed Gull split, with the old MEGU code never carried forward as an
-# alias). Every one of the other 210 distinct codes matched. Decide whether to
-# alias MEGU -> SBIG here or leave it unmatched -- not done automatically.
+# SBIG appears twice in the source: "Mew Gull" with no scientific name, and
+# "Short-billed gull" Larus brachyrhynchus -- one code, one taxon, two rows from
+# the 2021 AOS Mew Gull / Short-billed Gull split. Keep the row that carries the
+# name (append_dataset_taxon() refuses a duplicate code, by design). The old
+# code MEGU is the mirror image -- in the observations, absent from this table --
+# and is handled where the vocabulary is staged (Emit Core Tables, Q10).
+n_sbig <- sum(d_sp$species == "SBIG")
+d_sp   <- d_sp |> filter(!(species == "SBIG" & is.na(scientific_name)))
+stopifnot("species_code must be unique after the SBIG dedup" = !anyDuplicated(d_sp$species))
 d_species <- d_sp |>
   transmute(
-    species_code = species, common_name, scientific_name,
+    species_code = species, common_name, scientific_name, type,
     is_bird = type == "bird", is_mammal = type == "mammal",
-    is_fish = type == "fish", is_turtle = type == "turtle")
+    is_fish = type == "fish", is_turtle = type == "turtle") |>
+  left_join(d_datazoo |> select(species_code, itis_id, is_unidentified, include_flag,
+                                 scientific_name_datazoo = scientific_name),
+            by = "species_code")
 dbWriteTable(con, "bird_mammal_species", d_species, overwrite = TRUE)
 
 d_behavior <- d_bh |> transmute(behavior_code = id, behavior, description)
 dbWriteTable(con, "bird_mammal_behavior", d_behavior, overwrite = TRUE)
-cat(glue("species {nrow(d_species)}, behaviors {nrow(d_behavior)}"), "\n")
+cat(glue("species {nrow(d_species)} (SBIG {n_sbig} rows -> 1; ",
+         "{sum(!is.na(d_species$itis_id))} with a DataZoo TSN, ",
+         "{sum(is.na(d_species$include_flag))} not in DataZoo's list), ",
+         "behaviors {nrow(d_behavior)}"), "\n")
 ```
 
 ## Build Transect (effort) Table
@@ -272,8 +368,9 @@ cat(glue("bird_mammal_transect: {nrow(d_transect)} rows"), "\n")
 # observation_id instead of a locally generated row_number() (the old
 # behavior, from when the source had no id column of its own).
 #
-# species_code matches bird_mammal_species (ERDDAP-sourced, confirmed above,
-# MEGU excepted). behavior_code still matches against the local
+# species_code: every code the observations use is either staged in
+# dataset_taxon or listed as excluded, and check_dataset_taxon() enforces that
+# (Emit Core Tables). behavior_code still matches against the local
 # bird_mammal_behavior lookup exactly as before this rewrite -- unchanged, so
 # not a new risk from this edit.
 d_observation <- d_ob |>
@@ -313,9 +410,8 @@ load_prior_tables(con, parquet_dir = cc_stage_path("parquet", "swfsc_ichthyo"),
 add_point_geom(con, "bird_mammal_transect", lon_col = "longitude", lat_col = "latitude")
 assign_grid_key(con, "bird_mammal_transect") |> datatable(caption = "Grid assignment")
 
-# cruise track: one row per (cruise, day, station position). matched on `date`,
-# not datetime_start_utc, since the source timezone is unconfirmed (Q01) and the
-# observer is aboard for the whole day regardless.
+# cruise track: one row per (cruise, day, station position); the match below
+# is on datetime_start_utc now that ERDDAP's `time` is a UTC timestamp (Q01).
 dbExecute(con, glue(
   "CREATE OR REPLACE VIEW cruise_track AS
    SELECT DISTINCT cruise_key, datetime, latitude, longitude
@@ -389,6 +485,10 @@ The unresolved labels are correct as NULL, not gaps to be filled:
   covers every cruise the other datasets reference (workflows#75 — 296 of 987
   referenced keys are missing, so that gap is worth closing on its own merits
   rather than for this one survey).
+- **`CAC2022_8`** (2022-08-14 → 08-29, new with the ERDDAP source) is the same
+  case: the ichthyo reference carries `2022-04-3322` and `2022-10-33UD` but no
+  August 2022 cruise, so its 523 transects (355 with observations) stay NULL
+  until the reference does.
 
 ## Load Dataset Metadata + Schema
 
@@ -462,60 +562,212 @@ The `obs` headline is one row per (transect, species) with `count` summed across
 behaviors — otherwise the same birds are counted once per behavior code — and the
 behavior breakdown becomes `obs_attribute` rows carrying the behavior label.
 
+### Taxon vocabulary
+
+The vocabulary is **declared** here and **resolved** by calcofi4db (taxon plan
+D1–D3, ≥ 3.29.0): `append_dataset_taxon()` stages one `dataset_taxon` row per
+code with `taxon_key` empty; `ensure_taxon_xref()` / `ensure_taxon_lineage()`
+resolve ids and classification against WoRMS + ITIS (cached under `metadata/`);
+`resolve_dataset_taxon()` mints the key from the **class** — `itis:<tsn>` exactly
+when the class is Aves and an accepted TSN resolves, else `worms:<aphia>` — never
+from a source flag. There is no farallon arm in the package any more; what the
+arm used to hard-code is now registry rows, and `check_dataset_taxon()` halts the
+render if a code the observations use is neither staged nor deliberately excluded.
+
+What goes in, and what is left out (D3):
+
+- every code DataZoo's `include_flag` admitted (the 156 codes released at
+  v2026.08.25, minus `CSLI` and `XAMU`, which ERDDAP retired unreferenced — their
+  observations carry `CASL` and `GUMU`/`SCMU`). Excluded codes keep a NULL
+  `taxon_key` on their observations, as before.
+- codes ERDDAP added since DataZoo (44) have no include flag. Those the
+  observations reference are decided one by one in the chunk; the rest are
+  neither staged nor excluded until Farallon Institute flags them (Q10). `SBIG`
+  is staged although unreferenced: it is the provider's current code for the
+  taxon `MEGU` records.
+- `MEGU` (71 observations, absent from `CAC_FI_SBAS_sp`) is added: the pre-2021
+  Mew Gull code, the same bird the source now lists as `SBIG` (Q10).
+- the "Unidentified X" classes resolve to Aves `itis:174371` / Mammalia
+  `worms:1837` through `metadata/taxon_override.csv` rows — the fallback that
+  used to be hard-coded in the package's farallon arm.
+
 ```{r}
-#| label: emit_core
+#| label: taxon-stage
 
 ds_key <- "farallon_bird-mammal"
-# registries that resolve taxon_key at ingest time (seabirds -> itis:, marine
-# mammals -> worms: via the override table). Filter the crosswalk to THIS
-# dataset -- an unfiltered read leaks other datasets' taxa into this shard (the
-# retired emit_core_tables() wrapper filtered internally).
+# registries. measurement_taxon.csv has no farallon rows (this dataset's taxa are
+# a vocabulary, not measurement-type names) but the resolvers take it for
+# uniformity, filtered to THIS dataset; taxon_override.csv is read whole and
+# every helper filters to ds_key itself (a row for a dataset absent from this
+# connection is that dataset's business).
 mt_taxon <- read_csv(here("metadata/measurement_taxon.csv"),
                      col_types = cols(worms_id = "i", itis_id = "i",
                                       bin_value = "d", .default = "c")) |>
   filter(dataset_key == ds_key)
 tx_over  <- read_csv(here("metadata/taxon_override.csv"), show_col_types = FALSE)
 
-# This projection lives here, in the notebook that owns the dataset, not in a
-# switch(dataset_key, ...) arm inside calcofi4db. The reusable SHAPE stays in the
-# package (sample_arm_self), so this is a declaration.
+obs_codes <- dbGetQuery(con, "SELECT DISTINCT species_code FROM bird_mammal_observation")$species_code
+
+# ERDDAP-only codes the observations reference, decided one by one. DataZoo's
+# include flag drew the line at seabirds, marine mammals and sea turtles; the
+# same line is drawn here, and the list is asserted complete so a code that
+# appears on a re-pull cannot slip through undecided.
+erddap_only <- tibble::tribble(
+  ~species_code, ~stage, ~why,
+  "GUMU", TRUE,  "Guadalupe Murrelet - seabird (the post-2012 split of Xantus's Murrelet XAMU)",
+  "SCMU", TRUE,  "Scripps's Murrelet - seabird (the other half of that split)",
+  "CHSP", TRUE,  "Chapman's Storm-Petrel - seabird, a Leach's subspecies",
+  "TOSP", TRUE,  "Townsend's Storm-Petrel - seabird",
+  "NABO", TRUE,  "Nazca Booby - seabird",
+  "MABO", TRUE,  "Masked Booby - seabird",
+  "LOTU", TRUE,  "Loggerhead Turtle - sea turtle, as DataZoo included GRTU / RITU",
+  "UNLP", TRUE,  "Unidentified Leach's Storm-Petrel - seabird class, like the other UN** classes",
+  "UNMT", TRUE,  "Unidentified Murrelet - seabird class, like the other UN** classes",
+  "CRAB", FALSE, "'Crab pot' - gear, not an organism",
+  "FISH", FALSE, "unidentified fish - DataZoo excluded every fish (UNFI, BLSH, MOLA, ...)",
+  "TUNA", FALSE, "'Tuna' - a fish, no rank stated",
+  "VEVE", FALSE, "Velella velella - a hydrozoan; the census vocabulary is birds, mammals, turtles",
+  "RAPT", FALSE, "unidentified raptor - land-bird class, as DataZoo excluded UNPA / UNHU",
+  "WIWA", FALSE, "Wilson's Warbler - land bird, as DataZoo excluded YRWA / BRSP / EUST")
+new_ref <- d_species$species_code[is.na(d_species$include_flag) & d_species$species_code %in% obs_codes]
+stopifnot(
+  "every ERDDAP-only code the observations reference must be decided in erddap_only" =
+    setequal(new_ref, erddap_only$species_code))
+staged_codes <- d_species |>
+  filter(include_flag %in% TRUE |
+         species_code %in% erddap_only$species_code[erddap_only$stage] |
+         species_code == "SBIG") |>
+  pull(species_code)
+excluded_codes <- setdiff(obs_codes, c(staged_codes, "MEGU"))
+
+# the declaration: code, the source's name and common name, and the id the
+# source supplied (DataZoo's TSN, NA for an ERDDAP-only code) -- which
+# append_dataset_taxon() stores as ds_source_json, the audit value below
+d_vocab <- d_species |>
+  filter(species_code %in% staged_codes) |>
+  transmute(ds_taxa_code = species_code, ds_scientific_name = scientific_name,
+            ds_common_name = common_name, itis_id) |>
+  bind_rows(tibble(
+    ds_taxa_code = "MEGU", ds_scientific_name = "Larus brachyrhynchus",
+    ds_common_name = "Mew Gull",
+    # DataZoo's TSN (176832, Larus canus -- the pre-split name) rides along as
+    # the source claim; the override row keys the code to the Short-billed
+    # Gull like SBIG (Q10)
+    itis_id = d_datazoo$itis_id[d_datazoo$species_code == "MEGU"]))
+n_staged <- append_dataset_taxon(con, ds_key, d_vocab)
 
 # cross-reference: resolve each taxon against BOTH authorities (cached in
-# metadata/taxon_xref.csv, so a re-run costs no API calls). This fills the
-# `worms_id` COLUMN on itis:-keyed taxa without touching their key — a consumer
-# joining on worms_id used to match ZERO rows for every seabird and marine
-# mammal — backfills `itis_id` the other way, replaces an id its authority has
-# deprecated so the key is always an accepted id, and fetches the real
-# `taxonomic_status` with the date it was checked. Must precede the lineage
-# fetch, which should ask about the accepted id, not the deprecated one.
+# metadata/taxon_xref.csv, so a re-run costs no API calls) -- the TSN crosswalk
+# where the source gave a TSN, the name where it gave nothing; fills the
+# opposite authority's id as a cross-reference, replaces a deprecated id by its
+# accepted form so the key is always an accepted id, and fetches the real
+# taxonomic_status with the date it was checked. Must precede the lineage fetch.
 ensure_taxon_xref(con, mt_taxon, tx_over,
                   cache_csv = here("metadata/taxon_xref.csv"))
-
-# lineage: fetch each taxon's WoRMS/ITIS classification (cached in
-# metadata/taxon_lineage.csv, so a re-run costs no API calls) and stage it as the
-# `taxon` hierarchy build_taxon_reference() reads. Without it a crosswalk- or
-# vocabulary-resolved taxon reaches the release with a key and a name and NOTHING
-# else — no rank, no parent_taxon_key, no classification — so hierarchy rollups
-# ("all Decapoda") silently match nothing and no error is raised anywhere.
+# lineage: each taxon's classification (cached in metadata/taxon_lineage.csv),
+# staged as the `taxon` hierarchy build_taxon_reference() reads and the source
+# of the CLASS the key rule reads. Without it a taxon reaches the release with a
+# key and a name and nothing else -- no rank, no parent, no classification.
 ensure_taxon_lineage(con, mt_taxon, tx_over,
                      cache_csv = here("metadata/taxon_lineage.csv"))
 n_taxon    <- build_taxon_reference(con, mt_taxon, tx_over)
-n_ds_taxon <- build_dataset_taxon(con,   mt_taxon, tx_over)
-n_tx_group <- build_taxon_group(con,     mt_taxon, tx_over)
+n_ds_taxon <- resolve_dataset_taxon(con, mt_taxon, tx_over)
+n_tx_group <- build_taxon_group(con, read_taxon_group_rules(here("metadata/taxon_group.csv")))
 
+# the ingest asserts its own crosswalk (D6): every code the observations use is
+# staged or deliberately excluded, every staged row keys an authority id, every
+# Aves taxon keys itis:. Halts the render on any finding.
+chk <- check_dataset_taxon(con, ds_key, codes = setdiff(obs_codes, excluded_codes))
+cat(glue("vocabulary: {n_staged} codes staged; {length(excluded_codes)} of the ",
+         "{length(obs_codes)} observed codes excluded; taxon {n_taxon}, ",
+         "dataset_taxon {n_ds_taxon}, taxon_group {n_tx_group}"), "\n")
+cat("excluded (their observations keep a NULL taxon_key):",
+    paste(sort(excluded_codes), collapse = " "), "\n")
+```
+
+The audit: what the **source** claimed (DataZoo's TSN per code, kept in
+`dataset_taxon.ds_source_json`) against what the **authority** says
+(`taxon.itis_id` of the key the code resolved to). Every differing row must be
+one of three things, and the table says which: a deprecated TSN re-keyed onto
+its accepted form (`taxon.notes` records it), an override row
+(`taxon_override.csv`, with its note), or a taxon the source gave no TSN for.
+Never a silent pick.
+
+```{r}
+#| label: taxon-audit
+
+tx_over_ds <- tx_over |> filter(dataset_key == ds_key)
+audit <- dbGetQuery(con, "
+  SELECT d.ds_taxa_code, d.ds_scientific_name, d.ds_common_name,
+         json_extract(d.ds_source_json, '$.itis_id')::INTEGER AS source_itis_id,
+         t.itis_id, t.worms_id, t.scientific_name, d.taxon_key, t.notes
+  FROM dataset_taxon d JOIN taxon t USING (taxon_key)
+  WHERE d.dataset_key = ?
+    AND json_extract(d.ds_source_json, '$.itis_id')::INTEGER IS DISTINCT FROM t.itis_id
+  ORDER BY d.ds_taxa_code", params = list(ds_key)) |>
+  mutate(
+    override = tx_over_ds$note[match(ds_taxa_code, tx_over_ds$match_value)],
+    explained_by = case_when(
+      !is.na(override) ~ "override row (taxon_override.csv)",
+      !is.na(source_itis_id) &
+        str_detect(coalesce(notes, ""),
+                   fixed(as.character(glue("itis:{source_itis_id} deprecated in ITIS")))) ~
+        "deprecated TSN re-keyed onto its accepted form (taxon.notes)",
+      is.na(source_itis_id) ~ "no source TSN; resolved by crosswalk or name (taxon.notes)",
+      TRUE ~ "UNEXPLAINED"))
+n_agree <- dbGetQuery(con, "
+  SELECT COUNT(*) FROM dataset_taxon d JOIN taxon t USING (taxon_key)
+  WHERE d.dataset_key = ? AND json_extract(d.ds_source_json, '$.itis_id')::INTEGER = t.itis_id",
+  params = list(ds_key))[[1]]
+stopifnot("every audit row must be explained" = !any(audit$explained_by == "UNEXPLAINED"))
+cat(glue("audit: {n_agree} codes where the source TSN is the key's own TSN; ",
+         "{nrow(audit)} differ -- ",
+         "{paste(names(table(audit$explained_by)), table(audit$explained_by), sep = ': ', collapse = '; ')}"), "\n")
+
+# the D3 rows, asserted rather than described
+dt <- dbGetQuery(con, "SELECT ds_taxa_code, taxon_key FROM dataset_taxon WHERE dataset_key = ?",
+                 params = list(ds_key))
+key_of <- function(code) dt$taxon_key[dt$ds_taxa_code == code]
+unid_birds   <- tx_over_ds$match_value[tx_over_ds$itis_id  %in% 174371L]
+unid_mammals <- tx_over_ds$match_value[tx_over_ds$worms_id %in% 1837L]
+stopifnot(
+  "SBIG is staged exactly once"                      = sum(dt$ds_taxa_code == "SBIG") == 1,
+  "MEGU keys the same taxon as SBIG (Q10)"           = identical(key_of("MEGU"), key_of("SBIG")),
+  "MEGU / SBIG key an accepted ITIS TSN"             = str_starts(key_of("SBIG"), "itis:"),
+  "every unidentified bird class keys Aves"          = all(dt$taxon_key[dt$ds_taxa_code %in% unid_birds]   == "itis:174371"),
+  "every unidentified mammal class keys Mammalia"    = all(dt$taxon_key[dt$ds_taxa_code %in% unid_mammals] == "worms:1837"),
+  "no excluded code has a dataset_taxon row"         = !any(excluded_codes %in% dt$ds_taxa_code))
+cat(glue("D3: SBIG once; MEGU = SBIG = {key_of('SBIG')}; ",
+         "{sum(dt$ds_taxa_code %in% unid_birds)} unidentified bird classes -> itis:174371, ",
+         "{sum(dt$ds_taxa_code %in% unid_mammals)} unidentified mammal classes -> worms:1837"), "\n")
+
+audit |>
+  select(ds_taxa_code, ds_scientific_name, source_itis_id, itis_id, worms_id,
+         scientific_name, taxon_key, explained_by, override) |>
+  datatable(caption = "Source TSN (DataZoo) vs the authority TSN of the resolved key -- every row explained",
+            rownames = FALSE, filter = "top")
+```
+
+### Sample, obs, obs_attribute
+
+```{r}
+#| label: emit_core
+
+# This projection lives here, in the notebook that owns the dataset, not in a
+# switch(dataset_key, ...) arm inside calcofi4db. The reusable SHAPE stays in the
+# package (sample_arm_self), so this is a declaration.
 append_sample(con, sample_arm_self(
   ds_key, "bird_mammal_transect", "gis_key", "transect"))
 
 # obs — the occurrence headline: one row per (transect, SPECIES CODE), count
 # SUMmed across behaviors.
 #
-# Grouping is on the source species_code, NOT on taxon_key alone: only 156 of the
-# 207 observed codes resolve to a taxon (the rest are excluded by include_flag or
-# are coarse unidentified categories), so grouping by taxon_key alone would sum
-# every unresolved species into a single NULL-taxon row per transect, silently
-# merging distinct species. taxon_key is functionally determined by species_code
-# (dataset_taxon is unique on ds_taxa_code within a dataset), so carrying both
-# does not split the grain.
+# Grouping is on the source species_code, NOT on taxon_key alone: the excluded
+# codes (excluded_codes, above) have no taxon, so grouping by taxon_key alone
+# would sum every excluded species into a single NULL-taxon row per transect,
+# silently merging distinct species. taxon_key is functionally determined by
+# species_code (dataset_taxon is unique on ds_taxa_code within a dataset), so
+# carrying both does not split the grain.
 #
 # The behavior breakdown is sub-occurrence detail and goes to obs_attribute — it
 # must NOT ride on the headline's life_stage, or the same bird is counted once
@@ -560,8 +812,8 @@ cat(glue(
 # the headline must collapse behaviors, and the attribution must add back up
 n_obs <- core$obs
 # one headline row per (transect, species_code) — NOT per behavior, and NOT
-# collapsed by taxon_key (only 156 of 207 codes resolve; grouping on taxon_key
-# alone would merge every unresolved species into one row per transect)
+# collapsed by taxon_key (the excluded codes have none; grouping on taxon_key
+# alone would merge every excluded species into one row per transect)
 n_exp <- dbGetQuery(con, "
   SELECT COUNT(*) FROM (
     SELECT tr.gis_key, o.species_code
@@ -574,17 +826,26 @@ n_mismatch <- dbGetQuery(con, "
              GROUP BY 1, 2)
   SELECT COUNT(*) FROM a JOIN o USING (sample_key, taxon_key) WHERE a.s <> o.v")[[1]]
 # regression guard: grouping the headline on taxon_key alone (instead of
-# species_code) merged every unresolved species on a transect into ONE NULL-taxon
-# row. If that ever comes back, transects with several unresolved species collapse
+# species_code) merged every excluded species on a transect into ONE NULL-taxon
+# row. If that ever comes back, transects with several excluded species collapse
 # to a single row and this max drops to 1.
 n_null_max <- dbGetQuery(con, "
   SELECT COALESCE(MAX(n), 0) FROM (
     SELECT sample_key, COUNT(*) n FROM obs WHERE taxon_key IS NULL GROUP BY 1)")[[1]]
 n_null <- dbGetQuery(con, "SELECT COUNT(*) FROM obs WHERE taxon_key IS NULL")[[1]]
+# the NULL-taxon rows must be exactly the excluded codes' rows: a staged code
+# with no key would be a resolution failure check_dataset_taxon() should have
+# caught, and an excluded code with a key would be a leak
+excluded_sql <- paste0("'", excluded_codes, "'", collapse = ", ")
+n_null_bad <- dbGetQuery(con, glue("
+  SELECT COUNT(*) FROM bird_mammal_observation o
+  LEFT JOIN dataset_taxon dt ON dt.dataset_key = '{ds_key}' AND dt.ds_taxa_code = o.species_code
+  WHERE (dt.taxon_key IS NULL) <> (o.species_code IN ({excluded_sql}))"))[[1]]
 stopifnot(
   "obs must be one row per (transect, species), not per behavior" = n_obs == n_exp,
   "obs_attribute behavior counts must sum to the obs headline"    = n_mismatch == 0,
-  "unresolved species must stay distinct, not merge into one NULL-taxon row per transect" =
+  "a NULL taxon_key is an excluded code and nothing else"          = n_null_bad == 0,
+  "excluded species must stay distinct, not merge into one NULL-taxon row per transect" =
     n_null_max > 1,
   "every obs.sample_key must resolve in sample" =
     dbGetQuery(con, "SELECT COUNT(*) FROM obs o LEFT JOIN sample s USING (sample_key)
@@ -596,9 +857,9 @@ stopifnot(
     dbGetQuery(con, "SELECT COUNT(*) FROM obs_attribute
                      WHERE measurement_type <> 'behavior'")[[1]] == 0)
 cat(glue("obs parity: {format(n_obs, big.mark = ',')} headline rows ",
-         "({format(n_null, big.mark = ',')} without taxon_key, up to ",
-         "{n_null_max} distinct unresolved species per transect); ",
-         "behavior attribution reconciles"), "\n")
+         "({format(n_null, big.mark = ',')} without taxon_key = the ",
+         "{length(excluded_codes)} excluded codes, up to {n_null_max} of them ",
+         "on one transect); behavior attribution reconciles"), "\n")
 ```
 
 ## Write Outputs + Upload
@@ -627,9 +888,15 @@ build_metadata_json(
     here("metadata/farallon/bird-mammal/metadata_derived.csv")),
   output_dir = dir_parquet, tables = tbls_out,
   set_comments = TRUE, provider = provider, dataset = dataset,
-  workflow_url = cc$workflow_url, tables_owned = tables_owned)
+  workflow_url = cc$workflow_url, tables_owned = tables_owned,
+  # when the ERDDAP tables were fetched (Read Source Data) -> metadata.json sources[]
+  sources = src_stamp)
 
-sync_to_gcs(local_dir = dir_stage, sidecar_dir = dir_parquet, gcs_prefix = glue("ingest/{dir_label}"), bucket = "calcofi-db")
+if (publish_to_gcs) {
+  sync_to_gcs(local_dir = dir_stage, sidecar_dir = dir_parquet, gcs_prefix = glue("ingest/{dir_label}"), bucket = "calcofi-db")
+} else {
+  cat("publish_to_gcs is FALSE -- parquet kept local, NOT synced to gs://calcofi-db\n")
+}
 ```
 
 ```{r}
