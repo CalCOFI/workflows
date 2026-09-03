@@ -53,8 +53,19 @@ taxon,parent_taxon_key,taxon,taxon_key,"WoRMS lineage parent (self-reference, nu
 sample_spatial,root_sample_key,sample,sample_key,exact polygon membership per root sample (Explorer plan D4; release_database browser_objects)
 sample_spatial,spatial_key,spatial,spatial_key,the polygon a root sample falls in
 sample_root,root_sample_key,sample,sample_key,root sampling event with the dense integer root_id the browser objects join on
-obs_bio,root_id,sample_root,root_id,browser-shaped bio realm (supplemental)
-obs_env,root_id,sample_root,root_id,browser-shaped env realm (supplemental; one object per measurement_type)
+obs_bio,root_id,sample_root,root_id,bio observation's root sampling event (dense id; sample_root is supplemental)
+obs_env,root_id,sample_root,root_id,env observation's root sampling event (dense id; one object per measurement_type)
+obs_bio,sample_key,sample,sample_key,every bio observation belongs to a sampling event (the net / tow; D-S1: obs_bio is a core table)
+obs_env,sample_key,sample,sample_key,every env observation belongs to a sampling event (the bottle / cast; D-S1: obs_env is a core table)
+obs_bio,dataset_key,dataset,dataset_key,bio observation provenance stamp
+obs_env,dataset_key,dataset,dataset_key,env observation provenance stamp
+obs_bio,grid_key,grid,grid_key,bio observation spatial grid cell (nullable)
+obs_env,grid_key,grid,grid_key,env observation spatial grid cell (nullable)
+obs_bio,cruise_key,cruise,cruise_key,bio observation cruise (denormalized)
+obs_env,cruise_key,cruise,cruise_key,env observation cruise (denormalized)
+obs_bio,measurement_type,measurement_type,measurement_type,bio observation measured quantity vocabulary
+obs_env,measurement_type,measurement_type,measurement_type,env observation measured quantity vocabulary (the partition column)
+obs_bio,taxon_key,taxon,taxon_key,bio observation taxon (nullable; taxon-in-type rows are NULL)
 climatology,grid_key,grid,grid_key,the station a baseline cell belongs to (one climatology for every anomaly; release_database browser_objects)
 climatology,measurement_type,measurement_type,measurement_type,the measured quantity a baseline cell is a mean of
 climatology,dataset_key,dataset,dataset_key,the dataset a baseline cell is built from (one row per dataset)

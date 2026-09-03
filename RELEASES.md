@@ -8,6 +8,50 @@ versions). Conventions: see `CLAUDE.md` § "RELEASES.md is not optional".
 
 # Unreleased
 
+## `obs_bio` and `obs_env` are the observation tables; `obs` is a view and will be dropped in the next release
+
+Until now the release shipped every observation row twice: `obs` (26,261,931 rows, 401 MB in 16
+objects partitioned by `dataset_key`, plus a 200 MB single-file twin) and the browser-shaped pair
+`obs_bio` + `obs_env` (the same rows, 22 + 287 MB) — and the copy that carried the effort
+denominator was the *supplemental* one. `obs` partitioned by `dataset_key` answered no consumer's
+question: an app wants one variable (`obs_env` is one ≤ 10 MB object per `measurement_type`) or the
+whole bio realm (`obs_bio` is one 26 MB file), and it wants the gear and effort of the row's own
+sample beside the count, not a join to `sample_measurement` on every query. So the pair becomes the
+physical store and `obs` becomes a view (pre-release plan D-S1, calcofi4db 3.31.0):
+
+- **`obs_bio` / `obs_env` gain `sample_key`, `measurement_prec` and `hex_id`** (keeping `value`,
+  `root_id`, `hex7`), so each is a strict superset of `obs` under a name mapping — `realm` is the
+  table, `value` is `measurement_value`. Without `sample_key` a consumer could reach only the root
+  sample and lost the net / bottle grain. Both are **core** tables now (in the ERD, in
+  `cc_get_db()`'s default set); `sample_root` stays supplemental. Measured on the v2026.08.28 staging
+  release: `obs_bio` 21.8 → 25.6 MB, `obs_env` 286.7 → 317.2 MB (84 objects).
+- **`obs` still ships this once**, and `catalog.json` marks it `deprecated: true`,
+  `replaced_by: ["obs_bio", "obs_env"]`, `removed_in: "next"`; the catalog's new top-level **`views`**
+  map carries `obs` → the UNION ALL that reconstructs its 18 columns under their original names
+  (`SELECT obs_id, 'bio' AS realm, … value AS measurement_value … FROM {{obs_bio}} UNION ALL … FROM
+  {{obs_env}}`). `calcofi4r::cc_get_db()` (1.17.0), `calcofi4py.cc_get_db()` (0.6.0) and db-query's
+  `__TBL:obs__` create `obs` from that view, so `FROM obs` keeps working; the deprecated objects are
+  read only where the view's sources are not loaded.
+- **The gate**: `release_database.qmd` fails unless the pair reproduces `obs` per `(realm,
+  dataset_key)` — row count, distinct `obs_id`s, an order-independent signature of every non-depth
+  column — with no non-NULL depth changed (`check_obs_pair_parity()`; 15 groups, all equal on the
+  staging release); `test_release.qmd` runs every `obs` contract row three ways (the deprecated
+  objects, the view, the pair) and asserts the view's row counts and column order equal `obs`'s.
+- **One deliberate difference.** A bio row whose depth is NULL in `obs` carries its sample's span
+  through the pair — the tow's `depth_min_m`–`depth_max_m` — so through the view 482,250
+  `swfsc_ichthyo` rows (100 % of that dataset; every other dataset's NULLs stay NULL because no
+  span exists on `sample` either) now have a depth where `obs` had none. A non-NULL depth is never
+  changed.
+
+**Consumers:** read `obs_bio` / `obs_env` directly (`value`, no `realm`; effort and densities inline)
+before the **next release**, when the `obs` objects are dropped and only the view remains. Through
+`cc_get_db()` `SELECT * FROM obs` now returns columns in the table's order (`dataset_key` third)
+where the remote view over the hive partitions returned it last; a direct reader of
+`releases/{v}/parquet/obs/…` or `obs.parquet` (ERDDAP deploy, netCDF publish, the PostgreSQL
+`release.*` views) is unaffected this release and must move to the pair or the catalog view by the
+next. Known direct readers of `obs` to migrate: db-query (8 files), `apps/` (7), db-viz-station (5),
+ctd-transects (2), db-viz-hex (2), `libs/publish_netcdf.R`, `scripts/render_release_views.R`.
+
 ## The boundary layers describe themselves (`spatial_layers.json`)
 
 The release gains one sidecar beside `coverage.json`: the boundary-layer registry

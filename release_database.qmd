@@ -1461,6 +1461,22 @@ dens_sql <- calcofi4r::cc_density_sql()
 n_root <- build_sample_root(con_wdl)
 n_bio  <- build_obs_slim(con_wdl, "bio", qual_ok_sql = qual_sql, density_sql = dens_sql)
 n_env  <- build_obs_slim(con_wdl, "env", qual_ok_sql = qual_sql, density_sql = dens_sql)
+# --- D-S1 (pre-release plan 2026-09-03; calcofi4db >= 3.31.0): the pair IS the observation store ----
+# obs_bio / obs_env now carry sample_key, measurement_prec and hex_id too, so each is a strict superset
+# of obs under a name mapping (realm = the table, value = measurement_value), and `obs` becomes a VIEW
+# the catalog carries (`views.obs`, calcofi4db::obs_view_sql(), written by build_release_catalog() from
+# release_views() because both tables ship) while its own objects still ship this once — the catalog
+# marks the table `deprecated`, `replaced_by: [obs_bio, obs_env]`, `removed_in: next`. cc_get_db() (R and
+# Python) and db-query's `__TBL:obs__` serve `obs` through the view from this release on, so the gate
+# is that the pair reproduces obs: per (realm, dataset_key) the row count, the distinct obs_ids and an
+# order-independent signature of every non-depth column must match, and no non-NULL depth may change.
+# The one documented difference is the depth FALLBACK (a bio row with no depth in obs carries its
+# tow's span: 482,250 ichthyo rows at v2026.08.28), reported per dataset as n_depth_filled.
+obs_parity <- check_obs_pair_parity(con_wdl)
+datatable(obs_parity, caption = "obs_bio + obs_env reproduce obs (check_obs_pair_parity: counts, ids, signature; depth filled / changed)")
+stopifnot(all(obs_parity$ok), sum(obs_parity$n_pair) == n_bio + n_env,
+          dbGetQuery(con_wdl, glue("SELECT count(*) AS n FROM ({substitute_view_tables(obs_view_sql())})"))$n ==
+            dbGetQuery(con_wdl, "SELECT count(*) AS n FROM obs")$n)
 ss     <- build_sample_spatial(con_wdl)
 # the ONE seasonal baseline every anomaly is a departure from (calcofi4db >= 3.26.0): a plain mean per dataset x
 # station x calendar month x 10 m depth_bin x measurement type over 1993-2013, >= 3 cruises per cell, the window
@@ -1523,10 +1539,13 @@ cat(glue("coverage.json {round(file.size(coverage_path) / 1e3)} KB · coverage_s
          "grid.geojson {round(file.size(grid_geojson_path) / 1e3)} KB · spatial.geojson {round(file.size(spatial_geojson_path) / 1e6, 1)} MB · ",
          "spatial_layers.json {round(file.size(spatial_layers_path) / 1e3)} KB\n"))
 
-# sample_spatial is a core relationship table (ERD + default table list); the three browser objects
-# are supplemental — hosted and catalogued, hidden from cc_get_db() by default like obs_ctd_full
-core_keep         <- c(core_keep, "sample_spatial", "climatology")   # climatology: default table, in the ERD (FKs to grid, dataset, measurement_type)
-supplemental_keep <- c(supplemental_keep, "sample_root", "obs_bio", "obs_env")
+# sample_spatial is a core relationship table (ERD + default table list); since D-S1 obs_bio and
+# obs_env are CORE too — the observation tables every consumer reads, in the ERD and cc_get_db()'s
+# default set (obs is the deprecated table + the view over them; see the parity gate above). Only
+# sample_root stays supplemental — hosted and catalogued, hidden from cc_get_db() by default.
+core_keep         <- c(core_keep, "sample_spatial", "climatology",   # climatology: default table, in the ERD (FKs to grid, dataset, measurement_type)
+                       "obs_bio", "obs_env")
+supplemental_keep <- c(supplemental_keep, "sample_root")
 ```
 
 ```{r}
