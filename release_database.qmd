@@ -324,11 +324,27 @@ if (nrow(new_tables) > 0) {
         con = con_wdl, parquet_dir = base_src$parquet_dir[1],
         tables = base_tbl, geom_tables = all_geom_tables)
 
-      # get PK column for dedup
-      pk_col <- dbGetQuery(con_wdl, glue(
-        "SELECT column_name FROM information_schema.columns
-         WHERE table_name = '{base_tbl}'
-         ORDER BY ordinal_position LIMIT 1"))$column_name
+      # PK column for dedup — the DECLARED PK from core_relationships(), not
+      # "first column by ordinal position". For `cruise` that ordinal-first
+      # column is cruise_uuid, which is NULL on every delta row (no ingest
+      # mints one), so `WHERE cruise_uuid NOT IN (...)` evaluates NULL and no
+      # row would ever insert — silently, since the INSERT still "succeeds"
+      # with 0 rows added. No behaviour change today (every current _new
+      # table's first column already IS its PK, e.g. ship_new -> ship_key);
+      # this is the prerequisite for a future cruise_new delta (WS-B D4).
+      declared_pk <- core_relationships(base_tbl)$primary_keys[[base_tbl]]
+      if (is.null(declared_pk)) {
+        pk_col <- dbGetQuery(con_wdl, glue(
+          "SELECT column_name FROM information_schema.columns
+           WHERE table_name = '{base_tbl}'
+           ORDER BY ordinal_position LIMIT 1"))$column_name
+        warning(glue(
+          "release_database.qmd: no declared PK for '{base_tbl}' in ",
+          "core_relationships() — falling back to its first column ",
+          "('{pk_col}') by ordinal position for _new dedup."), call. = FALSE)
+      } else {
+        pk_col <- declared_pk
+      }
 
       for (j in seq_len(nrow(delta_rows))) {
         dr <- delta_rows[j, ]
@@ -875,6 +891,17 @@ d_depth |>
 sf_sample <- sample_seafloor(con_wdl, gebco_tif)
 add_sample_seafloor(con_wdl, gebco_tif, seafloor = sf_sample)
 
+# station_uuid (calcofi4db >= 3.32.0, WS-B / Ed Weber's ask): the SWFSC station
+# occupation (ichthyo `site`) each event belongs to — ichthyo's own rows carry
+# their own site; bottle/CTD/PIC/crab roots are matched on cruise + station +
+# occupation order, or a unique occupation within 24h. Called AFTER
+# add_sample_seafloor() (both rebuild `sample` — DuckDB cannot UPDATE a table
+# with a CRS-tagged geom column — so this one's own row-count/PK assertions are
+# the last thing to touch the table before check_core_pk_unique() below).
+d_station <- match_station_occupation(con_wdl)
+d_station |>
+  datatable(caption = "station_uuid match method, by dataset (root samples only)")
+
 # every NULL seafloor is one of four things, and only three may ship (D29): a sample
 # with no/NaN coordinates or one genuinely off the GEBCO tile is the owning ingest's
 # question; a positioned sample INSIDE the tile that still reads NULL can only be a
@@ -1206,22 +1233,13 @@ if ("casts" %in% tbls) {
   bridge_stats |> datatable(caption = "Cruise bridge coverage")
 }
 
-# cruise_key format validation (YYYY-MM-NODC)
-if ("cruise" %in% tbls) {
-  bad_ck <- dbGetQuery(
-    con_wdl,
-    "SELECT cruise_key FROM cruise
-     WHERE cruise_key IS NOT NULL
-       AND NOT regexp_matches(cruise_key, '^\\d{4}-\\d{2}-.+$')"
-  )
-  if (nrow(bad_ck) > 0) {
-    warning(glue("cruise_key format violations: {nrow(bad_ck)} rows"))
-  } else {
-    message("cruise_key: all match YYYY-MM-NODC format")
-  }
-}
-# Warning message: cruise_key format violations: 1 rows
-# cruise_key: 2019-07-
+# cruise_key format validation: this used to be a warn-only regexp check here
+# ("cruise_key format violations: 1 rows" / cruise_key: 2019-07-, forever, on
+# every render). It is superseded by calcofi4db::check_cruise_key_integrity()
+# (WS-B, the `cruise_key_integrity` chunk below, run once `cruise` is complete
+# and enriched) — a HARD gate covering format, date_ym/NODC agreement, the FK
+# to `cruise`, cruise_uuid hygiene and date-span containment, not a warning
+# repeated release after release.
 
 # site_key format validation (NNN.N NNN.N)
 for (tbl_name in intersect(c("site", "casts", "ctd_cast"), tbls)) {
@@ -1250,6 +1268,24 @@ for (tbl_name in intersect(c("site", "casts", "ctd_cast"), tbls)) {
 }
 # site_key in casts: all match NNN.N NNN.N format
 # Warning message: site_key format violations in site: 982 rows
+
+# complete the `cruise` reference BEFORE enrichment (WS-B design memo D4):
+# `cruise` is the SWFSC ichthyo export's station-occupation cruise list, not a
+# designation registry — 152 cruise_keys that bottle/CTD/METS/picoplankton key
+# events to (measured at v2026.08.25: 153,306 sample rows, 3.8M obs rows) name
+# no row in it, and nothing failed. This adds one `cruise` row per such key
+# (cruise_key_method = 'derived') so the FK holds by construction and stamps
+# cruise_key_method = 'swfsc' + cruise_key_datasets on every row, existing and
+# new. Must run before the enrichment below so the added rows get
+# year/month/ship_name/ship_nodc/per-dataset counts the same way every other
+# cruise does (via `cr.*` in that SELECT).
+if (all(c("cruise", "ship", "sample") %in% tbls)) {
+  cruise_added <- complete_cruise_reference(con_wdl)
+  cat(glue("cruise reference completed: {nrow(cruise_added)} derived row(s) added\n"))
+  if (nrow(cruise_added) > 0)
+    cruise_added |> datatable(caption = "Derived cruise rows added (cruise_key_method = 'derived')")
+  tbls <- DBI::dbListTables(con_wdl)  # `cruise` may have been materialized from a VIEW
+}
 
 # enrich the `cruise` reference in place with per-cruise x dataset event counts
 # from the consolidated obs/sample (this is the former `cruise_summary`, folded
@@ -1311,6 +1347,68 @@ tryCatch(
     message(glue("validate_for_release skipped: {e$message}"))
   }
 )
+```
+
+## Cruise Key Integrity
+
+`calcofi4db::check_cruise_key_integrity()` (>= 3.32.0, WS-B / Ed Weber's ask) is the hard
+gate over `cruise_key` as it is actually used, not as it is assumed to behave: format,
+`date_ym`/NODC agreement, the FK from `sample`/`obs` into the (now-completed) `cruise`
+reference, `cruise_uuid` hygiene (unique for `'swfsc'` rows, NULL for `'derived'` ones),
+every event's date within its cruise's span, the ichthyo notebook's own
+`cruise_uuid`/`cruise_key` agreement (read from its manifest — the release's `sample` table
+carries no `cruise_uuid` column, so that check can only run inside the notebook that still
+has it) and three ratchets (span overlaps, derived-row count, NULL-`cruise_key` backlog per
+dataset). See CLAUDE.md § "Provider UUIDs are columns, and the cruise key is checked
+against the cruise" and the WS-B design memo (`.claude/plans_todo/2026-09-03 WS-B …md`) for
+the numbers behind each check.
+
+```{r}
+#| label: cruise_key_integrity
+
+# the ichthyo notebook's own cruise_uuid <-> cruise_key check can only run
+# there, while `site.cruise_uuid` still exists (dropped by its compat VIEW
+# rebuild before parquet is written) — read its result out of the manifest.
+ich_manifest_path <- here("data/parquet/swfsc_ichthyo/manifest.json")
+manifest_ichthyo_n <- if (file.exists(ich_manifest_path)) {
+  m  <- jsonlite::read_json(ich_manifest_path)
+  cu <- m$mismatches$cruise_uuid
+  if (length(cu) >= 1 && !is.null(cu[[1]]$n_mismatch)) as.integer(cu[[1]]$n_mismatch) else NA_integer_
+} else NA_integer_
+cat(glue("ichthyo manifest cruise_uuid mismatch count: ",
+         "{if (is.na(manifest_ichthyo_n)) 'NOT FOUND (re-render ingest_swfsc_ichthyo.qmd)' else manifest_ichthyo_n}\n"))
+
+# seven calcofi_ctd-cast casts whose header TIMESTAMP is 187-948 days off
+# (1997/2012 dates inside 1999/2013 archives) — CTD keys every cast from its
+# ARCHIVE NAME, so cruise_key is right by construction; the timestamp is the
+# defect (ctd-cast Q32). Named exceptions, not a raised tolerance — an eighth,
+# unlisted violator still fails. Not fixed this round: the CTD ingest is not
+# being re-run (umbrella § "Avoiding the CTD ingest").
+ctd_span_exceptions <- c(
+  "calcofi_ctd-cast:cast:9908_067d", "calcofi_ctd-cast:cast:9908_067u",
+  "calcofi_ctd-cast:cast:9908_069d", "calcofi_ctd-cast:cast:9908_069u",
+  "calcofi_ctd-cast:cast:9908_070d", "calcofi_ctd-cast:cast:9908_070u",
+  "calcofi_ctd-cast:cast:1307_021u")
+
+d_cki <- check_cruise_key_integrity(
+  con_wdl,
+  tolerance_days     = 31L,
+  known_outside_span = ctd_span_exceptions,
+  manifest_ichthyo   = manifest_ichthyo_n,
+  ratchets = list(
+    span_overlaps_max = 2L,   # measured 3 pairs at v2026.08.25, 1 within transit tolerance
+    derived_max       = 152L, # 152 cruises no SWFSC site row names; only ever down
+    key_null_max      = c(    # root samples with NULL cruise_key, per dataset; only ever down
+      calcofi_dic           = 3255L,
+      "sio_pic-zooplankton" = 5087L,
+      "cdfw_dungeness-crab" = 1639L,
+      calcofi_bottle        = 49L)),
+  halt = TRUE)
+
+d_cki |>
+  datatable(caption = paste(
+    "cruise_key integrity — one row per check/ratchet.",
+    "mode = fail stops the release on n > 0; mode = ratchet stops it on n > allowance."))
 ```
 
 ## Show Combined Schema

@@ -265,6 +265,27 @@ easily identifiable attributes (ship + year-month). The `ichthyo` table uses a d
 UUID v5 hashed from its composite natural key. Other derived tables without source UUIDs
 (lookup, segment) still use sequential integer IDs for convenience.
 
+### Data Corrections
+
+Apply known data corrections identified by data managers — **before**
+`create_cruise_key()` derives any key, not after. Correction 1 patches a blank
+`ship.ship_nodc` (BOLD HORIZON has none in the source `shiplookup`); until
+2026-09 this chunk ran 280 lines *after* `create_cruise_key()`, so the July
+2019 Bold Horizon cruise was already minted as `cruise_key = "2019-07-"` (an
+empty NODC segment — DuckDB's `CONCAT()` treats NULL as `''`) by the time the
+correction landed, and the key was never re-derived (WS-B / question
+`swfsc_ichthyo_14`). `create_cruise_key()` now also refuses to mint a
+malformed key outright (`calcofi4db` ≥ 3.32.0), so a reordering mistake here
+fails loudly instead of shipping a bad key again. Correction 2 (missing invert
+species rows) is order-independent — it only appends to `species`.
+
+```{r}
+#| label: apply_corrections
+
+# apply data corrections BEFORE create_cruise_key() — see prose above
+apply_data_corrections(con, verbose = TRUE)
+```
+
 ### Create cruise_key (natural key)
 
 The cruise_key is a natural key in format YYYY-MM-NODC (4-digit year + 2-digit month + NODC ship code).
@@ -544,18 +565,10 @@ ichthyo_summary |>
 
 ## Data Quality Improvements
 
-This section applies data corrections and validates referential integrity.
+This section validates referential integrity. Data corrections (§ "Establish
+Primary Keys" above) now run *before* `create_cruise_key()`, not here — see
+that section for why.
 
-### Data Corrections
-
-Apply known data corrections identified by data managers.
-
-```{r}
-#| label: apply_corrections
-
-# apply data corrections
-apply_data_corrections(con, verbose = TRUE)
-```
 
 ### Validate Referential Integrity
 
@@ -1401,6 +1414,11 @@ n_pruned   <- prune_taxon_shard(con, ds_key)
 # sample — three chained levels. `site` has no datetime of its own, so it takes
 # the earliest tow time; `tow` and `net` inherit site_key/order_occ/grid_key/
 # cruise_key from the site, and both carry the net gear code as tow_type.
+# 16th column data_stage (ichthyo does not distinguish one, so NULL); 17th
+# source_uuid — the provider's own site_uuid/tow_uuid/net_uuid, verbatim
+# (calcofi4db >= 3.32.0, WS-B/Ed Weber's ask). Every other ingest's arm stays
+# 15-column and gets source_uuid = NULL for free (append_sample()'s arity
+# dispatch), so this is additive.
 append_sample(con, glue("
   SELECT {ns_key(ds_key, 'site', 's.site_uuid')} AS sample_key, 'site' AS sample_type,
          NULL::VARCHAR AS parent_sample_key,
@@ -1410,7 +1428,9 @@ append_sample(con, glue("
          s.latitude, s.longitude,
          CAST(td.dt AS TIMESTAMP) AS datetime,
          NULL::DOUBLE AS depth_min_m, NULL::DOUBLE AS depth_max_m,
-         NULL::VARCHAR AS tow_type
+         NULL::VARCHAR AS tow_type,
+         NULL::VARCHAR AS data_stage,
+         s.site_uuid AS source_uuid
   FROM site s
   LEFT JOIN (SELECT site_uuid, min(datetime_start_utc) AS dt FROM tow GROUP BY 1) td
          ON td.site_uuid = s.site_uuid"))
@@ -1422,7 +1442,9 @@ append_sample(con, glue("
          CAST(s.order_occ AS INTEGER) AS order_occ, s.latitude, s.longitude,
          CAST(t.datetime_start_utc AS TIMESTAMP) AS datetime,
          0::DOUBLE AS depth_min_m, NULL::DOUBLE AS depth_max_m,
-         t.tow_type_key AS tow_type
+         t.tow_type_key AS tow_type,
+         NULL::VARCHAR AS data_stage,
+         t.tow_uuid AS source_uuid
   FROM tow t JOIN site s USING (site_uuid)"))
 append_sample(con, glue("
   SELECT {ns_key(ds_key, 'net', 'n.net_uuid')} AS sample_key, 'net' AS sample_type,
@@ -1432,7 +1454,9 @@ append_sample(con, glue("
          CAST(s.order_occ AS INTEGER) AS order_occ, s.latitude, s.longitude,
          CAST(t.datetime_start_utc AS TIMESTAMP) AS datetime,
          0::DOUBLE AS depth_min_m, NULL::DOUBLE AS depth_max_m,
-         t.tow_type_key AS tow_type
+         t.tow_type_key AS tow_type,
+         NULL::VARCHAR AS data_stage,
+         n.net_uuid AS source_uuid
   FROM net n JOIN tow t USING (tow_uuid) JOIN site s USING (site_uuid)"))
 
 # obs — the abundance headline: BASE rows only (measurement_type IS NULL in the
@@ -1532,10 +1556,33 @@ stopifnot(
   "every taxon.parent_taxon_key must resolve (the lineage chain)" =
     dbGetQuery(con, "SELECT COUNT(*) FROM taxon c LEFT JOIN taxon p
                      ON c.parent_taxon_key = p.taxon_key
-                     WHERE c.parent_taxon_key IS NOT NULL AND p.taxon_key IS NULL")[[1]] == 0)
+                     WHERE c.parent_taxon_key IS NOT NULL AND p.taxon_key IS NULL")[[1]] == 0,
+  # source_uuid (calcofi4db >= 3.32.0, WS-B): every site/tow/net row must carry
+  # the provider's own UUID verbatim — a gap here would mean the append_sample()
+  # arm's 17th column silently stopped projecting it
+  "every site/tow/net sample row must carry source_uuid" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM sample
+                     WHERE sample_type IN ('site','tow','net') AND source_uuid IS NULL")[[1]] == 0)
 cat(glue("sample: {format(n_site, big.mark=',')} sites / {format(n_tow, big.mark=',')} tows / ",
          "{format(n_net, big.mark=',')} nets; obs_attribute ",
          "{paste(sprintf('%s=%s', d_attr$measurement_type, format(d_attr$n, big.mark=',')), collapse=', ')}"), "\n")
+
+# UUID check (calcofi4db >= 3.32.0, WS-B / design memo D2): site.cruise_uuid is
+# the ONLY place a real cruise_uuid<->cruise_key link survives past this chunk —
+# the compat block just below replaces `site` with a VIEW carrying only
+# cruise_key (not cruise_uuid), and the release's `sample` table has no
+# cruise_uuid column at all (a 1.3M-row denormalization to serve one check
+# would be worse than the check). So this assertion runs HERE, once, while both
+# columns still coexist, and its result travels in manifest.json
+# (`mismatches$cruise_uuid`, written below) for check_cruise_key_integrity()
+# (calcofi4db::check_cruise_key_integrity(), release_database.qmd) to gate on.
+n_cruise_uuid_mismatch <- dbGetQuery(con, "
+  SELECT COUNT(*) AS n FROM site s JOIN cruise c ON c.cruise_uuid = s.cruise_uuid
+  WHERE s.cruise_key IS DISTINCT FROM c.cruise_key OR s.cruise_key IS NULL")[[1]]
+stopifnot(
+  "every ichthyo site's cruise_key must agree with the cruise row its cruise_uuid names" =
+    n_cruise_uuid_mismatch == 0)
+cat(glue("cruise_uuid <-> cruise_key check: {n_cruise_uuid_mismatch} mismatch(es)\n"))
 
 # serve the retired per-dataset names as VIEWs over the core: the source id comes
 # back out of the namespaced sample_key, the containment FK out of
@@ -1586,7 +1633,13 @@ Export tables to parquet files for downstream use.
 # collect mismatches for manifest
 mismatches <- list(
   ships = collect_ship_mismatches(con, "cruise"),
-  cruise_keys = collect_cruise_key_mismatches(con, "cruise")
+  cruise_keys = collect_cruise_key_mismatches(con, "cruise"),
+  # calcofi4db >= 3.32.0 (WS-B / design memo D2): site.cruise_uuid <-> cruise.cruise_key
+  # agreement, computed in the emit_core chunk while site still carried
+  # cruise_uuid (the compat VIEW below drops it). release_database.qmd's
+  # check_cruise_key_integrity() reads this and fails the release if it is
+  # missing or non-zero.
+  cruise_uuid = tibble(n_mismatch = n_cruise_uuid_mismatch)
 )
 
 # write parquet files with manifest
