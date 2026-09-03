@@ -556,6 +556,11 @@ it means *we have already built or reasoned an answer and want it confirmed* —
 `[PROPOSED]`, and the provider approves a solution rather than being handed a
 problem. Pre-answer everything the repo can settle before asking.
 
+Each active provider also gets a Google Sheet (`metadata/questions_sheets.yml`, one tab
+per dataset, `Rscript scripts/sync_questions_sheets.R push|pull [provider] [--execute]`) —
+the CSV stays the record and every column but `answer`/`status`/`answered_date`/`who` is
+protected there, so `pull` only ever writes those four columns back into `questions.csv`.
+
 ### The ingest skills loop (`.claude/skills/`, see `RUNBOOK.md`)
 
 ```
