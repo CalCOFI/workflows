@@ -8,6 +8,39 @@ versions). Conventions: see `CLAUDE.md` § "RELEASES.md is not optional".
 
 # Unreleased
 
+## The boundary layers describe themselves (`spatial_layers.json`)
+
+The release gains one sidecar beside `coverage.json`: the boundary-layer registry
+(`metadata/spatial_layers.csv` — the 19 drawable layers, their PMTiles archives, default symbology
+and provenance) joined with what only the release knows: each layer's feature count, bbox, its
+distinct names (the Explorer's by-name palette) and how many root samples fall inside it
+(`sample_spatial`). The CalCOFI Explorer's Layers card reads this instead of hard-coding the layer
+list, so a row Erin adds to the registry reaches the app at the next release with no code change
+(calcofi4db 3.28.0 `build_spatial_layers()`). Not a table: `catalog.json` and consumers of the
+parquet are untouched.
+
+## The seafloor stamp runs anywhere, and an unexplained NULL fails the release
+
+`seafloor_depth_m` is sampled from GEBCO 2025, and until now that meant one laptop's local
+933 MB tile (`CALCOFI_GEBCO_TIF`'s default) — a machine without it could not run the release at
+all. The same grid is now published as a streamable Cloud-Optimized GeoTIFF
+(`gs://calcofi-db/bathymetry/gebco_2025_sub_ice_n90_w180_e90_cog.tif`), and the `depth_coverage`
+chunk falls back to it over `/vsicurl/` range reads when no local file is present
+(calcofi4db 3.27.0 `sample_seafloor()` accepts URL sources).
+
+With that, a NULL `seafloor_depth_m` stops being one undifferentiated count: every NULL is now
+classified (`calcofi4db::check_seafloor_nulls()`) as *no coordinates*, *NaN coordinate*,
+*outside the GEBCO source tile* (all three are the owning ingest's `questions.csv` material —
+at v2026.08.25 they were 1,360 ichthyo positions east of −90° plus 71 METS rows with no
+latitude), or *inside the tile and still NULL* — which can only be a regression in the sampling
+itself and now **fails the release**. Consumers see no schema change.
+
+Alongside (not release content, but the same D29 change): `gebco_2025_calcofi.tif`, the crop
+`calcofi4r::cc_bathy()` serves, was re-cut from lon −127 → −116.8 × lat 29.3 → 38.4 to
+**lon −165 → −100 × lat 15 → 56** (Int16 COG) so all 360,568 released positions that fell outside
+it — 24.7 %, silently reading `NA` depth — now sample a real value; `cc_bathy_depth()` warns
+about the remainder instead of keeping quiet (calcofi4r 1.16.0).
+
 ## One climatology for every anomaly
 
 Two products drew the same section — line 90, July 2026, temperature — and disagreed by the whole

@@ -26,16 +26,7 @@ The pipeline is the source of truth — prefer running notebooks through `target
 
 ```r
 # from the workflows/ directory
-Rscript -e 'targets::tar_make()'                       # run full pipeline
-Rscript -e 'targets::tar_make("ingest_calcofi_dic")'   # run one target
-Rscript -e 'targets::tar_visnetwork()'                 # dependency graph
-Rscript -e 'targets::tar_outdated()'                   # what would re-run
-Rscript -e 'targets::tar_meta(fields = error)'         # inspect target errors
-Rscript -e 'targets::tar_invalidate("ingest_swfsc_ichthyo")'  # force re-run a node
 Rscript -e 'targets::tar_unblock_process()'            # clear a locked db process
-
-# render a single notebook directly (bypasses dependency tracking)
-quarto render ingest_calcofi_dic.qmd
 
 # install/update the engine packages (sibling repos, not on CRAN)
 Rscript -e 'remotes::install_github("calcofi/calcofi4db"); remotes::install_github("calcofi/calcofi4r")'
@@ -164,40 +155,14 @@ sixteen shipped and named tables retired months earlier.
 
 ## The brand contract (theme, header, favicon) — `calcofi.io/brand/v1/`
 
-Every CalCOFI product wears one theme, one header and one favicon, and the rule is
-**checked weekly, not assumed** (`CalCOFI.github.io/scripts/check_brand.py`). Source:
-`CalCOFI.github.io/brand/v1/` (README there is the contract); plan:
-`.claude/plans/2026-08-25 Consistent dark-light theme …`. In one breath:
-
-- `?theme=dark|light` on any URL → `cc_theme` cookie on `.calcofi.io` → `localStorage.theme`
-  → **dark**. `theme.js` sets `data-theme` / `data-bs-theme` / `data-md-color-scheme` on
-  `<html>` and fires `cc:theme`; maps, Plotly and Mermaid restyle on it. Never key on
-  `prefers-color-scheme`.
-- `.cc-header`: logo far left → `https://calcofi.io`; the product's title beside it → its own
-  root (that is how the two links stay distinguishable); the theme toggle at the right — a sun while
-  the page is dark, a moon-in-sun while it is light, i.e. what a click switches *to* (MDI `brightness-7`/`-4`,
-  calcofi4py's pair; fleet-wide since 2026-08-29, replacing 🌓 — `theme.js` draws it over the snippet's `🌓`
-  fallback, `theme.css` exports the masks as `--cc-icon-sun`/`--cc-icon-moon`, and docs' `brand-head.html` /
-  the packages' `_pkgdown.yml` dress the framework toggles with them; the Shiny apps' bslib switch is not yet
-  switched). Where a
-  framework owns the bar (Quarto, pkgdown, mkdocs, bslib `page_navbar`) the logo goes in its
-  brand slot and its native toggle is bridged — never two bars, never two toggles.
-- The CalCOFI favicon set, except `calcofi4r` (hex) and `calcofi4py` (squircle).
-- `?tour=off` suppresses any guided tour, so `live_url?theme=<t>&tour=off` is a deterministic
-  screenshot; each card on calcofi.io has `images/<key>_dark.png` + `_light.png`
-  (`scripts/shots.py`, luminance-checked) once `shots: themed` is set in `products.yml`.
-
-**New product checklist** (extends the three-slug contract in `products.yml` / uptime /
-analytics): brand head + header + favicon · honours `?theme=` · `?tour=off` · two screenshots
-· `shots: themed`. Shiny: `calcofi4r::cc_brand_head()` / `cc_brand_header(mode =
-cc_theme(request))` / `cc_is_dark(input)` / `cc_tour_enabled()`. Quarto here: every render
-includes `libs/brand/quarto_head.html` + `quarto_header.html` via `_quarto.yml`;
-`scripts/brand_inject_html.R` (run by the Pages workflow) injects the same into notebooks
-rendered before 2026-08-25, because re-rendering an ingest for a stylesheet is a pipeline run.
-
-Two traps met on the way: pkgdown 2.2 has **no `html:` navbar component** (use a `link` with
-`icon:` + `class:` and draw it in CSS); Quarto's `book.favicon` with a URL renders
-`href="./https://…"` (download the png).
+Every CalCOFI product wears one theme, one header and one favicon, honours
+`?theme=dark|light` and `?tour=off`, and the rule is **checked weekly, not assumed**
+(`CalCOFI.github.io/scripts/check_brand.py`; the contract is
+`CalCOFI.github.io/brand/v1/README`). Quarto renders here get it from
+`libs/brand/quarto_head.html` + `quarto_header.html` via `_quarto.yml`. **Load the
+`brand-contract` skill** before touching a product's theme, header, favicon,
+screenshots or `products.yml` card — it holds the cookie chain, the header rules,
+the new-product checklist and the two framework traps.
 
 ## Deploy (release → consumers)
 
@@ -210,24 +175,11 @@ which loads on demand instead of sitting in every session's context.
 
 ### Data flow
 
-```
-Google Drive ──rclone──> GCS (gs://calcofi-files/) ──targets──> ingest_*.qmd
-   └─ source CSVs                                                    │
-                                     write_parquet_outputs()         │
-                                   + build_metadata_json()   <────────┘
-                                   + sync_to_gcs()
-                                                     │
-   $CALCOFI_STAGE_DIR/parquet/{provider}_{dataset}/  ┘   <- bulk .parquet
-       data/parquet/{provider}_{dataset}/*.json          <- sidecars, in git
-       (+ gs://calcofi-db/parquet/… mirror of both)
-                                                     │
-                          release_database.qmd ──────┘
-                          (assemble in-memory from the parquet shards,
-                           validate → freeze → upload)
-                                                     ▼
-                              Parquet + frozen release
-                              (gs://calcofi-db/ducklake/releases/{version}/)
-```
+Source files sit on Google Drive and rclone to `gs://calcofi-files/`; `targets`
+runs each `ingest_*.qmd`, which stages bulk parquet at `$CALCOFI_STAGE_DIR` and
+JSON sidecars in `data/parquet/` (both mirrored to `gs://calcofi-db/parquet/`);
+`release_database.qmd` assembles those shards in memory, validates, freezes and
+uploads `gs://calcofi-db/ducklake/releases/{version}/`.
 
 ::: There is **no Working DuckLake**, and no ingest calls `finalize_ingest()`.
 Both appear in `README_PLAN.qmd` as design intent and were documented here as if
@@ -235,7 +187,7 @@ built; verified 2026-07-30 — `gs://calcofi-db/ducklake/working/` holds **zero
 objects**, `grep -l finalize_ingest ingest_*.qmd` matches **nothing**, and
 `release_database.qmd`'s `con_wdl` is `get_duckdb_con(":memory:")` (the `wdl` in
 the name is vestigial). All 16 data ingests use the
-`write_parquet_outputs()` + `build_metadata_json()` + `sync_to_gcs()` trio above.
+`write_parquet_outputs()` + `build_metadata_json()` + `sync_to_gcs()` trio.
 Do not "migrate the laggards onto `finalize_ingest()`" — there are no laggards,
 and that function expresses neither the content-hash upload dedup nor the `_new`
 delta sidecars that the trio does. :::
@@ -274,15 +226,6 @@ Two things do **not** follow automatically, so handle them in the notebook:
 - **GCS uploads.** `sync_to_gcs()` targets world-readable buckets. If publication
   permission is itself unsettled, gate the calls behind a local flag rather than
   relying on `in_release: false`, which only governs the release.
-
-**No current holdouts.** `cdfw_dungeness-crab` was the only one and entered the
-release on 2026-08-14, once CDFW confirmed permission, a CC BY 4.0 licence and a
-citation (its Q01). Worth reading that notebook's diff as the worked example of
-what "entering the release" costs beyond the flag itself: the two staged
-measurement types moved into the shared registry (and the notebook's
-`stopifnot()` had to flip from "must not already be there" to "must be there"),
-the asserted `coverage_*` keys were deleted so coverage is measured, and
-`publish_to_gcs` flipped. The flag is one line; the change is not.
 
 ### `cruise_key` is the cruise's designated month, resolved by date span
 
@@ -494,102 +437,31 @@ flattened 37 species to one family key, bird_mammal merged every unresolved
 species into one row per transect, phytoplankton emitted zero observations, cufes
 and phyllosoma lost their taxa). Copy the pattern from any migrated notebook.
 
-| core table | grain | built by |
-|---|---|---|
-| `sample` | one row per physical sampling event (site/tow/net/cast/bottle/underway/transect/region_pool); adjacency list via `parent_sample_key` + `root_sample_key` | `append_sample()` (+ `sample_arm_self()` for the single-level case) |
-| `obs` | occurrence-headline long table (`realm` env\|bio, one scalar/row); bio taxon via `taxon_key` (global, `worms:`/`itis:`); env CTD via `ctd_thin` | `append_obs()` |
-| `obs_attribute` | sub-occurrence attribution — length/stage frequency (`bin_value`/`bin_label`/`count`) **+ categorical behavior** (was `obs_freq`) | `append_obs_attribute()` |
-| `sample_measurement` | event-level effort (net `volume_sampled`/`std_haul_factor`/… ; bottle cast conditions) | `append_sample_measurement()` |
-| `obs_ctd_full` | **supplemental** full-resolution CTD scans (~216M rows; hosted + catalog-flagged, excluded from ERD/default list; `cc_get_db(supplemental=TRUE)`) | `append_obs(obs_tbl="obs_ctd_full")` |
+The core tables — `sample`, `obs`, `obs_attribute`, `sample_measurement` and the
+supplemental `obs_ctd_full` — with their grains and the `append_*()` helper that
+builds each are specified in `design_env-bio-consolidation.md` and calcofi4db's
+`R/model.R` documentation.
 
-Shared taxonomy refs (built by `calcofi4db/R/taxa.R`, replacing the ~7 per-dataset
-taxon tables): **`taxon`** (one row per taxon, `taxon_key` = lowercase authority
-prefix `worms:<id>` — or `itis:<id>` for birds/Aves — + `worms_id`/`itis_id`/
-`gbif_id`/`ncbi_id`/`inat_id`, `parent_taxon_key`, lineage), **`dataset_taxon`**
-(per-dataset vocabulary → `taxon_key` crosswalk; `obs` resolves `taxon_key` by
-joining it on `(dataset_key, ds_taxa_code)`), **`taxon_group`** (groupings). Built
-by `build_taxon_reference()` / `build_dataset_taxon()` / `build_taxon_group()`.
-Coarse/composite taxa (cufes eggs, phyllosoma stages, euphausiid family, phyto
-functional groups, seabirds/mammals) resolve to real WoRMS/ITIS ids via the
-reviewable `metadata/measurement_taxon.csv` + `metadata/taxon_override.csv`.
-
-**Lineage is not free — call `ensure_taxon_lineage()` before the builders.**
-`build_taxon_reference()` takes `rank` / `parent_taxon_key` / classification from
-a DwC-shaped hierarchy table named `taxon` in the connection. Exactly one ingest
-built one (`swfsc_ichthyo`, via `build_taxon_hierarchy()`), so every other
-dataset's taxa reached the release with a key and a name and **nothing else** —
-0 ranks, 0 parents, no classification — and hierarchy rollups ("all Decapoda")
-silently matched nothing with no error anywhere.
-`ensure_taxon_lineage(con, mt_taxon, tx_over, cache_csv = here("metadata/taxon_lineage.csv"))`
-fetches each taxon's WoRMS (or ITIS, for Aves) classification, caches it in
-`metadata/taxon_lineage.csv` so re-runs cost no API calls, and stages it as that
-same `taxon` table — plus the flattened `kingdom`/`phylum`/`class`/`order_taxon`/
-`family`, which no dataset ever populated. Ancestors become `taxon` rows too, so
-`parent_taxon_key` chains resolve; `prune_taxon_shard()` keeps the transitive
-parent closure when trimming a shard. `ncbi_id`/`inat_id` stay declared-but-NULL:
-no source supplies them, and dropping the columns would change the release schema
-under consumers.
-
-**The key authority and the id columns are different questions — call
-`ensure_taxon_xref()` before the lineage fetch.** Birds key `itis:` because WoRMS
-bird taxonomy lags (it still says *Oceanodroma*, *Puffinus*, *Phalacrocorax*), and
-that rule is right. But nothing populated the `worms_id` **column** for them, so a
-consumer joining on `worms_id` matched **zero rows for every seabird and marine
-mammal** — 59,858 of the Farallon census's 64,956 `obs` rows, 92.2% of the
-dataset, with no error anywhere.
-`ensure_taxon_xref(con, mt_taxon, tx_over, cache_csv = here("metadata/taxon_xref.csv"))`
-crosswalks TSN→AphiaID with `worrms::wm_record_by_external(type = "tsn")` — an
-**exact id crosswalk, not a name match** (91 of the 92 Farallon bird TSNs resolve
-through it) — backfills `itis_id` the other way via `wm_external()`, and falls
-back to `wm_records_name()` on `clean_taxon_name()` output for taxa carrying
-neither id. Three things to keep straight:
-- **A key must be an *accepted* id; a cross-reference is whatever the authority
-  links.** A deprecated ITIS TSN is re-keyed (`itis:174553` *Puffinus griseus* →
-  `itis:1255050` *Ardenna grisea*) and the event lands in the append-only
-  `taxon.notes`; the TSN `wm_external()` returns for an AphiaID is stored verbatim.
-- **`clean_taxon_name()` output is the lookup query, never `ds_taxa_code`.** For
-  `sio_mesopelagic-fish` the local code *is* the verbatim spreadsheet header
-  (`Bathophilus sp.`) and is the join key from `obs` — rewriting it orphans every
-  observation of that taxon.
-- **`taxonomic_status` was fabricated.** It was the literal string `"accepted"`
-  stamped by `ensure_taxon_lineage()` onto all 2,090 taxa, including 28 whose ITIS
-  TSN is demonstrably deprecated. It is now fetched, and carries `status_checked` —
-  read the two together, a status with no check date is not a fact.
-
-`release_database.qmd`'s `taxon_authority_coverage` chunk gates this:
-`check_taxon_ids()` **fails the release** on a dataset-local `taxon_key` that is
-not in its explicit allowlist, so the 18 genuinely non-taxonomic classes (zooscan
-eggs/multiples/nauplii/others, phyto "other"/"undefined code") are declared one
-key at a time and a new unresolved taxon cannot hide among them.
-
-**Lineage ancestors are first-class taxa, and rank ordering is not one dataset's
-job.** Two gaps that looked unrelated turned out to share a cause — a taxon was
-treated as second-class because of *how it entered the release* rather than what
-it is:
-- `rank_order` came from a `taxa_rank` table built by an inline vector inside
-  `build_taxon_hierarchy()`, which only `swfsc_ichthyo` calls. It existed in that
-  one connection and nowhere else, so **100% of ITIS-keyed taxa** and 252
-  WoRMS-keyed ones released with the column NULL. It is now
-  `calcofi4db::taxa_rank_reference()` — the single vocabulary, covering both
-  authorities' rank sets (including `Section`/`Subsection`, which WoRMS nests
-  *below* Infraorder for decapods, not between order and family as in botany).
-- `.lineage_flat()` emitted one row per *requested* id, so an ancestor arrived
-  with a key, a name, a rank and no classification — 430 of ichthyo's taxa at or
-  below family rank had neither `family` nor `kingdom`, in both authorities
-  alike. It now emits one row per distinct taxon, deriving each node's
-  classification from its own ancestors-or-self. No API call: the chains already
-  contain them.
-
-When asserting coverage, **split by rank position**. `family` is legitimately
-NULL above family rank (a phylum has no family) and `kingdom` is NULL for
-`worms:1` Biota (rank Superdomain, above Kingdom). A blanket non-NULL assertion
-is wrong and will be "fixed" by someone inventing data.
-
-Ancestor ids are topped up by `ensure_taxon_lineage()`, not `ensure_taxon_xref()`
-— the xref step must run *first* (so the lineage fetch asks about the accepted
-id) and therefore only ever sees the dataset's own vocabulary. `.apply_xref()`
-takes `rekey = FALSE` there: an ancestor's key comes from the chain it was
-fetched in, so its ids may be filled but never replaced.
+Shared taxonomy refs — `taxon` (one row per taxon, `taxon_key` = `worms:<id>`, or
+`itis:<id>` for birds/Aves), `dataset_taxon` (per-dataset vocabulary → `taxon_key`;
+`obs` joins it on `(dataset_key, ds_taxa_code)`) and `taxon_group` — are built by
+`calcofi4db/R/taxa.R`. The rules that are not negotiable, with their mechanics and
+history in the **`taxon-reference` skill** (load it before touching taxon code in
+an ingest, `R/taxa.R` or a taxon metadata CSV):
+- Call `ensure_taxon_xref()` **then** `ensure_taxon_lineage()` **then** the
+  builders. A key must be an *accepted* id; a cross-reference id is whatever the
+  authority links. Skip either step and taxa ship with no ids, ranks or
+  classification — silently.
+- `clean_taxon_name()` output is the lookup query, **never** `ds_taxa_code`
+  (rewriting the code orphans every `obs` row of that taxon).
+- Stage `measurement_taxon.csv` with `ensure_measurement_taxon()`, never
+  `dbWriteTable()`; `taxon_override.csv` rows match on their own `match_column`,
+  and an unknown `dataset_key` there errors.
+- Assert coverage **by rank position**, never blanket non-NULL (`family` is NULL
+  above family rank; `kingdom` is NULL for `worms:1` Biota).
+- `release_database.qmd`'s `taxon_authority_coverage` chunk: `check_taxon_ids()`
+  **fails the release** on a dataset-local key outside its explicit allowlist —
+  declare non-taxonomic classes one key at a time, never as a pattern.
 
 - **Namespaced keys**: every `sample_key` is `dataset_key:sample_type:id` (globally
   unique across datasets *and* event levels; makes the DIC→bottle dedup fall out).
@@ -626,78 +498,19 @@ fetched in, so its ids may be filled but never replaced.
 
 #### Declared bounds are checked per dataset, at ingest time
 
-**Every ingest that emits measurements calls
-`calcofi4db::check_measurement_bounds()`, and every non-`ok` row is resolved
-before the notebook is done.** The check is `calcofi4db` ≥ 3.10.0; it runs on the
-per-dataset `{dataset}_measurement` (or on `obs` after the core is emitted) and
-returns one row per measurement type with a `finding` string ready to paste into a
-`questions.csv` `context` cell. `bounds_datatable()` renders it.
-
-Two findings, and the second is the larger one:
-
-- **`out_of_range`** — a bound is declared and the data breaks it. Nearly always
-  an unconverted sentinel or a scaling error.
-- **`undeclared`** — no bound, so nothing was checked. At v2026.08.07 this was
-  **73 of 98 (dataset, type) pairs and 67% of all `obs` rows**; only
-  `calcofi_ctd-cast` and one `calcofi_mets` type declared anything at all.
-
-Resolve each one of two ways — "note it and move on" is not one of them:
-
-1. **Declare the bound** with `declare_measurement_bounds()` (which sets bounds
-   on types that already exist; `register_measurement_types()` only *appends*, so
-   it cannot do this — that was the state of all 73). Bounds are
-   deliberately **generous**: they catch the impossible, they do not police
-   oceanography. If a bound would drop a value an oceanographer wants to see, the
-   bound is wrong. **One-sided is fine and usually right** — `valid_min = 0` for a
-   count, abundance or biomass is agreeable without knowing any ceiling, and it is
-   what catches a negative sentinel.
-2. **File a provider question** when the range is not ours to decide, with the
-   `finding` as `context` and `status = proposed` carrying the bound you intend to
-   apply. A value at exactly `-99`/`-999` is a sentinel until proven otherwise:
-   raise it `high` rather than quietly declaring a bound that deletes it.
-
-**Do not invent a bound to make the check quiet.** An `undeclared` type is a
-visible finding; a wrong bound silently deletes real data. And do not set the
-bound to the observed range — a bound describes what is physically possible, so it
-must sit outside the data, or next season's legitimate record becomes a violation.
-
-Enforcement is a **separate call**, `drop_out_of_bounds()`, so a bound must be
-agreed before it can delete. It DELETEs rather than flags for the same reason the
-`-99` sentinel is deleted: in a long-format table a row IS an assertion that a
-value was measured, and there is no in-band way to mark one as not-a-value.
-
-**Check the supplemental tables too, not just `obs`.** `obs_ctd_full` (~216M rows)
-and `obs_mets_full` (~20M) are published, and checking `obs` alone certifies about
-a third of the release. v2026.08.07 shipped an `obs_ctd_full` whose `ph` ran to
-−2.98 — 5,963 values below the declared floor — *that the CTD ingest had already
-removed from its own staged output*. The released bytes and the ingest's bytes
-disagreed and nothing compared them, because every check looked at `obs`. Each
-supplemental table derives from the same guarded per-dataset table as its `obs`,
-so its owning ingest asserts `out_of_range == 0` on it rather than merely
-reporting: a violation there means that derivation link has silently broken.
-Cost is not a reason to skip it — 216M rows check in ~20 s, since the work is a
-`GROUP BY` per type over one lazily-read column.
-
-`release_database.qmd`'s `bounds_coverage` chunk is the **backstop, not the
-mechanism**: it covers `obs` **and** every table in `supp_tbls`; `out_of_range`
-fails the release outright, while `undeclared` is ratcheted by
-`BOUNDS_UNDECLARED_MAX` (may only ever go down) so a *new* undeclared type fails
-even though the backlog does not.
-
-**Validate a proposed bound against every table the type appears in.** Two bounds
-were declared here from `obs` alone and were immediately violated in
-`obs_ctd_full` — `isus_v` at 0 (a −0.042 V sensor offset is normal, so the bound
-was simply wrong and is now −1) and `dynamic_height` at ±50 (−2,884 dyn m is
-genuinely impossible, so those 126 rows are correctly dropped). The observed range
-in the headline table is not the observed range. Fix findings at the ingest — that is
-the only place the provider can still be asked, and a release-time failure has
-nowhere to put the answer. Raising the ratchet to make a release pass is how the
-backlog reached 73.
-
-The whole failure mode here is a constraint that *looks* enforced. `valid_min` was
-emitted as a netCDF variable attribute and displayed on the schema site for months
-while nothing compared a value to it, and `ranges` sat in `/validate-ingest`'s
-`--checks` list with no section implementing it.
+**Every ingest that emits measurements calls `calcofi4db::check_measurement_bounds()`
+(≥ 3.10.0) on its `{dataset}_measurement` / `obs` and on every supplemental table it
+publishes, and resolves every non-`ok` row before the notebook is done** — by
+`declare_measurement_bounds()` (generous; one-sided is fine and usually right;
+`register_measurement_types()` only appends and cannot set bounds) or by a
+`proposed` provider question carrying the `finding`. Do not invent a bound to make
+the check quiet, and never set one to the observed range: a bound describes what is
+physically possible. Enforcement is the separate `drop_out_of_bounds()`, which
+DELETEs. `release_database.qmd`'s `bounds_coverage` chunk is the backstop, not the
+mechanism: `out_of_range` fails the release, `undeclared` is ratcheted by
+`BOUNDS_UNDECLARED_MAX` (only ever down). The two findings, the resolution
+procedure and the incidents behind these rules are in the **`measurement-bounds`
+skill**.
 
 #### The question registry convention
 
@@ -716,15 +529,6 @@ it means *we have already built or reasoned an answer and want it confirmed* —
 `[PROPOSED]`, and the provider approves a solution rather than being handed a
 problem. Pre-answer everything the repo can settle before asking.
 
-All 16 ingest notebooks used to read this file with their own `read_csv()` +
-`arrange(factor(priority, …))` + `select(…)`, each listing different levels and
-different columns — `ingest_calcofi_mets.qmd` ranked by a vector containing
-`"blocker"` and `"asked"`, neither of which is a status, so anything outside its
-list sorted silently to the bottom. Four spellings of "done" (`open`/`answered`/
-`resolved`/`wontfix`) and two of "normal" accumulated across 136 questions.
-`read_questions()` now holds the vocabulary and **errors** on anything outside
-it; `questions_datatable()` is the one render.
-
 ### The ingest skills loop (`.claude/skills/`, see `RUNBOOK.md`)
 
 ```
@@ -737,63 +541,28 @@ Each skill updates the shared tracking artifacts above so the loop is
 self-documenting; human review happens at every hand-off. Scaffolds come from
 `.claude/skills/templates/`.
 
-**A skill is a `<name>/SKILL.md` directory whose front-matter carries BOTH `name`
-and `description` — anything else is an inert file.** All five of these lived as
-bare `.claude/skills/<name>.md` with no `name:` key until 2026-08-10, so none of
-them ever loaded and none of the slash commands above resolved, while this
-section documented the loop as if it worked. Nothing errors in that state: a
-directory with no `SKILL.md` and a stray `.md` beside one are both simply
-skipped. `RUNBOOK.md` and `templates/` are deliberately neither — they are read
-by path, so they stay as files.
-
 ## Release tables are content-addressed (calcofi4db ≥ 3.22)
 
-Since v2026.09 every released parquet object lives once under
-`gs://calcofi-db/ducklake/tables/{table}/{content_hash}/…` (`canonical_path()`), and a release's
-`catalog.json` lists its objects per table (`objects[]`: `path`, `bytes`, `sha256`,
-`content_hash`, `since`, `partition_by`/`partition_value`), plus `layout` (`compat` |
-`canonical`), `writer` and per-table `compat_path`. The `releases/{v}/parquet/…` path is a real
-copy only for the promoted and consolidated versions (`metadata/release_policy.yml`).
+Every released parquet object lives once under
+`gs://calcofi-db/ducklake/tables/{table}/{content_hash}/…`, and a release's
+`catalog.json` lists its objects; `releases/{v}/parquet/…` is a real copy only for
+promoted and consolidated versions (`metadata/release_policy.yml`). **Never build a
+`releases/{v}/parquet/` path by hand** — go through `calcofi4r::cc_catalog()` /
+`cc_release_sources()` / `cc_read_parquet_sql()`, `calcofi4py.release_sources()`, or
+this repo's `libs/publish_netcdf.R` helpers. Stage a run without touching the real
+prefix with `CALCOFI_RELEASE_PREFIX=ducklake-staging/releases`. Freeze planning,
+byte determinism, `storage.calcofi.io` redirects and archive thinning
+(`scripts/thin_releases.R`) are in the **`release-objects` skill** — load it before
+cutting, staging or thinning a release.
 
-- **Bytes are deterministic by policy, identity is the row signature.** `export_release_parquet()`
-  writes every table with a unique total `ORDER BY` (`release_sort_keys()`: partition cols, sort
-  cols, PK), `SET threads = 1`, and the pinned `CC_PARQUET_WRITER` options (zstd, row group
-  122880, parquet V1), provenance columns stripped. Even so, `content_hash` (a row-signature hash,
-  `.table_content_hash()`) is the identity; `sha256` is recorded, never compared. Between
-  v2026.08.14 and v2026.08.25 only 52 MB of 2.09 GB was byte-identical because nothing ordered
-  the writes.
-- **`freeze_plan()` decides per object**: `upload` (new content), `copy` (unchanged since the
-  previous catalog → GCS server-side copy, no bytes leave the laptop), `exists` (canonical object
-  already in the store). `upload_release_objects()` executes it; `build_release_catalog()` writes
-  the catalog from the plan. `scripts/verify_release_objects.R {version}` re-checks every
-  object's size/sha256 against the bucket.
-- **Never build a `releases/{v}/parquet/` path by hand.** Resolvers: `calcofi4r::cc_catalog()` +
-  `cc_release_sources()` + `cc_read_parquet_sql()` (1.11.0), `calcofi4py.release_sources()` /
-  `read_parquet_sql()` (0.4.0) — both tested against the same fixture catalogs
-  (`calcofi4r/tests/testthat/fixtures/catalog_{canonical,legacy}.json`, copied into
-  `calcofi4py/tests/fixtures/`; keep them byte-identical). In this repo `libs/publish_netcdf.R`
-  `cc_release_table()`/`cc_release_partitions()`/`cc_release_parquet(table, version)`,
-  `scripts/render_release_views.R` (the PostgreSQL `release.*` views, replacing a `sed` on the
-  version string), and `libs/erddap_deploy.R` (manifest-driven copy into the server's layout)
-  all go through the catalog. A partitioned table is an explicit https file list with
-  `hive_partitioning = true` — no anonymous-S3 glob needed.
-- **Staging a release run** without touching the real prefix: `CALCOFI_RELEASE_PREFIX=
-  ducklake-staging/releases`, `CALCOFI_RELEASE_LAYOUT=compat|canonical`,
-  `CALCOFI_TABLES_PREFIX`; sidecars go to `data/releases-staging/` (gitignored), parquet to
-  `~/_big/calcofi/releases-staging/`, `promote_unreleased()` is skipped, and `test_release.qmd`
-  promotes under the same prefix. `scratchpad`-style detached launches survive the harness.
-- **`storage.calcofi.io`**: `server/caddy/Caddyfile` maps a 404 on a legacy parquet path to a
-  302 at the canonical object via `releases_redirects.caddy`, generated by
-  `scripts/build_release_redirects.R` from every canonical-layout catalog; regenerate and reload
-  Caddy after a release or a thinning run.
-- **Archive thinning** — `scripts/thin_releases.R` (dry-run by default; `--execute`):
-  `thin_plan()` keeps consolidated versions, the promoted one and its predecessor, never a
-  version newer than the promoted one; retires the rest *to* the nearest kept version (writes
-  `retired.json`, removes `parquet/`), sweeps `tables/` objects no kept catalog references,
-  rebuilds `versions.json` (`build_versions_json()`, which stamps `consolidated`/`retired` and is
-  what `release_database.qmd` calls too, so a re-run cannot drop them) and the index pages. It
-  refuses a version pinned as a literal in `docs/`, `db-query/_config.yml` or
-  `server/postgis/init/50_release_views.sql`.
+## Bathymetry artefacts (`gs://calcofi-db/bathymetry/`)
+
+Built by `scripts/build_bathymetry_tiles.py` from the local GEBCO 2025 sub-ice tile;
+`gebco_2025.json` on the bucket describes every artefact and consumers read it,
+nothing hard-codes what the build decided. Not release content. The build steps,
+the two-archive terrain decision, the 1 m encoding, the crop extent and the
+tippecanoe trap are in the **`bathymetry-tiles` skill** — load it before touching
+tiles, the GEBCO crop or a map's terrain/contour layers.
 
 ## The CTD team's PostgreSQL database (working store, not the release)
 

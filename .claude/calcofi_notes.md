@@ -1,9 +1,14 @@
 ## TODO
 
-- [ ] out of date (db-schema: v2026.08.14) as of 2026-08-20:
-  * db-query: v2026.08.11
-- [ ] hash tables like msens COGs, so storing less; virtual ref via storage. to show actual names
-- [ ] for sio_pic-zooplankton, ask Ed about cod end and sample type (ethanol or alcohol) missing fields for matching
+- generic OBIS publish: The plan adds NERC P01, P06 and S11 ids and Darwin Core terms to the registries, and defers a generic OBIS publish to a follow-on. Note below "On OBIS ENV-DATA and eMoF"
+- explorer
+  - [ ] ability to switch color schemes
+  - [ ] ability to change order visibility of data layer wrt to other layers
+  - [ ] but why are datasets not able to be merged together -- that's the whole point of integrating?
+  - [ ] bathymetry contour labels should appear for finer gradients with zoom level
+- [ ] make a card for /explore that supersedes other apps
+- [ ] rename all viz-\*, db-viz-\* repos to app-\*. consider moving apps/\* into own app-\* and rename to apps-other. 
+- [ ] for sio_pic-zooplankton (Linsey), ask Ed about cod end and sample type (ethanol or alcohol) missing fields for matching
 - [ ] check GDrive and GCS sync on server, per [rclone](https://github.com/CalCOFI/server/tree/main/rclone)
 - [ ] check enforcement/flagging of valid_min/valid_max in `release_database.qmd` or better yet in all the individual ingest notebooks (and skills) to flag for data providers
     One thing I found while checking: `release_database.qmd` applies the registry's `valid_min`/`valid_max` **nowhere**. The guard I added lives only in the CTD ingest, so the other 15 datasets have no bounds enforcement at all. That's a separate gap worth closing at release time where it would protect everything — I'd rather raise it than fold it into this release silently. 
@@ -25,6 +30,1956 @@
 - [ ] `ingest_calcofi_ctd-cast.qmd` needs a sync to GCS for just the used CSV files so saved in GCS `archive/`, not just GCS `_sync/`
 
 
+
+## 2026-09-03 email feedback and folding in aspects before DAG rerun with taxon crosswalk
+
+Before we run a full DAG workflow and release a new database as part of the plan:
+
+`.claude/plans/2026-09-02 Taxon crosswalk — ingests stage dataset_taxon, the Aves rule derived from lineage, no dataset arms in calcofi4db.md`
+
+I want to understand what else we can fix based on the following emails:
+
+1. "Attribution to integrated data"
+Erin on datasets to apps and explicit references.
+Need to ensure this appears in the app prominently on any download, even for figures. Probably a good idea to have the opening modal window have the user agree to properly cite datasets before use. Would be nice to have a facility for people to reach out to PIs and share any derived products too, online or in the literature, etc.
+Probably should have functions in calcofi4r and calcofi4py to automatically provide citations based on query and/or given a list of dataset identifiers.
+We do already have a `citation_main` field (eg ingest_swfsc_ichthyo.qmd) in the yaml frontmatter, but should there be date accessed fields automatically created and/or some validation of author, title, year? Are there other `citation` fields that are not `main`? Can we have `license` field too, such as Creative Commons / MIT / Apache / etc?
+
+1. "CalCOFI DMP work update by Sept 2?"
+Ed on UUID primary keys for CruiseId, StationId.
+I think we include with these origina UUIDs with extra provenance columns. We also have a different database structure that doesn't perfectly align with Ed's icthyo dataset, but as he says we should use these UUIDs where available. It already bit us once to use `cruise_key` because that erroneously got keyed to `YYYY-MM` based on year-month of observation, not of the registered cruise (which could for instance have started a month prior). Would we then need to propogate UUIDs to all other fields? Is this a good idea?
+
+1. "Fwd: Input on app to easily find data collected on the CalCOFI platform -- by Aug 28th
+Rasmus responded to all the Questions I posed. 
+
+1. "CalCOFI Dungeness Crab Megalopae Data Deposit -- Files for RDC Review"
+The UCSD Library has not yet minted a DOI, but perhaps we can use a placeholder to their catalog for now.
+This dataset also needs to be revised to exclude the historical samples that were never looked at, so only the ones that were searched for Dungeness crab should be retained.
+
+Also, I am forgetting now what else will be getting updated for this database release since last time, but there were definitely a couple things already in the code.
+
+Finally, I want this next plan to divide and conquer by specifying different tasks to be distributed to agents with sufficient but not excessive intelligence (eg Sonnet High effort, Opus 5 Medium, Fable 5.1 Xhigh, etc). Feel free to break this into different plans for different agents to be run concurrently and/or successively.
+
+Lastly, can we avoid the 1.5 hr ingest of the ctd-cast data and still get everything slotted accomplished?
+
+Also draft email replies at end
+
+---
+
+Everything is written. Recap and the drafts follow.
+
+**What I found in the four threads**
+
+- **Erin (attribution, 09-02)** asks for source-beside-variable, a citation on every downloaded row, a "Cite this data" function, and a Data Sources page. Today 8 of 16 datasets have an empty `citation_main` and only 3 carry a license; nothing checks either. The Explorer's bundle already writes a per-dataset CITATION.md, but figure footers name no dataset and the welcome modal asks for nothing. EDI's cite service, ERDDAP .das globals and NCEI pages expose authoritative citations we can validate against.
+- **Ed (UUIDs, 09-02)** is partly satisfied already: SWFSC station/tow/net UUIDs are embedded in `sample_key` and `cruise_uuid` is on the release `cruise` table. What is missing is a typed `source_uuid` column, a station-occupation crosswalk for other datasets, and a release gate that fails when a key's ship or dates disagree with its cruise row. Re-keying is the wrong answer and the plan says why.
+- **Rasmus (09-01, forwarded today) answered your a–f**. The consequential one is (a): the bottle `R_*` series are interpolated to standard depths, yet the registry marks all six as `is_canonical = TRUE` with no derivation. For (f), the bottle notebook's disagreement table shows 684 rows, but 670 are the DOUBLE `198809.0` formatting trap. The genuine count is 14 cruises, 829 casts, 1953–1989, five on David Starr Jordan, with summer and fall cases.
+- **Crab deposit (08-27): no DOI yet**; the ingest still ships 1,795 never-examined sorting-log jars as `sample` rows. The examined set is 310 subsamples plus 216 sorted tows spanning 1984-05 to 2009-04.
+
+**Can we skip the CTD ingest? Yes**
+
+Every ingest except spatial and ship-ices declares a dependency on ichthyo, so the taxon re-run would make a plain `tar_make()` rebuild CTD for 128 of the run's 211 minutes to produce identical shards. The recipe in WS-F runs only the changed ingests, gates on ichthyo's `cruise`/`grid`/`ship` shard hashes being unchanged in its manifest, then builds the caboose with `tar_make(shortcut = TRUE)`. Nothing else needs CTD: citation fills are read from YAML at release time, `source_accessed` is measured from git, `station_uuid` is computed in the release, and the accepted-flag snapshot is a 600-byte empty parquet untouched since 08-19, so the flag chunk is written but not run. Expected wall time is about 1 h 15.
+
+**Files written**
+
+- Umbrella plan: `.claude/plans/2026-09-03 Pre-release round — …md` (context, decisions, agent table, waves, Q1–Q11).
+- Nine briefs in `.claude/plans_todo/`: A0 (Fable xhigh, citation contract), A1 (Sonnet high, fill citations), A2 (Sonnet high, `cc_cite()`), A3 (Opus medium, Explorer UI), A4 (Sonnet high, other consumers), B (Fable xhigh design and spike, Sonnet impl), C (Sonnet high, crab), DG (Sonnet high, CTD flags plus Rasmus's answers), F (Sonnet high operator). WS-E is the existing taxon plan with models assigned.
+- Email drafts: `.claude/plans_todo/2026-09-03 Email drafts — …md`, reproduced below.
+- Memory pointer saved; the memory index was over its load limit, so I shortened 17 long entries.
+
+Nothing is committed. Your calls are Q1–Q11 in the umbrella; the ones that block wave 1 are Q5 (UUID columns), Q6 (crab placeholder URL) and Q10 (r_* canonical flag).
+
+---
+
+So will these new browser-shaped objects exist in the core database schema, including `obs_bio` and `obs_env` being duplicates of `obs`? In that case should we just use the bifurcated `obs_bio` and `obs_env` instead of also `obs`? It is already big and partitioning is a problem for reading a table in the browser (per DuckDB-WASM's inability to read partitioned parquet natively).
+
+I am wondering if we want to revise our schema, originally conceived in https://github.com/CalCOFI/workflows/blob/main/design_env-bio-consolidation.md. I'm not sure we really considered how much of the OBIS ENV-DATA / extendedMeasurementOrFact (De Pooter et al ,2017) could instead be used -- here are some links:
+- [formatting – The OBIS manual](https://manual.obis.org/formatting.html)
+- [format\\_emof – The OBIS manual](https://manual.obis.org/format_emof.html)
+- [darwin\\_core – The OBIS manual](https://manual.obis.org/darwin_core.html)
+- [Toward a new data standard for combined marine biological and environmental datasets - expanding OBIS beyond species occurrences - PMC](https://pmc.ncbi.nlm.nih.gov/articles/PMC5345125/)
+
+One of the biggest concerns lately is to properly incorporate the DENOMINATOR of effort when reporting biological observation. This is currently woefully absent from the ERDDAP published datasets on erddap.calcofi.io (in contrast to those at https://coastwatch.pfeg.noaa.gov/erddap/search/index.html?searchFor=calcofi).
+
+The @`../docs/db.qmd` should be updated according to the latest practices (including propogationn of UUIDs).
+
+Regarding Questions for Ben, go with your initial recommendations, but only draft emails (no sending).
+
+Reading draft email on attribution reminds me that the Explorer app `@../explore` says in the selection sidebar below the dataset pills "nothing averaged across denominators, datasets or stages", but we DO in fact want to **average across datasets** where denominators and life stages ("stages" is too vague) agree.
+
+For the database citation DOI, let's skip UCSD Library and go with Zenodo for minting since Zenodo can be automated through the Github release of the workflows repository with a tag for the database version, which we also want to fold into this plan.
+
+The db citation should include the 3 principal CalCOFI partners:
+1. Scripps Institution of Oceanography
+2. NOAA’s Fisheries Service
+3. California Department of Fish & Wildlife
+
+When emailing Ed, can we also summarize the most important outstanding questions for his swfsc_icthyo dataset? and note our process flow for data providers with standardized questions. Probably best to do this via a Google Sheet that both he and I can see (and similarly for all dataset Qs). 
+
+---
+
+Done. Here is what changed and the answers to your questions.
+
+---
+
+Ok, I enabled Zendo with initial release and updated README.md of CalCOFI/workflows repo [Image #6]
+How do I kick off all the agents now?
+
+**Your schema questions, with numbers from the staging release**
+
+`obs_bio` and `obs_env` are `obs` exactly in rows and a reshaped superset in columns. The rows match to the unit: 1,255,348 + 25,006,583 = 26,261,931. They add root id, year/quarter/depth bin, units, the qual predicate, the row's own gear and effort, the two canonical densities, effort class and hex7. They drop `sample_key`, `measurement_prec`,`hex_id` and `realm`, and rename `measurement_value` to value. So today the release ships the observation rows twice, 401 MB plus 309 MB of a 2.4 GB release, and the copy carrying the effort denominator is the supplemental one.
+
+I took your instinct and staged it over two releases. This release adds the four missing columns to the pair, promotes both to core, keeps `obs` but marks it deprecated in the catalog, and adds a `views.obs` entry that reconstructs `obs` under its original names. The R and Python `cc_get_db()` and db-query's table resolver create the view, so `FROM obs` keeps working. The next release drops the obs objects. The deprecation window keeps the consumer migration off this release's critical path. DuckDB-WASM's limit is directory listing, not partitioned reads, and the catalog already supplies the file list. The partition axis is what matters: one variable is one fetch under 10 MB, one taxon is one 22 MB file, and obs by dataset key served nobody's question.
+
+On OBIS ENV-DATA and eMoF: the July design already took eMoF as the model for `sample_measurement`, and the core maps one to one. `sample` is the Event core with parent events, bio `obs` is Occurrence with the denominator as `organismQuantityType`, and the three measurement tables are eMoF on events, occurrences and depth events. What is missing is vocabulary, not shape. The ichthyo OBIS export has `measurementTypeID` set to NA. The plan adds NERC P01, P06 and S11 ids and Darwin Core terms to the registries, and defers a generic OBIS publish to a follow-on.
+
+On ERDDAP: the per-dataset observation grain reads `obs` joined to taxon and sample, so it has counts with no effort and no density, while effort sits on a separate sample grain ERDDAP cannot join. Rebuilding the bio grain from `obs_bio` gives CoastWatch parity on every row.
+
+On the Explorer copy: the statistics already pool across datasets that share the chosen life stage and denominator, so "nothing averaged across datasets" is wrong on the middle term. It becomes a copy fix, and the Sources line lists every pooled dataset, which is the attribution consequence of pooling.
+
+Plan changes
+
+- **Umbrella plan** now reads as decided, with Q1–Q11 marked and your two overrides recorded: Zenodo through a tagged GitHub release of this repo, and the citation naming Scripps Institution of Oceanography, NOAA Fisheries, and California Department of Fish and Wildlife. New section "Schema" holds the analysis above.
+- **New briefs** WS-H (three parts: obs as a view for Fable, registries plus the docs/db.qmd rewrite for Opus, the ERDDAP grain for Sonnet) and WS-Q (one Google Sheet per provider, pushed from and pulled back into questions.csv, Sonnet).
+- **Patched briefs**: A0 gains the three-partner citation, .zenodo.json, CITATION.cff and a DOI lookup by tag. A3 gains the averaging copy fix. F gains the tag, GitHub release and DOI step after promotion. Package bump order is now E → A0 → H1 → B.
+- **Email drafts** rewritten: Erin's names Zenodo and the partners, Ed's adds the six ichthyo questions and the shared sheet. All four are at the end of the drafts file. Nothing has been sent.
+
+Two things need you before wave 1 can finish: enable the workflows repo on Zenodo once, and authenticate Google Sheets when WS-Q asks. The deposit zips still need to land in Drive before 26 September.
+
+## 2026-09-02 review PR workflows#77: switch Farallon bird/mammal ingest to ERDDAP
+
+Review https://github.com/CalCOFI/workflows/pull/77. I am concerned that Betty probably clobbered a bunch of past edits by using the File Upload approach and needs some basic training on how to safely use git
+
+---
+
+**Nothing was clobbered this time, but the PR should not merge as is**. The branch was cut from today's main tip, and the net diff to ingest_farallon_bird-mammal.qmd touches only the read and transform chunks that the ERDDAP switch intends to change. Every deletion in the diff is a deliberate rewrite, and Ben's August edits to the front-matter, coverage, and taxon sections all survive.
+
+**The git process is still unsafe, it just got lucky**. The three commits are an upload under the wrong filename, a delete, and a re-upload of the byte-identical file. An upload replaces the whole file with whatever copy is on Betty's laptop. Had main moved between her download and her upload, every intervening edit would have vanished with no conflict and no warning. The commit messages carry no information. A short clone, branch, edit, commit, push session is worth doing, and squash-merging this PR keeps the noise out of history.
+
+**Two blocking defects in the content**:
+
+- **Dropping `itis_id` from the species table silently un-keys every seabird**. Her comment claims taxon resolution reads the metadata registries rather than this table. For this dataset that is wrong. The farallon rows in the measurement-taxon registry number zero, and the override file covers only the mammals and species groups. The bird TSNs come from `bird_mammal_species.itis_id` via `calcofi4db/R/taxa.R:368`, which reads `itis_id`, `is_unidentified` and `include_flag` too. A missing column is filled with NA without warning, so the notebook runs green and every bird ends up with no `taxon_key`. The release gate would catch it, but only after the ingest looked fine.
+- **The notebook was never run**. No sidecar under `data/parquet/farallon_bird-mammal/` changed and nothing in `_output` did. A transect count that grows by a year and a species table that loses six columns would move all three sidecars.
+
+Smaller findings:
+
+- `observation_id` becomes a character column, against the integer *_id convention.
+- Live ERDDAP reads inside a `targets` run break the repo pattern. The cufes ingest downloads the CSV to a cache and archives it to GCS, which makes re-runs reproducible and survives a 503.
+- A stale comment above the cruise-track view still says matching is date-only because of Q01, directly above the new block that reverses it.
+- Q08 plans to emit `time_sec`, which the rewrite drops, and Q04 on bottom depth becomes moot. The questions registry was not touched, and the MEGU gap is noted as a pending question rather than filed.
+- `RELEASES.md` has no Unreleased entry for a source change, a coverage extension to 2022-10, and a species-table schema change.
+- Comment style is verbose and capitalised narration, against the lowercase convention.
+
+I verified independently that the three ERDDAP tables answer on oceanview today with exactly the columns her code expects, spanning 1987-05-02 to 2022-10-19 with 64,421 transects and 87,813 observations. The behavior table really does 404.
+
+A full review comment covering all of this is drafted in the scratchpad and ready to post to the PR as a "request changes" review if you want it posted under your account.
+
+---
+
+Path to draft in scratchpad please?
+
+---
+
+/private/tmp/claude-501/-Users-bbest-Github-CalCOFI-workflows/8ebc46a9-2ae1-4977-8a9a-5f9af7925bd5/scratchpad/pr77_review.md
+
+---
+
+Regarding this PR review:
+
+> **1. Dropping `itis_id` from `bird_mammal_species` silently un-keys every seabird.**
+> The comment says taxon resolution "reads `metadata/measurement_taxon.csv` + `taxon_override.csv`, not this table". That is not the case for this dataset: `measurement_taxon.csv` has zero farallon rows and `taxon_override.csv` covers only the ~30 mammal / species-group codes. The birds' TSNs come from `bird_mammal_species.itis_id` — see `calcofi4db/R/taxa.R` (`.read_cols(con, "bird_mammal_species", c(..., "itis_id", "is_bird", "is_mammal", "is_unidentified", "include_flag"))`)...
+
+Having dataset-specific species lists nested inside an R helper function without even clear paths for editing/udpating seems wildly fragile and confusing. We already have a bunch of species identification helper functions. And we explictitly use `"itis:"` prefix for birds and `"worms:"` prefix for all other taxa, so we need to be very clear about that (probably by looking for `class="Aves"` or similar field, otherwise assume not a bird). With this PR review and updated ingest of ERDDAP source data, can we revise and clean up the process for this and future datasets?
+
+---
+
+Yes, and it is the same cleanup calcofi4db 3.0.0 already did for the core projection, never applied to taxa. I wrote the plan and pointed the PR review draft at it.
+
+What is actually there. calcofi4db/R/taxa.R has a seven-arm switch on hard-coded table names, one per dataset, plus two hard-coded dataset lists for merge priority and override validation. A missing column is filled with NA without a word, which is why Betty's change would have un-keyed every seabird silently. The itis: rule is a flag that only the farallon arm ever sets, from a source boolean, so the same bird in any other dataset would key worms:. Unidentified-class fallbacks and the seabird and mammal groups are code rather than registry rows.
+
+The proposal, in the plan file at .claude/plans/2026-09-02 Taxon vocabulary — one staged shape per ingest…md:
+
+- One declared shape. Every ingest stages taxon_vocab through append_taxon_vocab(), which errors on a missing or unknown column, a duplicate code, or a bad id. The package never learns a dataset's table name again.
+- The Aves rule is derived. A taxon keys itis: exactly when its lineage class is Aves and an accepted TSN resolves, otherwise worms:. The class is already in the lineage cache, so this costs nothing new. The is_bird flag disappears.
+- Ids come from names through the existing resolvers. For Farallon, the ERDDAP species table has names and no ids, so the generic xref resolves them. DataZoo's TSN list is kept as an audit fixture the notebook compares against, not as an input.
+- Registries, not code. Unidentified fallbacks become override rows. Groups move to a new metadata/taxon_group.csv with a class rule, so seabirds and marine mammals are cross-dataset by construction.
+- An ingest-time gate. check_taxon_vocab() fails the notebook when an observed code is missing from the vocabulary, which is what would have caught the MEGU gap.
+
+Five phases, roughly 18 hours. Phases 1 and 2 are the minimum that fixes PR #77 properly. Phase 3 deletes the arms and bumps calcofi4db to 4.0.0 behind a row-for-row parity gate against the promoted release's taxon tables.
+
+Four decisions are yours and are listed at the end of the plan. The one that shapes Betty's work is D7: request changes now, land the helper first, then she rebases her branch onto it with a checklist. That gives her a bounded PR with a real diff at every step, which is a better vehicle for the git session than a lecture.
+
+The review draft in the scratchpad now tells her to hold the itis_id change until the helper lands and what the rebase will look like.
+
+---
+
+Rather than creating a new table `taxon_vocab`, shouldn't you use `dataset_taxon` instead that is already unique by `dataset_key` and `ds_taxa_code` to crosswalk to the globally unique `taxon_key`? How are you missing this obviousness - must I up the effort from Fable 5.1 high to xhigh or can you be more investigative and thorough?
+
+---
+
+You're right, and the miss was mine, not a settings problem. I had build_dataset_taxon()'s output in front of me, saw the release already unions dataset_taxon per shard, and still proposed a second table at the same grain. I also misread a grep hit: the crab ingest's mention of dataset_taxon is an ERD colour list, not a direct write, so my earlier claim that it "writes dataset_taxon directly" was wrong. This pass I verified each claim against the code before writing it, and that turned up a third hard-coded dataset list, merge_taxon_shards(priority = …) in shards.R, that the first draft missed.
+
+The revised plan is at .claude/plans/2026-09-02 Taxon crosswalk — ingests stage dataset_taxon, …md and replaces the first draft. The core change:
+
+- The ingest appends its rows to dataset_taxon itself with taxon_key empty, through append_dataset_taxon(). It errors on a missing or unknown column, a duplicate code, or a bad id. The seven per-dataset tables were only ever unresolved dataset_taxon rows.
+- The package fills taxon_key in place. build_dataset_taxon() becomes resolve_dataset_taxon(), an UPDATE rather than a rebuild, after the existing xref and lineage resolvers run over the staged rows.
+- The Aves rule reads the lineage. A taxon keys itis: exactly when its class is Aves and an accepted TSN resolves, otherwise worms:. The is_bird flag goes away.
+- One additive schema change to the released table: ds_worms_id, ds_itis_id, ds_gbif_id, ds_rank record what the source claimed, beside what the authority says on taxon. That makes the Farallon audit a one-line SQL comparison and is provenance for every dataset. Nothing is dropped.
+- Registries replace code for unidentified-class fallbacks and for groups, and all three hard-coded dataset lists are deleted.
+
+Phasing and the 18.5 hour estimate are unchanged. The PR review draft and my memory note now say dataset_taxon, not taxon_vocab.
+
+Three questions remain yours, listed at the end of the plan. The one with a schema consequence is whether the four ds_* provenance columns land on the released dataset_taxon or stay in a working table.
+
+---
+
+The three questions are still too vague for me to fully understand. It's also not perfectly clear whether all ingest_*.qmd notebooks will be updated accordingly (and hence need to re-run full update) and common names also applied (with preference for icthyo then WoRMS and optional overrides). Since this takes a while, we also need to ensure the full ingest can run on the server, so plan might need to expand requirements (and check Google Drive sync, especially with ERDDAP download first to CSV, GCS upload, all R/Python versions and packages up to date with locally updated git and sync to Github, etc)
+
+---
+
+The plan is rewritten with concrete decisions, an explicit list of which notebooks change and what re-runs, a written common-name precedence, and a server-readiness section measured directly over ssh today. Same path: .claude/plans/2026-09-02 Taxon crosswalk — …md.
+
+Which notebooks change and what re-runs. Ten ingests build taxon shards. Seven of them get the new append_dataset_taxon() call. Three that resolve through measurement_taxon.csv need no edit but re-run for the new columns. The other seven ingests carry no taxa and are untouched. Because a notebook edit never invalidates a target, the ten are invalidated explicitly and the caboose follows. From the last laptop run, that is about 80 minutes. A full pipeline is about 3.5 hours, of which the CTD ingest is 128 minutes.
+
+Common names now have one written order, applied centrally in the release so a name change never needs an ingest re-run: a human choice in the registry, then the ichthyo species list, then WoRMS when it offers exactly one English name, then any other dataset's name, then empty. I put the manual override first rather than last. Confirm or reorder.
+
+The server is not ready for a full run today. Measured facts:
+
+- The rstudio image has calcofi4db 3.4.3 against 3.28.0 locally, and lacks targets, worrms, taxize, quarto, tidyjson, automap, h3jsr, rmapshaper and tarchetypes.
+- Disk has 45 GB free where a full run needs about 75 GB.
+- About 5 GB of RAM is free with the eleven containers up. The CTD ingest needs a measured trial before anyone trusts it there.
+- The nightly Drive to GCS sync works and ran at 02:00 today, but the Shared Drive is missing the cce-lter, cdfw and sio folders that exist on your personal Drive. The pipeline still hard-codes your personal Drive path.
+- The server clone of workflows is a week behind, and your laptop has eight uncommitted files the server would never see.
+- Python is not used by the pipeline at all, so version drift there is out of scope.
+- Your local gcloud auth has expired, which blocks checking whether the service account can write the release bucket.
+
+Six decisions are yours, each stated in the plan with a recommendation and its cost:
+
+1. Add the four source-id provenance columns to the released dataset_taxon. Recommend yes.
+2. Confirm the common-name order above.
+3. Betty does the Farallon phase after the helper lands, or I do it and she reviews.
+4. A dedicated pipeline container plus roughly 100 GB more disk, or run inside the shared rstudio container.
+5. A server run pushes its tracked outputs as a PR you merge, or straight to main.
+6. Finish the Shared Drive migration for the three missing folders. Only you can move them.
+
+Phases are now six, about 27.5 hours of my time. Phases 1 and 2 fix PR #77 properly. Phase 3 is the server work and is the one that needs your disk, Drive and gcloud actions before it can start.
+
+---
+
+Hi @bhuang0022, 
+
+1. **Please stop using this "file upload" in Github.** There is no meaningful message with the commits and I have noticed code chunks getting missed in updates (but not this time), whereas a git pull and merge would explicitly resolve line-by-line differences. Are you getting conflicts when trying to `git pull`? Here are a couple of pointer chapters from the online book [Happy Git and GitHub for the useR](https://happygitwithr.com/):
+- [Chapter 29 Pull, but you have local work](https://happygitwithr.com/pull-tricky)
+- [Chapter 33 Explore and extend a pull request](https://happygitwithr.com/pr-extend.html?q=pull%20request#pr-extend)
+
+1. **Have you been able to render this or another `ingest_*.qmd` notebook to **`_output/ingest_*.html`?** BTW, this output folder is determined by:
+https://github.com/CalCOFI/workflows/blob/3942481cbbe1f0ec6e448b0d0dae8995cb887526/_quarto.yml#L2
+Rendering the notebooks (and therefore running all the code chunks within) is when any real conflicts pop up for further resolving.
+
+1. **Hold off on any edits while I fix resolving taxon.** Lastly, I am realizing these notebooks still rely on dataset-specific "arms" in the calcofi4db R package, which I am going to first remove and then apply generic functions for updating.
+
+PPS Here is the full review of the PR:
+
+The ERDDAP tables are the right long-term source. I confirmed all three (`CAC_FI_SBAS_tr` / `_obs` / `_sp`) answer on oceanview today with exactly the columns this reads, spanning 1987-05-02 to 2022-10-19 (64,421 transects, 87,813 observations), and that `CAC_FI_SBAS_beh` really does 404. Findings, biggest first:
+
+**1. Dropping `itis_id` from `bird_mammal_species` silently un-keys every seabird.**
+The comment says taxon resolution "reads `metadata/measurement_taxon.csv` + `taxon_override.csv`, not this table". Not for this dataset: `measurement_taxon.csv` has zero farallon rows and `taxon_override.csv` covers only the ~37 mammal / species-group codes. The birds' TSNs come from `bird_mammal_species.itis_id` — see `calcofi4db/R/taxa.R`, `.read_cols(con, "bird_mammal_species", c(..., "itis_id", "is_bird", "is_mammal", "is_unidentified", "include_flag"))`. `.read_cols()` fills a missing column with `NA` without warning, and `taxon_key_of()` then returns no key for any bird, so the notebook would run green and the release gate would fail weeks later. `is_unidentified` and `include_flag` feed the same call (unidentified bird → Aves fallback; the include filter). This is the "dataset-specific arm" problem in point 3 above: the fix is on the calcofi4db side first, and the rebase will then be to stage `species` / `scientific_name` / `common_name` from ERDDAP plus DataZoo's TSN as a source-id column, let the generic resolver mint the key, and add the `MEGU` / duplicate `SBIG` / unidentified-class decisions as explicit rows. Checklist to follow with the helper.
+
+**2. Evidence the rewrite works is missing.**
+Nothing under `data/parquet/farallon_bird-mammal/` (the `manifest.json` / `metadata.json` / `relationships.json` sidecars) changed, and neither did `_output/`. A transect count that grows by a year and a species table that loses six columns would move all of them. Include the rendered notebook and the sidecar diffs in the PR.
+
+**3. `MEGU` and the duplicate `SBIG`.** `_sp` lists `SBIG` twice ("Mew Gull" and "Short-billed gull") and has no `MEGU` row, while `_obs` has `MEGU` records. Pre-2021 Mew Gull records are the same bird under the pre-split code (*Larus brachyrhynchus*). Keep one `SBIG` row, add a `MEGU` row with that name, and file the alias as a real `questions.csv` row for Farallon Institute rather than "Q0x (pending)".
+
+Smaller:
+- `observation_id = idnum` is now a character column; the `*_id` convention is integer (`docs/db.qmd`). Use `as.integer(idnum)`.
+- Live network reads inside a `targets` run are not the repo pattern. `ingest_swfsc_cufes.qmd` downloads the ERDDAP CSV to `data/cache/…` guarded by `overwrite`, then `sync_to_gcs()` archives it to `calcofi-files-public`. Do the same here so a re-run is reproducible and a 503 does not take the pipeline down.
+- Stale comment: the `cruise_track` block still says "matched on `date`, not datetime_start_utc, since the source timezone is unconfirmed (Q01)" directly above the new block that reverses it.
+- Q08 (proposed) plans to emit `time_sec` to `sample_measurement`; this drops `time_sec`, and Q04 (`bottom_depth_m` sign) becomes moot. Update `metadata/farallon/bird-mammal/questions.csv` in this PR: mark Q01 answered, adjust Q04 / Q08, add the no-behavior-table question.
+- `RELEASES.md` `# Unreleased` needs an entry: source moves to ERDDAP, coverage extends to 2022-10, species table schema changes.
+- Comments: lowercase, and trim the "CONFIRMED" / "KNOWN GAP" / "Per Ben" narration. The questions registry is where that history lives.
+
+---
+
+Ok, let's update this plan to run on my laptop after all, since the running the workflow DAG for only taxon-related datasets (others are not needed) is only ≈ 1 h 20 min. I read "18 hours" from before, which is what prompted the server run. We do want to eventually move everything to run on the server though, so let's move that part of this plan to its own dedicated `.claude/plans_todo/` folder.
+
+**Q1 · Put `ds_worms_id` / `ds_itis_id` / `ds_gbif_id` / `ds_rank` on the released `dataset_taxon`?**
+
+Perhaps we could move these to a single column (an array or JSON) like `ds_original_values_json` or similar so as to not bloat the columns of the published table?
+
+**Q2 · `common_name` precedence**
+
+Yes to D5: manual choice → ichthyo species list → WoRMS single vernacular → other datasets → empty.
+
+**Q3 · Who does Phase 2 (Farallon)?** 
+
+You do it, Betty reviews.
+
+**Q4 · Server runner and disk.** 
+
+"Recommend a dedicated `pipeline` compose service (same image, `mem_limit ≈ 9 GB`, SA key mounted) and **+100 GB** on the VM (≈ $10/mo)." 
+Yes, for now seperate server pipeline plan.
+
+**Q5 · Where do a server run's outputs go?** The tracked outputs must reach GitHub or the
+
+push straight to `main` with a `[pipeline]` prefix (less ceremony, no review).
+
+**Q6 · Finish the Shared Drive migration** for `cce-lter/`, `cdfw/`, `sio/` (and decide what
+`ucsd_sio 2` and `google_datasets` on the laptop are). Only you can move them; until then the
+server cannot run zoodb, zooscan, dungeness-crab, pic-zooplankton or mesopelagic-fish from the
+mirror (the ones with `libs/download_*.R` can re-download).
+
+Yes, fold this into the server `plans_todo`
+
+---
+
+Both plans are in place.
+
+Taxon plan (.claude/plans/2026-09-02 Taxon crosswalk — …md), now marked decided:
+
+- Runs on the laptop. The ten taxon-bearing ingests plus the caboose are about 80 minutes. The 18 hours was my build estimate, and the plan now says so explicitly.
+- Q1: the four provenance columns collapse into one ds_source_json column on the released dataset_taxon, a JSON object of whatever ids and rank the source supplied, NULL when it supplied nothing. The helper builds it, so no notebook writes JSON by hand, and the Farallon audit becomes a json_extract against taxon.itis_id.
+- Q2: the common-name order stands as written.
+- Q3: I do the Farallon rebase as commits on Betty's branch, so the PR keeps her authorship of the ERDDAP switch, and she reviews the diff.
+- Phases are now four, about 19.5 hours of build time.
+
+Server plan (.claude/plans_todo/2026-09-02 Server pipeline — run the full workflows DAG on the CalCOFI server.md), new folder, marked todo. It carries the full measured requirements table verbatim, the four-step trial sequence, and your three decisions: a dedicated pipeline compose service with 100 GB more disk, outputs pushed straight to main with a [pipeline] prefix, and the Shared Drive migration for the three missing provider folders. Phase A lists the four things only you can do before it can start: the disk, the Drive folders, a fresh gcloud auth login to confirm the service account can write the release bucket, and committing the eight uncommitted files on your laptop.
+
+The PR review draft's item 1 now ends by saying I will take the rebase and ask Betty to review, which matches your point 3.
+
+## 2026-09-01 explore: flip sections plot x-axes nearshore to offshore station #s
+
+In the @../explore/ app flip the x axes of the sectins plot so nearshore to offshore (small to large station numbers) goes left to right like the actual geography of the map
+
+And default to the most recent cruise, not the most numerous obs (1950)
+
+yes, change Cruise lens to most recent too
+
+---
+
+Done — three files changed in CalCOFI/explore, verified in the running app.
+
+Section x axis flipped (src/charts.tsx:302,327)
+
+xs now sorts descending, and the label reads station (offshore → nearshore). Your parenthetical described what was already shipped (30 → 200 left→right); the map-geography rationale is the opposite, so I went with that: a CalCOFI line runs west-south-west off the coast, so on line 90 station 200 is −129.3° (west, left) and station 30 is −117.9° (coast, right). Now 200 → 30 left→right. Applies to both the env section (station × depth) and the bio one (station × year). The view=3d curtain is geospatial and needed nothing — it already is the geography.
+
+Both cruise pickers default to the newest cruise (src/App.tsx:310,331)
+
+They ranked by n_sta, so under a picker labelled "newest first" Sections opened on 1950-09-31CR and Cruises on 2009-04-OIFS. Now cruise_key / t0 descending with n_sta only as a tiebreak — both open on 2026-07-3322.
+
+Worth knowing: the 1950 default meant the anomaly checkbox was always blank there, since the release's climatology starts in 1993. On the new default the anomaly paints properly (July 2026 line 90 reads warm/red against 1993–2013 — right sign). The section itself also goes from a sparse 1950 bottle cast to a dense modern CTD profile.
+
+Verification — npx tsc --noEmit clean; scripts/verify.mjs --only='section|curtain|u4_figures|u0_cruise' all checks passed (10 export figures, the 3-D curtain scene, phone layout, light-theme capture).
+
+
+**Two things to note:**
+- `pmtiles` is in `package.json` but was missing from node_modules; I ran npm install pmtiles (no lockfile change) so the dev server and typecheck could run. Nothing else in the tree changed.
+- To run the app locally you need the dev catalog — `VITE_DATA_URL=https://storage.googleapis.com/calcofi-db/explore-dev-root/ VITE_RELEASE_PREFIX=explore-dev/releases npm run dev`. Without it the app dies on table `obs_env` is not in the v2026.08.25 catalog.
+
+I left the committed reference screenshots under shots/ alone — they're now stale for the section states, and regenerating them means a full verify.mjs run. Say the word if you want that before committing.
+
+---
+
+Now update @../ctd-transects to similarly use station number on x axis going offshore to nearshore left to right to match map
+
+---
+
+This app is built differently from the Explorer: its x axis is a distance ruler in km, and two features depend on that — the GEBCO seafloor silhouette (sampled every 500 m along the line, not per station) and the "Comparable x-axis" mode (shared full-line extent so cruises compare by width). Station numbers currently appear only as hover-able tick triangles along the top.
+
+So "use station number on x axis" has materially different versions here. Let me check with you rather than guess:
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────
+ ☐ X axis
+
+│ ctd-transects plots distance (km) on x, not station number. How should I make it read offshore → nearshore?
+
+❯ 1. Reverse + label stations (Recommended)                 │ Line 90 · 2026-07 · Temperature                │
+  2. Reverse the km axis only     │                                                │
+  3. Station-number axis, like explore                       │     │        (offshore)      (coast)           │
+                                  │     │  ▓▓▓▓▓▓▒▒▒▒▒▒▒▒▓▓▓▓▓▓▓▓████████          │
+                                  │     │  ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▓▓▓▓▓▓          │
+                                  │     │  ░░░░░░░░░░░░░░░░░░░░░░░▒▒▒▒▒▒▒          │
+                                  │ 500 ┴──┬────┬────┬───┬──┬──┬─┬┬┬┬┬───          │
+                                  │       120  100  90  80 70 60 50 40 30          │
+                                  │             Station (offshore → nearshore)     │
+                                  │                                                │
+                                  │   · spacing still TRUE distance (stations      │
+                                  │     thin out offshore) — seafloor correct      │
+                                  │   · Comparable x-axis keeps working            │
+                                  └────────────────────────────────────────────────┘
+
+  4. Reverse + label stations     │
+  5. Reverse the km axis only     │                                                │
+❯ 3. Station-number axis, li│     |     │  ▓▓▓▓▓▓▒▒▒▒▒▒▒▒▓▓▓▓▓▓▓▓████████          │
+                                  │     │  ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▓▓▓▓▓▓          │
+                                  │     │  ░░░░░░░░░░░░░░░░░░░░░░░▒▒▒▒▒▒▒          │
+                                  │ 500 ┴──┬───┬───┬───┬───┬───┬───┬───┬──         │
+                                  │       120 100  90  80  70  60  50  40          │
+                                  │        Station (offshore → nearshore)          │
+                                  │                                                │
+                                  │   · EVENLY spaced — 120→100 drawn as wide      │
+                                  │     as 40→35, though it is ~5x the ocean       │
+                                  │   · seafloor silhouette BREAKS (it is          │
+                                  │     sampled every 500 m along the line)        │
+                                  │   · "Comparable x-axis" becomes meaningless    │
+                                  └────────────────────────────────────────────────┘
+
+Notes: and confirm this is true that CalCOFI projection is not in fact equidistant between stations along a line based on the proj4 definition -- seems surprising to me
+and if that's the case, then we should have both sets of labels on x-axis, for km offshore and station #
+
+---
+
+Done. You were right to push back — the CalCOFI grid is equidistant, and I had it wrong.
+
+Inverting +proj=calcofi along line 90 gives a constant 7.386 km = 3.988 nmi per station unit — 4 nautical miles — with 0.02% spread over 665 km, and it holds to 0.04% against the real occupied cast positions on every consecutive pair. So station number is distance rescaled, and my "evenly-spaced station axis distorts" warning was wrong about the projection. (It's only true of a category axis like the Explorer's, which spaces by index, so 80→90 gets drawn as wide as 30→35.)
+
+That makes your "both sets of labels" free of any trade-off — which is what I built:
+
+public/app.js
+- x axis reversed: offshore left, coast right. Both rulers (Distance offshore and the Comparable Distance along line) flip together, and the GEBCO seafloor and Comparable x-axis are untouched because the axis is still distance.
+- New xaxis2 on top: station numbers as tick labels at each station's true distance, matches: "x" so it stays locked through zoom. The existing tick triangles now ride on it, so they are its ticks — no extra trace.
+- Top margin 44→92 with the plot title pinned to yref: "container"; without that the title and the "Station" label overprinted.
+
+Prose — header tagline, README, and the "What a transect is here" methods section, which now states the offshore-left rule and the 7.386 km/station equivalence with the numbers.
+
+One stale fact fixed while in there: the methods panel claimed "5 m depth bins" while the data ships 10 m bins (depths 0, 10, …, 500) and build_sections.sql:94 documents why 5 m was rejected. The same page's anomaly section already said 10 m, so it contradicted itself. Now 10 m.
+
+Verified in the running app: value + anomaly views, both rulers, both themes, methods panel; scripts/test_resolve_release.py 20/20 pass. On line 93.3's Comparable view the blank where the cruise stopped short now correctly sits at the offshore (left) end.
+
+### TODO: fix open `grid_key-pooling` issue as the `sections-should-key-on-site_key` note
+
+One thing I found but did not touch: a shard's sta label can disagree with the projected station — line 90's "35" is physically at station 37, its "55" at 53, because casts are snapped into 5-unit grid_key cells. The lon/lat is the true position; only the label is coarse. That's the same open grid_key-pooling issue as the sections-should-key-on-site_key note, so I left it alone.
+
+---
+
+Pushed — e27a92c..95c11fe, Pages deploy queued. The Explorer's Sections panel **now reads station number above, distance offshore below**, matching ctd-transects.
+
+**One thing changed beyond adding labels, and it's the important part**: the axis is no longer `type: "category"`. A category axis spaces by index, and CalCOFI stations aren't evenly numbered — 5 units apart inshore, 10–20 offshore — so station 80→90 (74 km) was drawn exactly as wide as 30→35 (37 km). Hanging a distance ruler off that would have printed uneven distances at even pixel spacing, which is worse than no ruler. It's linear now, so both scales are honest. The bio section is where this showed most: it reaches station 200, and 1,292 km were being drawn as though evenly sampled.
+
+Three things bit along the way, each looking like a rendering bug at first:
+
+- **Ticking every occupied station crowds the nearshore end** into an unreadable run — line 90's bio section put 25‑30‑35‑40‑45‑50‑55‑60 in the last fifth of the panel. So the station axis is a real linear axis in station units with its own range, and Plotly ticks it: round numbers, re-thinned to the width it actually has. The phone gets 80/60/40 with no special casing.
+- **An overlaying axis defaults to `tickmode: "sync"`**, pinning its ticks to the primary's, which labelled them 84.2, 77.4, 70.6 — round kilometres read out in stations. It asks for "auto" explicitly now.
+- **The invisible trace that makes the second axis render** had to move to a hidden y-axis; on the real one Plotly padded the autorange to fit its markers and opened a blank band above depth 0.
+
+`matches` can't link the two (different units), so the station range is re-derived from the km range on relayout. Verified exact: zooming to 300–100 km gives station 70.62–43.54, the affine map to the digit, ticks re-thinning, no relayout loop.
+
+Verified env + bio, value + anomaly, desktop + phone, the 3-D curtain (untouched — it's geospatial), and `verify.mjs --only='section|curtain|u4_figures|u4_capture'` all green. README updated with the 7.386 km/station fact and why the axis is linear.
+
+### TODO: now update ctd-transects to use the same auto-ticked station axis
+
+`claude --resume 5cd844c6-b6e6-4afc-8a06-40625cebd843`
+
+> TODO [suggested]: now update ctd-transects to use the same auto-ticked station axis
+
+## 2026-08-31 3D curtain plot
+
+I don't see much of a write up for slice 4 -- where is that or what would that look like? might be
+  worth it if sections could be visualized in a 3D view of the map, but if just adding pitch
+  probably not
+
+---
+
+Everything checks out in the installed stack, so here's the straight answer.
+
+Where slice 4's write-up is (and why it's thin)
+
+It's D28 in the plan plus the Phase-4 row — deliberately one paragraph, because it was spike-gated: "MapLibre setTerrain over the same DEM gives a pitched sea-floor view for free… ships as view=3d only if the deck-alignment test passes." Open question 6 asked whether to spend it at all. Your instinct matches the plan's own skepticism: pitch alone is scenery — the same map at an angle, with a real risk (deck's overlay doesn't know MapLibre's terrain camera) bought for nothing analytical.
+
+What "sections in 3-D" would actually look like
+
+That's a different — and much better — target: the oceanographer's curtain plot, and it sidesteps D28's co-registration risk entirely by going deck-only:
+
+- One deck.gl scene (view=3d inside the Sections lens), no MapLibre terrain at all. deck.gl 9.3 — already installed — ships TerrainLayer, and its elevationDecoder {rScaler, gScaler, bScaler, offset} is literally our custom encoding (65536 / 256 / 1 / −10000): the published terrain PMTiles feed it through the same tiny pmtiles shim the spike proved for maplibre-contour. Sea floor drawn as a real mesh, coloured by our validated depth ramp.
+- The section as a vertical curtain: a SimpleMeshLayer ribbon along the line's track — the already-computed sectionCells grid (or its climatology anomaly) rendered to a canvas texture with the panel's exact colour scale — hanging from the surface down to line_bathymetry's silhouette. Station dots at z = 0, the cruise track on the surface, everything in one camera, so nothing can mis-register.
+- Shared vertical exaggeration slider (~×50–100; 500 m over 700 km is invisible at ×1), view=3d in the URL.
+- What it shows that 2-D can't: the thermocline against the real ridge and basin walls under the line, and — the killer feature — two lines' curtains at once (80 + 90 = a fence diagram of the Bight).
+
+Honest costs: ~2 days, not D28's 8 h (mesh + texture, the shim, camera UX); no CARTO labels in a deck-only scene (fine for an inspector view — a thin coastline from the land polygons we already cached can stand in); desktop-first, phone falls back to 2-D.
+
+Recommendation: close D28-as-pitch (your call, made), reshape slice 4 as "Sections as curtains." Want me to write that into the plan as the new D28 — and spike it?
+
+---
+
+Slice 4 is live — Pages deployed ecfa473 and the production bundle at calcofi.io/explore carries the curtain scene. That completes the entire map-layers plan, executed end to end in this session:
+
+The whole arc, shipped
+
+- Phase 0 spike → measured every open decision (two archives, custom 1 m, igor, ramp at 0 m, no mask, B over B′).
+- Slice 1 — bathymetry artefacts live on gs://calcofi-db/bathymetry/; the re-cut crop reads a depth at every released position; the release streams GEBCO from anywhere and gates unexplained seafloor NULLs; storage.calcofi.io fixed and dated.
+- Slice 2 — the sea floor under every lens, composed style, zero first_paint cost.
+- Slice 3 — all 19 boundary layers with URL-borne symbology and draw order, validated palettes, the Layers card.
+- Slice 4 — sections as curtains: view=3d on an env section hangs the water column in the panel's exact colours over the real (clipped-stage) sea floor, one deck camera, exaggeration in the URL. Try it: calcofi.io/explore/?lens=section&var=temperature&line=90&view=3d.
+
+Final ledger
+
+Pushed: calcofi4r e740347 · calcofi4db 8c39a9f · workflows …3942481 (plan fully measured, all four phases) · explore 6e6fb04·3f48347·ecfa473 · CalCOFI.github.io bb8ac55. Memory updated.
+
+Still open, deliberately: workflows' release_database.qmd/RELEASES.md/CLAUDE.md edits ride uncommitted with your climatology WIP (shared files — commit together); verify-suite debt (u2_prewarm, warm grain_switch); and two fresh follow-ons from slice 4 — fence diagrams (two lines' curtains at once, the natural next step) and the section cruise picker's "newest first" showing 1950-09-31CR on top, which looks like a pre-existing sort bug worth a quick look.
+
+## 2026-08-31 add depth (3d relief / contours) + other layers
+
+In the @../explore app, I want to add a default bathymetry layer  that can toggle between dark and light modes. Perhaps it could be 3D shaded with depth contours and be derived from GEBCO, which we already sample from. Are map image tiles fastest to render or should it be stored as PMtiles (contours)?
+
+I want the ability to be able to toggle it on and off, and add other layers already in the spatial table of the integrated db (and uploaded already to GCS as PMTiles for interactive mapping) for background viewing with some basic symbology editing capability, ie color all the same or pick from a palette and a value (probably name), with transparency and line color thickness.
+
+Write a plan to `.claude/plans` for review.
+
+Does it handle layering, as in user can select multiple layers and order by dragging layer up/down?
+
+---
+
+All edits landed; nothing further is pending.
+
+Now, yes — and here is exactly how the plan handles it:
+
+- Multiple layers at once — always was in scope: layers= is a comma list, and every registry layer can be on together.
+- Order by dragging up/down — added as a first-class control (D24 Draw order, D25, D26):
+  - The Layers card now has an On the map list of the visible boundary layers, top-first (GIS table-of-contents convention: the top row draws on top). Each row is ⋮⋮ drag handle · swatch · name · ▲ ▼ · ×, and expands into the symbology controls. Drag reorders on desktop (a pointer handler like the cards' own drag — no library); ▲ ▼ do the same from the keyboard and on the phone sheet, where a drag would fight the scroll.
+  - Add a layer below it holds the registry groups with checkboxes; checking one puts it on top of the list.
+  - Each layer is inserted as one fill + line pair (its line above its own fill), so ordering is per layer, exactly as the list reads.
+  - The URL carries the order: layers= entry order is draw order, first entry on top; a drag rewrites it, so a shared link reproduces the stacking. Example: ?layers=ca_marine_protected_areas:pal1,noaa_onms_sanctuaries::0.15 draws MPAs over the sanctuaries; dragging the sanctuaries row up flips the two entries.
+  - The legend block lists visible layers in the same order.
+- Two deliberate limits, stated in D24: the sea floor is always the base (not in the reorderable list), and the data — dots, hexagons, regions — always sit above every boundary (deck's canvas is above everything MapLibre draws), so ordering only ever decides boundary-over-boundary, e.g. MPAs above or below sanctuaries — which matters as soon as two translucent fills overlap.
+
+Also updated: Phase 3's deliverables and acceptance (a layers_reorder verify state: drag flips the winning fill at a probed pixel and the URL order), the architecture note for src/layers.tsx, composeStyle() (boundary pairs appended in the list's reverse order), the ask list (item 5), and the estimate 16 → 18 h for slice 3 (~44 h total).
+
+---
+
+Looks great! The only thing I'd change is storing to `gs://calcofi-db/bathymetry/` to `gs://calcofi-files-public/bathymetry/`
+
+---
+
+Done — the plan now hosts the bathymetry artefacts at `gs://calcofi-files-public/bathymetry/` throughout (status line, scale line, D21 Hosting, the architecture diagram, the build script's `--upload` target, Appendix B's `pmtiles://` source URLs — now written out in full — Appendix C, and a new `VITE_BATHY_URL` default in the` basemap.ts` bullet), plus a **Decided (Ben, 2026-08-31)** section recording the review.
+
+One deliberate exception, stated in D21: the R consumers' crop `gebco_2025_calcofi.tif` stays on `gs://calcofi-db/bathymetry/`, because `calcofi4r::cc_bathy()` hard-codes that URL (ctd-viz, ctd-transects and `add_sample_seafloor()` read it). Moving it would be a separate calcofi4r change; it isn't needed for the tiles, which are cut from the full local GEBCO source anyway. Say the word if you'd rather consolidate both under the public bucket and I'll fold that into slice 1.
+
+The memory note and index are updated to match (reviewed, bucket decision, six open questions standing on their recommendations). Next step when you're ready: the Phase 0 kickoff prompt at the end of the plan.
+
+---
+
+Actually switch back to using `gs://calcofi-db/bathymetry/` and update the bathymetry so no depth becomes `NULL` because of sampling obs points from unnecessarily tightly cropped `gebco_2025_calcofi.tif` used by `calcofi4r::cc_bathy()`.
+
+I didn't think `gs://calcofi-db/bathymetry` bucket existed already, becuase when I navigated to https://storage.calcofi.io/ and then clicked on `calcofi-db` it took me straight to https://storage.calcofi.io/calcofi-db/ducklake/releases/. So that should get updated to showing the actual contents of https://storage.calcofi.io/calcofi-db.
+
+---
+
+While you're at it with storage, can you add a datetime stamp to the listings? For instance I want to know when this folder with 18.29 GB and subfolder of /tmp/ was created since I'm guessing it can be deleted: https://storage.calcofi.io/calcofi-db/gcloud/tmp/parallel_composite_uploads/see_gcloud_storage_cp_help_for_details/
+
+---
+
+All three changes plus the timestamp request are in the plan; nothing is left pending. Here's where things stand.
+
+What changed in the plan
+
+Bucket → back to gs://calcofi-db/bathymetry/ everywhere (status, D21 hosting, diagram, --upload, VITE_BATHY_URL default, Appendix B/C). The Decided section records the detour and why: the folder already existed, but the storage root page had sent you past it.
+
+D29 · the crop covers every observation. Measured against the released sample table (v2026.08.25): the current crop excludes 360,568 of 1,461,405 positioned samples — 24.7 % (bottle 271k: its 1949–1987 offshore/Baja cruises out to −164°; ichthyo 60k; PIC 20k; CUFES 8k up to 54.7 °N; dungeness, DIC, euphausiids), and cc_bathy_depth() returned NA for all of them silently. The plan re-cuts gebco_2025_calcofi.tif from the same source to lon −165 → −100 × lat 15 → 56 — every non-ichthyo position; only 5,703 ichthyo far-field/bad positions (lat 0.0, lon −77) remain out — as an Int16 COG under the same name, so ctd-transects/ctd-viz need no change. cc_bathy() gets a size-checked cache refresh and remote = TRUE (/vsicurl/, no download), cc_bathy_depth() warns on off-extent points, and — recommended extra — the full source tile goes up as a streamed COG so the release runs on machines without the 933 MB local file. One important finding: the release itself was never affected — release_database.qmd samples the full tile; its 1,431 NULLs are 1,360 ichthyo positions east of −90° and 71 METS rows with no latitude (ingest questions, not extent).
+
+D30 · storage.calcofi.io. Cause found: scripts/build_storage_index.R sets entry = "ducklake/releases/" for calcofi-db, so the card skips the bucket page (which exists and already lists bathymetry/). Fix: entry = "" + a per-folder note column; releases keeps its header link. Timestamps: the XML listing the script already reads carries <LastModified> — it was never parsed. Every row gets it; folders show modified (newest) and since (oldest). Zero extra requests.
+
+Your gcloud/tmp/… question
+
+Safe to delete. It is 79 orphaned chunks (19.6 GB) from three interrupted gcloud storage cp parallel composite uploads — 17 parts on 2026-02-24, 57 on 2026-03-13, 5 on 2026-06-06 — and nothing has touched them since, so no upload is resuming from them. I have not deleted anything; when you want to:
+
+gcloud storage rm -r gs://calcofi-db/gcloud/
+Rscript scripts/build_storage_index.R      # drops the stale gcloud/ pages
+
+The plan also suggests a 7-day lifecycle rule on gcloud/tmp/ so this can't accumulate again.
+
+Totals now ~51 h (slice 1 grew to 15 h with D29 + D30); the open questions gained a seventh (publish the full-tile COG? — recommended yes). Next step is still the Phase 0 kickoff prompt at the end of the plan.
+
+---
+
+gcloud storage rm -r gs://calcofi-db/gcloud/
+Rscript scripts/build_storage_index.R &
+
+---
+
+Phase 0 is done — numbers and screenshots are in, and the plan's Measured section now carries both halves. Nothing was uploaded or committed, and the published gebco_2025_calcofi.tif was never touched.
+
+What was built (~/_big/calcofi/bathymetry/, via the new workflows/scripts/build_bathymetry_tiles.py)
+
+┌───────────────────────┬────────────────────────────────────────────────────────────┬─────────┐
+│       artefact        │                        mapbox 0.1 m                        │ custom  │
+│                       │                                                            │   1 m   │
+├───────────────────────┼────────────────────────────────────────────────────────────┼─────────┤
+│ sparse (far z0–5 +    │                                                            │         │
+│ core z6–8, 1,430      │ 293 MB                                                     │ 160 MB  │
+│ tiles)                │                                                            │         │
+├───────────────────────┼────────────────────────────────────────────────────────────┼─────────┤
+│ core (z0–8) / far     │ 280 / 25 MB                                                │ 150 /   │
+│ (z0–5)                │                                                            │ 18 MB   │
+├───────────────────────┼────────────────────────────────────────────────────────────┼─────────┤
+│ + OSM land mask       │ 293 MB (Δ 0.07 %)                                          │ —       │
+├───────────────────────┼────────────────────────────────────────────────────────────┼─────────┤
+│ contours z0–10        │ 43 MB                                                      │         │
+│ (30,808 tiles)        │                                                            │         │
+├───────────────────────┼────────────────────────────────────────────────────────────┼─────────┤
+│ D29 crop COG,         │ 129 MB — reads 6,311 / 0 / 983 m at the three check points │         │
+│ −165→−100 × 15→56,    │  (= source); identical to the published crop on all 5.3 M  │         │
+│ Int16                 │ overlapping cells                                          │         │
+└───────────────────────┴────────────────────────────────────────────────────────────┴─────────┘
+
+Round-trip decode of 10 random z8 tiles is exact to each encoding's step. One build trap: tippecanoe's -j zoom filter silently drops integer-typed attributes ("mismatched type in comparison") — ele/level are written as doubles.
+
+**What the browser said** (worktree `~/_big/calcofi/explore-bathy`, branch `spike/bathy-layers`, shots in `shots/bathy{,_v1}/`)
+
+- Tiles at MAP_HOME: 4 DEM + 4 contour tiles = 2.1 MB (1.7 MB custom); relief in ~310 ms after load.
+- first_paint before → after: cold 414 → 507, env 411 → 339, phone 559 → 427 ms; across 32 bathy-on states median 334 ms vs 242–334 off — no regression. ?bathy=off matches today's pixels exactly.
+- One sparse archive: no. MapLibre never fetches a parent as a fallback; a missing child stays loading for ever (map never idles) and the far field is blank at z6+. Two archives work (far tile overzooms under a z7 view).
+- Shading: multidirectional/basic add an ambient wash on flat ground — land included (luminance 62 vs 42). igor (or standard) is the crisp one.
+- Ramp bug found by the pixels: the transparent stop at +0.5 m painted all land (clamped to exactly 0) the water colour; fixed in the branch (transparent at 0). On dark, ending on CARTO's water colour makes a dark rim on shelves < 50 m — end on the shallow colour instead.
+- OSM land mask: with the ramp fixed, indistinguishable at z11 (shore probes within 2 units, both themes) → no mask recommended.
+- B′ maplibre-contour: reads the PMTiles through a getTile hook on the main-thread LocalDemManager (worker route can't), 125–235 ms/tile, mapbox encoding only → feasible, but B stays primary.
+- Theme flip re-adds the layers but re-fetches tiles (what D22's composed diff avoids); z5 contours are busy over the abyssal plain (4,051 features) — consider level 3 only below z6.
+
+Left for Ben (before slice 1)
+
+Method (rec. igor) · dark ramp's shallow end · mask (rec. none) · B vs B′ (rec. B) · encoding (rec. custom 1 m unless B′) · two archives (a finding, not a choice). Uncommitted: the script + plan in workflows, the spike branch in the worktree. The verify.mjs warm run fails on HEAD too when the states are skipped (welcome card) — pre-existing, noted in the plan.
+
+---
+
+Looks good! The only thing about igor images is that the contours seem to have too much contrast in dark mode, but about right in light mode. This bathy layer is meant to be visible but not draw attention away from the plotted data
+
+---
+
+Agreed — under igor the plain goes near-black (18,25,36), so the same rgba(150,190,220,0.3) line that is quiet on light becomes the brightest thing on dark. Rather than guess a value, I'll add a contour-alpha knob to the spike and shoot dark igor at 0.3 / 0.15 / 0.10 (home and z9) so slice 2 starts from a chosen number, then record your pick in the plan.
+
+---
+
+Let's also look at this as v2, since that is much more likely to become the new theme than v1. I'm just noticing that selected theme does not carryover into the shared url, maybe by design?
+
+---
+
+Calibration round done — everything is in the plan for your pick before slice 1.
+
+**What this round produced** (`shots/bathy_v2/`, built with `VITE_BRAND=v2`)
+
+- **Contour contrast on dark (igor)**: shot at line alpha 0.3 / 0.15 / 0.10 (+ 0.15 with 0.7× width) at home, z7 and z9. 0.15 is my recommendation — the shelf, canyons and the z9 500 m labels still read, but the abyssal ripple drops well under the dots; 0.10 goes near-silent in the plain at the cost of the shelf. Light stays at 0.3 as you had it (a 0.2 variant is in the shots if you want symmetry).
+- **Legibility check**: the Hexagons lens over the calibrated layer, both themes — the hex fill covers the relief completely wherever data exists; the sea floor only shows around the survey's margins.
+- v2 changes only the chrome (same CARTO styles), so all the v1 measurements carry over. One note: v2 light with relief opacity 1 reads more saturated next to the white/navy chrome — worth trying ~0.8 when the ramps are tuned in slice 2.
+
+**The theme-in-URL question — a gap, not design**
+
+README.md line 35 already claims the URL carries the theme, but toUrl only echoes an incoming ?theme= (state.ts:181); the header toggle (App.tsx:161) never writes sel.theme, so a toggled theme is missing from share links. The fix is one line — setSel({ theme }) in the cc:theme listener — with one consequence to decide first: per the brand contract, a link's ?theme= persists onto the recipient's fleet-wide cc_theme cookie, so every shared Explorer link would also set their theme everywhere. Accept that (URL = whole view, as the README says) or drop the param from toUrl and fix the README. I left it out of the spike branch; it slots into slice 2's URL work.
+
+**Where everything stands**
+
+Plan (.claude/plans/2026-08-31 Explorer map layers …): Measured now has build side, browser side, and this calibration; the Decided section records tonight's feedback. Slice-2 defaults it proposes: **igor · contour alpha 0.15 dark / 0.3 light · relief opacity 0.7 dark / ~0.8–1 light · ramp a with transparent at 0 m and the dark shallow end re-ended on the shallow colour · two archives · custom 1 m · no OSM mask · B (archive) contours**. Uncommitted as before: the build script + plan in `workflows`, the spike branch in `~/_big/calcofi/explore-bathy`; nothing uploaded; preview server stopped.
+
+---
+
+Slice 3 is live — Pages deployed 3f48347 successfully and the production bundle at calcofi.io/explore carries the boundary-layers code. The whole map-layers plan is now executed through slice 3:
+
+What shipped tonight, end to end
+
+- Phase 0 spike → measured decisions: two archives not one sparse, custom 1 m encoding, igor shading, ramp transparent at exactly 0 m, no OSM mask, contours 0.15 α dark.
+- Slice 1 — gs://calcofi-db/bathymetry/ live (terrain core+far, contours, the re-cut gebco_2025_calcofi.tif, the full-tile COG, gebco_2025.json); calcofi4r 1.16.0 (cc_bathy self-refreshing/remote=/warning — 0 NA at every released position); calcofi4db 3.27.0 (/vsicurl/ seafloor + the NULL-by-cause release gate); the D30 storage index with dated rows.
+- Slice 2 — the sea floor under every lens, composed style, bathy=/bathyo=, Layers card, no first_paint regression; cards refreshed on calcofi.io.
+- Slice 3 — all 19 registry layers drawn from the _spatial PMTiles with symbology and draw order in the URL (layers=, first on top), drag/▲▼ reorder, one-colour or validated by-name palettes (pal1–3, six-checks on both map surfaces), legend block, hover, the Regions-lens outline rule and its now data-driven layer list; calcofi4db@8c39a9f (build_spatial_layers() sidecar) wired into the release, the dev catalog and the bundled fallback.
+
+Pushed: calcofi4r e740347 · calcofi4db 8c39a9f · workflows 1bd2730+39c0874+7e8be9d · explore 6e6fb04+3f48347 · CalCOFI.github.io bb8ac55.
+
+Left open, on purpose: release_database.qmd / RELEASES.md / CLAUDE.md edits sit uncommitted beside your climatology WIP in workflows (they share files — commit together); the two pre-existing verify failures (u2_prewarm stale selector, warm grain_switch) are a suite-cleanup item; slice 4 (true 3-D) remains the optional 8-h spike — the plan's open question 6 — whenever you want to spend it. Try it live: calcofi.io/explore/?layers=noaa_onms_sanctuaries:pal1,noaa_maritime_eez.
+
+## 2026-08-31 ctd-transect vs explore - sections discrepancies
+
+Explore why the transect products look so different between:
+  https://calcofi.io/explore/?lens=section&var=temperature&line=90&anom=1&cruise=2026-07-3322&map=-1
+  22.0125%2C27.9792%2C5.1 [Image #1]
+  and
+  https://calcofi.io/ctd-transects/?line=90&cruise=2026-07-3322&var=temperature_ave&mode=anomaly
+  [Image #2]
+
+  The ctd-transects shows massive warming and explore hardly any. I know the climatic periods are
+  different, but is that the only explanation? I want to make sure methods are rigorous and data
+  accurate
+
+---
+
+The theme toggle doesn't propagate to the share URL — it's a genuine gap, not intentional, and a one-line fix exists, but note it would also set the recipient's fleet-wide theme per the persistence contract. I'll leave it out of the throwaway branch for now and move on to the v2 build with the contour-alpha knob.
+
+---
+
+Short answer
+
+No — the baseline period is the smallest of the differences. The two apps agree on the physics: recomputed from the v2026.08.25 release, line 90 in July 2026 is +1.0 to +1.4 °C warm in the upper 50 m and +0.5–0.6 °C warm at 200–500 m under every baseline I tried, including explore's own. What differs is how each app paints and bins it, and there are two real bugs and one shared data-handling problem.
+
+The recomputed numbers (line 90 × 2026‑07‑3322, mean anomaly per depth band)
+
+┌─────────┬──────────────────────┬─────────┬──────────────┬─────────────┬─────────────────────┐
+│         │     explore def      │ same,   │ 1993–2013,   │ 1993–2013,  │ ctd‑transects def   │
+│  band   │   (1949–2026, all    │  July   │  all months  │    July     │ (1993–2013, July,   │
+│         │ months, bottle+CTD)  │  only   │              │             │        CTD)         │
+├─────────┼──────────────────────┼─────────┼──────────────┼─────────────┼─────────────────────┤
+│ 0–49 m  │                +1.25 │   +1.00 │        +1.37 │       +1.35 │               +1.42 │
+├─────────┼──────────────────────┼─────────┼──────────────┼─────────────┼─────────────────────┤
+│ 50–99 m │                +0.51 │   +1.00 │        +0.56 │       +1.18 │               +1.18 │
+├─────────┼──────────────────────┼─────────┼──────────────┼─────────────┼─────────────────────┤
+│ 100–199 │                +0.33 │   +0.52 │        +0.30 │       +0.59 │               +0.61 │
+│  m      │                      │         │              │             │                     │
+├─────────┼──────────────────────┼─────────┼──────────────┼─────────────┼─────────────────────┤
+│ 200–500 │                +0.55 │   +0.55 │        +0.56 │       +0.63 │               +0.64 │
+│  m      │                      │         │              │             │                     │
+└─────────┴──────────────────────┴─────────┴──────────────┴─────────────┴─────────────────────┘
+
+Changing the window (1949–2026 → 1993–2013) moves the surface by 0.1 °C. Changing bottle+CTD → CTD only moves it by <0.1. So explore should be showing roughly the same warm section as ctd‑transects. Here is why it doesn't look that way:
+
+1. Explore's anomaly colours are inverted (bug)
+
+explore/src/charts.tsx:308 — colorscale: "RdBu", reversescale: p.anom. plotly.js's built-in RdBu runs blue → red ([0,"rgb(5,10,172)"] in the bundled plotly.min.js), so reversescale: true makes positive = blue. Your screenshot confirms it: the colorbar reads +2 at the blue end, −2 at the red end. The blue upper layer in explore is the warm anomaly; the red blob at 50–100 m around stations 55–60 is the cold core (−1.6 °C), which ctd‑transects shows as the small blue patch at ~200 km, 50 m. Same feature, opposite colour. Compounding it, Plotly's RdBu has a wide grey mid-band, while ctd‑transects' RAMP_DIV_DARK pins neutral to the panel colour and saturates fast — so +1.3 °C looks vivid in one and washed out in the other. Explore also has no labelled contours. One-line fix: an explicit [[0, blue] … [1, red]] ramp (ideally the same one ctd‑transects uses).
+
+2. Explore's climatology pools all months — it is a seasonal-cycle map, not an anomaly (method)
+
+sql/section_clim.sql averages every cruise in the year-slider range, no month matching, no min‑n, and includes the target cruise. On line 90 the surface runs Jan 15.2 / Apr 15.3 / Jul 18.3 / Oct 18.5 vs an annual mean of 16.8 °C, and at 50–100 m the sign flips. Consequences at line 90, upper 50 m:
+
+┌─────────┬──────────────────────┬─────────────────────────┐
+│ cruise  │ explore (all months) │ month-matched 1993–2013 │
+├─────────┼──────────────────────┼─────────────────────────┤
+│ 2025‑01 │                +0.09 │                   +1.18 │
+├─────────┼──────────────────────┼─────────────────────────┤
+│ 2026‑01 │                +1.23 │                   +2.24 │
+├─────────┼──────────────────────┼─────────────────────────┤
+│ 2026‑04 │                +0.96 │                   +2.42 │
+├─────────┼──────────────────────┼─────────────────────────┤
+│ 2026‑07 │                +1.25 │                   +1.35 │
+└─────────┴──────────────────────┴─────────────────────────┘
+
+July happens to be where the two nearly agree at the surface; it under-reports the 50–100 m warmth by ~0.7 °C (the +0.51 vs +1.18 row) and exaggerates the cold core. In winter/spring it hides 1–1.5 °C of warming outright. It also means "anomaly vs climatology (1949–2026)" silently changes whenever the user moves the year slider. ctd‑transects' definition (station × calendar month × 5 m, 1993–2013, n ≥ 3, cruise excluded by construction) is the defensible one and is already documented as mirroring calcofi4r::cc_climatology().
+
+3. Both apps key "station" on grid_key, and nearshore cells hold 2–4 real stations (data handling, both apps)
+
+assign_grid_key() is ST_Intersects … LIMIT 1 into cc_grid polygons; st30-ln90 is a ~2,350 km² box that contains 90.30, 90.28, 90.27.7 (SCCOOS) and 88.5/30.1, all occupied every cruise since 2004 (st35-ln90 holds 90.35 + 90.37). On this cruise:
+
+- explore's "station 30" averaged four casts 15–30 km apart (surface 19.96 / 19.30 / 18.28 / 18.27 → 18.87 °C), knocking ~1 °C off the inshore surface anomaly; its climatology blends a station mix that changes over time (90.32 in 1959–84, the SCCOOS pair since 2004).
+- ctd‑transects' QUALIFY … ORDER BY downcast, datetime keeps whichever of the four the ship visited first — 90.30 this time, by luck of the track. Its 1993–2013 baseline is one arbitrary cast per cruise per cell in the same way.
+
+sample.site_key (090.0 028.0) carries the true station and is in the release. Sections and climatologies should parse line/station from it; grid_key belongs to map/hex aggregation. (This also explains explore's "580 observations" vs my 588 — the 8 missing are the 510 m bin, fine.)
+
+### TODO: fix ctd-transects / explore - ingest on site_key (not grid_key)
+
+What I'd do, in order
+
+1. explore charts.tsx: explicit diverging ramp, red = warm; consider a fixed symmetric range per variable (autoscaled ±max makes every cruise look equally moderate) and labelled contours.
+2. explore section_clim.sql: match the cruise's calendar month (or quarter — the slice already has it), pin the window to a stated reference, add HAVING count(DISTINCT cruise_key) >= 3, exclude the target cruise. Better still, ship one climatology table (station × month × depth × var) in the release so explore, ctd‑transects and ctd‑viz subtract identical numbers instead of maintaining three implementations.
+3. both apps + ingest: key section stations on site_key, not grid_key.
+
+I saved the Plotly RdBu direction and the grid-cell/site_key finding to memory. I didn't change any code — say the word and I'll open issues on explore/ctd-transects or make the fixes.
+
+---
+
+fix 1 & 2 (including the single climatology); will do 3 later
+
+---
+
+Done. Both fixes are in place across four repos, tested, and verified in the browser; nothing is committed (your call per repo below).
+
+What changed
+
+1. Explore's colours — explore/src/charts.tsx: an explicit RAMP_DIV (ctd‑transects' exact five stops, neutral = the panel colour) replaces Plotly's "RdBu"+reversescale; range is symmetric about 0 (zmin/zmax = ±max|z|). Red is warm again.
+
+2. One climatology, shipped in the release
+- calcofi4db 3.26.0 — build_climatology() (R/climatology.R): mean per dataset × grid_key × calendar month × 10 m floor depth_bin × measurement type, 1993–2013 (stamped on every row), kept where ≥ 3 distinct cruises contribute; partitioned by measurement_type like obs_env; sort key registered; test-climatology.R pins every rule (window, month, floor bins, cruise floor, qual predicate, per‑dataset rows, n‑weighted pooling ≡ pooled mean, exportability). NEWS entry. Full suite green.
+- workflows — release_database.qmd builds it in browser_objects (with a stopifnot on the window), adds it to core_keep/core_spec/ERD colours; release_tables.csv, release_columns.csv, relationships_cross.csv (FKs to grid/dataset/measurement_type) describe it; test_release.qmd gains three contract queries; RELEASES.md # Unreleased and CLAUDE.md document the contract. Both notebooks parse.
+- ctd-transects — build_sections.sql reads __TBL:climatology__ and moves to 10 m floor bins (its 5 m bins over the thinned series were built from RDP inflection points in every off‑grid bin — station 60, July: 14.27 °C between 15.39 and 15.04); resolve_release.py inlines climatology_fallback.sql (same definition) for a release that predates the table, with tests (20/20 pass); prose in app.js/index.html/README updated. Rebuilt locally against v2026.08.25: 896 shards, 100 % baseline coverage (was 98 %).
+- explore — sql/section.sql carries the cast's month; sql/section_clim.sql reads the climatology objects for the variable's member types, pooled by clim_n, untouched by the year/season/depth filters; App.tsx fetches them per variable and disables the toggle on a release without the table; README paragraph.
+- calcofi4r 1.15.0 — cc_climatology() returns the release table when present (source = "release"), else computes the identical definition; min_n → min_cruises; cc_transect_section() uses 10 m floor bins. Full suite green.
+- The explore‑dev catalog now carries climatology (768,880 cells; explore/scripts/dev_climatology.R), so pushing explore deploys the fix today. (The GCS edge caches catalog.json for an hour — I set it no-cache; the live site may take up to an hour to see it after your push.)
+
+Verified: explore now shows line 90 / 2026‑07 as a warm section with the blue cold core at 50–100 m off stations 55–60; its plotted anomalies match the rebuilt ctd‑transects shard (st 80 @ 50 m: +3.45 vs +3.58; st 60 @ 50 m: −0.95 vs −0.97). The remaining station‑30 difference is item 3.
+
+For you
+
+- Commit/push: calcofi4db, calcofi4r (install both), workflows, explore, ctd-transects (include the regenerated public/data/, or let CI regenerate it — CI will use the fallback until a release ships the table).
+- Next release ships climatology; until then ctd‑transects' CI computes the same numbers via the fallback.
+- Heads‑up: R was upgraded to 4.6.1 on 8/29 and its library is nearly empty (no devtools/arrow/targets); everything still lives under 4.5‑arm64 — I ran all R work through a 4.5 launcher. A plain Rscript -e 'targets::tar_make()' will fail until packages are reinstalled into 4.6.
+- Item 3 (key sections on site_key) remains open, noted in RELEASES.md and CLAUDE.md.
+
+---
+
+commit and push both and all the repos, install necessary R packages for workflows to work
+
+---
+
+I'll do three things: commit + push the five repos (only the files from this work — the other session's _output/, .claude/calcofi_notes.md and the map-layers plan stay untouched), then populate R 4.6's library by mirroring what 4.5 has (CRAN via pak, GitHub remotes by their recorded origin, the two CalCOFI packages from the just-pushed source), and finally smoke-test the pipeline under 4.6.
+
+Al five repos are pushed and in sync with origin/main. The CRAN install of 317 packages is running (5 of the original 322 are no longer on CRAN), so I'll wait for the install log to finish rather than poll repeatedly. · summarized
+
+Setting dependencies = TRUE was pulling in every package's Suggests (tensorflow, torch, keras, rgl, etc.), adding hundreds of unnecessary extras that weren't there in 4.5. I'm restarting with just the default Depends/Imports/LinkingTo and monitoring the log in the background.
+
+---
+
+### R 4.6 libraries updated
+
+All done.
+
+Pushed (all on main, each even with origin/main)
+
+┌───────────────┬──────────────────────────┬────────────────────────────────────────────────────┐
+│     repo      │          commit          │                        what                        │
+├───────────────┼──────────────────────────┼────────────────────────────────────────────────────┤
+│ calcofi4db    │ ca82dd6 3.26.0           │ build_climatology() + sort key +                   │
+│               │                          │ test-climatology.R + NEWS                          │
+├───────────────┼──────────────────────────┼────────────────────────────────────────────────────┤
+│ calcofi4r     │ de98062 1.15.0 (+ the    │ cc_climatology() reads the release table; 10 m     │
+│               │ pending 1.14.2 a8057d9)  │ floor bins; min_cruises; tests                     │
+├───────────────┼──────────────────────────┼────────────────────────────────────────────────────┤
+│ workflows     │ 4380218                  │ release builds climatology; registries, FKs, ERD,  │
+│               │                          │ 3 contract queries, RELEASES.md, CLAUDE.md         │
+├───────────────┼──────────────────────────┼────────────────────────────────────────────────────┤
+│ explore       │ f64d011                  │ explicit red‑warm ramp; month‑matched anomaly from │
+│               │                          │  the release table; dev_climatology.R              │
+├───────────────┼──────────────────────────┼────────────────────────────────────────────────────┤
+│ ctd-transects │ 54918d5                  │ reads __TBL:climatology__ (fallback for older      │
+│               │                          │ releases); 10 m floor bins; 896 rebuilt shards     │
+└───────────────┴──────────────────────────┴────────────────────────────────────────────────────┘
+
+Both Pages deploys ran green at 15:07 UTC: calcofi.io/ctd-transects already serves the new baseline block (min_cruises: 3, 160,729 cells, 100 % coverage) and calcofi.io/explore's bundle carries the new ramp and climatology loader. One caveat: the GCS edge is still handing the old explore‑dev catalog.json to plain requests (the pre‑upload cache entry, ≤ 1 h; I set the object Cache-Control: no-cache so it won't recur) — until it expires, the live Explorer shows the anomaly toggle disabled; a cache‑busted fetch already returns the catalog with climatology.
+
+R 4.6 library
+
+R was upgraded to 4.6.1 on 8/29 with an almost empty library, so Rscript/targets from a shell were broken. I mirrored 4.5's library into 4.6: 317 CRAN packages (binaries, < 1 min), 11 GitHub packages, and calcofi4db 3.26.0 / calcofi4r 1.15.0 from the pushed source — 187 → 516 packages. Verified under plain Rscript (4.6): both packages load and targets::tar_manifest() parses the full pipeline (25 targets, ingest_* → release_database → test_release → publish_* → deploy_consumers); Quarto CLI 1.8.25 is present.
+
+Not carried over (none used by the workflows): ncdf4.helpers, PCICt, plogr, WikidataQueryServiceR, WikidataR (gone from CRAN), r-arcgis/arcgis (repo moved), climdex.pcic.ncdf (build failed), and four stray local installs (`docs`, `extractr`, `msens`, `obisindicators`). One thing to expect: CRAN's roxygen2 is now 8.1.0 (4.5 had 7.3.3), so the first devtools::document() in any package will rewrite NAMESPACE in its multi‑line style and bump RoxygenNote — harmless, just noisy.
+
+What's next
+
+- The next database release ships climatology for real; until then ctd‑transects' CI computes the identical numbers through the fallback.
+- Item 3 (key sections on sample.site_key, not grid_key) is still open and documented in RELEASES.md / CLAUDE.md.
+- Untouched in workflows: the other session's _output/*, .claude/calcofi_notes.md and the map‑layers plan file.
+
+## 2026-08-31 explore time log scale
+
+Add option to change the scale to log (and/or maybe log10) scale for the time series mean+-se. I would prefer to see the original values in the y axis, but to ensure user percieves log scale it could be done in regular increments so horizontal axis lines are more condensed towards top
+
+---
+
+Done and pushed — explore 58e940c, verify green, Pages redeploying both /explore/ and /explore/v2/.
+
+What you get
+
+- A log chip beside the strip's mode toggle, visible only in mean ± se. Clicking it switches the y axis to log10 drawn the way you asked:
+  - Original values on the axis — decade labels (0.1 · 1 · 10 · 100), no exponent notation; the axis title reads "mean per 10 m² (log)".
+  - Minor gridlines at one even linear step (~8 to the series max, 1-2-5 rounded), so the lines visibly bunch toward the top — the perceptual cue that the scale is compressed.
+- Zeros are handled honestly: a zero-filled mean has no logarithm, so it drops to the axis floor (half a decade below the smallest positive mean) instead of vanishing as a gap, and the hover always shows the true value (mean 0 ± se) from customdata, never the clamped y. A series with no positive values falls back to linear. The chip's hover tooltip explains all of this.
+- Works at both LODs (year and month bins) and in the folded strip; the toggle is session state like the mode itself (the strip mode isn't URL state either), so shared URLs are unaffected.
+- verify.mjs gained u6_log (asserts the "(log)" axis title after toggling); the full check passes.
+
+On sardine larvae it's a good demo: the 1950s–60s plateau around 5–20, the 1980s–2000s recovery to the hundreds, and the surveyed-but-zero years (1982, 2020) reading as drops to the floor rather than as missing data.
+
+## 2026-08-30 /explore: status (uptime) and usage (analtyics)
+
+The status and usage links for the Explorer are not yet live:
+  - [status.calcofi.io/history/explore](https://status.calcofi.io/history/explore)
+  - [Page not found · GitHub Pages](https://calcofi.io/analytics/explore/)
+
+So has Google Analytics been logging usage of calcofi.io/explore?
+
+---
+
+Both links are live; the causes were mundane:
+
+What was wrong
+
+1. Neither registry change had been pushed. uptime 4455a571 (the check for https://calcofi.io/explore/) and analytics bf54a70 (the registry entry + page stub) both sat on local main, ahead of origin. I rebased them onto the bots' newer commits (the analytics conflicts were only in the auto-refreshed data/usage/*.json; I kept origin's) and pushed.
+2. The analytics entry looked in the wrong GA4 property. The Explorer's tag is calcofi4r::cc_ga_html("explore"), which stamps the apps measurement id (G-VV117EV9ZT), but the registry filed explore under property: site (calcofi.io's G-0HVK8TDMCF), so the refresh found nothing and wrote an empty stub (has_data: false). Refiled under apps (f5e48db) and re-ran the refresh.
+
+So yes — GA4 has been logging the Explorer
+
+Since the tag went in on 2026-08-29 (3d7813d), and the first page views are from 08-28 (the dev deploy). The refreshed page now shows 28-day totals of 5 users · 11 sessions · 169 page views · 243 events, including the D17 custom events — export ×6, feedback ×4 — and an average engagement of 6 min 20 s. Four of the five users are geolocated to Italy, so most of this is presumably you. ctd-transects (also a static app on calcofi.io) is filed under site and does have data (77 sessions), so its tag must be the site snippet — no change needed there.
+
+- https://calcofi.io/analytics/explore/ → 200, numbers rendering.
+- https://status.calcofi.io/history/explore → renders "explore · Up · 100.00% · last checked 9:52 PT". One thing to know: curl reports 404 for every history page on that site (db-viz-hex too) — the Sapper export only prerenders /, and GitHub Pages serves upptime's 404.html, which client-routes to the page. Browsers show it; link checkers won't like it. If that matters (uptime tooling, check_brand.py), the fix is on the upptime side (prerendering history routes), not in our config.
+
+Also pushed earlier this turn: the /brand/ and /brand/v1/ index pages (dca685f, 575c7b0).
+
+## 2026-08-30 icons
+
+Let's jigger the icons for more intuitive design, consistency and artistic form.
+https://calcofi.io/brand/v2/icons/ [Image #13]
+
+When using the **water surface**, can you something like the wavey form of [fontawesome's ship](https://fontawesome.com/icons/classic/solid/ship)? 
+
+- The `realm-env` could continue with having three of these **water surface** symbols stacked.
+- So `lens-sections` would have that **water surface** and lines down with dots indicating where sensor or bottle measurement was made. 
+- And `lens-cruises` could have not only **water surface** but done as a profile (vs head on) and something to make it look more like a research vessel, like an A-frame stern crane, eg [research vessel](https://www.shutterstock.com/image-vector/research-vessel-glyph-icon-rescue-ship-2705136105).
+- The `lens-regions` is the right idea with a polygon and vertices, but the vertices are too big and squere-like. The shape is also too much like a mouth shape. Instead here are examples of polygon icons with smaller vertices and more abstract shapes:
+  - [Polygon Icons & Symbols](https://www.flaticon.com/free-icon/draw-polygon_12355988?term=polygon&page=1&position=2&origin=tag&related_id=12355988)
+  - [Big Image - Polygon Png Icon - Free Transparent PNG Clipart Images Download](https://www.clipartmax.com/middle/m2i8d3i8H7K9b1A0_big-image-polygon-png-icon/)
+- `cat-whale` is a total fail. Here are some alternatives:
+  - [Whale Icon - Free PNG & SVG 1156124 - Noun Project](https://thenounproject.com/icon/whale-1156124/)
+  - [Whale Icon - Free PNG & SVG 51177 - Noun Project](https://thenounproject.com/icon/whale-51177/)
+  - [Whale Icon - Free PNG & SVG 8297704 - Noun Project](https://thenounproject.com/icon/whale-8297704/)
+
+Please feel free to improve any others and call on any SVG design skills as available and needed
+
+---
+
+I see https://calcofi.io/brand/v1/icons/, but not https://calcofi.io/brand/v1/
+
+---
+
+Both pages are live now (dca685f, 575c7b0):
+
+- https://calcofi.io/brand/v1/ — v1 never had an index.html, only README.md, which GitHub Pages copies as a file but doesn't serve as a directory index; icons/ had one, hence the asymmetry. It now has a specimen page in the style of v2's: the .cc-header chrome, the contract in one breath, the release chip with the paste-in markup, a token table computed live from theme.css (both themes, contrast against --bg and --panel), the category/lens icon row with a link to the full sheet, and the file table. Header links: icons · README · v2 (proposed).
+- https://calcofi.io/brand/ — a small index: v1 (in force) and v2 (proposed, decision 2026-09-08) with links to each specimen, icon sheet, README and the v2 previews.
+
+One thing the v1 page makes visible that the README never did: in the light theme, v1's --accent (4.0:1 on bg, 3.8 on panel), --warn (3.3 / 3.1) and --muted on panel (4.4) are below WCAG AA — 5 of 20 pairs. Dark passes everywhere. v2's tokens were built to clear 4.5 (42 pairs, min 4.56), so that's another point for the 9/8 decision rather than something to patch in a frozen v1.
+
+
+## 2026-08-30 fix time mean slivers, cruise gantt
+
+For @../explore/, the time series seems off
+  https://calcofi.io/explore/v2/?lens=station&taxon=worms%3A217452&stage=larva&den=per_10m2
+  [Image #10]
+
+And the cruises are way too faint to read with slivers too small on hover to capture. How else can
+  we represent cruises effectively? Or is it just applying more legible style to this gantt chart?
+  [Image #11] and default on bottom before expansion: [Image #12]
+
+---
+
+Nothing more to fetch — here is the full picture.
+
+A. The gaps are in the data, and two kinds are being conflated
+
+Running years.sql locally against the same obs_bio object the site reads (sardine worms:217452, larva, per_10m2), the missing years are 1970, 1971, 1973, 1976, 1982, 2020:
+
+┌──────────┬────────────────────────────────────────────────────────────────────────────────────┐
+│   year   │                           what the ichthyo dataset holds                           │
+├──────────┼────────────────────────────────────────────────────────────────────────────────────┤
+│ 1970,    │ no ichthyo tows at all — the triennial era (1969 / 72 / 75 / 78, plus one-cruise   │
+│ 1971,    │ years 1974 and 1977)                                                               │
+│ 1973     │                                                                                    │
+├──────────┼────────────────────────────────────────────────────────────────────────────────────┤
+│ 1976     │ no ichthyo (only cce-lter euphausiids)                                             │
+├──────────┼────────────────────────────────────────────────────────────────────────────────────┤
+│          │ 3 cruises, 702 tows, zero sardine rows — and two of those cruises carry only 2–3   │
+│ 1982     │ taxa (1982-02-31JD 568 tows / 3 taxa, 1982-12-31JD), i.e. partially sorted;        │
+│          │ 1982-03-90PN has 91 taxa and still no sardine                                      │
+├──────────┼────────────────────────────────────────────────────────────────────────────────────┤
+│ 2020     │ 1 cruise, 102 tows, 101 taxa, no sardine larva row (eggs are there, from cufes)    │
+└──────────┴────────────────────────────────────────────────────────────────────────────────────┘
+
+The reason 1982/2020 look identical to 1970: swfsc_ichthyo obs is positive-only — 0 zero rows of 482,250 (cufes, by contrast, has 38,929 zero egg rows for sardine alone). Two consequences beyond the gaps:
+- "mean per 10 m²" is the mean over positive tows (that is why 2001 reads 1,192).
+- a surveyed-but-empty year cannot be told from an unsurveyed one.
+
+The fix is not zero rows in obs (× n_taxa). sample_root.parquet is already loaded by the engine, so years.sql / cruise.sql / hex.sql can take the denominator from tows-sampled-per-bin: a sampled-empty year becomes 0, a no-survey year stays a gap, and the stat becomes a real density. I did not change this — it is a D8-denominator decision — but until then the axis label should say "mean of positive tows". The two 1982 cruises with 3 taxa are a questions.csv row for ichthyo.
+
+B. The slivers were a Plotly fill bug — fixed
+
+Plotly builds a tonexty fill path by joining the trace's segments with a straight L, so the band between lo and hi drew a wedge across every gap (1965→2010 is the one you circled); a year with n = 1 has se = NULL and broke the band mid-run too. customdata for the hover n was also built from the unpadded rows, so it was misaligned after the first gap.
+
+explore/src/charts.tsx:123 (uncommitted, npm run build clean): the band is now one fill: "toself" polygon per contiguous run (Plotly closes each null-separated segment on its own), an se-less point gets a zero-width band, and customdata is built beside the gap nulls. Verified on a local dev server against the explore-dev catalog — the band now stops at 1969, 1972 and 1975 are lone points, no wedges:
+
+fixed (/Users/bbest/.claude/jobs/449dad54/tmp/years_mean.png)
+
+Cruises: the Gantt is faint by construction, not just by style
+
+Measured on this slice (473 cruises):
+- Width: median cruise is 8.2 days → 0.55 px on the 78-year axis; p90 is 17 d → 1.1 px; 54 cruises have t0 = t1 (one tow-day) → 0.06 px. The 0.5 px black outline eats most of that. No styling makes a half-pixel bar hoverable.
+- Colour: viridis over the 5–95 % quantiles of the mean, but the distribution is heavy-tailed (q05 3.7, median 35, q95 564), so the median cruise sits at 6 % of the ramp — dark purple on navy. n as opacity (floor 0.45) fades it further. The yellow ones you can see are the top few percent.
+- Folded: 140 px / 35 lanes = 3 px lanes. Unreadable regardless.
+
+Lanes-by-ship also answers "which ship when" — a fleet-history question — rather than the data questions this panel is for (when was sampling, what was caught, pick a cruise).
+
+Recommendation: a cruise calendar, not a Gantt. Cells at year × month (x = year, y = Jan–Dec), one cell per cruise, coloured by the stat on a rank/log ramp with a floor away from the background, the picked cruise outlined in the brand yellow, ship + dates + n in the hover, click picks:
+
+Dec  ·  ·  ·  ▪  ·  ·  ·  ·  ·  ·  ·
+Oct  ▪  ▪  ·  ▪  ·  ·  ▪  ▪  ·  ▪  ▪
+Jul  ▪  ▪  ▪  ·  ·  ▪  ▪  ▪  ▪  ▪  ▪
+Apr  ▪  ▪  ▪  ▪  ·  ▪  ▪  ▪  ▪  ▪  ▪
+Jan  ▪  ▪  ▪  ·  ·  ▪  ▪  ▪  ▪  ▪  ▪
+    1950 51 52 53 54 55 56 57 58 59 60
+
+Why it works: every cruise is a ≥ 10 px target even folded (140 px / 12 = 11 px rows, 23 px columns), the quarterly pattern / triennial 1970s / 2020 gap read at a glance, and it is the shape oceanographers already read on CalCOFI's own coverage figures. When zoomed under ~15 years (the existing month LOD), the cells give way to the real t0–t1 spans on a date axis with the codes — at that scale a 3-week cruise is ≥ 40 px, which is exactly where the current Gantt starts to work. If you still want ship lanes, keep them for that zoomed/maximized view only, with a 3 px minimum bar width in pixels and no n-alpha.
+
+If you'd rather just restyle the Gantt: min bar width in px (recomputed on relayout), rank-based colour (percentile, not 5–95 % of a heavy tail), drop the opacity-by-n and the black outline, lane guide rules — the maximized view becomes legible, the folded one does not.
+
+State
+
+- explore/src/charts.tsx changed, built, not committed (say the word and I'll commit/push — Pages redeploys on push).
+- Not done, your call: the zero-filled denominator from sample_root (A), the cruise calendar (~2–3 h), a questions.csv row for the 1982 partially sorted cruises.
+- Saved to memory: the Plotly fill-across-gaps trap and the ichthyo positive-only finding.
+
+---
+
+Yes to ALL your suggestions! Then commit and push. Does https://calcofi.io/explore/v2/ also get automatically updated too I hope?
+
+---
+
+Done — all three changes are live, and yes, calcofi.io/explore/v2/ updated with the same push.
+
+What shipped
+
+explore 242bf45 (Pages run succeeded in 59 s; both /explore/ and /explore/v2/ are built by the one workflow — v2 now serves the new bundle):
+
+1. Zero-filled bio slice (`sql/slice_bio.sql`). For any dataset in the slice whose release rows carry no zeros (ichthyo, euphausiids, bird-mammal, mesopelagic-fish), every tow with ≥ 1 row of any taxon gets a value = 0 row per life stage the dataset records that taxon at — obs_id NULL, density columns 0 where the tow's own rows can standardize, NULL otherwise. Datasets that ship their own zeros (cufes, zooscan, zoodb, phyllosoma) are untouched. Because it's in the slice, every lens template, the bundle SQL and the R/Python parity are unchanged; the bundle README names the rows. Sardine larvae 2001: 1,192 → 197 per 10 m²; 1982 and 2020 now read 0 while the no-survey years (1970–76) stay gaps.
+2. The mean ± se band is one closed polygon per contiguous run (the slivers are gone), and the hover's n is aligned past gaps.
+3. Cruises = a year × month calendar. One cell per cruise at (year, month of first sample) spanning the months it ran; cruises starting the same month share the column; colour is the stat on a log ramp over its 5–95 % quantiles with a floor so nothing sinks into the background. Under 15 years the cell becomes the true date span; codes appear at ≥ 40 px; click picks; ship is in the hover. Every cruise is a ≥ 10 px target even folded. Month-resolved x ticks are whole years (month starts under 2.5 years) — a .0f on a half-year tick was repeating its neighbour. verify.mjs U6/P6: all 14 states pass.
+
+workflows f024f9a: metadata/swfsc/ichthyo/questions.csv Q09 (proposed) — is an absent row a zero or an unsorted tow? Cites the two 1982 cruises sorted for 2–3 taxa and the 6,907 of 61,104 tows with no row at all. Plus a dated addendum on the 2026-08-29 explorer plan. Your pre-existing uncommitted _output/* and .claude/calcofi_notes.md changes were left alone.
+
+Worth knowing
+
+- Picker pill counts now include the zero rows (e.g. "ichthyo larva 55,301"), and the Cruise-lens series shows many cruise means at 0 — both are the truth, not regressions.
+- The two 1982 anchovy-only cruises count as sardine zeros until Ed answers Q09; the questions_email.qmd draft will carry the [PROPOSED] answer.
+
+---
+
+Whoah, I'm actually unsure now if we should count all those zeros. It seems to greatly inflate the numbers comparing before [Image #15] and after [Image #16]. Can you think deeply about this? I meant it to only fix a wierd plot, not inflate records
+
+---
+
+Confirmed in the app: 6,158 observations in view, 1,262 excluded, pills 5,906 / 7,420, the observations bars back to the original picture — only the density statistics see the zeros. Pages is rebuilding (33319626734, same config as the last two green runs).
+
+**The zeros — what I changed back, and why the rest stays**
+
+You were right that the counts should not move. I had let the zero-filled rows count as "observations", which turned the observations bars into an effort chart and the pills into tow counts (6,158 → 52,741). That was never the intent. Now (explore f9660da):
+
+- **Counts are records**. Every template's n is count(obs_id) — a zero-filled row has no obs_id (checked: no real row in obs_bio or obs_env has a NULL one) — so the observations bars, the pills, "in view", "excluded" and the map dot sizes read exactly as before. n_samples is the tows sampled, zero ones included, so the hover reads "2003: 158 observations, 686 samples". The picker reports n_filled beside the records and the bundle README says "N observation rows (+ M zero-filled tows)".
+- **The statistics keep the zeros**, and I'd argue they must: CalCOFI's own larval abundance indices are per-tow means over all tows, and a mean over positive tows only is a known upward bias. Sardine larvae in 2001 read 1,192 per 10 m² before; the per-tow mean is 197. So the one number that changed by a lot changed downward, from inflated to right — and 1982 / 2020 (surveyed, no sardine) now read 0 instead of looking like years with no survey.
+
+Two things I did not do, both your call: a `positive-only` toggle in the DENOMINATOR group (URL-addressable, so both readings could be cited), and the provider question Q09 still stands — the two 1982 cruises sorted for 2–3 taxa are counted as sardine zeros until Ed says otherwise.
+
+**Icons** (explore 81a1ad6, CalCOFI.github.io 7d6f88c → calcofi.io/brand/v2/icons/)
+
+All seven drawn to the FontAwesome ship-wave idiom you asked for, as single filled paths from a committed generator (explore/scripts/icon_glyphs.py → src/icon-paths.ts → build_icons.mjs), checked at 16/24/40 px on both themes:
+
+- realm-env — three stacked wave ribbons
+- lens-sections — the surface, three sensor lines, bottles as dots
+- lens-cruises — a research vessel in profile on the water: raked bow right, bridge forward, A-frame leaning out over the stern
+- lens-regions — an irregular pentagon, thin edges, small vertices (a regular hexagon read as the Hexagons lens, so it's deliberately lopsided)
+- cat-whale — head left, peduncle curving up to raised flukes, eye, pectoral fin
+- cat-zooplankton — a copepod with the first antennae swept out; cat-krill — a krill in profile with tail fan, antennae and swimming legs
+
+Brand v1 was not regenerated (node scripts/build_icons.mjs ../CalCOFI.github.io/brand/v1 does it if you want the fleet to pick these up before the 9/8 decision). The explorer itself renders inline, so both /explore/ and /explore/v2/ show them now.
+
+---
+
+Yes, please add a `positive-only` toggle in the DENOMINATOR group with explanation on hover over an info icon (or something similar that keeps the visual real estate consumed low, but explanation high)
+
+And go ahead with populating a brand/v1. Was curious about that.
+
+---
+
+Icons. Make the `lens-regions` have open circle vertices to differentiate from `lens-sections` with closed circles. The `cat-whale` needs some improvement, especially on the raised flukes.
+
+---
+
+All pushed. Recap of this round:
+
+positive-only toggle — explore 24551fc
+
+- URL: zeros=0 (default is zero-filled, so the URL stays clean unless you switch). One filter line in _filters.sql — ({{zeros}} OR obs_id IS NOT NULL) — so every lens, the year strip, the depth strip and the exported SQL/bundle carry it.
+- UI under the denominator line, one row: a positive-only chip with a small switch, a one-line hint beside it ("47,881 sampled tows with no catch count as 0" / "mean, median and se over tows with a catch only"), and a ⓘ whose hover holds the full explanation (why positive-only datasets bias a mean high, what a zero-filled tow is, that counts never include them, that CUFES/ZooScan/ZooDB/phyllosoma read the same either way). Legend and select summary append "· positive tows only" when it's on; the bundle README records the mode.
+- Verified ?zeros=0 reproduces the old positive-tow picture (no slivers) and the toggle round-trips the URL; verify.mjs has u6_positive_only. Its one "failure" was the brand-token lint catching a literal #fff fallback in my switch CSS — removed.
+
+Icons — explore 81a1ad6 → 53d13a4, CalCOFI.github.io 7d6f88c → 1de28bf
+
+- brand v1 is now regenerated too (aeae1f0), so the fleet's cards and sites that load brand/v1/icons.css pick the new glyphs up on their next load.
+- lens-regions has open ring vertices (edges stop at the ring so the stroke can't refill the hole); lens-sections keeps closed bottles, so the two no longer rhyme.
+- cat-whale has broad twin flukes with a notch on a peduncle that rises more vertically — reads at 16 px beside the fish and bird.
+- All bespoke glyphs are reproducible from explore/scripts/icon_glyphs.py.
+
+Nothing left open from your messages. Pages is deploying 53d13a4; both /explore/ and /explore/v2/ get it.
+
+## 2026-08-30 rebrand to SIO
+
+The CalCOFI main organizational website at https://calcofi.org has a website revamp underway by the same team that manages https://scripps.ucsd.edu (SIO), who will now also support calcofi.org. Per Mark's recent message (subject: "CalCOFI.io product renames & themes"), the calcofi.io website and products should be rebranded according to the SIO style. I'm unclear how all the whitespace would work for the apps. As much as possible we should place this content in the brand/ folder, probably as v2. I would like to continue having a dark and light theme, but perhaps we default to the light theme to match SIO. Write a plan to `@.claude/plans` for rebranding to the SIO look and feel, starting with the calcofi.io landing page and the new `@../explore` app.
+
+---
+
+Plan written: `.claude/plans/2026-08-30 Rebrand to the SIO look — brand v2 (light default), the calcofi.io landing page and the Explorer first.md` (42 KB; memory note saved).
+
+What I found
+
+- The brief, from the thread (CalCOFI.io product renames & themes): Mark wants "connective tissue to the brand" with "creative latitude on the apps" — and says himself he doesn't like "the boring, all white, blocky style"; Erin wants fonts and some colours aligned but "feel[s] pretty strongly" dark mode matters for the data tools; you asked for both themes with light default and everything in brand/ as v2.
+- What "the SIO look" actually is — I measured the live template in Chrome rather than trusting its stylesheet, which matters: the old CSS says gray #484949 text and #006A96, but the rendered 2026 template is on the UCSD palette — navy #182B49 body text at 18 px, blue #00629B, one yellow #FFCD00 CTA (8 px corners, not square), Sand #F5F0E6 / navy bands at 40 px padding, borderless 14 px-radius cards, Refrigerator Deluxe condensed uppercase headings + Brix Sans, a 210 px white fixed masthead, 1170 px column. So "blocky" is the full-width band layout, and the whitespace is a reading layout, not a property of the palette or type.
+- Two constraints worth knowing: Brix Sans is MyFonts-licensed and self-hosted by SIO (can't hotlink); the UCSD brand site names Source Sans + Teko as the free substitutes. And the brand's own Cool Gray fails WCAG AA on its panel gray (4.2:1) at UI sizes — the plan derives two text tones and says so.
+
+What the plan proposes
+
+- brand/v2/ with the same file names and semantic token names as v1, so every product migrates by changing one URL — the payoff of v1's "consumed by URL" decision. Light default; dark becomes navy (UCSD navy panels — SIO's own band colour), so Erin's dark is on-brand and one click away, remembered fleet-wide as today.
+- Your whitespace question gets a mechanism: data-cc-scale="app" switches the same tokens to a dense scale (13 px / 4 px / 44 px header) — pages get SIO's rhythm, apps get SIO's tissue (type, palette, header anatomy, buttons, links, a yellow selection highlight in the explorer). No app is re-laid out.
+- A new horizontal CalCOFI lockup for the header; Source Sans 3 + Teko self-hosted (CORS verified for the feedback capture); a theme.js persistence rule so a v1 default can't leak into v2 pages during rollout.
+- Preview in place before anything flips: calcofi.io/brand/v2/ (a specimen page with both themes and contrast table), calcofi.io/v2/ (Jekyll second layout) and calcofi.io/explore/v2/ (a second Vite build) — ~3.5 days, then show 9/3, decide 9/8, flip, then the fleet (~4–5 days, per-product table).
+- Ten decisions to confirm, including two for Mark to take to the SIO team: whether their Brix Sans license can cover calcofi.io (one-file swap if so), and the UC San Diego lockup — recommended in a footer partner strip (NOAA · CDFW · SIO), not the masthead, since CalCOFI is tri-partite. Erin's renames/IA are designed for (tagline:, section split) but not decided here.
+
+Next: build Phase 0–2 so the specimen and the two previews exist before 9/3 — the kickoff prompt is at the end of the plan.
+
+---
+
+All three phases are done, pushed, and live as previews. On the browser question: two tools ran here, each where the repo already uses it — puppeteer-core driving your installed Chrome (headed) for the explorer's verify.mjs / card_shots.mjs, which need WebGL for the map, and shot-scraper (Playwright's headless Chromium) for check_brand.py and the quick DOM/font/cookie probes, because that is what the checker itself uses. Both worked throughout; the failures you may have seen flash by were my own test conditions (a stale-context check, a regex), not the browser.
+
+What's live (nothing flipped; every default still v1)
+
+preview: https://calcofi.io/brand/v2/ — the contract + specimen
+commit: CalCOFI.github.io 440c254, b987e32
+verified: check_brand.py --url ok at both themes · fonts load · 42 text/ground pairs, min 4.56:1, all
+AA (the specimen computes the table from theme.css itself)
+────────────────────────────────────────
+preview: https://calcofi.io/v2/ — the landing page on v2
+commit: 32ebc29
+verified: checker ok · Lighthouse a11y 100 both themes · phone width clean
+────────────────────────────────────────
+preview: https://calcofi.io/explore/v2/ — the explorer on v2
+commit: explore 4cbdda1, 7c4db12, 3fab508
+verified: verify.mjs v2_* states pass; full suite 100 states; /explore/ itself still on v1
+
+Fresh-context probe on both live previews: theme: light, ccTheme.version: "2", data-cc-scale: app (explorer), Source Sans 3 loaded, lockup present, no cookie written.
+
+Departures from the plan, all measured
+
+- --muted is #66686a, one step darker than the plan's #6e7072 (4.38:1 on the Sand band).
+- Font files are SourceSans3-VF.woff2 etc. (no brackets in URLs); 72 KB total, not ~200.
+- The long programme name under the wordmark was drawn and rejected — illegible at 36 px; the lockup is mark + wordmark (scripts/build_lockup.py, HarfBuzz-shaped, outlined).
+- 11 px labels → 11.5 px via --fs-sm in the app scale, decided from the specimen's rail sample.
+- Added --cc-green/--cc-red for the explorer's go/no-go states; prose links carry a faint underline (WCAG 1.4.1); demoted cards dim the shot, not the text (both forced by Lighthouse).
+
+Two traps worth knowing (saved to memory)
+
+- html-to-image silently drops an <img> inside <picture> — the lockup vanished from the feedback capture. Now two <img>s + a media query, and the verify state counts the mark's yellow pixels in the capture.
+- theme.css's .cc-header .cc-home img { display:block } (0,2,1) outranks a two-class hide; the phone swap needed img.cc-logo-mark selectors.
+
+Things I found and did not fix (unrelated to the brand)
+
+- verify.mjs u2_prewarm fails on v1 too — stale since U7c's picker opens on the category tree.
+- --timing parses as undefined (needs --timing=1) and its "warm" leg times out on both builds. I measured first paint directly: v1 2,090–2,322 ms, v2 2,079–2,280 ms (3 cold loads each) — within noise.
+
+Left
+
+The ten decisions for 9/8 (ask Mark about the Brix Sans licence and an SIO-supplied lockup); then the flip (landing default.html ← v2, explorer VITE_BRAND default), Phase 3 (calcofi4r 1.15.0 first, it gates the Shiny apps) and Phase 4 (checker reports version + light default). The execution log is appended to the plan (774b35a).
+
+---
+
+The draft is saved on the existing thread (reply to your 8/29 message; to Mark, cc Erin and Betty), not sent. Open Drafts in Gmail to add the four screenshots where the dashed boxes are:
+
+1. calcofi.io — light (default) — https://calcofi.io/v2/?theme=light
+2. calcofi.io — dark — https://calcofi.io/v2/?theme=dark
+3. Explorer — light (default) — https://calcofi.io/explore/v2/?theme=light&tour=off
+4. Explorer — dark — https://calcofi.io/explore/v2/?theme=dark&tour=off
+
+For 3 and 4 you already have ready-made captures at 1200×750 from this session: explore/shots/v2/explore_v2_light.png and explore_v2_dark.png (the hexagon view, same framing as the calcofi.io card). For 1 and 2 a quick browser screenshot of the top of /v2/ works, or I can shoot them with shot-scraper at whatever size you like.
+
+What the email says, briefly: both asks are met at once — SIO's colors, fonts, lockup and light default as CalCOFI's brand kit, with dark kept first-class and now navy rather than gray; three preview links (landing page, Explorer, the style guide); two things for Mark to ask the SIO web team (the Brix Sans license, a lockup in their font); and the five plain-language decisions for 9/8. No jargon, no version numbers.
+
+---
+
+What does "CalCOFI lockup in their font" mean?
+
+---
+
+"Lockup" is the graphic-design term for a logo's fixed arrangement of mark + wordmark — the symbol and the name set together in a specific font, size and spacing so they always appear as one unit. SIO's masthead uses one: the "UC San Diego | Scripps" image is a lockup.
+
+CalCOFI never had a horizontal one. The existing logo is the yellow rosette with "CalCOFI.io" stacked above it, which at 32 px in a header reads as an app icon, not a masthead. For v2 I drew a horizontal lockup — the rosette beside the word "CalCOFI" set in Source Sans 3 Extra Bold, outlined into the SVG so it needs no font installed:
+
+- https://calcofi.io/brand/v2/logo_calcofi_h_light.svg (navy wordmark, for white)
+- https://calcofi.io/brand/v2/logo_calcofi_h.svg (white wordmark, for navy/dark)
+
+"In their font" means: SIO's official typefaces are Brix Sans and Refrigerator Deluxe, which are licensed, not free — Source Sans 3 is the free stand-in the UC San Diego brand guide itself names. If the SIO web team's designer set the same wordmark in Brix Sans, the CalCOFI header would match the calcofi.org masthead exactly, and since the lockup is just an SVG file, dropping theirs in is a file swap with no code change.
+
+So the sentence is a low-cost ask: since they're already building calcofi.org for free, would they also hand us a "CalCOFI" wordmark in their typeface. If you'd rather not add that ask to the email, I can cut it to just the font-license question.
+
+## 2026-08-30 explorer: more UI cleanup
+
+Here is more UI cleanup for the Explorer app @../explore/.
+
+- drop links in upper right: query schema docs; mv release to right
+- Share: zoom NOT included vs "this view, folds and zoom included"
+- [ ] Feedback
+    - [ ] map extent not captured in URL (per Share comment above)
+    - [ ] annotate img
+        - [ ] Text not working
+        - [ ] Only 2 colors - add hot pink
+    - [ ] embed img in email?
+- [ ] Where is download images/svg/csv for the Map pane
+- [ ] DENOMINATOR
+    - [ ] too complicated to show initially - should show collapsed
+    - [ ] what about showing std_haul_factor? This is important to Ed Weber, curator of icthyo dataset. How does that metric compare with n/10m2 or n/100m3 or raw count? See note from previous session on this:
+> my first version tested std_haul_factor alone, which silently misreported manta tows as unstandardized — they standardize by volume, not haul factor. Fixed by testing "gear known AND some effort measure present," which covers both branches without naming a gear code. That's the kind of thing hardcoding 'MT' would have hidden.
+
+Generally, can we reduce the clutter, especially in left sidebar, perhaps by defaulting to collapsed Filters and Export?
+
+---
+
+Done. Everything on your list is shipped and verified; here's the recap.
+
+What changed — CalCOFI/explore @ 2b02804
+
+Header — query · schema · docs links dropped (About's credits keep them); the release chip + version picker moved to the right beside the tools. The phone's ⋯ menu is just About · Feedback.
+
+Share / map extent — the "zoom" in the old hint was the year strip's zoom (yview=); the map's extent was never in the URL, so Copy link and feedback reports reopened at the home view. Now map=lon,lat,zoom is written on every settled pan/zoom (absent at the home view) and reopens there. The hint says what the link carries: selection, filters, map extent, folds and the years' zoom.
+
+Feedback / annotator
+- Text tool was dead — root cause: the input mounted and focused inside pointerdown, then the browser's own mousedown moved focus to the canvas and the input blurred empty. Fixed with preventDefault() on placement, a key so a second placement remounts, and Done painting the pending text itself.
+- Third colour: hot pink #ff2d95 (no viridis dot wears it).
+- Email embeds the screenshot inline — calcofi4r 1.14.1 (005529d): cc_feedback_script() sends inlineImages with <img src="cid:shot"> linked to the view URL, gated on the Drive copy; Drive link kept. Test added (30 expectations green). You need to re-paste the regenerated Code.gs into the Apps Script to pick it up.
+
+Map export — a ⬇ beside the status chip: PNG (map + legend at 2×, stamped, floating cards excluded) and CSV (what the lens draws: station/hex/region summary, or the samples along a cruise track). No SVG — the map is WebGL; the menu title says so.
+
+Denominator — collapsed to one line (which is in force · datasets · excluded); click opens the radios with formulas. On std_haul_factor: it is not a fourth denominator — it's the multiplier per 10 m² already applies (density.sql: count × std_haul_factor ÷ prop_sorted). So Ed's metric is the first radio, now labelled as such, plus a note: standard haul factor = 10 × tow depth ÷ volume strained, carried per tow as obs_bio.std_haul_factor, kept in the download bundle. The ⚠ pill rule from the last session is untouched.
+
+Clutter — Group is now a disclosure; FILTERS and EXPORT start folded (folded FILTERS still shows 1990–2005 · Q1 Q2 · …; EXPORT says data · code · share); the DuckDB footer sentence is gone. The tour expands what its steps need.
+
+Verified
+
+tsc clean; verify.mjs new u7_* states (header, folded denominator + formulas, filters summary, map= written and reopened, map PNG 1452×1250 / CSV 1,050 lines, text mark in hot pink) plus the touched U0/U1/U4/U4b/U6/phone states — all green against the running dev server. Plan updated (workflows@eed4dc4), memory updated.
+
+For you
+
+1. Re-deploy the Apps Script (cat(calcofi4r::cc_feedback_script())) for the inline screenshot.
+2. Push explore (Pages redeploys) — git -C ../explore push.
+3. Note: R 4.6.1 here had no testthat/devtools; I installed testthat only.
+
+---
+
+Looking good, except it stopped working when selecting Environment, Hexagons. Getting in legend "root samples · all datasets (coverage.json, before the engine is warm)" [Image #3]
+https://calcofi.io/explore/?lens=hex&res=5&var=temperature&q=3&datasets=swfsc_ichthyo&hide=depth&map=-118.9636%2C34.3584%2C6.49
+
+---
+
+Fixed and committed — explore@d9dd343.
+
+What was wrong (two bugs, both reproduced from your URLs)
+
+1. Stale dataset filter. datasets=swfsc_ichthyo was set while you were in Biology and rode along into the temperature view, whose only datasets are bottle and CTD — so every query answered empty (ready · 0 observations). Now the slice effect prunes the filter to the datasets the current picker actually has (drops it when none or all remain), and a Biology ↔ Environment switch drops it outright. Your first URL now opens with 1,575,366 observations.
+2. The "root samples · coverage.json" legend after clearing. On a non-station lens the station table is only fetched once, at open. Your open happened under the empty filter, so that table stayed empty forever, and preSlice was keyed on exactly that — which also flipped the colour domain into count mode (the 0 – 17.75 with everything yellow). preSlice is now keyed on "the first lens has answered", and the domain always comes from the lens's own rows in the chosen stat. A genuinely empty result now says so in the legend:
+
+▎ nothing in the selection — the filters (2030–2031) leave no observation · all datasets
+
+Verified with three new verify.mjs states: your exact URL (filter gone, hexagons drawn), the realm switch, and open-empty → clear-filter (empty note first, then the real legend with an 8.82–16.92 °C domain). tsc clean; plan noted (workflows@1ce3815).
+
+Next: git -C ../explore push to redeploy Pages.
+
+---
+
+Can we have a default collapsed to category values for changing Biology and Environment selections? The list is otherwise overwhelming and hard to get a sense of other categories without a lot of scrolling. Ideally the selected variable shows directly under its category with a ... to expand the rest of available values in that category while showing the other categories with some sort of expander triangle or similar. For example, I like seeing the full list of datasets with icons next to them in the About.
+
+---
+
+How do I quickly preview locally before pushing?
+
+---
+
+Done — explore@10ab445. Both pickers now open exactly as you sketched:
+
+- Every category is one row with its glyph, item count, year span, dataset dots and a log-scale bar — six rows for organisms, six for variables, no scrolling.
+- The current pick sits under its own category, alone, with a … 956 more in Fish Eggs & Larvae (or … 38 more in Physical Oceanography) row that expands the rest; the other categories carry an expander triangle — click opens one in full, a second click folds it.
+- Typing searches within the tree: matching categories open, the rest disappear, Enter takes the first match (anchovy → Fish Eggs & Larvae with the three anchovies).
+- The Search tab (flat A–Z list with sort/group/letters) is still there for a known name, but it's a per-open choice — the tree is always the opening view. (My first cut persisted the tab and the verify run caught the problem: one Search click pinned the flat list forever.)
+- Popover widened to 400 px so category names fit; by category | by dataset still switches the grouping.
+
+Verified with five new states (tree on open, "more", search-in-tree, Enter-to-pick, the variable tree) plus the existing browse/search states; tour step and README updated; plan noted (workflows@00836fe).
+
+To preview locally: http://localhost:5178/ is live with hot reload right now (already on this code). If it's ever down: cd ~/Github/CalCOFI/explore && VITE_DATA_URL=data2/ VITE_RELEASE_PREFIX=explore-dev/releases npm run dev. Then git push from explore to redeploy Pages — three commits are waiting: d9dd343 (stale filter + empty legend), 10ab445 (picker tree), and the earlier 2b02804.
+
+---
+
+Make a note about previewing locally at bottom of @../explore/README.md or perhaps just below "npm
+  install" code chunk. In general try to make this intelligible to normal people, and dereference
+  the plans (eg UI plan D17 · D19)
+
+---
+
+Rewrote ../explore/README.md (explore@87c3572). It's now organized for a reader rather than for the plan:
+
+- Using it — what the lenses, rails, picker tree, denominators, URL, export and feedback do, in plain words. The plan codes are gone: "D8" became the sentence about never averaging across stage/denominator/dataset with the three formulas; "D10" became what the download zip contains; "D11 · D18" became the rail/card/phone-sheet layout; "D17 · D19" became the share/feedback/per-panel-export paragraph; "U7c" became the picker-tree description.
+- Run it locally → Preview locally (before pushing) — right under npm install: the one-time symlink, the npm run dev line, open http://localhost:5178/, what hot reload means, and the production-shaped npm run build + vite preview variant (with --host for a phone). Then Checks (verify.mjs and friends, and what they actually do).
+- Deploy and The feedback endpoint (once) — the Pages build and the Apps Script setup as a checklist, including "re-paste after 1.14.1".
+- How it is built — stack, data objects, a code map by file, the layout rule and the escape hatches, kept last for whoever edits the code.
+
+The two planning documents are still mentioned once, up top, as the design history — nothing in the README depends on reading them.
+
+---
+
+Can you also send the same email to the sender of the feedback?
+
+---
+
+Done — calcofi4r@a8057d9 (1.14.2, installed locally) and explore@580c195.
+
+What the submitter now gets: when they give an email, a separate message "Your feedback to the CalCOFI explore: …" with a thank-you line, the public issue URL ("where any reply will appear"), and then the same report the team gets — their text, the screenshot inline, the view link, release/viewport/theme. It's sent as its own message, so the team's recipient list is never exposed; only a well-formed address gets one, and a failure just lands in the row's status rather than breaking the submission. The dialog's hint now reads "email (optional — you get a copy of this report and any reply; never public)". Test added (two sendEmail calls, the team's first).
+
+Two steps for you
+
+1. Re-paste the Apps Script once more (this is the generator change, so it's the same paste as before):
+Rscript -e 'cat(calcofi4r::cc_feedback_script())' | pbcopy
+   then paste over Code.gs and Deploy → Manage deployments → edit → new version (the /exec URL stays the same, so VITE_FEEDBACK_URL needs no change).
+2. git -C ../explore push — I see you already pushed the earlier four; only the hint commit is waiting.
+
+One thing worth knowing rather than fixing now: the form can now mail an arbitrary address with arbitrary text, bounded only by the existing 20-per-hour cap across apps and the honeypot. That's an acceptable exposure for a science app's feedback form, but if it ever gets abused, the cap in `cc_feedback_script(max_per_hour=)` is the knob.
+
+Right — main and origin/main are identical now (5c9e3f6, your merge of the hint commit over the pipeline's feedback 777079f4…: screenshot commit). Pages will redeploy from it.
+
+Worth noting for next time: the feedback pipeline commits each screenshot to main (feedback/<id>.png), so any push made after someone sends feedback will hit "fetch first" — a git pull (or VS Code's Sync, as you did) before pushing is the routine. If that gets annoying, `cc_feedback_script(branch = "feedback")` would put the screenshots on their **own branch** and keep main quiet; the issue's image URL follows the branch automatically.
+
+
+
+## 2026-08-29 fix calcofi4r pkgdown CI
+
+▎ calcofi4r's pkgdown CI has failed on every run since 2026-08-25 (latest gh run view 33229911703 --log-failed): rendering vignettes/calcofi4r.Rmd dies at chunk convenience (lines 47–59) with cc_describe_table("obs") → "Table 'obs' not found", although the connect chunk's con <- cc_get_db() did not error and bio-env-matching.Rmd rendered in the same run. Locally on macOS with duckdb 1.5.5 (the runner's version too) the same sequence passes. Diagnosis to confirm, not re-derive: cc_get_db() (R/database.R) creates every table as a CREATE OR REPLACE VIEW … read_parquet('https://…') and relies on autoload_known_extensions for httpfs; it only calls .cc_setup_gcs_httpfs() when a legacy s3:// glob is present, and the content-addressed catalog removed the last one on 2026-08-25 — the day the failures start. match.R's connection helper (~line 82) runs INSTALL httpfs; LOAD httpfs explicitly, which is why cc_match_* works on the runner. A failed view becomes a warning() (database.R:222) that the vignette hides (warning = FALSE), so cc_get_db() hands back an empty database silently.
+▎
+▎ Do this, in order: (1) confirm on CI by adding a permanent smoke-test step before "Build site" in .github/workflows/pkgdown.yaml — Rscript -e 'options(warn = 1); con <- calcofi4r::cc_get_db(); stopifnot("obs" %in% DBI::dbListTables(con))' — and read what it prints on the runner before changing any code; (2) fix cc_get_db(): load httpfs explicitly and idempotently before creating views (as match.R does), and make a failed view an error — never a silent empty database (at minimum stop() when zero tables load or a requested table fails), keeping partitioned tables as remote views; (3) let cc_list_tables() / cc_describe_table() / cc_list_measurement_types() accept an optional con so the vignette reuses its connection; (4) add testthat regressions per ~/Github/CLAUDE.md: a fixture catalog with a bad object URL must error, not warn, and a network test (skipped offline) that obs is present; (5) bump DESCRIPTION to 1.13.1 with a matching NEWS.md entry in the same commit, devtools::document(), devtools::test(); (6) push, gh run watch until pkgdown is green and https://calcofi.io/calcofi4r/ serves 1.13.1 (its light-switch should show the sun / moon-in-sun pair — that styling was committed in 795db73, do not touch it); (7) then in ~/Github/CalCOFI/CalCOFI.github.io flip the calcofi4r card to shots: themed in _data/products.yml and reshoot its two images with scripts/shots.py, as the brand plan of 2026-08-25 left pending. Never add continue-on-error to the workflow — its comment explains why.
+
+---
+
+All seven steps are done. Recap:
+
+1 · Confirmed on CI (run 33230877433, commit 3e3078b — the smoke step is permanent, before "Build site", options(warn = 1)). The runner printed, for every one of the 16 tables:
+Failed to load table …: Extension Autoloading Error … httpfs.duckdb_extension not found … Install it first using "INSTALL httpfs" → character(0) → "obs" %in% dbListTables(con) is not TRUE.
+Diagnosis stands, with one refinement: DuckDB's autoload_known_extensions only loads an extension that is already installed (autoinstall_known_extensions is FALSE). Your Mac has ~/.duckdb/extensions/v1.5.5/osx_arm64/httpfs.duckdb_extension; a fresh runner has nothing, and the last s3:// glob whose setup happened to INSTALL it left the catalog on 2026-08-25.
+
+2 · cc_get_db() (R/database.R): new .cc_load_httpfs() runs INSTALL httpfs; LOAD httpfs right after connect — cached path included, since persisted views bind in the new connection. Views are created inside one dbBegin/dbCommit; a failed table rolls back, disconnects and stop()s naming the table and DuckDB's message (a partial calcofi_{v}.duckdb would otherwise be returned as "cached" next call). A tables= selection matching nothing errors. Partitioned tables stay remote views.
+
+3 · cc_list_tables(), cc_describe_table(), cc_list_measurement_types() take con =; the vignette passes its own.
+
+4 · Tests — tests/testthat/test-database.R + fixtures/catalog_bad_object.json: (offline) bad object → error, expect_no_warning, cache holds zero tables after rollback; empty tables= errors; helpers reuse con with cc_get_db mocked to fail; (network, skipped offline) obs present + httpfs loaded on fresh and cached connections; a 404 object errors. Suite: FAIL 0 | WARN 0 | SKIP 1 (pg tunnel) | PASS 376. One detour worth knowing: a bare on.exit() after local_mocked_bindings() wipes the restore handlers and leaked the mocks into test-release-sources.R — now withr::defer() everywhere, with a comment.
+
+5 · DESCRIPTION 1.13.1 + NEWS entry, document(), in commit a735da4.
+
+6 · Run 33231306554 green (smoke → build → deploy). https://calcofi.io/calcofi4r/ serves 1.13.1; the lightswitch carries --cc-icon-sun/--cc-icon-moon from 795db73, which I did not touch.
+
+7 · shots: themed was already committed on the calcofi4r card (shot 08-25, against the stale 1.11.0 site), so the pending piece was the reshoot: scripts/shots.py calcofi4r → dark 47 / light 243 luminance ok; both show calcofi4r 1.13.1 with the sun (dark) / moon-in-sun (light). Pushed as CalCOFI.github.io 67e0c47.
+
+Nothing left open from the request. One thing I noticed and left alone: pkgdown warns man/cc_db_connect.Rd:17: unknown macro '\lifecycle' on every build — harmless, but a lifecycle Rd macro import (RdMacros: lifecycle in DESCRIPTION) would silence it if you want.
+
+
+
+## 2026-08-29 update **explore** UI
+
+Let's write a plan (into `.claude/plans` to prep for implemenation) for user interface updates to `@../explore`.
+
+Ideally the panels become expandable, floatable and collapsible (perhaps with pill labels when collapsed). For instance, when choosing taxa there is no depth component, so perhaps that should automatically collapse (but is that too disorienting to automatically change the layout like that?). I would want your take on best most fluid UI design.
+
+Names like "taxon" and "variable" are not very intuitive. They are really in my mind "bio" and "env". Perhaps then they should be "biology" and "environment"?
+
+All of the drop-down selections (env variable, bio taxon, cruises) seem to sort based on number of records, but that makes it really hard to find a specific taxon/variable/cruise of interest. I really would like to retain the ability to easily see which options have the most and least records, but that should be secondary to having these lists alphabetically sorted by default.
+
+In the current station app (`@../db-viz-station/`; https://app.calcofi.io/station/) it is much easier to see and browse the entire CalCOFI data holdings by Category or by Dataset.
+
+I also quite like the visual icons prefixing the Category. These are just emoji, but there are other icons on CalCOFI.org, eg:
+- [Oceanographic Data – CalCOFI](https://calcofi.org/data/oceanographic-data/)
+- [Marine Ecosystem Data – CalCOFI](https://calcofi.org/data/marine-ecosystem-data/)
+I could imagine a set of SVG iconography to differentiate at least the categories (datasets is probably unnecessarily complicated).
+
+This and other apps also have a modal window explaining what its about, a tour feature to walk through all the components of the app and feedback button. It would be especially great to provide the options of submitting the current user's view via URL, a screenshot and even any annotations to that screenshot the user might want to add, like pointing out a wierd spike of data values.
+
+---
+
+The plan is written and cross-linked from memory. Nothing left to fetch — here's the recap.
+
+What I did
+
+Wrote .claude/plans/2026-08-29 CalCOFI Explorer UI — rails & cards, naming, sorted pickers, browse by category, icons, tour, annotated feedback.md (490 lines; uncommitted, like the plans dir usually is), after reading the current explore shell (App.tsx, state.ts, style.css, the picker SQL), the station app's inventory/tour/feedback code, the release's dataset.category/color + taxon lineage columns, coverage.json's shape, the brand contract, and the calcofi.org data pages' actual SVGs (rendered them: Flaticon-style outline glyphs — flask, CTD monitor, pipe, CO₂ cycle, dolphin, gull, egg cluster, shrimp, bacterium, DNA; licence not stated).
+
+Note: the repo is ../explore, not ../explorer.
+
+My take, in short (D11–D18 in the plan)
+
+- Panels — "signal, don't move." Three docked rails (select · depth · years) that fold into state pills — the folded pill reads "Depth 0–500 m" / "Years 1949–2026 ▂▃▅▇" / "🐟 Pacific sardine · larva · per 10 m²", so folding removes chrome, not information. Each rail can maximize; the left one resizes. Lens results (section, cruise series, and the station card — which today grows inside the left rail and pushes the export row off-screen) become floating, minimizable, draggable cards over the map. The layout never changes in response to a selection: an ichthyo taxon with no depth axis gets an honest empty state in the depth rail (and a muted Depth · integrated tows pill if folded), not an auto-collapse — a room that rearranges itself because you picked a different species is the opposite of fluid. Lens changes may open/close their own cards (that's a mode you asked for). Two URL params carry it: hide=depth,years, max=section. I argued against floating rails and against a generic window manager (dockview etc.) — it turns a map product into a workbench.
+- Names: Biology · Environment (parallel nouns, = realm, = calcofi.org's Ecosystem/Oceanographic split; "species"/"ocean" would be wrong for genera and weather), with organism and variable beneath; plus a wording table ("n rows" → observations, "H3 res" → hexagon size in km…). URL keys don't change.
+- Lists: one searchable combobox, A–Z default, with a log-scaled count bar on every row (so most/least is visible in any order), sort toggle (A–Z · most observations · most recent), group toggle (category · dataset · taxonomic class), all 1,212 taxa (today truncated to 400). Cruises stay chronological — that's the right order for them. Env defaults to grouped-by-category because 84 _ave_sta_corr names aren't browsable flat.
+- Browse: a Browse tab (by category | by dataset) built from coverage.json before the engine is warm — but driven by registries, not the station app's keyword matcher: new metadata/category.csv (lint-enforced like provider.csv), category + variable columns on measurement_type.csv, and taxa[] in coverage.json. This doubles as Task 14's inventory.
+- Icons: a brand sprite brand/v1/icons/categories.svg — 24-px currentColor outline glyphs (themes itself), Lucide for what it covers + ~5 bespoke marine glyphs (krill, copepod, diatom, larva, whale). calcofi.org's set only if the web team confirms the licence. Same sprite swapped into db-viz-station's emoji.
+- Help & feedback: header cluster ? ⓘ 💬 🌓 (not floating buttons); a one-paragraph welcome on first visit rather than an auto-started tour; driver.js with data-tour anchors and stateful before() hooks. Feedback = a composited screenshot (MapLibre needs preserveDrawingBuffer; deck's canvas is separate in non-interleaved mode; Plotly.toImage; html-to-image for the DOM — html2canvas breaks on this CSS's color-mix(), which the station app already found) → a small hand-rolled canvas annotator (arrow/circle/rect/pen/text) → an Apps Script endpoint modelled on the usage log (cc_feedback_script() beside cc_apps_script(): PNG to Drive, row to a Sheet, mail to you+Erin, optional GitHub issue without the email). The view URL rides in every submission, and the same capture gives a Share menu (copy link / copy image / download PNG with release + attribution baked in).
+
+Phasing (~82 h)
+
+U0 words+lists (8) → U1 rails+cards (16) → U3 help (8) before 9/3; U4a share (8) → U4b feedback (14) before 9/8 if time allows; U2 browse+registries+icons (18; needs a release to carry the new columns); U5 phone bottom-sheet (10) last.
+
+Open questions in the plan (none block U0–U1)
+
+Feedback destination (mail to whom; public GitHub issues or a private repo?), the calcofi.org icon licence, Biology/Environment vs Ecosystem/Ocean, and whether the phone matters for 9/8.
+
+---
+
+`## Open questions for Ben (none block U0–U1)`
+
+1. Feedback destination: mail to Ben + Erin, and should the optional GitHub issue be public in `CalCOFI/explore`
+   (no email, screenshot committed) or go to a private `explore-feedback` repo?
+   
+   Yes, also mail to Betty (should also be easy to add/remove other emails). Sure, add Github issue to public `CalCOFI/explore`.
+
+2. Ask CalCOFI's web team about the licence of the calcofi.org data-page icons (Flaticon-style exports) — reuse
+   if clean, else the bespoke five.
+
+   No need. Should be reusable. I shared those just by way of example. Not wed to them specifically. Want nice, clean, consistent.
+
+3. *Biology · Environment* vs *Ecosystem · Ocean* (calcofi.org's words) — the plan recommends the former.
+
+  Yes to *Biology · Environment*
+
+4. Does the phone matter for 9/8, or is "better on a computer" in the About modal acceptable until U5?
+
+  Yes, phone very much matters. Perhaps in the about modal we could mention "better on a computer", but I don't want it to fail on phone.
+
+
+Can we add the ability to download any given figure as a PNG, eg xy/t/z/other?
+
+There are also some layering issues, like:
+- showing the line over the plot with Sections [Image #9]
+  https://calcofi.io/explore/?lens=section&taxon=worms%3A217452&stage=larva&den=per_10m2&line=90&cruise=2009-04-OIFS 
+- the timings [Image #10]
+
+I love the plot over time at the bottom, and the ability to apply a filter by time by sweeping one to the other, but can we also zoom into a given period and zoom back out. And when zooming in even perhaps see more detail by month? Would be awesome to have another toggle besides "rows" and "mean+/-se" to show "cruises", perhaps like a Gantt chart with code (yyyy-mm-nodc) but maybe that gets too busy?
+
+---
+
+Does it make sense to add icons to the top level choices and give them categories like Lens and Measurement?
+Lens:
+- Stations
+- Hexagons
+- Cruises
+- Regions
+- Sections
+Measurement:
+- taxon
+- variable
+
+---
+
+Everything is in place — nothing further to fetch or edit. Recap of this round:
+
+Updated plan
+
+.claude/plans/2026-08-29 CalCOFI Explorer UI — rails & cards, naming, sorted pickers, browse by category, icons, tour, annotated feedback.md — rewritten in full (657 lines) so every section reflects your answers; the memory pointer is refreshed to match.
+
+Your decisions, folded in
+- Feedback (D17): recipients live in a recipients tab of the feedback Sheet — Ben, Erin, Betty to start; add/remove by editing a cell, no redeploy. Every submission also files a public issue in CalCOFI/explore (label feedback, the view URL, the text, the screenshot committed under feedback/ so the issue can embed it — never the email, which stays in the Sheet). The dialog says so plainly.
+- Icons (D15): licence question dropped. One clean, consistent set drawn once — Lucide base plus bespoke marine and lens glyphs on the same 24-px grid; if they don't read as one hand side by side at 16 px, redraw all of them rather than mix. Nothing copied from calcofi.org.
+- Biology · Environment confirmed (D12).
+- Phone (D18): promoted from the last slice into U1 — the rail/pill system is the phone layout (bottom sheet with three detents, edge pills, full-screen combobox), with a gate of verify.mjs at 390×844 plus a real phone over the LAN before 9/8. About may say "better on a computer"; nothing may fail.
+
+Your new asks
+- Per-figure export (new D19): every panel and card gets ⬇ in its header — PNG (2×, theme background, footer with selection · unit · release · URL), SVG (vector, for papers), CSV (the panel's own table). One src/export.ts footer stamp shared with the whole-view share image.
+- Layering bugs (added to D11): root cause is that deck.gl's overlay is a MapLibre control that paints above any of our overlays lacking a z-index — the section card, timing panel and legend have none. Fix is one stacking scale (canvases 0–2 · map chrome 5 · pills/legend 10 · cards 20 · maximized 30 · modals 40 · tour 50), plus placement: the legend moves to the map's top-left (it currently sits exactly where the section card lands), and the ⚙ leaves the map — "SQL & timing" becomes a card opened from EXPORT, so the bottom-right belongs to the attribution ⓘ alone.
+- Year strip (new D20, slice U6): brush stays the filter; zoom is a separate gesture (wheel/pinch, double-click reset, a ⤢ zoom to selection handle on the brush, a context bar for panning, yview= in the URL); zoom earns detail — month bins when the window is ≤ 15 years (years=2015-04:2016-10 filters by month; a season chip is the cheap sibling); and a cruises mode as a Gantt in lanes by ship — no two cruises of one ship overlap, so lanes never collide — with codes appearing only when a bar is ≥ 40 px and click selecting the cruise, which makes the strip the visual cruise picker. That's what keeps it from being busy: lanes, zoom, earned labels.
+- Icons + groups on the top-level choices: yes to lens glyphs (dot grid · hexagon · ship-on-track · polygon · curtain — a lens is a shape, so a glyph reads faster than a word; words kept) and to group labels LENS · DATA · FILTERS · EXPORT, with each lens's options directly under the lens buttons. I recommend Data rather than Measurement for the second group: a taxon isn't a measurement (its abundance is), and "measurement" already names something specific in this database (measurement_type, measurement_value, sample_measurement) that the schema site, docs and bundle all use. Runner-up: "Subject".
+
+Phasing (~98 h)
+
+U0 words + lists (8) → U1 rails, cards, z-order, phone (26) → U3 help (8) for the 9/3 checkpoint → U6 year strip (12) → U4a share + figures (10) → U4b feedback (14) for 9/8 → U2 browse + registries + icons (20; its registry half needs a release). Drop-order if hours must go: season mode (already out), bespoke redraw, SVG/CSV halves of D19, the GitHub-issue step.
+
+No open questions remain in the plan; the next step is U0.
+
+---
+
+I was originally suggesting this dark/light theme switch just for the explore app, but like that you went ahead with updating the brand and across all these repos. How does this branding affect the plan you've been writing for the UI updates? What's the prompt I should use after openingin new session with Fable Xhigh?
+
+---
+
+Good question — it does touch the plan, mostly to its benefit, and I'll fold the effect into the plan file itself so the next session reads one consistent document. Let me make those edits (plan D15/D16/Context/Decided + a kickoff-prompt section, plus the brand line in workflows/CLAUDE.md and the brand memory, which both still say "🌓 toggle").
+
+---
+
+Everything is now verified in production and the plan is reconciled. Recap:
+
+Deploys
+
+Brand is live (theme.js serves iconize), and the real pages probe correctly: calcofi.io, docs (Quarto's toggle now masked), calcofi4db (pkgdown's lightswitch) and calcofi.io/explore all show the sun while dark and the moon-in-sun while light, with the titles set. One exception: calcofi4r's pkgdown build failed — not the _pkgdown.yml (it parsed and pkgdown got well past it) but the calcofi4r.Rmd vignette, chunk convenience (vignettes/calcofi4r.Rmd:47-59): cc_describe_table("obs") → "Table 'obs' not found. Use cc_list_tables()". Its previous run (2026-08-28) already failed, so calcofi.io/calcofi4r keeps the old sun/moon until that vignette is fixed. That error looks like a real calcofi4r regression (the obs table missing from whatever cc_list_tables() resolves) rather than a docs nit — worth a look separately; say the word.
+
+How the brand change affects the UI plan
+
+It helps more than it disturbs, and I folded it into the plan (Context paragraph, D15 rewritten, D16 header bullet, Decided #6, Appendix A sources, a new Kickoff prompt section), plus the brand line in workflows/CLAUDE.md and the brand memory:
+
+- It settled the icon idiom (D15). The fleet's one shared glyph is now a filled Material Design Icons shape; the plan's Lucide 1.75-px-stroke set would have been a second idiom in the same header. D15 now says: MDI (Apache-2.0, outline variants where they exist) for what it covers — categories, lenses, help/about/feedback/download/expand/close — plus the bespoke marine glyphs (diatom, copepod, krill, larva, whale, ship-on-track, curtain) drawn to that weight. calcofi4py is MDI-native, so it matches too.
+- It proved the delivery mechanism. The toggle shipped both ways — inline SVG for React, CSS mask custom properties (--cc-icon-sun/moon) for framework pages — so the category/lens sprite goes out the same way: brand/v1/icons/calcofi-icons.svg + icons.css, additive under the README's new "Changes within v1" list. No v2 needed.
+- It fixed D16's header pattern. Help · about · feedback · theme become four .cc-icon-buttons (the toggle's 2 rem flat style, generalized), and the toggle is no longer the app's to draw — App.tsx already renders brand SVGs inline with React owning the nodes, which is the pattern for the other three.
+- Nothing else moves: D11–D14 and D17–D20, the slices, hours (98 h) and order are unchanged. Not switched by the brand change: the Shiny apps' bslib toggle — a calcofi4r follow-up outside the plan.
+
+Prompt for the new session
+
+Start it in ~/Github/CalCOFI/workflows (that's where CLAUDE.md and the memory index load; the memory dir is keyed to that path — a session opened in explore/ would not see it), Fable at xhigh, then:
+
+▎ Read `.claude/plans/2026-08-29 CalCOFI Explorer UI — rails & cards, naming, sorted pickers, browse by category, icons, tour, annotated feedback.md in full. Every decision (D11–D20) and the "Decided" section are settled — do not re-open or re-derive them. Implement slice U0, then U1 (the rails, the floating cards, the z-index scale, and the phone bottom sheet — U1 is not done without the phone half), then U3, in ~/Github/CalCOFI/explore, exactly as specified. Before each slice, read the files it touches; when the plan and the code disagree, say so and follow the code's reality rather than silently redesigning. Verify the way the plan says: npm run build, puppeteer screenshots of every panel state at 1280 × 800 and 390 × 844 driven by scripts/verify.mjs (the Claude-in-Chrome tab never paints — never verify through it), and the phone on a real device over the LAN before calling U1 done. Keep every URL key unchanged; never move the layout in response to data; render brand icons inline the way App.tsx renders the theme toggle. Commit each slice on main when its checks pass, do not ask before pushing, and append the measured results under that slice's row in the plan.
+
+The same text is in the plan under "Kickoff prompt", so the next session can find it even if you paraphrase.
+
+---
+
+Great! Provide seperate prompt to fix  calcofi4r's pkgdown build failed
+
+---
+
+Plan read in full. Order is U0 → U1 → U3 → U6 → U4a → U4b → U2. Now reading the explore repo: structure, package.json, src/*, sql/*, scripts/verify.mjs, and git state.
+
+
+Nothing else to gather — here's the finding and the prompt.
+
+What's wrong with calcofi4r's pkgdown build
+
+- Deterministic: all six runs since 2026-08-25 fail identically (33229911703 is the latest): vignettes/calcofi4r.Rmd:47-59 [convenience] → cc_describe_table("obs") → Table 'obs' not found. The connect chunk before it (con <- cc_get_db()) does not error, and bio-env-matching.Rmd renders fine in the same run.
+- Local passes (macOS, duckdb 1.5.5 — the same version the ubuntu runner installed): 16 tables incl. obs, even with the vignette's double-connection sequence (the second cc_get_db() shares the driver: "Using cached database").
+- Mechanism: cc_get_db() builds every table as a CREATE OR REPLACE VIEW … read_parquet('https://…') and relies on DuckDB's autoload_known_extensions for httpfs; it only runs .cc_setup_gcs_httpfs() (INSTALL httpfs; LOAD httpfs) when a legacy s3:// glob is present. The content-addressed catalog removed the last glob on 2026-08-25 — the first failing run is that afternoon. match.R's own connection helper (~line 82) loads httpfs explicitly, which is why the matching vignette passes. Every failed view is downgraded to a warning() (database.R:222) and the vignette sets warning = FALSE, so the log shows nothing and cc_get_db() returns an empty database. Saved as memory project_calcofi4r_pkgdown_httpfs.md.
+
+Prompt for a new session (Fable, xhigh) — start it in ~/Github/CalCOFI/calcofi4r
+
+▎ calcofi4r's pkgdown CI has failed on every run since 2026-08-25 (latest gh run view 33229911703 --log-failed): rendering vignettes/calcofi4r.Rmd dies at chunk convenience (lines 47–59) with cc_describe_table("obs") → "Table 'obs' not found", although the connect chunk's con <- cc_get_db() did not error and bio-env-matching.Rmd rendered in the same run. Locally on macOS with duckdb 1.5.5 (the runner's version too) the same sequence passes. Diagnosis to confirm, not re-derive: cc_get_db() (R/database.R) creates every table as a CREATE OR REPLACE VIEW … read_parquet('https://…') and relies on autoload_known_extensions for httpfs; it only calls .cc_setup_gcs_httpfs() when a legacy s3:// glob is present, and the content-addressed catalog removed the last one on 2026-08-25 — the day the failures start. match.R's connection helper (~line 82) runs INSTALL httpfs; LOAD httpfs explicitly, which is why cc_match_* works on the runner. A failed view becomes a warning() (database.R:222) that the vignette hides (warning = FALSE), so cc_get_db() hands back an empty database silently.
+▎
+▎ Do this, in order: (1) confirm on CI by adding a permanent smoke-test step before "Build site" in .github/workflows/pkgdown.yaml — Rscript -e 'options(warn = 1); con <- calcofi4r::cc_get_db(); stopifnot("obs" %in% DBI::dbListTables(con))' — and read what it prints on the runner before changing any code; (2) fix cc_get_db(): load httpfs explicitly and idempotently before creating views (as match.R does), and make a failed view an error — never a silent empty database (at minimum stop() when zero tables load or a requested table fails), keeping partitioned tables as remote views; (3) let cc_list_tables() / cc_describe_table() / cc_list_measurement_types() accept an optional con so the vignette reuses its connection; (4) add testthat regressions per ~/Github/CLAUDE.md: a fixture catalog with a bad object URL must error, not warn, and a network test (skipped offline) that obs is present; (5) bump DESCRIPTION to 1.13.1 with a matching NEWS.md entry in the same commit, devtools::document(), devtools::test(); (6) push, gh run watch until pkgdown is green and https://calcofi.io/calcofi4r/ serves 1.13.1 (its light-switch should show the sun / moon-in-sun pair — that styling was committed in 795db73, do not touch it); (7) then in ~/Github/CalCOFI/CalCOFI.github.io flip the calcofi4r card to shots: themed in _data/products.yml and reshoot its two images with scripts/shots.py, as the brand plan of 2026-08-25 left pending. Never add continue-on-error to the workflow — its comment explains why.
+
+---
+
+Everything is done and pushed; nothing further to request. Final report:
+
+Done — all seven slices of the Explorer UI plan, in order U0 → U1 → U3 → U6 → U4a → U4b → U2
+
+All in CalCOFI/explore on main (Pages deploy of 6c356ef in progress; every earlier one succeeded), each slice committed after its checks passed, each with measured results appended under "Measured" in the plan (workflows@396322d).
+
+┌───────┬─────────┬──────────────────────────────────────────────────────────────────────────────┐
+│ slice │ commit  │                                 what shipped                                 │
+├───────┼─────────┼──────────────────────────────────────────────────────────────────────────────┤
+│       │         │ Biology · Environment, LENS · DATA · FILTERS · EXPORT with MDI lens glyphs,  │
+│ U0    │ 31388d5 │ one searchable combobox (A–Z, log-scaled count bars, dataset dots,           │
+│       │         │ sort/group, all 1,212 taxa), cruises newest first, hexagon sizes in km       │
+├───────┼─────────┼──────────────────────────────────────────────────────────────────────────────┤
+│       │         │ three rails folding to state pills + maximize, floating cards                │
+│ U1    │ 5a9d50a │ (minimize/drag), the z-index scale (both layering bugs fixed by .map {       │
+│       │         │ z-index: 0 }), hide=/max=, viewport defaults, phone bottom sheet with three  │
+│       │         │ detents + edge pills                                                         │
+├───────┼─────────┼──────────────────────────────────────────────────────────────────────────────┤
+│ U3    │ 5fa0853 │ header cluster, welcome card, About modal, driver.js tour with ten anchored  │
+│       │         │ steps + before() hooks, ?tour=on|off                                         │
+├───────┼─────────┼──────────────────────────────────────────────────────────────────────────────┤
+│ U6    │ ce4b85f │ year-strip zoom (yview=), context bar, zoom-to-selection, month bins ≤ 15 y, │
+│       │         │  month-resolved years=, season chip q=, cruises Gantt in 36 ship lanes       │
+├───────┼─────────┼──────────────────────────────────────────────────────────────────────────────┤
+│ U4a   │ a38e596 │ whole-view PNG (one html-to-image composite; no interleaved/Screen-Capture   │
+│       │         │ fallback needed), per-panel PNG · SVG · CSV with the shared footer, Share ▾  │
+├───────┼─────────┼──────────────────────────────────────────────────────────────────────────────┤
+│       │         │ capture → annotate → send dialog; calcofi4r 1.14.0 cc_feedback_script()      │
+│ U4b   │ 3d7813d │ (Drive · Sheet · recipients-tab mail · public issue without the email); GA4  │
+│       │         │ snippet                                                                      │
+├───────┼─────────┼──────────────────────────────────────────────────────────────────────────────┤
+│       │         │ Browse by category/dataset; organisms listed before the engine is warm;      │
+│ U2    │ 6c356ef │ calcofi4db 3.25.0 taxa[] + declare_measurement_fields();                     │
+│       │         │ metadata/category.csv + index check; brand icons/ + icons.css +              │
+│       │         │ .cc-icon-button; db-viz-station emoji → masks                                │
+└───────┴─────────┴──────────────────────────────────────────────────────────────────────────────┘
+
+Verification: npm run build clean at every step; scripts/verify.mjs grew from 4 lens runs to 80 states (desktop 1280 × 800 + phone 390 × 844, overflow/reachability/tour-anchor/non-blank-figure assertions) — the whole suite is green (shots/all/).
+
+Plan-vs-code calls I made (all noted in the plan): MDI inline paths from U0 instead of emoji placeholders (mdiShip doesn't exist → bespoke); the section's default cruise stays "most stations"; double-click reset is also a header button because CDP can't synthesize dblclick; blankness is checked by spread + non-background fraction, not mean luminance; Browse shows six bio categories (Picoplankton has no taxon-keyed rows).
+
+Left for you (not doable from here):
+1. Real-phone gate for U1 — http://192.168.178.173:5179/ is serving the GCS-dev build on the LAN; tap through the sheet detents, pills, a lens switch and the full-screen picker.
+2. Feedback endpoint deploy — create the CalCOFI app feedback Sheet (feedback + recipients tabs), paste cat(calcofi4r::cc_feedback_script()), deploy as a web app (execute as me · anyone), add GITHUB_TOKEN as a script property, set the /exec URL as the VITE_FEEDBACK_URL repository variable and re-run the Pages workflow. Until then the dialog offers the prefilled public issue and says so.
+3. A release so ducklake/releases coverage.json carries taxa[]/categories (the dev catalog already does; explore/scripts/dev_coverage.R regenerates it).
+
+---
+
+Please expand on what I need to do for these "Left for you" items
+
+---
+
+Here is each item as a checklist you can work straight through.
+
+1. Real-phone gate for U1 (≈10 min, before 9/8)
+
+The LAN preview is still up at http://192.168.178.173:5179/ (a GCS-dev build, so the phone fetches release objects from the bucket, not your laptop). If it has died, restart it from ~/Github/CalCOFI/explore:
+
+VITE_DATA_URL=https://storage.googleapis.com/calcofi-db/explore-dev-root/ VITE_RELEASE_PREFIX=explore-dev/releases npx vite build
+npx vite preview --host --port 5179
+
+Open it on the phone (same Wi-Fi) and tap through what the emulator cannot judge — thumb reach, gesture feel, real GPU/memory:
+
+- Header fits (logo · Explorer · release chip · ? · ⋯ · theme) with no horizontal wiggle; page never scrolls sideways.
+- Bottom sheet: drag the handle through peek → half → full and back; a flick carries; double-tap the handle toggles; the sheet body scrolls at half/full without the map moving under it.
+- Lens strip at peek: tap Sections → the section opens as a sheet with ⬇ · ⌃ · ×; × returns to the select peek. Same for Cruises.
+- Edge pills Depth … / Years … open their sheets; brush the years strip with a finger (drag = filter), pinch = zoom, the context bar pans.
+- Organism picker opens full-screen; search, the letter strip, Browse → by category / by dataset (this is the U2 half, same gate).
+- Tap a station dot → coverage sheet; ⋯ → About and Feedback (capture + annotate with a finger; the annotator is pointer-event based).
+- ?theme=light once, and ?tour=on for the welcome card + tour on the phone.
+
+Anything that fails is a finding for the plan's U1 row — note it there or send it through the feedback dialog itself (item 2 makes that land somewhere).
+
+2. Feedback endpoint (≈20 min, your Google account + a GitHub token)
+
+1. Sheet: create a Google Sheet named CalCOFI app feedback with two tabs:
+   - feedback — first row exactly calcofi4r::cc_feedback_header():
+     ts, app, url, release, viewport, theme, text, email, image_url, issue_url, id, user_agent, status
+   - recipients — A1 email, then one address per row (you, Erin, Betty). Editing a cell adds/removes someone; no redeploy.
+2. Script: Extensions → Apps Script, replace Code.gs with Rscript -e 'cat(calcofi4r::cc_feedback_script())' (calcofi4r 1.14.0 is on main; remotes::install_github("calcofi/calcofi4r") if the installed copy is older). Defaults: repo CalCOFI/explore, label feedback, 20 submissions/hour; cc_feedback_script(repos = c(explore = "CalCOFI/explore", hex = "CalCOFI/db-viz-hex")) when a Shiny app joins.
+3. Script properties (Project settings → Script properties):
+   - GITHUB_TOKEN — a fine-grained token scoped to the one repository CalCOFI/explore with Contents: read & write and Issues: read & write. It commits feedback/<id>.png to main (so each submission triggers a Pages rebuild — harmless) and opens the public issue. Leave it unset and the row's status reads "issue skipped: no GITHUB_TOKEN".
+   - DRIVE_FOLDER_ID — optional; otherwise a CalCOFI app feedback/<app>/ folder is created beside the Sheet.
+4. Deploy: Deploy → New deployment → Web app → execute as Me, access Anyone → authorize (Drive, Sheets, Mail, UrlFetch) → copy the /exec URL. Open that URL in a browser: {"ok":true,"endpoint":"calcofi-feedback","rows":0,"recipients":3,"github":true} is the health check.
+5. Wire the explorer (a repository variable, no commit):
+cd ~/Github/CalCOFI/explore
+gh variable set VITE_FEEDBACK_URL --body "https://script.google.com/macros/s/…/exec"
+gh workflow run pages
+   Then on calcofi.io/explore: 💬 → text → Send → the thank-you names the issue; the mail and the Sheet row follow. The email stays in the Sheet only.
+
+3. A release that carries coverage.json taxa[] + categories (a normal release cut)
+
+Nothing new to write — release_database.qmd already calls build_coverage(con_wdl, …) (line 1461), calcofi4db 3.25.0 makes that emit taxa[] and the variable fields, measurement_type.csv carries category/variable, and RELEASES.md § Unreleased has the entry (the promote gate requires it). So:
+
+1. Install the engine: Rscript -e 'remotes::install_github("calcofi/calcofi4db")' (≥ 3.25.0).
+2. Cut as usual from workflows/: Rscript -e 'targets::tar_invalidate(release_database); targets::tar_make()' (per CLAUDE.md — editing the notebook's inputs doesn't outdate it; test_release promotes latest.txt).
+3. Once promoted, point the explorer at the real prefix — the flip the parent plan foresaw, two lines in .github/workflows/pages.yml:
+   VITE_DATA_URL: https://storage.googleapis.com/calcofi-db/ and VITE_RELEASE_PREFIX: ducklake/releases (the release must also ship the browser objects obs_bio / obs_env / sample_root / sample_spatial, which Phase 1 wired into release_database.qmd). Push → Pages rebuilds; the header chip then lists real versions.
+
+Until step 3 lands, calcofi.io/explore keeps reading the dev catalog, whose coverage.json I already regenerated and uploaded with explore/scripts/dev_coverage.R — so Browse and the pre-warm organism list work today.
+
+---
+
+Can you remind me how to create the token? Under my bbest settings or the repo's?
+
+---
+
+Under your account settings — tokens always belong to a user, never to a repo. A repository only has secrets/variables (that's where the /exec URL goes), not tokens. What you scope the token to is the repo.
+
+Steps:
+
+1. GitHub → your avatar (top right) → Settings → left sidebar bottom Developer settings → Personal access tokens → Fine-grained tokens → Generate new token.
+   (Direct link: https://github.com/settings/personal-access-tokens/new)
+2. Fill in:
+   - Token name: calcofi-explore-feedback
+   - Expiration: your call — 1 year is reasonable; note the date, the endpoint just starts writing "issue failed: GitHub 401" in the Sheet's status column when it lapses (mail and Sheet still work).
+   - Resource owner: CalCOFI (the org) — since CalCOFI/explore is an org repo, pick the org here, not bbest. If the org isn't offered, the org's settings need Third-party access → Personal access tokens allowed for fine-grained tokens (an org owner setting).
+   - Repository access: Only select repositories → CalCOFI/explore.
+   - Permissions → Repository permissions: Contents: Read and write (commits feedback/<id>.png) and Issues: Read and write (opens the issue). Metadata read is added automatically. Nothing else.
+3. Generate, copy it once (it's shown only then), and paste it as the GITHUB_TOKEN script property in the Apps Script project (Project settings → Script properties → Add). The issue will appear as opened by you (bbest), labelled feedback.
+
+If the CalCOFI org requires approval for fine-grained tokens, an org owner (you, I believe) approves it under org Settings → Personal access tokens → Pending requests.
+
+---
+
+Version 1 on Aug 29, 2026, 12:46 PM
+Deployment ID
+AKfycbzZYTK-JShRjiBWkdBoluTy12HhLol_soWX1OqYUEUf_PKpUzGiI4DuK_mF7CeERYtl
+
+Web app URL
+https://script.google.com/macros/s/AKfycbzZYTK-JShRjiBWkdBoluTy12HhLol_soWX1OqYUEUf_PKpUzGiI4DuK_mF7CeERYtl/exec
+https://script.google.com/macros/s/AKfycby8SIv9aBTXGBqKpPxLGox6YV2ZvqXwxvpwFq7Z9uFWLS8ik38_bADnMKlOJ_JolcfI/exec
+
+Script ID
+12ej2Xxh0SxCH31bh3mVPsFcRq7WhdSTwcbwM2l3zwRE2ort2tpBkX730
+
+Google Project Number (Name)
+933096264312 (calcofi-om)
+
+
+cd ~/Github/CalCOFI/explore
+gh variable set VITE_FEEDBACK_URL --body "https://script.google.com/macros/s/AKfycby8SIv9aBTXGBqKpPxLGox6YV2ZvqXwxvpwFq7Z9uFWLS8ik38_bADnMKlOJ_JolcfI/exec"
+gh workflow run pages
+
+## 2026-08-29 light/dark theme consistency
+
+Here are the range of of different light/dark theme pickers throughout CalCOFI.io, in order of preference:
+- https://calcofi.io/docs/: only a toggle without icon, so not clear what it even is
+- https://calcofi.io/: the yellow sun/ dark moon is distracting with color and not clear even what it is; currently being used by @../explore
+- https://calcofi.io/calcofi4db/: the non-colored moon/sun is ok
+- https://calcofi.io/calcofi4py/: the non-colored sun / moon-in-sun is the most obvious
+Let's switch to the calcofi4py style
+---
+
+Both Quarto captures confirm it: docs now shows the sun while dark and the moon-in-sun while light, sized to its neighbouring sidebar icons. Done — nothing is committed; here's the recap.
+
+What changed (5 repos, 8 files, all uncommitted)
+
+The 🌓 came from one place — calcofi.io/brand/v1/ — so the switch is made there and propagates; the framework-owned toggles get a bridge each.
+
+repo: CalCOFI.github.io
+file(s): brand/v1/theme.css
+change: .cc-theme-toggle becomes a flat 2 rem icon button (no border, hover tint), shows one <svg>
+per theme; exports the two masks as --cc-icon-sun / --cc-icon-moon for the bridges
+────────────────────────────────────────
+repo:
+file(s): brand/v1/theme.js
+change: iconize(): swaps a .cc-theme-toggle's 🌓 fallback for the two SVGs (skips buttons that
+already render them) and sets title "Switch to light/dark theme"; re-runs on every set(); exposed
+as ccTheme.iconize
+────────────────────────────────────────
+repo:
+file(s): brand/v1/README.md
+change: contract text, snippet comment, a "Changes within v1" note (changed in place on purpose — the
+point is every product changes at once; markup/classes/behaviour unchanged)
+────────────────────────────────────────
+repo: docs
+file(s): brand-head.html
+change: <style> dressing Quarto's icon-less .quarto-color-scheme-toggle .bi::before in the pair,
+keyed on our data-theme
+────────────────────────────────────────
+repo: calcofi4db, calcofi4r
+file(s): inst/_pkgdown.yml
+change: the lightswitch button (#dropdown-lightswitch .fa::before) wears the pair; the
+Light/Dark/Auto menu icons stay
+────────────────────────────────────────
+repo: explore
+file(s): src/App.tsx, src/style.css
+change: React renders the SVG pair itself (theme.js only refreshes the title — React keeps owning its
+nodes) and sets the title; the old font-size: 1.1rem override removed; show/hide rules duplicated
+locally so a build ahead of the brand deploy never shows both icons
+
+Icons are MDI brightness-7 / brightness-4 (Apache-2.0), the exact paths calcofi4py serves — sun while the page is dark, moon-in-sun while light, i.e. what a click switches to.
+
+Untouched and covered automatically once the brand deploys: calcofi.io landing, db-query, db-schema, ctd-transects, db-viz-station, analytics, the workflows pages (libs/brand/quarto_header.html, gcs_index.R) — their 🌓 markup stays as the no-JS fallback. check_brand.py is selector-based and unaffected.
+
+Verified
+
+Puppeteer against the live landing, docs and calcofi4db pages with the local theme.css/theme.js served in place of the deployed ones (request interception) and the bridge styles injected, plus explore on a local dev server — dark, click, light, in each: correct icon shown, data-theme/data-bs-theme flip, titles set, Quarto/pkgdown pseudo-elements carry the mask. tsc clean; theme.js parses; both YAMLs parse.
+
+Not done
+
+- Shiny apps (app.calcofi.io/*): cc_brand_header() uses bslib's <bslib-input-dark-mode> web component, which can't be restyled from theme.css — matching it means a calcofi4r change (render the brand button and bridge it to cc_is_dark()). Say the word and I'll do it.
+- calcofi4py is the reference — nothing to change.
+
+To ship
+
+Push order matters slightly: CalCOFI.github.io first (Pages deploys the brand in ~1 min; every static site changes at that moment), then docs (book rebuild), the two packages (pkgdown CI), explore. I haven't committed anything — want me to commit each repo with a matching message?
+
+---
+
+The 2nd and 3rd repos you list above are empty
+
+---
+
+All five repos carry their edits — here is the same table with the repo named on every row, and the git status --short of each:
+
+┌───────────────────┬────────────────────────┬──────────────────────────────────────────────────┐
+│       repo        │          file          │                      change                      │
+├───────────────────┼────────────────────────┼──────────────────────────────────────────────────┤
+│ CalCOFI.github.io │ brand/v1/theme.css     │ flat icon button, one SVG per theme, exports     │
+│                   │                        │ --cc-icon-sun / --cc-icon-moon                   │
+├───────────────────┼────────────────────────┼──────────────────────────────────────────────────┤
+│ CalCOFI.github.io │ brand/v1/theme.js      │ iconize() swaps 🌓 for the SVG pair, sets the    │
+│                   │                        │ title, re-runs on set()                          │
+├───────────────────┼────────────────────────┼──────────────────────────────────────────────────┤
+│ CalCOFI.github.io │ brand/v1/README.md     │ contract wording, snippet comment, "Changes      │
+│                   │                        │ within v1" note                                  │
+├───────────────────┼────────────────────────┼──────────────────────────────────────────────────┤
+│ docs              │ brand-head.html        │ Quarto's toggle dressed in the pair              │
+├───────────────────┼────────────────────────┼──────────────────────────────────────────────────┤
+│ calcofi4db        │ inst/_pkgdown.yml      │ pkgdown lightswitch button dressed in the pair   │
+├───────────────────┼────────────────────────┼──────────────────────────────────────────────────┤
+│ calcofi4r         │ inst/_pkgdown.yml      │ same                                             │
+├───────────────────┼────────────────────────┼──────────────────────────────────────────────────┤
+│ explore           │ src/App.tsx,           │ React renders the pair + title; old font-size    │
+│                   │ src/style.css          │ override removed                                 │
+└───────────────────┴────────────────────────┴──────────────────────────────────────────────────┘
+
+--- CalCOFI.github.io      M brand/v1/README.md   M brand/v1/theme.css   M brand/v1/theme.js
+--- docs                   M brand-head.html
+--- calcofi4db             M inst/_pkgdown.yml
+--- calcofi4r              M inst/_pkgdown.yml
+--- explore                M src/App.tsx   M src/style.css
+
+Still uncommitted; push CalCOFI.github.io first when you're ready, and tell me if you want me to commit each.
+
+---
+
+commit and push all five repos, brand first
+
+---
+
+The "Station Data Portal" does noet yet have "archived · superseded by Station Explorer" badge, just "archived" [Image #7]
+[Image #7]
+
+Right — the card include only builds the "superseded by …" badge when status is literally superseded; with status: archived + superseded_by it falls through to the plain badge. Fixing the include so any status with a superseded_by renders "archived · superseded by Station Explorer".
+
+  Ran 2 shell commands
+
+Fixed and pushed (9bb66c9, Pages redeploying). The include only built the "superseded by …" badge when status was literally superseded, so archived + superseded_by fell through to the bare badge. Now any card with a superseded_by names its continuation, prefixed by its lifecycle status when that isn't "superseded".
+
+Local build confirms the three badge forms on the page:
+
+- Station Data Portal → archived · superseded by Station Explorer (linked)
+- Contour Explorer → superseded by Hexagon Explorer (unchanged)
+- Larvae Dashboard, Marine Mammal App, Hypoxia Story, SaferSeafood, Capstone → archived
+
+`claude --resume 4b9b4d62-5c0b-40eb-8c9e-27515dfb0a2e`
+
+## 2026-08-28 create **explore** app
+
+Consider the current principal offering at https://CalCOFI.io of visualization Apps in various spatial grains: station, hexagon, cruise, or contour. And really, we should add arbitrary polygon to that list, as in the layers Erin mentioned with email subject "Update map layers on integrated app?".
+
+Could or should we offer a single app to do it all? Is Shiny the right fit or should we go with React or yet another framework?
+
+I imagine a cool visualization with the CalCOFI grid (https://calcofi.io/calcofi4r/articles/calcofi4r.html#calcofi-grid) could transform into any one of these outputs like a D3 animation. And then summarize accordingly. But I am not trying to impose that logic or idea. And we need to be able to emphasize the depth component to much of the data, especially oceanographic. I really am looking for a next big approach and idea for serving this data effectively considering the depth and breadth of users
+
+Reference recent emails with the following subjects:
+
+Subjects:
+- "A thought on the integrated app" yesterday
+- "CalCOFI.io product renames & themes" 3 days ago to yesterday
+- "Update map layers on integrated app?"
+
+
+---
+
+Ok, this is pretty exciting! 
+
+D4. The one aspect that gives me hesitation is the DuckDB WASM cold start "~5 s init and 10–20 s of footers on multi-object queries". Surely we can speed this up with a backend service, even a node DuckDB WASM instance that is kept warm.
+
+D9. Instead of https://app.calcofi.io/explore, why not simply https://calcofi.io/explore?
+
+D6. Yay, I love the grid morph as the opening move and grain transition!
+
+---
+
+Plan updated (.claude/plans/2026-08-28 CalCOFI Explorer — …md, now 425 lines) with your three points folded in:
+
+- D4 gained a "Cold start — measured against this design" subsection: where db-query's 5 s / 10–20 s actually come from (bundle + httpfs/spatial loads; many large objects with footers and unsorted row groups), the four-part budget that removes both (prebuilt first paint with WASM warming in a worker; no extensions; one whole-object fetch per lens; content-addressed URLs cached as immutable — a new release invalidates by changing the URL, as H3T's release= does today), the expected numbers (first paint < 1 s; first custom query 1–4 s cold, < 100 ms warm; repeat visits near-instant), and the warm backend as a same-SQL http transport — native DuckDB via @duckdb/node-api/the existing FastAPI, explicitly not a server-side WASM build — promoted from optional to Phase 2 only if Phase 0 misses. The Phase-0 go/no-go and the risk entry were rewritten to match.
+- D9 is now calcofi.io/explore/ on GitHub Pages, repo CalCOFI/explore (a Pages project site is always /<repo>/, so the app-* rename TODO doesn't apply), app.calcofi.io/explore as a 308 alias, and the old app paths 308 into ?lens=… as each lens reaches parity; the Scale line, Phase 2 and the 9/3–9/8 list were updated to match.
+- D6 unchanged; the status line records that you confirmed it.
+- Memory pointer updated with the same three facts.
+
+Next concrete step is the Phase-0 spike (hand-cut obs_bio + obs_env/temperature objects, DuckDB-WASM in a worker with no extensions, deck.gl station ↔ hexagon morph, timed on a laptop and a phone) — if you'd like it in hand for 9/8, I can build it from the local v2026.08.25 parquet.
+
+---
+
+Will the app include packaged download capability and possibly code (SQL/Python/R notebook for direct reproducible access given current filters)?
+
+---
+
+Yes — and in this architecture it is close to free, so it deserves its own decision rather than a feature line. Every lens is SQL over public, immutable release objects, so "download" is the app handing over what it just ran: the bytes, the exact SQL with table tokens resolved to content-addressed object URLs (runnable forever), and generated R/Python/notebook code pinned to the release. The fleet already has both halves: db-viz-hex's bundle (data/original|summarized|integrated/ + query/*.sql + REPRODUCE.md) and db-viz-station's in-browser JSZip/DuckDB-WASM exports; the explorer generalizes them and adds the rule that makes it trustworthy — one SQL, three runtimes (browser, R, Python), parity-tested per release the way match.js ≡ calcofi4r already is. Adding it as D10.
+
+---
+
+Done — D10 · Downloads and reproducible code is in the plan, and the answer is yes, first-class:
+
+- The bundle (JSZip, built in the browser from the in-memory slice): README.md (selection, the reproducing URL, release + catalog sha256), CITATION.md (per dataset from dataset.citation_main/others/license/pi_names), data/summary/ (the lens table as shown, CSV + GeoJSON for map grains), data/observations/ (the filtered rows, CSV and Parquet via DuckDB-WASM COPY … TO, every row carrying dataset_key, cpue_unit, measurement_qual, depth min/max), data/reference/, and query/ — selection.json, the exact SQL the browser ran with table tokens resolved to content-addressed object URLs (so it runs unchanged in ten years), reproduce.R (calcofi4r cc_get_db(version=…)), reproduce.py (calcofi4py release_sources() + duckdb), reproduce.qmd and reproduce.ipynb that go selection → query → table → the same figure.
+- In-app: "Copy as… SQL · R · Python · curl" beside every lens, and "Open in db-query" (needs a small ?sql= addition there).
+- The rule that makes it trustworthy — one SQL, three runtimes. Templates live in explore/sql/*.sql with named parameters bound from the URL; the browser executes them and the generators emit them verbatim. A parity CI runs every template in DuckDB-WASM, R and Python against the frozen release on each db-release and compares counts + hashes (the match.js ≡ calcofi4r precedent made systematic), and test_release.qmd's consumer-contract suite gains the same templates so schema drift fails the release, not someone's notebook.
+- Generated code is pinned and explicit: release, qual_ok predicate, chosen unit, depth band, viewport bbox if it was a filter, the sample_spatial join behind region summaries. Raw data beyond the slice (obs_ctd_full) is a pointer + code, never a payload. Downloads are tracked by selection URL for Erin's usage reporting.
+
+Phasing: Phase 2 ships bundle + SQL + reproduce.R/.py (60 → 65 h); Phase 3 adds notebooks, "Copy as…", db-query link and parity CI (25 → 30 h); total ~167 h, with the ~55 h beyond the Visualize line still belonging to Integrate/Publish + Task 14. Item 9 added to the 9/3–9/8 list; memory pointer updated.
+
+---
+
+Great! Can you create a working prototype showing off the different grains (with animation) within the next couple of days? Can I use Fable XHigh and not burn through too many tokens
+
+---
+
+Yes to both. The prototype is exactly the plan's Phase-0 spike, and it's a two-day build if the ground is prepared; xhigh is the right effort level for it — the build is tool-and-code work, not reasoning-bound, and the token spend is dominated by context carried per turn, not by thinking. The cheapest way to run it is a fresh session at xhigh with a short brief, because this session is carrying ~200k tokens of inventory the build doesn't need.
+
+What I'll do now, cheaply and deterministically: cut the browser-shaped data objects from the local release (so the fresh session starts with data, and we get the real sizes), and write the spike brief into the plan so the kickoff prompt is three lines. First, two facts I need for the cut: the exact quality predicate and the bio measurement types.
+
+⏺ Getting the quality predicate and bio measurement types for the data cut
+
+---
+
+Everything the fresh session needs is in place:
+
+- **Data cut done** (82 s): `~/_big/calcofi/explore-spike/data/` — `obs_bio.parquet` 22 MB (1,255,348 rows, the whole bio realm), `temperature` 4.5 MB (884,402), `oxygen_ml_l` 3.5 MB, sample_spatial 250 KB (92,589 exact per-root-sample memberships for MPAs / Sanctuaries / CDFW Regions / CA Counties), `sample_root` 11 MB, grid.geojson 400 KB (218 cells with centroids — the morph's home positions), spatial_spike.geojson 1.5 MB (236 features, lon/lat order verified). The bio object came in a shade over the plan's 15–20 MB guess; an env variable well under. The SQL that made it is beside it (build_spike_data.sql) and moves into the explore repo on day 1.
+- **Plan** now has "Phase 0 — spike brief": deliverable, data dictionary with measured sizes, minimal stack, the seven SQL templates, a Day-1/Day-2 split, go/no-go numbers, and the kickoff prompt. Node 24 / npm 11 are on this machine.
+
+**On effort**: /model → Fable xhigh is right for the build; the spend is tool output and screenshots, not reasoning. Three habits keep it low: fresh session (this one carries ~200k tokens of inventory the build doesn't need), one screenshot per lens rather than iterate-by-screenshot, no subagents. Rough expectation: 150–300k tokens for the two days.
+
+After `/clear`, paste this:
+
+Read `.claude/plans/2026-08-28 CalCOFI Explorer — one browser-native app across station, hexagon, cruise, region & section grains.md`, section "Phase 0 — spike brief", and build exactly that in `~/Github/CalCOFI/explore` (new local repo; do not create the GitHub repo or push). The data is already cut at `~/_big/calcofi/explore-spike/data/` (see `_sizes.txt`). Work in a few large files, verify in Chrome with one screenshot per lens, and append the measured numbers to the plan. Do not re-derive anything the brief already states.
+
+---
+
+One last thing. One of the more recent issues I mentioned in the email thread with subject "A thought on the integrated app" needs some explicit handling:
+
+> For example, for our default Pacific sardine, three different units (count, count/10m2, count/100m3) are averaged (which doesn't actually make much sense) without attributing which datasets. 
+
+We need to include effort wherever possible and responsibly resolve denominator differences or provide ways of filtering to datasets and by common denominators.
+
+---
+
+Right — that's the single most important correctness rule for the bio side, and the current behaviour is worse than "averaged": in the polygon bundle you sent Erin, the unit that got summarized was the bare count (3,673 rows, CUFES eggs) while the effort-standardized count/10m2 (739) and count/100m3 (178) were the ones excluded — largest-n won, and largest-n was the least comparable. Let me get the facts on what effort the release actually carries per dataset before writing the rule.
+
+⏺ Re-cutting obs_bio with effort fields and canonical densities
+
+Done. D8 is now the effort/denominator rule, and the spike data already implements its release half.
+
+What the release actually holds (measured, v2026.08.25): sardine is two datasets × two life stages and both publish raw counts — swfsc_cufes eggs 49,572 rows (underway pump) and swfsc_ichthyo eggs 5,906 + larvae 7,420 across five gears. The count/10m2 / count/100m3 only ever existed inside the Hexagon Explorer's prep_db.R. Effort is in sample_measurement for exactly one bio dataset (ichthyo: std_haul_factor, prop_sorted, volume_sampled, covering all 482,250 rows); CUFES has none in the release (284,097 rows — the ingest reads no volume), and phyllosoma (volume_water_filtered_ml_), mesopelagic-fish (volume_sampled), farallon (effort) and dungeness have effort at the source that isn't emitted. Across all 1.26 M bio rows: 482 k counts with effort · 355 k raw counts with none (5 datasets) · 155 k densities as published · 263 k other units. And the 2026-08-21 polygon bundle didn't just average — largest-n picked the bare CUFES count (3,673) and excluded the standardized count/10m2 (739) and count/100m3 (178).
+
+D8's five rules (two for the release, one for ingests, two for the app):
+1. Effort travels with every observation (tow_type + its sample's effort joined at cut time).
+2. Two canonical denominators derived once, tested, named — density_per_10m2 (areal: count × SHF / prop_sorted, oblique/vertical tows; published per-m² × 10) and density_per_1000m3 (volumetric: count / prop_sorted / volume × 1000, any tow with a volume incl. manta and CUFES once ingested) — plus effort_class per row and a denominator column in measurement_type.csv; one expression in three runtimes (cc_density_sql() R/py/app, fixture-tested). Areal ↔ volumetric is deliberately not converted — that needs integrated depth and a vertical-distribution assumption the app must not make silently.
+3. Missing effort is an ingest task, not a UI caveat: questions.csv rows for CUFES (provider question if the export lacks volume), phyllosoma, mesopelagic-fish, farallon (per-km² is a third denominator for birds/mammals), dungeness.
+4. Picker = taxon × life stage × denominator; eggs and larvae never merged; the switch greys out datasets that can't supply the denominator and shows excluded counts; default = the denominator covering the most datasets with effort, never largest-n; gear is a filter; a summary that would mix denominators/datasets/stages isn't computed — the UI asks.
+5. Attribution as before (CITATION.md, dataset_key + effort_class on every downloaded row).
+
+So the spike's sardine default opens as larvae · per 10 m² · ichthyo (6,158 rows; 1,262 manta rows excluded, available per 1000 m³) with pills ichthyo larvae 7,420 · ichthyo eggs 5,906 · CUFES eggs 49,572 (raw count, no effort in release) — instead of one number over 62,898 rows.
+
+Spike data re-cut: obs_bio.parquet is now 28 MB with tow_type, the three effort fields, both densities and effort_class (build_spike_bio_effort.sql beside it; the sardine breakdown above is its own check). Plan: D4/D10/Phase 1 (+5 h → ~172 total), the spike brief (templates filter on one life stage + one denominator, never across effort_class) and the 9/3–9/8 list (item 10) all updated; no cpue_unit left anywhere. The kickoff prompt is unchanged — the brief now carries D8, so the fresh session builds it in.
+
+---
+
+Done. Everything is committed and pushed; the heartbeat will report once more and exit on its own.
+
+Recap
+
+Repo created and pushed — github.com/CalCOFI/explore (branch main), Pages live at https://calcofi.io/explore/ (deploys on every push). PRs open for the three-slug contract: CalCOFI.github.io #5 (card + themed screenshots, status: interim) and uptime #90.
+
+Phase 1 — release additions (proven end-to-end by staging run ducklake-staging/releases/v2026.08.28)
+- calcofi4db 3.24.0 R/explore.R: build_sample_root, build_obs_slim (→ obs_bio / obs_env, one schema, hex7 UBIGINT), h3_parent_sql (bit arithmetic, verified vs the h3 extension), build_sample_spatial (polygon-only, chunked per layer), build_coverage + build_coverage_stations; sort keys; 65 tests.
+- calcofi4r 1.13.0 cc_density_sql() + cc_default_stage()/cc_default_denominator(); calcofi4py 0.5.0 twins; the density fixture is byte-identical in three repos.
+- workflows: browser_objects chunk + 4 sidecars, 7 contract rows, denominator column, cross-FK/column docs, RELEASES.md § Unreleased, six provider questions (incl. ichthyo Q08: no tow depth anywhere in sample — found by the cut), and a staging-path fix (notes promoted in memory). Staging catalog: 22 tables, all sidecars served, every new contract query passes. All three package repos pushed.
+
+Phase 2 — app: release.ts (catalog resolver, ?release=), coverage-first paint with early fetches from index.html, all 84 env variables from the release, station coverage card, mean ± se time series, D10 bundle (README, CITATION, summary + GeoJSON, observations parquet/CSV, resolved query/*.sql + objects.json, reproduce.R/.py/.qmd/.ipynb) plus "Copy as SQL/R/Python"; parity verified on a live bundle (R and Python reproduce the browser's 1,048 hexes, |Δ| 4.5e-13). Bundle diet: Plotly lazy, duckdb-wasm 1.29.0. Live cold: first paint 1.55 s, ready ~6.5 s (all obs_bio download); warm ready 1.2 s; queries 4–40 ms.
+
+Left for you
+- Cut the real release (the chunk is proven); then set VITE_RELEASE_PREFIX=ducklake/releases in explore/.github/workflows/pages.yml (Pages currently reads a catalog-shaped copy at gs://calcofi-db/explore-dev-root/).
+- Review/merge PRs #5 and #90; the GA4 tag (third slug, usage: explore) — the auto-mode classifier blocked me from adding tracking code; it's the cc_ga_head() snippet with content_group: "explore".
+- Effort ingests once providers answer the six questions; /station 308 only when the Stations lens reaches parity.
+
+---
+
+Looks amazing! I am not understanding what looks like it's supposed to be a dataset summary, but a repeat of "icthyo" (and one instance of "bottle") with different numbers
+Ideally clicking on the dataset pill can also filter to that dataset
+
+---
+
+Good catch — that's a bug: the env pills are showing stale bio picker rows (ichthyo by gear) alongside the bottle row. Reproducing it first, then fixing it together with the pill-to-filter behaviour.
+
+And the db has 2026-07 ctd-cast data, but I am not seeing that
+
+----
+
+The stale pills are orphaned DOM from duplicate React keys during the env slice transition — I'll fix by clearing the picker on slice change, using unique keys, and aggregating env pills per dataset. For the CTD issue, "temperature" is bottle-only since CTD uses a separate `temperature_ave` type, so I'll build a crosswalk in the env vocabulary to union comparable variable types and pull the year range from the release instead of a hardcoded constant.
+
+CTD publishes headline series with `_ave`/`_corr` suffixed names (1993–2026) while bottle uses bare names (1949–2021). I'll build a unified-variable crosswalk pairing comparable bottle/CTD types with dataset pills, pull year ranges from the release data instead of a hardcoded 2023, fix stale pills, and make pills toggle dataset filtering.
+
+---
+
+Live site confirmed: after switching to variable, the pills are bottle 884,402 · 575 flagged and CTD 690,964, years 1949–2026, 1,575,366 rows in view.
+
+What was wrong, and what changed (all pushed, live at calcofi.io/explore)
+
+1. Repeated "ichthyo" pills — a rendering bug, not data: for the ~2 s between clicking variable and the env slice landing, the env pill list rendered the old bio rows with duplicate React keys, and React never removed those DOM nodes. Fixed by clearing the picker on a slice change and aggregating env pills per dataset with unique keys.
+2. CTD through 2026-07 not showing — a vocabulary gap, not missing data. The release keys the CTD headline series by sensor/correction (temperature_ave, salinity_ave_corr, oxygen_ml_l_ave_sta_corr, oxygen_umol_kg_ave_sta_corr, sigma_theta_1, 1993–2026) and bottle by the bare names (1949–2021), so "temperature" was bottle-only. The explorer now has a unified-variable crosswalk (src/variables.ts): one variable = the comparable bottle + CTD headline types, its slice is the union of their objects, and the dataset pills attribute bottle vs CTD. The proper home for this is a variable column in metadata/measurement_type.csv, registry-owned like denominator — noted in the plan as a Phase-1 follow-up (the CTD's btl_* types are its own bottle samples and must stay separate or they'd double-count the bottle dataset).
+3. Year range now comes from coverage.json (the URL's years is open-ended by default and closes at the release's last year, 2026) instead of a 2023 constant — inputs, year strip, station cards and the section's cruise list all follow.
+4. Pills filter — clicking any dataset pill toggles it in a ?datasets= filter that every lens query applies (bio pills too), with "filtered to CTD · all datasets" shown under the pills; the bundle records the filter.
+
+---
+
+Visiting bare https://calcofi.io/explore/
+then takes me to:
+https://calcofi.io/explore/?lens=station&taxon=worms%3A217452&stage=larva&den=per_10m2&years=1949-2023
+then switching to variable keeps the same year filter
+https://calcofi.io/explore/?lens=station&var=temperature&years=1949-2023
+which hides data since 2023 for the casual user
+
+---
+
+It was the cached bundle: GitHub Pages serves the previous build for up to 10 minutes after a deploy, and the fix for exactly this (an implicit default written into the URL as an explicit years=1949-2023 ceiling) went live with the last push. A fresh profile on the live site now gives:
+
+- bare https://calcofi.io/explore/ → ?lens=station&taxon=worms%3A217452&stage=larva&den=per_10m2 — no years in the URL
+- switch to variable → ?lens=station&var=temperature, year inputs 1949–2026
+
+A hard reload (⌘⇧R) picks up the new bundle (index--L2mRwNn.js). The rule now: the year range is open-ended by default and closes at the release's last year from coverage.json; years= only appears in the URL once you've set it yourself, and an explicit range you set (or arrive with via a shared link) is kept across taxon/variable switches, which is the intended behaviour for a deliberate filter.
+
+---
+
+Let's turn off the timing by default. Perhaps there could be something clicked to open up advanced extra settings like this (eg I might use a gear icon with a`bslib::popover()` for Shiny apps)
+
+Let's collapse the "© CARTO, © OpenStreetMap contributors" by default. 
+
+---
+
+Pushed; Pages will serve it within a few minutes (hard reload if the old bundle is cached).
+
+- Timing panel is off by default and lives behind a ⚙ button at the map's bottom-right (the bslib popover() idea): it opens a panel with the go/no-go summary, every timing mark, device info and the last SQL, with a × to close. ?timing=1 opens it on load, so scripts/verify.mjs and anyone debugging can still get it directly.
+- Attribution starts collapsed to the ⓘ (MapLibre's compact control auto-expands on load; it's closed once the style lands, and hover/click still reveals "© CARTO, © OpenStreetMap contributors").
+
 ## 2026-08-25 dark/light
 
 Can we achieve consistency with dark/light themes + nav bar across products, including Shiny apps, web apps, packages, and docs?
@@ -36,6 +1991,71 @@ Ideally, we can switch all to either dark or light theme with the same url suffi
 I would also like to see a link back to CalCOFI.io in the far left nav with a common logo in the favicon, except where specifically designed like calcofi4r and calcofi4py.
 
 Write a plan to .claude/plans/ for review before we proceed.
+
+----
+
+Done — pushed as f7af65d (rebased over the other session's "Apps section" copy edit).
+
+Pollutants app (pollutants-app 273a842, live at app.calcofi.io/pollutants/)
+
+- bslib: page_navbar(fillable = "Map") + layout_sidebar()/sidebar() with a full-height leaflet (the #map { height: calc(100vh - 106px) } hack is gone), About in a container-lg, Share button and the dark/light switch as nav_items. The container runs bslib 0.11.0 / shiny 1.13.0, same as local.
+- Bookmarking (enableBookmarking("url")): the address bar follows analyte class, analyte and the map view continuously (zoom/center carried as bookmark values; leaflet's map_* inputs, the nav and the theme switch are excluded), plus a Share button that opens the URL modal. A link like
+  …/pollutants/?_inputs_&sel_analyte_class="PCB"&sel_analyte="PCB-118"&_values_&zoom=10&center={…}
+  reopens exactly that — verified locally and live. The analyte select is now static and server-updated (the old renderUI couldn't restore), with the restored analyte applied once the class-driven choices contain it.
+- Defaults: Chlorinated Hydrocarbons / 4,4′-DDT. Rationale (in global.R, with a stopifnot so a data rename fails loudly): of the seven DDT-family analytes in the Bight data, p,p′-DDT is the most acutely toxic to marine organisms — the compound EPA's aquatic-life criteria for the group are keyed on — while 4,4′-DDE is the persistent metabolite and DDD the least toxic. If you'd rather lead with the persistence story, it's a one-line change to DEFAULT_ANALYTE <- "4,4'-DDE".
+- Cleanup: dead baseGroups (Toner/NatGeo) dropped from the layers control; README points at the canonical URL and describes the bookmark URL.
+
+Cards: images/pollutants_{dark,light}.png re-captured from the live app (1,158 DDT stations on Carto Dark Matter / Esri Ocean respectively), both pass the luminance gate; calcofi.io redeploys on this push.
+
+One side effect worth knowing: updateQueryString() replaces ?theme=… with the bookmark state as soon as the app loads, so a shared link carries the view, and the recipient's theme comes from their own cookie/default (dark) — consistent with the contract, but a ?theme=light link to this app won't survive in the recipient's address bar.
+
+----
+
+The other aspect that is not yet fully consistent across apps is the display of the integrated database version (not applicable to pollutants app). Please update in the most sensible, legible way
+
+----
+
+Let's also set the default view for the CTD Transects to mode=anomaly, update description at calcofi.io to mention anomoly calculation option versus measured value and screenshots to show light and dark
+
+----
+
+Everything is deployed and pushed; nothing further is pending.
+
+Recap
+
+Database release, one way everywhere. Products that draw on the integrated database now show release v2026.08.25 as a single chip right after the title — mono, muted, bordered, linking to that version's schema and release notes on db-schema. Defined once in brand/v1/theme.css (.cc-release, additive to v1; unscoped because bslib's brand slot sits outside .cc-header) and emitted for Shiny by calcofi4r 1.12.0 — cc_brand_header(release =), cc_release_chip(), cc_release_url() (66 tests green).
+
+The rule behind it: the chip names the release the page's data was built from, never "latest" fetched at load — the two diverge between a release and the next redeploy.
+
+┌─────────────────┬──────────────────────────────────────────────────────────┬─────────────────┐
+│     product     │                  source of the version                   │     before      │
+├─────────────────┼──────────────────────────────────────────────────────────┼─────────────────┤
+│ Hexagon         │ h3t_release_of(db_path)                                  │ bespoke muted   │
+│ Explorer        │                                                          │ span            │
+├─────────────────┼──────────────────────────────────────────────────────────┼─────────────────┤
+│ CTD Explorer,   │ new release_version.txt written beside the duckdb by     │                 │
+│ Cruise Explorer │ prep_db.R (seeded v2026.08.25 on the server, matching    │ nothing         │
+│                 │ the DBs built in that release's deploy)                  │                 │
+├─────────────────┼──────────────────────────────────────────────────────────┼─────────────────┤
+│ CTD QA/QC       │ its existing sidecar                                     │ subtitle text   │
+├─────────────────┼──────────────────────────────────────────────────────────┼─────────────────┤
+│ Station         │                                                          │ About-panel     │
+│ Explorer, CTD   │ data/version.json                                        │ line / plain    │
+│ Transects       │                                                          │ span            │
+├─────────────────┼──────────────────────────────────────────────────────────┼─────────────────┤
+│ db-query        │ _config.yml                                              │ plain link      │
+├─────────────────┼──────────────────────────────────────────────────────────┼─────────────────┤
+│ db-schema       │ keeps its version picker (it chooses the version); label │ —               │
+│                 │  restyled to match                                       │                 │
+└─────────────────┴──────────────────────────────────────────────────────────┴─────────────────┘
+
+Not applicable: pollutants, workflows, docs, packages, erddap, storage.
+
+CTD Transects now opens on the anomaly against each station's day-of-year climatology (?mode=anomaly; the URL always names the mode, so a measured-value link still shares as ?mode=value), and its calcofi.io description says so.
+
+Cards: seven products re-captured in both themes with the chip, transects showing the anomaly view; all pass the luminance gate; the hub redeploys on a039fff.
+
+Two things worth knowing: deploy_consumers.sh still reports FAILED at the end because its verify list probes the old /db-viz-hex/ and /db-viz-cruise/ paths (308 now) — the file is dirty in the other session so I left it; and the next full prep_db.R run for ctd-viz/cruise will write the sidecar itself, so the hand-seeded files are only a bridge.
 
 ## 2026-08-25 app rename
 
@@ -191,7 +2211,25 @@ For your review — Parts 2–3
 
 Great, please proceed with the plan using all your recommendations for the 4 Qs
 
+----
 
+All four production steps are complete and verified. Final summary:
+
+Content-addressed release — shipped to production ✅
+
+1 · Code pushed — 7 repos (calcofi4db 3.23.3, calcofi4r 1.12.1, calcofi4py 0.4.0, workflows, db-query, db-viz-station, ctd-transects, db-schema) plus docs and the themed calcofi4r card.
+
+2 · Caddy 302 redirect — deployed to the server (validated + reloaded) and proven live: with a compat copy removed, a legacy releases/{v}/parquet/… path returned 302 → the canonical ducklake/tables/{table}/{hash}/ object → 200; restored.
+
+3 · Production release — v2026.08.25 republished deduplicated + content-addressed: sample now 1,467,245 rows (was 1,472,100 — the 4,855-duplicate bug is fixed in the data, guarded by a hard PK check). T3 clean (214 objects, 0 problems), promoted after the consumer contract suite passed 28/0. All server apps rebuilt and serving 200 on the corrected release (hex, cruise, ctd, ctd-qaqc, h3t); PostgreSQL release.* views re-pointed via the catalog; Station Explorer rebuilt too (per the teammate).
+
+4 · Archive thinned — 22 non-consolidated versions retired (~131 GB of parquet deleted; sidecars, notes, and retired.json kept), 6 consolidated versions + the promoted one intact. versions.json carries the consolidated/retired flags, retired index pages show the "Data retired" banner, and cc_get_db() on a retired version errors cleanly naming its replacement.
+
+Real bugs found and fixed along the way: the duplicate-sample seafloor-stamp merge() bug; a DuckDB spill temp-dir failure; the ctd-viz release_used ordering bug and its obs view/table drop; and calcofi4r's local_data no longer downloads all of obs. The one messy detour — repeated ctd-viz "failures" — turned out to be a 20-minute-stale log from pre-fix runs; the clean run downloads 0 obs partitions and serves correctly.
+
+Everything is committed and pushed; the rollout is done.
+
+`claude --resume "db changelog, archive thinning, hash tables"`
 
 ## 2026-08-24 find errant CTD plot
 

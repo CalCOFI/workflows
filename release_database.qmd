@@ -808,7 +808,14 @@ DEPTH_SEAFLOOR_OVER_MAX <- 694L  # ratchet: measured at v2026.08.25 (695 at v202
 gebco_tif <- path.expand(Sys.getenv(
   "CALCOFI_GEBCO_TIF",
   "~/_big/gebco_2025_sub_ice_topo_geotiff/gebco_2025_sub_ice_n90.0_s0.0_w-180.0_e-90.0.tif"))
-stopifnot("GEBCO tif not found; set CALCOFI_GEBCO_TIF" = file.exists(gebco_tif))
+if (!file.exists(gebco_tif)) {
+  # D29 (2026-08-31): no local tile is no longer fatal — the same grid is published as a
+  # streamable COG, and GDAL's /vsicurl/ range reads fetch only the blocks the positions
+  # touch. The laptop keeps its local file (faster, offline); any other machine just runs.
+  gebco_tif <- paste0("/vsicurl/https://storage.googleapis.com/calcofi-db/",
+                      "bathymetry/gebco_2025_sub_ice_n90_w180_e90_cog.tif")
+  cat(glue("CALCOFI_GEBCO_TIF names no local file - streaming {gebco_tif}\n"))
+}
 
 d_depth <- check_depth_bounds(
   con_wdl, tbls = c("sample", "obs", intersect(supp_tbls, dbListTables(con_wdl))))
@@ -821,6 +828,18 @@ d_depth |>
 
 sf_sample <- sample_seafloor(con_wdl, gebco_tif)
 add_sample_seafloor(con_wdl, gebco_tif, seafloor = sf_sample)
+
+# every NULL seafloor is one of four things, and only three may ship (D29): a sample
+# with no/NaN coordinates or one genuinely off the GEBCO tile is the owning ingest's
+# question; a positioned sample INSIDE the tile that still reads NULL can only be a
+# regression in the sampling itself, and fails the release.
+d_sf_null <- check_seafloor_nulls(con_wdl, source_bbox = c(-180, 0, -90, 90))
+d_sf_null |>
+  datatable(caption = "Samples with NULL seafloor_depth_m, by cause (inside_tile_null fails the release)")
+stopifnot(
+  "seafloor_depth_m is NULL for a positioned sample inside the GEBCO tile - the sampling regressed" =
+    attr(d_sf_null, "n_inside_null") == 0)
+
 d_over <- check_depth_vs_seafloor(con_wdl, sf_sample, tolerance_m = 10)
 attr(d_over, "summary") |>
   datatable(caption = paste(
@@ -1482,15 +1501,27 @@ jsonlite::write_json(build_coverage_stations(con_wdl, release_version), coverage
 # polygon layers (simplified for display; membership is exact and lives in sample_spatial)
 grid_geojson_path    <- file.path(dir_frozen, "grid.geojson")
 spatial_geojson_path <- file.path(dir_frozen, "spatial.geojson")
-unlink(c(grid_geojson_path, spatial_geojson_path))
+spatial_layers_path  <- file.path(dir_frozen, "spatial_layers.json")
+unlink(c(grid_geojson_path, spatial_geojson_path, spatial_layers_path))
 dbExecute(con_wdl, glue("COPY (SELECT grid_key, station, line, shore, pattern, zone, ST_X(geom_ctr) AS lon_ctr, ST_Y(geom_ctr) AS lat_ctr,
                                 ST_GeomFromWKB(ST_AsWKB(geom)) AS geom FROM grid)
                          TO '{grid_geojson_path}' WITH (FORMAT GDAL, DRIVER 'GeoJSON')"))
 dbExecute(con_wdl, glue("COPY (SELECT spatial_key, layer, name, ST_SimplifyPreserveTopology(ST_GeomFromWKB(ST_AsWKB(geom)), 0.002) AS geom
                                 FROM spatial WHERE ST_GeometryType(geom) IN ('POLYGON', 'MULTIPOLYGON'))
                          TO '{spatial_geojson_path}' WITH (FORMAT GDAL, DRIVER 'GeoJSON')"))
+# the boundary-layer registry + what only the release knows about each layer (counts, bbox, names,
+# sample_spatial memberships) — the explorer's Layers card reads this, never the CSV (D23, calcofi4db >= 3.28.0).
+# `built` = the ingest_spatial manifest's mtime: the PMTiles archives are rebuilt outside releases, and the skew
+# must at least be visible (plan 2026-08-31, Risks).
+jsonlite::write_json(
+  build_spatial_layers(
+    con_wdl, here("metadata/spatial_layers.csv"), release_version,
+    pmtiles_base = "https://storage.googleapis.com/calcofi-files-public/_spatial/",
+    built = format(file.mtime(here("data/parquet/spatial/manifest.json")), "%Y-%m-%d")),
+  spatial_layers_path, auto_unbox = TRUE, digits = NA, null = "null")
 cat(glue("coverage.json {round(file.size(coverage_path) / 1e3)} KB · coverage_stations.json {round(file.size(coverage_stations_path) / 1e3)} KB · ",
-         "grid.geojson {round(file.size(grid_geojson_path) / 1e3)} KB · spatial.geojson {round(file.size(spatial_geojson_path) / 1e6, 1)} MB\n"))
+         "grid.geojson {round(file.size(grid_geojson_path) / 1e3)} KB · spatial.geojson {round(file.size(spatial_geojson_path) / 1e6, 1)} MB · ",
+         "spatial_layers.json {round(file.size(spatial_layers_path) / 1e3)} KB\n"))
 
 # sample_spatial is a core relationship table (ERD + default table list); the three browser objects
 # are supplemental — hosted and catalogued, hidden from cc_get_db() by default like obs_ctd_full
@@ -1829,7 +1860,7 @@ jsonlite::write_json(catalog, catalog_path, auto_unbox = TRUE, pretty = TRUE, di
 put_gcs_file(catalog_path,
   glue("gs://{gcs_bucket}/{gcs_release}/catalog.json"))
 # the coverage cube behind the explorer's first paint (built in [browser_objects])
-for (f in c(coverage_path, coverage_stations_path, grid_geojson_path, spatial_geojson_path))
+for (f in c(coverage_path, coverage_stations_path, grid_geojson_path, spatial_geojson_path, spatial_layers_path))
   put_gcs_file(f, glue("gs://{gcs_bucket}/{gcs_release}/{basename(f)}"))
 
 # upload RELEASE_NOTES.md
@@ -2041,6 +2072,7 @@ sidecar_urls <- c(
   glue("gs://{gcs_bucket}/{gcs_release}/coverage_stations.json"),
   glue("gs://{gcs_bucket}/{gcs_release}/grid.geojson"),
   glue("gs://{gcs_bucket}/{gcs_release}/spatial.geojson"),
+  glue("gs://{gcs_bucket}/{gcs_release}/spatial_layers.json"),
   glue("gs://{gcs_bucket}/{gcs_release}/relationships.json"),
   glue("gs://{gcs_bucket}/{gcs_release}/erd.mmd"),
   glue("gs://{gcs_bucket}/{gcs_release}/RELEASE_NOTES.md"),
