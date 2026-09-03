@@ -2,6 +2,8 @@
 
 scripts to explore and load data into the CalCOFI database
 
+[![DOI](https://zenodo.org/badge/447789885.svg)](https://zenodo.org/badge/latestdoi/447789885)
+
 ## notebooks
 
 See rendered notebooks at <https://calcofi.github.io/workflows/>.
