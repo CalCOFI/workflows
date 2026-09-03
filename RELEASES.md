@@ -8,6 +8,234 @@ versions). Conventions: see `CLAUDE.md` § "RELEASES.md is not optional".
 
 # Unreleased
 
+## `dataset_taxon` says what the source claimed; the bird rule reads the classification; common names have one written order
+
+Three things about taxa change under consumers, all from the taxon crosswalk plan
+(`.claude/plans/2026-09-02 Taxon crosswalk — …md`, Phase 1, calcofi4db 3.29.0). None of them
+moves a key for a taxon released today — the Phase 1 gate staged the Farallon vocabulary through
+the new path and reproduced its v2026.08.25 `dataset_taxon` slice 156/156 rows, key for key.
+
+- **`dataset_taxon` gains one column, `ds_source_json`** — a JSON object of whatever ids and rank
+  the *source* supplied for that local taxon (`{"itis_id":174715}`,
+  `{"worms_id":217452,"itis_id":161729,"gbif_id":2415428}`; NULL where it supplied nothing).
+  It sits beside `taxon.worms_id` / `itis_id`, which are what the *authority* says, so the two
+  can be audited against each other (`json_extract(ds_source_json, '$.itis_id')`). Nothing is
+  dropped or renamed. The column is populated as each taxon-bearing ingest re-runs; a shard that
+  predates it carries NULL.
+- **Birds key `itis:` because their class is Aves, not because a source flag said so.**
+  The rule is now stated once, in `calcofi4db::taxon_key_of()`: `itis:<tsn>` exactly when the
+  taxon's class (from the cached WoRMS/ITIS lineage) is Aves and an accepted TSN resolves,
+  otherwise `worms:<aphia>`, otherwise a dataset-local key the release refuses. Before, only the
+  Farallon census carried an `is_bird` column, so an Aves taxon reaching the release through any
+  other dataset would have keyed `worms:` and one species could have carried two keys. Every
+  released bird already satisfies the new rule (113 of 113 `itis:` vocabulary taxa are class Aves;
+  no `worms:` vocabulary taxon is), so no key changes; a bird with no accepted TSN would now key
+  `worms:` with a note in `taxon.notes` rather than silently.
+- **`common_name` follows one written precedence, applied at the release:** a human choice in
+  `metadata/taxon_common.csv` (now tagged `source = "manual"`, 44 rows) > the CalCOFI species
+  list's own name (`swfsc_ichthyo`) > WoRMS when it offers exactly one English vernacular > any
+  other dataset's own name, in `dataset_key` order > empty. Until now the order was whichever
+  ingest's shard happened to win the merge. **Consumers:** measured against v2026.08.25 with the
+  new `apply_taxon_common()`, **50 of 2,125 taxa change `common_name`** — 48 that had none gain
+  the vernacular their dataset publishes (20 `cce-lter_zoodb` group labels such as "COPEPODA
+  CALANOIDA CALANIDAE", 8 `cce-lter_zooscan` operational classes, 20 `calcofi_phytoplankton`
+  functional-group labels including "other" — see the open question below), and two are renamed
+  by the tie-break for two codes of one dataset sharing a key: the code whose name *is* the
+  taxon's accepted name wins, then `ds_taxon_key`. So `itis:562561` *Pterodroma sandwichensis*
+  becomes "Hawaiian Petrel" (Farallon HAPE) rather than the old trinomial's "Dark-Rumped Petrel"
+  (DRPE), and `worms:275218` *Syngnathus californiensis* becomes "Kelp pipefish" (ichthyo 792)
+  rather than "Bay pipefish" (ichthyo 788, *S. leptorhynchus*, which carries the kelp pipefish's
+  AphiaID in the species list — swfsc/ichthyo Q13). `worms:126175` *Sebastes* keeps
+  "Rockfishes" under the same rule (Phase 0's plain `ds_taxon_key` order would have made it
+  "Sunset rockfish"). Per rank: 44 manual, 790 `swfsc_ichthyo`, 186 WoRMS single, 175 other
+  datasets, 930 empty.
+- **`taxon_group` comes from a registry.** `metadata/taxon_group.csv` declares
+  `calcofi:seabirds` = every observed taxon of class Aves, `calcofi:marine_mammals` = class
+  Mammalia, and the eight phytoplankton functional groups by `ds_common_name`. **Consumers:**
+  `calcofi:marine_mammals` loses the two sea turtles (*Chelonia mydas* `worms:137206`,
+  *Lepidochelys olivacea* `worms:220293`) that the Farallon arm's "not a bird" rule put there;
+  `calcofi:seabirds` is unchanged (94).
+
+Two findings from the Phase 1 measurement that this entry does *not* fix, because each changes
+released keys and needs a decision:
+
+- **Phytoplankton species identity is collapsed in every release since the ingest.** The source
+  vocabulary carries an AphiaID for 309 of its 393 codes (294 distinct — *Coscinodiscus
+  curvatulus*, *Prorocentrum micans*, …), but `metadata/taxon_override.csv`'s six functional-group
+  rows match on `taxa` and an override replaces the id a row already has, so 171 codes key the
+  class Bacillariophyceae `worms:148899`, 144 key Dinophyceae `worms:19542`, 53 Coccolithophyceae,
+  4 Dictyochophyceae: **22 distinct `taxon_key`s for 393 codes**, and the functional-group
+  `taxon_group` rows hold one taxon each. The fix is the override rows (match the nine idless
+  codes on `species_code`, not the group on `taxa`) or the override rule (fill, never replace),
+  and it belongs with the phytoplankton ingest's move to `append_dataset_taxon()` (Phase 3).
+- Rank 4 of the common-name order publishes `calcofi_phytoplankton`'s functional-group label as
+  a `common_name` ("other" for 8 taxa, "undefined (code not in source definitions; Q05)" for 9).
+  The label is what that ingest put in `ds_common_name`; whether it should be there is the
+  ingest's question, not the precedence's.
+
+## Every dataset carries a checked citation and a registered license, and the release cites itself
+
+Nothing validated attribution before this release: 8 of 16 datasets shipped `citation_main`
+empty and 13 shipped `license` empty (the other 3 were the free text `"CC BY 4.0"`), nothing
+compared any of it to the source, no consumer could tell when a source had been read, and the
+integrated database itself had no citation. Attribution is now a contract checked like links
+(`calcofi4db::check_dataset_citation()`, 3.30.0), enforced by the workflows index build and by
+the `dataset_coverage` chunk of the release, with the network half behind the same
+`CALCOFI_SKIP_LINK_CHECK` as the link probe:
+
+- **Structural, always:** `citation_main` non-empty with a year and a locator (a DOI, a URL in
+  the string, or `link_data_source`); `license` an active id in the new registry
+  **`metadata/license.csv`** (`CC-BY-4.0`, `CC0-1.0`, `CC-BY-NC-4.0`, `CC-BY-SA-4.0`, `US-PD`,
+  `custom` — which requires `license_url` — and `unknown`); `doi` bare. An error blocks unless
+  the dataset's `questions.csv` holds an `open`/`proposed` row on `related_table = dataset`
+  naming the field, so a gap is either fixed or on record with the provider — never silent.
+- **Against the source's own authority:** EDI's cite service, an NCEI landing page's "Cite as",
+  an ERDDAP `.das`, DataCite (`rightsList` SPDX id, doi.org content negotiation), a `HEAD` on
+  every declared DOI. Fetches are cached in `metadata/{provider}/{dataset}/citation_authority.json`
+  (7 written: phyllosoma, phytoplankton, euphausiids, dic, farallon, mesopelagic-fish, cufes);
+  a difference is reported as `authority_drift` with both strings and **never written into the
+  YAML** — the author's string is the record. Today: 4 datasets `ok`, 14 findings exempt under
+  the `proposed` rows WS-A1 filed plus one new one (mets Q31: its citation has no year and
+  calcofi.org states no publication date), 2 drift warnings (dic abbreviates the NCEI author
+  names; mesopelagic-fish differs from DataCite's APA form in initials and `[Dataset]`).
+- **`source_accessed` is measured, never asserted.** Each dataset's `source_accessed` (DATE) +
+  `source_accessed_method` land on `dataset`: an ingest's own `stamp_source_access()` record
+  (`download` / `file_mtime`, via `build_metadata_json(sources = )`) when it has one, else the
+  last commit of its `manifest.json` sidecar (`sidecar_commit`). Measured now: 15 datasets
+  2026-08-25 (the v2026.08.25 pipeline run, commit 3ee7479) and cdfw_dungeness-crab 2026-09-03
+  (its examined-only re-run) — the date the ingest last ran, which is the honest bound until
+  ingests stamp their downloads.
+- **The release cites itself:** *CalCOFI (YYYY). CalCOFI Integrated Database, release
+  vYYYY.MM.DD [Data set]. Scripps Institution of Oceanography, NOAA Fisheries, and California
+  Department of Fish and Wildlife. https://doi.org/…* — `catalog.json` gains `citation` and
+  `concept_doi` (Zenodo `10.5281/zenodo.22281994`; the version `doi` is written in by
+  `publish_release_notes()` once the GitHub release tag mints it, catalog re-uploaded, objects
+  untouched, `versions.json` records carry `doi`), and every `RELEASE_NOTES.md` appendix gains a
+  **How to cite** section: the release line, then each dataset's `citation_main` · license.
+  `.zenodo.json` and `CITATION.cff` at the repo root (generated by
+  `scripts/build_citation_files.R`: the three partners as creators, every dataset's PIs as
+  contributors, CC-BY-4.0 for the record while the code stays MIT) replace Zenodo's auto-filled
+  "initial Zenodo release" metadata at the next tag.
+
+**Consumers:** additive only. `dataset` gains `doi`, `license_url`, `acknowledgement`, `contact`
+(from the YAML; empty where unset), `source_accessed`, `source_accessed_method`; `license` values
+are SPDX ids (`CC-BY-4.0`, not `CC BY 4.0`); `metadata.json` `datasets[]` carries the same keys
+plus `citation_others` as an array; `catalog.json` gains `citation`, `concept_doi` (and `doi`
+once minted). Nothing is renamed or dropped.
+
+## Every dataset's citation, license and DOI now carries the evidence for it, or a filed question
+
+Eight of sixteen datasets shipped `citation_main` empty and thirteen shipped `license` empty, with
+nothing checked against the source. Filled from each dataset's own authority (EDI's cite service +
+its EML `intellectualRights`, ERDDAP `.das` globals, NCEI/DataCite landing pages, the DataZoo/
+zoodb/zooscan portal policy panels), never invented: **calcofi_phytoplankton** and
+**calcofi_phyllosoma** gained their EDI citation + DOI + license (CC0-1.0 and `custom`
+respectively — reading the actual EML `intellectualRights` matters: EDI packages are *not*
+uniformly CC-BY-4.0, and assuming so would have mislabeled both); **cce-lter_euphausiids** gained
+its EDI citation + DOI + `custom` license + an `acknowledgement` field (new key, additive) carrying
+the EML's required credit text; **cce-lter_zoodb** and **cce-lter_zooscan** gained a `custom`
+license from their portals' Data Use Policy panels and had the NSF credit prose that was sitting in
+`citation_others` moved into the new `acknowledgement` field (`citation_others` is reserved for
+*additional* citations, not credit prose); **farallon_bird-mammal** and **swfsc_cufes** gained a
+`custom` license pointing at their ERDDAP `.das`/data-sharing-agreement source. `calcofi_dic`,
+`sio_mesopelagic-fish` and `cdfw_dungeness-crab` had their free-text `"CC BY 4.0"` normalized to
+the SPDX id `CC-BY-4.0`; `dic` and `mesopelagic-fish` also gained a bare `doi:` field pulled from
+their existing citation strings.
+
+Where the source states nothing, the field stays empty rather than guessing, and a `proposed`
+`questions.csv` row carries the value we'd apply once confirmed: a formal citation for zoodb (Q10),
+zooscan (Q06), farallon (Q09), cufes (Q06) and pic-zooplankton (Q08, plus its license); a license
+for cce-lter_picoplankton-bacteria (Q06); a citation year/URL, `US-PD` license and `pi_names` for
+swfsc_ichthyo (Q10–Q12, the citation proposal reflecting the CSV export we actually ingest, dated
+2025-03-24); a `CC-BY-4.0` license and `pi_names` for calcofi_bottle (Q10–Q11), calcofi_ctd-cast
+(Q28–Q29, naming both Rasmus Swalethorp and Benjamin Gire) and calcofi_mets (Q29–Q30) — calcofi.org
+states no license for any of its three datasets. 14 `questions.csv` rows filed across 10 files, all
+`status = proposed`, `related_table = dataset`.
+
+New additive `dataset_meta` keys used here: `doi`, `license_url`, `acknowledgement` — the columns
+themselves (`ingest_yaml_to_dataset_df()` / `.dataset_entry()`) and `calcofi4db::
+check_dataset_citation()` are WS-A0's, not yet merged onto this branch, so that check was not run;
+`Rscript scripts/build_workflows_index.R` passes with and without `CALCOFI_SKIP_LINK_CHECK=1`
+(22 links, 22 OK). No `dataset_name` / `category` / `color` / `coverage_*` changed, and no ingest
+was re-run — `release_database.qmd` reads this YAML directly.
+
+## `obs_bio` and `obs_env` are the observation tables; `obs` is a view and will be dropped in the next release
+
+Until now the release shipped every observation row twice: `obs` (26,261,931 rows, 401 MB in 16
+objects partitioned by `dataset_key`, plus a 200 MB single-file twin) and the browser-shaped pair
+`obs_bio` + `obs_env` (the same rows, 22 + 287 MB) — and the copy that carried the effort
+denominator was the *supplemental* one. `obs` partitioned by `dataset_key` answered no consumer's
+question: an app wants one variable (`obs_env` is one ≤ 10 MB object per `measurement_type`) or the
+whole bio realm (`obs_bio` is one 26 MB file), and it wants the gear and effort of the row's own
+sample beside the count, not a join to `sample_measurement` on every query. So the pair becomes the
+physical store and `obs` becomes a view (pre-release plan D-S1, calcofi4db 3.31.0):
+
+- **`obs_bio` / `obs_env` gain `sample_key`, `measurement_prec` and `hex_id`** (keeping `value`,
+  `root_id`, `hex7`), so each is a strict superset of `obs` under a name mapping — `realm` is the
+  table, `value` is `measurement_value`. Without `sample_key` a consumer could reach only the root
+  sample and lost the net / bottle grain. Both are **core** tables now (in the ERD, in
+  `cc_get_db()`'s default set); `sample_root` stays supplemental. Measured on the v2026.08.28 staging
+  release: `obs_bio` 21.8 → 25.6 MB, `obs_env` 286.7 → 317.2 MB (84 objects).
+- **`obs` still ships this once**, and `catalog.json` marks it `deprecated: true`,
+  `replaced_by: ["obs_bio", "obs_env"]`, `removed_in: "next"`; the catalog's new top-level **`views`**
+  map carries `obs` → the UNION ALL that reconstructs its 18 columns under their original names
+  (`SELECT obs_id, 'bio' AS realm, … value AS measurement_value … FROM {{obs_bio}} UNION ALL … FROM
+  {{obs_env}}`). `calcofi4r::cc_get_db()` (1.17.0), `calcofi4py.cc_get_db()` (0.6.0) and db-query's
+  `__TBL:obs__` create `obs` from that view, so `FROM obs` keeps working; the deprecated objects are
+  read only where the view's sources are not loaded.
+- **The gate**: `release_database.qmd` fails unless the pair reproduces `obs` per `(realm,
+  dataset_key)` — row count, distinct `obs_id`s, an order-independent signature of every non-depth
+  column — with no non-NULL depth changed (`check_obs_pair_parity()`; 15 groups, all equal on the
+  staging release); `test_release.qmd` runs every `obs` contract row three ways (the deprecated
+  objects, the view, the pair) and asserts the view's row counts and column order equal `obs`'s.
+- **One deliberate difference.** A bio row whose depth is NULL in `obs` carries its sample's span
+  through the pair — the tow's `depth_min_m`–`depth_max_m` — so through the view 482,250
+  `swfsc_ichthyo` rows (100 % of that dataset; every other dataset's NULLs stay NULL because no
+  span exists on `sample` either) now have a depth where `obs` had none. A non-NULL depth is never
+  changed.
+
+**Consumers:** read `obs_bio` / `obs_env` directly (`value`, no `realm`; effort and densities inline)
+before the **next release**, when the `obs` objects are dropped and only the view remains. Through
+`cc_get_db()` `SELECT * FROM obs` now returns columns in the table's order (`dataset_key` third)
+where the remote view over the hive partitions returned it last; a direct reader of
+`releases/{v}/parquet/obs/…` or `obs.parquet` (ERDDAP deploy, netCDF publish, the PostgreSQL
+`release.*` views) is unaffected this release and must move to the pair or the catalog view by the
+next. Known direct readers of `obs` to migrate: db-query (8 files), `apps/` (7), db-viz-station (5),
+ctd-transects (2), db-viz-hex (2), `libs/publish_netcdf.R`, `scripts/render_release_views.R`.
+
+## The boundary layers describe themselves (`spatial_layers.json`)
+
+The release gains one sidecar beside `coverage.json`: the boundary-layer registry
+(`metadata/spatial_layers.csv` — the 19 drawable layers, their PMTiles archives, default symbology
+and provenance) joined with what only the release knows: each layer's feature count, bbox, its
+distinct names (the Explorer's by-name palette) and how many root samples fall inside it
+(`sample_spatial`). The CalCOFI Explorer's Layers card reads this instead of hard-coding the layer
+list, so a row Erin adds to the registry reaches the app at the next release with no code change
+(calcofi4db 3.28.0 `build_spatial_layers()`). Not a table: `catalog.json` and consumers of the
+parquet are untouched.
+
+## The seafloor stamp runs anywhere, and an unexplained NULL fails the release
+
+`seafloor_depth_m` is sampled from GEBCO 2025, and until now that meant one laptop's local
+933 MB tile (`CALCOFI_GEBCO_TIF`'s default) — a machine without it could not run the release at
+all. The same grid is now published as a streamable Cloud-Optimized GeoTIFF
+(`gs://calcofi-db/bathymetry/gebco_2025_sub_ice_n90_w180_e90_cog.tif`), and the `depth_coverage`
+chunk falls back to it over `/vsicurl/` range reads when no local file is present
+(calcofi4db 3.27.0 `sample_seafloor()` accepts URL sources).
+
+With that, a NULL `seafloor_depth_m` stops being one undifferentiated count: every NULL is now
+classified (`calcofi4db::check_seafloor_nulls()`) as *no coordinates*, *NaN coordinate*,
+*outside the GEBCO source tile* (all three are the owning ingest's `questions.csv` material —
+at v2026.08.25 they were 1,360 ichthyo positions east of −90° plus 71 METS rows with no
+latitude), or *inside the tile and still NULL* — which can only be a regression in the sampling
+itself and now **fails the release**. Consumers see no schema change.
+
+Alongside (not release content, but the same D29 change): `gebco_2025_calcofi.tif`, the crop
+`calcofi4r::cc_bathy()` serves, was re-cut from lon −127 → −116.8 × lat 29.3 → 38.4 to
+**lon −165 → −100 × lat 15 → 56** (Int16 COG) so all 360,568 released positions that fell outside
+it — 24.7 %, silently reading `NA` depth — now sample a real value; `cc_bathy_depth()` warns
+about the remainder instead of keeping quiet (calcofi4r 1.16.0).
+
 ## One climatology for every anomaly
 
 Two products drew the same section — line 90, July 2026, temperature — and disagreed by the whole
@@ -94,6 +322,77 @@ has `depth_max_m = NULL`, so a net tow cannot be drawn as the integrated span it
 
 **Consumers:** `cc_get_db()` gets `sample_spatial` by default; `obs_bio`/`obs_env`/`sample_root` are
 `supplemental = TRUE` (opt in). `test_release.qmd` gains seven contract rows over the new objects.
+
+## The Dungeness crab dataset is the examined samples
+
+`cdfw_dungeness-crab` published its 1949–2009 sorting log's full 2,011 rows as effort-only `sample`
+rows — 216 examined (sorted, each with a zero-valued *M. magister* absence `obs`) and 1,795 never
+looked at. An unexamined archived jar is a fact of the deposit's sorting-log inventory, not a sample
+of this dataset, so the 1,795 unsorted rows are now dropped from the core entirely rather than
+carried as "sample row, no `obs`" — that shape was indistinguishable from every other reason a
+sample might carry no observation. `sample` drops from 2,321 to **526** events (310 sorted
+2008–2014 time-series subsamples + the 216 examined sorting-log tows); `obs` (1,456) is unchanged,
+since the sorting log's absence rows were already scoped to examined tows only.
+`coverage_temporal_observed` moves from a 1949 start (the full log's span) to the true examined
+span, **1984-05-17 to 2014-05-03**; `coverage_spatial_observed`'s westward extent tightens from
+164.1°W to 132.25°W, since the sorting log's most extreme west/north rows were all unsorted.
+
+The California Digital Collections / UCSD Library Research Data Curation program deposited this
+dataset on 2026-08-27, ahead of a minted DOI. `link_data_source` carries a placeholder Library
+search URL (`https://library.ucsd.edu/dc/search?q=CalCOFI+Dungeness+crab+megalopae`, answers 200)
+with a YAML comment marking it as a placeholder; `metadata/cdfw/dungeness-crab/questions.csv` Q14
+tracks the DOI/object-URL ask, with the swap to `citation_main` + `link_data_source` proposed for
+when it mints. The deposit's README reportedly corrects the sorting log's one positive-longitude
+row (Q08) — that row is one of the dropped unsorted rows regardless, so it does not affect what
+ships here; the sign fix will be applied once the deposit zips are in hand.
+
+**Consumers:** `sample` row count and the dataset's temporal/spatial coverage change as above; no
+schema change.
+
+## The bottle's reported (`r_*`) series are interpolated, and say so
+
+The bottle's six pre-QC `r_*` measurement types (`r_ammonium`, `r_depth`, `r_dynamic_height`,
+`r_oxygen_umol_kg`, `r_salinity_sva`, `r_temperature`) carried an empty `derivation` and
+`is_canonical = TRUE`, so nothing on the released type itself said they were anything other than
+another canonical series a consumer could compare or interpolate from. Rasmus Swalethorp (SIO CTD
+data team) confirmed 2026-09-01 (`metadata/calcofi/bottle/questions.csv` Q09): the `r_*` columns
+are values *already* interpolated to standard depths in decodr, pre-QC and unflagged by design —
+"when we do any kinds of data interpolations ... we should not use already interpolated data points
+from the bottle database." `measurement_type.csv` now records that as `derivation` on all six types
+and flips `is_canonical` to `FALSE`; `release_database.qmd` gates the release on no `r_*` type ever
+carrying a `variable` crosswalk entry (the mechanism a consumer would use to compare it across
+datasets in the first place).
+
+**Consumers:** `is_canonical` flips TRUE → FALSE on `r_ammonium`, `r_depth`, `r_dynamic_height`,
+`r_oxygen_umol_kg`, `r_salinity_sva`, `r_temperature` — any query selecting the default/canonical
+`measurement_type` set for `calcofi_bottle` stops returning these six; they remain in `obs` under
+an explicit `measurement_type` filter, now documented as pre-QC and not for further interpolation.
+
+## Accepted CTD QC flags have a bridge to the release (unrun this round)
+
+`ingest_calcofi_ctd-cast.qmd` gains an `apply_accepted_flags` chunk: it downloads the CTD team's
+nightly-snapshotted, curator-accepted flag ledger (`gs://calcofi-db/qc/ctd/flag_accepted.parquet`,
+from the PostgreSQL `ctd.flag` table — see `CLAUDE.md` § *The CTD team's PostgreSQL database*),
+joins each flag to the scan it names via `(archive, _source_file, cast_key, depth_m)`, and
+overwrites `ctd_measurement.measurement_qual` for the match; `release_database.qmd` gains a
+warn-only `qc_flags_pending` chunk reporting the gap between the snapshot and what the last CTD
+ingest render applied. **This chunk ships unrun**: the snapshot is a 600-byte header-only parquet
+(0 accepted flags, last modified 2026-08-19) — the CTD team has not accepted a flag through the
+ledger yet, and the CTD ingest is not re-run this round (128 min; see the "Avoiding the CTD
+ingest" plan). It takes effect at the next CTD ingest render.
+
+## Rasmus's other CTD/bottle answers become registry facts
+
+`metadata/calcofi/bottle/questions.csv` Q09 (R_* quality-code inheritance) is `answered` — R_*
+stays unflagged, and the P_qual-vs-phosphate half is split into its own row (Q12, still open, for
+Ben G). `metadata/calcofi/ctd-cast/questions.csv`: Q27 (Rathburn core-station casts) is `answered`
+— continue to exclude; Q09 (sensor-selection codes 1/2) is `answered` on the codes' meaning
+(matches `metadata/measurement_qual.csv`), leaving the averaged-canonical-type propagation policy
+as unimplemented follow-on work, not a further provider question; two new rows record answers that
+were emailed 2026-08-24 but never filed — Q30 (the `orig*`/`uncorrected/` exclusion and
+`separate_runs/` retention, answered) and Q31 (the seafloor-vs-GEBCO "large discrepancy" threshold,
+proposed at > 500 m or > 25% beyond the deepest neighbouring cell, per the ratchet in `CLAUDE.md`
+§ *Depth is a coordinate*).
 
 
 # v2026.08.25 (2026-08-25)

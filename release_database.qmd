@@ -427,6 +427,20 @@ dbExecute(con_wdl,
    FROM _measurement_type_reg")
 dbExecute(con_wdl, "DROP TABLE _measurement_type_reg")
 
+# r_* types are the bottle's pre-QC, interpolated-to-standard-depth series
+# (Rasmus Swalethorp, 2026-09-01, WS-G: "we should not use already interpolated
+# data points from the bottle database" for any further interpolation). A
+# `variable` crosswalk entry is exactly that reuse — it tells a consumer this
+# type is comparable to, and poolable with, another dataset's canonical series —
+# so no r_* type may ever carry one. is_canonical is set FALSE on all six at the
+# registry (metadata/measurement_type.csv); this is the second, structural gate.
+d_r_star_variable <- dbGetQuery(con_wdl,
+  "SELECT measurement_type, variable FROM measurement_type
+   WHERE measurement_type LIKE 'r\\_%' ESCAPE '\\' AND variable IS NOT NULL")
+stopifnot(
+  "an r_* (pre-QC, interpolated) measurement_type carries a `variable` crosswalk entry - it must not, see WS-G 2026-09-03" =
+    nrow(d_r_star_variable) == 0)
+
 # --- assemble the core from the per-dataset shards --------------------------
 # Each ingest emits its own slice from its own notebook, which is the single
 # authoritative projection (calcofi4db holds only the generic shapes). This step only concatenates: it UNIONs the
@@ -508,6 +522,38 @@ d_dataset_cov <- d_dataset |>
     coverage_temporal = coalesce(coverage_temporal_observed, coverage_temporal),
     coverage_spatial  = coalesce(coverage_spatial_observed,  coverage_spatial)) |>
   select(all_of(names(d_dataset)))
+
+# source_accessed: measured, never asserted (calcofi4db >= 3.30.0, R/citation.R).
+# When an ingest stamped its own reads (stamp_source_access() -> metadata.json
+# sources[]) that stamp wins (method download / file_mtime); otherwise the last
+# commit of its manifest.json sidecar stands in (method sidecar_commit) — the
+# ingest rewrites that file every run, so its history is when the source was
+# last read, and no ingest has to re-run to say so. Both land on `dataset`.
+d_src <- resolve_source_accessed(here("data/parquet", d_dataset$dataset_key))
+d_dataset_cov <- d_dataset_cov |>
+  left_join(select(d_src, dataset_key, source_accessed, source_accessed_method),
+            by = "dataset_key")
+src_methods <- table(d_src$source_accessed_method)
+cat(sprintf("source_accessed: %d of %d datasets (%s)\n",
+            sum(!is.na(d_src$source_accessed)), nrow(d_src),
+            paste(names(src_methods), src_methods, sep = " = ", collapse = ", ")))
+
+# the attribution contract, enforced here as well as by the index build:
+# check_dataset_citation() — a citation with a year and a locator, a license from
+# metadata/license.csv (`custom` with a URL), a bare DOI that resolves, and the
+# source's own authority (EDI / NCEI / ERDDAP / DataCite, cached in
+# metadata/{provider}/{dataset}/citation_authority.json) compared for drift.
+# Error findings stop the release unless an open/proposed questions.csv row on
+# related_table = dataset covers the field; drift only warns. The network half
+# follows CALCOFI_SKIP_LINK_CHECK like the link check does.
+d_cit <- check_dataset_citation(
+  ingest_yaml, network = !nzchar(Sys.getenv("CALCOFI_SKIP_LINK_CHECK")),
+  cache_dir = here("metadata"))
+assert_dataset_citation(d_cit)
+d_cit |>
+  filter(finding != "ok") |>
+  select(dataset_key, finding, level, exempt, question, authority, checked, detail) |>
+  datatable(caption = "citation check: findings (error rows are exempt only while a provider question is open/proposed)")
 
 # `dataset` is written as a TABLE at [dataset_table] above, so the drop has to
 # match that type. DuckDB's `DROP VIEW IF EXISTS` does NOT no-op on a type
@@ -808,7 +854,14 @@ DEPTH_SEAFLOOR_OVER_MAX <- 694L  # ratchet: measured at v2026.08.25 (695 at v202
 gebco_tif <- path.expand(Sys.getenv(
   "CALCOFI_GEBCO_TIF",
   "~/_big/gebco_2025_sub_ice_topo_geotiff/gebco_2025_sub_ice_n90.0_s0.0_w-180.0_e-90.0.tif"))
-stopifnot("GEBCO tif not found; set CALCOFI_GEBCO_TIF" = file.exists(gebco_tif))
+if (!file.exists(gebco_tif)) {
+  # D29 (2026-08-31): no local tile is no longer fatal — the same grid is published as a
+  # streamable COG, and GDAL's /vsicurl/ range reads fetch only the blocks the positions
+  # touch. The laptop keeps its local file (faster, offline); any other machine just runs.
+  gebco_tif <- paste0("/vsicurl/https://storage.googleapis.com/calcofi-db/",
+                      "bathymetry/gebco_2025_sub_ice_n90_w180_e90_cog.tif")
+  cat(glue("CALCOFI_GEBCO_TIF names no local file - streaming {gebco_tif}\n"))
+}
 
 d_depth <- check_depth_bounds(
   con_wdl, tbls = c("sample", "obs", intersect(supp_tbls, dbListTables(con_wdl))))
@@ -821,6 +874,18 @@ d_depth |>
 
 sf_sample <- sample_seafloor(con_wdl, gebco_tif)
 add_sample_seafloor(con_wdl, gebco_tif, seafloor = sf_sample)
+
+# every NULL seafloor is one of four things, and only three may ship (D29): a sample
+# with no/NaN coordinates or one genuinely off the GEBCO tile is the owning ingest's
+# question; a positioned sample INSIDE the tile that still reads NULL can only be a
+# regression in the sampling itself, and fails the release.
+d_sf_null <- check_seafloor_nulls(con_wdl, source_bbox = c(-180, 0, -90, 90))
+d_sf_null |>
+  datatable(caption = "Samples with NULL seafloor_depth_m, by cause (inside_tile_null fails the release)")
+stopifnot(
+  "seafloor_depth_m is NULL for a positioned sample inside the GEBCO tile - the sampling regressed" =
+    attr(d_sf_null, "n_inside_null") == 0)
+
 d_over <- check_depth_vs_seafloor(con_wdl, sf_sample, tolerance_m = 10)
 attr(d_over, "summary") |>
   datatable(caption = paste(
@@ -837,6 +902,57 @@ stopifnot(
     nrow(d_over) <= DEPTH_SEAFLOOR_OVER_MAX)
 if (nrow(d_over) < DEPTH_SEAFLOOR_OVER_MAX)
   cat(glue("\nDEPTH_SEAFLOOR_OVER_MAX can be tightened to {nrow(d_over)}.\n"))
+```
+
+### CTD accepted QC flags pending
+
+`ingest_calcofi_ctd-cast.qmd`'s `apply_accepted_flags` chunk applies every
+*accepted* row of the CTD team's PostgreSQL QA/QC ledger
+(`gs://calcofi-db/qc/ctd/flag_accepted.parquet`, a nightly snapshot — see
+`CLAUDE.md` § *The CTD team's PostgreSQL database*) and records how many it
+applied in that ingest's `metadata.json` (`n_flags_applied`). This chunk
+compares the snapshot's current count to that stamp: a gap means flags were
+accepted by the team **after** the CTD ingest last rendered, so this release
+still ships the pre-acceptance `measurement_qual`. **Warn only** — the CTD
+ingest is 128 minutes and this round deliberately does not re-run it (§
+*Avoiding the CTD ingest*, 2026-09-03 pre-release plan).
+
+```{r}
+#| label: qc_flags_pending
+
+flag_snapshot_url <- "https://storage.googleapis.com/calcofi-db/qc/ctd/flag_accepted.parquet"
+n_flags_snapshot <- tryCatch({
+  tmp <- tempfile(fileext = ".parquet")
+  utils::download.file(flag_snapshot_url, tmp, mode = "wb", quiet = TRUE)
+  n <- dbGetQuery(con_wdl, glue("SELECT COUNT(*) AS n FROM read_parquet('{tmp}')"))$n
+  unlink(tmp)
+  n
+}, error = function(e) {
+  warning("could not reach flag_accepted.parquet: ", conditionMessage(e))
+  NA_integer_
+})
+
+ctd_meta_path <- here("data/parquet/calcofi_ctd-cast/metadata.json")
+n_flags_applied <- if (file.exists(ctd_meta_path)) {
+  m <- jsonlite::read_json(ctd_meta_path)
+  if (!is.null(m$n_flags_applied)) as.integer(m$n_flags_applied) else 0L
+} else 0L
+
+n_flags_pending <- if (is.na(n_flags_snapshot)) NA_integer_ else
+  max(0L, n_flags_snapshot - n_flags_applied)
+
+if (is.na(n_flags_pending)) {
+  cat("n_flags_pending: could not be measured (snapshot unreachable) — not fatal, warn only\n")
+} else {
+  cat(glue(
+    "CTD accepted QC flags: {n_flags_snapshot} in snapshot · ",
+    "{n_flags_applied} reflected in this release's calcofi_ctd-cast shard · ",
+    "{n_flags_pending} pending (not yet applied)\n"))
+  if (n_flags_pending > 0)
+    warning(glue(
+      "{n_flags_pending} accepted CTD QC flag(s) are not yet reflected in this release — ",
+      "the CTD ingest has not rendered since they were accepted. Not fatal (warn only)."))
+}
 ```
 
 ## Cruise Coverage — Samples With No Observations
@@ -1442,6 +1558,22 @@ dens_sql <- calcofi4r::cc_density_sql()
 n_root <- build_sample_root(con_wdl)
 n_bio  <- build_obs_slim(con_wdl, "bio", qual_ok_sql = qual_sql, density_sql = dens_sql)
 n_env  <- build_obs_slim(con_wdl, "env", qual_ok_sql = qual_sql, density_sql = dens_sql)
+# --- D-S1 (pre-release plan 2026-09-03; calcofi4db >= 3.31.0): the pair IS the observation store ----
+# obs_bio / obs_env now carry sample_key, measurement_prec and hex_id too, so each is a strict superset
+# of obs under a name mapping (realm = the table, value = measurement_value), and `obs` becomes a VIEW
+# the catalog carries (`views.obs`, calcofi4db::obs_view_sql(), written by build_release_catalog() from
+# release_views() because both tables ship) while its own objects still ship this once — the catalog
+# marks the table `deprecated`, `replaced_by: [obs_bio, obs_env]`, `removed_in: next`. cc_get_db() (R and
+# Python) and db-query's `__TBL:obs__` serve `obs` through the view from this release on, so the gate
+# is that the pair reproduces obs: per (realm, dataset_key) the row count, the distinct obs_ids and an
+# order-independent signature of every non-depth column must match, and no non-NULL depth may change.
+# The one documented difference is the depth FALLBACK (a bio row with no depth in obs carries its
+# tow's span: 482,250 ichthyo rows at v2026.08.28), reported per dataset as n_depth_filled.
+obs_parity <- check_obs_pair_parity(con_wdl)
+datatable(obs_parity, caption = "obs_bio + obs_env reproduce obs (check_obs_pair_parity: counts, ids, signature; depth filled / changed)")
+stopifnot(all(obs_parity$ok), sum(obs_parity$n_pair) == n_bio + n_env,
+          dbGetQuery(con_wdl, glue("SELECT count(*) AS n FROM ({substitute_view_tables(obs_view_sql())})"))$n ==
+            dbGetQuery(con_wdl, "SELECT count(*) AS n FROM obs")$n)
 ss     <- build_sample_spatial(con_wdl)
 # the ONE seasonal baseline every anomaly is a departure from (calcofi4db >= 3.26.0): a plain mean per dataset x
 # station x calendar month x 10 m depth_bin x measurement type over 1993-2013, >= 3 cruises per cell, the window
@@ -1482,20 +1614,35 @@ jsonlite::write_json(build_coverage_stations(con_wdl, release_version), coverage
 # polygon layers (simplified for display; membership is exact and lives in sample_spatial)
 grid_geojson_path    <- file.path(dir_frozen, "grid.geojson")
 spatial_geojson_path <- file.path(dir_frozen, "spatial.geojson")
-unlink(c(grid_geojson_path, spatial_geojson_path))
+spatial_layers_path  <- file.path(dir_frozen, "spatial_layers.json")
+unlink(c(grid_geojson_path, spatial_geojson_path, spatial_layers_path))
 dbExecute(con_wdl, glue("COPY (SELECT grid_key, station, line, shore, pattern, zone, ST_X(geom_ctr) AS lon_ctr, ST_Y(geom_ctr) AS lat_ctr,
                                 ST_GeomFromWKB(ST_AsWKB(geom)) AS geom FROM grid)
                          TO '{grid_geojson_path}' WITH (FORMAT GDAL, DRIVER 'GeoJSON')"))
 dbExecute(con_wdl, glue("COPY (SELECT spatial_key, layer, name, ST_SimplifyPreserveTopology(ST_GeomFromWKB(ST_AsWKB(geom)), 0.002) AS geom
                                 FROM spatial WHERE ST_GeometryType(geom) IN ('POLYGON', 'MULTIPOLYGON'))
                          TO '{spatial_geojson_path}' WITH (FORMAT GDAL, DRIVER 'GeoJSON')"))
+# the boundary-layer registry + what only the release knows about each layer (counts, bbox, names,
+# sample_spatial memberships) — the explorer's Layers card reads this, never the CSV (D23, calcofi4db >= 3.28.0).
+# `built` = the ingest_spatial manifest's mtime: the PMTiles archives are rebuilt outside releases, and the skew
+# must at least be visible (plan 2026-08-31, Risks).
+jsonlite::write_json(
+  build_spatial_layers(
+    con_wdl, here("metadata/spatial_layers.csv"), release_version,
+    pmtiles_base = "https://storage.googleapis.com/calcofi-files-public/_spatial/",
+    built = format(file.mtime(here("data/parquet/spatial/manifest.json")), "%Y-%m-%d")),
+  spatial_layers_path, auto_unbox = TRUE, digits = NA, null = "null")
 cat(glue("coverage.json {round(file.size(coverage_path) / 1e3)} KB · coverage_stations.json {round(file.size(coverage_stations_path) / 1e3)} KB · ",
-         "grid.geojson {round(file.size(grid_geojson_path) / 1e3)} KB · spatial.geojson {round(file.size(spatial_geojson_path) / 1e6, 1)} MB\n"))
+         "grid.geojson {round(file.size(grid_geojson_path) / 1e3)} KB · spatial.geojson {round(file.size(spatial_geojson_path) / 1e6, 1)} MB · ",
+         "spatial_layers.json {round(file.size(spatial_layers_path) / 1e3)} KB\n"))
 
-# sample_spatial is a core relationship table (ERD + default table list); the three browser objects
-# are supplemental — hosted and catalogued, hidden from cc_get_db() by default like obs_ctd_full
-core_keep         <- c(core_keep, "sample_spatial", "climatology")   # climatology: default table, in the ERD (FKs to grid, dataset, measurement_type)
-supplemental_keep <- c(supplemental_keep, "sample_root", "obs_bio", "obs_env")
+# sample_spatial is a core relationship table (ERD + default table list); since D-S1 obs_bio and
+# obs_env are CORE too — the observation tables every consumer reads, in the ERD and cc_get_db()'s
+# default set (obs is the deprecated table + the view over them; see the parity gate above). Only
+# sample_root stays supplemental — hosted and catalogued, hidden from cc_get_db() by default.
+core_keep         <- c(core_keep, "sample_spatial", "climatology",   # climatology: default table, in the ERD (FKs to grid, dataset, measurement_type)
+                       "obs_bio", "obs_env")
+supplemental_keep <- c(supplemental_keep, "sample_root")
 ```
 
 ```{r}
@@ -1750,19 +1897,21 @@ if (file.exists(py_toml)) {
               grep('^version = ', readLines(py_toml, warn = FALSE), value = TRUE)[1])
   if (!is.na(v_py) && nzchar(v_py)) pkg_versions <- c(pkg_versions, calcofi4py = v_py)
 }
-catalog_pre <- list(
+catalog_pre <- add_release_citation(list(
   version      = release_version,
   release_date = as.character(Sys.Date()),
   total_size   = NULL,
   tables       = freeze_stats |>
     mutate(supplemental = dplyr::coalesce(supplemental, FALSE)) |>
-    select(name = table, rows, partitioned, supplemental))
+    select(name = table, rows, partitioned, supplemental)))
 # `releases_md` is the promoted text from [release_notes_narrative] — on disk for a real release,
-# in memory only for a staging run (whose date has no section on disk)
+# in memory only for a staging run (whose date has no section on disk). The datasets block
+# feeds the appendix's "How to cite" (each dataset's citation_main · license) before
+# metadata.json exists; test_release.qmd re-publishes from the real sidecars.
 release_notes <- render_release_notes(
   release_version, releases_md,
   catalog      = catalog_pre,
-  metadata     = NULL,
+  metadata     = list(datasets = d_dataset_cov),
   test_results = NULL,
   pkg_versions = pkg_versions,
   promoted     = FALSE)
@@ -1823,13 +1972,18 @@ if (!setequal(unique(plan$table), tables_df$name))
             "{paste(setdiff(unique(plan$table), tables_df$name), collapse = ', ')}; ",
             "only in catalog = {paste(setdiff(tables_df$name, unique(plan$table)), collapse = ', ')}"))
 catalog <- build_release_catalog(release_version, tables_df, plan, layout = release_layout)
+# the release cites itself: `citation` (decided wording, three partners) + the
+# Zenodo `concept_doi`; the version `doi` arrives after WS-F's tag + GitHub release
+# mints it, and publish_release_notes() writes it into this catalog then
+# (objects untouched). Until then the citation resolves to db-schema for the version.
+catalog <- add_release_citation(catalog)
 total_bytes <- catalog$total_size
 catalog_path <- file.path(dir_frozen, "catalog.json")
 jsonlite::write_json(catalog, catalog_path, auto_unbox = TRUE, pretty = TRUE, digits = NA)
 put_gcs_file(catalog_path,
   glue("gs://{gcs_bucket}/{gcs_release}/catalog.json"))
 # the coverage cube behind the explorer's first paint (built in [browser_objects])
-for (f in c(coverage_path, coverage_stations_path, grid_geojson_path, spatial_geojson_path))
+for (f in c(coverage_path, coverage_stations_path, grid_geojson_path, spatial_geojson_path, spatial_layers_path))
   put_gcs_file(f, glue("gs://{gcs_bucket}/{gcs_release}/{basename(f)}"))
 
 # upload RELEASE_NOTES.md
@@ -2041,6 +2195,7 @@ sidecar_urls <- c(
   glue("gs://{gcs_bucket}/{gcs_release}/coverage_stations.json"),
   glue("gs://{gcs_bucket}/{gcs_release}/grid.geojson"),
   glue("gs://{gcs_bucket}/{gcs_release}/spatial.geojson"),
+  glue("gs://{gcs_bucket}/{gcs_release}/spatial_layers.json"),
   glue("gs://{gcs_bucket}/{gcs_release}/relationships.json"),
   glue("gs://{gcs_bucket}/{gcs_release}/erd.mmd"),
   glue("gs://{gcs_bucket}/{gcs_release}/RELEASE_NOTES.md"),

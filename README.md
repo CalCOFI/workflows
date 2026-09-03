@@ -1,3 +1,5 @@
+[![DOI](https://zenodo.org/badge/447789885.svg)](https://zenodo.org/badge/latestdoi/447789885)
+
 # workflows
 
 scripts to explore and load data into the CalCOFI database

@@ -26,6 +26,13 @@ calcofi:
     citation_main: "CalCOFI. (2023). CalCOFI Bottle Database 194903-202105. CalCOFI.org."
     link_calcofi_org: https://calcofi.org/data/oceanographic-data/bottle-database/
     link_data_source: https://calcofi.org/downloads/database/CalCOFI_Database_194903-202105_csv_16October2023.zip
+    # calcofi.org states no license anywhere on this page (checked 2026-09-03);
+    # left empty, see metadata/calcofi/bottle/questions.csv Q10 (proposed
+    # CC-BY-4.0 to Rasmus Swalethorp)
+    license: ""
+    # no PI stated by the source; left empty, see questions.csv Q11
+    # (proposed Rasmus Swalethorp)
+    pi_names: ""
   # publishes the consolidated core: the cast/bottle/measurement/condition source
   # shape is wrangled in the notebook and projected into sample / obs /
   # sample_measurement, surviving as compat VIEWs over the core.
@@ -1279,11 +1286,25 @@ bridge_result$key_stats |>
 # cruise designates the cruise differently (ichthyo calls the 9 Feb - 29 Mar 1984
 # Jordan cruise 8403, this database 8402) — the reference wins, every dataset
 # joins to it. Report the disagreements; a large count means a ship-code problem.
+#
+# FIXED 2026-09-03 (WS-G, Rasmus item f): the comparison used to be
+# `SUBSTR(cruise_key,...) || SUBSTR(cruise_key,...) <> cruise` — a VARCHAR
+# built from cruise_key compared directly against `cruise`, a DOUBLE
+# (Cruise = YYYYMM.0 in the source). That mixed-type comparison rendered
+# `cruise`'s side with a trailing ".0" (e.g. "198809.0") wherever a plain
+# CAST(...AS VARCHAR) is what got applied, so the VARCHAR "198809" built from
+# cruise_key never matched — the check failed on almost every row regardless
+# of whether the month actually agreed, which is why 670 of the 684 rows this
+# table used to show were a formatting artifact rather than a real
+# disagreement (measured against the rendered output, umbrella plan
+# 2026-09-03 "Context"). Casting both sides to INTEGER removes the ambiguity
+# and leaves the 14 genuine disagreements (829 casts, 1953-1989) that are the
+# real content of this check.
 dbGetQuery(con, "
   SELECT cruise, cruise_key, cruise_key_method, COUNT(*) AS n_casts
   FROM casts
   WHERE cruise_key IS NOT NULL
-    AND SUBSTR(cruise_key, 1, 4) || SUBSTR(cruise_key, 6, 2) <> cruise
+    AND CAST(SUBSTR(cruise_key, 1, 4) || SUBSTR(cruise_key, 6, 2) AS INTEGER) <> CAST(cruise AS INTEGER)
   GROUP BY 1, 2, 3 ORDER BY n_casts DESC") |>
   datatable(caption = "Casts whose resolved cruise month differs from the source Cruise designation")
 

@@ -23,7 +23,7 @@ Two statuses go out, and they ask for different things:
 ```{r setup}
 #| message: false
 librarian::shelf(
-  calcofi4db, dplyr, glue, here, purrr, readr, stringr, knitr, quiet = T)
+  calcofi4db, dplyr, glue, here, purrr, readr, stringr, knitr, yaml, quiet = T)
 options(readr.show_col_types = FALSE)
 ```
 
@@ -81,6 +81,12 @@ One draft per provider. Recipients are drawn from `pi_names` in each ingest's
 
 providers <- sort(unique(open_q$provider))
 
+# per-provider Google Sheet (scripts/sync_questions_sheets.R) — questions.csv
+# stays the record; the sheet is where a provider types answer/status/
+# answered_date/who. URL is blank until `push <provider> --execute` mints it.
+sheets_yml <- if (file.exists(here("metadata/questions_sheets.yml")))
+  yaml::read_yaml(here("metadata/questions_sheets.yml")) else list()
+
 for (prov in providers) {
   pq <- open_q |> filter(provider == prov) |> arrange(dataset, priority)
 
@@ -98,6 +104,10 @@ for (prov in providers) {
   cat(glue("To: {to_line}\n"))
   cat(glue("Subject: CalCOFI data integration — follow-up questions on ",
            "{paste(sort(unique(pq$dataset_name)), collapse = ', ')}\n\n"))
+  sheet_url <- sheets_yml[[prov]]$url
+  sheet_line <- if (!is.null(sheet_url) && nzchar(sheet_url)) sheet_url else
+    "(not yet created — see metadata/questions_sheets.yml)"
+  cat(glue("Question tracker: {sheet_line}\n\n"))
   cat("Hi,\n\n")
   cat(str_wrap(glue(
     "As we integrate your data into the CalCOFI database we have a few ",

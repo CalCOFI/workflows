@@ -195,7 +195,11 @@ render_template <- function(template, params) {
 
 # read_parquet(...) for a table (or one partition of it) in a release, through
 # the catalog; one catalog fetch per version. objects[].path is bucket-relative,
-# so the staging prefix resolves the same way.
+# so the staging prefix resolves the same way. A catalog VIEW (`obs` over
+# obs_bio + obs_env since D-S1, calcofi4db 3.31.0) expands to its SQL over the
+# objects of the tables it reads, parenthesised — exactly what db-query's
+# readParquetFor() does for `__TBL:obs__`, so this suite exercises the view the
+# browser will run; a partition token on a view becomes a WHERE on it.
 .tbl_cats <- new.env(parent = emptyenv())
 tbl_sql <- function(version, table, col = NULL, val = NULL) {
   if (is.null(.tbl_cats[[version]])) {
@@ -204,7 +208,13 @@ tbl_sql <- function(version, table, col = NULL, val = NULL) {
       glue("https://storage.googleapis.com/calcofi-db/{pre}/{version}/catalog.json"),
       simplifyVector = FALSE)
   }
-  src <- calcofi4r::cc_release_sources(.tbl_cats[[version]], table)
+  cat_ <- .tbl_cats[[version]]
+  if (table %in% names(calcofi4r::cc_catalog_views(cat_))) {
+    v <- paste0("(", calcofi4r::cc_view_sql(cat_, table, function(t) tbl_sql(version, t)), ")")
+    if (!is.null(col)) v <- glue("(SELECT * FROM {v} WHERE \"{col}\" = '{val}')")
+    return(v)
+  }
+  src <- calcofi4r::cc_release_sources(cat_, table)
   if (!is.null(col)) {
     keep <- grepl(glue("/{col}={val}/"), src$urls, fixed = TRUE)
     if (isTRUE(src$canonical) && any(keep)) src$urls <- src$urls[keep]
@@ -339,6 +349,114 @@ rel_cat <- jsonlite::fromJSON(
   glue("https://storage.googleapis.com/calcofi-db/{rel_prefix}/{release_version}/catalog.json"),
   simplifyVector = FALSE)
 rp <- function(t) calcofi4r::cc_read_parquet_sql(calcofi4r::cc_release_sources(rel_cat, t))
+# the catalog's `obs` VIEW over obs_bio + obs_env (D-S1, calcofi4db 3.31.0), as cc_get_db() and
+# db-query serve `obs` from this release on: its SQL over the pair's objects, parenthesised so it
+# stands wherever rp('obs') stood. Every contract row that reads obs runs twice — against the
+# deprecated table's own objects (rp) and against the view (rpv) — until the objects are dropped.
+rpv <- function(t) paste0("(", calcofi4r::cc_view_sql(rel_cat, t, rp), ")")
+# a partitioned table through its single-file twin (obs publishes one): the table's own column order
+rp1 <- function(t) calcofi4r::cc_read_parquet_sql(calcofi4r::cc_release_sources(rel_cat, t), prefer_single_file = TRUE)
+has_obs_view <- "obs" %in% names(calcofi4r::cc_catalog_views(rel_cat))
+stopifnot(has_obs_view)   # the catalog must carry the view: consumers read obs through it
+
+# the rows that read obs, parameterised on HOW obs is read (R = rp or rpv) and tagged
+obs_rows <- function(R, tag) tibble::tribble(
+  ~name, ~expect, ~sql,
+  glue("consumer: match env (bottle temperature) [{tag}]"), "nonzero", glue(
+    "SELECT count(*) n FROM {R('obs')}
+     WHERE realm='env' AND dataset_key='calcofi_bottle' AND measurement_type='temperature'"),
+  glue("consumer: match/download bio (ichthyo abundance x taxon x effort) [{tag}]"), "nonzero", glue(
+    "SELECT count(*) n FROM {R('obs')} o
+       JOIN {rp('taxon')} t ON t.taxon_key = o.taxon_key
+       LEFT JOIN {rp('sample_measurement')} shf ON shf.sample_key=o.sample_key AND shf.measurement_type='std_haul_factor'
+     WHERE o.realm='bio' AND o.dataset_key='swfsc_ichthyo' AND o.measurement_type='abundance'"),
+  glue("integrity: every non-null obs.taxon_key resolves to taxon [{tag}]"), "zero", glue(
+    "SELECT count(*) n FROM {R('obs')} o
+     WHERE o.taxon_key IS NOT NULL
+       AND NOT EXISTS (SELECT 1 FROM {rp('taxon')} t WHERE t.taxon_key=o.taxon_key)"),
+  # db-viz-hex::get_sp() picks taxa by worms_id and walks the WoRMS hierarchy for
+  # children. Seabirds and marine mammals key `itis:` (WoRMS bird taxonomy lags),
+  # and nothing populated their worms_id COLUMN — so every one of them returned
+  # ZERO rows: 59,858 of 64,956 Farallon obs, 92.2% of the dataset, with no error
+  # anywhere. Resolving a taxon and making it REACHABLE are different things;
+  # assert the second.
+  glue("consumer: seabird/mammal taxa reachable by worms_id (db-viz-hex get_sp) [{tag}]"), "nonzero", glue(
+    "SELECT count(*) n FROM {R('obs')} o
+       JOIN {rp('taxon')} t ON t.taxon_key = o.taxon_key
+     WHERE o.dataset_key='farallon_bird-mammal' AND t.worms_id IS NOT NULL"),
+  # `o.taxon_key IS NOT NULL` is load-bearing, not defensive: 1,316 of this
+  # dataset's 66,272 obs carry NO taxon at all — species codes the source marks
+  # Include=0 (fish, and non-target sightings) — and a LEFT JOIN reports those as
+  # a NULL worms_id too. Without the filter this asserts "every observation has a
+  # taxon", which is a different (and false) claim than the one intended.
+  glue("integrity: no farallon obs left unreachable by worms_id [{tag}]"), "zero", glue(
+    "SELECT count(*) n FROM {R('obs')} o
+       LEFT JOIN {rp('taxon')} t ON t.taxon_key = o.taxon_key
+     WHERE o.dataset_key='farallon_bird-mammal'
+       AND o.taxon_key IS NOT NULL AND t.worms_id IS NULL"),
+  glue("consumer: station coverage rollup (obs GROUP BY grid,dataset) [{tag}]"), "nonzero", glue(
+    "SELECT count(*) n FROM (
+       SELECT grid_key, dataset_key, count(*), count(DISTINCT sample_key), count(DISTINCT cruise_key)
+       FROM {R('obs')} WHERE grid_key IS NOT NULL GROUP BY 1,2)"),
+  glue("consumer: obs readable over HTTPS as the browser reads it (db-query match.js) [{tag}]"), "nonzero", glue(
+    "SELECT count(*) n FROM {R('obs')} WHERE realm='bio' LIMIT 1"),
+  glue("contract: obs.measurement_type all in registry [{tag}]"), "zero", glue(
+    "SELECT count(*) n FROM {R('obs')}
+     WHERE measurement_type NOT IN (SELECT measurement_type FROM {rp('measurement_type')})"),
+  glue("contract: obs.sample_key resolves in sample [{tag}]"), "zero", glue(
+    "SELECT count(*) n FROM {R('obs')} WHERE sample_key NOT IN (SELECT sample_key FROM {rp('sample')})"),
+  glue("contract: obs.hex_id present where lat/lng [{tag}]"), "zero", glue(
+    "SELECT count(*) n FROM {R('obs')} WHERE hex_id IS NULL AND latitude IS NOT NULL AND longitude IS NOT NULL"))
+
+# the same contract, read from the pair DIRECTLY under its own names (value, no realm) — what a
+# migrated consumer writes; obs_bio carries the effort inline, so the bio row needs no join
+pair_rows <- tibble::tribble(
+  ~name, ~expect, ~sql,
+  "consumer: match env (bottle temperature) [obs_env]", "nonzero", glue(
+    "SELECT count(*) n FROM {rp('obs_env')}
+     WHERE dataset_key='calcofi_bottle' AND measurement_type='temperature' AND value IS NOT NULL"),
+  "consumer: match/download bio (ichthyo abundance x taxon x effort) [obs_bio]", "nonzero", glue(
+    "SELECT count(*) n FROM {rp('obs_bio')} o JOIN {rp('taxon')} t ON t.taxon_key = o.taxon_key
+     WHERE o.dataset_key='swfsc_ichthyo' AND o.measurement_type='abundance' AND o.std_haul_factor IS NOT NULL"),
+  "integrity: every non-null obs_bio.taxon_key resolves to taxon [obs_bio]", "zero", glue(
+    "SELECT count(*) n FROM {rp('obs_bio')} o
+     WHERE o.taxon_key IS NOT NULL AND NOT EXISTS (SELECT 1 FROM {rp('taxon')} t WHERE t.taxon_key=o.taxon_key)"),
+  "consumer: seabird/mammal taxa reachable by worms_id [obs_bio]", "nonzero", glue(
+    "SELECT count(*) n FROM {rp('obs_bio')} o JOIN {rp('taxon')} t ON t.taxon_key = o.taxon_key
+     WHERE o.dataset_key='farallon_bird-mammal' AND t.worms_id IS NOT NULL"),
+  "integrity: no farallon obs_bio left unreachable by worms_id [obs_bio]", "zero", glue(
+    "SELECT count(*) n FROM {rp('obs_bio')} o LEFT JOIN {rp('taxon')} t ON t.taxon_key = o.taxon_key
+     WHERE o.dataset_key='farallon_bird-mammal' AND o.taxon_key IS NOT NULL AND t.worms_id IS NULL"),
+  "consumer: station coverage rollup (obs_bio + obs_env GROUP BY grid,dataset) [pair]", "nonzero", glue(
+    "SELECT count(*) n FROM (
+       SELECT grid_key, dataset_key, count(*), count(DISTINCT sample_key), count(DISTINCT cruise_key)
+       FROM (SELECT grid_key, dataset_key, sample_key, cruise_key FROM {rp('obs_bio')}
+             UNION ALL SELECT grid_key, dataset_key, sample_key, cruise_key FROM {rp('obs_env')})
+       WHERE grid_key IS NOT NULL GROUP BY 1,2)"),
+  "consumer: obs_bio single object readable over HTTPS (Explorer, db-query) [obs_bio]", "nonzero", glue(
+    "SELECT count(*) n FROM {rp('obs_bio')} LIMIT 1"),
+  "contract: pair measurement_type all in registry [pair]", "zero", glue(
+    "SELECT count(*) n FROM (SELECT measurement_type FROM {rp('obs_bio')} UNION ALL SELECT measurement_type FROM {rp('obs_env')})
+     WHERE measurement_type NOT IN (SELECT measurement_type FROM {rp('measurement_type')})"),
+  "contract: pair sample_key resolves in sample [pair]", "zero", glue(
+    "SELECT count(*) n FROM (SELECT sample_key FROM {rp('obs_bio')} UNION ALL SELECT sample_key FROM {rp('obs_env')})
+     WHERE sample_key NOT IN (SELECT sample_key FROM {rp('sample')})"),
+  "contract: pair hex_id present where lat/lng [pair]", "zero", glue(
+    "SELECT count(*) n FROM (SELECT hex_id, latitude, longitude FROM {rp('obs_bio')} UNION ALL SELECT hex_id, latitude, longitude FROM {rp('obs_env')})
+     WHERE hex_id IS NULL AND latitude IS NOT NULL AND longitude IS NOT NULL"),
+  # the view IS obs: same rows per realm (the gate release_database.qmd ran per dataset with a signature)
+  "integrity: the obs view reproduces obs row counts (bio = obs_bio, env = obs_env)", "zero", glue(
+    "SELECT abs((SELECT count(*) FROM {rp('obs')} WHERE realm='bio') - (SELECT count(*) FROM {rp('obs_bio')}))
+          + abs((SELECT count(*) FROM {rp('obs')} WHERE realm='env') - (SELECT count(*) FROM {rp('obs_env')}))
+          + abs((SELECT count(*) FROM {rp('obs')}) - (SELECT count(*) FROM {rpv('obs')})) AS n"),
+  # against the single-file twin, which carries the TABLE's column order; a read over the hive
+  # partition list appends the partition column (dataset_key) last, which is a reader artefact
+  "integrity: the obs view has obs's 18 columns in order", "zero", glue(
+    "SELECT count(*) n FROM (
+       SELECT row_number() OVER () AS i, column_name FROM (DESCRIBE SELECT * FROM {rpv('obs')})) v
+     FULL JOIN (
+       SELECT row_number() OVER () AS i, column_name FROM (DESCRIBE SELECT * FROM {rp1('obs')})) o USING (i)
+     WHERE v.column_name IS DISTINCT FROM o.column_name"))
 
 # name | expect ('nonzero' rows for a consumer read, or 'zero' for an integrity
 # assert) | SQL returning a single column `n`
@@ -390,38 +508,8 @@ contract <- tibble::tribble(
   "integrity: no non-finite coordinates in sample", "zero", glue(
     "SELECT count(*) n FROM {rp('sample')}
      WHERE isnan(latitude) OR isnan(longitude) OR isinf(latitude) OR isinf(longitude)"),
-  "consumer: match env (bottle temperature)", "nonzero", glue(
-    "SELECT count(*) n FROM {rp('obs')}
-     WHERE realm='env' AND dataset_key='calcofi_bottle' AND measurement_type='temperature'"),
-  "consumer: match/download bio (ichthyo abundance x taxon x effort)", "nonzero", glue(
-    "SELECT count(*) n FROM {rp('obs')} o
-       JOIN {rp('taxon')} t ON t.taxon_key = o.taxon_key
-       LEFT JOIN {rp('sample_measurement')} shf ON shf.sample_key=o.sample_key AND shf.measurement_type='std_haul_factor'
-     WHERE o.realm='bio' AND o.dataset_key='swfsc_ichthyo' AND o.measurement_type='abundance'"),
-  "integrity: every non-null obs.taxon_key resolves to taxon", "zero", glue(
-    "SELECT count(*) n FROM {rp('obs')} o
-     WHERE o.taxon_key IS NOT NULL
-       AND NOT EXISTS (SELECT 1 FROM {rp('taxon')} t WHERE t.taxon_key=o.taxon_key)"),
-  # db-viz-hex::get_sp() picks taxa by worms_id and walks the WoRMS hierarchy for
-  # children. Seabirds and marine mammals key `itis:` (WoRMS bird taxonomy lags),
-  # and nothing populated their worms_id COLUMN — so every one of them returned
-  # ZERO rows: 59,858 of 64,956 Farallon obs, 92.2% of the dataset, with no error
-  # anywhere. Resolving a taxon and making it REACHABLE are different things;
-  # assert the second.
-  "consumer: seabird/mammal taxa reachable by worms_id (db-viz-hex get_sp)", "nonzero", glue(
-    "SELECT count(*) n FROM {rp('obs')} o
-       JOIN {rp('taxon')} t ON t.taxon_key = o.taxon_key
-     WHERE o.dataset_key='farallon_bird-mammal' AND t.worms_id IS NOT NULL"),
-  # `o.taxon_key IS NOT NULL` is load-bearing, not defensive: 1,316 of this
-  # dataset's 66,272 obs carry NO taxon at all — species codes the source marks
-  # Include=0 (fish, and non-target sightings) — and a LEFT JOIN reports those as
-  # a NULL worms_id too. Without the filter this asserts "every observation has a
-  # taxon", which is a different (and false) claim than the one intended.
-  "integrity: no farallon obs left unreachable by worms_id", "zero", glue(
-    "SELECT count(*) n FROM {rp('obs')} o
-       LEFT JOIN {rp('taxon')} t ON t.taxon_key = o.taxon_key
-     WHERE o.dataset_key='farallon_bird-mammal'
-       AND o.taxon_key IS NOT NULL AND t.worms_id IS NULL"),
+  # (the rows that read obs live in obs_rows() above: once against the deprecated table's
+  #  own objects, once against the catalog view; pair_rows() reads obs_bio / obs_env directly)
   # an itis:-keyed taxon must KEEP its itis: key once worms_id is filled — the
   # cross-reference is not a licence to re-key onto the lagging authority
   "integrity: seabirds still key itis:, not worms:", "nonzero", glue(
@@ -432,16 +520,10 @@ contract <- tibble::tribble(
   "integrity: taxonomic_status is fetched, not stamped", "nonzero", glue(
     "SELECT count(*) n FROM (
        SELECT 1 FROM {rp('taxon')} WHERE status_checked IS NOT NULL LIMIT 1)"),
-  "consumer: station coverage rollup (obs GROUP BY grid,dataset)", "nonzero", glue(
-    "SELECT count(*) n FROM (
-       SELECT grid_key, dataset_key, count(*), count(DISTINCT sample_key), count(DISTINCT cruise_key)
-       FROM {rp('obs')} WHERE grid_key IS NOT NULL GROUP BY 1,2)"),
   "consumer: sample event grain (bottle cast)", "nonzero", glue(
     "SELECT count(*) n FROM {rp('sample')} WHERE dataset_key='calcofi_bottle' AND sample_type='cast'"),
   "consumer: cruise enriched per-dataset counts", "nonzero", glue(
     "SELECT count(*) n FROM {rp('cruise')} WHERE ichthyo IS NOT NULL"),
-  "consumer: obs single-file readable over HTTPS (browser match.js)", "nonzero", glue(
-    "SELECT count(*) n FROM {rp('obs')} WHERE realm='bio' LIMIT 1"),
   # the one baseline every anomaly subtracts (2026-08-31): read the way ctd-transects and the
   # Explorer's Sections lens do — the cast's month-matched cell for the CTD headline series
   "consumer: climatology month-matched cell (line 90 st 60, July, 0 m, temperature_ave)", "nonzero", glue(
@@ -451,14 +533,11 @@ contract <- tibble::tribble(
   "integrity: climatology carries one window, stamped on every row", "zero", glue(
     "SELECT count(*) - 1 AS n FROM (SELECT DISTINCT clim_yr_min, clim_yr_max FROM {rp('climatology')})"),
   "integrity: climatology depth_bin is a 10 m floor bin within 0-500", "zero", glue(
-    "SELECT count(*) n FROM {rp('climatology')} WHERE depth_bin % 10 <> 0 OR depth_bin < 0 OR depth_bin > 500"),
-  "contract: obs.measurement_type all in registry", "zero", glue(
-    "SELECT count(*) n FROM {rp('obs')}
-     WHERE measurement_type NOT IN (SELECT measurement_type FROM {rp('measurement_type')})"),
-  "contract: obs.sample_key resolves in sample", "zero", glue(
-    "SELECT count(*) n FROM {rp('obs')} WHERE sample_key NOT IN (SELECT sample_key FROM {rp('sample')})"),
-  "contract: obs.hex_id present where lat/lng", "zero", glue(
-    "SELECT count(*) n FROM {rp('obs')} WHERE hex_id IS NULL AND latitude IS NOT NULL AND longitude IS NOT NULL"))
+    "SELECT count(*) n FROM {rp('climatology')} WHERE depth_bin % 10 <> 0 OR depth_bin < 0 OR depth_bin > 500"))
+
+# obs three ways — the deprecated table's own objects, the catalog view, the pair directly — so the
+# contract covers every path a consumer can take through the deprecation window (D-S1)
+contract <- dplyr::bind_rows(contract, obs_rows(rp, "obs"), obs_rows(rpv, "obs view"), pair_rows)
 
 contract_res <- purrr::pmap_dfr(contract, function(name, expect, sql) {
   t0  <- Sys.time()
