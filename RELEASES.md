@@ -8,6 +8,42 @@ versions). Conventions: see `CLAUDE.md` § "RELEASES.md is not optional".
 
 # Unreleased
 
+## Every dataset's citation, license and DOI now carries the evidence for it, or a filed question
+
+Eight of sixteen datasets shipped `citation_main` empty and thirteen shipped `license` empty, with
+nothing checked against the source. Filled from each dataset's own authority (EDI's cite service +
+its EML `intellectualRights`, ERDDAP `.das` globals, NCEI/DataCite landing pages, the DataZoo/
+zoodb/zooscan portal policy panels), never invented: **calcofi_phytoplankton** and
+**calcofi_phyllosoma** gained their EDI citation + DOI + license (CC0-1.0 and `custom`
+respectively — reading the actual EML `intellectualRights` matters: EDI packages are *not*
+uniformly CC-BY-4.0, and assuming so would have mislabeled both); **cce-lter_euphausiids** gained
+its EDI citation + DOI + `custom` license + an `acknowledgement` field (new key, additive) carrying
+the EML's required credit text; **cce-lter_zoodb** and **cce-lter_zooscan** gained a `custom`
+license from their portals' Data Use Policy panels and had the NSF credit prose that was sitting in
+`citation_others` moved into the new `acknowledgement` field (`citation_others` is reserved for
+*additional* citations, not credit prose); **farallon_bird-mammal** and **swfsc_cufes** gained a
+`custom` license pointing at their ERDDAP `.das`/data-sharing-agreement source. `calcofi_dic`,
+`sio_mesopelagic-fish` and `cdfw_dungeness-crab` had their free-text `"CC BY 4.0"` normalized to
+the SPDX id `CC-BY-4.0`; `dic` and `mesopelagic-fish` also gained a bare `doi:` field pulled from
+their existing citation strings.
+
+Where the source states nothing, the field stays empty rather than guessing, and a `proposed`
+`questions.csv` row carries the value we'd apply once confirmed: a formal citation for zoodb (Q10),
+zooscan (Q06), farallon (Q09), cufes (Q06) and pic-zooplankton (Q08, plus its license); a license
+for cce-lter_picoplankton-bacteria (Q06); a citation year/URL, `US-PD` license and `pi_names` for
+swfsc_ichthyo (Q10–Q12, the citation proposal reflecting the CSV export we actually ingest, dated
+2025-03-24); a `CC-BY-4.0` license and `pi_names` for calcofi_bottle (Q10–Q11), calcofi_ctd-cast
+(Q28–Q29, naming both Rasmus Swalethorp and Benjamin Gire) and calcofi_mets (Q29–Q30) — calcofi.org
+states no license for any of its three datasets. 14 `questions.csv` rows filed across 10 files, all
+`status = proposed`, `related_table = dataset`.
+
+New additive `dataset_meta` keys used here: `doi`, `license_url`, `acknowledgement` — the columns
+themselves (`ingest_yaml_to_dataset_df()` / `.dataset_entry()`) and `calcofi4db::
+check_dataset_citation()` are WS-A0's, not yet merged onto this branch, so that check was not run;
+`Rscript scripts/build_workflows_index.R` passes with and without `CALCOFI_SKIP_LINK_CHECK=1`
+(22 links, 22 OK). No `dataset_name` / `category` / `color` / `coverage_*` changed, and no ingest
+was re-run — `release_database.qmd` reads this YAML directly.
+
 ## The boundary layers describe themselves (`spatial_layers.json`)
 
 The release gains one sidecar beside `coverage.json`: the boundary-layer registry
