@@ -61,7 +61,7 @@ Per `dataset_key`, up to four ERDDAP datasets, each only when it has rows:
 
 | datasetID | grain | source |
 |---|---|---|
-| `{dataset_key}` | one row per observation (occurrence × measurement) | `obs` + `taxon` + `sample` |
+| `{dataset_key}` | one row per observation (occurrence × measurement) | `obs_bio`/`obs_env` + `taxon` + `sample` (falls back to `obs` + `taxon` + `sample` for a release cut before D-S1) |
 | `{dataset_key}_sample` | one row per sampling event, effort widened onto it | `sample` + `sample_measurement` |
 | `{dataset_key}_attribute` | sub-occurrence detail (length/stage bins) | `obs_attribute` + `sample` |
 | `{dataset_key}_full` | the full series *before* thinning | a supplemental table |
@@ -70,6 +70,14 @@ The old datasetIDs (`calcofi_ctd`, `calcofi_casts`, `calcofi_ctd_thin`, …) are
 **not** preserved — these are `dataset_key`-based and self-describing. Deploy is
 manual and selective, so the changeover is a decision made at splice time, not
 here.
+
+Since the pre-release plan D-S1/D-S3 (2026-09), `{dataset_key}` also carries the
+observation's own sample gear and effort (`tow_type`, `std_haul_factor`,
+`prop_sorted`, `volume_sampled_m3`) and the two canonical densities
+(`density_per_10m2`, `density_per_1000m3`, `effort_class`) inline — no join to
+`sample_measurement` at query time — plus `units` and `qual_ok`. Which table is
+read is decided **through the release catalog**, never a hand-built
+`releases/{v}/parquet` path: see the `obs-pair` chunk below.
 :::
 
 ## Setup
@@ -138,11 +146,41 @@ pq <- function(root, tbl) if (dir_exists(file.path(PQ_LOCAL, tbl)))
   glue("{root}/{tbl}/**/*.parquet") else glue("{root}/{tbl}.parquet")
 ```
 
+```{r}
+#| label: obs-pair
+#| message: false
+# D-S1 (pre-release plan, calcofi4db >= 3.31.0 / calcofi4r >= 1.17.0): the release
+# ships the observation grain as obs_bio + obs_env, with `obs` a deprecated view
+# over them. Checked through the release CATALOG (cc_release_catalog(), the same
+# resolver libs/publish_netcdf.R's other cc_release_*() helpers use; never a
+# hand-built releases/{v}/parquet path) rather than guessed from file presence —
+# the promoted v2026.08.25 predates D-S1 and has no obs_bio/obs_env, so this must
+# fall back cleanly rather than error.
+release_catalog <- tryCatch(cc_release_catalog(RELEASE), error = function(e) NULL)
+HAS_OBS_PAIR <- FALSE
+if (!is.null(release_catalog)) {
+  HAS_OBS_PAIR <- tryCatch({
+    calcofi4r::cc_release_sources(release_catalog, "obs_bio")
+    calcofi4r::cc_release_sources(release_catalog, "obs_env")
+    TRUE
+  }, error = function(e) FALSE)
+}
+cat(if (HAS_OBS_PAIR) glue(
+  "{RELEASE} catalog carries obs_bio + obs_env: the {{dataset_key}} grain reads ",
+  "the bifurcated pair (adds tow_type, std_haul_factor, prop_sorted, ",
+  "volume_sampled_m3, density_per_10m2, density_per_1000m3, effort_class, units, ",
+  "qual_ok to the existing columns).\n") else glue(
+  "{RELEASE} catalog does not carry obs_bio + obs_env (a pre-D-S1 release, or no ",
+  "catalog reachable): the {{dataset_key}} grain falls back to the deprecated ",
+  "`obs` objects — no effort/density columns for this run.\n"))
+```
+
 ## Discover what the core holds per dataset
 
 ```{r}
 #| label: discover
-core_tbls <- c("sample", "obs", "obs_attribute", "sample_measurement")
+core_tbls <- c("sample", "obs_attribute", "sample_measurement",
+               if (HAS_OBS_PAIR) c("obs_bio", "obs_env") else "obs")
 presence <- bind_rows(lapply(core_tbls, function(t) {
   src <- pq(PQ_LOCAL, t)
   q("SELECT '{t}' AS tbl, dataset_key, count(*) AS n
@@ -273,6 +311,43 @@ sql_obs <- function(ds, root) glue("
   LEFT JOIN (SELECT sample_key, site_key, sample_type
              FROM read_parquet('{root}/sample.parquet')) s USING (sample_key)")
 
+# D-S1/D-S3: the {dataset_key} grain reads obs_bio for a bio dataset, obs_env for
+# an env dataset (each dataset_key is cleanly one realm — measured on staging
+# v2026.08.28: every dataset_key has rows in exactly one of the pair), keeping
+# every column of sql_obs() above and adding the sample's own gear + effort +
+# the two canonical densities, already computed onto the pair at release time
+# (calcofi4db::build_obs_slim()) so no join to sample_measurement is needed here.
+.obs_pair_src <- function(root, realm) if (identical(realm, "bio"))
+  glue("read_parquet('{root}/obs_bio.parquet')") else
+  glue("read_parquet('{root}/obs_env/**/*.parquet', hive_partitioning = true)")
+
+sql_obs_pair <- function(ds, root, realm = c("bio", "env")) {
+  realm <- match.arg(realm)
+  glue("
+  SELECT o.sample_key, o.cruise_key, o.grid_key, s.site_key, s.sample_type,
+         o.datetime                   AS time,
+         o.latitude::DOUBLE           AS latitude,
+         o.longitude::DOUBLE          AS longitude,
+         o.depth_min_m::DOUBLE        AS depth,
+         o.depth_max_m::DOUBLE        AS depth_max_m,
+         o.taxon_key, t.scientific_name, o.life_stage,
+         o.measurement_type,
+         o.value::DOUBLE              AS measurement_value,
+         o.measurement_qual,
+         o.tow_type,
+         o.std_haul_factor::DOUBLE    AS std_haul_factor,
+         o.prop_sorted::DOUBLE        AS prop_sorted,
+         o.volume_sampled_m3::DOUBLE  AS volume_sampled_m3,
+         o.density_per_10m2::DOUBLE   AS density_per_10m2,
+         o.density_per_1000m3::DOUBLE AS density_per_1000m3,
+         o.effort_class, o.units, o.qual_ok
+  FROM {.obs_pair_src(root, realm)} o
+  LEFT JOIN read_parquet('{root}/taxon.parquet') t USING (taxon_key)
+  LEFT JOIN (SELECT sample_key, site_key, sample_type
+             FROM read_parquet('{root}/sample.parquet')) s USING (sample_key)
+  WHERE o.dataset_key = '{ds}'")
+}
+
 sql_sample <- function(ds, root, eff = character()) {
   # effort widened onto the event: one column per sample_measurement type is far
   # more usable than a long table with no coordinates of its own
@@ -334,6 +409,94 @@ sql_full <- function(ds, tbl, root) glue("
   WHERE f.dataset_key = '{ds}'")
 ```
 
+## Variable attributes for the bio/env grain (D-S3)
+
+```{r}
+#| label: obs-pair-attrs
+#| message: false
+# units_lookup (mt_units, above) is keyed by measurement_type name, which already
+# covers std_haul_factor / prop_sorted (registered dimensionless types) for free —
+# the pivoted `_sample` columns AND the pair's plain columns share that name. Only
+# the derived columns need their own entries (volume_sampled_m3's registered name
+# is "volume_sampled"; the densities and qual_ok/effort_class/scientific_name are
+# not measurement types at all).
+obs_pair_units <- list(
+  volume_sampled_m3  = "m3",
+  density_per_10m2   = "count/10m2",
+  density_per_1000m3 = "count/1000m3")
+
+obs_pair_longname <- list(
+  scientific_name    = "Scientific name",
+  tow_type           = "Net/gear tow type code",
+  std_haul_factor    = "Standard haul factor",
+  prop_sorted        = "Proportion of the catch sorted",
+  volume_sampled_m3  = "Volume of water sampled",
+  density_per_10m2   = "Areal density",
+  density_per_1000m3 = "Volumetric density",
+  effort_class       = "How density was derived for this row",
+  units              = "Units of measurement_value",
+  qual_ok            = "Whether measurement_qual marks this row usable")
+
+# wording mirrors calcofi4r::cc_density_sql()'s own roxygen, not a re-derivation
+obs_pair_comment <- list(
+  density_per_10m2 = paste(
+    "Depth-integrated areal density. For an oblique/vertical net tow (gear C1,",
+    "CB, CV, PV) reporting units = 'count': measurement_value * std_haul_factor /",
+    "prop_sorted. For a value the source already publishes as an area density",
+    "(count/m2, numberPerMeterSquared): measurement_value * 10. NULL otherwise.",
+    "See calcofi4r::cc_density_sql()."),
+  density_per_1000m3 = paste(
+    "Volumetric density. For a tow reporting a sampled volume with units =",
+    "'count': measurement_value / prop_sorted / volume_sampled_m3 * 1000. For a",
+    "value already published as a volumetric density (count/1000m3): passed",
+    "through unchanged. NULL otherwise. See calcofi4r::cc_density_sql()."),
+  effort_class = paste(
+    "count_with_effort (a count converted using this row's own gear effort),",
+    "raw_count_no_effort (a bare count with no effort available),",
+    "density_as_published (the source already reports a density), or",
+    "other_unit (neither a count nor a recognized density unit).",
+    "See calcofi4r::cc_density_sql()."),
+  qual_ok = paste(
+    "TRUE unless measurement_qual is one of this dataset's own suspect/bad/missing",
+    "codes; NULL/unflagged rows are kept. See calcofi4r::cc_qual_ok_sql()."),
+  scientific_name = "Resolved from taxon_key against the release's shared taxon reference (WoRMS or ITIS).",
+  units = "Units of measurement_value, from the canonical measurement_type registry (metadata/measurement_type.csv).")
+
+# sdn_parameter_urn (NERC P01): H2 (pre-release plan D-S2) adds `nerc_p01` to
+# measurement_type.csv on an exact vocabulary match; nothing here invents one.
+# Keyed by measurement_type NAME, same as mt_units, so it only ever lands on a
+# column that IS one quantity (a `_sample` grain's pivoted effort column) — never
+# on a long measurement_type/measurement_value pair, which mixes quantities and
+# cannot carry a single URN.
+mt_nerc_p01 <- {
+  hdr <- names(readr::read_csv(here("metadata/measurement_type.csv"), n_max = 0,
+                               show_col_types = FALSE))
+  if ("nerc_p01" %in% hdr) {
+    v <- setNames(as.list(mt$nerc_p01), mt$measurement_type)
+    v[!vapply(v, function(x) is.null(x) || is.na(x) || !nzchar(x), TRUE)]
+  } else list()
+}
+cat(glue("nerc_p01 in metadata/measurement_type.csv: {length(mt_nerc_p01)} of ",
+         "{nrow(mt)} types ({if (length(mt_nerc_p01) == 0) 'H2 not yet landed — ' else ''}",
+         "sdn_parameter_urn set only for those).\n"))
+
+# measurement_qual flag_values/flag_meanings: metadata/measurement_qual.csv's
+# `code_set` is not yet keyed to dataset_key (only "bottle" and "ctd" exist, per
+# their own two documented vocabularies) — matched by substring against
+# dataset_key, the same relationship the notebooks already assume elsewhere
+# (e.g. `calcofi_bottle`, `calcofi_ctd-cast`). No match, no flag attributes: a
+# dataset's own vocabulary is never invented here.
+mq <- readr::read_csv(here("metadata/measurement_qual.csv"), show_col_types = FALSE)
+qual_flag_atts <- function(ds) {
+  cs <- unique(mq$code_set)
+  hit <- cs[vapply(cs, function(c) grepl(c, ds, fixed = TRUE), logical(1))]
+  if (!length(hit)) return(NULL)
+  rows <- mq[mq$code_set == hit[1], ] |> dplyr::arrange(qual_code)
+  list(values = paste(rows$qual_code, collapse = " "),
+       meanings = paste(rows$label, collapse = " "))
+}
+```
+
 ```{r}
 #| label: plan
 ds_all <- sort(unique(presence$dataset_key))
@@ -345,11 +508,17 @@ eff_of <- function(ds) q("
   SELECT DISTINCT measurement_type FROM read_parquet('{pq(PQ_LOCAL,\"sample_measurement\")}')
   WHERE dataset_key = '{ds}' ORDER BY 1")$measurement_type
 
+# obs_src_n()/realm_of(): each dataset_key carries rows in exactly one of the
+# pair (measured on staging v2026.08.28 — no dataset splits bio/env), so "which
+# table" is a lookup, not a per-row decision.
+obs_src_n <- function(ds) if (HAS_OBS_PAIR) n_of(ds, "obs_bio") + n_of(ds, "obs_env") else n_of(ds, "obs")
+realm_of  <- function(ds) if (n_of(ds, "obs_bio") > 0) "bio" else "env"
+
 cfg <- bind_rows(lapply(ds_all, function(ds) {
   rows <- list()
-  if (n_of(ds, "obs") > 0)
+  if (obs_src_n(ds) > 0)
     rows <- c(rows, list(tibble(dataset_id = ds, grain = "obs",
-                                src_rows = n_of(ds, "obs"))))
+                                src_rows = obs_src_n(ds))))
   if (n_of(ds, "sample") > 0)
     rows <- c(rows, list(tibble(dataset_id = glue("{ds}_sample"), grain = "sample",
                                 src_rows = n_of(ds, "sample"))))
@@ -389,7 +558,8 @@ build_sql <- function(r, root, ing_root = ING_LOCAL) {
     if (in_rel) root else glue("{ing_root}/{ds}")
   }
   switch(r$grain,
-    obs           = sql_obs(r$dataset_key, root),
+    obs           = if (HAS_OBS_PAIR) sql_obs_pair(r$dataset_key, root, realm_of(r$dataset_key))
+                    else sql_obs(r$dataset_key, root),
     sample        = sql_sample(r$dataset_key, root, eff_of(r$dataset_key)),
     obs_attribute = sql_attribute(r$dataset_key, root),
     full          = sql_full(r$dataset_key, r$supp_table,
@@ -543,9 +713,16 @@ summary_of <- function(r) {
   dm <- iy_meta(r$dataset_key)
   desc <- gsub("[[:space:]]+", " ", trimws(dm$description %||% ""))
   grain_txt <- switch(r$grain,
-    obs = paste("One row per observation: a measurement of one quantity at one",
+    obs = paste(Filter(nzchar, c(
+                "One row per observation: a measurement of one quantity at one",
                 "event, taxon and depth. `measurement_type` names the quantity and",
-                "`measurement_value` holds it, so filter on measurement_type."),
+                "`measurement_value` holds it, so filter on measurement_type.",
+                if (HAS_OBS_PAIR) paste(
+                  "Each row also carries its own sample's gear and effort",
+                  "(tow_type, std_haul_factor, prop_sorted, volume_sampled_m3) and",
+                  "the two canonical densities (density_per_10m2,",
+                  "density_per_1000m3, effort_class) — see the column comments —",
+                  "and qual_ok, a pre-computed pass/fail on measurement_qual.") else ""))),
     sample = paste("One row per sampling event, with event-level effort widened",
                    "into its own columns. Use this for effort and station",
                    "counting — summing effort over the observation table",
@@ -570,6 +747,7 @@ for (i in seq_len(nrow(cfg))) {
   r <- cfg[i, ]
   cols <- q("DESCRIBE SELECT * FROM ({build_sql(r, PQ_LOCAL)})") |>
     transmute(column = column_name, duckdb_type = column_type)
+  qflags <- if ("measurement_qual" %in% cols$column) qual_flag_atts(r$dataset_key) else NULL
   xml <- erddap_duckdb_dataset_xml(
     staged        = as.data.frame(cols),
     dataset_id    = r$dataset_id,
@@ -577,9 +755,17 @@ for (i in seq_len(nrow(cfg))) {
     summary       = summary_of(r),
     source_url    = glue("jdbc:duckdb:{ERDDAP_DB}"),
     table_name    = r$view_name,
-    # keyed by column name: this lands on the `{ds}_sample` views, whose widened
-    # effort columns ARE measurement_type names, and is inert elsewhere
-    units_lookup  = mt_units,
+    # keyed by column name: mt_units/mt_nerc_p01 land on the `{ds}_sample` views'
+    # widened effort columns (which ARE measurement_type names) and on the
+    # bio/env grain's plain std_haul_factor/prop_sorted columns (same names by
+    # construction); obs_pair_* only exist as columns on the bio/env grain, so
+    # both are safe to pass to every dataset unconditionally
+    units_lookup      = modifyList(mt_units, obs_pair_units),
+    longname_lookup   = obs_pair_longname,
+    comment_lookup    = obs_pair_comment,
+    urn_lookup        = mt_nerc_p01,
+    flagvalues_lookup   = if (!is.null(qflags)) list(measurement_qual = qflags$values) else list(),
+    flagmeanings_lookup = if (!is.null(qflags)) list(measurement_qual = qflags$meanings) else list(),
     cdm_data_type = CDM,
     global_atts   = list(
       license   = iy_meta(r$dataset_key)$license %||% "CC-BY 4.0",
