@@ -339,3 +339,20 @@ PR #77 properly; 3 is what makes the next dataset free.
   D5 changes 50 of 2,125 names (44 manual / 790 ichthyo / 186 WoRMS single / 175 other / 930 empty);
   tests 1,260 → 1,378. **Found:** phytoplankton releases 22 keys for 393 codes because six `taxa`-matched
   override rows replace species ids — decision needed before Phase 3.
+- **Phase 2 (2026-09-03, workflows `ws-e-ph2` on Betty's `ingest-farallon-erddap`, Fable; calcofi4db 3.31.0
+  unchanged):** farallon staged from ERDDAP `_sp` (241 codes; 164 staged, 49 observed codes excluded) with
+  DataZoo's TSNs as `ds_source_json` (`metadata/farallon/bird-mammal/species_itis_datazoo.csv`, 200 codes /
+  159 TSNs, from the archived `allspecieslist.csv`). Gate: **`taxon_key` 153/154 identical** to the
+  v2026.08.25 slice on the codes both hold, the one change the documented `MEGU` re-key
+  (`itis:176832` *L. canus* → `itis:1192602` *L. brachyrhynchus*, with `SBIG`); 126/126 `taxon` rows
+  identical on eight fields; only-in-fixture `CSLI`, `XAMU` (unreferenced, retired upstream); 10 new codes
+  (`CHSP GUMU LOTU MABO NABO SBIG SCMU TOSP UNLP UNMT`). `obs.taxon_key` NULL on the 65,855 shared rows
+  1,177 → 727: 450 rows gained a key through the nine staged ERDDAP-only codes, 53 changed key (`MEGU`),
+  **0 lost**; `check_dataset_taxon()` 0 findings; audit 96 agree / 68 explained (26 deprecated re-keys,
+  41 override rows, 1 no-source-TSN). Override rows 37 → 75 (`match_column` → `ds_taxa_code`; 28 + 2
+  unidentified classes; `SBIG`/`MEGU`; six ERDDAP-only birds whose TSN the generic path could not carry).
+  **Found:** (a) `.apply_xref()` branch (c) fills only `worms_id` for a name-resolved row, so a bird with no
+  source id can never key `itis:` without an override even when WoRMS links the TSN (`GUMU`, `MABO`,
+  `NABO`) — D3's "name → AphiaID → TSN → itis:" hop is not implemented; (b) ERDDAP `_obs` has no 2021 rows
+  (DataZoo had 625; farallon Q11); (c) ERDDAP now labels `CODO` "Delphinus sp." and `XCMU`
+  "Synthliboramphus craveri" where the overrides key *D. delphis* and the genus (Q10).
