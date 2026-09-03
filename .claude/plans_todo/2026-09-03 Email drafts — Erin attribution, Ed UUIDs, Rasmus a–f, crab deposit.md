@@ -37,49 +37,38 @@ Cheers, Ben
 
 ## 2 · Re: CalCOFI DMP work update — to Ed (cc the thread)
 
+*(Draft 2, refined 2026-09-03 with the WS-B spike + memo numbers, measured on v2026.08.25; 296
+words by `wc -w` from "Hi Ed" to "Ben". Ben sends.)*
+
 Hi Ed,
 
-Thanks — this is on the radar, and more of it is already true than the naming-conventions text
-suggests. Concretely:
+Agreed, and more is already true than the Task 12 text suggests:
 
-- Your UUIDs are in the integrated database now: every SWFSC station, tow and net is keyed by the UUID
-  your export ships (`sample_key = swfsc_ichthyo:site:<StationId>` and so on), and the cruise table
-  carries your CruiseId as `cruise_uuid`. Two things we'll add in the next release: `source_uuid` as a
-  proper UUID column on the sample table (so a join to your database needs no string surgery), and the
-  same treatment of station occupations for the other datasets — a bottle or CTD cast matched to the
-  SWFSC station occupation gets its StationId as `station_uuid`. I'll send you the match rates before
-  we ship that.
-- On compound keys: you're right about the failure mode, and we hit exactly it in August — `cruise_key`
-  was being derived from each cast's month instead of looked up from the cruise, which split cruises
-  that straddle a month boundary. It's now resolved against the cruise table (your date spans), and
-  the next release adds a check that fails the build if a key's ship or dates ever disagree with the
-  cruise row it points to. We keep the readable `cruise_key` / `sample_key` as the join keys because
-  the integrated database is a read-only frozen release — the "business logic" lives in those
-  release-time checks rather than in an entry form — but the identifiers of record are yours, carried
-  as columns, not re-minted.
-- Task 12 is about the *names* of things (variables, units, station notation, dataset slugs), not
-  about primary keys; I'll make that explicit in the status text.
+- Every SWFSC station, tow and net is already keyed by the UUID your export ships, and `cruise`
+  carries CruiseId. The next release adds `source_uuid` (typed UUID) on `sample`, and `station_uuid`:
+  casts matched to your station occupation (by occupation order, or a unique occupation within
+  24 h): 78% of 35,644 bottle and 80% of 19,242 CTD casts; the rest are pre-1951 or lack stations in
+  your export.
+- Compound keys: we hit your failure mode in August (keys derived from each cast's month split
+  month-straddling cruises). Keys now come from the cruise table by your date spans, and the next
+  release fails when a key's ship or dates disagree with its cruise row. It found one
+  malformed key (Bold Horizon 2019-07: `shiplookup` lacks BH's NODC) and 152 cruises our
+  bottle/CTD/METS sources designate that your export lacks (mostly 1949–1950, 2016–2026). Could you
+  export the full cruise table (CruiseId, ship, month, dates) independent of stations, so every
+  cruise gets your UUID?
+- Task 12 is about names (variables, units, station notation), not keys; I'll say so.
 
-While I have you — the questions we've accumulated on the ichthyoplankton export, in priority order.
-Each ingest keeps a standard question log (id, question, context, our proposed answer, status), and
-I've put the SWFSC ones in a Google Sheet we can both edit: [link]. The most important:
+The ichthyo questions, in a shared sheet: [link]. Top six:
 
-1. **Egg stages 12–15.** 790 egg records (2,029 eggs, 5 species) use stages 12–15, but the Moser &
-   Ahlstrom scale we encode runs 1–11. A different scheme, or entry errors? They are excluded for now.
-2. **Missing net effort.** Should `volume_sampled`, `standard_haul_factor` or `percent_sorted` ever be
-   absent, and how should abundance be standardized when one is? (Manta tows were ~50× low in one app
-   before gear-aware handling.)
-3. **Tow depth.** Every tow/net in the export reaches us with no maximum depth, so a tow can't be drawn as
-   the 0–210 m span it is. Which field carries it (`tow.max_depth`?), and is it wire-out or true depth?
-4. **Zero vs unsorted.** The larvae/egg tables are positive-only, so absence of a row is our only zero.
-   Two 1982 cruises (1982-02 and 1982-12 on Jordan) look sorted for anchovy only, and 6,907 of 61,104
-   tows have no row of any taxon. Is there a per-tow or per-cruise "taxa sorted" indicator? Our
-   proposed rule: a tow with ≥ 1 row of any taxon is a zero for the rest; a tow with none is out of the
-   denominator.
-5. **Species crosswalk.** Do you hold a `species_id` → WoRMS AphiaID table? We match on name today.
-6. **Duplicate occurrence keys** (same net + taxon + stage more than once): replicate sorts, or
-   duplicates to collapse? And 4.8 % of observations resolve no CalCOFI grid cell — genuine off-grid
-   positions, or coordinate errors?
+1. Egg stages 12–15 (790 records, 5 species): beyond Moser & Ahlstrom's 1–11: a scheme, or errors?
+   Excluded for now.
+2. Missing net effort (volume, haul factor, percent sorted): expected, and how to standardize?
+3. Tow maximum depth: which field, and wire-out or true depth?
+4. Zero vs unsorted: 6,907 of 61,104 tows have no taxon row; any "taxa sorted" flag? Proposed: ≥1
+   row ⇒ zeros for the rest, none ⇒ excluded.
+5. A species_id → WoRMS AphiaID table?
+6. Duplicate net+taxon+stage keys: replicates or duplicates? And 4.8% of observations off-grid:
+   real, or coordinate errors?
 
 Take care, Ben
 

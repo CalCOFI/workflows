@@ -460,3 +460,419 @@ of this was "fixed" here per the Gates section's own instruction — it is numbe
 and for whoever writes Phase 2's actual gate (which will need at minimum a documented tolerance
 band for (b), and a plan for the orphan-`cruise_key` rows before "(a)" can fail the release as
 worded).
+
+## Decided (Phase 1 memo, Fable · xhigh, 2026-09-03)
+
+The spike's measurements stand and were not re-run. Everything below that carries a number not in
+the Measured section was measured once, read-only, on `calcofi4r::cc_get_db("v2026.08.25")` on
+2026-09-03 (scripts `ws_b_memo_queries{,2}.R` in the session scratchpad; SQL reproduced where a
+number is load-bearing). Two things were **traced in code**, not measured: where `site.cruise_uuid`
+goes (D2) and why `2019-07-` exists (D3). Phase 2 is the checklist at the end; the questions to file
+are in it as ready-to-paste rows.
+
+### D1 · Provider UUIDs are columns; the namespaced keys stay the integration PK (Q5, unchanged)
+
+- **No re-keying, no minted UUIDs.** `sample_key` / `cruise_key` remain the join keys of a read-only
+  frozen release; Ed's "business logic enforces entry" is met by `check_cruise_key_integrity()` (D5),
+  not by PK choice. 15 of 16 datasets mint no UUID; a v5 UUID of a natural key is that key with worse
+  legibility. Umbrella § Decisions › WS-B holds.
+- **`cruise.cruise_uuid`** (Ed's CruiseId) is already released, 691/691 populated, and is the public
+  join key to NOAA's database — `field_dictionary.csv` row 3 still says "internal to swfsc source;
+  cruise_key is the public join key", which is the sentence to replace.
+- **`sample.source_uuid`** (new, typed `UUID`, 17th positional column of `append_sample()`, NULL
+  everywhere but ichthyo): the provider's own identifier for *that* event — `site_uuid` on a site
+  row, `tow_uuid` on a tow, `net_uuid` on a net. The shards are unioned `BY NAME`
+  (`calcofi4db/R/shards.R` l.55–90), so a column only ichthyo's shard carries arrives NULL for the
+  other 15 with no arm touched.
+- **`sample.station_uuid`** (new, `UUID`) + **`station_uuid_method`** (`VARCHAR`) — approved on
+  the numbers in D8: the SWFSC station occupation an event belongs to, on **every** `sample` row
+  (ichthyo's own rows carry their site; the others carry the match), computed in the release.
+- **No `cruise_uuid` on `sample`.** It is a function of `cruise_key` (`cruise` is unique on both), so a
+  1.3 M-row UUID column would be pure denormalization; a consumer joins `cruise` once. The brief's
+  Phase 2 item 3(a) needed it only to run the UUID check in the release — D2 puts that check where
+  the two columns still coexist.
+- **Item 4 (strip `_source_*` from `cruise`) is verify-only.** The spike showed the released
+  `cruise` carries none of them; `freeze.R` l.495 strips them. Keep a one-line assertion, drop the
+  work.
+
+### D2 · Where `site.cruise_uuid` is lost — traced, and what the UUID check becomes
+
+The chain in `ingest_swfsc_ichthyo.qmd`, verified line by line:
+
+1. `metadata/swfsc/ichthyo/flds_redefine.csv` l.40 maps `station.cruise_id` → `site.cruise_uuid`
+   (type `uuid`); `ingest_dataset()` loads it (chunk `load_tbls_to_db`, l.230).
+2. Chunk `propagate_cruise_key` (l.299–316) stamps `site.cruise_key` **from** `site.cruise_uuid`
+   (`propagate_natural_key()` is an `UPDATE`; it drops nothing). Both columns coexist from here on.
+3. `add_point_geom()`, `assign_grid_key()`, `standardize_site_key()`, `enforce_column_types()`
+   (chunks `mk_site_pts` l.909, `update_site_from_grid` l.1032, `enforce_types` l.1272) are all
+   `ALTER … ADD COLUMN` / `UPDATE` — nothing drops a column.
+4. Chunk `emit_core` (l.1347): the three `append_sample()` arms (l.1395–1425) project the 15-column
+   contract from `site s` — `s.grid_key, s.site_key, s.cruise_key, …` — **no UUID slot exists**, so
+   neither `site_uuid` (except embedded in `sample_key` text) nor `cruise_uuid` reaches `sample`.
+5. Same chunk, l.1538–1558: `compat <- list(site = compat_event_sql(ds_key, "site", "site_uuid", NULL,
+   c(order_occ, longitude, latitude, cruise_key, geom, grid_key, site_key)), …)`, then for each:
+   `DROP TABLE site` and `CREATE OR REPLACE VIEW site AS <compat SQL>`. The VIEW's column list is
+   **exactly the 8 columns the spike's `DESCRIBE site` returned** (`site_uuid` recovered from
+   `split_part(sample_key, ':', 3)` + those 7). The comment above it says so: "lossy for the rest
+   (net.side, tow.tow_number, the legacy site columns) — which the release drops anyway. The real
+   tables are DROPped". `write_parquet` (l.1575) writes `sample.parquet`, not `site`.
+
+So the column is not lost by accident: the source table is deliberately discarded after the core is
+emitted, and the core has nowhere to put it. The persisted wrangling DB shows the VIEW.
+
+**Decision — the UUID check runs inside the ichthyo notebook, and its result travels in the
+manifest.** In `emit_core`, *before* the compat block (after the `stopifnot()` at ~l.1508), assert:
+
+```sql
+SELECT COUNT(*) AS n_mismatch
+FROM site s JOIN cruise c ON c.cruise_uuid = s.cruise_uuid
+WHERE s.cruise_key IS DISTINCT FROM c.cruise_key
+   OR s.cruise_key IS NULL
+```
+
+= 0 (hard `stopifnot()`), plus `COUNT(source_uuid) = COUNT(*)` per grain on `sample`, and
+`n_mismatch` written to `manifest.json` `mismatches$cruise_uuid` beside `ships`/`cruise_keys`
+(`write_parquet` chunk, l.1578). `check_cruise_key_integrity()` (D5) reads
+`data/parquet/swfsc_ichthyo/manifest.json` and fails if the entry is missing or non-zero, so the
+release verifies the fact without holding the column. Rejected: an 18th `append_sample()` column
+(`cruise_uuid`) — carries a derived value on 1.3 M rows to serve one check; a `site_cruise.parquet`
+side table — a fourth artefact for a 61,104-row fact that is `cruise.cruise_uuid` joined on
+`cruise_key` anyway. The spike's proxy (every ichthyo `site.cruise_key` resolves to a `cruise` row,
+61,104/61,104) stays in the gate as the FK check.
+
+### D3 · `2019-07-` — root cause (traced) and fix
+
+`create_cruise_key()` (`calcofi4db/R/wrangle.R` l.28–83) builds
+`CONCAT(year, '-', month, '-', s.ship_nodc)`; DuckDB's `CONCAT` treats NULL as `''`. In the ichthyo
+notebook it runs in chunk `create_cruise_key` (l.264) — **281 lines before** chunk
+`apply_corrections` (l.545), whose `apply_data_corrections()` correction 1 (`wrangle.R` l.1036–1046)
+is precisely `UPDATE ship SET ship_nodc = '39C2' WHERE ship_name = 'BOLD HORIZON' AND (ship_nodc IS
+NULL OR ship_nodc = '')`. The source `shiplookup.shipnodc` is blank for Bold Horizon
+(`flds_redefine.csv` l.33), so the key was minted as `2019-07-`, the correction then patched the ship
+row, and the key was never re-derived. That is why the spike found `ship.ship_nodc = '39C2'` beside
+a key with an empty NODC, and why the interim-ship path never fired: `ensure_interim_ships()` handles
+*unmatched* ship codes, not a matched ship with a blank code. Three guards saw it and none stopped:
+`create_cruise_key()` warns only on a NULL key (this one is not NULL); `collect_cruise_key_mismatches()`
+labels it `malformed` in the manifest; `release_database.qmd` l.1112–1127 **warns** and its own
+comment records `# cruise_key: 2019-07-`. Downstream every ingest inherited it through
+`resolve_cruise_key()` step 1 (`cr.cruise_key` verbatim) — bottle 1,922, ichthyo 210, PIC 100,
+zooscan 19, phyto 4 = 2,255 rows — while CTD (keys from the archive name via
+`convert_cruise_key_format()`, l.1894) and METS (filename) minted the *correct* `2019-07-39C2`,
+which is why two of the 152 orphan keys are Bold Horizon's: the same cruise under two spellings.
+
+**Fix (Phase 2, ichthyo re-renders anyway):** (i) move `apply_data_corrections(con)` ahead of
+`create_cruise_key()` (correction 2 only appends `species` rows; order-independent); (ii)
+`create_cruise_key()` **stops** when any cruise's ship has a NULL/empty `ship_nodc` or the minted
+key fails `^\d{4}-(0[1-9]|1[0-2])-[A-Z0-9]{4}$` — today it cannot fail; (iii) the same guard in
+`resolve_cruise_key()` steps 2–3, which `CONCAT` `s.ship_nodc` the same way; (iv) the release warning
+becomes part of the hard gate (D5). After the fix the reference row is `2019-07-39C2`, the 2,255
+rows re-key when their ingests re-run, and the two Bold Horizon orphan keys converge. The source
+defect (blank NODC) is a question for Ed (row in the checklist).
+
+### D4 · Completing the `cruise` reference — the rows, their method, their spans
+
+**What is missing, measured.** 843 distinct `cruise_key` values in `sample`, 691 in `cruise`:
+**152 orphan keys** carry 153,306 `sample` rows and **3,804,612 `obs` rows**. By dataset (keys /
+rows): bottle 132 / 135,827; ctd-cast 25 / 3,563 (events 2016-11 → **2026-07**: the 2025-04 export
+lags CTD by over a year); mets 11 / 13,452; picoplankton 2 / 463; dic 1 / 1. By decade (keys):
+1940s 27, 1950s 65, 1960s 12, 1970s 14, 1980s 7, 2000s 1, 2010s 6, 2020s 20. By ship: Horizon 21,
+Black Douglas 21, Crest 21, Agassiz 19, Sally Ride 14, Paolina T 12, E. W. Scripps 7, Scofield 5,
+Jordan 5, Baird 5, Stranger 4, Shimada 4, New Horizon 4, Lasker 4, Oceanus 2, Bold Horizon 2,
+McArthur 1, Ellen B. Scripps 1. **Every NODC resolves in `ship`** (0 unknown, 0 interim); 121 of
+152 keys lie more than 45 days from any reference cruise of the same ship (genuinely absent from the
+export — the early SIO fleet and the post-export years), 31 lie 4–45 days from one (each is either a
+designation disagreement or a real short cruise; adjudicated per key, not by rule). Largest:
+`1987-05-32NM` 7,466 rows and `1988-09-32NM` 7,438 (bottle only), `2019-11-32OC` 3,735 (four
+datasets), `2020-07-33P4` 3,637, `1950-03-31BD` 2,659. No ingest writes a `cruise_new` delta
+(`grep cruise_new` matches nothing; only `ship` is in any `modifies:`), so nothing could ever have
+added them.
+
+**Decision — day one, the release completes the reference; the durable form follows.**
+
+- **`complete_cruise_reference(con)`** (calcofi4db, `R/keys.R`), called in `release_database.qmd`
+  immediately before the `cruise` enrichment (l.1157, whose `LEFT JOIN cruise_ref` keeps every row):
+  one row per distinct non-NULL `sample.cruise_key` absent from `cruise`, with `cruise_key`,
+  `ship_key` (the `ship` row whose `ship_nodc` is the key's NODC — **error** if none), `date_ym` (the
+  key's month), `date_min`/`date_max` (min/max event date over that key's `sample` rows),
+  `cruise_uuid` NULL, **`cruise_key_method = 'derived'`**, **`cruise_key_datasets`** (comma list).
+  The 691 SWFSC rows get `cruise_key_method = 'swfsc'` and their datasets likewise. Ratchet
+  `CRUISE_DERIVED_MAX = 152L` (only down). The FK check then holds by construction and `cruise`
+  stays unique on `cruise_key` (`check_core_pk_unique()` already covers it).
+- **Why `derived`, not `source`/`month`.** The brief asks for the ingest's `cruise_key_method` on
+  the row. The release cannot supply it: `sample` does not carry the method, and the ingests that
+  designate (bottle `Cruise` = YYYYMM, CTD archive name, METS filename, pico `cruise_ym`) each also
+  have a fallback that mints a key no source designated (bottle/pico step 3 month rule; METS's
+  year+month for files without a ship suffix). Labelling all 152 `source` would be a claim the release
+  cannot check. **Next cycle** the designating ingests declare `modifies: [ship, cruise]` and write
+  a `cruise_new` delta carrying their own `cruise_key_method` (`source` / `month`); the release then
+  labels rows from deltas with that value, keeps `derived` as the backstop that must add **zero**
+  rows, and ratchets `month` to zero. This needs one bug fixed first: the `_new` merge
+  (`release_database.qmd` l.311–345) takes the PK as the table's **first column by ordinal
+  position**, which for `cruise` is `cruise_uuid` — NULL on a delta row, so `WHERE cruise_uuid NOT IN
+  (…)` is NULL and no row would ever insert. It must use `core_relationships(tables)$primary_keys`.
+- **The best completion is Ed's.** NOAA's CalCOFI database has a cruise table independent of
+  stations; a full export (CruiseId, ship, designated month, start/end) turns every `derived` row
+  into a `swfsc` one with a `cruise_uuid`. Asked in the reply and filed as an ichthyo question.
+
+**Spans.** `date_min`/`date_max` on the 691 SWFSC rows stay **ichthyo-observed** — they are what
+`resolve_cruise_key()` keyed every ingest against (± 3 d), and widening them at release time is
+circular (an event mis-keyed by the month rule widens the span that would then capture more events)
+and would not be the span the ingests used. `derived` rows carry their own event span. Measured
+support: other datasets' events widen 326 of 676 ichthyo spans, by at most 29 days (p99 13 d); under
+all-dataset spans only **3 pairs** of cruises of one ship overlap, each explained — `2012-07-32I1` /
+`2012-08-32I1` by 3 transit days (Farallon transects keyed 08 start 07-28, METS keyed 07 runs to
+07-30); `2015-10-32OC` is **METS's own `1510` filename designation** for the cruise every other
+dataset keys `2015-11-32OC` (identical spans 10-28 → 11-13; METS does not use
+`resolve_cruise_key()`, its notebook says so at l.585); `2025-01-33UD` / `2025-02-33UD` is 6 CTD
+casts dated 2025-01-19 inside a `2502` archive (a CTD question, with D7). Tolerance for the gate:
+**31 days** (99.97% of events inside; the 7 CTD casts of D7 outside).
+
+### D5 · `check_cruise_key_integrity()` — what fails on day one, what comes after
+
+`calcofi4db::check_cruise_key_integrity(con, tolerance_days = 31L, known_outside_span = …,
+manifest_ichthyo = …)` returns one tibble (`check`, `dataset_key`, `n`, `mode`, `finding`) and
+**stops** on any `mode = 'fail'` row with `n > 0`. Called in a new `cruise_key_integrity` chunk
+right after `check_core_pk_unique()` (l.1038) and after `complete_cruise_reference()`.
+
+| # | check | mode | today (v2026.08.25) | zero after |
+|---|---|---|---:|---|
+| 1 | `cruise_key` matches `^\d{4}-(0[1-9]\|1[0-2])-[A-Z0-9]{4}$` on `cruise`, `sample`, `obs` | fail | 1 key / 2,255 rows | D3 |
+| 2 | `cruise.date_ym` = the key's `YYYY-MM` | fail | 0 | — |
+| 3 | key's NODC = `ship.ship_nodc` of `cruise.ship_key` | fail | 1 key / 2,255 rows | D3 |
+| 4 | every non-NULL `sample.cruise_key` / `obs.cruise_key` exists in `cruise` | fail | 152 keys / 153,306 + 3,804,612 rows | D4 |
+| 5 | `swfsc` rows have a unique non-NULL `cruise_uuid`; `derived` rows NULL | fail | 0 | — |
+| 6 | event date within `[date_min − 31 d, date_max + 31 d]` of its cruise (SWFSC rows; derived rows are their own span) | fail, minus `known_outside_span` | 7 rows (all CTD) | D7 allowlist now; CTD re-run later |
+| 7 | ichthyo `manifest.json` `mismatches$cruise_uuid` present and 0; `COUNT(source_uuid) = COUNT(*)` on ichthyo site/tow/net | fail | n/a until the ichthyo re-render | D2 |
+| 8 | event spans of two cruises of one ship overlap by > 3 days | ratchet `CRUISE_SPAN_OVERLAPS_MAX = 2L` | 3 pairs (1 within transit tolerance) | METS → `resolve_cruise_key()`; CTD Q |
+| 9 | `derived` rows in `cruise` | ratchet `CRUISE_DERIVED_MAX = 152L` | 152 | `cruise_new` deltas; Ed's cruise table |
+| 10 | root samples with NULL `cruise_key`, per dataset | ratchet (`CRUISE_KEY_NULL_MAX`: dic 3,255 · pic 5,087 · crab 1,639 · bottle 49; mets and ctd 0) | as listed | D6 for dic; the others are open questions |
+
+Checks 1–5 and 7 are hard from the first run; 6 is hard with the seven named keys as exceptions
+(named, not counted, so an eighth fails); 8–10 are ratchets in the release notebook, never raised.
+The literal spike SQL (§4) is the body of checks 3, 4 and 6.
+
+### D6 · DIC's NULL `cruise_key` is a projection gap, and the source can fill it
+
+All 3,255 DIC root samples have `parent_sample_key IS NULL` — they are the Niskins that matched no
+bottle cast — and `ingest_calcofi_dic.qmd` l.714/730 takes `cruise_key` **only** from the matched
+cast (`c.cruise_key`), so an unmatched DIC row has none by construction (the 7 DIC samples under a
+cast, and the matched `obs`, carry it). 1,926 of the 3,255 (59%) have a datetime on the 1st of the
+month, so the row's own date is month-precision and unsafe for span matching. But the source carries
+`EXPOCODE` (WOCE: NODC ship code + cruise start date `YYYYMMDD`) and `Ship_Name`
+(`metadata/calcofi/dic/flds_redefine.csv` l.2–3): `ship_key` from the NODC prefix, then
+`resolve_cruise_key()` on the expocode's start date against the reference (span first, then the
+expocode's month as `cruise_ym_col`), so every DIC row carries the cruise its provider designated
+whether or not a Niskin matched. Filed as dic Q07 (proposed). Until it lands, check 10's ratchet
+holds the count at 3,255.
+
+### D7 · The seven CTD casts are timestamps, not keys
+
+CTD keys every cast from its **archive name** (`19-9908NM_…` → `1999-08-32NM`,
+`convert_cruise_key_format()` at l.1894), never from the cast date, so `cruise_key` is right by
+construction and the timestamps are the defect: `9908_067/069/070` (`d` + `u`) carry 1997-01-01 to
+1997-01-05, `1307_021u` carries `2012-12-31 00:00:00`; all seven are `data_stage = final`. Not fixed
+this round (umbrella § Avoiding the CTD ingest); check 6 names the seven keys with the question id
+so the release passes and an eighth cast cannot hide behind them. Proposed answer to file: the
+archive is the cruise identity; the seven timestamps are set NULL (or corrected from the cast header
+if Ben G finds the right value) when the CTD ingest next runs.
+
+### D8 · The `station_uuid` rule, decided on the numbers
+
+Beyond the spike's 23,403 exact / 72,969 nearest / 964 ambiguous / 122,958 none, measured:
+
+- Of the 964 ambiguous (> 1 ichthyo occupation of the station on the cruise, no `order_occ` match):
+  **92** have exactly one candidate within 6 h, **845** more exactly one within 24 h, **29** stay
+  ambiguous (bottle 11, ctd 2, crab 1, pic 15). Ichthyo's own `(cruise_key, site_key, order_occ)`
+  is unique, and `order_occ` is populated on 61,104/61,104 sites but on only 11,194/35,644 bottle,
+  1,457/82,343 PIC and 4/2,015 crab roots — so datetime carries the match for the old data.
+- Of the single-candidate rows without an `order_occ` match: 19,576 bottle / 165 ctd / 178 pic /
+  1 crab within 6 h; 495 / 152 / 52,142 / 260 in 6–24 h; then 521 / 102 / 51 / 1 in 24–36 h, and
+  150 / 2 / 14 / 0 beyond 36 h. The 6–24 h band is PIC's bulk (its tow times sit hours from the
+  ichthyo site's first tow); the 24–36 h band (675 rows) is the one to re-measure before widening.
+  330 single-candidate roots (bottle 180, ctd 8, crab 2, pic 140) meet an ichthyo site with **no
+  datetime** — 3,169 of 61,104 sites have no tow time — and stay NULL.
+- Date-only timestamps are rare (bottle 454, pic 155 at midnight), so a date-level rule is not needed.
+
+**Rule.** `match_station_occupation(con, tolerance_hours = 24)` in the release, over `sample`:
+
+1. `self` — ichthyo rows: the root site's `source_uuid` (every ichthyo site/tow/net).
+2. `parent` — a root that *is* an ichthyo site through `parent_sample_key` (the crab's 310
+   subsamples): the parent's `source_uuid`.
+3. `order_occ` — exactly one ichthyo site shares `(cruise_key, site_key, order_occ)`.
+4. `datetime` — exactly one ichthyo site at `(cruise_key, site_key)` has a datetime within 24 h of
+   the root's (whether it is the only candidate or the only one inside the window).
+5. otherwise NULL (`station_uuid_method` NULL), counted per dataset and reason.
+
+The root's value is copied to every row under it (`root_sample_key`), so `obs.sample_key → sample`
+answers "which SWFSC station occupation" at any grain. Expected coverage of root samples: bottle
+27,785/35,644 (78.0%), ctd 15,450/19,242 (80.3%), pic 53,800/82,343 (65.3%; the rest are pre-1951
+or no ichthyo occupation), crab 274/2,015 (13.6%, plus the 310 subsamples by `parent`), mets 0 (no
+`site_key`), dic 0 until D6. Implementation follows `add_sample_seafloor()`'s rebuild (DuckDB cannot
+`UPDATE` a table with a CRS-tagged `geom`), and — the v2026.08.25 lesson — the match table is
+asserted unique on `root_sample_key` **before** the join and `sample` is asserted unchanged in row
+count and unique on `sample_key` after it. Not on `obs` (additive later if a consumer needs the
+`GROUP BY`).
+
+### D9 · What the docs must stop saying
+
+`docs/db.qmd` l.35 gives `cruise_key = 'YYMMKK'` (it has been `YYYY-MM-NODC` since 2026-06) and
+l.46 says "Avoid UUIDs in output tables: use `_source_uuid` … (stripped in frozen releases)". True
+sentences for WS-H (owner of the `db.qmd` rewrite): *provider UUIDs are released as typed columns
+where the provider mints them — `cruise.cruise_uuid` (NOAA CruiseId), `sample.source_uuid`
+(SWFSC site/tow/net), `sample.station_uuid` (the SWFSC station occupation any event belongs to);
+the namespaced string keys remain the primary keys; `_source_*` provenance columns are stripped at
+the freeze.* The CLAUDE.md § keys paragraph is Phase 2's (this WS owns it).
+
+## Phase 2 checklist (decided; Sonnet · high, calcofi4db 3.31.0 after A0)
+
+Order matters: 1–4 are the package, 5–7 the ichthyo notebook, 8–10 the release, 11–13 registries,
+docs and notes. Every rule gets its testthat test **before** the code; `devtools::test()` green is
+the gate at each step; `DESCRIPTION` is not bumped by the agent.
+
+1. **`append_sample()` — 17th column `source_uuid`** (`calcofi4db/R/model.R` l.325). Extend the
+   DESCRIBE-arity guard to `c(15L, 16L, 17L)`; 17 ⇒ `data_stage` + `source_uuid`; `NULL::UUID` when
+   absent; `.ensure_sample_schema()` (l.123) adds `source_uuid UUID` in the DDL and via
+   `ALTER TABLE … ADD COLUMN IF NOT EXISTS` (as `data_stage` at l.145). Tests in
+   `tests/testthat/test-append_sample.R`: 15/16/17-column arms; 17 with a `UUID`-typed expression
+   round-trips; 18 columns is a named error; a 15-column arm leaves the column NULL.
+2. **`create_cruise_key()` refuses a blank NODC** (`R/wrangle.R` l.28): after the `UPDATE`, `stop()`
+   if any `cruise` row's ship has `ship_nodc IS NULL OR ship_nodc = ''` or the key fails
+   `^\d{4}-(0[1-9]|1[0-2])-[A-Z0-9]{4}$`; message names the ship. New
+   `tests/testthat/test-create_cruise_key.R`: happy path; blank NODC errors (regression for
+   `2019-07-`); missing ship_key still warns. **`resolve_cruise_key()`** (`R/cruise.R` l.141): steps
+   2–3 join `ship` with `s.ship_nodc IS NOT NULL AND s.ship_nodc <> ''`; test in
+   `test-resolve_cruise_key.R` that a blank-NODC ship yields NULL + method NULL, never `YYYY-MM-`.
+3. **`R/keys.R` (new)** — `complete_cruise_reference(con, sample_tbl = "sample", cruise_tbl = "cruise",
+   ship_tbl = "ship")` per D4 (adds `cruise_key_method`, `cruise_key_datasets`; returns the added
+   rows); **`check_cruise_key_integrity(con, tolerance_days = 31L, known_outside_span = character(),
+   manifest_ichthyo = NULL, ratchets = list(...))`** per D5 (the ten checks; `stop()` on a failing
+   hard check; returns the tibble); **`match_station_occupation(con, tolerance_hours = 24)`** per D8.
+   New `tests/testthat/test-keys.R` with one fixture per branch: reference completion (row added,
+   method/datasets/spans right, unknown NODC errors, existing rows untouched); each integrity check
+   on a fixture that violates only it (malformed key, `date_ym` mismatch, NODC mismatch, orphan key,
+   `swfsc` row without UUID, event 32 d outside vs 30 d inside, allowlisted key passes but an
+   unlisted one fails, overlap > 3 d vs ≤ 3 d, manifest missing / non-zero); station matching
+   (`self`, `parent`, `order_occ`, unique-within-24 h, two candidates both inside ⇒ NULL, one of two
+   inside ⇒ match, no datetime ⇒ NULL, children inherit the root, row count and `sample_key`
+   uniqueness preserved). `NEWS.md` entry under the version the integrator assigns.
+4. **`_new` merge keys on the real PK** — not in the package: `release_database.qmd` l.324–329
+   replaces the ordinal-first `pk_col` with `core_relationships(base_tbl)$primary_keys[[base_tbl]]`
+   (fall back to ordinal-first with a warning for tables outside the spec). No behaviour change
+   today (`ship_new`'s first column is `ship_key`); it is the prerequisite for `cruise_new`.
+5. **Ichthyo notebook — order and guard** (`ingest_swfsc_ichthyo.qmd`): move the `apply_corrections`
+   chunk (l.540–551) to before `create_cruise_key` (l.264); keep the uniqueness `stop()` there.
+6. **Ichthyo notebook — `source_uuid`**: the three `append_sample()` arms (l.1395–1425) gain a 16th
+   `NULL::VARCHAR AS data_stage` and 17th `s.site_uuid` / `t.tow_uuid` / `n.net_uuid` `AS
+   source_uuid`; the `stopifnot()` block (~l.1508) adds `COUNT(source_uuid) = COUNT(*)` for
+   `sample_type IN ('site','tow','net')` and the D2 `cruise_uuid`-vs-`cruise_key` assertion
+   (**before** the compat block at l.1538, while `site.cruise_uuid` still exists).
+7. **Ichthyo notebook — manifest**: `mismatches$cruise_uuid <- <the D2 count as a one-row tibble>`
+   in the `write_parquet` chunk (l.1578), beside `ships` / `cruise_keys`.
+8. **Release — reference completion + gate**: in `release_database.qmd`, call
+   `complete_cruise_reference(con_wdl)` immediately before the enrichment at l.1157; new chunk
+   `cruise_key_integrity` after `check_core_pk_unique()` (l.1038) calling
+   `check_cruise_key_integrity()` with `known_outside_span = c(<the 7 ctd-cast keys of D7>)` (each
+   commented with the ctd-cast question id) and the ratchets `CRUISE_SPAN_OVERLAPS_MAX = 2L`,
+   `CRUISE_DERIVED_MAX = 152L`, `CRUISE_KEY_NULL_MAX = c(calcofi_dic = 3255L, "sio_pic-zooplankton" =
+   5087L, "cdfw_dungeness-crab" = 1639L, calcofi_bottle = 49L)` (mets and ctd-cast have none and are
+   deliberately absent, so a first NULL there fails; measure at run time and tighten); delete the
+   warn-only format block at l.1112–1127 (the gate subsumes it). `cruise` is already in
+   `derived_tables` and the `gcs_prefix = NA` list (l.1583, l.1643), so the completed table ships.
+9. **Release — `station_uuid`**: call `match_station_occupation(con_wdl)` in `depth_coverage` after
+   `add_sample_seafloor()` (both rebuild `sample`; seafloor first so the rebuild count assertion is
+   the last thing that touches the table), before `check_core_pk_unique()`; report the per-dataset
+   method table with `datatable()`. `sample` is in `core_spec` (`gcs_prefix = NA`), so the columns
+   ship; `test_release.qmd` gains one consumer-contract query that joins `obs → sample.station_uuid
+   → sample (ichthyo site)` and asserts ≥ 25,000 bottle casts resolve.
+10. **WS-F coordination (write into the F brief at merge):** the fix in step 5 changes ichthyo's
+    `cruise` shard (one key), so F's "reference-shard hash unchanged ⇒ skip is safe" gate will
+    correctly say *not safe*. Re-run the cheap dependents that carry `2019-07-` (bottle, PIC,
+    zooscan, phytoplankton; ≈ 1.5 min each beyond what F already re-runs) — check 4 makes this
+    mandatory, not optional; CTD may still be skipped by argument: it keys from archive names, holds
+    0 rows of `2019-07-`, and its shard is byte-identical either way (verify with the manifest
+    `content_hash` after the run). Also re-run METS if there is time: keying its cruise through
+    `resolve_cruise_key()` removes the `2015-10-32OC` overlap (D4) — otherwise the ratchet holds it.
+11. **Registries**: `metadata/field_dictionary.csv` — new rows `source_uuid` (UUID, identifier, "the
+    provider's own identifier for this event as shipped (SWFSC site/tow/net UUID); NULL where the
+    source mints none"), `station_uuid` (UUID, identifier, "SWFSC station-occupation UUID (= ichthyo
+    `site_uuid`) this event belongs to; the row's own site for ichthyo, matched for other datasets;
+    see `station_uuid_method`"), `station_uuid_method` (VARCHAR: self | parent | order_occ |
+    datetime), `cruise_key_method` (VARCHAR on `cruise`: swfsc | derived), `cruise_key_datasets`
+    (VARCHAR); replace `cruise_uuid`'s note (row 3) with "NOAA CruiseId; public join key to NOAA's
+    CalCOFI database; released on `cruise`". No write helper exists for this file — append with
+    `readr::write_csv(na = "")` and run `check_registry_na_strings()` on the result.
+    `metadata/relationships_cross.csv`: add `sample,station_uuid,sample,source_uuid` (logical FK,
+    note "SWFSC station occupation; NULL when unmatched"). The `questions.csv` rows below.
+12. **Docs**: CLAUDE.md — a § "Provider UUIDs are columns; the cruise key is checked against the
+    cruise" (D1, D2's "the check runs where the columns are", D3's ordering rule, D4's completion,
+    the ratchet names); hand WS-H the D9 sentences for `docs/db.qmd` rather than editing it.
+13. **`RELEASES.md # Unreleased`** — paste (adjust the counts to the run):
+
+    > ## The provider's own identifiers are columns, and the cruise key is checked against the cruise
+    >
+    > Ed Weber asked (2026-09-02) that the integrated database adopt NOAA's UUIDs. It carries them
+    > now as typed columns beside the namespaced keys it joins on: `sample.source_uuid` — the SWFSC
+    > station, tow or net UUID exactly as the export ships it (NULL for the 15 datasets that mint
+    > none); `sample.station_uuid` + `station_uuid_method` — the SWFSC station occupation any event
+    > belongs to (ichthyo rows: their own site; bottle, CTD, PIC and crab roots matched on cruise +
+    > station + occupation order, or on a unique occupation within 24 h — 78% of 35,644 bottle and
+    > 80% of 19,242 CTD casts; the rest are pre-1951 or cruises the export has no stations for);
+    > `cruise.cruise_uuid` documented as the public join key to NOAA's database. The `cruise`
+    > reference is completed by the release (691 → 843 rows: 152 cruises the bottle, CTD, METS and
+    > picoplankton sources designate that the SWFSC export has no stations for — 1949–1950 and
+    > 2016–2026 mostly — stamped `cruise_key_method = 'derived'` with the datasets that carry them),
+    > so every `sample.cruise_key` now names a cruise; before this 153,306 sample rows and 3.8 M
+    > observations keyed cruises the reference lacked, and nothing failed. The Bold Horizon July 2019
+    > cruise had been released as `2019-07-` (the source ship lookup has no NODC code for it and the
+    > correction ran after the key was minted; 2,255 rows in five datasets) and is `2019-07-39C2`.
+    > `check_cruise_key_integrity()` fails the release on a malformed key, a key naming no cruise, a
+    > NODC that is not the cruise's ship, a `date_ym` that disagrees with the key, an ichthyo site
+    > whose `cruise_uuid` and `cruise_key` disagree, or an event more than 31 days outside its
+    > cruise's span (seven CTD casts with 1997 and 2012 timestamps in 1999 and 2013 archives are
+    > named exceptions, ctd-cast Q32). **Consumers:** additive — three new columns on `sample`, two
+    > on `cruise`, 152 new `cruise` rows; `cruise_key` values change only for Bold Horizon 2019-07.
+
+**`questions.csv` rows to file** (columns: `label,id,question,context,status,priority,
+proposed_answer,answer,asked_date,answered_date,who,related_table,related_field`; labels are the
+next free on **main at merge** — A1 took ctd-cast Q28/Q29 and ichthyo Q10–Q12, DG took ctd-cast
+Q30/Q31 on their branches, so the labels below assume those land first):
+
+- `metadata/calcofi/dic/questions.csv` — `Q07,calcofi_dic_07,"Every DIC bottle that shares no
+  Niskin with the bottle database reaches the release with no cruise_key (3,255 of 3,262 DIC samples;
+  1,926 of their datetimes sit on the 1st of the month). Is EXPOCODE (NODC ship code + cruise start
+  date) the intended cruise designation for every row, including those a Niskin match never
+  found?","cruise_key is projected only through the matched bottle cast (ingest l.714); the
+  unmatched majority carries none, so the cruise_key integrity gate holds them in a ratchet
+  (CRUISE_KEY_NULL_MAX dic = 3255).",proposed,high,"Derive ship_key from the EXPOCODE's NODC prefix
+  and resolve cruise_key against the SWFSC cruise reference by the EXPOCODE start date
+  (calcofi4db::resolve_cruise_key, span first, then the expocode month), so every DIC row carries the
+  cruise its provider designated; the row's own month-precision datetime is not used for the
+  match.",,2026-09-03,,Ben Best,dic_sample,expocode`
+- `metadata/calcofi/ctd-cast/questions.csv` — `Q32,calcofi_ctd-cast_32,"Seven final casts carry
+  timestamps far outside their cruise: 9908_067, 9908_069 and 9908_070 (down + up) in the 9908NM
+  archive are dated 1997-01-01 to 1997-01-05 (the cruise ran 1999-08-07 to 08-23), and 1307_021u in
+  1307NM is dated 2012-12-31 00:00:00 (2013-07-06 to 07-21). Is the archive the correct cruise and
+  the header timestamp wrong, and do you hold the right times?","Found by the release's cruise_key
+  integrity gate (event > 31 d outside its cruise's span; 21,980 of 21,987 outside-span events are
+  within 31 d, these seven are 187–948 d). CTD keys every cast from its archive name, so cruise_key
+  is right by construction; the seven are named exceptions in release_database.qmd until the CTD
+  ingest re-runs.",proposed,normal,"Treat the archive as the cruise identity; set the seven
+  timestamps NULL (or to the header value Ben G supplies) when the CTD ingest next runs, keeping the
+  casts on their cruise.",,2026-09-03,,Ben Best,ctd_cast,datetime_start_utc`
+- `metadata/swfsc/ichthyo/questions.csv` — `Q13,swfsc_ichthyo_13,"shiplookup.shipnodc is blank for
+  BOLD HORIZON (BH). We patch it to 39C2 on load, but until 2026-09 the patch ran after the cruise key
+  was minted, so the July 2019 Bold Horizon cruise was released as cruise_key '2019-07-' with an empty
+  NODC segment (2,255 rows across five datasets). Can 39C2 be added to shiplookup at source, and is
+  39C2 the code NOAA uses for Bold Horizon?","calcofi4db::apply_data_corrections() correction 1;
+  ingest_swfsc_ichthyo.qmd chunk order fixed and create_cruise_key() now refuses a blank
+  NODC.",proposed,normal,"Fixed on our side (correction precedes the key; the key builder refuses an
+  empty NODC); adding the code at source retires the patch.",,2026-09-03,,Ben Best,ship,ship_nodc`
+- `metadata/swfsc/ichthyo/questions.csv` (recommended, the D4 ask) — `Q14,swfsc_ichthyo_14,"152
+  cruises designated by the bottle, CTD, METS and picoplankton sources have no station rows in the
+  ichthyo export and so no CruiseId: 92 from 1949–1959 (Horizon, Black Douglas, Crest, Agassiz,
+  Paolina T.), 20 from 2020–2026 (Sally Ride, Lasker, Shimada), and e.g. 1987-05 and 1988-09 New
+  Horizon. Could you export the full cruise table (CruiseId, ship, designated month, start and end
+  dates) independent of station rows?","Measured on v2026.08.25: 153,306 sample rows and 3.8 M
+  observations keyed these cruises; the release now completes the reference itself
+  (cruise_key_method = 'derived') and would replace those rows with yours.",open,high,,,2026-09-03,,
+  Ben Best,cruise,cruise_uuid`
