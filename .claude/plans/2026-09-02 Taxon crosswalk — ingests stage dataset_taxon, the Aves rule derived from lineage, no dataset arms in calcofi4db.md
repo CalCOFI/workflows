@@ -332,3 +332,10 @@ PR #77 properly; 3 is what makes the next dataset free.
   not `source == "worms" & n_candidates_en == 1` (`taxon_common.csv` has no literal tag yet — Phase 1 adds
   it). Open for Phase 1: `worms:126175` has two ichthyo codes (genus "Rockfishes" vs "Sunset rockfish");
   D5 needs an intra-dataset tie-break (fixture used `ds_taxon_key` ascending).
+- **Phase 1 (2026-09-03, calcofi4db `ws-e` @ c36d60a, workflows `ws-e-ph1b` @ a013108, Fable):** farallon
+  staged through `append_dataset_taxon()` reproduces the v2026.08.25 `dataset_taxon` slice 156/156 and its
+  127 `taxon` rows on eight fields; 113/113 `itis:` vocabulary taxa are Aves and 0 `worms:` ones are;
+  `taxon_group` differs only by the two turtles leaving `marine_mammals`; the merge priority list was inert;
+  D5 changes 50 of 2,125 names (44 manual / 790 ichthyo / 186 WoRMS single / 175 other / 930 empty);
+  tests 1,260 → 1,378. **Found:** phytoplankton releases 22 keys for 393 codes because six `taxa`-matched
+  override rows replace species ids — decision needed before Phase 3.

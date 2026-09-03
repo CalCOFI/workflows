@@ -469,3 +469,18 @@ docs · db-schema · ctd-transects              cite.qmd; db.qmd § keys; doi / 
   a cruise the reference lacks**, plus one malformed key `2019-07-` (2,255 rows) and 7 CTD casts up to
   948 days outside their cruise span; DIC root samples have no `cruise_key` at all. WS-B Phase 2 starts
   by completing the `cruise` reference.
+- 2026-09-03 · B memo (`ws-b-memo` @ 37eaeed): `site.cruise_uuid` is discarded by the ichthyo compat VIEW,
+  not a helper; `2019-07-` = `create_cruise_key()` before `apply_data_corrections()` (Bold Horizon `39C2`);
+  152 orphan cruise keys carry 3,804,612 `obs` rows → `complete_cruise_reference()` at release, method
+  `derived`; 845 of 964 ambiguous station matches resolve within 24 h; `station_uuid` approved. **WS-F's
+  hash gate must accept the one-key rename and re-run bottle, pic, zooscan, phyto (2,255 rows); CTD still
+  skipped (0 rows).**
+- 2026-09-03 · A0 (`ws-a0` @ 83b359a; calcofi4db `ws-a0` @ d41baf5, 1417 tests): `check_dataset_citation()`
+  on the merged YAML = 0 blocking, 4 ok, 14 exempt, 2 drift warnings; pre-A1 = 8 empty citations, 13 empty
+  licenses, 3 free-text; `source_accessed` from the sidecar commit is the last-run date (2026-08-25 ×15,
+  2026-09-03 crab), not the download date; PASTA answers 403 to public listing (cite-service probing
+  instead); Zenodo's `.zenodo.json` has no ROR field.
+- 2026-09-03 · H1 (`ws-h1` in five repos): pair = `obs` exactly (15 realm×dataset groups signature-equal,
+  26,261,931 rows through the view); `obs_bio` 21.8 → 25.6 MB, `obs_env` 286.7 → 317.2 MB with
+  `sample_key`/`measurement_prec`/`hex_id`; the depth fallback fills 482,250 ichthyo rows and no other
+  dataset; catalog `views.obs` + `deprecated`; resolvers in R/py/JS with byte-identical fixtures.
