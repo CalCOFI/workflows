@@ -56,9 +56,11 @@ calcofi:
     # coverage_temporal / coverage_spatial deliberately absent: measured at
     # release time by calcofi4db::observed_coverage() now that this dataset
     # reaches the core. Do not re-assert them — see "Coverage is measured, never
-    # asserted" in CLAUDE.md. The measured extent runs to 164.1°W, well outside
-    # the survey area; that is the known positive-longitude / off-grid-station
-    # pair (Q07, Q08), still open with the provider, not a new bug.
+    # asserted" in CLAUDE.md. Now that only the 216 EXAMINED sorting-log tows
+    # publish, the measured extent is 132.25-120.675 W / 33.46-51.05 N — the
+    # sorting log's most extreme west/north rows (to ~164 W) were unsorted and
+    # are no longer part of this dataset. Still genuinely offshore/north of the
+    # CalCOFI grid (see "Build Sorting Log"), not a defect.
     license: CC BY 4.0
     pi_names: Laura Rogers-Bennett
   # publishes the consolidated core AND NOTHING ELSE. The source shape is wrangled
@@ -1031,15 +1033,25 @@ nullable <- tribble(
   ~table,                  ~column,             ~n,   ~reason,
   "dungeness_sample",      "site_sample_key",   4L,   "no matching CalCOFI station occupation (Q09)",
   "dungeness_sample",      "grid_key",          4L,   "same 4 samples: no position, so no grid cell",
-  "dungeness_sorting_log", "cruise_key",        1639L,"log records no ship; cruise resolves only where YYYY-MM is unambiguous",
+  # 1639 -> 1776: the ichthyo `cruise` reference this joins against has grown
+  # more designated cruises since this count was last measured (2026-08-14),
+  # so more (year, month) pairs are now ambiguous between two cruises of the
+  # same ship and resolve_cruise_key()'s "unambiguous YYYY-MM only" rule
+  # excludes more rows than before. Working table, still all 2,011 rows.
+  "dungeness_sorting_log", "cruise_key",        1776L,"log records no ship; cruise resolves only where YYYY-MM is unambiguous (count drifts with the ichthyo cruise reference)",
   "dungeness_sorting_log", "site_key",          77L,  "no line/station in the source row",
   "dungeness_sorting_log", "grid_key",          77L,  "same 77 rows: north of or offshore from the CalCOFI grid",
-  "sample",                "parent_sample_key", 2015L,"2011 sorting-log tows are roots + the 4 unmatched subsamples",
-  "sample",                "site_key",          77L,  "inherited from the sorting log",
-  "sample",                "cruise_key",        1639L,"inherited from the sorting log",
-  "sample",                "grid_key",          81L,  "4 unmatched subsamples + 77 out-of-grid log tows",
+  # sample now holds only the 216 EXAMINED (sorted) log tows, not all 2,011 —
+  # the four sample.* rows below are recomputed on that smaller set
+  "sample",                "parent_sample_key", 220L, "the 216 examined sorting-log tows are roots + the 4 unmatched subsamples",
+  # dropped: sample.site_key is no longer nullable. All 77 no-line/station log
+  # rows turned out to be among the 1,795 UNSORTED rows dropped from the core,
+  # not the 216 examined ones — verified by the "no longer occurs" reconciler
+  # below rather than assumed.
+  "sample",                "cruise_key",        97L,  "inherited from the sorting log, scoped to the 216 examined tows (same ambiguous-cruise-reference cause as dungeness_sorting_log.cruise_key)",
+  "sample",                "grid_key",          18L,  "4 unmatched subsamples + 14 out-of-grid EXAMINED log tows (the matching 77 out-of-grid rows above include 63 unsorted ones, dropped from the core)",
   "obs",                   "grid_key",          30L,  "16 from the 4 unmatched subsamples x 4 types + 14 out-of-grid absences",
-  "obs",                   "cruise_key",        87L,  "absence rows whose log entry has no resolvable cruise",
+  "obs",                   "cruise_key",        97L,  "absence rows whose log entry has no resolvable cruise (drifts with the ichthyo cruise reference, same cause as dungeness_sorting_log.cruise_key)",
   "obs",                   "hex_id",            16L,  "H3 needs a position; the 4 unmatched subsamples have none",
   # taxon: 17 rows, not 3 — ensure_taxon_lineage() adds this dataset's 3 taxa
   # PLUS their 14 WoRMS lineage ancestors, which have to be rows of their own or
