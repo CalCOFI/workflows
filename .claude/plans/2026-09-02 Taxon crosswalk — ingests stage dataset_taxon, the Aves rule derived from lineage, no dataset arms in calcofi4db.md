@@ -323,4 +323,12 @@ PR #77 properly; 3 is what makes the next dataset free.
 
 ## Measured (appended per phase as it ships)
 
-_(none yet)_
+- **Phase 0 (2026-09-03, calcofi4db `ws-e` @ f78a368, Sonnet after four 529s on Fable/Opus):** fixture
+  `tests/testthat/fixtures/taxon_parity_v2026.08.25/` — `taxon` 2,125 · `dataset_taxon` 1,910 ·
+  `taxon_group` 151 rows, generator `data-raw/build_taxon_parity_fixture.R`, `test-taxon-parity.R` 19/19.
+  **D5 common-name order changes 49 of 2,125 taxa (2.3 %)**: `other:calcofi_phytoplankton` 20,
+  `other:cce-lter_zoodb` 20, `other:cce-lter_zooscan` 8, `swfsc_ichthyo` 1 — mostly taxa with NO name today
+  because those arms never wired `ds_common_name` through. "Manual" reconstructed as filled names that are
+  not `source == "worms" & n_candidates_en == 1` (`taxon_common.csv` has no literal tag yet — Phase 1 adds
+  it). Open for Phase 1: `worms:126175` has two ichthyo codes (genus "Rockfishes" vs "Sunset rockfish");
+  D5 needs an intra-dataset tie-break (fixture used `ds_taxon_key` ascending).

@@ -461,3 +461,11 @@ docs · db-schema · ctd-transects              cite.qmd; db.qmd § keys; doi / 
 - 2026-09-03 · Ben enabled Zenodo: tag `v2026.09.03-alpha` → pre-release → version DOI
   10.5281/zenodo.22281995, concept DOI 10.5281/zenodo.22281994 (auto-metadata: MIT, creators = GitHub
   contributors — `.zenodo.json` in A0 overrides). README badge added (origin/main aa2e950, merged).
+- 2026-09-03 · wave 1a hand-backs: A1 (EDI licences are not uniform: phyto CC0-1.0, phyllosoma/euphausiids
+  custom; 14 proposed rows), C (526 events, 1984-05 → 2014-05), DG (r_* non-canonical; cron alive, 0
+  accepted / 579 proposed flags; QC finding 0 casts), Q (script + 18 tests, waits on gs4_auth), E Ph0 (49 of
+  2,125 names change under D5), B spike — **corrections to this plan:** the released `cruise` carries no
+  `_source_*` columns (WS-B item dropped); `sample.cruise_key → cruise` is not an FK and **153,306 rows key
+  a cruise the reference lacks**, plus one malformed key `2019-07-` (2,255 rows) and 7 CTD casts up to
+  948 days outside their cruise span; DIC root samples have no `cruise_key` at all. WS-B Phase 2 starts
+  by completing the `cruise` reference.
