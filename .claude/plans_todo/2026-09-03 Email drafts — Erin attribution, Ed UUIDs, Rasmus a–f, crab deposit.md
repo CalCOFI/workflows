@@ -1,4 +1,7 @@
-# Email drafts (2026-09-03, revised after Ben's decisions) — drafts only, Ben sends; numbers verified against the repo and the rendered notebooks
+# Email drafts — drafts only, Ben sends; numbers verified against the repo and the rendered notebooks
+
+Draft 1 (Erin, attribution) was SENT 2026-09-03; the follow-up with the Explorer's Sources UI waits for the
+release that flips the app onto it. Drafts 2–5 revised 2026-09-04 after the release-round hand-backs.
 
 ## 1 · Re: Attribution to integrated data — to Erin (cc Betty, Rasmus, Mark)
 
@@ -37,38 +40,45 @@ Cheers, Ben
 
 ## 2 · Re: CalCOFI DMP work update — to Ed (cc the thread)
 
-*(Draft 2, refined 2026-09-03 with the WS-B spike + memo numbers, measured on v2026.08.25; 296
-words by `wc -w` from "Hi Ed" to "Ben". Ben sends.)*
-
 Hi Ed,
 
-Agreed, and more is already true than the Task 12 text suggests:
+Agreed, and more of it is already true than the Task 12 wording suggests:
 
 - Every SWFSC station, tow and net is already keyed by the UUID your export ships, and `cruise`
-  carries CruiseId. The next release adds `source_uuid` (typed UUID) on `sample`, and `station_uuid`:
-  casts matched to your station occupation (by occupation order, or a unique occupation within
-  24 h): 78% of 35,644 bottle and 80% of 19,242 CTD casts; the rest are pre-1951 or lack stations in
-  your export.
-- Compound keys: we hit your failure mode in August (keys derived from each cast's month split
-  month-straddling cruises). Keys now come from the cruise table by your date spans, and the next
-  release fails when a key's ship or dates disagree with its cruise row. It found one
-  malformed key (Bold Horizon 2019-07: `shiplookup` lacks BH's NODC) and 152 cruises our
-  bottle/CTD/METS sources designate that your export lacks (mostly 1949–1950, 2016–2026). Could you
-  export the full cruise table (CruiseId, ship, month, dates) independent of stations, so every
-  cruise gets your UUID?
-- Task 12 is about names (variables, units, station notation), not keys; I'll say so.
+  carries your CruiseId. The next release adds `source_uuid` as a typed column on the sample table,
+  and `station_uuid`: any cast or tow matched to your station occupation (same occupation order, or a
+  unique occupation within 24 h) carries that StationId — about 78 % of 35,644 bottle casts and 80 %
+  of 19,242 CTD casts; the rest are pre-1951 or at stations your export has no row for.
+- Compound keys: we hit exactly your failure mode in August (keys derived from each cast's month
+  split cruises that straddle a month). Keys now come from the cruise table by your date spans, and
+  the next release fails the build when a key's ship or dates disagree with its cruise row. Two things
+  it turned up: one malformed key (Bold Horizon, July 2019 — `shiplookup` has no NODC for BH, so the
+  key minted with an empty ship segment; we patch it to 39C2), and 152 cruises that the bottle, CTD,
+  METS and picoplankton sources designate but your export has no station row for (92 of them
+  1949–1950, the rest mostly 2016–2026). Could you export the full cruise table (CruiseId, ship,
+  month, dates) independent of stations, so those cruises get your UUID too?
+- Task 12 is about the names of things (variables, units, station notation, dataset slugs), not
+  primary keys; I'll say so in the status text.
 
-The ichthyo questions, in a shared sheet: https://docs.google.com/spreadsheets/d/1kQM6aw3yiT1AZAmFfgCp2Ou9u-UckR69Tien_4Mk1qE/edit. Top six:
+The open ichthyoplankton questions now live in a shared sheet you can answer in place (edit the
+`answer` / `status` cells; everything else is generated):
+https://docs.google.com/spreadsheets/d/1kQM6aw3yiT1AZAmFfgCp2Ou9u-UckR69Tien_4Mk1qE/edit
+Where we could pre-answer we did, marked "proposed", so you can confirm rather than start from
+scratch. The six that matter most:
 
-1. Egg stages 12–15 (790 records, 5 species): beyond Moser & Ahlstrom's 1–11: a scheme, or errors?
-   Excluded for now.
-2. Missing net effort (volume, haul factor, percent sorted): expected, and how to standardize?
-3. Tow maximum depth: which field, and wire-out or true depth?
-4. Zero vs unsorted: 6,907 of 61,104 tows have no taxon row; any "taxa sorted" flag? Proposed: ≥1
-   row ⇒ zeros for the rest, none ⇒ excluded.
-5. A species_id → WoRMS AphiaID table?
-6. Duplicate net+taxon+stage keys: replicates or duplicates? And 4.8% of observations off-grid:
-   real, or coordinate errors?
+1. **Egg stages 12–15**: 790 records (2,029 eggs, 5 species) use stages beyond Moser & Ahlstrom's
+   1–11. A different scheme, or entry errors? Excluded for now.
+2. **Missing net effort** (volume, standard haul factor, percent sorted): expected, and how should
+   abundance be standardized when one is absent?
+3. **Tow maximum depth**: every tow reaches us with no maximum depth. Which field carries it, and is
+   it wire-out or true depth?
+4. **Zero vs unsorted**: 6,907 of 61,104 tows have no taxon row; is there a per-tow or per-cruise
+   "taxa sorted" flag? Proposed rule: a tow with any row is a zero for the rest, a tow with none is
+   out of the denominator.
+5. **A species_id → WoRMS AphiaID table?** We match on name today, and it bites: code 788
+   *Syngnathus leptorhynchus* carries the AphiaID of *S. californiensis* in the species list.
+6. **Duplicate net + taxon + stage keys**: replicate sorts or duplicates? And 4.8 % of observations
+   resolve no CalCOFI grid cell: real off-grid positions, or coordinate errors?
 
 Take care, Ben
 
@@ -76,34 +86,29 @@ Take care, Ben
 
 Hi Rasmus,
 
-Thanks — that settles most of it. What we're doing with each:
+Thanks, that settles most of it. What we did with each:
 
-- (a) R_* columns stay unflagged, and we'll now record in the registry that they are interpolated to
-  standard depths (pre-QC) and must not feed further interpolation — neither the transect tool nor the
-  Explorer sections use them (they interpolate CTD profiles), and a release check will keep it that
-  way. One thing for Ben G, since it follows from your answer: we checked casts where every T_degC is
-  flagged 8 (suspect) or 9 (missing) yet R_Temp values still exist — **zero casts** in v2026.08.25 meet
-  that description (every cast with any bad-temperature bottle also has at least one good one), so this
-  particular gap does not currently manifest in the released database; the check now exists if a future
-  release needs re-checking. Still open from my list: whether P_qual is the pressure/depth code or the
-  phosphate one.
-- (b)/(c) Rathburn casts stay excluded; `orig/` and `uncorrected/` are treated as superseded copies and
-  excluded; the `separate_runs/` folder inside a FinalQC archive is kept since those casts exist nowhere
-  else (20-1104SH 031–036).
-- (d) Codes 1/2 as sensor selection, 8/9 as exclusion — confirmed and documented.
-- (e) Agreed: samples deeper than GEBCO stay a report, not a flag. To make "large discrepancy" a rule
-  rather than a judgment, I'd propose we only raise a question when a cast or tow goes more than 500 m,
-  or 25 %, below the deepest neighbouring GEBCO cell — does that sound right to you?
-- (f) Counts, from the bottle database vs the SWFSC cruise table: **14 cruises (829 casts) between 1953
-  and 1989** where the bottle's YYYYMM designation differs from the cruise the casts fall inside by date
-  span. Five are David Starr Jordan cruises (1975-05, 1975-07, 1975-11, 1981-07 and the 1984-03 one I
-  mentioned; 535 casts), one is New Horizon 1989-07, the rest are 1950s–60s SIO ships. Summer/fall cases
-  exist: 1967-06 (158 casts), 1975-07, 1981-07, 1989-07 and 1975-11. Our rule is that the SWFSC table
-  wins for every dataset so the join means one thing — which matches "follow the NOAA designation" for
-  the Jordan cruises. For the nine SIO-ship cases, should the bottle designation win instead? (The
-  bottle's own designation is kept on its cast table either way.) I'll send the 14 as a table.
+- **(a)** R_* stays unflagged, and the registry now records that those series are interpolated to
+  standard depths (pre-QC) and must never feed further interpolation; neither the transect tool nor
+  the Explorer sections use them (both interpolate CTD profiles), and a release check keeps it so.
+  We also checked the case your answer implies: casts where every T_degC is flagged bad yet R_Temp
+  values exist. None in the current release. Still open from my list: whether P_qual is the
+  pressure/depth code or the phosphate one.
+- **(b), (c)** Rathburn casts stay excluded; `orig/` and `uncorrected/` are treated as superseded
+  copies and excluded; `separate_runs/` inside a FinalQC archive is kept, since those casts exist
+  nowhere else (20-1104SH 031–036).
+- **(d)** Codes 1/2 as sensor selection, 8/9 as exclusion: confirmed and documented.
+- **(e)** Agreed, samples deeper than GEBCO stay a report. To make "large discrepancy" a rule, we
+  would only raise a question when a cast or tow goes more than 500 m, or 25 %, below the deepest
+  neighbouring GEBCO cell. Does that sound right?
+- **(f)** 14 cruises (829 casts, 1953–1989) where the bottle database's YYYYMM designation differs
+  from the cruise the casts fall inside by date span. Five are David Starr Jordan cruises (535
+  casts), where your "follow the NOAA designation" is what we do; the summer and fall cases are
+  1967-06, 1975-07, 1981-07, 1989-07 and 1975-11. Our rule is that the SWFSC cruise table wins for
+  every dataset so the join means one thing, and the bottle's own designation stays on its cast
+  table. For the nine SIO-ship cases, should the bottle designation win instead?
 
-| Bottle designation (YYYY-MM) | Resolved `cruise_key` | Ship | casts |
+| Bottle designation | Resolved cruise | Ship | Casts |
 |---|---|---|---|
 | 1984-02 | 1984-03-31JD | David Starr Jordan | 310 |
 | 1967-07 | 1967-06-31EB | Ellen B. Scripps | 158 |
@@ -120,13 +125,20 @@ Thanks — that settles most of it. What we're doing with each:
 | 1975-06 | 1975-07-31JD | David Starr Jordan | 9 |
 | 1959-06 | 1959-05-31OR | Orca | 1 |
 
-14 rows, 829 casts total — reproduced from `_output/ingest_calcofi_bottle.html`'s rendered
-"Casts whose resolved cruise month differs from the source Cruise designation" widget (684 rows as
-rendered pre-fix), filtered client-side to the rows where `cruise` and `cruise_key` disagree as
-integers rather than as the DOUBLE-vs-VARCHAR text the notebook's query used to compare — the same
-670 rows the notebook's own comparison bug was dropping in are excluded here too, so this table and
-the corrected notebook query agree. Ship names joined from the release `ship` table
-(`calcofi4r::cc_get_db("v2026.08.25")`) on `ship_nodc`.
+Three new ones from this week's work, for you and Ben G:
+
+- **Ammonia or ammonium?** The bottle database labels the QC'd column NH3 ("Micromoles Ammonia")
+  while its raw columns say ammonium (NH4+). They are the same measurement, so one label is wrong,
+  and it matters now that each type carries a NERC vocabulary id for OBIS and ERDDAP.
+- **Seven final CTD casts carry timestamps far outside their cruise**: 9908_067/069/070 (down and
+  up) in the 9908NM archive dated 1997, and 1307_021u, off by up to 948 days. The keys are right
+  (they come from the archive name); the timestamps look like the corruption we saw before.
+- **DIC bottles that share no Niskin with the bottle database** (3,255 of 3,262) reach the release
+  with no cruise at all; the NCEI EXPOCODE would resolve them, and that one is for Todd and Aaron.
+
+All of the CalCOFI-curated questions (bottle, CTD, METS, DIC, hydro-master, phyllosoma,
+phytoplankton), pre-answered where we could, are in one sheet you can edit in place:
+https://docs.google.com/spreadsheets/d/1uW9GLogdD2K6NiQGS_xJiIPFUPUvifWesrLlK5UUK7g/edit
 
 Cheers, Ben
 
@@ -136,16 +148,49 @@ Hi Betty,
 
 Two things on the integrated-database side while the Library review runs:
 
-- I'm revising the ingest so the dataset is the *examined* samples only: the 310 subsamples from the
-  2008–2014 series plus the 216 archived samples from the sorting log that were actually searched
-  (1984–2009), which carry a "none found" zero. The 1,795 jars that were never examined drop out of the
-  integrated database (they remain what they are in your sorting-log deposit — an inventory). The
-  temporal coverage therefore reads 1984–2014 rather than 1949–2014.
-- Until the DOI is minted I'll point the dataset at the Library catalog as a placeholder and file the
-  DOI as an open question; when it lands, the citation and link switch to it. Could you (1) let me know
-  the moment the object/DOI exists, and (2) drop the two zips into the Drive folder
-  `cdfw/dungeness-crab/deposit/` (the rdl-share link expires 26 Sept) so I can reconcile the ingest's
-  corrections with your README — e.g. I currently null the +138° longitude where you sign-corrected it,
-  and I'd rather match the citable copy.
+- The ingest now publishes the *examined* samples only: the 310 subsamples from the 2008–2014 series
+  plus the 216 archived samples from the sorting log that were actually searched (1984–2009), which
+  carry a "none found" zero. The 1,795 jars that were never examined are out of the integrated
+  database; they remain what they are in your sorting-log deposit, an inventory. The dataset's
+  temporal coverage therefore reads 1984–2014 rather than 1949–2014, and it ships that way in the
+  next release.
+- Until the DOI is minted the dataset points at the Library catalog as a placeholder, with the DOI
+  filed as an open question; when it lands, the citation and link switch to it. Could you (1) tell me
+  the moment the object or DOI exists, and (2) drop the two zips into the Drive folder
+  `cdfw/dungeness-crab/deposit/` before the rdl-share link expires on 26 September, so I can
+  reconcile the ingest's corrections with your README? I currently null the +138° longitude where you
+  sign-corrected it, and I'd rather match the citable copy.
+
+Thanks, Ben
+
+## 5 · PR #77, Farallon on ERDDAP — to Betty (cc Erin)
+
+Hi Betty,
+
+I pushed four commits onto your `ingest-farallon-erddap` branch (your three keep their authorship;
+mine merge main and move the species list onto the generic taxon path we finished this week), so the
+PR is ready for your review. What to look at, one change per commit:
+
+1. The `taxon-stage` chunk's `erddap_only` table is the judgment call: nine ERDDAP-only codes are
+   staged (seabirds, marine mammals, sea turtles), six excluded (CRAB, FISH, TUNA, VEVE, RAPT, WIWA),
+   each with a reason, and the list is asserted complete so a new code on a re-pull stops the render.
+2. Your "confirm the extra year" is now measured: 1987–2018 identical row for row, 2019, 2020 and
+   2022 new, and **no 2021 observations upstream** (DataZoo had 625 for CAC2021_7), taken as served
+   and filed as Q11, high.
+3. ERDDAP's `time` being UTC settles Q01; the row is still open and yours to mark answered.
+4. The species table keeps your `type` columns and adds `itis_id` / `include_flag` /
+   `is_unidentified` from the DataZoo list, which is what keeps every key identical to the last
+   release (164 of 164, one documented Mew Gull re-key).
+5. Two small fixes: the stale "matched on `date`" comment above `cruise_track`, and the unused `b01()`.
+6. No rendered HTML is in the PR; the manifest and metadata diffs are the evidence.
+
+The Farallon questions, including the ERDDAP gaps, are in a sheet you can edit in place:
+https://docs.google.com/spreadsheets/d/1szPLnPuQtaskPpwB1dkX7kGqs4hj6I2g2cE_kGq6ZbU/edit
+
+Two notes for db-viz-station while you are there: the next release's `dataset` table gains `doi`,
+`license_url`, `acknowledgement` and `contact`, so `scripts/build_datasets.sql` should carry them into
+`datasets_meta.json`; and Pooh Venrick asked that the phytoplankton entry show one heading,
+"Phytoplankton abundances by species", instead of per-parameter sub-headings, since they are all one
+table.
 
 Thanks, Ben
