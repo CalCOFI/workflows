@@ -165,7 +165,8 @@ your READMEs. Where they meet:
 
 - **Same records.** 310 tow records in the 2008–2014 series, 216 sorted and 1,795 unsorted jars in the
   sorting log, 14 positive samples from 15 removal vials. Your note that three station occupations were
-  examined twice answers a question I had open (Q10), so I have closed it citing the README.
+  examined twice answers a question I had open (Q10); it is marked answered, citing the README, in the
+  CDFW question sheet linked below.
 - **Same date rule.** Both of us rebuild the month-less SampleDate cells from the Month column, and your
   cross-check against the expedition year matches mine.
 - **The +138.483° longitude.** You sign-corrected it in the unsorted file (TROLL CRUISE, 1955-04-13); I
@@ -194,6 +195,11 @@ Three things you may want to touch before the Library review closes, and two I n
    Library mints one and list both object DOIs beside it; otherwise the series DOI with the sorting log
    as a second link. Tell me the moment either exists and the placeholder search link switches to it
    (my Q14).
+
+All fourteen questions for this dataset, with what the ingest already assumes marked "proposed", are
+in the CDFW question sheet, one tab per dataset, which you and Christy can edit in place (answer,
+status, date, who):
+https://docs.google.com/spreadsheets/d/1cOEo_ylXNPgQDp3wCMz7DHo_5v1jz65nyhXAN9KK_EE/edit?gid=46889232#gid=46889232
 
 Cheers, Ben
 
