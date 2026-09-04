@@ -6,7 +6,7 @@
 # rendered after 2026-08-25 carries the theme, favicon and header natively. The
 # ~58 notebooks rendered before that are ingest runs — re-rendering one is an
 # hours-long pipeline step, not a stylesheet change — so the Pages workflow runs
-# this instead: for each _output/*.html without the `cc-brand v1` marker, insert
+# this instead: for each _output/*.html without the `cc-brand v2` marker, insert
 # the same two snippets after <head> and after <body …>. Idempotent; a notebook
 # that already carries the marker (new render, or a previous injection) is
 # untouched, so it is safe to commit the result or to run it only at deploy time.
@@ -20,7 +20,11 @@ wd      <- getwd()
 if (!dir.exists(file.path(wd, "_output")))
   stop("run from the workflows/ repo root (no ./_output found)")
 
-marker <- "cc-brand v1"
+marker   <- "cc-brand v2"
+# a page rendered between 2026-08-25 and the v2 flip (2026-09-04) carries the v1 chrome;
+# its head block (marker comment … </style>) and header (marker … </header>) are swapped
+# for the v2 snippets in place — the plan's "swap the URL in already-rendered HTML"
+marker_v1 <- "cc-brand v1"
 head_snip   <- paste(readLines(file.path(wd, "libs/brand/quarto_head.html"),   warn = FALSE), collapse = "\n")
 header_snip <- paste(readLines(file.path(wd, "libs/brand/quarto_header.html"), warn = FALSE), collapse = "\n")
 
@@ -35,6 +39,15 @@ for (f in htmls) {
   if (grepl(marker, x, fixed = TRUE)) next
   # only quarto/bootstrap pages: a stray non-quarto html is left alone
   if (!grepl('name="generator" content="quarto', x, fixed = TRUE)) next
+  if (grepl(marker_v1, x, fixed = TRUE)) {
+    x <- sub("(?s)<!-- cc-brand v1 \u2014.*?</style>", head_snip, x, perl = TRUE)
+    x <- sub("(?s)<!-- cc-brand v1 header.*?</header>", header_snip, x, perl = TRUE)
+    if (grepl(marker_v1, x, fixed = TRUE)) { cat("skip (v1 blocks not matched):", basename(f), "\n"); next }
+    n_done <- n_done + 1L
+    if (dry_run) { cat("would swap v1 -> v2:", basename(f), "\n"); next }
+    writeLines(x, f, useBytes = TRUE)
+    cat("swapped v1 -> v2:", basename(f), "\n"); next
+  }
   if (!grepl("<head>", x, fixed = TRUE) || !grepl("<body[^>]*>", x)) {
     cat("skip (no <head>/<body>):", basename(f), "\n"); next
   }

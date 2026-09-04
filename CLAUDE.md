@@ -165,12 +165,16 @@ sixteen shipped and named tables retired months earlier.
 - A range heading (`# v2026.08.04 – v2026.08.06`) documents several closely spaced
   releases at once; each of those versions' `RELEASE_NOTES.md` says so.
 
-## The brand contract (theme, header, favicon) — `calcofi.io/brand/v1/`
+## The brand contract (theme, header, favicon) — `calcofi.io/brand/v2/`
 
 Every CalCOFI product wears one theme, one header and one favicon, honours
 `?theme=dark|light` and `?tour=off`, and the rule is **checked weekly, not assumed**
 (`CalCOFI.github.io/scripts/check_brand.py`; the contract is
-`CalCOFI.github.io/brand/v1/README`). Quarto renders here get it from
+`CalCOFI.github.io/brand/v2/README`). **v2 — the SIO look: light by default, UCSD
+palette, Source Sans 3 / Teko, the horizontal lockup, two scales (`<meta name="cc-scale"
+content="app">` for an app) — has been in force fleet-wide since 2026-09-04**; v1 is
+superseded, frozen and still served. A stored theme counts only beside the
+`cc_theme_src=user` marker, so a v1 default never leaks into a v2 page. Quarto renders here get it from
 `libs/brand/quarto_head.html` + `quarto_header.html` via `_quarto.yml`. **Load the
 `brand-contract` skill** before touching a product's theme, header, favicon,
 screenshots or `products.yml` card — it holds the cookie chain, the header rules,
@@ -665,7 +669,7 @@ an ingest, `R/taxa.R` or a taxon metadata CSV):
 |---|---|
 | `field_dictionary.csv` | **Prescriptive** canonical field names/types/units/aliases. New datasets conform; consistency is linted against it. `dwc_term` is the Darwin Core term URI the field publishes as, on the 12 of 57 fields one term means exactly. Authored by `libs/build_field_dictionary.R`, which regenerates the whole CSV — **add a row there, not to the CSV**, or the next run deletes it (four rows had already drifted out by 2026-09-03). |
 | `measurement_type.csv` | Canonical measurement vocabulary (raw measured quantities). `is_canonical` flags the headline types; `valid_min`/`valid_max` bound the value and `valid_depth_min_m`/`valid_depth_max_m` the **depth over which the type is defined** (`est_chlorophyll_a_*` is computed for 0–200 m alone, so a null below that is by construction, not missing data); `derivation` is free text saying how a *derived* type was produced (the `_cruise_corr` vs `_sta_corr` distinction is not something a consumer should have to guess). **Read it with `calcofi4db::read_measurement_type()` and append with `register_measurement_types()`, never with bare `read_csv`/`write_csv`** — see the round-trip trap below. Bounds are **enforced per dataset at ingest time**, see below. `nerc_p01` / `units_nerc_p06` are the NERC concept URIs a Darwin Core / OBIS eMoF export emits as `measurementTypeID` / `measurementUnitID` — set with `declare_measurement_fields()` (`scripts/declare_measurement_vocab.R` seeds them), never a bare `write_csv`. |
-| `category.csv` | **Registry of the twelve data categories** (`category, order, realm, icon, description`) — what an ingest's `calcofi.dataset_meta.category` and `measurement_type.category` must be one of (`build_workflows_index.R` errors on an unregistered one); the explorer's *Browse* tab, the schema site and the calcofi.io cards group by it, and `icon` is the brand sprite id (`calcofi.io/brand/v1/icons/`). Set a type's `category` / `variable` with `calcofi4db::declare_measurement_fields()`, never a bare `write_csv` (`scripts/declare_measurement_fields.R` seeds them). |
+| `category.csv` | **Registry of the twelve data categories** (`category, order, realm, icon, description`) — what an ingest's `calcofi.dataset_meta.category` and `measurement_type.category` must be one of (`build_workflows_index.R` errors on an unregistered one); the explorer's *Browse* tab, the schema site and the calcofi.io cards group by it, and `icon` is the brand sprite id (`calcofi.io/brand/v2/icons/`). Set a type's `category` / `variable` with `calcofi4db::declare_measurement_fields()`, never a bare `write_csv` (`scripts/declare_measurement_fields.R` seeds them). |
 | `life_stage.csv` | **Registry of life stages** (`life_stage, dwc_lifeStage, nerc_s11, life_stage_parent, datasets, note`) — every distinct `obs.life_stage` value, with the DwC label and NERC S11 concept URI where one is exact, and `life_stage_parent` for a substage S11 does not carve (`furcilia F1` → `furcilia`). Two values are recorded as **not life stages** (euphausiid `damaged`, ichthyo `invert`); do not emit those as `lifeStage`. |
 | `gear.csv` | **Registry of net gear** (`tow_type, gear_name, dwc_samplingProtocol, nerc_l22, datasets, note`) — every `sample.tow_type` code with the sentence a DwC `samplingProtocol` needs and the NERC L22 *device* URI where one is exact. L22 is a device catalogue: `DC` (a 600 m oblique) shares `CB`'s bongo id because the depth is protocol, not gear. |
 | `provider.csv` | **Registry of curating organizations** — one row per `provider` slug with `provider_short` (display label), `provider_name`, `url`, `status`. Any provider an ingest declares MUST be here: `scripts/build_workflows_index.R` errors out otherwise. Replaced a hardcoded label vector in that script, which silently yielded `NA` and published a literal `.na.character` heading for unregistered orgs. |

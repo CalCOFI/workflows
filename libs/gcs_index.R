@@ -6,7 +6,7 @@
 # storage.calcofi.io root), and they must LOOK like one site — so the skin and the
 # object-listing helper live here rather than being re-typed per script.
 #
-# The chrome is the calcofi.io brand contract (https://calcofi.io/brand/v1/):
+# The chrome is the calcofi.io brand contract (https://calcofi.io/brand/v2/):
 # favicons, theme.css + theme.js hotlinked from calcofi.io (a bucket-served page
 # may reference them; only the listing styles are inline), dark by default with
 # light via <html data-theme="light">, the shared .cc-header / .cc-footer. Wide
@@ -51,22 +51,19 @@ GA_HTML <- paste0(
   '</script>')
 
 # --- shared page chrome -------------------------------------------------------
-# Brand head block pasted verbatim from brand/v1/head.html (favicon set, the
+# Brand head block pasted verbatim from brand/v2/head.html (light default; the fonts; (favicon set, the
 # inline pre-paint theme snippet so the first paint is already the right colour,
 # theme.css, theme.js), then the page's own listing styles. The token block
 # mirrors theme.css so the page still reads if calcofi.io is unreachable.
-BRAND_URL  <- "https://calcofi.io/brand/v1"
+BRAND_URL  <- "https://calcofi.io/brand/v2"
 BRAND_HEAD <- paste0(
   '<link rel="icon" type="image/x-icon" href="', BRAND_URL, '/favicon.ico">\n',
   '<link rel="icon" type="image/png" sizes="32x32" href="', BRAND_URL, '/favicon-32x32.png">\n',
   '<link rel="icon" type="image/png" sizes="16x16" href="', BRAND_URL, '/favicon-16x16.png">\n',
   '<link rel="apple-touch-icon" sizes="180x180" href="', BRAND_URL, '/apple-touch-icon.png">\n',
-  '<script>(function(){var m=/[?&]theme=(dark|light)\\b/.exec(location.search),',
-  'c=/(?:^|;\\s*)cc_theme=(dark|light)/.exec(document.cookie),s=null;',
-  'try{s=localStorage.getItem("theme")}catch(e){}',
-  'var t=(m&&m[1])||(c&&c[1])||(s==="light"||s==="dark"?s:null)||"dark",d=document.documentElement;',
-  'd.dataset.theme=t;d.setAttribute("data-bs-theme",t);',
-  'd.setAttribute("data-md-color-scheme",t==="dark"?"slate":"default");d.style.colorScheme=t})();</script>\n',
+  '<script>(function(){var d=document.documentElement,m=/[?&]theme=(dark|light)\\b/.exec(location.search),k=/(?:^|;\\s*)cc_theme_src=user\\b/.test(document.cookie),c=k&&/(?:^|;\\s*)cc_theme=(dark|light)\\b/.exec(document.cookie),s=null;try{if(localStorage.getItem("cc_theme_src")==="user")s=localStorage.getItem("cc_theme")}catch(e){}var t=(m&&m[1])||(c&&c[1])||(s==="dark"||s==="light"?s:null)||"light";d.dataset.theme=t;d.setAttribute("data-bs-theme",t);d.setAttribute("data-md-color-scheme",t==="dark"?"slate":"default");d.style.colorScheme=t;})();</script>\n',
+  '<link rel="preload" href="', BRAND_URL, '/fonts/SourceSans3-VF.woff2" as="font" type="font/woff2" crossorigin>\n',
+  '<link rel="stylesheet" href="', BRAND_URL, '/fonts.css">\n',
   '<link rel="stylesheet" href="', BRAND_URL, '/theme.css">\n',
   '<script defer src="', BRAND_URL, '/theme.js"></script>')
 
