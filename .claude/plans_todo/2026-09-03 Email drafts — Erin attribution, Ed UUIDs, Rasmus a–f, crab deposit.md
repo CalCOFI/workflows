@@ -160,22 +160,42 @@ Cheers, Ben
 
 Hi Betty,
 
-Two things on the integrated-database side while the Library review runs:
+I have the two review zips from the Drive folder and reconciled the integrated-database ingest against
+your READMEs. Where they meet:
 
-- The ingest now publishes the *examined* samples only: the 310 subsamples from the 2008–2014 series
-  plus the 216 archived samples from the sorting log that were actually searched (1984–2009), which
-  carry a "none found" zero. The 1,795 jars that were never examined are out of the integrated
-  database; they remain what they are in your sorting-log deposit, an inventory. The dataset's
-  temporal coverage therefore reads 1984–2014 rather than 1949–2014, and it ships that way in the
-  next release.
-- Until the DOI is minted the dataset points at the Library catalog as a placeholder, with the DOI
-  filed as an open question; when it lands, the citation and link switch to it. Could you (1) tell me
-  the moment the object or DOI exists, and (2) drop the two zips into the Drive folder
-  `cdfw/dungeness-crab/deposit/` before the rdl-share link expires on 26 September, so I can
-  reconcile the ingest's corrections with your README? I currently null the +138° longitude where you
-  sign-corrected it, and I'd rather match the citable copy.
+- **Same records.** 310 tow records in the 2008–2014 series, 216 sorted and 1,795 unsorted jars in the
+  sorting log, 14 positive samples from 15 removal vials. Your note that three station occupations were
+  examined twice answers a question I had open (Q10), so I have closed it citing the README.
+- **Same date rule.** Both of us rebuild the month-less SampleDate cells from the Month column, and your
+  cross-check against the expedition year matches mine.
+- **The +138.483° longitude.** You sign-corrected it in the unsorted file (TROLL CRUISE, 1955-04-13); I
+  had nulled it. I will adopt your correction so the ingest matches the citable copy (Q08 closed). It
+  changes nothing in the release, because that jar was never examined.
+- **Counts stay raw.** No scaling by aliquot fraction, as Angela's note says (Q11).
+- **What the integrated database publishes** is the *examined* samples only: the 310 subsamples plus the
+  216 sorting-log tows that were searched (1984–2009), which carry a "none found" zero. The 1,795
+  unexamined jars stay in your deposit as the inventory they are, and the dataset's coverage reads
+  1984–2014 rather than 1949–2014.
 
-Thanks, Ben
+Three things you may want to touch before the Library review closes, and two I need from you:
+
+1. **Time zone.** Neither README nor the data dictionary says what zone the Time / StartTime columns are
+   in (my Q04). One sentence in the dictionary would settle it for every reader.
+2. **Repeated rows in the sorted file.** Some tows appear twice with identical fields (8803, line 68.3,
+   station 55.5, for one). If each row is one archived jar, the README could say so (my Q03).
+3. **Geographic scope.** The methods summary quotes 121–150° W, but the unsorted log reaches 164° W.
+   Worth a clause so nobody reads the western rows as errors.
+4. **Whom to name.** The two READMEs credit different people: Angela Klemmedson for the series, Emily
+   Jones with Christy Juhasz and Julia Coates for the sorting log, Laura Rogers-Bennett as primary
+   provider for both. The integrated database pools both deposits into one dataset, which I currently
+   cite as Rogers-Bennett, Jones and Klemmedson. Should Christy and Julia join the author list, or the
+   acknowledgement?
+5. **Which DOI.** Two objects means two DOIs, plus the collection. I would cite the collection DOI if the
+   Library mints one and list both object DOIs beside it; otherwise the series DOI with the sorting log
+   as a second link. Tell me the moment either exists and the placeholder search link switches to it
+   (my Q14).
+
+Cheers, Ben
 
 ## 5 · PR #77, Farallon on ERDDAP — to Betty (cc Erin)
 
