@@ -307,9 +307,9 @@ cat(glue("euphausiids_taxon: {nrow(euph_taxon)} species"), "\n")
 `taxon_id` is a local key; the shared `taxon` / `dataset_taxon` model keys on
 `worms:<AphiaID>`, so resolve each name against WoRMS with
 `calcofi4db::standardize_species()` and carry `worms_id` on
-`euphausiids_taxon`. `calcofi4db::build_dataset_taxon()` reads that column to
-crosswalk this dataset's vocabulary into the global `taxon` table, which is what
-lets `obs.taxon_key` be populated for euphausiids (see *Emit Core Tables*).
+`euphausiids_taxon`. *Emit Core Tables* then stages that column with
+`calcofi4db::append_dataset_taxon()` and lets `resolve_dataset_taxon()` fill
+`taxon_key`, which is what lets `obs.taxon_key` be populated for euphausiids.
 
 This is also what answers **Q10**: if BTEDB's `Nematoscelis` and the DB's older
 `Hansarsia` are synonyms, WoRMS returns the same accepted AphiaID for both, so
@@ -732,6 +732,20 @@ tx_over  <- read_csv(here("metadata/taxon_override.csv"), show_col_types = FALSE
 # switch(dataset_key, ...) arm inside calcofi4db. The reusable SHAPES stay in the
 # package (sample_arm_self / compat_measurement_sql), so this is a declaration.
 
+# the vocabulary is DECLARED here and RESOLVED by the package (taxon plan D1,
+# calcofi4db >= 3.29.0): append_dataset_taxon() stages one `dataset_taxon` row
+# per BTEDB species with `taxon_key` empty and the AphiaID standardize_species()
+# resolved above carried along as `ds_source_json`; resolve_dataset_taxon() fills
+# the key from the authorities. There is no euphausiids arm inside calcofi4db any
+# more -- a column renamed or dropped here now fails at this call rather than
+# becoming NA at release.
+d_vocab <- dbGetQuery(con, "
+  SELECT CAST(taxon_id AS VARCHAR) AS ds_taxa_code,
+         scientific_name           AS ds_scientific_name,
+         CAST(worms_id AS INTEGER) AS worms_id
+  FROM euphausiids_taxon ORDER BY taxon_id")
+n_staged <- append_dataset_taxon(con, ds_key, d_vocab)
+
 # cross-reference: resolve each taxon against BOTH authorities (cached in
 # metadata/taxon_xref.csv, so a re-run costs no API calls). This fills the
 # `worms_id` COLUMN on itis:-keyed taxa without touching their key — a consumer
@@ -752,7 +766,17 @@ ensure_taxon_xref(con, mt_taxon, tx_over,
 ensure_taxon_lineage(con, mt_taxon, tx_over,
                      cache_csv = here("metadata/taxon_lineage.csv"))
 n_taxon    <- build_taxon_reference(con, mt_taxon, tx_over)
-n_ds_taxon <- build_dataset_taxon(con,   mt_taxon, tx_over)
+n_ds_taxon <- resolve_dataset_taxon(con, mt_taxon, tx_over)
+
+# the ingest asserts its own crosswalk (D6): every taxon_id the measurements use
+# is in the vocabulary and every staged row keys an authority id. Halts on any
+# finding.
+obs_codes <- dbGetQuery(con,
+  "SELECT DISTINCT CAST(taxon_id AS VARCHAR) AS c FROM euphausiids_measurement
+   WHERE taxon_id IS NOT NULL")$c
+chk_taxon <- check_dataset_taxon(con, ds_key, codes = obs_codes)
+cat(glue("vocabulary: {n_staged} species staged; taxon {n_taxon}, ",
+         "dataset_taxon {n_ds_taxon}"), "\n")
 # NOTE: no `_measurement_taxon` staging. The crosswalk's euphausiid rows describe
 # the OLD single-`Abundance` export, where the taxon was baked into the type name.
 # The BTEDB export is species- AND life-stage-resolved, so taxon_key comes from
