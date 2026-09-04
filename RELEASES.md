@@ -73,6 +73,54 @@ released keys and needs a decision:
   The label is what that ingest put in `ds_common_name`; whether it should be there is the
   ingest's question, not the precedence's.
 
+## Farallon bird and mammal observations now come from ERDDAP
+
+The `farallon_bird-mammal` ingest reads NOAA's ERDDAP tables (`CAC_FI_SBAS_tr` / `_obs` / `_sp` on
+oceanview.pfeg.noaa.gov; workflows PR #77) instead of the March-2022 CCE-LTER DataZoo 255 export —
+download-first into `data/cache/`, archived beside the DataZoo files under
+`gs://calcofi-files-public/archive/farallon/bird-mammal/erddap/`, the fetch time stamped in the
+ingest's `metadata.json` `sources[]` (the first ingest to measure its own `source_accessed`). The
+behavior-code lookup is not on ERDDAP and stays DataZoo-sourced. Measured 2026-09-03 against the
+DataZoo build that v2026.08.25 released:
+
+- **Rows.** The two sources are identical for 1987–2018 (60,715 shared transects; every
+  observation row equal). ERDDAP adds 2019, 2020 and 2022 (3,216 transects, 6,020 observation
+  rows) and 490 more transects for January 2021, and carries **no observations at all for 2021**
+  although it lists 956 transects for `CAC2021_1` and `CAC2021_7` — DataZoo had 625 rows for
+  `CAC2021_7`. Taken as served, not patched from DataZoo; asked as farallon Q11 (high). `sample`
+  60,715 → 64,421; `obs` 66,344 → 69,661; `obs_attribute` 82,418 → 87,813. `cruise_key`
+  resolves on 98.1 % of transects (was 98.8 %): `CAC2022_8` joins `CAC2021_7` and `Fronts_0711`
+  as NULL because the ichthyo cruise reference has no August-2022 cruise.
+- **The vocabulary is declared by the ingest and resolved by the package** — the first dataset on
+  the taxon plan's generic path (D3): `append_dataset_taxon()` stages ERDDAP's `_sp` codes, with
+  DataZoo's ITIS TSN per code (committed once as
+  `metadata/farallon/bird-mammal/species_itis_datazoo.csv`) riding along as `ds_source_json`, the
+  audit value rather than the key's source; `check_dataset_taxon()` gates the render (0
+  findings). For the 154 codes both lists share **every `taxon_key` is unchanged**, and the 126
+  `taxon` rows already released agree on all eight compared fields (ids, name, rank, class,
+  parent, kingdom, family); ERDDAP's scientific names are newer for 48 codes (*Hydrobates*,
+  *Ardenna*, *Urile*, …), which changes `dataset_taxon.ds_scientific_name` only. The 28
+  "Unidentified …" classes resolve through `metadata/taxon_override.csv` rows (Aves `itis:174371`
+  / Mammalia `worms:1837`) instead of a fallback hard-coded in calcofi4db's farallon arm, and the
+  37 existing farallon override rows match on `ds_taxa_code`.
+- **Three things the source forced.** `SBIG` appears twice in `_sp` ("Mew Gull", "Short-billed
+  gull") and is staged once, as *Larus brachyrhynchus*. `MEGU` — 71 observations, absent from
+  `_sp` — is the pre-2021 code for the same bird and now keys **`itis:1192602`** with `SBIG`
+  rather than DataZoo's *Larus canus* `itis:176832` (WoRMS has no record for *L. brachyrhynchus*,
+  so the key rests on ITIS alone; 53 `obs` rows change key; farallon Q10). Nine ERDDAP-only codes
+  the observations use gain a key — `GUMU` `itis:177011` (270 `obs` rows), `UNLP` (91), `SCMU`
+  `itis:1192605` (36), `LOTU` `worms:137205` (26), `TOSP` `itis:1255031` (16), `CHSP` as the ITIS
+  subspecies `itis:1255264` (11), `NABO`, `MABO`, `UNMT` — so on the 65,855 `obs` rows both
+  builds share `taxon_key` is NULL on 727 where it was NULL on 1,177 (450 gained, none lost); six
+  are excluded as gear, fish or land birds (`CRAB FISH TUNA VEVE RAPT WIWA`) and 28 unreferenced
+  ERDDAP-only codes wait for the provider's include flag (Q10). `CSLI` and `XAMU`, DataZoo rows no
+  observation ever used, are gone (`CASL` and `GUMU`/`SCMU` carry those observations).
+- **Consumers:** this dataset's `obs` gains 2019–2020 and 2022 and loses 2021; `dataset_taxon`
+  156 → 164 rows, `ds_source_json` populated (123 rows carry a DataZoo TSN);
+  `calcofi:seabirds` 94 → 99 taxa (`itis:176832` leaves, six enter). The transect-level columns
+  ERDDAP lacks (start/stop positions, bottom depth, Julian date) never reached the core `sample`
+  table, so nothing released loses a column.
+
 ## Every dataset carries a checked citation and a registered license, and the release cites itself
 
 Nothing validated attribution before this release: 8 of 16 datasets shipped `citation_main`
