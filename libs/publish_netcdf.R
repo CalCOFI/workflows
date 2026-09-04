@@ -109,8 +109,17 @@ cc_release_partitions <- function(table, version = NULL) {
 #' Single-file table URL. `cc_release_parquet()` used to return a base to
 #' concatenate onto; callers now name the table.
 cc_release_parquet <- function(table, version = NULL) {
+  # a partitioned table may also publish one whole-table twin (obs does — 15
+  # dataset partitions plus obs.parquet); the twin IS the single-file URL, and
+  # cc_release_sources() keeps it out of urls[] so a reader never gets both.
+  # v2026.09.04's publish_to_netcdf failed here on the first chunk: this used to
+  # look only at urls[] and refused obs as "partitioned (15 objects)".
+  v   <- cc_release_version(version)
+  src <- calcofi4r::cc_release_sources(cc_release_catalog(v), table)
+  if (!is.null(src$single_file) && !is.na(src$single_file) && nzchar(src$single_file))
+    return(as.character(src$single_file))
   urls <- cc_release_table(table, version)
-  if (length(urls) != 1) stop(glue("{table} is partitioned ({length(urls)} objects); use cc_release_partitions()"))
+  if (length(urls) != 1) stop(glue("{table} is partitioned ({length(urls)} objects) and publishes no single-file twin; use cc_release_partitions()"))
   urls
 }
 
