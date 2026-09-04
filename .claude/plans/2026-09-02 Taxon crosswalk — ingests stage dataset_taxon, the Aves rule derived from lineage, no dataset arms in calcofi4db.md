@@ -282,6 +282,14 @@ The parity gate (Phase 0 fixture) is what says the re-run changed only what D1�
 - **Q2** — `common_name` precedence exactly as written in D5.
 - **Q3** — I do the Farallon phase; Betty reviews (D7).
 
+- **Decided (Ben, 2026-09-04) — the phytoplankton override collapse.** The taxon is keyed by the finest
+  WoRMS AphiaID the source supplies; the functional-group labels (`taxa`: "diatom, centric", …) belong to
+  `taxon_group` only; a group label is never a `common_name`, and the group itself is not renamed. Rule for
+  the package (D2 step 2): **an override row never replaces an id the source supplied** — a row matched on
+  a non-code column (`taxa`) applies only where the source id is NA; a row matched on the dataset's own
+  code applies always. Expected effect: ~290 of 393 phytoplankton codes regain species/genus keys (22 keys
+  → ~294). Ben: "That was a seriously faulty ingest to miss that."
+
 ## Architecture (what changes)
 
 ```
