@@ -1354,8 +1354,15 @@ if (all(c("cruise", "ship", "sample") %in% tbls)) {
 # extend to new datasets.
 if (all(c("cruise", "ship") %in% tbls)) {
   dbExecute(con_wdl, "CREATE OR REPLACE TEMP TABLE cruise_ref AS SELECT * FROM cruise")
-  dbExecute(con_wdl, "DROP VIEW IF EXISTS cruise")
-  dbExecute(con_wdl, "DROP TABLE IF EXISTS cruise")
+  # drop by the object's actual type: complete_cruise_reference() above turns the
+  # `cruise` VIEW into a TABLE, and DuckDB's `DROP VIEW IF EXISTS` errors on a
+  # table ("Existing object cruise is of type Table") rather than no-op — the
+  # unconditional pair here halted the 2026-09-04 staging run 27 minutes in.
+  cruise_kind <- dbGetQuery(con_wdl,
+    "SELECT table_type FROM information_schema.tables WHERE table_name = 'cruise'")$table_type
+  if (length(cruise_kind))
+    dbExecute(con_wdl, if (grepl("VIEW", cruise_kind[1], ignore.case = TRUE))
+      "DROP VIEW cruise" else "DROP TABLE cruise")
   dbExecute(
     con_wdl,
     "CREATE TABLE cruise AS
