@@ -292,7 +292,7 @@ ensure_taxon_xref(con, mt_taxon, tx_over,
 ensure_taxon_lineage(con, mt_taxon, tx_over,
                      cache_csv = here("metadata/taxon_lineage.csv"))
 n_taxon    <- build_taxon_reference(con, mt_taxon, tx_over)
-n_ds_taxon <- build_dataset_taxon(con,   mt_taxon, tx_over)
+n_ds_taxon <- resolve_dataset_taxon(con, mt_taxon, tx_over)
 # stage the crosswalk WITH its derived taxon_key. Do NOT dbWriteTable() the raw
 # CSV: it has no taxon_key column at all, so `mx.taxon_key` below is a binder
 # error — and a 'worms:' || worms_id string built inline would mis-key any

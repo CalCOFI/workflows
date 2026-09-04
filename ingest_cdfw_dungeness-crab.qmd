@@ -674,8 +674,8 @@ ensure_taxon_xref(con, mt_taxon, tx_over,
 ensure_taxon_lineage(con, mt_taxon, tx_over,
                      cache_csv = here("metadata/taxon_lineage.csv"))
 n_taxon    <- build_taxon_reference(con, mt_taxon, tx_over)
-n_ds_taxon <- build_dataset_taxon(con,   mt_taxon, tx_over)
-n_tx_group <- build_taxon_group(con,     mt_taxon, tx_over)
+n_ds_taxon <- resolve_dataset_taxon(con, mt_taxon, tx_over)
+n_tx_group <- build_taxon_group(con, read_taxon_group_rules(here("metadata/taxon_group.csv")))
 # stage the crosswalk WITH its derived taxon_key, rather than dbWriteTable()-ing
 # the raw CSV (which has no taxon_key column) and hand-rolling
 # 'worms:' || worms_id in each arm — that inline string mis-keys any
