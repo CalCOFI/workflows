@@ -121,6 +121,61 @@ DataZoo build that v2026.08.25 released:
   ERDDAP lacks (start/stop positions, bottom depth, Julian date) never reached the core `sample`
   table, so nothing released loses a column.
 
+## Phytoplankton taxa are keyed to species again
+
+v2026.08.25 released **22** distinct `taxon_key`s for the **393** `calcofi_phytoplankton` codes.
+The source (Venrick's Definitions sheet, resolved to WoRMS in the ingest's `taxon_worms.csv`)
+supplies an AphiaID for 309 of them — 294 distinct species, genera and varieties — and six
+`metadata/taxon_override.csv` rows matched on the functional-group label (`taxa`: "diatom,
+centric" → Bacillariophyceae, "dinoflagellate, thecate" → Dinophyceae, …) replaced the id of
+*every* code in their group, so 302 species-resolved codes keyed their **class**. 124,586 of
+159,804 phytoplankton observations (78 %) carried a class-level `taxon_key`, and nothing said so:
+the override rows were doing exactly what they declared. "That was a seriously faulty ingest to
+miss that" (Ben, 2026-09-04).
+
+**The rule now (calcofi4db 3.33.0): an override never replaces an id the source supplied,
+unless it names the row by the dataset's own code.** A registry row matched on a non-code column
+(`ds_common_name`, `ds_scientific_name`; the arm's `taxa`) applies only where the source supplied
+no `worms_id` / `itis_id`; a row matched on `ds_taxa_code` applies always. The functional group
+is what `taxon_group` is for; the species keeps its key. `resolve_dataset_taxon()` reports how
+many rows each override was *skipped* for, and `release_database.qmd` shows the same table
+(`report_taxon_overrides()`) beside the authority-coverage gate, with `check_taxon_registries()`
+now failing the release on a registry row naming a dataset nothing supplies.
+
+Measured by re-resolving the 2026-08-25 phytoplankton vocabulary in memory under the rule:
+**393 codes → 309 distinct keys** — 299 `worms:` (all 294 source AphiaIDs, exactly as supplied
+and all WoRMS-accepted; the 6 class keys for the 70 codes the source could not resolve; 2
+genus keys) + the 10 allow-listed local codes (Q05). 302 codes change key, every one a code the
+source had resolved; 91 are unchanged. Every one of the 299 authority taxa carries class, rank,
+`rank_order` and a parent. One thing the collapse had been hiding: code 600 "*Actinocyclus*,
+uncertain species." had been resolved in `taxon_worms.csv` to AphiaID 196347 — *Actinocyclus*
+Ehrenberg 1831, a **nudibranch** genus — instead of the centric diatom *Actinocyclus* C.G.
+Ehrenberg 1837 (148944); a code-matched override row keys it to the diatom.
+
+Two smaller rules landed with it:
+
+- **A group label is never a `common_name`.** "other" (×9), "undefined (code not in source
+  definitions; Q05)" (×9), "coccolithophore", "silicoflagellate" and ZooScan's "eggs",
+  "multiples", "nauplii", "others" reached `taxon.common_name` through the "any other dataset's
+  name" rank: a functional-group label is the `ds_common_name` of every code in the group.
+  `apply_taxon_common()` refuses any `taxon_group.csv` label and the label of any dataset-local
+  key — 24 taxa lose a name that was not one. The group's own name in `taxon_group` is unchanged.
+- **A bird with no source id keys `itis:` through name → AphiaID → linked TSN.** The generic
+  path now carries the TSN WoRMS links to a name-resolved AphiaID; Farallon's `GUMU`, `MABO` and
+  `NABO` resolve without their override rows (`SCMU`, `TOSP`, `CHSP` still need theirs — WoRMS
+  links no TSN). No released key changes.
+
+These numbers land when the phytoplankton ingest re-runs (taxon plan Phase 3b; the release run
+is WS-F).
+
+**Consumers:** `dataset_taxon.taxon_key` changes for 302 of the 393 `calcofi_phytoplankton`
+codes and, through it, `obs.taxon_key` / `obs_bio.taxon_key` on ~124,600 phytoplankton
+observations (class key → species or genus key); `taxon` gains 482 rows (287 phytoplankton
+vocabulary taxa + 195 ancestors); `taxon_group`'s phytoplankton memberships grow from 24 to
+311 rows, so a consumer that grouped phytoplankton by class-level `taxon_key` should group by
+`taxon_group` (the functional groups) or `taxon.class` instead; `taxon.common_name` becomes NULL
+for the 24 taxa that carried a group or operational-class label.
+
 ## Every dataset carries a checked citation and a registered license, and the release cites itself
 
 Nothing validated attribution before this release: 8 of 16 datasets shipped `citation_main`

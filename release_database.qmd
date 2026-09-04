@@ -486,7 +486,15 @@ core_n <- assemble_core(con_wdl, root = here(), supplemental = supp_tbls)
 # ten of them. A dataset's own common name always wins — it is what the provider
 # publishes. A taxon whose WoRMS vernaculars are ambiguous stays NULL until a
 # human picks one in the registry; see metadata/taxon_common.csv.
-n_common <- apply_taxon_common(con_wdl, here("metadata/taxon_common.csv"))
+#
+# A group label is never a common name (calcofi4db >= 3.33.0): the registry's
+# `dataset_taxon` rule values ("diatom, centric", "other", …) and the label of
+# any dataset-local key ("undefined (code not in source definitions; Q05)",
+# zooscan "nauplii") are refused at rank 4 — 24 taxa carried one as their
+# common_name at v2026.08.25. The group's own name lives in taxon_group.
+tg_rules <- read_taxon_group_rules(here("metadata/taxon_group.csv"))
+n_common <- apply_taxon_common(con_wdl, here("metadata/taxon_common.csv"),
+                               group_rules = tg_rules)
 
 tibble(
   table = names(core_n),
@@ -716,6 +724,18 @@ not declared below. The allowlist is deliberately one key at a time — these ar
 non-taxonomic operational classes the source records as data, not lookup
 failures — so a *new* unresolved taxon can never hide among the known ones.
 
+Two more things are checked here because this is the one place every dataset is
+present at once. `check_taxon_registries()` **fails the release** on a
+`taxon_override.csv` or `taxon_group.csv` row naming a `dataset_key` nothing
+supplies — each ingest reads the whole registry while loading only its own
+vocabulary, so a typo there is invisible until now, and a registry row that
+matches nothing is how a missing id hides. And `report_taxon_overrides()` shows,
+per override row, how many vocabulary rows it matched, keyed, and **skipped**:
+since calcofi4db 3.33.0 an override never replaces an id the source supplied
+unless it names the row by the dataset's own code, which is what stopped six
+`taxa`-matched phytoplankton group rows from collapsing 287 species onto 6 class
+keys. A skip is the rule working; it is reported so it is never silent.
+
 ```{r}
 #| label: taxon_authority_coverage
 
@@ -743,6 +763,21 @@ TAXON_LOCAL_ALLOW <- c(
 
 tx_cover <- check_taxon_ids(con_wdl, allow = TAXON_LOCAL_ALLOW, halt = TRUE)
 
+# the registries, validated where every dataset IS present (taxon plan D5): a
+# row naming a dataset_key that no shard and no measurement_taxon row supplies
+# fails the release. `tg_rules` was read in `core_tables` for apply_taxon_common().
+mt_taxon_all <- readr::read_csv(
+  here("metadata/measurement_taxon.csv"),
+  col_types = readr::cols(worms_id = "i", itis_id = "i", bin_value = "d", .default = "c"))
+tx_over_all <- readr::read_csv(here("metadata/taxon_override.csv"), show_col_types = FALSE)
+check_taxon_registries(con_wdl, overrides = tx_over_all, group_rules = tg_rules,
+                       measurement_taxon = mt_taxon_all, halt = TRUE)
+
+# what each override row did: matched / applied / skipped (the source's own id
+# kept). `source_json_known = FALSE` means the shard predates ds_source_json, so
+# the skip count is unknowable here and the ingest's own message is the fact.
+tx_over_rpt <- report_taxon_overrides(con_wdl, tx_over_all)
+
 tx_cover |>
   datatable(caption = paste(
     "Taxon authority coverage by dataset.",
@@ -752,6 +787,22 @@ tx_cover |>
     "either way. `n_no_rank_order` should be 0: it was every ITIS-keyed taxon",
     "until the rank vocabulary moved out of a single ingest's connection into",
     "calcofi4db::taxa_rank_reference()."))
+```
+
+```{r}
+#| label: taxon_override_report
+
+tx_over_rpt |>
+  dplyr::group_by(dataset_key) |>
+  dplyr::summarise(
+    override_rows = dplyr::n(), n_matched = sum(n_matched),
+    n_applied = sum(n_applied), n_skipped = sum(n_skipped),
+    source_json_known = all(source_json_known), .groups = "drop") |>
+  datatable(caption = paste(
+    "taxon_override.csv per dataset: vocabulary rows each registry row matched,",
+    "keyed (`n_applied`) and skipped because the source supplied its own id",
+    "(`n_skipped`; NA where `source_json_known` is FALSE). Per-row detail,",
+    "with the skipped codes, is in `tx_over_rpt`."))
 ```
 
 ## Declared Measurement Bounds

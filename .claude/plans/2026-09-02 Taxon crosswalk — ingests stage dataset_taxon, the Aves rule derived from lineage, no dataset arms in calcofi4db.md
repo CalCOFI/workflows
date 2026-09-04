@@ -364,3 +364,29 @@ PR #77 properly; 3 is what makes the next dataset free.
   `NABO`) — D3's "name → AphiaID → TSN → itis:" hop is not implemented; (b) ERDDAP `_obs` has no 2021 rows
   (DataZoo had 625; farallon Q11); (c) ERDDAP now labels `CODO` "Delphinus sp." and `XCMU`
   "Synthliboramphus craveri" where the overrides key *D. delphis* and the genus (Q10).
+- **Phase 3a (2026-09-04, calcofi4db `ws-e3a` @ d24bd32 — `# calcofi4db 3.33.0`, no DESCRIPTION bump; workflows
+  `ws-e3a`; Fable):** the override rule is code — `.apply_overrides()` applies a non-code-matched row only where
+  the source supplied no id, a code-matched row always and last; `resolve_dataset_taxon()` stages
+  `_taxon_override_report` and messages the skips; `report_taxon_overrides()` recomputes it from `dataset_taxon`
+  for the release (`n_skipped = NA`, `source_json_known = FALSE` for a pre-3.29 shard; arm match columns through
+  a transitional alias). `apply_taxon_common(group_rules =)` refuses group labels and local-key labels at rank 4.
+  `.apply_xref()` (c) takes the TSN linked to a name-resolved AphiaID; `ensure_taxon_xref()` fetches it in a
+  third pass. `release_database.qmd` gates `check_taxon_registries()` and shows the override report; tests
+  1,711 → 1,762 (0 fail). **Phyto gate** (in memory, 2026-08-25 `phyto_taxon`, real registries, caches +510
+  xref / +3,035 lineage rows, 3 min of WoRMS): 393 codes → **309 distinct keys** (was 22): 299 `worms:` = 294
+  source AphiaIDs exactly as supplied (0 re-keyed) + 6 class keys for the **70** id-less codes + 3 genus
+  overrides, + 10 local (Q05); **302 of 393 codes change** vs the fixture, all source-resolved, 91 unchanged;
+  11 override rows matched 377 rows, 75 applied, 302 skipped; `check_dataset_taxon()` 0 findings; 299/299 with
+  class/rank/rank_order/parent; `taxon` shard 50 → 542 rows (482 new to the release: 287 vocabulary taxa +
+  195 ancestors); `taxon_group` phyto memberships 24 → 311; obs: 124,586 of 159,804 change key. **Found:** code 600 "Actinocyclus, uncertain
+  species." was resolved in `taxon_worms.csv` to the nudibranch homonym (196347, Gastropoda) — a code-matched
+  override row keys it to the diatom genus 148944 (Phase 3b: fix `taxon_worms.csv`, drop the row).
+  **Farallon re-check:** full registry 164/164 keys identical to Phase 2, 0 findings (one row, `CSLI`, matches
+  no ERDDAP code); minus the six ERDDAP-only rows, `GUMU`/`MABO`/`NABO` key `itis:` through the generic hop and
+  `SCMU`/`TOSP`/`CHSP` fall to `worms:` (`aves_not_itis`) — those three rows stay. **Common names** on the
+  fixture: manual 44 / ichthyo 790 / WoRMS-single 186 / other 175 → **151** / empty 930 → **954**; the 24 refused
+  = 9 "undefined (…)", 9 "other", coccolithophore, silicoflagellate, zooscan eggs/multiples/nauplii/others; D5
+  changes vs the released names 50 → 26. **Phase 3b:** delete the arms + `.override_match_alias`; migrate
+  ichthyo, phyto, zoodb, zooscan, euphausiids, mesopelagic to `append_dataset_taxon()` (the phyto `taxa` rows
+  then match `ds_common_name`); override rows now redundant: `GUMU`, `MABO`, `NABO` (and `CSLI`, unreferenced);
+  4.0.0.
