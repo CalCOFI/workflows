@@ -146,10 +146,12 @@ Three new ones from this week's work, for you and Ben G:
 Thanks too for the four CTD answers you left in the older sheet (−99 reads as NULL; the extreme
 pH, O2 and temperature values are QC misses the team will flag upstream, not a units error, while raw
 voltage outliers are left alone; the bottle database, not the cast files, is authoritative for
-ammonium; no flag columns exist for the bottle values in the cast files). They are recorded, and I
-have retired that sheet in favour of one per provider. All of the CalCOFI-curated questions (bottle,
-CTD, METS, DIC, hydro-master, phyllosoma, phytoplankton), pre-answered where we could and marked
-"proposed", are in this one, which you can edit in place, one tab per dataset:
+ammonium; no flag columns exist for the bottle values in the cast files, and going forward bottle
+values should come from one table rather than be duplicated in the profiles). They are recorded, and
+that older sheet is retired: it now just points to the new one. All of the CalCOFI-curated questions
+(bottle, CTD, METS, DIC, hydro-master, phyllosoma, phytoplankton), pre-answered where we could and
+marked "proposed", are in this one sheet, one tab per dataset, which you can edit in place; the CTD
+ones are on the calcofi_ctd-cast tab:
 https://docs.google.com/spreadsheets/d/1uW9GLogdD2K6NiQGS_xJiIPFUPUvifWesrLlK5UUK7g/edit
 
 Cheers, Ben
