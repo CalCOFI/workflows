@@ -58,7 +58,7 @@ Agreed, and more is already true than the Task 12 text suggests:
   cruise gets your UUID?
 - Task 12 is about names (variables, units, station notation), not keys; I'll say so.
 
-The ichthyo questions, in a shared sheet: [link]. Top six:
+The ichthyo questions, in a shared sheet: https://docs.google.com/spreadsheets/d/1kQM6aw3yiT1AZAmFfgCp2Ou9u-UckR69Tien_4Mk1qE/edit. Top six:
 
 1. Egg stages 12–15 (790 records, 5 species): beyond Moser & Ahlstrom's 1–11: a scheme, or errors?
    Excluded for now.

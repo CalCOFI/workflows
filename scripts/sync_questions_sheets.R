@@ -61,10 +61,12 @@ qs_auth <- function() {
   }
   googledrive::drive_auth(token = googlesheets4::gs4_token())
   who <- tryCatch(googlesheets4::gs4_user(), error = function(e) NA_character_)
-  qcat("authenticated as {who %||% '<unknown>'}")
-  tolower(who %||% NA_character_)
+  if (length(who) != 1 || is.na(who)) who <- NA_character_
+  qcat("authenticated as {if (is.na(who)) '<unknown>' else who}")
+  tolower(who)
 }
-`%||%` <- function(a, b) if (is.null(a) || length(a) == 0 || is.na(a)) b else a
+# rlang's null-coalescing operator: NULL → b; never tests NA (a list would break `||`)
+`%||%` <- function(a, b) if (is.null(a)) b else a
 
 #' cat() a glue()d line with its newline intact. glue::glue() trims trailing
 #' whitespace/newlines by default (.trim = TRUE), so `cat(glue::glue("...\n"))`
