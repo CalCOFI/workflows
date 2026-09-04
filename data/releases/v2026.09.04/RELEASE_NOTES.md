@@ -757,11 +757,11 @@ Horizon 2019-07.
 
 **Validation:** 61 pass / 0 fail / 4 skip (consumer-contract suite, 2026-09-04T18:24:14Z).
 
-**Software:** calcofi4db 4.0.2, calcofi4r 1.17.0.
+**Software:** calcofi4db 4.0.2, calcofi4r 1.18.0.
 
 ## How to cite
 
-> CalCOFI (2026). CalCOFI Integrated Database, release v2026.09.04 [Data set]. Scripps Institution of Oceanography, NOAA Fisheries, and California Department of Fish and Wildlife. https://calcofi.io/db-schema/?v=v2026.09.04
+> CalCOFI (2026). CalCOFI Integrated Database, release v2026.09.04 [Data set]. Scripps Institution of Oceanography, NOAA Fisheries, and California Department of Fish and Wildlife. https://doi.org/10.5281/zenodo.22310858
 
 Cite the source datasets you use alongside the release:
 
