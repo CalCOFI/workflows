@@ -18,13 +18,23 @@
 # cdfw, farallon, sccoos); omit it to act on every active provider that has a
 # row in metadata/questions_sheets.yml.
 #
-# Requires Google auth this script never performs itself: run
-# `googlesheets4::gs4_auth()` (interactive OAuth as bebest@ucsd.edu, or
-# `gs4_auth(path = "<calcofi-admin service account json>")`) in the SAME R
-# session/process before invoking push/pull with --execute, or arrange gargle
-# to pick up a cached token non-interactively. googledrive shares the same
-# token once googlesheets4 has authenticated (both use gargle credential
-# caching), so a separate drive_auth() call is not needed.
+# Google auth (only for `pull`, and for `push --execute`; a push dry run needs
+# none). The token is chosen by environment variable, in this order:
+#   QS_GOOGLE_SA_JSON=<service-account json>  — the calcofi-admin key. The
+#       sheets are then OWNED by the service account (its own Drive), and its
+#       GCP project must have the Sheets + Drive APIs enabled, else every
+#       gs4_create() answers 403 PERMISSION_DENIED (measured 2026-09-03).
+#   QS_GOOGLE_EMAIL=<address>  — a cached user token for that account with
+#       BOTH the spreadsheets and drive scopes (drive_share() needs drive).
+#       Cache it once, in an interactive R session (Rscript cannot open the
+#       browser flow):
+#         googlesheets4::gs4_auth(email = "bebest@ucsd.edu",
+#           scopes = c("https://www.googleapis.com/auth/spreadsheets",
+#                      "https://www.googleapis.com/auth/drive"))
+#   neither  — interactive gs4_auth() (browser), interactive sessions only.
+# googledrive is handed the same token, so the two packages never disagree.
+# The authenticated user is dropped from SHARE_WITH (Drive refuses to share a
+# file with its owner).
 #
 # Deps beyond calcofi4db, all CRAN, loaded via librarian::shelf() below:
 # googlesheets4, googledrive, readr, yaml, glue, here.
@@ -33,7 +43,28 @@ suppressMessages(librarian::shelf(
 
 SHEETS_YML  <- here("metadata/questions_sheets.yml")
 PROVIDER_CSV <- here("metadata/provider.csv")
-SHARE_WITH  <- c("bebest@ucsd.edu", "esatterthwaite@ucsd.edu")
+SHARE_WITH  <- c("bebest@ucsd.edu", "ben@oceanmetrics.io", "esatterthwaite@ucsd.edu", "bthuang@ucsd.edu", "bhuang0022@gmail.com")
+QS_SCOPES   <- c("https://www.googleapis.com/auth/spreadsheets",
+                 "https://www.googleapis.com/auth/drive")
+
+#' Authenticate once per process — see the header for the precedence. Returns
+#' the authenticated address (lower-case) so callers can skip sharing with it.
+qs_auth <- function() {
+  sa <- Sys.getenv("QS_GOOGLE_SA_JSON", "")
+  em <- Sys.getenv("QS_GOOGLE_EMAIL", "")
+  if (nzchar(sa)) {
+    googlesheets4::gs4_auth(path = path.expand(sa), scopes = QS_SCOPES)
+  } else if (nzchar(em)) {
+    googlesheets4::gs4_auth(email = em, scopes = QS_SCOPES)
+  } else {
+    googlesheets4::gs4_auth(scopes = QS_SCOPES)
+  }
+  googledrive::drive_auth(token = googlesheets4::gs4_token())
+  who <- tryCatch(googlesheets4::gs4_user(), error = function(e) NA_character_)
+  qcat("authenticated as {who %||% '<unknown>'}")
+  tolower(who %||% NA_character_)
+}
+`%||%` <- function(a, b) if (is.null(a) || length(a) == 0 || is.na(a)) b else a
 
 #' cat() a glue()d line with its newline intact. glue::glue() trims trailing
 #' whitespace/newlines by default (.trim = TRUE), so `cat(glue::glue("...\n"))`
@@ -323,6 +354,7 @@ gs_push_provider <- function(provider, sheets_yml_path = SHEETS_YML, execute = F
     yml[[provider]] <- list(sheet_id = as.character(ss), url = meta$spreadsheet_url,
                              created = format(Sys.Date()))
     qs_save_sheets_yml(yml, sheets_yml_path)
+    share_with <- setdiff(tolower(share_with), getOption("qs.auth_user", character()))
     for (email in share_with)
       googledrive::drive_share(googledrive::as_id(as.character(ss)), role = "writer",
                                 type = "user", emailAddress = email)
@@ -407,6 +439,9 @@ gs_pull_provider <- function(provider, sheets_yml_path = SHEETS_YML, execute = F
 
   providers <- if (!is.null(provider_arg)) provider_arg else
     intersect(qs_provider_registry()$provider, names(qs_load_sheets_yml()))
+
+  # a push dry run touches no Google API; everything else does
+  if (mode == "pull" || execute) options(qs.auth_user = qs_auth())
 
   for (pv in providers) {
     if (mode == "push") gs_push_provider(pv, execute = execute)
