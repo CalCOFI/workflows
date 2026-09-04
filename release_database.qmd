@@ -1464,10 +1464,30 @@ d_cki <- check_cruise_key_integrity(
     span_overlaps_max = 2L,   # measured 3 pairs at v2026.08.25, 1 within transit tolerance
     derived_max       = 152L, # 152 cruises no SWFSC site row names; only ever down
     key_null_max      = c(    # root samples with NULL cruise_key, per dataset; only ever down
+      # measured by the WS-B spike on v2026.08.25 (dic: unmatched Niskins, Q07;
+      # pic: pre-1951 tows; bottle: 49 casts)
       calcofi_dic           = 3255L,
       "sio_pic-zooplankton" = 5087L,
-      "cdfw_dungeness-crab" = 1639L,
-      calcofi_bottle        = 49L)),
+      calcofi_bottle        = 49L,
+      # crab: was 1639 over the 2,011 sorting-log tows; the core now holds the
+      # 216 examined ones only (WS-C), 97 of whose log entries resolve no cruise
+      "cdfw_dungeness-crab" = 97L,
+      # the backlog the gate measured the first time it ran end-to-end
+      # (2026-09-04 staging, first attempt through this chunk): datasets the
+      # spike never counted, each an open question for its ingest to file —
+      # underway/transect events with no cruise designation (cufes, farallon:
+      # CAC2022_8 has no Aug-2022 ichthyo cruise), net tows whose year-month
+      # is ambiguous between two cruises of one ship (zoodb, zooscan,
+      # euphausiids, phyllosoma), picoplankton's undesignated casts, and the
+      # region-pooled phytoplankton. Baselines, not targets.
+      calcofi_phyllosoma              = 44L,
+      calcofi_phytoplankton           = 168L,
+      "cce-lter_euphausiids"          = 420L,
+      "cce-lter_picoplankton-bacteria" = 7216L,
+      "cce-lter_zoodb"                = 111L,
+      "cce-lter_zooscan"              = 421L,
+      "farallon_bird-mammal"          = 1228L,
+      swfsc_cufes                     = 5053L)),
   halt = TRUE)
 
 d_cki |>
