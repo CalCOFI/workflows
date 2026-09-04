@@ -595,6 +595,19 @@ an ingest, `R/taxa.R` or a taxon metadata CSV):
 - Stage `measurement_taxon.csv` with `ensure_measurement_taxon()`, never
   `dbWriteTable()`; `taxon_override.csv` rows match on their own `match_column`,
   and an unknown `dataset_key` there errors.
+- **An override never replaces an id the source supplied** (Ben, 2026-09-04;
+  calcofi4db ≥ 3.33.0). A row matched on a non-code column (`ds_common_name`,
+  `ds_scientific_name`) applies only where the source supplied no `worms_id` /
+  `itis_id`; a row matched on the dataset's own code (`ds_taxa_code`) applies
+  always. v2026.08.25 released 22 phytoplankton keys for 393 codes because six
+  `taxa`-matched functional-group rows replaced every species AphiaID in their
+  group. The group belongs in `taxon_group.csv`; the species keeps its key; and
+  `resolve_dataset_taxon()` says how many rows each override was *skipped* for
+  (`report_taxon_overrides()` shows the same table at release).
+- **A group label is never a `common_name`.** `apply_taxon_common()` rank 4 refuses
+  any `taxon_group.csv` `match_value` and the label of any dataset-local key, so
+  "diatom, centric" / "other" / "undefined (…)" never name a taxon; the group's own
+  name in `taxon_group` is unchanged.
 - Assert coverage **by rank position**, never blanket non-NULL (`family` is NULL
   above family rank; `kingdom` is NULL for `worms:1` Biota).
 - `release_database.qmd`'s `taxon_authority_coverage` chunk: `check_taxon_ids()`

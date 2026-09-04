@@ -94,4 +94,42 @@ id) and therefore only ever sees the dataset's own vocabulary. `.apply_xref()`
 takes `rekey = FALSE` there: an ancestor's key comes from the chain it was
 fetched in, so its ids may be filled but never replaced.
 
+**An override never replaces an id the source supplied** (Ben, 2026-09-04;
+calcofi4db ≥ 3.33.0, `.apply_overrides()` / `report_taxon_overrides()`). A
+`taxon_override.csv` row exists for the rows the source could *not* resolve, so:
+- a row matched on a **non-code** column (`ds_common_name`, `ds_scientific_name`;
+  the phyto arm's `taxa`) applies **only** to vocabulary rows whose source supplied
+  no `worms_id` / `itis_id` (nothing in `ds_source_json`);
+- a row matched on the dataset's own **code** (`ds_taxa_code`; the arms'
+  `species_code` / `species_id` / `taxon_id`) is a statement about that one row and
+  applies **always** — and wins over a non-code row on the same vocabulary row,
+  whatever order the registry lists them in.
+
+v2026.08.25 released **22** `taxon_key`s for **393** phytoplankton codes: six
+`taxa`-matched rows ("diatom, centric" → Bacillariophyceae, …) replaced the AphiaID
+of every species in their group, so 287 species-resolved codes keyed their class.
+The functional group is a `taxon_group.csv` rule, not a key. `resolve_dataset_taxon()`
+messages what each override matched / applied / skipped and stages it as
+`_taxon_override_report`; `report_taxon_overrides(con, tx_over)` recomputes the
+same table from `dataset_taxon` (+ `ds_source_json`) at release — `n_skipped` is
+`NA` with `source_json_known = FALSE` for a shard that predates the column, never a
+wrong zero. A skip is the rule working; it is reported so it is never silent.
+
+**A group label is never a `common_name`.** `apply_taxon_common()` rank 4 (other
+datasets' `ds_common_name`) refuses any `match_value` of a `dataset_taxon` rule in
+`taxon_group.csv` (pass `group_rules = read_taxon_group_rules(...)`) and the label of
+any dataset-local key — "diatom, centric", "other", "undefined (code not in source
+definitions; Q05)", zooscan "nauplii" were being published as the common name of
+every taxon in the group (24 taxa on the v2026.08.25 fixture). Counted as
+`other_excluded_label`; the group's own name in `taxon_group` is untouched.
+
+**A bird with no source id keys `itis:` through name → AphiaID → linked TSN.**
+`.apply_xref()` branch (c) fills `worms_id` from the name match *and* takes the TSN
+`wm_external()` links to that AphiaID (`ensure_taxon_xref()` fetches it in a third
+pass, cached); the class from the WoRMS chain says Aves, so `taxon_key_of()` keys
+`itis:`. Until 3.33.0 only `worms_id` was filled, so Farallon's `GUMU` / `MABO` /
+`NABO` needed override rows for a hop the authorities already answered. A TSN the
+row carries is never replaced; a name WoRMS links no TSN to (`SCMU`, `TOSP`, `CHSP`)
+still needs its row.
+
 > Moved out of the root `CLAUDE.md` on 2026-09-03 so it loads on demand; the hard rules stay resident there. Edit this file, not both.
