@@ -162,3 +162,62 @@ object 200 (latest.txt, catalog, coverage, grid, spatial_layers, obs_bio, taxon,
 sample_spatial); the one "failed" request is DuckDB-WASM aborting its unused `duckdb-eh` bundle probe.
 The welcome card (agree-to-cite) shows once per browser (`explore_welcome` in localStorage); `?tour=on`
 forces it, `?tour=off` never shows it — verified on the local build with a screenshot.
+
+## WS-F Sections 4/4b Measured (Sonnet, 2026-09-04) — REAL release v2026.09.04 cut, tagged, released, DOI minted
+Env vars confirmed empty for every real-prefix R call (`CALCOFI_RELEASE_PREFIX`/`CALCOFI_RELEASE_LAYOUT`
+unset); `shortcut = TRUE` throughout so no ingest re-ran (Section 2's ichthyo reference-shard gate is what
+makes that honest). Per-target wall times: `release_database` **1h30m18s** (vs 2h29m under staging — most
+objects already content-addressed from the staging run, so `freeze_plan()` found `copy`/`exists` not
+`upload`), `test_release` **8m29s** (61 pass / 0 fail / 4 skip, same as staging), `deploy_consumers`
+**15m14s** (prep_db.R on the server for db-viz-hex, no error), `publish_to_netcdf` **1h45m26s** (3.6 GB
+`calcofi_ctd-cast_full.nc` alone took ~40 min to upload), `publish_to_erddap` **5m33s**.
+
+- **`publish_to_netcdf` failed first** (`connect`, 14.7s): `cc_release_parquet()` in `libs/publish_netcdf.R`
+  refused `obs` as "partitioned (15 objects)" — `obs`'s deprecated compat object is now genuinely
+  partitioned by `dataset_key` (H1), but the release also ships a single-file twin
+  (`releases/{v}/parquet/obs.parquet`) that `calcofi4r::cc_release_sources()` reports as `src$single_file`.
+  Ben fixed in `12ca22f`: the function now returns the twin when present. Verified from the checkout before
+  rerun (bottle 11,135,600 / ctd-cast 13,295,014 / dic 3,708 via grouped counts over https). Rerun succeeded.
+- **`publish_to_erddap` failed twice** (`deploy-run`, ~20s each): `erddap_sync_parquet()` in
+  `libs/erddap_deploy.R` built its copy manifest from `lapply(cat_$tables, ...)` over **every** object per
+  table; `obs`'s new single-file twin has no `partition_by`/`partition_value`, so `sprintf()` returned
+  `character(0)` for it and `vapply(..., "")` aborted ("values must be length 1, but FUN(X[[16]]) result is
+  length 0"). Ben fixed in `fe5e2ef`: a new `erddap_sync_manifest()` pure helper builds pairs from the
+  **partition objects only** (371 pairs = 372 objects − the twin; dry-run verified against the real
+  v2026.09.04 catalog before commit). Rerun succeeded — the "1.–5." deploy-run lines: **1.** synced 371
+  parquet files; **2.** built view db (37 views, none empty); **3.** spliced 37 generated + 8
+  hand-maintained, added 0 / retiring 0; **4.** flagged for reload; **5.** live verification — every
+  datasetID `ok = TRUE` (200/200). `density_per_10m2` (45 occurrences) and effort columns
+  (`std_haul_factor`/`effort_class`, 92 occurrences) confirmed present in `datasets_calcofi.xml` for the bio
+  datasets — the WS-H gate.
+- **Own mistake, self-corrected before commit:** first ran `scripts/build_citation_files.R` with no
+  arguments, which silently defaulted to the stale `v2026.09.03-alpha` placeholder (the script's own header
+  documents `v2026.09.03 2026-09-03 # before WS-F tags a release`). Re-ran with `v2026.09.04 2026-09-04`
+  before staging anything for commit; verified `.zenodo.json`/`CITATION.cff` both show `v2026.09.04`.
+- **Caddy redirect reload not completed — flagged, not silently skipped.** `scripts/build_release_redirects.R`
+  ran locally and regenerated `server/caddy/releases_redirects.caddy` (214 redirects, 29 versions) in the
+  sibling `server` checkout, but completing the reload needs (a) committing+pushing that **different repo**
+  (outside this run's authorized scope — only `workflows` main was to be pushed) and (b) `git pull` +
+  `docker exec caddy caddy reload` (or restart) on the production host over SSH — confirmed reachable
+  (`ssh calcofi`, Caddy runs in a Docker container, config at
+  `/ssd/share/github/CalCOFI/server/caddy/Caddyfile`) but a live-server mutation this run wasn't told to
+  perform. Needs a human/separate authorized step.
+- **New, unresolved finding: `verify_release_objects.R v2026.09.04` reports ~40 size/sha256 mismatches**
+  between the uploaded GCS object and `catalog.json`'s recorded hash — every `obs_mets_full` cruise
+  partition (dozens) plus 2 `obs_ctd_full` partitions (`cruise_key=2026-04-3322`, `cruise_key=2026-07-3322`).
+  The script exits 0 (non-fatal) so the release proceeded, but this needs investigation — possibly
+  non-deterministic parquet writing for these two supplemental tables (see CLAUDE.md's byte-determinism
+  requirements: unique `ORDER BY` + `threads = 1`) causing the local file to differ between when the catalog
+  hash was computed and when the object was actually uploaded.
+- Real `latest.txt` promoted to **v2026.09.04** (verified via `gcloud storage cat`). Tag `v2026.09.04` pushed;
+  GitHub release: https://github.com/CalCOFI/workflows/releases/tag/v2026.09.04. Zenodo DOI minted within
+  the 10-minute poll window: **10.5281/zenodo.22310858** (concept `10.5281/zenodo.22281994`, created
+  2026-09-04T20:45:33Z) — landed in `catalog.json`, `versions.json` and the "How to cite" block via a second
+  `publish_release_notes.R v2026.09.04` run.
+- Commits (workflows main, all pushed): `968dc83` ("[pipeline] release v2026.09.04" — RELEASES.md's renamed
+  `# v2026.09.04` section, 5 `_output/*.html`, `_targets/meta/meta`, `data/releases/v2026.09.04/` sidecars +
+  `_release_stamp.json`, `.zenodo.json`, `CITATION.cff`), `02e96f7` ("release notes: v2026.09.04 DOI
+  10.5281/zenodo.22310858" — catalog.json + RELEASE_NOTES.md re-published with the DOI). Fix commits on main
+  by Ben: `12ca22f` (netcdf obs-twin), `fe5e2ef` (erddap partition-only manifest). Section 4b step-by-step
+  otherwise exactly as briefed. **Section 5 (Explorer flip, calcofi4r/py tags, db-schema, docs, Shiny
+  deploys) was dispatched separately (see the entry above) and NOT started by this agent.**
