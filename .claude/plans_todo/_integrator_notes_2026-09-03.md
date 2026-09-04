@@ -221,3 +221,27 @@ objects already content-addressed from the staging run, so `freeze_plan()` found
   by Ben: `12ca22f` (netcdf obs-twin), `fe5e2ef` (erddap partition-only manifest). Section 4b step-by-step
   otherwise exactly as briefed. **Section 5 (Explorer flip, calcofi4r/py tags, db-schema, docs, Shiny
   deploys) was dispatched separately (see the entry above) and NOT started by this agent.**
+
+### The 173 object mismatches — cause, repair, fixes (integrator, 2026-09-04 23:15)
+
+Measured: `verify_release_objects.R v2026.09.04 --max-mb 200` → 372 checked, 173 objects with size AND
+sha256 mismatches: all 133 `obs_ctd_full` and 38 `obs_mets_full` cruise partitions plus `obs`'s
+`calcofi_ctd-cast` and `calcofi_mets` partitions. Every local frozen file matches the catalog. Chain:
+1. Writes are NOT byte-deterministic for those tables (row-identical, byte-different between the
+   staging and real runs — `release_sort_keys()` orders them by cruise_key + core sort + obs_id, so a
+   non-unique obs_id in the supplementals, or NULL ties, is the likely reason; OPEN).
+2. The staging run (canonical layout, default `CALCOFI_TABLES_PREFIX=ducklake/tables`) had no
+   previous canonical catalog under its prefix, so every object was `upload` — straight over the
+   promoted v2026.08.25 canonical objects with the same content_hash (e.g. obs_ctd_full 1993-08-32NM:
+   7,360,117 → 7,359,787 bytes at 15:27Z).
+3. The real run (compat layout, prev = v2026.08.25's catalog) planned `copy` for those objects from
+   the (now clobbered) canonical paths, while `build_release_catalog()` recorded the LOCAL export's
+   bytes/sha256 — a third variant.
+Repair: re-uploaded the 173 real-run local files over `releases/v2026.09.04/parquet/…` (the catalog
+already describes them; verify re-run pending). The 173 v2026.08.25 canonical objects can be restored
+by server-side copy from that release's intact compat copies (dry-run: all 173 compat sizes match its
+catalog) — `scratchpad/restore_0825_canonical.sh … --execute`, awaiting Ben's go.
+Fixes: calcofi4db 4.0.3 `freeze_plan()` carries the previous release's bytes/sha256 for
+copy/exists objects (`bytes_local`/`sha256_local` keep the local values; regression test);
+`release_database.qmd` stops a staging run whose tables prefix is the shared store; CLAUDE.md +
+release-objects skill say `CALCOFI_TABLES_PREFIX=ducklake-staging/tables` is required.
