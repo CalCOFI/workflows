@@ -21,6 +21,7 @@ erDiagram
         varchar tow_type
         varchar data_stage
         geometry geom
+        uuid source_uuid
     }
     obs {
         bigint obs_id PK
@@ -90,6 +91,7 @@ erDiagram
         varchar ds_scientific_name
         varchar ds_common_name
         varchar ds_taxa_code
+        varchar ds_source_json
     }
     measurement_type {
         varchar measurement_type PK
@@ -110,6 +112,8 @@ erDiagram
         varchar denominator
         varchar category
         varchar variable
+        varchar nerc_p01
+        varchar units_nerc_p06
     }
     sample ||--o{ sample : "parent_sample_key"
     sample ||--o{ sample : "root_sample_key"

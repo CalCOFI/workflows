@@ -8,47 +8,39 @@ erDiagram
         varchar cruise_label
         int transect_number
         int bin_number
-        date date
-        double time_sec
         double latitude
         double longitude
-        double latitude_start
-        double longitude_start
-        double latitude_stop
-        double longitude_stop
         double length_m
         double width_m
         double area_m2
-        double bottom_depth_m
-        double julian_date
-        int julian_day
-        varchar svy
+        int core_flag
         varchar season
         timestamp datetime_start_utc
+        date date
         geometry geom
         varchar grid_key
         varchar cruise_key
     }
     bird_mammal_observation {
-        int observation_id PK
         varchar gis_key FK
         varchar species_code FK
         varchar behavior_code FK
         int count
+        varchar observation_id PK
     }
     bird_mammal_species {
         varchar species_code PK
         varchar common_name
         varchar scientific_name
-        int itis_id
+        varchar type
         bool is_bird
         bool is_mammal
         bool is_fish
-        bool is_large_bird
+        bool is_turtle
+        int itis_id
         bool is_unidentified
         bool include_flag
-        varchar nmfs_code
-        varchar comment
+        varchar scientific_name_datazoo
     }
     bird_mammal_behavior {
         varchar behavior_code PK
@@ -73,6 +65,10 @@ erDiagram
         varchar coverage_spatial
         varchar license
         varchar pi_names
+        varchar doi
+        varchar license_url
+        varchar acknowledgement
+        varchar contact
     }
     bird_mammal_transect ||--o{ bird_mammal_observation : "gis_key"
     bird_mammal_species ||--o{ bird_mammal_observation : "species_code"
