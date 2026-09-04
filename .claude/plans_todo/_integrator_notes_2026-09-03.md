@@ -245,3 +245,8 @@ Fixes: calcofi4db 4.0.3 `freeze_plan()` carries the previous release's bytes/sha
 copy/exists objects (`bytes_local`/`sha256_local` keep the local values; regression test);
 `release_database.qmd` stops a staging run whose tables prefix is the shared store; CLAUDE.md +
 release-objects skill say `CALCOFI_TABLES_PREFIX=ducklake-staging/tables` is required.
+Measured (2026-09-05 00:05): re-upload of the 173 local files completed (0 failures);
+`verify_release_objects.R v2026.09.04 --max-mb 200` → 372 objects checked, 371 hashed, **0 problems**.
+(A verify started while uploads were still landing reported stale sha256s from the https cache; a
+three-way check of one object — catalog, local file, bucket download — agreed. Run the verifier only
+after the last upload returns.) v2026.08.25's 173 canonical objects still await Ben's "restore 08-25".
