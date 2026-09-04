@@ -1381,7 +1381,24 @@ tx_over  <- read_csv(here("metadata/taxon_override.csv"), show_col_types = FALSE
 # switch(dataset_key, ...) arm inside calcofi4db. The reusable SHAPES stay in the
 # package (compat_event_sql / ns_key / prune_taxon_shard), so this is a declaration.
 #
-# taxa: build_taxon_reference() reads the WoRMS lineage `taxon` table built above
+# taxa: the vocabulary is DECLARED here and RESOLVED by the package (taxon plan
+# D1, calcofi4db >= 3.29.0). append_dataset_taxon() stages one `dataset_taxon`
+# row per CalCOFI species code with `taxon_key` empty and the ids the SOURCE
+# supplied (worms_id / itis_id / gbif_id) carried along as `ds_source_json`;
+# resolve_dataset_taxon() fills the key from the authorities. ds_prefix is
+# "calcofi", not the dataset_key: `species` is the shared CalCOFI species list
+# (ichthyo + the folded invert export), so its ds_taxon_key is `calcofi:<id>`.
+# There is no ichthyo arm inside calcofi4db any more — a column renamed or
+# dropped here now fails at this call rather than becoming NA at release.
+d_vocab <- dbGetQuery(con, "
+  SELECT CAST(species_id AS VARCHAR) AS ds_taxa_code,
+         scientific_name AS ds_scientific_name,
+         common_name     AS ds_common_name,
+         worms_id, itis_id, gbif_id
+  FROM species ORDER BY species_id")
+n_staged <- append_dataset_taxon(con, ds_key, d_vocab, ds_prefix = "calcofi")
+
+# build_taxon_reference() reads the WoRMS lineage `taxon` table built above
 # (build_taxon_hierarchy()) as the authority for rank/parent/classification, then
 # OVERWRITES `taxon` with the unified shape. prune_taxon_shard() trims it back to
 # the transitive parent closure of this dataset's vocabulary — the hierarchy is
@@ -1408,8 +1425,19 @@ ensure_taxon_xref(con, mt_taxon, tx_over,
 ensure_taxon_lineage(con, mt_taxon, tx_over,
                      cache_csv = here("metadata/taxon_lineage.csv"))
 n_taxon    <- build_taxon_reference(con, mt_taxon, tx_over)
-n_ds_taxon <- build_dataset_taxon(con,   mt_taxon, tx_over)
+n_ds_taxon <- resolve_dataset_taxon(con, mt_taxon, tx_over)
 n_pruned   <- prune_taxon_shard(con, ds_key)
+
+# the ingest asserts its own crosswalk (D6): every species code the observations
+# use is in the vocabulary, every staged row keys an authority id, every Aves
+# taxon keys itis:. Halts the render on any finding.
+obs_codes <- dbGetQuery(con,
+  "SELECT DISTINCT CAST(species_id AS VARCHAR) AS c FROM ichthyo
+   WHERE species_id IS NOT NULL")$c
+chk_taxon <- check_dataset_taxon(con, ds_key, codes = obs_codes)
+cat(glue("vocabulary: {n_staged} CalCOFI species codes staged; ",
+         "taxon {n_taxon} (pruned to {n_pruned$taxon}), ",
+         "dataset_taxon {n_ds_taxon}"), "\n")
 
 # sample — three chained levels. `site` has no datetime of its own, so it takes
 # the earliest tow time; `tow` and `net` inherit site_key/order_occ/grid_key/
