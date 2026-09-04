@@ -58,8 +58,17 @@ librarian::shelf(
   quiet = T)
 
 # which release to test? read the just-uploaded version from the local
-# release directory (most recent date-stamped folder under data/releases/)
-releases_dir <- here("data/releases")
+# release directory (most recent date-stamped folder). A STAGING run
+# (CALCOFI_RELEASE_PREFIX=ducklake-staging/releases) keeps its sidecars under
+# data/releases-staging/ — the same rule release_database.qmd applies — so the
+# version MUST be picked there: until 2026-09-04 this always read data/releases/,
+# and the 2026-08-28 staging run "passed" by testing the promoted v2026.08.25
+# instead of the staging catalog (no test_results.json ever landed under
+# data/releases-staging/). A false green is worse than a failure.
+release_prefix <- Sys.getenv("CALCOFI_RELEASE_PREFIX", "ducklake/releases")
+staging        <- release_prefix != "ducklake/releases"
+releases_dir   <- here(if (staging) "data/releases-staging" else "data/releases")
+if (staging) message(glue("STAGING run: testing the release under {releases_dir}"))
 release_dirs <- list.dirs(releases_dir, recursive = FALSE)
 release_dirs <- release_dirs[grepl("v[0-9]{4}[.][0-9]{2}[.]?[0-9]*$",
                                    basename(release_dirs))]
@@ -582,8 +591,7 @@ contract_res |>
 ```{r}
 #| label: save_results
 
-results_path <- file.path(here("data/releases"), release_version,
-                          "test_results.json")
+results_path <- file.path(releases_dir, release_version, "test_results.json")
 jsonlite::write_json(
   list(
     release_version = release_version,
