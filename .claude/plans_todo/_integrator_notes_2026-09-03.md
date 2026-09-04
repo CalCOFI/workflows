@@ -148,3 +148,17 @@ Continue the brief; hand back per the rules."
 - **Incident: `test_release.qmd`'s `save_results` chunk hardcoded the GCS upload path to the real prefix** (`gcs_release <- glue("ducklake/releases/{release_version}")`, ignoring `CALCOFI_RELEASE_PREFIX` that every other path in the file reads) — a staging test run wrote a real, phantom `gs://calcofi-db/ducklake/releases/v2026.09.04/test_results.json`. `latest.txt` on the real prefix was never at risk (the `promote` chunk's `stop()` on failed queries runs before `promote_release()` unconditionally). Found and reported by the agent; Ben fixed both the stray object (backed up, deleted) and the code (`ad99de5`, `release_prefix` var) within ~5 minutes.
 - `test_release` first run: 58 pass / **3 fail** (farallon "unreachable by worms_id" ×3 forms, n=123 each — some ERDDAP Aves resolve only via ITIS, MEGU/SBIG → `itis:1192602`) / 4 skip — correctly refused to promote. Ben fixed the contract to `worms_id OR itis_id` (`19a30fa`). Rerun (`test_release` only, `shortcut = TRUE`, `release_database` not re-executed, 8m8.8s): **61 pass / 0 fail / 4 skip**. `test_results.json` correctly landed at `gs://calcofi-db/ducklake-staging/releases/v2026.09.04/test_results.json`; staging `latest.txt` promoted to `v2026.09.04`. Re-verified real prefix untouched: 0 objects under `gs://calcofi-db/ducklake/releases/v2026.09.04`, real `latest.txt` still `v2026.08.25`.
 - Commits: `942cc51` (Section 1, 13 changed ingests, calcofi4db 4.0.1), `f16907b`/`8b1d71e` (Section 3 failed-attempt meta bookkeeping), `f03180a` (staging v2026.09.04 release_database success + the stray-bucket bug report), `8720586` (test_release green). Section 4 (the real release) NOT started — needs Ben's explicit go.
+
+### WS-F Section 5 — Explorer prefix flip (integrator, 2026-09-04 22:40)
+
+Measured: calcofi.io/explore read the explore-dev cut of v2026.08.25 while app.calcofi.io/hex already showed
+v2026.09.04 (Ben). Flipped both Pages builds (`/explore/` and the `/explore/v2/` preview) to
+`VITE_DATA_URL=https://storage.googleapis.com/calcofi-db/` + `VITE_RELEASE_PREFIX=ducklake/releases`
+(explore f71006d). Contract check before the push: every table the Explorer reads is a strict superset of
+the dev cut (obs_bio/obs_env +sample_key, measurement_prec, hex_id; dataset +6 attribution columns; cruise
++2; measurement_type +5; the rest identical). New `scripts/smoke_release.mjs` (headless, no window) drove the
+local build and then the live site: page names v2026.09.04, zero console/page errors, every calcofi-db
+object 200 (latest.txt, catalog, coverage, grid, spatial_layers, obs_bio, taxon, dataset, measurement_type,
+sample_spatial); the one "failed" request is DuckDB-WASM aborting its unused `duckdb-eh` bundle probe.
+The welcome card (agree-to-cite) shows once per browser (`explore_welcome` in localStorage); `?tour=on`
+forces it, `?tour=off` never shows it — verified on the local build with a screenshot.
