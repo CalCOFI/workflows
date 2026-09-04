@@ -118,6 +118,12 @@ eval(bquote(targets::tar_make(names = tidyselect::all_of(.(tgts)))))  # all of t
 
 There is no test suite or linter in this repo; correctness is enforced by the
 `/validate-ingest` checks and the validation chunks inside `release_database.qmd`.
+**A staging run must be tested as a staging run.** `test_release.qmd` picks the version
+from `data/releases-staging/` when `CALCOFI_RELEASE_PREFIX` is a staging prefix (since
+2026-09-04); before that it always read `data/releases/`, so the 2026-08-28 staging run "passed"
+by testing the promoted v2026.08.25. A staging run that leaves no `test_results.json` under
+`data/releases-staging/<version>/` did not test itself.
+
 `release_database.qmd` promotes `latest.txt` only after `test_release.qmd`'s
 consumer-contract query suite passes (it exercises the app/`calcofi4r` query
 shapes against the frozen release, so a schema drift that would break a consumer
