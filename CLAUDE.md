@@ -122,7 +122,13 @@ There is no test suite or linter in this repo; correctness is enforced by the
 from `data/releases-staging/` when `CALCOFI_RELEASE_PREFIX` is a staging prefix (since
 2026-09-04); before that it always read `data/releases/`, so the 2026-08-28 staging run "passed"
 by testing the promoted v2026.08.25. A staging run that leaves no `test_results.json` under
-`data/releases-staging/<version>/` did not test itself.
+`data/releases-staging/<version>/` did not test itself. **And it must not touch the real prefix
+either:** the same file's `save_results` chunk hardcoded `ducklake/releases/` in its upload path
+while every other path read the env var, so the 2026-09-04 staging test wrote a phantom
+`releases/v2026.09.04/test_results.json` to the real bucket (deleted by hand). Before a staging
+run, `grep -n '"ducklake/releases' *.qmd` must show only `Sys.getenv(..., "ducklake/releases")`
+defaults, never a literal in a path; and after it,
+`gcloud storage ls gs://calcofi-db/ducklake/releases/ | grep <version>` must be empty.
 
 `release_database.qmd` promotes `latest.txt` only after `test_release.qmd`'s
 consumer-contract query suite passes (it exercises the app/`calcofi4r` query
