@@ -300,11 +300,56 @@ qs_save_sheets_yml <- function(x, path = SHEETS_YML) {
   yaml::write_yaml(x[ord], path)
 }
 
-gs_ensure_spreadsheet <- function(provider, short, entry) {
+#' Where the sheets live. A service account has NO Drive storage quota, so a
+#' bare gs4_create() (which creates in the caller's own My Drive) answers 403
+#' PERMISSION_DENIED (measured 2026-09-03). Files created inside a Shared Drive
+#' are owned by the drive, so the script creates every sheet through the Drive
+#' API inside one folder there: `QS_DRIVE_FOLDER` (a folder id), or — by default —
+#' a folder named QS_FOLDER_NAME under QS_DRIVE_PARENT ("CalCOFI Data Folder",
+#' itself inside the org Shared Drive), created on first use and recorded in
+#' metadata/questions_sheets.yml under `_folder` so every later run reuses it.
+QS_DRIVE_PARENT <- Sys.getenv("QS_DRIVE_PARENT", "1KYo8-WiWpdYcvHU8CBPvPhJdJdOym0oW")
+QS_FOLDER_NAME  <- "questions"
+
+#' Shared-Drive-aware Drive API calls (googledrive's helpers scope a query to
+#' the drive, which a member of the FOLDER but not the DRIVE cannot see).
+qs_drive_list <- function(parent, mime = NULL) {
+  q <- sprintf("'%s' in parents and trashed = false", parent)
+  if (!is.null(mime)) q <- sprintf("%s and mimeType = '%s'", q, mime)
+  req <- googledrive::request_generate("drive.files.list", params = list(
+    q = q, supportsAllDrives = TRUE, includeItemsFromAllDrives = TRUE,
+    pageSize = 200, fields = "files(name,id,mimeType,webViewLink)"))
+  gargle::response_process(googledrive::request_make(req))$files
+}
+
+qs_ensure_folder <- function(yml, sheets_yml_path = SHEETS_YML) {
+  env_id <- Sys.getenv("QS_DRIVE_FOLDER", "")
+  if (nzchar(env_id)) return(env_id)
+  if (!is.null(yml[["_folder"]]$id) && nzchar(yml[["_folder"]]$id)) return(yml[["_folder"]]$id)
+  hits <- Filter(function(f) identical(f$name, QS_FOLDER_NAME),
+                 qs_drive_list(QS_DRIVE_PARENT, "application/vnd.google-apps.folder"))
+  if (length(hits)) {
+    id <- hits[[1]]$id; url <- hits[[1]]$webViewLink %||% NA_character_
+  } else {
+    f  <- googledrive::drive_mkdir(QS_FOLDER_NAME, path = googledrive::as_id(QS_DRIVE_PARENT))
+    id <- as.character(f$id); url <- f$drive_resource[[1]]$webViewLink %||% NA_character_
+    qcat("created Drive folder '{QS_FOLDER_NAME}' under {QS_DRIVE_PARENT}: {id}")
+  }
+  yml[["_folder"]] <- list(id = id, url = url, parent = QS_DRIVE_PARENT)
+  qs_save_sheets_yml(yml, sheets_yml_path)
+  id
+}
+
+gs_ensure_spreadsheet <- function(provider, short, entry, folder_id) {
   if (!is.null(entry$sheet_id) && nzchar(entry$sheet_id))
     return(googlesheets4::as_sheets_id(entry$sheet_id))
   name <- glue::glue("CalCOFI integrated database — questions for {short}")
-  googlesheets4::gs4_create(name, sheets = "README")
+  f  <- googledrive::drive_create(as.character(name), path = googledrive::as_id(folder_id),
+                                  type = "spreadsheet")
+  ss <- googlesheets4::as_sheets_id(as.character(f$id))
+  # drive_create() gives one tab named "Sheet1"; the README tab is the front page
+  googlesheets4::sheet_rename(ss, sheet = 1, new_name = "README")
+  ss
 }
 
 #' Push provider(s) questions.csv content to their Google Sheet.
@@ -348,38 +393,65 @@ gs_push_provider <- function(provider, sheets_yml_path = SHEETS_YML, execute = F
   if (is.na(short)) short <- provider
 
   is_new_sheet <- is.null(entry$sheet_id) || !nzchar(entry$sheet_id)
-  ss <- gs_ensure_spreadsheet(provider, short, entry)
+  folder_id <- qs_ensure_folder(yml, sheets_yml_path)
+  yml <- qs_load_sheets_yml(sheets_yml_path)   # qs_ensure_folder() may have written _folder
+  ss <- gs_ensure_spreadsheet(provider, short, entry, folder_id)
   if (is_new_sheet) {
     meta <- googlesheets4::gs4_get(ss)
     yml[[provider]] <- list(sheet_id = as.character(ss), url = meta$spreadsheet_url,
                              created = format(Sys.Date()))
     qs_save_sheets_yml(yml, sheets_yml_path)
+    # the folder's own sharing (Shared Drive membership) is what normally grants
+    # access; per-file sharing is additive, silent (no notification e-mail — the
+    # provider e-mail carries the link), and a refusal is reported, not fatal
     share_with <- setdiff(tolower(share_with), getOption("qs.auth_user", character()))
-    for (email in share_with)
-      googledrive::drive_share(googledrive::as_id(as.character(ss)), role = "writer",
-                                type = "user", emailAddress = email)
-    qcat("created {meta$spreadsheet_url}, shared with {paste(share_with, collapse=', ')}")
+    shared <- character()
+    for (email in share_with) {
+      ok <- tryCatch({
+        googledrive::drive_share(googledrive::as_id(as.character(ss)), role = "writer",
+                                  type = "user", emailAddress = email,
+                                  sendNotificationEmail = FALSE); TRUE },
+        error = function(e) { qcat("  share with {email} refused: {substr(conditionMessage(e), 1, 80)}"); FALSE })
+      if (ok) shared <- c(shared, email)
+    }
+    qcat("created {meta$spreadsheet_url} in folder {folder_id}; shared with {paste(shared, collapse=', ')}")
   }
 
   googlesheets4::sheet_write(qs_readme_content(short), ss = ss, sheet = "README")
-  existing_tabs <- tryCatch(googlesheets4::sheet_names(ss), error = function(e) character())
 
   for (pl in plan) {
-    is_new_tab <- !(pl$tab %in% existing_tabs)
     googlesheets4::sheet_write(pl$df, ss = ss, sheet = pl$tab)
-    if (is_new_tab) {
-      props <- googlesheets4::sheet_properties(ss)
-      sid   <- props$id[props$name == pl$tab]
-      reqs  <- c(qs_protection_requests(sid, names(pl$df)),
-                 list(qs_validation_request(sid, names(pl$df), nrow(pl$df))))
+    # protection + validation are applied once per tab: skipped when the tab
+    # already carries a protected range (sheet_write() keeps them, so re-adding
+    # on every push would pile up duplicates; an interrupted first push is
+    # therefore completed by the next one, not left unprotected)
+    props <- googlesheets4::sheet_properties(ss)
+    sid   <- props$id[props$name == pl$tab]
+    protect <- !qs_tab_is_protected(ss, sid)
+    if (protect) {
+      reqs <- c(qs_protection_requests(sid, names(pl$df)),
+                list(qs_validation_request(sid, names(pl$df), nrow(pl$df))))
+      # gargle's endpoint registry takes the batchUpdate body fields as params
       googlesheets4::request_make(googlesheets4::request_generate(
         "sheets.spreadsheets.batchUpdate",
-        params = list(spreadsheetId = as.character(ss), body = list(requests = reqs))))
+        params = list(spreadsheetId = as.character(ss), requests = reqs)))
     }
     if (pl$n_stamped > 0) qs_write_questions_csv(pl$df, pl$path)
-    qcat("  wrote {pl$tab} ({nrow(pl$df)} rows){if (is_new_tab) ' + protection/validation' else ''}")
+    qcat("  wrote {pl$tab} ({nrow(pl$df)} rows){if (protect) ' + protection/validation' else ''}")
   }
   invisible(ss)
+}
+
+#' Does a tab already carry any protected range?
+qs_tab_is_protected <- function(ss, sid) {
+  req <- googlesheets4::request_generate("sheets.spreadsheets.get", params = list(
+    spreadsheetId = as.character(ss),
+    fields = "sheets(properties(sheetId),protectedRanges(protectedRangeId))"))
+  js <- gargle::response_process(googlesheets4::request_make(req))
+  for (sh in js$sheets)
+    if (identical(as.numeric(sh$properties$sheetId), as.numeric(sid)))
+      return(length(sh$protectedRanges %||% list()) > 0)
+  FALSE
 }
 
 #' Pull provider(s) editable columns back from their Google Sheet into
