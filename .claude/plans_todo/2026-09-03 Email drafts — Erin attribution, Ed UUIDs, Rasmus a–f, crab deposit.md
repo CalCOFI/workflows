@@ -143,8 +143,13 @@ Three new ones from this week's work, for you and Ben G:
 - **DIC bottles that share no Niskin with the bottle database** (3,255 of 3,262) reach the release
   with no cruise at all; the NCEI EXPOCODE would resolve them, and that one is for Todd and Aaron.
 
-All of the CalCOFI-curated questions (bottle, CTD, METS, DIC, hydro-master, phyllosoma,
-phytoplankton), pre-answered where we could, are in one sheet you can edit in place:
+Thanks too for the four CTD answers you left in the older sheet (−99 reads as NULL; the extreme
+pH, O2 and temperature values are QC misses the team will flag upstream, not a units error, while raw
+voltage outliers are left alone; the bottle database, not the cast files, is authoritative for
+ammonium; no flag columns exist for the bottle values in the cast files). They are recorded, and I
+have retired that sheet in favour of one per provider. All of the CalCOFI-curated questions (bottle,
+CTD, METS, DIC, hydro-master, phyllosoma, phytoplankton), pre-answered where we could and marked
+"proposed", are in this one, which you can edit in place, one tab per dataset:
 https://docs.google.com/spreadsheets/d/1uW9GLogdD2K6NiQGS_xJiIPFUPUvifWesrLlK5UUK7g/edit
 
 Cheers, Ben
