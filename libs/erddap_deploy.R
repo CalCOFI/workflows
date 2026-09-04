@@ -57,19 +57,36 @@ ssh_run <- function(host, cmd, what = "remote command") {
 #' `…/{table}/{col}={val}/data_0.parquet` — rather than `cp -r` of a version
 #' prefix that only exists for promoted/consolidated versions. Unchanged
 #' objects (same size on disk) are skipped.
-erddap_sync_parquet <- function(host, erddap_root, release, gcs_bucket = "calcofi-db") {
-  cat_ <- calcofi4r::cc_catalog(release)
-  pairs <- unlist(lapply(cat_$tables, function(t) {
+#' The copy manifest for one release: "gs://src dst" lines, one per parquet
+#' object, mirroring the catalog into {erddap_root}/datasets/release/{release}/parquet/
+#' as {table}.parquet or {table}/{partition_by}={value}/data_0.parquet.
+#' Pure (no ssh), so it can be dry-run against a catalog. A partitioned table may
+#' ALSO publish a whole-table twin (obs does since v2026.08.25: 15 partitions +
+#' obs.parquet); the twin has no partition_by, and mapping over every object put
+#' character(0) into vapply() — which is how the v2026.09.04 deploy died. Only
+#' the partition objects are copied; the ERDDAP view db reads the partitions.
+erddap_sync_manifest <- function(cat_, erddap_root, release, gcs_bucket = "calcofi-db") {
+  unlist(lapply(cat_$tables, function(t) {
     src <- calcofi4r::cc_release_sources(cat_, t$name)
     if (any(startsWith(src$urls, "s3://")))
       stop(glue::glue("{t$name}: legacy catalog without objects[]; cannot build the copy manifest"))
+    objs <- if (isTRUE(t$partitioned))
+      Filter(function(o) !is.null(o$partition_by) && !is.null(o$partition_value), t$objects)
+    else t$objects
+    if (!length(objs)) stop(glue::glue("{t$name}: no copyable objects in the catalog"))
     dst <- if (isTRUE(t$partitioned)) {
-      vapply(t$objects, function(o)
+      vapply(objs, function(o)
         sprintf("%s/%s=%s/data_0.parquet", t$name, o$partition_by, o$partition_value), "")
     } else sprintf("%s.parquet", t$name)
-    gs <- sub("^https://storage.googleapis.com/", "gs://", src$urls)
+    gs <- vapply(objs, function(o) sprintf("gs://%s/%s", gcs_bucket, sub("^/", "", o$path)), "")
+    stopifnot(length(gs) == length(dst))
     sprintf("%s %s/datasets/release/%s/parquet/%s", gs, erddap_root, release, dst)
   }))
+}
+
+erddap_sync_parquet <- function(host, erddap_root, release, gcs_bucket = "calcofi-db") {
+  cat_  <- calcofi4r::cc_catalog(release)
+  pairs <- erddap_sync_manifest(cat_, erddap_root, release, gcs_bucket)
   manifest <- tempfile(fileext = ".txt"); writeLines(pairs, manifest)
   remote <- sprintf("/tmp/erddap_sync_%s.txt", release)
   system2("scp", c("-q", manifest, sprintf("%s:%s", host, remote)))
