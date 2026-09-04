@@ -398,11 +398,15 @@ obs_rows <- function(R, tag) tibble::tribble(
   # Include=0 (fish, and non-target sightings) — and a LEFT JOIN reports those as
   # a NULL worms_id too. Without the filter this asserts "every observation has a
   # taxon", which is a different (and false) claim than the one intended.
-  glue("integrity: no farallon obs left unreachable by worms_id [{tag}]"), "zero", glue(
+  # birds key on ITIS by rule (class Aves, calcofi4db >= 3.29.0), and WoRMS has no record at all for
+  # some of them — Larus brachyrhynchus and the subspecies Hydrobates leucorhous chapmani, 123
+  # farallon rows at v2026.09.04 — so "reachable by worms_id" stopped being the invariant. What
+  # must never happen again is a farallon observation with NO authority id (59,858 rows in 2026-07).
+  glue("integrity: no farallon obs left unreachable by an authority id (worms_id or itis_id) [{tag}]"), "zero", glue(
     "SELECT count(*) n FROM {R('obs')} o
        LEFT JOIN {rp('taxon')} t ON t.taxon_key = o.taxon_key
      WHERE o.dataset_key='farallon_bird-mammal'
-       AND o.taxon_key IS NOT NULL AND t.worms_id IS NULL"),
+       AND o.taxon_key IS NOT NULL AND t.worms_id IS NULL AND t.itis_id IS NULL"),
   glue("consumer: station coverage rollup (obs GROUP BY grid,dataset) [{tag}]"), "nonzero", glue(
     "SELECT count(*) n FROM (
        SELECT grid_key, dataset_key, count(*), count(DISTINCT sample_key), count(DISTINCT cruise_key)
@@ -433,9 +437,9 @@ pair_rows <- tibble::tribble(
   "consumer: seabird/mammal taxa reachable by worms_id [obs_bio]", "nonzero", glue(
     "SELECT count(*) n FROM {rp('obs_bio')} o JOIN {rp('taxon')} t ON t.taxon_key = o.taxon_key
      WHERE o.dataset_key='farallon_bird-mammal' AND t.worms_id IS NOT NULL"),
-  "integrity: no farallon obs_bio left unreachable by worms_id [obs_bio]", "zero", glue(
+  "integrity: no farallon obs_bio left unreachable by an authority id (worms_id or itis_id) [obs_bio]", "zero", glue(
     "SELECT count(*) n FROM {rp('obs_bio')} o LEFT JOIN {rp('taxon')} t ON t.taxon_key = o.taxon_key
-     WHERE o.dataset_key='farallon_bird-mammal' AND o.taxon_key IS NOT NULL AND t.worms_id IS NULL"),
+     WHERE o.dataset_key='farallon_bird-mammal' AND o.taxon_key IS NOT NULL AND t.worms_id IS NULL AND t.itis_id IS NULL"),
   "consumer: station coverage rollup (obs_bio + obs_env GROUP BY grid,dataset) [pair]", "nonzero", glue(
     "SELECT count(*) n FROM (
        SELECT grid_key, dataset_key, count(*), count(DISTINCT sample_key), count(DISTINCT cruise_key)
