@@ -265,7 +265,7 @@ cat(glue("mesopelagic_fish_tow {nrow(d_tow)}, mesopelagic_fish_measurement {nrow
 The source names taxa in its column headers, so the dataset has no local taxon
 code — `scientific_name` *is* the code. Resolve each of the 90 named species
 against WoRMS with `calcofi4db::standardize_species()` into
-`mesopelagic_fish_taxon`, which `build_dataset_taxon()` then crosswalks into the
+`mesopelagic_fish_taxon`, which `resolve_dataset_taxon()` then crosswalks into the
 global `taxon` table so `obs.taxon_key` is populated at release time. The
 `UnidentifiedFish` catch-all column carries no name and is excluded here (its
 measurements survive with a NULL `scientific_name`).
@@ -440,6 +440,19 @@ tx_over  <- read_csv(here("metadata/taxon_override.csv"), show_col_types = FALSE
 # switch(dataset_key, ...) arm inside calcofi4db. The reusable SHAPES stay in the
 # package (sample_arm_self / compat_measurement_sql), so this is a declaration.
 
+# the vocabulary is DECLARED here and RESOLVED by the package (taxon plan D1,
+# calcofi4db >= 3.29.0). `ds_taxa_code` IS the verbatim spreadsheet header (the
+# source has no local code), so `obs` joins dataset_taxon on the name it stores
+# on the measurement row -- which is exactly why the " sp." suffix must NOT be
+# cleaned out of the code: rewriting it would orphan every observation of those
+# six taxa. The lookup name is cleaned instead, inside the xref name fallback.
+d_vocab <- dbGetQuery(con, "
+  SELECT scientific_name           AS ds_taxa_code,
+         scientific_name           AS ds_scientific_name,
+         CAST(worms_id AS INTEGER) AS worms_id
+  FROM mesopelagic_fish_taxon ORDER BY taxon_id")
+n_staged <- append_dataset_taxon(con, ds_key, d_vocab)
+
 # cross-reference: resolve each taxon against BOTH authorities (cached in
 # metadata/taxon_xref.csv, so a re-run costs no API calls). This fills the
 # `worms_id` COLUMN on itis:-keyed taxa without touching their key — a consumer
@@ -460,7 +473,17 @@ ensure_taxon_xref(con, mt_taxon, tx_over,
 ensure_taxon_lineage(con, mt_taxon, tx_over,
                      cache_csv = here("metadata/taxon_lineage.csv"))
 n_taxon    <- build_taxon_reference(con, mt_taxon, tx_over)
-n_ds_taxon <- build_dataset_taxon(con,   mt_taxon, tx_over)
+n_ds_taxon <- resolve_dataset_taxon(con, mt_taxon, tx_over)
+
+# the ingest asserts its own crosswalk (D6): every name the measurements use is
+# in the vocabulary and every staged row keys an authority id. Halts on any
+# finding.
+obs_codes <- dbGetQuery(con,
+  "SELECT DISTINCT scientific_name AS c FROM mesopelagic_fish_measurement
+   WHERE scientific_name IS NOT NULL")$c
+chk_taxon <- check_dataset_taxon(con, ds_key, codes = obs_codes)
+cat(glue("vocabulary: {n_staged} species staged; taxon {n_taxon}, ",
+         "dataset_taxon {n_ds_taxon}"), "\n")
 
 append_sample(con, sample_arm_self(
   ds_key, "mesopelagic_fish_tow", "tow_id", "tow", site_expr = "site_key",
@@ -531,7 +554,7 @@ if (length(results$errors) > 0)
 # remaining errors are NULL authority ids on mesopelagic_fish_taxon: species
 # WoRMS or ITIS does not carry. They are reported by name above so a curator can
 # act on them; nothing downstream requires a non-NULL worms_id (obs.taxon_key
-# falls back to a dataset-local key via build_dataset_taxon()).
+# falls back to a dataset-local key via resolve_dataset_taxon()).
 
 dir_create(dir_parquet)
 tbls_out <- core_output_tables(con, extra = c("measurement_type", "dataset"))
