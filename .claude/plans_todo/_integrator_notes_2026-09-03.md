@@ -120,6 +120,11 @@ calcofi 1uW9GLogdD2K6NiQGS_xJiIPFUPUvifWesrLlK5UUK7g · swfsc 1kQM6aw3yiT1AZAmFf
 - 3b list: drop override rows GUMU/MABO/NABO/CSLI (+ code 600 after the csv fix); migrate ichthyo, phyto, zoodb, zooscan, euphausiids, mesopelagic to `append_dataset_taxon()`; phyto/crab positional `build_taxon_group()`; delete `.override_match_alias` with the arms → phyto `taxa` rows become `ds_common_name` rows; calcofi4db 4.0.0.
 - Worktree base carried Ben's `aa43cde` (provider.csv SWFSC → NOAA SWFSC), not on local main → kept on branch `keep-provider-swfsc-aa43cde`; check origin.
 
+## E-Ph3a + 3b INTEGRATED (2026-09-04) — calcofi4db main 3.33.0 (a36674c) → **4.0.0 (419a674)**: 3b merged + the upsert fix; 1,774 tests; installed. workflows main: 087b2d6 (3a) → merge of `ws-e3b` @ 85aca44
+- 3b gate: ichthyo 1,167/1,167, zoodb 33/33, zooscan 23/23, euphausiids 37/37 (+1 unreferenced `euphausiidae` vocabulary row leaves), mesopelagic 90/90; phyto 302/393 change by design (22 → 309 keys; taxon 50 → 542; taxon_group 24 → 311; 124,586 obs re-keyed); code 600 fixed in `taxon_worms.csv`. Six shards re-rendered into `~/_big/calcofi/parquet/` — WS-F re-renders them anyway. `_output/` untouched. Farallon not re-rendered (3a's 164/164 stands).
+- **BLOCKER FIXED in 4.0.0:** `upsert_measurement_types()` keeps the registry-owned fields (`declarable_measurement_fields()`) across an ingest re-run — registry value wins even over an explicit literal; new types take the literal (test added). Without it every re-run ingest blanked H2's ids and DG's `is_canonical = FALSE`.
+- 3b kept the `build_dataset_taxon()` deprecated alias; the measurement-path notebooks call `resolve_dataset_taxon()`.
+
 ## Resume message (send to each when Ben is back)
 "Resume from your checkpoint (`.claude/plans_todo/_checkpoint_ws-<id>.md` on your branch). Two things
 changed: (1) `.claude/worktrees/calcofi4db` and `calcofi4r` are now symlinks to the sibling repos, so
