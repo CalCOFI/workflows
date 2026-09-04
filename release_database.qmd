@@ -149,6 +149,15 @@ tables_prefix  <- Sys.getenv("CALCOFI_TABLES_PREFIX",  "ducklake/tables")
 release_layout <- match.arg(Sys.getenv("CALCOFI_RELEASE_LAYOUT", "compat"),
                             c("compat", "canonical"))
 staging <- release_prefix != "ducklake/releases"
+# a STAGING run must not write the SHARED content store either: canonical objects are
+# keyed by row signature, a row-identical re-export is not byte-identical for every
+# table, and an upload into ducklake/tables/ silently replaced the promoted release's
+# bytes on 2026-09-04 (173 objects; the real run then server-side copied those bytes
+# while its catalog described the local files). Stage the store under its own prefix.
+if (staging && tables_prefix == calcofi4db::CC_TABLES_PREFIX)
+  stop(glue("a staging run (CALCOFI_RELEASE_PREFIX={release_prefix}) must set ",
+            "CALCOFI_TABLES_PREFIX to a staging prefix (e.g. ducklake-staging/tables); ",
+            "it must never write the shared {tables_prefix}/ store"))
 # a STAGING run must not touch the real release's local record: its sidecars and
 # parquet land under *-staging roots keyed by the same date-derived version
 sidecar_root <- if (staging) "data/releases-staging" else "data/releases"

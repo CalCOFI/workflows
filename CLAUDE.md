@@ -129,6 +129,16 @@ while every other path read the env var, so the 2026-09-04 staging test wrote a 
 run, `grep -n '"ducklake/releases' *.qmd` must show only `Sys.getenv(..., "ducklake/releases")`
 defaults, never a literal in a path; and after it,
 `gcloud storage ls gs://calcofi-db/ducklake/releases/ | grep <version>` must be empty.
+**And a staging run must not write the shared content store**: set
+`CALCOFI_TABLES_PREFIX=ducklake-staging/tables` alongside the release prefix
+(`release_database.qmd` now stops otherwise). Canonical objects are keyed by *row signature*,
+and a row-identical re-export is not byte-identical for `obs_ctd_full`, `obs_mets_full` or
+`obs`'s CTD/METS partitions, so the 2026-09-04 staging run's uploads into `ducklake/tables/`
+replaced 173 of v2026.08.25's objects with different bytes; the real run then server-side
+copied those bytes into `releases/v2026.09.04/parquet/` while its catalog described the local
+files, and `scripts/verify_release_objects.R` flagged all 173. calcofi4db 4.0.3's
+`freeze_plan()` records the copied object's bytes/sha256 (not the local export's) so the
+catalog is true either way; the prefix rule is what keeps the store immutable.
 
 `release_database.qmd` promotes `latest.txt` only after `test_release.qmd`'s
 consumer-contract query suite passes (it exercises the app/`calcofi4r` query

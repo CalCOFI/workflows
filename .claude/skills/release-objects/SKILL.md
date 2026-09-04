@@ -35,8 +35,12 @@ copy only for the promoted and consolidated versions (`metadata/release_policy.y
   all go through the catalog. A partitioned table is an explicit https file list with
   `hive_partitioning = true` — no anonymous-S3 glob needed.
 - **Staging a release run** without touching the real prefix: `CALCOFI_RELEASE_PREFIX=
-  ducklake-staging/releases`, `CALCOFI_RELEASE_LAYOUT=compat|canonical`,
-  `CALCOFI_TABLES_PREFIX`; sidecars go to `data/releases-staging/` (gitignored), parquet to
+  ducklake-staging/releases`, `CALCOFI_RELEASE_LAYOUT=compat|canonical`, **and**
+  `CALCOFI_TABLES_PREFIX=ducklake-staging/tables` (required since 2026-09-04 — the shared
+  store is immutable by policy, and a staging upload of a row-identical, byte-different
+  re-export replaced 173 promoted objects; `release_database.qmd` stops without it). A
+  `copy`/`exists` object's catalog `bytes`/`sha256` are the previous release's (calcofi4db
+  4.0.3), the local export's live in `bytes_local`/`sha256_local`. Sidecars go to `data/releases-staging/` (gitignored), parquet to
   `~/_big/calcofi/releases-staging/`, `promote_unreleased()` is skipped, and `test_release.qmd`
   promotes under the same prefix. `scratchpad`-style detached launches survive the harness.
 - **`storage.calcofi.io`**: `server/caddy/Caddyfile` maps a 404 on a legacy parquet path to a
