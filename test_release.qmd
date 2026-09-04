@@ -607,8 +607,11 @@ jsonlite::write_json(
   results_path,
   auto_unbox = TRUE, pretty = TRUE, null = "null")
 
+# under the staging prefix too: this line hardcoded "ducklake/releases" while every other path in the
+# file read CALCOFI_RELEASE_PREFIX, so a staging test wrote test_results.json to the REAL prefix (a
+# phantom releases/v2026.09.04/ on 2026-09-04, deleted by hand). release_prefix is set in `setup`.
 gcs_bucket  <- "calcofi-db"
-gcs_release <- glue("ducklake/releases/{release_version}")
+gcs_release <- glue("{release_prefix}/{release_version}")
 put_gcs_file(results_path,
   glue("gs://{gcs_bucket}/{gcs_release}/test_results.json"))
 message(glue("test_results.json uploaded for {release_version}"))
