@@ -14,6 +14,8 @@ erDiagram
         varchar cruise_key PK
         date date_min
         date date_max
+        varchar cruise_key_method
+        varchar cruise_key_datasets
         int year
         int month
         varchar ship_name
@@ -42,6 +44,12 @@ erDiagram
         varchar coverage_spatial
         varchar license
         varchar pi_names
+        varchar doi
+        varchar license_url
+        varchar acknowledgement
+        varchar contact
+        date source_accessed
+        varchar source_accessed_method
     }
     dataset_taxon {
         varchar ds_taxon_key PK
@@ -50,6 +58,7 @@ erDiagram
         varchar ds_scientific_name
         varchar ds_common_name
         varchar ds_taxa_code
+        varchar ds_source_json
     }
     grid {
         varchar grid_key PK
@@ -90,6 +99,11 @@ erDiagram
         varchar _qual_column
         varchar _prec_column
         varchar grain
+        varchar denominator
+        varchar category
+        varchar variable
+        varchar nerc_p01
+        varchar units_nerc_p06
         varchar provider
         varchar dataset
     }
@@ -152,7 +166,10 @@ erDiagram
         varchar tow_type
         varchar data_stage
         geometry geom
+        uuid source_uuid
         double seafloor_depth_m
+        uuid station_uuid FK
+        varchar station_uuid_method
     }
     sample_measurement {
         bigint sample_measurement_id PK
@@ -252,6 +269,7 @@ erDiagram
     dataset ||--o{ dataset_taxon : "dataset_key"
     taxon ||--o{ taxon_group : "taxon_key"
     taxon ||--o{ taxon : "parent_taxon_key"
+    sample ||--o{ sample : "station_uuid"
     classDef _e8e8e8 stroke:#e8e8e8,stroke-width:3px
     class sample,obs,sample_measurement,measurement_type,obs_attribute,cruise,dataset _e8e8e8
     classDef _dcdcdc stroke:#dcdcdc,stroke-width:3px
