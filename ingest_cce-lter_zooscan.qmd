@@ -503,6 +503,24 @@ tx_over  <- read_csv(here("metadata/taxon_override.csv"), show_col_types = FALSE
 # switch(dataset_key, ...) arm inside calcofi4db. The reusable SHAPES stay in the
 # package (sample_arm_self / compat_measurement_sql), so this is a declaration.
 
+# the vocabulary is DECLARED here and RESOLVED by the package (taxon plan D1,
+# calcofi4db >= 3.29.0): append_dataset_taxon() stages one `dataset_taxon` row
+# per local taxon_id with `taxon_key` empty and the AphiaID the SOURCE supplied
+# carried along as `ds_source_json`; resolve_dataset_taxon() fills the key from
+# the authorities. There is no zooscan arm inside calcofi4db any more -- a column
+# renamed or dropped here now fails at this call rather than becoming NA at
+# release. The source's denormalized lineage columns are NOT staged: the
+# classification the release publishes comes from ensure_taxon_lineage(), the
+# authority, not from the export's copy of it.
+d_vocab <- dbGetQuery(con, "
+  SELECT CAST(taxon_id AS VARCHAR) AS ds_taxa_code,
+         scientific_name           AS ds_scientific_name,
+         taxon_zooscan AS ds_common_name,
+         CAST(aphia_id AS INTEGER) AS worms_id,
+         rank
+  FROM zooscan_taxon ORDER BY taxon_id")
+n_staged <- append_dataset_taxon(con, ds_key, d_vocab)
+
 # cross-reference: resolve each taxon against BOTH authorities (cached in
 # metadata/taxon_xref.csv, so a re-run costs no API calls). This fills the
 # `worms_id` COLUMN on itis:-keyed taxa without touching their key — a consumer
@@ -523,7 +541,27 @@ ensure_taxon_xref(con, mt_taxon, tx_over,
 ensure_taxon_lineage(con, mt_taxon, tx_over,
                      cache_csv = here("metadata/taxon_lineage.csv"))
 n_taxon    <- build_taxon_reference(con, mt_taxon, tx_over)
-n_ds_taxon <- build_dataset_taxon(con,   mt_taxon, tx_over)
+n_ds_taxon <- resolve_dataset_taxon(con, mt_taxon, tx_over)
+
+# the ingest asserts its own crosswalk (D6). ZooScan's bioclasses are
+# OPERATIONAL, not taxonomic: four of the 23 name a life stage or an image
+# artefact rather than an organism, so they key dataset-locally by declaration --
+# one key at a time, so a genuinely unresolved taxon cannot hide among them (Q03).
+local_allow <- tibble::tribble(
+  ~ds_taxa_code, ~why,
+  "13", "eggs - a life stage, not a taxon",
+  "15", "multiples - more than one organism in the vignette",
+  "16", "nauplii - a crustacean larval stage across taxa",
+  "18", "others - the residual bioclass")
+obs_codes <- dbGetQuery(con,
+  "SELECT DISTINCT CAST(taxon_id AS VARCHAR) AS c FROM zooscan_measurement
+   WHERE taxon_id IS NOT NULL")$c
+chk_taxon <- check_dataset_taxon(
+  con, ds_key, allow = paste0(ds_key, ":", local_allow$ds_taxa_code),
+  codes = obs_codes)
+cat(glue("vocabulary: {n_staged} bioclasses staged; {nrow(local_allow)} keyed ",
+         "dataset-locally by declaration; taxon {n_taxon}, ",
+         "dataset_taxon {n_ds_taxon}"), "\n")
 
 append_sample(con, sample_arm_self(
   ds_key, "zooscan_sample", "sample_id", "tow",
