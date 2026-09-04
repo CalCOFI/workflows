@@ -586,6 +586,22 @@ Shared taxonomy refs — `taxon` (one row per taxon, `taxon_key` = `worms:<id>`,
 `calcofi4db/R/taxa.R`. The rules that are not negotiable, with their mechanics and
 history in the **`taxon-reference` skill** (load it before touching taxon code in
 an ingest, `R/taxa.R` or a taxon metadata CSV):
+- **The ingest declares its vocabulary; the package resolves it. There are no
+  per-dataset arms in `calcofi4db`** (4.0.0 deleted all seven — `species`,
+  `phyto_taxon`, `zoodb_taxon`, `zooscan_taxon`, `euphausiids_taxon`,
+  `mesopelagic_fish_taxon`, `bird_mammal_species`). A taxon-bearing ingest calls,
+  in this order and before `append_obs()`:
+  `append_dataset_taxon(con, ds_key, df)` (the contract is `ds_taxa_code` +
+  `ds_scientific_name`, optionally `ds_common_name` / `worms_id` / `itis_id` /
+  `gbif_id` / `rank`; an unknown or missing column is an error, and the ids the
+  source supplied are stored as `ds_source_json`) → `ensure_taxon_xref()` →
+  `ensure_taxon_lineage()` → `resolve_dataset_taxon()` → `build_taxon_reference()`
+  and `build_taxon_group(con, read_taxon_group_rules(here("metadata/taxon_group.csv")))`
+  → `check_dataset_taxon(con, ds_key, allow =, codes =)`.
+  `ingest_farallon_bird-mammal.qmd` is the worked example. An ingest that has not
+  migrated **errors** at `resolve_dataset_taxon()`, naming the working table it
+  left in the connection. The composite-measurement path (cufes, phyllosoma,
+  crab: `metadata/measurement_taxon.csv`) is untouched by this and stays.
 - Call `ensure_taxon_xref()` **then** `ensure_taxon_lineage()` **then** the
   builders. A key must be an *accepted* id; a cross-reference id is whatever the
   authority links. Skip either step and taxa ship with no ids, ranks or
@@ -594,7 +610,9 @@ an ingest, `R/taxa.R` or a taxon metadata CSV):
   (rewriting the code orphans every `obs` row of that taxon).
 - Stage `measurement_taxon.csv` with `ensure_measurement_taxon()`, never
   `dbWriteTable()`; `taxon_override.csv` rows match on their own `match_column`,
-  and an unknown `dataset_key` there errors.
+  which is one of `dataset_taxon`'s `ds_taxa_code` / `ds_scientific_name` /
+  `ds_common_name` (the arms' own column names went with the arms), and an
+  unknown `dataset_key` there errors.
 - **An override never replaces an id the source supplied** (Ben, 2026-09-04;
   calcofi4db ≥ 3.33.0). A row matched on a non-code column (`ds_common_name`,
   `ds_scientific_name`) applies only where the source supplied no `worms_id` /

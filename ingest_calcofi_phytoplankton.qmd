@@ -318,8 +318,29 @@ tx_over  <- read_csv(here("metadata/taxon_override.csv"), show_col_types = FALSE
 # This projection lives here, in the notebook that owns the dataset, not in a
 # switch(dataset_key, ...) arm inside calcofi4db. The reusable SHAPES stay in the
 # package (sample_arm_self / compat_measurement_sql), so this is a declaration.
-# The coarse functional groups (NULL aphia_id) resolve via taxon_override.csv,
-# keyed on phyto_taxon.taxa — hence tx_over is required, not optional.
+#
+# The vocabulary is DECLARED here and RESOLVED by the package (taxon plan D1,
+# calcofi4db >= 3.29.0): append_dataset_taxon() stages one `dataset_taxon` row
+# per species_code with `taxon_key` empty and the AphiaID the SOURCE supplied
+# carried along as `ds_source_json`; resolve_dataset_taxon() fills the key.
+#
+# The functional-group label (`taxa`: "diatom, centric", ...) is what the source
+# CALLS the row, so it is `ds_common_name` — the group itself is a
+# metadata/taxon_group.csv rule (D4) matched on that column, never the key. The
+# six functional-group rows in taxon_override.csv now match on `ds_common_name`
+# and, under the override rule (Ben, 2026-09-04; calcofi4db >= 3.33.0), apply
+# ONLY to the codes whose source supplied no AphiaID. v2026.08.25 released 22
+# taxon_keys for 393 codes because those six rows replaced the AphiaID of every
+# species in their group; the finest AphiaID the source supplies keys the taxon.
+
+d_vocab <- dbGetQuery(con, "
+  SELECT CAST(species_code AS VARCHAR) AS ds_taxa_code,
+         scientific_name_accepted      AS ds_scientific_name,
+         taxa                          AS ds_common_name,
+         CAST(aphia_id AS INTEGER)     AS worms_id,
+         rank
+  FROM phyto_taxon ORDER BY species_code")
+n_staged <- append_dataset_taxon(con, ds_key, d_vocab)
 
 # cross-reference: resolve each taxon against BOTH authorities (cached in
 # metadata/taxon_xref.csv, so a re-run costs no API calls). This fills the
@@ -341,8 +362,34 @@ ensure_taxon_xref(con, mt_taxon, tx_over,
 ensure_taxon_lineage(con, mt_taxon, tx_over,
                      cache_csv = here("metadata/taxon_lineage.csv"))
 n_taxon    <- build_taxon_reference(con, mt_taxon, tx_over)
-n_ds_taxon <- build_dataset_taxon(con,   mt_taxon, tx_over)
-n_tx_group <- build_taxon_group(con,     mt_taxon, tx_over)
+n_ds_taxon <- resolve_dataset_taxon(con, mt_taxon, tx_over)
+n_tx_group <- build_taxon_group(con, read_taxon_group_rules(here("metadata/taxon_group.csv")))
+
+# the ingest asserts its own crosswalk (D6). The codes that legitimately key
+# dataset-locally are declared ONE AT A TIME: nine codes the abundance sheet
+# uses that the Definitions sheet never defines (Q05) and one the source itself
+# labels "other" with no name to look up. A new unresolved code cannot hide
+# among them — it fails the render here.
+local_allow <- tibble::tribble(
+  ~ds_taxa_code, ~why,
+  "4",   "undefined (code not in source definitions; Q05)",
+  "59",  "undefined (code not in source definitions; Q05)",
+  "218", "undefined (code not in source definitions; Q05)",
+  "229", "undefined (code not in source definitions; Q05)",
+  "232", "source label 'other' — no name to resolve",
+  "300", "undefined (code not in source definitions; Q05)",
+  "454", "undefined (code not in source definitions; Q05)",
+  "532", "undefined (code not in source definitions; Q05)",
+  "540", "undefined (code not in source definitions; Q05)",
+  "596", "undefined (code not in source definitions; Q05)")
+obs_codes <- dbGetQuery(con,
+  "SELECT DISTINCT CAST(species_code AS VARCHAR) AS c FROM phyto_measurement")$c
+chk_taxon <- check_dataset_taxon(
+  con, ds_key, allow = paste0(ds_key, ":", local_allow$ds_taxa_code),
+  codes = obs_codes)
+cat(glue("vocabulary: {n_staged} codes staged; {nrow(local_allow)} keyed ",
+         "dataset-locally by declaration; taxon {n_taxon}, ",
+         "dataset_taxon {n_ds_taxon}, taxon_group {n_tx_group}"), "\n")
 
 append_sample(con, sample_arm_self(
   ds_key, "phyto_sample", "phyto_sample_id", "region_pool",

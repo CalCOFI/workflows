@@ -16,6 +16,52 @@ Coarse/composite taxa (cufes eggs, phyllosoma stages, euphausiid family, phyto
 functional groups, seabirds/mammals) resolve to real WoRMS/ITIS ids via the
 reviewable `metadata/measurement_taxon.csv` + `metadata/taxon_override.csv`.
 
+## The four calls: the ingest declares, the package resolves (calcofi4db ≥ 4.0.0)
+
+There are **no per-dataset arms in `calcofi4db`**. 4.0.0 deleted all seven — the
+`species` (ichthyo), `phyto_taxon`, `zoodb_taxon`, `zooscan_taxon`,
+`euphausiids_taxon`, `mesopelagic_fish_taxon` and `bird_mammal_species` readers — for
+the reason 3.0.0 deleted the core-projection `switch()` arms: the contract was
+implicit, so a column renamed or dropped in a notebook changed the taxonomy silently
+(dropping `itis_id` from the Farallon species table would have un-keyed every seabird,
+92 % of that dataset's observations, with no error anywhere).
+
+A taxon-bearing ingest calls these, in this order, **before `append_obs()`** —
+`ingest_farallon_bird-mammal.qmd` is the worked example, and
+`.claude/skills/templates/ingest_template.qmd` carries the commented skeleton:
+
+1. **`append_dataset_taxon(con, dataset_key, df, ds_prefix = dataset_key)`** — the
+   declaration. `ds_taxa_code` (the code `obs` stores, **verbatim**) and
+   `ds_scientific_name` are required; `ds_common_name`, `worms_id`, `itis_id`,
+   `gbif_id`, `rank` are optional and are what **the source supplied**, stored
+   together as `ds_source_json`. A missing or unknown column, a duplicate or NA code,
+   or an id that does not coerce to an integer is an **error at ingest**. `ds_prefix`
+   is the `dataset_key` except for the shared CalCOFI species list (`"calcofi"`).
+2. **`ensure_taxon_xref()`** then 3. **`ensure_taxon_lineage()`** — in that order; the
+   lineage fetch must ask about the accepted id, and its `class` is what decides the
+   key authority.
+4. **`resolve_dataset_taxon()`** (+ `build_taxon_reference()`,
+   `build_taxon_group(con, read_taxon_group_rules(...))`, and `prune_taxon_shard()` where
+   the connection holds a broader hierarchy) — fills `taxon_key` **in place** on the
+   staged rows, so every other column comes back byte-identical and a re-run over
+   unchanged inputs is a no-op.
+5. **`check_dataset_taxon(con, dataset_key, codes =, allow =)`** — the ingest asserts its
+   own crosswalk: every code the observations reference is staged, every staged row keys
+   an authority id unless `allow`-listed **one key at a time with a reason**, every Aves
+   taxon keys `itis:`. Halts the render.
+
+An ingest that has **not** migrated errors at `resolve_dataset_taxon()`, naming the
+working table it left in the connection. The **composite-measurement path is untouched**:
+`swfsc_cufes`, `calcofi_phyllosoma` and `cdfw_dungeness-crab` resolve through
+`metadata/measurement_taxon.csv` exactly as before, and a dataset that stages has its
+`measurement_taxon` rows ignored as a vocabulary (this is what removed the unreferenced
+`cce-lter_euphausiids:euphausiidae` row).
+
+A `taxon_override.csv` `match_column` is now one of `dataset_taxon`'s own `ds_taxa_code` /
+`ds_scientific_name` / `ds_common_name`. The arms' column names (`taxa`, `species_code`,
+`species_id`, `taxon_id`) went with the arms.
+
+
 **Lineage is not free — call `ensure_taxon_lineage()` before the builders.**
 `build_taxon_reference()` takes `rank` / `parent_taxon_key` / classification from
 a DwC-shaped hierarchy table named `taxon` in the connection. Exactly one ingest

@@ -390,3 +390,35 @@ PR #77 properly; 3 is what makes the next dataset free.
   ichthyo, phyto, zoodb, zooscan, euphausiids, mesopelagic to `append_dataset_taxon()` (the phyto `taxa` rows
   then match `ds_common_name`); override rows now redundant: `GUMU`, `MABO`, `NABO` (and `CSLI`, unreferenced);
   4.0.0.
+
+- **Phase 3b (2026-09-04, calcofi4db `ws-e3b` — `# calcofi4db 4.0.0`, no DESCRIPTION bump; workflows
+  `ws-e3b`; Fable):** the six remaining notebooks stage their vocabulary
+  (`append_dataset_taxon()` → xref → lineage → `resolve_dataset_taxon()` → `build_taxon_reference()` /
+  `build_taxon_group(con, rules)` → `check_dataset_taxon()`), each **rendered once** in the worktree
+  against calcofi4db **main 3.33.0** (coexistence: the arms were still present, and the staged rows won
+  in every case — "`<ds>` is staged; its source table is not read"), with GCS publishing stubbed out and
+  reverted before commit. **`.taxon_norm_sources()`'s seven arms, `.override_match_alias` and
+  `isTRUE_vec()` are deleted** on `ws-e3b`; an unmigrated ingest now errors at `resolve_dataset_taxon()`
+  naming the working table it left in the connection; `build_dataset_taxon()` stays as the deprecated
+  alias (the plan does not ask for its removal). Tests 1,762 → **1,765** (0 fail, 2 warnings = the
+  `check_dataset_taxon()` finding messages, as on main), every arm fixture rewritten as a staged
+  vocabulary.
+  **Gate, vs the v2026.08.25 fixture, per dataset (codes · identical `taxon_key` · changed):**
+  ichthyo 1,167 · 1,167 · 0 — phytoplankton 393 · 91 · **302** — zoodb 33 · 33 · 0 — zooscan 23 · 23 · 0 —
+  euphausiids 37 · 37 · 0 (one unreferenced fixture row leaves, `cce-lter_euphausiids:euphausiidae`
+  `worms:110671`, minted by the measurement crosswalk for the old single-`Abundance` export) —
+  mesopelagic 90 · 90 · 0. No code added or lost anywhere else; `ds_scientific_name` /
+  `ds_common_name` unchanged on every shared code; `check_dataset_taxon()` 0 findings for all six;
+  `obs.taxon_key` NULLs unchanged (0, 0, 0, 0, 0 and 1 = `UnidentifiedFish`).
+  **Phytoplankton, rendered:** 393 codes → **309** distinct keys (was 22); 302 change; the ten override
+  rows matched 376 vocabulary rows, applied 74, skipped 302; `taxon` shard 50 → **542**; `taxon_group`
+  phyto memberships 24 → **311**; **124,586 of 159,804** `obs` rows change key. `taxon_worms.csv`
+  code 600 fixed at the source (196347 nudibranch → **148944** diatom *Actinocyclus*, verified against
+  the WoRMS REST record) and Phase 3a's stopgap override row dropped; the six functional-group rows
+  moved `taxa` → `ds_common_name` and the four species rows `species_code` → `ds_taxa_code`; farallon
+  `GUMU` / `MABO` / `NABO` / `CSLI` dropped (3.33.0's TSN hop; `CSLI` matches no ERDDAP code).
+  **Found, not fixed (outside this brief):** re-running an ingest **wipes WS-H2's registry columns for
+  its own `measurement_type` row** — `upsert_measurement_types()`'s `preserve` default is only the four
+  bounds columns, so the euphausiids notebook's literal (which predates H2) blanked
+  `euphausiid_abundance`'s `category`, `variable` and `units_nerc_p06`. Reverted here; **WS-F must not
+  re-run the ingests until `preserve` covers H2's columns**, or every re-run ingest loses them.

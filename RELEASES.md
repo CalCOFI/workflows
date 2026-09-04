@@ -142,15 +142,25 @@ many rows each override was *skipped* for, and `release_database.qmd` shows the 
 (`report_taxon_overrides()`) beside the authority-coverage gate, with `check_taxon_registries()`
 now failing the release on a registry row naming a dataset nothing supplies.
 
-Measured by re-resolving the 2026-08-25 phytoplankton vocabulary in memory under the rule:
-**393 codes → 309 distinct keys** — 299 `worms:` (all 294 source AphiaIDs, exactly as supplied
-and all WoRMS-accepted; the 6 class keys for the 70 codes the source could not resolve; 2
-genus keys) + the 10 allow-listed local codes (Q05). 302 codes change key, every one a code the
-source had resolved; 91 are unchanged. Every one of the 299 authority taxa carries class, rank,
-`rank_order` and a parent. One thing the collapse had been hiding: code 600 "*Actinocyclus*,
-uncertain species." had been resolved in `taxon_worms.csv` to AphiaID 196347 — *Actinocyclus*
-Ehrenberg 1831, a **nudibranch** genus — instead of the centric diatom *Actinocyclus* C.G.
-Ehrenberg 1837 (148944); a code-matched override row keys it to the diatom.
+Measured on a **rendered** `ingest_calcofi_phytoplankton.qmd` (2026-09-04, the migrated
+notebook against calcofi4db 3.33.0): **393 codes → 309 distinct `taxon_key`s**, up from 22 —
+299 `worms:` (the source's own AphiaIDs exactly as supplied and all WoRMS-accepted; the 6 class
+keys for the 70 codes the source could not resolve; the 3 genus keys of the code-matched
+override rows) + the 10 allow-listed local codes (Q05). **302 codes change key**, every one a
+code the source had resolved; 91 are unchanged, and no code is added or lost. The ten override
+rows matched 376 vocabulary rows, applied to 74 and were skipped for 302 — a skip is the rule
+working, and it is now reported rather than silent. The `taxon` shard grows 50 → **542** rows
+(287 vocabulary taxa + 195 lineage ancestors), `taxon_group`'s phytoplankton memberships 24 →
+**311**, and of the 159,804 phytoplankton `obs` rows (0 with a NULL `taxon_key`) **124,586**
+carry a different key than v2026.08.25 released.
+
+One thing the collapse had been hiding: code 600 "*Actinocyclus*, uncertain species." was
+resolved in `metadata/calcofi/phytoplankton/taxon_worms.csv` to AphiaID 196347 — *Actinocyclus*
+Ehrenberg 1831, a **nudibranch** genus (Animalia / Mollusca / Gastropoda) — a homonym of the
+centric diatom *Actinocyclus* C.G. Ehrenberg 1837 (148944, Chromista / Heterokontophyta /
+Bacillariophyceae). Every diatom code keyed the same class, so a wrong genus was invisible. The
+source file is fixed and the code keys `worms:148944` on its own; the code-matched override row
+that stood in for the fix is dropped.
 
 Two smaller rules landed with it:
 
@@ -165,9 +175,6 @@ Two smaller rules landed with it:
   `NABO` resolve without their override rows (`SCMU`, `TOSP`, `CHSP` still need theirs — WoRMS
   links no TSN). No released key changes.
 
-These numbers land when the phytoplankton ingest re-runs (taxon plan Phase 3b; the release run
-is WS-F).
-
 **Consumers:** `dataset_taxon.taxon_key` changes for 302 of the 393 `calcofi_phytoplankton`
 codes and, through it, `obs.taxon_key` / `obs_bio.taxon_key` on ~124,600 phytoplankton
 observations (class key → species or genus key); `taxon` gains 482 rows (287 phytoplankton
@@ -175,6 +182,65 @@ vocabulary taxa + 195 ancestors); `taxon_group`'s phytoplankton memberships grow
 311 rows, so a consumer that grouped phytoplankton by class-level `taxon_key` should group by
 `taxon_group` (the functional groups) or `taxon.class` instead; `taxon.common_name` becomes NULL
 for the 24 taxa that carried a group or operational-class label.
+
+## Every taxon-bearing ingest stages its own vocabulary
+
+Until now, seven datasets' taxon vocabularies were read by a `switch()` arm inside `calcofi4db`
+that knew each source table's name and column shape — `species`, `phyto_taxon`, `zoodb_taxon`,
+`zooscan_taxon`, `euphausiids_taxon`, `mesopelagic_fish_taxon`, `bird_mammal_species`. That is
+the pattern calcofi4db 3.0.0 deleted from the core projection, for the reason it deleted it: the
+contract was implicit, so renaming or dropping a column in a notebook changed the taxonomy
+**silently**. Dropping `itis_id` from the Farallon species table would have un-keyed every
+seabird — 92 % of that dataset's observations — with no error anywhere.
+
+The vocabulary is now **declared by the ingest that owns the dataset and resolved by the
+package** (`append_dataset_taxon()` → `ensure_taxon_xref()` → `ensure_taxon_lineage()` →
+`resolve_dataset_taxon()` → `build_taxon_reference()` / `build_taxon_group()` →
+`check_dataset_taxon()`). The declaration is explicit and a deviation is a hard stop at ingest
+time rather than an `NA` at release; the ids the source supplied ride along in
+`dataset_taxon.ds_source_json`; the key authority is read from the **classification**, not from a
+source flag. **calcofi4db 4.0.0 deletes the seven arms**, so there is one copy of each dataset's
+taxonomy and adding a dataset touches zero lines of the package.
+
+Each migrated ingest was rendered and its `dataset_taxon` slice compared, code for code, with the
+one v2026.08.25 released:
+
+| dataset | codes | `taxon_key` identical | changed | other difference |
+|---|---|---|---|---|
+| `swfsc_ichthyo` | 1,167 | 1,167 | 0 | — |
+| `calcofi_phytoplankton` | 393 | 91 | **302** | the section above |
+| `cce-lter_zoodb` | 33 | 33 | 0 | — |
+| `cce-lter_zooscan` | 23 | 23 | 0 | — |
+| `cce-lter_euphausiids` | 37 | 37 | 0 | one row leaves (below) |
+| `sio_mesopelagic-fish` | 90 | 90 | 0 | — |
+| `farallon_bird-mammal` | 164 | 164 | 0 | migrated earlier, re-checked |
+
+`ds_scientific_name` and `ds_common_name` are unchanged on every shared code, no code is added or
+lost, `check_dataset_taxon()` reports 0 findings for each, and each dataset's `obs.taxon_key` NULL
+count is unchanged (0 for ichthyo, phytoplankton, zoodb, zooscan and euphausiids; 1 for
+mesopelagic fish — `UnidentifiedFish`, as before).
+
+Three things the migration settles rather than preserves:
+
+- **A dataset's own codes decide which taxa key locally, one at a time.** ZooScan's four
+  operational bioclasses (eggs, multiples, nauplii, others — Q03) and the ten phytoplankton codes
+  the Definitions sheet never defines (Q05, plus the source's own "other") are declared in the
+  notebook with a reason each, so a genuinely unresolved taxon fails the render instead of hiding
+  among them. The release-time allowlist stays as the backstop.
+- **`cce-lter_euphausiids:euphausiidae` (`worms:110671`) leaves `dataset_taxon`.** It was minted
+  by the composite-measurement crosswalk from `metadata/measurement_taxon.csv`'s rows for the old
+  single-`Abundance` export, and no observation ever referenced it — the BTEDB export is species-
+  and life-stage-resolved and `obs` joins on the numeric `taxon_id`. A staged dataset's
+  `measurement_taxon` rows are no longer read as a vocabulary, so the unreferenced row goes.
+- **A functional-group label is what the source *calls* a row, so it is `ds_common_name`.**
+  Phytoplankton's `taxa` column lands there, which is the column `taxon_group.csv` matches on and
+  the column the six functional-group override rows now match on — the group is a group, not a key.
+
+`swfsc_cufes`, `calcofi_phyllosoma` and `cdfw_dungeness-crab` are unaffected: their taxa live in
+`measurement_type` names, and that path is untouched.
+
+**Consumers:** additive except the phytoplankton re-keys described in the section above. No
+column is added or removed, and no other dataset's `taxon_key` changes.
 
 ## Every dataset carries a checked citation and a registered license, and the release cites itself
 

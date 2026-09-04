@@ -546,8 +546,24 @@ mt_taxon <- read_csv(here("metadata/measurement_taxon.csv"),
   filter(dataset_key == ds_key)
 tx_over  <- read_csv(here("metadata/taxon_override.csv"), show_col_types = FALSE)
 
-# taxa references: zoodb_taxon carries aphia_id + denormalized lineage, so the
-# generic builders pick it up from the connection
+# the vocabulary is DECLARED here and RESOLVED by the package (taxon plan D1,
+# calcofi4db >= 3.29.0): append_dataset_taxon() stages one `dataset_taxon` row
+# per local taxon_id with `taxon_key` empty and the AphiaID the SOURCE supplied
+# carried along as `ds_source_json`; resolve_dataset_taxon() fills the key from
+# the authorities. There is no zoodb arm inside calcofi4db any more -- a column
+# renamed or dropped here now fails at this call rather than becoming NA at
+# release. The source's denormalized lineage columns are NOT staged: the
+# classification the release publishes comes from ensure_taxon_lineage(), the
+# authority, not from the export's copy of it.
+d_vocab <- dbGetQuery(con, "
+  SELECT CAST(taxon_id AS VARCHAR) AS ds_taxa_code,
+         scientific_name           AS ds_scientific_name,
+         taxon_zoodb AS ds_common_name,
+         CAST(aphia_id AS INTEGER) AS worms_id,
+         rank
+  FROM zoodb_taxon ORDER BY taxon_id")
+n_staged <- append_dataset_taxon(con, ds_key, d_vocab)
+
 
 # cross-reference: resolve each taxon against BOTH authorities (cached in
 # metadata/taxon_xref.csv, so a re-run costs no API calls). This fills the
@@ -569,7 +585,17 @@ ensure_taxon_xref(con, mt_taxon, tx_over,
 ensure_taxon_lineage(con, mt_taxon, tx_over,
                      cache_csv = here("metadata/taxon_lineage.csv"))
 n_taxon    <- build_taxon_reference(con, mt_taxon, tx_over)
-n_ds_taxon <- build_dataset_taxon(con,   mt_taxon, tx_over)
+n_ds_taxon <- resolve_dataset_taxon(con, mt_taxon, tx_over)
+
+# the ingest asserts its own crosswalk (D6): every taxon_id the measurements use
+# is in the vocabulary and every staged row keys an authority id. Halts on any
+# finding.
+obs_codes <- dbGetQuery(con,
+  "SELECT DISTINCT CAST(taxon_id AS VARCHAR) AS c FROM zoodb_measurement
+   WHERE taxon_id IS NOT NULL")$c
+chk_taxon <- check_dataset_taxon(con, ds_key, codes = obs_codes)
+cat(glue("vocabulary: {n_staged} taxa staged; taxon {n_taxon}, ",
+         "dataset_taxon {n_ds_taxon}"), "\n")
 
 # 1. sample — one row per zoodb_sample tow
 append_sample(con, sample_arm_self(
