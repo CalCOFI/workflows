@@ -53,12 +53,19 @@ Agreed, and more of it is already true than the Task 12 wording suggests:
   split cruises that straddle a month). Keys now come from the cruise table by your date spans, and
   the next release fails the build when a key's ship or dates disagree with its cruise row. Two things
   it turned up: one malformed key (Bold Horizon, July 2019 — `shiplookup` has no NODC for BH, so the
-  key minted with an empty ship segment; we patch it to 39C2), and 152 cruises that the bottle, CTD,
+  key minted with an empty ship segment; we patch it to `39C2`), and 152 cruises that the bottle, CTD,
   METS and picoplankton sources designate but your export has no station row for (92 of them
   1949–1950, the rest mostly 2016–2026). Could you export the full cruise table (CruiseId, ship,
   month, dates) independent of stations, so those cruises get your UUID too?
 - Task 12 is about the names of things (variables, units, station notation, dataset slugs), not
-  primary keys; I'll say so in the status text.
+  primary keys; I'll say so in the status text. Erin, Betty and I talked this through yesterday: the
+  conventions document will get an audience-and-purpose section up front and split its fields into
+  mandatory (what, when, where), optional and best practice, with UUIDs listed as a best practice for
+  any provider who runs a database. We will not require them of providers, most of whom keep
+  spreadsheets, but where a provider mints them, as you do, we preserve them as columns, and for
+  everything else the integrated database mints and maintains its own identifiers internally. That
+  way anyone who finds a problem in a SWFSC record can hand you the station, tow or net UUID and you
+  know exactly where it lives.
 
 The open ichthyoplankton questions now live in a shared sheet you can answer in place (edit the
 `answer` / `status` cells; everything else is generated):
@@ -184,8 +191,22 @@ PR is ready for your review. What to look at, one change per commit:
 5. Two small fixes: the stale "matched on `date`" comment above `cruise_track`, and the unused `b01()`.
 6. No rendered HTML is in the PR; the manifest and metadata diffs are the evidence.
 
+Since the four commits are on your branch, please `git pull` it before editing anything (RStudio's
+Git pane works for all of this: pull, stage, commit, push), then edit line by line and push; the PR
+updates itself. If you hit the "rejected, fetch first" message, that is the pull-then-resolve dance
+we walked through, not a problem with your work.
+
 The Farallon questions, including the ERDDAP gaps, are in a sheet you can edit in place:
 https://docs.google.com/spreadsheets/d/1szPLnPuQtaskPpwB1dkX7kGqs4hj6I2g2cE_kGq6ZbU/edit
+
+On the dataset-by-affiliation list you offered Erin: build it from the release rather than the CalOOS
+draft. The `dataset` table (or `data/parquet/*/metadata.json` on main) already carries provider,
+`dataset_name`, `pi_names`, `citation_main`, `license` and, from the next release, `acknowledgement`
+for the funder credit Erin wants elevated (the ZooDB and ZooScan rows carry "supported by NSF grants
+to the CCE-LTER site" today; the seabird data should say CCE-LTER too), and `metadata/provider.csv`
+maps each provider slug to its display name and full organization (SWFSC now shows as "NOAA SWFSC").
+Anything you or Erin add there flows to every app, package and page at the next release, which is why
+the source of truth has to stay in the workflows repo rather than in any one app.
 
 Two notes for db-viz-station while you are there: the next release's `dataset` table gains `doi`,
 `license_url`, `acknowledgement` and `contact`, so `scripts/build_datasets.sql` should carry them into
@@ -194,3 +215,45 @@ Two notes for db-viz-station while you are there: the next release's `dataset` t
 table.
 
 Thanks, Ben
+
+## 6 · The datasets still missing a citation or licence — to Erin (cc Betty)
+
+*(The list Erin asked for on 2026-09-03 so she can chase providers; sendable now, independent of the
+Explorer's Sources UI, because provider answers take weeks.)*
+
+Hi Erin,
+
+Here is the list you asked for. Every dataset now has a checked entry in the release for citation,
+licence, DOI and acknowledgement, and the build fails if one goes missing without a question on
+record; these are the gaps that only a provider can close. Each is already a row in that provider's
+question sheet, pre-answered where we could ("proposed"), so the ask is to confirm or correct in
+place. The sheets are shared with you; the provider link is in each row's `who`.
+
+**No formal citation anywhere we could find (5):**
+
+| dataset | provider | who | what we propose |
+|---|---|---|---|
+| ZooDB holoplankton | CCE-LTER | Mark Ohman, Linsey Sala | author-year-title citation for the ZooDB export |
+| ZooScan PRPOOS | CCE-LTER | Mark Ohman, Marina Frants | same, for the ZooScan export |
+| Seabird and marine mammal surveys | Farallon Institute | Bill Sydeman, Sarah Ann Thompson | citation; the ERDDAP entry names only the institution |
+| CUFES eggs | NOAA SWFSC | Ed Weber, Noelle Bowlin | citation for the ERDDAP dataset |
+| PIC zooplankton net tows | SIO | Linsey Sala | citation and licence; no portal exists |
+
+**No licence stated by the source (6):** the CalCOFI bottle database, CTD cast files and METS
+(we propose CC-BY-4.0, to Rasmus); the SWFSC ichthyoplankton database (we propose US government work,
+to Ed); picoplankton and bacteria (Mike Landry); PIC zooplankton (as above). Four datasets carry
+bespoke terms rather than a Creative Commons licence (CUFES, Farallon's data-sharing agreement, and
+EDI's own terms on phyllosoma and euphausiids), which we record as they are.
+
+**No named PI or contact (4):** bottle, CTD, METS (we propose Rasmus; Ben Gire for CTD) and
+ichthyoplankton (we propose Ed).
+
+**Affiliation and funder credit.** Your CCE-LTER point from Kathy and Mike is exactly what the new
+`acknowledgement` field is for: ZooDB and ZooScan already carry "supported by NSF grants to the
+CCE-LTER site", the euphausiid package its EDI credit line, and nothing else has one yet. The seabird
+data should say CCE-LTER too; if you can tell me the wording each program wants (CCE-LTER, NOAA,
+CDFW), it goes on every download, figure footer and the Sources page verbatim. Betty is building the
+dataset-by-affiliation list for you from the release table rather than the CalOOS draft, so the two
+stay one thing.
+
+Cheers, Ben
