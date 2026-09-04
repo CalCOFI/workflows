@@ -112,6 +112,8 @@ calcofi 1uW9GLogdD2K6NiQGS_xJiIPFUPUvifWesrLlK5UUK7g · swfsc 1kQM6aw3yiT1AZAmFf
 - Round trip proven on swfsc (cell edit → pull dry-run diff + auto-flip → `--execute` → clear → `--execute` → CSV identical). Polish left: an auto-flipped row gets no `answered_date`. `asked_date` stamped today on every open/proposed row (the push, not the e-mail, is "asked").
 - Run non-interactively with `QS_GOOGLE_SA_JSON="~/My Drive/private/2026-06-07 ucsd-sio-calcofi_36230b2795e6_calcofi-admin-sa.json"`.
 
+## ws-e-ph2 MERGED to main (Ben, 2026-09-04) — c5b9ac9 (one conflict: farallon questions.csv, kept main's asked_date stamps + the branch's Q10/Q11); 99b0500 farallon sheet re-pushed (11 rows). Betty's review is on the PR after `git push origin ws-e-ph2:ingest-farallon-erddap` (Ben). The stage dir already holds E-Ph2's ERDDAP farallon build.
+
 ## Resume message (send to each when Ben is back)
 "Resume from your checkpoint (`.claude/plans_todo/_checkpoint_ws-<id>.md` on your branch). Two things
 changed: (1) `.claude/worktrees/calcofi4db` and `calcofi4r` are now symlinks to the sibling repos, so
