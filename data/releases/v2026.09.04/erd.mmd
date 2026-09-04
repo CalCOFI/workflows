@@ -1,0 +1,446 @@
+---
+config:
+  layout: elk
+---
+erDiagram
+    climatology {
+        varchar dataset_key FK
+        varchar grid_key FK
+        tinyint month
+        int depth_bin
+        varchar measurement_type FK
+        double clim_mean
+        double clim_sd
+        int clim_n
+        int n_cruises
+        smallint clim_yr_min
+        smallint clim_yr_max
+    }
+    cruise {
+        uuid cruise_uuid
+        date date_ym
+        varchar ship_key
+        varchar _source_file
+        int _source_row
+        timestamp _ingested_at
+        varchar _source_uuid
+        varchar cruise_key PK
+        date date_min
+        date date_max
+        varchar cruise_key_method
+        varchar cruise_key_datasets
+        int year
+        int month
+        varchar ship_name
+        varchar ship_nodc
+        bigint ichthyo
+        bigint bottle
+        bigint ctd_cast
+        bigint dic
+    }
+    dataset {
+        varchar dataset_key
+        varchar provider
+        varchar dataset
+        varchar dataset_name
+        varchar dataset_name_short
+        varchar category
+        varchar color
+        varchar description
+        varchar citation_main
+        varchar citation_others
+        varchar link_calcofi_org
+        varchar link_data_source
+        varchar link_others
+        varchar tables
+        varchar coverage_temporal
+        varchar coverage_spatial
+        varchar license
+        varchar pi_names
+        varchar doi
+        varchar license_url
+        varchar acknowledgement
+        varchar contact
+        date source_accessed
+        varchar source_accessed_method
+    }
+    dataset_taxon {
+        varchar ds_taxon_key PK
+        varchar dataset_key FK
+        varchar taxon_key FK
+        varchar ds_scientific_name
+        varchar ds_common_name
+        varchar ds_taxa_code
+        varchar ds_source_json
+    }
+    grid {
+        varchar grid_key PK
+        double station
+        double line
+        varchar shore
+        varchar pattern
+        int spacing
+        varchar zone
+        double area_km2
+        geometry geom
+        geometry geom_ctr
+    }
+    lookup {
+        int lookup_id
+        varchar lookup_type
+        int lookup_num
+        varchar lookup_chr
+        varchar description
+        varchar _source_file
+        int _source_row
+        varchar _ingested_at
+        varchar _source_uuid
+    }
+    measurement_type {
+        varchar measurement_type PK
+        varchar description
+        varchar units
+        double valid_min
+        double valid_max
+        double valid_depth_min_m
+        double valid_depth_max_m
+        varchar derivation
+        bool is_canonical
+        varchar _source_column
+        varchar _source_table
+        varchar _source_datasets
+        varchar _qual_column
+        varchar _prec_column
+        varchar grain
+        varchar denominator
+        varchar category
+        varchar variable
+        varchar nerc_p01
+        varchar units_nerc_p06
+        varchar provider
+        varchar dataset
+    }
+    obs {
+        bigint obs_id PK
+        varchar realm
+        varchar dataset_key FK
+        varchar sample_key FK
+        varchar grid_key FK
+        varchar cruise_key FK
+        double latitude
+        double longitude
+        timestamp datetime
+        double depth_min_m
+        double depth_max_m
+        varchar taxon_key FK
+        varchar life_stage
+        varchar measurement_type FK
+        double measurement_value
+        varchar measurement_qual
+        double measurement_prec
+        ubigint hex_id
+    }
+    obs_attribute {
+        bigint obs_attribute_id PK
+        varchar dataset_key
+        varchar sample_key FK
+        varchar taxon_key FK
+        varchar life_stage
+        varchar measurement_type FK
+        double bin_value
+        varchar bin_label
+        int count
+        varchar measurement_qual
+    }
+    obs_bio {
+        bigint obs_id
+        varchar dataset_key FK
+        int root_id FK
+        varchar sample_key FK
+        varchar grid_key FK
+        varchar cruise_key FK
+        double latitude
+        double longitude
+        timestamp datetime
+        smallint year
+        tinyint quarter
+        double depth_min_m
+        double depth_max_m
+        int depth_bin
+        varchar taxon_key FK
+        varchar life_stage
+        varchar measurement_type FK
+        varchar units
+        double value
+        varchar measurement_qual
+        double measurement_prec
+        bool qual_ok
+        varchar tow_type
+        double std_haul_factor
+        double prop_sorted
+        double volume_sampled_m3
+        double density_per_10m2
+        double density_per_1000m3
+        varchar effort_class
+        ubigint hex_id
+        ubigint hex7
+    }
+    obs_ctd_full {
+        bigint obs_id
+        varchar realm
+        varchar dataset_key FK
+        varchar sample_key FK
+        varchar grid_key
+        double latitude
+        double longitude
+        timestamp datetime
+        double depth_min_m
+        double depth_max_m
+        varchar taxon_key
+        varchar life_stage
+        varchar measurement_type FK
+        double measurement_value
+        varchar measurement_qual
+        double measurement_prec
+        ubigint hex_id
+        varchar cruise_key
+    }
+    obs_env {
+        bigint obs_id
+        varchar dataset_key FK
+        int root_id FK
+        varchar sample_key FK
+        varchar grid_key FK
+        varchar cruise_key FK
+        double latitude
+        double longitude
+        timestamp datetime
+        smallint year
+        tinyint quarter
+        double depth_min_m
+        double depth_max_m
+        int depth_bin
+        varchar taxon_key
+        varchar life_stage
+        varchar measurement_type FK
+        varchar units
+        double value
+        varchar measurement_qual
+        double measurement_prec
+        bool qual_ok
+        varchar tow_type
+        double std_haul_factor
+        double prop_sorted
+        double volume_sampled_m3
+        double density_per_10m2
+        double density_per_1000m3
+        varchar effort_class
+        ubigint hex_id
+        ubigint hex7
+    }
+    obs_mets_full {
+        bigint obs_id
+        varchar realm
+        varchar dataset_key
+        varchar sample_key
+        varchar grid_key
+        double latitude
+        double longitude
+        timestamp datetime
+        double depth_min_m
+        double depth_max_m
+        varchar taxon_key
+        varchar life_stage
+        varchar measurement_type
+        double measurement_value
+        varchar measurement_qual
+        double measurement_prec
+        ubigint hex_id
+        varchar cruise_key
+    }
+    region {
+        varchar region_key PK
+        varchar description
+        double latitude
+        double longitude
+        int n_stations
+        varchar station_codes
+        geometry geom
+    }
+    sample {
+        varchar sample_key PK
+        varchar sample_type
+        varchar parent_sample_key FK
+        varchar root_sample_key FK
+        varchar dataset_key FK
+        varchar grid_key FK
+        varchar site_key
+        varchar cruise_key FK
+        int order_occ
+        double latitude
+        double longitude
+        timestamp datetime
+        double depth_min_m
+        double depth_max_m
+        varchar tow_type
+        varchar data_stage
+        geometry geom
+        uuid source_uuid
+        double seafloor_depth_m
+        uuid station_uuid FK
+        varchar station_uuid_method
+    }
+    sample_measurement {
+        bigint sample_measurement_id PK
+        varchar sample_key FK
+        varchar dataset_key FK
+        varchar measurement_type FK
+        double measurement_value
+        varchar measurement_qual
+    }
+    sample_root {
+        int root_id
+        varchar root_sample_key FK
+        varchar dataset_key
+        varchar sample_type
+        varchar grid_key
+        varchar cruise_key
+        int order_occ
+        double latitude
+        double longitude
+        timestamp datetime
+        double depth_min_m
+        double depth_max_m
+        varchar tow_type
+        double seafloor_depth_m
+    }
+    sample_spatial {
+        int root_id
+        varchar root_sample_key FK
+        varchar layer
+        varchar spatial_key FK
+        varchar spatial_name
+    }
+    ship {
+        varchar ship_key PK
+        varchar ship_name
+        varchar ship_nodc
+        varchar _source_file
+        int _source_row
+        timestamp _ingested_at
+        varchar _source_uuid
+    }
+    spatial {
+        varchar spatial_key
+        int id
+        varchar layer
+        varchar name
+        geometry geom
+    }
+    spatial_attribute {
+        varchar spatial_key
+        varchar layer
+        int id
+        varchar fld
+        double val_dbl
+        int val_int
+        varchar val_chr
+        date val_date
+        bool val_lgl
+    }
+    taxon {
+        varchar taxon_key PK
+        int worms_id
+        int itis_id
+        int gbif_id
+        int ncbi_id
+        int inat_id
+        varchar scientific_name
+        varchar common_name
+        varchar rank
+        int rank_order
+        varchar taxonomic_status
+        varchar status_checked
+        varchar parent_taxon_key FK
+        varchar kingdom
+        varchar phylum
+        varchar class
+        varchar order_taxon
+        varchar family
+        varchar notes
+    }
+    taxon_group {
+        varchar taxon_group_key
+        varchar description
+        varchar taxon_key FK
+    }
+    sample ||--o{ sample : "parent_sample_key"
+    sample ||--o{ sample : "root_sample_key"
+    sample ||--o{ obs : "sample_key"
+    measurement_type ||--o{ obs : "measurement_type"
+    sample ||--o{ sample_measurement : "sample_key"
+    measurement_type ||--o{ sample_measurement : "measurement_type"
+    taxon ||--o{ obs : "taxon_key"
+    sample ||--o{ obs_attribute : "sample_key"
+    taxon ||--o{ obs_attribute : "taxon_key"
+    measurement_type ||--o{ obs_attribute : "measurement_type"
+    taxon ||--o{ dataset_taxon : "taxon_key"
+    taxon ||--o{ taxon : "parent_taxon_key"
+    taxon ||--o{ taxon_group : "taxon_key"
+    grid ||--o{ sample : "grid_key"
+    cruise ||--o{ sample : "cruise_key"
+    grid ||--o{ obs : "grid_key"
+    cruise ||--o{ obs : "cruise_key"
+    sample ||--o{ obs : "sample_key"
+    dataset ||--o{ obs : "dataset_key"
+    grid ||--o{ obs : "grid_key"
+    cruise ||--o{ obs : "cruise_key"
+    measurement_type ||--o{ obs : "measurement_type"
+    sample ||--o{ sample : "parent_sample_key"
+    dataset ||--o{ sample : "dataset_key"
+    grid ||--o{ sample : "grid_key"
+    cruise ||--o{ sample : "cruise_key"
+    sample ||--o{ obs_attribute : "sample_key"
+    measurement_type ||--o{ obs_attribute : "measurement_type"
+    sample ||--o{ sample_measurement : "sample_key"
+    dataset ||--o{ sample_measurement : "dataset_key"
+    measurement_type ||--o{ sample_measurement : "measurement_type"
+    sample ||--o{ obs_ctd_full : "sample_key"
+    dataset ||--o{ obs_ctd_full : "dataset_key"
+    measurement_type ||--o{ obs_ctd_full : "measurement_type"
+    taxon ||--o{ obs : "taxon_key"
+    taxon ||--o{ obs_attribute : "taxon_key"
+    taxon ||--o{ dataset_taxon : "taxon_key"
+    dataset ||--o{ dataset_taxon : "dataset_key"
+    taxon ||--o{ taxon_group : "taxon_key"
+    taxon ||--o{ taxon : "parent_taxon_key"
+    sample ||--o{ sample_spatial : "root_sample_key"
+    spatial ||--o{ sample_spatial : "spatial_key"
+    sample ||--o{ sample_root : "root_sample_key"
+    sample_root ||--o{ obs_bio : "root_id"
+    sample_root ||--o{ obs_env : "root_id"
+    sample ||--o{ obs_bio : "sample_key"
+    sample ||--o{ obs_env : "sample_key"
+    dataset ||--o{ obs_bio : "dataset_key"
+    dataset ||--o{ obs_env : "dataset_key"
+    grid ||--o{ obs_bio : "grid_key"
+    grid ||--o{ obs_env : "grid_key"
+    cruise ||--o{ obs_bio : "cruise_key"
+    cruise ||--o{ obs_env : "cruise_key"
+    measurement_type ||--o{ obs_bio : "measurement_type"
+    measurement_type ||--o{ obs_env : "measurement_type"
+    taxon ||--o{ obs_bio : "taxon_key"
+    grid ||--o{ climatology : "grid_key"
+    measurement_type ||--o{ climatology : "measurement_type"
+    dataset ||--o{ climatology : "dataset_key"
+    sample ||--o{ sample : "station_uuid"
+    classDef _e8e8e8 stroke:#e8e8e8,stroke-width:3px
+    class sample,obs,sample_measurement,measurement_type,obs_ctd_full,obs_mets_full,obs_attribute,cruise,dataset,sample_root,obs_bio,obs_env _e8e8e8
+    classDef _dcdcdc stroke:#dcdcdc,stroke-width:3px
+    class taxon,dataset_taxon,taxon_group _dcdcdc
+    classDef _b5e8b0 stroke:#b5e8b0,stroke-width:3px
+    class region _b5e8b0
+    classDef _cdebc6 stroke:#cdebc6,stroke-width:3px
+    class ship,lookup,grid _cdebc6
+    classDef _cfe8ea stroke:#cfe8ea,stroke-width:3px
+    class spatial,spatial_attribute,sample_spatial,climatology _cfe8ea

@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 <meta name="author" content="CalCOFI">
-<meta name="dcterms.date" content="2026-08-25">
+<meta name="dcterms.date" content="2026-09-04">
 
 <title>Deploy consumers</title>
 <style>
@@ -72,6 +72,43 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="deploy_consumers_files/libs/bootstrap/bootstrap.min.js"></script>
 <link href="deploy_consumers_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
 <link href="deploy_consumers_files/libs/bootstrap/bootstrap-d6a003b94517c951b2d65075d42fb01b.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<!-- cc-brand v1 — the calcofi.io brand contract (https://calcofi.io/brand/v1/) for a
+     rendered Quarto notebook. Included by _quarto.yml (include-in-header) on every
+     render, and injected into already-rendered _output/*.html that lack the marker
+     above by scripts/brand_inject_html.R (run by the Pages workflow). Quarto 1.8's
+     Bootstrap 5.3 bundle carries native colour modes, so setting data-bs-theme on
+     <html> is all a page needs; the CSS below covers what Bootstrap does not own. -->
+<link rel="icon" type="image/x-icon" href="https://calcofi.io/brand/v1/favicon.ico">
+<link rel="icon" type="image/png" sizes="32x32" href="https://calcofi.io/brand/v1/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="https://calcofi.io/brand/v1/favicon-16x16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="https://calcofi.io/brand/v1/apple-touch-icon.png">
+<script>(function(){var m=/[?&]theme=(dark|light)\b/.exec(location.search),c=/(?:^|;\s*)cc_theme=(dark|light)/.exec(document.cookie),s=null;try{s=localStorage.getItem("theme")}catch(e){}var t=(m&&m[1])||(c&&c[1])||(s==="light"||s==="dark"?s:null)||"dark",d=document.documentElement;d.dataset.theme=t;d.setAttribute("data-bs-theme",t);d.setAttribute("data-md-color-scheme",t==="dark"?"slate":"default");d.style.colorScheme=t})();</script>
+<link rel="stylesheet" href="https://calcofi.io/brand/v1/theme.css">
+<script defer="" src="https://calcofi.io/brand/v1/theme.js"></script>
+<style>
+  /* the brand bar sits above quarto's own sticky sidebars */
+  .cc-header { font-size: 0.9rem; }
+  #quarto-margin-sidebar, #quarto-sidebar { top: 3.4rem; }
+  #quarto-content { padding-top: 0.5rem; }
+  /* bootstrap's dark colour mode handles body/text/links/tables; quarto's code
+     highlighting is hard-coded for a light page, so remap it (arrow theme → a
+     light-on-dark palette) and give code blocks the panel tone */
+  [data-bs-theme="dark"] div.sourceCode, [data-bs-theme="dark"] pre { background-color: #24272b; color: #e6e9ed; }
+  [data-bs-theme="dark"] code:not(.sourceCode) { color: #ffa8a8; background: #2c3035; }
+  [data-bs-theme="dark"] code span.kw, [data-bs-theme="dark"] code span.cf { color: #d0bfff; }
+  [data-bs-theme="dark"] code span.fu { color: #74c0fc; }
+  [data-bs-theme="dark"] code span.st, [data-bs-theme="dark"] code span.ss, [data-bs-theme="dark"] code span.vs { color: #8ce99a; }
+  [data-bs-theme="dark"] code span.co, [data-bs-theme="dark"] code span.do { color: #9aa0a6; font-style: italic; }
+  [data-bs-theme="dark"] code span.dv, [data-bs-theme="dark"] code span.fl, [data-bs-theme="dark"] code span.cn, [data-bs-theme="dark"] code span.bn { color: #ffd43b; }
+  [data-bs-theme="dark"] code span.va, [data-bs-theme="dark"] code span.at, [data-bs-theme="dark"] code span.dt { color: #e6e9ed; }
+  [data-bs-theme="dark"] code span.op, [data-bs-theme="dark"] code span.sc { color: #c1c8cf; }
+  [data-bs-theme="dark"] code span.ot, [data-bs-theme="dark"] code span.er, [data-bs-theme="dark"] code span.al { color: #ffa8a8; }
+  [data-bs-theme="dark"] .code-tools-button, [data-bs-theme="dark"] .quarto-title-block .btn { color: #e6e9ed; }
+  [data-bs-theme="dark"] .quarto-title-block, [data-bs-theme="dark"] .cell-output-display { color-scheme: dark; }
+  [data-bs-theme="dark"] .cell-output pre, [data-bs-theme="dark"] .cell-output-stdout pre { background-color: #1f2225; }
+  [data-bs-theme="dark"] table.dataTable, [data-bs-theme="dark"] .dataTables_wrapper { color: #e6e9ed; }
+  [data-bs-theme="dark"] .nav-tabs .nav-link.active { background: #24272b; border-color: #3a3f44 #3a3f44 #24272b; }
+</style>
 
 
 </head>
@@ -91,6 +128,23 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </nav>
 </div>
 <main class="content" id="quarto-document-content">
+<!-- cc-brand v1 header: logo far left → calcofi.io, the site title → the workflows
+     index, sibling links, and the theme toggle theme.js wires -->
+<header class="cc-header">
+  <a class="cc-home" href="https://calcofi.io" aria-label="CalCOFI.io home">
+    <img class="cc-logo-dark" src="https://calcofi.io/brand/v1/logo_calcofi.svg" alt="CalCOFI" width="32" height="32">
+    <img class="cc-logo-light" src="https://calcofi.io/brand/v1/logo_calcofi_light.svg" alt="CalCOFI" width="32" height="32">
+  </a>
+  <a class="cc-title" href="https://calcofi.io/workflows/">workflows</a>
+  <span class="cc-spacer"></span>
+  <nav class="cc-links">
+    <a href="https://calcofi.io/db-schema/">schema</a>
+    <a href="https://calcofi.io/db-query/">query</a>
+    <a href="https://calcofi.io/docs/">docs</a>
+    <a href="https://github.com/CalCOFI/workflows">source</a>
+  </nav>
+  <button class="cc-theme-toggle" type="button" aria-label="Toggle dark / light theme">🌓</button>
+</header>
 
 <header id="title-block-header" class="quarto-title-block default">
 <div class="quarto-title">
@@ -112,7 +166,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">2026-08-25</p>
+      <p class="date">2026-09-04</p>
     </div>
   </div>
   
@@ -166,7 +220,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"promoted release : {RELEASE}</span><span class="sc">\n</span><span class="st">"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>promoted release : v2026.08.25</code></pre>
+<pre><code>promoted release : v2026.09.04</code></pre>
 </div>
 <details class="code-fold">
 <summary>Code</summary>
@@ -266,24 +320,32 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb7-74"><a href="#cb7-74" aria-hidden="true" tabindex="-1"></a>                      <span class="st">"datasets.xml summary text"</span>,</span>
 <span id="cb7-75"><a href="#cb7-75" aria-hidden="true" tabindex="-1"></a>    <span class="st">"db-viz-cruise"</span>,  <span class="fu">ssh_out</span>(<span class="st">"stat -c %y /share/data/db-viz-cruise/db-viz-cruise.duckdb 2&gt;/dev/null | cut -c1-16"</span>),</span>
 <span id="cb7-76"><a href="#cb7-76" aria-hidden="true" tabindex="-1"></a>                      <span class="st">"database mtime (carries no version)"</span>,</span>
-<span id="cb7-77"><a href="#cb7-77" aria-hidden="true" tabindex="-1"></a>    <span class="st">"db-query site"</span>,  <span class="fu">dbquery_serving</span>(),</span>
-<span id="cb7-78"><a href="#cb7-78" aria-hidden="true" tabindex="-1"></a>                      <span class="st">"live page vs _config.yml default_version"</span>,</span>
-<span id="cb7-79"><a href="#cb7-79" aria-hidden="true" tabindex="-1"></a>    <span class="st">"releases index"</span>, <span class="fu">idx_serving</span>(),</span>
-<span id="cb7-80"><a href="#cb7-80" aria-hidden="true" tabindex="-1"></a>                      <span class="st">"storage.calcofi.io releases/index.html"</span>) <span class="sc">|&gt;</span></span>
-<span id="cb7-81"><a href="#cb7-81" aria-hidden="true" tabindex="-1"></a>    <span class="fu">mutate</span>(<span class="at">http =</span> <span class="fu">c</span>(<span class="fu">http_code</span>(<span class="st">"https://app.calcofi.io/db-viz-hex/"</span>),</span>
-<span id="cb7-82"><a href="#cb7-82" aria-hidden="true" tabindex="-1"></a>                    <span class="fu">http_code</span>(<span class="st">"https://h3t.calcofi.io/h3t/health"</span>),</span>
-<span id="cb7-83"><a href="#cb7-83" aria-hidden="true" tabindex="-1"></a>                    <span class="fu">http_code</span>(<span class="st">"https://erddap.calcofi.io/erddap/info/index.json"</span>),</span>
-<span id="cb7-84"><a href="#cb7-84" aria-hidden="true" tabindex="-1"></a>                    <span class="fu">http_code</span>(<span class="st">"https://app.calcofi.io/db-viz-cruise/"</span>),</span>
-<span id="cb7-85"><a href="#cb7-85" aria-hidden="true" tabindex="-1"></a>                    <span class="fu">http_code</span>(<span class="st">"https://calcofi.io/db-query/"</span>),</span>
-<span id="cb7-86"><a href="#cb7-86" aria-hidden="true" tabindex="-1"></a>                    <span class="fu">http_code</span>(<span class="st">"https://storage.calcofi.io/calcofi-db/ducklake/releases/"</span>)))</span>
-<span id="cb7-87"><a href="#cb7-87" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb7-88"><a href="#cb7-88" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-89"><a href="#cb7-89" aria-hidden="true" tabindex="-1"></a>before <span class="ot">&lt;-</span> <span class="fu">consumer_status</span>()</span>
-<span id="cb7-90"><a href="#cb7-90" aria-hidden="true" tabindex="-1"></a><span class="fu">kable</span>(before, <span class="at">caption =</span> <span class="fu">glue</span>(<span class="st">"Consumer state BEFORE (promoted release: {RELEASE})"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb7-77"><a href="#cb7-77" aria-hidden="true" tabindex="-1"></a>    <span class="co"># both were outside the deploy until 2026-08-25; ctd-viz had served a</span></span>
+<span id="cb7-78"><a href="#cb7-78" aria-hidden="true" tabindex="-1"></a>    <span class="co"># 2026-05-15 database through three releases with nothing here to say so</span></span>
+<span id="cb7-79"><a href="#cb7-79" aria-hidden="true" tabindex="-1"></a>    <span class="st">"ctd-viz"</span>,        <span class="fu">ssh_out</span>(<span class="st">"stat -c %y /share/data/ctd-viz/ctd-viz.duckdb 2&gt;/dev/null | cut -c1-16"</span>),</span>
+<span id="cb7-80"><a href="#cb7-80" aria-hidden="true" tabindex="-1"></a>                      <span class="st">"database mtime (carries no version)"</span>,</span>
+<span id="cb7-81"><a href="#cb7-81" aria-hidden="true" tabindex="-1"></a>    <span class="st">"ctd-qaqc"</span>,       <span class="fu">ssh_out</span>(<span class="st">"stat -c %y /share/data/ctd-qaqc/ctd-qaqc.duckdb 2&gt;/dev/null | cut -c1-16"</span>),</span>
+<span id="cb7-82"><a href="#cb7-82" aria-hidden="true" tabindex="-1"></a>                      <span class="st">"database mtime (carries no version)"</span>,</span>
+<span id="cb7-83"><a href="#cb7-83" aria-hidden="true" tabindex="-1"></a>    <span class="st">"db-query site"</span>,  <span class="fu">dbquery_serving</span>(),</span>
+<span id="cb7-84"><a href="#cb7-84" aria-hidden="true" tabindex="-1"></a>                      <span class="st">"live page vs _config.yml default_version"</span>,</span>
+<span id="cb7-85"><a href="#cb7-85" aria-hidden="true" tabindex="-1"></a>    <span class="st">"releases index"</span>, <span class="fu">idx_serving</span>(),</span>
+<span id="cb7-86"><a href="#cb7-86" aria-hidden="true" tabindex="-1"></a>                      <span class="st">"storage.calcofi.io releases/index.html"</span>) <span class="sc">|&gt;</span></span>
+<span id="cb7-87"><a href="#cb7-87" aria-hidden="true" tabindex="-1"></a>    <span class="fu">mutate</span>(<span class="at">http =</span> <span class="fu">c</span>(<span class="fu">http_code</span>(<span class="st">"https://app.calcofi.io/db-viz-hex/"</span>),</span>
+<span id="cb7-88"><a href="#cb7-88" aria-hidden="true" tabindex="-1"></a>                    <span class="fu">http_code</span>(<span class="st">"https://h3t.calcofi.io/h3t/health"</span>),</span>
+<span id="cb7-89"><a href="#cb7-89" aria-hidden="true" tabindex="-1"></a>                    <span class="fu">http_code</span>(<span class="st">"https://erddap.calcofi.io/erddap/info/index.json"</span>),</span>
+<span id="cb7-90"><a href="#cb7-90" aria-hidden="true" tabindex="-1"></a>                    <span class="fu">http_code</span>(<span class="st">"https://app.calcofi.io/db-viz-cruise/"</span>),</span>
+<span id="cb7-91"><a href="#cb7-91" aria-hidden="true" tabindex="-1"></a>                    <span class="fu">http_code</span>(<span class="st">"https://app.calcofi.io/ctd/"</span>),</span>
+<span id="cb7-92"><a href="#cb7-92" aria-hidden="true" tabindex="-1"></a>                    <span class="fu">http_code</span>(<span class="st">"https://app.calcofi.io/ctd-qaqc/"</span>),</span>
+<span id="cb7-93"><a href="#cb7-93" aria-hidden="true" tabindex="-1"></a>                    <span class="fu">http_code</span>(<span class="st">"https://calcofi.io/db-query/"</span>),</span>
+<span id="cb7-94"><a href="#cb7-94" aria-hidden="true" tabindex="-1"></a>                    <span class="fu">http_code</span>(<span class="st">"https://storage.calcofi.io/calcofi-db/ducklake/releases/"</span>)))</span>
+<span id="cb7-95"><a href="#cb7-95" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb7-96"><a href="#cb7-96" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-97"><a href="#cb7-97" aria-hidden="true" tabindex="-1"></a>before <span class="ot">&lt;-</span> <span class="fu">consumer_status</span>()</span>
+<span id="cb7-98"><a href="#cb7-98" aria-hidden="true" tabindex="-1"></a><span class="fu">kable</span>(before, <span class="at">caption =</span> <span class="fu">glue</span>(<span class="st">"Consumer state BEFORE (promoted release: {RELEASE})"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output-display">
 <table class="caption-top table table-sm table-striped small">
-<caption>Consumer state BEFORE (promoted release: v2026.08.25)</caption>
+<caption>Consumer state BEFORE (promoted release: v2026.09.04)</caption>
 <colgroup>
 <col style="width: 17%">
 <col style="width: 30%">
@@ -301,13 +363,13 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <tbody>
 <tr class="odd">
 <td style="text-align: left;">db-viz-hex</td>
-<td style="text-align: left;">calcofi_v2026.08.14.duckdb</td>
+<td style="text-align: left;">calcofi_v2026.08.25.duckdb</td>
 <td style="text-align: left;">calcofi_latest.duckdb symlink</td>
 <td style="text-align: left;">200</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">h3t API</td>
-<td style="text-align: left;">calcofi_v2026.08.14.duckdb</td>
+<td style="text-align: left;">calcofi_v2026.08.25.duckdb</td>
 <td style="text-align: left;">/h3t/health db_mtime -&gt; file on disk</td>
 <td style="text-align: left;">200</td>
 </tr>
@@ -319,19 +381,31 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </tr>
 <tr class="even">
 <td style="text-align: left;">db-viz-cruise</td>
-<td style="text-align: left;">2026-08-14 13:39</td>
+<td style="text-align: left;">2026-08-25 14:24</td>
+<td style="text-align: left;">database mtime (carries no version)</td>
+<td style="text-align: left;">200</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">ctd-viz</td>
+<td style="text-align: left;">2026-08-25 14:52</td>
+<td style="text-align: left;">database mtime (carries no version)</td>
+<td style="text-align: left;">200</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">ctd-qaqc</td>
+<td style="text-align: left;">2026-08-25 14:26</td>
 <td style="text-align: left;">database mtime (carries no version)</td>
 <td style="text-align: left;">200</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">db-query site</td>
-<td style="text-align: left;">v2026.08.25</td>
+<td style="text-align: left;">v2026.09.04</td>
 <td style="text-align: left;">live page vs _config.yml default_version</td>
 <td style="text-align: left;">200</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">releases index</td>
-<td style="text-align: left;">v2026.08.25</td>
+<td style="text-align: left;">v2026.09.04</td>
 <td style="text-align: left;">storage.calcofi.io releases/index.html</td>
 <td style="text-align: left;">200</td>
 </tr>
@@ -370,30 +444,33 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb8-24"><a href="#cb8-24" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <p>Running <code>scripts/deploy_consumers.sh</code>.</p>
-<pre><code>==&gt; deploying consumers for v2026.08.25 (host: calcofi)
+<pre><code>==&gt; deploying consumers for v2026.09.04 (host: calcofi)
 ==&gt; 1/5 pulling sources
-    calcofi4r     create mode 100644 tests/testthat/test-qual.R
-    db-viz-hex    2 files changed, 18 insertions(+)
-    apps          1 file changed, 13 insertions(+)
+    calcofi4r     create mode 100644 vignettes/citing-calcofi-data.Rmd
+    db-viz-hex    create mode 100644 feedback/1c7e3a51df.png
+    apps         Already up to date.
 ==&gt; 1b/5 checking calcofi4r in the rstudio container
-    checkout 1.9.0 | installed 1.7.0 -&gt; installing
-    installed calcofi4r 1.9.0
+    checkout 1.17.0 | installed 1.12.1 -&gt; installing
+    installed calcofi4r 1.17.0
 ==&gt; 2/5 rebuilding app databases (slow)
 hex_rc=0
 cruise_rc=0
+ctdviz_rc=0
+ctdqaqc_rc=0
 ==&gt; 3/5 reopening the h3t database + flushing tiles
  Container h3t_api_py Started 
 
-==&gt; 3b/5 re-pointing PostgreSQL release.* views at v2026.08.25
-    release.cruise rows: 691
+==&gt; 3b/5 re-pointing PostgreSQL release.* views at v2026.09.04
+    release.cruise rows: 842
 ==&gt; 4/5 restarting apps
 ok
 ==&gt; 5/5 verifying
-    https://app.calcofi.io/db-viz-hex/             200
-    https://app.calcofi.io/db-viz-cruise/          200
+    https://app.calcofi.io/hex/                    200
+    https://app.calcofi.io/cruise/                 200
+    https://app.calcofi.io/ctd/                    200
     https://h3t.calcofi.io/h3t/health              200
     h3t open file:
-      {"ok":true,"default_db":"default","dbs":{"default":{"path":"/data/calcofi_latest.duckdb","mtime":"1787618380.374843"}}}==&gt; consumers deployed for v2026.08.25 </code></pre>
+      {"ok":true,"default_db":"default","dbs":{"default":{"path":"/data/calcofi_latest.duckdb","mtime":"1788547174.228909"}}}==&gt; consumers deployed for v2026.09.04 </code></pre>
 <div class="cell">
 <details class="code-fold">
 <summary>Code</summary>
@@ -402,7 +479,7 @@ ok
 </details>
 <div class="cell-output-display">
 <table class="caption-top table table-sm table-striped small">
-<caption>Consumer state AFTER (promoted release: v2026.08.25)</caption>
+<caption>Consumer state AFTER (promoted release: v2026.09.04)</caption>
 <colgroup>
 <col style="width: 17%">
 <col style="width: 30%">
@@ -420,13 +497,13 @@ ok
 <tbody>
 <tr class="odd">
 <td style="text-align: left;">db-viz-hex</td>
-<td style="text-align: left;">calcofi_v2026.08.25.duckdb</td>
+<td style="text-align: left;">calcofi_v2026.09.04.duckdb</td>
 <td style="text-align: left;">calcofi_latest.duckdb symlink</td>
 <td style="text-align: left;">200</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">h3t API</td>
-<td style="text-align: left;">calcofi_v2026.08.25.duckdb</td>
+<td style="text-align: left;">calcofi_v2026.09.04.duckdb</td>
 <td style="text-align: left;">/h3t/health db_mtime -&gt; file on disk</td>
 <td style="text-align: left;">200</td>
 </tr>
@@ -438,19 +515,31 @@ ok
 </tr>
 <tr class="even">
 <td style="text-align: left;">db-viz-cruise</td>
-<td style="text-align: left;">2026-08-25 00:39</td>
+<td style="text-align: left;">2026-09-04 18:39</td>
+<td style="text-align: left;">database mtime (carries no version)</td>
+<td style="text-align: left;">200</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">ctd-viz</td>
+<td style="text-align: left;">2026-09-04 18:40</td>
+<td style="text-align: left;">database mtime (carries no version)</td>
+<td style="text-align: left;">200</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">ctd-qaqc</td>
+<td style="text-align: left;">2026-09-04 18:42</td>
 <td style="text-align: left;">database mtime (carries no version)</td>
 <td style="text-align: left;">200</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">db-query site</td>
-<td style="text-align: left;">v2026.08.25</td>
+<td style="text-align: left;">v2026.09.04</td>
 <td style="text-align: left;">live page vs _config.yml default_version</td>
 <td style="text-align: left;">200</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">releases index</td>
-<td style="text-align: left;">v2026.08.25</td>
+<td style="text-align: left;">v2026.09.04</td>
 <td style="text-align: left;">storage.calcofi.io releases/index.html</td>
 <td style="text-align: left;">200</td>
 </tr>
@@ -1094,74 +1183,82 @@ ok
 <span id="cb12-170"><a href="#cb12-170" aria-hidden="true" tabindex="-1"></a>                      <span class="st">"datasets.xml summary text"</span>,</span>
 <span id="cb12-171"><a href="#cb12-171" aria-hidden="true" tabindex="-1"></a>    <span class="st">"db-viz-cruise"</span>,  <span class="fu">ssh_out</span>(<span class="st">"stat -c %y /share/data/db-viz-cruise/db-viz-cruise.duckdb 2&gt;/dev/null | cut -c1-16"</span>),</span>
 <span id="cb12-172"><a href="#cb12-172" aria-hidden="true" tabindex="-1"></a>                      <span class="st">"database mtime (carries no version)"</span>,</span>
-<span id="cb12-173"><a href="#cb12-173" aria-hidden="true" tabindex="-1"></a>    <span class="st">"db-query site"</span>,  <span class="fu">dbquery_serving</span>(),</span>
-<span id="cb12-174"><a href="#cb12-174" aria-hidden="true" tabindex="-1"></a>                      <span class="st">"live page vs _config.yml default_version"</span>,</span>
-<span id="cb12-175"><a href="#cb12-175" aria-hidden="true" tabindex="-1"></a>    <span class="st">"releases index"</span>, <span class="fu">idx_serving</span>(),</span>
-<span id="cb12-176"><a href="#cb12-176" aria-hidden="true" tabindex="-1"></a>                      <span class="st">"storage.calcofi.io releases/index.html"</span>) <span class="sc">|&gt;</span></span>
-<span id="cb12-177"><a href="#cb12-177" aria-hidden="true" tabindex="-1"></a>    <span class="fu">mutate</span>(<span class="at">http =</span> <span class="fu">c</span>(<span class="fu">http_code</span>(<span class="st">"https://app.calcofi.io/db-viz-hex/"</span>),</span>
-<span id="cb12-178"><a href="#cb12-178" aria-hidden="true" tabindex="-1"></a>                    <span class="fu">http_code</span>(<span class="st">"https://h3t.calcofi.io/h3t/health"</span>),</span>
-<span id="cb12-179"><a href="#cb12-179" aria-hidden="true" tabindex="-1"></a>                    <span class="fu">http_code</span>(<span class="st">"https://erddap.calcofi.io/erddap/info/index.json"</span>),</span>
-<span id="cb12-180"><a href="#cb12-180" aria-hidden="true" tabindex="-1"></a>                    <span class="fu">http_code</span>(<span class="st">"https://app.calcofi.io/db-viz-cruise/"</span>),</span>
-<span id="cb12-181"><a href="#cb12-181" aria-hidden="true" tabindex="-1"></a>                    <span class="fu">http_code</span>(<span class="st">"https://calcofi.io/db-query/"</span>),</span>
-<span id="cb12-182"><a href="#cb12-182" aria-hidden="true" tabindex="-1"></a>                    <span class="fu">http_code</span>(<span class="st">"https://storage.calcofi.io/calcofi-db/ducklake/releases/"</span>)))</span>
-<span id="cb12-183"><a href="#cb12-183" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb12-184"><a href="#cb12-184" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-185"><a href="#cb12-185" aria-hidden="true" tabindex="-1"></a>before <span class="ot">&lt;-</span> <span class="fu">consumer_status</span>()</span>
-<span id="cb12-186"><a href="#cb12-186" aria-hidden="true" tabindex="-1"></a><span class="fu">kable</span>(before, <span class="at">caption =</span> <span class="fu">glue</span>(<span class="st">"Consumer state BEFORE (promoted release: {RELEASE})"</span>))</span>
-<span id="cb12-187"><a href="#cb12-187" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb12-188"><a href="#cb12-188" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-189"><a href="#cb12-189" aria-hidden="true" tabindex="-1"></a><span class="fu">## Deploy ----</span></span>
-<span id="cb12-190"><a href="#cb12-190" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-193"><a href="#cb12-193" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb12-194"><a href="#cb12-194" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: deploy</span></span>
-<span id="cb12-195"><a href="#cb12-195" aria-hidden="true" tabindex="-1"></a><span class="co">#| results: asis</span></span>
-<span id="cb12-196"><a href="#cb12-196" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="sc">!</span>DEPLOY) {</span>
-<span id="cb12-197"><a href="#cb12-197" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="fu">glue</span>(</span>
-<span id="cb12-198"><a href="#cb12-198" aria-hidden="true" tabindex="-1"></a>    <span class="st">"**Dry run — nothing deployed.** `CALCOFI_DEPLOY=false` is set, so this "</span>,</span>
-<span id="cb12-199"><a href="#cb12-199" aria-hidden="true" tabindex="-1"></a>    <span class="st">"target reported the state above and changed nothing.</span><span class="sc">\n\n</span><span class="st">"</span>,</span>
-<span id="cb12-200"><a href="#cb12-200" aria-hidden="true" tabindex="-1"></a>    <span class="st">"The server-side consumers may therefore be serving a previous release. "</span>,</span>
-<span id="cb12-201"><a href="#cb12-201" aria-hidden="true" tabindex="-1"></a>    <span class="st">"Unset the variable (deploying is the default) and re-run:</span><span class="sc">\n\n</span><span class="st">"</span>,</span>
-<span id="cb12-202"><a href="#cb12-202" aria-hidden="true" tabindex="-1"></a>    <span class="st">"```r</span><span class="sc">\n</span><span class="st">"</span>,</span>
-<span id="cb12-203"><a href="#cb12-203" aria-hidden="true" tabindex="-1"></a>    <span class="st">"targets::tar_invalidate(names = tidyselect::any_of(</span><span class="sc">\"</span><span class="st">deploy_consumers</span><span class="sc">\"</span><span class="st">))</span><span class="sc">\n</span><span class="st">"</span>,</span>
-<span id="cb12-204"><a href="#cb12-204" aria-hidden="true" tabindex="-1"></a>    <span class="st">"targets::tar_make(names = tidyselect::any_of(</span><span class="sc">\"</span><span class="st">deploy_consumers</span><span class="sc">\"</span><span class="st">))</span><span class="sc">\n</span><span class="st">"</span>,</span>
-<span id="cb12-205"><a href="#cb12-205" aria-hidden="true" tabindex="-1"></a>    <span class="st">"```</span><span class="sc">\n\n</span><span class="st">"</span>,</span>
-<span id="cb12-206"><a href="#cb12-206" aria-hidden="true" tabindex="-1"></a>    <span class="st">"or run the script directly: `bash scripts/deploy_consumers.sh`.</span><span class="sc">\n</span><span class="st">"</span>))</span>
-<span id="cb12-207"><a href="#cb12-207" aria-hidden="true" tabindex="-1"></a>} <span class="cf">else</span> {</span>
-<span id="cb12-208"><a href="#cb12-208" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="st">"Running `scripts/deploy_consumers.sh`.</span><span class="sc">\n\n</span><span class="st">```</span><span class="sc">\n</span><span class="st">"</span>)</span>
-<span id="cb12-209"><a href="#cb12-209" aria-hidden="true" tabindex="-1"></a>  out <span class="ot">&lt;-</span> <span class="fu">system2</span>(<span class="st">"bash"</span>, <span class="fu">c</span>(<span class="fu">here</span>(<span class="st">"scripts"</span>, <span class="st">"deploy_consumers.sh"</span>),</span>
-<span id="cb12-210"><a href="#cb12-210" aria-hidden="true" tabindex="-1"></a>                           <span class="st">"--release"</span>, RELEASE),</span>
-<span id="cb12-211"><a href="#cb12-211" aria-hidden="true" tabindex="-1"></a>                 <span class="at">stdout =</span> <span class="cn">TRUE</span>, <span class="at">stderr =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb12-212"><a href="#cb12-212" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="fu">paste</span>(out, <span class="at">collapse =</span> <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">```</span><span class="sc">\n</span><span class="st">"</span>)</span>
-<span id="cb12-213"><a href="#cb12-213" aria-hidden="true" tabindex="-1"></a>  rc <span class="ot">&lt;-</span> <span class="fu">attr</span>(out, <span class="st">"status"</span>) <span class="sc">%||%</span> <span class="dv">0</span>L</span>
-<span id="cb12-214"><a href="#cb12-214" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">identical</span>(<span class="fu">as.integer</span>(rc), <span class="dv">0</span>L))</span>
-<span id="cb12-215"><a href="#cb12-215" aria-hidden="true" tabindex="-1"></a>    <span class="fu">stop</span>(<span class="fu">glue</span>(</span>
-<span id="cb12-216"><a href="#cb12-216" aria-hidden="true" tabindex="-1"></a>      <span class="st">"consumer deploy FAILED for {RELEASE}. latest.txt is promoted and correct, "</span>,</span>
-<span id="cb12-217"><a href="#cb12-217" aria-hidden="true" tabindex="-1"></a>      <span class="st">"so calcofi4r and the hosted sites are fine — but db-viz-hex, db-viz-cruise "</span>,</span>
-<span id="cb12-218"><a href="#cb12-218" aria-hidden="true" tabindex="-1"></a>      <span class="st">"or the h3t API may still be serving the previous release."</span>))</span>
-<span id="cb12-219"><a href="#cb12-219" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb12-220"><a href="#cb12-220" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb12-221"><a href="#cb12-221" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-224"><a href="#cb12-224" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb12-225"><a href="#cb12-225" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: status-after</span></span>
-<span id="cb12-226"><a href="#cb12-226" aria-hidden="true" tabindex="-1"></a><span class="co">#| eval: !expr DEPLOY</span></span>
-<span id="cb12-227"><a href="#cb12-227" aria-hidden="true" tabindex="-1"></a>after <span class="ot">&lt;-</span> <span class="fu">consumer_status</span>()</span>
-<span id="cb12-228"><a href="#cb12-228" aria-hidden="true" tabindex="-1"></a><span class="fu">kable</span>(after, <span class="at">caption =</span> <span class="fu">glue</span>(<span class="st">"Consumer state AFTER (promoted release: {RELEASE})"</span>))</span>
+<span id="cb12-173"><a href="#cb12-173" aria-hidden="true" tabindex="-1"></a>    <span class="co"># both were outside the deploy until 2026-08-25; ctd-viz had served a</span></span>
+<span id="cb12-174"><a href="#cb12-174" aria-hidden="true" tabindex="-1"></a>    <span class="co"># 2026-05-15 database through three releases with nothing here to say so</span></span>
+<span id="cb12-175"><a href="#cb12-175" aria-hidden="true" tabindex="-1"></a>    <span class="st">"ctd-viz"</span>,        <span class="fu">ssh_out</span>(<span class="st">"stat -c %y /share/data/ctd-viz/ctd-viz.duckdb 2&gt;/dev/null | cut -c1-16"</span>),</span>
+<span id="cb12-176"><a href="#cb12-176" aria-hidden="true" tabindex="-1"></a>                      <span class="st">"database mtime (carries no version)"</span>,</span>
+<span id="cb12-177"><a href="#cb12-177" aria-hidden="true" tabindex="-1"></a>    <span class="st">"ctd-qaqc"</span>,       <span class="fu">ssh_out</span>(<span class="st">"stat -c %y /share/data/ctd-qaqc/ctd-qaqc.duckdb 2&gt;/dev/null | cut -c1-16"</span>),</span>
+<span id="cb12-178"><a href="#cb12-178" aria-hidden="true" tabindex="-1"></a>                      <span class="st">"database mtime (carries no version)"</span>,</span>
+<span id="cb12-179"><a href="#cb12-179" aria-hidden="true" tabindex="-1"></a>    <span class="st">"db-query site"</span>,  <span class="fu">dbquery_serving</span>(),</span>
+<span id="cb12-180"><a href="#cb12-180" aria-hidden="true" tabindex="-1"></a>                      <span class="st">"live page vs _config.yml default_version"</span>,</span>
+<span id="cb12-181"><a href="#cb12-181" aria-hidden="true" tabindex="-1"></a>    <span class="st">"releases index"</span>, <span class="fu">idx_serving</span>(),</span>
+<span id="cb12-182"><a href="#cb12-182" aria-hidden="true" tabindex="-1"></a>                      <span class="st">"storage.calcofi.io releases/index.html"</span>) <span class="sc">|&gt;</span></span>
+<span id="cb12-183"><a href="#cb12-183" aria-hidden="true" tabindex="-1"></a>    <span class="fu">mutate</span>(<span class="at">http =</span> <span class="fu">c</span>(<span class="fu">http_code</span>(<span class="st">"https://app.calcofi.io/db-viz-hex/"</span>),</span>
+<span id="cb12-184"><a href="#cb12-184" aria-hidden="true" tabindex="-1"></a>                    <span class="fu">http_code</span>(<span class="st">"https://h3t.calcofi.io/h3t/health"</span>),</span>
+<span id="cb12-185"><a href="#cb12-185" aria-hidden="true" tabindex="-1"></a>                    <span class="fu">http_code</span>(<span class="st">"https://erddap.calcofi.io/erddap/info/index.json"</span>),</span>
+<span id="cb12-186"><a href="#cb12-186" aria-hidden="true" tabindex="-1"></a>                    <span class="fu">http_code</span>(<span class="st">"https://app.calcofi.io/db-viz-cruise/"</span>),</span>
+<span id="cb12-187"><a href="#cb12-187" aria-hidden="true" tabindex="-1"></a>                    <span class="fu">http_code</span>(<span class="st">"https://app.calcofi.io/ctd/"</span>),</span>
+<span id="cb12-188"><a href="#cb12-188" aria-hidden="true" tabindex="-1"></a>                    <span class="fu">http_code</span>(<span class="st">"https://app.calcofi.io/ctd-qaqc/"</span>),</span>
+<span id="cb12-189"><a href="#cb12-189" aria-hidden="true" tabindex="-1"></a>                    <span class="fu">http_code</span>(<span class="st">"https://calcofi.io/db-query/"</span>),</span>
+<span id="cb12-190"><a href="#cb12-190" aria-hidden="true" tabindex="-1"></a>                    <span class="fu">http_code</span>(<span class="st">"https://storage.calcofi.io/calcofi-db/ducklake/releases/"</span>)))</span>
+<span id="cb12-191"><a href="#cb12-191" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb12-192"><a href="#cb12-192" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-193"><a href="#cb12-193" aria-hidden="true" tabindex="-1"></a>before <span class="ot">&lt;-</span> <span class="fu">consumer_status</span>()</span>
+<span id="cb12-194"><a href="#cb12-194" aria-hidden="true" tabindex="-1"></a><span class="fu">kable</span>(before, <span class="at">caption =</span> <span class="fu">glue</span>(<span class="st">"Consumer state BEFORE (promoted release: {RELEASE})"</span>))</span>
+<span id="cb12-195"><a href="#cb12-195" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb12-196"><a href="#cb12-196" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-197"><a href="#cb12-197" aria-hidden="true" tabindex="-1"></a><span class="fu">## Deploy ----</span></span>
+<span id="cb12-198"><a href="#cb12-198" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-201"><a href="#cb12-201" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb12-202"><a href="#cb12-202" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: deploy</span></span>
+<span id="cb12-203"><a href="#cb12-203" aria-hidden="true" tabindex="-1"></a><span class="co">#| results: asis</span></span>
+<span id="cb12-204"><a href="#cb12-204" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="sc">!</span>DEPLOY) {</span>
+<span id="cb12-205"><a href="#cb12-205" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="fu">glue</span>(</span>
+<span id="cb12-206"><a href="#cb12-206" aria-hidden="true" tabindex="-1"></a>    <span class="st">"**Dry run — nothing deployed.** `CALCOFI_DEPLOY=false` is set, so this "</span>,</span>
+<span id="cb12-207"><a href="#cb12-207" aria-hidden="true" tabindex="-1"></a>    <span class="st">"target reported the state above and changed nothing.</span><span class="sc">\n\n</span><span class="st">"</span>,</span>
+<span id="cb12-208"><a href="#cb12-208" aria-hidden="true" tabindex="-1"></a>    <span class="st">"The server-side consumers may therefore be serving a previous release. "</span>,</span>
+<span id="cb12-209"><a href="#cb12-209" aria-hidden="true" tabindex="-1"></a>    <span class="st">"Unset the variable (deploying is the default) and re-run:</span><span class="sc">\n\n</span><span class="st">"</span>,</span>
+<span id="cb12-210"><a href="#cb12-210" aria-hidden="true" tabindex="-1"></a>    <span class="st">"```r</span><span class="sc">\n</span><span class="st">"</span>,</span>
+<span id="cb12-211"><a href="#cb12-211" aria-hidden="true" tabindex="-1"></a>    <span class="st">"targets::tar_invalidate(names = tidyselect::any_of(</span><span class="sc">\"</span><span class="st">deploy_consumers</span><span class="sc">\"</span><span class="st">))</span><span class="sc">\n</span><span class="st">"</span>,</span>
+<span id="cb12-212"><a href="#cb12-212" aria-hidden="true" tabindex="-1"></a>    <span class="st">"targets::tar_make(names = tidyselect::any_of(</span><span class="sc">\"</span><span class="st">deploy_consumers</span><span class="sc">\"</span><span class="st">))</span><span class="sc">\n</span><span class="st">"</span>,</span>
+<span id="cb12-213"><a href="#cb12-213" aria-hidden="true" tabindex="-1"></a>    <span class="st">"```</span><span class="sc">\n\n</span><span class="st">"</span>,</span>
+<span id="cb12-214"><a href="#cb12-214" aria-hidden="true" tabindex="-1"></a>    <span class="st">"or run the script directly: `bash scripts/deploy_consumers.sh`.</span><span class="sc">\n</span><span class="st">"</span>))</span>
+<span id="cb12-215"><a href="#cb12-215" aria-hidden="true" tabindex="-1"></a>} <span class="cf">else</span> {</span>
+<span id="cb12-216"><a href="#cb12-216" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="st">"Running `scripts/deploy_consumers.sh`.</span><span class="sc">\n\n</span><span class="st">```</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb12-217"><a href="#cb12-217" aria-hidden="true" tabindex="-1"></a>  out <span class="ot">&lt;-</span> <span class="fu">system2</span>(<span class="st">"bash"</span>, <span class="fu">c</span>(<span class="fu">here</span>(<span class="st">"scripts"</span>, <span class="st">"deploy_consumers.sh"</span>),</span>
+<span id="cb12-218"><a href="#cb12-218" aria-hidden="true" tabindex="-1"></a>                           <span class="st">"--release"</span>, RELEASE),</span>
+<span id="cb12-219"><a href="#cb12-219" aria-hidden="true" tabindex="-1"></a>                 <span class="at">stdout =</span> <span class="cn">TRUE</span>, <span class="at">stderr =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb12-220"><a href="#cb12-220" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="fu">paste</span>(out, <span class="at">collapse =</span> <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">```</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb12-221"><a href="#cb12-221" aria-hidden="true" tabindex="-1"></a>  rc <span class="ot">&lt;-</span> <span class="fu">attr</span>(out, <span class="st">"status"</span>) <span class="sc">%||%</span> <span class="dv">0</span>L</span>
+<span id="cb12-222"><a href="#cb12-222" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">identical</span>(<span class="fu">as.integer</span>(rc), <span class="dv">0</span>L))</span>
+<span id="cb12-223"><a href="#cb12-223" aria-hidden="true" tabindex="-1"></a>    <span class="fu">stop</span>(<span class="fu">glue</span>(</span>
+<span id="cb12-224"><a href="#cb12-224" aria-hidden="true" tabindex="-1"></a>      <span class="st">"consumer deploy FAILED for {RELEASE}. latest.txt is promoted and correct, "</span>,</span>
+<span id="cb12-225"><a href="#cb12-225" aria-hidden="true" tabindex="-1"></a>      <span class="st">"so calcofi4r and the hosted sites are fine — but db-viz-hex, db-viz-cruise "</span>,</span>
+<span id="cb12-226"><a href="#cb12-226" aria-hidden="true" tabindex="-1"></a>      <span class="st">"or the h3t API may still be serving the previous release."</span>))</span>
+<span id="cb12-227"><a href="#cb12-227" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb12-228"><a href="#cb12-228" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
 <span id="cb12-229"><a href="#cb12-229" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-230"><a href="#cb12-230" aria-hidden="true" tabindex="-1"></a><span class="co"># The h3t API is the one that fails silently, so assert on it rather than</span></span>
-<span id="cb12-231"><a href="#cb12-231" aria-hidden="true" tabindex="-1"></a><span class="co"># trusting the script's own exit status.</span></span>
-<span id="cb12-232"><a href="#cb12-232" aria-hidden="true" tabindex="-1"></a>h3t_now <span class="ot">&lt;-</span> after<span class="sc">$</span>serving[after<span class="sc">$</span>consumer <span class="sc">==</span> <span class="st">"h3t API"</span>]</span>
-<span id="cb12-233"><a href="#cb12-233" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">nzchar</span>(RELEASE) <span class="sc">&amp;&amp;</span> <span class="fu">nzchar</span>(h3t_now) <span class="sc">&amp;&amp;</span> <span class="sc">!</span><span class="fu">grepl</span>(RELEASE, h3t_now, <span class="at">fixed =</span> <span class="cn">TRUE</span>))</span>
-<span id="cb12-234"><a href="#cb12-234" aria-hidden="true" tabindex="-1"></a>  <span class="fu">warning</span>(<span class="fu">glue</span>(</span>
-<span id="cb12-235"><a href="#cb12-235" aria-hidden="true" tabindex="-1"></a>    <span class="st">"h3t API is serving {h3t_now}, not {RELEASE}. It holds its database file "</span>,</span>
-<span id="cb12-236"><a href="#cb12-236" aria-hidden="true" tabindex="-1"></a>    <span class="st">"open, so a symlink flip alone does not move it — the container restart in "</span>,</span>
-<span id="cb12-237"><a href="#cb12-237" aria-hidden="true" tabindex="-1"></a>    <span class="st">"step 3 is what does."</span>))</span>
-<span id="cb12-238"><a href="#cb12-238" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb12-239"><a href="#cb12-239" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-242"><a href="#cb12-242" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb12-243"><a href="#cb12-243" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: write-output</span></span>
-<span id="cb12-244"><a href="#cb12-244" aria-hidden="true" tabindex="-1"></a><span class="co">#| include: false</span></span>
-<span id="cb12-245"><a href="#cb12-245" aria-hidden="true" tabindex="-1"></a><span class="co"># `output:` in the calcofi block is this HTML; quarto writes it. Nothing else to do.</span></span>
+<span id="cb12-232"><a href="#cb12-232" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb12-233"><a href="#cb12-233" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: status-after</span></span>
+<span id="cb12-234"><a href="#cb12-234" aria-hidden="true" tabindex="-1"></a><span class="co">#| eval: !expr DEPLOY</span></span>
+<span id="cb12-235"><a href="#cb12-235" aria-hidden="true" tabindex="-1"></a>after <span class="ot">&lt;-</span> <span class="fu">consumer_status</span>()</span>
+<span id="cb12-236"><a href="#cb12-236" aria-hidden="true" tabindex="-1"></a><span class="fu">kable</span>(after, <span class="at">caption =</span> <span class="fu">glue</span>(<span class="st">"Consumer state AFTER (promoted release: {RELEASE})"</span>))</span>
+<span id="cb12-237"><a href="#cb12-237" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-238"><a href="#cb12-238" aria-hidden="true" tabindex="-1"></a><span class="co"># The h3t API is the one that fails silently, so assert on it rather than</span></span>
+<span id="cb12-239"><a href="#cb12-239" aria-hidden="true" tabindex="-1"></a><span class="co"># trusting the script's own exit status.</span></span>
+<span id="cb12-240"><a href="#cb12-240" aria-hidden="true" tabindex="-1"></a>h3t_now <span class="ot">&lt;-</span> after<span class="sc">$</span>serving[after<span class="sc">$</span>consumer <span class="sc">==</span> <span class="st">"h3t API"</span>]</span>
+<span id="cb12-241"><a href="#cb12-241" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">nzchar</span>(RELEASE) <span class="sc">&amp;&amp;</span> <span class="fu">nzchar</span>(h3t_now) <span class="sc">&amp;&amp;</span> <span class="sc">!</span><span class="fu">grepl</span>(RELEASE, h3t_now, <span class="at">fixed =</span> <span class="cn">TRUE</span>))</span>
+<span id="cb12-242"><a href="#cb12-242" aria-hidden="true" tabindex="-1"></a>  <span class="fu">warning</span>(<span class="fu">glue</span>(</span>
+<span id="cb12-243"><a href="#cb12-243" aria-hidden="true" tabindex="-1"></a>    <span class="st">"h3t API is serving {h3t_now}, not {RELEASE}. It holds its database file "</span>,</span>
+<span id="cb12-244"><a href="#cb12-244" aria-hidden="true" tabindex="-1"></a>    <span class="st">"open, so a symlink flip alone does not move it — the container restart in "</span>,</span>
+<span id="cb12-245"><a href="#cb12-245" aria-hidden="true" tabindex="-1"></a>    <span class="st">"step 3 is what does."</span>))</span>
 <span id="cb12-246"><a href="#cb12-246" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb12-247"><a href="#cb12-247" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-250"><a href="#cb12-250" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb12-251"><a href="#cb12-251" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: write-output</span></span>
+<span id="cb12-252"><a href="#cb12-252" aria-hidden="true" tabindex="-1"></a><span class="co">#| include: false</span></span>
+<span id="cb12-253"><a href="#cb12-253" aria-hidden="true" tabindex="-1"></a><span class="co"># `output:` in the calcofi block is this HTML; quarto writes it. Nothing else to do.</span></span>
+<span id="cb12-254"><a href="#cb12-254" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
 </code></pre></div><button title="Copy to Clipboard" class="code-copy-button" data-in-quarto-modal=""><i class="bi"></i></button></div>
 </div></div></div></div></div>
 </div> <!-- /content -->
