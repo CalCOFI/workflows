@@ -139,19 +139,60 @@ ingest_dataset(con, d)
 <!-- {{taxonomy_section_start}} -->
 ## Standardize Taxonomy
 
+Delete this section if the dataset carries no taxa. Otherwise: the vocabulary is
+**declared here** and **resolved by the package** (taxon plan D1-D6). There is no
+per-dataset arm inside `calcofi4db` — a column you rename or drop below fails at
+`append_dataset_taxon()` rather than becoming an `NA` at release. Copy the shape
+from `ingest_farallon_bird-mammal.qmd`, which is the worked example.
+
 ```{r}
 #| label: TODO-taxonomy
 
-# TODO: uncomment if dataset has species/taxonomy data
-# standardize_species_local(
-#   con,
-#   spp_db_path  = "~/My Drive/projects/calcofi/data-public/MarineSensitivity/spp.duckdb",
-#   species_tbl  = "species")
+# registries. taxon_override.csv is read whole (every helper filters to ds_key
+# itself); measurement_taxon.csv is filtered to THIS dataset.
+mt_taxon <- read_csv(here("metadata/measurement_taxon.csv"),
+                     col_types = cols(worms_id = "i", itis_id = "i",
+                                      bin_value = "d", .default = "c")) |>
+  filter(dataset_key == ds_key)
+tx_over  <- read_csv(here("metadata/taxon_override.csv"), show_col_types = FALSE)
 
-# build_taxon_hierarchy(
-#   con,
-#   spp_db_path  = "~/My Drive/projects/calcofi/data-public/MarineSensitivity/spp.duckdb",
-#   species_tbl  = "species")
+# 1. DECLARE. One row per local taxon. `ds_taxa_code` is the code `obs` stores,
+#    VERBATIM (never cleaned — rewriting it orphans every observation of that
+#    taxon); `ds_scientific_name` is the source's name and the lookup query;
+#    `worms_id` / `itis_id` / `gbif_id` / `rank` are what THE SOURCE supplied and
+#    are stored together as `ds_source_json`. Unknown columns error.
+#    `ds_prefix` defaults to `dataset_key`; pass "calcofi" only for the shared
+#    CalCOFI species list.
+# d_vocab <- dbGetQuery(con, "
+#   SELECT CAST(<code> AS VARCHAR) AS ds_taxa_code,
+#          <name>                  AS ds_scientific_name,
+#          <label>                 AS ds_common_name,
+#          CAST(<aphia> AS INTEGER) AS worms_id
+#   FROM <source_taxon_table> ORDER BY 1")
+# n_staged <- append_dataset_taxon(con, ds_key, d_vocab)
+
+# 2. RESOLVE against the authorities. xref BEFORE lineage: the lineage fetch must
+#    ask about the accepted id, and the CLASS it returns is what decides whether
+#    the key is `itis:` (Aves with an accepted TSN) or `worms:`. Both are cached
+#    under metadata/, so a re-run costs no API calls.
+# ensure_taxon_xref(con, mt_taxon, tx_over,
+#                   cache_csv = here("metadata/taxon_xref.csv"))
+# ensure_taxon_lineage(con, mt_taxon, tx_over,
+#                      cache_csv = here("metadata/taxon_lineage.csv"))
+
+# 3. BUILD the shared references. Groups come from the registry, never from code.
+# n_taxon    <- build_taxon_reference(con, mt_taxon, tx_over)
+# n_ds_taxon <- resolve_dataset_taxon(con, mt_taxon, tx_over)
+# n_tx_group <- build_taxon_group(
+#   con, read_taxon_group_rules(here("metadata/taxon_group.csv")))
+
+# 4. ASSERT, before append_obs(). `codes` is every code the observations
+#    reference; `allow` names the dataset-local keys ONE AT A TIME, with a
+#    comment, for genuinely non-taxonomic classes (an operational bioclass, an
+#    undefined source code) — never as a pattern.
+# obs_codes <- dbGetQuery(con, "SELECT DISTINCT <code> FROM <observation_table>")[[1]]
+# chk_taxon <- check_dataset_taxon(con, ds_key, codes = obs_codes,
+#                                  allow = character())
 ```
 <!-- {{taxonomy_section_end}} -->
 
