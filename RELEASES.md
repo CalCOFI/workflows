@@ -121,6 +121,12 @@ DataZoo build that v2026.08.25 released:
   ERDDAP lacks (start/stop positions, bottom depth, Julian date) never reached the core `sample`
   table, so nothing released loses a column.
 
+Two of the 123 Farallon cruises reach the release as transects with no observation at all —
+2021-01-33UD (490 transects) and 2022-10-33UD (260) — because ERDDAP serves their effort but none of
+their sightings (Q11, high). They are allowed by name in `release_database.qmd`'s orphan-cruise ratchet
+rather than dropped: the effort is real as published, and a sample with no observation row never enters
+an Explorer denominator. The allowance falls to zero when Farallon Institute answers.
+
 ## Phytoplankton taxa are keyed to species again
 
 v2026.08.25 released **22** distinct `taxon_key`s for the **393** `calcofi_phytoplankton` codes.

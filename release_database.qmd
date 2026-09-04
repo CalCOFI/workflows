@@ -1086,7 +1086,14 @@ ORPHAN_CRUISES_MAX <- c(
   "swfsc_ichthyo"        = 20L,
   "swfsc_cufes"          =  3L,
   "calcofi_mets"         =  1L,
-  "cce-lter_euphausiids" =  1L)
+  "cce-lter_euphausiids" =  1L,
+  # farallon on ERDDAP (2026-09-04): CAC_FI_SBAS_obs carries NO observations for
+  # two cruises whose transects it does serve — 2021-01-33UD (490 transects) and
+  # 2022-10-33UD (260) — where DataZoo's export had 625 rows for the 2021 cruise.
+  # Taken as served (Q11, high, asked 2026-09-04); the transects are real effort
+  # and the Explorer keeps samples with no observation row out of every
+  # denominator. Ben, 2026-09-04: allow by name. Drops to 0 when Q11 is answered.
+  "farallon_bird-mammal" =  2L)
 
 # NOT `d_cov` — that name is live from the `dataset_coverage` chunk above and is
 # read again in `upload_frozen` (d_cov$coverage_temporal_observed). Reusing it
