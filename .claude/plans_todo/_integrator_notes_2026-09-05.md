@@ -65,4 +65,14 @@ https://claude.ai/code/artifact/5fe1fa4e-c124-4525-a27a-a4a978abf2ba (the spec f
   workflows `publish_to-erddap.qmd`), E2 (Opus; calcofi4db `dwc-4.4.0` + workflows `obis-generic`), E3 (Sonnet;
   workflows `edi-publish`), M2 (Sonnet; workflows `registrations-drafts`). Merge order: E2's 4.4.0 after P2's
   calcofi4r/calcofi4py bumps are independent; RELEASES.md text comes back in hand-backs (agents do not edit it).
+- 2026-09-05 evening · **Pushed** (Ben, "push ready repos, including landing page"): calcofi4db, workflows, explore,
+  CalCOFI.github.io — calcofi.io deployed with the catalog (`/datasets/`, `/data.json`, `/datasets/sitemap.xml`,
+  `/stac/` all 200), rendering the staging record through the `DATASETS_RELEASE_URL` bridge. The workflows-site deploy
+  had failed on every push since 2026-09-03 (no calcofi4db on the runner) — fixed in `jekyll-gh-pages.yml`
+  (setup-r-dependencies + `calcofi/calcofi4db`, link check skipped on the runner). **Wave 3 merged + pushed:** E3
+  (`publish_to-edi.qmd`), M2 (registration drafts, `portal.csv` ioos-catalog → FGDC WAF), P2 (12 repos on
+  `dataset-page-links`: workflows publish_to-erddap.qmd, db-schema, db-query, explore, db-viz-station, db-viz-hex,
+  ctd-transects, calcofi4r 1.19.0, calcofi4py 0.7.0, docs portals.qmd, analytics, uptime). Not yet: E2 (running);
+  db-viz-hex is a server-side Shiny app (deploy-consumers skill, not a push); calcofi4r 1.19.0 / calcofi4py 0.7.0
+  are on main, untagged; the ERDDAP `datasets.xml` regeneration (publish_to-erddap.qmd) runs with the next release.
 
