@@ -700,14 +700,71 @@ cat(glue("wrote {basename(script_path)} ({length(script)} lines, parses clean)\n
 # built from), so ERDDAP, the database and the schema site cannot disagree.
 iy_meta <- function(ds) iy[[ds]]$dataset_meta %||% list()
 
+# The dataset-catalog page (plan 2026-09-05 D-4/D-5(4)) — built from the key
+# alone, never a hard-coded per-dataset list.
+dataset_page_url <- function(dataset_key) glue("https://calcofi.io/datasets/{dataset_key}/")
+
+# The dataset registries the record itself reads (calcofi4db >= 4.1.0):
+# provider display name/URL for the creator_*/institution globals when a
+# dataset states no contact or creator of its own, and the license registry so
+# a dataset's own `license` id resolves to its full name/URL rather than being
+# guessed. Read once, here, at render time.
+CATALOG_REGISTRIES <- calcofi4db::read_catalog_registries(here("metadata"))
+.s0 <- function(x) if (is.null(x) || length(x) == 0 || is.na(x[1])) "" else trimws(as.character(x)[1])
+provider_of <- function(slug) {
+  row <- CATALOG_REGISTRIES$provider[CATALOG_REGISTRIES$provider$provider == slug, ]
+  if (!nrow(row)) return(list(name = NA_character_, url = NA_character_))
+  list(name = row$provider_name[1], url = row$url[1])
+}
+license_of <- function(license_id) {
+  license_id <- .s0(license_id)
+  if (!nzchar(license_id)) return(NA_character_)
+  row <- CATALOG_REGISTRIES$license[CATALOG_REGISTRIES$license$license == license_id, ]
+  if (nrow(row) && nzchar(.s0(row$name[1]))) row$name[1] else license_id
+}
+
+# creator_name/_type/_email/_url + institution: I-13's WS-P2 fix (D-5(4)) —
+# ERDDAP's own globals should say what the record says, not a fixed program
+# name. Order: the sidecar's own contact/pi_names, else the provider
+# organization (never invented) — the same fallback chain WS-E1's build_eml()
+# uses for the EML `creator`/`contact` elements, so the two documents agree.
+creator_fields_of <- function(dataset_key) {
+  dm  <- iy_meta(dataset_key)
+  org <- provider_of(iy[[dataset_key]]$provider %||% "")
+  pis <- trimws(unlist(strsplit(.s0(dm$pi_names), ";")))
+  pis <- pis[nzchar(pis)]
+  name  <- if (length(pis)) paste(pis, collapse = "; ") else (org$name %||% "CalCOFI")
+  ctype <- if (length(pis)) "person" else "institution"
+  email <- .s0(dm$contact)
+  email <- if (grepl("^https?://", email)) NA_character_ else if (nzchar(email)) email else NA_character_
+  url   <- if (grepl("^https?://", .s0(dm$contact))) dm$contact else (dm$link_calcofi_org %||% org$url %||% "https://calcofi.org")
+  list(creator_name = name, creator_type = ctype, creator_email = email %||% NA_character_,
+       creator_url = url, institution = org$name %||% "CalCOFI")
+}
+
+# keywords: the sidecar's GCMD Science Keywords (declared for all 16 datasets
+# by WS-R1) joined comma-separated, ERDDAP's own convention for this global.
+keywords_of <- function(dataset_key) {
+  kw <- unlist(iy_meta(dataset_key)$keywords_gcmd)
+  if (!length(kw)) return(NA_character_)
+  paste(kw, collapse = ", ")
+}
+
+# I-13 (this WS-P2's fix, at the source): an em dash in a title survives this
+# notebook as real UTF-8, but erddap.calcofi.io's OWN `allDatasets` metadata
+# re-serializes it as the literal 6-character string "—" — verified on
+# the live server 2026-09-05, decoded downstream since calcofi4db 4.2.x
+# (WS-M1's observe_distributions()). The durable fix is not to hand ERDDAP a
+# character its own metadata layer mishandles: a plain hyphen reads the same
+# and survives every consumer.
 title_of <- function(r) {
   dm <- iy_meta(r$dataset_key)
   base <- dm$dataset_name %||% r$dataset_key
   switch(r$grain,
-    obs           = glue("{base} — observations"),
-    sample        = glue("{base} — sampling events"),
-    obs_attribute = glue("{base} — length/stage frequency"),
-    full          = glue("{base} — full resolution (pre-thinning)"))
+    obs           = glue("{base} - observations"),
+    sample        = glue("{base} - sampling events"),
+    obs_attribute = glue("{base} - length/stage frequency"),
+    full          = glue("{base} - full resolution (pre-thinning)"))
 }
 summary_of <- function(r) {
   dm <- iy_meta(r$dataset_key)
@@ -767,11 +824,27 @@ for (i in seq_len(nrow(cfg))) {
     flagvalues_lookup   = if (!is.null(qflags)) list(measurement_qual = qflags$values) else list(),
     flagmeanings_lookup = if (!is.null(qflags)) list(measurement_qual = qflags$meanings) else list(),
     cdm_data_type = CDM,
-    global_atts   = list(
-      license   = iy_meta(r$dataset_key)$license %||% "CC-BY 4.0",
-      infoUrl   = iy_meta(r$dataset_key)$link_calcofi_org %||% "https://calcofi.org",
-      db_release = RELEASE, dataset_key = r$dataset_key,
-      references = "https://calcofi.io/workflows/publish_to-erddap.html"))
+    # infoUrl -> the dataset page (built from the key, D-5(4)); creator_*/
+    # institution/keywords from the record's own sidecar + provider registry,
+    # never a fixed program-wide default (I-13's fix travels with these, since
+    # both read the same iy_meta()). A field the record does not state is
+    # OMITTED, never written as the literal string "NA" — an ERDDAP global
+    # that is absent is a fact, not a guess.
+    global_atts   = local({
+      cr  <- creator_fields_of(r$dataset_key)
+      atts <- list(
+        license       = license_of(iy_meta(r$dataset_key)$license) %||% "not specified",
+        infoUrl       = dataset_page_url(r$dataset_key),
+        creator_name  = cr$creator_name,
+        creator_type  = cr$creator_type,
+        creator_email = cr$creator_email,
+        creator_url   = cr$creator_url,
+        institution   = cr$institution,
+        keywords      = keywords_of(r$dataset_key),
+        db_release    = RELEASE, dataset_key = r$dataset_key,
+        references    = "https://calcofi.io/workflows/publish_to-erddap.html")
+      Filter(function(x) !is.null(x) && !(length(x) == 1 && is.na(x)), atts)
+    }))
   dir_create(file.path(dir_erddap, r$dataset_id))
   writeLines(xml, file.path(dir_erddap, r$dataset_id, glue("{r$dataset_id}.xml")))
   blocks <- c(blocks, xml)
