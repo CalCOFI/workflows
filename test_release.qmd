@@ -636,6 +636,74 @@ catalog_res |>
   DT::datatable(escape = FALSE, rownames = FALSE, colnames = c("", "catalog check", "error"))
 ```
 
+## Static STAC catalog
+
+The STAC catalog `release_database.qmd` wrote to `gs://calcofi-db/stac/` (plan 2026-09-05 § D-5.3;
+calcofi4db >= 4.3.0) is checked **as published**, not as built: the root, every child collection and
+this release's item are fetched back from the bucket into a local mirror and run through
+`check_stac()` — the structural half always, `stac-validator` (pip) over every document when it is
+installed. That is what `stac-browser` at calcofi.io/stac/ will read.
+
+```{r}
+#| label: stac_catalog
+
+stac_prefix <- if (grepl("staging", rel_prefix)) "stac-staging" else "stac"
+stac_base   <- glue("https://storage.googleapis.com/calcofi-db/{stac_prefix}")
+dir_mirror  <- file.path(tempdir(), "stac_mirror")
+unlink(dir_mirror, recursive = TRUE)
+
+get_json <- function(url) tryCatch(
+  paste(readLines(url, warn = FALSE, encoding = "UTF-8"), collapse = "\n"), error = function(e) NULL)
+save_rel <- function(txt, rel) {
+  p <- file.path(dir_mirror, rel)
+  dir.create(dirname(p), recursive = TRUE, showWarnings = FALSE)
+  writeLines(txt, p)
+  p
+}
+
+root_txt <- get_json(glue("{stac_base}/catalog.json"))
+stac_res <- if (is.null(root_txt)) {
+  cat_row("stac: catalog.json present", FALSE, glue("{stac_base}/catalog.json not readable"))
+} else {
+  save_rel(root_txt, "catalog.json")
+  root  <- jsonlite::fromJSON(root_txt, simplifyVector = FALSE)
+  kids  <- Filter(function(l) identical(l$rel, "child"), root$links)
+  # the record was read above; if it was not readable this row still runs, on the root's own count
+  n_pub <- if (exists("ds_rec"))
+    sum(vapply(ds_rec$datasets, function(d) identical(d$visibility %||% "public", "public"), logical(1)))
+    else sum(!grepl("/layer_", vapply(kids, function(k) k$href, "")))
+  # mirror every child collection, and each dataset collection's item for THIS release
+  n_miss <- 0L
+  for (k in kids) {
+    rel <- sub(glue("^{stac_base}/"), "", k$href)
+    txt <- get_json(k$href)
+    if (is.null(txt)) { n_miss <- n_miss + 1L; next }
+    save_rel(txt, rel)
+    if (!grepl("/layer_", rel)) {
+      id  <- basename(dirname(rel))
+      irel <- glue("collections/{id}/items/{release_version}.json")
+      itxt <- get_json(glue("{stac_base}/{irel}"))
+      if (is.null(itxt)) n_miss <- n_miss + 1L else save_rel(itxt, irel)
+    }
+  }
+  chk <- check_stac(dir_mirror, network = !nzchar(Sys.getenv("CALCOFI_SKIP_LINK_CHECK")))
+  bad <- chk[chk$level == "error", , drop = FALSE]
+  n_items <- length(list.files(dir_mirror, pattern = "^v.*[.]json$", recursive = TRUE))
+  dplyr::bind_rows(
+    cat_row(glue("stac: every child collection and this release's item fetched ({length(kids)} children)"),
+            n_miss == 0, glue("{n_miss} document(s) missing on the bucket")),
+    cat_row(glue("stac: one item per public dataset at {release_version} [{n_items} vs {n_pub}]"),
+            n_items == n_pub, "item count mismatch"),
+    cat_row(glue("stac: check_stac 0 errors ({sum(chk$finding == 'ok')} ok, {sum(chk$level == 'warn')} warn)"),
+            nrow(bad) == 0, paste(sprintf("%s %s", bad$document, bad$finding), collapse = "; ")))
+}
+results <- dplyr::bind_rows(results, stac_res)
+stac_res |>
+  mutate(status_html = status_badge(status)) |>
+  select(status_html, query, error) |>
+  DT::datatable(escape = FALSE, rownames = FALSE, colnames = c("", "STAC check", "error"))
+```
+
 ## Save results sidecar
 
 ```{r}

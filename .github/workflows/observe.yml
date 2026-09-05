@@ -1,0 +1,91 @@
+name: observe distributions + sitemap
+
+# What every external copy of a CalCOFI dataset says NOW (plan 2026-09-05 § D-10/D-11),
+# and the ODIS sitemap regenerated from the release record.
+#
+# Weekly, because a portal revises a package without a release: EDI publishes a new
+# revision, OBIS re-indexes, an ERDDAP id is dropped. On `workflow_dispatch` and on the
+# release dispatch (`repository_dispatch: release`) because the record changed.
+#
+# It NEVER edits metadata/distribution.csv — that registry is curated by hand and
+# nothing is ever deleted from it. This job writes the parallel observation
+# (metadata/distribution_observed.json) and datasets/sitemap.xml, and commits them.
+
+on:
+  schedule:
+    - cron: "17 9 * * 1"        # Mondays 09:17 UTC
+  workflow_dispatch:
+  repository_dispatch:
+    types: [release]
+
+permissions:
+  contents: write
+
+jobs:
+  observe:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      R_KEEP_PKG_SOURCE: no
+      # TEMPORARY, and it comes out with WS-P1: calcofi.io/datasets/{key}/ 404s until the
+      # landing repo generates the pages (33 of them, measured 2026-09-05). Only those are
+      # forgiven — a dead EXTERNAL record still fails the run.
+      CALCOFI_PAGES_PENDING: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: release
+          use-public-rspm: true
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          packages: |
+            any::here
+            any::glue
+            any::dplyr
+            any::jsonlite
+            github::calcofi/calcofi4db
+
+      - name: Observe every external distribution
+        run: Rscript scripts/observe_distributions.R --quiet
+
+      - name: Regenerate datasets/sitemap.xml from the release record
+        run: Rscript scripts/build_datasets_sitemap.R
+
+      - name: Commit what moved
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add metadata/distribution_observed.json datasets/sitemap.xml
+          if git diff --staged --quiet; then
+            echo "no change"
+          else
+            git commit -m "observe: what the portals say now + the regenerated sitemap ($(date -u +%Y-%m-%d))"
+            git push
+          fi
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo '### Observed distributions'
+            python3 - <<'PY'
+          import json, pathlib
+          p = pathlib.Path("metadata/distribution_observed.json")
+          if p.exists():
+              d = json.loads(p.read_text())
+              print(f"observed `{d['observed_utc']}` — " +
+                    ", ".join(f"{k}: {v}" for k, v in d["counts"].items()))
+              if d.get("changes"):
+                  print("\n**Changes since the last observation** (each one a proposed provider question):\n")
+                  print("| dataset | field | was | now |")
+                  print("|---|---|---|---|")
+                  for c in d["changes"]:
+                      print(f"| {c['dataset_key']} | {c['field']} | {c.get('was')} | {c.get('now')} |")
+              else:
+                  print("\nno change since the last observation")
+          PY
+          } >> "$GITHUB_STEP_SUMMARY"
