@@ -2356,6 +2356,55 @@ if (length(meta_paths) > 0) {
   warning("No per-ingest metadata.json files found; skipping release metadata.json")
 }
 
+# 3b. datasets.json — the dataset catalog record (plan 2026-09-05 § D-1; calcofi4db >= 4.1.0) ----
+# One record per dataset_key joining metadata.json, coverage.json (built in [browser_objects]) and
+# the catalog.json just built with the registries — metadata/{category,provider,license,
+# dataset_status,distribution,portal}.csv and the descriptive sidecars
+# metadata/{provider}/{dataset}/dataset_meta.yml — and with what the live services answer NOW
+# (erddap.calcofi.io's allDatasets, the netCDF manifests, the earlier releases' metadata.json for
+# since_version). It is built HERE rather than beside coverage.json because it points at the
+# catalog's content-addressed objects, which exist only after the freeze plan. check_dataset_catalog()
+# is a release gate like assert_dataset_citation(): a record without a name, a registered category and
+# provider, a description, a bbox or a download fails; a missing citation is exempt only while a
+# provider question covers it; every listed URL must answer (one-byte ranged GET, behind
+# CALCOFI_SKIP_LINK_CHECK, like the index's link check). Nothing on calcofi.io/datasets is authored
+# by hand: the landing page fetches this file (Phase 1). holdings.csv is regenerated from the sidecars.
+if (file.exists(meta_json_path)) {
+  cat_registries <- read_catalog_registries(here("metadata"))
+  net_ok     <- !nzchar(Sys.getenv("CALCOFI_SKIP_LINK_CHECK"))
+  erddap_now <- if (net_ok) fetch_erddap_datasets() else NULL
+  netcdf_now <- if (net_ok) fetch_netcdf_manifests(c(names(ingest_yaml), paste0(names(ingest_yaml), "_full"))) else list()
+  rel_https  <- glue("https://storage.googleapis.com/{gcs_bucket}/{release_prefix}")
+  prev_versions <- tryCatch(jsonlite::fromJSON(glue("{rel_https}/versions.json"), simplifyVector = FALSE),
+                            error = function(e) NULL)
+  since <- if (!is.null(prev_versions) && net_ok) dataset_since_versions(prev_versions, base = rel_https) else character()
+  # source_accessed is measured in [dataset_coverage]; keyed by dataset_key here
+  src_acc <- setNames(format(d_dataset_cov$source_accessed), paste0(d_dataset_cov$provider, "_", d_dataset_cov$dataset))
+  bathy <- tryCatch(jsonlite::fromJSON("https://storage.googleapis.com/calcofi-db/bathymetry/gebco_2025.json",
+                                       simplifyVector = FALSE), error = function(e) NULL)
+  datasets_rec <- build_dataset_catalog(
+    meta_json_path, coverage_path, catalog, cat_registries, version = release_version,
+    erddap = erddap_now, netcdf = netcdf_now, since = since, source_accessed = src_acc,
+    spatial_layers = spatial_layers_path, bathymetry = bathy)
+  # a dataset in no earlier release first appears in this one
+  for (i in seq_along(datasets_rec$datasets))
+    if (is.null(datasets_rec$datasets[[i]]$since_version)) datasets_rec$datasets[[i]]$since_version <- release_version
+  d_catalog_chk <- check_dataset_catalog(datasets_rec, cat_registries, network = net_ok)
+  assert_dataset_catalog(d_catalog_chk)
+  d_catalog_chk |>
+    filter(finding != "ok") |>
+    datatable(caption = "dataset catalog check: findings (error rows are exempt only while a provider question is open/proposed)")
+  datasets_paths <- write_dataset_catalog(datasets_rec, dir_frozen)
+  validate_dataset_catalog(datasets_paths[1])
+  for (f in datasets_paths)
+    put_gcs_file(f, glue("gs://{gcs_bucket}/{gcs_release}/{substring(f, nchar(dir_frozen) + 2)}"))
+  write_holdings_csv(cat_registries, here("metadata/holdings.csv"))
+  cat(glue("datasets.json: {length(datasets_rec$datasets)} datasets · {length(datasets_rec$holdings)} holdings · ",
+           "{length(datasets_rec$reference)} reference rows · {round(file.size(datasets_paths[1]) / 1e3)} KB\n"))
+} else {
+  stop("datasets.json needs metadata.json; no per-ingest metadata.json was merged")
+}
+
 # 4. update versions.json (latest.txt promotion is deferred to test_release.qmd)
 # rebuilt from every catalog.json under the prefix by calcofi4db::build_versions_json(),
 # which also stamps the archive-policy fields: `consolidated` from
@@ -2390,6 +2439,7 @@ sidecar_urls <- c(
   glue("gs://{gcs_bucket}/{release_prefix}/versions.json"),
   glue("gs://{gcs_bucket}/{gcs_release}/catalog.json"),
   glue("gs://{gcs_bucket}/{gcs_release}/metadata.json"),
+  glue("gs://{gcs_bucket}/{gcs_release}/datasets.json"),
   glue("gs://{gcs_bucket}/{gcs_release}/coverage.json"),
   glue("gs://{gcs_bucket}/{gcs_release}/coverage_stations.json"),
   glue("gs://{gcs_bucket}/{gcs_release}/grid.geojson"),

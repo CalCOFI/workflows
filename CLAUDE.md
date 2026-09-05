@@ -686,7 +686,11 @@ an ingest, `R/taxa.R` or a taxon metadata CSV):
 | `license.csv` | **Registry of dataset licenses** (`license, name, url, status, notes`): the SPDX-style ids an ingest's `calcofi.dataset_meta.license` may carry — `CC-BY-4.0`, `CC0-1.0`, `CC-BY-NC-4.0`, `CC-BY-SA-4.0`, `US-PD`, `custom` (needs `license_url`), `unknown`. Read with `calcofi4db::read_license_registry()`; `check_dataset_citation()` fails the index and the release on a value outside it (see § "Attribution is a contract"). |
 | `{provider}/{dataset}/citation_authority.json` | **Generated cache** of what the source's own authority says (EDI / NCEI / ERDDAP / DataCite: `authority, url, citation, license, creator, title, checked, doi, doi_status`). Written by `check_dataset_citation()`; safe to delete (it refetches); `refresh = TRUE` refetches in place. A proposal, never the record — nothing copies it into the YAML. |
 | `dataset.csv` | **DEPRECATED** — superseded by each ingest's `calcofi.dataset_meta` YAML block via `ingest_yaml_to_dataset_df(read_ingest_yaml())`. The CSV drifted from the notebooks and orphaned `obs` rows. |
-| `dataset_status.csv` | Pipeline-stage tracker, one row per dataset; each skill writes its stage column. |
+| `dataset_status.csv` | Pipeline-stage tracker, one row per dataset; each skill writes its stage column. The `publish_obis` / `publish_erddap` / `publish_edi` / `publish_ncei` / `publish_caloos` cells (`done`, `n/a`, `#38 planned`) become each record's `registrations[]` in `datasets.json` — ERDDAP and OBIS are *measured* there and win over the cell. |
+| `distribution.csv` | **Registry of curated endpoints per dataset** (`dataset_key, kind, portal, id, url, title, status, superseded_by, observed_utc, notes`; calcofi4db ≥ 4.1.0, plan 2026-09-05 § D-1/D-10) — the endpoints the release cannot measure itself: CoastWatch mirrors, the EDI / NCEI / DataZoo records, the OBIS dataset and its IPT resource, the legacy erddap.calcofi.io ids with their successor. `kind ∈ download|service|mirror|source|archive`, `status ∈ current|superseded|retired|external|planned`; read with `read_distribution_registry()` (an unknown value errors). **Never delete a row — status it** (`retired`, `superseded_by`), so a page can say "was at X until …". |
+| `portal.csv` | **Registry of the portals** (`portal, name, kind, url, full_archive … api_access, harvests_from_us, observe_method, notes`) — the capability table `docs/portals.qmd` used to hand-maintain, plus what each portal reads from calcofi.io and how the weekly observation will ask it. Read with `read_portal_registry()`. |
+| `holdings.csv` | **GENERATED** by `write_holdings_csv()` at release from every `metadata/{provider}/{dataset}/dataset_meta.yml` whose `status` is `planned | external | archived` (a dataset CalCOFI has but has not ingested — plan § D-11). Edit the sidecar, never this file. |
+| `metadata/{provider}/{dataset}/dataset_meta.yml` | **The descriptive half of `calcofi.dataset_meta`** (plan § D-9): `description`/`abstract`, `citation_main`, `citation_others`, `license`, `license_url`, `doi`, `acknowledgement`, `contact`, `pi_names`, `creators[]`, `keywords_gcmd`, `link_*`, `methods_md`, … and `visibility: public | internal` (default public; `internal` keeps a dataset in the record and off every public surface). The notebook YAML keeps the *structural* keys only (`dataset_name`, `dataset_name_short`, `category`, `color`, `tables`, `in_release`); `read_calcofi_meta()` merges the two, and `check_dataset_meta_split()` (run by `build_workflows_index.R`) errors on a descriptive key left in a notebook. Providers edit it through the `metadata` tab of their question Sheet (`scripts/sync_dataset_meta_sheets.R`). For a holding the sidecar also carries the structural keys and `status`, `priority`, `owner`, `next_step`, `gh_issue`, `module`. |
 | `relationships_cross.csv` | Cross-dataset FKs (intra-dataset FKs live in each ingest's `relationships.json`). |
 | `measurement_taxon.csv` | Decomposes a taxon-bearing `measurement_type` name (`sardine_eggs`, `phyllosoma_stage_3`) into (taxon, canonical type, `life_stage`, `bin_value`, target grain). **Stage it with `ensure_measurement_taxon()`, never `dbWriteTable()`** — the CSV has no `taxon_key` column, so a raw write makes every `mx.taxon_key` reference a binder error, and hand-rolling `'worms:' \|\| worms_id` mis-keys ITIS-resolved taxa. Filter it to the emitting `dataset_key`. |
 | `taxon_override.csv` | Manual id resolution for source taxa with no clean id (phyto functional groups, marine mammals, "(species group)" codes), matched on the source column named in its own `match_column`. **Generic since calcofi4db 3.6.0** — every arm consults it, and a row naming an unknown `dataset_key` or a `match_column` the source does not expose now **errors**. Before that, `match_column` was never read anywhere in `R/` and only 2 of 7 arms consulted the file, so a row for any other dataset was parsed and silently dropped. |
@@ -749,9 +753,25 @@ it means *we have already built or reasoned an answer and want it confirmed* —
 problem. Pre-answer everything the repo can settle before asking.
 
 Each active provider also gets a Google Sheet (`metadata/questions_sheets.yml`, one tab
-per dataset, `Rscript scripts/sync_questions_sheets.R push|pull [provider] [--execute]`) —
+per dataset, `Rscript scripts/sync_questions_sheets.R push|pull [provider] [--execute]`;
+**auth is the calcofi-admin service account only**, resolved by `scripts/lib_google_auth.R` from
+`QS_GOOGLE_SA_JSON` / `CALCOFI_GOOGLE_SA_JSON`, else the key's Drive home, else
+`/etc/rclone/calcofi-admin-sa.json` — never an individual's OAuth token, which expires and needs a
+human at the keyboard) —
 the CSV stays the record and every column but `answer`/`status`/`answered_date`/`who` is
 protected there, so `pull` only ever writes those four columns back into `questions.csv`.
+
+Descriptive dataset metadata (abstract, methods, creators, license, …) lives in
+`metadata/{provider}/{dataset}/dataset_meta.yml`, not the notebook — `read_calcofi_meta()` merges it
+back into `calcofi.dataset_meta` so every reader sees one block. Each provider's Sheet gains a
+`metadata` tab, long form (`dataset_key · field · value · guidance · edited_by · edited_date`), tiered
+required → recommended → optional from `metadata/dataset_meta_fields.csv`; only
+`value/edited_by/edited_date` are unprotected, and the `calcofi` Sheet's `holdings` tab is the team's
+triage board for the not-yet-ingested datasets. `scripts/sync_dataset_meta_sheets.R pull` validates
+before writing — `license` against `metadata/license.csv`, `contact` as an email or URL, `doi` bare,
+`creators`/`associated_parties` parsed from `Name · Org · orcid · email` lines — and rewrites only the
+changed value plus an `edited:` stamp, never the whole file. WS-R1's CalOOS-sheet proposals sit beside
+each sidecar as `dataset_meta.proposed.yml` until a provider confirms them.
 
 ### The ingest skills loop (`.claude/skills/`, see `RUNBOOK.md`)
 

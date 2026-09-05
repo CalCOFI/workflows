@@ -1,0 +1,37 @@
+# descriptive metadata for calcofi_phytoplankton -- provider-editable (Google Sheet tab `metadata`, scripts/sync_dataset_meta_sheets.R); the structural keys stay in ingest_calcofi_phytoplankton.qmd
+  visibility: public
+  description: >
+    Abundance and species composition of phytoplankton (385 taxonomic
+    categories) in the California Current, 1996-2022, by inverted-microscope
+    counts (E. Venrick). Samples from the near-surface "second depth" are
+    pooled across stations into four regions (NE, SE, Alley, Offshore;
+    Hayward & Venrick 1998) before counting, so the grain is cruise x region,
+    not per-station. Source: EDI knb-lter-cce.254.4.
+  # source: https://cite.edirepository.org/cite/knb-lter-cce.254.4?style=ESIP, checked 2026-09-03
+  citation_main: "CalCOFI - Scripps Institution of Oceanography, California Current Ecosystem LTER, and E. Venrick. 2023. Temporal and spatial changes of the abundance and species composition of phytoplankton in the California Current from samples collected aboard CalCOFI cruises from summer 1996 through 2022. ver 4. Environmental Data Initiative. https://doi.org/10.6073/pasta/60edabfbfd85c623fce05822befaa071"
+  # source: https://cite.edirepository.org/cite/knb-lter-cce.254.4?style=ESIP, checked 2026-09-03
+  doi: 10.6073/pasta/60edabfbfd85c623fce05822befaa071
+  link_calcofi_org: "https://calcofi.org/data/marine-ecosystem-data/phytoplankton-bacterioplankton/"
+  link_data_source: "https://portal.edirepository.org/nis/mapbrowse?packageid=knb-lter-cce.254.4"
+  link_others: []
+  # ASSERTED, and one of only two left in the repo. Every other dataset's
+  # coverage is measured at release time by calcofi4db::observed_coverage();
+  # this one is region-pooled, so its `sample` rows carry real coordinates but
+  # NO datetime at all (409 of 409 null). The spatial half is therefore
+  # measured like everyone else's and is absent here on purpose; only the
+  # temporal half cannot be derived and has to be claimed.
+  coverage_temporal: 1996 to 2022
+  # NOT CC-BY-4.0: the EML <intellectualRights> (fetched via DataONE's mirror,
+  # since pasta.lternet.edu / portal.edirepository.org block automated fetches
+  # with a Cloudflare bot check) reads "This data package is released to the
+  # public domain under Creative Commons CC0 1.0 No Rights Reserved... It is
+  # considered professional etiquette to provide attribution..."
+  # source: https://cn.dataone.org/cn/v2/object/https%3A%2F%2Fpasta.lternet.edu%2Fpackage%2Fmetadata%2Feml%2Fknb-lter-cce%2F254%2F4, checked 2026-09-03
+  license: CC0-1.0
+  license_url: https://creativecommons.org/publicdomain/zero/1.0/
+  pi_names: Elizabeth L. Venrick
+  # GCMD Science Keywords, proposed by WS-R1 from the category + measurement types;
+  # source: https://gcmd.earthdata.nasa.gov/KeywordViewer/ (GCMD KMS export), checked 2026-09-05
+  keywords_gcmd:
+    - "EARTH SCIENCE > BIOSPHERE > ECOSYSTEMS > AQUATIC ECOSYSTEMS > PLANKTON > PHYTOPLANKTON"
+    - "EARTH SCIENCE > BIOLOGICAL CLASSIFICATION > PROTISTS > PLANKTON > PHYTOPLANKTON"

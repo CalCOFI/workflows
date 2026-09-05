@@ -590,6 +590,52 @@ contract_res |>
     options = list(pageLength = 20), colnames = c("", "contract query", "n", "ms", "error"))
 ```
 
+## Dataset catalog record
+
+`datasets.json` (calcofi4db >= 4.1.0; plan 2026-09-05 § D-1) is the one dataset list every product
+reads — the landing page's dataset grid and pages, `cc_datasets()`, the sitemap, `data.json`, STAC.
+Three rows join the promote gate: the file validates against `datasets.schema.json`, it carries every
+dataset `metadata.json` carries, and `check_dataset_catalog()` reports no blocking finding (a dead
+endpoint on a page is worse than absence; the network half follows `CALCOFI_SKIP_LINK_CHECK`).
+
+```{r}
+#| label: dataset_catalog
+
+ds_url  <- glue("https://storage.googleapis.com/calcofi-db/{rel_prefix}/{release_version}/datasets.json")
+ds_txt  <- tryCatch(paste(readLines(ds_url, warn = FALSE, encoding = "UTF-8"), collapse = "\n"),
+                    error = function(e) NULL)
+cat_row <- function(name, ok, err) tibble::tibble(
+  query = name, label = "dataset-catalog", status = if (isTRUE(ok)) "pass" else "fail",
+  reason = NA_character_, rows = NA_integer_, ms = NA_real_,
+  error = if (isTRUE(ok)) NA_character_ else as.character(err))
+
+catalog_res <- if (is.null(ds_txt)) {
+  cat_row("catalog: datasets.json present", FALSE, glue("{ds_url} not readable"))
+} else {
+  ds_rec  <- jsonlite::fromJSON(ds_txt, simplifyVector = FALSE)
+  meta_n  <- length(jsonlite::fromJSON(
+    glue("https://storage.googleapis.com/calcofi-db/{rel_prefix}/{release_version}/metadata.json"),
+    simplifyVector = FALSE)$datasets)
+  schema_ok <- tryCatch(validate_dataset_catalog(ds_txt), error = function(e) conditionMessage(e))
+  ds_chk <- check_dataset_catalog(ds_rec, read_catalog_registries(here("metadata")),
+                                  network = !nzchar(Sys.getenv("CALCOFI_SKIP_LINK_CHECK")))
+  ds_bad <- ds_chk[ds_chk$level == "error" & !ds_chk$exempt, , drop = FALSE]
+  dplyr::bind_rows(
+    cat_row("catalog: datasets.json validates against datasets.schema.json", isTRUE(schema_ok), schema_ok),
+    cat_row(glue("catalog: n(datasets) == n(metadata.json datasets) [{length(ds_rec$datasets)} vs {meta_n}]"),
+            length(ds_rec$datasets) == meta_n, "count mismatch"),
+    cat_row(glue("catalog: no blocking finding (check_dataset_catalog: {nrow(ds_bad)} error, ",
+                 "{sum(ds_chk$level == 'warn')} warn, {sum(ds_chk$exempt)} exempt)"),
+            nrow(ds_bad) == 0,
+            paste(sprintf("%s %s %s", ds_bad$dataset_key, ds_bad$finding, dplyr::coalesce(ds_bad$url, "")), collapse = "; ")))
+}
+results <- dplyr::bind_rows(results, catalog_res)
+catalog_res |>
+  mutate(status_html = status_badge(status)) |>
+  select(status_html, query, error) |>
+  DT::datatable(escape = FALSE, rownames = FALSE, colnames = c("", "catalog check", "error"))
+```
+
 ## Save results sidecar
 
 ```{r}
@@ -709,7 +755,10 @@ gh_dispatch <- tribble(
   "CalCOFI/db-query",         "bump-default-version.yml",    "query-site default_version bump",
   "CalCOFI/db-viz-station",   "refresh.yml",                 "station-portal coverage refresh",
   # rebuilds the per-(line, cruise) section shards from the new release
-  "CalCOFI/ctd-transects",    "refresh.yml",                 "CTD transect sections refresh")
+  "CalCOFI/ctd-transects",    "refresh.yml",                 "CTD transect sections refresh",
+  # re-fetches datasets.json and rebuilds the dataset grid + pages (plan 2026-09-05 D-2; the
+  # workflow is created by WS-P1 — until then the dispatch warns, it does not fail)
+  "CalCOFI/CalCOFI.github.io", "refresh.yml",                "dataset catalog refresh (landing page + dataset pages)")
 
 gh_bin <- Sys.which("gh")
 if (!nzchar(gh_bin)) {

@@ -8,6 +8,64 @@ versions). Conventions: see `CLAUDE.md` § "RELEASES.md is not optional".
 
 # Unreleased
 
+## Every dataset has a record: `datasets.json` (the dataset catalog, Phase 0)
+
+The release now writes **`datasets.json`** beside `catalog.json` — one generated record per
+`dataset_key` (schema 1.0; `calcofi4db::build_dataset_catalog()`, ≥ 4.1.0) joining what the release
+already measured (the `metadata.json` dataset block, `coverage.json` rolled up per dataset —
+years, stations, variables, taxa, depth span, the env variables a dataset contributes to another
+category — and the content-addressed `catalog.json` objects that belong to it) with the reviewable
+registries and with what the live services answer at release time. Each record carries
+`distributions[]` (every endpoint: parquet objects with bytes/sha256/since, the CF netCDF, the
+ERDDAP ids that exist on erddap.calcofi.io, the ISO 19115 record, the ingest notebook, the
+calcofi.org page, the source portal, and the curated mirrors/archives — CoastWatch, EDI, NCEI,
+OBIS, the IPT — with `status` and `superseded_by`), `registrations[]` (per portal
+`published | planned | n/a`; ERDDAP and OBIS measured, Zenodo from the release DOI), `status`
+(stage, priority, issue, blockers, open questions) and `visibility` (`public | internal`). It also
+lists `holdings[]` (datasets CalCOFI has but has not ingested, from a sidecar with
+`status: planned | external | archived`) and `reference[]` (cruise, ship, grid, spatial, the 19
+boundary layers, the GEBCO bathymetry). One `datasets/{dataset_key}.json` per dataset sits beside
+it. Nothing on calcofi.io's dataset pages (Phase 1) is authored by hand: they read this file.
+
+- **A release gate**: `check_dataset_catalog()` fails the release on a record without a name, a
+  registered category and provider, a description, a bbox or a download; a missing citation is
+  exempt only while a provider question covers it (the citation contract's rule); every listed URL
+  must answer a one-byte ranged GET (behind `CALCOFI_SKIP_LINK_CHECK`); `datasets.json` joins
+  `RELEASE_REQUIRED_OBJECTS`, so `promote_release()` refuses a release without it, and
+  `test_release.qmd` checks the file against `datasets.schema.json`, counts it against
+  `metadata.json` and re-runs the check before promoting. At v2026.09.04 the finding table is
+  `no_citation` × 5 (zoodb, zooscan, farallon, pic-zooplankton, cufes — all exempt, questions open).
+- **Three new registries** under `metadata/`: `distribution.csv` (27 curated endpoints —
+  the OBIS dataset `0e223f55…` and its IPT resource `calcofi_ichthyo`, eight CoastWatch mirrors of
+  the ichthyoplankton, the SIO hydrographic mirrors, EDI/NCEI/DataZoo records, and the seven legacy
+  erddap.calcofi.io ids marked `superseded` with their successor), `portal.csv` (16 portals with
+  `harvests_from_us` and `observe_method`) and the generated `holdings.csv`;
+  `dataset_status.csv` gains `publish_ncei` and `publish_caloos`, and `publish_erddap` now says
+  `done` for the 16 datasets erddap.calcofi.io serves.
+- **Descriptive metadata leaves the notebooks** (plan § D-9): a dataset's citation, licence, DOI,
+  links, contact, keywords, creators and narrative now live in
+  `metadata/{provider}/{dataset}/dataset_meta.yml`, the file a provider edits through the
+  `metadata` tab of their question Sheet; the notebook keeps the structural keys. `read_calcofi_meta()`
+  merges the two, so the release `dataset` table and every consumer see exactly what they saw
+  before; a descriptive key left in a notebook now fails the workflows index.
+- `coverage.json` `datasets[]` gains `life_stages` per dataset (the dataset's own values).
+- Imported the CalOOS working sheet (41 rows) via the new idempotent `scripts/import_caloos_sheet.R`: 24 rows
+  matched to already-integrated datasets became `dataset_meta.proposed.yml` proposals (creators, contact,
+  keywords, funding, associated parties, QC notes, maintenance) plus 5 new `distribution.csv` rows (3 CalOOS
+  module ids, a DataZoo phytoplankton mirror, a NOAA seabird/mammal transect-effort source); 17 unmatched rows
+  became new holding sidecars (`metadata/{provider}/{dataset}/dataset_meta.yml`), including the discovery that
+  EDI package knb-lter-cce.104 is mislabeled in the sheet (titled "nitrate isotopes", actually POC/PON). Added
+  providers `jcvi`, `calpoly`, `stanford`; added category *Genomics & eDNA* and widened *Nutrients & Chemistry*
+  / *Phytoplankton*. Filled GCMD Science Keywords (`keywords_gcmd`, 2–5 each, verified against the live GCMD
+  KMS export) for all 16 ingested datasets.
+- Descriptive dataset metadata split out of the 16 ingest notebooks into per-dataset sidecars
+  (`metadata/{provider}/{dataset}/dataset_meta.yml`), editable by providers in a new `metadata` tab of
+  their Google Sheet; `scripts/migrate_dataset_meta.R` did the one-off move byte-identically (117 keys,
+  comments preserved, the release `dataset` table unchanged before/after), `scripts/sync_dataset_meta_sheets.R`
+  does the push/pull (a `holdings` tab in the `calcofi` Sheet is the triage board for the 17 holdings). Both sheet
+  scripts now authenticate as the calcofi-admin service account only (`scripts/lib_google_auth.R`), never interactively.
+
+
 # v2026.09.04 (2026-09-04)
 
 ## `dataset_taxon` says what the source claimed; the bird rule reads the classification; common names have one written order

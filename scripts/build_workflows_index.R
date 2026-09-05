@@ -13,6 +13,14 @@
 # chunk, or into .github/workflows/jekyll-gh-pages.yml before the Jekyll build.)
 
 librarian::shelf(rmarkdown, yaml, curl, quiet = TRUE)
+# calcofi4db reads the notebooks' `calcofi:` blocks (read_calcofi_meta() merges each dataset's
+# descriptive sidecar, metadata/{provider}/{dataset}/dataset_meta.yml, into dataset_meta — plan
+# 2026-09-05 § D-9) and checks the attribution contract. CALCOFI4DB_DIR loads a development checkout
+# instead of the installed package.
+suppressPackageStartupMessages(
+  if (nzchar(Sys.getenv("CALCOFI4DB_DIR"))) {
+    devtools::load_all(Sys.getenv("CALCOFI4DB_DIR"), quiet = TRUE)
+  } else library(calcofi4db))
 
 # resolve workflows dir (expects to run from repo root, or one level up) ----
 wd <- getwd()
@@ -181,8 +189,10 @@ htmls <- htmls[!basename(htmls) %in% c("index.html")]
 recs <- lapply(htmls, function(h) {
   base <- sub("[.]html$", "", h)
   src  <- find_source(base)
-  fm   <- if (!is.na(src)) tryCatch(rmarkdown::yaml_front_matter(src), error = function(e) list()) else list()
-  cc   <- fm$calcofi
+  # the merged block: structural keys from the notebook YAML, descriptive keys from the sidecar.
+  # a conflict (the same key in both with different values) is an error, not a fallback.
+  cc   <- if (!is.na(src) && grepl("[.]qmd$", src)) calcofi4db::read_calcofi_meta(src) else
+    if (!is.na(src)) tryCatch(rmarkdown::yaml_front_matter(src)$calcofi, error = function(e) NULL) else NULL
   dm   <- cc$dataset_meta
   cat_id <- classify(base, cc)
 
@@ -306,11 +316,7 @@ if (!is.null(links) && nrow(links) > 0) {
 # An error-level finding fails the build unless the dataset's questions.csv holds
 # an open/proposed row on related_table = dataset naming the field; drift and an
 # unreachable authority only warn. Nothing is written into a notebook's YAML.
-# CALCOFI4DB_DIR loads a development checkout instead of the installed package.
-suppressPackageStartupMessages(
-  if (nzchar(Sys.getenv("CALCOFI4DB_DIR"))) {
-    devtools::load_all(Sys.getenv("CALCOFI4DB_DIR"), quiet = TRUE)
-  } else library(calcofi4db))
+# (calcofi4db is loaded at the top of this script.)
 cit <- calcofi4db::check_dataset_citation(
   calcofi4db::read_ingest_yaml(wd),
   network   = !nzchar(Sys.getenv("CALCOFI_SKIP_LINK_CHECK")),
@@ -321,6 +327,14 @@ message("citation check: ", length(unique(cit$dataset_key)), " dataset(s); ",
         sum(cit$level == "error" & cit$exempt), " exempt (question open/proposed), ",
         sum(cit$level == "warn"), " warning(s)",
         if (nzchar(Sys.getenv("CALCOFI_SKIP_LINK_CHECK"))) " — authorities not fetched (CALCOFI_SKIP_LINK_CHECK)" else "")
+
+# the notebook / sidecar split (plan 2026-09-05 § D-9): once a dataset has a
+# metadata/{provider}/{dataset}/dataset_meta.yml, its descriptive keys (citation,
+# licence, links, contact, keywords, …) live THERE and nowhere else — a copy left
+# in the notebook YAML would be a second truth the provider's Sheet never sees.
+split <- calcofi4db::check_dataset_meta_split(wd)
+message("dataset_meta split: ", sum(split$has_sidecar), " of ", nrow(split),
+        " ingest(s) carry a descriptive sidecar; no descriptive key left in a notebook that has one")
 
 # assemble the grouped, ordered structure for Liquid ----
 emit_item <- function(r) {
