@@ -44,16 +44,29 @@ jobs:
         uses: r-lib/actions/setup-r@v2
         with:
           use-public-rspm: true
-      - name: Install index-builder R deps
-        run: |
-          # `here` and `readr` are called directly by the script (here::here,
-          # readr::write_csv); `jsonlite` is shelf()'d at runtime for the release
-          # metadata. Keep this list in step with the script's imports.
-          install.packages(
-            c("librarian", "rmarkdown", "yaml", "here", "readr", "jsonlite"),
-            repos = Sys.getenv("RSPM", "https://cloud.r-project.org"))
-        shell: Rscript {0}
+      # The index builder loads calcofi4db (read_calcofi_meta() merges each dataset's
+      # descriptive sidecar; check_dataset_citation() and check_dataset_meta_split() are
+      # gates) — since 2026-09-03 the deploy failed on every push with "there is no package
+      # called 'calcofi4db'" because only the six CRAN packages below were installed.
+      # setup-r-dependencies resolves the package's system libraries too (libpq, gdal, …).
+      - name: Install index-builder R deps (CRAN + calcofi/calcofi4db)
+        uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          packages: |
+            any::librarian
+            any::rmarkdown
+            any::yaml
+            any::here
+            any::readr
+            any::jsonlite
+            any::curl
+            calcofi/calcofi4db
       - name: Build workflows index (_data/workflows.yml)
+        # the shape checks always run; the network half (link liveness, citation
+        # authorities) runs at release and in observe.yml — a runner without egress to
+        # CoastWatch/EDI must not fail the landing page for it
+        env:
+          CALCOFI_SKIP_LINK_CHECK: "1"
         run: Rscript scripts/build_workflows_index.R
       # notebooks rendered before the brand contract (2026-08-25) get the same
       # head/header snippets a fresh render includes; idempotent, marker-guarded
