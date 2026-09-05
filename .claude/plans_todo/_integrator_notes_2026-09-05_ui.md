@@ -91,3 +91,13 @@ The single-session alternative: one Opus 5 · high session in `CalCOFI.github.io
   and `global.R` fails on main too, so the rule is a pure tested function and the app check waits for
   the next deploy (`deploy-consumers` skill; this session does not deploy).
   **Next:** UI-D (`calcofi4db` 4.5.0 / schema 1.1 + `workflows`); merge and install, no render, no release.
+- 2026-09-05 · **UI-D done** — `calcofi4db` main **93ee0228** (4.5.0, **installed**: `packageVersion()`
+  4.5.0, both new functions exported, the installed schema reads `const: "1.1"`), `workflows` main
+  **743f25e**. 2,643 tests pass. `distribution.csv` needed no edit (31/31 ids already curated and all
+  agreeing with the derived rule). Q16 filed. Nothing rendered, no release.
+- 2026-09-05 · **Ben's live review** — two rounds, both shipped: `de04dcb` (the filter had never hidden
+  anything; `[hidden]` lost to `display:flex`) and `0298b3f` (the map box was the cell, not the map).
+  **ALL SIX PHASES DONE.** What is left is not this session's: the next release renders schema 1.1 and
+  the site deletes its five marked fallbacks; `db-viz-hex` needs a deploy before its `?datasets=` can be
+  checked in a running app (the local DuckDB is v2026.08.02 and `global.R` fails on main too); UI-G (the
+  list view, the season strip from `coverage.months`) was always "later".
