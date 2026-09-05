@@ -146,7 +146,11 @@ release_version <- format(Sys.Date(), "v%Y.%m.%d")
 # see .claude/plans/2026-08-25 … content-addressed release tables.md, tests T1-T7.
 release_prefix <- Sys.getenv("CALCOFI_RELEASE_PREFIX", "ducklake/releases")
 tables_prefix  <- Sys.getenv("CALCOFI_TABLES_PREFIX",  "ducklake/tables")
-release_layout <- match.arg(Sys.getenv("CALCOFI_RELEASE_LAYOUT", "compat"),
+# canonical (content-addressed tables/{table}/{hash}/ + a compat copy) is the design and
+# what v2026.08.25 shipped; v2026.09.04 came out compat because the default was, so its
+# objects live only under releases/v2026.09.04/parquet/ and the next canonical release
+# re-uploads them once. Set CALCOFI_RELEASE_LAYOUT=compat only to reproduce that.
+release_layout <- match.arg(Sys.getenv("CALCOFI_RELEASE_LAYOUT", "canonical"),
                             c("compat", "canonical"))
 staging <- release_prefix != "ducklake/releases"
 # a STAGING run must not write the SHARED content store either: canonical objects are
@@ -2368,7 +2372,10 @@ all_versions <- build_versions_json(
     total_rows   = as.numeric(catalog$total_rows %||% 0),
     size_mb      = round((catalog$total_size %||% 0) / 1024 / 1024, 1)))
 
-versions_local <- tempfile(fileext = ".json")
+# the register lives on the bucket AND as a tracked sidecar (data/releases/versions.json,
+# or the staging root): the tracked copy sat at v2026.02 for seven months because only
+# the tempfile was uploaded
+versions_local <- here(sidecar_root, "versions.json")
 jsonlite::write_json(list(versions = all_versions), versions_local,
   auto_unbox = TRUE, pretty = TRUE)
 put_gcs_file(versions_local,

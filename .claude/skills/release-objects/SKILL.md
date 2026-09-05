@@ -34,6 +34,12 @@ copy only for the promoted and consolidated versions (`metadata/release_policy.y
   version string), and `libs/erddap_deploy.R` (manifest-driven copy into the server's layout)
   all go through the catalog. A partitioned table is an explicit https file list with
   `hive_partitioning = true` — no anonymous-S3 glob needed.
+- **Default layout is `canonical` since 2026-09-05** (`CALCOFI_RELEASE_LAYOUT`); v2026.09.04 shipped
+  `compat` because the default was, so its 372 objects sit only under `releases/v2026.09.04/parquet/`
+  and the next canonical release uploads them once (`exists` needs the previous catalog to point at
+  the canonical path). **Open (durable immutability):** an `upload` into `tables/` still overwrites;
+  the real fix is `--no-clobber` plus the sha256 as object metadata (`x-goog-meta-sha256`) so
+  `freeze_plan()` can mark a present object `exists` with its true bytes/hash without a catalog.
 - **Staging a release run** without touching the real prefix: `CALCOFI_RELEASE_PREFIX=
   ducklake-staging/releases`, `CALCOFI_RELEASE_LAYOUT=compat|canonical`, **and**
   `CALCOFI_TABLES_PREFIX=ducklake-staging/tables` (required since 2026-09-04 — the shared
