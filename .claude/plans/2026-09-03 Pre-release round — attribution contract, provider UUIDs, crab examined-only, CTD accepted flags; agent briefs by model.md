@@ -484,3 +484,13 @@ docs · db-schema · ctd-transects              cite.qmd; db.qmd § keys; doi / 
   26,261,931 rows through the view); `obs_bio` 21.8 → 25.6 MB, `obs_env` 286.7 → 317.2 MB with
   `sample_key`/`measurement_prec`/`hex_id`; the depth fallback fills 482,250 ichthyo rows and no other
   dataset; catalog `views.obs` + `deprecated`; resolvers in R/py/JS with byte-identical fixtures.
+
+**Measured (WS-F, 2026-09-04/05):** v2026.09.04 cut, promoted, tagged, DOI 10.5281/zenodo.22310858.
+Wall times: release_database 1h30m18s (57 chunks, shortcut, no ingest re-runs) · test_release 8m29s
+(61/0/4) · deploy_consumers 15m14s · publish_to_netcdf 1h45m26s (3.6 GB CTD full on a 1.3 MB/s uplink)
+· publish_to_erddap 5m33s (371 objects, 37 views, live verify ok). `targets` still lists the skipped
+ingests (CTD and every ingest downstream of the ichthyo reference shards) as outdated — expected, the
+reference-shard gate is what made skipping them honest. Section 5 done by the integrator: Explorer flipped
+to ducklake/releases, db-schema + docs rebuilt, calcofi4py v0.6.0 + calcofi4r v1.18.0 tagged. Incident:
+173 store objects clobbered by the staging run (row-identical, byte-different) — repaired both releases,
+calcofi4db 4.0.3 + staging tables-prefix guard; full chain in `_integrator_notes_2026-09-03.md`.

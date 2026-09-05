@@ -80,3 +80,9 @@ server
 ## Measured (appended per phase as it ships)
 
 _(none yet)_
+
+**Note from WS-F (2026-09-05):** split ichthyo's reference shards (`cruise` with its date spans, `ship`,
+`grid`) into their own target, so the 15 ingests that only need the reference do not depend on the full
+ichthyo ingest, and a reference-only change does not invalidate every downstream ingest. WS-F skipped the
+CTD ingest with `shortcut = TRUE` behind a manual gate (the ichthyo manifest's `mismatches$cruise_uuid`
+and the shard's row signature); on the server that gate should be a target dependency, not a note.
