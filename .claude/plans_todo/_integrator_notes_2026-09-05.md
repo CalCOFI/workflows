@@ -75,4 +75,11 @@ https://claude.ai/code/artifact/5fe1fa4e-c124-4525-a27a-a4a978abf2ba (the spec f
   ctd-transects, calcofi4r 1.19.0, calcofi4py 0.7.0, docs portals.qmd, analytics, uptime). Not yet: E2 (running);
   db-viz-hex is a server-side Shiny app (deploy-consumers skill, not a push); calcofi4r 1.19.0 / calcofi4py 0.7.0
   are on main, untagged; the ERDDAP `datasets.xml` regeneration (publish_to-erddap.qmd) runs with the next release.
+- 2026-09-05 night · **E2 merged + pushed** (calcofi4db main 4.4.0 @ 7ef3cb42, installed; workflows main 3357f99 with
+  `publish_to-obis.qmd` in the pipeline by auto-discovery; docs main 26d712d carries the EDI/OBIS manual-step
+  paragraphs). **Every WS of the plan is now merged and pushed except the uploads (4b) and the release (F).**
+  Open for Ben: I-18 (retire `publish_ichthyo_to-obis.qmd`), I-19 (OBIS prerequisites), I-15 (EDI account), the
+  M2 checklist, the untagged calcofi4r 1.19.0 / calcofi4py 0.7.0, db-viz-hex's server deploy, and the next
+  production release (which carries datasets.json, eml/, stac/ to production and flips the landing page off the
+  staging bridge).
 
