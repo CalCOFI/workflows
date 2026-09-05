@@ -47,6 +47,63 @@ Here are a few examples:
   -  The Services section doesn't even mention ERDDAP.
   -  Archives & portals should probably list the unique identifier and/or title.
 
+---
+
+The plan is written and its mockup spec is published. Nothing was changed on the live site or in any repo besides the new plan file.
+
+Where it lives
+- Plan: workflows/.claude/plans/2026-09-05 CalCOFI.io UI refresh — emphasis, density and the dataset page, now that the catalog is live.md, in the house structure with measured context, design sections D-1 to D-10, 16 decisions with recommendations, architecture by repo, phases, verification, risks, open questions and a kickoff prompt.
+- Mockups, both themes, on the brand tokens: ⧉ https://claude.ai/code/artifact/b06dcb2e-f899-4c00-831e-7383a5f4e87e
+
+What I measured on the live site (Chrome, 1470 px)
+
+┌───────────────────────────────────────────┬────────────────────────────┐
+│                  finding                  │           number           │
+├───────────────────────────────────────────┼────────────────────────────┤
+│ Dataset grid height, of which row-stretch │ 4,910 px, 2,838 px stretch │
+├───────────────────────────────────────────┼────────────────────────────┤
+│ Same grid with masonry packing            │ 4,320 px                   │
+├───────────────────────────────────────────┼────────────────────────────┤
+│ Masonry with the reference tile moved to  │ 2,760 px                   │
+│ its own band                              │                            │
+├───────────────────────────────────────────┼────────────────────────────┤
+│ CTD page: abstract column vs sidebar      │ 418 px vs 1,346 px, so 928 │
+│                                           │  px blank                  │
+├───────────────────────────────────────────┼────────────────────────────┤
+│ Download rows for three ERDDAP ids        │ 13                         │
+├───────────────────────────────────────────┼────────────────────────────┤
+│ Ichthyoplankton bbox in the record        │ 0 to 54°N, 180 to 77°W     │
+└───────────────────────────────────────────┴────────────────────────────┘
+
+Your emphasis observation is confirmed in computed styles: holdings render in the page foreground colour at weight 700 with the one yellow chip on the page, while datasets sit in the softer accent blue. Holdings pages also have no Access section at all today.
+
+The design moves the plan proposes
+- An emphasis ladder with four rungs, and yellow reserved for states that need attention, never for holdings or pipeline stages.
+- Masonry packing via a small script, holdings quiet and capped, contributions collapsed, and the 25-row reference tile as its own band.
+- Dataset page rebalanced: a sticky sub-nav, an at-a-glance card, a full-width coverage band, and variables normalised before the next release changes their shape.
+- A real map: Natural Earth coast plus the stations each dataset actually sampled from the release's station-coverage sidecar, framed by a rule that clips bad bboxes and says so. I prototyped it with pure Python; the coast is 21 KB.
+- Access regrouped with a URL on every row, an ERDDAP matrix with a grain glossary, a DuckDB-anywhere snippet, a named Services and metadata group, and a Portal, Identifier, Title, Status table.
+- Brand v2 extended additively only: status chip tints, a quiet chip, map tokens, the tab row promoted, and two glyphs, all with computed contrast at or above 4.5:1. The earlier mockup's green tint failed at 4.43 and is corrected.
+- Record follow-ups for calcofi4db so grain meanings, portal descriptions, category ledes and registration identifiers become facts in the record rather than site text.
+
+What needs you
+- Decisions 1 to 16 in the plan, each with a recommendation.
+- Three open questions, notably the ichthyoplankton coordinates and the stage vocabulary meanings.
+
+The kickoff prompt in the plan starts with phases C and A, about a day and a half, which alone fix both front-door examples you raised.
+
+--- 
+
+The URLs, which are typically long, are terribly placed in a right-hand column, which hideously wraps on a mobile device. They should try to span the full page width and probably get a ellipses ... over certain lenght on mobile.
+
+Based on "The grid: today → proposed" since there is only one card, I cannot tell how they stack one on top of the other, especially when different between left & right columns.
+
+There is a HUGE amount of white space [img]
+
+The SQL could populate the db-query custom field if missing existing queries.
+
+Also the ERDDAP double listing is confusing, once for Downloads in formats that page and info, and another for Services 
+
 ## 2026-09-05 CalCOFI.io dataset-centric view
 
 The current landing page at CalCOFI.io loosely groups products as cards, but this is not a holistic data-centric view. We seem to be missing a dataset catalog that clearly showcases all of the CalCOFI dataset holdings. We have been trying to make the datasets more clearly stand out in the interactive visualization apps, like @../explore / @../db-viz-station / @../db-viz-hex, but the space there is already crammed. The [Data – CalCOFI.org](https://calcofi.org/data/) website (which is seperately maintained) has a decent overview with appealing icons, that dive deeper into dataset types and then links out to repositories (EDI, ERDDAP) or downloads, but is not data-driven or interactive with search/filtering/etc. 
@@ -445,6 +502,8 @@ Measured, in one line each
 - Darwin Core: ten archives from the core in 124 s; the ichthyo diff gate matched 76,512 of 76,512 net events and 99.71 % of occurrence grains.
 - Pages: Lighthouse accessibility 100 on six pages; data.json validates against DCAT-US 1.1.
 
+### TODO: finish dataset-centric views / EDI & OBIS populate
+
 Only you can do these (all logged in the plan's investigation log, I-1 to I-19)
 
 1. Cut the next production release when data changes; it carries datasets.json, eml/ and stac/ to production and takes the landing page off the staging bridge.
@@ -452,6 +511,24 @@ Only you can do these (all logged in the plan's investigation log, I-1 to I-19)
 3. The M2 checklist: CalOOS message to Iwen Su, IOOS registration through the FGDC WAF (the harvester does not read 19115-3), ODISCat 3318 re-point, legacy ERDDAP sunset on 2026-12-04.
 4. Decisions: retire publish_ichthyo_to-obis.qmd (I-18, dead code either way); tag calcofi4r 1.19.0 and calcofi4py 0.7.0; run deploy-consumers for db-viz-hex.
 5. Providers, through the Sheets: the CalOOS proposals awaiting confirmation, contacts, creators and methods (0 of 16 sidecars carry a contact today), and the two CalOOS-sheet corrections now filed as questions.
+
+---
+
+Besides "Only you can do these", is there anything else for you to do from
+  the plan? Have you cleaned up all the local repos, everything committed and
+  pushed to main, all plans_todo logged?
+
+---
+
+Yes to all three, with the audit just run to confirm it.
+
+Clean and pushed. All fifteen repos I touched (calcofi4db, workflows, CalCOFI.github.io, explore, db-schema, db-query, db-viz-station, db-viz-hex, ctd-transects, calcofi4r, calcofi4py, docs, analytics, uptime, erddap) are on main, zero commits ahead of origin, no modified tracked files. All eight agent worktrees are removed and their branches deleted. The only untracked files are pre-existing ones I did not create (three *.docx.md conversions in docs, staging HTML renders and one plan artefact in workflows).
+
+plans_todo logged. The ten completed briefs (R0, R1, R2, P1, P2, E1, E2, E3, M1, M2) and the folded-in OBIS follow-on moved to plans_done; the email-drafts move and your notes file, which had sat uncommitted since an earlier session, are committed too. What remains in plans_todo is exactly what is not done: WS-F (the release run), the M2 registration checklist, the server-pipeline plan, and the two integrator-notes files. The umbrella plan's status line now says what is built, and its investigation log carries I-1 to I-19.
+
+Remaining plan items done in this pass, since you asked: the ERDDAP header gained a "catalog" link to calcofi.io/datasets/ (live at the next ERDDAP restart), the dataset pages now emit the datasets analytics content group and the analytics site has its /analytics/datasets/ stub, and uptime was fast-forwarded.
+
+Nothing else from the plan is mine to do. What is left is either yours (the release run that carries datasets.json, eml/ and stac/ to production and takes the landing page off the staging bridge; the IPT and EDI uploads and their prerequisites; the registration forms; tags for calcofi4r 1.19.0 and calcofi4py 0.7.0; the db-viz-hex and ERDDAP server deploys; the decision to retire publish_ichthyo_to-obis.qmd) or a provider's (the CalOOS proposals, contacts, creators, methods, and the two CalOOS-sheet corrections now filed as questions). Phase 5 (pycsw) stays gated on someone asking for CSW.
 
 ## 2026-09-04 flip switch on brand v2, default light theme
 
