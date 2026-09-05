@@ -8,6 +8,35 @@ versions). Conventions: see `CLAUDE.md` § "RELEASES.md is not optional".
 
 # Unreleased
 
+## A generic EDI publisher turns the release EML into a data package, per dataset
+
+`publish_to-edi.qmd` (plan § D-6/D-8, WS-E3) is the third generic publisher over the
+frozen release, alongside `publish_to-netcdf.qmd` and `publish_to-erddap.qmd`: parameterised
+by `dataset_key` (default the three program datasets with no existing archive —
+`calcofi_bottle`, `calcofi_ctd-cast`, `calcofi_mets`), it exports each core table's rows for
+the dataset as a CSV `dataTable` entity, pairs them with the release's own `eml/{dataset_key}.xml`
+(`calcofi4db::build_eml()`, entity `physical` rewritten from the release parquet object to the
+exported CSV), and writes `data/edi/{dataset_key}/{dataset_key}_{version}/` plus a manifest
+(`content_hash`, `package_id`, `evaluated_utc`, `uploaded_utc`). A shared vocabulary table with
+no `dataset_key` column (`measurement_type`) is named whole as an `otherEntity` rather than
+duplicated per dataset; a `supplemental` full-resolution table (`obs_ctd_full`, `obs_mets_full`
+— hundreds of millions of rows, partitioned by `cruise_key` not `dataset_key`) is excluded and
+the exclusion recorded in the EML's own `additionalMetadata`, never silently dropped.
+
+**The non-interference rule from `publish_to-obis.qmd` applies here too**: a dataset whose own
+`link_data_source` is itself an EDI/PASTA package, or whose record already carries a
+`kind = "archive"` distribution on `portal %in% c("edi", "knb-lter-cce")`, is refused — reported,
+not published — so a CCE-LTER-owned package (or any provider's own EDI record) is never
+republished under a CalCOFI-owned one.
+
+`EDIutils::evaluate_data_package()` runs against EDI's PASTA **staging** environment on every
+render that has credentials (`EDI_KEY`, or `EDI_USER`/`EDI_PASS`); without them the notebook says
+so and skips cleanly. `create_data_package()` / `update_data_package()` — which mint or revise a
+real package — run only under `CALCOFI_PUBLISH_EDI=true`, against `env = "production"`, and
+record the minted package id in the new `metadata/edi_packages.csv` registry. The pure
+classification/entity-rewrite logic lives in `libs/edi_entities.R`
+(`scripts/test_publish_edi.R`, no network).
+
 ## The release record now has a public rendering, one page per dataset
 
 `datasets.json` (schema 1.0, `build_dataset_catalog()`) is no longer only a sidecar: calcofi.io
