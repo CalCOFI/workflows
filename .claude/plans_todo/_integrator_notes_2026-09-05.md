@@ -38,9 +38,13 @@ https://claude.ai/code/artifact/5fe1fa4e-c124-4525-a27a-a4a978abf2ba (the spec f
   on the six provider sheets and the `holdings` tab on the calcofi sheet (17 rows), pushed as the
   calcofi-admin service account (scripts/lib_google_auth.R — no interactive auth anywhere now);
   `pull` reads back with zero changes. sccoos has holdings but no sheet (skipped).
-  **Next:** staging render of release_database.qmd (the R0 gate: 16 records validate, finding table
-  `no_citation` × 5 exempt, `url_dead` × 0 — already true offline against v2026.09.04), then Wave 2
-  (P1, E1, M1) reads `datasets.json`.
+  **Staging render done 14:48 CEST** (release_database 1 h 03 + test_release 10 min; 64/4/0; catalog rows
+  pass) → calcofi4db `catalog-datasets-4.1.0` @ 4179e8ee (netCDF fallback fix), workflows
+  `dataset-catalog-phase0` (staging `exists` verification + production-history `since_version`).
+  Ben: no production release for the sidecars alone. **Next:** merge both branches to main, install
+  4.1.0 wherever the pipeline runs, then Wave 2 (P1, E1, M1) reads `datasets.json` from the next release.
+  Separate fix wanted: `build_climatology()` hash non-determinism (60/71 partitions re-upload on every
+  re-cut).
 - Lessons: an `.nz()` helper name collided with netcdf.R's; `$` partial matching on record lists
   (dataset_name → dataset_name_short) silently passed a red test — use `[[ ]]`; the migrated sidecars
   sit at a uniform 2-space indent while generated/hand-written ones sit at 0, so the sync script now

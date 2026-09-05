@@ -2132,8 +2132,24 @@ gcloud      <- find_gcloud()
 # copy under this release's parquet/ keeps every legacy URL working.
 plan <- freeze_plan(release_objs, prev_catalog, release_version,
                     layout = release_layout, release_prefix = release_prefix)
-if (release_layout == "canonical" && tables_prefix != CC_TABLES_PREFIX)
+if (release_layout == "canonical" && tables_prefix != CC_TABLES_PREFIX) {
   plan$path <- sub(paste0("^", CC_TABLES_PREFIX, "/"), paste0(tables_prefix, "/"), plan$path)
+  # `exists` was decided against the PREVIOUS catalog's paths, and a staging catalog can name
+  # objects the staging store never held (the 2026-09-04 staging run catalogued production
+  # ducklake/tables/ paths before the tables-prefix guard existed; measured 2026-09-05: the
+  # measurement_type object was `exists` and the compat copy 404'd). An object is reused only if
+  # it is actually in the store this run writes to; otherwise it is uploaded like a new one.
+  have <- system2(gcloud, c("storage", "ls", "-r", glue("gs://{gcs_bucket}/{tables_prefix}/**")),
+                  stdout = TRUE, stderr = FALSE)
+  have <- sub(glue("^gs://{gcs_bucket}/"), "", have[grepl("[.]parquet$", have)])
+  missing <- plan$action == "exists" & !plan$path %in% have
+  if (any(missing)) {
+    message(glue("  {sum(missing)} object(s) marked `exists` are absent from {tables_prefix}/ — uploading them"))
+    plan$action[missing] <- "upload"
+    plan$bytes[missing]  <- plan$bytes_local[missing]
+    plan$sha256[missing] <- plan$sha256_local[missing]
+  }
+}
 plan |>
   dplyr::count(action, wt = bytes, name = "bytes") |>
   dplyr::mutate(n = as.vector(table(plan$action)[action]), mb = round(bytes / 1e6, 1)) |>
@@ -2374,10 +2390,13 @@ if (file.exists(meta_json_path)) {
   net_ok     <- !nzchar(Sys.getenv("CALCOFI_SKIP_LINK_CHECK"))
   erddap_now <- if (net_ok) fetch_erddap_datasets() else NULL
   netcdf_now <- if (net_ok) fetch_netcdf_manifests(c(names(ingest_yaml), paste0(names(ingest_yaml), "_full"))) else list()
-  rel_https  <- glue("https://storage.googleapis.com/{gcs_bucket}/{release_prefix}")
-  prev_versions <- tryCatch(jsonlite::fromJSON(glue("{rel_https}/versions.json"), simplifyVector = FALSE),
+  # since_version is a fact about the PROMOTED history, so it is always derived from the
+  # production prefix — a staging run's own versions.json holds three throwaway versions and
+  # would date every dataset to the oldest of them (measured 2026-09-05: ichthyo "since v2026.08.25")
+  prod_https <- glue("https://storage.googleapis.com/{gcs_bucket}/ducklake/releases")
+  prod_versions <- tryCatch(jsonlite::fromJSON(glue("{prod_https}/versions.json"), simplifyVector = FALSE),
                             error = function(e) NULL)
-  since <- if (!is.null(prev_versions) && net_ok) dataset_since_versions(prev_versions, base = rel_https) else character()
+  since <- if (!is.null(prod_versions) && net_ok) dataset_since_versions(prod_versions, base = prod_https) else character()
   # source_accessed is measured in [dataset_coverage]; keyed by dataset_key here
   src_acc <- setNames(format(d_dataset_cov$source_accessed), paste0(d_dataset_cov$provider, "_", d_dataset_cov$dataset))
   bathy <- tryCatch(jsonlite::fromJSON("https://storage.googleapis.com/calcofi-db/bathymetry/gebco_2025.json",
