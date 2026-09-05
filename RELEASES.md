@@ -203,6 +203,28 @@ it. Nothing on calcofi.io's dataset pages (Phase 1) is authored by hand: they re
   unchanged. **Consumers:** the next release's `climatology` values differ from v2026.09.04's beyond the 6th
   decimal only.
 
+## ERDDAP's own globals now say what the record says (WS-P2)
+
+`publish_to-erddap.qmd`'s generated `datasets.xml` no longer states a program-wide default for
+things the record can answer per dataset. `infoUrl` is now the dataset's own
+`https://calcofi.io/datasets/{dataset_key}/` page — built from the key, never a per-dataset URL
+list — instead of `link_calcofi_org` (which many datasets do not carry) or the bare
+`https://calcofi.org` fallback. `license` reads the dataset's own `dataset_meta.yml` `license` id
+through `metadata/license.csv` (its full name, e.g. "Creative Commons Attribution 4.0
+International") and states `not specified` rather than the previous blanket `CC-BY 4.0` default —
+which had been asserting a licence for datasets (`calcofi_bottle` among them) whose own citation
+questions are still open. New `creator_name` / `creator_type` / `creator_email` / `creator_url` /
+`institution` / `keywords` globals resolve from the sidecar's `pi_names` / `contact` /
+`keywords_gcmd`, falling back to the registered provider organization (`metadata/provider.csv`) —
+never CalCOFI program-wide — and are omitted, not written as the literal string `"NA"`, when the
+record states none. **Also fixed at the source (I-13):** `title_of()`'s dataset-block suffix
+(" — observations", " — sampling events", …) used a real em dash, which erddap.calcofi.io's own
+`allDatasets` metadata re-serializes as the six-character literal `"—"` — a plain hyphen
+(" - ") reads the same and survives every consumer, so titles are now ASCII-safe at the source
+instead of being decoded downstream (as `observe_distributions()`, calcofi4db ≥ 4.2.x, already
+does for existing ERDDAP metadata). **Consumers:** erddap.calcofi.io's `datasets.xml` and its
+served globals change on the next deploy; no table, column or row is affected.
+
 
 # v2026.09.04 (2026-09-04)
 
