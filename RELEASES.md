@@ -8,6 +8,43 @@ versions). Conventions: see `CLAUDE.md` § "RELEASES.md is not optional".
 
 # Unreleased
 
+## Every biological dataset can now leave as a Darwin Core Archive
+
+`publish_to-obis.qmd` (generic, `calcofi4db::dwc_*()`, ≥ 4.4.0) builds one archive per dataset
+whose taxa resolve to WoRMS — Event core from `sample`'s adjacency list, Occurrence from
+`obs_bio` + `taxon`, eMoF from `sample_measurement` + `obs_attribute` + `obs_env`, `meta.xml`
+from the term map and `eml.xml` from the release's own `eml/{dataset_key}.xml`. It supersedes
+`publish_ichthyo_to-obis.qmd`, which read the `swfsc_ichthyo` source tables directly and has
+been unrunnable since the core consolidation retired them, and which is why nine other
+biological datasets had no OBIS route at all. Ten archives build clean at v2026.09.05:
+213,813 / 482,250 / 613,576 events / occurrences / eMoF for ichthyo, plus cufes, bird-mammal,
+phytoplankton, zooscan, euphausiids, zoodb, phyllosoma, dungeness-crab and mesopelagic-fish.
+Nothing is uploaded by the pipeline: the IPT copy is a deliberate manual act gated on the
+archive manifest's `content_hash`.
+
+The vocabulary ids the registries carry now reach a portal for the first time.
+`measurement_type.nerc_p01` / `units_nerc_p06` become `measurementTypeID` / `measurementUnitID`
+(241,871 of ichthyo's 613,576 eMoF rows carry a P01, all of them a P06 — the published 2026-03
+archive carried none); `gear.csv` supplies a per-gear `samplingProtocol` sentence in place of one
+hand-typed string; `life_stage.csv` supplies `lifeStage`, and its two "not a life stage" values
+(`damaged`, `invert`) go to `occurrenceRemarks` instead. An id absent from a registry ships empty,
+never invented.
+
+**`occurrenceStatus` is measured, not assumed.** Six datasets record their zeros (cufes,
+phytoplankton, zoodb, zooscan, phyllosoma, dungeness-crab) and those rows publish as `absent`.
+Four are positive-only (ichthyo, euphausiids, bird-mammal, mesopelagic-fish): a surveyed-empty
+sample simply has no row, so an absence could only be derived from `sample_root` minus the
+positives — a claim about a sampling protocol, not about the data. None is derived; each is a
+question for its provider.
+
+**Gaps the export measured, and did not paper over.** 409 `calcofi_phytoplankton` region pools
+carry no `datetime`, so 64,643 of its occurrences cannot index at OBIS; 155 `cce-lter_zoodb` tows
+carry neither date nor coordinates (12,573 records); 1,563 `swfsc_cufes` underway samples carry no
+coordinates (8,897 records); 123 `farallon_bird-mammal` occurrences have no WoRMS id; and 26,049
+`obs_bio` rows across four datasets carry a dataset-local taxon key with no scientific name
+(zooscan 23,380, phytoplankton 1,906, bird-mammal 762, mesopelagic-fish 1) and cannot be
+Occurrences at all. Each is reported per dataset, never dropped silently.
+
 ## A generic EDI publisher turns the release EML into a data package, per dataset
 
 `publish_to-edi.qmd` (plan § D-6/D-8, WS-E3) is the third generic publisher over the
