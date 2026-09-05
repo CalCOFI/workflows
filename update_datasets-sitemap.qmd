@@ -1,518 +1,185 @@
 ---
-title: "Generate a datasets sitemap.xml for ODIS crawling"
+title: "The datasets sitemap, generated from the release record"
 editor: visual
-editor_options: 
+editor_options:
   chunk_output_type: console
+execute:
+  echo: true
+  warning: false
 format:
   html:
     code-fold: true
 ---
 
-**Goal**: Generate `datasets/sitemap.xml` with datasets already in authoritative repositories with JSON-LD content for ODIS crawling.
+**Goal**: regenerate `datasets/sitemap.xml` — the file [ODISCat record 3318](https://catalogue.odis.org/view/3318) points at — from the release's own dataset record, so what a crawler is told matches what CalCOFI publishes.
 
--   Tracking in Github issue(s):
-    -   [register datasets with ODIS (using JSON-LD) · Issue #24 · CalCOFI/workflows](https://github.com/CalCOFI/workflows/issues/24)
--   Techniques:
-    -   Use RESTful based APIs directly where possible. Avoid web scraping since most brittle to website changes. Avoid custom R packages (e.g., [`rerddap`](https://docs.ropensci.org/rerddap/) or [`rdataone`](https://github.com/DataONEorg/rdataone) for EDI) since have more R package dependencies, may be out of date and add unnecessary complexity.
-    -   Store CSV tables of repositories and datasets gleaned as snapshot in Github along with this report output as html.
+Until 2026-09-05 this notebook read a hand-maintained [Google Sheet of repositories](https://docs.google.com/spreadsheets/d/1uhviF2ecfOqGaSbC_JE8B5jPRqqjMaFc9TNCK_m297c/edit?gid=1271784325) (snapshot 2025-07-02), asked ERDDAP and EDI what they held, and listed **78 external pages** with `lastmod` = the run date. Every one of those pages belonged to somebody else, none of them was a CalCOFI record, and a package that had been superseded stayed on the list forever.
 
-## Read GoogleSheet of repos
+Since the dataset-catalog plan (2026-09-05 § D-10, Decision 15) the sitemap is a **generated view of `datasets.json`**:
 
-Columns from original GoogleSheet:
+1.  **The calcofi.io dataset pages come first** — `https://calcofi.io/datasets/{dataset_key}/`, one per public dataset and per public holding. They are the canonical records: each carries schema.org JSON-LD naming every external copy as `sameAs`, so a crawler meeting the same dataset twice can tell it is one dataset.
+2.  **Then every `current` / `external` record at another portal** — the EDI package at its newest revision, the OBIS dataset and its IPT resource, the NCEI accession, the CoastWatch mirrors, the DataZoo catalog pages, the CalOOS modules, the ERDDAP dataset pages on calcofi.io and at NOAA.
+3.  **Never a `superseded` or `retired` one.** Those rows stay in `metadata/distribution.csv` — nothing is ever deleted from the registry, so a dataset page can say *"was at X until 2026-08; now at Y"* — and they are simply not listed. Pointing a crawler at a legacy ERDDAP id is how a retired copy outlives its successor.
 
--   `repo`: repository name
--   `link`: url to repository
+`lastmod` is measured, not stamped with the run date: a page's is the later of the release date and its descriptive sidecar's last edit; an external record's is what the portal itself said when `observe_distributions()` last asked (`metadata/distribution_observed.json`).
 
-Extra columns added by this script:
+The logic lives in `calcofi4db` (`build_datasets_sitemap()`, `write_sitemap_xml()`, `check_sitemap()`) and has its own tests, so this notebook and the weekly GitHub Action cannot drift from each other — both call the same functions through `scripts/build_datasets_sitemap.R`.
 
--   `to_ds`: custom function to fetch datasets from repository
--   `status`: check if repository is accessible (`OK`) or not (`Not Found`); optionally set in code with `ck_status <- T`
+## What each portal says now
+
+`observe_distributions()` (calcofi4db ≥ 4.3.0) asks each portal by the method its `metadata/portal.csv` row declares — EDI's cite service for the newest revision, `api.obis.org` for `updated`, an ERDDAP `.das` for `date_modified`, `doi.org`, NCBI's esummary, Zenodo's API, a ranged GET for everything else — over the curated registry **and** the holdings' own links. `.github/workflows/observe.yml` runs it weekly and commits the result.
 
 ```{r}
-# libraries ----
+#| label: observed
+
 librarian::shelf(
-  curl, dplyr, DT, here, httr2, glue, googlesheets4, janitor, knitr, purrr, 
-  readr, stringr, tidyr)
-options(readr.show_col_types = F)
+  calcofi/calcofi4db, dplyr, DT, glue, here, jsonlite, readr, quiet = TRUE)
+options(readr.show_col_types = FALSE)
 
-# variables ----
-d_gs      <- "https://docs.google.com/spreadsheets/d/1uhviF2ecfOqGaSbC_JE8B5jPRqqjMaFc9TNCK_m297c/edit?gid=1271784325#gid=1271784325"
-d_csv     <- here("datasets/repo_links.csv")
-ds_csv    <- here("datasets/repo_datasets.csv")
-dsi_csv   <- here("datasets/repo_datasets_info.csv")
-dss_csv   <- here("datasets/repo_datasets_summary.csv")
-sm_xml    <- here("datasets/sitemap.xml")
-ck_status <- F
+dir_meta <- here("metadata")
+registry <- read_distribution_registry(file.path(dir_meta, "distribution.csv"))
+observed <- read_distribution_observed(file.path(dir_meta, "distribution_observed.json"))
 
-# helper functions ----
-erddap_ds <- function(link){
-  # link = d$link[3]
-  
-  x <- link |> 
-    str_replace(fixed("index.html"), fixed("index.csv")) |> 
-    read_csv() |> 
-    filter(
-      Accessible == "public") |> 
-    mutate(
-      pfx = dplyr::if_else(
-        !is.na(tabledap),
-        tabledap |> str_replace("tabledap", "info"),
-        griddap  |> str_replace("griddap",  "info")),
-      url = glue("{pfx}/index.html"))
-
-  ds <- x |> 
-    select(
-      title = Title, url)
-  attr(ds, "datasets") <- x
-  ds
+if (is.null(observed)) {
+  cat("no distribution_observed.json yet — run `Rscript scripts/observe_distributions.R`\n")
+} else {
+  cat(glue(
+    "{nrow(observed)} distributions observed at {observed$observed_utc[1]} ",
+    "({nrow(registry)} curated registry rows + the holdings' links)\n"))
+  observed |>
+    mutate(url = glue("<a href='{url}' target='_blank'>{url}</a>")) |>
+    select(dataset_key, portal, method, status, registry_status, revision, updated, url, note) |>
+    datatable(escape = FALSE, options = list(pageLength = 15))
 }
+```
 
-edi_ds <- function(link){
-  # link = d$link[2]
+A change since the last observation is a **proposal, never a silent edit**: a new EDI revision, a DOI newly minted, a dead link becomes a `proposed` `questions.csv` row (`observed_change`) for the dataset's provider, and the same line appears in the `calcofi` Sheet's `holdings` tab.
 
-  u <- url_parse(link)
-  u$path  <- str_replace(u$path, "simpleSearch", "downloadSearch")
-  u$query <- list(
-    q = paste(names(u$query), u$query, sep = "=", collapse = "&"))
-  #     curl_escape(httr2:::query_build(u$query)))
-  
-  x <- read_csv(url_build(u)) |> 
-    mutate(
-      url = glue("https://portal.edirepository.org/nis/mapbrowse?packageid={packageid}"))
-  
-  ds <- x |> 
-    select(title, url)
-  attr(ds, "datasets") <- x
-  ds
-}
+```{r}
+#| label: changes
 
-# individual dataset functions (not yet used) ----
-erddap_ds_indiv <- function(link){
-  # link = "https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFIzoovol.html"
-  # link = "https://coastwatch.pfeg.noaa.gov/erddap/info/erdCalCOFIzoovol/index.html"
-  
-  title <- link |> 
-    str_replace("tabledap/([^.]+)\\.html", "info/\\1/index.csv") |>
-    str_replace("info/([^/]+)/index\\.html", "info/\\1/index.csv") |> 
-    read_csv() |> 
-    filter(
-      `Attribute Name` == "title") |>
-    pull(Value)
-
-  tibble(
-    title = title, 
-    url   = link)
-}
-
-edi_ds_indiv <- function(link){
-  # link = "https://portal.edirepository.org/nis/mapbrowse?packageid=knb-lter-cce.188.4"
-  # link = "https://portal.edirepository.org/nis/mapbrowse?scope=knb-lter-cce&identifier=313"
-  # link = "https://portal.edirepository.org/nis/mapbrowse?scope=knb-lter-cce&identifier=104&revision=12"
-
-  u <- url_parse(link)
-  # trim revision to return latest packageid
-  if (length(u$query) == 1 && names(u$query) == "packageid"){
-    id <- u$query |> str_replace("\\.[0-9]+$", "")
-  } else if (all(c("scope", "identifier") %in% names(u$query))){
-    id <- paste(u$query$scope, u$query$identifier, sep = ".")
+if (!is.null(observed)) {
+  j <- fromJSON(file.path(dir_meta, "distribution_observed.json"), simplifyVector = FALSE)
+  ch <- j$changes
+  if (!length(ch)) {
+    cat("no change since the previous observation\n")
   } else {
-    stop("Unsupported link format for EDI repository")
+    bind_rows(lapply(ch, as_tibble)) |>
+      datatable(caption = "changes since the last observation (each one a proposed provider question)")
   }
-  res <- search_data_packages(query = glue("q=id:{id}&fl=packageid,title"))
-  stopifnot(nrow(res) == 1)
-  
-  tibble(
-    title = res$title,
-    url   = glue("https://portal.edirepository.org/nis/mapbrowse?packageid={res$packageid}"))
+  # what the portals say beyond liveness
+  observed |>
+    count(status, method) |>
+    datatable(options = list(dom = "t", pageLength = 20), caption = "observation status by method")
 }
-
-# read googlesheet repos ----
-dir.create(dirname(d_csv), showWarnings = F)
-
-gs4_deauth()
-read_sheet(d_gs, "CalCOFI data repositories") |> 
-  write_csv(d_csv)
-
-d <- read_csv(d_csv) |> 
-  clean_names() |> # for now, simply translates to lower case
-  mutate(
-    to_ds = map_chr(
-      link, 
-      \(link){
-        case_when(
-          str_detect(link, "erddap")        ~ "erddap_ds(link)",
-          str_detect(link, "edirepository") ~ "edi_ds(link)",
-          .default = NA) } ) ) |> 
-  relocate(to_ds, .after = repo)
-
-if (ck_status){
-  d <- d |> 
-    mutate(
-      status = map_chr(
-        link, 
-        \(x){
-          request(x) |> 
-            req_perform() |> 
-            resp_status_desc() } ) )
-}
-
-# write repos to csv ----
-d |> 
-  select(repo, to_ds, link) |> 
-  write_csv(d_csv)
-
-# show repos ----
-d |> 
-  mutate(
-    link   = glue("<a href='{link}' target='_blank'>{link}</a>")) |>
-  datatable(
-    escape = F,
-    options = list(
-      dom = "ft",
-      pageLength = nrow(d))) |> 
-  formatStyle(
-    "to_ds",
-    `font-family` = 'monospace')
 ```
 
--   source: [Living program document: CalCOFI Data Inventory_updated Oct2024 - Google Sheets](https://docs.google.com/spreadsheets/d/1uhviF2ecfOqGaSbC_JE8B5jPRqqjMaFc9TNCK_m297c/edit?gid=1271784325#gid=1271784325)
-
-## Issues
-
--   GoogleSheet typo under `repo`: "ER**R**DAP" -\> "ER**D**DAP"
--   Repositories require login:
-    -   [ZooDB](%60r%20filter(d,%20repo%20==%20%22ZooDB%22)%20%7C%3E%20pull(link)%60)
-    -   [ZooScan](%60r%20filter(d,%20repo%20==%20%22ZooScan%22)%20%7C%3E%20pull(link)%60)
--   <a name="todo"></a>TODO:
-    -   [ ] Add datasets from other repositories
-
-    -   [ ] Extract JSON-LD from dataset links (see [CalCOFI/workflows#24](https://github.com/CalCOFI/workflows/issues/24))
-
-    -   [ ] Update `lastmod` to dataset's last modified date
-
-    -   [x] Create an ODISCat entry
-
-        > (and point to the sitemap there). See steps at [book.odis.org/gettingStarted.html](https://book.odis.org/gettingStarted.html). We'll be driving the connection through that entry (to find your sitemap etc).\
-        > -- \@jmckenna, per [iodepo/odis-arch#461](https://github.com/iodepo/odis-arch/issues/461#issuecomment-2429931617)
-
-## Fetch datasets per repo
-
-Always return a data frame with columns:
-
--   `title`: title of dataset
--   `url`: url to dataset
-
-And attach the original data frame as an attribute `datasets`.
+## Write `datasets/sitemap.xml`
 
 ```{r}
-# fetch datasets per repo ----
-datasets <- d |> 
-  filter(!is.na(to_ds)) |> # View()
-  mutate(
-    ds = map2(
-      to_ds, link,
-      \(to_ds, link){
-        eval(parse(text = to_ds)) } ) ) |> 
-  unnest(ds)
+#| label: sitemap
 
-# write datasets to csv ----
-datasets |> 
-  write_csv(ds_csv)
+version  <- Sys.getenv("CALCOFI_SITEMAP_VERSION", "")
+prefix   <- Sys.getenv("CALCOFI_RELEASE_PREFIX", "ducklake/releases")
+base     <- glue("https://storage.googleapis.com/calcofi-db/{prefix}")
+if (!nzchar(version))
+  version <- trimws(readLines(glue("{base}/latest.txt"), warn = FALSE))[1]
 
-# show datasets ----
-datasets|> 
-  mutate(
-    dataset = glue("<a href='{url}' target='_blank'>{title}</a>")) |>
-  select(repo, dataset) |> 
-  datatable(escape = F)
+record   <- fromJSON(glue("{base}/{version}/datasets.json"), simplifyVector = FALSE)
+sidecars <- read_dataset_sidecars(dir_meta)
+edited   <- vapply(names(sidecars), function(k) {
+  y <- sidecars[[k]]
+  e <- as.character(y[["edited"]] %||% "")[1]
+  if (!is.na(e) && nzchar(e)) return(substr(e, 1, 10))
+  g <- suppressWarnings(system2("git", c("-C", here(), "log", "-1", "--format=%cs", "--", y[["path"]]),
+                                stdout = TRUE, stderr = FALSE))
+  if (length(g) && nzchar(g[1])) g[1] else ""
+}, "")
+
+d <- build_datasets_sitemap(record, observed = observed, edited = edited)
+write_sitemap_xml(d, here("datasets/sitemap.xml"))
+
+n_pages <- sum(d$kind == "page" & d$portal == "calcofi.io")
+cat(glue("{nrow(d)} URLs — {n_pages} calcofi.io dataset pages then ",
+         "{nrow(d) - n_pages} external records (release {version})\n"))
+
+d |>
+  mutate(loc = glue("<a href='{loc}' target='_blank'>{loc}</a>")) |>
+  datatable(escape = FALSE, options = list(pageLength = 20))
 ```
 
-### Summary of datasets per repo
-
 ```{r}
-# tabulate datasets per repo ----
-dss <- datasets |> 
-  count(repo, name = "n_datasets")
+#| label: sitemap_check
 
-write_csv(dss, dss_csv)
+# the structural half always runs; the network half (a one-byte ranged GET per URL,
+# ~100 s for 127 URLs) follows CALCOFI_SKIP_LINK_CHECK like every other link check.
+# CALCOFI_PAGES_PENDING=1 forgives the calcofi.io dataset pages — and only those —
+# while the landing repo has not generated them yet (plan Phase 1, WS-P1).
+chk   <- check_sitemap(d)
+allow <- if (nzchar(Sys.getenv("CALCOFI_PAGES_PENDING"))) "^https://calcofi[.]io/datasets/" else character()
+assert_sitemap(chk, allow_dead = allow)
 
-dss |> 
-  datatable(
-    options = list(
-      dom = "t",
-      pageLength = nrow(d)))
+chk |>
+  filter(finding != "ok") |>
+  datatable(caption = "sitemap check findings (url_dead fails; url_unreachable is someone else's outage)")
 ```
 
-## Write sitemap.xml
-
--   [Build and Submit a Sitemap \| Google Search Documentation](https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap)
--   [Protocol \| sitemaps.org](https://www.sitemaps.org/protocol.html)\
-    -   `loc`: dataset link
-    -   `lastmod`: today's date\
-        TODO: change to dataset's last modified date
-    -   `changefreq`: weekly; valid values: always, hourly, daily, weekly, monthly, yearly, never
-    -   `priority`: SKIP; valid values: 0 to 1, e.g. 0.8
-
 ```{r}
-# write sitemap.xml ----
-datasets <- read_csv(ds_csv)
+#| label: copy_to_output
 
-sm_body <- datasets |>
-  glue_data(
-    "<url>
-      <loc>{url}</loc>
-      <lastmod>{Sys.Date()}</lastmod>
-      <changefreq>weekly</changefreq>
-    </url>") |> 
-  paste(collapse = "\n")
-
-write_lines(
-  list(
-    glue('
-      <?xml version="1.0" encoding="UTF-8"?>
-        <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'), 
-    sm_body, 
-    '</urlset>'), 
-  path = sm_xml)
-
-# copy entire datasets folder to _output
-dir_from <- here("datasets")
-dir_to   <- here("_output")
-dir.create(dir_to, recursive = T, showWarnings = F)
-file.copy(
-  from      = dir_from, 
-  to        = dir_to, 
-  recursive = T, 
-  overwrite = T)
+# the sitemap is served from calcofi.io/workflows/datasets/sitemap.xml
+dir_to <- here("_output")
+dir.create(dir_to, recursive = TRUE, showWarnings = FALSE)
+file.copy(here("datasets"), dir_to, recursive = TRUE, overwrite = TRUE)
 ```
 
 **Datasets** `sitemap.xml`:
 
 -   [`calcofi.io/workflows/datasets/sitemap.xml`](https://calcofi.io/workflows/datasets/sitemap.xml)
 
-Contents of `sitemap.xml`:
+## Regenerating it
 
-``` xml
-{{< include datasets/sitemap.xml >}}
+```bash
+# after a release (the record changed), or weekly (a portal revised a package)
+Rscript scripts/observe_distributions.R      # -> metadata/distribution_observed.json
+Rscript scripts/build_datasets_sitemap.R     # -> datasets/sitemap.xml
 ```
 
-## Create an ODISCat entry
+`.github/workflows/observe.yml` runs both on a weekly cron, on `workflow_dispatch` and on the release dispatch, and commits whatever changed. ODISCat record 3318 is re-pointed at this file by WS-M2 (with Ben).
 
-### NEW: Spatial Coverage using `ctd_casts.geom`
+## The ODIS record
 
-We'll get the spatial extent for the entirety of the CalCOFI CTD casts going back to 1949.
-
-``` sql
-SELECT
-  MIN(date) AS date_min,
-  MAX(date) AS date_max,
-  ST_Extent(geom) AS bbox
-FROM ctd_casts
-```
-
-|            |            |                                                  |
-|------------|------------|--------------------------------------------------|
-| date_min   | date_max   | bbox                                             |
-| 1949-02-28 | 2020-01-26 | BOX(-164.083333 18.416666,-105.966666 47.916666) |
-
-Looking at JSON-LD in source of page [California Cooperative Oceanic Fisheries Investigations (CalCOFI)Database \| InPort](https://www.fisheries.noaa.gov/inport/item/20691), it wants minY minX maxY maxX, so for `Spatial coverage` using:
-
-```
-"box": "18.4 -164.1 47.9 -106.0"
-```
-
-### OLD: Spatial Coverage using `calcofi4r`
-
-Per example under [Essential Ocean Variables — The Ocean InfoHub Project and the development of the ODIS-architecture](https://book.odis.org/thematics/variables/index.html#references):
-
-``` json
-"spatialCoverage": {
-        "@type": "Place",
-        "geo": {
-            "@type": "GeoShape",
-            "description": "schema.org expects lat long (Y X) coordinate order",
-            "polygon": "10.161667 142.014,18.033833 142.014,18.033833 147.997833,10.161667 147.997833,10.161667 142.014"
-        },
-        "additionalProperty": {
-            "@type": "PropertyValue",
-            "propertyID": "https://dbpedia.org/page/Spatial_reference_system",
-            "value": "https://www.w3.org/2003/01/geo/wgs84_pos"
-        }
-    }
-```
-
-#### CalCOFI zones
-
-Let's use the CalCOFI zones described in the [`calcofi4r`](https://calcofi.io/calcofi4r/articles/calcofi4r.html) R package to construct the study envelope for the `spatialCoverage` term.
-
-```{r}
-librarian::shelf(
-  calcofi/calcofi4r, dplyr, glue, leaflet, mapview, rmapshaper, sf)
-
-mapview(cc_grid_zones, zcol="zone_key") +
-  mapview(cc_grid_ctrs, cex = 1)
-```
-
-#### Dissolve zones
-
-```{r}
-# dissolve zones into a single polygon
-cc_ply <- cc_grid_zones |> 
-  st_union()
-
-# mapview() not working on cc_ply, so switching to leaflet()
-lmap <- function(ply){
-  leaflet(ply) |> 
-  addProviderTiles(providers$Esri.OceanBasemap) |> 
-  addPolygons()
-}
-lmap(cc_ply)
-```
-
-#### Remove holes
-
-```{r}
-# remove holes and cast to simple polygon
-cc_ply <- st_multipolygon(lapply(cc_ply, function(x) x[1])) |> 
-  st_sfc(crs = 4326) |> 
-  st_cast("POLYGON")
-lmap(cc_ply)
-```
-
-Number of characters: `r st_as_text(cc_ply, digits=4) |> nchar()`
-
-#### Simplify
-
-To reduce number of characters in text string.
-
-```{r}
-cc_ply <- cc_ply |> 
-  st_simplify(preserveTopology = T, dTolerance = 10*1000) |> # simplify by 10 km
-  st_cast("POLYGON") |>  
-  st_as_sf() |> 
-  slice(1)
-
-cc_txt <- cc_ply |> 
-  st_geometry() |> 
-  st_as_text(digits=4)
-
-lmap(cc_ply)
-```
-
-Number of characters: `r nchar(cc_txt)`
-
-#### Transform text
-
-Transform to "schema.org expects lat long (Y X) coordinate order", versus the default "X Y" order for well-known text (WKT) (and every other geospatial standard, including GeoJSON).
-
-Original:
-
-```{r}
-cc_txt
-```
-
-Converted:
-
-```{r}
-cc_txt = cc_txt |>
-  # Swap coordinates
-  gsub("([-0-9.]+)\\s+([-0-9.]+)", "\\2 \\1", x = _) |>
-  # Remove space after comma
-  gsub(",\\s",",", x = _) |>
-  # Remove outer MULTIPOLYGON (( and ))
-  gsub("POLYGON \\(\\((.*)\\)\\)", "\\1", x = _)
-# nchar(cc_txt) # 2,476
-cc_txt
-```
-
-#### Enter `polygon` into `spatialCoverage`
-
-```{r}
-sc <- glue(
-  '{
-      "@type": "Place",
-      "geo": {
-          "@type": "GeoShape",
-          "description": "schema.org expects lat long (Y X) coordinate order",
-          "polygon": "{{cc_txt}}"
-      },
-      "additionalProperty": {
-          "@type": "PropertyValue",
-          "propertyID": "https://dbpedia.org/page/Spatial_reference_system",
-          "value": "https://www.w3.org/2003/01/geo/wgs84_pos"
-   }',
-  .open  = "{{",
-  .close = "}}")
-sc
-```
-
-### Add ODIS record `3318`
-
-Added record here:
-
--   [catalogue.odis.org/view/3318](https://catalogue.odis.org/view/3318)
-    -   print: [CalCOFI on ODIS record 3318.pdf](./datasets/CalCOFI%20on%20ODIS%20record%203318.pdf)
-
-screenshot...
+Record [catalogue.odis.org/view/3318](https://catalogue.odis.org/view/3318) — [print](./datasets/CalCOFI%20on%20ODIS%20record%203318.pdf), [screenshot](./datasets/CalCOFI%20on%20ODIS%20record%203318.png) — is the entry ODIS crawls the sitemap through, per [book.odis.org/gettingStarted.html](https://book.odis.org/gettingStarted.html) and [iodepo/odis-arch#461](https://github.com/iodepo/odis-arch/issues/461#issuecomment-2429931617).
 
 ![](./datasets/CalCOFI%20on%20ODIS%20record%203318.png)
 
-## Parse JSON-LD from dataset links
+Its spatial coverage is the CalCOFI station-grid envelope, in schema.org's lat-long (Y X) order:
 
 ```{r}
-# Load required libraries
-librarian::shelf(
-  dplyr, httr2, jsonlite, listviewer, readr, rvest, dplyr, purrr, tibble, tidyr, yaml)
-redo_dsi = F
+#| label: odis_extent
 
-# Define the function to extract and flatten JSON-LD data
-extract_jsonld <- function(url) {
-  # url <- d$url[1]
-  
-  # Fetch the web page using httr2
-  response <- request(url) %>%
-    req_perform()
-  
-  # Check if the request was successful
-  if (response$status_code == 200) {
-    page_content <- response %>%
-      resp_body_string()
-  } else {
-    warning(paste("Failed to retrieve the web page:", url))
-    return(NULL)
-  }
-  
-  # Parse the HTML content and find the script tag with type="application/ld+json"
-  script_node <- page_content |> 
-    read_html() |> 
-    html_node(
-      xpath = "//script[@type='application/ld+json']")
-  
-  if (is.na(script_node)) {
-    warning(paste("No JSON-LD found in the page:", url))
-    return(NULL)
-  }
-  
-  # Extract the JSON-LD content
-  html_text(script_node) |> 
-    fromJSON() |> 
-    as.yaml()
-}
+librarian::shelf(calcofi/calcofi4r, sf, quiet = TRUE)
 
-if (!file.exists(dsi_csv) | redo_dsi){
-  d <- read_csv(ds_csv) |> 
-    select(url) |> 
-    mutate(
-      jsonld_yaml = map_chr(url, extract_jsonld)) 
-  
-  write_csv(d, dsi_csv)
-}
+cc_ply <- calcofi4r::cc_grid_zones |>
+  st_union() |>
+  (\(x) st_multipolygon(lapply(x, function(p) p[1])))() |>
+  st_sfc(crs = 4326) |>
+  st_cast("POLYGON") |>
+  st_simplify(preserveTopology = TRUE, dTolerance = 10 * 1000) |>   # 10 km
+  st_as_sf() |>
+  slice(1)
 
-# show outputs
-read_csv(dsi_csv) |> 
-  mutate(
-    jsonld = map(jsonld_yaml, yaml::yaml.load)) |> 
-  select(-jsonld_yaml) |>
-  deframe() |> 
-  jsonedit()
+cc_txt <- cc_ply |>
+  st_geometry() |>
+  st_as_text(digits = 4) |>
+  gsub("([-0-9.]+)\\s+([-0-9.]+)", "\\2 \\1", x = _) |>             # swap to Y X
+  gsub(",\\s", ",", x = _) |>
+  gsub("POLYGON \\(\\((.*)\\)\\)", "\\1", x = _)
+
+cat(glue("{nchar(cc_txt)} characters\n"))
+substr(cc_txt, 1, 300)
 ```
+
+## What this replaced
+
+The old repository Sheet, `datasets/repo_links.csv`, `datasets/repo_datasets.csv` and the JSON-LD scrape of 78 external pages are retired: `metadata/distribution.csv` (curated, reviewed, in git) and `metadata/holdings.csv` (generated from the sidecars) carry the same knowledge with a `status` per row, and `observe_distributions()` refreshes it weekly instead of a person re-reading a spreadsheet.

@@ -8,6 +8,33 @@ versions). Conventions: see `CLAUDE.md` § "RELEASES.md is not optional".
 
 # Unreleased
 
+## The release publishes a STAC catalog, and the sitemap follows the record
+
+The release now also writes a static **SpatioTemporal Asset Catalog** (STAC 1.0.0) to
+`gs://calcofi-db/stac/` — `calcofi4db::build_stac()` (≥ 4.3.0), a pure function of `datasets.json`,
+`metadata.json` and `spatial_layers.json`: a root catalog, one collection per **public** dataset
+(extent from the observed bbox and year span, `license`, `providers[]`, GCMD `keywords`,
+`table:tables`, `sci:doi` / `sci:citation`), one **item per release** whose assets are that
+dataset's parquet objects (`application/x-parquet`, `roles: [data]`, each with `table:columns` from
+`metadata.json`, `file:size` and a sha256 `file:checksum`), its CF netCDF, its ERDDAP pages and its
+ISO 19115 record, and one collection per spatial layer with its PMTiles. A `superseded` or
+`retired` distribution is never published as an asset, and an `internal` dataset gets no collection.
+`check_stac()` runs `stac-validator` when it is installed and always runs a structural check;
+`test_release.qmd` fetches the published documents back off the bucket and re-checks them, so the
+gate is on what is served, not on what was built. A staging run writes `stac-staging/`.
+`stac-browser` at **calcofi.io/stac/** reads the root. **Consumers:** nothing changes for existing
+readers — STAC is an addition beside `catalog.json`, and the pages keep reading `datasets.json`.
+
+`datasets/sitemap.xml` (ODISCat record 3318) is now generated from the record too
+(`build_datasets_sitemap()`): the calcofi.io dataset pages first — 16 datasets + 17 holdings — then
+every `current`/`external` record at another portal, and **never** a `superseded` or `retired` one;
+`lastmod` is the release date or the sidecar's own edit for a page, and what the portal itself said
+for an external record. `observe_distributions()` asks each portal weekly by its `portal.csv`
+`observe_method` and writes `metadata/distribution_observed.json` — 58 distributions at 2026-09-05
+(32 curated rows + the holdings' links): 53 live, 4 EDI packages superseded by a newer revision, 1
+unreachable. Nothing is ever deleted from `distribution.csv`, and an unanswered request is
+`unreachable`, never `retired`.
+
 ## Every dataset has a record: `datasets.json` (the dataset catalog, Phase 0)
 
 The release now writes **`datasets.json`** beside `catalog.json` — one generated record per

@@ -2424,6 +2424,43 @@ if (file.exists(meta_json_path)) {
   stop("datasets.json needs metadata.json; no per-ingest metadata.json was merged")
 }
 
+# 3d. stac — the static STAC catalog (plan 2026-09-05 § D-5.3; calcofi4db >= 4.3.0) ----
+# STAC is a MACHINE surface, never the UI the catalog depends on: the pages read datasets.json
+# directly. build_stac() is a pure function of the record just written, metadata.json (the column
+# descriptions) and spatial_layers.json — a root catalog, one collection per PUBLIC dataset with an
+# item per release (parquet objects with table:columns / file:size / file:checksum, the CF netCDF,
+# the ERDDAP pages, the ISO 19115 record), and one collection per spatial layer with its PMTiles.
+# It lives beside the releases rather than inside one (gs://calcofi-db/stac/) because a STAC root is
+# one stable URL that gains an item per release; stac-browser at calcofi.io/stac/ reads it.
+# A staging run writes stac-staging/ — the browser's root is the production catalog and a rehearsal
+# must not rewrite it.
+stac_prefix <- if (grepl("staging", release_prefix)) "stac-staging" else "stac"
+stac_base   <- glue("https://storage.googleapis.com/{gcs_bucket}/{stac_prefix}")
+dir_stac    <- file.path(dir_frozen, "stac")
+unlink(dir_stac, recursive = TRUE)
+stac_paths <- build_stac(
+  record         = datasets_rec,
+  catalog        = catalog,
+  spatial_layers = spatial_layers_path,
+  dir            = dir_stac,
+  base_url       = stac_base,
+  metadata       = meta_json_path)
+stac_chk <- check_stac(dir_stac, network = net_ok)
+assert_stac(stac_chk)
+stac_chk |>
+  filter(finding != "ok") |>
+  datatable(caption = "STAC check: findings (structural always; stac-validator when installed)")
+# the whole prefix is regenerated every release, so an unmatched object is stale by construction
+stac_res <- system2(gcloud, c(
+  "storage", "rsync", "-r", "--delete-unmatched-destination-objects",
+  dir_stac, glue("gs://{gcs_bucket}/{stac_prefix}")), stdout = TRUE, stderr = TRUE)
+if (!identical(attr(stac_res, "status") %||% 0L, 0L))
+  stop(glue("STAC upload failed: {paste(stac_res, collapse='; ')}"))
+system2(gcloud, c("storage", "objects", "update", "--cache-control=no-cache",
+                  glue("gs://{gcs_bucket}/{stac_prefix}/catalog.json")), stdout = TRUE, stderr = TRUE)
+cat(glue("STAC: {length(stac_paths)} documents -> gs://{gcs_bucket}/{stac_prefix}/ ",
+         "({sum(stac_chk$finding == 'ok')} ok, {sum(stac_chk$level == 'warn')} warn)\n"))
+
 # 4. update versions.json (latest.txt promotion is deferred to test_release.qmd)
 # rebuilt from every catalog.json under the prefix by calcofi4db::build_versions_json(),
 # which also stamps the archive-policy fields: `consolidated` from
