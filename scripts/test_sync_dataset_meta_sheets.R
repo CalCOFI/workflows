@@ -27,6 +27,21 @@ test_that("dm_measured_fields matches the brief's six read-only context fields",
                  "source_accessed", "n_obs", "year_min", "year_max"))
 })
 
+# dm_provider_needs_sheet — the create-vs-skip decision -------------------------
+
+test_that("dm_provider_needs_sheet is TRUE for a provider with no entry at all", {
+  expect_true(dm_provider_needs_sheet(NULL))
+})
+
+test_that("dm_provider_needs_sheet is TRUE for an entry with a NULL or blank sheet_id (sccoos's shape)", {
+  expect_true(dm_provider_needs_sheet(list(sheet_id = NULL, url = NULL, created = NULL)))
+  expect_true(dm_provider_needs_sheet(list(sheet_id = "")))
+})
+
+test_that("dm_provider_needs_sheet is FALSE once a sheet_id is on file", {
+  expect_false(dm_provider_needs_sheet(list(sheet_id = "1AbCdEf")))
+})
+
 # dm_read_fields_csv -----------------------------------------------------------
 
 test_that("dm_read_fields_csv sorts required -> recommended -> optional and coerces editable to logical", {

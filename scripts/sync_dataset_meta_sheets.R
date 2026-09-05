@@ -28,10 +28,13 @@
 #   Rscript scripts/sync_dataset_meta_sheets.R pull [provider] --execute    # applies the diff to the sidecar(s)
 #
 # `provider` is a metadata/provider.csv slug; omit it to act on every active
-# provider that already has a sheet_id in metadata/questions_sheets.yml. A
-# provider with no sheet_id yet (sccoos, as of 2026-09-05) is skipped with a
-# message to run `sync_questions_sheets.R push <provider> --execute` first —
-# this script never creates a spreadsheet of its own.
+# provider that already has a sheet_id in metadata/questions_sheets.yml, OR that
+# has at least one dataset_meta.yml sidecar (a holding, with no questions.csv and
+# therefore no reason for scripts/sync_questions_sheets.R to have made it a sheet
+# yet — sccoos, as of 2026-09-05). `push --execute` for such a provider creates its
+# spreadsheet itself (Drive-folder mechanics, README tab, silent shares — all
+# reused from sync_questions_sheets.R via source(), never copied) rather than
+# requiring `sync_questions_sheets.R push <provider> --execute` to run first.
 #
 # Google auth: the calcofi-admin SERVICE ACCOUNT only, via scripts/lib_google_auth.R
 # (QS_GOOGLE_SA_JSON / CALCOFI_GOOGLE_SA_JSON, else the key's Drive home, else
@@ -51,6 +54,13 @@ HOLDINGS_TAB        <- "holdings"
 HOLDINGS_PROVIDER   <- "calcofi"  # the sheet that carries the team triage board
 source(here("scripts/lib_google_auth.R"))
 QS_SCOPES <- CC_GOOGLE_SCOPES
+
+# Drive/Sheet-creation mechanics (qs_ensure_folder(), gs_ensure_spreadsheet(),
+# qs_save_sheets_yml(), qs_readme_content(), qs_provider_registry(), SHARE_WITH)
+# are reused from sync_questions_sheets.R, not copied — see dm_ensure_provider_sheet()
+# below. It is sys.nframe()==0-guarded, so source()-ing it here never runs its own
+# CLI or touches the network.
+source(here("scripts/sync_questions_sheets.R"))
 
 `%||%` <- function(a, b) if (is.null(a) || (length(a) == 1 && is.na(a))) b else a
 
@@ -73,6 +83,13 @@ dm_editable_cols <- function() c("value", "edited_by", "edited_date")
 dm_measured_fields <- function()
   c("coverage_temporal_observed", "coverage_spatial_observed",
     "source_accessed", "n_obs", "year_min", "year_max")
+
+#' Does this provider's questions_sheets.yml `entry` (yml[[provider]], or NULL
+#' when the provider has no entry at all) still need a spreadsheet created
+#' before a metadata tab can be written to it? TRUE exactly when there is no
+#' usable `sheet_id` yet — the create-vs-skip decision, kept pure/testable
+#' apart from the Drive calls in dm_ensure_provider_sheet().
+dm_provider_needs_sheet <- function(entry) is.null(entry$sheet_id) || !nzchar(entry$sheet_id)
 
 #' Read metadata/dataset_meta_fields.csv, validated, sorted required -> recommended -> optional.
 dm_read_fields_csv <- function(path = DATASET_META_FIELDS) {
@@ -558,11 +575,56 @@ dm_all_holding_sidecars <- function(metadata_dir = METADATA_DIR) {
   out
 }
 
+#' Create `provider`'s question spreadsheet when it has none yet (sccoos,
+#' 2026-09-05: two holdings, no ingest, so sync_questions_sheets.R's own push
+#' has nothing to create one FOR — its `qs_dataset_paths()` glob is empty).
+#' Reuses sync_questions_sheets.R's Drive mechanics verbatim (source()d above,
+#' never copied): `qs_ensure_folder()` for the Shared-Drive folder a service
+#' account (no My Drive quota) must create inside, `gs_ensure_spreadsheet()`
+#' for the spreadsheet + its README tab rename, `qs_save_sheets_yml()` to
+#' record `sheet_id`/`url`/`created`, `qs_readme_content()` for the README
+#' tab's text, and the same silent per-file shares (`SHARE_WITH`, minus the
+#' service account's own address). Idempotent: returns the existing
+#' `sheet_id` untouched when one is already on file.
+dm_ensure_provider_sheet <- function(provider, sheets_yml_path = SHEETS_YML, share_with = SHARE_WITH) {
+  yml   <- qs_load_sheets_yml(sheets_yml_path)
+  entry <- yml[[provider]]
+  if (!dm_provider_needs_sheet(entry)) return(googlesheets4::as_sheets_id(entry$sheet_id))
+
+  reg   <- qs_provider_registry()
+  short <- reg$provider_short[match(provider, reg$provider)]
+  if (is.na(short)) short <- provider
+
+  folder_id <- qs_ensure_folder(yml, sheets_yml_path)
+  yml <- qs_load_sheets_yml(sheets_yml_path)   # qs_ensure_folder() may have written _folder
+  ss  <- gs_ensure_spreadsheet(provider, short, entry, folder_id)
+
+  meta <- googlesheets4::gs4_get(ss)
+  yml[[provider]] <- list(sheet_id = as.character(ss), url = meta$spreadsheet_url,
+                           created = format(Sys.Date()))
+  qs_save_sheets_yml(yml, sheets_yml_path)
+
+  # per-file sharing is additive to the folder's own Shared-Drive membership —
+  # same rationale as gs_push_provider()'s identical loop
+  share_with <- setdiff(tolower(share_with), getOption("qs.auth_user", character()))
+  shared <- character()
+  for (email in share_with) {
+    ok <- tryCatch({
+      googledrive::drive_share(googledrive::as_id(as.character(ss)), role = "writer",
+                                type = "user", emailAddress = email,
+                                sendNotificationEmail = FALSE); TRUE },
+      error = function(e) { dcat("  share with {email} refused: {substr(conditionMessage(e), 1, 80)}"); FALSE })
+    if (ok) shared <- c(shared, email)
+  }
+  dcat("created {meta$spreadsheet_url} in folder {folder_id}; shared with {paste(shared, collapse=', ')}")
+
+  googlesheets4::sheet_write(qs_readme_content(short), ss = ss, sheet = "README")
+  ss
+}
+
 #' Push provider(s) `metadata` tab (dry run touches no network).
 gs_push_metadata_provider <- function(provider, sheets_yml_path = SHEETS_YML, execute = FALSE,
                                        metadata_dir = METADATA_DIR) {
-  yml   <- dm_load_sheets_yml(sheets_yml_path)
-  entry <- yml[[provider]]
   sidecars <- dm_provider_sidecars(provider, metadata_dir)
   if (!length(sidecars)) { dcat("{provider}: no dataset_meta.yml sidecars — nothing to push"); return(invisible(NULL)) }
 
@@ -574,15 +636,10 @@ gs_push_metadata_provider <- function(provider, sheets_yml_path = SHEETS_YML, ex
   for (dk in names(sidecars)) dcat("  {dk}: {nrow(fields_df)} field row(s)")
 
   if (!isTRUE(execute)) { cat("dry run — pass --execute to write\n"); return(invisible(rows)) }
-  # a provider with holdings but no question sheet yet (sccoos, 2026-09-05): skip, do not stop —
-  # its holdings still reach the `holdings` tab, and the run must go on to write that tab
-  if (is.null(entry$sheet_id) || !nzchar(entry$sheet_id)) {
-    dcat("{provider}: no sheet_id in {sheets_yml_path} — SKIPPED; run `Rscript scripts/sync_questions_sheets.R push ",
-         "{provider} --execute` first (this script never creates a spreadsheet)")
-    return(invisible(NULL))
-  }
 
-  ss <- googlesheets4::as_sheets_id(entry$sheet_id)
+  # creates the spreadsheet (folder + README + shares) when this provider has
+  # none yet; a no-op returning the existing id otherwise
+  ss <- dm_ensure_provider_sheet(provider, sheets_yml_path)
   googlesheets4::sheet_write(rows, ss = ss, sheet = DM_TAB)
   props <- googlesheets4::sheet_properties(ss); sid <- props$id[props$name == DM_TAB]
   reqs <- c(dm_protection_requests(sid, names(rows), dm_editable_cols()),
