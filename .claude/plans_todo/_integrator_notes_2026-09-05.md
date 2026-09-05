@@ -49,3 +49,12 @@ https://claude.ai/code/artifact/5fe1fa4e-c124-4525-a27a-a4a978abf2ba (the spec f
   (dataset_name → dataset_name_short) silently passed a red test — use `[[ ]]`; the migrated sidecars
   sit at a uniform 2-space indent while generated/hand-written ones sit at 0, so the sync script now
   detects the indent; EDI's portal starts refusing ranged GETs after ~150 requests in a day (warn, not fail).
+- 2026-09-05 ~15:20 · both mains fast-forwarded to Phase 0 (calcofi4db 4179e8ee, workflows 1bee2d7). **Wave 2
+  spawned** in worktrees under `/Users/bbest/Github/CalCOFI/.worktrees/`: P1 (Opus; landing repo branch
+  `dataset-catalog-pages`, reads the staging `datasets.json` until a promoted release carries one), E1 (Opus;
+  `eml-4.2.0` in calcofi4db + workflows), M1 (Opus; `stac-4.3.0` in calcofi4db + workflows, `stac-browser` in
+  the landing repo, `stac/` only), plus two fixes: `climatology-determinism` (Sonnet; 4.1.1) and
+  `sheets-followup` (Sonnet; sccoos Sheet, CalOOS question rows). Merge order for calcofi4db: 4.1.1 → 4.2.0 →
+  4.3.0 (NEWS headings pre-assigned). No agent installs the package or renders; the integrator does both after
+  merging. Ben: no production release for the sidecars alone — the next data change carries datasets.json.
+
