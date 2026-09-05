@@ -73,6 +73,14 @@ it. Nothing on calcofi.io's dataset pages (Phase 1) is authored by hand: they re
   sheet claims for four NOAA CoastWatch ERDDAP mirrors is not confirmed by their own `.das` `license`
   globals, which carry only the generic ERDDAP disclaimer (`swfsc_ichthyo` Q11, `swfsc_cufes` Q07,
   `calcofi_bottle` Q10, `sio_pic-zooplankton` Q08).
+- **`climatology` re-exports byte-identically now** (calcofi4db 4.1.1). `clim_mean` / `clim_sd` came out
+  of DuckDB's parallel `avg()` / `stddev_samp()` with last-bit differences (≤ 1.8e-16 relative) on every
+  run, so 60 of 71 partitions re-uploaded and were stamped as changed at each re-cut even with no data
+  change (v2026.09.04 vs its staging twin, and two staging runs on 2026-09-05). Both are now rounded to six
+  decimal places — nine orders of magnitude above the noise, well below any instrument's resolution — so an
+  unchanged climatology reuses its objects. Row counts, grouping and the 1993–2013 / ≥ 3-cruise definition are
+  unchanged. **Consumers:** the next release's `climatology` values differ from v2026.09.04's beyond the 6th
+  decimal only.
 
 
 # v2026.09.04 (2026-09-04)
