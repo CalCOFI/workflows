@@ -8,6 +8,50 @@ versions). Conventions: see `CLAUDE.md` § "RELEASES.md is not optional".
 
 # Unreleased
 
+## Every dataset ships an EML 2.2 document: `eml/{dataset_key}.xml`
+
+The release now writes **one EML 2.2 document per dataset** into `eml/` beside `datasets.json`
+(`calcofi4db::build_eml()`, >= 4.2.0), generated from the record and the descriptive sidecar. It is
+the metadata document every publisher shares: the Darwin Core archive's `eml.xml`, the EDI data
+package, ERDDAP's globals and the dataset page's JSON-LD all derive from it, so those four cannot
+disagree, because none of them is typed twice. Until now the only EML CalCOFI produced was
+`publish_ichthyo_to-obis.qmd`'s, built from strings hand-typed inside that notebook — the one place
+a provider cannot edit and the record cannot see — and only for `swfsc_ichthyo`.
+
+Each document carries the title, short name and abstract from the record; the creators (the
+sidecar's `creators[]`, else `pi_names` with the provider organization); the licence and its URL
+from `metadata/license.csv`; the GCMD keywords under their thesaurus plus the category and the
+observed variables; the **measured** geographic bounding box and year span, and the taxonomic
+coverage `coverage.json` resolved (WoRMS / ITIS `taxonId` per taxon — 963 classifications for
+`swfsc_ichthyo`); the methods, study extent and sampling description from the sidecar with
+`metadata/gear.csv`'s `dwc_samplingProtocol` sentences for the dataset's `tow_type`s; a `dataTable`
+per released table whose `attributeList` comes from `metadata.json`'s `columns{}` (label,
+definition, unit, storage type) and whose `physical` block carries the content-addressed object's
+bytes, SHA-256 and URL; and an `additionalMetadata` block with the release and dataset citations.
+
+- **A release gate**: `check_eml()` runs `eml_validate()` against EML 2.2's XSDs (local, no network)
+  plus the required-element checklist EDI's evaluate applies, and `assert_eml()` fails the release
+  on any non-exempt error — `invalid_eml`, `no_title`, `no_abstract`, `no_creator`, `no_pub_date`,
+  `no_license`, `no_geographic_coverage`, `no_temporal_coverage`, `no_data_table`. `eml/` joins
+  `RELEASE_REQUIRED_OBJECTS`, so `promote_release()` refuses a release without it.
+- **Nothing is invented.** An absent optional field is omitted; a missing required field is a
+  finding, exempt only while an open/proposed `questions.csv` row on `related_table = dataset` names
+  it — the same rule the citation contract uses. Two fallbacks are derivations from a registry, not
+  values typed into code, and each is reported so it stays visible: an `organizationName`-only
+  creator taken from `provider.csv` when the record names no person (4 of 16 datasets), and the
+  CalCOFI role address `data@calcofi.io` as the contact when no provider address is on record
+  (16 of 16 — `contact` is the emptiest field in the catalog and this is what it costs). A unit
+  becomes an EML `standardUnit` only on an exact match; `count/10m2` and `count/1000m3` travel as
+  `customUnit` carrying the release's own string rather than being coerced onto a near-neighbour.
+- **Measured over the 16 records** (v2026.09.05 staging sidecars): 16/16 documents valid, 18 KB
+  (`sio_pic-zooplankton`) to 366 KB (`swfsc_ichthyo`), 1.3 MB in all; 0 blocking findings; 6 `no_license` exempt
+  on an open licence question (bottle Q10, ctd-cast Q28, mets Q29, picoplankton-bacteria Q06,
+  pic-zooplankton Q08, ichthyo Q11); warnings `contact_role_address` x 16,
+  `undocumented_attributes` x 16, `no_methods` x 14 (only ichthyo and the Dungeness crab have gear
+  in `gear.csv`; no sidecar carries `methods_md` yet), `short_abstract` x 5 and
+  `creator_from_provider` x 4, and `no_taxonomic_coverage` x 1 (`sio_pic-zooplankton`, whose taxa
+  do not reach `coverage.json`). Every warning names a field a provider can fill in the Sheet.
+
 ## Every dataset has a record: `datasets.json` (the dataset catalog, Phase 0)
 
 The release now writes **`datasets.json`** beside `catalog.json` — one generated record per

@@ -2420,6 +2420,30 @@ if (file.exists(meta_json_path)) {
   write_holdings_csv(cat_registries, here("metadata/holdings.csv"))
   cat(glue("datasets.json: {length(datasets_rec$datasets)} datasets · {length(datasets_rec$holdings)} holdings · ",
            "{length(datasets_rec$reference)} reference rows · {round(file.size(datasets_paths[1]) / 1e3)} KB\n"))
+
+  # 3c. eml/{dataset_key}.xml — one EML 2.2 document per dataset (plan § D-8, Decision 13;
+  # calcofi4db >= 4.2.0) ----
+  # The record is the only source: title, abstract, creators, contact, licence, keywords, the
+  # measured coverage, the taxa coverage.json resolved, gear.csv's dwc_samplingProtocol sentences
+  # and a dataTable per released table with the attributeList metadata.json's columns{} describes.
+  # publish_to-obis, publish_to-edi, ERDDAP's globals and the dataset page's JSON-LD all read THIS
+  # document, so none of them is typed twice. check_eml() is a release gate like
+  # check_dataset_catalog(): eml_validate() against EML 2.2's local XSDs (no network) plus the
+  # required-element checklist — an element the record cannot supply is a finding, exempt only
+  # while an open/proposed questions.csv row on the dataset names the field, never a made-up value.
+  eml_docs  <- build_eml_catalog(
+    datasets_rec, sidecars = cat_registries, meta = meta_json_path, coverage = coverage_path,
+    gear = read_gear_registry(here("metadata/gear.csv")))
+  eml_paths <- write_eml_files(eml_docs, dir_frozen)
+  d_eml_chk <- check_eml_catalog(eml_docs, eml_paths, datasets_rec)
+  assert_eml(d_eml_chk)
+  d_eml_chk |>
+    filter(finding != "ok") |>
+    datatable(caption = "EML check: findings (error rows are exempt only while a provider question is open/proposed)")
+  for (f in eml_paths)
+    put_gcs_file(f, glue("gs://{gcs_bucket}/{gcs_release}/eml/{basename(f)}"))
+  cat(glue("eml/: {length(eml_paths)} documents · all valid EML 2.2 · ",
+           "{round(sum(file.size(eml_paths)) / 1e3)} KB\n"))
 } else {
   stop("datasets.json needs metadata.json; no per-ingest metadata.json was merged")
 }
@@ -2459,6 +2483,8 @@ sidecar_urls <- c(
   glue("gs://{gcs_bucket}/{gcs_release}/catalog.json"),
   glue("gs://{gcs_bucket}/{gcs_release}/metadata.json"),
   glue("gs://{gcs_bucket}/{gcs_release}/datasets.json"),
+  # the EML folder: every publisher (OBIS, EDI, ERDDAP) and the dataset page read these
+  glue("gs://{gcs_bucket}/{gcs_release}/eml/*.xml"),
   glue("gs://{gcs_bucket}/{gcs_release}/coverage.json"),
   glue("gs://{gcs_bucket}/{gcs_release}/coverage_stations.json"),
   glue("gs://{gcs_bucket}/{gcs_release}/grid.geojson"),
