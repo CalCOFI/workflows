@@ -594,9 +594,19 @@ contract_res |>
 
 `datasets.json` (calcofi4db >= 4.1.0; plan 2026-09-05 § D-1) is the one dataset list every product
 reads — the landing page's dataset grid and pages, `cc_datasets()`, the sitemap, `data.json`, STAC.
-Three rows join the promote gate: the file validates against `datasets.schema.json`, it carries every
-dataset `metadata.json` carries, and `check_dataset_catalog()` reports no blocking finding (a dead
-endpoint on a page is worse than absence; the network half follows `CALCOFI_SKIP_LINK_CHECK`).
+Four rows join the promote gate: the file validates against `datasets.schema.json`, it declares the
+**schema version this release was built with** (`1.1` from calcofi4db 4.5.0 — a record that says
+`1.0` means the release ran an older builder than the checks assume), it carries every dataset
+`metadata.json` carries, and `check_dataset_catalog()` reports no blocking finding (a dead endpoint
+on a page is worse than absence; the network half follows `CALCOFI_SKIP_LINK_CHECK`).
+
+Schema 1.1's three new findings are reported here with the rest and only one of them blocks:
+`grain_without_description` is an **error** — the builder should never emit an ERDDAP grain nobody
+has described, and a new grain means a new sentence in `erddap_grain_description()` — while
+`registration_without_id` and `bbox_implausible` are warnings a human reads. `bbox_implausible` is
+expected to fire for `swfsc_ichthyo` (its asserted extent reads 0–54° N × 180–77° W from bad upstream
+coordinates while its sampled positions sit in the California Current; question Q16 to SWFSC), so its
+count is printed rather than gated.
 
 ```{r}
 #| label: dataset_catalog
@@ -620,8 +630,19 @@ catalog_res <- if (is.null(ds_txt)) {
   ds_chk <- check_dataset_catalog(ds_rec, read_catalog_registries(here("metadata")),
                                   network = !nzchar(Sys.getenv("CALCOFI_SKIP_LINK_CHECK")))
   ds_bad <- ds_chk[ds_chk$level == "error" & !ds_chk$exempt, , drop = FALSE]
+  # the schema 1.1 findings, named so a reader sees them without opening the table
+  n_find <- function(f) sum(ds_chk$finding == f)
   dplyr::bind_rows(
     cat_row("catalog: datasets.json validates against datasets.schema.json", isTRUE(schema_ok), schema_ok),
+    cat_row(glue("catalog: schema_version is 1.1 [{ds_rec$schema_version %||% 'absent'}]"),
+            identical(ds_rec$schema_version, "1.1"),
+            glue("built by a calcofi4db older than 4.5.0 — the D-9 fields are absent")),
+    cat_row(glue("catalog: every ERDDAP grain is described ",
+                 "(grain_without_description: {n_find('grain_without_description')}; ",
+                 "registration_without_id: {n_find('registration_without_id')} warn; ",
+                 "bbox_implausible: {n_find('bbox_implausible')} warn)"),
+            n_find("grain_without_description") == 0,
+            "add the grain to calcofi4db::erddap_grain_description()"),
     cat_row(glue("catalog: n(datasets) == n(metadata.json datasets) [{length(ds_rec$datasets)} vs {meta_n}]"),
             length(ds_rec$datasets) == meta_n, "count mismatch"),
     cat_row(glue("catalog: no blocking finding (check_dataset_catalog: {nrow(ds_bad)} error, ",

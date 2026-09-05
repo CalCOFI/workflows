@@ -8,6 +8,49 @@ versions). Conventions: see `CLAUDE.md` § "RELEASES.md is not optional".
 
 # Unreleased
 
+## The dataset catalog record says what a page needs to say (schema 1.1)
+
+`datasets.json` grew five fields, all additive, all read from a registry the team already edits
+(calcofi4db 4.5.0; UI plan 2026-09-05 § D-9). Each of them retires a hand-typed map in
+calcofi.io's own generator — a fact with two homes drifts:
+
+- `category.description` — the one line a category tile shows. Already a column of
+  `metadata/category.csv`, simply not carried.
+- `distributions[].grain_description` — what an ERDDAP grain *means*. A page that says
+  `length/stage frequency` and nothing else asks the reader to guess.
+- `objects[].table_description` — the first sentence of what `metadata.json` already says the
+  table is, so a parquet row names more than a table and a size.
+- `registrations[].id` and `.title` — the identifier a portal knows the dataset by
+  (`edi.109.4`, `gov.noaa.nodc:0301029`, an OBIS uuid) and what it calls it. Curated in
+  `metadata/distribution.csv` where a row exists — **all 31 rows that name one already did**,
+  and every one agrees with `derive_registration_id()`, which is the same rule the site used as
+  its fallback. The one row with no id is a UC San Diego Library *search* URL, which names none.
+- `portals[]` — every portal the record can mention, with what it is, from `metadata/portal.csv`.
+  CalCOFI's own ERDDAP ships under **both** ids it has in the record (`erddap` from `portal.csv`
+  and the registrations, `erddap-calcofi` from `distribution_portals()`) because a consumer
+  looking either up must find it. Collapsing the two is a registry change with its own consumers
+  (`observe_distributions()`, `distribution.csv`) and is **not** done here — worth doing next.
+
+## Coverage measures the season, and a second extent
+
+- `coverage.months` — observations by calendar month, twelve counts per dataset. CalCOFI is a
+  quarterly survey, so *which* quarters a dataset covers is coverage; a years sparkline cannot
+  show it.
+- `coverage.bbox_robust` — the 2.5–97.5 percentile of a dataset's own sampling positions, with
+  `n_positions`. **Not a correction.** A second, measured number beside the asserted `bbox` so
+  the two can be compared, which is what the new `bbox_implausible` warning does. It fires for
+  `swfsc_ichthyo`: its record extent reads 0–54° N × 180–77° W from bad upstream coordinates
+  while its sampled positions sit in the California Current. The bbox is the provider's to fix —
+  **question Q16 to SWFSC** (`metadata/swfsc/ichthyo/questions.csv`, `proposed`, asking whether
+  there are sentinel or mis-signed coordinates and a flag to filter on) — and until it is
+  answered the release carries both numbers so a consumer can choose. Nothing is deleted:
+  `check_measurement_bounds()` bounds a *value*, not a coordinate.
+
+**Consumers:** nothing removed or renamed, so a reader on schema 1.0 is unaffected.
+`test_release.qmd` now asserts `schema_version == "1.1"` and blocks on
+`grain_without_description`; `registration_without_id` and `bbox_implausible` are reported as
+warnings a human reads. calcofi.io deletes its five marked fallbacks when this release renders.
+
 ## Every biological dataset can now leave as a Darwin Core Archive
 
 `publish_to-obis.qmd` (generic, `calcofi4db::dwc_*()`, ≥ 4.4.0) builds one archive per dataset
