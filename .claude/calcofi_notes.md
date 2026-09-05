@@ -1,5 +1,6 @@
 ## TODO
 
+- massive revamp of docs
 - generic OBIS publish: The plan adds NERC P01, P06 and S11 ids and Darwin Core terms to the registries, and defers a generic OBIS publish to a follow-on. Note below "On OBIS ENV-DATA and eMoF"
 - explorer
   - [ ] ability to switch color schemes
@@ -30,8 +31,415 @@
 - [ ] `ingest_calcofi_ctd-cast.qmd` needs a sync to GCS for just the used CSV files so saved in GCS `archive/`, not just GCS `_sync/`
 
 
+## 2026-09-05 CalCOFI.io dataset-centric view
 
-## 2026-09-03 email feedback and folding in aspects before DAG rerun with taxon crosswalk
+The current landing page at CalCOFI.io loosely groups products as cards, but this is not a holistic data-centric view. We seem to be missing a dataset catalog that clearly showcases all of the CalCOFI dataset holdings. We have been trying to make the datasets more clearly stand out in the interactive visualization apps, like @../explore / @../db-viz-station / @../db-viz-hex, but the space there is already crammed. The [Data – CalCOFI.org](https://calcofi.org/data/) website (which is seperately maintained) has a decent overview with appealing icons, that dive deeper into dataset types and then links out to repositories (EDI, ERDDAP) or downloads, but is not data-driven or interactive with search/filtering/etc. 
+
+On CalCOFI.io we have been working towards producing different formats/endpoints for dataset consumption (netCDF under storage.calcofi.io, ERDDAP, OBIS so far for icthyo eventually others, EDI historical and eventually versioned full-dataset archive, or even the apps for viewing/subsetting/downloading), but there is not yet a single view of a dataset where you can see all of these formats / endpoints.
+
+One of the more closely aligned dataset catalogue options is to use CKAN, especially in its form already in active use by IOOS:
+
+  https://data.ioos.us/dataset/
+
+  - [ioos/catalog-docker-base: Docker Image for the base CKAN build for all CKAN related images](https://github.com/ioos/catalog-docker-base)
+  - [ioos/ckanext-ioos-theme: IOOS Catalog as a CKAN extension](https://github.com/ioos/ckanext-ioos-theme)
+
+We don't necessarily want to support yet another set of Docker containers, but they are easy to install and this is actively maintained software. It's also been around for a long time, so may be bloated and outdated. Part of the appeal is to also offer alternative query endpoints, especially spatially, like:
+
+* CSW (Catalog Service for the Web): An OGC standard to discover, browse, and query metadata about spatial data.
+* WMS / WFS (Web Map / Feature Service): Protocols used alongside catalogs to render and download geographic layers.
+* STAC (Spatian Temporal Asset Catalogs): A modern specification to structure and expose raster and vector geospatial assets via standard JSON APIs. [3] 
+
+Other open-source spatial data catalogues used to store, manage, search, and share geographic metadata and datasets:
+
+* [GeoNetwork opensource](https://geonetwork-opensource.org/): A standards-based catalog application designed to manage spatially referenced resources, supporting interactive web map viewing and metadata harvesting. [1, 2, 3] 
+* [GeoNode](https://geonode.org/): A web-based platform that combines a spatial data catalog with map visualization, data editing, and user collaboration tools. [3] 
+* [pycsw](https://pycsw.org/): An OGC Catalog Service for the Web (CSW) server implementation written in Python, lightweight and easily embedded into spatial infrastructures. [3] 
+* [geOrchestra](https://www.georchestra.org/): A free, modular, interoperable, and secure Spatial Data Infrastructure (SDI) featuring a built-in directory and metadata catalog component. [3] 
+* [OpenDataCat](https://www.geocat.com/blog/news-1/the-inspire-geoportal-is-gone-here-s-what-we-built-instead-25): A modern open metadata catalogue built on top of GeoNetwork technology to index and discover European geospatial datasets. [4] 
+
+Let's iterate on writing a plan to re-invent the CalCOFI.io space. I want to continue highlighting the integrated database, its schema (@../db-schema), access via SQL (@../db-query) / R (@../calcofi4r) / Python (@../calcofi4py), etc but establish a more dataset-centric view. It's also worth doing a deep dive into @../docs/portals.qmd, which describes all the external portals where we want to populate CalCOFI dataset packages to facilitate discovery and use. Again to be centrally linked here.
+
+---
+
+The plan is written and ready for your iteration:
+
+workflows/.claude/plans/2026-09-05 CalCOFI.io as a dataset catalog — one record per dataset with every endpoint, the front door re-cut around Datasets, and the portal registrations.md
+
+**The core recommendation**. Don't run a catalog server. The release already carries ~80% of a catalog record per dataset in its sidecars (metadata.json datasets block, coverage.json, catalog.json objects, the registries). The plan generates one datasets.json record per dataset_key at release time, renders one page per dataset at calcofi.io/datasets/{dataset_key}/ in the landing repo, and re-cuts the landing page so a twelve-category dataset grid (using the brand's existing cat-* icons) comes first, with the release as its spine and the apps re-framed as ways to use the data. Machine surfaces are all static files: schema.org JSON-LD plus a sitemap for ODIS and Google, DCAT-US data.json for any CKAN harvester, and a static STAC catalog with stac-browser. CKAN, GeoNetwork and GeoNode are rejected with reasons. pycsw is the one option kept, gated on a partner asking for CSW.
+
+What I measured that shapes the plan (all live as of today):
+
+┌────────────────────────────┬───────────────────────────────────────────┐
+│          finding           │                   value                   │
+├────────────────────────────┼───────────────────────────────────────────┤
+│ landing page               │ 26 product cards, 5 sections, zero        │
+│                            │ dataset entries                           │
+├────────────────────────────┼───────────────────────────────────────────┤
+│ dataset records in         │ 16, with DOI on 5, license on 10,         │
+│ v2026.09.04                │ citation on 11, contact on 0              │
+├────────────────────────────┼───────────────────────────────────────────┤
+│ ERDDAP at                  │ 44 ids (37 current + 7 legacy); ISO       │
+│ erddap.calcofi.io          │ 19115-3 and FGDC WAFs answer 200          │
+├────────────────────────────┼───────────────────────────────────────────┤
+│ CF netCDF                  │ 17 files with per-dataset manifests       │
+├────────────────────────────┼───────────────────────────────────────────┤
+│ OBIS                       │ zero CalCOFI datasets (the ichthyo DwC-A  │
+│                            │ workflow is excluded from targets)        │
+├────────────────────────────┼───────────────────────────────────────────┤
+│ EDI                        │ 53 upstream packages match "CalCOFI",     │
+│                            │ none published by calcofi.io              │
+├────────────────────────────┼───────────────────────────────────────────┤
+│ ODIS                       │ record 3318 points at 78 external pages,  │
+│                            │ none on calcofi.io                        │
+├────────────────────────────┼───────────────────────────────────────────┤
+│ partial dataset lists      │ 6, none canonical                         │
+│ across products            │                                           │
+└────────────────────────────┴───────────────────────────────────────────┘
+
+Two findings change the portals story in docs/portals.qmd: the IOOS Catalog can harvest ERDDAP's existing ISO WAF, so IOOS presence is a registration form rather than a build, and OBIS is a real gap that needs an IPT decision (OBIS-USA recommended).
+
+Decisions to confirm are numbered in the plan (12 of them). The ones that most change the work: generated record vs hand-authored YAML, pages in the landing repo vs a new repo, dataset grid first on the landing page, STAC static in Phase 3, register ERDDAP with IOOS after checking they accept ISO 19115-3, and OBIS via OBIS-USA.
+
+Sizes. Phases 0 to 3 total about 8.5 days (record, pages, back-links, machine catalogs). Phase 4 (OBIS, EDI, NCEI publications) is per dataset in its own plans.
+
+Open questions for Erin, Mark and Ed are listed in the plan, led by the calcofi.org registration wall, which the catalog forces into the open because the same rows are already unrestricted on ERDDAP and GCS.
+
+Appendix B has the 16-row endpoint inventory per dataset, and Appendix A the proposed record schema. If a shareable page for the 9/8-style review would help, I can publish the plan as an artifact.
+
+---
+
+You say "OBIS: zero CalCOFI datasets (the ichthyo DwC-A workflow is excluded from targets)"
+
+That's true that the workflow is excluded from targets, because OBIS upload is a semi-manual process (which I did through hte OBIS-USA IPT for which I have login access) and should only happen when data changes. But the DwC-A of `publish_ichthyo_to-obis.qmd` did land on OBIS:
+
+- [CalCOFI Fish Larvae &amp; Egg Tows | Ocean Biodiversity Information System (OBIS)](https://obis.org/dataset/0e223f55-c826-4513-ae9a-b04cbf2e189c)
+  and got highlighted in this press release: [Standardized and FAIR: unleashing nearly 75 years of fish larvae and egg records | Ocean Biodiversity Information System (OBIS)](https://obis.org/2026/04/15/fish-egg-larvae-dataset-calcofi/)
+
+Now that we have a crosswalk to OBIS (https://calcofi.io/docs/db.html#darwin-core-obis-env-data-mapping (`@..docs/db.qmd`)), we can hopefully create a generic `publish_to_obis.qmd` across all biological datasets (superseding `publish_ichthyo_to_obis.qmd`), similar to existing generics for publishing to erddap and netcdf. These would simply output the DwC-A.
+
+We also need a way to easily update information, especially metadata. Folks seem comfortable using a shared Google Sheet, and we recently started synchronizing the data provider questions with Gsheets.
+
+Ideally we can generate the authoritative EML document for all datasets, which can then be used for a generic `publish_to_edi.qmd`.
+
+Note that we have @update_datasets-sitemap.qmd for generating the sitemap that the ODIS portal ingests, but as you say nothing there is yet CalCOFI hosted or directly generated from database. Ideally the sitemap ODIS consumes gets updated by any updates to these datasets, including tracking which external datasets URLs (eg from ERDDAP, EDI, OBIS) exist and are superseded by another.
+
+I reviewed all the Decisions and confirm strong preference for your recommendations.
+
+Yes! Please publish the plan as an artifact with visual mockups for sharing.
+
+---
+
+Thanks for the correction on OBIS. I'll verify the live OBIS record and the DwC mapping section, look at how the questions sheet sync works so the metadata sheet can mirror it, then update the plan (OBIS facts, generic `publish_to-obis` and `publish_to-edi` with EML, the Google Sheet round-trip, sitemap supersession, decisions marked confirmed) and build the artifact with mockups.
+
+---
+
+Great, so can you fold in .claude/plans_todo/2026-09-03 Follow-on — generic
+  publish_to-obis over the core.md into this plan?
+
+---
+
+Published: ⧉ https://claude.ai/code/artifact/5fe1fa4e-c124-4525-a27a-a4a978abf2ba
+
+What changed in the plan (same file in `workflows/.claude/plans/`, now 77 KB):
+
+- **OBIS corrected**. The context, endpoint table, D-6, Decision 10, Appendix B and the Measured log now record the ichthyo dataset on OBIS via the OBIS-USA IPT, with the real counts, and note that the OBIS API text search does not return it, so presence is tracked by dataset id in the distribution registry, never by search.
+- **D-8, one EML per dataset**. build_eml() writes and validates an EML 2.2 document per dataset at release from the record plus the descriptive sidecar. The Darwin Core Archive, the EDI package, ERDDAP's globals and the page JSON-LD all derive from it. The generic publish_to-obis.qmd and publish_to-edi.qmd supersede the ichthyo-only notebook; uploads to the IPT and PASTA stay deliberate and gated on a content change, which the dataset page reports as a stale chip.
+- **The follow-on plan is folded into D-8**. Its core-to-Darwin-Core mapping is now a table there, the rule that absences come from sample_root minus the positives is stated, and its IPT-resource, licence and provider-ownership questions became Open question 9. The plans_todo file carries a note pointing here.
+- **D-9, the provider metadata sheet**. Descriptive fields move to `metadata/{provider}/{dataset}/dataset_meta.yml`. Each provider's existing question Sheet gains a long-form metadata tab, and a sync_dataset_meta_sheets.R script mirrors the questions sync, validating licences and contacts at pull time.
+- **D-10, the sitemap follows the record**. The distribution registry gains status and superseded_by, observed weekly from EDI revisions, OBIS and ERDDAP. The ODIS sitemap is generated from the record, lists the calcofi.io pages first, and excludes superseded and retired records.
+- Decisions 1 to 12 are marked confirmed, 13 to 15 added, phases resized (0 to 3 about 9.5 days, Phase 4 about 4 days, uploads per dataset).
+
+The artifact carries the plan's substance with four figures built from release v2026.09.04's real numbers: the record-flow diagram, the re-cut landing page with the twelve category tiles and brand icons, the swfsc_ichthyo dataset page with its Access table and JSON-LD, and the provider metadata sheet. It uses the brand v2 tokens in both themes.
+
+Two things I could not verify and left as questions in the plan: whether the IOOS harvester accepts the ISO 19115-3 that ERDDAP 2.30 emits, and the EDI scope for the program's own datasets.
+
+- [CalCOFI Dataset Catalog](https://claude.ai/code/artifact/5fe1fa4e-c124-4525-a27a-a4a978abf2ba?via=auto_preview)
+
+---
+
+Fantastic! Please also consume the following Google Sheet for further reference to datasets and metadata:
+
+- [Working draft of CalOOS_CalCOFI dataset collection - Google Sheets](https://docs.google.com/spreadsheets/d/1eyvhdzA5YwuDxH8tBld2-h_odKA1KYt_RXI3loI0OaU/edit?gid=0#gid=0)
+
+We want to migrate to the suggest Gsheet per provider, but this is the current location where Erin and Betty are actively collecting information.
+
+Can you also mockup what the rest of the CalCOFI.io landing page could look like? Fpr instance, I don't see the top level nav anchors of existing site: Apps 5 | Apps — Dataset-Specific 3 | Services 2 | Developer 7 | Student Contributions 9. What did  you have in mind? 
+
+(Super minor: maintain consistent look with artifact and final per @../CalCOFI.github.io/brand/v2/. I am noticing the old yellow sun/moon for light/dark theme selection but want the uncolored one borrowed from @../calcofi4py)
+
+Then split up this plan into an overview plan and subplans in @.claude/plans_todo/ for agents based on sufficient intelligence/effort that minimizes token usage.
+
+And yes to your subsequent recs Decisions 13-15
+
+---
+
+Four things to do: pull in Erin and Betty's working sheet, read the brand v2 contract precisely (including the sun and moon-in-sun toggle glyphs), mock up the full landing page with every section and the nav counts, and split the plan into an overview plus agent briefs. Starting with the reads.
+
+I've confirmed the working sheet (41x35, CalOOS ingest-form shape) contains the missing contributor and holdings fields, with 8 rows mirroring our integrated CoastWatch datasets. Now I'll write everything in parallel: the umbrella plan updates, agent briefs and integrator notes, the reworked artifact with brand tokens and landing page, and the memory note.
+
+Noted: Decisions 13 to 15 confirmed. I'll mark them in the plan and the artifact now, and write the reworked artifact with the full landing page.
+
+---
+
+Republished at the same link: ⧉ https://claude.ai/code/artifact/5fe1fa4e-c124-4525-a27a-a4a978abf2ba
+
+The navigation question. The five-tab row and its counts stay; the sections are re-cut, not removed. The mockup now shows the whole page, top to bottom, with every one of the 26 cards.
+
+┌────────────────────────────┬───────────┬───────────────────────────────┐
+│           today            │ proposed  │          what moves           │
+├────────────────────────────┼───────────┼───────────────────────────────┤
+│ —                          │ Datasets  │ new, first: the category grid │
+│                            │ 16        │  plus holdings                │
+├────────────────────────────┼───────────┼───────────────────────────────┤
+│ Apps 5 + Apps —            │           │ one section, two eyebrow      │
+│ Dataset-Specific 3         │ Explore 8 │ groups: across datasets, one  │
+│                            │           │ dataset                       │
+├────────────────────────────┼───────────┼───────────────────────────────┤
+│ Services 2 + db-query,     │ Access 5  │ the ways to get data          │
+│ calcofi4r, calcofi4py      │           │                               │
+├────────────────────────────┼───────────┼───────────────────────────────┤
+│ Developer 7 minus those    │ Build 4   │ calcofi4db, workflows,        │
+│ three                      │           │ db-schema, docs               │
+├────────────────────────────┼───────────┼───────────────────────────────┤
+│ Student Contributions 9    │ Students  │ unchanged                     │
+│                            │ 9         │                               │
+└────────────────────────────┴───────────┴───────────────────────────────┘
+
+Each card carries datasets: chips. A reserve alternative keeps Apps and Apps — Dataset-Specific as two tabs under a Datasets-first page.
+
+Brand. The artifact now uses the v2 tokens verbatim from theme.css, the page scale type, borderless cards on the panel colour, and the brand toggle pair (moon-in-sun while light, sun while dark) from the same masks calcofi4py's docs bridge to. No emoji anywhere.
+
+The CalOOS working sheet. I read it through the public CSV export plus the Drive connector for comments. It is CalOOS's own ingest form filled in for CalCOFI: 41 rows by 35 columns with lead contributor, email and affiliation on 33 rows, module titles, abstracts, licences, tags and QC notes. Eight rows are CoastWatch mirrors of our integrated datasets, thirteen are the sources of integrated datasets, and about fifteen are holdings with no ingest. The plan now imports it rather than asking anyone to re-type: a script matches rows to datasets by access URL, seeds the holdings and distribution registries, and writes creator, contact, licence and keyword proposals into the sidecars. Erin and Betty keep working there until the per-provider tabs are pushed with that content in them. CalOOS itself becomes a registration target, since it already holds four CalCOFI modules and its catalog feeds data.ioos.us. These are Decisions 16 and 17, recommended; 13 to 15 are marked confirmed.
+
+The split. The umbrella plan keeps the design and gains a Workstreams table. Eleven self-contained briefs are in workflows/.claude/plans_todo/2026-09-05 WS-*.md, in the same shape as the 2026-09-03 briefs, plus _integrator_notes_2026-09-05.md with waves, merge order and worktree mechanics. Model choice follows risk: Fable only for R0 (the record contract), Opus where a spec plus validator exists (pages, EML, STAC, DwC-A), Sonnet for the sheet import, the sidecar sync, links back, EDI, registrations and the operator run.
+
+One thing I could not do: the Drive connector returned the sheet's structure but truncated long cells, so abstracts in the plan come from the CSV export, which is complete.
+
+---
+
+Ok, here's the temporary download to CSV of Gsheet: '/Users/bbest/Downloads/Working draft of CalOOS_CalCOFI dataset collection - CalCOFI list.csv'. Since we're actively using the Gsheet sync for grabbing metadata, including long abstracts, do you need to refactor that aspect so long cells don't get truncated?
+
+---
+
+No refactor needed. Your download and the CSV export I pulled earlier are identical: 41 rows, 35 columns, every abstract byte for byte the same, with the longest cell at 1,546 characters fully intact (the Dungeness crab sorting-log abstract). The truncation I mentioned was only in the Drive connector's summary view, which I used in this session to read the comment threads; it is a reading aid, not a data path.
+
+The paths the plan actually relies on return full cells:
+
+- The public CSV export URL, which WS-R1's import script reads.
+- googlesheets4::range_read(), which the existing questions sync and the proposed metadata-tab sync use. Sheets cells hold up to 50,000 characters, so abstracts and methods paragraphs are safe.
+
+I added a one-line caveat to _integrator_notes_2026-09-05.md so no agent reaches for the connector to read a sheet.
+
+---
+
+I'm not so sure about the Datasets mockup using "variables also in: " without explicitly listing the dataset. I presume this is to prevent repetition of datasets, but if someone is interested in a given category, they have to inspect hard to comprehend. Perhaps the repeats could be muted in presentation (grayed or similar) so the unique individuals pop out. I do very much like seeing the planned and external though
+
+---
+
+Good call. A muted row per contributing dataset, naming the variables it contributes, keeps the category self-contained while the homed datasets still pop. Pulling the variable names per category and dataset from the release so the muted rows say something real.
+
+---
+
+Are there other Dataset categories we should add, like eDNA, even though they are only so far planned?
+
+And how can we also manage these extra planned and external datasets with Gsheets and programmatic checking (as suggested weekly)?
+
+---
+
+Republished: ⧉ https://claude.ai/code/artifact/5fe1fa4e-c124-4525-a27a-a4a978abf2ba
+
+**Tiles**. A dataset homed elsewhere now appears in the category as a muted row naming the variables it contributes, from the release's own variable registry, under a small "also measured by" label. The bottle's nutrients show under Nutrients & Chemistry, the underway record's air temperature under Physical Oceanography, and so on. Home datasets keep their full rows, and holdings follow under "not yet in the database". The rule is recorded in the plan and the P1 brief.
+
+**Categories**. I went through the 41 sheet rows and calcofi.org's tiles against the twelve categories:
+
+- **Add now: Genomics & eDNA** (Decision 18, recommended). It has holdings only today (NCOG 16S/18S metabarcoding, the baleen whale eDNA deposit, and Erin's note that more is coming), which is exactly why a tile earns its place: the roadmap shows on the front door. The mockup has it as a dashed thirteenth tile with a DNA glyph, an additive icon for brand v2.
+- **Widen two descriptions** rather than add categories: Nutrients & Chemistry takes organic carbon and nitrogen, nitrate isotopes and trace metals (five EDI holdings), and Phytoplankton takes imagery (IFCB).
+- **Nothing else needed**. Primary production and HPLC pigments are Productivity & Pigments, ZooScan imagery is Zooplankton, cetacean sightings and eDNA-derived densities are Seabirds & Marine Mammals by subject.
+- **One open question (10)**: a reference tile for the**cruise list, station grid, boundary layers and bathymetry**, which are not measurements but are what every query joins on.
+
+**Managing planned and external dataset**. The plan now has a section for this (D-11, Decision 19): holdings get no special machinery. Each gets a dataset_key, the same sidecar with a status field, and a row in its provider's Sheet tab. The CalCOFI Sheet gains a holdings tab as the triage board with status, priority, owner, next step and issue as the editable columns, replacing the CalOOS sheet for internal tracking. The weekly observer covers holdings' links and DOIs with one method per portal (EDI revisions, DOI resolution, OBIS and Zenodo updates, NCBI summaries, ERDDAP coverage end, liveness for the rest), runs from a GitHub Action, and turns any change into a proposed question and a chip on the page. When a holding is ingested, the notebook is added and the metadata is already there, so the grey row becomes a full row on the next release without the URL changing. The R0, R1, R2 and M1 briefs carry the corresponding lines.
+
+---
+
+And how are dataset categories determined to be the "Home Datasets" -- is that explicitly part of dataset metadata?
+
+Q1. We don't want to require registration, but encourage it, per NOAA open policy
+
+Q3. The CalOOS ERDDAP registration process was initiated by Erin (not Betty, but Betty is filling out metadata) working with Iwen Su there, and it predated us standing up our own ERDDAP, so this is still an open question, whether they host our ERDDAP datasets (and what's handoff?), and how it gets propogated to broader data.ioos.us data catalog. 
+
+Q4. Can we easily setup a data@calcofi.io email through our Google Cloud Services or would you recommend something else, like a Google Group or official calcofi-data@ucsd.edu (UCSD uses Google Workspace, but not sure about if feasible, probably needs multiple IT departments involved)?
+
+Q5. Can you explain more about **EDI scope**? Is that registering for the organization and assuming responsibility with edit/remove curation rights on all datasets there? I know CCE-LTER is very involved. NCEI is probably a seperate thread that we need to consider, unless EDI automatically goes to NCEI? EDI is preferred over ERDDAP for dataset archive sake, because we can archive the full dataset (not just tabular or gridded views) plus version. I do see at least one R package for handling EDI data, so hoping we can automate this:
+- [Publishing a Data Package](https://edirepository.org/resources/publishing-a-data-package)
+- [CRAN: Package EDIutils](https://cran.r-project.org/web/packages/EDIutils/index.html)
+- [Evaluate and Upload Data](https://cran.r-project.org/web/packages/EDIutils/vignettes/evaluate_and_upload.html)
+
+Q6. This is a cosmetic issue to resolve later.
+
+Q7. Perhaps we want a dataset, but not to publish on the Datasets landing page, since conversations need to be had first. Will want that kind of checkbox in the Google Sheet.
+
+Q8. Yes, add license to GSheet. Consult EML requirements for more:
+- [Read and Write Ecological Metadata Language Files • EML](https://docs.ropensci.org/EML/)
+- [User Guide - ezEML Metadata Editor](https://ezeml.edirepository.org/eml/user_guide)
+- [lkuiucsb/Excel-to-EML: This is a tool for generating EML from an Excel metadata workbook.](https://github.com/lkuiucsb/Excel-to-EML)
+- [Create EML from Template • EMLaide](https://cvpia-osc.github.io/EMLaide/articles/create-EML-from-template.html)
+- [chapter-10-data-entities – Environmental Dataset Preparation Guides](https://prerelease-edi-docs.netlify.app/guide-eml-bp/chapter-10-data-entities)
+- [ezEML Guidebook – Palmer LTER](https://pallter.marine.rutgers.edu/data/information-management/ezeml-guidebook/)
+Would be good to rank / color code / sort (vertically or ~horizontally to other tabs) based on importance, so provider not overwhelmed.
+
+Q9. Yes to adding a reference tile!
+
+Q10. Yes, one IPT resource per dataset (for ones containing taxon resolvable to WoRMS). Yes, we will need to resolve duplicates (historical already out there) and not interfere with others like CCE-LTER who may be publishing there as the dataset authority.
+
+---
+
+Republished: ⧉ https://claude.ai/code/artifact/5fe1fa4e-c124-4525-a27a-a4a978abf2ba. Everything below is now in the plan (Decisions 20 to 26) and the briefs.
+
+**Home datasets**. Yes, the home category is explicit metadata. Each ingest declares category in its calcofi.dataset_meta block, validated against the category registry at index build, and the release carries it per dataset in metadata.json. The muted rows come from a second field, the per-variable measurement_type.category, which coverage.json carries per dataset and type. One nuance I added as a rule for the record builder: that field is per type, so the shared abundance count type would list phyllosoma, the crab and the mesopelagic fish under ichthyoplankton. A bio dataset contributes only through its own home.
+
+**Q1**. Encourage, never require. The page and the download bundle get an optional register-your-use link through the Explorer's existing feedback pipeline and a stay-informed sign-up. Nothing on calcofi.io gates.
+
+**Q3**. Corrected to Erin and Iwen Su, and kept open with three specific asks for one message Erin can send: whether CalOOS harvests erddap.calcofi.io directly (the Axiom portal reads ERDDAP by URL, so hosting is not needed), the handoff from the CoastWatch datasets (they stay NOAA's and remain listed), and whether the modules propagate to data.ioos.us or a provider record is still wanted.
+
+**Q4**. I checked calcofi.io's DNS: Google Cloud DNS, no mail records at all, and Google Cloud offers no mailbox. Recommendation: a free MX-based forwarder (ImprovMX) for data@calcofi.io today, two records plus SPF in Cloud DNS, forwarding to you, Erin and Betty. In parallel Erin tries creating calcofi-data@ucsd.edu as a UCSD Google Group herself, since UCSD runs Workspace, falling back to one ITS ticket. The public address stays data@calcofi.io; the group becomes its target.
+
+**Q5**. A scope is a namespace in the package id, not an organization account. LTER sites own theirs; edi is open to any registered user, with no curation rights over other packages, and the creating account owns each package and grants access through EML. EDI does not forward to NCEI; that stays a separate thread. EDI archives the whole package versioned, any file type, a DOI per revision, so the parquet and catalog go in as other entities. EDIutils automates evaluate, create and update against a staging environment first. Recommendation: scope edi, one package per integrated dataset, an account Erin holds with you as editor; CCE-LTER's packages stay theirs.
+
+**Q7**. A visibility checkbox on every dataset and holding; internal stays in the record and on the triage board but off every public surface.
+
+**Q8**. Licence is editable. Fields carry a tier from EDI's EML requirements (required, recommended, optional), sorted and colour-banded, with Excel-to-EML's field names borrowed where they fit.
+
+**Q9**. The reference tile is in the mockup, last in the grid: cruise reference, station grid, the 19 spatial layers, bathymetry.
+
+**Q10**. One IPT resource per WoRMS-resolvable dataset, so not picoplankton or the tow registry. The OBIS brief now lists existing records for each source before any upload so duplicates are resolved with their owners.
+
+### Public artifact
+
+with diagram: source -> record -> surfaces -> readers
+- [CalCOFI Dataset Catalog](https://claude.ai/code/artifact/5fe1fa4e-c124-4525-a27a-a4a978abf2ba?via=auto_preview)
+
+---
+
+Phase 0 is complete in both repos, with all gates green. Nothing is committed; both working trees hold the changes for your review.
+
+**What shipped**
+
+**calcofi4db 4.1.0** (full test suite green, installed locally, NEWS entry written)
+- R/catalog_datasets.R: build_dataset_catalog(), check_dataset_catalog() and assert_dataset_catalog(), write_dataset_catalog(), validate_dataset_catalog() against inst/schema/datasets.schema.json, the registry readers, classify_portal(), parse_registration(), fetch_erddap_datasets(), fetch_netcdf_manifests(), dataset_since_versions(), holdings_from_sidecars() and write_holdings_csv().
+- read_calcofi_meta() merges the descriptive sidecar through merge_dataset_meta(); check_dataset_meta_split() polices the notebooks. build_coverage() gains per-dataset life_stages. RELEASE_REQUIRED_OBJECTS gains datasets.json.
+- Tests in test-catalog_datasets.R: fixtures trimmed from the live v2026.09.04 sidecars, the swfsc_ichthyo and calcofi_dic records pinned as snapshots, one red test per finding, no network.
+
+**workflows**
+- Registries: distribution.csv (32 rows), portal.csv (16), generated holdings.csv (17 holdings), dataset_status.csv with publish_ncei and publish_caloos, category.csv with the thirteenth category, provider.csv with jcvi, calpoly and stanford.
+- The 16 notebooks lost their descriptive keys byte-identically into metadata/{provider}/{dataset}/dataset_meta.yml (comments preserved); the release dataset table is unchanged before and after. GCMD keywords are folded in; the rest of the CalOOS proposals sit beside each sidecar as dataset_meta.proposed.yml for provider review.
+- release_database.qmd writes datasets.json after catalog.json and metadata.json (the record points at catalog objects, which is why it is not beside coverage.json). test_release.qmd gains the schema, count and dead-URL gate rows plus the CalCOFI.github.io dispatch row. The index script uses the merged reader and the split check.
+- New scripts from the agents: import_caloos_sheet.R, migrate_dataset_meta.R, sync_dataset_meta_sheets.R, each with a passing test script. RELEASES.md, CLAUDE.md and the plan's § Measured carry all three hand-backs.
+
+**Measured against the live release**
+
+┌─────────────────────────┬──────────────────────────────────────────────┐
+│         measure         │                    result                    │
+├─────────────────────────┼──────────────────────────────────────────────┤
+│ records built           │ 16 datasets, 17 holdings, 25 reference rows  │
+├─────────────────────────┼──────────────────────────────────────────────┤
+│ finding table           │ no_citation × 5, all exempt; url_dead × 0    │
+├─────────────────────────┼──────────────────────────────────────────────┤
+│ distinct URLs probed    │ 156 in 123 s, one transient url_unreachable  │
+│                         │ (NCEI)                                       │
+├─────────────────────────┼──────────────────────────────────────────────┤
+│ distributions per       │ 7 to 28 (ichthyo 28)                         │
+│ dataset                 │                                              │
+└─────────────────────────┴──────────────────────────────────────────────┘
+
+**Things you should know**
+
+- **Not rendered**. Per the integrator notes I did not render release_database.qmd; the first datasets.json on GCS will come from the next release run. A staging render is the remaining gate.
+- **EDI started refusing probes** after about 150 requests today, so the holdings' EDI links show as warnings, not failures. Retry tomorrow before treating any as gone.
+- **R1 found a real error in the CalOOS sheet**: EDI knb-lter-cce.104 is labelled "nitrate isotopes" there but is a POC/PON package. The sheet's "Public domain (CC0)" on the NOAA rows is not confirmed by the ERDDAP licence globals, so no licence was written.
+- **The Sheet tabs are not pushed**. sync_dataset_meta_sheets.R push --execute needs your Google auth; the dry run plans 7 providers, 29 datasets and 896 rows plus a 17-row holdings tab.
+- One robustness fix went into R2's sync script (its dedent helper now passes blank lines through).
+
+Next steps are yours to call: review and commit the two trees, push the Sheet tabs, then a staging render before WS-P1 reads the record.
+
+---
+
+Use Google Service Account, NOT individual Google auth, which is brittle and requires manual intervention
+
+Here's the SA json: '/Users/bbest/Library/CloudStorage/GoogleDrive-ben@ecoquants.com/My Drive/private/2026-06-07 ucsd-sio-calcofi_36230b2795e6_calcofi-admin-sa.json'
+
+---
+
+Key path confirmed. I'll set the service account as the sole auth method in both sync scripts via a shared helper (checking env var, then Drive path, then the server's /etc/rclone copy, with no interactive fallback), then push the metadata and holdings tabs.
+
+The staging render is running (past the setup guard, into the core-table assembly at chunk 10 of 57). The monitor on its log will report the datasets.json gate line, any blocking finding, the promotion and dispatch lines, or a failure, and I will act on whatever arrives.
+
+State right now:
+- Both repos committed on branches: calcofi4db catalog-datasets-4.1.0 (80910f49) and workflows dataset-catalog-phase0 (4800c60). Not pushed, not merged.
+- Service account only: scripts/lib_google_auth.R resolves the calcofi-admin key (env var, else its Drive path, else /etc/rclone); both sheet scripts use it and have no interactive fallback. The metadata tabs are live on the six provider sheets and the holdings tab (17 rows) on the calcofi sheet; pull reads back with zero changes. SCCOOS has holdings but no sheet yet, so it is skipped rather than stopping the run.
+- Three fixes to R2's sync script along the way: blank lines and 0-indent sidecars are accepted, block-sequence items parse, trailing-whitespace differences are not diffs, and the pull carries the sidecar path.
+
+Next I will read the render's result, confirm the finding table on the staging output is no_citation × 5 exempt and url_dead × 0, append the measured staging line to the plan, and commit that.
+
+---
+
+Setup a heartbeat monitor every 30 min, report the time and status to make sure no processes fall off
+
+---
+
+Heartbeat 11:38 CEST: the staging render is alive (tar_make pid 10753, quarto rendering release_database.qmd), now at chunk 24 of 57 (depth_coverage), about 13 minutes in. Nothing to act on; the next heartbeat is at ~12:08 unless the event monitor fires first.
+
+
+
+## 2026-09-04 flip switch on brand v2, default light theme
+
+Ok, flip the switch to the v2 branding, defaulting to light theme, for
+  calcofi.io, explore and any other apps you can readily update listed under
+  calcofi.io apps, including dedicated ones. commit and push
+
+---
+
+The docs book rendered and deployed on v2 as well. The flip is complete.
+
+Brand v2 is now in force fleet-wide (light default, UCSD palette, Source Sans 3 / Teko, the horizontal lockup). Live and verified with the brand checker: calcofi.io and the Explorer. Every other product has its brand head swapped to brand/v2/head.html and the lockup, committed and pushed on main.
+
+What changed, per repo
+
+- CalCOFI.github.io: the /v2/ preview became the site (layout, index, stylesheet, card include), v2/ deleted. The brand index and READMEs mark v1 superseded. The checker now reports ver and a no-parameter dflt probe (light in a fresh context, fonts loaded, lockup present) and warns on any product still on v1.
+- explore: VITE_BRAND defaults to v2 and the second /explore/v2/ build is gone.
+- Static apps (db-viz-station, ctd-transects on the app scale; db-query, db-schema, analytics on the page scale): head block and lockup swapped. Station and Transects were checked locally with the checker and screenshots.
+- calcofi4r 1.18.0: cc_brand_head() emits the v2 head plus a scale argument, cc_brand_header() carries the lockup, cc_theme() defaults light and honours the cookie only with the cc_theme_src=user marker, cc_is_dark() defaults FALSE, and cc_plot_colors() carries v2 tokens. 544 tests pass, installed locally, NEWS written.
+- Shiny apps: db-viz-hex and pollutants-app had a hardcoded logo pair, now the lockup. ctd-viz, db-viz-cruise and ctd-qaqc need no code change since they use the helpers.
+- workflows: Quarto head and header on v2, brand_inject_html.R now also swaps the 21 already-rendered notebooks still wearing v1 in place (dry run: 21 swaps + 25 injects). CLAUDE.md and the brand-contract skill say v2.
+- docs (pushed to main after discovering the checkout was on a test branch), calcofi4py (light palette first), calcofi4r/calcofi4db pkgdown, uptime, api-h3t-py, erddap, server compose comments.
+
+Still pending, needs the server or a rerun
+
+- The five Shiny apps pick up v2 only once calcofi4r 1.18.0 is installed on the CalCOFI server and they restart (the deploy-consumers skill).
+- ERDDAP needs a git pull and container restart on the server for the new messages.xml.
+- Every shots: themed card should be reshot light-first with scripts/shots.py; the cards currently show v1 screenshots.
+- The docs repo's local checkout is still on its test branch. I left it as found.
+
+---
+
+Ok, install latest calcofi4r on server and restart Shiny apps
+Do the ERDDAP git pull and container restart
+Yes, reshoot every card
+Switch docs repo back to main (test branch should be deleted on Github origin; delete also locally)
+
+---
+
+All four items are done.
+
+**Server deploy**. The deploy script pulled calcofi4r, db-viz-hex and apps on the CalCOFI server, upgraded the rstudio container's calcofi4r from 1.17.0 to 1.18.0, restarted the h3t API and banned its tiles, and touched every Shiny app's restart.txt. I ran it with --skip-prep since the release data did not change. pollutants-app is not in the script, so I pulled and restarted it by hand. Hex, CTD, Cruise and Pollutants all serve brand v2 now.
+
+**ERDDAP**. Pulled the erddap repo on the server and restarted the container. The live index page serves the v2 head and lockup.
+
+**Cards**. All 17 themed products re-shot in both themes, 34 images, every one passing the luminance check. I eyeballed the Hexagon Explorer light shot and the CTD Explorer dark shot: lockup, light default and navy dark all correct. Pushed to CalCOFI.github.io.
+
+**docs repo**. Local checkout is on main, up to date with origin. The local test branch is deleted. On GitHub the test branch had already been deleted before I got there, so only a stale local remote ref remained, now pruned.
+
+## 2026-09-03 db release prep: email feedback and folding in aspects before DAG rerun with taxon crosswalk
 
 Before we run a full DAG workflow and release a new database as part of the plan:
 
@@ -124,6 +532,30 @@ Done. Here is what changed and the answers to your questions.
 Ok, I enabled Zendo with initial release and updated README.md of CalCOFI/workflows repo [Image #6]
 How do I kick off all the agents now?
 
+---
+
+Wave 1a is running. Six agents, each in its own worktree of workflows (and their own worktree of calcofi4db where needed), all on ws-* branches:
+
+┌───────┬────────┬────────────────────────────────────────┬─────────────────────────────────────────────────────────────────────────────┐
+│ agent │ model  │               workstream               │                               what comes back                               │
+├───────┼────────┼────────────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────┤
+│ E     │ Fable  │ taxon crosswalk Phases 0–1             │ parity fixture, calcofi4db contract on ws-e, name-change count              │
+├───────┼────────┼────────────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────┤
+│ B     │ Fable  │ UUID design memo + station-match spike │ match rates by dataset and decade, integrity-gate SQL, Ed draft refined     │
+├───────┼────────┼────────────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────┤
+│ A1    │ Sonnet │ citation / license / DOI fills         │ 16-row before/after table, questions.csv rows, index build result           │
+├───────┼────────┼────────────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────┤
+│ C     │ Sonnet │ crab examined-only                     │ notebook rendered once with GCS publishing off, sample 2,321 → 526          │
+├───────┼────────┼────────────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────┤
+│ DG    │ Sonnet │ CTD flag chunk + Rasmus's answers      │ registry diffs, QC finding count, cron status, Rasmus draft with ship names │
+├───────┼────────┼────────────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────┤
+│ Q     │ Sonnet │ provider question sheets               │ script + tests, then it stops at the Google-auth step for you               │
+└───────┴────────┴────────────────────────────────────────┴─────────────────────────────────────────────────────────────────────────────┘
+
+Two caveats on the mechanics. The .claude/agents/ws-* definitions I wrote are only registered when a session starts, so this session launched the six as general-purpose agents with the model pinned and worktree isolation; the effort knob (xhigh for Fable, high for Sonnet) therefore did not apply this time. From your terminal, claude --agent ws-fable-xhigh "Execute the brief at …" honours it, and so will the next session. Nothing has been pushed; branches stay local until you say otherwise.
+
+What happens next, without you: each agent reports on completion and I integrate in the order E → A0 → H1 → B, then start wave 1b (A0 and H1, both Fable) once E-Ph1 is merged. Two things only you can do meanwhile: run the Google auth step when WS-Q stops and asks, and get the two crab deposit zips into Drive before 26 September.
+
 **Your schema questions, with numbers from the staging release**
 
 `obs_bio` and `obs_env` are `obs` exactly in rows and a reshaped superset in columns. The rows match to the unit: 1,255,348 + 25,006,583 = 26,261,931. They add root id, year/quarter/depth bin, units, the qual predicate, the row's own gear and effort, the two canonical densities, effort class and hex7. They drop `sample_key`, `measurement_prec`,`hex_id` and `realm`, and rename `measurement_value` to value. So today the release ships the observation rows twice, 401 MB plus 309 MB of a 2.4 GB release, and the copy carrying the effort denominator is the supplemental one.
@@ -144,6 +576,318 @@ Plan changes
 - **Email drafts** rewritten: Erin's names Zenodo and the partners, Ed's adds the six ichthyo questions and the shared sheet. All four are at the end of the drafts file. Nothing has been sent.
 
 Two things need you before wave 1 can finish: enable the workflows repo on Zenodo once, and authenticate Google Sheets when WS-Q asks. The deposit zips still need to land in Drive before 26 September.
+
+---
+
+Everything is integrated locally and nothing is running. What remains, in order:
+
+1. Your two decisions: (a) the phytoplankton override rule (I recommend "an override never replaces a source-supplied id" plus fixing the six rows; it changes about 290 released keys either way); (b) merge ws-e-ph2 to main now so the release carries Farallon-from-ERDDAP, or hold for Betty's review of the PR (push with git push origin ws-e-ph2:ingest-farallon-erddap either way).
+2. E Phase 3 (Opus): the other six taxon notebooks onto append_dataset_taxon(), delete the seven arms, close the .apply_xref() TSN gap Phase 2 found, wire check_taxon_registries() into the release, calcofi4db 4.0.0.
+3. The release run (WS-F, Sonnet operator, main tree): re-run bottle, ichthyo, PIC, zooscan, phytoplankton and the taxon ten; the hash gate now expects the one-key 2019-07- rename; CTD stays skipped; staging release first, then the real one, the vYYYY.MM.DD tag and GitHub release for Zenodo, the notes re-publish with the DOI, and the Explorer prefix flip.
+4. Only you: gs4_auth() for the question sheets, the crab deposit zips before 26 September, the Apps Script label field for "Register a product", and pushing all seven repos when you are satisfied.
+
+Say the word on the two decisions and I launch Phase 3; "pause the agents" still applies whenever you need it.
+
+---
+
+I want to use the Service Account approach so I don't have to run interactively in future, so I confirmed via Claude browser plugin these APIs are enabled. I don't see where the destination drive path and sheet are specified in the script, so maybe that's the issue.
+
+---
+
+The question sheets are live for all six providers, created and maintained by the service account with no interactive step. The root cause of your 403 was that a service account has no My Drive storage, so gs4_create() had nowhere to put the file; the script now creates each sheet through the Drive API inside a questions folder under "CalCOFI Data Folder" on the Shared Drive, where files belong to the drive. Sheets there inherit the drive's membership, so Ed Weber, Rasmus, Erin, Mark Gold and Noelle Bowlin already have access, and the explicit shares to you, Erin and Betty are silent (no notification emails).
+
+┌────────────────────────┬──────────────────────────────────────────────────────────────────────────────────────────┐
+│        provider        │                                          sheet                                           │
+├────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────┤
+│ SWFSC (ichthyo, cufes) │ https://docs.google.com/spreadsheets/d/1kQM6aw3yiT1AZAmFfgCp2Ou9u-UckR69Tien_4Mk1qE/edit │
+├────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────┤
+│ CalCOFI (7 tabs)       │ https://docs.google.com/spreadsheets/d/1uW9GLogdD2K6NiQGS_xJiIPFUPUvifWesrLlK5UUK7g/edit │
+├────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────┤
+│ SIO                    │ https://docs.google.com/spreadsheets/d/1Te26TbEr_Snz4A2818VcEi5tMj2Q9vNuUxvhKWBkUo0/edit │
+├────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────┤
+│ CCE-LTER               │ https://docs.google.com/spreadsheets/d/1vExO9H6g9fTJ-kisz5LJ0eu02V8t8nrXwi1IVGoQHd8/edit │
+├────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────┤
+│ CDFW                   │ https://docs.google.com/spreadsheets/d/1cOEo_ylXNPgQDp3wCMz7DHo_5v1jz65nyhXAN9KK_EE/edit │
+├────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────┤
+│ Farallon               │ https://docs.google.com/spreadsheets/d/1szPLnPuQtaskPpwB1dkX7kGqs4hj6I2g2cE_kGq6ZbU/edit │
+└────────────────────────┴──────────────────────────────────────────────────────────────────────────────────────────┘
+
+The round trip was proven on SWFSC: an answer typed in the sheet came back through pull as a diff with the auto-flip to answered, and clearing it restored the CSV byte-for-byte. Every open or proposed row now carries today's asked_date, the Ed draft carries the SWFSC link, and everything is committed (a0fc2e6). Future runs:
+
+```bash
+QS_GOOGLE_SA_JSON="$HOME/My Drive/private/2026-06-07 ucsd-sio-calcofi_36230b2795e6_calcofi-admin-sa.json" \
+  Rscript scripts/sync_questions_sheets.R pull            # dry run; add --execute to write
+```
+
+Two small leftovers: a probe file I created while diagnosing sits in the Shared Drive's trash (the account can trash but not delete), and an auto-flipped row does not yet get an answered_date. Still waiting on you: the phytoplankton override rule and whether ws-e-ph2 merges before Betty's review.
+
+---
+
+ws-e-ph2 is on main (c5b9ac9); the Farallon sheet has its two new questions; pushing the PR branch for Betty is git push origin ws-e-ph2:ingest-farallon-erddap when you are ready.
+
+**The phytoplankton override problem**
+
+**What the release does today**. Venrick's source table gives every species row a WoRMS AphiaID plus a functional-group label in its taxa column ("diatom, centric", "dinoflagellate, thecate", …). Six rows in metadata/taxon_override.csv match on that taxa column and map each label to the class-level id (Bacillariophyceae, Dinophyceae, Coccolithophyceae, Dictyochophyceae). Because the override wins over the source id, every species in the group is re-keyed to the class. In v2026.08.25 the 393 phytoplankton codes resolve to 22 keys: 171 codes sit on Bacillariophyceae, 144 on Dinophyceae, 53 on Coccolithophyceae, 4 on Dictyochophyceae. Corethron criophilum and Nitzschia bicapitata are both published as "Bacillariophyceae". The source knows 294 distinct species and genera; the release keeps about 20.
+
+Those six rows were written for the group-level codes, the rows whose species is blank, and there is nothing in the override mechanism that limits them to those rows.
+
+Where to look.
+- `metadata/taxon_override.csv`: the six `calcofi_phytoplankton` rows with `match_column = taxa` (the four species_code rows below them are fine).
+- `ingest_calcofi_phytoplankton.qmd` lines 264–278: the `phyto_taxon` table (`species_code, taxa, species, aphia_id, …`) and `metadata/calcofi/phytoplankton/taxon_worms.csv`, the per-species AphiaIDs it already resolved.
+- The taxon plan's Measured entry for Phase 1 and the E Ph1 section of .claude/plans_todo/_integrator_notes_2026-09-03.md.
+- On db-query against v2026.08.25:
+
+```sql
+SELECT dt.taxon_key, t.scientific_name, t.rank, count(*) AS n_codes
+FROM dataset_taxon dt LEFT JOIN taxon t USING (taxon_key)
+WHERE dt.dataset_key = 'calcofi_phytoplankton' GROUP BY 1,2,3 ORDER BY n_codes DESC
+```
+
+**The rule I recommend, in two parts.**
+1. **An override never replaces an id the source supplied**. An override row may fill a missing id or re-key a row matched on its own code, but a row that arrived with an AphiaID keeps it unless the override names that exact code. With that rule the six taxa rows do what they were meant to do: they key the group-level codes and leave the species alone. Roughly 290 phytoplankton codes regain their species or genus key; nothing else in the release matches an override this way (the check runs across all datasets).
+2. **A functional-group label is not a common name**. Those labels stay as the group's membership in taxon_group (the D4 registry already defines the phytoplankton groups on ds_common_name), and the common-name precedence skips any ds_common_name that is a taxon_group label, so Corethron criophilum never gets "diatom, centric" published as its common name. E Phase 1 flagged the same failure for "other" and "undefined" labels; the same test covers them.
+
+Class-level rollups lose nothing: `taxon.class` and the `taxon_group` rows still put every diatom under Bacillariophyceae. What changes is that consumers can finally tell the species apart. If you agree, E Phase 3 launches with both parts in its brief; the parity gate then expects exactly those phytoplankton key changes and no others.
+
+---
+
+Phase 3a came back clean before the restart, with the numbers that matter:
+
+- Phytoplankton keys go from 22 to 309 for its 393 codes: 302 codes change to the species or genus id the source supplied, 70 with no source id stay at their class, 10 are declared local classes. About 124,600 phytoplankton observations change taxon_key, the taxon table gains 482 rows, and the functional groups keep every member through taxon_group (24 → 311 memberships). Common names refuse 24 group and operational labels.
+- It also found a mis-resolved species: code 600 "Actinocyclus, uncertain species" had been matched in the phyto WoRMS cache to the nudibranch genus Actinocyclus rather than the diatom. A code-matched override corrects it for now; Phase 3b fixes the cache file itself.
+- Farallon is unchanged (164 of 164 keys) and three of its birds now key through the generic path without override rows.
+- calcofi4db ws-e3a at d24bd32 with 1,762 tests; workflows ws-e3a at 6499080.
+
+---
+
+Phase 3a is integrated and Phase 3b is running on the registered Opus definition; meanwhile I'm updating the WS-F recipe with the latest hand-back changes so the release operator has the current version. · summarized
+
+Phase 3b is running: the six remaining taxon notebooks move onto the generic path, the phytoplankton cache entry that pointed at the nudibranch gets corrected at the source, the redundant Farallon override rows go, and the seven arms are deleted for calcofi4db 4.0.0. Each migrated notebook is rendered once in the worktree against the installed 3.33.0 and gated against the parity fixture.
+
+Meanwhile the release-run brief now carries what the later hand-backs changed: the re-run list gains bottle, PIC and DIC because of the `2019-07-` key convergence, the hash gate expects exactly that one-key difference in ichthyo's cruise shard, CTD stays skipped with a query that proves it holds no such row, the citation files are rebuilt before the tag, and the staging gates cover the pair parity, the completed cruise reference, `source_uuid`, the override report and the ERDDAP effort columns. One precondition is on you before that run reaches the tag: every repo's `main` must be pushed first, or Zenodo archives a tree without this round's code. Nothing else to fetch until 3b reports.
+
+---
+
+The heartbeat is stopped (the operator handed back). Where things stand:
+
+- **Sections 1 and 2 are green**. All thirteen ingests re-rendered (14 min 28 s; mesopelagic the slowest at 4.7 min), committed as 942cc51. The hash gate proved ichthyo's cruise shard differs by exactly the one key `2019-07-` → `2019-07-39C2`, grid and ship byte-identical, and CTD holds zero rows of the old key.
+- **A second registry cell got blanked** on the re-render: `euphausiid_abundance`'s `denominator = area`, because `denominator` was not in the list my 4.0.0 fix protected. calcofi4db 4.0.2 now treats it as registry-owned (a413245, installed) and the cell is restored (16b095e). Push calcofi4db again before the tag.
+- **Section 3 stopped on a real gate, yours to call**. `check_cruise_coverage()` allows zero orphan cruises for Farallon, and the ERDDAP build has two cruises with transect samples but no observations: 2021-01-33UD (490 samples) and 2022-10-33UD (260). That is the ERDDAP gap E Phase 2 filed as Q11 this morning (DataZoo had 625 observations for the 2021 cruise). Two ways through:
+
+  a. **Allow the two cruises, named** (recommended): add `"farallon_bird-mammal" = 2L` to the `ORPHAN_CRUISES_MAX` ratchet in `release_database.qmd` with a comment naming both cruise keys and Q11. The transects are real effort exactly as ERDDAP serves them; the Explorer already excludes samples with no observation rows from its denominators, so nothing reads them as "surveyed, saw nothing"; the release notes already say the 2021 observations are absent upstream; and the ratchet can only go down, so the entry disappears when the provider answers.
+  b. **Drop the 750 transects** from the Farallon ingest until Q11 is answered, which means re-rendering Farallon and hiding effort the provider did publish.
+
+Say "allow" (or "drop") and I make the edit, re-arm the heartbeat and resume Section 3 from the staging release.
+
+---
+
+allow
+
+---
+
+
+Status while the operator reruns test_release under staging:
+
+Staging release v2026.09.04 built end to end (2 h 29 m, all 57 chunks) and every gate passed: citation check 0 blocking, ichthyo cruise_uuid mismatches 0, cruise-key integrity clean with 151 derived cruises added, all core PKs unique, obs-pair parity equal on 15 groups, obs carried as a deprecated view. The catalog grew from 18 to 23 tables (adds climatology, obs_bio, obs_env, sample_root, sample_spatial; nothing removed). The "How to cite" block reads as decided, naming the three partners.
+
+test_release failed on two things, both now fixed on main:
+- The three failures were one Farallon contract counted three ways: 123 rows of two birds that only ITIS knows (Larus brachyrhynchus, Hydrobates leucorhous chapmani). Zero rows lack both ids, so the contract now reads "reachable by worms_id or itis_id" (commit 19a30fa).
+- The upload of test_results.json hardcoded the real prefix while every other path read the env var, so the staging test wrote a phantom file to gs://calcofi-db/ducklake/releases/v2026.09.04/. I backed that file up to the scratchpad and removed it. Nothing else leaked, and latest.txt on the real prefix is still v2026.08.25. The chunk now honours CALCOFI_RELEASE_PREFIX (ad99de5), and the rule is in CLAUDE.md (7181a4c). No other notebook has a literal real-prefix path.
+
+The operator is invalidating and rerunning only test_release under staging and will stop before the real release. The 20-minute heartbeat keeps watching.
+
+---
+
+**Staging release v2026.09.04 is fully green**. The `test_release` rerun passed 61 queries with 0 failures and 4 skips, its results file landed under the staging prefix, and staging `latest.txt` now points to v2026.09.04. The real prefix is untouched: no v2026.09.04 objects there and latest.txt still reads v2026.08.25. The operator committed the render (8720586), I committed its notes (0b5f891), and the 20-minute heartbeat is stopped.
+
+Everything through Section 3 of the WS-F brief is done. Section 4, the real release, waits on your explicit "run the release". When you give it, the sequence is:
+
+1. Push calcofi4db (2 commits: 4.0.1, 4.0.2) and workflows main (18 commits), since the tag must point at pushed code.
+2. Run the release without the staging prefix. release_database will re-freeze and upload, then test_release promotes latest.txt.
+3. Run scripts/build_citation_files.R, tag v2026.09.04 (or the day's date), and create the GitHub release so Zenodo mints the version DOI.
+4. Run scripts/publish_release_notes.R to write that DOI into the notes, then deploy the consumers and flip the Explorer's release prefix.
+
+Two items stay open from the staging run and need no action before the release: the CTD accepted-flag snapshot was unreachable so n_flags_pending went unmeasured (warn-only), and publish_to_erddap was not part of the staging run, so the effort-denominator columns on ERDDAP get verified at deploy time.
+
+---
+
+run the release
+
+---
+
+I see that https://app.calcofi.io/hex/ (ie @../db-viz-hex/) shows release v2026.09.04 but https://calcofi.io/explore (ie @../explore/) does not -- please fix
+Listed directory ../db-viz-hex/
+Listed directory ../explore/
+
+I also thought there was a prompt to accept terms of use about citation on opening the explore app
+
+So was it simply not pushed, but already built? Or why did it at least not get updated to most recent version already since it is the main consumer of the db release?
+
+---
+
+**Fixed**. calcofi.io/explore and the /explore/v2/ preview now read release v2026.09.04. A headless run against the live site shows the version in the page, every release object fetched with a 200, and no console errors.
+
+### new tables for /explore: `obs_bio`, `obs_env`, `sample_root`, `sample_spatial`, `climatology`
+
+**Why it lagged**. It was not a stale build. The Explorer's deploy workflow had the data source pinned by configuration to a development cut of v2026.08.25, because until today no promoted release carried the browser-shaped tables it needs (`obs_bio`, `obs_env`, `sample_root`, `sample_spatial`, `climatology`). v2026.09.04 is the first that does, so switching the workflow to the real release prefix was a planned step of the release brief, deliberately gated on promotion. The release operator was told to stop before that step, and you noticed before I had dispatched it. The hex app picked up the new release on its own because the pipeline's consumer-deploy target rebuilds its database on the server from whatever `latest.txt` names, whereas the Explorer bakes its data URL in at build time.
+
+**What changed** (explore commit f71006d): both Pages builds now point at the bucket root plus the real release prefix, the README says so, and a new `scripts/smoke_release.mjs` drives any build or the live site headlessly and reports the version shown, console errors and the objects fetched. Before pushing I checked that every table the Explorer reads in v2026.09.04 is a strict superset of the dev cut, so nothing the SQL templates rely on went missing.
+
+**The citation prompt is there**. The welcome card with the "I will cite the datasets I use" button ships in the live bundle, but it shows once per browser and is remembered in local storage, so a browser that has already seen it opens straight into the app. Add `?tour=on` to the URL to force it, or `?tour=off` to suppress it. If you would rather it reappear whenever the release version changes, since a new release means a new citation, that is a small change I can make.
+
+The real release run continues in the background: the netCDF upload of the 3.6 GB CTD file was still transmitting at the last heartbeat, with ERDDAP, the tag and the Zenodo DOI to follow.
+
+---
+
+### db has citable DOI!
+
+Not stuck, and nearly done. Since the last tick: ERDDAP published at 22:40 on the fixed manifest, the release outputs are committed as 968dc83, the v2026.09.04 tag and GitHub release exist with three assets, and Zenodo has minted the version DOI:
+
+**`10.5281/zenodo.22310858`**
+
+---
+
+### ERDDAP has effort denominators
+
+**Release v2026.09.04 is live, tagged and citable**, and the consumers follow it: Explorer, hex, cruise, station, ctd-viz, db-query and db-schema are on the new release, docs is rebuilding now. The DOI is 10.5281/zenodo.22310858 and the "How to cite" block carries it. Wall times: 
+- `release_database` 1 h 30 m, 
+- `test_release` 8 m (61 pass, 0 fail), 
+- consumer deploy 15 m, 
+- netCDF 1 h 45 m, 
+- ERDDAP 6 m with all 37 views verified live and the effort denominators present.
+
+One incident behind the operator's "40 mismatches", now repaired and closed off. The object verifier actually flagged 173 objects, every CTD and METS supplemental partition. The chain was:
+
+- Those tables are not byte-deterministic across re-exports even when rows are identical, which is an open question for the writer.
+- The staging run wrote into the shared content store with the default tables prefix, so its byte-different files replaced 173 of v2026.08.25's canonical objects.
+- The real run then server-side copied those bytes into the release while its catalog described the local files.
+
+What I did: re-uploaded the 173 local files over the release paths so the catalog is true (finishing now, a verification rerun follows automatically); calcofi4db 4.0.3 makes the plan record a copied object's bytes and hash from the previous release, with a regression test; release_database.qmd now refuses a staging run that does not set CALCOFI_TABLES_PREFIX to a staging prefix, and CLAUDE.md and the release-objects skill say so. All pushed.
+
+**One decision for you**. v2026.08.25's 173 canonical objects still hold the staging bytes, so its catalog is stale for them. Its compat copies under `releases/v2026.08.25/parquet/` are intact and match its catalog exactly, so a server-side copy restores the originals with nothing uploaded. The script is staged and dry-run clean. Say "restore 08-25" and I run it.
+
+Smaller notes: calcofi4py is tagged v0.6.0 per its convention, while calcofi4r has never carried version tags beyond the manuscript snapshot, so I left it. The Caddy redirect map came out identical, so no reload was needed. The tracked `data/releases/versions.json` is a stale v2026.02 file; the bucket copy is the real register and is correct.
+
+---
+
+Help me understand "v2026.08.25's 173 canonical objects" and the smaller notes
+
+---
+
+**The 173 objects, in plain terms**. Since v2026.08.25 every release table file is stored once in a shared, content-addressed store, at a path keyed by a hash of the file's rows. A release's `catalog.json` points at those paths and records each object's size and sha256, and a promoted release also keeps a plain copy under its own `releases/{v}/parquet/` folder. Yesterday's staging run wrote into that same shared store. For 173 files, every CTD and METS supplemental partition plus the CTD and METS partitions of `obs`, the rows were identical to v2026.08.25's, so they mapped to the same paths, but the bytes were not identical, because the parquet writer is not byte-deterministic for those tables. The upload replaced v2026.08.25's files with byte-different twins.
+
+Three consequences follow:
+- Anyone reading v2026.08.25 through its catalog still gets exactly the same rows. No data changed.
+- Its catalog's recorded sizes and hashes no longer match those 173 objects, so an integrity check fails and a consumer that validates hashes would refuse them. The release's immutability promise is broken for those files.
+- The real run then copied those bytes into v2026.09.04. That half is already repaired and verified clean.
+
+The restore copies v2026.08.25's own untouched plain copies back over the 173 store paths. Nothing is uploaded, nothing changes for readers, and the dry run matched all 173 against the catalog. Two things are needed: your go, and a fresh gcloud login, since the token expired about an hour ago:
+
+```bash
+! gcloud auth login
+```
+
+Then say "restore 08-25". Prevention is in place: a staging run now must use its own store prefix, and calcofi4db 4.0.3 records a copied object's true bytes. The durable fix, never overwriting a store object and carrying the sha256 as object metadata, is written up as open in the release-objects skill. The byte non-determinism itself is also open and worth a look at the sort keys for the supplementals.
+
+Loose ends, now fixed:
+- **versions.json**: the notebook wrote only a temp file to the bucket, so the tracked copy sat at v2026.02 for seven months. It now writes the tracked sidecar too, and I refreshed it from the bucket: 29 versions, v2026.09.04 first with its DOI.
+- **Release layout**: v2026.08.25 was cut in the canonical layout but v2026.09.04 came out in the older compat layout, because that was the default when the staging variables were unset. Canonical is now the default. The next release will upload its objects into the store once instead of copying.
+- **calcofi4r tag**: v1.18.0 is created locally, matching calcofi4py's convention. My permission classifier blocked pushing it, so please run:
+
+```bash
+! git -C ../calcofi4r push origin v1.18.0
+```
+
+- **Caddy**: nothing to fix. The redirect map only serves versions whose plain copies were thinned away, sending a legacy path to the store object. v2026.09.04 has plain copies, so the map came out identical to before.
+
+---
+
+`! git -C ../calcofi4r push origin v1.18.0`
+`! gcloud auth login`
+
+I do not want to have to occasionally do this gcloud auth login on my laptop, nor on the server when we get everything eventually running there, so can you instead use this Google Service Account: '/Users/bbest/Library/CloudStorage/GoogleDrive-ben@ecoquants.com/My Drive/private/2026-06-07 ucsd-sio-calcofi_36230b2795e6_calcofi-admin-sa.json'
+Then restore 08-25
+
+For any of the @.claude/plans_todo/ that have been completed, please move to plans_done
+
+---
+
+Moved 13 files to .claude/plans_done/ with git mv and committed locally as 1129d4c: the eleven completed briefs (WS-A0 through A4, B, C, DG, H, Q and F) plus the two pause checkpoints. Before moving WS-F I closed its last section: the umbrella plan now carries the measured wall times and the note that the skipped ingests still read as outdated, and the server-pipeline plan gets the request to split ichthyo's reference shards into their own target.
+
+Four files stay in plans_todo because they are not finished:
+- the server-pipeline plan, which is future work
+- the OBIS publish follow-on
+- the email drafts, which you still send
+- the integrator notes, the running record of this round
+
+Three things were cut off by the interrupt and remain as they were:
+- The integrator-notes entry recording the v2026.08.25 restore and the service-account switch is written but uncommitted.
+- The v2026.08.25 verifier reported 6 hash problems after the restore. My spot check of three objects matched, and the earlier v2026.09.04 run showed the same pattern from HTTPS cache lag, but the cache-free comparison of all 173 restored objects did not run, so that release is not yet confirmed clean.
+- The server README still tells a reader to run gcloud auth login; it should describe activating the service account instead.
+
+Say the word and I finish those three, and push.
+
+---
+
+Yes, finish those three and push
+
+---
+
+All three are done and pushed.
+
+- **v2026.08.25 is confirmed clean**. A cache-free comparison through gcloud shows all 173 restored store objects byte-identical to that release's intact compat copies. The six hash problems the verifier reported right after the restore were the HTTPS edge cache still serving the old bytes, which it can do for up to an hour. The notes now say to verify through gcloud, or wait an hour, after rewriting objects in place.
+- **Server README** (server c3ab0ba) tells a reader to activate the calcofi-admin service account once instead of running gcloud auth login, notes the key stays in Drive and is copied to the server by hand, and says what to do if a compute command is refused under the service account.
+- **Integrator notes** committed and pushed with the plans move (workflows 3993bd5, nothing unpushed).
+
+Both releases now verify against their catalogs, and the round's remaining open items are the ones still in plans_todo: the emails to send, the OBIS follow-on and the server pipeline.
+
+---
+
+looks like there is some cleanup todo in file system for agent repos:
+
+  ls | col
+  _git-logs_2025-07-01-to-2025-12-01
+  2026-ucla-cal-ocean-coastal-monitoring-map
+  2026-ucsb-larvae-dashboard
+  2026-ucsb-station-data-portal
+  analytics
+  api
+  api-h3t
+  api-h3t-py
+  apps
+  CalCOFI.github.io
+  calcofi4db
+  calcofi4db-ws-a0
+  calcofi4db-ws-b2
+  calcofi4db-ws-dg
+  calcofi4db-ws-e
+  calcofi4db-ws-e3a
+  calcofi4db-ws-e3b
+  calcofi4db-ws-h1
+  calcofi4db-ws-h2
+  calcofi4py
+  calcofi4py-ws-a2
+  calcofi4py-ws-h1
+  calcofi4r
+  calcofi4r-ws-a2
+  calcofi4r-ws-h1
+  ...
+
+---
+
+Cleanup is done. Every agent worktree is gone and every repo is back to a single checkout.
+
+**Removed beside the repos**: all 19 `*-ws-*` directories. Eighteen were clean with their tips already on main; the nineteenth, `db-query-ws-h1`, held one commit that main carries under a different hash after a rebase, so it was removed too. Their `ws-*` branches were deleted, including three in docs that branch -d had refused only because that checkout sits on the test branch rather than main.
+
+**Removed inside workflows**: all 21 agent worktrees under `.claude/worktrees/`, their branches, the two auto-named leftover branches, and the two helper symlinks to calcofi4db and calcofi4r; the directory itself is gone. The one unmerged branch,`ws-e-ph1`, differed from main only by the paused stand-in's checkpoint file, which the merged `ws-e-ph1b` superseded, so I deleted it (it was 110cae2 if you ever want it back from the reflog).
+
+**One more, outside the pattern**: explore still had a 1.5 GB worktree at `~/_big/calcofi/explore-bathy` on the curtains branch from the 31 August map-layers session. Its single commit is on main by content and only four old verify logs were untracked, so I removed that as well.
+
+Not touched, because they are yours: `test.qmd`, `test_files`, the git-logs folder, the three staging render HTMLs under _output/, and the uncommitted moves in .claude/ from your other session, where the email drafts now sit in plans_done, the OBIS follow-on is being edited, and a new plan for calcofi.io as a dataset catalog has appeared.
+
+---
+
+remove test.qmd, test_files
 
 ## 2026-09-02 review PR workflows#77: switch Farallon bird/mammal ingest to ERDDAP
 

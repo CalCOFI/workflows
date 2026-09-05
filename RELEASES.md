@@ -64,6 +64,15 @@ it. Nothing on calcofi.io's dataset pages (Phase 1) is authored by hand: they re
   comments preserved, the release `dataset` table unchanged before/after), `scripts/sync_dataset_meta_sheets.R`
   does the push/pull (a `holdings` tab in the `calcofi` Sheet is the triage board for the 17 holdings). Both sheet
   scripts now authenticate as the calcofi-admin service account only (`scripts/lib_google_auth.R`), never interactively.
+- **sccoos gets a question/metadata Sheet, and two CalOOS-import findings are on record with providers.**
+  `sync_dataset_meta_sheets.R push` can now create a provider's spreadsheet itself when none exists yet
+  (sccoos: two holdings, no ingest, so the questions script had nothing of its own to push) — sccoos's
+  `metadata` tab is live. Two findings from importing the CalOOS working sheet are open provider questions
+  rather than asserted facts: CCE-LTER's `knb-lter-cce.104` accession names a POC/PON dataset, not the
+  nitrate-isotope dataset the sheet describes (`cce-lter_poc-pon-cce-region` Q01); and the CC0 licence the
+  sheet claims for four NOAA CoastWatch ERDDAP mirrors is not confirmed by their own `.das` `license`
+  globals, which carry only the generic ERDDAP disclaimer (`swfsc_ichthyo` Q11, `swfsc_cufes` Q07,
+  `calcofi_bottle` Q10, `sio_pic-zooplankton` Q08).
 
 
 # v2026.09.04 (2026-09-04)

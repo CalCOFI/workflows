@@ -1,3 +1,5 @@
+> **Folded into** `.claude/plans/2026-09-05 CalCOFI.io as a dataset catalog — one record per dataset with every endpoint, the front door re-cut around Datasets, and the portal registrations.md` § D-8 on 2026-09-05 (Ben's ask). The core→DwC mapping, the `occurrenceStatus` rule and the IPT-resource / licence / provider-ownership questions live there now (Open question 9); this note stays as the origin.
+
 # Follow-on — generic `publish_to-obis.qmd` over the core
 
 `publish_ichthyo_to-obis.qmd` is the last per-dataset publish notebook: it reads the
