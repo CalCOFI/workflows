@@ -30,6 +30,22 @@
 - [ ] rename `swfsc_inverts` to `swfsc_invert` including `ingest_swfsc_inverts.qmd` -> `ingest_swfsc_invert.qmd`
 - [ ] `ingest_calcofi_ctd-cast.qmd` needs a sync to GCS for just the used CSV files so saved in GCS `archive/`, not just GCS `_sync/`
 
+## 2026-09-05 CalCOFI.io datasets UI cleanup
+
+Write a plan to refresh the CalCOFI.io website UI with the newly added datasets. I am offering a few suggestions, but be exhaustive and creative here. Refer to and possibly even update the v2 branding, and work on communicating emphasis appropriately.
+
+Here are a few examples:
+
+- Datasets (https://calcofi.io/datasets/, https://calcofi.io/#:~:text=25%20REFERENCE%20ROWS-,DATASETS,-Find%20what%20has)
+  - The datasets listed under "not yet in the integrated database" have more emphasis in both light and dark themes then the integrated datasets above.
+  - There is a LOT of variety in vertical size of each categorical card, so creates a LOT of empty space. Can the cards vary in height to avoid this?
+- Individual dataset page (eg https://calcofi.io/datasets/calcofi_ctd-cast/)
+  - The extent map shows shows a bbox with very faint light gray station dots, but no basemap, which should also change based on theme
+  - There is a massive amount of space between the top left column abstract section and the Access section below.
+  - Some Explore links take you to the given dataset, eg [CalCOFI Explorer](https://calcofi.io/explore/?datasets=calcofi_ctd-cast) and the rest only to the app [Station Explorer](https://app.calcofi.io/station/), so maybe the full URL should be listed
+  -  The Download section is confusing without explanation or grouping of source (eg ERDDAP) and sometimes format (eg parquet), nor explanation of obs vs sample.
+  -  The Services section doesn't even mention ERDDAP.
+  -  Archives & portals should probably list the unique identifier and/or title.
 
 ## 2026-09-05 CalCOFI.io dataset-centric view
 
@@ -389,7 +405,53 @@ Setup a heartbeat monitor every 30 min, report the time and status to make sure 
 
 Heartbeat 11:38 CEST: the staging render is alive (tar_make pid 10753, quarto rendering release_database.qmd), now at chunk 24 of 57 (depth_coverage), about 13 minutes in. Nothing to act on; the next heartbeat is at ~12:08 unless the event monitor fires first.
 
+---
 
+The workflows-site deploy now succeeds with calcofi4db installed on the runner (run for 712f0fe green; the run for the latest push is in progress). Everything the plan defined through Wave 3 is merged and pushed.
+
+What is live and where
+
+surface: calcofi.io
+state: re-cut around Datasets: 33 dataset pages, data.json,
+datasets/sitemap.xml, /stac/; rendering the 2026-09-05 staging record until
+a promoted release carries datasets.json
+────────────────────────────────────────
+surface: calcofi.io/workflows
+state: deploy repaired (it had failed on every push since 2026-09-03 for lack
+of calcofi4db on the runner)
+────────────────────────────────────────
+surface: consumers
+state: dataset-page links merged and deployed in db-schema, db-query, the
+Explorer, Station Explorer, CTD Transects and docs; db-viz-hex awaits a
+server deploy
+────────────────────────────────────────
+surface: calcofi4db
+state: 4.4.0 on main: the record, check_dataset_catalog(), EML, STAC,
+observation, sitemap, Darwin Core builders, climatology determinism
+────────────────────────────────────────
+surface: workflows
+state: release steps 3b datasets.json, 3c eml/, 3d stac/ with gates in
+test_release.qmd; generic publish_to-obis.qmd and publish_to-edi.qmd; weekly
+ observe.yml; the SCCOOS Sheet and all metadata tabs live
+────────────────────────────────────────
+surface: calcofi4r 1.19.0, calcofi4py 0.7.0
+state: on main, cc_datasets() and the page line in cc_cite(), untagged
+
+Measured, in one line each
+
+- Record: 16 datasets, 17 holdings, 25 reference rows; 156 URLs probed, none dead; staging render 1 h 03 min plus a 10 min test suite, 64 pass, 0 fail.
+- EML: 16 of 16 valid EML 2.2, 0 blocking findings.
+- STAC: 52 documents, all valid under stac-validator.
+- Darwin Core: ten archives from the core in 124 s; the ichthyo diff gate matched 76,512 of 76,512 net events and 99.71 % of occurrence grains.
+- Pages: Lighthouse accessibility 100 on six pages; data.json validates against DCAT-US 1.1.
+
+Only you can do these (all logged in the plan's investigation log, I-1 to I-19)
+
+1. Cut the next production release when data changes; it carries datasets.json, eml/ and stac/ to production and takes the landing page off the staging bridge.
+2. Uploads (I-15, I-19): an EDI account on the edi scope with credentials where the pipeline runs; IPT uploads only after the likely duplicate Farallon record on OBIS is resolved with its owner, and after the absence and gap questions go to providers.
+3. The M2 checklist: CalOOS message to Iwen Su, IOOS registration through the FGDC WAF (the harvester does not read 19115-3), ODISCat 3318 re-point, legacy ERDDAP sunset on 2026-12-04.
+4. Decisions: retire publish_ichthyo_to-obis.qmd (I-18, dead code either way); tag calcofi4r 1.19.0 and calcofi4py 0.7.0; run deploy-consumers for db-viz-hex.
+5. Providers, through the Sheets: the CalOOS proposals awaiting confirmation, contacts, creators and methods (0 of 16 sidecars carry a contact today), and the two CalOOS-sheet corrections now filed as questions.
 
 ## 2026-09-04 flip switch on brand v2, default light theme
 
