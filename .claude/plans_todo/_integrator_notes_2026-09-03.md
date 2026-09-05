@@ -250,3 +250,13 @@ Measured (2026-09-05 00:05): re-upload of the 173 local files completed (0 failu
 (A verify started while uploads were still landing reported stale sha256s from the https cache; a
 three-way check of one object — catalog, local file, bucket download — agreed. Run the verifier only
 after the last upload returns.) v2026.08.25's 173 canonical objects still await Ben's "restore 08-25".
+Measured (2026-09-05 00:40): Ben's go → the 173 v2026.08.25 store objects restored by server-side copy
+from that release's compat copies (173 restored, 0 skipped, 0 failed; md5 canonical == compat and size ==
+catalog on the spot check; full verifier run below). gcloud on this laptop now runs as the
+calcofi-admin service account (`gcloud auth activate-service-account --key-file=<Drive private key>`),
+so no interactive `gcloud auth login` is needed again; the server gets the same key + command.
+Measured (2026-09-05 01:05): cache-free check via `gcloud storage hash` — all 173 restored v2026.08.25
+store objects are md5-identical to that release's compat copies (0 differ). The verifier's 6 sha256
+"problems" right after the restore were the https edge cache still serving the staging bytes
+(objects are cached up to an hour); v2026.08.25 is clean. Rule: after rewriting objects in place,
+verify through gcloud (no cache) or wait an hour before the https verifier.
