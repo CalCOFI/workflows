@@ -2404,7 +2404,7 @@ if (file.exists(meta_json_path)) {
   datasets_rec <- build_dataset_catalog(
     meta_json_path, coverage_path, catalog, cat_registries, version = release_version,
     erddap = erddap_now, netcdf = netcdf_now, since = since, source_accessed = src_acc,
-    spatial_layers = spatial_layers_path, bathymetry = bathy)
+    spatial_layers = spatial_layers_path, bathymetry = bathy, release_prefix = release_prefix)
   # a dataset in no earlier release first appears in this one
   for (i in seq_along(datasets_rec$datasets))
     if (is.null(datasets_rec$datasets[[i]]$since_version)) datasets_rec$datasets[[i]]$since_version <- release_version

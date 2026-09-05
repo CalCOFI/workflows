@@ -8,6 +8,27 @@ versions). Conventions: see `CLAUDE.md` § "RELEASES.md is not optional".
 
 # Unreleased
 
+## The release record now has a public rendering, one page per dataset
+
+`datasets.json` (schema 1.0, `build_dataset_catalog()`) is no longer only a sidecar: calcofi.io
+opens on the dataset grid it describes, and every dataset and holding has a page at
+`https://calcofi.io/datasets/{dataset_key}/` with its coverage, every endpoint it can be reached
+through, its registrations, its citation and schema.org JSON-LD. The machine surfaces ship with it —
+`calcofi.io/data.json` (DCAT-US 1.1, harvestable by any CKAN), `calcofi.io/datasets/sitemap.xml`,
+and `{dataset_key}.json` / `.jsonld` beside each page.
+
+Nothing about a dataset is written in the landing repo: the pages are a rendering of the promoted
+release, refreshed by `CalCOFI/CalCOFI.github.io` `refresh.yml` on the `gh_dispatch` row
+`test_release.qmd` already carries, so they follow a promotion within minutes and can never describe
+an unpromoted release. Until the next promoted release carries `datasets.json`, the site builds from
+the 2026-09-05 staging record through a documented `DATASETS_RELEASE_URL` bridge.
+
+**Consumers:** a record's `visibility: internal` is now load-bearing in public — such a dataset gets
+no page, no sitemap entry, no `data.json` row and no search row. The two record gaps the pages found
+are fixed in the same round (calcofi4db 4.2.x): ERDDAP titles no longer reach the record as a literal
+`\u2014`, `coverage.variables[]` carry units and NERC P01 URIs, and `coverage.taxa[]` names the top
+50 taxa so the catalog's search can match a taxon.
+
 ## Every dataset ships an EML 2.2 document: `eml/{dataset_key}.xml`
 
 The release now writes **one EML 2.2 document per dataset** into `eml/` beside `datasets.json`
