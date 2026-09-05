@@ -57,4 +57,12 @@ https://claude.ai/code/artifact/5fe1fa4e-c124-4525-a27a-a4a978abf2ba (the spec f
   `sheets-followup` (Sonnet; sccoos Sheet, CalOOS question rows). Merge order for calcofi4db: 4.1.1 → 4.2.0 →
   4.3.0 (NEWS headings pre-assigned). No agent installs the package or renders; the integrator does both after
   merging. Ben: no production release for the sidecars alone — the next data change carries datasets.json.
+- 2026-09-05 ~17:40 · **Wave 2 merged** (calcofi4db main 4.3.0 @ 29e53dad: 4.1.1 climatology, 4.2.0 EML, 4.3.0 STAC/
+  observe/sitemap + the record follow-ups from P1; workflows main 3cc849e; CalCOFI.github.io main b51db1a = pages +
+  /stac/; explore main aa8aa7f = cat-genomics). Full calcofi4db suite green; index gate 16/16; nothing pushed.
+  **Wave 3 spawned** in worktrees: P2 (Sonnet; branches `dataset-page-links` in db-schema, db-query, explore,
+  db-viz-station, db-viz-hex, ctd-transects, calcofi4r 1.19.0, calcofi4py 0.7.0, docs, analytics, uptime +
+  workflows `publish_to-erddap.qmd`), E2 (Opus; calcofi4db `dwc-4.4.0` + workflows `obis-generic`), E3 (Sonnet;
+  workflows `edi-publish`), M2 (Sonnet; workflows `registrations-drafts`). Merge order: E2's 4.4.0 after P2's
+  calcofi4r/calcofi4py bumps are independent; RELEASES.md text comes back in hand-backs (agents do not edit it).
 
