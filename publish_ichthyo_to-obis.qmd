@@ -12,6 +12,63 @@ editor_options:
 
 ## Overview
 
+::: {.callout-important title="Superseded by `publish_to-obis.qmd` — and no longer runnable"}
+**This notebook is superseded** by the generic `publish_to-obis.qmd`, which builds a
+Darwin Core Archive for every biological dataset from the core and the registries
+(plan 2026-09-05 § D-8, Decision 13). It is kept, unrun and excluded from
+`_targets.R`, only as the record of what was published to OBIS on 2026-03-27
+(dataset `0e223f55-c826-4513-ae9a-b04cbf2e189c`, IPT resource `calcofi_ichthyo`).
+
+**It cannot run against v2026.09.05.** It reads the `swfsc_ichthyo` *source* tables
+— `ichthyo`, `net`, `tow`, `site`, `species`, `taxa_rank` — and the core
+consolidation retired all of them from the release; only `sample`, `obs_bio`,
+`obs_attribute`, `sample_measurement` and `taxon` ship now.
+
+**The diff gate (2026-09-05, WS-E2), against this notebook's own last output**
+(`data/darwincore/ichthyo/`, 2026-04-08 — byte-for-byte the counts of the published
+archive: 77,188 events · 463,655 occurrences · 610,816 eMoF):
+
+*Where the two can be compared, they agree exactly.* Joining the generic net events
+to these on `sample.source_uuid` (100 % populated for all 76,512 nets):
+
+| | ref | generic | matched | differing |
+|---|---|---|---|---|
+| net events | 76,512 | 76,512 | **76,512** | `eventDate` 0 · `decimalLatitude` 0 · `decimalLongitude` 0 · `sampleSizeValue` 0 |
+| event-grain eMoF | 243,598 | 243,598 | **243,598** | `std_haul_factor` 0 of 76,512 |
+| occurrence grains (net uuid × AphiaID × lifeStage) | 463,652 | 482,247 | **462,289 (99.71 %)** | `scientificNameID` 41 |
+
+*Where they differ, the difference is deliberate or is the data moving on:*
+
+- **Event count** 213,813 vs 77,188 — the generic path emits `sample`'s whole
+  adjacency list (61,104 sites + 75,506 tows + 76,512 nets + 691 cruises); this
+  notebook deliberately collapsed it to cruise → net_sample, so which nets came
+  from one tow was not recoverable from the archive.
+- **`eventID`** is `sample_key`, not the raw `net_uuid` — D-8's mapping.
+- **Occurrences** 482,250 vs 463,655: the release gained 9,223 `invert` rows (the
+  merged SWFSC invertebrate counts) and 9,372 re-resolved larva/egg rows since
+  2026-04-08. The 1,363 reference grains with no generic partner are **6 AphiaIDs
+  the taxon reference re-keyed onto WoRMS-accepted ids** (`Eustomias` 126208 →
+  843439, and five more); all 38 reference-only *names* are WoRMS synonyms whose
+  accepted name the release now carries (`Antennarius avalonis` →
+  *Fowlerichthys avalonis*, `Etrumeus teres` → *Etrumeus sadina*, …).
+- **eMoF** 613,576 vs 610,816: 2,760 more `stage` rows in the core.
+- **`organismQuantity`** is the D8 density (per 10 m² / per 1000 m³) with the raw
+  tally beside it in `individualCount`; this notebook emitted the tally alone.
+- **`measurementTypeID`** was `NA` on all 610,816 rows here (there was nowhere for a
+  P01 to live before WS-H2); the generic archive carries `OBSINDLX` on 241,871.
+- **`locationID`** is `site_key` (`076.7 051.0`, the release's own format) not
+  `line_station` (`76.7_51`); **`sampleSizeUnit`** is the registry's `m3` not `m^3`;
+  **`samplingProtocol`** is `gear.csv`'s per-gear sentence, not one string for every
+  tow. `countryCode`, `waterBody` and `coordinateUncertaintyInMeters` are **not**
+  emitted: the release measures none of them, and hand-typing them here was the
+  problem D-8 set out to fix.
+
+So the gate **does not pass as a count-for-count identity, and cannot** — the
+mapping changed on purpose and the data changed underneath. Retiring this file is
+therefore Ben's call, not this branch's; it stays here, excluded, until then.
+:::
+
+
 This workflow converts CalCOFI ichthyoplankton (fish eggs and larvae) data to an OBIS-compliant DarwinCore Archive for publication. The archive follows the Event Core structure with Occurrence and ExtendedMeasurementOrFact (eMoF) extensions.
 
 **Note on bottle data**: CalCOFI bottle hydrography (temperature, salinity, dissolved oxygen, nutrients, chlorophyll, carbon system parameters) is not included in this DarwinCore Archive. These environmental data are already served via [ERDDAP CalCOFI SIO Hydrographic Bottle Data](https://coastwatch.pfeg.noaa.gov/erddap/tabledap/siocalcofiHydroBottle.html).

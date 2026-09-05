@@ -1,0 +1,439 @@
+---
+title: "Publish every biological dataset to OBIS"
+subtitle: "One Darwin Core Archive per dataset, generated from the core and the registries"
+author: "CalCOFI"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: true
+    code-tools: true
+    df-print: kable
+calcofi:
+  target_name: publish_to_obis
+  workflow_type: publish
+  dependency:
+    - release_database
+  output: data/darwincore/publish_plan.csv
+  workflow_url: https://calcofi.io/workflows/publish_to-obis.html
+  description: >
+    Builds one Darwin Core Archive (Event core + Occurrence + eMoF + meta.xml +
+    the release's own eml.xml) per biological dataset in the frozen release,
+    generically from the core and the metadata registries. Replaces
+    publish_ichthyo_to-obis.qmd, which read the swfsc_ichthyo source tables
+    directly and left nine other biological datasets with no OBIS route. Writes
+    files only: the upload to the OBIS-USA IPT stays a deliberate manual step.
+execute:
+  echo: true
+  warning: false
+editor_options:
+  chunk_output_type: console
+---
+
+## Overview
+
+Build one **Darwin Core Archive** per biological dataset in the frozen release —
+`event.csv` (Event core) + `occurrence.csv` + `extendedMeasurementOrFact.csv` +
+`meta.xml` + the release's own `eml/{dataset_key}.xml` — validate it, and write it
+to `data/darwincore/{dataset_key}/{dataset_key}_{version}.zip` with a manifest.
+
+This notebook **writes files only**. The upload to the OBIS-USA IPT is a
+deliberate manual act with Ben's login, gated on a content change (Decision 10;
+`docs/portals.qmd` § OBIS has the steps). Nothing here talks to a portal except
+the read-only duplicate check below.
+
+### Why it is generic now
+
+`publish_ichthyo_to-obis.qmd` was the last per-dataset publisher. It read the
+`swfsc_ichthyo` **source** tables (`ichthyo`, `net`, `tow`, `site`, `species`,
+`lookup`) and hand-built the Event / Occurrence / eMoF triple, which is why nine
+other biological datasets had no OBIS route at all — and why, since the core
+consolidation retired those tables from the release, it can no longer run.
+
+Everything it hand-built now exists generically, and the vocabulary ids it was
+missing live in the registries the release already publishes:
+
+| Darwin Core | from the core | vocabulary |
+|---|---|---|
+| **Event core** `eventID` · `parentEventID` · `eventType` · `eventDate` · `decimalLatitude/Longitude` · `minimum`/`maximumDepthInMeters` · `locationID` · `samplingProtocol` · `sampleSizeValue`/`Unit` · `geodeticDatum` · `datasetID` | `sample.sample_key` · `sample.parent_sample_key` (the row's `cruise_key` for a root) · `sample.sample_type` · `sample.datetime` · `sample.latitude`/`longitude` · `sample.depth_min_m`/`depth_max_m` · `sample.site_key` · `sample.tow_type` · `sample_measurement.volume_sampled` · the release CRS · `dataset_key` | `gear.csv` `dwc_samplingProtocol` (+ NERC **L22**) |
+| **Occurrence** `occurrenceID` · `eventID` · `basisOfRecord` · `occurrenceStatus` · `scientificName` · `scientificNameID` · `taxonID` · `taxonRank` · `kingdom`…`family` · `vernacularName` · `lifeStage` · `individualCount` · `organismQuantity` + `organismQuantityType` · `occurrenceRemarks` | md5 of `obs_bio`'s natural grain · `obs_bio.sample_key` · `HumanObservation` · `obs_bio.value` · `taxon.scientific_name` · WoRMS LSID of `taxon.worms_id` · `obs_bio.taxon_key` · `taxon.rank` · `taxon` lineage · `taxon.common_name` · `obs_bio.life_stage` · `obs_bio.value` where the unit is a count · `density_per_10m2` / `density_per_1000m3` | `life_stage.csv` `dwc_lifeStage` (+ NERC **S11**) |
+| **eMoF** `measurementType` · `measurementTypeID` · `measurementValue` · `measurementUnit` · `measurementUnitID` · `measurementRemarks` | `sample_measurement` (event grain) · `obs_attribute` (occurrence grain) · `obs_env` on the dataset's own events | `measurement_type.csv` `nerc_p01` / `units_nerc_p06` — **empty where no exact concept exists, never invented** |
+| `meta.xml` | generated from the term map (`calcofi4db::dwc_term_map()`) | — |
+| `eml.xml` | the release's `eml/{dataset_key}.xml` (`build_eml()`, D-8) | — |
+
+The logic lives in **`calcofi4db::dwc_*()`** (`R/dwc.R`), not in this notebook, so
+`devtools::test()` asserts the exact DwC rows against a synthetic core and this
+file cannot drift from what the tests pin.
+
+### `occurrenceStatus` is emitted honestly
+
+::: {.callout-important title="An absence is a claim about a protocol, not about a table"}
+`calcofi4db::dwc_absence_rule()` measures which rule each dataset falls under:
+
+* **`zeros_recorded`** — the dataset has zero-valued `obs_bio` rows, so a sample
+  examined and found empty of a taxon is already in the release. Those rows become
+  `occurrenceStatus = "absent"`, and nothing is derived.
+* **`positive_only`** — the dataset has **no** zero rows: a surveyed-empty sample
+  simply has no row. Every row it does have is `present`, and an absence can only be
+  *derived*, from `sample_root` minus the positives — which is true only if the
+  protocol sorted every sample for the dataset's whole vocabulary.
+
+That last claim is about the protocol, not about the data, so deriving absences is
+never the default. For `swfsc_ichthyo` it would be plainly false: the ichthyoplankton
+protocol identifies each specimen to the lowest taxon possible, so 963 observed taxa
+× 61,104 sorted stations is 58 M absences nobody ever asserted. `dwc_occurrence()`
+refuses to emit them without `absences = "sample_root"` and a `max_absences` the
+caller raised on purpose.
+
+The two positive-only datasets where the claim may genuinely hold —
+`cce-lter_euphausiids` (BTEDB stages 37 species in every sample) and
+`sio_mesopelagic-fish` (90 taxa, 102 tows) — are **questions for their providers**,
+not something this notebook decides. Until a provider says yes, they publish
+presence-only, which is what OBIS assumes of an archive with no `absent` rows.
+:::
+
+## Setup
+
+```{r}
+#| label: setup
+#| message: false
+
+librarian::shelf(DBI, duckdb, dplyr, glue, jsonlite, knitr, readr, tibble,
+                 here, curl, quiet = TRUE)
+here <- here::here
+devtools::load_all(here::here("../calcofi4db"))
+
+# a STAGING run (CALCOFI_RELEASE_PREFIX=ducklake-staging/releases) reads the
+# staging release and writes under data/darwincore-staging/, so it can never be
+# mistaken for, or overwrite, what was published from the promoted one
+RELEASE_PREFIX <- Sys.getenv("CALCOFI_RELEASE_PREFIX", "ducklake/releases")
+STAGING        <- grepl("staging", RELEASE_PREFIX, fixed = TRUE)
+BASE_HTTPS     <- "https://storage.googleapis.com/calcofi-db"
+RELEASES_URL   <- glue("{BASE_HTTPS}/{RELEASE_PREFIX}")
+
+RELEASE <- Sys.getenv("CALCOFI_RELEASE_VERSION", "")
+if (!nzchar(RELEASE))
+  RELEASE <- trimws(readLines(glue("{RELEASES_URL}/latest.txt"), warn = FALSE)[1])
+
+OUT_DIR <- here(if (STAGING) "data/darwincore-staging" else "data/darwincore")
+dir.create(OUT_DIR, recursive = TRUE, showWarnings = FALSE)
+
+# comma-separated dataset_keys to restrict a run while iterating; empty = all
+ONLY <- Filter(nzchar, trimws(strsplit(Sys.getenv("CALCOFI_DATASETS", ""), ",")[[1]]))
+# the duplicate check asks api.obis.org; off-line it is skipped, never faked
+NET  <- !identical(Sys.getenv("CALCOFI_OFFLINE"), "true")
+
+cat(glue("release  : {RELEASE} (prefix {RELEASE_PREFIX})"), "\n")
+cat(glue("output   : {OUT_DIR}"), "\n")
+cat(glue("network  : {NET} (set CALCOFI_OFFLINE=true to skip the OBIS duplicate check)"), "\n")
+if (length(ONLY)) cat(glue("restricted to: {paste(ONLY, collapse = ', ')}"), "\n")
+```
+
+```{r}
+#| label: connect
+# the release catalog resolves every table to its content-addressed objects —
+# never concatenate releases/{v}/parquet/… by hand (CLAUDE.md § content-addressed)
+rel_catalog <- jsonlite::fromJSON(glue("{RELEASES_URL}/{RELEASE}/catalog.json"),
+                                  simplifyVector = FALSE)
+rel_urls <- function(table) {
+  src <- calcofi4r::cc_release_sources(rel_catalog, table)
+  sf <- src$single_file
+  # `single_file` is NA for a table with no whole-table twin, and as.character(NA)
+  # is the STRING "NA" — which nzchar() happily accepts and read_parquet() then
+  # resolves to a file called "NA". Test is.na() first, always.
+  if (!is.null(sf) && length(sf) == 1 && !is.na(sf) && nzchar(as.character(sf)))
+    return(as.character(sf))
+  as.character(src$urls)
+}
+url_list <- function(u) if (length(u) == 1) glue("'{u}'") else
+  glue("[{paste0(\"'\", u, \"'\", collapse = ', ')}]")
+read_pq <- function(table, hive = FALSE)
+  glue("read_parquet({url_list(rel_urls(table))}",
+       "{if (hive) ', hive_partitioning = true' else ''}, union_by_name = true)")
+
+con <- dbConnect(duckdb())
+for (s in c("INSTALL httpfs", "LOAD httpfs", "SET memory_limit='8GB'",
+            "SET enable_progress_bar=false")) try(dbExecute(con, s), silent = TRUE)
+
+# `sample` is read WITHOUT geom: the exporter needs lat/lon numerics, and a
+# CRS-tagged geometry column would pull in the spatial extension for nothing.
+t0 <- Sys.time()
+dbExecute(con, glue("
+  CREATE TABLE sample AS
+    SELECT sample_key, sample_type, parent_sample_key, root_sample_key, dataset_key,
+           grid_key, site_key, cruise_key, order_occ, latitude, longitude, datetime,
+           depth_min_m, depth_max_m, tow_type
+    FROM {read_pq('sample')};
+  CREATE TABLE obs_bio           AS SELECT * FROM {read_pq('obs_bio')};
+  CREATE TABLE obs_attribute     AS SELECT * FROM {read_pq('obs_attribute')};
+  CREATE TABLE sample_measurement AS SELECT * FROM {read_pq('sample_measurement')};
+  CREATE TABLE taxon             AS SELECT * FROM {read_pq('taxon')};
+  CREATE TABLE sample_root       AS SELECT * FROM {read_pq('sample_root')};
+  CREATE TABLE cruise            AS SELECT * FROM {read_pq('cruise')};
+  CREATE TABLE dataset           AS SELECT * FROM {read_pq('dataset')};"))
+cat(glue("materialized the core in {round(difftime(Sys.time(), t0, units = 'secs'))}s"), "\n")
+q <- function(sql, ...) dbGetQuery(con, glue(sql, ..., .envir = parent.frame()))
+```
+
+```{r}
+#| label: registries
+# gear.csv + life_stage.csv + measurement_type.csv — the single sources of truth
+# for samplingProtocol, lifeStage and the P01/P06 ids. An id is filled ONLY on an
+# exact match; an empty cell means "no concept says exactly this".
+reg <- dwc_registries(here("metadata"))
+cat(glue("gear            : {nrow(reg$gear)} codes, ",
+         "{sum(!is.na(reg$gear$nerc_l22))} with an L22 device id"), "\n")
+cat(glue("life stage      : {nrow(reg$life_stage)} values, ",
+         "{sum(!is.na(reg$life_stage$nerc_s11))} with an S11 concept"), "\n")
+cat(glue("measurement type: {nrow(reg$measurement_type)} types, ",
+         "{sum(!is.na(reg$measurement_type$nerc_p01))} with a P01, ",
+         "{sum(!is.na(reg$measurement_type$units_nerc_p06))} with a P06 unit"), "\n")
+```
+
+```{r}
+#| label: eml
+# the release's own EML, one document per dataset (D-8). A staging release may not
+# carry eml/ yet; the archive is still built and the missing document is reported,
+# never substituted with strings typed here.
+EML_DIR <- file.path(OUT_DIR, "_eml", RELEASE)
+dir.create(EML_DIR, recursive = TRUE, showWarnings = FALSE)
+eml_path_of <- function(k) {
+  local <- file.path(EML_DIR, paste0(k, ".xml"))
+  if (file.exists(local)) return(local)
+  url <- glue("{RELEASES_URL}/{RELEASE}/eml/{k}.xml")
+  ok <- tryCatch({ curl::curl_download(url, local, quiet = TRUE); TRUE },
+                 error = function(e) FALSE)
+  if (ok && file.exists(local)) local else NA_character_
+}
+```
+
+## The plan — every dataset, before anything is written
+
+```{r}
+#| label: plan
+# Decision 21 is MEASURED, not listed: a dataset publishes when it has obs_bio rows
+# and at least one observed taxon carries a WoRMS id. cce-lter_picoplankton-bacteria
+# (flow-cytometry groups, environmental realm) and sio_pic-zooplankton (no taxa) have
+# no obs_bio rows at all, so they fall out by construction rather than by exclusion.
+cand_all <- dwc_datasets(con)
+cand <- if (length(ONLY)) cand_all[cand_all$dataset_key %in% ONLY, , drop = FALSE] else cand_all
+
+names_of <- q("SELECT provider || '_' || dataset AS dataset_key, dataset_name FROM dataset")
+plan <- cand |>
+  left_join(names_of, by = "dataset_key") |>
+  mutate(
+    n_events = vapply(dataset_key, function(k)
+      q("SELECT COUNT(*) n FROM sample WHERE dataset_key = '{k}'")$n, numeric(1)),
+    gear_codes = vapply(dataset_key, function(k)
+      nrow(dataset_gear(reg$gear, k)), numeric(1)),
+    eml = vapply(dataset_key, function(k) !is.na(eml_path_of(k)), logical(1))) |>
+  select(dataset_key, dataset_name, n_events, n_obs, n_taxa, n_worms, n_no_worms,
+         n_no_taxon, absence_rule, gear_codes, eml)
+
+write_csv(plan, file.path(OUT_DIR, "publish_plan.csv"), na = "")
+kable(plan, caption = glue("Darwin Core plan for {RELEASE} — {nrow(plan)} datasets"))
+```
+
+```{r}
+#| label: obs-env-for-candidates
+# eMoF's third grain is "the env rows sitting on THIS dataset's own events". obs_env
+# is 25 M rows across 84 objects hive-partitioned by **measurement_type**, not by
+# dataset, so which datasets it covers cannot be read off the object names — one
+# projection scan of `dataset_key` answers it in ~13 s, and only the candidates' rows
+# are then materialized. Today that is zero rows (every obs_env dataset is
+# environmental: bottle, ctd-cast, dic, mets, picoplankton-bacteria), which the count
+# below STATES rather than assumes — a bio dataset that starts recording its own CTD
+# would light up here with no code change.
+env_by_ds <- q("SELECT dataset_key, COUNT(*) AS n FROM {read_pq('obs_env', hive = TRUE)}
+                GROUP BY 1 ORDER BY 1")
+env_cand <- intersect(env_by_ds$dataset_key, cand$dataset_key)
+cat(glue("obs_env covers: {paste(env_by_ds$dataset_key, collapse = ', ')}"), "\n")
+if (length(env_cand)) {
+  keys <- paste0("'", env_cand, "'", collapse = ", ")
+  dbExecute(con, glue("CREATE TABLE obs_env AS SELECT * FROM
+                       {read_pq('obs_env', hive = TRUE)} WHERE dataset_key IN ({keys})"))
+  cat(glue("\nenv rows on a candidate's own events: ",
+           "{q('SELECT COUNT(*) n FROM obs_env')$n} ({paste(env_cand, collapse = ', ')})"), "\n")
+} else {
+  cat("\nno candidate dataset has obs_env rows — the eMoF env grain is empty\n")
+}
+```
+
+```{r}
+#| label: plan-notes
+bio_all <- q("SELECT DISTINCT dataset_key FROM obs_bio ORDER BY 1")$dataset_key
+no_worms <- setdiff(bio_all, cand_all$dataset_key)
+if (length(no_worms))
+  cat(glue("biological in the core but no taxon resolves to WoRMS ",
+           "(no IPT resource, Decision 21): {paste(no_worms, collapse = ', ')}"), "\n")
+env_only <- setdiff(q("SELECT DISTINCT dataset_key FROM sample")$dataset_key, bio_all)
+cat(glue("\nno obs_bio rows at all (environmental or taxon-free, nothing to publish ",
+         "to OBIS): {paste(sort(env_only), collapse = ', ')}"), "\n")
+if (any(!plan$eml))
+  cat(glue("\nno eml/{{dataset_key}}.xml in {RELEASE} for: ",
+           "{paste(plan$dataset_key[!plan$eml], collapse = ', ')} — ",
+           "build it with build_eml_catalog() + write_eml_files() ",
+           "(release_database.qmd s 3c) before an upload"), "\n")
+```
+
+## Duplicates first — what OBIS already holds for these sources
+
+::: {.callout-warning title="A provider's own record is never duplicated"}
+Before any upload, the OBIS records that already cover the same source are listed
+and resolved **with their owners** (Decision 21): a historical CalCOFI record is
+retired or cross-referenced with its owner's agreement, and a dataset whose
+authority is CCE-LTER or NOAA is never republished by CalCOFI without that
+provider's yes. This table is for Ben and the providers; it blocks nothing here,
+because nothing here uploads.
+:::
+
+```{r}
+#| label: obis-duplicates
+# the curated rows first: metadata/distribution.csv is the record of what CalCOFI
+# already published where, and it is never guessed from a search
+dist <- read_distribution_registry(here("metadata/distribution.csv"))
+known <- dist |>
+  filter(portal %in% c("obis", "ipt")) |>
+  select(dataset_key, portal, id, url, title, status, notes)
+if (nrow(known)) kable(known, caption = "curated OBIS / IPT distributions (distribution.csv)")
+
+obis_search <- function(terms) {
+  # OBIS's dataset search, read-only. The CalCOFI record is NOT findable by the
+  # word "CalCOFI" (measured, 2026-09-05 — that is why distribution.csv carries
+  # its id), so institution and taxon words are what is asked here.
+  out <- lapply(terms, function(tm) {
+    u <- glue("https://api.obis.org/v3/dataset?q={utils::URLencode(tm, reserved = TRUE)}&size=25")
+    j <- tryCatch(jsonlite::fromJSON(u, simplifyVector = FALSE), error = function(e) NULL)
+    r <- if (is.null(j)) list() else j$results
+    if (!length(r)) return(NULL)
+    tibble(
+      term    = tm,
+      obis_id = vapply(r, function(x) x$id %||% NA_character_, ""),
+      title   = vapply(r, function(x) x$title %||% NA_character_, ""),
+      owner   = vapply(r, function(x)
+        paste(unlist(lapply(x$institutes %||% list(), function(i) i$name)), collapse = "; "), ""),
+      records = vapply(r, function(x) as.numeric(x$records %||% NA), numeric(1)),
+      published = vapply(r, function(x) as.character(x$published %||% NA), ""))
+  })
+  bind_rows(out)
+}
+
+if (NET) {
+  hits <- obis_search(c("CalCOFI",
+                        "California Cooperative Oceanic Fisheries Investigations",
+                        "Southwest Fisheries Science Center",
+                        "Scripps Institution of Oceanography",
+                        "California Current Ecosystem LTER"))
+  # OBIS's `q` is a loose full-text OR, so "California Current euphausiid" returns
+  # Happywhale killer whales. The candidate list is therefore narrowed to records
+  # whose OWN title or institute names one of the organizations behind these
+  # datasets — a filter on what came back, never a claim that nothing else exists.
+  who <- "calcofi|cooperative oceanic|southwest fisheries|scripps|california current ecosystem|cce.?lter|farallon|dungeness"
+  hits <- hits |>
+    distinct(obis_id, .keep_all = TRUE) |>
+    filter(grepl(who, tolower(paste(title, owner)))) |>
+    arrange(desc(records))
+  if (nrow(hits)) {
+    kable(hits |> select(-term), caption = paste(
+      "OBIS datasets whose title or institute names one of these datasets' sources —",
+      "resolve each with its owner before an upload (a provider's own record is never",
+      "republished). Not exhaustive: OBIS's text search does not match every record,",
+      "which is why metadata/distribution.csv holds the ids we know."))
+  } else cat("no OBIS dataset named one of these sources in its title or institute\n")
+} else {
+  cat("CALCOFI_OFFLINE=true — the OBIS duplicate check was skipped (not 'no duplicates')\n")
+}
+```
+
+## Build every archive
+
+```{r}
+#| label: build
+results <- list()
+findings <- list()
+
+for (k in plan$dataset_key) {
+  cat(glue("\n--- {k} ---"), "\n")
+  d_dir <- file.path(OUT_DIR, k)
+
+  ev <- dwc_event(con, k, gear = reg$gear, measurement_type = reg$measurement_type)
+  oc <- dwc_occurrence(con, k, life_stage = reg$life_stage,
+                       measurement_type = reg$measurement_type)
+  mf <- dwc_emof(con, k, occurrence = oc, measurement_type = reg$measurement_type,
+                 env = TRUE)
+
+  chk <- dwc_check(ev, oc, mf, dataset_key = k)
+  findings[[k]] <- chk
+  print(chk[, c("finding", "level", "n", "detail")], row.names = FALSE)
+
+  if (any(chk$level == "error")) {
+    # a failing dataset gets NO zip: a broken archive at OBIS is worse than a
+    # missing one, and the finding is what says why
+    cat(glue("SKIPPED — {sum(chk$level == 'error')} error finding(s); no archive written"), "\n")
+    results[[k]] <- tibble(dataset_key = k, status = "failed checks",
+                           n_event = nrow(ev), n_occurrence = nrow(oc), n_emof = nrow(mf),
+                           content_hash = NA_character_, archive = NA_character_)
+    next
+  }
+
+  ipt <- dist |> filter(dataset_key == k, portal == "ipt") |> pull(id)
+  obs_id <- dist |> filter(dataset_key == k, portal == "obis") |> pull(id)
+  a <- dwc_archive(
+    d_dir, ev, oc, mf,
+    eml_path        = eml_path_of(k),
+    dataset_key     = k,
+    version         = RELEASE,
+    ipt_resource    = if (length(ipt)) ipt[1] else NULL,
+    obis_dataset_id = if (length(obs_id)) obs_id[1] else NULL)
+  cat(glue("wrote {basename(a$zip)} ({round(file.size(a$zip) / 1e6, 1)} MB), ",
+           "content_hash {substr(a$content_hash, 1, 12)}"), "\n")
+  results[[k]] <- tibble(dataset_key = k, status = "built",
+                         n_event = nrow(ev), n_occurrence = nrow(oc), n_emof = nrow(mf),
+                         content_hash = a$content_hash, archive = basename(a$zip))
+}
+res <- bind_rows(results)
+```
+
+```{r}
+#| label: build-summary
+kable(res, caption = glue("Darwin Core archives written for {RELEASE}"))
+fin <- bind_rows(findings)
+if (nrow(fin)) kable(fin[fin$finding != "ok", ],
+                     caption = "every finding, by dataset (error = no archive written)")
+```
+
+## Registration status — when is an upload due?
+
+```{r}
+#| label: manifests
+mans <- Sys.glob(file.path(OUT_DIR, "*_manifest.json"))
+if (length(mans)) {
+  st <- bind_rows(lapply(mans, dwc_manifest_status))
+  kable(st, caption = paste(
+    "the manifest each archive carries: `built, not uploaded` until the IPT copy is",
+    "made, then `published (vX)` while the uploaded bytes are these bytes and",
+    "`stale — data changed in vY` once they are not. This is what `registrations[]`",
+    "in datasets.json reads."))
+} else cat("no manifests yet\n")
+```
+
+## Upload — a deliberate manual step
+
+::: {.callout-note title="What this notebook does NOT do"}
+It does not upload. The OBIS-USA IPT (`ipt-obis.gbif.us`) holds CalCOFI's
+resources under Ben's login, and an upload is made only after the dataset's
+provider has agreed (Decision 21) and only when the manifest's `content_hash`
+differs from the published copy's. The steps are in
+[`docs/portals.qmd` § OBIS](https://calcofi.io/docs/portals.html#obis); in short:
+create or open the resource, upload the zip's five files as the source, map the
+Event core + the two extensions from `meta.xml`, publish a new version, then
+record the resulting OBIS dataset id in `metadata/distribution.csv` and stamp
+`uploaded_utc` / `uploaded_hash` into the archive's `{dataset_key}_manifest.json`.
+:::
+
+```{r}
+#| label: cleanup
+dbDisconnect(con, shutdown = TRUE)
+cat("done\n")
+```
