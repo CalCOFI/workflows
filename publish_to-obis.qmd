@@ -357,6 +357,25 @@ for (k in plan$dataset_key) {
   cat(glue("\n--- {k} ---"), "\n")
   d_dir <- file.path(OUT_DIR, k)
 
+  # a release is frozen, so an archive already built for THIS version cannot differ: the
+  # zip + its manifest are the fingerprint, and a re-render reuses them instead of running
+  # the three DwC queries again (2026-09-06). Another version, or a missing zip, rebuilds.
+  prev_zip <- file.path(OUT_DIR, glue("{k}_{RELEASE}.zip"))
+  prev_man <- file.path(OUT_DIR, glue("{k}_manifest.json"))
+  if (file.exists(prev_zip) && file.exists(prev_man)) {
+    pm <- jsonlite::fromJSON(prev_man, simplifyVector = TRUE)
+    if (identical(pm$version, RELEASE) && nzchar(pm$content_hash %||% "")) {
+      cat(glue("archive for {RELEASE} already built ({basename(prev_zip)}, ",
+               "content_hash {substr(pm$content_hash, 1, 12)}) — not rebuilt"), "\n")
+      results[[k]] <- tibble(dataset_key = k, status = "built",
+                             n_event = pm$counts$event %||% NA_integer_,
+                             n_occurrence = pm$counts$occurrence %||% NA_integer_,
+                             n_emof = pm$counts$emof %||% NA_integer_,
+                             content_hash = pm$content_hash, archive = basename(prev_zip))
+      next
+    }
+  }
+
   ev <- dwc_event(con, k, gear = reg$gear, measurement_type = reg$measurement_type)
   oc <- dwc_occurrence(con, k, life_stage = reg$life_stage,
                        measurement_type = reg$measurement_type)

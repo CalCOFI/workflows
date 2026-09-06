@@ -177,11 +177,28 @@ for (s in c("INSTALL httpfs", "LOAD httpfs", "SET enable_progress_bar=false"))
 manifest_rows <- list()
 
 for (key in names(records)) {
+  pkg_dir <- file.path(OUT_DIR, key, glue("{key}_{RELEASE_VERSION}"))
+  # a release is frozen, so a package already built for THIS version from it cannot differ:
+  # its manifest.json is the fingerprint, and a re-render reads it instead of re-exporting
+  # gigabytes of CSV (2026-09-06). A package for another version, or a manifest that names
+  # a file that is gone, is rebuilt.
+  prev <- file.path(pkg_dir, "manifest.json")
+  if (file.exists(prev)) {
+    pm <- jsonlite::fromJSON(prev, simplifyVector = TRUE)
+    eml_ok <- file.exists(file.path(pkg_dir, glue("{key}.xml")))
+    if (identical(pm$version, RELEASE_VERSION) && eml_ok) {
+      manifest_rows[[key]] <- edi_manifest_row(key, RELEASE_VERSION, pm$content_hash,
+                                               n_csv = pm$n_csv, n_other_ref = pm$n_other_ref,
+                                               n_excluded = pm$n_excluded, bytes_total = pm$bytes_total,
+                                               package_id = pm$package_id %||% NA_character_)
+      cat(glue("- `{key}`: package for {RELEASE_VERSION} already built ({pm$n_csv} CSV, ",
+               "{fmt_mb0(pm$bytes_total)}, content_hash {substr(pm$content_hash, 1, 12)}) — not re-exported\n"))
+      next
+    }
+  }
   rec <- records[[key]]
   doc <- build_eml(rec, sidecar = sidecars[[key]], meta = meta_json, coverage = coverage_json,
                    release = release_block, gear = gear)
-
-  pkg_dir <- file.path(OUT_DIR, key, glue("{key}_{RELEASE_VERSION}"))
   dir.create(pkg_dir, recursive = TRUE, showWarnings = FALSE)
 
   rows <- plan_tbl |> filter(dataset_key == key)
