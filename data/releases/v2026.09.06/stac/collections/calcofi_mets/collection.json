@@ -1,0 +1,81 @@
+{
+  "type": "Collection",
+  "stac_version": "1.0.0",
+  "stac_extensions": ["https://stac-extensions.github.io/table/v1.2.0/schema.json", "https://stac-extensions.github.io/scientific/v1.0.0/schema.json"],
+  "id": "calcofi_mets",
+  "title": "CalCOFI METS (Underway TSG/Meteorology)",
+  "description": "Shipboard underway thermosalinograph (TSG) and meteorology data, ~1-minute resolution, recorded continuously along the cruise track.\n",
+  "keywords": ["EARTH SCIENCE > ATMOSPHERE > ATMOSPHERIC WINDS", "EARTH SCIENCE > ATMOSPHERE > ATMOSPHERIC TEMPERATURE > SURFACE TEMPERATURE > AIR TEMPERATURE", "EARTH SCIENCE > ATMOSPHERE > ATMOSPHERIC PRESSURE > SURFACE PRESSURE", "EARTH SCIENCE > OCEANS > OCEAN OPTICS > OCEAN COLOR", "EARTH SCIENCE > OCEANS > OCEAN TEMPERATURE > WATER TEMPERATURE"],
+  "license": "other",
+  "providers": [
+    {
+      "name": "California Cooperative Oceanic Fisheries Investigations",
+      "roles": ["producer", "licensor"],
+      "url": "https://calcofi.org"
+    },
+    {
+      "name": "CalCOFI",
+      "roles": ["processor", "host"],
+      "url": "https://calcofi.io"
+    }
+  ],
+  "extent": {
+    "spatial": {
+      "bbox": [
+        [-125.7906, 29.8225, -117.153, 37.8658]
+      ]
+    },
+    "temporal": {
+      "interval": [
+        [
+          "2004-01-01T00:00:00Z",
+          "2022-12-31T23:59:59Z"
+        ]
+      ]
+    }
+  },
+  "sci:citation": "CalCOFI. Underway (METS) TSG/Meteorology Data. CalCOFI.org.",
+  "table:tables": [
+    {
+      "name": "sample",
+      "description": "One row per physical sampling event at its native grain (site, tow, net, cast, bottle, underway, transect, region pool). An adjacency list: `parent_sample_key` points at the containing event and `root_sample_key` at the top of the chain, so counting distinct events at any level is a single `GROUP BY`."
+    },
+    {
+      "name": "obs",
+      "description": "The occurrence-headline long table: one scalar measurement per row, environmental (`realm = 'env'`) and biological (`realm = 'bio'`) together. Biological taxon is the global `taxon_key`; sub-occurrence detail (length/stage bins, behavior) lives in `obs_attribute`, and event-level effort in `sample_measurement`."
+    },
+    {
+      "name": "obs_mets_full"
+    },
+    {
+      "name": "measurement_type"
+    }
+  ],
+  "summaries": {
+    "calcofi:category": ["Meteorology & Sea State"],
+    "calcofi:variables": ["air_temp_c", "deg_C", "http://vocab.nerc.ac.uk/collection/P01/current/CTMPZZ01/", "Physical Oceanography", "atm_pressure_mb", "mb", "http://vocab.nerc.ac.uk/collection/P01/current/CAPHZZ01/", "Physical Oceanography", "bottom_depth_m", "m", "http://vocab.nerc.ac.uk/collection/P01/current/MBANZZ01/", "Physical Oceanography", "chl_fluor", "ug/L", "http://vocab.nerc.ac.uk/collection/P01/current/CPHLZZXX/", "Productivity & Pigments", "long_wave_rad", "W/m2", "Meteorology & Sea State", "oxygen", "Physical Oceanography", "par_surf", "Productivity & Pigments", "rel_humidity_pct", "percent", "http://vocab.nerc.ac.uk/collection/P01/current/CRELZZ01/", "Physical Oceanography", "short_wave_rad", "W/m2", "Meteorology & Sea State", "sss_psu", "PSU", "http://vocab.nerc.ac.uk/collection/P01/current/PSLTZZ01/", "Physical Oceanography", "sst_c", "deg_C", "http://vocab.nerc.ac.uk/collection/P01/current/TEMPPR01/", "Physical Oceanography", "sw_ph", "http://vocab.nerc.ac.uk/collection/P01/current/PHXXZZXX/", "Carbonate System", "tsg1_salinity_psu", "PSU", "http://vocab.nerc.ac.uk/collection/P01/current/PSALSZ01/", "Physical Oceanography", "tsg1_temp_c", "deg_C", "http://vocab.nerc.ac.uk/collection/P01/current/TEMPSZ01/", "Physical Oceanography", "uws_flow", "L/min", "Physical Oceanography", "wind_dir_deg", "degrees", "http://vocab.nerc.ac.uk/collection/P01/current/EWDAZZ01/", "Meteorology & Sea State", "wind_speed_ms", "m/s", "http://vocab.nerc.ac.uk/collection/P01/current/EWSBZZ01/", "Meteorology & Sea State"]
+  },
+  "links": [
+    {
+      "rel": "root",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "self",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/calcofi_mets/collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "about",
+      "href": "https://calcofi.io/datasets/calcofi_mets/",
+      "type": "text/html",
+      "title": "Dataset page"
+    }
+  ]
+}

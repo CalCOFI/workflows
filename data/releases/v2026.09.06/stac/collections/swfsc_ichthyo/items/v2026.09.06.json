@@ -1,0 +1,888 @@
+{
+  "type": "Feature",
+  "stac_version": "1.0.0",
+  "stac_extensions": ["https://stac-extensions.github.io/table/v1.2.0/schema.json", "https://stac-extensions.github.io/scientific/v1.0.0/schema.json", "https://stac-extensions.github.io/file/v2.1.0/schema.json"],
+  "id": "v2026.09.06",
+  "collection": "swfsc_ichthyo",
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [-179.8217, 0.0017],
+        [-77.2283, 0.0017],
+        [-77.2283, 54.385],
+        [-179.8217, 54.385],
+        [-179.8217, 0.0017]
+      ]
+    ]
+  },
+  "bbox": [-179.8217, 0.0017, -77.2283, 54.385],
+  "properties": {
+    "title": "SWFSC Ichthyoplankton — v2026.09.06",
+    "description": "Ichthyoplankton (fish eggs and larvae) collected by bongo and manta net tows on CalCOFI cruises, processed by SWFSC.\n",
+    "datetime": null,
+    "start_datetime": "1951-01-01T00:00:00Z",
+    "end_datetime": "2023-12-31T23:59:59Z",
+    "created": "2026-09-06T00:00:00Z",
+    "sci:citation": "NOAA Fisheries SWFSC. CalCOFI Ichthyoplankton Database."
+  },
+  "assets": {
+    "obs_partition": {
+      "href": "https://storage.googleapis.com/calcofi-db/ducklake/tables/obs/dataset_key=swfsc_ichthyo/1ad4cc8b42078b1b3c5c6f18/data_0.parquet",
+      "type": "application/x-parquet",
+      "title": "obs (parquet, this dataset's partition)",
+      "roles": ["data"],
+      "file:size": 4028122,
+      "file:checksum": "12203eaa004cb56682ddb66e07ef8527322f77a51c09c7d4f0836e0c167375de062b",
+      "table:columns": [
+        {
+          "name": "obs_id",
+          "description": "Surrogate key, renumbered globally when the release concatenates the per-dataset shards.",
+          "type": "BIGINT"
+        },
+        {
+          "name": "realm",
+          "description": "`env` for physical/chemical measurements, `bio` for organism observations.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "dataset_key",
+          "description": "Provenance stamp: `provider_dataset`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "sample_key",
+          "description": "The sampling event this observation came from; joins `sample`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "grid_key",
+          "description": "CalCOFI station grid cell, denormalized from `sample` so rollups need no join. NULL for region-pooled data.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "cruise_key",
+          "description": "Cruise, denormalized from `sample` so rollups need no join.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "latitude",
+          "description": "Observation latitude (WGS84).",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "longitude",
+          "description": "Observation longitude (WGS84).",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "datetime",
+          "description": "Observation time (UTC). NULL for region-pooled data with no event time.",
+          "type": "TIMESTAMP"
+        },
+        {
+          "name": "depth_min_m",
+          "description": "Shallowest depth this observation represents.",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "depth_max_m",
+          "description": "Deepest depth this observation represents; equal to `depth_min_m` for point measurements (bottle, CTD scan).",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "taxon_key",
+          "description": "Global taxon key, `worms:<AphiaID>` or `itis:<TSN>` for birds. NULL for `env` rows. Joins `taxon`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "life_stage",
+          "description": "Life stage where the source resolves one (larva, adult, juvenile, egg, phyllosoma).",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "measurement_type",
+          "description": "Measured quantity; joins the `measurement_type` vocabulary.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "measurement_value",
+          "description": "The measured value, in the units `measurement_type` declares.",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "measurement_qual",
+          "description": "Source quality flag, verbatim.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "measurement_prec",
+          "description": "Source-reported precision where available.",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "hex_id",
+          "description": "H3 cell at resolution 10, stored as UBIGINT. Aggregate coarser at query time with `h3_cell_to_parent(hex_id, res)` — there is no per-resolution column ladder.",
+          "type": "UBIGINT"
+        }
+      ]
+    },
+    "sample": {
+      "href": "https://storage.googleapis.com/calcofi-db/ducklake/tables/sample/20f8bca6631580d382ef064c/sample.parquet",
+      "type": "application/x-parquet",
+      "title": "sample (parquet)",
+      "roles": ["data"],
+      "file:size": 25947132,
+      "file:checksum": "1220679c7b933da2bee77c9d099b6dcfc94c618e363a4cc423a1c374dcd63a85f285",
+      "table:columns": [
+        {
+          "name": "sample_key",
+          "description": "Globally unique event key, namespaced `dataset_key:sample_type:id` so the same integer id in two datasets — or at two event levels in one dataset — never collides.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "sample_type",
+          "description": "Event grain: `site`, `tow`, `net`, `cast`, `bottle`, `underway`, `transect` or `region_pool`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "parent_sample_key",
+          "description": "The containing event (net → tow → site; bottle → cast). NULL at the top of the chain. Flat adjacency list: attributes are not inherited.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "root_sample_key",
+          "description": "Top of this event's containment chain; equals `sample_key` for single-level datasets. Use `count(DISTINCT root_sample_key)` to count stations/casts irrespective of grain.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "dataset_key",
+          "description": "Provenance stamp: `provider_dataset`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "grid_key",
+          "description": "CalCOFI station grid cell. NULL where the dataset has no station assignment (region-pooled phytoplankton).",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "site_key",
+          "description": "CalCOFI station natural key as the source records it (line/station, e.g. `090.0 060.0`). Present on 13 of the 18 source event tables, so it is carried on the event dimension rather than lost to consolidation; `grid_key` is the derived grid cell, this is the source's own station id.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "cruise_key",
+          "description": "CalCOFI cruise natural key `YYYY-MM-NODC`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "order_occ",
+          "description": "Order in which the station was occupied on the cruise. Source spelling varies (`order_occ`, `ord_occ`) and CTD stores it as text; normalised to an integer here.",
+          "type": "INTEGER"
+        },
+        {
+          "name": "latitude",
+          "description": "Event latitude (WGS84).",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "longitude",
+          "description": "Event longitude (WGS84).",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "datetime",
+          "description": "Event start time (UTC).",
+          "type": "TIMESTAMP"
+        },
+        {
+          "name": "depth_min_m",
+          "description": "Shallowest depth sampled by this event.",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "depth_max_m",
+          "description": "Deepest depth sampled by this event.",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "tow_type",
+          "description": "Net gear code where the dataset records one (C1/CB/CV/PV oblique or vertical, MT manta); NULL for gears and datasets without one. Needed to compute gear-appropriate CPUE.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "data_stage",
+          "description": "The source's own processing state for this event: `final` (post-cruise calibrations applied) or `preliminary` (**not for publication** — the source warns that oxygen, nitrate and chlorophyll may change significantly once calibrated). Populated by `calcofi_ctd-cast`; NULL where the dataset draws no such distinction, which is not a claim that the data are final.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "geom",
+          "description": "Point geometry minted from `longitude`/`latitude` (OGC:CRS84).",
+          "type": "GEOMETRY('EPSG:4326')"
+        },
+        {
+          "name": "source_uuid",
+          "type": "UUID"
+        },
+        {
+          "name": "seafloor_depth_m",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "station_uuid",
+          "type": "UUID"
+        },
+        {
+          "name": "station_uuid_method",
+          "type": "VARCHAR"
+        }
+      ]
+    },
+    "obs_attribute": {
+      "href": "https://storage.googleapis.com/calcofi-db/ducklake/tables/obs_attribute/df2caf362cc9829013c29c0c/obs_attribute.parquet",
+      "type": "application/x-parquet",
+      "title": "obs_attribute (parquet)",
+      "roles": ["data"],
+      "file:size": 1849619,
+      "file:checksum": "1220db65be59c116553572c28110d13b695438b1d59f12fdad0c6c66e1939709a16a",
+      "table:columns": [
+        {
+          "name": "obs_attribute_id",
+          "description": "Surrogate key.",
+          "type": "BIGINT"
+        },
+        {
+          "name": "dataset_key",
+          "description": "Provenance stamp: `provider_dataset`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "sample_key",
+          "description": "The sampling event; joins `sample`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "taxon_key",
+          "description": "Global taxon key; joins `taxon`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "life_stage",
+          "description": "Life stage the attribution applies to.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "measurement_type",
+          "description": "The attribute being broken down: `body_length`, `stage` or `behavior`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "bin_value",
+          "description": "Numeric bin — length in mm, stage number. NULL for categorical attributes.",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "bin_label",
+          "description": "Category label — stage description, behavior name. NULL for purely numeric bins.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "count",
+          "description": "Number of individuals in this bin.",
+          "type": "INTEGER"
+        },
+        {
+          "name": "measurement_qual",
+          "description": "Source quality flag, verbatim.",
+          "type": "VARCHAR"
+        }
+      ]
+    },
+    "sample_measurement": {
+      "href": "https://storage.googleapis.com/calcofi-db/ducklake/tables/sample_measurement/3ca15d80943300a06e48d290/sample_measurement.parquet",
+      "type": "application/x-parquet",
+      "title": "sample_measurement (parquet)",
+      "roles": ["data"],
+      "file:size": 2017797,
+      "file:checksum": "12206b4182c1b153a838891eed1844b351a9e3e643ac7b90a6a912ba5c43aaf70901",
+      "table:columns": [
+        {
+          "name": "sample_measurement_id",
+          "description": "Surrogate key.",
+          "type": "BIGINT"
+        },
+        {
+          "name": "sample_key",
+          "description": "The sampling event this effort measurement describes; joins `sample`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "dataset_key",
+          "description": "Provenance stamp: `provider_dataset`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "measurement_type",
+          "description": "Measured quantity; joins the `measurement_type` vocabulary.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "measurement_value",
+          "description": "The measured value, in the units `measurement_type` declares.",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "measurement_qual",
+          "description": "Source quality flag, verbatim.",
+          "type": "VARCHAR"
+        }
+      ]
+    },
+    "taxon": {
+      "href": "https://storage.googleapis.com/calcofi-db/ducklake/tables/taxon/cc3a951dc5223524b62fa88a/taxon.parquet",
+      "type": "application/x-parquet",
+      "title": "taxon (parquet)",
+      "roles": ["data"],
+      "file:size": 87824,
+      "file:checksum": "12203519d4cabdab1a78c1b1a99993da6de6381d8683d7d0757b87c7fea566952fef",
+      "table:columns": [
+        {
+          "name": "taxon_key",
+          "description": "Global taxon key: lowercase authority prefix plus id, `worms:127023` or `itis:176754`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "worms_id",
+          "description": "WoRMS AphiaID.",
+          "type": "INTEGER"
+        },
+        {
+          "name": "itis_id",
+          "description": "ITIS Taxonomic Serial Number.",
+          "type": "INTEGER"
+        },
+        {
+          "name": "gbif_id",
+          "description": "GBIF backbone taxon key.",
+          "type": "INTEGER"
+        },
+        {
+          "name": "ncbi_id",
+          "description": "NCBI Taxonomy id.",
+          "type": "INTEGER"
+        },
+        {
+          "name": "inat_id",
+          "description": "iNaturalist taxon id.",
+          "type": "INTEGER"
+        },
+        {
+          "name": "scientific_name",
+          "description": "Accepted scientific name.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "common_name",
+          "description": "Common name where one is recorded.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "rank",
+          "description": "Taxonomic rank.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "rank_order",
+          "description": "Ordinal for sorting ranks from kingdom down.",
+          "type": "INTEGER"
+        },
+        {
+          "name": "taxonomic_status",
+          "description": "Status as fetched from the keying authority (accepted, unaccepted, superseded combination, ...). Read it with `status_checked` — before v2026.08.05 this column was the literal string \"accepted\" on every row, stamped rather than fetched.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "status_checked",
+          "description": "Date `taxonomic_status` was last confirmed against the authority. A status with no check date is not a fact.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "parent_taxon_key",
+          "description": "Lineage parent; walk this to expand a taxon to its descendants.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "kingdom",
+          "description": "Kingdom.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "phylum",
+          "description": "Phylum.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "class",
+          "description": "Class.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "order_taxon",
+          "description": "Order (named `order_taxon` because `order` is a SQL keyword).",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "family",
+          "description": "Family.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "notes",
+          "description": "Append-only provenance log, one datestamped line per entry: how each id was resolved and any re-key onto an authority-accepted id (e.g. `itis:174553` Puffinus griseus -> `itis:1255050` Ardenna grisea). The dataset's own original code and name stay in `dataset_taxon`.",
+          "type": "VARCHAR"
+        }
+      ]
+    },
+    "dataset_taxon": {
+      "href": "https://storage.googleapis.com/calcofi-db/ducklake/tables/dataset_taxon/3a26fcfe5701d1301faeb8f8/dataset_taxon.parquet",
+      "type": "application/x-parquet",
+      "title": "dataset_taxon (parquet)",
+      "roles": ["data"],
+      "file:size": 57947,
+      "file:checksum": "12201cfc4c0b4dd1ac05e4e630c2dca5c972bf648b76376dcbed0999ccc7f6ab4f50",
+      "table:columns": [
+        {
+          "name": "ds_taxon_key",
+          "description": "Key of this crosswalk row, `<dataset-or-known-list>:<local code>`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "dataset_key",
+          "description": "The dataset whose vocabulary this row belongs to.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "taxon_key",
+          "description": "The global taxon it resolves to; joins `taxon`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "ds_scientific_name",
+          "description": "Scientific name as the source dataset spells it.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "ds_common_name",
+          "description": "Common name as the source dataset spells it.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "ds_taxa_code",
+          "description": "The dataset's own code, as stored on its measurement rows.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "ds_source_json",
+          "type": "VARCHAR"
+        }
+      ]
+    },
+    "cruise": {
+      "href": "https://storage.googleapis.com/calcofi-db/ducklake/tables/cruise/829f8b61e2af101e53a0c484/cruise.parquet",
+      "type": "application/x-parquet",
+      "title": "cruise (parquet)",
+      "roles": ["data"],
+      "file:size": 19615,
+      "file:checksum": "12208118ed2008c97c72bb67ad137aac0682a5d926a94ad45bcc33da23bc2fd797d4",
+      "table:columns": [
+        {
+          "name": "cruise_uuid",
+          "description": "CalCOFI species identifier, primary key in species table",
+          "type": "UUID"
+        },
+        {
+          "name": "date_ym",
+          "description": "Cruise year and month — the YYYY-MM half of cruise_key.",
+          "type": "DATE"
+        },
+        {
+          "name": "ship_key",
+          "description": "FK to ship; the natural key of the vessel that ran the cruise.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "_source_file",
+          "description": "Provenance: the source file this row was read from.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "_source_row",
+          "description": "Provenance: 1-based row number within _source_file, so a value can be traced back to its line.",
+          "type": "INTEGER"
+        },
+        {
+          "name": "_ingested_at",
+          "description": "Provenance: UTC timestamp of the ingest run that produced this row.",
+          "type": "TIMESTAMP"
+        },
+        {
+          "name": "_source_uuid",
+          "description": "Provenance: the UUID the source record carried where it minted one.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "cruise_key",
+          "description": "Natural primary key in YYMMKK format (2-digit year + 2-digit month + ship_key)",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "date_min",
+          "type": "DATE"
+        },
+        {
+          "name": "date_max",
+          "type": "DATE"
+        },
+        {
+          "name": "year",
+          "description": "Cruise year extracted from date_ym.",
+          "type": "INTEGER"
+        },
+        {
+          "name": "month",
+          "description": "Cruise month extracted from date_ym.",
+          "type": "INTEGER"
+        },
+        {
+          "name": "ship_name",
+          "description": "Ship name as resolved against NODC ship registry.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "ship_nodc",
+          "description": "NODC ship code.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "ichthyo",
+          "description": "Distinct sites sampled by SWFSC ichthyo on this cruise.",
+          "type": "BIGINT"
+        },
+        {
+          "name": "bottle",
+          "description": "Distinct sites sampled by CalCOFI bottle casts on this cruise.",
+          "type": "BIGINT"
+        },
+        {
+          "name": "ctd_cast",
+          "description": "Distinct sites sampled by CTD casts on this cruise.",
+          "type": "BIGINT"
+        },
+        {
+          "name": "dic",
+          "description": "Distinct sites with NCEI DIC samples on this cruise.",
+          "type": "BIGINT"
+        },
+        {
+          "name": "cruise_key_method",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "cruise_key_datasets",
+          "type": "VARCHAR"
+        }
+      ]
+    },
+    "ship": {
+      "href": "https://storage.googleapis.com/calcofi-db/ducklake/tables/ship/9a88861433301d3665cb140d/ship.parquet",
+      "type": "application/x-parquet",
+      "title": "ship (parquet)",
+      "roles": ["data"],
+      "file:size": 1238,
+      "file:checksum": "12206c320d5032a33e3d54295957e09d607ad19f39379e1cb6567de0da9e91dd65da",
+      "table:columns": [
+        {
+          "name": "ship_key",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "ship_name",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "ship_nodc",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "_source_file",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "_source_row",
+          "type": "INTEGER"
+        },
+        {
+          "name": "_ingested_at",
+          "type": "TIMESTAMP"
+        },
+        {
+          "name": "_source_uuid",
+          "type": "VARCHAR"
+        }
+      ]
+    },
+    "lookup": {
+      "href": "https://storage.googleapis.com/calcofi-db/ducklake/tables/lookup/4638ecc002bce55650565636/lookup.parquet",
+      "type": "application/x-parquet",
+      "title": "lookup (parquet)",
+      "roles": ["data"],
+      "file:size": 1597,
+      "file:checksum": "122021f96f3971d403fdac5c50d5e5e4fba9cd1ba2d3c0bee6ee3637091b3e9b8fda",
+      "table:columns": [
+        {
+          "name": "lookup_id",
+          "description": "Sequential integer primary key",
+          "type": "INTEGER"
+        },
+        {
+          "name": "lookup_type",
+          "description": "Category: 'egg_stage', 'larva_stage', or 'tow_type'",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "lookup_num",
+          "description": "Numeric code for the lookup value",
+          "type": "INTEGER"
+        },
+        {
+          "name": "lookup_chr",
+          "description": "Character code for the lookup value (e.g. YOLK, PREF)",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "description",
+          "description": "Human-readable description of the lookup value",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "_source_file",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "_source_row",
+          "type": "INTEGER"
+        },
+        {
+          "name": "_ingested_at",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "_source_uuid",
+          "type": "VARCHAR"
+        }
+      ]
+    },
+    "grid": {
+      "href": "https://storage.googleapis.com/calcofi-db/ducklake/tables/grid/2b546ac2ee0a112afbf96bd5/grid.parquet",
+      "type": "application/x-parquet",
+      "title": "grid (parquet)",
+      "roles": ["data"],
+      "file:size": 102994,
+      "file:checksum": "12205a1617386223025e515602d4dda5da92d1aebca41ef33b13ab882e2e1fc53493",
+      "table:columns": [
+        {
+          "name": "grid_key",
+          "description": "Natural primary key (e.g. st60-ln80 or st60-ln80_hist for historical)",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "station",
+          "description": "Offshore component of CalCOFI coordinate system",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "line",
+          "description": "Alongshore component of CalCOFI coordinate system",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "shore",
+          "description": "Shore classification (nearshore, offshore, etc.)",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "pattern",
+          "description": "Station pattern: 'standard' or 'historical'",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "spacing",
+          "description": "Station spacing in nautical miles",
+          "type": "INTEGER"
+        },
+        {
+          "name": "zone",
+          "description": "Combined shore-pattern zone label",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "area_km2",
+          "description": "Grid cell area",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "geom",
+          "description": "Polygon geometry (WGS84 EPSG:4326) of grid cell",
+          "type": "GEOMETRY('EPSG:4326')"
+        },
+        {
+          "name": "geom_ctr",
+          "description": "Point geometry (WGS84 EPSG:4326) of grid cell centroid",
+          "type": "GEOMETRY('EPSG:4326')"
+        }
+      ]
+    },
+    "swfsc_ichthyo": {
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/swfsc_ichthyo/collection.json",
+      "type": "application/json",
+      "roles": ["overview"],
+      "title": "STAC collection"
+    },
+    "netcdf": {
+      "href": "https://storage.calcofi.io/calcofi-files-public/netcdf/swfsc_ichthyo/v2026.09.04/swfsc_ichthyo.nc",
+      "type": "application/x-netcdf",
+      "roles": ["data"],
+      "title": "CF netCDF"
+    },
+    "swfsc_ichthyo_attribute": {
+      "href": "https://erddap.calcofi.io/erddap/tabledap/swfsc_ichthyo_attribute.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "SWFSC Ichthyoplankton — length/stage frequency"
+    },
+    "swfsc_ichthyo_2": {
+      "href": "https://erddap.calcofi.io/erddap/tabledap/swfsc_ichthyo.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "SWFSC Ichthyoplankton — observations"
+    },
+    "swfsc_ichthyo_sample": {
+      "href": "https://erddap.calcofi.io/erddap/tabledap/swfsc_ichthyo_sample.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "SWFSC Ichthyoplankton — sampling events"
+    },
+    "iso19115": {
+      "href": "https://erddap.calcofi.io/erddap/metadata/iso19115/xml/swfsc_ichthyo_iso19115.xml",
+      "type": "application/xml",
+      "roles": ["metadata"],
+      "title": "ISO 19115-3 metadata (ERDDAP)"
+    },
+    "notebook": {
+      "href": "https://calcofi.io/workflows/ingest_swfsc_ichthyo.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "ingest notebook"
+    },
+    "page": {
+      "href": "https://calcofi.org/data/marine-ecosystem-data/fish-eggs-larvae/",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "calcofi.org data page"
+    },
+    "0e223f55-c826-4513-ae9a-b04cbf2e189c": {
+      "href": "https://obis.org/dataset/0e223f55-c826-4513-ae9a-b04cbf2e189c",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "CalCOFI Fish Larvae & Egg Tows"
+    },
+    "calcofi_ichthyo": {
+      "href": "https://ipt-obis.gbif.us/resource?r=calcofi_ichthyo",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "CalCOFI Fish Larvae & Egg Tows (OBIS-USA IPT resource)"
+    },
+    "erdCalCOFIlrvcnt": {
+      "href": "https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFIlrvcnt.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "CalCOFI NOAA Fish Larvae Counts"
+    },
+    "erdCalCOFIlrvsiz": {
+      "href": "https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFIlrvsiz.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "CalCOFI NOAA Fish Larvae Sizes"
+    },
+    "erdCalCOFIlrvstg": {
+      "href": "https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFIlrvstg.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "CalCOFI NOAA Fish Larvae Stages"
+    },
+    "erdCalCOFIeggcnt": {
+      "href": "https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFIeggcnt.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "CalCOFI NOAA Fish Egg Counts"
+    },
+    "erdCalCOFIeggstg": {
+      "href": "https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFIeggstg.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "CalCOFI NOAA Fish Egg Stages"
+    },
+    "erdCalCOFIinvcnt": {
+      "href": "https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFIinvcnt.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "CalCOFI NOAA Invertebrate Counts (cephalopods)"
+    },
+    "erdCalCOFIinvsiz": {
+      "href": "https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFIinvsiz.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "CalCOFI NOAA Invertebrate Sizes (cephalopods)"
+    },
+    "erdCalCOFItows": {
+      "href": "https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFItows.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "CalCOFI NOAA Ichthyoplankton Tows"
+    },
+    "edi.109.4": {
+      "href": "https://portal.edirepository.org/nis/mapbrowse?packageid=edi.109.4",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "CALCOFI fish larvae at 66 standard stations, 1966 - ongoing"
+    },
+    "1a1a7812-48f9-4325-8ad0-e51e67e366ba": {
+      "href": "https://data.caloos.org/#module-metadata/1a1a7812-48f9-4325-8ad0-e51e67e366ba",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "CalCOFI Fish Eggs & Larvae Counts/Stages from net tows and CUFES (CalOOS module)"
+    }
+  },
+  "links": [
+    {
+      "rel": "root",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/swfsc_ichthyo/collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "collection",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/swfsc_ichthyo/collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "self",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/swfsc_ichthyo/items/v2026.09.06.json",
+      "type": "application/json"
+    }
+  ]
+}

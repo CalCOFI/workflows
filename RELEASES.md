@@ -8,6 +8,8 @@ versions). Conventions: see `CLAUDE.md` § "RELEASES.md is not optional".
 
 # Unreleased
 
+# v2026.09.06 (2026-09-06)
+
 ## The dataset catalog record says what a page needs to say (schema 1.1)
 
 `datasets.json` grew five fields, all additive, all read from a registry the team already edits

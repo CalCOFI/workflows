@@ -1,0 +1,201 @@
+{
+  "type": "Feature",
+  "stac_version": "1.0.0",
+  "stac_extensions": ["https://stac-extensions.github.io/table/v1.2.0/schema.json", "https://stac-extensions.github.io/file/v2.1.0/schema.json"],
+  "id": "v2026.09.06",
+  "collection": "cce-lter_zooscan",
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [-124, 30.42],
+        [-117.77, 30.42],
+        [-117.77, 34.45],
+        [-124, 34.45],
+        [-124, 30.42]
+      ]
+    ]
+  },
+  "bbox": [-124, 30.42, -117.77, 34.45],
+  "properties": {
+    "title": "ZooScan PRPOOS Zooplankton — v2026.09.06",
+    "description": "Zooplankton abundance, carbon biomass, and size (Feret diameter, individual carbon content) from ZooScan optical imaging of CalCOFI / CCE-LTER PRPOOS net tows on lines 80, 87 and 90, 2005-present, machine-classified into 23 bioclasses (copepod groups, euphausiids, chaetognaths, appendicularians, salps, doliolids, pteropods, rhizaria and more). One row per (sample, taxon, measurement_type); per-station tows. Source: SIO Ocean Informatics ZooScan portal (Ohman Lab; interface by Marina Frants).\n",
+    "datetime": null,
+    "start_datetime": "2005-01-01T00:00:00Z",
+    "end_datetime": "2026-12-31T23:59:59Z",
+    "created": "2026-09-06T00:00:00Z",
+    "license": "custom"
+  },
+  "assets": {
+    "obs_partition": {
+      "href": "https://storage.googleapis.com/calcofi-db/ducklake/tables/obs/dataset_key=cce-lter_zooscan/8767afb6413867e98cfceee3/data_0.parquet",
+      "type": "application/x-parquet",
+      "title": "obs (parquet, this dataset's partition)",
+      "roles": ["data"],
+      "file:size": 636768,
+      "file:checksum": "1220a47319cbb94471d72e13561cc89a80dd0410c36c21179ce4c42c4ae8dd32d979",
+      "table:columns": [
+        {
+          "name": "obs_id",
+          "description": "Surrogate key, renumbered globally when the release concatenates the per-dataset shards.",
+          "type": "BIGINT"
+        },
+        {
+          "name": "realm",
+          "description": "`env` for physical/chemical measurements, `bio` for organism observations.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "dataset_key",
+          "description": "Provenance stamp: `provider_dataset`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "sample_key",
+          "description": "The sampling event this observation came from; joins `sample`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "grid_key",
+          "description": "CalCOFI station grid cell, denormalized from `sample` so rollups need no join. NULL for region-pooled data.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "cruise_key",
+          "description": "Cruise, denormalized from `sample` so rollups need no join.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "latitude",
+          "description": "Observation latitude (WGS84).",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "longitude",
+          "description": "Observation longitude (WGS84).",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "datetime",
+          "description": "Observation time (UTC). NULL for region-pooled data with no event time.",
+          "type": "TIMESTAMP"
+        },
+        {
+          "name": "depth_min_m",
+          "description": "Shallowest depth this observation represents.",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "depth_max_m",
+          "description": "Deepest depth this observation represents; equal to `depth_min_m` for point measurements (bottle, CTD scan).",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "taxon_key",
+          "description": "Global taxon key, `worms:<AphiaID>` or `itis:<TSN>` for birds. NULL for `env` rows. Joins `taxon`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "life_stage",
+          "description": "Life stage where the source resolves one (larva, adult, juvenile, egg, phyllosoma).",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "measurement_type",
+          "description": "Measured quantity; joins the `measurement_type` vocabulary.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "measurement_value",
+          "description": "The measured value, in the units `measurement_type` declares.",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "measurement_qual",
+          "description": "Source quality flag, verbatim.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "measurement_prec",
+          "description": "Source-reported precision where available.",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "hex_id",
+          "description": "H3 cell at resolution 10, stored as UBIGINT. Aggregate coarser at query time with `h3_cell_to_parent(hex_id, res)` — there is no per-resolution column ladder.",
+          "type": "UBIGINT"
+        }
+      ]
+    },
+    "cce-lter_zooscan": {
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/cce-lter_zooscan/collection.json",
+      "type": "application/json",
+      "roles": ["overview"],
+      "title": "STAC collection"
+    },
+    "netcdf": {
+      "href": "https://storage.calcofi.io/calcofi-files-public/netcdf/cce-lter_zooscan/v2026.09.04/cce-lter_zooscan.nc",
+      "type": "application/x-netcdf",
+      "roles": ["data"],
+      "title": "CF netCDF"
+    },
+    "cce-lter_zooscan_2": {
+      "href": "https://erddap.calcofi.io/erddap/tabledap/cce-lter_zooscan.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "ZooScan PRPOOS Zooplankton — observations"
+    },
+    "cce-lter_zooscan_sample": {
+      "href": "https://erddap.calcofi.io/erddap/tabledap/cce-lter_zooscan_sample.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "ZooScan PRPOOS Zooplankton — sampling events"
+    },
+    "iso19115": {
+      "href": "https://erddap.calcofi.io/erddap/metadata/iso19115/xml/cce-lter_zooscan_iso19115.xml",
+      "type": "application/xml",
+      "roles": ["metadata"],
+      "title": "ISO 19115-3 metadata (ERDDAP)"
+    },
+    "notebook": {
+      "href": "https://calcofi.io/workflows/ingest_cce-lter_zooscan.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "ingest notebook"
+    },
+    "page": {
+      "href": "https://calcofi.org/data/marine-ecosystem-data/zooplankton/",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "calcofi.org data page"
+    },
+    "source": {
+      "href": "https://oceaninformatics.ucsd.edu/zooscandb/",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "source"
+    }
+  },
+  "links": [
+    {
+      "rel": "root",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/cce-lter_zooscan/collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "collection",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/cce-lter_zooscan/collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "self",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/cce-lter_zooscan/items/v2026.09.06.json",
+      "type": "application/json"
+    }
+  ]
+}

@@ -30,6 +30,111 @@
 - [ ] rename `swfsc_inverts` to `swfsc_invert` including `ingest_swfsc_inverts.qmd` -> `ingest_swfsc_invert.qmd`
 - [ ] `ingest_calcofi_ctd-cast.qmd` needs a sync to GCS for just the used CSV files so saved in GCS `archive/`, not just GCS `_sync/`
 
+## 2026-09-06 Explorer UI simplify
+
+Despite the speed and power of all lenses in one app (whereas individual before) in the Explorer app @../explore, colleagues still feel a bit overwhelmed by the interface.
+
+How can we maintain all the functionality but present a more soothing and welcoming interface?
+
+I have some ideas, but don't want to predispose ones you may come up with, so please create artifact drafts for us to iterate.
+
+---
+
+The drafts are on a design canvas: ⧉ https://claude.ai/code/artifact/83dd9c7d-b174-4d89-bf13-c920630216a0
+
+What overwhelms, measured on the live site at 1440 × 900 with the tour off:
+
+┌─────────────────────────────────────┬─────┐
+│                                     │     │
+├─────────────────────────────────────┼─────┤
+│ Interactive controls on first paint │ 45  │
+├─────────────────────────────────────┼─────┤
+│ Of those in the left rail           │ 19  │
+├─────────────────────────────────────┼─────┤
+│ Numbers on screen before any choice │ 11  │
+├─────────────────────────────────────┼─────┤
+│ Folding idioms in play              │ 4   │
+└─────────────────────────────────────┴─────┘
+
+The rail also opens on the lens before the data, and the first words a newcomer meets are "denominator", "positive-only" and "anomaly vs monthly climatology".
+
+What is on the canvas. A "Today" baseline drawn from the app's own source, a "Shared moves" board with a table giving every one of 18 controls a named home in each direction, and four directions that each change one thing:
+
+- A · The sentence. The view reads as one sentence, and every bold part is a control that opens today's pickers. The rail is gone; a Details panel holds what it used to show.
+- B · Four steps. The rail becomes an order: What, View as, Refine, Take it with you. One step is open at a time and the rest are summarised in a line.
+- C · Quiet map. A full-bleed map, one floating panel with three tabs, one chip that merges legend and status, and lens results docked in a tray instead of floating over the stations they describe.
+- D · Start with a question. A welcome with two doors and four real questions, each a URL the app already understands, plus a Guided | Full switch that keeps the expert controls one disclosure away.
+
+They compose rather than compete. My take, written as a note on the canvas and not a verdict: D's welcome and a Guided default, B's order inside the rail, C's docking and view chip, and A's sentence as the readout in that chip rather than as the control.
+
+Assumptions: static mockups in the light theme, a stand-in map drawn on the brand's map tokens with the real station grid, and illustrative data dots. Nothing is removed in any direction.
+
+---
+
+Wow! I love what all of the prototypes bring. Can you make a final recommendation, perhaps an amalgum of the best ideas? And can we reasonably collapse Depth by default (since not applicable to biology) and signal its availability (vs auto-open) when choosing Environment sampled at depth?
+
+---
+
+The canvas now opens on a "Recommended" page: ⧉ https://claude.ai/code/artifact/83dd9c7d-b174-4d89-bf13-c920630216a0
+
+The recommendation keeps the rail people already know and takes one thing from each sketch:
+
+- From D: the welcome with two doors and four real questions, and a "More options" disclosure that holds the expert controls: summary statistic, standardized-as with its formulas, zeros counted, dataset pills, sources.
+- From B: the rail's order. Data, then View as, then Refine, then Take it with you. A plain line under the active lens, with its options beneath it.
+- From C: one view chip at the top of the map that merges legend and status, one corner cluster for the map buttons, and results docked in the bottom tray instead of floating over the stations.
+- From A: the sentence, as the readout in that chip rather than as the control, so a screenshot says what it shows.
+
+Two decisions on the way. Disclosures that remember their state replace a Guided | Full mode, so there is no mode to get lost in. The tray grows for a section or cruise and folds to a pill, so nothing covers the map by itself.
+
+┌───────────────────────────┬───────┬─────────────┐
+│        First paint        │ Today │ Recommended │
+├───────────────────────────┼───────┼─────────────┤
+│ Controls                  │ 45    │ about 30    │
+├───────────────────────────┼───────┼─────────────┤
+│ Numbers before any choice │ 11    │ 1           │
+├───────────────────────────┼───────┼─────────────┤
+│ Folding idioms            │ 4     │ 1           │
+└───────────────────────────┴───────┴─────────────┘
+
+Depth: yes, and it is cheap. The right rail starts as the app's 28 px pill and never opens itself. The board "The Depth pill · three states" specifies it:
+
+- Quiet. The pick has no depth axis, such as ichthyo larvae. The pill is muted and says only "Depth"; clicking it opens the honest empty state.
+- Available. The moment a variable sampled at depth arrives, the pill turns on: the band in its label, a small sparkline of the mean profile, one 600 ms pulse. It stays folded and nothing else moves.
+- Brushed. The band becomes the label, yellow on the sparkline, with a reset. The state travels in the URL, and a shared link that names a band opens the rail.
+
+Availability is also signalled before the pick and beside it: every variable row in the picker carries its sampled depth span, the "0–500 m" chip appears in Refine only when depth applies, and the view chip's readout carries the band. The app already has the parts, the muted and pulse props on the rail, the sparkline and the 28 px fold. The change is the default state and what the pill says.
+
+The four directions moved to a second page of the canvas, unchanged, for reference.
+
+---
+
+Let's create a 3rd page for another rec that uses the C. Quiet Map as the basis with floating panels. This has the lightest feel.
+
+Be sure to maintain the expand / collapse / resize / move ability for all panels.
+
+The welcoming modal is unclear with only the "I will cite the datasets I use" as being the button to proceed. Usually this is a checkbox clicked before proceeding, but that may also be a bit dated.
+
+The A. Sentence could be an even more literal sentence at the top that also acts like a title of what the person is viewing. Adding an expansion button to it could be provide an alternative view of the same controls as the Explore (should probably be "Select") tab of the the C. Quiet Map panel for changing.
+
+"Take it with you" is a bit verbose, so prefer "Share".
+
+Please feel free to take liberties beyond what I specify here to go to the intent, not the exact instruction.
+
+---
+
+The canvas now opens on the new page: ⧉ https://claude.ai/code/artifact/83dd9c7d-b174-4d89-bf13-c920630216a0
+
+Page 3, "Recommended · light (floating)", builds on C and holds four boards:
+
+- First open. The map is the page. A title sentence sits at the top and reads as prose: "Pacific sardine larvae, as the mean per 10 m² of sea surface at each station, across all years." The legend and the observation count sit beside it, and its caret expands it. The Select panel floats top-left with tabs Select, Refine and Share. Years floats along the bottom. Depth is the folded pill on the right edge.
+- The sentence expanded. The title turns into chips, and a chip opens the same picker the panel would; the variable tree is shown open with each variable's sampled depth span. One control surface at a time: opening the sentence folds the Select panel to a pill, and opening the panel closes the sentence. Both write the same state. The section is its own floating panel, Years is collapsed to a pill above it, and Depth signals on the right edge without opening.
+- Every panel. The same controls on each: move by dragging the title bar, collapse to a labelled pill on the nearest edge, expand to fill the map with Esc to restore, and resize from the corner grip or any edge. Result panels add export and close; Select, Years and Depth collapse instead of closing. Refine and Share are tabs of the Select panel, so there is one panel to find. Resize is the one addition to the app's existing floating-card code.
+- Welcome. It floats over the live map with no dim. The primary button is "Start exploring", and the doors and questions proceed too. The citation norm is one sentence with a link, so there is no checkbox and no promise-as-button. If the team wants an explicit acknowledgement kept, the button can read "Start exploring · I'll cite what I use".
+
+"Share" replaces "Take it with you" on the rail page too, and C's first tab is now "Select". The rail recommendation moved to page 2 and the sketches to page 3, unchanged.
+
+Liberties taken toward the intent: the title sentence is pinned rather than a movable panel, since it is the view's name; double-clicking a title bar snaps a panel back to its dock; and the welcome comes back from Help so dismissing it costs nothing.
+
 ## 2026-09-05 CalCOFI.io datasets UI cleanup
 
 Write a plan to refresh the CalCOFI.io website UI with the newly added datasets. I am offering a few suggestions, but be exhaustive and creative here. Refer to and possibly even update the v2 branding, and work on communicating emphasis appropriately.
@@ -103,6 +208,152 @@ There is a HUGE amount of white space [img]
 The SQL could populate the db-query custom field if missing existing queries.
 
 Also the ERDDAP double listing is confusing, once for Downloads in formats that page and info, and another for Services 
+
+---
+
+All six phases are done and deployed. Everything below is live and verified against https://calcofi.io, not just localhost.
+
+Live now
+- https://calcofi.io/datasets/ — the grid
+- https://calcofi.io/datasets/calcofi_ctd-cast/ · https://calcofi.io/datasets/swfsc_ichthyo/ · https://calcofi.io/datasets/calcofi_prodo/ (a holding)
+- https://calcofi.io/brand/v2/ — the specimen, with the additions
+
+Your four findings, all fixed and deployed
+
+1. The blank space above Access — gone. The head band is now the only two-column region and its second column is the map, bounded to the title block by construction: the columns measure 399 px and 399 px, a gap of 0.
+2. No STAC links — the record carries no stac distribution (0 of 20 distribution shapes), so the page had nothing to draw. It is now a Metadata records row built from the release's own STAC catalog, marked as a site-side fallback; UI-D's schema 1.1 is where the field belongs, and I did not add it there because the release writes the catalog, not the record. Worth a follow-up.
+3. The category filter — it had never hidden anything. el.hidden is a user-agent rule, and style.css sets display: flex on .cc-card and .ds-row, so choosing a category left 12 tiles and 41 rows painted. Harmless-looking until the grid packed. One rule fixes it, and check_layout.py now applies a filter and fails on any element that carries hidden and still displays — 49 elements without the fix.
+4. The map border, margins and caption — the box was the cell, not the map: 467 px against a 256 px drawing, so the radius curved round nothing and the caption sat 211 px adrift by an amount that changed with each drawing's shape. aspect-ratio from the drawing's own viewBox makes the box the map. Also fixed a tick label half outside the viewBox (135°W rendering as 1°W) and the phone, which my first cut of that broke.
+
+The six phases
+
+┌──────────┬─────────────────────────────────────────┬──────────────────────────────────────────┐
+│          │                 shipped                 │         the number that matters          │
+├──────────┼─────────────────────────────────────────┼──────────────────────────────────────────┤
+│ UI-C     │ CalCOFI.github.io f848c44, explore      │ 0 deleted lines in theme.css; contrast   │
+│ brand    │ 5e1fc3e                                 │ 42 → 58 pairs, min 4.56 : 1              │
+├──────────┼─────────────────────────────────────────┼──────────────────────────────────────────┤
+│ UI-A     │ 887b6e4                                 │ 4,910 → 2,096 px, worst stretch 1.00×    │
+│ grid     │                                         │                                          │
+├──────────┼─────────────────────────────────────────┼──────────────────────────────────────────┤
+│ UI-B     │ 812bf05                                 │ hero gap 0 px; 38/38 URL tails whole at  │
+│ page     │                                         │ 375 px; ERDDAP listed once               │
+├──────────┼─────────────────────────────────────────┼──────────────────────────────────────────┤
+│ UI-F CI  │ 13db153                                 │ pr.yml + a weekly layout job; both       │
+│          │                                         │ assertion families proven to bite        │
+├──────────┼─────────────────────────────────────────┼──────────────────────────────────────────┤
+│ UI-E     │ db-query 463f82d, station 89786ce, hex  │ 4 of 6 Explore rows now say this         │
+│ links    │ 9b12cf9, site 01da915                   │ dataset, was 1                           │
+├──────────┼─────────────────────────────────────────┼──────────────────────────────────────────┤
+│ UI-D     │ calcofi4db 4.5.0 (installed), workflows │ schema 1.1, 2,643 tests pass             │
+│ record   │  743f25e                                │                                          │
+└──────────┴─────────────────────────────────────────┴──────────────────────────────────────────┘
+
+Three things worth your attention
+
+- distribution.csv needed no edit. All 31 rows that name an identifier already carried one, and every one agrees with the derived rule — so the brief's "fill the columns for the 27 rows" was already done.
+- CalCOFI's own ERDDAP has two ids in the record — erddap in portal.csv, erddap-calcofi in distribution_portals(). It ships under both because a consumer must find either; collapsing them is a registry change with its own consumers, recorded in RELEASES.md rather than done on the way past.
+- db-viz-hex was not run. The local calcofi_latest.duckdb is v2026.08.02 and global.R fails to load on main too. The rule is a pure tested function (11 cases); the app-level check needs a deploy, which this session didn't do.
+
+Nothing rendered, no release cut — schema 1.1 rides the next one, and the site's five marked fallbacks get deleted then. Q16 is filed with SWFSC on the ichthyoplankton coordinates, with both measured extents side by side.
+
+---
+
+Edit the landing page and Datasets grid and individual views at @../CalCOFI.github.io/ with these UI changes.
+
+In the Dataset grid let's make "not yet in the database" collapse with `class="ds-details ds-arow-note"` like "how far this file is CF".
+
+Please re-release as needed to populate the STAC links.
+
+Improve the description under "Files from the release", which are all actually "Tables from the release" in parquet format.
+
+Not all of the links actually open the dataset, eg https://app.calcofi.io/hex/?datasets=calcofi_bottle, so should be switched to "Across datasets".
+
+Let's drop URLs throughout -- too busy, and now all links are distinguished by name and/or tags from the other. Do include the copy button throughout.
+
+And develop ways of further compacting sections' length with tables and/or multi-column layouts.
+
+Odd "__TBL:obs__" resolves. Query section should be folded into Code and "DuckDB, anywhere" with links to db-schema and db-query and short explanation that table name is a unique hash to prevent storing unchanged tables between versions. This makes more sense when placed after the "Tables from the release", so that the single query for `obs` could be interchanged for any of the listed tables (with a filtering `WHERE` statement to limit to the dataset).
+
+obs: is observations
+sample: sampling events, with possible parents, eg cruise to net to tow (check this)
+
+The Explore apps could have a set of suffix icons explaining the "lens" used, with CalCOFI Explorer having all but a new icon that needs to be created for the "contour" lens. And probably a generic student contribution.
+
+Under ERDDAP, let's drop the netCDF since we'd prefer users to go with our own CF netCDF and the duplication confuses.
+
+Also give these issues previously raised your attention:
+
+- CalCOFI's own ERDDAP has two ids in the record — erddap in portal.csv, erddap-calcofi in distribution_portals(). It ships under both because a consumer must find either; collapsing them is a registry change with its own consumers, recorded in RELEASES.md rather than done on the way past.
+- db-viz-hex was not run. The local calcofi_latest.duckdb is v2026.08.02 and global.R fails to load on main too. The rule is a pure tested function (11 cases); the app-level check needs a deploy, which this session didn't do.
+
+---
+
+The release run is in progress (about 1.5 to 2.5 hours, based on the staging run) and a monitor will wake me on each chunk, any error, and the promotion. Everything that does not depend on it is done and pushed:
+
+- calcofi4db 4.6.0 (main, pushed): every dataset record now carries its STAC collection as a format: stac distribution, and CalCOFI's ERDDAP has one id, erddap, everywhere (registry, classifier, schema, tests). The full suite passed.
+- calcofi.io (main, pushed, deploying via Pages): one-line Access rows with copy buttons and no URL lines; the release tables as a table with what each table holds; Code after the tables with the content-hash explanation and db-schema/db-query links; lens icons on Explore apps plus a key and a student icon (two new brand glyphs); ERDDAP without netCDF; Metadata records beside Archives; holdings collapsed in the grid. Layout assertions pass.
+- workflows: the distribution registry renamed, RELEASES.md Unreleased updated for both changes, and the release launched with CALCOFI_PUBLISH=true and the deploy chain at defaults.
+
+Still to do once the run finishes: publish the notes, verify the objects, tag and GitHub release for the Zenodo DOI, drop the site's staging and STAC fallbacks, and check the Hexagon Explorer's ?datasets= link live after the consumer deploy.
+
+---
+
+We also registered the original input files (all CSV I think for now) for all dataset ingests into GCS. Can we provide these links too in a small tight section at bottom of dataset page?
+
+"The reference frame" on the bottom of the Datasets grid takes up too much space. Let's reduce the description size and simply link to here for the 19 spatial layers: 
+https://storage.calcofi.io/calcofi-files-public/_spatial/.
+
+PS I am seeing many repeats of "Monitor event: "release run 2026-09-06: chunk progress, errors, promotion" above.
+
+This level of header seems to have smaller text size than the body, so should probably be bumped up:
+```html
+<h4 class="ds-access-sub">Tables from the release (Parquet)</h4>
+```
+
+---
+
+Round 3 is live on main (deploying via Pages), layout assertions pass, and the release is in its freeze step (the ~40-minute part). Summary of this round:
+
+- Source files section at the bottom of each dataset page, with a tab in the sub-nav. It lists the ingest's original inputs on the public files bucket: 12 datasets archive theirs at archive/{provider}/{dataset}/, and bottle, CTD casts and ichthyo read the nightly Drive mirror under _sync/. METS has neither, so it shows no section. The listing is measured at build through the bucket's anonymous JSON API, capped at 12 rows with the rest collapsed, and the folder URL has a copy button.
+- Reference band is now three lines: the release tables as chips, one link for the 19 spatial layers to the public _spatial/ folder, one link for the bathymetry.
+- Block headings ("Tables from the release", "CF netCDF", ERDDAP) went from 12 px muted to 15 px body colour.
+- Monitor noise: the release watch now reports only errors, target completions and the promotion, not each chunk.
+
+Waiting on the release to finish before the remaining follow-ups (notes, object verification, tag and DOI, dropping the site's staging and STAC fallbacks, checking the Hexagon Explorer's ?datasets= link after the consumer deploy).
+
+---
+
+Let's try allocating the datasets to columns Biology on left and Environment on the right. Be sure to use headers bigger than the categories but smaller than Datasets and uniquely symbolized
+
+Instead of saying "homed in", perhaps a home icon for brevity?
+
+---
+
+Both are live on main (7eb3389):
+
+- Grid in two realm columns: Biology on the left, Environment on the right, each under a Teko heading at 26 px (between the page's h2 and the tile names, which stepped down to h4) with the realm glyphs nothing else on the page uses, the fish and the waves. Tiles stack inside each column, so the packer is no longer needed; the grid measures 1,927 px at desktop and one column on a phone, and the layout assertions pass.
+- "homed in" is a home glyph before the category name, with the phrase kept as the hover title and the accessible label. That added ui-home to the brand sprite (now 54 icons, pushed in the explore repo).
+
+The release is still in its freeze step.
+
+---
+
+Where is the EML record for the datasets? I thought that was also generated, or does `publish_to-edi.qmd` need to run first?
+
+---
+
+The EML file is generated during release itself (via `release_database.qmd`), not by the EDI publisher, which is why it's missing from the current staging record predating that change—the in-progress production run will produce it. I'll add a Metadata records row that displays the EML link once the file exists. · summarized
+
+To answer directly: the EML record is produced by the release, not by `publish_to-edi.qmd`.
+
+- `release_database.qmd` builds one `eml/{dataset_key}.xml` per dataset with `calcofi4db::build_eml()`, validates it, gates the release on it, and uploads it beside `datasets.json` under the release folder.
+- `publish_to-edi.qmd` reads that file and packages it with CSV exports for an EDI deposit. It creates nothing the release did not already write.
+- Nothing links it today because the record the site renders is the staging v2026.09.05 run, which predates the EML chunk, so that release folder has no `eml/` at all. The production run now at its upload step writes it for v2026.09.06.
+
+Site change, pushed (a28a0db): Metadata records gains an "EML 2.2" row pointing at the release's document, drawn only when the address answers, so it appears once the site rebuilds on v2026.09.06 rather than shipping a dead link now. The probe is marked as a fallback until the record carries an eml distribution.
+
+The release is at chunk 52 of 57 (uploading the frozen tables); datasets.json, eml/ and stac/ follow, then test_release and the consumer deploys.
 
 ## 2026-09-05 CalCOFI.io dataset-centric view
 
@@ -529,6 +780,39 @@ plans_todo logged. The ten completed briefs (R0, R1, R2, P1, P2, E1, E2, E3, M1,
 Remaining plan items done in this pass, since you asked: the ERDDAP header gained a "catalog" link to calcofi.io/datasets/ (live at the next ERDDAP restart), the dataset pages now emit the datasets analytics content group and the analytics site has its /analytics/datasets/ stub, and uptime was fast-forwarded.
 
 Nothing else from the plan is mine to do. What is left is either yours (the release run that carries datasets.json, eml/ and stac/ to production and takes the landing page off the staging bridge; the IPT and EDI uploads and their prerequisites; the registration forms; tags for calcofi4r 1.19.0 and calcofi4py 0.7.0; the db-viz-hex and ERDDAP server deploys; the decision to retire publish_ichthyo_to-obis.qmd) or a provider's (the CalOOS proposals, contacts, creators, methods, and the two CalOOS-sheet corrections now filed as questions). Phase 5 (pycsw) stays gated on someone asking for CSW.
+
+---
+
+Is the STAC supposed to be working?
+
+---
+
+The production STAC catalog doesn't exist yet since no release has run with 4.3.0 — only the staging copy is available. I'll build the STAC from the staging record with production self-links and upload it to stac/, but first I'll check the builder's base-URL handling. · summarized
+
+  Ran 5 shell commands
+
+It is now. The catalog root the browser reads did not exist yet, because a production release run is what writes gs://calcofi-db/stac/, and no release has run with calcofi4db 4.3.0. Only the staging copy existed, so calcofi.io/stac/ opened to an empty root.
+
+I built the STAC from the staging record with production self-links (52 documents, all validated), uploaded it to gs://calcofi-db/stac/, and confirmed the root, the swfsc_ichthyo collection and its item answer 200. Reload https://calcofi.io/stac/ and it should list the 16 datasets and 19 layers.
+
+Two caveats, both logged as I-20 in the plan:
+- It is the same bridge the pages use: the record it renders is the 2026-09-05 staging one, so assets point at the staging table store. The next production release regenerates stac/ wholesale and removes the bridge by construction.
+- The browser fetches the root client-side; if you opened it before the upload, a hard refresh clears the cached failure.
+
+---
+
+I only see a blank page at https://calcofi.io/stac/
+
+---
+
+It renders now. I loaded https://calcofi.io/stac/ in Chrome after the fix deployed: the root shows "CalCOFI Integrated Database" with the description, the links to the dataset pages and datasets.json, and the tiles for all 16 datasets followed by the boundary layers. The only console error is from a Chrome extension, not the page.
+
+The blank page had two causes, one after the other:
+
+1. No catalog root yet. The browser reads gs://calcofi-db/stac/catalog.json, which only a production release run writes. I built the STAC from the staging record with production self-links and uploaded it as a bridge, logged as I-20; the next release replaces it wholesale.
+2. Jekyll drops files whose names start with an underscore. Two of stac-browser's hashed Vite chunks (_commonjsHelpers-*.js, __vite-browser-external-*.js) were never deployed, so the module graph failed silently. _config.yml now lists them under include:, and stac/README.md says to update the two hashed names after any rebuild.
+
+If you looked before the last deploy finished, a hard refresh clears the cached failure.
 
 ## 2026-09-04 flip switch on brand v2, default light theme
 

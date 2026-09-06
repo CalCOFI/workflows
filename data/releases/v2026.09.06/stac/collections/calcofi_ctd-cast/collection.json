@@ -1,0 +1,82 @@
+{
+  "type": "Collection",
+  "stac_version": "1.0.0",
+  "stac_extensions": ["https://stac-extensions.github.io/table/v1.2.0/schema.json", "https://stac-extensions.github.io/scientific/v1.0.0/schema.json"],
+  "id": "calcofi_ctd-cast",
+  "title": "CalCOFI CTD Cast Files",
+  "description": "CTD downcast profiles with temperature, salinity, oxygen, fluorescence, and other sensors at standard depths. 1 m-binned final data for 1993-2002 come from the SIO-CalCOFI Technical Group's own archive (J. Wilkinson), which covers the decade calcofi.org does not publish finals for; 1998 and 2003 onward come from calcofi.org. Where both publish the same cruise, calcofi.org is used; the two agree on 130 of 140 comparable files, and the four cruises that differ are recorded in question calcofi_ctd-cast_20.\n",
+  "keywords": ["EARTH SCIENCE > OCEANS > OCEAN TEMPERATURE > WATER TEMPERATURE", "EARTH SCIENCE > OCEANS > SALINITY/DENSITY > OCEAN SALINITY", "EARTH SCIENCE > OCEANS > OCEAN CHEMISTRY > OXYGEN", "EARTH SCIENCE > OCEANS > OCEAN PRESSURE > WATER PRESSURE"],
+  "license": "other",
+  "providers": [
+    {
+      "name": "California Cooperative Oceanic Fisheries Investigations",
+      "roles": ["producer", "licensor"],
+      "url": "https://calcofi.org"
+    },
+    {
+      "name": "CalCOFI",
+      "roles": ["processor", "host"],
+      "url": "https://calcofi.io"
+    }
+  ],
+  "extent": {
+    "spatial": {
+      "bbox": [
+        [-126.4843, 29.8268, -117.2734, 37.8491]
+      ]
+    },
+    "temporal": {
+      "interval": [
+        [
+          "1993-01-01T00:00:00Z",
+          "2026-12-31T23:59:59Z"
+        ]
+      ]
+    }
+  },
+  "sci:citation": "CalCOFI. (2023). CalCOFI CTD Cast Files. CalCOFI.org.",
+  "table:tables": [
+    {
+      "name": "sample",
+      "description": "One row per physical sampling event at its native grain (site, tow, net, cast, bottle, underway, transect, region pool). An adjacency list: `parent_sample_key` points at the containing event and `root_sample_key` at the top of the chain, so counting distinct events at any level is a single `GROUP BY`."
+    },
+    {
+      "name": "obs",
+      "description": "The occurrence-headline long table: one scalar measurement per row, environmental (`realm = 'env'`) and biological (`realm = 'bio'`) together. Biological taxon is the global `taxon_key`; sub-occurrence detail (length/stage bins, behavior) lives in `obs_attribute`, and event-level effort in `sample_measurement`."
+    },
+    {
+      "name": "obs_ctd_full",
+      "description": "Supplemental full-resolution CTD scans, identical in shape to `obs`. Excluded from the default table list and the ERD because of its size; opt in with `cc_get_db(supplemental = TRUE)`. The default `obs` carries CTD via the adaptively thinned `ctd_thin`."
+    },
+    {
+      "name": "measurement_type"
+    }
+  ],
+  "summaries": {
+    "calcofi:category": ["Physical Oceanography"],
+    "calcofi:variables": ["beam_attenuation", "1/m", "http://vocab.nerc.ac.uk/collection/P01/current/ATTNXXZZ/", "Physical Oceanography", "btl_ammonium", "umol/L", "http://vocab.nerc.ac.uk/collection/P01/current/AMONZZXX/", "Nutrients & Chemistry", "btl_chlorophyll_a", "ug/L", "http://vocab.nerc.ac.uk/collection/P01/current/CPHLZZXX/", "Productivity & Pigments", "btl_depth", "m", "http://vocab.nerc.ac.uk/collection/P01/current/ADEPZZ01/", "Physical Oceanography", "btl_nitrate", "umol/L", "http://vocab.nerc.ac.uk/collection/P01/current/NTRAZZXX/", "Nutrients & Chemistry", "btl_nitrite", "umol/L", "http://vocab.nerc.ac.uk/collection/P01/current/NTRIZZXX/", "Nutrients & Chemistry", "btl_phaeopigment", "ug/L", "http://vocab.nerc.ac.uk/collection/P01/current/PHAEZZXX/", "Productivity & Pigments", "btl_phosphate", "umol/L", "http://vocab.nerc.ac.uk/collection/P01/current/PHOSZZXX/", "Nutrients & Chemistry", "btl_silicate", "umol/L", "http://vocab.nerc.ac.uk/collection/P01/current/SLCAZZXX/", "Nutrients & Chemistry", "btl_temperature", "degC", "http://vocab.nerc.ac.uk/collection/P01/current/TEMPPR01/", "Physical Oceanography", "dynamic_height", "dyn m", "Physical Oceanography", "fluorescence_v", "V", "Productivity & Pigments", "isus_v", "V", "Nutrients & Chemistry", "oxygen_btl_ml_l", "ml/L", "http://vocab.nerc.ac.uk/collection/P01/current/DOXYZZXX/", "Physical Oceanography", "oxygen_btl_umol_kg", "umol/kg", "http://vocab.nerc.ac.uk/collection/P01/current/DOXMZZXX/", "Physical Oceanography", "oxygen_ml_l_1", "ml/L", "http://vocab.nerc.ac.uk/collection/P01/current/DOXYZZXX/", "Physical Oceanography", "oxygen_ml_l_2", "ml/L", "http://vocab.nerc.ac.uk/collection/P01/current/DOXYZZXX/", "Physical Oceanography", "oxygen_ml_l_ave_sta_corr", "ml/L", "http://vocab.nerc.ac.uk/collection/P01/current/DOXYZZXX/", "Physical Oceanography", "oxygen_umol_kg_1", "umol/kg", "http://vocab.nerc.ac.uk/collection/P01/current/DOXMZZXX/", "Physical Oceanography", "oxygen_umol_kg_2", "umol/kg", "http://vocab.nerc.ac.uk/collection/P01/current/DOXMZZXX/", "Physical Oceanography", "oxygen_umol_kg_ave_sta_corr", "umol/kg", "http://vocab.nerc.ac.uk/collection/P01/current/DOXMZZXX/", "Physical Oceanography", "par", "uE/m2/s", "Productivity & Pigments", "ph", "pH", "http://vocab.nerc.ac.uk/collection/P01/current/PHXXZZXX/", "Carbonate System", "pressure", "dbar", "http://vocab.nerc.ac.uk/collection/P01/current/PRESPR01/", "Physical Oceanography", "salinity_1", "PSU", "http://vocab.nerc.ac.uk/collection/P01/current/PSALST01/", "Physical Oceanography", "salinity_2", "PSU", "http://vocab.nerc.ac.uk/collection/P01/current/PSALST02/", "Physical Oceanography", "salinity_ave_corr", "PSU", "http://vocab.nerc.ac.uk/collection/P01/current/PSLTZZ01/", "Physical Oceanography", "salinity_btl", "PSU", "http://vocab.nerc.ac.uk/collection/P01/current/PSLTZZ01/", "Physical Oceanography", "sigma_theta_1", "kg/m3", "http://vocab.nerc.ac.uk/collection/P01/current/SIGTPR01/", "Physical Oceanography", "spar", "uE/m2/s", "Productivity & Pigments", "specific_volume_anomaly", "10^-8 m3/kg", "Physical Oceanography", "temperature_ave", "degC", "http://vocab.nerc.ac.uk/collection/P01/current/TEMPPR01/", "Physical Oceanography", "transmissometer", "%", "Physical Oceanography"]
+  },
+  "links": [
+    {
+      "rel": "root",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "self",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/calcofi_ctd-cast/collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "about",
+      "href": "https://calcofi.io/datasets/calcofi_ctd-cast/",
+      "type": "text/html",
+      "title": "Dataset page"
+    }
+  ]
+}

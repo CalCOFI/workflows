@@ -1,0 +1,91 @@
+{
+  "type": "Collection",
+  "stac_version": "1.0.0",
+  "stac_extensions": ["https://stac-extensions.github.io/table/v1.2.0/schema.json"],
+  "id": "cce-lter_zooscan",
+  "title": "ZooScan PRPOOS Zooplankton",
+  "description": "Zooplankton abundance, carbon biomass, and size (Feret diameter, individual carbon content) from ZooScan optical imaging of CalCOFI / CCE-LTER PRPOOS net tows on lines 80, 87 and 90, 2005-present, machine-classified into 23 bioclasses (copepod groups, euphausiids, chaetognaths, appendicularians, salps, doliolids, pteropods, rhizaria and more). One row per (sample, taxon, measurement_type); per-station tows. Source: SIO Ocean Informatics ZooScan portal (Ohman Lab; interface by Marina Frants).\n",
+  "keywords": ["EARTH SCIENCE > BIOSPHERE > ECOSYSTEMS > AQUATIC ECOSYSTEMS > PLANKTON > ZOOPLANKTON", "EARTH SCIENCE > BIOLOGICAL CLASSIFICATION > ANIMALS/INVERTEBRATES > ARTHROPODS > CRUSTACEANS"],
+  "license": "custom",
+  "providers": [
+    {
+      "name": "California Current Ecosystem Long Term Ecological Research",
+      "roles": ["producer", "licensor"],
+      "url": "https://ccelter.ucsd.edu"
+    },
+    {
+      "name": "CalCOFI",
+      "roles": ["processor", "host"],
+      "url": "https://calcofi.io"
+    }
+  ],
+  "extent": {
+    "spatial": {
+      "bbox": [
+        [-124, 30.42, -117.77, 34.45]
+      ]
+    },
+    "temporal": {
+      "interval": [
+        [
+          "2005-01-01T00:00:00Z",
+          "2026-12-31T23:59:59Z"
+        ]
+      ]
+    }
+  },
+  "table:tables": [
+    {
+      "name": "sample",
+      "description": "One row per physical sampling event at its native grain (site, tow, net, cast, bottle, underway, transect, region pool). An adjacency list: `parent_sample_key` points at the containing event and `root_sample_key` at the top of the chain, so counting distinct events at any level is a single `GROUP BY`."
+    },
+    {
+      "name": "obs",
+      "description": "The occurrence-headline long table: one scalar measurement per row, environmental (`realm = 'env'`) and biological (`realm = 'bio'`) together. Biological taxon is the global `taxon_key`; sub-occurrence detail (length/stage bins, behavior) lives in `obs_attribute`, and event-level effort in `sample_measurement`."
+    },
+    {
+      "name": "taxon",
+      "description": "Taxonomic hierarchy for species via WoRMS and ITIS authorities (built from spp.duckdb via recursive CTEs)"
+    },
+    {
+      "name": "dataset_taxon",
+      "description": "Crosswalk from each dataset's own taxon vocabulary to the global `taxon_key`. `obs` resolves its taxon by joining this on (`dataset_key`, `ds_taxa_code`), so a dataset can keep its local codes without leaking them into the shared model."
+    },
+    {
+      "name": "measurement_type"
+    }
+  ],
+  "summaries": {
+    "calcofi:category": ["Zooplankton"],
+    "calcofi:variables": ["zooscan_abundance", "count/m2", "Zooplankton", "zooscan_biomass_carbon", "mgC/m2", "Zooplankton", "zooscan_carbon_individual", "ugC", "Zooplankton", "zooscan_feret_diameter", "mm", "Zooplankton"]
+  },
+  "links": [
+    {
+      "rel": "root",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "self",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/cce-lter_zooscan/collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "about",
+      "href": "https://calcofi.io/datasets/cce-lter_zooscan/",
+      "type": "text/html",
+      "title": "Dataset page"
+    },
+    {
+      "rel": "license",
+      "href": "https://oceaninformatics.ucsd.edu/zooscandb/",
+      "type": "text/html",
+      "title": "Custom terms stated by the provider"
+    }
+  ]
+}
