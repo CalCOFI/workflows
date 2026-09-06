@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 <meta name="author" content="CalCOFI">
-<meta name="dcterms.date" content="2026-09-04">
+<meta name="dcterms.date" content="2026-09-06">
 
 <title>Publish every dataset to ERDDAP</title>
 <style>
@@ -72,42 +72,45 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="publish_to-erddap_files/libs/bootstrap/bootstrap.min.js"></script>
 <link href="publish_to-erddap_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
 <link href="publish_to-erddap_files/libs/bootstrap/bootstrap-d6a003b94517c951b2d65075d42fb01b.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
-<!-- cc-brand v1 — the calcofi.io brand contract (https://calcofi.io/brand/v1/) for a
-     rendered Quarto notebook. Included by _quarto.yml (include-in-header) on every
-     render, and injected into already-rendered _output/*.html that lack the marker
-     above by scripts/brand_inject_html.R (run by the Pages workflow). Quarto 1.8's
-     Bootstrap 5.3 bundle carries native colour modes, so setting data-bs-theme on
-     <html> is all a page needs; the CSS below covers what Bootstrap does not own. -->
-<link rel="icon" type="image/x-icon" href="https://calcofi.io/brand/v1/favicon.ico">
-<link rel="icon" type="image/png" sizes="32x32" href="https://calcofi.io/brand/v1/favicon-32x32.png">
-<link rel="icon" type="image/png" sizes="16x16" href="https://calcofi.io/brand/v1/favicon-16x16.png">
-<link rel="apple-touch-icon" sizes="180x180" href="https://calcofi.io/brand/v1/apple-touch-icon.png">
-<script>(function(){var m=/[?&]theme=(dark|light)\b/.exec(location.search),c=/(?:^|;\s*)cc_theme=(dark|light)/.exec(document.cookie),s=null;try{s=localStorage.getItem("theme")}catch(e){}var t=(m&&m[1])||(c&&c[1])||(s==="light"||s==="dark"?s:null)||"dark",d=document.documentElement;d.dataset.theme=t;d.setAttribute("data-bs-theme",t);d.setAttribute("data-md-color-scheme",t==="dark"?"slate":"default");d.style.colorScheme=t})();</script>
-<link rel="stylesheet" href="https://calcofi.io/brand/v1/theme.css">
-<script defer="" src="https://calcofi.io/brand/v1/theme.js"></script>
+<!-- cc-brand v2 — the calcofi.io brand contract (https://calcofi.io/brand/v2/; the SIO look,
+     light by default, in force 2026-09-04) for a rendered Quarto notebook. Included by
+     _quarto.yml (include-in-header) on every render, and injected into (or swapped into, for a
+     page still wearing the v1 chrome) already-rendered _output/*.html by
+     scripts/brand_inject_html.R (run by the Pages workflow). Quarto 1.8's Bootstrap 5.3 bundle
+     carries native colour modes, so setting data-bs-theme on <html> is all a page needs; the CSS
+     below covers what Bootstrap does not own. A notebook is a page (the reading scale): no cc-scale meta. -->
+<link rel="icon" type="image/x-icon" href="https://calcofi.io/brand/v2/favicon.ico">
+<link rel="icon" type="image/png" sizes="32x32" href="https://calcofi.io/brand/v2/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="https://calcofi.io/brand/v2/favicon-16x16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="https://calcofi.io/brand/v2/apple-touch-icon.png">
+<link rel="preload" href="https://calcofi.io/brand/v2/fonts/SourceSans3-VF.woff2" as="font" type="font/woff2" crossorigin="">
+<link rel="preload" href="https://calcofi.io/brand/v2/fonts/Teko-VF.woff2" as="font" type="font/woff2" crossorigin="">
+<script>(function(){var d=document.documentElement,m=/[?&]theme=(dark|light)\b/.exec(location.search),k=/(?:^|;\s*)cc_theme_src=user\b/.test(document.cookie),c=k&&/(?:^|;\s*)cc_theme=(dark|light)\b/.exec(document.cookie),s=null;try{if(localStorage.getItem("cc_theme_src")==="user")s=localStorage.getItem("cc_theme")}catch(e){}var t=(m&&m[1])||(c&&c[1])||(s==="dark"||s==="light"?s:null)||"light";d.dataset.theme=t;d.setAttribute("data-bs-theme",t);d.setAttribute("data-md-color-scheme",t==="dark"?"slate":"default");d.style.colorScheme=t;var sc=document.querySelector('meta[name="cc-scale"]');if(sc&&sc.content)d.setAttribute("data-cc-scale",sc.content)})();</script>
+<link rel="stylesheet" href="https://calcofi.io/brand/v2/fonts.css">
+<link rel="stylesheet" href="https://calcofi.io/brand/v2/theme.css">
+<script defer="" src="https://calcofi.io/brand/v2/theme.js"></script>
 <style>
   /* the brand bar sits above quarto's own sticky sidebars */
-  .cc-header { font-size: 0.9rem; }
-  #quarto-margin-sidebar, #quarto-sidebar { top: 3.4rem; }
+  #quarto-margin-sidebar, #quarto-sidebar { top: calc(var(--header-h) + 0.5rem); }
   #quarto-content { padding-top: 0.5rem; }
   /* bootstrap's dark colour mode handles body/text/links/tables; quarto's code
      highlighting is hard-coded for a light page, so remap it (arrow theme → a
-     light-on-dark palette) and give code blocks the panel tone */
-  [data-bs-theme="dark"] div.sourceCode, [data-bs-theme="dark"] pre { background-color: #24272b; color: #e6e9ed; }
-  [data-bs-theme="dark"] code:not(.sourceCode) { color: #ffa8a8; background: #2c3035; }
+     light-on-navy palette, brand v2's dark tokens) and give code blocks the panel tone */
+  [data-bs-theme="dark"] div.sourceCode, [data-bs-theme="dark"] pre { background-color: #182b49; color: #e9edf3; }
+  [data-bs-theme="dark"] code:not(.sourceCode) { color: #ffa8a8; background: #21375c; }
   [data-bs-theme="dark"] code span.kw, [data-bs-theme="dark"] code span.cf { color: #d0bfff; }
   [data-bs-theme="dark"] code span.fu { color: #74c0fc; }
   [data-bs-theme="dark"] code span.st, [data-bs-theme="dark"] code span.ss, [data-bs-theme="dark"] code span.vs { color: #8ce99a; }
-  [data-bs-theme="dark"] code span.co, [data-bs-theme="dark"] code span.do { color: #9aa0a6; font-style: italic; }
+  [data-bs-theme="dark"] code span.co, [data-bs-theme="dark"] code span.do { color: #9fb0c8; font-style: italic; }
   [data-bs-theme="dark"] code span.dv, [data-bs-theme="dark"] code span.fl, [data-bs-theme="dark"] code span.cn, [data-bs-theme="dark"] code span.bn { color: #ffd43b; }
-  [data-bs-theme="dark"] code span.va, [data-bs-theme="dark"] code span.at, [data-bs-theme="dark"] code span.dt { color: #e6e9ed; }
-  [data-bs-theme="dark"] code span.op, [data-bs-theme="dark"] code span.sc { color: #c1c8cf; }
+  [data-bs-theme="dark"] code span.va, [data-bs-theme="dark"] code span.at, [data-bs-theme="dark"] code span.dt { color: #e9edf3; }
+  [data-bs-theme="dark"] code span.op, [data-bs-theme="dark"] code span.sc { color: #c9d3e2; }
   [data-bs-theme="dark"] code span.ot, [data-bs-theme="dark"] code span.er, [data-bs-theme="dark"] code span.al { color: #ffa8a8; }
-  [data-bs-theme="dark"] .code-tools-button, [data-bs-theme="dark"] .quarto-title-block .btn { color: #e6e9ed; }
+  [data-bs-theme="dark"] .code-tools-button, [data-bs-theme="dark"] .quarto-title-block .btn { color: #e9edf3; }
   [data-bs-theme="dark"] .quarto-title-block, [data-bs-theme="dark"] .cell-output-display { color-scheme: dark; }
-  [data-bs-theme="dark"] .cell-output pre, [data-bs-theme="dark"] .cell-output-stdout pre { background-color: #1f2225; }
-  [data-bs-theme="dark"] table.dataTable, [data-bs-theme="dark"] .dataTables_wrapper { color: #e6e9ed; }
-  [data-bs-theme="dark"] .nav-tabs .nav-link.active { background: #24272b; border-color: #3a3f44 #3a3f44 #24272b; }
+  [data-bs-theme="dark"] .cell-output pre, [data-bs-theme="dark"] .cell-output-stdout pre { background-color: #0f1a2e; }
+  [data-bs-theme="dark"] table.dataTable, [data-bs-theme="dark"] .dataTables_wrapper { color: #e9edf3; }
+  [data-bs-theme="dark"] .nav-tabs .nav-link.active { background: #182b49; border-color: #34486b #34486b #182b49; }
 </style>
 
 
@@ -134,12 +137,12 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </nav>
 </div>
 <main class="content" id="quarto-document-content">
-<!-- cc-brand v1 header: logo far left → calcofi.io, the site title → the workflows
+<!-- cc-brand v2 header: the lockup far left → calcofi.io, the site title → the workflows
      index, sibling links, and the theme toggle theme.js wires -->
 <header class="cc-header">
   <a class="cc-home" href="https://calcofi.io" aria-label="CalCOFI.io home">
-    <img class="cc-logo-dark" src="https://calcofi.io/brand/v1/logo_calcofi.svg" alt="CalCOFI" width="32" height="32">
-    <img class="cc-logo-light" src="https://calcofi.io/brand/v1/logo_calcofi_light.svg" alt="CalCOFI" width="32" height="32">
+    <img class="cc-logo-dark" src="https://calcofi.io/brand/v2/logo_calcofi_h.svg" alt="CalCOFI">
+    <img class="cc-logo-light" src="https://calcofi.io/brand/v2/logo_calcofi_h_light.svg" alt="CalCOFI">
   </a>
   <a class="cc-title" href="https://calcofi.io/workflows/">workflows</a>
   <span class="cc-spacer"></span>
@@ -172,7 +175,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">2026-09-04</p>
+      <p class="date">2026-09-06</p>
     </div>
   </div>
   
@@ -296,21 +299,21 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb1-43"><a href="#cb1-43" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"release       : {RELEASE}</span><span class="sc">\n</span><span class="st">"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>release       : v2026.09.04</code></pre>
+<pre><code>release       : v2026.09.06</code></pre>
 </div>
 <details class="code-fold">
 <summary>Code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"local parquet : {PQ_LOCAL} ({ifelse(dir_exists(PQ_LOCAL), 'present', 'MISSING')})</span><span class="sc">\n</span><span class="st">"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>local parquet : /Users/bbest/_big/calcofi/releases/v2026.09.04/parquet (present)</code></pre>
+<pre><code>local parquet : /Users/bbest/_big/calcofi/releases/v2026.09.06/parquet (present)</code></pre>
 </div>
 <details class="code-fold">
 <summary>Code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"server parquet: {PQ_SERVER}</span><span class="sc">\n</span><span class="st">"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>server parquet: /share/data/erddap-duckdb/datasets/release/v2026.09.04/parquet</code></pre>
+<pre><code>server parquet: /share/data/erddap-duckdb/datasets/release/v2026.09.06/parquet</code></pre>
 </div>
 <details class="code-fold">
 <summary>Code</summary>
@@ -364,7 +367,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb11-24"><a href="#cb11-24" aria-hidden="true" tabindex="-1"></a>  <span class="st">"`obs` objects — no effort/density columns for this run.</span><span class="sc">\n</span><span class="st">"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>v2026.09.04 catalog carries obs_bio + obs_env: the {dataset_key} grain reads the bifurcated pair (adds tow_type, std_haul_factor, prop_sorted, volume_sampled_m3, density_per_10m2, density_per_1000m3, effort_class, units, qual_ok to the existing columns).</code></pre>
+<pre><code>v2026.09.06 catalog carries obs_bio + obs_env: the {dataset_key} grain reads the bifurcated pair (adds tow_type, std_haul_factor, prop_sorted, volume_sampled_m3, density_per_10m2, density_per_1000m3, effort_class, units, qual_ok to the existing columns).</code></pre>
 </div>
 </div>
 </section>
@@ -388,7 +391,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </details>
 <div class="cell-output-display">
 <table class="caption-top table table-sm table-striped small">
-<caption>Core rows per dataset in v2026.09.04</caption>
+<caption>Core rows per dataset in v2026.09.06</caption>
 <colgroup>
 <col style="width: 35%">
 <col style="width: 7%">
@@ -1950,84 +1953,157 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb31-3"><a href="#cb31-3" aria-hidden="true" tabindex="-1"></a><span class="co"># built from), so ERDDAP, the database and the schema site cannot disagree.</span></span>
 <span id="cb31-4"><a href="#cb31-4" aria-hidden="true" tabindex="-1"></a>iy_meta <span class="ot">&lt;-</span> <span class="cf">function</span>(ds) iy[[ds]]<span class="sc">$</span>dataset_meta <span class="sc">%||%</span> <span class="fu">list</span>()</span>
 <span id="cb31-5"><a href="#cb31-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb31-6"><a href="#cb31-6" aria-hidden="true" tabindex="-1"></a>title_of <span class="ot">&lt;-</span> <span class="cf">function</span>(r) {</span>
-<span id="cb31-7"><a href="#cb31-7" aria-hidden="true" tabindex="-1"></a>  dm <span class="ot">&lt;-</span> <span class="fu">iy_meta</span>(r<span class="sc">$</span>dataset_key)</span>
-<span id="cb31-8"><a href="#cb31-8" aria-hidden="true" tabindex="-1"></a>  base <span class="ot">&lt;-</span> dm<span class="sc">$</span>dataset_name <span class="sc">%||%</span> r<span class="sc">$</span>dataset_key</span>
-<span id="cb31-9"><a href="#cb31-9" aria-hidden="true" tabindex="-1"></a>  <span class="cf">switch</span>(r<span class="sc">$</span>grain,</span>
-<span id="cb31-10"><a href="#cb31-10" aria-hidden="true" tabindex="-1"></a>    <span class="at">obs           =</span> <span class="fu">glue</span>(<span class="st">"{base} — observations"</span>),</span>
-<span id="cb31-11"><a href="#cb31-11" aria-hidden="true" tabindex="-1"></a>    <span class="at">sample        =</span> <span class="fu">glue</span>(<span class="st">"{base} — sampling events"</span>),</span>
-<span id="cb31-12"><a href="#cb31-12" aria-hidden="true" tabindex="-1"></a>    <span class="at">obs_attribute =</span> <span class="fu">glue</span>(<span class="st">"{base} — length/stage frequency"</span>),</span>
-<span id="cb31-13"><a href="#cb31-13" aria-hidden="true" tabindex="-1"></a>    <span class="at">full          =</span> <span class="fu">glue</span>(<span class="st">"{base} — full resolution (pre-thinning)"</span>))</span>
-<span id="cb31-14"><a href="#cb31-14" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb31-15"><a href="#cb31-15" aria-hidden="true" tabindex="-1"></a>summary_of <span class="ot">&lt;-</span> <span class="cf">function</span>(r) {</span>
-<span id="cb31-16"><a href="#cb31-16" aria-hidden="true" tabindex="-1"></a>  dm <span class="ot">&lt;-</span> <span class="fu">iy_meta</span>(r<span class="sc">$</span>dataset_key)</span>
-<span id="cb31-17"><a href="#cb31-17" aria-hidden="true" tabindex="-1"></a>  desc <span class="ot">&lt;-</span> <span class="fu">gsub</span>(<span class="st">"[[:space:]]+"</span>, <span class="st">" "</span>, <span class="fu">trimws</span>(dm<span class="sc">$</span>description <span class="sc">%||%</span> <span class="st">""</span>))</span>
-<span id="cb31-18"><a href="#cb31-18" aria-hidden="true" tabindex="-1"></a>  grain_txt <span class="ot">&lt;-</span> <span class="cf">switch</span>(r<span class="sc">$</span>grain,</span>
-<span id="cb31-19"><a href="#cb31-19" aria-hidden="true" tabindex="-1"></a>    <span class="at">obs =</span> <span class="fu">paste</span>(<span class="fu">Filter</span>(nzchar, <span class="fu">c</span>(</span>
-<span id="cb31-20"><a href="#cb31-20" aria-hidden="true" tabindex="-1"></a>                <span class="st">"One row per observation: a measurement of one quantity at one"</span>,</span>
-<span id="cb31-21"><a href="#cb31-21" aria-hidden="true" tabindex="-1"></a>                <span class="st">"event, taxon and depth. `measurement_type` names the quantity and"</span>,</span>
-<span id="cb31-22"><a href="#cb31-22" aria-hidden="true" tabindex="-1"></a>                <span class="st">"`measurement_value` holds it, so filter on measurement_type."</span>,</span>
-<span id="cb31-23"><a href="#cb31-23" aria-hidden="true" tabindex="-1"></a>                <span class="cf">if</span> (HAS_OBS_PAIR) <span class="fu">paste</span>(</span>
-<span id="cb31-24"><a href="#cb31-24" aria-hidden="true" tabindex="-1"></a>                  <span class="st">"Each row also carries its own sample's gear and effort"</span>,</span>
-<span id="cb31-25"><a href="#cb31-25" aria-hidden="true" tabindex="-1"></a>                  <span class="st">"(tow_type, std_haul_factor, prop_sorted, volume_sampled_m3) and"</span>,</span>
-<span id="cb31-26"><a href="#cb31-26" aria-hidden="true" tabindex="-1"></a>                  <span class="st">"the two canonical densities (density_per_10m2,"</span>,</span>
-<span id="cb31-27"><a href="#cb31-27" aria-hidden="true" tabindex="-1"></a>                  <span class="st">"density_per_1000m3, effort_class) — see the column comments —"</span>,</span>
-<span id="cb31-28"><a href="#cb31-28" aria-hidden="true" tabindex="-1"></a>                  <span class="st">"and qual_ok, a pre-computed pass/fail on measurement_qual."</span>) <span class="cf">else</span> <span class="st">""</span>))),</span>
-<span id="cb31-29"><a href="#cb31-29" aria-hidden="true" tabindex="-1"></a>    <span class="at">sample =</span> <span class="fu">paste</span>(<span class="st">"One row per sampling event, with event-level effort widened"</span>,</span>
-<span id="cb31-30"><a href="#cb31-30" aria-hidden="true" tabindex="-1"></a>                   <span class="st">"into its own columns. Use this for effort and station"</span>,</span>
-<span id="cb31-31"><a href="#cb31-31" aria-hidden="true" tabindex="-1"></a>                   <span class="st">"counting — summing effort over the observation table"</span>,</span>
-<span id="cb31-32"><a href="#cb31-32" aria-hidden="true" tabindex="-1"></a>                   <span class="st">"double-counts it."</span>),</span>
-<span id="cb31-33"><a href="#cb31-33" aria-hidden="true" tabindex="-1"></a>    <span class="at">obs_attribute =</span> <span class="fu">paste</span>(<span class="st">"Sub-occurrence detail: length- and stage-frequency bins"</span>,</span>
-<span id="cb31-34"><a href="#cb31-34" aria-hidden="true" tabindex="-1"></a>                          <span class="st">"(`bin_value`, `bin_label`, `count`) under each"</span>,</span>
-<span id="cb31-35"><a href="#cb31-35" aria-hidden="true" tabindex="-1"></a>                          <span class="st">"occurrence. Coordinates are inherited from the event."</span>),</span>
-<span id="cb31-36"><a href="#cb31-36" aria-hidden="true" tabindex="-1"></a>    <span class="at">full =</span> <span class="fu">paste</span>(<span class="st">"The full series before adaptive thinning. Much larger than the"</span>,</span>
-<span id="cb31-37"><a href="#cb31-37" aria-hidden="true" tabindex="-1"></a>                 <span class="st">"headline table and provided for scan-level work; most analyses"</span>,</span>
-<span id="cb31-38"><a href="#cb31-38" aria-hidden="true" tabindex="-1"></a>                 <span class="st">"want the thinned table."</span>))</span>
-<span id="cb31-39"><a href="#cb31-39" aria-hidden="true" tabindex="-1"></a>  <span class="fu">paste</span>(<span class="fu">c</span>(desc, grain_txt, <span class="fu">glue</span>(<span class="st">"Source: CalCOFI integrated database release {RELEASE}."</span>),</span>
-<span id="cb31-40"><a href="#cb31-40" aria-hidden="true" tabindex="-1"></a>          <span class="cf">if</span> (<span class="fu">nzchar</span>(dm<span class="sc">$</span>citation_main <span class="sc">%||%</span> <span class="st">""</span>)) <span class="fu">glue</span>(<span class="st">"Citation: {dm$citation_main}."</span>)),</span>
-<span id="cb31-41"><a href="#cb31-41" aria-hidden="true" tabindex="-1"></a>        <span class="at">collapse =</span> <span class="st">" "</span>)</span>
-<span id="cb31-42"><a href="#cb31-42" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb31-43"><a href="#cb31-43" aria-hidden="true" tabindex="-1"></a><span class="co"># every view is a long table of independent rows carrying their own time and</span></span>
-<span id="cb31-44"><a href="#cb31-44" aria-hidden="true" tabindex="-1"></a><span class="co"># position, which is ERDDAP's "Point"; the vertical/trajectory structure is</span></span>
-<span id="cb31-45"><a href="#cb31-45" aria-hidden="true" tabindex="-1"></a><span class="co"># expressed in the netCDF products, not here</span></span>
-<span id="cb31-46"><a href="#cb31-46" aria-hidden="true" tabindex="-1"></a>CDM <span class="ot">&lt;-</span> <span class="st">"Point"</span></span>
+<span id="cb31-6"><a href="#cb31-6" aria-hidden="true" tabindex="-1"></a><span class="co"># The dataset-catalog page (plan 2026-09-05 D-4/D-5(4)) — built from the key</span></span>
+<span id="cb31-7"><a href="#cb31-7" aria-hidden="true" tabindex="-1"></a><span class="co"># alone, never a hard-coded per-dataset list.</span></span>
+<span id="cb31-8"><a href="#cb31-8" aria-hidden="true" tabindex="-1"></a>dataset_page_url <span class="ot">&lt;-</span> <span class="cf">function</span>(dataset_key) <span class="fu">glue</span>(<span class="st">"https://calcofi.io/datasets/{dataset_key}/"</span>)</span>
+<span id="cb31-9"><a href="#cb31-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb31-10"><a href="#cb31-10" aria-hidden="true" tabindex="-1"></a><span class="co"># The dataset registries the record itself reads (calcofi4db &gt;= 4.1.0):</span></span>
+<span id="cb31-11"><a href="#cb31-11" aria-hidden="true" tabindex="-1"></a><span class="co"># provider display name/URL for the creator_*/institution globals when a</span></span>
+<span id="cb31-12"><a href="#cb31-12" aria-hidden="true" tabindex="-1"></a><span class="co"># dataset states no contact or creator of its own, and the license registry so</span></span>
+<span id="cb31-13"><a href="#cb31-13" aria-hidden="true" tabindex="-1"></a><span class="co"># a dataset's own `license` id resolves to its full name/URL rather than being</span></span>
+<span id="cb31-14"><a href="#cb31-14" aria-hidden="true" tabindex="-1"></a><span class="co"># guessed. Read once, here, at render time.</span></span>
+<span id="cb31-15"><a href="#cb31-15" aria-hidden="true" tabindex="-1"></a>CATALOG_REGISTRIES <span class="ot">&lt;-</span> calcofi4db<span class="sc">::</span><span class="fu">read_catalog_registries</span>(<span class="fu">here</span>(<span class="st">"metadata"</span>))</span>
+<span id="cb31-16"><a href="#cb31-16" aria-hidden="true" tabindex="-1"></a>.s0 <span class="ot">&lt;-</span> <span class="cf">function</span>(x) <span class="cf">if</span> (<span class="fu">is.null</span>(x) <span class="sc">||</span> <span class="fu">length</span>(x) <span class="sc">==</span> <span class="dv">0</span> <span class="sc">||</span> <span class="fu">is.na</span>(x[<span class="dv">1</span>])) <span class="st">""</span> <span class="cf">else</span> <span class="fu">trimws</span>(<span class="fu">as.character</span>(x)[<span class="dv">1</span>])</span>
+<span id="cb31-17"><a href="#cb31-17" aria-hidden="true" tabindex="-1"></a>provider_of <span class="ot">&lt;-</span> <span class="cf">function</span>(slug) {</span>
+<span id="cb31-18"><a href="#cb31-18" aria-hidden="true" tabindex="-1"></a>  row <span class="ot">&lt;-</span> CATALOG_REGISTRIES<span class="sc">$</span>provider[CATALOG_REGISTRIES<span class="sc">$</span>provider<span class="sc">$</span>provider <span class="sc">==</span> slug, ]</span>
+<span id="cb31-19"><a href="#cb31-19" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">nrow</span>(row)) <span class="fu">return</span>(<span class="fu">list</span>(<span class="at">name =</span> <span class="cn">NA_character_</span>, <span class="at">url =</span> <span class="cn">NA_character_</span>))</span>
+<span id="cb31-20"><a href="#cb31-20" aria-hidden="true" tabindex="-1"></a>  <span class="fu">list</span>(<span class="at">name =</span> row<span class="sc">$</span>provider_name[<span class="dv">1</span>], <span class="at">url =</span> row<span class="sc">$</span>url[<span class="dv">1</span>])</span>
+<span id="cb31-21"><a href="#cb31-21" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb31-22"><a href="#cb31-22" aria-hidden="true" tabindex="-1"></a>license_of <span class="ot">&lt;-</span> <span class="cf">function</span>(license_id) {</span>
+<span id="cb31-23"><a href="#cb31-23" aria-hidden="true" tabindex="-1"></a>  license_id <span class="ot">&lt;-</span> <span class="fu">.s0</span>(license_id)</span>
+<span id="cb31-24"><a href="#cb31-24" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">nzchar</span>(license_id)) <span class="fu">return</span>(<span class="cn">NA_character_</span>)</span>
+<span id="cb31-25"><a href="#cb31-25" aria-hidden="true" tabindex="-1"></a>  row <span class="ot">&lt;-</span> CATALOG_REGISTRIES<span class="sc">$</span>license[CATALOG_REGISTRIES<span class="sc">$</span>license<span class="sc">$</span>license <span class="sc">==</span> license_id, ]</span>
+<span id="cb31-26"><a href="#cb31-26" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">nrow</span>(row) <span class="sc">&amp;&amp;</span> <span class="fu">nzchar</span>(<span class="fu">.s0</span>(row<span class="sc">$</span>name[<span class="dv">1</span>]))) row<span class="sc">$</span>name[<span class="dv">1</span>] <span class="cf">else</span> license_id</span>
+<span id="cb31-27"><a href="#cb31-27" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb31-28"><a href="#cb31-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb31-29"><a href="#cb31-29" aria-hidden="true" tabindex="-1"></a><span class="co"># creator_name/_type/_email/_url + institution: I-13's WS-P2 fix (D-5(4)) —</span></span>
+<span id="cb31-30"><a href="#cb31-30" aria-hidden="true" tabindex="-1"></a><span class="co"># ERDDAP's own globals should say what the record says, not a fixed program</span></span>
+<span id="cb31-31"><a href="#cb31-31" aria-hidden="true" tabindex="-1"></a><span class="co"># name. Order: the sidecar's own contact/pi_names, else the provider</span></span>
+<span id="cb31-32"><a href="#cb31-32" aria-hidden="true" tabindex="-1"></a><span class="co"># organization (never invented) — the same fallback chain WS-E1's build_eml()</span></span>
+<span id="cb31-33"><a href="#cb31-33" aria-hidden="true" tabindex="-1"></a><span class="co"># uses for the EML `creator`/`contact` elements, so the two documents agree.</span></span>
+<span id="cb31-34"><a href="#cb31-34" aria-hidden="true" tabindex="-1"></a>creator_fields_of <span class="ot">&lt;-</span> <span class="cf">function</span>(dataset_key) {</span>
+<span id="cb31-35"><a href="#cb31-35" aria-hidden="true" tabindex="-1"></a>  dm  <span class="ot">&lt;-</span> <span class="fu">iy_meta</span>(dataset_key)</span>
+<span id="cb31-36"><a href="#cb31-36" aria-hidden="true" tabindex="-1"></a>  org <span class="ot">&lt;-</span> <span class="fu">provider_of</span>(iy[[dataset_key]]<span class="sc">$</span>provider <span class="sc">%||%</span> <span class="st">""</span>)</span>
+<span id="cb31-37"><a href="#cb31-37" aria-hidden="true" tabindex="-1"></a>  pis <span class="ot">&lt;-</span> <span class="fu">trimws</span>(<span class="fu">unlist</span>(<span class="fu">strsplit</span>(<span class="fu">.s0</span>(dm<span class="sc">$</span>pi_names), <span class="st">";"</span>)))</span>
+<span id="cb31-38"><a href="#cb31-38" aria-hidden="true" tabindex="-1"></a>  pis <span class="ot">&lt;-</span> pis[<span class="fu">nzchar</span>(pis)]</span>
+<span id="cb31-39"><a href="#cb31-39" aria-hidden="true" tabindex="-1"></a>  name  <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="fu">length</span>(pis)) <span class="fu">paste</span>(pis, <span class="at">collapse =</span> <span class="st">"; "</span>) <span class="cf">else</span> (org<span class="sc">$</span>name <span class="sc">%||%</span> <span class="st">"CalCOFI"</span>)</span>
+<span id="cb31-40"><a href="#cb31-40" aria-hidden="true" tabindex="-1"></a>  ctype <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="fu">length</span>(pis)) <span class="st">"person"</span> <span class="cf">else</span> <span class="st">"institution"</span></span>
+<span id="cb31-41"><a href="#cb31-41" aria-hidden="true" tabindex="-1"></a>  email <span class="ot">&lt;-</span> <span class="fu">.s0</span>(dm<span class="sc">$</span>contact)</span>
+<span id="cb31-42"><a href="#cb31-42" aria-hidden="true" tabindex="-1"></a>  email <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="fu">grepl</span>(<span class="st">"^https?://"</span>, email)) <span class="cn">NA_character_</span> <span class="cf">else</span> <span class="cf">if</span> (<span class="fu">nzchar</span>(email)) email <span class="cf">else</span> <span class="cn">NA_character_</span></span>
+<span id="cb31-43"><a href="#cb31-43" aria-hidden="true" tabindex="-1"></a>  url   <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="fu">grepl</span>(<span class="st">"^https?://"</span>, <span class="fu">.s0</span>(dm<span class="sc">$</span>contact))) dm<span class="sc">$</span>contact <span class="cf">else</span> (dm<span class="sc">$</span>link_calcofi_org <span class="sc">%||%</span> org<span class="sc">$</span>url <span class="sc">%||%</span> <span class="st">"https://calcofi.org"</span>)</span>
+<span id="cb31-44"><a href="#cb31-44" aria-hidden="true" tabindex="-1"></a>  <span class="fu">list</span>(<span class="at">creator_name =</span> name, <span class="at">creator_type =</span> ctype, <span class="at">creator_email =</span> email <span class="sc">%||%</span> <span class="cn">NA_character_</span>,</span>
+<span id="cb31-45"><a href="#cb31-45" aria-hidden="true" tabindex="-1"></a>       <span class="at">creator_url =</span> url, <span class="at">institution =</span> org<span class="sc">$</span>name <span class="sc">%||%</span> <span class="st">"CalCOFI"</span>)</span>
+<span id="cb31-46"><a href="#cb31-46" aria-hidden="true" tabindex="-1"></a>}</span>
 <span id="cb31-47"><a href="#cb31-47" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb31-48"><a href="#cb31-48" aria-hidden="true" tabindex="-1"></a>blocks <span class="ot">&lt;-</span> <span class="fu">character</span>(<span class="dv">0</span>)</span>
-<span id="cb31-49"><a href="#cb31-49" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (i <span class="cf">in</span> <span class="fu">seq_len</span>(<span class="fu">nrow</span>(cfg))) {</span>
-<span id="cb31-50"><a href="#cb31-50" aria-hidden="true" tabindex="-1"></a>  r <span class="ot">&lt;-</span> cfg[i, ]</span>
-<span id="cb31-51"><a href="#cb31-51" aria-hidden="true" tabindex="-1"></a>  cols <span class="ot">&lt;-</span> <span class="fu">q</span>(<span class="st">"DESCRIBE SELECT * FROM ({build_sql(r, PQ_LOCAL)})"</span>) <span class="sc">|&gt;</span></span>
-<span id="cb31-52"><a href="#cb31-52" aria-hidden="true" tabindex="-1"></a>    <span class="fu">transmute</span>(<span class="at">column =</span> column_name, <span class="at">duckdb_type =</span> column_type)</span>
-<span id="cb31-53"><a href="#cb31-53" aria-hidden="true" tabindex="-1"></a>  qflags <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="st">"measurement_qual"</span> <span class="sc">%in%</span> cols<span class="sc">$</span>column) <span class="fu">qual_flag_atts</span>(r<span class="sc">$</span>dataset_key) <span class="cf">else</span> <span class="cn">NULL</span></span>
-<span id="cb31-54"><a href="#cb31-54" aria-hidden="true" tabindex="-1"></a>  xml <span class="ot">&lt;-</span> <span class="fu">erddap_duckdb_dataset_xml</span>(</span>
-<span id="cb31-55"><a href="#cb31-55" aria-hidden="true" tabindex="-1"></a>    <span class="at">staged        =</span> <span class="fu">as.data.frame</span>(cols),</span>
-<span id="cb31-56"><a href="#cb31-56" aria-hidden="true" tabindex="-1"></a>    <span class="at">dataset_id    =</span> r<span class="sc">$</span>dataset_id,</span>
-<span id="cb31-57"><a href="#cb31-57" aria-hidden="true" tabindex="-1"></a>    <span class="at">title         =</span> <span class="fu">title_of</span>(r),</span>
-<span id="cb31-58"><a href="#cb31-58" aria-hidden="true" tabindex="-1"></a>    <span class="at">summary       =</span> <span class="fu">summary_of</span>(r),</span>
-<span id="cb31-59"><a href="#cb31-59" aria-hidden="true" tabindex="-1"></a>    <span class="at">source_url    =</span> <span class="fu">glue</span>(<span class="st">"jdbc:duckdb:{ERDDAP_DB}"</span>),</span>
-<span id="cb31-60"><a href="#cb31-60" aria-hidden="true" tabindex="-1"></a>    <span class="at">table_name    =</span> r<span class="sc">$</span>view_name,</span>
-<span id="cb31-61"><a href="#cb31-61" aria-hidden="true" tabindex="-1"></a>    <span class="co"># keyed by column name: mt_units/mt_nerc_p01 land on the `{ds}_sample` views'</span></span>
-<span id="cb31-62"><a href="#cb31-62" aria-hidden="true" tabindex="-1"></a>    <span class="co"># widened effort columns (which ARE measurement_type names) and on the</span></span>
-<span id="cb31-63"><a href="#cb31-63" aria-hidden="true" tabindex="-1"></a>    <span class="co"># bio/env grain's plain std_haul_factor/prop_sorted columns (same names by</span></span>
-<span id="cb31-64"><a href="#cb31-64" aria-hidden="true" tabindex="-1"></a>    <span class="co"># construction); obs_pair_* only exist as columns on the bio/env grain, so</span></span>
-<span id="cb31-65"><a href="#cb31-65" aria-hidden="true" tabindex="-1"></a>    <span class="co"># both are safe to pass to every dataset unconditionally</span></span>
-<span id="cb31-66"><a href="#cb31-66" aria-hidden="true" tabindex="-1"></a>    <span class="at">units_lookup      =</span> <span class="fu">modifyList</span>(mt_units, obs_pair_units),</span>
-<span id="cb31-67"><a href="#cb31-67" aria-hidden="true" tabindex="-1"></a>    <span class="at">longname_lookup   =</span> obs_pair_longname,</span>
-<span id="cb31-68"><a href="#cb31-68" aria-hidden="true" tabindex="-1"></a>    <span class="at">comment_lookup    =</span> obs_pair_comment,</span>
-<span id="cb31-69"><a href="#cb31-69" aria-hidden="true" tabindex="-1"></a>    <span class="at">urn_lookup        =</span> mt_nerc_p01,</span>
-<span id="cb31-70"><a href="#cb31-70" aria-hidden="true" tabindex="-1"></a>    <span class="at">flagvalues_lookup   =</span> <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.null</span>(qflags)) <span class="fu">list</span>(<span class="at">measurement_qual =</span> qflags<span class="sc">$</span>values) <span class="cf">else</span> <span class="fu">list</span>(),</span>
-<span id="cb31-71"><a href="#cb31-71" aria-hidden="true" tabindex="-1"></a>    <span class="at">flagmeanings_lookup =</span> <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.null</span>(qflags)) <span class="fu">list</span>(<span class="at">measurement_qual =</span> qflags<span class="sc">$</span>meanings) <span class="cf">else</span> <span class="fu">list</span>(),</span>
-<span id="cb31-72"><a href="#cb31-72" aria-hidden="true" tabindex="-1"></a>    <span class="at">cdm_data_type =</span> CDM,</span>
-<span id="cb31-73"><a href="#cb31-73" aria-hidden="true" tabindex="-1"></a>    <span class="at">global_atts   =</span> <span class="fu">list</span>(</span>
-<span id="cb31-74"><a href="#cb31-74" aria-hidden="true" tabindex="-1"></a>      <span class="at">license   =</span> <span class="fu">iy_meta</span>(r<span class="sc">$</span>dataset_key)<span class="sc">$</span>license <span class="sc">%||%</span> <span class="st">"CC-BY 4.0"</span>,</span>
-<span id="cb31-75"><a href="#cb31-75" aria-hidden="true" tabindex="-1"></a>      <span class="at">infoUrl   =</span> <span class="fu">iy_meta</span>(r<span class="sc">$</span>dataset_key)<span class="sc">$</span>link_calcofi_org <span class="sc">%||%</span> <span class="st">"https://calcofi.org"</span>,</span>
-<span id="cb31-76"><a href="#cb31-76" aria-hidden="true" tabindex="-1"></a>      <span class="at">db_release =</span> RELEASE, <span class="at">dataset_key =</span> r<span class="sc">$</span>dataset_key,</span>
-<span id="cb31-77"><a href="#cb31-77" aria-hidden="true" tabindex="-1"></a>      <span class="at">references =</span> <span class="st">"https://calcofi.io/workflows/publish_to-erddap.html"</span>))</span>
-<span id="cb31-78"><a href="#cb31-78" aria-hidden="true" tabindex="-1"></a>  <span class="fu">dir_create</span>(<span class="fu">file.path</span>(dir_erddap, r<span class="sc">$</span>dataset_id))</span>
-<span id="cb31-79"><a href="#cb31-79" aria-hidden="true" tabindex="-1"></a>  <span class="fu">writeLines</span>(xml, <span class="fu">file.path</span>(dir_erddap, r<span class="sc">$</span>dataset_id, <span class="fu">glue</span>(<span class="st">"{r$dataset_id}.xml"</span>)))</span>
-<span id="cb31-80"><a href="#cb31-80" aria-hidden="true" tabindex="-1"></a>  blocks <span class="ot">&lt;-</span> <span class="fu">c</span>(blocks, xml)</span>
-<span id="cb31-81"><a href="#cb31-81" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"</span><span class="sc">\n</span><span class="st">- `{r$dataset_id}`: {ncol(cols)} cols, "</span>,</span>
-<span id="cb31-82"><a href="#cb31-82" aria-hidden="true" tabindex="-1"></a>           <span class="st">"{val$rows[val$dataset_id == r$dataset_id]} rows</span><span class="sc">\n</span><span class="st">"</span>))</span>
-<span id="cb31-83"><a href="#cb31-83" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb31-48"><a href="#cb31-48" aria-hidden="true" tabindex="-1"></a><span class="co"># keywords: the sidecar's GCMD Science Keywords (declared for all 16 datasets</span></span>
+<span id="cb31-49"><a href="#cb31-49" aria-hidden="true" tabindex="-1"></a><span class="co"># by WS-R1) joined comma-separated, ERDDAP's own convention for this global.</span></span>
+<span id="cb31-50"><a href="#cb31-50" aria-hidden="true" tabindex="-1"></a>keywords_of <span class="ot">&lt;-</span> <span class="cf">function</span>(dataset_key) {</span>
+<span id="cb31-51"><a href="#cb31-51" aria-hidden="true" tabindex="-1"></a>  kw <span class="ot">&lt;-</span> <span class="fu">unlist</span>(<span class="fu">iy_meta</span>(dataset_key)<span class="sc">$</span>keywords_gcmd)</span>
+<span id="cb31-52"><a href="#cb31-52" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">length</span>(kw)) <span class="fu">return</span>(<span class="cn">NA_character_</span>)</span>
+<span id="cb31-53"><a href="#cb31-53" aria-hidden="true" tabindex="-1"></a>  <span class="fu">paste</span>(kw, <span class="at">collapse =</span> <span class="st">", "</span>)</span>
+<span id="cb31-54"><a href="#cb31-54" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb31-55"><a href="#cb31-55" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb31-56"><a href="#cb31-56" aria-hidden="true" tabindex="-1"></a><span class="co"># I-13 (this WS-P2's fix, at the source): an em dash in a title survives this</span></span>
+<span id="cb31-57"><a href="#cb31-57" aria-hidden="true" tabindex="-1"></a><span class="co"># notebook as real UTF-8, but erddap.calcofi.io's OWN `allDatasets` metadata</span></span>
+<span id="cb31-58"><a href="#cb31-58" aria-hidden="true" tabindex="-1"></a><span class="co"># re-serializes it as the literal 6-character string "—" — verified on</span></span>
+<span id="cb31-59"><a href="#cb31-59" aria-hidden="true" tabindex="-1"></a><span class="co"># the live server 2026-09-05, decoded downstream since calcofi4db 4.2.x</span></span>
+<span id="cb31-60"><a href="#cb31-60" aria-hidden="true" tabindex="-1"></a><span class="co"># (WS-M1's observe_distributions()). The durable fix is not to hand ERDDAP a</span></span>
+<span id="cb31-61"><a href="#cb31-61" aria-hidden="true" tabindex="-1"></a><span class="co"># character its own metadata layer mishandles: a plain hyphen reads the same</span></span>
+<span id="cb31-62"><a href="#cb31-62" aria-hidden="true" tabindex="-1"></a><span class="co"># and survives every consumer.</span></span>
+<span id="cb31-63"><a href="#cb31-63" aria-hidden="true" tabindex="-1"></a>title_of <span class="ot">&lt;-</span> <span class="cf">function</span>(r) {</span>
+<span id="cb31-64"><a href="#cb31-64" aria-hidden="true" tabindex="-1"></a>  dm <span class="ot">&lt;-</span> <span class="fu">iy_meta</span>(r<span class="sc">$</span>dataset_key)</span>
+<span id="cb31-65"><a href="#cb31-65" aria-hidden="true" tabindex="-1"></a>  base <span class="ot">&lt;-</span> dm<span class="sc">$</span>dataset_name <span class="sc">%||%</span> r<span class="sc">$</span>dataset_key</span>
+<span id="cb31-66"><a href="#cb31-66" aria-hidden="true" tabindex="-1"></a>  <span class="cf">switch</span>(r<span class="sc">$</span>grain,</span>
+<span id="cb31-67"><a href="#cb31-67" aria-hidden="true" tabindex="-1"></a>    <span class="at">obs           =</span> <span class="fu">glue</span>(<span class="st">"{base} - observations"</span>),</span>
+<span id="cb31-68"><a href="#cb31-68" aria-hidden="true" tabindex="-1"></a>    <span class="at">sample        =</span> <span class="fu">glue</span>(<span class="st">"{base} - sampling events"</span>),</span>
+<span id="cb31-69"><a href="#cb31-69" aria-hidden="true" tabindex="-1"></a>    <span class="at">obs_attribute =</span> <span class="fu">glue</span>(<span class="st">"{base} - length/stage frequency"</span>),</span>
+<span id="cb31-70"><a href="#cb31-70" aria-hidden="true" tabindex="-1"></a>    <span class="at">full          =</span> <span class="fu">glue</span>(<span class="st">"{base} - full resolution (pre-thinning)"</span>))</span>
+<span id="cb31-71"><a href="#cb31-71" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb31-72"><a href="#cb31-72" aria-hidden="true" tabindex="-1"></a>summary_of <span class="ot">&lt;-</span> <span class="cf">function</span>(r) {</span>
+<span id="cb31-73"><a href="#cb31-73" aria-hidden="true" tabindex="-1"></a>  dm <span class="ot">&lt;-</span> <span class="fu">iy_meta</span>(r<span class="sc">$</span>dataset_key)</span>
+<span id="cb31-74"><a href="#cb31-74" aria-hidden="true" tabindex="-1"></a>  desc <span class="ot">&lt;-</span> <span class="fu">gsub</span>(<span class="st">"[[:space:]]+"</span>, <span class="st">" "</span>, <span class="fu">trimws</span>(dm<span class="sc">$</span>description <span class="sc">%||%</span> <span class="st">""</span>))</span>
+<span id="cb31-75"><a href="#cb31-75" aria-hidden="true" tabindex="-1"></a>  grain_txt <span class="ot">&lt;-</span> <span class="cf">switch</span>(r<span class="sc">$</span>grain,</span>
+<span id="cb31-76"><a href="#cb31-76" aria-hidden="true" tabindex="-1"></a>    <span class="at">obs =</span> <span class="fu">paste</span>(<span class="fu">Filter</span>(nzchar, <span class="fu">c</span>(</span>
+<span id="cb31-77"><a href="#cb31-77" aria-hidden="true" tabindex="-1"></a>                <span class="st">"One row per observation: a measurement of one quantity at one"</span>,</span>
+<span id="cb31-78"><a href="#cb31-78" aria-hidden="true" tabindex="-1"></a>                <span class="st">"event, taxon and depth. `measurement_type` names the quantity and"</span>,</span>
+<span id="cb31-79"><a href="#cb31-79" aria-hidden="true" tabindex="-1"></a>                <span class="st">"`measurement_value` holds it, so filter on measurement_type."</span>,</span>
+<span id="cb31-80"><a href="#cb31-80" aria-hidden="true" tabindex="-1"></a>                <span class="cf">if</span> (HAS_OBS_PAIR) <span class="fu">paste</span>(</span>
+<span id="cb31-81"><a href="#cb31-81" aria-hidden="true" tabindex="-1"></a>                  <span class="st">"Each row also carries its own sample's gear and effort"</span>,</span>
+<span id="cb31-82"><a href="#cb31-82" aria-hidden="true" tabindex="-1"></a>                  <span class="st">"(tow_type, std_haul_factor, prop_sorted, volume_sampled_m3) and"</span>,</span>
+<span id="cb31-83"><a href="#cb31-83" aria-hidden="true" tabindex="-1"></a>                  <span class="st">"the two canonical densities (density_per_10m2,"</span>,</span>
+<span id="cb31-84"><a href="#cb31-84" aria-hidden="true" tabindex="-1"></a>                  <span class="st">"density_per_1000m3, effort_class) — see the column comments —"</span>,</span>
+<span id="cb31-85"><a href="#cb31-85" aria-hidden="true" tabindex="-1"></a>                  <span class="st">"and qual_ok, a pre-computed pass/fail on measurement_qual."</span>) <span class="cf">else</span> <span class="st">""</span>))),</span>
+<span id="cb31-86"><a href="#cb31-86" aria-hidden="true" tabindex="-1"></a>    <span class="at">sample =</span> <span class="fu">paste</span>(<span class="st">"One row per sampling event, with event-level effort widened"</span>,</span>
+<span id="cb31-87"><a href="#cb31-87" aria-hidden="true" tabindex="-1"></a>                   <span class="st">"into its own columns. Use this for effort and station"</span>,</span>
+<span id="cb31-88"><a href="#cb31-88" aria-hidden="true" tabindex="-1"></a>                   <span class="st">"counting — summing effort over the observation table"</span>,</span>
+<span id="cb31-89"><a href="#cb31-89" aria-hidden="true" tabindex="-1"></a>                   <span class="st">"double-counts it."</span>),</span>
+<span id="cb31-90"><a href="#cb31-90" aria-hidden="true" tabindex="-1"></a>    <span class="at">obs_attribute =</span> <span class="fu">paste</span>(<span class="st">"Sub-occurrence detail: length- and stage-frequency bins"</span>,</span>
+<span id="cb31-91"><a href="#cb31-91" aria-hidden="true" tabindex="-1"></a>                          <span class="st">"(`bin_value`, `bin_label`, `count`) under each"</span>,</span>
+<span id="cb31-92"><a href="#cb31-92" aria-hidden="true" tabindex="-1"></a>                          <span class="st">"occurrence. Coordinates are inherited from the event."</span>),</span>
+<span id="cb31-93"><a href="#cb31-93" aria-hidden="true" tabindex="-1"></a>    <span class="at">full =</span> <span class="fu">paste</span>(<span class="st">"The full series before adaptive thinning. Much larger than the"</span>,</span>
+<span id="cb31-94"><a href="#cb31-94" aria-hidden="true" tabindex="-1"></a>                 <span class="st">"headline table and provided for scan-level work; most analyses"</span>,</span>
+<span id="cb31-95"><a href="#cb31-95" aria-hidden="true" tabindex="-1"></a>                 <span class="st">"want the thinned table."</span>))</span>
+<span id="cb31-96"><a href="#cb31-96" aria-hidden="true" tabindex="-1"></a>  <span class="fu">paste</span>(<span class="fu">c</span>(desc, grain_txt, <span class="fu">glue</span>(<span class="st">"Source: CalCOFI integrated database release {RELEASE}."</span>),</span>
+<span id="cb31-97"><a href="#cb31-97" aria-hidden="true" tabindex="-1"></a>          <span class="cf">if</span> (<span class="fu">nzchar</span>(dm<span class="sc">$</span>citation_main <span class="sc">%||%</span> <span class="st">""</span>)) <span class="fu">glue</span>(<span class="st">"Citation: {dm$citation_main}."</span>)),</span>
+<span id="cb31-98"><a href="#cb31-98" aria-hidden="true" tabindex="-1"></a>        <span class="at">collapse =</span> <span class="st">" "</span>)</span>
+<span id="cb31-99"><a href="#cb31-99" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb31-100"><a href="#cb31-100" aria-hidden="true" tabindex="-1"></a><span class="co"># every view is a long table of independent rows carrying their own time and</span></span>
+<span id="cb31-101"><a href="#cb31-101" aria-hidden="true" tabindex="-1"></a><span class="co"># position, which is ERDDAP's "Point"; the vertical/trajectory structure is</span></span>
+<span id="cb31-102"><a href="#cb31-102" aria-hidden="true" tabindex="-1"></a><span class="co"># expressed in the netCDF products, not here</span></span>
+<span id="cb31-103"><a href="#cb31-103" aria-hidden="true" tabindex="-1"></a>CDM <span class="ot">&lt;-</span> <span class="st">"Point"</span></span>
+<span id="cb31-104"><a href="#cb31-104" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb31-105"><a href="#cb31-105" aria-hidden="true" tabindex="-1"></a>blocks <span class="ot">&lt;-</span> <span class="fu">character</span>(<span class="dv">0</span>)</span>
+<span id="cb31-106"><a href="#cb31-106" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (i <span class="cf">in</span> <span class="fu">seq_len</span>(<span class="fu">nrow</span>(cfg))) {</span>
+<span id="cb31-107"><a href="#cb31-107" aria-hidden="true" tabindex="-1"></a>  r <span class="ot">&lt;-</span> cfg[i, ]</span>
+<span id="cb31-108"><a href="#cb31-108" aria-hidden="true" tabindex="-1"></a>  cols <span class="ot">&lt;-</span> <span class="fu">q</span>(<span class="st">"DESCRIBE SELECT * FROM ({build_sql(r, PQ_LOCAL)})"</span>) <span class="sc">|&gt;</span></span>
+<span id="cb31-109"><a href="#cb31-109" aria-hidden="true" tabindex="-1"></a>    <span class="fu">transmute</span>(<span class="at">column =</span> column_name, <span class="at">duckdb_type =</span> column_type)</span>
+<span id="cb31-110"><a href="#cb31-110" aria-hidden="true" tabindex="-1"></a>  qflags <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="st">"measurement_qual"</span> <span class="sc">%in%</span> cols<span class="sc">$</span>column) <span class="fu">qual_flag_atts</span>(r<span class="sc">$</span>dataset_key) <span class="cf">else</span> <span class="cn">NULL</span></span>
+<span id="cb31-111"><a href="#cb31-111" aria-hidden="true" tabindex="-1"></a>  xml <span class="ot">&lt;-</span> <span class="fu">erddap_duckdb_dataset_xml</span>(</span>
+<span id="cb31-112"><a href="#cb31-112" aria-hidden="true" tabindex="-1"></a>    <span class="at">staged        =</span> <span class="fu">as.data.frame</span>(cols),</span>
+<span id="cb31-113"><a href="#cb31-113" aria-hidden="true" tabindex="-1"></a>    <span class="at">dataset_id    =</span> r<span class="sc">$</span>dataset_id,</span>
+<span id="cb31-114"><a href="#cb31-114" aria-hidden="true" tabindex="-1"></a>    <span class="at">title         =</span> <span class="fu">title_of</span>(r),</span>
+<span id="cb31-115"><a href="#cb31-115" aria-hidden="true" tabindex="-1"></a>    <span class="at">summary       =</span> <span class="fu">summary_of</span>(r),</span>
+<span id="cb31-116"><a href="#cb31-116" aria-hidden="true" tabindex="-1"></a>    <span class="at">source_url    =</span> <span class="fu">glue</span>(<span class="st">"jdbc:duckdb:{ERDDAP_DB}"</span>),</span>
+<span id="cb31-117"><a href="#cb31-117" aria-hidden="true" tabindex="-1"></a>    <span class="at">table_name    =</span> r<span class="sc">$</span>view_name,</span>
+<span id="cb31-118"><a href="#cb31-118" aria-hidden="true" tabindex="-1"></a>    <span class="co"># keyed by column name: mt_units/mt_nerc_p01 land on the `{ds}_sample` views'</span></span>
+<span id="cb31-119"><a href="#cb31-119" aria-hidden="true" tabindex="-1"></a>    <span class="co"># widened effort columns (which ARE measurement_type names) and on the</span></span>
+<span id="cb31-120"><a href="#cb31-120" aria-hidden="true" tabindex="-1"></a>    <span class="co"># bio/env grain's plain std_haul_factor/prop_sorted columns (same names by</span></span>
+<span id="cb31-121"><a href="#cb31-121" aria-hidden="true" tabindex="-1"></a>    <span class="co"># construction); obs_pair_* only exist as columns on the bio/env grain, so</span></span>
+<span id="cb31-122"><a href="#cb31-122" aria-hidden="true" tabindex="-1"></a>    <span class="co"># both are safe to pass to every dataset unconditionally</span></span>
+<span id="cb31-123"><a href="#cb31-123" aria-hidden="true" tabindex="-1"></a>    <span class="at">units_lookup      =</span> <span class="fu">modifyList</span>(mt_units, obs_pair_units),</span>
+<span id="cb31-124"><a href="#cb31-124" aria-hidden="true" tabindex="-1"></a>    <span class="at">longname_lookup   =</span> obs_pair_longname,</span>
+<span id="cb31-125"><a href="#cb31-125" aria-hidden="true" tabindex="-1"></a>    <span class="at">comment_lookup    =</span> obs_pair_comment,</span>
+<span id="cb31-126"><a href="#cb31-126" aria-hidden="true" tabindex="-1"></a>    <span class="at">urn_lookup        =</span> mt_nerc_p01,</span>
+<span id="cb31-127"><a href="#cb31-127" aria-hidden="true" tabindex="-1"></a>    <span class="at">flagvalues_lookup   =</span> <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.null</span>(qflags)) <span class="fu">list</span>(<span class="at">measurement_qual =</span> qflags<span class="sc">$</span>values) <span class="cf">else</span> <span class="fu">list</span>(),</span>
+<span id="cb31-128"><a href="#cb31-128" aria-hidden="true" tabindex="-1"></a>    <span class="at">flagmeanings_lookup =</span> <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.null</span>(qflags)) <span class="fu">list</span>(<span class="at">measurement_qual =</span> qflags<span class="sc">$</span>meanings) <span class="cf">else</span> <span class="fu">list</span>(),</span>
+<span id="cb31-129"><a href="#cb31-129" aria-hidden="true" tabindex="-1"></a>    <span class="at">cdm_data_type =</span> CDM,</span>
+<span id="cb31-130"><a href="#cb31-130" aria-hidden="true" tabindex="-1"></a>    <span class="co"># infoUrl -&gt; the dataset page (built from the key, D-5(4)); creator_*/</span></span>
+<span id="cb31-131"><a href="#cb31-131" aria-hidden="true" tabindex="-1"></a>    <span class="co"># institution/keywords from the record's own sidecar + provider registry,</span></span>
+<span id="cb31-132"><a href="#cb31-132" aria-hidden="true" tabindex="-1"></a>    <span class="co"># never a fixed program-wide default (I-13's fix travels with these, since</span></span>
+<span id="cb31-133"><a href="#cb31-133" aria-hidden="true" tabindex="-1"></a>    <span class="co"># both read the same iy_meta()). A field the record does not state is</span></span>
+<span id="cb31-134"><a href="#cb31-134" aria-hidden="true" tabindex="-1"></a>    <span class="co"># OMITTED, never written as the literal string "NA" — an ERDDAP global</span></span>
+<span id="cb31-135"><a href="#cb31-135" aria-hidden="true" tabindex="-1"></a>    <span class="co"># that is absent is a fact, not a guess.</span></span>
+<span id="cb31-136"><a href="#cb31-136" aria-hidden="true" tabindex="-1"></a>    <span class="at">global_atts   =</span> <span class="fu">local</span>({</span>
+<span id="cb31-137"><a href="#cb31-137" aria-hidden="true" tabindex="-1"></a>      cr  <span class="ot">&lt;-</span> <span class="fu">creator_fields_of</span>(r<span class="sc">$</span>dataset_key)</span>
+<span id="cb31-138"><a href="#cb31-138" aria-hidden="true" tabindex="-1"></a>      atts <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
+<span id="cb31-139"><a href="#cb31-139" aria-hidden="true" tabindex="-1"></a>        <span class="at">license       =</span> <span class="fu">license_of</span>(<span class="fu">iy_meta</span>(r<span class="sc">$</span>dataset_key)<span class="sc">$</span>license) <span class="sc">%||%</span> <span class="st">"not specified"</span>,</span>
+<span id="cb31-140"><a href="#cb31-140" aria-hidden="true" tabindex="-1"></a>        <span class="at">infoUrl       =</span> <span class="fu">dataset_page_url</span>(r<span class="sc">$</span>dataset_key),</span>
+<span id="cb31-141"><a href="#cb31-141" aria-hidden="true" tabindex="-1"></a>        <span class="at">creator_name  =</span> cr<span class="sc">$</span>creator_name,</span>
+<span id="cb31-142"><a href="#cb31-142" aria-hidden="true" tabindex="-1"></a>        <span class="at">creator_type  =</span> cr<span class="sc">$</span>creator_type,</span>
+<span id="cb31-143"><a href="#cb31-143" aria-hidden="true" tabindex="-1"></a>        <span class="at">creator_email =</span> cr<span class="sc">$</span>creator_email,</span>
+<span id="cb31-144"><a href="#cb31-144" aria-hidden="true" tabindex="-1"></a>        <span class="at">creator_url   =</span> cr<span class="sc">$</span>creator_url,</span>
+<span id="cb31-145"><a href="#cb31-145" aria-hidden="true" tabindex="-1"></a>        <span class="at">institution   =</span> cr<span class="sc">$</span>institution,</span>
+<span id="cb31-146"><a href="#cb31-146" aria-hidden="true" tabindex="-1"></a>        <span class="at">keywords      =</span> <span class="fu">keywords_of</span>(r<span class="sc">$</span>dataset_key),</span>
+<span id="cb31-147"><a href="#cb31-147" aria-hidden="true" tabindex="-1"></a>        <span class="at">db_release    =</span> RELEASE, <span class="at">dataset_key =</span> r<span class="sc">$</span>dataset_key,</span>
+<span id="cb31-148"><a href="#cb31-148" aria-hidden="true" tabindex="-1"></a>        <span class="at">references    =</span> <span class="st">"https://calcofi.io/workflows/publish_to-erddap.html"</span>)</span>
+<span id="cb31-149"><a href="#cb31-149" aria-hidden="true" tabindex="-1"></a>      <span class="fu">Filter</span>(<span class="cf">function</span>(x) <span class="sc">!</span><span class="fu">is.null</span>(x) <span class="sc">&amp;&amp;</span> <span class="sc">!</span>(<span class="fu">length</span>(x) <span class="sc">==</span> <span class="dv">1</span> <span class="sc">&amp;&amp;</span> <span class="fu">is.na</span>(x)), atts)</span>
+<span id="cb31-150"><a href="#cb31-150" aria-hidden="true" tabindex="-1"></a>    }))</span>
+<span id="cb31-151"><a href="#cb31-151" aria-hidden="true" tabindex="-1"></a>  <span class="fu">dir_create</span>(<span class="fu">file.path</span>(dir_erddap, r<span class="sc">$</span>dataset_id))</span>
+<span id="cb31-152"><a href="#cb31-152" aria-hidden="true" tabindex="-1"></a>  <span class="fu">writeLines</span>(xml, <span class="fu">file.path</span>(dir_erddap, r<span class="sc">$</span>dataset_id, <span class="fu">glue</span>(<span class="st">"{r$dataset_id}.xml"</span>)))</span>
+<span id="cb31-153"><a href="#cb31-153" aria-hidden="true" tabindex="-1"></a>  blocks <span class="ot">&lt;-</span> <span class="fu">c</span>(blocks, xml)</span>
+<span id="cb31-154"><a href="#cb31-154" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"</span><span class="sc">\n</span><span class="st">- `{r$dataset_id}`: {ncol(cols)} cols, "</span>,</span>
+<span id="cb31-155"><a href="#cb31-155" aria-hidden="true" tabindex="-1"></a>           <span class="st">"{val$rows[val$dataset_id == r$dataset_id]} rows</span><span class="sc">\n</span><span class="st">"</span>))</span>
+<span id="cb31-156"><a href="#cb31-156" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <ul>
 <li><code>calcofi_bottle</code>: 2 cols, 11135600 rows- <code>calcofi_bottle_sample</code>: 2 cols, 931015 rows- <code>calcofi_ctd-cast_full</code>: 2 cols, 271394164 rows- <code>calcofi_ctd-cast</code>: 2 cols, 13295014 rows- <code>calcofi_ctd-cast_sample</code>: 2 cols, 19242 rows- <code>calcofi_dic</code>: 2 cols, 3708 rows- <code>calcofi_dic_sample</code>: 2 cols, 3261 rows- <code>calcofi_mets_full</code>: 2 cols, 19927416 rows- <code>calcofi_mets</code>: 2 cols, 511459 rows- <code>calcofi_mets_sample</code>: 2 cols, 77795 rows- <code>calcofi_phyllosoma</code>: 2 cols, 1859 rows- <code>calcofi_phyllosoma_attribute</code>: 2 cols, 369 rows- <code>calcofi_phyllosoma_sample</code>: 2 cols, 1859 rows- <code>calcofi_phytoplankton</code>: 2 cols, 159804 rows- <code>calcofi_phytoplankton_sample</code>: 2 cols, 409 rows- <code>cce-lter_euphausiids</code>: 2 cols, 100505 rows- <code>cce-lter_euphausiids_sample</code>: 2 cols, 7482 rows- <code>cce-lter_picoplankton-bacteria</code>: 2 cols, 60802 rows- <code>cce-lter_picoplankton-bacteria_sample</code>: 2 cols, 16017 rows- <code>cce-lter_zoodb</code>: 2 cols, 30948 rows- <code>cce-lter_zoodb_sample</code>: 2 cols, 506 rows- <code>cce-lter_zooscan</code>: 2 cols, 126692 rows- <code>cce-lter_zooscan_sample</code>: 2 cols, 1483 rows- <code>cdfw_dungeness-crab</code>: 2 cols, 1456 rows- <code>cdfw_dungeness-crab_attribute</code>: 2 cols, 24 rows- <code>cdfw_dungeness-crab_sample</code>: 2 cols, 526 rows- <code>farallon_bird-mammal</code>: 2 cols, 69661 rows- <code>farallon_bird-mammal_attribute</code>: 2 cols, 87813 rows- <code>farallon_bird-mammal_sample</code>: 2 cols, 64421 rows- <code>sio_mesopelagic-fish</code>: 2 cols, 1393 rows- <code>sio_mesopelagic-fish_sample</code>: 2 cols, 102 rows- <code>sio_pic-zooplankton_sample</code>: 2 cols, 82343 rows- <code>swfsc_cufes</code>: 2 cols, 284097 rows- <code>swfsc_cufes_sample</code>: 2 cols, 49572 rows- <code>swfsc_ichthyo</code>: 2 cols, 482250 rows- <code>swfsc_ichthyo_attribute</code>: 2 cols, 369978 rows- <code>swfsc_ichthyo_sample</code>: 2 cols, 213122 rows</li>
@@ -2087,7 +2163,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb36-2"><a href="#cb36-2" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"1. synced {n_pq} parquet files to {ERDDAP_ROOT}/datasets/release/{RELEASE}</span><span class="sc">\n</span><span class="st">"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>1. synced 371 parquet files to /share/data/erddap-duckdb/datasets/release/v2026.09.04</code></pre>
+<pre><code>1. synced 371 parquet files to /share/data/erddap-duckdb/datasets/release/v2026.09.06</code></pre>
 </div>
 <details class="code-fold">
 <summary>Code</summary>
@@ -3613,205 +3689,278 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb47-728"><a href="#cb47-728" aria-hidden="true" tabindex="-1"></a><span class="co"># built from), so ERDDAP, the database and the schema site cannot disagree.</span></span>
 <span id="cb47-729"><a href="#cb47-729" aria-hidden="true" tabindex="-1"></a>iy_meta <span class="ot">&lt;-</span> <span class="cf">function</span>(ds) iy[[ds]]<span class="sc">$</span>dataset_meta <span class="sc">%||%</span> <span class="fu">list</span>()</span>
 <span id="cb47-730"><a href="#cb47-730" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb47-731"><a href="#cb47-731" aria-hidden="true" tabindex="-1"></a>title_of <span class="ot">&lt;-</span> <span class="cf">function</span>(r) {</span>
-<span id="cb47-732"><a href="#cb47-732" aria-hidden="true" tabindex="-1"></a>  dm <span class="ot">&lt;-</span> <span class="fu">iy_meta</span>(r<span class="sc">$</span>dataset_key)</span>
-<span id="cb47-733"><a href="#cb47-733" aria-hidden="true" tabindex="-1"></a>  base <span class="ot">&lt;-</span> dm<span class="sc">$</span>dataset_name <span class="sc">%||%</span> r<span class="sc">$</span>dataset_key</span>
-<span id="cb47-734"><a href="#cb47-734" aria-hidden="true" tabindex="-1"></a>  <span class="cf">switch</span>(r<span class="sc">$</span>grain,</span>
-<span id="cb47-735"><a href="#cb47-735" aria-hidden="true" tabindex="-1"></a>    <span class="at">obs           =</span> <span class="fu">glue</span>(<span class="st">"{base} — observations"</span>),</span>
-<span id="cb47-736"><a href="#cb47-736" aria-hidden="true" tabindex="-1"></a>    <span class="at">sample        =</span> <span class="fu">glue</span>(<span class="st">"{base} — sampling events"</span>),</span>
-<span id="cb47-737"><a href="#cb47-737" aria-hidden="true" tabindex="-1"></a>    <span class="at">obs_attribute =</span> <span class="fu">glue</span>(<span class="st">"{base} — length/stage frequency"</span>),</span>
-<span id="cb47-738"><a href="#cb47-738" aria-hidden="true" tabindex="-1"></a>    <span class="at">full          =</span> <span class="fu">glue</span>(<span class="st">"{base} — full resolution (pre-thinning)"</span>))</span>
-<span id="cb47-739"><a href="#cb47-739" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb47-740"><a href="#cb47-740" aria-hidden="true" tabindex="-1"></a>summary_of <span class="ot">&lt;-</span> <span class="cf">function</span>(r) {</span>
-<span id="cb47-741"><a href="#cb47-741" aria-hidden="true" tabindex="-1"></a>  dm <span class="ot">&lt;-</span> <span class="fu">iy_meta</span>(r<span class="sc">$</span>dataset_key)</span>
-<span id="cb47-742"><a href="#cb47-742" aria-hidden="true" tabindex="-1"></a>  desc <span class="ot">&lt;-</span> <span class="fu">gsub</span>(<span class="st">"[[:space:]]+"</span>, <span class="st">" "</span>, <span class="fu">trimws</span>(dm<span class="sc">$</span>description <span class="sc">%||%</span> <span class="st">""</span>))</span>
-<span id="cb47-743"><a href="#cb47-743" aria-hidden="true" tabindex="-1"></a>  grain_txt <span class="ot">&lt;-</span> <span class="cf">switch</span>(r<span class="sc">$</span>grain,</span>
-<span id="cb47-744"><a href="#cb47-744" aria-hidden="true" tabindex="-1"></a>    <span class="at">obs =</span> <span class="fu">paste</span>(<span class="fu">Filter</span>(nzchar, <span class="fu">c</span>(</span>
-<span id="cb47-745"><a href="#cb47-745" aria-hidden="true" tabindex="-1"></a>                <span class="st">"One row per observation: a measurement of one quantity at one"</span>,</span>
-<span id="cb47-746"><a href="#cb47-746" aria-hidden="true" tabindex="-1"></a>                <span class="st">"event, taxon and depth. `measurement_type` names the quantity and"</span>,</span>
-<span id="cb47-747"><a href="#cb47-747" aria-hidden="true" tabindex="-1"></a>                <span class="st">"`measurement_value` holds it, so filter on measurement_type."</span>,</span>
-<span id="cb47-748"><a href="#cb47-748" aria-hidden="true" tabindex="-1"></a>                <span class="cf">if</span> (HAS_OBS_PAIR) <span class="fu">paste</span>(</span>
-<span id="cb47-749"><a href="#cb47-749" aria-hidden="true" tabindex="-1"></a>                  <span class="st">"Each row also carries its own sample's gear and effort"</span>,</span>
-<span id="cb47-750"><a href="#cb47-750" aria-hidden="true" tabindex="-1"></a>                  <span class="st">"(tow_type, std_haul_factor, prop_sorted, volume_sampled_m3) and"</span>,</span>
-<span id="cb47-751"><a href="#cb47-751" aria-hidden="true" tabindex="-1"></a>                  <span class="st">"the two canonical densities (density_per_10m2,"</span>,</span>
-<span id="cb47-752"><a href="#cb47-752" aria-hidden="true" tabindex="-1"></a>                  <span class="st">"density_per_1000m3, effort_class) — see the column comments —"</span>,</span>
-<span id="cb47-753"><a href="#cb47-753" aria-hidden="true" tabindex="-1"></a>                  <span class="st">"and qual_ok, a pre-computed pass/fail on measurement_qual."</span>) <span class="cf">else</span> <span class="st">""</span>))),</span>
-<span id="cb47-754"><a href="#cb47-754" aria-hidden="true" tabindex="-1"></a>    <span class="at">sample =</span> <span class="fu">paste</span>(<span class="st">"One row per sampling event, with event-level effort widened"</span>,</span>
-<span id="cb47-755"><a href="#cb47-755" aria-hidden="true" tabindex="-1"></a>                   <span class="st">"into its own columns. Use this for effort and station"</span>,</span>
-<span id="cb47-756"><a href="#cb47-756" aria-hidden="true" tabindex="-1"></a>                   <span class="st">"counting — summing effort over the observation table"</span>,</span>
-<span id="cb47-757"><a href="#cb47-757" aria-hidden="true" tabindex="-1"></a>                   <span class="st">"double-counts it."</span>),</span>
-<span id="cb47-758"><a href="#cb47-758" aria-hidden="true" tabindex="-1"></a>    <span class="at">obs_attribute =</span> <span class="fu">paste</span>(<span class="st">"Sub-occurrence detail: length- and stage-frequency bins"</span>,</span>
-<span id="cb47-759"><a href="#cb47-759" aria-hidden="true" tabindex="-1"></a>                          <span class="st">"(`bin_value`, `bin_label`, `count`) under each"</span>,</span>
-<span id="cb47-760"><a href="#cb47-760" aria-hidden="true" tabindex="-1"></a>                          <span class="st">"occurrence. Coordinates are inherited from the event."</span>),</span>
-<span id="cb47-761"><a href="#cb47-761" aria-hidden="true" tabindex="-1"></a>    <span class="at">full =</span> <span class="fu">paste</span>(<span class="st">"The full series before adaptive thinning. Much larger than the"</span>,</span>
-<span id="cb47-762"><a href="#cb47-762" aria-hidden="true" tabindex="-1"></a>                 <span class="st">"headline table and provided for scan-level work; most analyses"</span>,</span>
-<span id="cb47-763"><a href="#cb47-763" aria-hidden="true" tabindex="-1"></a>                 <span class="st">"want the thinned table."</span>))</span>
-<span id="cb47-764"><a href="#cb47-764" aria-hidden="true" tabindex="-1"></a>  <span class="fu">paste</span>(<span class="fu">c</span>(desc, grain_txt, <span class="fu">glue</span>(<span class="st">"Source: CalCOFI integrated database release {RELEASE}."</span>),</span>
-<span id="cb47-765"><a href="#cb47-765" aria-hidden="true" tabindex="-1"></a>          <span class="cf">if</span> (<span class="fu">nzchar</span>(dm<span class="sc">$</span>citation_main <span class="sc">%||%</span> <span class="st">""</span>)) <span class="fu">glue</span>(<span class="st">"Citation: {dm$citation_main}."</span>)),</span>
-<span id="cb47-766"><a href="#cb47-766" aria-hidden="true" tabindex="-1"></a>        <span class="at">collapse =</span> <span class="st">" "</span>)</span>
-<span id="cb47-767"><a href="#cb47-767" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb47-768"><a href="#cb47-768" aria-hidden="true" tabindex="-1"></a><span class="co"># every view is a long table of independent rows carrying their own time and</span></span>
-<span id="cb47-769"><a href="#cb47-769" aria-hidden="true" tabindex="-1"></a><span class="co"># position, which is ERDDAP's "Point"; the vertical/trajectory structure is</span></span>
-<span id="cb47-770"><a href="#cb47-770" aria-hidden="true" tabindex="-1"></a><span class="co"># expressed in the netCDF products, not here</span></span>
-<span id="cb47-771"><a href="#cb47-771" aria-hidden="true" tabindex="-1"></a>CDM <span class="ot">&lt;-</span> <span class="st">"Point"</span></span>
+<span id="cb47-731"><a href="#cb47-731" aria-hidden="true" tabindex="-1"></a><span class="co"># The dataset-catalog page (plan 2026-09-05 D-4/D-5(4)) — built from the key</span></span>
+<span id="cb47-732"><a href="#cb47-732" aria-hidden="true" tabindex="-1"></a><span class="co"># alone, never a hard-coded per-dataset list.</span></span>
+<span id="cb47-733"><a href="#cb47-733" aria-hidden="true" tabindex="-1"></a>dataset_page_url <span class="ot">&lt;-</span> <span class="cf">function</span>(dataset_key) <span class="fu">glue</span>(<span class="st">"https://calcofi.io/datasets/{dataset_key}/"</span>)</span>
+<span id="cb47-734"><a href="#cb47-734" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb47-735"><a href="#cb47-735" aria-hidden="true" tabindex="-1"></a><span class="co"># The dataset registries the record itself reads (calcofi4db &gt;= 4.1.0):</span></span>
+<span id="cb47-736"><a href="#cb47-736" aria-hidden="true" tabindex="-1"></a><span class="co"># provider display name/URL for the creator_*/institution globals when a</span></span>
+<span id="cb47-737"><a href="#cb47-737" aria-hidden="true" tabindex="-1"></a><span class="co"># dataset states no contact or creator of its own, and the license registry so</span></span>
+<span id="cb47-738"><a href="#cb47-738" aria-hidden="true" tabindex="-1"></a><span class="co"># a dataset's own `license` id resolves to its full name/URL rather than being</span></span>
+<span id="cb47-739"><a href="#cb47-739" aria-hidden="true" tabindex="-1"></a><span class="co"># guessed. Read once, here, at render time.</span></span>
+<span id="cb47-740"><a href="#cb47-740" aria-hidden="true" tabindex="-1"></a>CATALOG_REGISTRIES <span class="ot">&lt;-</span> calcofi4db<span class="sc">::</span><span class="fu">read_catalog_registries</span>(<span class="fu">here</span>(<span class="st">"metadata"</span>))</span>
+<span id="cb47-741"><a href="#cb47-741" aria-hidden="true" tabindex="-1"></a>.s0 <span class="ot">&lt;-</span> <span class="cf">function</span>(x) <span class="cf">if</span> (<span class="fu">is.null</span>(x) <span class="sc">||</span> <span class="fu">length</span>(x) <span class="sc">==</span> <span class="dv">0</span> <span class="sc">||</span> <span class="fu">is.na</span>(x[<span class="dv">1</span>])) <span class="st">""</span> <span class="cf">else</span> <span class="fu">trimws</span>(<span class="fu">as.character</span>(x)[<span class="dv">1</span>])</span>
+<span id="cb47-742"><a href="#cb47-742" aria-hidden="true" tabindex="-1"></a>provider_of <span class="ot">&lt;-</span> <span class="cf">function</span>(slug) {</span>
+<span id="cb47-743"><a href="#cb47-743" aria-hidden="true" tabindex="-1"></a>  row <span class="ot">&lt;-</span> CATALOG_REGISTRIES<span class="sc">$</span>provider[CATALOG_REGISTRIES<span class="sc">$</span>provider<span class="sc">$</span>provider <span class="sc">==</span> slug, ]</span>
+<span id="cb47-744"><a href="#cb47-744" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">nrow</span>(row)) <span class="fu">return</span>(<span class="fu">list</span>(<span class="at">name =</span> <span class="cn">NA_character_</span>, <span class="at">url =</span> <span class="cn">NA_character_</span>))</span>
+<span id="cb47-745"><a href="#cb47-745" aria-hidden="true" tabindex="-1"></a>  <span class="fu">list</span>(<span class="at">name =</span> row<span class="sc">$</span>provider_name[<span class="dv">1</span>], <span class="at">url =</span> row<span class="sc">$</span>url[<span class="dv">1</span>])</span>
+<span id="cb47-746"><a href="#cb47-746" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb47-747"><a href="#cb47-747" aria-hidden="true" tabindex="-1"></a>license_of <span class="ot">&lt;-</span> <span class="cf">function</span>(license_id) {</span>
+<span id="cb47-748"><a href="#cb47-748" aria-hidden="true" tabindex="-1"></a>  license_id <span class="ot">&lt;-</span> <span class="fu">.s0</span>(license_id)</span>
+<span id="cb47-749"><a href="#cb47-749" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">nzchar</span>(license_id)) <span class="fu">return</span>(<span class="cn">NA_character_</span>)</span>
+<span id="cb47-750"><a href="#cb47-750" aria-hidden="true" tabindex="-1"></a>  row <span class="ot">&lt;-</span> CATALOG_REGISTRIES<span class="sc">$</span>license[CATALOG_REGISTRIES<span class="sc">$</span>license<span class="sc">$</span>license <span class="sc">==</span> license_id, ]</span>
+<span id="cb47-751"><a href="#cb47-751" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">nrow</span>(row) <span class="sc">&amp;&amp;</span> <span class="fu">nzchar</span>(<span class="fu">.s0</span>(row<span class="sc">$</span>name[<span class="dv">1</span>]))) row<span class="sc">$</span>name[<span class="dv">1</span>] <span class="cf">else</span> license_id</span>
+<span id="cb47-752"><a href="#cb47-752" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb47-753"><a href="#cb47-753" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb47-754"><a href="#cb47-754" aria-hidden="true" tabindex="-1"></a><span class="co"># creator_name/_type/_email/_url + institution: I-13's WS-P2 fix (D-5(4)) —</span></span>
+<span id="cb47-755"><a href="#cb47-755" aria-hidden="true" tabindex="-1"></a><span class="co"># ERDDAP's own globals should say what the record says, not a fixed program</span></span>
+<span id="cb47-756"><a href="#cb47-756" aria-hidden="true" tabindex="-1"></a><span class="co"># name. Order: the sidecar's own contact/pi_names, else the provider</span></span>
+<span id="cb47-757"><a href="#cb47-757" aria-hidden="true" tabindex="-1"></a><span class="co"># organization (never invented) — the same fallback chain WS-E1's build_eml()</span></span>
+<span id="cb47-758"><a href="#cb47-758" aria-hidden="true" tabindex="-1"></a><span class="co"># uses for the EML `creator`/`contact` elements, so the two documents agree.</span></span>
+<span id="cb47-759"><a href="#cb47-759" aria-hidden="true" tabindex="-1"></a>creator_fields_of <span class="ot">&lt;-</span> <span class="cf">function</span>(dataset_key) {</span>
+<span id="cb47-760"><a href="#cb47-760" aria-hidden="true" tabindex="-1"></a>  dm  <span class="ot">&lt;-</span> <span class="fu">iy_meta</span>(dataset_key)</span>
+<span id="cb47-761"><a href="#cb47-761" aria-hidden="true" tabindex="-1"></a>  org <span class="ot">&lt;-</span> <span class="fu">provider_of</span>(iy[[dataset_key]]<span class="sc">$</span>provider <span class="sc">%||%</span> <span class="st">""</span>)</span>
+<span id="cb47-762"><a href="#cb47-762" aria-hidden="true" tabindex="-1"></a>  pis <span class="ot">&lt;-</span> <span class="fu">trimws</span>(<span class="fu">unlist</span>(<span class="fu">strsplit</span>(<span class="fu">.s0</span>(dm<span class="sc">$</span>pi_names), <span class="st">";"</span>)))</span>
+<span id="cb47-763"><a href="#cb47-763" aria-hidden="true" tabindex="-1"></a>  pis <span class="ot">&lt;-</span> pis[<span class="fu">nzchar</span>(pis)]</span>
+<span id="cb47-764"><a href="#cb47-764" aria-hidden="true" tabindex="-1"></a>  name  <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="fu">length</span>(pis)) <span class="fu">paste</span>(pis, <span class="at">collapse =</span> <span class="st">"; "</span>) <span class="cf">else</span> (org<span class="sc">$</span>name <span class="sc">%||%</span> <span class="st">"CalCOFI"</span>)</span>
+<span id="cb47-765"><a href="#cb47-765" aria-hidden="true" tabindex="-1"></a>  ctype <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="fu">length</span>(pis)) <span class="st">"person"</span> <span class="cf">else</span> <span class="st">"institution"</span></span>
+<span id="cb47-766"><a href="#cb47-766" aria-hidden="true" tabindex="-1"></a>  email <span class="ot">&lt;-</span> <span class="fu">.s0</span>(dm<span class="sc">$</span>contact)</span>
+<span id="cb47-767"><a href="#cb47-767" aria-hidden="true" tabindex="-1"></a>  email <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="fu">grepl</span>(<span class="st">"^https?://"</span>, email)) <span class="cn">NA_character_</span> <span class="cf">else</span> <span class="cf">if</span> (<span class="fu">nzchar</span>(email)) email <span class="cf">else</span> <span class="cn">NA_character_</span></span>
+<span id="cb47-768"><a href="#cb47-768" aria-hidden="true" tabindex="-1"></a>  url   <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="fu">grepl</span>(<span class="st">"^https?://"</span>, <span class="fu">.s0</span>(dm<span class="sc">$</span>contact))) dm<span class="sc">$</span>contact <span class="cf">else</span> (dm<span class="sc">$</span>link_calcofi_org <span class="sc">%||%</span> org<span class="sc">$</span>url <span class="sc">%||%</span> <span class="st">"https://calcofi.org"</span>)</span>
+<span id="cb47-769"><a href="#cb47-769" aria-hidden="true" tabindex="-1"></a>  <span class="fu">list</span>(<span class="at">creator_name =</span> name, <span class="at">creator_type =</span> ctype, <span class="at">creator_email =</span> email <span class="sc">%||%</span> <span class="cn">NA_character_</span>,</span>
+<span id="cb47-770"><a href="#cb47-770" aria-hidden="true" tabindex="-1"></a>       <span class="at">creator_url =</span> url, <span class="at">institution =</span> org<span class="sc">$</span>name <span class="sc">%||%</span> <span class="st">"CalCOFI"</span>)</span>
+<span id="cb47-771"><a href="#cb47-771" aria-hidden="true" tabindex="-1"></a>}</span>
 <span id="cb47-772"><a href="#cb47-772" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb47-773"><a href="#cb47-773" aria-hidden="true" tabindex="-1"></a>blocks <span class="ot">&lt;-</span> <span class="fu">character</span>(<span class="dv">0</span>)</span>
-<span id="cb47-774"><a href="#cb47-774" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (i <span class="cf">in</span> <span class="fu">seq_len</span>(<span class="fu">nrow</span>(cfg))) {</span>
-<span id="cb47-775"><a href="#cb47-775" aria-hidden="true" tabindex="-1"></a>  r <span class="ot">&lt;-</span> cfg[i, ]</span>
-<span id="cb47-776"><a href="#cb47-776" aria-hidden="true" tabindex="-1"></a>  cols <span class="ot">&lt;-</span> <span class="fu">q</span>(<span class="st">"DESCRIBE SELECT * FROM ({build_sql(r, PQ_LOCAL)})"</span>) <span class="sc">|&gt;</span></span>
-<span id="cb47-777"><a href="#cb47-777" aria-hidden="true" tabindex="-1"></a>    <span class="fu">transmute</span>(<span class="at">column =</span> column_name, <span class="at">duckdb_type =</span> column_type)</span>
-<span id="cb47-778"><a href="#cb47-778" aria-hidden="true" tabindex="-1"></a>  qflags <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="st">"measurement_qual"</span> <span class="sc">%in%</span> cols<span class="sc">$</span>column) <span class="fu">qual_flag_atts</span>(r<span class="sc">$</span>dataset_key) <span class="cf">else</span> <span class="cn">NULL</span></span>
-<span id="cb47-779"><a href="#cb47-779" aria-hidden="true" tabindex="-1"></a>  xml <span class="ot">&lt;-</span> <span class="fu">erddap_duckdb_dataset_xml</span>(</span>
-<span id="cb47-780"><a href="#cb47-780" aria-hidden="true" tabindex="-1"></a>    <span class="at">staged        =</span> <span class="fu">as.data.frame</span>(cols),</span>
-<span id="cb47-781"><a href="#cb47-781" aria-hidden="true" tabindex="-1"></a>    <span class="at">dataset_id    =</span> r<span class="sc">$</span>dataset_id,</span>
-<span id="cb47-782"><a href="#cb47-782" aria-hidden="true" tabindex="-1"></a>    <span class="at">title         =</span> <span class="fu">title_of</span>(r),</span>
-<span id="cb47-783"><a href="#cb47-783" aria-hidden="true" tabindex="-1"></a>    <span class="at">summary       =</span> <span class="fu">summary_of</span>(r),</span>
-<span id="cb47-784"><a href="#cb47-784" aria-hidden="true" tabindex="-1"></a>    <span class="at">source_url    =</span> <span class="fu">glue</span>(<span class="st">"jdbc:duckdb:{ERDDAP_DB}"</span>),</span>
-<span id="cb47-785"><a href="#cb47-785" aria-hidden="true" tabindex="-1"></a>    <span class="at">table_name    =</span> r<span class="sc">$</span>view_name,</span>
-<span id="cb47-786"><a href="#cb47-786" aria-hidden="true" tabindex="-1"></a>    <span class="co"># keyed by column name: mt_units/mt_nerc_p01 land on the `{ds}_sample` views'</span></span>
-<span id="cb47-787"><a href="#cb47-787" aria-hidden="true" tabindex="-1"></a>    <span class="co"># widened effort columns (which ARE measurement_type names) and on the</span></span>
-<span id="cb47-788"><a href="#cb47-788" aria-hidden="true" tabindex="-1"></a>    <span class="co"># bio/env grain's plain std_haul_factor/prop_sorted columns (same names by</span></span>
-<span id="cb47-789"><a href="#cb47-789" aria-hidden="true" tabindex="-1"></a>    <span class="co"># construction); obs_pair_* only exist as columns on the bio/env grain, so</span></span>
-<span id="cb47-790"><a href="#cb47-790" aria-hidden="true" tabindex="-1"></a>    <span class="co"># both are safe to pass to every dataset unconditionally</span></span>
-<span id="cb47-791"><a href="#cb47-791" aria-hidden="true" tabindex="-1"></a>    <span class="at">units_lookup      =</span> <span class="fu">modifyList</span>(mt_units, obs_pair_units),</span>
-<span id="cb47-792"><a href="#cb47-792" aria-hidden="true" tabindex="-1"></a>    <span class="at">longname_lookup   =</span> obs_pair_longname,</span>
-<span id="cb47-793"><a href="#cb47-793" aria-hidden="true" tabindex="-1"></a>    <span class="at">comment_lookup    =</span> obs_pair_comment,</span>
-<span id="cb47-794"><a href="#cb47-794" aria-hidden="true" tabindex="-1"></a>    <span class="at">urn_lookup        =</span> mt_nerc_p01,</span>
-<span id="cb47-795"><a href="#cb47-795" aria-hidden="true" tabindex="-1"></a>    <span class="at">flagvalues_lookup   =</span> <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.null</span>(qflags)) <span class="fu">list</span>(<span class="at">measurement_qual =</span> qflags<span class="sc">$</span>values) <span class="cf">else</span> <span class="fu">list</span>(),</span>
-<span id="cb47-796"><a href="#cb47-796" aria-hidden="true" tabindex="-1"></a>    <span class="at">flagmeanings_lookup =</span> <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.null</span>(qflags)) <span class="fu">list</span>(<span class="at">measurement_qual =</span> qflags<span class="sc">$</span>meanings) <span class="cf">else</span> <span class="fu">list</span>(),</span>
-<span id="cb47-797"><a href="#cb47-797" aria-hidden="true" tabindex="-1"></a>    <span class="at">cdm_data_type =</span> CDM,</span>
-<span id="cb47-798"><a href="#cb47-798" aria-hidden="true" tabindex="-1"></a>    <span class="at">global_atts   =</span> <span class="fu">list</span>(</span>
-<span id="cb47-799"><a href="#cb47-799" aria-hidden="true" tabindex="-1"></a>      <span class="at">license   =</span> <span class="fu">iy_meta</span>(r<span class="sc">$</span>dataset_key)<span class="sc">$</span>license <span class="sc">%||%</span> <span class="st">"CC-BY 4.0"</span>,</span>
-<span id="cb47-800"><a href="#cb47-800" aria-hidden="true" tabindex="-1"></a>      <span class="at">infoUrl   =</span> <span class="fu">iy_meta</span>(r<span class="sc">$</span>dataset_key)<span class="sc">$</span>link_calcofi_org <span class="sc">%||%</span> <span class="st">"https://calcofi.org"</span>,</span>
-<span id="cb47-801"><a href="#cb47-801" aria-hidden="true" tabindex="-1"></a>      <span class="at">db_release =</span> RELEASE, <span class="at">dataset_key =</span> r<span class="sc">$</span>dataset_key,</span>
-<span id="cb47-802"><a href="#cb47-802" aria-hidden="true" tabindex="-1"></a>      <span class="at">references =</span> <span class="st">"https://calcofi.io/workflows/publish_to-erddap.html"</span>))</span>
-<span id="cb47-803"><a href="#cb47-803" aria-hidden="true" tabindex="-1"></a>  <span class="fu">dir_create</span>(<span class="fu">file.path</span>(dir_erddap, r<span class="sc">$</span>dataset_id))</span>
-<span id="cb47-804"><a href="#cb47-804" aria-hidden="true" tabindex="-1"></a>  <span class="fu">writeLines</span>(xml, <span class="fu">file.path</span>(dir_erddap, r<span class="sc">$</span>dataset_id, <span class="fu">glue</span>(<span class="st">"{r$dataset_id}.xml"</span>)))</span>
-<span id="cb47-805"><a href="#cb47-805" aria-hidden="true" tabindex="-1"></a>  blocks <span class="ot">&lt;-</span> <span class="fu">c</span>(blocks, xml)</span>
-<span id="cb47-806"><a href="#cb47-806" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"</span><span class="sc">\n</span><span class="st">- `{r$dataset_id}`: {ncol(cols)} cols, "</span>,</span>
-<span id="cb47-807"><a href="#cb47-807" aria-hidden="true" tabindex="-1"></a>           <span class="st">"{val$rows[val$dataset_id == r$dataset_id]} rows</span><span class="sc">\n</span><span class="st">"</span>))</span>
-<span id="cb47-808"><a href="#cb47-808" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb47-809"><a href="#cb47-809" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb47-810"><a href="#cb47-810" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb47-813"><a href="#cb47-813" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb47-814"><a href="#cb47-814" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: assemble</span></span>
-<span id="cb47-815"><a href="#cb47-815" aria-hidden="true" tabindex="-1"></a>xml_all <span class="ot">&lt;-</span> <span class="fu">paste0</span>(</span>
-<span id="cb47-816"><a href="#cb47-816" aria-hidden="true" tabindex="-1"></a>  <span class="st">"&lt;!-- CalCOFI ERDDAP datasets — generated by publish_to-erddap.qmd</span><span class="sc">\n</span><span class="st">"</span>,</span>
-<span id="cb47-817"><a href="#cb47-817" aria-hidden="true" tabindex="-1"></a>  <span class="fu">glue</span>(<span class="st">"     release {RELEASE}, {length(blocks)} datasets, "</span>,</span>
-<span id="cb47-818"><a href="#cb47-818" aria-hidden="true" tabindex="-1"></a>       <span class="st">"{format(Sys.time(), '%Y-%m-%d')}</span><span class="sc">\n</span><span class="st">"</span>),</span>
-<span id="cb47-819"><a href="#cb47-819" aria-hidden="true" tabindex="-1"></a>  <span class="st">"     EDDTableFromDatabase over DuckDB views; see the notebook for deploy. --&gt;</span><span class="sc">\n</span><span class="st">"</span>,</span>
-<span id="cb47-820"><a href="#cb47-820" aria-hidden="true" tabindex="-1"></a>  <span class="fu">paste</span>(blocks, <span class="at">collapse =</span> <span class="st">"</span><span class="sc">\n\n</span><span class="st">"</span>))</span>
-<span id="cb47-821"><a href="#cb47-821" aria-hidden="true" tabindex="-1"></a><span class="fu">writeLines</span>(xml_all, <span class="fu">file.path</span>(dir_erddap, <span class="st">"datasets_calcofi.xml"</span>))</span>
-<span id="cb47-822"><a href="#cb47-822" aria-hidden="true" tabindex="-1"></a><span class="fu">write_csv</span>(cfg <span class="sc">|&gt;</span> <span class="fu">left_join</span>(val, <span class="at">by =</span> <span class="st">"dataset_id"</span>),</span>
-<span id="cb47-823"><a href="#cb47-823" aria-hidden="true" tabindex="-1"></a>          <span class="fu">file.path</span>(dir_erddap, <span class="st">"erddap_plan.csv"</span>), <span class="at">na =</span> <span class="st">""</span>)</span>
-<span id="cb47-824"><a href="#cb47-824" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"wrote {length(blocks)} dataset blocks to data/erddap/datasets_calcofi.xml</span><span class="sc">\n</span><span class="st">"</span>))</span>
-<span id="cb47-825"><a href="#cb47-825" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb47-826"><a href="#cb47-826" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb47-827"><a href="#cb47-827" aria-hidden="true" tabindex="-1"></a><span class="fu">## Deploy</span></span>
-<span id="cb47-828"><a href="#cb47-828" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb47-831"><a href="#cb47-831" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb47-832"><a href="#cb47-832" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: deploy</span></span>
-<span id="cb47-833"><a href="#cb47-833" aria-hidden="true" tabindex="-1"></a><span class="co">#| message: false</span></span>
-<span id="cb47-834"><a href="#cb47-834" aria-hidden="true" tabindex="-1"></a><span class="fu">source</span>(<span class="fu">here</span>(<span class="st">"libs/erddap_deploy.R"</span>))</span>
-<span id="cb47-835"><a href="#cb47-835" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb47-836"><a href="#cb47-836" aria-hidden="true" tabindex="-1"></a><span class="co"># Gated, like CALCOFI_PUBLISH=true in the netCDF publisher: `tar_make()` keeps</span></span>
-<span id="cb47-837"><a href="#cb47-837" aria-hidden="true" tabindex="-1"></a><span class="co"># GENERATING config on every release, but pushing to a public production service</span></span>
-<span id="cb47-838"><a href="#cb47-838" aria-hidden="true" tabindex="-1"></a><span class="co"># stays a deliberate act. Set CALCOFI_ERDDAP_DEPLOY=true to actually deploy.</span></span>
-<span id="cb47-839"><a href="#cb47-839" aria-hidden="true" tabindex="-1"></a><span class="co"># Deploying is the DEFAULT, matching deploy_consumers.qmd: a release consumers</span></span>
-<span id="cb47-840"><a href="#cb47-840" aria-hidden="true" tabindex="-1"></a><span class="co"># never receive is not a release. CALCOFI_DEPLOY=false turns the whole</span></span>
-<span id="cb47-841"><a href="#cb47-841" aria-hidden="true" tabindex="-1"></a><span class="co"># post-release chain into a dry run; CALCOFI_ERDDAP_DEPLOY=false skips only this</span></span>
-<span id="cb47-842"><a href="#cb47-842" aria-hidden="true" tabindex="-1"></a><span class="co"># leg, which is worth having because it is the slowest (a ~1.6 GB server-side</span></span>
-<span id="cb47-843"><a href="#cb47-843" aria-hidden="true" tabindex="-1"></a><span class="co"># parquet pull).</span></span>
-<span id="cb47-844"><a href="#cb47-844" aria-hidden="true" tabindex="-1"></a>DEPLOY      <span class="ot">&lt;-</span> <span class="sc">!</span><span class="fu">identical</span>(<span class="fu">tolower</span>(<span class="fu">Sys.getenv</span>(<span class="st">"CALCOFI_DEPLOY"</span>, <span class="st">"true"</span>)), <span class="st">"false"</span>) <span class="sc">&amp;&amp;</span></span>
-<span id="cb47-845"><a href="#cb47-845" aria-hidden="true" tabindex="-1"></a>               <span class="sc">!</span><span class="fu">identical</span>(<span class="fu">tolower</span>(<span class="fu">Sys.getenv</span>(<span class="st">"CALCOFI_ERDDAP_DEPLOY"</span>, <span class="st">"true"</span>)), <span class="st">"false"</span>)</span>
-<span id="cb47-846"><a href="#cb47-846" aria-hidden="true" tabindex="-1"></a>SSH_HOST    <span class="ot">&lt;-</span> <span class="fu">Sys.getenv</span>(<span class="st">"CALCOFI_SSH_HOST"</span>, <span class="st">"calcofi"</span>)</span>
-<span id="cb47-847"><a href="#cb47-847" aria-hidden="true" tabindex="-1"></a>ERDDAP_REPO <span class="ot">&lt;-</span> <span class="fu">Sys.getenv</span>(<span class="st">"CALCOFI_ERDDAP_REPO"</span>, <span class="fu">here</span>(<span class="st">"../erddap"</span>))</span>
-<span id="cb47-848"><a href="#cb47-848" aria-hidden="true" tabindex="-1"></a>ERDDAP_REMOTE_REPO <span class="ot">&lt;-</span> <span class="fu">Sys.getenv</span>(<span class="st">"CALCOFI_ERDDAP_REMOTE_REPO"</span>,</span>
-<span id="cb47-849"><a href="#cb47-849" aria-hidden="true" tabindex="-1"></a>                                 <span class="st">"/share/github/CalCOFI/erddap"</span>)</span>
-<span id="cb47-850"><a href="#cb47-850" aria-hidden="true" tabindex="-1"></a>ERDDAP_URL  <span class="ot">&lt;-</span> <span class="fu">Sys.getenv</span>(<span class="st">"CALCOFI_ERDDAP_URL"</span>, <span class="st">"https://erddap.calcofi.io"</span>)</span>
-<span id="cb47-851"><a href="#cb47-851" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb47-852"><a href="#cb47-852" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"deploy: {DEPLOY} -&gt; {ERDDAP_URL} (default; CALCOFI_DEPLOY=false for a dry run, CALCOFI_ERDDAP_DEPLOY=false to skip just this leg)</span><span class="sc">\n</span><span class="st">"</span>))</span>
-<span id="cb47-853"><a href="#cb47-853" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb47-854"><a href="#cb47-854" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb47-857"><a href="#cb47-857" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb47-858"><a href="#cb47-858" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: deploy-run</span></span>
-<span id="cb47-859"><a href="#cb47-859" aria-hidden="true" tabindex="-1"></a><span class="co">#| eval: !expr DEPLOY</span></span>
-<span id="cb47-860"><a href="#cb47-860" aria-hidden="true" tabindex="-1"></a><span class="co">#| message: false</span></span>
-<span id="cb47-861"><a href="#cb47-861" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb47-862"><a href="#cb47-862" aria-hidden="true" tabindex="-1"></a>n_pq <span class="ot">&lt;-</span> <span class="fu">erddap_sync_parquet</span>(SSH_HOST, ERDDAP_ROOT, RELEASE)</span>
-<span id="cb47-863"><a href="#cb47-863" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"1. synced {n_pq} parquet files to {ERDDAP_ROOT}/datasets/release/{RELEASE}</span><span class="sc">\n</span><span class="st">"</span>))</span>
-<span id="cb47-864"><a href="#cb47-864" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb47-865"><a href="#cb47-865" aria-hidden="true" tabindex="-1"></a>built <span class="ot">&lt;-</span> <span class="fu">erddap_build_db</span>(SSH_HOST, ERDDAP_ROOT, script_path)</span>
-<span id="cb47-866"><a href="#cb47-866" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"2. built view db ({sum(grepl('rows$', built))} views, none empty)</span><span class="sc">\n</span><span class="st">"</span>))</span>
-<span id="cb47-867"><a href="#cb47-867" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb47-868"><a href="#cb47-868" aria-hidden="true" tabindex="-1"></a>ids <span class="ot">&lt;-</span> <span class="fu">erddap_splice_config</span>(ERDDAP_REPO, <span class="fu">file.path</span>(dir_erddap, <span class="st">"datasets_calcofi.xml"</span>))</span>
-<span id="cb47-869"><a href="#cb47-869" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"3. spliced {length(ids$all)} generated + {length(ids$kept_outside)} hand-maintained; "</span>,</span>
-<span id="cb47-870"><a href="#cb47-870" aria-hidden="true" tabindex="-1"></a>         <span class="st">"added {length(ids$added)}, retiring {length(ids$retired)}</span><span class="sc">\n</span><span class="st">"</span>))</span>
-<span id="cb47-871"><a href="#cb47-871" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">length</span>(ids<span class="sc">$</span>retired))</span>
-<span id="cb47-872"><a href="#cb47-872" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"   RETIRING (public URLs stop resolving): {paste(ids$retired, collapse = ', ')}</span><span class="sc">\n</span><span class="st">"</span>))</span>
-<span id="cb47-873"><a href="#cb47-873" aria-hidden="true" tabindex="-1"></a><span class="fu">erddap_push_config</span>(SSH_HOST, ERDDAP_REPO, ERDDAP_REMOTE_REPO, RELEASE)</span>
-<span id="cb47-874"><a href="#cb47-874" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb47-875"><a href="#cb47-875" aria-hidden="true" tabindex="-1"></a><span class="fu">erddap_flag</span>(SSH_HOST, ERDDAP_FLAG, ids<span class="sc">$</span>all, ids<span class="sc">$</span>retired)</span>
-<span id="cb47-876"><a href="#cb47-876" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"4. flagged for reload</span><span class="sc">\n</span><span class="st">"</span>)</span>
-<span id="cb47-877"><a href="#cb47-877" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb47-878"><a href="#cb47-878" aria-hidden="true" tabindex="-1"></a><span class="co"># ERDDAP reloads asynchronously, so give it a moment before asking.</span></span>
-<span id="cb47-879"><a href="#cb47-879" aria-hidden="true" tabindex="-1"></a><span class="fu">Sys.sleep</span>(<span class="dv">30</span>)</span>
-<span id="cb47-880"><a href="#cb47-880" aria-hidden="true" tabindex="-1"></a>ver <span class="ot">&lt;-</span> <span class="fu">erddap_verify</span>(ERDDAP_URL, <span class="at">expect_present =</span> ids<span class="sc">$</span>all, <span class="at">expect_absent =</span> ids<span class="sc">$</span>retired)</span>
-<span id="cb47-881"><a href="#cb47-881" aria-hidden="true" tabindex="-1"></a><span class="fu">kable</span>(ver, <span class="at">caption =</span> <span class="st">"5. Live verification (the flag directory is not a reliable signal)"</span>)</span>
-<span id="cb47-882"><a href="#cb47-882" aria-hidden="true" tabindex="-1"></a><span class="fu">stopifnot</span>(<span class="st">"live ERDDAP does not match the deployed config"</span> <span class="ot">=</span> <span class="fu">all</span>(ver<span class="sc">$</span>ok))</span>
-<span id="cb47-883"><a href="#cb47-883" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb47-884"><a href="#cb47-884" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb47-885"><a href="#cb47-885" aria-hidden="true" tabindex="-1"></a>::: {.callout-note title="What deploying does, and the traps it encodes"}</span>
-<span id="cb47-886"><a href="#cb47-886" aria-hidden="true" tabindex="-1"></a>The five steps are in <span class="in">`libs/erddap_deploy.R`</span>, one function each: sync the release</span>
-<span id="cb47-887"><a href="#cb47-887" aria-hidden="true" tabindex="-1"></a>parquet server-side, build the DuckDB views **on the server** (DuckDB validates a</span>
-<span id="cb47-888"><a href="#cb47-888" aria-hidden="true" tabindex="-1"></a>view's parquet paths at <span class="in">`CREATE`</span> time, so they cannot be built here), splice this</span>
-<span id="cb47-889"><a href="#cb47-889" aria-hidden="true" tabindex="-1"></a>config into <span class="in">`CalCOFI/erddap`</span>, flag every dataset for reload, and verify against</span>
-<span id="cb47-890"><a href="#cb47-890" aria-hidden="true" tabindex="-1"></a>the live service.</span>
-<span id="cb47-891"><a href="#cb47-891" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb47-892"><a href="#cb47-892" aria-hidden="true" tabindex="-1"></a>Four failure modes are handled there because every one of them fails *silently*:</span>
-<span id="cb47-893"><a href="#cb47-893" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb47-894"><a href="#cb47-894" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**`sudo git pull` cannot work** — root has no GitHub credentials. The fetch runs</span>
-<span id="cb47-895"><a href="#cb47-895" aria-hidden="true" tabindex="-1"></a>  as the ssh user, the merge as root. A bare <span class="in">`git pull`</span> prints <span class="in">`Updating &lt;a&gt;..&lt;b&gt;`</span></span>
-<span id="cb47-896"><a href="#cb47-896" aria-hidden="true" tabindex="-1"></a>  and then dies on the write, so its first line reads like success.</span>
-<span id="cb47-897"><a href="#cb47-897" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Ownership is captured and restored.** The checkout is owned by uids that are</span>
-<span id="cb47-898"><a href="#cb47-898" aria-hidden="true" tabindex="-1"></a>  not the ssh user; a root merge re-owns the tree and breaks the *next*</span>
-<span id="cb47-899"><a href="#cb47-899" aria-hidden="true" tabindex="-1"></a>  unprivileged fetch.</span>
-<span id="cb47-900"><a href="#cb47-900" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**The flag directory proves nothing.** It is <span class="in">`drwxrws---`</span> under a group the ssh</span>
-<span id="cb47-901"><a href="#cb47-901" aria-hidden="true" tabindex="-1"></a>  user is not in, so an unprivileged <span class="in">`ls`</span> reports zero either way, and ERDDAP</span>
-<span id="cb47-902"><a href="#cb47-902" aria-hidden="true" tabindex="-1"></a>  deletes each flag as it consumes it. Verification reads the live service.</span>
-<span id="cb47-903"><a href="#cb47-903" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Splicing at the wrong marker duplicates everything.** <span class="in">`datasets.xml`</span> carries</span>
-<span id="cb47-904"><a href="#cb47-904" aria-hidden="true" tabindex="-1"></a>  both an <span class="in">`add dataset definitions below`</span> marker and a <span class="in">`BEGIN/END generated`</span></span>
-<span id="cb47-905"><a href="#cb47-905" aria-hidden="true" tabindex="-1"></a>  pair; only replacing between BEGIN/END is idempotent. Appending at the former</span>
-<span id="cb47-906"><a href="#cb47-906" aria-hidden="true" tabindex="-1"></a>  would add a second copy of all 34 datasets.</span>
-<span id="cb47-907"><a href="#cb47-907" aria-hidden="true" tabindex="-1"></a>:::</span>
+<span id="cb47-773"><a href="#cb47-773" aria-hidden="true" tabindex="-1"></a><span class="co"># keywords: the sidecar's GCMD Science Keywords (declared for all 16 datasets</span></span>
+<span id="cb47-774"><a href="#cb47-774" aria-hidden="true" tabindex="-1"></a><span class="co"># by WS-R1) joined comma-separated, ERDDAP's own convention for this global.</span></span>
+<span id="cb47-775"><a href="#cb47-775" aria-hidden="true" tabindex="-1"></a>keywords_of <span class="ot">&lt;-</span> <span class="cf">function</span>(dataset_key) {</span>
+<span id="cb47-776"><a href="#cb47-776" aria-hidden="true" tabindex="-1"></a>  kw <span class="ot">&lt;-</span> <span class="fu">unlist</span>(<span class="fu">iy_meta</span>(dataset_key)<span class="sc">$</span>keywords_gcmd)</span>
+<span id="cb47-777"><a href="#cb47-777" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">length</span>(kw)) <span class="fu">return</span>(<span class="cn">NA_character_</span>)</span>
+<span id="cb47-778"><a href="#cb47-778" aria-hidden="true" tabindex="-1"></a>  <span class="fu">paste</span>(kw, <span class="at">collapse =</span> <span class="st">", "</span>)</span>
+<span id="cb47-779"><a href="#cb47-779" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb47-780"><a href="#cb47-780" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb47-781"><a href="#cb47-781" aria-hidden="true" tabindex="-1"></a><span class="co"># I-13 (this WS-P2's fix, at the source): an em dash in a title survives this</span></span>
+<span id="cb47-782"><a href="#cb47-782" aria-hidden="true" tabindex="-1"></a><span class="co"># notebook as real UTF-8, but erddap.calcofi.io's OWN `allDatasets` metadata</span></span>
+<span id="cb47-783"><a href="#cb47-783" aria-hidden="true" tabindex="-1"></a><span class="co"># re-serializes it as the literal 6-character string "—" — verified on</span></span>
+<span id="cb47-784"><a href="#cb47-784" aria-hidden="true" tabindex="-1"></a><span class="co"># the live server 2026-09-05, decoded downstream since calcofi4db 4.2.x</span></span>
+<span id="cb47-785"><a href="#cb47-785" aria-hidden="true" tabindex="-1"></a><span class="co"># (WS-M1's observe_distributions()). The durable fix is not to hand ERDDAP a</span></span>
+<span id="cb47-786"><a href="#cb47-786" aria-hidden="true" tabindex="-1"></a><span class="co"># character its own metadata layer mishandles: a plain hyphen reads the same</span></span>
+<span id="cb47-787"><a href="#cb47-787" aria-hidden="true" tabindex="-1"></a><span class="co"># and survives every consumer.</span></span>
+<span id="cb47-788"><a href="#cb47-788" aria-hidden="true" tabindex="-1"></a>title_of <span class="ot">&lt;-</span> <span class="cf">function</span>(r) {</span>
+<span id="cb47-789"><a href="#cb47-789" aria-hidden="true" tabindex="-1"></a>  dm <span class="ot">&lt;-</span> <span class="fu">iy_meta</span>(r<span class="sc">$</span>dataset_key)</span>
+<span id="cb47-790"><a href="#cb47-790" aria-hidden="true" tabindex="-1"></a>  base <span class="ot">&lt;-</span> dm<span class="sc">$</span>dataset_name <span class="sc">%||%</span> r<span class="sc">$</span>dataset_key</span>
+<span id="cb47-791"><a href="#cb47-791" aria-hidden="true" tabindex="-1"></a>  <span class="cf">switch</span>(r<span class="sc">$</span>grain,</span>
+<span id="cb47-792"><a href="#cb47-792" aria-hidden="true" tabindex="-1"></a>    <span class="at">obs           =</span> <span class="fu">glue</span>(<span class="st">"{base} - observations"</span>),</span>
+<span id="cb47-793"><a href="#cb47-793" aria-hidden="true" tabindex="-1"></a>    <span class="at">sample        =</span> <span class="fu">glue</span>(<span class="st">"{base} - sampling events"</span>),</span>
+<span id="cb47-794"><a href="#cb47-794" aria-hidden="true" tabindex="-1"></a>    <span class="at">obs_attribute =</span> <span class="fu">glue</span>(<span class="st">"{base} - length/stage frequency"</span>),</span>
+<span id="cb47-795"><a href="#cb47-795" aria-hidden="true" tabindex="-1"></a>    <span class="at">full          =</span> <span class="fu">glue</span>(<span class="st">"{base} - full resolution (pre-thinning)"</span>))</span>
+<span id="cb47-796"><a href="#cb47-796" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb47-797"><a href="#cb47-797" aria-hidden="true" tabindex="-1"></a>summary_of <span class="ot">&lt;-</span> <span class="cf">function</span>(r) {</span>
+<span id="cb47-798"><a href="#cb47-798" aria-hidden="true" tabindex="-1"></a>  dm <span class="ot">&lt;-</span> <span class="fu">iy_meta</span>(r<span class="sc">$</span>dataset_key)</span>
+<span id="cb47-799"><a href="#cb47-799" aria-hidden="true" tabindex="-1"></a>  desc <span class="ot">&lt;-</span> <span class="fu">gsub</span>(<span class="st">"[[:space:]]+"</span>, <span class="st">" "</span>, <span class="fu">trimws</span>(dm<span class="sc">$</span>description <span class="sc">%||%</span> <span class="st">""</span>))</span>
+<span id="cb47-800"><a href="#cb47-800" aria-hidden="true" tabindex="-1"></a>  grain_txt <span class="ot">&lt;-</span> <span class="cf">switch</span>(r<span class="sc">$</span>grain,</span>
+<span id="cb47-801"><a href="#cb47-801" aria-hidden="true" tabindex="-1"></a>    <span class="at">obs =</span> <span class="fu">paste</span>(<span class="fu">Filter</span>(nzchar, <span class="fu">c</span>(</span>
+<span id="cb47-802"><a href="#cb47-802" aria-hidden="true" tabindex="-1"></a>                <span class="st">"One row per observation: a measurement of one quantity at one"</span>,</span>
+<span id="cb47-803"><a href="#cb47-803" aria-hidden="true" tabindex="-1"></a>                <span class="st">"event, taxon and depth. `measurement_type` names the quantity and"</span>,</span>
+<span id="cb47-804"><a href="#cb47-804" aria-hidden="true" tabindex="-1"></a>                <span class="st">"`measurement_value` holds it, so filter on measurement_type."</span>,</span>
+<span id="cb47-805"><a href="#cb47-805" aria-hidden="true" tabindex="-1"></a>                <span class="cf">if</span> (HAS_OBS_PAIR) <span class="fu">paste</span>(</span>
+<span id="cb47-806"><a href="#cb47-806" aria-hidden="true" tabindex="-1"></a>                  <span class="st">"Each row also carries its own sample's gear and effort"</span>,</span>
+<span id="cb47-807"><a href="#cb47-807" aria-hidden="true" tabindex="-1"></a>                  <span class="st">"(tow_type, std_haul_factor, prop_sorted, volume_sampled_m3) and"</span>,</span>
+<span id="cb47-808"><a href="#cb47-808" aria-hidden="true" tabindex="-1"></a>                  <span class="st">"the two canonical densities (density_per_10m2,"</span>,</span>
+<span id="cb47-809"><a href="#cb47-809" aria-hidden="true" tabindex="-1"></a>                  <span class="st">"density_per_1000m3, effort_class) — see the column comments —"</span>,</span>
+<span id="cb47-810"><a href="#cb47-810" aria-hidden="true" tabindex="-1"></a>                  <span class="st">"and qual_ok, a pre-computed pass/fail on measurement_qual."</span>) <span class="cf">else</span> <span class="st">""</span>))),</span>
+<span id="cb47-811"><a href="#cb47-811" aria-hidden="true" tabindex="-1"></a>    <span class="at">sample =</span> <span class="fu">paste</span>(<span class="st">"One row per sampling event, with event-level effort widened"</span>,</span>
+<span id="cb47-812"><a href="#cb47-812" aria-hidden="true" tabindex="-1"></a>                   <span class="st">"into its own columns. Use this for effort and station"</span>,</span>
+<span id="cb47-813"><a href="#cb47-813" aria-hidden="true" tabindex="-1"></a>                   <span class="st">"counting — summing effort over the observation table"</span>,</span>
+<span id="cb47-814"><a href="#cb47-814" aria-hidden="true" tabindex="-1"></a>                   <span class="st">"double-counts it."</span>),</span>
+<span id="cb47-815"><a href="#cb47-815" aria-hidden="true" tabindex="-1"></a>    <span class="at">obs_attribute =</span> <span class="fu">paste</span>(<span class="st">"Sub-occurrence detail: length- and stage-frequency bins"</span>,</span>
+<span id="cb47-816"><a href="#cb47-816" aria-hidden="true" tabindex="-1"></a>                          <span class="st">"(`bin_value`, `bin_label`, `count`) under each"</span>,</span>
+<span id="cb47-817"><a href="#cb47-817" aria-hidden="true" tabindex="-1"></a>                          <span class="st">"occurrence. Coordinates are inherited from the event."</span>),</span>
+<span id="cb47-818"><a href="#cb47-818" aria-hidden="true" tabindex="-1"></a>    <span class="at">full =</span> <span class="fu">paste</span>(<span class="st">"The full series before adaptive thinning. Much larger than the"</span>,</span>
+<span id="cb47-819"><a href="#cb47-819" aria-hidden="true" tabindex="-1"></a>                 <span class="st">"headline table and provided for scan-level work; most analyses"</span>,</span>
+<span id="cb47-820"><a href="#cb47-820" aria-hidden="true" tabindex="-1"></a>                 <span class="st">"want the thinned table."</span>))</span>
+<span id="cb47-821"><a href="#cb47-821" aria-hidden="true" tabindex="-1"></a>  <span class="fu">paste</span>(<span class="fu">c</span>(desc, grain_txt, <span class="fu">glue</span>(<span class="st">"Source: CalCOFI integrated database release {RELEASE}."</span>),</span>
+<span id="cb47-822"><a href="#cb47-822" aria-hidden="true" tabindex="-1"></a>          <span class="cf">if</span> (<span class="fu">nzchar</span>(dm<span class="sc">$</span>citation_main <span class="sc">%||%</span> <span class="st">""</span>)) <span class="fu">glue</span>(<span class="st">"Citation: {dm$citation_main}."</span>)),</span>
+<span id="cb47-823"><a href="#cb47-823" aria-hidden="true" tabindex="-1"></a>        <span class="at">collapse =</span> <span class="st">" "</span>)</span>
+<span id="cb47-824"><a href="#cb47-824" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb47-825"><a href="#cb47-825" aria-hidden="true" tabindex="-1"></a><span class="co"># every view is a long table of independent rows carrying their own time and</span></span>
+<span id="cb47-826"><a href="#cb47-826" aria-hidden="true" tabindex="-1"></a><span class="co"># position, which is ERDDAP's "Point"; the vertical/trajectory structure is</span></span>
+<span id="cb47-827"><a href="#cb47-827" aria-hidden="true" tabindex="-1"></a><span class="co"># expressed in the netCDF products, not here</span></span>
+<span id="cb47-828"><a href="#cb47-828" aria-hidden="true" tabindex="-1"></a>CDM <span class="ot">&lt;-</span> <span class="st">"Point"</span></span>
+<span id="cb47-829"><a href="#cb47-829" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb47-830"><a href="#cb47-830" aria-hidden="true" tabindex="-1"></a>blocks <span class="ot">&lt;-</span> <span class="fu">character</span>(<span class="dv">0</span>)</span>
+<span id="cb47-831"><a href="#cb47-831" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (i <span class="cf">in</span> <span class="fu">seq_len</span>(<span class="fu">nrow</span>(cfg))) {</span>
+<span id="cb47-832"><a href="#cb47-832" aria-hidden="true" tabindex="-1"></a>  r <span class="ot">&lt;-</span> cfg[i, ]</span>
+<span id="cb47-833"><a href="#cb47-833" aria-hidden="true" tabindex="-1"></a>  cols <span class="ot">&lt;-</span> <span class="fu">q</span>(<span class="st">"DESCRIBE SELECT * FROM ({build_sql(r, PQ_LOCAL)})"</span>) <span class="sc">|&gt;</span></span>
+<span id="cb47-834"><a href="#cb47-834" aria-hidden="true" tabindex="-1"></a>    <span class="fu">transmute</span>(<span class="at">column =</span> column_name, <span class="at">duckdb_type =</span> column_type)</span>
+<span id="cb47-835"><a href="#cb47-835" aria-hidden="true" tabindex="-1"></a>  qflags <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="st">"measurement_qual"</span> <span class="sc">%in%</span> cols<span class="sc">$</span>column) <span class="fu">qual_flag_atts</span>(r<span class="sc">$</span>dataset_key) <span class="cf">else</span> <span class="cn">NULL</span></span>
+<span id="cb47-836"><a href="#cb47-836" aria-hidden="true" tabindex="-1"></a>  xml <span class="ot">&lt;-</span> <span class="fu">erddap_duckdb_dataset_xml</span>(</span>
+<span id="cb47-837"><a href="#cb47-837" aria-hidden="true" tabindex="-1"></a>    <span class="at">staged        =</span> <span class="fu">as.data.frame</span>(cols),</span>
+<span id="cb47-838"><a href="#cb47-838" aria-hidden="true" tabindex="-1"></a>    <span class="at">dataset_id    =</span> r<span class="sc">$</span>dataset_id,</span>
+<span id="cb47-839"><a href="#cb47-839" aria-hidden="true" tabindex="-1"></a>    <span class="at">title         =</span> <span class="fu">title_of</span>(r),</span>
+<span id="cb47-840"><a href="#cb47-840" aria-hidden="true" tabindex="-1"></a>    <span class="at">summary       =</span> <span class="fu">summary_of</span>(r),</span>
+<span id="cb47-841"><a href="#cb47-841" aria-hidden="true" tabindex="-1"></a>    <span class="at">source_url    =</span> <span class="fu">glue</span>(<span class="st">"jdbc:duckdb:{ERDDAP_DB}"</span>),</span>
+<span id="cb47-842"><a href="#cb47-842" aria-hidden="true" tabindex="-1"></a>    <span class="at">table_name    =</span> r<span class="sc">$</span>view_name,</span>
+<span id="cb47-843"><a href="#cb47-843" aria-hidden="true" tabindex="-1"></a>    <span class="co"># keyed by column name: mt_units/mt_nerc_p01 land on the `{ds}_sample` views'</span></span>
+<span id="cb47-844"><a href="#cb47-844" aria-hidden="true" tabindex="-1"></a>    <span class="co"># widened effort columns (which ARE measurement_type names) and on the</span></span>
+<span id="cb47-845"><a href="#cb47-845" aria-hidden="true" tabindex="-1"></a>    <span class="co"># bio/env grain's plain std_haul_factor/prop_sorted columns (same names by</span></span>
+<span id="cb47-846"><a href="#cb47-846" aria-hidden="true" tabindex="-1"></a>    <span class="co"># construction); obs_pair_* only exist as columns on the bio/env grain, so</span></span>
+<span id="cb47-847"><a href="#cb47-847" aria-hidden="true" tabindex="-1"></a>    <span class="co"># both are safe to pass to every dataset unconditionally</span></span>
+<span id="cb47-848"><a href="#cb47-848" aria-hidden="true" tabindex="-1"></a>    <span class="at">units_lookup      =</span> <span class="fu">modifyList</span>(mt_units, obs_pair_units),</span>
+<span id="cb47-849"><a href="#cb47-849" aria-hidden="true" tabindex="-1"></a>    <span class="at">longname_lookup   =</span> obs_pair_longname,</span>
+<span id="cb47-850"><a href="#cb47-850" aria-hidden="true" tabindex="-1"></a>    <span class="at">comment_lookup    =</span> obs_pair_comment,</span>
+<span id="cb47-851"><a href="#cb47-851" aria-hidden="true" tabindex="-1"></a>    <span class="at">urn_lookup        =</span> mt_nerc_p01,</span>
+<span id="cb47-852"><a href="#cb47-852" aria-hidden="true" tabindex="-1"></a>    <span class="at">flagvalues_lookup   =</span> <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.null</span>(qflags)) <span class="fu">list</span>(<span class="at">measurement_qual =</span> qflags<span class="sc">$</span>values) <span class="cf">else</span> <span class="fu">list</span>(),</span>
+<span id="cb47-853"><a href="#cb47-853" aria-hidden="true" tabindex="-1"></a>    <span class="at">flagmeanings_lookup =</span> <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.null</span>(qflags)) <span class="fu">list</span>(<span class="at">measurement_qual =</span> qflags<span class="sc">$</span>meanings) <span class="cf">else</span> <span class="fu">list</span>(),</span>
+<span id="cb47-854"><a href="#cb47-854" aria-hidden="true" tabindex="-1"></a>    <span class="at">cdm_data_type =</span> CDM,</span>
+<span id="cb47-855"><a href="#cb47-855" aria-hidden="true" tabindex="-1"></a>    <span class="co"># infoUrl -&gt; the dataset page (built from the key, D-5(4)); creator_*/</span></span>
+<span id="cb47-856"><a href="#cb47-856" aria-hidden="true" tabindex="-1"></a>    <span class="co"># institution/keywords from the record's own sidecar + provider registry,</span></span>
+<span id="cb47-857"><a href="#cb47-857" aria-hidden="true" tabindex="-1"></a>    <span class="co"># never a fixed program-wide default (I-13's fix travels with these, since</span></span>
+<span id="cb47-858"><a href="#cb47-858" aria-hidden="true" tabindex="-1"></a>    <span class="co"># both read the same iy_meta()). A field the record does not state is</span></span>
+<span id="cb47-859"><a href="#cb47-859" aria-hidden="true" tabindex="-1"></a>    <span class="co"># OMITTED, never written as the literal string "NA" — an ERDDAP global</span></span>
+<span id="cb47-860"><a href="#cb47-860" aria-hidden="true" tabindex="-1"></a>    <span class="co"># that is absent is a fact, not a guess.</span></span>
+<span id="cb47-861"><a href="#cb47-861" aria-hidden="true" tabindex="-1"></a>    <span class="at">global_atts   =</span> <span class="fu">local</span>({</span>
+<span id="cb47-862"><a href="#cb47-862" aria-hidden="true" tabindex="-1"></a>      cr  <span class="ot">&lt;-</span> <span class="fu">creator_fields_of</span>(r<span class="sc">$</span>dataset_key)</span>
+<span id="cb47-863"><a href="#cb47-863" aria-hidden="true" tabindex="-1"></a>      atts <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
+<span id="cb47-864"><a href="#cb47-864" aria-hidden="true" tabindex="-1"></a>        <span class="at">license       =</span> <span class="fu">license_of</span>(<span class="fu">iy_meta</span>(r<span class="sc">$</span>dataset_key)<span class="sc">$</span>license) <span class="sc">%||%</span> <span class="st">"not specified"</span>,</span>
+<span id="cb47-865"><a href="#cb47-865" aria-hidden="true" tabindex="-1"></a>        <span class="at">infoUrl       =</span> <span class="fu">dataset_page_url</span>(r<span class="sc">$</span>dataset_key),</span>
+<span id="cb47-866"><a href="#cb47-866" aria-hidden="true" tabindex="-1"></a>        <span class="at">creator_name  =</span> cr<span class="sc">$</span>creator_name,</span>
+<span id="cb47-867"><a href="#cb47-867" aria-hidden="true" tabindex="-1"></a>        <span class="at">creator_type  =</span> cr<span class="sc">$</span>creator_type,</span>
+<span id="cb47-868"><a href="#cb47-868" aria-hidden="true" tabindex="-1"></a>        <span class="at">creator_email =</span> cr<span class="sc">$</span>creator_email,</span>
+<span id="cb47-869"><a href="#cb47-869" aria-hidden="true" tabindex="-1"></a>        <span class="at">creator_url   =</span> cr<span class="sc">$</span>creator_url,</span>
+<span id="cb47-870"><a href="#cb47-870" aria-hidden="true" tabindex="-1"></a>        <span class="at">institution   =</span> cr<span class="sc">$</span>institution,</span>
+<span id="cb47-871"><a href="#cb47-871" aria-hidden="true" tabindex="-1"></a>        <span class="at">keywords      =</span> <span class="fu">keywords_of</span>(r<span class="sc">$</span>dataset_key),</span>
+<span id="cb47-872"><a href="#cb47-872" aria-hidden="true" tabindex="-1"></a>        <span class="at">db_release    =</span> RELEASE, <span class="at">dataset_key =</span> r<span class="sc">$</span>dataset_key,</span>
+<span id="cb47-873"><a href="#cb47-873" aria-hidden="true" tabindex="-1"></a>        <span class="at">references    =</span> <span class="st">"https://calcofi.io/workflows/publish_to-erddap.html"</span>)</span>
+<span id="cb47-874"><a href="#cb47-874" aria-hidden="true" tabindex="-1"></a>      <span class="fu">Filter</span>(<span class="cf">function</span>(x) <span class="sc">!</span><span class="fu">is.null</span>(x) <span class="sc">&amp;&amp;</span> <span class="sc">!</span>(<span class="fu">length</span>(x) <span class="sc">==</span> <span class="dv">1</span> <span class="sc">&amp;&amp;</span> <span class="fu">is.na</span>(x)), atts)</span>
+<span id="cb47-875"><a href="#cb47-875" aria-hidden="true" tabindex="-1"></a>    }))</span>
+<span id="cb47-876"><a href="#cb47-876" aria-hidden="true" tabindex="-1"></a>  <span class="fu">dir_create</span>(<span class="fu">file.path</span>(dir_erddap, r<span class="sc">$</span>dataset_id))</span>
+<span id="cb47-877"><a href="#cb47-877" aria-hidden="true" tabindex="-1"></a>  <span class="fu">writeLines</span>(xml, <span class="fu">file.path</span>(dir_erddap, r<span class="sc">$</span>dataset_id, <span class="fu">glue</span>(<span class="st">"{r$dataset_id}.xml"</span>)))</span>
+<span id="cb47-878"><a href="#cb47-878" aria-hidden="true" tabindex="-1"></a>  blocks <span class="ot">&lt;-</span> <span class="fu">c</span>(blocks, xml)</span>
+<span id="cb47-879"><a href="#cb47-879" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"</span><span class="sc">\n</span><span class="st">- `{r$dataset_id}`: {ncol(cols)} cols, "</span>,</span>
+<span id="cb47-880"><a href="#cb47-880" aria-hidden="true" tabindex="-1"></a>           <span class="st">"{val$rows[val$dataset_id == r$dataset_id]} rows</span><span class="sc">\n</span><span class="st">"</span>))</span>
+<span id="cb47-881"><a href="#cb47-881" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb47-882"><a href="#cb47-882" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb47-883"><a href="#cb47-883" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb47-886"><a href="#cb47-886" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb47-887"><a href="#cb47-887" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: assemble</span></span>
+<span id="cb47-888"><a href="#cb47-888" aria-hidden="true" tabindex="-1"></a>xml_all <span class="ot">&lt;-</span> <span class="fu">paste0</span>(</span>
+<span id="cb47-889"><a href="#cb47-889" aria-hidden="true" tabindex="-1"></a>  <span class="st">"&lt;!-- CalCOFI ERDDAP datasets — generated by publish_to-erddap.qmd</span><span class="sc">\n</span><span class="st">"</span>,</span>
+<span id="cb47-890"><a href="#cb47-890" aria-hidden="true" tabindex="-1"></a>  <span class="fu">glue</span>(<span class="st">"     release {RELEASE}, {length(blocks)} datasets, "</span>,</span>
+<span id="cb47-891"><a href="#cb47-891" aria-hidden="true" tabindex="-1"></a>       <span class="st">"{format(Sys.time(), '%Y-%m-%d')}</span><span class="sc">\n</span><span class="st">"</span>),</span>
+<span id="cb47-892"><a href="#cb47-892" aria-hidden="true" tabindex="-1"></a>  <span class="st">"     EDDTableFromDatabase over DuckDB views; see the notebook for deploy. --&gt;</span><span class="sc">\n</span><span class="st">"</span>,</span>
+<span id="cb47-893"><a href="#cb47-893" aria-hidden="true" tabindex="-1"></a>  <span class="fu">paste</span>(blocks, <span class="at">collapse =</span> <span class="st">"</span><span class="sc">\n\n</span><span class="st">"</span>))</span>
+<span id="cb47-894"><a href="#cb47-894" aria-hidden="true" tabindex="-1"></a><span class="fu">writeLines</span>(xml_all, <span class="fu">file.path</span>(dir_erddap, <span class="st">"datasets_calcofi.xml"</span>))</span>
+<span id="cb47-895"><a href="#cb47-895" aria-hidden="true" tabindex="-1"></a><span class="fu">write_csv</span>(cfg <span class="sc">|&gt;</span> <span class="fu">left_join</span>(val, <span class="at">by =</span> <span class="st">"dataset_id"</span>),</span>
+<span id="cb47-896"><a href="#cb47-896" aria-hidden="true" tabindex="-1"></a>          <span class="fu">file.path</span>(dir_erddap, <span class="st">"erddap_plan.csv"</span>), <span class="at">na =</span> <span class="st">""</span>)</span>
+<span id="cb47-897"><a href="#cb47-897" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"wrote {length(blocks)} dataset blocks to data/erddap/datasets_calcofi.xml</span><span class="sc">\n</span><span class="st">"</span>))</span>
+<span id="cb47-898"><a href="#cb47-898" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb47-899"><a href="#cb47-899" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb47-900"><a href="#cb47-900" aria-hidden="true" tabindex="-1"></a><span class="fu">## Deploy</span></span>
+<span id="cb47-901"><a href="#cb47-901" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb47-904"><a href="#cb47-904" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb47-905"><a href="#cb47-905" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: deploy</span></span>
+<span id="cb47-906"><a href="#cb47-906" aria-hidden="true" tabindex="-1"></a><span class="co">#| message: false</span></span>
+<span id="cb47-907"><a href="#cb47-907" aria-hidden="true" tabindex="-1"></a><span class="fu">source</span>(<span class="fu">here</span>(<span class="st">"libs/erddap_deploy.R"</span>))</span>
 <span id="cb47-908"><a href="#cb47-908" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb47-909"><a href="#cb47-909" aria-hidden="true" tabindex="-1"></a>::: {.callout-warning title="Retiring datasetIDs changes public URLs"}</span>
-<span id="cb47-910"><a href="#cb47-910" aria-hidden="true" tabindex="-1"></a>Datasets are keyed on <span class="in">`dataset_key`</span>, so a provider-slug correction renames a</span>
-<span id="cb47-911"><a href="#cb47-911" aria-hidden="true" tabindex="-1"></a>**public** ERDDAP endpoint. Anything present in the previous generated block but</span>
-<span id="cb47-912"><a href="#cb47-912" aria-hidden="true" tabindex="-1"></a>absent from this one is reported as <span class="in">`retired`</span> above and hard-flagged, so ERDDAP</span>
-<span id="cb47-913"><a href="#cb47-913" aria-hidden="true" tabindex="-1"></a>forgets it and its URL 404s.</span>
-<span id="cb47-914"><a href="#cb47-914" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb47-915"><a href="#cb47-915" aria-hidden="true" tabindex="-1"></a>Old ids are retired rather than kept as aliases: they are no longer generated, so</span>
-<span id="cb47-916"><a href="#cb47-916" aria-hidden="true" tabindex="-1"></a>leaving them would freeze them at the previous release's definitions while the</span>
-<span id="cb47-917"><a href="#cb47-917" aria-hidden="true" tabindex="-1"></a>data underneath moved on — a duplicate that silently drifts is worse than a clean</span>
-<span id="cb47-918"><a href="#cb47-918" aria-hidden="true" tabindex="-1"></a><span class="ss">404. </span>Datasets **outside** the generated block (<span class="in">`calcofi_casts`</span>, <span class="in">`calcofi_ctd`</span>,</span>
-<span id="cb47-919"><a href="#cb47-919" aria-hidden="true" tabindex="-1"></a><span class="in">`calcofi_ctd_thin`</span>, <span class="in">`calcofi_ctd_measurement`</span>, <span class="in">`calcofi_euphausiids`</span>,</span>
-<span id="cb47-920"><a href="#cb47-920" aria-hidden="true" tabindex="-1"></a><span class="in">`calcofi_zooplankton`</span>, and the <span class="in">`_old`</span> pair) are hand-maintained and untouched.</span>
-<span id="cb47-921"><a href="#cb47-921" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb47-922"><a href="#cb47-922" aria-hidden="true" tabindex="-1"></a><span class="in">`v2026.08.04`</span> retired six: <span class="in">`calcofi_bird_mammal_census{,_attribute,_sample}`</span> →</span>
-<span id="cb47-923"><a href="#cb47-923" aria-hidden="true" tabindex="-1"></a><span class="in">`farallon_bird-mammal*`</span>, <span class="in">`ucsd_sio_mesopelagic-fish{,_sample}`</span> →</span>
-<span id="cb47-924"><a href="#cb47-924" aria-hidden="true" tabindex="-1"></a><span class="in">`sio_mesopelagic-fish*`</span>, and <span class="in">`pic_zooplankton_sample`</span> →</span>
-<span id="cb47-925"><a href="#cb47-925" aria-hidden="true" tabindex="-1"></a><span class="in">`sio_pic-zooplankton_sample`</span>.</span>
-<span id="cb47-926"><a href="#cb47-926" aria-hidden="true" tabindex="-1"></a>:::</span>
+<span id="cb47-909"><a href="#cb47-909" aria-hidden="true" tabindex="-1"></a><span class="co"># Gated, like CALCOFI_PUBLISH=true in the netCDF publisher: `tar_make()` keeps</span></span>
+<span id="cb47-910"><a href="#cb47-910" aria-hidden="true" tabindex="-1"></a><span class="co"># GENERATING config on every release, but pushing to a public production service</span></span>
+<span id="cb47-911"><a href="#cb47-911" aria-hidden="true" tabindex="-1"></a><span class="co"># stays a deliberate act. Set CALCOFI_ERDDAP_DEPLOY=true to actually deploy.</span></span>
+<span id="cb47-912"><a href="#cb47-912" aria-hidden="true" tabindex="-1"></a><span class="co"># Deploying is the DEFAULT, matching deploy_consumers.qmd: a release consumers</span></span>
+<span id="cb47-913"><a href="#cb47-913" aria-hidden="true" tabindex="-1"></a><span class="co"># never receive is not a release. CALCOFI_DEPLOY=false turns the whole</span></span>
+<span id="cb47-914"><a href="#cb47-914" aria-hidden="true" tabindex="-1"></a><span class="co"># post-release chain into a dry run; CALCOFI_ERDDAP_DEPLOY=false skips only this</span></span>
+<span id="cb47-915"><a href="#cb47-915" aria-hidden="true" tabindex="-1"></a><span class="co"># leg, which is worth having because it is the slowest (a ~1.6 GB server-side</span></span>
+<span id="cb47-916"><a href="#cb47-916" aria-hidden="true" tabindex="-1"></a><span class="co"># parquet pull).</span></span>
+<span id="cb47-917"><a href="#cb47-917" aria-hidden="true" tabindex="-1"></a>DEPLOY      <span class="ot">&lt;-</span> <span class="sc">!</span><span class="fu">identical</span>(<span class="fu">tolower</span>(<span class="fu">Sys.getenv</span>(<span class="st">"CALCOFI_DEPLOY"</span>, <span class="st">"true"</span>)), <span class="st">"false"</span>) <span class="sc">&amp;&amp;</span></span>
+<span id="cb47-918"><a href="#cb47-918" aria-hidden="true" tabindex="-1"></a>               <span class="sc">!</span><span class="fu">identical</span>(<span class="fu">tolower</span>(<span class="fu">Sys.getenv</span>(<span class="st">"CALCOFI_ERDDAP_DEPLOY"</span>, <span class="st">"true"</span>)), <span class="st">"false"</span>)</span>
+<span id="cb47-919"><a href="#cb47-919" aria-hidden="true" tabindex="-1"></a>SSH_HOST    <span class="ot">&lt;-</span> <span class="fu">Sys.getenv</span>(<span class="st">"CALCOFI_SSH_HOST"</span>, <span class="st">"calcofi"</span>)</span>
+<span id="cb47-920"><a href="#cb47-920" aria-hidden="true" tabindex="-1"></a>ERDDAP_REPO <span class="ot">&lt;-</span> <span class="fu">Sys.getenv</span>(<span class="st">"CALCOFI_ERDDAP_REPO"</span>, <span class="fu">here</span>(<span class="st">"../erddap"</span>))</span>
+<span id="cb47-921"><a href="#cb47-921" aria-hidden="true" tabindex="-1"></a>ERDDAP_REMOTE_REPO <span class="ot">&lt;-</span> <span class="fu">Sys.getenv</span>(<span class="st">"CALCOFI_ERDDAP_REMOTE_REPO"</span>,</span>
+<span id="cb47-922"><a href="#cb47-922" aria-hidden="true" tabindex="-1"></a>                                 <span class="st">"/share/github/CalCOFI/erddap"</span>)</span>
+<span id="cb47-923"><a href="#cb47-923" aria-hidden="true" tabindex="-1"></a>ERDDAP_URL  <span class="ot">&lt;-</span> <span class="fu">Sys.getenv</span>(<span class="st">"CALCOFI_ERDDAP_URL"</span>, <span class="st">"https://erddap.calcofi.io"</span>)</span>
+<span id="cb47-924"><a href="#cb47-924" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb47-925"><a href="#cb47-925" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"deploy: {DEPLOY} -&gt; {ERDDAP_URL} (default; CALCOFI_DEPLOY=false for a dry run, CALCOFI_ERDDAP_DEPLOY=false to skip just this leg)</span><span class="sc">\n</span><span class="st">"</span>))</span>
+<span id="cb47-926"><a href="#cb47-926" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
 <span id="cb47-927"><a href="#cb47-927" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb47-928"><a href="#cb47-928" aria-hidden="true" tabindex="-1"></a>**Requirements.** The DuckDB JDBC driver must be in ERDDAP's <span class="in">`WEB-INF/lib`</span></span>
-<span id="cb47-929"><a href="#cb47-929" aria-hidden="true" tabindex="-1"></a>(custom image: <span class="in">`CalCOFI/server/erddap/Dockerfile`</span>), and its engine version must be</span>
-<span id="cb47-930"><a href="#cb47-930" aria-hidden="true" tabindex="-1"></a><span class="at">&gt;= the engine that wrote the views.</span></span>
-<span id="cb47-931"><a href="#cb47-931" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb47-934"><a href="#cb47-934" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb47-935"><a href="#cb47-935" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: cleanup</span></span>
-<span id="cb47-936"><a href="#cb47-936" aria-hidden="true" tabindex="-1"></a><span class="fu">dbDisconnect</span>(con, <span class="at">shutdown =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb47-937"><a href="#cb47-937" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb47-930"><a href="#cb47-930" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb47-931"><a href="#cb47-931" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: deploy-run</span></span>
+<span id="cb47-932"><a href="#cb47-932" aria-hidden="true" tabindex="-1"></a><span class="co">#| eval: !expr DEPLOY</span></span>
+<span id="cb47-933"><a href="#cb47-933" aria-hidden="true" tabindex="-1"></a><span class="co">#| message: false</span></span>
+<span id="cb47-934"><a href="#cb47-934" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb47-935"><a href="#cb47-935" aria-hidden="true" tabindex="-1"></a>n_pq <span class="ot">&lt;-</span> <span class="fu">erddap_sync_parquet</span>(SSH_HOST, ERDDAP_ROOT, RELEASE)</span>
+<span id="cb47-936"><a href="#cb47-936" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"1. synced {n_pq} parquet files to {ERDDAP_ROOT}/datasets/release/{RELEASE}</span><span class="sc">\n</span><span class="st">"</span>))</span>
+<span id="cb47-937"><a href="#cb47-937" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb47-938"><a href="#cb47-938" aria-hidden="true" tabindex="-1"></a>built <span class="ot">&lt;-</span> <span class="fu">erddap_build_db</span>(SSH_HOST, ERDDAP_ROOT, script_path)</span>
+<span id="cb47-939"><a href="#cb47-939" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"2. built view db ({sum(grepl('rows$', built))} views, none empty)</span><span class="sc">\n</span><span class="st">"</span>))</span>
+<span id="cb47-940"><a href="#cb47-940" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb47-941"><a href="#cb47-941" aria-hidden="true" tabindex="-1"></a>ids <span class="ot">&lt;-</span> <span class="fu">erddap_splice_config</span>(ERDDAP_REPO, <span class="fu">file.path</span>(dir_erddap, <span class="st">"datasets_calcofi.xml"</span>))</span>
+<span id="cb47-942"><a href="#cb47-942" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"3. spliced {length(ids$all)} generated + {length(ids$kept_outside)} hand-maintained; "</span>,</span>
+<span id="cb47-943"><a href="#cb47-943" aria-hidden="true" tabindex="-1"></a>         <span class="st">"added {length(ids$added)}, retiring {length(ids$retired)}</span><span class="sc">\n</span><span class="st">"</span>))</span>
+<span id="cb47-944"><a href="#cb47-944" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">length</span>(ids<span class="sc">$</span>retired))</span>
+<span id="cb47-945"><a href="#cb47-945" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"   RETIRING (public URLs stop resolving): {paste(ids$retired, collapse = ', ')}</span><span class="sc">\n</span><span class="st">"</span>))</span>
+<span id="cb47-946"><a href="#cb47-946" aria-hidden="true" tabindex="-1"></a><span class="fu">erddap_push_config</span>(SSH_HOST, ERDDAP_REPO, ERDDAP_REMOTE_REPO, RELEASE)</span>
+<span id="cb47-947"><a href="#cb47-947" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb47-948"><a href="#cb47-948" aria-hidden="true" tabindex="-1"></a><span class="fu">erddap_flag</span>(SSH_HOST, ERDDAP_FLAG, ids<span class="sc">$</span>all, ids<span class="sc">$</span>retired)</span>
+<span id="cb47-949"><a href="#cb47-949" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"4. flagged for reload</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb47-950"><a href="#cb47-950" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb47-951"><a href="#cb47-951" aria-hidden="true" tabindex="-1"></a><span class="co"># ERDDAP reloads asynchronously, so give it a moment before asking.</span></span>
+<span id="cb47-952"><a href="#cb47-952" aria-hidden="true" tabindex="-1"></a><span class="fu">Sys.sleep</span>(<span class="dv">30</span>)</span>
+<span id="cb47-953"><a href="#cb47-953" aria-hidden="true" tabindex="-1"></a>ver <span class="ot">&lt;-</span> <span class="fu">erddap_verify</span>(ERDDAP_URL, <span class="at">expect_present =</span> ids<span class="sc">$</span>all, <span class="at">expect_absent =</span> ids<span class="sc">$</span>retired)</span>
+<span id="cb47-954"><a href="#cb47-954" aria-hidden="true" tabindex="-1"></a><span class="fu">kable</span>(ver, <span class="at">caption =</span> <span class="st">"5. Live verification (the flag directory is not a reliable signal)"</span>)</span>
+<span id="cb47-955"><a href="#cb47-955" aria-hidden="true" tabindex="-1"></a><span class="fu">stopifnot</span>(<span class="st">"live ERDDAP does not match the deployed config"</span> <span class="ot">=</span> <span class="fu">all</span>(ver<span class="sc">$</span>ok))</span>
+<span id="cb47-956"><a href="#cb47-956" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb47-957"><a href="#cb47-957" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb47-958"><a href="#cb47-958" aria-hidden="true" tabindex="-1"></a>::: {.callout-note title="What deploying does, and the traps it encodes"}</span>
+<span id="cb47-959"><a href="#cb47-959" aria-hidden="true" tabindex="-1"></a>The five steps are in <span class="in">`libs/erddap_deploy.R`</span>, one function each: sync the release</span>
+<span id="cb47-960"><a href="#cb47-960" aria-hidden="true" tabindex="-1"></a>parquet server-side, build the DuckDB views **on the server** (DuckDB validates a</span>
+<span id="cb47-961"><a href="#cb47-961" aria-hidden="true" tabindex="-1"></a>view's parquet paths at <span class="in">`CREATE`</span> time, so they cannot be built here), splice this</span>
+<span id="cb47-962"><a href="#cb47-962" aria-hidden="true" tabindex="-1"></a>config into <span class="in">`CalCOFI/erddap`</span>, flag every dataset for reload, and verify against</span>
+<span id="cb47-963"><a href="#cb47-963" aria-hidden="true" tabindex="-1"></a>the live service.</span>
+<span id="cb47-964"><a href="#cb47-964" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb47-965"><a href="#cb47-965" aria-hidden="true" tabindex="-1"></a>Four failure modes are handled there because every one of them fails *silently*:</span>
+<span id="cb47-966"><a href="#cb47-966" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb47-967"><a href="#cb47-967" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**`sudo git pull` cannot work** — root has no GitHub credentials. The fetch runs</span>
+<span id="cb47-968"><a href="#cb47-968" aria-hidden="true" tabindex="-1"></a>  as the ssh user, the merge as root. A bare <span class="in">`git pull`</span> prints <span class="in">`Updating &lt;a&gt;..&lt;b&gt;`</span></span>
+<span id="cb47-969"><a href="#cb47-969" aria-hidden="true" tabindex="-1"></a>  and then dies on the write, so its first line reads like success.</span>
+<span id="cb47-970"><a href="#cb47-970" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Ownership is captured and restored.** The checkout is owned by uids that are</span>
+<span id="cb47-971"><a href="#cb47-971" aria-hidden="true" tabindex="-1"></a>  not the ssh user; a root merge re-owns the tree and breaks the *next*</span>
+<span id="cb47-972"><a href="#cb47-972" aria-hidden="true" tabindex="-1"></a>  unprivileged fetch.</span>
+<span id="cb47-973"><a href="#cb47-973" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**The flag directory proves nothing.** It is <span class="in">`drwxrws---`</span> under a group the ssh</span>
+<span id="cb47-974"><a href="#cb47-974" aria-hidden="true" tabindex="-1"></a>  user is not in, so an unprivileged <span class="in">`ls`</span> reports zero either way, and ERDDAP</span>
+<span id="cb47-975"><a href="#cb47-975" aria-hidden="true" tabindex="-1"></a>  deletes each flag as it consumes it. Verification reads the live service.</span>
+<span id="cb47-976"><a href="#cb47-976" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Splicing at the wrong marker duplicates everything.** <span class="in">`datasets.xml`</span> carries</span>
+<span id="cb47-977"><a href="#cb47-977" aria-hidden="true" tabindex="-1"></a>  both an <span class="in">`add dataset definitions below`</span> marker and a <span class="in">`BEGIN/END generated`</span></span>
+<span id="cb47-978"><a href="#cb47-978" aria-hidden="true" tabindex="-1"></a>  pair; only replacing between BEGIN/END is idempotent. Appending at the former</span>
+<span id="cb47-979"><a href="#cb47-979" aria-hidden="true" tabindex="-1"></a>  would add a second copy of all 34 datasets.</span>
+<span id="cb47-980"><a href="#cb47-980" aria-hidden="true" tabindex="-1"></a>:::</span>
+<span id="cb47-981"><a href="#cb47-981" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb47-982"><a href="#cb47-982" aria-hidden="true" tabindex="-1"></a>::: {.callout-warning title="Retiring datasetIDs changes public URLs"}</span>
+<span id="cb47-983"><a href="#cb47-983" aria-hidden="true" tabindex="-1"></a>Datasets are keyed on <span class="in">`dataset_key`</span>, so a provider-slug correction renames a</span>
+<span id="cb47-984"><a href="#cb47-984" aria-hidden="true" tabindex="-1"></a>**public** ERDDAP endpoint. Anything present in the previous generated block but</span>
+<span id="cb47-985"><a href="#cb47-985" aria-hidden="true" tabindex="-1"></a>absent from this one is reported as <span class="in">`retired`</span> above and hard-flagged, so ERDDAP</span>
+<span id="cb47-986"><a href="#cb47-986" aria-hidden="true" tabindex="-1"></a>forgets it and its URL 404s.</span>
+<span id="cb47-987"><a href="#cb47-987" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb47-988"><a href="#cb47-988" aria-hidden="true" tabindex="-1"></a>Old ids are retired rather than kept as aliases: they are no longer generated, so</span>
+<span id="cb47-989"><a href="#cb47-989" aria-hidden="true" tabindex="-1"></a>leaving them would freeze them at the previous release's definitions while the</span>
+<span id="cb47-990"><a href="#cb47-990" aria-hidden="true" tabindex="-1"></a>data underneath moved on — a duplicate that silently drifts is worse than a clean</span>
+<span id="cb47-991"><a href="#cb47-991" aria-hidden="true" tabindex="-1"></a><span class="ss">404. </span>Datasets **outside** the generated block (<span class="in">`calcofi_casts`</span>, <span class="in">`calcofi_ctd`</span>,</span>
+<span id="cb47-992"><a href="#cb47-992" aria-hidden="true" tabindex="-1"></a><span class="in">`calcofi_ctd_thin`</span>, <span class="in">`calcofi_ctd_measurement`</span>, <span class="in">`calcofi_euphausiids`</span>,</span>
+<span id="cb47-993"><a href="#cb47-993" aria-hidden="true" tabindex="-1"></a><span class="in">`calcofi_zooplankton`</span>, and the <span class="in">`_old`</span> pair) are hand-maintained and untouched.</span>
+<span id="cb47-994"><a href="#cb47-994" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb47-995"><a href="#cb47-995" aria-hidden="true" tabindex="-1"></a><span class="in">`v2026.08.04`</span> retired six: <span class="in">`calcofi_bird_mammal_census{,_attribute,_sample}`</span> →</span>
+<span id="cb47-996"><a href="#cb47-996" aria-hidden="true" tabindex="-1"></a><span class="in">`farallon_bird-mammal*`</span>, <span class="in">`ucsd_sio_mesopelagic-fish{,_sample}`</span> →</span>
+<span id="cb47-997"><a href="#cb47-997" aria-hidden="true" tabindex="-1"></a><span class="in">`sio_mesopelagic-fish*`</span>, and <span class="in">`pic_zooplankton_sample`</span> →</span>
+<span id="cb47-998"><a href="#cb47-998" aria-hidden="true" tabindex="-1"></a><span class="in">`sio_pic-zooplankton_sample`</span>.</span>
+<span id="cb47-999"><a href="#cb47-999" aria-hidden="true" tabindex="-1"></a>:::</span>
+<span id="cb47-1000"><a href="#cb47-1000" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb47-1001"><a href="#cb47-1001" aria-hidden="true" tabindex="-1"></a>**Requirements.** The DuckDB JDBC driver must be in ERDDAP's <span class="in">`WEB-INF/lib`</span></span>
+<span id="cb47-1002"><a href="#cb47-1002" aria-hidden="true" tabindex="-1"></a>(custom image: <span class="in">`CalCOFI/server/erddap/Dockerfile`</span>), and its engine version must be</span>
+<span id="cb47-1003"><a href="#cb47-1003" aria-hidden="true" tabindex="-1"></a><span class="at">&gt;= the engine that wrote the views.</span></span>
+<span id="cb47-1004"><a href="#cb47-1004" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb47-1007"><a href="#cb47-1007" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb47-1008"><a href="#cb47-1008" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: cleanup</span></span>
+<span id="cb47-1009"><a href="#cb47-1009" aria-hidden="true" tabindex="-1"></a><span class="fu">dbDisconnect</span>(con, <span class="at">shutdown =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb47-1010"><a href="#cb47-1010" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
 </code></pre></div><button title="Copy to Clipboard" class="code-copy-button" data-in-quarto-modal=""><i class="bi"></i></button></div>
 </div></div></div></div></div>
 </div> <!-- /content -->

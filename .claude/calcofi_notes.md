@@ -1,5 +1,7 @@
 ## TODO
 
+- redo climatology so uses individual stations, vs aggregrated to grid (esp imp for coastal)
+- add contours to Explore app
 - massive revamp of docs
 - generic OBIS publish: The plan adds NERC P01, P06 and S11 ids and Darwin Core terms to the registries, and defers a generic OBIS publish to a follow-on. Note below "On OBIS ENV-DATA and eMoF"
 - explorer
@@ -29,6 +31,44 @@
 - [ ] note missing relationships: *_summary tables, grid, places, segments
 - [ ] rename `swfsc_inverts` to `swfsc_invert` including `ingest_swfsc_inverts.qmd` -> `ingest_swfsc_invert.qmd`
 - [ ] `ingest_calcofi_ctd-cast.qmd` needs a sync to GCS for just the used CSV files so saved in GCS `archive/`, not just GCS `_sync/`
+
+## TODO: 2026-09-10 presentation
+
+Create a presentation that introduces everything we've done in the last couple weeks, principally including:
+
+- The Explorer app https://calcofi.io/explore/
+  - speed: avg response time of 0.15 s vs 11.51 s (Hexagon app) = 2 orders of magnitude faster (per https://status.calcofi.io)
+  - cost: FREE! No server VM required like with db-viz-hex; presently costs $200/mo
+  - downside: maintenance requires AI
+- The Datasets grid https://calcofi.io/#datasets (or https://calcofi.io/datasets/)
+
+Here are some of the key points:
+
+- Explorer app: one app, many lenses
+  We already created several apps with slightly different lenses. This gets confusing to toggle between, and also cumbersome for development of features/styles to be repeated across.
+- Dataset catalogue
+  We were getting a bit stuck on showcasing the datasets in the apps with credit. Then confused where to find all the different flavors of a given dataset, eg ERDDAP netCDF etc, so needed a d
+- Document all new endpoints and creations to facilitate discovery via portals
+  - old: 
+    - OBIS
+    - EDI
+    - ERDDAP
+    - NCEI
+  - new: STAC
+
+Use / show:
+- screenshots with URLs to examples
+- Diagram of original docs and subsequent update flowing to portals
+- Feedback / Register use mechanism: Gsheet + email + Github issue
+  - Feedback can use screenshot, annotate it, and include URL directly to view (selections + map view, toggles)
+
+Asks: how can everybody help and move things along?
+- Metadata and Qs to data providers
+  - facility for sync b/n Gsheets and git versioned files used throughout
+- data@calcofi.io -> calcofi-data@ucsd.edu UCSD IT group request
+
+Closing:
+- The singularity is really here. Development happens at the speed of thought. And human ideas and communication are the chokepoint now, not software development (ie coding).
 
 ## 2026-09-06 Explorer UI simplify
 
@@ -135,7 +175,87 @@ Page 3, "Recommended · light (floating)", builds on C and holds four boards:
 
 Liberties taken toward the intent: the title sentence is pinned rather than a movable panel, since it is the view's name; double-clicking a title bar snaps a panel back to its dock; and the welcome comes back from Help so dismissing it costs nothing.
 
-## 2026-09-05 CalCOFI.io datasets UI cleanup
+---
+
+Implemented and committed on the `calm` branch of `CalCOFI/explore` as one commit, 452d96e. Not pushed.
+
+What the app does now
+
+- **The map is the page**. Select, Years, Depth, Layers and every lens result are floating panels with one bar and the same four controls. Drag the bar to move it and double-click to send it home. Collapse it to a labelled pill on the nearest edge. Expand it to fill the map and press Esc to restore. Resize it from any edge or the corner grip. Positions are remembered per browser.
+- **The title sentence** at the top says what the map shows in plain words, with the colour scale and the observation count beside it. Its caret turns every part into a chip whose popover is the same picker the Select panel uses. Opening the sentence folds the panel, and the panel's pill closes the sentence, so the two can never disagree.
+- **The Select panel** has tabs Select, Refine and Share. Data comes first, then View as with a plain line under the active lens, then More options for the summary statistic, standardization, zeros counted, dataset pills and sources. That disclosure remembers whether you left it open.
+- **Depth starts folded and signals** The pill is quiet when a pick has no depth axis, lights up with the band and a sparkline of the profile when a pick sampled at depth arrives, and carries a reset once you brush. It never opens itself. A shared link with a depth band opens it.
+- **The welcome** floats over the live map with no dim. Two doors open the organism or variable picker, the four questions from the canvas each load a real view, and Start exploring is the primary button. The citation norm is one sentence, accepted by continuing.
+- **The header** keeps the release chip, a Help menu with the tour, Start here, About, Data Sources, Register a product and Keyboard, plus feedback and the theme toggle.
+- **Words**. "Share" replaces "Take it with you", "standardized as" replaces "denominator", "zeros counted" replaces "positive-only", and the anomaly reads "difference from the 1993–2013 normal".
+
+Verification. The build type-checks. The verify suite passes all 67 states at 1280×800 and 390×844, including the twelve-step tour on both, after I updated its expectations to the new selectors. The phone keeps its bottom sheet.
+
+**Left for you**
+
+1. Preview it before pushing:
+
+cd ~/Github/CalCOFI/explore && git checkout calm && npm run build && npx vite preview --host --port 5179
+
+2. Push the branch and merge to `main` for the Pages deploy.
+3. Reshoot the calcofi.io card with `scripts/card_shots.mjs` and rerun the brand check, since the header and layout changed.
+4. The `README.md` "Using it" section describes the new layout; the design canvas stays as the record of the decision.
+
+---
+
+Looks amazing! Let's make a few minor tweaks:
+
+- Fold the feedback button into the Help dropdown.
+- The keyboard help does not move to that section in the model, so looks wrong.
+- The "release **v2026.09.06**" pill is redundant with the dropdown showing the same "v2026.09.06". Simply prefix the dropdown with release and make the selected release bold.
+- Add icons to the Select | Refine | Share and name the overall panel something besides Select, maybe Control?
+- Call the Years panel "Time" (we can zoom in sub years and the columns update)
+- The map controls feel tight and out of place in lower right. Move top of Depth panel down and move them to upper right with horizontal alignment: zoom | layers | export (left to right).
+
+---
+
+All six tweaks are in, committed on calm as d7cd898 on top of the layout commit. The verify states they touch pass, including both tours.
+
+- Feedback now lives in Help ▾ as "Send feedback". The header is the release picker, Help and the theme toggle.
+- Keyboard opens About scrolled to its Keyboard section.
+- One release picker. The word "release" links to the schema and release notes, and the bold value is the list of releases. The duplicate pill is gone.
+- Controls is the panel's name, and its tabs Select, Refine and Share carry icons. The collapsed pill reads "Controls · Pacific sardine …".
+- Time replaces Years on the panel, its pill, the phone pill and the tour step. The panel id stays years, so links with hide=years still work.
+- The map's buttons are one row at the top right, left to right: zoom in, zoom out, layers, export, with 3D appended in the Sections lens. The app draws its own zoom buttons now, so the MapLibre control is gone. Depth, its pill and the station, timing and layers cards start below the row.
+
+One thing to look at when you preview: with the Controls panel open and a station card up, the title sentence gets narrow at 1280 px and wraps to three lines. It is legible, and it widens again when either panel collapses.
+
+---
+
+The light layout is live at https://calcofi.io/explore/.
+
+- main was fast-forwarded to d7cd898 and pushed, with the calm branch pushed alongside it.
+- The Pages deploy, run 34029503015, succeeded.
+- The smoke check against the live site reads the new build: the title sentence, the release picker, Help, the Controls and Time panels, and every release object fetched with status 200. No console or page errors in either the default view or the welcome.
+
+The two screenshots above are the live site as a first visitor sees it, with the welcome, and after it is dismissed.
+
+Two follow-ups remain on your side. The calcofi.io landing card still shows the old layout until scripts/card_shots.mjs is rerun and the images committed in CalCOFI.github.io. The weekly brand check should be rerun once, since the header changed.
+
+---
+
+Please follow up with both
+
+---
+
+Both follow-ups are done.
+
+- Card reshot. card_shots.mjs captured the live Explorer in both themes at 1200×750. The images show the new layout with the Controls panel, the title sentence, the Time panel and the top-right map row, in the Hexagons lens the card has always used. They are committed in CalCOFI.github.io as 2bb10c2 and pushed, so the calcofi.io landing page picks them up on its next build.
+- Brand check passed. check_brand.py explore against the live site reports every column green: the theme responds to ?theme=, the favicon is the CalCOFI set, the home link is present, the toggle exists, the contract version is 2, and a fresh visit opens light with Source Sans 3 loaded and the lockup present.
+
+Nothing is left open from this round.
+
+Resume this session with:
+```bash
+claude --resume a190376c-899a-4d48-a4c3-d663104952d0
+```
+
+## 2026-09-05 CalCOFI.io datasets UI cleanup; re-release with OBIS, EDI publishing
 
 Write a plan to refresh the CalCOFI.io website UI with the newly added datasets. I am offering a few suggestions, but be exhaustive and creative here. Refer to and possibly even update the v2 branding, and work on communicating emphasis appropriately.
 
@@ -259,6 +379,10 @@ Nothing rendered, no release cut — schema 1.1 rides the next one, and the site
 
 ---
 
+```bash
+cd ~/Github/CalCOFI/workflows
+```
+
 Edit the landing page and Datasets grid and individual views at @../CalCOFI.github.io/ with these UI changes.
 
 In the Dataset grid let's make "not yet in the database" collapse with `class="ds-details ds-arow-note"` like "how far this file is CF".
@@ -354,6 +478,155 @@ To answer directly: the EML record is produced by the release, not by `publish_t
 Site change, pushed (a28a0db): Metadata records gains an "EML 2.2" row pointing at the release's document, drawn only when the address answers, so it appears once the site rebuilds on v2026.09.06 rather than shipping a dead link now. The probe is marked as a fallback until the record carries an eml distribution.
 
 The release is at chunk 52 of 57 (uploading the frozen tables); datasets.json, eml/ and stac/ follow, then test_release and the consumer deploys.
+
+---
+
+Have the publish_to-edi.qmd and publish_to-obis.qmd workflows run? If not, please proceed. And where can their dataset package bundles be visible in dataset view before pushing to actual portal?
+
+---
+
+So all done? Please clean up any repos and plans_todo
+
+---
+
+Done. Cleanup complete.
+
+Branches — all seven this session created were verified merged into their repo's current main, then deleted. None had ever been pushed, so no remote branches to prune:
+
+┌───────────────────┬────────────────────┐
+│       repo        │   branch deleted   │
+├───────────────────┼────────────────────┤
+│ CalCOFI.github.io │ ui-refresh         │
+├───────────────────┼────────────────────┤
+│ explore           │ icons-ui           │
+├───────────────────┼────────────────────┤
+│ db-query          │ url-params         │
+├───────────────────┼────────────────────┤
+│ db-viz-station    │ dataset-param      │
+├───────────────────┼────────────────────┤
+│ db-viz-hex        │ dataset-bookmark   │
+├───────────────────┼────────────────────┤
+│ calcofi4db        │ catalog-4.5.0      │
+├───────────────────┼────────────────────┤
+│ workflows         │ catalog-record-4.5 │
+└───────────────────┴────────────────────┘
+
+plans_todo — the six UI briefs and _integrator_notes_2026-09-05_ui.md moved to plans_done/ as pure git mv renames (workflows ff52000, pushed). The umbrella plan's status line now names the sha per phase instead of saying "nothing built". What's left in plans_todo/ is other people's queue: the server pipeline, M2's registrations, WS-F's release run, and the two older integrator notes.
+
+Three things I found while checking, worth knowing
+
+- The repos moved on after my session. main on the site is six commits past mine — a later session's "round 2", plus the v2026.09.06 release. My work is all still in there (0298b3f is an ancestor).
+- Both follow-ups I flagged are already closed, in calcofi4db 4.6.0 (installed): the record now carries a stac distribution — so my marked stac_collection_url fallback is gone — and CalCOFI's ERDDAP has one id (erddap) instead of the two it had, which is exactly the registry change I recorded in RELEASES.md rather than making myself.
+- A concurrent session is working in these repos right now. It committed a73a083 in workflows seconds after mine, and explore is on branch calm with five modified files. I scoped my git add to the three plan directories, so nothing of theirs was swept in — and I left their uncommitted work and their unpushed commits alone. Two repos read "ahead 1" for that reason; those are theirs to push, not mine.
+
+I did not delete the other merged branches lying around (calm, sea-floor, pr-15, catalog-4.6, ui-refresh-2 and others) — none are mine, and ui-refresh-2 was created this morning by whoever is doing round 2. Say the word if you want those pruned too.
+
+---
+
+
+Resume this session with:
+```bash
+cd ~/Github/CalCOFI
+claude --resume 2ebb97ba-f690-48dc-aa34-e026777b631e
+```
+
+---
+
+Have the `publish_to-edi.qmd` and `publish_to-obis.qmd` workflows run? If not, please proceed. And where can their dataset package bundles be visible in dataset view before pushing to actual portal?
+
+---
+
+To your two questions:
+
+- **Neither has run**. Both targets exist (publish_to_edi, publish_to_obis, each depending on release_database) but have no run record, no rendered notebook and no output folder. Neither is in the release chain the pipeline is finishing now, so I'll start them as soon as the ERDDAP leg releases the targets lock, against the promoted v2026.09.06 (the EDI notebook defaults to the staging prefix, so it needs the production prefix set explicitly).
+- 
+- **Where the bundles show before a deposit**. Until now, nowhere public: OBIS wrote zips only to the local `data/darwincore/`, and EDI staged files to GCS only when EDI credentials were present. Both notebooks now have a stage chunk (committed a73a083) that copies every built bundle to a deterministic public address on the release bucket, `publish/dwca/{key}/{key}_{version}.zip` with its manifest, and `publish/edi/{key}/{key}_{version}/` with the CSV entities, EML and manifest. The dataset page's Archives & portals group gains two rows, "Darwin Core Archive" and "EDI data package", each chipped "built, not deposited", drawn only when the file answers (site commit 8f9ff39, pushed after the first bundles land). The deposit itself stays manual for OBIS and gated on `CALCOFI_PUBLISH_EDI` for EDI, as the notebooks specify.
+
+Waiting on the pipeline's ERDDAP leg, then the consumer deploy, then the two publishers.
+
+---
+
+The Hexagon Explorer link is now fully working live: ?datasets=cce-lter_zooscan opens on ZooScan, the Filter Summary says so, and the URL keeps the parameter. Two app fixes shipped (61d9524, b7717b0) and deployed. On the site, the deep link is scoped to biological datasets, since the parameter drives the taxa group only, so an environmental dataset like bottle now gets the plain app link with the "Across datasets" chip and no "opens on this dataset" (51b2f63).
+
+Publishers: the EDI notebook is at its new stage step, uploading the bottle package (its obs.csv is large). The OBIS target is queued behind it in the same run. I'll report when their bundles are staged and the dataset pages list them.
+
+※ recap: Goal: the calcofi.io dataset-page refresh plus the v2026.09.06 release, which is promoted, deployed and DOI-stamped. Now the EDI and OBIS publishers are running; next I verify their staged bundles appear on the dataset pages.
+
+EDI staging is mid-upload: the bottle package's obs.csv alone is 1.9 GB (plus 257 MB of samples), so at this uplink the three EDI packages (bottle, CTD casts, METS) will take a couple of hours before OBIS runs. Nothing to act on; the heartbeat will keep reporting.
+
+---
+
+Do they need to be run sequentially, or could be done in parallel?
+
+---
+
+They are independent, both depend only on release_database with no link between them, so nothing requires the order. It is sequential only because targets' default runner walks one target at a time and the running tar_make holds the project lock, so a second tar_make cannot start. They also contend for different resources: EDI is stuck on uplink bandwidth while OBIS is DuckDB work, so running them side by side costs little.
+
+I'll render the OBIS notebook directly now, in parallel, with the same production environment. The only cost is that when the running tar_make reaches publish_to_obis after EDI it will re-render it once more to record it in the pipeline metadata, about 30 minutes of background work, overwriting identical outputs.
+
+OBIS is now rendering in parallel (connected to the release), with its own watch for each archive written, staged, or any error. EDI continues its uploads in the pipeline run. I'll report as their bundles land.
+
+---
+
+This re-rendering of identical outputs is EXACTLY what we want to go out of our way to avoid, through using hashes and programmatic checks before re-building
+
+---
+
+You're right, and I should not have taken that shortcut. The fix is to make the checks programmatic so a re-render costs nothing: each notebook skips a build whose output already exists for this release (the frozen release is the fingerprint), and every upload compares the local md5 with the object's before sending. That way the pipeline's later publish_to_obis pass finds the direct render's outputs and does no work. Implementing that in put_gcs_file() and both notebooks now, before the pipeline reaches OBIS.
+
+---
+
+I also want a report on how the generalized ichthyo OBIS dataset package is different from our previously custom-made one. I don't think the data has changed, but need to check that. Wondering if we're sufficiently capturing everything in the OBIS generalization, and what we've added since that is particularly nice (eg standardized vocabularies)
+
+---
+
+The report is published: ⧉ https://claude.ai/code/artifact/d58f5c49-6e04-4cc3-b164-5479cb02cf57
+
+The short version:
+
+- The observations did not change. All 76,512 net events match the April archive on date, position and volume; 462,289 occurrence grains (net × WoRMS id × life stage) exist in both and every tally agrees; the standardized haul factor agrees on every net.
+- What moved is the data underneath, not the mapping: the release gained the merged invertebrate counts (9,223 rows), six taxa were re-keyed to their WoRMS-accepted ids, and the current SWFSC export ships plankton displacement volumes as whole millilitres where the April export had decimals (99.8% agree after rounding; 82 nets do not).
+- The generalization captures everything the custom archive did except three hand-typed fields it declined on purpose (a blanket 1,000 m coordinate uncertainty, "marine" habitat, a remarks string restating the eMoF), and adds the full sampling chain with parent links, the D8 densities beside the tallies, taxonomy down to family plus common names, per-gear sampling protocols, and NERC ids: P01 on 241,871 eMoF rows (was 0), P06 on every row.
+- Two gaps to close before an upload. The ingest asserts every ichthyo tow depth as 0 m with no maximum, so OBIS would read them as surface samples; and the biomass rounding plus "small equals total" on 89.5% of nets is a provider question for SWFSC.
+
+Meanwhile the EDI publisher is still uploading the CTD package, and the OBIS archives for all ten datasets are staged on the bucket.
+
+---
+
+Ensure all generic publishers publish_*_to-*.qmd are also performing programmatic checks against hashes to prevent re-generating the same output, being cautious of datetimestamps and random sort orders don't make an artifical change. This way we can fold into the regular targets workflow without clogging up storage and CPU
+
+---
+
+Everything is in place; the site refresh is the last thing running. Summary of this round:
+
+**Publishers are now idempotent over a frozen release** (workflows 6e25857, calcofi4db 4.6.1 and 4.6.2, pushed):
+
+- **netCDF**: a file whose `db_release` attribute names the release and that the published manifest lists is returned, not rebuilt; `cc_netcdf_plan()` recognises a version already published with these bytes and the publisher then writes nothing. Before, every render rebuilt every file and re-wrote `manifests.json` with a fresh `generated_utc`. Verified against the live manifest for the crab file: published, nothing to upload.
+
+- **ERDDAP**: the config header carries the release date instead of the render date, and the splice helper now reports which dataset blocks changed; only new or changed datasets are flagged for reload (was all 34, every run). Verified: zero changes against the live config, one change detected when one block is edited.
+
+- **OBIS**: an archive built for this release is reused; the zip is byte-stable (members stamped with the release date) and the manifest's `generated_utc` moves only with the content hash. Measured on the pipeline's own pass right after: 3 minutes for all ten datasets, no rebuild, no re-upload.
+
+- **EDI**: a package built for this release is reused; the export pins DuckDB's insertion order so the hashed CSVs depend on the release objects, not the scheduler.
+
+- Every upload goes through the MD5 comparison in `put_gcs_file()` first.
+
+**Both publishers have now run against v2026.09.06**. Ten Darwin Core Archives and three EDI packages (bottle, CTD casts, METS) are staged under `publish/` on the release bucket. The dataset pages list them as "built, not deposited"; the EDI row is already live on the bottle page, and the archive rows appear once the refresh workflow I just triggered finishes (the previous build predated the staged zips).
+
+The ichthyo parity report is at ⧉ https://claude.ai/code/artifact/d58f5c49-6e04-4cc3-b164-5479cb02cf57. The 30-minute heartbeat is still armed; the pipeline it reports on is finished, so say the word and I'll stop it.
+
+---
+
+Confirmed live: the ichthyo dataset page now lists its Darwin Core Archive under Archives & portals as "built, not deposited", alongside the EML and STAC rows. That closes the loop on every item from this session:
+
+- Release v2026.09.06 promoted, tagged, DOI 10.5281/zenodo.22514953, all consumers deployed.
+- calcofi.io rounds 2 to 4 live, now rendering the promoted record with no fallbacks.
+- OBIS and EDI publishers run for the first time, bundles staged and visible on the dataset pages.
+- All four publishers idempotent over a frozen release.
+- Hexagon Explorer deep link working live.
+- Ichthyo parity report published.
+
+The only watch still running is the 30-minute heartbeat you asked for; it now reports the finished pipeline, so I'll stop it whenever you say.
 
 ## 2026-09-05 CalCOFI.io dataset-centric view
 
@@ -813,6 +1086,26 @@ The blank page had two causes, one after the other:
 2. Jekyll drops files whose names start with an underscore. Two of stac-browser's hashed Vite chunks (_commonjsHelpers-*.js, __vite-browser-external-*.js) were never deployed, so the module graph failed silently. _config.yml now lists them under include:, and stac/README.md says to update the two hashed names after any rebuild.
 
 If you looked before the last deploy finished, a hard refresh clears the cached failure.
+
+---
+
+So all done? Please clean up any repos and plans_todo
+
+---
+
+Yes, from my side it is all done, and the cleanup is complete.
+
+Repos. All fifteen repos I touched are on main, level with origin/main, with no modified tracked files. I fast-forwarded the five that bot commits had moved ahead (db-query, db-viz-station, ctd-transects, analytics, uptime), removed every worktree I created, and deleted my two merged local branches (dataset-catalog-phase0 in workflows, catalog-datasets-4.1.0 in calcofi4db). The only untracked files left are ones I deliberately did not touch: the staging render HTMLs in workflows/_output/ (kept beside the earlier staging renders, as those were) and the pre-existing docx.md and site_libs/ leftovers in docs.
+
+plans_todo. The eleven briefs this session completed are in plans_done. What remains in plans_todo is either yours (WS-F the release run, the M2 registration checklist), pre-existing (the server-pipeline plan, the integrator notes), or belongs to another active session that I have not touched.
+
+One thing you should know from the audit: another session has continued the work since I last looked. Since my last commits, new UI-A to UI-F briefs and a _integrator_notes_2026-09-05_ui.md appeared in plans_todo, calcofi4db main now carries merged catalog-4.5.0 and catalog-4.6 branches beyond my 4.4.0, workflows has a catalog-record-4.5 branch, explore is checked out on a branch named calm, and there is a _output/release_run_2026-09-06.log. None of that is mine, so I left all of it exactly as found rather than moving or deleting anything. If that session is yours, it owns the next round; if it is not what you expect, that is worth a look before anything else runs against these checkouts.
+
+---
+
+[cd ~/Github/CalCOFI]
+Resume this session with:
+claude --resume f9009031-11d0-40cd-89e8-e8404561d748
 
 ## 2026-09-04 flip switch on brand v2, default light theme
 
