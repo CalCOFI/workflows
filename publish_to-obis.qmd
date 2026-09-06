@@ -403,6 +403,35 @@ if (nrow(fin)) kable(fin[fin$finding != "ok", ],
                      caption = "every finding, by dataset (error = no archive written)")
 ```
 
+## Stage the archives where a reviewer can see them
+
+An archive is uploaded to the IPT by hand and only after its provider agrees, but the
+bundle itself should be inspectable before that — by the provider, and by the dataset
+page (calcofi.io/datasets/{dataset_key}/ lists it under *Archives & portals* as "built,
+not deposited"). So every archive built here, with its manifest, is copied to the public
+bucket at a deterministic address: `gs://calcofi-db/publish/dwca/{dataset_key}/{dataset_key}_{version}.zip`
+(+ `{dataset_key}_manifest.json`). A staging run stays local.
+
+```{r}
+#| label: stage
+if (!STAGING && nrow(res) && any(res$status == "built")) {
+  for (i in which(res$status == "built")) {
+    k <- res$dataset_key[i]
+    # dwc_archive() writes the zip beside the dataset's folder (OUT_DIR root) and the manifest
+    # under the same name pattern; look in both places so a layout change cannot silently skip
+    zip_path <- c(file.path(OUT_DIR, res$archive[i]), file.path(OUT_DIR, k, res$archive[i]))
+    zip_path <- zip_path[file.exists(zip_path)][1]
+    man_path <- c(file.path(OUT_DIR, glue("{k}_manifest.json")), file.path(OUT_DIR, k, glue("{k}_manifest.json")))
+    man_path <- man_path[file.exists(man_path)][1]
+    if (is.na(zip_path)) { cat(glue("{k}: archive {res$archive[i]} not found on disk; not staged"), "\n"); next }
+    put_gcs_file(zip_path, glue("gs://calcofi-db/publish/dwca/{k}/{basename(zip_path)}"))
+    if (!is.na(man_path))
+      put_gcs_file(man_path, glue("gs://calcofi-db/publish/dwca/{k}/{basename(man_path)}"))
+    cat(glue("staged {k}: https://storage.googleapis.com/calcofi-db/publish/dwca/{k}/{basename(zip_path)}"), "\n")
+  }
+} else cat("staging run or nothing built: nothing staged\n")
+```
+
 ## Registration status — when is an upload due?
 
 ```{r}

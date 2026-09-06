@@ -8,6 +8,15 @@ versions). Conventions: see `CLAUDE.md` § "RELEASES.md is not optional".
 
 # Unreleased
 
+## Portal bundles are staged where a reviewer can see them
+
+`publish_to-obis.qmd` and `publish_to-edi.qmd` (both first run against v2026.09.06) now copy what
+they build to the public bucket at a deterministic address before any deposit —
+`gs://calcofi-db/publish/dwca/{dataset_key}/{dataset_key}_{version}.zip` (+ manifest) and
+`gs://calcofi-db/publish/edi/{dataset_key}/{dataset_key}_{version}/` — so a provider, and the
+dataset page (*Archives & portals*, "built, not deposited"), can inspect a bundle before it goes to
+the IPT or PASTA. The deposit itself stays a deliberate act (Decision 21; `CALCOFI_PUBLISH_EDI`).
+
 # v2026.09.06 (2026-09-06)
 
 ## The dataset catalog record says what a page needs to say (schema 1.1)

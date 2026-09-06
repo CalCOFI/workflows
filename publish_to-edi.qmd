@@ -253,6 +253,28 @@ write_csv(manifest_tbl, file.path(OUT_DIR, "manifest.csv"), na = "")
 kable(manifest_tbl, caption = "data/edi/manifest.csv")
 ```
 
+## Stage the packages where a reviewer can see them
+
+Before any `evaluate`/`create` at EDI, each package (the CSV entities, the EML, its
+`manifest.json`) is copied to a public, deterministic address —
+`gs://calcofi-db/publish/edi/{dataset_key}/{dataset_key}_{version}/` — so the provider and the
+dataset page (calcofi.io/datasets/{dataset_key}/, *Archives & portals*, "built, not deposited")
+can inspect it. The `evaluate` chunk below points PASTA at the same copy.
+
+```{r}
+#| label: stage
+edi_stage_prefix <- glue("publish/edi/{{key}}/{{key}}_{RELEASE_VERSION}")
+for (key in names(records)) {
+  pkg_dir <- file.path(OUT_DIR, key, glue("{key}_{RELEASE_VERSION}"))
+  files <- list.files(pkg_dir, full.names = TRUE)
+  if (!length(files)) next
+  stage_prefix <- glue(edi_stage_prefix, key = key)
+  for (f in files) put_gcs_file(f, glue("gs://calcofi-db/{stage_prefix}/{basename(f)}"))
+  cat(glue("staged {key}: {length(files)} file(s) at https://storage.googleapis.com/calcofi-db/{stage_prefix}/"), "\n")
+}
+put_gcs_file(file.path(OUT_DIR, "manifest.csv"), "gs://calcofi-db/publish/edi/manifest.csv")
+```
+
 ::: {.callout-note title="Measured, `calcofi_bottle`"}
 `sample` and `sample_measurement` are shared, single-file tables (all 16
 datasets' rows in one object) filtered here to `dataset_key = 'calcofi_bottle'`;
@@ -278,10 +300,8 @@ if (identical(creds$method, "key")) {
 
 # EDI's evaluate/create/update fetch each entity from its EML
 # physical/distribution/online/url over the open web — a LOCAL file is not
-# enough. Stage this run's entities + EML at a public, deterministic URL under
-# the same staging bucket the release itself uses, so nothing here depends on a
-# host that could disappear between this render and PASTA's fetch.
-edi_stage_prefix <- glue("ducklake-staging/edi/{{key}}/{{key}}_{RELEASE_VERSION}")
+# enough. The `stage` chunk above put this run's entities + EML at a public,
+# deterministic URL (publish/edi/…); PASTA fetches from that copy.
 evaluate_reports <- list()
 for (key in names(records)) {
   pkg_dir <- file.path(OUT_DIR, key, glue("{key}_{RELEASE_VERSION}"))
