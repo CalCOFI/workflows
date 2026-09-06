@@ -26,10 +26,17 @@ calcofi.io's own generator — a fact with two homes drifts:
   and every one agrees with `derive_registration_id()`, which is the same rule the site used as
   its fallback. The one row with no id is a UC San Diego Library *search* URL, which names none.
 - `portals[]` — every portal the record can mention, with what it is, from `metadata/portal.csv`.
-  CalCOFI's own ERDDAP ships under **both** ids it has in the record (`erddap` from `portal.csv`
-  and the registrations, `erddap-calcofi` from `distribution_portals()`) because a consumer
-  looking either up must find it. Collapsing the two is a registry change with its own consumers
-  (`observe_distributions()`, `distribution.csv`) and is **not** done here — worth doing next.
+- **CalCOFI's own ERDDAP has one id, `erddap`** (calcofi4db 4.6.0). The record used to carry it
+  twice — `erddap` from `portal.csv` and the registrations, `erddap-calcofi` from the
+  distribution registry's vocabulary — so `portals[]` listed the same portal under both and a
+  consumer had to look either up. `distribution_portals()`, `classify_portal()` and the seven
+  legacy-id rows of `metadata/distribution.csv` now say `erddap`; the old value is rejected by
+  `read_distribution_registry()` rather than aliased. **Consumers:** a reader keyed on the
+  literal `erddap-calcofi` (calcofi.io's `_plugins/datasets.rb` accepted both) finds only `erddap`.
+- **`distributions[]` opens with the dataset's STAC collection** (`format: stac`,
+  `{stac root}/collections/{dataset_key}/collection.json`; calcofi4db 4.6.0). The catalog
+  `build_stac()` writes was on the bucket but nothing in the record pointed at it, so the dataset
+  pages linked a site-side guess. Holdings, which have no collection, get no row.
 
 ## Coverage measures the season, and a second extent
 
