@@ -148,8 +148,18 @@ erddap_splice_config <- function(repo_dir, generated_xml) {
          " — refusing to splice, since appending at the 'add dataset definitions",
          " below' marker would duplicate every dataset instead of replacing them")
   ids <- function(s) unique(regmatches(s, gregexpr('(?<=datasetID=")[^"]+', s, perl = TRUE))[[1]])
-  old_ids <- ids(substr(txt, b, e - 1))
+  old_gen <- substr(txt, b, e - 1)
+  old_ids <- ids(old_gen)
   new_ids <- ids(gen)
+  # one <dataset …>…</dataset> block per id, so a changed DEFINITION can be told from an
+  # unchanged one and only the changed datasets are flagged for reload
+  blocks_of <- function(s) {
+    m <- regmatches(s, gregexpr("(?s)<dataset\\b.*?</dataset>", s, perl = TRUE))[[1]]
+    stats::setNames(m, vapply(m, function(x) ids(x)[1], ""))
+  }
+  ob <- blocks_of(old_gen); nb <- blocks_of(gen)
+  changed <- names(nb)[names(nb) %in% names(ob) &
+                       vapply(names(nb), function(i) !identical(trimws(nb[[i]]), trimws(ob[[i]])), logical(1))]
   out <- paste0(substr(txt, 1, b - 1), ERDDAP_BEGIN, "\n", gen, "\n",
                 substr(txt, e, nchar(txt)))
   writeLines(out, cfg_path)
@@ -157,6 +167,7 @@ erddap_splice_config <- function(repo_dir, generated_xml) {
   ok <- tryCatch({ xml2::read_xml(cfg_path); TRUE }, error = function(e) conditionMessage(e))
   if (!isTRUE(ok)) stop("spliced datasets.xml is not well-formed XML: ", ok)
   list(added   = setdiff(new_ids, old_ids),
+       changed = changed,
        retired = setdiff(old_ids, new_ids),
        all     = new_ids,
        kept_outside = setdiff(ids(paste0(substr(txt, 1, b - 1),

@@ -172,13 +172,21 @@ cc_netcdf_plan <- function(local_file, dataset, version) {
   hit <- NULL
   for (r in prior$releases %||% list())
     if (identical(r$sha256, sha)) { hit <- r; break }
-  if (!is.null(hit)) {
+  # THIS version already published with THESE bytes: there is nothing to write at all
+  # (2026-09-06) — the plan says so, and cc_netcdf_publish() then touches no object
+  this <- Filter(function(r) identical(r$version, version), prior$releases %||% list())
+  published <- length(this) == 1 && identical(this[[1]]$sha256, sha)
+  if (published) {
+    list(sha256 = sha, identical_to = this[[1]]$identical_to %||% NA_character_,
+         canonical_url = this[[1]]$canonical_url, upload = FALSE, published = TRUE,
+         generated_utc = this[[1]]$generated_utc)
+  } else if (!is.null(hit)) {
     list(sha256 = sha, identical_to = hit$version,
-         canonical_url = hit$canonical_url, upload = FALSE)
+         canonical_url = hit$canonical_url, upload = FALSE, published = FALSE)
   } else {
     list(sha256 = sha, identical_to = NA_character_,
          canonical_url = glue("{NETCDF_SITE}/{dataset}/{version}/{dataset}.nc"),
-         upload = TRUE)
+         upload = TRUE, published = FALSE)
   }
 }
 
@@ -220,6 +228,15 @@ cc_netcdf_publish <- function(local_nc, dataset, release, plan, manifest,
   base_gs  <- glue("gs://{GCS_BUCKET_PUB}/netcdf/{dataset}")
   base_web <- glue("{NETCDF_SITE}/{dataset}")
   tmp <- tempdir()
+
+  # already published for this release with these bytes: write nothing. Re-writing the
+  # sidecars would only move manifests.json (and every index page derived from it) for
+  # a change that is not one.
+  if (isTRUE(plan$published)) {
+    message(glue("  {dataset}: {release} already published with these bytes — nothing written"))
+    return(invisible(list(uploaded = FALSE, base = base_web, url = manifest$canonical_url,
+                          skipped = TRUE)))
+  }
 
   # accumulate history BEFORE writing, so a re-run is idempotent
   hist <- tryCatch(fromJSON(glue("{base_web}/manifests.json"), simplifyDataFrame = FALSE),
@@ -286,7 +303,9 @@ cc_netcdf_manifest <- function(plan, dataset, version, release, n_bytes,
     dataset       = dataset,
     version       = version,
     db_release    = release,
-    generated_utc = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
+    # when the same bytes were already published for this version, the time they were
+    # first made is the truth; the wall clock is not
+    generated_utc = plan$generated_utc %||% format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
     sha256        = plan$sha256,
     bytes         = n_bytes,
     identical_to  = plan$identical_to,

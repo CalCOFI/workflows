@@ -8,6 +8,27 @@ versions). Conventions: see `CLAUDE.md` § "RELEASES.md is not optional".
 
 # Unreleased
 
+## A publisher re-run over a frozen release costs a hash comparison, not a rebuild
+
+The four generic publishers now check before they build or upload, so they can sit in the
+regular `targets` run without regenerating identical outputs (2026-09-06):
+
+- `publish_to-netcdf.qmd`: a file whose `db_release` attribute names this release and that the
+  published manifest already lists is returned, not rebuilt; `cc_netcdf_plan()` recognises a
+  version already published with these bytes and `cc_netcdf_publish()` then writes nothing —
+  before, every render rebuilt every file (the CTD supplemental is an hour and 3.6 GB) and
+  re-wrote `manifests.json` with a new `generated_utc`.
+- `publish_to-erddap.qmd`: the config header carries the release date, not the render date, so
+  an unchanged config is unchanged; only datasets whose definition changed (or are new) are
+  flagged for reload, where every one of 34 was flagged each run.
+- `publish_to-obis.qmd`: an archive already built for this release is reused; the zip itself is
+  now byte-stable (members stamped with the release date, calcofi4db 4.6.2) and the manifest's
+  `generated_utc` moves only when the content hash does.
+- `publish_to-edi.qmd`: a package already built for this release is reused; the export pins
+  DuckDB's insertion order so the hashed CSVs are a function of the release objects.
+- Every upload goes through `put_gcs_file(skip_unchanged = TRUE)` (calcofi4db 4.6.1): an object
+  with the same MD5 is not sent again.
+
 ## Portal bundles are staged where a reviewer can see them
 
 `publish_to-obis.qmd` and `publish_to-edi.qmd` (both first run against v2026.09.06) now copy what

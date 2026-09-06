@@ -168,6 +168,11 @@ kable(plan_tbl, caption = glue("EDI entity plan for {RELEASE_VERSION} — {lengt
 con <- dbConnect(duckdb())
 for (s in c("INSTALL httpfs", "LOAD httpfs", "SET enable_progress_bar=false"))
   try(dbExecute(con, s), silent = TRUE)
+# the CSV entities are hashed, so their row order must be a function of the release, not
+# of the scheduler: DuckDB keeps a scan's insertion order when this is on (its default,
+# pinned here so a future default cannot change the bytes), and the release objects are
+# themselves written under a total ORDER BY
+dbExecute(con, "SET preserve_insertion_order = true")
 ```
 
 ```{r}

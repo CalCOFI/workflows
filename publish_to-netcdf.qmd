@@ -304,6 +304,35 @@ build_one <- function(ds, plan) {
   mts   <- plan$measurement_types
   ident <- obs_ident_cols(ds)
   nc_path <- file.path(OUT_DIR, glue("{ds}.nc"))
+
+  # a release is frozen, so a file already built from THIS release cannot differ: its
+  # own `db_release` attribute is the fingerprint, and a re-render returns the row
+  # instead of rebuilding (the CTD supplemental alone is an hour). The row's
+  # `source_tables` comes from the published manifest for this release, so nothing is
+  # written into the file (a new attribute would change its bytes and force a
+  # re-upload). A file from another release, or one never published, is rebuilt.
+  if (file.exists(nc_path)) {
+    prior <- tryCatch({
+      o <- nc_open(nc_path); on.exit(nc_close(o), add = TRUE)
+      g <- function(a) { v <- ncatt_get(o, 0, a); if (isTRUE(v$hasatt)) v$value else NA_character_ }
+      list(release = g("db_release"), cf_scope = g("cf_scope"), feature_type = g("featureType"))
+    }, error = function(e) NULL)
+    if (!is.null(prior) && identical(prior$release, RELEASE)) {
+      man <- tryCatch(fromJSON(glue("{NETCDF_SITE}/{ds}/manifests.json"), simplifyDataFrame = FALSE)$releases,
+                      error = function(e) list())
+      man <- Filter(function(r) identical(r$version, RELEASE), man %||% list())
+      if (length(man) == 1) {
+        cat(glue("\n- **`{ds}`** ({shape}): already built from {RELEASE} — not rebuilt ",
+                 "({round(file.size(nc_path)/1048576, 1)} MB)\n"))
+        return(tibble(dataset_key = ds, shape = shape,
+                      feature_type = if (is.na(prior$feature_type)) plan$feature_type %||% NA else prior$feature_type,
+                      path = nc_path, bytes = file.size(nc_path),
+                      source_tables = paste(unlist(man[[1]]$source_tables), collapse = ","),
+                      cf_scope = if (is.na(prior$cf_scope)) man[[1]]$cf_scope %||% "" else prior$cf_scope,
+                      note = "reused"))
+      }
+    }
+  }
   unlink(nc_path)
 
   # ---- obs-derived wide frame, at the OCCURRENCE grain ------------------------
