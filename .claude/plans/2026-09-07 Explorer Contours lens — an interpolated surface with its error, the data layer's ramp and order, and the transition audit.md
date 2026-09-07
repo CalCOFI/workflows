@@ -317,7 +317,7 @@ feature under the floating Controls panel; it now picks one in the open map); an
 failing, and pre-existing** (they fail at `d7cd898`, before this plan, from the 2026-09-06 first-look tweaks that
 moved feedback under *Help* and dropped the sea-floor legend row): `u4b_feedback_open`, `u4b_annotate`,
 `u4b_send_mock`, `u7_annotate_text`, `p4b_feedback` (`[data-tour="feedback"]` / `[data-tour="more"]`), `p4_share`
-(`.menu-btn` *Share*), `layers_default_dark` (`.legend-bathy`). A follow-up should re-anchor those states. **Smoke test on the real release** (`npm run build` with the
+(`.menu-btn` *Share*), `layers_default_dark` (`.legend-bathy`). A follow-up should re-anchor those states. **The final full run (146 states) fails exactly those 7 plus 7 late-run timeouts, all 7 of which pass when run alone.** **Smoke test on the real release** (`npm run build` with the
 defaults, `vite preview`, `scripts/smoke_release.mjs`): v2026.09.06 with the eight-version picker, no console
 errors, the Contours lens on the site grain reads *"Temperature, the mean as a contoured surface by ordinary kriging
 over every site"*; the one "failed" request is DuckDB-WASM's `eh` bundle probe, aborted by design when the `mvp`
