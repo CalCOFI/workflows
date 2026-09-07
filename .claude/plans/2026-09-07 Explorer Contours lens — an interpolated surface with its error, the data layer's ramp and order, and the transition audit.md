@@ -247,16 +247,20 @@ Layers card; **off by default on the site grain, on for the station grid** (218 
 which still says where the record is thick), and the URL carries an explicit choice. The station-dot layer stays the
 morph carrier under every lens; in Contours with the inputs off it draws at radius 0 and is not pickable.
 
-### D44 · Contour labels, on by default (executed)
+### D44 · Contour lines in the ramp's dark, labels in white on a halo, thinned by the zoom — off by default (executed)
 
-Ben: *"add option for contour labels layer (on by default)."* The marching-squares output is segments, so
-`joinSegments()` (`src/contour.ts`) chains each level's segments into polylines by shared endpoints and
-`labelPoints()` places one label about every 150 km of line (the spacing in cells follows the cell size; a line
-shorter than half that gets none), rotated to follow the line and kept upright. A deck `TextLayer` draws the level
-(years as integers) at 12 px on a translucent white box. `labels=off` in the URL, a *contour labels* checkbox in the
-options and a row under *Data* in the Layers card. One trap: deck's font atlas rendered nothing with
-any custom `fontFamily` here (with or without a weight) — boxes without glyphs — so the layer keeps deck's default
-font; worth a look at the atlas when a brand-font label matters.
+Ben: *"add option for contour labels layer (on by default)"*, then on the first cut (black text on white boxes,
+every ~150 km of line, at 12,000 sites): *"still looks messy … contour lines are dark variants of the color ramp …
+labels white (fully unique on the map) … extra logic to prevent overcrowding that ideally is zoom level
+dependent"* — and, having just mailed the team the link, *"quick turn off the labels by default, then fix"*. So:
+`labels=on` (off by default; a checkbox in the options and a row under *Data* in the Layers card). The
+marching-squares segments are chained into polylines (`joinSegments()`), the **isolines take 55 % of the ramp colour
+at their level** (they stand out of the surface without fighting it), and the **labels are white on a dark SDF halo**
+— the one white text on the map — rotated to follow the line and kept upright (`labelPoints()`). Density follows the
+zoom: one label per **~260 px of line**, none on a line under 130 px, none within **70 px** of another
+(`thinLabels()`, a bucket hash), recomputed when the map's zoom settles (`map=` in the URL). Years read as integers.
+Trap: deck's font atlas rendered empty boxes with any custom `fontFamily`; the default font with `fontSettings.sdf`
+renders, halo included.
 
 ### D38 · The hexagon size is a slider (executed)
 
@@ -307,7 +311,7 @@ call these on `summary/station.csv` when the lens is Contours, so the bundle re-
 | **3 · D36 → interleaved overlay (executed 2026-09-07)** | the four proofs, the Data row in *On the map*, `layers=…,data,…` | 4 |
 | **4 · the site grain (executed 2026-09-07, D40)** | `grain=site` default, `contour_cast.sql`, the local mode in the worker + calcofi4r 1.22.0 + calcofi4py 0.9.0 with the seeded subsamples | 6 |
 | **5 · the lens picker (executed 2026-09-07, D41)** | `src/lenspicker.tsx` | 2 |
-| **9 · contour labels (executed 2026-09-07, D44)** | `joinSegments()` + `labelPoints()`, a `TextLayer`, `labels=` | 1 |
+| **9 · contour lines + labels (executed 2026-09-07, D44)** | darkened ramp lines; `joinSegments()` + `labelPoints()` + `thinLabels()`, a `TextLayer`, `labels=on` | 2 |
 | **8 · the inputs as a layer (executed 2026-09-07, D43)** | `inputs=`, the toggle and the Layers-card row | 1 |
 | **7 · land clip (executed 2026-09-07, D42)** | `landMask()` rasterises Natural Earth land onto the grid; `public/land.geojson` | 1 |
 | **6 · retire the Contour Explorer (executed 2026-09-07)** | `server/caddy/Caddyfile`: `/contour` and `/oceano` 308 to `calcofi.io/explore/?lens=contour&var=temperature` (deployed: Caddy restarted on the server); `products.yml`: the card superseded by the Explorer, the Explorer card lists contours; `uptime`: the monitor dropped | 1 |
