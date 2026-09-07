@@ -388,15 +388,19 @@ dm_apply_pull_dataset <- function(sidecar_lines, sheet_rows, licenses = NULL, to
 dm_holdings_row <- function(dataset_key, sidecar_list) {
   data.frame(
     dataset_key = dataset_key,
-    name        = as.character(sidecar_list$dataset_name %||% ""),
-    provider    = as.character(sidecar_list$provider %||% ""),
-    category    = as.character(sidecar_list$category %||% ""),
-    status      = as.character(sidecar_list$status %||% ""),
-    priority    = as.character(sidecar_list$priority %||% ""),
-    owner       = as.character(sidecar_list$owner %||% ""),
-    next_step   = as.character(sidecar_list$next_step %||% ""),
-    gh_issue    = as.character(sidecar_list$gh_issue %||% ""),
-    observed    = as.character(sidecar_list$observed %||% ""),
+    name        = as.character(sidecar_list[["dataset_name"]] %||% ""),
+    provider    = as.character(sidecar_list[["provider"]] %||% ""),
+    category    = as.character(sidecar_list[["category"]] %||% ""),
+    status      = as.character(sidecar_list[["status"]] %||% ""),
+    priority    = as.character(sidecar_list[["priority"]] %||% ""),
+    # the CalOOS working sheet's own priority, shown read-only beside the team's `priority`. Exact
+    # `[[` throughout: `$priority` PARTIAL-MATCHED `priority_caloos` whenever `priority` was absent,
+    # which is how the CalOOS values reached the tab's `priority` column on 2026-09-05
+    priority_caloos = as.character(sidecar_list[["priority_caloos"]] %||% ""),
+    owner       = as.character(sidecar_list[["owner"]] %||% ""),
+    next_step   = as.character(sidecar_list[["next_step"]] %||% ""),
+    gh_issue    = as.character(sidecar_list[["gh_issue"]] %||% ""),
+    observed    = as.character(sidecar_list[["observed"]] %||% ""),
     stringsAsFactors = FALSE)
 }
 
@@ -438,6 +442,28 @@ dm_contiguous_ranges <- function(idx0) {
   brk <- which(diff(idx0) != 1)
   starts <- idx0[c(1, brk + 1)]; ends <- idx0[c(brk, length(idx0))]
   Map(function(s, e) list(start = s, end = e + 1L), starts, ends)
+}
+
+#' The protectedRangeIds a tab already carries (a re-push must delete them: they
+#' protect by column index, so an inserted column would leave an editable column
+#' under a stale range). Mirrors sync_questions_sheets.R's qs_tab_is_protected().
+dm_tab_protected_range_ids <- function(ss, sheet_id) {
+  req <- googlesheets4::request_generate("sheets.spreadsheets.get", params = list(
+    spreadsheetId = as.character(ss),
+    fields = "sheets(properties(sheetId),protectedRanges(protectedRangeId))"))
+  js <- gargle::response_process(googlesheets4::request_make(req))
+  for (sh in js$sheets)
+    if (identical(as.numeric(sh$properties$sheetId), as.numeric(sheet_id)))
+      return(vapply(sh$protectedRanges %||% list(), function(pr) as.numeric(pr$protectedRangeId), numeric(1)))
+  numeric(0)
+}
+
+#' One deleteProtectedRange request per id (pure; empty in, empty out).
+dm_delete_protection_requests <- function(ids) {
+  lapply(ids, function(id) {
+    if (is.numeric(id) && abs(id) <= .Machine$integer.max) id <- as.integer(id)
+    list(deleteProtectedRange = list(protectedRangeId = id))
+  })
 }
 
 dm_protection_requests <- function(sheet_id, col_names, editable_cols) {
@@ -643,7 +669,8 @@ gs_push_metadata_provider <- function(provider, sheets_yml_path = SHEETS_YML, ex
   ss <- dm_ensure_provider_sheet(provider, sheets_yml_path)
   googlesheets4::sheet_write(rows, ss = ss, sheet = DM_TAB)
   props <- googlesheets4::sheet_properties(ss); sid <- props$id[props$name == DM_TAB]
-  reqs <- c(dm_protection_requests(sid, names(rows), dm_editable_cols()),
+  reqs <- c(dm_delete_protection_requests(dm_tab_protected_range_ids(ss, sid)),
+            dm_protection_requests(sid, names(rows), dm_editable_cols()),
             dm_importance_band_requests(sid, fields_df$importance[match(rows$field, fields_df$field)], ncol(rows)))
   googlesheets4::request_make(googlesheets4::request_generate(
     "sheets.spreadsheets.batchUpdate", params = list(spreadsheetId = as.character(ss), requests = reqs)))
@@ -699,7 +726,8 @@ gs_push_holdings <- function(sheets_yml_path = SHEETS_YML, execute = FALSE, meta
   ss <- googlesheets4::as_sheets_id(entry$sheet_id)
   googlesheets4::sheet_write(rows, ss = ss, sheet = HOLDINGS_TAB)
   props <- googlesheets4::sheet_properties(ss); sid <- props$id[props$name == HOLDINGS_TAB]
-  reqs <- c(dm_protection_requests(sid, names(rows), dm_holdings_editable_cols()),
+  reqs <- c(dm_delete_protection_requests(dm_tab_protected_range_ids(ss, sid)),
+            dm_protection_requests(sid, names(rows), dm_holdings_editable_cols()),
             list(dm_status_validation_request(sid, names(rows), nrow(rows))))
   googlesheets4::request_make(googlesheets4::request_generate(
     "sheets.spreadsheets.batchUpdate", params = list(spreadsheetId = as.character(ss), requests = reqs)))

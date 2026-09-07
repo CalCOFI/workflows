@@ -295,6 +295,29 @@ test_that("dm_holdings_row shapes one row from a holding sidecar", {
   expect_equal(row$status, "planned"); expect_equal(row$owner, "Erin")
 })
 
+test_that("dm_holdings_row carries priority_caloos read-only beside the team's priority (2026-09-07)", {
+  sc  <- list(dataset_name = "X", provider = "sio", category = "Zooplankton", status = "external",
+              priority_caloos = "EDI")
+  row <- dm_holdings_row("sio_x", sc)
+  expect_equal(row$priority, "")                     # the team's, blank until someone sets it
+  expect_equal(row$priority_caloos, "EDI")           # the CalOOS sheet's, never pulled back
+  expect_equal(which(names(row) == "priority_caloos"), which(names(row) == "priority") + 1L)
+  expect_false("priority_caloos" %in% dm_holdings_editable_cols())
+  # the protection builder leaves exactly the editable columns open, whatever their index
+  reqs <- dm_protection_requests(7L, names(row), dm_holdings_editable_cols())
+  protected <- unlist(lapply(Filter(function(r) is.null(r$addProtectedRange$protectedRange$range$startRowIndex), reqs),
+                             function(r) { rg <- r$addProtectedRange$protectedRange$range; seq(rg$startColumnIndex, rg$endColumnIndex - 1L) }))
+  expect_equal(sort(names(row)[protected + 1L]), sort(setdiff(names(row), dm_holdings_editable_cols())))
+})
+
+test_that("dm_delete_protection_requests is one deleteProtectedRange per id, empty in empty out", {
+  expect_equal(dm_delete_protection_requests(numeric(0)), list())
+  reqs <- dm_delete_protection_requests(c(1234567890, 42))
+  expect_length(reqs, 2)
+  expect_identical(reqs[[1]]$deleteProtectedRange$protectedRangeId, 1234567890L)
+  expect_identical(reqs[[2]]$deleteProtectedRange$protectedRangeId, 42L)
+})
+
 test_that("dm_apply_holdings_pull updates only status/priority/owner/next_step and validates status", {
   sidecar <- c("# header", "  status: planned", "  priority: normal", "  owner: \"\"", "  next_step: \"\"")
   row <- list(status = "external", priority = "high", owner = "Erin", next_step = "email PI")
