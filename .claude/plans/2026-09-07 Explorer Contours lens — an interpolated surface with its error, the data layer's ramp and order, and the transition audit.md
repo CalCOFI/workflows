@@ -6,7 +6,7 @@ executed 2026-09-07** — see *Decided* and *Measured* at the end ·
 **Date:** 2026-09-07 · **Scale:** one repo (`CalCOFI/explore`: three new modules — `contour.worker.ts`,
 `contour.ts`, `ramps.ts` — and edits to `state.ts`, `map.tsx`, `App.tsx`, `sentence.tsx`, `layers.tsx`,
 `sql/station.sql`, `sql/cruise_track.sql`); no release change, no server; ~14 h spent, ~24 h left across three slices.
-Decision numbering continues from the 2026-08-31 map-layers plan (D21–D30): **D31–D41**.
+Decision numbering continues from the 2026-08-31 map-layers plan (D21–D30): **D31–D42**.
 
 ## The ask (Ben, 2026-09-07)
 
@@ -221,6 +221,18 @@ picking one closes it; Esc and a click outside close it too. It replaces the six
 strip; the sentence's lens chip keeps its own menu. The tour step says *Six ways to view it* and describes the
 slivers; `verify.mjs` clicks lenses through the picker.
 
+### D42 · Land is clipped from the surface by the GEBCO terrain tiles, not by layer order (executed)
+
+Ben (mid-session): *"clip out land from the interpolated surface, which could be done by putting the data layer
+below the land basemap layer."* Order cannot do it: in CARTO's styles land is the **background colour**, not a layer
+— `water`, landcover, parks and roads are the layers, so nothing drawn above the surface covers land as a whole, and
+below `water` the surface vanishes at sea. Instead the clip is a **display mask like the edge fade**: `landMask()`
+(`src/contour.ts`) decodes the same GEBCO terrain-RGB PMTiles the 3-D curtain reads (`loadMosaic`, now exported
+with a zoom argument; z6 ≈ 1.2 km per pixel) over the grid's extent and blanks every cell whose centre is at or
+above sea level, in the bitmap, the isolines and the hover. The values, the CSV and the R / Python parity are
+untouched — a user masks `cc_interpolate_rast()` with `calcofi4r::cc_bathy()` for the same effect. One fetch per
+grid extent, cached per session.
+
 ### D38 · The hexagon size is a slider (executed)
 
 `<input type="range" min=3 max=7 step=1>` with a `<datalist>` tick per H3 resolution, 110 px wide, the readout
@@ -270,6 +282,7 @@ call these on `summary/station.csv` when the lens is Contours, so the bundle re-
 | **3 · D36 → interleaved overlay (executed 2026-09-07)** | the four proofs, the Data row in *On the map*, `layers=…,data,…` | 4 |
 | **4 · the site grain (executed 2026-09-07, D40)** | `grain=site` default, `contour_cast.sql`, the local mode in the worker + calcofi4r 1.22.0 + calcofi4py 0.9.0 with the seeded subsamples | 6 |
 | **5 · the lens picker (executed 2026-09-07, D41)** | `src/lenspicker.tsx` | 2 |
+| **7 · land clip (executed 2026-09-07, D42)** | `landMask()` from the terrain tiles; blank at or above sea level | 1 |
 | **6 · retire the Contour Explorer (executed 2026-09-07)** | `server/caddy/Caddyfile`: `/contour` and `/oceano` 308 to `calcofi.io/explore/?lens=contour&var=temperature` (deployed: Caddy restarted on the server); `products.yml`: the card superseded by the Explorer, the Explorer card lists contours; `uptime`: the monitor dropped | 1 |
 | left | the kriging SD at the station grid stays ≈ 3 s (delivered after the value; a Cholesky path would halve it); isoline labels; a log1p transform for heavy-tailed biology (D40); `reproduce.R` running the surface itself rather than naming the call | — |
 
@@ -285,6 +298,22 @@ call these on `summary/station.csv` when the lens is Contours, so the bundle re-
   45 s+), with the canvas *or* `ImageData`, with picking on or off, with a 2×2 test image — while headed and
   headless puppeteer Chrome on the same page stay at 60 fps ("alive", heartbeat every 2 s). An extension artefact,
   not the app; verify with `scripts/verify.mjs` / puppeteer, as `feedback_explorer_verify_gotchas` already says.
+
+### `verify.mjs`, 2026-09-07 (the dev catalog, headed Chrome, 1280 × 800 and 390 × 844)
+
+The first full run after slices 2–5 failed 33 states in four groups, and each group had one cause: the lens picker
+was two rows tall inside the phone sheet's peek strip (one CSS rule: the description hides there and the open list
+floats over the map, `position: fixed`, since the sheet clips overflow); the Layers-card states counted checkboxes,
+indexed rows and read the first range slider from before the Data row (the expectations updated: 6 checkboxes, the
+Data row leads *On the map*, the sea floor's slider is the second); **interleaved deck forwards no mouse events** —
+its overlaid mode registered MapLibre's `mousemove`/`click` itself — so no tooltip or click reached the app until
+`MapView` drove picking from the map's own events into one `.deck-tooltip` element (and the hover state picked a
+feature under the floating Controls panel; it now picks one in the open map); and a run of late-suite
+`first_lens_ready` timeouts that pass in isolation (run fatigue in one Chrome profile, not regressions). **Left
+failing, and pre-existing** (they fail at `d7cd898`, before this plan, from the 2026-09-06 first-look tweaks that
+moved feedback under *Help* and dropped the sea-floor legend row): `u4b_feedback_open`, `u4b_annotate`,
+`u4b_send_mock`, `u7_annotate_text`, `p4b_feedback` (`[data-tour="feedback"]` / `[data-tour="more"]`), `p4_share`
+(`.menu-btn` *Share*), `layers_default_dark` (`.legend-bathy`). A follow-up should re-anchor those states.
 
 ## Risks and what bounds them
 
