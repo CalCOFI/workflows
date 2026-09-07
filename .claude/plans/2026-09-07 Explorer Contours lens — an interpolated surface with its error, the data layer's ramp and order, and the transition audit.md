@@ -6,7 +6,7 @@ executed 2026-09-07** — see *Decided* and *Measured* at the end ·
 **Date:** 2026-09-07 · **Scale:** one repo (`CalCOFI/explore`: three new modules — `contour.worker.ts`,
 `contour.ts`, `ramps.ts` — and edits to `state.ts`, `map.tsx`, `App.tsx`, `sentence.tsx`, `layers.tsx`,
 `sql/station.sql`, `sql/cruise_track.sql`); no release change, no server; ~14 h spent, ~24 h left across three slices.
-Decision numbering continues from the 2026-08-31 map-layers plan (D21–D30): **D31–D43**.
+Decision numbering continues from the 2026-08-31 map-layers plan (D21–D30): **D31–D44**.
 
 ## The ask (Ben, 2026-09-07)
 
@@ -247,6 +247,16 @@ Layers card; **off by default on the site grain, on for the station grid** (218 
 which still says where the record is thick), and the URL carries an explicit choice. The station-dot layer stays the
 morph carrier under every lens; in Contours with the inputs off it draws at radius 0 and is not pickable.
 
+### D44 · Contour labels, on by default (executed)
+
+Ben: *"add option for contour labels layer (on by default)."* The marching-squares output is segments, so
+`joinSegments()` (`src/contour.ts`) chains each level's segments into polylines by shared endpoints and
+`labelPoints()` places one label about every 150 km of line (the spacing in cells follows the cell size; a line
+shorter than half that gets none), rotated to follow the line and kept upright. A deck `TextLayer` draws the level
+(years as integers) at 12 px on a translucent white box. `labels=off` in the URL, a *contour labels* checkbox in the
+options and a row under *Data* in the Layers card. One trap: deck's font atlas rendered nothing with
+`fontWeight: "600"` beside a family list — boxes without glyphs — so the layer sets the family only.
+
 ### D38 · The hexagon size is a slider (executed)
 
 `<input type="range" min=3 max=7 step=1>` with a `<datalist>` tick per H3 resolution, 110 px wide, the readout
@@ -296,6 +306,7 @@ call these on `summary/station.csv` when the lens is Contours, so the bundle re-
 | **3 · D36 → interleaved overlay (executed 2026-09-07)** | the four proofs, the Data row in *On the map*, `layers=…,data,…` | 4 |
 | **4 · the site grain (executed 2026-09-07, D40)** | `grain=site` default, `contour_cast.sql`, the local mode in the worker + calcofi4r 1.22.0 + calcofi4py 0.9.0 with the seeded subsamples | 6 |
 | **5 · the lens picker (executed 2026-09-07, D41)** | `src/lenspicker.tsx` | 2 |
+| **9 · contour labels (executed 2026-09-07, D44)** | `joinSegments()` + `labelPoints()`, a `TextLayer`, `labels=` | 1 |
 | **8 · the inputs as a layer (executed 2026-09-07, D43)** | `inputs=`, the toggle and the Layers-card row | 1 |
 | **7 · land clip (executed 2026-09-07, D42)** | `landMask()` rasterises Natural Earth land onto the grid; `public/land.geojson` | 1 |
 | **6 · retire the Contour Explorer (executed 2026-09-07)** | `server/caddy/Caddyfile`: `/contour` and `/oceano` 308 to `calcofi.io/explore/?lens=contour&var=temperature` (deployed: Caddy restarted on the server); `products.yml`: the card superseded by the Explorer, the Explorer card lists contours; `uptime`: the monitor dropped | 1 |
