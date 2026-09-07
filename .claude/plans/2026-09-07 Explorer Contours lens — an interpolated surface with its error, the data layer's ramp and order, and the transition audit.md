@@ -221,17 +221,21 @@ picking one closes it; Esc and a click outside close it too. It replaces the six
 strip; the sentence's lens chip keeps its own menu. The tour step says *Six ways to view it* and describes the
 slivers; `verify.mjs` clicks lenses through the picker.
 
-### D42 · Land is clipped from the surface by the GEBCO terrain tiles, not by layer order (executed)
+### D42 · Land is clipped from the surface by Natural Earth land rasterised onto the grid, not by layer order (executed)
 
 Ben (mid-session): *"clip out land from the interpolated surface, which could be done by putting the data layer
 below the land basemap layer."* Order cannot do it: in CARTO's styles land is the **background colour**, not a layer
 — `water`, landcover, parks and roads are the layers, so nothing drawn above the surface covers land as a whole, and
-below `water` the surface vanishes at sea. Instead the clip is a **display mask like the edge fade**: `landMask()`
-(`src/contour.ts`) decodes the same GEBCO terrain-RGB PMTiles the 3-D curtain reads (`loadMosaic`, now exported
-with a zoom argument; z6 ≈ 1.2 km per pixel) over the grid's extent and blanks every cell whose centre is at or
-above sea level, in the bitmap, the isolines and the hover. The values, the CSV and the R / Python parity are
-untouched — a user masks `cc_interpolate_rast()` with `calcofi4r::cc_bathy()` for the same effect. One fetch per
-grid extent, cached per session.
+below `water` the surface vanishes at sea. The first cut read the GEBCO terrain-RGB tiles the 3-D curtain decodes
+(elevation ≥ 0 = land): right where the tiles exist (Los Angeles reads 0 m, the basin −1,090 m) but they stop at the
+CalCOFI crop, so Arizona and the Gulf of California stayed coloured, and the mosaic over a site-grain grid reaching
+165° W took 8.8 s. The shipped clip is **Natural Earth 10 m land** — `rnaturalearth::ne_countries(scale = 10)`
+unioned, clipped to 170–95° W × 5–55° N, simplified, bundled as `public/land.geojson` (267 KB, 11,443 vertices) —
+**rasterised onto the grid's own Mercator-regular cells with a canvas** (`landMask()` in `src/contour.ts`, the
+even-odd rule so lakes are holes): complete coverage, no fetch beyond the one file, milliseconds. A display mask
+like the edge fade: the bitmap, the isolines and the hover are blank over land; the values, the CSV and the R /
+Python parity are untouched (mask `cc_interpolate_rast()` with `calcofi4r::cc_bathy()` in R for the same effect).
+`loadMosaic()` in `curtain.tsx` kept its new zoom argument and `mosaicAt()` for whoever needs elevations next.
 
 ### D38 · The hexagon size is a slider (executed)
 
@@ -282,7 +286,7 @@ call these on `summary/station.csv` when the lens is Contours, so the bundle re-
 | **3 · D36 → interleaved overlay (executed 2026-09-07)** | the four proofs, the Data row in *On the map*, `layers=…,data,…` | 4 |
 | **4 · the site grain (executed 2026-09-07, D40)** | `grain=site` default, `contour_cast.sql`, the local mode in the worker + calcofi4r 1.22.0 + calcofi4py 0.9.0 with the seeded subsamples | 6 |
 | **5 · the lens picker (executed 2026-09-07, D41)** | `src/lenspicker.tsx` | 2 |
-| **7 · land clip (executed 2026-09-07, D42)** | `landMask()` from the terrain tiles; blank at or above sea level | 1 |
+| **7 · land clip (executed 2026-09-07, D42)** | `landMask()` rasterises Natural Earth land onto the grid; `public/land.geojson` | 1 |
 | **6 · retire the Contour Explorer (executed 2026-09-07)** | `server/caddy/Caddyfile`: `/contour` and `/oceano` 308 to `calcofi.io/explore/?lens=contour&var=temperature` (deployed: Caddy restarted on the server); `products.yml`: the card superseded by the Explorer, the Explorer card lists contours; `uptime`: the monitor dropped | 1 |
 | left | the kriging SD at the station grid stays ≈ 3 s (delivered after the value; a Cholesky path would halve it); isoline labels; a log1p transform for heavy-tailed biology (D40); `reproduce.R` running the surface itself rather than naming the call | — |
 
@@ -313,7 +317,11 @@ feature under the floating Controls panel; it now picks one in the open map); an
 failing, and pre-existing** (they fail at `d7cd898`, before this plan, from the 2026-09-06 first-look tweaks that
 moved feedback under *Help* and dropped the sea-floor legend row): `u4b_feedback_open`, `u4b_annotate`,
 `u4b_send_mock`, `u7_annotate_text`, `p4b_feedback` (`[data-tour="feedback"]` / `[data-tour="more"]`), `p4_share`
-(`.menu-btn` *Share*), `layers_default_dark` (`.legend-bathy`). A follow-up should re-anchor those states.
+(`.menu-btn` *Share*), `layers_default_dark` (`.legend-bathy`). A follow-up should re-anchor those states. **Smoke test on the real release** (`npm run build` with the
+defaults, `vite preview`, `scripts/smoke_release.mjs`): v2026.09.06 with the eight-version picker, no console
+errors, the Contours lens on the site grain reads *"Temperature, the mean as a contoured surface by ordinary kriging
+over every site"*; the one "failed" request is DuckDB-WASM's `eh` bundle probe, aborted by design when the `mvp`
+bundle is chosen.
 
 ## Risks and what bounds them
 
