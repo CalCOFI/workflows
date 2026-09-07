@@ -6,7 +6,7 @@ executed 2026-09-07** — see *Decided* and *Measured* at the end ·
 **Date:** 2026-09-07 · **Scale:** one repo (`CalCOFI/explore`: three new modules — `contour.worker.ts`,
 `contour.ts`, `ramps.ts` — and edits to `state.ts`, `map.tsx`, `App.tsx`, `sentence.tsx`, `layers.tsx`,
 `sql/station.sql`, `sql/cruise_track.sql`); no release change, no server; ~14 h spent, ~24 h left across three slices.
-Decision numbering continues from the 2026-08-31 map-layers plan (D21–D30): **D31–D44**.
+Decision numbering continues from the 2026-08-31 map-layers plan (D21–D30): **D31–D45**.
 
 ## The ask (Ben, 2026-09-07)
 
@@ -247,13 +247,13 @@ Layers card; **off by default on the site grain, on for the station grid** (218 
 which still says where the record is thick), and the URL carries an explicit choice. The station-dot layer stays the
 morph carrier under every lens; in Contours with the inputs off it draws at radius 0 and is not pickable.
 
-### D44 · Contour lines in the ramp's dark, labels in white on a halo, thinned by the zoom — off by default (executed)
+### D44 · Contour lines in the ramp's dark, labels in white on a halo, thinned by the zoom — on by default (executed)
 
 Ben: *"add option for contour labels layer (on by default)"*, then on the first cut (black text on white boxes,
 every ~150 km of line, at 12,000 sites): *"still looks messy … contour lines are dark variants of the color ramp …
 labels white (fully unique on the map) … extra logic to prevent overcrowding that ideally is zoom level
 dependent"* — and, having just mailed the team the link, *"quick turn off the labels by default, then fix"*. So:
-`labels=on` (off by default; a checkbox in the options and a row under *Data* in the Layers card). The
+`labels=off` (on by default again once Ben saw the legible cut — "Looks good!"; a checkbox in the options and a row under *Data* in the Layers card). The
 marching-squares segments are chained into polylines (`joinSegments()`), the **isolines take 55 % of the ramp colour
 at their level** (they stand out of the surface without fighting it), and the **labels are white on a dark SDF halo**
 — the one white text on the map — rotated to follow the line and kept upright (`labelPoints()`). Density follows the
@@ -261,6 +261,16 @@ zoom: one label per **~260 px of line**, none on a line under 130 px, none withi
 (`thinLabels()`, a bucket hash), recomputed when the map's zoom settles (`map=` in the URL). Years read as integers.
 Trap: deck's font atlas rendered empty boxes with any custom `fontFamily`; the default font with `fontSettings.sdf`
 renders, halo included.
+
+### D45 · The title stands above its legend; the status has its own toast; the Controls tabs are numbered (executed)
+
+Ben's screenshot (2026-09-07): at some window widths the sentence collapsed into a one-word column beside a legend
+that would not wrap — *"it is a mouthful already, so it should be above the legend, not to left"* — and the status
+(*"engine warming…"*, *"building slice…"*, *"saved …png"*) was tucked into the legend's hint, *"a tiny tucked away
+spot that people are not going to be looking at"*. Now the collapsed sentence is two rows — the title with its ▾,
+the legend (scale · 5–95 % · count) under it — and the **status is a pill over the map above the Time panel**, with a
+spinner while something is in flight, transient notes clearing after 5 s, an error staying until the next change.
+And the Controls tabs read as a sequence: small step badges **① Select ② Refine ③ Share**, the active one filled.
 
 ### D38 · The hexagon size is a slider (executed)
 
@@ -311,6 +321,7 @@ call these on `summary/station.csv` when the lens is Contours, so the bundle re-
 | **3 · D36 → interleaved overlay (executed 2026-09-07)** | the four proofs, the Data row in *On the map*, `layers=…,data,…` | 4 |
 | **4 · the site grain (executed 2026-09-07, D40)** | `grain=site` default, `contour_cast.sql`, the local mode in the worker + calcofi4r 1.22.0 + calcofi4py 0.9.0 with the seeded subsamples | 6 |
 | **5 · the lens picker (executed 2026-09-07, D41)** | `src/lenspicker.tsx` | 2 |
+| **10 · title above legend, status toast, numbered tabs (executed 2026-09-07, D45)** | `sentence.tsx`, `App.tsx` status toast, `.tabs .step` | 1 |
 | **9 · contour lines + labels (executed 2026-09-07, D44)** | darkened ramp lines; `joinSegments()` + `labelPoints()` + `thinLabels()`, a `TextLayer`, `labels=on` | 2 |
 | **8 · the inputs as a layer (executed 2026-09-07, D43)** | `inputs=`, the toggle and the Layers-card row | 1 |
 | **7 · land clip (executed 2026-09-07, D42)** | `landMask()` rasterises Natural Earth land onto the grid; `public/land.geojson` | 1 |
