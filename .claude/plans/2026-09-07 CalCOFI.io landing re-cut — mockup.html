@@ -1,0 +1,1220 @@
+<!-- Reference mockup for the plan `2026-09-07 CalCOFI.io landing re-cut …` (workflows/.claude/plans). Built 2026-09-07 from CalCOFI.github.io data: brand/v2 tokens + icons, _data/grid.geojson, _data/land.geojson, datasets.json coverage at v2026.09.06. The product screenshots are replaced by a 1×1 pixel here; the published artifact carries them: https://claude.ai/code/artifact/7e41ff7c-2a0a-4bb7-b993-25142657dc77 . Open in a browser: needs <meta charset="utf-8"> if served without one. -->
+<meta charset="utf-8">
+<title>CalCOFI.io Reimagined</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,300..900;1,300..900&family=Teko:wght@300..700&display=swap">
+<style>
+/* ── brand v2 tokens (calcofi.io/brand/v2/theme.css), plus the section-drawing tokens this page adds ── */
+:root {
+  --bg:#ffffff; --panel:#f5f5f5; --panel-2:#ffffff; --border:#dddddd; --fg:#182b49; --muted:#66686a;
+  --accent:#00629b; --accent-d:#004663; --on-accent:#ffffff; --warn:#8a6500; --band:#f5f0e6;
+  --cta-bg:#ffcd00; --cta-fg:#182b49; --cc-green:#457a1c; --cc-red:#b3261e;
+  --ok-bg:#eef5e9; --warn-bg:#fff6dc; --na-bg:#ececec; --nogo-bg:#fbe9e7; --accent-bg:#e3eef6;
+  --map-water:#e6eef4; --map-land:#f5f0e6; --map-coast:#66686a; --map-mark:#00629b;
+  --navy:#182b49; --blue:#00629b; --yellow:#ffcd00; --gold:#c69214; --cyan:#00c6d7; --sand:#f5f0e6; --gray:#747678; --stone:#b6b1a9;
+  /* the section drawing */
+  --sky0:#ffffff; --sky1:#e6eef4;
+  --w0:#dcedf5; --w1:#a9d4e6; --w2:#4d8fb8; --w3:#1f5f8f; --w4:#182b49;
+  --floor:#f5f0e6; --floor-line:#b6b1a9; --ship:#182b49; --wire:#182b49; --surf:#00c6d7; --sun:#c69214;
+  --pin-bg:#ffffff; --pin-fg:#00629b;
+  --lab:#182b49; --halo:rgba(255,255,255,.85); --lab-d:#ffffff; --halo-d:rgba(24,43,73,.55);
+  --shadow: 0 1px 2px rgba(24,43,73,.08), 0 8px 24px rgba(24,43,73,.08);
+  --sans:"Source Sans 3", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --display:"Teko", "Source Sans 3", Impact, "Arial Narrow", sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#0f1a2e; --panel:#182b49; --panel-2:#21375c; --border:#34486b; --fg:#e9edf3; --muted:#9fb0c8;
+  --accent:#4fb6e6; --accent-d:#8ad0f0; --on-accent:#0f1a2e; --warn:#ffcd00; --band:#182b49;
+  --cc-green:#8fbf4f; --cc-red:#ff8080; --ok-bg:#1e3a22; --warn-bg:#3a2d0a; --na-bg:#25344f; --nogo-bg:#4a1f1f; --accent-bg:#12314a;
+  --map-water:#0f1a2e; --map-land:#21375c; --map-coast:#9fb0c8; --map-mark:#4fb6e6;
+  --sky0:#0f1a2e; --sky1:#182b49; --w0:#2a5a82; --w1:#1e4666; --w2:#16324c; --w3:#10223a; --w4:#0b1524;
+  --floor:#21375c; --floor-line:#34486b; --ship:#e9edf3; --wire:#e9edf3; --surf:#4fb6e6; --sun:#e9edf3;
+  --pin-bg:#182b49; --pin-fg:#4fb6e6; --lab:#e9edf3; --halo:rgba(15,26,46,.65); --lab-d:#e9edf3; --halo-d:rgba(15,26,46,.65);
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35); } }
+:root[data-theme="dark"] { --bg:#0f1a2e; --panel:#182b49; --panel-2:#21375c; --border:#34486b; --fg:#e9edf3; --muted:#9fb0c8;
+  --accent:#4fb6e6; --accent-d:#8ad0f0; --on-accent:#0f1a2e; --warn:#ffcd00; --band:#182b49;
+  --cc-green:#8fbf4f; --cc-red:#ff8080; --ok-bg:#1e3a22; --warn-bg:#3a2d0a; --na-bg:#25344f; --nogo-bg:#4a1f1f; --accent-bg:#12314a;
+  --map-water:#0f1a2e; --map-land:#21375c; --map-coast:#9fb0c8; --map-mark:#4fb6e6;
+  --sky0:#0f1a2e; --sky1:#182b49; --w0:#2a5a82; --w1:#1e4666; --w2:#16324c; --w3:#10223a; --w4:#0b1524;
+  --floor:#21375c; --floor-line:#34486b; --ship:#e9edf3; --wire:#e9edf3; --surf:#4fb6e6; --sun:#e9edf3;
+  --pin-bg:#182b49; --pin-fg:#4fb6e6; --lab:#e9edf3; --halo:rgba(15,26,46,.65); --lab-d:#e9edf3; --halo-d:rgba(15,26,46,.65);
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35); }
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin:0; background:var(--bg); color:var(--fg); font:18px/1.44 var(--sans); }
+a { color:var(--accent); text-decoration:none; }
+a:hover { color:var(--accent-d); text-decoration:underline; }
+p { max-width:68ch; margin:0 0 12px; }
+ul { padding-left:20px; margin:0 0 12px; max-width:68ch; }
+li { margin-bottom:4px; }
+code { font-family:var(--mono); font-size:.88em; background:var(--panel); padding:1px 5px; border-radius:4px; }
+.wrap { max-width:1200px; margin:0 auto; padding:0 24px; }
+.eyebrow { font-size:13px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); font-weight:600; }
+h1.display, h2.display { font-family:var(--display); font-weight:500; text-transform:uppercase; letter-spacing:.01em; text-wrap:balance; }
+h1.display { font-size:clamp(60px, 8vw, 104px); line-height:.9; margin:.08em 0 .15em; }
+h2.display { font-size:clamp(38px, 4.6vw, 60px); line-height:.95; margin:0 0 10px; }
+h3 { font-size:22px; font-weight:700; margin:0 0 6px; text-wrap:balance; }
+h4 { margin:0 0 6px; font-size:13px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); }
+.lede { font-size:21px; line-height:1.4; max-width:60ch; margin:0 0 16px; }
+.small { font-size:15px; color:var(--muted); }
+
+.masthead { padding:44px 0 28px; border-bottom:1px solid var(--border); background:var(--band); }
+.masthead .row { display:flex; gap:24px; align-items:flex-end; justify-content:space-between; flex-wrap:wrap; }
+.toc { display:flex; flex-wrap:wrap; gap:4px 20px; margin-top:8px; font-size:14px; letter-spacing:.06em; text-transform:uppercase; font-weight:600; }
+.toc a { color:var(--fg); border-bottom:2px solid transparent; padding:6px 0; }
+.toc a:hover { border-bottom-color:var(--accent); text-decoration:none; color:var(--accent); }
+.toc a b { color:var(--accent); font-family:var(--display); font-size:18px; margin-right:6px; font-weight:500; }
+.tbtn { font:600 13px var(--sans); letter-spacing:.06em; text-transform:uppercase; border:1px solid var(--border); background:var(--bg); color:var(--fg); border-radius:999px; padding:8px 14px; cursor:pointer; }
+.tbtn:hover { border-color:var(--accent); color:var(--accent); }
+.tbtn:focus-visible, .copy:focus-visible, .chip:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+
+section.part { padding:56px 0; border-bottom:1px solid var(--border); }
+section.part.alt { background:var(--band); }
+.part-head { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,1fr); gap:16px 40px; align-items:end; margin-bottom:24px; }
+.part-head .lede { margin:0; font-size:19px; }
+.stepno { font-family:var(--display); font-size:22px; color:var(--accent); letter-spacing:.06em; font-weight:500; }
+
+.mock { border:1px solid var(--border); border-radius:12px; overflow:hidden; background:var(--bg); box-shadow:var(--shadow); }
+.mock-cap { display:flex; gap:6px 22px; flex-wrap:wrap; font-size:14px; color:var(--muted); padding:10px 16px; border-top:1px solid var(--border); background:var(--panel); }
+.mock-cap b { color:var(--fg); font-weight:600; }
+.notes { display:grid; grid-template-columns:repeat(auto-fit, minmax(270px, 1fr)); gap:8px 32px; margin-top:28px; }
+.notes p, .notes li { font-size:16px; }
+.notes ul { margin-bottom:8px; }
+
+/* the today / proposed wireframes */
+.wires { display:grid; grid-template-columns:1fr 1fr; gap:24px; margin:20px 0 8px; max-width:720px; }
+.wire { border:1px solid var(--border); border-radius:10px; padding:10px; background:var(--bg); display:flex; flex-direction:column; gap:6px; }
+.wire .blk { border-radius:4px; background:var(--panel); border:1px solid var(--border); color:var(--muted); font-size:11px; letter-spacing:.06em; text-transform:uppercase; padding:4px 8px; display:flex; align-items:center; }
+.wire .blk.hero { background:linear-gradient(180deg, var(--sky1), var(--w2)); color:#fff; height:60px; }
+.wire .blk.band { background:var(--band); }
+.wire .grid2 { display:grid; grid-template-columns:1fr 2fr; gap:6px; }
+.wire .grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; }
+.wire .grid2 .blk, .wire .grid3 .blk { height:34px; }
+.wire .lbl { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--fg); margin-bottom:2px; }
+
+/* ── the section drawing ── */
+svg.sec { display:block; width:100%; height:auto; font-family:var(--sans); }
+.sec .lab { font-size:13px; fill:var(--lab); paint-order:stroke; stroke:var(--halo); stroke-width:3.5px; stroke-linejoin:round; }
+.sec .lab-d { fill:var(--lab-d); stroke:var(--halo-d); }
+.sec .ax { font-family:var(--mono); font-size:11px; fill:var(--muted); }
+.sec .axt { font-size:11px; letter-spacing:.1em; text-transform:uppercase; fill:var(--muted); font-weight:600; }
+.sec .axl { stroke:var(--muted); stroke-width:1; fill:none; }
+.sec .grid { stroke:var(--fg); opacity:.12; stroke-dasharray:2 6; }
+.sec .eyeb { font-size:13px; letter-spacing:.1em; text-transform:uppercase; fill:var(--muted); font-weight:600; }
+.sec .h1 { font-family:var(--display); font-size:80px; font-weight:500; fill:var(--fg); letter-spacing:.01em; }
+.sec .ledet { font-size:17px; fill:var(--fg); }
+.sec .cta { fill:var(--cta-bg); }
+.sec .ctat { font-size:14px; font-weight:700; fill:var(--cta-fg); }
+.sec .ship { fill:var(--ship); }
+.sec .win { stroke:var(--pin-bg); stroke-width:1.6; }
+.sec .wire { stroke:var(--wire); stroke-width:1.5; fill:none; }
+.sec .thin { stroke:var(--wire); stroke-width:1; fill:none; opacity:.55; stroke-dasharray:3 4; }
+.sec .net { fill:none; stroke:var(--wire); stroke-width:1.2; }
+.sec .btl { fill:var(--pin-fg); }
+.sec .ros { fill:var(--pin-bg); stroke:var(--wire); stroke-width:1.5; }
+.sec .rosette { animation:cast 26s ease-in-out infinite; }
+@keyframes cast { 0% { transform:translateY(-268px); } 42% { transform:translateY(0); } 56% { transform:translateY(0); } 96% { transform:translateY(-268px); } 100% { transform:translateY(-268px); } }
+.sec .cufes { stroke:var(--wire); stroke-width:1.4; stroke-dasharray:2 6; fill:none; animation:flow 2.4s linear infinite; }
+@keyframes flow { to { stroke-dashoffset:-16; } }
+.sec .pin { cursor:pointer; }
+.sec .pin circle { fill:var(--pin-bg); stroke:var(--pin-fg); stroke-width:2; transition:fill .15s; }
+.sec .pin use { fill:var(--pin-fg); transition:fill .15s; }
+.sec .pin.held circle { stroke-dasharray:3 3; }
+.sec .pin.held use { fill:var(--muted); }
+.sec .pin:hover circle { fill:var(--pin-fg); }
+.sec .pin:hover use { fill:var(--pin-bg); }
+.sec .glyph { fill:var(--ship); }
+.sec .sun { fill:var(--sun); opacity:.95; }
+.sec .surf { stroke:var(--surf); stroke-width:2; }
+.sec .floor { fill:var(--floor); stroke:var(--floor-line); stroke-width:1.2; }
+.sec .lead { stroke:var(--pin-fg); stroke-width:1; opacity:.6; fill:none; }
+
+/* ── the map ── */
+svg.map { display:block; width:100%; height:auto; }
+.map .water { fill:var(--map-water); }
+.map .land { fill:var(--map-land); stroke:var(--map-coast); stroke-width:.6; }
+.map .trk { fill:none; stroke:var(--map-mark); stroke-width:.8; opacity:.55; }
+.map .trk.e { stroke-dasharray:2 2; opacity:.4; }
+.map .st.h { fill:var(--stone); opacity:.85; }
+.map .st.e { fill:none; stroke:var(--map-mark); stroke-width:1; }
+.map .st.s { fill:var(--map-mark); transform-box:fill-box; transform-origin:center; animation:sweep 12s linear infinite; animation-delay:var(--d); }
+.map .ring { fill:none; stroke:var(--cyan); stroke-width:1.4; opacity:0; transform-box:fill-box; transform-origin:center; animation:ripple 12s linear infinite; animation-delay:var(--d); }
+@keyframes sweep { 0%, 9% { transform:scale(1); } 2% { transform:scale(1.9); } }
+@keyframes ripple { 0% { opacity:.9; transform:scale(1); } 7% { opacity:0; transform:scale(6); } 100% { opacity:0; transform:scale(6); } }
+.map .plc { font:10px var(--sans); fill:var(--muted); }
+.map .plcd { fill:var(--muted); }
+.map .ln { font:9px var(--mono); fill:var(--map-mark); }
+.map .key { font:10px var(--sans); fill:var(--muted); }
+
+/* ── the years strip ── */
+svg.strip { display:block; width:100%; height:auto; }
+.strip .rl { font:11px var(--mono); fill:var(--fg); }
+.strip .dl { font:10px var(--mono); fill:var(--muted); }
+.strip .dt { stroke:var(--fg); opacity:.1; }
+.strip .bar { fill:var(--accent); opacity:.55; }
+.strip .cell { }
+.strip .ass { fill-opacity:.22; stroke-dasharray:3 2; stroke-width:1; }
+.strip .sum { font:10px var(--sans); fill:var(--muted); }
+
+/* the reach layout (part 2) */
+.reach { display:grid; grid-template-columns:minmax(0, 340px) minmax(0, 1fr); gap:24px; padding:20px; }
+.reach .mapwrap { position:relative; }
+.odo { position:absolute; right:10px; top:6px; font-family:var(--display); font-size:54px; line-height:1; color:var(--fg); font-weight:500; letter-spacing:.02em; font-variant-numeric:tabular-nums; }
+.odo small { display:block; font:600 10px var(--sans); letter-spacing:.1em; text-transform:uppercase; color:var(--muted); text-align:right; }
+.reach .cap { font-size:14px; color:var(--muted); margin-top:6px; }
+.reach .cap b { color:var(--fg); }
+
+/* chips */
+.chips { display:flex; flex-wrap:wrap; gap:8px; }
+.chip { display:inline-flex; align-items:center; gap:6px; border:1px solid var(--border); border-radius:999px; padding:4px 11px 4px 7px; font-size:14px; background:var(--bg); color:var(--fg); cursor:pointer; }
+.chip svg { width:18px; height:18px; fill:var(--accent); flex:none; }
+.chip .n { color:var(--muted); font-family:var(--mono); font-size:12px; }
+.chip.on, .chip:hover { border-color:var(--accent); color:var(--accent); }
+.chip.held svg { fill:var(--muted); } .chip.held { border-style:dashed; }
+
+/* numbers */
+.nums { display:grid; grid-template-columns:repeat(6, 1fr); gap:12px; }
+.nums div { border-left:2px solid var(--border); padding-left:12px; }
+.nums b { display:block; font-family:var(--display); font-size:54px; line-height:.95; font-weight:500; color:var(--fg); font-variant-numeric:tabular-nums; }
+.nums span { font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); font-weight:600; }
+
+/* browser frame + the scaled page */
+.browser { border:1px solid var(--border); border-radius:12px; overflow:hidden; background:var(--panel); box-shadow:var(--shadow); }
+.browser .bar { display:flex; align-items:center; gap:7px; padding:9px 12px; border-bottom:1px solid var(--border); font:12px var(--mono); color:var(--muted); }
+.browser .bar i { width:10px; height:10px; border-radius:50%; background:var(--stone); display:inline-block; opacity:.7; }
+.browser .bar .url { margin-left:8px; background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:3px 10px; flex:1; }
+.stage { position:relative; overflow:hidden; background:var(--bg); }
+.page { width:1170px; transform-origin:0 0; position:absolute; left:0; top:0; background:var(--bg); font-size:16px; line-height:1.4; }
+.page .hd { display:flex; align-items:center; gap:18px; height:72px; padding:0 28px; border-bottom:1px solid var(--border); }
+.page .hd .lk { height:36px; display:flex; align-items:center; }
+.page .hd .lk svg { height:36px; width:auto; }
+.page .hd .ttl { font-size:15px; letter-spacing:.06em; text-transform:uppercase; font-weight:700; }
+.page .hd .ttl small { text-transform:none; letter-spacing:0; font-weight:400; color:var(--muted); margin-left:8px; }
+.page .hd nav { margin-left:auto; display:flex; gap:20px; font-size:14px; letter-spacing:.06em; text-transform:uppercase; font-weight:700; }
+.page .hd nav span.new { position:relative; }
+.page .hd nav span.new::after { content:""; position:absolute; top:-2px; right:-9px; width:6px; height:6px; border-radius:50%; background:var(--cta-bg); border:1px solid var(--fg); }
+.page .hd .tg { width:32px; height:32px; border-radius:50%; border:1px solid var(--border); display:grid; place-items:center; }
+.page .hd .tg svg { width:16px; height:16px; fill:var(--fg); }
+.page .hero { position:relative; }
+.page .numsband { background:var(--band); padding:20px 28px; }
+.page .numsband .nums b { font-size:44px; }
+.page .bento { display:grid; grid-template-columns:repeat(6, 1fr); grid-auto-rows:150px; gap:16px; padding:24px 28px; }
+.tile { border:1px solid var(--border); border-radius:12px; background:var(--panel-2); padding:14px 16px; overflow:hidden; position:relative; display:flex; flex-direction:column; gap:6px; min-width:0; }
+.tile .eyebrow { font-size:11px; }
+.tile h3 { font-size:18px; margin:0; }
+.tile .more { margin-top:auto; font-size:13px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--accent); }
+.tile.t-map { grid-column:1 / span 2; grid-row:1 / span 3; }
+.tile.t-years { grid-column:3 / span 4; grid-row:1 / span 2; }
+.tile.t-rel { grid-column:3 / span 2; grid-row:3 / span 1; }
+.tile.t-log { grid-column:5 / span 2; grid-row:3 / span 2; }
+.tile.t-exp { grid-column:1 / span 2; grid-row:4 / span 2; padding:0; }
+.tile.t-get { grid-column:3 / span 2; grid-row:4 / span 2; }
+.tile.t-sp { grid-column:5 / span 2; grid-row:5 / span 1; }
+.tile .fill { flex:1; min-height:0; }
+.tile.t-map .fill { position:relative; } .tile.t-map .fill svg { position:absolute; inset:0; width:100%; height:100%; }
+.tile .odo { font-size:46px; top:10px; right:12px; }
+.tile.t-rel .v { font:700 22px var(--mono); color:var(--accent); }
+.tile.t-rel dl { display:flex; gap:18px; margin:0; }
+.tile.t-rel dt { font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
+.tile.t-rel dd { margin:0; font-family:var(--mono); font-size:14px; }
+.tile.t-exp img { display:block; width:100%; height:200px; object-fit:cover; object-position:top; border-bottom:1px solid var(--border); }
+.tile.t-exp .tb { padding:12px 16px 14px; display:flex; flex-direction:column; gap:4px; flex:1; }
+.tile.t-exp .lens { display:flex; gap:8px; }
+.tile.t-exp .lens svg { width:18px; height:18px; fill:var(--muted); }
+.tabs { display:flex; gap:14px; font-size:12px; letter-spacing:.06em; text-transform:uppercase; font-weight:700; color:var(--muted); border-bottom:1px solid var(--border); }
+.tabs span { padding:4px 0; }
+.tabs span.on { color:var(--accent); border-bottom:2px solid var(--accent); }
+.tile pre { margin:0; font:12.5px/1.5 var(--mono); background:var(--panel); border-radius:8px; padding:10px 12px; overflow:hidden; white-space:pre; }
+.tile.t-sp .big { font-family:var(--display); font-size:44px; line-height:.9; font-weight:500; }
+.tile.t-sp .row { display:flex; gap:10px; align-items:center; }
+.tile.t-sp .row svg { width:26px; height:26px; fill:var(--accent); }
+.log { display:grid; grid-template-columns:auto auto 1fr; gap:8px 14px; align-items:baseline; }
+.log .d { font:13px var(--mono); color:var(--muted); white-space:nowrap; }
+.log .t { font-size:10.5px; text-transform:uppercase; letter-spacing:.08em; padding:2px 8px; border-radius:999px; background:var(--accent-bg); color:var(--accent); font-weight:700; white-space:nowrap; }
+.log .t.release { background:var(--warn-bg); color:var(--warn); }
+.log .t.dataset { background:var(--ok-bg); color:var(--cc-green); }
+.log .t.site { background:var(--na-bg); color:var(--muted); }
+.log .t.data { background:var(--accent-bg); color:var(--accent); }
+.log .e { min-width:0; }
+.log .e b { display:block; font-size:16px; line-height:1.3; }
+.log .e span { font-size:14px; color:var(--muted); }
+.tile .log .e b { font-size:14px; } .tile .log .e span { font-size:12.5px; } .tile .log .d { font-size:11.5px; }
+.page .band { background:var(--band); padding:28px 28px 30px; }
+.page .band h2 { font-family:var(--display); font-weight:500; font-size:44px; text-transform:uppercase; line-height:.95; margin:2px 0 8px; }
+.page .band p { font-size:16px; max-width:70ch; }
+.page .prods { padding:24px 28px 8px; }
+.page .prods .tabs { margin-bottom:16px; font-size:13px; }
+.cards { display:grid; grid-template-columns:repeat(4, 1fr); gap:16px; }
+.card { border:1px solid var(--border); border-radius:12px; overflow:hidden; background:var(--panel-2); }
+.card img { display:block; width:100%; height:120px; object-fit:cover; object-position:top; border-bottom:1px solid var(--border); }
+.card div { padding:10px 12px 12px; }
+.card b { font-size:15px; display:block; }
+.card span { font-size:13px; color:var(--muted); }
+.page .ft { margin-top:20px; background:var(--navy); color:#e9edf3; font-size:12px; padding:12px 28px; letter-spacing:.06em; text-transform:uppercase; }
+
+/* prompts, palette, engines */
+.prompt { position:relative; background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:14px 16px 14px; margin:12px 0 18px; }
+.prompt h4 { margin-bottom:8px; color:var(--fg); }
+.prompt pre { white-space:pre-wrap; font:13px/1.55 var(--mono); margin:0; max-width:none; }
+.copy { position:absolute; top:10px; right:10px; font:600 12px var(--sans); border:1px solid var(--border); background:var(--bg); color:var(--accent); border-radius:6px; padding:4px 9px; cursor:pointer; }
+.copy:hover { border-color:var(--accent); }
+.sw { display:flex; gap:10px; flex-wrap:wrap; margin:10px 0 20px; }
+.sw div { width:96px; }
+.sw i { display:block; height:44px; border-radius:8px; border:1px solid var(--border); }
+.sw b { display:block; font:600 12px var(--sans); margin-top:4px; }
+.sw span { font:11px var(--mono); color:var(--muted); }
+.twocol { display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:8px 40px; }
+.dodont { display:grid; grid-template-columns:1fr 1fr; gap:24px; margin:8px 0 20px; }
+.dodont > div { border:1px solid var(--border); border-radius:10px; padding:14px 16px; background:var(--bg); }
+.dodont h4 { color:var(--cc-green); } .dodont div + div h4 { color:var(--cc-red); }
+.dodont ul { margin:0; }
+.tablewrap { overflow-x:auto; margin:8px 0 20px; }
+table { border-collapse:collapse; width:100%; font-size:15px; min-width:640px; }
+th, td { padding:9px 10px; border-bottom:1px solid var(--border); vertical-align:top; text-align:left; }
+th { font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); font-weight:600; }
+td b { font-weight:600; }
+.phase { display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:16px; margin:10px 0 20px; }
+.phase > div { border:1px solid var(--border); border-radius:10px; padding:14px 16px; background:var(--bg); }
+.phase .stepno { display:block; margin-bottom:2px; }
+.phase ul { margin:6px 0 0; }
+.phase li { font-size:15.5px; }
+
+@media (max-width: 860px) {
+  .part-head, .reach, .wires, .dodont { grid-template-columns:1fr; }
+  .nums { grid-template-columns:repeat(3, 1fr); }
+  .nums b { font-size:42px; }
+  .odo { font-size:40px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sec .rosette, .sec .cufes, .map .st.s, .map .ring { animation:none; }
+  .map .ring { opacity:0; }
+  html { scroll-behavior:auto; }
+}
+</style>
+
+<div id="icons-host"></div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="row">
+      <div>
+        <div class="eyebrow">calcofi.io · landing page concepts · 2026-09-07 · brand v2</div>
+        <h1 class="display">CalCOFI.io, reimagined</h1>
+        <p class="lede">Six ideas for a first screen that shows the ship, the instruments, the life and the seventy-seven years — measured from the release, drawn in the brand, with the catalog and the apps one scroll down.</p>
+      </div>
+      <button class="tbtn" id="theme" type="button" aria-label="Toggle dark / light">Theme: light</button>
+    </div>
+    <nav class="toc" aria-label="Contents">
+      <a href="#read"><b>0</b>Today</a>
+      <a href="#section"><b>1</b>The section</a>
+      <a href="#reach"><b>2</b>Where &amp; when</a>
+      <a href="#bento"><b>3</b>The page, re-cut</a>
+      <a href="#news"><b>4</b>Ship's log</a>
+      <a href="#art"><b>5</b>Imagery</a>
+      <a href="#plan"><b>6</b>Plan</a>
+    </nav>
+  </div>
+</header>
+
+<!-- ───────────────────────── 0 · today ───────────────────────── -->
+<section class="part" id="read">
+  <div class="wrap">
+    <div class="part-head">
+      <div>
+        <div class="stepno">0 · What the page says today</div>
+        <h2 class="display">Linear, and in words</h2>
+      </div>
+      <p class="lede">The hero is a paragraph. The ship, the water and the years appear only as a line of monospace: <code>ship → workflows → database → datasets → apps</code>. Then five bands of the same shape.</p>
+    </div>
+    <div class="twocol">
+      <div>
+        <p>Everything below the hero is good and stays — the catalog is the strongest thing on the site, and the product cards are honest screenshots. The gap is the first screen: it argues the pipeline instead of showing the ocean, so a first-time visitor reads <em>about</em> breadth rather than seeing it. Three moves fix that without touching the catalog:</p>
+        <ul>
+          <li><b>Draw the sampling, to scale.</b> One CalCOFI line as a section — the ship on the surface, each instrument hanging to its real depth, each kind of life at the depth it lives. It is the same picture CalCOFI has drawn of itself since the first atlases, and it is the Explorer's Sections lens.</li>
+          <li><b>Measure the reach.</b> The station grid from the release's own <code>grid</code> table and a dataset-by-year strip from the coverage the release measures. Real numbers beside a real map.</li>
+          <li><b>Break the rhythm.</b> A bento of ways in — where, when, what's new, explore, get the data — before the catalog, instead of five identical bands.</li>
+        </ul>
+        <p>Every hotspot in the drawing links to calcofi.org's own method page (bottle, CTD, DIC, ichthyoplankton, zooplankton, seabirds, marine mammals, underway, NCOG), so calcofi.io never has to explain a bongo net — the MBON pattern, with the depth pushed to the program site.</p>
+      </div>
+      <div>
+        <div class="wires" aria-label="Today versus proposed page structure">
+          <div class="wire">
+            <div class="lbl">Today</div>
+            <div class="blk band" style="height:48px">hero · text + one CTA</div>
+            <div class="blk" style="height:16px">tab row</div>
+            <div class="blk" style="height:64px">datasets · release strip + tiles</div>
+            <div class="blk band" style="height:44px">explore · cards</div>
+            <div class="blk" style="height:34px">access · cards</div>
+            <div class="blk band" style="height:34px">build · cards</div>
+            <div class="blk" style="height:40px">students · cards</div>
+          </div>
+          <div class="wire">
+            <div class="lbl">Proposed</div>
+            <div class="blk hero">the section · ship, gear, life, to depth</div>
+            <div class="blk band" style="height:20px">77 yrs · 842 cruises · 49 ships · 218 stations · 2,614 taxa</div>
+            <div class="grid2"><div class="blk">where</div><div class="blk">when · 16 × 77 years</div></div>
+            <div class="grid3"><div class="blk">release</div><div class="blk">ship's log</div><div class="blk">explore</div></div>
+            <div class="grid3"><div class="blk">get the data</div><div class="blk">species</div><div class="blk">students</div></div>
+            <div class="blk band" style="height:40px">datasets · the catalog, unchanged</div>
+            <div class="blk" style="height:16px">explore · access · build · students as tabs</div>
+          </div>
+        </div>
+        <p class="small">Left: the page as built (index.html). Right: the cut proposed in parts 1–4. The catalog keeps its markup and its includes.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── 1 · the section ───────────────────────── -->
+<section class="part alt" id="section">
+  <div class="wrap">
+    <div class="part-head">
+      <div>
+        <div class="stepno">1 · The hero</div>
+        <h2 class="display">One line, from the coast to the deep</h2>
+      </div>
+      <p class="lede">Line 90 as a section: the ship, five kinds of gear at their true depths, thirteen kinds of measurement at the depth they live. Hover a pin. The rosette is lowering.</p>
+    </div>
+    <div class="mock">
+      <div id="sec-main"></div>
+      <div class="mock-cap">
+        <span><b>Real:</b> station spacing on Line 90, the 14 standard bottle depths, 515 m CTD, 210 m bongo, 70 m PairoVET, 3 m CUFES, the 13 categories and their glyphs from <code>brand/v2/icons</code>, every link a calcofi.org method page</span>
+        <span><b>Placeholder:</b> the ship, the sea floor profile (GEBCO along Line 90 in the real build), the organism art (part 5)</span>
+      </div>
+    </div>
+    <div class="notes">
+      <div>
+        <h4>Why a section</h4>
+        <p>It is the one picture that holds ship, instruments and species in a single frame with a true axis. Depth is the coordinate the whole database is bounded on; the horizontal axis is the CalCOFI line every cruise repeats. Nothing here is a metaphor.</p>
+      </div>
+      <div>
+        <h4>Restraint</h4>
+        <p>Thirteen pins, one to three words each; the sentence lives in the tooltip and the calcofi.org page behind it. No gears, no badges, no in-image text — the labels are HTML, so they translate, resize and theme.</p>
+      </div>
+      <div>
+        <h4>Theme and motion</h4>
+        <p>Every colour is a brand token, so the same drawing flips with <code>?theme=dark</code> (try the button in the masthead: the sun becomes a moon, the water darkens). Two motions only — the rosette's cast and the CUFES intake — both off under reduced-motion.</p>
+      </div>
+      <div>
+        <h4>What is measured here</h4>
+        <p>The pin legend below is the category registry with the release's counts; it doubles as the catalog filter. The depths come from the sampling protocol, not from a designer.</p>
+      </div>
+    </div>
+    <div style="margin-top:20px">
+      <h4>The legend as the catalog filter · in release <span style="color:var(--fg)">· held</span></h4>
+      <div class="chips" id="chips-main"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── 2 · where & when ───────────────────────── -->
+<section class="part" id="reach">
+  <div class="wrap">
+    <div class="part-head">
+      <div>
+        <div class="stepno">2 · The reach</div>
+        <h2 class="display">Where, and when — measured</h2>
+      </div>
+      <p class="lede">The 218-cell grid from the release's <code>grid</code> table, with a cruise sweeping the core lines; and every dataset's years from the coverage the release measures at freeze time. Nothing asserted.</p>
+    </div>
+    <div class="mock">
+      <div class="reach">
+        <div>
+          <div class="mapwrap">
+            <div id="map-main"></div>
+            <div class="odo"><small>a cruise a season since</small><span class="odo-n">1949</span></div>
+          </div>
+          <div class="cap"><b>218 grid cells</b> · 67 standard (quarterly since 1985) · 37 extended (winter, spring) · 114 historical — the 1950s pattern ran from <b>48°N to 20°N</b>, the Strait of Juan de Fuca to Cabo San Lucas.</div>
+        </div>
+        <div>
+          <div id="strip-main"></div>
+          <div class="cap">One row per dataset, one cell per year, shaded by how many casts or tows that year holds; the bars count datasets with data. Hatched rows are asserted (phytoplankton is region-pooled) or samples-only. Hover a cell.</div>
+        </div>
+      </div>
+      <div class="mock-cap">
+        <span><b>Real:</b> <code>_data/grid.geojson</code> (218 cells, the three patterns), <code>_data/land.geojson</code>, <code>_data/datasets.json</code> → <code>coverage.years</code> from <code>observed_coverage()</code> at v2026.09.06</span>
+        <span><b>Placeholder:</b> the sweep order is a plausible zigzag, not a real cruise track</span>
+      </div>
+    </div>
+    <div class="notes">
+      <div>
+        <h4>What it says without words</h4>
+        <p>The grid is a shape people recognise; the fade from navy (core) to stone (historical) says the program once reached Oregon and Baja. The strip says 1949, the 1951 trio, the triennial 1970s, and that the CTD carries on where the bottle database pauses.</p>
+      </div>
+      <div>
+        <h4>Honesty is the feature</h4>
+        <p>The strip shows gaps. That is right: <em>coverage is measured, never asserted</em> is already the repo's rule, and the two hatched rows are the two datasets the rule exempts. A visitor who sees a gap has learned something true.</p>
+      </div>
+      <div>
+        <h4>Where it points</h4>
+        <p>A station click opens the Station Explorer on that cell; a strip cell opens the Explorer on that dataset and year; the odometer links to the 75th-anniversary timeline and <a href="https://calcofi.org/about/history/">calcofi.org/about/history</a>.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── 3 · the page ───────────────────────── -->
+<section class="part alt" id="bento">
+  <div class="wrap">
+    <div class="part-head">
+      <div>
+        <div class="stepno">3 · The page, re-cut</div>
+        <h2 class="display">Ways in, then the catalog</h2>
+      </div>
+      <p class="lede">The whole landing page at scale: the section hero, six numbers, a bento of ways in, then the catalog and the products exactly as they are. Scroll inside the frame.</p>
+    </div>
+    <div class="browser">
+      <div class="bar"><i></i><i></i><i></i><span class="url">calcofi.io</span></div>
+      <div class="stage" id="stage">
+        <div class="page" id="page">
+          <div class="hd">
+            <div class="lk"><span class="lk-dark"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1007 240" role="img" aria-label="CalCOFI">
+  
+  <g fill="#F4D530" transform="translate(-34.949,-36.252) scale(0.61747)">
+    <path d="M381.3,227.2c-7.3,2.6-14.6,5.1-22,7.7c-12.6,4.4-25.1,8.8-37.7,13.1c-1.7,0.6-1.9,1.5-1.9,3.1 c0.2,13.1-1.9,25.9-6.6,38.3c-7.2,18.9-18.9,34.5-35.2,46.5c-9.3,6.8-19.3,12.1-30.5,15.2c-2.2,0.6-2.9,1.9-3,4.1 c-0.4,19.2-0.9,38.4-1.4,57.6c0,0.7-0.1,1.4-0.6,2.2c-1.2-3.4-2.6-6.8-3.8-10.3c-5.4-15.5-10.8-31-16.2-46.5 c-0.6-1.9-1.5-2.6-3.6-2.6c-36.2-0.2-64.8-15.2-85.8-44.6c-6-8.3-10.4-17.4-13.1-27.3c-0.9-3.2-2.4-3.9-5.6-4 c-19.2-0.4-38.3-1.1-57.7-2.1c3.3-1.2,6.7-2.6,10-3.8c15.2-5.6,30.4-11.2,45.7-16.6c2.2-0.8,2.9-1.8,2.9-4.1 c-0.1-27.3,9.3-50.9,27.7-70.9c11.8-12.8,26.2-22,43-27.2c2.9-0.9,3.8-2.2,3.9-5.1c0.2-16.8,0.5-33.7,0.8-50.5c0.1-2.8,0-5.6,0-8.3 c1.3,0,1.2,0.9,1.4,1.5c6.6,18.2,13.3,36.5,19.8,54.7c0.7,2.1,1.6,2.7,3.9,2.7c36.9,0,65.8,15.4,86.9,45.4c5.6,8,10,16.9,12.5,26.4 c0.7,2.5,1.7,3.3,4.4,3.4c20.6,0.3,41.2,0.8,61.8,1.2C381.2,226.7,381.2,226.9,381.3,227.2z M217.3,351.1 c50.3-0.8,95.5-38.3,97.7-95.1c2.1-52.9-37.6-99.5-94.8-101.4c-52.4-1.8-97.8,38-100.2,94.5C117.5,302.2,158.4,349.5,217.3,351.1z"/>
+    <path d="M130,192.5c-3.4,5.3-6.2,10.2-8.8,15.8c-4.4-5.8-8.6-11.4-13.3-17.5C115.7,191.3,122.6,191.9,130,192.5z"/>
+    <path d="M139.2,324.6c4.3,4.6,8.3,8.3,13.1,12.2c-6.8,2.9-13.3,5.6-20.5,8.7C134.4,338.2,136.7,331.6,139.2,324.6z"/>
+    <path d="M112.6,236.5c-0.5,6.1-1.2,11.6-1,17.8c-6.6-3.5-12.8-6.6-19.4-10.1C99.2,241.5,105.7,239.1,112.6,236.5z"/>
+    <path d="M122.6,300.2c-7.4,0.2-14.2-0.4-21.3-0.7c5.3-4.8,10.3-9.4,15.3-14.1C117.8,289.6,120,294.7,122.6,300.2z"/>
+    <path d="M135,319.9c-7,1.3-13.5,2.6-20.8,3.9c3.6-6.4,7-12.4,10.7-18.9C128.1,310.2,131.3,314.9,135,319.9z"/>
+    <path d="M326.2,315.2c-7.6-0.7-14.4-1.2-21.4-1.9c2.9-5.1,5.7-10,8.7-15.1C317.6,303.8,321.7,309.2,326.2,315.2z"/>
+    <path d="M281.9,168.1c6.8-2.9,13.1-5.6,20.1-8.5c-2.5,7.2-4.7,13.6-7.1,20.3C290.7,175.6,286.6,171.9,281.9,168.1z"/>
+    <path d="M97.6,216.8c7.3-1,13.8-2.2,20.7-2.5c-1.6,5.6-3.1,10.9-4.8,16.8C108.3,226.4,103.2,221.8,97.6,216.8z"/>
+    <path d="M146.2,150c6.4,3.6,12.1,6.9,18.2,10.4c-5,3.4-9.8,6.4-14.8,10.5C148.5,163.9,147.4,157.4,146.2,150z"/>
+    <path d="M125,168.6c7.1,2.1,13.5,3.9,20.3,5.9c-4.3,4.3-8.1,8.5-12,13.4C130.4,181.4,127.9,175.4,125,168.6z"/>
+    <path d="M323.5,252c6.3,3.3,12.2,6.5,18.7,10c-6.9,2.5-13.1,4.8-19.9,7.3C322.7,263.4,323.1,257.9,323.5,252z"/>
+    <path d="M252.8,133c1.2,7.1,2.6,13.4,3.2,20.2c-5.8-1.7-11.2-3.2-17-4.9C243.6,143.2,247.9,138.4,252.8,133z"/>
+    <path d="M333,206.2c-4.8,4.6-9.6,9-14.5,13.8c-1.9-4.8-4-9.8-6-14.8c6.9,0,13.5,0,20.3,0 C332.7,205.5,332.9,205.8,333,206.2z"/>
+    <path d="M309.3,199.4c-3.2-5.2-6.3-9.7-10-14.3c6.8-1.3,13.2-2.6,20.5-4.1C316.2,187.5,312.9,193.2,309.3,199.4z"/>
+    <path d="M316.2,291.7c1.8-5.6,3.5-10.8,4.7-16.9c5.3,4.9,10.3,9.4,15.8,14.4C329.7,290.1,323.1,290.9,316.2,291.7z"/>
+    <path d="M279.1,143.8c-0.8,7.3-1.4,13.8-2.1,20.6c-5.1-3.1-9.9-6-15.4-8.7C267.3,151.8,272.8,148,279.1,143.8z"/>
+    <path d="M155,361c0.7-7.3,1.2-13.8,1.9-20.7c5.1,3,9.8,6.1,15.5,8.8C166.6,353.1,161.1,356.9,155,361z"/>
+    <path d="M194.9,356.9c-4.7,5.3-9.1,10.1-13.9,15.4c-1.1-7.2-2.2-13.8-3.2-20.6C183.4,353.7,188.9,355.3,194.9,356.9z"/>
+    <path d="M215.5,146.3c3.4-6.3,6.6-12.1,10.1-18.5c2.4,6.7,4.6,12.8,7,19.6C226.9,146.3,221.5,146.4,215.5,146.3z"/>
+    <path d="M309,337.2c-7-2.1-13.2-3.9-19.9-6c4.2-4.2,7.9-8.1,11.8-13C303.7,324.7,306.2,330.7,309,337.2z"/>
+    <path d="M287.4,355.6c-6.3-3.6-11.7-6.9-17.6-10.3c5.2-3.2,10-6.3,14.7-10.3C285.5,342.1,286.4,348.5,287.4,355.6z"/>
+    <path d="M170.1,157.3c0-6.9,0.2-13.3,0.8-20.3c5,4.7,9.8,9.1,15.1,14.1C180.2,152.6,175.4,155,170.1,157.3z"/>
+    <path d="M208.2,377.1c-2.4-6.6-4.6-12.6-6.9-19c5.7,0.3,11,1.3,16.9,0.9C214.8,365.2,211.7,370.9,208.2,377.1z"/>
+    <path d="M248.2,354.6c5.6-1.8,10.4-3.8,15.5-6.1c0,6.7-0.2,13-0.9,19.9C257.8,363.8,253.3,359.3,248.2,354.6z"/>
+    <path d="M307.7,252.8c0.2,50.2-40.3,90.8-91.1,90.7c-49.5-0.2-89.6-40.9-89.6-91.2c0-49.5,40.5-90.2,90.1-90.4 C267.2,161.7,307.5,202.3,307.7,252.8z M266.3,323.1c0.7,1.3,1.5,1.1,2.6,0.3c9.5-7,17.2-15.5,23.2-25.7c0.7-1.2,0.6-1.9-0.4-2.7 c1.2,0.5,1.9,0.2,2.6-1c5.6-11.1,9.5-22.6,10.2-35c1.5-27.9-7.9-51.7-28.2-70.8c-15.1-14.1-33.3-21.6-53.8-23 c-17.2-1.2-33.2,3.1-48.1,11.5c-13.1,7.3-23.5,17.5-31.2,30.4c-0.7,1.2-1.9,2.4,0.2,3.6c-2.2-1.1-2.5,0.8-3.1,2 c-8.6,16.7-11.7,34.4-9,53c0.9,6.5,2.5,12.8,5.5,19.1c10.8-7,21.3-13.7,32.2-20.7c1.1,5,3,9.4,5.3,13.8c-12.8,2.4-25,4.8-37.6,7.2 c4.7,11.9,11.2,22.1,20.2,30.5c19.7,18.5,43.1,27.1,70.1,24.3c13.8-1.4,26.4-6.3,38.1-13.8c1.1-0.7,1.9-1.4,1.2-2.8 C266.2,323.3,266.2,323.2,266.3,323.1z"/>
+    <path d="M257.8,279.1c-5.6-0.3-10.8-2.8-16.8-3.2c0.9,5.7,3.2,10.8,4.9,16.9c-5.2-3.6-9.7-6.7-14.7-10.1 c-0.5,5.9-1.1,11.3-1.7,17.8c-3.6-5.3-6.6-9.8-10-14.8c-2.6,5.6-5,10.5-7.6,16c-2.3-5.7-2.6-11.4-4.6-17.5 c-4.3,4-8.3,7.7-12.8,11.8c0.2-6.2,1.8-11.6,2.6-18c-5.9,2.3-11.1,4.4-17.1,6.7c3.1-5.5,5.9-10.4,8.9-15.6c-6,0-11.5,0-17.9,0 c4.9-4.1,9.2-7.7,13.7-11.5c-5.3-2.8-10.7-4.1-15.9-7c5.3-1.5,10.7-3,16.8-4.6c-2.9-2.6-5.4-4.9-7.9-7c-0.2-0.2-0.3-0.2-0.5-0.4 c-10.6-7-20.2-15.4-29.7-23.7c-1.5-1.3-3.2-2.4-4.3-4.2c4.4,0.4,8.3,2.6,12.4,3.8c6.4,1.9,12.8,4.1,19.1,6.2 c1.1,0.4,2.1,0.9,3.4,1.4c-2.8,3.7-4.9,7.3-6.6,11.7c6.1,0.5,12,0.9,18.6,1.4c-2.8-5.6-5.3-10.6-8.2-16.2c6,1.9,10.8,5.2,16.7,6.8 c0.2-5.8-1.7-11.1-1.7-17.2c4.3,4.4,8,8.4,12.3,12.9c1.6-6,3.2-11.4,4.8-17.4c3.2,5.2,4.3,11,7.5,16.3c3.6-4.8,6.8-9.3,10.1-13.7 c0.2,0.1,0.5,0.1,0.7,0.2c0,5.6,0,11.1,0,17.5c5.9-2.9,10.4-6.7,15.2-9.7l-0.1-0.1c-0.5,3.9-2.4,7.4-3.7,11.1 c-0.6,1.7-1.1,3.4-1.9,5.9c6-1.1,11.4-2.1,17.6-3.2c-4.2,4.8-7.7,9-11.7,13.5c6,1.2,11.6,2.3,17.9,3.6c-5.6,2.9-10.5,5.6-16,8.4 c5.1,3.2,9.8,6.2,15.1,9.5c-6.2,1.1-11.8,1.1-17.5,2.6C251.1,270.4,254.4,274.7,257.8,279.1z"/>
+    <path d="M265.6,241.5c-1.2-5-3.2-9.4-5.6-14.3c12.4-2.2,24.7-4.3,36.8-6.5c0.1,0.2,0.2,0.4,0.3,0.6 C286.7,228,276.4,234.6,265.6,241.5z"/>
+    <path d="M217.2,202.8c-5.3,0.2-10,0.9-15,2.2c0.4-12.3,0.8-24.3,1.2-36.2c0.3-0.1,0.7-0.2,1-0.3 C208.7,179.8,212.9,191.1,217.2,202.8z"/>
+    <path d="M266.8,248.4c12.1,3.3,23.8,6.6,35.6,9.8c-11.9,2.6-23.9,3.8-36.5,5.5C266.8,258.6,266.9,253.6,266.8,248.4z"/>
+    <path d="M242.4,170.8c-1.1,12.2-2.2,24.4-3.3,37.1c-4.7-2.4-9.4-3.5-14.5-4.6c5.8-11,11.5-21.8,17.2-32.6 C242.1,170.7,242.3,170.8,242.4,170.8z"/>
+    <path d="M291.8,295.1c-5.2-0.8-9.9-3.2-14.8-4.7c-6.6-2.1-13.2-4.6-19.7-6.8c-0.6-1.8,2.7-2.8,0.5-4.5 c1.3,0.9,1.9-0.1,2.4-1c1.2-2.5,2.5-4.9,3.7-7.6c1.5,0.5,2.5,1.8,3.6,2.8c7.4,6.5,14.8,13.1,22.2,19.6 C290.4,293.4,291.1,294.3,291.8,295.1z"/>
+    <path d="M247.5,214.4c0.6-1.7-1.5-1.7-1.9-3.3c9.2-6.8,18.7-13.8,28.1-20.7c0.3,0.3,0.6,0.5,0.9,0.9 c-6.2,9.9-12.3,19.9-18.7,30.2c-1.9-2-3.5-3.8-5.1-5.3C250,215.2,249.2,213.7,247.5,214.4C247.5,214.3,247.5,214.4,247.5,214.4z"/>
+    <path d="M168.8,182.3c7.3,6.1,13.8,13.2,20.7,19.7c1.9,1.7,3.8,3.4,6.2,5.6c-4.7,2.6-8.4,5.3-12.4,8.4 c-2.9-6.4-5.8-12.5-8.3-18.8C172.9,192.3,169.9,187.8,168.8,182.3L168.8,182.3z"/>
+    <path d="M168.8,182.3c-0.2-0.1-0.3-0.2-0.5-0.3C168.9,181.7,168.7,182.1,168.8,182.3L168.8,182.3z"/>
+    <path d="M266.1,323.3c-9-8.2-17.5-17-26.4-25.7c4.4-2.6,8.3-5.2,12.1-8.6c2.7,6.1,5.4,11.8,7.8,17.7 c2.2,5.5,5.1,10.7,6.9,16.5C266.2,323.2,266.2,323.3,266.1,323.3z"/>
+    <path d="M218.1,302.8c5.3-0.2,9.7-1.2,14.7-2.2c-0.5,12.4-0.9,24.7-1.3,36.9c-0.2,0.1-0.5,0.2-0.7,0.2 C226.6,326.1,222.4,314.7,218.1,302.8z"/>
+    <path d="M196.1,298c4.8,2.5,9.3,3.2,14.1,4.4c-5.9,11-11.6,21.7-17.3,32.5c-0.2-0.1-0.5-0.1-0.6-0.2 C193.5,322.6,194.8,310.6,196.1,298z"/>
+    <path d="M132,246c12.1-1.5,24.3-2.9,36.8-4.3c-0.9,5-1.3,9.5-1.2,14.7c-12.1-3.2-23.8-6.4-35.5-9.5 C132.1,246.6,132,246.3,132,246z"/>
+    <path d="M189.2,294c-9.9,7-18.9,14.4-28.7,20.8c-0.2-0.2-0.5-0.5-0.7-0.8c6.1-9.8,12.3-19.6,18.5-29.6 C181.8,287.9,184.9,291.3,189.2,294z"/>
+  </g>
+  <path fill="#FFFFFF" d="M311.2575660521696 197.72727272727272Q292.21666112249443 197.72727272727272 276.1666777674302 189.30680777873332Q260.116694412366 180.8863428301939 250.43034742093812 163.9931547701612Q240.74400042951027 147.09996671012846 240.74400042951027 122.02270646655755Q240.74400042951027 103.48635115266181 246.41444457187995 89.05453297084362Q252.08488871424964 74.62271478902544 262.0485125941842 64.62271478902542Q272.01213647411873 54.62271478902542 284.72803516194296 49.484076344772106Q297.4439338497672 44.34543790051879 311.35757437463747 44.34543790051879Q325.9802891636629 44.34543790051879 337.5098200538896 50.00225400171999Q349.0393509441162 55.65907010292119 356.6166111876871 63.74087996227149L337.5621822476921 85.72710627791494Q332.05763263191267 80.70435819901796 326.0121572802884 78.16798207895249Q319.9666819286641 75.63160595888701 312.21666112249443 75.63160595888701Q303.0575077948944 75.63160595888701 295.22110670742524 81.1589036535634Q287.3847056199561 86.68620134823979 282.63923442956576 96.78170166726773Q277.8937632391754 106.87720198629567 277.8937632391754 120.80908258662302Q277.8937632391754 135.3727772075346 282.411961702293 145.5819138901989Q286.9301601654106 155.7910505728632 295.0574661825549 161.11607762088386Q303.1847721996992 166.44110466890447 313.7848221345065 166.44110466890447Q322.0893967176896 166.44110466890447 328.7030538874957 163.02063972036507Q335.31671105730175 159.60017477182566 340.03492616535516 154.83195550253836L358.2302683574932 176.36363636363637Q348.6075535684678 187.1727189502594 336.80074578973444 192.44999583876606Q324.9939380110011 197.72727272727272 311.2575660521696 197.72727272727272ZM406.1485417228218 197.72727272727272Q395.6667401859394 197.72727272727272 388.07810590292 193.01592365522788Q380.4894716199006 188.30457458318307 376.3735604483745 180.47503953172247Q372.25764927684844 172.64550448026188 372.25764927684844 163.22731433961218Q372.25764927684844 145.25002080616972 387.0781267090897 135.23639276500126Q401.89860414133096 125.22276472383278 434.9759059972413 121.76366965350792Q434.57136470392976 117.32273143396122 432.72818080513093 114.23405553860238Q430.88499690633216 111.14537964324354 427.2508872716885 109.54535051460593Q423.6167776370449 107.94532138596831 418.0667318634715 107.94532138596831Q411.48033077600235 107.94532138596831 404.4371302322678 110.27942685937803Q397.3939296885332 112.61353233278776 388.8303182923005 117.33625544428108L376.0940295581479 93.93638860376731Q383.6485417228218 89.3636779759758 391.6303432597042 85.97958914750187Q399.61214479658656 82.59550031902793 407.9712315444435 80.84095070324854Q416.3303182923005 79.08640108746914 425.19395465593686 79.08640108746914Q439.76666528372834 79.08640108746914 450.0348221345065 84.65458290565095Q460.30297898528465 90.22276472383278 465.7597784415501 101.72729353344246Q471.21657789781557 113.23182234305213 471.21657789781557 131.2181318833745V195.0H441.6485833351612L439.12132725282424 183.79088412350544H438.21223634373337Q431.1940378806158 189.977251921103 423.4053869526606 193.85226232418785Q415.6167360247054 197.72727272727272 406.1485417228218 197.72727272727272ZM418.5848054895707 169.6274308541626Q423.8075702134035 169.6274308541626 427.56443624941204 167.31832746136988Q431.3213022854206 165.00922406857714 434.9759059972413 161.10009154714677V143.84539628817933Q424.3576159869769 145.30904097428356 418.24164239694164 147.73178073071267Q412.12566880690645 150.15452048714178 409.5279144861585 153.38408882847392Q406.9301601654106 156.6136571698061 406.9301601654106 160.34552112519765Q406.9301601654106 164.90921574610925 410.0574661825549 167.26832330013593Q413.1847721996992 169.6274308541626 418.5848054895707 169.6274308541626ZM530.9620490882058 197.62726440480483Q518.6303016473647 197.62726440480483 511.4667027348339 192.63638444253337Q504.30310382230306 187.64550448026188 501.1826638411673 178.56146142536133Q498.06222386003157 169.47741837046078 498.06222386003157 157.40019973922932V36.318140205842354H534.3028957606058V158.7638361028657Q534.3028957606058 164.29564180098205 536.3869804278459 166.37972646822203Q538.4710650950858 168.46381113546204 540.5665238017743 168.46381113546204Q541.6528832769039 168.46381113546204 542.4483378223586 168.35017477182566Q543.2437923678131 168.23653840818932 544.6074287314494 168.00926568091657L548.9028624707342 194.64546286792245Q546.0983294998906 195.9090909090909 541.6006251139501 196.76817765694787Q537.1029207280095 197.62726440480483 530.9620490882058 197.62726440480483ZM631.2575660521696 197.72727272727272Q612.2166611224944 197.72727272727272 596.1666777674302 189.30680777873332Q580.116694412366 180.8863428301939 570.4303474209381 163.9931547701612Q560.7440004295103 147.09996671012846 560.7440004295103 122.02270646655755Q560.7440004295103 103.48635115266181 566.41444457188 89.05453297084362Q572.0848887142497 74.62271478902544 582.0485125941842 64.62271478902542Q592.0121364741187 54.62271478902542 604.7280351619429 49.484076344772106Q617.4439338497672 44.34543790051879 631.3575743746375 44.34543790051879Q645.980289163663 44.34543790051879 657.5098200538896 50.00225400171999Q669.0393509441162 55.65907010292119 676.6166111876871 63.74087996227149L657.5621822476921 85.72710627791494Q652.0576326319127 80.70435819901796 646.0121572802884 78.16798207895249Q639.9666819286642 75.63160595888701 632.2166611224944 75.63160595888701Q623.0575077948944 75.63160595888701 615.2211067074252 81.1589036535634Q607.3847056199561 86.68620134823979 602.6392344295657 96.78170166726773Q597.8937632391754 106.87720198629567 597.8937632391754 120.80908258662302Q597.8937632391754 135.3727772075346 602.411961702293 145.5819138901989Q606.9301601654106 155.7910505728632 615.0574661825549 161.11607762088386Q623.1847721996992 166.44110466890447 633.7848221345066 166.44110466890447Q642.0893967176896 166.44110466890447 648.7030538874957 163.02063972036507Q655.3167110573017 159.60017477182566 660.0349261653552 154.83195550253836L678.2302683574932 176.36363636363637Q668.6075535684678 187.1727189502594 656.8007457897345 192.44999583876606Q644.9939380110011 197.72727272727272 631.2575660521696 197.72727272727272ZM752.7712148995078 197.72727272727272Q732.566690251132 197.72727272727272 717.2621572802884 188.47272311149334Q701.9576243094448 179.21817349571393 693.3962669149321 161.9204441423697Q684.8349095204193 144.62271478902545 684.8349095204193 120.35453713207757Q684.8349095204193 96.0863594751297 693.3962669149321 79.12953921269454Q701.9576243094448 62.172718950259394 717.2621572802884 53.25907842538909Q732.566690251132 44.34543790051879 752.7712148995078 44.34543790051879Q773.0257437091174 44.34543790051879 788.330276679961 53.25907842538909Q803.6348096508046 62.172718950259394 812.1961670453175 79.12953921269454Q820.7575244398301 96.0863594751297 820.7575244398301 120.35453713207757Q820.7575244398301 144.62271478902545 812.1961670453175 161.9204441423697Q803.6348096508046 179.21817349571393 788.330276679961 188.47272311149334Q773.0257437091174 197.72727272727272 752.7712148995078 197.72727272727272ZM752.7712148995078 166.44110466890447Q762.2849053591854 166.44110466890447 769.2122155375636 160.80017061059172Q776.1395257159418 155.15923655227897 779.8486415924364 144.81146142536133Q783.557757468931 134.4636862984437 783.557757468931 120.35453713207757Q783.557757468931 106.24538796571143 779.8486415924364 96.26352401031986Q776.1395257159418 86.2816600549283 769.2122155375636 80.95663300690765Q762.2849053591854 75.63160595888701 752.7712148995078 75.63160595888701Q743.3075286010641 75.63160595888701 736.3552163420688 80.95663300690765Q729.4029040830736 86.2816600549283 725.693788206579 96.26352401031986Q721.9846723300844 106.24538796571143 721.9846723300844 120.35453713207757Q721.9846723300844 134.4636862984437 725.693788206579 144.81146142536133Q729.4029040830736 155.15923655227897 736.3552163420688 160.80017061059172Q743.3075286010641 166.44110466890447 752.7712148995078 166.44110466890447ZM847.8722422298746 195.0V47.07269841974431H942.7956708520337V77.47963645241478H884.1627473790223V108.74189897017045H934.3338122760393V139.1488370028409H884.1627473790223V195.0ZM968.3167526696412 195.0V47.07271062779151H1004.6074287314494V195.0Z"/>
+</svg></span><span class="lk-light"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1007 240" role="img" aria-label="CalCOFI">
+  
+  <g fill="#F4D530" transform="translate(-34.949,-36.252) scale(0.61747)">
+    <path d="M381.3,227.2c-7.3,2.6-14.6,5.1-22,7.7c-12.6,4.4-25.1,8.8-37.7,13.1c-1.7,0.6-1.9,1.5-1.9,3.1 c0.2,13.1-1.9,25.9-6.6,38.3c-7.2,18.9-18.9,34.5-35.2,46.5c-9.3,6.8-19.3,12.1-30.5,15.2c-2.2,0.6-2.9,1.9-3,4.1 c-0.4,19.2-0.9,38.4-1.4,57.6c0,0.7-0.1,1.4-0.6,2.2c-1.2-3.4-2.6-6.8-3.8-10.3c-5.4-15.5-10.8-31-16.2-46.5 c-0.6-1.9-1.5-2.6-3.6-2.6c-36.2-0.2-64.8-15.2-85.8-44.6c-6-8.3-10.4-17.4-13.1-27.3c-0.9-3.2-2.4-3.9-5.6-4 c-19.2-0.4-38.3-1.1-57.7-2.1c3.3-1.2,6.7-2.6,10-3.8c15.2-5.6,30.4-11.2,45.7-16.6c2.2-0.8,2.9-1.8,2.9-4.1 c-0.1-27.3,9.3-50.9,27.7-70.9c11.8-12.8,26.2-22,43-27.2c2.9-0.9,3.8-2.2,3.9-5.1c0.2-16.8,0.5-33.7,0.8-50.5c0.1-2.8,0-5.6,0-8.3 c1.3,0,1.2,0.9,1.4,1.5c6.6,18.2,13.3,36.5,19.8,54.7c0.7,2.1,1.6,2.7,3.9,2.7c36.9,0,65.8,15.4,86.9,45.4c5.6,8,10,16.9,12.5,26.4 c0.7,2.5,1.7,3.3,4.4,3.4c20.6,0.3,41.2,0.8,61.8,1.2C381.2,226.7,381.2,226.9,381.3,227.2z M217.3,351.1 c50.3-0.8,95.5-38.3,97.7-95.1c2.1-52.9-37.6-99.5-94.8-101.4c-52.4-1.8-97.8,38-100.2,94.5C117.5,302.2,158.4,349.5,217.3,351.1z"/>
+    <path d="M130,192.5c-3.4,5.3-6.2,10.2-8.8,15.8c-4.4-5.8-8.6-11.4-13.3-17.5C115.7,191.3,122.6,191.9,130,192.5z"/>
+    <path d="M139.2,324.6c4.3,4.6,8.3,8.3,13.1,12.2c-6.8,2.9-13.3,5.6-20.5,8.7C134.4,338.2,136.7,331.6,139.2,324.6z"/>
+    <path d="M112.6,236.5c-0.5,6.1-1.2,11.6-1,17.8c-6.6-3.5-12.8-6.6-19.4-10.1C99.2,241.5,105.7,239.1,112.6,236.5z"/>
+    <path d="M122.6,300.2c-7.4,0.2-14.2-0.4-21.3-0.7c5.3-4.8,10.3-9.4,15.3-14.1C117.8,289.6,120,294.7,122.6,300.2z"/>
+    <path d="M135,319.9c-7,1.3-13.5,2.6-20.8,3.9c3.6-6.4,7-12.4,10.7-18.9C128.1,310.2,131.3,314.9,135,319.9z"/>
+    <path d="M326.2,315.2c-7.6-0.7-14.4-1.2-21.4-1.9c2.9-5.1,5.7-10,8.7-15.1C317.6,303.8,321.7,309.2,326.2,315.2z"/>
+    <path d="M281.9,168.1c6.8-2.9,13.1-5.6,20.1-8.5c-2.5,7.2-4.7,13.6-7.1,20.3C290.7,175.6,286.6,171.9,281.9,168.1z"/>
+    <path d="M97.6,216.8c7.3-1,13.8-2.2,20.7-2.5c-1.6,5.6-3.1,10.9-4.8,16.8C108.3,226.4,103.2,221.8,97.6,216.8z"/>
+    <path d="M146.2,150c6.4,3.6,12.1,6.9,18.2,10.4c-5,3.4-9.8,6.4-14.8,10.5C148.5,163.9,147.4,157.4,146.2,150z"/>
+    <path d="M125,168.6c7.1,2.1,13.5,3.9,20.3,5.9c-4.3,4.3-8.1,8.5-12,13.4C130.4,181.4,127.9,175.4,125,168.6z"/>
+    <path d="M323.5,252c6.3,3.3,12.2,6.5,18.7,10c-6.9,2.5-13.1,4.8-19.9,7.3C322.7,263.4,323.1,257.9,323.5,252z"/>
+    <path d="M252.8,133c1.2,7.1,2.6,13.4,3.2,20.2c-5.8-1.7-11.2-3.2-17-4.9C243.6,143.2,247.9,138.4,252.8,133z"/>
+    <path d="M333,206.2c-4.8,4.6-9.6,9-14.5,13.8c-1.9-4.8-4-9.8-6-14.8c6.9,0,13.5,0,20.3,0 C332.7,205.5,332.9,205.8,333,206.2z"/>
+    <path d="M309.3,199.4c-3.2-5.2-6.3-9.7-10-14.3c6.8-1.3,13.2-2.6,20.5-4.1C316.2,187.5,312.9,193.2,309.3,199.4z"/>
+    <path d="M316.2,291.7c1.8-5.6,3.5-10.8,4.7-16.9c5.3,4.9,10.3,9.4,15.8,14.4C329.7,290.1,323.1,290.9,316.2,291.7z"/>
+    <path d="M279.1,143.8c-0.8,7.3-1.4,13.8-2.1,20.6c-5.1-3.1-9.9-6-15.4-8.7C267.3,151.8,272.8,148,279.1,143.8z"/>
+    <path d="M155,361c0.7-7.3,1.2-13.8,1.9-20.7c5.1,3,9.8,6.1,15.5,8.8C166.6,353.1,161.1,356.9,155,361z"/>
+    <path d="M194.9,356.9c-4.7,5.3-9.1,10.1-13.9,15.4c-1.1-7.2-2.2-13.8-3.2-20.6C183.4,353.7,188.9,355.3,194.9,356.9z"/>
+    <path d="M215.5,146.3c3.4-6.3,6.6-12.1,10.1-18.5c2.4,6.7,4.6,12.8,7,19.6C226.9,146.3,221.5,146.4,215.5,146.3z"/>
+    <path d="M309,337.2c-7-2.1-13.2-3.9-19.9-6c4.2-4.2,7.9-8.1,11.8-13C303.7,324.7,306.2,330.7,309,337.2z"/>
+    <path d="M287.4,355.6c-6.3-3.6-11.7-6.9-17.6-10.3c5.2-3.2,10-6.3,14.7-10.3C285.5,342.1,286.4,348.5,287.4,355.6z"/>
+    <path d="M170.1,157.3c0-6.9,0.2-13.3,0.8-20.3c5,4.7,9.8,9.1,15.1,14.1C180.2,152.6,175.4,155,170.1,157.3z"/>
+    <path d="M208.2,377.1c-2.4-6.6-4.6-12.6-6.9-19c5.7,0.3,11,1.3,16.9,0.9C214.8,365.2,211.7,370.9,208.2,377.1z"/>
+    <path d="M248.2,354.6c5.6-1.8,10.4-3.8,15.5-6.1c0,6.7-0.2,13-0.9,19.9C257.8,363.8,253.3,359.3,248.2,354.6z"/>
+    <path d="M307.7,252.8c0.2,50.2-40.3,90.8-91.1,90.7c-49.5-0.2-89.6-40.9-89.6-91.2c0-49.5,40.5-90.2,90.1-90.4 C267.2,161.7,307.5,202.3,307.7,252.8z M266.3,323.1c0.7,1.3,1.5,1.1,2.6,0.3c9.5-7,17.2-15.5,23.2-25.7c0.7-1.2,0.6-1.9-0.4-2.7 c1.2,0.5,1.9,0.2,2.6-1c5.6-11.1,9.5-22.6,10.2-35c1.5-27.9-7.9-51.7-28.2-70.8c-15.1-14.1-33.3-21.6-53.8-23 c-17.2-1.2-33.2,3.1-48.1,11.5c-13.1,7.3-23.5,17.5-31.2,30.4c-0.7,1.2-1.9,2.4,0.2,3.6c-2.2-1.1-2.5,0.8-3.1,2 c-8.6,16.7-11.7,34.4-9,53c0.9,6.5,2.5,12.8,5.5,19.1c10.8-7,21.3-13.7,32.2-20.7c1.1,5,3,9.4,5.3,13.8c-12.8,2.4-25,4.8-37.6,7.2 c4.7,11.9,11.2,22.1,20.2,30.5c19.7,18.5,43.1,27.1,70.1,24.3c13.8-1.4,26.4-6.3,38.1-13.8c1.1-0.7,1.9-1.4,1.2-2.8 C266.2,323.3,266.2,323.2,266.3,323.1z"/>
+    <path d="M257.8,279.1c-5.6-0.3-10.8-2.8-16.8-3.2c0.9,5.7,3.2,10.8,4.9,16.9c-5.2-3.6-9.7-6.7-14.7-10.1 c-0.5,5.9-1.1,11.3-1.7,17.8c-3.6-5.3-6.6-9.8-10-14.8c-2.6,5.6-5,10.5-7.6,16c-2.3-5.7-2.6-11.4-4.6-17.5 c-4.3,4-8.3,7.7-12.8,11.8c0.2-6.2,1.8-11.6,2.6-18c-5.9,2.3-11.1,4.4-17.1,6.7c3.1-5.5,5.9-10.4,8.9-15.6c-6,0-11.5,0-17.9,0 c4.9-4.1,9.2-7.7,13.7-11.5c-5.3-2.8-10.7-4.1-15.9-7c5.3-1.5,10.7-3,16.8-4.6c-2.9-2.6-5.4-4.9-7.9-7c-0.2-0.2-0.3-0.2-0.5-0.4 c-10.6-7-20.2-15.4-29.7-23.7c-1.5-1.3-3.2-2.4-4.3-4.2c4.4,0.4,8.3,2.6,12.4,3.8c6.4,1.9,12.8,4.1,19.1,6.2 c1.1,0.4,2.1,0.9,3.4,1.4c-2.8,3.7-4.9,7.3-6.6,11.7c6.1,0.5,12,0.9,18.6,1.4c-2.8-5.6-5.3-10.6-8.2-16.2c6,1.9,10.8,5.2,16.7,6.8 c0.2-5.8-1.7-11.1-1.7-17.2c4.3,4.4,8,8.4,12.3,12.9c1.6-6,3.2-11.4,4.8-17.4c3.2,5.2,4.3,11,7.5,16.3c3.6-4.8,6.8-9.3,10.1-13.7 c0.2,0.1,0.5,0.1,0.7,0.2c0,5.6,0,11.1,0,17.5c5.9-2.9,10.4-6.7,15.2-9.7l-0.1-0.1c-0.5,3.9-2.4,7.4-3.7,11.1 c-0.6,1.7-1.1,3.4-1.9,5.9c6-1.1,11.4-2.1,17.6-3.2c-4.2,4.8-7.7,9-11.7,13.5c6,1.2,11.6,2.3,17.9,3.6c-5.6,2.9-10.5,5.6-16,8.4 c5.1,3.2,9.8,6.2,15.1,9.5c-6.2,1.1-11.8,1.1-17.5,2.6C251.1,270.4,254.4,274.7,257.8,279.1z"/>
+    <path d="M265.6,241.5c-1.2-5-3.2-9.4-5.6-14.3c12.4-2.2,24.7-4.3,36.8-6.5c0.1,0.2,0.2,0.4,0.3,0.6 C286.7,228,276.4,234.6,265.6,241.5z"/>
+    <path d="M217.2,202.8c-5.3,0.2-10,0.9-15,2.2c0.4-12.3,0.8-24.3,1.2-36.2c0.3-0.1,0.7-0.2,1-0.3 C208.7,179.8,212.9,191.1,217.2,202.8z"/>
+    <path d="M266.8,248.4c12.1,3.3,23.8,6.6,35.6,9.8c-11.9,2.6-23.9,3.8-36.5,5.5C266.8,258.6,266.9,253.6,266.8,248.4z"/>
+    <path d="M242.4,170.8c-1.1,12.2-2.2,24.4-3.3,37.1c-4.7-2.4-9.4-3.5-14.5-4.6c5.8-11,11.5-21.8,17.2-32.6 C242.1,170.7,242.3,170.8,242.4,170.8z"/>
+    <path d="M291.8,295.1c-5.2-0.8-9.9-3.2-14.8-4.7c-6.6-2.1-13.2-4.6-19.7-6.8c-0.6-1.8,2.7-2.8,0.5-4.5 c1.3,0.9,1.9-0.1,2.4-1c1.2-2.5,2.5-4.9,3.7-7.6c1.5,0.5,2.5,1.8,3.6,2.8c7.4,6.5,14.8,13.1,22.2,19.6 C290.4,293.4,291.1,294.3,291.8,295.1z"/>
+    <path d="M247.5,214.4c0.6-1.7-1.5-1.7-1.9-3.3c9.2-6.8,18.7-13.8,28.1-20.7c0.3,0.3,0.6,0.5,0.9,0.9 c-6.2,9.9-12.3,19.9-18.7,30.2c-1.9-2-3.5-3.8-5.1-5.3C250,215.2,249.2,213.7,247.5,214.4C247.5,214.3,247.5,214.4,247.5,214.4z"/>
+    <path d="M168.8,182.3c7.3,6.1,13.8,13.2,20.7,19.7c1.9,1.7,3.8,3.4,6.2,5.6c-4.7,2.6-8.4,5.3-12.4,8.4 c-2.9-6.4-5.8-12.5-8.3-18.8C172.9,192.3,169.9,187.8,168.8,182.3L168.8,182.3z"/>
+    <path d="M168.8,182.3c-0.2-0.1-0.3-0.2-0.5-0.3C168.9,181.7,168.7,182.1,168.8,182.3L168.8,182.3z"/>
+    <path d="M266.1,323.3c-9-8.2-17.5-17-26.4-25.7c4.4-2.6,8.3-5.2,12.1-8.6c2.7,6.1,5.4,11.8,7.8,17.7 c2.2,5.5,5.1,10.7,6.9,16.5C266.2,323.2,266.2,323.3,266.1,323.3z"/>
+    <path d="M218.1,302.8c5.3-0.2,9.7-1.2,14.7-2.2c-0.5,12.4-0.9,24.7-1.3,36.9c-0.2,0.1-0.5,0.2-0.7,0.2 C226.6,326.1,222.4,314.7,218.1,302.8z"/>
+    <path d="M196.1,298c4.8,2.5,9.3,3.2,14.1,4.4c-5.9,11-11.6,21.7-17.3,32.5c-0.2-0.1-0.5-0.1-0.6-0.2 C193.5,322.6,194.8,310.6,196.1,298z"/>
+    <path d="M132,246c12.1-1.5,24.3-2.9,36.8-4.3c-0.9,5-1.3,9.5-1.2,14.7c-12.1-3.2-23.8-6.4-35.5-9.5 C132.1,246.6,132,246.3,132,246z"/>
+    <path d="M189.2,294c-9.9,7-18.9,14.4-28.7,20.8c-0.2-0.2-0.5-0.5-0.7-0.8c6.1-9.8,12.3-19.6,18.5-29.6 C181.8,287.9,184.9,291.3,189.2,294z"/>
+  </g>
+  <path fill="#182B49" d="M311.2575660521696 197.72727272727272Q292.21666112249443 197.72727272727272 276.1666777674302 189.30680777873332Q260.116694412366 180.8863428301939 250.43034742093812 163.9931547701612Q240.74400042951027 147.09996671012846 240.74400042951027 122.02270646655755Q240.74400042951027 103.48635115266181 246.41444457187995 89.05453297084362Q252.08488871424964 74.62271478902544 262.0485125941842 64.62271478902542Q272.01213647411873 54.62271478902542 284.72803516194296 49.484076344772106Q297.4439338497672 44.34543790051879 311.35757437463747 44.34543790051879Q325.9802891636629 44.34543790051879 337.5098200538896 50.00225400171999Q349.0393509441162 55.65907010292119 356.6166111876871 63.74087996227149L337.5621822476921 85.72710627791494Q332.05763263191267 80.70435819901796 326.0121572802884 78.16798207895249Q319.9666819286641 75.63160595888701 312.21666112249443 75.63160595888701Q303.0575077948944 75.63160595888701 295.22110670742524 81.1589036535634Q287.3847056199561 86.68620134823979 282.63923442956576 96.78170166726773Q277.8937632391754 106.87720198629567 277.8937632391754 120.80908258662302Q277.8937632391754 135.3727772075346 282.411961702293 145.5819138901989Q286.9301601654106 155.7910505728632 295.0574661825549 161.11607762088386Q303.1847721996992 166.44110466890447 313.7848221345065 166.44110466890447Q322.0893967176896 166.44110466890447 328.7030538874957 163.02063972036507Q335.31671105730175 159.60017477182566 340.03492616535516 154.83195550253836L358.2302683574932 176.36363636363637Q348.6075535684678 187.1727189502594 336.80074578973444 192.44999583876606Q324.9939380110011 197.72727272727272 311.2575660521696 197.72727272727272ZM406.1485417228218 197.72727272727272Q395.6667401859394 197.72727272727272 388.07810590292 193.01592365522788Q380.4894716199006 188.30457458318307 376.3735604483745 180.47503953172247Q372.25764927684844 172.64550448026188 372.25764927684844 163.22731433961218Q372.25764927684844 145.25002080616972 387.0781267090897 135.23639276500126Q401.89860414133096 125.22276472383278 434.9759059972413 121.76366965350792Q434.57136470392976 117.32273143396122 432.72818080513093 114.23405553860238Q430.88499690633216 111.14537964324354 427.2508872716885 109.54535051460593Q423.6167776370449 107.94532138596831 418.0667318634715 107.94532138596831Q411.48033077600235 107.94532138596831 404.4371302322678 110.27942685937803Q397.3939296885332 112.61353233278776 388.8303182923005 117.33625544428108L376.0940295581479 93.93638860376731Q383.6485417228218 89.3636779759758 391.6303432597042 85.97958914750187Q399.61214479658656 82.59550031902793 407.9712315444435 80.84095070324854Q416.3303182923005 79.08640108746914 425.19395465593686 79.08640108746914Q439.76666528372834 79.08640108746914 450.0348221345065 84.65458290565095Q460.30297898528465 90.22276472383278 465.7597784415501 101.72729353344246Q471.21657789781557 113.23182234305213 471.21657789781557 131.2181318833745V195.0H441.6485833351612L439.12132725282424 183.79088412350544H438.21223634373337Q431.1940378806158 189.977251921103 423.4053869526606 193.85226232418785Q415.6167360247054 197.72727272727272 406.1485417228218 197.72727272727272ZM418.5848054895707 169.6274308541626Q423.8075702134035 169.6274308541626 427.56443624941204 167.31832746136988Q431.3213022854206 165.00922406857714 434.9759059972413 161.10009154714677V143.84539628817933Q424.3576159869769 145.30904097428356 418.24164239694164 147.73178073071267Q412.12566880690645 150.15452048714178 409.5279144861585 153.38408882847392Q406.9301601654106 156.6136571698061 406.9301601654106 160.34552112519765Q406.9301601654106 164.90921574610925 410.0574661825549 167.26832330013593Q413.1847721996992 169.6274308541626 418.5848054895707 169.6274308541626ZM530.9620490882058 197.62726440480483Q518.6303016473647 197.62726440480483 511.4667027348339 192.63638444253337Q504.30310382230306 187.64550448026188 501.1826638411673 178.56146142536133Q498.06222386003157 169.47741837046078 498.06222386003157 157.40019973922932V36.318140205842354H534.3028957606058V158.7638361028657Q534.3028957606058 164.29564180098205 536.3869804278459 166.37972646822203Q538.4710650950858 168.46381113546204 540.5665238017743 168.46381113546204Q541.6528832769039 168.46381113546204 542.4483378223586 168.35017477182566Q543.2437923678131 168.23653840818932 544.6074287314494 168.00926568091657L548.9028624707342 194.64546286792245Q546.0983294998906 195.9090909090909 541.6006251139501 196.76817765694787Q537.1029207280095 197.62726440480483 530.9620490882058 197.62726440480483ZM631.2575660521696 197.72727272727272Q612.2166611224944 197.72727272727272 596.1666777674302 189.30680777873332Q580.116694412366 180.8863428301939 570.4303474209381 163.9931547701612Q560.7440004295103 147.09996671012846 560.7440004295103 122.02270646655755Q560.7440004295103 103.48635115266181 566.41444457188 89.05453297084362Q572.0848887142497 74.62271478902544 582.0485125941842 64.62271478902542Q592.0121364741187 54.62271478902542 604.7280351619429 49.484076344772106Q617.4439338497672 44.34543790051879 631.3575743746375 44.34543790051879Q645.980289163663 44.34543790051879 657.5098200538896 50.00225400171999Q669.0393509441162 55.65907010292119 676.6166111876871 63.74087996227149L657.5621822476921 85.72710627791494Q652.0576326319127 80.70435819901796 646.0121572802884 78.16798207895249Q639.9666819286642 75.63160595888701 632.2166611224944 75.63160595888701Q623.0575077948944 75.63160595888701 615.2211067074252 81.1589036535634Q607.3847056199561 86.68620134823979 602.6392344295657 96.78170166726773Q597.8937632391754 106.87720198629567 597.8937632391754 120.80908258662302Q597.8937632391754 135.3727772075346 602.411961702293 145.5819138901989Q606.9301601654106 155.7910505728632 615.0574661825549 161.11607762088386Q623.1847721996992 166.44110466890447 633.7848221345066 166.44110466890447Q642.0893967176896 166.44110466890447 648.7030538874957 163.02063972036507Q655.3167110573017 159.60017477182566 660.0349261653552 154.83195550253836L678.2302683574932 176.36363636363637Q668.6075535684678 187.1727189502594 656.8007457897345 192.44999583876606Q644.9939380110011 197.72727272727272 631.2575660521696 197.72727272727272ZM752.7712148995078 197.72727272727272Q732.566690251132 197.72727272727272 717.2621572802884 188.47272311149334Q701.9576243094448 179.21817349571393 693.3962669149321 161.9204441423697Q684.8349095204193 144.62271478902545 684.8349095204193 120.35453713207757Q684.8349095204193 96.0863594751297 693.3962669149321 79.12953921269454Q701.9576243094448 62.172718950259394 717.2621572802884 53.25907842538909Q732.566690251132 44.34543790051879 752.7712148995078 44.34543790051879Q773.0257437091174 44.34543790051879 788.330276679961 53.25907842538909Q803.6348096508046 62.172718950259394 812.1961670453175 79.12953921269454Q820.7575244398301 96.0863594751297 820.7575244398301 120.35453713207757Q820.7575244398301 144.62271478902545 812.1961670453175 161.9204441423697Q803.6348096508046 179.21817349571393 788.330276679961 188.47272311149334Q773.0257437091174 197.72727272727272 752.7712148995078 197.72727272727272ZM752.7712148995078 166.44110466890447Q762.2849053591854 166.44110466890447 769.2122155375636 160.80017061059172Q776.1395257159418 155.15923655227897 779.8486415924364 144.81146142536133Q783.557757468931 134.4636862984437 783.557757468931 120.35453713207757Q783.557757468931 106.24538796571143 779.8486415924364 96.26352401031986Q776.1395257159418 86.2816600549283 769.2122155375636 80.95663300690765Q762.2849053591854 75.63160595888701 752.7712148995078 75.63160595888701Q743.3075286010641 75.63160595888701 736.3552163420688 80.95663300690765Q729.4029040830736 86.2816600549283 725.693788206579 96.26352401031986Q721.9846723300844 106.24538796571143 721.9846723300844 120.35453713207757Q721.9846723300844 134.4636862984437 725.693788206579 144.81146142536133Q729.4029040830736 155.15923655227897 736.3552163420688 160.80017061059172Q743.3075286010641 166.44110466890447 752.7712148995078 166.44110466890447ZM847.8722422298746 195.0V47.07269841974431H942.7956708520337V77.47963645241478H884.1627473790223V108.74189897017045H934.3338122760393V139.1488370028409H884.1627473790223V195.0ZM968.3167526696412 195.0V47.07271062779151H1004.6074287314494V195.0Z"/>
+</svg></span></div>
+            <div class="ttl">calcofi.io <small>open data ecosystem</small></div>
+            <nav><span>Datasets</span><span>Explore</span><span>Access</span><span>Build</span><span>Students</span><span class="new">News</span><span>calcofi.org ↗</span></nav>
+            <div class="tg"><svg viewBox="0 0 24 24"><use href="#i-moon"></use></svg></div>
+          </div>
+          <div class="hero" id="sec-page"></div>
+          <div class="numsband">
+            <div class="nums">
+              <div><b>77</b><span>years · since 1949</span></div>
+              <div><b>842</b><span>cruises</span></div>
+              <div><b>49</b><span>ships</span></div>
+              <div><b>218</b><span>stations</span></div>
+              <div><b>2,614</b><span>taxa</span></div>
+              <div><b>349 M</b><span>rows · v2026.09.06</span></div>
+            </div>
+          </div>
+          <div class="bento">
+            <div class="tile t-map">
+              <div class="eyebrow">Where · 218 stations</div>
+              <div class="fill" id="map-page"></div>
+              <div class="odo"><span class="odo-n">1949</span></div>
+              <div class="more">Open the Station Explorer →</div>
+            </div>
+            <div class="tile t-years">
+              <div class="eyebrow">When · 16 datasets · 1949 → 2026</div>
+              <div class="fill" id="strip-page"></div>
+            </div>
+            <div class="tile t-rel">
+              <div class="eyebrow">Latest release · 2026-09-06</div>
+              <div class="v">v2026.09.06</div>
+              <dl><div><dt>tables</dt><dd>23</dd></div><div><dt>rows</dt><dd>348.7 M</dd></div><div><dt>doi</dt><dd>10.5281/zenodo.22514953</dd></div></dl>
+              <div class="more">Schema · Query · Notes · Cite</div>
+            </div>
+            <div class="tile t-log">
+              <div class="eyebrow">Ship's log · what's new</div>
+              <div class="log">
+                <span class="d">09-06</span><span class="t release">release</span><div class="e"><b>v2026.09.06 — obs is a view over obs_bio + obs_env</b><span>NERC and Darwin Core ids on the measurement vocabulary; Zenodo DOI minted.</span></div>
+                <span class="d">09-06</span><span class="t">app</span><div class="e"><b>Explorer: the calm layout</b><span>Floating panels; every view is a URL you can share.</span></div>
+                <span class="d">08-31</span><span class="t data">data</span><div class="e"><b>One climatology for every anomaly</b><span>1993–2013, month-matched; ctd-transects and the Explorer now agree.</span></div>
+                <span class="d">08-14</span><span class="t dataset">dataset</span><div class="e"><b>Dungeness crab megalopae enter the release</b><span>CDFW, 310 samples, 1984–2014.</span></div>
+              </div>
+              <div class="more">All entries · RSS →</div>
+            </div>
+            <div class="tile t-exp">
+              <img src="data:image/gif;base64,R0lGODlhAQABAIAAAPXw5gAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==" alt="The CalCOFI Explorer, sections lens">
+              <div class="tb">
+                <div class="eyebrow">Explore · in the browser</div>
+                <h3>One app, five lenses</h3>
+                <div class="lens"><svg viewBox="0 0 24 24"><use href="#i-lens-stations"></use></svg><svg viewBox="0 0 24 24"><use href="#i-lens-hexagons"></use></svg><svg viewBox="0 0 24 24"><use href="#i-lens-cruises"></use></svg><svg viewBox="0 0 24 24"><use href="#i-lens-regions"></use></svg><svg viewBox="0 0 24 24"><use href="#i-lens-sections"></use></svg></div>
+                <div class="more">Open the Explorer →</div>
+              </div>
+            </div>
+            <div class="tile t-get">
+              <div class="eyebrow">Get the data</div>
+              <div class="tabs"><span class="on">R</span><span>Python</span><span>SQL</span><span>ERDDAP</span><span>Parquet</span></div>
+<pre>library(calcofi4r)
+con &lt;- cc_get_db()          # the latest frozen release
+tbl(con, "obs_env") |&gt;
+  filter(measurement_type == "temperature",
+         cruise_key == "2026-04-3322")</pre>
+              <div class="more">calcofi4r · calcofi4py · db-query →</div>
+            </div>
+            <div class="tile t-sp">
+              <div class="eyebrow">Life · WoRMS-keyed</div>
+              <div class="row"><span class="big">2,614 taxa</span>
+                <svg viewBox="0 0 24 24"><use href="#i-cat-phytoplankton"></use></svg><svg viewBox="0 0 24 24"><use href="#i-cat-zooplankton"></use></svg><svg viewBox="0 0 24 24"><use href="#i-cat-krill"></use></svg><svg viewBox="0 0 24 24"><use href="#i-cat-ichthyo"></use></svg><svg viewBox="0 0 24 24"><use href="#i-cat-fish"></use></svg><svg viewBox="0 0 24 24"><use href="#i-cat-whale"></use></svg>
+              </div>
+              <div class="more">From diatoms to blue whales →</div>
+            </div>
+          </div>
+          <div class="band">
+            <div class="eyebrow">16 datasets · 17 holdings · 25 reference rows</div>
+            <h2>Datasets</h2>
+            <p>Find what has been collected. One record per dataset — coverage, every endpoint it can be reached through, its licence and how to cite it — by category, with the holdings CalCOFI has but has not ingested yet.</p>
+            <div class="chips" id="chips-page"></div>
+          </div>
+          <div class="prods">
+            <div class="tabs"><span class="on">Explore · 8</span><span>Access · 5</span><span>Build · 4</span><span>Students · 9</span></div>
+            <div class="cards">
+              <div class="card"><img src="data:image/gif;base64,R0lGODlhAQABAIAAAPXw5gAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==" alt=""><div><b>CalCOFI Explorer</b><span>Five lenses over the frozen release, in the browser.</span></div></div>
+              <div class="card"><img src="data:image/gif;base64,R0lGODlhAQABAIAAAPXw5gAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==" alt=""><div><b>Station Explorer</b><span>What is measured at each station, by dataset.</span></div></div>
+              <div class="card"><img src="data:image/gif;base64,R0lGODlhAQABAIAAAPXw5gAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==" alt=""><div><b>Hexagon Explorer</b><span>Larvae and bottle data on hexagon maps.</span></div></div>
+              <div class="card"><img src="data:image/gif;base64,R0lGODlhAQABAIAAAPXw5gAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==" alt=""><div><b>CTD Transects</b><span>Sections along every line, every cruise since 1993.</span></div></div>
+            </div>
+          </div>
+          <div class="ft">A partnership since 1949 · NOAA Fisheries · California Department of Fish and Wildlife · Scripps Institution of Oceanography</div>
+        </div>
+      </div>
+    </div>
+    <div class="mock-cap" style="border:1px solid var(--border); border-radius:0 0 12px 12px; margin-top:-1px">
+      <span><b>Real:</b> the header contract (lockup, title, uppercase links, toggle), the release numbers, the site's own screenshots, the R call</span>
+      <span><b>Placeholder:</b> tile copy; the products row shows four of twenty-six cards</span>
+    </div>
+    <div class="notes">
+      <div>
+        <h4>Why a bento and not more bands</h4>
+        <p>A band says "here is a category"; a tile says "here is a thing you can do". Six tiles of different sizes let the map and the years be large and the release and the log be small, which is their true weight.</p>
+      </div>
+      <div>
+        <h4>What does not change</h4>
+        <p>The catalog band and its includes; the product cards, their three-slug contract, the screenshots and the weekly brand check. The header gains one link (News) and keeps the lockup rule.</p>
+      </div>
+      <div>
+        <h4>The one CTA</h4>
+        <p>Brand v2 allows one yellow button per view. It stays in the hero — <em>Explore the data</em> — and every tile ends in a text link instead.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── 4 · ship's log ───────────────────────── -->
+<section class="part" id="news">
+  <div class="wrap">
+    <div class="part-head">
+      <div>
+        <div class="stepno">4 · News</div>
+        <h2 class="display">The ship's log</h2>
+      </div>
+      <p class="lede">News that cannot rot: most entries are generated from data the site already carries — releases, datasets entering the release, products added — with a hand-written line for features. Filter it.</p>
+    </div>
+    <div class="mock">
+      <div style="padding:20px 20px 8px">
+        <div class="chips" id="log-filter" style="margin-bottom:16px">
+          <span class="chip on" data-f="all">all</span>
+          <span class="chip" data-f="release">release</span>
+          <span class="chip" data-f="dataset">dataset</span>
+          <span class="chip" data-f="app">app</span>
+          <span class="chip" data-f="data">data</span>
+          <span class="chip" data-f="site">site</span>
+        </div>
+        <div class="log" id="log-main">
+          <span class="d" data-t="release">2026-09-06</span><span class="t release" data-t="release">release</span><div class="e" data-t="release"><b>v2026.09.06 — <code>obs</code> becomes a view over <code>obs_bio</code> + <code>obs_env</code></b><span>115 of 200 measurement types carry a NERC P01 id and 174 a P06 unit; the release cites itself with a Zenodo DOI (10.5281/zenodo.22514953). Consumers: <code>obs</code> still ships its objects for one release, deprecated.</span></div>
+          <span class="d" data-t="app">2026-09-06</span><span class="t" data-t="app">app</span><div class="e" data-t="app"><b>Explorer: the calm layout is live</b><span>Floating panels you can move, collapse and resize; the title sentence is the query; every view is a URL; feedback arrives with an annotated screenshot.</span></div>
+          <span class="d" data-t="site">2026-09-04</span><span class="t site" data-t="site">site</span><div class="e" data-t="site"><b>Brand v2 — the SIO look, fleet-wide</b><span>Light by default, UCSD palette, Source Sans 3 and Teko, the horizontal lockup; <code>?theme=dark</code> everywhere; checked weekly.</span></div>
+          <span class="d" data-t="data">2026-08-31</span><span class="t data" data-t="data">data</span><div class="e" data-t="data"><b>One climatology for every anomaly</b><span>A 1993–2013, month-matched, 10 m-binned baseline in the release; ctd-transects, the Explorer's Sections lens and <code>calcofi4r::cc_climatology()</code> now subtract the same table.</span></div>
+          <span class="d" data-t="release">2026-08-25</span><span class="t release" data-t="release">release</span><div class="e" data-t="release"><b>v2026.08.25 — quality flags reach the plots</b><span>A 1955 oxygen spike flagged suspect since 1955 had been drawn for years; every consumer now applies <code>cc_qual_ok_sql()</code>. Cruise keys resolve by date span, so casts stop drifting onto the neighbouring month's cruise.</span></div>
+          <span class="d" data-t="dataset">2026-08-14</span><span class="t dataset" data-t="dataset">dataset</span><div class="e" data-t="dataset"><b>Dungeness crab megalopae enter the release</b><span>CDFW's 1984–2014 light-trap and net series, 310 samples, sorted at SIO — the first dataset to go through the <code>in_release</code> staging path.</span></div>
+        </div>
+      </div>
+      <div class="mock-cap">
+        <span><b>Real:</b> six events from RELEASES.md and the repo, with their dates</span>
+        <span><b>Placeholder:</b> the wording is a draft; the filter works</span>
+      </div>
+    </div>
+    <div class="notes">
+      <div>
+        <h4>Where entries come from</h4>
+        <ul>
+          <li><b>release</b> — generated from <code>_data/versions.json</code> (already on the site) and each version's <code>RELEASE_NOTES.md</code> heading.</li>
+          <li><b>dataset</b> — generated from <code>datasets.json</code>'s <code>since_version</code>: a dataset's first release is its news item.</li>
+          <li><b>app</b> — an <code>added:</code> date on a product in <code>products.yml</code>; a "new" dot on its card and in the header for 30 days.</li>
+          <li><b>data · site · paper</b> — hand-written rows in <code>_data/news.yml</code> (<code>date, type, title, body, url</code>).</li>
+        </ul>
+      </div>
+      <div>
+        <h4>Where it goes</h4>
+        <p>A <code>_plugins/news.rb</code> beside <code>datasets.rb</code> merges and sorts; the tile shows four, <code>/news/</code> shows all, <code>feed.xml</code> (jekyll-feed) lets calcofi.org's WordPress pull it into <a href="https://calcofi.org/about/news-updates/">News &amp; Updates</a>, and the release notes page links back. Program news — cruises, people, papers — stays on calcofi.org and is linked, not copied.</p>
+      </div>
+      <div>
+        <h4>A later tile</h4>
+        <p><b>At sea now.</b> The cruise table's latest cruise and calcofi.org's cruise page (the <code>2604SH</code> link on its front page) make a live "R/V Sally Ride, Line 80, day 9" tile with no new data source.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── 5 · imagery ───────────────────────── -->
+<section class="part alt" id="art">
+  <div class="wrap">
+    <div class="part-head">
+      <div>
+        <div class="stepno">5 · Imagery</div>
+        <h2 class="display">Field-guide plate, not cartoon</h2>
+      </div>
+      <p class="lede">The direction, the palette, three prompts you can paste, and which engine to paste them into. And the route that needs no engine at all.</p>
+    </div>
+
+    <h3>The direction</h3>
+    <p>Flat vector with fine line-work, the way the 1950s CalCOFI atlas plates and Scripps' technical drawings did it: silhouettes with one interior line, a limited palette, light from the upper left, generous empty water. Scientific because the geometry is true; at ease because there is nothing to read inside the picture; exciting because it is one scene, not a diagram of boxes.</p>
+    <div class="sw" aria-label="Brand palette">
+      <div><i style="background:#182b49"></i><b>Navy</b><span>#182B49</span></div>
+      <div><i style="background:#00629b"></i><b>UCSD Blue</b><span>#00629B</span></div>
+      <div><i style="background:#00c6d7"></i><b>Cyan</b><span>#00C6D7</span></div>
+      <div><i style="background:#f5f0e6"></i><b>Sand</b><span>#F5F0E6</span></div>
+      <div><i style="background:#c69214"></i><b>Gold</b><span>#C69214</span></div>
+      <div><i style="background:#ffcd00"></i><b>Yellow · CTA only</b><span>#FFCD00</span></div>
+      <div><i style="background:#b6b1a9"></i><b>Stone</b><span>#B6B1A9</span></div>
+      <div><i style="background:#ffffff"></i><b>White</b><span>#FFFFFF</span></div>
+    </div>
+    <div class="dodont">
+      <div>
+        <h4>Keep from the proposal figure</h4>
+        <ul>
+          <li>The four beats — ship, harmonise, database, discover — as the story of the <em>docs</em> site, not the landing page.</li>
+          <li>The instinct to show instruments and species in one frame.</li>
+          <li>The habit of naming real standards (WoRMS, ITIS, NERC, EDI, OBIS) — in the page's text.</li>
+        </ul>
+      </div>
+      <div>
+        <h4>Drop</h4>
+        <ul>
+          <li>Gears, "AI" badges, padlocks, generic clip-art icons; every label inside the pixels.</li>
+          <li>Mixed rendering — glossy 3D beside flat vector beside a screenshot.</li>
+          <li>Boxes-with-arrows as the composition. One scene, one horizon, one palette.</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>The route with no engine</h3>
+    <p>Part 1 is already it: the brand's 51-glyph sprite, forty lines of SVG for the ship and gear, and tokens for every colour. It themes, scales, links and animates today. Generated art is a <em>layer behind it</em> — a <code>&lt;picture&gt;</code> with a light and a dark source under the SVG overlay, <code>pointer-events: none</code> — so the page can ship now and gain the painted version when one is good enough.</p>
+
+    <h3>Prompts</h3>
+    <div class="prompt">
+      <h4>P1 · The hero section (raster, wide, two grounds)</h4>
+      <button class="copy" type="button">Copy</button>
+<pre>Wide (21:9, 4K) scientific cross-section of the ocean off Southern California, drawn like an oceanographic section plot seen from the side: flat vector, field-guide plate, calm and precise.
+
+Composition. The sea surface is a straight horizontal line one fifth from the top. Above it, a pale sand-white sky (#FFFFFF fading down to #E6EEF4). Below it, open water grading from pale cyan (#DCEDF5) at the surface through UCSD blue (#00629B) to deep navy (#182B49) at the bottom. The sea floor runs along the bottom: a deep basin on the left, one submarine bank rising midway, then a continental slope climbing on the right to a narrow shelf and a low headland that breaks the surface at the right edge, all in flat sand (#F5F0E6) with a thin stone outline (#B6B1A9).
+
+The ship. One modern fisheries research vessel slightly left of centre, sitting on the surface line, as a crisp navy (#182B49) silhouette with a single white window strip: dark hull, blocky superstructure, a tall mast with a crossbar of sensors, an A-frame at the stern, steaming toward the coast on the right.
+
+The gear, hanging to its true depth. A straight vertical wire from the ship's side down to a CTD rosette (a squat cylindrical frame of grey bottles) about a quarter of the way down the water; a diagonal wire trailing behind the stern at 45 degrees to a bongo net (two side-by-side rings with long fine conical nets) at a shallower depth; a short vertical wire to a small paired net just under the surface; a tiny rectangular net towed at the surface; a dotted intake line running along the surface behind the hull.
+
+The life, at the depth it lives, each a simple two-tone silhouette with one interior line and no face: a chain of diatoms and one dinoflagellate just under the surface; a few copepods and a loose swarm of krill in mid-water; a scatter of fish eggs and one fish larva near the surface; a single lanternfish deep in the navy water; a blue whale at the surface ahead of the ship; three shearwaters in the sky.
+
+Style rules. Flat vector, generous empty water, restrained. Palette limited to navy #182B49, blue #00629B, cyan #00C6D7, sand #F5F0E6, gold #C69214 and white. Gradients only in the water and the sky. No text, no labels, no arrows, no icons, no gears, no reflections, no lens flare, no 3D, no photorealism, no people.
+
+Dark variant (same composition): sky #0F1A2E to #182B49, water #2A5A82 to #0B1524, ship silhouette #E9EDF3, sea floor #21375C with outline #34486B.</pre>
+    </div>
+    <div class="prompt">
+      <h4>P2 · Thirteen category spots (square, one style, transparent)</h4>
+      <button class="copy" type="button">Copy</button>
+<pre>A single flat vector spot illustration of {SUBJECT} for a scientific data catalog. Two-tone silhouette in navy (#182B49) and UCSD blue (#00629B) with one cyan (#00C6D7) highlight line, on a plain white background, centred, square, generous margins, consistent 2 px line weight, field-guide plate style. No text, no shadow, no gradient, no background scene.
+
+{SUBJECT}, one per category (metadata/category.csv order):
+ 1 Physical Oceanography — a CTD rosette frame with Niskin bottles
+ 2 Nutrients & Chemistry — a Niskin bottle beside a small volumetric flask
+ 3 Carbonate System — a sealed glass bottle with a few CO2 bubbles and a pH strip
+ 4 Productivity & Pigments — a chlorophyll filter disc under a small sun
+ 5 Meteorology & Sea State — a cup anemometer on a mast with one cloud
+ 6 Phytoplankton — a chain of centric diatoms
+ 7 Picoplankton & Bacteria — a cloud of tiny cells beside a flow-cytometer dot plot
+ 8 Zooplankton — a copepod
+ 9 Euphausiids — a krill in side view
+10 Fish Eggs & Larvae — three transparent fish eggs and one larva
+11 Mesopelagic Fish — a lanternfish with a row of photophores
+12 Seabirds & Marine Mammals — a shearwater above a whale fluke
+13 Genomics & eDNA — a DNA helix inside a water drop</pre>
+    </div>
+    <div class="prompt">
+      <h4>P3 · The ships (side profiles, from reference photos)</h4>
+      <button class="copy" type="button">Copy</button>
+<pre>Flat side-profile silhouette of {SHIP} in navy (#182B49) with white (#FFFFFF) detail lines for windows and railings, on a plain white background, hull sitting level on an invisible waterline, facing right, field-guide plate style. Match the proportions and superstructure of the attached reference photo. No text, no water, no shadow, no flag.
+
+{SHIP}: NOAA Ship Reuben Lasker · R/V Sally Ride · R/V Bold Horizon · NOAA Ship David Starr Jordan (1966–2009) · R/V New Horizon · the schooner Black Douglas (1950s)
+References and the roster: https://calcofi.org/sampling-info/ships/</pre>
+    </div>
+
+    <h3>Which engine</h3>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Engine</th><th>Reach for it when</th><th>Watch for</th></tr></thead>
+        <tbody>
+          <tr><td><b>Nano Banana Pro</b> (Gemini 3 Pro Image)</td><td>You will iterate. It keeps the scene and edits one thing ("move the bongo rings side by side, change nothing else"), takes reference images — the ship photos, the brand glyphs, this mockup — and renders 2K/4K. The natural home for P1.</td><td>Honours hex values approximately, not exactly; likes to add a caption, so repeat "no text" and crop generously.</td></tr>
+          <tr><td><b>GPT Image 1.5</b> (OpenAI)</td><td>The spots (P2): clean flat shapes, true transparent backgrounds, and it reads a long compositional prompt well.</td><td>A warm cast on white; rounds every corner unless told "sharp".</td></tr>
+          <tr><td><b>Midjourney v7</b></td><td>The most beautiful single hero; <code>--sref</code> locks one style across all thirteen spots; <code>--no text</code>.</td><td>Least controllable of the four; no exact colour; needs an upscale pass.</td></tr>
+          <tr><td><b>Recraft V3</b></td><td>The vector route: real SVG output and a brand palette set by hex, so the spots recolour for the dark theme for free and scale to any size. Try it first for P2 and P3.</td><td>Complex scenes get simplified; P1 may still want raster.</td></tr>
+          <tr><td><b>Adobe Firefly</b> (+ Illustrator text-to-vector)</td><td>When SIO communications asks about training-data licensing; the answer is clean.</td><td>A flatter aesthetic; palette by words, not hex.</td></tr>
+          <tr><td><b>A person</b></td><td>The strongest version of this page is drawn by an illustrator with the mockup and P1 as the brief; SIO has one. The engines above make the first draft cheap enough to commission the second.</td><td>Weeks, not hours.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="small">Model names as of mid-2026; check the current version before comparing. Whatever the engine, keep the SVG overlay (pins, axes, labels) as the page's own — never bake text into the image.</p>
+  </div>
+</section>
+
+<!-- ───────────────────────── 6 · plan ───────────────────────── -->
+<section class="part" id="plan">
+  <div class="wrap">
+    <div class="part-head">
+      <div>
+        <div class="stepno">6 · Plan</div>
+        <h2 class="display">Ship it in three cuts</h2>
+      </div>
+      <p class="lede">Cut one needs no imagery and no new data source; it is the page you are looking at, in Jekyll. Cuts two and three add the painted layer and the live tiles.</p>
+    </div>
+    <div class="phase">
+      <div>
+        <span class="stepno">Cut 1 · the structure · ~2 days</span>
+        <ul>
+          <li><code>index.html</code>: hero → numbers → bento → the existing catalog band → the product sections as a tab row.</li>
+          <li><code>assets/section.js</code>: the section drawing from the brand sprite (part 1), pins from <code>category.csv</code>, links to calcofi.org methods.</li>
+          <li><code>assets/reach.js</code>: the grid map and the years strip from <code>_data/grid.geojson</code>, <code>land.geojson</code>, <code>datasets.json</code> — all already on the site.</li>
+          <li><code>_data/news.yml</code> + <code>_plugins/news.rb</code> + <code>/news/</code> + <code>feed.xml</code>; <code>added:</code> on products.</li>
+          <li>The header keeps the contract; <code>check_brand.py</code> needs no change. Re-shoot the site's own card.</li>
+        </ul>
+      </div>
+      <div>
+        <span class="stepno">Cut 2 · the painted layer · ~1 day + review</span>
+        <ul>
+          <li>P2 spots via Recraft (SVG) or GPT Image; drop them into the category tiles and the pins' hover cards.</li>
+          <li>P1 hero in two grounds via Nano Banana Pro; place under the SVG overlay as a <code>&lt;picture&gt;</code>; keep the overlay's pins and axes.</li>
+          <li>Screenshot both themes; the luminance check in <code>scripts/shots.py</code> catches a wrong ground.</li>
+        </ul>
+      </div>
+      <div>
+        <span class="stepno">Cut 3 · live tiles · later</span>
+        <ul>
+          <li><b>At sea now</b> from the cruise table and calcofi.org's cruise page.</li>
+          <li><b>Latest paper</b> from calcofi.org/publications; <b>next release</b> from the pipeline's stamp.</li>
+          <li>The strip's hover opens the Explorer on that dataset and year; the map's click opens the Station Explorer.</li>
+        </ul>
+      </div>
+    </div>
+    <h3>What each element reads</h3>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Element</th><th>Source</th><th>Measured or drawn</th></tr></thead>
+        <tbody>
+          <tr><td>Section: gear depths, bottle depths, station spacing</td><td>the sampling protocol (515 m CTD, 210 m bongo, 70 m PairoVET, 3 m CUFES; 14 standard depths); <code>metadata/gear.csv</code> for the net names</td><td>constants, commented</td></tr>
+          <tr><td>Section: sea floor</td><td>GEBCO 2025 along Line 90 (<code>cc_transect_bathy()</code>, already used by ctd-transects)</td><td>measured</td></tr>
+          <tr><td>Section: pins</td><td><code>metadata/category.csv</code> → glyph, name, realm; <code>datasets.json</code> → counts</td><td>measured</td></tr>
+          <tr><td>Map</td><td><code>_data/grid.geojson</code> (218 cells, pattern), <code>_data/land.geojson</code></td><td>measured</td></tr>
+          <tr><td>Years strip</td><td><code>_data/datasets.json</code> → <code>coverage.years</code> (<code>observed_coverage()</code>)</td><td>measured; two rows asserted, hatched</td></tr>
+          <tr><td>Numbers</td><td><code>catalog.json</code>: cruise 842, ship 49, grid 218, taxon 2,614; release rows</td><td>measured</td></tr>
+          <tr><td>Ship's log</td><td><code>versions.json</code>, <code>since_version</code>, <code>products.yml</code>, <code>news.yml</code></td><td>generated + authored</td></tr>
+          <tr><td>The painted layer</td><td>P1–P3</td><td>drawn; behind the overlay</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="small">One rule to carry over from the repo: nothing on the first screen asserts a number the release does not carry. The page can be exciting because it is true.</p>
+  </div>
+</section>
+
+<script>
+const ICONS = {"lens-stations":{"vb":"0 0 24 24","d":["M12 16C13.1 16 14 16.9 14 18S13.1 20 12 20 10 19.1 10 18 10.9 16 12 16M12 10C13.1 10 14 10.9 14 12S13.1 14 12 14 10 13.1 10 12 10.9 10 12 10M12 4C13.1 4 14 4.9 14 6S13.1 8 12 8 10 7.1 10 6 10.9 4 12 4M6 16C7.1 16 8 16.9 8 18S7.1 20 6 20 4 19.1 4 18 4.9 16 6 16M6 10C7.1 10 8 10.9 8 12S7.1 14 6 14 4 13.1 4 12 4.9 10 6 10M6 4C7.1 4 8 4.9 8 6S7.1 8 6 8 4 7.1 4 6 4.9 4 6 4M18 16C19.1 16 20 16.9 20 18S19.1 20 18 20 16 19.1 16 18 16.9 16 18 16M18 10C19.1 10 20 10.9 20 12S19.1 14 18 14 16 13.1 16 12 16.9 10 18 10M18 4C19.1 4 20 4.9 20 6S19.1 8 18 8 16 7.1 16 6 16.9 4 18 4Z"]},"lens-hexagons":{"vb":"0 0 24 24","d":["M21,16.5C21,16.88 20.79,17.21 20.47,17.38L12.57,21.82C12.41,21.94 12.21,22 12,22C11.79,22 11.59,21.94 11.43,21.82L3.53,17.38C3.21,17.21 3,16.88 3,16.5V7.5C3,7.12 3.21,6.79 3.53,6.62L11.43,2.18C11.59,2.06 11.79,2 12,2C12.21,2 12.41,2.06 12.57,2.18L20.47,6.62C20.79,6.79 21,7.12 21,7.5V16.5M12,4.15L5,8.09V15.91L12,19.85L19,15.91V8.09L12,4.15Z"]},"lens-cruises":{"vb":"0 0 24 24","d":["M1 20.35 L1.91 20.2 L2.57 19.83 L3.12 19.35 L3.68 18.87 L4.34 18.5 L5.25 18.35 L6.16 18.5 L6.82 18.87 L7.38 19.35 L7.93 19.83 L8.59 20.2 L9.5 20.35 L10.41 20.2 L11.07 19.83 L11.62 19.35 L12.18 18.87 L12.84 18.5 L13.75 18.35 L14.66 18.5 L15.32 18.87 L15.88 19.35 L16.43 19.83 L17.09 20.2 L18 20.35 L18.91 20.2 L19.57 19.83 L20.12 19.35 L20.68 18.87 L21.34 18.5 L22.25 18.35 L22.25 20.25 L21.34 20.4 L20.68 20.77 L20.12 21.25 L19.57 21.73 L18.91 22.1 L18 22.25 L17.09 22.1 L16.43 21.73 L15.88 21.25 L15.32 20.77 L14.66 20.4 L13.75 20.25 L12.84 20.4 L12.18 20.77 L11.62 21.25 L11.07 21.73 L10.41 22.1 L9.5 22.25 L8.59 22.1 L7.93 21.73 L7.38 21.25 L6.82 20.77 L6.16 20.4 L5.25 20.25 L4.34 20.4 L3.68 20.77 L3.12 21.25 L2.57 21.73 L1.91 22.1 L1 22.25ZM2 13 L23 13 L21.5 15.5 L19.5 17.6 L4.5 17.6 L3 15.5ZM11.5 8.8 L18.5 8.8 L18.5 13.1 L11.5 13.1ZM13 5.8 L17 5.8 L17 8.9 L13 8.9ZM14.6 2.2 L15.4 2.2 L15.4 5.9 L14.6 5.9ZM3.36 13.1 L2.46 5.3 L4.14 5.1 L5.04 12.9ZM4.02 4.74 L9.02 12.54 L7.58 13.46 L2.58 5.66ZM3.35 13a0.85 0.85 0 1 1 1.7 0a0.85 0.85 0 1 1 -1.7 0ZM2.45 5.2a0.85 0.85 0 1 1 1.7 0a0.85 0.85 0 1 1 -1.7 0ZM7.45 13a0.85 0.85 0 1 1 1.7 0a0.85 0.85 0 1 1 -1.7 0ZM3.9 9.55 L7.2 9.55 L7.2 10.85 L3.9 10.85Z"]},"lens-regions":{"vb":"0 0 24 24","d":["M5.36 6.9 L9.33 4.34 L10.14 5.6 L6.17 8.16ZM14.77 3.91 L18.84 5.72 L18.23 7.09 L14.16 5.28ZM20.99 10.3 L18.95 17.6 L17.51 17.2 L19.55 9.9ZM14.7 20.1 L9.45 18.85 L9.8 17.4 L15.05 18.65ZM5.28 15.29 L3.83 11.78 L5.22 11.21 L6.67 14.72ZM0.8 9a2.7 2.7 0 1 1 5.4 0a2.7 2.7 0 1 1 -5.4 0ZM2.2 9a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0ZM9.3 3.5a2.7 2.7 0 1 1 5.4 0a2.7 2.7 0 1 1 -5.4 0ZM10.7 3.5a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0ZM18.3 7.5a2.7 2.7 0 1 1 5.4 0a2.7 2.7 0 1 1 -5.4 0ZM19.7 7.5a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0ZM14.8 20a2.7 2.7 0 1 1 5.4 0a2.7 2.7 0 1 1 -5.4 0ZM16.2 20a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0ZM4.3 17.5a2.7 2.7 0 1 1 5.4 0a2.7 2.7 0 1 1 -5.4 0ZM5.7 17.5a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0Z"]},"lens-sections":{"vb":"0 0 24 24","d":["M2 4.6 L3.06 4.44 L3.85 4.03 L4.5 3.5 L5.15 2.97 L5.94 2.56 L7 2.4 L8.06 2.56 L8.85 2.97 L9.5 3.5 L10.15 4.03 L10.94 4.44 L12 4.6 L13.06 4.44 L13.85 4.03 L14.5 3.5 L15.15 2.97 L15.94 2.56 L17 2.4 L18.06 2.56 L18.85 2.97 L19.5 3.5 L20.15 4.03 L20.94 4.44 L22 4.6 L22 6.6 L20.94 6.44 L20.15 6.03 L19.5 5.5 L18.85 4.97 L18.06 4.56 L17 4.4 L15.94 4.56 L15.15 4.97 L14.5 5.5 L13.85 6.03 L13.06 6.44 L12 6.6 L10.94 6.44 L10.15 6.03 L9.5 5.5 L8.85 4.97 L8.06 4.56 L7 4.4 L5.94 4.56 L5.15 4.97 L4.5 5.5 L3.85 6.03 L3.06 6.44 L2 6.6ZM5.2 7.3 L6.8 7.3 L6.8 21.5 L5.2 21.5ZM4 10a2 2 0 1 1 4 0a2 2 0 1 1 -4 0ZM4 16a2 2 0 1 1 4 0a2 2 0 1 1 -4 0ZM11.2 7.3 L12.8 7.3 L12.8 21.5 L11.2 21.5ZM10 12.5a2 2 0 1 1 4 0a2 2 0 1 1 -4 0ZM10 19a2 2 0 1 1 4 0a2 2 0 1 1 -4 0ZM17.2 7.3 L18.8 7.3 L18.8 21.5 L17.2 21.5ZM16 9a2 2 0 1 1 4 0a2 2 0 1 1 -4 0ZM16 15a2 2 0 1 1 4 0a2 2 0 1 1 -4 0Z"]},"lens-contours":{"vb":"0 0 24 24","d":["M23.85 12.39 L23.43 14.28 L21.77 13.91 L22.19 12.01ZM23.3 14.58 L22.16 16.25 L20.76 15.29 L21.9 13.62ZM21.97 16.45 L20.27 17.73 L19.25 16.37 L20.95 15.09ZM20.09 17.84 L18.11 18.67 L17.45 17.1 L19.43 16.27ZM17.98 18.71 L15.99 19.2 L15.59 17.55 L17.58 17.06ZM15.94 19.21 L14.05 19.56 L13.74 17.88 L15.64 17.54ZM14.05 19.56 L12.16 19.91 L11.84 18.24 L13.74 17.89ZM12.13 19.91 L10.04 20.25 L9.77 18.57 L11.87 18.23ZM9.94 20.26 L7.54 20.37 L7.46 18.67 L9.86 18.56ZM7.37 20.36 L4.83 19.97 L5.09 18.29 L7.63 18.68ZM4.6 19.89 L2.3 18.81 L3.02 17.27 L5.32 18.36ZM2.03 18.62 L0.45 16.9 L1.7 15.75 L3.28 17.47ZM0.26 16.55 L-0.3 14.48 L1.34 14.03 L1.9 16.1ZM-0.31 14.07 L0.15 12.02 L1.81 12.38 L1.35 14.44ZM0.27 11.73 L1.43 9.97 L2.85 10.9 L1.68 12.67ZM1.56 9.82 L3.03 8.42 L4.2 9.65 L2.73 11.05ZM3.1 8.36 L4.59 7.21 L5.62 8.56 L4.13 9.71ZM4.61 7.2 L6.05 6.15 L7.05 7.53 L5.6 8.58ZM6.09 6.13 L7.62 5.12 L8.56 6.54 L7.02 7.55ZM7.72 5.07 L9.51 4.18 L10.26 5.71 L8.47 6.6ZM9.66 4.13 L11.77 3.55 L12.23 5.19 L10.11 5.77ZM11.96 3.52 L14.27 3.41 L14.35 5.11 L12.04 5.22ZM14.47 3.42 L16.77 3.85 L16.46 5.52 L14.16 5.09ZM16.95 3.91 L19.05 4.82 L18.37 6.38 L16.27 5.46ZM19.21 4.91 L20.98 6.21 L19.98 7.58 L18.21 6.28ZM21.12 6.34 L22.49 7.93 L21.2 9.04 L19.84 7.45ZM22.61 8.1 L23.5 9.9 L21.97 10.65 L21.09 8.86ZM23.58 10.15 L23.86 12.07 L22.18 12.33 L21.9 10.4ZM22.17 12.2a0.85 0.85 0 1 1 1.7 0a0.85 0.85 0 1 1 -1.7 0ZM21.75 14.1a0.85 0.85 0 1 1 1.7 0a0.85 0.85 0 1 1 -1.7 0ZM20.61 15.77a0.85 0.85 0 1 1 1.7 0a0.85 0.85 0 1 1 -1.7 0ZM18.91 17.05a0.85 0.85 0 1 1 1.7 0a0.85 0.85 0 1 1 -1.7 0ZM16.93 17.88a0.85 0.85 0 1 1 1.7 0a0.85 0.85 0 1 1 -1.7 0ZM14.94 18.37a0.85 0.85 0 1 1 1.7 0a0.85 0.85 0 1 1 -1.7 0ZM13.05 18.72a0.85 0.85 0 1 1 1.7 0a0.85 0.85 0 1 1 -1.7 0ZM11.15 19.07a0.85 0.85 0 1 1 1.7 0a0.85 0.85 0 1 1 -1.7 0ZM9.05 19.41a0.85 0.85 0 1 1 1.7 0a0.85 0.85 0 1 1 -1.7 0ZM6.65 19.52a0.85 0.85 0 1 1 1.7 0a0.85 0.85 0 1 1 -1.7 0ZM4.11 19.13a0.85 0.85 0 1 1 1.7 0a0.85 0.85 0 1 1 -1.7 0ZM1.81 18.04a0.85 0.85 0 1 1 1.7 0a0.85 0.85 0 1 1 -1.7 0ZM0.23 16.33a0.85 0.85 0 1 1 1.7 0a0.85 0.85 0 1 1 -1.7 0ZM-0.33 14.26a0.85 0.85 0 1 1 1.7 0a0.85 0.85 0 1 1 -1.7 0ZM0.13 12.2a0.85 0.85 0 1 1 1.7 0a0.85 0.85 0 1 1 -1.7 0ZM1.29 10.44a0.85 0.85 0 1 1 1.7 0a0.85 0.85 0 1 1 -1.7 0ZM2.77 9.03a0.85 0.85 0 1 1 1.7 0a0.85 0.85 0 1 1 -1.7 0ZM4.25 7.89a0.85 0.85 0 1 1 1.7 0a0.85 0.85 0 1 1 -1.7 0ZM5.7 6.84a0.85 0.85 0 1 1 1.7 0a0.85 0.85 0 1 1 -1.7 0ZM7.24 5.83a0.85 0.85 0 1 1 1.7 0a0.85 0.85 0 1 1 -1.7 0ZM9.04 4.95a0.85 0.85 0 1 1 1.7 0a0.85 0.85 0 1 1 -1.7 0ZM11.15 4.37a0.85 0.85 0 1 1 1.7 0a0.85 0.85 0 1 1 -1.7 0ZM13.46 4.26a0.85 0.85 0 1 1 1.7 0a0.85 0.85 0 1 1 -1.7 0ZM15.76 4.69a0.85 0.85 0 1 1 1.7 0a0.85 0.85 0 1 1 -1.7 0ZM17.86 5.6a0.85 0.85 0 1 1 1.7 0a0.85 0.85 0 1 1 -1.7 0ZM19.63 6.9a0.85 0.85 0 1 1 1.7 0a0.85 0.85 0 1 1 -1.7 0ZM21 8.48a0.85 0.85 0 1 1 1.7 0a0.85 0.85 0 1 1 -1.7 0ZM21.89 10.28a0.85 0.85 0 1 1 1.7 0a0.85 0.85 0 1 1 -1.7 0ZM19.31 12.58 L19.04 13.75 L17.48 13.38 L17.75 12.22ZM18.91 14.03 L18.17 15.06 L16.87 14.12 L17.61 13.09ZM17.98 15.24 L16.88 16.02 L15.96 14.72 L17.06 13.94ZM16.72 16.12 L15.44 16.62 L14.84 15.14 L16.12 14.63ZM15.32 16.66 L14.04 16.96 L13.67 15.4 L14.96 15.1ZM13.99 16.97 L12.76 17.18 L12.49 15.61 L13.72 15.39ZM12.77 17.18 L11.54 17.4 L11.26 15.82 L12.49 15.61ZM11.52 17.4 L10.16 17.61 L9.92 16.03 L11.28 15.82ZM10.08 17.62 L8.53 17.68 L8.46 16.09 L10.01 16.02ZM8.37 17.68 L6.73 17.43 L6.96 15.85 L8.61 16.09ZM6.52 17.37 L5.03 16.71 L5.68 15.25 L7.17 15.91ZM4.78 16.54 L3.76 15.48 L4.91 14.37 L5.93 15.42ZM3.56 15.15 L3.2 13.88 L4.74 13.44 L5.1 14.71ZM3.19 13.48 L3.49 12.22 L5.05 12.58 L4.75 13.84ZM3.61 11.94 L4.37 10.86 L5.68 11.78 L4.92 12.86ZM4.49 10.72 L5.44 9.87 L6.51 11.05 L5.56 11.91ZM5.5 9.81 L6.47 9.11 L7.41 10.4 L6.45 11.11ZM6.49 9.1 L7.42 8.46 L8.33 9.78 L7.39 10.42ZM7.45 8.44 L8.45 7.82 L9.29 9.18 L8.3 9.8ZM8.53 7.78 L9.7 7.23 L10.37 8.68 L9.21 9.23ZM9.83 7.18 L11.2 6.83 L11.6 8.38 L10.24 8.73ZM11.36 6.8 L12.86 6.74 L12.93 8.33 L11.44 8.4ZM13.03 6.75 L14.52 7.01 L14.25 8.59 L12.76 8.32ZM14.69 7.06 L16.05 7.62 L15.44 9.1 L14.08 8.54ZM16.2 7.7 L17.34 8.49 L16.43 9.81 L15.29 9.01ZM17.48 8.61 L18.36 9.58 L17.18 10.66 L16.3 9.69ZM18.48 9.75 L19.06 10.85 L17.64 11.59 L17.06 10.49ZM19.14 11.1 L19.32 12.27 L17.74 12.53 L17.56 11.35ZM17.73 12.4a0.8 0.8 0 1 1 1.6 0a0.8 0.8 0 1 1 -1.6 0ZM17.46 13.56a0.8 0.8 0 1 1 1.6 0a0.8 0.8 0 1 1 -1.6 0ZM16.72 14.59a0.8 0.8 0 1 1 1.6 0a0.8 0.8 0 1 1 -1.6 0ZM15.62 15.37a0.8 0.8 0 1 1 1.6 0a0.8 0.8 0 1 1 -1.6 0ZM14.34 15.88a0.8 0.8 0 1 1 1.6 0a0.8 0.8 0 1 1 -1.6 0ZM13.05 16.18a0.8 0.8 0 1 1 1.6 0a0.8 0.8 0 1 1 -1.6 0ZM11.83 16.39a0.8 0.8 0 1 1 1.6 0a0.8 0.8 0 1 1 -1.6 0ZM10.6 16.61a0.8 0.8 0 1 1 1.6 0a0.8 0.8 0 1 1 -1.6 0ZM9.24 16.82a0.8 0.8 0 1 1 1.6 0a0.8 0.8 0 1 1 -1.6 0ZM7.69 16.88a0.8 0.8 0 1 1 1.6 0a0.8 0.8 0 1 1 -1.6 0ZM6.04 16.64a0.8 0.8 0 1 1 1.6 0a0.8 0.8 0 1 1 -1.6 0ZM4.56 15.98a0.8 0.8 0 1 1 1.6 0a0.8 0.8 0 1 1 -1.6 0ZM3.53 14.93a0.8 0.8 0 1 1 1.6 0a0.8 0.8 0 1 1 -1.6 0ZM3.17 13.66a0.8 0.8 0 1 1 1.6 0a0.8 0.8 0 1 1 -1.6 0ZM3.47 12.4a0.8 0.8 0 1 1 1.6 0a0.8 0.8 0 1 1 -1.6 0ZM4.22 11.32a0.8 0.8 0 1 1 1.6 0a0.8 0.8 0 1 1 -1.6 0ZM5.18 10.46a0.8 0.8 0 1 1 1.6 0a0.8 0.8 0 1 1 -1.6 0ZM6.14 9.76a0.8 0.8 0 1 1 1.6 0a0.8 0.8 0 1 1 -1.6 0ZM7.07 9.12a0.8 0.8 0 1 1 1.6 0a0.8 0.8 0 1 1 -1.6 0ZM8.07 8.5a0.8 0.8 0 1 1 1.6 0a0.8 0.8 0 1 1 -1.6 0ZM9.23 7.96a0.8 0.8 0 1 1 1.6 0a0.8 0.8 0 1 1 -1.6 0ZM10.6 7.6a0.8 0.8 0 1 1 1.6 0a0.8 0.8 0 1 1 -1.6 0ZM12.1 7.54a0.8 0.8 0 1 1 1.6 0a0.8 0.8 0 1 1 -1.6 0ZM13.59 7.8a0.8 0.8 0 1 1 1.6 0a0.8 0.8 0 1 1 -1.6 0ZM14.94 8.36a0.8 0.8 0 1 1 1.6 0a0.8 0.8 0 1 1 -1.6 0ZM16.09 9.15a0.8 0.8 0 1 1 1.6 0a0.8 0.8 0 1 1 -1.6 0ZM16.97 10.12a0.8 0.8 0 1 1 1.6 0a0.8 0.8 0 1 1 -1.6 0ZM17.55 11.22a0.8 0.8 0 1 1 1.6 0a0.8 0.8 0 1 1 -1.6 0ZM14.98 12.79 L14.85 13.29 L13.4 12.91 L13.52 12.41ZM14.71 13.56 L14.36 14 L13.19 13.07 L13.53 12.63ZM14.18 14.17 L13.67 14.5 L12.85 13.24 L13.37 12.91ZM13.51 14.58 L12.91 14.8 L12.4 13.39 L13 13.17ZM12.81 14.83 L12.21 14.95 L11.9 13.49 L12.5 13.36ZM12.17 14.96 L11.59 15.05 L11.36 13.57 L11.94 13.48ZM11.6 15.05 L11.02 15.14 L10.78 13.66 L11.36 13.57ZM11 15.15 L10.37 15.24 L10.16 13.75 L10.8 13.66ZM10.29 15.24 L9.56 15.27 L9.5 13.77 L10.23 13.74ZM9.43 15.27 L8.66 15.16 L8.86 13.67 L9.63 13.78ZM8.48 15.11 L7.78 14.83 L8.34 13.44 L9.04 13.72ZM7.55 14.68 L7.07 14.23 L8.09 13.14 L8.57 13.59ZM6.86 13.91 L6.7 13.36 L8.13 12.92 L8.3 13.46ZM6.68 12.95 L6.82 12.41 L8.28 12.79 L8.14 13.33ZM6.95 12.14 L7.31 11.68 L8.5 12.59 L8.14 13.06ZM7.43 11.56 L7.88 11.19 L8.83 12.35 L8.38 12.72ZM7.94 11.14 L8.39 10.84 L9.22 12.09 L8.77 12.39ZM8.41 10.83 L8.85 10.56 L9.64 11.83 L9.2 12.1ZM8.87 10.54 L9.34 10.28 L10.08 11.58 L9.61 11.85ZM9.42 10.24 L9.96 10.01 L10.55 11.39 L10.01 11.62ZM10.09 9.97 L10.73 9.81 L11.07 11.27 L10.43 11.43ZM10.87 9.79 L11.57 9.77 L11.63 11.26 L10.93 11.29ZM11.72 9.77 L12.42 9.89 L12.18 11.37 L11.48 11.26ZM12.57 9.93 L13.2 10.17 L12.68 11.57 L12.04 11.33ZM13.34 10.23 L13.88 10.57 L13.08 11.84 L12.54 11.5ZM14.01 10.68 L14.42 11.09 L13.36 12.15 L12.95 11.74ZM14.54 11.25 L14.81 11.72 L13.51 12.47 L13.24 12ZM14.9 11.97 L14.99 12.47 L13.51 12.73 L13.42 12.22ZM13.5 12.6a0.75 0.75 0 1 1 1.5 0a0.75 0.75 0 1 1 -1.5 0ZM13.37 13.1a0.75 0.75 0 1 1 1.5 0a0.75 0.75 0 1 1 -1.5 0ZM13.02 13.54a0.75 0.75 0 1 1 1.5 0a0.75 0.75 0 1 1 -1.5 0ZM12.51 13.87a0.75 0.75 0 1 1 1.5 0a0.75 0.75 0 1 1 -1.5 0ZM11.91 14.09a0.75 0.75 0 1 1 1.5 0a0.75 0.75 0 1 1 -1.5 0ZM11.3 14.22a0.75 0.75 0 1 1 1.5 0a0.75 0.75 0 1 1 -1.5 0ZM10.73 14.31a0.75 0.75 0 1 1 1.5 0a0.75 0.75 0 1 1 -1.5 0ZM10.15 14.4a0.75 0.75 0 1 1 1.5 0a0.75 0.75 0 1 1 -1.5 0ZM9.51 14.49a0.75 0.75 0 1 1 1.5 0a0.75 0.75 0 1 1 -1.5 0ZM8.78 14.52a0.75 0.75 0 1 1 1.5 0a0.75 0.75 0 1 1 -1.5 0ZM8.01 14.42a0.75 0.75 0 1 1 1.5 0a0.75 0.75 0 1 1 -1.5 0ZM7.31 14.13a0.75 0.75 0 1 1 1.5 0a0.75 0.75 0 1 1 -1.5 0ZM6.83 13.68a0.75 0.75 0 1 1 1.5 0a0.75 0.75 0 1 1 -1.5 0ZM6.66 13.14a0.75 0.75 0 1 1 1.5 0a0.75 0.75 0 1 1 -1.5 0ZM6.8 12.6a0.75 0.75 0 1 1 1.5 0a0.75 0.75 0 1 1 -1.5 0ZM7.15 12.14a0.75 0.75 0 1 1 1.5 0a0.75 0.75 0 1 1 -1.5 0ZM7.6 11.77a0.75 0.75 0 1 1 1.5 0a0.75 0.75 0 1 1 -1.5 0ZM8.05 11.47a0.75 0.75 0 1 1 1.5 0a0.75 0.75 0 1 1 -1.5 0ZM8.49 11.19a0.75 0.75 0 1 1 1.5 0a0.75 0.75 0 1 1 -1.5 0ZM8.96 10.93a0.75 0.75 0 1 1 1.5 0a0.75 0.75 0 1 1 -1.5 0ZM9.51 10.7a0.75 0.75 0 1 1 1.5 0a0.75 0.75 0 1 1 -1.5 0ZM10.15 10.54a0.75 0.75 0 1 1 1.5 0a0.75 0.75 0 1 1 -1.5 0ZM10.85 10.52a0.75 0.75 0 1 1 1.5 0a0.75 0.75 0 1 1 -1.5 0ZM11.55 10.63a0.75 0.75 0 1 1 1.5 0a0.75 0.75 0 1 1 -1.5 0ZM12.19 10.87a0.75 0.75 0 1 1 1.5 0a0.75 0.75 0 1 1 -1.5 0ZM12.73 11.21a0.75 0.75 0 1 1 1.5 0a0.75 0.75 0 1 1 -1.5 0ZM13.14 11.62a0.75 0.75 0 1 1 1.5 0a0.75 0.75 0 1 1 -1.5 0ZM13.41 12.1a0.75 0.75 0 1 1 1.5 0a0.75 0.75 0 1 1 -1.5 0Z"]},"realm-bio":{"vb":"0 0 24 24","d":["M12,20L12.76,17C9.5,16.79 6.59,15.4 5.75,13.58C5.66,14.06 5.53,14.5 5.33,14.83C4.67,16 3.33,16 2,16C3.1,16 3.5,14.43 3.5,12.5C3.5,10.57 3.1,9 2,9C3.33,9 4.67,9 5.33,10.17C5.53,10.5 5.66,10.94 5.75,11.42C6.4,10 8.32,8.85 10.66,8.32L9,5C11,5 13,5 14.33,5.67C15.46,6.23 16.11,7.27 16.69,8.38C19.61,9.08 22,10.66 22,12.5C22,14.38 19.5,16 16.5,16.66C15.67,17.76 14.86,18.78 14.17,19.33C13.33,20 12.67,20 12,20M17,11A1,1 0 0,0 16,12A1,1 0 0,0 17,13A1,1 0 0,0 18,12A1,1 0 0,0 17,11Z"]},"realm-env":{"vb":"0 0 24 24","d":["M2.5 6.7 L3.51 6.51 L4.26 6.05 L4.88 5.45 L5.49 4.85 L6.24 4.39 L7.25 4.2 L8.26 4.39 L9.01 4.85 L9.62 5.45 L10.24 6.05 L10.99 6.51 L12 6.7 L13.01 6.51 L13.76 6.05 L14.38 5.45 L14.99 4.85 L15.74 4.39 L16.75 4.2 L17.76 4.39 L18.51 4.85 L19.12 5.45 L19.74 6.05 L20.49 6.51 L21.5 6.7 L21.5 8.8 L20.49 8.61 L19.74 8.15 L19.12 7.55 L18.51 6.95 L17.76 6.49 L16.75 6.3 L15.74 6.49 L14.99 6.95 L14.38 7.55 L13.76 8.15 L13.01 8.61 L12 8.8 L10.99 8.61 L10.24 8.15 L9.62 7.55 L9.01 6.95 L8.26 6.49 L7.25 6.3 L6.24 6.49 L5.49 6.95 L4.88 7.55 L4.26 8.15 L3.51 8.61 L2.5 8.8ZM2.5 12.2 L3.51 12.01 L4.26 11.55 L4.88 10.95 L5.49 10.35 L6.24 9.89 L7.25 9.7 L8.26 9.89 L9.01 10.35 L9.62 10.95 L10.24 11.55 L10.99 12.01 L12 12.2 L13.01 12.01 L13.76 11.55 L14.38 10.95 L14.99 10.35 L15.74 9.89 L16.75 9.7 L17.76 9.89 L18.51 10.35 L19.12 10.95 L19.74 11.55 L20.49 12.01 L21.5 12.2 L21.5 14.3 L20.49 14.11 L19.74 13.65 L19.12 13.05 L18.51 12.45 L17.76 11.99 L16.75 11.8 L15.74 11.99 L14.99 12.45 L14.38 13.05 L13.76 13.65 L13.01 14.11 L12 14.3 L10.99 14.11 L10.24 13.65 L9.62 13.05 L9.01 12.45 L8.26 11.99 L7.25 11.8 L6.24 11.99 L5.49 12.45 L4.88 13.05 L4.26 13.65 L3.51 14.11 L2.5 14.3ZM2.5 17.7 L3.51 17.51 L4.26 17.05 L4.88 16.45 L5.49 15.85 L6.24 15.39 L7.25 15.2 L8.26 15.39 L9.01 15.85 L9.62 16.45 L10.24 17.05 L10.99 17.51 L12 17.7 L13.01 17.51 L13.76 17.05 L14.38 16.45 L14.99 15.85 L15.74 15.39 L16.75 15.2 L17.76 15.39 L18.51 15.85 L19.12 16.45 L19.74 17.05 L20.49 17.51 L21.5 17.7 L21.5 19.8 L20.49 19.61 L19.74 19.15 L19.12 18.55 L18.51 17.95 L17.76 17.49 L16.75 17.3 L15.74 17.49 L14.99 17.95 L14.38 18.55 L13.76 19.15 L13.01 19.61 L12 19.8 L10.99 19.61 L10.24 19.15 L9.62 18.55 L9.01 17.95 L8.26 17.49 L7.25 17.3 L6.24 17.49 L5.49 17.95 L4.88 18.55 L4.26 19.15 L3.51 19.61 L2.5 19.8Z"]},"cat-physical":{"vb":"0 0 24 24","d":["M15 13V5A3 3 0 0 0 9 5V13A5 5 0 1 0 15 13M12 4A1 1 0 0 1 13 5V8H11V5A1 1 0 0 1 12 4Z"]},"cat-nutrients":{"vb":"0 0 24 24","d":["M5,19A1,1 0 0,0 6,20H18A1,1 0 0,0 19,19C19,18.79 18.93,18.59 18.82,18.43L13,8.35V4H11V8.35L5.18,18.43C5.07,18.59 5,18.79 5,19M6,22A3,3 0 0,1 3,19C3,18.4 3.18,17.84 3.5,17.37L9,7.81V6A1,1 0 0,1 8,5V4A2,2 0 0,1 10,2H14A2,2 0 0,1 16,4V5A1,1 0 0,1 15,6V7.81L20.5,17.37C20.82,17.84 21,18.4 21,19A3,3 0 0,1 18,22H6M13,16L14.34,14.66L16.27,18H7.73L10.39,13.39L13,16M12.5,12A0.5,0.5 0 0,1 13,12.5A0.5,0.5 0 0,1 12.5,13A0.5,0.5 0 0,1 12,12.5A0.5,0.5 0 0,1 12.5,12Z"]},"cat-carbonate":{"vb":"0 0 24 24","d":["M5,7A2,2 0 0,0 3,9V15A2,2 0 0,0 5,17H8V15H5V9H8V7H5M11,7A2,2 0 0,0 9,9V15A2,2 0 0,0 11,17H13A2,2 0 0,0 15,15V9A2,2 0 0,0 13,7H11M11,9H13V15H11V9M16,10.5V12H19V13.5H17.5A1.5,1.5 0 0,0 16,15V18H20.5V16.5H17.5V15H19A1.5,1.5 0 0,0 20.5,13.5V12A1.5,1.5 0 0,0 19,10.5H16Z"]},"cat-productivity":{"vb":"0 0 24 24","d":["M3.55 19.09L4.96 20.5L6.76 18.71L5.34 17.29M12 6C8.69 6 6 8.69 6 12S8.69 18 12 18 18 15.31 18 12C18 8.68 15.31 6 12 6M20 13H23V11H20M17.24 18.71L19.04 20.5L20.45 19.09L18.66 17.29M20.45 5L19.04 3.6L17.24 5.39L18.66 6.81M13 1H11V4H13M6.76 5.39L4.96 3.6L3.55 5L5.34 6.81L6.76 5.39M1 13H4V11H1M13 20H11V23H13"]},"cat-meteorology":{"vb":"0 0 24 24","d":["M12.74,5.47C15.1,6.5 16.35,9.03 15.92,11.46C17.19,12.56 18,14.19 18,16V16.17C18.31,16.06 18.65,16 19,16A3,3 0 0,1 22,19A3,3 0 0,1 19,22H6A4,4 0 0,1 2,18A4,4 0 0,1 6,14H6.27C5,12.45 4.6,10.24 5.5,8.26C6.72,5.5 9.97,4.24 12.74,5.47M11.93,7.3C10.16,6.5 8.09,7.31 7.31,9.07C6.85,10.09 6.93,11.22 7.41,12.13C8.5,10.83 10.16,10 12,10C12.7,10 13.38,10.12 14,10.34C13.94,9.06 13.18,7.86 11.93,7.3M13.55,3.64C13,3.4 12.45,3.23 11.88,3.12L14.37,1.82L15.27,4.71C14.76,4.29 14.19,3.93 13.55,3.64M6.09,4.44C5.6,4.79 5.17,5.19 4.8,5.63L4.91,2.82L7.87,3.5C7.25,3.71 6.65,4.03 6.09,4.44M18,9.71C17.91,9.12 17.78,8.55 17.59,8L19.97,9.5L17.92,11.73C18.03,11.08 18.05,10.4 18,9.71M3.04,11.3C3.11,11.9 3.24,12.47 3.43,13L1.06,11.5L3.1,9.28C3,9.93 2.97,10.61 3.04,11.3M19,18H16V16A4,4 0 0,0 12,12A4,4 0 0,0 8,16H6A2,2 0 0,0 4,18A2,2 0 0,0 6,20H19A1,1 0 0,0 20,19A1,1 0 0,0 19,18Z"]},"cat-phytoplankton":{"vb":"0 0 24 24","d":["M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20zm0 2a8 8 0 0 0-7.7 6H11V4.1c.3 0 .7-.1 1-.1zm1 .1V10h6.7A8 8 0 0 0 13 4.1zM4.3 13A8 8 0 0 0 11 19.9V13H4.3zm8.7 6.9A8 8 0 0 0 19.7 13H13v6.9z"]},"cat-picoplankton":{"vb":"0 0 24 24","d":["M9,2H7V4.1C6.29,4.25 5.73,4.54 5.32,4.91L2.7,2.29L1.29,3.71L4.24,6.65C4,7.39 4,8 4,8H2V10H4.04C4.1,10.63 4.21,11.36 4.4,12.15L1.68,13.05L2.31,14.95L5,14.05C5.24,14.56 5.5,15.08 5.82,15.58L3.44,17.17L4.55,18.83L7.07,17.15C7.63,17.71 8.29,18.21 9.06,18.64L8.1,20.55L9.89,21.45L10.89,19.45L10.73,19.36C11.68,19.68 12.76,19.9 14,19.97V22H16V19.93C16.76,19.84 17.81,19.64 18.77,19.19L20.29,20.71L21.7,19.29L20.37,17.95C20.75,17.44 21,16.8 21,16C21,15.5 20.95,15.08 20.88,14.68L22.45,13.9L21.55,12.1L20.18,12.79C19.63,11.96 18.91,11.5 18.29,11.28L18.95,9.32L17.05,8.68L16.29,10.96C14.96,10.83 14.17,10.32 13.7,9.77L15.45,8.9L14.55,7.1L13,7.89C12.97,7.59 12.86,6.72 12.28,5.87L13.83,3.55L12.17,2.44L10.76,4.56C10.28,4.33 9.7,4.15 9,4.06M15,18C12.06,18 9.81,17.18 8.31,15.56C5.68,12.72 6,8.2 6,8.17V8.11L6,8.03C6,7.1 6.39,6 8,6C10.63,6 10.97,7.43 11,8C11,10 12.6,13 17,13C17.33,13 19,13.15 19,16C19,17.89 15.03,18 15,18M8.5,8A1.5,1.5 0 0,0 7,9.5A1.5,1.5 0 0,0 8.5,11A1.5,1.5 0 0,0 10,9.5A1.5,1.5 0 0,0 8.5,8M11,12A1,1 0 0,0 10,13A1,1 0 0,0 11,14A1,1 0 0,0 12,13A1,1 0 0,0 11,12M15.5,14A1.5,1.5 0 0,0 14,15.5A1.5,1.5 0 0,0 15.5,17A1.5,1.5 0 0,0 17,15.5A1.5,1.5 0 0,0 15.5,14Z"]},"cat-zooplankton":{"vb":"0 0 24 24","d":["M12 3 L12.92 3.13 L13.69 3.5 L14.32 4.08 L14.81 4.84 L15.16 5.75 L15.37 6.78 L15.44 7.9 L15.36 9.08 L15.15 10.29 L14.8 11.5 L14.47 12.01 L13.99 12.41 L13.39 12.7 L12.71 12.87 L12 12.93 L11.29 12.87 L10.61 12.7 L10.01 12.41 L9.53 12.01 L9.2 11.5 L8.85 10.29 L8.64 9.08 L8.56 7.9 L8.63 6.78 L8.84 5.75 L9.19 4.84 L9.68 4.08 L10.31 3.5 L11.08 3.13 L12 3ZM10.15 6.75 L8.26 6.63 L8.35 5.14 L10.25 5.25ZM8.42 6.63 L6.58 6.89 L6.37 5.41 L8.2 5.14ZM6.74 6.85 L4.99 7.53 L4.45 6.13 L6.21 5.45ZM5.14 7.45 L3.47 8.56 L2.64 7.31 L4.3 6.2ZM3.59 8.47 L2.03 10.03 L0.97 8.97 L2.53 7.41ZM9.45 6a0.75 0.75 0 1 1 1.5 0a0.75 0.75 0 1 1 -1.5 0ZM7.56 5.88a0.75 0.75 0 1 1 1.5 0a0.75 0.75 0 1 1 -1.5 0ZM5.73 6.15a0.75 0.75 0 1 1 1.5 0a0.75 0.75 0 1 1 -1.5 0ZM3.97 6.83a0.75 0.75 0 1 1 1.5 0a0.75 0.75 0 1 1 -1.5 0ZM2.31 7.94a0.75 0.75 0 1 1 1.5 0a0.75 0.75 0 1 1 -1.5 0ZM0.75 9.5a0.75 0.75 0 1 1 1.5 0a0.75 0.75 0 1 1 -1.5 0ZM13.75 5.25 L15.65 5.14 L15.74 6.63 L13.85 6.75ZM15.8 5.14 L17.63 5.41 L17.42 6.89 L15.58 6.63ZM17.79 5.45 L19.55 6.13 L19.01 7.53 L17.26 6.85ZM19.7 6.2 L21.36 7.31 L20.53 8.56 L18.86 7.45ZM21.47 7.41 L23.03 8.97 L21.97 10.03 L20.41 8.47ZM13.05 6a0.75 0.75 0 1 1 1.5 0a0.75 0.75 0 1 1 -1.5 0ZM14.94 5.88a0.75 0.75 0 1 1 1.5 0a0.75 0.75 0 1 1 -1.5 0ZM16.77 6.15a0.75 0.75 0 1 1 1.5 0a0.75 0.75 0 1 1 -1.5 0ZM18.53 6.83a0.75 0.75 0 1 1 1.5 0a0.75 0.75 0 1 1 -1.5 0ZM20.19 7.94a0.75 0.75 0 1 1 1.5 0a0.75 0.75 0 1 1 -1.5 0ZM21.75 9.5a0.75 0.75 0 1 1 1.5 0a0.75 0.75 0 1 1 -1.5 0ZM10.9 13.4 L13.1 13.4 L13.1 15.2 L10.9 15.2ZM10.9 15.6 L13.1 15.6 L13.1 17.4 L10.9 17.4ZM10.9 17.8 L13.1 17.8 L13.1 19.6 L10.9 19.6ZM12.16 19.93 L10.36 22.93 L9.24 22.27 L11.04 19.27ZM10.95 19.6a0.65 0.65 0 1 1 1.3 0a0.65 0.65 0 1 1 -1.3 0ZM9.15 22.6a0.65 0.65 0 1 1 1.3 0a0.65 0.65 0 1 1 -1.3 0ZM12.96 19.27 L14.76 22.27 L13.64 22.93 L11.84 19.93ZM11.75 19.6a0.65 0.65 0 1 1 1.3 0a0.65 0.65 0 1 1 -1.3 0ZM13.55 22.6a0.65 0.65 0 1 1 1.3 0a0.65 0.65 0 1 1 -1.3 0Z"]},"cat-krill":{"vb":"0 0 24 24","d":["M3 11 L3.1 10.02 L3.39 9.19 L3.84 8.49 L4.42 7.92 L5.12 7.47 L5.92 7.14 L6.77 6.91 L7.67 6.79 L8.59 6.75 L9.5 6.8 L10.34 6.91 L11.07 7.12 L11.69 7.42 L12.2 7.79 L12.62 8.22 L12.96 8.72 L13.2 9.25 L13.37 9.81 L13.47 10.4 L13.5 11 L13.44 11.66 L13.27 12.26 L12.99 12.79 L12.6 13.26 L12.12 13.66 L11.56 14 L10.9 14.26 L10.17 14.45 L9.37 14.56 L8.5 14.6 L7.62 14.57 L6.78 14.47 L5.99 14.29 L5.27 14.05 L4.62 13.74 L4.07 13.35 L3.62 12.88 L3.28 12.33 L3.07 11.71 L3 11ZM12.57 8.4 L13.86 8.47 L13.72 11.26 L12.43 11.2ZM14.02 8.48 L15.19 8.68 L14.74 11.44 L13.56 11.25ZM15.37 8.72 L16.43 9.04 L15.62 11.72 L14.56 11.4ZM16.62 9.12 L17.57 9.56 L16.38 12.1 L15.43 11.65ZM17.76 9.67 L18.61 10.24 L17.04 12.56 L16.2 11.99ZM18.78 10.37 L19.52 11.06 L17.62 13.12 L16.87 12.43ZM19.66 11.21 L20.31 12.02 L18.12 13.77 L17.48 12.96ZM20.42 12.18 L20.97 13.1 L18.57 14.54 L18.01 13.62ZM21.05 13.25 L21.51 14.29 L18.95 15.42 L18.49 14.39ZM21.56 14.42 L21.93 15.57 L19.27 16.43 L18.9 15.29ZM12.39 9.87a1.4 1.4 0 1 1 2.8 0a1.4 1.4 0 1 1 -2.8 0ZM13.56 10.06a1.4 1.4 0 1 1 2.8 0a1.4 1.4 0 1 1 -2.8 0ZM14.63 10.38a1.4 1.4 0 1 1 2.8 0a1.4 1.4 0 1 1 -2.8 0ZM15.58 10.83a1.4 1.4 0 1 1 2.8 0a1.4 1.4 0 1 1 -2.8 0ZM16.43 11.4a1.4 1.4 0 1 1 2.8 0a1.4 1.4 0 1 1 -2.8 0ZM17.17 12.09a1.4 1.4 0 1 1 2.8 0a1.4 1.4 0 1 1 -2.8 0ZM17.82 12.9a1.4 1.4 0 1 1 2.8 0a1.4 1.4 0 1 1 -2.8 0ZM18.37 13.82a1.4 1.4 0 1 1 2.8 0a1.4 1.4 0 1 1 -2.8 0ZM18.83 14.85a1.4 1.4 0 1 1 2.8 0a1.4 1.4 0 1 1 -2.8 0ZM19.2 16a1.4 1.4 0 1 1 2.8 0a1.4 1.4 0 1 1 -2.8 0ZM19.6 15 L23.2 12.8 L23.4 15 L21 16.2ZM19.6 17 L23.4 17.6 L22.4 19.6 L19.8 18ZM3.09 9.51 L0.69 5.51 L1.71 4.89 L4.11 8.89ZM3 9.2a0.6 0.6 0 1 1 1.2 0a0.6 0.6 0 1 1 -1.2 0ZM0.6 5.2a0.6 0.6 0 1 1 1.2 0a0.6 0.6 0 1 1 -1.2 0ZM4.23 8.2 L2.63 3.7 L3.77 3.3 L5.37 7.8ZM4.2 8a0.6 0.6 0 1 1 1.2 0a0.6 0.6 0 1 1 -1.2 0ZM2.6 3.5a0.6 0.6 0 1 1 1.2 0a0.6 0.6 0 1 1 -1.2 0ZM7.13 14.37 L6.13 17.97 L4.87 17.63 L5.87 14.03ZM5.85 14.2a0.65 0.65 0 1 1 1.3 0a0.65 0.65 0 1 1 -1.3 0ZM4.85 17.8a0.65 0.65 0 1 1 1.3 0a0.65 0.65 0 1 1 -1.3 0ZM10.14 14.32 L9.44 17.92 L8.16 17.68 L8.86 14.08ZM8.85 14.2a0.65 0.65 0 1 1 1.3 0a0.65 0.65 0 1 1 -1.3 0ZM8.15 17.8a0.65 0.65 0 1 1 1.3 0a0.65 0.65 0 1 1 -1.3 0ZM13.85 13.47 L13.45 17.27 L12.15 17.13 L12.55 13.33ZM12.55 13.4a0.65 0.65 0 1 1 1.3 0a0.65 0.65 0 1 1 -1.3 0ZM12.15 17.2a0.65 0.65 0 1 1 1.3 0a0.65 0.65 0 1 1 -1.3 0ZM16.85 13.43 L16.65 17.23 L15.35 17.17 L15.55 13.37ZM15.55 13.4a0.65 0.65 0 1 1 1.3 0a0.65 0.65 0 1 1 -1.3 0ZM15.35 17.2a0.65 0.65 0 1 1 1.3 0a0.65 0.65 0 1 1 -1.3 0ZM4.65 10.2a0.95 0.95 0 1 0 1.9 0a0.95 0.95 0 1 0 -1.9 0Z"]},"cat-ichthyo":{"vb":"0 0 24 24","d":["M12 4C14.32 4 17.5 10.7 17.5 14.5C17.5 17.53 15.03 20 12 20S6.5 17.53 6.5 14.5C6.5 10.7 9.68 4 12 4M12 2C7.86 2 4.5 10.36 4.5 14.5C4.5 18.64 7.86 22 12 22S19.5 18.64 19.5 14.5C19.5 10.36 16.14 2 12 2Z"]},"cat-fish":{"vb":"0 0 24 24","d":["M12,20L12.76,17C9.5,16.79 6.59,15.4 5.75,13.58C5.66,14.06 5.53,14.5 5.33,14.83C4.67,16 3.33,16 2,16C3.1,16 3.5,14.43 3.5,12.5C3.5,10.57 3.1,9 2,9C3.33,9 4.67,9 5.33,10.17C5.53,10.5 5.66,10.94 5.75,11.42C6.4,10 8.32,8.85 10.66,8.32L9,5C11,5 13,5 14.33,5.67C15.46,6.23 16.11,7.27 16.69,8.38C19.61,9.08 22,10.66 22,12.5C22,14.38 19.5,16 16.5,16.66C15.67,17.76 14.86,18.78 14.17,19.33C13.33,20 12.67,20 12,20M17,11A1,1 0 0,0 16,12A1,1 0 0,0 17,13A1,1 0 0,0 18,12A1,1 0 0,0 17,11Z"]},"cat-birds-mammals":{"vb":"0 0 24 24","d":["M23 11.5L19.95 10.37C19.69 9.22 19.04 8.56 19.04 8.56C17.4 6.92 14.75 6.92 13.11 8.56L11.63 10.04L5 3C4 7 5 11 7.45 14.22L2 19.5C2 19.5 10.89 21.5 16.07 17.45C18.83 15.29 19.45 14.03 19.84 12.7L23 11.5M17.71 11.72C17.32 12.11 16.68 12.11 16.29 11.72C15.9 11.33 15.9 10.7 16.29 10.31C16.68 9.92 17.32 9.92 17.71 10.31C18.1 10.7 18.1 11.33 17.71 11.72Z"]},"cat-whale":{"vb":"0 0 24 24","d":["M1.5 12.8 L1.57 12.01 L1.77 11.31 L2.1 10.7 L2.55 10.18 L3.11 9.75 L3.79 9.4 L4.57 9.13 L5.46 8.95 L6.43 8.84 L7.5 8.8 L8.66 8.81 L9.73 8.85 L10.72 8.89 L11.64 8.92 L12.5 8.95 L13.3 8.95 L14.04 8.92 L14.73 8.84 L15.38 8.7 L16 8.5 L16.33 8.34 L16.62 8.17 L16.86 7.99 L17.05 7.79 L17.21 7.58 L17.34 7.34 L17.44 7.09 L17.51 6.81 L17.56 6.52 L17.6 6.2 L13.9 3.9 L14.3 1.8 L19.2 3.9 L23.2 1.3 L23.9 3.2 L20.9 6.6 L20.61 7.1 L20.45 7.71 L20.23 8.32 L19.94 8.92 L19.6 9.53 L19.2 10.12 L18.73 10.71 L18.21 11.29 L17.63 11.85 L17 12.4 L16.37 13.05 L15.68 13.68 L14.93 14.28 L14.12 14.83 L13.25 15.32 L12.32 15.76 L11.33 16.11 L10.28 16.37 L9.17 16.54 L8 16.6 L7.12 16.57 L6.27 16.49 L5.46 16.35 L4.7 16.13 L4 15.83 L3.36 15.43 L2.78 14.94 L2.27 14.35 L1.84 13.64 L1.5 12.8ZM11.8 16.3 L9.2 19.7 L7.6 16ZM3.6 11.7a1 1 0 1 0 2 0a1 1 0 1 0 -2 0Z"]},"cat-genomics":{"vb":"0 0 24 24","d":["M4,2H6V4C6,5.44 6.68,6.61 7.88,7.78C8.74,8.61 9.89,9.41 11.09,10.2L9.26,11.39C8.27,10.72 7.31,10 6.5,9.21C5.07,7.82 4,6.1 4,4V2M18,2H20V4C20,6.1 18.93,7.82 17.5,9.21C16.09,10.59 14.29,11.73 12.54,12.84C10.79,13.96 9.09,15.05 7.88,16.22C6.68,17.39 6,18.56 6,20V22H4V20C4,17.9 5.07,16.18 6.5,14.79C7.91,13.41 9.71,12.27 11.46,11.16C13.21,10.04 14.91,8.95 16.12,7.78C17.32,6.61 18,5.44 18,4V2M14.74,12.61C15.73,13.28 16.69,14 17.5,14.79C18.93,16.18 20,17.9 20,20V22H18V20C18,18.56 17.32,17.39 16.12,16.22C15.26,15.39 14.11,14.59 12.91,13.8L14.74,12.61M7,3H17V4L16.94,4.5H7.06L7,4V3M7.68,6H16.32C16.08,6.34 15.8,6.69 15.42,7.06L14.91,7.5H9.07L8.58,7.06C8.2,6.69 7.92,6.34 7.68,6M9.09,16.5H14.93L15.42,16.94C15.8,17.31 16.08,17.66 16.32,18H7.68C7.92,17.66 8.2,17.31 8.58,16.94L9.09,16.5M7.06,19.5H16.94L17,20V21H7V20L7.06,19.5Z"]},"cat-other":{"vb":"0 0 24 24","d":["M12 3C7.58 3 4 4.79 4 7V17C4 19.21 7.59 21 12 21S20 19.21 20 17V7C20 4.79 16.42 3 12 3M18 17C18 17.5 15.87 19 12 19S6 17.5 6 17V14.77C7.61 15.55 9.72 16 12 16S16.39 15.55 18 14.77V17M18 12.45C16.7 13.4 14.42 14 12 14C9.58 14 7.3 13.4 6 12.45V9.64C7.47 10.47 9.61 11 12 11C14.39 11 16.53 10.47 18 9.64V12.45M12 9C8.13 9 6 7.5 6 7S8.13 5 12 5C15.87 5 18 6.5 18 7S15.87 9 12 9Z"]},"ui-download":{"vb":"0 0 24 24","d":["M5,20H19V18H5M19,9H15V3H9V9H5L12,16L19,9Z"]},"ui-sql":{"vb":"0 0 24 24","d":["M12,8A4,4 0 0,1 16,12A4,4 0 0,1 12,16A4,4 0 0,1 8,12A4,4 0 0,1 12,8M12,10A2,2 0 0,0 10,12A2,2 0 0,0 12,14A2,2 0 0,0 14,12A2,2 0 0,0 12,10M10,22C9.75,22 9.54,21.82 9.5,21.58L9.13,18.93C8.5,18.68 7.96,18.34 7.44,17.94L4.95,18.95C4.73,19.03 4.46,18.95 4.34,18.73L2.34,15.27C2.21,15.05 2.27,14.78 2.46,14.63L4.57,12.97L4.5,12L4.57,11L2.46,9.37C2.27,9.22 2.21,8.95 2.34,8.73L4.34,5.27C4.46,5.05 4.73,4.96 4.95,5.05L7.44,6.05C7.96,5.66 8.5,5.32 9.13,5.07L9.5,2.42C9.54,2.18 9.75,2 10,2H14C14.25,2 14.46,2.18 14.5,2.42L14.87,5.07C15.5,5.32 16.04,5.66 16.56,6.05L19.05,5.05C19.27,4.96 19.54,5.05 19.66,5.27L21.66,8.73C21.79,8.95 21.73,9.22 21.54,9.37L19.43,11L19.5,12L19.43,13L21.54,14.63C21.73,14.78 21.79,15.05 21.66,15.27L19.66,18.73C19.54,18.95 19.27,19.04 19.05,18.95L16.56,17.95C16.04,18.34 15.5,18.68 14.87,18.93L14.5,21.58C14.46,21.82 14.25,22 14,22H10M11.25,4L10.88,6.61C9.68,6.86 8.62,7.5 7.85,8.39L5.44,7.35L4.69,8.65L6.8,10.2C6.4,11.37 6.4,12.64 6.8,13.8L4.68,15.36L5.43,16.66L7.86,15.62C8.63,16.5 9.68,17.14 10.87,17.38L11.24,20H12.76L13.13,17.39C14.32,17.14 15.37,16.5 16.14,15.62L18.57,16.66L19.32,15.36L17.2,13.81C17.6,12.64 17.6,11.37 17.2,10.2L19.31,8.65L18.56,7.35L16.15,8.39C15.38,7.5 14.32,6.86 13.12,6.62L12.75,4H11.25Z"]},"ui-copy":{"vb":"0 0 24 24","d":["M19,21H8V7H19M19,5H8A2,2 0 0,0 6,7V21A2,2 0 0,0 8,23H19A2,2 0 0,0 21,21V7A2,2 0 0,0 19,5M16,1H4A2,2 0 0,0 2,3V17H4V3H16V1Z"]},"ui-link":{"vb":"0 0 24 24","d":["M10.59,13.41C11,13.8 11,14.44 10.59,14.83C10.2,15.22 9.56,15.22 9.17,14.83C7.22,12.88 7.22,9.71 9.17,7.76V7.76L12.71,4.22C14.66,2.27 17.83,2.27 19.78,4.22C21.73,6.17 21.73,9.34 19.78,11.29L18.29,12.78C18.3,11.96 18.17,11.14 17.89,10.36L18.36,9.88C19.54,8.71 19.54,6.81 18.36,5.64C17.19,4.46 15.29,4.46 14.12,5.64L10.59,9.17C9.41,10.34 9.41,12.24 10.59,13.41M13.41,9.17C13.8,8.78 14.44,8.78 14.83,9.17C16.78,11.12 16.78,14.29 14.83,16.24V16.24L11.29,19.78C9.34,21.73 6.17,21.73 4.22,19.78C2.27,17.83 2.27,14.66 4.22,12.71L5.71,11.22C5.7,12.04 5.83,12.86 6.11,13.65L5.64,14.12C4.46,15.29 4.46,17.19 5.64,18.36C6.81,19.54 8.71,19.54 9.88,18.36L13.41,14.83C14.59,13.66 14.59,11.76 13.41,10.59C13,10.2 13,9.56 13.41,9.17Z"]},"ui-data":{"vb":"0 0 24 24","d":["M12 3C7.58 3 4 4.79 4 7V17C4 19.21 7.59 21 12 21S20 19.21 20 17V7C20 4.79 16.42 3 12 3M18 17C18 17.5 15.87 19 12 19S6 17.5 6 17V14.77C7.61 15.55 9.72 16 12 16S16.39 15.55 18 14.77V17M18 12.45C16.7 13.4 14.42 14 12 14C9.58 14 7.3 13.4 6 12.45V9.64C7.47 10.47 9.61 11 12 11C14.39 11 16.53 10.47 18 9.64V12.45M12 9C8.13 9 6 7.5 6 7S8.13 5 12 5C15.87 5 18 6.5 18 7S15.87 9 12 9Z"]},"ui-years":{"vb":"0 0 24 24","d":["M9,10H7V12H9V10M13,10H11V12H13V10M17,10H15V12H17V10M19,3H18V1H16V3H8V1H6V3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5A2,2 0 0,0 19,3M19,19H5V8H19V19Z"]},"ui-open":{"vb":"0 0 24 24","d":["M14,3V5H17.59L7.76,14.83L9.17,16.24L19,6.41V10H21V3M19,19H5V5H12V3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V12H19V19Z"]},"ui-code":{"vb":"0 0 24 24","d":["M14.6,16.6L19.2,12L14.6,7.4L16,6L22,12L16,18L14.6,16.6M9.4,16.6L4.8,12L9.4,7.4L8,6L2,12L8,18L9.4,16.6Z"]},"ui-external":{"vb":"0 0 24 24","d":["M14,3V5H17.59L7.76,14.83L9.17,16.24L19,6.41V10H21V3M19,19H5V5H12V3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V12H19V19Z"]}};
+const MAPD = {"stations":[{"k":"st0-ln10_hist","l":10.0,"s":0.0,"p":"h","x":-125.43,"y":48.19},{"k":"st20-ln10_hist","l":10.0,"s":20.0,"p":"h","x":-126.95,"y":47.61},{"k":"st40-ln10_hist","l":10.0,"s":40.0,"p":"h","x":-128.65,"y":46.95},{"k":"st60-ln10_hist","l":10.0,"s":60.0,"p":"h","x":-130.32,"y":46.28},{"k":"st80-ln10_hist","l":10.0,"s":80.0,"p":"h","x":-131.98,"y":45.61},{"k":"st100-ln10_hist","l":10.0,"s":100.0,"p":"h","x":-133.61,"y":44.95},{"k":"st0-ln20_hist","l":20.0,"s":0.0,"p":"h","x":-124.48,"y":46.54},{"k":"st20-ln20_hist","l":20.0,"s":20.0,"p":"h","x":-125.63,"y":45.88},{"k":"st40-ln20_hist","l":20.0,"s":40.0,"p":"h","x":-127.28,"y":45.21},{"k":"st60-ln20_hist","l":20.0,"s":60.0,"p":"h","x":-128.9,"y":44.55},{"k":"st80-ln20_hist","l":20.0,"s":80.0,"p":"h","x":-130.51,"y":43.88},{"k":"st100-ln20_hist","l":20.0,"s":100.0,"p":"h","x":-132.09,"y":43.21},{"k":"st120-ln20_hist","l":20.0,"s":120.0,"p":"h","x":-133.67,"y":42.55},{"k":"st0-ln30_hist","l":30.0,"s":0.0,"p":"h","x":-124.04,"y":45.29},{"k":"st20-ln30_hist","l":30.0,"s":20.0,"p":"h","x":-124.72,"y":44.3},{"k":"st40-ln30_hist","l":30.0,"s":40.0,"p":"h","x":-125.95,"y":43.48},{"k":"st60-ln30_hist","l":30.0,"s":60.0,"p":"h","x":-127.52,"y":42.81},{"k":"st80-ln30_hist","l":30.0,"s":80.0,"p":"h","x":-129.08,"y":42.15},{"k":"st100-ln30_hist","l":30.0,"s":100.0,"p":"h","x":-130.63,"y":41.48},{"k":"st120-ln30_hist","l":30.0,"s":120.0,"p":"h","x":-132.16,"y":40.81},{"k":"st140-ln30_hist","l":30.0,"s":140.0,"p":"h","x":-133.67,"y":40.15},{"k":"st20-ln40_hist","l":40.0,"s":20.0,"p":"h","x":-124.5,"y":42.94},{"k":"st40-ln40_hist","l":40.0,"s":40.0,"p":"h","x":-124.89,"y":41.77},{"k":"st60-ln40_hist","l":40.0,"s":60.0,"p":"h","x":-126.18,"y":41.08},{"k":"st80-ln40_hist","l":40.0,"s":80.0,"p":"h","x":-127.7,"y":40.42},{"k":"st100-ln40_hist","l":40.0,"s":100.0,"p":"h","x":-129.21,"y":39.75},{"k":"st120-ln40_hist","l":40.0,"s":120.0,"p":"h","x":-130.69,"y":39.08},{"k":"st140-ln40_hist","l":40.0,"s":140.0,"p":"h","x":-132.17,"y":38.42},{"k":"st100-ln50_hist","l":50.0,"s":100.0,"p":"h","x":-127.83,"y":38.02},{"k":"st120-ln50_hist","l":50.0,"s":120.0,"p":"h","x":-129.28,"y":37.35},{"k":"st140-ln50_hist","l":50.0,"s":140.0,"p":"h","x":-130.72,"y":36.68},{"k":"st140-ln60_hist","l":60.0,"s":140.0,"p":"h","x":-129.31,"y":34.95},{"k":"st160-ln60_hist","l":60.0,"s":160.0,"p":"h","x":-130.71,"y":34.28},{"k":"st180-ln60_hist","l":60.0,"s":180.0,"p":"h","x":-132.1,"y":33.62},{"k":"st200-ln60_hist","l":60.0,"s":200.0,"p":"h","x":-133.47,"y":32.95},{"k":"st140-ln70_hist","l":70.0,"s":140.0,"p":"h","x":-127.95,"y":33.22},{"k":"st160-ln70_hist","l":70.0,"s":160.0,"p":"h","x":-129.32,"y":32.55},{"k":"st180-ln70_hist","l":70.0,"s":180.0,"p":"h","x":-130.68,"y":31.89},{"k":"st200-ln70_hist","l":70.0,"s":200.0,"p":"h","x":-132.02,"y":31.22},{"k":"st140-ln80_hist","l":80.0,"s":140.0,"p":"h","x":-126.62,"y":31.49},{"k":"st160-ln80_hist","l":80.0,"s":160.0,"p":"h","x":-127.96,"y":30.82},{"k":"st180-ln80_hist","l":80.0,"s":180.0,"p":"h","x":-129.3,"y":30.15},{"k":"st200-ln80_hist","l":80.0,"s":200.0,"p":"h","x":-130.62,"y":29.49},{"k":"st120-ln90_hist","l":90.0,"s":120.0,"p":"h","x":-124.47,"y":30.5},{"k":"st140-ln90_hist","l":90.0,"s":140.0,"p":"h","x":-125.33,"y":29.75},{"k":"st160-ln90_hist","l":90.0,"s":160.0,"p":"h","x":-126.65,"y":29.09},{"k":"st180-ln90_hist","l":90.0,"s":180.0,"p":"h","x":-127.96,"y":28.42},{"k":"st200-ln90_hist","l":90.0,"s":200.0,"p":"h","x":-129.26,"y":27.75},{"k":"st20-ln100_hist","l":100.0,"s":20.0,"p":"h","x":-116.85,"y":31.93},{"k":"st40-ln100_hist","l":100.0,"s":40.0,"p":"h","x":-117.45,"y":31.35},{"k":"st60-ln100_hist","l":100.0,"s":60.0,"p":"h","x":-118.79,"y":30.69},{"k":"st80-ln100_hist","l":100.0,"s":80.0,"p":"h","x":-120.12,"y":30.02},{"k":"st100-ln100_hist","l":100.0,"s":100.0,"p":"h","x":-121.44,"y":29.35},{"k":"st120-ln100_hist","l":100.0,"s":120.0,"p":"h","x":-122.76,"y":28.69},{"k":"st140-ln100_hist","l":100.0,"s":140.0,"p":"h","x":-124.06,"y":28.02},{"k":"st160-ln100_hist","l":100.0,"s":160.0,"p":"h","x":-125.36,"y":27.36},{"k":"st180-ln100_hist","l":100.0,"s":180.0,"p":"h","x":-126.65,"y":26.69},{"k":"st200-ln100_hist","l":100.0,"s":200.0,"p":"h","x":-127.93,"y":26.02},{"k":"st0-ln110_hist","l":110.0,"s":0.0,"p":"h","x":-113.79,"y":30.78},{"k":"st20-ln110_hist","l":110.0,"s":20.0,"p":"h","x":-114.38,"y":30.34},{"k":"st40-ln110_hist","l":110.0,"s":40.0,"p":"h","x":-116.34,"y":29.62},{"k":"st60-ln110_hist","l":110.0,"s":60.0,"p":"h","x":-117.64,"y":28.96},{"k":"st80-ln110_hist","l":110.0,"s":80.0,"p":"h","x":-118.95,"y":28.29},{"k":"st100-ln110_hist","l":110.0,"s":100.0,"p":"h","x":-120.25,"y":27.62},{"k":"st120-ln110_hist","l":110.0,"s":120.0,"p":"h","x":-121.55,"y":26.96},{"k":"st140-ln110_hist","l":110.0,"s":140.0,"p":"h","x":-122.83,"y":26.29},{"k":"st160-ln110_hist","l":110.0,"s":160.0,"p":"h","x":-124.11,"y":25.62},{"k":"st180-ln110_hist","l":110.0,"s":180.0,"p":"h","x":-125.38,"y":24.96},{"k":"st0-ln120_hist","l":120.0,"s":0.0,"p":"h","x":-112.79,"y":29.13},{"k":"st20-ln120_hist","l":120.0,"s":20.0,"p":"h","x":-114.49,"y":28.52},{"k":"st40-ln120_hist","l":120.0,"s":40.0,"p":"h","x":-115.31,"y":27.93},{"k":"st60-ln120_hist","l":120.0,"s":60.0,"p":"h","x":-116.52,"y":27.22},{"k":"st80-ln120_hist","l":120.0,"s":80.0,"p":"h","x":-117.8,"y":26.56},{"k":"st100-ln120_hist","l":120.0,"s":100.0,"p":"h","x":-119.08,"y":25.89},{"k":"st120-ln120_hist","l":120.0,"s":120.0,"p":"h","x":-120.36,"y":25.22},{"k":"st140-ln120_hist","l":120.0,"s":140.0,"p":"h","x":-121.62,"y":24.56},{"k":"st160-ln120_hist","l":120.0,"s":160.0,"p":"h","x":-122.88,"y":23.89},{"k":"st-20-ln130_hist","l":130.0,"s":-20.0,"p":"h","x":-110.58,"y":27.49},{"k":"st0-ln130_hist","l":130.0,"s":0.0,"p":"h","x":-111.55,"y":27.49},{"k":"st20-ln130_hist","l":130.0,"s":20.0,"p":"h","x":-112.96,"y":26.23},{"k":"st40-ln130_hist","l":130.0,"s":40.0,"p":"h","x":-114.13,"y":26.12},{"k":"st60-ln130_hist","l":130.0,"s":60.0,"p":"h","x":-115.41,"y":25.49},{"k":"st80-ln130_hist","l":130.0,"s":80.0,"p":"h","x":-116.68,"y":24.83},{"k":"st100-ln130_hist","l":130.0,"s":100.0,"p":"h","x":-117.94,"y":24.16},{"k":"st120-ln130_hist","l":130.0,"s":120.0,"p":"h","x":-119.19,"y":23.49},{"k":"st140-ln130_hist","l":130.0,"s":140.0,"p":"h","x":-120.44,"y":22.83},{"k":"st-20-ln140_hist","l":140.0,"s":-20.0,"p":"h","x":-109.65,"y":26.24},{"k":"st0-ln140_hist","l":140.0,"s":0.0,"p":"h","x":-110.45,"y":25.77},{"k":"st20-ln140_hist","l":140.0,"s":20.0,"p":"h","x":-112.2,"y":24.98},{"k":"st40-ln140_hist","l":140.0,"s":40.0,"p":"h","x":-113.05,"y":24.43},{"k":"st60-ln140_hist","l":140.0,"s":60.0,"p":"h","x":-114.31,"y":23.76},{"k":"st80-ln140_hist","l":140.0,"s":80.0,"p":"h","x":-115.56,"y":23.09},{"k":"st100-ln140_hist","l":140.0,"s":100.0,"p":"h","x":-116.81,"y":22.43},{"k":"st120-ln140_hist","l":140.0,"s":120.0,"p":"h","x":-118.05,"y":21.76},{"k":"st-20-ln150_hist","l":150.0,"s":-20.0,"p":"h","x":-108.36,"y":24.5},{"k":"st0-ln150_hist","l":150.0,"s":0.0,"p":"h","x":-109.4,"y":24.1},{"k":"st20-ln150_hist","l":150.0,"s":20.0,"p":"h","x":-110.84,"y":23.21},{"k":"st40-ln150_hist","l":150.0,"s":40.0,"p":"h","x":-111.99,"y":22.69},{"k":"st60-ln150_hist","l":150.0,"s":60.0,"p":"h","x":-113.23,"y":22.03},{"k":"st80-ln150_hist","l":150.0,"s":80.0,"p":"h","x":-114.47,"y":21.36},{"k":"st100-ln150_hist","l":150.0,"s":100.0,"p":"h","x":-115.7,"y":20.69},{"k":"st-40-ln160_hist","l":160.0,"s":-40.0,"p":"h","x":-106.24,"y":22.91},{"k":"st-20-ln160_hist","l":160.0,"s":-20.0,"p":"h","x":-107.23,"y":22.96},{"k":"st0-ln160_hist","l":160.0,"s":0.0,"p":"h","x":-108.47,"y":22.3},{"k":"st20-ln160_hist","l":160.0,"s":20.0,"p":"h","x":-109.71,"y":21.63},{"k":"st40-ln160_hist","l":160.0,"s":40.0,"p":"h","x":-110.94,"y":20.96},{"k":"st60-ln160_hist","l":160.0,"s":60.0,"p":"h","x":-112.17,"y":20.3},{"k":"st80-ln160_hist","l":160.0,"s":80.0,"p":"h","x":-113.39,"y":19.63},{"k":"st70-ln60","l":60.0,"s":70.0,"p":"e","x":-124.33,"y":37.28},{"k":"st80-ln60","l":60.0,"s":80.0,"p":"e","x":-125.05,"y":36.95},{"k":"st90-ln60","l":60.0,"s":90.0,"p":"e","x":-125.77,"y":36.61},{"k":"st70-ln63.3","l":63.3,"s":70.0,"p":"e","x":-123.91,"y":36.71},{"k":"st100-ln60","l":60.0,"s":100.0,"p":"e","x":-126.49,"y":36.28},{"k":"st80-ln63.3","l":63.3,"s":80.0,"p":"e","x":-124.63,"y":36.37},{"k":"st90-ln63.3","l":63.3,"s":90.0,"p":"e","x":-125.34,"y":36.04},{"k":"st70-ln66.7","l":66.7,"s":70.0,"p":"e","x":-123.49,"y":36.13},{"k":"st100-ln63.3","l":63.3,"s":100.0,"p":"e","x":-126.05,"y":35.71},{"k":"st80-ln66.7","l":66.7,"s":80.0,"p":"e","x":-124.2,"y":35.79},{"k":"st90-ln66.7","l":66.7,"s":90.0,"p":"e","x":-124.91,"y":35.46},{"k":"st70-ln70","l":70.0,"s":70.0,"p":"e","x":-123.07,"y":35.55},{"k":"st100-ln66.7","l":66.7,"s":100.0,"p":"e","x":-125.61,"y":35.13},{"k":"st80-ln70","l":70.0,"s":80.0,"p":"e","x":-123.78,"y":35.22},{"k":"st90-ln70","l":70.0,"s":90.0,"p":"e","x":-124.48,"y":34.88},{"k":"st70-ln73.3","l":73.3,"s":70.0,"p":"e","x":-122.66,"y":34.97},{"k":"st100-ln70","l":70.0,"s":100.0,"p":"e","x":-125.18,"y":34.55},{"k":"st80-ln73.3","l":73.3,"s":80.0,"p":"e","x":-123.36,"y":34.64},{"k":"st90-ln73.3","l":73.3,"s":90.0,"p":"e","x":-124.06,"y":34.31},{"k":"st70-ln76.7","l":76.7,"s":70.0,"p":"s","x":-122.25,"y":34.39},{"k":"st100-ln73.3","l":73.3,"s":100.0,"p":"e","x":-124.75,"y":33.97},{"k":"st80-ln76.7","l":76.7,"s":80.0,"p":"s","x":-122.94,"y":34.06},{"k":"st90-ln76.7","l":76.7,"s":90.0,"p":"s","x":-123.64,"y":33.73},{"k":"st70-ln80","l":80.0,"s":70.0,"p":"s","x":-121.84,"y":33.82},{"k":"st100-ln76.7","l":76.7,"s":100.0,"p":"s","x":-124.33,"y":33.39},{"k":"st80-ln80","l":80.0,"s":80.0,"p":"s","x":-122.53,"y":33.48},{"k":"st90-ln80","l":80.0,"s":90.0,"p":"s","x":-123.22,"y":33.15},{"k":"st70-ln83.3","l":83.3,"s":70.0,"p":"s","x":-121.44,"y":33.24},{"k":"st100-ln80","l":80.0,"s":100.0,"p":"s","x":-123.91,"y":32.82},{"k":"st80-ln83.3","l":83.3,"s":80.0,"p":"s","x":-122.13,"y":32.91},{"k":"st90-ln83.3","l":83.3,"s":90.0,"p":"s","x":-122.81,"y":32.57},{"k":"st70-ln86.7","l":86.7,"s":70.0,"p":"s","x":-121.04,"y":32.66},{"k":"st100-ln83.3","l":83.3,"s":100.0,"p":"s","x":-123.49,"y":32.24},{"k":"st80-ln86.7","l":86.7,"s":80.0,"p":"s","x":-121.72,"y":32.33},{"k":"st110-ln83.3","l":83.3,"s":110.0,"p":"s","x":-124.17,"y":31.91},{"k":"st90-ln86.7","l":86.7,"s":90.0,"p":"s","x":-122.4,"y":31.99},{"k":"st70-ln90","l":90.0,"s":70.0,"p":"s","x":-120.64,"y":32.09},{"k":"st100-ln86.7","l":86.7,"s":100.0,"p":"s","x":-123.07,"y":31.66},{"k":"st80-ln90","l":90.0,"s":80.0,"p":"s","x":-121.32,"y":31.75},{"k":"st110-ln86.7","l":86.7,"s":110.0,"p":"s","x":-123.75,"y":31.33},{"k":"st90-ln90","l":90.0,"s":90.0,"p":"s","x":-121.99,"y":31.42},{"k":"st70-ln93.3","l":93.3,"s":70.0,"p":"s","x":-120.24,"y":31.51},{"k":"st100-ln90","l":90.0,"s":100.0,"p":"s","x":-122.66,"y":31.09},{"k":"st80-ln93.3","l":93.3,"s":80.0,"p":"s","x":-120.92,"y":31.18},{"k":"st110-ln90","l":90.0,"s":110.0,"p":"s","x":-123.33,"y":30.75},{"k":"st90-ln93.3","l":93.3,"s":90.0,"p":"s","x":-121.59,"y":30.84},{"k":"st120-ln90","l":90.0,"s":120.0,"p":"s","x":-124.0,"y":30.42},{"k":"st100-ln93.3","l":93.3,"s":100.0,"p":"s","x":-122.25,"y":30.51},{"k":"st110-ln93.3","l":93.3,"s":110.0,"p":"s","x":-122.92,"y":30.18},{"k":"st120-ln93.3","l":93.3,"s":120.0,"p":"s","x":-123.58,"y":29.84},{"k":"st60-ln60","l":60.0,"s":60.0,"p":"e","x":-123.67,"y":37.53},{"k":"st45-ln60","l":60.0,"s":45.0,"p":"e","x":-122.4,"y":37.97},{"k":"st50-ln60","l":60.0,"s":50.0,"p":"e","x":-122.86,"y":37.86},{"k":"st55-ln60","l":60.0,"s":55.0,"p":"e","x":-123.21,"y":37.74},{"k":"st50-ln63.3","l":63.3,"s":50.0,"p":"e","x":-122.56,"y":37.39},{"k":"st55-ln63.3","l":63.3,"s":55.0,"p":"e","x":-122.83,"y":37.21},{"k":"st60-ln63.3","l":63.3,"s":60.0,"p":"e","x":-123.28,"y":37.0},{"k":"st45-ln66.7","l":66.7,"s":45.0,"p":"e","x":-121.86,"y":36.88},{"k":"st50-ln66.7","l":66.7,"s":50.0,"p":"e","x":-122.09,"y":36.78},{"k":"st55-ln66.7","l":66.7,"s":55.0,"p":"e","x":-122.42,"y":36.62},{"k":"st60-ln66.7","l":66.7,"s":60.0,"p":"e","x":-122.86,"y":36.42},{"k":"st50-ln70","l":70.0,"s":50.0,"p":"e","x":-121.73,"y":36.11},{"k":"st55-ln70","l":70.0,"s":55.0,"p":"e","x":-122.01,"y":36.05},{"k":"st60-ln70","l":70.0,"s":60.0,"p":"e","x":-122.45,"y":35.84},{"k":"st50-ln73.3","l":73.3,"s":50.0,"p":"e","x":-121.29,"y":35.57},{"k":"st55-ln73.3","l":73.3,"s":55.0,"p":"e","x":-121.61,"y":35.47},{"k":"st60-ln73.3","l":73.3,"s":60.0,"p":"e","x":-122.05,"y":35.26},{"k":"st45-ln76.7","l":76.7,"s":45.0,"p":"s","x":-120.65,"y":35.13},{"k":"st50-ln76.7","l":76.7,"s":50.0,"p":"s","x":-120.88,"y":35.06},{"k":"st55-ln76.7","l":76.7,"s":55.0,"p":"s","x":-121.2,"y":34.89},{"k":"st60-ln76.7","l":76.7,"s":60.0,"p":"s","x":-121.64,"y":34.68},{"k":"st45-ln80","l":80.0,"s":45.0,"p":"s","x":-120.04,"y":34.39},{"k":"st50-ln80","l":80.0,"s":50.0,"p":"s","x":-120.45,"y":34.4},{"k":"st55-ln80","l":80.0,"s":55.0,"p":"s","x":-120.8,"y":34.32},{"k":"st35-ln83.3","l":83.3,"s":35.0,"p":"s","x":-118.99,"y":34.05},{"k":"st60-ln80","l":80.0,"s":60.0,"p":"s","x":-121.24,"y":34.11},{"k":"st40-ln83.3","l":83.3,"s":40.0,"p":"s","x":-119.37,"y":34.15},{"k":"st45-ln83.3","l":83.3,"s":45.0,"p":"s","x":-119.71,"y":34.08},{"k":"st50-ln83.3","l":83.3,"s":50.0,"p":"s","x":-120.05,"y":33.9},{"k":"st30-ln86.7","l":86.7,"s":30.0,"p":"s","x":-118.21,"y":33.7},{"k":"st55-ln83.3","l":83.3,"s":55.0,"p":"s","x":-120.41,"y":33.74},{"k":"st35-ln86.7","l":86.7,"s":35.0,"p":"s","x":-118.62,"y":33.78},{"k":"st60-ln83.3","l":83.3,"s":60.0,"p":"s","x":-120.84,"y":33.53},{"k":"st40-ln86.7","l":86.7,"s":40.0,"p":"s","x":-118.98,"y":33.66},{"k":"st45-ln86.7","l":86.7,"s":45.0,"p":"s","x":-119.32,"y":33.49},{"k":"st25-ln90","l":90.0,"s":25.0,"p":"s","x":-117.57,"y":33.33},{"k":"st50-ln86.7","l":86.7,"s":50.0,"p":"s","x":-119.67,"y":33.33},{"k":"st30-ln90","l":90.0,"s":30.0,"p":"s","x":-117.9,"y":33.38},{"k":"st55-ln86.7","l":86.7,"s":55.0,"p":"s","x":-120.01,"y":33.16},{"k":"st35-ln90","l":90.0,"s":35.0,"p":"s","x":-118.23,"y":33.24},{"k":"st60-ln86.7","l":86.7,"s":60.0,"p":"s","x":-120.44,"y":32.95},{"k":"st40-ln90","l":90.0,"s":40.0,"p":"s","x":-118.6,"y":33.1},{"k":"st45-ln90","l":90.0,"s":45.0,"p":"s","x":-118.94,"y":32.92},{"k":"st25-ln93.3","l":93.3,"s":25.0,"p":"s","x":-117.38,"y":33.06},{"k":"st50-ln90","l":90.0,"s":50.0,"p":"s","x":-119.28,"y":32.75},{"k":"st30-ln93.3","l":93.3,"s":30.0,"p":"s","x":-117.53,"y":32.84},{"k":"st55-ln90","l":90.0,"s":55.0,"p":"s","x":-119.62,"y":32.58},{"k":"st35-ln93.3","l":93.3,"s":35.0,"p":"s","x":-117.87,"y":32.68},{"k":"st60-ln90","l":90.0,"s":60.0,"p":"s","x":-120.04,"y":32.38},{"k":"st40-ln93.3","l":93.3,"s":40.0,"p":"s","x":-118.21,"y":32.51},{"k":"st45-ln93.3","l":93.3,"s":45.0,"p":"s","x":-118.55,"y":32.34},{"k":"st50-ln93.3","l":93.3,"s":50.0,"p":"s","x":-118.89,"y":32.18},{"k":"st55-ln93.3","l":93.3,"s":55.0,"p":"s","x":-119.23,"y":32.01},{"k":"st60-ln93.3","l":93.3,"s":60.0,"p":"s","x":-119.65,"y":31.8},{"k":"st110-ln60_hist","l":60.0,"s":110.0,"p":"h","x":-127.57,"y":35.91},{"k":"st110-ln70_hist","l":70.0,"s":110.0,"p":"h","x":-126.4,"y":33.97},{"k":"st110-ln80_hist","l":80.0,"s":110.0,"p":"h","x":-125.24,"y":32.29},{"k":"st80-ln55_hist","l":55.0,"s":80.0,"p":"h","x":-126.14,"y":38.39},{"k":"st60-ln55_hist","l":55.0,"s":60.0,"p":"h","x":-124.64,"y":39.03},{"k":"st40-ln55_hist","l":55.0,"s":40.0,"p":"h","x":-124.22,"y":40.05}],"land":[[[-123.78,49.0],[-123.75,48.95],[-123.63,48.82],[-123.5,48.58],[-123.47,48.6],[-123.46,48.67],[-123.42,48.7],[-123.28,48.46],[-123.31,48.41],[-123.33,48.41],[-123.45,48.43],[-123.57,48.32],[-123.92,48.39],[-124.69,48.6],[-125.12,48.76],[-125.14,48.82],[-124.88,49.0],[-125.36,49.0],[-125.49,48.93],[-125.62,49.0],[-123.78,49.0]],[[-120.31,34.02],[-120.44,34.03],[-120.37,34.07],[-120.31,34.02]],[[-119.44,33.22],[-119.54,33.22],[-119.58,33.28],[-119.48,33.27],[-119.44,33.22]],[[-122.85,47.2],[-122.88,47.19],[-122.91,47.25],[-122.89,47.27],[-122.85,47.2]],[[-122.39,47.4],[-122.4,47.37],[-122.44,47.35],[-122.47,47.39],[-122.51,47.36],[-122.49,47.49],[-122.47,47.49],[-122.39,47.4]],[[-122.5,47.59],[-122.5,47.58],[-122.58,47.62],[-122.55,47.7],[-122.51,47.68],[-122.5,47.59]],[[-122.78,48.67],[-122.77,48.65],[-122.84,48.63],[-122.9,48.66],[-122.89,48.59],[-122.99,48.63],[-123.0,48.65],[-122.9,48.71],[-122.78,48.67]],[[-122.82,48.43],[-122.89,48.43],[-122.92,48.46],[-122.93,48.48],[-122.91,48.54],[-122.87,48.55],[-122.86,48.5],[-122.81,48.45],[-122.82,48.43]],[[-123.01,48.5],[-122.99,48.47],[-123.14,48.51],[-123.16,48.61],[-123.11,48.61],[-123.02,48.54],[-123.01,48.5]],[[-122.57,48.16],[-122.52,48.03],[-122.5,48.08],[-122.37,47.99],[-122.37,47.94],[-122.38,47.92],[-122.41,47.92],[-122.49,47.98],[-122.56,47.99],[-122.6,48.05],[-122.62,48.15],[-122.69,48.17],[-122.75,48.24],[-122.63,48.38],[-122.54,48.32],[-122.54,48.29],[-122.7,48.23],[-122.6,48.2],[-122.57,48.16]],[[-123.37,48.89],[-123.38,48.88],[-123.54,48.95],[-123.6,49.0],[-123.55,49.0],[-123.38,48.91],[-123.37,48.89]],[[-123.44,48.75],[-123.48,48.73],[-123.52,48.75],[-123.58,48.93],[-123.47,48.87],[-123.49,48.85],[-123.42,48.79],[-123.41,48.76],[-123.44,48.75]],[[-118.35,32.83],[-118.41,32.82],[-118.47,32.84],[-118.59,33.01],[-118.56,33.03],[-118.51,32.96],[-118.35,32.83]],[[-118.24,28.94],[-118.29,28.9],[-118.4,29.11],[-118.4,29.16],[-118.37,29.19],[-118.31,29.18],[-118.31,29.13],[-118.25,29.04],[-118.24,28.94]],[[-120.04,33.92],[-120.11,33.9],[-120.17,33.92],[-120.25,34.01],[-120.07,34.03],[-119.98,33.97],[-120.04,33.92]],[[-119.88,34.08],[-119.68,34.03],[-119.57,34.05],[-119.55,34.03],[-119.56,34.01],[-119.81,33.97],[-119.89,33.99],[-119.92,34.07],[-119.88,34.08]],[[-118.35,33.39],[-118.3,33.31],[-118.45,33.32],[-118.49,33.41],[-118.56,33.43],[-118.57,33.46],[-118.55,33.48],[-118.35,33.39]],[[-106.5,21.61],[-106.53,21.53],[-106.61,21.56],[-106.63,21.61],[-106.64,21.7],[-106.6,21.71],[-106.54,21.68],[-106.5,21.61]],[[-110.57,25.0],[-110.54,24.89],[-110.59,24.91],[-110.66,24.97],[-110.7,25.05],[-110.7,25.08],[-110.6,25.04],[-110.57,25.0]],[[-109.81,24.15],[-109.83,24.15],[-109.88,24.2],[-109.89,24.34],[-109.79,24.18],[-109.81,24.15]],[[-113.16,29.05],[-113.16,29.03],[-113.26,29.1],[-113.5,29.31],[-113.58,29.41],[-113.59,29.57],[-113.51,29.56],[-113.42,29.49],[-113.38,29.42],[-113.37,29.34],[-113.2,29.3],[-113.16,29.05]],[[-114.69,31.71],[-114.73,31.7],[-114.79,31.75],[-114.78,31.79],[-114.71,31.76],[-114.69,31.71]],[[-115.17,28.07],[-115.18,28.04],[-115.35,28.1],[-115.26,28.22],[-115.27,28.34],[-115.23,28.37],[-115.2,28.33],[-115.15,28.17],[-115.17,28.07]],[[-111.7,24.39],[-111.71,24.35],[-112.01,24.53],[-111.94,24.55],[-111.86,24.54],[-111.7,24.39]],[[-111.1,26.02],[-111.09,25.97],[-111.14,26.0],[-111.22,25.84],[-111.18,26.04],[-111.09,26.08],[-111.1,26.02]],[[-112.2,29.01],[-112.28,28.77],[-112.36,28.77],[-112.51,28.85],[-112.53,28.89],[-112.47,29.17],[-112.42,29.2],[-112.29,29.24],[-112.2,29.01]],[[-112.06,24.55],[-112.08,24.53],[-112.16,24.65],[-112.18,24.73],[-112.21,24.76],[-112.3,24.79],[-112.22,24.95],[-112.16,25.29],[-112.13,25.22],[-112.19,24.84],[-112.13,24.73],[-112.13,24.65],[-112.06,24.55]],[[-105.0,49.0],[-105.0,19.39],[-105.11,19.56],[-105.29,19.71],[-105.48,19.98],[-105.53,20.08],[-105.57,20.23],[-105.67,20.39],[-105.64,20.44],[-105.54,20.5],[-105.38,20.51],[-105.26,20.58],[-105.25,20.67],[-105.33,20.75],[-105.49,20.78],[-105.51,20.81],[-105.46,20.84],[-105.24,21.12],[-105.23,21.38],[-105.21,21.49],[-105.43,21.62],[-105.53,21.82],[-105.65,21.99],[-105.65,22.33],[-105.79,22.63],[-105.94,22.78],[-106.02,22.83],[-106.23,23.06],[-106.4,23.2],[-106.57,23.45],[-106.73,23.61],[-106.94,23.88],[-107.08,24.02],[-107.76,24.47],[-107.73,24.47],[-107.53,24.36],[-107.49,24.37],[-107.49,24.42],[-107.51,24.49],[-107.55,24.5],[-107.6,24.49],[-107.82,24.54],[-107.95,24.61],[-108.01,24.69],[-108.02,24.78],[-108.21,24.97],[-108.28,25.08],[-108.14,25.02],[-108.04,25.04],[-108.05,25.07],[-108.37,25.19],[-108.47,25.27],[-108.7,25.38],[-108.75,25.42],[-108.79,25.54],[-108.84,25.54],[-108.89,25.51],[-109.03,25.48],[-109.06,25.52],[-109.07,25.55],[-108.97,25.59],[-108.88,25.7],[-108.89,25.73],[-109.01,25.64],[-109.2,25.59],[-109.3,25.63],[-109.39,25.73],[-109.43,26.03],[-109.27,26.24],[-109.2,26.31],[-109.16,26.26],[-109.12,26.25],[-109.15,26.31],[-109.22,26.36],[-109.28,26.53],[-109.48,26.71],[-109.75,26.7],[-109.83,26.77],[-109.89,26.88],[-109.94,27.08],[-110.28,27.16],[-110.48,27.32],[-110.56,27.45],[-110.62,27.65],[-110.58,27.8],[-110.53,27.86],[-110.76,27.92],[-110.85,27.92],[-110.92,27.89],[-111.12,27.97],[-111.28,28.12],[-111.47,28.38],[-111.68,28.47],[-111.83,28.65],[-111.94,28.82],[-112.04,28.9],[-112.16,29.02],[-112.22,29.27],[-112.3,29.32],[-112.38,29.35],[-112.41,29.54],[-112.57,29.72],[-112.74,29.99],[-112.76,30.13],[-112.82,30.3],[-113.06,30.65],[-113.11,30.79],[-113.09,30.94],[-113.12,31.05],[-113.11,31.08],[-113.07,31.06],[-113.04,31.09],[-113.05,31.18],[-113.23,31.26],[-113.48,31.29],[-113.62,31.35],[-113.63,31.47],[-113.76,31.56],[-113.95,31.63],[-114.0,31.53],[-114.15,31.51],[-114.26,31.55],[-114.55,31.73],[-114.7,31.78],[-114.93,31.9],[-114.84,31.8],[-114.79,31.65],[-114.85,31.54],[-114.88,31.16],[-114.76,30.96],[-114.7,30.77],[-114.69,30.62],[-114.63,30.51],[-114.65,30.24],[-114.63,30.16],[-114.55,30.02],[-114.4,29.9],[-114.37,29.83],[-114.18,29.73],[-114.06,29.61],[-113.76,29.37],[-113.55,29.1],[-113.54,29.02],[-113.5,28.93],[-113.38,28.95],[-113.33,28.87],[-113.32,28.81],[-113.26,28.82],[-113.21,28.8],[-113.09,28.51],[-113.03,28.47],[-112.87,28.42],[-112.87,28.29],[-112.8,28.21],[-112.81,28.09],[-112.75,27.99],[-112.76,27.9],[-112.73,27.83],[-112.55,27.66],[-112.33,27.52],[-112.28,27.35],[-112.19,27.19],[-112.0,27.08],[-112.01,26.97],[-111.88,26.84],[-111.86,26.68],[-111.75,26.57],[-111.72,26.56],[-111.7,26.58],[-111.82,26.76],[-111.82,26.87],[-111.8,26.88],[-111.57,26.71],[-111.55,26.58],[-111.47,26.51],[-111.46,26.41],[-111.42,26.35],[-111.4,26.27],[-111.33,26.13],[-111.33,25.93],[-111.29,25.79],[-111.15,25.57],[-111.03,25.53],[-111.01,25.42],[-110.89,25.14],[-110.76,24.99],[-110.69,24.87],[-110.68,24.79],[-110.73,24.67],[-110.73,24.59],[-110.66,24.34],[-110.55,24.21],[-110.42,24.18],[-110.4,24.17],[-110.41,24.13],[-110.37,24.1],[-110.32,24.14],[-110.3,24.19],[-110.33,24.31],[-110.3,24.34],[-110.26,24.34],[-110.02,24.17],[-109.98,24.11],[-109.81,23.94],[-109.78,23.86],[-109.71,23.8],[-109.68,23.66],[-109.51,23.6],[-109.42,23.48],[-109.42,23.41],[-109.46,23.21],[-109.5,23.16],[-109.63,23.08],[-109.73,22.98],[-109.82,22.92],[-109.92,22.89],[-110.01,22.89],[-110.09,23.01],[-110.18,23.34],[-110.36,23.6],[-110.63,23.74],[-110.76,23.88],[-110.9,23.97],[-111.04,24.11],[-111.42,24.33],[-111.58,24.44],[-111.68,24.56],[-111.8,24.54],[-111.85,24.67],[-112.07,24.84],[-112.12,24.93],[-112.13,25.04],[-112.06,25.49],[-112.07,25.57],[-112.11,25.63],[-112.12,25.77],[-112.17,25.91],[-112.38,26.21],[-112.66,26.32],[-113.02,26.58],[-113.12,26.72],[-113.16,26.95],[-113.21,26.86],[-113.27,26.79],[-113.43,26.8],[-113.6,26.72],[-113.7,26.79],[-113.84,26.97],[-114.0,26.99],[-114.11,27.11],[-114.2,27.14],[-114.33,27.16],[-114.45,27.22],[-114.5,27.38],[-114.54,27.43],[-114.99,27.74],[-115.03,27.8],[-115.04,27.84],[-114.82,27.83],[-114.57,27.78],[-114.45,27.8],[-114.3,27.87],[-114.29,27.84],[-114.3,27.78],[-114.14,27.67],[-114.07,27.68],[-114.14,27.73],[-114.18,27.83],[-114.16,27.92],[-114.25,27.91],[-114.27,27.93],[-114.19,28.01],[-114.09,28.22],[-114.05,28.43],[-114.15,28.61],[-114.31,28.73],[-114.94,29.35],[-114.99,29.38],[-115.17,29.43],[-115.67,29.76],[-115.75,29.94],[-115.81,29.96],[-115.79,30.08],[-115.82,30.3],[-115.86,30.36],[-116.0,30.41],[-116.06,30.8],[-116.3,30.97],[-116.33,31.2],[-116.46,31.36],[-116.66,31.56],[-116.67,31.7],[-116.72,31.73],[-116.62,31.76],[-116.62,31.85],[-116.85,32.0],[-116.91,32.2],[-117.06,32.34],[-117.13,32.54],[-117.14,32.65],[-117.18,32.69],[-117.24,32.66],[-117.27,32.81],[-117.26,32.94],[-117.32,33.1],[-117.47,33.3],[-117.79,33.54],[-117.95,33.62],[-118.08,33.72],[-118.16,33.75],[-118.26,33.76],[-118.29,33.71],[-118.41,33.74],[-118.39,33.86],[-118.51,34.02],[-118.6,34.03],[-118.83,34.02],[-119.14,34.11],[-119.24,34.16],[-119.27,34.26],[-119.61,34.42],[-119.71,34.4],[-119.85,34.41],[-120.05,34.47],[-120.48,34.47],[-120.56,34.54],[-120.64,34.58],[-120.62,34.81],[-120.66,34.95],[-120.63,35.08],[-120.66,35.12],[-120.71,35.16],[-120.86,35.21],[-120.88,35.27],[-120.86,35.37],[-120.9,35.43],[-121.02,35.48],[-121.14,35.61],[-121.28,35.68],[-121.34,35.79],[-121.43,35.86],[-121.47,35.93],[-121.66,36.15],[-121.88,36.33],[-121.91,36.43],[-121.92,36.57],[-121.79,36.73],[-121.81,36.85],[-121.88,36.94],[-122.16,36.99],[-122.39,37.21],[-122.41,37.37],[-122.5,37.54],[-122.51,37.77],[-122.45,37.8],[-122.38,37.79],[-122.37,37.66],[-122.3,37.59],[-122.23,37.56],[-122.17,37.5],[-122.07,37.48],[-122.12,37.54],[-122.22,37.73],[-122.3,37.79],[-122.33,37.9],[-122.39,37.96],[-122.31,38.01],[-122.22,38.04],[-122.09,38.05],[-121.72,38.03],[-121.64,38.06],[-121.53,38.06],[-121.63,38.08],[-121.88,38.08],[-122.03,38.12],[-122.15,38.07],[-122.39,38.14],[-122.48,38.11],[-122.49,37.95],[-122.47,37.84],[-122.52,37.83],[-122.58,37.87],[-122.76,37.95],[-122.93,38.06],[-123.0,37.99],[-122.97,38.1],[-122.98,38.23],[-122.88,38.12],[-122.91,38.2],[-122.99,38.28],[-123.05,38.31],[-123.12,38.45],[-123.29,38.54],[-123.42,38.68],[-123.7,38.91],[-123.72,39.11],[-123.82,39.37],[-123.78,39.51],[-123.78,39.62],[-123.83,39.78],[-123.88,39.86],[-124.11,40.09],[-124.32,40.25],[-124.36,40.37],[-124.37,40.49],[-124.28,40.71],[-124.25,40.74],[-124.25,40.7],[-124.22,40.7],[-124.19,40.77],[-124.22,40.77],[-124.22,40.79],[-124.13,40.97],[-124.14,41.16],[-124.07,41.38],[-124.07,41.46],[-124.16,41.72],[-124.24,41.79],[-124.21,41.89],[-124.21,41.98],[-124.36,42.12],[-124.42,42.38],[-124.41,42.58],[-124.54,42.81],[-124.35,43.34],[-124.2,43.42],[-124.23,43.44],[-124.29,43.41],[-124.18,43.65],[-124.15,43.69],[-124.1,44.33],[-124.05,44.43],[-124.07,44.52],[-124.04,44.65],[-124.06,44.78],[-123.95,45.4],[-123.96,45.48],[-123.93,45.58],[-123.96,45.84],[-123.95,46.14],[-123.99,46.22],[-123.96,46.23],[-123.91,46.18],[-123.67,46.18],[-123.52,46.22],[-123.47,46.21],[-123.4,46.16],[-123.22,46.15],[-123.4,46.22],[-123.46,46.27],[-123.65,46.27],[-123.69,46.3],[-123.9,46.27],[-123.96,46.3],[-124.07,46.28],[-124.05,46.37],[-124.04,46.61],[-124.02,46.52],[-123.95,46.43],[-123.89,46.66],[-123.96,46.71],[-124.07,46.74],[-124.11,46.86],[-123.84,46.96],[-123.99,46.98],[-124.04,47.03],[-124.11,47.04],[-124.14,46.95],[-124.2,47.21],[-124.31,47.4],[-124.38,47.66],[-124.46,47.78],[-124.62,47.9],[-124.66,47.97],[-124.7,48.15],[-124.68,48.29],[-124.71,48.38],[-124.63,48.38],[-123.98,48.17],[-123.29,48.12],[-123.16,48.15],[-123.12,48.15],[-123.02,48.08],[-122.97,48.07],[-122.86,48.09],[-122.78,48.14],[-122.74,48.01],[-122.66,47.88],[-122.78,47.74],[-122.8,47.74],[-122.81,47.78],[-122.82,47.79],[-123.05,47.55],[-123.13,47.44],[-123.14,47.39],[-123.14,47.36],[-123.1,47.35],[-122.92,47.41],[-123.07,47.4],[-123.05,47.48],[-122.98,47.56],[-122.76,47.7],[-122.72,47.76],[-122.61,47.84],[-122.59,47.86],[-122.59,47.93],[-122.53,47.92],[-122.51,47.82],[-122.52,47.77],[-122.63,47.69],[-122.61,47.62],[-122.68,47.61],[-122.59,47.53],[-122.56,47.46],[-122.58,47.29],[-122.6,47.27],[-122.65,47.28],[-122.71,47.32],[-122.77,47.22],[-122.83,47.34],[-122.92,47.29],[-122.99,47.17],[-123.03,47.14],[-122.81,47.15],[-122.7,47.11],[-122.6,47.17],[-122.54,47.28],[-122.42,47.31],[-122.35,47.37],[-122.37,47.6],[-122.41,47.65],[-122.38,47.72],[-122.4,47.78],[-122.32,47.93],[-122.24,48.01],[-122.42,48.18],[-122.39,48.08],[-122.49,48.13],[-122.53,48.2],[-122.52,48.23],[-122.4,48.27],[-122.41,48.29],[-122.54,48.41],[-122.66,48.45],[-122.66,48.49],[-122.54,48.49],[-122.5,48.51],[-122.51,48.56],[-122.51,48.67],[-122.55,48.76],[-122.58,48.78],[-122.65,48.76],[-122.69,48.79],[-122.8,49.0],[-123.05,49.0],[-123.06,48.98],[-123.09,49.0],[-105.0,49.0]]]};
+const PRES = {"calcofi_bottle":{"name":"Hydrographic Bottle","cat":"Physical Oceanography","realm":"env","color":"#4dabf7","temporal":"1949-02 to 2021-05","ymin":1949,"ymax":2021,"years":[[1949,911,305760],[1950,1304,422155],[1951,1455,215270],[1952,1482,305001],[1953,1370,272875],[1954,717,135189],[1955,815,243573],[1956,528,148233],[1957,757,197421],[1958,957,251586],[1959,1250,364888],[1960,941,291838],[1961,477,159579],[1962,447,153496],[1963,367,139276],[1964,385,126770],[1965,484,93722],[1966,446,131183],[1967,222,36897],[1968,315,54081],[1969,1730,247283],[1970,43,12453],[1971,40,10753],[1972,1388,292190],[1973,213,18468],[1974,375,88755],[1975,1259,185186],[1976,172,31607],[1977,60,25574],[1978,870,385153],[1980,63,8574],[1981,465,77974],[1982,50,7294],[1983,163,56798],[1984,1448,515957],[1985,352,121796],[1986,349,147496],[1987,616,212836],[1988,746,199840],[1989,340,155986],[1990,292,128991],[1991,314,133493],[1992,314,140703],[1993,292,135094],[1994,264,129577],[1995,259,127696],[1996,283,141910],[1997,274,136642],[1998,411,186443],[1999,263,129406],[2000,264,129691],[2001,264,129731],[2002,265,128721],[2003,310,141315],[2004,281,128881],[2005,297,130903],[2006,297,132675],[2007,303,133494],[2008,298,147935],[2009,321,153833],[2010,321,140958],[2011,321,153672],[2012,282,134741],[2013,326,149705],[2014,257,121749],[2015,311,141634],[2016,348,156965],[2017,333,149553],[2018,294,132552],[2019,241,111999],[2020,250,100511],[2021,122,43661]]},"calcofi_ctd-cast":{"name":"CTD Cast Files","cat":"Physical Oceanography","realm":"env","color":"#3bc9db","temporal":"1993-08 to 2026-07","ymin":1993,"ymax":2026,"years":[[1993,131,187038],[1994,264,380286],[1995,193,272521],[1996,313,402644],[1997,272,372205],[1998,306,397278],[1999,262,369652],[2000,257,350599],[2001,257,340674],[2002,260,335461],[2003,323,405867],[2004,334,446693],[2005,294,388167],[2006,321,407862],[2007,299,390660],[2008,287,355366],[2009,320,463815],[2010,307,491563],[2011,318,528776],[2012,279,412941],[2013,326,504831],[2014,256,397720],[2015,311,529884],[2016,348,533522],[2017,333,500103],[2018,294,419418],[2019,241,328833],[2020,250,353672],[2021,268,328669],[2022,227,370467],[2023,323,404334],[2024,270,335981],[2025,319,375272],[2026,267,212240]]},"calcofi_dic":{"name":"Carbonate Chemistry / DIC","cat":"Carbonate System","realm":"env","color":"#63e6be","temporal":"1983-03 to 2021-07","ymin":1983,"ymax":2021,"years":[[1983,13,64],[1984,59,310],[1985,8,80],[1986,6,62],[1987,6,61],[1988,10,118],[1989,9,98],[1990,11,120],[1991,10,112],[1992,12,144],[1993,5,30],[1994,5,19],[1995,2,8],[1996,4,16],[1997,4,16],[1998,10,38],[1999,4,16],[2000,4,16],[2001,4,16],[2011,5,164],[2012,6,196],[2014,13,270],[2016,27,615],[2017,23,486],[2018,19,203],[2019,17,116],[2020,35,256],[2021,10,58]]},"calcofi_mets":{"name":"Underway Meteorological (METS)","cat":"Meteorology & Sea State","realm":"env","color":"#74c0fc","temporal":"2004-01 to 2022-11","ymin":2004,"ymax":2022,"years":[[2004,3662,7324],[2005,4035,8070],[2009,2738,5476],[2010,3665,11941],[2011,2821,11284],[2012,5818,15357],[2013,8042,32168],[2014,3117,11808],[2015,5589,22353],[2016,7907,61213],[2017,5693,62050],[2018,1968,26948],[2019,4828,49818],[2020,3846,44126],[2021,10890,111312],[2022,3176,30211]]},"calcofi_phyllosoma":{"name":"Phyllosoma (Lobster Larvae)","cat":"Zooplankton","realm":"bio","color":"#f783ac","temporal":"1951-07 to 2009-07","ymin":1951,"ymax":2009,"years":[[1951,30,30],[1952,45,45],[1953,71,71],[1954,71,71],[1955,31,31],[1956,34,34],[1957,32,32],[1958,32,32],[1959,63,63],[1960,47,47],[1961,31,31],[1962,25,25],[1963,38,38],[1964,37,37],[1965,43,43],[1966,67,67],[1969,33,33],[1972,35,35],[1975,76,76],[1978,92,92],[1981,36,36],[1984,36,36],[1985,34,34],[1988,36,36],[1989,35,35],[1990,36,36],[1991,36,36],[1992,36,36],[1993,36,36],[1994,36,36],[1995,36,36],[1996,36,36],[1997,36,36],[1998,36,36],[1999,34,34],[2000,36,36],[2001,36,36],[2002,36,36],[2003,36,36],[2004,44,44],[2005,45,45],[2006,43,43],[2007,32,32],[2008,39,39],[2009,43,43]]},"calcofi_phytoplankton":{"name":"Phytoplankton","cat":"Phytoplankton","realm":"bio","color":"#12b886","temporal":"1996 to 2022","ymin":null,"ymax":null,"years":[]},"cce-lter_euphausiids":{"name":"Euphausiids (Krill)","cat":"Euphausiids (Krill)","realm":"bio","color":"#b197fc","temporal":"1951-01 to 2019-04","ymin":1951,"ymax":2019,"years":[[1951,110,1468],[1952,82,1031],[1953,191,2031],[1954,192,2369],[1955,292,3375],[1956,165,1831],[1957,139,2173],[1958,225,4111],[1959,253,4560],[1960,139,1535],[1961,94,762],[1962,100,890],[1963,149,1407],[1964,115,1012],[1965,116,935],[1966,171,1501],[1967,31,208],[1968,106,913],[1969,489,10542],[1970,44,403],[1972,117,1095],[1974,37,314],[1975,198,1669],[1976,20,109],[1977,119,1599],[1978,493,7307],[1979,104,1162],[1980,97,1036],[1981,105,1078],[1982,97,949],[1983,136,2135],[1984,497,10970],[1985,127,1090],[1986,114,1298],[1987,75,691],[1988,97,1190],[1989,134,1311],[1990,107,1626],[1991,129,1922],[1992,84,919],[1993,100,1279],[1994,91,1135],[1995,83,992],[1996,89,929],[1997,89,881],[1998,111,1599],[1999,116,1341],[2000,111,1195],[2001,80,871],[2002,64,703],[2003,32,452],[2004,25,387],[2005,28,422],[2006,29,384],[2007,20,297],[2008,19,217],[2009,56,712],[2010,26,371],[2011,17,264],[2012,31,460],[2013,22,372],[2014,21,309],[2015,17,408],[2016,33,662],[2017,27,511],[2018,32,536],[2019,17,282]]},"cce-lter_picoplankton-bacteria":{"name":"Picoplankton & Bacteria","cat":"Picoplankton & Bacteria","realm":"bio","color":"#94d82d","temporal":"2004-11 to 2023-07","ymin":2004,"ymax":2023,"years":[[2004,213,826],[2005,925,3462],[2006,927,3472],[2007,875,3023],[2008,870,2953],[2009,914,3389],[2010,867,3296],[2011,908,3397],[2012,663,2511],[2013,909,3636],[2014,792,3163],[2015,896,3532],[2016,907,3489],[2017,915,3513],[2018,869,3273],[2019,783,3038],[2020,682,2715],[2021,777,3029],[2022,647,2519],[2023,672,2566]]},"cce-lter_zoodb":{"name":"ZooDB (Holoplankton Community)","cat":"Zooplankton","realm":"bio","color":"#38d9a9","temporal":"1951-03 to 2015-04","ymin":1951,"ymax":2015,"years":[[1951,19,1881],[1953,22,1683],[1956,10,660],[1958,14,462],[1964,12,396],[1966,19,1254],[1972,14,924],[1974,8,528],[1978,12,396],[1979,11,726],[1980,10,660],[1983,13,429],[1984,9,594],[1986,13,858],[1991,28,2244],[1995,18,1188],[1997,12,792],[1998,22,1617],[1999,2,198],[2008,6,270],[2010,2,198],[2012,64,384],[2015,11,33]]},"cce-lter_zooscan":{"name":"ZooScan (Imaged Zooplankton)","cat":"Zooplankton","realm":"bio","color":"#a9e34b","temporal":"2005-07 to 2026-04","ymin":2005,"ymax":2026,"years":[[2005,36,3062],[2006,76,6450],[2007,66,5584],[2008,64,5384],[2009,77,6560],[2010,72,6132],[2011,80,6632],[2012,54,4638],[2013,73,6290],[2014,68,5892],[2015,78,6684],[2016,60,5202],[2017,75,6298],[2018,77,6404],[2019,75,6144],[2020,59,4804],[2021,77,6472],[2022,51,4498],[2023,77,6814],[2024,79,7020],[2025,83,7414],[2026,26,2314]]},"cdfw_dungeness-crab":{"name":"Dungeness Crab Megalopae","cat":"Zooplankton","realm":"bio","color":"#f76707","temporal":"1984-05 to 2014-05","ymin":1984,"ymax":2014,"years":[[1984,24,24],[1988,10,10],[1998,7,7],[2004,13,13],[2005,15,15],[2006,55,55],[2007,7,7],[2008,102,189],[2009,39,120],[2010,71,288],[2011,41,164],[2012,39,164],[2013,45,180],[2014,55,220]]},"farallon_bird-mammal":{"name":"Seabirds & Marine Mammals","cat":"Seabirds & Marine Mammals","realm":"bio","color":"#ff8787","temporal":"1987-05 to 2022-10","ymin":1987,"ymax":2022,"years":[[1987,955,1862],[1988,1325,2880],[1989,1288,2694],[1990,1239,2799],[1991,1307,2603],[1992,1403,2939],[1993,1284,2619],[1994,578,986],[1995,1219,2262],[1996,738,1574],[1997,842,1748],[1998,1480,3083],[1999,673,1208],[2000,871,1781],[2001,1181,2720],[2002,971,1731],[2003,1962,3877],[2004,1421,2813],[2005,1687,3791],[2006,1291,2628],[2007,703,1435],[2008,534,954],[2009,499,936],[2010,697,1242],[2011,879,1459],[2012,800,1352],[2013,639,1277],[2014,719,1497],[2015,864,1885],[2016,1109,2189],[2017,938,1898],[2018,528,1133],[2019,646,1354],[2020,392,926],[2022,732,1526]]},"sio_mesopelagic-fish":{"name":"Mesopelagic Fish","cat":"Mesopelagic Fish","realm":"bio","color":"#5c7cfa","temporal":"2010-01 to 2012-02","ymin":2010,"ymax":2012,"years":[[2010,22,415],[2011,42,715],[2012,14,263]]},"sio_pic-zooplankton":{"name":"Zooplankton Net Tows","cat":"Zooplankton","realm":"bio","color":"#69db7c","temporal":"1939-05 to 2024-04","ymin":null,"ymax":null,"years":[]},"swfsc_cufes":{"name":"CUFES Fish Eggs","cat":"Fish Eggs & Larvae","realm":"bio","color":"#ffd43b","temporal":"1996-03 to 2022-04","ymin":1996,"ymax":2022,"years":[[1996,2301,6903],[1997,1924,9620],[1998,4876,27380],[1999,1823,10110],[2000,1277,6385],[2001,1455,8203],[2002,1621,9726],[2003,1761,10566],[2004,1428,8568],[2005,961,5766],[2006,2039,12234],[2007,1529,9174],[2008,3210,19260],[2009,1127,6762],[2010,1898,11388],[2011,1618,9708],[2012,2428,14568],[2013,2027,12162],[2014,1423,8538],[2015,2071,12426],[2016,3223,19338],[2017,3034,18204],[2018,2422,14532],[2019,619,3714],[2020,487,2922],[2021,572,3432],[2022,418,2508]]},"swfsc_ichthyo":{"name":"Ichthyoplankton","cat":"Fish Eggs & Larvae","realm":"bio","color":"#ffa94d","temporal":"1951-01 to 2023-01","ymin":1951,"ymax":2023,"years":[[1951,1373,11794],[1952,1481,13383],[1953,1428,11686],[1954,1472,13863],[1955,1302,10771],[1956,1393,9591],[1957,1476,12385],[1958,1871,14728],[1959,2174,17303],[1960,1807,15062],[1961,953,7907],[1962,917,8929],[1963,1007,10298],[1964,1193,11481],[1965,1092,11963],[1966,1974,21613],[1967,258,3109],[1968,319,3716],[1969,1722,18180],[1972,1496,13651],[1974,271,1782],[1975,1389,12470],[1977,89,821],[1978,1147,14294],[1979,246,2860],[1980,961,3773],[1981,1733,13563],[1982,702,2065],[1983,833,3148],[1984,1493,10176],[1985,1327,4880],[1986,587,4318],[1987,770,5215],[1988,806,5359],[1989,859,5082],[1990,673,4261],[1991,657,5432],[1992,417,4412],[1993,292,3506],[1994,513,3895],[1995,503,3575],[1996,389,4004],[1997,423,3573],[1998,660,9336],[1999,456,4960],[2000,458,6722],[2001,349,3611],[2002,612,7809],[2003,706,7877],[2004,575,5482],[2005,566,5127],[2006,629,7919],[2007,337,2904],[2008,545,4203],[2009,432,4167],[2010,452,4445],[2011,414,4919],[2012,495,5257],[2013,461,5792],[2014,352,5154],[2015,436,5818],[2016,389,4971],[2017,374,3413],[2018,146,2015],[2019,164,1966],[2020,102,830],[2021,121,1321],[2022,106,1551],[2023,72,804]]}};
+const NS = 'http://www.w3.org/2000/svg';
+const rm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function el(t, a, parent) {
+  const e = document.createElementNS(NS, t);
+  for (const k in (a || {})) {
+    if (k === 'text') e.textContent = a[k];
+    else if (k === 'cls') e.setAttribute('class', a[k]);
+    else e.setAttribute(k, a[k]);
+  }
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function makeSymbols() {
+  const host = document.getElementById('icons-host');
+  const svg = el('svg', { width: 0, height: 0, style: 'position:absolute;width:0;height:0;overflow:hidden' });
+  const defs = el('defs', {}, svg);
+  for (const [k, v] of Object.entries(ICONS)) {
+    const s = el('symbol', { id: 'i-' + k, viewBox: v.vb }, defs);
+    v.d.forEach(d => el('path', { d }, s));
+  }
+  host.appendChild(svg);
+}
+function smooth(pts) {
+  let d = 'M' + pts[0][0] + ',' + pts[0][1];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[Math.max(i - 1, 0)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(i + 2, pts.length - 1)];
+    const c1 = [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6];
+    const c2 = [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6];
+    d += ' C' + c1[0].toFixed(1) + ',' + c1[1].toFixed(1) + ' ' + c2[0].toFixed(1) + ',' + c2[1].toFixed(1) + ' ' + p2[0] + ',' + p2[1];
+  }
+  return d;
+}
+
+/* ── the categories (metadata/category.csv) with the release's counts ── */
+const CATS = [
+  { n: 'Physical Oceanography', i: 'cat-physical', r: 'env', rel: 2, held: 2, href: 'https://calcofi.org/sampling-info/methods/ctd-faq-circa-2020/' },
+  { n: 'Nutrients & Chemistry', i: 'cat-nutrients', r: 'env', rel: 0, held: 4, href: 'https://calcofi.org/sampling-info/methods/bottle-sampling-methods/' },
+  { n: 'Carbonate System', i: 'cat-carbonate', r: 'env', rel: 1, held: 0, href: 'https://calcofi.org/sampling-info/methods/dic-methods/' },
+  { n: 'Productivity & Pigments', i: 'cat-productivity', r: 'env', rel: 0, held: 4, href: 'https://calcofi.org/sampling-info/methods/primary-production-methods/' },
+  { n: 'Meteorology & Sea State', i: 'cat-meteorology', r: 'env', rel: 1, held: 0, href: 'https://calcofi.org/sampling-info/methods/underway_methods/' },
+  { n: 'Phytoplankton', i: 'cat-phytoplankton', r: 'bio', rel: 1, held: 3, href: 'https://calcofi.org/sampling-info/methods/phytoplankton-bacterioplankton-methods/' },
+  { n: 'Picoplankton & Bacteria', i: 'cat-picoplankton', r: 'bio', rel: 1, held: 0, href: 'https://calcofi.org/sampling-info/methods/phytoplankton-bacterioplankton-methods/' },
+  { n: 'Zooplankton', i: 'cat-zooplankton', r: 'bio', rel: 5, held: 1, href: 'https://calcofi.org/sampling-info/methods/zooplankton-methods/' },
+  { n: 'Euphausiids (Krill)', i: 'cat-krill', r: 'bio', rel: 1, held: 0, href: 'https://calcofi.org/sampling-info/methods/zooplankton-methods/' },
+  { n: 'Fish Eggs & Larvae', i: 'cat-ichthyo', r: 'bio', rel: 2, held: 0, href: 'https://calcofi.org/sampling-info/methods/ichthyoplankton-methods/' },
+  { n: 'Mesopelagic Fish', i: 'cat-fish', r: 'bio', rel: 1, held: 0, href: 'https://calcofi.org/data/marine-ecosystem-data/' },
+  { n: 'Seabirds & Marine Mammals', i: 'cat-birds-mammals', r: 'bio', rel: 1, held: 1, href: 'https://calcofi.org/sampling-info/methods/seabird-methods/' },
+  { n: 'Genomics & eDNA', i: 'cat-genomics', r: 'bio', rel: 0, held: 2, href: 'https://calcofi.org/sampling-info/methods/ncog-methods/' },
+];
+const CAT = Object.fromEntries(CATS.map(c => [c.i, c]));
+
+function buildChips(host) {
+  CATS.forEach(c => {
+    const s = document.createElement('span');
+    s.className = 'chip' + (c.rel === 0 ? ' held' : '');
+    s.setAttribute('tabindex', '0');
+    s.title = c.n + ' — ' + c.rel + ' in the release, ' + c.held + ' held';
+    s.innerHTML = '<svg viewBox="0 0 24 24"><use href="#i-' + c.i + '"></use></svg>' + c.n + ' <span class="n">' + c.rel + (c.held ? ' · ' + c.held : '') + '</span>';
+    host.appendChild(s);
+  });
+}
+
+/* ── the section: Line 90, west on the left, depth broken at 500 m ── */
+function dy(d) { return d <= 500 ? 200 + d * 0.5 : 450 + (d - 500) * 150 / 3500; }
+function sx(st) { return 130 + (120 - st) * 12.5; }
+const STD_DEPTHS = [0, 10, 20, 30, 50, 75, 100, 125, 150, 200, 250, 300, 400, 500];
+const PINS = [
+  { c: 'cat-meteorology', x: 738, y: 84, l: 'METS · wind, air, SST underway' },
+  { c: 'cat-physical', x: 812, y: 458, l: 'CTD · 20 bottles to 515 m', deep: true },
+  { c: 'cat-productivity', x: 815, y: 212, l: 'chlorophyll · 10 m', lead: [778, 205] },
+  { c: 'cat-carbonate', x: 815, y: 250, l: 'DIC · 100 m', lead: [778, 250] },
+  { c: 'cat-nutrients', x: 815, y: 288, l: 'nutrients · 150 m', lead: [778, 275] },
+  { c: 'cat-genomics', x: 740, y: 262, l: 'eDNA · a holding', held: true, lead: [778, 210], side: 'l' },
+  { c: 'cat-zooplankton', x: 560, y: 284, l: 'zooplankton · 0–210 m' },
+  { c: 'cat-krill', x: 440, y: 350, l: 'krill · 300 m by day, up at night' },
+  { c: 'cat-phytoplankton', x: 300, y: 224, l: 'phytoplankton · 0–50 m' },
+  { c: 'cat-picoplankton', x: 225, y: 262, l: 'picoplankton & bacteria · 0–100 m' },
+  { c: 'cat-ichthyo', x: 985, y: 218, l: 'fish eggs & larvae · 0–210 m' },
+  { c: 'cat-fish', x: 370, y: 470, l: 'mesopelagic fish · 200–1,000 m', deep: true },
+  { c: 'cat-whale', x: 1015, y: 190, l: 'marine mammals · surface' },
+  { c: 'cat-birds-mammals', x: 1060, y: 68, l: 'seabirds · flying bridge count' },
+];
+const FLOOR = [[0, 4000], [130, 3950], [330, 3800], [520, 3750], [700, 3500], [820, 2300], [880, 1100], [930, 1500], [990, 1900], [1060, 1500], [1120, 900], [1180, 480], [1220, 180], [1260, 100], [1295, 45], [1312, 0]];
+
+function buildSection(host, opts) {
+  const p = opts.prefix;
+  const svg = el('svg', { viewBox: '0 0 1400 660', cls: 'sec', role: 'img', 'aria-label': 'A cross-section of CalCOFI Line 90: the ship, its instruments at depth, and the life sampled at each depth' });
+  const defs = el('defs', {}, svg);
+  const g1 = el('linearGradient', { id: p + '-sky', x1: 0, y1: 0, x2: 0, y2: 1 }, defs);
+  el('stop', { offset: '0', style: 'stop-color:var(--sky0)' }, g1);
+  el('stop', { offset: '1', style: 'stop-color:var(--sky1)' }, g1);
+  const g2 = el('linearGradient', { id: p + '-water', x1: 0, y1: 0, x2: 0, y2: 1 }, defs);
+  [['0', '--w0'], ['.18', '--w1'], ['.45', '--w2'], ['.7', '--w3'], ['1', '--w4']].forEach(s => el('stop', { offset: s[0], style: 'stop-color:var(' + s[1] + ')' }, g2));
+  el('rect', { x: 0, y: 0, width: 1400, height: 200, fill: 'url(#' + p + '-sky)' }, svg);
+  el('rect', { x: 0, y: 200, width: 1400, height: 400, fill: 'url(#' + p + '-water)' }, svg);
+  el('rect', { x: 0, y: 600, width: 1400, height: 60, fill: 'var(--bg)' }, svg);
+  // faint depth grid
+  [100, 200, 300, 400, 500, 1000, 2000, 3000].forEach(d => el('line', { x1: 80, x2: 1400, y1: dy(d), y2: dy(d), cls: 'grid' }, svg));
+  // the sun / moon
+  el('circle', { cx: 1310, cy: 58, r: 22, cls: 'sun' }, svg);
+  // sea floor + the headland
+  const fp = FLOOR.map(q => [q[0], +dy(q[1]).toFixed(1)]);
+  let fd = smooth(fp) + ' C1318,192 1324,182 1332,177 L1360,173 L1400,171 L1400,660 L0,660 Z';
+  el('path', { d: fd, cls: 'floor' }, svg);
+  // the surface
+  el('line', { x1: 0, x2: 1314, y1: 200, y2: 200, cls: 'surf' }, svg);
+  // CUFES intake track (3 m, trailing astern)
+  el('line', { x1: 150, x2: 612, y1: 201.5, y2: 201.5, cls: 'cufes' }, svg);
+  // the ship (bow to the right, toward the coast)
+  const ship = el('g', { cls: 'ship' }, svg);
+  el('path', { d: 'M600,186 L606,214 L770,214 L800,186 Z' }, ship);               // hull
+  el('rect', { x: 688, y: 158, width: 64, height: 28 }, ship);                    // bridge block
+  el('rect', { x: 700, y: 140, width: 42, height: 18 }, ship);                    // wheelhouse
+  el('rect', { x: 756, y: 166, width: 8, height: 20 }, ship);                     // stack
+  el('line', { x1: 704, x2: 738, y1: 149, y2: 149, cls: 'win' }, ship);           // window strip
+  el('line', { x1: 738, x2: 738, y1: 140, y2: 104, cls: 'wire' }, ship);          // mast
+  el('line', { x1: 727, x2: 749, y1: 110, y2: 110, cls: 'wire' }, ship);          // sensor crossbar
+  el('circle', { cx: 738, cy: 104, r: 3 }, ship);
+  el('path', { d: 'M610,186 L618,152 L630,152 L638,186', cls: 'wire' }, ship);   // stern A-frame
+  el('path', { d: 'M766,186 L766,170 L778,170', cls: 'wire' }, ship);            // CTD davit
+  el('circle', { cx: 721, cy: 134, r: 2.6 }, ship); el('circle', { cx: 727, cy: 134, r: 2.6 }, ship); // observer's binoculars
+  el('line', { x1: 727, x2: 1045, y1: 133, y2: 74, cls: 'thin' }, svg);
+  el('line', { x1: 727, x2: 1000, y1: 135, y2: 192, cls: 'thin' }, svg);
+  // wires and nets
+  el('line', { x1: 778, x2: 778, y1: 170, y2: 457, cls: 'wire' }, svg);          // CTD wire
+  STD_DEPTHS.forEach(d => el('circle', { cx: 778, cy: dy(d), r: 2.6, cls: 'btl' }, svg));
+  const ros = el('g', { cls: 'rosette' }, svg);
+  el('rect', { x: 768, y: 449, width: 20, height: 20, rx: 2, cls: 'ros' }, ros);
+  [773, 778, 783].forEach(x => el('line', { x1: x, x2: x, y1: 452, y2: 466, cls: 'wire' }, ros));
+  el('line', { x1: 624, x2: 474, y1: 152, y2: 305, cls: 'wire' }, svg);          // bongo wire, 45°
+  el('ellipse', { cx: 470, cy: 305, rx: 5, ry: 10, cls: 'net' }, svg);
+  el('ellipse', { cx: 483, cy: 305, rx: 5, ry: 10, cls: 'net' }, svg);
+  el('path', { d: 'M470,295 L422,332 L470,315 M483,295 L438,338 L483,315', cls: 'net' }, svg);
+  el('line', { x1: 648, x2: 648, y1: 186, y2: 235, cls: 'wire' }, svg);          // PairoVET wire
+  el('path', { d: 'M643,235 L653,235 L648,248 Z', cls: 'net' }, svg);
+  el('path', { d: 'M604,190 L588,197', cls: 'wire' }, svg);                       // manta
+  el('path', { d: 'M578,195 h14 v4 h-14 z M578,197 L560,199 L578,199 Z', cls: 'net' }, svg);
+  // krill: diel migration
+  el('path', { d: 'M440,332 L440,212 M436,218 L440,212 L444,218 M436,326 L440,332 L444,326', cls: 'thin' }, svg);
+  // gear labels
+  const gl = [[406, 193, 'CUFES · 3 m, underway', 'end'], [556, 193, 'manta · surface', 'end'], [656, 246, 'PairoVET · 70 m'], [452, 336, 'bongo · 210 m', 'end']];
+  gl.forEach(t => el('text', { x: t[0], y: t[1], cls: 'lab', 'text-anchor': t[3] || 'start', text: t[2] }, svg));
+  // pins
+  PINS.forEach(q => {
+    const c = CAT[q.c] || CAT['cat-birds-mammals'];
+    const a = el('a', { href: c.href, target: '_blank', rel: 'noopener', cls: 'pin' + (q.held ? ' held' : '') }, svg);
+    el('title', { text: c.n + ' — ' + (c.rel ? c.rel + ' dataset' + (c.rel > 1 ? 's' : '') + ' in the release' : 'not yet in the release') + (c.held ? ', ' + c.held + ' held' : '') + ' · methods on calcofi.org' }, a);
+    if (q.lead) el('line', { x1: q.lead[0], y1: q.lead[1], x2: q.x, y2: q.y, cls: 'lead' }, a);
+    el('circle', { cx: q.x, cy: q.y, r: 15 }, a);
+    el('use', { href: '#i-' + q.c, x: q.x - 9, y: q.y - 9, width: 18, height: 18 }, a);
+    el('text', { x: q.side === 'l' ? q.x - 21 : q.x + 21, y: q.y + 4.5, 'text-anchor': q.side === 'l' ? 'end' : 'start', cls: 'lab' + (q.deep ? ' lab-d' : ''), text: q.l }, a);
+  });
+  // axes
+  el('path', { d: 'M80,200 V456 M76,460 L84,464 M80,467 V600', cls: 'axl' }, svg);
+  [[0, '0'], [100, '100'], [200, '200'], [300, '300'], [400, '400'], [500, '500'], [1000, '1,000'], [2000, '2,000'], [3000, '3,000'], [4000, '4,000']].forEach(t => {
+    el('line', { x1: 76, x2: 80, y1: dy(t[0]), y2: dy(t[0]), cls: 'axl' }, svg);
+    el('text', { x: 72, y: dy(t[0]) + 4, cls: 'ax', 'text-anchor': 'end', text: t[1] }, svg);
+  });
+  el('text', { x: 22, y: 400, cls: 'axt', transform: 'rotate(-90 22 400)', 'text-anchor': 'middle', text: 'depth (m)' }, svg);
+  el('line', { x1: 80, x2: 1314, y1: 600, y2: 600, cls: 'axl' }, svg);
+  [120, 110, 100, 90, 80, 70, 60, 53, 45, 37, 35, 30, 28].forEach(st => {
+    el('line', { x1: sx(st), x2: sx(st), y1: 600, y2: 606, cls: 'axl' }, svg);
+    el('text', { x: sx(st), y: 622, cls: 'ax', 'text-anchor': 'middle', text: st }, svg);
+  });
+  el('text', { x: 130, y: 646, cls: 'axt', text: '← offshore' }, svg);
+  el('text', { x: 700, y: 646, cls: 'axt', 'text-anchor': 'middle', text: 'Line 90 · station · 4 nmi per unit' }, svg);
+  el('text', { x: 1280, y: 646, cls: 'axt', 'text-anchor': 'end', text: 'coast →' }, svg);
+  // hero text
+  if (opts.hero) {
+    el('text', { x: 80, y: 46, cls: 'eyeb', text: 'Since 1949 · the California Current · 842 cruises · 49 ships · one grid' }, svg);
+    el('text', { x: 78, y: 122, cls: 'h1', text: 'FROM SHIP TO SCREEN' }, svg);
+    el('text', { x: 80, y: 150, cls: 'ledet', text: 'Temperature to whales, surface to the deep, since 1949 — open and integrated.' }, svg);
+    const cta = el('a', { href: 'https://calcofi.io/explore/', target: '_blank', rel: 'noopener' }, svg);
+    el('rect', { x: 80, y: 162, width: 168, height: 30, rx: 7, cls: 'cta' }, cta);
+    el('text', { x: 164, y: 182, cls: 'ctat', 'text-anchor': 'middle', text: 'Explore the data' }, cta);
+  }
+  host.appendChild(svg);
+}
+
+/* ── the map: equirectangular over lon −134…−105, lat 19…49 ── */
+function px(lon) { return (lon + 134) / 29 * 520; }
+function py(lat) { return (49 - lat) / 30 * 640; }
+function buildMap(host, opts) {
+  const svg = el('svg', { viewBox: '0 0 520 640', cls: 'map', role: 'img', 'aria-label': 'The CalCOFI station grid: 67 standard, 37 extended and 114 historical cells from Washington to the tip of Baja California' });
+  el('rect', { x: 0, y: 0, width: 520, height: 640, cls: 'water' }, svg);
+  MAPD.land.forEach(poly => el('path', { d: 'M' + poly.map(q => px(q[0]).toFixed(1) + ',' + py(q[1]).toFixed(1)).join('L') + 'Z', cls: 'land' }, svg));
+  const byLine = {};
+  MAPD.stations.forEach(s => { if (s.p !== 'h') { (byLine[s.p + s.l] = byLine[s.p + s.l] || []).push(s); } });
+  Object.values(byLine).forEach(arr => {
+    arr.sort((a, b) => a.s - b.s);
+    el('polyline', { points: arr.map(s => px(s.x).toFixed(1) + ',' + py(s.y).toFixed(1)).join(' '), cls: 'trk ' + arr[0].p }, svg);
+  });
+  const stdLines = [93.3, 90, 86.7, 83.3, 80, 76.7];
+  ['h', 'e', 's'].forEach(pat => MAPD.stations.filter(s => s.p === pat).forEach(s => {
+    const cx = px(s.x).toFixed(1), cy = py(s.y).toFixed(1);
+    let delay = '';
+    if (pat === 's') {
+      const li = stdLines.indexOf(s.l);
+      const line = MAPD.stations.filter(t => t.p === 's' && t.l === s.l).sort((a, b) => a.s - b.s);
+      let rank = line.indexOf(s); if (li % 2 === 1) rank = line.length - 1 - rank;
+      delay = '--d:' + (li * 1.7 + rank * 0.07).toFixed(2) + 's';
+      el('circle', { cx, cy, r: 3, cls: 'ring', style: delay }, svg);
+    }
+    const c = el('circle', { cx, cy, r: pat === 's' ? 3 : pat === 'e' ? 2.6 : 2, cls: 'st ' + pat, style: delay }, svg);
+    el('title', { text: 'Line ' + s.l + ' · station ' + s.s + ' · ' + (pat === 's' ? 'standard' : pat === 'e' ? 'extended' : 'historical') }, c);
+  }));
+  // line labels at the west end of three standard lines and one extended
+  [['93.3', 93.3, 's'], ['76.7', 76.7, 's'], ['60', 60, 'e']].forEach(q => {
+    const w = MAPD.stations.filter(s => s.l === q[1] && s.p === q[2]).sort((a, b) => a.x - b.x)[0];
+    if (w) el('text', { x: px(w.x) - 4, y: py(w.y) + 3, cls: 'ln', 'text-anchor': 'end', text: 'line ' + q[0] }, svg);
+  });
+  [['San Diego', -117.16, 32.72, 6, 4], ['Pt. Conception', -120.47, 34.45, -6, -6, 'end'], ['San Francisco', -122.42, 37.77, 6, -4], ['Cabo San Lucas', -109.9, 22.89, -6, 12, 'end'], ['Columbia River', -124.0, 46.25, 8, 4]].forEach(q => {
+    el('circle', { cx: px(q[1]), cy: py(q[2]), r: 1.8, cls: 'plcd' }, svg);
+    el('text', { x: px(q[1]) + q[3], y: py(q[2]) + q[4], cls: 'plc', 'text-anchor': q[5] || 'start', text: q[0] }, svg);
+  });
+  if (opts.key) {
+    const ky = el('g', {}, svg);
+    [['s', 'standard · 67', 3], ['e', 'extended · 37', 2.6], ['h', 'historical · 114', 2]].forEach((q, i) => {
+      el('circle', { cx: 14, cy: 596 + i * 14, r: q[2], cls: 'st ' + q[0], style: 'animation:none' }, ky);
+      el('text', { x: 24, y: 599 + i * 14, cls: 'key', text: q[1] }, ky);
+    });
+  }
+  host.appendChild(svg);
+}
+
+/* ── the years strip: 16 datasets × 1949…2026 ── */
+function buildStrip(host) {
+  const Y0 = 1949, Y1 = 2026, N = Y1 - Y0 + 1;
+  const X0 = 200, X1 = 992, cw = (X1 - X0) / N, RH = 13, TOP = 66;
+  const rows = Object.entries(PRES).map(([k, v]) => {
+    let ymin = v.ymin, ymax = v.ymax, ass = false;
+    if (!ymin && v.temporal) { const m = v.temporal.match(/(\d{4}).*?(\d{4})/); if (m) { ymin = +m[1]; ymax = +m[2]; } ass = true; }
+    return Object.assign({ k, ymin, ymax, ass }, v);
+  }).sort((a, b) => (a.ymin - b.ymin) || a.name.localeCompare(b.name));
+  const H = TOP + rows.length * RH + 22;
+  const svg = el('svg', { viewBox: '0 0 1000 ' + H, cls: 'strip', role: 'img', 'aria-label': 'Which years each of the 16 datasets covers, 1949 to 2026' });
+  // decade lines + labels
+  for (let y = 1950; y <= 2020; y += 10) {
+    const x = X0 + (y - Y0) * cw;
+    el('line', { x1: x, x2: x, y1: TOP - 6, y2: TOP + rows.length * RH, cls: 'dt' }, svg);
+    el('text', { x, y: TOP - 10, cls: 'dl', 'text-anchor': 'middle', text: y }, svg);
+  }
+  // datasets-with-data bars
+  const count = new Array(N).fill(0);
+  rows.forEach(r => { if (r.ass) { for (let y = r.ymin; y <= r.ymax; y++) count[y - Y0]++; } else r.years.forEach(q => { if (q[0] >= Y0 && q[0] <= Y1) count[q[0] - Y0]++; }); });
+  const mx = Math.max(...count);
+  count.forEach((n, i) => { if (n) el('rect', { x: X0 + i * cw + .5, y: 44 - n / mx * 36, width: cw - 1, height: n / mx * 36, cls: 'bar' }, svg); });
+  el('text', { x: X0 - 8, y: 24, cls: 'sum', 'text-anchor': 'end', text: 'datasets with data' }, svg);
+  el('text', { x: X0 - 8, y: 36, cls: 'sum', 'text-anchor': 'end', text: 'that year (max ' + mx + ')' }, svg);
+  rows.forEach((r, i) => {
+    const y = TOP + i * RH;
+    el('text', { x: X0 - 8, y: y + 10, cls: 'rl', 'text-anchor': 'end', text: r.name }, svg);
+    if (r.ass) {
+      const g = el('rect', { x: X0 + (r.ymin - Y0) * cw + .5, y: y + 1, width: (r.ymax - r.ymin + 1) * cw - 1, height: RH - 2, fill: r.color, stroke: r.color, cls: 'ass' }, svg);
+      el('title', { text: r.name + ' · ' + r.temporal + ' · asserted, not measured' }, g);
+    } else {
+      const m = Math.max(...r.years.map(q => q[1]));
+      r.years.forEach(q => {
+        if (q[0] < Y0 || q[0] > Y1) return;
+        const c = el('rect', { x: X0 + (q[0] - Y0) * cw + .5, y: y + 1, width: cw - 1, height: RH - 2, fill: r.color, 'fill-opacity': (0.3 + 0.7 * Math.sqrt(q[1] / m)).toFixed(2), cls: 'cell' }, svg);
+        el('title', { text: r.name + ' · ' + q[0] + ' · ' + q[1].toLocaleString() + ' casts or tows · ' + q[2].toLocaleString() + ' observations' }, c);
+      });
+    }
+  });
+  const now = X0 + (2026 - Y0) * cw + cw;
+  el('line', { x1: now, x2: now, y1: TOP - 6, y2: TOP + rows.length * RH, stroke: 'var(--accent)', 'stroke-width': 1 }, svg);
+  el('text', { x: now, y: TOP + rows.length * RH + 14, cls: 'dl', 'text-anchor': 'end', text: 'v2026.09.06' }, svg);
+  host.appendChild(svg);
+}
+
+/* ── wiring ── */
+makeSymbols();
+buildSection(document.getElementById('sec-main'), { prefix: 'a', hero: true });
+buildSection(document.getElementById('sec-page'), { prefix: 'b', hero: true });
+buildMap(document.getElementById('map-main'), { key: true });
+buildMap(document.getElementById('map-page'), { key: false });
+buildStrip(document.getElementById('strip-main'));
+buildStrip(document.getElementById('strip-page'));
+buildChips(document.getElementById('chips-main'));
+buildChips(document.getElementById('chips-page'));
+
+// the year odometer
+document.querySelectorAll('.odo-n').forEach(o => {
+  if (rm) { o.textContent = '1949 – 2026'; return; }
+  const t0 = performance.now();
+  (function f(t) { const p = ((t - t0) / 12000) % 1; o.textContent = String(1949 + Math.floor(p * 78)); requestAnimationFrame(f); })(t0);
+});
+
+// scale the mock page to the frame
+function fitPages() {
+  document.querySelectorAll('.stage').forEach(st => {
+    const pg = st.querySelector('.page'); const s = Math.min(1, st.clientWidth / 1170);
+    pg.style.transform = 'scale(' + s + ')'; st.style.height = (pg.offsetHeight * s) + 'px';
+  });
+}
+new ResizeObserver(fitPages).observe(document.body);
+addEventListener('load', fitPages); fitPages();
+
+// the log filter
+document.querySelectorAll('#log-filter .chip').forEach(ch => ch.addEventListener('click', () => {
+  document.querySelectorAll('#log-filter .chip').forEach(c => c.classList.remove('on')); ch.classList.add('on');
+  const f = ch.dataset.f;
+  document.querySelectorAll('#log-main [data-t]').forEach(e => { e.hidden = !(f === 'all' || e.dataset.t === f); });
+}));
+
+// copy buttons
+document.querySelectorAll('.copy').forEach(b => b.addEventListener('click', async () => {
+  const txt = b.parentElement.querySelector('pre').textContent;
+  try { await navigator.clipboard.writeText(txt); b.textContent = 'Copied'; } catch (e) { b.textContent = 'Select and copy'; }
+  setTimeout(() => b.textContent = 'Copy', 1600);
+}));
+
+// theme toggle (mirrors brand/v2 theme.js: an explicit choice stamps data-theme)
+const root = document.documentElement, tb = document.getElementById('theme');
+function curTheme() { return root.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); }
+function paintTheme() { tb.textContent = 'Theme: ' + curTheme(); document.querySelectorAll('.lk-dark').forEach(e => e.hidden = curTheme() !== 'dark'); document.querySelectorAll('.lk-light').forEach(e => e.hidden = curTheme() !== 'light'); }
+tb.addEventListener('click', () => { root.dataset.theme = curTheme() === 'dark' ? 'light' : 'dark'; paintTheme(); });
+paintTheme();
+</script>

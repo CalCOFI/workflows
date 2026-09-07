@@ -1,5 +1,19 @@
 ## TODO
 
+- setup data@calcofi.io -- already in use!
+- OBIS generic publish vs existing OBIS ichthyo artifact generated
+- Keys in schema? UUID?
+- Ed: start/stop xyt; cod end / alcohol or … for Linsey
+
+- color schemes by variable:
+  - [oceColorsGebco() R function from [oce] | R PACKAGES](https://r-packages.io/packages/oce/oceColorsGebco)
+  - [Beautiful colormaps for oceanography: cmocean](https://cran.r-project.org/web/packages/cmocean/vignettes/cmocean.html)
+  - [Overview of the ‘pals’ package](https://cran.r-project.org/web/packages/pals/vignettes/pals_examples.html)
+  - [Beautiful colormaps for oceanography: cmocean — cmocean 0.02 documentation](https://matplotlib.org/cmocean/)
+  - [oceans.colormaps — oceans 1.3.0 documentation](https://pyoceans.github.io/python-oceans/colormaps.html)
+  - [Named Colormaps — PyVista 0.48.4 documentation](https://docs.pyvista.org/api/utilities/named_colormaps.html)
+  - [Colormap reference — FanInSAR v0.1 documentation](https://faninsar.readthedocs.io/en/v0.0.1-rc/user_guide/colormap.html)
+
 - redo climatology so uses individual stations, vs aggregrated to grid (esp imp for coastal)
 - add contours to Explore app
 - massive revamp of docs
@@ -32,7 +46,15 @@
 - [ ] rename `swfsc_inverts` to `swfsc_invert` including `ingest_swfsc_inverts.qmd` -> `ingest_swfsc_invert.qmd`
 - [ ] `ingest_calcofi_ctd-cast.qmd` needs a sync to GCS for just the used CSV files so saved in GCS `archive/`, not just GCS `_sync/`
 
-## TODO: 2026-09-10 presentation
+## TODO: 2026-09-07 presentation, email
+
+Write a plan for the following...
+
+You and I have been very busy these past couple of weeks on the whole CalCOFI.io enterprise. You can see from my email (SU: "CalCOFI Explorer — one app, five lenses, no server") that despite my over the moon excitement for the Explorer app and applying your capabilities to the CalCOFI data management needs, there was mostly no response (neither the director Mark nor the intern Betty replied; Erin only expressed cautious overwhelm). I have a meeting again with all 3 tomorrow. I need to bring them along more slowly despite us being able to create at a breakneck speed. So I need to update them on the latest developments and am thinking of doing this in two parts:
+
+1. Email. Briefly request 20 min of time in tomorrow's meeting to present and discuss all the updates with some proposed next steps. Also flag near-term concerns like setting up data@calcofi.io email, and datasets "not yet in the database" but listed on the landing page's dataset catalogue (are any of these sensitive and need to be turned off publicly). Also how for them to interact with Google Sheets that are now consumed for metadata and the ingestion process? Since we need to make this short, maybe that part could live in its own @../docs page for metadata management and dataset ingestion process or similar.
+  
+2. Presentation. This will be what I present to them within 15 minutes. This should be a PowerPoint presentation (that can convert to Google Slides) for their consumption.
 
 Create a presentation that introduces everything we've done in the last couple weeks, principally including:
 
@@ -41,8 +63,13 @@ Create a presentation that introduces everything we've done in the last couple w
   - cost: FREE! No server VM required like with db-viz-hex; presently costs $200/mo
   - downside: maintenance requires AI
 - The Datasets grid https://calcofi.io/#datasets (or https://calcofi.io/datasets/)
+- All the generic publishers: OBIS, EDI, ERDDAP now working! Even better than ever, eg vs custom icthyo
+  - This is the final realization of the overarching **publish** component for CalCOFI.io: https://calcofi.io/docs/figs/sw_arch.svg
+  - Now improved by this one: [CalCOFI Dataset Catalog](https://claude.ai/code/artifact/5fe1fa4e-c124-4525-a27a-a4a978abf2ba?via=auto_preview) with caption: "Everything a portal sees is generated from one record per dataset. The dotted boxes are catalogs run by others; each is pointed at a static file we already publish. The one server-shaped option, pycsw, is gated on a partner asking for CSW."
+  - And deserving of a pretty mermaid diagram update
+- Wow, we did calcofi4py for CTD group and helper db fxns like calcofi4r
 
-Here are some of the key points:
+Here are some of points that come to mind:
 
 - Explorer app: one app, many lenses
   We already created several apps with slightly different lenses. This gets confusing to toggle between, and also cumbersome for development of features/styles to be repeated across.
@@ -55,7 +82,7 @@ Here are some of the key points:
     - ERDDAP
     - NCEI
   - new: STAC
-
+- every DB Release is now automaticaly minted with a DOI (via Zenodo on the worklfows repo)
 Use / show:
 - screenshots with URLs to examples
 - Diagram of original docs and subsequent update flowing to portals
@@ -69,6 +96,240 @@ Asks: how can everybody help and move things along?
 
 Closing:
 - The singularity is really here. Development happens at the speed of thought. And human ideas and communication are the chokepoint now, not software development (ie coding).
+
+I need to sound calm and even with these materials. Please fill in all the missing pieces and feel free to look at our conversation in `@.claude/calcofi_notes.md`.
+
+
+## TODO: Explorer app contours?
+
+- [ ] Animations? pts meaning 
+- [ ] Cruise extra segs?
+- [ ] Slider hex bin
+- [ ] Contour lens? mean, n, yr_min/max, se
+  - [ ] Must be possible since already doing it with https://calcofi.io/ctd-transects, just not sure how quantitative (eg with standard error) we can get with only Javascript libraries
+
+## 2026-09-07 CalCOFi.io landing page redesign
+
+I am wanting to snazz up the CalCOFI.io landing page @../CalCOFI.github.io/ to quickly visually communicate the breadth and vastness in time and space of the data collected. We now have the Datasets view and the App screenshots, but what about something that more visual that connects the ship, species and instrumentation? And a more exciting layout that is not so linear?
+
+For example, I recently revamped the website for the NOAA/NASA/... funded Marine Biodiversity Observation Network (MBON) with a hero banner image of the different methods https://marinebon.org/img/methods/methods-illustration.png on the landing page https://marinebon.org/ that goes to more specific imagery per method at https://marinebon.org/methods/. We don't want that much detail here, or if so then should link out to appropriate pages at https://calcofi.org. CalCOFI.io is still the data-centric arm of CalCOFI.org but hoping to make it an exciting place to visit. Perhaps we could also add News as datasets and apps and features get added.
+
+For an unfunded AI proposal I also made this little figure for CalCOFI. It looks too cartoony for my tastes. I want something scientific but stylized and makes you feel at ease and excited. Bonus if it works with colors in our branding v2.
+
+I am looking for some inspirational ideas from you, ideally with mockups generated into an artifact. I understand you're not exceptional at image generation, so placeholders with prompts and recommended image generation engines (I used Gemini Pro NanoBanana before) are welcome.
+
+---
+
+The mockup page is published: ⧉ https://claude.ai/code/artifact/7e41ff7c-2a0a-4bb7-b993-25142657dc77
+
+It is a design brief in brand v2 (Teko and Source Sans 3, the UCSD palette, light default with a working dark toggle) with six parts. Everything drawn in it is built from data the site already carries, so the mockups are also the spec.
+
+1. The hero is a section, not a paragraph. Line 90 drawn to scale, west on the left: the ship on the surface, the CTD wire with the 14 standard bottle depths down to 515 m, the bongo at 210 m on a 45° wire, the PairoVET at 70 m, the manta at the surface, the CUFES intake at 3 m trailing astern, and thirteen pins placed at the depth each kind of measurement lives, from picoplankton in the top 100 m to mesopelagic fish near 1,000 m. The depth axis breaks at 500 m so the euphotic zone gets room. Every pin links to the matching calcofi.org methods page, so calcofi.io never explains a net. The rosette lowers on a 26 s loop, the intake line flows, and both stop under reduced motion. It is built from the brand's own 51-glyph sprite, so it themes with a token flip.
+
+2. Reach, measured. The real 218-cell grid from the release, with a cruise sweeping the six core lines and a year odometer, next to a dataset-by-year strip built from the coverage the release measures at freeze time. The two asserted rows (region-pooled phytoplankton, samples-only PIC zooplankton) are hatched rather than hidden.
+
+3. The page re-cut as a scaled, scrollable mock: hero, six numbers (77 years, 842 cruises, 49 ships, 218 stations, 2,614 taxa, 349 M rows), then a bento of ways in (where, when, release, ship's log, Explorer, get the data, species), then the catalog band and the product cards unchanged.
+
+4. News as a ship's log, with a working filter. Most entries generate themselves: releases from versions.json, datasets from their first release, apps from an added date in products.yml, with a hand-written news.yml only for features. A feed lets calcofi.org's WordPress pull it.
+
+5. Imagery. The direction is field-guide plate, not cartoon: silhouettes with one interior line, the brand palette, nothing readable inside the pixels. Three paste-ready prompts with copy buttons (the hero in two grounds, thirteen category spots, ship profiles from reference photos), and an engine table. Recraft V3 first for the spots because it emits real SVG in exact hex, Nano Banana Pro for the hero because it iterates on one scene, plus the honest option of handing the mockup to an illustrator. The page can ship with no generated art at all: the painted version sits behind the SVG overlay later.
+
+6. A plan in three cuts. Cut one (about two days) is the structure with no imagery and no new data source. Cut two adds the painted layer. Cut three adds live tiles such as "at sea now" from the cruise table and calcofi.org's cruise page.
+
+Two things I could not do. The Chrome extension timed out on every screenshot of the live calcofi.io page, so the "today" wireframe comes from index.html and the site's own datasets-page capture rather than a fresh shot. The sea floor in the section is a plausible Line 90 profile, not GEBCO; the real build would draw it with the same transect bathymetry ctd-transects already uses.
+
+---
+
+Looks fantastic! Here are my first attempts using other AI:
+
+- P1 with Gemini Pro (have subscription)
+  `~/Desktop/CalCOFI.io-redesign/Gemini_Generated_Image_b0yv1xb0yv1xb0yv.jpeg`
+- P2 with ChatGPT (free tier)
+  `~/Desktop/CalCOFI.io-redesign/ChatGPT Image Sep 7, 2026, 03_16_13 PM.png`
+- P3 with Recraft (free tier)
+  `~/Desktop/CalCOFI.io-redesign/a-flat--solid-color-side-profile-silhouette-of-a-g.png`
+
+TBH I am inclined to go with what you already created. It's cleaner and simpler and not too distracting with at least color coordinated fade of ocean water and little animation.
+
+Can you write up an agentic plan for completion, recommend model & effort for managing session to kick it off with a supplied prompt?
+
+---
+
+Plan written and the mockup saved beside it as the reference the agent ports from:
+
+- `workflows/.claude/plans/2026-09-07 CalCOFI.io landing re-cut — the section hero, measured reach, a bento of ways in, the ship's log.md`
+- `workflows/.claude/plans/2026-09-07 CalCOFI.io landing re-cut — mockup.html` (the artifact with the screenshots swapped for a pixel; its script holds the three builders, Appendix A of the plan lists every constant with its source)
+
+Both are uncommitted; commit them before kickoff so the session reads the same plan you approved.
+
+**On your three generations**. The Gemini hero is a genuinely good reading of P1 and would be the painted layer if cut 2 ever happens. The ChatGPT sheet is consistent but one raster image, so it cannot theme or scale and does not replace the sprite. The Recraft ship is the one worth a side quest: traced to a single path it drops into the section as the hull and the drawing gets a real ship for free. The plan records all three in Appendix B with those uses, and agrees with your call on the SVG route.
+
+**One correction to the mockup**. Its release chip used the yellow warn tint, which breaks the UI refresh's rule that yellow marks a state needing attention, never a kind of thing. The plan makes it the one thing not to copy and adds a layout assertion so nothing on the first screen computes to warn except the CTA.
+
+**Recommended session: one session, Claude Opus 5, effort high, cwd `~/Github/CalCOFI`**. The spec, the data files and a browser-based checker all exist, no contract changes and no dataset fact is typed, so the work is a port of about 500 lines plus layout judgment in two themes at two widths. That is the same shape as the 2026-09-05 UI refresh, which one Opus 5 · high session built and deployed in a day. Fable would only earn its cost if the drawing had to be designed rather than ported. If you want parallelism, the log phase is the only clean split (a Sonnet subagent in a worktree); a single session needs no merge.
+
+Kickoff prompt (also in the plan):
+
+Execute `workflows/.claude/plans/2026-09-07 CalCOFI.io landing re-cut — the section hero, measured reach, a bento of ways in, the ship's log.md` as one session, phases L1 → L2 → L3 → L4 → L5, in `CalCOFI.github.io` on a branch `landing-recut` (push the repo first). The visual spec is the artifact https://claude.ai/code/artifact/7e41ff7c-2a0a-4bb7-b993-25142657dc77 and the reference copy beside the plan, `2026-09-07 CalCOFI.io landing re-cut — mockup.html`: open it in a browser (both themes; the masthead's toggle stamps `data-theme`), then read its `<script>` — `buildSection`, `buildMap`, `buildStrip` and the constants table are what you port into `assets/section.js` and `assets/reach.js`; the plan's Appendix A lists the constants with their sources. Read the plan's § Context, § Design D-1 … D-9 and § Decisions (1 confirmed; take the bold recommendation on 2–10 unless I say otherwise), then the site's README and `style.css`'s top comment before editing. Rules: every colour is a token (the new ones added to `brand/v2/theme.css` additively, both themes, with swatches and README rows); every number and count is read from `_data/datasets.json` / `catalog.json` / `grid.geojson` at build or is a commented protocol constant — type no dataset fact; the hero copy and CTA are HTML over the SVG, not `<text>`; nothing below `#datasets` changes (diff `_site` against main's build to prove it); no framework, no map library, no external asset, fonts stay self-hosted; no `--warn` anywhere on the first screen except the CTA (the mockup's release chip is the one thing not to copy); the `[hidden]` rule stays first in `style.css`. After each phase: `scripts/build.sh serve`, `scripts/check_layout.py` (adding `/` and the D-8 assertions in L5, but run the existing paths from L1), `scripts/check_brand.py --url http://localhost:4000/`, `scripts/check_jsonld.py _site`, a look in Chrome at 1470 and 375 px in both themes, and one *Measured* line appended to the plan (what you measured, not what you did). In L1 build `_data/line90_floor.json` with `calcofi4r::cc_transect_bathy()` along Line 90 (Decision 6) and commit it as cartography; if the package call fails, use the mockup's profile marked `// drawn, not measured` and say so. In L5 add `home` to `shots.yml pages:`, capture both themes, open the PR so `pr.yml` runs, merge when green, confirm the deploy at https://calcofi.io/ in both themes, and finish with the live URL, the *Measured* lines and anything you could not verify.
+
+Ten decisions await you in the plan, each with a bold recommendation the prompt tells the session to take by default. The two worth a glance before kickoff: whether the product sections below the catalog stay as bands (recommended) or fold into a tab row, and whether the numbers band says "stations" or "grid cells" for 218.
+
+---
+
+But I am currently in `~/Github/CalCOFI/workflows` where most of the intelligence of this project lives. I did not see the best results previously when executing from `~/Github/CalCOFI`, which is outside a Github repository
+
+---
+
+You're right, and the prior plan's note was the wrong lesson. The memory index, the skills, the agent definitions and the plans are all scoped to ~/Github/CalCOFI/workflows; from ~/Github/CalCOFI a session gets none of them and no repo CLAUDE.md of its own. Fixing the plan, the memory, and the prompt.
+
+  Ran 1 shell command, wrote 1 memory
+
+Plan, memory and the prompt are corrected. Start the session from where you are.
+
+**Kickoff prompt (cwd `~/Github/CalCOFI/workflows`, Claude Opus 5, effort high)**:
+
+Execute `.claude/plans/2026-09-07 CalCOFI.io landing re-cut — the section hero, measured reach, a bento of ways in, the ship's log.md` as one session, phases L1 → L2 → L3 → L4 → L5, in the sibling repo `/Users/bbest/Github/CalCOFI/CalCOFI.github.io` (absolute paths and `git -C`, never `cd`) on a branch `landing-recut` (push that repo first). The visual spec is the artifact https://claude.ai/code/artifact/7e41ff7c-2a0a-4bb7-b993-25142657dc77 and the reference copy beside the plan, `.claude/plans/2026-09-07 CalCOFI.io landing re-cut — mockup.html`: open it in a browser (both themes; the masthead's toggle stamps `data-theme`), then read its `<script>` — `buildSection`, `buildMap`, `buildStrip` and the constants table are what you port into `assets/section.js` and `assets/reach.js`; the plan's Appendix A lists the constants with their sources. Read the plan's § Context, § Design D-1 … D-9 and § Decisions (1 confirmed; take the bold recommendation on 2–10 unless I say otherwise), then the site's README and `style.css`'s top comment before editing. Rules: every colour is a token (the new ones added to `brand/v2/theme.css` additively, both themes, with swatches and README rows); every number and count is read from `_data/datasets.json` / `catalog.json` / `grid.geojson` at build or is a commented protocol constant — type no dataset fact; the hero copy and CTA are HTML over the SVG, not `<text>`; nothing below `#datasets` changes (diff `_site` against main's build to prove it); no framework, no map library, no external asset, fonts stay self-hosted; no `--warn` anywhere on the first screen except the CTA (the mockup's release chip is the one thing not to copy); the `[hidden]` rule stays first in `style.css`. After each phase: `scripts/build.sh serve`, `scripts/check_layout.py` (adding `/` and the D-8 assertions in L5, but run the existing paths from L1), `scripts/check_brand.py --url http://localhost:4000/`, `scripts/check_jsonld.py _site`, a look in Chrome at 1470 and 375 px in both themes, and one *Measured* line appended to the plan (what you measured, not what you did). In L1 build `_data/line90_floor.json` with `calcofi4r::cc_transect_bathy()` along Line 90 (Decision 6) and commit it as cartography; if the package call fails, use the mockup's profile marked `// drawn, not measured` and say so. In L5 add `home` to `shots.yml pages:`, capture both themes, open the PR so `pr.yml` runs, merge when green, confirm the deploy at https://calcofi.io/ in both themes, and finish with the live URL, the *Measured* lines and anything you could not verify.
+
+What changed to match:
+
+- **The plan's kickoff section** now says `cwd workflows`, with a paragraph on why: the memory index, skills, `ws-*` agent definitions and plans are all scoped to this repo and load only when the session starts here. The 2026-09-05 plan's note is marked superseded.
+- **A feedback memory** records your rule so no future plan repeats the mistake: start here, work in siblings by absolute path with git -C, never cd in a compound command.
+- **The project memory** for this plan carries the same cwd.
+
+Two things before you paste it: commit the two plan files under .claude/plans/ so the session reads the approved version, and push CalCOFI.github.io so the branch has a current base.
+
+---
+
+I'd like to see options for the one-line lede:
+- "The same lines, the same depths, every cruise since 1949 — open and integrated"
+
+I like it, but it hasn't been exactly the same lines/depths (but typically), which sounds too tightly constrained than reailty. Definitely "since 1949." I like "open and integrated", but we're missing the whole ecosystem aspect (biology + environment). And communicating that we're sampling at depth (not just surface) is important.
+
+---
+
+The budget first. The current line is 79 characters, and at 17 px it ends just before the wheelhouse. Anything past about 80 needs one of two trivial changes in the plan: nudge the ship 60 units right, or set the lede one size smaller. So pick by voice, not by length.
+
+Plain, with both halves of the ecosystem and the depth
+
+1. "Ocean and ecosystem, sampled to depth, cruise after cruise since 1949 — open and integrated." (92)
+2. "The water column and the life in it, cruise after cruise since 1949 — open and integrated." (90)
+3. "Physics, chemistry and life, sampled to depth on every cruise since 1949 — open and integrated." (95)
+
+"Cruise after cruise" carries the repetition without claiming the lines and depths never changed.
+
+The range, named (the two ends of the pin list: physical oceanography to marine mammals)
+
+4. "Temperature to whales, surface to the deep, since 1949 — open and integrated." (77)
+5. "Temperature to whales, surface to the deep, cruise after cruise since 1949 — open and integrated." (97)
+6. "Salt, heat, plankton, fish, birds and whales, surface to the deep, since 1949 — open and integrated." (100)
+
+Playful
+
+7. "Sea water, plankton and everything that eats it, sampled to depth since 1949 — open and integrated." (99)
+
+My pick is option 4, with option 5 if you want the repetition in the sentence rather than left to the drawing. "Temperature to whales" says environment and biology in three words, it is exactly the span the pins draw from the CTD rosette to the whale at the surface, and "surface to the deep" is the depth claim without a number that some cast would contradict. It also fits the line as drawn, so the ship stays where it is. Option 1 is the safe choice if "temperature to whales" reads too clever for an SIO page.
+
+On "the deep" versus a number: the routine cast is 515 m, historic bottle casts reached 3,500 m, and the drawing's axis shows both, so the words can stay general and the picture carries the specifics.
+
+Tell me the one you want and I will put it into the plan's D-1 and the open question, so the session does not have to choose.
+
+## 2026-09-07 hex app updates
+
+So do the Datasets pages in @../CalCOFI.github.io/ need to be updated? For https://calcofi.io/datasets/calcofi_bottle/ and https://calcofi.io/datasets/calcofi_dic/ (and presumably others), the Hexagon Explorer link does not have "opens on this dataset"
+
+---
+
+No update is needed. The pages are behaving as designed, and the difference is deliberate.
+
+Why bottle and DIC lack the phrase. The Hexagon Explorer's ?datasets= parameter only drives the taxa-dataset picker. Bottle and DIC are environmental datasets, and the app chooses its environmental variable separately, so a ?datasets=calcofi_bottle link would open the app with nothing selected differently. The site encodes that rule in two places:
+
+- _data/products.yml gives the Hexagon Explorer card dataset_url_realm: bio, with a comment saying the deep link "opens on a biological dataset and merely opens for an environmental one".
+- _plugins/datasets.rb drops the template when the dataset's realm differs, so an environmental dataset gets the plain app link with the hover text "the app opens at its own start; pick the dataset there".
+
+The live pages confirm it. CUFES links to /hex/?datasets=swfsc_cufes and says "opens on this dataset". Bottle and DIC link to the bare /hex/. The same will be true for CTD, METS and picoplankton.
+
+If you want the phrase on the environmental pages too, that is an app feature, not a site fix. The redesign makes it a natural one: the app would accept something like ?env=calcofi_bottle, flick the Compare switch on, and select that dataset's first headline variable. Then the dataset_url_realm restriction in products.yml could go, or become a second template for the env realm. I can build that on both sides if you would like it.
+
+---
+
+I am also surprised to see the old v1 branding on the Hexagon explorer on dark theme so black, not v2 dark blue. Please apply branding v2. And yes, let's get the link going for that first headline variable of the env dataset
+
+---
+
+Both changes are live.
+
+Brand v2 dark palette on the Hexagon Explorer
+- The cause was a missing mapping. The brand's theme.css was loaded, but nothing carried its dark tokens onto the bslib tokens every app surface derives from, so dark mode fell through to Bootstrap's own near-black. The light theme already had such a block.
+- The new dark block uses the contract's values: navy ground, UCSD Navy panels, brand border, text and muted colours, and the lifted UCSD Blue accent for links and primary buttons. The navbar, selectize group headers and the map legend follow. Light mode gets UCSD Navy type and UCSD Blue accent, with the mockup's ground and cards unchanged.
+- Verified live: body, navbar, cards and the left panel now measure the brand's navy values.
+
+?env=<dataset_key> deep link
+- The app resolves the key to the dataset's leading variable, the first of the curated headline types the release carries, then opens with Compare on and that variable selected. Unknown keys are ignored, like ?datasets=. The rule has seven new unit tests.
+- Verified live: ?env=calcofi_dic opens with Compare on and "Dissolved inorganic carbon" selected.
+- CalCOFI.github.io gained a dataset_url_env template for the Hexagon Explorer card, and the plugin uses it for the env realm. The Pages build succeeded. Bottle and DIC pages now link with ?env= and say "opens on this dataset"; CUFES still links with ?datasets=.
+
+One observation, not fixed. In my browser the maps take 30 to 60 seconds to paint, and during a Split-layout rebuild the tab looked frozen for a while each time before recovering. It never stayed frozen, so I left the layouts as they are. Worth watching on the server's real users. Also, ?datasets= and ?env= together are untested.
+
+---
+
+Please update dark/light cards on calcofi.io
+
+And for CTD Explorer to match brand v2
+
+And Pollutants Explorer brand v2
+
+And storage.calcofi.io to match brand v2
+
+And these:
+
+  - [CalCOFI public storage](https://storage.calcofi.io/)
+  - [CalCOFI R helper functions • calcofi4r](https://calcofi.io/calcofi4r/)
+  - [calcofi4py v0.7.0](https://calcofi.io/calcofi4py/)
+  - [CalCOFI Database Tools • calcofi4db](https://calcofi.io/calcofi4db/)
+  - [CalCOFI Workflows](https://calcofi.io/workflows/)
+
+---
+
+Everything requested is live, and the cards are republished.
+
+Root cause, fixed once for every Shiny app. The brand's theme.css paints only the header. Bootstrap paints the body, cards, sidebar and controls from its own variables, and nothing had mapped the brand's tokens onto them. So every bslib app showed a navy header over Bootstrap's near-black, in Open Sans. calcofi4r 1.20.0's brand head now carries that mapping for both themes, including Source Sans 3 and the UCSD Blue accent. The server installed it and restarted the apps.
+
+**Verified live in dark mode** (body navy, panels UCSD Navy, brand font):
+- Hexagon Explorer, CTD Explorer, Cruise Explorer, Pollutants Explorer.
+
+**Sites moved to v2**
+- storage.calcofi.io: root, calcofi-db and calcofi-files-public pages re-uploaded. The builder already produced v2; the objects were stale.
+- calcofi.io/workflows: the Jekyll landing layout still had its own v1 copy. Ported to the v2 head, lockup and light default.
+- calcofi.io/calcofi4r: its pkgdown build had failed on every push since Sep 4 because a vignette passed the removed min_n argument. Fixed, and the site now serves v2.
+- calcofi4py and calcofi4db were already on v2.
+
+**Cards** re-shot in both themes for hex, CTD, cruise, pollutants, storage, workflows and calcofi4r, all luminance checks passing, pushed to CalCOFI.github.io.
+
+**Two things left for you**
+- The calcofi-projects bucket page is still on v1. The calcofi-admin service account has no object-create right on that bucket, so the storage index script cannot upload there. Someone with rights on that bucket needs to run it once, or grant the service account write access.
+- Pollutants' Leaflet basemap now renders "API KEY REQUIRED" tiles. CARTO's raster tiles need a key since recently. Switching it to a keyless basemap or the vector CARTO style the other apps use is a small change I can make if you want.
+
+Also unverified: check_brand.py hung for over ten minutes locally, so I did not get its fleet table. The Monday scheduled run will report it.
+
+---
+
+My bebest@ucsd.edu account (gcloud auth should work) has permissions on that calcofi-projects bucket to add the admin SA.
+
+Yes please go with non-CARTO basemap for pollutants app.
+
+---
+
+Done. The grant took, the storage index re-uploaded with no warning this time, and the calcofi-projects page now serves brand v2.
+
+Final state of everything from this round:
+- calcofi-admin has object-admin on gs://calcofi-projects, granted from your UCSD account. All four storage.calcofi.io pages are on v2.
+- Pollutants runs on Esri's keyless dark canvas; its card is republished.
+- Every product you listed is on v2, verified live, with fresh cards.
+
+Nothing is outstanding on my side. The active gcloud account is still the service account, as the deploy scripts expect.
+
+Resume this session with:
+claude --resume 49cd1d9a-0243-4769-8c80-0f051ce70604
 
 ## 2026-09-06 Explorer UI simplify
 
@@ -254,6 +515,8 @@ Resume this session with:
 ```bash
 claude --resume a190376c-899a-4d48-a4c3-d663104952d0
 ```
+
+
 
 ## 2026-09-05 CalCOFI.io datasets UI cleanup; re-release with OBIS, EDI publishing
 
@@ -627,6 +890,74 @@ Confirmed live: the ichthyo dataset page now lists its Darwin Core Archive under
 - Ichthyo parity report published.
 
 The only watch still running is the 30-minute heartbeat you asked for; it now reports the finished pipeline, so I'll stop it whenever you say.
+
+---
+
+So where, for instance, is the latest EDI package for https://calcofi.io/datasets/swfsc_ichthyo/? And if not some dataset built, why not?
+
+---
+
+There is no EDI package for`swfsc_ichthyo`, and that is by the publisher's design rather than a failure.
+
+- **What it built**. `publish_to-edi.qmd` defaults to the three CalCOFI program datasets with no archive of record: `calcofi_bottle`, `calcofi_ctd-cast`, `calcofi_mets`. Those three packages are staged under publish/edi/ on the release bucket, and the bottle page already lists its package as "built, not deposited". The list is the `CALCOFI_DATASETS` environment variable; the run used the default.
+- **Why not ichthyo**. The notebook's own rationale is that every other dataset already has a home: `swfsc_ichthyo` at OBIS through the IPT (the Darwin Core Archive is its route, and that one is staged and listed on its page), and the nine CCE-LTER-adjacent datasets in `knb-lter-cce`, which are sourced from EDI and never republished there. The non-interference rule enforces that generically: a requested dataset whose source is itself an EDI package, or whose record carries an EDI archive distribution, is refused and reported rather than packaged.
+- **So the ichthyo page shows** the EML, the STAC collection and the staged Darwin Core Archive, and no EDI row, because no EDI package exists for it.
+
+Two things follow that you may want to decide:
+
+1. Ichthyo could be packaged for EDI too. Nothing technical prevents it: CALCOFI_DATASETS=…,swfsc_ichthyo would build it, since its source is SWFSC's export, not EDI, so the rule would not refuse it. Whether SWFSC data should get a CalCOFI-owned EDI package beside its OBIS record is a provider and policy question, not one the notebook should answer on its own.
+2. The dataset page does not yet say why a row is absent. It lists a bundle when one answers and stays silent otherwise, so a reader cannot tell "not built" from "not applicable". A one-line note per dataset stating its intended archive of record (OBIS, EDI, or a provider's own package) would make that explicit; that needs the rule to be recorded in the dataset record, which it is not today.
+
+---
+
+Yes, please implement 2. so the policy is stated up front. This "Archives & portals" section needs better organization, probably that references / updates @../docs/portals.qmd (https://calcofi.io/docs/portals.html) and organizes it into a table for explicitly stating purpose, status, etc.
+
+While you're at it, please:
+- Datasets grid:
+  - sort en bio columns alphabetically
+- Dataset individual pages:
+  - The link out to the "release changelog ↗" goes to the raw markdown, which is not very nice to look at. The RELEASES.md (and all markdown files) should instead be rendered (still with link to raw source) on https://storage.calcofi.io and it should be linked to there.
+  - Can you make the obs by year interactive to see values on hover (or click with smartphone) and the map interactive for similarly seeing values (n, mean, min/max yr) on click?
+
+---
+
+Everything you asked for is in place; one background pass is still finishing (the second sweep of markdown pages, which waits for the first to end).
+
+- **Policy stated up front**. Each dataset now carries a one-sentence archive-of-record policy in metadata/dataset_status.csv (publish_policy), carried into the record as status.publish_policy (calcofi4db 4.6.3), and shown above the Archives & portals table. For ichthyo it reads: archive of record OBIS through the IPT; NCEI is SWFSC's to deposit; EDI does not apply. The cells were corrected to match the policy: the CCE-LTER EDI packages count as published there (with the three missing archive rows added), the program datasets' EDI is planned, and every dataset with a staged Darwin Core Archive has OBIS planned.
+- **Archives & portals is a table**: role, portal, purpose (from the portal registry), status, the identifier it is known by, and any staged bundle. docs/portals.qmd gained a section with the five rules behind the sentences and a live table of them (pushed; the book renders on its own workflow).
+- **Grid**: categories alphabetical within Biology and Environment.
+- **Interactive figures**: hover on a pointer, tap on a phone, keyboard focus on the map. The years bars show year and count; a station shows its key, observations, the years it was sampled and observations per sampled year.
+- **Rendered markdown on storage.calcofi.io**: RELEASES.html is live beside RELEASES.md (raw linked from the page), the changelog links on the site and the release index point there, publish_release_notes.R renders the notes on every publish, and a sweep is rendering all 48 markdown objects across both buckets. It also exposed and fixed a quoting bug that had been defeating the MD5 skip in put_gcs_file() (calcofi4db 4.6.4).
+
+Site is pushed and deploying (dcc82a9); workflows and calcofi4db are pushed. I'll confirm when the second markdown pass reports.
+
+Both passes are done and clean. The first pass wrote all 48 pages; the second re-rendered all 48 (every page changed once, since the heading fix removed the duplicated title) with the MD5 check now working and no shell errors. Spot checks: v2026.09.06/RELEASE_NOTES.html serves as HTML, and the changelog page carries one heading per release section as intended.
+
+---
+
+That closes this round. Final state:
+
+- Live on calcofi.io (deploying from dcc82a9): the archive-of-record policy above a full-width Archives & portals table, alphabetical categories in each realm column, hover and tap cards on the years bars and the map's stations, and changelog links to the rendered RELEASES.html.
+- Storage: a rendered page beside all 48 markdown objects on both public buckets, kept current by publish_release_notes.R and re-runnable with scripts/render_md_on_storage.R (idempotent by MD5).
+- Registry and record: publish_policy for every dataset in dataset_status.csv, corrected portal cells, three CCE-LTER EDI archive rows, carried by calcofi4db 4.6.3; 4.6.4 fixes the MD5 read that quoting had silently broken.
+- Docs: portals.qmd states the five rules and renders the per-dataset policy table live.
+
+All of workflows, calcofi4db, CalCOFI.github.io and docs are committed and pushed to main; no monitors are running.
+
+---
+
+One last little tweak. Can you add a default interactive table of contents for all markdown files in the rendered HTML? The https://storage.calcofi.io/calcofi-db/ducklake/releases/RELEASES.html is a vast file and hard to navigate or see any overview of what happened when
+
+---
+
+Done. The changelog page now has a table of contents: https://storage.calcofi.io/calcofi-db/ducklake/releases/RELEASES.html
+
+- **Every rendered markdown page** gets an id on each heading (h1 to h3) and a "Contents" list built from them: on a wide screen a sticky sidebar that follows the scroll and highlights the section in view (confirmed live: scrolled into the notes, the entry "Every biological dataset can now leave as a Darwin Core Archive" is the one marked); on a phone it collapses to a "Contents · 78" toggle above the text so the page opens on the prose.
+- **RELEASES.html** therefore shows the release versions as the top level with each release's headline changes under them, which is the overview of what happened when.
+- One bug found on the way: quotes in the script's selector were unescaped by the R string, so the script had thrown silently; fixed and confirmed by re-running the page's script under a try/catch.
+
+The renderer is committed and pushed (2d4fc99). A final sweep over all 48 markdown pages with the corrected script is queued behind the one still running; it will report when it finishes.
+
 
 ## 2026-09-05 CalCOFI.io dataset-centric view
 
