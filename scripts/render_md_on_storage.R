@@ -37,6 +37,47 @@ list_md <- function(prefix) {
 if (!length(uris)) uris <- unlist(lapply(PREFIXES, list_md))
 cat(length(uris), "markdown object(s)\n")
 
+# a table of contents for every rendered page: an id on each h1–h3 (slug of its text, made
+# unique), a nested list in a sticky aside on a wide screen and a collapsed <details> above the
+# text on a narrow one, with the heading in view highlighted as the reader scrolls. RELEASES.md is
+# 23 release sections deep; without this it is a wall.
+slug <- function(x) { x <- tolower(gsub("<[^>]+>", "", x)); x <- gsub("[^a-z0-9]+", "-", x); gsub("^-+|-+$", "", x) }
+add_toc <- function(html) {
+  m <- gregexpr("<h([1-3])>(.*?)</h[1-3]>", html, perl = TRUE)
+  hits <- regmatches(html, m)[[1]]
+  if (length(hits) < 3) return(list(body = html, nav = ""))
+  seen <- character(); items <- character(); out <- html
+  for (h in hits) {
+    lvl <- as.integer(sub("^<h([1-3])>.*", "\\1", h))
+    txt <- sub("^<h[1-3]>(.*)</h[1-3]>$", "\\1", h)
+    id  <- slug(txt); if (!nzchar(id)) id <- "section"
+    n <- sum(seen == id); seen <- c(seen, id); if (n) id <- paste0(id, "-", n + 1)
+    out <- sub(h, sprintf('<h%d id="%s">%s</h%d>', lvl, id, txt, lvl), out, fixed = TRUE)
+    items <- c(items, sprintf('<li class="l%d"><a href="#%s">%s</a></li>', lvl, id, gsub("<[^>]+>", "", txt)))
+  }
+  nav <- paste0('<nav class="toc" aria-label="Contents"><details><summary>Contents · ',
+                length(items), '</summary><ol>', paste(items, collapse = ""), '</ol></details></nav>')
+  list(body = out, nav = nav)
+}
+TOC_CSS <- '<style>
+.mdwrap{display:grid;grid-template-columns:minmax(0,1fr);gap:0 2.5rem}
+@media(min-width:960px){.mdwrap{grid-template-columns:17rem minmax(0,1fr)}.toc{position:sticky;top:1rem;align-self:start;max-height:calc(100vh - 2rem);overflow:auto}}
+.toc{font-size:.85rem;line-height:1.35;margin:0 0 1.2rem}
+.toc summary{cursor:pointer;font-weight:600;font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:.4rem}
+.toc ol{list-style:none;margin:0;padding:0;border-left:2px solid var(--border)}
+.toc li{margin:0}.toc li a{display:block;padding:.15rem .6rem;color:var(--fg);border-left:2px solid transparent;margin-left:-2px}
+.toc li.l2 a{padding-left:1.2rem;color:var(--muted)}.toc li.l3 a{padding-left:1.9rem;color:var(--muted);font-size:.8rem}
+.toc li a:hover{color:var(--accent);text-decoration:none}.toc li a.is-active{color:var(--accent);border-left-color:var(--accent)}
+.md h1,.md h2,.md h3{scroll-margin-top:1rem}
+</style>'
+TOC_JS <- '<script>(function(){var links=[].slice.call(document.querySelectorAll(".toc a[href^=\"#\"]"));if(!links.length)return;
+var heads=links.map(function(a){return document.getElementById(decodeURIComponent(a.getAttribute("href").slice(1)))});
+var on=null;function mark(i){if(on===i)return;links.forEach(function(a){a.classList.remove("is-active")});if(i>=0){links[i].classList.add("is-active");on=i;
+var el=links[i];var box=el.closest(".toc");if(box&&box.getBoundingClientRect().height<box.scrollHeight){var r=el.getBoundingClientRect(),b=box.getBoundingClientRect();if(r.top<b.top||r.bottom>b.bottom)el.scrollIntoView({block:"center"})}}}
+function spy(){var y=window.scrollY+24,best=-1;for(var i=0;i<heads.length;i++){if(heads[i]&&heads[i].offsetTop<=y)best=i}mark(best)}
+window.addEventListener("scroll",spy,{passive:true});window.addEventListener("resize",spy);spy();
+var d=document.querySelector(".toc details");if(d&&window.innerWidth>=960)d.open=true})();</script>'
+
 # the page: the markdown body in the index skin, the raw source one link away
 render_one <- function(uri) {
   p <- calcofi4db:::parse_gcs_path(uri)
@@ -49,17 +90,20 @@ render_one <- function(uri) {
   if (is.na(title) || !nzchar(title)) title <- basename(p$path) else
     md <- md[-grep("^#\\s+", md)[1]]   # the page's h1 is the document's first heading; not twice
   body <- commonmark::markdown_html(paste(md, collapse = "\n"), extensions = TRUE, smart = FALSE)
+  toc  <- add_toc(body)      # ids on every h1–h3, and the nested list beside the page
+  body <- toc$body
   folder <- dirname(p$path)
   crumb  <- glue('<p class="crumb"><a href="https://storage.calcofi.io/{p$bucket}/{folder}/">{esc(folder)}</a> / ',
                  '{esc(basename(p$path))} · <a href="{https}">raw markdown ↗</a></p>')
   html <- page(title, glue("{basename(p$path)} on gs://{p$bucket}/{folder}"),
-               glue('<article class="md">{body}</article>',
-                    '<style>.md{{max-width:72ch;font-size:1rem}} .md h1{{font-size:1.4rem;margin:1.6rem 0 .4rem}} ',
+               paste0(glue('<div class="mdwrap">{toc$nav}<article class="md">{body}</article></div>'),
+                    TOC_CSS, TOC_JS,   # braces in CSS/JS: never through glue()
+                    glue('<style>.md{{max-width:72ch;font-size:1rem}} .md h1{{font-size:1.4rem;margin:1.6rem 0 .4rem}} ',
                     '.md h2{{font-size:1.15rem;margin:1.4rem 0 .3rem}} .md h3{{font-size:1rem;margin:1.1rem 0 .2rem}} ',
                     '.md code{{font:.9em var(--mono);background:var(--panel);padding:.05em .3em;border-radius:4px}} ',
                     '.md pre{{background:var(--panel);padding:.8rem 1rem;border-radius:8px;overflow-x:auto}} .md pre code{{background:none;padding:0}} ',
                     '.md table{{font-size:.9rem;margin:.6rem 0}} .md th,.md td{{white-space:normal}} ',
-                    '.md ul,.md ol{{padding-left:1.4em}} .md li{{margin:.15em 0}} .md blockquote{{margin:.8rem 0;padding:.2rem 1rem;border-left:3px solid var(--border);color:var(--muted)}}</style>'),
+                    '.md ul,.md ol{{padding-left:1.4em}} .md li{{margin:.15em 0}} .md blockquote{{margin:.8rem 0;padding:.2rem 1rem;border-left:3px solid var(--border);color:var(--muted)}}</style>')),
                crumb = crumb)
   local_html <- sub("\\.md$", ".html", local_md); writeLines(html, local_html, useBytes = TRUE)
   target <- sub("\\.md$", ".html", uri)
