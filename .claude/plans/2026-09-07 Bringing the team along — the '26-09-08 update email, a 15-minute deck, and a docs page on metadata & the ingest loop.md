@@ -1,6 +1,12 @@
 # Bringing the team along — the 9/8 update email, a 15-minute deck, and a docs page on metadata & the ingest loop
 
-Status: **proposed 2026-09-07** (evening, Europe time). Three deliverables for the CalCOFI data meeting
+Status: **in progress 2026-09-07** (evening, Europe time). Updates the same evening: Ben set up
+ImprovMX forwarding for `data@calcofi.io` → ben@oceanmetrics.io, esatterthwaite@ucsd.edu, bthuang@ucsd.edu
+(email item 1 becomes a report, not a proposal; the UCSD Google Group stays as the long-term target). Two
+sibling sessions are in flight and fold in when done: the calcofi.io landing re-cut (mockup
+`claude.ai/code/artifact/7e41ff7c-2a0a-4bb7-b993-25142657dc77`, plan of 2026-09-07) and a **Contours lens**
+for the Explorer — slide 3 should say "six lenses" only once contours is live; until then it is a
+"coming next" line on slide 14. C and D started in this session (see § Measured at the end). Three deliverables for the CalCOFI data meeting
 on **Tue 2026-09-08, 08:15–09:15 PT** (17:15 CEST; organizer Erin; Mark accepted, Betty has not answered
 the invite). Nothing in this plan changes a product; it produces an email, a `.pptx`, one docs chapter and
 one mermaid diagram. Ben sends the email and presents; the rest is generated and reviewed.
@@ -97,10 +103,9 @@ per item. Draft:
 >
 > Three things are time-sensitive and small:
 >
-> 1. **A mailbox behind data@calcofi.io.** The address is already printed as the public contact in the
->    catalog and metadata we publish, but nothing receives it yet. Proposal: I set up free forwarding to the
->    three of us this week, and Erin (or Scripps IT) creates calcofi-data@ucsd.edu as a Google Group to be
->    its long-term target.
+> 1. **data@calcofi.io now works.** The address was already printed as the public contact in the catalog
+>    and metadata we publish; as of today it forwards to the three of us. For the long term I'd like a
+>    calcofi-data@ucsd.edu Google Group as its target — Erin, can you create one, or is that an ITS ticket?
 > 2. **Holdings listed publicly.** calcofi.io/datasets/ now lists 17 datasets "not yet in the database"
 >    (CCE-LTER EDI packages, NCOG genomics, the Stanford Hopkins records, cetacean sightings, IFCB, …). All are
 >    already public archives, but if any should stay off the page until a provider conversation happens,
@@ -147,7 +152,7 @@ a machine without them falls back to Calibri, which is acceptable. Do not embed.
 
 | Ask | Owner | Proposed answer already on the table |
 |---|---|---|
-| Mailbox behind `data@calcofi.io` | Ben (forwarder, this week) · Erin (Google Group `calcofi-data@ucsd.edu`, or one ITS ticket) | the public address never changes; the group becomes its target |
+| Long-term target for `data@calcofi.io` (forwarding is live since 9/7) | Erin (Google Group `calcofi-data@ucsd.edu`, or one ITS ticket) | the public address never changes; the group becomes its target |
 | Which holdings stay public | Erin, Mark | all 17 are public archives already; `visibility: internal` hides one from every public surface in one line |
 | One outreach channel for providers | Erin, Ben | Erin's attribution sheet stays the outreach form for this round and is imported (`scripts/import_caloos_sheet.R`); from the next round the per-provider Sheets are the one place — or we add her columns to those Sheets now |
 | Who holds the CalCOFI EDI account | Erin (recommended) | scope `edi`, one package per program dataset; CCE-LTER's stay in `knb-lter-cce` — ask Kathy/Mike once |
@@ -358,3 +363,35 @@ Two sessions, in parallel; each cwd `~/Github/CalCOFI/workflows` so CLAUDE.md an
 > exists), one provider Sheet's metadata tab, and the Zenodo record. Speaker notes on every slide carry the
 > talk track and each number's source. Build, open with `open`, then run the XML font check from § Verification.
 > Do not invent a number: anything not in the facts table is a placeholder in square brackets for Ben.
+
+## Measured (appended as pieces ship)
+
+- **2026-09-07 · D done.** `docs/diagrams/catalog_flow.mmd` (record → surfaces → readers, brand-neutral fills,
+  dashed readers) renders with `mmdc` and client-side in the book; it replaces `portals_flow.mmd` in
+  `portals.qmd` (paragraph before it rewritten from "one possible realization" to the flow as it runs) and
+  joins `index.qmd` beside the 2022 figure, which stays as history. PNG for the deck:
+  `mmdc -i ../docs/diagrams/catalog_flow.mmd -o presentations/assets/catalog_flow.png -w 2400 -b white`.
+- **2026-09-07 · C done.** `docs/metadata.qmd` "Metadata & the ingest loop" (chapter 6, after Database):
+  one key/record/page with the three states; authored vs measured; the tier table read live from
+  `metadata/dataset_meta_fields.csv` (gt, `fmt_markdown` on guidance); the Sheets table (three tab kinds,
+  editable columns); `visibility` and `license` notes; question statuses and what *proposed* means; what a
+  sync and a release regenerate (the diagram); the weekly observer; the five-step loop; who to contact
+  (`data@calcofi.io` now forwards). Rendered locally to `_book/`, every link 200 (ranged GET), screenshots
+  checked. Docs commits a46d6f7 + ca3b61c pushed to `CalCOFI/docs` main (the first carried only `metadata.qmd`
+  and the diagram deletion — a failed `git add` pathspec — the second carries the wiring; the book
+  deploys itself through `render_book.yml`, ~15 min on the macOS runner). Live URL once deployed:
+  https://calcofi.io/docs/metadata.html. Side fix pushed to `CalCOFI/workflows` (c18a687): the
+  `citation_main` guidance cell no longer carries escaped quotes.
+- Email item 3 can now link the live page; the deck's slide 12 footer is the same URL.
+- **2026-09-07 · the docs deploy was already red before this work.** This morning's portals commit (70341e2)
+  failed `render_book.yml` at the **docx** download: gt 1.3.0's Word export unescapes `&` in a
+  `fmt_markdown()` cell and then parses the cell as XML (`xmlParseEntityRef: no name`), and v2026.09.06's
+  record carries "Picoplankton & Bacteria". A local `quarto render --to html` cannot show it; the check is
+  `gt::as_word(tbl)` on the chunk's table (plus `as_latex()`). Fixed in 3473672: both live portals tables
+  link each dataset with `fmt_url(label = from_column("name"))`, which passes Word, LaTeX and HTML;
+  `tbl-meta-fields` was already clean. Runs a46d6f7 and ca3b61c failed for the same pre-existing reason;
+  3473672 is the deploy to watch.
+- **2026-09-07 · LIVE.** The pdf download failed next (gt's `fmt_url()` writes the raw URL into LaTeX with
+  an unescaped `_`): 2bab28d makes the dataset link HTML-only (`knitr::is_html_output()`; the pdf/docx/epub
+  show the plain name). Deploy run 34137348470 green; https://calcofi.io/docs/metadata.html answers 200,
+  chapter 6 in the sidebar, the diagram in Process, Portals and Metadata. Email item 3 links it as written.
