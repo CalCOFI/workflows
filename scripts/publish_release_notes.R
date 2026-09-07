@@ -54,3 +54,12 @@ for (v in vers_local) run(v, bucket = NULL, pkg_versions = NULL)
 
 cat(glue("published {length(ok)} version(s){if (dry) ' (dry run, local only)' else ''}\n"))
 if (length(bad)) { cat("skipped:\n"); cat(paste(" -", bad), sep = "\n") }
+
+# the readable pages beside the markdown just written (RELEASES.html, {v}/RELEASE_NOTES.html):
+# storage.calcofi.io serves objects as they are, and a link to RELEASES.md opened raw markdown
+if (!dry && length(ok)) {
+  md_uris <- c("gs://calcofi-db/ducklake/releases/RELEASES.md",
+               glue("gs://calcofi-db/ducklake/releases/{ok}/RELEASE_NOTES.md"))
+  system2("Rscript", c(shQuote(here("scripts/render_md_on_storage.R")), shQuote(md_uris)))
+}
+

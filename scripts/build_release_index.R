@@ -261,7 +261,7 @@ root_body <- glue('
 </tbody></table></div>
 
 <div class="note">
-<b>What changed between versions?</b> <a href="{HTTPS}/RELEASES.md">RELEASES.md</a> is
+<b>What changed between versions?</b> <a href="{HTTPS}/RELEASES.html">RELEASES.md</a> (rendered; <a href="{HTTPS}/RELEASES.md">raw</a>) is
 the running changelog (newest first); the <code>RELEASE_NOTES.md</code> of each version is its
 section plus a generated appendix.<br><br>
 <b>Which version should I use?</b> <code>{HTTPS}/latest.txt</code> holds the
