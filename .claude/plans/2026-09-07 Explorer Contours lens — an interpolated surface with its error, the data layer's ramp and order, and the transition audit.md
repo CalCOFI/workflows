@@ -255,7 +255,8 @@ Ben: *"add option for contour labels layer (on by default)."* The marching-squar
 shorter than half that gets none), rotated to follow the line and kept upright. A deck `TextLayer` draws the level
 (years as integers) at 12 px on a translucent white box. `labels=off` in the URL, a *contour labels* checkbox in the
 options and a row under *Data* in the Layers card. One trap: deck's font atlas rendered nothing with
-`fontWeight: "600"` beside a family list — boxes without glyphs — so the layer sets the family only.
+any custom `fontFamily` here (with or without a weight) — boxes without glyphs — so the layer keeps deck's default
+font; worth a look at the atlas when a brand-font label matters.
 
 ### D38 · The hexagon size is a slider (executed)
 
