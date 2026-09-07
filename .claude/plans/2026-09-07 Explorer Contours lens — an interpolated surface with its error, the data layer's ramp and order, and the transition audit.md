@@ -272,6 +272,17 @@ the legend (scale · 5–95 % · count) under it — and the **status is a pill 
 spinner while something is in flight, transient notes clearing after 5 s, an error staying until the next change.
 And the Controls tabs read as a sequence: small step badges **① Select ② Refine ③ Share**, the active one filled.
 
+### D37 (addendum) · No phantom stations: the carrier dots fade out on arrival (executed)
+
+Ben, on the Hexagons and Regions screenshots: *"This animation leaves these inexplicable phantom stations — what is
+supposed to be their meaning? They are not mentioned in the legend."* They were the morph carrier — the 218 station
+dots every lens keeps so deck can tween them — left visible at the hexagon centres (alpha 160) and inside the regions
+(alpha 120), and no lens explained them. Now the dots **fade to transparent as they arrive**: Stations → Hexagons still
+travels them to the hexagon centre (the pooling, in one move) but they land invisible; Regions and Cruises fade them in
+place (the cruise's own sampled dots are its own layer, and the track animation Ben likes is untouched); Sections keeps
+only its line's stations; Contours only the optional inputs (D43). The layer stays — it is what makes the next morph
+possible — but nothing lingers that the legend does not name.
+
 ### D38 · The hexagon size is a slider (executed)
 
 `<input type="range" min=3 max=7 step=1>` with a `<datalist>` tick per H3 resolution, 110 px wide, the readout
