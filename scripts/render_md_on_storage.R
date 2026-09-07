@@ -45,9 +45,10 @@ render_one <- function(uri) {
   system2(calcofi4db:::find_gcloud(), c("storage", "cp", shQuote(uri), shQuote(local_md)), stdout = FALSE, stderr = FALSE)
   if (!file.exists(local_md)) stop("could not fetch ", uri)
   md   <- readLines(local_md, warn = FALSE, encoding = "UTF-8")
-  body <- commonmark::markdown_html(paste(md, collapse = "\n"), extensions = TRUE, smart = FALSE)
   title <- sub("^#\\s+", "", grep("^#\\s+", md, value = TRUE)[1])
-  if (is.na(title) || !nzchar(title)) title <- basename(p$path)
+  if (is.na(title) || !nzchar(title)) title <- basename(p$path) else
+    md <- md[-grep("^#\\s+", md)[1]]   # the page's h1 is the document's first heading; not twice
+  body <- commonmark::markdown_html(paste(md, collapse = "\n"), extensions = TRUE, smart = FALSE)
   folder <- dirname(p$path)
   crumb  <- glue('<p class="crumb"><a href="https://storage.calcofi.io/{p$bucket}/{folder}/">{esc(folder)}</a> / ',
                  '{esc(basename(p$path))} · <a href="{https}">raw markdown ↗</a></p>')
