@@ -70,7 +70,7 @@ TOC_CSS <- '<style>
 .toc li a:hover{color:var(--accent);text-decoration:none}.toc li a.is-active{color:var(--accent);border-left-color:var(--accent)}
 .md h1,.md h2,.md h3{scroll-margin-top:1rem}
 </style>'
-TOC_JS <- '<script>(function(){var links=[].slice.call(document.querySelectorAll(".toc a[href^=\"#\"]"));if(!links.length)return;
+TOC_JS <- '<script>(function(){var links=[].slice.call(document.querySelectorAll(".toc ol a"));if(!links.length)return;
 var heads=links.map(function(a){return document.getElementById(decodeURIComponent(a.getAttribute("href").slice(1)))});
 var on=null;function mark(i){if(on===i)return;links.forEach(function(a){a.classList.remove("is-active")});if(i>=0){links[i].classList.add("is-active");on=i;
 var el=links[i];var box=el.closest(".toc");if(box&&box.getBoundingClientRect().height<box.scrollHeight){var r=el.getBoundingClientRect(),b=box.getBoundingClientRect();if(r.top<b.top||r.bottom>b.bottom)el.scrollIntoView({block:"center"})}}}
