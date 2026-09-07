@@ -6,7 +6,7 @@ executed 2026-09-07** — see *Decided* and *Measured* at the end ·
 **Date:** 2026-09-07 · **Scale:** one repo (`CalCOFI/explore`: three new modules — `contour.worker.ts`,
 `contour.ts`, `ramps.ts` — and edits to `state.ts`, `map.tsx`, `App.tsx`, `sentence.tsx`, `layers.tsx`,
 `sql/station.sql`, `sql/cruise_track.sql`); no release change, no server; ~14 h spent, ~24 h left across three slices.
-Decision numbering continues from the 2026-08-31 map-layers plan (D21–D30): **D31–D42**.
+Decision numbering continues from the 2026-08-31 map-layers plan (D21–D30): **D31–D43**.
 
 ## The ask (Ben, 2026-09-07)
 
@@ -237,6 +237,16 @@ like the edge fade: the bitmap, the isolines and the hover are blank over land; 
 Python parity are untouched (mask `cc_interpolate_rast()` with `calcofi4r::cc_bathy()` in R for the same effect).
 `loadMosaic()` in `curtain.tsx` kept its new zoom argument and `mosaicAt()` for whoever needs elevations next.
 
+### D43 · The inputs are a layer of their own, off by default on the site grain (executed)
+
+Ben, on seeing the site grain: *"Why all the white dots? Seems like obs, but conflated with the data layer, so
+confusing — should be separate, optional."* D33 drew the fitted points over the surface as the answer to "what data
+contributes"; at 12,000 sites that reads as a second data layer. Now `inputs=on|off`: a *show the inputs* checkbox in
+the Contours options (naming the count — "12,046 sites" or "213 stations") and an *Inputs* row under *Data* in the
+Layers card; **off by default on the site grain, on for the station grid** (218 dots sized by their observations,
+which still says where the record is thick), and the URL carries an explicit choice. The station-dot layer stays the
+morph carrier under every lens; in Contours with the inputs off it draws at radius 0 and is not pickable.
+
 ### D38 · The hexagon size is a slider (executed)
 
 `<input type="range" min=3 max=7 step=1>` with a `<datalist>` tick per H3 resolution, 110 px wide, the readout
@@ -286,6 +296,7 @@ call these on `summary/station.csv` when the lens is Contours, so the bundle re-
 | **3 · D36 → interleaved overlay (executed 2026-09-07)** | the four proofs, the Data row in *On the map*, `layers=…,data,…` | 4 |
 | **4 · the site grain (executed 2026-09-07, D40)** | `grain=site` default, `contour_cast.sql`, the local mode in the worker + calcofi4r 1.22.0 + calcofi4py 0.9.0 with the seeded subsamples | 6 |
 | **5 · the lens picker (executed 2026-09-07, D41)** | `src/lenspicker.tsx` | 2 |
+| **8 · the inputs as a layer (executed 2026-09-07, D43)** | `inputs=`, the toggle and the Layers-card row | 1 |
 | **7 · land clip (executed 2026-09-07, D42)** | `landMask()` rasterises Natural Earth land onto the grid; `public/land.geojson` | 1 |
 | **6 · retire the Contour Explorer (executed 2026-09-07)** | `server/caddy/Caddyfile`: `/contour` and `/oceano` 308 to `calcofi.io/explore/?lens=contour&var=temperature` (deployed: Caddy restarted on the server); `products.yml`: the card superseded by the Explorer, the Explorer card lists contours; `uptime`: the monitor dropped | 1 |
 | left | the kriging SD at the station grid stays ≈ 3 s (delivered after the value; a Cholesky path would halve it); isoline labels; a log1p transform for heavy-tailed biology (D40); `reproduce.R` running the surface itself rather than naming the call | — |
