@@ -6,7 +6,7 @@ executed 2026-09-07** — see *Decided* and *Measured* at the end ·
 **Date:** 2026-09-07 · **Scale:** one repo (`CalCOFI/explore`: three new modules — `contour.worker.ts`,
 `contour.ts`, `ramps.ts` — and edits to `state.ts`, `map.tsx`, `App.tsx`, `sentence.tsx`, `layers.tsx`,
 `sql/station.sql`, `sql/cruise_track.sql`); no release change, no server; ~14 h spent, ~24 h left across three slices.
-Decision numbering continues from the 2026-08-31 map-layers plan (D21–D30): **D31–D45**.
+Decision numbering continues from the 2026-08-31 map-layers plan (D21–D30): **D31–D46**.
 
 ## The ask (Ben, 2026-09-07)
 
@@ -283,6 +283,20 @@ place (the cruise's own sampled dots are its own layer, and the track animation 
 only its line's stations; Contours only the optional inputs (D43). The layer stays — it is what makes the next morph
 possible — but nothing lingers that the legend does not name.
 
+### D46 · A dataset deep link opens on what that dataset holds (executed)
+
+Ben: *"from calcofi.io/datasets/sio_mesopelagic-fish, if I click CalCOFI Explorer (`?datasets=sio_mesopelagic-fish`), it
+resolves to sardine larvae per 10 m² and I don't see the dataset at all. I'm sure that's not the only dataset."* It was
+not: the link carried only the filter, the app opened on the default sardine, and the slice pruned a dataset that had no
+sardine. Now, when the page boots with `datasets=` and names no `taxon` or `var`, `coverage.json` picks the subject:
+the dataset's **headline variable** (a unified one — temperature, salinity, oxygen — before a bare type, never a
+depth / pressure / flag / id column; coverage lists the bio count types as variables too, so the env realm is filtered
+first) when its env observations outnumber its bio ones, else its **most-observed named taxon** (unidentified eggs
+skipped). And the slice now defaults the **stage and denominator from the datasets in view**, so CUFES opens on sardine
+*eggs* as a raw count rather than inheriting ichthyo's larva · per 10 m² and 0 observations. Checked for all 15
+datasets in the dev catalog: each lands on data (mesopelagic → Mexican lampfish, 73 obs; bottle → temperature; METS →
+TSG salinity; phyllosoma → spiny lobster; Farallon → Western Gull; dungeness → megalopae …).
+
 ### D38 · The hexagon size is a slider (executed)
 
 `<input type="range" min=3 max=7 step=1>` with a `<datalist>` tick per H3 resolution, 110 px wide, the readout
@@ -332,6 +346,7 @@ call these on `summary/station.csv` when the lens is Contours, so the bundle re-
 | **3 · D36 → interleaved overlay (executed 2026-09-07)** | the four proofs, the Data row in *On the map*, `layers=…,data,…` | 4 |
 | **4 · the site grain (executed 2026-09-07, D40)** | `grain=site` default, `contour_cast.sql`, the local mode in the worker + calcofi4r 1.22.0 + calcofi4py 0.9.0 with the seeded subsamples | 6 |
 | **5 · the lens picker (executed 2026-09-07, D41)** | `src/lenspicker.tsx` | 2 |
+| **11 · dataset deep links land on data (executed 2026-09-07, D46)** | `BOOT` params → coverage.json pick; stage/denominator from the datasets in view | 1 |
 | **10 · title above legend, status toast, numbered tabs (executed 2026-09-07, D45)** | `sentence.tsx`, `App.tsx` status toast, `.tabs .step` | 1 |
 | **9 · contour lines + labels (executed 2026-09-07, D44)** | darkened ramp lines; `joinSegments()` + `labelPoints()` + `thinLabels()`, a `TextLayer`, `labels=on` | 2 |
 | **8 · the inputs as a layer (executed 2026-09-07, D43)** | `inputs=`, the toggle and the Layers-card row | 1 |
