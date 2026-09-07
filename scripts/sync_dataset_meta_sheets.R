@@ -569,6 +569,7 @@ dm_all_holding_sidecars <- function(metadata_dir = METADATA_DIR) {
     y <- calcofi4db::read_dataset_sidecar(p)
     if (nzchar(y$status %||% "") && y$status %in% calcofi4db::holding_statuses()) {
       dataset <- basename(dirname(p)); provider <- basename(dirname(dirname(p)))
+      y$path <- p   # gs_pull_holdings() reads the sidecar back through it (2026-09-07: NULL crashed the pull)
       out[[paste0(provider, "_", dataset)]] <- y
     }
   }

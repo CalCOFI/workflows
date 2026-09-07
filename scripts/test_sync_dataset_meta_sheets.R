@@ -365,3 +365,18 @@ test_that("every metadata/*/*/dataset_meta.yml in the repo is readable and every
 })
 
 cat("\nAll scripts/sync_dataset_meta_sheets.R tests passed.\n")
+
+# dm_all_holding_sidecars — every record carries the path the pull reads it back through ------
+
+test_that("dm_all_holding_sidecars stamps path on every holding (regression: NULL crashed gs_pull_holdings)", {
+  tmp <- tempfile(); dir.create(file.path(tmp, "acme", "widgets"), recursive = TRUE)
+  dir.create(file.path(tmp, "acme", "released"), recursive = TRUE)
+  writeLines(c("status: external", "dataset_name: Widgets", "visibility: public"),
+             file.path(tmp, "acme", "widgets", "dataset_meta.yml"))
+  writeLines(c("dataset_name: Released one", "visibility: public"),     # no status: not a holding
+             file.path(tmp, "acme", "released", "dataset_meta.yml"))
+  h <- dm_all_holding_sidecars(tmp)
+  expect_equal(names(h), "acme_widgets")
+  expect_equal(h$acme_widgets$path, file.path(tmp, "acme", "widgets", "dataset_meta.yml"))
+  expect_true(file.exists(h$acme_widgets$path))
+})
