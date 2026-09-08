@@ -15,10 +15,12 @@ bash scripts/deploy_consumers.sh --release v2026.08.10   # pin, else reads lates
 
 It resolves the release from `latest.txt`, then: pulls sources → rebuilds the two
 app databases inside the `rstudio` container → restarts the h3t API and bans the
-cached tiles → touches `restart.txt` → **verifies all three endpoints return 200
-and prints which file the h3t API actually has open.** It is `set -euo pipefail`
-and exits non-zero on the first real failure, because a half-deployed consumer
-set is worse than an obviously failed one.
+cached tiles → re-points the PostgreSQL `release.*` views → touches `restart.txt`
+→ **verifies all three endpoints return 200 and prints which file the h3t API
+actually has open** → dispatches the hosted consumers, the docs book included
+(step 6, below). It is `set -euo pipefail` and exits non-zero on the first real
+failure, because a half-deployed consumer set is worse than an obviously failed
+one.
 
 `test_release.qmd` invokes it automatically when `CALCOFI_DEPLOY=true`, so a
 normal `tar_make()` still only builds and promotes — deploying stays one
@@ -43,17 +45,31 @@ Restart the h3t container with `docker compose restart`, never `up -d`: restart
 reuses the same container so its docker IP is unchanged and Varnish keeps
 resolving it. Recreating it would need Varnish restarted too.
 
-## What the script does not cover
+## The hosted consumers (step 6)
 
-Hosted consumers redeploy themselves and are not in the script:
+Hosted consumers redeploy themselves on GitHub Actions rather than on the CalCOFI
+server, so step 6 only fires the dispatch — non-fatally, since `gh` may be absent
+or unauthorized on the machine cutting the release:
 
 ```bash
-gh workflow run refresh.yml --ref main -R CalCOFI/db-viz-station    # coverage JSON
-gh workflow run refresh.yml --ref main -R CalCOFI/ctd-transects     # section shards
+gh workflow run refresh.yml     --ref main -R CalCOFI/db-viz-station   # coverage JSON
+gh workflow run refresh.yml     --ref main -R CalCOFI/ctd-transects    # section shards
+gh workflow run render_book.yml --ref main -R CalCOFI/docs             # the docs book
 ```
 
-`calcofi.io/query` and `calcofi.io/schema` are GitHub Pages and rebuild on push.
-`calcofi4r` reads `latest` directly and needs no deploy — but keep
+**The docs book is a release consumer, and the least obvious one.** `CalCOFI/docs`
+renders through `libs/pre-render.R`, which snapshots the **promoted** release's
+sidecars (`catalog.json`, `integrity.json`, `metadata.json`, `relationships.json`,
+`datasets.json`, the `dataset` table, the release notes) plus this repo's
+`metadata/` registries, and every generated table in the book reads that snapshot.
+Until the book re-renders it describes the *previous* release — no error, no stale
+marker, just last release's inventory, keys, versions and datasets on
+calcofi.io/docs. `render_book.yml` also accepts a `repository_dispatch` of type
+`release-promoted` and runs on a weekly schedule, so the dispatch here is belt and
+braces rather than the only path.
+
+`calcofi.io/db-query` and `calcofi.io/db-schema` are GitHub Pages and rebuild on
+push. `calcofi4r` reads `latest` directly and needs no deploy — but keep
 `calcofi4r/R/match.R` byte-identical with `db-query/lib/match.js` (CI verifies).
 
 ## If `db-viz-hex`'s `prep_db.R` is OOM-killed

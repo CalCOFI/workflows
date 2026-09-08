@@ -38,6 +38,13 @@ consumer-contract query suite passes (it exercises the app/`calcofi4r` query
 shapes against the frozen release, so a schema drift that would break a consumer
 fails the release rather than the app).
 
+**After promotion, run `bash scripts/deploy_consumers.sh`** (the `deploy-consumers`
+skill; `test_release.qmd` runs it for you when `CALCOFI_DEPLOY=true`). Since
+2026-09-08 its last step also dispatches `render_book.yml` in `CalCOFI/docs`: the
+docs book is a release consumer — `libs/pre-render.R` snapshots the *promoted*
+release's sidecars at render time — so until it re-renders, calcofi.io/docs
+describes the previous release with nothing to say so.
+
 
 ## RELEASES.md is not optional (the database's NEWS file)
 

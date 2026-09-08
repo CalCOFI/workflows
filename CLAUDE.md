@@ -30,6 +30,22 @@ JSON sidecars in `data/parquet/` (both mirrored to `gs://calcofi-db/parquet/`);
 `release_database.qmd` assembles those shards in memory, validates, freezes and
 uploads `gs://calcofi-db/ducklake/releases/{version}/`.
 
+## The documentation is the compendium — `docs-compendium` skill
+
+- **`../docs` (calcofi.io/docs) is the authoritative description of the system**; this file and
+  the skills are the engineering rules for changing it. Start work in an area by reading its
+  chapter (the chapter → area table is in the skill), then the skill, then the code.
+- **A change that alters what a chapter states updates that chapter in the same change** — the
+  prose, `diagrams/*.mmd` + its rendered `.svg`, the caption, the cross-reference — and the
+  render is checked. A rule the pipeline enforces is stated with how it is enforced; one nobody
+  enforces is stated as intent.
+- Prose is authored, facts are generated: never type a number, count, column list, status or
+  version into a chapter; surface it through `libs/pre-render.R`'s snapshot under `data/`.
+- Every figure and table is numbered, captioned (`{#fig-…}`, `{#tbl-…}` / `tbl-cap`) and
+  referenced from the prose; citations are BibTeX keys in `refs/*.bib`, never pasted text.
+- The book is a release consumer: `scripts/deploy_consumers.sh` re-renders it after
+  `latest.txt` is promoted; a stale version on the site means that step was skipped.
+
 ## Commands
 
 The pipeline is the source of truth — prefer running notebooks through `targets`
@@ -220,7 +236,8 @@ Rscript scripts/build_workflows_index.R
   honours `?theme=` and `?tour=off`, and is checked weekly. Quarto renders get it
   from `libs/brand/quarto_head.html` + `quarto_header.html`.
 - **Deploy** (`deploy-consumers`): the per-app refresh after a release is
-  promoted.
+  promoted, ending with the hosted consumers — db-viz-station, ctd-transects and
+  the docs book — dispatched on GitHub Actions.
 - **Release objects** (`release-objects`): released parquet is content-addressed
   under `ducklake/tables/{table}/{hash}/`; never build a
   `releases/{v}/parquet/` path by hand, go through `cc_catalog()` /
