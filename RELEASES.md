@@ -4,9 +4,45 @@ What changed between releases and why. One section per release, newest first; th
 `# Unreleased` section collects changes since the last release and becomes the next release's
 section when `release_database.qmd` runs. Each release's `RELEASE_NOTES.md` on GCS is the
 section below plus a generated appendix (tables, rows, datasets, validation gates, package
-versions). Conventions: see `CLAUDE.md` § "RELEASES.md is not optional".
+versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run` skill.
 
 # Unreleased
+
+## Every released key is declared, and every declared key is measured
+
+The release has always declared its keys in `relationships.json` and drawn them in the ERD, but
+it gated only a few: the core primary keys (`check_core_pk_unique()`, since v2026.08.25's 4,855
+duplicate `sample_key`s) and the `cruise_key` edges (`check_cruise_key_integrity()`). The other
+~50 declared foreign keys were true by construction and never measured, twelve of the 23 released
+tables declared no primary key at all (`obs_bio`, `obs_env`, `sample_root`, `sample_spatial`,
+`climatology`, `spatial`, `spatial_attribute`, `dataset`, `lookup`, `taxon_group`, the two
+supplementals), and 28 of the 88 foreign-key rows named thirteen per-dataset tables the release
+retired in 2026-07 (`casts`, `ctd_cast`, `zooplankton_tow`, …).
+
+Now (calcofi4db 4.7.0): every released table declares a primary key — each measured unique on
+v2026.09.06 before being declared — `relationships.json` carries only edges whose both ends ship
+(the ingest-only rows stay in `relationships_all.csv` as `released = FALSE`), and a new
+`integrity.json` sidecar beside `catalog.json` records, per key, rows / distinct / duplicates /
+NULLs and rows / NULL / orphans, with `ok` overall. A duplicate or NULL primary key or any
+foreign-key orphan stops the release (`release_database.qmd` `relationship_integrity`, after every
+released table exists), and `test_release.qmd` refuses to promote a release without an all-ok
+`integrity.json`. A NULL foreign key is a nullable edge (an env row's `taxon_key`, an ungridded
+sample's `grid_key`), not an orphan. `metadata/release_tables.csv` describes `sample_root` and
+`sample_spatial` at last (both were absent from `metadata.json`, so the schema browser could not
+list them) and drops the retired `obs_freq` row.
+
+Thirteen edges the release always had but never declared are declared now, each measured at 0
+orphans first (`spatial_attribute` → `spatial`, `cruise` → `ship`, the supplementals' `cruise_key` /
+`grid_key` / `dataset_key` / `measurement_type`, `sample_root`'s three, `sample_spatial.root_id`,
+`obs_attribute.dataset_key`). One is deliberately **not**: `obs_mets_full.sample_key` → `sample`
+resolves for 73,607 of its 2,168,850 distinct keys — `sample` holds the 77,795 underway events the
+METS headline series keys to, while the full-resolution table mints one key per record that
+never reaches `sample`. Declaring it would fail the release on 18,990,343 orphans; leaving it
+undeclared hides a real gap, so it is recorded here and as a workflows issue for the METS ingest
+until the supplemental's events either join `sample` or carry a documented per-record key.
+
+**Consumers:** `relationships.json` lists fewer, truer edges (the 60 with both ends released, deduplicated, plus the thirteen above) and a primary key for every table; `integrity.json` is new and optional to read;
+`metadata.json` gains `sample_root` and `sample_spatial`. Nothing in the parquet changes.
 
 ## A publisher re-run over a frozen release costs a hash comparison, not a rebuild
 

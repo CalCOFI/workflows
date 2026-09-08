@@ -580,6 +580,21 @@ contract_res <- purrr::pmap_dfr(contract, function(name, expect, sql) {
     error = if (ok) NA_character_ else glue("expected {expect}, got n={n}"))
 })
 
+# the measured keys travel with the release: integrity.json (calcofi4db >= 4.7.0, written by
+# release_database.qmd's relationship_integrity chunk) must exist and report every key ok
+integrity_path <- file.path(releases_dir, release_version, "integrity.json")
+integ <- if (file.exists(integrity_path)) jsonlite::fromJSON(integrity_path) else NULL
+integ_row <- tibble::tibble(
+  query  = "sidecar: integrity.json present and every declared key measured ok",
+  label  = "consumer-contract",
+  status = if (!is.null(integ) && isTRUE(integ$ok)) "pass" else "fail",
+  reason = NA_character_,
+  rows   = if (is.null(integ)) NA_integer_ else as.integer(integ$n_foreign_keys),
+  ms     = NA_real_,
+  error  = if (is.null(integ)) "integrity.json missing" else
+           if (!isTRUE(integ$ok)) "integrity.json reports a failing key" else NA_character_)
+contract_res <- dplyr::bind_rows(contract_res, integ_row)
+
 # fold into the same results table the promote gate reads
 results <- dplyr::bind_rows(results, contract_res)
 

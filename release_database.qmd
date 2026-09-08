@@ -1000,7 +1000,7 @@ if (nrow(d_over) < DEPTH_SEAFLOOR_OVER_MAX)
 `ingest_calcofi_ctd-cast.qmd`'s `apply_accepted_flags` chunk applies every
 *accepted* row of the CTD team's PostgreSQL QA/QC ledger
 (`gs://calcofi-db/qc/ctd/flag_accepted.parquet`, a nightly snapshot — see
-`CLAUDE.md` § *The CTD team's PostgreSQL database*) and records how many it
+the `pipeline-targets` skill, § *The CTD team's PostgreSQL database*) and records how many it
 applied in that ingest's `metadata.json` (`n_flags_applied`). This chunk
 compares the snapshot's current count to that stamp: a gap means flags were
 accepted by the team **after** the CTD ingest last rendered, so this release
@@ -1437,8 +1437,8 @@ every event's date within its cruise's span, the ichthyo notebook's own
 `cruise_uuid`/`cruise_key` agreement (read from its manifest — the release's `sample` table
 carries no `cruise_uuid` column, so that check can only run inside the notebook that still
 has it) and three ratchets (span overlaps, derived-row count, NULL-`cruise_key` backlog per
-dataset). See CLAUDE.md § "Provider UUIDs are columns, and the cruise key is checked
-against the cruise" and the WS-B design memo (`.claude/plans_todo/2026-09-03 WS-B …md`) for
+dataset). See the `cruise-key` skill, § "Provider UUIDs are columns; the cruise key is checked
+against the cruise", and the WS-B design memo (`.claude/plans_todo/2026-09-03 WS-B …md`) for
 the numbers behind each check.
 
 ```{r}
@@ -1841,10 +1841,70 @@ core_keep         <- c(core_keep, "sample_spatial", "climatology",   # climatolo
 supplemental_keep <- c(supplemental_keep, "sample_root")
 ```
 
+### Relationship integrity
+
+`calcofi4db::check_release_relationships()` (>= 4.7.0) walks every declared key on the
+assembled tables — each primary key unique and non-NULL, each non-NULL foreign key resolving in
+its referenced column — and writes `integrity.json` beside `catalog.json`, so the schema browser
+and the docs can show *measured* beside every key instead of trusting the diagram. Until
+2026-09-08 only the core primary keys (`check_core_pk_unique()`, above) and the `cruise_key` edges
+(`check_cruise_key_integrity()`) were gated; the other ~50 declared edges were true by construction.
+A NULL foreign key is a nullable edge and is permitted; an orphan stops the release. This runs here,
+after `browser_objects`, because it is the first point at which every released table exists.
+
+```{r}
+#| label: relationship_integrity
+
+# every released table declares its primary key. The release-built ones (obs_bio, obs_env,
+# sample_root, sample_spatial, climatology, spatial, …) come from core_relationships(), which the
+# ingest sidecars merged in [combined_schema] never carry; they are filled in here.
+released_tbls <- setdiff(DBI::dbListTables(con_wdl),
+  c("_meta", "_sp_update", "casts_derived", "ctd_cast_derived", "_measurement_taxon"))
+rels_merged <- jsonlite::fromJSON(rels_merged_path, simplifyVector = FALSE)
+rel_pks <- core_relationships(released_tbls)$primary_keys
+for (tb in names(rel_pks))
+  if (is.null(rels_merged$primary_keys[[tb]])) rels_merged$primary_keys[[tb]] <- rel_pks[[tb]]
+rels_merged$primary_keys <- rels_merged$primary_keys[
+  intersect(names(rels_merged$primary_keys), released_tbls)]
+
+# an FK edge ships only when both ends do. relationships_cross.csv still records how each ingest
+# resolved its keys on the per-dataset tables the release retired in 2026-07 (casts, ctd_cast,
+# zooplankton_tow, …); those rows stay in the CSV, and in relationships_all.csv as released = FALSE,
+# and leave relationships.json so the ERD, db-schema and this check see the released graph alone.
+fk_released <- vapply(rels_merged$foreign_keys, function(fk)
+  fk$table %in% released_tbls && fk$ref_table %in% released_tbls, logical(1))
+n_dropped <- sum(!fk_released)
+rels_merged$foreign_keys <- rels_merged$foreign_keys[fk_released]
+# one edge once: the ingest sidecars and relationships_cross.csv both declare the core edges
+# (obs.sample_key -> sample, …), and [combined_schema] appended the cross rows without deduplicating
+fk_id <- vapply(rels_merged$foreign_keys, function(fk)
+  paste(fk$table, fk$column, fk$ref_table, fk$ref_column), character(1))
+rels_merged$foreign_keys <- rels_merged$foreign_keys[!duplicated(fk_id)]
+jsonlite::write_json(rels_merged, rels_merged_path, auto_unbox = TRUE, pretty = TRUE, null = "null")
+rels_all_path <- file.path(dir_frozen, "relationships_all.csv")
+if (file.exists(rels_all_path)) {
+  rels_all <- readr::read_csv(rels_all_path, show_col_types = FALSE)
+  rels_all$released <- rels_all$from_table %in% released_tbls & rels_all$to_table %in% released_tbls
+  readr::write_csv(rels_all, rels_all_path)
+}
+cat(glue("relationships.json: {length(rels_merged$primary_keys)} primary keys over ",
+         "{length(released_tbls)} released tables; {length(rels_merged$foreign_keys)} foreign keys ",
+         "({n_dropped} ingest-only edges left in relationships_all.csv)\n"))
+
+integrity_path <- file.path(dir_frozen, "integrity.json")
+d_integrity <- check_release_relationships(
+  con_wdl, rels_merged_path, path = integrity_path, version = release_version, halt = TRUE)
+cat(glue("integrity: {sum(d_integrity$primary_keys$status == 'ok')} primary keys and ",
+         "{sum(d_integrity$foreign_keys$status == 'ok')} foreign keys measured ok; ",
+         "{d_integrity$n_skipped} skipped\n"))
+datatable(d_integrity$foreign_keys,
+  caption = "foreign keys measured on the assembled release (n_null is permitted; an orphan fails)")
+```
+
 ```{r}
 #| label: release_notes_narrative
 
-# RELEASES.md is the database's NEWS file (CLAUDE.md § "RELEASES.md is not
+# RELEASES.md is the database's NEWS file (`release-run` skill, § "RELEASES.md is not
 # optional"). A release with no section for itself is refused HERE, before the
 # freeze, for the same reason the packages refuse a version bump without a NEWS
 # entry: the notes are written by the change that made them necessary, not
@@ -2207,11 +2267,15 @@ if (file.exists(notes_path))
 put_gcs_file(releases_md_path,
   glue("gs://{gcs_bucket}/{release_prefix}/RELEASES.md"))
 
-# upload relationships.json
+# upload relationships.json and the measured keys beside it
 rels_json <- file.path(dir_frozen, "relationships.json")
 if (file.exists(rels_json))
   put_gcs_file(rels_json,
     glue("gs://{gcs_bucket}/{gcs_release}/relationships.json"))
+integrity_json <- file.path(dir_frozen, "integrity.json")
+if (file.exists(integrity_json))
+  put_gcs_file(integrity_json,
+    glue("gs://{gcs_bucket}/{gcs_release}/integrity.json"))
 
 # build and upload metadata.json (table/column descriptions + units).
 # auto-discover every ingest's metadata.json (same as rels_paths) so newly added
@@ -2528,6 +2592,7 @@ sidecar_urls <- c(
   glue("gs://{gcs_bucket}/{gcs_release}/spatial.geojson"),
   glue("gs://{gcs_bucket}/{gcs_release}/spatial_layers.json"),
   glue("gs://{gcs_bucket}/{gcs_release}/relationships.json"),
+  glue("gs://{gcs_bucket}/{gcs_release}/integrity.json"),
   glue("gs://{gcs_bucket}/{gcs_release}/erd.mmd"),
   glue("gs://{gcs_bucket}/{gcs_release}/RELEASE_NOTES.md"),
   glue("gs://{gcs_bucket}/{release_prefix}/RELEASES.md"))
