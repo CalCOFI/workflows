@@ -85,7 +85,7 @@ over them. All deleted in calcofi4db 3.0.0. The package keeps only generic
 shapes; each dataset's projection lives in the notebook that owns it. Not for
 tidiness: `release_database.qmd` kept a second copy of every arm, and the two
 drifted into four silent data errors before anyone compared them. The release is
-now a pure union of shards, and its `core_parity` chunk asserts shard counts, so
+a pure union of shards, and its `core_parity` chunk asserts shard counts, so
 cut-over stays safe.
 
 **Fetch the taxon lineage.** After `build_taxon_reference()` /
@@ -139,7 +139,7 @@ consumer-contract query suite passes (so a schema drift that would break the app
 / `calcofi4r` / `db-query` fails the release, not the consumer).
 
 ### 6. Deploy to consumers (after `latest` promoted)
-Refresh the read-only consumers (full runbook in `CLAUDE.md` §Deploy):
+Refresh the read-only consumers (full runbook in the `deploy-consumers` skill):
 - **Shiny apps** (`ssh calcofi`): `git -C /share/github/CalCOFI/{calcofi4r,db-viz-hex,apps} pull --ff-only`,
   rebuild each app's DuckDB in the `rstudio` container
   (`docker exec -d rstudio bash -lc 'cd …/db-viz-hex && Rscript prep_db.R'`;

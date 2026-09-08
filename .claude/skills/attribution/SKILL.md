@@ -23,7 +23,7 @@ dataset`, `related_field` = the key, `who` = the PI). **Never invent a license.*
 an SPDX-style id from `metadata/license.csv`; `custom` points `license_url` at the provider's
 own terms (an EDI `intellectualRights`, a portal's Data Use Policy, an ERDDAP `.das` `license`
 global, a data-sharing agreement); `acknowledgement` takes credit prose a source requires
-(it used to be misfiled in `citation_others`, which is a **list of additional citations**);
+(`citation_others` is a **list of additional citations**, not the place for it);
 `doi` is bare (`10.6073/pasta/…`, never `https://doi.org/…`); `contact` is a provider-chosen
 URL or `mailto:`. **Do not** add `coverage_*` or `source_accessed` — both are measured.
 
@@ -142,3 +142,52 @@ and California Department of Fish and Wildlife. https://doi.org/<doi>* — the d
 - `CALCOFI4DB_DIR=<checkout>` makes `build_workflows_index.R` and
   `build_citation_files.R` `load_all()` a development checkout instead of the installed
   package — the index needs 3.30.0.
+
+## The contract in brief, and the consumer half
+
+> Moved verbatim out of `CLAUDE.md` on 2026-09-08 so the rules stay in every session's context and the mechanics and incidents behind them load only when needed. `CLAUDE.md` summarizes each rule and names this skill.
+
+**Every dataset's `citation_main`, `license` and `doi` are checked, not trusted** —
+by `scripts/build_workflows_index.R` and by `release_database.qmd`'s
+`dataset_coverage` chunk, both through `calcofi4db::check_dataset_citation()`
+(≥ 3.30.0). A citation needs a year and a locator; `license` must be an active id in
+**`metadata/license.csv`** (`custom` requires `license_url`; `unknown` or empty fails
+unless a question is open); `doi` is bare and must resolve. The network half asks
+the source's own authority (EDI cite service, NCEI "Cite as", ERDDAP `.das`,
+DataCite) behind `CALCOFI_SKIP_LINK_CHECK`, caches it in
+`metadata/{provider}/{dataset}/citation_authority.json`, and reports drift — **it
+never writes into a notebook's YAML**; the author's string is the record. An error
+is exempt only while an `open`/`proposed` `questions.csv` row on `related_table =
+dataset` names the field, so a gap is fixed or on record with the provider. A value
+is written only with evidence (a `# source: <url>, checked <date>` comment);
+**never invent a license**. `source_accessed` is measured at release time
+(`resolve_source_accessed()`: the ingest's `stamp_source_access()` record, else the
+sidecar's last commit), never authored. The release cites itself
+(`release_citation()` → `catalog.json` `citation`/`concept_doi`/`doi`, the notes'
+"How to cite", `.zenodo.json` + `CITATION.cff` from
+`scripts/build_citation_files.R`); the Zenodo version DOI is written in by
+`publish_release_notes()` after WS-F's tag. Findings, resolvers, the Zenodo flow and
+what was measured are in the sections above — read them before touching a
+`dataset_meta` citation/license key, `R/citation.R` or the release citation.
+
+**A citation reaches a user only if a consumer shows it** — the same shape as the
+quality-flag gap (`core-model` skill). The Explorer (`CalCOFI/explore`, WS-A3) is the worked
+example: the welcome card's primary button is the promise to cite
+(`explore_cite_ack`; a promise, not a gate), a **Sources** line under the dataset
+pills names every dataset the view *pools* — pooling is exactly why each of them
+must be cited, and the copy that said "nothing averaged across … datasets" was
+wrong on that term — every figure footer carries a third line `Data: <dataset_key,
+…> · cite: calcofi.io/explore → Cite this data`, every panel CSV carries a
+`dataset_key` column (a **column**, never a `#` comment line: a comment breaks
+`read.csv`, pandas and `read_csv_auto` alike), **Cite this data** copies the release
+citation plus each dataset's as text or BibTeX, and `?modal=sources` opens **Data
+Sources & Attribution** — one row per *dataset*, never per taxon or variable (Pooh
+Venrick's point about the phytoplankton headings). All of it reads the release's own
+`dataset` rows and `catalog.json` through one builder (`src/cite.ts`); nothing is
+fetched. **Every column A0 adds is optional at the UI** — `doi`, `license_url`,
+`acknowledgement`, `contact`, `source_accessed`, a `provider` table and
+`catalog.citation` each have a stated fallback (explore's README § Attribution) —
+because the Explorer reads its dev catalog until WS-F flips `VITE_RELEASE_PREFIX`,
+and that catalog has none of them.
+
+

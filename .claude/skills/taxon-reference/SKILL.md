@@ -57,7 +57,7 @@ working table it left in the connection. The **composite-measurement path is unt
 `measurement_taxon` rows ignored as a vocabulary (this is what removed the unreferenced
 `cce-lter_euphausiids:euphausiidae` row).
 
-A `taxon_override.csv` `match_column` is now one of `dataset_taxon`'s own `ds_taxa_code` /
+A `taxon_override.csv` `match_column` is one of `dataset_taxon`'s own `ds_taxa_code` /
 `ds_scientific_name` / `ds_common_name`. The arms' column names (`taxa`, `species_code`,
 `species_id`, `taxon_id`) went with the arms.
 
@@ -102,7 +102,7 @@ neither id. Three things to keep straight:
   observation of that taxon.
 - **`taxonomic_status` was fabricated.** It was the literal string `"accepted"`
   stamped by `ensure_taxon_lineage()` onto all 2,090 taxa, including 28 whose ITIS
-  TSN is demonstrably deprecated. It is now fetched, and carries `status_checked` —
+  TSN is demonstrably deprecated. It is fetched from the authority and carries `status_checked` —
   read the two together, a status with no check date is not a fact.
 
 `release_database.qmd`'s `taxon_authority_coverage` chunk gates this:
@@ -118,14 +118,14 @@ it is:
 - `rank_order` came from a `taxa_rank` table built by an inline vector inside
   `build_taxon_hierarchy()`, which only `swfsc_ichthyo` calls. It existed in that
   one connection and nowhere else, so **100% of ITIS-keyed taxa** and 252
-  WoRMS-keyed ones released with the column NULL. It is now
+  WoRMS-keyed ones released with the column NULL. The vocabulary is
   `calcofi4db::taxa_rank_reference()` — the single vocabulary, covering both
   authorities' rank sets (including `Section`/`Subsection`, which WoRMS nests
   *below* Infraorder for decapods, not between order and family as in botany).
 - `.lineage_flat()` emitted one row per *requested* id, so an ancestor arrived
   with a key, a name, a rank and no classification — 430 of ichthyo's taxa at or
   below family rank had neither `family` nor `kingdom`, in both authorities
-  alike. It now emits one row per distinct taxon, deriving each node's
+  alike. It emits one row per distinct taxon, deriving each node's
   classification from its own ancestors-or-self. No API call: the chains already
   contain them.
 
@@ -179,3 +179,61 @@ row carries is never replaced; a name WoRMS links no TSN to (`SCMU`, `TOSP`, `CH
 still needs its row.
 
 > Moved out of the root `CLAUDE.md` on 2026-09-03 so it loads on demand; the hard rules stay resident there. Edit this file, not both.
+
+## The rules in brief
+
+> Moved verbatim out of `CLAUDE.md` on 2026-09-08 so the rules stay in every session's context and the mechanics and incidents behind them load only when needed. `CLAUDE.md` summarizes each rule and names this skill.
+
+Shared taxonomy refs — `taxon` (one row per taxon, `taxon_key` = `worms:<id>`, or
+`itis:<id>` for birds/Aves), `dataset_taxon` (per-dataset vocabulary → `taxon_key`;
+`obs` joins it on `(dataset_key, ds_taxa_code)`) and `taxon_group` — are built by
+`calcofi4db/R/taxa.R`. The rules that are not negotiable, with their mechanics and
+history in the sections above (read them before touching taxon code in
+an ingest, `R/taxa.R` or a taxon metadata CSV):
+- **The ingest declares its vocabulary; the package resolves it. There are no
+  per-dataset arms in `calcofi4db`** (4.0.0 deleted all seven — `species`,
+  `phyto_taxon`, `zoodb_taxon`, `zooscan_taxon`, `euphausiids_taxon`,
+  `mesopelagic_fish_taxon`, `bird_mammal_species`). A taxon-bearing ingest calls,
+  in this order and before `append_obs()`:
+  `append_dataset_taxon(con, ds_key, df)` (the contract is `ds_taxa_code` +
+  `ds_scientific_name`, optionally `ds_common_name` / `worms_id` / `itis_id` /
+  `gbif_id` / `rank`; an unknown or missing column is an error, and the ids the
+  source supplied are stored as `ds_source_json`) → `ensure_taxon_xref()` →
+  `ensure_taxon_lineage()` → `resolve_dataset_taxon()` → `build_taxon_reference()`
+  and `build_taxon_group(con, read_taxon_group_rules(here("metadata/taxon_group.csv")))`
+  → `check_dataset_taxon(con, ds_key, allow =, codes =)`.
+  `ingest_farallon_bird-mammal.qmd` is the worked example. An ingest that has not
+  migrated **errors** at `resolve_dataset_taxon()`, naming the working table it
+  left in the connection. The composite-measurement path (cufes, phyllosoma,
+  crab: `metadata/measurement_taxon.csv`) is untouched by this and stays.
+- Call `ensure_taxon_xref()` **then** `ensure_taxon_lineage()` **then** the
+  builders. A key must be an *accepted* id; a cross-reference id is whatever the
+  authority links. Skip either step and taxa ship with no ids, ranks or
+  classification — silently.
+- `clean_taxon_name()` output is the lookup query, **never** `ds_taxa_code`
+  (rewriting the code orphans every `obs` row of that taxon).
+- Stage `measurement_taxon.csv` with `ensure_measurement_taxon()`, never
+  `dbWriteTable()`; `taxon_override.csv` rows match on their own `match_column`,
+  which is one of `dataset_taxon`'s `ds_taxa_code` / `ds_scientific_name` /
+  `ds_common_name` (the arms' own column names went with the arms), and an
+  unknown `dataset_key` there errors.
+- **An override never replaces an id the source supplied** (Ben, 2026-09-04;
+  calcofi4db ≥ 3.33.0). A row matched on a non-code column (`ds_common_name`,
+  `ds_scientific_name`) applies only where the source supplied no `worms_id` /
+  `itis_id`; a row matched on the dataset's own code (`ds_taxa_code`) applies
+  always. v2026.08.25 released 22 phytoplankton keys for 393 codes because six
+  `taxa`-matched functional-group rows replaced every species AphiaID in their
+  group. The group belongs in `taxon_group.csv`; the species keeps its key; and
+  `resolve_dataset_taxon()` says how many rows each override was *skipped* for
+  (`report_taxon_overrides()` shows the same table at release).
+- **A group label is never a `common_name`.** `apply_taxon_common()` rank 4 refuses
+  any `taxon_group.csv` `match_value` and the label of any dataset-local key, so
+  "diatom, centric" / "other" / "undefined (…)" never name a taxon; the group's own
+  name in `taxon_group` is unchanged.
+- Assert coverage **by rank position**, never blanket non-NULL (`family` is NULL
+  above family rank; `kingdom` is NULL for `worms:1` Biota).
+- `release_database.qmd`'s `taxon_authority_coverage` chunk: `check_taxon_ids()`
+  **fails the release** on a dataset-local key outside its explicit allowlist —
+  declare non-taxonomic classes one key at a time, never as a pattern.
+
+

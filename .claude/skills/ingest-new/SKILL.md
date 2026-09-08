@@ -418,18 +418,13 @@ Show the user:
   2. Run the notebook to test
   3. Run `/validate-ingest {provider} {dataset}` to verify
 
-### 10. Post-ingest metadata.json completeness scan — now automatic
+### 10. Post-ingest metadata.json completeness scan
 
 `build_metadata_json()` calls `calcofi4db::scan_metadata_gaps()` on every write, so
 **every** ingest reports its own documentation gaps as part of the render. There is
-nothing to run by hand.
-
-This used to be the snippet below, which a human was expected to run once, after
-the first render, from memory. It never appeared in a single notebook
-(`grep description_md *.qmd` returned nothing), so in practice empty descriptions
-and units shipped unnoticed — verbatim into the release `metadata.json` and on to
-`calcofi4r::cc_describe_table()` / `cc_db_catalog()`, where they render as blank
-documentation.
+nothing to run by hand. The scan exists because an empty description or unit ships
+verbatim into the release `metadata.json` and on to `calcofi4r::cc_describe_table()` /
+`cc_db_catalog()`, where it renders as blank documentation.
 
 Read the scan's output in the render and **backfill
 `metadata/{provider}/{dataset}/flds_redefine.csv`**, then re-run. A missing `units`
