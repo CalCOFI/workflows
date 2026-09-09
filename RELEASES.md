@@ -108,6 +108,40 @@ they build to the public bucket at a deterministic address before any deposit �
 dataset page (*Archives & portals*, "built, not deposited"), can inspect a bundle before it goes to
 the IPT or PASTA. The deposit itself stays a deliberate act (Decision 21; `CALCOFI_PUBLISH_EDI`).
 
+## Dataset colours are re-spread so every dataset reads apart
+
+The sixteen `dataset.color` values (each `ingest_*.qmd` front matter `dataset_meta.color`, carried by the `dataset` table
+and `datasets.json`) were chosen one at a time as pastel tints. Measured on 2026-09-09 with a palette validator over all
+pairs: the two closest biology datasets were ΔE 4.3 apart for normal vision and 1 under deuteranopia, fifteen sat
+above the lightness band and thirteen under 3 : 1 on white. They are now one set found by search over OKLCH inside the
+band the light and dark themes share (L 0.48–0.665, chroma ≥ 0.106), maximising the worst within-realm pair — biology
+13.6 normal / 7 CVD, environment 14.7 / 8 — then the worst cross-realm pair (7.9), then assigned so that the
+datasets that appear together (cufes and ichthyo, ZooDB and ZooScan, bottle and CTD …) are far apart; every colour is
+≥ 3 : 1 on white and on navy. A dataset's name still travels beside its dot everywhere: twelve colours in one band cannot
+all clear the validator's normal-vision floor (a packing bound), so colour stays a secondary cue by design.
+
+**Consumers:** the landing page, the Explorer, db-viz-station and the docs read the release's colour and follow on
+their next build; screenshots change; nothing is keyed on a hex.
+
+| dataset | realm | today | revised | L · C · h (OKLCH) |
+|---|---|---|---|---|
+| `calcofi_bottle` | env | `#4dabf7` | `#718fdd` | 0.66 · 0.12 · 267° |
+| `calcofi_ctd-cast` | env | `#3bc9db` | `#10a74a` | 0.64 · 0.18 · 149° |
+| `calcofi_dic` | env | `#63e6be` | `#cf2407` | 0.55 · 0.21 · 32° |
+| `calcofi_mets` | env | `#74c0fc` | `#5c5dad` | 0.52 · 0.12 · 281° |
+| `calcofi_phytoplankton` | bio | `#12b886` | `#0b7454` | 0.50 · 0.10 · 165° |
+| `cce-lter_picoplankton-bacteria` | bio | `#94d82d` | `#1f88cc` | 0.60 · 0.14 · 244° |
+| `calcofi_phyllosoma` | bio | `#f783ac` | `#8c4f8e` | 0.52 · 0.12 · 326° |
+| `cce-lter_zoodb` | bio | `#38d9a9` | `#17a490` | 0.65 · 0.11 · 180° |
+| `cce-lter_zooscan` | bio | `#a9e34b` | `#885e08` | 0.51 · 0.10 · 77° |
+| `cdfw_dungeness-crab` | bio | `#f76707` | `#f028c9` | 0.66 · 0.27 · 338° |
+| `sio_pic-zooplankton` | bio | `#69db7c` | `#1551fd` | 0.53 · 0.26 · 264° |
+| `cce-lter_euphausiids` | bio | `#b197fc` | `#9876fa` | 0.66 · 0.19 · 292° |
+| `swfsc_cufes` | bio | `#ffd43b` | `#af8a11` | 0.65 · 0.13 · 89° |
+| `swfsc_ichthyo` | bio | `#ffa94d` | `#d3115d` | 0.56 · 0.22 · 8° |
+| `sio_mesopelagic-fish` | bio | `#5c7cfa` | `#a809d1` | 0.54 · 0.26 · 317° |
+| `farallon_bird-mammal` | bio | `#ff8787` | `#d86d6f` | 0.66 · 0.13 · 20° |
+
 # v2026.09.06 (2026-09-06)
 
 ## The dataset catalog record says what a page needs to say (schema 1.1)
