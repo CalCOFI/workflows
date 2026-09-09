@@ -161,9 +161,17 @@ observations keyed to it) and `rollup{}` (it and every descendant: observations,
 datasets, year span), and one block per dataset that observed it — observations, samples, years,
 per-year counts, life stages — ending in `sources[]`, the `dataset_taxon` rows that resolve to it:
 **what that dataset calls the taxon**, flagged `synonym`, `sp_to_genus` (a "… sp." name resolved to
-its genus), `rekeyed` (an id the source gave that the authority has since moved) or `no_name` (a
-code only). Measured over v2026.09.06's 1,917 `dataset_taxon` rows: 1,704 use the accepted name,
-120 carry only a code, 93 use a different name, 54 carry a superseded ITIS id. `datasets[]` lists
+its genus), `rekeyed`, `id_conflict` or `no_name` (a code only). Measured over v2026.09.06's 1,917
+`dataset_taxon` rows: 1,704 use the accepted name, 120 carry only a code, 93 use a different name.
+
+The two id flags say different things, and the difference matters on a page. A taxon is keyed by
+exactly one authority; only a disagreement *there* is a re-key. **27 rows are `rekeyed`, all
+Farallon** — an ITIS TSN the source gave that ITIS itself has deprecated, the row keyed to the
+successor (`taxon.notes`: "itis:174550 deprecated in ITIS -> itis:1255048"). **27 are
+`id_conflict`, all ichthyoplankton** — `worms:`-keyed taxa whose source ITIS hint differs from the
+`itis_id` WoRMS publishes as its external link (`taxon.notes`: "2026-08-05: itis_id 622362 via
+WoRMS external link"). Nothing was re-keyed in those 27: two authorities' crosswalks disagree, and
+that is what the pill says. `datasets[]` lists
 the ten datasets carrying taxa with their catalog colour and, per dataset, the vocabulary rows that
 have no observation anywhere — the list a provider wants and no page had.
 
