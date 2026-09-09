@@ -672,6 +672,73 @@ catalog_res |>
   DT::datatable(escape = FALSE, rownames = FALSE, colnames = c("", "catalog check", "error"))
 ```
 
+## Species catalog record
+
+`taxa.json` (calcofi4db >= 4.9.0; plan 2026-09-09 § D6/D7) is what calcofi.io/species/ generates
+every species page from — one entry per taxon of this release's `taxon` table with an observation at
+or below it, its lineage and rollups, and the name each dataset uses for it. Six rows join the
+promote gate: the file validates against `taxa.schema.json`, it declares the schema version this
+release was built with (`1.0`), its `counts.taxa_observed` equals the distinct `taxon_key` of **this
+release's own `obs_bio`**, every `parent_taxon_key` resolves inside `taxa[]` (a page with a dangling
+breadcrumb is a 404 on the site), the roots' `rollup.n_obs` sums to `obs_bio`'s keyed row count, and
+every `dataset_key` it names is in `datasets.json`.
+
+The record is **generated**, so unlike the dataset catalog there is nothing here a provider question
+can excuse: a failing row is a bug in `build_taxa_catalog()` or a break in the release's own
+`taxon` / `obs_bio`, and it stops the promotion. `taxon` and `obs_bio` are read back through this
+release's catalog, exactly as a consumer reads them, not from the connection that built the record.
+
+```{r}
+#| label: taxa_catalog
+
+taxa_url <- glue("https://storage.googleapis.com/calcofi-db/{rel_prefix}/{release_version}/taxa.json")
+taxa_txt <- tryCatch(paste(readLines(taxa_url, warn = FALSE, encoding = "UTF-8"), collapse = "\n"),
+                     error = function(e) NULL)
+tx_row <- function(name, ok, err) tibble::tibble(
+  query = name, label = "taxa-catalog", status = if (isTRUE(ok)) "pass" else "fail",
+  reason = NA_character_, rows = NA_integer_, ms = NA_real_,
+  error = if (isTRUE(ok)) NA_character_ else as.character(err))
+
+taxa_res <- if (is.null(taxa_txt)) {
+  tx_row("taxa: taxa.json present", FALSE, glue("{taxa_url} not readable"))
+} else {
+  taxa_rec  <- jsonlite::fromJSON(taxa_txt, simplifyVector = FALSE)
+  schema_ok <- tryCatch(validate_taxa_catalog(taxa_txt), error = function(e) conditionMessage(e))
+  # the release's own tables, resolved through its catalog like every consumer
+  dbExecute(con_test, glue("CREATE OR REPLACE VIEW taxon   AS SELECT * FROM {rp('taxon')}"))
+  dbExecute(con_test, glue("CREATE OR REPLACE VIEW obs_bio AS SELECT * FROM {rp('obs_bio')}"))
+  tx_chk <- check_taxa_catalog(taxa_rec, con_test, if (exists("ds_rec")) ds_rec else NULL)
+  chk <- function(nm) {
+    r <- tx_chk[tx_chk$check == nm, , drop = FALSE]
+    if (nrow(r)) as.list(r[1, ]) else
+      list(ok = FALSE, expected = NA_character_, observed = NA_character_, detail = "check not reported")
+  }
+  a <- chk("taxa_observed"); pr <- chk("parents_resolve")
+  rt <- chk("rollup_total");  dk <- chk("datasets_known")
+  n_bad <- sum(!tx_chk$ok)
+  dplyr::bind_rows(
+    tx_row("taxa: taxa.json validates against taxa.schema.json", isTRUE(schema_ok), schema_ok),
+    tx_row(glue("taxa: schema_version is 1.0 [{taxa_rec$schema_version %||% 'absent'}]"),
+           identical(taxa_rec$schema_version, "1.0"),
+           "built by a calcofi4db older than 4.9.0"),
+    tx_row(glue("taxa: counts.taxa_observed == distinct obs_bio.taxon_key ",
+                "[{a$observed} vs {a$expected}]"), isTRUE(a$ok), a$detail),
+    tx_row(glue("taxa: every parent_taxon_key resolves within taxa[] ",
+                "[{taxa_rec$counts$pages} pages]"), isTRUE(pr$ok), pr$detail),
+    tx_row(glue("taxa: the roots' rollup.n_obs sums to obs_bio's keyed rows [{rt$observed}]"),
+           isTRUE(rt$ok), rt$detail),
+    tx_row(glue("taxa: every dataset_key is in datasets.json [{taxa_rec$counts$datasets} datasets]"),
+           isTRUE(dk$ok), dk$detail),
+    tx_row(glue("taxa: check_taxa_catalog: {nrow(tx_chk) - n_bad}/{nrow(tx_chk)} checks pass"),
+           n_bad == 0, paste(tx_chk$check[!tx_chk$ok], collapse = "; ")))
+}
+results <- dplyr::bind_rows(results, taxa_res)
+taxa_res |>
+  mutate(status_html = status_badge(status)) |>
+  select(status_html, query, error) |>
+  DT::datatable(escape = FALSE, rownames = FALSE, colnames = c("", "species catalog check", "error"))
+```
+
 ## Static STAC catalog
 
 The STAC catalog `release_database.qmd` wrote to `gs://calcofi-db/stac/` (plan 2026-09-05 § D-5.3;
