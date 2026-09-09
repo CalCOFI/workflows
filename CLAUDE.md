@@ -109,7 +109,10 @@ Rscript scripts/build_workflows_index.R
   it, the real prefix has no object for that version and
   `data/releases-staging/<version>/test_results.json` exists.
 - `latest.txt` is promoted only after `test_release.qmd`'s consumer-contract
-  query suite passes.
+  query suite **and the client packages' README examples** pass: `calcofi4r`'s
+  `README.Rmd` is knit and `calcofi4py`'s `README.md` blocks are executed against
+  the candidate (`CALCOFI_RELEASE_VERSION` + `CALCOFI_RELEASE_PREFIX`), from the
+  sibling checkouts, so pull them first.
 - **`RELEASES.md` is the database's NEWS file.** Every change that alters release
   content adds to `# Unreleased` in the same commit; `promote_unreleased()` stops
   the release without a section for the version. Notes are re-rendered any time

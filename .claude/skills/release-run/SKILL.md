@@ -38,6 +38,22 @@ consumer-contract query suite passes (it exercises the app/`calcofi4r` query
 shapes against the frozen release, so a schema drift that would break a consumer
 fails the release rather than the app).
 
+**The client packages are consumers, and their README examples gate the release too**
+(`package_examples` chunk, since 2026-09-09). On 2026-09-09 a researcher ran the opening
+example of the calcofi4py README against v2026.09.06 and it failed on `sample.datetime_utc`
+(the column is `datetime`; the contract suite never reads a README); the calcofi4r README had
+drifted to the pre-consolidation schema (`ichthyo`, `casts`, `species_id`) because its chunks
+were `eval = FALSE`. Now `../calcofi4r/tests/testthat/test-readme.R` knits `README.Rmd` for
+real and `../calcofi4py/tests/test_readme.py` executes every `python` block of `README.md`,
+both against the candidate: the packages resolve `"latest"` through `CALCOFI_RELEASE_VERSION`
+and the prefix through `CALCOFI_RELEASE_PREFIX` (calcofi4r ≥ 1.24.0, calcofi4py ≥ 0.9.1), so a
+staging run tests the staging bucket. The gate runs the sibling checkouts as they are on disk
+(`../calcofi4py/.venv/bin/python`, or `CALCOFI_PY`), so **pull both before a release**; a
+skipped README test (offline, no README.Rmd) is a failure, not a skip. After promotion the
+dispatch table fires `calcofi4r` `pkgdown.yaml` (vignettes execute against the new latest) and
+`calcofi4py` `test.yml`. The rule for the packages: an example a reader can copy is a test —
+never `eval = FALSE` a README chunk; a PostgreSQL block skips without `CALCOFI_PG_TEST=1`.
+
 **After promotion, run `bash scripts/deploy_consumers.sh`** (the `deploy-consumers`
 skill; `test_release.qmd` runs it for you when `CALCOFI_DEPLOY=true`). Since
 2026-09-08 its last step also dispatches `render_book.yml` in `CalCOFI/docs`: the

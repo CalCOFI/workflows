@@ -32,9 +32,11 @@ uploaded the parquet, `metadata.json`, `relationships.json`, `erd.mmd`, and
 but **before** `latest.txt` is updated. Every `.md` query in the
 [`_queries/`](https://github.com/CalCOFI/db-query/tree/main/_queries) folder
 is rendered with its YAML defaults, executed against the just-uploaded
-release on GCS, and reported below. If every query returns without error,
-`latest.txt` is written; otherwise the target fails and consumer apps
-keep pointing at the previously-promoted version.
+release on GCS, and reported below — followed by the consumer-contract
+queries, the client packages' README examples (calcofi4r, calcofi4py) and
+the catalog records. If every check passes, `latest.txt` is written;
+otherwise the target fails and consumer apps keep pointing at the
+previously-promoted version.
 
 ## Setup
 
@@ -54,6 +56,7 @@ librarian::shelf(
   jsonlite,
   purrr,
   tibble,
+  withr,
   yaml,
   quiet = T)
 
@@ -605,6 +608,88 @@ contract_res |>
     options = list(pageLength = 20), colnames = c("", "contract query", "n", "ms", "error"))
 ```
 
+## Package examples — calcofi4r and calcofi4py are consumers too
+
+The two client packages are the first thing a reader copies. On 2026-09-09 a researcher ran the
+opening example of the calcofi4py README against v2026.09.06 and it failed on `sample.datetime_utc`
+(the column is `datetime`); the calcofi4r README had drifted further — to tables the core
+consolidation retired — because its chunks were never executed. The contract queries above pin the
+*shapes* consumers depend on; this section runs the packages' own **README examples** against the
+just-uploaded release, as a reader would:
+
+- `../calcofi4r/tests/testthat/test-readme.R` knits `README.Rmd` for real (every chunk executes);
+- `../calcofi4py/tests/test_readme.py` executes every `python` block of `README.md`.
+
+Both packages resolve `"latest"` through `CALCOFI_RELEASE_VERSION` and the releases prefix through
+`CALCOFI_RELEASE_PREFIX` (calcofi4r ≥ 1.24.0, calcofi4py ≥ 0.9.1), so they read **this** release
+under **this** prefix — on a staging run, the staging bucket — never the promoted one. One row per
+package joins the promote gate. The sibling checkouts are required, as `../db-query` is: the gate
+tests the packages as they are on disk, so pull them first. `CALCOFI_PY` names the Python to use
+(default: the sibling's `.venv/bin/python`, else `python3`).
+
+```{r}
+#| label: package_examples
+
+pkg_env <- c(
+  CALCOFI_RELEASE_VERSION = release_version,
+  CALCOFI_RELEASE_PREFIX  = release_prefix,
+  # the package tests skip their PostgreSQL blocks without this; the gate is the release
+  CALCOFI_PG_TEST = "",
+  # a bare Rscript has no NOT_CRAN, and testthat's skip_if_offline() then skips "On CRAN" —
+  # which this gate counts as a failure (the first dry run, 2026-09-09, failed exactly so)
+  NOT_CRAN = "true")
+pkg_row <- function(name, ok, ms, err) tibble::tibble(
+  query = name, label = "package-examples", status = if (isTRUE(ok)) "pass" else "fail",
+  reason = NA_character_, rows = NA_integer_, ms = ms,
+  error = if (isTRUE(ok)) NA_character_ else as.character(err))
+run_logged <- function(cmd, args, dir) {
+  t0  <- Sys.time()
+  out <- withr::with_envvar(pkg_env, withr::with_dir(dir,
+    system2(cmd, args, stdout = TRUE, stderr = TRUE)))
+  list(status = attr(out, "status") %||% 0L, out = out,
+       ms = as.numeric(difftime(Sys.time(), t0, units = "secs")) * 1000)
+}
+tail_txt <- function(x, n = 25) paste(utils::tail(x, n), collapse = "\n")
+
+# calcofi4r: the README knit test, on the sibling checkout (its DESCRIPTION version is what runs)
+r_dir <- here("../calcofi4r")
+stopifnot("clone CalCOFI/calcofi4r as a sibling of this repo" = dir.exists(r_dir))
+r_ver <- read.dcf(file.path(r_dir, "DESCRIPTION"), fields = "Version")[[1]]
+r_run <- run_logged(file.path(R.home("bin"), "Rscript"), c("-e", shQuote(
+  "res <- testthat::test_file('tests/testthat/test-readme.R', reporter = 'summary', package = 'calcofi4r', load_package = 'source');
+   df <- as.data.frame(res); cat('\nreadme: failed', sum(df$failed), 'error', sum(df$error), 'skipped', sum(df$skipped), '\n');
+   quit(status = as.integer(sum(df$failed) + sum(df$error) + sum(df$skipped) > 0))")), r_dir)
+# a SKIP is a failure here: offline or a missing README.Rmd means the release was not tested
+r_ok <- identical(r_run$status, 0L)
+if (!r_ok) cat(tail_txt(r_run$out), "\n")
+
+# calcofi4py: every README block, through the sibling's venv
+py_dir <- here("../calcofi4py")
+stopifnot("clone CalCOFI/calcofi4py as a sibling of this repo" = dir.exists(py_dir))
+py_bin <- Sys.getenv("CALCOFI_PY", "")
+if (!nzchar(py_bin)) py_bin <- if (file.exists(file.path(py_dir, ".venv/bin/python")))
+  file.path(py_dir, ".venv/bin/python") else Sys.which("python3")
+py_ver <- trimws(system2(py_bin, c("-c", shQuote("import calcofi4py; print(calcofi4py.__version__)")),
+                         stdout = TRUE, stderr = FALSE))
+# -rs prints the skip reasons; a skipped release block (offline) fails the gate below
+py_run <- run_logged(py_bin, c("-m", "pytest", "-q", "-rs", "tests/test_readme.py"), py_dir)
+py_summary <- grep("passed|failed|error", py_run$out, value = TRUE)
+py_skipped_release <- any(grepl("SKIPPED .*no network", py_run$out))
+py_ok <- identical(py_run$status, 0L) && !py_skipped_release
+if (!py_ok) cat(tail_txt(py_run$out), "\n")
+
+pkg_res <- dplyr::bind_rows(
+  pkg_row(glue("package: calcofi4r {r_ver} README.Rmd knits against {release_version}"),
+          r_ok, r_run$ms, tail_txt(r_run$out, 12)),
+  pkg_row(glue("package: calcofi4py {py_ver} README.md blocks run against {release_version} [{paste(py_summary, collapse = '; ')}]"),
+          py_ok, py_run$ms, tail_txt(py_run$out, 12)))
+results <- dplyr::bind_rows(results, pkg_res)
+pkg_res |>
+  mutate(status_html = status_badge(status)) |>
+  select(status_html, query, ms, error) |>
+  DT::datatable(escape = FALSE, rownames = FALSE, colnames = c("", "package example run", "ms", "error"))
+```
+
 ## Dataset catalog record
 
 `datasets.json` (calcofi4db >= 4.1.0; plan 2026-09-05 § D-1) is the one dataset list every product
@@ -929,7 +1014,11 @@ gh_dispatch <- tribble(
   "CalCOFI/ctd-transects",    "refresh.yml",                 "CTD transect sections refresh",
   # re-fetches datasets.json and rebuilds the dataset grid + pages (plan 2026-09-05 D-2; the
   # workflow is created by WS-P1 — until then the dispatch warns, it does not fail)
-  "CalCOFI/CalCOFI.github.io", "refresh.yml",                "dataset catalog refresh (landing page + dataset pages)")
+  "CalCOFI/CalCOFI.github.io", "refresh.yml",                "dataset catalog refresh (landing page + dataset pages)",
+  # the client packages: re-run their README/vignette examples against the promoted latest and
+  # republish their sites (pkgdown executes the vignettes; the pytest job executes the README)
+  "CalCOFI/calcofi4r",        "pkgdown.yaml",                "calcofi4r site + vignettes against latest",
+  "CalCOFI/calcofi4py",       "test.yml",                    "calcofi4py README examples against latest")
 
 gh_bin <- Sys.which("gh")
 if (!nzchar(gh_bin)) {

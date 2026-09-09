@@ -167,11 +167,16 @@ curl -s --max-time 60 https://h3t.calcofi.io/h3t/health | sed 's/^/      /'
 #     the keys, the versions, the datasets — describes the previous release.
 #     render_book.yml also runs weekly and accepts a `release-promoted`
 #     repository_dispatch, so this is belt and braces.
+#   * calcofi4r and calcofi4py are consumers whose README examples gated this
+#     release (test_release.qmd, package_examples); their CI re-runs the examples
+#     and vignettes against the promoted latest and republishes the sites.
 echo "==> 6/6 dispatching the hosted consumers (GitHub Actions)"
 if command -v gh >/dev/null 2>&1; then
   for spec in "refresh.yml CalCOFI/db-viz-station" \
               "refresh.yml CalCOFI/ctd-transects" \
-              "render_book.yml CalCOFI/docs"; do
+              "render_book.yml CalCOFI/docs" \
+              "pkgdown.yaml CalCOFI/calcofi4r" \
+              "test.yml CalCOFI/calcofi4py"; do
     set -- $spec
     printf '    %-16s %-24s ' "$1" "$2"
     if gh workflow run "$1" --ref main -R "$2" >/dev/null 2>&1; then echo "dispatched"; else echo "FAILED (run it by hand)"; fi
@@ -181,6 +186,8 @@ else
   echo "      gh workflow run refresh.yml     --ref main -R CalCOFI/db-viz-station"
   echo "      gh workflow run refresh.yml     --ref main -R CalCOFI/ctd-transects"
   echo "      gh workflow run render_book.yml --ref main -R CalCOFI/docs"
+  echo "      gh workflow run pkgdown.yaml    --ref main -R CalCOFI/calcofi4r"
+  echo "      gh workflow run test.yml        --ref main -R CalCOFI/calcofi4py"
 fi
 
 echo "==> consumers deployed for $RELEASE"
