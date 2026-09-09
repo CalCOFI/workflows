@@ -14,7 +14,7 @@
 #
 # The prefixes: the release notes (ducklake/releases), the staged portal bundles (publish/), the
 # netCDF site and the archived source folders on calcofi-files-public.
-librarian::shelf(commonmark, glue, here, calcofi4db, quiet = TRUE)
+librarian::shelf(commonmark, glue, here, jsonlite, calcofi4db, quiet = TRUE)
 # libs/gcs_index.R finds gcloud with Sys.which(); an Rscript's PATH may not carry the SDK
 Sys.setenv(PATH = paste(dirname(calcofi4db:::find_gcloud()), Sys.getenv("PATH"), sep = ":"))
 source(here("libs/gcs_index.R"))
@@ -48,16 +48,40 @@ cat(length(uris), "markdown object(s)\n")
 # `RELEASES.html#v{version}` without reproducing the slug rule or knowing the release date. The
 # slug that heading used to carry (`v2026-09-06-2026-09-06`: the version *and* the date, both
 # transformed) stays as an empty <a id> inside it so a bookmark on it still resolves, and every
-# further version the heading names gets one of those too. Every other heading keeps its slug id.
+# other version the heading spans gets one of those too. Every other heading keeps its slug id.
 slug <- function(x) { x <- tolower(gsub("<[^>]+>", "", x)); x <- gsub("[^a-z0-9]+", "-", x); gsub("^-+|-+$", "", x) }
 VER_RX <- "v[0-9]{4}\\.[0-9]{2}\\.[0-9]{2}"
-# the versions a heading names, in order; only a heading that opens with one is a version heading
-heading_versions <- function(x) {
+# a range heading covers every version between its endpoints, and names only the two: v2026.08.05
+# lives inside `# v2026.08.04 – v2026.08.06` and is written nowhere. So `known` — the release
+# folder's own versions.json — fills the middle in, and every version in the span is anchored.
+# String order is date order on `vYYYY.MM.DD`.
+heading_versions <- function(x, known = character()) {
   x <- gsub("<[^>]+>", "", x)
   if (!grepl(paste0("^", VER_RX), x)) return(character())
-  regmatches(x, gregexpr(VER_RX, x))[[1]]
+  v <- regmatches(x, gregexpr(VER_RX, x))[[1]]
+  if (length(v) < 2 || !length(known)) return(v)
+  c(v, sort(setdiff(known[known >= min(v) & known <= max(v)], v)))
 }
-add_toc <- function(html) {
+# versions.json beside the object being rendered, read once per folder. Only the release prefix
+# has one; `known` is passed unevaluated, so a folder without one is never asked (R forces the
+# promise at the first range heading, and a `{v}/RELEASE_NOTES.md` has none).
+VERSIONS_CACHE <- list()
+release_versions <- function(uri) {
+  folder <- paste0(dirname(uri), "/")
+  if (!is.null(VERSIONS_CACHE[[folder]])) return(VERSIONS_CACHE[[folder]])
+  txt <- suppressWarnings(system2(calcofi4db:::find_gcloud(),
+                                  c("storage", "cat", shQuote(paste0(folder, "versions.json"))),
+                                  stdout = TRUE, stderr = FALSE))
+  v <- character()
+  if (length(txt))
+    v <- tryCatch(as.character(jsonlite::fromJSON(paste(txt, collapse = "\n"))$versions$version),
+                  error = function(e) character())
+  if (!length(v))
+    cat("note: no readable versions.json at", folder, "— a range heading anchors only the versions it names\n")
+  VERSIONS_CACHE[[folder]] <<- v
+  v
+}
+add_toc <- function(html, known = character()) {
   m <- gregexpr("<h([1-3])>(.*?)</h[1-3]>", html, perl = TRUE)
   hits <- regmatches(html, m)[[1]]
   if (length(hits) < 3) return(list(body = html, nav = ""))
@@ -67,11 +91,11 @@ add_toc <- function(html) {
     txt <- sub("^<h[1-3]>(.*)</h[1-3]>$", "\\1", h)
     id  <- slug(txt); if (!nzchar(id)) id <- "section"
     n <- sum(seen == id); seen <- c(seen, id); if (n) id <- paste0(id, "-", n + 1)
-    vs  <- heading_versions(txt)
+    vs  <- heading_versions(txt, known)
     if (length(vs) && vs[1] %in% vseen) vs <- character()  # a version anchors one heading
     vs  <- unique(vs[!vs %in% vseen]); vseen <- c(vseen, vs)
-    # a version heading: the version is the id, the slug and any further version
-    # named in it ride along as empty anchors
+    # a version heading: the first version is the id, the slug and every other
+    # version in its span ride along as empty anchors
     if (length(vs)) {
       txt <- paste0(paste(sprintf('<a id="%s"></a>', c(id, vs[-1])), collapse = ""), txt)
       id  <- vs[1]
@@ -114,9 +138,11 @@ render_one <- function(uri) {
   if (is.na(title) || !nzchar(title)) title <- basename(p$path) else
     md <- md[-grep("^#\\s+", md)[1]]   # the page's h1 is the document's first heading; not twice
   body <- commonmark::markdown_html(paste(md, collapse = "\n"), extensions = TRUE, smart = FALSE)
-  toc  <- add_toc(body)      # ids on every h1–h3, and the nested list beside the page
-  body <- toc$body
   folder <- dirname(p$path)
+  # ids on every h1–h3, and the nested list beside the page; the folder's versions.json, where
+  # there is one, tells a range heading which versions it spans
+  toc  <- add_toc(body, release_versions(uri))
+  body <- toc$body
   crumb  <- glue('<p class="crumb"><a href="https://storage.calcofi.io/{p$bucket}/{folder}/">{esc(folder)}</a> / ',
                  '{esc(basename(p$path))} · <a href="{https}">raw markdown ↗</a></p>')
   html <- page(title, glue("{basename(p$path)} on gs://{p$bucket}/{folder}"),
