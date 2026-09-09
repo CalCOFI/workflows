@@ -5,8 +5,9 @@ ImprovMX forwarding for `data@calcofi.io` → ben@oceanmetrics.io, esatterthwait
 (email item 1 becomes a report, not a proposal; the UCSD Google Group stays as the long-term target). Two
 sibling sessions are in flight and fold in when done: the calcofi.io landing re-cut (mockup
 `claude.ai/code/artifact/7e41ff7c-2a0a-4bb7-b993-25142657dc77`, plan of 2026-09-07) and a **Contours lens**
-for the Explorer — slide 3 should say "six lenses" only once contours is live; until then it is a
-"coming next" line on slide 14. C and D started in this session (see § Measured at the end). Three deliverables for the CalCOFI data meeting
+for the Explorer — **live since 2026-09-07 17:51** (explore 165048a; `app.calcofi.io/contour` 308s to it), so slide 4 says
+six lenses and slide 5 is the lens itself. The landing page's bento tile and the Explorer card in `products.yml`
+(line 112) still say "One app, five lenses" — the landing session's to update. C and D started in this session (see § Measured at the end). Three deliverables for the CalCOFI data meeting
 on **Tue 2026-09-08, 08:15–09:15 PT** (17:15 CEST; organizer Erin; Mark accepted, Betty has not answered
 the invite). Nothing in this plan changes a product; it produces an email, a `.pptx`, one docs chapter and
 one mermaid diagram. Ben sends the email and presents; the rest is generated and reviewed.
@@ -61,7 +62,8 @@ slowly**, in a **calm, even** register, with two artifacts:
 | Monitors | 29 sites, all up; `status.calcofi.io` checks every 15 min | same |
 | Explorer hosting | GitHub Pages + public GCS objects; no server; DuckDB-WASM in the browser | `explore/README.md` |
 | Shiny/ERDDAP/PG server | one GCE VM (`shiny-server`, e2-standard-2 + 40 GB), the "≈ $200/mo" Ben cites — **confirm the figure in the GCP billing console before the slide is final** | `server/README.md` line 806 |
-| Explorer lenses | stations · hexagons · cruises · regions · sections (contours is the separate Contour Explorer today) | `explore/README.md`, `products.yml` |
+| Explorer lenses | **six**: stations · hexagons · **contours** (since 2026-09-07) · cruises · regions · sections; the Contour Explorer is retired (`app.calcofi.io/contour` → 308 → `explore/?lens=contour&var=temperature`, card `status: superseded`) | `explore/src/state.ts`, `curl -I`, `products.yml` |
+| Contours lens, measured live 2026-09-07 | temperature, every site: **12,046 sites → 60,165 cells of 0.1° in 1.2 s**, leave-one-out RMSE 1.46 °C, blank beyond 60 km of a point and over land; station grid 0.3 s; kriging halves IDW's error (LOO 0.91 vs 1.72 °C on 213 station means) and the spline 0.83; eight surfaces (value · error · n · first/last year · p05/p95 · spread); ramps cmocean/viridis/GEBCO | the live fit line; contours plan § The take, D32, D40 |
 | Feedback pipeline | *Help → Send feedback*: captures the view, annotate (arrow, circle, rectangle, pen, text), sends note + view URL + release + viewport + theme → Sheet `1_3DrB_MqrXEoyMtosTbbwgEHv-JXiEd0R1E2NeK9Pao` + mail (Ben, Erin, Betty, inline screenshot) + public issue in `CalCOFI/explore` (no email in the issue). *Register a product* is the second kind (`derived-product` label) | `explore/README.md` § Using it, § The feedback endpoint |
 | Attribution in the Explorer | Sources line under the dataset pills · *Cite this data* (text/BibTeX) · `?modal=sources` Data Sources & Attribution (one row per dataset) · figure footers carry `Data: <dataset_key…>` · welcome button "I will cite the datasets I use" · every CSV carries `dataset_key` | CLAUDE.md § Attribution; `explore/README.md` § Attribution |
 | Datasets grid | `calcofi.io/datasets/` (200): 12 categories in Biology ‖ Environment columns, alphabetical; holdings collapsed under "not yet in the database"; hover/tap cards on years bars and the station map | CalCOFI.github.io, memory 2026-09-06/07 |
@@ -70,7 +72,7 @@ slowly**, in a **calm, even** register, with two artifacts:
 | Generic publishers | `publish_to-obis` (10 DwC-A staged at `gs://calcofi-db/publish/dwca/`), `publish_to-edi` (3 packages staged: bottle, ctd-cast, mets), `publish_to-erddap` (**45** datasets answered by `allDatasets` today), `publish_to-netcdf` (CF netCDF per dataset at `storage.calcofi.io/calcofi-files-public/netcdf/`); all idempotent since 9/6 (a re-run is a hash comparison) | `RELEASES.md` § Unreleased; `gcloud storage ls` |
 | Ichthyo DwC-A parity vs the old IPT archive | data unchanged; two gaps to raise with SWFSC (depth asserted 0/NULL, biomass whole-mL) | artifact `d58f5c49-6e04-4cc3-b164-5479cb02cf57` |
 | Machine surfaces | STAC `gs://calcofi-db/stac/catalog.json` (200) + browser `calcofi.io/stac/` (200) · `datasets.json` schema 1.1 · EML ×16 · ISO 19115 WAF via ERDDAP · DCAT-US `data.json` · JSON-LD per page · sitemap at `calcofi.io/datasets/sitemap.xml` (200; the root `/sitemap.xml` is 404 — say the right path on the slide) | curl 2026-09-07 |
-| Packages | calcofi4r 1.20.0 · calcofi4py 0.7.0 (`cc_get_db`, `cc_query`, `qual_ok_sql`, CTD PostgreSQL helpers) · calcofi4db 4.6.4 | NEWS/CHANGELOG |
+| Packages | calcofi4r 1.22.0 · calcofi4py 0.9.0 (`cc_get_db`, `cc_query`, `qual_ok_sql`, CTD PostgreSQL helpers; `cc_interpolate()` / `interpolate()` since 1.21.0 / 0.8.0 reproduce the Contours surface cell for cell from a fixture the browser's own worker wrote) · calcofi4db 4.6.4 | NEWS/CHANGELOG, contours plan D39 |
 | Provider Sheets | 7 (calcofi, swfsc, sio, cce-lter, cdfw, farallon, sccoos) in Shared Drive folder `1Tryjfd76TNU4nVPPSQiyQCy03uo0hlx6`; tabs: one per dataset (questions), `metadata` (long form, tiered required → recommended → optional), `holdings` (calcofi Sheet only, the triage board); service-account auth; `pull` writes only `answer/status/answered_date/who` and `value/edited_by/edited_date` | `metadata/questions_sheets.yml`, `scripts/sync_*_sheets.R` |
 | `data@calcofi.io` | Already published as the contact in JSON-LD/DCAT (`_config.yml` `contact_email`), the "stay informed" mailto, and the EML fallback contact. DNS = Google Cloud DNS with **no MX record**: mail to it bounces today | `_config.yml`; catalog plan § Open questions 4 |
 
@@ -122,7 +124,7 @@ how it fits after the meeting" — never link a page that 404s.
 
 ### B · The deck (`presentations/2026-09-08_CalCOFI.io_update.pptx`)
 
-**Shape.** 16:9, 14 slides, ~1 min each, brand v2 (UCSD navy `#182b49`, blue `#00629b`, yellow `#ffcd00`,
+**Shape.** 16:9, 16 slides, ~1 min each, brand v2 (UCSD navy `#182b49`, blue `#00629b`, yellow `#ffcd00`,
 sand `#f5f0e6`; Source Sans 3 body, Teko display). Each slide: one headline sentence, one visual, ≤ 4 short
 bullets, a footer with the URL shown. Speaker notes carry the talk track and the source of every number.
 Title case off; declarative headlines.
@@ -133,22 +135,24 @@ a machine without them falls back to Calibri, which is acceptable. Do not embed.
 | # | Headline | Visual | Bullets / talk track |
 |---|---|---|---|
 | 1 | **CalCOFI.io — what landed since Aug 25, and what we need from each other** | lockup, release strip `v2026.09.06 · 16 datasets · 349 M rows · DOI` | date; "15 minutes, then discussion" |
-| 2 | **Four things, one database** | 2×2 tiles: Explorer · Datasets catalog · Publishers · Packages + DOI | the map of the talk; everything reads the same frozen release |
-| 3 | **One app, five lenses** | `images/explore_light.png` (or a fresh shot: `?lens=section&var=temperature&line=90&tour=off`) | we had five apps with slightly different grains; switching between them was confusing and every feature was built five times. Lenses: stations, hexagons, cruises, regions, sections. The URL *is* the view: send a link, get the exact map. Erin's 8/26 names still apply to the lenses. |
-| 4 | **It answers in 0.15 s, and it costs nothing to host** | two response-time graphs from `uptime/graphs/{explore,db-viz-hex}/response-time-week.png` side by side, labelled 155 ms vs 11,324 ms | no server: the page is on GitHub, the tables on GCS, the SQL runs in the browser. The Shiny apps live on one VM (≈ $200/mo, confirm). **The honest downside:** it is a large TypeScript app; maintaining it presumes AI-assisted development, and it needs a second pair of eyes — that is one of the asks. |
-| 5 | **Attribution and feedback are built in** | crop of the Sources line + *Cite this data*, and the feedback dialog with an annotated screenshot (`explore/shots/live_feedback.png`) | Erin's five asks from 9/2 are all in: source beside the variable, a citation per row (`dataset_key` on every CSV), *Cite this data*, a Sources page, footers on figures. Feedback: screenshot → mark it up → goes to a Sheet, an email to the three of us, and a public GitHub issue; *Register a product* uses the same pipe. |
-| 6 | **Every dataset has one page, and every page has every endpoint** | `images/datasets_light.png` (the grid) | we were stuck showing datasets *with credit* inside the apps, and nobody could find "the ERDDAP one" or "the netCDF one". Now: 16 in the database + 17 holdings, by category with the brand icons, generated from the release. |
-| 7 | **A dataset page, top to bottom** | `images/dataset-ichthyo_light.png` (or a taller shot of `/datasets/swfsc_ichthyo/`) | Explore (which app opens on it) · Get the data · Code (R ‖ Python) · Metadata records (STAC, EML, JSON-LD) · Archives & portals with the *policy sentence* ("archive of record OBIS through the IPT; NCEI is SWFSC's; EDI does not apply") · Source files · coverage. |
-| 8 | **The generic publishers work, and they wait for a decision, not a build** | small table: portal · what · how many · state | OBIS: 10 Darwin Core archives, staged; EDI: 3 packages (bottle, CTD, METS), staged; ERDDAP: 45 datasets live; netCDF: one per dataset. "Staged" = built and byte-stable, deposited only when we say so. The ichthyo archive matches the hand-built one that is on OBIS today, with two data questions for SWFSC. |
-| 9 | **The 2022 picture, and what it became** | left: `docs/figs/sw_arch.svg` (rendered PNG); right: the new v3 mermaid (record → surfaces → readers) | the *publish* box is now real. What changed: everything a portal sees is generated from one record per dataset; the dotted boxes are catalogs run by others, each pointed at a static file we already publish. Old routes still there: OBIS, EDI, ERDDAP, NCEI. New: STAC, DCAT `data.json`, JSON-LD + sitemap (Google Dataset Search, ODIS), Zenodo. The only server-shaped option, pycsw, waits for a partner asking for CSW. |
-| 10 | **Every release has a DOI** | screenshot of the Zenodo record + the RELEASES.html contents sidebar | citation string on the slide; concept DOI for "the database", version DOI per release; the changelog (`storage.calcofi.io/…/RELEASES.html`) says what changed and why, per release, with a table of contents. |
-| 11 | **The same bytes from R, Python and the browser** | code pair: `calcofi4r::cc_get_db()` ‖ `calcofi4py.cc_get_db()` + the CTD team's `cc_pg_connect()` | calcofi4py 0.7.0 for the CTD group (release access + their PostgreSQL); calcofi4r 1.20.0; quality flags as one predicate in each language. No credentials in code. |
-| 12 | **Providers edit a Sheet; git keeps the record; the release publishes it** | screenshot of one provider Sheet (metadata tab, tiered rows) + a 4-box flow: Sheet ⇄ `metadata/…/*.yml` + `questions.csv` → release → calcofi.io / EML / portals | one Sheet per provider, three kinds of tab; only the answer columns are editable; the weekly observer files a proposed question when a portal changes something. Point to the docs page. This is where the two-sheets question gets asked (slide 13). |
-| 13 | **Decisions and asks, with an owner each** | table | see § Asks below — eight lines, no more |
-| 14 | **Software is no longer the bottleneck** | plain, one line, navy band | said once, evenly: "Building is now fast. Deciding what to build, checking it, and telling people about it are what set the pace. That is where I need you." Then the proposed cadence (below). |
+| 2 | **Five things, one database** | tiles: the front door · Explorer · Datasets catalog · Publishers · Packages + DOI | the map of the talk; everything reads the same frozen release |
+| 3 | **The front door: from ship to screen** | `presentations/assets/landing_hero_2026-09-07.png` (hero + the six numbers); `landing_top_2026-09-07.png` if a second beat is wanted (Where · When · release · ship's log · Explorer · get the data · taxa) | calcofi.io opens on a Line 90 section drawn to scale from the release and the brand's own sprite: the ship, the CTD wire with its 14 bottle depths to 515 m, the bongo at 210 m, PairoVET, manta, the CUFES intake, GEBCO sea floor, and 14 pins placed at the depth each measurement lives — every pin links to calcofi.org's method page, so calcofi.io never explains a net. The six numbers (77 years · 842 cruises · 49 ships · 218 stations · 2,614 taxa · 349 M rows) and the Where map (the real 218-cell grid) and When strip (measured coverage per dataset, the two asserted rows hatched) all come from the record, never typed. The ship's log writes itself: 77 entries from releases, datasets and apps, a hand-written file only for features, and a feed calcofi.org can pull. Deployed 2026-09-07 (CalCOFI.github.io PR #6); the landing session is still open for polish. |
+| 4 | **One app, six lenses** | `images/explore_light.png` (or a fresh shot: `?lens=section&var=temperature&line=90&tour=off`) | we had five apps with slightly different grains; switching between them was confusing and every feature was built five times. Now one app, and the grains are lenses in one picker: stations, hexagons, contours, cruises, regions, sections. The URL *is* the view: send a link, get the exact map. Erin's 8/26 names still apply to the lenses. |
+| 5 | **Contours: a surface between the stations, with its error, computed in your browser** | `presentations/assets/explore_contour_2026-09-07.png` (temperature, kriging over every site, the fit line visible in the panel) | the sixth lens, live today, replaces the Contour Explorer (which read the legacy PostgreSQL; its URL now redirects). Three methods — IDW for parity with the old app, ordinary kriging by default, a thin-plate spline — and the model-based two halve IDW's error *and* say where they are unsure: the error is a surface you can switch to. The fit line under the method says what you are looking at: 12,046 sites → 60,165 cells in 1.2 s, leave-one-out error 1.46 °C, blank beyond 60 km of a point. Eight surfaces from one table (the statistic, its error, observation density, first and last year, the 5th/95th percentiles and their spread); the inputs can be drawn on top; ramps follow oceanographic convention per variable. Honesty is built in: the sentence says *"by ordinary kriging"*, never just "temperature". And the same algorithm runs in R (`cc_interpolate()`) and Python (`interpolate()`), tested cell for cell against a fixture the browser wrote, so a figure is reproducible outside the app. No server. |
+| 6 | **It answers in 0.15 s, and it costs nothing to host** | two response-time graphs from `uptime/graphs/{explore,db-viz-hex}/response-time-week.png` side by side, labelled 155 ms vs 11,324 ms | no server: the page is on GitHub, the tables on GCS, the SQL runs in the browser. The Shiny apps live on one VM (≈ $200/mo, confirm), one fewer since today: the Contour Explorer is retired. **The honest downside:** it is a large TypeScript app; maintaining it presumes AI-assisted development, and it needs a second pair of eyes — that is one of the asks. |
+| 7 | **Attribution and feedback are built in** | crop of the Sources line + *Cite this data*, and the feedback dialog with an annotated screenshot (`explore/shots/live_feedback.png`) | Erin's five asks from 9/2 are all in: source beside the variable, a citation per row (`dataset_key` on every CSV), *Cite this data*, a Sources page, footers on figures. Feedback: screenshot → mark it up → goes to a Sheet, an email to the three of us, and a public GitHub issue; *Register a product* uses the same pipe. |
+| 8 | **Every dataset has one page, and every page has every endpoint** | `images/datasets_light.png` (the grid) | we were stuck showing datasets *with credit* inside the apps, and nobody could find "the ERDDAP one" or "the netCDF one". Now: 16 in the database + 17 holdings, by category with the brand icons, generated from the release. |
+| 9 | **A dataset page, top to bottom** | `images/dataset-ichthyo_light.png` (or a taller shot of `/datasets/swfsc_ichthyo/`) | Explore (which app opens on it) · Get the data · Code (R ‖ Python) · Metadata records (STAC, EML, JSON-LD) · Archives & portals with the *policy sentence* ("archive of record OBIS through the IPT; NCEI is SWFSC's; EDI does not apply") · Source files · coverage. |
+| 10 | **The generic publishers work, and they wait for a decision, not a build** | small table: portal · what · how many · state | OBIS: 10 Darwin Core archives, staged; EDI: 3 packages (bottle, CTD, METS), staged; ERDDAP: 45 datasets live; netCDF: one per dataset. "Staged" = built and byte-stable, deposited only when we say so. The ichthyo archive matches the hand-built one that is on OBIS today, with two data questions for SWFSC. |
+| 11 | **The 2022 picture, and what it became** | left: `docs/figs/sw_arch.svg` (rendered PNG); right: the new v3 mermaid (record → surfaces → readers) | the *publish* box is now real. What changed: everything a portal sees is generated from one record per dataset; the dotted boxes are catalogs run by others, each pointed at a static file we already publish. Old routes still there: OBIS, EDI, ERDDAP, NCEI. New: STAC, DCAT `data.json`, JSON-LD + sitemap (Google Dataset Search, ODIS), Zenodo. The only server-shaped option, pycsw, waits for a partner asking for CSW. |
+| 12 | **Every release has a DOI** | screenshot of the Zenodo record + the RELEASES.html contents sidebar | citation string on the slide; concept DOI for "the database", version DOI per release; the changelog (`storage.calcofi.io/…/RELEASES.html`) says what changed and why, per release, with a table of contents. |
+| 13 | **The same bytes from R, Python and the browser** | code pair: `calcofi4r::cc_get_db()` ‖ `calcofi4py.cc_get_db()` + the CTD team's `cc_pg_connect()` | calcofi4py 0.7.0 for the CTD group (release access + their PostgreSQL); calcofi4r 1.20.0; quality flags as one predicate in each language. No credentials in code. |
+| 14 | **Providers edit a Sheet; git keeps the record; the release publishes it** | screenshot of one provider Sheet (metadata tab, tiered rows) + a 4-box flow: Sheet ⇄ `metadata/…/*.yml` + `questions.csv` → release → calcofi.io / EML / portals | one Sheet per provider, three kinds of tab; only the answer columns are editable; the weekly observer files a proposed question when a portal changes something. Point to the docs page. This is where the two-sheets question gets asked (slide 13). |
+| 15 | **Decisions and asks, with an owner each** | table | see § Asks below — nine lines, no more |
+| 16 | **Software is no longer the bottleneck** | plain, one line, navy band | said once, evenly: "Building is now fast. Deciding what to build, checking it, and telling people about it are what set the pace. That is where I need you." Then the proposed cadence (below). |
 | A1 | Appendix: URLs | the list | every URL shown, for the PDF |
 
-**Asks (slide 13), owner first.** Keep the register of "small, specific, dated":
+**Asks (slide 15), owner first.** Keep the register of "small, specific, dated":
 
 | Ask | Owner | Proposed answer already on the table |
 |---|---|---|
@@ -160,8 +164,9 @@ a machine without them falls back to Calibri, which is acceptable. Do not embed.
 | CalOOS ↔ our ERDDAP | Erin → Iwen Su | does CalOOS harvest `erddap.calcofi.io` directly; the CoastWatch handoff; propagation to data.ioos.us |
 | Explorer review | Erin, Betty (by a date) | use the feedback button; 30 minutes each; Betty as second pair of eyes on the code |
 | Crab answers from CDFW | Betty (Sept 16) | the ingest already ships examined-only; the remaining Qs are in the cdfw Sheet |
+| calcofi.org ↔ calcofi.io links | Erin, Mark, with the SIO web team | the hero's pins already link out to calcofi.org's method pages; a link back from calcofi.org/data's tiles to `calcofi.io/datasets/{key}/` closes the loop (cosmetic, whenever the web team has a slot) |
 
-**Proposed cadence (slide 14, one line):** a monthly release (already the rhythm since August), a 20-minute
+**Proposed cadence (slide 16, one line):** a monthly release (already the rhythm since August), a 20-minute
 demo in the data meeting when something ships, and questions to providers only through the Sheets.
 
 **Build mechanics.**
@@ -181,8 +186,8 @@ demo in the data meeting when something ships, and questions to providers only t
 - Uptime graphs: `../uptime/graphs/{explore,db-viz-hex}/response-time-week.png` (pull the repo first).
 - Diagram: `mmdc -i docs/diagrams/catalog_flow.mmd -o presentations/assets/catalog_flow.png -w 2400 -b transparent`
   (`mmdc` is installed); the 2022 SVG via `rsvg_png`.
-- Google Slides check: upload the `.pptx` to the CalCOFI Drive folder, open, and look at slides 4, 9, 12
-  (images), 8 and 13 (tables) — flextable renders as a native table and imports cleanly.
+- Google Slides check: upload the `.pptx` to the CalCOFI Drive folder, open, and look at slides 3–6, 11, 14
+  (images), 10 and 15 (tables) — flextable renders as a native table and imports cleanly.
 
 ### C · The docs chapter: `docs/metadata.qmd` — "Metadata & the ingest loop"
 
@@ -282,7 +287,7 @@ server-shaped option, pycsw, is gated on a partner asking for CSW.*
    meeting's is collegial. Fresh subject, plain text, three numbered items, one link each.
 2. **Cost is hosting cost.** The deck compares a VM to static hosting and says nothing about AI subscriptions
    or notional consultancy prices.
-3. **The downside is stated on the same slide as the upside** (slide 4), and it becomes an ask (a reviewer),
+3. **The downside is stated on the same slide as the upside** (slide 6), and it becomes an ask (a reviewer),
    not an apology.
 4. **The closing line is one sentence, no "singularity".** The idea is Ben's and it is right; the word reads
    as hype to this audience. "Software is no longer the bottleneck" carries it.
@@ -302,10 +307,10 @@ server-shaped option, pycsw, is gated on a partner asking for CSW.*
 | 0 | Confirm the VM monthly cost (GCP billing) and the CalOOS sheet id Erin linked (`1eyvhdzA5YwuDxH8tBld2-h_odKA1KYt_RXI3loI0OaU`) is the one `import_caloos_sheet.R` reads | Ben | 5 min |
 | 1 | Write `docs/diagrams/catalog_flow.mmd`; render with `mmdc` to check it; wire into `portals.qmd` (replace `fig-portals-flow`) and `index.qmd` (beside the 2022 figure) | Sonnet · high | 30 min |
 | 2 | Write `docs/metadata.qmd` per § C; add to `_quarto.yml`; render; push (the book deploys itself) | Sonnet · high | 1.5 h |
-| 3 | Send the email (§ A) with the live link — or the fallback sentence | Ben | 5 min |
-| 4 | `presentations/assets/template_16x9.pptx`; `build_update_2026-09-08.R`; assets (logo PNG, uptime graphs, diagram PNG, the four fresh crops); build; open in PowerPoint | Opus · medium | 2.5 h |
-| 5 | Upload to Drive, open in Google Slides, fix anything that moved; export PDF beside the pptx | Ben | 20 min |
-| 6 | Dry run against a clock: 14 slides in 13 minutes, notes only | Ben | 15 min |
+| 4 | Send the email (§ A) with the live link — or the fallback sentence | Ben | 5 min |
+| 6 | `presentations/assets/template_16x9.pptx`; `build_update_2026-09-08.R`; assets (logo PNG, uptime graphs, diagram PNG, the four fresh crops); build; open in PowerPoint | Opus · medium | 2.5 h |
+| 7 | Upload to Drive, open in Google Slides, fix anything that moved; export PDF beside the pptx | Ben | 20 min |
+| 8 | Dry run against a clock: 14 slides in 13 minutes, notes only | Ben | 15 min |
 
 Total about five hours; steps 1–2 and 4 can run in parallel (two sessions, two worktrees are not needed —
 different repos).
@@ -316,18 +321,18 @@ different repos).
 - Deck: opens in PowerPoint without a repair prompt; slide size 13.333 × 7.5 in; every number on a slide
   appears in the table above with its source in the notes; fonts named Source Sans 3 / Teko in the XML
   (`unzip -p … ppt/slides/slide4.xml | grep -o 'typeface="[^"]*"' | sort -u`); the Google Slides import shows
-  images on 3–7, 9–12 and tables on 8 and 13; PDF exported.
+  images on 3–9, 11–14 and tables on 10 and 15; PDF exported.
 - Docs: `quarto render` clean; sidebar shows the new chapter; `curl -s -o /dev/null -w '%{http_code}'` on
   every link in it; the diagram renders client-side (mermaid-format png stays off).
 - Sitemap: the slide and the docs say `calcofi.io/datasets/sitemap.xml`, which is the path that answers.
 
 ## Risks and what bounds them
 
-- **Over-length.** The deck is capped at 14 slides + appendix, ≤ 4 bullets each, by construction; the dry
-  run is the check. If it runs long, drop slides 10 and 11 into the appendix — the DOI and packages survive as
+- **Over-length.** The deck is capped at 16 slides + appendix, ≤ 4 bullets each, by construction; the dry
+  run is the check. If it runs long, drop slides 12 and 13 into the appendix — the DOI and packages survive as
   one line on slide 2.
 - **Tone drift.** Every headline is a declarative sentence about a thing that exists; no exclamation marks;
-  the one "we did it" moment is slide 8 and it ends in "waits for a decision". Ben reads the notes aloud once
+  the one "we did it" moment is slide 10 and it ends in "waits for a decision". Ben reads the notes aloud once
   before the meeting.
 - **The two-sheets problem lands badly.** It is framed as *our* duplication to resolve, with Erin's channel
   kept for this round. If Erin prefers her sheet permanently, `import_caloos_sheet.R` already exists; the
@@ -357,7 +362,7 @@ Two sessions, in parallel; each cwd `~/Github/CalCOFI/workflows` so CLAUDE.md an
 > `presentations/assets/template_16x9.pptx` (LibreOffice headless from a blank 16:9 `.odp` is fine), then
 > `presentations/build_update_2026-09-08.R` with officer + flextable mirroring `build_deck.R`'s helpers but in
 > brand v2 (colours, Source Sans 3 / Teko). Assets: logo via rsvg from `../CalCOFI.github.io/brand/v2/logo_calcofi_h.svg`;
-> `git -C ../uptime pull` then the two response-time-week PNGs; the site's `images/*_light.png` card shots;
+> `git -C ../uptime pull` then the two response-time-week PNGs; the site's `images/*_light.png` card shots; the landing crops already in `presentations/assets/landing_*_2026-09-07.png` (re-shoot with `shot-scraper 'https://calcofi.io/?theme=light&tour=off' --width 1440` if the landing session ships more);
 > `mmdc` on `../docs/diagrams/catalog_flow.mmd` (write it from § D if the docs session has not yet); fresh crops
 > with `shot-scraper --selector` for the Sources line, the feedback dialog (`../explore/shots/live_feedback.png`
 > exists), one provider Sheet's metadata tab, and the Zenodo record. Speaker notes on every slide carry the
@@ -382,7 +387,7 @@ Two sessions, in parallel; each cwd `~/Github/CalCOFI/workflows` so CLAUDE.md an
   deploys itself through `render_book.yml`, ~15 min on the macOS runner). Live URL once deployed:
   https://calcofi.io/docs/metadata.html. Side fix pushed to `CalCOFI/workflows` (c18a687): the
   `citation_main` guidance cell no longer carries escaped quotes.
-- Email item 3 can now link the live page; the deck's slide 12 footer is the same URL.
+- Email item 3 can now link the live page; the deck's slide 14 footer is the same URL.
 - **2026-09-07 · the docs deploy was already red before this work.** This morning's portals commit (70341e2)
   failed `render_book.yml` at the **docx** download: gt 1.3.0's Word export unescapes `&` in a
   `fmt_markdown()` cell and then parses the cell as XML (`xmlParseEntityRef: no name`), and v2026.09.06's
@@ -395,3 +400,63 @@ Two sessions, in parallel; each cwd `~/Github/CalCOFI/workflows` so CLAUDE.md an
   an unescaped `_`): 2bab28d makes the dataset link HTML-only (`knitr::is_html_output()`; the pdf/docx/epub
   show the plain name). Deploy run 34137348470 green; https://calcofi.io/docs/metadata.html answers 200,
   chapter 6 in the sidebar, the diagram in Process, Portals and Metadata. Email item 3 links it as written.
+- **2026-09-07 · the Sheets, verified against Google (Ben's question).** All seven provider Sheets exist in the
+  Shared Drive folder *questions* (`1Tryjfd76…`), each titled "CalCOFI integrated database — questions for
+  <provider>", each with README + one tab per dataset + a populated `metadata` tab (rows: calcofi 225, swfsc 97,
+  sio 97, cce-lter 353, cdfw 33, farallon 33, sccoos 65), and the CalCOFI Sheet a `holdings` tab (18 rows);
+  pushed 2026-09-05 09:15, no human edit since (Drive `modifiedTime`). `docs/metadata.qmd` now names the title
+  and the folder so the reader is not misled (b2440d2). Two things fell out of the read-only pull:
+  - `gs_pull_holdings()` crashed on every holding (`readLines(NULL)`: `dm_all_holding_sidecars()` never
+    stamped `path`) — fixed with a regression test, workflows 7653ede; the pull now completes.
+  - **The holdings tab's `priority` column holds the CalOOS portal priorities** (EDI / Other / NCBI /
+    CalOOS / ERDDAP / "CalCOFI website") for 15 of 17 holdings, while the sidecars carry those under
+    `priority_caloos` and leave `priority` (the team's triage priority) blank. **Root cause (found by
+    the regression test, not the hypothesis above): R's `$` partial-matches list names**, so
+    `sidecar_list$priority` returned `priority_caloos` whenever `priority` was absent. **Resolved
+    2026-09-07 evening (Ben: "re-push and fix however necessary")**: `dm_holdings_row()` indexes with exact
+    `[[`, the tab gains a read-only `priority_caloos` column beside `priority`, a re-push now deletes the
+    tab's existing protected ranges before re-protecting (they protect by column index, so the inserted
+    column would have left `next_step` under a stale range), tests for each; `push calcofi --execute` run:
+    metadata tab 224 rows, holdings 17 rows, `priority` blank on all, `priority_caloos` on 15, five clean
+    protected ranges, and a dry-run pull reports **0** diffs. `pull --execute` is safe again.
+- The plan file itself was committed by the landing-page session under a nested path (its title had a
+  slash); renamed in git to the on-disk name, c712511.
+- **2026-09-07 · the landing page is a slide (Ben).** The re-cut is deployed (plan `2026-09-07 CalCOFI.io landing
+  re-cut …`, L1–L5 measured, the Where map static after Ben's note); slide 3 shows it, with two crops of the live
+  page saved to `presentations/assets/landing_{hero,top}_2026-09-07.png` (1440 wide, light, tour off). One
+  inconsistency to hand the landing session: the numbers band says **349 M** rows and the catalog strip below it
+  **348 M** for the same 348,657,010 (rounding vs truncation) — one should give.
+- **2026-09-07 · Contours is a slide (Ben).** The lens shipped and deployed the same evening (contours plan
+  `2026-09-07 Explorer Contours lens …`, all slices; explore 165048a, Pages green 17:51; `app.calcofi.io/contour`
+  308 → the lens; calcofi4r 1.22.0 / calcofi4py 0.9.0 carry the parity functions). Slide 4 now says six lenses,
+  slide 5 is the lens, the live shot is `presentations/assets/explore_contour_2026-09-07.png` (1440 × 900, light,
+  headless Chromium — the Chrome MCP tab freezes on the surface's BitmapLayer, so never shoot this one there).
+  Two lines for the landing session: the bento tile "One app, 5 lenses" and `products.yml` line 112 "One app,
+  five lenses — stations, hexagons, cruises, regions and sections" should say six and name contours.
+- **2026-09-07 · B built.** `presentations/2026-09-08_CalCOFI.io_update.pptx` (17 slides = 16 + the URL appendix,
+  13.333 × 7.5 in, 3.7 MB) from `presentations/build_update_2026-09-08.R` (officer 0.7.6 + flextable 0.10.0), on
+  `presentations/assets/template_16x9.pptx` — officer's own 4:3 template with `sldSz` widened and every
+  layout/master placeholder rescaled ×4/3, so the "Office Theme" layouts survive. Brand v2 throughout (navy /
+  blue / yellow / sand, Source Sans 3 body, Teko headlines, Source Code Pro for the two snippets); the XML names
+  only those three faces (`grep typeface` over all 17 slides). Speaker notes on every slide carry the talk track
+  and each number's source. **Numbers are read at build time, not typed**: release facts from
+  `data/releases/v2026.09.06/{datasets.json,catalog.json}`; response times from `../uptime/api/*/response-time*.json`
+  (147 ms Explorer / 11,353 ms Hexagon Explorer all-time at the 2026-09-07 pull — the facts table's 155 / 11,324
+  had already moved; 28 monitors, not 29: `oceano` was deleted in that pull); package versions from the sibling
+  repos; the ERDDAP count live from `allDatasets` (44 excluding the `allDatasets` row; the facts table's 45 counted
+  it) with a fallback; holdings statuses from `holdings[].status.stage`. The one placeholder on a slide is the VM
+  cost, `[about $200/mo — confirm in the GCP billing console]` (slide 6 + its note). Assets shot tonight:
+  Zenodo record (shot-scraper needed `--timeout 150000`; the first try captured Zenodo's own 504 page — check the
+  PNG, not the exit code; cookie banner cropped in the script), `RELEASES.html`, the Explorer's
+  `?modal=sources` crop (`--selector .modal-sources`; the `.sources` line itself sits in a collapsed *More options*
+  and shot-scraper cannot see it), the CalCOFI Sheet's `metadata` tab via the logged-in Chrome tab (shot-scraper
+  has no Google session), the 2022 SVG and both lockups via rsvg, the v3 diagram via `mmdc -b white`. Two officer
+  traps, both now handled in the script: `read_pptx()` has no 16:9 template (hence the widened copy), and every
+  `ph_location()` shape is a *placeholder*, so an empty rectangle shows "Click to edit Master text styles" in
+  PowerPoint's edit view, LibreOffice and Google Slides — `strip_ph()` removes the `<p:ph>` tags after `print()`
+  (each shape keeps its own `<a:xfrm>` and run properties). Reviewed slide by slide through LibreOffice → PDF →
+  PNG, i.e. in *fallback* fonts (Source Sans 3 / Teko are not installed here — `fc-list` is empty; the brand
+  ships woff2 only), which are wider than the real faces, so what fits there fits in the brand fonts. Left for Ben:
+  step 0 (the VM cost), step 7 (Drive upload → Google Slides check on 3–9, 11–14 images and 10, 15 tables →
+  PDF export; the LibreOffice PDF was not kept because it carries the fallback fonts), and the morning
+  `git -C ../uptime pull` + rebuild if the response-time numbers should be fresh.
