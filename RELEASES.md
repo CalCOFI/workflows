@@ -1541,7 +1541,7 @@ Invertebrates folded into ichthyo; spatial tables consolidated and uploaded to G
 optimised with VIEWs and GCS server-side copy (60+ min → ~4 min); `inverts` → `invert`,
 `dic_measurement_summary` → `dic_summary`.
 
-# v2026.03 – v2026.03.26 (2026-03 … 2026-03-26)
+# v2026.03.14 – v2026.03.25 (2026-03-14 – 2026-03-25)
 
 First releases on the versioned GCS layout (`ducklake/releases/{version}/`), `relationships.json`
 sidecar from v2026.03.14; bottle, CTD, DIC and ichthyo as per-dataset tables.
