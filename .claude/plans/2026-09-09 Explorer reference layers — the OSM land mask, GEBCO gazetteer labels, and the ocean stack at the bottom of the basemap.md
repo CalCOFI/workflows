@@ -101,3 +101,33 @@ explore (`basemap.ts`, `state.ts`, `layers.tsx`, `App.tsx`, `README.md`, `help.t
 - **Left over from the session**: Homebrew's `re2` had been upgraded past the `abseil` it linked (every GDAL CLI and the
   Python `osgeo` bindings died with "Library not loaded … libabsl_log_internal_check_op.2508"); `brew upgrade re2`
   (→ 2025-11-05_2) fixed all of them — the bathymetry build script runs again.
+
+## Committed and pushed 2026-09-09 (Ben: "Beautiful! Commit and push")
+
+calcofi4db `e961fee3` (4.8.0) · workflows `3518190` · explore `4446e06` + the sidecar merge (`src/App.tsx`: a release
+whose `spatial_layers.json` predates the reference rows takes them from the bundled snapshot — **D55**, else the
+Reference group and `layers=gebco_gazetteer` wait for the next release) · docs `5fb5000` (the book published).
+
+**Incident — the shared working tree.** While the Explorer edits sat uncommitted, another session checked
+`explore` out to a `site-key` branch, committed `d9d3d68` ("Sections lens: the station is site_key, not the grid
+cell") with `git add -A` semantics, and returned to main: all eleven reference-layer files rode into that commit
+(and to `origin/site-key`), and main's working tree came back clean — the first `git commit` here found nothing
+to commit. Recovered with `git checkout d9d3d68 -- <the eleven files>` (their hunks in that commit were exactly
+these, the branch's own change is four `sql/` files) and committed on main; a rebase of `site-key` onto main
+merges the identical hunks clean. Both idle sessions were told. Lesson: commit before handing a working tree back
+to a shared machine, and never `git add -A` on a tree another session may be using.
+
+## Round 2 (Ben, 2026-09-09: "turn on the names by default, drop them from the legend, keep Esri, keep parks off")
+
+- **D56 — the default `layers=` is the registry's default-visible REFERENCE layers, above the data.** `defaultLayers()`
+  in `basemap.ts`: the rows with `role = reference` and `default_visible` (the GEBCO names; the mask is excluded),
+  then a `data` entry. `layers=off` = none; an explicit list = that list; the card writes null when the list equals
+  the defaults. The boundary rows' `default_visible` (the EEZ) belongs to db-viz-hex and is not read.
+- **D57 — the legend lists boundaries only**; label and raster kinds are never a legend row.
+- **D58 — a lens sliver switches the lens and opens the list** with the new lens selected (the old "open only"
+  behaviour read as a switch that did not happen).
+- verify: `layers3_default_names`, `layers3_off`, `lens_sliver_switches` (24 cases green on dev, the live smoke after
+  the deploy in the transcript). Esri's raster row stays offered, off; CARTO's `park_*` stay under water (D49 holds).
+- **D59 — `basemap=nolabels`** (Ben: "turn off the Carto land labels, helpful for a fully data-centric view"): the
+  Basemap labels checkbox beside Land; `composeStyle()` sets `visibility: none` on every symbol layer of the base
+  style before the isobath labels and the registry's label layers are added, so those stay. verify: `basemap_nolabels`.
