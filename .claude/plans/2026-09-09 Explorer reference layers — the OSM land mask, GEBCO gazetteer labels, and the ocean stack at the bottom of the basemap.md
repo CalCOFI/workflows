@@ -131,3 +131,11 @@ to a shared machine, and never `git add -A` on a tree another session may be usi
 - **D59 — `basemap=nolabels`** (Ben: "turn off the Carto land labels, helpful for a fully data-centric view"): the
   Basemap labels checkbox beside Land; `composeStyle()` sets `visibility: none` on every symbol layer of the base
   style before the isobath labels and the registry's label layers are added, so those stay. verify: `basemap_nolabels`.
+- **D60 — both label families toned down, a dial each** (Ben: "the place labels are too visually dominant … both
+  terrestrial and marine"). Diagnosis: Dark Matter's city names are near white (rgba 211,228,236 · 233,239,246),
+  Montserrat Medium, 12–14 px, 1 px black halo — the highest contrast on the map; the names were 13/11/10 px at 0.92.
+  CARTO's text: one mid grey (rgb 214,220,226 dark · 74,84,92 light) at `basemapo=` (0.6 · 0.7), Regular weight, a
+  0.9 px halo, 1 px smaller (`toneBaseLabels()`); the names: 12/10/9 px at 0.65 · 0.7, the row's opacity slider
+  (`layers=gebco_gazetteer::0.45`). Colour/opacity does most of the work, weight next, size least (legibility goes
+  first). CARTO's zoom gating left alone. A dangling `else` (an `if … for … if … else`) silently skipped the toning
+  once and two `Math.abs(undefined − x) > ε` checks passed vacuously — the checks now assert the type first.
