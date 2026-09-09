@@ -474,3 +474,14 @@ Ben
 - Does not change `grid_key`, `hex_id` or any map product; only sections and the climatology re-key.
 - Does not deposit to OBIS/EDI; that stays a deliberate manual act (Betty proposes, Erin/Ben approve).
 - Does not archive any repo without Ben saying so.
+
+## Executed 2026-09-09 (slices 0–5; 6–7 pending)
+
+- **Slice 0.** Plan + deck build committed (`bfa2433`); calcofi4r pushed; `gh auth refresh -h github.com -s read:project,project`.
+- **Slice 1.** ~75 issues closed with evidence comments (workflows, CalCOFI.github.io, server, calcofi4r, apps, api, capstone, larvae-cinms, pollutants-app, prj-mgt, db-viz-hex); #74 retitled (931 NULL cruise_keys); #73 status noted (thinned METS netCDF published, full not); PR CalCOFI.github.io#5 closed. Nothing archived (Ben's call).
+- **Slice 2.** Project 4 "Management" closed with a pointer; **project 5 "CalCOFI.io"** created (Status · Area · Size · Owner · Target week; ten repos linked), 38 items with fields set.
+- **Slice 3.** Betty's issues: docs#14, workflows#79 #80 #81 #82 #83 #84 #85, ctd-transects#1, explore#8, CalCOFI.github.io#12, calcofi4r#17; existing #17 #24 #42 #43 #44 #62 #65 and db-viz-station #3 #5 #7 #8 labelled `betty` + milestone `2026-09 sprint`. Ben's: workflows#86 (site_key grain), #87 (CTD canonical flips, waits on Rasmus), ctd-transects#2, explore#9.
+- **Slice 4.** calcofi4db (working tree, **uncommitted — shares the tree with the reference-layers session's 4.8.0**): `R/site_key.R` (`site_key_sql()`, `normalize_site_key()`, `check_site_key_format()`), `append_sample()` normalises `site_key` (exactly the 28 CTD rows change on v2026.09.06, nothing else), `build_climatology()` grained on `site_key` via `sample` with `grid_key` = modal cell, PK + export sort key follow, `obs_bio`/`obs_env` gain `site_key`; NEWS under 4.8.0; 550 tests green; installed. calcofi4r **1.23.0** pushed (`38286fc`): `cc_climatology()` computes on `site_key`.
+- **Slice 5.** ctd-transects PR #3 and explore PR #10 (branches `site-key`), to merge after the release. `release_database.qmd` calls `check_site_key_format()` before the PK gate and counts stations by `site_key`; `RELEASES.md # Unreleased` carries the section — both **uncommitted** in the shared tree.
+- **Slice 8 (moved up).** The reply is Gmail draft `r-306959493649294701` on the thread, with every link live; Ben sends.
+- **Pending.** Slice 6 (D3) waits on Rasmus's three answers; slice 7 (staged release → promote → `deploy_consumers.sh`, then merge the two PRs) after the reference-layers work commits. Measured on the way: 709 of 9,705 `site_key`s straddle a grid-cell edge; the ichthyo "odd" keys are legitimate negative stations.
