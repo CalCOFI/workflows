@@ -41,17 +41,41 @@ cat(length(uris), "markdown object(s)\n")
 # unique), a nested list in a sticky aside on a wide screen and a collapsed <details> above the
 # text on a narrow one, with the heading in view highlighted as the reader scrolls. RELEASES.md is
 # 23 release sections deep; without this it is a wall.
+#
+# a heading that *starts* with a release version — `v2026.09.06 (2026-09-06)`, or a range
+# `v2026.08.04 – v2026.08.06` — is anchored on the version string itself, `id="v2026.09.06"` (dots
+# are legal in an id and in a fragment), so anything holding a version can link
+# `RELEASES.html#v{version}` without reproducing the slug rule or knowing the release date. The
+# slug that heading used to carry (`v2026-09-06-2026-09-06`: the version *and* the date, both
+# transformed) stays as an empty <a id> inside it so a bookmark on it still resolves, and every
+# further version the heading names gets one of those too. Every other heading keeps its slug id.
 slug <- function(x) { x <- tolower(gsub("<[^>]+>", "", x)); x <- gsub("[^a-z0-9]+", "-", x); gsub("^-+|-+$", "", x) }
+VER_RX <- "v[0-9]{4}\\.[0-9]{2}\\.[0-9]{2}"
+# the versions a heading names, in order; only a heading that opens with one is a version heading
+heading_versions <- function(x) {
+  x <- gsub("<[^>]+>", "", x)
+  if (!grepl(paste0("^", VER_RX), x)) return(character())
+  regmatches(x, gregexpr(VER_RX, x))[[1]]
+}
 add_toc <- function(html) {
   m <- gregexpr("<h([1-3])>(.*?)</h[1-3]>", html, perl = TRUE)
   hits <- regmatches(html, m)[[1]]
   if (length(hits) < 3) return(list(body = html, nav = ""))
-  seen <- character(); items <- character(); out <- html
+  seen <- character(); vseen <- character(); items <- character(); out <- html
   for (h in hits) {
     lvl <- as.integer(sub("^<h([1-3])>.*", "\\1", h))
     txt <- sub("^<h[1-3]>(.*)</h[1-3]>$", "\\1", h)
     id  <- slug(txt); if (!nzchar(id)) id <- "section"
     n <- sum(seen == id); seen <- c(seen, id); if (n) id <- paste0(id, "-", n + 1)
+    vs  <- heading_versions(txt)
+    if (length(vs) && vs[1] %in% vseen) vs <- character()  # a version anchors one heading
+    vs  <- unique(vs[!vs %in% vseen]); vseen <- c(vseen, vs)
+    # a version heading: the version is the id, the slug and any further version
+    # named in it ride along as empty anchors
+    if (length(vs)) {
+      txt <- paste0(paste(sprintf('<a id="%s"></a>', c(id, vs[-1])), collapse = ""), txt)
+      id  <- vs[1]
+    }
     out <- sub(h, sprintf('<h%d id="%s">%s</h%d>', lvl, id, txt, lvl), out, fixed = TRUE)
     items <- c(items, sprintf('<li class="l%d"><a href="#%s">%s</a></li>', lvl, id, gsub("<[^>]+>", "", txt)))
   }

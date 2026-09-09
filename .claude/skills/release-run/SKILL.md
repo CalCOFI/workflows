@@ -63,6 +63,17 @@ sixteen shipped and named tables retired months earlier.
   data fix. Headings are declarative sentences ("Depth is a coordinate, and it is now
   bounded"), bodies say what was wrong, what is true now, by how much, and which
   provider question it raised; consumer-facing breakage gets a `**Consumers:**` line.
+- **The first `##` heading under a version's section is the headline calcofi.io/news and
+  `feed.xml` show for that release.** The landing page's `_plugins/news.rb` reads it through
+  `scripts/fetch_release.sh` and titles the entry `<version> — <that heading>`; for most
+  readers it is the only line of the notes they ever see. So make the first `##` the story of
+  the release — the same declarative sentence, and the change that matters most, first.
+- **Every version heading is anchored on the rendered page by its version string**:
+  `https://storage.calcofi.io/calcofi-db/ducklake/releases/RELEASES.html#v{version}`
+  (`scripts/render_md_on_storage.R`'s `add_toc()`, which keeps the heading's old slug as an
+  empty `<a id>` beside it). Link a release that way — never the raw `.md` on
+  `storage.googleapis.com`. A version that appears only in a section's prose, and not in a
+  heading, has no anchor.
 - `release_database.qmd`'s `release_notes_narrative` chunk (before the freeze) renames a
   non-empty `# Unreleased` to the release and **stops the release** if no section for
   `release_version` exists — `calcofi4db::promote_unreleased()`. Do not bypass it by
