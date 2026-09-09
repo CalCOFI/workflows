@@ -1230,6 +1230,12 @@ Cross-dataset validation to ensure data integrity before freezing.
 # core primary keys: HARD gate. v2026.08.25 shipped `sample` with 4,855 keys twice
 # (a seafloor-stamp join bug) while this chunk only warned on ship/cruise; every
 # count or join keyed on sample over-counted those rows 2x until the next release.
+# site_key is one spelling per station (calcofi4db 4.8.0: append_sample() normalises, this gates).
+# v2026.09.06 shipped 28 CTD casts with the source's own Sta_ID forms ("93.3    26.4"); harmless for a
+# map (grid_key is the join), fatal for anything keyed on the station — the climatology and the
+# sections now are.
+sk_res <- check_site_key_format(con_wdl)
+datatable(sk_res, caption = "site_key format per dataset (n_bad must be 0; NULL is a sample with no station)")
 pk_res <- check_core_pk_unique(con_wdl, c(core_tbls, "taxon", "dataset_taxon", "cruise",
                                           "ship", "grid", "dataset", "measurement_type"))
 cat(glue("core primary keys unique: {paste(pk_res$table, collapse = ', ')}\n"))
@@ -1772,7 +1778,9 @@ stopifnot(all(obs_parity$ok), sum(obs_parity$n_pair) == n_bio + n_env,
             dbGetQuery(con_wdl, "SELECT count(*) AS n FROM obs")$n)
 ss     <- build_sample_spatial(con_wdl)
 # the ONE seasonal baseline every anomaly is a departure from (calcofi4db >= 3.26.0): a plain mean per dataset x
-# station x calendar month x 10 m depth_bin x measurement type over 1993-2013, >= 3 cruises per cell, the window
+# station (sample.site_key since 4.8.0 — the inshore grid cells hold 2–4 stations, so the cell blended them;
+# grid_key rides along as the station's modal cell) x calendar month x 10 m depth_bin x measurement type over
+# 1993-2013, >= 3 cruises per cell, the window
 # stamped on every row. ctd-transects, the Explorer's Sections lens and calcofi4r::cc_climatology() subtract this
 # table — each used to compute its own, and by 2026-08-31 the three had drifted (all-months pooling; 5 m bins over
 # the thinned 10 m series; one arbitrary cast per grid cell), so one July 2026 section read +1.4 degC in one
@@ -1780,7 +1788,7 @@ ss     <- build_sample_spatial(con_wdl)
 n_clim <- build_climatology(con_wdl, qual_ok_sql = qual_sql)
 cat(glue("sample_root {n_root} · obs_bio {n_bio} · obs_env {n_env} · climatology {n_clim} rows\n"))
 datatable(dbGetQuery(con_wdl, "
-  SELECT dataset_key, count(*) AS n_cells, count(DISTINCT measurement_type) AS n_types, count(DISTINCT grid_key) AS n_stations,
+  SELECT dataset_key, count(*) AS n_cells, count(DISTINCT measurement_type) AS n_types, count(DISTINCT site_key) AS n_stations, count(DISTINCT grid_key) AS n_cells_grid,
          min(n_cruises) AS min_cruises, round(avg(n_cruises), 1) AS mean_cruises, any_value(clim_yr_min) AS yr_min, any_value(clim_yr_max) AS yr_max
   FROM climatology GROUP BY 1 ORDER BY 1"), caption = "climatology — cells per dataset (each ≥ 3 cruises; the window is on every row)")
 stopifnot(n_clim > 0, nrow(dbGetQuery(con_wdl, "SELECT DISTINCT clim_yr_min, clim_yr_max FROM climatology")) == 1)
@@ -1826,7 +1834,9 @@ jsonlite::write_json(
   build_spatial_layers(
     con_wdl, here("metadata/spatial_layers.csv"), release_version,
     pmtiles_base = "https://storage.googleapis.com/calcofi-files-public/_spatial/",
-    built = format(file.mtime(here("data/parquet/spatial/manifest.json")), "%Y-%m-%d")),
+    built = format(file.mtime(here("data/parquet/spatial/manifest.json")), "%Y-%m-%d"),
+    # the reference rows' counts (the land mask, the gazetteer labels; plan 2026-09-09 D52, calcofi4db >= 4.8.0)
+    reference_json = here("data/parquet/spatial/reference_layers.json")),
   spatial_layers_path, auto_unbox = TRUE, digits = NA, null = "null")
 cat(glue("coverage.json {round(file.size(coverage_path) / 1e3)} KB · coverage_stations.json {round(file.size(coverage_stations_path) / 1e3)} KB · ",
          "grid.geojson {round(file.size(grid_geojson_path) / 1e3)} KB · spatial.geojson {round(file.size(spatial_geojson_path) / 1e6, 1)} MB · ",

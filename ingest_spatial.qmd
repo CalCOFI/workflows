@@ -20,6 +20,14 @@ Process spatial boundary datasets into **two outputs, both uploaded to GCS**:
    shard `release_database.qmd` picks up like every other, from
    `data/parquet/spatial/`.
 
+Plus the **reference layers** (plan 2026-09-09, D47–D54; `libs/reference_layers.R`):
+registry rows with `role = reference` are not regions — no parquet, no memberships —
+but their PMTiles ship beside the boundary archives and their counts land in
+`data/parquet/spatial/reference_layers.json`, which `build_spatial_layers()` reads at
+release. Today: the OpenStreetMap **land mask** the Explorer draws over the sea floor
+and the data (`osm_land`), and the **undersea feature names** of the IHO-IOC GEBCO
+Gazetteer (`gebco_gazetteer`). A `raster` row (Esri's ocean reference) is registry-only.
+
 This notebook used to end by loading that same parquet into a
 `data/calcofi_wrangling.duckdb` at the repo root. Nothing ever read it: the
 release builds `spatial` from the parquet shard directly, and a repo-wide grep
@@ -43,7 +51,10 @@ graph LR
   C --> D["spatial + spatial_attribute Parquet"]
   C --> E["GeoJSON → tippecanoe → PMTiles"]
   D --> F["gs://calcofi-db/ingest/spatial/<br/>→ release_database.qmd"]
-  E --> G["gs://calcofi-files-public/_spatial/<br/>→ db-viz-hex"]
+  E --> G["gs://calcofi-files-public/_spatial/<br/>→ db-viz-hex, explore"]
+  R["OSM land polygons · GEBCO gazetteer<br/>(cc_stage_path('reference'))"] --> S["crop · rank · tippecanoe"]
+  S --> E
+  S --> T["reference_layers.json<br/>→ build_spatial_layers()"]
 ```
 
 ### Pre-processing
@@ -83,6 +94,9 @@ librarian::shelf(
 
 # common ingest settings (overwrite, dir_data)
 source(here("libs/ingest.R"))
+# the reference layers (land mask, gazetteer labels): sources, ranks, tippecanoe, manifest
+source(here("libs/reference_layers.R"))
+dir_reference <- cc_stage_path("reference", create = TRUE)
 
 dir_spatial <- path_expand(glue("{dir_data}/_spatial"))
 dir_pmtiles <- here("data/pmtiles")
@@ -115,6 +129,12 @@ datatable(
   d_layers,
   caption = "Spatial layers registry from `metadata/spatial_layers.csv`"
 )
+
+# the reference rows (role = reference) build in their own section below; the loop
+# here is the boundary layers only (an older registry without the column is all boundaries)
+if (!"role" %in% names(d_layers)) d_layers$role <- "boundary"
+d_layers_ref <- d_layers |> filter(role == "reference")
+d_layers     <- d_layers |> filter(is.na(role) | role != "reference")
 
 # compare with folders/files in dir_spatial
 spatial_dirs <- dir_ls(dir_spatial, type = "directory")
@@ -584,6 +604,30 @@ for (i in seq_len(nrow(d_groups))) {
     "(CRS {src_crs} -> 4326), PMTiles {pmtiles_size}\n\n"
   ))
 }
+```
+
+## Reference layers
+
+The land mask and the undersea feature names (plan 2026-09-09; `libs/reference_layers.R`).
+Sources download once under `r dir_reference` (the OSM zip is reused from the bathymetry
+build when present); the archives rebuild with `overwrite`, and the manifest merges a
+skipped layer's previous record so a partial run never blanks a count.
+
+```{r}
+#| label: reference-layers
+#| output: asis
+ref_manifest <- path(dir_parquet, "reference_layers.json")
+ref <- build_reference_layers(dir_reference, dir_pmtiles, overwrite = overwrite)
+write_reference_manifest(ref, ref_manifest)
+ref <- jsonlite::fromJSON(ref_manifest, simplifyVector = FALSE)
+cat(glue("Reference layers (built {ref$built}, tippecanoe {ref$tippecanoe}, box {paste(ref$bbox, collapse = ', ')}):\n\n"))
+for (k in names(ref$layers)) {
+  l <- ref$layers[[k]]
+  cat(glue("- **{k}**: {format(l$n_features, big.mark = ',')} features, {round(l$bytes / 1e6, 1)} MB · ",
+           "source {l$source$url} ({l$source$version})\n\n"))
+}
+missing_ref <- setdiff(d_layers_ref$dataset_id[d_layers_ref$source_type != "raster"], names(ref$layers))
+if (length(missing_ref)) cat(glue("\nWARNING: registry reference rows without an archive: {paste(missing_ref, collapse = ', ')}\n"))
 ```
 
 ## Build consolidated `spatial` + `spatial_attribute` parquet

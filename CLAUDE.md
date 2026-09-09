@@ -245,6 +245,10 @@ Rscript scripts/build_workflows_index.R
 - **Bathymetry** (`bathymetry-tiles`): GEBCO 2025 artefacts on
   `gs://calcofi-db/bathymetry/`, described by `gebco_2025.json`; not release
   content.
+- **Reference layers** (`reference-layers`): the OSM land mask and the GEBCO
+  gazetteer labels are `role = reference` rows of `spatial_layers.csv`, built by
+  `ingest_spatial.qmd` into `_spatial/*.pmtiles`; the Explorer draws the ocean
+  stack under CARTO's land layers and the mask directly above the Data row.
 
 ## The ingest skills loop (`.claude/skills/`, see `RUNBOOK.md`)
 

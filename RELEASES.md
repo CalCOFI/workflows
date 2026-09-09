@@ -8,6 +8,40 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## The climatology and the sections key on the station, not the grid cell
+
+`grid_key` is a point-in-polygon into the 218 grid cells, and the inshore cells of the core lines
+are ~2,350 km² boxes holding 2–4 real stations, all occupied every cruise since 2004 (`st30-ln90` =
+90.30 · 90.28 · 90.27.7 · 88.5/30.1, 3.7 CTD occupations per cruise; `st35-ln86.7` 3.2;
+`st40-ln83.3` 2.9; `st25-ln93.3` 2.7). `climatology` was grained on the cell, so the inshore baseline
+blended stations 15–30 km apart where the gradient is steepest; ctd-transects drew one of them
+(1,595 of 9,637 CTD occupations, 16.6 %, never drew — 26 % on line 90 since 2004) and the
+Explorer's Sections lens averaged them. Three products, three answers within 30 km of the coast.
+
+Now (calcofi4db 4.8.0): `climatology` is grained on **`site_key`** (the real station, read from
+`sample`), with `grid_key` kept on the row as the station's modal cell (709 of 9,705 stations
+straddle a cell edge across their occupations); its primary key and its export sort key follow.
+`site_key` itself has one spelling — `printf('%05.1f %05.1f', line, station)` — applied to every
+ingest's sample arm by `append_sample()` and gated at release by `check_site_key_format()`:
+v2026.09.06 shipped 28 CTD casts carrying the source's own `Sta_ID` forms (`93.3    26.4`,
+`0093. 060.0`, `090.0 27.76`, `88.50 030.1`) beside the canonical form.
+
+**Consumers:** `climatology` gains `site_key` (first after `dataset_key`) and keeps every other
+column; a cell-level reader pools rows by `grid_key` weighted by `clim_n` (exactly the old value).
+ctd-transects (PR `site-key`), the Explorer's Sections lens (PR `site-key`) and
+`calcofi4r::cc_climatology()` (1.23.0) key on the station; inshore anomalies move by up to ~1 °C at
+the surface. The 28 CTD `site_key` values change spelling (same station). Nothing else changes.
+
+## Reference layers in `spatial_layers.json`
+
+The boundary-layer sidecar gains three registry rows with `role = reference` (calcofi4db 4.8.0,
+plan 2026-09-09): `osm_land` (the OpenStreetMap land polygons the Explorer draws over the sea floor
+and the data, `_spatial/osm_land.pmtiles`), `gebco_gazetteer` (219 undersea feature names from the
+IHO-IOC GEBCO Gazetteer, a `label` layer) and `esri_ocean_reference` (a `raster` row). Every layer
+now carries `role`, `source_type` and `source_url`; a reference row's `n_features` / `bbox` come
+from `reference_layers.json`, it has no names and no memberships, and it is not in the `spatial`
+table — nothing else in the release changes.
+
 ## Every released key is declared, and every declared key is measured
 
 The release has always declared its keys in `relationships.json` and drawn them in the ERD, but
