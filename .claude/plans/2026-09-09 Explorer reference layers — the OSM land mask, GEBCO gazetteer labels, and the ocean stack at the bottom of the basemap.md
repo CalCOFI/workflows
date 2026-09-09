@@ -145,6 +145,6 @@ to a shared machine, and never `git add -A` on a tree another session may be usi
   (rank ≥ 4, z10+) under `place_town` (towns and cities, placed first from the top of the stack, win collisions),
   authored in the toned look so the slider, `basemap=nolabels` and the theme apply. A z7 tile holds no islands, so
   they appear from z8 whatever the style says. verify: `labels_islands`, `labels_islands_off`.
-- **D62 — Land is always on** (Ben: "we always want the ON"): the checkbox goes, the row states the rule;
+- **D62 — Land is always on and not listed** (Ben: "we always want the ON", then "drop the listing of Land altogether"): no checkbox, no row;
   `land=off` survives as a link-only diagnostic (`ref_land_off` compares the stacks). A label row's opacity slider
   sits under the row head, in view, like the Basemap labels slider (it had been inside the expanded style block).
