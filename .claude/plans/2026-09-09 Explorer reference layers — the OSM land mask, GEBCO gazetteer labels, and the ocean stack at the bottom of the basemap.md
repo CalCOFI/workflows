@@ -139,3 +139,9 @@ to a shared machine, and never `git add -A` on a tree another session may be usi
   (`layers=gebco_gazetteer::0.45`). Colour/opacity does most of the work, weight next, size least (legibility goes
   first). CARTO's zoom gating left alone. A dangling `else` (an `if … for … if … else`) silently skipped the toning
   once and two `Math.abs(undefined − x) > ε` checks passed vacuously — the checks now assert the type first.
+- **D61 — island names** (Ben: "surprised to not see any island labels"): CARTO's `place` layer carries class `island`
+  from z8 (the Channel Islands rank 2–3; Anacapa, Santa Barbara Island rank 5 from z10) and neither Positron nor
+  Dark Matter has a rule for it. `addIslandLabels()`: `place_island` (rank ≤ 3, z8+) and `place_island_minor`
+  (rank ≥ 4, z10+) under `place_town` (towns and cities, placed first from the top of the stack, win collisions),
+  authored in the toned look so the slider, `basemap=nolabels` and the theme apply. A z7 tile holds no islands, so
+  they appear from z8 whatever the style says. verify: `labels_islands`, `labels_islands_off`.
