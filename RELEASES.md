@@ -142,6 +142,44 @@ their next build; screenshots change; nothing is keyed on a hex.
 | `sio_mesopelagic-fish` | bio | `#5c7cfa` | `#a809d1` | 0.54 · 0.26 · 317° |
 | `farallon_bird-mammal` | bio | `#ff8787` | `#d86d6f` | 0.66 · 0.13 · 20° |
 
+## Every observed taxon has a record: `taxa.json`, the species catalog
+
+The release has shipped the `taxon` table since v2026.07 and counted it on calcofi.io as "2,614
+taxa". That is the size of a lookup table, not a number of organisms: 1,108 of its rows have no
+observation at all — 904 are lineage ancestors (Biota, Animalia, Chordata …) and 204 are entries in
+a dataset's vocabulary the sampling never met. The observed count on v2026.09.06 is **1,506**, and
+**1,008** of those are identified to species; the remaining 498 stopped at genus, family, order or
+class (*Sebastes* 18,187 rows, "Unidentified teleost" 72,797). Nothing published the lineage, the
+per-year counts or the crosswalk, so no page could say which species a dataset holds.
+
+New sidecar `taxa.json` beside `datasets.json` (calcofi4db 4.9.0 `build_taxa_catalog()`, schema
+`taxa.schema.json` 1.0, ~2.4 MB). One entry per `taxon` row **with an observation at or below it** —
+the 1,506 observed plus their 904 ancestors, 2,410 entries — each carrying its accepted name and
+common name, rank and taxonomic status, the WoRMS · ITIS · GBIF · NCBI · iNaturalist ids, the
+`parent_taxon_key` and the flattened lineage, its `taxon_group` memberships, `direct{}` (the
+observations keyed to it) and `rollup{}` (it and every descendant: observations, taxa, species,
+datasets, year span), and one block per dataset that observed it — observations, samples, years,
+per-year counts, life stages — ending in `sources[]`, the `dataset_taxon` rows that resolve to it:
+**what that dataset calls the taxon**, flagged `synonym`, `sp_to_genus` (a "… sp." name resolved to
+its genus), `rekeyed` (an id the source gave that the authority has since moved) or `no_name` (a
+code only). Measured over v2026.09.06's 1,917 `dataset_taxon` rows: 1,704 use the accepted name,
+120 carry only a code, 93 use a different name, 54 carry a superseded ITIS id. `datasets[]` lists
+the ten datasets carrying taxa with their catalog colour and, per dataset, the vocabulary rows that
+have no observation anywhere — the list a provider wants and no page had.
+
+The record is generated and gated. `check_taxa_catalog()` re-measures every count against the
+release's own `obs_bio`, requires every `parent_taxon_key` to resolve inside the record (a page with
+a dangling breadcrumb is a 404), requires the roots' rollups to sum to `obs_bio`'s 1,257,902 keyed
+rows, and requires unique page slugs and known datasets and flags; `release_database.qmd` step 3b′
+stops the release on any failure and `test_release.qmd` refuses to promote without an all-pass
+`taxa_catalog` gate. `taxa.json` joins `RELEASE_REQUIRED_OBJECTS`, so a release that does not carry
+it cannot be promoted.
+
+**Consumers:** additive — no existing object, table or column changes. calcofi.io/species/ is
+generated from this file (one page per `taxon_key`, at `/species/{key with ':' written '-'}/`); the
+landing page's Life tile and numbers band read its `counts`. A consumer that wants the crosswalk
+reads `taxa[].datasets[].sources[]` instead of joining `dataset_taxon` by hand.
+
 # v2026.09.06 (2026-09-06)
 
 ## The dataset catalog record says what a page needs to say (schema 1.1)

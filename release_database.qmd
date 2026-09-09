@@ -2495,6 +2495,35 @@ if (file.exists(meta_json_path)) {
   cat(glue("datasets.json: {length(datasets_rec$datasets)} datasets · {length(datasets_rec$holdings)} holdings · ",
            "{length(datasets_rec$reference)} reference rows · {round(file.size(datasets_paths[1]) / 1e3)} KB\n"))
 
+  # 3b'. taxa.json — the species catalog record (plan 2026-09-09 § D6/D7; calcofi4db >= 4.9.0) ----
+  # One entry per row of THIS release's `taxon` table with an observation at or below it — the
+  # observed taxa plus their ancestors (2,410 of 2,614 rows on v2026.09.06; the 204 vocabulary-only
+  # rows get no page and are listed under the dataset that declares them) — with its lineage, ids and
+  # groups, the direct counts and the rollup over its descendants, and one block per dataset that
+  # observed it carrying that dataset's own name for the taxon from `dataset_taxon`, flagged where
+  # the authority says otherwise (synonym · sp_to_genus · rekeyed · no_name). calcofi.io/species/
+  # generates one page per entry from this file; nothing on those pages is authored.
+  # It is built AFTER datasets.json because it reads that record's datasets[] for the short names,
+  # colours and categories the species pages draw their dataset dots with — so a dot cannot disagree
+  # between /datasets/ and /species/ — and from con_wdl, which holds the assembled taxon,
+  # dataset_taxon, taxon_group and obs_bio. check_taxa_catalog() is a release gate like
+  # check_dataset_catalog(): the counts are re-measured against obs_bio, every parent_taxon_key must
+  # resolve inside taxa[], the roots' rollups must sum to obs_bio's keyed row count, slugs must be
+  # unique and every dataset must be in the record. The record is GENERATED, so a failing row is a
+  # bug in the builder or a break in the release's own tables — never something a question excuses.
+  taxa_rec  <- build_taxa_catalog(con_wdl, datasets_rec, release_version,
+                                  as.character(catalog$release_date))
+  taxa_path <- write_taxa_catalog(taxa_rec, dir_frozen)
+  validate_taxa_catalog(taxa_path)
+  d_taxa_chk <- check_taxa_catalog(taxa_rec, con_wdl, datasets_rec)
+  assert_taxa_catalog(d_taxa_chk)
+  d_taxa_chk |>
+    datatable(caption = "taxa catalog check: every row must be ok (the record is generated from the release, so a failure is a bug, not a data gap)")
+  put_gcs_file(taxa_path, glue("gs://{gcs_bucket}/{gcs_release}/{basename(taxa_path)}"))
+  cat(glue("taxa.json: {taxa_rec$counts$pages} pages ({taxa_rec$counts$taxa_observed} observed taxa, ",
+           "{taxa_rec$counts$species_observed} at species rank, of {taxa_rec$counts$taxon_rows} taxon rows) · ",
+           "{taxa_rec$counts$datasets} datasets · {round(file.size(taxa_path) / 1e6, 2)} MB\n"))
+
   # 3c. eml/{dataset_key}.xml — one EML 2.2 document per dataset (plan § D-8, Decision 13;
   # calcofi4db >= 4.2.0) ----
   # The record is the only source: title, abstract, creators, contact, licence, keywords, the
@@ -2594,6 +2623,7 @@ sidecar_urls <- c(
   glue("gs://{gcs_bucket}/{gcs_release}/catalog.json"),
   glue("gs://{gcs_bucket}/{gcs_release}/metadata.json"),
   glue("gs://{gcs_bucket}/{gcs_release}/datasets.json"),
+  glue("gs://{gcs_bucket}/{gcs_release}/taxa.json"),
   # the EML folder: every publisher (OBIS, EDI, ERDDAP) and the dataset page read these
   glue("gs://{gcs_bucket}/{gcs_release}/eml/*.xml"),
   glue("gs://{gcs_bucket}/{gcs_release}/coverage.json"),
