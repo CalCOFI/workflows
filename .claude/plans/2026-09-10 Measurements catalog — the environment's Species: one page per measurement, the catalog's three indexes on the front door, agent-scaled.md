@@ -470,6 +470,12 @@ what it owns, what to do, the gates that stop it, and what to hand back.
   `fetch_release.sh` and `pre-render.R` prefer the promoted record and `MEASUREMENTS_RELEASE_URL` can be unset on both repos.
   Not done, by instruction: M6 (the Explorer reads the labels and links the page) waits for Ben's ask; open question 8 (the
   submenus) stays open — one class removes them. The `ws-*` worktrees under `~/Github/CalCOFI/.worktrees/` are left for review.
+- 2026-09-10 (evening) — **Two more front-door fixes from Ben**, branch `ws-m0c` → CalCOFI.github.io PR #16: the DATA menu's
+  Species and Measurements items link `/species/` and `/measurements/` (a tab's `url:` + `data:` in `products.yml`; Datasets stays
+  the homepage tab because the whole grid is there; without a record the item falls back to the tab — D-2 exercised), and the
+  bento's three columns end on one row line again: the Observed tile is six rows (eight under 1100 px) and fits them because each
+  counted row is two lines and the caption two — measured at seven widths, bottoms equal, overflow 0, worst stretch 1.197×.
+  D7's front door is therefore: header → pages for the two catalogs, homepage tabs for the rest.
 
 ## Appendix A — the record, in shape (`measurements.schema.json` 1.0)
 
