@@ -485,6 +485,14 @@ what it owns, what to do, the gates that stop it, and what to hand back.
   redundant "pages" became "with a NERC concept" (`measurements.rb` adds `n_unified` / `n_p01` / `n_no_p01` + `unified`);
   "The machine-readable form is …" is a `.cc-aside` (small print, muted, a hairline) on `/measurements/`, `/species/` and
   `/datasets/` alike. D5 is thereby amended: the index's first figure is the matrix, the timeline second.
+- 2026-09-10 (night) — **`/species/` pane fix** (branch `ws-m0e` → CalCOFI.github.io PR #18), found by Ben: expanding one pane set
+  the other to `display: none` and the choice was remembered per viewer, so an expanded matrix followed him across visits with
+  the tree gone and "sardine" counting "1 match" nobody could see. Now the collapsed pane folds into a 28 px vertical pill beside
+  the expanded one — the Explorer's `edge-pill` idiom, Ben's suggestion — labelled "Show the tree" / "Show the matrix"; the mode
+  lives in `?panes=` only (the old localStorage key is removed on load); a search with hits shows the tree; `check_layout.py`
+  asserts the pill and the restore on two new species paths. Lesson for the catalog pages: a viewer-remembered layout choice
+  that hides a primary figure is a trap — remember in the URL, never in storage. PR #17 (the measurements index re-cut) merged
+  and live at ~21:45.
 
 ## Appendix A — the record, in shape (`measurements.schema.json` 1.0)
 
