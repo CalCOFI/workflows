@@ -388,10 +388,35 @@ what it owns, what to do, the gates that stop it, and what to hand back.
   before their existing check / drop (sst_c −2…40, tsg1_salinity_psu 0…45, bottom_depth_m 0…11,000, uws_flow ≥ 0; par and
   spar −100…5,000) and a post-check `stopifnot`; the registry carries the six bounds (diff = six rows); `RELEASES.md
   # Unreleased` has the entry; METS re-rendered by hand for the release underway; the CTD render in flight (workflows-e6's
-  `tar_make`, started 16:06) predates the declaration and must re-run — told by message. Short term the record computes
+  `tar_make`, started 16:06) predated the declaration (made ~16:23) and was stopped — told by message. Short term the record computes
   `observed{}` within declared bounds and carries `out_of_bounds{n, min, max}` per series, and `coverage.json` `variables[]`
   gains `valid_min` / `valid_max` for the Explorer (M6). Not bounded, noted for the provider: `sss_psu` < 20 PSU on a
   quarter of rows, `rel_humidity_pct` to 120 %, CTD `beam_attenuation` / `transmissometer` calibration negatives.
+- 2026-09-10 — **WS-M2 executed** (calcofi4db `ws-m2` b450a48a → 13b04ddf, workflows `ws-m2` ae4aee1d → fad471ae):
+  `build_measurements_catalog()` + `measurements.schema.json` 1.0 + 17 tests (145 assertions); release step 3b″ writes,
+  validates, checks and uploads `measurements.json` after `taxa.json`, `build_coverage(variable =)` puts `label` /
+  `valid_min` / `valid_max` on `variables[]`, `RELEASE_REQUIRED_OBJECTS` gains the file, `test_release.qmd` gains the
+  `measurements_catalog` promote gate; full suite 3,107 pass / 0 fail. **Integrator decisions folded in:** `related[].why`
+  has seven values (`underway_vs_cast` 16 · `same_bottles` 36 · `replicate_vs_mean` 4 · `pre_qc_twin` 6 · `sensor_vs_mean` 8 ·
+  `paired_sensors` 4 · `same_casts` 2 — all 76 directed P01 pairs reasoned); `observed{}` is computed within the declared
+  bounds with `out_of_bounds{n, min, max}` beside it (Ben: a breach is a bug, not a question); `sentinel_suspected` is a
+  declared bound exceeded or, with no bound, an extreme two orders beyond the 5th/95th percentile (13 series, 18 with no
+  bound at all); `full_resolution_only[]` lists only rows whose source table is a supplemental release table (CTD 21, METS
+  37); `full_rows` reads the supplementals from `catalog.json` when a connection lacks them. The provisional record from
+  promoted v2026.09.06 (85 s, validates, 12/12 checks): **79 · 84 · 5 · 25,006,583 · 316,328,163**, 167 KB, five keys
+  labelled from `variable.csv`, 74 `no_label`; bottle `temperature` 1.44–31.14 °C with `{n: 2, 56.87…99.00}`, METS `sst_c`
+  0.007–25.89 °C with `{n: 3, 9,231…9,895}`, CTD `par` `{n: 35,306}`, `spar` `{n: 31,623}`.
+- 2026-09-10 — **Wave 1 integrated** (~16:45–17:00): PRs merged in order — workflows #93 (M1), calcofi4db #8 (M1), calcofi4db
+  #9 (M2), workflows #94 (M2), CalCOFI.github.io #13 (M0, Pages deploy green); calcofi4db **4.12.0** (157ddcb7, one NEWS
+  heading for M1 + M2) installed in the shared library while no render ran; the provisional record uploaded to
+  `gs://calcofi-db/ducklake-staging/releases/v2026.09.06/measurements.json` (public, `Cache-Control: no-cache`) and
+  `MEASUREMENTS_RELEASE_URL` set on CalCOFI/CalCOFI.github.io beside `TAXA_RELEASE_URL`. **Ben (16:4x): "restart the
+  pipeline with everything needed for all phases of this plan" rather than re-release** — so the release run underway
+  (workflows-e6) relaunches on main d006746 with METS + CTD invalidated and will carry `measurements.json`, the labels in
+  `coverage.json` and the six bounds; M7 collapses into it. Wave 2 dispatched: M3 (→ M4) on landing `ws-m3` from main
+  3d62b48, M5 on docs `ws-m5` + workflows `ws-m5`; M0's PR check had one red line — `/species/` scrolls 405 > 375 px at
+  phone width in both themes — inherited by M3 to fix first. Seen and cleaned: a stopped `quarto render` left its R child
+  (150 % CPU) and the old `tar_make` alive beside the relaunch — kill the R child, not only the wrapper.
 
 ## Appendix A — the record, in shape (`measurements.schema.json` 1.0)
 
