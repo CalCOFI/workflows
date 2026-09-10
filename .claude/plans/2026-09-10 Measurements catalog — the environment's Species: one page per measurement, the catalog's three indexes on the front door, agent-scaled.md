@@ -1,6 +1,6 @@
 # Measurements catalog — the environment's Species: one page per measurement, the catalog's three indexes on the front door, agent-scaled
 
-**Status:** proposed 2026-09-10; **Ben confirmed D1–D8, D10 and the defaults of § Open questions the same afternoon, revised D7 (the navigation, below) and D9 (the sentinel is fixed at the ingest, done 2026-09-10 — see § Measured).** Nothing else has run. **Spec:** the mockup
+**Status:** proposed 2026-09-10; **Ben confirmed D1–D8, D10 and the defaults of § Open questions the same afternoon, revised D7 (the navigation, below) and D9 (the sentinel is fixed at the ingest, done 2026-09-10 — see § Measured). Waves 1 and 2 EXECUTED and LIVE the same day (§ Measured); M6 waits for Ben's ask; M7 folded into the release run relaunched at 16:48.** **Spec:** the mockup
 artifact *CalCOFI Measurements Catalog* — https://claude.ai/code/artifact/acc4f6c0-814e-46fe-a79a-a804edebe196 — the front
 door with the catalog's three indexes, the `/measurements/` index (search, the timeline of every measurement by dataset,
 the category × dataset matrix) and the `/measurements/temperature/` page, both themes, every number read from
@@ -461,6 +461,15 @@ what it owns, what to do, the gates that stop it, and what to hand back.
   `<h4>`s become `<h3>`; `check_layout.py` asserts the bridge ≥ the gap and the phone menu's seven items + three submenus with no
   horizontal scroll. Trap met: a stale `http.server` from an earlier agent held port 4100 and served an older build, so the
   first checks passed against the wrong site — always confirm the served page carries the change before reading a check.
+- 2026-09-10 — **The header hotfix is live** (CalCOFI.github.io #15 merged 51a7bc5, Pages deploy green ~18:35): calcofi.io carries the
+  hamburger, the submenu's hover bridge, the phone-menu styles and the footer's `<h3>`s; the local suite was green on all nine
+  paths × 2 widths × 2 themes and CI's font stack agreed. **State at 18:40:** waves 1 and 2 merged and deployed (landing #13, #14,
+  #15; workflows #93, #94, #95; calcofi4db #8, #9 → 4.12.0 installed; docs #16, book re-rendering); the release run relaunched
+  at 16:48 on main d006746 has passed every ingest and is rendering `release_database.qmd` — the first release to write
+  `measurements.json`, carry the five labels in `coverage.json` and drop the six series' impossible values; once it is promoted,
+  `fetch_release.sh` and `pre-render.R` prefer the promoted record and `MEASUREMENTS_RELEASE_URL` can be unset on both repos.
+  Not done, by instruction: M6 (the Explorer reads the labels and links the page) waits for Ben's ask; open question 8 (the
+  submenus) stays open — one class removes them. The `ws-*` worktrees under `~/Github/CalCOFI/.worktrees/` are left for review.
 
 ## Appendix A — the record, in shape (`measurements.schema.json` 1.0)
 
