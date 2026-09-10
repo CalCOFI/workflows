@@ -2274,11 +2274,29 @@ stopifnot("sentinel delete accounting" = n_meas_raw - n_sentinel == n_meas)
 # ingest calls and release_database.qmd re-checks — because the same defect was
 # live in calcofi_mets.sw_ph (494 values at -99, 16.6% of the type) with its
 # bounds declared and equally unread.
+# --- declare the PAR sensors' physical bounds ---------------------------------
+# `par` and `spar` were two of the nine CTD types with no bound, and v2026.09.06
+# published what that leaves in at the release grain: `spar` from -3.07e17 to
+# 2.01e16 µE/m²/s (31,623 values on ten cruises, 1995–2008 — 6% of the series) and
+# `par` with 34,233 values at exactly 9999 — a fill, not a reading — plus 1,065 more
+# above 5,000 and eight below -100 (24 cruises, 1994–2025). Photosynthetically
+# available radiation at the sea surface cannot exceed the ~2,500 µE/m²/s the sun
+# delivers at the top of the atmosphere, and a dark reading sits within a few units
+# of zero, so -100…5,000 catches only the impossible (Ben, 2026-09-10: a certain
+# bug, not a question). Idempotent, as the bottle's § Declare and Enforce Physical
+# Bounds is.
+ctd_bounds <- tibble::tribble(
+  ~measurement_type, ~valid_min, ~valid_max,
+  "par",                   -100,       5000,
+  "spar",                  -100,       5000)
+d_meas_type <- calcofi4db::declare_measurement_bounds(
+  ctd_bounds, here("metadata/measurement_type.csv"))
+
 bounds_pre <- check_measurement_bounds(
   con, "ctd_measurement", mt = d_meas_type)
 
-# report BEFORE deleting: `undeclared` is a finding too, and the 9 CTD types with
-# no bound are the ones still to take to the provider (spar spans -3.07e17..2.01e16)
+# report BEFORE deleting: `undeclared` is a finding too, and the seven CTD types
+# with no bound are the ones still to take to the provider
 bounds_datatable(bounds_pre)
 
 oob_tally <- drop_out_of_bounds(con, "ctd_measurement", mt = d_meas_type)
@@ -2287,6 +2305,14 @@ say(glue("out-of-range rows removed: {format(sum(oob_tally$n_bad), big.mark = ',
          "across {nrow(oob_tally)} type(s), against ",
          "{sum(bounds_pre$status != 'undeclared')} declared bound(s); ",
          "{sum(bounds_pre$status == 'undeclared')} type(s) still undeclared"))
+
+# the guard must leave nothing behind: a violation here means the delete and the
+# check disagree on a bound
+bounds_post <- check_measurement_bounds(
+  con, "ctd_measurement", mt = d_meas_type, include_undeclared = FALSE)
+stopifnot(
+  "ctd_measurement must hold no value outside a declared bound" =
+    sum(bounds_post$status == "out_of_range") == 0)
 
 # assign deterministic UUID (md5-based, DuckDB-native — single SQL, no R data transfer)
 assign_deterministic_uuids_md5(

@@ -355,6 +355,43 @@ what it owns, what to do, the gates that stop it, and what to hand back.
   `obs_env` grouped by dataset × type × year / month / depth band / flag for the temperature family), the release sidecars
   (`coverage.json`, `datasets.json`, `taxa.json`, `catalog.json`) and the registries; the palette check with the dataviz
   validator; the mockup published with those numbers inline.
+- 2026-09-10 — **Wave 1 dispatched** (integrator session, Fable xhigh): worktrees under `~/Github/CalCOFI/.worktrees/`
+  (`CalCOFI.github.io-ws-m0`, `workflows-ws-m1` + `calcofi4db-ws-m1`, `calcofi4db-ws-m2` + `workflows-ws-m2`) branched from
+  each repo's local `main`; M0 ws-opus-medium, M1 ws-sonnet-high, M2 ws-opus-medium; the mockup saved beside them.
+- 2026-09-10 — **WS-M0 executed** (CalCOFI.github.io `ws-m0` 7a6225a): D7's six words, three CSS-only submenus (removable
+  by deleting the `cc-submenus` class on the header nav), the tabbed DATA / APPS / ACCESS sections and the one search over
+  three indexes ship reading **79 measurements in 84 series across 5 datasets, 25.0 M rows at the release grain of 316 M,
+  1949 → 2026** from v2026.09.06's `coverage.json` `variables[realm == env]` (distinct `variable ∥ measurement_type`)
+  beside 16 datasets and 1,008 species; the Data section grew 2,974 → 3,078 px at 1470 (+104, budget 120); the hero, the
+  five reach tiles, the release strip and all 24 category tiles are byte-identical to `main`'s build (the Explorer card's
+  eyebrow "Explore" → "Apps" is the rename itself); `check_layout.py` green on 7 paths × 2 widths × 2 themes with the D7
+  assertions, `check_brand.py`, `check_jsonld.py`, `check_news.py` green. Until M3 ships the measurements tile, Observed
+  row, realm door and tab fall back to `…/explore/?var=temperature`, and `/measurements/search.json` is a coverage-built
+  stub M3 must delete. `assets/tabs.js` loads from `<head>` because `catalog.js` rewrites the URL on load.
+- 2026-09-10 — **WS-M1 executed** (workflows `ws-m1` 129eafd, calcofi4db `ws-m1` 872fe19): `metadata/variable.csv` (five
+  rows, header comment) with `read_variable()` / `register_variables()` / `check_variable_registry()` + 109 registry tests;
+  `libs/measure_variable_crosswalk.R` on v2026.09.06 finds **15** P01 concepts shared by > 1 dataset (§ Context said 14 —
+  Appendix B's own enumeration is 15); only the four temperature / salinity / oxygen pairs pass all four D3 criteria.
+  **`sigma_theta`'s two members carry different concepts** (bottle `SIGTEQ01` "by computation", CTD `SIGTPR01` "by CTD and
+  computation") — reported as the gate; the integrator keeps the key unified (Ben's confirmed fifth pair; the concepts differ
+  by method qualifier for one quantity, which is criterion (iii)'s business, and (iii) passes: cast with cast) and the
+  `variable.csv` row carries no `nerc_p01`, stating the disagreement; D3 (i) reads "identical P01, or P01s that differ only
+  by a method qualifier for the same quantity". Bottle ↔ CTD cast overlap (`site_key` + datetime ≤ 1 h, 1993–2021):
+  **5,061 of 8,352 bottle casts (60.6 %)**, 30.8 % of CTD casts — the evidence for `same_bottles`. Questions
+  `calcofi_dic_08` / `_09` (proposed, normal) for the alkalinity / DIC replicate-vs-mean pairs; Q13 not re-filed.
+  `devtools::test()` 2,952 pass / 0 fail.
+- 2026-09-10 — **The catalog's first find is a bug, fixed at the ingest (Ben: "an absolutely certain bug, not an open
+  question").** Measured on v2026.09.06 `obs_env`: METS `sst_c` max **9,895 °C** (three readings, 2016-07-32I1), `uws_flow`
+  min exactly −99 (40 negatives), `bottom_depth_m` 14 negatives (2020–2022), `tsg1_salinity_psu` 45.6; CTD `spar` from
+  −3.07e17 to 2.01e16 (31,623 values, ten cruises 1995–2008), `par` 34,233 values at exactly 9999 + 1,065 above 5,000 +
+  eight below −100 (24 cruises). `ingest_calcofi_mets.qmd` and `ingest_calcofi_ctd-cast.qmd` gain `declare_measurement_bounds()`
+  before their existing check / drop (sst_c −2…40, tsg1_salinity_psu 0…45, bottom_depth_m 0…11,000, uws_flow ≥ 0; par and
+  spar −100…5,000) and a post-check `stopifnot`; the registry carries the six bounds (diff = six rows); `RELEASES.md
+  # Unreleased` has the entry; METS re-rendered by hand for the release underway; the CTD render in flight (workflows-e6's
+  `tar_make`, started 16:06) predates the declaration and must re-run — told by message. Short term the record computes
+  `observed{}` within declared bounds and carries `out_of_bounds{n, min, max}` per series, and `coverage.json` `variables[]`
+  gains `valid_min` / `valid_max` for the Explorer (M6). Not bounded, noted for the provider: `sss_psu` < 20 PSU on a
+  quarter of rows, `rel_humidity_pct` to 120 %, CTD `beam_attenuation` / `transmissometer` calibration negatives.
 
 ## Appendix A — the record, in shape (`measurements.schema.json` 1.0)
 

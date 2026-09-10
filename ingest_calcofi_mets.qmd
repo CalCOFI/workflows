@@ -804,10 +804,42 @@ stopifnot(
 # A declared bound is the per-type version of the sentinel rule: -99 is
 # impossible for pH and ordinary for radiation, and the registry already knows
 # which is which. Nothing here needs a hand-maintained column list.
+# --- declare the underway series' physical bounds -----------------------------
+# v2026.09.06 published a sea-surface temperature of 9,895 °C (three readings on
+# 2016-07-32I1), an intake flow of exactly -99 L/min beside 39 smaller negatives,
+# fourteen negative bottom depths (five cruises, 2020–2022) and a TSG salinity of
+# 45.6 PSU — every one impossible, none caught, because these four series declared
+# no bound (Ben, 2026-09-10: a certain bug, not a question). The bounds are the ones
+# the registry already uses for the same quantities (tsg1_temp_c -2…40, the
+# salinities 0…45, btl_depth 0…11,000) and a floor of zero for a flow rate; they are
+# declared here so the registry says what this ingest enforces.
+# declare_measurement_bounds() is idempotent: an equal bound is "unchanged", a
+# different one errors unless overwrite = TRUE.
+mets_bounds <- tibble::tribble(
+  ~measurement_type,   ~valid_min, ~valid_max,
+  "sst_c",                     -2,         40,
+  "tsg1_salinity_psu",          0,         45,
+  "bottom_depth_m",             0,      11000,
+  "uws_flow",                   0,         NA)
+d_meas_type <- declare_measurement_bounds(
+  mets_bounds, here("metadata/measurement_type.csv"))
+
 bounds_pre <- check_measurement_bounds(con, "mets_measurement", mt = d_meas_type)
 bounds_datatable(bounds_pre)
 
-drop_out_of_bounds(con, "mets_measurement", mt = d_meas_type)
+oob_tally <- drop_out_of_bounds(con, "mets_measurement", mt = d_meas_type)
+cat(glue(
+  "out-of-range rows removed: {format(sum(oob_tally$n_bad), big.mark = ',')} ",
+  "across {nrow(oob_tally)} type(s), against ",
+  "{sum(bounds_pre$status != 'undeclared')} declared bound(s)"), "\n")
+
+# the guard must leave nothing behind: a violation here means the delete and the
+# check disagree on a bound
+bounds_post <- check_measurement_bounds(
+  con, "mets_measurement", mt = d_meas_type, include_undeclared = FALSE)
+stopifnot(
+  "mets_measurement must hold no value outside a declared bound" =
+    sum(bounds_post$status == "out_of_range") == 0)
 
 n_meas <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM mets_measurement")$n
 # Count against THIS table, which is the full ~1-min series feeding the
