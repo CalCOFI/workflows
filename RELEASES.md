@@ -250,6 +250,36 @@ cruise the provider must rule on before any floor is set. **Consumers:** `obs_en
 11 `calcofi_bottle` rows; `measurement_type.valid_min` / `valid_max` are populated for
 the five series and `check_measurement_bounds()` treats them as declared.
 
+## Every released measurement has a record: `measurements.json`, the measurements catalog
+
+The release writes one more sidecar beside `taxa.json`: **`measurements.json`**, the environment
+half of the catalog (plan 2026-09-10 § D2/D4, Appendix A; `calcofi4db::build_measurements_catalog()`,
+schema `measurements.schema.json` 1.0). One entry per measurement **key** `obs_env` carries — the
+registry's `variable` where one is set, so the bottle's `temperature` and the CTD's
+`temperature_ave` are one page, else the `measurement_type` — and under it one `series[]` per
+`measurement_type` × dataset with that dataset's own source column and flag column, its values by
+year, calendar month, eight depth bands and quality code, the observed min / 5th / median / 95th /
+max, the registry's declared bounds and the NERC P01 / P06 ids. Measured on v2026.09.06: **79
+measurements over 84 series in 5 datasets, 25,006,583 values** (Physical Oceanography 39 ·
+Productivity & Pigments 14 · Nutrients & Chemistry 12 · Carbonate System 6 · Meteorology & Sea State
+4 · Picoplankton & Bacteria 4), 164 KB. A registry row that never reaches `obs_env` — a raw CTD
+sensor, a thermosalinograph past the first — gets no page and is listed under its dataset in
+`full_resolution_only[]` with the supplemental table it does live in (21 for the CTD files, 37 for
+METS). `related[]` names the other keys sharing a NERC P01 concept that are kept apart on purpose,
+with the reason (`same_bottles` 36 pairs · `underway_vs_cast` 16 · `pre_qc_twin` 6 ·
+`replicate_vs_mean` 4): P01 identity says two series name the same quantity, never that they may be
+pooled — the CTD files' own `btl_*` bottle table is plausibly the same physical bottles as the
+bottle dataset. Nothing on a measurement page is authored: the label comes from
+`metadata/variable.csv` and, absent a row, falls back to the canonical series' registry description
+carrying a `no_label` flag. `measurements.json` joins `RELEASE_REQUIRED_OBJECTS` and a
+`measurements_catalog` gate in `test_release.qmd` feeds the promote gate — schema valid, the counts
+re-measured against this release's own `obs_env`, and the sum of `series[].n_values` over every key
+equal to `obs_env`'s row count, which is what catches a series counted twice. **Consumers:**
+calcofi.io reads it to generate `/measurements/` and one page per key (the landing page's
+Measurements index); `coverage.json`'s `variables[]` gains a `label` field, empty until
+`metadata/variable.csv` carries the key's row, which the CalCOFI Explorer may read in place of its
+hard-coded `UNIFIED` labels. No released table, column or row changes.
+
 # v2026.09.06 (2026-09-06)
 
 ## The dataset catalog record says what a page needs to say (schema 1.1)

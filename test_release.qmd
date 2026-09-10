@@ -824,6 +824,85 @@ taxa_res |>
   DT::datatable(escape = FALSE, rownames = FALSE, colnames = c("", "species catalog check", "error"))
 ```
 
+## Measurements catalog record
+
+`measurements.json` (calcofi4db >= 4.12.0; plan 2026-09-10 § D2/D4) is `taxa.json`'s twin for the
+environment half of the catalog, and what calcofi.io/measurements/ generates every measurement page
+from — one entry per measurement **key** this release's `obs_env` carries (the registry's `variable`
+where one is set, else the `measurement_type`), with one `series[]` per `measurement_type` x dataset.
+Six rows join the promote gate: the file validates against `measurements.schema.json`, it declares
+the schema version this release was built with (`1.0`), its `counts.obs_env_rows` equals **this
+release's own `obs_env`** row count, the sum of `series[].n_values` over every key equals that same
+number (a series counted twice — the risk a wrong `variable` merge carries — is exactly what this
+catches), every `series[].measurement_type` is in `metadata/measurement_type.csv`, and every
+`dataset_key` it names is in `datasets.json`.
+
+The record is **generated**: a failing row is a bug in `build_measurements_catalog()` or a break in
+`obs_env`, never something a provider question can excuse, and it stops the promotion. `obs_env` is
+read back through this release's catalog, exactly as a consumer reads it, not from the connection
+that built the record.
+
+```{r}
+#| label: measurements_catalog
+
+meas_url <- glue("https://storage.googleapis.com/calcofi-db/{rel_prefix}/{release_version}/measurements.json")
+meas_txt <- tryCatch(paste(readLines(meas_url, warn = FALSE, encoding = "UTF-8"), collapse = "\n"),
+                     error = function(e) NULL)
+mm_row <- function(name, ok, err) tibble::tibble(
+  query = name, label = "measurements-catalog", status = if (isTRUE(ok)) "pass" else "fail",
+  reason = NA_character_, rows = NA_integer_, ms = NA_real_,
+  error = if (isTRUE(ok)) NA_character_ else as.character(err))
+
+meas_res <- if (is.null(meas_txt)) {
+  mm_row("measurements: measurements.json present", FALSE, glue("{meas_url} not readable"))
+} else {
+  meas_rec  <- jsonlite::fromJSON(meas_txt, simplifyVector = FALSE)
+  schema_ok <- tryCatch(validate_measurements_catalog(meas_txt), error = function(e) conditionMessage(e))
+  dbExecute(con_test, glue("CREATE OR REPLACE VIEW obs_env AS SELECT * FROM {rp('obs_env')}"))
+  mm_reg <- read_measurement_type(here("metadata/measurement_type.csv"))
+  mm_chk <- check_measurements_catalog(
+    meas_rec, con_test, if (exists("ds_rec")) ds_rec else NULL, mm_reg)
+  chk <- function(nm) {
+    r <- mm_chk[mm_chk$check == nm, , drop = FALSE]
+    if (nrow(r)) as.list(r[1, ]) else
+      list(ok = FALSE, expected = NA_character_, observed = NA_character_, detail = "check not reported")
+  }
+  ro <- chk("obs_env_rows"); st <- chk("series_total")
+  tk <- chk("types_known");  dk <- chk("datasets_known")
+  n_bad <- sum(!mm_chk$ok)
+  # the mocked page's own arithmetic: the temperature entry's totals are its two series
+  tmp <- Filter(function(m) identical(m$key, "temperature"), meas_rec$measurements)
+  tmp_ok <- length(tmp) == 1 &&
+    isTRUE(as.numeric(tmp[[1]]$totals$n_values) ==
+             sum(vapply(tmp[[1]]$series, function(s) as.numeric(s$n_values), 0)))
+  dplyr::bind_rows(
+    mm_row("measurements: measurements.json validates against measurements.schema.json",
+           isTRUE(schema_ok), schema_ok),
+    mm_row(glue("measurements: schema_version is 1.0 [{meas_rec$schema_version %||% 'absent'}]"),
+           identical(meas_rec$schema_version, "1.0"),
+           "built by a calcofi4db older than 4.12.0"),
+    mm_row(glue("measurements: counts.obs_env_rows == obs_env rows [{ro$observed} vs {ro$expected}]"),
+           isTRUE(ro$ok), ro$detail),
+    mm_row(glue("measurements: sum of series[].n_values == obs_env rows over ",
+                "{meas_rec$counts$measurements} keys / {meas_rec$counts$series} series [{st$observed}]"),
+           isTRUE(st$ok), st$detail),
+    mm_row(glue("measurements: every series[].measurement_type is in measurement_type.csv ",
+                "[{meas_rec$counts$series} series]"), isTRUE(tk$ok), tk$detail),
+    mm_row(glue("measurements: every dataset_key is in datasets.json ",
+                "[{meas_rec$counts$datasets} datasets]"), isTRUE(dk$ok), dk$detail),
+    mm_row(glue("measurements: the temperature entry's totals.n_values is its series' sum ",
+                "[{if (length(tmp) == 1) tmp[[1]]$totals$n_values else 'no temperature key'}]"),
+           tmp_ok, "totals.n_values != sum(series[].n_values) for `temperature`"),
+    mm_row(glue("measurements: check_measurements_catalog: {nrow(mm_chk) - n_bad}/{nrow(mm_chk)} checks pass"),
+           n_bad == 0, paste(mm_chk$check[!mm_chk$ok], collapse = "; ")))
+}
+results <- dplyr::bind_rows(results, meas_res)
+meas_res |>
+  mutate(status_html = status_badge(status)) |>
+  select(status_html, query, error) |>
+  DT::datatable(escape = FALSE, rownames = FALSE, colnames = c("", "measurements catalog check", "error"))
+```
+
 ## Static STAC catalog
 
 The STAC catalog `release_database.qmd` wrote to `gs://calcofi-db/stac/` (plan 2026-09-05 § D-5.3;
