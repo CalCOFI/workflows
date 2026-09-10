@@ -2539,9 +2539,15 @@ if (file.exists(meta_json_path)) {
   # is authored — including the label, which comes from metadata/variable.csv and, absent a row,
   # falls back to the canonical series' registry description with a `no_label` flag.
   # `related[]` names the other keys sharing a NERC P01 concept that are kept apart on purpose,
-  # with the reason (same_bottles · replicate_vs_mean · underway_vs_cast · pre_qc_twin): P01
-  # identity says two series name the same quantity, never that they may be pooled — the CTD files'
-  # own bottle table is plausibly the same physical bottles as the bottle dataset.
+  # with the reason (underway_vs_cast · same_bottles · replicate_vs_mean · pre_qc_twin ·
+  # sensor_vs_mean · same_casts): P01 identity says two series name the same quantity, never that
+  # they may be pooled — the CTD files' own bottle table is plausibly the same physical bottles as
+  # the bottle dataset.
+  # `observed{}` is computed WITHIN each series' declared bounds and what falls outside is counted
+  # in `out_of_bounds{n, min, max}`, so a page's range is the range a reader would use while the
+  # breach stays visible; the raw counts (n_values, years, months, depth bands, qual) are untouched,
+  # which is why the arithmetic gate still equals obs_env's row count. `full_rows` counts obs_env
+  # plus the full-resolution supplementals from con_wdl, which carries them.
   # It is built AFTER datasets.json for the same reason taxa.json is: the dataset dots come from
   # that record. check_measurements_catalog() is a release gate — the sum of series[].n_values over
   # every key must be obs_env's row count (a series counted twice is exactly what that catches),

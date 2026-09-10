@@ -262,14 +262,25 @@ year, calendar month, eight depth bands and quality code, the observed min / 5th
 max, the registry's declared bounds and the NERC P01 / P06 ids. Measured on v2026.09.06: **79
 measurements over 84 series in 5 datasets, 25,006,583 values** (Physical Oceanography 39 ·
 Productivity & Pigments 14 · Nutrients & Chemistry 12 · Carbonate System 6 · Meteorology & Sea State
-4 · Picoplankton & Bacteria 4), 164 KB. A registry row that never reaches `obs_env` — a raw CTD
-sensor, a thermosalinograph past the first — gets no page and is listed under its dataset in
-`full_resolution_only[]` with the supplemental table it does live in (21 for the CTD files, 37 for
-METS). `related[]` names the other keys sharing a NERC P01 concept that are kept apart on purpose,
-with the reason (`same_bottles` 36 pairs · `underway_vs_cast` 16 · `pre_qc_twin` 6 ·
-`replicate_vs_mean` 4): P01 identity says two series name the same quantity, never that they may be
-pooled — the CTD files' own `btl_*` bottle table is plausibly the same physical bottles as the
-bottle dataset. Nothing on a measurement page is authored: the label comes from
+4 · Picoplankton & Bacteria 4), 167 KB; `counts.full_rows` adds the two full-resolution
+supplementals for the 316,328,163 the front door's band counts. A registry row that never reaches
+`obs_env` from a supplemental's own source table — a raw CTD sensor, a thermosalinograph past the
+first — gets no page and is listed under its dataset in `full_resolution_only[]` with the table it
+does live in (21 for the CTD files, 37 for METS, none elsewhere). `related[]` names the other keys
+sharing a NERC P01 concept that are kept apart on purpose, with the reason (`same_bottles` 36
+directed pairs · `underway_vs_cast` 16 · `sensor_vs_mean` 8 · `pre_qc_twin` 6 ·
+`replicate_vs_mean` 4 · `same_casts` 2): P01 identity says two series name the same quantity, never
+that they may be pooled — the CTD files' own `btl_*` bottle table is plausibly the same physical
+bottles as the bottle dataset. **A series' `observed{}` is computed within its declared bounds** and
+what falls outside is counted in `out_of_bounds{n, min, max}`, so a page shows the range a reader
+would use while the breach stays visible: the bottle's `temperature` reads 1.44–31.14 °C with
+`out_of_bounds` `{n: 2, min: 56.87, max: 99.00}` and its `sigma_theta` 16.996–28.139 kg/m³ with six
+values of 216.6–250.8 — the same eleven rows the bounds declared above drop at the ingest, still
+present in v2026.09.06 and now stated rather than averaged in. Seven series carry
+`sentinel_suspected`: those five bottle series, plus METS `sst_c` (9,895 °C against a 95th
+percentile of 20.4) and CTD `spar` (2.01e16 µE/m²/s), neither of which declares a bound yet. The raw
+counts are untouched, so the arithmetic gate still equals `obs_env`'s row count. Nothing on a
+measurement page is authored: the label comes from
 `metadata/variable.csv` and, absent a row, falls back to the canonical series' registry description
 carrying a `no_label` flag. `measurements.json` joins `RELEASE_REQUIRED_OBJECTS` and a
 `measurements_catalog` gate in `test_release.qmd` feeds the promote gate — schema valid, the counts
@@ -278,7 +289,8 @@ equal to `obs_env`'s row count, which is what catches a series counted twice. **
 calcofi.io reads it to generate `/measurements/` and one page per key (the landing page's
 Measurements index); `coverage.json`'s `variables[]` gains a `label` field, empty until
 `metadata/variable.csv` carries the key's row, which the CalCOFI Explorer may read in place of its
-hard-coded `UNIFIED` labels. No released table, column or row changes.
+hard-coded `UNIFIED` labels, and `valid_min` / `valid_max` from the registry so a ramp or an axis
+can be clipped at first paint. No released table, column or row changes.
 
 # v2026.09.06 (2026-09-06)
 
