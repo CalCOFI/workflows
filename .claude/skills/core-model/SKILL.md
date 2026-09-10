@@ -55,6 +55,18 @@ run rather than the primary mechanism.
   `gs://calcofi-db/ducklake/releases/{version}/`. Read-only consumers use
   `calcofi4r::cc_get_db()` against the frozen release.
 
+## Two catalog records generated from the core at release: `taxa.json`, `measurements.json`
+
+`release_database.qmd` writes one JSON record per catalog half beside the frozen tables —
+`taxa.json` (`build_taxa_catalog()`) for `obs_bio.taxon_key`, `measurements.json`
+(`calcofi4db::build_measurements_catalog()` ≥ 4.12.0, schema `measurements.schema.json`) for
+`obs_env.measurement_type` grouped by the `variable` crosswalk — each with a `test_release.qmd`
+gate whose arithmetic check (the sum of every key's row counts equals the source table's row
+count) catches a row counted under two keys; `calcofi.io` generates one page per key from the
+record, never from a live query. See the `metadata-registries` skill for the `variable.csv`
+registry the measurements record reads, and `.claude/plans/2026-09-10 Measurements catalog …md`
+for the story.
+
 ## Consolidated core model (`obs` / `sample` / …)
 
 Per `design_env-bio-consolidation.md`, the ~40 per-dataset triples collapse into a
