@@ -476,6 +476,15 @@ what it owns, what to do, the gates that stop it, and what to hand back.
   bento's three columns end on one row line again: the Observed tile is six rows (eight under 1100 px) and fits them because each
   counted row is two lines and the caption two — measured at seven widths, bottoms equal, overflow 0, worst stretch 1.197×.
   D7's front door is therefore: header → pages for the two catalogs, homepage tabs for the rest.
+- 2026-09-10 (evening) — **`/measurements/` re-cut on Ben's reading of it** (branch `ws-m0d` → CalCOFI.github.io PR #17): the
+  category × dataset matrix and the datasets list open the body ("a great overview summary"), then the search, the chips and
+  the timeline; the head states how the count works with every number read from the record — a measurement is one quantity
+  under one name, two datasets' series are one measurement only where they share a NERC P01 concept for the same kind of
+  sample (the 5 unified keys listed and linked), so 84 series make 79 measurements; 56 carry a NERC concept and 23 keep their
+  own names — the eyebrow no longer says "NERC P01-keyed" (it made 79 read as the keyed subset) and the count strip's
+  redundant "pages" became "with a NERC concept" (`measurements.rb` adds `n_unified` / `n_p01` / `n_no_p01` + `unified`);
+  "The machine-readable form is …" is a `.cc-aside` (small print, muted, a hairline) on `/measurements/`, `/species/` and
+  `/datasets/` alike. D5 is thereby amended: the index's first figure is the matrix, the timeline second.
 
 ## Appendix A — the record, in shape (`measurements.schema.json` 1.0)
 
