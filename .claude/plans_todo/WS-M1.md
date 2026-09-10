@@ -1,0 +1,25 @@
+# WS-M1 — the registries: `variable.csv`, the crosswalk under the rule, the questions (D3, D9)
+
+**Umbrella:** `.claude/plans/2026-09-10 Measurements catalog — the environment's Species: one page per measurement, the catalog's three indexes on the front door, agent-scaled.md` § D3, D9, Appendix B. **Agent:** `ws-sonnet-high`. **Repos:** CalCOFI/workflows (worktree `~/Github/CalCOFI/.worktrees/workflows-ws-m1`, branch `ws-m1`) and CalCOFI/calcofi4db (`git -C ../calcofi4db worktree add ../.worktrees/calcofi4db-ws-m1 -b ws-m1`). **Wave 1 · ≈ ½–1 day.**
+
+## Read first
+- The umbrella's § Context, § F3–F5, § D3, § D9, Appendix B (the measured crosswalk table — your evidence rule and its expected outcome).
+- `CLAUDE.md` § Metadata registries and § measurement-bounds; the `metadata-registries` and `measurement-bounds` skills.
+- `calcofi4db/R/registry.R` (`read_measurement_type()`, `register_measurement_types()`, `declare_measurement_fields()`, the `write_csv(na = "")` rule) and its tests; `metadata/measurement_type.csv` (columns 17–20: `category, variable, nerc_p01, units_nerc_p06`); `metadata/category.csv`; `metadata/calcofi/bottle/questions.csv` and `metadata/calcofi/dic/questions.csv` (`read_questions()`, the id/label/status/priority vocabulary); `explore/src/variables.ts` (`UNIFIED`: the five labels to seed).
+
+## You own
+`metadata/variable.csv` (new), the `variable` column of `metadata/measurement_type.csv` (no new rows, no other column), your own rows in the two `questions.csv`, `calcofi4db/R/registry.R` (three new functions) + tests + your own `NEWS.md` section (no `DESCRIPTION` bump), `RELEASES.md # Unreleased` (your own `##`).
+
+## Do
+1. **`metadata/variable.csv`** — columns `variable, label, description, units, nerc_p01, category, is_unified`; one row per key the release carries with `variable` set: seed the five from `UNIFIED` (`temperature` "Temperature" °C TEMPPR01 …). A label is a short noun phrase without units ("Dissolved oxygen", not "Dissolved oxygen (ml/L)" — units are their own column; where two keys differ only by units, the label carries the unit in parentheses as the Explorer does). Header comment: what the file is, who appends (`register_variables()`), never a bare `write_csv()`.
+2. **Helpers in calcofi4db** mirroring the measurement_type ones: `read_variable(path)`, `register_variables(path, rows)` (appends, `na = ""`, refuses a duplicate key or a key whose `nerc_p01` differs from its member series'), `check_variable_registry(variable_csv, measurement_type_csv)` (every `measurement_type.variable` value has a row; every row has ≥ 1 member; units consistent). Tests: one per rule, small fixtures, in the same change.
+3. **The crosswalk run.** Write `libs/measure_variable_crosswalk.R` (committed, reproducible): from the promoted release's `coverage.json` `variables[realm == env]` × `measurement_type.csv`, list every P01 shared by > 1 dataset and evaluate D3's four criteria per pair — (i) identical P01, (ii) same units or a declared conversion, (iii) same sample kind (cast profile · underway · replicate · mean), (iv) not plausibly the same physical samples. For (iv) **measure** the bottle ↔ CTD `btl_*` overlap on the release: casts of `calcofi_bottle` and `calcofi_ctd-cast` matched by `site_key` + `datetime` within one hour, 1993–2021 (`match_by_site_datetime()` in calcofi4db is the helper; report the count and share). Print an evidence table (pair · criteria pass/fail · verdict · question id). **Expected on v2026.09.06:** the five pairs pass; nothing else does (Appendix B). If a pair passes all four and is not in Appendix B, stop and report — do not assign.
+4. **Questions** (`status = proposed`): `alkalinity_rep1` ↔ DIC `alkalinity` and `dic_rep1` ↔ DIC `dic` — is the bottle replicate the same analysis as the DIC mean (merge) or a different sample (apart)? Do **not** re-file the temperature bound: it was declared and enforced on 2026-09-10 (`ingest_calcofi_bottle.qmd` § Declare and Enforce Physical Bounds — temperature, sigma_theta and the three oxygen series), and the bottle salinity question is already Q13 (`calcofi_bottle_13`, `high`); read both before writing a row so the registries do not carry the same question twice.
+5. `RELEASES.md # Unreleased`: one `##` — the variable registry exists, what it carries, that labels reach `coverage.json` (WS-M2) and the release record.
+6. Do **not** touch the Explorer; do not add `nerc_p01` values (an empty cell means no concept says exactly this; if you believe one does, file a question, never fill).
+
+## Gates (stop and report)
+- A pair passing all four criteria beyond the five; a `nerc_p01` disagreement inside a unified key; `devtools::test()` red; a registry written by anything but the helpers.
+
+## Hand back
+The evidence table (every pair of Appendix B with pass/fail per criterion and the verdict), the measured bottle ↔ CTD overlap (number, share, the query), the three question ids, the five `variable.csv` rows, tests run + result, branches + commits (both repos), the `RELEASES.md` text, one *Measured* line.
