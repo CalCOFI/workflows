@@ -441,6 +441,26 @@ what it owns, what to do, the gates that stop it, and what to hand back.
   post-fix range with the excluded values counted. **PR #13's `/species/` 375 px overflow** was `.sp-search`'s min-content —
   the nowrap count in a wider mono fallback — fixed with `min-width: 0` + an ellipsis (mechanism reproduced locally, CI
   re-run pending on the PR). Bugs found on the way: `Fmt.num` dropped the minus sign (CTD `spar`'s −3.07e17 read positive).
+- 2026-09-10 — **WS-M4 executed** (CalCOFI.github.io `ws-m3` 64f5e77): `assets/measurements.js` draws the index's **timeline (79 rows
+  · 84 bars · 6 category headings)**, the **6 × 5 matrix (30 cells, 15 with a series, summing to 84)**, the datasets legend and a
+  `?q=` / `?cat=` search (nitrate 3 · NTRAZZXX 2 · µmol/kg 9 · METS 17), and a page's **years strip (2 rows · 106 year cells),
+  depth bars (8 bands × 2 series, 0 labels outside their column) and month strip (24 cells)** from a **32 KB / 5.7 KB gzipped**
+  inline record (the plan estimated ~60 KB); `check_layout.py` green on 36 runs (9 paths × 2 widths × 2 themes) with assertions
+  that compare the drawing with the page's own inline record; Lighthouse accessibility **99 / 98** in both themes — the
+  remaining audit is the shared footer's `<h4>` skipping a level (fixed in the header PR). `n_roots` reads "sampling events";
+  units render typographically (`Fmt.units`) with the registry's spelling kept in the ids, titles, search and JSON-LD; the
+  matrix ramp is capped at 45 % for contrast; dataset names are never renamed (the strip's gutter is 150 px with an ellipsis).
+- 2026-09-10 — **Wave 2 integrated** (~18:10): CalCOFI.github.io #14 (M3 + M4) merged — CI green in the runner's font stack,
+  which confirms the `/species/` 375 px fix — and deployed: **calcofi.io/measurements/ and calcofi.io/measurements/temperature/
+  answer 200**, the front door's measurements tile, Observed row, realm door and tab now link `/measurements/`; CalCOFI/docs #16
+  and workflows #95 (M5) merged after it, so the book's one dead link resolves. **Two live defects Ben found within the hour of
+  M0's deploy** — the submenu closed as the pointer moved down to pick an item (a 10 px hover gap), and a phone had no menu at
+  all (the brand hides `.cc-links` under 480 px) — fixed on `ws-m0b` → PR #15: the list's `::before` spans the gap; a hamburger
+  in the icon cluster opens the same nav as a column with the submenu items inline (`cc-nav-open`, Escape, resize); the
+  "CalCOFI.io" title is hidden on phones on this site alone so the row holds the lockup and three buttons at 375 px; the footer's
+  `<h4>`s become `<h3>`; `check_layout.py` asserts the bridge ≥ the gap and the phone menu's seven items + three submenus with no
+  horizontal scroll. Trap met: a stale `http.server` from an earlier agent held port 4100 and served an older build, so the
+  first checks passed against the wrong site — always confirm the served page carries the change before reading a check.
 
 ## Appendix A — the record, in shape (`measurements.schema.json` 1.0)
 
