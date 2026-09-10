@@ -8,6 +8,20 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## The `obs` objects ship for the last time
+
+v2026.09.06 marked the `obs` table `deprecated`, `replaced_by: [obs_bio, obs_env]`, `removed_in:
+next`, and this release still exports its 16 partition objects and the single-file `obs.parquet`
+twin (401 MB per release beside the pair's 342 MB) because nothing in the notebook acted on the
+mark. That is deliberate for this cut and final: **the next release drops the `obs` objects and the
+twin.** `obs` stays as the catalog view over `obs_bio` + `obs_env` (`views.obs`), so
+`cc_get_db()` (R and Python) and db-query's `__TBL:obs__` keep answering; a reader that resolves the
+`obs` *table's* objects by hand — `cc_release_sources(catalog, "obs")`, the `single_file` twin,
+`ducklake/releases/{v}/parquet/obs/` — must move to the pair or the view before then. The list of
+those readers and their fixes is `.claude/plans/2026-09-10 plan_todo — drop the obs objects.md`.
+The hive partitioning of `obs_env` by `measurement_type` stays: every browser reader takes the
+object list from `catalog.json`, never a glob, and one variable is one ≤ 10 MB object.
+
 ## The baseline needs five cruises, and the corrected per-sensor CTD series reach `obs`
 
 Rasmus Swalethorp's review of the transect plotter (2026-09-09) settles two things the release carries:
