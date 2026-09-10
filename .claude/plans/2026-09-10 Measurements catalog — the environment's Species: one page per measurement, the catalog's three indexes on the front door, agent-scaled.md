@@ -417,6 +417,16 @@ what it owns, what to do, the gates that stop it, and what to hand back.
   3d62b48, M5 on docs `ws-m5` + workflows `ws-m5`; M0's PR check had one red line — `/species/` scrolls 405 > 375 px at
   phone width in both themes — inherited by M3 to fix first. Seen and cleaned: a stopped `quarto render` left its R child
   (150 % CPU) and the old `tar_make` alive beside the relaunch — kill the R child, not only the wrapper.
+- 2026-09-10 — **WS-M5 executed** (docs `ws-m5` b9e793f + ab753cf → PR CalCOFI/docs#16; workflows `ws-m5` b301b10 → PR #95;
+  both held behind M3+M4): `db.qmd` § Measurements after § Taxonomy (the key rule, D3's four criteria as enforced by
+  `check_variable_registry()` and the arithmetic gate, the record, `@tbl-measurements-unified` read from the record — it shows
+  `sigma_theta`'s two NERC concepts — and the two surfaced facts), `variable.csv` in `@tbl-registries` and `metadata.qmd`,
+  the Explore sentence, glossary *measurement · series · value*; `libs/pre-render.R` snapshots `variable.csv` and
+  `{version}/measurements.json` with the `MEASUREMENTS_RELEASE_URL` bridge and records `measurements_source` ∈ release |
+  bridge | none (the variable set on CalCOFI/docs and passed by `render_book.yml`). Rendered against the bridge: db 18 s ·
+  metadata 9 s · explore 10 s · glossary 6 s, every count generated (79 · 84 · 5 · 25,006,583 · 316,328,163; 23 series with
+  no P01, 18 with no bound); whole-book docx 6.9 MB + pdf 6.3 MB clean; `check_links.R` one dead link,
+  `calcofi.io/measurements/`, until M3+M4 deploy.
 
 ## Appendix A — the record, in shape (`measurements.schema.json` 1.0)
 
