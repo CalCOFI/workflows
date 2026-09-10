@@ -307,6 +307,53 @@ ingests report the count); `measurement_type.valid_min` / `valid_max` are popula
 six series; the measurements catalog reports a series' observed range within its declared
 bounds and counts what fell outside.
 
+## Every released measurement has a record: `measurements.json`, the measurements catalog
+
+The release writes one more sidecar beside `taxa.json`: **`measurements.json`**, the environment
+half of the catalog (plan 2026-09-10 § D2/D4, Appendix A; `calcofi4db::build_measurements_catalog()`,
+schema `measurements.schema.json` 1.0). One entry per measurement **key** `obs_env` carries — the
+registry's `variable` where one is set, so the bottle's `temperature` and the CTD's
+`temperature_ave` are one page, else the `measurement_type` — and under it one `series[]` per
+`measurement_type` × dataset with that dataset's own source column and flag column, its values by
+year, calendar month, eight depth bands and quality code, the observed min / 5th / median / 95th /
+max, the registry's declared bounds and the NERC P01 / P06 ids. Measured on v2026.09.06: **79
+measurements over 84 series in 5 datasets, 25,006,583 values** (Physical Oceanography 39 ·
+Productivity & Pigments 14 · Nutrients & Chemistry 12 · Carbonate System 6 · Meteorology & Sea State
+4 · Picoplankton & Bacteria 4), 167 KB; `counts.full_rows` adds the two full-resolution
+supplementals for the 316,328,163 the front door's band counts. A registry row that never reaches
+`obs_env` from a supplemental's own source table — a raw CTD sensor, a thermosalinograph past the
+first — gets no page and is listed under its dataset in `full_resolution_only[]` with the table it
+does live in (21 for the CTD files, 37 for METS, none elsewhere). `related[]` names the other keys
+sharing a NERC P01 concept that are kept apart on purpose, with the reason — all 76 directed pairs
+carry one (`same_bottles` 36 · `underway_vs_cast` 16 · `sensor_vs_mean` 8 · `pre_qc_twin` 6 ·
+`replicate_vs_mean` 4 · `paired_sensors` 4 · `same_casts` 2): P01 identity says two series name the
+same quantity, never
+that they may be pooled — the CTD files' own `btl_*` bottle table is plausibly the same physical
+bottles as the bottle dataset. **A series' `observed{}` is computed within its declared bounds** and
+what falls outside is counted in `out_of_bounds{n, min, max}`, so a page shows the range a reader
+would use while the breach stays visible: the bottle's `temperature` reads 1.44–31.14 °C with
+`out_of_bounds` `{n: 2, min: 56.87, max: 99.00}`, its `sigma_theta` 16.996–28.139 kg/m³ with six
+values of 216.6–250.8, METS `sst_c` 0.007–25.89 °C with three of 9,231–9,895, and CTD `par` /
+`spar` 4,997 µE/m²/s with 35,306 and 31,623 outside — the rows the two bounds entries above drop at
+the ingest, still present in v2026.09.06 and now stated rather than averaged into a page's range.
+Thirteen series carry `sentinel_suspected` (a declared bound broken, or — where nothing is declared
+— an extreme both past ±99 and 100× the series' own 5th/95th percentile, which is what catches the
+bottle's `r_oxygen_umol_kg` at −8,740 and the CTD's `specific_volume_anomaly` at −63,921); 18 series
+still declare no bound at all. The raw counts are untouched, so the arithmetic gate still equals
+`obs_env`'s row count. Nothing on a
+measurement page is authored: the label comes from
+`metadata/variable.csv` and, absent a row, falls back to the canonical series' registry description
+carrying a `no_label` flag. `measurements.json` joins `RELEASE_REQUIRED_OBJECTS` and a
+`measurements_catalog` gate in `test_release.qmd` feeds the promote gate — schema valid, the counts
+re-measured against this release's own `obs_env`, and the sum of `series[].n_values` over every key
+equal to `obs_env`'s row count, which is what catches a series counted twice. **Consumers:**
+calcofi.io reads it to generate `/measurements/` and one page per key (the landing page's
+Measurements index); `coverage.json`'s `variables[]` gains a `label` field from
+`metadata/variable.csv` — filled for the five unified keys, which the CalCOFI Explorer may read in
+place of its hard-coded `UNIFIED` labels — and `valid_min` / `valid_max` from the registry so a ramp
+or an axis can be clipped at first paint. Five of the 79 measurements carry an authored label; the
+other 74 fall back to their canonical series' description with a `no_label` flag. No released table, column or row changes.
+
 # v2026.09.06 (2026-09-06)
 
 ## The dataset catalog record says what a page needs to say (schema 1.1)
@@ -612,7 +659,6 @@ record states none. **Also fixed at the source (I-13):** `title_of()`'s dataset-
 instead of being decoded downstream (as `observe_distributions()`, calcofi4db ≥ 4.2.x, already
 does for existing ERDDAP metadata). **Consumers:** erddap.calcofi.io's `datasets.xml` and its
 served globals change on the next deploy; no table, column or row is affected.
-
 
 # v2026.09.04 (2026-09-04)
 
@@ -1397,7 +1443,6 @@ it (`metadata/release_policy.yml`). Every other version keeps its `catalog.json`
 loses its `parquet/`; its entry carries `retired: {retired_utc, to, reason}` naming the nearest
 kept version, `cc_get_db()` and `cc_get_db` (py) refuse it with that name, and its release page
 says so. Pin a consolidated version for reproducibility; pin any other and plan to move.
-
 
 ## A quality flag now reaches every consumer, not just the database
 
