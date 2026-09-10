@@ -61,10 +61,11 @@ parquet files. The workflow:
 4. Consolidates temporal columns into `datetime_start_utc`, drops derivable columns, creates `casts_derived` VIEW
 5. Pivots bottle measurements into long-format `bottle_measurement` table
 6. Pivots cast environmental conditions into `cast_condition` table
-7. Loads `measurement_type` reference table
-8. Validates primary keys and foreign key integrity
-9. Adds spatial geometry and grid assignments
-10. Exports to parquet files (for later integration into Working DuckLake)
+7. Declares the series' physical bounds in the registry and deletes the values outside them
+8. Loads `measurement_type` reference table
+9. Validates primary keys and foreign key integrity
+10. Adds spatial geometry and grid assignments
+11. Exports to parquet files (for later integration into Working DuckLake)
 
 ```{r}
 #| label: setup
@@ -618,6 +619,68 @@ n_after <- length(dbListFields(con, "casts"))
 say(glue(
   "casts columns: {n_before} -> {n_after} (dropped {n_before - n_after})"
 ))
+```
+
+## Declare and Enforce Physical Bounds
+
+Every ingest that emits measurements declares the physical bounds of its series in
+`metadata/measurement_type.csv` and deletes what breaks them (the `measurement-bounds`
+skill): a bound catches the impossible and never polices oceanography, so a value
+outside it is a sentinel or a scaling error, not a reading. Until 2026-09-10 the bottle
+series declared nothing, and release v2026.09.06 published a 99.00 °C and a 56.87 °C at
+50 m (cruise 2020-07-33P4, station 93.3/30 — the same two bottles read 9.50 and
+21.06 PSU beside 33.6 in the bottles above and below), six potential densities of
+216–251 kg/m³ (2014-11-32NM and 2015-04-32NM, flagged `6`), and one surface oxygen of
+−200.2 ml/L / −8,740.6 µmol/kg / −3,605 % saturation (2020-07-33P4, station 90/30):
+eleven values on three cruises. None is a DBF-era 9-fill — the 9-family scan finds no
+−99 / 999 pattern in any bottle series, and the 1,739 `temperature` values at exactly 9
+or 99 are real 9.0 °C readings.
+
+The bounds mirror the CTD's for the same quantities (`temperature_ave` −2…40 °C,
+`sigma_theta_1` 15…35 kg/m³). The three oxygen floors sit just below zero rather than
+at the CTD's 0: four Winkler titrations in the oxygen minimum on line 83.3 station 45
+(550–570 m, 1995–2002) read −0.010 ml/L / −0.435 µmol/kg / −0.10 %, a blank subtraction
+of zero rather than a sentinel, and an oceanographer wants to see that the water was
+measured anoxic. Salinity declares nothing yet: cruise 2021-05-3322 carries 918 values
+of 24.19–27.06 PSU to 568 m across 39 stations with `S_qual` 254–344 — a whole cruise,
+not a sentinel, and a floor that caught it would delete provider-flagged data while one
+that spared it would miss the 9.50 (question Q13).
+
+```{r}
+#| label: bounds
+
+# --- declare, then enforce, the bottle's physical bounds ----------------------
+# declare_measurement_bounds() is idempotent: a bound equal to the declared one is
+# "unchanged", a different one errors unless overwrite = TRUE — a declared bound is
+# an agreement with the provider, not a side effect of a re-run.
+bottle_bounds <- tibble::tribble(
+  ~measurement_type,   ~valid_min, ~valid_max,
+  "temperature",             -2,          40,
+  "sigma_theta",             15,          35,
+  "oxygen_ml_l",           -0.5,          15,
+  "oxygen_umol_kg",         -20,         700,
+  "oxygen_saturation",       -1,         250)
+d_meas_type <- declare_measurement_bounds(bottle_bounds, meas_type_csv)
+
+# report BEFORE deleting: `undeclared` is a finding too — the bottle types with no
+# bound are the ones still to take to the provider
+bounds_pre <- check_measurement_bounds(con, "bottle_measurement", mt = d_meas_type)
+bounds_datatable(bounds_pre)
+
+oob_tally <- drop_out_of_bounds(con, "bottle_measurement", mt = d_meas_type)
+say(glue(
+  "out-of-range rows removed: {format(sum(oob_tally$n_bad), big.mark = ',')} ",
+  "across {nrow(oob_tally)} type(s), against ",
+  "{sum(bounds_pre$status != 'undeclared')} declared bound(s); ",
+  "{sum(bounds_pre$status == 'undeclared')} type(s) still undeclared"))
+
+# the guard must leave nothing behind: a violation here means the delete and the
+# check disagree on a bound
+bounds_post <- check_measurement_bounds(
+  con, "bottle_measurement", mt = d_meas_type, include_undeclared = FALSE)
+stopifnot(
+  "bottle_measurement must hold no value outside a declared bound" =
+    sum(bounds_post$status == "out_of_range") == 0)
 ```
 
 ## Load Measurement Type Reference

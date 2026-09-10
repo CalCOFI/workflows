@@ -230,6 +230,26 @@ generated from this file (one page per `taxon_key`, at `/species/{key with ':' w
 landing page's Life tile and numbers band read its `counts`. A consumer that wants the crosswalk
 reads `taxa[].datasets[].sources[]` instead of joining `dataset_taxon` by hand.
 
+## Five bottle series declare their physical bounds, and eleven impossible values leave
+
+`calcofi_bottle` declared no bound on any of its 26 series, so v2026.09.06 published a
+99.00 °C and a 56.87 °C at 50 m (2020-07-33P4, station 93.3/30 — the same two bottles
+read 9.50 and 21.06 PSU), six potential densities of 216–251 kg/m³ (2014-11-32NM,
+2015-04-32NM) and one surface oxygen of −200.2 ml/L / −8,740.6 µmol/kg / −3,605 %
+saturation (2020-07-33P4, station 90/30). `ingest_calcofi_bottle.qmd` § Declare and
+Enforce Physical Bounds now declares `temperature` −2…40 °C and `sigma_theta` 15…35 kg/m³
+(the CTD's own bounds for the same quantities) and `oxygen_ml_l` −0.5…15,
+`oxygen_umol_kg` −20…700, `oxygen_saturation` −1…250 — the oxygen floors just below
+zero so the four Winkler zeros of the line 83.3 oxygen minimum (−0.010 ml/L, 550–570 m,
+1995–2002) stay — and `drop_out_of_bounds()` removes the eleven rows before `obs` is
+emitted, as the CTD and METS ingests already do. This was not a DBF-era 9-fill: no
+bottle series carries a −99 / 999 pattern, and the 1,739 temperatures at exactly 9 or
+99 are 9.0 °C readings. Salinity declares nothing yet — cruise 2021-05-3322 reads
+24.19–27.06 PSU in 918 bottles to 568 m across 39 stations (Q13, `high`), a whole
+cruise the provider must rule on before any floor is set. **Consumers:** `obs_env` loses
+11 `calcofi_bottle` rows; `measurement_type.valid_min` / `valid_max` are populated for
+the five series and `check_measurement_bounds()` treats them as declared.
+
 # v2026.09.06 (2026-09-06)
 
 ## The dataset catalog record says what a page needs to say (schema 1.1)
