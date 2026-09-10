@@ -2733,7 +2733,7 @@ freq_cast_dir |>
 
 ### Multiplier 3 — redundant measurement-type variants
 
-Many of the measurement types below are variants of the same property (multiple oxygen units and sensor/correction combinations, dual temperature and salinity sensors, derived estimates). `ctd_thin` keeps one canonical type per property — see the `is_canonical` flag in `metadata/measurement_type.csv`.
+Many of the measurement types below are variants of the same property (multiple oxygen units and sensor/correction combinations, dual temperature and salinity sensors, derived estimates). `ctd_thin` keeps the canonical types — the averages, the bottle references, the uncorrected sensors (2026-08-06, so a sensor-only cruise still has salinity and oxygen) and, since 2026-09-10, the bottle-corrected per-sensor series and the chlorophyll / nitrate sensor estimates at both correction levels (Rasmus Swalethorp's transect-plotter rule) — see the `is_canonical` flag in `metadata/measurement_type.csv`, set by `libs/build_ctd_measurement_registry.R`.
 
 ```{r}
 #| label: freq_measurement_types

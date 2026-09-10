@@ -75,6 +75,30 @@ sensor_desc <- tribble(
   "oxygen_umol_kg_1",   "DO sensor 1 (uncorrected)",
   "oxygen_umol_kg_2",   "DO sensor 2 (uncorrected)")
 
+# -- 2b. the bottle-corrected PER-SENSOR series and the sensor-derived estimates --
+# Rasmus Swalethorp, 2026-09-09 (thread "Next Two Weeks Tasks"), on the transect
+# plotter's data streams: for Final and CTD & Bottle cruises the salinity/oxygen
+# shown should be the mean of the two CORRECTED sensors, computed by us with an
+# explicit rule — one sensor alone when the other is flagged 8/9, the 1/2 flags
+# honoured — rather than the file's own `*_ave_*` ("theoretically already done
+# within decodr, but this is a safer option"); chlorophyll and nitrate should be the
+# corrected SENSOR estimates, not bottle values, offering both the station- and the
+# cruise-corrected fit (and the same choice for oxygen). None of those reach `obs`
+# unless canonical, so the plotter could not build the rule. The types already
+# existed here (parsed into ctd_measurement); this only lets them through to
+# ctd_thin and obs. ctd_thin's retained depths come from the temperature /
+# salinity_ave_corr profiles alone, so adding canonical types adds rows, never
+# changes which depths are kept. The umol/kg oxygen pair is left out for now (the
+# plotter reads ml/L); the `variable` column stays empty on every one of these so
+# the Explorer's pooled variables (temperature / salinity / oxygen_ml_l) do not
+# double-count a sensor beside its average.
+corr_types <- c(
+  "salinity_1_corr", "salinity_2_corr",
+  "oxygen_ml_l_1_sta_corr", "oxygen_ml_l_2_sta_corr",
+  "oxygen_ml_l_1_cruise_corr", "oxygen_ml_l_2_cruise_corr",
+  "est_chlorophyll_a_sta_corr", "est_chlorophyll_a_cruise_corr",
+  "est_nitrate_sta_corr", "est_nitrate_cruise_corr")
+
 # -- 3. plausible physical ranges (verbatim from the notebook's `plaus`) -------
 plaus <- tribble(
   ~measurement_type,              ~valid_min, ~valid_max,
@@ -98,6 +122,11 @@ plaus <- tribble(
   "oxygen_ml_l_2",                 0,     15,
   "oxygen_btl_ml_l",               0,     15,
   "oxygen_umol_kg_ave_sta_corr",   0,    700,
+  # the per-sensor corrected oxygens share the average's physical range (ml/L)
+  "oxygen_ml_l_1_sta_corr",        0,     15,
+  "oxygen_ml_l_2_sta_corr",        0,     15,
+  "oxygen_ml_l_1_cruise_corr",     0,     15,
+  "oxygen_ml_l_2_cruise_corr",     0,     15,
   "oxygen_umol_kg_1",              0,    700,
   "oxygen_umol_kg_2",              0,    700,
   "oxygen_btl_umol_kg",            0,    700,
@@ -127,15 +156,15 @@ if (!"valid_max" %in% names(d1)) d1$valid_max <- NA_real_
 
 # a sensor type declared here but absent from the registry is a typo the
 # rows_update would swallow — same reasoning as `unknown` above
-missing_sensor <- setdiff(sensor_types, d0$measurement_type)
-stopifnot("uncorrected sensor type(s) not in the registry" =
+missing_sensor <- setdiff(c(sensor_types, corr_types), d0$measurement_type)
+stopifnot("sensor / corrected type(s) not in the registry" =
             length(missing_sensor) == 0)
 
 d1 <- d1 |>
   rows_update(plaus, by = "measurement_type", unmatched = "ignore") |>
   rows_update(sensor_desc, by = "measurement_type", unmatched = "ignore") |>
   mutate(is_canonical = if_else(
-    measurement_type %in% c(btl_types, sensor_types), TRUE, is_canonical))
+    measurement_type %in% c(btl_types, sensor_types, corr_types), TRUE, is_canonical))
 
 # keep valid_min/valid_max next to units rather than tacked on the end
 d1 <- d1 |> relocate(valid_min, valid_max, .after = units)
@@ -152,6 +181,8 @@ if (isTRUE(all.equal(as.data.frame(d0), as.data.frame(d1)))) {
       sprintf("(+%d newly flagged)", newly(btl_types)), "\n")
   cat("  uncorrected sensor types canonical:", length(sensor_types),
       sprintf("(+%d newly flagged)", newly(sensor_types)), "\n")
+  cat("  corrected per-sensor + estimate types canonical:", length(corr_types),
+      sprintf("(+%d newly flagged)", newly(corr_types)), "\n")
   cat("  valid_min/valid_max populated   :", nrow(plaus), "types\n")
 }
 
@@ -161,12 +192,21 @@ stopifnot(
   "btl group must be canonical"  = all(d2$is_canonical[d2$measurement_type %in% btl_types]),
   "sensor group must be canonical" =
     all(d2$is_canonical[d2$measurement_type %in% sensor_types]),
+  "corrected per-sensor + estimate group must be canonical" =
+    all(d2$is_canonical[d2$measurement_type %in% corr_types]),
+  # a per-sensor series must never pool into the Explorer's variables beside its average
+  "corr group carries no `variable`" =
+    all(is.na(d2$variable[d2$measurement_type %in% corr_types]) |
+          d2$variable[d2$measurement_type %in% corr_types] == ""),
   # the point of the sensor group is that a sensor-only cruise still has both
   # variables; one of each is the minimum that guarantees it
   "an uncorrected salinity AND oxygen must both be canonical" =
     any(d2$is_canonical[d2$measurement_type %in% c("salinity_1", "salinity_2")]) &&
     any(d2$is_canonical[d2$measurement_type %in% c("oxygen_ml_l_1", "oxygen_ml_l_2")]),
-  "ranges must round-trip"       = sum(!is.na(d2$valid_min)) == nrow(plaus),
+  # every range declared HERE round-trips; other ingests declare their own bounds in the same
+  # registry (92 ranged types on 2026-09-10), so a global count is not the test
+  "ranges must round-trip"       =
+    all(!is.na(d2$valid_min[d2$measurement_type %in% plaus$measurement_type])),
   "valid_min <= valid_max"       = all(d2$valid_min <= d2$valid_max, na.rm = TRUE))
 
 ctd <- filter(d2, str_detect(`_source_datasets`, "calcofi_ctd-cast"))

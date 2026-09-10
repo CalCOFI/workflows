@@ -1780,17 +1780,20 @@ ss     <- build_sample_spatial(con_wdl)
 # the ONE seasonal baseline every anomaly is a departure from (calcofi4db >= 3.26.0): a plain mean per dataset x
 # station (sample.site_key since 4.8.0 — the inshore grid cells hold 2–4 stations, so the cell blended them;
 # grid_key rides along as the station's modal cell) x calendar month x 10 m depth_bin x measurement type over
-# 1993-2013, >= 3 cruises per cell, the window
+# 1993-2013, >= 5 cruises per cell (3 until v2026.09.06), the window
 # stamped on every row. ctd-transects, the Explorer's Sections lens and calcofi4r::cc_climatology() subtract this
 # table — each used to compute its own, and by 2026-08-31 the three had drifted (all-months pooling; 5 m bins over
 # the thinned 10 m series; one arbitrary cast per grid cell), so one July 2026 section read +1.4 degC in one
 # product and ~0 in another. Partitioned by measurement_type like obs_env, so a browser fetches one variable.
-n_clim <- build_climatology(con_wdl, qual_ok_sql = qual_sql)
+# min_cruises = 5, not the function's default 3: Rasmus Swalethorp (2026-09-09) — a three-cruise cell
+# is too thin a baseline for an anomaly a reader will act on; the consumers show n_cruises per cell.
+# Measured on v2026.09.06: 5 keeps 577,113 of 768,880 cells (75 %; 87 % of CTD temperature cells).
+n_clim <- build_climatology(con_wdl, qual_ok_sql = qual_sql, min_cruises = 5L)
 cat(glue("sample_root {n_root} · obs_bio {n_bio} · obs_env {n_env} · climatology {n_clim} rows\n"))
 datatable(dbGetQuery(con_wdl, "
   SELECT dataset_key, count(*) AS n_cells, count(DISTINCT measurement_type) AS n_types, count(DISTINCT site_key) AS n_stations, count(DISTINCT grid_key) AS n_cells_grid,
          min(n_cruises) AS min_cruises, round(avg(n_cruises), 1) AS mean_cruises, any_value(clim_yr_min) AS yr_min, any_value(clim_yr_max) AS yr_max
-  FROM climatology GROUP BY 1 ORDER BY 1"), caption = "climatology — cells per dataset (each ≥ 3 cruises; the window is on every row)")
+  FROM climatology GROUP BY 1 ORDER BY 1"), caption = "climatology — cells per dataset (each ≥ 5 cruises; the window is on every row)")
 stopifnot(n_clim > 0, nrow(dbGetQuery(con_wdl, "SELECT DISTINCT clim_yr_min, clim_yr_max FROM climatology")) == 1)
 datatable(ss, caption = "sample_spatial — exact per-root-sample membership, one layer at a time (n_polys = 0: a line or point layer, skipped)")
 

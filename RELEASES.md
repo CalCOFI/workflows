@@ -8,6 +8,34 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## The baseline needs five cruises, and the corrected per-sensor CTD series reach `obs`
+
+Rasmus Swalethorp's review of the transect plotter (2026-09-09) settles two things the release carries:
+
+- **`climatology` keeps a cell only where ≥ 5 distinct cruises contribute** (was 3). Measured on
+  v2026.09.06: 577,113 of 768,880 cells survive (75 %; 87 % of the CTD temperature cells, the losses
+  concentrated in the thinly sampled offshore and pre-2004 inshore stations). `clim_n` and
+  `n_cruises` stay on every row, so a consumer can show how many observations and cruises made the
+  baseline it subtracts. The `calcofi_mets` cells (156, none ≥ 5) drop out entirely.
+- **Ten CTD measurement types become canonical** and so reach `ctd_thin` → `obs` / `obs_env` (one
+  hive object each): `salinity_1_corr`, `salinity_2_corr`, `oxygen_ml_l_{1,2}_sta_corr`,
+  `oxygen_ml_l_{1,2}_cruise_corr`, `est_chlorophyll_a_{sta,cruise}_corr`,
+  `est_nitrate_{sta,cruise}_corr`. Until now only the file's own averages (`salinity_ave_corr`,
+  `oxygen_ml_l_ave_sta_corr`) and the uncorrected sensors were published, so no consumer could apply
+  the rule Rasmus asked for — the mean of the two corrected sensors, one alone when the other is
+  flagged 8/9, honouring the 1/2 sensor-choice flags — nor offer chlorophyll or nitrate from the
+  bottle-fitted sensor estimates, nor choose between the station- and cruise-corrected fits. The
+  thinned depth set is unchanged (it is derived from the temperature / average-salinity profiles),
+  so these add rows at the depths already kept. Each keeps its own `measurement_qual`. None carries a
+  `variable`, so the Explorer's pooled variables do not double-count a sensor beside its average.
+  Sensor-only preliminary cruises stay temperature-only in the plotter (Rasmus: an uncalibrated or
+  drifting sensor reads badly in an anomaly).
+
+**Consumers:** `climatology` has fewer rows (a cell absent is an anomaly left blank, never 0);
+`obs_env` gains ten `measurement_type` partitions; `metadata/measurement_type.csv` flags them
+`is_canonical` and declares the oxygen ranges. `calcofi4db::combine_sensor_pair()` is the tested
+form of the sensor rule for any consumer.
+
 ## The climatology and the sections key on the station, not the grid cell
 
 `grid_key` is a point-in-polygon into the 218 grid cells, and the inshore cells of the core lines
