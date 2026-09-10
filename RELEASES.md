@@ -281,6 +281,31 @@ two `proposed` questions ask the DIC provider whether the bottle's replicate is 
 analyses averaged into the reported value (`calcofi_dic_08`, `calcofi_dic_09`). **Consumers:**
 additive — a new registry file and three new calcofi4db functions; `coverage.json`'s `variables[]`
 gains `label` from this registry at the next step (WS-M2).
+## Six underway and CTD series declare their physical bounds; the 9,895 °C sea surface and the PAR fills leave
+
+v2026.09.06 published a **sea-surface temperature of 9,895 °C** (`calcofi_mets` `sst_c`: three
+readings of 9,231–9,895 °C on 2016-07-32I1), an intake flow of exactly −99 L/min beside 39
+smaller negatives (`uws_flow`, 2016), fourteen negative bottom depths (`bottom_depth_m`, five
+cruises 2020–2022), a thermosalinograph salinity of 45.6 PSU (`tsg1_salinity_psu`), and from the
+CTD files a surface PAR (`spar`) running from −3.07 × 10¹⁷ to 2.01 × 10¹⁶ µE/m²/s — 31,623 values
+on ten cruises 1995–2008, 6 % of the series — and an in-water PAR (`par`) with 34,233 values at
+exactly 9999, a fill, plus 1,065 more above 5,000 and eight below −100 (24 cruises, 1994–2025).
+None of the six series declared a bound, so nothing caught any of it; the measurements catalog
+(below) surfaced them on 2026-09-10 and Ben ruled them a certain bug, not a question.
+`ingest_calcofi_mets.qmd` now declares `sst_c` −2…40 °C, `tsg1_salinity_psu` 0…45 PSU and
+`bottom_depth_m` 0…11,000 m (the registry's own bounds for the same quantities on other
+series) and `uws_flow` ≥ 0; `ingest_calcofi_ctd-cast.qmd` declares `par` and `spar`
+−100…5,000 µE/m²/s (the sun delivers ~2,500 at the top of the atmosphere; a dark reading sits
+within a few units of zero). Both ingests already ran `drop_out_of_bounds()` against the
+registry, so the values leave at the ingest and each now asserts nothing remains outside a
+declared bound. Not bounded, and noted for the provider: `sss_psu` reads below 20 PSU on a
+quarter of its rows (a flushed intake, not a sentinel), `rel_humidity_pct` reaches 120 %, and
+the CTD's `beam_attenuation` / `transmissometer` carry calibration negatives. **Consumers:**
+`obs_env` loses 3 + 40 + 14 + 2 `calcofi_mets` rows and 31,623 + 35,306 `calcofi_ctd-cast`
+rows at the release grain (the full-resolution `obs_mets_full` / `obs_ctd_full` lose more; the
+ingests report the count); `measurement_type.valid_min` / `valid_max` are populated for the
+six series; the measurements catalog reports a series' observed range within its declared
+bounds and counts what fell outside.
 
 # v2026.09.06 (2026-09-06)
 
