@@ -1,0 +1,78 @@
+{
+  "type": "Collection",
+  "stac_version": "1.0.0",
+  "stac_extensions": ["https://stac-extensions.github.io/table/v1.2.0/schema.json", "https://stac-extensions.github.io/scientific/v1.0.0/schema.json"],
+  "id": "cce-lter_picoplankton-bacteria",
+  "title": "Picoplankton and Bacteria Abundance (CalCOFI Cruise)",
+  "description": "Picophytoplankton (Prochlorococcus, Synechococcus, picoeukaryotes) and heterotrophic bacteria abundances analyzed by flow cytometry (FCM) from CCE-CalCOFI Augmented cruises in the California Current System, 2004-2023 (ongoing). Seawater collected from Niskin bottles at 3-8 depths per station; cells fixed shipboard with paraformaldehyde, stained with a DNA-specific dye, and enumerated on an Altra flow cytometer with dual argon-ion lasers.\n",
+  "keywords": ["EARTH SCIENCE > BIOLOGICAL CLASSIFICATION > BACTERIA/ARCHAEA", "EARTH SCIENCE > BIOLOGICAL CLASSIFICATION > PROTISTS > PLANKTON > PHYTOPLANKTON"],
+  "license": "other",
+  "providers": [
+    {
+      "name": "California Current Ecosystem Long Term Ecological Research",
+      "roles": ["producer", "licensor"],
+      "url": "https://ccelter.ucsd.edu"
+    },
+    {
+      "name": "CalCOFI",
+      "roles": ["processor", "host"],
+      "url": "https://calcofi.io"
+    }
+  ],
+  "extent": {
+    "spatial": {
+      "bbox": [
+        [-124.33, 29.83, -117.295, 35.6379]
+      ]
+    },
+    "temporal": {
+      "interval": [
+        [
+          "2004-01-01T00:00:00Z",
+          "2023-12-31T23:59:59Z"
+        ]
+      ]
+    }
+  },
+  "sci:citation": "Landry, M. (2004-2023). Picoplankton and Bacteria Abundance (CalCOFI Cruise). CCE LTER.",
+  "table:tables": [
+    {
+      "name": "sample",
+      "description": "One row per physical sampling event at its native grain (site, tow, net, cast, bottle, underway, transect, region pool). An adjacency list: `parent_sample_key` points at the containing event and `root_sample_key` at the top of the chain, so counting distinct events at any level is a single `GROUP BY`."
+    },
+    {
+      "name": "obs",
+      "description": "The occurrence-headline long table: one scalar measurement per row, environmental (`realm = 'env'`) and biological (`realm = 'bio'`) together. Biological taxon is the global `taxon_key`; sub-occurrence detail (length/stage bins, behavior) lives in `obs_attribute`, and event-level effort in `sample_measurement`."
+    },
+    {
+      "name": "measurement_type"
+    }
+  ],
+  "summaries": {
+    "calcofi:category": ["Picoplankton & Bacteria"],
+    "calcofi:variables": ["het_bacteria", "number/ml", "Picoplankton & Bacteria", "picoeukaryotes", "number/ml", "Picoplankton & Bacteria", "prochlorococcus", "number/ml", "http://vocab.nerc.ac.uk/collection/P01/current/P701A90Z/", "Picoplankton & Bacteria", "synechococcus", "number/ml", "http://vocab.nerc.ac.uk/collection/P01/current/P700A90Z/", "Picoplankton & Bacteria"]
+  },
+  "links": [
+    {
+      "rel": "root",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "self",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/cce-lter_picoplankton-bacteria/collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "about",
+      "href": "https://calcofi.io/datasets/cce-lter_picoplankton-bacteria/",
+      "type": "text/html",
+      "title": "Dataset page"
+    }
+  ]
+}

@@ -6,7 +6,7 @@ erDiagram
     cruise {
         uuid cruise_uuid
         date date_ym
-        varchar ship_key
+        varchar ship_key FK
         varchar _source_file
         int _source_row
         timestamp _ingested_at
@@ -26,7 +26,7 @@ erDiagram
         bigint dic
     }
     dataset {
-        varchar dataset_key
+        varchar dataset_key PK
         varchar provider
         varchar dataset
         varchar dataset_name
@@ -129,7 +129,7 @@ erDiagram
     }
     obs_attribute {
         bigint obs_attribute_id PK
-        varchar dataset_key
+        varchar dataset_key FK
         varchar sample_key FK
         varchar taxon_key FK
         varchar life_stage
@@ -196,7 +196,7 @@ erDiagram
         geometry geom
     }
     spatial_attribute {
-        varchar spatial_key
+        varchar spatial_key FK
         varchar layer
         int id
         varchar fld
@@ -228,9 +228,9 @@ erDiagram
         varchar notes
     }
     taxon_group {
-        varchar taxon_group_key
+        varchar taxon_group_key PK
         varchar description
-        varchar taxon_key FK
+        varchar taxon_key PK,FK
     }
     sample ||--o{ sample : "parent_sample_key"
     sample ||--o{ sample : "root_sample_key"
@@ -270,6 +270,9 @@ erDiagram
     taxon ||--o{ taxon_group : "taxon_key"
     taxon ||--o{ taxon : "parent_taxon_key"
     sample ||--o{ sample : "station_uuid"
+    spatial ||--o{ spatial_attribute : "spatial_key"
+    ship ||--o{ cruise : "ship_key"
+    dataset ||--o{ obs_attribute : "dataset_key"
     classDef _e8e8e8 stroke:#e8e8e8,stroke-width:3px
     class sample,obs,sample_measurement,measurement_type,obs_attribute,cruise,dataset _e8e8e8
     classDef _dcdcdc stroke:#dcdcdc,stroke-width:3px

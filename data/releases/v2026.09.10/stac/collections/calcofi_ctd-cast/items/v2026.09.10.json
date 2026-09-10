@@ -1,0 +1,213 @@
+{
+  "type": "Feature",
+  "stac_version": "1.0.0",
+  "stac_extensions": ["https://stac-extensions.github.io/table/v1.2.0/schema.json", "https://stac-extensions.github.io/scientific/v1.0.0/schema.json", "https://stac-extensions.github.io/file/v2.1.0/schema.json"],
+  "id": "v2026.09.10",
+  "collection": "calcofi_ctd-cast",
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [-126.4843, 29.8268],
+        [-117.2734, 29.8268],
+        [-117.2734, 37.8491],
+        [-126.4843, 37.8491],
+        [-126.4843, 29.8268]
+      ]
+    ]
+  },
+  "bbox": [-126.4843, 29.8268, -117.2734, 37.8491],
+  "properties": {
+    "title": "CalCOFI CTD Cast Files — v2026.09.10",
+    "description": "CTD downcast profiles with temperature, salinity, oxygen, fluorescence, and other sensors at standard depths. 1 m-binned final data for 1993-2002 come from the SIO-CalCOFI Technical Group's own archive (J. Wilkinson), which covers the decade calcofi.org does not publish finals for; 1998 and 2003 onward come from calcofi.org. Where both publish the same cruise, calcofi.org is used; the two agree on 130 of 140 comparable files, and the four cruises that differ are recorded in question calcofi_ctd-cast_20.\n",
+    "datetime": null,
+    "start_datetime": "1993-01-01T00:00:00Z",
+    "end_datetime": "2026-12-31T23:59:59Z",
+    "created": "2026-09-11T00:00:00Z",
+    "sci:citation": "CalCOFI. (2023). CalCOFI CTD Cast Files. CalCOFI.org."
+  },
+  "assets": {
+    "obs_partition": {
+      "href": "https://storage.googleapis.com/calcofi-db/ducklake/tables/obs/dataset_key=calcofi_ctd-cast/df38809eac8ce84444c810f5/data_0.parquet",
+      "type": "application/x-parquet",
+      "title": "obs (parquet, this dataset's partition)",
+      "roles": ["data"],
+      "file:size": 129905602,
+      "file:checksum": "1220b7a885a3311d88b7d1006ecd6995d7d3a8a80350405c8efc8a8dd5fd58c6e1b0",
+      "table:columns": [
+        {
+          "name": "obs_id",
+          "description": "Surrogate key, renumbered globally when the release concatenates the per-dataset shards.",
+          "type": "BIGINT"
+        },
+        {
+          "name": "realm",
+          "description": "`env` for physical/chemical measurements, `bio` for organism observations.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "dataset_key",
+          "description": "Provenance stamp: `provider_dataset`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "sample_key",
+          "description": "The sampling event this observation came from; joins `sample`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "grid_key",
+          "description": "CalCOFI station grid cell, denormalized from `sample` so rollups need no join. NULL for region-pooled data.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "cruise_key",
+          "description": "Cruise, denormalized from `sample` so rollups need no join.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "latitude",
+          "description": "Observation latitude (WGS84).",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "longitude",
+          "description": "Observation longitude (WGS84).",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "datetime",
+          "description": "Observation time (UTC). NULL for region-pooled data with no event time.",
+          "type": "TIMESTAMP"
+        },
+        {
+          "name": "depth_min_m",
+          "description": "Shallowest depth this observation represents.",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "depth_max_m",
+          "description": "Deepest depth this observation represents; equal to `depth_min_m` for point measurements (bottle, CTD scan).",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "taxon_key",
+          "description": "Global taxon key, `worms:<AphiaID>` or `itis:<TSN>` for birds. NULL for `env` rows. Joins `taxon`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "life_stage",
+          "description": "Life stage where the source resolves one (larva, adult, juvenile, egg, phyllosoma).",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "measurement_type",
+          "description": "Measured quantity; joins the `measurement_type` vocabulary.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "measurement_value",
+          "description": "The measured value, in the units `measurement_type` declares.",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "measurement_qual",
+          "description": "Source quality flag, verbatim.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "measurement_prec",
+          "description": "Source-reported precision where available.",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "hex_id",
+          "description": "H3 cell at resolution 10, stored as UBIGINT. Aggregate coarser at query time with `h3_cell_to_parent(hex_id, res)` — there is no per-resolution column ladder.",
+          "type": "UBIGINT"
+        }
+      ]
+    },
+    "calcofi_ctd-cast": {
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/calcofi_ctd-cast/collection.json",
+      "type": "application/json",
+      "roles": ["overview"],
+      "title": "STAC collection"
+    },
+    "netcdf": {
+      "href": "https://storage.calcofi.io/calcofi-files-public/netcdf/calcofi_ctd-cast/v2026.09.06/calcofi_ctd-cast.nc",
+      "type": "application/x-netcdf",
+      "roles": ["data"],
+      "title": "CF netCDF"
+    },
+    "netcdf_2": {
+      "href": "https://storage.calcofi.io/calcofi-files-public/netcdf/calcofi_ctd-cast_full/v2026.09.06/calcofi_ctd-cast_full.nc",
+      "type": "application/x-netcdf",
+      "roles": ["data"],
+      "title": "CF netCDF (full)"
+    },
+    "calcofi_ctd-cast_full": {
+      "href": "https://erddap.calcofi.io/erddap/tabledap/calcofi_ctd-cast_full.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "CalCOFI CTD Cast Files - full resolution (pre-thinning)"
+    },
+    "calcofi_ctd-cast_2": {
+      "href": "https://erddap.calcofi.io/erddap/tabledap/calcofi_ctd-cast.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "CalCOFI CTD Cast Files - observations"
+    },
+    "calcofi_ctd-cast_sample": {
+      "href": "https://erddap.calcofi.io/erddap/tabledap/calcofi_ctd-cast_sample.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "CalCOFI CTD Cast Files - sampling events"
+    },
+    "iso19115": {
+      "href": "https://erddap.calcofi.io/erddap/metadata/iso19115/xml/calcofi_ctd-cast_iso19115.xml",
+      "type": "application/xml",
+      "roles": ["metadata"],
+      "title": "ISO 19115-3 metadata (ERDDAP)"
+    },
+    "notebook": {
+      "href": "https://calcofi.io/workflows/ingest_calcofi_ctd-cast.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "ingest notebook"
+    },
+    "page": {
+      "href": "https://calcofi.org/data/oceanographic-data/ctd-cast-files/",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "calcofi.org data page"
+    },
+    "source": {
+      "href": "https://calcofi.org/data/oceanographic-data/ctd-cast-files/",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "source"
+    }
+  },
+  "links": [
+    {
+      "rel": "root",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/calcofi_ctd-cast/collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "collection",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/calcofi_ctd-cast/collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "self",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/calcofi_ctd-cast/items/v2026.09.10.json",
+      "type": "application/json"
+    }
+  ]
+}

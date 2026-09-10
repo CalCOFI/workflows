@@ -1,0 +1,213 @@
+{
+  "type": "Feature",
+  "stac_version": "1.0.0",
+  "stac_extensions": ["https://stac-extensions.github.io/table/v1.2.0/schema.json", "https://stac-extensions.github.io/scientific/v1.0.0/schema.json", "https://stac-extensions.github.io/file/v2.1.0/schema.json"],
+  "id": "v2026.09.10",
+  "collection": "calcofi_bottle",
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [-164.0833, 18.4167],
+        [-105.9667, 18.4167],
+        [-105.9667, 47.9167],
+        [-164.0833, 47.9167],
+        [-164.0833, 18.4167]
+      ]
+    ]
+  },
+  "bbox": [-164.0833, 18.4167, -105.9667, 47.9167],
+  "properties": {
+    "title": "CalCOFI Bottle Database — v2026.09.10",
+    "description": "Hydrographic bottle data including temperature, salinity, oxygen, nutrients, pigments, and C14 from CalCOFI cruises.\n",
+    "datetime": null,
+    "start_datetime": "1949-01-01T00:00:00Z",
+    "end_datetime": "2021-12-31T23:59:59Z",
+    "created": "2026-09-11T00:00:00Z",
+    "sci:citation": "CalCOFI. (2023). CalCOFI Bottle Database 194903-202105. CalCOFI.org."
+  },
+  "assets": {
+    "obs_partition": {
+      "href": "https://storage.googleapis.com/calcofi-db/ducklake/tables/obs/dataset_key=calcofi_bottle/8e3729a81f94a336b9d682f2/data_0.parquet",
+      "type": "application/x-parquet",
+      "title": "obs (parquet, this dataset's partition)",
+      "roles": ["data"],
+      "file:size": 76007084,
+      "file:checksum": "1220cc64338bd40f012e72603a82893f3d30a20742e9f04debd33caea3ce31417a71",
+      "table:columns": [
+        {
+          "name": "obs_id",
+          "description": "Surrogate key, renumbered globally when the release concatenates the per-dataset shards.",
+          "type": "BIGINT"
+        },
+        {
+          "name": "realm",
+          "description": "`env` for physical/chemical measurements, `bio` for organism observations.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "dataset_key",
+          "description": "Provenance stamp: `provider_dataset`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "sample_key",
+          "description": "The sampling event this observation came from; joins `sample`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "grid_key",
+          "description": "CalCOFI station grid cell, denormalized from `sample` so rollups need no join. NULL for region-pooled data.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "cruise_key",
+          "description": "Cruise, denormalized from `sample` so rollups need no join.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "latitude",
+          "description": "Observation latitude (WGS84).",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "longitude",
+          "description": "Observation longitude (WGS84).",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "datetime",
+          "description": "Observation time (UTC). NULL for region-pooled data with no event time.",
+          "type": "TIMESTAMP"
+        },
+        {
+          "name": "depth_min_m",
+          "description": "Shallowest depth this observation represents.",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "depth_max_m",
+          "description": "Deepest depth this observation represents; equal to `depth_min_m` for point measurements (bottle, CTD scan).",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "taxon_key",
+          "description": "Global taxon key, `worms:<AphiaID>` or `itis:<TSN>` for birds. NULL for `env` rows. Joins `taxon`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "life_stage",
+          "description": "Life stage where the source resolves one (larva, adult, juvenile, egg, phyllosoma).",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "measurement_type",
+          "description": "Measured quantity; joins the `measurement_type` vocabulary.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "measurement_value",
+          "description": "The measured value, in the units `measurement_type` declares.",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "measurement_qual",
+          "description": "Source quality flag, verbatim.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "measurement_prec",
+          "description": "Source-reported precision where available.",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "hex_id",
+          "description": "H3 cell at resolution 10, stored as UBIGINT. Aggregate coarser at query time with `h3_cell_to_parent(hex_id, res)` — there is no per-resolution column ladder.",
+          "type": "UBIGINT"
+        }
+      ]
+    },
+    "calcofi_bottle": {
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/calcofi_bottle/collection.json",
+      "type": "application/json",
+      "roles": ["overview"],
+      "title": "STAC collection"
+    },
+    "netcdf": {
+      "href": "https://storage.calcofi.io/calcofi-files-public/netcdf/calcofi_bottle/v2026.09.06/calcofi_bottle.nc",
+      "type": "application/x-netcdf",
+      "roles": ["data"],
+      "title": "CF netCDF"
+    },
+    "calcofi_bottle_2": {
+      "href": "https://erddap.calcofi.io/erddap/tabledap/calcofi_bottle.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "CalCOFI Bottle Database - observations"
+    },
+    "calcofi_bottle_sample": {
+      "href": "https://erddap.calcofi.io/erddap/tabledap/calcofi_bottle_sample.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "CalCOFI Bottle Database - sampling events"
+    },
+    "iso19115": {
+      "href": "https://erddap.calcofi.io/erddap/metadata/iso19115/xml/calcofi_bottle_iso19115.xml",
+      "type": "application/xml",
+      "roles": ["metadata"],
+      "title": "ISO 19115-3 metadata (ERDDAP)"
+    },
+    "notebook": {
+      "href": "https://calcofi.io/workflows/ingest_calcofi_bottle.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "ingest notebook"
+    },
+    "page": {
+      "href": "https://calcofi.org/data/oceanographic-data/bottle-database/",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "calcofi.org data page"
+    },
+    "source": {
+      "href": "https://calcofi.org/downloads/database/CalCOFI_Database_194903-202105_csv_16October2023.zip",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "source"
+    },
+    "siocalcofiHydroCast": {
+      "href": "https://coastwatch.pfeg.noaa.gov/erddap/tabledap/siocalcofiHydroCast.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "CalCOFI SIO Hydrographic Cast Data"
+    },
+    "siocalcofiHydroBottle": {
+      "href": "https://coastwatch.pfeg.noaa.gov/erddap/tabledap/siocalcofiHydroBottle.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "CalCOFI SIO Hydrographic Bottle Data"
+    }
+  },
+  "links": [
+    {
+      "rel": "root",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/calcofi_bottle/collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "collection",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/calcofi_bottle/collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "self",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/calcofi_bottle/items/v2026.09.10.json",
+      "type": "application/json"
+    }
+  ]
+}

@@ -1,0 +1,90 @@
+{
+  "type": "Collection",
+  "stac_version": "1.0.0",
+  "stac_extensions": ["https://stac-extensions.github.io/table/v1.2.0/schema.json", "https://stac-extensions.github.io/scientific/v1.0.0/schema.json"],
+  "id": "calcofi_dic",
+  "title": "CalCOFI DIC",
+  "description": "Discrete profile dissolved inorganic carbon (DIC) and total alkalinity (TA) from CalCOFI Niskin bottle samples, quality-controlled using WOCE flagging.\n",
+  "keywords": ["EARTH SCIENCE > OCEANS > OCEAN CHEMISTRY > INORGANIC CARBON", "EARTH SCIENCE > OCEANS > OCEAN CHEMISTRY > ALKALINITY", "EARTH SCIENCE > OCEANS > OCEAN CHEMISTRY > PH", "EARTH SCIENCE > OCEANS > OCEAN TEMPERATURE > WATER TEMPERATURE", "EARTH SCIENCE > OCEANS > SALINITY/DENSITY > OCEAN SALINITY"],
+  "license": "CC-BY-4.0",
+  "providers": [
+    {
+      "name": "California Cooperative Oceanic Fisheries Investigations",
+      "roles": ["producer", "licensor"],
+      "url": "https://calcofi.org"
+    },
+    {
+      "name": "CalCOFI",
+      "roles": ["processor", "host"],
+      "url": "https://calcofi.io"
+    }
+  ],
+  "extent": {
+    "spatial": {
+      "bbox": [
+        [-125.0533, 28.1401, -117.3054, 37.0425]
+      ]
+    },
+    "temporal": {
+      "interval": [
+        [
+          "1983-01-01T00:00:00Z",
+          "2021-12-31T23:59:59Z"
+        ]
+      ]
+    }
+  },
+  "sci:doi": "10.25921/3w9f-jd72",
+  "sci:citation": "Keeling, C.D.; Lueker, T.J.; Emanuele, G.; Dickson, A.G.; Martz, T.R.; Wolfe, W.H.; Mau, A. (2025). Discrete profile dissolved inorganic carbon, total alkalinity, water temperature and salinity measurements for CalCOFI (NCEI Accession 0301029). NOAA NCEI. https://doi.org/10.25921/3w9f-jd72",
+  "table:tables": [
+    {
+      "name": "sample",
+      "description": "One row per physical sampling event at its native grain (site, tow, net, cast, bottle, underway, transect, region pool). An adjacency list: `parent_sample_key` points at the containing event and `root_sample_key` at the top of the chain, so counting distinct events at any level is a single `GROUP BY`."
+    },
+    {
+      "name": "obs",
+      "description": "The occurrence-headline long table: one scalar measurement per row, environmental (`realm = 'env'`) and biological (`realm = 'bio'`) together. Biological taxon is the global `taxon_key`; sub-occurrence detail (length/stage bins, behavior) lives in `obs_attribute`, and event-level effort in `sample_measurement`."
+    },
+    {
+      "name": "measurement_type"
+    }
+  ],
+  "summaries": {
+    "calcofi:category": ["Carbonate System"],
+    "calcofi:variables": ["alkalinity", "umol/kg", "http://vocab.nerc.ac.uk/collection/P01/current/MDMAP014/", "Carbonate System", "ctdtemp_its90", "degC", "http://vocab.nerc.ac.uk/collection/P01/current/TEMPST01/", "Physical Oceanography", "dic", "umol/kg", "http://vocab.nerc.ac.uk/collection/P01/current/TCO2MSXX/", "Carbonate System", "salinity_pss78", "PSS-78", "http://vocab.nerc.ac.uk/collection/P01/current/PSLTZZ01/", "Physical Oceanography"]
+  },
+  "links": [
+    {
+      "rel": "root",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "self",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/calcofi_dic/collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "about",
+      "href": "https://calcofi.io/datasets/calcofi_dic/",
+      "type": "text/html",
+      "title": "Dataset page"
+    },
+    {
+      "rel": "license",
+      "href": "https://creativecommons.org/licenses/by/4.0/",
+      "type": "text/html",
+      "title": "Creative Commons Attribution 4.0 International"
+    },
+    {
+      "rel": "cite-as",
+      "href": "https://doi.org/10.25921/3w9f-jd72",
+      "type": "text/html"
+    }
+  ]
+}

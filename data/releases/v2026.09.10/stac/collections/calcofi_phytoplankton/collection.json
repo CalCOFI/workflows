@@ -1,0 +1,106 @@
+{
+  "type": "Collection",
+  "stac_version": "1.0.0",
+  "stac_extensions": ["https://stac-extensions.github.io/table/v1.2.0/schema.json", "https://stac-extensions.github.io/scientific/v1.0.0/schema.json"],
+  "id": "calcofi_phytoplankton",
+  "title": "CalCOFI Phytoplankton (Venrick)",
+  "description": "Abundance and species composition of phytoplankton (385 taxonomic categories) in the California Current, 1996-2022, by inverted-microscope counts (E. Venrick). Samples from the near-surface \"second depth\" are pooled across stations into four regions (NE, SE, Alley, Offshore; Hayward & Venrick 1998) before counting, so the grain is cruise x region, not per-station. Source: EDI knb-lter-cce.254.4.\n",
+  "keywords": ["EARTH SCIENCE > BIOSPHERE > ECOSYSTEMS > AQUATIC ECOSYSTEMS > PLANKTON > PHYTOPLANKTON", "EARTH SCIENCE > BIOLOGICAL CLASSIFICATION > PROTISTS > PLANKTON > PHYTOPLANKTON"],
+  "license": "CC0-1.0",
+  "providers": [
+    {
+      "name": "California Cooperative Oceanic Fisheries Investigations",
+      "roles": ["producer", "licensor"],
+      "url": "https://calcofi.org"
+    },
+    {
+      "name": "CalCOFI",
+      "roles": ["processor", "host"],
+      "url": "https://calcofi.io"
+    }
+  ],
+  "extent": {
+    "spatial": {
+      "bbox": [
+        [-121.6543, 32.4352, -118.7603, 33.5668]
+      ]
+    },
+    "temporal": {
+      "interval": [
+        [
+          null,
+          null
+        ]
+      ]
+    }
+  },
+  "sci:doi": "10.6073/pasta/60edabfbfd85c623fce05822befaa071",
+  "sci:citation": "CalCOFI - Scripps Institution of Oceanography, California Current Ecosystem LTER, and E. Venrick. 2023. Temporal and spatial changes of the abundance and species composition of phytoplankton in the California Current from samples collected aboard CalCOFI cruises from summer 1996 through 2022. ver 4. Environmental Data Initiative. https://doi.org/10.6073/pasta/60edabfbfd85c623fce05822befaa071",
+  "table:tables": [
+    {
+      "name": "sample",
+      "description": "One row per physical sampling event at its native grain (site, tow, net, cast, bottle, underway, transect, region pool). An adjacency list: `parent_sample_key` points at the containing event and `root_sample_key` at the top of the chain, so counting distinct events at any level is a single `GROUP BY`."
+    },
+    {
+      "name": "obs",
+      "description": "The occurrence-headline long table: one scalar measurement per row, environmental (`realm = 'env'`) and biological (`realm = 'bio'`) together. Biological taxon is the global `taxon_key`; sub-occurrence detail (length/stage bins, behavior) lives in `obs_attribute`, and event-level effort in `sample_measurement`."
+    },
+    {
+      "name": "taxon",
+      "description": "Taxonomic hierarchy for species via WoRMS and ITIS authorities (built from spp.duckdb via recursive CTEs)"
+    },
+    {
+      "name": "dataset_taxon",
+      "description": "Crosswalk from each dataset's own taxon vocabulary to the global `taxon_key`. `obs` resolves its taxon by joining this on (`dataset_key`, `ds_taxa_code`), so a dataset can keep its local codes without leaking them into the shared model."
+    },
+    {
+      "name": "taxon_group",
+      "description": "Portable groupings of taxa (phytoplankton functional groups, seabirds, marine mammals). Many taxa per group; a taxon may belong to several."
+    },
+    {
+      "name": "region",
+      "description": "The 4 pooled regions defined on the CalCOFI grid (Hayward & Venrick 1998), with the member station codes the source declares and a POLYGON derived from them: each declared station claims the water nearest to it, clipped to the convex hull of all 34 stations and dissolved by region, so the four tile their pooled domain with no overlap and no gaps. Stations are placed by the `+proj=calcofi` transform rather than a grid lookup, which is what lets the six intermediate inshore stations with no cell in the regularized grid resolve. latitude/longitude is an interior representative point, not a centroid (the regions are concave). Land is not erased. See questions Q01."
+    },
+    {
+      "name": "measurement_type"
+    }
+  ],
+  "summaries": {
+    "calcofi:category": ["Phytoplankton"],
+    "calcofi:variables": ["phytoplankton_abundance", "cells/L", "Phytoplankton"]
+  },
+  "links": [
+    {
+      "rel": "root",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "self",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/calcofi_phytoplankton/collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "about",
+      "href": "https://calcofi.io/datasets/calcofi_phytoplankton/",
+      "type": "text/html",
+      "title": "Dataset page"
+    },
+    {
+      "rel": "license",
+      "href": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "type": "text/html",
+      "title": "CC0 1.0 Universal (public domain dedication)"
+    },
+    {
+      "rel": "cite-as",
+      "href": "https://doi.org/10.6073/pasta/60edabfbfd85c623fce05822befaa071",
+      "type": "text/html"
+    }
+  ]
+}

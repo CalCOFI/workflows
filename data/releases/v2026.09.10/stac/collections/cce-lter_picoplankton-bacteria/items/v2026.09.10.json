@@ -1,0 +1,201 @@
+{
+  "type": "Feature",
+  "stac_version": "1.0.0",
+  "stac_extensions": ["https://stac-extensions.github.io/table/v1.2.0/schema.json", "https://stac-extensions.github.io/scientific/v1.0.0/schema.json", "https://stac-extensions.github.io/file/v2.1.0/schema.json"],
+  "id": "v2026.09.10",
+  "collection": "cce-lter_picoplankton-bacteria",
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [-124.33, 29.83],
+        [-117.295, 29.83],
+        [-117.295, 35.6379],
+        [-124.33, 35.6379],
+        [-124.33, 29.83]
+      ]
+    ]
+  },
+  "bbox": [-124.33, 29.83, -117.295, 35.6379],
+  "properties": {
+    "title": "Picoplankton and Bacteria Abundance (CalCOFI Cruise) — v2026.09.10",
+    "description": "Picophytoplankton (Prochlorococcus, Synechococcus, picoeukaryotes) and heterotrophic bacteria abundances analyzed by flow cytometry (FCM) from CCE-CalCOFI Augmented cruises in the California Current System, 2004-2023 (ongoing). Seawater collected from Niskin bottles at 3-8 depths per station; cells fixed shipboard with paraformaldehyde, stained with a DNA-specific dye, and enumerated on an Altra flow cytometer with dual argon-ion lasers.\n",
+    "datetime": null,
+    "start_datetime": "2004-01-01T00:00:00Z",
+    "end_datetime": "2023-12-31T23:59:59Z",
+    "created": "2026-09-11T00:00:00Z",
+    "sci:citation": "Landry, M. (2004-2023). Picoplankton and Bacteria Abundance (CalCOFI Cruise). CCE LTER."
+  },
+  "assets": {
+    "obs_partition": {
+      "href": "https://storage.googleapis.com/calcofi-db/ducklake/tables/obs/dataset_key=cce-lter_picoplankton-bacteria/0a07816958448d8f44ecf23c/data_0.parquet",
+      "type": "application/x-parquet",
+      "title": "obs (parquet, this dataset's partition)",
+      "roles": ["data"],
+      "file:size": 674849,
+      "file:checksum": "1220fd7de795db4baf36967e02d9875c889629fb95accc0428fedfdcb4ce9777c98e",
+      "table:columns": [
+        {
+          "name": "obs_id",
+          "description": "Surrogate key, renumbered globally when the release concatenates the per-dataset shards.",
+          "type": "BIGINT"
+        },
+        {
+          "name": "realm",
+          "description": "`env` for physical/chemical measurements, `bio` for organism observations.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "dataset_key",
+          "description": "Provenance stamp: `provider_dataset`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "sample_key",
+          "description": "The sampling event this observation came from; joins `sample`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "grid_key",
+          "description": "CalCOFI station grid cell, denormalized from `sample` so rollups need no join. NULL for region-pooled data.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "cruise_key",
+          "description": "Cruise, denormalized from `sample` so rollups need no join.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "latitude",
+          "description": "Observation latitude (WGS84).",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "longitude",
+          "description": "Observation longitude (WGS84).",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "datetime",
+          "description": "Observation time (UTC). NULL for region-pooled data with no event time.",
+          "type": "TIMESTAMP"
+        },
+        {
+          "name": "depth_min_m",
+          "description": "Shallowest depth this observation represents.",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "depth_max_m",
+          "description": "Deepest depth this observation represents; equal to `depth_min_m` for point measurements (bottle, CTD scan).",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "taxon_key",
+          "description": "Global taxon key, `worms:<AphiaID>` or `itis:<TSN>` for birds. NULL for `env` rows. Joins `taxon`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "life_stage",
+          "description": "Life stage where the source resolves one (larva, adult, juvenile, egg, phyllosoma).",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "measurement_type",
+          "description": "Measured quantity; joins the `measurement_type` vocabulary.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "measurement_value",
+          "description": "The measured value, in the units `measurement_type` declares.",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "measurement_qual",
+          "description": "Source quality flag, verbatim.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "measurement_prec",
+          "description": "Source-reported precision where available.",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "hex_id",
+          "description": "H3 cell at resolution 10, stored as UBIGINT. Aggregate coarser at query time with `h3_cell_to_parent(hex_id, res)` — there is no per-resolution column ladder.",
+          "type": "UBIGINT"
+        }
+      ]
+    },
+    "cce-lter_picoplankton-bacteria": {
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/cce-lter_picoplankton-bacteria/collection.json",
+      "type": "application/json",
+      "roles": ["overview"],
+      "title": "STAC collection"
+    },
+    "netcdf": {
+      "href": "https://storage.calcofi.io/calcofi-files-public/netcdf/cce-lter_picoplankton-bacteria/v2026.09.06/cce-lter_picoplankton-bacteria.nc",
+      "type": "application/x-netcdf",
+      "roles": ["data"],
+      "title": "CF netCDF"
+    },
+    "cce-lter_picoplankton-bacteria_2": {
+      "href": "https://erddap.calcofi.io/erddap/tabledap/cce-lter_picoplankton-bacteria.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "Picoplankton and Bacteria Abundance (CalCOFI Cruise) - observations"
+    },
+    "cce-lter_picoplankton-bacteria_sample": {
+      "href": "https://erddap.calcofi.io/erddap/tabledap/cce-lter_picoplankton-bacteria_sample.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "Picoplankton and Bacteria Abundance (CalCOFI Cruise) - sampling events"
+    },
+    "iso19115": {
+      "href": "https://erddap.calcofi.io/erddap/metadata/iso19115/xml/cce-lter_picoplankton-bacteria_iso19115.xml",
+      "type": "application/xml",
+      "roles": ["metadata"],
+      "title": "ISO 19115-3 metadata (ERDDAP)"
+    },
+    "notebook": {
+      "href": "https://calcofi.io/workflows/ingest_cce-lter_picoplankton-bacteria.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "ingest notebook"
+    },
+    "source": {
+      "href": "https://oceaninformatics.ucsd.edu/datazoo/catalogs/ccelter/datasets/159",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "source"
+    },
+    "knb-lter-cce.159": {
+      "href": "https://portal.edirepository.org/nis/mapbrowse?scope=knb-lter-cce&identifier=159",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "Picoplankton and Bacteria Abundance (CalCOFI Cruise) — EDI package"
+    }
+  },
+  "links": [
+    {
+      "rel": "root",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/cce-lter_picoplankton-bacteria/collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "collection",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/cce-lter_picoplankton-bacteria/collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "self",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/cce-lter_picoplankton-bacteria/items/v2026.09.10.json",
+      "type": "application/json"
+    }
+  ]
+}

@@ -1,0 +1,293 @@
+{
+  "type": "Feature",
+  "stac_version": "1.0.0",
+  "stac_extensions": ["https://stac-extensions.github.io/table/v1.2.0/schema.json", "https://stac-extensions.github.io/file/v2.1.0/schema.json"],
+  "id": "v2026.09.10",
+  "collection": "swfsc_cufes",
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [-134.1163, 29.8331],
+        [-117.2157, 29.8331],
+        [-117.2157, 54.7431],
+        [-134.1163, 54.7431],
+        [-134.1163, 29.8331]
+      ]
+    ]
+  },
+  "bbox": [-134.1163, 29.8331, -117.2157, 54.7431],
+  "properties": {
+    "title": "CalCOFI Underway CUFES Fish Eggs — v2026.09.10",
+    "description": "Continuous Underway Fish Egg Sampler (CUFES) egg counts (sardine, anchovy, jack mackerel, hake, squid, other) with underway environmental conditions, from CalCOFI cruises (1996-present). Source: NOAA CoastWatch ERDDAP erdCalCOFIcufes.\n",
+    "datetime": null,
+    "start_datetime": "1996-01-01T00:00:00Z",
+    "end_datetime": "2022-12-31T23:59:59Z",
+    "created": "2026-09-11T00:00:00Z",
+    "license": "custom"
+  },
+  "assets": {
+    "obs_partition": {
+      "href": "https://storage.googleapis.com/calcofi-db/ducklake/tables/obs/dataset_key=swfsc_cufes/c8016da1ccdc97d403034d3b/data_0.parquet",
+      "type": "application/x-parquet",
+      "title": "obs (parquet, this dataset's partition)",
+      "roles": ["data"],
+      "file:size": 2716525,
+      "file:checksum": "1220a8db7c70cb29088432c4f7a2f1c503d3b1f9ee366dcf26fc1de6713f46c9f0c9",
+      "table:columns": [
+        {
+          "name": "obs_id",
+          "description": "Surrogate key, renumbered globally when the release concatenates the per-dataset shards.",
+          "type": "BIGINT"
+        },
+        {
+          "name": "realm",
+          "description": "`env` for physical/chemical measurements, `bio` for organism observations.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "dataset_key",
+          "description": "Provenance stamp: `provider_dataset`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "sample_key",
+          "description": "The sampling event this observation came from; joins `sample`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "grid_key",
+          "description": "CalCOFI station grid cell, denormalized from `sample` so rollups need no join. NULL for region-pooled data.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "cruise_key",
+          "description": "Cruise, denormalized from `sample` so rollups need no join.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "latitude",
+          "description": "Observation latitude (WGS84).",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "longitude",
+          "description": "Observation longitude (WGS84).",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "datetime",
+          "description": "Observation time (UTC). NULL for region-pooled data with no event time.",
+          "type": "TIMESTAMP"
+        },
+        {
+          "name": "depth_min_m",
+          "description": "Shallowest depth this observation represents.",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "depth_max_m",
+          "description": "Deepest depth this observation represents; equal to `depth_min_m` for point measurements (bottle, CTD scan).",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "taxon_key",
+          "description": "Global taxon key, `worms:<AphiaID>` or `itis:<TSN>` for birds. NULL for `env` rows. Joins `taxon`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "life_stage",
+          "description": "Life stage where the source resolves one (larva, adult, juvenile, egg, phyllosoma).",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "measurement_type",
+          "description": "Measured quantity; joins the `measurement_type` vocabulary.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "measurement_value",
+          "description": "The measured value, in the units `measurement_type` declares.",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "measurement_qual",
+          "description": "Source quality flag, verbatim.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "measurement_prec",
+          "description": "Source-reported precision where available.",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "hex_id",
+          "description": "H3 cell at resolution 10, stored as UBIGINT. Aggregate coarser at query time with `h3_cell_to_parent(hex_id, res)` — there is no per-resolution column ladder.",
+          "type": "UBIGINT"
+        }
+      ]
+    },
+    "measurement_type": {
+      "href": "https://storage.googleapis.com/calcofi-db/ducklake/tables/measurement_type/ab5bf76e59cb2a8ae6e05f4c/measurement_type.parquet",
+      "type": "application/x-parquet",
+      "title": "measurement_type (parquet)",
+      "roles": ["data"],
+      "file:size": 11925,
+      "file:checksum": "12206697bbf14034a0422b6897246f887a6de66e1e9ac8c411c403f40f82b65bf8ce",
+      "table:columns": [
+        {
+          "name": "measurement_type",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "description",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "units",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "valid_min",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "valid_max",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "valid_depth_min_m",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "valid_depth_max_m",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "derivation",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "is_canonical",
+          "type": "BOOLEAN"
+        },
+        {
+          "name": "_source_column",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "_source_table",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "_source_datasets",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "_qual_column",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "_prec_column",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "grain",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "denominator",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "category",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "variable",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "nerc_p01",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "units_nerc_p06",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "provider",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "dataset",
+          "type": "VARCHAR"
+        }
+      ]
+    },
+    "swfsc_cufes": {
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/swfsc_cufes/collection.json",
+      "type": "application/json",
+      "roles": ["overview"],
+      "title": "STAC collection"
+    },
+    "netcdf": {
+      "href": "https://storage.calcofi.io/calcofi-files-public/netcdf/swfsc_cufes/v2026.09.06/swfsc_cufes.nc",
+      "type": "application/x-netcdf",
+      "roles": ["data"],
+      "title": "CF netCDF"
+    },
+    "swfsc_cufes_2": {
+      "href": "https://erddap.calcofi.io/erddap/tabledap/swfsc_cufes.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "CalCOFI Underway CUFES Fish Eggs - observations"
+    },
+    "swfsc_cufes_sample": {
+      "href": "https://erddap.calcofi.io/erddap/tabledap/swfsc_cufes_sample.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "CalCOFI Underway CUFES Fish Eggs - sampling events"
+    },
+    "iso19115": {
+      "href": "https://erddap.calcofi.io/erddap/metadata/iso19115/xml/swfsc_cufes_iso19115.xml",
+      "type": "application/xml",
+      "roles": ["metadata"],
+      "title": "ISO 19115-3 metadata (ERDDAP)"
+    },
+    "notebook": {
+      "href": "https://calcofi.io/workflows/ingest_swfsc_cufes.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "ingest notebook"
+    },
+    "source": {
+      "href": "https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFIcufes.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "source"
+    }
+  },
+  "links": [
+    {
+      "rel": "root",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/swfsc_cufes/collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "collection",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/swfsc_cufes/collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "self",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/swfsc_cufes/items/v2026.09.10.json",
+      "type": "application/json"
+    }
+  ]
+}

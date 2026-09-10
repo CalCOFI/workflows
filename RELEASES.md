@@ -8,6 +8,8 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+# v2026.09.10 (2026-09-10)
+
 ## The `obs` objects ship for the last time
 
 v2026.09.06 marked the `obs` table `deprecated`, `replaced_by: [obs_bio, obs_env]`, `removed_in:

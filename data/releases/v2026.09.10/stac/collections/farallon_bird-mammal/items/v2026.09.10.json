@@ -1,0 +1,250 @@
+{
+  "type": "Feature",
+  "stac_version": "1.0.0",
+  "stac_extensions": ["https://stac-extensions.github.io/table/v1.2.0/schema.json", "https://stac-extensions.github.io/file/v2.1.0/schema.json"],
+  "id": "v2026.09.10",
+  "collection": "farallon_bird-mammal",
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [-126.47, 29.77],
+        [-117.18, 29.77],
+        [-117.18, 37.84],
+        [-126.47, 37.84],
+        [-126.47, 29.77]
+      ]
+    ]
+  },
+  "bbox": [-126.47, 29.77, -117.18, 37.84],
+  "properties": {
+    "title": "CalCOFI Bird & Mammal Census — v2026.09.10",
+    "description": "Bird and mammal observations along CalCOFI (and NMFS, CPR) cruise transects, 1987-present. Transect effort, counts, and species live from NOAA ERDDAP (CAC_FI_SBAS_tr / CAC_FI_SBAS_obs / CAC_FI_SBAS_sp); behavior lookups curated via CCE-LTER DataZoo 255 (PI Bill Sydeman).\n",
+    "datetime": null,
+    "start_datetime": "1987-01-01T00:00:00Z",
+    "end_datetime": "2022-12-31T23:59:59Z",
+    "created": "2026-09-11T00:00:00Z",
+    "license": "custom"
+  },
+  "assets": {
+    "obs_partition": {
+      "href": "https://storage.googleapis.com/calcofi-db/ducklake/tables/obs/dataset_key=farallon_bird-mammal/3336caea0087176bce47b458/data_0.parquet",
+      "type": "application/x-parquet",
+      "title": "obs (parquet, this dataset's partition)",
+      "roles": ["data"],
+      "file:size": 757818,
+      "file:checksum": "122004e34380a04e8ec378b15de091e7e0f0211cb798d3615ac6457a4bbe3695941e",
+      "table:columns": [
+        {
+          "name": "obs_id",
+          "description": "Surrogate key, renumbered globally when the release concatenates the per-dataset shards.",
+          "type": "BIGINT"
+        },
+        {
+          "name": "realm",
+          "description": "`env` for physical/chemical measurements, `bio` for organism observations.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "dataset_key",
+          "description": "Provenance stamp: `provider_dataset`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "sample_key",
+          "description": "The sampling event this observation came from; joins `sample`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "grid_key",
+          "description": "CalCOFI station grid cell, denormalized from `sample` so rollups need no join. NULL for region-pooled data.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "cruise_key",
+          "description": "Cruise, denormalized from `sample` so rollups need no join.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "latitude",
+          "description": "Observation latitude (WGS84).",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "longitude",
+          "description": "Observation longitude (WGS84).",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "datetime",
+          "description": "Observation time (UTC). NULL for region-pooled data with no event time.",
+          "type": "TIMESTAMP"
+        },
+        {
+          "name": "depth_min_m",
+          "description": "Shallowest depth this observation represents.",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "depth_max_m",
+          "description": "Deepest depth this observation represents; equal to `depth_min_m` for point measurements (bottle, CTD scan).",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "taxon_key",
+          "description": "Global taxon key, `worms:<AphiaID>` or `itis:<TSN>` for birds. NULL for `env` rows. Joins `taxon`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "life_stage",
+          "description": "Life stage where the source resolves one (larva, adult, juvenile, egg, phyllosoma).",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "measurement_type",
+          "description": "Measured quantity; joins the `measurement_type` vocabulary.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "measurement_value",
+          "description": "The measured value, in the units `measurement_type` declares.",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "measurement_qual",
+          "description": "Source quality flag, verbatim.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "measurement_prec",
+          "description": "Source-reported precision where available.",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "hex_id",
+          "description": "H3 cell at resolution 10, stored as UBIGINT. Aggregate coarser at query time with `h3_cell_to_parent(hex_id, res)` — there is no per-resolution column ladder.",
+          "type": "UBIGINT"
+        }
+      ]
+    },
+    "taxon_group": {
+      "href": "https://storage.googleapis.com/calcofi-db/ducklake/tables/taxon_group/b278ba2d8ce2addf2f9ecc35/taxon_group.parquet",
+      "type": "application/x-parquet",
+      "title": "taxon_group (parquet)",
+      "roles": ["data"],
+      "file:size": 2791,
+      "file:checksum": "1220da4ec348c9c8bc42d63663b4c2a638f1a2eec48c027faf3ac7590f86d20eaec3",
+      "table:columns": [
+        {
+          "name": "taxon_group_key",
+          "description": "Group key, `<dataset-or-known-list>:<group>`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "description",
+          "description": "Human-readable description of the group.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "taxon_key",
+          "description": "A member taxon; joins `taxon`.",
+          "type": "VARCHAR"
+        }
+      ]
+    },
+    "farallon_bird-mammal": {
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/farallon_bird-mammal/collection.json",
+      "type": "application/json",
+      "roles": ["overview"],
+      "title": "STAC collection"
+    },
+    "netcdf": {
+      "href": "https://storage.calcofi.io/calcofi-files-public/netcdf/farallon_bird-mammal/v2026.09.06/farallon_bird-mammal.nc",
+      "type": "application/x-netcdf",
+      "roles": ["data"],
+      "title": "CF netCDF"
+    },
+    "farallon_bird-mammal_attribute": {
+      "href": "https://erddap.calcofi.io/erddap/tabledap/farallon_bird-mammal_attribute.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "CalCOFI Bird & Mammal Census - length/stage frequency"
+    },
+    "farallon_bird-mammal_2": {
+      "href": "https://erddap.calcofi.io/erddap/tabledap/farallon_bird-mammal.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "CalCOFI Bird & Mammal Census - observations"
+    },
+    "farallon_bird-mammal_sample": {
+      "href": "https://erddap.calcofi.io/erddap/tabledap/farallon_bird-mammal_sample.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "CalCOFI Bird & Mammal Census - sampling events"
+    },
+    "iso19115": {
+      "href": "https://erddap.calcofi.io/erddap/metadata/iso19115/xml/farallon_bird-mammal_iso19115.xml",
+      "type": "application/xml",
+      "roles": ["metadata"],
+      "title": "ISO 19115-3 metadata (ERDDAP)"
+    },
+    "notebook": {
+      "href": "https://calcofi.io/workflows/ingest_farallon_bird-mammal.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "ingest notebook"
+    },
+    "source": {
+      "href": "https://oceanview.pfeg.noaa.gov/erddap/tabledap/CAC_FI_SBAS_obs.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "source"
+    },
+    "knb-lter-cce.255.3": {
+      "href": "https://portal.edirepository.org/nis/mapbrowse?packageid=knb-lter-cce.255.3",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "Bird and mammal observations aboard CalCOFI (1987-2021, ongoing), NMFS (1996-2021, ongoing) and CPR (2003-2006, completed) cruises"
+    },
+    "255": {
+      "href": "https://oceaninformatics.ucsd.edu/datazoo/catalogs/ccelter/datasets/255",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "CalCOFI Bird & Mammal Census (DataZoo 255)"
+    },
+    "2458d7c2-af69-4a76-abfb-195fb5aa8f14": {
+      "href": "https://data.caloos.org/#module-metadata/2458d7c2-af69-4a76-abfb-195fb5aa8f14",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "CalCOFI & CCE-LTER Seabird Visual Observations (CalOOS module)"
+    },
+    "CAC_FI_SBAS_tr": {
+      "href": "https://oceanview.pfeg.noaa.gov/erddap/tabledap/CAC_FI_SBAS_tr.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "CalCOFI Seabird/Mammal Transect Effort (NOAA ERDDAP)"
+    }
+  },
+  "links": [
+    {
+      "rel": "root",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/farallon_bird-mammal/collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "collection",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/farallon_bird-mammal/collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "self",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/farallon_bird-mammal/items/v2026.09.10.json",
+      "type": "application/json"
+    }
+  ]
+}
