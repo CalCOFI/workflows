@@ -250,6 +250,37 @@ cruise the provider must rule on before any floor is set. **Consumers:** `obs_en
 11 `calcofi_bottle` rows; `measurement_type.valid_min` / `valid_max` are populated for
 the five series and `check_measurement_bounds()` treats them as declared.
 
+## A label per crosswalk key: `metadata/variable.csv`
+
+`measurement_type.variable` has said which raw series measure the same thing since 4.6.0, but there
+was nowhere to put a name for the key itself — only `description` on each member row, a column note
+("DO average station-corrected"). New registry **`metadata/variable.csv`** (`variable, label,
+description, units, nerc_p01, category, is_unified`; calcofi4db `read_variable()` /
+`register_variables()` / `check_variable_registry()`, mirroring the `measurement_type.csv` helpers)
+carries one row per key the release carries with `variable` set. Seeded with the five pairs the
+Explorer's `UNIFIED` already carries — `temperature`, `salinity`, `oxygen_ml_l`, `oxygen_umol_kg`,
+`sigma_theta` — checked against D3's crosswalk rule (identical NERC P01 · same units or a declared
+conversion · same kind of sample · not plausibly the same physical samples) by the new, reproducible
+`libs/measure_variable_crosswalk.R`: of the **15 NERC P01 concepts shared by more than one released
+env series** (84 series, 5 datasets, v2026.09.06), only these four pass all four criteria outright.
+
+`sigma_theta` is the fifth and, measured strictly, does not: the bottle's own computation carries
+NERC P01 `SIGTEQ01` ("by computation from salinity and potential temperature") while the CTD's
+carries `SIGTPR01` ("by CTD and computation …") — two different concepts for the same physical
+quantity. `variable.csv`'s `sigma_theta` row therefore declares no `nerc_p01` rather than picking a
+side, the same exact-match rule as everywhere else in these registries; `register_variables()` and
+`check_variable_registry()` both refuse a row whose `nerc_p01` disagrees with a member series' own
+value, so this could not have been filled in by mistake. Everything else the crosswalk touches stays
+apart: the CTD's own embedded `btl_*` bottle table (nitrate, nitrite, phosphate, silicate, ammonium,
+phaeopigment, depth, chlorophyll, temperature) shares a P01 with the bottle dataset's series but
+fails criterion (iv) — **measured**, 5,061 of `calcofi_bottle`'s 8,352 casts 1993–2021 (60.6%) have a
+matching `calcofi_ctd-cast` cast at the same `site_key` within one hour (5,061 of 16,431 CTD casts,
+30.8%), plausibly the same physical bottles. The bottle's `alkalinity_rep1` / `dic_rep1` replicates
+and DIC's `alkalinity` / `dic` means share a P01 too but fail criterion (iii) (replicate vs mean);
+two `proposed` questions ask the DIC provider whether the bottle's replicate is one of the two
+analyses averaged into the reported value (`calcofi_dic_08`, `calcofi_dic_09`). **Consumers:**
+additive — a new registry file and three new calcofi4db functions; `coverage.json`'s `variables[]`
+gains `label` from this registry at the next step (WS-M2).
 ## Six underway and CTD series declare their physical bounds; the 9,895 °C sea surface and the PAR fills leave
 
 v2026.09.06 published a **sea-surface temperature of 9,895 °C** (`calcofi_mets` `sst_c`: three
