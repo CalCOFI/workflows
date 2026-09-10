@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 <meta name="author" content="CalCOFI">
-<meta name="dcterms.date" content="2026-09-06">
+<meta name="dcterms.date" content="2026-09-11">
 
 <title>Deploy consumers</title>
 <style>
@@ -169,7 +169,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">2026-09-06</p>
+      <p class="date">2026-09-11</p>
     </div>
   </div>
   
@@ -223,7 +223,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"promoted release : {RELEASE}</span><span class="sc">\n</span><span class="st">"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>promoted release : v2026.09.06</code></pre>
+<pre><code>promoted release : v2026.09.10</code></pre>
 </div>
 <details class="code-fold">
 <summary>Code</summary>
@@ -348,146 +348,12 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </details>
 <div class="cell-output-display">
 <table class="caption-top table table-sm table-striped small">
-<caption>Consumer state BEFORE (promoted release: v2026.09.06)</caption>
+<caption>Consumer state BEFORE (promoted release: v2026.09.10)</caption>
 <colgroup>
-<col style="width: 17%">
-<col style="width: 30%">
-<col style="width: 46%">
-<col style="width: 5%">
-</colgroup>
-<thead>
-<tr class="header">
-<th style="text-align: left;">consumer</th>
-<th style="text-align: left;">serving</th>
-<th style="text-align: left;">probe</th>
-<th style="text-align: left;">http</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td style="text-align: left;">db-viz-hex</td>
-<td style="text-align: left;">calcofi_v2026.09.04.duckdb</td>
-<td style="text-align: left;">calcofi_latest.duckdb symlink</td>
-<td style="text-align: left;">200</td>
-</tr>
-<tr class="even">
-<td style="text-align: left;">h3t API</td>
-<td style="text-align: left;">calcofi_v2026.09.04.duckdb</td>
-<td style="text-align: left;">/h3t/health db_mtime -&gt; file on disk</td>
-<td style="text-align: left;">200</td>
-</tr>
-<tr class="odd">
-<td style="text-align: left;">ERDDAP</td>
-<td style="text-align: left;">release v2026.09.06</td>
-<td style="text-align: left;">datasets.xml summary text</td>
-<td style="text-align: left;">200</td>
-</tr>
-<tr class="even">
-<td style="text-align: left;">db-viz-cruise</td>
-<td style="text-align: left;">2026-09-04 18:39</td>
-<td style="text-align: left;">database mtime (carries no version)</td>
-<td style="text-align: left;">200</td>
-</tr>
-<tr class="odd">
-<td style="text-align: left;">ctd-viz</td>
-<td style="text-align: left;">2026-09-04 18:40</td>
-<td style="text-align: left;">database mtime (carries no version)</td>
-<td style="text-align: left;">200</td>
-</tr>
-<tr class="even">
-<td style="text-align: left;">ctd-qaqc</td>
-<td style="text-align: left;">2026-09-04 18:42</td>
-<td style="text-align: left;">database mtime (carries no version)</td>
-<td style="text-align: left;">200</td>
-</tr>
-<tr class="odd">
-<td style="text-align: left;">db-query site</td>
-<td style="text-align: left;">v2026.09.06</td>
-<td style="text-align: left;">live page vs _config.yml default_version</td>
-<td style="text-align: left;">200</td>
-</tr>
-<tr class="even">
-<td style="text-align: left;">releases index</td>
-<td style="text-align: left;">v2026.09.06</td>
-<td style="text-align: left;">storage.calcofi.io releases/index.html</td>
-<td style="text-align: left;">200</td>
-</tr>
-</tbody>
-</table>
-</div>
-</div>
-</section>
-<section id="deploy--" class="level2" data-number="3">
-<h2 data-number="3" class="anchored" data-anchor-id="deploy--"><span class="header-section-number">3</span> Deploy —-</h2>
-<details class="code-fold">
-<summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="sc">!</span>DEPLOY) {</span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="fu">glue</span>(</span>
-<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    <span class="st">"**Dry run — nothing deployed.** `CALCOFI_DEPLOY=false` is set, so this "</span>,</span>
-<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">"target reported the state above and changed nothing.</span><span class="sc">\n\n</span><span class="st">"</span>,</span>
-<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">"The server-side consumers may therefore be serving a previous release. "</span>,</span>
-<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>    <span class="st">"Unset the variable (deploying is the default) and re-run:</span><span class="sc">\n\n</span><span class="st">"</span>,</span>
-<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>    <span class="st">"```r</span><span class="sc">\n</span><span class="st">"</span>,</span>
-<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>    <span class="st">"targets::tar_invalidate(names = tidyselect::any_of(</span><span class="sc">\"</span><span class="st">deploy_consumers</span><span class="sc">\"</span><span class="st">))</span><span class="sc">\n</span><span class="st">"</span>,</span>
-<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>    <span class="st">"targets::tar_make(names = tidyselect::any_of(</span><span class="sc">\"</span><span class="st">deploy_consumers</span><span class="sc">\"</span><span class="st">))</span><span class="sc">\n</span><span class="st">"</span>,</span>
-<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>    <span class="st">"```</span><span class="sc">\n\n</span><span class="st">"</span>,</span>
-<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a>    <span class="st">"or run the script directly: `bash scripts/deploy_consumers.sh`.</span><span class="sc">\n</span><span class="st">"</span>))</span>
-<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a>} <span class="cf">else</span> {</span>
-<span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="st">"Running `scripts/deploy_consumers.sh`.</span><span class="sc">\n\n</span><span class="st">```</span><span class="sc">\n</span><span class="st">"</span>)</span>
-<span id="cb8-14"><a href="#cb8-14" aria-hidden="true" tabindex="-1"></a>  out <span class="ot">&lt;-</span> <span class="fu">system2</span>(<span class="st">"bash"</span>, <span class="fu">c</span>(<span class="fu">here</span>(<span class="st">"scripts"</span>, <span class="st">"deploy_consumers.sh"</span>),</span>
-<span id="cb8-15"><a href="#cb8-15" aria-hidden="true" tabindex="-1"></a>                           <span class="st">"--release"</span>, RELEASE),</span>
-<span id="cb8-16"><a href="#cb8-16" aria-hidden="true" tabindex="-1"></a>                 <span class="at">stdout =</span> <span class="cn">TRUE</span>, <span class="at">stderr =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb8-17"><a href="#cb8-17" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="fu">paste</span>(out, <span class="at">collapse =</span> <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">```</span><span class="sc">\n</span><span class="st">"</span>)</span>
-<span id="cb8-18"><a href="#cb8-18" aria-hidden="true" tabindex="-1"></a>  rc <span class="ot">&lt;-</span> <span class="fu">attr</span>(out, <span class="st">"status"</span>) <span class="sc">%||%</span> <span class="dv">0</span>L</span>
-<span id="cb8-19"><a href="#cb8-19" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">identical</span>(<span class="fu">as.integer</span>(rc), <span class="dv">0</span>L))</span>
-<span id="cb8-20"><a href="#cb8-20" aria-hidden="true" tabindex="-1"></a>    <span class="fu">stop</span>(<span class="fu">glue</span>(</span>
-<span id="cb8-21"><a href="#cb8-21" aria-hidden="true" tabindex="-1"></a>      <span class="st">"consumer deploy FAILED for {RELEASE}. latest.txt is promoted and correct, "</span>,</span>
-<span id="cb8-22"><a href="#cb8-22" aria-hidden="true" tabindex="-1"></a>      <span class="st">"so calcofi4r and the hosted sites are fine — but db-viz-hex, db-viz-cruise "</span>,</span>
-<span id="cb8-23"><a href="#cb8-23" aria-hidden="true" tabindex="-1"></a>      <span class="st">"or the h3t API may still be serving the previous release."</span>))</span>
-<span id="cb8-24"><a href="#cb8-24" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-</details>
-<p>Running <code>scripts/deploy_consumers.sh</code>.</p>
-<pre><code>==&gt; deploying consumers for v2026.09.06 (host: calcofi)
-==&gt; 1/5 pulling sources
-    calcofi4r     create mode 100644 tests/testthat/test-catalog.R
-    db-viz-hex    create mode 100644 tests/test_url_datasets.R
-    apps         Already up to date.
-==&gt; 1b/5 checking calcofi4r in the rstudio container
-    checkout 1.19.0 | installed 1.18.0 -&gt; installing
-    installed calcofi4r 1.19.0
-==&gt; 2/5 rebuilding app databases (slow)
-hex_rc=0
-cruise_rc=0
-ctdviz_rc=0
-ctdqaqc_rc=0
-==&gt; 3/5 reopening the h3t database + flushing tiles
- Container h3t_api_py Started 
-
-==&gt; 3b/5 re-pointing PostgreSQL release.* views at v2026.09.06
-    release.cruise rows: 842
-==&gt; 4/5 restarting apps
-ok
-==&gt; 5/5 verifying
-    https://app.calcofi.io/hex/                    200
-    https://app.calcofi.io/cruise/                 200
-    https://app.calcofi.io/ctd/                    200
-    https://h3t.calcofi.io/h3t/health              200
-    h3t open file:
-      {"ok":true,"default_db":"default","dbs":{"default":{"path":"/data/calcofi_latest.duckdb","mtime":"1788694296.604614"}}}==&gt; consumers deployed for v2026.09.06 </code></pre>
-<div class="cell">
-<details class="code-fold">
-<summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>after <span class="ot">&lt;-</span> <span class="fu">consumer_status</span>()</span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="fu">kable</span>(after, <span class="at">caption =</span> <span class="fu">glue</span>(<span class="st">"Consumer state AFTER (promoted release: {RELEASE})"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-</details>
-<div class="cell-output-display">
-<table class="caption-top table table-sm table-striped small">
-<caption>Consumer state AFTER (promoted release: v2026.09.06)</caption>
-<colgroup>
-<col style="width: 17%">
-<col style="width: 30%">
-<col style="width: 46%">
-<col style="width: 5%">
+<col style="width: 14%">
+<col style="width: 41%">
+<col style="width: 39%">
+<col style="width: 4%">
 </colgroup>
 <thead>
 <tr class="header">
@@ -536,13 +402,153 @@ ok
 </tr>
 <tr class="odd">
 <td style="text-align: left;">db-query site</td>
-<td style="text-align: left;">v2026.09.06</td>
+<td style="text-align: left;">v2026.09.10 in config, NOT on the live page</td>
 <td style="text-align: left;">live page vs _config.yml default_version</td>
 <td style="text-align: left;">200</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">releases index</td>
-<td style="text-align: left;">v2026.09.06</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">storage.calcofi.io releases/index.html</td>
+<td style="text-align: left;">200</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</section>
+<section id="deploy--" class="level2" data-number="3">
+<h2 data-number="3" class="anchored" data-anchor-id="deploy--"><span class="header-section-number">3</span> Deploy —-</h2>
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="sc">!</span>DEPLOY) {</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="fu">glue</span>(</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    <span class="st">"**Dry run — nothing deployed.** `CALCOFI_DEPLOY=false` is set, so this "</span>,</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">"target reported the state above and changed nothing.</span><span class="sc">\n\n</span><span class="st">"</span>,</span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">"The server-side consumers may therefore be serving a previous release. "</span>,</span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>    <span class="st">"Unset the variable (deploying is the default) and re-run:</span><span class="sc">\n\n</span><span class="st">"</span>,</span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>    <span class="st">"```r</span><span class="sc">\n</span><span class="st">"</span>,</span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>    <span class="st">"targets::tar_invalidate(names = tidyselect::any_of(</span><span class="sc">\"</span><span class="st">deploy_consumers</span><span class="sc">\"</span><span class="st">))</span><span class="sc">\n</span><span class="st">"</span>,</span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>    <span class="st">"targets::tar_make(names = tidyselect::any_of(</span><span class="sc">\"</span><span class="st">deploy_consumers</span><span class="sc">\"</span><span class="st">))</span><span class="sc">\n</span><span class="st">"</span>,</span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>    <span class="st">"```</span><span class="sc">\n\n</span><span class="st">"</span>,</span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a>    <span class="st">"or run the script directly: `bash scripts/deploy_consumers.sh`.</span><span class="sc">\n</span><span class="st">"</span>))</span>
+<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a>} <span class="cf">else</span> {</span>
+<span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="st">"Running `scripts/deploy_consumers.sh`.</span><span class="sc">\n\n</span><span class="st">```</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb8-14"><a href="#cb8-14" aria-hidden="true" tabindex="-1"></a>  out <span class="ot">&lt;-</span> <span class="fu">system2</span>(<span class="st">"bash"</span>, <span class="fu">c</span>(<span class="fu">here</span>(<span class="st">"scripts"</span>, <span class="st">"deploy_consumers.sh"</span>),</span>
+<span id="cb8-15"><a href="#cb8-15" aria-hidden="true" tabindex="-1"></a>                           <span class="st">"--release"</span>, RELEASE),</span>
+<span id="cb8-16"><a href="#cb8-16" aria-hidden="true" tabindex="-1"></a>                 <span class="at">stdout =</span> <span class="cn">TRUE</span>, <span class="at">stderr =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb8-17"><a href="#cb8-17" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="fu">paste</span>(out, <span class="at">collapse =</span> <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">```</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb8-18"><a href="#cb8-18" aria-hidden="true" tabindex="-1"></a>  rc <span class="ot">&lt;-</span> <span class="fu">attr</span>(out, <span class="st">"status"</span>) <span class="sc">%||%</span> <span class="dv">0</span>L</span>
+<span id="cb8-19"><a href="#cb8-19" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">identical</span>(<span class="fu">as.integer</span>(rc), <span class="dv">0</span>L))</span>
+<span id="cb8-20"><a href="#cb8-20" aria-hidden="true" tabindex="-1"></a>    <span class="fu">stop</span>(<span class="fu">glue</span>(</span>
+<span id="cb8-21"><a href="#cb8-21" aria-hidden="true" tabindex="-1"></a>      <span class="st">"consumer deploy FAILED for {RELEASE}. latest.txt is promoted and correct, "</span>,</span>
+<span id="cb8-22"><a href="#cb8-22" aria-hidden="true" tabindex="-1"></a>      <span class="st">"so calcofi4r and the hosted sites are fine — but db-viz-hex, db-viz-cruise "</span>,</span>
+<span id="cb8-23"><a href="#cb8-23" aria-hidden="true" tabindex="-1"></a>      <span class="st">"or the h3t API may still be serving the previous release."</span>))</span>
+<span id="cb8-24"><a href="#cb8-24" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<p>Running <code>scripts/deploy_consumers.sh</code>.</p>
+<pre><code>==&gt; deploying consumers for v2026.09.10 (host: calcofi)
+==&gt; 1/6 pulling sources
+    calcofi4r     create mode 100644 tests/testthat/test-readme.R
+    db-viz-hex   Already up to date.
+    apps         Already up to date.
+==&gt; 1b/6 checking calcofi4r in the rstudio container
+    checkout 1.24.2 | installed 1.22.0 -&gt; installing
+    installed calcofi4r 1.24.2
+==&gt; 2/6 rebuilding app databases (slow)
+hex_rc=0
+cruise_rc=0
+ctdviz_rc=0
+ctdqaqc_rc=0
+==&gt; 3/6 reopening the h3t database + flushing tiles
+ Container h3t_api_py Started 
+
+==&gt; 3b/6 re-pointing PostgreSQL release.* views at v2026.09.10
+    release.cruise rows: 842
+==&gt; 4/6 restarting apps
+ok
+==&gt; 5/6 verifying
+    https://app.calcofi.io/hex/                    200
+    https://app.calcofi.io/cruise/                 200
+    https://app.calcofi.io/ctd/                    200
+    https://h3t.calcofi.io/h3t/health              200
+    h3t open file:
+      {"ok":true,"default_db":"default","dbs":{"default":{"path":"/data/calcofi_latest.duckdb","mtime":"1789080713.495969"}}}==&gt; 6/6 dispatching the hosted consumers (GitHub Actions)
+    refresh.yml      CalCOFI/db-viz-station   dispatched
+    refresh.yml      CalCOFI/ctd-transects    dispatched
+    render_book.yml  CalCOFI/docs             dispatched
+    pkgdown.yaml     CalCOFI/calcofi4r        dispatched
+    test.yml         CalCOFI/calcofi4py       dispatched
+==&gt; consumers deployed for v2026.09.10 </code></pre>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>after <span class="ot">&lt;-</span> <span class="fu">consumer_status</span>()</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="fu">kable</span>(after, <span class="at">caption =</span> <span class="fu">glue</span>(<span class="st">"Consumer state AFTER (promoted release: {RELEASE})"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output-display">
+<table class="caption-top table table-sm table-striped small">
+<caption>Consumer state AFTER (promoted release: v2026.09.10)</caption>
+<colgroup>
+<col style="width: 17%">
+<col style="width: 30%">
+<col style="width: 46%">
+<col style="width: 5%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">consumer</th>
+<th style="text-align: left;">serving</th>
+<th style="text-align: left;">probe</th>
+<th style="text-align: left;">http</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">db-viz-hex</td>
+<td style="text-align: left;">calcofi_v2026.09.10.duckdb</td>
+<td style="text-align: left;">calcofi_latest.duckdb symlink</td>
+<td style="text-align: left;">200</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">h3t API</td>
+<td style="text-align: left;">calcofi_v2026.09.10.duckdb</td>
+<td style="text-align: left;">/h3t/health db_mtime -&gt; file on disk</td>
+<td style="text-align: left;">200</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">ERDDAP</td>
+<td style="text-align: left;">release v2026.09.06</td>
+<td style="text-align: left;">datasets.xml summary text</td>
+<td style="text-align: left;">200</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">db-viz-cruise</td>
+<td style="text-align: left;">2026-09-10 22:52</td>
+<td style="text-align: left;">database mtime (carries no version)</td>
+<td style="text-align: left;">200</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">ctd-viz</td>
+<td style="text-align: left;">2026-09-10 22:53</td>
+<td style="text-align: left;">database mtime (carries no version)</td>
+<td style="text-align: left;">200</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">ctd-qaqc</td>
+<td style="text-align: left;">2026-09-10 22:54</td>
+<td style="text-align: left;">database mtime (carries no version)</td>
+<td style="text-align: left;">200</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">db-query site</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">live page vs _config.yml default_version</td>
+<td style="text-align: left;">200</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">releases index</td>
+<td style="text-align: left;">v2026.09.10</td>
 <td style="text-align: left;">storage.calcofi.io releases/index.html</td>
 <td style="text-align: left;">200</td>
 </tr>
