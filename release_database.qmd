@@ -446,6 +446,16 @@ dbExecute(con_wdl, "DROP VIEW IF EXISTS measurement_type")
 d_meas_type_reg <- read_measurement_type(here("metadata/measurement_type.csv"))
 dbWriteTable(con_wdl, "_measurement_type_reg", as.data.frame(d_meas_type_reg),
              overwrite = TRUE)
+# the label registry for the crosswalk KEY (metadata/variable.csv, measurements catalog plan § D3),
+# read once here and used twice: build_coverage() puts `label` onto coverage.json's variables[] (the
+# explorer's hook, in place of its hard-coded UNIFIED labels) and step 3b'' puts it on every
+# measurement of measurements.json. read_variable() skips the file's leading `#` comment line and
+# validates, which a bare read_csv() would not. Absent, every measurement carries `no_label` and
+# nothing is invented.
+meas_var <- if (file.exists(here("metadata/variable.csv")))
+  read_variable(here("metadata/variable.csv")) else NULL
+cat(glue("metadata/variable.csv: {if (is.null(meas_var)) 'absent — labels fall back to the ",
+         "canonical series description (no_label)' else paste(nrow(meas_var), 'labelled key(s)')}\n"))
 # derive provider/dataset from _source_datasets (first source) so the schema site
 # + query app ("browse measurement types") keep their provider/dataset columns.
 dbExecute(con_wdl,
@@ -1811,7 +1821,7 @@ datatable(dbGetQuery(con_wdl, "
          count(*) FILTER (WHERE qual_ok) AS n_qual_ok, count(DISTINCT effort_class) AS n_classes
   FROM obs_bio GROUP BY 1 ORDER BY 1"), caption = "obs_bio — depth, hex and quality coverage per dataset")
 
-cov <- build_coverage(con_wdl, release_version)
+cov <- build_coverage(con_wdl, release_version, variable = meas_var)
 coverage_path <- file.path(dir_frozen, "coverage.json")
 jsonlite::write_json(cov, coverage_path, auto_unbox = TRUE, digits = NA)
 # the per-station year x month card, its own sidecar so the first paint stays small
@@ -2554,12 +2564,8 @@ if (file.exists(meta_json_path)) {
   # every years{} must sum to at most its series, every measurement_type must be registered and
   # every dataset_key must be in the record. The record is GENERATED, so a failing row is a bug in
   # the builder or a break in obs_env, never something a question excuses.
-  meas_var_path <- here("metadata/variable.csv")
-  meas_var <- if (file.exists(meas_var_path))
-    readr::read_csv(meas_var_path, na = "", show_col_types = FALSE) else NULL
-  if (is.null(meas_var))
-    cat("metadata/variable.csv absent: every measurement falls back to its canonical series' ",
-        "description and carries the `no_label` flag\n", sep = "")
+  # `meas_var` is metadata/variable.csv, read once with read_variable() where the registries
+  # are loaded and already on coverage.json's variables[]
   meas_rec  <- build_measurements_catalog(
     con_wdl, datasets_rec,
     measurement_type = cat_registries$measurement_type,
