@@ -427,6 +427,20 @@ what it owns, what to do, the gates that stop it, and what to hand back.
   metadata 9 s · explore 10 s · glossary 6 s, every count generated (79 · 84 · 5 · 25,006,583 · 316,328,163; 23 series with
   no P01, 18 with no bound); whole-book docx 6.9 MB + pdf 6.3 MB clean; `check_links.R` one dead link,
   `calcofi.io/measurements/`, until M3+M4 deploy.
+- 2026-09-10 — **WS-M3 executed** (CalCOFI.github.io `ws-m3` 7ec74fd on main 3d62b48; M4 continues on it): `_plugins/measurements.rb`
+  renders the bridge record into **79 measurement pages · 79 `{key}.json` · an 80-URL sitemap · 79 search rows · a 31 KB
+  inline index payload**; `fetch_release.sh` resolves `measurements.json` as `taxa.json` (promoted → `MEASUREMENTS_RELEASE_URL`
+  → nothing, one NOTE) and probes ERDDAP — `measurement_type` on **5 of 5** tables, so every series gets a constrained
+  tabledap row; the bottle page's 26 variables all link pages that exist; the CTD and METS pages fold 21 and 37
+  full-resolution-only series; `check_jsonld.py`'s `DefinedTerm` rule and `check_layout.py` green at 1470/375 in both themes
+  on nine paths; the D-2 path exercised (no record → no pages, doors fall back, 0 links to `/measurements/`); M0's
+  `measurements/search.json` stub deleted; `site.data.catalog.numbers.measurements_*` rewritten from the record so the front
+  door and the index read one source. Deliberate divergences from the mock, all because the record does not carry the
+  fact: "sampling events" for casts (METS is underway), units as the registry spells them (rendered typographically by M4),
+  no typed `line=90`, no `qual_ok` in the db-query SQL (`obs_env` carries `measurement_qual`), Range & quality states the
+  post-fix range with the excluded values counted. **PR #13's `/species/` 375 px overflow** was `.sp-search`'s min-content —
+  the nowrap count in a wider mono fallback — fixed with `min-width: 0` + an ellipsis (mechanism reproduced locally, CI
+  re-run pending on the PR). Bugs found on the way: `Fmt.num` dropped the minus sign (CTD `spar`'s −3.07e17 read positive).
 
 ## Appendix A — the record, in shape (`measurements.schema.json` 1.0)
 
