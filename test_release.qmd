@@ -985,8 +985,13 @@ tryCatch(
 # Runs AFTER the promotion above, because the index reads latest.txt to mark the
 # "latest" badge. Non-fatal for the same reason as the dispatch below: a stale
 # index is a documentation bug, not a reason to fail a validated release.
+# a staging run must not touch the public index or the hosted consumers: both read the REAL
+# latest.txt, so a staging pass would rebuild every consumer against the unchanged promoted
+# release (measured 2026-09-10 while preparing v2026.09.10: nothing here was staging-aware).
 idx_script <- here::here("scripts", "build_release_index.R")
-if (file.exists(idx_script)) {
+if (staging) {
+  message("STAGING run: release index and consumer dispatches skipped")
+} else if (file.exists(idx_script)) {
   idx_rc <- system2(file.path(R.home("bin"), "Rscript"), idx_script,
                     stdout = TRUE, stderr = TRUE)
   if ((attr(idx_rc, "status") %||% 0L) != 0) {
@@ -1021,7 +1026,9 @@ gh_dispatch <- tribble(
   "CalCOFI/calcofi4py",       "test.yml",                    "calcofi4py README examples against latest")
 
 gh_bin <- Sys.which("gh")
-if (!nzchar(gh_bin)) {
+if (staging) {
+  # skipped above: nothing to nudge until a real promotion
+} else if (!nzchar(gh_bin)) {
   message(glue(
     "gh not found; these need a manual `gh workflow run`: ",
     "{paste(gh_dispatch$repo, collapse = ', ')}"))
