@@ -386,7 +386,7 @@ other 74 fall back to their canonical series' description with a `no_label` flag
 
 ## How to cite
 
-> CalCOFI (2026). CalCOFI Integrated Database, release v2026.09.10 [Data set]. Scripps Institution of Oceanography, NOAA Fisheries, and California Department of Fish and Wildlife. https://calcofi.io/db-schema/?v=v2026.09.10
+> CalCOFI (2026). CalCOFI Integrated Database, release v2026.09.10 [Data set]. Scripps Institution of Oceanography, NOAA Fisheries, and California Department of Fish and Wildlife. https://doi.org/10.5281/zenodo.22698724
 
 Cite the source datasets you use alongside the release:
 
