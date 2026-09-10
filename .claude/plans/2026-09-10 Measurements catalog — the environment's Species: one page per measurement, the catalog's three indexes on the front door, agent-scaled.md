@@ -493,6 +493,12 @@ what it owns, what to do, the gates that stop it, and what to hand back.
   asserts the pill and the restore on two new species paths. Lesson for the catalog pages: a viewer-remembered layout choice
   that hides a primary figure is a trap — remember in the URL, never in storage. PR #17 (the measurements index re-cut) merged
   and live at ~21:45.
+- 2026-09-10 (night) — PR #18 (the species pane pill) merged and live; **catalog heads get one prose width** (branch `ws-m0f`):
+  each head paragraph was capped at 78 characters of its own type size (802 / 543 / 485 px), so the right edge stepped inward
+  and the head grew — Ben: "diminishing right-hand rulers … makes the header longer than need be". `--cc-prose-w` in root units
+  per head (44.6 rem on species and measurements, 34.3 rem on datasets) puts the lede, the explanation and the aside on one
+  edge: 803 / 803 / 803 px on `/measurements/`, the explanation 147 → 84 px tall. Rule for the catalog heads: cap prose in rem,
+  never in `ch` of the paragraph's own type.
 
 ## Appendix A — the record, in shape (`measurements.schema.json` 1.0)
 
