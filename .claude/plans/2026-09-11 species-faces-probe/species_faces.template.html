@@ -1,0 +1,674 @@
+<title>CalCOFI Species Faces</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Teko:wght@500&display=swap">
+<style>
+/* ── brand v2 tokens (calcofi.io/brand/v2/theme.css), light by default ─────────────────────── */
+:root {
+  --bg: #ffffff; --panel: #f5f5f5; --panel-2: #ffffff; --border: #dddddd; --fg: #182b49; --muted: #66686a;
+  --accent: #00629b; --accent-d: #004663; --band: #f5f0e6; --cta-bg: #ffcd00; --cta-fg: #182b49;
+  --warn: #8a6500; --ok: #457a1c; --nogo: #b3261e; --ok-bg: #eef5e9; --warn-bg: #fff6dc; --na-bg: #ececec; --nogo-bg: #fbe9e7; --accent-bg: #e3eef6;
+  --ink: #00629b; --plate-filter: none; --shadow: 0 1px 2px rgba(24,43,73,.08);
+  --sans: "Source Sans 3", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --display: "Teko", "Source Sans 3", Impact, "Arial Narrow", sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1a2e; --panel: #182b49; --panel-2: #21375c; --border: #34486b; --fg: #e9edf3; --muted: #9fb0c8;
+    --accent: #4fb6e6; --accent-d: #8ad0f0; --band: #182b49; --cta-bg: #ffcd00; --cta-fg: #182b49;
+    --warn: #ffcd00; --ok: #8fbf4f; --nogo: #ff8080; --ok-bg: #1e3a22; --warn-bg: #3a2d0a; --na-bg: #25344f; --nogo-bg: #4a1f1f; --accent-bg: #12314a;
+    --ink: #4fb6e6; --plate-filter: invert(.9) hue-rotate(180deg); --shadow: none; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1a2e; --panel: #182b49; --panel-2: #21375c; --border: #34486b; --fg: #e9edf3; --muted: #9fb0c8;
+  --accent: #4fb6e6; --accent-d: #8ad0f0; --band: #182b49; --cta-bg: #ffcd00; --cta-fg: #182b49;
+  --warn: #ffcd00; --ok: #8fbf4f; --nogo: #ff8080; --ok-bg: #1e3a22; --warn-bg: #3a2d0a; --na-bg: #25344f; --nogo-bg: #4a1f1f; --accent-bg: #12314a;
+  --ink: #4fb6e6; --plate-filter: invert(.9) hue-rotate(180deg); --shadow: none; color-scheme: dark;
+}
+/* the same two palettes, scoped, so one figure can be shown in both themes side by side */
+.t-light {
+  --bg: #ffffff; --panel: #f5f5f5; --panel-2: #ffffff; --border: #dddddd; --fg: #182b49; --muted: #66686a;
+  --accent: #00629b; --accent-d: #004663; --band: #f5f0e6; --warn: #8a6500; --ok: #457a1c; --nogo: #b3261e;
+  --ok-bg: #eef5e9; --warn-bg: #fff6dc; --na-bg: #ececec; --nogo-bg: #fbe9e7; --accent-bg: #e3eef6; --ink: #00629b; --plate-filter: none; --shadow: 0 1px 2px rgba(24,43,73,.08); color-scheme: light;
+}
+.t-dark {
+  --bg: #0f1a2e; --panel: #182b49; --panel-2: #21375c; --border: #34486b; --fg: #e9edf3; --muted: #9fb0c8;
+  --accent: #4fb6e6; --accent-d: #8ad0f0; --band: #182b49; --warn: #ffcd00; --ok: #8fbf4f; --nogo: #ff8080;
+  --ok-bg: #1e3a22; --warn-bg: #3a2d0a; --na-bg: #25344f; --nogo-bg: #4a1f1f; --accent-bg: #12314a; --ink: #4fb6e6; --plate-filter: invert(.9) hue-rotate(180deg); --shadow: none; color-scheme: dark;
+}
+
+/* ── base ───────────────────────────────────────────────────────────────────────────────────── */
+* { box-sizing: border-box; }
+body { margin: 0; font: 17px/1.45 var(--sans); color: var(--fg); background: var(--bg); -webkit-font-smoothing: antialiased; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { color: var(--accent-d); text-decoration: underline; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.container { max-width: 1170px; margin: 0 auto; padding-inline: 16px; }
+.band { padding-block: 36px; }
+.band-alt { background: var(--band); }
+p { max-width: 70ch; margin: 0 0 .8em; }
+.lede { font-size: 20px; max-width: 62ch; }
+.muted { color: var(--muted); }
+.mono { font-family: var(--mono); font-size: .92em; }
+.tab { font-variant-numeric: tabular-nums; }
+.eyebrow { font: 700 13px/1.3 var(--sans); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+h1, h2 { font-family: var(--display); font-weight: 500; line-height: 1; text-transform: uppercase; letter-spacing: .02em; margin: 0 0 .35em; color: var(--fg); text-wrap: balance; }
+h1 { font-size: clamp(40px, 6vw, 68px); }
+h2 { font-size: clamp(30px, 4vw, 44px); }
+h3 { font: 700 1.05em/1.2 var(--sans); text-transform: uppercase; letter-spacing: .04em; margin: 0 0 .4em; color: var(--fg); }
+.rule { border: 0; border-top: 1px solid var(--border); margin: 24px 0; }
+.chip { display: inline-block; padding: .05em .6em; border: 1px solid var(--border); border-radius: 999px; background: var(--panel-2); color: var(--muted); font: 12px/1.6 var(--mono); white-space: nowrap; vertical-align: middle; }
+.chip-ok { background: var(--ok-bg); color: var(--ok); border-color: transparent; }
+.chip-warn { background: var(--warn-bg); color: var(--warn); border-color: transparent; }
+.chip-na { background: var(--na-bg); color: var(--muted); border-color: transparent; }
+.chip-nogo { background: var(--nogo-bg); color: var(--nogo); border-color: transparent; }
+.chip-accent { background: var(--accent-bg); color: var(--accent); border-color: transparent; }
+.credit { font: 11.5px/1.45 var(--mono); color: var(--muted); margin-top: 6px; }
+.credit a { color: inherit; text-decoration: underline; text-decoration-color: var(--border); }
+code, pre { font-family: var(--mono); }
+pre { font-size: 12.5px; line-height: 1.5; background: var(--panel); color: var(--fg); border-radius: 8px; padding: 12px 14px; overflow-x: auto; margin: 8px 0 0; }
+.scroll { overflow-x: auto; }
+ul.plain { list-style: none; margin: 0; padding: 0; }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 28px; align-items: start; }
+
+/* ── header, in the SIO one-bar shape ───────────────────────────────────────────────────────── */
+.hdr { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 18px; min-height: 60px; padding: 0 16px; background: var(--bg); border-bottom: 1px solid var(--border); }
+.lockup { font: 500 30px/1 var(--display); letter-spacing: .02em; text-transform: uppercase; color: var(--fg); }
+.lockup small { font-size: 60%; color: var(--muted); letter-spacing: .04em; margin-left: 2px; }
+.hdr .title { font: 700 13px var(--sans); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.hdr .spacer { flex: 1; }
+.toggle { font: 600 13px var(--sans); color: var(--fg); background: var(--panel); border: 1px solid var(--border); border-radius: 999px; padding: 5px 12px; cursor: pointer; }
+.castbar { position: sticky; top: 60px; z-index: 19; display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 16px; background: var(--panel); border-bottom: 1px solid var(--border); }
+.castbar .lab { font: 700 11.5px var(--sans); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); align-self: center; margin-right: 6px; }
+.pill { display: inline-flex; align-items: center; gap: 7px; font: 600 13px var(--sans); color: var(--fg); background: var(--panel-2); border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px 3px 7px; cursor: pointer; }
+.pill svg { height: 14px; width: 26px; color: currentColor; }
+.pill i { font-style: normal; color: var(--muted); font-weight: 400; }
+.pill[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.pill[aria-pressed="true"] i { color: inherit; opacity: .75; }
+
+/* ── the species page head, as the live page draws it, plus the new face row ────────────────── */
+.frames { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 20px; }
+.frame { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--bg); color: var(--fg); }
+.frame .fhead { padding: 22px 22px 18px; background: var(--band); }
+.frame .fbody { padding: 18px 22px 22px; }
+.frame .flab { font: 700 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 6px 22px; border-bottom: 1px solid var(--border); background: var(--panel); }
+.sp-lineage { display: flex; flex-wrap: wrap; gap: 3px 7px; align-items: center; font-size: 12.5px; margin: 0 0 8px; }
+.sp-lineage .sep { color: var(--muted); }
+.sp-r { font: 700 9.5px var(--mono); color: var(--muted); letter-spacing: .04em; text-transform: uppercase; margin-right: 3px; }
+.sp-it { font-style: italic; }
+.sp-here { color: var(--muted); }
+.sp-h1 { font: 500 clamp(34px, 4vw, 46px)/1 var(--display); text-transform: uppercase; letter-spacing: .02em; margin: 2px 0 3px; }
+.sp-common { font: 500 clamp(18px, 2vw, 24px)/1 var(--display); color: var(--muted); margin: 0 0 8px; }
+.sp-ids { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12.5px; margin-top: 4px; }
+.sp-ids a, .sp-ids .mono { font-family: var(--mono); font-size: 12px; }
+.sp-stat { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 12px; margin: 16px 0 0; padding: 14px 0 0; border-top: 1px solid var(--border); }
+.sp-stat div { min-width: 0; }
+.sp-stat dd { margin: 0; font: 500 26px/1 var(--display); font-variant-numeric: tabular-nums; }
+.sp-stat dd.sm { font: 600 14px/1.2 var(--sans); }
+.sp-stat dt { font: 700 10.5px var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.face { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 18px; align-items: stretch; margin-top: 16px; }
+@media (max-width: 520px) { .face { grid-template-columns: 1fr; } }
+.fig-sil { display: flex; flex-direction: column; justify-content: space-between; gap: 10px; min-width: 0; }
+.sil { display: block; color: var(--fg); fill: currentColor; max-width: 100%; }
+.fig-sil .sil { height: 92px; width: 100%; }
+.stand { font: 11px var(--mono); color: var(--muted); }
+.glance { border-top: 1px solid var(--border); padding-top: 8px; font-size: 12.5px; }
+.glance-row { display: grid; grid-template-columns: 96px minmax(0, 1fr) 62px; gap: 8px; align-items: center; padding: 2px 0; }
+.glance-l { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.glance-v { text-align: right; font-family: var(--mono); font-size: 12px; }
+.bar { display: block; height: 8px; border-radius: 4px; background: var(--accent); min-width: 2px; }
+.bar-ref { background: var(--muted); opacity: .55; }
+.glance-none { color: var(--muted); }
+.ph { position: relative; aspect-ratio: 3 / 2; overflow: hidden; border-radius: 10px; max-width: 100%;
+  -webkit-mask-image: radial-gradient(ellipse 74% 70% at 50% 50%, #000 40%, transparent 100%); mask-image: radial-gradient(ellipse 74% 70% at 50% 50%, #000 40%, transparent 100%); }
+.ph img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.ph.muted-t img { filter: saturate(.55) contrast(.96); }
+.ph.ink { background: var(--ink); }
+.ph.ink img { filter: grayscale(1) contrast(1.08) brightness(1.02); mix-blend-mode: luminosity; }
+.ph.plate { aspect-ratio: 3 / 4; -webkit-mask-image: none; mask-image: none; background: var(--panel-2); border: 1px solid var(--border); }
+.ph.plate img { object-fit: contain; filter: var(--plate-filter); }
+.ph.nofade { -webkit-mask-image: none; mask-image: none; }
+.ph.empty { -webkit-mask-image: none; mask-image: none; border: 1px dashed var(--border); display: grid; place-items: center; color: var(--muted); font-size: 13px; text-align: center; padding: 12px; }
+.sent { font-size: 15.5px; line-height: 1.5; margin: 14px 0 0; max-width: none; }
+.sent .s-wp { text-decoration: underline; text-decoration-color: var(--accent); text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
+.sent .s-rec { text-decoration: underline; text-decoration-style: dotted; text-decoration-color: var(--ok); text-underline-offset: 3px; }
+.sent .s-au { text-decoration: underline; text-decoration-style: dashed; text-decoration-color: var(--warn); text-underline-offset: 3px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; color: var(--muted); margin-top: 8px; }
+.legend span::before { content: ""; display: inline-block; width: 18px; height: 0; border-top: 2px solid var(--accent); margin-right: 6px; vertical-align: middle; }
+.legend .l-rec::before { border-top-style: dotted; border-top-color: var(--ok); }
+.legend .l-au::before { border-top-style: dashed; border-top-color: var(--warn); }
+
+/* ── the option cards ───────────────────────────────────────────────────────────────────────── */
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 20px; margin-top: 18px; }
+.card { background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 10px; box-shadow: var(--shadow); }
+.card .ph { border-radius: 8px; }
+.card .fig { display: grid; place-items: center; height: 200px; }
+.card .fig .sil { max-height: 150px; width: 100%; height: 100%; }
+.card h3 { margin: 0; }
+.card p { font-size: 14.5px; margin: 0; }
+.card .cov { margin-top: auto; padding-top: 8px; border-top: 1px solid var(--border); font-size: 13px; }
+.card .cov b { font-weight: 600; }
+.tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 18px; }
+@media (max-width: 760px) { .tiles { grid-template-columns: 1fr; } }
+.tile { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--bg); color: var(--fg); }
+.tile .tin { padding: 14px 14px 12px; background: var(--band); }
+.tile .tlab { padding: 8px 14px 10px; font-size: 12.5px; color: var(--muted); }
+.tile .tlab b { display: block; font-weight: 600; color: var(--fg); font-size: 13.5px; margin-bottom: 1px; }
+
+/* ── the size ladder ────────────────────────────────────────────────────────────────────────── */
+.ladder-wrap { margin-top: 12px; }
+.ladder { width: 100%; height: auto; display: block; overflow: visible; }
+.ladder .ax { stroke: var(--muted); stroke-width: 1; }
+.ladder .lead { stroke: var(--border); stroke-width: 1; }
+.ladder .tick { font: 11px var(--mono); fill: var(--muted); }
+.ladder .rlab { font: 12px var(--sans); fill: var(--fg); }
+.ladder .mlab { font: 11.5px var(--sans); fill: var(--fg); }
+.ladder .mval { font: 10.5px var(--mono); fill: var(--muted); }
+.ladder .ref-g { fill: var(--fg); stroke: var(--fg); }
+.ladder .mark { stroke: var(--accent); stroke-width: 5; stroke-linecap: butt; }
+.ladder .mark-dot { fill: var(--accent); stroke: var(--bg); stroke-width: 2; }
+.ladder .adult { color: var(--accent); }
+.ladder g.hit:hover .mark { stroke: var(--accent-d); }
+.ladder g.hit { cursor: default; }
+.readout { font: 12.5px var(--mono); color: var(--muted); min-height: 1.4em; margin-top: 4px; }
+.beside-wrap { margin-top: 12px; }
+.beside { width: 100%; height: auto; display: block; }
+.beside .base { stroke: var(--border); stroke-width: 1; }
+.beside .dim { stroke: var(--muted); stroke-width: 1; }
+.beside .blab { font: 12px var(--sans); fill: var(--fg); }
+.beside .bval { font: 11px var(--mono); fill: var(--muted); }
+.beside .ref-g { fill: var(--muted); stroke: var(--muted); }
+.beside .org { color: var(--accent); }
+.early { list-style: none; margin: 10px 0 0; padding: 0; font-size: 14px; }
+.early li { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 10px; padding: 5px 0; border-top: 1px solid var(--border); }
+.early li:first-child { border-top: 0; }
+.early b { font-weight: 600; }
+.early .mono { color: var(--muted); }
+
+/* ── tables and steps ───────────────────────────────────────────────────────────────────────── */
+.tbl { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 760px; }
+.tbl th { text-align: left; font: 700 11px var(--sans); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: bottom; }
+.tbl td { padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.tbl td:first-child { font-weight: 600; white-space: nowrap; }
+.tbl .n { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
+.steps { list-style: none; counter-reset: s; margin: 16px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
+.steps li { counter-increment: s; background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 14px 14px 12px; font-size: 14px; position: relative; }
+.steps li::before { content: counter(s); position: absolute; top: -10px; left: 12px; font: 500 20px/1 var(--display); color: var(--bg); background: var(--fg); border-radius: 999px; width: 24px; height: 24px; display: grid; place-items: center; }
+.steps b { display: block; font-weight: 700; margin-bottom: 4px; font-family: var(--mono); font-size: 12.5px; }
+.pol { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; margin-top: 14px; }
+.pol ul { margin: 6px 0 0; padding-left: 18px; font-size: 14.5px; }
+.pol li { margin-bottom: 4px; }
+.qs { margin: 14px 0 0; padding-left: 20px; font-size: 15px; }
+.qs li { margin-bottom: 8px; max-width: 80ch; }
+footer { padding: 28px 0 40px; font-size: 12.5px; color: var(--muted); }
+footer ul { margin: 6px 0 0; padding-left: 18px; }
+footer li { margin-bottom: 3px; }
+@media (prefers-reduced-motion: no-preference) { .pill, .toggle { transition: background .15s, color .15s; } }
+</style>
+
+<header class="hdr">
+  <span class="lockup">CalCOFI<small>.io</small></span>
+  <span class="title">Species · faces, sizes, sentences</span>
+  <span class="chip">release v2026.09.06</span>
+  <span class="spacer"></span>
+  <button class="toggle" id="theme-toggle" type="button" aria-label="Toggle dark / light theme">🌓 theme</button>
+</header>
+<nav class="castbar" id="castbar" aria-label="Pick a taxon"><span class="lab">Cast</span></nav>
+
+<main>
+<section class="band band-alt">
+  <div class="container">
+    <div class="eyebrow">Design study · probed against the live sources on <span id="built"></span></div>
+    <h1>A face, a size and a sentence for every species page</h1>
+    <p class="lede">The 2,410 pages under <a href="https://calcofi.io/species/">calcofi.io/species/</a> read the release faithfully and say
+      nothing about the organism. This page tries the ways to fix that <em>systematically</em>: a silhouette, a licensed photo or plate, a
+      length on a scale a reader already knows, and one sentence, each fetched by the taxon's own ids and shipped with its credit.</p>
+    <p>Every asset here was fetched today for the ten taxa in the cast bar, one from each world the database covers (a sardine and an
+      anchovy, a hake, a lanternfish, a krill, a squid, a seabird, a dolphin, a diatom genus and the rockfish genus). Pick one to see how each
+      idea holds up when the species has no length on record, no clean photo, or only a family-level silhouette. The recommendation is the
+      composed head just below; the sections after it are the parts and their alternatives, then the sources with what each actually gives,
+      and the build.</p>
+  </div>
+</section>
+
+<section class="band" id="s-head">
+  <div class="container">
+    <div class="eyebrow">Recommendation</div>
+    <h2>The page head, composed</h2>
+    <p>The live head, unchanged, gains a face row: the PhyloPic silhouette in the page's own ink beside a licensed photo that fades into the
+      band, a two-bar glance at size against a familiar object, and a sentence stitched from Wikipedia, the release record and WoRMS, each
+      part underlined in the colour of its source. Light and dark are drawn together because the fade and the ink have to work on both.</p>
+    <div class="frames">
+      <div class="frame t-light"><div class="flab">light</div><div id="head-light"></div></div>
+      <div class="frame t-dark"><div class="flab">dark</div><div id="head-dark"></div></div>
+    </div>
+    <div class="legend"><span>Wikipedia · CC BY-SA 4.0</span><span class="l-rec">the release record, measured</span><span class="l-au">WoRMS, FishBase / SeaLifeBase</span></div>
+  </div>
+</section>
+
+<section class="band band-alt" id="s-face">
+  <div class="container">
+    <div class="eyebrow">Part 1</div>
+    <h2>The face: silhouette, photo or plate</h2>
+    <p>Three kinds of picture, three coverage stories. The silhouette is the only one every page can have, so it is the constant; the photo and
+      the plate are enrichments that appear when a clean one exists and are simply absent when none does, without changing the layout.</p>
+    <div class="cards" id="face-cards"></div>
+  </div>
+</section>
+
+<section class="band" id="s-treat">
+  <div class="container">
+    <div class="eyebrow">Part 2</div>
+    <h2>The treatment: one frame, one fade, three inks</h2>
+    <p>Photos from four sources will never match in crop, light or background. What can match is the frame: a fixed 3 : 2 crop, and a radial
+      mask that dissolves the edges into whatever ground the page has, so the messy corners of a Commons upload disappear and the same photo sits
+      quietly on sand or on navy. The ink is the second dial: full colour keeps the field marks, muted colour calms a busy photo, and the
+      brand-blue luminosity blend turns any photo into one house style at the cost of colour.</p>
+    <div class="tiles" id="treat-tiles"></div>
+    <p class="credit" id="treat-credit"></p>
+  </div>
+</section>
+
+<section class="band band-alt" id="s-size">
+  <div class="container">
+    <div class="eyebrow">Part 3</div>
+    <h2>How big is it</h2>
+    <p>One logarithmic ladder from a hair to the ship, with CalCOFI's own gear on it: the 505 µm bongo mesh and the 71 cm ring say at a glance
+      why a diatom is counted from a bottle and a krill from a net. The taxon's lengths sit under the axis: its adult maximum from WoRMS or
+      SeaLifeBase and, for the fishes, the egg, hatching, flexion and transformation lengths FishBase carries from the NOAA and CalCOFI larval
+      guides, which is where the ichthyoplankton and CUFES datasets actually meet the animal.</p>
+    <div class="ladder-wrap"><div id="ladder"></div><div class="readout" id="readout">hover a mark</div></div>
+    <div class="two" style="margin-top:28px">
+      <div>
+        <h3>Beside something familiar</h3>
+        <p style="font-size:14.5px">The nearest reference within an order of magnitude, drawn at the same scale as the silhouette. A person for a
+          dolphin, the bongo ring for a sardine, a quarter for a krill.</p>
+        <div class="beside-wrap" id="beside"></div>
+      </div>
+      <div>
+        <h3>What the nets and pumps catch</h3>
+        <p style="font-size:14.5px">For the fishes, NOAA's Ichthyoplankton Information System serves a developmental plate, egg to late larva,
+          from a 1989 NOAA technical report that is public domain as a US Government work. The lengths beside it are FishBase's, citing the same
+          guides.</p>
+        <div id="plate"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="s-sentence">
+  <div class="container">
+    <div class="eyebrow">Part 4</div>
+    <h2>The sentence</h2>
+    <p>Prose is authored, facts are generated, and here the prose is borrowed: the first sentence or two of the Wikipedia article, under CC BY-SA
+      with a link to the revision. The measured half is the release record's own numbers written as a sentence, and the authority line is
+      WoRMS. Where Wikipedia only has the genus, the page says so rather than pretending.</p>
+    <div class="frames" style="margin-top:14px">
+      <div class="frame t-light"><div class="flab">assembled</div><div class="fbody" id="sentence-box"></div></div>
+      <div class="frame"><div class="flab">the alternatives, for the same taxon</div><div class="fbody" id="sentence-alt"></div></div>
+    </div>
+  </div>
+</section>
+
+<section class="band band-alt" id="s-sources">
+  <div class="container">
+    <div class="eyebrow">Where it comes from</div>
+    <h2>The sources, as probed</h2>
+    <p>Each row is what the source returned today for the cast, not what its front page promises. Coverage counts are out of the ten cast taxa
+      (twelve probes, two of which were the reference person and a second diatom).</p>
+    <div class="scroll">
+    <table class="tbl">
+      <thead><tr><th>Source</th><th>What it gives</th><th>Keyed by</th><th>Licence</th><th>Access</th><th>In the probe</th><th>Verdict</th></tr></thead>
+      <tbody>
+        <tr><td>PhyloPic</td><td>a silhouette, vector and raster, with the taxon it depicts and the clade it can stand for</td><td>WoRMS id via <span class="n">/resolve/marinespecies.org/taxname/</span>, else the name via <span class="n">/nodes?filter_name=</span>, walking up the lineage</td><td>per image: CC0, Public Domain Mark, CC BY, CC BY-SA</td><td>API v2, no key</td><td>4 of 12 by WoRMS id; 12 of 12 by name (6 of them one to two ranks up)</td><td><span class="chip chip-ok">use · the constant</span></td></tr>
+        <tr><td>Wikidata</td><td>the bridge: WoRMS id → item → Commons image (P18), the English article, iNaturalist, eBird, FishBase, GBIF and ITIS ids</td><td>P850 (WoRMS), P815 (ITIS) for the birds</td><td>CC0</td><td>SPARQL</td><td>12 of 12 items; 11 with an image; 12 with an article</td><td><span class="chip chip-ok">use · the key ring</span></td></tr>
+        <tr><td>Wikimedia Commons</td><td>the P18 photo and the taxon category: photos, 19th-century plates, NOAA larval drawings</td><td>file title from Wikidata; <span class="n">extmetadata</span> carries the licence and artist per file</td><td>per file: public domain, CC BY, CC BY-SA; some NC</td><td>MediaWiki API</td><td>11 of 12 P18 images; the sardine category alone had 26 files, 8 of them public domain</td><td><span class="chip chip-ok">use · curated first</span></td></tr>
+        <tr><td>Wikipedia</td><td>the article's lead as plain text, with a revision id</td><td>the sitelink from Wikidata</td><td>CC BY-SA 4.0</td><td>REST <span class="n">page/summary</span></td><td>12 of 12; the sardine's link lands on the genus article</td><td><span class="chip chip-ok">use · 1–2 sentences, linked</span></td></tr>
+        <tr><td>iNaturalist</td><td>curated taxon photos and the default photo, each with its licence; a Wikipedia summary; observation counts</td><td>iNat taxon id from Wikidata, or the name</td><td>per photo: CC0, CC BY, CC BY-NC, CC BY-NC-SA, some all-rights-reserved (<span class="n">null</span>)</td><td>API v1, no key</td><td>12 of 12 taxa; 5 default photos were NC, 4 were all-rights-reserved</td><td><span class="chip chip-ok">use · curated, NC ranked last</span></td></tr>
+        <tr><td>GBIF</td><td>occurrence images, most of them iNaturalist research-grade re-served with a normalised licence field</td><td>GBIF usage key from Wikidata or <span class="n">species/match</span></td><td>per media item; note the <span class="n">license=</span> query filters the <em>dataset</em>, so NC-ND items still come back</td><td>API v1</td><td>12 of 12, 38 to 4,061 images each</td><td><span class="chip chip-ok">use · fallback, filter per item</span></td></tr>
+        <tr><td>WoRMS</td><td>the accepted name, authority, status and citation; body-size attributes with a quality flag; no image API</td><td>AphiaID, which is the database's own key</td><td>CC BY 4.0 (data); images per photographer</td><td>REST</td><td>12 of 12 records; 7 of 12 with a checked body size</td><td><span class="chip chip-ok">use · names and sizes</span> <span class="chip chip-na">images: link</span></td></tr>
+        <tr><td>FishBase · SeaLifeBase</td><td>max length and its type; egg diameter; hatching, flexion and transformation lengths citing the larval guides; a biology paragraph</td><td>the name, or the FishBase id from Wikidata</td><td>CC BY-NC 3.0</td><td>rfishbase (parquet, offline)</td><td>lengths for the 6 fishes, the krill, the squid and the dolphin; larval lengths for 5 fishes</td><td><span class="chip chip-ok">use · sizes, larvae</span> <span class="chip chip-na">photos: link</span></td></tr>
+        <tr><td>NOAA AFSC Ichthyoplankton Information System</td><td>a developmental-series plate per fish, egg to late larva with lengths, for over 200 north-east Pacific species</td><td><span class="n">LHDataIll.php?GSID=Genus!species</span></td><td>public domain: plates from Matarese et al. 1989, NOAA Technical Report NMFS 80, a US Government work; the site asks to be cited</td><td>one GIF per species, scrapable</td><td>4 of 4 fishes probed</td><td><span class="chip chip-ok">use · larvae</span> <span class="chip chip-warn">ask AFSC as a courtesy</span></td></tr>
+        <tr><td>CalCOFI Atlas 33 (Moser 1996)</td><td>the definitive larval drawings for the California Current, 1,505 pages</td><td>a scanned PDF at calcofi.org, no per-species addressing</td><td>CalCOFI's data-use agreement; drawings by many hands</td><td>manual extraction</td><td>not extracted</td><td><span class="chip chip-warn">later · ask SWFSC</span></td></tr>
+        <tr><td>NOAA Fisheries species pages</td><td>one adult illustration per managed species in a single hand (credited "NOAA Fisheries/Jack Hornady")</td><td>the page slug</td><td>a contractor's work: rights not stated</td><td>scrape</td><td>sardine page checked</td><td><span class="chip chip-warn">ask</span></td></tr>
+        <tr><td>eBird · Macaulay Library</td><td>bird photos and sounds; the species page</td><td>the eBird code from Wikidata (P3444)</td><td>owned by the contributors; not for third-party download; the API is data only</td><td>—</td><td>sooty shearwater: <span class="n">sooshe</span></td><td><span class="chip chip-na">link out only</span></td></tr>
+        <tr><td>BOLD Systems (CBG)</td><td>specimen photos on a plain ground with a scale bar, the closest thing to a house style for zooplankton</td><td>the name</td><td>CC BY 3.0 for the krill's photo; varies by project</td><td>via Commons, or BOLD's API</td><td>the krill</td><td><span class="chip chip-accent">nice to have</span></td></tr>
+        <tr><td>Biodiversity Heritage Library</td><td>public-domain plates from the old monographs, tagged by binomial on Flickr</td><td>machine tags, patchy under old synonyms</td><td>public domain</td><td>Flickr API</td><td>not probed</td><td><span class="chip chip-accent">nice to have</span></td></tr>
+      </tbody>
+    </table>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="s-build">
+  <div class="container">
+    <div class="eyebrow">How it would be built</div>
+    <h2>One sidecar, fetched by id, shipped with its credit</h2>
+    <p>The catalog's rule holds: nothing typed. A fetcher in the landing repo walks <span class="mono">taxa.json</span>, asks each source by the
+      taxon's ids, keeps only what passes the licence policy, caches the pictures at 800 px on the public bucket, and writes one
+      <span class="mono">taxa_media.json</span>. The Jekyll generator merges it by <span class="mono">taxon_key</span>, so a page whose taxon has no
+      media renders exactly as it does today.</p>
+    <ol class="steps">
+      <li><b>taxa.json</b>the release record: 2,410 taxa with their WoRMS, ITIS and GBIF ids and lineage</li>
+      <li><b>scripts/fetch_species_media.py</b>weekly in <span class="mono">refresh.yml</span> and after a release; PhyloPic → Wikidata → Commons → iNaturalist → GBIF → WoRMS → FishBase → NOAA IIS, keyed by id, rate-limited, resumable</li>
+      <li><b>taxa_media.json + thumbs</b>on <span class="mono">gs://calcofi-files-public/species-media/</span>: one JSON, an 800 px WebP per picture, the source URL and licence beside each</li>
+      <li><b>scripts/fetch_release.sh</b>pulls it into <span class="mono">_data/</span> like the other release files; never committed</li>
+      <li><b>_plugins/species.rb</b>merges by <span class="mono">taxon_key</span>; <span class="mono">_includes/species_face.html</span> draws the row; JSON-LD gains an <span class="mono">ImageObject</span> with <span class="mono">license</span> and <span class="mono">creditText</span></li>
+      <li><b>scripts/check_species_media.py</b>every shown asset has an allow-listed licence, a credit, a live source URL and a taxon within two ranks</li>
+    </ol>
+    <div class="pol">
+      <div>
+        <h3>Licence policy</h3>
+        <ul>
+          <li><b>Take:</b> CC0, public domain, CC BY, CC BY-SA. Share-alike is fine: the cropped, faded copy is shared under the same terms.</li>
+          <li><b>Take, rank last, say so:</b> CC BY-NC and CC BY-NC-SA. calcofi.io is non-commercial, but a downstream reuser is not, so the caption carries the licence.</li>
+          <li><b>Leave:</b> any ND (the crop and the fade are derivatives) and anything without a licence field. iNaturalist's <span class="mono">null</span> means all rights reserved.</li>
+          <li><b>Never:</b> Macaulay, FishBase and WoRMS photos, or Hornady's drawings, until someone says yes in writing.</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Ranking, per slot</h3>
+        <ul>
+          <li><b>Taxon first:</b> the page's own taxon, then a species under it (a genus page shows one and names it), then an ancestor within two ranks, flagged "stands in".</li>
+          <li><b>Curated over raw:</b> Commons P18 and iNaturalist's taxon photos before the first research-grade observation; the developmental plate for larvae.</li>
+          <li><b>Then licence order, then size:</b> CC0, PD, BY, BY-SA, NC; landscape, at least 800 px on the long side.</li>
+          <li><b>Focal point kept:</b> a stored <span class="mono">[x, y]</span> so the 3 : 2 crop does not behead the fish.</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Sizes</h3>
+        <ul>
+          <li>WoRMS body-size attributes first (they are FishBase's, checked), then SeaLifeBase, then Wikidata P2043. The kind of length (SL, TL, mantle) is kept and shown.</li>
+          <li>FishBase EGGS and LARVAE for egg diameter and the hatching, flexion and transformation lengths, citing their references.</li>
+          <li>The ladder's references live in a <span class="mono">size_reference.csv</span> with their sources; the mesh and ring are CalCOFI's own numbers.</li>
+          <li>No number is invented for a taxon without one; the glance says "not on record", and a curated size-class file can fill the phytoplankton later.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="two" style="margin-top:26px">
+      <div>
+        <h3>The sidecar's shape</h3>
+<pre>{ "schema_version": "1.0", "release": "v2026.09.06", "fetched": "2026-09-11",
+  "taxa": { "worms:217452": {
+    "silhouette": { "source": "phylopic", "uuid": "34c2ed3a-…", "license": "CC0 1.0",
+                    "credit": "Mathieu Pélissié", "taxon_shown": "Sardinops melanostictus", "steps_up": 0 },
+    "photo":  { "source": "commons", "file": "Pacific sardine (Sardinops sagax) 01.jpg", "page": "https://commons.…",
+                "license": "CC BY 2.5", "license_url": "…", "credit": "Tewy", "taxon_shown": "Sardinops sagax",
+                "shows": "a school", "cached": "species-media/worms-217452/photo.webp", "w": 800, "h": 533, "focal": [0.5, 0.5] },
+    "drawing": { "source": "commons", "file": "Sardinops sagax.jpg", "license": "public domain", "credit": "J. H. Richard", … },
+    "plate":   { "source": "noaa_iis", "url": "…/LHDataIll.php?GSID=Sardinops!sagax", "license": "public domain (US Government work)",
+                 "credit": "Matarese, Kendall, Blood & Vinter 1989, NOAA Tech. Rep. NMFS 80", "cached": "…/plate.webp" },
+    "size":    { "m": 0.395, "kind": "max length (SL)", "source": "worms_attribute", "source_id": 232797 },
+    "early":   [ { "stage": "egg", "mm": [1.34, 2.05], "source": "fishbase_eggs" },
+                 { "stage": "hatching", "mm": [3.5, 3.8], "source": "fishbase_larvae", "ref": 265 }, … ],
+    "text":    { "source": "wikipedia", "title": "Sardinops", "revision": …, "license": "CC BY-SA 4.0", "about": "genus", "extract": "…" },
+    "links":   { "inat": 55535, "fishbase": 1477, "wikidata": "Q2069084", "ebird": null } } } }</pre>
+      </div>
+      <div>
+        <h3>What the page emits</h3>
+<pre>&lt;figure class="sp-face"&gt;
+  &lt;svg class="sp-sil" viewBox="…" role="img" aria-label="silhouette of Sardinops sagax"&gt;…&lt;/svg&gt;
+  &lt;img class="sp-photo" src="…/species-media/worms-217452/photo.webp" width="800" height="533"
+       alt="a school of Pacific sardines" loading="lazy"&gt;
+  &lt;figcaption class="sp-credit"&gt;
+    Silhouette · Mathieu Pélissié · CC0 · PhyloPic  ·  Photo · Tewy · CC BY 2.5 · Wikimedia Commons
+  &lt;/figcaption&gt;
+&lt;/figure&gt;
+
+{ "@type": "Taxon", …,
+  "image": { "@type": "ImageObject", "contentUrl": "…/photo.webp",
+             "license": "https://creativecommons.org/licenses/by/2.5/",
+             "creditText": "Tewy, via Wikimedia Commons",
+             "acquireLicensePage": "https://commons.wikimedia.org/wiki/File:…" } }</pre>
+        <h3 style="margin-top:18px">Effort</h3>
+        <div class="scroll"><table class="tbl" style="min-width:0">
+          <thead><tr><th>Phase</th><th>Ships</th><th>Days</th></tr></thead>
+          <tbody>
+            <tr><td>1 · silhouette, size, sentence</td><td>the fetcher for PhyloPic, Wikidata, Wikipedia, WoRMS, FishBase; the face row with the glance; the check; the index tree gains class-level silhouettes</td><td class="n">2</td></tr>
+            <tr><td>2 · photos and the policy</td><td>Commons, iNaturalist, GBIF; the cache on the bucket; the fade and ink; JSON-LD images; focal points for the top 100 by observations</td><td class="n">1.5</td></tr>
+            <tr><td>3 · larvae</td><td>the NOAA plates and the ladder with early-life marks, after the courtesy ask; Atlas 33 only if AFSC lacks a species</td><td class="n">1</td></tr>
+          </tbody>
+        </table></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band band-alt" id="s-notes">
+  <div class="container">
+    <div class="eyebrow">Found on the way</div>
+    <h2>Notes and decisions</h2>
+    <div class="two">
+      <div>
+        <h3>Findings</h3>
+        <ul class="qs">
+          <li><b>CUFES rows include zero counts.</b> 75.5 % of the CUFES rows in <span class="mono">obs_bio</span> are zeros (38,929 of the sardine's 49,572), and every CUFES species carries the same 49,572 "observations" with the same 1998 peak. The species page says "obs"; the sentence here says "records". A per-dataset <span class="mono">n_present</span> beside <span class="mono">n_obs</span> in <span class="mono">taxa.json</span> would let both be honest.</li>
+          <li><b>PhyloPic's WoRMS ids are sparse; its names are not.</b> Four of twelve resolved by AphiaID, all twelve by name with a walk up the lineage. The fetcher should try the id, then the name at each rank.</li>
+          <li><b>GBIF's licence filter is per dataset.</b> Asking for CC0 and CC BY returned NC-ND images; filter on <span class="mono">media[].license</span>.</li>
+          <li><b>The first raw photo is rarely the portrait.</b> Research-grade iNaturalist photos of the sardine, hake and rockfish were a fish on sand, a head on a rock and a catch in a hand; the curated Commons and iNat taxon photos were the ones to use.</li>
+          <li><b>Wikidata's P18 can be the sister species.</b> The sardine's image on Wikidata is <em>Sardinops melanostictus</em>; the caption must name what is shown.</li>
+          <li><b>The lengths already cite the CalCOFI guides.</b> FishBase's larval lengths reference Matarese et al. 1989 and the Atlas 33 chapters, so the numbers can be shown before any drawing is extracted.</li>
+        </ul>
+      </div>
+      <div>
+        <h3>For Ben to decide</h3>
+        <ul class="qs">
+          <li><b>Silhouette as the constant, photo as the enrichment</b> (recommended), or photo-first with the silhouette as a fallback? The first keeps every page consistent and theme-safe; the second is warmer but 30 % of pages would fall back anyway.</li>
+          <li><b>Allow NC photos?</b> Recommended yes, ranked last and labelled; the alternative leaves most plankton without a photo.</li>
+          <li><b>Which ink for photos:</b> full colour with the fade (recommended: the field marks survive), muted, or the brand-blue luminosity blend?</li>
+          <li><b>The references on the ladder:</b> the mesh and the ring are the CalCOFI-specific choice; the quarter and the person are the universal ones; the ship is the flourish. Keep all six or drop the ship?</li>
+          <li><b>The courtesy asks:</b> AFSC for the plates (public domain, but they maintain the site), NOAA Fisheries for the Hornady drawings, SWFSC for Atlas 33.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <div class="eyebrow">Credits for everything on this page</div>
+    <ul id="credits"></ul>
+    <p style="margin-top:12px">Release facts are read from <span class="mono">taxa.json</span> of v2026.09.06. Sizes: WoRMS attributes, SeaLifeBase and FishBase as labelled. The ladder's references: a hair ≈ 70 µm; the CalCOFI bongo mesh 505 µm and ring 71 cm; a US quarter 24.26 mm; a person 1.7 m; R/V Reuben Lasker 63.8 m.</p>
+  </div>
+</footer>
+</main>
+
+<script>/*__DATA__*/</script>
+<script>
+(function () {
+  const D = window.DATA, byId = Object.fromEntries(D.cast.map(c => [c.id, c]));
+  const $ = (s, r) => (r || document).querySelector(s);
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+  const fmt = n => n == null ? '—' : Number(n).toLocaleString('en-US');
+  const tidy = v => Math.abs(v - Math.round(v)) < 0.05 ? v.toFixed(0) : v.toFixed(1);
+  const fmtLen = m => m < 1e-3 ? `${Math.round(m * 1e6)} µm` : m < 1e-2 ? `${tidy(m * 1e3)} mm` : m < 1 ? `${tidy(m * 100)} cm` : `${tidy(m)} m`;
+  const shortName = c => (c.common || c.name).split(' (')[0];
+  const art = l => /^(a |an |the )/i.test(l) ? l : 'the ' + l;
+  const fmtMM = r => r[0] === r[1] ? `${r[0]} mm` : `${r[0]}–${r[1]} mm`;
+  const it = (c, s) => c.italic ? `<i>${esc(s)}</i>` : esc(s);
+  const silSvg = (key, cls, label, attrs) => { const s = D.sil[key]; return `<svg class="sil ${cls || ''}" viewBox="${s.vb}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${esc(label)}" ${attrs || ''}>${s.inner}</svg>`; };
+  const silCredit = c => { const s = D.sil[c.sil]; const stand = c.sil_stand_in ? ` <span class="stand">drawn from ${esc(s.image_of)}${s.steps_up ? `, ${s.steps_up} rank${s.steps_up > 1 ? 's' : ''} up` : ''}</span>` : ''; return `Silhouette · ${esc(s.contributor)} · ${esc(s.license_short)} · <a href="${s.url}">PhyloPic</a>${stand}`; };
+  const phCredit = (k, word) => { const p = D.photos[k]; return `${word || 'Photo'} · ${esc(p.by)} · ${esc(p.license)} · <a href="${p.page}">${esc(p.via)}</a> · ${esc(p.shows)}`; };
+  const isNC = k => /NC/.test(D.photos[k].license);
+  const stagesText = st => !st || !st.length ? '' : st.length > 4 ? `${st.slice(0, 3).join(', ')} and ${st.length - 3} more stages` : st.length === 2 ? st.join(' and ') : st.join(', ');
+  const pickRef = (m, familiarOnly) => { const refs = D.refs.filter(r => !familiarOnly || !['hair', 'mesh'].includes(r.k)); return refs.reduce((b, r) => Math.abs(Math.log10(m / r.m)) < Math.abs(Math.log10(m / b.m)) ? r : b, refs[0]); };
+  const named = c => { const m = /^\(?(.+?),\s*(\d{4})\)?$/.exec(c.authority || ''); return m ? `Named by ${m[1]} in ${m[2]}` : ''; };
+
+  // ── the head ────────────────────────────────────────────────────────────────────────────────
+  function sizeGlance(c) {
+    if (!c.size) return `<div class="glance glance-none"><span class="eyebrow">Size</span> · not on record: WoRMS, FishBase / SeaLifeBase and Wikidata carry no length for this taxon${c.rank !== 'Species' ? ' (a genus page could show the range of its species)' : ''}</div>`;
+    const m = c.size.cm / 100, ref = pickRef(m, true), r = m / ref.m;
+    const w1 = r >= 1 ? 100 : r * 100, w2 = r >= 1 ? 100 / r : 100;
+    return `<div class="glance">
+      <div class="glance-row"><span class="glance-l">${esc(shortName(c))}</span><i class="bar" style="width:${w1.toFixed(1)}%"></i><span class="glance-v">${fmtLen(m)}</span></div>
+      <div class="glance-row"><span class="glance-l">${esc(ref.label)}</span><i class="bar bar-ref" style="width:${w2.toFixed(1)}%"></i><span class="glance-v">${fmtLen(ref.m)}</span></div>
+      <div class="credit">${esc(c.size.kind)} · <a href="${c.size.url}">${esc(c.size.src)}</a></div></div>`;
+  }
+  function sentenceHtml(c) {
+    const b = c.blurb, r = c.rollup, st = stagesText(c.direct.life_stages);
+    const wp = b.text ? `<span class="s-wp">${esc(b.text)}</span>${b.about_genus ? ' <span class="muted">(Wikipedia has only the genus.)</span>' : ''} ` : '';
+    const yrs = r.year_min ? ` between ${r.year_min} and ${r.year_max}` : '';
+    const rec = `<span class="s-rec">CalCOFI holds ${fmt(r.n_obs)} records of it in ${r.n_datasets} dataset${r.n_datasets > 1 ? 's' : ''}${yrs}${st ? `, as ${esc(st)}` : ''}${c.rank !== 'Species' ? `, across ${fmt(r.n_taxa)} taxa under it` : ''}.</span>`;
+    const au = named(c) ? ` <span class="s-au">${esc(named(c))}${c.size ? `; grows to ${fmtLen(c.size.cm / 100)} (${esc(c.size.kind)})` : ''}.</span>` : '';
+    return `<p class="sent">${wp}${rec}${au}</p>`;
+  }
+  function headHtml(c) {
+    const lin = c.lineage.map(a => `<span><span class="sp-r" title="${a.rank}">${a.abbr}</span><span class="${a.italic ? 'sp-it' : ''}">${esc(a.name)}</span></span>`).join('<span class="sep">›</span>');
+    const ids = [['WoRMS', c.ids.worms_id, c.links.worms], ['ITIS', c.ids.itis_id, c.links.itis], ['GBIF', c.ids.gbif_id, c.links.gbif]].filter(x => x[1]).map(x => `<span><span class="muted">${x[0]}</span> <a href="${x[2]}">${x[1]}</a></span>`).join('');
+    const d = c.direct, r = c.rollup;
+    const stats = [[fmt(r.n_obs), 'records'], [fmt(d.n_samples), 'sampling events'], [r.year_min ? `${r.year_min}–${r.year_max}` : '—', 'years'], [r.n_datasets, 'datasets'], [d.life_stages.length ? d.life_stages.slice(0, 3).join(' · ') + (d.life_stages.length > 3 ? ` +${d.life_stages.length - 3}` : '') : '—', 'life stages', true]];
+    const photoKey = c.photo, nc = isNC(photoKey);
+    return `<div class="fhead">
+      <nav class="sp-lineage">${lin}<span class="sep">›</span><span><span class="sp-r">${c.rank === 'Species' ? 'sp' : c.rank[0]}</span><span class="sp-here ${c.italic ? 'sp-it' : ''}">${esc(c.name)}</span></span></nav>
+      <div class="eyebrow">${esc(c.rank)} · ${esc(c.status)}${c.checked ? ` · checked ${esc(c.checked)}` : ''}</div>
+      <div class="sp-h1 ${c.italic ? 'sp-it' : ''}">${esc(c.name)}</div>
+      ${c.common ? `<div class="sp-common">${esc(c.common)}</div>` : ''}
+      <div class="sp-ids">${ids}<span><span class="muted">key</span> <span class="mono">${esc(c.key)}</span></span></div>
+      <div class="face">
+        <div class="fig-sil">${silSvg(c.sil, '', 'silhouette of ' + c.name)}${sizeGlance(c)}</div>
+        <div><div class="ph"><img src="${D.photos[photoKey].data}" alt="${esc(D.photos[photoKey].shows)}"></div>
+          <div class="credit">${phCredit(photoKey)}${nc ? ' <span class="chip chip-warn">NC</span>' : ''}</div></div>
+      </div>
+      ${sentenceHtml(c)}
+      <div class="credit">${silCredit(c)}${c.blurb.url ? ` · Text · <a href="${c.blurb.url}">Wikipedia, “${esc(c.blurb.title)}”</a> · CC BY-SA 4.0 · rev. ${esc(c.blurb.revision)} (${esc(c.blurb.timestamp)})` : ''}</div>
+      <dl class="sp-stat">${stats.map(s => `<div><dd class="tab ${s[2] ? 'sm' : ''}">${esc(s[0])}</dd><dt>${s[1]}</dt></div>`).join('')}</dl>
+    </div>
+    <div class="fbody"><span class="eyebrow">Observed in</span>
+      <ul class="plain" style="margin-top:6px;font-size:14px">${c.datasets.map(d => `<li style="display:flex;gap:8px;align-items:baseline;padding:4px 0;border-top:1px solid var(--border)"><i style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${d.color};flex:none"></i><b style="font-weight:600">${esc(d.name)}</b><span class="mono muted" style="font-size:12px">${fmt(d.n_obs)} records${d.y0 ? ` · ${d.y0}–${d.y1}` : ''}${d.stages.length ? ` · ${esc(d.stages.slice(0, 2).join(' · '))}${d.stages.length > 2 ? ' …' : ''}` : ''}</span></li>`).join('')}</ul>
+      <div class="muted" style="font-size:13px;margin-top:8px">… the years strip, children, groups and the ways in continue as on the live page.</div></div>`;
+  }
+
+  // ── part 1: the face cards ──────────────────────────────────────────────────────────────────
+  function faceCards(c) {
+    const s = D.sil[c.sil];
+    const cards = [];
+    cards.push(`<div class="card"><div class="eyebrow">Silhouette</div><div class="fig">${silSvg(c.sil, '', 'silhouette of ' + c.name)}</div>
+      <h3>Every page, in the page's ink</h3><p>PhyloPic by WoRMS id, else by name, else the nearest ancestor. A 2–12 KB vector filled with <span class="mono">currentColor</span>, so it is navy on white and bone on navy without a second file, prints, and scales onto the ladder.</p>
+      <div class="credit">${silCredit(c)}</div>
+      <div class="cov"><b>Coverage:</b> all 2,410 pages; in the cast 4 of 10 are the taxon itself, 6 stand in from one or two ranks up${c.sil_stand_in ? ' (this one)' : ''}.</div></div>`);
+    const pk = c.photo, p = D.photos[pk];
+    cards.push(`<div class="card"><div class="eyebrow">Photo</div><div class="ph"><img src="${p.data}" alt="${esc(p.shows)}"></div>
+      <h3>When a clean one exists</h3><p>Commons P18 and category, iNaturalist's curated taxon photos, then GBIF's licensed occurrences. Cropped 3 : 2 and faded into the band; the caption names what is shown, who took it and under what.</p>
+      <div class="credit">${phCredit(pk)}${isNC(pk) ? ' <span class="chip chip-warn">NC: allowed, ranked last</span>' : ''}</div>
+      <div class="cov"><b>Coverage:</b> 9 of 10 in the cast pass the policy without NC; the lanternfish only with it. Plankton and mesopelagic fishes are the thin end.</div></div>`);
+    const dk = c.plate || c.drawing;
+    if (dk) { const q = D.photos[dk]; cards.push(`<div class="card"><div class="eyebrow">${c.plate ? 'Developmental plate' : 'Drawing'}</div><div class="ph ${c.plate ? 'plate' : ''}"><img src="${q.data}" alt="${esc(q.shows)}"></div>
+      <h3>${c.plate ? 'The stages CalCOFI counts' : 'A plate in one hand'}</h3><p>${c.plate ? 'NOAA\'s Ichthyoplankton Information System serves one plate per fish from the 1989 laboratory guide, egg to late larva with lengths: the very organisms the ichthyoplankton and CUFES datasets record.' : 'Commons holds public-domain plates and engravings for many of the fishes, consistent in style and free to crop.'}</p>
+      <div class="credit">${phCredit(dk, c.plate ? 'Plate' : 'Drawing')}</div>
+      <div class="cov"><b>Coverage:</b> ${c.plate ? 'over 200 north-east Pacific fishes; 4 of 4 probed had one' : 'fishes mostly; found for the sardine and the hake in the cast'}.</div></div>`); }
+    else cards.push(`<div class="card"><div class="eyebrow">Drawing or plate</div><div class="ph empty">none found for ${esc(c.name)} in the probe: the slot is simply absent on the page</div>
+      <h3>Absent, not empty</h3><p>The NOAA plates cover fishes; the public-domain plates on Commons cover the well-known ones. For everything else the page shows the silhouette and the photo and no gap where a third picture would be.</p>
+      <div class="cov"><b>Coverage:</b> fishes; nothing for this taxon.</div></div>`);
+    return cards.join('');
+  }
+
+  // ── part 2: treatments ──────────────────────────────────────────────────────────────────────
+  function treatTiles(c) {
+    const p = D.photos[c.photo];
+    const rows = [['t-light', 'light'], ['t-dark', 'dark']], cols = [['', 'full colour', 'the field marks survive; the fade does the unifying'], ['muted-t', 'muted', 'saturation at 55 %: a busy Commons upload calms down'], ['ink', 'brand ink', 'grayscale under a luminosity blend with UCSD blue: one house look, colour lost']];
+    return rows.map(r => cols.map(col => `<div class="tile ${r[0]}"><div class="tin"><div class="ph ${col[0]}"><img src="${p.data}" alt="${esc(p.shows)}"></div></div><div class="tlab"><b>${col[1]} · ${r[1]}</b><span class="muted" style="font-size:12.5px">${col[2]}</span></div></div>`).join('')).join('');
+  }
+
+  // ── part 3: the ladder ──────────────────────────────────────────────────────────────────────
+  const refGlyph = (k, x, y, h, cls) => { // drawn to fit a box of height h centred on x, bottom at y
+    cls = cls || 'ref-g';
+    if (k === 'hair') return `<line x1="${x}" x2="${x}" y1="${y - h}" y2="${y}" class="${cls}" stroke-width="1.5"/>`;
+    if (k === 'mesh') { const s = h * .8, x0 = x - s / 2, y0 = y - s; return `<g class="${cls}" style="fill:none" stroke-width="1"><rect x="${x0}" y="${y0}" width="${s}" height="${s}"/><line x1="${x0 + s / 3}" x2="${x0 + s / 3}" y1="${y0}" y2="${y0 + s}"/><line x1="${x0 + 2 * s / 3}" x2="${x0 + 2 * s / 3}" y1="${y0}" y2="${y0 + s}"/><line y1="${y0 + s / 3}" y2="${y0 + s / 3}" x1="${x0}" x2="${x0 + s}"/><line y1="${y0 + 2 * s / 3}" y2="${y0 + 2 * s / 3}" x1="${x0}" x2="${x0 + s}"/></g>`; }
+    if (k === 'quarter') { const r = h * .42; return `<g class="${cls}"><circle cx="${x}" cy="${y - r}" r="${r}" style="fill:none" stroke-width="${Math.max(1, r * .12)}" stroke-dasharray="${(r * .18).toFixed(2)} ${(r * .12).toFixed(2)}"/><circle cx="${x}" cy="${y - r}" r="${r * .72}" style="fill:none" stroke-width="${Math.max(1, r * .06)}"/></g>`; }
+    if (k === 'ring') { const r = h * .46; return `<circle cx="${x}" cy="${y - r}" r="${r}" style="fill:none" class="${cls}" stroke-width="${Math.max(2, r * .1)}"/>`; }
+    if (k === 'person') { const s = D.sil.human, w = h * s.aspect; return `<svg x="${x - w / 2}" y="${y - h}" width="${w}" height="${h}" viewBox="${s.vb}" preserveAspectRatio="xMidYMid meet" class="${cls}">${s.inner}</svg>`; }
+    if (k === 'ship') { const L = h * 3.2, x0 = x - L / 2, yb = y; return `<g class="${cls}" stroke="none"><path d="M${x0},${yb - h * .32} L${x0 + L},${yb - h * .32} L${x0 + L * .93},${yb} L${x0 + L * .06},${yb} Z"/><path d="M${x0 + L * .18},${yb - h * .32} L${x0 + L * .18},${yb - h * .62} L${x0 + L * .56},${yb - h * .62} L${x0 + L * .56},${yb - h * .85} L${x0 + L * .72},${yb - h * .85} L${x0 + L * .72},${yb - h * .32} Z"/><rect x="${x0 + L * .62}" y="${yb - h}" width="${L * .015}" height="${h * .2}"/></g>`; }
+    return '';
+  };
+  function speciesMarks(c) {
+    const marks = c.early.map(e => ({ label: e.label, lo: e.mm[0] / 1e3, hi: e.mm[1] / 1e3, src: e.src }));
+    if (c.size) marks.push({ label: 'adult, max', lo: c.size.cm / 100, hi: c.size.cm / 100, src: c.size.src, adult: true });
+    return marks;
+  }
+  // greedy row assignment so no two labels share a row while overlapping horizontally
+  const assignRows = (items, gap) => { const end = []; items.sort((a, b) => a.left - b.left).forEach(o => { let r = 0; while (end[r] != null && o.left < end[r] + gap) r++; end[r] = o.right; o.row = r; }); return items; };
+  function ladder(c) {
+    const W = 1000, x0 = 34, x1 = 966, AX = 122, lx = m => x0 + (Math.log10(m) + 5) / 7 * (x1 - x0);
+    const tick = e => e === -5 ? '10 µm' : e === -4 ? '100 µm' : e === -3 ? '1 mm' : e === -2 ? '1 cm' : e === -1 ? '10 cm' : e === 0 ? '1 m' : e === 1 ? '10 m' : '100 m';
+    const refs = assignRows(D.refs.map(r => { const x = lx(r.m), w = Math.max(64, r.label.length * 6.6); return { r, x, left: x - w / 2, right: x + w / 2 }; }), 12);
+    const marks = assignRows(speciesMarks(c).map(m => { const xa = lx(m.lo), xb = lx(m.hi), val = m.lo === m.hi ? fmtLen(m.lo) : `${fmtLen(m.lo)}–${fmtLen(m.hi)}`; const silW = m.adult ? 18 * D.sil[c.sil].aspect + 6 : 0; return { m, xa, xb, val, silW, left: xa - 5, right: xb + 8 + silW + (m.label.length + 1) * 6.4 + val.length * 6.3 }; }), 10);
+    const maxRow = marks.reduce((a, o) => Math.max(a, o.row), 0), H = AX + 44 + (maxRow + 1) * 22 + 4;
+    let s = `<svg viewBox="0 0 ${W} ${H}" class="ladder" role="img" aria-label="Sizes on a logarithmic scale from 10 micrometres to 100 metres">`;
+    s += `<line x1="${x0}" x2="${x1}" y1="${AX}" y2="${AX}" class="ax"/>`;
+    for (let e = -5; e <= 2; e++) { const x = lx(10 ** e); s += `<line x1="${x}" x2="${x}" y1="${AX - 4}" y2="${AX + 4}" class="ax"/><text x="${x}" y="${AX + 18}" class="tick" text-anchor="middle">${tick(e)}</text>`; }
+    refs.forEach(o => { const { r, x, row } = o, ly = 16 + row * 28; s += `<g class="hit" data-tip="${esc(r.label)}: ${esc(r.note)}"><title>${esc(r.label)}: ${esc(r.note)}</title>${refGlyph(r.k, x, AX - 12, 40)}<line x1="${x}" x2="${x}" y1="${AX - 10}" y2="${AX - 2}" class="lead"/><text x="${x}" y="${ly}" text-anchor="middle" class="rlab">${esc(r.label)}</text><text x="${x}" y="${ly + 13}" text-anchor="middle" class="mval">${fmtLen(r.m)}</text></g>`; });
+    if (!marks.length) s += `<text x="${x0}" y="${AX + 48}" class="mlab">No length on record for ${esc(c.name)}: nothing is marked under the axis.</text>`;
+    marks.forEach(o => { const { m, xa, xb, val, silW, row } = o, xm = (xa + xb) / 2, y = AX + 44 + row * 22, tip = `${m.label}: ${val} · ${m.src}`;
+      s += `<g class="hit" data-tip="${esc(tip)}"><title>${esc(tip)}</title><line x1="${xm}" x2="${xm}" y1="${AX + 2}" y2="${y - 7}" class="lead"/>${xa === xb ? `<circle cx="${xa}" cy="${y}" r="4.5" class="mark-dot"/>` : `<line x1="${xa}" x2="${xb}" y1="${y}" y2="${y}" class="mark"/>`}${m.adult ? (() => { const sl = D.sil[c.sil], h = 18, w = h * sl.aspect; return `<svg x="${xb + 8}" y="${y - h / 2}" width="${w}" height="${h}" viewBox="${sl.vb}" preserveAspectRatio="xMidYMid meet" class="adult">${sl.inner}</svg>`; })() : ''}<text x="${xb + 8 + silW}" y="${y + 4}" class="mlab">${esc(m.label)} <tspan class="mval">${val}</tspan></text></g>`; });
+    s += '</svg>';
+    return s;
+  }
+  function beside(c) {
+    if (!c.size || !c.sil_axis) return `<p class="muted" style="font-size:14px">${!c.size ? `No length on record for ${esc(c.name)}, so nothing is drawn to scale; the row is absent on the page.` : 'The silhouette has no length axis to scale on.'}</p>`;
+    const m = c.size.cm / 100, ref = pickRef(m, true), sl = D.sil[c.sil];
+    const orgW = c.sil_axis === 'w' ? m : m * sl.aspect, orgH = c.sil_axis === 'w' ? m / sl.aspect : m;
+    const refW = ref.k === 'person' ? ref.m * D.sil.human.aspect : ref.k === 'ship' ? ref.m : ref.m, refH = ref.k === 'ship' ? ref.m * .31 : ref.m;
+    const W = 640, H = 250, pad = 24, gap = 40, base = H - 44;
+    const scale = Math.min((W - 2 * pad - gap) / (orgW + refW), (base - 30) / Math.max(orgH, refH));
+    const rw = refW * scale, rh = refH * scale, ow = orgW * scale, oh = orgH * scale, xr = pad + rw / 2, xo = pad + rw + gap + ow / 2;
+    const ratio = m / ref.m, phrase = ratio >= 1 ? `${tidy(ratio)} × ${art(ref.label)}` : `${Math.round(ref.m / m)} of them, ${c.sil_axis === 'w' ? 'nose to tail' : 'end to end'}, would span ${art(ref.label)}`;
+    let s = `<svg viewBox="0 0 ${W} ${H}" class="beside" role="img" aria-label="${esc(c.name)} drawn to scale beside ${esc(ref.label)}">`;
+    s += `<line x1="${pad}" x2="${W - pad}" y1="${base}" y2="${base}" class="base"/>`;
+    s += refGlyph(ref.k, xr, base, ref.k === 'ship' ? rh : rh, 'ref-g');
+    s += `<svg x="${xo - ow / 2}" y="${base - oh}" width="${ow}" height="${oh}" viewBox="${sl.vb}" preserveAspectRatio="xMidYMid meet" class="org">${sl.inner}</svg>`;
+    s += `<text x="${xr}" y="${base + 18}" text-anchor="middle" class="blab">${esc(ref.label)}</text><text x="${xr}" y="${base + 32}" text-anchor="middle" class="bval">${fmtLen(ref.m)}</text>`;
+    s += `<text x="${xo}" y="${base + 18}" text-anchor="middle" class="blab">${esc(shortName(c))}</text><text x="${xo}" y="${base + 32}" text-anchor="middle" class="bval">${fmtLen(m)} · ${esc(c.size.kind)}</text>`;
+    s += `<text x="${pad}" y="16" class="blab">${esc(phrase)}</text></svg>`;
+    return s;
+  }
+  function plate(c) {
+    const early = c.early.map(e => `<li><b>${esc(e.label)}</b><span>${fmtMM(e.mm)} <span class="mono">${esc(e.src)}</span></span></li>`).join('');
+    const adult = c.size ? `<li><b>adult, max</b><span>${fmtLen(c.size.cm / 100)} <span class="mono">${esc(c.size.src)}</span></span></li>` : '';
+    const st = c.datasets.filter(d => d.stages.length).map(d => `${esc(d.name)}: ${esc(d.stages.slice(0, 4).join(', '))}${d.stages.length > 4 ? ` and ${d.stages.length - 4} more` : ''}`).join('; ');
+    if (!c.plate) return `<p class="muted" style="font-size:14px">No plate for ${esc(c.name)}: the NOAA system covers fishes.${early || adult ? ' The lengths still show:' : ''}</p>${early || adult ? `<ul class="early">${early}${adult}</ul>` : ''}${st ? `<p class="muted" style="font-size:13px;margin-top:8px">Stages in the datasets · ${st}</p>` : ''}`;
+    const p = D.photos[c.plate];
+    return `<div class="two" style="gap:16px"><div><div class="ph plate" style="max-width:260px"><img src="${p.data}" alt="${esc(p.shows)}"></div><div class="credit">${phCredit(c.plate, 'Plate')}</div></div>
+      <div><ul class="early">${early}${adult}</ul>${st ? `<p class="muted" style="font-size:13px;margin-top:10px">Stages in the datasets · ${st}</p>` : ''}</div></div>`;
+  }
+
+  // ── part 4: the sentence ────────────────────────────────────────────────────────────────────
+  function sentenceAlt(c) {
+    const b = c.blurb;
+    return `<div class="eyebrow">Wikipedia, the whole lead</div><p style="font-size:14px;margin-top:4px">${esc(b.full || '—')}</p>
+      <div class="eyebrow" style="margin-top:12px">iNaturalist's summary of the same article</div><p style="font-size:14px;margin-top:4px">${esc(b.inat_summary || 'none returned')}</p>
+      <div class="eyebrow" style="margin-top:12px">WoRMS citation, verbatim</div><p class="mono muted" style="font-size:12.5px;margin-top:4px">${esc(c.worms_citation || '—')}</p>`;
+  }
+
+  // ── credits ─────────────────────────────────────────────────────────────────────────────────
+  function credits() {
+    const sils = Object.values(D.sil).map(s => `<li>Silhouette of ${esc(s.image_of)} (${esc(s.node)}) · ${esc(s.contributor)} · ${esc(s.license_short)} · <a href="${s.url}">PhyloPic</a></li>`);
+    const phs = Object.entries(D.photos).map(([k, p]) => `<li>${p.kind === 'plate' ? 'Plate' : p.kind === 'drawing' ? 'Drawing' : 'Photo'}: ${esc(p.shows)} · ${esc(p.by)} · ${esc(p.license)} · <a href="${p.page}">${esc(p.via)}</a></li>`);
+    const txt = D.cast.filter(c => c.blurb.url).map(c => `<li>Text: <a href="${c.blurb.url}">Wikipedia, “${esc(c.blurb.title)}”</a> · CC BY-SA 4.0 · revision ${esc(c.blurb.revision)}</li>`);
+    return sils.concat(phs, txt).join('');
+  }
+
+  // ── wiring ──────────────────────────────────────────────────────────────────────────────────
+  let cur = null;
+  function render(id) {
+    const c = byId[id]; if (!c) return; cur = id;
+    document.querySelectorAll('.pill').forEach(b => b.setAttribute('aria-pressed', b.dataset.id === id ? 'true' : 'false'));
+    $('#head-light').innerHTML = headHtml(c); $('#head-dark').innerHTML = headHtml(c);
+    $('#face-cards').innerHTML = faceCards(c);
+    $('#treat-tiles').innerHTML = treatTiles(c); $('#treat-credit').innerHTML = phCredit(c.photo);
+    $('#ladder').innerHTML = ladder(c); $('#readout').textContent = 'hover a mark';
+    $('#beside').innerHTML = beside(c); $('#plate').innerHTML = plate(c);
+    $('#sentence-box').innerHTML = sentenceHtml(c) + `<div class="credit">${c.blurb.url ? `Text · <a href="${c.blurb.url}">Wikipedia, “${esc(c.blurb.title)}”</a> · CC BY-SA 4.0 · rev. ${esc(c.blurb.revision)} (${esc(c.blurb.timestamp)}) · ` : ''}record: taxa.json v2026.09.06 · WoRMS AphiaID ${esc(c.ids.worms_id)}</div>`;
+    $('#sentence-alt').innerHTML = sentenceAlt(c);
+    document.querySelectorAll('.ladder g.hit').forEach(g => { g.addEventListener('mouseenter', () => { $('#readout').textContent = g.dataset.tip; }); g.addEventListener('mouseleave', () => { $('#readout').textContent = 'hover a mark'; }); });
+    try { history.replaceState(null, '', '#' + id); } catch (e) {}
+  }
+  const bar = $('#castbar');
+  D.cast.forEach(c => { const b = document.createElement('button'); b.type = 'button'; b.className = 'pill'; b.dataset.id = c.id; b.setAttribute('aria-pressed', 'false');
+    b.innerHTML = `${silSvg(c.sil, '', '')}<span>${c.common ? esc(c.common.split(' (')[0]) : esc(c.name)}</span><i>${c.rank === 'Species' ? '' : c.rank.toLowerCase()}</i>`; b.addEventListener('click', () => render(c.id)); bar.appendChild(b); });
+  $('#built').textContent = D.built; $('#credits').innerHTML = credits();
+  const root = document.documentElement;
+  $('#theme-toggle').addEventListener('click', () => { const dark = root.dataset.theme === 'dark' || (!root.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches); root.dataset.theme = dark ? 'light' : 'dark'; });
+  const h = location.hash.replace('#', ''); render(byId[h] ? h : D.cast[0].id);
+})();
+</script>
