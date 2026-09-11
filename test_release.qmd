@@ -803,9 +803,12 @@ taxa_res <- if (is.null(taxa_txt)) {
   n_bad <- sum(!tx_chk$ok)
   dplyr::bind_rows(
     tx_row("taxa: taxa.json validates against taxa.schema.json", isTRUE(schema_ok), schema_ok),
-    tx_row(glue("taxa: schema_version is 1.0 [{taxa_rec$schema_version %||% 'absent'}]"),
-           identical(taxa_rec$schema_version, "1.0"),
-           "built by a calcofi4db older than 4.9.0"),
+    # the version the package that BUILT the record declares, never a literal: a schema bump
+    # (1.1 added n_present, 2026-09-11) otherwise fails the release on a test that was not updated
+    tx_row(glue("taxa: schema_version is {calcofi4db:::CC_TAXA_SCHEMA_VERSION} ",
+                "[{taxa_rec$schema_version %||% 'absent'}]"),
+           identical(taxa_rec$schema_version, calcofi4db:::CC_TAXA_SCHEMA_VERSION),
+           "taxa.json was built by a different calcofi4db than the one this test loads"),
     tx_row(glue("taxa: counts.taxa_observed == distinct obs_bio.taxon_key ",
                 "[{a$observed} vs {a$expected}]"), isTRUE(a$ok), a$detail),
     tx_row(glue("taxa: every parent_taxon_key resolves within taxa[] ",
@@ -878,9 +881,10 @@ meas_res <- if (is.null(meas_txt)) {
   dplyr::bind_rows(
     mm_row("measurements: measurements.json validates against measurements.schema.json",
            isTRUE(schema_ok), schema_ok),
-    mm_row(glue("measurements: schema_version is 1.0 [{meas_rec$schema_version %||% 'absent'}]"),
-           identical(meas_rec$schema_version, "1.0"),
-           "built by a calcofi4db older than 4.12.0"),
+    mm_row(glue("measurements: schema_version is {calcofi4db:::CC_MEASUREMENTS_SCHEMA_VERSION} ",
+                "[{meas_rec$schema_version %||% 'absent'}]"),
+           identical(meas_rec$schema_version, calcofi4db:::CC_MEASUREMENTS_SCHEMA_VERSION),
+           "measurements.json was built by a different calcofi4db than the one this test loads"),
     mm_row(glue("measurements: counts.obs_env_rows == obs_env rows [{ro$observed} vs {ro$expected}]"),
            isTRUE(ro$ok), ro$detail),
     mm_row(glue("measurements: sum of series[].n_values == obs_env rows over ",
