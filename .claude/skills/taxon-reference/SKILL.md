@@ -236,4 +236,15 @@ an ingest, `R/taxa.R` or a taxon metadata CSV):
   **fails the release** on a dataset-local key outside its explicit allowlist —
   declare non-taxonomic classes one key at a time, never as a pattern.
 
+## Species faces
+
+- The silhouette, photo, size and sentence on each `calcofi.io/species/` page are
+  fetched and policed by `CalCOFI.github.io/scripts/fetch_species_media.py` (+
+  `scripts/fetch_species_sizes.R`), never by this package or the release — both
+  script and policy are keyed by `taxon_key`, the same key this file builds.
+- `taxa.json` 1.1 adds `n_present` (rows with `value > 0`) beside `n_obs` in
+  `direct`, `rollup` and `datasets[]`; that split is why the species page says
+  *observations* when `n_present` is available and *records* otherwise — CUFES
+  rows are mostly zeros, so `n_obs` alone overstates what was seen.
+
 
