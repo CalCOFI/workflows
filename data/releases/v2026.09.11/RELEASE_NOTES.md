@@ -89,7 +89,7 @@ for `n_present` and *records* for `n_obs`.
 
 ## How to cite
 
-> CalCOFI (2026). CalCOFI Integrated Database, release v2026.09.11 [Data set]. Scripps Institution of Oceanography, NOAA Fisheries, and California Department of Fish and Wildlife. https://calcofi.io/db-schema/?v=v2026.09.11
+> CalCOFI (2026). CalCOFI Integrated Database, release v2026.09.11 [Data set]. Scripps Institution of Oceanography, NOAA Fisheries, and California Department of Fish and Wildlife. https://doi.org/10.5281/zenodo.22714951
 
 Cite the source datasets you use alongside the release:
 
