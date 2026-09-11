@@ -65,7 +65,7 @@ describes the previous release with nothing to say so.
 ## RELEASES.md is not optional (the database's NEWS file)
 
 `RELEASES.md` at the repo root documents **what changed between database releases and
-why** — one `# vYYYY.MM.DD (date)` section per release, newest first, with `# Unreleased`
+why** — one `# vYYYY.MM.DD` section per release (no date suffix: the version carries it), newest first, with `# Unreleased`
 collecting changes until the next cut. It is uploaded to
 `gs://calcofi-db/ducklake/releases/RELEASES.md`, and each version's `RELEASE_NOTES.md`
 (what db-schema's "release notes" modal and `calcofi4r::cc_release_notes()` show) is its

@@ -1,6 +1,6 @@
 # CalCOFI integrated database release v2026.09.10
 
-**Release date:** 2026-09-10 · **promoted** (`latest.txt`)
+**Release date:** 2026-09-11 · **promoted** (`latest.txt`)
 
 ## The `obs` objects ship for the last time
 
@@ -381,8 +381,6 @@ other 74 fall back to their canonical series' description with a `no_label` flag
 **Datasets (16):** `calcofi_bottle`, `calcofi_ctd-cast`, `calcofi_dic`, `calcofi_mets`, `calcofi_phyllosoma`, `calcofi_phytoplankton`, `cce-lter_euphausiids`, `cce-lter_picoplankton-bacteria`, `cce-lter_zoodb`, `cce-lter_zooscan`, `cdfw_dungeness-crab`, `farallon_bird-mammal`, `sio_mesopelagic-fish`, `sio_pic-zooplankton`, `swfsc_cufes`, `swfsc_ichthyo`
 
 **Validation:** 87 pass / 0 fail / 4 skip (consumer-contract suite, 2026-09-10T22:37:26Z).
-
-**Software:** calcofi4db 4.12.0, calcofi4r 1.24.2.
 
 ## How to cite
 

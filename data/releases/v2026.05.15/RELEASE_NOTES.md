@@ -1,7 +1,7 @@
 # CalCOFI integrated database release v2026.05.15
 
 **Release date:** 2026-05-15
-*Documented with v2026.05.14 – v2026.05.20 (2026-05-14 … 2026-05-20).*
+*Documented with v2026.05.14 – v2026.05.20.*
 
 `ctd_thin` introduced as the headline CTD series (one direction, canonical types, 10 m grid +
 inflections + bottle depths); schema browser site and the `test_release` → promote pipeline with
@@ -41,6 +41,14 @@ inflections + bottle depths); schema browser site and the `test_release` → pro
 | `tow` | 75,506 |  |
 
 **28 tables, 133,013,839 rows, 0.00 GB.**
+
+## How to cite
+
+> CalCOFI (2026). CalCOFI Integrated Database, release v2026.05.15 [Data set]. Scripps Institution of Oceanography, NOAA Fisheries, and California Department of Fish and Wildlife. https://calcofi.io/db-schema/?v=v2026.05.15
+
+Cite the source datasets you use alongside the release:
+
+- *(no dataset list available for this version)*
 
 ## Access
 

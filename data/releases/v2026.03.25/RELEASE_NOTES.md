@@ -1,7 +1,7 @@
 # CalCOFI integrated database release v2026.03.25
 
 **Release date:** 2026-03-25
-*Documented with v2026.03 – v2026.03.26 (2026-03 … 2026-03-26).*
+*Documented with v2026.03.14 – v2026.03.25.*
 
 First releases on the versioned GCS layout (`ducklake/releases/{version}/`), `relationships.json`
 sidecar from v2026.03.14; bottle, CTD, DIC and ichthyo as per-dataset tables.
@@ -30,6 +30,14 @@ sidecar from v2026.03.14; bottle, CTD, DIC and ichthyo as per-dataset tables.
 | `tow` | 75,506 |  |
 
 **18 tables, 354,898,020 rows, 11.81 GB.**
+
+## How to cite
+
+> CalCOFI (2026). CalCOFI Integrated Database, release v2026.03.25 [Data set]. Scripps Institution of Oceanography, NOAA Fisheries, and California Department of Fish and Wildlife. https://calcofi.io/db-schema/?v=v2026.03.25
+
+Cite the source datasets you use alongside the release:
+
+- *(no dataset list available for this version)*
 
 ## Access
 

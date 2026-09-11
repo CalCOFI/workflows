@@ -8,7 +8,7 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
-# v2026.09.10 (2026-09-10)
+# v2026.09.10
 
 ## The `obs` objects ship for the last time
 
@@ -356,7 +356,7 @@ place of its hard-coded `UNIFIED` labels — and `valid_min` / `valid_max` from 
 or an axis can be clipped at first paint. Five of the 79 measurements carry an authored label; the
 other 74 fall back to their canonical series' description with a `no_label` flag. No released table, column or row changes.
 
-# v2026.09.06 (2026-09-06)
+# v2026.09.06
 
 ## The dataset catalog record says what a page needs to say (schema 1.1)
 
@@ -662,7 +662,7 @@ instead of being decoded downstream (as `observe_distributions()`, calcofi4db �
 does for existing ERDDAP metadata). **Consumers:** erddap.calcofi.io's `datasets.xml` and its
 served globals change on the next deploy; no table, column or row is affected.
 
-# v2026.09.04 (2026-09-04)
+# v2026.09.04
 
 ## `dataset_taxon` says what the source claimed; the bird rule reads the classification; common names have one written order
 
@@ -1385,7 +1385,7 @@ cruise designation at all — `metadata/calcofi/dic/questions.csv` Q07). **Consu
 `cruise_key_datasets` on `cruise`, 152 new `cruise` rows; `cruise_key` values change only for Bold
 Horizon 2019-07.
 
-# v2026.08.25 (2026-08-25)
+# v2026.08.25
 
 ## `sample` is unique on its key — the 4,855-duplicate bug is fixed, and a gate now guards it
 
@@ -1518,7 +1518,7 @@ had needed the retired `ctd_cast`/`ctd_thin`/`ctd_summary` parquet since the cor
 and had served a 2026-05-15 database for three releases; it now builds from `sample`/`obs`.
 **Open:** ERDDAP `flag_values`/`flag_meanings` on `measurement_qual`; netCDF `*_qc` companions.
 
-# v2026.08.14 (2026-08-14)
+# v2026.08.14
 
 ## CDFW Dungeness crab megalopae enter the release
 
@@ -1553,7 +1553,7 @@ off Google Drive to local scratch and the extraction completeness check began co
 counts (a Drive placeholder reads as an empty file with no error). **Packages:** calcofi4db
 3.15.0–3.19.0, calcofi4r 1.7.0 (a time-series gap is drawn as a gap, not a measured zero).
 
-# v2026.08.11 (2026-08-11)
+# v2026.08.11
 
 ## Ungridded observations are released
 
@@ -1578,7 +1578,7 @@ version unless `CALCOFI_ALLOW_REPUBLISH=true`.
 
 **Packages:** calcofi4db 3.13.1 (NaN/Inf coordinates → NULL), 3.14.0 (line/station ↔ lon/lat).
 
-# v2026.08.10 (2026-08-10)
+# v2026.08.10
 
 ## Ten CTD cruises are back
 
@@ -1604,7 +1604,7 @@ deterministic `_release_stamp.json`; `check_nested_outputs()` refuses any direct
 **Packages:** calcofi4db 3.12.0, 3.13.0; calcofi4r 1.6.0 (seafloor sampled along the transect
 track, not at stations).
 
-# v2026.08.08 (2026-08-08)
+# v2026.08.08
 
 ## Declared bounds are enforced, and 31k impossible values leave
 
@@ -1626,7 +1626,7 @@ Q22 records the surface-soak artifact.
 **Rows:** `obs` 26.27 M → 25.39 M, `obs_ctd_full` 274.9 M → 261.1 M (the impossible values).
 **Packages:** calcofi4db 3.10.0 (`declare_measurement_bounds()`), 3.11.0 (no directory outputs).
 
-# v2026.08.07 (2026-08-07)
+# v2026.08.07
 
 ## The Wilkinson CTD archive and three data stages
 
@@ -1653,7 +1653,7 @@ measurement surfaces coordinate bugs the prose hid. Bulk parquet moved outside t
 **Packages:** calcofi4db 3.5.0–3.9.3; calcofi4r 1.5.0–1.5.4 (shared transect/climatology/anomaly
 functions, summer-anomaly vignette).
 
-# v2026.08.04 – v2026.08.06 (2026-08-04 … 2026-08-06)
+# v2026.08.04 – v2026.08.06
 
 Three closely spaced releases while consumer deployment became part of the pipeline: consumers
 sync automatically on promotion, `deploy_consumers` is a real target that reports which release
@@ -1663,7 +1663,7 @@ promotion. Spatial layers gained attributes (`spatial` 3,373 → 13,206 features
 40k → 148k). v2026.08.05 dropped 17,187 duplicate/invalid `sample` rows. Four WoRMS/taxonomic-status
 gates added (28 → 32).
 
-# v2026.08.03 (2026-08-03)
+# v2026.08.03
 
 ## All released geometry is tagged EPSG:4326
 
@@ -1675,7 +1675,7 @@ by GCS server-side copy and never pass through the connection (the check passed 
 with a real `spatial_key`. Five spatial gates added (23 → 28). Partitioned uploads use `rsync`, so a
 retry resumes; full-scan parquet is clustered by cast. Rows unchanged; 2.19 → 2.16 GB.
 
-# v2026.08.02 (2026-08-02)
+# v2026.08.02
 
 ## A full rebuild on the core-only model
 
@@ -1684,7 +1684,7 @@ Every dataset's core projection SQL moved out of calcofi4db into the ingest note
 from its own inline copy and the two copies drifted, each divergence a silent data error).
 `obs_mets_full` and `taxon` are catalogued; spatial tables renamed. `obs` 18.7 M → 20.1 M.
 
-# v2026.07.30 (2026-07-30)
+# v2026.07.30
 
 ## Four new datasets, the CTD QA/QC engine, and generic publishing
 
@@ -1703,14 +1703,14 @@ from its own inline copy and the two copies drifted, each divergence a silent da
 
 **Packages:** calcofi4db 2.11.0 → 3.4.0; calcofi4r 1.4.0–1.4.3 (non-blocking usage analytics).
 
-# v2026.07.17 (2026-07-17)
+# v2026.07.17
 
 Serving-layer release, no row change: thinned CTD served as CF Profile NetCDF on ERDDAP, profiles
 keyed by station occupation (`ord_occ`) rather than per scan; `tow_type` (net gear) promoted onto
 the core `sample` table (calcofi4db 2.10.0); the station portal refresh repointed to
 `CalCOFI/db-viz-station`.
 
-# v2026.07.16 (2026-07-16)
+# v2026.07.16
 
 ## One taxonomy
 
@@ -1720,7 +1720,7 @@ Eight per-dataset taxon tables (`species`, `taxa_rank`, `phyto_taxon`, `zoodb_ta
 `obs_freq` becomes `obs_attribute` (size/stage frequencies + behaviour). 22 → 17 tables.
 **Consumers:** the consumer contract rekeyed from `species_id` to `taxon_key`.
 
-# v2026.07.15 (2026-07-15)
+# v2026.07.15
 
 ## The consolidated core model
 
@@ -1731,29 +1731,29 @@ per row, `realm` env|bio), `sample_measurement` (event-level effort) and the sup
 compat views. Namespaced `sample_key` = `dataset_key:sample_type:id`; `hex_id` (H3 res 10) on
 `obs`. `obs_ctd_full` complete for the first time.
 
-# v2026.06.26 (2026-06-26)
+# v2026.06.26
 
 CCE-LTER ZooDB holoplankton and ZooScan PRPOOS ingested with reproducible acquisition scripts;
 `measurement_type` → dataset membership derived rather than asserted.
 
-# v2026.06.07 – v2026.06.08 (2026-06-07 … 2026-06-08)
+# v2026.06.07 – v2026.06.08
 
 Phytoplankton (Venrick, region-pooled) added; 44 tables; full ingest + release re-run with
 refreshed outputs, DB and PMTiles.
 
-# v2026.05.14 – v2026.05.20 (2026-05-14 … 2026-05-20)
+# v2026.05.14 – v2026.05.20
 
 `ctd_thin` introduced as the headline CTD series (one direction, canonical types, 10 m grid +
 inflections + bottle depths); schema browser site and the `test_release` → promote pipeline with
 `test_results.json`; ERD and `metadata.json` sidecars from v2026.05.19.
 
-# v2026.04.02 – v2026.04.08 (2026-04-02 … 2026-04-08)
+# v2026.04.02 – v2026.04.08
 
 Invertebrates folded into ichthyo; spatial tables consolidated and uploaded to GCS; pipeline
 optimised with VIEWs and GCS server-side copy (60+ min → ~4 min); `inverts` → `invert`,
 `dic_measurement_summary` → `dic_summary`.
 
-# v2026.03.14 – v2026.03.25 (2026-03-14 – 2026-03-25)
+# v2026.03.14 – v2026.03.25
 
 First releases on the versioned GCS layout (`ducklake/releases/{version}/`), `relationships.json`
 sidecar from v2026.03.14; bottle, CTD, DIC and ichthyo as per-dataset tables.

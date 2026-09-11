@@ -1,6 +1,6 @@
 # CalCOFI integrated database release v2026.08.25
 
-**Release date:** 2026-08-25 · **promoted** (`latest.txt`)
+**Release date:** 2026-08-25
 
 ## `sample` is unique on its key — the 4,855-duplicate bug is fixed, and a gate now guards it
 
@@ -60,7 +60,6 @@ it (`metadata/release_policy.yml`). Every other version keeps its `catalog.json`
 loses its `parquet/`; its entry carries `retired: {retired_utc, to, reason}` naming the nearest
 kept version, `cc_get_db()` and `cc_get_db` (py) refuse it with that name, and its release page
 says so. Pin a consolidated version for reproducibility; pin any other and plan to move.
-
 
 ## A quality flag now reaches every consumer, not just the database
 
@@ -163,7 +162,30 @@ and had served a 2026-05-15 database for three releases; it now builds from `sam
 
 **Validation:** 28 pass / 0 fail / 4 skip (consumer-contract suite, 2026-08-25T14:06:36Z).
 
-**Software:** calcofi4db 3.23.3, calcofi4r 1.12.0.
+## How to cite
+
+> CalCOFI (2026). CalCOFI Integrated Database, release v2026.08.25 [Data set]. Scripps Institution of Oceanography, NOAA Fisheries, and California Department of Fish and Wildlife. https://calcofi.io/db-schema/?v=v2026.08.25
+
+Cite the source datasets you use alongside the release:
+
+- `calcofi_bottle` — CalCOFI. (2023). CalCOFI Bottle Database 194903-202105. CalCOFI.org. · *license pending*
+- `calcofi_ctd-cast` — CalCOFI. (2023). CalCOFI CTD Cast Files. CalCOFI.org. · *license pending*
+- `calcofi_dic` — Keeling, C.D.; Lueker, T.J.; Emanuele, G.; Dickson, A.G.; Martz, T.R.; Wolfe, W.H.; Mau, A. (2025). Discrete profile dissolved inorganic carbon, total alkalinity, water temperature and salinity measurements for CalCOFI (NCEI Accession 0301029). NOAA NCEI. https://doi.org/10.25921/3w9f-jd72 · CC BY 4.0
+- `calcofi_mets` — CalCOFI. Underway (METS) TSG/Meteorology Data. CalCOFI.org. · *license pending*
+- `calcofi_phyllosoma` — *citation pending* · *license pending*
+- `calcofi_phytoplankton` — *citation pending* · *license pending*
+- `cce-lter_euphausiids` — *citation pending* · *license pending*
+- `cce-lter_picoplankton-bacteria` — Landry, M. (2004-2023). Picoplankton and Bacteria Abundance (CalCOFI Cruise). CCE LTER. · *license pending*
+- `cce-lter_zoodb` — *citation pending* · *license pending*
+- `cce-lter_zooscan` — *citation pending* · *license pending*
+- `cdfw_dungeness-crab` — Rogers-Bennett, L.; Jones, E.; Klemmedson, A. (2026). CDFW Dungeness Crab Megalopae from archived CalCOFI plankton samples (1949-2014). California Department of Fish and Wildlife, published through CalCOFI / Scripps Institution of Oceanography.
+ · CC BY 4.0
+- `farallon_bird-mammal` — *citation pending* · *license pending*
+- `sio_mesopelagic-fish` — Koslow, J. Anthony (2016). CalCOFI Trawl Data. In California Cooperative Oceanic Fisheries Investigations (CalCOFI): Acoustic and Trawl Data. UC San Diego Library Digital Collections. https://doi.org/10.6075/J0BZ64DH
+ · CC BY 4.0
+- `sio_pic-zooplankton` — *citation pending* · *license pending*
+- `swfsc_cufes` — *citation pending* · *license pending*
+- `swfsc_ichthyo` — NOAA Fisheries SWFSC. CalCOFI Ichthyoplankton Database. · *license pending*
 
 ## Access
 

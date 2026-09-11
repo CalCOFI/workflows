@@ -1,7 +1,7 @@
 # CalCOFI integrated database release v2026.04.08
 
 **Release date:** 2026-04-08
-*Documented with v2026.04.02 – v2026.04.08 (2026-04-02 … 2026-04-08).*
+*Documented with v2026.04.02 – v2026.04.08.*
 
 Invertebrates folded into ichthyo; spatial tables consolidated and uploaded to GCS; pipeline
 optimised with VIEWs and GCS server-side copy (60+ min → ~4 min); `inverts` → `invert`,
@@ -41,6 +41,14 @@ optimised with VIEWs and GCS server-side copy (60+ min → ~4 min); `inverts` �
 | `tow` | 75,506 |  |
 
 **28 tables, 357,418,040 rows, 0.00 GB.**
+
+## How to cite
+
+> CalCOFI (2026). CalCOFI Integrated Database, release v2026.04.08 [Data set]. Scripps Institution of Oceanography, NOAA Fisheries, and California Department of Fish and Wildlife. https://calcofi.io/db-schema/?v=v2026.04.08
+
+Cite the source datasets you use alongside the release:
+
+- *(no dataset list available for this version)*
 
 ## Access
 

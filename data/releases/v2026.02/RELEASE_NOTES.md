@@ -28,6 +28,14 @@ First frozen release: 17 tables, 13.4 M rows, 81 MB — ichthyo merged with bott
 
 **17 tables, 13,410,422 rows, 0.08 GB.**
 
+## How to cite
+
+> CalCOFI (2026). CalCOFI Integrated Database, release v2026.02 [Data set]. Scripps Institution of Oceanography, NOAA Fisheries, and California Department of Fish and Wildlife. https://calcofi.io/db-schema/?v=v2026.02
+
+Cite the source datasets you use alongside the release:
+
+- *(no dataset list available for this version)*
+
 ## Access
 
 ```r

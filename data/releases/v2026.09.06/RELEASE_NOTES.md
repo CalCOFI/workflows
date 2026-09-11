@@ -1,6 +1,6 @@
 # CalCOFI integrated database release v2026.09.06
 
-**Release date:** 2026-09-06 · **promoted** (`latest.txt`)
+**Release date:** 2026-09-06
 
 ## The dataset catalog record says what a page needs to say (schema 1.1)
 
@@ -339,8 +339,6 @@ served globals change on the next deploy; no table, column or row is affected.
 **Datasets (16):** `calcofi_bottle`, `calcofi_ctd-cast`, `calcofi_dic`, `calcofi_mets`, `calcofi_phyllosoma`, `calcofi_phytoplankton`, `cce-lter_euphausiids`, `cce-lter_picoplankton-bacteria`, `cce-lter_zoodb`, `cce-lter_zooscan`, `cdfw_dungeness-crab`, `farallon_bird-mammal`, `sio_mesopelagic-fish`, `sio_pic-zooplankton`, `swfsc_cufes`, `swfsc_ichthyo`
 
 **Validation:** 69 pass / 0 fail / 4 skip (consumer-contract suite, 2026-09-06T09:05:02Z).
-
-**Software:** calcofi4db 4.6.0, calcofi4r 1.18.0.
 
 ## How to cite
 

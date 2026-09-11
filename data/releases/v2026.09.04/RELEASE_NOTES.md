@@ -1,6 +1,6 @@
 # CalCOFI integrated database release v2026.09.04
 
-**Release date:** 2026-09-04 · **promoted** (`latest.txt`)
+**Release date:** 2026-09-04
 
 ## `dataset_taxon` says what the source claimed; the bird rule reads the classification; common names have one written order
 
@@ -756,8 +756,6 @@ Horizon 2019-07.
 **Datasets (16):** `calcofi_bottle`, `calcofi_ctd-cast`, `calcofi_dic`, `calcofi_mets`, `calcofi_phyllosoma`, `calcofi_phytoplankton`, `cce-lter_euphausiids`, `cce-lter_picoplankton-bacteria`, `cce-lter_zoodb`, `cce-lter_zooscan`, `cdfw_dungeness-crab`, `farallon_bird-mammal`, `sio_mesopelagic-fish`, `sio_pic-zooplankton`, `swfsc_cufes`, `swfsc_ichthyo`
 
 **Validation:** 61 pass / 0 fail / 4 skip (consumer-contract suite, 2026-09-04T18:24:14Z).
-
-**Software:** calcofi4db 4.0.2, calcofi4r 1.18.0.
 
 ## How to cite
 

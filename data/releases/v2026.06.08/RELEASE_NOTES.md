@@ -1,7 +1,7 @@
 # CalCOFI integrated database release v2026.06.08
 
 **Release date:** 2026-06-08
-*Documented with v2026.06.07 – v2026.06.08 (2026-06-07 … 2026-06-08).*
+*Documented with v2026.06.07 – v2026.06.08.*
 
 Phytoplankton (Venrick, region-pooled) added; 44 tables; full ingest + release re-run with
 refreshed outputs, DB and PMTiles.
@@ -58,6 +58,23 @@ refreshed outputs, DB and PMTiles.
 **44 tables, 133,807,311 rows, 3.73 GB.**
 
 **Datasets (10):** `calcofi_bird_mammal_census`, `calcofi_bottle`, `calcofi_ctd-cast`, `calcofi_dic`, `calcofi_phyllosoma`, `calcofi_phytoplankton`, `cce-lter_euphausiids`, `pic_zooplankton`, `swfsc_cufes`, `swfsc_ichthyo`
+
+## How to cite
+
+> CalCOFI (2026). CalCOFI Integrated Database, release v2026.06.08 [Data set]. Scripps Institution of Oceanography, NOAA Fisheries, and California Department of Fish and Wildlife. https://calcofi.io/db-schema/?v=v2026.06.08
+
+Cite the source datasets you use alongside the release:
+
+- `calcofi_bird_mammal_census` — *citation pending* · *license pending*
+- `calcofi_bottle` — CalCOFI. (2023). CalCOFI Bottle Database 194903-202105. CalCOFI.org. · *license pending*
+- `calcofi_ctd-cast` — CalCOFI. (2023). CalCOFI CTD Cast Files. CalCOFI.org. · *license pending*
+- `calcofi_dic` — Keeling, C.D.; Lueker, T.J.; Emanuele, G.; Dickson, A.G.; Martz, T.R.; Wolfe, W.H.; Mau, A. (2025). Discrete profile dissolved inorganic carbon, total alkalinity, water temperature and salinity measurements for CalCOFI (NCEI Accession 0301029). NOAA NCEI. https://doi.org/10.25921/3w9f-jd72 · CC BY 4.0
+- `calcofi_phyllosoma` — *citation pending* · *license pending*
+- `calcofi_phytoplankton` — *citation pending* · *license pending*
+- `cce-lter_euphausiids` — *citation pending* · *license pending*
+- `pic_zooplankton` — *citation pending* · *license pending*
+- `swfsc_cufes` — *citation pending* · *license pending*
+- `swfsc_ichthyo` — NOAA Fisheries SWFSC. CalCOFI Ichthyoplankton Database. · *license pending*
 
 ## Access
 
