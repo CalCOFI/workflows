@@ -22,7 +22,10 @@ measurements block and before `versions.json`: put the measurement-media block r
 1. Walk `measurements.json` (1.0 or 1.1): for each key, the P01 (or `face.face_of`'s P01, or the `chem[]` rows in 1.1) → NVS (`?_profile=nvs&_mediatype=application/ld%2Bjson`), following S27, S25, S06, A05, P06, P07, P02 one hop; record pref label, definition, and `sameAs` (ChEBI, CAS, WoRMS, QUDT).
 2. For each ChEBI id: the compound record (name stripped of markup, formula, charge, mass, definition) and the molfile → RDKit SVG (BW palette, text as paths, `currentColor`, tight `viewBox`, a linear molecule drawn horizontal); **never store ChEBI roles**.
 3. Wikipedia: the lead of each title named by `why[kind = wikipedia]` (two sentences, revision id, CC BY-SA 4.0); the ONI table → `strong_el_nino` (any 3-month ONI ≥ +1.5) and `latest`.
-4. Write `measurements_media.json` (Appendix A) to `gs://calcofi-files-public/measurement-media/{release}/` and `_data/` locally; per-URI cache on disk, resumable, NVS ≤ 2 rps, a contact User-Agent on every request.
+4. Write `measurements_media.json` (Appendix A) to `gs://calcofi-files-public/measurement-media/measurements_media.json`, its structures to
+   `measurement-media/keys/{key}/`, and `_data/` locally — **one copy, never one per release**: the sidecar's `release` field is the only place
+   a version may appear, because the site fetches it without knowing which release built it (species faces shipped `{release}/` and promoting
+   v2026.09.11 blanked every species page; fixed in CalCOFI.github.io `6904faa`, whose species-media block is the pattern to copy); per-URI cache on disk, resumable, NVS ≤ 2 rps, a contact User-Agent on every request.
 5. `check_measurement_faces.py`: every structure traces to an S27 `sameAs` or a registry row; every lead has a revision; no `roles` key anywhere; every SVG parses and uses no colour but `currentColor`.
 
 ## Gates (stop and report)

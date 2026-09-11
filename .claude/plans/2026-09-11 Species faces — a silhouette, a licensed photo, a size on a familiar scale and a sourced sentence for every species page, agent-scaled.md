@@ -110,7 +110,10 @@ answers (Appendix B).
 The media depend on eight external services and change on their own cadence; the release must stay reproducible. So
 `scripts/fetch_species_media.py` (+ `scripts/fetch_species_sizes.R`) in CalCOFI.github.io runs weekly in a new
 `species-media.yml` workflow and by hand after a release, walks `taxa.json`, and writes `taxa_media.json` + 800 px WebP
-thumbnails to `gs://calcofi-files-public/species-media/{release}/`; `scripts/fetch_release.sh` (run by `pages.yml`, `pr.yml`,
+thumbnails to `gs://calcofi-files-public/species-media/` — one copy, never one per release: the thumbnails under `species-media/taxa/{slug}/`
+and the sidecar at `species-media/taxa_media.json`, whose `release` field is the only version in the layout. (This said `{release}/`, and
+promoting v2026.09.11 on 2026-09-11 therefore took every face, ladder and sentence off every species page while § D6's "silently absent"
+made it look deliberate; corrected 2026-09-12 in CalCOFI.github.io `6904faa`.) `scripts/fetch_release.sh` (run by `pages.yml`, `pr.yml`,
 `refresh.yml` and `check-brand.yml`) pulls the JSON into `_data/` like the other release files (git-ignored). The generator
 merges by `taxon_key`; a taxon without media renders exactly as today.
 

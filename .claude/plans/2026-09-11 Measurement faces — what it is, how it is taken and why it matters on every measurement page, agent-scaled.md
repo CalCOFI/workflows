@@ -159,7 +159,12 @@ The vocabularies and leads change on their own cadence and the release must stay
 `scripts/fetch_measurement_faces.py` in CalCOFI.github.io (weekly `measurement-media.yml`, and by hand after a release) walks
 `measurements.json`, follows each key's P01 (or its `face_of`, or its `measurement_chem.csv` rows) through NVS, fetches the ChEBI records and
 molfiles, draws the SVGs (RDKit), fetches the Wikipedia leads named in `measurement_why.csv` and the ONI table, and writes
-`measurements_media.json` to `gs://calcofi-files-public/measurement-media/{release}/`; `scripts/fetch_release.sh` pulls it into `_data/`
+`measurements_media.json` to `gs://calcofi-files-public/measurement-media/` — **one copy, never one per release**: the structures under
+`measurement-media/keys/{key}/structure.svg` and the sidecar beside them at `measurement-media/measurements_media.json`, its own `release`
+field the only place a version appears. (This read `measurement-media/{release}/` until 2026-09-12. The species faces shipped that layout
+and promoting v2026.09.11 silently took every face, size ladder and sentence off every species page, because the site fetched the sidecar
+at the *promoted* version and the media existed only for the previous one; a molecule and an EOV outlive a release exactly as a taxon
+does. Fixed there in CalCOFI.github.io `6904faa`; do not reintroduce it here.) `scripts/fetch_release.sh` pulls it into `_data/`
 (git-ignored). The record (`measurements.json` 1.1) carries the anomaly and the five registries, so the page's numbers and the authored
 prose come from the release and the pictures from the fetcher. A key without media renders exactly as today.
 
@@ -272,7 +277,8 @@ MF6 ws-sonnet-high; MF7 ws-opus-medium). Each agent's prompt: the brief's path, 
 in, and the worktree convention `git -C ~/Github/CalCOFI/<repo> worktree add ~/Github/CalCOFI/.worktrees/<repo>-ws-<id> -b ws-<id>`.
 Remind each: never install a package into the shared R library while a render runs, never push, never touch another workstream's files,
 hand back branch + SHAs + tests run + one Measured line. While they run: confirm gcloud runs as the calcofi-admin service account and
-gs://calcofi-files-public/measurement-media/ is writable; read the landing repo's fetch_release.sh and refresh.yml.
+gs://calcofi-files-public/measurement-media/ is writable; read the landing repo's fetch_release.sh and refresh.yml — including its
+species-media block, which is the worked example of the version-free media layout MF4 must follow.
 
 Wave 2 — merge MF1 → MF2 into workflows (registries), MF1 → MF3 → MF7 into calcofi4db (bump to the next minor, NEWS.md, install while no
 render runs, devtools::test()); build a bridge measurements.json 1.1 from v2026.09.10 with the merged builder and upload it to
