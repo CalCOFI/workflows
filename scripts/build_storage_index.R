@@ -70,8 +70,11 @@ BUCKETS <- list(
                      "whole-dataset CF NetCDF files."),
        # netcdf/ is owned by the per-dataset publish notebooks, which write a
        # curated page (provenance, CF structure, how to read it). A generic file
-       # listing on top would erase that.
-       entry = "", skip = "^netcdf(/|$)"),
+       # listing on top would erase that. species-media/ is the species pages'
+       # asset store (thumbnails hot-linked from calcofi.io/species/, one JSON
+       # sidecar), not a place to browse, and its fetcher's checker would count a
+       # listing page as an asset (2026-09-11: this script wrote 14 of them there).
+       entry = "", skip = "^(netcdf|species-media)(/|$)"),
   list(name  = "calcofi-projects",
        title = "Project outputs",
        desc  = "Outputs from individual CalCOFI projects and analyses.",
