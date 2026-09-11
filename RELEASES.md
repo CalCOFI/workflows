@@ -8,6 +8,12 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## `taxa.json` 1.1: `n_present` beside `n_obs`
+
+`taxa.json` 1.1 adds `n_present` beside `n_obs`; `n_obs` counts rows, and CUFES, phytoplankton,
+phyllosoma, crab and zoodb rows include zero counts, so the species pages will say *observations*
+for `n_present` and *records* for `n_obs`.
+
 # v2026.09.10
 
 ## The `obs` objects ship for the last time
