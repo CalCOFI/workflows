@@ -8,8 +8,8 @@
 #
 # The chrome is the calcofi.io brand contract (https://calcofi.io/brand/v2/):
 # favicons, theme.css + theme.js hotlinked from calcofi.io (a bucket-served page
-# may reference them; only the listing styles are inline), dark by default with
-# light via <html data-theme="light">, the shared .cc-header / .cc-footer. Wide
+# may reference them; only the listing styles are inline), light by default with
+# dark via <html data-theme="dark">, the shared .cc-header / .cc-footer. Wide
 # tables scroll inside their own container rather than forcing the page sideways.
 librarian::shelf(glue, quiet = TRUE)
 
@@ -54,7 +54,9 @@ GA_HTML <- paste0(
 # Brand head block pasted verbatim from brand/v2/head.html (light default; the fonts; (favicon set, the
 # inline pre-paint theme snippet so the first paint is already the right colour,
 # theme.css, theme.js), then the page's own listing styles. The token block
-# mirrors theme.css so the page still reads if calcofi.io is unreachable.
+# mirrors theme.css v2 (light on :root, navy under data-theme="dark", Source Sans 3)
+# so the page still reads if calcofi.io is unreachable — and must stay a mirror: it
+# sits after theme.css, so a stale value here wins over the brand.
 BRAND_URL  <- "https://calcofi.io/brand/v2"
 BRAND_HEAD <- paste0(
   '<link rel="icon" type="image/x-icon" href="', BRAND_URL, '/favicon.ico">\n',
@@ -67,16 +69,17 @@ BRAND_HEAD <- paste0(
   '<link rel="stylesheet" href="', BRAND_URL, '/theme.css">\n',
   '<script defer src="', BRAND_URL, '/theme.js"></script>')
 
-# logo -> calcofi.io, title -> the storage front door, the site's own links,
-# the theme toggle (theme.js wires it). Absolute hrefs: release pages are also
-# reachable under storage.googleapis.com/<bucket>/..., where "/" is not ours.
+# the "CalCOFI.io" lockup -> calcofi.io, the product's own name -> the storage
+# front door, the site's own links, the theme toggle (theme.js wires it). Absolute
+# hrefs: release pages are also reachable under storage.googleapis.com/<bucket>/...,
+# where "/" is not ours. The lockup is sized by theme.css (--lockup-h), never 32 px.
 BRAND_HEADER <- glue('
 <header class="cc-header">
   <a class="cc-home" href="https://calcofi.io" aria-label="CalCOFI.io home">
-    <img class="cc-logo-dark"  src="{BRAND_URL}/logo_calcofi.svg"       alt="CalCOFI" width="32" height="32">
-    <img class="cc-logo-light" src="{BRAND_URL}/logo_calcofi_light.svg" alt="CalCOFI" width="32" height="32">
+    <img class="cc-logo-dark"  src="{BRAND_URL}/logo_calcofi_h.svg"       alt="CalCOFI.io">
+    <img class="cc-logo-light" src="{BRAND_URL}/logo_calcofi_h_light.svg" alt="CalCOFI.io">
   </a>
-  <a class="cc-title" href="{SITE_URL}/">storage</a>
+  <a class="cc-title" href="{SITE_URL}/">Storage</a>
   <span class="cc-spacer"></span>
   <nav class="cc-links">
     <a href="{SITE_URL}/calcofi-db/ducklake/releases/">releases</a>
@@ -103,16 +106,16 @@ page <- function(title, subtitle, body_html, crumb = "") glue('
 {GA_HTML}
 <style>
   :root {{
-    --bg:#1b1d20; --panel:#24272b; --panel-2:#2c3035; --border:#3a3f44;
-    --fg:#e6e9ed; --muted:#9aa0a6; --accent:#4dabf7; --accent-d:#339af0;
-    --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --bg:#ffffff; --panel:#f5f5f5; --panel-2:#ffffff; --border:#dddddd;
+    --fg:#182b49; --muted:#66686a; --accent:#00629b; --accent-d:#004663; --header-bg:#ffffff;
+    --sans:"Source Sans 3",system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Helvetica,Arial,sans-serif;
     --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
-    color-scheme:dark;
-  }}
-  :root[data-theme="light"] {{
-    --bg:#ffffff; --panel:#f8f9fa; --panel-2:#ffffff; --border:#dee2e6;
-    --fg:#212529; --muted:#6c757d; --accent:#2780e3; --accent-d:#1c69bf;
     color-scheme:light;
+  }}
+  :root[data-theme="dark"] {{
+    --bg:#0f1a2e; --panel:#182b49; --panel-2:#21375c; --border:#34486b;
+    --fg:#e9edf3; --muted:#9fb0c8; --accent:#4fb6e6; --accent-d:#8ad0f0; --header-bg:#182b49;
+    color-scheme:dark;
   }}
   * {{ box-sizing:border-box; }}
   body {{ margin:0; background:var(--bg); color:var(--fg); font:16px/1.55 var(--sans); }}
