@@ -1,6 +1,6 @@
-generated: '2026-09-05'
-n_total: 58
-n_meta: 25
+generated: '2026-09-11'
+n_total: 56
+n_meta: 28
 categories:
 - id: ingest
   title: Ingest
@@ -244,12 +244,29 @@ categories:
     NetCDF, OBIS. These are dataset-agnostic: one notebook covers every dataset in
     the release.'
   layout: cards
-  count: 3
+  count: 6
   groups:
   - label: ''
     items:
     - url: publish_ichthyo_to-obis.html
       title: publish_ichthyo_to-obis
+    - url: publish_status.html
+      title: publish_status
+      description: 'The caboose of the publishers: after publish_to-edi, -obis, -netcdf
+        and -erddap have run against a promoted release, compares each dataset''s
+        built package, archive or file with the copy its portal holds, and lists what
+        needs a fresh upload — never deposited, or changed since the last deposit
+        — with what still blocks it and how to do it.'
+    - url: publish_to-edi.html
+      title: publish_to-edi
+      description: 'Publishes CalCOFI''s own program datasets — the ones with no existing
+        archive of record (bottle, CTD casts, underway TSG/meteorology) — as EDI data
+        packages: the release''s own EML 2.2 document (`build_eml()`) paired with
+        each core table''s rows for that dataset as CSV entities. Runs after every
+        promoted release but rebuilds a package only when that dataset''s rows, metadata
+        or this code changed; evaluates against EDI''s PASTA staging environment when
+        credentials exist; creates/updates the real package only under an explicit
+        flag, and says which packages EDI is behind on.'
     - url: publish_to-erddap.html
       title: publish_to-erddap
       description: Generates the ERDDAP configuration for every dataset in the frozen
@@ -263,13 +280,21 @@ categories:
         CF NetCDF file. Dataset-agnostic: the sampling hierarchy in the core decides
         each file''s shape — CF profile, trajectory, point, or netCDF-4 groups — so
         one notebook replaces the former per-dataset CTD and ichthyoplankton publishers.'
+    - url: publish_to-obis.html
+      title: publish_to-obis
+      description: 'Builds one Darwin Core Archive (Event core + Occurrence + eMoF
+        + meta.xml + the release''s own eml.xml) per biological dataset in the frozen
+        release, generically from the core and the metadata registries. Replaces publish_ichthyo_to-obis.qmd,
+        which read the swfsc_ichthyo source tables directly and left nine other biological
+        datasets with no OBIS route. Writes files only: the upload to the OBIS-USA
+        IPT stays a deliberate manual step.'
 - id: release
   title: Release & pipeline
   blurb: Freeze a versioned release, validate it against the consumer contract, deploy
     it to the apps and services that read it, and the maintenance utilities that support
     the pipeline.
   layout: list
-  count: 12
+  count: 8
   groups:
   - label: ''
     items:
@@ -288,14 +313,6 @@ categories:
       title: load_views
     - url: release_database.html
       title: release_database
-    - url: release_database-staging.html
-      title: release_database-staging
-    - url: release_database-staging-canon.html
-      title: release_database-staging-canon
-    - url: release_database-staging-catalog.html
-      title: release_database-staging-catalog
-    - url: release_database-staging-p1.html
-      title: release_database-staging-p1
     - url: test_release.html
       title: test_release
     - url: update_datasets-sitemap.html
@@ -323,7 +340,7 @@ categories:
   title: Other notebooks
   blurb: Exploratory analyses and legacy load scripts, kept for reference.
   layout: list
-  count: 23
+  count: 22
   groups:
   - label: ''
     items:
@@ -371,8 +388,6 @@ categories:
       title: load_pg_ctd
     - url: load_sanctuaries.html
       title: load_sanctuaries
-    - url: test_release-staging-catalog.html
-      title: test_release-staging-catalog
 dag_mermaid: |-
   graph LR
     deploy_consumers(["deploy_consumers"]):::release
@@ -394,8 +409,11 @@ dag_mermaid: |-
     ingest_swfsc_cufes(["ingest_swfsc_cufes"]):::c_ingest_swfsc_cufes
     ingest_swfsc_ichthyo(["ingest_swfsc_ichthyo"]):::c_ingest_swfsc_ichthyo
     publish_ichthyo_to_obis(["publish_ichthyo_to_obis"]):::publish
+    publish_status(["publish_status"]):::publish
+    publish_to_edi(["publish_to_edi"]):::publish
     publish_to_erddap(["publish_to_erddap"]):::publish
     publish_to_netcdf(["publish_to_netcdf"]):::publish
+    publish_to_obis(["publish_to_obis"]):::publish
     release_database(["release_database"]):::release
     test_release(["test_release"]):::release
     test_release --> deploy_consumers
@@ -415,8 +433,14 @@ dag_mermaid: |-
     ingest_swfsc_ichthyo --> ingest_sio_pic_zooplankton
     ingest_swfsc_ichthyo --> ingest_swfsc_cufes
     release_database --> publish_ichthyo_to_obis
-    release_database --> publish_to_erddap
-    release_database --> publish_to_netcdf
+    publish_to_edi --> publish_status
+    publish_to_obis --> publish_status
+    publish_to_netcdf --> publish_status
+    publish_to_erddap --> publish_status
+    test_release --> publish_to_edi
+    test_release --> publish_to_erddap
+    test_release --> publish_to_netcdf
+    test_release --> publish_to_obis
     ingest_calcofi_bottle --> release_database
     ingest_calcofi_ctd_cast --> release_database
     ingest_calcofi_dic --> release_database

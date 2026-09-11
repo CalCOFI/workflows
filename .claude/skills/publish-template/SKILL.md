@@ -149,22 +149,45 @@ Following the pattern from `publish_ichthyo_to_obis.qmd`:
 8. **Upload to EDI staging** — Via EDI API (optional)
 9. **Upload to GCS**
 
-### 5. Update `_targets.R`
+### 5. Join the DAG through the `calcofi:` block — and rebuild only what changed
 
-Add the publish target after `release_database`:
+Never hand-edit `_targets.R`; `build_targets_list()` reads the notebook's front matter. A
+publisher depends on **`test_release`** (not `release_database`), so it runs after the release is
+tested and promoted and reads the promoted version; its `output:` is one small file only it writes
+(a plan or manifest CSV), and `publish_status.qmd` lists it as a dependency so the portal-status
+caboose sees its result:
 
-```r
-tar_target(
-  publish_{dataset_snake}_to_{portal},
-  {
-    quarto::quarto_render(
-      here("publish_{dataset}_to_{portal}.qmd"),
-      output_file = here("_output/publish_{dataset}_to_{portal}.html"))
-    Sys.glob(here("data/{output_format}/{dataset}_*.{ext}"))
-  },
-  format = "file"
-)
+```yaml
+calcofi:
+  target_name: publish_to_{portal}
+  workflow_type: publish
+  dependency:
+    - test_release
+  output: data/{portal}/manifest.csv
 ```
+
+**The change-detection contract** (calcofi4db ≥ 4.14.0, `R/publish.R`; worked examples in
+`publish_to-edi.qmd`, `publish_to-obis.qmd`, `publish_to-netcdf.qmd`). Every release re-renders
+every publisher, so each must reuse what did not change — rebuilding exports gigabytes for
+nothing and, worse, makes a portal copy look stale when it is not:
+
+- Per dataset, fingerprint what the output is a function of: `publish_data_parts()` over
+  `publish_object_signatures()` (remote release objects; a `dataset_key` partition is its own
+  `content_hash`, a shared object is scanned once and cached in
+  `data/publish/object_signatures.csv` by `content_hash`) or `publish_table_signatures()`
+  (tables already materialized, with `via` for a vocabulary); `publish_record_digest()` of the
+  `datasets.json` record plus any registry the output carries; `publish_code_parts()` of the
+  notebook, its `libs/` helper and the calcofi4db source it calls. Combine with
+  `publish_fingerprint()`.
+- Never fingerprint the release version, the release's own EML (it names the version), or a
+  `distributions`/`registrations` row (the publisher's own status feeding back into its input).
+- `publish_decide(fp, prior, outputs)` → reuse (keep the build, stamp `checked_version`) or
+  build (store `input_fingerprint = list(hash, parts)` beside the output). A reused output keeps
+  the release it was built from as its `version`.
+- Upload status is a separate comparison: built `content_hash` vs the hash recorded when the
+  portal was last given it (`publish_upload_status()`), surfaced in `publish_status.qmd`.
+- Editing any file in the code list rebuilds every dataset once — expected, and the reason to
+  land format fixes together.
 
 ### 6. Post-release sidecar smoke test
 

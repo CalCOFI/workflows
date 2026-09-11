@@ -1,0 +1,202 @@
+---
+title: "Portal status — what needs a fresh upload"
+subtitle: "Every publisher's output against what each portal holds, after every release"
+author: "CalCOFI"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    code-fold: true
+    code-tools: true
+    df-print: kable
+calcofi:
+  target_name: publish_status
+  workflow_type: publish
+  dependency:
+    - publish_to_edi
+    - publish_to_obis
+    - publish_to_netcdf
+    - publish_to_erddap
+  output: data/publish/portal_status.csv
+  workflow_url: https://calcofi.io/workflows/publish_status.html
+  description: >
+    The caboose of the publishers: after publish_to-edi, -obis, -netcdf and
+    -erddap have run against a promoted release, compares each dataset's built
+    package, archive or file with the copy its portal holds, and lists what
+    needs a fresh upload — never deposited, or changed since the last deposit —
+    with what still blocks it and how to do it.
+editor_options:
+  chunk_output_type: console
+---
+
+## Why this page exists
+
+The four publishers run after every promoted release, and each rebuilds a dataset's
+output only when that dataset's rows, metadata or the publisher's code changed
+(`calcofi4db::publish_fingerprint()`). Two of the four portals then take a deliberate,
+manual step — an EDI deposit and an OBIS-USA IPT upload — and the other two publish
+from the pipeline when a flag says so. Whether a portal is behind is therefore a
+comparison, not a memory: the bytes built now against the bytes the portal was last
+given (`calcofi4db::publish_upload_status()`). This page makes that comparison for every
+dataset on every portal, and its first table is the to-do list.
+
+| portal | the copy it holds is recorded in | an upload is |
+|---|---|---|
+| EDI | `metadata/edi_packages.csv` (`content_hash`, `built_from`) | `CALCOFI_PUBLISH_EDI=true` + EDI credentials, re-rendering `publish_to-edi.qmd`; refused while the record lacks a required field |
+| OBIS (via the OBIS-USA IPT) | each archive's `{dataset_key}_manifest.json` (`uploaded_hash`) | manual, after the provider agrees (Decision 21) — [`docs/portals.qmd` § OBIS](https://calcofi.io/docs/portals.html#obis) |
+| netCDF (`calcofi-files-public/netcdf/`) | the site's `{dataset}/manifests.json` | `CALCOFI_PUBLISH=true`, re-rendering `publish_to-netcdf.qmd`; unchanged bytes are never re-uploaded |
+| ERDDAP (`erddap.calcofi.io`) | `data/erddap/deploy_status.json` | automatic unless `CALCOFI_DEPLOY=false` / `CALCOFI_ERDDAP_DEPLOY=false` |
+
+## Setup
+
+```{r}
+#| label: setup
+#| message: false
+librarian::shelf(dplyr, glue, jsonlite, knitr, purrr, readr, tibble, here, quiet = TRUE)
+here <- here::here
+options(readr.show_col_types = FALSE)
+devtools::load_all(here::here("../calcofi4db"))
+
+RELEASE_PREFIX <- Sys.getenv("CALCOFI_RELEASE_PREFIX", "ducklake/releases")
+STAGING        <- grepl("staging", RELEASE_PREFIX, fixed = TRUE)
+BASE_HTTPS     <- "https://storage.googleapis.com/calcofi-db"
+RELEASE <- Sys.getenv("CALCOFI_RELEASE_VERSION", "")
+if (!nzchar(RELEASE))
+  RELEASE <- trimws(readLines(glue("{BASE_HTTPS}/{RELEASE_PREFIX}/latest.txt"), warn = FALSE)[1])
+NETCDF_SITE <- "https://storage.calcofi.io/calcofi-files-public/netcdf"
+OUT <- here("data/publish/portal_status.csv")
+dir.create(dirname(OUT), recursive = TRUE, showWarnings = FALSE)
+
+read_json_or_null <- function(p) tryCatch(jsonlite::fromJSON(p, simplifyVector = FALSE),
+                                          error = function(e) NULL)
+cat(glue("release : {RELEASE}{if (STAGING) ' (STAGING)' else ''}"), "\n")
+```
+
+## EDI
+
+```{r}
+#| label: edi
+edi_csv <- here(if (STAGING) "data/edi-staging" else "data/edi", "manifest.csv")
+edi <- if (file.exists(edi_csv)) read_csv(edi_csv, col_types = cols(.default = "c"), na = "") else NULL
+edi_rows <- if (is.null(edi) || !nrow(edi)) tibble() else edi |>
+  transmute(
+    portal = "edi", dataset_key, built_from = version, checked_version,
+    upload_status, needs_upload = as.logical(needs_upload),
+    blocked_by = if_else(nzchar(coalesce(eml_blocking, "")),
+                         paste("record incomplete:", eml_blocking), ""),
+    how  = "CALCOFI_PUBLISH_EDI=true + EDI credentials, re-render publish_to-edi.qmd",
+    link = glue("{BASE_HTTPS}/publish/edi/{dataset_key}/{dataset_key}_{version}/"))
+if (nrow(edi_rows)) kable(edi_rows |> select(dataset_key, built_from, upload_status, blocked_by)) else
+  cat("no EDI manifest yet\n")
+```
+
+## OBIS
+
+```{r}
+#| label: obis
+obis_dir <- here(if (STAGING) "data/darwincore-staging" else "data/darwincore")
+mans <- Sys.glob(file.path(obis_dir, "*_manifest.json"))
+obis_rows <- map_dfr(mans, function(p) {
+  m <- read_json_or_null(p)
+  if (is.null(m)) return(NULL)
+  st <- publish_upload_status(m$content_hash %||% NA_character_, m$uploaded_hash %||% NA_character_)
+  # a resource can be on OBIS from before manifests stamped `uploaded_hash`
+  # (swfsc_ichthyo, 2026-04): it is not "never uploaded", its copy is just unverifiable
+  on_portal <- !is.null(m$ipt_resource) || !is.null(m$obis_dataset_id)
+  if (on_portal && is.null(m$uploaded_hash))
+    st$upload_status <- "on OBIS; the uploaded copy's hash was never recorded"
+  tibble(
+    portal = "obis", dataset_key = m$dataset_key, built_from = m$version,
+    checked_version = m$checked_version %||% m$version,
+    upload_status = st$upload_status, needs_upload = st$needs_upload,
+    blocked_by = if (!on_portal) "provider agreement (Decision 21); no IPT resource yet" else
+      if (is.null(m$uploaded_hash)) "stamp uploaded_utc + uploaded_hash in the manifest at the next upload" else "",
+    how  = "manual OBIS-USA IPT upload — docs/portals.qmd § OBIS",
+    link = glue("{BASE_HTTPS}/publish/dwca/{m$dataset_key}/{m$archive}"))
+})
+# a candidate that failed its checks has no manifest, and is listed rather than dropped
+plan_csv <- file.path(obis_dir, "publish_plan.csv")
+if (file.exists(plan_csv)) {
+  cand <- read_csv(plan_csv, col_types = cols(.default = "c"))$dataset_key
+  missing <- setdiff(cand, obis_rows$dataset_key)
+  if (length(missing)) obis_rows <- bind_rows(obis_rows, tibble(
+    portal = "obis", dataset_key = missing, built_from = NA, checked_version = NA,
+    upload_status = "not built", needs_upload = FALSE,
+    blocked_by = "no archive: failed dwc_check() — see publish_to-obis.html",
+    how = "", link = ""))
+}
+if (nrow(obis_rows)) kable(obis_rows |> select(dataset_key, built_from, upload_status, blocked_by)) else
+  cat("no Darwin Core archives built yet\n")
+```
+
+## netCDF
+
+A file counts as published for this release when the site's `manifests.json` lists
+the release, and its bytes are online when any listed release carries the local
+file's sha256 — an unchanged file is never uploaded twice, only listed.
+
+```{r}
+#| label: netcdf
+sides <- Sys.glob(here("data/netcdf/*.fingerprint.json"))
+nc_rows <- map_dfr(sides, function(p) {
+  s  <- read_json_or_null(p)
+  ds <- sub("\\.fingerprint\\.json$", "", basename(p))
+  nc <- sub("\\.fingerprint\\.json$", ".nc", p)
+  if (is.null(s) || !file.exists(nc)) return(NULL)
+  rel  <- read_json_or_null(glue("{NETCDF_SITE}/{ds}/manifests.json"))$releases %||% list()
+  sha  <- digest::digest(nc, algo = "sha256", file = TRUE)
+  online <- any(vapply(rel, function(r) identical(r$sha256, sha), logical(1)))
+  listed <- any(vapply(rel, function(r) identical(r$version, RELEASE), logical(1)))
+  status <- if (online && listed) "current" else if (online) "bytes online; release not listed" else
+    "not online"
+  tibble(portal = "netcdf", dataset_key = ds, built_from = s$built_from, checked_version = RELEASE,
+         upload_status = status, needs_upload = !(online && listed), blocked_by = "",
+         how  = "CALCOFI_PUBLISH=true, re-render publish_to-netcdf.qmd (+ scripts/build_netcdf_index.R)",
+         link = glue("{NETCDF_SITE}/{ds}/"))
+})
+if (nrow(nc_rows)) kable(nc_rows |> select(dataset_key, built_from, upload_status)) else
+  cat("no netCDF fingerprints yet — publish_to-netcdf.qmd has not run since change detection\n")
+```
+
+## ERDDAP
+
+```{r}
+#| label: erddap
+es <- read_json_or_null(here("data/erddap/deploy_status.json"))
+erddap_rows <- if (is.null(es)) tibble() else {
+  served <- es$deployed_release %||% NA_character_
+  tibble(portal = "erddap", dataset_key = "(all)", built_from = RELEASE, checked_version = RELEASE,
+         upload_status = if (identical(served, RELEASE)) "current" else
+           glue("serves {served %||% 'an unknown release'}"),
+         needs_upload = !identical(served, RELEASE), blocked_by = "",
+         how  = "re-render publish_to-erddap.qmd without CALCOFI_DEPLOY=false",
+         link = "https://erddap.calcofi.io/erddap/")
+}
+if (nrow(erddap_rows)) kable(erddap_rows |> select(upload_status, how)) else
+  cat("no ERDDAP deploy status yet — publish_to-erddap.qmd has not run since it began recording one\n")
+```
+
+## What needs a fresh upload
+
+```{r}
+#| label: status
+status <- bind_rows(edi_rows, obis_rows, nc_rows, erddap_rows) |>
+  mutate(release = RELEASE, .before = 1) |>
+  arrange(desc(needs_upload), portal, dataset_key)
+write_csv(status, OUT, na = "")
+if (!STAGING) put_gcs_file(OUT, "gs://calcofi-db/publish/portal_status.csv")
+
+due <- status |> filter(needs_upload)
+cat(glue("{nrow(due)} of {nrow(status)} portal copies need a fresh upload for {RELEASE}",
+         "{if (nrow(due)) paste0(' (', paste(sort(unique(due$portal)), collapse = ', '), ')') else ''}"), "\n")
+if (nrow(due))
+  kable(due |> select(portal, dataset_key, built_from, upload_status, blocked_by, how),
+        caption = "due: never deposited, or changed since the last deposit")
+```
+
+```{r}
+#| label: status-all
+kable(status |> select(portal, dataset_key, built_from, checked_version, upload_status, blocked_by),
+      caption = glue("every portal copy, {RELEASE} (data/publish/portal_status.csv)"))
+```

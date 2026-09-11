@@ -241,6 +241,10 @@ Rscript scripts/build_workflows_index.R
 - **Deploy** (`deploy-consumers`): the per-app refresh after a release is
   promoted, ending with the hosted consumers — db-viz-station, ctd-transects and
   the docs book — dispatched on GitHub Actions.
+- **Publishers** (`publish-template`): every `publish_to-*.qmd` depends on
+  `test_release` and rebuilds a dataset only when its input fingerprint changed
+  (`publish_fingerprint()` → `publish_decide()`; never fingerprint the release
+  version); `publish_status.qmd` lists which portal copies are due an upload.
 - **Release objects** (`release-objects`): released parquet is content-addressed
   under `ducklake/tables/{table}/{hash}/`; never build a
   `releases/{v}/parquet/` path by hand, go through `cc_catalog()` /

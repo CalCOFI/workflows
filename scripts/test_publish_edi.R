@@ -135,7 +135,8 @@ test_that("edi_rewrite_datatable_physical swaps a matching entity's physical to 
   expect_equal(p$size$size, "12345")
   expect_equal(p$authentication$authentication, "deadbeef")
   expect_equal(p$dataFormat$textFormat$simpleDelimited$fieldDelimiter, ",")
-  expect_equal(p$distribution$online$url, "https://example.org/sample.csv")
+  expect_equal(p$distribution$online$url$url, "https://example.org/sample.csv")
+  expect_equal(p$distribution$online$url$`function`, "download")
   # the other entity is untouched
   expect_equal(out$dataset$dataTable[[2]]$physical$objectName, "obs.parquet")
 })
@@ -155,6 +156,37 @@ test_that("edi_add_other_entity appends without disturbing existing entities", {
   expect_equal(out$dataset$otherEntity[[1]]$entityName, "measurement_type")
   expect_equal(out$dataset$otherEntity[[1]]$physical$authentication$authentication, "abc123")
   expect_length(out$dataset$dataTable, 1) # untouched
+})
+
+# regression (v2026.09.06): `function` was written as a SIBLING of `url`, which EML 2.2
+# serializes as a <function> element and the schema rejects — all three staged packages
+# failed EML::eml_validate(). The attribute form must round-trip to a schema-valid file.
+test_that("an entity's download URL serializes as <url function=\"download\"> and validates", {
+  doc <- list(
+    packageId = "calcofi.test.1", system = "calcofi",
+    dataset = list(
+      title = "Test package",
+      creator = list(organizationName = "CalCOFI"),
+      contact = list(organizationName = "CalCOFI"),
+      dataTable = list(list(
+        entityName = "sample",
+        physical = list(objectName = "sample.csv"),
+        attributeList = list(attribute = list(list(
+          attributeName = "sample_key", attributeDefinition = "the sample",
+          measurementScale = list(nominal = list(nonNumericDomain = list(
+            textDomain = list(definition = "free text")))))))))))
+  doc <- edi_rewrite_datatable_physical(doc, "sample", "sample.csv", bytes = 10, sha256 = "ab",
+                                        url = "https://example.org/sample.csv")
+  doc <- edi_add_other_entity(doc, "measurement_type", "shared vocabulary",
+                              "measurement_type.parquet", bytes = 9, sha256 = "cd",
+                              url = "https://example.org/measurement_type.parquet")
+  f <- tempfile(fileext = ".xml"); on.exit(unlink(f), add = TRUE)
+  EML::write_eml(doc, f)
+  xml <- paste(readLines(f), collapse = "\n")
+  expect_match(xml, '<url function="download">https://example.org/sample.csv</url>', fixed = TRUE)
+  expect_false(grepl("<function>", xml, fixed = TRUE))
+  v <- EML::eml_validate(f)
+  expect_true(isTRUE(as.logical(v)), info = paste(attr(v, "errors"), collapse = " | "))
 })
 
 test_that("edi_note_excluded_table records the reason under additionalMetadata", {
@@ -182,6 +214,27 @@ test_that("edi_manifest_row builds one well-typed row", {
   expect_equal(r$dataset_key, "calcofi_bottle")
   expect_true(is.na(r$package_id))
   expect_true(is.na(r$evaluated_utc))
+  expect_equal(r$upload_status, "never uploaded")
+  expect_true(r$needs_upload)
+  # a reused package built from an earlier release, already deposited with these bytes
+  r2 <- edi_manifest_row("calcofi_bottle", "v2026.09.06", "hash123", checked_version = "v2026.09.10",
+                         action = "reuse", uploaded_hash = "hash123", uploaded_version = "v2026.09.06")
+  expect_equal(r2$upload_status, "current")
+  expect_false(r2$needs_upload)
+})
+
+test_that("edi_latest_package picks the newest build of a dataset, NULL when none", {
+  d <- tempfile(); on.exit(unlink(d, recursive = TRUE), add = TRUE)
+  expect_null(edi_latest_package(d, "calcofi_mets"))
+  for (v in c("v2026.09.06", "v2026.09.10")) {
+    p <- file.path(d, "calcofi_mets", paste0("calcofi_mets_", v))
+    dir.create(p, recursive = TRUE)
+    jsonlite::write_json(list(dataset_key = "calcofi_mets", version = v), file.path(p, "manifest.json"),
+                         auto_unbox = TRUE)
+  }
+  lp <- edi_latest_package(d, "calcofi_mets")
+  expect_equal(lp$manifest$version, "v2026.09.10")
+  expect_equal(basename(lp$dir), "calcofi_mets_v2026.09.10")
 })
 
 # ---- edi_has_credentials() ---------------------------------------------------
@@ -220,6 +273,10 @@ test_that("edi_read_package_registry / edi_package_id_for round-trip a real file
   reg <- edi_read_package_registry(p)
   expect_equal(edi_package_id_for(reg, "calcofi_bottle"), "edi.500.1")
   expect_true(is.na(edi_package_id_for(reg, "calcofi_mets")))
+  # a registry written before content_hash/built_from existed reads them as empty
+  expect_true(all(c("content_hash", "built_from") %in% names(reg)))
+  expect_true(is.na(edi_uploaded_for(reg, "calcofi_bottle")$uploaded_hash))
+  expect_true(is.na(edi_uploaded_for(reg, "calcofi_mets")$uploaded_version))
 })
 
 cat("\nAll libs/edi_entities.R tests passed.\n")

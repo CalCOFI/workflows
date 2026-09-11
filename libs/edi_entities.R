@@ -37,11 +37,10 @@ edi_read_json <- function(path_or_url) {
 #' Resolve the release version to publish from under a given prefix.
 #'
 #' Mirrors `cc_release_version()` in `libs/publish_netcdf.R`, generalised to any
-#' prefix (staging by default here — plan § D-6 evaluates against staging, and
-#' `release_database.qmd` has not yet shipped `datasets.json`/`eml/` in a
-#' promoted release at the time this notebook was written).
+#' prefix: the promoted `ducklake/releases` by default, a staging prefix when a
+#' staging run sets `CALCOFI_RELEASE_PREFIX`.
 #'
-#' @param prefix the releases prefix, e.g. `"ducklake-staging/releases"`
+#' @param prefix the releases prefix, e.g. `"ducklake/releases"`
 #' @param version an explicit version, or NULL to read `{prefix}/latest.txt`
 #' @param base_https bucket https root
 #' @return character version string
@@ -200,6 +199,23 @@ edi_table_read_plan <- function(catalog, table, dataset_key) {
 
 # ---- EML document surgery: rewrite dataTable physical, add otherEntity --------
 
+#' An entity's `physical/distribution`: one download URL
+#'
+#' In EML 2.2 `function` is an ATTRIBUTE of `<url>` (`<url function="download">`),
+#' so in the emld list it sits inside `url` beside the text value. Written as a
+#' sibling of `url` (`online = list(function = ..., url = ...)`) it serializes as a
+#' `<function>` element, which the schema rejects — every package staged from
+#' v2026.09.06 failed `EML::eml_validate()` that way ("Element 'function': This
+#' element is not expected") and was never evaluated, because the build reused the
+#' first run's XML without re-checking it.
+#'
+#' @param url the entity's public URL
+#' @param fun the url's `function` attribute, `"download"` or `"information"`
+#' @return the `distribution` list
+edi_online_distribution <- function(url, fun = "download") {
+  list(online = list(url = list(`function` = fun, url = as.character(url))))
+}
+
 #' Point one dataTable entity's `physical` at an exported CSV instead of the
 #' release parquet object `build_eml()` originally filled in.
 #'
@@ -233,7 +249,7 @@ edi_rewrite_datatable_physical <- function(doc, table, object_name, bytes, sha25
       recordDelimiter = "\\n",
       attributeOrientation = "column",
       simpleDelimited = list(fieldDelimiter = delimiter))))
-  if (!is.null(url)) phys$distribution <- list(online = list(`function` = "download", url = url))
+  if (!is.null(url)) phys$distribution <- edi_online_distribution(url)
   doc$dataset$dataTable[[i[1]]]$physical <- phys
   doc
 }
@@ -260,7 +276,7 @@ edi_add_other_entity <- function(doc, entity_name, description, object_name, byt
       size = list(unit = "bytes", size = as.character(as.integer(bytes))),
       authentication = list(method = "SHA-256", authentication = sha256),
       dataFormat = list(externallyDefinedFormat = list(formatName = format_name)),
-      distribution = list(online = list(`function` = "download", url = url))),
+      distribution = edi_online_distribution(url)),
     entityType = "table")
   doc$dataset$otherEntity <- c(doc$dataset$otherEntity, list(e))
   doc
@@ -294,19 +310,51 @@ edi_content_hash <- function(hashes) {
 }
 
 #' Build one manifest row (the shape `publish_to-edi.qmd` writes to
-#' `data/edi/manifest.csv`, "like E2's": `package_id, revision, content_hash,
-#' uploaded_utc`, plus the fields this notebook's own gates need).
+#' `data/edi/manifest.csv`: what was built, from which release, whether this run
+#' rebuilt or reused it, and whether EDI's copy is current).
+#'
+#' `version` is the release the package was BUILT from; `checked_version` the release
+#' this run confirmed it against. They differ exactly when the dataset did not change
+#' between the two releases, and the package was reused rather than rebuilt.
 edi_manifest_row <- function(dataset_key, version, content_hash, n_csv = NA_integer_,
                              n_other_ref = NA_integer_, n_excluded = NA_integer_,
                              bytes_total = NA_real_, package_id = NA_character_,
                              revision = NA_integer_, evaluated_utc = NA_character_,
-                             uploaded_utc = NA_character_) {
+                             uploaded_utc = NA_character_, checked_version = NA_character_,
+                             action = NA_character_, changed = NA_character_,
+                             input_fingerprint = NA_character_, eml_blocking = NA_character_,
+                             uploaded_hash = NA_character_, uploaded_version = NA_character_) {
+  st <- calcofi4db::publish_upload_status(content_hash, uploaded_hash, uploaded_version)
   tibble::tibble(
-    dataset_key = dataset_key, version = version, content_hash = content_hash,
+    dataset_key = dataset_key, version = version, checked_version = checked_version,
+    action = action, changed = changed, input_fingerprint = input_fingerprint,
+    content_hash = content_hash,
     n_csv = as.integer(n_csv), n_other_ref = as.integer(n_other_ref),
     n_excluded = as.integer(n_excluded), bytes_total = as.numeric(bytes_total),
+    eml_blocking = eml_blocking,
     package_id = package_id, revision = as.integer(revision),
-    evaluated_utc = evaluated_utc, uploaded_utc = uploaded_utc)
+    evaluated_utc = evaluated_utc, uploaded_utc = uploaded_utc,
+    uploaded_hash = uploaded_hash, uploaded_version = uploaded_version,
+    upload_status = st$upload_status, needs_upload = st$needs_upload)
+}
+
+#' The most recent package built for a dataset, whatever release it came from
+#'
+#' Packages live at `{out_dir}/{dataset_key}/{dataset_key}_{version}/`; the one whose
+#' `manifest.json` names the latest `version` is the previous build a new run is
+#' compared with.
+#'
+#' @return list(dir, manifest) or NULL when nothing was ever built
+edi_latest_package <- function(out_dir, dataset_key) {
+  mans <- Sys.glob(file.path(out_dir, dataset_key, paste0(dataset_key, "_*"), "manifest.json"))
+  if (!length(mans)) return(NULL)
+  ms <- lapply(mans, function(m) tryCatch(jsonlite::fromJSON(m, simplifyVector = FALSE),
+                                          error = function(e) NULL))
+  ok <- !vapply(ms, is.null, logical(1))
+  if (!any(ok)) return(NULL)
+  mans <- mans[ok]; ms <- ms[ok]
+  i <- order(vapply(ms, function(m) .chr0(m[["version"]]), ""), decreasing = TRUE)[1]
+  list(dir = dirname(mans[i]), manifest = ms[[i]])
 }
 
 # ---- EDI credentials + the package-id registry --------------------------------
@@ -327,8 +375,10 @@ edi_has_credentials <- function() {
   list(available = FALSE, method = NA_character_)
 }
 
+# `content_hash` + `built_from` are the package EDI holds: the upload status compares
+# them with the package built now (calcofi4db::publish_upload_status())
 EDI_PACKAGES_COLS <- c("dataset_key", "scope", "identifier", "revision", "env",
-                      "package_id", "created_utc", "updated_utc")
+                      "package_id", "created_utc", "updated_utc", "content_hash", "built_from")
 
 #' Read `metadata/edi_packages.csv` (dataset_key -> the EDI package id that owns
 #' it), or an empty typed tibble if the file does not exist yet.
@@ -336,7 +386,21 @@ edi_read_package_registry <- function(path) {
   if (!file.exists(path))
     return(tibble::as_tibble(stats::setNames(replicate(length(EDI_PACKAGES_COLS), character(), simplify = FALSE),
                                              EDI_PACKAGES_COLS)))
-  readr::read_csv(path, col_types = readr::cols(.default = "c"), na = "")
+  reg <- readr::read_csv(path, col_types = readr::cols(.default = "c"), na = "")
+  # a registry written before a column existed reads with it empty, never errors
+  for (col in setdiff(EDI_PACKAGES_COLS, names(reg))) reg[[col]] <- NA_character_
+  reg[, c(EDI_PACKAGES_COLS, setdiff(names(reg), EDI_PACKAGES_COLS))]
+}
+
+#' What EDI holds for a dataset: the deposited package's hash, source release and date
+#'
+#' @return list(uploaded_hash, uploaded_version, uploaded_utc), each NA when never uploaded
+edi_uploaded_for <- function(registry, dataset_key) {
+  hit <- registry[registry$dataset_key == dataset_key, , drop = FALSE]
+  if (!nrow(hit)) return(list(uploaded_hash = NA_character_, uploaded_version = NA_character_,
+                              uploaded_utc = NA_character_))
+  list(uploaded_hash = hit$content_hash[1], uploaded_version = hit$built_from[1],
+       uploaded_utc = hit$updated_utc[1])
 }
 
 #' The registered EDI package id for a dataset, or NA if none exists yet

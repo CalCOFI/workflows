@@ -14,7 +14,7 @@ calcofi:
   target_name: publish_to_netcdf
   workflow_type: publish
   dependency:
-    - release_database
+    - test_release
   output: data/netcdf/publish_plan.csv
   workflow_url: https://calcofi.io/workflows/publish_to-netcdf.html
   description: >
@@ -289,6 +289,51 @@ dataset_meta_of <- function(ds) {
 reg_full <- q("SELECT * FROM dataset")
 ```
 
+## What changed since each file was built
+
+A file is a function of the dataset's rows in the tables the writers read (its own
+`obs` partition, signed by the catalog's `content_hash` with no read; `sample`,
+`obs_attribute`, `sample_measurement` and `dataset` signed per dataset over the tables
+materialized above; `taxon` whole, and only for a dataset that names taxa), of its
+self-description (`dataset_meta_of()`, the registry rows of its variables, the plan)
+and of this code. An unchanged fingerprint with the file on disk is reused; the CTD
+supplemental below is gated the same way, which is what keeps an unchanged release
+from costing its hour.
+
+```{r}
+#| label: fingerprint
+CODE_FILES <- c(here("publish_to-netcdf.qmd"), here("libs/publish_netcdf.R"),
+                here("../calcofi4db/R/netcdf.R"))
+code_parts <- publish_code_parts(CODE_FILES)
+rel_catalog <- cc_release_catalog(RELEASE)
+sigs <- rbind(
+  publish_object_signatures(con, rel_catalog, "obs"),   # partitioned by dataset_key: no read
+  publish_table_signatures(con, c("sample", "obs_attribute", "sample_measurement", "dataset", "taxon")))
+
+nc_read_side <- function(path) {
+  if (!file.exists(path)) return(NULL)
+  tryCatch(jsonlite::fromJSON(path, simplifyVector = FALSE), error = function(e) NULL)
+}
+nc_write_side <- function(path, fp, ...) {
+  writeLines(jsonlite::toJSON(c(list(hash = fp$hash, parts = as.list(fp$parts), built_from = RELEASE),
+                                list(...)), auto_unbox = TRUE, pretty = TRUE, null = "null", na = "null"),
+             path)
+}
+
+fps <- list()
+for (d in names(plans)) {
+  tbls <- c("obs", "sample", "obs_attribute", "sample_measurement", "dataset",
+            if (length(obs_ident_cols(d))) "taxon")
+  mts <- plans[[d]]$measurement_types
+  fps[[d]] <- publish_fingerprint(
+    data     = publish_data_parts(sigs, d, tbls),
+    metadata = list(meta = dataset_meta_of(d), var_meta = var_meta[intersect(mts, names(var_meta))],
+                    plan = summarise_netcdf_plan(plans[[d]])),
+    code     = code_parts)
+}
+cat(glue("fingerprinted {length(fps)} dataset(s)\n"))
+```
+
 ## Build
 
 ```{r}
@@ -305,34 +350,23 @@ build_one <- function(ds, plan) {
   ident <- obs_ident_cols(ds)
   nc_path <- file.path(OUT_DIR, glue("{ds}.nc"))
 
-  # a release is frozen, so a file already built from THIS release cannot differ: its
-  # own `db_release` attribute is the fingerprint, and a re-render returns the row
-  # instead of rebuilding (the CTD supplemental alone is an hour). The row's
-  # `source_tables` comes from the published manifest for this release, so nothing is
-  # written into the file (a new attribute would change its bytes and force a
-  # re-upload). A file from another release, or one never published, is rebuilt.
-  if (file.exists(nc_path)) {
-    prior <- tryCatch({
-      o <- nc_open(nc_path); on.exit(nc_close(o), add = TRUE)
-      g <- function(a) { v <- ncatt_get(o, 0, a); if (isTRUE(v$hasatt)) v$value else NA_character_ }
-      list(release = g("db_release"), cf_scope = g("cf_scope"), feature_type = g("featureType"))
-    }, error = function(e) NULL)
-    if (!is.null(prior) && identical(prior$release, RELEASE)) {
-      man <- tryCatch(fromJSON(glue("{NETCDF_SITE}/{ds}/manifests.json"), simplifyDataFrame = FALSE)$releases,
-                      error = function(e) list())
-      man <- Filter(function(r) identical(r$version, RELEASE), man %||% list())
-      if (length(man) == 1) {
-        cat(glue("\n- **`{ds}`** ({shape}): already built from {RELEASE} — not rebuilt ",
-                 "({round(file.size(nc_path)/1048576, 1)} MB)\n"))
-        return(tibble(dataset_key = ds, shape = shape,
-                      feature_type = if (is.na(prior$feature_type)) plan$feature_type %||% NA else prior$feature_type,
-                      path = nc_path, bytes = file.size(nc_path),
-                      source_tables = paste(unlist(man[[1]]$source_tables), collapse = ","),
-                      cf_scope = if (is.na(prior$cf_scope)) man[[1]]$cf_scope %||% "" else prior$cf_scope,
-                      note = "reused"))
-      }
-    }
+  # a file built from an EARLIER release is reused when nothing it is a function of
+  # changed since (the `fingerprint` chunk) — its bytes, `db_release` attribute
+  # included, stay those of the release it was built from, so cc_netcdf_plan() finds
+  # them already published and uploads nothing. The sidecar carries what the row
+  # needs, so nothing is written into the file.
+  side <- file.path(OUT_DIR, glue("{ds}.fingerprint.json"))
+  prior <- nc_read_side(side)
+  dec <- publish_decide(fps[[ds]], prior, nc_path)
+  if (dec$action == "reuse") {
+    cat(glue("\n- **`{ds}`** ({shape}): unchanged since {prior$built_from} — reused ",
+             "({round(file.size(nc_path)/1048576, 1)} MB)\n"))
+    return(tibble(dataset_key = ds, shape = shape, feature_type = prior$feature_type %||% NA,
+                  path = nc_path, bytes = file.size(nc_path),
+                  source_tables = prior$source_tables %||% "", cf_scope = prior$cf_scope %||% "",
+                  note = glue("reused (built from {prior$built_from})")))
   }
+  cat(glue("\n- `{ds}`: rebuilding — {dec$reason}\n"))
   unlink(nc_path)
 
   # ---- obs-derived wide frame, at the OCCURRENCE grain ------------------------
@@ -395,6 +429,8 @@ build_one <- function(ds, plan) {
 
   cat(glue("\n- **`{ds}`** ({shape}): {res$note}, ",
            "{round(file.size(nc_path)/1048576, 1)} MB\n"))
+  nc_write_side(side, fps[[ds]], shape = shape, feature_type = plan$feature_type %||% NA,
+                source_tables = paste(res$source_tables, collapse = ","), cf_scope = res$cf_scope)
   tibble(dataset_key = ds, shape = shape, feature_type = plan$feature_type %||% NA,
          path = nc_path, bytes = file.size(nc_path),
          source_tables = paste(res$source_tables, collapse = ","),
@@ -706,11 +742,37 @@ advertised as full resolution: 39 variables where there should have been 61.
 :::
 
 ```{r}
+#| label: supplemental-fingerprint
+#| results: asis
+FULL_NC   <- file.path(OUT_DIR, "calcofi_ctd-cast_full.nc")
+SIDE_FULL <- file.path(OUT_DIR, "calcofi_ctd-cast_full.fingerprint.json")
+# obs_ctd_full is read by one dataset only, so its objects are signed by their
+# content_hash — no scan of 1.4 GB to learn that nothing changed
+sup_sigs <- publish_object_signatures(con, rel_catalog, "obs_ctd_full",
+                                      owners = list(obs_ctd_full = "calcofi_ctd-cast"))
+fp_full <- publish_fingerprint(
+  data     = publish_data_parts(sup_sigs, "calcofi_ctd-cast", "obs_ctd_full"),
+  metadata = list(meta = dataset_meta_of("calcofi_ctd-cast"), var_meta = var_meta),
+  code     = code_parts)
+prior_full <- nc_read_side(SIDE_FULL)
+dec_full <- publish_decide(fp_full, prior_full, FULL_NC)
+SUP_REUSE <- DO_SUPPLEMENTAL && dec_full$action == "reuse"
+SUP_BUILD <- DO_SUPPLEMENTAL && !SUP_REUSE
+if (SUP_REUSE) {
+  cat(glue("\n- `calcofi_ctd-cast_full.nc`: unchanged since {prior_full$built_from} — reused ",
+           "({round(file.size(FULL_NC)/1048576, 1)} MB)\n"))
+  built <- bind_rows(built, tibble(
+    dataset_key = "calcofi_ctd-cast_full", shape = "profile", feature_type = "profile",
+    path = FULL_NC, bytes = file.size(FULL_NC), source_tables = "obs_ctd_full",
+    cf_scope = prior_full$cf_scope %||% "", note = glue("reused (built from {prior_full$built_from})")))
+} else if (DO_SUPPLEMENTAL) cat(glue("\n- `calcofi_ctd-cast_full.nc`: rebuilding — {dec_full$reason}\n"))
+```
+
+```{r}
 #| label: supplemental
-#| eval: !expr DO_SUPPLEMENTAL
+#| eval: !expr SUP_BUILD
 #| results: asis
 
-FULL_NC <- file.path(OUT_DIR, "calcofi_ctd-cast_full.nc")
 parts <- cc_release_partitions("obs_ctd_full", RELEASE)
 urls_all <- paste0("'", parts, "'", collapse = ", ")
 cat(glue("\n- partitions: {length(parts)}\n"))
@@ -785,6 +847,8 @@ for (nm in names(gl)) ncatt_put(ncf, 0, nm, gl[[nm]])
 nc_close(ncf)
 cat(glue("\n- wrote `{basename(FULL_NC)}` ({round(file.size(FULL_NC)/1048576, 1)} MB)\n"))
 
+nc_write_side(SIDE_FULL, fp_full, shape = "profile", feature_type = "profile",
+              source_tables = "obs_ctd_full", cf_scope = gl$cf_scope)
 built <- bind_rows(built, tibble(
   dataset_key = "calcofi_ctd-cast_full", shape = "profile", feature_type = "profile",
   path = FULL_NC, bytes = file.size(FULL_NC),

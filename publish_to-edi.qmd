@@ -1,6 +1,6 @@
 ---
 title: "Publish every program dataset to EDI"
-subtitle: "EML + data entities from the frozen release; PASTA evaluate always, upload gated"
+subtitle: "EML + data entities from the frozen release; rebuilt only when a dataset changed; PASTA evaluate always, upload gated"
 author: "CalCOFI"
 date: today
 format:
@@ -14,16 +14,18 @@ calcofi:
   target_name: publish_to_edi
   workflow_type: publish
   dependency:
-    - release_database
+    - test_release
   output: data/edi/manifest.csv
   workflow_url: https://calcofi.io/workflows/publish_to-edi.html
   description: >
     Publishes CalCOFI's own program datasets — the ones with no existing
     archive of record (bottle, CTD casts, underway TSG/meteorology) — as EDI
     data packages: the release's own EML 2.2 document (`build_eml()`) paired
-    with each core table's rows for that dataset as CSV entities, evaluated
-    against EDI's PASTA staging environment on every run that has credentials,
-    and created/updated as a real package only under an explicit flag.
+    with each core table's rows for that dataset as CSV entities. Runs after
+    every promoted release but rebuilds a package only when that dataset's
+    rows, metadata or this code changed; evaluates against EDI's PASTA staging
+    environment when credentials exist; creates/updates the real package only
+    under an explicit flag, and says which packages EDI is behind on.
 editor_options:
   chunk_output_type: console
 ---
@@ -40,9 +42,9 @@ an organisational registration — CCE-LTER's own `knb-lter-cce` packages stay
 theirs), one package per dataset, owned by a CalCOFI EDI account. This notebook
 defaults to the three program datasets that have **no existing archive of
 record** — `calcofi_bottle`, `calcofi_ctd-cast`, `calcofi_mets` — because every
-other CalCOFI dataset already has a home (`swfsc_ichthyo` on OBIS; the nine
-CCE-LTER-adjacent datasets already live in `knb-lter-cce` and are sourced from
-there, never republished).
+other CalCOFI dataset already has a home (`swfsc_ichthyo` on OBIS; `calcofi_dic`
+at NCEI; the nine CCE-LTER-adjacent datasets already live in `knb-lter-cce` and
+are sourced from there, never republished).
 
 **The non-interference rule holds generically, not just by default list.** A
 requested `dataset_key` is refused — reported, not published — when its own
@@ -65,13 +67,28 @@ list, so a schema change is picked up automatically):
 The exclusion is recorded in the EML's own `additionalMetadata` (never silent)
 and reported in the plan table below with measured sizes.
 
-**Evaluate always, upload gated.** `EDIutils::evaluate_data_package()` runs
-against `env = "staging"` on every render that has EDI credentials
-(`EDI_KEY`, or `EDI_USER` + `EDI_PASS`) — evaluating is non-destructive and
-does not mint anything, so there is no reason to gate it behind a flag the way
-`create_data_package()` / `update_data_package()` are (env = `"production"`,
-only under `CALCOFI_PUBLISH_EDI = true`). Without credentials the notebook
-**says so and skips cleanly** rather than prompting or failing.
+**Rebuilt only when the dataset changed.** The notebook runs after every
+promoted release (it depends on `test_release`), but most releases leave most
+datasets alone, and a rebuild would re-export gigabytes of CSV and — worse — ask
+EDI for a new revision of data that did not change. So each package carries an
+input fingerprint (`calcofi4db::publish_fingerprint()`): the dataset's rows in
+every table it exports, identified by the release's own row signatures rather
+than by bytes or version; its catalog record and the registries the EML reads;
+and this notebook's code. An unchanged fingerprint reuses the package built from
+an earlier release (its `version` stays the release it was built from, and
+`checked_version` records the release it was confirmed against); anything else
+rebuilds, and the plan says which input moved.
+
+**Evaluate always, upload gated, and say when EDI is behind.**
+`EDIutils::evaluate_data_package()` runs against `env = "staging"` on every
+render that has EDI credentials (`EDI_KEY`, or `EDI_USER` + `EDI_PASS`) for
+each package whose bytes it has not yet evaluated — evaluating is
+non-destructive and does not mint anything. `create_data_package()` /
+`update_data_package()` (env = `"production"`) run only under
+`CALCOFI_PUBLISH_EDI = true`, and only for a package whose `content_hash`
+differs from the one `metadata/edi_packages.csv` records as deposited. That same
+comparison is the *Upload due* table at the end, which `publish_status.qmd`
+gathers with the other portals'.
 
 ## Setup
 
@@ -87,10 +104,12 @@ options(readr.show_col_types = FALSE)
 devtools::load_all(here::here("../calcofi4db"))
 source(here("libs/edi_entities.R"))
 
-# Staging by default (plan § D-6: evaluate against staging first) — and, at the
-# time this notebook was written, datasets.json/eml/ exist only in the staging
-# release (v2026.09.05); a promoted release will carry them once R0/E1 ship.
-RELEASE_PREFIX  <- Sys.getenv("CALCOFI_RELEASE_PREFIX", "ducklake-staging/releases")
+# the promoted release by default; a STAGING run (CALCOFI_RELEASE_PREFIX=
+# ducklake-staging/releases) reads the staging release, writes under
+# data/edi-staging/ and stages nothing to GCS, so it can never be mistaken for, or
+# overwrite, what was built from the promoted one (the OBIS publisher's rule)
+RELEASE_PREFIX  <- Sys.getenv("CALCOFI_RELEASE_PREFIX", "ducklake/releases")
+STAGING         <- grepl("staging", RELEASE_PREFIX, fixed = TRUE)
 RELEASE_VERSION <- edi_resolve_version(RELEASE_PREFIX, Sys.getenv("CALCOFI_RELEASE_VERSION", ""))
 BASE_HTTPS      <- "https://storage.googleapis.com/calcofi-db"
 
@@ -101,15 +120,30 @@ DATASET_KEYS <- Filter(nzchar, trimws(strsplit(
 
 PUBLISH_EDI    <- identical(Sys.getenv("CALCOFI_PUBLISH_EDI"), "true")   # opt-in create/update
 creds          <- edi_has_credentials()
-NO_CREDS       <- !creds$available   # separate booleans: `!expr !x` confuses the YAML chunk-option parser
+# separate booleans: `!expr !x` confuses the YAML chunk-option parser
+NO_CREDS       <- !creds$available
 NO_PUBLISH_EDI <- !PUBLISH_EDI
+DO_EVALUATE    <- creds$available && !STAGING   # a staging run never talks to EDI
+DO_PUBLISH_EDI <- PUBLISH_EDI && !STAGING
 
-OUT_DIR <- here("data/edi"); dir.create(OUT_DIR, recursive = TRUE, showWarnings = FALSE)
+OUT_DIR <- here(if (STAGING) "data/edi-staging" else "data/edi")
+dir.create(OUT_DIR, recursive = TRUE, showWarnings = FALSE)
 PKG_REGISTRY_PATH <- here("metadata/edi_packages.csv")
+# where a package is staged for review, and where its EML says each entity downloads from
+EDI_STAGE_ROOT <- "publish/edi"
+staged_url <- function(key, version, file)
+  glue("{BASE_HTTPS}/{EDI_STAGE_ROOT}/{key}/{key}_{version}/{file}")
+# per-dataset row signatures of shared release objects, cached by content_hash
+# (true forever: objects are content-addressed); shared by every publisher
+SIG_CACHE <- here("data/publish/object_signatures.csv")
+# the code the packages are a function of: a change here rebuilds them
+CODE_FILES <- c(here("publish_to-edi.qmd"), here("libs/edi_entities.R"),
+                here("../calcofi4db/R/eml.R"))
 
-cat(glue("release prefix   : {RELEASE_PREFIX}\n"))
+cat(glue("release prefix   : {RELEASE_PREFIX}{if (STAGING) ' (STAGING)' else ''}\n"))
 cat(glue("release version  : {RELEASE_VERSION}\n"))
 cat(glue("datasets         : {paste(DATASET_KEYS, collapse=', ')}\n"))
+cat(glue("output           : {OUT_DIR}\n"))
 cat(glue("EDI credentials  : {creds$available} ({creds$method %||% 'none'})\n"))
 cat(glue("CALCOFI_PUBLISH_EDI : {PUBLISH_EDI} (create/update only when true)\n"))
 ```
@@ -129,6 +163,13 @@ pkg_registry <- edi_read_package_registry(PKG_REGISTRY_PATH)
 
 meta_has_col <- function(table, col) paste0(table, ".", col) %in% names(meta_json[["columns"]] %||% list())
 cat_entry <- function(table) Find(function(t) identical(t[["name"]], table), catalog[["tables"]] %||% list())
+
+# table -> the datasets that read it: a table only one dataset reads is signed by its
+# own content_hash and never scanned
+owners <- list()
+for (r in datasets_json[["datasets"]] %||% list())
+  for (tb in as.character(unlist(r[["tables"]])))
+    owners[[tb]] <- c(owners[[tb]], r[["dataset_key"]])
 ```
 
 ## The plan — every requested dataset, before anything is written
@@ -161,11 +202,13 @@ plan_tbl <- if (length(plan_rows)) bind_rows(plan_rows) else
 kable(plan_tbl, caption = glue("EDI entity plan for {RELEASE_VERSION} — {length(records)} dataset(s)"))
 ```
 
-## Build EML, export entities
+## What changed since each package was built
 
 ```{r}
 #| label: connect
-con <- dbConnect(duckdb())
+# get_duckdb_con() honours CALCOFI_DUCKDB_MEMORY_LIMIT / CALCOFI_DUCKDB_THREADS and
+# spills to tempdir(), so a publisher sharing the machine with an ingest stays bounded
+con <- get_duckdb_con()
 for (s in c("INSTALL httpfs", "LOAD httpfs", "SET enable_progress_bar=false"))
   try(dbExecute(con, s), silent = TRUE)
 # the CSV entities are hashed, so their row order must be a function of the release, not
@@ -176,38 +219,101 @@ dbExecute(con, "SET preserve_insertion_order = true")
 ```
 
 ```{r}
+#| label: fingerprint
+# every table a package is a function of: the CSV entities and the whole-object
+# references (an excluded supplemental contributes nothing but its name)
+entity_tables <- function(key)
+  plan_tbl$table[plan_tbl$dataset_key == key & plan_tbl$class != "excluded_supplemental"]
+sigs <- publish_object_signatures(con, catalog, unique(unlist(lapply(names(records), entity_tables))),
+                                  owners = owners, cache = SIG_CACHE, base_url = BASE_HTTPS)
+code_parts <- publish_code_parts(CODE_FILES)
+
+fps <- list(); decisions <- list(); priors <- list()
+for (key in names(records)) {
+  tbls <- entity_tables(key)
+  cols <- meta_json[["columns"]] %||% list()
+  taxa <- Filter(function(t) key %in% vapply(t[["datasets"]] %||% list(), function(d) d[["dataset_key"]] %||% "", ""),
+                 coverage_json[["taxa"]] %||% list())
+  fps[[key]] <- publish_fingerprint(
+    data     = publish_data_parts(sigs, key, tbls),
+    metadata = list(
+      record   = publish_record_digest(records[[key]]),
+      sidecar  = sidecars[[key]],
+      tables   = (meta_json[["tables"]] %||% list())[intersect(tbls, names(meta_json[["tables"]]))],
+      columns  = cols[sub("\\..*$", "", names(cols)) %in% tbls],
+      taxa     = taxa,
+      gear     = gear,
+      excluded = plan_tbl$table[plan_tbl$dataset_key == key & plan_tbl$class == "excluded_supplemental"]),
+    code     = code_parts)
+  priors[[key]] <- edi_latest_package(OUT_DIR, key)
+  pm <- priors[[key]]$manifest
+  outputs <- if (is.null(pm)) character() else
+    file.path(priors[[key]]$dir, c(glue("{key}.xml"), as.character(unlist(pm[["files"]]))))
+  decisions[[key]] <- publish_decide(fps[[key]], pm[["input_fingerprint"]], outputs)
+  if (!is.null(pm) && is.null(pm[["input_fingerprint"]]))
+    decisions[[key]]$reason <- glue("the {pm$version} build predates input fingerprints")
+}
+
+kable(tibble(
+  dataset_key = names(decisions),
+  previous    = vapply(names(decisions), function(k) priors[[k]]$manifest$version %||% "—", ""),
+  action      = vapply(decisions, `[[`, "", "action"),
+  why         = vapply(decisions, `[[`, "", "reason")),
+  caption = glue("reuse or rebuild, against {RELEASE_VERSION}"))
+```
+
+## Build EML, export entities
+
+```{r}
 #| label: export
 #| results: asis
 
 manifest_rows <- list()
+pkg_dirs <- list()
 
 for (key in names(records)) {
-  pkg_dir <- file.path(OUT_DIR, key, glue("{key}_{RELEASE_VERSION}"))
-  # a release is frozen, so a package already built for THIS version from it cannot differ:
-  # its manifest.json is the fingerprint, and a re-render reads it instead of re-exporting
-  # gigabytes of CSV (2026-09-06). A package for another version, or a manifest that names
-  # a file that is gone, is rebuilt.
-  prev <- file.path(pkg_dir, "manifest.json")
-  if (file.exists(prev)) {
-    pm <- jsonlite::fromJSON(prev, simplifyVector = TRUE)
-    eml_ok <- file.exists(file.path(pkg_dir, glue("{key}.xml")))
-    if (identical(pm$version, RELEASE_VERSION) && eml_ok) {
-      manifest_rows[[key]] <- edi_manifest_row(key, RELEASE_VERSION, pm$content_hash,
-                                               n_csv = pm$n_csv, n_other_ref = pm$n_other_ref,
-                                               n_excluded = pm$n_excluded, bytes_total = pm$bytes_total,
-                                               package_id = pm$package_id %||% NA_character_)
-      cat(glue("- `{key}`: package for {RELEASE_VERSION} already built ({pm$n_csv} CSV, ",
-               "{fmt_mb0(pm$bytes_total)}, content_hash {substr(pm$content_hash, 1, 12)}) — not re-exported\n"))
-      next
-    }
-  }
   rec <- records[[key]]
+  up  <- edi_uploaded_for(pkg_registry, key)
+
+  # ---- reuse: the dataset did not change since an earlier release's build ----
+  if (decisions[[key]]$action == "reuse") {
+    pkg_dir <- priors[[key]]$dir
+    pm <- priors[[key]]$manifest
+    eml_path <- file.path(pkg_dir, glue("{key}.xml"))
+    # the schema check is cheap and the one that let v2026.09.06's packages through, so a
+    # reused package is re-validated; the record-level findings were stored at build time
+    # and still hold, because a changed record would have changed the fingerprint
+    v <- EML::eml_validate(eml_path)
+    if (!isTRUE(as.logical(v)))
+      stop(glue("{key}: reused EML fails EML::eml_validate(): ",
+                "{paste(head(as.character(attr(v, 'errors')), 3), collapse = ' | ')}"))
+    pm$checked_version <- RELEASE_VERSION
+    jsonlite::write_json(pm, file.path(pkg_dir, "manifest.json"), auto_unbox = TRUE, pretty = TRUE,
+                         null = "null")
+    pkg_dirs[[key]] <- pkg_dir
+    manifest_rows[[key]] <- edi_manifest_row(
+      key, pm$version, pm$content_hash, n_csv = pm$n_csv, n_other_ref = pm$n_other_ref,
+      n_excluded = pm$n_excluded, bytes_total = pm$bytes_total,
+      package_id = pm$package_id %||% NA_character_, evaluated_utc = pm$evaluated_utc %||% NA_character_,
+      uploaded_utc = up$uploaded_utc, checked_version = RELEASE_VERSION, action = "reuse",
+      changed = "", input_fingerprint = fps[[key]]$hash,
+      eml_blocking = pm$eml_blocking %||% "", uploaded_hash = up$uploaded_hash,
+      uploaded_version = up$uploaded_version)
+    cat(glue("- `{key}`: unchanged since {pm$version} — package reused ({pm$n_csv} CSV, ",
+             "{fmt_mb0(pm$bytes_total)}, content_hash {substr(pm$content_hash, 1, 12)})\n"))
+    next
+  }
+
+  # ---- build ----------------------------------------------------------------
   doc <- build_eml(rec, sidecar = sidecars[[key]], meta = meta_json, coverage = coverage_json,
                    release = release_block, gear = gear)
+  pkg_dir <- file.path(OUT_DIR, key, glue("{key}_{RELEASE_VERSION}"))
+  unlink(pkg_dir, recursive = TRUE)
   dir.create(pkg_dir, recursive = TRUE, showWarnings = FALSE)
+  cat(glue("- `{key}`: rebuilding — {decisions[[key]]$reason}\n"))
 
   rows <- plan_tbl |> filter(dataset_key == key)
-  hashes <- character(); bytes_total <- 0
+  hashes <- character(); bytes_total <- 0; files <- character()
   n_csv <- 0L; n_other <- 0L; n_excl <- 0L
 
   for (i in seq_len(nrow(rows))) {
@@ -215,15 +321,15 @@ for (key in names(records)) {
     if (cls == "excluded_supplemental") {
       doc <- edi_note_excluded_table(doc, tb, rows$reason[i])
       n_excl <- n_excl + 1L
-      cat(glue("- `{key}`/`{tb}`: excluded — {rows$reason[i]}\n"))
+      cat(glue("  - `{tb}`: excluded — {rows$reason[i]}\n"))
       next
     }
     if (cls == "other_ref") {
       obj <- edi_first_object(catalog, tb, BASE_HTTPS)
-      if (is.null(obj)) { cat(glue("- `{key}`/`{tb}`: NOTE no catalog object found, skipping\n")); next }
+      if (is.null(obj)) { cat(glue("  - `{tb}`: NOTE no catalog object found, skipping\n")); next }
       doc <- edi_add_other_entity(doc, tb, rows$reason[i], basename(obj$path), obj$bytes, obj$sha256, obj$url)
       hashes <- c(hashes, obj$sha256); bytes_total <- bytes_total + obj$bytes; n_other <- n_other + 1L
-      cat(glue("- `{key}`/`{tb}`: otherEntity -> {basename(obj$path)} ({fmt_mb0(obj$bytes)})\n"))
+      cat(glue("  - `{tb}`: otherEntity -> {basename(obj$path)} ({fmt_mb0(obj$bytes)})\n"))
       next
     }
     # cls == "csv": write this dataset's rows for `tb` to a local CSV
@@ -237,9 +343,12 @@ for (key in names(records)) {
     csv_bytes  <- file.size(csv_path)
     csv_sha256 <- digest::digest(csv_path, algo = "sha256", file = TRUE)
     n_rows     <- dbGetQuery(con, glue("SELECT COUNT(*) n FROM read_csv_auto('{csv_path}')"))$n
-    doc <- edi_rewrite_datatable_physical(doc, tb, basename(csv_path), csv_bytes, csv_sha256)
+    # the EML names the entity's public download URL: the staged copy PASTA fetches
+    doc <- edi_rewrite_datatable_physical(doc, tb, basename(csv_path), csv_bytes, csv_sha256,
+                                          url = staged_url(key, RELEASE_VERSION, basename(csv_path)))
     hashes <- c(hashes, csv_sha256); bytes_total <- bytes_total + csv_bytes; n_csv <- n_csv + 1L
-    cat(glue("- `{key}`/`{tb}`: {format(n_rows, big.mark=',')} rows -> `{basename(csv_path)}` ({fmt_mb0(csv_bytes)})\n"))
+    files <- c(files, basename(csv_path))
+    cat(glue("  - `{tb}`: {format(n_rows, big.mark=',')} rows -> `{basename(csv_path)}` ({fmt_mb0(csv_bytes)})\n"))
   }
 
   eml_path <- file.path(pkg_dir, glue("{key}.xml"))
@@ -247,23 +356,44 @@ for (key in names(records)) {
   eml_sha256 <- digest::digest(eml_path, algo = "sha256", file = TRUE)
   hashes <- c(hashes, eml_sha256); bytes_total <- bytes_total + file.size(eml_path)
 
+  # a schema-invalid document is a bug in this code, so it stops the render; a gap in the
+  # record (no licence, no creator) builds and stages the package for review but blocks
+  # the deposit, and is reported until the record is filled. An open question exempts a
+  # finding from failing the RELEASE (check_eml()'s rule), never from blocking a deposit:
+  # a package with no licence must not reach EDI because someone asked what it should be
   chk <- check_eml(doc, path = eml_path, record = rec)
-  bad <- chk |> filter(level == "error", !exempt)
-  if (nrow(bad)) cat(glue("  EML check: {nrow(bad)} blocking finding(s) — see below\n"))
+  if (any(chk$finding == "invalid_eml"))
+    stop(glue("{key}: EML fails EML::eml_validate(): {chk$detail[chk$finding == 'invalid_eml'][1]}"))
+  errs <- chk[chk$level == "error", , drop = FALSE]
+  blocking <- ifelse(errs$exempt & !is.na(errs$question),
+                     glue("{errs$finding} (open: {errs$question})"), errs$finding)
+  if (length(blocking)) cat(glue("  - EML check: blocks deposit — {paste(blocking, collapse = ', ')}\n"))
   print(kable(chk |> filter(finding != "ok"), caption = glue("check_eml(): {key}")))
 
   content_hash <- edi_content_hash(hashes)
   pkg_id <- edi_package_id_for(pkg_registry, key)
   jsonlite::write_json(list(
-    dataset_key = key, version = RELEASE_VERSION, content_hash = content_hash,
-    package_id = if (is.na(pkg_id)) NULL else pkg_id, n_csv = n_csv, n_other_ref = n_other,
-    n_excluded = n_excl, bytes_total = bytes_total,
-    evaluated_utc = NULL, uploaded_utc = NULL),
+    dataset_key = key, version = RELEASE_VERSION, checked_version = RELEASE_VERSION,
+    content_hash = content_hash, input_fingerprint = list(hash = fps[[key]]$hash, parts = as.list(fps[[key]]$parts)),
+    files = files, package_id = if (is.na(pkg_id)) NULL else pkg_id, n_csv = n_csv,
+    n_other_ref = n_other, n_excluded = n_excl, bytes_total = bytes_total,
+    eml_findings = chk |> filter(finding != "ok") |> select(finding, level, exempt, detail),
+    eml_blocking = paste(blocking, collapse = ","),
+    evaluated_utc = NULL, evaluated_hash = NULL),
     file.path(pkg_dir, "manifest.json"), auto_unbox = TRUE, pretty = TRUE, null = "null")
 
-  manifest_rows[[key]] <- edi_manifest_row(key, RELEASE_VERSION, content_hash,
-                                           n_csv = n_csv, n_other_ref = n_other, n_excluded = n_excl,
-                                           bytes_total = bytes_total, package_id = pkg_id)
+  # the build before this one is superseded; it is reproducible from its frozen release
+  old <- setdiff(Sys.glob(file.path(OUT_DIR, key, glue("{key}_v*"))), pkg_dir)
+  if (length(old)) { unlink(old, recursive = TRUE); cat(glue("  - removed superseded {paste(basename(old), collapse = ', ')}\n")) }
+
+  pkg_dirs[[key]] <- pkg_dir
+  manifest_rows[[key]] <- edi_manifest_row(
+    key, RELEASE_VERSION, content_hash, n_csv = n_csv, n_other_ref = n_other, n_excluded = n_excl,
+    bytes_total = bytes_total, package_id = pkg_id, uploaded_utc = up$uploaded_utc,
+    checked_version = RELEASE_VERSION, action = "build",
+    changed = paste(decisions[[key]]$changed, collapse = ","), input_fingerprint = fps[[key]]$hash,
+    eml_blocking = paste(blocking, collapse = ","), uploaded_hash = up$uploaded_hash,
+    uploaded_version = up$uploaded_version)
 }
 ```
 
@@ -272,29 +402,41 @@ for (key in names(records)) {
 manifest_tbl <- if (length(manifest_rows)) bind_rows(manifest_rows) else
   edi_manifest_row(character(), character(), character())[0, ]
 write_csv(manifest_tbl, file.path(OUT_DIR, "manifest.csv"), na = "")
-kable(manifest_tbl, caption = "data/edi/manifest.csv")
+kable(manifest_tbl |> select(dataset_key, version, checked_version, action, content_hash,
+                             eml_blocking, upload_status),
+      caption = glue("{basename(OUT_DIR)}/manifest.csv"))
 ```
 
 ## Stage the packages where a reviewer can see them
 
 Before any `evaluate`/`create` at EDI, each package (the CSV entities, the EML, its
 `manifest.json`) is copied to a public, deterministic address —
-`gs://calcofi-db/publish/edi/{dataset_key}/{dataset_key}_{version}/` — so the provider and the
-dataset page (calcofi.io/datasets/{dataset_key}/, *Archives & portals*, "built, not deposited")
-can inspect it. The `evaluate` chunk below points PASTA at the same copy.
+`gs://calcofi-db/publish/edi/{dataset_key}/{dataset_key}_{version}/`, `version` being the
+release it was built from — so the provider and the dataset page
+(calcofi.io/datasets/{dataset_key}/, *Archives & portals*, "built, not deposited") can
+inspect it, and so PASTA can fetch each entity from the URL its EML names. An unchanged
+file is not re-uploaded (`put_gcs_file()` compares md5s); a superseded version's folder
+is removed once the new one is staged. A staging run stages nothing.
 
 ```{r}
 #| label: stage
-edi_stage_prefix <- glue("publish/edi/{{key}}/{{key}}_{RELEASE_VERSION}")
-for (key in names(records)) {
-  pkg_dir <- file.path(OUT_DIR, key, glue("{key}_{RELEASE_VERSION}"))
-  files <- list.files(pkg_dir, full.names = TRUE)
-  if (!length(files)) next
-  stage_prefix <- glue(edi_stage_prefix, key = key)
-  for (f in files) put_gcs_file(f, glue("gs://calcofi-db/{stage_prefix}/{basename(f)}"))
-  cat(glue("staged {key}: {length(files)} file(s) at https://storage.googleapis.com/calcofi-db/{stage_prefix}/"), "\n")
-}
-put_gcs_file(file.path(OUT_DIR, "manifest.csv"), "gs://calcofi-db/publish/edi/manifest.csv")
+if (!STAGING) {
+  for (key in names(pkg_dirs)) {
+    pkg_dir <- pkg_dirs[[key]]
+    files <- list.files(pkg_dir, full.names = TRUE)
+    if (!length(files)) next
+    stage_prefix <- glue("{EDI_STAGE_ROOT}/{key}/{basename(pkg_dir)}")
+    for (f in files) put_gcs_file(f, glue("gs://calcofi-db/{stage_prefix}/{basename(f)}"))
+    cat(glue("staged {key}: {length(files)} file(s) at https://storage.googleapis.com/calcofi-db/{stage_prefix}/"), "\n")
+    staged <- unique(sub("^(.*/[^/]+_v[0-9.]+)/.*$", "\\1",
+                         list_gcs_files("calcofi-db", prefix = glue("{EDI_STAGE_ROOT}/{key}/"))$name))
+    for (p in setdiff(staged[grepl(glue("/{key}_v"), staged, fixed = TRUE)], stage_prefix)) {
+      delete_gcs_prefix(glue("{p}/"), bucket = "calcofi-db", dry_run = FALSE)
+      cat(glue("  removed superseded gs://calcofi-db/{p}/"), "\n")
+    }
+  }
+  put_gcs_file(file.path(OUT_DIR, "manifest.csv"), "gs://calcofi-db/publish/edi/manifest.csv")
+} else cat("staging run: nothing staged to GCS\n")
 ```
 
 ::: {.callout-note title="Measured, `calcofi_bottle`"}
@@ -311,7 +453,7 @@ this run's measured byte counts and row counts.
 
 ```{r}
 #| label: evaluate
-#| eval: !expr creds$available
+#| eval: !expr DO_EVALUATE
 
 librarian::shelf(EDIutils, quiet = TRUE)
 if (identical(creds$method, "key")) {
@@ -321,38 +463,30 @@ if (identical(creds$method, "key")) {
 }
 
 # EDI's evaluate/create/update fetch each entity from its EML
-# physical/distribution/online/url over the open web — a LOCAL file is not
-# enough. The `stage` chunk above put this run's entities + EML at a public,
-# deterministic URL (publish/edi/…); PASTA fetches from that copy.
+# physical/distribution/online/url over the open web; the `export` chunk wrote those
+# URLs as the staged copies above. A package whose bytes were already evaluated is
+# not evaluated again (PASTA would re-fetch gigabytes to say the same thing).
 evaluate_reports <- list()
-for (key in names(records)) {
-  pkg_dir <- file.path(OUT_DIR, key, glue("{key}_{RELEASE_VERSION}"))
-  files <- list.files(pkg_dir, full.names = TRUE)
-  stage_prefix <- glue(edi_stage_prefix, key = key)
-  for (f in files) put_gcs_file(f, glue("gs://calcofi-db/{stage_prefix}/{basename(f)}"))
-  staged_url <- function(f) glue("{BASE_HTTPS}/{stage_prefix}/{basename(f)}")
-
-  doc <- EML::read_eml(file.path(pkg_dir, glue("{key}.xml")))
-  for (i in seq_along(doc$dataset$dataTable %||% list()))
-    doc$dataset$dataTable[[i]]$physical$distribution <-
-      list(online = list(`function` = "download", url = staged_url(doc$dataset$dataTable[[i]]$physical$objectName)))
-  for (i in seq_along(doc$dataset$otherEntity %||% list()))
-    doc$dataset$otherEntity[[i]]$physical$distribution <-
-      list(online = list(`function` = "download", url = staged_url(doc$dataset$otherEntity[[i]]$physical$objectName)))
-  eml_staged_path <- file.path(pkg_dir, glue("{key}.staged.xml"))
-  EML::write_eml(doc, eml_staged_path)
-  put_gcs_file(eml_staged_path, glue("gs://calcofi-db/{stage_prefix}/{key}.xml"))
-
+for (key in names(pkg_dirs)) {
+  pkg_dir <- pkg_dirs[[key]]
+  man_path <- file.path(pkg_dir, "manifest.json")
+  pm <- jsonlite::fromJSON(man_path, simplifyVector = FALSE)
+  if (identical(pm$evaluated_hash %||% "", pm$content_hash)) {
+    cat(glue("- `{key}`: these bytes were evaluated {pm$evaluated_utc} — not re-evaluated\n")); next
+  }
+  eml_path <- file.path(pkg_dir, glue("{key}.xml"))
   tx <- tryCatch(
-    EDIutils::evaluate_data_package(eml = eml_staged_path, env = "staging"),
+    EDIutils::evaluate_data_package(eml = eml_path, env = "staging"),
     error = function(e) { message(glue("evaluate failed for {key}: {conditionMessage(e)}")); NULL })
   if (is.null(tx)) next
   EDIutils::check_status_evaluate(tx, env = "staging")
   rpt <- tryCatch(EDIutils::read_evaluate_report_summary(tx, with_exceptions = FALSE, env = "staging"),
                   error = function(e) conditionMessage(e))
-  evaluated_utc <- format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")
+  pm$evaluated_utc  <- format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")
+  pm$evaluated_hash <- pm$content_hash
   writeLines(as.character(rpt), file.path(pkg_dir, "evaluate_report.txt"))
-  evaluate_reports[[key]] <- list(transaction = tx, summary = rpt, evaluated_utc = evaluated_utc)
+  jsonlite::write_json(pm, man_path, auto_unbox = TRUE, pretty = TRUE, null = "null")
+  evaluate_reports[[key]] <- list(transaction = tx, summary = rpt, evaluated_utc = pm$evaluated_utc)
   cat(glue("- `{key}`: evaluate transaction `{tx}` — report written to evaluate_report.txt\n"))
 }
 EDIutils::logout()
@@ -369,7 +503,7 @@ cat("EDI_USER/EDI_PASS (or EDI_KEY) are not set — evaluate_data_package() was 
 
 ```{r}
 #| label: publish
-#| eval: !expr PUBLISH_EDI
+#| eval: !expr DO_PUBLISH_EDI
 
 # Only reached when CALCOFI_PUBLISH_EDI=true AND (for the create/update call
 # itself) EDI credentials are present — never run as part of this repo's own
@@ -379,16 +513,21 @@ librarian::shelf(EDIutils, quiet = TRUE)
 if (identical(creds$method, "key")) EDIutils::login(key = Sys.getenv("EDI_KEY")) else
   EDIutils::login(userId = Sys.getenv("EDI_USER"), userPass = Sys.getenv("EDI_PASS"))
 
+# only a package whose bytes differ from EDI's copy, and whose record is complete
+due <- manifest_tbl |> filter(needs_upload, !nzchar(coalesce(eml_blocking, "")))
+held <- manifest_tbl |> filter(needs_upload, nzchar(coalesce(eml_blocking, "")))
+for (i in seq_len(nrow(held)))
+  cat(glue("- `{held$dataset_key[i]}`: NOT deposited — the record is incomplete ({held$eml_blocking[i]})\n"))
+
 publish_rows <- list()
-for (key in names(records)) {
-  pkg_dir <- file.path(OUT_DIR, key, glue("{key}_{RELEASE_VERSION}"))
-  eml_staged_path <- file.path(pkg_dir, glue("{key}.staged.xml"))
-  stopifnot("run the `evaluate` chunk first (it stages entities + rewrites physical URLs)" = file.exists(eml_staged_path))
+for (key in due$dataset_key) {
+  pkg_dir  <- pkg_dirs[[key]]
+  eml_path <- file.path(pkg_dir, glue("{key}.xml"))
   existing <- edi_package_id_for(pkg_registry, key)
   uploaded_utc <- format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")
   tx <- if (is.na(existing))
-    EDIutils::create_data_package(eml = eml_staged_path, env = "production") else
-    EDIutils::update_data_package(eml = eml_staged_path, env = "production")
+    EDIutils::create_data_package(eml = eml_path, env = "production") else
+    EDIutils::update_data_package(eml = eml_path, env = "production")
   ok <- if (is.na(existing)) EDIutils::check_status_create(tx, env = "production") else
     EDIutils::check_status_update(tx, env = "production")
   # EDIutils' create_data_package() example names its transaction
@@ -399,17 +538,23 @@ for (key in names(records)) {
   # match, read the package id back with EDIutils::list_data_package_identifiers()
   # / read_data_package_report_summary(tx) instead of trusting this regex.
   pkg_id <- sub("^(create|update)_[0-9]+__?", "", tx)
-  publish_rows[[key]] <- tibble(dataset_key = key, package_id = pkg_id, uploaded_utc = uploaded_utc, ok = ok)
+  row_i <- manifest_tbl[manifest_tbl$dataset_key == key, ]
+  publish_rows[[key]] <- tibble(dataset_key = key, package_id = pkg_id, uploaded_utc = uploaded_utc,
+                                ok = ok, content_hash = row_i$content_hash, built_from = row_i$version)
   cat(glue("- `{key}`: {if (is.na(existing)) 'create' else 'update'} -> `{pkg_id}` (status ok={ok})\n"))
 }
 EDIutils::logout()
 
 if (length(publish_rows)) {
   new_rows <- bind_rows(publish_rows) |>
+    filter(ok) |>
     mutate(scope = "edi", identifier = sub("^edi\\.([0-9]+)\\..*$", "\\1", package_id),
           revision = sub("^edi\\.[0-9]+\\.([0-9]+)$", "\\1", package_id), env = "production",
           created_utc = uploaded_utc, updated_utc = uploaded_utc) |>
-    select(dataset_key, scope, identifier, revision, env, package_id, created_utc, updated_utc)
+    select(all_of(EDI_PACKAGES_COLS))
+  # a revision keeps the package's first created_utc
+  new_rows$created_utc <- coalesce(pkg_registry$created_utc[match(new_rows$dataset_key, pkg_registry$dataset_key)],
+                                   new_rows$created_utc)
   pkg_registry <- bind_rows(pkg_registry |> filter(!dataset_key %in% new_rows$dataset_key), new_rows)
   write_csv(pkg_registry, PKG_REGISTRY_PATH, na = "")
 }
@@ -420,6 +565,22 @@ if (length(publish_rows)) {
 #| eval: !expr NO_PUBLISH_EDI
 cat("CALCOFI_PUBLISH_EDI is not `true` — create_data_package()/update_data_package() were not run.\n",
    "Set CALCOFI_PUBLISH_EDI=true (with EDI credentials) to mint or revise a real EDI package.\n")
+```
+
+## Upload due
+
+A package needs a fresh deposit when its `content_hash` is not the one
+`metadata/edi_packages.csv` records for EDI's copy — never deposited, or changed
+since. `eml_blocking` names what the record still lacks before it may be deposited.
+
+```{r}
+#| label: upload-due
+due_tbl <- manifest_tbl |>
+  mutate(staged = if (STAGING) NA_character_ else
+           as.character(staged_url(dataset_key, version, ""))) |>
+  select(dataset_key, built_from = version, checked_version, upload_status, needs_upload,
+         eml_blocking, staged)
+kable(due_tbl, caption = glue("EDI: {sum(due_tbl$needs_upload)} of {nrow(due_tbl)} package(s) due for a deposit"))
 ```
 
 ```{r}

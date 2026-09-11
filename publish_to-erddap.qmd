@@ -14,7 +14,7 @@ calcofi:
   target_name: publish_to_erddap
   workflow_type: publish
   dependency:
-    - release_database
+    - test_release
   output: data/erddap/datasets_calcofi.xml
   workflow_url: https://calcofi.io/workflows/publish_to-erddap.html
   description: >
@@ -926,6 +926,22 @@ if (length(to_flag) || length(ids$retired)) {
 ver <- erddap_verify(ERDDAP_URL, expect_present = ids$all, expect_absent = ids$retired)
 kable(ver, caption = "5. Live verification (the flag directory is not a reliable signal)")
 stopifnot("live ERDDAP does not match the deployed config" = all(ver$ok))
+```
+
+```{r}
+#| label: deploy-status
+# which release erddap.calcofi.io serves, for publish_status.qmd: this run's when it
+# deployed (and verified — the stopifnot above stops the render otherwise), else the
+# last run's, carried forward, so a dry run reports the server as behind
+status_path <- file.path(dir_erddap, "deploy_status.json")
+prev <- if (file.exists(status_path)) jsonlite::fromJSON(status_path, simplifyVector = FALSE) else list()
+st <- if (DEPLOY) list(
+  release = RELEASE, deployed_release = RELEASE,
+  deployed_utc = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
+  added = as.list(ids$added), changed = as.list(ids$changed), retired = as.list(ids$retired)) else
+  modifyList(prev, list(release = RELEASE))
+writeLines(jsonlite::toJSON(st, auto_unbox = TRUE, pretty = TRUE, null = "null"), status_path)
+cat(glue("erddap.calcofi.io serves {st$deployed_release %||% 'an unknown release'}; the release is {RELEASE}\n"))
 ```
 
 ::: {.callout-note title="What deploying does, and the traps it encodes"}

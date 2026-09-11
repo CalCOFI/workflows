@@ -1,0 +1,1838 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.8.25">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="CalCOFI">
+<meta name="dcterms.date" content="2026-09-11">
+
+<title>Portal status — what needs a fresh upload</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="publish_status_files/libs/clipboard/clipboard.min.js"></script>
+<script src="publish_status_files/libs/quarto-html/quarto.js" type="module"></script>
+<script src="publish_status_files/libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="publish_status_files/libs/quarto-html/axe/axe-check.js" type="module"></script>
+<script src="publish_status_files/libs/quarto-html/popper.min.js"></script>
+<script src="publish_status_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="publish_status_files/libs/quarto-html/anchor.min.js"></script>
+<link href="publish_status_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="publish_status_files/libs/quarto-html/quarto-syntax-highlighting-7b89279ff1a6dce999919e0e67d4d9ec.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="publish_status_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="publish_status_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="publish_status_files/libs/bootstrap/bootstrap-d6a003b94517c951b2d65075d42fb01b.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<!-- cc-brand v2 — the calcofi.io brand contract (https://calcofi.io/brand/v2/; the SIO look,
+     light by default, in force 2026-09-04) for a rendered Quarto notebook. Included by
+     _quarto.yml (include-in-header) on every render, and injected into (or swapped into, for a
+     page still wearing the v1 chrome) already-rendered _output/*.html by
+     scripts/brand_inject_html.R (run by the Pages workflow). Quarto 1.8's Bootstrap 5.3 bundle
+     carries native colour modes, so setting data-bs-theme on <html> is all a page needs; the CSS
+     below covers what Bootstrap does not own. A notebook is a page (the reading scale): no cc-scale meta. -->
+<link rel="icon" type="image/x-icon" href="https://calcofi.io/brand/v2/favicon.ico">
+<link rel="icon" type="image/png" sizes="32x32" href="https://calcofi.io/brand/v2/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="https://calcofi.io/brand/v2/favicon-16x16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="https://calcofi.io/brand/v2/apple-touch-icon.png">
+<link rel="preload" href="https://calcofi.io/brand/v2/fonts/SourceSans3-VF.woff2" as="font" type="font/woff2" crossorigin="">
+<link rel="preload" href="https://calcofi.io/brand/v2/fonts/Teko-VF.woff2" as="font" type="font/woff2" crossorigin="">
+<script>(function(){var d=document.documentElement,m=/[?&]theme=(dark|light)\b/.exec(location.search),k=/(?:^|;\s*)cc_theme_src=user\b/.test(document.cookie),c=k&&/(?:^|;\s*)cc_theme=(dark|light)\b/.exec(document.cookie),s=null;try{if(localStorage.getItem("cc_theme_src")==="user")s=localStorage.getItem("cc_theme")}catch(e){}var t=(m&&m[1])||(c&&c[1])||(s==="dark"||s==="light"?s:null)||"light";d.dataset.theme=t;d.setAttribute("data-bs-theme",t);d.setAttribute("data-md-color-scheme",t==="dark"?"slate":"default");d.style.colorScheme=t;var sc=document.querySelector('meta[name="cc-scale"]');if(sc&&sc.content)d.setAttribute("data-cc-scale",sc.content)})();</script>
+<link rel="stylesheet" href="https://calcofi.io/brand/v2/fonts.css">
+<link rel="stylesheet" href="https://calcofi.io/brand/v2/theme.css">
+<script defer="" src="https://calcofi.io/brand/v2/theme.js"></script>
+<style>
+  /* the brand bar sits above quarto's own sticky sidebars */
+  #quarto-margin-sidebar, #quarto-sidebar { top: calc(var(--header-h) + 0.5rem); }
+  #quarto-content { padding-top: 0.5rem; }
+  /* bootstrap's dark colour mode handles body/text/links/tables; quarto's code
+     highlighting is hard-coded for a light page, so remap it (arrow theme → a
+     light-on-navy palette, brand v2's dark tokens) and give code blocks the panel tone */
+  [data-bs-theme="dark"] div.sourceCode, [data-bs-theme="dark"] pre { background-color: #182b49; color: #e9edf3; }
+  [data-bs-theme="dark"] code:not(.sourceCode) { color: #ffa8a8; background: #21375c; }
+  [data-bs-theme="dark"] code span.kw, [data-bs-theme="dark"] code span.cf { color: #d0bfff; }
+  [data-bs-theme="dark"] code span.fu { color: #74c0fc; }
+  [data-bs-theme="dark"] code span.st, [data-bs-theme="dark"] code span.ss, [data-bs-theme="dark"] code span.vs { color: #8ce99a; }
+  [data-bs-theme="dark"] code span.co, [data-bs-theme="dark"] code span.do { color: #9fb0c8; font-style: italic; }
+  [data-bs-theme="dark"] code span.dv, [data-bs-theme="dark"] code span.fl, [data-bs-theme="dark"] code span.cn, [data-bs-theme="dark"] code span.bn { color: #ffd43b; }
+  [data-bs-theme="dark"] code span.va, [data-bs-theme="dark"] code span.at, [data-bs-theme="dark"] code span.dt { color: #e9edf3; }
+  [data-bs-theme="dark"] code span.op, [data-bs-theme="dark"] code span.sc { color: #c9d3e2; }
+  [data-bs-theme="dark"] code span.ot, [data-bs-theme="dark"] code span.er, [data-bs-theme="dark"] code span.al { color: #ffa8a8; }
+  [data-bs-theme="dark"] .code-tools-button, [data-bs-theme="dark"] .quarto-title-block .btn { color: #e9edf3; }
+  [data-bs-theme="dark"] .quarto-title-block, [data-bs-theme="dark"] .cell-output-display { color-scheme: dark; }
+  [data-bs-theme="dark"] .cell-output pre, [data-bs-theme="dark"] .cell-output-stdout pre { background-color: #0f1a2e; }
+  [data-bs-theme="dark"] table.dataTable, [data-bs-theme="dark"] .dataTables_wrapper { color: #e9edf3; }
+  [data-bs-theme="dark"] .nav-tabs .nav-link.active { background: #182b49; border-color: #34486b #34486b #182b49; }
+</style>
+
+
+</head>
+
+<body class="quarto-light">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+  <nav id="TOC" role="doc-toc" class="toc-active" data-toc-expanded="1">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul class="collapse">
+  <li><a href="#why-this-page-exists" id="toc-why-this-page-exists" class="nav-link active" data-scroll-target="#why-this-page-exists"><span class="header-section-number">1</span> Why this page exists</a></li>
+  <li><a href="#setup" id="toc-setup" class="nav-link" data-scroll-target="#setup"><span class="header-section-number">2</span> Setup</a></li>
+  <li><a href="#edi" id="toc-edi" class="nav-link" data-scroll-target="#edi"><span class="header-section-number">3</span> EDI</a></li>
+  <li><a href="#obis" id="toc-obis" class="nav-link" data-scroll-target="#obis"><span class="header-section-number">4</span> OBIS</a></li>
+  <li><a href="#netcdf" id="toc-netcdf" class="nav-link" data-scroll-target="#netcdf"><span class="header-section-number">5</span> netCDF</a></li>
+  <li><a href="#erddap" id="toc-erddap" class="nav-link" data-scroll-target="#erddap"><span class="header-section-number">6</span> ERDDAP</a></li>
+  <li><a href="#what-needs-a-fresh-upload" id="toc-what-needs-a-fresh-upload" class="nav-link" data-scroll-target="#what-needs-a-fresh-upload"><span class="header-section-number">7</span> What needs a fresh upload</a></li>
+  </ul>
+</nav>
+</div>
+<main class="content" id="quarto-document-content">
+<!-- cc-brand v2 header: the "CalCOFI.io" lockup far left → calcofi.io, the product's own name
+     ("Workflows") → the workflows index, sibling links, and the theme toggle theme.js wires -->
+<header class="cc-header">
+  <a class="cc-home" href="https://calcofi.io" aria-label="CalCOFI.io home">
+    <img class="cc-logo-dark" src="https://calcofi.io/brand/v2/logo_calcofi_h.svg" alt="CalCOFI.io">
+    <img class="cc-logo-light" src="https://calcofi.io/brand/v2/logo_calcofi_h_light.svg" alt="CalCOFI.io">
+  </a>
+  <a class="cc-title" href="https://calcofi.io/workflows/">Workflows</a>
+  <span class="cc-spacer"></span>
+  <nav class="cc-links">
+    <a href="https://calcofi.io/db-schema/">schema</a>
+    <a href="https://calcofi.io/db-query/">query</a>
+    <a href="https://calcofi.io/docs/">docs</a>
+    <a href="https://github.com/CalCOFI/workflows">source</a>
+  </nav>
+  <button class="cc-theme-toggle" type="button" aria-label="Toggle dark / light theme">🌓</button>
+</header>
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<div class="quarto-title-block"><div><h1 class="title">Portal status — what needs a fresh upload</h1><button type="button" class="btn code-tools-button dropdown-toggle" id="quarto-code-tools-menu" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi"></i> Code</button><ul class="dropdown-menu dropdown-menu-end" aria-labelelledby="quarto-code-tools-menu"><li><a id="quarto-show-all-code" class="dropdown-item" href="javascript:void(0)" role="button">Show All Code</a></li><li><a id="quarto-hide-all-code" class="dropdown-item" href="javascript:void(0)" role="button">Hide All Code</a></li><li><hr class="dropdown-divider"></li><li><a id="quarto-view-source" class="dropdown-item" href="javascript:void(0)" role="button">View Source</a></li></ul></div></div>
+<p class="subtitle lead">Every publisher’s output against what each portal holds, after every release</p>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>CalCOFI </p>
+          </div>
+  </div>
+    
+    <div>
+    <div class="quarto-title-meta-heading">Published</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">2026-09-11</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="why-this-page-exists" class="level2" data-number="1">
+<h2 data-number="1" class="anchored" data-anchor-id="why-this-page-exists"><span class="header-section-number">1</span> Why this page exists</h2>
+<p>The four publishers run after every promoted release, and each rebuilds a dataset’s output only when that dataset’s rows, metadata or the publisher’s code changed (<code>calcofi4db::publish_fingerprint()</code>). Two of the four portals then take a deliberate, manual step — an EDI deposit and an OBIS-USA IPT upload — and the other two publish from the pipeline when a flag says so. Whether a portal is behind is therefore a comparison, not a memory: the bytes built now against the bytes the portal was last given (<code>calcofi4db::publish_upload_status()</code>). This page makes that comparison for every dataset on every portal, and its first table is the to-do list.</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>portal</th>
+<th>the copy it holds is recorded in</th>
+<th>an upload is</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>EDI</td>
+<td><code>metadata/edi_packages.csv</code> (<code>content_hash</code>, <code>built_from</code>)</td>
+<td><code>CALCOFI_PUBLISH_EDI=true</code> + EDI credentials, re-rendering <code>publish_to-edi.qmd</code>; refused while the record lacks a required field</td>
+</tr>
+<tr class="even">
+<td>OBIS (via the OBIS-USA IPT)</td>
+<td>each archive’s <code>{dataset_key}_manifest.json</code> (<code>uploaded_hash</code>)</td>
+<td>manual, after the provider agrees (Decision 21) — <a href="https://calcofi.io/docs/portals.html#obis"><code>docs/portals.qmd</code> § OBIS</a></td>
+</tr>
+<tr class="odd">
+<td>netCDF (<code>calcofi-files-public/netcdf/</code>)</td>
+<td>the site’s <code>{dataset}/manifests.json</code></td>
+<td><code>CALCOFI_PUBLISH=true</code>, re-rendering <code>publish_to-netcdf.qmd</code>; unchanged bytes are never re-uploaded</td>
+</tr>
+<tr class="even">
+<td>ERDDAP (<code>erddap.calcofi.io</code>)</td>
+<td><code>data/erddap/deploy_status.json</code></td>
+<td>automatic unless <code>CALCOFI_DEPLOY=false</code> / <code>CALCOFI_ERDDAP_DEPLOY=false</code></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="setup" class="level2" data-number="2">
+<h2 data-number="2" class="anchored" data-anchor-id="setup"><span class="header-section-number">2</span> Setup</h2>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>librarian<span class="sc">::</span><span class="fu">shelf</span>(dplyr, glue, jsonlite, knitr, purrr, readr, tibble, here, <span class="at">quiet =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>here <span class="ot">&lt;-</span> here<span class="sc">::</span>here</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="fu">options</span>(<span class="at">readr.show_col_types =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>devtools<span class="sc">::</span><span class="fu">load_all</span>(here<span class="sc">::</span><span class="fu">here</span>(<span class="st">"../calcofi4db"</span>))</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>RELEASE_PREFIX <span class="ot">&lt;-</span> <span class="fu">Sys.getenv</span>(<span class="st">"CALCOFI_RELEASE_PREFIX"</span>, <span class="st">"ducklake/releases"</span>)</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>STAGING        <span class="ot">&lt;-</span> <span class="fu">grepl</span>(<span class="st">"staging"</span>, RELEASE_PREFIX, <span class="at">fixed =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>BASE_HTTPS     <span class="ot">&lt;-</span> <span class="st">"https://storage.googleapis.com/calcofi-db"</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>RELEASE <span class="ot">&lt;-</span> <span class="fu">Sys.getenv</span>(<span class="st">"CALCOFI_RELEASE_VERSION"</span>, <span class="st">""</span>)</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="sc">!</span><span class="fu">nzchar</span>(RELEASE))</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>  RELEASE <span class="ot">&lt;-</span> <span class="fu">trimws</span>(<span class="fu">readLines</span>(<span class="fu">glue</span>(<span class="st">"{BASE_HTTPS}/{RELEASE_PREFIX}/latest.txt"</span>), <span class="at">warn =</span> <span class="cn">FALSE</span>)[<span class="dv">1</span>])</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>NETCDF_SITE <span class="ot">&lt;-</span> <span class="st">"https://storage.calcofi.io/calcofi-files-public/netcdf"</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>OUT <span class="ot">&lt;-</span> <span class="fu">here</span>(<span class="st">"data/publish/portal_status.csv"</span>)</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="fu">dir.create</span>(<span class="fu">dirname</span>(OUT), <span class="at">recursive =</span> <span class="cn">TRUE</span>, <span class="at">showWarnings =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>read_json_or_null <span class="ot">&lt;-</span> <span class="cf">function</span>(p) <span class="fu">tryCatch</span>(jsonlite<span class="sc">::</span><span class="fu">fromJSON</span>(p, <span class="at">simplifyVector =</span> <span class="cn">FALSE</span>),</span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>                                          <span class="at">error =</span> <span class="cf">function</span>(e) <span class="cn">NULL</span>)</span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"release : {RELEASE}{if (STAGING) ' (STAGING)' else ''}"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>release : v2026.09.10 </code></pre>
+</div>
+</div>
+</section>
+<section id="edi" class="level2" data-number="3">
+<h2 data-number="3" class="anchored" data-anchor-id="edi"><span class="header-section-number">3</span> EDI</h2>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>edi_csv <span class="ot">&lt;-</span> <span class="fu">here</span>(<span class="cf">if</span> (STAGING) <span class="st">"data/edi-staging"</span> <span class="cf">else</span> <span class="st">"data/edi"</span>, <span class="st">"manifest.csv"</span>)</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>edi <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="fu">file.exists</span>(edi_csv)) <span class="fu">read_csv</span>(edi_csv, <span class="at">col_types =</span> <span class="fu">cols</span>(<span class="at">.default =</span> <span class="st">"c"</span>), <span class="at">na =</span> <span class="st">""</span>) <span class="cf">else</span> <span class="cn">NULL</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>edi_rows <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="fu">is.null</span>(edi) <span class="sc">||</span> <span class="sc">!</span><span class="fu">nrow</span>(edi)) <span class="fu">tibble</span>() <span class="cf">else</span> edi <span class="sc">|&gt;</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">transmute</span>(</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">portal =</span> <span class="st">"edi"</span>, dataset_key, <span class="at">built_from =</span> version, checked_version,</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    upload_status, <span class="at">needs_upload =</span> <span class="fu">as.logical</span>(needs_upload),</span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    <span class="at">blocked_by =</span> <span class="fu">if_else</span>(<span class="fu">nzchar</span>(<span class="fu">coalesce</span>(eml_blocking, <span class="st">""</span>)),</span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>                         <span class="fu">paste</span>(<span class="st">"record incomplete:"</span>, eml_blocking), <span class="st">""</span>),</span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    <span class="at">how  =</span> <span class="st">"CALCOFI_PUBLISH_EDI=true + EDI credentials, re-render publish_to-edi.qmd"</span>,</span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    <span class="at">link =</span> <span class="fu">glue</span>(<span class="st">"{BASE_HTTPS}/publish/edi/{dataset_key}/{dataset_key}_{version}/"</span>))</span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">nrow</span>(edi_rows)) <span class="fu">kable</span>(edi_rows <span class="sc">|&gt;</span> <span class="fu">select</span>(dataset_key, built_from, upload_status, blocked_by)) <span class="cf">else</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="st">"no EDI manifest yet</span><span class="sc">\n</span><span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output-display">
+<table class="caption-top table table-sm table-striped small">
+<colgroup>
+<col style="width: 19%">
+<col style="width: 13%">
+<col style="width: 17%">
+<col style="width: 48%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">dataset_key</th>
+<th style="text-align: left;">built_from</th>
+<th style="text-align: left;">upload_status</th>
+<th style="text-align: left;">blocked_by</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">calcofi_bottle</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">record incomplete: no_license (open: Q10)</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">calcofi_ctd-cast</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">record incomplete: no_license (open: Q28)</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">calcofi_mets</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">record incomplete: no_license (open: Q29)</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</section>
+<section id="obis" class="level2" data-number="4">
+<h2 data-number="4" class="anchored" data-anchor-id="obis"><span class="header-section-number">4</span> OBIS</h2>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>obis_dir <span class="ot">&lt;-</span> <span class="fu">here</span>(<span class="cf">if</span> (STAGING) <span class="st">"data/darwincore-staging"</span> <span class="cf">else</span> <span class="st">"data/darwincore"</span>)</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>mans <span class="ot">&lt;-</span> <span class="fu">Sys.glob</span>(<span class="fu">file.path</span>(obis_dir, <span class="st">"*_manifest.json"</span>))</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>obis_rows <span class="ot">&lt;-</span> <span class="fu">map_dfr</span>(mans, <span class="cf">function</span>(p) {</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>  m <span class="ot">&lt;-</span> <span class="fu">read_json_or_null</span>(p)</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">is.null</span>(m)) <span class="fu">return</span>(<span class="cn">NULL</span>)</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>  st <span class="ot">&lt;-</span> <span class="fu">publish_upload_status</span>(m<span class="sc">$</span>content_hash <span class="sc">%||%</span> <span class="cn">NA_character_</span>, m<span class="sc">$</span>uploaded_hash <span class="sc">%||%</span> <span class="cn">NA_character_</span>)</span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>  <span class="co"># a resource can be on OBIS from before manifests stamped `uploaded_hash`</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>  <span class="co"># (swfsc_ichthyo, 2026-04): it is not "never uploaded", its copy is just unverifiable</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>  on_portal <span class="ot">&lt;-</span> <span class="sc">!</span><span class="fu">is.null</span>(m<span class="sc">$</span>ipt_resource) <span class="sc">||</span> <span class="sc">!</span><span class="fu">is.null</span>(m<span class="sc">$</span>obis_dataset_id)</span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (on_portal <span class="sc">&amp;&amp;</span> <span class="fu">is.null</span>(m<span class="sc">$</span>uploaded_hash))</span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>    st<span class="sc">$</span>upload_status <span class="ot">&lt;-</span> <span class="st">"on OBIS; the uploaded copy's hash was never recorded"</span></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>  <span class="fu">tibble</span>(</span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>    <span class="at">portal =</span> <span class="st">"obis"</span>, <span class="at">dataset_key =</span> m<span class="sc">$</span>dataset_key, <span class="at">built_from =</span> m<span class="sc">$</span>version,</span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>    <span class="at">checked_version =</span> m<span class="sc">$</span>checked_version <span class="sc">%||%</span> m<span class="sc">$</span>version,</span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>    <span class="at">upload_status =</span> st<span class="sc">$</span>upload_status, <span class="at">needs_upload =</span> st<span class="sc">$</span>needs_upload,</span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>    <span class="at">blocked_by =</span> <span class="cf">if</span> (<span class="sc">!</span>on_portal) <span class="st">"provider agreement (Decision 21); no IPT resource yet"</span> <span class="cf">else</span></span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> (<span class="fu">is.null</span>(m<span class="sc">$</span>uploaded_hash)) <span class="st">"stamp uploaded_utc + uploaded_hash in the manifest at the next upload"</span> <span class="cf">else</span> <span class="st">""</span>,</span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>    <span class="at">how  =</span> <span class="st">"manual OBIS-USA IPT upload — docs/portals.qmd § OBIS"</span>,</span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a>    <span class="at">link =</span> <span class="fu">glue</span>(<span class="st">"{BASE_HTTPS}/publish/dwca/{m$dataset_key}/{m$archive}"</span>))</span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a>})</span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a><span class="co"># a candidate that failed its checks has no manifest, and is listed rather than dropped</span></span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a>plan_csv <span class="ot">&lt;-</span> <span class="fu">file.path</span>(obis_dir, <span class="st">"publish_plan.csv"</span>)</span>
+<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">file.exists</span>(plan_csv)) {</span>
+<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a>  cand <span class="ot">&lt;-</span> <span class="fu">read_csv</span>(plan_csv, <span class="at">col_types =</span> <span class="fu">cols</span>(<span class="at">.default =</span> <span class="st">"c"</span>))<span class="sc">$</span>dataset_key</span>
+<span id="cb4-25"><a href="#cb4-25" aria-hidden="true" tabindex="-1"></a>  missing <span class="ot">&lt;-</span> <span class="fu">setdiff</span>(cand, obis_rows<span class="sc">$</span>dataset_key)</span>
+<span id="cb4-26"><a href="#cb4-26" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">length</span>(missing)) obis_rows <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(obis_rows, <span class="fu">tibble</span>(</span>
+<span id="cb4-27"><a href="#cb4-27" aria-hidden="true" tabindex="-1"></a>    <span class="at">portal =</span> <span class="st">"obis"</span>, <span class="at">dataset_key =</span> missing, <span class="at">built_from =</span> <span class="cn">NA</span>, <span class="at">checked_version =</span> <span class="cn">NA</span>,</span>
+<span id="cb4-28"><a href="#cb4-28" aria-hidden="true" tabindex="-1"></a>    <span class="at">upload_status =</span> <span class="st">"not built"</span>, <span class="at">needs_upload =</span> <span class="cn">FALSE</span>,</span>
+<span id="cb4-29"><a href="#cb4-29" aria-hidden="true" tabindex="-1"></a>    <span class="at">blocked_by =</span> <span class="st">"no archive: failed dwc_check() — see publish_to-obis.html"</span>,</span>
+<span id="cb4-30"><a href="#cb4-30" aria-hidden="true" tabindex="-1"></a>    <span class="at">how =</span> <span class="st">""</span>, <span class="at">link =</span> <span class="st">""</span>))</span>
+<span id="cb4-31"><a href="#cb4-31" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb4-32"><a href="#cb4-32" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">nrow</span>(obis_rows)) <span class="fu">kable</span>(obis_rows <span class="sc">|&gt;</span> <span class="fu">select</span>(dataset_key, built_from, upload_status, blocked_by)) <span class="cf">else</span></span>
+<span id="cb4-33"><a href="#cb4-33" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="st">"no Darwin Core archives built yet</span><span class="sc">\n</span><span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output-display">
+<table class="caption-top table table-sm table-striped small">
+<colgroup>
+<col style="width: 14%">
+<col style="width: 7%">
+<col style="width: 33%">
+<col style="width: 44%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">dataset_key</th>
+<th style="text-align: left;">built_from</th>
+<th style="text-align: left;">upload_status</th>
+<th style="text-align: left;">blocked_by</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">calcofi_phyllosoma</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">calcofi_phytoplankton</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">cce-lter_euphausiids</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">cce-lter_zoodb</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">cce-lter_zooscan</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">cdfw_dungeness-crab</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">farallon_bird-mammal</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">sio_mesopelagic-fish</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">swfsc_cufes</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">swfsc_ichthyo</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">on OBIS; the uploaded copy’s hash was never recorded</td>
+<td style="text-align: left;">stamp uploaded_utc + uploaded_hash in the manifest at the next upload</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</section>
+<section id="netcdf" class="level2" data-number="5">
+<h2 data-number="5" class="anchored" data-anchor-id="netcdf"><span class="header-section-number">5</span> netCDF</h2>
+<p>A file counts as published for this release when the site’s <code>manifests.json</code> lists the release, and its bytes are online when any listed release carries the local file’s sha256 — an unchanged file is never uploaded twice, only listed.</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>sides <span class="ot">&lt;-</span> <span class="fu">Sys.glob</span>(<span class="fu">here</span>(<span class="st">"data/netcdf/*.fingerprint.json"</span>))</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>nc_rows <span class="ot">&lt;-</span> <span class="fu">map_dfr</span>(sides, <span class="cf">function</span>(p) {</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>  s  <span class="ot">&lt;-</span> <span class="fu">read_json_or_null</span>(p)</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>  ds <span class="ot">&lt;-</span> <span class="fu">sub</span>(<span class="st">"</span><span class="sc">\\</span><span class="st">.fingerprint</span><span class="sc">\\</span><span class="st">.json$"</span>, <span class="st">""</span>, <span class="fu">basename</span>(p))</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>  nc <span class="ot">&lt;-</span> <span class="fu">sub</span>(<span class="st">"</span><span class="sc">\\</span><span class="st">.fingerprint</span><span class="sc">\\</span><span class="st">.json$"</span>, <span class="st">".nc"</span>, p)</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">is.null</span>(s) <span class="sc">||</span> <span class="sc">!</span><span class="fu">file.exists</span>(nc)) <span class="fu">return</span>(<span class="cn">NULL</span>)</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>  rel  <span class="ot">&lt;-</span> <span class="fu">read_json_or_null</span>(<span class="fu">glue</span>(<span class="st">"{NETCDF_SITE}/{ds}/manifests.json"</span>))<span class="sc">$</span>releases <span class="sc">%||%</span> <span class="fu">list</span>()</span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>  sha  <span class="ot">&lt;-</span> digest<span class="sc">::</span><span class="fu">digest</span>(nc, <span class="at">algo =</span> <span class="st">"sha256"</span>, <span class="at">file =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>  online <span class="ot">&lt;-</span> <span class="fu">any</span>(<span class="fu">vapply</span>(rel, <span class="cf">function</span>(r) <span class="fu">identical</span>(r<span class="sc">$</span>sha256, sha), <span class="fu">logical</span>(<span class="dv">1</span>)))</span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>  listed <span class="ot">&lt;-</span> <span class="fu">any</span>(<span class="fu">vapply</span>(rel, <span class="cf">function</span>(r) <span class="fu">identical</span>(r<span class="sc">$</span>version, RELEASE), <span class="fu">logical</span>(<span class="dv">1</span>)))</span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>  status <span class="ot">&lt;-</span> <span class="cf">if</span> (online <span class="sc">&amp;&amp;</span> listed) <span class="st">"current"</span> <span class="cf">else</span> <span class="cf">if</span> (online) <span class="st">"bytes online; release not listed"</span> <span class="cf">else</span></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>    <span class="st">"not online"</span></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">tibble</span>(<span class="at">portal =</span> <span class="st">"netcdf"</span>, <span class="at">dataset_key =</span> ds, <span class="at">built_from =</span> s<span class="sc">$</span>built_from, <span class="at">checked_version =</span> RELEASE,</span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>         <span class="at">upload_status =</span> status, <span class="at">needs_upload =</span> <span class="sc">!</span>(online <span class="sc">&amp;&amp;</span> listed), <span class="at">blocked_by =</span> <span class="st">""</span>,</span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>         <span class="at">how  =</span> <span class="st">"CALCOFI_PUBLISH=true, re-render publish_to-netcdf.qmd (+ scripts/build_netcdf_index.R)"</span>,</span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>         <span class="at">link =</span> <span class="fu">glue</span>(<span class="st">"{NETCDF_SITE}/{ds}/"</span>))</span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>})</span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">nrow</span>(nc_rows)) <span class="fu">kable</span>(nc_rows <span class="sc">|&gt;</span> <span class="fu">select</span>(dataset_key, built_from, upload_status)) <span class="cf">else</span></span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="st">"no netCDF fingerprints yet — publish_to-netcdf.qmd has not run since change detection</span><span class="sc">\n</span><span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output-display">
+<table class="caption-top table table-sm table-striped small">
+<thead>
+<tr class="header">
+<th style="text-align: left;">dataset_key</th>
+<th style="text-align: left;">built_from</th>
+<th style="text-align: left;">upload_status</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">calcofi_bottle</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">calcofi_ctd-cast_full</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">calcofi_ctd-cast</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">calcofi_dic</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">calcofi_mets</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">calcofi_phyllosoma</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">calcofi_phytoplankton</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">cce-lter_euphausiids</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">cce-lter_picoplankton-bacteria</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">cce-lter_zoodb</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">cce-lter_zooscan</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">cdfw_dungeness-crab</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">farallon_bird-mammal</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">sio_mesopelagic-fish</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">sio_pic-zooplankton</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">swfsc_cufes</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">swfsc_ichthyo</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</section>
+<section id="erddap" class="level2" data-number="6">
+<h2 data-number="6" class="anchored" data-anchor-id="erddap"><span class="header-section-number">6</span> ERDDAP</h2>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>es <span class="ot">&lt;-</span> <span class="fu">read_json_or_null</span>(<span class="fu">here</span>(<span class="st">"data/erddap/deploy_status.json"</span>))</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>erddap_rows <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="fu">is.null</span>(es)) <span class="fu">tibble</span>() <span class="cf">else</span> {</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>  served <span class="ot">&lt;-</span> es<span class="sc">$</span>deployed_release <span class="sc">%||%</span> <span class="cn">NA_character_</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">tibble</span>(<span class="at">portal =</span> <span class="st">"erddap"</span>, <span class="at">dataset_key =</span> <span class="st">"(all)"</span>, <span class="at">built_from =</span> RELEASE, <span class="at">checked_version =</span> RELEASE,</span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>         <span class="at">upload_status =</span> <span class="cf">if</span> (<span class="fu">identical</span>(served, RELEASE)) <span class="st">"current"</span> <span class="cf">else</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>           <span class="fu">glue</span>(<span class="st">"serves {served %||% 'an unknown release'}"</span>),</span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>         <span class="at">needs_upload =</span> <span class="sc">!</span><span class="fu">identical</span>(served, RELEASE), <span class="at">blocked_by =</span> <span class="st">""</span>,</span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>         <span class="at">how  =</span> <span class="st">"re-render publish_to-erddap.qmd without CALCOFI_DEPLOY=false"</span>,</span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>         <span class="at">link =</span> <span class="st">"https://erddap.calcofi.io/erddap/"</span>)</span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">nrow</span>(erddap_rows)) <span class="fu">kable</span>(erddap_rows <span class="sc">|&gt;</span> <span class="fu">select</span>(upload_status, how)) <span class="cf">else</span></span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="st">"no ERDDAP deploy status yet — publish_to-erddap.qmd has not run since it began recording one</span><span class="sc">\n</span><span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output-display">
+<table class="caption-top table table-sm table-striped small">
+<colgroup>
+<col style="width: 18%">
+<col style="width: 81%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">upload_status</th>
+<th style="text-align: left;">how</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">current</td>
+<td style="text-align: left;">re-render publish_to-erddap.qmd without CALCOFI_DEPLOY=false</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</section>
+<section id="what-needs-a-fresh-upload" class="level2" data-number="7">
+<h2 data-number="7" class="anchored" data-anchor-id="what-needs-a-fresh-upload"><span class="header-section-number">7</span> What needs a fresh upload</h2>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>status <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(edi_rows, obis_rows, nc_rows, erddap_rows) <span class="sc">|&gt;</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">release =</span> RELEASE, <span class="at">.before =</span> <span class="dv">1</span>) <span class="sc">|&gt;</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(<span class="fu">desc</span>(needs_upload), portal, dataset_key)</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="fu">write_csv</span>(status, OUT, <span class="at">na =</span> <span class="st">""</span>)</span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="sc">!</span>STAGING) <span class="fu">put_gcs_file</span>(OUT, <span class="st">"gs://calcofi-db/publish/portal_status.csv"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>gs://calcofi-db/publish/portal_status.csv</code></pre>
+</div>
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>due <span class="ot">&lt;-</span> status <span class="sc">|&gt;</span> <span class="fu">filter</span>(needs_upload)</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"{nrow(due)} of {nrow(status)} portal copies need a fresh upload for {RELEASE}"</span>,</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>         <span class="st">"{if (nrow(due)) paste0(' (', paste(sort(unique(due$portal)), collapse = ', '), ')') else ''}"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>30 of 31 portal copies need a fresh upload for v2026.09.10 (edi, netcdf, obis) </code></pre>
+</div>
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">nrow</span>(due))</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kable</span>(due <span class="sc">|&gt;</span> <span class="fu">select</span>(portal, dataset_key, built_from, upload_status, blocked_by, how),</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>        <span class="at">caption =</span> <span class="st">"due: never deposited, or changed since the last deposit"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output-display">
+<table class="caption-top table table-sm table-striped small">
+<caption>due: never deposited, or changed since the last deposit</caption>
+<colgroup>
+<col style="width: 2%">
+<col style="width: 11%">
+<col style="width: 4%">
+<col style="width: 20%">
+<col style="width: 26%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">portal</th>
+<th style="text-align: left;">dataset_key</th>
+<th style="text-align: left;">built_from</th>
+<th style="text-align: left;">upload_status</th>
+<th style="text-align: left;">blocked_by</th>
+<th style="text-align: left;">how</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">edi</td>
+<td style="text-align: left;">calcofi_bottle</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">record incomplete: no_license (open: Q10)</td>
+<td style="text-align: left;">CALCOFI_PUBLISH_EDI=true + EDI credentials, re-render publish_to-edi.qmd</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">edi</td>
+<td style="text-align: left;">calcofi_ctd-cast</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">record incomplete: no_license (open: Q28)</td>
+<td style="text-align: left;">CALCOFI_PUBLISH_EDI=true + EDI credentials, re-render publish_to-edi.qmd</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">edi</td>
+<td style="text-align: left;">calcofi_mets</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">record incomplete: no_license (open: Q29)</td>
+<td style="text-align: left;">CALCOFI_PUBLISH_EDI=true + EDI credentials, re-render publish_to-edi.qmd</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">netcdf</td>
+<td style="text-align: left;">calcofi_bottle</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+<td style="text-align: left;"></td>
+<td style="text-align: left;">CALCOFI_PUBLISH=true, re-render publish_to-netcdf.qmd (+ scripts/build_netcdf_index.R)</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">netcdf</td>
+<td style="text-align: left;">calcofi_ctd-cast</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+<td style="text-align: left;"></td>
+<td style="text-align: left;">CALCOFI_PUBLISH=true, re-render publish_to-netcdf.qmd (+ scripts/build_netcdf_index.R)</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">netcdf</td>
+<td style="text-align: left;">calcofi_ctd-cast_full</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+<td style="text-align: left;"></td>
+<td style="text-align: left;">CALCOFI_PUBLISH=true, re-render publish_to-netcdf.qmd (+ scripts/build_netcdf_index.R)</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">netcdf</td>
+<td style="text-align: left;">calcofi_dic</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+<td style="text-align: left;"></td>
+<td style="text-align: left;">CALCOFI_PUBLISH=true, re-render publish_to-netcdf.qmd (+ scripts/build_netcdf_index.R)</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">netcdf</td>
+<td style="text-align: left;">calcofi_mets</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+<td style="text-align: left;"></td>
+<td style="text-align: left;">CALCOFI_PUBLISH=true, re-render publish_to-netcdf.qmd (+ scripts/build_netcdf_index.R)</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">netcdf</td>
+<td style="text-align: left;">calcofi_phyllosoma</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+<td style="text-align: left;"></td>
+<td style="text-align: left;">CALCOFI_PUBLISH=true, re-render publish_to-netcdf.qmd (+ scripts/build_netcdf_index.R)</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">netcdf</td>
+<td style="text-align: left;">calcofi_phytoplankton</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+<td style="text-align: left;"></td>
+<td style="text-align: left;">CALCOFI_PUBLISH=true, re-render publish_to-netcdf.qmd (+ scripts/build_netcdf_index.R)</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">netcdf</td>
+<td style="text-align: left;">cce-lter_euphausiids</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+<td style="text-align: left;"></td>
+<td style="text-align: left;">CALCOFI_PUBLISH=true, re-render publish_to-netcdf.qmd (+ scripts/build_netcdf_index.R)</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">netcdf</td>
+<td style="text-align: left;">cce-lter_picoplankton-bacteria</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+<td style="text-align: left;"></td>
+<td style="text-align: left;">CALCOFI_PUBLISH=true, re-render publish_to-netcdf.qmd (+ scripts/build_netcdf_index.R)</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">netcdf</td>
+<td style="text-align: left;">cce-lter_zoodb</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+<td style="text-align: left;"></td>
+<td style="text-align: left;">CALCOFI_PUBLISH=true, re-render publish_to-netcdf.qmd (+ scripts/build_netcdf_index.R)</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">netcdf</td>
+<td style="text-align: left;">cce-lter_zooscan</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+<td style="text-align: left;"></td>
+<td style="text-align: left;">CALCOFI_PUBLISH=true, re-render publish_to-netcdf.qmd (+ scripts/build_netcdf_index.R)</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">netcdf</td>
+<td style="text-align: left;">cdfw_dungeness-crab</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+<td style="text-align: left;"></td>
+<td style="text-align: left;">CALCOFI_PUBLISH=true, re-render publish_to-netcdf.qmd (+ scripts/build_netcdf_index.R)</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">netcdf</td>
+<td style="text-align: left;">farallon_bird-mammal</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+<td style="text-align: left;"></td>
+<td style="text-align: left;">CALCOFI_PUBLISH=true, re-render publish_to-netcdf.qmd (+ scripts/build_netcdf_index.R)</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">netcdf</td>
+<td style="text-align: left;">sio_mesopelagic-fish</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+<td style="text-align: left;"></td>
+<td style="text-align: left;">CALCOFI_PUBLISH=true, re-render publish_to-netcdf.qmd (+ scripts/build_netcdf_index.R)</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">netcdf</td>
+<td style="text-align: left;">sio_pic-zooplankton</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+<td style="text-align: left;"></td>
+<td style="text-align: left;">CALCOFI_PUBLISH=true, re-render publish_to-netcdf.qmd (+ scripts/build_netcdf_index.R)</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">netcdf</td>
+<td style="text-align: left;">swfsc_cufes</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+<td style="text-align: left;"></td>
+<td style="text-align: left;">CALCOFI_PUBLISH=true, re-render publish_to-netcdf.qmd (+ scripts/build_netcdf_index.R)</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">netcdf</td>
+<td style="text-align: left;">swfsc_ichthyo</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+<td style="text-align: left;"></td>
+<td style="text-align: left;">CALCOFI_PUBLISH=true, re-render publish_to-netcdf.qmd (+ scripts/build_netcdf_index.R)</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">obis</td>
+<td style="text-align: left;">calcofi_phyllosoma</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
+<td style="text-align: left;">manual OBIS-USA IPT upload — docs/portals.qmd § OBIS</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">obis</td>
+<td style="text-align: left;">calcofi_phytoplankton</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
+<td style="text-align: left;">manual OBIS-USA IPT upload — docs/portals.qmd § OBIS</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">obis</td>
+<td style="text-align: left;">cce-lter_euphausiids</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
+<td style="text-align: left;">manual OBIS-USA IPT upload — docs/portals.qmd § OBIS</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">obis</td>
+<td style="text-align: left;">cce-lter_zoodb</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
+<td style="text-align: left;">manual OBIS-USA IPT upload — docs/portals.qmd § OBIS</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">obis</td>
+<td style="text-align: left;">cce-lter_zooscan</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
+<td style="text-align: left;">manual OBIS-USA IPT upload — docs/portals.qmd § OBIS</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">obis</td>
+<td style="text-align: left;">cdfw_dungeness-crab</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
+<td style="text-align: left;">manual OBIS-USA IPT upload — docs/portals.qmd § OBIS</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">obis</td>
+<td style="text-align: left;">farallon_bird-mammal</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
+<td style="text-align: left;">manual OBIS-USA IPT upload — docs/portals.qmd § OBIS</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">obis</td>
+<td style="text-align: left;">sio_mesopelagic-fish</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
+<td style="text-align: left;">manual OBIS-USA IPT upload — docs/portals.qmd § OBIS</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">obis</td>
+<td style="text-align: left;">swfsc_cufes</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
+<td style="text-align: left;">manual OBIS-USA IPT upload — docs/portals.qmd § OBIS</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">obis</td>
+<td style="text-align: left;">swfsc_ichthyo</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">on OBIS; the uploaded copy’s hash was never recorded</td>
+<td style="text-align: left;">stamp uploaded_utc + uploaded_hash in the manifest at the next upload</td>
+<td style="text-align: left;">manual OBIS-USA IPT upload — docs/portals.qmd § OBIS</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="fu">kable</span>(status <span class="sc">|&gt;</span> <span class="fu">select</span>(portal, dataset_key, built_from, checked_version, upload_status, blocked_by),</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>      <span class="at">caption =</span> <span class="fu">glue</span>(<span class="st">"every portal copy, {RELEASE} (data/publish/portal_status.csv)"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output-display">
+<table class="caption-top table table-sm table-striped small">
+<caption>every portal copy, v2026.09.10 (data/publish/portal_status.csv)</caption>
+<colgroup>
+<col style="width: 3%">
+<col style="width: 16%">
+<col style="width: 6%">
+<col style="width: 8%">
+<col style="width: 28%">
+<col style="width: 37%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">portal</th>
+<th style="text-align: left;">dataset_key</th>
+<th style="text-align: left;">built_from</th>
+<th style="text-align: left;">checked_version</th>
+<th style="text-align: left;">upload_status</th>
+<th style="text-align: left;">blocked_by</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">edi</td>
+<td style="text-align: left;">calcofi_bottle</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">record incomplete: no_license (open: Q10)</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">edi</td>
+<td style="text-align: left;">calcofi_ctd-cast</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">record incomplete: no_license (open: Q28)</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">edi</td>
+<td style="text-align: left;">calcofi_mets</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">record incomplete: no_license (open: Q29)</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">netcdf</td>
+<td style="text-align: left;">calcofi_bottle</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+<td style="text-align: left;"></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">netcdf</td>
+<td style="text-align: left;">calcofi_ctd-cast</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+<td style="text-align: left;"></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">netcdf</td>
+<td style="text-align: left;">calcofi_ctd-cast_full</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+<td style="text-align: left;"></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">netcdf</td>
+<td style="text-align: left;">calcofi_dic</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+<td style="text-align: left;"></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">netcdf</td>
+<td style="text-align: left;">calcofi_mets</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+<td style="text-align: left;"></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">netcdf</td>
+<td style="text-align: left;">calcofi_phyllosoma</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+<td style="text-align: left;"></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">netcdf</td>
+<td style="text-align: left;">calcofi_phytoplankton</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+<td style="text-align: left;"></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">netcdf</td>
+<td style="text-align: left;">cce-lter_euphausiids</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+<td style="text-align: left;"></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">netcdf</td>
+<td style="text-align: left;">cce-lter_picoplankton-bacteria</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+<td style="text-align: left;"></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">netcdf</td>
+<td style="text-align: left;">cce-lter_zoodb</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+<td style="text-align: left;"></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">netcdf</td>
+<td style="text-align: left;">cce-lter_zooscan</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+<td style="text-align: left;"></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">netcdf</td>
+<td style="text-align: left;">cdfw_dungeness-crab</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+<td style="text-align: left;"></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">netcdf</td>
+<td style="text-align: left;">farallon_bird-mammal</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+<td style="text-align: left;"></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">netcdf</td>
+<td style="text-align: left;">sio_mesopelagic-fish</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+<td style="text-align: left;"></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">netcdf</td>
+<td style="text-align: left;">sio_pic-zooplankton</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+<td style="text-align: left;"></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">netcdf</td>
+<td style="text-align: left;">swfsc_cufes</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+<td style="text-align: left;"></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">netcdf</td>
+<td style="text-align: left;">swfsc_ichthyo</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">not online</td>
+<td style="text-align: left;"></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">obis</td>
+<td style="text-align: left;">calcofi_phyllosoma</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">obis</td>
+<td style="text-align: left;">calcofi_phytoplankton</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">obis</td>
+<td style="text-align: left;">cce-lter_euphausiids</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">obis</td>
+<td style="text-align: left;">cce-lter_zoodb</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">obis</td>
+<td style="text-align: left;">cce-lter_zooscan</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">obis</td>
+<td style="text-align: left;">cdfw_dungeness-crab</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">obis</td>
+<td style="text-align: left;">farallon_bird-mammal</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">obis</td>
+<td style="text-align: left;">sio_mesopelagic-fish</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">obis</td>
+<td style="text-align: left;">swfsc_cufes</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">obis</td>
+<td style="text-align: left;">swfsc_ichthyo</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">on OBIS; the uploaded copy’s hash was never recorded</td>
+<td style="text-align: left;">stamp uploaded_utc + uploaded_hash in the manifest at the next upload</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">erddap</td>
+<td style="text-align: left;">(all)</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">current</td>
+<td style="text-align: left;"></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- -->
+
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+    const viewSource = window.document.getElementById('quarto-view-source') ||
+                       window.document.getElementById('quarto-code-tools-source');
+    if (viewSource) {
+      const sourceUrl = viewSource.getAttribute("data-quarto-source-url");
+      viewSource.addEventListener("click", function(e) {
+        if (sourceUrl) {
+          // rstudio viewer pane
+          if (/\bcapabilities=\b/.test(window.location)) {
+            window.open(sourceUrl);
+          } else {
+            window.location.href = sourceUrl;
+          }
+        } else {
+          const modal = new bootstrap.Modal(document.getElementById('quarto-embedded-source-code-modal'));
+          modal.show();
+        }
+        return false;
+      });
+    }
+    function toggleCodeHandler(show) {
+      return function(e) {
+        const detailsSrc = window.document.querySelectorAll(".cell > details > .sourceCode");
+        for (let i=0; i<detailsSrc.length; i++) {
+          const details = detailsSrc[i].parentElement;
+          if (show) {
+            details.open = true;
+          } else {
+            details.removeAttribute("open");
+          }
+        }
+        const cellCodeDivs = window.document.querySelectorAll(".cell > .sourceCode");
+        const fromCls = show ? "hidden" : "unhidden";
+        const toCls = show ? "unhidden" : "hidden";
+        for (let i=0; i<cellCodeDivs.length; i++) {
+          const codeDiv = cellCodeDivs[i];
+          if (codeDiv.classList.contains(fromCls)) {
+            codeDiv.classList.remove(fromCls);
+            codeDiv.classList.add(toCls);
+          } 
+        }
+        return false;
+      }
+    }
+    const hideAllCode = window.document.getElementById("quarto-hide-all-code");
+    if (hideAllCode) {
+      hideAllCode.addEventListener("click", toggleCodeHandler(false));
+    }
+    const showAllCode = window.document.getElementById("quarto-show-all-code");
+    if (showAllCode) {
+      showAllCode.addEventListener("click", toggleCodeHandler(true));
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script><div class="modal fade" id="quarto-embedded-source-code-modal" tabindex="-1" aria-labelledby="quarto-embedded-source-code-modal-label" aria-hidden="true"><div class="modal-dialog modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><h5 class="modal-title" id="quarto-embedded-source-code-modal-label">Source Code</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="">
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb13" data-shortcodes="false"><pre class="sourceCode markdown code-with-copy"><code class="sourceCode markdown"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="co">---</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="an">title:</span><span class="co"> "Portal status — what needs a fresh upload"</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a><span class="an">subtitle:</span><span class="co"> "Every publisher's output against what each portal holds, after every release"</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a><span class="an">author:</span><span class="co"> "CalCOFI"</span></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a><span class="an">date:</span><span class="co"> today</span></span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a><span class="an">format:</span></span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a><span class="co">  html:</span></span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a><span class="co">    toc: true</span></span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a><span class="co">    toc-depth: 2</span></span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a><span class="co">    code-fold: true</span></span>
+<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a><span class="co">    code-tools: true</span></span>
+<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a><span class="co">    df-print: kable</span></span>
+<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a><span class="an">calcofi:</span></span>
+<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a><span class="co">  target_name: publish_status</span></span>
+<span id="cb13-15"><a href="#cb13-15" aria-hidden="true" tabindex="-1"></a><span class="co">  workflow_type: publish</span></span>
+<span id="cb13-16"><a href="#cb13-16" aria-hidden="true" tabindex="-1"></a><span class="co">  dependency:</span></span>
+<span id="cb13-17"><a href="#cb13-17" aria-hidden="true" tabindex="-1"></a><span class="co">    - publish_to_edi</span></span>
+<span id="cb13-18"><a href="#cb13-18" aria-hidden="true" tabindex="-1"></a><span class="co">    - publish_to_obis</span></span>
+<span id="cb13-19"><a href="#cb13-19" aria-hidden="true" tabindex="-1"></a><span class="co">    - publish_to_netcdf</span></span>
+<span id="cb13-20"><a href="#cb13-20" aria-hidden="true" tabindex="-1"></a><span class="co">    - publish_to_erddap</span></span>
+<span id="cb13-21"><a href="#cb13-21" aria-hidden="true" tabindex="-1"></a><span class="co">  output: data/publish/portal_status.csv</span></span>
+<span id="cb13-22"><a href="#cb13-22" aria-hidden="true" tabindex="-1"></a><span class="co">  workflow_url: https://calcofi.io/workflows/publish_status.html</span></span>
+<span id="cb13-23"><a href="#cb13-23" aria-hidden="true" tabindex="-1"></a><span class="co">  description: &gt;</span></span>
+<span id="cb13-24"><a href="#cb13-24" aria-hidden="true" tabindex="-1"></a><span class="co">    The caboose of the publishers: after publish_to-edi, -obis, -netcdf and</span></span>
+<span id="cb13-25"><a href="#cb13-25" aria-hidden="true" tabindex="-1"></a><span class="co">    -erddap have run against a promoted release, compares each dataset's built</span></span>
+<span id="cb13-26"><a href="#cb13-26" aria-hidden="true" tabindex="-1"></a><span class="co">    package, archive or file with the copy its portal holds, and lists what</span></span>
+<span id="cb13-27"><a href="#cb13-27" aria-hidden="true" tabindex="-1"></a><span class="co">    needs a fresh upload — never deposited, or changed since the last deposit —</span></span>
+<span id="cb13-28"><a href="#cb13-28" aria-hidden="true" tabindex="-1"></a><span class="co">    with what still blocks it and how to do it.</span></span>
+<span id="cb13-29"><a href="#cb13-29" aria-hidden="true" tabindex="-1"></a><span class="an">editor_options:</span></span>
+<span id="cb13-30"><a href="#cb13-30" aria-hidden="true" tabindex="-1"></a><span class="co">  chunk_output_type: console</span></span>
+<span id="cb13-31"><a href="#cb13-31" aria-hidden="true" tabindex="-1"></a><span class="co">---</span></span>
+<span id="cb13-32"><a href="#cb13-32" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-33"><a href="#cb13-33" aria-hidden="true" tabindex="-1"></a><span class="fu">## Why this page exists</span></span>
+<span id="cb13-34"><a href="#cb13-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-35"><a href="#cb13-35" aria-hidden="true" tabindex="-1"></a>The four publishers run after every promoted release, and each rebuilds a dataset's</span>
+<span id="cb13-36"><a href="#cb13-36" aria-hidden="true" tabindex="-1"></a>output only when that dataset's rows, metadata or the publisher's code changed</span>
+<span id="cb13-37"><a href="#cb13-37" aria-hidden="true" tabindex="-1"></a>(<span class="in">`calcofi4db::publish_fingerprint()`</span>). Two of the four portals then take a deliberate,</span>
+<span id="cb13-38"><a href="#cb13-38" aria-hidden="true" tabindex="-1"></a>manual step — an EDI deposit and an OBIS-USA IPT upload — and the other two publish</span>
+<span id="cb13-39"><a href="#cb13-39" aria-hidden="true" tabindex="-1"></a>from the pipeline when a flag says so. Whether a portal is behind is therefore a</span>
+<span id="cb13-40"><a href="#cb13-40" aria-hidden="true" tabindex="-1"></a>comparison, not a memory: the bytes built now against the bytes the portal was last</span>
+<span id="cb13-41"><a href="#cb13-41" aria-hidden="true" tabindex="-1"></a>given (<span class="in">`calcofi4db::publish_upload_status()`</span>). This page makes that comparison for every</span>
+<span id="cb13-42"><a href="#cb13-42" aria-hidden="true" tabindex="-1"></a>dataset on every portal, and its first table is the to-do list.</span>
+<span id="cb13-43"><a href="#cb13-43" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-44"><a href="#cb13-44" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> portal <span class="pp">|</span> the copy it holds is recorded in <span class="pp">|</span> an upload is <span class="pp">|</span></span>
+<span id="cb13-45"><a href="#cb13-45" aria-hidden="true" tabindex="-1"></a><span class="pp">|---|---|---|</span></span>
+<span id="cb13-46"><a href="#cb13-46" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> EDI <span class="pp">|</span> <span class="in">`metadata/edi_packages.csv`</span> (<span class="in">`content_hash`</span>, <span class="in">`built_from`</span>) <span class="pp">|</span> <span class="in">`CALCOFI_PUBLISH_EDI=true`</span> + EDI credentials, re-rendering <span class="in">`publish_to-edi.qmd`</span>; refused while the record lacks a required field <span class="pp">|</span></span>
+<span id="cb13-47"><a href="#cb13-47" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> OBIS (via the OBIS-USA IPT) <span class="pp">|</span> each archive's <span class="in">`{dataset_key}_manifest.json`</span> (<span class="in">`uploaded_hash`</span>) <span class="pp">|</span> manual, after the provider agrees (Decision 21) — <span class="co">[</span><span class="ot">`docs/portals.qmd` § OBIS</span><span class="co">](https://calcofi.io/docs/portals.html#obis)</span> <span class="pp">|</span></span>
+<span id="cb13-48"><a href="#cb13-48" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> netCDF (<span class="in">`calcofi-files-public/netcdf/`</span>) <span class="pp">|</span> the site's <span class="in">`{dataset}/manifests.json`</span> <span class="pp">|</span> <span class="in">`CALCOFI_PUBLISH=true`</span>, re-rendering <span class="in">`publish_to-netcdf.qmd`</span>; unchanged bytes are never re-uploaded <span class="pp">|</span></span>
+<span id="cb13-49"><a href="#cb13-49" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> ERDDAP (<span class="in">`erddap.calcofi.io`</span>) <span class="pp">|</span> <span class="in">`data/erddap/deploy_status.json`</span> <span class="pp">|</span> automatic unless <span class="in">`CALCOFI_DEPLOY=false`</span> / <span class="in">`CALCOFI_ERDDAP_DEPLOY=false`</span> <span class="pp">|</span></span>
+<span id="cb13-50"><a href="#cb13-50" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-51"><a href="#cb13-51" aria-hidden="true" tabindex="-1"></a><span class="fu">## Setup</span></span>
+<span id="cb13-52"><a href="#cb13-52" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-55"><a href="#cb13-55" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb13-56"><a href="#cb13-56" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: setup</span></span>
+<span id="cb13-57"><a href="#cb13-57" aria-hidden="true" tabindex="-1"></a><span class="co">#| message: false</span></span>
+<span id="cb13-58"><a href="#cb13-58" aria-hidden="true" tabindex="-1"></a>librarian<span class="sc">::</span><span class="fu">shelf</span>(dplyr, glue, jsonlite, knitr, purrr, readr, tibble, here, <span class="at">quiet =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb13-59"><a href="#cb13-59" aria-hidden="true" tabindex="-1"></a>here <span class="ot">&lt;-</span> here<span class="sc">::</span>here</span>
+<span id="cb13-60"><a href="#cb13-60" aria-hidden="true" tabindex="-1"></a><span class="fu">options</span>(<span class="at">readr.show_col_types =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb13-61"><a href="#cb13-61" aria-hidden="true" tabindex="-1"></a>devtools<span class="sc">::</span><span class="fu">load_all</span>(here<span class="sc">::</span><span class="fu">here</span>(<span class="st">"../calcofi4db"</span>))</span>
+<span id="cb13-62"><a href="#cb13-62" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-63"><a href="#cb13-63" aria-hidden="true" tabindex="-1"></a>RELEASE_PREFIX <span class="ot">&lt;-</span> <span class="fu">Sys.getenv</span>(<span class="st">"CALCOFI_RELEASE_PREFIX"</span>, <span class="st">"ducklake/releases"</span>)</span>
+<span id="cb13-64"><a href="#cb13-64" aria-hidden="true" tabindex="-1"></a>STAGING        <span class="ot">&lt;-</span> <span class="fu">grepl</span>(<span class="st">"staging"</span>, RELEASE_PREFIX, <span class="at">fixed =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb13-65"><a href="#cb13-65" aria-hidden="true" tabindex="-1"></a>BASE_HTTPS     <span class="ot">&lt;-</span> <span class="st">"https://storage.googleapis.com/calcofi-db"</span></span>
+<span id="cb13-66"><a href="#cb13-66" aria-hidden="true" tabindex="-1"></a>RELEASE <span class="ot">&lt;-</span> <span class="fu">Sys.getenv</span>(<span class="st">"CALCOFI_RELEASE_VERSION"</span>, <span class="st">""</span>)</span>
+<span id="cb13-67"><a href="#cb13-67" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="sc">!</span><span class="fu">nzchar</span>(RELEASE))</span>
+<span id="cb13-68"><a href="#cb13-68" aria-hidden="true" tabindex="-1"></a>  RELEASE <span class="ot">&lt;-</span> <span class="fu">trimws</span>(<span class="fu">readLines</span>(<span class="fu">glue</span>(<span class="st">"{BASE_HTTPS}/{RELEASE_PREFIX}/latest.txt"</span>), <span class="at">warn =</span> <span class="cn">FALSE</span>)[<span class="dv">1</span>])</span>
+<span id="cb13-69"><a href="#cb13-69" aria-hidden="true" tabindex="-1"></a>NETCDF_SITE <span class="ot">&lt;-</span> <span class="st">"https://storage.calcofi.io/calcofi-files-public/netcdf"</span></span>
+<span id="cb13-70"><a href="#cb13-70" aria-hidden="true" tabindex="-1"></a>OUT <span class="ot">&lt;-</span> <span class="fu">here</span>(<span class="st">"data/publish/portal_status.csv"</span>)</span>
+<span id="cb13-71"><a href="#cb13-71" aria-hidden="true" tabindex="-1"></a><span class="fu">dir.create</span>(<span class="fu">dirname</span>(OUT), <span class="at">recursive =</span> <span class="cn">TRUE</span>, <span class="at">showWarnings =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb13-72"><a href="#cb13-72" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-73"><a href="#cb13-73" aria-hidden="true" tabindex="-1"></a>read_json_or_null <span class="ot">&lt;-</span> <span class="cf">function</span>(p) <span class="fu">tryCatch</span>(jsonlite<span class="sc">::</span><span class="fu">fromJSON</span>(p, <span class="at">simplifyVector =</span> <span class="cn">FALSE</span>),</span>
+<span id="cb13-74"><a href="#cb13-74" aria-hidden="true" tabindex="-1"></a>                                          <span class="at">error =</span> <span class="cf">function</span>(e) <span class="cn">NULL</span>)</span>
+<span id="cb13-75"><a href="#cb13-75" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"release : {RELEASE}{if (STAGING) ' (STAGING)' else ''}"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb13-76"><a href="#cb13-76" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb13-77"><a href="#cb13-77" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-78"><a href="#cb13-78" aria-hidden="true" tabindex="-1"></a><span class="fu">## EDI</span></span>
+<span id="cb13-79"><a href="#cb13-79" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-82"><a href="#cb13-82" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb13-83"><a href="#cb13-83" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: edi</span></span>
+<span id="cb13-84"><a href="#cb13-84" aria-hidden="true" tabindex="-1"></a>edi_csv <span class="ot">&lt;-</span> <span class="fu">here</span>(<span class="cf">if</span> (STAGING) <span class="st">"data/edi-staging"</span> <span class="cf">else</span> <span class="st">"data/edi"</span>, <span class="st">"manifest.csv"</span>)</span>
+<span id="cb13-85"><a href="#cb13-85" aria-hidden="true" tabindex="-1"></a>edi <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="fu">file.exists</span>(edi_csv)) <span class="fu">read_csv</span>(edi_csv, <span class="at">col_types =</span> <span class="fu">cols</span>(<span class="at">.default =</span> <span class="st">"c"</span>), <span class="at">na =</span> <span class="st">""</span>) <span class="cf">else</span> <span class="cn">NULL</span></span>
+<span id="cb13-86"><a href="#cb13-86" aria-hidden="true" tabindex="-1"></a>edi_rows <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="fu">is.null</span>(edi) <span class="sc">||</span> <span class="sc">!</span><span class="fu">nrow</span>(edi)) <span class="fu">tibble</span>() <span class="cf">else</span> edi <span class="sc">|&gt;</span></span>
+<span id="cb13-87"><a href="#cb13-87" aria-hidden="true" tabindex="-1"></a>  <span class="fu">transmute</span>(</span>
+<span id="cb13-88"><a href="#cb13-88" aria-hidden="true" tabindex="-1"></a>    <span class="at">portal =</span> <span class="st">"edi"</span>, dataset_key, <span class="at">built_from =</span> version, checked_version,</span>
+<span id="cb13-89"><a href="#cb13-89" aria-hidden="true" tabindex="-1"></a>    upload_status, <span class="at">needs_upload =</span> <span class="fu">as.logical</span>(needs_upload),</span>
+<span id="cb13-90"><a href="#cb13-90" aria-hidden="true" tabindex="-1"></a>    <span class="at">blocked_by =</span> <span class="fu">if_else</span>(<span class="fu">nzchar</span>(<span class="fu">coalesce</span>(eml_blocking, <span class="st">""</span>)),</span>
+<span id="cb13-91"><a href="#cb13-91" aria-hidden="true" tabindex="-1"></a>                         <span class="fu">paste</span>(<span class="st">"record incomplete:"</span>, eml_blocking), <span class="st">""</span>),</span>
+<span id="cb13-92"><a href="#cb13-92" aria-hidden="true" tabindex="-1"></a>    <span class="at">how  =</span> <span class="st">"CALCOFI_PUBLISH_EDI=true + EDI credentials, re-render publish_to-edi.qmd"</span>,</span>
+<span id="cb13-93"><a href="#cb13-93" aria-hidden="true" tabindex="-1"></a>    <span class="at">link =</span> <span class="fu">glue</span>(<span class="st">"{BASE_HTTPS}/publish/edi/{dataset_key}/{dataset_key}_{version}/"</span>))</span>
+<span id="cb13-94"><a href="#cb13-94" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">nrow</span>(edi_rows)) <span class="fu">kable</span>(edi_rows <span class="sc">|&gt;</span> <span class="fu">select</span>(dataset_key, built_from, upload_status, blocked_by)) <span class="cf">else</span></span>
+<span id="cb13-95"><a href="#cb13-95" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="st">"no EDI manifest yet</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb13-96"><a href="#cb13-96" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb13-97"><a href="#cb13-97" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-98"><a href="#cb13-98" aria-hidden="true" tabindex="-1"></a><span class="fu">## OBIS</span></span>
+<span id="cb13-99"><a href="#cb13-99" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-102"><a href="#cb13-102" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb13-103"><a href="#cb13-103" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: obis</span></span>
+<span id="cb13-104"><a href="#cb13-104" aria-hidden="true" tabindex="-1"></a>obis_dir <span class="ot">&lt;-</span> <span class="fu">here</span>(<span class="cf">if</span> (STAGING) <span class="st">"data/darwincore-staging"</span> <span class="cf">else</span> <span class="st">"data/darwincore"</span>)</span>
+<span id="cb13-105"><a href="#cb13-105" aria-hidden="true" tabindex="-1"></a>mans <span class="ot">&lt;-</span> <span class="fu">Sys.glob</span>(<span class="fu">file.path</span>(obis_dir, <span class="st">"*_manifest.json"</span>))</span>
+<span id="cb13-106"><a href="#cb13-106" aria-hidden="true" tabindex="-1"></a>obis_rows <span class="ot">&lt;-</span> <span class="fu">map_dfr</span>(mans, <span class="cf">function</span>(p) {</span>
+<span id="cb13-107"><a href="#cb13-107" aria-hidden="true" tabindex="-1"></a>  m <span class="ot">&lt;-</span> <span class="fu">read_json_or_null</span>(p)</span>
+<span id="cb13-108"><a href="#cb13-108" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">is.null</span>(m)) <span class="fu">return</span>(<span class="cn">NULL</span>)</span>
+<span id="cb13-109"><a href="#cb13-109" aria-hidden="true" tabindex="-1"></a>  st <span class="ot">&lt;-</span> <span class="fu">publish_upload_status</span>(m<span class="sc">$</span>content_hash <span class="sc">%||%</span> <span class="cn">NA_character_</span>, m<span class="sc">$</span>uploaded_hash <span class="sc">%||%</span> <span class="cn">NA_character_</span>)</span>
+<span id="cb13-110"><a href="#cb13-110" aria-hidden="true" tabindex="-1"></a>  <span class="co"># a resource can be on OBIS from before manifests stamped `uploaded_hash`</span></span>
+<span id="cb13-111"><a href="#cb13-111" aria-hidden="true" tabindex="-1"></a>  <span class="co"># (swfsc_ichthyo, 2026-04): it is not "never uploaded", its copy is just unverifiable</span></span>
+<span id="cb13-112"><a href="#cb13-112" aria-hidden="true" tabindex="-1"></a>  on_portal <span class="ot">&lt;-</span> <span class="sc">!</span><span class="fu">is.null</span>(m<span class="sc">$</span>ipt_resource) <span class="sc">||</span> <span class="sc">!</span><span class="fu">is.null</span>(m<span class="sc">$</span>obis_dataset_id)</span>
+<span id="cb13-113"><a href="#cb13-113" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (on_portal <span class="sc">&amp;&amp;</span> <span class="fu">is.null</span>(m<span class="sc">$</span>uploaded_hash))</span>
+<span id="cb13-114"><a href="#cb13-114" aria-hidden="true" tabindex="-1"></a>    st<span class="sc">$</span>upload_status <span class="ot">&lt;-</span> <span class="st">"on OBIS; the uploaded copy's hash was never recorded"</span></span>
+<span id="cb13-115"><a href="#cb13-115" aria-hidden="true" tabindex="-1"></a>  <span class="fu">tibble</span>(</span>
+<span id="cb13-116"><a href="#cb13-116" aria-hidden="true" tabindex="-1"></a>    <span class="at">portal =</span> <span class="st">"obis"</span>, <span class="at">dataset_key =</span> m<span class="sc">$</span>dataset_key, <span class="at">built_from =</span> m<span class="sc">$</span>version,</span>
+<span id="cb13-117"><a href="#cb13-117" aria-hidden="true" tabindex="-1"></a>    <span class="at">checked_version =</span> m<span class="sc">$</span>checked_version <span class="sc">%||%</span> m<span class="sc">$</span>version,</span>
+<span id="cb13-118"><a href="#cb13-118" aria-hidden="true" tabindex="-1"></a>    <span class="at">upload_status =</span> st<span class="sc">$</span>upload_status, <span class="at">needs_upload =</span> st<span class="sc">$</span>needs_upload,</span>
+<span id="cb13-119"><a href="#cb13-119" aria-hidden="true" tabindex="-1"></a>    <span class="at">blocked_by =</span> <span class="cf">if</span> (<span class="sc">!</span>on_portal) <span class="st">"provider agreement (Decision 21); no IPT resource yet"</span> <span class="cf">else</span></span>
+<span id="cb13-120"><a href="#cb13-120" aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> (<span class="fu">is.null</span>(m<span class="sc">$</span>uploaded_hash)) <span class="st">"stamp uploaded_utc + uploaded_hash in the manifest at the next upload"</span> <span class="cf">else</span> <span class="st">""</span>,</span>
+<span id="cb13-121"><a href="#cb13-121" aria-hidden="true" tabindex="-1"></a>    <span class="at">how  =</span> <span class="st">"manual OBIS-USA IPT upload — docs/portals.qmd § OBIS"</span>,</span>
+<span id="cb13-122"><a href="#cb13-122" aria-hidden="true" tabindex="-1"></a>    <span class="at">link =</span> <span class="fu">glue</span>(<span class="st">"{BASE_HTTPS}/publish/dwca/{m$dataset_key}/{m$archive}"</span>))</span>
+<span id="cb13-123"><a href="#cb13-123" aria-hidden="true" tabindex="-1"></a>})</span>
+<span id="cb13-124"><a href="#cb13-124" aria-hidden="true" tabindex="-1"></a><span class="co"># a candidate that failed its checks has no manifest, and is listed rather than dropped</span></span>
+<span id="cb13-125"><a href="#cb13-125" aria-hidden="true" tabindex="-1"></a>plan_csv <span class="ot">&lt;-</span> <span class="fu">file.path</span>(obis_dir, <span class="st">"publish_plan.csv"</span>)</span>
+<span id="cb13-126"><a href="#cb13-126" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">file.exists</span>(plan_csv)) {</span>
+<span id="cb13-127"><a href="#cb13-127" aria-hidden="true" tabindex="-1"></a>  cand <span class="ot">&lt;-</span> <span class="fu">read_csv</span>(plan_csv, <span class="at">col_types =</span> <span class="fu">cols</span>(<span class="at">.default =</span> <span class="st">"c"</span>))<span class="sc">$</span>dataset_key</span>
+<span id="cb13-128"><a href="#cb13-128" aria-hidden="true" tabindex="-1"></a>  missing <span class="ot">&lt;-</span> <span class="fu">setdiff</span>(cand, obis_rows<span class="sc">$</span>dataset_key)</span>
+<span id="cb13-129"><a href="#cb13-129" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">length</span>(missing)) obis_rows <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(obis_rows, <span class="fu">tibble</span>(</span>
+<span id="cb13-130"><a href="#cb13-130" aria-hidden="true" tabindex="-1"></a>    <span class="at">portal =</span> <span class="st">"obis"</span>, <span class="at">dataset_key =</span> missing, <span class="at">built_from =</span> <span class="cn">NA</span>, <span class="at">checked_version =</span> <span class="cn">NA</span>,</span>
+<span id="cb13-131"><a href="#cb13-131" aria-hidden="true" tabindex="-1"></a>    <span class="at">upload_status =</span> <span class="st">"not built"</span>, <span class="at">needs_upload =</span> <span class="cn">FALSE</span>,</span>
+<span id="cb13-132"><a href="#cb13-132" aria-hidden="true" tabindex="-1"></a>    <span class="at">blocked_by =</span> <span class="st">"no archive: failed dwc_check() — see publish_to-obis.html"</span>,</span>
+<span id="cb13-133"><a href="#cb13-133" aria-hidden="true" tabindex="-1"></a>    <span class="at">how =</span> <span class="st">""</span>, <span class="at">link =</span> <span class="st">""</span>))</span>
+<span id="cb13-134"><a href="#cb13-134" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb13-135"><a href="#cb13-135" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">nrow</span>(obis_rows)) <span class="fu">kable</span>(obis_rows <span class="sc">|&gt;</span> <span class="fu">select</span>(dataset_key, built_from, upload_status, blocked_by)) <span class="cf">else</span></span>
+<span id="cb13-136"><a href="#cb13-136" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="st">"no Darwin Core archives built yet</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb13-137"><a href="#cb13-137" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb13-138"><a href="#cb13-138" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-139"><a href="#cb13-139" aria-hidden="true" tabindex="-1"></a><span class="fu">## netCDF</span></span>
+<span id="cb13-140"><a href="#cb13-140" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-141"><a href="#cb13-141" aria-hidden="true" tabindex="-1"></a>A file counts as published for this release when the site's <span class="in">`manifests.json`</span> lists</span>
+<span id="cb13-142"><a href="#cb13-142" aria-hidden="true" tabindex="-1"></a>the release, and its bytes are online when any listed release carries the local</span>
+<span id="cb13-143"><a href="#cb13-143" aria-hidden="true" tabindex="-1"></a>file's sha256 — an unchanged file is never uploaded twice, only listed.</span>
+<span id="cb13-144"><a href="#cb13-144" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-147"><a href="#cb13-147" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb13-148"><a href="#cb13-148" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: netcdf</span></span>
+<span id="cb13-149"><a href="#cb13-149" aria-hidden="true" tabindex="-1"></a>sides <span class="ot">&lt;-</span> <span class="fu">Sys.glob</span>(<span class="fu">here</span>(<span class="st">"data/netcdf/*.fingerprint.json"</span>))</span>
+<span id="cb13-150"><a href="#cb13-150" aria-hidden="true" tabindex="-1"></a>nc_rows <span class="ot">&lt;-</span> <span class="fu">map_dfr</span>(sides, <span class="cf">function</span>(p) {</span>
+<span id="cb13-151"><a href="#cb13-151" aria-hidden="true" tabindex="-1"></a>  s  <span class="ot">&lt;-</span> <span class="fu">read_json_or_null</span>(p)</span>
+<span id="cb13-152"><a href="#cb13-152" aria-hidden="true" tabindex="-1"></a>  ds <span class="ot">&lt;-</span> <span class="fu">sub</span>(<span class="st">"</span><span class="sc">\\</span><span class="st">.fingerprint</span><span class="sc">\\</span><span class="st">.json$"</span>, <span class="st">""</span>, <span class="fu">basename</span>(p))</span>
+<span id="cb13-153"><a href="#cb13-153" aria-hidden="true" tabindex="-1"></a>  nc <span class="ot">&lt;-</span> <span class="fu">sub</span>(<span class="st">"</span><span class="sc">\\</span><span class="st">.fingerprint</span><span class="sc">\\</span><span class="st">.json$"</span>, <span class="st">".nc"</span>, p)</span>
+<span id="cb13-154"><a href="#cb13-154" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">is.null</span>(s) <span class="sc">||</span> <span class="sc">!</span><span class="fu">file.exists</span>(nc)) <span class="fu">return</span>(<span class="cn">NULL</span>)</span>
+<span id="cb13-155"><a href="#cb13-155" aria-hidden="true" tabindex="-1"></a>  rel  <span class="ot">&lt;-</span> <span class="fu">read_json_or_null</span>(<span class="fu">glue</span>(<span class="st">"{NETCDF_SITE}/{ds}/manifests.json"</span>))<span class="sc">$</span>releases <span class="sc">%||%</span> <span class="fu">list</span>()</span>
+<span id="cb13-156"><a href="#cb13-156" aria-hidden="true" tabindex="-1"></a>  sha  <span class="ot">&lt;-</span> digest<span class="sc">::</span><span class="fu">digest</span>(nc, <span class="at">algo =</span> <span class="st">"sha256"</span>, <span class="at">file =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb13-157"><a href="#cb13-157" aria-hidden="true" tabindex="-1"></a>  online <span class="ot">&lt;-</span> <span class="fu">any</span>(<span class="fu">vapply</span>(rel, <span class="cf">function</span>(r) <span class="fu">identical</span>(r<span class="sc">$</span>sha256, sha), <span class="fu">logical</span>(<span class="dv">1</span>)))</span>
+<span id="cb13-158"><a href="#cb13-158" aria-hidden="true" tabindex="-1"></a>  listed <span class="ot">&lt;-</span> <span class="fu">any</span>(<span class="fu">vapply</span>(rel, <span class="cf">function</span>(r) <span class="fu">identical</span>(r<span class="sc">$</span>version, RELEASE), <span class="fu">logical</span>(<span class="dv">1</span>)))</span>
+<span id="cb13-159"><a href="#cb13-159" aria-hidden="true" tabindex="-1"></a>  status <span class="ot">&lt;-</span> <span class="cf">if</span> (online <span class="sc">&amp;&amp;</span> listed) <span class="st">"current"</span> <span class="cf">else</span> <span class="cf">if</span> (online) <span class="st">"bytes online; release not listed"</span> <span class="cf">else</span></span>
+<span id="cb13-160"><a href="#cb13-160" aria-hidden="true" tabindex="-1"></a>    <span class="st">"not online"</span></span>
+<span id="cb13-161"><a href="#cb13-161" aria-hidden="true" tabindex="-1"></a>  <span class="fu">tibble</span>(<span class="at">portal =</span> <span class="st">"netcdf"</span>, <span class="at">dataset_key =</span> ds, <span class="at">built_from =</span> s<span class="sc">$</span>built_from, <span class="at">checked_version =</span> RELEASE,</span>
+<span id="cb13-162"><a href="#cb13-162" aria-hidden="true" tabindex="-1"></a>         <span class="at">upload_status =</span> status, <span class="at">needs_upload =</span> <span class="sc">!</span>(online <span class="sc">&amp;&amp;</span> listed), <span class="at">blocked_by =</span> <span class="st">""</span>,</span>
+<span id="cb13-163"><a href="#cb13-163" aria-hidden="true" tabindex="-1"></a>         <span class="at">how  =</span> <span class="st">"CALCOFI_PUBLISH=true, re-render publish_to-netcdf.qmd (+ scripts/build_netcdf_index.R)"</span>,</span>
+<span id="cb13-164"><a href="#cb13-164" aria-hidden="true" tabindex="-1"></a>         <span class="at">link =</span> <span class="fu">glue</span>(<span class="st">"{NETCDF_SITE}/{ds}/"</span>))</span>
+<span id="cb13-165"><a href="#cb13-165" aria-hidden="true" tabindex="-1"></a>})</span>
+<span id="cb13-166"><a href="#cb13-166" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">nrow</span>(nc_rows)) <span class="fu">kable</span>(nc_rows <span class="sc">|&gt;</span> <span class="fu">select</span>(dataset_key, built_from, upload_status)) <span class="cf">else</span></span>
+<span id="cb13-167"><a href="#cb13-167" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="st">"no netCDF fingerprints yet — publish_to-netcdf.qmd has not run since change detection</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb13-168"><a href="#cb13-168" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb13-169"><a href="#cb13-169" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-170"><a href="#cb13-170" aria-hidden="true" tabindex="-1"></a><span class="fu">## ERDDAP</span></span>
+<span id="cb13-171"><a href="#cb13-171" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-174"><a href="#cb13-174" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb13-175"><a href="#cb13-175" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: erddap</span></span>
+<span id="cb13-176"><a href="#cb13-176" aria-hidden="true" tabindex="-1"></a>es <span class="ot">&lt;-</span> <span class="fu">read_json_or_null</span>(<span class="fu">here</span>(<span class="st">"data/erddap/deploy_status.json"</span>))</span>
+<span id="cb13-177"><a href="#cb13-177" aria-hidden="true" tabindex="-1"></a>erddap_rows <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="fu">is.null</span>(es)) <span class="fu">tibble</span>() <span class="cf">else</span> {</span>
+<span id="cb13-178"><a href="#cb13-178" aria-hidden="true" tabindex="-1"></a>  served <span class="ot">&lt;-</span> es<span class="sc">$</span>deployed_release <span class="sc">%||%</span> <span class="cn">NA_character_</span></span>
+<span id="cb13-179"><a href="#cb13-179" aria-hidden="true" tabindex="-1"></a>  <span class="fu">tibble</span>(<span class="at">portal =</span> <span class="st">"erddap"</span>, <span class="at">dataset_key =</span> <span class="st">"(all)"</span>, <span class="at">built_from =</span> RELEASE, <span class="at">checked_version =</span> RELEASE,</span>
+<span id="cb13-180"><a href="#cb13-180" aria-hidden="true" tabindex="-1"></a>         <span class="at">upload_status =</span> <span class="cf">if</span> (<span class="fu">identical</span>(served, RELEASE)) <span class="st">"current"</span> <span class="cf">else</span></span>
+<span id="cb13-181"><a href="#cb13-181" aria-hidden="true" tabindex="-1"></a>           <span class="fu">glue</span>(<span class="st">"serves {served %||% 'an unknown release'}"</span>),</span>
+<span id="cb13-182"><a href="#cb13-182" aria-hidden="true" tabindex="-1"></a>         <span class="at">needs_upload =</span> <span class="sc">!</span><span class="fu">identical</span>(served, RELEASE), <span class="at">blocked_by =</span> <span class="st">""</span>,</span>
+<span id="cb13-183"><a href="#cb13-183" aria-hidden="true" tabindex="-1"></a>         <span class="at">how  =</span> <span class="st">"re-render publish_to-erddap.qmd without CALCOFI_DEPLOY=false"</span>,</span>
+<span id="cb13-184"><a href="#cb13-184" aria-hidden="true" tabindex="-1"></a>         <span class="at">link =</span> <span class="st">"https://erddap.calcofi.io/erddap/"</span>)</span>
+<span id="cb13-185"><a href="#cb13-185" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb13-186"><a href="#cb13-186" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">nrow</span>(erddap_rows)) <span class="fu">kable</span>(erddap_rows <span class="sc">|&gt;</span> <span class="fu">select</span>(upload_status, how)) <span class="cf">else</span></span>
+<span id="cb13-187"><a href="#cb13-187" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="st">"no ERDDAP deploy status yet — publish_to-erddap.qmd has not run since it began recording one</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb13-188"><a href="#cb13-188" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb13-189"><a href="#cb13-189" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-190"><a href="#cb13-190" aria-hidden="true" tabindex="-1"></a><span class="fu">## What needs a fresh upload</span></span>
+<span id="cb13-191"><a href="#cb13-191" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-194"><a href="#cb13-194" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb13-195"><a href="#cb13-195" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: status</span></span>
+<span id="cb13-196"><a href="#cb13-196" aria-hidden="true" tabindex="-1"></a>status <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(edi_rows, obis_rows, nc_rows, erddap_rows) <span class="sc">|&gt;</span></span>
+<span id="cb13-197"><a href="#cb13-197" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">release =</span> RELEASE, <span class="at">.before =</span> <span class="dv">1</span>) <span class="sc">|&gt;</span></span>
+<span id="cb13-198"><a href="#cb13-198" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(<span class="fu">desc</span>(needs_upload), portal, dataset_key)</span>
+<span id="cb13-199"><a href="#cb13-199" aria-hidden="true" tabindex="-1"></a><span class="fu">write_csv</span>(status, OUT, <span class="at">na =</span> <span class="st">""</span>)</span>
+<span id="cb13-200"><a href="#cb13-200" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="sc">!</span>STAGING) <span class="fu">put_gcs_file</span>(OUT, <span class="st">"gs://calcofi-db/publish/portal_status.csv"</span>)</span>
+<span id="cb13-201"><a href="#cb13-201" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-202"><a href="#cb13-202" aria-hidden="true" tabindex="-1"></a>due <span class="ot">&lt;-</span> status <span class="sc">|&gt;</span> <span class="fu">filter</span>(needs_upload)</span>
+<span id="cb13-203"><a href="#cb13-203" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"{nrow(due)} of {nrow(status)} portal copies need a fresh upload for {RELEASE}"</span>,</span>
+<span id="cb13-204"><a href="#cb13-204" aria-hidden="true" tabindex="-1"></a>         <span class="st">"{if (nrow(due)) paste0(' (', paste(sort(unique(due$portal)), collapse = ', '), ')') else ''}"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb13-205"><a href="#cb13-205" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">nrow</span>(due))</span>
+<span id="cb13-206"><a href="#cb13-206" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kable</span>(due <span class="sc">|&gt;</span> <span class="fu">select</span>(portal, dataset_key, built_from, upload_status, blocked_by, how),</span>
+<span id="cb13-207"><a href="#cb13-207" aria-hidden="true" tabindex="-1"></a>        <span class="at">caption =</span> <span class="st">"due: never deposited, or changed since the last deposit"</span>)</span>
+<span id="cb13-208"><a href="#cb13-208" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb13-209"><a href="#cb13-209" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-212"><a href="#cb13-212" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb13-213"><a href="#cb13-213" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: status-all</span></span>
+<span id="cb13-214"><a href="#cb13-214" aria-hidden="true" tabindex="-1"></a><span class="fu">kable</span>(status <span class="sc">|&gt;</span> <span class="fu">select</span>(portal, dataset_key, built_from, checked_version, upload_status, blocked_by),</span>
+<span id="cb13-215"><a href="#cb13-215" aria-hidden="true" tabindex="-1"></a>      <span class="at">caption =</span> <span class="fu">glue</span>(<span class="st">"every portal copy, {RELEASE} (data/publish/portal_status.csv)"</span>))</span>
+<span id="cb13-216"><a href="#cb13-216" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+</code></pre></div><button title="Copy to Clipboard" class="code-copy-button" data-in-quarto-modal=""><i class="bi"></i></button></div>
+</div></div></div></div></div>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

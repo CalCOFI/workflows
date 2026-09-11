@@ -14,7 +14,7 @@ calcofi:
   target_name: publish_to_obis
   workflow_type: publish
   dependency:
-    - release_database
+    - test_release
   output: data/darwincore/publish_plan.csv
   workflow_url: https://calcofi.io/workflows/publish_to-obis.html
   description: >
@@ -121,6 +121,9 @@ dir.create(OUT_DIR, recursive = TRUE, showWarnings = FALSE)
 
 # comma-separated dataset_keys to restrict a run while iterating; empty = all
 ONLY <- Filter(nzchar, trimws(strsplit(Sys.getenv("CALCOFI_DATASETS", ""), ",")[[1]]))
+# the code an archive is a function of: a change here rebuilds every archive
+CODE_FILES <- c(here("publish_to-obis.qmd"), here("../calcofi4db/R/dwc.R"),
+                here("../calcofi4db/R/eml.R"))
 # the duplicate check asks api.obis.org; off-line it is skipped, never faked
 NET  <- !identical(Sys.getenv("CALCOFI_OFFLINE"), "true")
 
@@ -346,6 +349,42 @@ if (NET) {
 }
 ```
 
+## What changed since each archive was built
+
+An archive is a function of the dataset's rows in the tables the Darwin Core builders
+read, its catalog record, the three registries, the portal ids it names, and this
+code. Each is signed per dataset (`calcofi4db::publish_table_signatures()` over the
+tables materialized above: `taxon` through the taxa the dataset's `obs_bio` rows name,
+`cruise` through its samples' cruises, so another dataset's new taxon or cruise does
+not rebuild this one). An unchanged fingerprint with its zip on disk is reused.
+
+```{r}
+#| label: fingerprint
+datasets_json <- jsonlite::fromJSON(glue("{RELEASES_URL}/{RELEASE}/datasets.json"),
+                                    simplifyVector = FALSE)
+record_of <- function(k) Find(function(r) identical(r[["dataset_key"]], k),
+                              datasets_json[["datasets"]] %||% list())
+DWC_TABLES <- c("sample", "obs_bio", "obs_attribute", "sample_measurement", "sample_root",
+                "obs_env", "taxon", "cruise")
+sigs <- publish_table_signatures(con, DWC_TABLES,
+                                 via = list(taxon = c("obs_bio", "taxon_key"),
+                                            cruise = c("sample", "cruise_key")))
+code_parts <- publish_code_parts(CODE_FILES)
+fps <- list()
+for (k in plan$dataset_key)
+  fps[[k]] <- publish_fingerprint(
+    data     = publish_data_parts(sigs, k, DWC_TABLES),
+    metadata = list(
+      record           = publish_record_digest(record_of(k)),
+      gear             = dataset_gear(reg$gear, k),
+      life_stage       = reg$life_stage,
+      measurement_type = reg$measurement_type,
+      portal_ids       = dist |> filter(dataset_key == k, portal %in% c("ipt", "obis")) |>
+                           select(portal, id) |> arrange(portal, id)),
+    code     = code_parts)
+cat(glue("fingerprinted {length(fps)} dataset(s) over {length(DWC_TABLES)} tables"), "\n")
+```
+
 ## Build every archive
 
 ```{r}
@@ -357,24 +396,28 @@ for (k in plan$dataset_key) {
   cat(glue("\n--- {k} ---"), "\n")
   d_dir <- file.path(OUT_DIR, k)
 
-  # a release is frozen, so an archive already built for THIS version cannot differ: the
-  # zip + its manifest are the fingerprint, and a re-render reuses them instead of running
-  # the three DwC queries again (2026-09-06). Another version, or a missing zip, rebuilds.
-  prev_zip <- file.path(OUT_DIR, glue("{k}_{RELEASE}.zip"))
+  # an archive built from an EARLIER release is reused when nothing it is a function
+  # of changed since (the `fingerprint` chunk): the zip keeps that release's name, and the
+  # manifest records the release it was confirmed against. Anything else rebuilds.
   prev_man <- file.path(OUT_DIR, glue("{k}_manifest.json"))
-  if (file.exists(prev_zip) && file.exists(prev_man)) {
-    pm <- jsonlite::fromJSON(prev_man, simplifyVector = TRUE)
-    if (identical(pm$version, RELEASE) && nzchar(pm$content_hash %||% "")) {
-      cat(glue("archive for {RELEASE} already built ({basename(prev_zip)}, ",
-               "content_hash {substr(pm$content_hash, 1, 12)}) — not rebuilt"), "\n")
-      results[[k]] <- tibble(dataset_key = k, status = "built",
-                             n_event = pm$counts$event %||% NA_integer_,
-                             n_occurrence = pm$counts$occurrence %||% NA_integer_,
-                             n_emof = pm$counts$emof %||% NA_integer_,
-                             content_hash = pm$content_hash, archive = basename(prev_zip))
-      next
-    }
+  pm <- if (file.exists(prev_man)) jsonlite::fromJSON(prev_man, simplifyVector = FALSE) else NULL
+  dec <- publish_decide(fps[[k]], pm$input_fingerprint,
+                        if (is.null(pm)) character() else file.path(OUT_DIR, pm$archive %||% "<none>"))
+  if (!is.null(pm) && is.null(pm$input_fingerprint))
+    dec$reason <- glue("the {pm$version} build predates input fingerprints")
+  if (dec$action == "reuse") {
+    pm$checked_version <- RELEASE
+    writeLines(jsonlite::toJSON(pm, auto_unbox = TRUE, pretty = TRUE, null = "null"), prev_man)
+    cat(glue("unchanged since {pm$version} — {pm$archive} reused ",
+             "(content_hash {substr(pm$content_hash, 1, 12)})"), "\n")
+    results[[k]] <- tibble(dataset_key = k, status = "reused", built_from = pm$version,
+                           n_event = pm$counts$event %||% NA_integer_,
+                           n_occurrence = pm$counts$occurrence %||% NA_integer_,
+                           n_emof = pm$counts$emof %||% NA_integer_,
+                           content_hash = pm$content_hash, archive = pm$archive)
+    next
   }
+  cat(glue("rebuilding — {dec$reason}"), "\n")
 
   ev <- dwc_event(con, k, gear = reg$gear, measurement_type = reg$measurement_type)
   oc <- dwc_occurrence(con, k, life_stage = reg$life_stage,
@@ -390,7 +433,7 @@ for (k in plan$dataset_key) {
     # a failing dataset gets NO zip: a broken archive at OBIS is worse than a
     # missing one, and the finding is what says why
     cat(glue("SKIPPED — {sum(chk$level == 'error')} error finding(s); no archive written"), "\n")
-    results[[k]] <- tibble(dataset_key = k, status = "failed checks",
+    results[[k]] <- tibble(dataset_key = k, status = "failed checks", built_from = RELEASE,
                            n_event = nrow(ev), n_occurrence = nrow(oc), n_emof = nrow(mf),
                            content_hash = NA_character_, archive = NA_character_)
     next
@@ -407,7 +450,13 @@ for (k in plan$dataset_key) {
     obis_dataset_id = if (length(obs_id)) obs_id[1] else NULL)
   cat(glue("wrote {basename(a$zip)} ({round(file.size(a$zip) / 1e6, 1)} MB), ",
            "content_hash {substr(a$content_hash, 1, 12)}"), "\n")
-  results[[k]] <- tibble(dataset_key = k, status = "built",
+  # the fingerprint rides in the manifest dwc_archive() wrote, so the next release can
+  # tell whether this archive is still current without rebuilding it
+  m <- jsonlite::fromJSON(a$manifest, simplifyVector = FALSE)
+  m$checked_version   <- RELEASE
+  m$input_fingerprint <- list(hash = fps[[k]]$hash, parts = as.list(fps[[k]]$parts))
+  writeLines(jsonlite::toJSON(m, auto_unbox = TRUE, pretty = TRUE, null = "null"), a$manifest)
+  results[[k]] <- tibble(dataset_key = k, status = "built", built_from = RELEASE,
                          n_event = nrow(ev), n_occurrence = nrow(oc), n_emof = nrow(mf),
                          content_hash = a$content_hash, archive = basename(a$zip))
 }
@@ -433,8 +482,10 @@ bucket at a deterministic address: `gs://calcofi-db/publish/dwca/{dataset_key}/{
 
 ```{r}
 #| label: stage
-if (!STAGING && nrow(res) && any(res$status == "built")) {
-  for (i in which(res$status == "built")) {
+if (!STAGING && nrow(res) && any(res$status %in% c("built", "reused"))) {
+  # a reused archive was staged when it was built; put_gcs_file() compares md5s, so
+  # re-offering it costs a HEAD, and repairs a staging that never happened
+  for (i in which(res$status %in% c("built", "reused"))) {
     k <- res$dataset_key[i]
     # dwc_archive() writes the zip beside the dataset's folder (OUT_DIR root) and the manifest
     # under the same name pattern; look in both places so a layout change cannot silently skip
