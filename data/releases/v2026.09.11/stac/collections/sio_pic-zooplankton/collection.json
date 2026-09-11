@@ -1,0 +1,69 @@
+{
+  "type": "Collection",
+  "stac_version": "1.0.0",
+  "stac_extensions": ["https://stac-extensions.github.io/table/v1.2.0/schema.json"],
+  "id": "sio_pic-zooplankton",
+  "title": "SIO PIC Zooplankton Net Tows",
+  "description": "Zooplankton net-tow sample registry from the SIO Pelagic Invertebrate Collection, scoped to CalCOFI-program expeditions. Position, time, depth, and gear metadata per tow. Includes the historical grid (1950s-80s inshore, Gulf of California and Baja lines), not just the modern pattern. Biovolume measurements are not in the source file and are pending from the provider (see Questions for Data Providers).\n",
+  "keywords": ["EARTH SCIENCE > BIOSPHERE > ECOSYSTEMS > AQUATIC ECOSYSTEMS > PLANKTON", "EARTH SCIENCE > BIOSPHERE > ECOSYSTEMS > AQUATIC ECOSYSTEMS > PLANKTON > ZOOPLANKTON"],
+  "license": "other",
+  "providers": [
+    {
+      "name": "Scripps Institution of Oceanography, UC San Diego",
+      "roles": ["producer", "licensor"],
+      "url": "https://scripps.ucsd.edu"
+    },
+    {
+      "name": "CalCOFI",
+      "roles": ["processor", "host"],
+      "url": "https://calcofi.io"
+    }
+  ],
+  "extent": {
+    "spatial": {
+      "bbox": [
+        [-164.083, 19.917, -107.1, 51.05]
+      ]
+    },
+    "temporal": {
+      "interval": [
+        [
+          null,
+          null
+        ]
+      ]
+    }
+  },
+  "table:tables": [
+    {
+      "name": "sample",
+      "description": "One row per physical sampling event at its native grain (site, tow, net, cast, bottle, underway, transect, region pool). An adjacency list: `parent_sample_key` points at the containing event and `root_sample_key` at the top of the chain, so counting distinct events at any level is a single `GROUP BY`."
+    }
+  ],
+  "summaries": {
+    "calcofi:category": ["Zooplankton"]
+  },
+  "links": [
+    {
+      "rel": "root",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "self",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/sio_pic-zooplankton/collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "about",
+      "href": "https://calcofi.io/datasets/sio_pic-zooplankton/",
+      "type": "text/html",
+      "title": "Dataset page"
+    }
+  ]
+}

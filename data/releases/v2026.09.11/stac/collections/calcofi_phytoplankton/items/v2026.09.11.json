@@ -1,0 +1,251 @@
+{
+  "type": "Feature",
+  "stac_version": "1.0.0",
+  "stac_extensions": ["https://stac-extensions.github.io/table/v1.2.0/schema.json", "https://stac-extensions.github.io/scientific/v1.0.0/schema.json", "https://stac-extensions.github.io/file/v2.1.0/schema.json"],
+  "id": "v2026.09.11",
+  "collection": "calcofi_phytoplankton",
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [-121.6543, 32.4352],
+        [-118.7603, 32.4352],
+        [-118.7603, 33.5668],
+        [-121.6543, 33.5668],
+        [-121.6543, 32.4352]
+      ]
+    ]
+  },
+  "bbox": [-121.6543, 32.4352, -118.7603, 33.5668],
+  "properties": {
+    "title": "CalCOFI Phytoplankton (Venrick) — v2026.09.11",
+    "description": "Abundance and species composition of phytoplankton (385 taxonomic categories) in the California Current, 1996-2022, by inverted-microscope counts (E. Venrick). Samples from the near-surface \"second depth\" are pooled across stations into four regions (NE, SE, Alley, Offshore; Hayward & Venrick 1998) before counting, so the grain is cruise x region, not per-station. Source: EDI knb-lter-cce.254.4.\n",
+    "datetime": "2026-09-11T00:00:00Z",
+    "created": "2026-09-11T00:00:00Z",
+    "license": "CC0-1.0",
+    "sci:doi": "10.6073/pasta/60edabfbfd85c623fce05822befaa071",
+    "sci:citation": "CalCOFI - Scripps Institution of Oceanography, California Current Ecosystem LTER, and E. Venrick. 2023. Temporal and spatial changes of the abundance and species composition of phytoplankton in the California Current from samples collected aboard CalCOFI cruises from summer 1996 through 2022. ver 4. Environmental Data Initiative. https://doi.org/10.6073/pasta/60edabfbfd85c623fce05822befaa071"
+  },
+  "assets": {
+    "obs_partition": {
+      "href": "https://storage.googleapis.com/calcofi-db/ducklake/tables/obs/dataset_key=calcofi_phytoplankton/4867e58b3ae6a03aa8b0868c/data_0.parquet",
+      "type": "application/x-parquet",
+      "title": "obs (parquet, this dataset's partition)",
+      "roles": ["data"],
+      "file:size": 259372,
+      "file:checksum": "1220fd2466e01f65a126d846429485a8143b792b951f0c7fbb1cb6461761bf6a4c3c",
+      "table:columns": [
+        {
+          "name": "obs_id",
+          "description": "Surrogate key, renumbered globally when the release concatenates the per-dataset shards.",
+          "type": "BIGINT"
+        },
+        {
+          "name": "realm",
+          "description": "`env` for physical/chemical measurements, `bio` for organism observations.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "dataset_key",
+          "description": "Provenance stamp: `provider_dataset`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "sample_key",
+          "description": "The sampling event this observation came from; joins `sample`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "grid_key",
+          "description": "CalCOFI station grid cell, denormalized from `sample` so rollups need no join. NULL for region-pooled data.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "cruise_key",
+          "description": "Cruise, denormalized from `sample` so rollups need no join.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "latitude",
+          "description": "Observation latitude (WGS84).",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "longitude",
+          "description": "Observation longitude (WGS84).",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "datetime",
+          "description": "Observation time (UTC). NULL for region-pooled data with no event time.",
+          "type": "TIMESTAMP"
+        },
+        {
+          "name": "depth_min_m",
+          "description": "Shallowest depth this observation represents.",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "depth_max_m",
+          "description": "Deepest depth this observation represents; equal to `depth_min_m` for point measurements (bottle, CTD scan).",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "taxon_key",
+          "description": "Global taxon key, `worms:<AphiaID>` or `itis:<TSN>` for birds. NULL for `env` rows. Joins `taxon`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "life_stage",
+          "description": "Life stage where the source resolves one (larva, adult, juvenile, egg, phyllosoma).",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "measurement_type",
+          "description": "Measured quantity; joins the `measurement_type` vocabulary.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "measurement_value",
+          "description": "The measured value, in the units `measurement_type` declares.",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "measurement_qual",
+          "description": "Source quality flag, verbatim.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "measurement_prec",
+          "description": "Source-reported precision where available.",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "hex_id",
+          "description": "H3 cell at resolution 10, stored as UBIGINT. Aggregate coarser at query time with `h3_cell_to_parent(hex_id, res)` — there is no per-resolution column ladder.",
+          "type": "UBIGINT"
+        }
+      ]
+    },
+    "region": {
+      "href": "https://storage.googleapis.com/calcofi-db/ducklake/tables/region/b0b4ead4d403485c9fc0e93c/region.parquet",
+      "type": "application/x-parquet",
+      "title": "region (parquet)",
+      "roles": ["data"],
+      "file:size": 4018,
+      "file:checksum": "12203cd3267556a56a9ed1eb4481964db389d80c822dcd501b696b50925fbe21260c",
+      "table:columns": [
+        {
+          "name": "region_key",
+          "description": "Pooled-region code: NE, SE, Alley, or Offshore (primary key).",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "description",
+          "description": "Region description (Northern Inshore, Southern Inshore, California Current, Central Pacific).",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "latitude",
+          "description": "Provisional region centroid latitude (mean of member CalCOFI stations; Q01).",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "longitude",
+          "description": "Provisional region centroid longitude (mean of member CalCOFI stations; Q01).",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "n_stations",
+          "description": "Count of CalCOFI grid stations defining the region.",
+          "type": "INTEGER"
+        },
+        {
+          "name": "station_codes",
+          "description": "Member CalCOFI line.station codes (Hayward & Venrick 1998).",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "geom",
+          "type": "GEOMETRY('EPSG:4326')"
+        }
+      ]
+    },
+    "calcofi_phytoplankton": {
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/calcofi_phytoplankton/collection.json",
+      "type": "application/json",
+      "roles": ["overview"],
+      "title": "STAC collection"
+    },
+    "netcdf": {
+      "href": "https://storage.calcofi.io/calcofi-files-public/netcdf/calcofi_phytoplankton/v2026.09.06/calcofi_phytoplankton.nc",
+      "type": "application/x-netcdf",
+      "roles": ["data"],
+      "title": "CF netCDF"
+    },
+    "calcofi_phytoplankton_2": {
+      "href": "https://erddap.calcofi.io/erddap/tabledap/calcofi_phytoplankton.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "CalCOFI Phytoplankton (Venrick) - observations"
+    },
+    "calcofi_phytoplankton_sample": {
+      "href": "https://erddap.calcofi.io/erddap/tabledap/calcofi_phytoplankton_sample.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "CalCOFI Phytoplankton (Venrick) - sampling events"
+    },
+    "iso19115": {
+      "href": "https://erddap.calcofi.io/erddap/metadata/iso19115/xml/calcofi_phytoplankton_iso19115.xml",
+      "type": "application/xml",
+      "roles": ["metadata"],
+      "title": "ISO 19115-3 metadata (ERDDAP)"
+    },
+    "notebook": {
+      "href": "https://calcofi.io/workflows/ingest_calcofi_phytoplankton.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "ingest notebook"
+    },
+    "page": {
+      "href": "https://calcofi.org/data/marine-ecosystem-data/phytoplankton-bacterioplankton/",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "calcofi.org data page"
+    },
+    "source": {
+      "href": "https://portal.edirepository.org/nis/mapbrowse?packageid=knb-lter-cce.254.4",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "source"
+    },
+    "254": {
+      "href": "https://oceaninformatics.ucsd.edu/datazoo/catalogs/ccelter/datasets/254",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "CalCOFI Phytoplankton Community Composition (DataZoo 254)"
+    }
+  },
+  "links": [
+    {
+      "rel": "root",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/calcofi_phytoplankton/collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "collection",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/calcofi_phytoplankton/collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "self",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/calcofi_phytoplankton/items/v2026.09.11.json",
+      "type": "application/json"
+    }
+  ]
+}

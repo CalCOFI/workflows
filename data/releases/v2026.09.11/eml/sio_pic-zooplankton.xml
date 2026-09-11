@@ -1,0 +1,403 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<eml:eml xmlns:eml="https://eml.ecoinformatics.org/eml-2.2.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:stmml="http://www.xml-cml.org/schema/stmml-1.2" packageId="sio_pic-zooplankton.v2026.09.11" system="calcofi.io" xsi:schemaLocation="https://eml.ecoinformatics.org/eml-2.2.0 https://eml.ecoinformatics.org/eml-2.2.0/eml.xsd">
+  <dataset>
+    <alternateIdentifier>https://calcofi.io/datasets/sio_pic-zooplankton/</alternateIdentifier>
+    <shortName>Zooplankton Net Tows</shortName>
+    <title>SIO PIC Zooplankton Net Tows</title>
+    <creator>
+      <individualName>
+        <givenName>Rasmus</givenName>
+        <surName>Swalethorp</surName>
+      </individualName>
+      <organizationName>Scripps Institution of Oceanography, UC San Diego</organizationName>
+    </creator>
+    <creator>
+      <individualName>
+        <givenName>Ed</givenName>
+        <surName>Weber</surName>
+      </individualName>
+      <organizationName>Scripps Institution of Oceanography, UC San Diego</organizationName>
+    </creator>
+    <creator>
+      <individualName>
+        <givenName>Linsey</givenName>
+        <surName>Sala</surName>
+      </individualName>
+      <organizationName>Scripps Institution of Oceanography, UC San Diego</organizationName>
+    </creator>
+    <pubDate>2026-09-11</pubDate>
+    <language>eng</language>
+    <abstract>
+      <para>Zooplankton net-tow sample registry from the SIO Pelagic Invertebrate Collection, scoped to CalCOFI-program expeditions. Position, time, depth, and gear metadata per tow. Includes the historical grid (1950s-80s inshore, Gulf of California and Baja lines), not just the modern pattern. Biovolume measurements are not in the source file and are pending from the provider (see Questions for Data Providers).</para>
+    </abstract>
+    <keywordSet>
+      <keyword>EARTH SCIENCE &gt; BIOSPHERE &gt; ECOSYSTEMS &gt; AQUATIC ECOSYSTEMS &gt; PLANKTON</keyword>
+      <keyword>EARTH SCIENCE &gt; BIOSPHERE &gt; ECOSYSTEMS &gt; AQUATIC ECOSYSTEMS &gt; PLANKTON &gt; ZOOPLANKTON</keyword>
+      <keywordThesaurus>GCMD Science Keywords</keywordThesaurus>
+    </keywordSet>
+    <keywordSet>
+      <keyword>Zooplankton</keyword>
+    </keywordSet>
+    <distribution scope="document">
+      <online>
+        <url function="information">https://calcofi.io/datasets/sio_pic-zooplankton/</url>
+      </online>
+    </distribution>
+    <coverage>
+      <geographicCoverage>
+        <geographicDescription>19.9–51.0°N, 164.1–107.1°W</geographicDescription>
+        <boundingCoordinates>
+          <westBoundingCoordinate>-164.083</westBoundingCoordinate>
+          <eastBoundingCoordinate>-107.1</eastBoundingCoordinate>
+          <northBoundingCoordinate>51.05</northBoundingCoordinate>
+          <southBoundingCoordinate>19.917</southBoundingCoordinate>
+        </boundingCoordinates>
+      </geographicCoverage>
+      <temporalCoverage>
+        <rangeOfDates>
+          <beginDate>
+            <calendarDate>1939</calendarDate>
+          </beginDate>
+          <endDate>
+            <calendarDate>2024</calendarDate>
+          </endDate>
+        </rangeOfDates>
+      </temporalCoverage>
+    </coverage>
+    <contact>
+      <organizationName>CalCOFI</organizationName>
+      <electronicMailAddress>data@calcofi.io</electronicMailAddress>
+    </contact>
+    <dataTable>
+      <entityName>sample</entityName>
+      <entityDescription>One row per physical sampling event at its native grain (site, tow, net, cast, bottle, underway, transect, region pool). An adjacency list: parent_sample_key points at the containing event and root_sample_key at the top of the chain, so counting distinct events at any level is a single GROUP BY.</entityDescription>
+      <attributeList>
+        <attribute>
+          <attributeName>sample_key</attributeName>
+          <attributeLabel>Sample Key</attributeLabel>
+          <attributeDefinition>Globally unique event key, namespaced dataset_key:sample_type:id so the same integer id in two datasets — or at two event levels in one dataset — never collides.</attributeDefinition>
+          <storageType>VARCHAR</storageType>
+          <measurementScale>
+            <nominal>
+              <nonNumericDomain>
+                <textDomain>
+                  <definition>Globally unique event key, namespaced dataset_key:sample_type:id so the same integer id in two datasets — or at two event levels in one dataset — never collides.</definition>
+                </textDomain>
+              </nonNumericDomain>
+            </nominal>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>sample_type</attributeName>
+          <attributeLabel>Sample Type</attributeLabel>
+          <attributeDefinition>Event grain: site, tow, net, cast, bottle, underway, transect or region_pool.</attributeDefinition>
+          <storageType>VARCHAR</storageType>
+          <measurementScale>
+            <nominal>
+              <nonNumericDomain>
+                <textDomain>
+                  <definition>Event grain: site, tow, net, cast, bottle, underway, transect or region_pool.</definition>
+                </textDomain>
+              </nonNumericDomain>
+            </nominal>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>parent_sample_key</attributeName>
+          <attributeLabel>Parent Sample Key</attributeLabel>
+          <attributeDefinition>The containing event (net → tow → site; bottle → cast). NULL at the top of the chain. Flat adjacency list: attributes are not inherited.</attributeDefinition>
+          <storageType>VARCHAR</storageType>
+          <measurementScale>
+            <nominal>
+              <nonNumericDomain>
+                <textDomain>
+                  <definition>The containing event (net → tow → site; bottle → cast). NULL at the top of the chain. Flat adjacency list: attributes are not inherited.</definition>
+                </textDomain>
+              </nonNumericDomain>
+            </nominal>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>root_sample_key</attributeName>
+          <attributeLabel>Root Sample Key</attributeLabel>
+          <attributeDefinition>Top of this event's containment chain; equals sample_key for single-level datasets. Use count(DISTINCT root_sample_key) to count stations/casts irrespective of grain.</attributeDefinition>
+          <storageType>VARCHAR</storageType>
+          <measurementScale>
+            <nominal>
+              <nonNumericDomain>
+                <textDomain>
+                  <definition>Top of this event's containment chain; equals sample_key for single-level datasets. Use count(DISTINCT root_sample_key) to count stations/casts irrespective of grain.</definition>
+                </textDomain>
+              </nonNumericDomain>
+            </nominal>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>dataset_key</attributeName>
+          <attributeLabel>Dataset Key</attributeLabel>
+          <attributeDefinition>Provenance stamp: provider_dataset.</attributeDefinition>
+          <storageType>VARCHAR</storageType>
+          <measurementScale>
+            <nominal>
+              <nonNumericDomain>
+                <textDomain>
+                  <definition>Provenance stamp: provider_dataset.</definition>
+                </textDomain>
+              </nonNumericDomain>
+            </nominal>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>grid_key</attributeName>
+          <attributeLabel>Grid Key</attributeLabel>
+          <attributeDefinition>CalCOFI station grid cell. NULL where the dataset has no station assignment (region-pooled phytoplankton).</attributeDefinition>
+          <storageType>VARCHAR</storageType>
+          <measurementScale>
+            <nominal>
+              <nonNumericDomain>
+                <textDomain>
+                  <definition>CalCOFI station grid cell. NULL where the dataset has no station assignment (region-pooled phytoplankton).</definition>
+                </textDomain>
+              </nonNumericDomain>
+            </nominal>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>site_key</attributeName>
+          <attributeLabel>Site Key</attributeLabel>
+          <attributeDefinition>CalCOFI station natural key as the source records it (line/station, e.g. 090.0 060.0). Present on 13 of the 18 source event tables, so it is carried on the event dimension rather than lost to consolidation; grid_key is the derived grid cell, this is the source's own station id.</attributeDefinition>
+          <storageType>VARCHAR</storageType>
+          <measurementScale>
+            <nominal>
+              <nonNumericDomain>
+                <textDomain>
+                  <definition>CalCOFI station natural key as the source records it (line/station, e.g. 090.0 060.0). Present on 13 of the 18 source event tables, so it is carried on the event dimension rather than lost to consolidation; grid_key is the derived grid cell, this is the source's own station id.</definition>
+                </textDomain>
+              </nonNumericDomain>
+            </nominal>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>cruise_key</attributeName>
+          <attributeLabel>Cruise Key</attributeLabel>
+          <attributeDefinition>CalCOFI cruise natural key YYYY-MM-NODC.</attributeDefinition>
+          <storageType>VARCHAR</storageType>
+          <measurementScale>
+            <nominal>
+              <nonNumericDomain>
+                <textDomain>
+                  <definition>CalCOFI cruise natural key YYYY-MM-NODC.</definition>
+                </textDomain>
+              </nonNumericDomain>
+            </nominal>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>order_occ</attributeName>
+          <attributeLabel>Order of Occupation</attributeLabel>
+          <attributeDefinition>Order in which the station was occupied on the cruise. Source spelling varies (order_occ, ord_occ) and CTD stores it as text; normalised to an integer here.</attributeDefinition>
+          <storageType>INTEGER</storageType>
+          <measurementScale>
+            <ratio>
+              <unit>
+                <standardUnit>dimensionless</standardUnit>
+              </unit>
+              <numericDomain>
+                <numberType>integer</numberType>
+              </numericDomain>
+            </ratio>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>latitude</attributeName>
+          <attributeLabel>Latitude</attributeLabel>
+          <attributeDefinition>Event latitude (WGS84).</attributeDefinition>
+          <storageType>DOUBLE</storageType>
+          <measurementScale>
+            <ratio>
+              <unit>
+                <standardUnit>degree</standardUnit>
+              </unit>
+              <numericDomain>
+                <numberType>real</numberType>
+              </numericDomain>
+            </ratio>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>longitude</attributeName>
+          <attributeLabel>Longitude</attributeLabel>
+          <attributeDefinition>Event longitude (WGS84).</attributeDefinition>
+          <storageType>DOUBLE</storageType>
+          <measurementScale>
+            <ratio>
+              <unit>
+                <standardUnit>degree</standardUnit>
+              </unit>
+              <numericDomain>
+                <numberType>real</numberType>
+              </numericDomain>
+            </ratio>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>datetime</attributeName>
+          <attributeLabel>Datetime</attributeLabel>
+          <attributeDefinition>Event start time (UTC).</attributeDefinition>
+          <storageType>TIMESTAMP</storageType>
+          <measurementScale>
+            <dateTime>
+              <formatString>YYYY-MM-DDThh:mm:ss</formatString>
+            </dateTime>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>depth_min_m</attributeName>
+          <attributeLabel>Depth Min</attributeLabel>
+          <attributeDefinition>Shallowest depth sampled by this event.</attributeDefinition>
+          <storageType>DOUBLE</storageType>
+          <measurementScale>
+            <ratio>
+              <unit>
+                <standardUnit>meter</standardUnit>
+              </unit>
+              <numericDomain>
+                <numberType>real</numberType>
+              </numericDomain>
+            </ratio>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>depth_max_m</attributeName>
+          <attributeLabel>Depth Max</attributeLabel>
+          <attributeDefinition>Deepest depth sampled by this event.</attributeDefinition>
+          <storageType>DOUBLE</storageType>
+          <measurementScale>
+            <ratio>
+              <unit>
+                <standardUnit>meter</standardUnit>
+              </unit>
+              <numericDomain>
+                <numberType>real</numberType>
+              </numericDomain>
+            </ratio>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>tow_type</attributeName>
+          <attributeLabel>Tow Type</attributeLabel>
+          <attributeDefinition>Net gear code where the dataset records one (C1/CB/CV/PV oblique or vertical, MT manta); NULL for gears and datasets without one. Needed to compute gear-appropriate CPUE.</attributeDefinition>
+          <storageType>VARCHAR</storageType>
+          <measurementScale>
+            <nominal>
+              <nonNumericDomain>
+                <textDomain>
+                  <definition>Net gear code where the dataset records one (C1/CB/CV/PV oblique or vertical, MT manta); NULL for gears and datasets without one. Needed to compute gear-appropriate CPUE.</definition>
+                </textDomain>
+              </nonNumericDomain>
+            </nominal>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>data_stage</attributeName>
+          <attributeLabel>Data Stage</attributeLabel>
+          <attributeDefinition>The source's own processing state for this event: final (post-cruise calibrations applied) or preliminary (not for publication — the source warns that oxygen, nitrate and chlorophyll may change significantly once calibrated). Populated by calcofi_ctd-cast; NULL where the dataset draws no such distinction, which is not a claim that the data are final.</attributeDefinition>
+          <storageType>VARCHAR</storageType>
+          <measurementScale>
+            <nominal>
+              <nonNumericDomain>
+                <textDomain>
+                  <definition>The source's own processing state for this event: final (post-cruise calibrations applied) or preliminary (not for publication — the source warns that oxygen, nitrate and chlorophyll may change significantly once calibrated). Populated by calcofi_ctd-cast; NULL where the dataset draws no such distinction, which is not a claim that the data are final.</definition>
+                </textDomain>
+              </nonNumericDomain>
+            </nominal>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>geom</attributeName>
+          <attributeLabel>Geometry</attributeLabel>
+          <attributeDefinition>Point geometry minted from longitude/latitude (OGC:CRS84).</attributeDefinition>
+          <storageType>GEOMETRY('EPSG:4326')</storageType>
+          <measurementScale>
+            <nominal>
+              <nonNumericDomain>
+                <textDomain>
+                  <definition>Point geometry minted from longitude/latitude (OGC:CRS84).</definition>
+                </textDomain>
+              </nonNumericDomain>
+            </nominal>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>source_uuid</attributeName>
+          <attributeLabel>Source Uuid</attributeLabel>
+          <attributeDefinition>Source Uuid</attributeDefinition>
+          <storageType>UUID</storageType>
+          <measurementScale>
+            <nominal>
+              <nonNumericDomain>
+                <textDomain>
+                  <definition>Source Uuid</definition>
+                </textDomain>
+              </nonNumericDomain>
+            </nominal>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>seafloor_depth_m</attributeName>
+          <attributeDefinition>seafloor_depth_m</attributeDefinition>
+          <storageType>DOUBLE</storageType>
+          <measurementScale>
+            <ratio>
+              <unit>
+                <standardUnit>dimensionless</standardUnit>
+              </unit>
+              <numericDomain>
+                <numberType>real</numberType>
+              </numericDomain>
+            </ratio>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>station_uuid</attributeName>
+          <attributeDefinition>station_uuid</attributeDefinition>
+          <storageType>UUID</storageType>
+          <measurementScale>
+            <nominal>
+              <nonNumericDomain>
+                <textDomain>
+                  <definition>station_uuid</definition>
+                </textDomain>
+              </nonNumericDomain>
+            </nominal>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>station_uuid_method</attributeName>
+          <attributeDefinition>station_uuid_method</attributeDefinition>
+          <storageType>VARCHAR</storageType>
+          <measurementScale>
+            <nominal>
+              <nonNumericDomain>
+                <textDomain>
+                  <definition>station_uuid_method</definition>
+                </textDomain>
+              </nonNumericDomain>
+            </nominal>
+          </measurementScale>
+        </attribute>
+      </attributeList>
+    </dataTable>
+  </dataset>
+  <additionalMetadata>
+    <metadata>
+      <calcofi>
+        <datasetKey>sio_pic-zooplankton</datasetKey>
+        <datasetPage>https://calcofi.io/datasets/sio_pic-zooplankton/</datasetPage>
+        <release>v2026.09.11</release>
+        <releaseCitation>CalCOFI (2026). CalCOFI Integrated Database, release v2026.09.11 [Data set]. Scripps Institution of Oceanography, NOAA Fisheries, and California Department of Fish and Wildlife. https://calcofi.io/db-schema/?v=v2026.09.11</releaseCitation>
+        <sourceAccessed>2026-09-11</sourceAccessed>
+      </calcofi>
+    </metadata>
+  </additionalMetadata>
+</eml:eml>

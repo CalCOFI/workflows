@@ -1,0 +1,98 @@
+{
+  "type": "Collection",
+  "stac_version": "1.0.0",
+  "stac_extensions": ["https://stac-extensions.github.io/table/v1.2.0/schema.json", "https://stac-extensions.github.io/scientific/v1.0.0/schema.json"],
+  "id": "cce-lter_euphausiids",
+  "title": "CCE-LTER Euphausiid Abundance",
+  "description": "Species- and life-stage-resolved euphausiid (krill) abundance from CalCOFI / CCE-LTER net tows (BTEDB export), 1951-present, one row per tow x species x life stage. Supersedes the prior single-Abundance- column ingest, which had no taxonomic scope (Q02, now resolved) — units remain provisional pending provider confirmation (Q01).\n",
+  "keywords": ["EARTH SCIENCE > BIOSPHERE > ECOSYSTEMS > AQUATIC ECOSYSTEMS > PLANKTON > ZOOPLANKTON", "EARTH SCIENCE > BIOLOGICAL CLASSIFICATION > ANIMALS/INVERTEBRATES > ARTHROPODS > CRUSTACEANS > EUPHAUSIIDS (KRILL)"],
+  "license": "custom",
+  "providers": [
+    {
+      "name": "California Current Ecosystem Long Term Ecological Research",
+      "roles": ["producer", "licensor"],
+      "url": "https://ccelter.ucsd.edu"
+    },
+    {
+      "name": "CalCOFI",
+      "roles": ["processor", "host"],
+      "url": "https://calcofi.io"
+    }
+  ],
+  "extent": {
+    "spatial": {
+      "bbox": [
+        [-133.467, 28, -117.283, 46.6]
+      ]
+    },
+    "temporal": {
+      "interval": [
+        [
+          "1951-01-01T00:00:00Z",
+          "2019-12-31T23:59:59Z"
+        ]
+      ]
+    }
+  },
+  "sci:doi": "10.6073/pasta/4a92a0044bcd1523a4f994ece874a57d",
+  "sci:citation": "Ohman, M.D. 2022. California Current Ecosystem Euphausiid data, Brinton and Townsend Euphausiid Database (BTEDB) ver 1. Environmental Data Initiative. https://doi.org/10.6073/pasta/4a92a0044bcd1523a4f994ece874a57d",
+  "table:tables": [
+    {
+      "name": "sample",
+      "description": "One row per physical sampling event at its native grain (site, tow, net, cast, bottle, underway, transect, region pool). An adjacency list: `parent_sample_key` points at the containing event and `root_sample_key` at the top of the chain, so counting distinct events at any level is a single `GROUP BY`."
+    },
+    {
+      "name": "obs",
+      "description": "The occurrence-headline long table: one scalar measurement per row, environmental (`realm = 'env'`) and biological (`realm = 'bio'`) together. Biological taxon is the global `taxon_key`; sub-occurrence detail (length/stage bins, behavior) lives in `obs_attribute`, and event-level effort in `sample_measurement`."
+    },
+    {
+      "name": "taxon",
+      "description": "Taxonomic hierarchy for species via WoRMS and ITIS authorities (built from spp.duckdb via recursive CTEs)"
+    },
+    {
+      "name": "dataset_taxon",
+      "description": "Crosswalk from each dataset's own taxon vocabulary to the global `taxon_key`. `obs` resolves its taxon by joining this on (`dataset_key`, `ds_taxa_code`), so a dataset can keep its local codes without leaking them into the shared model."
+    },
+    {
+      "name": "measurement_type"
+    }
+  ],
+  "summaries": {
+    "calcofi:category": ["Euphausiids (Krill)"],
+    "calcofi:variables": ["euphausiid_abundance", "numberPerMeterSquared", "Euphausiids (Krill)"]
+  },
+  "links": [
+    {
+      "rel": "root",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "self",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/cce-lter_euphausiids/collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "about",
+      "href": "https://calcofi.io/datasets/cce-lter_euphausiids/",
+      "type": "text/html",
+      "title": "Dataset page"
+    },
+    {
+      "rel": "license",
+      "href": "https://portal.edirepository.org/nis/metadataviewer?packageid=knb-lter-cce.313.1",
+      "type": "text/html",
+      "title": "Custom terms stated by the provider"
+    },
+    {
+      "rel": "cite-as",
+      "href": "https://doi.org/10.6073/pasta/4a92a0044bcd1523a4f994ece874a57d",
+      "type": "text/html"
+    }
+  ]
+}

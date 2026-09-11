@@ -1,0 +1,91 @@
+{
+  "type": "Collection",
+  "stac_version": "1.0.0",
+  "stac_extensions": ["https://stac-extensions.github.io/table/v1.2.0/schema.json"],
+  "id": "swfsc_cufes",
+  "title": "CalCOFI Underway CUFES Fish Eggs",
+  "description": "Continuous Underway Fish Egg Sampler (CUFES) egg counts (sardine, anchovy, jack mackerel, hake, squid, other) with underway environmental conditions, from CalCOFI cruises (1996-present). Source: NOAA CoastWatch ERDDAP erdCalCOFIcufes.\n",
+  "keywords": ["EARTH SCIENCE > BIOLOGICAL CLASSIFICATION > ANIMALS/VERTEBRATES > FISH", "EARTH SCIENCE > BIOLOGICAL CLASSIFICATION > ANIMALS/VERTEBRATES > FISH > RAY-FINNED FISHES > ANCHOVIES/HERRINGS"],
+  "license": "custom",
+  "providers": [
+    {
+      "name": "NOAA Southwest Fisheries Science Center",
+      "roles": ["producer", "licensor"],
+      "url": "https://www.fisheries.noaa.gov/about/southwest-fisheries-science-center"
+    },
+    {
+      "name": "CalCOFI",
+      "roles": ["processor", "host"],
+      "url": "https://calcofi.io"
+    }
+  ],
+  "extent": {
+    "spatial": {
+      "bbox": [
+        [-134.1163, 29.8331, -117.2157, 54.7431]
+      ]
+    },
+    "temporal": {
+      "interval": [
+        [
+          "1996-01-01T00:00:00Z",
+          "2022-12-31T23:59:59Z"
+        ]
+      ]
+    }
+  },
+  "table:tables": [
+    {
+      "name": "sample",
+      "description": "One row per physical sampling event at its native grain (site, tow, net, cast, bottle, underway, transect, region pool). An adjacency list: `parent_sample_key` points at the containing event and `root_sample_key` at the top of the chain, so counting distinct events at any level is a single `GROUP BY`."
+    },
+    {
+      "name": "obs",
+      "description": "The occurrence-headline long table: one scalar measurement per row, environmental (`realm = 'env'`) and biological (`realm = 'bio'`) together. Biological taxon is the global `taxon_key`; sub-occurrence detail (length/stage bins, behavior) lives in `obs_attribute`, and event-level effort in `sample_measurement`."
+    },
+    {
+      "name": "taxon",
+      "description": "Taxonomic hierarchy for species via WoRMS and ITIS authorities (built from spp.duckdb via recursive CTEs)"
+    },
+    {
+      "name": "dataset_taxon",
+      "description": "Crosswalk from each dataset's own taxon vocabulary to the global `taxon_key`. `obs` resolves its taxon by joining this on (`dataset_key`, `ds_taxa_code`), so a dataset can keep its local codes without leaking them into the shared model."
+    },
+    {
+      "name": "measurement_type"
+    }
+  ],
+  "summaries": {
+    "calcofi:category": ["Fish Eggs & Larvae"],
+    "calcofi:variables": ["abundance", "count", "Fish Eggs & Larvae"]
+  },
+  "links": [
+    {
+      "rel": "root",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "self",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/swfsc_cufes/collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "about",
+      "href": "https://calcofi.io/datasets/swfsc_cufes/",
+      "type": "text/html",
+      "title": "Dataset page"
+    },
+    {
+      "rel": "license",
+      "href": "https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFIcufes.das",
+      "type": "text/html",
+      "title": "Custom terms stated by the provider"
+    }
+  ]
+}

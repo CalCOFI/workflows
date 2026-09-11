@@ -1,0 +1,97 @@
+{
+  "type": "Collection",
+  "stac_version": "1.0.0",
+  "stac_extensions": ["https://stac-extensions.github.io/table/v1.2.0/schema.json", "https://stac-extensions.github.io/scientific/v1.0.0/schema.json"],
+  "id": "cdfw_dungeness-crab",
+  "title": "CDFW Dungeness Crab Megalopae",
+  "description": "Dungeness crab (Metacarcinus magister) megalopae and larval decapods picked from archived CalCOFI oblique-tow plankton samples, examined for the California Department of Fish and Wildlife. Two efforts: a 2008-2014 time series of 310 sorted samples (A. Klemmedson, 2015) yielding 24 M. magister megalopae from 14 samples, and 216 archived samples from the 1949-2009 sorting log that were examined and found free of M. magister (1984-2009, E. Jones, as of 2012-02-15). Only examined samples are published — the log's remaining unsorted rows are a fact of the archive's inventory, not a sample of this dataset. Spring cruises, CalBOBL oblique tows, lines < 80 / stations < 90. Counts are occurrence in the examined aliquot, not standardized density. Sorting was performed at the SIO Pelagic Invertebrate Collection, where the removed megalopae are archived in vials.\n",
+  "keywords": ["EARTH SCIENCE > BIOSPHERE > ECOSYSTEMS > AQUATIC ECOSYSTEMS > PLANKTON > ZOOPLANKTON", "EARTH SCIENCE > BIOLOGICAL CLASSIFICATION > ANIMALS/INVERTEBRATES > ARTHROPODS > CRUSTACEANS > DECAPODS"],
+  "license": "CC-BY-4.0",
+  "providers": [
+    {
+      "name": "California Department of Fish and Wildlife",
+      "roles": ["producer", "licensor"],
+      "url": "https://wildlife.ca.gov"
+    },
+    {
+      "name": "CalCOFI",
+      "roles": ["processor", "host"],
+      "url": "https://calcofi.io"
+    }
+  ],
+  "extent": {
+    "spatial": {
+      "bbox": [
+        [-132.25, 33.46, -120.675, 51.05]
+      ]
+    },
+    "temporal": {
+      "interval": [
+        [
+          "1984-01-01T00:00:00Z",
+          "2014-12-31T23:59:59Z"
+        ]
+      ]
+    }
+  },
+  "sci:citation": "Rogers-Bennett, L.; Jones, E.; Klemmedson, A. (2026). CDFW Dungeness Crab Megalopae from archived CalCOFI plankton samples (1949-2014). California Department of Fish and Wildlife, published through CalCOFI / Scripps Institution of Oceanography.\n",
+  "table:tables": [
+    {
+      "name": "sample",
+      "description": "One row per physical sampling event at its native grain (site, tow, net, cast, bottle, underway, transect, region pool). An adjacency list: `parent_sample_key` points at the containing event and `root_sample_key` at the top of the chain, so counting distinct events at any level is a single `GROUP BY`."
+    },
+    {
+      "name": "obs",
+      "description": "The occurrence-headline long table: one scalar measurement per row, environmental (`realm = 'env'`) and biological (`realm = 'bio'`) together. Biological taxon is the global `taxon_key`; sub-occurrence detail (length/stage bins, behavior) lives in `obs_attribute`, and event-level effort in `sample_measurement`."
+    },
+    {
+      "name": "obs_attribute",
+      "description": "Sub-occurrence attribution: the breakdown *within* an `obs` headline row. Covers numeric frequency distributions (length bins, stage numbers) and categorical breakdowns (seabird behavior). Counts here sum to the headline where the source is internally consistent."
+    },
+    {
+      "name": "sample_measurement",
+      "description": "Event-level (effort) measurements: quantities that describe the sampling event itself rather than anything observed in it — net volume filtered, standard haul factor, proportion sorted, bottle cast conditions. Kept apart from `obs` so effort is never mistaken for an observation."
+    },
+    {
+      "name": "taxon",
+      "description": "Taxonomic hierarchy for species via WoRMS and ITIS authorities (built from spp.duckdb via recursive CTEs)"
+    },
+    {
+      "name": "dataset_taxon",
+      "description": "Crosswalk from each dataset's own taxon vocabulary to the global `taxon_key`. `obs` resolves its taxon by joining this on (`dataset_key`, `ds_taxa_code`), so a dataset can keep its local codes without leaking them into the shared model."
+    }
+  ],
+  "summaries": {
+    "calcofi:category": ["Zooplankton"],
+    "calcofi:variables": ["abundance", "count", "Fish Eggs & Larvae"]
+  },
+  "links": [
+    {
+      "rel": "root",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "self",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/cdfw_dungeness-crab/collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "about",
+      "href": "https://calcofi.io/datasets/cdfw_dungeness-crab/",
+      "type": "text/html",
+      "title": "Dataset page"
+    },
+    {
+      "rel": "license",
+      "href": "https://creativecommons.org/licenses/by/4.0/",
+      "type": "text/html",
+      "title": "Creative Commons Attribution 4.0 International"
+    }
+  ]
+}

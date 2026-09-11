@@ -8,6 +8,8 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+# v2026.09.11
+
 ## CTD averages rebuilt from their sensors by the provider's flags
 
 The CTD's canonical temperature, salinity and oxygen are the average of a sensor pair, and the

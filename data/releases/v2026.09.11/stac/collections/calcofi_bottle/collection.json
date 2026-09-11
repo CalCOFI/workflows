@@ -1,0 +1,82 @@
+{
+  "type": "Collection",
+  "stac_version": "1.0.0",
+  "stac_extensions": ["https://stac-extensions.github.io/table/v1.2.0/schema.json", "https://stac-extensions.github.io/scientific/v1.0.0/schema.json"],
+  "id": "calcofi_bottle",
+  "title": "CalCOFI Bottle Database",
+  "description": "Hydrographic bottle data including temperature, salinity, oxygen, nutrients, pigments, and C14 from CalCOFI cruises.\n",
+  "keywords": ["EARTH SCIENCE > OCEANS > OCEAN TEMPERATURE > WATER TEMPERATURE", "EARTH SCIENCE > OCEANS > SALINITY/DENSITY > OCEAN SALINITY", "EARTH SCIENCE > OCEANS > OCEAN CHEMISTRY > OXYGEN", "EARTH SCIENCE > OCEANS > OCEAN CHEMISTRY > NUTRIENTS", "EARTH SCIENCE > OCEANS > OCEAN CHEMISTRY > CHLOROPHYLL"],
+  "license": "other",
+  "providers": [
+    {
+      "name": "California Cooperative Oceanic Fisheries Investigations",
+      "roles": ["producer", "licensor"],
+      "url": "https://calcofi.org"
+    },
+    {
+      "name": "CalCOFI",
+      "roles": ["processor", "host"],
+      "url": "https://calcofi.io"
+    }
+  ],
+  "extent": {
+    "spatial": {
+      "bbox": [
+        [-164.0833, 18.4167, -105.9667, 47.9167]
+      ]
+    },
+    "temporal": {
+      "interval": [
+        [
+          "1949-01-01T00:00:00Z",
+          "2021-12-31T23:59:59Z"
+        ]
+      ]
+    }
+  },
+  "sci:citation": "CalCOFI. (2023). CalCOFI Bottle Database 194903-202105. CalCOFI.org.",
+  "table:tables": [
+    {
+      "name": "sample",
+      "description": "One row per physical sampling event at its native grain (site, tow, net, cast, bottle, underway, transect, region pool). An adjacency list: `parent_sample_key` points at the containing event and `root_sample_key` at the top of the chain, so counting distinct events at any level is a single `GROUP BY`."
+    },
+    {
+      "name": "obs",
+      "description": "The occurrence-headline long table: one scalar measurement per row, environmental (`realm = 'env'`) and biological (`realm = 'bio'`) together. Biological taxon is the global `taxon_key`; sub-occurrence detail (length/stage bins, behavior) lives in `obs_attribute`, and event-level effort in `sample_measurement`."
+    },
+    {
+      "name": "sample_measurement",
+      "description": "Event-level (effort) measurements: quantities that describe the sampling event itself rather than anything observed in it — net volume filtered, standard haul factor, proportion sorted, bottle cast conditions. Kept apart from `obs` so effort is never mistaken for an observation."
+    },
+    {
+      "name": "measurement_type"
+    }
+  ],
+  "summaries": {
+    "calcofi:category": ["Physical Oceanography"],
+    "calcofi:variables": ["alkalinity_rep1", "umol/kg", "http://vocab.nerc.ac.uk/collection/P01/current/MDMAP014/", "Carbonate System", "ammonia", "umol/L", "http://vocab.nerc.ac.uk/collection/P01/current/AMONZZXX/", "Nutrients & Chemistry", "c14_dark", "mgC/m3/hld", "Productivity & Pigments", "c14_mean", "mgC/m3/hld", "Productivity & Pigments", "c14_rep1", "mgC/m3/hld", "Productivity & Pigments", "c14_rep2", "mgC/m3/hld", "Productivity & Pigments", "chlorophyll_a", "ug/L", "http://vocab.nerc.ac.uk/collection/P01/current/CPHLZZXX/", "Productivity & Pigments", "dic_rep1", "umol/kg", "http://vocab.nerc.ac.uk/collection/P01/current/TCO2MSXX/", "Carbonate System", "light_pct", "%", "Productivity & Pigments", "nitrate", "umol/L", "http://vocab.nerc.ac.uk/collection/P01/current/NTRAZZXX/", "Nutrients & Chemistry", "nitrite", "umol/L", "http://vocab.nerc.ac.uk/collection/P01/current/NTRIZZXX/", "Nutrients & Chemistry", "oxygen_ml_l", "ml/L", "http://vocab.nerc.ac.uk/collection/P01/current/DOXYZZXX/", "Physical Oceanography", "oxygen_saturation", "%", "http://vocab.nerc.ac.uk/collection/P01/current/OXYSZZ01/", "Physical Oceanography", "oxygen_umol_kg", "umol/kg", "http://vocab.nerc.ac.uk/collection/P01/current/DOXMZZXX/", "Physical Oceanography", "phaeopigment", "ug/L", "http://vocab.nerc.ac.uk/collection/P01/current/PHAEZZXX/", "Productivity & Pigments", "phosphate", "umol/L", "http://vocab.nerc.ac.uk/collection/P01/current/PHOSZZXX/", "Nutrients & Chemistry", "r_ammonium", "umol/L", "http://vocab.nerc.ac.uk/collection/P01/current/AMONZZXX/", "Nutrients & Chemistry", "r_depth", "m", "http://vocab.nerc.ac.uk/collection/P01/current/ADEPZZ01/", "Physical Oceanography", "r_dynamic_height", "dyn m", "Physical Oceanography", "r_oxygen_umol_kg", "umol/kg", "http://vocab.nerc.ac.uk/collection/P01/current/DOXMZZXX/", "Physical Oceanography", "r_salinity_sva", "10^-8 m3/kg", "Physical Oceanography", "r_temperature", "degC", "Physical Oceanography", "salinity", "PSS-78", "http://vocab.nerc.ac.uk/collection/P01/current/PSLTZZ01/", "Physical Oceanography", "sigma_theta", "kg/m3", "http://vocab.nerc.ac.uk/collection/P01/current/SIGTEQ01/", "Physical Oceanography", "silicate", "umol/L", "http://vocab.nerc.ac.uk/collection/P01/current/SLCAZZXX/", "Nutrients & Chemistry", "temperature", "degC", "http://vocab.nerc.ac.uk/collection/P01/current/TEMPPR01/", "Physical Oceanography"]
+  },
+  "links": [
+    {
+      "rel": "root",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "self",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/calcofi_bottle/collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "about",
+      "href": "https://calcofi.io/datasets/calcofi_bottle/",
+      "type": "text/html",
+      "title": "Dataset page"
+    }
+  ]
+}
