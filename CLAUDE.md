@@ -156,6 +156,18 @@ Rscript scripts/build_workflows_index.R
 - **`measurement_qual` is each dataset's own vocabulary, uninterpreted**
   (`metadata/measurement_qual.csv`); a flag reaches a user only if the consumer
   applies `cc_qual_ok_sql()` / `qual_ok_sql()` / `qualOkSQL()`.
+- **A provider's quality flag outranks a physical bound.** A value its provider
+  flags questionable or bad (CTD 8/9, an accepted `flag_accepted.parquet` flag)
+  never enters anything we derive — an average, a climatology, an anomaly, a
+  published statistic; a bound is only a sentinel guard, never the test of
+  "valid". CTD sensor pairs are rebuilt with `combine_sensor_pair_sql()` (Rasmus,
+  2026-09-09) after the accepted flags, never taken from the file's own average; a
+  corrected series carries its sensor's flag; the ingest asserts no average
+  includes a flagged sensor (`measurement-bounds` skill).
+- **A data fix is diffed against the release before it is re-staged**: per
+  `measurement_type`, rows changed / filled / removed and the largest change, for
+  every series the fix can touch — a dry run that leaves a series out of its
+  breakdown is not a dry run (`measurement-bounds` skill).
 - **One `climatology` table for every anomaly** (`build_climatology()`:
   1993–2013, dataset × `grid_key` × calendar month × 10 m bin × type, ≥ 3
   cruises). Month-matched always; pass an explicit color ramp, Plotly's `"RdBu"`

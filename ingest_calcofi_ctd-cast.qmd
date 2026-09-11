@@ -2082,96 +2082,16 @@ dbExecute(
     AND r.datetime_start_utc = c.datetime_start_utc"
 )
 
-# --- recompute the two-sensor averages from sensors that are individually valid
-#
-# The source ships PRE-COMPUTED averages — TempAve, SaltAve_Corr, OxAve_StaCorr,
-# OxAveuM_StaCorr — and their arithmetic is faithful. What it does not do,
-# consistently, is check whether each sensor is worth averaging. Two failure
-# modes, and the second is why validating the AVERAGE is not enough:
-#
-#  1. MISSING SENSOR. Only one sensor fitted, so the good one is averaged with
-#     the -99 missing marker:
-#       Depth 3.0 | Temp1 20.8951 | Temp2 -99.0    | TempAve -39.0525
-#     Exact on 29,596 of 29,596 such rows in 9308NH. Lands far out of range, so
-#     the bounds guard below would at least DELETE it — but deleting throws away
-#     a perfectly good Temp1 reading to fix a bad average.
-#
-#  2. FAILED SENSOR. A sensor reading nonsense without being a sentinel — on
-#     2607SH Temp2 ranges -31.95 to 32.64 degC while Temp1 sits at a steady 20.15:
-#       Depth 3.0 | Temp1 20.1499 | Temp2 -18.607  | TempAve 0.7714
-#     The mean is arithmetically correct and lands INSIDE the valid range, so
-#     neither the -99 filter nor a bounds check on the average can see it. 407
-#     such rows on that cruise alone — and a 0.77 degC "summer surface
-#     temperature" produces an 18 degC cold anomaly, which is precisely the
-#     quantity this data is being used to compute.
-#
-# THIS IS NOT A TEMPERATURE-ONLY PROBLEM, though temperature is the worst of it.
-# Across a 14-cruise sample, of the rows where one sensor is out of bounds the
-# source fell back to the good sensor 73,438 times for TempAve but took the naive
-# mean 14,750 times; for oxygen the proportion inverts — OxAve_StaCorr took the
-# naive mean on 348 of 457, OxAveuM_StaCorr on 245 of 252. Salinity is the well
-# behaved one (5 of 105,403), so a temperature-only fix would have left oxygen
-# wrong in the same way and looked complete.
-#
-# THE RULE: a sensor outside its declared bounds is ABSENT, and the average of
-# what remains is the average — one good sensor averages to itself, no good
-# sensor averages to NULL. That is `avg()`'s own NULL semantics, so it is
-# written as list_avg() over the nulled-out sensors rather than a CASE ladder:
-# the expression then IS the rule, and cannot drift from it.
-#   https://duckdb.org/docs/stable/sql/functions/aggregates#avgarg
-#
-# Bounds come from the registry entry for the SENSOR series (temperature_1 etc.),
-# so tightening them there tightens this too.
-ave_repair <- tribble(
-  ~ave_col,             ~s1_col,            ~s2_col,            ~bound_type,
-  "temp_ave",           "temp1",            "temp2",            "temperature_1",
-  "salt_ave_corr",      "salt1_corr",       "salt2_corr",       "salinity_1",
-  "ox_ave_sta_corr",    "ox1_sta_corr",     "ox2_sta_corr",     "oxygen_ml_l_1",
-  "ox_aveu_m_sta_corr", "ox1u_m_sta_corr",  "ox2u_m_sta_corr",  "oxygen_umol_kg_1")
-
-raw_cols <- dbListFields(con, "ctd_raw")
-
-ave_report <- pmap_dfr(ave_repair, function(ave_col, s1_col, s2_col, bound_type) {
-  # a stage that does not ship a column (sensor-only cruises have no *_corr) is
-  # skipped, not an error
-  if (!all(c(ave_col, s1_col, s2_col) %in% raw_cols))
-    return(tibble(measure = ave_col, n_repaired = NA_integer_,
-                  n_still_oob = NA_integer_, note = "column absent"))
-
-  lo <- d_meas_type$valid_min[d_meas_type$measurement_type == bound_type]
-  hi <- d_meas_type$valid_max[d_meas_type$measurement_type == bound_type]
-  stopifnot("sensor series must declare bounds for the average repair" =
-              length(lo) == 1 && !is.na(lo) && !is.na(hi))
-
-  # BETWEEN yields NULL on a NULL operand, so `NOT BETWEEN` is NULL — hence the
-  # explicit IS NOT NULL on each arm: a genuinely absent sensor is not "bad".
-  suspect <- glue(
-    "({s1_col} IS NOT NULL AND {s1_col} NOT BETWEEN {lo} AND {hi})
-     OR ({s2_col} IS NOT NULL AND {s2_col} NOT BETWEEN {lo} AND {hi})
-     OR ({ave_col} IS NOT NULL AND {ave_col} NOT BETWEEN {lo} AND {hi})")
-
-  n_bad <- dbGetQuery(con, glue(
-    "SELECT COUNT(*) n FROM ctd_raw WHERE {suspect}"))$n
-
-  dbExecute(con, glue("
-    UPDATE ctd_raw SET {ave_col} = list_avg([
-        CASE WHEN {s1_col} BETWEEN {lo} AND {hi} THEN {s1_col} END,
-        CASE WHEN {s2_col} BETWEEN {lo} AND {hi} THEN {s2_col} END])
-    WHERE {suspect}"))
-
-  n_after <- dbGetQuery(con, glue(
-    "SELECT COUNT(*) n FROM ctd_raw
-     WHERE {ave_col} IS NOT NULL AND {ave_col} NOT BETWEEN {lo} AND {hi}"))$n
-
-  tibble(measure = ave_col, n_repaired = n_bad, n_still_oob = n_after,
-         note = glue("bounds {lo}–{hi} from {bound_type}"))
-})
-
-say(glue("two-sensor averages recomputed where a sensor was invalid: ",
-         "{format(sum(ave_report$n_repaired, na.rm = TRUE), big.mark = ',')} row(s) ",
-         "across {sum(!is.na(ave_report$n_repaired))} measure(s)"))
-stopifnot("average repair must leave no out-of-range average" =
-            all(ave_report$n_still_oob == 0, na.rm = TRUE))
+# --- the two-sensor averages are NOT repaired here -----------------------------
+# The source's pre-computed averages (TempAve, SaltAve_Corr, OxAve_StaCorr,
+# OxAveuM_StaCorr) are rebuilt from their two sensors by the PROVIDER'S FLAGS in
+# § Combine the Sensor Pairs by Their Flags, after the CTD team's accepted flags are
+# applied — Rasmus Swalethorp's rule (2026-09-09), calcofi4db::combine_sensor_pair().
+# Until 2026-09-11 this spot "repaired" them by the registry's physical bounds alone,
+# which let a sensor the source flags 8 (questionable) or 9 (bad) into the average
+# whenever its value was physically possible (1,425 temperature and 6,001 salinity
+# averages in v2026.09.10) and never saw the accepted flags at all. A physical bound
+# is a sentinel guard, not a quality test.
 
 # pivot wide-to-long one measurement type at a time to avoid OOM
 dbExecute(con, "DROP TABLE IF EXISTS ctd_measurement")
@@ -2513,6 +2433,156 @@ It first has an effect at the next CTD ingest render after the team accepts
 one. `RELEASES.md` gets an entry only once `n_flags_applied` > 0 — a
 zero-effect chunk shipping is not itself a release-content change.
 :::
+
+## Combine the Sensor Pairs by Their Flags
+
+The canonical CTD temperature, salinity and oxygen are the **average of a sensor
+pair**, and the source ships that average pre-computed. It is not trustworthy as
+shipped: where the second sensor is missing, `SaltAve_Corr` and `TempAve` are
+sometimes exactly half of sensor 1 (1998-07-32NM, 2024-01-33UD: salinity ≈ 17 at
+1,000 m beside a sensor reading 34), `TempAve` reads 35–40 °C at 1–2 m on
+2003-04-31JD beside a sensor reading 12, and none of these carries a flag. So every
+average is **rebuilt here from its two sensors**, by the rule Rasmus Swalethorp set
+for this project (2026-09-09), implemented and tested as
+`calcofi4db::combine_sensor_pair()`:
+
+1. a sensor flagged **8** (questionable) or **9** (bad) is dropped;
+2. a **1** (use primary) or **2** (use secondary) selects that sensor alone;
+3. otherwise the **mean** of the two, **one alone** when the other is missing, and
+   nothing when neither survives.
+
+The flags are each sensor's own (`T1Q`/`T2Q`, `S1Q`/`S2Q`, `Ox1Q`/`Ox2Q`), which the
+corrected series inherit from their sensor (`libs/build_ctd_measurement_registry.R`
+§ 4), **after** the CTD team's accepted flags (§ above) have been written onto them.
+A sensor value removed above as a `-99` sentinel or outside its physical bound is
+absent here, which the rule treats like a 9. A physical bound is only that guard: it
+never decides that a flagged value is good.
+
+Every average is rebuilt, oxygen included, and an average is written wherever a
+surviving sensor exists even if the source shipped none (Ben, 2026-09-11: Rasmus is
+the authority on the rule). The source's own average survives only on a scan where the
+source shipped **no sensor value at all** — there is nothing to rebuild it from.
+
+```{r}
+#| label: combine_sensor_pairs
+
+pair_rule <- tibble::tribble(
+  ~ave,                          ~s1,                          ~s2,                          ~raw1,              ~raw2,
+  "temperature_ave",             "temperature_1",              "temperature_2",              "temp1",            "temp2",
+  "salinity_ave_corr",           "salinity_1_corr",            "salinity_2_corr",            "salt1_corr",       "salt2_corr",
+  "oxygen_ml_l_ave_sta_corr",    "oxygen_ml_l_1_sta_corr",     "oxygen_ml_l_2_sta_corr",     "ox1_sta_corr",     "ox2_sta_corr",
+  "oxygen_umol_kg_ave_sta_corr", "oxygen_umol_kg_1_sta_corr",  "oxygen_umol_kg_2_sta_corr",  "ox1u_m_sta_corr",  "ox2u_m_sta_corr")
+
+# a sensor series with no flag column would make the rule silently flag-blind
+qual_cols <- setNames(d_meas_ctd$`_qual_column`, d_meas_ctd$measurement_type)
+stopifnot("every paired sensor series must carry its sensor's flag column" =
+            all(!is.na(qual_cols[c(pair_rule$s1, pair_rule$s2)]) &
+                  qual_cols[c(pair_rule$s1, pair_rule$s2)] != ""))
+
+combined_sql <- calcofi4db::combine_sensor_pair_sql("p.v1", "p.v2", "p.q1", "p.q2")
+q89 <- function(q) glue("regexp_replace(CAST({q} AS VARCHAR), '\\.0+$', '') IN ('8', '9')")
+# the same md5 key assign_deterministic_uuids_md5() uses, so a rebuilt row keeps its id
+uuid_sql <- "substr(_h, 1, 8) || '-' || substr(_h, 9, 4) || '-' || substr(_h, 13, 4) || '-' ||
+             substr(_h, 17, 4) || '-' || substr(_h, 21, 12)"
+
+pair_report <- pmap_dfr(pair_rule, function(ave, s1, s2, raw1, raw2) {
+  dbExecute(con, glue("
+    CREATE OR REPLACE TEMP TABLE _pair AS
+    WITH m AS (
+      SELECT ctd_cast_uuid, depth_m,
+        any_value(cruise_key) AS cruise_key,
+        max(measurement_value) FILTER (WHERE measurement_type = '{s1}')  AS v1,
+        max(measurement_qual)  FILTER (WHERE measurement_type = '{s1}')  AS q1,
+        max(measurement_value) FILTER (WHERE measurement_type = '{s2}')  AS v2,
+        max(measurement_qual)  FILTER (WHERE measurement_type = '{s2}')  AS q2,
+        max(measurement_value) FILTER (WHERE measurement_type = '{ave}') AS v_src
+      FROM ctd_measurement
+      WHERE measurement_type IN ('{s1}', '{s2}', '{ave}')
+      GROUP BY ctd_cast_uuid, depth_m),
+    r AS (
+      -- did the SOURCE ship any sensor value on this scan (before sentinels and bounds)?
+      SELECT ctd_cast_uuid, depth_m,
+        bool_or({raw1} IS NOT NULL OR {raw2} IS NOT NULL) AS src_has_sensor
+      FROM ctd_raw GROUP BY ctd_cast_uuid, depth_m)
+    SELECT m.*, coalesce(r.src_has_sensor, FALSE) AS src_has_sensor
+    FROM m LEFT JOIN r USING (ctd_cast_uuid, depth_m)"))
+
+  dbExecute(con, glue("
+    CREATE OR REPLACE TEMP TABLE _pair_new AS
+    SELECT p.*,
+      CASE WHEN p.src_has_sensor THEN {combined_sql} ELSE p.v_src END AS v_new
+    FROM _pair p"))
+
+  r <- dbGetQuery(con, glue("
+    SELECT
+      COUNT(*) FILTER (WHERE v_src IS NOT NULL)                                   AS n_shipped,
+      COUNT(*) FILTER (WHERE v_new IS NOT NULL)                                   AS n_written,
+      COUNT(*) FILTER (WHERE v_src IS NOT NULL AND v_new IS NOT NULL
+                         AND abs(v_src - v_new) > 1e-4)                           AS n_changed,
+      COUNT(*) FILTER (WHERE v_src IS NULL AND v_new IS NOT NULL)                 AS n_filled,
+      COUNT(*) FILTER (WHERE v_src IS NOT NULL AND v_new IS NULL)                 AS n_removed,
+      COUNT(*) FILTER (WHERE ({q89('q1')} AND v1 IS NOT NULL)
+                          OR ({q89('q2')} AND v2 IS NOT NULL))                    AS n_flag_excluded,
+      COUNT(*) FILTER (WHERE NOT src_has_sensor AND v_src IS NOT NULL)            AS n_src_only
+    FROM _pair_new"))
+
+  dbExecute(con, glue("DELETE FROM ctd_measurement WHERE measurement_type = '{ave}'"))
+  dbExecute(con, glue("
+    INSERT INTO ctd_measurement BY NAME
+    SELECT {uuid_sql} AS ctd_measurement_uuid,
+           ctd_cast_uuid, depth_m, '{ave}' AS measurement_type,
+           v_new AS measurement_value, CAST(NULL AS VARCHAR) AS measurement_qual, cruise_key
+    FROM (
+      SELECT *, md5(concat_ws('|', COALESCE(CAST(ctd_cast_uuid AS VARCHAR), ''),
+                                   COALESCE(CAST(depth_m AS VARCHAR), ''),
+                                   '{ave}')) AS _h
+      FROM _pair_new WHERE v_new IS NOT NULL)"))
+
+  mutate(r, measure = ave, .before = 1)
+})
+dbExecute(con, "DROP TABLE IF EXISTS _pair")
+dbExecute(con, "DROP TABLE IF EXISTS _pair_new")
+
+say(glue("sensor pairs combined by their flags: ",
+         "{format(sum(pair_report$n_written), big.mark = ',')} averages written, ",
+         "{format(sum(pair_report$n_changed), big.mark = ',')} changed from the source's, ",
+         "{format(sum(pair_report$n_filled), big.mark = ',')} filled where it shipped none, ",
+         "{format(sum(pair_report$n_flag_excluded), big.mark = ',')} with a flagged sensor left out"))
+datatable(pair_report, caption = "Averages rebuilt from their sensor pairs by the flag rule",
+          rownames = FALSE)
+
+# the rebuilt averages must still sit inside their own bounds, and each scan has one
+bounds_pairs <- check_measurement_bounds(
+  con, "ctd_measurement", mt = d_meas_type, include_undeclared = FALSE)
+stopifnot(
+  "a rebuilt average fell outside its declared bound" =
+    sum(bounds_pairs$status == "out_of_range" &
+          bounds_pairs$measurement_type %in% pair_rule$ave) == 0,
+  "one rebuilt average per scan" =
+    dbGetQuery(con, glue("
+      SELECT COUNT(*) - COUNT(DISTINCT ctd_cast_uuid || '|' || depth_m || '|' || measurement_type) AS n
+      FROM ctd_measurement WHERE measurement_type IN ({paste0(\"'\", pair_rule$ave, \"'\", collapse = ', ')})"))$n == 0)
+
+# and the rule itself, asserted on what was written: where a sensor is flagged 8/9 the
+# average is the OTHER sensor (or absent) — never a mean that includes the flagged one
+n_flag_leak <- sum(pmap_int(pair_rule, function(ave, s1, s2, raw1, raw2) {
+  dbGetQuery(con, glue("
+    WITH p AS (
+      SELECT ctd_cast_uuid, depth_m,
+        max(measurement_value) FILTER (WHERE measurement_type = '{s1}')  AS v1,
+        max(measurement_qual)  FILTER (WHERE measurement_type = '{s1}')  AS q1,
+        max(measurement_value) FILTER (WHERE measurement_type = '{s2}')  AS v2,
+        max(measurement_qual)  FILTER (WHERE measurement_type = '{s2}')  AS q2,
+        max(measurement_value) FILTER (WHERE measurement_type = '{ave}') AS va
+      FROM ctd_measurement WHERE measurement_type IN ('{s1}', '{s2}', '{ave}')
+      GROUP BY ctd_cast_uuid, depth_m)
+    SELECT COUNT(*) AS n FROM p
+    WHERE va IS NOT NULL AND (
+      ({q89('q1')} AND v1 IS NOT NULL AND (v2 IS NULL OR {q89('q2')} OR abs(va - v2) > 1e-9)) OR
+      ({q89('q2')} AND v2 IS NOT NULL AND (v1 IS NULL OR {q89('q1')} OR abs(va - v1) > 1e-9)))"))$n
+}))
+stopifnot("an average includes a sensor its provider flags 8/9" = n_flag_leak == 0)
+```
 
 ### ctd_summary — summary stats across cast directions
 

@@ -8,6 +8,49 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## CTD averages rebuilt from their sensors by the provider's flags
+
+The CTD's canonical temperature, salinity and oxygen are the average of a sensor pair, and the
+files ship that average pre-computed. It is no longer used where a sensor exists: the ingest
+rebuilds every average (`temperature_ave`, `salinity_ave_corr`, `oxygen_ml_l_ave_sta_corr`,
+`oxygen_umol_kg_ave_sta_corr`) with the rule Rasmus Swalethorp set on 2026-09-09
+(`calcofi4db::combine_sensor_pair()`): a sensor flagged **8** (questionable) or **9** (bad) is
+left out, a **1**/**2** selects the primary/secondary, otherwise the mean, one sensor alone when the
+other is missing. The CTD team's accepted flags are applied to the sensors first. Until now the
+averages were repaired by physical bounds alone, which let a flagged sensor into the mean whenever
+its value was possible (1,425 temperature and 6,001 salinity averages in v2026.09.10) and could not
+see failures with no flag at all: on 1998-07-32NM and 2024-01-33UD `SaltAve_Corr` was exactly half
+of sensor 1 (≈ 17 PSU down to 1,041 m) and `TempAve` wrong by up to 10 °C, and on 17 casts of
+2003-04-31JD `TempAve` read 35–40 °C at 1–2 m beside a sensor reading 12–14 °C.
+
+Predicted against v2026.09.10 (dry run, 2026-09-11; the ingest's own counts replace these): temperature
+34,923 averages changed, 238 filled, 1,434 removed (both sensors flagged); salinity 39,276 / 811 / 1,141;
+oxygen (ml/L) 2,656,233 changed — where the second corrected sensor is empty the file's average differed
+from sensor 1 by 0.1–0.4 ml/L — 1,135,319 filled, 5,866 removed; oxygen (µmol/kg) 4,274 changed and
+3,529,141 filled where the file shipped no average. The corrected sensor series (`salinity_{1,2}_corr`,
+`oxygen_*_{sta,cruise}_corr`, `est_*`) now carry their sensor's flag in `measurement_qual`, so a consumer
+can apply the same rule; the per-sensor µmol/kg corrected oxygens gain the 0–700 bound, removing about
+1,400 values up to 6.4 × 10¹⁰ from `obs_ctd_full`. What remains is single-sensor faults with no flag
+(one 2007-11-32NM cast's only corrected salinity sensor reads ≈ 19 PSU from 61 to 509 m; a 36.2 °C bin
+at 516 m on 9401_002d) — the CTD team's to flag.
+
+## Bottle: nitrate, chlorophyll-a and phaeopigment bounds; two corrupt salinities removed
+
+`nitrate` declares −1…60 µmol/L, which removes six values of 66–95 µmol/L on 1976-02-31AX that
+sit beside 0.6–0.97 µmol/L phosphate in oxygenated water (a seventh, 56.0, is inside the real deep
+tail that runs to 52 and stays until question `calcofi_bottle_14` is answered);
+`chlorophyll_a` and `phaeopigment` declare floors of −1 and −5 and no ceiling. A bottle whose
+temperature is impossible now loses its salinity too: the 9.50 and 21.06 PSU beside the 99.00 °C
+and 56.87 °C bottles of 2020-07-33P4 (station 93.3/30), whose temperatures were already removed.
+
+## Registry: `ammonia` is ammonium, and the underway series have categories
+
+`ammonia` (the QC'd bottle series, source column `NH3uM`) carries NERC P01 `AMONZZXX`, the concept
+its own pre-QC twin `r_ammonium` already carried, and its description now says ammonium — the
+Berthelot method measures ammonium. The 52 `calcofi_mets` measurement types gain a `category`
+(Meteorology & Sea State, Physical Oceanography, Productivity & Pigments or Carbonate System), so
+their measurement pages stop reading "Measurement ·" with no category.
+
 ## `taxa.json` 1.1: `n_present` beside `n_obs`
 
 `taxa.json` 1.1 adds `n_present` beside `n_obs`; `n_obs` counts rows, and CUFES, phytoplankton,

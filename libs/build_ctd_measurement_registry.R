@@ -127,6 +127,12 @@ plaus <- tribble(
   "oxygen_ml_l_2_sta_corr",        0,     15,
   "oxygen_ml_l_1_cruise_corr",     0,     15,
   "oxygen_ml_l_2_cruise_corr",     0,     15,
+  # and the µmol/kg ones the µmol/kg average's (they had none until 2026-09-11, so no
+  # sentinel guard stood in front of the pair rule for that average)
+  "oxygen_umol_kg_1_sta_corr",     0,    700,
+  "oxygen_umol_kg_2_sta_corr",     0,    700,
+  "oxygen_umol_kg_1_cruise_corr",  0,    700,
+  "oxygen_umol_kg_2_cruise_corr",  0,    700,
   "oxygen_umol_kg_1",              0,    700,
   "oxygen_umol_kg_2",              0,    700,
   "oxygen_btl_umol_kg",            0,    700,
@@ -139,6 +145,31 @@ plaus <- tribble(
   "btl_silicate",                  0,    300,
   "btl_chlorophyll_a",             0,    100,
   "btl_phaeopigment",              0,    100)
+
+# -- 4. a corrected series carries its SENSOR's flag ---------------------------
+# The source flags the sensor (T1Q/T2Q, S1Q/S2Q, Ox1Q/Ox2Q, FlQ, IsQ), and a
+# bottle correction changes the value, not the sensor's health — so Salt1_Corr is
+# exactly as questionable as Salt1. Until 2026-09-11 the corrected series carried no
+# `_qual_column`, so their rows reached `obs` with a NULL flag and no consumer could
+# apply the sensor-pair rule (drop 8/9, honour 1/2; calcofi4db::combine_sensor_pair())
+# to the corrected values Rasmus asked for; the ingest's own averages ignored the
+# flags for the same reason.
+qual_inherit <- tribble(
+  ~measurement_type,                ~`_qual_column`,
+  "salinity_1_corr",                "salt1q",
+  "salinity_2_corr",                "salt2q",
+  "oxygen_ml_l_1_sta_corr",         "ox1q",
+  "oxygen_ml_l_2_sta_corr",         "ox2q",
+  "oxygen_ml_l_1_cruise_corr",      "ox1q",
+  "oxygen_ml_l_2_cruise_corr",      "ox2q",
+  "oxygen_umol_kg_1_sta_corr",      "ox1q",
+  "oxygen_umol_kg_2_sta_corr",      "ox2q",
+  "oxygen_umol_kg_1_cruise_corr",   "ox1q",
+  "oxygen_umol_kg_2_cruise_corr",   "ox2q",
+  "est_chlorophyll_a_sta_corr",     "fluor_q",
+  "est_chlorophyll_a_cruise_corr",  "fluor_q",
+  "est_nitrate_sta_corr",           "isusq",
+  "est_nitrate_cruise_corr",        "isusq")
 
 # a range declared for a type that does not exist is a typo, not a no-op — the
 # left_join would swallow it silently, so surface it
@@ -160,8 +191,12 @@ missing_sensor <- setdiff(c(sensor_types, corr_types), d0$measurement_type)
 stopifnot("sensor / corrected type(s) not in the registry" =
             length(missing_sensor) == 0)
 
+stopifnot("a qual_inherit type is not in the registry" =
+            all(qual_inherit$measurement_type %in% d0$measurement_type))
+
 d1 <- d1 |>
   rows_update(plaus, by = "measurement_type", unmatched = "ignore") |>
+  rows_update(qual_inherit, by = "measurement_type", unmatched = "ignore") |>
   rows_update(sensor_desc, by = "measurement_type", unmatched = "ignore") |>
   mutate(is_canonical = if_else(
     measurement_type %in% c(btl_types, sensor_types, corr_types), TRUE, is_canonical))

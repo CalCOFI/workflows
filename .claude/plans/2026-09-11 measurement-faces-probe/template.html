@@ -1,0 +1,951 @@
+<title>CalCOFI Measurement Faces</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=Teko:wght@500&display=swap">
+<style>
+/* ── brand v2 tokens (calcofi.io/brand/v2/theme.css), light by default ─────────────────────── */
+:root {
+  --bg: #ffffff; --panel: #f5f5f5; --panel-2: #ffffff; --border: #dddddd; --fg: #182b49; --muted: #66686a;
+  --accent: #00629b; --accent-d: #004663; --band: #f5f0e6; --warn: #8a6500; --ok: #457a1c; --nogo: #b3261e;
+  --ok-bg: #eef5e9; --warn-bg: #fff6dc; --na-bg: #ececec; --nogo-bg: #fbe9e7; --accent-bg: #e3eef6;
+  --warm: #b3261e; --cool: #00629b; --nino: rgba(198, 146, 20, 0.16); --grid: #e7e7e7;
+  --s1: #182b49; --s2: #00629b; --s3: #4d8fb8; --s4: #a9d4e6; --s5: #c69214;
+  --shadow: 0 1px 2px rgba(24,43,73,.08);
+  --sans: "Source Sans 3", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --display: "Teko", "Source Sans 3", Impact, "Arial Narrow", sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1a2e; --panel: #182b49; --panel-2: #21375c; --border: #34486b; --fg: #e9edf3; --muted: #9fb0c8;
+    --accent: #4fb6e6; --accent-d: #8ad0f0; --band: #182b49; --warn: #ffcd00; --ok: #8fbf4f; --nogo: #ff8080;
+    --ok-bg: #1e3a22; --warn-bg: #3a2d0a; --na-bg: #25344f; --nogo-bg: #4a1f1f; --accent-bg: #12314a;
+    --warm: #ff8a80; --cool: #4fb6e6; --nino: rgba(255, 205, 0, 0.13); --grid: #24385a;
+    --s1: #e9edf3; --s2: #4fb6e6; --s3: #8ad0f0; --s4: #2a5a82; --s5: #ffcd00; --shadow: none; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1a2e; --panel: #182b49; --panel-2: #21375c; --border: #34486b; --fg: #e9edf3; --muted: #9fb0c8;
+  --accent: #4fb6e6; --accent-d: #8ad0f0; --band: #182b49; --warn: #ffcd00; --ok: #8fbf4f; --nogo: #ff8080;
+  --ok-bg: #1e3a22; --warn-bg: #3a2d0a; --na-bg: #25344f; --nogo-bg: #4a1f1f; --accent-bg: #12314a;
+  --warm: #ff8a80; --cool: #4fb6e6; --nino: rgba(255, 205, 0, 0.13); --grid: #24385a;
+  --s1: #e9edf3; --s2: #4fb6e6; --s3: #8ad0f0; --s4: #2a5a82; --s5: #ffcd00; --shadow: none; color-scheme: dark;
+}
+/* the same two palettes, scoped, so one head can be shown in both themes side by side */
+.t-light {
+  --bg: #ffffff; --panel: #f5f5f5; --panel-2: #ffffff; --border: #dddddd; --fg: #182b49; --muted: #66686a;
+  --accent: #00629b; --accent-d: #004663; --band: #f5f0e6; --warn: #8a6500; --ok: #457a1c; --nogo: #b3261e;
+  --ok-bg: #eef5e9; --warn-bg: #fff6dc; --na-bg: #ececec; --nogo-bg: #fbe9e7; --accent-bg: #e3eef6;
+  --warm: #b3261e; --cool: #00629b; --nino: rgba(198, 146, 20, 0.16); --grid: #e7e7e7;
+  --s1: #182b49; --s2: #00629b; --s3: #4d8fb8; --s4: #a9d4e6; --s5: #c69214; color-scheme: light;
+}
+.t-dark {
+  --bg: #0f1a2e; --panel: #182b49; --panel-2: #21375c; --border: #34486b; --fg: #e9edf3; --muted: #9fb0c8;
+  --accent: #4fb6e6; --accent-d: #8ad0f0; --band: #182b49; --warn: #ffcd00; --ok: #8fbf4f; --nogo: #ff8080;
+  --ok-bg: #1e3a22; --warn-bg: #3a2d0a; --na-bg: #25344f; --nogo-bg: #4a1f1f; --accent-bg: #12314a;
+  --warm: #ff8a80; --cool: #4fb6e6; --nino: rgba(255, 205, 0, 0.13); --grid: #24385a;
+  --s1: #e9edf3; --s2: #4fb6e6; --s3: #8ad0f0; --s4: #2a5a82; --s5: #ffcd00; color-scheme: dark;
+}
+
+/* ── base ───────────────────────────────────────────────────────────────────────────────────── */
+* { box-sizing: border-box; }
+body { margin: 0; font: 17px/1.45 var(--sans); color: var(--fg); background: var(--bg); -webkit-font-smoothing: antialiased; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { color: var(--accent-d); text-decoration: underline; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.container { max-width: 1170px; margin: 0 auto; padding-inline: 16px; }
+.band { padding-block: 36px; }
+.band-alt { background: var(--band); }
+p { max-width: 70ch; margin: 0 0 .8em; }
+.lede { font-size: 20px; max-width: 64ch; }
+.muted { color: var(--muted); }
+.mono { font-family: var(--mono); font-size: .9em; }
+.tab { font-variant-numeric: tabular-nums; }
+.eyebrow { font: 700 13px/1.3 var(--sans); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+h1, h2 { font-family: var(--display); font-weight: 500; line-height: 1; text-transform: uppercase; letter-spacing: .02em; margin: 0 0 .35em; color: var(--fg); text-wrap: balance; }
+h1 { font-size: clamp(40px, 6vw, 68px); }
+h2 { font-size: clamp(30px, 4vw, 44px); }
+h3 { font: 700 1.02em/1.2 var(--sans); text-transform: uppercase; letter-spacing: .04em; margin: 0 0 .5em; color: var(--fg); }
+.chip { display: inline-block; padding: .05em .6em; border: 1px solid var(--border); border-radius: 999px; background: var(--panel-2); color: var(--muted); font: 12px/1.6 var(--mono); white-space: nowrap; vertical-align: middle; }
+.chip-ok { background: var(--ok-bg); color: var(--ok); border-color: transparent; }
+.chip-warn { background: var(--warn-bg); color: var(--warn); border-color: transparent; }
+.chip-na { background: var(--na-bg); color: var(--muted); border-color: transparent; }
+.chip-nogo { background: var(--nogo-bg); color: var(--nogo); border-color: transparent; }
+.chip-accent { background: var(--accent-bg); color: var(--accent); border-color: transparent; }
+.u { text-transform: none; letter-spacing: 0; }
+.note { font-size: 13.5px; color: var(--muted); max-width: 80ch; }
+.credit { font: 11.5px/1.45 var(--mono); color: var(--muted); margin-top: 6px; }
+.credit a { color: inherit; text-decoration: underline; text-decoration-color: var(--border); }
+pre { font: 12.5px/1.5 var(--mono); background: var(--panel); color: var(--fg); border-radius: 8px; padding: 12px 14px; overflow-x: auto; margin: 8px 0 0; }
+.scroll { overflow-x: auto; }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 28px; align-items: start; }
+.split { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 32px; align-items: start; }
+@media (max-width: 860px) { .split { grid-template-columns: 1fr; } }
+sub, sup { line-height: 0; }
+
+/* ── header, in the SIO one-bar shape, and the cast bar ─────────────────────────────────────── */
+.hdr { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 18px; min-height: 60px; padding: 0 16px; background: var(--bg); border-bottom: 1px solid var(--border); }
+.lockup { font: 500 30px/1 var(--display); letter-spacing: .02em; text-transform: uppercase; color: var(--fg); }
+.lockup small { font-size: 60%; color: var(--muted); letter-spacing: .04em; margin-left: 2px; }
+.hdr .title { font: 700 13px var(--sans); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.hdr .spacer { flex: 1; }
+@media (max-width: 620px) { .hdr .title, .hdr .chip { display: none; } }
+.toggle { font: 600 13px var(--sans); color: var(--fg); background: var(--panel); border: 1px solid var(--border); border-radius: 999px; padding: 5px 12px; cursor: pointer; }
+.castbar { position: sticky; top: 60px; z-index: 19; display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 16px; background: var(--panel); border-bottom: 1px solid var(--border); }
+.castbar .lab { font: 700 11.5px var(--sans); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); align-self: center; margin-right: 6px; }
+.pill { display: inline-flex; align-items: center; gap: 7px; font: 600 13px var(--sans); color: var(--fg); background: var(--panel-2); border: 1px solid var(--border); border-radius: 999px; padding: 3px 11px 3px 4px; cursor: pointer; }
+.pill .gl { display: inline-grid; place-items: center; min-width: 30px; height: 22px; padding: 0 5px; border-radius: 999px; background: var(--accent-bg); color: var(--accent); font: 600 12px/1 var(--sans); }
+.pill[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.pill[aria-pressed="true"] .gl { background: var(--bg); color: var(--fg); }
+.ico { width: 1em; height: 1em; fill: currentColor; vertical-align: -0.12em; }
+
+/* ── the measurement page head, as the live page draws it, plus the new face row ────────────── */
+.frames { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 20px; }
+@media (max-width: 480px) { .frames { grid-template-columns: 1fr; } }
+.frame { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--bg); color: var(--fg); min-width: 0; }
+.frame .flab { font: 700 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 6px 20px; border-bottom: 1px solid var(--border); background: var(--panel); }
+.frame .fhead { padding: 20px 20px 16px; background: var(--band); }
+.frame .fbody { padding: 16px 20px 20px; }
+.mm-crumb { display: flex; flex-wrap: wrap; gap: 4px 8px; font-size: 13px; margin: 0 0 8px; color: var(--muted); }
+.mm-crumb a { color: var(--accent); }
+.mm-h1 { font: 500 clamp(34px, 4vw, 46px)/1 var(--display); text-transform: uppercase; letter-spacing: .02em; margin: 4px 0 4px; }
+.mm-sub { font-size: 14px; color: var(--muted); margin: 0 0 8px; max-width: none; }
+.mm-ids { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; }
+.mm-ids a, .mm-ids .mono { font-family: var(--mono); font-size: 12px; }
+.mm-stat { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 10px; margin: 14px 0 0; padding: 12px 0 0; border-top: 1px solid var(--border); }
+.mm-stat div { min-width: 0; }
+.mm-stat dd { margin: 0; font: 500 25px/1 var(--display); font-variant-numeric: tabular-nums; }
+.mm-stat dt { font: 700 10.5px var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.face { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--border); }
+.face > div { padding: 14px 14px 12px; min-width: 0; border-left: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
+.face > div:first-child { border-left: 0; padding-left: 0; }
+.face > div:last-child { padding-right: 0; }
+@media (max-width: 1100px) { .frames .face { grid-template-columns: 1fr; } .frames .face > div { border-left: 0; padding-inline: 0; border-top: 1px solid var(--border); } .frames .face > div:first-child { border-top: 0; } }
+@media (max-width: 640px) { .face { grid-template-columns: 1fr; } .face > div { border-left: 0; padding-inline: 0; border-top: 1px solid var(--border); } .face > div:first-child { border-top: 0; } }
+.face .fk { font: 700 11px var(--sans); text-transform: uppercase; letter-spacing: .1em; color: var(--accent); }
+.face .glyph { color: var(--fg); display: flex; align-items: center; gap: 8px; min-height: 92px; }
+.face .glyph svg.mol { height: 92px; width: auto; max-width: min(100%, 200px); }
+.face .glyph svg.mol.big { height: 110px; max-width: 100%; }
+.face .line { font-size: 13.5px; line-height: 1.4; }
+.face .line b { font-weight: 600; }
+.face .def { font-size: 12.5px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.face .eq { font: 600 20px/1 var(--sans); color: var(--muted); }
+.plat { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: 12.5px; color: var(--muted); }
+.plat svg { width: 26px; height: 26px; color: var(--fg); fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.pin { display: inline-flex; align-items: center; gap: 7px; font: 700 12px var(--sans); text-transform: uppercase; letter-spacing: .06em; color: var(--accent); margin-top: auto; }
+.pin .disc { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--accent); background: var(--bg); }
+.pin .disc svg { width: 13px; height: 13px; fill: currentColor; }
+.spark { width: 100%; height: 58px; display: block; }
+.face .q { font-size: 13px; font-style: italic; color: var(--fg); }
+.face .q::before { content: "GOOS asks: "; font-style: normal; font-weight: 700; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.face .none { font-size: 12.5px; color: var(--muted); }
+.sent { font-size: 15.5px; line-height: 1.55; margin: 14px 0 0; max-width: none; }
+.sent .s-nerc { text-decoration: underline; text-decoration-color: var(--accent); text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
+.sent .s-rec { text-decoration: underline; text-decoration-style: dotted; text-decoration-color: var(--ok); text-underline-offset: 3px; }
+.sent .s-why { text-decoration: underline; text-decoration-style: dashed; text-decoration-color: var(--warn); text-underline-offset: 3px; }
+.sent sup a { font-size: 11px; }
+/* the why's alternatives, collapsed — the landing's "not yet in the database" idiom (.ds-details.ds-holdings-det) */
+.ds-details { border-top: 1px solid var(--border); padding: 7px 0 2px; margin-top: 12px; }
+.ds-details > summary { font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); cursor: pointer; }
+.ds-details > summary:hover { color: var(--accent); }
+.alts { list-style: none; margin: 6px 0 0; padding: 0; }
+.alts li { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 10px; padding: 7px 0; border-top: 1px solid var(--border); font-size: 14px; line-height: 1.45; }
+.alts li:first-child { border-top: 0; }
+.alts .k { font: 700 10.5px var(--sans); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); padding-top: 3px; }
+.alts .k.authored { color: var(--warn); } .alts .k.goos { color: var(--accent); } .alts .k.wikipedia, .alts .k.calcofi { color: var(--ok); }
+.alts .c { font-size: 12px; } .alts .nc { font-size: 11.5px; color: var(--warn); }
+.stands { display: inline-block; font: 600 12px/1.5 var(--sans); color: var(--warn); background: var(--warn-bg); border: 1px dashed var(--warn); border-radius: 999px; padding: 0 9px; }
+.bandlab { font: 11px var(--mono); fill: var(--muted); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; color: var(--muted); margin-top: 10px; }
+.legend span::before { content: ""; display: inline-block; width: 18px; height: 0; border-top: 2px solid var(--accent); margin-right: 6px; vertical-align: middle; }
+.legend .l-rec::before { border-top-style: dotted; border-top-color: var(--ok); }
+.legend .l-why::before { border-top-style: dashed; border-top-color: var(--warn); }
+
+/* ── part 1: what ──────────────────────────────────────────────────────────────────────────── */
+.what-fig { background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 20px; color: var(--fg); min-width: 0; }
+.mols { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px 22px; }
+.mol-card { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; max-width: 100%; }
+.mol-card svg { height: 150px; width: auto; max-width: min(100%, 340px); }
+.mol-card.huge svg { height: 250px; max-width: 100%; }
+.mol-card .cap { font-size: 13px; text-align: center; }
+.mol-card .cap b { font-size: 16px; font-weight: 600; }
+.mol-card .cap .mono { color: var(--muted); font-size: 11.5px; }
+.arrow { font: 500 16px/1.2 var(--sans); color: var(--muted); text-align: center; }
+.arrow b { display: block; font: 500 40px/1 var(--display); color: var(--fg); }
+.chain { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0; }
+.chain li { display: grid; grid-template-columns: 58px minmax(0, 1fr); gap: 12px; padding: 10px 0; border-top: 1px solid var(--border); font-size: 14px; }
+.chain li:first-child { border-top: 0; }
+.chain .cc { font: 700 12px var(--mono); color: var(--accent); padding-top: 2px; }
+.chain .cv b { font-weight: 600; }
+.chain .cv .mono { font-size: 11.5px; color: var(--muted); word-break: break-all; }
+.kinds { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-top: 18px; }
+.kind { background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 8px; box-shadow: var(--shadow); }
+.kind .n { font: 500 34px/1 var(--display); }
+.kind .n small { font: 600 13px var(--sans); color: var(--muted); margin-left: 6px; letter-spacing: 0; }
+.kind p { font-size: 14px; margin: 0; }
+.kind .ex { font: 11.5px/1.5 var(--mono); color: var(--muted); margin-top: auto; }
+.ions { display: flex; height: 44px; border-radius: 6px; overflow: hidden; margin: 10px 0 6px; }
+.ions div { display: grid; place-items: center; font: 600 13px var(--sans); color: #fff; min-width: 0; overflow: hidden; white-space: nowrap; }
+.ion-tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-top: 10px; }
+.ion-tbl td { padding: 4px 6px; border-top: 1px solid var(--border); }
+.ion-tbl td.n { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: 12.5px; }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: -1px; margin-right: 6px; }
+.hair { display: block; margin: 0 auto; width: 100%; max-width: 360px; height: auto; }
+
+/* ── part 2: how ───────────────────────────────────────────────────────────────────────────── */
+.how-cards { display: flex; flex-direction: column; gap: 16px; }
+.how-card { background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
+.how-top { display: flex; gap: 12px; align-items: flex-start; }
+.how-top svg.pg { flex: none; width: 40px; height: 40px; color: var(--fg); fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.how-top .ds { font: 700 11.5px var(--sans); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.how-top .ins { font-weight: 600; font-size: 16px; line-height: 1.25; }
+.how-card p { font-size: 14.5px; margin: 0; max-width: none; }
+.steps { list-style: none; margin: 0; padding: 10px 12px; background: var(--panel); border-radius: 8px; font: 13px/1.6 var(--mono); }
+.steps li::before { content: "→ "; color: var(--muted); }
+.meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.spec { position: relative; height: 18px; border-radius: 3px; margin: 18px 0 20px;
+  background: linear-gradient(90deg, #0b0718 0%, #2a0a4d 10%, #6a00c8 18%, #3a2cff 27%, #00a7ff 34%, #00d27a 40%, #7de000 45%, #ffe600 51%, #ff9d00 57%, #ff2a00 63%, #c40000 73%, #5a0000 82%, #1a0404 92%, #0b0304 100%); }
+.spec .mk { position: absolute; top: -6px; bottom: -6px; width: 2px; background: var(--fg); }
+.spec .mk span { position: absolute; top: -18px; left: 50%; transform: translateX(-50%); font: 600 12px var(--sans); white-space: nowrap; color: var(--fg); }
+.spec .ax { position: absolute; top: 22px; font: 10.5px var(--mono); color: var(--muted); transform: translateX(-50%); }
+.col { display: grid; grid-template-columns: 98px minmax(0, 1fr); gap: 3px 10px; font-size: 12.5px; align-items: center; }
+.col .dl { color: var(--muted); font-family: var(--mono); font-size: 11.5px; text-align: right; }
+.col .bars { display: flex; flex-direction: column; gap: 2px; }
+.col .bar { height: 7px; border-radius: 2px; min-width: 1px; }
+.water { background: linear-gradient(180deg, var(--accent-bg), transparent); border-radius: 8px; padding: 10px 12px; }
+
+/* ── part 3: why ───────────────────────────────────────────────────────────────────────────── */
+.chart { width: 100%; height: auto; display: block; overflow: visible; }
+.chart text { font-family: var(--sans); }
+.chart .tick { font: 11px var(--mono); fill: var(--muted); }
+.chart .lab { font-size: 12.5px; fill: var(--fg); }
+.chart .lab-m { font-size: 11.5px; fill: var(--muted); }
+.chart .ax { stroke: var(--muted); stroke-width: 1; }
+svg .gr { stroke: var(--grid); stroke-width: 1; }
+.chart .lead { stroke: var(--border); stroke-width: 1; }
+.chart .bnd { stroke: var(--muted); stroke-dasharray: 4 3; stroke-width: 1; }
+.chart .flag { fill: var(--nogo); }
+svg .zero { stroke: var(--fg); stroke-width: 1; }
+svg .trend { stroke: var(--fg); stroke-width: 1.5; stroke-dasharray: 6 4; fill: none; }
+svg .nino { fill: var(--nino); }
+.flags { list-style: none; margin: 8px 0 0; padding: 0; font-size: 13px; }
+.flags li { padding: 3px 0; }
+.flags li::before { content: "▲ "; color: var(--nogo); font-size: 10px; }
+.why-row { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 24px; margin-top: 24px; }
+@media (max-width: 860px) { .why-row { grid-template-columns: 1fr; } }
+.eov { background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
+.eov .nm { font: 500 26px/1 var(--display); text-transform: uppercase; margin: 2px 0 6px; }
+.eov ul { margin: 6px 0 0; padding-left: 18px; font-size: 14.5px; }
+.eov .ph { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+.wp { font-size: 14.5px; border-left: 3px solid var(--border); padding-left: 12px; margin-top: 14px; color: var(--fg); }
+.empty { border: 1px dashed var(--border); border-radius: 10px; padding: 18px; color: var(--muted); font-size: 14.5px; }
+
+/* ── tables, steps, notes ──────────────────────────────────────────────────────────────────── */
+.tbl { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 820px; }
+.tbl th { text-align: left; font: 700 11px var(--sans); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: bottom; }
+.tbl td { padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.tbl td:first-child { font-weight: 600; white-space: nowrap; }
+.tbl .n { font-family: var(--mono); font-size: 12.5px; }
+.flow { list-style: none; counter-reset: s; margin: 16px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
+.flow li { counter-increment: s; background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 16px 14px 12px; font-size: 14px; position: relative; }
+.flow li::before { content: counter(s); position: absolute; top: -10px; left: 12px; font: 500 20px/1 var(--display); color: var(--bg); background: var(--fg); border-radius: 999px; width: 24px; height: 24px; display: grid; place-items: center; }
+.flow b { display: block; font-weight: 700; margin-bottom: 4px; font-family: var(--mono); font-size: 12.5px; word-break: break-all; }
+.qs { margin: 14px 0 0; padding-left: 20px; font-size: 15px; }
+.qs li { margin-bottom: 9px; max-width: 82ch; }
+footer { padding: 28px 0 40px; font-size: 12.5px; color: var(--muted); }
+footer ul { margin: 6px 0 0; padding-left: 18px; }
+footer li { margin-bottom: 3px; }
+@media (prefers-reduced-motion: no-preference) { .pill, .toggle { transition: background .15s, color .15s; } }
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="cat-physical" viewBox="0 0 24 24"><path d="M15 13V5A3 3 0 0 0 9 5V13A5 5 0 1 0 15 13M12 4A1 1 0 0 1 13 5V8H11V5A1 1 0 0 1 12 4Z"/></symbol>
+  <symbol id="cat-nutrients" viewBox="0 0 24 24"><path d="M5,19A1,1 0 0,0 6,20H18A1,1 0 0,0 19,19C19,18.79 18.93,18.59 18.82,18.43L13,8.35V4H11V8.35L5.18,18.43C5.07,18.59 5,18.79 5,19M6,22A3,3 0 0,1 3,19C3,18.4 3.18,17.84 3.5,17.37L9,7.81V6A1,1 0 0,1 8,5V4A2,2 0 0,1 10,2H14A2,2 0 0,1 16,4V5A1,1 0 0,1 15,6V7.81L20.5,17.37C20.82,17.84 21,18.4 21,19A3,3 0 0,1 18,22H6Z"/></symbol>
+  <symbol id="cat-carbonate" viewBox="0 0 24 24"><path d="M5,7A2,2 0 0,0 3,9V15A2,2 0 0,0 5,17H8V15H5V9H8V7H5M11,7A2,2 0 0,0 9,9V15A2,2 0 0,0 11,17H13A2,2 0 0,0 15,15V9A2,2 0 0,0 13,7H11M11,9H13V15H11V9Z"/></symbol>
+  <symbol id="cat-productivity" viewBox="0 0 24 24"><path d="M3.55 19.09L4.96 20.5L6.76 18.71L5.34 17.29M12 6C8.69 6 6 8.69 6 12S8.69 18 12 18 18 15.31 18 12C18 8.68 15.31 6 12 6M20 13H23V11H20M17.24 18.71L19.04 20.5L20.45 19.09L18.66 17.29M20.45 5L19.04 3.6L17.24 5.39L18.66 6.81M13 1H11V4H13M4 11H1V13H4V11Z"/></symbol>
+  <symbol id="cat-meteorology" viewBox="0 0 24 24"><path d="M6 14A4 4 0 0 0 2 18A4 4 0 0 0 6 22H19A3 3 0 0 0 22 19A3 3 0 0 0 19 16C18.65 16 18.31 16.06 18 16.17V16A6 6 0 0 0 12 10A6 6 0 0 0 6.27 14Z"/></symbol>
+  <symbol id="cat-picoplankton" viewBox="0 0 24 24"><circle cx="8" cy="9" r="4"/><circle cx="16.5" cy="15.5" r="3.5"/><circle cx="16" cy="6" r="2"/></symbol>
+  <symbol id="ext" viewBox="0 0 24 24"><path d="M14 3V5H17.59L7.76 14.83L9.17 16.24L19 6.41V10H21V3M19 19H5V5H12V3H5A2 2 0 0 0 3 5V19A2 2 0 0 0 5 21H19A2 2 0 0 0 21 19V12H19V19Z"/></symbol>
+</svg>
+
+<header class="hdr">
+  <span class="lockup">CalCOFI<small>.io</small></span>
+  <span class="title">Measurements · what, how, why</span>
+  <span class="chip" id="rel-chip">release</span>
+  <span class="spacer"></span>
+  <button class="toggle" id="theme-toggle" type="button" aria-label="Switch between dark and light theme">◐ theme</button>
+</header>
+<nav class="castbar" id="castbar" aria-label="Pick a measurement"><span class="lab">Cast</span></nav>
+
+<main>
+<section class="band band-alt">
+  <div class="container">
+    <div class="eyebrow">Design study · probed against the live sources on <span id="built"></span></div>
+    <h1>What it is, how it is taken, why it matters</h1>
+    <p class="lede">The <span id="n-pages"></span> pages under <a href="https://calcofi.io/measurements/">calcofi.io/measurements/</a> count a measurement
+      faithfully and never show it. This study gives each one a face in three parts: <b>what</b> the thing is, drawn from its NERC concept down to
+      the molecule; <b>how</b> CalCOFI takes it, from the bottle or the sensor to the reaction in the lab, linked to its method on calcofi.org the way
+      the front door's pins are; and <b>why</b> it matters, on a scale a reader already knows and in the record's own 70 years.</p>
+    <p>The eleven measurements in the cast bar were chosen because each one breaks the design differently: an ion (nitrate), a gas (oxygen), a
+      molecule of 65 heavy atoms (chlorophyll-a), a mixture (salinity), a pool of three species (dissolved inorganic carbon), a pure number (pH), a
+      physical property (temperature), a living thing (<i>Synechococcus</i>), a key whose name disagrees with its chemistry (ammonium) and one with
+      no concept at all (wind speed), and one that borrows a sibling's face and says so (estimated nitrate). Every structure was drawn from ChEBI's own coordinates today; every number is read from release
+      <span id="rel-v"></span> or computed from it, with the computation named.</p>
+  </div>
+</section>
+
+<section class="band" id="s-head">
+  <div class="container">
+    <div class="eyebrow">Recommendation</div>
+    <h2>The page head, composed</h2>
+    <p>The live head stays as it is: crumb, label, NERC ids, the stats band. Beneath it goes a face row in three columns, <b>What · How · Why</b>,
+      and one sentence stitched from the NERC definition, the release record and an authored, cited line, each part underlined in the colour of
+      its source. The other ways to say why (a second authored line, the GOOS question, the Wikipedia lead) wait one click away, collapsed the way
+      the datasets catalog collapses what is not yet in the database. The structure is drawn in the page's own ink, so it is navy on white and bone on navy from the same file.</p>
+    <div class="frames">
+      <div class="frame t-light"><div class="flab">light</div><div id="head-light"></div></div>
+      <div class="frame t-dark"><div class="flab">dark</div><div id="head-dark"></div></div>
+    </div>
+    <div class="legend"><span>NERC P01 definition · CC BY 4.0</span><span class="l-rec">the release record, measured</span><span class="l-why">authored and cited · the pick; the rest collapsed below it</span></div>
+  </div>
+</section>
+
+<section class="band band-alt" id="s-what">
+  <div class="container">
+    <div class="eyebrow">Part 1 · What</div>
+    <h2>The thing itself</h2>
+    <p>NERC's P01 concept is the key ring. It is not a label but a sentence built from parts, and the parts carry identifiers: a chemical object
+      (S27) that is <i>sameAs</i> a ChEBI entry and a CAS number, a biological entity (S25) that is <i>sameAs</i> a WoRMS id, a property (S06) that is
+      <i>sameAs</i> a QUDT quantity kind. Follow the chain to ChEBI and the structure comes with it, laid out by a chemist.</p>
+    <div class="split">
+      <div class="what-fig" id="what-fig"></div>
+      <div>
+        <h3>The chain, for this measurement</h3>
+        <ul class="chain" id="chain"></ul>
+      </div>
+    </div>
+    <h3 style="margin-top:30px">Four kinds of face, and how many of the <span class="n-keys"></span> keys have each</h3>
+    <div class="kinds" id="kinds"></div>
+  </div>
+</section>
+
+<section class="band" id="s-how">
+  <div class="container">
+    <div class="eyebrow">Part 2 · How</div>
+    <h2>From the water to the number</h2>
+    <p>One card per series, because a measurement with two datasets is two methods: a Winkler titration and a membrane sensor are not the same
+      act. Each card names the platform, the instrument, the principle in one or two sentences from the calcofi.org methods page and, where the
+      analysis is a colour, the wavelength it is read at. The pin links to the section of the method page it came from, highlighted by a text
+      fragment because the page has no stable anchors.</p>
+    <div class="split">
+      <div class="how-cards" id="how-cards"></div>
+      <div>
+        <h3>Where in the water column</h3>
+        <div class="water"><div class="col" id="how-col"></div></div>
+        <p class="note" style="margin-top:8px">Share of each series' values per depth band, from the record's own <span class="mono">depth_bands</span>.
+          The bands are uneven on purpose (0–10, 10–50 … 2000+ m); the bar is the share, not a density.</p>
+        <div id="how-extra"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band band-alt" id="s-why">
+  <div class="container">
+    <div class="eyebrow">Part 3 · Why</div>
+    <h2>On a scale you know, and over 70 years</h2>
+    <p>Two figures carry the why. The first puts the measurement on a scale a reader already has, with the familiar things and the thresholds
+      that matter beside the range CalCOFI actually sees; every mark has a source, and the scale turned out to be a quality check (the red marks).
+      The second is the record's own history: each year's departure from the 1993–2013 normal for the same station, month and 10 m depth, from
+      the release's <span class="mono">climatology</span> table, with the strong El Niño years shaded from NOAA's Oceanic Niño Index. It is drawn once per depth band the measurement is taken in, the same bands as <i>Where in the water column</i>, on one shared scale so the bands compare.</p>
+    <h3 style="margin-top:18px" id="scale-h">The familiar scale</h3>
+    <div id="scale"></div>
+    <ul class="flags" id="flags"></ul>
+    <h3 style="margin-top:26px" id="anom-h">The record's own history</h3>
+    <div id="anom"></div>
+    <div class="why-row">
+      <div class="eov" id="eov"></div>
+      <div>
+        <h3>The sentence · one pick, the rest one click away</h3>
+        <div id="sentence"></div>
+        <div id="wp"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="s-sources">
+  <div class="container">
+    <div class="eyebrow">Where it comes from</div>
+    <h2>The sources, as probed</h2>
+    <p>Each row is what the source returned today for the cast, not what its front page promises.</p>
+    <div class="scroll">
+    <table class="tbl">
+      <thead><tr><th>Source</th><th>What it gives</th><th>Keyed by</th><th>Licence</th><th>In the probe</th><th>Verdict</th></tr></thead>
+      <tbody>
+        <tr><td>NERC Vocabulary Server</td><td>P01 preferred label and definition; its parts: S27 chemical, S25 taxon, S06 property, S26 matrix; P06 unit, P07 CF name, P02 group, A05 essential variable</td><td>the P01 URI already in <span class="n">measurement_type.csv</span></td><td>CC BY 4.0</td><td>20 of the 24 P01s on the <span class="n" id="src-keys"></span> keys; 50 of 89 keys carry one</td><td><span class="chip chip-ok">use · the key ring</span></td></tr>
+        <tr><td>ChEBI (EMBL-EBI)</td><td>name, formula, charge, mass, a definition and a curated 2D molfile per entity</td><td>the S27's <i>sameAs</i> <span class="n">CHEBI_…</span></td><td>CC BY 4.0</td><td>9 of 9 S27s with a ChEBI link; molfiles for all 13 structures drawn; its roles are nonsense for oceanography (dioxygen: "anti-inflammatory drug")</td><td><span class="chip chip-ok">use · structures</span> <span class="chip chip-na">never show roles</span></td></tr>
+        <tr><td>RDKit</td><td>draws a molfile as SVG, text as paths, black swapped for <span class="n">currentColor</span>: 1.7 KB for O₂, 32 KB for chlorophyll-a</td><td>—</td><td>BSD-3</td><td>13 of 13</td><td><span class="chip chip-ok">use · at fetch time</span></td></tr>
+        <tr><td>Wikidata · PubChem</td><td>SMILES, formula, PubChem CID, the enwiki article; a structure image (P117) on some</td><td>CAS (P231) from the P01 label, or ChEBI (P683)</td><td>CC0 · public domain</td><td>23 of 23 CAS numbers resolved; only 8 with a structure image, each in a different style</td><td><span class="chip chip-accent">ids only</span></td></tr>
+        <tr><td>TEOS-10 Manual, Table D.3</td><td>the Reference Composition of sea salt: mole and mass fractions of 15 solutes (Millero et al. 2008)</td><td>—</td><td>IOC Manuals and Guides 56, free</td><td>the salinity face</td><td><span class="chip chip-ok">use · a registry row per ion</span></td></tr>
+        <tr><td>gsw · PyCO2SYS</td><td>freezing point, oxygen solubility, carbonate speciation, computed from the record's own medians</td><td>—</td><td>MIT · GPL-3</td><td>freezing −1.91 °C; O₂ saturation 245.2 µmol/kg; pH 8.07, 91.3 % bicarbonate</td><td><span class="chip chip-ok">use · computed, named</span></td></tr>
+        <tr><td>GOOS EOV specification sheets</td><td>sub-variables (membership), societal drivers, the scientific questions, the phenomena</td><td>the EOV name; the PDF from oceanexpert.org</td><td>UNESCO-IOC; the site says "all rights reserved"</td><td>8 sheets read; A05 links our P01 directly for 6 of 20</td><td><span class="chip chip-ok">quote the question, link</span></td></tr>
+        <tr><td>calcofi.org methods pages</td><td>per analysis: principle, instrument, wavelength, precision, references</td><td>a page per method, no stable anchors (Elementor ids)</td><td>CalCOFI</td><td>the bottle page and CTD FAQ are rich; the DIC, underway and phyto/bacterioplankton pages render client-side and return an empty shell to a fetcher</td><td><span class="chip chip-ok">author from, link with #:~:text=</span></td></tr>
+        <tr><td>NCEI 0301029</td><td>the DIC dataset's instrument keywords: CO₂ gas analyser, titrator, salinometer</td><td>the dataset's <span class="n">link_data_source</span></td><td>public domain</td><td>the DIC card</td><td><span class="chip chip-accent">fill a gap</span></td></tr>
+        <tr><td>NOAA CPC Oceanic Niño Index</td><td>3-month ONI since 1950; strong El Niño years (≥ +1.5)</td><td>—</td><td>public domain</td><td>16 strong years; JJA 2026 at <span class="n" id="oni-latest"></span></td><td><span class="chip chip-ok">use · the shading</span></td></tr>
+        <tr><td>Wikipedia</td><td>the lead of the phenomenon's article (ocean deoxygenation, acidification, upwelling); the pH and Beaufort tables for the scales</td><td>a curated title per variable</td><td>CC BY-SA 4.0</td><td>22 titles, 21 resolved</td><td><span class="chip chip-ok">context, linked to the revision</span></td></tr>
+        <tr><td>The release</td><td><span class="n">measurements.json</span> (totals, series, depth bands, observed range, bounds, flags) and <span class="n">obs_env</span> joined to <span class="n">climatology</span></td><td>the measurement key</td><td>CC BY 4.0</td><td>v2026.09.10, 89 keys</td><td><span class="chip chip-ok">the only source of numbers</span></td></tr>
+      </tbody>
+    </table>
+    </div>
+  </div>
+</section>
+
+<section class="band band-alt" id="s-build">
+  <div class="container">
+    <div class="eyebrow">How it would be built</div>
+    <h2>Two halves: the record computes, the fetcher borrows</h2>
+    <p>The measurement catalog's rule holds: the page reads the release record and nothing typed. What the release can compute (the anomaly
+      series, the trend) goes into <span class="mono">measurements.json</span>; what CalCOFI authors (the method, the scale's references, the why and
+      its citation) goes into four registries beside <span class="mono">variable.csv</span> and rides the release; what the world publishes (NERC,
+      ChEBI, Wikipedia) is fetched weekly by the landing site, as the species faces are.</p>
+    <ol class="flow">
+      <li><b>metadata/measurement_*.csv</b>four registries with a source per row: <span class="mono">_chem</span> (ChEBI id and role), <span class="mono">_method</span> (dataset × type: platform, instrument, principle, nm, precision, reference, calcofi.org section), <span class="mono">_scale</span> (value, label, kind, source), <span class="mono">_why</span> (EOV, sentence, BibTeX keys, review status)</li>
+      <li><b>build_measurements_catalog()</b>schema 1.1: each key gains <span class="mono">anomaly</span> (band, yearly series, trend) from <span class="mono">obs_env</span> ⋈ <span class="mono">climatology</span>, and carries the four registries</li>
+      <li><b>fetch_measurement_faces.py</b>weekly in the landing repo: NVS chain → ChEBI molfile → RDKit SVG in <span class="mono">currentColor</span>; Wikipedia leads; writes <span class="mono">measurements_media.json</span> to the public bucket</li>
+      <li><b>_plugins/measurements.rb</b>merges both by key; <span class="mono">_includes/measurement_face.html</span> draws the row; the three sections draw from the mock's reference JS</li>
+      <li><b>check_measurement_faces.py</b>every scale mark has a source, every why a citation and a status, every structure a ChEBI id reached through NERC or a registry row</li>
+    </ol>
+    <div class="two" style="margin-top:26px">
+      <div>
+        <h3>measurements.json 1.1, one key</h3>
+<pre id="shape-rec"></pre>
+      </div>
+      <div>
+        <h3>measurements_media.json, one key</h3>
+<pre id="shape-media"></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="s-notes">
+  <div class="container">
+    <div class="eyebrow">Found on the way · decided 2026-09-11</div>
+    <h2>Findings and decisions</h2>
+    <div class="two">
+      <div>
+        <h3>Findings</h3>
+        <ul class="qs">
+          <li><span class="chip chip-ok">fixing now · 2026-09-11</span> <b>CTD two-sensor averages fold in a dead sensor.</b> On 36 casts (1998-07, 2007-11, 2024-01) the averaged salinity is half of sensor 1, about 17 against 34, and on 17 casts of 2003-04 the 1–2 m temperature reads 35–40 °C. Both are the source's average taking in a missing or out-of-range sensor (question Q21); every average is now recomputed from the valid sensors only.</li>
+          <li><span class="chip chip-warn">filed to the CTD team</span> <b>CTD oxygen above 450 µmol/kg</b> is a failed station correction on casts 2404_025 and 1907_050, where the station-corrected value is about 2.8 times the raw sensor.</li>
+          <li><span class="chip chip-warn">provider question, not converted</span> <b>Wind speed may be in knots on some ships.</b> NDBC buoy matchups (within 30 km, same 30-minute bin, 2016–2022, seven buoys) give median ship/buoy ratios of 1.7–2.4 on most 3322, 33UD and 39C2 cruises (knots-like) but 0.5–1.3 on most 33P4 cruises (m/s-like), confounded by true versus relative wind (METS Q22). The Beaufort face shows both readings until the provider answers.</li>
+          <li><span class="chip chip-ok">fixing now · 2026-09-11</span> <b>The key says ammonia; its chemistry says ammonium.</b> The QC'd bottle series gets AMONZZXX (NH₄⁺), as its own pre-QC twin already has, and the label Ammonium.</li>
+          <li><span class="chip chip-ok">fixing now · 2026-09-11</span> <b>Loose and missing bounds.</b> Nitrate, chlorophyll-a and phaeopigment declare no bound; the 2020-07-33P4 cast whose 99 °C was dropped still ships salinity 9.50.</li>
+          <li><span class="chip chip-ok">fixing now · 2026-09-11</span> <b>The METS keys have no category,</b> so 17 live pages read "Measurement ·"; each gets the category of what it measures.</li>
+          <li><span class="chip chip-accent">its own workstream</span> <b>The two catalogs do not meet.</b> <i>Synechococcus</i> and <i>Prochlorococcus</i> carry WoRMS ids through NERC S25, but the picoplankton ingest emits the four flow-cytometry counts as <span class="mono">obs_env</span> rows with no <span class="mono">taxon_key</span>, and <span class="mono">build_taxa_catalog()</span> reads <span class="mono">obs_bio</span> only, so <span class="mono">/species/worms-160572/</span> is a 404. A model change, planned rather than patched.</li>
+          <li><span class="chip chip-na">a design rule</span> <b>DIC's chemical object is "carbon atom"</b> (NERC S27 → CHEBI_27594, roles include "antidepressant"): a pool of three species takes composition rows, never the S27, and ChEBI roles are never shown.</li>
+          <li><span class="chip chip-na">a design rule</span> <b>A05 is not the EOV membership test:</b> EV_NUTS omits NTRAZZXX; the GOOS sheets' sub-variables are the list.</li>
+          <li><b>The record already tells the story.</b> Oxygen has fallen in every band since 1984, faster with depth (−0.83 µmol/kg per decade at 0–10 m, −6.56 at 200–500 m) while nitrate rose at 50–200 m; the top 10 m ran +2.10 °C in 2015, its warmest year, though 1983 was warmer at 10–100 m; NOAA's ONI for June–August 2026 is +1.80, a strong El Niño under way while these pages are built.</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Decided 2026-09-11 (Ben)</h3>
+        <ul class="qs">
+          <li><b>The structures:</b> "Draw ourselves" — ChEBI's molfile through RDKit, in the page's ink.</li>
+          <li><b>The why:</b> "You pick one and offer the rest under an expandable details/summary class like 'not yet in the database' in the datasets catalog." One sentence on the page, Claude's pick; the other authored lines, the GOOS question, the Wikipedia lead and the calcofi.org words collapsed under "other ways to say why".</li>
+          <li><b>The depth band:</b> "Show all of the bands where measured, ie 'Where in the water column' in your mockup." One anomaly row per band with a climatology (0–500 m today), one shared scale.</li>
+          <li><b>The findings:</b> "Fix findings now." Fixed or filed the same day (left); the picoplankton link is a model change with its own workstream.</li>
+          <li><b>The 37 keys with no concept:</b> "stands in." A sibling's face with a chip saying whose it is (20 keys), the scale alone where no sibling fits (16), nothing for the flow meter (1).</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <div class="eyebrow">Credits and references</div>
+    <ul id="credits"></ul>
+  </div>
+</footer>
+</main>
+
+<script>window.DATA = /*DATA*/;</script>
+<script>
+(function () {
+  'use strict';
+  var D = window.DATA;
+  var $ = function (s, r) { return (r || document).querySelector(s); };
+  var fmt = function (n, d) { return (n == null || isNaN(n)) ? '—' : Number(n).toLocaleString('en-US', { maximumFractionDigits: d == null ? 0 : d, minimumFractionDigits: 0 }); };
+  var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+  var ic = function (id) { return '<svg class="ico" aria-hidden="true"><use href="#' + id + '"/></svg>'; };
+  var dsName = function (k) { return (D.datasets[k] || {}).name || k; };
+  var dsColor = function (k) { return (D.datasets[k] || {}).color || '#888'; };
+  var sub = function (f) { return String(f).replace(/(\d+)/g, '<sub>$1</sub>'); };
+  function formula(c) {
+    var f = sub(c.formula), q = c.charge;
+    if (!q) return f;
+    var s = (Math.abs(q) > 1 ? Math.abs(q) : '') + (q > 0 ? '+' : '−');
+    return f + '<sup>' + s + '</sup>';
+  }
+  function mol(name, cls) {
+    var s = D.svg[name]; if (!s) return '';
+    return '<svg class="mol ' + (cls || '') + '" viewBox="' + s.viewBox + '" role="img" aria-label="structure of ' + esc(name.replace(/_/g, ' ')) + '">' + s.inner + '</svg>';
+  }
+
+  // platform glyphs, drawn to the same 24-unit grid as the brand icons
+  var PG = {
+    bottle: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="4" width="8" height="16" rx="2"/><path d="M8 7h8M8 17h8M12 1.5v2.5M12 20v2.5"/></svg>',
+    ctd: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><rect x="10.3" y="7" width="3.4" height="10" rx="1"/><path d="M12 1v2M5.2 6.5l1.6 1M18.8 6.5l-1.6 1M5.2 17.5l1.6-1M18.8 17.5l-1.6-1"/></svg>',
+    mast: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22V6M8 22h8M12 6l-5 0M12 6l5 0"/><circle cx="6" cy="6" r="1.6"/><circle cx="18" cy="6" r="1.6"/><path d="M12 3v3"/></svg>',
+    lab: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20"/><path d="M2 12h7M15 12h7" stroke-dasharray="2 2"/><circle cx="12" cy="12" r="2.2"/><circle cx="12" cy="6" r="1.1"/><circle cx="12" cy="17.5" r="1.1"/></svg>'
+  };
+  var PLAT = { bottle: 'rosette bottle', ctd: 'CTD sensor', mast: 'underway, on the mast', lab: 'counted ashore' };
+
+  // ── the cast bar and the theme toggle ───────────────────────────────────────────────────────
+  var bar = $('#castbar');
+  D.cast.forEach(function (c) {
+    var b = document.createElement('button');
+    b.className = 'pill'; b.type = 'button'; b.dataset.key = c.key; b.id = 'pill-' + c.key;
+    b.innerHTML = '<span class="gl">' + esc(c.glyph) + '</span>' + esc(c.label);
+    b.addEventListener('click', function () { select(c.key, true); });
+    bar.appendChild(b);
+  });
+  $('#theme-toggle').addEventListener('click', function () {
+    var root = document.documentElement, cur = root.getAttribute('data-theme');
+    var dark = cur ? cur === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+    root.setAttribute('data-theme', dark ? 'light' : 'dark');
+  });
+  $('#built').textContent = D.built;
+  $('#rel-chip').textContent = 'release ' + D.release.version;
+  $('#rel-v').textContent = D.release.version;
+  $('#n-pages').textContent = fmt(D.counts.pages);
+  document.querySelectorAll('.n-keys').forEach(function (e) { e.textContent = D.counts.measurements; });
+  $('#src-keys').textContent = D.counts.measurements;
+  $('#oni-latest').textContent = '+' + D.oni.latest[3];
+
+  // ── the record sentence, shared by the head and part 3 ──────────────────────────────────────
+  function recSentence(c) {
+    var t = c.rec.totals;
+    var s = 'CalCOFI holds ' + fmt(t.n_values) + ' values of it from ' + fmt(t.n_roots) + (c.key === 'wind_speed_ms' ? ' underway records' : ' casts') +
+      ' in ' + (t.n_datasets === 1 ? 'one dataset' : t.n_datasets + ' datasets') + ', ' + t.year_min + '–' + t.year_max;
+    s += c.key === 'wind_speed_ms' ? ', at the ship.' : ', from the surface to ' + fmt(t.depth_max_m) + ' m.';
+    var a = c.anomaly;
+    if (a) {
+      var b = band(c, a.spark_band), tr = b.trend.per_decade, u = a.units ? ' ' + a.units : '';
+      if (c.key === 'oxygen_umol_kg' || c.key === 'nitrate') {
+        s += ' At ' + b.band.replace('-', '–') + ' m it has ' + (tr < 0 ? 'fallen ' : 'risen ') + fmt(Math.abs(tr), 2) + u + ' per decade since ' + b.trend.from + '.';
+      } else {
+        s += ' At ' + b.band.replace('-', '–') + ' m its high was ' + b.ext.hi[0] + ' (' + (b.ext.hi[1] > 0 ? '+' : '') + fmt(b.ext.hi[1], 2) + u + ' against the 1993–2013 normal), its low ' + b.ext.lo[0] + ' (' + fmt(b.ext.lo[1], 2) + u + ').';
+      }
+    }
+    return s;
+  }
+  function band(c, name) { return c.anomaly.bands.filter(function (b) { return b.band === name; })[0]; }
+  function firstSentence(t) { if (!t) return ''; var m = String(t).match(/^.*?[.;](\s|$)/); return (m ? m[0] : t).trim(); }
+  function sentence(c) {
+    var nerc = c.p01 ? firstSentence(c.p01.def) : (c.a05_only ? c.a05_only.def : '');
+    var whyC = c.why.cites.map(function (x) { return '<sup><a href="' + x[2] + '" title="' + esc(x[1]) + '">' + esc(x[1]) + '</a></sup>'; }).join(' ');
+    return '<p class="sent">' + (nerc ? '<span class="s-nerc">' + esc(nerc) + '</span> ' : '') +
+      '<span class="s-rec">' + esc(recSentence(c)) + '</span> <span class="s-why">' + esc(c.why.text) + '</span>' + (whyC ? ' ' + whyC : '') + '</p>' + whyAlts(c);
+  }
+  var KIND = { authored: 'authored', goos: 'GOOS asks', wikipedia: 'Wikipedia', calcofi: 'calcofi.org' };
+  function whyAlts(c) {
+    var a = c.why.alts || [];
+    if (!a.length) return '';
+    return '<details class="ds-details"><summary>other ways to say why · ' + a.length + '</summary><ul class="alts">' + a.map(function (x) {
+      return '<li><span class="k ' + x.kind + '">' + KIND[x.kind] + '</span><span>' + esc(x.text) + (x.cites.length ? ' <span class="c">' + x.cites.map(function (ci) { return '<a href="' + ci[2] + '">' + esc(ci[1]) + '</a>'; }).join(' · ') + '</span>' : (x.kind === 'authored' ? ' <span class="nc">needs a citation before it can be the pick</span>' : '')) + '</span></li>';
+    }).join('') + '</ul></details>';
+  }
+
+  // ── the head, as the live page draws it, plus the face row ──────────────────────────────────
+  function whatGlyph(c) {
+    if (c.kind === 'structure' && c.key === 'ammonia') return mol('ammonium') + '<span class="eq">⇌</span>' + mol('ammonia') + '<span class="eq">+ H⁺</span>';
+    if (c.kind === 'structure' || c.kind === 'standsin') return mol(c.svg[0], c.key === 'chlorophyll_a' ? 'big' : '');
+    if (c.key === 'salinity') return ionBar(c, true);
+    if (c.key === 'dic') return c.svg.map(function (k) { return mol(k); }).join('');
+    if (c.kind === 'organism') return hairFigure(c, true);
+    if (c.key === 'ph') return '<div style="flex:1">' + phStrip(c, true) + '</div>';
+    if (c.key === 'temperature') return '<div style="flex:1">' + miniScale(c) + '</div>';
+    if (c.key === 'wind_speed_ms') return '<div style="flex:1">' + beaufortMini(c) + '</div>';
+    return '';
+  }
+  function whatLine(c) {
+    if (c.kind === 'standsin') return '<div class="line"><span class="stands">stands in: ' + esc(c.stands_in.label.toLowerCase()) + '’s face, ' + esc(c.stands_in.why) + '</span></div>';
+    if (c.chem && c.chem.length && c.kind === 'structure') {
+      var x = c.chem[0];
+      return '<div class="line"><b>' + formula(x) + '</b> · ' + esc(x.name) + ' · ' + esc(x.mass) + ' g/mol · <a class="mono" href="https://www.ebi.ac.uk/chebi/searchId.do?chebiId=' + x.chebi + '">' + x.chebi + '</a></div>';
+    }
+    if (c.key === 'salinity') { var s = c.composition; return '<div class="line"><b>' + fmt(s.sr_med, 2) + ' g</b> of salt in a kilogram of CalCOFI surface water, <b>' + fmt(s.sr_med * (s.ions[0][2] + s.ions[1][2]), 1) + ' g</b> of it sodium and chloride</div>'; }
+    if (c.key === 'dic') { var b = c.bjerrum; return '<div class="line">CO₂ <b>' + fmt(b.co2, 2) + ' %</b> · HCO₃⁻ <b>' + fmt(b.hco3, 1) + ' %</b> · CO₃²⁻ <b>' + fmt(b.co3, 1) + ' %</b> at the record’s surface pH ' + fmt(b.pH, 2) + '</div>'; }
+    if (c.kind === 'organism') return '<div class="line"><i>Synechococcus</i> · WoRMS <a class="mono" href="https://www.marinespecies.org/aphia.php?p=taxdetails&id=' + c.taxon.worms + '">' + c.taxon.worms + '</a> · 0.8–1.5 µm, about 60 across a hair</div>';
+    if (c.property) return '<div class="line">' + esc(c.property.name) + ' · <span class="mono">' + esc(c.property.id) + '</span></div>';
+    if (c.a05_only) return '<div class="line">No NERC concept on the key · the nearest is A05 <span class="mono">' + c.a05_only.code + '</span></div>';
+    return '';
+  }
+  function howCol(c) {
+    var plats = []; c.how.forEach(function (h) { if (plats.indexOf(h.platform) < 0) plats.push(h.platform); });
+    var h0 = c.how[0];
+    return '<div class="fk">How</div><div class="plat">' + plats.map(function (p) { return PG[p] + '<span>' + PLAT[p] + '</span>'; }).join('') + '</div>' +
+      '<div class="line"><b>' + esc(h0.instrument) + '</b></div>' +
+      (h0.nm ? '<div class="line"><span class="chip chip-accent">' + h0.nm + ' nm</span> ' + esc(h0.nm_label) + '</div>' : '') +
+      (c.how.length > 1 ? '<div class="line muted">and ' + esc(c.how[1].instrument.charAt(0).toLowerCase() + c.how[1].instrument.slice(1)) + '</div>' : '') +
+      '<a class="pin" href="' + h0.url + '"><span class="disc">' + '<svg viewBox="0 0 24 24"><use href="#' + c.icon + '"/></svg>' + '</span>Methods on calcofi.org ↗</a>';
+  }
+  function whyCol(c) {
+    var out = '<div class="fk">Why</div>';
+    if (c.anomaly) {
+      var a = c.anomaly, b = band(c, a.spark_band), tr = b.trend.per_decade;
+      out += anomalySpark(c, b);
+      out += '<div class="line">' + (c.key === 'oxygen_umol_kg' || c.key === 'nitrate' ? '<b>' + (tr > 0 ? '+' : '−') + fmt(Math.abs(tr), 2) + ' ' + a.units + '</b> per decade at ' + b.band.replace('-', '–') + ' m since ' + b.trend.from
+        : (c.key === 'temperature' ? 'Warmest' : 'Highest') + ' year at ' + b.band.replace('-', '–') + ' m <b>' + b.ext.hi[0] + '</b>, ' + (b.ext.hi[1] > 0 ? '+' : '') + fmt(b.ext.hi[1], 2) + (a.units ? ' ' + a.units : '')) +
+        ' <span class="muted">· ' + a.bands.length + ' bands below</span></div>';
+    } else {
+      out += '<div class="none">' + esc(c.anomaly_none) + '</div>';
+    }
+    var e = c.eov;
+    if (e.questions) out += '<div class="q">' + esc(e.questions[0]) + '</div>';
+    else out += '<div class="line"><span class="muted">EOV</span> ' + esc(e.name) + ' · ' + e.phenomena.slice(0, 3).map(esc).join(', ') + '</div>';
+    return out;
+  }
+  function head(c) {
+    var t = c.rec.totals, cat = c.category;
+    var ids = [];
+    if (c.p01) ids.push('<span><span class="muted">NERC P01</span> <a href="' + c.p01.url + '">' + c.p01.code + '</a>' + (c.p01_borrowed_from ? ' <span class="chip chip-warn">from ' + c.p01_borrowed_from[0] + '</span>' : '') + '</span>');
+    else ids.push('<span><span class="muted">NERC P01</span> <span class="chip chip-warn">none</span></span>');
+    if (c.stands_in) ids.push('<span class="stands">stands in: ' + esc(c.stands_in.label.toLowerCase()) + '’s face</span>');
+    if (c.chem && c.chem[0] && c.kind === 'structure') ids.push('<span><span class="muted">ChEBI</span> <a href="https://www.ebi.ac.uk/chebi/searchId.do?chebiId=' + c.chem[0].chebi + '">' + c.chem[0].chebi.replace('CHEBI:', '') + '</a></span>');
+    if (c.cas) ids.push('<span><span class="muted">CAS</span> <span class="mono">' + c.cas + '</span></span>');
+    if (c.taxon) ids.push('<span><span class="muted">WoRMS</span> <a href="https://www.marinespecies.org/aphia.php?p=taxdetails&id=' + c.taxon.worms + '">' + c.taxon.worms + '</a></span>');
+    ids.push('<span><span class="muted">EOV</span> <a href="' + c.eov.doc + '">' + esc(c.eov.name) + '</a></span>');
+    ids.push('<span><span class="muted">key</span> <span class="mono">' + c.key + '</span></span>');
+    var dep = c.key === 'wind_speed_ms' ? 'ship' : fmt(t.depth_max_m) + ' m';
+    return '<div class="fhead">' +
+      '<nav class="mm-crumb"><a href="https://calcofi.io/measurements/">Measurements</a>' + (cat ? '<span>›</span><a href="https://calcofi.io/measurements/">' + esc(cat) + '</a>' : '') + '<span>›</span><span>' + esc(c.label) + '</span></nav>' +
+      '<div class="eyebrow">Measurement' + (cat ? ' · ' + esc(cat) : ' · <span style="color:var(--warn)">no category</span>') + ' · <span class="u">' + esc(c.units_disp) + '</span>' + (t.n_datasets > 1 ? ' · one key across ' + t.n_datasets + ' datasets' : '') + '</div>' +
+      '<div class="mm-h1">' + esc(c.label) + '</div>' +
+      '<p class="mm-sub">' + esc(c.p01 ? c.p01.pref : c.label_record) + '</p>' +
+      '<div class="mm-ids">' + ids.join('') + '</div>' +
+      '<dl class="mm-stat"><div><dd>' + fmt(t.n_values) + '</dd><dt>values</dt></div><div><dd>' + fmt(t.n_roots) + '</dd><dt>' + (c.key === 'wind_speed_ms' ? 'records' : 'casts') + '</dt></div>' +
+      '<div><dd>' + t.n_datasets + '</dd><dt>datasets</dt></div><div><dd>' + t.year_min + '–' + String(t.year_max).slice(2) + '</dd><dt>years</dt></div><div><dd>' + dep + '</dd><dt>deepest</dt></div></dl>' +
+      '</div><div class="fbody"><div class="face">' +
+      '<div><div class="fk">What</div><div class="glyph">' + whatGlyph(c) + '</div>' + whatLine(c) + '<div class="def">' + esc(c.p01 ? c.p01.def : (c.a05_only ? c.a05_only.def : (c.stands_in ? 'No definition of its own: the estimate is described by its derivation, under How.' : ''))) + '</div></div>' +
+      '<div>' + howCol(c) + '</div><div>' + whyCol(c) + '</div></div>' + sentence(c) + '</div>';
+  }
+
+  // ── small figures ───────────────────────────────────────────────────────────────────────────
+  var ION_COL = ['var(--s1)', 'var(--s2)', 'var(--s3)', 'var(--s5)', '#7a8aa6', '#5d7f99', '#8f9bb0', '#a3aebf', '#b9c2cf'];
+  function ionBar(c, small) {
+    var s = c.composition;
+    return '<div style="flex:1;min-width:0"><div class="ions" style="height:' + (small ? 34 : 48) + 'px">' + s.ions.map(function (x, i) {
+      var p = x[2] * 100;
+      return '<div style="width:' + p + '%;background:' + ION_COL[i] + ';' + (i === 3 ? 'color:#182b49' : '') + '" title="' + esc(x[0] + ' ' + x[1] + ' ' + p.toFixed(2) + ' %') + '">' + (p > 6 ? x[0] + (small ? '' : ' ' + p.toFixed(1) + ' %') : '') + '</div>';
+    }).join('') + '</div></div>';
+  }
+  function hairFigure(c, small) {
+    var n = Math.round(c.taxon.hair_um / ((c.taxon.size_um[0] + c.taxon.size_um[1]) / 2));
+    var R = 70, cx = 80, cy = 80, dots = '';
+    var d = (2 * R) / n;
+    for (var i = 0; i < n; i++) dots += '<circle cx="' + (cx - R + d / 2 + i * d).toFixed(2) + '" cy="' + cy + '" r="' + (d * 0.42).toFixed(2) + '" fill="var(--accent)"/>';
+    return '<svg class="hair" viewBox="0 0 ' + (small ? 160 : 330) + ' 160" role="img" aria-label="a hair cut across, with ' + n + ' Synechococcus cells in a row across it" style="max-height:' + (small ? 92 : 220) + 'px">' +
+      '<circle cx="' + cx + '" cy="' + cy + '" r="' + R + '" fill="none" stroke="currentColor" stroke-width="1.5"/>' + dots +
+      (small ? '' : '<text x="165" y="60" class="lab" style="font:13px var(--sans);fill:currentColor">a hair, cut across: ' + c.taxon.hair_um + ' µm</text><text x="165" y="84" style="font:13px var(--sans);fill:var(--accent)">' + n + ' cells of 0.8–1.5 µm</text><text x="165" y="104" style="font:11px var(--mono);fill:var(--muted)">size: ' + esc(c.taxon.size_src) + '</text>') + '</svg>';
+  }
+  function phStrip(c, small) {
+    var o = c.rec.series[0].observed;
+    var x = function (v) { return (v / 14 * 100).toFixed(2) + '%'; };
+    return '<div style="position:relative;height:' + (small ? 16 : 22) + 'px;border-radius:4px;background:linear-gradient(90deg,#d7263d 0%,#f46036 14%,#f5b700 29%,#c5d86d 43%,#3fa34d 50%,#1b998b 60%,#2e86ab 72%,#3c4f9c 86%,#5b2a86 100%)">' +
+      '<div style="position:absolute;left:' + x(o.p05) + ';width:calc(' + x(o.p95) + ' - ' + x(o.p05) + ');top:-4px;bottom:-4px;border:2px solid var(--fg);border-radius:3px"></div></div>' +
+      '<div style="display:flex;justify-content:space-between;font:11px var(--mono);color:var(--muted);margin-top:4px"><span>0 acid</span><span>7</span><span>14 base</span></div>' +
+      '<div class="line" style="margin-top:4px">CalCOFI’s CTD pH: <b>' + fmt(o.p05, 2) + '–' + fmt(o.p95, 2) + '</b> (5th–95th percentile)</div>';
+  }
+  function miniScale(c) {
+    var o = c.rec.series[0].observed, dm = c.scale.domain, w = dm[1] - dm[0];
+    var x = function (v) { return ((v - dm[0]) / w * 100).toFixed(2) + '%'; };
+    return '<div style="position:relative;height:16px;border-radius:4px;background:linear-gradient(90deg,var(--cool),var(--panel) 45%,var(--warm))">' +
+      '<div style="position:absolute;left:' + x(o.p05) + ';width:calc(' + x(o.p95) + ' - ' + x(o.p05) + ');top:-4px;bottom:-4px;border:2px solid var(--fg);border-radius:3px"></div></div>' +
+      '<div style="display:flex;justify-content:space-between;font:11px var(--mono);color:var(--muted);margin-top:4px"><span>' + fmt(c.scale.refs[0].v, 2) + ' °C freezes</span><span>37 °C body</span></div>' +
+      '<div class="line" style="margin-top:4px">CalCOFI’s bottles: <b>' + fmt(o.p05, 1) + '–' + fmt(o.p95, 1) + ' °C</b> (5th–95th percentile)</div>';
+  }
+  function beaufort(v) { var b = c0.scale.beaufort; for (var i = b.length - 1; i >= 0; i--) if (v >= b[i][1]) return b[i]; return b[0]; }
+  var c0 = null;
+  function beaufortMini(c) {
+    c0 = c; var o = c.rec.series[0].observed, b50 = beaufort(o.p50), b95 = beaufort(o.p95), k50 = beaufort(o.p50 / 1.9438), k95 = beaufort(o.p95 / 1.9438);
+    var cells = c.scale.beaufort.map(function (b) { var on = b[0] === b50[0] || b[0] === b95[0], kn = b[0] === k50[0] || b[0] === k95[0];
+      return '<div title="' + b[0] + ' ' + b[3] + ', ' + b[1] + '–' + b[2] + ' m/s" style="flex:1;height:22px;display:grid;place-items:center;font:600 11px var(--sans);border-radius:2px;' +
+        (on ? 'background:var(--nogo-bg);color:var(--nogo);outline:2px solid var(--nogo)' : kn ? 'background:var(--accent-bg);color:var(--accent);outline:2px dashed var(--accent)' : 'background:var(--panel);color:var(--muted)') + '">' + b[0] + '</div>'; }).join('');
+    return '<div style="display:flex;gap:2px">' + cells + '</div><div class="line" style="margin-top:6px">Beaufort: median <b style="color:var(--nogo)">' + b50[0] + '</b>, 95th <b style="color:var(--nogo)">' + b95[0] + '</b> as m/s; <b style="color:var(--accent)">' + k50[0] + '</b> and <b style="color:var(--accent)">' + k95[0] + '</b> read as knots</div>';
+  }
+
+  // ── part 1: what ────────────────────────────────────────────────────────────────────────────
+  function whatFig(c) {
+    var h = '';
+    if (c.kind === 'standsin') {
+      return '<div class="mols"><div class="mol-card" style="opacity:.8">' + mol('nitrate') + '<div class="cap"><span class="stands">stands in</span><br><b>NO<sub>3</sub><sup>−</sup></b> nitrate’s face<br><span class="mono">borrowed from the key nitrate · CHEBI:17632</span></div></div></div>' +
+        '<p class="note" style="margin:14px auto 0;text-align:center">This key has no NERC concept: it is the ISUS sensor’s estimate of nitrate, not a nitrate analysis. It borrows the face of the quantity it estimates and says so in a chip, never passing the borrowed ids off as its own. Of the ' + D.kinds.none + ' keys with no concept, ' + D.stands.borrow + ' borrow a sibling’s face, ' + D.stands.scale_only + ' show their scale alone, and ' + D.stands.left.length + ' (' + D.stands.left.join(', ') + ') shows nothing.</p>';
+    }
+    if (c.kind === 'structure') {
+      var cards = c.chem.map(function (x, i) {
+        return '<div class="mol-card' + (c.key === 'chlorophyll_a' ? ' huge' : '') + '">' + mol(c.svg[i]) + '<div class="cap"><b>' + formula(x) + '</b> ' + esc(x.name) + '<br><span class="mono">' + x.chebi + ' · ' + esc(x.mass) + ' g/mol · ' + esc(x.role) + '</span></div></div>';
+      });
+      if (c.key === 'ammonia') h = '<div class="mols">' + cards[0] + '<div class="arrow"><b>⇌</b>at seawater pH<br>mostly the left</div>' + cards[1] + '</div>';
+      else if (c.key === 'chlorophyll_a') h = '<div class="mols">' + cards[0] + '</div>';
+      else h = '<div class="mols">' + cards.join('') + '</div>';
+      var d = c.chem[0].definition;
+      h += '<p class="note" style="margin:14px auto 0;text-align:center">' + (d ? 'ChEBI: “' + esc(d) + '” · ' : '') + 'drawn by RDKit from ChEBI’s molfile, in the page’s ink</p>';
+    } else if (c.key === 'salinity') {
+      var s = c.composition;
+      h = '<div class="eyebrow">A kilogram of CalCOFI surface water</div><div class="mm-h1" style="font-size:44px;margin:4px 0">' + fmt(s.sr_med, 2) + ' g of salt</div>' +
+        '<p class="note" style="margin:0">Reference Salinity from the median practical salinity above 10 m (' + fmt(s.sp_med, 3) + ' × 35.16504 / 35, TEOS-10). The salt is ions, not NaCl crystals: sodium and chloride are ' + fmt((s.ions[0][2] + s.ions[1][2]) * 100, 1) + ' % of it by mass.</p>' +
+        ionBar(c, false) + '<table class="ion-tbl"><tbody>' + s.ions.map(function (x, i) {
+          return '<tr><td><span class="sw" style="background:' + ION_COL[i] + '"></span><b>' + x[0] + '</b> ' + esc(x[1]) + '</td><td class="n">' + (x[2] * 100).toFixed(2) + ' %</td><td class="n">' + fmt(x[2] * s.sr_med, 3) + ' g</td><td class="n">' + (x[3] ? '<a href="https://www.ebi.ac.uk/chebi/searchId.do?chebiId=' + x[3] + '">' + x[3] + '</a>' : '') + '</td></tr>';
+        }).join('') + '</tbody></table><p class="credit">' + esc(s.src) + '</p>';
+    } else if (c.key === 'dic') {
+      h = '<div class="mols">' + c.chem.map(function (x, i) { return '<div class="mol-card">' + mol(c.svg[i]) + '<div class="cap"><b>' + formula(x) + '</b> ' + esc(x.role) + '<br><span class="mono">' + x.chebi + '</span></div></div>'; }).join('<div class="arrow"><b>+</b></div>') + '</div>' + bjerrum(c);
+    } else if (c.kind === 'organism') {
+      h = hairFigure(c, false) + '<p class="note" style="text-align:center;margin:10px auto 0">The picture is the species face: the fetcher that builds <span class="mono">taxa_media.json</span> resolves WoRMS ' + c.taxon.worms + ' to a PhyloPic silhouette and a licensed photo. It is not in <span class="mono">taxa.json</span> today, so it has no species page to borrow from.</p>';
+    } else if (c.key === 'ph') {
+      h = '<div class="mols"><div class="mol-card"><div style="font:500 110px/1 var(--display)">H<sup style="font-size:50%">+</sup></div><div class="cap"><b>hydron</b><br><span class="mono">CHEBI:15378 · the ion pH counts</span></div></div><div style="flex:1;min-width:240px">' + phStrip(c, false) + '</div></div>' +
+        '<p class="note" style="margin-top:12px">pH = −log₁₀ of the hydrogen-ion activity. NERC’s concept is “unspecified scale”, and so is the record: seawater pH is reported on the total, seawater or NBS scale, which differ by up to about 0.1.</p>';
+    } else if (c.key === 'temperature') {
+      h = '<div class="mols"><div class="mol-card"><svg viewBox="0 0 24 24" style="height:130px;fill:currentColor"><use href="#cat-physical"/></svg><div class="cap"><b>Temperature</b><br><span class="mono">S06 S0600082 · sameAs QUDT quantitykind/Temperature</span></div></div><div style="flex:1;min-width:240px">' + miniScale(c) + '</div></div>' +
+        '<p class="note" style="margin-top:12px">A property has no molecule, so its face is the scale. NERC’s TEMPPR01 covers both the IPTS-68 and ITS-90 scales; the CTD’s own <span class="mono">ctdtemp_its90</span> key names ITS-90 explicitly.</p>';
+    } else {
+      h = '<div class="mols"><div class="mol-card"><svg viewBox="0 0 24 24" style="height:120px;fill:currentColor"><use href="#cat-meteorology"/></svg><div class="cap"><b>Wind speed</b><br><span class="mono">no P01 · A05 ' + c.a05_only.code + ' is the nearest concept</span></div></div><div style="flex:1;min-width:260px">' + beaufortMini(c) + '</div></div>' +
+        '<p class="note" style="margin-top:12px">A key with no concept falls back to its scale and says so. Registering an exact P01 (a wind speed relative to the fixed earth, at a stated height) is a registry row; until then the page shows no NERC id rather than a near miss.</p>';
+    }
+    return h;
+  }
+  function chain(c) {
+    var L = [];
+    if (c.p01) {
+      L.push(['P01', '<b>' + esc(c.p01.pref) + '</b><br><a class="mono" href="' + c.p01.url + '">' + c.p01.url + '</a>' + (c.p01_borrowed_from ? '<br><span class="chip chip-warn">not on this key: carried by ' + c.p01_borrowed_from.join(' and ') + '</span>' : '')]);
+      Object.keys(c.p01.links).forEach(function (k) {
+        var v = c.p01.links[k], coll = k.split(' ')[0];
+        if (['S27', 'S25', 'S06', 'A05', 'P07', 'P02'].indexOf(coll) < 0 || !v.pref) return;
+        var same = (v.sameAs || []).map(function (u) {
+          var t = u.indexOf('CHEBI_') > 0 ? 'ChEBI ' + u.split('CHEBI_')[1] : u.indexOf('chemidplus/rn/') > 0 ? 'CAS ' + u.split('/rn/')[1] : u.indexOf('aphia') > 0 || u.indexOf('marinespecies') > 0 ? 'WoRMS ' + u.split(':').pop().split('/').pop() : u.indexOf('qudt') > 0 ? 'QUDT ' + u.split('/').pop() : u.indexOf('OD1') > 0 ? null : u.split('/').filter(Boolean).pop();
+          return t ? '<a class="mono" href="' + u + '">' + esc(t) + '</a>' : '';
+        }).filter(Boolean).join(' · ');
+        var chip = coll === 'S27' && k.indexOf('CS002894') > 0 ? ' <span class="chip chip-nogo">ChEBI says “carbon atom”</span>' : coll === 'A05' ? ' <span class="chip chip-ok">exact</span>' : '';
+        L.push([coll, '<b>' + esc(v.pref) + '</b> <span class="mono">' + esc(k.split(' ')[1]) + '</span>' + chip + (same ? '<br>' + same : '')]);
+      });
+    } else if (c.stands_in) {
+      L.push(['P01', '<span class="chip chip-warn">none on this key</span><br><span class="stands">stands in</span> the face of <span class="mono">' + c.stands_in.face_of + '</span> (NTRAZZXX → S27 nitrate → CHEBI:17632), drawn but not claimed: the ids row shows none']);
+    } else {
+      L.push(['P01', '<span class="chip chip-warn">none on this key</span><br>nearest: A05 <span class="mono">' + c.a05_only.code + '</span> “' + esc(c.a05_only.def) + '”']);
+    }
+    var hasA05 = c.p01 && Object.keys(c.p01.links).some(function (k) { return k.indexOf('A05') === 0; });
+    L.push(['EOV', '<b>' + esc(c.eov.name) + '</b> <span class="chip ' + (hasA05 ? 'chip-ok' : 'chip-accent') + '">' + (hasA05 ? 'via A05' : 'via GOOS') + '</span><br><span class="note">' + esc(c.eov.membership) + '</span>']);
+    return L.map(function (x) { return '<li><span class="cc">' + x[0] + '</span><span class="cv">' + x[1] + '</span></li>'; }).join('');
+  }
+  function kinds() {
+    var K = [['structure', 'Structure', 'An ion or a molecule: NERC S27 → ChEBI → the drawing. Oxygen, nitrate, nitrite, phosphate, silicate, ammonium, chlorophyll-a.', 'nitrate · oxygen_umol_kg · chlorophyll_a'],
+             ['composition', 'Composition', 'A mixture or a pool: the salts of salinity, the three carbon species of DIC and alkalinity, the pigments lumped as phaeopigment. A registry row per component, with its source.', 'salinity · dic · phaeopigment'],
+             ['scale', 'Scale', 'A property with no substance: temperature, pH, pressure, density, attenuation. The face is the scale it is read on, with the familiar marks.', 'temperature · ph · sigma_theta'],
+             ['organism', 'Organism', 'A count of a living thing: NERC S25 → WoRMS → the species face. Two carry the link today; two more need a P01.', 'synechococcus · prochlorococcus'],
+             ['none', 'No concept · stands in', 'No P01 on the key: raw voltages, estimates, 14C incubations, the underway series. ' + D.stands.borrow + ' borrow a sibling’s face with a “stands in” chip, ' + D.stands.scale_only + ' show their scale alone, ' + D.stands.left.length + ' shows nothing.', 'est_nitrate_sta_corr → nitrate · c14_mean → HCO₃⁻ · wind_speed_ms → Beaufort']];
+    return K.map(function (k) { return '<div class="kind"><div class="eyebrow">' + k[1] + '</div><div class="n">' + D.kinds[k[0]] + '<small>of ' + D.counts.measurements + ' keys</small></div><p>' + k[2] + '</p><div class="ex">' + k[3] + '</div></div>'; }).join('');
+  }
+
+  // ── charts ──────────────────────────────────────────────────────────────────────────────────
+  function ticks(lo, hi, n) {
+    var span = hi - lo, step = Math.pow(10, Math.floor(Math.log10(span / n))), err = span / n / step;
+    if (err >= 7.5) step *= 10; else if (err >= 3.5) step *= 5; else if (err >= 1.5) step *= 2;
+    var t = []; for (var v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) t.push(+v.toFixed(10)); return t;
+  }
+  function bjerrum(c) {
+    var b = c.bjerrum, W = 640, H = 260, L = 44, R = 16, T = 16, B = 38;
+    var x = function (p) { return L + (p - 4) / 7 * (W - L - R); }, y = function (f) { return T + (1 - f) * (H - T - B); };
+    var line = function (i) { return b.curve.map(function (r, j) { return (j ? 'L' : 'M') + x(r[0]).toFixed(1) + ',' + y(r[i]).toFixed(1); }).join(''); };
+    var ph = D.cast.filter(function (k) { return k.key === 'ph'; })[0].rec.series[0].observed;
+    var g = '';
+    for (var p = 4; p <= 11; p++) g += '<line class="gr" x1="' + x(p) + '" x2="' + x(p) + '" y1="' + T + '" y2="' + (H - B) + '"/><text class="tick" x="' + x(p) + '" y="' + (H - B + 16) + '" text-anchor="middle">' + p + '</text>';
+    [0, .5, 1].forEach(function (f) { g += '<text class="tick" x="' + (L - 6) + '" y="' + (y(f) + 4) + '" text-anchor="end">' + (f * 100) + '%</text>'; });
+    return '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Bjerrum plot: the share of dissolved CO2, bicarbonate and carbonate by pH" style="margin-top:14px">' + g +
+      '<rect x="' + x(ph.p05) + '" y="' + T + '" width="' + (x(ph.p95) - x(ph.p05)) + '" height="' + (H - T - B) + '" fill="var(--accent-bg)" opacity=".9"/>' +
+      '<path d="' + line(1) + '" fill="none" stroke="var(--s5)" stroke-width="2.2"/><path d="' + line(2) + '" fill="none" stroke="var(--s2)" stroke-width="2.6"/><path d="' + line(3) + '" fill="none" stroke="var(--s1)" stroke-width="2.2" stroke-dasharray="6 4"/>' +
+      '<line x1="' + x(b.pH) + '" x2="' + x(b.pH) + '" y1="' + T + '" y2="' + (H - B) + '" stroke="var(--fg)" stroke-width="1.5"/>' +
+      '<text class="lab" x="' + (x(5) - 20) + '" y="' + (y(0.9) ) + '" fill="var(--s5)" style="fill:var(--s5);font-weight:600">CO₂</text>' +
+      '<text class="lab" x="' + x(6.9) + '" y="' + (y(1.0) + 14) + '" style="font-weight:600;fill:var(--s2)">HCO₃⁻</text>' +
+      '<text class="lab" x="' + (x(10.2)) + '" y="' + (y(0.9)) + '" style="font-weight:600">CO₃²⁻</text>' +
+      '<text class="lab-m" x="' + (x(b.pH) + 6) + '" y="' + (y(0.42)) + '">surface pH ' + fmt(b.pH, 2) + '</text>' +
+      '<text class="lab-m" x="' + (x(b.pH) + 6) + '" y="' + (y(0.42) + 15) + '">' + fmt(b.hco3, 1) + ' % HCO₃⁻, ' + fmt(b.co3, 1) + ' % CO₃²⁻</text>' +
+      '<text class="lab-m" x="' + (x(ph.p05) + 4) + '" y="' + (H - B - 6) + '">CTD pH 5–95 %</text>' +
+      '<line class="ax" x1="' + L + '" x2="' + (W - R) + '" y1="' + (H - B) + '" y2="' + (H - B) + '"/><text class="tick" x="' + ((W + L) / 2) + '" y="' + (H - 4) + '" text-anchor="middle">pH</text></svg>' +
+      '<p class="credit">' + esc(b.src) + '. Aragonite saturation Ω ' + fmt(b.omega_arag, 1) + ', pCO₂ ' + fmt(b.pco2) + ' µatm.</p>';
+  }
+  function anomalySpark(c, b) {
+    var W = 300, H = 60, y0 = 1949, y1 = 2026, x = function (yr) { return (yr - y0) / (y1 - y0 + 1) * W; }, bw = W / (y1 - y0 + 1), top = c.anomaly.ymax;
+    var y = function (v) { v = Math.max(-top, Math.min(top, v)); return 3 + (top - v) / (2 * top) * (H - 6); }, g = '';
+    D.oni.strong_el_nino.forEach(function (yr) { g += '<rect class="nino" x="' + x(yr).toFixed(1) + '" y="0" width="' + bw.toFixed(1) + '" height="' + H + '"/>'; });
+    b.series.forEach(function (r) { var v = r[1]; g += '<rect x="' + (x(r[0]) + bw * .12).toFixed(1) + '" y="' + Math.min(y(v), y(0)).toFixed(1) + '" width="' + (bw * .76).toFixed(1) + '" height="' + Math.max(Math.abs(y(v) - y(0)), .6).toFixed(1) + '" fill="' + (v >= 0 ? 'var(--warm)' : 'var(--cool)') + '" opacity="' + (r[2] >= 2 ? 1 : .35) + '"/>'; });
+    g += '<line class="zero" x1="0" x2="' + W + '" y1="' + y(0) + '" y2="' + y(0) + '"/>';
+    return '<svg class="spark" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" role="img" aria-label="yearly anomaly at ' + b.band + ' m">' + g + '</svg>';
+  }
+  function anomalyBands(c) {
+    var a = c.anomaly, nb = a.bands.length, W = 1000, L = 78, R = 150, T = 22, rowH = 64, gap = 10, B = 26;
+    var H = T + nb * rowH + (nb - 1) * gap + B, y0 = 1949, y1 = 2026;
+    var x = function (yr) { return L + (yr - y0) / (y1 - y0 + 1) * (W - L - R); }, bw = (W - L - R) / (y1 - y0 + 1);
+    var top = a.ymax, g = '', trendy = c.key === 'oxygen_umol_kg' || c.key === 'nitrate';
+    D.oni.strong_el_nino.forEach(function (yr) { g += '<rect class="nino" x="' + x(yr).toFixed(1) + '" y="' + T + '" width="' + bw.toFixed(1) + '" height="' + (H - T - B) + '"/>'; });
+    a.bands.forEach(function (b, i) {
+      var r0 = T + i * (rowH + gap), y = function (v) { return r0 + (top - Math.max(-top, Math.min(top, v))) / (2 * top) * rowH; };
+      g += '<line class="gr" x1="' + L + '" x2="' + (W - R) + '" y1="' + r0 + '" y2="' + r0 + '"/><line class="gr" x1="' + L + '" x2="' + (W - R) + '" y1="' + (r0 + rowH) + '" y2="' + (r0 + rowH) + '"/>';
+      g += '<text class="lab" x="' + (L - 10) + '" y="' + (r0 + rowH / 2 - 2) + '" text-anchor="end" style="font-weight:600">' + b.band.replace('-', '–') + ' m</text><text class="bandlab" x="' + (L - 10) + '" y="' + (r0 + rowH / 2 + 13) + '" text-anchor="end">' + fmt(b.n_values) + '</text>';
+      b.series.forEach(function (r) {
+        var v = r[1], clip = Math.abs(v) > top;
+        g += '<rect x="' + (x(r[0]) + bw * .12).toFixed(1) + '" y="' + Math.min(y(v), y(0)).toFixed(1) + '" width="' + (bw * .76).toFixed(1) + '" height="' + Math.max(Math.abs(y(v) - y(0)), .6).toFixed(1) + '" fill="' + (v >= 0 ? 'var(--warm)' : 'var(--cool)') + '" opacity="' + (r[2] >= 2 ? 1 : .35) + '"><title>' + b.band + ' m, ' + r[0] + ': ' + (v > 0 ? '+' : '') + fmt(v, 2) + ' ' + a.units + ' · ' + r[2] + ' cruise' + (r[2] > 1 ? 's' : '') + ', ' + fmt(r[3]) + ' values' + (clip ? ' · off this scale' : '') + '</title></rect>';
+        if (clip) g += '<path d="M' + (x(r[0]) + bw / 2) + ' ' + (v > 0 ? r0 - 1 : r0 + rowH + 1) + 'l-3 ' + (v > 0 ? 5 : -5) + 'h6z" fill="var(--muted)"/>';
+      });
+      g += '<line class="zero" x1="' + L + '" x2="' + (W - R) + '" y1="' + y(0) + '" y2="' + y(0) + '"/>';
+      var tr = b.trend, ty = function (yr) { return y(tr.intercept + tr.per_decade / 10 * yr); };
+      if (trendy) g += '<line class="trend" x1="' + (x(tr.from) + bw / 2) + '" x2="' + (x(tr.to) + bw / 2) + '" y1="' + ty(tr.from) + '" y2="' + ty(tr.to) + '"/>';
+      g += '<text class="lab-m" x="' + (W - R + 12) + '" y="' + (r0 + rowH / 2 + 4) + '">' + (tr.per_decade >= 0 ? '+' : '−') + fmt(Math.abs(tr.per_decade), Math.abs(tr.per_decade) < 0.1 ? 3 : 2) + ' / decade</text>';
+    });
+    for (var yr = 1950; yr <= 2020; yr += 10) g += '<text class="tick" x="' + (x(yr) + bw / 2) + '" y="' + (H - 6) + '" text-anchor="middle">' + yr + '</text>';
+    g += '<text class="tick" x="' + (L - 10) + '" y="' + (T - 8) + '" text-anchor="end">depth · values</text><text class="tick" x="' + (W - R + 12) + '" y="' + (T - 8) + '">trend 1984–2021</text>' +
+      '<text class="tick" x="' + ((L + W - R) / 2) + '" y="' + (T - 8) + '" text-anchor="middle">each row ±' + fmt(top, top < 1 ? 2 : 1) + ' ' + esc(a.units) + ', one scale for every band</text>';
+    return '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="yearly anomaly of ' + esc(c.label) + ' in ' + nb + ' depth bands, 1949–2026">' + g + '</svg>' +
+      '<p class="credit"><span class="sw" style="background:var(--nino);outline:1px solid var(--border)"></span>strong El Niño (NOAA ONI ≥ +1.5; JJA ' + D.oni.latest[1] + ' is +' + D.oni.latest[3] + ') · <span class="sw" style="background:var(--warm)"></span>above the 1993–2013 normal · <span class="sw" style="background:var(--cool)"></span>below · faded: one cruise that year, marked ▲ at the row edge when off the shared scale (set by the years with two or more cruises)' + (trendy ? ' · dashed: least-squares trend over years with two or more cruises' : '') + '</p>';
+  }
+  function scaleChart(c) {
+    var sc = c.scale;
+    if (!sc) return '<div class="empty">No scale drawn for DIC: its familiar figure is the Bjerrum plot in Part 1, the three carbon species by pH with CalCOFI’s surface water marked. The record’s DIC runs ' +
+      fmt(c.rec.series[0].observed.p05) + '–' + fmt(c.rec.series[0].observed.p95) + ' µmol/kg (5th–95th percentile).</div>';
+    var W = 1000, L = 20, R = 20, rows = c.rec.series.length, top = 30 + rows * 36, axY = top + 6, H = axY + 44;
+    var dm = sc.domain, log = sc.type === 'log';
+    var x = function (v) { v = Math.min(Math.max(v, dm[0]), dm[1]); return log ? L + (Math.log10(v) - Math.log10(dm[0])) / (Math.log10(dm[1]) - Math.log10(dm[0])) * (W - L - R) : L + (v - dm[0]) / (dm[1] - dm[0]) * (W - L - R); };
+    var g = '';
+    if (sc.type === 'beaufort') {
+      sc.beaufort.forEach(function (b, i) { var x0 = x(b[1]), x1 = x(i < 12 ? sc.beaufort[i + 1][1] : dm[1]);
+        g += '<rect x="' + x0 + '" y="' + (axY - 14) + '" width="' + (x1 - x0) + '" height="14" fill="' + (i % 2 ? 'var(--panel)' : 'var(--accent-bg)') + '"/><text class="tick" x="' + ((x0 + x1) / 2) + '" y="' + (axY - 3) + '" text-anchor="middle">' + b[0] + '</text>';
+        if (i >= 3 && i % 3 === 0 || i === 12) g += '<text class="lab-m" x="' + ((x0 + x1) / 2) + '" y="' + (axY + 50) + '" text-anchor="middle">' + b[3] + '</text>'; });
+    }
+    var tk = log ? [] : ticks(dm[0], dm[1], 10);
+    if (log) for (var e = Math.log10(dm[0]); e <= Math.log10(dm[1]); e++) tk.push(Math.pow(10, e));
+    tk.forEach(function (v) { g += '<line class="gr" x1="' + x(v) + '" x2="' + x(v) + '" y1="16" y2="' + axY + '"/><text class="tick" x="' + x(v) + '" y="' + (axY + 16) + '" text-anchor="middle">' + (log && v >= 1000 ? fmt(v) : fmt(v, 2)) + '</text>'; });
+    g += '<line class="ax" x1="' + L + '" x2="' + (W - R) + '" y1="' + axY + '" y2="' + axY + '"/>';
+    var bd = c.rec.bounds;
+    [['valid_min', bd.valid_min], ['valid_max', bd.valid_max]].forEach(function (p) { if (p[1] != null && p[1] >= dm[0] && p[1] <= dm[1]) g += '<line class="bnd" x1="' + x(p[1]) + '" x2="' + x(p[1]) + '" y1="10" y2="' + axY + '"/><text class="lab-m" x="' + x(p[1]) + '" y="9" text-anchor="' + (p[0] === 'valid_min' ? 'start' : 'end') + '">declared ' + (p[0] === 'valid_min' ? 'minimum ' : 'maximum ') + p[1] + '</text>'; });
+    c.rec.series.forEach(function (s, i) {
+      var o = s.observed, yy = 34 + i * 36, col = dsColor(s.dataset_key);
+      var lo = Math.max(o.p05, log ? dm[0] : o.p05);
+      g += '<rect x="' + x(lo) + '" y="' + yy + '" width="' + Math.max(2, x(o.p95) - x(lo)) + '" height="12" rx="3" fill="' + col + '" opacity=".85"/><line x1="' + x(o.min > (log ? dm[0] : -1e9) ? o.min : dm[0]) + '" x2="' + x(o.max) + '" y1="' + (yy + 6) + '" y2="' + (yy + 6) + '" stroke="' + col + '" stroke-width="1"/>' +
+        '<circle cx="' + x(o.p50) + '" cy="' + (yy + 6) + '" r="5" fill="var(--bg)" stroke="var(--fg)" stroke-width="2"/>' +
+        '<text class="lab-m" x="' + Math.min(x(lo), W - 420) + '" y="' + (yy - 5) + '">' + esc(dsName(s.dataset_key)) + ' · 5–95 % ' + fmt(o.p05, 2) + '–' + fmt(o.p95, 2) + ', median ' + fmt(o.p50, 2) + '</text>';
+      if (sc.type === 'beaufort') g += '<circle cx="' + x(o.p50 / 1.9438) + '" cy="' + (yy + 6) + '" r="5" fill="none" stroke="var(--accent)" stroke-width="2" stroke-dasharray="2 2"/><circle cx="' + x(o.p95 / 1.9438) + '" cy="' + (yy + 6) + '" r="4" fill="none" stroke="var(--accent)" stroke-width="2" stroke-dasharray="2 2"/>';
+    });
+    // references below the axis, staggered so labels never collide
+    var placed = [], refs = (sc.refs || []).slice().sort(function (a, b) { return a.v - b.v; });
+    refs.forEach(function (r) {
+      var off = r.off || r.v > dm[1], xv = off ? W - R : x(r.v), lab = r.label + (off ? ' ' + fmt(r.v) + ' →' : ' · ' + fmt(r.v, 2));
+      var w = lab.length * 6.4, lv = 0;
+      while (placed.some(function (p) { return p.lv === lv && Math.abs(p.x - xv) < (p.w + w) / 2 + 8; })) lv++;
+      placed.push({ x: xv, w: w, lv: lv });
+      var ly = axY + 36 + lv * 17, anchor = xv > W - 140 ? 'end' : xv < 140 ? 'start' : 'middle';
+      var col = r.kind === 'threshold' ? 'var(--warn)' : r.kind === 'physical' ? 'var(--accent)' : 'var(--fg)';
+      if (r.lo != null) g += '<rect x="' + x(r.lo) + '" y="' + (axY + 2) + '" width="' + Math.max(2, x(r.hi) - x(r.lo)) + '" height="6" fill="' + col + '" opacity=".6"/>';
+      g += '<line class="lead" x1="' + xv + '" x2="' + xv + '" y1="' + (axY + 2) + '" y2="' + (ly - 11) + '"/><path d="M' + xv + ' ' + (axY + 1) + 'l-4 7h8z" fill="' + col + '"/>' +
+        '<text class="lab" x="' + xv + '" y="' + ly + '" text-anchor="' + anchor + '" style="fill:' + col + '"><title>' + esc(r.src) + '</title>' + esc(lab) + '</text>';
+    });
+    (sc.flags || []).forEach(function (f) { var fx = f.off || f.v > dm[1] ? W - R : x(f.v); g += '<path class="flag" d="M' + fx + ' ' + (axY - 1) + 'l-5 -9h10z"><title>' + esc(f.text) + '</title></path>'; });
+    if (sc.zero_pct) g += '<text class="lab" x="' + (x(0) + 6) + '" y="16" style="fill:var(--warn);font-weight:600">' + sc.zero_pct + ' % of values are exactly 0</text>';
+    var maxLv = placed.reduce(function (m, p) { return Math.max(m, p.lv); }, 0);
+    H = Math.max(H, axY + 46 + maxLv * 17 + (sc.type === 'beaufort' ? 12 : 0));
+    return '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + esc(c.label) + ' on a familiar scale">' + g + '</svg>' +
+      '<p class="credit">' + (log ? 'log scale · ' : '') + 'bars: the record’s 5th–95th percentile per series; line: minimum to maximum; ring: median' + (sc.type === 'beaufort' ? '; dashed rings: the same values read as knots' : '') +
+      ' · marks: ' + refs.map(function (r) { return esc(r.label) + ' (' + esc(r.src) + ')'; }).join('; ') + (sc.src ? ' · ' + esc(sc.src) : '') + '</p>';
+  }
+
+  // ── part 2: how ─────────────────────────────────────────────────────────────────────────────
+  function spec(nm) {
+    var lo = 300, hi = 850, p = function (v) { return ((v - lo) / (hi - lo) * 100).toFixed(1) + '%'; };
+    return '<div class="spec" role="img" aria-label="read at ' + nm + ' nanometres"><div class="mk" style="left:' + p(nm) + '"><span>' + nm + ' nm</span></div>' +
+      [[350, 'UV'], [450, ''], [550, 'visible'], [650, ''], [800, 'near-IR']].map(function (a) { return '<span class="ax" style="left:' + p(a[0]) + '">' + a[0] + (a[1] ? ' ' + a[1] : '') + '</span>'; }).join('') + '</div>';
+  }
+  function howCards(c) {
+    return c.how.map(function (h) {
+      var s = c.rec.series.filter(function (x) { return x.dataset_key === h.dataset; })[0] || {};
+      return '<div class="how-card"><div class="how-top">' + PG[h.platform].replace('<svg', '<svg class="pg"') + '<div><div class="ds"><span class="sw" style="background:' + dsColor(h.dataset) + '"></span>' + esc(dsName(h.dataset)) + ' · ' + PLAT[h.platform] + '</div><div class="ins">' + esc(h.instrument) + '</div></div></div>' +
+        '<p>' + esc(h.principle) + (h.src_note ? ' <span class="credit">(' + esc(h.src_note) + ')</span>' : '') + '</p>' +
+        (h.steps ? '<ul class="steps">' + h.steps.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : '') +
+        (h.nm ? spec(h.nm) : '') +
+        '<div class="meta">' + (s.n_values ? '<span class="chip">' + fmt(s.n_values) + ' values</span><span class="chip">' + s.year_min + '–' + s.year_max + '</span><span class="chip">column ' + esc(s.source_column) + '</span>' +
+          (s.qual_column ? '<span class="chip chip-ok">flag ' + esc(s.qual_column) + '</span>' : '<span class="chip chip-warn">no flag at this grain</span>') : '') +
+          (h.precision ? '<span class="chip chip-accent">' + esc(h.precision) + '</span>' : '') + '</div>' +
+        '<a class="pin" href="' + h.url + '"><span class="disc"><svg viewBox="0 0 24 24"><use href="#' + c.icon + '"/></svg></span>' + esc(h.page) + ' on calcofi.org ↗</a></div>';
+    }).join('');
+  }
+  function howCol2(c) {
+    var bands = Object.keys(c.rec.series[0].depth_bands), out = '';
+    bands.forEach(function (b) {
+      out += '<div class="dl">' + b + ' m</div><div class="bars">' + c.rec.series.map(function (s) {
+        var tot = 0; Object.keys(s.depth_bands).forEach(function (k) { tot += s.depth_bands[k]; });
+        var p = tot ? s.depth_bands[b] / tot * 100 : 0;
+        return '<div class="bar" title="' + esc(dsName(s.dataset_key)) + ': ' + fmt(s.depth_bands[b]) + ' values, ' + p.toFixed(1) + ' %" style="width:' + Math.max(p, p > 0 ? 0.6 : 0).toFixed(1) + '%;background:' + dsColor(s.dataset_key) + '"></div>';
+      }).join('') + '</div>';
+    });
+    return out;
+  }
+  function howExtra(c) {
+    if (c.key === 'chlorophyll_a') return '<h3 style="margin-top:22px">The method is the chemistry</h3><div class="what-fig" style="padding:14px"><div class="mols">' +
+      '<div class="mol-card">' + mol('chlorophyll_a') + '<div class="cap"><b>chlorophyll-a</b><br><span class="mono">reading 1, before acid</span></div></div>' +
+      '<div class="arrow"><b>→</b>acid: H⁺ in,<br>Mg²⁺ out</div>' +
+      '<div class="mol-card">' + mol('pheophytin_a') + '<div class="cap"><b>pheophytin-a</b><br><span class="mono">reading 2, after acid</span></div></div></div>' +
+      '<p class="note" style="margin:10px 0 0">The fluorescence drop between the two readings is the chlorophyll-a; what is left is reported as phaeopigment. calcofi.org warns that chlorophyll-b reads as “phaeopigment” too.</p></div>';
+    if (c.key === 'dic' && c.calcofi_quote) return '<h3 style="margin-top:22px">Why CalCOFI samples it, in its own words</h3><p class="wp">“' + esc(c.calcofi_quote) + '” <a href="' + c.how[0].url + '">calcofi.org ↗</a></p>';
+    return '';
+  }
+
+  // ── part 3: why ─────────────────────────────────────────────────────────────────────────────
+  function eov(c) {
+    var e = c.eov;
+    return '<div class="eyebrow">Essential Ocean Variable</div><div class="nm">' + esc(e.name) + '</div>' +
+      '<div class="note">' + esc(e.membership) + '</div>' +
+      (e.questions ? '<h3 style="margin-top:12px">GOOS asks</h3><ul>' + e.questions.map(function (q) { return '<li><i>' + esc(q) + '</i></li>'; }).join('') + '</ul>' : '') +
+      (e.phenomena ? '<h3 style="margin-top:12px">Phenomena it captures</h3><div class="ph">' + e.phenomena.map(function (p) { return '<span class="chip chip-accent">' + esc(p) + '</span>'; }).join('') + '</div>' : '') +
+      '<p class="credit"><a href="' + e.doc + '">GOOS specification sheet ↗</a> · quoted, not copied</p>';
+  }
+  function wp(c) {
+    if (!c.wp || !c.wp.extract) return '';
+    var t = c.wp.extract.split(/(?<=\.)\s/).slice(0, 2).join(' ');
+    return '<p class="wp">' + esc(t) + '<br><span class="credit">Wikipedia, <a href="' + c.wp.url + '?oldid=' + c.wp.revision + '">' + esc(c.wp.title) + '</a>, revision ' + c.wp.revision + ' · CC BY-SA 4.0 · borrowed context, shown beside the sentence, never inside it</span></p>';
+  }
+
+  // ── the shapes, for the build section ───────────────────────────────────────────────────────
+  $('#shape-rec').textContent = '{ "key": "oxygen_umol_kg", … ,\n  "face_kind": "structure",\n  "chem":   [ { "chebi": "CHEBI:15379", "role": "the thing", "via": "nerc_s27" } ],\n  "method": [ { "dataset_key": "calcofi_bottle", "platform": "bottle",\n                "instrument": "Automated Winkler titrator, UV end point",\n                "principle": "Carpenter (1965) modification of Winkler …", "nm": 350,\n                "ref": ["carpenter1965"], "calcofi_org": "…/bottle-sampling-methods/#:~:text=Dissolved%20Oxygen%20Sampling" }, … ],\n  "scale":  [ { "v": 61.0, "label": "hypoxic (1.4 ml/L)", "kind": "threshold", "ref": ["bograd2008"] },\n              { "v": 245.2, "label": "air-saturated", "kind": "computed", "how": "gsw.O2sol at the surface medians" } ],\n  "why":    { "eov": "Oxygen", "text": "Below the mixed layer …", "ref": ["bograd2008"], "status": "proposed" },\n  "anomaly": { "band_m": [200, 300], "baseline": [1993, 2013],\n               "series": [[1950, 7.34, 2], … , [2021, -8.96, 2]],\n               "trend": { "per_decade": -7.221, "from": 1984, "to": 2021 } } }';
+  $('#shape-media').textContent = '{ "schema_version": "1.0", "fetched": "2026-09-11",\n  "measurements": { "oxygen_umol_kg": {\n    "nerc": { "p01": "DOXMZZXX", "pref": "Concentration of oxygen {O2 CAS 7782-44-7} per unit mass …",\n              "definition": "Concentration of dissolved oxygen per unit mass …", "license": "CC BY 4.0",\n              "s27": { "id": "CS002779", "chebi": "CHEBI:15379", "cas": "7782-44-7" },\n              "a05": "EV_OXY", "p07": "moles_of_oxygen_per_unit_mass_in_sea_water" },\n    "structures": [ { "chebi": "CHEBI:15379", "name": "dioxygen", "formula": "O2", "charge": 0,\n                      "mass": 31.998, "viewBox": "0 0 220 180", "svg_inner": "<path …/>",\n                      "drawn_by": "RDKit 2026.03 from the ChEBI molfile", "license": "CC BY 4.0 (ChEBI)" } ],\n    "text": { "source": "wikipedia", "title": "Ocean deoxygenation", "revision": 1354922617,\n              "license": "CC BY-SA 4.0", "extract": "…" } } } }';
+
+  // ── credits ─────────────────────────────────────────────────────────────────────────────────
+  $('#credits').innerHTML = [
+    'Structures: ChEBI (EMBL-EBI), CC BY 4.0, drawn from its molfiles by RDKit (BSD-3). Concepts: NERC Vocabulary Server (BODC), CC BY 4.0.',
+    'Sea-salt composition: IOC, SCOR & IAPSO (2010) The international thermodynamic equation of seawater – 2010, IOC Manuals and Guides 56, Table D.3; Millero, Feistel, Wright & McDougall (2008) Deep-Sea Research I 55:50–72.',
+    'Computed: TEOS-10 GSW (gsw.t_freezing, gsw.O2sol after Garcia & Gordon 1992, Limnology & Oceanography 37:1307); PyCO2SYS 1.8.3 (Humphreys et al. 2022, Geoscientific Model Development 15:15) with Lueker, Dickson & Keeling (2000) constants.',
+    'Methods: calcofi.org Bottle sampling methods and CTD FAQ circa 2020, read 2026-09-11; NCEI accession 0301029 for the DIC instruments.',
+    'Why: GOOS Essential Ocean Variable specification sheets (UNESCO-IOC; oxygen, nutrients, inorganic carbon 2017-08-25; subsurface temperature and salinity; phytoplankton 2.0, 2025; microbes pilot, 2026). Bograd et al. 2008 (GRL 35:L12607); Bograd et al. 2015 (DSR II 112:42); Bond et al. 2015 (GRL 42:3414); Feely et al. 2008 (Science 320:1490); Dugdale & Goering 1967 (L&O 12:196); Lynn & Simpson 1987 (JGR 92:12947); Bakun 1973 (NOAA Tech. Rep. NMFS SSRF-671); Jacox et al. 2018 (JGR Oceans 123:7332). The authored sentences are proposals for a CalCOFI scientist to review.',
+    'El Niño shading: NOAA Climate Prediction Center, Oceanic Niño Index (oni.ascii.txt), strong years where any 3-month ONI ≥ +1.5. Anomalies: v2026.09.10 obs_env joined to climatology on dataset, site, month and 10 m bin, qual_ok only, mean per cruise then per year.',
+    'Scales: Wikipedia, pH (revision 1370268150) and Beaufort scale (revision 1365957641), CC BY-SA 4.0; US EPA drinking-water standard for nitrate (10 mg/L as N). Leads quoted from Wikipedia under CC BY-SA 4.0 with their revisions.'
+  ].map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('');
+
+  // ── select ──────────────────────────────────────────────────────────────────────────────────
+  function select(key, push) {
+    var c = D.cast.filter(function (x) { return x.key === key; })[0] || D.cast[0];
+    document.querySelectorAll('.pill').forEach(function (p) { p.setAttribute('aria-pressed', p.dataset.key === c.key ? 'true' : 'false'); });
+    $('#head-light').innerHTML = head(c); $('#head-dark').innerHTML = head(c);
+    $('#what-fig').innerHTML = whatFig(c); $('#chain').innerHTML = chain(c); $('#kinds').innerHTML = kinds();
+    $('#how-cards').innerHTML = howCards(c); $('#how-col').innerHTML = howCol2(c); $('#how-extra').innerHTML = howExtra(c);
+    $('#scale-h').innerHTML = 'The familiar scale · ' + esc(c.label) + (c.units_disp && c.units_disp !== 'pH' ? ' <span class="u">(' + esc(c.units_disp) + ')</span>' : '');
+    $('#scale').innerHTML = scaleChart(c);
+    $('#flags').innerHTML = ((c.scale && c.scale.flags) || []).map(function (f) { return '<li>' + esc(f.text) + '</li>'; }).join('');
+    $('#anom-h').textContent = 'The record’s own history' + (c.anomaly ? ' · ' + c.label + ' in every depth band it is measured in' : '');
+    $('#anom').innerHTML = c.anomaly ? anomalyBands(c) + (c.anomaly.deeper.length ? '<p class="note">Deeper than 500 m: ' + c.anomaly.deeper.map(function (d) { return fmt(d.n_obs) + ' values at ' + d.band + ' m'; }).join(', ') +
+      ' have no normal to depart from, because the release’s climatology stops at the 500 m bin. Carrying it to the bottom is one argument of <span class="mono">build_climatology()</span> and puts these bands on the page too.</p>' : '') +
+      '<p class="note">The bottle record ends in 2021; the shaded years after it are El Niños the release cannot yet see.</p>' : '<div class="empty">' + esc(c.anomaly_none) + '</div>';
+    $('#eov').innerHTML = eov(c); $('#sentence').innerHTML = sentence(c) + '<div class="legend"><span>NERC</span><span class="l-rec">record</span><span class="l-why">authored' + (c.why.cites.length ? ', cited' : ', needs a citation') + '</span></div>'; $('#wp').innerHTML = wp(c);
+    if (push) history.replaceState(null, '', '#' + c.key);
+  }
+  select((location.hash || '').slice(1) || 'nitrate', false);
+})();
+</script>

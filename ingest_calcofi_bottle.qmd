@@ -646,6 +646,29 @@ of 24.19–27.06 PSU to 568 m across 39 stations with `S_qual` 254–344 — a w
 not a sentinel, and a floor that caught it would delete provider-flagged data while one
 that spared it would miss the 9.50 (question Q13).
 
+So the 9.50 and the 21.06 go with their bottles instead (2026-09-11, found again by the
+measurement faces' familiar scale): **a bottle whose temperature is impossible loses its
+salinity too**. Those two bottles are the 99.00 °C and 56.87 °C ones; after the bounds
+delete their temperature, oxygen and density, the salinity was the only reading either
+had left, and a salinity beside an impossible temperature on the same bottle is the same
+corrupt record, not a second opinion. The rule is written for the class, and today it
+removes exactly those two values.
+
+Three more series gained bounds the same day. **Nitrate**: seven bottles read 56–95
+µmol/L (bottle ids 508764–508823, one cruise) beside 0.6–0.97 µmol/L phosphate, 6–10
+µmol/L silicate and 4.3–6.1 ml/L oxygen — a nitrate:phosphate ratio near 100 in
+oxygenated water, which no ocean holds (the deep North Pacific, the world's most
+nitrate-rich water, sits in the 40s at a ratio near 15); they read like a slipped decimal.
+The ceiling of 60 µmol/L sits above CalCOFI's real deep tail, which runs continuously to
+52 µmol/L, and removes six of the seven (66–95); the seventh, 56.0, is impossible only by
+its phosphate, not by its size, so a bound cannot take it without cutting into that tail
+and it stays until the provider answers question 14. The floor of −1 keeps the five
+blank-subtraction negatives (to −0.4). **Chlorophyll-a** and **phaeopigment** get floors
+only — −1 and −5, which keep the rounding negatives of the acid-ratio calculation
+(phaeopigment to −3.89; calcofi.org notes chlorophyll-b reads as phaeopigment) and catch
+a sentinel — and no ceiling: a red-tide bloom off San Diego reaches tens of µg/L, and the
+record's 66 is one.
+
 ```{r}
 #| label: bounds
 
@@ -659,13 +682,29 @@ bottle_bounds <- tibble::tribble(
   "sigma_theta",             15,          35,
   "oxygen_ml_l",           -0.5,          15,
   "oxygen_umol_kg",         -20,         700,
-  "oxygen_saturation",       -1,         250)
+  "oxygen_saturation",       -1,         250,
+  "nitrate",                 -1,          60,
+  "chlorophyll_a",           -1,          NA,
+  "phaeopigment",            -5,          NA)
 d_meas_type <- declare_measurement_bounds(bottle_bounds, meas_type_csv)
 
 # report BEFORE deleting: `undeclared` is a finding too — the bottle types with no
 # bound are the ones still to take to the provider
 bounds_pre <- check_measurement_bounds(con, "bottle_measurement", mt = d_meas_type)
 bounds_datatable(bounds_pre)
+
+# a bottle whose temperature is impossible loses its salinity too: collect those
+# bottles BEFORE the bounds delete their temperature, then remove the salinity
+t_lo <- d_meas_type$valid_min[d_meas_type$measurement_type == "temperature"]
+t_hi <- d_meas_type$valid_max[d_meas_type$measurement_type == "temperature"]
+n_sal_corrupt <- dbExecute(con, glue("
+  DELETE FROM bottle_measurement
+  WHERE measurement_type = 'salinity'
+    AND bottle_id IN (
+      SELECT bottle_id FROM bottle_measurement
+      WHERE measurement_type = 'temperature'
+        AND measurement_value NOT BETWEEN {t_lo} AND {t_hi})"))
+say(glue("salinity removed beside an impossible temperature: {n_sal_corrupt} value(s)"))
 
 oob_tally <- drop_out_of_bounds(con, "bottle_measurement", mt = d_meas_type)
 say(glue(
