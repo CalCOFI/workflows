@@ -3,7 +3,7 @@
 **Status:** proposed 2026-09-11 from the mockup; **Ben decided the five open questions the same evening** (§ Open questions →
 Answers): the silhouette is the constant, full-colour photos where a licensed one exists, non-commercial licences accepted,
 full-colour ink, the ship stays on the ladder, and the three courtesy emails are drafted (Appendix B; Gmail drafts created
-2026-09-11, unsent). Nothing is built. **Spec:** the mockup artifact *CalCOFI Species Faces* —
+2026-09-11, unsent). **EXECUTED 2026-09-11: live at calcofi.io/species/ (CalCOFI.github.io PR #20, merge 3a49931); calcofi4db 4.13.0 on main; docs § 4.2.5 live; the full record in § Measured.** **Spec:** the mockup artifact *CalCOFI Species Faces* —
 https://claude.ai/code/artifact/34135a47-7597-41af-ad58-5328bde815dd — ten cast taxa (sardine, anchovy, hake, lanternfish,
 krill, market squid, sooty shearwater, common dolphin, *Chaetoceros*, *Sebastes*), every asset fetched live on 2026-09-11 with its
 licence and credit, the composed head in both themes, the face options, the treatments, the size ladder, the sentence, the
@@ -66,7 +66,8 @@ non-commercial licenses accepted, full color ink, ship stays, yes compose courte
   at `LHDataIll.php?GSID=Genus!species` → `images/ill/Genus!speciesPage.gif`, from the 1989 NOAA report, a US Government
   work in the public domain; the site asks to be cited. It is the picture of what the ichthyoplankton and CUFES datasets record.
 - **F7** A CalCOFI-native size ladder needs no invented numbers: the bongo mesh (505 µm) and ring (71 cm) are the
-  programme's own, the quarter (24.26 mm) and a person (1.7 m) are universal, R/V Reuben Lasker (63.8 m) is the flourish.
+  programme's own, the quarter (24.26 mm) and a person (1.7 m) are universal, R/V Reuben Lasker (63.6 m; NOAA OMAO states
+  208.70 ft — the 63.8 m first written here was a rounding slip, corrected by WS-F2b 2026-09-11) is the flourish.
 - **F8** "Observations" on the species page counts CUFES rows, not organisms (§ Context). The record needs `n_present`
   beside `n_obs`; the page needs the honest word in the meantime.
 
@@ -258,7 +259,84 @@ coverage, the three emails waiting in his Gmail drafts, and what waits for the n
 
 ## Measured (appended per workstream as it ships)
 
-- 2026-09-11 — the probe: Appendix C. Nothing else yet.
+- 2026-09-11 — the probe: Appendix C.
+- 2026-09-11 — **F1 shipped** (calcofi4db 4.13.0 on main, `d8ca7e24`; `[ FAIL 0 | WARN 2 | SKIP 0 | PASS 3165 ]`; workflows
+  `59282a4` carries the RELEASES.md line). `obs_bio` of v2026.09.10: rows with `value = 0` are 85.0 % of calcofi_phytoplankton,
+  82.9 % of calcofi_phyllosoma, 75.5 % of swfsc_cufes, 67.5 % of cdfw_dungeness-crab, 42.5 % of cce-lter_zoodb and 7.7 % of
+  cce-lter_zooscan (§ Context omitted zooscan); farallon_bird-mammal, cce-lter_euphausiids, sio_mesopelagic-fish and
+  swfsc_ichthyo are positive-only; cdfw_dungeness-crab holds the only 5 NULL values. The sardine `worms:217452`: 49,572 records /
+  10,643 observations in swfsc_cufes, 13,326 / 13,326 in swfsc_ichthyo. `n_present` reaches `taxa.json` (schema 1.1) at the next
+  release.
+- 2026-09-11 — **F2b shipped** (CalCOFI.github.io `ws-f2b` `8a9283d5`): of 1,026 species-rank taxa in taxa.json v2026.09.10, 572 are
+  fish (572 matched to FishBase, 100 %) and 454 non-fish (256 matched to SeaLifeBase, 56.4 %; the 198 unmatched are seabirds and
+  phytoplankton SeaLifeBase lacks); 828 `sizes.json` entries, 715 with a length, 218 with an early-life length; 806 matched by
+  accepted name, 15 by synonym, 9 by a dataset's own name; 397 s. The cast reproduced exactly (hake: FishBase's 83 TL vs WoRMS's
+  91; dolphin 260 TL). Two FishBase larvae rows carry `TransLengthMin > Max` as entered (*Vinciguerria poweriae*, *Cololabis
+  saira*); kept verbatim. The ship is 63.6 m at the source (F7 corrected).
+- 2026-09-11 — **F4 shipped** (CalCOFI.github.io `ws-f4` `821dc03`): phylum/class silhouettes in the tree (18 px, `vertical-align:
+  middle` or the row grows 26 → 30 px) and a six-class strip on the Life tile, computed in Liquid from `taxa.json` +
+  `taxa_media.json`; the tile is 230 → 230 px at 1470 and 232.4 → 225.4 px at 375 against `main`; 0 of the 40 phylum/class nodes
+  are in the ten-taxon fixture (the real sidecar fills them). `check_layout.py` carries 18 failures that pre-exist on `main`
+  (2 on `/`'s Data section, 16 on `/measurements/`), none in F4's files.
+- 2026-09-11 — **F3 shipped** (CalCOFI.github.io `ws-f3` `d5c8003` + `48f4049`): the face row, sentence, glance, ladder, beside figure
+  and plate against the fixture; 10 of 2,410 pages get a face (10 silhouettes, 10 photos, 7 sizes); every one of the 2,400 pages
+  without a sidecar entry differs from `main`'s build in exactly two ways — the sentence's record part and D9's stat word
+  (`observations` → `records`, because `n_present` is not in the record until the next release) — and in nothing else.
+  `taxa.json` carries no authority string, so the `s-au` clause is omitted (never fetched). `check_jsonld.py` finds an
+  `ImageObject` with `license` + `creditText` on every page with a photo; `check_layout.py` passes on the four pages at
+  1470/375 in both themes (0 new failures against `main`'s 18). The NC label is `cc-chip-na` (`--warn` is reserved for "needs
+  attention"). The fixture's *Chaetoceros* lead is cut after an initial ("C. G.") — the page's own truncation refuses to cut
+  after an initial; the fetcher's sentence rule must too.
+- 2026-09-11 — **F5 shipped** (docs `ws-f5` `52f92e6` → main; workflows `ws-f5` `41d6b90` → main): `db.qmd` § 4.2.5 *A face for
+  every species page* with `{#fig-species-face}` (the mockup's light head; the integrator swaps in the live shot), BibTeX
+  `matarese1989` + `moser1996`; the whole book renders html 37.8 s, docx 8.1 MB, pdf 7.5 MB, 0 warnings; no count typed. The
+  `taxon-reference` skill carries the *Species faces* pointer.
+- 2026-09-11 — **F2a shipped and the full fetch ran** (CalCOFI.github.io `ws-f2a` → `species-faces`). The cast reproduces all ten
+  silhouettes exactly (uuid, licence, credit, `taxon_shown`, `steps_up`); photos differ only by ranking upward. The full run:
+  2,410 taxa in 9,804 s cold (4.07 s/taxon with six workers — the 1.2 h projection came from a seabird-heavy slice; fishes with
+  Commons categories and NOAA plates are slower), then 158 s from cache. **Coverage on v2026.09.10: silhouette 2,396 (99.4 %; the
+  14 misses are the record's 14 nameless taxa), photo 2,082 (86.4 %), drawing 602 (25.0 %), plate 158 (fishes AFSC covers),
+  size 718 (29.8 %), text 1,566 (65.0 %); 381 silhouettes stand in from more than two ranks up.** Photo sources: iNaturalist 1,455
+  · Commons 403 · GBIF 224; licences: CC BY-NC 4.0 732 · CC BY 4.0 623 · public domain 334 · CC BY-SA 114 · NC-SA 90. Published to
+  `gs://calcofi-files-public/species-media/v2026.09.10/` (2,398 objects, 355 MB, `taxa_media.json` 33 MB). Six fetcher fixes the
+  integration found, each a measured incident in the code: the sentence rule cut after an initial ("C. G." Ehrenberg); `sizes.json`
+  is flat, not wrapped in `fishbase`, so sizes and `refs{}` never merged; PhyloPic's `filter_name` is fuzzy and the first item
+  with an image was taken (Leach's storm petrel wore the water mite *Hygrobates*, which lists "Hydrobates" as a synonym — a node
+  whose TITLE is the query now wins, then a synonym match; 30 silhouettes changed); a Commons *category* file is not curated (the
+  gull's category held an Alcatraz building, Teuthida's a sand sculpture and a NASA lab — only P18 is curated, decided at ranking
+  time, 691 photos moved, mostly to iNaturalist's taxon photos); `sweetgum.nybg.org` drops SYNs and urllib's timeout does not
+  bound a connect, so one taxon held the run 40 min (a hard deadline per request, a host dead after three hangs — one hang once
+  skipped 1,368 iNaturalist downloads); the rsync ran before the `cached` stamps existed (the stamped JSON is copied last). Every
+  per-taxon cache record is stamped with the name and ids it was fetched under, so a renamed taxon refetches by itself (Ben's
+  reproducibility question). The checker treats a 403/429 from inaturalist.org / gbif.org *page* links as a bot wall, not a dead
+  link (measured: those hosts answer 403 to a browser User-Agent too). `rank_override.csv` holds six rows from the 30-page review.
+- 2026-09-11 — **F6, the 30-page hand review** (the three most observed taxa in each of the ten classes with the most
+  observations: Teleostei, Malacostraca, Bacillariophyceae, Aves, Dinophyceae, Cephalopoda, Copepoda, Coccolithophyceae,
+  Thaliacea, Gastropoda): first pass found five photos that were not the organism (an Alcatraz building for the western gull, a
+  sand sculpture for Teuthida, sea foam for *Phaeocystis*, a museum accessions-register scan for *Thysanoessa gregaria*, a flock
+  of great shearwaters for the sooty) and one wrong silhouette (a water mite for Leach's storm petrel) — the causes were fixed in
+  the fetcher (Commons category files are not curated; PhyloPic's title beats a synonym) rather than only overridden; second
+  pass: all 30 pages show the organism or nothing, 19 with a photo (11 iNaturalist, 5 Commons, 2 GBIF, 1 NOAA), 11 silhouette
+  only. The merged branch builds (faces on 2,410 of 2,410 pages; the inline tree JSON is 687 KB, was 284 KB), `check_jsonld.py`
+  passes (2,082 `ImageObject`s), `check_layout.py` passes every species assertion at 1470/375 in both themes and fails only the
+  two pre-existing front-door height assertions (the measurements session re-baselines them; its `ws-mcat` also fixes the
+  measurements index's 16 failures, which are the METS null-category drift, not this work). PR CalCOFI.github.io#20 opened as a
+  draft; CI's only red is that pre-existing layout set. One merge trap found: WS-F4 reused WS-F3's `.sp-sil` class, so the page's
+  `width: 100 %; min-height: 72px` grew a tree row to 78 px once a real silhouette existed — the tree glyph is `.sp-tsil`.
+- 2026-09-11 — **LIVE.** PR CalCOFI.github.io#20 merged as `3a49931` after the measurements session's `ws-mcat` (#21) fixed the
+  METS null-category drift on main and re-measured the front-door baseline; CI green (build-and-check on the merged head);
+  Pages deploy run 34588728722 succeeded. Live checks on calcofi.io: the sardine page carries the face row, the storm
+  petrel's silhouette is *Hydrobates pelagicus*, `check_brand.py` passes on `/species/` and `/species/worms-217452/`,
+  `check_layout.py` against the live site passes (ladder 5 marks / 6 references / 25 labels, none overlapping, at 1470 and
+  375 in both themes). `_data/shots.yml` reshot: `images/species_{light,dark}.png`, `images/species_page_{light,dark}.png`
+  (landing `fc5bc97`). Docs: `db.qmd` § 4.2.5's figure is the live sardine head (docs `main`, rebased onto WS-M5 + the header
+  commit, pushed). The bucket prefix holds 5,240 objects (2,396 silhouettes, 2,082 photos, 602 drawings, 158 plates, 1 JSON)
+  after removing 21,702 cache records the broken rsync exclude had uploaded and 14 `index.html` pages the storage-index run
+  wrote (that script now skips `species-media/`, workflows `ddde419`). Coordination with the two other live sessions
+  (measurement faces: the CTD rebuild at its 8 GB cap with swap at 17–18 of 18 GB killed three of this session's runs — builds
+  waited for its `write_parquet`; navbar/brand: pushed calcofi4db 4.13.0 and workflows main on Ben's OK). **Waits for the next
+  release:** `n_present` in `taxa.json` 1.1 (the page then says *observations*). **Waits for Ben:** the three courtesy emails
+  (Gmail drafts), the `GCP_SA_KEY` secret for the weekly `species-media.yml`.
 
 ## Appendix A — `taxa_media.json` in shape (schema 1.0) and the `sizes.json` contract
 
