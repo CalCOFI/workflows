@@ -27,7 +27,12 @@ since 2026-09-04**, v1 superseded, frozen, still served); plans:
   (`--lockup-h`), never a fixed 32 px. `check_brand.py` reports `ver` and a no-param `dflt`
   probe (light, fonts loaded, lockup present) and warns on any product still on v1.
 - `.cc-header`: lockup far left → `https://calcofi.io`; the product's title beside it → its own
-  root (that is how the two links stay distinguishable); the theme toggle at the right — a sun while
+  root with no query or subpath (that is how the two links stay distinguishable). **The lockup's
+  wordmark reads "CalCOFI.io"** (since 2026-09-11, `scripts/build_lockup.py` `WORDMARK`), so the title
+  is the product's own name alone — "Explorer", "Query", "Schema", "ERDDAP", "Docs", "Storage",
+  "Workflows", never "CalCOFI Query" — and no nav link to calcofi.io beside it; calcofi.io itself has
+  no title, only `.cc-tagline` ("open data ecosystem"), and no unread-news dot (it could not know
+  what a visitor had read); the theme toggle at the right — a sun while
   the page is dark, a moon-in-sun while it is light, i.e. what a click switches *to* (MDI `brightness-7`/`-4`,
   calcofi4py's pair; fleet-wide since 2026-08-29, replacing 🌓 — `theme.js` draws it over the snippet's `🌓`
   fallback, `theme.css` exports the masks as `--cc-icon-sun`/`--cc-icon-moon`, and docs' `brand-head.html` /
@@ -48,8 +53,9 @@ includes `libs/brand/quarto_head.html` + `quarto_header.html` via `_quarto.yml`;
 `scripts/brand_inject_html.R` (run by the Pages workflow) injects the same into notebooks
 rendered before 2026-08-25, because re-rendering an ingest for a stylesheet is a pipeline run.
 
-Two traps met on the way: pkgdown 2.2 has **no `html:` navbar component** (use a `link` with
-`icon:` + `class:` and draw it in CSS); Quarto's `book.favicon` with a URL renders
+Two traps met on the way: pkgdown 2.2 has **no `html:` navbar component** — put the lockup in
+`template.includes.before_title` (it lands before the package name + version, as real `<img>`s the
+brand check can see), and give dark mode the navy ground with `template.bslib` `*-dark` variables; Quarto's `book.favicon` with a URL renders
 `href="./https://…"` (download the png).
 
 > Moved out of the root `CLAUDE.md` on 2026-09-03 so it loads on demand; the hard rules stay resident there. Edit this file, not both. Flipped to v2 on 2026-09-04.
