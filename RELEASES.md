@@ -19,6 +19,40 @@ why. The why covers the concept, not the key, so the fifteen oxygen keys share o
 stand-in inherits the pick of the face it borrows, with its own reason ranked beneath it. The
 BibTeX entries live in `../docs/refs/refs.bib`.
 
+## `measurements.json` is schema 1.1: an anomaly per depth band, the face registries, `n_flagged`
+
+The measurements catalog record gains three things, all additive — a 1.0 reader sees the record it
+always saw. **`anomaly`**: for every key the release's `climatology` covers, the yearly departure
+from that baseline in each depth band it is measured in (`obs_env` joined to `climatology` on
+dataset_key, measurement_type, `site_key`, calendar month and 10 m bin), with a 1984–2021
+least-squares trend per decade, the band's extremes, one symmetric `ymax` shared by the key's bands
+and the bands that hold values but reach no baseline listed under `deeper[]` rather than dropped.
+The mean is taken per cruise and then over cruises, and a year of fewer than two cruises stays in
+the series but never steers a trend, an extreme or the scale. A unified key merges its series before
+averaging, each series against the normal of its own `measurement_type`. **The five face
+registries** `metadata/measurement_{face,chem,method,scale,why}.csv` ride on the key when they carry
+a row for it; a `kind = computed` scale mark is recomputed at build from its own `how` (TEOS-10's
+`gsw`) and never read as a typed number, and one this package cannot evaluate says so
+(`computed_at_build: false`). **`n_flagged`** (`n_values − qual_ok_n`) is now on every series and
+every key, and `observed{}` — the range a page quotes — is computed inside the declared bounds
+**and** inside `qual_ok`: a provider's quality flag outranks a physical bound, so a flagged extreme
+that happens to be inside the bounds is no longer advertised as the observed maximum. Measured on
+v2026.09.11: 89 keys, 71 with an anomaly over 362 bands with a normal and 164 deeper bands named,
+48,427 values that a provider flag keeps out of `observed{}`; the record grows 189 KB → 551 KB.
+
+## The climatology goes to the bottom, not to 500 m
+
+`build_climatology()`'s `depth_max_m` defaulted to 500 m — the depth the Explorer's Sections lens
+draws to — and the cap travelled well beyond that lens: on v2026.09.10, 117,302 temperature,
+105,689 salinity, 81,423 oxygen and 26,076 nitrate values below 500 m had no normal to depart from,
+so no product could show a deep anomaly at all. The default is now no depth ceiling: the ≥ 5-cruise
+rule the release already passes is the only rule that decides whether a cell is a baseline, and it
+stops the table where the data thins. Measured on v2026.09.10 at `min_cruises = 5`: 714,882 →
+734,410 rows (+19,528, +2.7 %), deepest bin 500 → 720 m, 8.98 → 9.27 MB of parquet. The change is
+additive: no cell at or above 500 m is added, lost, or changed (the Explorer's own
+`section_clim.sql` returns the identical 21,306 cells above 500 m and 533 new ones at 510–720 m),
+so every existing anomaly reads exactly as before.
+
 # v2026.09.11
 
 ## CTD averages rebuilt from their sensors by the provider's flags

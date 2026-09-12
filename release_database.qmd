@@ -2566,13 +2566,29 @@ if (file.exists(meta_json_path)) {
   # the builder or a break in obs_env, never something a question excuses.
   # `meas_var` is metadata/variable.csv, read once with read_variable() where the registries
   # are loaded and already on coverage.json's variables[]
+  # schema 1.1 (plan 2026-09-11 "Measurement faces", § D6/D8, Appendix A): the record also
+  # carries, per key, the five registries CalCOFI authors under metadata/ —
+  # measurement_{face,chem,method,scale,why}.csv, the page's WHAT / HOW / WHY — and `anomaly`,
+  # the yearly departure from the release's own `climatology` per depth band (obs_env joined on
+  # dataset_key, measurement_type, site_key, calendar month and 10 m bin; qual_ok only, because a
+  # provider's flag outranks a bound in anything derived; the mean per cruise, then per year; a
+  # unified key merges its series first). `observed{}` is now computed inside qual_ok as well as
+  # inside the declared bounds and `n_flagged` (n_values - qual_ok_n) rides beside it, so the
+  # measurement page's flagged heads-up READS the record instead of recomputing it.
+  # Every 1.1 field is additive and absent when its registry is: a metadata/ directory with none
+  # of the five files writes exactly the 1.0 record.
+  # `registries` takes the directory OR a named list of data frames, so when WS-MF1's readers land
+  # this becomes `registries = list(chem = read_measurement_chem(here("metadata/measurement_chem.csv")),
+  # method = …, scale = …, why = …, face = …)` — the validators then run at read time rather than
+  # the builder taking the files on trust.
   meas_rec  <- build_measurements_catalog(
     con_wdl, datasets_rec,
     measurement_type = cat_registries$measurement_type,
     variable         = meas_var,
     category         = cat_registries$category,
     release_version  = release_version,
-    release_date     = as.character(catalog$release_date))
+    release_date     = as.character(catalog$release_date),
+    registries       = here("metadata"))
   meas_path <- write_measurements_catalog(meas_rec, dir_frozen)
   validate_measurements_catalog(meas_path)
   d_meas_chk <- check_measurements_catalog(
