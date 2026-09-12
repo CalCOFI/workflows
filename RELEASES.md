@@ -8,6 +8,17 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## Why each measurement matters: one cited pick, the alternatives beside it
+
+`metadata/measurement_why.csv` now carries, for every measurement key with a face, one authored
+rank-1 sentence about the health of the ocean or the California Current, each tied to a citation
+whose DOI resolves, plus the alternatives a reader can open instead: a second authored line, the
+GOOS Essential Ocean Variable's scientific question quoted verbatim from its specification sheet,
+the Wikipedia article the page leads from, and calcofi.org's own words where a methods page states
+why. The why covers the concept, not the key, so the fifteen oxygen keys share one pick and a
+stand-in inherits the pick of the face it borrows, with its own reason ranked beneath it. The
+BibTeX entries live in `../docs/refs/refs.bib`.
+
 # v2026.09.11
 
 ## CTD averages rebuilt from their sensors by the provider's flags
