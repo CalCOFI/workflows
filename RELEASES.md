@@ -8,6 +8,28 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## Picoplankton counts move to Biology, with a taxon on every row
+
+The CCE-LTER flow-cytometry counts are observations of organisms, so they are now `obs_bio`
+rather than `obs_env` (measurement-faces plan D9; Ben, 2026-09-12). All 60,802 rows carry one
+`measurement_type`, `picoplankton_abundance` (cells per ml), and the population counted moves
+into `obs.taxon_key`: `worms:160572` *Synechococcus* (16,002 rows, 2004–2023) and
+`worms:345515` *Prochlorococcus* (12,789), which therefore get species pages at
+`/species/worms-160572/` and `/species/worms-345515/`. The flow cytometer's other two
+populations are operational, not taxonomic — a size fraction and a trophic fraction — so they
+keep their identity in a declared dataset-local key
+(`cce-lter_picoplankton-bacteria:picoeukaryotes`, 16,009 rows; `…:het_bacteria`, 16,002), the
+same mechanism ZooScan's eggs / multiples / nauplii / others use, and both are declared in
+`check_taxon_ids()`'s allowlist.
+
+Consequence for consumers: the four measurement keys `synechococcus`, `prochlorococcus`,
+`picoeukaryotes` and `het_bacteria` **leave the measurements catalog** — 89 keys / 94 series on
+v2026.09.11 become 85 / 90 — and `obs_env` loses those 60,802 rows (29,838,093 → 29,777,291).
+Their `metadata/measurement_type.csv` rows are **not deleted**: a registry row is statused, never
+removed, and they remain the vocabulary of the dataset's own
+`picoplankton_bacteria_measurement` table, which is still served as a compat view carrying the
+source's four column names.
+
 # v2026.09.11
 
 ## CTD averages rebuilt from their sensors by the provider's flags
