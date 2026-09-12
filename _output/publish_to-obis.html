@@ -301,7 +301,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"release  : {RELEASE} (prefix {RELEASE_PREFIX})"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>release  : v2026.09.10 (prefix ducklake/releases) </code></pre>
+<pre><code>release  : v2026.09.11 (prefix ducklake/releases) </code></pre>
 </div>
 <details class="code-fold">
 <summary>Code</summary>
@@ -374,7 +374,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"materialized the core in {round(difftime(Sys.time(), t0, units = 'secs'))}s"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>materialized the core in 25s </code></pre>
+<pre><code>materialized the core in 21s </code></pre>
 </div>
 <details class="code-fold">
 <summary>Code</summary>
@@ -460,7 +460,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </details>
 <div class="cell-output-display">
 <table class="caption-top table table-sm table-striped small">
-<caption>Darwin Core plan for v2026.09.10 — 10 datasets</caption>
+<caption>Darwin Core plan for v2026.09.11 — 10 datasets</caption>
 <colgroup>
 <col style="width: 15%">
 <col style="width: 23%">
@@ -965,25 +965,94 @@ no candidate dataset has obs_env rows — the eMoF env grain is empty</code></pr
 </details>
 <div class="cell-output cell-output-stdout">
 <pre><code>--- calcofi_phyllosoma --- 
-unchanged since v2026.09.10 — calcofi_phyllosoma_v2026.09.10.zip reused (content_hash eeac6f9d2b21) 
+rebuilding — changed: data:obs_bio, meta:measurement_type, meta:record 
+                finding level   n
+          no_event_date  warn   1
+     incomplete_records  warn   1
+ no_measurement_type_id  warn 369
+                                              detail
+                                         leaf events
+ flattened occurrence: eventDate (1 of 1859 records)
+                                                &lt;NA&gt;
+wrote calcofi_phyllosoma_v2026.09.11.zip (0.1 MB), content_hash eeac6f9d2b21 
 --- calcofi_phytoplankton --- 
-unchanged since v2026.09.10 — calcofi_phytoplankton_v2026.09.10.zip reused (content_hash 31716f4afb98) 
+rebuilding — changed: data:obs_bio, meta:measurement_type, meta:record 
+            finding level     n
+      no_event_date  warn   409
+   dropped_no_taxon  warn  1906
+ incomplete_records  warn 64643
+                                                    detail
+                                               leaf events
+               obs_bio rows whose taxon_key names no taxon
+ flattened occurrence: eventDate (64643 of 157898 records)
+wrote calcofi_phytoplankton_v2026.09.11.zip (6.4 MB), content_hash 31716f4afb98 
 --- cce-lter_euphausiids --- 
-unchanged since v2026.09.10 — cce-lter_euphausiids_v2026.09.10.zip reused (content_hash 938c91caed88) 
+rebuilding — changed: data:obs_bio, meta:measurement_type, meta:record 
+          finding level   n      detail
+    no_event_date  warn   1 leaf events
+ no_life_stage_id  warn 843        &lt;NA&gt;
+wrote cce-lter_euphausiids_v2026.09.11.zip (3.1 MB), content_hash 938c91caed88 
 --- cce-lter_zoodb --- 
-unchanged since v2026.09.10 — cce-lter_zoodb_v2026.09.10.zip reused (content_hash 25e5fadb74f6) 
+rebuilding — changed: data:obs_bio, meta:measurement_type, meta:record 
+            finding level     n
+      no_event_date  warn   155
+     no_coordinates  warn   155
+ incomplete_records  warn 12573
+                                                                                      detail
+                                                                                 leaf events
+                                                                                 leaf events
+ flattened occurrence: eventDate, decimalLongitude, decimalLatitude (12573 of 30948 records)
+wrote cce-lter_zoodb_v2026.09.11.zip (0.9 MB), content_hash 25e5fadb74f6 
 --- cce-lter_zooscan --- 
-unchanged since v2026.09.10 — cce-lter_zooscan_v2026.09.10.zip reused (content_hash dd0de501d64f) 
+rebuilding — changed: data:obs_bio, meta:measurement_type, meta:record 
+          finding level     n                                      detail
+ dropped_no_taxon  warn 23380 obs_bio rows whose taxon_key names no taxon
+wrote cce-lter_zooscan_v2026.09.11.zip (2.9 MB), content_hash dd0de501d64f 
 --- cdfw_dungeness-crab --- 
-unchanged since v2026.09.10 — cdfw_dungeness-crab_v2026.09.10.zip reused (content_hash bc22f6f9d5e8) 
+rebuilding — changed: data:obs_bio, meta:measurement_type, meta:record 
+                finding level   n
+         no_coordinates  warn   4
+     incomplete_records  warn  16
+ no_measurement_type_id  warn 617
+                                                                       detail
+                                                                  leaf events
+ flattened occurrence: decimalLongitude, decimalLatitude (16 of 1456 records)
+                                                                         &lt;NA&gt;
+wrote cdfw_dungeness-crab_v2026.09.11.zip (0.1 MB), content_hash bc22f6f9d5e8 
 --- farallon_bird-mammal --- 
-unchanged since v2026.09.10 — farallon_bird-mammal_v2026.09.10.zip reused (content_hash 4719d33ecd04) 
+rebuilding — changed: data:obs_bio, meta:measurement_type 
+                finding level     n
+       dropped_no_taxon  warn   762
+  no_scientific_name_id  warn   123
+     incomplete_records  warn   123
+ no_measurement_type_id  warn 87813
+                                                        detail
+                   obs_bio rows whose taxon_key names no taxon
+                                                          &lt;NA&gt;
+ flattened occurrence: scientificNameID (123 of 68899 records)
+                                                          &lt;NA&gt;
+wrote farallon_bird-mammal_v2026.09.11.zip (6.3 MB), content_hash 4719d33ecd04 
 --- sio_mesopelagic-fish --- 
-unchanged since v2026.09.10 — sio_mesopelagic-fish_v2026.09.10.zip reused (content_hash ccf7fc8301ed) 
+rebuilding — changed: data:obs_bio, data:taxon, meta:measurement_type, meta:record 
+          finding level n                                      detail
+ dropped_no_taxon  warn 1 obs_bio rows whose taxon_key names no taxon
+wrote sio_mesopelagic-fish_v2026.09.11.zip (0.1 MB), content_hash ccf7fc8301ed 
 --- swfsc_cufes --- 
-unchanged since v2026.09.10 — swfsc_cufes_v2026.09.10.zip reused (content_hash f678d0a7b61a) 
+rebuilding — changed: data:obs_bio, meta:measurement_type, meta:record 
+            finding level    n
+     no_coordinates  warn 1563
+ incomplete_records  warn 8897
+                                                                           detail
+                                                                      leaf events
+ flattened occurrence: decimalLongitude, decimalLatitude (8897 of 284097 records)
+wrote swfsc_cufes_v2026.09.11.zip (8.1 MB), content_hash f678d0a7b61a 
 --- swfsc_ichthyo --- 
-unchanged since v2026.09.10 — swfsc_ichthyo_v2026.09.10.zip reused (content_hash 04597f97e066) </code></pre>
+rebuilding — changed: data:obs_bio, data:taxon, meta:measurement_type 
+                finding level      n      detail
+          no_event_date  warn   3169 leaf events
+       no_life_stage_id  warn   9223        &lt;NA&gt;
+ no_measurement_type_id  warn 371705        &lt;NA&gt;
+wrote swfsc_ichthyo_v2026.09.11.zip (46 MB), content_hash 04597f97e066 </code></pre>
 </div>
 <details class="code-fold">
 <summary>Code</summary>
@@ -997,7 +1066,7 @@ unchanged since v2026.09.10 — swfsc_ichthyo_v2026.09.10.zip reused (content_ha
 </details>
 <div class="cell-output-display">
 <table class="caption-top table table-sm table-striped small">
-<caption>Darwin Core archives written for v2026.09.10</caption>
+<caption>Darwin Core archives written for v2026.09.11</caption>
 <colgroup>
 <col style="width: 15%">
 <col style="width: 5%">
@@ -1023,103 +1092,103 @@ unchanged since v2026.09.10 — swfsc_ichthyo_v2026.09.10.zip reused (content_ha
 <tbody>
 <tr class="odd">
 <td style="text-align: left;">calcofi_phyllosoma</td>
-<td style="text-align: left;">reused</td>
-<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">built</td>
+<td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: right;">1928</td>
 <td style="text-align: right;">1859</td>
 <td style="text-align: right;">369</td>
 <td style="text-align: left;">eeac6f9d2b21ecf15c80c33a3b41fcd2</td>
-<td style="text-align: left;">calcofi_phyllosoma_v2026.09.10.zip</td>
+<td style="text-align: left;">calcofi_phyllosoma_v2026.09.11.zip</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">calcofi_phytoplankton</td>
-<td style="text-align: left;">reused</td>
-<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">built</td>
+<td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: right;">470</td>
 <td style="text-align: right;">157898</td>
 <td style="text-align: right;">0</td>
 <td style="text-align: left;">31716f4afb98bdfada4a1077522be568</td>
-<td style="text-align: left;">calcofi_phytoplankton_v2026.09.10.zip</td>
+<td style="text-align: left;">calcofi_phytoplankton_v2026.09.11.zip</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">cce-lter_euphausiids</td>
-<td style="text-align: left;">reused</td>
-<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">built</td>
+<td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: right;">7758</td>
 <td style="text-align: right;">100505</td>
 <td style="text-align: right;">0</td>
 <td style="text-align: left;">938c91caed8878e51c56afaf4f672390</td>
-<td style="text-align: left;">cce-lter_euphausiids_v2026.09.10.zip</td>
+<td style="text-align: left;">cce-lter_euphausiids_v2026.09.11.zip</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">cce-lter_zoodb</td>
-<td style="text-align: left;">reused</td>
-<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">built</td>
+<td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: right;">581</td>
 <td style="text-align: right;">30948</td>
 <td style="text-align: right;">0</td>
 <td style="text-align: left;">25e5fadb74f6d34966dcee094d68f2bc</td>
-<td style="text-align: left;">cce-lter_zoodb_v2026.09.10.zip</td>
+<td style="text-align: left;">cce-lter_zoodb_v2026.09.11.zip</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">cce-lter_zooscan</td>
-<td style="text-align: left;">reused</td>
-<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">built</td>
+<td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: right;">1542</td>
 <td style="text-align: right;">103312</td>
 <td style="text-align: right;">0</td>
 <td style="text-align: left;">dd0de501d64fdd4adf67736d44736f47</td>
-<td style="text-align: left;">cce-lter_zooscan_v2026.09.10.zip</td>
+<td style="text-align: left;">cce-lter_zooscan_v2026.09.11.zip</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">cdfw_dungeness-crab</td>
-<td style="text-align: left;">reused</td>
-<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">built</td>
+<td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: right;">846</td>
 <td style="text-align: right;">1456</td>
 <td style="text-align: right;">641</td>
 <td style="text-align: left;">bc22f6f9d5e8921ef13e7d141beb8324</td>
-<td style="text-align: left;">cdfw_dungeness-crab_v2026.09.10.zip</td>
+<td style="text-align: left;">cdfw_dungeness-crab_v2026.09.11.zip</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">farallon_bird-mammal</td>
-<td style="text-align: left;">reused</td>
-<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">built</td>
+<td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: right;">64544</td>
 <td style="text-align: right;">68899</td>
 <td style="text-align: right;">87813</td>
 <td style="text-align: left;">4719d33ecd04d001f5c6fc1246097db9</td>
-<td style="text-align: left;">farallon_bird-mammal_v2026.09.10.zip</td>
+<td style="text-align: left;">farallon_bird-mammal_v2026.09.11.zip</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">sio_mesopelagic-fish</td>
-<td style="text-align: left;">reused</td>
-<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">built</td>
+<td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: right;">109</td>
 <td style="text-align: right;">1392</td>
 <td style="text-align: right;">0</td>
 <td style="text-align: left;">ccf7fc8301ed6eba248fcb42dee229b3</td>
-<td style="text-align: left;">sio_mesopelagic-fish_v2026.09.10.zip</td>
+<td style="text-align: left;">sio_mesopelagic-fish_v2026.09.11.zip</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">swfsc_cufes</td>
-<td style="text-align: left;">reused</td>
-<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">built</td>
+<td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: right;">49656</td>
 <td style="text-align: right;">284097</td>
 <td style="text-align: right;">0</td>
 <td style="text-align: left;">f678d0a7b61acafc0afb04af2b825d67</td>
-<td style="text-align: left;">swfsc_cufes_v2026.09.10.zip</td>
+<td style="text-align: left;">swfsc_cufes_v2026.09.11.zip</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">swfsc_ichthyo</td>
-<td style="text-align: left;">reused</td>
-<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">built</td>
+<td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: right;">213813</td>
 <td style="text-align: right;">482250</td>
 <td style="text-align: right;">613576</td>
 <td style="text-align: left;">04597f97e066ee7c5f897589842d65de</td>
-<td style="text-align: left;">swfsc_ichthyo_v2026.09.10.zip</td>
+<td style="text-align: left;">swfsc_ichthyo_v2026.09.11.zip</td>
 </tr>
 </tbody>
 </table>
@@ -1130,6 +1199,204 @@ unchanged since v2026.09.10 — swfsc_ichthyo_v2026.09.10.zip reused (content_ha
 <span id="cb36-2"><a href="#cb36-2" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">nrow</span>(fin)) <span class="fu">kable</span>(fin[fin<span class="sc">$</span>finding <span class="sc">!=</span> <span class="st">"ok"</span>, ],</span>
 <span id="cb36-3"><a href="#cb36-3" aria-hidden="true" tabindex="-1"></a>                     <span class="at">caption =</span> <span class="st">"every finding, by dataset (error = no archive written)"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
+<div class="cell-output-display">
+<table class="caption-top table table-sm table-striped small">
+<caption>every finding, by dataset (error = no archive written)</caption>
+<colgroup>
+<col style="width: 14%">
+<col style="width: 15%">
+<col style="width: 4%">
+<col style="width: 4%">
+<col style="width: 61%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">dataset_key</th>
+<th style="text-align: left;">finding</th>
+<th style="text-align: left;">level</th>
+<th style="text-align: right;">n</th>
+<th style="text-align: left;">detail</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">calcofi_phyllosoma</td>
+<td style="text-align: left;">no_event_date</td>
+<td style="text-align: left;">warn</td>
+<td style="text-align: right;">1</td>
+<td style="text-align: left;">leaf events</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">calcofi_phyllosoma</td>
+<td style="text-align: left;">incomplete_records</td>
+<td style="text-align: left;">warn</td>
+<td style="text-align: right;">1</td>
+<td style="text-align: left;">flattened occurrence: eventDate (1 of 1859 records)</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">calcofi_phyllosoma</td>
+<td style="text-align: left;">no_measurement_type_id</td>
+<td style="text-align: left;">warn</td>
+<td style="text-align: right;">369</td>
+<td style="text-align: left;">NA</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">calcofi_phytoplankton</td>
+<td style="text-align: left;">no_event_date</td>
+<td style="text-align: left;">warn</td>
+<td style="text-align: right;">409</td>
+<td style="text-align: left;">leaf events</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">calcofi_phytoplankton</td>
+<td style="text-align: left;">dropped_no_taxon</td>
+<td style="text-align: left;">warn</td>
+<td style="text-align: right;">1906</td>
+<td style="text-align: left;">obs_bio rows whose taxon_key names no taxon</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">calcofi_phytoplankton</td>
+<td style="text-align: left;">incomplete_records</td>
+<td style="text-align: left;">warn</td>
+<td style="text-align: right;">64643</td>
+<td style="text-align: left;">flattened occurrence: eventDate (64643 of 157898 records)</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">cce-lter_euphausiids</td>
+<td style="text-align: left;">no_event_date</td>
+<td style="text-align: left;">warn</td>
+<td style="text-align: right;">1</td>
+<td style="text-align: left;">leaf events</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">cce-lter_euphausiids</td>
+<td style="text-align: left;">no_life_stage_id</td>
+<td style="text-align: left;">warn</td>
+<td style="text-align: right;">843</td>
+<td style="text-align: left;">NA</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">cce-lter_zoodb</td>
+<td style="text-align: left;">no_event_date</td>
+<td style="text-align: left;">warn</td>
+<td style="text-align: right;">155</td>
+<td style="text-align: left;">leaf events</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">cce-lter_zoodb</td>
+<td style="text-align: left;">no_coordinates</td>
+<td style="text-align: left;">warn</td>
+<td style="text-align: right;">155</td>
+<td style="text-align: left;">leaf events</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">cce-lter_zoodb</td>
+<td style="text-align: left;">incomplete_records</td>
+<td style="text-align: left;">warn</td>
+<td style="text-align: right;">12573</td>
+<td style="text-align: left;">flattened occurrence: eventDate, decimalLongitude, decimalLatitude (12573 of 30948 records)</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">cce-lter_zooscan</td>
+<td style="text-align: left;">dropped_no_taxon</td>
+<td style="text-align: left;">warn</td>
+<td style="text-align: right;">23380</td>
+<td style="text-align: left;">obs_bio rows whose taxon_key names no taxon</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">cdfw_dungeness-crab</td>
+<td style="text-align: left;">no_coordinates</td>
+<td style="text-align: left;">warn</td>
+<td style="text-align: right;">4</td>
+<td style="text-align: left;">leaf events</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">cdfw_dungeness-crab</td>
+<td style="text-align: left;">incomplete_records</td>
+<td style="text-align: left;">warn</td>
+<td style="text-align: right;">16</td>
+<td style="text-align: left;">flattened occurrence: decimalLongitude, decimalLatitude (16 of 1456 records)</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">cdfw_dungeness-crab</td>
+<td style="text-align: left;">no_measurement_type_id</td>
+<td style="text-align: left;">warn</td>
+<td style="text-align: right;">617</td>
+<td style="text-align: left;">NA</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">farallon_bird-mammal</td>
+<td style="text-align: left;">dropped_no_taxon</td>
+<td style="text-align: left;">warn</td>
+<td style="text-align: right;">762</td>
+<td style="text-align: left;">obs_bio rows whose taxon_key names no taxon</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">farallon_bird-mammal</td>
+<td style="text-align: left;">no_scientific_name_id</td>
+<td style="text-align: left;">warn</td>
+<td style="text-align: right;">123</td>
+<td style="text-align: left;">NA</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">farallon_bird-mammal</td>
+<td style="text-align: left;">incomplete_records</td>
+<td style="text-align: left;">warn</td>
+<td style="text-align: right;">123</td>
+<td style="text-align: left;">flattened occurrence: scientificNameID (123 of 68899 records)</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">farallon_bird-mammal</td>
+<td style="text-align: left;">no_measurement_type_id</td>
+<td style="text-align: left;">warn</td>
+<td style="text-align: right;">87813</td>
+<td style="text-align: left;">NA</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">sio_mesopelagic-fish</td>
+<td style="text-align: left;">dropped_no_taxon</td>
+<td style="text-align: left;">warn</td>
+<td style="text-align: right;">1</td>
+<td style="text-align: left;">obs_bio rows whose taxon_key names no taxon</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">swfsc_cufes</td>
+<td style="text-align: left;">no_coordinates</td>
+<td style="text-align: left;">warn</td>
+<td style="text-align: right;">1563</td>
+<td style="text-align: left;">leaf events</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">swfsc_cufes</td>
+<td style="text-align: left;">incomplete_records</td>
+<td style="text-align: left;">warn</td>
+<td style="text-align: right;">8897</td>
+<td style="text-align: left;">flattened occurrence: decimalLongitude, decimalLatitude (8897 of 284097 records)</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">swfsc_ichthyo</td>
+<td style="text-align: left;">no_event_date</td>
+<td style="text-align: left;">warn</td>
+<td style="text-align: right;">3169</td>
+<td style="text-align: left;">leaf events</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">swfsc_ichthyo</td>
+<td style="text-align: left;">no_life_stage_id</td>
+<td style="text-align: left;">warn</td>
+<td style="text-align: right;">9223</td>
+<td style="text-align: left;">NA</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">swfsc_ichthyo</td>
+<td style="text-align: left;">no_measurement_type_id</td>
+<td style="text-align: left;">warn</td>
+<td style="text-align: right;">371705</td>
+<td style="text-align: left;">NA</td>
+</tr>
+</tbody>
+</table>
+</div>
 </div>
 </section>
 <section id="stage-the-archives-where-a-reviewer-can-see-them" class="level2" data-number="7">
@@ -1158,34 +1425,34 @@ unchanged since v2026.09.10 — swfsc_ichthyo_v2026.09.10.zip reused (content_ha
 <span id="cb37-18"><a href="#cb37-18" aria-hidden="true" tabindex="-1"></a>} <span class="cf">else</span> <span class="fu">cat</span>(<span class="st">"staging run or nothing built: nothing staged</span><span class="sc">\n</span><span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>staged calcofi_phyllosoma: https://storage.googleapis.com/calcofi-db/publish/dwca/calcofi_phyllosoma/calcofi_phyllosoma_v2026.09.10.zip </code></pre>
+<pre><code>staged calcofi_phyllosoma: https://storage.googleapis.com/calcofi-db/publish/dwca/calcofi_phyllosoma/calcofi_phyllosoma_v2026.09.11.zip </code></pre>
 </div>
 <div class="cell-output cell-output-stdout">
-<pre><code>staged calcofi_phytoplankton: https://storage.googleapis.com/calcofi-db/publish/dwca/calcofi_phytoplankton/calcofi_phytoplankton_v2026.09.10.zip </code></pre>
+<pre><code>staged calcofi_phytoplankton: https://storage.googleapis.com/calcofi-db/publish/dwca/calcofi_phytoplankton/calcofi_phytoplankton_v2026.09.11.zip </code></pre>
 </div>
 <div class="cell-output cell-output-stdout">
-<pre><code>staged cce-lter_euphausiids: https://storage.googleapis.com/calcofi-db/publish/dwca/cce-lter_euphausiids/cce-lter_euphausiids_v2026.09.10.zip </code></pre>
+<pre><code>staged cce-lter_euphausiids: https://storage.googleapis.com/calcofi-db/publish/dwca/cce-lter_euphausiids/cce-lter_euphausiids_v2026.09.11.zip </code></pre>
 </div>
 <div class="cell-output cell-output-stdout">
-<pre><code>staged cce-lter_zoodb: https://storage.googleapis.com/calcofi-db/publish/dwca/cce-lter_zoodb/cce-lter_zoodb_v2026.09.10.zip </code></pre>
+<pre><code>staged cce-lter_zoodb: https://storage.googleapis.com/calcofi-db/publish/dwca/cce-lter_zoodb/cce-lter_zoodb_v2026.09.11.zip </code></pre>
 </div>
 <div class="cell-output cell-output-stdout">
-<pre><code>staged cce-lter_zooscan: https://storage.googleapis.com/calcofi-db/publish/dwca/cce-lter_zooscan/cce-lter_zooscan_v2026.09.10.zip </code></pre>
+<pre><code>staged cce-lter_zooscan: https://storage.googleapis.com/calcofi-db/publish/dwca/cce-lter_zooscan/cce-lter_zooscan_v2026.09.11.zip </code></pre>
 </div>
 <div class="cell-output cell-output-stdout">
-<pre><code>staged cdfw_dungeness-crab: https://storage.googleapis.com/calcofi-db/publish/dwca/cdfw_dungeness-crab/cdfw_dungeness-crab_v2026.09.10.zip </code></pre>
+<pre><code>staged cdfw_dungeness-crab: https://storage.googleapis.com/calcofi-db/publish/dwca/cdfw_dungeness-crab/cdfw_dungeness-crab_v2026.09.11.zip </code></pre>
 </div>
 <div class="cell-output cell-output-stdout">
-<pre><code>staged farallon_bird-mammal: https://storage.googleapis.com/calcofi-db/publish/dwca/farallon_bird-mammal/farallon_bird-mammal_v2026.09.10.zip </code></pre>
+<pre><code>staged farallon_bird-mammal: https://storage.googleapis.com/calcofi-db/publish/dwca/farallon_bird-mammal/farallon_bird-mammal_v2026.09.11.zip </code></pre>
 </div>
 <div class="cell-output cell-output-stdout">
-<pre><code>staged sio_mesopelagic-fish: https://storage.googleapis.com/calcofi-db/publish/dwca/sio_mesopelagic-fish/sio_mesopelagic-fish_v2026.09.10.zip </code></pre>
+<pre><code>staged sio_mesopelagic-fish: https://storage.googleapis.com/calcofi-db/publish/dwca/sio_mesopelagic-fish/sio_mesopelagic-fish_v2026.09.11.zip </code></pre>
 </div>
 <div class="cell-output cell-output-stdout">
-<pre><code>staged swfsc_cufes: https://storage.googleapis.com/calcofi-db/publish/dwca/swfsc_cufes/swfsc_cufes_v2026.09.10.zip </code></pre>
+<pre><code>staged swfsc_cufes: https://storage.googleapis.com/calcofi-db/publish/dwca/swfsc_cufes/swfsc_cufes_v2026.09.11.zip </code></pre>
 </div>
 <div class="cell-output cell-output-stdout">
-<pre><code>staged swfsc_ichthyo: https://storage.googleapis.com/calcofi-db/publish/dwca/swfsc_ichthyo/swfsc_ichthyo_v2026.09.10.zip </code></pre>
+<pre><code>staged swfsc_ichthyo: https://storage.googleapis.com/calcofi-db/publish/dwca/swfsc_ichthyo/swfsc_ichthyo_v2026.09.11.zip </code></pre>
 </div>
 </div>
 </section>
@@ -1230,7 +1497,7 @@ unchanged since v2026.09.10 — swfsc_ichthyo_v2026.09.10.zip reused (content_ha
 <tbody>
 <tr class="odd">
 <td style="text-align: left;">calcofi_phyllosoma</td>
-<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: left;">eeac6f9d2b21ecf15c80c33a3b41fcd2</td>
 <td style="text-align: left;"></td>
 <td style="text-align: left;"></td>
@@ -1239,7 +1506,7 @@ unchanged since v2026.09.10 — swfsc_ichthyo_v2026.09.10.zip reused (content_ha
 </tr>
 <tr class="even">
 <td style="text-align: left;">calcofi_phytoplankton</td>
-<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: left;">31716f4afb98bdfada4a1077522be568</td>
 <td style="text-align: left;"></td>
 <td style="text-align: left;"></td>
@@ -1248,7 +1515,7 @@ unchanged since v2026.09.10 — swfsc_ichthyo_v2026.09.10.zip reused (content_ha
 </tr>
 <tr class="odd">
 <td style="text-align: left;">cce-lter_euphausiids</td>
-<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: left;">938c91caed8878e51c56afaf4f672390</td>
 <td style="text-align: left;"></td>
 <td style="text-align: left;"></td>
@@ -1257,7 +1524,7 @@ unchanged since v2026.09.10 — swfsc_ichthyo_v2026.09.10.zip reused (content_ha
 </tr>
 <tr class="even">
 <td style="text-align: left;">cce-lter_zoodb</td>
-<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: left;">25e5fadb74f6d34966dcee094d68f2bc</td>
 <td style="text-align: left;"></td>
 <td style="text-align: left;"></td>
@@ -1266,7 +1533,7 @@ unchanged since v2026.09.10 — swfsc_ichthyo_v2026.09.10.zip reused (content_ha
 </tr>
 <tr class="odd">
 <td style="text-align: left;">cce-lter_zooscan</td>
-<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: left;">dd0de501d64fdd4adf67736d44736f47</td>
 <td style="text-align: left;"></td>
 <td style="text-align: left;"></td>
@@ -1275,7 +1542,7 @@ unchanged since v2026.09.10 — swfsc_ichthyo_v2026.09.10.zip reused (content_ha
 </tr>
 <tr class="even">
 <td style="text-align: left;">cdfw_dungeness-crab</td>
-<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: left;">bc22f6f9d5e8921ef13e7d141beb8324</td>
 <td style="text-align: left;"></td>
 <td style="text-align: left;"></td>
@@ -1284,7 +1551,7 @@ unchanged since v2026.09.10 — swfsc_ichthyo_v2026.09.10.zip reused (content_ha
 </tr>
 <tr class="odd">
 <td style="text-align: left;">farallon_bird-mammal</td>
-<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: left;">4719d33ecd04d001f5c6fc1246097db9</td>
 <td style="text-align: left;"></td>
 <td style="text-align: left;"></td>
@@ -1293,7 +1560,7 @@ unchanged since v2026.09.10 — swfsc_ichthyo_v2026.09.10.zip reused (content_ha
 </tr>
 <tr class="even">
 <td style="text-align: left;">sio_mesopelagic-fish</td>
-<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: left;">ccf7fc8301ed6eba248fcb42dee229b3</td>
 <td style="text-align: left;"></td>
 <td style="text-align: left;"></td>
@@ -1302,7 +1569,7 @@ unchanged since v2026.09.10 — swfsc_ichthyo_v2026.09.10.zip reused (content_ha
 </tr>
 <tr class="odd">
 <td style="text-align: left;">swfsc_cufes</td>
-<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: left;">f678d0a7b61acafc0afb04af2b825d67</td>
 <td style="text-align: left;"></td>
 <td style="text-align: left;"></td>
@@ -1311,7 +1578,7 @@ unchanged since v2026.09.10 — swfsc_ichthyo_v2026.09.10.zip reused (content_ha
 </tr>
 <tr class="even">
 <td style="text-align: left;">swfsc_ichthyo</td>
-<td style="text-align: left;">v2026.09.10</td>
+<td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: left;">04597f97e066ee7c5f897589842d65de</td>
 <td style="text-align: left;">calcofi_ichthyo</td>
 <td style="text-align: left;">0e223f55-c826-4513-ae9a-b04cbf2e189c</td>
