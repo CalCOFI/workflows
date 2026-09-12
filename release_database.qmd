@@ -2595,7 +2595,12 @@ if (file.exists(meta_json_path)) {
     category         = cat_registries$category,
     release_version  = release_version,
     release_date     = as.character(catalog$release_date),
-    registries       = here("metadata"))
+    registries       = list(
+      chem   = read_measurement_chem(here("metadata/measurement_chem.csv")),
+      method = read_measurement_method(here("metadata/measurement_method.csv")),
+      scale  = read_measurement_scale(here("metadata/measurement_scale.csv")),
+      why    = read_measurement_why(here("metadata/measurement_why.csv")),
+      face   = read_measurement_face(here("metadata/measurement_face.csv"))))
   meas_path <- write_measurements_catalog(meas_rec, dir_frozen)
   validate_measurements_catalog(meas_path)
   d_meas_chk <- check_measurements_catalog(
