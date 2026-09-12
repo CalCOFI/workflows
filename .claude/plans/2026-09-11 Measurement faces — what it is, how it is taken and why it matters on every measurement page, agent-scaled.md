@@ -259,7 +259,7 @@ umbrella.
 4. Findings now or later → **now** (F8; done or filed the same day).
 5. Keys with no concept → **stands in** (D3).
 
-Still open: D9's option (a) needs a yes (it changes what `taxa.json` counts).
+**D9 decided 2026-09-12 (Ben): neither (a) nor (b) as written — the counts move to Biology.** "The picoplankton dataset should probably be under Biology, not Environment … it already is under Biology" (the datasets catalog files it there). WS-MF7 now emits the four flow-cytometry counts as `obs_bio` rows (one `measurement_type` for the quantity, number/ml) with `taxon_key` `worms:160572` / `worms:345515` on *Synechococcus* / *Prochlorococcus*; picoeukaryotes and heterotrophic bacteria keep their identity through the established composite-group mechanism or a NULL key plus a proposed question. `build_taxa_catalog()` is unchanged. Consequence at the next release: the four keys leave `measurements.json` (89 → 85 keys, 94 → 90 series) and the *organism* face kind is served by the species pages instead.
 
 ## Kickoff prompt (the integrator session — Claude Fable 5.1 · effort high; cwd `~/Github/CalCOFI/workflows`)
 
