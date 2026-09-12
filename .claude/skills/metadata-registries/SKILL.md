@@ -71,6 +71,27 @@ mechanism: `out_of_range` fails the release, `undeclared` is ratcheted by
 procedure and the incidents behind these rules are in the **`measurement-bounds`
 skill**.
 
+## Measurement faces
+
+Five registries carry what a `calcofi.io/measurements/{key}/` page shows beyond the catalog's own
+counts (plan `.claude/plans/2026-09-11 Measurement faces …`): `measurement_chem.csv` (key,
+`chebi_id`, role, mass fraction, `via`, source), `measurement_method.csv` (dataset_key ×
+measurement_type: platform, instrument, `nerc_l22`, principle, steps, wavelength, precision,
+bibkeys, the calcofi.org page and fragment, source), `measurement_scale.csv` (key, value, lo, hi,
+label, kind, `how`, source), `measurement_why.csv` (key, rank, kind, text, bibkeys, source_url, eov,
+goos_doc), and `measurement_face.csv` (key, `face_kind`, `face_of`, `stands_in_note`, source) — see
+Appendix A of the plan for each file's exact header. Every row carries a **source** — the same
+discipline as `dataset_meta.yml`'s citation fields: a row without one is not a fact yet.
+`measurement_method.csv`'s `nerc_l22` follows the same **exact-match rule** as every other
+controlled-vocabulary id above — a device concept naming a facet the dataset's protocol does not
+document is left empty, never a plausible near-match. A key with no NERC concept of its own (an
+instrument voltage, an estimate, a sensor pair's average) is **the stands-in map**: it borrows the
+face of the quantity it estimates or repeats via `measurement_face.csv`'s `face_of` column, shows a
+chip naming what it stands in for, and never carries the borrowed quantity's own ids. A
+`measurement_scale.csv` row of `kind = computed` **names its `how`** — the function and inputs
+(`gsw.t_freezing(35, 0)`) — because a computed mark is recomputed at build from the release's own
+numbers, never typed in as a value.
+
 ## The question registry convention
 
 Two identifiers, deliberately: **`id`** (`calcofi_ctd-cast_15`) is the durable
