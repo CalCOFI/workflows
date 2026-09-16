@@ -41,6 +41,13 @@ comparison, not a memory: the bytes built now against the bytes the portal was l
 given (`calcofi4db::publish_upload_status()`). This page makes that comparison for every
 dataset on every portal, and its first table is the to-do list.
 
+**`upload_status` is about the portal of record, never about our own bucket.** Every
+package, archive and file listed here is already built and staged publicly under
+`gs://calcofi-db/publish/` (or `calcofi-files-public/netcdf/`) — that is what a provider
+reviews. `never deposited` therefore means EDI has no such package / the IPT has no such
+resource yet, not that the bytes are missing from GCS. The `staged` column is the copy
+that does exist.
+
 | portal | the copy it holds is recorded in | an upload is |
 |---|---|---|
 | EDI | `metadata/edi_packages.csv` (`content_hash`, `built_from`) | `CALCOFI_PUBLISH_EDI=true` + EDI credentials, re-rendering `publish_to-edi.qmd`; refused while the record lacks a required field |
@@ -70,6 +77,10 @@ dir.create(dirname(OUT), recursive = TRUE, showWarnings = FALSE)
 
 read_json_or_null <- function(p) tryCatch(jsonlite::fromJSON(p, simplifyVector = FALSE),
                                           error = function(e) NULL)
+# the browse pages are rebuilt unless this is a staging run or the whole post-release
+# chain is a dry run (the ERDDAP publisher's CALCOFI_DEPLOY convention)
+REFRESH_INDEX    <- !STAGING && !identical(tolower(Sys.getenv("CALCOFI_DEPLOY", "true")), "false")
+NO_REFRESH_INDEX <- !REFRESH_INDEX
 cat(glue("release : {RELEASE}{if (STAGING) ' (STAGING)' else ''}"), "\n")
 ```
 
@@ -184,6 +195,16 @@ if (nrow(erddap_rows)) kable(erddap_rows |> select(upload_status, how)) else
 status <- bind_rows(edi_rows, obis_rows, nc_rows, erddap_rows) |>
   mutate(release = RELEASE, .before = 1) |>
   arrange(desc(needs_upload), portal, dataset_key)
+# "never uploaded" read as "not on GCS" in a provider meeting (2026-09-16). The
+# comparison is against the portal of record, so say which portal, and show the staged
+# copy that does exist beside it.
+status <- status |>
+  mutate(upload_status = case_when(
+    upload_status == "never uploaded" & portal == "edi"  ~ "never deposited at EDI (staged on GCS)",
+    upload_status == "never uploaded" & portal == "obis" ~ "never uploaded to the OBIS-USA IPT (staged on GCS)",
+    upload_status == "not online"                        ~ "not yet on calcofi-files-public/netcdf",
+    .default = upload_status))
+
 write_csv(status, OUT, na = "")
 if (!STAGING) put_gcs_file(OUT, "gs://calcofi-db/publish/portal_status.csv")
 
@@ -191,12 +212,40 @@ due <- status |> filter(needs_upload)
 cat(glue("{nrow(due)} of {nrow(status)} portal copies need a fresh upload for {RELEASE}",
          "{if (nrow(due)) paste0(' (', paste(sort(unique(due$portal)), collapse = ', '), ')') else ''}"), "\n")
 if (nrow(due))
-  kable(due |> select(portal, dataset_key, built_from, upload_status, blocked_by, how),
+  kable(due |> select(portal, dataset_key, built_from, upload_status, blocked_by, how, staged = link),
         caption = "due: never deposited, or changed since the last deposit")
 ```
 
 ```{r}
 #| label: status-all
-kable(status |> select(portal, dataset_key, built_from, checked_version, upload_status, blocked_by),
+kable(status |> select(portal, dataset_key, built_from, checked_version, upload_status, blocked_by, staged = link),
       caption = glue("every portal copy, {RELEASE} (data/publish/portal_status.csv)"))
+```
+
+## Refresh the browsable storage pages
+
+`storage.calcofi.io` serves object storage, which has no directory listing: every
+browsable folder is an `index.html` object that `scripts/build_storage_index.R` writes by
+walking each bucket. Nothing else calls it, and the publishers above create new folders
+(`publish/edi/{dataset}/{dataset}_{version}/`, `publish/dwca/`, `netcdf/{dataset}/{version}/`)
+*after* `deploy_consumers.sh` has run — so every release left the browse pages one release
+behind, pointing at version folders that had since been pruned. On 2026-09-16 a provider
+meeting opened a staged EDI package link and got `Not found.` while the files sat on GCS.
+Rebuilding here, at the end of the publishers, is what keeps a link in an email true.
+
+```{r}
+#| label: storage-index
+#| eval: !expr REFRESH_INDEX
+idx <- system2("Rscript", shQuote(here("scripts/build_storage_index.R")),
+               stdout = TRUE, stderr = TRUE)
+cat(tail(idx, 6), sep = "\n")
+if (!is.null(attr(idx, "status")) && attr(idx, "status") != 0)
+  warning("build_storage_index.R failed — the browse pages still point at the previous run")
+```
+
+```{r}
+#| label: storage-index-skip
+#| eval: !expr NO_REFRESH_INDEX
+cat("staging run, or CALCOFI_DEPLOY=false — the browse pages under storage.calcofi.io were\n",
+    "NOT rebuilt, so a folder published by this run has no index.html yet.\n")
 ```

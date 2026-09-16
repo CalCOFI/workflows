@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 <meta name="author" content="CalCOFI">
-<meta name="dcterms.date" content="2026-09-12">
+<meta name="dcterms.date" content="2026-09-16">
 
 <title>Portal status — what needs a fresh upload</title>
 <style>
@@ -131,6 +131,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   <li><a href="#netcdf" id="toc-netcdf" class="nav-link" data-scroll-target="#netcdf"><span class="header-section-number">5</span> netCDF</a></li>
   <li><a href="#erddap" id="toc-erddap" class="nav-link" data-scroll-target="#erddap"><span class="header-section-number">6</span> ERDDAP</a></li>
   <li><a href="#what-needs-a-fresh-upload" id="toc-what-needs-a-fresh-upload" class="nav-link" data-scroll-target="#what-needs-a-fresh-upload"><span class="header-section-number">7</span> What needs a fresh upload</a></li>
+  <li><a href="#refresh-the-browsable-storage-pages" id="toc-refresh-the-browsable-storage-pages" class="nav-link" data-scroll-target="#refresh-the-browsable-storage-pages"><span class="header-section-number">8</span> Refresh the browsable storage pages</a></li>
   </ul>
 </nav>
 </div>
@@ -173,7 +174,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">2026-09-12</p>
+      <p class="date">2026-09-16</p>
     </div>
   </div>
   
@@ -188,6 +189,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <section id="why-this-page-exists" class="level2" data-number="1">
 <h2 data-number="1" class="anchored" data-anchor-id="why-this-page-exists"><span class="header-section-number">1</span> Why this page exists</h2>
 <p>The four publishers run after every promoted release, and each rebuilds a dataset’s output only when that dataset’s rows, metadata or the publisher’s code changed (<code>calcofi4db::publish_fingerprint()</code>). Two of the four portals then take a deliberate, manual step — an EDI deposit and an OBIS-USA IPT upload — and the other two publish from the pipeline when a flag says so. Whether a portal is behind is therefore a comparison, not a memory: the bytes built now against the bytes the portal was last given (<code>calcofi4db::publish_upload_status()</code>). This page makes that comparison for every dataset on every portal, and its first table is the to-do list.</p>
+<p><strong><code>upload_status</code> is about the portal of record, never about our own bucket.</strong> Every package, archive and file listed here is already built and staged publicly under <code>gs://calcofi-db/publish/</code> (or <code>calcofi-files-public/netcdf/</code>) — that is what a provider reviews. <code>never deposited</code> therefore means EDI has no such package / the IPT has no such resource yet, not that the bytes are missing from GCS. The <code>staged</code> column is the copy that does exist.</p>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -242,7 +244,11 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>read_json_or_null <span class="ot">&lt;-</span> <span class="cf">function</span>(p) <span class="fu">tryCatch</span>(jsonlite<span class="sc">::</span><span class="fu">fromJSON</span>(p, <span class="at">simplifyVector =</span> <span class="cn">FALSE</span>),</span>
 <span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>                                          <span class="at">error =</span> <span class="cf">function</span>(e) <span class="cn">NULL</span>)</span>
-<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"release : {RELEASE}{if (STAGING) ' (STAGING)' else ''}"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a><span class="co"># the browse pages are rebuilt unless this is a staging run or the whole post-release</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a><span class="co"># chain is a dry run (the ERDDAP publisher's CALCOFI_DEPLOY convention)</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>REFRESH_INDEX    <span class="ot">&lt;-</span> <span class="sc">!</span>STAGING <span class="sc">&amp;&amp;</span> <span class="sc">!</span><span class="fu">identical</span>(<span class="fu">tolower</span>(<span class="fu">Sys.getenv</span>(<span class="st">"CALCOFI_DEPLOY"</span>, <span class="st">"true"</span>)), <span class="st">"false"</span>)</span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>NO_REFRESH_INDEX <span class="ot">&lt;-</span> <span class="sc">!</span>REFRESH_INDEX</span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"release : {RELEASE}{if (STAGING) ' (STAGING)' else ''}"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
 <pre><code>release : v2026.09.11 </code></pre>
@@ -602,8 +608,18 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>status <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(edi_rows, obis_rows, nc_rows, erddap_rows) <span class="sc">|&gt;</span></span>
 <span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">release =</span> RELEASE, <span class="at">.before =</span> <span class="dv">1</span>) <span class="sc">|&gt;</span></span>
 <span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(<span class="fu">desc</span>(needs_upload), portal, dataset_key)</span>
-<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="fu">write_csv</span>(status, OUT, <span class="at">na =</span> <span class="st">""</span>)</span>
-<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="sc">!</span>STAGING) <span class="fu">put_gcs_file</span>(OUT, <span class="st">"gs://calcofi-db/publish/portal_status.csv"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="co"># "never uploaded" read as "not on GCS" in a provider meeting (2026-09-16). The</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a><span class="co"># comparison is against the portal of record, so say which portal, and show the staged</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a><span class="co"># copy that does exist beside it.</span></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>status <span class="ot">&lt;-</span> status <span class="sc">|&gt;</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">upload_status =</span> <span class="fu">case_when</span>(</span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>    upload_status <span class="sc">==</span> <span class="st">"never uploaded"</span> <span class="sc">&amp;</span> portal <span class="sc">==</span> <span class="st">"edi"</span>  <span class="sc">~</span> <span class="st">"never deposited at EDI (staged on GCS)"</span>,</span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>    upload_status <span class="sc">==</span> <span class="st">"never uploaded"</span> <span class="sc">&amp;</span> portal <span class="sc">==</span> <span class="st">"obis"</span> <span class="sc">~</span> <span class="st">"never uploaded to the OBIS-USA IPT (staged on GCS)"</span>,</span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>    upload_status <span class="sc">==</span> <span class="st">"not online"</span>                        <span class="sc">~</span> <span class="st">"not yet on calcofi-files-public/netcdf"</span>,</span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>    <span class="at">.default =</span> upload_status))</span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a><span class="fu">write_csv</span>(status, OUT, <span class="at">na =</span> <span class="st">""</span>)</span>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="sc">!</span>STAGING) <span class="fu">put_gcs_file</span>(OUT, <span class="st">"gs://calcofi-db/publish/portal_status.csv"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
 <pre><code>gs://calcofi-db/publish/portal_status.csv</code></pre>
@@ -620,19 +636,20 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <details class="code-fold">
 <summary>Code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">nrow</span>(due))</span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kable</span>(due <span class="sc">|&gt;</span> <span class="fu">select</span>(portal, dataset_key, built_from, upload_status, blocked_by, how),</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kable</span>(due <span class="sc">|&gt;</span> <span class="fu">select</span>(portal, dataset_key, built_from, upload_status, blocked_by, how, <span class="at">staged =</span> link),</span>
 <span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>        <span class="at">caption =</span> <span class="st">"due: never deposited, or changed since the last deposit"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output-display">
 <table class="caption-top table table-sm table-striped small">
 <caption>due: never deposited, or changed since the last deposit</caption>
 <colgroup>
-<col style="width: 2%">
-<col style="width: 9%">
-<col style="width: 5%">
-<col style="width: 22%">
-<col style="width: 29%">
-<col style="width: 30%">
+<col style="width: 1%">
+<col style="width: 6%">
+<col style="width: 3%">
+<col style="width: 15%">
+<col style="width: 19%">
+<col style="width: 20%">
+<col style="width: 32%">
 </colgroup>
 <thead>
 <tr class="header">
@@ -642,6 +659,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <th style="text-align: left;">upload_status</th>
 <th style="text-align: left;">blocked_by</th>
 <th style="text-align: left;">how</th>
+<th style="text-align: left;">staged</th>
 </tr>
 </thead>
 <tbody>
@@ -649,97 +667,109 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: left;">edi</td>
 <td style="text-align: left;">calcofi_bottle</td>
 <td style="text-align: left;">v2026.09.11</td>
-<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">never deposited at EDI (staged on GCS)</td>
 <td style="text-align: left;">record incomplete: no_license (open: Q10)</td>
 <td style="text-align: left;">CALCOFI_PUBLISH_EDI=true + EDI credentials, re-render publish_to-edi.qmd</td>
+<td style="text-align: left;">https://storage.googleapis.com/calcofi-db/publish/edi/calcofi_bottle/calcofi_bottle_v2026.09.11/</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">edi</td>
 <td style="text-align: left;">calcofi_ctd-cast</td>
 <td style="text-align: left;">v2026.09.11</td>
-<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">never deposited at EDI (staged on GCS)</td>
 <td style="text-align: left;">record incomplete: no_license (open: Q28)</td>
 <td style="text-align: left;">CALCOFI_PUBLISH_EDI=true + EDI credentials, re-render publish_to-edi.qmd</td>
+<td style="text-align: left;">https://storage.googleapis.com/calcofi-db/publish/edi/calcofi_ctd-cast/calcofi_ctd-cast_v2026.09.11/</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">edi</td>
 <td style="text-align: left;">calcofi_mets</td>
 <td style="text-align: left;">v2026.09.11</td>
-<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">never deposited at EDI (staged on GCS)</td>
 <td style="text-align: left;">record incomplete: no_license (open: Q29)</td>
 <td style="text-align: left;">CALCOFI_PUBLISH_EDI=true + EDI credentials, re-render publish_to-edi.qmd</td>
+<td style="text-align: left;">https://storage.googleapis.com/calcofi-db/publish/edi/calcofi_mets/calcofi_mets_v2026.09.11/</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">obis</td>
 <td style="text-align: left;">calcofi_phyllosoma</td>
 <td style="text-align: left;">v2026.09.11</td>
-<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">never uploaded to the OBIS-USA IPT (staged on GCS)</td>
 <td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
 <td style="text-align: left;">manual OBIS-USA IPT upload — docs/portals.qmd § OBIS</td>
+<td style="text-align: left;">https://storage.googleapis.com/calcofi-db/publish/dwca/calcofi_phyllosoma/calcofi_phyllosoma_v2026.09.11.zip</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">obis</td>
 <td style="text-align: left;">calcofi_phytoplankton</td>
 <td style="text-align: left;">v2026.09.11</td>
-<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">never uploaded to the OBIS-USA IPT (staged on GCS)</td>
 <td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
 <td style="text-align: left;">manual OBIS-USA IPT upload — docs/portals.qmd § OBIS</td>
+<td style="text-align: left;">https://storage.googleapis.com/calcofi-db/publish/dwca/calcofi_phytoplankton/calcofi_phytoplankton_v2026.09.11.zip</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">obis</td>
 <td style="text-align: left;">cce-lter_euphausiids</td>
 <td style="text-align: left;">v2026.09.11</td>
-<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">never uploaded to the OBIS-USA IPT (staged on GCS)</td>
 <td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
 <td style="text-align: left;">manual OBIS-USA IPT upload — docs/portals.qmd § OBIS</td>
+<td style="text-align: left;">https://storage.googleapis.com/calcofi-db/publish/dwca/cce-lter_euphausiids/cce-lter_euphausiids_v2026.09.11.zip</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">obis</td>
 <td style="text-align: left;">cce-lter_zoodb</td>
 <td style="text-align: left;">v2026.09.11</td>
-<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">never uploaded to the OBIS-USA IPT (staged on GCS)</td>
 <td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
 <td style="text-align: left;">manual OBIS-USA IPT upload — docs/portals.qmd § OBIS</td>
+<td style="text-align: left;">https://storage.googleapis.com/calcofi-db/publish/dwca/cce-lter_zoodb/cce-lter_zoodb_v2026.09.11.zip</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">obis</td>
 <td style="text-align: left;">cce-lter_zooscan</td>
 <td style="text-align: left;">v2026.09.11</td>
-<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">never uploaded to the OBIS-USA IPT (staged on GCS)</td>
 <td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
 <td style="text-align: left;">manual OBIS-USA IPT upload — docs/portals.qmd § OBIS</td>
+<td style="text-align: left;">https://storage.googleapis.com/calcofi-db/publish/dwca/cce-lter_zooscan/cce-lter_zooscan_v2026.09.11.zip</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">obis</td>
 <td style="text-align: left;">cdfw_dungeness-crab</td>
 <td style="text-align: left;">v2026.09.11</td>
-<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">never uploaded to the OBIS-USA IPT (staged on GCS)</td>
 <td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
 <td style="text-align: left;">manual OBIS-USA IPT upload — docs/portals.qmd § OBIS</td>
+<td style="text-align: left;">https://storage.googleapis.com/calcofi-db/publish/dwca/cdfw_dungeness-crab/cdfw_dungeness-crab_v2026.09.11.zip</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">obis</td>
 <td style="text-align: left;">farallon_bird-mammal</td>
 <td style="text-align: left;">v2026.09.11</td>
-<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">never uploaded to the OBIS-USA IPT (staged on GCS)</td>
 <td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
 <td style="text-align: left;">manual OBIS-USA IPT upload — docs/portals.qmd § OBIS</td>
+<td style="text-align: left;">https://storage.googleapis.com/calcofi-db/publish/dwca/farallon_bird-mammal/farallon_bird-mammal_v2026.09.11.zip</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">obis</td>
 <td style="text-align: left;">sio_mesopelagic-fish</td>
 <td style="text-align: left;">v2026.09.11</td>
-<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">never uploaded to the OBIS-USA IPT (staged on GCS)</td>
 <td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
 <td style="text-align: left;">manual OBIS-USA IPT upload — docs/portals.qmd § OBIS</td>
+<td style="text-align: left;">https://storage.googleapis.com/calcofi-db/publish/dwca/sio_mesopelagic-fish/sio_mesopelagic-fish_v2026.09.11.zip</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">obis</td>
 <td style="text-align: left;">swfsc_cufes</td>
 <td style="text-align: left;">v2026.09.11</td>
-<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">never uploaded to the OBIS-USA IPT (staged on GCS)</td>
 <td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
 <td style="text-align: left;">manual OBIS-USA IPT upload — docs/portals.qmd § OBIS</td>
+<td style="text-align: left;">https://storage.googleapis.com/calcofi-db/publish/dwca/swfsc_cufes/swfsc_cufes_v2026.09.11.zip</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">obis</td>
@@ -748,6 +778,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: left;">on OBIS; the uploaded copy’s hash was never recorded</td>
 <td style="text-align: left;">stamp uploaded_utc + uploaded_hash in the manifest at the next upload</td>
 <td style="text-align: left;">manual OBIS-USA IPT upload — docs/portals.qmd § OBIS</td>
+<td style="text-align: left;">https://storage.googleapis.com/calcofi-db/publish/dwca/swfsc_ichthyo/swfsc_ichthyo_v2026.09.11.zip</td>
 </tr>
 </tbody>
 </table>
@@ -756,18 +787,19 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <div class="cell">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="fu">kable</span>(status <span class="sc">|&gt;</span> <span class="fu">select</span>(portal, dataset_key, built_from, checked_version, upload_status, blocked_by),</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="fu">kable</span>(status <span class="sc">|&gt;</span> <span class="fu">select</span>(portal, dataset_key, built_from, checked_version, upload_status, blocked_by, <span class="at">staged =</span> link),</span>
 <span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>      <span class="at">caption =</span> <span class="fu">glue</span>(<span class="st">"every portal copy, {RELEASE} (data/publish/portal_status.csv)"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output-display">
 <table class="caption-top table table-sm table-striped small">
 <caption>every portal copy, v2026.09.11 (data/publish/portal_status.csv)</caption>
 <colgroup>
+<col style="width: 2%">
+<col style="width: 10%">
 <col style="width: 3%">
-<col style="width: 16%">
-<col style="width: 6%">
-<col style="width: 8%">
-<col style="width: 28%">
+<col style="width: 5%">
+<col style="width: 17%">
+<col style="width: 23%">
 <col style="width: 37%">
 </colgroup>
 <thead>
@@ -778,6 +810,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <th style="text-align: left;">checked_version</th>
 <th style="text-align: left;">upload_status</th>
 <th style="text-align: left;">blocked_by</th>
+<th style="text-align: left;">staged</th>
 </tr>
 </thead>
 <tbody>
@@ -786,96 +819,108 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: left;">calcofi_bottle</td>
 <td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: left;">v2026.09.11</td>
-<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">never deposited at EDI (staged on GCS)</td>
 <td style="text-align: left;">record incomplete: no_license (open: Q10)</td>
+<td style="text-align: left;">https://storage.googleapis.com/calcofi-db/publish/edi/calcofi_bottle/calcofi_bottle_v2026.09.11/</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">edi</td>
 <td style="text-align: left;">calcofi_ctd-cast</td>
 <td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: left;">v2026.09.11</td>
-<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">never deposited at EDI (staged on GCS)</td>
 <td style="text-align: left;">record incomplete: no_license (open: Q28)</td>
+<td style="text-align: left;">https://storage.googleapis.com/calcofi-db/publish/edi/calcofi_ctd-cast/calcofi_ctd-cast_v2026.09.11/</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">edi</td>
 <td style="text-align: left;">calcofi_mets</td>
 <td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: left;">v2026.09.11</td>
-<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">never deposited at EDI (staged on GCS)</td>
 <td style="text-align: left;">record incomplete: no_license (open: Q29)</td>
+<td style="text-align: left;">https://storage.googleapis.com/calcofi-db/publish/edi/calcofi_mets/calcofi_mets_v2026.09.11/</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">obis</td>
 <td style="text-align: left;">calcofi_phyllosoma</td>
 <td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: left;">v2026.09.11</td>
-<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">never uploaded to the OBIS-USA IPT (staged on GCS)</td>
 <td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
+<td style="text-align: left;">https://storage.googleapis.com/calcofi-db/publish/dwca/calcofi_phyllosoma/calcofi_phyllosoma_v2026.09.11.zip</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">obis</td>
 <td style="text-align: left;">calcofi_phytoplankton</td>
 <td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: left;">v2026.09.11</td>
-<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">never uploaded to the OBIS-USA IPT (staged on GCS)</td>
 <td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
+<td style="text-align: left;">https://storage.googleapis.com/calcofi-db/publish/dwca/calcofi_phytoplankton/calcofi_phytoplankton_v2026.09.11.zip</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">obis</td>
 <td style="text-align: left;">cce-lter_euphausiids</td>
 <td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: left;">v2026.09.11</td>
-<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">never uploaded to the OBIS-USA IPT (staged on GCS)</td>
 <td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
+<td style="text-align: left;">https://storage.googleapis.com/calcofi-db/publish/dwca/cce-lter_euphausiids/cce-lter_euphausiids_v2026.09.11.zip</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">obis</td>
 <td style="text-align: left;">cce-lter_zoodb</td>
 <td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: left;">v2026.09.11</td>
-<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">never uploaded to the OBIS-USA IPT (staged on GCS)</td>
 <td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
+<td style="text-align: left;">https://storage.googleapis.com/calcofi-db/publish/dwca/cce-lter_zoodb/cce-lter_zoodb_v2026.09.11.zip</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">obis</td>
 <td style="text-align: left;">cce-lter_zooscan</td>
 <td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: left;">v2026.09.11</td>
-<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">never uploaded to the OBIS-USA IPT (staged on GCS)</td>
 <td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
+<td style="text-align: left;">https://storage.googleapis.com/calcofi-db/publish/dwca/cce-lter_zooscan/cce-lter_zooscan_v2026.09.11.zip</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">obis</td>
 <td style="text-align: left;">cdfw_dungeness-crab</td>
 <td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: left;">v2026.09.11</td>
-<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">never uploaded to the OBIS-USA IPT (staged on GCS)</td>
 <td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
+<td style="text-align: left;">https://storage.googleapis.com/calcofi-db/publish/dwca/cdfw_dungeness-crab/cdfw_dungeness-crab_v2026.09.11.zip</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">obis</td>
 <td style="text-align: left;">farallon_bird-mammal</td>
 <td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: left;">v2026.09.11</td>
-<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">never uploaded to the OBIS-USA IPT (staged on GCS)</td>
 <td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
+<td style="text-align: left;">https://storage.googleapis.com/calcofi-db/publish/dwca/farallon_bird-mammal/farallon_bird-mammal_v2026.09.11.zip</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">obis</td>
 <td style="text-align: left;">sio_mesopelagic-fish</td>
 <td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: left;">v2026.09.11</td>
-<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">never uploaded to the OBIS-USA IPT (staged on GCS)</td>
 <td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
+<td style="text-align: left;">https://storage.googleapis.com/calcofi-db/publish/dwca/sio_mesopelagic-fish/sio_mesopelagic-fish_v2026.09.11.zip</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">obis</td>
 <td style="text-align: left;">swfsc_cufes</td>
 <td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: left;">v2026.09.11</td>
-<td style="text-align: left;">never uploaded</td>
+<td style="text-align: left;">never uploaded to the OBIS-USA IPT (staged on GCS)</td>
 <td style="text-align: left;">provider agreement (Decision 21); no IPT resource yet</td>
+<td style="text-align: left;">https://storage.googleapis.com/calcofi-db/publish/dwca/swfsc_cufes/swfsc_cufes_v2026.09.11.zip</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">obis</td>
@@ -884,6 +929,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: left;">on OBIS; the uploaded copy’s hash was never recorded</td>
 <td style="text-align: left;">stamp uploaded_utc + uploaded_hash in the manifest at the next upload</td>
+<td style="text-align: left;">https://storage.googleapis.com/calcofi-db/publish/dwca/swfsc_ichthyo/swfsc_ichthyo_v2026.09.11.zip</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">erddap</td>
@@ -892,6 +938,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: left;">current</td>
 <td style="text-align: left;"></td>
+<td style="text-align: left;">https://erddap.calcofi.io/erddap/</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">netcdf</td>
@@ -900,6 +947,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: left;">current</td>
 <td style="text-align: left;"></td>
+<td style="text-align: left;">https://storage.calcofi.io/calcofi-files-public/netcdf/calcofi_bottle/</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">netcdf</td>
@@ -908,6 +956,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: left;">current</td>
 <td style="text-align: left;"></td>
+<td style="text-align: left;">https://storage.calcofi.io/calcofi-files-public/netcdf/calcofi_ctd-cast/</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">netcdf</td>
@@ -916,6 +965,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: left;">current</td>
 <td style="text-align: left;"></td>
+<td style="text-align: left;">https://storage.calcofi.io/calcofi-files-public/netcdf/calcofi_ctd-cast_full/</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">netcdf</td>
@@ -924,6 +974,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: left;">current</td>
 <td style="text-align: left;"></td>
+<td style="text-align: left;">https://storage.calcofi.io/calcofi-files-public/netcdf/calcofi_dic/</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">netcdf</td>
@@ -932,6 +983,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: left;">current</td>
 <td style="text-align: left;"></td>
+<td style="text-align: left;">https://storage.calcofi.io/calcofi-files-public/netcdf/calcofi_mets/</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">netcdf</td>
@@ -940,6 +992,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: left;">current</td>
 <td style="text-align: left;"></td>
+<td style="text-align: left;">https://storage.calcofi.io/calcofi-files-public/netcdf/calcofi_phyllosoma/</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">netcdf</td>
@@ -948,6 +1001,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: left;">current</td>
 <td style="text-align: left;"></td>
+<td style="text-align: left;">https://storage.calcofi.io/calcofi-files-public/netcdf/calcofi_phytoplankton/</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">netcdf</td>
@@ -956,6 +1010,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: left;">current</td>
 <td style="text-align: left;"></td>
+<td style="text-align: left;">https://storage.calcofi.io/calcofi-files-public/netcdf/cce-lter_euphausiids/</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">netcdf</td>
@@ -964,6 +1019,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: left;">current</td>
 <td style="text-align: left;"></td>
+<td style="text-align: left;">https://storage.calcofi.io/calcofi-files-public/netcdf/cce-lter_picoplankton-bacteria/</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">netcdf</td>
@@ -972,6 +1028,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: left;">current</td>
 <td style="text-align: left;"></td>
+<td style="text-align: left;">https://storage.calcofi.io/calcofi-files-public/netcdf/cce-lter_zoodb/</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">netcdf</td>
@@ -980,6 +1037,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: left;">current</td>
 <td style="text-align: left;"></td>
+<td style="text-align: left;">https://storage.calcofi.io/calcofi-files-public/netcdf/cce-lter_zooscan/</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">netcdf</td>
@@ -988,6 +1046,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: left;">current</td>
 <td style="text-align: left;"></td>
+<td style="text-align: left;">https://storage.calcofi.io/calcofi-files-public/netcdf/cdfw_dungeness-crab/</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">netcdf</td>
@@ -996,6 +1055,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: left;">current</td>
 <td style="text-align: left;"></td>
+<td style="text-align: left;">https://storage.calcofi.io/calcofi-files-public/netcdf/farallon_bird-mammal/</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">netcdf</td>
@@ -1004,6 +1064,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: left;">current</td>
 <td style="text-align: left;"></td>
+<td style="text-align: left;">https://storage.calcofi.io/calcofi-files-public/netcdf/sio_mesopelagic-fish/</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">netcdf</td>
@@ -1012,6 +1073,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: left;">current</td>
 <td style="text-align: left;"></td>
+<td style="text-align: left;">https://storage.calcofi.io/calcofi-files-public/netcdf/sio_pic-zooplankton/</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">netcdf</td>
@@ -1020,6 +1082,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: left;">current</td>
 <td style="text-align: left;"></td>
+<td style="text-align: left;">https://storage.calcofi.io/calcofi-files-public/netcdf/swfsc_cufes/</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">netcdf</td>
@@ -1028,9 +1091,35 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: left;">v2026.09.11</td>
 <td style="text-align: left;">current</td>
 <td style="text-align: left;"></td>
+<td style="text-align: left;">https://storage.calcofi.io/calcofi-files-public/netcdf/swfsc_ichthyo/</td>
 </tr>
 </tbody>
 </table>
+</div>
+</div>
+</section>
+<section id="refresh-the-browsable-storage-pages" class="level2" data-number="8">
+<h2 data-number="8" class="anchored" data-anchor-id="refresh-the-browsable-storage-pages"><span class="header-section-number">8</span> Refresh the browsable storage pages</h2>
+<p><code>storage.calcofi.io</code> serves object storage, which has no directory listing: every browsable folder is an <code>index.html</code> object that <code>scripts/build_storage_index.R</code> writes by walking each bucket. Nothing else calls it, and the publishers above create new folders (<code>publish/edi/{dataset}/{dataset}_{version}/</code>, <code>publish/dwca/</code>, <code>netcdf/{dataset}/{version}/</code>) <em>after</em> <code>deploy_consumers.sh</code> has run — so every release left the browse pages one release behind, pointing at version folders that had since been pruned. On 2026-09-16 a provider meeting opened a staged EDI package link and got <code>Not found.</code> while the files sat on GCS. Rebuilding here, at the end of the publishers, is what keeps a link in an email true.</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>idx <span class="ot">&lt;-</span> <span class="fu">system2</span>(<span class="st">"Rscript"</span>, <span class="fu">shQuote</span>(<span class="fu">here</span>(<span class="st">"scripts/build_storage_index.R"</span>)),</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>               <span class="at">stdout =</span> <span class="cn">TRUE</span>, <span class="at">stderr =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">tail</span>(idx, <span class="dv">6</span>), <span class="at">sep =</span> <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.null</span>(<span class="fu">attr</span>(idx, <span class="st">"status"</span>)) <span class="sc">&amp;&amp;</span> <span class="fu">attr</span>(idx, <span class="st">"status"</span>) <span class="sc">!=</span> <span class="dv">0</span>)</span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">warning</span>(<span class="st">"build_storage_index.R failed — the browse pages still point at the previous run"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"staging run, or CALCOFI_DEPLOY=false — the browse pages under storage.calcofi.io were</span><span class="sc">\n</span><span class="st">"</span>,</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>    <span class="st">"NOT rebuilt, so a folder published by this run has no index.html yet.</span><span class="sc">\n</span><span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code>staging run, or CALCOFI_DEPLOY=false — the browse pages under storage.calcofi.io were
+ NOT rebuilt, so a folder published by this run has no index.html yet.</code></pre>
 </div>
 </div>
 <!-- -->
@@ -1490,208 +1579,257 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
     }
   });
   </script><div class="modal fade" id="quarto-embedded-source-code-modal" tabindex="-1" aria-labelledby="quarto-embedded-source-code-modal-label" aria-hidden="true"><div class="modal-dialog modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><h5 class="modal-title" id="quarto-embedded-source-code-modal-label">Source Code</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="">
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb13" data-shortcodes="false"><pre class="sourceCode markdown code-with-copy"><code class="sourceCode markdown"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="co">---</span></span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="an">title:</span><span class="co"> "Portal status — what needs a fresh upload"</span></span>
-<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a><span class="an">subtitle:</span><span class="co"> "Every publisher's output against what each portal holds, after every release"</span></span>
-<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a><span class="an">author:</span><span class="co"> "CalCOFI"</span></span>
-<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a><span class="an">date:</span><span class="co"> today</span></span>
-<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a><span class="an">format:</span></span>
-<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a><span class="co">  html:</span></span>
-<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a><span class="co">    toc: true</span></span>
-<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a><span class="co">    toc-depth: 2</span></span>
-<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a><span class="co">    code-fold: true</span></span>
-<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a><span class="co">    code-tools: true</span></span>
-<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a><span class="co">    df-print: kable</span></span>
-<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a><span class="an">calcofi:</span></span>
-<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a><span class="co">  target_name: publish_status</span></span>
-<span id="cb13-15"><a href="#cb13-15" aria-hidden="true" tabindex="-1"></a><span class="co">  workflow_type: publish</span></span>
-<span id="cb13-16"><a href="#cb13-16" aria-hidden="true" tabindex="-1"></a><span class="co">  dependency:</span></span>
-<span id="cb13-17"><a href="#cb13-17" aria-hidden="true" tabindex="-1"></a><span class="co">    - publish_to_edi</span></span>
-<span id="cb13-18"><a href="#cb13-18" aria-hidden="true" tabindex="-1"></a><span class="co">    - publish_to_obis</span></span>
-<span id="cb13-19"><a href="#cb13-19" aria-hidden="true" tabindex="-1"></a><span class="co">    - publish_to_netcdf</span></span>
-<span id="cb13-20"><a href="#cb13-20" aria-hidden="true" tabindex="-1"></a><span class="co">    - publish_to_erddap</span></span>
-<span id="cb13-21"><a href="#cb13-21" aria-hidden="true" tabindex="-1"></a><span class="co">  output: data/publish/portal_status.csv</span></span>
-<span id="cb13-22"><a href="#cb13-22" aria-hidden="true" tabindex="-1"></a><span class="co">  workflow_url: https://calcofi.io/workflows/publish_status.html</span></span>
-<span id="cb13-23"><a href="#cb13-23" aria-hidden="true" tabindex="-1"></a><span class="co">  description: &gt;</span></span>
-<span id="cb13-24"><a href="#cb13-24" aria-hidden="true" tabindex="-1"></a><span class="co">    The caboose of the publishers: after publish_to-edi, -obis, -netcdf and</span></span>
-<span id="cb13-25"><a href="#cb13-25" aria-hidden="true" tabindex="-1"></a><span class="co">    -erddap have run against a promoted release, compares each dataset's built</span></span>
-<span id="cb13-26"><a href="#cb13-26" aria-hidden="true" tabindex="-1"></a><span class="co">    package, archive or file with the copy its portal holds, and lists what</span></span>
-<span id="cb13-27"><a href="#cb13-27" aria-hidden="true" tabindex="-1"></a><span class="co">    needs a fresh upload — never deposited, or changed since the last deposit —</span></span>
-<span id="cb13-28"><a href="#cb13-28" aria-hidden="true" tabindex="-1"></a><span class="co">    with what still blocks it and how to do it.</span></span>
-<span id="cb13-29"><a href="#cb13-29" aria-hidden="true" tabindex="-1"></a><span class="an">editor_options:</span></span>
-<span id="cb13-30"><a href="#cb13-30" aria-hidden="true" tabindex="-1"></a><span class="co">  chunk_output_type: console</span></span>
-<span id="cb13-31"><a href="#cb13-31" aria-hidden="true" tabindex="-1"></a><span class="co">---</span></span>
-<span id="cb13-32"><a href="#cb13-32" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-33"><a href="#cb13-33" aria-hidden="true" tabindex="-1"></a><span class="fu">## Why this page exists</span></span>
-<span id="cb13-34"><a href="#cb13-34" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-35"><a href="#cb13-35" aria-hidden="true" tabindex="-1"></a>The four publishers run after every promoted release, and each rebuilds a dataset's</span>
-<span id="cb13-36"><a href="#cb13-36" aria-hidden="true" tabindex="-1"></a>output only when that dataset's rows, metadata or the publisher's code changed</span>
-<span id="cb13-37"><a href="#cb13-37" aria-hidden="true" tabindex="-1"></a>(<span class="in">`calcofi4db::publish_fingerprint()`</span>). Two of the four portals then take a deliberate,</span>
-<span id="cb13-38"><a href="#cb13-38" aria-hidden="true" tabindex="-1"></a>manual step — an EDI deposit and an OBIS-USA IPT upload — and the other two publish</span>
-<span id="cb13-39"><a href="#cb13-39" aria-hidden="true" tabindex="-1"></a>from the pipeline when a flag says so. Whether a portal is behind is therefore a</span>
-<span id="cb13-40"><a href="#cb13-40" aria-hidden="true" tabindex="-1"></a>comparison, not a memory: the bytes built now against the bytes the portal was last</span>
-<span id="cb13-41"><a href="#cb13-41" aria-hidden="true" tabindex="-1"></a>given (<span class="in">`calcofi4db::publish_upload_status()`</span>). This page makes that comparison for every</span>
-<span id="cb13-42"><a href="#cb13-42" aria-hidden="true" tabindex="-1"></a>dataset on every portal, and its first table is the to-do list.</span>
-<span id="cb13-43"><a href="#cb13-43" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-44"><a href="#cb13-44" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> portal <span class="pp">|</span> the copy it holds is recorded in <span class="pp">|</span> an upload is <span class="pp">|</span></span>
-<span id="cb13-45"><a href="#cb13-45" aria-hidden="true" tabindex="-1"></a><span class="pp">|---|---|---|</span></span>
-<span id="cb13-46"><a href="#cb13-46" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> EDI <span class="pp">|</span> <span class="in">`metadata/edi_packages.csv`</span> (<span class="in">`content_hash`</span>, <span class="in">`built_from`</span>) <span class="pp">|</span> <span class="in">`CALCOFI_PUBLISH_EDI=true`</span> + EDI credentials, re-rendering <span class="in">`publish_to-edi.qmd`</span>; refused while the record lacks a required field <span class="pp">|</span></span>
-<span id="cb13-47"><a href="#cb13-47" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> OBIS (via the OBIS-USA IPT) <span class="pp">|</span> each archive's <span class="in">`{dataset_key}_manifest.json`</span> (<span class="in">`uploaded_hash`</span>) <span class="pp">|</span> manual, after the provider agrees (Decision 21) — <span class="co">[</span><span class="ot">`docs/portals.qmd` § OBIS</span><span class="co">](https://calcofi.io/docs/portals.html#obis)</span> <span class="pp">|</span></span>
-<span id="cb13-48"><a href="#cb13-48" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> netCDF (<span class="in">`calcofi-files-public/netcdf/`</span>) <span class="pp">|</span> the site's <span class="in">`{dataset}/manifests.json`</span> <span class="pp">|</span> <span class="in">`CALCOFI_PUBLISH=true`</span>, re-rendering <span class="in">`publish_to-netcdf.qmd`</span>; unchanged bytes are never re-uploaded <span class="pp">|</span></span>
-<span id="cb13-49"><a href="#cb13-49" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> ERDDAP (<span class="in">`erddap.calcofi.io`</span>) <span class="pp">|</span> <span class="in">`data/erddap/deploy_status.json`</span> <span class="pp">|</span> automatic unless <span class="in">`CALCOFI_DEPLOY=false`</span> / <span class="in">`CALCOFI_ERDDAP_DEPLOY=false`</span> <span class="pp">|</span></span>
-<span id="cb13-50"><a href="#cb13-50" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-51"><a href="#cb13-51" aria-hidden="true" tabindex="-1"></a><span class="fu">## Setup</span></span>
-<span id="cb13-52"><a href="#cb13-52" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-55"><a href="#cb13-55" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb13-56"><a href="#cb13-56" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: setup</span></span>
-<span id="cb13-57"><a href="#cb13-57" aria-hidden="true" tabindex="-1"></a><span class="co">#| message: false</span></span>
-<span id="cb13-58"><a href="#cb13-58" aria-hidden="true" tabindex="-1"></a>librarian<span class="sc">::</span><span class="fu">shelf</span>(dplyr, glue, jsonlite, knitr, purrr, readr, tibble, here, <span class="at">quiet =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb13-59"><a href="#cb13-59" aria-hidden="true" tabindex="-1"></a>here <span class="ot">&lt;-</span> here<span class="sc">::</span>here</span>
-<span id="cb13-60"><a href="#cb13-60" aria-hidden="true" tabindex="-1"></a><span class="fu">options</span>(<span class="at">readr.show_col_types =</span> <span class="cn">FALSE</span>)</span>
-<span id="cb13-61"><a href="#cb13-61" aria-hidden="true" tabindex="-1"></a>devtools<span class="sc">::</span><span class="fu">load_all</span>(here<span class="sc">::</span><span class="fu">here</span>(<span class="st">"../calcofi4db"</span>))</span>
-<span id="cb13-62"><a href="#cb13-62" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-63"><a href="#cb13-63" aria-hidden="true" tabindex="-1"></a>RELEASE_PREFIX <span class="ot">&lt;-</span> <span class="fu">Sys.getenv</span>(<span class="st">"CALCOFI_RELEASE_PREFIX"</span>, <span class="st">"ducklake/releases"</span>)</span>
-<span id="cb13-64"><a href="#cb13-64" aria-hidden="true" tabindex="-1"></a>STAGING        <span class="ot">&lt;-</span> <span class="fu">grepl</span>(<span class="st">"staging"</span>, RELEASE_PREFIX, <span class="at">fixed =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb13-65"><a href="#cb13-65" aria-hidden="true" tabindex="-1"></a>BASE_HTTPS     <span class="ot">&lt;-</span> <span class="st">"https://storage.googleapis.com/calcofi-db"</span></span>
-<span id="cb13-66"><a href="#cb13-66" aria-hidden="true" tabindex="-1"></a>RELEASE <span class="ot">&lt;-</span> <span class="fu">Sys.getenv</span>(<span class="st">"CALCOFI_RELEASE_VERSION"</span>, <span class="st">""</span>)</span>
-<span id="cb13-67"><a href="#cb13-67" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="sc">!</span><span class="fu">nzchar</span>(RELEASE))</span>
-<span id="cb13-68"><a href="#cb13-68" aria-hidden="true" tabindex="-1"></a>  RELEASE <span class="ot">&lt;-</span> <span class="fu">trimws</span>(<span class="fu">readLines</span>(<span class="fu">glue</span>(<span class="st">"{BASE_HTTPS}/{RELEASE_PREFIX}/latest.txt"</span>), <span class="at">warn =</span> <span class="cn">FALSE</span>)[<span class="dv">1</span>])</span>
-<span id="cb13-69"><a href="#cb13-69" aria-hidden="true" tabindex="-1"></a>NETCDF_SITE <span class="ot">&lt;-</span> <span class="st">"https://storage.calcofi.io/calcofi-files-public/netcdf"</span></span>
-<span id="cb13-70"><a href="#cb13-70" aria-hidden="true" tabindex="-1"></a>OUT <span class="ot">&lt;-</span> <span class="fu">here</span>(<span class="st">"data/publish/portal_status.csv"</span>)</span>
-<span id="cb13-71"><a href="#cb13-71" aria-hidden="true" tabindex="-1"></a><span class="fu">dir.create</span>(<span class="fu">dirname</span>(OUT), <span class="at">recursive =</span> <span class="cn">TRUE</span>, <span class="at">showWarnings =</span> <span class="cn">FALSE</span>)</span>
-<span id="cb13-72"><a href="#cb13-72" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-73"><a href="#cb13-73" aria-hidden="true" tabindex="-1"></a>read_json_or_null <span class="ot">&lt;-</span> <span class="cf">function</span>(p) <span class="fu">tryCatch</span>(jsonlite<span class="sc">::</span><span class="fu">fromJSON</span>(p, <span class="at">simplifyVector =</span> <span class="cn">FALSE</span>),</span>
-<span id="cb13-74"><a href="#cb13-74" aria-hidden="true" tabindex="-1"></a>                                          <span class="at">error =</span> <span class="cf">function</span>(e) <span class="cn">NULL</span>)</span>
-<span id="cb13-75"><a href="#cb13-75" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"release : {RELEASE}{if (STAGING) ' (STAGING)' else ''}"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
-<span id="cb13-76"><a href="#cb13-76" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb13-77"><a href="#cb13-77" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-78"><a href="#cb13-78" aria-hidden="true" tabindex="-1"></a><span class="fu">## EDI</span></span>
-<span id="cb13-79"><a href="#cb13-79" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-82"><a href="#cb13-82" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb13-83"><a href="#cb13-83" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: edi</span></span>
-<span id="cb13-84"><a href="#cb13-84" aria-hidden="true" tabindex="-1"></a>edi_csv <span class="ot">&lt;-</span> <span class="fu">here</span>(<span class="cf">if</span> (STAGING) <span class="st">"data/edi-staging"</span> <span class="cf">else</span> <span class="st">"data/edi"</span>, <span class="st">"manifest.csv"</span>)</span>
-<span id="cb13-85"><a href="#cb13-85" aria-hidden="true" tabindex="-1"></a>edi <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="fu">file.exists</span>(edi_csv)) <span class="fu">read_csv</span>(edi_csv, <span class="at">col_types =</span> <span class="fu">cols</span>(<span class="at">.default =</span> <span class="st">"c"</span>), <span class="at">na =</span> <span class="st">""</span>) <span class="cf">else</span> <span class="cn">NULL</span></span>
-<span id="cb13-86"><a href="#cb13-86" aria-hidden="true" tabindex="-1"></a>edi_rows <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="fu">is.null</span>(edi) <span class="sc">||</span> <span class="sc">!</span><span class="fu">nrow</span>(edi)) <span class="fu">tibble</span>() <span class="cf">else</span> edi <span class="sc">|&gt;</span></span>
-<span id="cb13-87"><a href="#cb13-87" aria-hidden="true" tabindex="-1"></a>  <span class="fu">transmute</span>(</span>
-<span id="cb13-88"><a href="#cb13-88" aria-hidden="true" tabindex="-1"></a>    <span class="at">portal =</span> <span class="st">"edi"</span>, dataset_key, <span class="at">built_from =</span> version, checked_version,</span>
-<span id="cb13-89"><a href="#cb13-89" aria-hidden="true" tabindex="-1"></a>    upload_status, <span class="at">needs_upload =</span> <span class="fu">as.logical</span>(needs_upload),</span>
-<span id="cb13-90"><a href="#cb13-90" aria-hidden="true" tabindex="-1"></a>    <span class="at">blocked_by =</span> <span class="fu">if_else</span>(<span class="fu">nzchar</span>(<span class="fu">coalesce</span>(eml_blocking, <span class="st">""</span>)),</span>
-<span id="cb13-91"><a href="#cb13-91" aria-hidden="true" tabindex="-1"></a>                         <span class="fu">paste</span>(<span class="st">"record incomplete:"</span>, eml_blocking), <span class="st">""</span>),</span>
-<span id="cb13-92"><a href="#cb13-92" aria-hidden="true" tabindex="-1"></a>    <span class="at">how  =</span> <span class="st">"CALCOFI_PUBLISH_EDI=true + EDI credentials, re-render publish_to-edi.qmd"</span>,</span>
-<span id="cb13-93"><a href="#cb13-93" aria-hidden="true" tabindex="-1"></a>    <span class="at">link =</span> <span class="fu">glue</span>(<span class="st">"{BASE_HTTPS}/publish/edi/{dataset_key}/{dataset_key}_{version}/"</span>))</span>
-<span id="cb13-94"><a href="#cb13-94" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">nrow</span>(edi_rows)) <span class="fu">kable</span>(edi_rows <span class="sc">|&gt;</span> <span class="fu">select</span>(dataset_key, built_from, upload_status, blocked_by)) <span class="cf">else</span></span>
-<span id="cb13-95"><a href="#cb13-95" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="st">"no EDI manifest yet</span><span class="sc">\n</span><span class="st">"</span>)</span>
-<span id="cb13-96"><a href="#cb13-96" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb13-97"><a href="#cb13-97" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-98"><a href="#cb13-98" aria-hidden="true" tabindex="-1"></a><span class="fu">## OBIS</span></span>
-<span id="cb13-99"><a href="#cb13-99" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-102"><a href="#cb13-102" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb13-103"><a href="#cb13-103" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: obis</span></span>
-<span id="cb13-104"><a href="#cb13-104" aria-hidden="true" tabindex="-1"></a>obis_dir <span class="ot">&lt;-</span> <span class="fu">here</span>(<span class="cf">if</span> (STAGING) <span class="st">"data/darwincore-staging"</span> <span class="cf">else</span> <span class="st">"data/darwincore"</span>)</span>
-<span id="cb13-105"><a href="#cb13-105" aria-hidden="true" tabindex="-1"></a>mans <span class="ot">&lt;-</span> <span class="fu">Sys.glob</span>(<span class="fu">file.path</span>(obis_dir, <span class="st">"*_manifest.json"</span>))</span>
-<span id="cb13-106"><a href="#cb13-106" aria-hidden="true" tabindex="-1"></a>obis_rows <span class="ot">&lt;-</span> <span class="fu">map_dfr</span>(mans, <span class="cf">function</span>(p) {</span>
-<span id="cb13-107"><a href="#cb13-107" aria-hidden="true" tabindex="-1"></a>  m <span class="ot">&lt;-</span> <span class="fu">read_json_or_null</span>(p)</span>
-<span id="cb13-108"><a href="#cb13-108" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">is.null</span>(m)) <span class="fu">return</span>(<span class="cn">NULL</span>)</span>
-<span id="cb13-109"><a href="#cb13-109" aria-hidden="true" tabindex="-1"></a>  st <span class="ot">&lt;-</span> <span class="fu">publish_upload_status</span>(m<span class="sc">$</span>content_hash <span class="sc">%||%</span> <span class="cn">NA_character_</span>, m<span class="sc">$</span>uploaded_hash <span class="sc">%||%</span> <span class="cn">NA_character_</span>)</span>
-<span id="cb13-110"><a href="#cb13-110" aria-hidden="true" tabindex="-1"></a>  <span class="co"># a resource can be on OBIS from before manifests stamped `uploaded_hash`</span></span>
-<span id="cb13-111"><a href="#cb13-111" aria-hidden="true" tabindex="-1"></a>  <span class="co"># (swfsc_ichthyo, 2026-04): it is not "never uploaded", its copy is just unverifiable</span></span>
-<span id="cb13-112"><a href="#cb13-112" aria-hidden="true" tabindex="-1"></a>  on_portal <span class="ot">&lt;-</span> <span class="sc">!</span><span class="fu">is.null</span>(m<span class="sc">$</span>ipt_resource) <span class="sc">||</span> <span class="sc">!</span><span class="fu">is.null</span>(m<span class="sc">$</span>obis_dataset_id)</span>
-<span id="cb13-113"><a href="#cb13-113" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (on_portal <span class="sc">&amp;&amp;</span> <span class="fu">is.null</span>(m<span class="sc">$</span>uploaded_hash))</span>
-<span id="cb13-114"><a href="#cb13-114" aria-hidden="true" tabindex="-1"></a>    st<span class="sc">$</span>upload_status <span class="ot">&lt;-</span> <span class="st">"on OBIS; the uploaded copy's hash was never recorded"</span></span>
-<span id="cb13-115"><a href="#cb13-115" aria-hidden="true" tabindex="-1"></a>  <span class="fu">tibble</span>(</span>
-<span id="cb13-116"><a href="#cb13-116" aria-hidden="true" tabindex="-1"></a>    <span class="at">portal =</span> <span class="st">"obis"</span>, <span class="at">dataset_key =</span> m<span class="sc">$</span>dataset_key, <span class="at">built_from =</span> m<span class="sc">$</span>version,</span>
-<span id="cb13-117"><a href="#cb13-117" aria-hidden="true" tabindex="-1"></a>    <span class="at">checked_version =</span> m<span class="sc">$</span>checked_version <span class="sc">%||%</span> m<span class="sc">$</span>version,</span>
-<span id="cb13-118"><a href="#cb13-118" aria-hidden="true" tabindex="-1"></a>    <span class="at">upload_status =</span> st<span class="sc">$</span>upload_status, <span class="at">needs_upload =</span> st<span class="sc">$</span>needs_upload,</span>
-<span id="cb13-119"><a href="#cb13-119" aria-hidden="true" tabindex="-1"></a>    <span class="at">blocked_by =</span> <span class="cf">if</span> (<span class="sc">!</span>on_portal) <span class="st">"provider agreement (Decision 21); no IPT resource yet"</span> <span class="cf">else</span></span>
-<span id="cb13-120"><a href="#cb13-120" aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> (<span class="fu">is.null</span>(m<span class="sc">$</span>uploaded_hash)) <span class="st">"stamp uploaded_utc + uploaded_hash in the manifest at the next upload"</span> <span class="cf">else</span> <span class="st">""</span>,</span>
-<span id="cb13-121"><a href="#cb13-121" aria-hidden="true" tabindex="-1"></a>    <span class="at">how  =</span> <span class="st">"manual OBIS-USA IPT upload — docs/portals.qmd § OBIS"</span>,</span>
-<span id="cb13-122"><a href="#cb13-122" aria-hidden="true" tabindex="-1"></a>    <span class="at">link =</span> <span class="fu">glue</span>(<span class="st">"{BASE_HTTPS}/publish/dwca/{m$dataset_key}/{m$archive}"</span>))</span>
-<span id="cb13-123"><a href="#cb13-123" aria-hidden="true" tabindex="-1"></a>})</span>
-<span id="cb13-124"><a href="#cb13-124" aria-hidden="true" tabindex="-1"></a><span class="co"># a candidate that failed its checks has no manifest, and is listed rather than dropped</span></span>
-<span id="cb13-125"><a href="#cb13-125" aria-hidden="true" tabindex="-1"></a>plan_csv <span class="ot">&lt;-</span> <span class="fu">file.path</span>(obis_dir, <span class="st">"publish_plan.csv"</span>)</span>
-<span id="cb13-126"><a href="#cb13-126" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">file.exists</span>(plan_csv)) {</span>
-<span id="cb13-127"><a href="#cb13-127" aria-hidden="true" tabindex="-1"></a>  cand <span class="ot">&lt;-</span> <span class="fu">read_csv</span>(plan_csv, <span class="at">col_types =</span> <span class="fu">cols</span>(<span class="at">.default =</span> <span class="st">"c"</span>))<span class="sc">$</span>dataset_key</span>
-<span id="cb13-128"><a href="#cb13-128" aria-hidden="true" tabindex="-1"></a>  missing <span class="ot">&lt;-</span> <span class="fu">setdiff</span>(cand, obis_rows<span class="sc">$</span>dataset_key)</span>
-<span id="cb13-129"><a href="#cb13-129" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">length</span>(missing)) obis_rows <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(obis_rows, <span class="fu">tibble</span>(</span>
-<span id="cb13-130"><a href="#cb13-130" aria-hidden="true" tabindex="-1"></a>    <span class="at">portal =</span> <span class="st">"obis"</span>, <span class="at">dataset_key =</span> missing, <span class="at">built_from =</span> <span class="cn">NA</span>, <span class="at">checked_version =</span> <span class="cn">NA</span>,</span>
-<span id="cb13-131"><a href="#cb13-131" aria-hidden="true" tabindex="-1"></a>    <span class="at">upload_status =</span> <span class="st">"not built"</span>, <span class="at">needs_upload =</span> <span class="cn">FALSE</span>,</span>
-<span id="cb13-132"><a href="#cb13-132" aria-hidden="true" tabindex="-1"></a>    <span class="at">blocked_by =</span> <span class="st">"no archive: failed dwc_check() — see publish_to-obis.html"</span>,</span>
-<span id="cb13-133"><a href="#cb13-133" aria-hidden="true" tabindex="-1"></a>    <span class="at">how =</span> <span class="st">""</span>, <span class="at">link =</span> <span class="st">""</span>))</span>
-<span id="cb13-134"><a href="#cb13-134" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb13-135"><a href="#cb13-135" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">nrow</span>(obis_rows)) <span class="fu">kable</span>(obis_rows <span class="sc">|&gt;</span> <span class="fu">select</span>(dataset_key, built_from, upload_status, blocked_by)) <span class="cf">else</span></span>
-<span id="cb13-136"><a href="#cb13-136" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="st">"no Darwin Core archives built yet</span><span class="sc">\n</span><span class="st">"</span>)</span>
-<span id="cb13-137"><a href="#cb13-137" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb13-138"><a href="#cb13-138" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-139"><a href="#cb13-139" aria-hidden="true" tabindex="-1"></a><span class="fu">## netCDF</span></span>
-<span id="cb13-140"><a href="#cb13-140" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-141"><a href="#cb13-141" aria-hidden="true" tabindex="-1"></a>A file counts as published for this release when the site's <span class="in">`manifests.json`</span> lists</span>
-<span id="cb13-142"><a href="#cb13-142" aria-hidden="true" tabindex="-1"></a>the release, and its bytes are online when any listed release carries the local</span>
-<span id="cb13-143"><a href="#cb13-143" aria-hidden="true" tabindex="-1"></a>file's sha256 — an unchanged file is never uploaded twice, only listed.</span>
-<span id="cb13-144"><a href="#cb13-144" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-147"><a href="#cb13-147" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb13-148"><a href="#cb13-148" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: netcdf</span></span>
-<span id="cb13-149"><a href="#cb13-149" aria-hidden="true" tabindex="-1"></a>sides <span class="ot">&lt;-</span> <span class="fu">Sys.glob</span>(<span class="fu">here</span>(<span class="st">"data/netcdf/*.fingerprint.json"</span>))</span>
-<span id="cb13-150"><a href="#cb13-150" aria-hidden="true" tabindex="-1"></a>nc_rows <span class="ot">&lt;-</span> <span class="fu">map_dfr</span>(sides, <span class="cf">function</span>(p) {</span>
-<span id="cb13-151"><a href="#cb13-151" aria-hidden="true" tabindex="-1"></a>  s  <span class="ot">&lt;-</span> <span class="fu">read_json_or_null</span>(p)</span>
-<span id="cb13-152"><a href="#cb13-152" aria-hidden="true" tabindex="-1"></a>  ds <span class="ot">&lt;-</span> <span class="fu">sub</span>(<span class="st">"</span><span class="sc">\\</span><span class="st">.fingerprint</span><span class="sc">\\</span><span class="st">.json$"</span>, <span class="st">""</span>, <span class="fu">basename</span>(p))</span>
-<span id="cb13-153"><a href="#cb13-153" aria-hidden="true" tabindex="-1"></a>  nc <span class="ot">&lt;-</span> <span class="fu">sub</span>(<span class="st">"</span><span class="sc">\\</span><span class="st">.fingerprint</span><span class="sc">\\</span><span class="st">.json$"</span>, <span class="st">".nc"</span>, p)</span>
-<span id="cb13-154"><a href="#cb13-154" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">is.null</span>(s) <span class="sc">||</span> <span class="sc">!</span><span class="fu">file.exists</span>(nc)) <span class="fu">return</span>(<span class="cn">NULL</span>)</span>
-<span id="cb13-155"><a href="#cb13-155" aria-hidden="true" tabindex="-1"></a>  rel  <span class="ot">&lt;-</span> <span class="fu">read_json_or_null</span>(<span class="fu">glue</span>(<span class="st">"{NETCDF_SITE}/{ds}/manifests.json"</span>))<span class="sc">$</span>releases <span class="sc">%||%</span> <span class="fu">list</span>()</span>
-<span id="cb13-156"><a href="#cb13-156" aria-hidden="true" tabindex="-1"></a>  sha  <span class="ot">&lt;-</span> digest<span class="sc">::</span><span class="fu">digest</span>(nc, <span class="at">algo =</span> <span class="st">"sha256"</span>, <span class="at">file =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb13-157"><a href="#cb13-157" aria-hidden="true" tabindex="-1"></a>  online <span class="ot">&lt;-</span> <span class="fu">any</span>(<span class="fu">vapply</span>(rel, <span class="cf">function</span>(r) <span class="fu">identical</span>(r<span class="sc">$</span>sha256, sha), <span class="fu">logical</span>(<span class="dv">1</span>)))</span>
-<span id="cb13-158"><a href="#cb13-158" aria-hidden="true" tabindex="-1"></a>  listed <span class="ot">&lt;-</span> <span class="fu">any</span>(<span class="fu">vapply</span>(rel, <span class="cf">function</span>(r) <span class="fu">identical</span>(r<span class="sc">$</span>version, RELEASE), <span class="fu">logical</span>(<span class="dv">1</span>)))</span>
-<span id="cb13-159"><a href="#cb13-159" aria-hidden="true" tabindex="-1"></a>  status <span class="ot">&lt;-</span> <span class="cf">if</span> (online <span class="sc">&amp;&amp;</span> listed) <span class="st">"current"</span> <span class="cf">else</span> <span class="cf">if</span> (online) <span class="st">"bytes online; release not listed"</span> <span class="cf">else</span></span>
-<span id="cb13-160"><a href="#cb13-160" aria-hidden="true" tabindex="-1"></a>    <span class="st">"not online"</span></span>
-<span id="cb13-161"><a href="#cb13-161" aria-hidden="true" tabindex="-1"></a>  <span class="fu">tibble</span>(<span class="at">portal =</span> <span class="st">"netcdf"</span>, <span class="at">dataset_key =</span> ds, <span class="at">built_from =</span> s<span class="sc">$</span>built_from, <span class="at">checked_version =</span> RELEASE,</span>
-<span id="cb13-162"><a href="#cb13-162" aria-hidden="true" tabindex="-1"></a>         <span class="at">upload_status =</span> status, <span class="at">needs_upload =</span> <span class="sc">!</span>(online <span class="sc">&amp;&amp;</span> listed), <span class="at">blocked_by =</span> <span class="st">""</span>,</span>
-<span id="cb13-163"><a href="#cb13-163" aria-hidden="true" tabindex="-1"></a>         <span class="at">how  =</span> <span class="st">"CALCOFI_PUBLISH=true, re-render publish_to-netcdf.qmd (+ scripts/build_netcdf_index.R)"</span>,</span>
-<span id="cb13-164"><a href="#cb13-164" aria-hidden="true" tabindex="-1"></a>         <span class="at">link =</span> <span class="fu">glue</span>(<span class="st">"{NETCDF_SITE}/{ds}/"</span>))</span>
-<span id="cb13-165"><a href="#cb13-165" aria-hidden="true" tabindex="-1"></a>})</span>
-<span id="cb13-166"><a href="#cb13-166" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">nrow</span>(nc_rows)) <span class="fu">kable</span>(nc_rows <span class="sc">|&gt;</span> <span class="fu">select</span>(dataset_key, built_from, upload_status)) <span class="cf">else</span></span>
-<span id="cb13-167"><a href="#cb13-167" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="st">"no netCDF fingerprints yet — publish_to-netcdf.qmd has not run since change detection</span><span class="sc">\n</span><span class="st">"</span>)</span>
-<span id="cb13-168"><a href="#cb13-168" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb13-169"><a href="#cb13-169" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-170"><a href="#cb13-170" aria-hidden="true" tabindex="-1"></a><span class="fu">## ERDDAP</span></span>
-<span id="cb13-171"><a href="#cb13-171" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-174"><a href="#cb13-174" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb13-175"><a href="#cb13-175" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: erddap</span></span>
-<span id="cb13-176"><a href="#cb13-176" aria-hidden="true" tabindex="-1"></a>es <span class="ot">&lt;-</span> <span class="fu">read_json_or_null</span>(<span class="fu">here</span>(<span class="st">"data/erddap/deploy_status.json"</span>))</span>
-<span id="cb13-177"><a href="#cb13-177" aria-hidden="true" tabindex="-1"></a>erddap_rows <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="fu">is.null</span>(es)) <span class="fu">tibble</span>() <span class="cf">else</span> {</span>
-<span id="cb13-178"><a href="#cb13-178" aria-hidden="true" tabindex="-1"></a>  served <span class="ot">&lt;-</span> es<span class="sc">$</span>deployed_release <span class="sc">%||%</span> <span class="cn">NA_character_</span></span>
-<span id="cb13-179"><a href="#cb13-179" aria-hidden="true" tabindex="-1"></a>  <span class="fu">tibble</span>(<span class="at">portal =</span> <span class="st">"erddap"</span>, <span class="at">dataset_key =</span> <span class="st">"(all)"</span>, <span class="at">built_from =</span> RELEASE, <span class="at">checked_version =</span> RELEASE,</span>
-<span id="cb13-180"><a href="#cb13-180" aria-hidden="true" tabindex="-1"></a>         <span class="at">upload_status =</span> <span class="cf">if</span> (<span class="fu">identical</span>(served, RELEASE)) <span class="st">"current"</span> <span class="cf">else</span></span>
-<span id="cb13-181"><a href="#cb13-181" aria-hidden="true" tabindex="-1"></a>           <span class="fu">glue</span>(<span class="st">"serves {served %||% 'an unknown release'}"</span>),</span>
-<span id="cb13-182"><a href="#cb13-182" aria-hidden="true" tabindex="-1"></a>         <span class="at">needs_upload =</span> <span class="sc">!</span><span class="fu">identical</span>(served, RELEASE), <span class="at">blocked_by =</span> <span class="st">""</span>,</span>
-<span id="cb13-183"><a href="#cb13-183" aria-hidden="true" tabindex="-1"></a>         <span class="at">how  =</span> <span class="st">"re-render publish_to-erddap.qmd without CALCOFI_DEPLOY=false"</span>,</span>
-<span id="cb13-184"><a href="#cb13-184" aria-hidden="true" tabindex="-1"></a>         <span class="at">link =</span> <span class="st">"https://erddap.calcofi.io/erddap/"</span>)</span>
-<span id="cb13-185"><a href="#cb13-185" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb13-186"><a href="#cb13-186" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">nrow</span>(erddap_rows)) <span class="fu">kable</span>(erddap_rows <span class="sc">|&gt;</span> <span class="fu">select</span>(upload_status, how)) <span class="cf">else</span></span>
-<span id="cb13-187"><a href="#cb13-187" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="st">"no ERDDAP deploy status yet — publish_to-erddap.qmd has not run since it began recording one</span><span class="sc">\n</span><span class="st">"</span>)</span>
-<span id="cb13-188"><a href="#cb13-188" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb13-189"><a href="#cb13-189" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-190"><a href="#cb13-190" aria-hidden="true" tabindex="-1"></a><span class="fu">## What needs a fresh upload</span></span>
-<span id="cb13-191"><a href="#cb13-191" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-194"><a href="#cb13-194" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb13-195"><a href="#cb13-195" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: status</span></span>
-<span id="cb13-196"><a href="#cb13-196" aria-hidden="true" tabindex="-1"></a>status <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(edi_rows, obis_rows, nc_rows, erddap_rows) <span class="sc">|&gt;</span></span>
-<span id="cb13-197"><a href="#cb13-197" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">release =</span> RELEASE, <span class="at">.before =</span> <span class="dv">1</span>) <span class="sc">|&gt;</span></span>
-<span id="cb13-198"><a href="#cb13-198" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(<span class="fu">desc</span>(needs_upload), portal, dataset_key)</span>
-<span id="cb13-199"><a href="#cb13-199" aria-hidden="true" tabindex="-1"></a><span class="fu">write_csv</span>(status, OUT, <span class="at">na =</span> <span class="st">""</span>)</span>
-<span id="cb13-200"><a href="#cb13-200" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="sc">!</span>STAGING) <span class="fu">put_gcs_file</span>(OUT, <span class="st">"gs://calcofi-db/publish/portal_status.csv"</span>)</span>
-<span id="cb13-201"><a href="#cb13-201" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-202"><a href="#cb13-202" aria-hidden="true" tabindex="-1"></a>due <span class="ot">&lt;-</span> status <span class="sc">|&gt;</span> <span class="fu">filter</span>(needs_upload)</span>
-<span id="cb13-203"><a href="#cb13-203" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"{nrow(due)} of {nrow(status)} portal copies need a fresh upload for {RELEASE}"</span>,</span>
-<span id="cb13-204"><a href="#cb13-204" aria-hidden="true" tabindex="-1"></a>         <span class="st">"{if (nrow(due)) paste0(' (', paste(sort(unique(due$portal)), collapse = ', '), ')') else ''}"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
-<span id="cb13-205"><a href="#cb13-205" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">nrow</span>(due))</span>
-<span id="cb13-206"><a href="#cb13-206" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kable</span>(due <span class="sc">|&gt;</span> <span class="fu">select</span>(portal, dataset_key, built_from, upload_status, blocked_by, how),</span>
-<span id="cb13-207"><a href="#cb13-207" aria-hidden="true" tabindex="-1"></a>        <span class="at">caption =</span> <span class="st">"due: never deposited, or changed since the last deposit"</span>)</span>
-<span id="cb13-208"><a href="#cb13-208" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb13-209"><a href="#cb13-209" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-212"><a href="#cb13-212" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb13-213"><a href="#cb13-213" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: status-all</span></span>
-<span id="cb13-214"><a href="#cb13-214" aria-hidden="true" tabindex="-1"></a><span class="fu">kable</span>(status <span class="sc">|&gt;</span> <span class="fu">select</span>(portal, dataset_key, built_from, checked_version, upload_status, blocked_by),</span>
-<span id="cb13-215"><a href="#cb13-215" aria-hidden="true" tabindex="-1"></a>      <span class="at">caption =</span> <span class="fu">glue</span>(<span class="st">"every portal copy, {RELEASE} (data/publish/portal_status.csv)"</span>))</span>
-<span id="cb13-216"><a href="#cb13-216" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb16" data-shortcodes="false"><pre class="sourceCode markdown code-with-copy"><code class="sourceCode markdown"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="co">---</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="an">title:</span><span class="co"> "Portal status — what needs a fresh upload"</span></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a><span class="an">subtitle:</span><span class="co"> "Every publisher's output against what each portal holds, after every release"</span></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a><span class="an">author:</span><span class="co"> "CalCOFI"</span></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a><span class="an">date:</span><span class="co"> today</span></span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a><span class="an">format:</span></span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a><span class="co">  html:</span></span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a><span class="co">    toc: true</span></span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a><span class="co">    toc-depth: 2</span></span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a><span class="co">    code-fold: true</span></span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a><span class="co">    code-tools: true</span></span>
+<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a><span class="co">    df-print: kable</span></span>
+<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a><span class="an">calcofi:</span></span>
+<span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a><span class="co">  target_name: publish_status</span></span>
+<span id="cb16-15"><a href="#cb16-15" aria-hidden="true" tabindex="-1"></a><span class="co">  workflow_type: publish</span></span>
+<span id="cb16-16"><a href="#cb16-16" aria-hidden="true" tabindex="-1"></a><span class="co">  dependency:</span></span>
+<span id="cb16-17"><a href="#cb16-17" aria-hidden="true" tabindex="-1"></a><span class="co">    - publish_to_edi</span></span>
+<span id="cb16-18"><a href="#cb16-18" aria-hidden="true" tabindex="-1"></a><span class="co">    - publish_to_obis</span></span>
+<span id="cb16-19"><a href="#cb16-19" aria-hidden="true" tabindex="-1"></a><span class="co">    - publish_to_netcdf</span></span>
+<span id="cb16-20"><a href="#cb16-20" aria-hidden="true" tabindex="-1"></a><span class="co">    - publish_to_erddap</span></span>
+<span id="cb16-21"><a href="#cb16-21" aria-hidden="true" tabindex="-1"></a><span class="co">  output: data/publish/portal_status.csv</span></span>
+<span id="cb16-22"><a href="#cb16-22" aria-hidden="true" tabindex="-1"></a><span class="co">  workflow_url: https://calcofi.io/workflows/publish_status.html</span></span>
+<span id="cb16-23"><a href="#cb16-23" aria-hidden="true" tabindex="-1"></a><span class="co">  description: &gt;</span></span>
+<span id="cb16-24"><a href="#cb16-24" aria-hidden="true" tabindex="-1"></a><span class="co">    The caboose of the publishers: after publish_to-edi, -obis, -netcdf and</span></span>
+<span id="cb16-25"><a href="#cb16-25" aria-hidden="true" tabindex="-1"></a><span class="co">    -erddap have run against a promoted release, compares each dataset's built</span></span>
+<span id="cb16-26"><a href="#cb16-26" aria-hidden="true" tabindex="-1"></a><span class="co">    package, archive or file with the copy its portal holds, and lists what</span></span>
+<span id="cb16-27"><a href="#cb16-27" aria-hidden="true" tabindex="-1"></a><span class="co">    needs a fresh upload — never deposited, or changed since the last deposit —</span></span>
+<span id="cb16-28"><a href="#cb16-28" aria-hidden="true" tabindex="-1"></a><span class="co">    with what still blocks it and how to do it.</span></span>
+<span id="cb16-29"><a href="#cb16-29" aria-hidden="true" tabindex="-1"></a><span class="an">editor_options:</span></span>
+<span id="cb16-30"><a href="#cb16-30" aria-hidden="true" tabindex="-1"></a><span class="co">  chunk_output_type: console</span></span>
+<span id="cb16-31"><a href="#cb16-31" aria-hidden="true" tabindex="-1"></a><span class="co">---</span></span>
+<span id="cb16-32"><a href="#cb16-32" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-33"><a href="#cb16-33" aria-hidden="true" tabindex="-1"></a><span class="fu">## Why this page exists</span></span>
+<span id="cb16-34"><a href="#cb16-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-35"><a href="#cb16-35" aria-hidden="true" tabindex="-1"></a>The four publishers run after every promoted release, and each rebuilds a dataset's</span>
+<span id="cb16-36"><a href="#cb16-36" aria-hidden="true" tabindex="-1"></a>output only when that dataset's rows, metadata or the publisher's code changed</span>
+<span id="cb16-37"><a href="#cb16-37" aria-hidden="true" tabindex="-1"></a>(<span class="in">`calcofi4db::publish_fingerprint()`</span>). Two of the four portals then take a deliberate,</span>
+<span id="cb16-38"><a href="#cb16-38" aria-hidden="true" tabindex="-1"></a>manual step — an EDI deposit and an OBIS-USA IPT upload — and the other two publish</span>
+<span id="cb16-39"><a href="#cb16-39" aria-hidden="true" tabindex="-1"></a>from the pipeline when a flag says so. Whether a portal is behind is therefore a</span>
+<span id="cb16-40"><a href="#cb16-40" aria-hidden="true" tabindex="-1"></a>comparison, not a memory: the bytes built now against the bytes the portal was last</span>
+<span id="cb16-41"><a href="#cb16-41" aria-hidden="true" tabindex="-1"></a>given (<span class="in">`calcofi4db::publish_upload_status()`</span>). This page makes that comparison for every</span>
+<span id="cb16-42"><a href="#cb16-42" aria-hidden="true" tabindex="-1"></a>dataset on every portal, and its first table is the to-do list.</span>
+<span id="cb16-43"><a href="#cb16-43" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-44"><a href="#cb16-44" aria-hidden="true" tabindex="-1"></a>**`upload_status` is about the portal of record, never about our own bucket.** Every</span>
+<span id="cb16-45"><a href="#cb16-45" aria-hidden="true" tabindex="-1"></a>package, archive and file listed here is already built and staged publicly under</span>
+<span id="cb16-46"><a href="#cb16-46" aria-hidden="true" tabindex="-1"></a><span class="in">`gs://calcofi-db/publish/`</span> (or <span class="in">`calcofi-files-public/netcdf/`</span>) — that is what a provider</span>
+<span id="cb16-47"><a href="#cb16-47" aria-hidden="true" tabindex="-1"></a>reviews. <span class="in">`never deposited`</span> therefore means EDI has no such package / the IPT has no such</span>
+<span id="cb16-48"><a href="#cb16-48" aria-hidden="true" tabindex="-1"></a>resource yet, not that the bytes are missing from GCS. The <span class="in">`staged`</span> column is the copy</span>
+<span id="cb16-49"><a href="#cb16-49" aria-hidden="true" tabindex="-1"></a>that does exist.</span>
+<span id="cb16-50"><a href="#cb16-50" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-51"><a href="#cb16-51" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> portal <span class="pp">|</span> the copy it holds is recorded in <span class="pp">|</span> an upload is <span class="pp">|</span></span>
+<span id="cb16-52"><a href="#cb16-52" aria-hidden="true" tabindex="-1"></a><span class="pp">|---|---|---|</span></span>
+<span id="cb16-53"><a href="#cb16-53" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> EDI <span class="pp">|</span> <span class="in">`metadata/edi_packages.csv`</span> (<span class="in">`content_hash`</span>, <span class="in">`built_from`</span>) <span class="pp">|</span> <span class="in">`CALCOFI_PUBLISH_EDI=true`</span> + EDI credentials, re-rendering <span class="in">`publish_to-edi.qmd`</span>; refused while the record lacks a required field <span class="pp">|</span></span>
+<span id="cb16-54"><a href="#cb16-54" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> OBIS (via the OBIS-USA IPT) <span class="pp">|</span> each archive's <span class="in">`{dataset_key}_manifest.json`</span> (<span class="in">`uploaded_hash`</span>) <span class="pp">|</span> manual, after the provider agrees (Decision 21) — <span class="co">[</span><span class="ot">`docs/portals.qmd` § OBIS</span><span class="co">](https://calcofi.io/docs/portals.html#obis)</span> <span class="pp">|</span></span>
+<span id="cb16-55"><a href="#cb16-55" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> netCDF (<span class="in">`calcofi-files-public/netcdf/`</span>) <span class="pp">|</span> the site's <span class="in">`{dataset}/manifests.json`</span> <span class="pp">|</span> <span class="in">`CALCOFI_PUBLISH=true`</span>, re-rendering <span class="in">`publish_to-netcdf.qmd`</span>; unchanged bytes are never re-uploaded <span class="pp">|</span></span>
+<span id="cb16-56"><a href="#cb16-56" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> ERDDAP (<span class="in">`erddap.calcofi.io`</span>) <span class="pp">|</span> <span class="in">`data/erddap/deploy_status.json`</span> <span class="pp">|</span> automatic unless <span class="in">`CALCOFI_DEPLOY=false`</span> / <span class="in">`CALCOFI_ERDDAP_DEPLOY=false`</span> <span class="pp">|</span></span>
+<span id="cb16-57"><a href="#cb16-57" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-58"><a href="#cb16-58" aria-hidden="true" tabindex="-1"></a><span class="fu">## Setup</span></span>
+<span id="cb16-59"><a href="#cb16-59" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-62"><a href="#cb16-62" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb16-63"><a href="#cb16-63" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: setup</span></span>
+<span id="cb16-64"><a href="#cb16-64" aria-hidden="true" tabindex="-1"></a><span class="co">#| message: false</span></span>
+<span id="cb16-65"><a href="#cb16-65" aria-hidden="true" tabindex="-1"></a>librarian<span class="sc">::</span><span class="fu">shelf</span>(dplyr, glue, jsonlite, knitr, purrr, readr, tibble, here, <span class="at">quiet =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb16-66"><a href="#cb16-66" aria-hidden="true" tabindex="-1"></a>here <span class="ot">&lt;-</span> here<span class="sc">::</span>here</span>
+<span id="cb16-67"><a href="#cb16-67" aria-hidden="true" tabindex="-1"></a><span class="fu">options</span>(<span class="at">readr.show_col_types =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb16-68"><a href="#cb16-68" aria-hidden="true" tabindex="-1"></a>devtools<span class="sc">::</span><span class="fu">load_all</span>(here<span class="sc">::</span><span class="fu">here</span>(<span class="st">"../calcofi4db"</span>))</span>
+<span id="cb16-69"><a href="#cb16-69" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-70"><a href="#cb16-70" aria-hidden="true" tabindex="-1"></a>RELEASE_PREFIX <span class="ot">&lt;-</span> <span class="fu">Sys.getenv</span>(<span class="st">"CALCOFI_RELEASE_PREFIX"</span>, <span class="st">"ducklake/releases"</span>)</span>
+<span id="cb16-71"><a href="#cb16-71" aria-hidden="true" tabindex="-1"></a>STAGING        <span class="ot">&lt;-</span> <span class="fu">grepl</span>(<span class="st">"staging"</span>, RELEASE_PREFIX, <span class="at">fixed =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb16-72"><a href="#cb16-72" aria-hidden="true" tabindex="-1"></a>BASE_HTTPS     <span class="ot">&lt;-</span> <span class="st">"https://storage.googleapis.com/calcofi-db"</span></span>
+<span id="cb16-73"><a href="#cb16-73" aria-hidden="true" tabindex="-1"></a>RELEASE <span class="ot">&lt;-</span> <span class="fu">Sys.getenv</span>(<span class="st">"CALCOFI_RELEASE_VERSION"</span>, <span class="st">""</span>)</span>
+<span id="cb16-74"><a href="#cb16-74" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="sc">!</span><span class="fu">nzchar</span>(RELEASE))</span>
+<span id="cb16-75"><a href="#cb16-75" aria-hidden="true" tabindex="-1"></a>  RELEASE <span class="ot">&lt;-</span> <span class="fu">trimws</span>(<span class="fu">readLines</span>(<span class="fu">glue</span>(<span class="st">"{BASE_HTTPS}/{RELEASE_PREFIX}/latest.txt"</span>), <span class="at">warn =</span> <span class="cn">FALSE</span>)[<span class="dv">1</span>])</span>
+<span id="cb16-76"><a href="#cb16-76" aria-hidden="true" tabindex="-1"></a>NETCDF_SITE <span class="ot">&lt;-</span> <span class="st">"https://storage.calcofi.io/calcofi-files-public/netcdf"</span></span>
+<span id="cb16-77"><a href="#cb16-77" aria-hidden="true" tabindex="-1"></a>OUT <span class="ot">&lt;-</span> <span class="fu">here</span>(<span class="st">"data/publish/portal_status.csv"</span>)</span>
+<span id="cb16-78"><a href="#cb16-78" aria-hidden="true" tabindex="-1"></a><span class="fu">dir.create</span>(<span class="fu">dirname</span>(OUT), <span class="at">recursive =</span> <span class="cn">TRUE</span>, <span class="at">showWarnings =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb16-79"><a href="#cb16-79" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-80"><a href="#cb16-80" aria-hidden="true" tabindex="-1"></a>read_json_or_null <span class="ot">&lt;-</span> <span class="cf">function</span>(p) <span class="fu">tryCatch</span>(jsonlite<span class="sc">::</span><span class="fu">fromJSON</span>(p, <span class="at">simplifyVector =</span> <span class="cn">FALSE</span>),</span>
+<span id="cb16-81"><a href="#cb16-81" aria-hidden="true" tabindex="-1"></a>                                          <span class="at">error =</span> <span class="cf">function</span>(e) <span class="cn">NULL</span>)</span>
+<span id="cb16-82"><a href="#cb16-82" aria-hidden="true" tabindex="-1"></a><span class="co"># the browse pages are rebuilt unless this is a staging run or the whole post-release</span></span>
+<span id="cb16-83"><a href="#cb16-83" aria-hidden="true" tabindex="-1"></a><span class="co"># chain is a dry run (the ERDDAP publisher's CALCOFI_DEPLOY convention)</span></span>
+<span id="cb16-84"><a href="#cb16-84" aria-hidden="true" tabindex="-1"></a>REFRESH_INDEX    <span class="ot">&lt;-</span> <span class="sc">!</span>STAGING <span class="sc">&amp;&amp;</span> <span class="sc">!</span><span class="fu">identical</span>(<span class="fu">tolower</span>(<span class="fu">Sys.getenv</span>(<span class="st">"CALCOFI_DEPLOY"</span>, <span class="st">"true"</span>)), <span class="st">"false"</span>)</span>
+<span id="cb16-85"><a href="#cb16-85" aria-hidden="true" tabindex="-1"></a>NO_REFRESH_INDEX <span class="ot">&lt;-</span> <span class="sc">!</span>REFRESH_INDEX</span>
+<span id="cb16-86"><a href="#cb16-86" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"release : {RELEASE}{if (STAGING) ' (STAGING)' else ''}"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb16-87"><a href="#cb16-87" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb16-88"><a href="#cb16-88" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-89"><a href="#cb16-89" aria-hidden="true" tabindex="-1"></a><span class="fu">## EDI</span></span>
+<span id="cb16-90"><a href="#cb16-90" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-93"><a href="#cb16-93" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb16-94"><a href="#cb16-94" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: edi</span></span>
+<span id="cb16-95"><a href="#cb16-95" aria-hidden="true" tabindex="-1"></a>edi_csv <span class="ot">&lt;-</span> <span class="fu">here</span>(<span class="cf">if</span> (STAGING) <span class="st">"data/edi-staging"</span> <span class="cf">else</span> <span class="st">"data/edi"</span>, <span class="st">"manifest.csv"</span>)</span>
+<span id="cb16-96"><a href="#cb16-96" aria-hidden="true" tabindex="-1"></a>edi <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="fu">file.exists</span>(edi_csv)) <span class="fu">read_csv</span>(edi_csv, <span class="at">col_types =</span> <span class="fu">cols</span>(<span class="at">.default =</span> <span class="st">"c"</span>), <span class="at">na =</span> <span class="st">""</span>) <span class="cf">else</span> <span class="cn">NULL</span></span>
+<span id="cb16-97"><a href="#cb16-97" aria-hidden="true" tabindex="-1"></a>edi_rows <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="fu">is.null</span>(edi) <span class="sc">||</span> <span class="sc">!</span><span class="fu">nrow</span>(edi)) <span class="fu">tibble</span>() <span class="cf">else</span> edi <span class="sc">|&gt;</span></span>
+<span id="cb16-98"><a href="#cb16-98" aria-hidden="true" tabindex="-1"></a>  <span class="fu">transmute</span>(</span>
+<span id="cb16-99"><a href="#cb16-99" aria-hidden="true" tabindex="-1"></a>    <span class="at">portal =</span> <span class="st">"edi"</span>, dataset_key, <span class="at">built_from =</span> version, checked_version,</span>
+<span id="cb16-100"><a href="#cb16-100" aria-hidden="true" tabindex="-1"></a>    upload_status, <span class="at">needs_upload =</span> <span class="fu">as.logical</span>(needs_upload),</span>
+<span id="cb16-101"><a href="#cb16-101" aria-hidden="true" tabindex="-1"></a>    <span class="at">blocked_by =</span> <span class="fu">if_else</span>(<span class="fu">nzchar</span>(<span class="fu">coalesce</span>(eml_blocking, <span class="st">""</span>)),</span>
+<span id="cb16-102"><a href="#cb16-102" aria-hidden="true" tabindex="-1"></a>                         <span class="fu">paste</span>(<span class="st">"record incomplete:"</span>, eml_blocking), <span class="st">""</span>),</span>
+<span id="cb16-103"><a href="#cb16-103" aria-hidden="true" tabindex="-1"></a>    <span class="at">how  =</span> <span class="st">"CALCOFI_PUBLISH_EDI=true + EDI credentials, re-render publish_to-edi.qmd"</span>,</span>
+<span id="cb16-104"><a href="#cb16-104" aria-hidden="true" tabindex="-1"></a>    <span class="at">link =</span> <span class="fu">glue</span>(<span class="st">"{BASE_HTTPS}/publish/edi/{dataset_key}/{dataset_key}_{version}/"</span>))</span>
+<span id="cb16-105"><a href="#cb16-105" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">nrow</span>(edi_rows)) <span class="fu">kable</span>(edi_rows <span class="sc">|&gt;</span> <span class="fu">select</span>(dataset_key, built_from, upload_status, blocked_by)) <span class="cf">else</span></span>
+<span id="cb16-106"><a href="#cb16-106" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="st">"no EDI manifest yet</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb16-107"><a href="#cb16-107" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb16-108"><a href="#cb16-108" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-109"><a href="#cb16-109" aria-hidden="true" tabindex="-1"></a><span class="fu">## OBIS</span></span>
+<span id="cb16-110"><a href="#cb16-110" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-113"><a href="#cb16-113" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb16-114"><a href="#cb16-114" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: obis</span></span>
+<span id="cb16-115"><a href="#cb16-115" aria-hidden="true" tabindex="-1"></a>obis_dir <span class="ot">&lt;-</span> <span class="fu">here</span>(<span class="cf">if</span> (STAGING) <span class="st">"data/darwincore-staging"</span> <span class="cf">else</span> <span class="st">"data/darwincore"</span>)</span>
+<span id="cb16-116"><a href="#cb16-116" aria-hidden="true" tabindex="-1"></a>mans <span class="ot">&lt;-</span> <span class="fu">Sys.glob</span>(<span class="fu">file.path</span>(obis_dir, <span class="st">"*_manifest.json"</span>))</span>
+<span id="cb16-117"><a href="#cb16-117" aria-hidden="true" tabindex="-1"></a>obis_rows <span class="ot">&lt;-</span> <span class="fu">map_dfr</span>(mans, <span class="cf">function</span>(p) {</span>
+<span id="cb16-118"><a href="#cb16-118" aria-hidden="true" tabindex="-1"></a>  m <span class="ot">&lt;-</span> <span class="fu">read_json_or_null</span>(p)</span>
+<span id="cb16-119"><a href="#cb16-119" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">is.null</span>(m)) <span class="fu">return</span>(<span class="cn">NULL</span>)</span>
+<span id="cb16-120"><a href="#cb16-120" aria-hidden="true" tabindex="-1"></a>  st <span class="ot">&lt;-</span> <span class="fu">publish_upload_status</span>(m<span class="sc">$</span>content_hash <span class="sc">%||%</span> <span class="cn">NA_character_</span>, m<span class="sc">$</span>uploaded_hash <span class="sc">%||%</span> <span class="cn">NA_character_</span>)</span>
+<span id="cb16-121"><a href="#cb16-121" aria-hidden="true" tabindex="-1"></a>  <span class="co"># a resource can be on OBIS from before manifests stamped `uploaded_hash`</span></span>
+<span id="cb16-122"><a href="#cb16-122" aria-hidden="true" tabindex="-1"></a>  <span class="co"># (swfsc_ichthyo, 2026-04): it is not "never uploaded", its copy is just unverifiable</span></span>
+<span id="cb16-123"><a href="#cb16-123" aria-hidden="true" tabindex="-1"></a>  on_portal <span class="ot">&lt;-</span> <span class="sc">!</span><span class="fu">is.null</span>(m<span class="sc">$</span>ipt_resource) <span class="sc">||</span> <span class="sc">!</span><span class="fu">is.null</span>(m<span class="sc">$</span>obis_dataset_id)</span>
+<span id="cb16-124"><a href="#cb16-124" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (on_portal <span class="sc">&amp;&amp;</span> <span class="fu">is.null</span>(m<span class="sc">$</span>uploaded_hash))</span>
+<span id="cb16-125"><a href="#cb16-125" aria-hidden="true" tabindex="-1"></a>    st<span class="sc">$</span>upload_status <span class="ot">&lt;-</span> <span class="st">"on OBIS; the uploaded copy's hash was never recorded"</span></span>
+<span id="cb16-126"><a href="#cb16-126" aria-hidden="true" tabindex="-1"></a>  <span class="fu">tibble</span>(</span>
+<span id="cb16-127"><a href="#cb16-127" aria-hidden="true" tabindex="-1"></a>    <span class="at">portal =</span> <span class="st">"obis"</span>, <span class="at">dataset_key =</span> m<span class="sc">$</span>dataset_key, <span class="at">built_from =</span> m<span class="sc">$</span>version,</span>
+<span id="cb16-128"><a href="#cb16-128" aria-hidden="true" tabindex="-1"></a>    <span class="at">checked_version =</span> m<span class="sc">$</span>checked_version <span class="sc">%||%</span> m<span class="sc">$</span>version,</span>
+<span id="cb16-129"><a href="#cb16-129" aria-hidden="true" tabindex="-1"></a>    <span class="at">upload_status =</span> st<span class="sc">$</span>upload_status, <span class="at">needs_upload =</span> st<span class="sc">$</span>needs_upload,</span>
+<span id="cb16-130"><a href="#cb16-130" aria-hidden="true" tabindex="-1"></a>    <span class="at">blocked_by =</span> <span class="cf">if</span> (<span class="sc">!</span>on_portal) <span class="st">"provider agreement (Decision 21); no IPT resource yet"</span> <span class="cf">else</span></span>
+<span id="cb16-131"><a href="#cb16-131" aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> (<span class="fu">is.null</span>(m<span class="sc">$</span>uploaded_hash)) <span class="st">"stamp uploaded_utc + uploaded_hash in the manifest at the next upload"</span> <span class="cf">else</span> <span class="st">""</span>,</span>
+<span id="cb16-132"><a href="#cb16-132" aria-hidden="true" tabindex="-1"></a>    <span class="at">how  =</span> <span class="st">"manual OBIS-USA IPT upload — docs/portals.qmd § OBIS"</span>,</span>
+<span id="cb16-133"><a href="#cb16-133" aria-hidden="true" tabindex="-1"></a>    <span class="at">link =</span> <span class="fu">glue</span>(<span class="st">"{BASE_HTTPS}/publish/dwca/{m$dataset_key}/{m$archive}"</span>))</span>
+<span id="cb16-134"><a href="#cb16-134" aria-hidden="true" tabindex="-1"></a>})</span>
+<span id="cb16-135"><a href="#cb16-135" aria-hidden="true" tabindex="-1"></a><span class="co"># a candidate that failed its checks has no manifest, and is listed rather than dropped</span></span>
+<span id="cb16-136"><a href="#cb16-136" aria-hidden="true" tabindex="-1"></a>plan_csv <span class="ot">&lt;-</span> <span class="fu">file.path</span>(obis_dir, <span class="st">"publish_plan.csv"</span>)</span>
+<span id="cb16-137"><a href="#cb16-137" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">file.exists</span>(plan_csv)) {</span>
+<span id="cb16-138"><a href="#cb16-138" aria-hidden="true" tabindex="-1"></a>  cand <span class="ot">&lt;-</span> <span class="fu">read_csv</span>(plan_csv, <span class="at">col_types =</span> <span class="fu">cols</span>(<span class="at">.default =</span> <span class="st">"c"</span>))<span class="sc">$</span>dataset_key</span>
+<span id="cb16-139"><a href="#cb16-139" aria-hidden="true" tabindex="-1"></a>  missing <span class="ot">&lt;-</span> <span class="fu">setdiff</span>(cand, obis_rows<span class="sc">$</span>dataset_key)</span>
+<span id="cb16-140"><a href="#cb16-140" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">length</span>(missing)) obis_rows <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(obis_rows, <span class="fu">tibble</span>(</span>
+<span id="cb16-141"><a href="#cb16-141" aria-hidden="true" tabindex="-1"></a>    <span class="at">portal =</span> <span class="st">"obis"</span>, <span class="at">dataset_key =</span> missing, <span class="at">built_from =</span> <span class="cn">NA</span>, <span class="at">checked_version =</span> <span class="cn">NA</span>,</span>
+<span id="cb16-142"><a href="#cb16-142" aria-hidden="true" tabindex="-1"></a>    <span class="at">upload_status =</span> <span class="st">"not built"</span>, <span class="at">needs_upload =</span> <span class="cn">FALSE</span>,</span>
+<span id="cb16-143"><a href="#cb16-143" aria-hidden="true" tabindex="-1"></a>    <span class="at">blocked_by =</span> <span class="st">"no archive: failed dwc_check() — see publish_to-obis.html"</span>,</span>
+<span id="cb16-144"><a href="#cb16-144" aria-hidden="true" tabindex="-1"></a>    <span class="at">how =</span> <span class="st">""</span>, <span class="at">link =</span> <span class="st">""</span>))</span>
+<span id="cb16-145"><a href="#cb16-145" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb16-146"><a href="#cb16-146" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">nrow</span>(obis_rows)) <span class="fu">kable</span>(obis_rows <span class="sc">|&gt;</span> <span class="fu">select</span>(dataset_key, built_from, upload_status, blocked_by)) <span class="cf">else</span></span>
+<span id="cb16-147"><a href="#cb16-147" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="st">"no Darwin Core archives built yet</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb16-148"><a href="#cb16-148" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb16-149"><a href="#cb16-149" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-150"><a href="#cb16-150" aria-hidden="true" tabindex="-1"></a><span class="fu">## netCDF</span></span>
+<span id="cb16-151"><a href="#cb16-151" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-152"><a href="#cb16-152" aria-hidden="true" tabindex="-1"></a>A file counts as published for this release when the site's <span class="in">`manifests.json`</span> lists</span>
+<span id="cb16-153"><a href="#cb16-153" aria-hidden="true" tabindex="-1"></a>the release, and its bytes are online when any listed release carries the local</span>
+<span id="cb16-154"><a href="#cb16-154" aria-hidden="true" tabindex="-1"></a>file's sha256 — an unchanged file is never uploaded twice, only listed.</span>
+<span id="cb16-155"><a href="#cb16-155" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-158"><a href="#cb16-158" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb16-159"><a href="#cb16-159" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: netcdf</span></span>
+<span id="cb16-160"><a href="#cb16-160" aria-hidden="true" tabindex="-1"></a>sides <span class="ot">&lt;-</span> <span class="fu">Sys.glob</span>(<span class="fu">here</span>(<span class="st">"data/netcdf/*.fingerprint.json"</span>))</span>
+<span id="cb16-161"><a href="#cb16-161" aria-hidden="true" tabindex="-1"></a>nc_rows <span class="ot">&lt;-</span> <span class="fu">map_dfr</span>(sides, <span class="cf">function</span>(p) {</span>
+<span id="cb16-162"><a href="#cb16-162" aria-hidden="true" tabindex="-1"></a>  s  <span class="ot">&lt;-</span> <span class="fu">read_json_or_null</span>(p)</span>
+<span id="cb16-163"><a href="#cb16-163" aria-hidden="true" tabindex="-1"></a>  ds <span class="ot">&lt;-</span> <span class="fu">sub</span>(<span class="st">"</span><span class="sc">\\</span><span class="st">.fingerprint</span><span class="sc">\\</span><span class="st">.json$"</span>, <span class="st">""</span>, <span class="fu">basename</span>(p))</span>
+<span id="cb16-164"><a href="#cb16-164" aria-hidden="true" tabindex="-1"></a>  nc <span class="ot">&lt;-</span> <span class="fu">sub</span>(<span class="st">"</span><span class="sc">\\</span><span class="st">.fingerprint</span><span class="sc">\\</span><span class="st">.json$"</span>, <span class="st">".nc"</span>, p)</span>
+<span id="cb16-165"><a href="#cb16-165" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">is.null</span>(s) <span class="sc">||</span> <span class="sc">!</span><span class="fu">file.exists</span>(nc)) <span class="fu">return</span>(<span class="cn">NULL</span>)</span>
+<span id="cb16-166"><a href="#cb16-166" aria-hidden="true" tabindex="-1"></a>  rel  <span class="ot">&lt;-</span> <span class="fu">read_json_or_null</span>(<span class="fu">glue</span>(<span class="st">"{NETCDF_SITE}/{ds}/manifests.json"</span>))<span class="sc">$</span>releases <span class="sc">%||%</span> <span class="fu">list</span>()</span>
+<span id="cb16-167"><a href="#cb16-167" aria-hidden="true" tabindex="-1"></a>  sha  <span class="ot">&lt;-</span> digest<span class="sc">::</span><span class="fu">digest</span>(nc, <span class="at">algo =</span> <span class="st">"sha256"</span>, <span class="at">file =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb16-168"><a href="#cb16-168" aria-hidden="true" tabindex="-1"></a>  online <span class="ot">&lt;-</span> <span class="fu">any</span>(<span class="fu">vapply</span>(rel, <span class="cf">function</span>(r) <span class="fu">identical</span>(r<span class="sc">$</span>sha256, sha), <span class="fu">logical</span>(<span class="dv">1</span>)))</span>
+<span id="cb16-169"><a href="#cb16-169" aria-hidden="true" tabindex="-1"></a>  listed <span class="ot">&lt;-</span> <span class="fu">any</span>(<span class="fu">vapply</span>(rel, <span class="cf">function</span>(r) <span class="fu">identical</span>(r<span class="sc">$</span>version, RELEASE), <span class="fu">logical</span>(<span class="dv">1</span>)))</span>
+<span id="cb16-170"><a href="#cb16-170" aria-hidden="true" tabindex="-1"></a>  status <span class="ot">&lt;-</span> <span class="cf">if</span> (online <span class="sc">&amp;&amp;</span> listed) <span class="st">"current"</span> <span class="cf">else</span> <span class="cf">if</span> (online) <span class="st">"bytes online; release not listed"</span> <span class="cf">else</span></span>
+<span id="cb16-171"><a href="#cb16-171" aria-hidden="true" tabindex="-1"></a>    <span class="st">"not online"</span></span>
+<span id="cb16-172"><a href="#cb16-172" aria-hidden="true" tabindex="-1"></a>  <span class="fu">tibble</span>(<span class="at">portal =</span> <span class="st">"netcdf"</span>, <span class="at">dataset_key =</span> ds, <span class="at">built_from =</span> s<span class="sc">$</span>built_from, <span class="at">checked_version =</span> RELEASE,</span>
+<span id="cb16-173"><a href="#cb16-173" aria-hidden="true" tabindex="-1"></a>         <span class="at">upload_status =</span> status, <span class="at">needs_upload =</span> <span class="sc">!</span>(online <span class="sc">&amp;&amp;</span> listed), <span class="at">blocked_by =</span> <span class="st">""</span>,</span>
+<span id="cb16-174"><a href="#cb16-174" aria-hidden="true" tabindex="-1"></a>         <span class="at">how  =</span> <span class="st">"CALCOFI_PUBLISH=true, re-render publish_to-netcdf.qmd (+ scripts/build_netcdf_index.R)"</span>,</span>
+<span id="cb16-175"><a href="#cb16-175" aria-hidden="true" tabindex="-1"></a>         <span class="at">link =</span> <span class="fu">glue</span>(<span class="st">"{NETCDF_SITE}/{ds}/"</span>))</span>
+<span id="cb16-176"><a href="#cb16-176" aria-hidden="true" tabindex="-1"></a>})</span>
+<span id="cb16-177"><a href="#cb16-177" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">nrow</span>(nc_rows)) <span class="fu">kable</span>(nc_rows <span class="sc">|&gt;</span> <span class="fu">select</span>(dataset_key, built_from, upload_status)) <span class="cf">else</span></span>
+<span id="cb16-178"><a href="#cb16-178" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="st">"no netCDF fingerprints yet — publish_to-netcdf.qmd has not run since change detection</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb16-179"><a href="#cb16-179" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb16-180"><a href="#cb16-180" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-181"><a href="#cb16-181" aria-hidden="true" tabindex="-1"></a><span class="fu">## ERDDAP</span></span>
+<span id="cb16-182"><a href="#cb16-182" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-185"><a href="#cb16-185" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb16-186"><a href="#cb16-186" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: erddap</span></span>
+<span id="cb16-187"><a href="#cb16-187" aria-hidden="true" tabindex="-1"></a>es <span class="ot">&lt;-</span> <span class="fu">read_json_or_null</span>(<span class="fu">here</span>(<span class="st">"data/erddap/deploy_status.json"</span>))</span>
+<span id="cb16-188"><a href="#cb16-188" aria-hidden="true" tabindex="-1"></a>erddap_rows <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="fu">is.null</span>(es)) <span class="fu">tibble</span>() <span class="cf">else</span> {</span>
+<span id="cb16-189"><a href="#cb16-189" aria-hidden="true" tabindex="-1"></a>  served <span class="ot">&lt;-</span> es<span class="sc">$</span>deployed_release <span class="sc">%||%</span> <span class="cn">NA_character_</span></span>
+<span id="cb16-190"><a href="#cb16-190" aria-hidden="true" tabindex="-1"></a>  <span class="fu">tibble</span>(<span class="at">portal =</span> <span class="st">"erddap"</span>, <span class="at">dataset_key =</span> <span class="st">"(all)"</span>, <span class="at">built_from =</span> RELEASE, <span class="at">checked_version =</span> RELEASE,</span>
+<span id="cb16-191"><a href="#cb16-191" aria-hidden="true" tabindex="-1"></a>         <span class="at">upload_status =</span> <span class="cf">if</span> (<span class="fu">identical</span>(served, RELEASE)) <span class="st">"current"</span> <span class="cf">else</span></span>
+<span id="cb16-192"><a href="#cb16-192" aria-hidden="true" tabindex="-1"></a>           <span class="fu">glue</span>(<span class="st">"serves {served %||% 'an unknown release'}"</span>),</span>
+<span id="cb16-193"><a href="#cb16-193" aria-hidden="true" tabindex="-1"></a>         <span class="at">needs_upload =</span> <span class="sc">!</span><span class="fu">identical</span>(served, RELEASE), <span class="at">blocked_by =</span> <span class="st">""</span>,</span>
+<span id="cb16-194"><a href="#cb16-194" aria-hidden="true" tabindex="-1"></a>         <span class="at">how  =</span> <span class="st">"re-render publish_to-erddap.qmd without CALCOFI_DEPLOY=false"</span>,</span>
+<span id="cb16-195"><a href="#cb16-195" aria-hidden="true" tabindex="-1"></a>         <span class="at">link =</span> <span class="st">"https://erddap.calcofi.io/erddap/"</span>)</span>
+<span id="cb16-196"><a href="#cb16-196" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb16-197"><a href="#cb16-197" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">nrow</span>(erddap_rows)) <span class="fu">kable</span>(erddap_rows <span class="sc">|&gt;</span> <span class="fu">select</span>(upload_status, how)) <span class="cf">else</span></span>
+<span id="cb16-198"><a href="#cb16-198" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="st">"no ERDDAP deploy status yet — publish_to-erddap.qmd has not run since it began recording one</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb16-199"><a href="#cb16-199" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb16-200"><a href="#cb16-200" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-201"><a href="#cb16-201" aria-hidden="true" tabindex="-1"></a><span class="fu">## What needs a fresh upload</span></span>
+<span id="cb16-202"><a href="#cb16-202" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-205"><a href="#cb16-205" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb16-206"><a href="#cb16-206" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: status</span></span>
+<span id="cb16-207"><a href="#cb16-207" aria-hidden="true" tabindex="-1"></a>status <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(edi_rows, obis_rows, nc_rows, erddap_rows) <span class="sc">|&gt;</span></span>
+<span id="cb16-208"><a href="#cb16-208" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">release =</span> RELEASE, <span class="at">.before =</span> <span class="dv">1</span>) <span class="sc">|&gt;</span></span>
+<span id="cb16-209"><a href="#cb16-209" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(<span class="fu">desc</span>(needs_upload), portal, dataset_key)</span>
+<span id="cb16-210"><a href="#cb16-210" aria-hidden="true" tabindex="-1"></a><span class="co"># "never uploaded" read as "not on GCS" in a provider meeting (2026-09-16). The</span></span>
+<span id="cb16-211"><a href="#cb16-211" aria-hidden="true" tabindex="-1"></a><span class="co"># comparison is against the portal of record, so say which portal, and show the staged</span></span>
+<span id="cb16-212"><a href="#cb16-212" aria-hidden="true" tabindex="-1"></a><span class="co"># copy that does exist beside it.</span></span>
+<span id="cb16-213"><a href="#cb16-213" aria-hidden="true" tabindex="-1"></a>status <span class="ot">&lt;-</span> status <span class="sc">|&gt;</span></span>
+<span id="cb16-214"><a href="#cb16-214" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">upload_status =</span> <span class="fu">case_when</span>(</span>
+<span id="cb16-215"><a href="#cb16-215" aria-hidden="true" tabindex="-1"></a>    upload_status <span class="sc">==</span> <span class="st">"never uploaded"</span> <span class="sc">&amp;</span> portal <span class="sc">==</span> <span class="st">"edi"</span>  <span class="sc">~</span> <span class="st">"never deposited at EDI (staged on GCS)"</span>,</span>
+<span id="cb16-216"><a href="#cb16-216" aria-hidden="true" tabindex="-1"></a>    upload_status <span class="sc">==</span> <span class="st">"never uploaded"</span> <span class="sc">&amp;</span> portal <span class="sc">==</span> <span class="st">"obis"</span> <span class="sc">~</span> <span class="st">"never uploaded to the OBIS-USA IPT (staged on GCS)"</span>,</span>
+<span id="cb16-217"><a href="#cb16-217" aria-hidden="true" tabindex="-1"></a>    upload_status <span class="sc">==</span> <span class="st">"not online"</span>                        <span class="sc">~</span> <span class="st">"not yet on calcofi-files-public/netcdf"</span>,</span>
+<span id="cb16-218"><a href="#cb16-218" aria-hidden="true" tabindex="-1"></a>    <span class="at">.default =</span> upload_status))</span>
+<span id="cb16-219"><a href="#cb16-219" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-220"><a href="#cb16-220" aria-hidden="true" tabindex="-1"></a><span class="fu">write_csv</span>(status, OUT, <span class="at">na =</span> <span class="st">""</span>)</span>
+<span id="cb16-221"><a href="#cb16-221" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="sc">!</span>STAGING) <span class="fu">put_gcs_file</span>(OUT, <span class="st">"gs://calcofi-db/publish/portal_status.csv"</span>)</span>
+<span id="cb16-222"><a href="#cb16-222" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-223"><a href="#cb16-223" aria-hidden="true" tabindex="-1"></a>due <span class="ot">&lt;-</span> status <span class="sc">|&gt;</span> <span class="fu">filter</span>(needs_upload)</span>
+<span id="cb16-224"><a href="#cb16-224" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"{nrow(due)} of {nrow(status)} portal copies need a fresh upload for {RELEASE}"</span>,</span>
+<span id="cb16-225"><a href="#cb16-225" aria-hidden="true" tabindex="-1"></a>         <span class="st">"{if (nrow(due)) paste0(' (', paste(sort(unique(due$portal)), collapse = ', '), ')') else ''}"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb16-226"><a href="#cb16-226" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">nrow</span>(due))</span>
+<span id="cb16-227"><a href="#cb16-227" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kable</span>(due <span class="sc">|&gt;</span> <span class="fu">select</span>(portal, dataset_key, built_from, upload_status, blocked_by, how, <span class="at">staged =</span> link),</span>
+<span id="cb16-228"><a href="#cb16-228" aria-hidden="true" tabindex="-1"></a>        <span class="at">caption =</span> <span class="st">"due: never deposited, or changed since the last deposit"</span>)</span>
+<span id="cb16-229"><a href="#cb16-229" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb16-230"><a href="#cb16-230" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-233"><a href="#cb16-233" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb16-234"><a href="#cb16-234" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: status-all</span></span>
+<span id="cb16-235"><a href="#cb16-235" aria-hidden="true" tabindex="-1"></a><span class="fu">kable</span>(status <span class="sc">|&gt;</span> <span class="fu">select</span>(portal, dataset_key, built_from, checked_version, upload_status, blocked_by, <span class="at">staged =</span> link),</span>
+<span id="cb16-236"><a href="#cb16-236" aria-hidden="true" tabindex="-1"></a>      <span class="at">caption =</span> <span class="fu">glue</span>(<span class="st">"every portal copy, {RELEASE} (data/publish/portal_status.csv)"</span>))</span>
+<span id="cb16-237"><a href="#cb16-237" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb16-238"><a href="#cb16-238" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-239"><a href="#cb16-239" aria-hidden="true" tabindex="-1"></a><span class="fu">## Refresh the browsable storage pages</span></span>
+<span id="cb16-240"><a href="#cb16-240" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-241"><a href="#cb16-241" aria-hidden="true" tabindex="-1"></a><span class="in">`storage.calcofi.io`</span> serves object storage, which has no directory listing: every</span>
+<span id="cb16-242"><a href="#cb16-242" aria-hidden="true" tabindex="-1"></a>browsable folder is an <span class="in">`index.html`</span> object that <span class="in">`scripts/build_storage_index.R`</span> writes by</span>
+<span id="cb16-243"><a href="#cb16-243" aria-hidden="true" tabindex="-1"></a>walking each bucket. Nothing else calls it, and the publishers above create new folders</span>
+<span id="cb16-244"><a href="#cb16-244" aria-hidden="true" tabindex="-1"></a>(<span class="in">`publish/edi/{dataset}/{dataset}_{version}/`</span>, <span class="in">`publish/dwca/`</span>, <span class="in">`netcdf/{dataset}/{version}/`</span>)</span>
+<span id="cb16-245"><a href="#cb16-245" aria-hidden="true" tabindex="-1"></a>*after* <span class="in">`deploy_consumers.sh`</span> has run — so every release left the browse pages one release</span>
+<span id="cb16-246"><a href="#cb16-246" aria-hidden="true" tabindex="-1"></a>behind, pointing at version folders that had since been pruned. On 2026-09-16 a provider</span>
+<span id="cb16-247"><a href="#cb16-247" aria-hidden="true" tabindex="-1"></a>meeting opened a staged EDI package link and got <span class="in">`Not found.`</span> while the files sat on GCS.</span>
+<span id="cb16-248"><a href="#cb16-248" aria-hidden="true" tabindex="-1"></a>Rebuilding here, at the end of the publishers, is what keeps a link in an email true.</span>
+<span id="cb16-249"><a href="#cb16-249" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-252"><a href="#cb16-252" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb16-253"><a href="#cb16-253" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: storage-index</span></span>
+<span id="cb16-254"><a href="#cb16-254" aria-hidden="true" tabindex="-1"></a><span class="co">#| eval: !expr REFRESH_INDEX</span></span>
+<span id="cb16-255"><a href="#cb16-255" aria-hidden="true" tabindex="-1"></a>idx <span class="ot">&lt;-</span> <span class="fu">system2</span>(<span class="st">"Rscript"</span>, <span class="fu">shQuote</span>(<span class="fu">here</span>(<span class="st">"scripts/build_storage_index.R"</span>)),</span>
+<span id="cb16-256"><a href="#cb16-256" aria-hidden="true" tabindex="-1"></a>               <span class="at">stdout =</span> <span class="cn">TRUE</span>, <span class="at">stderr =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb16-257"><a href="#cb16-257" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">tail</span>(idx, <span class="dv">6</span>), <span class="at">sep =</span> <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb16-258"><a href="#cb16-258" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.null</span>(<span class="fu">attr</span>(idx, <span class="st">"status"</span>)) <span class="sc">&amp;&amp;</span> <span class="fu">attr</span>(idx, <span class="st">"status"</span>) <span class="sc">!=</span> <span class="dv">0</span>)</span>
+<span id="cb16-259"><a href="#cb16-259" aria-hidden="true" tabindex="-1"></a>  <span class="fu">warning</span>(<span class="st">"build_storage_index.R failed — the browse pages still point at the previous run"</span>)</span>
+<span id="cb16-260"><a href="#cb16-260" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb16-261"><a href="#cb16-261" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-264"><a href="#cb16-264" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb16-265"><a href="#cb16-265" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: storage-index-skip</span></span>
+<span id="cb16-266"><a href="#cb16-266" aria-hidden="true" tabindex="-1"></a><span class="co">#| eval: !expr NO_REFRESH_INDEX</span></span>
+<span id="cb16-267"><a href="#cb16-267" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"staging run, or CALCOFI_DEPLOY=false — the browse pages under storage.calcofi.io were</span><span class="sc">\n</span><span class="st">"</span>,</span>
+<span id="cb16-268"><a href="#cb16-268" aria-hidden="true" tabindex="-1"></a>    <span class="st">"NOT rebuilt, so a folder published by this run has no index.html yet.</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb16-269"><a href="#cb16-269" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
 </code></pre></div><button title="Copy to Clipboard" class="code-copy-button" data-in-quarto-modal=""><i class="bi"></i></button></div>
 </div></div></div></div></div>
 </div> <!-- /content -->
