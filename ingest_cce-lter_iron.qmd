@@ -1,0 +1,609 @@
+---
+title: "Ingest CCE-LTER Dissolved Iron"
+calcofi:
+  target_name: ingest_cce_lter_iron
+  workflow_type: ingest
+  dependency:
+    - ingest_swfsc_ichthyo
+  output: data/parquet/cce-lter_iron/manifest.json
+  provider: cce-lter
+  dataset: iron
+  workflow_url: https://calcofi.io/workflows/ingest_cce-lter_iron.html
+  questions_file: metadata/cce-lter/iron/questions.csv
+  dataset_meta:
+    dataset_name: Measurements of dissolved inorganic concentrations of nutrient
+      iron and of iron limitation at selected stations and depths from CalCOFI
+      cruises in the California Current System, Nov. 2002 - July 2004 (completed)
+    # display trio, read by the release `dataset` table and the consumer apps
+    # (calcofi4db >= 3.15.0) — see NEWS for why these left the apps' own
+    # hardcoded maps. Moved here from metadata/cce-lter/iron/dataset_meta.yml
+    # on 2026-09-19: that sidecar held both halves while this was still an
+    # un-ingested "holding" (WS-R1 2026-09-05 CalOOS intake); now that a
+    # notebook exists, the structural keys belong here per
+    # check_dataset_meta_split().
+    dataset_name_short: "Dissolved iron"
+    category: "Nutrients & Chemistry"
+    color: "#b8860b"
+  # publishes the consolidated core: the source shape is wrangled in the
+  # notebook and projected into the shared core tables.
+  tables_owned:
+    - {table: sample, shared: true, note: "core event dimension (own sample grain, no cast/bottle FK available in the source)"}
+    - {table: obs, shared: true, note: "core observation headline (env realm; dissolved_iron, total_iron, chl_response_to_fe)"}
+    - {table: measurement_type, shared: true, note: "shared registry across datasets"}
+  erd:
+    color: "#f0e0c0"
+editor_options:
+  chunk_output_type: console
+---
+
+## Overview
+
+**Source**: EDI package `knb-lter-cce.21.3` (Barbeau), entity *DissolvedIron* —
+171 rows, 13 columns per the package's EML (`libs/download_iron.R`), Nov. 2002 -
+July 2004, completed/archived. This is the "first solo run" ingest tracked by
+[CalCOFI/workflows#82](https://github.com/CalCOFI/workflows/issues/82); model
+reference is `ingest_cce-lter_picoplankton-bacteria.qmd`, the closest existing
+shape (a CCE-LTER DataZoo/EDI export with no native cast/bottle FK, its own
+`study_name`-derived cruise key, own position/depth/time per row).
+
+- **Provider**: `cce-lter` (matches `euphausiids`/`picoplankton-bacteria`/
+  `zoodb`/`zooscan`)
+- **Grain**: one row per sample event (surface pole sample or profile bottle);
+  no cast/bottle number in the source, so this dataset mints its **own**
+  `sample` arm rather than matching into `calcofi_bottle`/`casts` (Pattern A,
+  like picoplankton-bacteria — not Pattern B/DIC, which has cast/bottle FKs to
+  match against).
+- **Realm**: `env` — this is chemistry (dissolved/total iron) plus a bioassay
+  response metric, not an occurrence of a taxon. `obs.taxon_key` stays NULL
+  throughout, unlike picoplankton-bacteria's `bio` realm.
+- **Scope decision**: no bounding-box filter applied — source is already
+  scoped to CalCOFI/CCE cruises by the provider (same reasoning as
+  picoplankton-bacteria).
+
+::: {.callout-important}
+**Environment note (updated 2026-09-19).** This notebook was drafted in a
+sandboxed session with no R/DuckDB and no network path to EDI's PASTA API
+(`pasta.lternet.edu`) or portal (`portal.edirepository.org`) — both were
+unreachable from here (robots.txt on the portal, an org egress policy
+rejecting the PASTA host). Betty subsequently downloaded the real package zip
+from the EDI portal herself and supplied it directly, so the actual
+`table_21.csv` (171 rows, 13 columns) and the real EML/quality-report XML
+have now been inspected directly (outside R, by script) against every claim
+below — the source `Latitude`/`Longitude`/`Depth`/`Dissolved Fe`/`Total Fe`
+column names carry unit suffixes the EML's `attributeName` elements omit (see
+`flds_redefine.csv`), an undocumented `-999` missing-value sentinel is used
+throughout (`questions.csv` Q06), one row is fully blank (source line 80),
+and the `study_name`-derived cruise-key format, row/column counts, and
+equipment code (Q03) are all confirmed. The `clean-cast` chunk below has been
+corrected against these findings. What remains genuinely unverified: this
+notebook has still never executed in R/DuckDB in any environment available
+here, so `/ingest-new`'s render, the bounds-enforcement and core-projection
+steps, and `/validate-ingest` all still need a real run before this is
+release-ready. Q01 and Q06 are `proposed` (evidence-backed) but still await
+provider confirmation from Kathy Barbeau.
+:::
+
+```{mermaid}
+graph LR
+  A[EDI knb-lter-cce.21.3<br/>DissolvedIron, 171 rows] --> B[rename + type-cast]
+  B --> C[iron_sample<br/>position + depth, one row per sample]
+  B --> D[iron_measurement<br/>long format: dissolved_iron / total_iron / chl_response_to_fe]
+  C -.study_name -> cruise_key.-> E[(shared refs)]
+  D -.sample_id.-> C
+  C --> F[[core: sample]]
+  D --> G[[core: obs, realm=env]]
+```
+
+## Setup
+
+```{r}
+#| label: setup
+devtools::load_all(here::here("../calcofi4db"))
+devtools::load_all(here::here("../calcofi4r"))
+librarian::shelf(
+  CalCOFI/calcofi4db, CalCOFI/calcofi4r,
+  DBI, dplyr, DT, fs, glue, here, htmltools, janitor, jsonlite, knitr,
+  lubridate, purrr, readr, sf, stringr, tibble, tidyr, units,
+  quiet = T)
+options(readr.show_col_types = F)
+options(DT.options = list(scrollX = TRUE))
+
+source(here("libs/ingest.R"))
+cc <- read_calcofi_meta(here("ingest_cce-lter_iron.qmd"))
+provider <- cc$provider
+dataset <- cc$dataset
+dataset_name <- cc$dataset_meta$dataset_name
+tables_owned <- cc$tables_owned
+dir_label <- glue("{provider}_{dataset}")
+dir_parquet <- here(glue("data/parquet/{dir_label}"))
+dir_stage <- cc_stage_path("parquet", dir_label, create = TRUE)
+db_path <- here(glue("data/wrangling/{dir_label}.duckdb"))
+meas_type_csv <- here("metadata/measurement_type.csv")
+# dissolved_iron / total_iron / chl_response_to_fe were registered directly
+# into the registry during /generate-metadata (metadata/measurement_type.csv),
+# not here at ingest time — this notebook reads and uses them, it does not
+# (re-)register them. See "Check Declared Bounds" for why none of the three
+# carries a valid_max yet.
+d_meas_type <- read_measurement_type(meas_type_csv)
+stopifnot(
+  "dissolved_iron/total_iron/chl_response_to_fe must be pre-registered" =
+    all(c("dissolved_iron", "total_iron", "chl_response_to_fe") %in%
+          d_meas_type$measurement_type))
+
+if (overwrite) {
+  if (file_exists(db_path)) file_delete(db_path)
+  if (file_exists(paste0(db_path, ".wal"))) file_delete(paste0(db_path, ".wal"))
+  if (dir_exists(paste0(db_path, ".tmp"))) dir_delete(paste0(db_path, ".tmp"))
+}
+dir_create(dirname(db_path))
+con <- get_duckdb_con(db_path)
+load_duckdb_extension(con, "spatial")
+```
+
+## Read Source Data
+
+Fetched reproducibly from EDI by `libs/download_iron.R` (package
+`knb-lter-cce.21.3`, entity *DissolvedIron*), pinned to revision 3 with its
+md5 asserted, so a republished package fails loudly instead of silently
+re-shaping the ingest. Unlike picoplankton-bacteria's Datazoo table, this
+entity is not gated behind a login/data-agreement form, so it is pulled
+directly from EDI — same route as `download_euphausiids()`. Columns are
+renamed per `metadata/cce-lter/iron/flds_redefine.csv`.
+
+```{r}
+#| label: read-source
+source(here("libs/download_iron.R"))
+iron_csv <- download_iron(
+  path_expand(glue("{dir_data}/{provider}/{dataset}")),
+  overwrite = overwrite_all)
+stopifnot("iron data.csv not found" = file_exists(iron_csv))
+
+sync_to_gcs(
+  local_dir  = path_dir(iron_csv),
+  gcs_prefix = glue("archive/{provider}/{dataset}"),
+  bucket     = "calcofi-files-public",
+  exclude    = c(".DS_Store", "*.tmp", "*.gdoc"))
+
+d_raw <- read_csv(iron_csv, col_types = cols(.default = "c"))
+cat(glue("Read {format(nrow(d_raw), big.mark=',')} rows, {ncol(d_raw)} columns"), "\n")
+# confirmed against the real file (2026-09-19): 171 rows, 13 columns, matching
+# the EML's 13 attributes -- DataZoo's summary page figure of 12 columns was
+# stale/wrong and is not asserted here.
+stopifnot(
+  "expected 171 rows x 13 columns per the real source file" =
+    nrow(d_raw) == 171 && ncol(d_raw) == 13)
+```
+
+## Clean, Type-Cast
+
+Canonical names from `metadata/cce-lter/iron/flds_redefine.csv`. `Event
+Number` and `Index Number` are the source's own provenance counters, kept but
+not used as keys (see `flds_redefine.csv` notes). The three measurement
+columns (Dissolved Fe, Total Fe, Chla response to Fe+) are NOT kept as wide
+columns — pivoted to long format below. Real source headers carry unit
+suffixes the EML's `attributeName` elements omit (`Latitude (º)`,
+`Longitude (º)`, `Depth (m)`, `Dissolved Fe (nM/L)`, `Total Fe (nM/L)`) —
+confirmed against the real file (2026-09-19) and reflected in the column
+references below and in `flds_redefine.csv`.
+
+`Datetime PST` is converted to UTC as a **fixed UTC-8 offset**, not adjusted
+for daylight saving — the column is explicitly labeled PST rather than
+"Pacific Time" or "local time", which is the reading proposed to the provider
+in `questions.csv` Q02 (`status = proposed`, awaiting confirmation). If that
+reading is wrong, every `datetime_start_utc` value shifts by up to an hour for
+rows sampled during PDT months — re-derive from `Datetime PST` rather than
+patching `datetime_start_utc` directly if Q02 comes back answered differently.
+
+One source row (line 80 of the real CSV) is entirely blank apart from
+`studyName` and is dropped explicitly below, with a reported count, rather
+than letting the resulting NAs flow into `add_point_geom()` /
+`assign_grid_key()` downstream. Separately, `-999` is used throughout this
+table as an undocumented missing-value sentinel (`questions.csv` Q06 — the
+EML itself declares `missingValueCode = NULL`/blank for every attribute) and
+is converted to `NA` before casting, for the same reason
+`check_measurement_bounds()`/`drop_out_of_bounds()` exist: an unconverted
+sentinel reaching `obs.measurement_value` as if it were a real reading is
+exactly the failure mode behind the historical `calcofi_mets.sw_ph` `-99`
+incident (`RUNBOOK.md`).
+
+```{r}
+#| label: clean-cast
+# one fully-blank row (source keeps only studyName; every other field is
+# empty) — verified 2026-09-19 to be exactly 1 row (CSV line 80,
+# `2002-11-10-C-32NM,,,,,,,,,,,,`)
+d_raw <- d_raw |>
+  mutate(.blank = if_all(-studyName, ~ is.na(.x) | .x == ""))
+n_blank <- sum(d_raw$.blank)
+d_raw <- d_raw |> filter(!.blank) |> select(-.blank)
+cat(glue("Dropped {n_blank} fully-blank row(s) (studyName only, no measurements)"), "\n")
+
+# -999 is an undocumented missing-value sentinel (see Q06 above). Converted
+# to NA before casting for every column verified to carry it: event_number
+# (170/171 rows), total_fe_nmol_l (170/171 rows — zero real values in this
+# revision), and chl_response_to_fe (148/171 rows).
+na_sentinel <- function(x) if_else(x == "-999", NA_character_, x)
+
+d_clean <- d_raw |>
+  transmute(
+    study_name    = studyName,
+    event_number  = suppressWarnings(as.numeric(na_sentinel(`Event Number`))),
+    index_number  = suppressWarnings(as.integer(`Index Number`)),
+    # fixed UTC-8: see Q02 above — the source column is literally "Datetime PST"
+    datetime_start_utc = suppressWarnings(as_datetime(`Datetime PST`)) + hours(8),
+    latitude      = suppressWarnings(as.numeric(`Latitude (º)`)),
+    longitude     = suppressWarnings(as.numeric(`Longitude (º)`)),
+    line          = suppressWarnings(as.numeric(Line)),
+    station       = suppressWarnings(as.numeric(Station)),
+    depth_m       = suppressWarnings(as.numeric(`Depth (m)`)),
+    iron_sampling_equipment = `Iron Sampling Equipment`,
+    dissolved_fe_nmol_l = suppressWarnings(as.numeric(na_sentinel(`Dissolved Fe (nM/L)`))),
+    total_fe_nmol_l     = suppressWarnings(as.numeric(na_sentinel(`Total Fe (nM/L)`))),
+    chl_response_to_fe  = suppressWarnings(as.numeric(na_sentinel(`Chla response to Fe+`)))) |>
+  mutate(
+    site_key = if_else(
+      is.na(line) | is.na(station), NA_character_,
+      sprintf("%05.1f %05.1f", line, station)),
+    sample_id = row_number())
+
+n_all <- nrow(d_clean)
+cat(glue("{format(n_all, big.mark=',')} rows read, no bounding-box filter applied ",
+         "(source pre-scoped to CalCOFI/CCE cruises)"), "\n")
+
+n_equip_other <- sum(!is.na(d_clean$iron_sampling_equipment) &
+                       d_clean$iron_sampling_equipment != "p")
+cat(glue("Iron Sampling Equipment codes other than documented 'p': {n_equip_other} row(s) ",
+         "— if > 0, resolve against Q03 before publishing (0 expected — Q03 resolved 2026-09-19)"), "\n")
+
+dbWriteTable(con, "iron_sample", d_clean, overwrite = TRUE)
+```
+
+## Pivot Measurements to Long Format
+
+`chl_response_to_fe` is pivoted alongside the two concentration columns even
+though its exact interpretation is still `proposed`, not confirmed (Q01) —
+staging it now means the bounds check below surfaces its missing `valid_max`
+as an expected, already-documented finding rather than silently dropping a
+column the dataset is supposed to carry.
+
+```{r}
+#| label: pivot-long
+iron_meas_map <- tribble(
+  ~measurement_type,     ~value_col,
+  "dissolved_iron",       "dissolved_fe_nmol_l",
+  "total_iron",           "total_fe_nmol_l",
+  "chl_response_to_fe",   "chl_response_to_fe")
+
+sql_parts <- purrr::pmap_chr(iron_meas_map, function(measurement_type, value_col) {
+  glue(
+    "SELECT sample_id, '{measurement_type}' AS measurement_type,
+     CAST({value_col} AS DOUBLE) AS measurement_value
+     FROM iron_sample WHERE {value_col} IS NOT NULL")
+})
+
+sql_create <- glue(
+  "CREATE OR REPLACE TABLE iron_measurement AS
+   SELECT ROW_NUMBER() OVER (ORDER BY sample_id, measurement_type) AS measurement_id, *
+   FROM (
+     {paste(sql_parts, collapse = '\nUNION ALL\n')}
+   ) sub")
+dbExecute(con, sql_create)
+
+n_meas <- dbGetQuery(con, "SELECT COUNT(*) FROM iron_measurement")[[1]]
+cat(glue("iron_measurement: {format(n_meas, big.mark=',')} rows"), "\n")
+dbGetQuery(con, "SELECT measurement_type, COUNT(*) n FROM iron_measurement GROUP BY 1 ORDER BY 1") |>
+  datatable(caption = "Rows per measurement_type")
+
+for (col in c("dissolved_fe_nmol_l", "total_fe_nmol_l", "chl_response_to_fe")) {
+  tryCatch(
+    dbExecute(con, glue('ALTER TABLE iron_sample DROP COLUMN "{col}"')),
+    error = function(e) NULL)
+}
+```
+
+## Resolve Ship and Cruise Keys
+
+Same approach as `ingest_cce-lter_picoplankton-bacteria.qmd`: `study_name` is
+the only cruise identifier in this source (no separate `Cruise` short-code
+column here), and its trailing token is the ship code.
+
+The extraction regex below is copied from the picoplankton-bacteria
+notebook's verified pattern (`2004-11-02-C-33RR` -> `33RR`). Confirmed
+2026-09-19 against all 6 distinct `study_name` values in the real file (e.g.
+`2002-11-10-C-32NM`) — the format matches structurally. `derive_cruise_key_on_casts()`
+itself has still never executed in R, so `cruise_key_result$key_stats` and
+the match-rate percentage below remain unverified until this notebook is
+actually run.
+
+```{r}
+#| label: resolve-keys
+load_prior_tables(
+  con, parquet_dir = cc_stage_path("parquet", "swfsc_ichthyo"),
+  tables = c("ship", "cruise", "grid"), geom_tables = c("grid"), as_view = TRUE)
+
+dbExecute(con, "
+  ALTER TABLE iron_sample ADD COLUMN IF NOT EXISTS ship_code VARCHAR")
+dbExecute(con, "
+  UPDATE iron_sample
+  SET ship_code = regexp_extract(study_name, '[0-9A-Z]+$')")
+
+dbExecute(con, "
+  ALTER TABLE iron_sample ADD COLUMN IF NOT EXISTS cruise_ym VARCHAR")
+dbExecute(con, "
+  UPDATE iron_sample
+  SET cruise_ym = regexp_replace(study_name, '^(\\d{4})-(\\d{2}).*$', '\\1\\2')")
+
+cruise_key_result <- derive_cruise_key_on_casts(
+  con, table_name = "iron_sample", datetime_col = "datetime_start_utc",
+  cruise_ym_col = "cruise_ym")
+cruise_key_result$key_stats |>
+  datatable(caption = "cruise_key resolution: span > source designation > month")
+
+n_ck <- dbGetQuery(con, "SELECT COUNT(*) FROM iron_sample WHERE cruise_key IS NOT NULL")[[1]]
+n_all <- dbGetQuery(con, "SELECT COUNT(*) FROM iron_sample")[[1]]
+cat(glue("cruise_key match: {n_ck}/{n_all} ({round(100*n_ck/n_all,1)}%)"), "\n")
+```
+
+## Add Spatial
+
+```{r}
+#| label: spatial
+add_point_geom(con, "iron_sample", lon_col = "longitude", lat_col = "latitude")
+assign_grid_key(con, "iron_sample") |> datatable(caption = "Grid assignment")
+```
+
+## Load Dataset Metadata
+
+```{r}
+#| label: load-dataset-metadata
+d_dataset <- ingest_yaml_to_dataset_df(read_ingest_yaml(here()))
+dbWriteTable(con, "dataset", d_dataset, overwrite = TRUE)
+cat(glue("dataset: {nrow(d_dataset)} datasets registered"), "\n")
+```
+
+## Schema Documentation
+
+```{r}
+#| label: schema
+iron_rels <- list(
+  primary_keys = list(
+    iron_sample      = "sample_id",
+    iron_measurement = "measurement_id",
+    measurement_type = "measurement_type"),
+  foreign_keys = list(
+    list(table = "iron_measurement", column = "sample_id",
+         ref_table = "iron_sample", ref_column = "sample_id"),
+    list(table = "iron_measurement", column = "measurement_type",
+         ref_table = "measurement_type", ref_column = "measurement_type")))
+
+cc_erd(
+  con, tables = c("iron_sample", "iron_measurement", "measurement_type", "dataset"),
+  rels = iron_rels,
+  colors = list(lightblue = c("iron_sample", "iron_measurement"),
+                lightyellow = "measurement_type", white = "dataset"))
+
+build_relationships_json(
+  rels = iron_rels, output_dir = dir_parquet, provider = provider, dataset = dataset)
+```
+
+## Check Declared Bounds
+
+Not optional (RUNBOOK.md §3b) and an explicit completion criterion of issue
+#82. `dissolved_iron` / `total_iron` carry `valid_min = 0` (registered during
+`/generate-metadata`); neither carries a `valid_max` yet — `questions.csv` Q05
+proposes 50 / 100 nmol/L to Kathy, a ceiling revised down from an earlier
+literature-only guess (500 / 2000 nmol/L) once the real file could be
+inspected (2026-09-19): dissolved_iron is populated 170/171 with observed
+range 0.05-8.2 nmol/L, and total_iron has zero real values in this revision
+(170/171 rows are the undocumented `-999` sentinel, Q06) — per the
+measurement-bounds skill the proposed ceiling stays a generous multiple above
+the observed range, not the range itself. `chl_response_to_fe` now carries
+`valid_min = 0` directly (real data: 22/171 populated, range [1.0, 3.4], all
+non-negative) but still no `valid_max` — its exact definition is `proposed`
+not yet confirmed (Q01), so it is expected to report `undeclared` for the
+upper bound below until Q01 is answered.
+
+```{r}
+#| label: bounds-check
+bounds_pre <- check_measurement_bounds(con, "iron_measurement", mt = d_meas_type)
+bounds_datatable(bounds_pre)
+
+bounds_pre |> filter(status != "ok") |> select(measurement_type, status, finding) |>
+  datatable(caption = "Bounds findings — dissolved_iron/total_iron: undeclared valid_max, tracked as Q05 (proposed); chl_response_to_fe: valid_min=0 declared, undeclared valid_max, tracked as Q01 (proposed)")
+```
+
+```{r}
+#| label: bounds-enforce
+# all three measurement_types now carry a declared valid_min = 0 floor; none
+# has a declared valid_max yet (Q05 for dissolved_iron/total_iron, Q01 for
+# chl_response_to_fe)
+oob_tally <- drop_out_of_bounds(con, "iron_measurement", mt = d_meas_type)
+cat(glue(
+  "out-of-range rows removed: {format(sum(oob_tally$n_bad %||% 0), big.mark=',')} ",
+  "(dissolved_iron/total_iron/chl_response_to_fe < 0 is enforceable today; ",
+  "upper bounds await Q05/Q01)"), "\n")
+
+bounds_post <- check_measurement_bounds(
+  con, "iron_measurement", mt = d_meas_type, include_undeclared = FALSE)
+stopifnot(
+  "iron_measurement must hold no value outside a DECLARED bound" =
+    sum(bounds_post$status == "out_of_range") == 0)
+```
+
+## Validate
+
+```{r}
+#| label: validate
+results <- validate_for_release(con, checks = "all", strict = FALSE)
+cat("Validation:", ifelse(results$passed, "PASSED", "FAILED"), "\n")
+if (length(results$errors) > 0)
+  cat("Errors:\n", paste("-", results$errors, collapse = "\n"), "\n")
+if (length(results$warnings) > 0)
+  cat("Warnings:\n", paste("-", results$warnings, collapse = "\n"), "\n")
+
+# NULL cruise_key would mean derive_cruise_key_on_casts() couldn't resolve a
+# row even though study_name's format is now confirmed structurally correct
+# (see Resolve Ship and Cruise Keys above) -- not asserted to zero here since
+# the function has never actually executed in R; only reported.
+n_dup <- dbGetQuery(con,
+  "SELECT COUNT(*) FROM (SELECT sample_id, COUNT(*) n FROM iron_sample GROUP BY sample_id HAVING COUNT(*)>1)")[[1]]
+cat(glue("iron_sample sample_id duplicates: {n_dup}"), "\n")
+
+n_orphan <- dbGetQuery(con,
+  "SELECT COUNT(*) FROM iron_measurement m
+   LEFT JOIN iron_sample s ON m.sample_id = s.sample_id
+   WHERE s.sample_id IS NULL")[[1]]
+cat(glue("Orphan measurements (no matching sample): {n_orphan}"), "\n")
+
+n_orphan_type <- dbGetQuery(con,
+  "SELECT COUNT(*) FROM iron_measurement m
+   WHERE m.measurement_type NOT IN (SELECT measurement_type FROM measurement_type)")[[1]]
+cat(glue("Orphan measurement_types (not registered): {n_orphan_type}"), "\n")
+```
+
+## Enforce Column Types
+
+```{r}
+#| label: enforce-types
+enforce_column_types(con)
+```
+
+## Data Preview
+
+```{r}
+#| label: preview
+cols <- dbGetQuery(con,
+  "SELECT column_name FROM information_schema.columns
+   WHERE table_name='iron_sample' AND data_type NOT LIKE 'GEOMETRY%'")$column_name
+dbGetQuery(con, glue("SELECT {paste(cols, collapse=', ')} FROM iron_sample LIMIT 200")) |>
+  datatable(caption = "iron_sample — all rows (source table is 171 rows)", rownames = FALSE, filter = "top")
+
+dbGetQuery(con, "SELECT * FROM iron_measurement LIMIT 200") |>
+  datatable(caption = "iron_measurement — all rows", rownames = FALSE, filter = "top")
+```
+
+## Emit Core Tables
+
+Project this dataset into the shared consolidated core model
+(`design_env-bio-consolidation.md`). Realm `env` throughout — no taxon
+involved. This is a self-contained sample arm: the source carries no
+cast/bottle FK to match against (unlike `calcofi_dic`), so every sample mints
+its own `sample` row via `sample_arm_self()`, same as
+picoplankton-bacteria's bottle arm.
+
+```{r}
+#| label: emit_core
+ds_key <- "cce-lter_iron"
+
+append_sample(con, sample_arm_self(
+  ds_key, "iron_sample", "sample_id", "bottle",
+  dt_col = "datetime_start_utc", site_expr = "site_key",
+  depth_min = "depth_m", depth_max = "depth_m"))
+
+# env realm: NULL taxon_key throughout — this is chemistry + a bioassay
+# response metric, not an occurrence
+append_obs(con, glue("
+  SELECT 'env', '{ds_key}', {ns_key(ds_key, 'bottle', 's.sample_id')},
+         s.grid_key, s.cruise_key, s.latitude, s.longitude,
+         CAST(s.datetime_start_utc AS TIMESTAMP), s.depth_m, s.depth_m,
+         NULL::VARCHAR, NULL::VARCHAR, m.measurement_type, m.measurement_value,
+         NULL::VARCHAR, NULL::DOUBLE
+  FROM iron_measurement m
+  JOIN iron_sample s USING (sample_id)"))
+
+core <- list(
+  sample = dbGetQuery(con, "SELECT COUNT(*) FROM sample")[[1]],
+  obs    = dbGetQuery(con, "SELECT COUNT(*) FROM obs")[[1]])
+cat(glue("core projection — sample={core$sample %||% 0} obs={core$obs %||% 0}\n"))
+
+n_obs <- core$obs
+n_exp <- dbGetQuery(con,
+  "SELECT COUNT(*) FROM iron_measurement m JOIN iron_sample s USING (sample_id)")[[1]]
+stopifnot(
+  "obs must be one row per measurement" = n_obs == n_exp,
+  "every obs.sample_key must resolve in sample" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM obs o LEFT JOIN sample s USING (sample_key)
+                     WHERE s.sample_key IS NULL")[[1]] == 0)
+cat(glue("obs parity: {format(n_obs, big.mark=',')} rows"), "\n")
+
+# serve the retired per-dataset table name as a VIEW over the core, so
+# in-notebook consumers and ad-hoc queries keep working against the old name
+invisible(dbExecute(con, "DROP TABLE IF EXISTS iron_measurement_src"))
+invisible(dbExecute(con, "ALTER TABLE iron_measurement RENAME TO iron_measurement_src"))
+invisible(dbExecute(con, glue(
+  "CREATE OR REPLACE VIEW iron_measurement AS
+   SELECT o.obs_id AS measurement_id,
+          split_part(o.sample_key, ':', 3) AS sample_id,
+          o.measurement_type, o.measurement_value, o.measurement_qual
+   FROM obs o WHERE o.dataset_key = '{ds_key}'")))
+cat(glue("compat view iron_measurement over obs: ",
+         "{dbGetQuery(con, 'SELECT COUNT(*) FROM iron_measurement')[[1]]} rows"), "\n")
+```
+
+## Write Parquet Outputs
+
+```{r}
+#| label: write-parquet
+dir_create(dir_parquet)
+mismatches <- list(cruise_keys = collect_cruise_key_mismatches(con, "iron_sample"))
+tbls_out <- core_output_tables(con, extra = c("measurement_type", "dataset"))
+parquet_stats <- write_parquet_outputs(
+  con = con, output_dir = dir_parquet,
+  tables = tbls_out,
+  sort_by = list(obs = c("grid_key", "measurement_type")),
+  strip_provenance = FALSE, mismatches = mismatches)
+
+build_relationships_json(
+  rels = core_relationships(tbls_out), output_dir = dir_parquet,
+  provider = provider, dataset = dataset)
+parquet_stats |> mutate(file = basename(path)) |> select(-path) |>
+  datatable(caption = "Parquet export statistics")
+```
+
+## Write Metadata
+
+```{r}
+#| label: write-metadata
+d_tbls_rd <- read_csv(here("metadata/cce-lter/iron/tbls_redefine.csv"))
+d_flds_rd <- read_csv(here("metadata/cce-lter/iron/flds_redefine.csv"))
+metadata_path <- build_metadata_json(
+  con = con, d_tbls_rd = d_tbls_rd, d_flds_rd = d_flds_rd,
+  metadata_derived_csv = c(here("metadata/core_dictionary.csv"),
+                           here("metadata/cce-lter/iron/metadata_derived.csv")),
+  output_dir = dir_parquet, tables = tbls_out,
+  set_comments = TRUE, provider = provider, dataset = dataset,
+  workflow_url = cc$workflow_url, tables_owned = tables_owned)
+```
+
+## Upload to GCS
+
+```{r}
+#| label: upload-gcs
+if (Sys.getenv("CALCOFI_SKIP_GCS") == "") {
+  sync_to_gcs(local_dir = dir_stage, sidecar_dir = dir_parquet, gcs_prefix = glue("ingest/{dir_label}"), bucket = "calcofi-db")
+} else cat("CALCOFI_SKIP_GCS set — skipping the upload (local verification run)\n")
+```
+
+## Questions for Data Providers
+
+Follow-up questions for CCE-LTER (Katherine Barbeau), ranked by importance.
+Tracked in `metadata/cce-lter/iron/questions.csv`. Q03 is resolved by direct
+inspection of the real data; Q01, Q02, Q05, Q06 are `proposed` (each carries
+an evidence-backed answer awaiting Kathy's confirmation); Q04 (units /
+detection-limit convention) is still `open` but `priority = high`, not
+`blocker`. No question is currently `open` + `blocker`, so none fails
+`/validate-ingest --strict`'s open-blocker gate as drafted.
+
+```{r}
+#| label: provider-questions
+questions_datatable(
+  here(cc$questions_file),
+  caption = "Questions for the cce-lter iron data providers (ranked)")
+```
+
+## Cleanup
+
+```{r}
+#| label: cleanup
+close_duckdb(con)
+cat(glue("parquet outputs written to: {dir_parquet}"), "\n")
+```
