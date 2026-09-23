@@ -463,6 +463,7 @@ fp <- input_fingerprint(
     file.path(dir_meta, "flds_redefine.csv"),
     file.path(dir_meta, "tbls_redefine.csv"),
     file.path(dir_meta, "cruise_key_corrections.csv"),
+    file.path(dir_meta, "flag_overrides.csv"),
     file.path(dir_meta, "metadata_derived.csv")),
   # the engine version is an input too: a change to calcofi4db's projection or
   # parsing would otherwise leave the fingerprint identical and keep outputs that
@@ -1817,9 +1818,11 @@ bb_cr <- pts_filt |> pts_bbox() |> st_as_sfc()
 
 mapView(bb_cr) +
   mapView(
+    # 20 per cruise, not 100: at 100 the widget reached 11.7 MB on ONE line, and pandoc
+    # sat on it for 45+ minutes at full CPU (2026-09-24) after every R chunk had finished
     pts_filt |>
       group_by(cruise_key) |>
-      slice_sample(n = 100) |>
+      slice_sample(n = 20) |>
       ungroup() |>
       as_pts_sf() |>
       select(
@@ -2680,6 +2683,80 @@ one. `RELEASES.md` gets an entry only once `n_flags_applied` > 0 — a
 zero-effect chunk shipping is not itself a release-content change.
 :::
 
+## Apply Flag Overrides
+
+The accepted-flag ledger above holds flags a CTD curator has entered against individual scans in
+the team's PostgreSQL database. Some flags are known before anyone enters them, most often because
+the provider's own cruise notes say a sensor failed. `metadata/calcofi/ctd-cast/flag_overrides.csv`
+is where those live: one committed row per (cruise, cast range, direction, series), each with the
+flag, the reason, the source it rests on and the question that keeps it provisional until the
+provider flags at source. It is applied **after** the provider's flags and the accepted ledger and
+**before** any average, so an overridden sensor can never enter `temperature_ave` or anything built
+on it: the climatology, the transect shards, `measurements.json`, the derived dataset.
+
+The first entry (2026-09-24, questions.csv Q37) is cruise 2026-07-3322 casts 1–6. The provider's
+notes say the secondary temperature sensor was faulty there, and the data agree: sensor 2 sits a
+median 11 °C from sensor 1, up to 42 °C, against 0.002 °C on casts 7–72. Every series the provider
+builds from that temperature is flagged with it: conductivity-derived salinity, sigma-theta,
+potential temperature, and the sensor-2 oxygens, since oxygen concentration and saturation use the
+sensor's own temperature and salinity. The corrected forms of those series are included so the rule
+still holds when a bottle-merged file for the cruise arrives.
+
+```{r}
+#| label: apply_flag_overrides
+
+path_overrides <- file.path(dir_meta, "flag_overrides.csv")
+d_overrides <- read_csv(path_overrides, show_col_types = FALSE, na = "",
+                        col_types = cols(cast_min = "i", cast_max = "i", qual_code = "c",
+                                         .default = "c"))
+stopifnot(
+  "flag_overrides.csv: every row needs a reason, a source and a question" =
+    all(nzchar(d_overrides$reason) & nzchar(d_overrides$source) & nzchar(d_overrides$question)),
+  "flag_overrides.csv: cast_dir is D, U or *" = all(d_overrides$cast_dir %in% c("D", "U", "*")),
+  "flag_overrides.csv: measurement_type must be a registered CTD type" =
+    all(d_overrides$measurement_type %in% d_meas_ctd$measurement_type))
+
+dbWriteTable(con, "_flag_overrides", d_overrides, overwrite = TRUE)
+dbExecute(con, "
+  CREATE OR REPLACE TEMP TABLE _override_hits AS
+  SELECT o.cruise_key, o.cast_min, o.cast_max, o.cast_dir, o.measurement_type, o.qual_code,
+         c.cast_key, m.ctd_cast_uuid, m.depth_m
+  FROM _flag_overrides o
+  JOIN ctd_cast c
+    ON c.cruise_key = o.cruise_key
+   AND (o.cast_dir = '*' OR c.cast_dir = o.cast_dir)
+   AND TRY_CAST(regexp_extract(c.cast_key, '_([0-9]{3})', 1) AS INTEGER)
+         BETWEEN o.cast_min AND o.cast_max
+  JOIN ctd_measurement m
+    ON m.ctd_cast_uuid = c.ctd_cast_uuid AND m.measurement_type = o.measurement_type")
+dbExecute(con, "
+  UPDATE ctd_measurement m SET measurement_qual = h.qual_code
+  FROM _override_hits h
+  WHERE m.ctd_cast_uuid = h.ctd_cast_uuid AND m.depth_m = h.depth_m
+    AND m.measurement_type = h.measurement_type")
+
+d_override_report <- d_overrides |>
+  left_join(dbGetQuery(con, "
+    SELECT cruise_key, cast_min, cast_max, cast_dir, measurement_type,
+           COUNT(*) AS n_flagged, COUNT(DISTINCT cast_key) AS n_casts
+    FROM _override_hits GROUP BY ALL"),
+    by = c("cruise_key", "cast_min", "cast_max", "cast_dir", "measurement_type")) |>
+  mutate(across(c(n_flagged, n_casts), \(x) coalesce(as.integer(x), 0L)))
+# a series the cruise's file does not carry yet (the corrected forms, before the bottle merge)
+# matches nothing, which is fine; an override whose FIRST series matches nothing is a broken
+# key, and so is an override row whose cruise has no casts at all in that range
+stopifnot("a flag override matches no cast: check cruise_key / cast range / direction" =
+  all(d_override_report |> group_by(cruise_key, cast_min, cast_max, cast_dir) |>
+        summarize(n = sum(n_flagged), .groups = "drop") |> pull(n) > 0))
+dbExecute(con, "DROP TABLE _flag_overrides")
+say(glue("flag overrides applied: {nrow(d_overrides)} rule(s), ",
+         "{format(sum(d_override_report$n_flagged), big.mark = ',')} value(s) flagged"))
+datatable(d_override_report |> select(cruise_key, cast_min, cast_max, cast_dir, measurement_type,
+                                      qual_code, n_casts, n_flagged, reason, question),
+          rownames = FALSE, options = list(pageLength = 12, scrollX = TRUE),
+          caption = "Flag overrides (metadata/calcofi/ctd-cast/flag_overrides.csv) and what each flagged")
+```
+
 ## Combine the Sensor Pairs by Their Flags
 
 The canonical CTD temperature, salinity and oxygen are the **average of a sensor
@@ -2865,6 +2942,31 @@ n_flag_leak <- sum(pmap_int(pair_rule, function(ave, s1, s2, raw1, raw2) {
       ({q89('q2')} AND v2 IS NOT NULL AND (v1 IS NULL OR {q89('q1')} OR abs(va - v1) > 1e-9)))"))$n
 }))
 stopifnot("an average includes a sensor its provider flags 8/9" = n_flag_leak == 0)
+
+# and the overrides in particular: on every overridden cast the average is the OTHER sensor
+# exactly — for Q37, temperature_ave on 2026-07-3322 casts 1-6 equals temperature_1
+n_override_leak <- dbGetQuery(con, glue("
+  WITH t AS (
+    SELECT h.ctd_cast_uuid, h.depth_m
+    FROM _override_hits h WHERE h.measurement_type = 'temperature_2'),
+  p AS (
+    SELECT m.ctd_cast_uuid, m.depth_m,
+      max(measurement_value) FILTER (WHERE measurement_type = 'temperature_1')   AS v1,
+      max(measurement_qual)  FILTER (WHERE measurement_type = 'temperature_1')   AS q1,
+      max(measurement_value) FILTER (WHERE measurement_type = 'temperature_ave') AS va
+    FROM ctd_measurement m JOIN t USING (ctd_cast_uuid, depth_m)
+    WHERE measurement_type IN ('temperature_1', 'temperature_ave')
+    GROUP BY 1, 2)
+  SELECT
+    COUNT(*) FILTER (WHERE va IS NOT NULL AND (v1 IS NULL OR {q89('q1')} OR abs(va - v1) > 1e-12)) AS n_leak,
+    COUNT(*) FILTER (WHERE va IS NOT NULL) AS n_ave,
+    max(abs(va - v1)) AS max_abs_diff
+  FROM p"))
+say(glue("override check: {n_override_leak$n_ave} temperature_ave values on overridden casts, ",
+         "max |temperature_ave - temperature_1| = {n_override_leak$max_abs_diff}"))
+stopifnot("an average on an overridden cast includes the overridden sensor" =
+            n_override_leak$n_leak == 0)
+dbExecute(con, "DROP TABLE IF EXISTS _override_hits")
 ```
 
 ### ctd_summary — summary stats across cast directions

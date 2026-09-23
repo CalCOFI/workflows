@@ -37,6 +37,16 @@ moves. The two-sensor averages are still rebuilt by Rasmus Swalethorp's flag rul
 (`combine_sensor_pair_sql()`); the provider's flag on its own average rides on ours, and a
 cross-check table compares the two averages per file layout for the CTD team (#105).
 
+**2607 casts 1–6: the faulty secondary temperature is flagged.** The provider's cruise notes say the
+secondary temperature sensor was faulty on casts 1–6. It reads a median 11 °C from the primary, up to
+42 °C, and nothing flagged it, so 1,775 of those casts' `temperature_ave` values averaged it in (up to
+11.3 °C off). A new committed registry, `metadata/calcofi/ctd-cast/flag_overrides.csv` (one row per
+cruise, cast range, direction and series, each with a reason, a source and a question), flags that
+sensor 9 on those casts, together with every series the provider derives from it (secondary
+salinity, sigma-theta, potential temperature and oxygen). It is applied after the provider's flags
+and before any average, so `temperature_ave` there is the primary sensor alone; the ingest asserts
+it. This is provisional until the CTD team flags at source (questions.csv Q37).
+
 **`oxygen_ml_l_ave_cruise_corr`**, the cruise-corrected DO average, is new. It is built from
 `Ox1_CruiseCorr` / `Ox2_CruiseCorr` by the same flag rule; the source ships no average of that
 pair. It is canonical (in `obs` via `ctd_thin`) and bounded 0–15 ml/L like its station-corrected
