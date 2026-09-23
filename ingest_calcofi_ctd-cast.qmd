@@ -558,8 +558,12 @@ con <- get_duckdb_con(db_path)
 load_duckdb_extension(con, "spatial")
 load_duckdb_extension(con, "icu")
 
-# limit memory to half of system RAM so DuckDB spills to disk instead of consuming all RAM
-mem_gb <- ps::ps_system_memory()$total / 1024^3 / 2 |> floor()
+# DuckDB's memory limit from what is AVAILABLE, not half of total: this notebook
+# shares the machine with R's own ~20 GB of scan frames and whatever else runs (the
+# 2026-09-23 run crawled at 3-9x under swap with a fixed half-of-RAM limit). 40 % of
+# available, between 2 GB and half of total; DuckDB spills to temp_directory beyond it.
+mem_sys <- ps::ps_system_memory()
+mem_gb  <- max(2, floor(min(mem_sys$total / 2, mem_sys$avail * 0.4) / 1024^3))
 dbExecute(con, glue("SET memory_limit = '{mem_gb}GB'"))
 dbExecute(con, glue("SET temp_directory = '{dir_tmp}'"))
 
