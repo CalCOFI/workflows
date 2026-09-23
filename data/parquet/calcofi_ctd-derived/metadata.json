@@ -1,0 +1,414 @@
+{
+  "schema_version": "1.1",
+  "provider": "calcofi",
+  "dataset": "ctd-derived",
+  "workflow": "https://calcofi.io/workflows/ingest_calcofi_ctd-derived.html",
+  "tables": {
+    "obs": {
+      "name_long": "Observation",
+      "description_md": "The occurrence-headline long table: one scalar measurement per row, environmental (`realm = 'env'`) and biological (`realm = 'bio'`) together. Biological taxon is the global `taxon_key`; sub-occurrence detail (length/stage bins, behavior) lives in `obs_attribute`, and event-level effort in `sample_measurement`."
+    },
+    "sample_measurement": {
+      "name_long": "Sample Measurement",
+      "description_md": "Event-level (effort) measurements: quantities that describe the sampling event itself rather than anything observed in it — net volume filtered, standard haul factor, proportion sorted, bottle cast conditions. Kept apart from `obs` so effort is never mistaken for an observation."
+    },
+    "ctd_geostrophic": {
+      "name_long": "CTD Relative Geostrophic Velocity",
+      "description_md": "Relative geostrophic velocity between adjacent CTD stations of each CalCOFI line, per cruise: dynamic height anomaly relative to 500 dbar (`gsw_geo_strf_dyn_height`), `v = (dh2 - dh1) / (f dx)`, averaged to 10 dbar bins. Positive is equatorward. Relative flow, so it has no climatology and no anomaly. `calcofi4db::ctd_geostrophic()`; CalCOFI/workflows#103."
+    },
+    "measurement_type": {
+      "name_long": "Measurement Type",
+      "description_md": ""
+    },
+    "dataset": {
+      "name_long": "Dataset",
+      "description_md": ""
+    }
+  },
+  "columns": {
+    "ctd_geostrophic.cruise_key": {
+      "name_long": "Cruise",
+      "description_md": "Cruise natural key (YYYY-MM-NODC)"
+    },
+    "ctd_geostrophic.line": {
+      "name_long": "Line",
+      "description_md": "CalCOFI line number"
+    },
+    "ctd_geostrophic.site_key_1": {
+      "name_long": "Station 1",
+      "description_md": "Nearshore station of the pair, `LLL.L SSS.S`"
+    },
+    "ctd_geostrophic.site_key_2": {
+      "name_long": "Station 2",
+      "description_md": "Offshore station of the pair, `LLL.L SSS.S`"
+    },
+    "ctd_geostrophic.sample_key_1": {
+      "name_long": "Cast 1",
+      "description_md": "The calcofi_ctd-cast cast `sample_key` at station 1"
+    },
+    "ctd_geostrophic.sample_key_2": {
+      "name_long": "Cast 2",
+      "description_md": "The calcofi_ctd-cast cast `sample_key` at station 2"
+    },
+    "ctd_geostrophic.dist_mid_km": {
+      "name_long": "Pair midpoint distance",
+      "units": "km",
+      "description_md": "Along-line distance of the pair midpoint from the first station used, nearshore = 0"
+    },
+    "ctd_geostrophic.dx_km": {
+      "name_long": "Station spacing",
+      "units": "km",
+      "description_md": "Great-circle distance between the two stations"
+    },
+    "ctd_geostrophic.pressure_min_dbar": {
+      "name_long": "Pressure bin top",
+      "units": "dbar",
+      "description_md": "Top of the 10 dbar bin (0 = surface bin)"
+    },
+    "ctd_geostrophic.pressure_max_dbar": {
+      "name_long": "Pressure bin bottom",
+      "units": "dbar",
+      "description_md": "Bottom of the 10 dbar bin"
+    },
+    "ctd_geostrophic.velocity_m_s": {
+      "name_long": "Relative geostrophic velocity",
+      "units": "m/s",
+      "description_md": "Bin-mean velocity relative to 500 dbar; positive equatorward (90 degrees left of the offshore direction on a line running west-south-west)"
+    },
+    "ctd_geostrophic.shallow": {
+      "name_long": "Shallow pair",
+      "description_md": "TRUE when a cast of the pair is shallower than 500 dbar, so its deepest density is carried down (questions.csv Q03)"
+    },
+    "ctd_geostrophic.data_stage": {
+      "name_long": "Data stage",
+      "description_md": "The less-processed data_stage of the two casts"
+    },
+    "dataset.provider": {
+      "name_long": "Provider",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.dataset": {
+      "name_long": "Dataset",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.dataset_name": {
+      "name_long": "Dataset Name",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.dataset_name_short": {
+      "name_long": "Dataset Name Short",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.category": {
+      "name_long": "Category",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.color": {
+      "name_long": "Color",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.description": {
+      "name_long": "Description",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.citation_main": {
+      "name_long": "Citation Main",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.citation_others": {
+      "name_long": "Citation Others",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.link_calcofi_org": {
+      "name_long": "Link Calcofi Org",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.link_data_source": {
+      "name_long": "Link Data Source",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.link_others": {
+      "name_long": "Link Others",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.tables": {
+      "name_long": "Tables",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.coverage_temporal": {
+      "name_long": "Coverage Temporal",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.coverage_spatial": {
+      "name_long": "Coverage Spatial",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.license": {
+      "name_long": "License",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.pi_names": {
+      "name_long": "Pi Names",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.doi": {
+      "name_long": "Doi",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.license_url": {
+      "name_long": "License Url",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.acknowledgement": {
+      "name_long": "Acknowledgement",
+      "units": null,
+      "description_md": ""
+    },
+    "dataset.contact": {
+      "name_long": "Contact",
+      "units": null,
+      "description_md": ""
+    },
+    "measurement_type.measurement_type": {
+      "name_long": "Measurement Type",
+      "units": null,
+      "description_md": ""
+    },
+    "measurement_type.description": {
+      "name_long": "Description",
+      "units": null,
+      "description_md": ""
+    },
+    "measurement_type.units": {
+      "name_long": "Units",
+      "units": null,
+      "description_md": ""
+    },
+    "measurement_type.valid_min": {
+      "name_long": "Valid Min",
+      "units": null,
+      "description_md": ""
+    },
+    "measurement_type.valid_max": {
+      "name_long": "Valid Max",
+      "units": null,
+      "description_md": ""
+    },
+    "measurement_type.valid_depth_min_m": {
+      "name_long": "Valid Depth Min M",
+      "units": null,
+      "description_md": ""
+    },
+    "measurement_type.valid_depth_max_m": {
+      "name_long": "Valid Depth Max M",
+      "units": null,
+      "description_md": ""
+    },
+    "measurement_type.derivation": {
+      "name_long": "Derivation",
+      "units": null,
+      "description_md": ""
+    },
+    "measurement_type.is_canonical": {
+      "name_long": "Is Canonical",
+      "units": null,
+      "description_md": ""
+    },
+    "measurement_type._source_column": {
+      "name_long": " Source Column",
+      "units": null,
+      "description_md": ""
+    },
+    "measurement_type._source_table": {
+      "name_long": " Source Table",
+      "units": null,
+      "description_md": ""
+    },
+    "measurement_type._source_datasets": {
+      "name_long": " Source Datasets",
+      "units": null,
+      "description_md": ""
+    },
+    "measurement_type._qual_column": {
+      "name_long": " Qual Column",
+      "units": null,
+      "description_md": ""
+    },
+    "measurement_type._prec_column": {
+      "name_long": " Prec Column",
+      "units": null,
+      "description_md": ""
+    },
+    "measurement_type.grain": {
+      "name_long": "Grain",
+      "units": null,
+      "description_md": ""
+    },
+    "measurement_type.denominator": {
+      "name_long": "Denominator",
+      "units": null,
+      "description_md": ""
+    },
+    "measurement_type.category": {
+      "name_long": "Category",
+      "units": null,
+      "description_md": ""
+    },
+    "measurement_type.variable": {
+      "name_long": "Variable",
+      "units": null,
+      "description_md": ""
+    },
+    "measurement_type.nerc_p01": {
+      "name_long": "Nerc P01",
+      "units": null,
+      "description_md": ""
+    },
+    "measurement_type.units_nerc_p06": {
+      "name_long": "Units Nerc P06",
+      "units": null,
+      "description_md": ""
+    },
+    "obs.obs_id": {
+      "name_long": "Observation ID",
+      "description_md": "Surrogate key, renumbered globally when the release concatenates the per-dataset shards."
+    },
+    "obs.realm": {
+      "name_long": "Realm",
+      "description_md": "`env` for physical/chemical measurements, `bio` for organism observations."
+    },
+    "obs.dataset_key": {
+      "name_long": "Dataset Key",
+      "description_md": "Provenance stamp: `provider_dataset`."
+    },
+    "obs.sample_key": {
+      "name_long": "Sample Key",
+      "description_md": "The sampling event this observation came from; joins `sample`."
+    },
+    "obs.grid_key": {
+      "name_long": "Grid Key",
+      "description_md": "CalCOFI station grid cell, denormalized from `sample` so rollups need no join. NULL for region-pooled data."
+    },
+    "obs.cruise_key": {
+      "name_long": "Cruise Key",
+      "description_md": "Cruise, denormalized from `sample` so rollups need no join."
+    },
+    "obs.latitude": {
+      "name_long": "Latitude",
+      "units": "decimal degrees",
+      "description_md": "Observation latitude (WGS84)."
+    },
+    "obs.longitude": {
+      "name_long": "Longitude",
+      "units": "decimal degrees",
+      "description_md": "Observation longitude (WGS84)."
+    },
+    "obs.datetime": {
+      "name_long": "Datetime",
+      "description_md": "Observation time (UTC). NULL for region-pooled data with no event time."
+    },
+    "obs.depth_min_m": {
+      "name_long": "Depth Min",
+      "units": "m",
+      "description_md": "Shallowest depth this observation represents."
+    },
+    "obs.depth_max_m": {
+      "name_long": "Depth Max",
+      "units": "m",
+      "description_md": "Deepest depth this observation represents; equal to `depth_min_m` for point measurements (bottle, CTD scan)."
+    },
+    "obs.taxon_key": {
+      "name_long": "Taxon Key",
+      "description_md": "Global taxon key, `worms:<AphiaID>` or `itis:<TSN>` for birds. NULL for `env` rows. Joins `taxon`."
+    },
+    "obs.life_stage": {
+      "name_long": "Life Stage",
+      "description_md": "Life stage where the source resolves one (larva, adult, juvenile, egg, phyllosoma)."
+    },
+    "obs.measurement_type": {
+      "name_long": "Measurement Type",
+      "description_md": "Measured quantity; joins the `measurement_type` vocabulary."
+    },
+    "obs.measurement_value": {
+      "name_long": "Measurement Value",
+      "description_md": "The measured value, in the units `measurement_type` declares."
+    },
+    "obs.measurement_qual": {
+      "name_long": "Measurement Qualifier",
+      "description_md": "Source quality flag, verbatim."
+    },
+    "obs.measurement_prec": {
+      "name_long": "Measurement Precision",
+      "description_md": "Source-reported precision where available."
+    },
+    "obs.hex_id": {
+      "name_long": "Hex ID",
+      "description_md": "H3 cell at resolution 10, stored as UBIGINT. Aggregate coarser at query time with `h3_cell_to_parent(hex_id, res)` — there is no per-resolution column ladder."
+    },
+    "sample_measurement.sample_measurement_id": {
+      "name_long": "Sample Measurement ID",
+      "description_md": "Surrogate key."
+    },
+    "sample_measurement.sample_key": {
+      "name_long": "Sample Key",
+      "description_md": "The sampling event this effort measurement describes; joins `sample`."
+    },
+    "sample_measurement.dataset_key": {
+      "name_long": "Dataset Key",
+      "description_md": "Provenance stamp: `provider_dataset`."
+    },
+    "sample_measurement.measurement_type": {
+      "name_long": "Measurement Type",
+      "description_md": "Measured quantity; joins the `measurement_type` vocabulary."
+    },
+    "sample_measurement.measurement_value": {
+      "name_long": "Measurement Value",
+      "description_md": "The measured value, in the units `measurement_type` declares."
+    },
+    "sample_measurement.measurement_qual": {
+      "name_long": "Measurement Qualifier",
+      "description_md": "Source quality flag, verbatim."
+    }
+  },
+  "contributions": {
+    "obs": {
+      "rows": 1346581,
+      "owned": true,
+      "shared": true
+    },
+    "sample_measurement": {
+      "rows": 63232,
+      "owned": true,
+      "shared": true
+    },
+    "ctd_geostrophic": {
+      "rows": 372050,
+      "owned": true,
+      "shared": false
+    },
+    "measurement_type": {
+      "rows": 210,
+      "owned": true,
+      "shared": true
+    }
+  }
+}

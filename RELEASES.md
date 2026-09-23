@@ -8,6 +8,28 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## A new dataset: `calcofi_ctd-derived`, hydrographic products computed from the CTD casts
+
+Rasmus Swalethorp asked for values derived from the CTD profiles beside the measured series,
+to show how much upwelling, productivity and California Undercurrent there is on each cruise
+(CalCOFI/workflows#98). `ingest_calcofi_ctd-derived.qmd` computes them from the full-resolution
+1 m bins of `calcofi_ctd-cast` after the provider's 8/9 flags are dropped, with one tested
+calcofi4db (≥ 4.16.0) function per rule. It publishes:
+- **`obs`** (so `obs_env` and the `climatology`): `spiciness0` (TEOS-10 spice at 0 dbar) and
+  `sigma_theta_ave` (the sensor pair combined by its flags), at the depths ctd-cast publishes;
+- **`sample_measurement`**, on the ctd-cast cast:
+  - mixed-layer depth by three criteria (`mld_sigma_theta_003`, `mld_sigma_theta_0125`,
+    `mld_temperature_02`);
+  - `chl_max_depth` / `chl_max`;
+  - `chl_integrated` (0–200 m) / `chl_integrated_depth`;
+- **`ctd_geostrophic`**, a new table: relative geostrophic velocity between adjacent stations of
+  each line, referenced to 500 dbar, in 10 dbar bins (no anomaly: relative flow).
+
+`preliminary_without_bottle` casts get only `mld_temperature_02`, since nothing salinity-based
+applies. The defaults (10 m / Δσθ 0.03, 5 m median, 0–200 m, p_ref 500, 10 km minimum spacing,
+down cast) are provisional until Rasmus answers the dataset's questions Q01–Q05. The dataset emits
+no `sample`: every row keys to the ctd-cast cast, declared in `relationships_cross.csv`.
+
 ## Dataset metadata: the 16 CalOOS-sheet proposals reviewed into the record (#79, #96)
 
 Each `dataset_meta.yml` proposal imported from the CalOOS sheet on 2026-09-05 was reviewed field by
