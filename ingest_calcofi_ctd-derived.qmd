@@ -237,9 +237,16 @@ types <- c(
   "pressure", "temperature_ave", "salinity_ave_corr", "sigma_theta_1", "sigma_theta_2",
   "est_chlorophyll_a_sta_corr")
 pivot_sql <- function(ck) {
+  # a 1 m bin can hold two scans (the file repeats a depth); the value is their mean
+  # and the flag is 8/9 if EITHER scan is flagged, else whatever code the scans carry
+  # (a bare MAX() would let the string 'nan' outrank '9' and lose the flag)
+  flg <- "regexp_replace(CAST(measurement_qual AS VARCHAR), '\\.0+$', '') IN ('8', '9')"
   cols <- unlist(lapply(types, function(tp) c(
-    glue("MAX(measurement_value) FILTER (WHERE measurement_type = '{tp}') AS \"{tp}\""),
-    glue("MAX(measurement_qual)  FILTER (WHERE measurement_type = '{tp}') AS \"q_{tp}\""))))
+    glue("AVG(measurement_value) FILTER (WHERE measurement_type = '{tp}') AS \"{tp}\""),
+    glue("COALESCE(
+            MAX(measurement_qual) FILTER (WHERE measurement_type = '{tp}' AND {flg}),
+            MAX(measurement_qual) FILTER (WHERE measurement_type = '{tp}' AND measurement_qual NOT IN ('nan', '')))
+          AS \"q_{tp}\""))))
   glue("
     SELECT f.sample_key, f.depth_min_m AS depth_m,
            ANY_VALUE(f.latitude) AS latitude, ANY_VALUE(f.longitude) AS longitude,
@@ -485,14 +492,21 @@ The cross-dataset keys are declared in `metadata/relationships_cross.csv`.
 
 ```{r}
 #| label: emit-core
+# ctd-cast's thinned series repeats ~10,200 (cast, depth) pairs as two scans at
+# different times; one derived value per (cast, depth), on the earlier scan's row
+dbExecute(con, "
+  CREATE OR REPLACE TEMP TABLE thin_depth AS
+  SELECT sample_key, grid_key, cruise_key, latitude, longitude, datetime, depth_min_m, depth_max_m
+  FROM src_obs WHERE measurement_type = 'temperature_ave'
+  QUALIFY ROW_NUMBER() OVER (PARTITION BY sample_key, depth_min_m ORDER BY datetime, latitude) = 1")
 for (tp in c("sigma_theta_ave", "spiciness0"))
   append_obs(con, glue("
     SELECT 'env', '{ds_key}', o.sample_key, o.grid_key, o.cruise_key,
            o.latitude, o.longitude, o.datetime, o.depth_min_m, o.depth_max_m,
            NULL::VARCHAR, NULL::VARCHAR, '{tp}', b.{tp}, NULL::VARCHAR, NULL::DOUBLE
-    FROM src_obs o
+    FROM thin_depth o
     JOIN bin_full b ON b.sample_key = o.sample_key AND b.depth_m = o.depth_min_m
-    WHERE o.measurement_type = 'temperature_ave' AND b.{tp} IS NOT NULL"))
+    WHERE b.{tp} IS NOT NULL"))
 
 append_sample_measurement(con, glue("
   SELECT sample_key, '{ds_key}', measurement_type, value, NULL::VARCHAR
@@ -636,6 +650,9 @@ stopifnot(
   "ctd_geostrophic key is unique" =
     dbGetQuery(con, "SELECT COUNT(*) AS n FROM (SELECT cruise_key, sample_key_1, sample_key_2, pressure_min_dbar
                      FROM ctd_geostrophic GROUP BY ALL HAVING COUNT(*) > 1)")$n == 0,
+  "one obs row per cast, depth and type" =
+    dbGetQuery(con, "SELECT COUNT(*) AS n FROM (SELECT sample_key, depth_min_m, measurement_type FROM obs
+                     GROUP BY ALL HAVING COUNT(*) > 1)")$n == 0,
   "one sample_measurement row per cast and type" =
     dbGetQuery(con, "SELECT COUNT(*) AS n FROM (SELECT sample_key, measurement_type FROM sample_measurement
                      GROUP BY ALL HAVING COUNT(*) > 1)")$n == 0)
