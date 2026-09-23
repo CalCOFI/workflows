@@ -8,6 +8,20 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## Dataset metadata: the 16 CalOOS-sheet proposals reviewed into the record (#79, #96)
+
+Each `dataset_meta.yml` proposal imported from the CalOOS sheet on 2026-09-05 was reviewed field by
+field against its dataset (Betty Huang). What was accurate was merged, what wasn't was rejected
+with a reason, and what was uncertain became a `proposed` question for the provider. The new
+fields are abstracts, creators, associated parties, contacts, keywords, QC statements and
+maintenance, which flow into every dataset page, citation and EML document.
+- **DIC:** creators are now the seven authors of its NCEI citation, in order. The two PIs stay in
+  `pi_names`.
+- **Dungeness crab:** its data source is CDFW's CNRA Open Data page (Christy Juhasz, 2026-09-14).
+- **`sio/pic-zooplankton`:** the proposal is rejected; it described the pending biovolume table
+  (Q01).
+- The proposal files are removed now that they are reviewed.
+
 ## Why each measurement matters: one cited pick, the alternatives beside it
 
 `metadata/measurement_why.csv` now carries, for every measurement key with a face, one authored
