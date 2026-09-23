@@ -8,6 +8,34 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## CTD: the corrected 2607 file, provider flags on every series, cruise-corrected oxygen
+
+**2607SH regains its offshore stations.** The first 20-2607SH_CTDPrelim.zip wrote station numbers
+of 100 and above with three digits, so 100/110/120 read as 000/010/020. The distance filter then
+dropped every such cast as a position error: in v2026.09.11, 2026-07-3322 has 122 casts instead of
+144, and lines 80, 83.3, 86.7, 90 and 93.3 stop at station 90. The provider fixed the file on
+2026-09-14 (Kelsey Vogel). Only `Sta` and `Sta_ID` differ between the two files, not a single
+measured value, so this release adds those 22 casts back: 11,372 rows per series, and no value
+changes on any other cruise. The ingest now **fails the render** when a dropped cast sits within the
+cutoff of its station number + 100, so a truncation cannot drop stations quietly again. A zip
+re-published under the same name also invalidates the ingest's fingerprint, its checkpoint and its
+extraction now; before this, the corrected file would have read as "inputs unchanged"
+(CalCOFI/workflows#104).
+
+**Every CTD series carries the provider's own flag.** The CTD team's 2026 processing software writes
+a quality code for each corrected, averaged and derived series (`SaltAve_CorrQ`, `OxAve_StaCorrQ`,
+`EstChl_StaCorrQ`, `EstNO3_CruiseCorrQ`, `BATQ`, `PoT1Q`, `DynHtQ`, … 27 columns, first in the
+corrected 2607 file). Each series' `measurement_qual` now comes from that column, falling back to
+the sensor flag it inherited before for a file in the legacy layout, so no flag on a legacy cruise
+moves. The two-sensor averages are still rebuilt by Rasmus Swalethorp's flag rule
+(`combine_sensor_pair_sql()`); the provider's flag on its own average rides on ours, and a
+cross-check table compares the two averages per file layout for the CTD team (#105).
+
+**`oxygen_ml_l_ave_cruise_corr`**, the cruise-corrected DO average, is new. It is built from
+`Ox1_CruiseCorr` / `Ox2_CruiseCorr` by the same flag rule; the source ships no average of that
+pair. It is canonical (in `obs` via `ctd_thin`) and bounded 0–15 ml/L like its station-corrected
+sibling (#106).
+
 ## Why each measurement matters: one cited pick, the alternatives beside it
 
 `metadata/measurement_why.csv` now carries, for every measurement key with a face, one authored

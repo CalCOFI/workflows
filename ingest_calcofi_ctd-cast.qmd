@@ -472,7 +472,13 @@ fp <- input_fingerprint(
   # hashing `d_zips$url` would let the whole Wilkinson archive (and 2607SH) arrive
   # without invalidating anything — the run would report "inputs unchanged" and
   # skip the rebuild that was the entire point.
-  values = c(sort(paste(d_zips$source, d_zips$file_zip)),
+  #
+  # ...and the archive's SIZE on disk: a provider re-publishing a corrected zip under
+  # the same name (20-2607SH_CTDPrelim.zip, 2026-09-14: station numbers >= 100 had
+  # been cut to three digits) changes nothing else, so without it the fix would read
+  # as "inputs unchanged" and never be ingested (CalCOFI/workflows#104)
+  values = c(sort(paste(d_zips$source, d_zips$file_zip,
+                        file.size(file.path(dir_dl, d_zips$file_zip)))),
              paste0("calcofi4db ", as.character(packageVersion("calcofi4db")))))
 fp_prior <- read_input_fingerprint(fingerprint_path)
 fp_same  <- !is.null(fp_prior) && identical(fp_prior$hash, fp$hash)
@@ -530,7 +536,19 @@ if (overwrite && !parquet_complete) {
   }
 }
 
-# restore from checkpoint DB if available (skips expensive read+bind+filter)
+# restore from checkpoint DB if available (skips expensive read+bind+filter) — but
+# only a checkpoint built from THESE archives: it holds ctd_raw, i.e. the files as
+# read, so a replaced archive must not be answered from the old copy of it
+fp_zips <- input_fingerprint(
+  files  = file.path(dir_meta, "flds_redefine.csv"),
+  values = sort(paste(d_zips$file_zip, file.size(file.path(dir_dl, d_zips$file_zip)))))
+checkpoint_fp_path <- paste0(db_checkpoint, ".inputs.json")
+fp_ckpt <- read_input_fingerprint(checkpoint_fp_path)
+if (file_exists(db_checkpoint) &&
+    (is.null(fp_ckpt) || !identical(fp_ckpt$hash, fp_zips$hash))) {
+  file_delete(db_checkpoint)
+  say("Checkpoint discarded: built from a different set of archives")
+}
 if (!parquet_complete && file_exists(db_checkpoint) && !file_exists(db_path)) {
   file_copy(db_checkpoint, db_path, overwrite = TRUE)
   say(glue("Restored from checkpoint: {db_checkpoint}"))
@@ -689,6 +707,19 @@ download_and_unzip <- function(url, file_zip, dest_dir, ext_dir, zip_type,
   # [jrw_overlap_report]), so it costs a seek, not an extraction, per archive.
   # `<`, not `!=`: an archive may legitimately be over-populated (an older run of
   # a since-shrunk archive), and re-extracting on that is churn, not repair.
+  # an archive REPLACED under the same name (see above) keeps its member count, so
+  # the count below would bless the old extraction: key it on the archive's size and
+  # mtime instead, recorded beside the extraction
+  stamp_file <- file.path(dir_unzip, ".archive_stamp")
+  stamp_now  <- paste(file.size(dest_file), as.numeric(file.mtime(dest_file)))
+  stale <- dir_exists(dir_unzip) && if (file_exists(stamp_file))
+    !identical(read_lines(stamp_file), stamp_now) else
+    file.mtime(dest_file) > file.mtime(dir_unzip)
+  if (stale) {
+    say(glue("Archive changed since it was extracted — re-extracting {file_zip}"))
+    dir_delete(dir_unzip)
+  }
+
   n_members <- sum(!str_detect(utils::unzip(dest_file, list = TRUE)$Name, "/$"))
   n_on_disk <- if (dir_exists(dir_unzip)) {
     length(list.files(dir_unzip, recursive = TRUE, all.files = TRUE,
@@ -706,6 +737,7 @@ download_and_unzip <- function(url, file_zip, dest_dir, ext_dir, zip_type,
     # around; unzip()'s default leaves an existing (possibly truncated) file be.
     unzip(dest_file, exdir = dir_unzip, overwrite = TRUE)
   }
+  write_lines(stamp_now, stamp_file)
 }
 
 d_zips_read |>
@@ -715,6 +747,35 @@ d_zips_read |>
 
 say(glue("Download and extraction complete: archives in {dir_dl}, ",
          "extracted files in {dir_ext}"))
+
+# A provider may re-publish a corrected archive under the same name — the 2607
+# preliminary file was, on 2026-09-14, after station numbers >= 100 had shipped cut
+# to three digits (CalCOFI/workflows#104). The Shared Drive stays the authoritative
+# copy (it primes dir_dl above), so this REPORTS a calcofi.org archive whose size
+# differs from the local copy rather than replacing it: replacing it here would swap
+# an input without the per-series diff a data fix needs. Only archives this notebook
+# reads, only an HTTP 200 (calcofi.org lists some archives that 404), and a failed
+# HEAD is simply not reported. Fix a hit by updating the Shared Drive copy.
+head_size <- function(url) tryCatch({
+  r <- curl::curl_fetch_memory(url, handle = curl::new_handle(
+    nobody = TRUE, timeout = 30, followlocation = TRUE))
+  if (r$status_code != 200) return(NA_real_)
+  as.numeric(curl::parse_headers_list(r$headers)[["content-length"]] %||% NA)
+}, error = function(e) NA_real_)
+d_zip_drift <- d_zips_read |>
+  filter(!is.na(url), zip_type %in% c("final", "preliminary"),
+         file_exists(file.path(dir_dl, file_zip))) |>
+  mutate(local_bytes  = file.size(file.path(dir_dl, file_zip)),
+         remote_bytes = map_dbl(url, head_size)) |>
+  filter(!is.na(remote_bytes), remote_bytes != local_bytes) |>
+  select(file_zip, zip_type, local_bytes, remote_bytes, url)
+if (nrow(d_zip_drift) > 0) {
+  say(glue("{nrow(d_zip_drift)} read archive(s) differ from calcofi.org — update the ",
+           "Shared Drive copy and re-render: {paste(d_zip_drift$file_zip, collapse = ', ')}"))
+  dt(d_zip_drift, caption = paste(
+    "Read archives whose calcofi.org copy differs in size from the local (Shared Drive)",
+    "copy: a re-published file the ingest has NOT taken"), fname = "ctd_zip_drift")
+} else say("every read archive matches its calcofi.org size (where calcofi.org answers)")
 ```
 
 ### Overlap guard {#jrw-overlap-guard}
@@ -1034,14 +1095,49 @@ d_csv <- d_csv |>
         data <- read_csv(path, guess_max = Inf, show_col_types = F) |>
           clean_names()
       }
-      data
+      # a flag column the provider left empty throughout a file reads as logical
+      # (all NA). Make every flag column numeric so the files bind to one type and
+      # COALESCE(provider flag, sensor flag) below never mixes BOOLEAN with DOUBLE.
+      #
+      # ...and DROP a 2026-layout flag column the file leaves wholly empty. bind_rows
+      # broadcasts every column to every scan of the archive, so the 27 new *Q columns
+      # of ONE file (the corrected 2607 preliminary, every code empty) became ~30M
+      # doubles each and took R past its 24 GB vector limit in
+      # [pts_distance_from_lnst] (run of 2026-09-23). An all-empty column carries no
+      # flag, and [meas_col_registry] adds any flag column still missing as NULL
+      # before the COALESCE, so dropping it loses nothing.
+      q_new <- c("temp_ave_q", "salt1_corr_q", "salt2_corr_q", "salt_ave_corr_q",
+                 "ox1_cruise_corr_q", "ox1_sta_corr_q", "ox2_cruise_corr_q",
+                 "ox2_sta_corr_q", "ox_ave_sta_corr_q", "ox1u_mq", "ox1u_m_cruise_corr_q",
+                 "ox1u_m_sta_corr_q", "ox2u_mq", "ox2u_m_cruise_corr_q", "ox2u_m_sta_corr_q",
+                 "ox_aveu_m_sta_corr_q", "est_chl_cruise_corr_q", "est_chl_sta_corr_q",
+                 "est_no3_cruise_corr_q", "est_no3_sta_corr_q", "batq", "po_t1q", "po_t2q",
+                 "dyn_ht_q", "svaq", "ox_sat1q", "ox_sat2q")
+      q_empty <- intersect(q_new, names(data))[
+        vapply(intersect(q_new, names(data)), \(c) all(is.na(data[[c]])), logical(1))]
+      data |>
+        mutate(across(where(is.logical) & matches("q$"), as.numeric)) |>
+        # the layout marker survives the drop (the cross-check needs it)
+        mutate(.src_qc_2026 = "salt_ave_corr_q" %in% names(data)) |>
+        select(-any_of(q_empty))
     }),
-    nrows = map_int(data, ~ if (is.null(.x)) 0 else nrow(.x))
+    nrows = map_int(data, ~ if (is.null(.x)) 0 else nrow(.x)),
+    # the file layout: the CTD team's 2026 processing software writes a quality
+    # code for every corrected, averaged and derived series (SaltAve_CorrQ,
+    # OxAve_StaCorrQ, EstChl_StaCorrQ, …; CalCOFI/workflows#105), the legacy
+    # layout flags only the sensors. The cross-check in [combine_sensor_pairs]
+    # reads it.
+    src_format = map_chr(data, ~ if (isTRUE(.x$.src_qc_2026[1])) "qc_2026" else "legacy"),
+    data = map(data, ~ select(.x, -.src_qc_2026))
   )
+
+say(glue("file layouts: {paste(names(table(d_csv$src_format)), table(d_csv$src_format), sep = ' = ', collapse = ', ')}"))
+write_rds(d_csv |> transmute(`_source_file` = path_unzip, src_format),
+          glue("{dir_tmp}/d_src_format.rds"))
 
 d_csv |>
   arrange(cruise_key, file_csv) |>
-  select(cruise_key, file_csv, nrows) |>
+  select(cruise_key, file_csv, nrows, src_format) |>
   dt(
     caption = "Number of rows read per file",
     fname = "ctd_rows_per_file"
@@ -1209,7 +1305,8 @@ d_bind <- d_bind |>
     -study,
     -nrows,
     -col_empties,
-    -col_types
+    -col_types,
+    -src_format
   )
 
 # fill missing ord_occ from cast_id
@@ -1582,6 +1679,39 @@ pts_filt <- pts |>
     !is.na(grid_site)
   )
 
+# A station number written with only three digits is not "far from its station",
+# it is a different station: 100/110/120 shipped as 000.0/010.0/020.0 in the 2607
+# preliminary file until the provider fixed it on 2026-09-14 (CalCOFI/workflows#104),
+# and the distance filter above then dropped every offshore cast on lines 80-93.3
+# as a position error — quietly, one row in a table of cruises. So test the dropped
+# scans for exactly that signature: an inshore station number (< 30) whose cast
+# sits within the cutoff of station number + 100. Any match stops the render.
+d_trunc <- pts |>
+  filter(!is_dist_dec_lnst_within_max, !is.na(sta), !is.na(line),
+         suppressWarnings(as.numeric(sta)) < 30) |>
+  distinct(cruise_key, `_source_file`, line, sta, longitude, latitude)
+if (nrow(d_trunc) > 0) {
+  xy100 <- sf_project(
+    from = "+proj=calcofi", to = "+proj=longlat +datum=WGS84",
+    pts  = cbind(as.numeric(d_trunc$line), as.numeric(d_trunc$sta) + 100))
+  hav_km <- function(lon1, lat1, lon2, lat2) {
+    r <- pi / 180
+    a <- sin((lat2 - lat1) * r / 2)^2 +
+      cos(lat1 * r) * cos(lat2 * r) * sin((lon2 - lon1) * r / 2)^2
+    2 * 6371.0088 * asin(sqrt(a))
+  }
+  d_trunc$dist_sta_plus100_km <- hav_km(d_trunc$longitude, d_trunc$latitude,
+                                        xy100[, 1], xy100[, 2])
+  d_trunc <- filter(d_trunc, dist_sta_plus100_km <= max_dist_dec_lnst_km)
+}
+if (nrow(d_trunc) > 0)
+  stop(glue(
+    "{nrow(distinct(d_trunc, `_source_file`, line, sta))} station(s) look TRUNCATED to three ",
+    "digits (the cast sits at station + 100): ",
+    paste(unique(glue("{basename(d_trunc$`_source_file`)} {d_trunc$line}/{d_trunc$sta}")),
+          collapse = "; "),
+    ". Ask the CTD team for a corrected file; do not widen the distance filter."))
+
 d_pts_cruise_filt_smry |>
   dt(
     caption = glue(
@@ -1711,6 +1841,9 @@ d_filt <- d_filt |>
 
 # write raw table for pivoting
 dbWriteTable(con, "ctd_raw", d_filt, overwrite = TRUE)
+# which layout each source file is in, for the provider-average cross-check
+dbWriteTable(con, "ctd_src_format", read_rds(glue("{dir_tmp}/d_src_format.rds")),
+             overwrite = TRUE)
 say(glue("Loaded {nrow(d_filt)} rows into ctd_raw"))
 ```
 
@@ -1928,6 +2061,7 @@ Save a DuckDB checkpoint after the expensive read+bind+filter+bridge steps so su
 if (!file_exists(db_checkpoint) || overwrite) {
   close_duckdb(con)
   file_copy(db_path, db_checkpoint, overwrite = TRUE)
+  write_input_fingerprint(checkpoint_fp_path, fp_zips)
   con <- get_duckdb_con(db_path)
   load_duckdb_extension(con, "spatial")
   load_duckdb_extension(con, "icu")
@@ -1962,7 +2096,45 @@ itself is gone.
 # identify measurement and quality columns from measurement_type metadata
 d_meas_ctd <- d_meas_type |>
   filter(str_detect(`_source_datasets`, "calcofi_ctd-cast"))
-meas_cols <- d_meas_ctd$`_source_column`
+
+# --- every series names the PROVIDER'S OWN flag column (CalCOFI/workflows#105) ---
+# The 2026 processing software flags each corrected, averaged and derived series
+# (SaltAve_CorrQ, EstChl_StaCorrQ, …) and the registry now points each series at that
+# column (libs/build_ctd_measurement_registry.R § 4). A legacy-layout file has no such
+# column, so fill it from the sensor flag the series inherited before 2026-09-23:
+# COALESCE(provider flag, sensor flag) — the provider's word wherever it has one, and
+# never weaker than the old rule where it does not. An average has no sensor to fall
+# back on (NA): it is rebuilt from its pair in [combine_sensor_pairs] and keeps the
+# provider's flag on it only as the provider's own verdict.
+qual_fallback <- c(
+  temp_ave_q            = NA,        salt_ave_corr_q       = NA,
+  salt1_corr_q          = "salt1q",  salt2_corr_q          = "salt2q",
+  ox1_sta_corr_q        = "ox1q",    ox2_sta_corr_q        = "ox2q",
+  ox1_cruise_corr_q     = "ox1q",    ox2_cruise_corr_q     = "ox2q",
+  ox_ave_sta_corr_q     = NA,
+  ox1u_mq               = "ox1q",    ox2u_mq               = "ox2q",
+  ox1u_m_sta_corr_q     = "ox1q",    ox2u_m_sta_corr_q     = "ox2q",
+  ox1u_m_cruise_corr_q  = "ox1q",    ox2u_m_cruise_corr_q  = "ox2q",
+  ox_aveu_m_sta_corr_q  = NA,
+  est_chl_sta_corr_q    = "fluor_q", est_chl_cruise_corr_q = "fluor_q",
+  est_no3_sta_corr_q    = "isusq",   est_no3_cruise_corr_q = "isusq",
+  batq                  = NA,        dyn_ht_q              = NA,
+  svaq                  = NA,
+  po_t1q                = "temp1q",  po_t2q                = "temp2q",
+  ox_sat1q              = "ox1q",    ox_sat2q              = "ox2q")
+stopifnot(
+  "every provider flag column the registry names has a fallback rule here" =
+    all(setdiff(na.omit(d_meas_ctd$`_qual_column`),
+                c("", "pr_q", "temp1q", "temp2q", "salt1q", "salt2q", "ox1q", "ox2q",
+                  "fluor_q", "isusq", "sig_theta_ts1q", "sig_theta_ts2q", "trans_q",
+                  "p_hq", "sparq", "parq")) %in% names(qual_fallback)))
+for (q in names(qual_fallback))
+  dbExecute(con, glue("ALTER TABLE ctd_raw ADD COLUMN IF NOT EXISTS {q} DOUBLE"))
+q_fill <- qual_fallback[!is.na(qual_fallback)]
+dbExecute(con, glue("UPDATE ctd_raw SET {paste0(names(q_fill), ' = COALESCE(TRY_CAST(', names(q_fill), ' AS DOUBLE), TRY_CAST(', q_fill, ' AS DOUBLE))', collapse = ', ')}"))
+cat(glue("provider flag columns: {length(qual_fallback)} ({length(q_fill)} filled from their sensor flag where the file predates them)\n"))
+meas_cols <- d_meas_ctd$`_source_column` |> na.omit() |> as.character()
+meas_cols <- meas_cols[meas_cols != ""]
 qual_cols <- d_meas_ctd$`_qual_column` |> na.omit() |> as.character()
 qual_cols <- qual_cols[qual_cols != ""]
 
@@ -2096,11 +2268,15 @@ dbExecute(
 # pivot wide-to-long one measurement type at a time to avoid OOM
 dbExecute(con, "DROP TABLE IF EXISTS ctd_measurement")
 
+created <- FALSE
 for (i in seq_len(nrow(d_meas_ctd))) {
   row <- d_meas_ctd[i, ]
   src_col <- row$`_source_column`
   meas_type <- row$measurement_type
   qual_col <- row$`_qual_column`
+  # a series the ingest BUILDS (oxygen_ml_l_ave_cruise_corr, from its sensor pair in
+  # [combine_sensor_pairs]) has no source column: nothing to pivot
+  if (is.na(src_col) || src_col == "") next
 
   # a bare NULL is typed INT32 by DuckDB, so if the FIRST measurement type has no
   # qual column the CREATE TABLE below makes measurement_qual an integer column —
@@ -2131,8 +2307,9 @@ for (i in seq_len(nrow(d_meas_ctd))) {
     "
   )
 
-  if (i == 1) {
+  if (!created) {
     dbExecute(con, glue("CREATE OR REPLACE TABLE ctd_measurement AS {sql_select}"))
+    created <- TRUE
   } else {
     dbExecute(con, glue("INSERT INTO ctd_measurement {sql_select}"))
   }
@@ -2471,6 +2648,8 @@ pair_rule <- tibble::tribble(
   "temperature_ave",             "temperature_1",              "temperature_2",              "temp1",            "temp2",
   "salinity_ave_corr",           "salinity_1_corr",            "salinity_2_corr",            "salt1_corr",       "salt2_corr",
   "oxygen_ml_l_ave_sta_corr",    "oxygen_ml_l_1_sta_corr",     "oxygen_ml_l_2_sta_corr",     "ox1_sta_corr",     "ox2_sta_corr",
+  # the source ships no cruise-corrected average; built here (CalCOFI/workflows#106)
+  "oxygen_ml_l_ave_cruise_corr", "oxygen_ml_l_1_cruise_corr",  "oxygen_ml_l_2_cruise_corr",  "ox1_cruise_corr",  "ox2_cruise_corr",
   "oxygen_umol_kg_ave_sta_corr", "oxygen_umol_kg_1_sta_corr",  "oxygen_umol_kg_2_sta_corr",  "ox1u_m_sta_corr",  "ox2u_m_sta_corr")
 
 # a sensor series with no flag column would make the rule silently flag-blind
@@ -2485,6 +2664,16 @@ q89 <- function(q) glue("regexp_replace(CAST({q} AS VARCHAR), '\\.0+$', '') IN (
 uuid_sql <- "substr(_h, 1, 8) || '-' || substr(_h, 9, 4) || '-' || substr(_h, 13, 4) || '-' ||
              substr(_h, 17, 4) || '-' || substr(_h, 21, 12)"
 
+# the file layout per source file ([rename_fields]); a checkpoint from before
+# 2026-09-23 has no such table, which the cross-check reports as 'unknown'
+src_format_tbl <- if ("ctd_src_format" %in% dbListTables(con)) "ctd_src_format" else
+  "(SELECT CAST(NULL AS VARCHAR) AS _source_file, CAST(NULL AS VARCHAR) AS src_format)"
+
+# the provider's own average, beside ours: agreement per layout. The rule is ours
+# (Rasmus, 2026-09-09) and it stands; this table is how a disagreement reaches the
+# CTD team (Ben Gire, Kelsey Vogel) as a QC finding instead of being a silent choice.
+pair_xcheck <- list()
+
 pair_report <- pmap_dfr(pair_rule, function(ave, s1, s2, raw1, raw2) {
   dbExecute(con, glue("
     CREATE OR REPLACE TEMP TABLE _pair AS
@@ -2495,16 +2684,20 @@ pair_report <- pmap_dfr(pair_rule, function(ave, s1, s2, raw1, raw2) {
         max(measurement_qual)  FILTER (WHERE measurement_type = '{s1}')  AS q1,
         max(measurement_value) FILTER (WHERE measurement_type = '{s2}')  AS v2,
         max(measurement_qual)  FILTER (WHERE measurement_type = '{s2}')  AS q2,
-        max(measurement_value) FILTER (WHERE measurement_type = '{ave}') AS v_src
+        max(measurement_value) FILTER (WHERE measurement_type = '{ave}') AS v_src,
+        max(measurement_qual)  FILTER (WHERE measurement_type = '{ave}') AS q_src
       FROM ctd_measurement
       WHERE measurement_type IN ('{s1}', '{s2}', '{ave}')
       GROUP BY ctd_cast_uuid, depth_m),
     r AS (
       -- did the SOURCE ship any sensor value on this scan (before sentinels and bounds)?
-      SELECT ctd_cast_uuid, depth_m,
-        bool_or({raw1} IS NOT NULL OR {raw2} IS NOT NULL) AS src_has_sensor
-      FROM ctd_raw GROUP BY ctd_cast_uuid, depth_m)
-    SELECT m.*, coalesce(r.src_has_sensor, FALSE) AS src_has_sensor
+      SELECT x.ctd_cast_uuid, x.depth_m,
+        bool_or({raw1} IS NOT NULL OR {raw2} IS NOT NULL) AS src_has_sensor,
+        any_value(coalesce(f.src_format, 'unknown'))     AS src_format
+      FROM ctd_raw x LEFT JOIN {src_format_tbl} f ON f._source_file = x._source_file
+      GROUP BY x.ctd_cast_uuid, x.depth_m)
+    SELECT m.*, coalesce(r.src_has_sensor, FALSE) AS src_has_sensor,
+           coalesce(r.src_format, 'unknown') AS src_format
     FROM m LEFT JOIN r USING (ctd_cast_uuid, depth_m)"))
 
   dbExecute(con, glue("
@@ -2526,12 +2719,27 @@ pair_report <- pmap_dfr(pair_rule, function(ave, s1, s2, raw1, raw2) {
       COUNT(*) FILTER (WHERE NOT src_has_sensor AND v_src IS NOT NULL)            AS n_src_only
     FROM _pair_new"))
 
+  pair_xcheck[[ave]] <<- dbGetQuery(con, glue("
+    SELECT '{ave}' AS measure, src_format,
+      COUNT(*) FILTER (WHERE v_src IS NOT NULL AND v_new IS NOT NULL)             AS n_both,
+      COUNT(*) FILTER (WHERE v_src IS NOT NULL AND v_new IS NOT NULL
+                         AND abs(v_src - v_new) > 1e-4)                           AS n_disagree,
+      max(abs(v_src - v_new)) FILTER (WHERE v_src IS NOT NULL AND v_new IS NOT NULL) AS max_abs_diff,
+      COUNT(*) FILTER (WHERE {q89('q_src')})                                      AS n_provider_flag_89,
+      COUNT(*) FILTER (WHERE {q89('q_src')} AND v_new IS NOT NULL)                AS n_provider_89_kept_flagged,
+      COUNT(*) FILTER (WHERE v_src IS NOT NULL AND v_new IS NULL)                 AS n_provider_only
+    FROM _pair_new GROUP BY src_format ORDER BY src_format"))
+
   dbExecute(con, glue("DELETE FROM ctd_measurement WHERE measurement_type = '{ave}'"))
   dbExecute(con, glue("
     INSERT INTO ctd_measurement BY NAME
     SELECT {uuid_sql} AS ctd_measurement_uuid,
            ctd_cast_uuid, depth_m, '{ave}' AS measurement_type,
-           v_new AS measurement_value, CAST(NULL AS VARCHAR) AS measurement_qual, cruise_key
+           v_new AS measurement_value,
+           -- the provider's verdict on ITS average (SaltAve_CorrQ, OxAve_StaCorrQ, …)
+           -- rides on ours: a value it flags 8/9 stays flagged for every consumer
+           -- that applies qual_ok, even though the pair rule rebuilt it
+           q_src AS measurement_qual, cruise_key
     FROM (
       SELECT *, md5(concat_ws('|', COALESCE(CAST(ctd_cast_uuid AS VARCHAR), ''),
                                    COALESCE(CAST(depth_m AS VARCHAR), ''),
@@ -2550,6 +2758,12 @@ say(glue("sensor pairs combined by their flags: ",
          "{format(sum(pair_report$n_flag_excluded), big.mark = ',')} with a flagged sensor left out"))
 datatable(pair_report, caption = "Averages rebuilt from their sensor pairs by the flag rule",
           rownames = FALSE)
+pair_xcheck <- bind_rows(pair_xcheck)
+write_csv(pair_xcheck, glue("{dir_tmp}/ctd_pair_xcheck.csv"), na = "")
+datatable(pair_xcheck, rownames = FALSE, caption = paste(
+  "Cross-check: our flag-rule average against the provider's own (SaltAve_Corr +",
+  "SaltAve_CorrQ, OxAve_StaCorr + OxAve_StaCorrQ, …) per file layout. n_disagree > 0 is",
+  "a QC finding for the CTD team, never a silent choice; ours is what is written."))
 
 # the rebuilt averages must still sit inside their own bounds, and each scan has one
 bounds_pairs <- check_measurement_bounds(

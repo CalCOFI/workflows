@@ -146,30 +146,79 @@ plaus <- tribble(
   "btl_chlorophyll_a",             0,    100,
   "btl_phaeopigment",              0,    100)
 
-# -- 4. a corrected series carries its SENSOR's flag ---------------------------
-# The source flags the sensor (T1Q/T2Q, S1Q/S2Q, Ox1Q/Ox2Q, FlQ, IsQ), and a
-# bottle correction changes the value, not the sensor's health — so Salt1_Corr is
-# exactly as questionable as Salt1. Until 2026-09-11 the corrected series carried no
-# `_qual_column`, so their rows reached `obs` with a NULL flag and no consumer could
-# apply the sensor-pair rule (drop 8/9, honour 1/2; calcofi4db::combine_sensor_pair())
-# to the corrected values Rasmus asked for; the ingest's own averages ignored the
-# flags for the same reason.
+# -- 4. every series carries the PROVIDER'S OWN flag column --------------------
+# Until 2026-09-23 a corrected series inherited its sensor's flag (Salt1_Corr ->
+# Salt1Q), because the source flagged only the sensors: a bottle correction changes
+# the value, not the sensor's health. The CTD team's new processing software (Ben
+# Gire, 2026-09-23; first shipped in the corrected 20-2607SH_CTDPrelim.zip) writes a
+# quality code for every corrected, averaged and derived series (Salt1_CorrQ,
+# SaltAve_CorrQ, OxAve_StaCorrQ, EstChl_StaCorrQ, EstNO3_CruiseCorrQ, BATQ, PoT1Q,
+# DynHtQ, ...; CalCOFI/workflows#105). Each series now names that column. A file in
+# the legacy layout has no such column, so ingest_calcofi_ctd-cast.qmd
+# (§ Measurement Column Registry, `qual_fallback`) fills it from the sensor flag the
+# series inherited before: COALESCE(provider flag, sensor flag) — never weaker than
+# the old rule, and the provider's word wherever it has one.
 qual_inherit <- tribble(
   ~measurement_type,                ~`_qual_column`,
-  "salinity_1_corr",                "salt1q",
-  "salinity_2_corr",                "salt2q",
-  "oxygen_ml_l_1_sta_corr",         "ox1q",
-  "oxygen_ml_l_2_sta_corr",         "ox2q",
-  "oxygen_ml_l_1_cruise_corr",      "ox1q",
-  "oxygen_ml_l_2_cruise_corr",      "ox2q",
-  "oxygen_umol_kg_1_sta_corr",      "ox1q",
-  "oxygen_umol_kg_2_sta_corr",      "ox2q",
-  "oxygen_umol_kg_1_cruise_corr",   "ox1q",
-  "oxygen_umol_kg_2_cruise_corr",   "ox2q",
-  "est_chlorophyll_a_sta_corr",     "fluor_q",
-  "est_chlorophyll_a_cruise_corr",  "fluor_q",
-  "est_nitrate_sta_corr",           "isusq",
-  "est_nitrate_cruise_corr",        "isusq")
+  "temperature_ave",                "temp_ave_q",
+  "salinity_1_corr",                "salt1_corr_q",
+  "salinity_2_corr",                "salt2_corr_q",
+  "salinity_ave_corr",              "salt_ave_corr_q",
+  "oxygen_ml_l_1_sta_corr",         "ox1_sta_corr_q",
+  "oxygen_ml_l_2_sta_corr",         "ox2_sta_corr_q",
+  "oxygen_ml_l_1_cruise_corr",      "ox1_cruise_corr_q",
+  "oxygen_ml_l_2_cruise_corr",      "ox2_cruise_corr_q",
+  "oxygen_ml_l_ave_sta_corr",       "ox_ave_sta_corr_q",
+  "oxygen_umol_kg_1",               "ox1u_mq",
+  "oxygen_umol_kg_2",               "ox2u_mq",
+  "oxygen_umol_kg_1_sta_corr",      "ox1u_m_sta_corr_q",
+  "oxygen_umol_kg_2_sta_corr",      "ox2u_m_sta_corr_q",
+  "oxygen_umol_kg_1_cruise_corr",   "ox1u_m_cruise_corr_q",
+  "oxygen_umol_kg_2_cruise_corr",   "ox2u_m_cruise_corr_q",
+  "oxygen_umol_kg_ave_sta_corr",    "ox_aveu_m_sta_corr_q",
+  "est_chlorophyll_a_sta_corr",     "est_chl_sta_corr_q",
+  "est_chlorophyll_a_cruise_corr",  "est_chl_cruise_corr_q",
+  "est_nitrate_sta_corr",           "est_no3_sta_corr_q",
+  "est_nitrate_cruise_corr",        "est_no3_cruise_corr_q",
+  "beam_attenuation",               "batq",
+  "potential_temperature_1",        "po_t1q",
+  "potential_temperature_2",        "po_t2q",
+  "dynamic_height",                 "dyn_ht_q",
+  "specific_volume_anomaly",        "svaq",
+  "oxygen_saturation_1",            "ox_sat1q",
+  "oxygen_saturation_2",            "ox_sat2q")
+
+# -- 5. the cruise-corrected oxygen average ------------------------------------
+# The source ships OxAve_StaCorr but no cruise-corrected average, so the ingest
+# builds one from Ox1_CruiseCorr / Ox2_CruiseCorr by the same flag rule
+# (combine_sensor_pair_sql(); CalCOFI/workflows#106 — Rasmus asked for both
+# corrections, 2026-09-09). It has no `_source_column`: nothing in the file pivots
+# into it, the pair rule writes it. Bounds are its station-corrected sibling's.
+new_types <- tibble(
+  measurement_type   = "oxygen_ml_l_ave_cruise_corr",
+  description        = "DO average cruise-corrected",
+  units              = "ml/L",
+  valid_min          = 0,
+  valid_max          = 15,
+  derivation         = paste(
+    "Built by the ingest from the two cruise-corrected oxygen sensors",
+    "(Ox1_CruiseCorr, Ox2_CruiseCorr) by the sensor-pair flag rule",
+    "(calcofi4db::combine_sensor_pair_sql(): drop 8/9, honour 1/2, else the mean,",
+    "one alone when the other is missing). Cruise-corrected = ONE regression per",
+    "cruise against all its bottles; the source ships no average of this pair."),
+  is_canonical       = TRUE,
+  `_source_table`    = "ctd_raw",
+  `_source_datasets` = "calcofi_ctd-cast",
+  grain              = "obs",
+  category           = "Physical Oceanography")
+if (!"oxygen_ml_l_ave_cruise_corr" %in% d0$measurement_type) {
+  d0 <- calcofi4db::register_measurement_types(new_types, path_reg)
+  cat("registered oxygen_ml_l_ave_cruise_corr\n")
+}
+# the nerc / units vocab of its sibling, filled only on an exact match (same concept)
+sib <- d0[d0$measurement_type == "oxygen_ml_l_ave_sta_corr", ]
+d0$nerc_p01[d0$measurement_type == "oxygen_ml_l_ave_cruise_corr"]       <- sib$nerc_p01
+d0$units_nerc_p06[d0$measurement_type == "oxygen_ml_l_ave_cruise_corr"] <- sib$units_nerc_p06
 
 # a range declared for a type that does not exist is a typo, not a no-op — the
 # left_join would swallow it silently, so surface it
