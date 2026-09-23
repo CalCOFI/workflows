@@ -1399,6 +1399,68 @@ d_bind <- read_rds(glue("{dir_tmp}/d_bind_post_datetime.rds"))
 
 pseudoNA_values <- c(-9.99e-29, -99)
 
+# --- station numbers cut to three digits: repaired by the cast's own position ---
+# The CTD team's preliminary files for 2507SR, 2511SR, 2601RL, 2604SH and 2607SH
+# wrote station numbers >= 100 with three digits: 100/110/120 read as 000/010/020
+# (`Sta` "000.0", `Sta_ID` "090.0 000.0"). The distance filter then dropped every
+# such cast as a position error, so those cruises lost their offshore stations in
+# every release through v2026.09.11 (CalCOFI/workflows#104). The provider re-issued
+# 2607 on 2026-09-14, and the ONLY difference is `Sta`/`Sta_ID` = station + 100; the
+# other four are not re-issued yet (questions.csv Q39). So repair exactly that, and
+# only where the cast's recorded GPS position says so: an inshore number (< 30)
+# whose cast lies within CTD_TRUNC_KM of station + 100 and farther than that from
+# the station as written. Every repair is listed below; [filter_pts] still stops the
+# render if a truncated station survives unrepaired.
+CTD_TRUNC_KM <- 10   # the distance filter's own cutoff (max_dist_dec_lnst_km)
+sta_num  <- suppressWarnings(as.numeric(d_bind$sta))
+line_num <- suppressWarnings(as.numeric(d_bind$line))
+i_cand <- which(!is.na(sta_num) & !is.na(line_num) & sta_num < 30 & line_num > 0 &
+                  !is.na(d_bind$longitude) & !is.na(d_bind$latitude) &
+                  d_bind$longitude > -180 & d_bind$latitude > -90)
+d_trunc_fix <- tibble(
+  .i = i_cand, src = d_bind$`_source_file`[i_cand], cast_id = d_bind$cast_id[i_cand],
+  line = line_num[i_cand], sta = sta_num[i_cand],
+  lon = d_bind$longitude[i_cand], lat = d_bind$latitude[i_cand]) |>
+  group_by(src, cast_id, line, sta) |>
+  summarize(lon = median(lon), lat = median(lat), n_scans = n(), .groups = "drop")
+if (nrow(d_trunc_fix) > 0) {
+  nominal <- function(line, sta) sf_project(
+    from = "+proj=calcofi", to = "+proj=longlat +datum=WGS84", pts = cbind(line, sta))
+  hav_km <- function(lon1, lat1, lon2, lat2) {
+    r <- pi / 180
+    a <- sin((lat2 - lat1) * r / 2)^2 +
+      cos(lat1 * r) * cos(lat2 * r) * sin((lon2 - lon1) * r / 2)^2
+    2 * 6371.0088 * asin(sqrt(a))
+  }
+  xy0   <- nominal(d_trunc_fix$line, d_trunc_fix$sta)
+  xy100 <- nominal(d_trunc_fix$line, d_trunc_fix$sta + 100)
+  d_trunc_fix <- d_trunc_fix |>
+    mutate(km_as_written = hav_km(lon, lat, xy0[, 1], xy0[, 2]),
+           km_plus_100   = hav_km(lon, lat, xy100[, 1], xy100[, 2])) |>
+    filter(km_plus_100 <= CTD_TRUNC_KM, km_as_written > CTD_TRUNC_KM)
+}
+if (nrow(d_trunc_fix) > 0) {
+  key_fix <- paste(d_trunc_fix$src, d_trunc_fix$cast_id, d_trunc_fix$line, d_trunc_fix$sta)
+  i_fix   <- i_cand[paste(d_bind$`_source_file`[i_cand], d_bind$cast_id[i_cand],
+                          line_num[i_cand], sta_num[i_cand]) %in% key_fix]
+  sta_new <- sta_num[i_fix] + 100
+  d_bind$sta[i_fix] <- if (is.character(d_bind$sta)) sprintf("%05.1f", sta_new) else sta_new
+  d_bind$sta_id[i_fix] <- sprintf("%05.1f %05.1f", line_num[i_fix], sta_new)
+  say(glue("station numbers repaired (+100, confirmed by position): ",
+           "{nrow(d_trunc_fix)} casts, {format(length(i_fix), big.mark = ',')} scans, ",
+           "files: {paste(unique(basename(d_trunc_fix$src)), collapse = ', ')}"))
+  write_rds(d_trunc_fix, glue("{dir_tmp}/d_station_truncation_repaired.rds"))
+  d_trunc_fix |>
+    mutate(file = basename(src), sta_repaired = sta + 100) |>
+    select(file, cast_id, line, sta_as_written = sta, sta_repaired, n_scans,
+           km_as_written, km_plus_100) |>
+    dt(caption = paste(
+      "Station numbers cut to three digits by the source, repaired to station + 100",
+      "where the cast's recorded position confirms it (CalCOFI/workflows#104)"),
+      fname = "ctd_station_truncation_repaired")
+} else say("no truncated station numbers found")
+rm(sta_num, line_num, i_cand)
+
 d_bind <- d_bind |>
   mutate(
     is_lnsta_pseudoNA = ifelse(
@@ -1573,7 +1635,10 @@ d_bind <- d_bind |> mutate(.row_id = row_number())
 # column rather than joining. A `right_join` back would allocate a second copy of
 # the whole ~30M-row frame, which on a 24 GB machine is the very thing that
 # killed the previous run.
+# only the columns dist_one_cruise() reads: group_split() COPIES what it splits, and
+# splitting the whole ~110-column frame doubled R's peak (2026-09-23: 24 GB limit)
 d_dist <- d_bind |>
+  select(.row_id, cruise_key, longitude, latitude, lon_lnst, lat_lnst) |>
   group_split(cruise_key) |>
   purrr::map(dist_one_cruise) |>
   bind_rows() |>
@@ -1680,12 +1745,12 @@ pts_filt <- pts |>
   )
 
 # A station number written with only three digits is not "far from its station",
-# it is a different station: 100/110/120 shipped as 000.0/010.0/020.0 in the 2607
-# preliminary file until the provider fixed it on 2026-09-14 (CalCOFI/workflows#104),
-# and the distance filter above then dropped every offshore cast on lines 80-93.3
-# as a position error — quietly, one row in a table of cruises. So test the dropped
-# scans for exactly that signature: an inshore station number (< 30) whose cast
-# sits within the cutoff of station number + 100. Any match stops the render.
+# it is a different station: 100/110/120 shipped as 000.0/010.0/020.0 in five
+# preliminary files (CalCOFI/workflows#104), and the distance filter above dropped
+# every such cast as a position error — quietly, one row in a table of cruises.
+# [fill_lonlat] repairs the ones the cast's position confirms; this is the backstop:
+# any dropped scan that still carries the signature (an inshore number < 30 whose
+# cast sits within the cutoff of station + 100) stops the render.
 d_trunc <- pts |>
   filter(!is_dist_dec_lnst_within_max, !is.na(sta), !is.na(line),
          suppressWarnings(as.numeric(sta)) < 30) |>
