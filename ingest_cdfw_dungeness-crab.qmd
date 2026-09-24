@@ -392,38 +392,50 @@ at as of 2012-02-15 and which had not. It carries its own coordinates, so no
 station matching is needed — but it reaches far north and offshore of the CalCOFI
 grid, so most rows get no `grid_key`.
 
-It records no ship, so `cruise_key` is assigned only where the parsed year-month
-matches exactly one cruise in the reference.
+It records no ship, and its designations are a month at best (`CALCOFI 0604`,
+`8803.0`, `SARDINE BIOMASS SURVEY 0904`) — in April 2004–2006 two or three ships
+were at sea under one designation. v2026.09.11 keyed a row only where its
+designated month named exactly one reference cruise, which left **97 of the 216
+examined tows with no `cruise_key`** (#109): 83 in the multi-ship Aprils of
+2004–2006, 4 in April 2008 (31JD + Miller Freeman), and 10 from 1988 whose
+`8803.0` the label pattern could not read. But every row names a CalCOFI station
+and a time, and at most one ship occupies a station within a day, so the cruise
+is recoverable without guessing:
+
+1. `infer_ship_by_occupation()` (calcofi4db ≥ 4.17.0) takes the ship of the one
+   `swfsc_ichthyo` station occupation at the row's `site_key` within 24 h (the
+   log's clock sits ~8 h off the reference's for 1988, see Q04);
+2. `resolve_cruise_key()` then keys the row by **span containment** on that ship
+   (designation, then month, only where no span contains it — never, here);
+3. a row the occupation cannot place keeps the legacy rule: a designation that
+   names exactly one reference cruise, and only when the row's date lies inside
+   that cruise's span (± 3 days) and the designation agrees with any candidates
+   the occupation step found. Anything else stays NULL and is asked about (Q15).
 
 ```{r}
 #| label: build-sorting-log
 
-d_ym_lookup <- dbGetQuery(con, "
-  SELECT strftime(date_ym, '%Y-%m') AS cruise_ym, cruise_key
-  FROM cruise") |>
-  count(cruise_ym, cruise_key) |>
-  add_count(cruise_ym, name = "n_cruises") |>
-  filter(n_cruises == 1) |>
-  select(cruise_ym, cruise_key)
-
 d_sorting <- d_log |>
   mutate(
-    # expedition labels are inconsistent ("8803", "CALCOFI 0404", "BODEGA BAY");
-    # take a trailing YYMM where one exists, otherwise no cruise at all
-    yymm      = str_match(expedition_orig, "(\\d{2})(\\d{2})[A-Z]?$")[, 1],
+    # expedition labels are inconsistent ("8803.0", "CALCOFI 0404",
+    # "SARDINE BIOMASS SURVEY 0904", "BODEGA BAY"). A bare-number label arrives
+    # from Excel as "8803.0", which the trailing-YYMM pattern missed (#109: the
+    # ten examined 1988 tows lost their cruise), so drop the ".0" first; then
+    # take a trailing YYMM where one exists, otherwise no designation
+    exped     = str_remove(expedition_orig, "\\.0+$"),
+    yymm      = str_match(exped, "(\\d{2})(\\d{2})[A-Z]?$")[, 1],
     yy        = as.integer(str_sub(yymm, 1, 2)),
     mm        = as.integer(str_sub(yymm, 3, 4)),
     # this log spans 1949-2009: resolve the 2-digit year against the row's own
     # date rather than a fixed pivot
-    cruise_ym = if_else(
-      is.na(yymm) | is.na(date), NA_character_,
-      sprintf("%04d-%02d", 100L * (year(date) %/% 100L) + yy, mm)),
+    cruise_designation = if_else(
+      is.na(yymm) | is.na(date) | !mm %in% 1:12, NA_character_,
+      sprintf("%04d%02d", 100L * (year(date) %/% 100L) + yy, mm)),
     # one row records longitude +138.483 where every other is negative; flag it
     # rather than silently negating (Q08)
     longitude = if_else(!is.na(longitude) & longitude > 0, NA_real_, longitude)) |>
-  left_join(d_ym_lookup, by = "cruise_ym") |>
   transmute(
-    sorting_status, expedition_orig, cruise_ym, cruise_key,
+    sorting_status, expedition_orig, cruise_designation,
     line, station, site_key, latitude, longitude,
     date,
     datetime_start_utc = as_datetime(date) + dseconds(coalesce(time_start_sec, 0L)),
@@ -434,10 +446,70 @@ d_sorting <- d_log |>
   mutate(dungeness_sorting_log_id = row_number(), .before = 1)
 dbWriteTable(con, "dungeness_sorting_log", as.data.frame(d_sorting), overwrite = TRUE)
 
+# 1. the ship, from the one ichthyo station occupation the row matches
+stopifnot("infer_ship_by_occupation() needs calcofi4db >= 4.17.0" =
+            packageVersion("calcofi4db") >= "4.17.0")
+st_ship <- infer_ship_by_occupation(
+  con, "dungeness_sorting_log", datetime_col = "datetime_start_utc",
+  tolerance_hours = 24)
+
+# 2. span containment on that ship (then the designation, then the month)
+st_ck <- resolve_cruise_key(
+  con, "dungeness_sorting_log", datetime_col = "datetime_start_utc",
+  cruise_ym_col = "cruise_designation", require_in_cruise = TRUE)
+
+# the occupation lies inside its own cruise's span, so every inferred ship must
+# key by span — anything else means the reference spans and sites disagree
+stopifnot("every occupation-inferred ship must key by span" = dbGetQuery(con, "
+  SELECT COUNT(*) FROM dungeness_sorting_log
+  WHERE ship_key_method = 'occupation'
+    AND (cruise_key IS NULL OR cruise_key_method <> 'span')")[[1]] == 0)
+
+# 3. rows no occupation places: a designation that names exactly one reference
+#    cruise, inside that cruise's span, and not contradicting the candidates
+dbExecute(con, "
+  UPDATE dungeness_sorting_log SET cruise_key = u.cruise_key,
+         cruise_key_method = 'designation'
+  FROM (
+    SELECT strftime(date_ym, '%Y%m') AS designation,
+           MIN(cruise_key) AS cruise_key, MIN(date_min) AS date_min,
+           MIN(date_max) AS date_max
+    FROM cruise GROUP BY 1 HAVING COUNT(DISTINCT cruise_key) = 1) u
+  WHERE dungeness_sorting_log.cruise_key IS NULL
+    AND dungeness_sorting_log.ship_key IS NULL
+    AND dungeness_sorting_log.cruise_designation = u.designation
+    AND (u.date_min IS NULL OR
+         CAST(dungeness_sorting_log.datetime_start_utc AS DATE)
+           BETWEEN u.date_min - INTERVAL 3 DAY AND u.date_max + INTERVAL 3 DAY)
+    AND (dungeness_sorting_log.cruise_key_candidates IS NULL OR
+         list_contains(string_split(dungeness_sorting_log.cruise_key_candidates, ','),
+                       u.cruise_key))")
+
+d_ck_method <- dbGetQuery(con, "
+  SELECT sorting_status, COALESCE(cruise_key_method, 'none') AS cruise_key_method,
+         COUNT(*) AS n
+  FROM dungeness_sorting_log GROUP BY 1, 2 ORDER BY 1, 2")
+d_ck_method |>
+  datatable(caption = "Sorting log: how each row's cruise_key was resolved",
+            options = list(dom = "t"), rownames = FALSE)
+
+# the EXAMINED tows are what reach `sample`: every one but the single tow no
+# ichthyo occupation places (2006-04-23, 040.0 035.0, Q15) must resolve
+n_sorted_null <- dbGetQuery(con, "
+  SELECT COUNT(*) FROM dungeness_sorting_log
+  WHERE sorting_status = 'sorted' AND cruise_key IS NULL")[[1]]
+stopifnot("examined sorting-log tows without a cruise_key: expected 1 (Q15)" =
+            n_sorted_null == 1L)
+
+d_sorting <- dbGetQuery(con, "
+  SELECT * FROM dungeness_sorting_log ORDER BY dungeness_sorting_log_id")
 cat(glue("dungeness_sorting_log: {nrow(d_sorting)} rows ",
          "({sum(d_sorting$sorting_status == 'sorted')} sorted, ",
          "{sum(d_sorting$sorting_status == 'unsorted')} unsorted); ",
-         "cruise_key resolved for {sum(!is.na(d_sorting$cruise_key))}; ",
+         "ship by occupation for {sum(d_sorting$ship_key_method %in% 'occupation')}; ",
+         "cruise_key resolved for {sum(!is.na(d_sorting$cruise_key))} ",
+         "({sum(!is.na(d_sorting$cruise_key[d_sorting$sorting_status == 'sorted']))}",
+         "/{sum(d_sorting$sorting_status == 'sorted')} examined); ",
          "dates {format(min(d_sorting$date))} to {format(max(d_sorting$date))}"), "\n")
 ```
 
@@ -923,6 +995,8 @@ tribble(
     "measurement_type='settled_volume_ml'",
   "sorting log", "SampleDate + Month", "sample", "datetime",
     "day/year text recombined with the separate Month column",
+  "sorting log", "Staline/StaNo + SampleDate (+ Expedition)", "sample", "cruise_key",
+    "ship from the one ichthyo station occupation within 24 h, then span containment (resolve_cruise_key); else an Expedition YYMM naming one reference cruise inside its span (#109, Q15)",
   "sorting log", "Lat / Lon", "sample", "latitude / longitude",
     "as given; one positive longitude nulled as a suspected sign error (Q08)",
   "sorting log", "Tow / MaxDepth", "sample", "tow_type / depth_max_m", "as given",
@@ -995,12 +1069,16 @@ nullable <- tribble(
   ~table,                  ~column,             ~n,   ~reason,
   "dungeness_sample",      "site_sample_key",   4L,   "no matching CalCOFI station occupation (Q09)",
   "dungeness_sample",      "grid_key",          4L,   "same 4 samples: no position, so no grid cell",
-  # 1639 -> 1776: the ichthyo `cruise` reference this joins against has grown
-  # more designated cruises since this count was last measured (2026-08-14),
-  # so more (year, month) pairs are now ambiguous between two cruises of the
-  # same ship and resolve_cruise_key()'s "unambiguous YYYY-MM only" rule
-  # excludes more rows than before. Working table, still all 2,011 rows.
-  "dungeness_sorting_log", "cruise_key",        1776L,"log records no ship; cruise resolves only where YYYY-MM is unambiguous (count drifts with the ichthyo cruise reference)",
+  # 1639 -> 1776 -> 945 (#109). The designation-only rule left every row in a
+  # multi-ship month unkeyed; infer_ship_by_occupation() + resolve_cruise_key()
+  # now key 1,002 rows by span on the ship of their ichthyo station occupation
+  # and 64 more by an unambiguous designation inside its cruise's span (all
+  # 1,066 agree with the row's own designation). The 945 left are 944 UNSORTED
+  # jars (1949-50 and other years no ichthyo site covers, non-CalCOFI
+  # expeditions such as SQ87 / BODEGA BAY / TROLL CRUISE, stations off the
+  # grid) and the ONE examined tow of Q15. Working table, still all 2,011 rows.
+  "dungeness_sorting_log", "cruise_key",        945L, "no ichthyo station occupation within 24 h and no designation naming exactly one reference cruise inside its span (944 unsorted jars + the one examined tow of Q15)",
+  "dungeness_sorting_log", "ship_key",          1009L,"the log records no ship; inferred only from a unique ichthyo station occupation (1,002 of 2,011), so NULL for the rest",
   "dungeness_sorting_log", "site_key",          77L,  "no line/station in the source row",
   "dungeness_sorting_log", "grid_key",          77L,  "same 77 rows: north of or offshore from the CalCOFI grid",
   # sample now holds only the 216 EXAMINED (sorted) log tows, not all 2,011 —
@@ -1010,10 +1088,13 @@ nullable <- tribble(
   # rows turned out to be among the 1,795 UNSORTED rows dropped from the core,
   # not the 216 examined ones — verified by the "no longer occurs" reconciler
   # below rather than assumed.
-  "sample",                "cruise_key",        97L,  "inherited from the sorting log, scoped to the 216 examined tows (same ambiguous-cruise-reference cause as dungeness_sorting_log.cruise_key)",
+  # 97 -> 1 (#109): the one examined tow no ichthyo occupation places —
+  # 2006-04-23 at 040.0 035.0, 'CALCOFI 0604', inside both 2006-04-31JD's and
+  # 2006-04-33OA's span (Q15)
+  "sample",                "cruise_key",        1L,   "the one examined sorting-log tow whose multi-ship month no ichthyo station occupation settles (Q15)",
   "sample",                "grid_key",          18L,  "4 unmatched subsamples + 14 out-of-grid EXAMINED log tows (the matching 77 out-of-grid rows above include 63 unsorted ones, dropped from the core)",
   "obs",                   "grid_key",          30L,  "16 from the 4 unmatched subsamples x 4 types + 14 out-of-grid absences",
-  "obs",                   "cruise_key",        97L,  "absence rows whose log entry has no resolvable cruise (drifts with the ichthyo cruise reference, same cause as dungeness_sorting_log.cruise_key)",
+  "obs",                   "cruise_key",        1L,   "the absence row of that same examined tow (Q15)",
   "obs",                   "hex_id",            16L,  "H3 needs a position; the 4 unmatched subsamples have none",
   # taxon: 17 rows, not 3 — ensure_taxon_lineage() adds this dataset's 3 taxa
   # PLUS their 14 WoRMS lineage ancestors, which have to be rows of their own or

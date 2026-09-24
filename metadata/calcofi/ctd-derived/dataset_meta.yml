@@ -1,0 +1,101 @@
+# descriptive metadata for calcofi_ctd-derived -- provider-editable (Google Sheet tab `metadata`, scripts/sync_dataset_meta_sheets.R); the structural keys stay in ingest_calcofi_ctd-derived.qmd
+  visibility: public
+  description: >
+    Hydrographic products DERIVED from the CalCOFI CTD cast profiles rather than
+    measured: spice (spiciness at 0 dbar, TEOS-10) and the sensor-pair averaged
+    sigma-theta at every published CTD depth; per cast, the mixed-layer depth by
+    three criteria, the depth and value of the chlorophyll-a maximum and the
+    chlorophyll-a integrated over 0-200 m; and the relative geostrophic velocity
+    between adjacent stations of each CalCOFI line, referenced to 500 dbar.
+    Computed from the full-resolution 1 m bins of the CalCOFI CTD Cast Files
+    after the provider's quality flags are applied.
+  abstract: >
+    Rasmus Swalethorp (CalCOFI-SIO) asked for derived products beside the
+    measured CTD series to show, cruise by cruise, how much upwelling and
+    productivity there is on the CalCOFI grid, and the California Undercurrent
+    an El Nino is expected to strengthen (CalCOFI/workflows#98). Every product
+    is computed by one tested function in the calcofi4db R package (>= 4.16.0),
+    so the database, the notebooks and the apps cannot disagree on a rule.
+  # the release version this dataset was cut in is its locator; calcofi.io is where
+  # the integrated database lives -- source: https://calcofi.io/workflows/ingest_calcofi_ctd-derived.html
+  citation_main: "CalCOFI. (2026). CalCOFI CTD Derived Hydrographic Products (from the CalCOFI CTD Cast Files). CalCOFI.io. https://calcofi.io/workflows/ingest_calcofi_ctd-derived.html"
+  link_calcofi_org: https://calcofi.org/data/oceanographic-data/ctd-cast-files/
+  # the data these are computed from (this dataset's own page does not exist until it is published)
+  link_data_source: https://calcofi.org/data/oceanographic-data/ctd-cast-files/
+  # a derived product inherits its source's terms, and the source states none yet:
+  # calcofi_ctd-cast's license is empty pending its Q28 (proposed CC-BY-4.0). Left
+  # empty here too, see questions.csv Q06 -- never invented
+  license: ""
+  # the source states no PI; follows calcofi_ctd-cast Q29, see questions.csv Q06
+  pi_names: ""
+  methods_md: |
+    **Input.** The full-resolution 1 m bins of the CalCOFI CTD Cast Files, as the
+    `calcofi_ctd-cast` ingest stages them (`obs_ctd_full`), for the cast of each
+    station occupation that the ingest publishes in `obs` (the down cast, the up
+    cast only where no down cast exists). A value the provider flags 8
+    (questionable) or 9 (bad) is dropped before anything is computed; the
+    temperature and salinity used are the sensor-pair averages the ctd-cast ingest
+    rebuilds by the provider's flags (`combine_sensor_pair_sql()`).
+
+    **Tiers.** `final` and `preliminary_with_bottle` casts get every product.
+    `preliminary_without_bottle` casts have no bottle-corrected salinity, so they
+    get only the temperature-criterion mixed-layer depth: nothing salinity-based
+    (spice, sigma-theta, density MLD, geostrophic flow) and no chlorophyll
+    estimate, following Rasmus Swalethorp's rule (2026-09-09) that uncorrected
+    sensors are not shown.
+
+    **Spice** (`spiciness0`, kg m-3): absolute salinity from practical salinity
+    (`gsw_SA_from_SP`), conservative temperature from in-situ temperature
+    (`gsw_CT_from_t`), then spiciness at 0 dbar (`gsw_spiciness0`), TEOS-10 via the
+    Gibbs SeaWater toolbox (IOC, SCOR and IAPSO 2010; McDougall and Barker 2011) and
+    McDougall and Krzysik (2015). Positive is spicy (warm, salty), negative minty.
+
+    **Averaged sigma-theta** (`sigma_theta_ave`, kg m-3): the two sensors'
+    sigma-theta combined by the provider's flags, the same rule as every CTD pair.
+
+    **Mixed-layer depth** (m, per cast): the first depth below a 10 m reference
+    where sigma-theta has increased by 0.03 kg m-3 (de Boyer Montegut et al. 2004;
+    `mld_sigma_theta_003`) or 0.125 kg m-3 (Levitus 1982; `mld_sigma_theta_0125`),
+    or temperature has departed by 0.2 deg C (de Boyer Montegut et al. 2004;
+    `mld_temperature_02`), interpolated linearly between the bracketing bins. A
+    cast that never crosses the threshold, or does not reach 10 m, has none.
+
+    **Chlorophyll-a maximum** (per cast): the depth and value of the maximum of a
+    5 m running median of the bottle-fitted sensor estimate
+    (`est_chlorophyll_a_sta_corr`), so a single spiking bin cannot be the maximum.
+
+    **Integrated chlorophyll-a** (mg m-2, per cast): the trapezoidal integral of the
+    same estimate from the surface to 200 m, or to the cast bottom if shallower
+    (`chl_integrated_depth` says how deep it reached); the shallowest bin is carried
+    to the surface only when it is no deeper than 5 m.
+
+    **Relative geostrophic velocity** (m s-1, table `ctd_geostrophic`): per cruise
+    and CalCOFI line, stations ordered nearshore to offshore, dynamic height anomaly
+    relative to 500 dbar (`gsw_geo_strf_dyn_height`) on a 1 dbar grid and
+    v = (dh2 - dh1) / (f dx) between adjacent stations, averaged to 10 dbar bins.
+    Positive is equatorward. A station closer than 10 km to the previous one kept
+    is skipped; a pair with a cast shallower than 500 dbar carries its deepest
+    density down and is flagged `shallow`. It is relative flow, so it has no anomaly.
+
+    Every rule is a function in calcofi4db (`ctd_spice()`, `ctd_sigma_theta_ave()`,
+    `ctd_mld()`, `ctd_chl_max()`, `ctd_integrate()`, `ctd_geostrophic()`) with unit
+    tests. The defaults are awaiting Rasmus Swalethorp's confirmation
+    (questions.csv Q01-Q05).
+
+    **References.** de Boyer Montegut, C., G. Madec, A. S. Fischer, A. Lazar and
+    D. Iudicone (2004), Mixed layer depth over the global ocean: an examination of
+    profile data and a profile-based climatology, J. Geophys. Res. 109, C12003,
+    doi:10.1029/2004JC002378. Levitus, S. (1982), Climatological Atlas of the World
+    Ocean, NOAA Professional Paper 13. McDougall, T. J. and O. A. Krzysik (2015),
+    Spiciness, J. Mar. Res. 73, 141-152, doi:10.1357/002224015816665589. IOC, SCOR
+    and IAPSO (2010), The international thermodynamic equation of seawater - 2010
+    (TEOS-10), IOC Manuals and Guides 56. McDougall, T. J. and P. M. Barker (2011),
+    Getting started with TEOS-10 and the Gibbs Seawater (GSW) Oceanographic Toolbox,
+    SCOR/IAPSO WG127. Kelley, D., C. Richards and WG127 (2023), gsw: Gibbs Sea Water
+    Functions, R package.
+  # GCMD Science Keywords; source: https://gcmd.earthdata.nasa.gov/KeywordViewer/, checked 2026-09-23
+  keywords_gcmd:
+    - "EARTH SCIENCE > OCEANS > SALINITY/DENSITY > DENSITY"
+    - "EARTH SCIENCE > OCEANS > OCEAN CIRCULATION > OCEAN CURRENTS"
+    - "EARTH SCIENCE > OCEANS > OCEAN CIRCULATION > OCEAN MIXED LAYER"
+    - "EARTH SCIENCE > OCEANS > OCEAN CHEMISTRY > CHLOROPHYLL"

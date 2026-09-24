@@ -13,6 +13,30 @@
   # no PI stated by the source; left empty, see questions.csv Q11
   # (proposed Rasmus Swalethorp)
   pi_names: ""
+  # source: caloos-sheet rows 11,13, 2026-09-05, expanded against the CalOOS
+  # sheet's own Tags (Portal) controlled vocabulary and calcofi.org's field
+  # key, 2026-09-17. "Waves"/"Wind Speed and Direction" dropped (not bottle
+  # fields -- belong to calcofi_ctd-cast/mets instead). Salinity, Dissolved
+  # Oxygen, Dissolved Nutrients, and "Ocean Acidification and Hypoxia" added:
+  # not in the original proposal, but each is a literal vocabulary term
+  # matching real bottle fields (Salnty; O2ml_L/Oxy_umol/Kg; PO4uM/SiO3uM/
+  # NO2uM/NO3uM/NH3uM; DIC1/DIC2/TA1/TA2/pH1/pH2 -- "Ocean Acidification and
+  # Hypoxia" confirmed verbatim from calcofi_dic's own sheet row, which
+  # covers the same DIC/TA/pH fields)
+  keywords:
+    - "CalCOFI Network"
+    - "Temperature"
+    - "Salinity"
+    - "Dissolved Oxygen"
+    - "Dissolved Nutrients"
+    - "Ocean Acidification and Hypoxia"
+    - "Phytoplankton Biomass and Diversity"
+  # source: caloos-sheet row 13 (calcofi.org direct, matches link_data_source);
+  # row 11 (siocalcofiHydroCast ERDDAP mirror) said "QC flags present: No" and
+  # "maintenance: ongoing" -- that describes the mirror, not this record, and
+  # doesn't match the field key's ~20 *_qual/*q columns, so row 13 is used here
+  quality_control_md: 'QC flags present: Yes. Most parameters have associated precision and quality code columns. A RecInd column applies a record-level quality code to each bottle.'
+  maintenance: 'Quarterly; ongoing'
   # GCMD Science Keywords, proposed by WS-R1 from the category + measurement types;
   # source: https://gcmd.earthdata.nasa.gov/KeywordViewer/ (GCMD KMS export), checked 2026-09-05
   keywords_gcmd:
