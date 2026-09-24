@@ -216,7 +216,22 @@ For tables appearing in multiple ingests, use the canonical (first) source.
 ```{r}
 #| label: assemble_working
 
-con_wdl <- get_duckdb_con(":memory:")
+# where con_wdl spills, and how much, from the environment when set. An in-memory
+# connection spills under tempdir(), so a killed render orphans its spill files
+# (103 GB on 2026-09-24), and DuckDB's default spill cap (90 % of free disk) then
+# shrinks every retry. A known temp_directory can be cleaned by whoever stops a
+# run; an explicit max_temp_directory_size fails fast instead of filling the disk.
+wdl_config <- list(
+  temp_directory          = Sys.getenv("CALCOFI_DUCKDB_TEMP_DIR", ""),
+  max_temp_directory_size = Sys.getenv("CALCOFI_DUCKDB_MAX_TEMP", ""))
+wdl_config <- wdl_config[nzchar(unlist(wdl_config))]
+if (!is.null(wdl_config$temp_directory))
+  dir.create(wdl_config$temp_directory, recursive = TRUE, showWarnings = FALSE)
+con_wdl <- get_duckdb_con(":memory:", config = wdl_config)
+wdl_set <- function(s) dbGetQuery(con_wdl, glue("SELECT current_setting('{s}') AS v"))$v
+cat(glue("con_wdl: memory_limit {wdl_set('memory_limit')}, threads {wdl_set('threads')}, ",
+         "temp_directory {wdl_set('temp_directory')}, ",
+         "max_temp_directory_size {wdl_set('max_temp_directory_size')}"), "\n")
 load_duckdb_extension(con_wdl, "spatial")
 
 # auto-discover table registry from all ingest manifests. An ingest that declares
