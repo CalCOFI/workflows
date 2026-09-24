@@ -3001,10 +3001,12 @@ dbExecute(con, "DROP TABLE IF EXISTS _override_hits")
 ```{r}
 #| label: ctd_summary
 
-dbExecute(
-  con,
-  "
-  CREATE OR REPLACE TABLE ctd_summary AS
+# one measurement type at a time: every group is (cruise, site, depth, TYPE), so the
+# per-type slices are disjoint and their union is exactly the one-statement result. The
+# single GROUP BY over ~280M rows needed a hash table larger than the DuckDB budget
+# (6 GB, 2026-09-24: "Out of Memory Error ... 5.5 GiB/5.5 GiB used"); it had only ever
+# passed because the post-checkpoint connection ran unlimited.
+summ_sql <- function(type) glue("
   SELECT
     c.cruise_key,
     c.site_key,
@@ -3018,10 +3020,14 @@ dbExecute(
     COUNT(*)                     AS n_obs
   FROM ctd_measurement m
   INNER JOIN ctd_cast c ON m.ctd_cast_uuid = c.ctd_cast_uuid
-  WHERE NOT isnan(m.measurement_value)
+  WHERE m.measurement_type = '{type}'
+    AND NOT isnan(m.measurement_value)
     AND isfinite(m.measurement_value)
-  GROUP BY c.cruise_key, c.site_key, m.depth_m, m.measurement_type"
-)
+  GROUP BY c.cruise_key, c.site_key, m.depth_m, m.measurement_type")
+summ_types <- dbGetQuery(con, "SELECT DISTINCT measurement_type FROM ctd_measurement ORDER BY 1")$measurement_type
+dbExecute(con, glue("CREATE OR REPLACE TABLE ctd_summary AS {summ_sql(summ_types[1])}"))
+for (type in summ_types[-1])
+  dbExecute(con, glue("INSERT INTO ctd_summary {summ_sql(type)}"))
 
 n_summ <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM ctd_summary")$n
 say(glue("ctd_summary: {format(n_summ, big.mark = ',')} rows"))
