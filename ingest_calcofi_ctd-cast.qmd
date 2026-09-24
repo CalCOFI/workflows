@@ -572,8 +572,20 @@ mem_env <- suppressWarnings(as.numeric(Sys.getenv("BUILD_MEMORY_GB", NA)))
 if (!is.na(mem_env) && mem_env > 0) mem_gb <- mem_env
 say(glue("DuckDB memory_limit {mem_gb} GB (available {round(mem_sys$avail / 1024^3, 1)} of ",
          "{round(mem_sys$total / 1024^3)} GB; BUILD_MEMORY_GB {if (is.na(mem_env)) 'unset' else mem_env})"))
-dbExecute(con, glue("SET memory_limit = '{mem_gb}GB'"))
-dbExecute(con, glue("SET temp_directory = '{dir_tmp}'"))
+# every connection this notebook opens to the wrangling DB gets the same budget. The
+# checkpoint step closes and reopens `con`, and until 2026-09-24 the reopened connection
+# silently ran on DuckDB's default (80 % of RAM) instead of this limit: the restarted
+# render's R process peaked at 22 GB in [ctd_measurement] with a 6 GB limit "set".
+# preserve_insertion_order = false lets the large INSERT ... SELECTs of the pivot stream
+# instead of buffering to keep row order, which nothing downstream relies on (every
+# table is re-sorted at write_parquet_outputs()).
+duck_budget <- function(con) {
+  dbExecute(con, glue("SET memory_limit = '{mem_gb}GB'"))
+  dbExecute(con, glue("SET temp_directory = '{dir_tmp}'"))
+  dbExecute(con, "SET preserve_insertion_order = false")
+  invisible(con)
+}
+duck_budget(con)
 
 # a second, cheaper resume: ctd_raw already pivoted from a prior interrupted run
 has_ctd_raw <- FALSE
@@ -2149,6 +2161,7 @@ if (!file_exists(db_checkpoint) || overwrite) {
   file_copy(db_path, db_checkpoint, overwrite = TRUE)
   write_input_fingerprint(checkpoint_fp_path, fp_zips)
   con <- get_duckdb_con(db_path)
+  duck_budget(con)
   load_duckdb_extension(con, "spatial")
   load_duckdb_extension(con, "icu")
   say(glue("Saved checkpoint: {db_checkpoint}"))
