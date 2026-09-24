@@ -2519,7 +2519,11 @@ if (file.exists(meta_json_path)) {
   # a dataset in no earlier release first appears in this one
   for (i in seq_along(datasets_rec$datasets))
     if (is.null(datasets_rec$datasets[[i]]$since_version)) datasets_rec$datasets[[i]]$since_version <- release_version
-  d_catalog_chk <- check_dataset_catalog(datasets_rec, cat_registries, network = net_ok)
+  # this release's own STAC tree is uploaded in §3d, AFTER this check: a dataset in its first
+  # release has no collection there yet, so a dead URL under that root is `url_pending` here and
+  # is re-probed right after the upload (calcofi4db >= 4.17.1; calcofi_ctd-derived, 2026-09-24)
+  d_catalog_chk <- check_dataset_catalog(datasets_rec, cat_registries, network = net_ok,
+                                         pending_base = release_stac_base(release_prefix))
   assert_dataset_catalog(d_catalog_chk)
   d_catalog_chk |>
     filter(finding != "ok") |>
@@ -2670,6 +2674,8 @@ if (file.exists(meta_json_path)) {
 # must not rewrite it.
 stac_prefix <- if (grepl("staging", release_prefix)) "stac-staging" else "stac"
 stac_base   <- glue("https://storage.googleapis.com/{gcs_bucket}/{stac_prefix}")
+stopifnot("the STAC root the catalog check deferred to must be the one this chunk uploads" =
+            identical(as.character(stac_base), release_stac_base(release_prefix, gcs_bucket)))
 dir_stac    <- file.path(dir_frozen, "stac")
 unlink(dir_stac, recursive = TRUE)
 stac_paths <- build_stac(
@@ -2694,6 +2700,14 @@ system2(gcloud, c("storage", "objects", "update", "--cache-control=no-cache",
                   glue("gs://{gcs_bucket}/{stac_prefix}/catalog.json")), stdout = TRUE, stderr = TRUE)
 cat(glue("STAC: {length(stac_paths)} documents -> gs://{gcs_bucket}/{stac_prefix}/ ",
          "({sum(stac_chk$finding == 'ok')} ok, {sum(stac_chk$level == 'warn')} warn)\n"))
+# the catalog URLs the check left pending on this upload must answer now, before anything is
+# promoted: a new dataset's collection that the upload did not write is a dead link (a gate)
+if (exists("d_catalog_chk") && net_ok) {
+  d_pending <- recheck_pending_urls(d_catalog_chk)
+  assert_dataset_catalog(d_pending)
+  cat(glue("catalog URLs pending on this upload: {nrow(d_pending)} re-probed, ",
+           "{sum(d_pending$finding == 'ok')} answer\n"))
+}
 
 # 4. update versions.json (latest.txt promotion is deferred to test_release.qmd)
 # rebuilt from every catalog.json under the prefix by calcofi4db::build_versions_json(),
