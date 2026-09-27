@@ -1,0 +1,17 @@
+tbl_old,tbl_new,fld_old,fld_new,type_new,fld_description
+occurrence,edna_sample,parentEventID,parent_event_id,varchar,"Sample grain key (Darwin Core parentEventID) -- one row per physical water filter; eventID (201 rows) is the finer assay-run dimension, not the sample."
+occurrence,edna_sample,decimalLatitude,latitude,decimal,Latitude in decimal degrees (WGS84)
+occurrence,edna_sample,decimalLongitude,longitude,decimal,Longitude in decimal degrees (WGS84)
+occurrence,edna_sample,minimumDepthInMeters,depth_min_m,decimal,Minimum filter depth in meters
+occurrence,edna_sample,maximumDepthInMeters,depth_max_m,decimal,Maximum filter depth in meters
+occurrence,edna_sample,eventDate,datetime_start_utc,timestamp,Filter collection datetime (ISO 8601 in source; already UTC)
+occurrence,edna_sample,locationID,location_id,varchar,"Kept verbatim for QA; staging-only, not projected into core sample"
+occurrence,edna_sample,locality,locality,varchar,"Kept verbatim for QA; staging-only, not projected into core sample"
+occurrence,edna_assay,occurrenceID,occurrenceID,varchar,"Per-detection identifier; join key between occurrence/dnaderiveddata/extendedmeasurementorfact, staging-only"
+occurrence,edna_assay,eventID,eventID,varchar,"Assay-run identifier (201 distinct, vs. 47 parentEventID samples); staging-only, not projected into core"
+occurrence,edna_assay,scientificNameID,ds_taxa_code,varchar,"WoRMS LSID URN (urn:lsid:marinespecies.org:taxname:<AphiaID>), used verbatim as dataset_taxon.ds_taxa_code"
+occurrence,edna_assay,(derived from scientificNameID),worms_id,integer,AphiaID extracted from the scientificNameID LSID URN via regexp_extract('([0-9]+)$')
+occurrence,edna_assay,organismQuantity,measurement_value,double,"Sequence read count for this detection (organismQuantityType is 'DNA sequence reads' for all 201 rows, confirmed); becomes obs.measurement_value under measurement_type='sequence_reads'"
+dnaderiveddata,edna_assay,target_gene,assay,varchar,"Molecular marker, recoded to a short display label: 'D-loop' stays 'D-loop'; '12S rRNA (SSU mitochondria)' becomes '12S (MiFish)'. Written to obs_attribute.bin_label under measurement_type='assay'."
+extendedmeasurementorfact,edna_context,measurementType,measurement_type,varchar,"11 of ~60 distinct source measurementType strings map to a sample_measurement type via emof_type_map (6 reuse existing canonical types: ammonia/nitrate/nitrite/phosphate/silicate/chl_fluor; 5 are new: oxygen_mg_l/dna_concentration/reads_raw_total/reads_filtered_total/otu_richness). The other ~50 are FAIRe-checklist protocol text (kit names, SOP links, extraction dates) with no value/unit and are dropped."
+extendedmeasurementorfact,edna_context,measurementValue,measurement_value,double,"TRY_CAST to DOUBLE; deduped to one value per (parentEventID, measurement_type) via MIN() -- a tie-break over identical values, confirmed identical across every eventID child of a parentEventID for all 47 groups, not an aggregation"
