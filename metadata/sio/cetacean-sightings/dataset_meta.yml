@@ -1,74 +1,72 @@
-# source: WS-R1 2026-09-05: dataset_key minted from the CalOOS row's access URL/provider
-provider: sio
-
-# source: WS-R1 2026-09-05
-dataset: cetacean-sightings
-
-# source: https://cite.edirepository.org/cite/knb-lter-cce.262.2?style=ESIP, checked 2026-09-05 (newest EDI revision; overrides the sheet's title where they disagree, see note)
-dataset_name: Index of visual monitoring, location, species behavior, and identification
-  of cetaceans from CalCOFI cruises in the California Current System, 2005-2015 (ongoing)
-# the pick-list / card label (the long title above is the source's own); authored by R0 2026-09-05
-dataset_name_short: "Cetacean sightings"
-
-# source: WS-R1 2026-09-05: category.csv (widened for this holding, see hand-back)
-category: Seabirds & Marine Mammals
-
-# source: caloos-sheet row 23, 2026-09-05
-status: external
-
-# source: WS-R1 2026-09-05 default
-visibility: public
-
-# source: caloos-sheet row 23, 2026-09-05
-priority_caloos: EDI
-
-# source: caloos-sheet row 23, 2026-09-05
-module: CalCOFI Underway Marine Mammal Sighting Surveys - SIO, UCSD
-
-# source: caloos-sheet row 23, 2026-09-05
-abstract: CalCOFI Underway Marine Mammal Sighting Surveys contains visual sighting
-  records of cetaceans (whales and dolphins) collected during California Cooperative
-  Oceanic Fisheries Investigations (CalCOFI) cruises, run by the Scripps Institution
-  of Oceanography (SIO), to understand cetacean ecology and habitat use. The dataset
-  covers the CalCOFI station grid off Southern and Central California, recorded while
-  the ship transits between stations, and spans 2004 to 2015, with cruises conducted
-  quarterly. Trained observers watch for cetaceans during daylight hours using standard
-  line-transect distance-sampling methods (Burnham et al. 1980; Buckland et al. 1993;
-  Barlow 1995), recording each sighting's location and distance from the ship's track.
-  Surveys are conducted during favorable weather, with calm seas (Beaufort state 5
-  or below) and visibility beyond 1 nautical mile. This dataset supports study of
-  cetacean distribution and habitat use relative to oceanographic conditions, for
-  researchers studying marine mammal ecology in the California Current.
-
-# source: caloos-sheet row 23, 2026-09-05
-creators:
-- name: John Hildebrand & Simone Baumann Pickering
-  organization: UCSD SIO
-  email: jahildebrand@ucsd.edu
-  role: lead
-
-# source: caloos-sheet row 23, 2026-09-05
-contact: jahildebrand@ucsd.edu
-
-# source: caloos-sheet row 23, 2026-09-05
-keywords:
-- '"Marine Turtles'
-- Birds
-- and Mammals"
-
-# source: caloos-sheet row 23, 2026-09-05
-quality_control_md: 'QC flags present: No.'
-
-# source: caloos-sheet row 23, 2026-09-05
-maintenance: ongoing
-
-# source: https://cite.edirepository.org/cite/knb-lter-cce.262.2?style=ESIP, checked 2026-09-05
-doi: 10.6073/pasta/9ee6ca9b4a316708ca3d17ddc92debfb
-
-# source: caloos-sheet row 23, 2026-09-05
-link_data_source: https://oceaninformatics.ucsd.edu/datazoo/catalogs/ccelter/datasets/284
-
-# source: WS-R1 2026-09-05 triage note + match/conflict evidence (see hand-back)
-next_step: confirm dataset scope, license and DOI with the provider; no ingest planned
-  yet. EDI 262 (Hildebrand cetacean visual monitoring) is NOT farallon_bird-mammal's
-  EDI 255 (Sydeman bird/mammal census) -- a different package/PI
+# descriptive metadata for sio_cetacean-sightings -- provider-editable (Google Sheet tab `metadata`, scripts/sync_dataset_meta_sheets.R); the structural keys stay in ingest_sio_cetacean-sightings.qmd
+# Was a holding (status: external, WS-R1 2026-09-05) until 2026-09-27, when
+# ingest_sio_cetacean-sightings.qmd started staging it from the curated CSVs in
+# CalCOFI/marmam-app. The holding-only keys (status, priority_caloos, module,
+# next_step) and the structural keys (dataset_name, dataset_name_short,
+# category) left this file then; the structural ones now live in the notebook.
+  visibility: public
+  description: >
+    Cetacean (whale, dolphin, porpoise) sightings and on-effort visual
+    line-transect survey segments from quarterly CalCOFI cruises, 2004-2022
+    (effort through 2021). Curated by the Scripps Whale Acoustics Lab
+    (Hildebrand / Baumann-Pickering) and staged from the CalCOFI marine mammal
+    Shiny app repository (CalCOFI/marmam-app).
+  # source: caloos-sheet row 23, 2026-09-05
+  abstract: >
+    CalCOFI Underway Marine Mammal Sighting Surveys contains visual sighting
+    records of cetaceans (whales and dolphins) collected during California
+    Cooperative Oceanic Fisheries Investigations (CalCOFI) cruises, run by the
+    Scripps Institution of Oceanography (SIO), to understand cetacean ecology
+    and habitat use. The dataset covers the CalCOFI station grid off Southern
+    and Central California, recorded while the ship transits between stations,
+    and spans 2004 to 2015, with cruises conducted quarterly. Trained observers
+    watch for cetaceans during daylight hours using standard line-transect
+    distance-sampling methods (Burnham et al. 1980; Buckland et al. 1993;
+    Barlow 1995), recording each sighting's location and distance from the
+    ship's track. Surveys are conducted during favorable weather, with calm
+    seas (Beaufort state 5 or below) and visibility beyond 1 nautical mile.
+    This dataset supports study of cetacean distribution and habitat use
+    relative to oceanographic conditions, for researchers studying marine
+    mammal ecology in the California Current.
+  # EDI 262's formal citation could not be fetched from this session
+  # (cite.edirepository.org blocked by the network policy, 2026-09-27); the
+  # ingest's source is the 2004-2022 marmam-app CSV, which is wider than EDI's
+  # 2005-2015 package, so which one to cite is itself Q02.
+  citation_main: ""
+  link_calcofi_org: ""
+  # the ingest's actual source; the notebook pins the commit it reads
+  link_data_source: "https://github.com/CalCOFI/marmam-app/tree/main/data/whale_visual_data"
+  link_others:
+    - https://oceaninformatics.ucsd.edu/datazoo/catalogs/ccelter/datasets/284
+    - https://doi.org/10.1016/j.dsr2.2014.10.008
+  # source: https://cite.edirepository.org/cite/knb-lter-cce.262.2?style=ESIP, checked 2026-09-05
+  doi: 10.6073/pasta/9ee6ca9b4a316708ca3d17ddc92debfb
+  # never invented: marmam-app states no data licence (its LICENSE file is MIT,
+  # for the app code) -- open question Q01 names the field
+  license: unknown
+  pi_names: John Hildebrand; Simone Baumann-Pickering
+  # source: caloos-sheet row 23, 2026-09-05 (one sheet cell, split in two here)
+  creators:
+    - name: John Hildebrand
+      organization: UCSD SIO
+      email: jahildebrand@ucsd.edu
+      role: lead
+    - name: Simone Baumann-Pickering
+      organization: UCSD SIO
+      email: ~
+      role: lead
+  # source: CalCOFI/marmam-app data/more_info_page.Rmd (co-author list), 2026-09-27
+  associated_parties:
+    - name: Michaela Alksne
+      role: curation/management
+  contact: jahildebrand@ucsd.edu
+  # source: caloos-sheet row 23, 2026-09-05 (the sheet's one keyword had been
+  # split on its commas into three broken entries; rejoined 2026-09-27)
+  keywords:
+    - "Marine Turtles, Birds, and Mammals"
+  quality_control_md: 'QC flags present: No. Each sighting carries the analyst-adjusted on-effort/on-transect flag (ON/OFF), staged as obs.measurement_qual.'
+  maintenance: ongoing
+  # source: CalCOFI/marmam-app data/more_info_page.Rmd, 2026-09-27
+  funding: "Office of Naval Research, Award N00014-22-1-2719"
+  keywords_gcmd:
+    - "EARTH SCIENCE > BIOLOGICAL CLASSIFICATION > ANIMALS/VERTEBRATES > MAMMALS"

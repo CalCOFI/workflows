@@ -1,0 +1,462 @@
+---
+title: "Ingest SIO Cetacean eDNA Detections"
+calcofi:
+  target_name: ingest_sio_cetacean_edna
+  workflow_type: ingest
+  dependency:
+    - ingest_swfsc_ichthyo
+  output: data/parquet/sio_cetacean-edna/manifest.json
+  provider: sio
+  dataset: cetacean-edna
+  # staged, not released, until the licence (Q01), citation (Q02) and provider
+  # (Q03) are settled
+  in_release: false
+  workflow_url: https://calcofi.io/workflows/ingest_sio_cetacean-edna.html
+  questions_file: metadata/sio/cetacean-edna/questions.csv
+  dataset_meta:
+    dataset_name: CalCOFI Cetacean eDNA Detections (NCOG samples)
+    dataset_name_short: "Cetacean eDNA"
+    category: "Genomics & eDNA"
+    color: "#8a6bb0"
+  tables_owned:
+    - {table: sample, shared: true, note: "core event dimension (eDNA water sample)"}
+    - {table: obs, shared: true, note: "core occurrence headline (edna_presence per sample x species)"}
+    - {table: taxon, shared: true, note: "shared taxa reference (7 cetaceans, worms:)"}
+    - {table: dataset_taxon, shared: true, note: "species_code -> taxon_key crosswalk"}
+    - {table: taxon_group, shared: true, note: "calcofi:marine_mammals"}
+    - {table: measurement_type, shared: true, note: "shared registry across datasets"}
+  erd:
+    color: "#e4dcef"
+editor_options:
+  chunk_output_type: console
+---
+
+## Overview
+
+**Source**: `data/edna_data/edna.csv` in
+[CalCOFI/marmam-app](https://github.com/CalCOFI/marmam-app), read from a pinned
+commit. One row per NOAA CalCOFI Genomics Program (NCOG) seawater sample screened
+for cetaceans: 136 rows over 12 cruises (2014-02 to 2016-11), mostly 10 m. Seven
+species columns (`Gg`, `Tt`, `Mn`, `Dc`, `Lb`, `Lo`, `Dd`) hold an `x` where the
+species' DNA was detected. `eDNA_Process` says whether the sample was sequenced
+(71) or did not amplify (65, "not sequenced PCR negative").
+
+The app's `edna-processed.csv` is not read (a re-typed copy). This is **not**
+`calpoly_whale-edna` (the Zenodo ASV tables behind a whale-density model).
+
+- **Provider**: `sio` (tentative; the samples are NCOG's, the screening appears to
+  be the Whale Acoustics Lab's; Q03)
+- **Grain**: one water sample (`sample_label`, the NCOG name
+  `YYYYMM_LLL.L_SSS.S_depth`)
+- **Occurrence**: `edna_presence` 1/0 for each of the seven species on every
+  sample; a PCR-negative sample is an absence for all seven (Q04), with
+  `measurement_qual` naming the process so a consumer can drop them
+- **Time**: the table gives none. Each sample takes the time of the CalCOFI
+  station occupation at the same station on that cruise (Q06)
+
+```{mermaid}
+graph LR
+  R[edna.csv<br/>one row per sample, 7 species columns] --> S[edna_sample]
+  R --> D[edna_detection<br/>sample x species, 0/1]
+  D -.sample_label.-> S
+```
+
+## Setup
+
+```{r}
+#| label: setup
+#| message: false
+
+devtools::load_all(here::here("../calcofi4db"))
+devtools::load_all(here::here("../calcofi4r"))
+librarian::shelf(
+  CalCOFI/calcofi4db, CalCOFI/calcofi4r,
+  DBI, dplyr, DT, fs, glue, here, jsonlite, knitr,
+  lubridate, purrr, readr, sf, stringr, tibble, tidyr, quiet = T)
+options(readr.show_col_types = F)
+options(DT.options = list(scrollX = TRUE))
+source(here("libs/ingest.R"))
+
+cc           <- read_calcofi_meta(here("ingest_sio_cetacean-edna.qmd"))
+provider     <- cc$provider
+dataset      <- cc$dataset
+tables_owned <- cc$tables_owned
+ds_key       <- glue("{provider}_{dataset}")
+dir_label    <- ds_key
+dir_parquet  <- here(glue("data/parquet/{dir_label}"))
+dir_stage    <- cc_stage_path("parquet", dir_label, create = TRUE)
+db_path      <- here(glue("data/wrangling/{dir_label}.duckdb"))
+dir_meta     <- here(glue("metadata/{provider}/{dataset}"))
+dir_dl       <- here(glue("data/cache/{dir_label}")); dir_create(dir_dl)
+publish_to_gcs <- Sys.getenv("CALCOFI_SKIP_GCS") == ""
+
+if (overwrite) {
+  if (file_exists(db_path))                 file_delete(db_path)
+  if (file_exists(paste0(db_path, ".wal"))) file_delete(paste0(db_path, ".wal"))
+}
+dir_create(dirname(db_path))
+con <- get_duckdb_con(db_path)
+load_duckdb_extension(con, "spatial")
+```
+
+## Read Source Data
+
+```{r}
+#| label: read-source
+
+# CalCOFI/marmam-app at a pinned commit (see ingest_sio_cetacean-sightings.qmd)
+src_sha  <- "7bc0e18d7cb0ac7ba58d7bc4d47e57c50bd9bc80"
+src_url  <- glue("https://raw.githubusercontent.com/CalCOFI/marmam-app/{src_sha}/data/edna_data/edna.csv")
+src_file <- file.path(dir_dl, "edna.csv")
+downloaded <- overwrite_all || !file_exists(src_file)
+if (downloaded) download.file(src_url, src_file, quiet = TRUE, mode = "wb")
+src_stamp <- stamp_source_access(files = src_file) |>
+  mutate(source = as.character(src_url), method = if (downloaded) "download" else "file_mtime")
+
+if (publish_to_gcs) {
+  sync_to_gcs(local_dir = dir_dl, gcs_prefix = glue("archive/{provider}/{dataset}"),
+              bucket = "calcofi-files-public")
+} else {
+  cat("CALCOFI_SKIP_GCS set -- source NOT archived to gs://calcofi-files-public\n")
+}
+
+d_raw <- read_csv(src_file, col_types = cols(.default = "c"))
+sp_cols <- c("Gg", "Tt", "Mn", "Dc", "Lb", "Lo", "Dd")
+stopifnot(
+  "row count changed at this commit" = nrow(d_raw) == 136L,
+  "the seven species columns are present" = all(sp_cols %in% names(d_raw)),
+  "a species cell is 'x' or blank" = all(unlist(d_raw[sp_cols]) %in% c("x", NA)))
+cat(glue("edna.csv: {nrow(d_raw)} rows, {sum(unlist(d_raw[sp_cols]) %in% 'x')} detections"), "\n")
+```
+
+## Build Sample + Detection Tables
+
+Three samples are listed twice, once sequenced and once PCR-negative. The
+sequenced row is kept (Q05): it is the one that went further through the
+pipeline, and two of the three carry a detection.
+
+```{r}
+#| label: sample
+
+num <- function(x) suppressWarnings(as.numeric(x))
+
+dupes <- d_raw |> group_by(Sample) |> filter(n() > 1) |> ungroup()
+stopifnot(
+  "exactly three samples are listed twice" = n_distinct(dupes$Sample) == 3L && nrow(dupes) == 6L,
+  "each duplicate pair is one sequenced + one PCR-negative row" =
+    all(table(dupes$eDNA_Process) == 3L))
+d_dedup <- d_raw |>
+  arrange(Sample, eDNA_Process != "sequenced") |>
+  distinct(Sample, .keep_all = TRUE)
+
+d_sample <- d_dedup |>
+  transmute(
+    sample_label  = Sample,
+    edna_process  = eDNA_Process,
+    illumina_name = Illumina_name,
+    station_name,
+    season        = str_trim(season),
+    line          = num(line),
+    station       = num(station),
+    site_key      = normalize_site_key(sprintf("%.1f %.1f", line, station)),
+    depth_m       = num(depth),
+    latitude      = num(latitude),
+    longitude     = num(longitude),
+    cruise_label  = cruise,
+    # no sampling date in the source: the 15th of the cruise month (CCYYMM) is
+    # the anchor the station-visit match searches around (Q06)
+    nominal_date  = make_date(2000L + as.integer(substr(cruise, 3, 4)),
+                              as.integer(substr(cruise, 5, 6)), 15L))
+stopifnot(
+  "sample_label is unique"   = !anyDuplicated(d_sample$sample_label),
+  "every sample has a station, depth and position" =
+    !anyNA(d_sample$site_key) && !anyNA(d_sample$depth_m) &&
+    !anyNA(d_sample$latitude) && !anyNA(d_sample$longitude),
+  "cruise_label parses to a date" = !anyNA(d_sample$nominal_date),
+  "the label's YYYYMM matches the sample name's" =
+    all(substr(d_sample$sample_label, 3, 6) == substr(d_sample$cruise_label, 3, 6)))
+dbWriteTable(con, "edna_sample", d_sample, overwrite = TRUE)
+
+d_detection <- d_dedup |>
+  select(sample_label = Sample, all_of(sp_cols)) |>
+  pivot_longer(-sample_label, names_to = "species_code", values_to = "cell") |>
+  transmute(sample_label, species_code, detected = as.integer(cell %in% "x"))
+dbWriteTable(con, "edna_detection", d_detection, overwrite = TRUE)
+
+cat(glue("edna_sample: {nrow(d_sample)} samples ",
+         "({sum(d_sample$edna_process == 'sequenced')} sequenced); ",
+         "edna_detection: {nrow(d_detection)} rows, {sum(d_detection$detected)} detections"), "\n")
+```
+
+## Resolve cruise_key, time + Spatial
+
+`match_by_site_datetime()` finds, for each sample, the `swfsc_ichthyo` station
+occupation at the **same `site_key`** nearest the 15th of the cruise month, within
+25 days — one station is visited once per quarterly cruise, so the window cannot
+reach a neighbouring cruise. The sample takes that occupation's `cruise_key` and
+time. A sample whose station ichthyo did not occupy takes its label's
+`cruise_key` (the majority among its matched siblings) and no time.
+
+```{r}
+#| label: spatial-cruise
+
+load_prior_tables(con, parquet_dir = cc_stage_path("parquet", "swfsc_ichthyo"),
+                  tables = c("grid"), geom_tables = c("grid"), as_view = TRUE)
+add_point_geom(con, "edna_sample", lon_col = "longitude", lat_col = "latitude")
+assign_grid_key(con, "edna_sample")
+
+dbExecute(con, glue(
+  "CREATE OR REPLACE TABLE station_visit AS
+   SELECT sample_key, site_key, cruise_key, datetime
+   FROM read_parquet('{cc_stage_path('parquet','swfsc_ichthyo','sample.parquet')}')
+   WHERE site_key IS NOT NULL AND cruise_key IS NOT NULL AND datetime IS NOT NULL"))
+
+visit_match <- match_by_site_datetime(
+  con, "edna_sample", "station_visit",
+  fk_col = "visit_sample_key", ref_pk = "sample_key",
+  key_col = "site_key", datetime_col = "nominal_date", ref_datetime_col = "datetime",
+  window_days = 25)
+
+dbExecute(con, "ALTER TABLE edna_sample ADD COLUMN IF NOT EXISTS cruise_key VARCHAR")
+dbExecute(con, "ALTER TABLE edna_sample ADD COLUMN IF NOT EXISTS datetime_start_utc TIMESTAMP")
+dbExecute(con, "
+  UPDATE edna_sample e SET cruise_key = v.cruise_key, datetime_start_utc = v.datetime
+  FROM station_visit v WHERE v.sample_key = e.visit_sample_key")
+# the label's consensus for the rest: every matched sample of a label must agree
+label_ck <- dbGetQuery(con, "
+  SELECT cruise_label, COUNT(DISTINCT cruise_key) AS n_keys, ANY_VALUE(cruise_key) AS cruise_key
+  FROM edna_sample WHERE cruise_key IS NOT NULL GROUP BY 1")
+stopifnot("a cruise label's matched samples agree on one cruise_key" = all(label_ck$n_keys == 1))
+dbWriteTable(con, "_label_ck", label_ck, overwrite = TRUE)
+dbExecute(con, "
+  UPDATE edna_sample e SET cruise_key = l.cruise_key
+  FROM _label_ck l WHERE e.cruise_key IS NULL AND l.cruise_label = e.cruise_label")
+dbExecute(con, "DROP TABLE _label_ck")
+
+cat(glue("station visit matched for {visit_match$matched}/{visit_match$total} samples ",
+         "({visit_match$pct}%); cruise_key on ",
+         "{dbGetQuery(con, 'SELECT COUNT(cruise_key) FROM edna_sample')[[1]]} samples"), "\n")
+visit_match$unmatched |> datatable(caption = "Samples with no ichthyo station visit (no time)", rownames = FALSE)
+```
+
+## Load Dataset Metadata + Schema
+
+```{r}
+#| label: meta-schema
+
+this_provider <- provider; this_dataset <- dataset
+d_dataset <- ingest_yaml_to_dataset_df(read_ingest_yaml(here())) |>
+  filter(provider == this_provider, dataset == this_dataset)
+stopifnot(nrow(d_dataset) == 1)
+dbWriteTable(con, "dataset", as.data.frame(d_dataset), overwrite = TRUE)
+
+d_meas_type <- read_measurement_type(here("metadata/measurement_type.csv"))
+stopifnot("edna_presence is registered" = "edna_presence" %in% d_meas_type$measurement_type)
+dbWriteTable(con, "measurement_type", as.data.frame(d_meas_type), overwrite = TRUE)
+
+d_qual <- read_csv(here("metadata/measurement_qual.csv"), col_types = cols(.default = "c")) |>
+  filter(code_set == "cetacean-edna")
+stopifnot("every eDNA_Process value is a registered code" =
+            all(d_sample$edna_process %in% d_qual$qual_code))
+
+src_rels <- list(
+  primary_keys = list(edna_sample = "sample_label"),
+  foreign_keys = list(
+    list(table = "edna_detection", column = "sample_label",
+         ref_table = "edna_sample", ref_column = "sample_label")))
+cc_erd(con, tables = c("edna_sample", "edna_detection", "dataset"), rels = src_rels,
+       colors = list(lightblue = c("edna_sample", "edna_detection"), white = "dataset"))
+```
+
+## Questions for Data Providers
+
+```{r}
+#| label: provider-questions
+
+questions_datatable(
+  here(cc$questions_file),
+  caption = "Questions for the cetacean eDNA data providers (ranked)")
+```
+
+## Emit Core Tables
+
+| source | core | transform |
+|---|---|---|
+| `edna_sample` | `sample` (`water`) | key `sio_cetacean-edna:water:<sample_label>`; depth_min_m = depth_max_m = `depth_m`; time of the matched station visit |
+| `edna_detection.detected` | `obs` `edna_presence` | 1/0 for each of the seven species on every sample; `measurement_qual` = `edna_process` verbatim |
+
+**Not published** (kept in the archived source): `illumina_name`,
+`station_name`, `season`, the app's `detections` / `SpeciesName` / `SubOrder`
+convenience columns.
+
+### Taxon vocabulary
+
+```{r}
+#| label: taxon-stage
+
+mt_taxon <- read_csv(here("metadata/measurement_taxon.csv"),
+                     col_types = cols(worms_id = "i", itis_id = "i",
+                                      bin_value = "d", .default = "c")) |>
+  filter(dataset_key == ds_key)
+tx_over  <- read_csv(here("metadata/taxon_override.csv"), show_col_types = FALSE)
+
+# the same codes as the visual survey; their names come from its vocabulary
+d_vocab <- read_csv(here("metadata/sio/cetacean-sightings/species_codes.csv"),
+                    col_types = cols(.default = "c")) |>
+  filter(species_code %in% sp_cols) |>
+  transmute(ds_taxa_code = species_code, ds_scientific_name = scientific_name,
+            ds_common_name = common_name)
+stopifnot("all seven codes named" = setequal(d_vocab$ds_taxa_code, sp_cols))
+n_staged <- append_dataset_taxon(con, ds_key, d_vocab)
+ensure_taxon_xref(con, mt_taxon, tx_over, cache_csv = here("metadata/taxon_xref.csv"))
+ensure_taxon_lineage(con, mt_taxon, tx_over, cache_csv = here("metadata/taxon_lineage.csv"))
+n_taxon    <- build_taxon_reference(con, mt_taxon, tx_over)
+n_ds_taxon <- resolve_dataset_taxon(con, mt_taxon, tx_over)
+n_tx_group <- build_taxon_group(con, read_taxon_group_rules(here("metadata/taxon_group.csv")))
+chk <- check_dataset_taxon(con, ds_key, codes = sp_cols)
+
+dt <- dbGetQuery(con, "SELECT ds_taxa_code, taxon_key FROM dataset_taxon WHERE dataset_key = ?",
+                 params = list(ds_key))
+key_of <- function(code) dt$taxon_key[dt$ds_taxa_code == code]
+stopifnot(
+  "every code keys a taxon"             = !anyNA(dt$taxon_key) && nrow(dt) == 7L,
+  "Dc keys Delphinus delphis (Q08)"     = identical(key_of("Dc"), "worms:137094"),
+  "Lo keys Sagmatias obliquidens (Q08)" = identical(key_of("Lo"), "worms:1571909"))
+cat(glue("vocabulary: {n_staged} codes; taxon {n_taxon}, dataset_taxon {n_ds_taxon}"), "\n")
+```
+
+### Sample, obs
+
+```{r}
+#| label: emit_core
+
+append_sample(con, sample_arm_self(
+  ds_key, "edna_sample", "sample_label", "water",
+  site_expr = "site_key", depth_min = "depth_m", depth_max = "depth_m"))
+
+append_obs(con, glue("
+  SELECT 'bio', '{ds_key}', {ns_key(ds_key, 'water', 's.sample_label')},
+         s.grid_key, s.cruise_key, s.latitude, s.longitude,
+         CAST(s.datetime_start_utc AS TIMESTAMP), s.depth_m, s.depth_m,
+         dt.taxon_key, NULL::VARCHAR, 'edna_presence',
+         CAST(d.detected AS DOUBLE), s.edna_process, NULL::DOUBLE
+  FROM edna_detection d JOIN edna_sample s USING (sample_label)
+  JOIN dataset_taxon dt ON dt.dataset_key = '{ds_key}' AND dt.ds_taxa_code = d.species_code"))
+
+q1 <- function(sql) dbGetQuery(con, sql)[[1]]
+core <- list(
+  sample      = q1("SELECT COUNT(*) FROM sample"),
+  obs         = q1("SELECT COUNT(*) FROM obs"),
+  obs_present = q1("SELECT COUNT(*) FROM obs WHERE measurement_value = 1"))
+cat(glue("core projection -- ", paste(names(core), unlist(core), sep = "=", collapse = " ")), "\n")
+
+stopifnot(
+  "one sample per eDNA sample"            = core$sample == nrow(d_sample),
+  "seven obs per sample"                  = core$obs == 7L * nrow(d_sample),
+  "presences = detections in the source"  = core$obs_present == sum(d_detection$detected),
+  "a PCR-negative sample has no presence (Q04)" =
+    q1("SELECT COUNT(*) FROM obs WHERE measurement_value = 1
+        AND measurement_qual <> 'sequenced'") == 0,
+  "every obs.sample_key resolves in sample" =
+    q1("SELECT COUNT(*) FROM obs o LEFT JOIN sample s USING (sample_key) WHERE s.sample_key IS NULL") == 0,
+  "every obs.taxon_key resolves in taxon" =
+    q1("SELECT COUNT(*) FROM obs o LEFT JOIN taxon t USING (taxon_key) WHERE t.taxon_key IS NULL") == 0)
+```
+
+### Declared NULLs
+
+```{r}
+#| label: validate
+
+results <- validate_for_release(con, checks = "all", strict = FALSE)
+n_no_visit <- visit_match$total - visit_match$matched
+nullable <- tribble(
+  ~table,   ~column,             ~n,                ~reason,
+  "sample", "parent_sample_key", nrow(d_sample),    "single-level dataset: every sample is a root",
+  "sample", "datetime",          n_no_visit,        "no ichthyo occupation of the station on that cruise (Q06)",
+  "sample", "cruise_key",        q1("SELECT COUNT(*) FROM sample WHERE cruise_key IS NULL"),
+    "a label none of whose samples matched a station visit",
+  "sample", "grid_key",          q1("SELECT COUNT(*) FROM sample WHERE grid_key IS NULL"),
+    "station outside the CalCOFI grid cells")
+stopifnot(
+  "declared datetime NULLs match" =
+    q1("SELECT COUNT(*) FROM sample WHERE datetime IS NULL") == n_no_visit,
+  "every sample is a root" =
+    q1("SELECT COUNT(*) FROM sample WHERE parent_sample_key IS NULL") == nrow(d_sample))
+cat("validate_for_release:", ifelse(results$passed, "PASSED", "reported findings -- reconciled against the declared NULLs below"), "\n")
+nullable |> datatable(caption = "Declared NULLs (count and reason)", rownames = FALSE)
+```
+
+### Measurement bounds
+
+```{r}
+#| label: bounds
+
+b <- check_measurement_bounds(con, "obs", mt = d_meas_type, dataset_key = ds_key,
+                              depth_col = "depth_max_m")
+bounds_datatable(b)
+stopifnot("edna_presence is declared and respected" = all(b$status == "ok"))
+```
+
+## Preview
+
+```{r}
+#| label: preview
+
+dbGetQuery(con, "
+  SELECT dt.ds_taxa_code, t.scientific_name,
+         COUNT(*) FILTER (WHERE o.measurement_qual = 'sequenced') AS n_sequenced,
+         SUM(o.measurement_value) AS n_detected
+  FROM obs o JOIN taxon t USING (taxon_key)
+  JOIN dataset_taxon dt ON dt.taxon_key = o.taxon_key AND dt.dataset_key = o.dataset_key
+  GROUP BY ALL ORDER BY n_detected DESC") |>
+  datatable(caption = "Detections by species", rownames = FALSE)
+```
+
+```{r}
+#| label: erd-core
+
+core_tbls <- core_output_tables(con)
+cc_erd(con, tables = core_tbls, rels = core_relationships(core_tbls))
+```
+
+## Write Outputs + Upload
+
+```{r}
+#| label: outputs
+
+dir_create(dir_parquet)
+tbls_out <- core_output_tables(con, extra = c("measurement_type", "dataset"))
+write_parquet_outputs(
+  con = con, output_dir = dir_parquet, tables = tbls_out,
+  sort_by = list(obs = c("grid_key", "measurement_type")),
+  strip_provenance = FALSE)
+
+build_relationships_json(
+  rels = core_relationships(tbls_out), output_dir = dir_parquet,
+  provider = provider, dataset = dataset)
+
+d_tbls_rd <- read_csv(file.path(dir_meta, "tbls_redefine.csv"))
+d_flds_rd <- read_csv(file.path(dir_meta, "flds_redefine.csv"))
+build_metadata_json(
+  con = con, d_tbls_rd = d_tbls_rd, d_flds_rd = d_flds_rd,
+  metadata_derived_csv = c(here("metadata/core_dictionary.csv"),
+                           file.path(dir_meta, "metadata_derived.csv")),
+  output_dir = dir_parquet, tables = tbls_out,
+  set_comments = TRUE, provider = provider, dataset = dataset,
+  workflow_url = cc$workflow_url, tables_owned = tables_owned,
+  sources = src_stamp)
+
+if (publish_to_gcs) {
+  sync_to_gcs(local_dir = dir_stage, sidecar_dir = dir_parquet,
+              gcs_prefix = glue("ingest/{dir_label}"), bucket = "calcofi-db")
+} else {
+  cat("CALCOFI_SKIP_GCS set -- parquet kept local, NOT synced to gs://calcofi-db\n")
+}
+```
+
+```{r}
+#| label: cleanup
+close_duckdb(con)
+cat(glue("Parquet outputs written to: {dir_parquet}"), "\n")
+```
