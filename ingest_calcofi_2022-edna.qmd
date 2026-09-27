@@ -104,7 +104,7 @@ source(here("libs/ingest.R"))
 cc           <- read_calcofi_meta(here("ingest_calcofi_2022-edna.qmd"))
 provider     <- cc$provider    # "calcofi"
 dataset      <- cc$dataset     # "2022-edna"
-ds_key       <- glue("{provider}_{dataset}")
+ds_key       <- as.character(glue("{provider}_{dataset}"))
 tables_owned <- cc$tables_owned
 dir_label    <- ds_key
 dir_parquet  <- here(glue("data/parquet/{dir_label}"))
@@ -225,7 +225,7 @@ d_sample <- d_occ |>
     longitude  = as.numeric(decimalLongitude),
     depth_min_m = as.numeric(minimumDepthInMeters),
     depth_max_m = as.numeric(maximumDepthInMeters),
-    datetime_start_utc = as_datetime(eventDate),
+    datetime_start_utc = readr::parse_datetime(eventDate, format = "%Y-%m-%dT%H:%M%z"),
     location_id = locationID,
     locality = locality)
 
@@ -320,6 +320,13 @@ on its own staging table, the pattern this notebook follows -- omit
 
 ```{r}
 #| label: add-spatial
+
+load_prior_tables(
+  con,
+  parquet_dir = cc_stage_path("parquet", "swfsc_ichthyo"),
+  tables      = c("ship", "cruise", "grid"),
+  geom_tables = c("grid"),
+  as_view     = TRUE)
 
 add_point_geom(con, "edna_sample", lon_col = "longitude", lat_col = "latitude")
 assign_grid_key(con, "edna_sample") |> datatable(caption = "Grid assignment")
@@ -465,16 +472,15 @@ rule -- no `calcofi4db` change needed for this dataset.
 ```{r}
 #| label: emit-core
 
-build_grid_reference(con)
-
 # 1. sample -- one row per physical water filter (parentEventID grain)
 append_sample(con, glue("
   SELECT {ns_key(ds_key, 'sample', 'parent_event_id')} AS sample_key,
          'filter' AS sample_type, NULL::VARCHAR AS parent_sample_key,
          {ns_key(ds_key, 'sample', 'parent_event_id')} AS root_sample_key,
-         '{ds_key}' AS dataset_key, grid_key, cruise_key,
+         '{ds_key}' AS dataset_key, grid_key, NULL::VARCHAR AS site_key, cruise_key,
+         NULL::INTEGER AS order_occ,
          latitude, longitude, datetime_start_utc AS datetime,
-         depth_min_m, depth_max_m
+         depth_min_m, depth_max_m, NULL::VARCHAR AS tow_type
   FROM edna_sample"))
 
 # 2. obs -- species detections, headline measurement = sequence_reads
