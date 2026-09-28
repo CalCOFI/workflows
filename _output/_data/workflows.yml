@@ -1,13 +1,13 @@
-generated: '2026-09-11'
-n_total: 56
-n_meta: 28
+generated: '2026-09-23'
+n_total: 58
+n_meta: 29
 categories:
 - id: ingest
   title: Ingest
   blurb: Acquire, standardize, and load a source dataset into the integrated database.
     Cards are grouped by data provider.
   layout: cards
-  count: 17
+  count: 18
   groups:
   - label: CalCOFI
     items:
@@ -35,6 +35,21 @@ categories:
       coverage: 1993-08 to 2026-07
       bbox: 29.8–37.8°N, 126.5–117.3°W
       color: '#e0ccf0'
+      link_calcofi_org: https://calcofi.org/data/oceanographic-data/ctd-cast-files/
+      link_data_source: https://calcofi.org/data/oceanographic-data/ctd-cast-files/
+      provider: calcofi
+    - url: ingest_calcofi_ctd-derived.html
+      title: ingest_calcofi_ctd-derived
+      dataset_name: CalCOFI CTD Derived Hydrographic Products
+      description: 'Hydrographic products DERIVED from the CalCOFI CTD cast profiles
+        rather than measured: spice (spiciness at 0 dbar, TEOS-10) and the sensor-pair
+        averaged sigma-theta at every published CTD depth; per cast, the mixed-layer
+        depth by three criteria, the depth and value of the chlorophyll-a maximum
+        and the chlorophyll-a integrated over 0-200 m; and the relative geostrophic
+        velocity between adjacent stations of each CalCOFI line, referenced to 500
+        dbar. Computed from the full-resolution 1 m bins of the CalCOFI CTD Cast Files
+        after the provider''s quality flags are applied.'
+      color: '#cfe8dc'
       link_calcofi_org: https://calcofi.org/data/oceanographic-data/ctd-cast-files/
       link_data_source: https://calcofi.org/data/oceanographic-data/ctd-cast-files/
       provider: calcofi
@@ -340,7 +355,7 @@ categories:
   title: Other notebooks
   blurb: Exploratory analyses and legacy load scripts, kept for reference.
   layout: list
-  count: 22
+  count: 23
   groups:
   - label: ''
     items:
@@ -350,6 +365,8 @@ categories:
       title: explore_bird-mammal
     - url: explore_bottle.html
       title: explore_bottle
+    - url: explore_calcofi_ctd-derived.html
+      title: explore_calcofi_ctd-derived
     - url: explore_ctd-cast.html
       title: explore_ctd-cast
     - url: explore_ctd-cast2.html
@@ -393,6 +410,7 @@ dag_mermaid: |-
     deploy_consumers(["deploy_consumers"]):::release
     ingest_calcofi_bottle(["ingest_calcofi_bottle"]):::c_ingest_calcofi_bottle
     ingest_calcofi_ctd_cast(["ingest_calcofi_ctd_cast"]):::c_ingest_calcofi_ctd_cast
+    ingest_calcofi_ctd_derived(["ingest_calcofi_ctd_derived"]):::c_ingest_calcofi_ctd_derived
     ingest_calcofi_dic(["ingest_calcofi_dic"]):::c_ingest_calcofi_dic
     ingest_calcofi_mets(["ingest_calcofi_mets"]):::c_ingest_calcofi_mets
     ingest_calcofi_phyllosoma(["ingest_calcofi_phyllosoma"]):::c_ingest_calcofi_phyllosoma
@@ -419,6 +437,7 @@ dag_mermaid: |-
     test_release --> deploy_consumers
     ingest_swfsc_ichthyo --> ingest_calcofi_bottle
     ingest_swfsc_ichthyo --> ingest_calcofi_ctd_cast
+    ingest_calcofi_ctd_cast --> ingest_calcofi_ctd_derived
     ingest_calcofi_bottle --> ingest_calcofi_dic
     ingest_swfsc_ichthyo --> ingest_calcofi_mets
     ingest_swfsc_ichthyo --> ingest_calcofi_phyllosoma
@@ -443,6 +462,7 @@ dag_mermaid: |-
     test_release --> publish_to_obis
     ingest_calcofi_bottle --> release_database
     ingest_calcofi_ctd_cast --> release_database
+    ingest_calcofi_ctd_derived --> release_database
     ingest_calcofi_dic --> release_database
     ingest_calcofi_mets --> release_database
     ingest_calcofi_phyllosoma --> release_database
@@ -462,6 +482,7 @@ dag_mermaid: |-
     classDef release fill:#f06595,stroke:#00000033,color:#10161c;
     classDef c_ingest_calcofi_bottle fill:#f5cad9,stroke:#00000033,color:#10161c;
     classDef c_ingest_calcofi_ctd_cast fill:#e0ccf0,stroke:#00000033,color:#10161c;
+    classDef c_ingest_calcofi_ctd_derived fill:#cfe8dc,stroke:#00000033,color:#10161c;
     classDef c_ingest_calcofi_dic fill:#ffd2bb,stroke:#00000033,color:#10161c;
     classDef c_ingest_calcofi_mets fill:#cce5ff,stroke:#00000033,color:#10161c;
     classDef c_ingest_calcofi_phyllosoma fill:#e0bbf0,stroke:#00000033,color:#10161c;

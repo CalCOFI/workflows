@@ -36,6 +36,15 @@ event month as a last resort, recorded in `cruise_key_method`.
   `Cruise` and re-derived it as `STRFTIME(datetime, '%Y%m')` in `casts_derived`
   for years; that was the bug.
 
+**An event with no ship but a station and a time** (the CDFW Dungeness crab
+sorting log) cannot use span containment directly, and a bare `YYMM` cannot
+choose between two or three ships in one month. Since calcofi4db 4.17.0
+`infer_ship_by_occupation()` first takes the ship of the ONE `swfsc_ichthyo`
+station occupation at the event's `site_key` within 24 h, then
+`resolve_cruise_key()` keys it by span; two or more candidates stay NULL with
+`cruise_key_candidates` listed for a `proposed` question, never a guess (#109:
+96 of the crab's 97 NULL `cruise_key`s, all agreeing with their own designation).
+
 A `cruise` reference without spans makes `resolve_cruise_key()` **error**, so an
 ingest run against a stale ichthyo shard fails instead of quietly regressing to
 the month rule.

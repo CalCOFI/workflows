@@ -8,6 +8,85 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## CTD: the corrected 2607 file, provider flags on every series, cruise-corrected oxygen
+
+**Five recent cruises regain their offshore stations.** The first 20-2607SH_CTDPrelim.zip wrote station numbers
+of 100 and above with three digits, so 100/110/120 read as 000/010/020. The distance filter then
+dropped every such cast as a position error: in v2026.09.11, 2026-07-3322 has 122 casts instead of
+144, and lines 80, 83.3, 86.7, 90 and 93.3 stop at station 90. The provider fixed the file on
+2026-09-14 (Kelsey Vogel). Only `Sta` and `Sta_ID` differ between the two files, not a single
+measured value, so this release adds those 22 casts back: 11,372 rows per series, and no value
+changes on any other cruise. The same truncation is in the still-current preliminary files for
+**2507SR, 2511SR, 2601RL and 2604SH**, which the provider has not re-issued. The ingest repairs a
+station to station + 100 only where the cast's own GPS position confirms it: within 10 km of
+station + 100 and farther than that from the station as written. Applied to the old 2607 file,
+that rule reproduces the provider's correction on all 56,993 rows. Every repaired cast is listed
+in the ingest's report, and questions.csv Q39 asks for re-issued files. The ingest also **fails the
+render** if any dropped cast still carries the signature, so a truncation cannot drop stations
+quietly again. A zip
+re-published under the same name also invalidates the ingest's fingerprint, its checkpoint and its
+extraction now; before this, the corrected file would have read as "inputs unchanged"
+(CalCOFI/workflows#104).
+
+**Every CTD series carries the provider's own flag.** The CTD team's 2026 processing software writes
+a quality code for each corrected, averaged and derived series (`SaltAve_CorrQ`, `OxAve_StaCorrQ`,
+`EstChl_StaCorrQ`, `EstNO3_CruiseCorrQ`, `BATQ`, `PoT1Q`, `DynHtQ`, … 27 columns, first in the
+corrected 2607 file). Each series' `measurement_qual` now comes from that column, falling back to
+the sensor flag it inherited before for a file in the legacy layout, so no flag on a legacy cruise
+moves. The two-sensor averages are still rebuilt by Rasmus Swalethorp's flag rule
+(`combine_sensor_pair_sql()`); the provider's flag on its own average rides on ours, and a
+cross-check table compares the two averages per file layout for the CTD team (#105).
+
+**2607 casts 1–6: the faulty secondary temperature is flagged.** The provider's cruise notes say the
+secondary temperature sensor was faulty on casts 1–6. It reads a median 11 °C from the primary, up to
+42 °C, and nothing flagged it, so 1,775 of those casts' `temperature_ave` values averaged it in (up to
+11.3 °C off). A new committed registry, `metadata/calcofi/ctd-cast/flag_overrides.csv` (one row per
+cruise, cast range, direction and series, each with a reason, a source and a question), flags that
+sensor 9 on those casts, together with every series the provider derives from it (secondary
+salinity, sigma-theta, potential temperature and oxygen). It is applied after the provider's flags
+and before any average, so `temperature_ave` there is the primary sensor alone; the ingest asserts
+it. This is provisional until the CTD team flags at source (questions.csv Q37).
+
+**`oxygen_ml_l_ave_cruise_corr`**, the cruise-corrected DO average, is new. It is built from
+`Ox1_CruiseCorr` / `Ox2_CruiseCorr` by the same flag rule; the source ships no average of that
+pair. It is canonical (in `obs` via `ctd_thin`) and bounded 0–15 ml/L like its station-corrected
+sibling (#106).
+## A new dataset: `calcofi_ctd-derived`, hydrographic products computed from the CTD casts
+
+Rasmus Swalethorp asked for values derived from the CTD profiles beside the measured series,
+to show how much upwelling, productivity and California Undercurrent there is on each cruise
+(CalCOFI/workflows#98). `ingest_calcofi_ctd-derived.qmd` computes them from the full-resolution
+1 m bins of `calcofi_ctd-cast` after the provider's 8/9 flags are dropped, with one tested
+calcofi4db (≥ 4.16.0) function per rule. It publishes:
+- **`obs`** (so `obs_env` and the `climatology`): `spiciness0` (TEOS-10 spice at 0 dbar) and
+  `sigma_theta_ave` (the sensor pair combined by its flags), at the depths ctd-cast publishes;
+- **`sample_measurement`**, on the ctd-cast cast:
+  - mixed-layer depth by three criteria (`mld_sigma_theta_003`, `mld_sigma_theta_0125`,
+    `mld_temperature_02`);
+  - `chl_max_depth` / `chl_max`;
+  - `chl_integrated` (0–200 m) / `chl_integrated_depth`;
+- **`ctd_geostrophic`**, a new table: relative geostrophic velocity between adjacent stations of
+  each line, referenced to 500 dbar, in 10 dbar bins (no anomaly: relative flow).
+
+`preliminary_without_bottle` casts get only `mld_temperature_02`, since nothing salinity-based
+applies. The defaults (10 m / Δσθ 0.03, 5 m median, 0–200 m, p_ref 500, 10 km minimum spacing,
+down cast) are provisional until Rasmus answers the dataset's questions Q01–Q05. The dataset emits
+no `sample`: every row keys to the ctd-cast cast, declared in `relationships_cross.csv`.
+
+## Dataset metadata: the 16 CalOOS-sheet proposals reviewed into the record (#79, #96)
+
+Each `dataset_meta.yml` proposal imported from the CalOOS sheet on 2026-09-05 was reviewed field by
+field against its dataset (Betty Huang). What was accurate was merged, what wasn't was rejected
+with a reason, and what was uncertain became a `proposed` question for the provider. The new
+fields are abstracts, creators, associated parties, contacts, keywords, QC statements and
+maintenance, which flow into every dataset page, citation and EML document.
+- **DIC:** creators are now the seven authors of its NCEI citation, in order. The two PIs stay in
+  `pi_names`.
+- **Dungeness crab:** its data source is CDFW's CNRA Open Data page (Christy Juhasz, 2026-09-14).
+- **`sio/pic-zooplankton`:** the proposal is rejected; it described the pending biovolume table
+  (Q01).
+- The proposal files are removed now that they are reviewed.
+
 ## Why each measurement matters: one cited pick, the alternatives beside it
 
 `metadata/measurement_why.csv` now carries, for every measurement key with a face, one authored

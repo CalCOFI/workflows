@@ -548,8 +548,12 @@ contract <- tibble::tribble(
        AND grid_key = 'st60-ln90' AND month = 7 AND depth_bin = 0 AND n_cruises >= 3"),
   "integrity: climatology carries one window, stamped on every row", "zero", glue(
     "SELECT count(*) - 1 AS n FROM (SELECT DISTINCT clim_yr_min, clim_yr_max FROM {rp('climatology')})"),
-  "integrity: climatology depth_bin is a 10 m floor bin within 0-500", "zero", glue(
-    "SELECT count(*) n FROM {rp('climatology')} WHERE depth_bin % 10 <> 0 OR depth_bin < 0 OR depth_bin > 500"),
+  # no 500 m ceiling since calcofi4db 4.15.0: build_climatology()'s depth_max_m defaults to NULL
+  # and the >= n-cruise rule alone stops the table where the data thins (510-720 m on
+  # v2026.09.24). The bound is the pipeline's depth ceiling for any coordinate.
+  "integrity: climatology depth_bin is a 10 m floor bin within 0-CC_DEPTH_MAX_M", "zero", glue(
+    "SELECT count(*) n FROM {rp('climatology')}
+     WHERE depth_bin % 10 <> 0 OR depth_bin < 0 OR depth_bin > {calcofi4db::CC_DEPTH_MAX_M}"),
   # station_uuid (WS-B / Ed Weber's ask, calcofi4db >= 3.32.0): the SWFSC station
   # occupation each event belongs to. Read the way a consumer would — obs -> its
   # sample -> the ichthyo site sample.station_uuid names — and require a real
