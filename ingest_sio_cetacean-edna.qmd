@@ -81,7 +81,7 @@ cc           <- read_calcofi_meta(here("ingest_sio_cetacean-edna.qmd"))
 provider     <- cc$provider
 dataset      <- cc$dataset
 tables_owned <- cc$tables_owned
-ds_key       <- glue("{provider}_{dataset}")
+ds_key       <- as.character(glue("{provider}_{dataset}"))
 dir_label    <- ds_key
 dir_parquet  <- here(glue("data/parquet/{dir_label}"))
 dir_stage    <- cc_stage_path("parquet", dir_label, create = TRUE)
@@ -156,8 +156,13 @@ d_sample <- d_dedup |>
     illumina_name = Illumina_name,
     station_name,
     season        = str_trim(season),
-    line          = num(line),
-    station       = num(station),
+    # line/station from the NCOG sample name (YYYYMM_LLL.L_SSS.S_depth), not the
+    # line/station columns: on 7 rows those disagree with the name, and the
+    # row's own latitude/longitude sit on the name's station (asserted below)
+    line_src      = num(line),
+    station_src   = num(station),
+    line          = num(substr(Sample, 8, 12)),
+    station       = num(substr(Sample, 14, 18)),
     site_key      = normalize_site_key(sprintf("%.1f %.1f", line, station)),
     depth_m       = num(depth),
     latitude      = num(latitude),
@@ -167,7 +172,16 @@ d_sample <- d_dedup |>
     # the anchor the station-visit match searches around (Q06)
     nominal_date  = make_date(2000L + as.integer(substr(cruise, 3, 4)),
                               as.integer(substr(cruise, 5, 6)), 15L))
+xy_name <- cc_calcofi_to_lonlat(d_sample$line, d_sample$station)
+n_ls_fix <- sum(d_sample$line != d_sample$line_src | d_sample$station != d_sample$station_src)
 stopifnot(
+  "every sample name is YYYYMM_LLL.L_SSS.S_depth" =
+    all(grepl("^\\d{6}_\\d{3}\\.\\d_\\d{3}\\.\\d_\\d+(\\.\\d+)?$", d_sample$sample_label)),
+  "the name's station is where the row's own position is (within 0.02 deg)" =
+    all(abs(xy_name$latitude - d_sample$latitude) < 0.02 &
+        abs(xy_name$longitude - d_sample$longitude) < 0.02),
+  "the name's depth is the depth column" =
+    all(as.numeric(sub(".*_", "", d_sample$sample_label)) == d_sample$depth_m),
   "sample_label is unique"   = !anyDuplicated(d_sample$sample_label),
   "every sample has a station, depth and position" =
     !anyNA(d_sample$site_key) && !anyNA(d_sample$depth_m) &&
@@ -183,6 +197,8 @@ d_detection <- d_dedup |>
   transmute(sample_label, species_code, detected = as.integer(cell %in% "x"))
 dbWriteTable(con, "edna_detection", d_detection, overwrite = TRUE)
 
+cat(glue("line/station taken from the sample name; the line/station columns disagree on ",
+         "{n_ls_fix} rows (Q10)"), "\n")
 cat(glue("edna_sample: {nrow(d_sample)} samples ",
          "({sum(d_sample$edna_process == 'sequenced')} sequenced); ",
          "edna_detection: {nrow(d_detection)} rows, {sum(d_detection$detected)} detections"), "\n")
@@ -233,9 +249,21 @@ dbExecute(con, "
   FROM _label_ck l WHERE e.cruise_key IS NULL AND l.cruise_label = e.cruise_label")
 dbExecute(con, "DROP TABLE _label_ck")
 
+# a label none of whose stations ichthyo occupied (CC1611: a Sally Ride cruise with
+# no tows) takes the cruise the release's CTD casts and bottles place on those
+# dates, from the visual survey's crosswalk (sightings Q14 / Q06 here)
+d_xwalk <- read_csv(here("metadata/sio/cetacean-sightings/cruise_label_crosswalk.csv"),
+                    col_types = cols(.default = "c"))
+dbWriteTable(con, "_xwalk", d_xwalk |> select(cruise_label, cruise_key), overwrite = TRUE)
+n_xwalk <- dbExecute(con, "
+  UPDATE edna_sample e SET cruise_key = x.cruise_key
+  FROM _xwalk x WHERE e.cruise_key IS NULL AND x.cruise_label = e.cruise_label")
+dbExecute(con, "DROP TABLE _xwalk")
+
 cat(glue("station visit matched for {visit_match$matched}/{visit_match$total} samples ",
          "({visit_match$pct}%); cruise_key on ",
-         "{dbGetQuery(con, 'SELECT COUNT(cruise_key) FROM edna_sample')[[1]]} samples"), "\n")
+         "{dbGetQuery(con, 'SELECT COUNT(cruise_key) FROM edna_sample')[[1]]} samples ",
+         "({n_xwalk} from the crosswalk)"), "\n")
 visit_match$unmatched |> datatable(caption = "Samples with no ichthyo station visit (no time)", rownames = FALSE)
 ```
 
@@ -320,7 +348,8 @@ dt <- dbGetQuery(con, "SELECT ds_taxa_code, taxon_key FROM dataset_taxon WHERE d
 key_of <- function(code) dt$taxon_key[dt$ds_taxa_code == code]
 stopifnot(
   "every code keys a taxon"             = !anyNA(dt$taxon_key) && nrow(dt) == 7L,
-  "Dc keys Delphinus delphis (Q08)"     = identical(key_of("Dc"), "worms:137094"),
+  "Dc keys Delphinus capensis (Q08)"    = identical(key_of("Dc"), "worms:383816"),
+  "Dc and Dd are distinct taxa (Q08)"   = !identical(key_of("Dc"), key_of("Dd")),
   "Lo keys Sagmatias obliquidens (Q08)" = identical(key_of("Lo"), "worms:1571909"))
 cat(glue("vocabulary: {n_staged} codes; taxon {n_taxon}, dataset_taxon {n_ds_taxon}"), "\n")
 ```
@@ -353,6 +382,8 @@ cat(glue("core projection -- ", paste(names(core), unlist(core), sep = "=", coll
 stopifnot(
   "one sample per eDNA sample"            = core$sample == nrow(d_sample),
   "seven obs per sample"                  = core$obs == 7L * nrow(d_sample),
+  "one obs per sample x taxon (Q08)"      =
+    q1("SELECT COUNT(*) FROM (SELECT sample_key, taxon_key FROM obs GROUP BY ALL HAVING COUNT(*) > 1)") == 0,
   "presences = detections in the source"  = core$obs_present == sum(d_detection$detected),
   "a PCR-negative sample has no presence (Q04)" =
     q1("SELECT COUNT(*) FROM obs WHERE measurement_value = 1

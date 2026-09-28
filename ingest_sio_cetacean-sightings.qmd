@@ -94,7 +94,7 @@ cc           <- read_calcofi_meta(here("ingest_sio_cetacean-sightings.qmd"))
 provider     <- cc$provider
 dataset      <- cc$dataset
 tables_owned <- cc$tables_owned
-ds_key       <- glue("{provider}_{dataset}")
+ds_key       <- as.character(glue("{provider}_{dataset}"))
 dir_label    <- ds_key
 dir_parquet  <- here(glue("data/parquet/{dir_label}"))
 dir_stage    <- cc_stage_path("parquet", dir_label, create = TRUE)
@@ -196,9 +196,21 @@ cat(glue("cetacean_species: {nrow(d_species)} codes, ",
 ```{r}
 #| label: segment
 
-# local clock time -> UTC (Q04): America/Los_Angeles, so daylight saving applies
-local_to_utc <- function(x)
-  with_tz(suppressWarnings(mdy_hm(x, tz = "America/Los_Angeles")), "UTC")
+# local clock time -> UTC (Q04). EDI knb-lter-cce.262.2 records each 2005-2015
+# cruise's own GMT offset: most kept Pacific standard time (UTC-8) all year, even
+# in summer; a few used PDT (UTC-7). Those cruises take their recorded offset
+# (cruise_utc_offset.csv); the rest are read as America/Los_Angeles, daylight
+# saving applied.
+d_utc_offset <- read_csv(file.path(dir_meta, "cruise_utc_offset.csv"),
+                         col_types = cols(utc_offset_h = "i", .default = "c"))
+stopifnot("an offset is 7 or 8 h" = all(d_utc_offset$utc_offset_h %in% 7:8),
+          "one offset per label"  = !anyDuplicated(d_utc_offset$cruise_label))
+local_to_utc <- function(x, label) {
+  off <- d_utc_offset$utc_offset_h[match(label, d_utc_offset$cruise_label)]
+  la  <- with_tz(suppressWarnings(mdy_hm(x, tz = "America/Los_Angeles")), "UTC")
+  fix <- suppressWarnings(mdy_hm(x, tz = "UTC")) + hours(off)
+  if_else(is.na(off), la, fix)
+}
 num <- function(x) suppressWarnings(as.numeric(x))
 
 # the eight rows with no Segment.ID are per-cruise placeholders (length 0, no
@@ -215,8 +227,8 @@ d_segment <- d_ef_raw |>
     season               = str_trim(Season),
     datetime_start_local = StartDateTimeLocal,
     datetime_end_local   = EndDateTimeLocal,
-    datetime_start_utc   = local_to_utc(StartDateTimeLocal),
-    datetime_end_utc     = local_to_utc(EndDateTimeLocal),
+    datetime_start_utc   = local_to_utc(StartDateTimeLocal, cruise_label),
+    datetime_end_utc     = local_to_utc(EndDateTimeLocal, cruise_label),
     latitude_start       = num(StartLat),  longitude_start = num(StartLon),
     latitude_end         = num(EndLat),    longitude_end   = num(EndLon),
     # the core carries one point per event: the segment midpoint
@@ -257,7 +269,7 @@ d_sighting <- d_si_raw |>
     season                = str_trim(Season),
     datetime_local        = DateTimeLocal,
     # '#REF!' on 36 CC0501 rows parses to NA (Q06)
-    datetime_start_utc    = local_to_utc(DateTimeLocal),
+    datetime_start_utc    = local_to_utc(DateTimeLocal, cruise_label),
     latitude              = num(DecLat),
     longitude             = num(DecLong),
     segment_id            = as.integer(num(`segID..NaN..Off.effort.and.or.off.transect..AG.`)),
@@ -326,7 +338,17 @@ The sightings carry a **survey label** (`CC0407`), not a cruise, and no ship. As
 for `farallon_bird-mammal`, `match_cruise_by_track()` matches each sighting to
 the nearest CalCOFI station occupied within a day (the `swfsc_ichthyo` sample
 track, whose `cruise_key`s are exactly the `cruise` reference's) and takes the
-**majority vote per label**. The effort segments take their label's winner.
+**majority vote per label**. The effort segments (the ship's own track) vote the
+same way, and the two votes must agree wherever both exist; each fills the
+other's gaps: CC0501's sightings have no time (Q06) but its effort does, and the
+2022 surveys have sightings but no effort (Q07).
+
+Nine surveys ran on cruises `swfsc_ichthyo` has no tows for (Sally Ride,
+Oceanus and Bold Horizon cruises, 2016-2022). Their cruise comes from
+`cruise_label_crosswalk.csv`: the one cruise the release's CTD casts and bottles
+place on the same dates (Q14), checked here against the ship reference. The
+chunk below asserts that the crosswalk is used only where the ichthyo track has
+no occupation at all during a survey's dates, never to overrule a track match.
 
 ```{r}
 #| label: spatial-cruise
@@ -351,38 +373,105 @@ cruise_match <- match_cruise_by_track(
   datetime_col = "datetime_start_utc", lon_col = "longitude", lat_col = "latitude",
   ref_datetime_col = "datetime", group_col = "cruise_label", window_days = 1)
 
-# the segments take the winner of their label; a label with no sightings (a
-# cruise with effort but nothing seen) stays NULL and is counted below
-dbExecute(con, "ALTER TABLE cetacean_segment ADD COLUMN IF NOT EXISTS cruise_key VARCHAR")
-dbExecute(con, "
-  UPDATE cetacean_segment g SET cruise_key = (
-    SELECT ANY_VALUE(s.cruise_key) FROM cetacean_sighting s
-    WHERE s.cruise_label = g.cruise_label AND s.cruise_key IS NOT NULL)")
+# the effort segments vote on the same labels from the ship's own positions
+seg_match <- match_cruise_by_track(
+  con, "cetacean_segment", "cruise_track",
+  datetime_col = "datetime_start_utc", lon_col = "longitude", lat_col = "latitude",
+  ref_datetime_col = "datetime", group_col = "cruise_label", window_days = 1)
 
-cat(glue("cruise_key resolved on {cruise_match$matched}/{cruise_match$total} ",
-         "sightings ({cruise_match$pct}%)"), "\n")
-cruise_match$groups |>
-  datatable(caption = "Cruise label -> cruise_key (vote share; NULL = unresolved)",
+# surveys on cruises with no ichthyo tows: the cruise the release's CTD casts and
+# bottles place on the same dates (Q14); each key must be the label's year-month
+# plus its ship's NODC code, so a typo in the crosswalk cannot slip through
+d_ship  <- dbGetQuery(con, glue(
+  "SELECT ship_key, ship_nodc FROM read_parquet('{cc_stage_path('parquet','swfsc_ichthyo','ship.parquet')}')"))
+d_xwalk <- read_csv(file.path(dir_meta, "cruise_label_crosswalk.csv"), col_types = cols(.default = "c")) |>
+  left_join(d_ship, by = "ship_key") |>
+  mutate(minted = paste0("20", substr(cruise_label, 3, 4), "-", substr(cruise_label, 5, 6), "-", ship_nodc))
+stopifnot(
+  "every crosswalk ship is in the ship reference" = !anyNA(d_xwalk$ship_nodc),
+  "each crosswalk cruise_key is the label's year-month + its ship's NODC code" =
+    all(d_xwalk$minted == d_xwalk$cruise_key))
+
+d_labels <- dbGetQuery(con, "
+  SELECT cruise_label FROM cetacean_sighting UNION SELECT cruise_label FROM cetacean_segment")
+grp <- d_labels |>
+  left_join(cruise_match$groups |> select(cruise_label, sighting_key = cruise_key,
+                                          sighting_votes = votes, sighting_share = share),
+            by = "cruise_label") |>
+  left_join(seg_match$groups |> select(cruise_label, segment_key = cruise_key,
+                                       segment_votes = votes, segment_share = share),
+            by = "cruise_label") |>
+  left_join(d_xwalk |> select(cruise_label, crosswalk_key = cruise_key), by = "cruise_label") |>
+  mutate(
+    cruise_key = coalesce(sighting_key, segment_key, crosswalk_key),
+    cruise_key_method = case_when(
+      !is.na(sighting_key)  ~ "track: sightings",
+      !is.na(segment_key)   ~ "track: effort",
+      !is.na(crosswalk_key) ~ "crosswalk: release CTD/bottle (Q14)")) |>
+  arrange(cruise_label)
+stopifnot(
+  "the sighting and segment votes agree wherever both resolve a label" =
+    with(grp, all(is.na(sighting_key) | is.na(segment_key) | sighting_key == segment_key)),
+  "the crosswalk only fills labels the track cannot resolve" =
+    with(grp, all(is.na(crosswalk_key) | (is.na(sighting_key) & is.na(segment_key)))))
+
+# each fills the other's gaps (CC0501 sightings from its effort; 2022 effort-less
+# labels from their sightings; the Q14 surveys from the crosswalk)
+dbWriteTable(con, "_label_ck", grp |> select(cruise_label, cruise_key), overwrite = TRUE)
+for (tbl in c("cetacean_sighting", "cetacean_segment"))
+  dbExecute(con, glue("
+    UPDATE {tbl} t SET cruise_key = l.cruise_key FROM _label_ck l
+    WHERE t.cruise_key IS NULL AND l.cruise_key IS NOT NULL AND l.cruise_label = t.cruise_label"))
+dbExecute(con, "DROP TABLE _label_ck")
+
+n_sight_ck <- dbGetQuery(con, "SELECT COUNT(cruise_key) FROM cetacean_sighting")[[1]]
+cat(glue("cruise_key resolved on {n_sight_ck}/{cruise_match$total} sightings ",
+         "({round(100 * n_sight_ck / cruise_match$total, 1)}%; ",
+         "{cruise_match$matched} by their own label vote)"), "\n")
+grp |>
+  datatable(caption = "Cruise label -> cruise_key: sighting vote, effort-segment vote, crosswalk (NULL = unresolved)",
             rownames = FALSE, filter = "top") |>
-  formatPercentage("share", 1)
+  formatPercentage(c("sighting_share", "segment_share"), 1)
 ```
 
 ```{r}
 #| label: cruise-match-validate
 
-grp  <- cruise_match$groups
 dupe <- grp$cruise_key[!is.na(grp$cruise_key)]
 dupe <- dupe[duplicated(dupe)]
 n_seg_null <- dbGetQuery(con, "SELECT COUNT(*) FROM cetacean_segment WHERE cruise_key IS NULL")[[1]]
+unresolved_labels <- grp$cruise_label[is.na(grp$cruise_key)]
+xwalk_labels      <- grp$cruise_label[grp$cruise_key_method %in% "crosswalk: release CTD/bottle (Q14)"]
+xw_sql            <- paste0("'", c(xwalk_labels, "_"), "'", collapse = ", ")
+# a label keyed by the crosswalk (or left unresolved) must be one whose cruise the
+# ichthyo track lacks entirely (no occupation within a day of its dates), never a
+# failed match
+dbWriteTable(con, "_off_track", tibble(cruise_label = c(unresolved_labels, xwalk_labels)),
+             overwrite = TRUE)
+d_unres_track <- dbGetQuery(con, "
+  WITH lab AS (
+    SELECT cruise_label,
+           MIN(datetime_start_utc) :: DATE AS dmin,
+           MAX(datetime_start_utc) :: DATE AS dmax
+    FROM (SELECT cruise_label, datetime_start_utc FROM cetacean_sighting
+          UNION ALL SELECT cruise_label, datetime_start_utc FROM cetacean_segment)
+    GROUP BY 1)
+  SELECT l.cruise_label, COUNT(*) AS n_track
+  FROM lab l JOIN cruise_track t ON t.datetime :: DATE BETWEEN l.dmin - 1 AND l.dmax + 1
+  WHERE l.cruise_label IN (SELECT cruise_label FROM _off_track)
+  GROUP BY 1")
+dbExecute(con, "DROP TABLE _off_track")
 stopifnot(
-  "cruise_key must resolve on >90% of sightings" = cruise_match$pct > 90,
+  "a crosswalk or unresolved label has no ichthyo occupation during its dates (Q14)" =
+    nrow(d_unres_track) == 0,
   "every cruise label must resolve to a distinct cruise_key" = length(dupe) == 0,
-  "a resolved cruise_key must exist in the track (no dangling FK)" =
-    dbGetQuery(con, "
+  "a track-resolved cruise_key exists in the track (no dangling FK)" =
+    dbGetQuery(con, glue("
       SELECT COUNT(*) FROM cetacean_sighting WHERE cruise_key IS NOT NULL
-        AND cruise_key NOT IN (SELECT cruise_key FROM cruise_track)")[[1]] == 0)
+        AND cruise_label NOT IN ({xw_sql})
+        AND cruise_key NOT IN (SELECT cruise_key FROM cruise_track)"))[[1]] == 0)
 cat(glue(
-  "{sum(!is.na(grp$cruise_key))}/{nrow(grp)} labels resolved; unresolved: ",
+  "{sum(!is.na(grp$cruise_key))}/{nrow(grp)} labels resolved ({length(xwalk_labels)} by the crosswalk); unresolved: ",
   "{paste(grp$cruise_label[is.na(grp$cruise_key)], collapse = ', ')}; ",
   "{n_seg_null} segment(s) without a cruise_key"), "\n")
 ```
@@ -494,7 +583,8 @@ key_of <- function(code) dt$taxon_key[dt$ds_taxa_code == code]
 stopifnot(
   "every staged code has a taxon_key"   = !anyNA(dt$taxon_key),
   "Beba and Bbo are one taxon"          = identical(key_of("Beba"), key_of("Bbo")),
-  "Dc keys Delphinus delphis (Q10)"     = identical(key_of("Dc"), "worms:137094"),
+  "Dc keys Delphinus capensis (Q10)"    = identical(key_of("Dc"), "worms:383816"),
+  "Dc and Dd are distinct taxa (Q10)"   = !identical(key_of("Dc"), key_of("Dd")),
   "Lo keys Sagmatias obliquidens (Q10)" = identical(key_of("Lo"), "worms:1571909"))
 cat(glue("vocabulary: {n_staged} codes staged, {length(excluded_codes)} excluded (Oth); ",
          "taxon {n_taxon}, dataset_taxon {n_ds_taxon}, taxon_group {n_tx_group}"), "\n")
@@ -639,12 +729,11 @@ the dataset's contract, each with its count and reason; anything else fails.
 
 results <- validate_for_release(con, checks = "all", strict = FALSE)
 
-unresolved_labels <- grp$cruise_label[is.na(grp$cruise_key)]
 lbl_sql <- paste0("'", c(unresolved_labels, "_"), "'", collapse = ", ")
 nullable <- tribble(
   ~table,   ~column,             ~n,                                              ~reason,
   "sample", "cruise_key",        q1("SELECT COUNT(*) FROM sample WHERE cruise_key IS NULL"),
-    glue("labels with no track match ({paste(unresolved_labels, collapse = ', ')}), and their segments"),
+    glue("labels resolved by neither the ichthyo track nor the crosswalk ({paste(unresolved_labels, collapse = ', ')}), and their segments"),
   "sample", "parent_sample_key", sum(is.na(d_sighting$segment_id)) + n_seg_orphan + nrow(d_segment),
     "transects are roots; off-effort sightings, and those whose segment_id is not in the effort file, have no parent",
   "sample", "site_key",          nrow(d_segment) + nrow(d_sighting),

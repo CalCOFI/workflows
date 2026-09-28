@@ -80,7 +80,7 @@ cc           <- read_calcofi_meta(here("ingest_sio_cetacean-sonobuoy.qmd"))
 provider     <- cc$provider
 dataset      <- cc$dataset
 tables_owned <- cc$tables_owned
-ds_key       <- glue("{provider}_{dataset}")
+ds_key       <- as.character(glue("{provider}_{dataset}"))
 dir_label    <- ds_key
 dir_parquet  <- here(glue("data/parquet/{dir_label}"))
 dir_stage    <- cc_stage_path("parquet", dir_label, create = TRUE)
