@@ -231,7 +231,20 @@ cat(glue("phyto_sample {nrow(phyto_sample)} (4 regions x {n_distinct(phyto_sampl
 ```{r}
 #| label: taxon-measurement
 
-# WoRMS aphia_ids resolved + cached in metadata/.../taxon_worms.csv (Q05)
+# WoRMS aphia_ids resolved + cached in metadata/.../taxon_worms.csv (Q05).
+# `species` is the source's name, verbatim; `name_query` is what was looked up,
+# under these rules (2026-09-28):
+# - a clear spelling slip is fixed in the query only (Rhisosolenia -> Rhizosolenia,
+#   brightwelli -> brightwellii); the species keys its accepted WoRMS record
+# - an unknown species of a named genus -- "sp. 1", "sp. a", "spp.", "uncertain
+#   species", a size class, spores, a "complex", a "cf." determination, a species
+#   WoRMS does not hold, and species of ONE genus counted together ("A + A. b") --
+#   keys that genus, as the source spells it ("Ceratium spp.", not WoRMS's Tripos)
+# - species of two genera counted together key nothing of ours: they fall to the
+#   functional-group class and are asked of the provider (Q09)
+# Calcidiscus leptoporus (worms:235923) and Rhabdosphaera clavigera (worms:235972)
+# are accepted species the WoRMS name services never return; they are filled from
+# their AphiaID records.
 worms <- read_csv(here("metadata/calcofi/phytoplankton/taxon_worms.csv")) |>
   mutate(species_code = as.character(species_code))
 phyto_taxon <- worms |>
@@ -257,6 +270,31 @@ phyto_measurement <- d_taxa_long |>
 dbWriteTable(con, "phyto_measurement", phyto_measurement, overwrite = TRUE)
 cat(glue("phyto_taxon {nrow(phyto_taxon)} ({sum(!is.na(phyto_taxon$aphia_id))} WoRMS-matched); ",
          "phyto_measurement {nrow(phyto_measurement)}"), "\n")
+
+# Codes that reach ONLY their functional-group class ----
+# A code with no AphiaID in taxon_worms.csv and no ds_taxa_code row in
+# metadata/taxon_override.csv falls through to the six ds_common_name rows there
+# and keys the class (Bacillariophyceae, Dinophyceae, ...). That is right for the
+# source's own unidentified classes ("indistinguished pennate diatoms", "pennate
+# sp. 6") and for species of two genera counted together; it is wrong for a named
+# taxon whose lookup failed. Until 2026-09-28, 53 codes were that -- among them
+# both Pseudo-nitzschia size classes, Calcidiscus leptoporus and Ditylum
+# brightwellii -- so "Diatoms, not identified further" silently absorbed named
+# taxa. This table is the check: every row should be one of those two kinds.
+# `taxa = "other"` rows are excluded: no class row reaches them; they resolve by
+# code override or key dataset-locally (local_allow, below).
+ovr_codes <- read_csv(here("metadata/taxon_override.csv"), show_col_types = FALSE) |>
+  filter(dataset_key == "calcofi_phytoplankton", match_column == "ds_taxa_code") |>
+  pull(match_value) |> as.character()
+class_only <- phyto_taxon |>
+  filter(is.na(aphia_id), !species_code %in% ovr_codes,
+         !is.na(species), taxa != "other") |>
+  select(species_code, taxa, species)
+cat(glue("{nrow(class_only)} named codes key only their functional-group class ",
+         "(no AphiaID in the cache, no code-keyed override)"), "\n")
+datatable(class_only, caption = paste(
+  "Codes keyed only to their functional-group class.",
+  "Expected: the source's own unidentified classes, and species of two genera counted together."))
 ```
 
 ## Measurement Types + Finalize

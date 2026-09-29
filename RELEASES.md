@@ -8,6 +8,62 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## Phytoplankton: named codes stop falling into "not identified further"; one rule for unknown species
+
+**53 codes with real names keyed only their functional-group class.** The ingest's WoRMS cache
+(`metadata/calcofi/phytoplankton/taxon_worms.csv`) had no AphiaID for 75 of the source's 384 defined
+species codes. Those fell through to the six `ds_common_name` rows in `metadata/taxon_override.csv`
+and keyed their class (Bacillariophyceae, Dinophyceae, Coccolithophyceae, Dictyochophyceae). That
+is right for the source's own unidentified classes ("indistinguished pennate diatoms", "pennate
+sp. 6"). For 53 real names it was a failed lookup, so "Diatoms, not identified further" and its
+siblings silently absorbed named taxa. Among them were both *Pseudo-nitzschia* size classes (codes
+94 and 400: cells counted in 405 and 234 source samples, 1996–2022), *Calcidiscus leptoporus* (223)
+and *Ditylum brightwellii* (43). The lookups failed for four reasons:
+
+- **Source spelling slips:** *Rhisosolenia*, *brightwelli*, *obtusidiens*, *Lithodesmum*, *octanarius*, …
+- **Qualifiers the name cleaner turned into an empty query:** "slim" / "robust Pseudo-nitzschia spp.".
+- **Open nomenclature queried verbatim:** "Hemiaulus 1".
+- **Accepted species the WoRMS name services never return:** *Calcidiscus leptoporus*
+  (worms:235923) and *Rhabdosphaera clavigera* (worms:235972).
+
+**One rule for what the source names.** `species` stays verbatim; `name_query` is what is looked up:
+
+- **Clear spelling slips** are fixed in the query only. The species keys its accepted WoRMS record
+  (16 codes).
+- **An unknown species of a named genus keys that genus.** This covers "sp. 1" / "sp. a", "spp.",
+  size classes, spores, "complex", "cf." determinations, a species WoRMS does not hold (*Prorocentrum
+  cinctum*), and species of one genus counted together ("Ceratium kofoidii + C. boehmii"). The genus
+  is the one the source names, not WoRMS's current genus ("Ceratium spp.", not *Tripos*) (92 codes).
+- **Older rows are brought into line too.** The rule also applies to the 57 older "cf." and combined
+  rows, which keyed a species ("Chaetoceros cf. subtilis" keyed *C. subtilis*; "Actinoptychus
+  adriaticus + A. vulgaris" keyed *A. adriaticus*). Those species items now fold into their genus.
+- **Species of two genera counted together key nothing of ours.** "Dactyliosolen phuketensis +
+  Guinardia striata", "Mastogloia woodiana + pennate a" and "indistinguished Gyrosigma spp. +
+  Pleurosigma spp." fall to their class, and `questions.csv` Q09 asks the provider.
+- **Same spelling, wrong author.** Five cached rows keyed a later, unaccepted name spelled like the
+  source's, not the accepted species. They now key the accepted record:
+  - *Chaetoceros debilis* (codes 367 and 521): Leegaard 1920 (worms:961758) → Cleve 1894 (worms:149219).
+  - *Chaetoceros peruvianus* (34): Gran 1908 (worms:961865) → Brightwell 1856 (worms:178185).
+  - *Coscinodiscus perforatus* (501): Cleve & Möller 1878 (worms:962307) → Ehrenberg 1844 (worms:149272).
+  - "*Rhizosolenia hebetata* f. *hebetata*" (390) had keyed *R. hebetata* (Hensen) Margalef, a
+    synonym of *R. semispina*, so it merged with f. *semispina* (code 62). It now keys its own form
+    (worms:163347).
+
+**Result.** By the resolution order applied to the committed registries:
+
+- 115 codes change `taxon_key`: 53 leave their class, 57 move from a species to its genus, and 5
+  move to the accepted record of the same name.
+- No other code moves.
+- 19 codes stay at class level: 16 unidentified classes and 3 two-genus entries.
+- Distinct phytoplankton `taxon_key`s go from 300 to 296.
+- The ingest now tables every code left at class level.
+- `obs` rows of the 115 codes change key; the release measures how many.
+
+**Two phytoplankton common names.** WoRMS, GBIF, ITIS and NCBI Taxonomy were checked for every
+phytoplankton taxon. Beyond the classes, only two species have an English name, and both are WoRMS's
+single English vernacular: *Noctiluca scintillans* "sea sparkle" (worms:109921) and *Pyrocystis
+fusiformis* "ocean night light" (worms:110328). They are added to `metadata/taxon_common.csv`.
+
 ## CTD: the corrected 2607 file, provider flags on every series, cruise-corrected oxygen
 
 **Five recent cruises regain their offshore stations.** The first 20-2607SH_CTDPrelim.zip wrote station numbers
