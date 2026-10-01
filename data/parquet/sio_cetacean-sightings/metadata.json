@@ -6,7 +6,7 @@
   "tables": {
     "sample": {
       "name_long": "Sample",
-      "description_md": "One row per physical sampling event at its native grain (site, tow, net, cast, bottle, underway, transect, region pool). An adjacency list: `parent_sample_key` points at the containing event and `root_sample_key` at the top of the chain, so counting distinct events at any level is a single `GROUP BY`."
+      "description_md": "One row per physical sampling event at its native grain (site, tow, net, subsample, cast, bottle, water, underway, transect, sighting, deployment, scan, region pool). An adjacency list: `parent_sample_key` points at the containing event and `root_sample_key` at the top of the chain, so counting distinct events at any level is a single `GROUP BY`."
     },
     "obs": {
       "name_long": "Observation",
@@ -399,11 +399,11 @@
     },
     "sample.sample_type": {
       "name_long": "Sample Type",
-      "description_md": "Event grain: `site`, `tow`, `net`, `cast`, `bottle`, `underway`, `transect` or `region_pool`."
+      "description_md": "Event grain: `site`, `tow`, `net`, `subsample`, `cast`, `bottle`, `water` (an eDNA water sample), `underway`, `transect` (a visual-survey effort segment), `sighting`, `deployment` (a sonobuoy), `scan` (one analysed hour of a recording) or `region_pool`."
     },
     "sample.parent_sample_key": {
       "name_long": "Parent Sample Key",
-      "description_md": "The containing event (net → tow → site; bottle → cast). NULL at the top of the chain. Flat adjacency list: attributes are not inherited."
+      "description_md": "The containing event (net → tow → site; bottle → cast; sighting → transect; scan → deployment). NULL at the top of the chain. Flat adjacency list: attributes are not inherited."
     },
     "sample.root_sample_key": {
       "name_long": "Root Sample Key",
@@ -590,12 +590,12 @@
       "shared": true
     },
     "obs": {
-      "rows": 6107,
+      "rows": 6097,
       "owned": true,
       "shared": true
     },
     "obs_attribute": {
-      "rows": 23480,
+      "rows": 29194,
       "owned": true,
       "shared": true
     },
@@ -620,7 +620,7 @@
       "shared": true
     },
     "measurement_type": {
-      "rows": 219,
+      "rows": 220,
       "owned": true,
       "shared": true
     }
@@ -629,19 +629,19 @@
     {
       "source": "https://raw.githubusercontent.com/CalCOFI/marmam-app/7bc0e18d7cb0ac7ba58d7bc4d47e57c50bd9bc80/data/whale_visual_data/CalCOFI_2004-2022_CombinedSightings.csv",
       "method": "file_mtime",
-      "accessed": "2026-09-28T01:04:01Z",
+      "accessed": "2026-10-01T11:44:24Z",
       "bytes": 982900
     },
     {
       "source": "https://raw.githubusercontent.com/CalCOFI/marmam-app/7bc0e18d7cb0ac7ba58d7bc4d47e57c50bd9bc80/data/whale_visual_data/CalCOFI_2004-2021_Effort_OnTransectOnEffortONLY_MNA.csv",
       "method": "file_mtime",
-      "accessed": "2026-09-28T01:04:02Z",
+      "accessed": "2026-10-01T11:44:24Z",
       "bytes": 389240
     },
     {
       "source": "https://raw.githubusercontent.com/CalCOFI/marmam-app/7bc0e18d7cb0ac7ba58d7bc4d47e57c50bd9bc80/data/CalCOFI_species_codes.csv",
       "method": "file_mtime",
-      "accessed": "2026-09-28T01:04:02Z",
+      "accessed": "2026-10-01T11:44:25Z",
       "bytes": 1191
     }
   ]
