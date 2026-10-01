@@ -227,15 +227,21 @@ new_slide()
 headline("QA/QC", "Review caught the release-breakers before the release; all fixed today")
 tbl(ft_tbl(data.frame(
   PR      = c("#117 cetaceans", "#118 eDNA", "#118 eDNA", "#119 phytoplankton", "#116 iron", "#116 iron"),
-  Finding = c("13 taxon overrides for held-out datasets read as orphans by the release check",
-              "the assay attribute is not a registered measurement type",
-              "one row per ASV, not per detection: 2–17 rows for one taxon in one filter",
-              "the corrected names never re-ran through the ingest, so the taxon tables are stale",
-              "8 malformed rows in the field-redefinition CSV shift a column's units",
-              "parquet rendered without the cloud upload"),
-  Effect  = c("next release stops", "next release stops", "counts read as abundance",
-              "the fix would not ship", "wrong units in metadata", "dataset missing from the release"),
-  check.names = FALSE), size = 13, widths = c(2.2, 6.6, 3.3)))
+  `What review found` = c(
+    "Species-name fixes added for the whale datasets, which are held back from release, look like mistakes to the release's safety check",
+    "A new field (which lab test, or 'assay', detected the DNA) was never added to the list of known measurement types",
+    "One fish species in one water sample appeared as 2–17 separate rows, one per DNA sequence variant",
+    "The corrected species names were never run through the import, so the published species tables were still the old ones",
+    "8 lines in a settings file had stray commas, which pushed the units into the wrong column",
+    "The data files were built on a laptop but never uploaded to the cloud store the release reads from"),
+  `What would have happened` = c(
+    "The next database release would fail its checks and stop",
+    "The next database release would fail its checks and stop",
+    "Users would add up the rows and mistake DNA read counts for fish abundance",
+    "The name corrections would silently not reach users",
+    "Iron values would be published with the wrong units",
+    "The iron dataset would be missing from the release"),
+  check.names = FALSE), size = 12, widths = c(1.9, 6.0, 4.2)))
 footer("calcofi.io/docs · validation gates")
 notes("Sources: the four review reports. Each finding cites file:line there (e.g. release_database.qmd:802-804 for #117,",
       "release_database.qmd:709-720 for #118).")
@@ -375,6 +381,111 @@ tbl(ft_tbl(data.frame(
   check.names = FALSE), size = 13, widths = c(2.0, 10.1)))
 footer("calcofi.io")
 notes("Dates: Tactiq 9/23 DMP (10/8, El Niño cruise), Gmail (SOCCR meeting mid next week).")
+
+# ── speaker notes: plain-English explanation of every slide ──────────────────────────────────────
+# set last, so each slide's notes are the full explanation (the sources stay at the end of each)
+NOTES <- list(
+`1` = c(
+"Purpose of this meeting: bring Erin, Mark and Betty up to date on the CalCOFI integrated database, get decisions on a handful of open questions, and agree what goes into the next release before the El Niño cruise on 31 October.",
+"Two themes. First, datasets are now arriving and being checked much faster: five new datasets came in this round, from Betty, and all were reviewed, corrected and merged today. Second, we have started publishing derived products: values computed from the raw CTD profiles, such as mixed-layer depth, that answer questions scientists ask directly, rather than raw measurements they must process themselves."),
+`2` = c(
+"The four tiles, left to right.",
+"5 new datasets: dissolved iron from the CCE-LTER program; three whale (cetacean) datasets from the marine-mammal app (visual sightings, acoustic sonobuoy recordings, and environmental DNA); and the October 2022 CalCOFI vertebrate eDNA survey. 'eDNA' (environmental DNA) means DNA shed by animals into seawater, filtered from water samples and sequenced to tell which species were present.",
+"53 named phytoplankton: Venrick's phytoplankton counts had 53 real species names that the name-lookup service failed to match, so they were being lumped into catch-all groups like 'Diatoms, not identified further'. They now carry their proper names.",
+"1 release ready: the database release prepared on 24 September had passed all its checks but was paused before publishing. It was published today as version v2026.10.01.",
+"Oct 31: the El Niño cruise departs. Rasmus wants the derived products and the transect plotter ready before then, so the team at sea and the public can follow El Niño as it develops.",
+"Sources: the PR descriptions (workflows #116–#119), the 9/23 review round, and the 9/23 DMP meeting transcript."),
+`3` = c(
+"What 'a release' is: a frozen, numbered snapshot of the whole integrated database (every dataset, in one consistent set of tables), published to cloud storage. The version number is the date it was cut. A pointer file called latest.txt tells every app and package which version is current, so publishing a release means moving that pointer, only after an automated suite of 87 consumer checks passes.",
+"What v2026.10.01 contains, bullet by bullet. (1) CTD fixes: CTD is the instrument package lowered on each station to profile temperature, salinity, oxygen and more. One cruise file (July 2026) had station numbers of 100 and above cut to three digits, so offshore stations went missing; Kelsey corrected it, and we found and repaired the same problem in four more cruises. (2) The CTD team's own quality flags now travel with every CTD measurement, so questionable values never feed an average or a map. (3) Cruise-corrected oxygen: the oxygen sensor is calibrated against bottle samples; 'station-corrected' uses bottles from that station, 'cruise-corrected' uses the whole cruise's bottles, and so it exists at more stations. (4) A new derived-products dataset (see slide 7). (5) Crab samples now link to their cruise. (6) The 'normal' (climatology) used to compute anomalies now goes all the way to the bottom, not just 500 m. (7) The measurements catalog, the public pages describing each measurement, gained anomaly charts.",
+"Status box: promoted at 16:22 today; 87 checks passed, none failed, 4 skipped by design. The plotter, station viewer and query app rebuilt from it automatically. Zenodo issued the citable DOI 10.5281/zenodo.23085119.",
+"Source: RELEASES.md, section v2026.10.01; test_results.json."),
+`4` = c(
+"This slide answers 'what has been merged versus what has been released'. Merged means the code is accepted into the main branch; released means it is in the published database users read. They differ.",
+"Column 1, Released: live today in v2026.10.01 (details on slide 3).",
+"Column 2, Merged and ships in the next release: iron, the phytoplankton name fixes, and the provider answers we recorded. Nothing more needs doing; they go out automatically with the next release.",
+"Column 3, Merged but held: the three whale datasets and the 2022 eDNA are in the code base but carry a switch, 'in_release: false', that keeps them out of every release. Why: the data providers have not yet told us the licence, the preferred citation, or how to interpret some fields, and we will not publish data under terms we have guessed. When they answer, we flip the switch, re-run the import and they ship. The iron bioassay result is held for the same reason (its units are unknown).",
+"Column 4, Open: a check for CTD values that wrongly stay constant from surface to bottom (from Rasmus's screenshot, slide 8) is written but not merged, because it needs a one-hour re-run of the CTD import first. The documentation change for eDNA waits for the eDNA release. 'Not started' lists the work queued for the next release.",
+"Source: the plan's 'Release ledger' section; RELEASES.md '# Unreleased'."),
+`5` = c(
+"The five pull requests (PRs; proposed code changes reviewed before merging) from Betty this round, all merged today after review and fixes.",
+"Iron (#116): dissolved iron in seawater from 2002–2004 CalCOFI cruises, 170 samples, from the CCE-LTER archive. Iron limits plankton growth in parts of the California Current.",
+"2022 eDNA (#118): 47 water filters from the October 2022 cruise, sequenced for fish and other vertebrate DNA. Reworked today so each row is one species in one filter for one lab test, rather than one row per DNA variant. Held from release until the provider answers 8 questions.",
+"Whales (#117): 6,107 visual sightings, 3,244 hours of acoustic recordings of blue, fin and humpback whale calls, and 133 eDNA samples. Held until licence and citation are settled.",
+"Phytoplankton names (#119): fixes the 53 misfiled species names, and 118 species codes now point to the correct taxonomic record. The number of observations is unchanged.",
+"Station viewer (db-viz-station #16): presentation fixes requested by Pooh (Venrick's review), merged with the names fix.",
+"Sources: the PR descriptions and review reports in '2026-10-01 review/'."),
+`6` = c(
+"This slide shows why careful review matters: three of the five PRs contained a problem that would have broken or corrupted the next release. Each was caught in review and fixed today. Row by row:",
+"Whales (#117): the PR added corrections to species names for the whale datasets. The release has a safety check that stops if a species correction points at a dataset it cannot find, because that is usually a typo. The whale datasets are deliberately held out, so the check could not find them and would have stopped the whole next release. Fixed by teaching the check about held-out datasets.",
+"eDNA (#118), first row: the PR recorded which lab test (assay) found each DNA detection, but never registered 'assay' in the list of known measurement types. Another release check requires every measurement to be registered, so again the next release would have stopped.",
+"eDNA (#118), second row: DNA sequencing returns many slightly different sequence variants (ASVs) for the same species. The import kept one row per variant, so one fish could appear 17 times in one sample. Anyone summing the rows would mistake DNA read counts for how many fish there were. Fixed: one row per species, per filter, per assay, labelled clearly as 'reads, not abundance'.",
+"Phytoplankton (#119): the name corrections were made in the reference tables but the import was never re-run, so the published tables still had the old names. The fix would have merged and silently changed nothing. Fixed by re-running the import.",
+"Iron (#116), first row: a configuration file had stray commas in 8 lines, which shifted the units into the wrong column, so iron would have been labelled with the wrong units.",
+"Iron (#116), second row: the data were built on a laptop with the cloud upload switched off, so the release, which reads from the cloud, would not have found the iron data. Fixed by re-running with the upload on.",
+"Sources: the review reports (e.g. release_database.qmd lines 802–804 for #117, lines 709–720 for #118)."),
+`7` = c(
+"Derived products are values computed from the raw CTD profiles that answer a scientific question directly. This is new territory for the database.",
+"Released today in the calcofi_ctd-derived dataset. Sigma-theta: seawater density computed from temperature and salinity, from both sensors. Spiciness: a measure of whether water is warm-and-salty or cold-and-fresh at the same density; it traces the California Undercurrent, which strengthens during El Niño. Mixed-layer depth (MLD): how deep the well-mixed surface layer goes, one value per station visit, computed three standard ways. Chlorophyll maximum: the depth and strength of the subsurface chlorophyll peak, where phytoplankton concentrate. Integrated chlorophyll: total chlorophyll in the top 200 m.",
+"Built but not released: relative geostrophic flow (current speeds computed from the density field); Rasmus found the speeds too high, so it is held while we check the method.",
+"Next, using Rasmus's own definitions (sent 24 September): MLD by CalCOFI's historical rule (density increase of 0.02 kg/m3 below 10 m) as the headline; the chlorophyll maximum smoothed with a 3 m running mean instead of today's 5 m median; the nitracline (depth where nitrate reaches 1 micromolar); hypoxic boundaries (depths where oxygen drops to 2.4, 1.4 and 0.5 mL/L, the thresholds for mild, hypoxic and severe low oxygen); pycnocline depth and buoyancy frequency (how sharply density changes with depth); and long-term averages from bottle samples for 1949–2013 and 1993–2013.",
+"Two caveats: the public dataset page lists only the two profile variables, not the per-station values, which is a website fix filed as issue #26. And the Explorer maps of these products are not built yet (explore#13).",
+"Sources: the released data files; metadata/measurement_type.csv; Rasmus's emails of 9/22 and 9/24."),
+`8` = c(
+"On 29 September Rasmus sent two screenshots of the CTD transect plotter (the web app that draws a vertical slice of the ocean along a line of stations) saying it did not show the data correctly. Both cases are from the April 2025 cruise on the NOAA ship Bell M. Shimada, line 93.3 off San Diego.",
+"Top: station-corrected oxygen appears only between stations 45 and 55. The cause is in the source file itself: that corrected oxygen exists at only 3 of 14 stations, because the correction needs a deep cast with about ten bottle samples, and on this preliminary file only three casts qualified. The plotter then shaded the gap between them as if the whole section were sampled, which was misleading.",
+"Bottom: cruise-corrected estimated nitrate shows vertical stripes. Real nitrate rises from near zero at the surface to about 40 micromolar at 500 m, but this column holds one number per station from top to bottom, so it cannot be a nitrate profile. Across all CTD files it is constant like this on 441 of 5,066 station visits on 20 cruises, mostly as zeros. We asked Rasmus and Kelsey whether the column is an offset or simply not filled in (question 40).",
+"Note: an earlier version of these findings named two cruises wrongly; those turned out to be marked 'missing' (-99) rather than constant. The numbers here are from the full survey.",
+"Sources: the 2504SH source CSV; the plotter's published section file; libs/census_depth_constant_ctd.R."),
+`9` = c(
+"The same section on the live site this afternoon, after today's release and the plotter changes (ctd-transects #12).",
+"Top: the new cruise-corrected oxygen is offered instead, and covers the whole section. The sparse station-corrected version is withheld, and a note under the controls says so and why ('data at 3 of 15 stations').",
+"Bottom: the station-corrected nitrate shows the real profile, rising from about 5 to 40 micromolar with depth. The suspect cruise-corrected nitrate is withheld with a note ('constant with depth at every station').",
+"The general rules now applied to every section: a variable is shown only where at least 3 stations, and at least half the stations, have it; a variable that does not change with depth anywhere is withheld; and sections with fewer than 3 stations are not offered at all, as Rasmus suggested.",
+"Links for these views are in the reply drafted to Rasmus."),
+`10` = c(
+"Who we owe a reply, and about what. Drafts for the first four are ready in Gmail for Ben to review.",
+"Rasmus Swalethorp (CTD and hydrography lead): Ben promised an update by today; it covers the release, his screenshots, and adopting his definitions for the derived products.",
+"Ed Weber (NOAA Southwest Fisheries Science Center): sent new versions of the fish larvae tables, which change their layout, and asked that ships be identified by ICES codes rather than the NODC codes our cruise identifier uses. The draft proposes keeping our identifier as is and adding the ICES code as an extra column.",
+"Kelsey Vogel (CTD data analyst): asked on 14 September for access to replace files. A draft thanks her, asks her for corrected files for four more cruises, and asks her to confirm a faulty temperature sensor on the July 2026 cruise.",
+"Ho Jung Yoo (UC San Diego Library): asked how to name cruises for the crab data deposit; Ben's answer went only to Erin and Betty, and the draft sends it to her.",
+"Christy Juhasz (California Department of Fish and Wildlife): waiting for the Library's web address to link from CDFW's portal.",
+"Other providers: each new dataset comes with a list of questions (licence, citation, units); Betty sends them after Erin reviews.",
+"Source: '2026-10-01 review/gmail.md'."),
+`11` = c(
+"Each data provider has a shared Google Sheet of our questions about their data, with one tab per dataset, where they type answers or comment.",
+"About 33 answers had been typed or commented there but not yet copied into our own records; today they were recorded, and the sheets refreshed so providers also see our newer questions. All 19 comment threads were checked and remain attached to the right questions.",
+"9 comment threads are assigned to Ben, the oldest from 17 September; replies are drafted in the review notes.",
+"4 places where a provider disagrees with what we proposed; in each case we adopt the provider's position (for example, Ed Weber says fish tows with no catch recorded are true zeros, not missing data).",
+"Highlights: Rasmus confirms that ammonium readings of zero are real values and should not be flagged as below detection; the CTD team confirms the three stages of data (preliminary without bottles, preliminary with bottles, final) and says bad pH values should be excluded; CDFW confirms crab times are local Pacific time.",
+"The order matters: answers must be copied into our records before the sheets are refreshed, otherwise the refresh would erase what providers typed. Today that order was followed.",
+"Source: '2026-10-01 review/questions_sheets.md'."),
+`12` = c(
+"Decisions where the group's input is needed. Each row: the question, and the proposal.",
+"Ship codes: SWFSC prefers international ICES ship codes; our cruise identifier (year-month-ship code, using the US NODC code) is already used by every app and package. Proposal: keep the identifier, add ICES as an extra column so either can be used.",
+"eDNA sample hierarchy: in 2022, 47 filters came from 37 water samples; in the whale data, eDNA samples were matched to bottle casts. Proposal: record that link ('parent sample') so users can join DNA results to the water chemistry from the same bottle.",
+"Whale counts: two independent observer teams (the whale survey and the Farallon seabird and mammal survey) sometimes saw the same animals on the same cruises. Proposal: report species counts per dataset so totals are not double-counted.",
+"Shared bounds and units: the 2022 eDNA dataset reports oxygen in mg/L while the rest of the database uses mL/L, and a lower limit of zero was set on a chlorophyll measurement shared with another dataset. Proposal: convert to the shared unit and keep the zero floor.",
+"Phytoplankton duplicates: 12 samples from three cruises have every species listed twice. Proposal: ask Venrick which copy is correct, keeping the first meanwhile.",
+"Kuali vendor review (UCSD's supplier security questionnaire): a reply to Pilar was drafted on 30 September; confirm whether it was sent.",
+"SCCOOS quote: whether to trim the first quote by $433.25 so the total stays at $65,625; Erin's call.",
+"Source: the plan's decisions list and the review reports."),
+`13` = c(
+"The next five weeks.",
+"Today: the release is out, the plotter is refreshed, and replies to Rasmus, Ed, Kelsey and the Library are ready to send.",
+"This week: the five PRs are merged (done today); the held datasets stay out until providers answer.",
+"Mid next week: Rasmus is arranging a session on reproducing the State of the California Current report figures with Andrew Thompson (NOAA) and Nastassia Patin, who had trouble getting the hydrographic data; Betty is scheduling it.",
+"Thursday 8 October: next DMP call.",
+"By then, the next release: iron, the phytoplankton name fixes, the second round of derived products using Rasmus's definitions, and the check on constant CTD values.",
+"October: re-import the fish larvae data from SWFSC's new tables; add the alternative cruise names and ICES codes; Explorer colour scales.",
+"31 October – 10 November: the El Niño cruise; the goal is to have the derived products and transects live before it leaves.",
+"Sources: the 9/23 DMP meeting transcript and Gmail."))
+for (i in seq_along(NOTES)) {
+  doc <- on_slide(doc, index = i)
+  doc <- set_notes(doc, value = paste(NOTES[[as.character(i)]], collapse = "\n\n"),
+                   location = notes_location_type("body"))
+}
+stopifnot(length(NOTES) == length(doc))
 
 out <- "presentations/2026-10-01 CalCOFI.io DMP update.pptx"
 print(doc, target = out)
