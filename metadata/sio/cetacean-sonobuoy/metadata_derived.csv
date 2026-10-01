@@ -1,0 +1,11 @@
+table,column,name_long,units,description_md
+sonobuoy_scan,scan_id,Scan ID,,Row number of the hour in the pinned source file; primary key (Cruise + SB# + Date + Hour is not unique: a recording file can end and the next start inside one hour).
+sonobuoy_scan,deployment_key,Deployment Key,,`cruise_label` + '_' + `sonobuoy_label`; FK to sonobuoy_deployment.
+sonobuoy_scan,line,Line,,"CalCOFI line with the source's rounding undone (63->63.3, 67->66.7, 73->73.3, 77->76.7, 83->83.3, 87->86.7, 93->93.3; Q06)."
+sonobuoy_scan,site_key,Site Key,,CalCOFI station 'LLL.L SSS.S' from line + station.
+sonobuoy_scan,latitude,Latitude,decimal_degrees,Nominal station latitude from line/station (`cc_calcofi_to_lonlat()`); the sonobuoy's own position is not recorded.
+sonobuoy_scan,longitude,Longitude,decimal_degrees,Nominal station longitude from line/station.
+sonobuoy_scan,datetime_start_utc,Datetime UTC,,"Start of the analysed hour, Date + Hour read as UTC (Q04)."
+sonobuoy_scan,cruise_key,Cruise Key,,"CalCOFI cruise key from `match_cruise_by_track()` against the ichthyo station track, majority vote per cruise_label."
+sonobuoy_scan,grid_key,Grid Key,,CalCOFI grid cell of the nominal station position.
+sonobuoy_deployment,deployment_key,Deployment Key,,`cruise_label` + '_' + `sonobuoy_label`; primary key.

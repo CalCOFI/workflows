@@ -86,6 +86,28 @@ phytoplankton taxon. Beyond the classes, only two species have an English name, 
 single English vernacular: *Noctiluca scintillans* "sea sparkle" (worms:109921) and *Pyrocystis
 fusiformis* "ocean night light" (worms:110328). They are added to `metadata/taxon_common.csv`.
 
+## A new dataset: `cce-lter_iron`, dissolved iron on CalCOFI cruises, 2002–2004
+
+`ingest_cce-lter_iron.qmd` ingests the CCE-LTER EDI package `knb-lter-cce.21.3` (Barbeau,
+doi:10.6073/pasta/63c4e57f87861db3acaf80d1dec103e1), fetched and md5-pinned by
+`libs/download_iron.R` (CalCOFI/workflows#82). With no cast or bottle number in the source, it
+mints its own `sample` arm (170 surface pole samples, Nov 2002 – Jul 2004, keyed
+`cce-lter_iron:bottle:{study_name}-{index_number}` from the source's own unique pair, not row
+position) and publishes 170 `obs` rows in the env realm of one new measurement type,
+`dissolved_iron` (nmol/L; the file header says "nM/L", confirmation pending, Q04).
+
+**Held out, on purpose.** `chl_response_to_fe` (the iron-addition bioassay response) is **not**
+released until the provider answers Q01 (is it a unitless treatment:control ratio, a concentration
+or a code? its EML scale is `nominal`); Q01 stays `open` with priority `blocker`. `total_iron` is
+not registered because the revision has no real value (170 of 170 rows are the `-999` sentinel).
+Neither has a row in `measurement_type`, so neither appears in the measurements catalog.
+
+The source's undocumented `-999` sentinel becomes NULL (Q06), and `Datetime PST` is read as a fixed
+UTC−8 offset pending the provider's answer to Q02. The license is the package's own free-text
+rights statement (`custom`), not a CC grant. Open provider questions: Q01, Q04 (units, detection
+limit, whether the 0.05 nmol/L floor is one), Q07 (operational definition of "dissolved",
+contamination control).
+
 ## CTD: the corrected 2607 file, provider flags on every series, cruise-corrected oxygen
 
 **Five recent cruises regain their offshore stations.** The first 20-2607SH_CTDPrelim.zip wrote station numbers
@@ -231,6 +253,27 @@ Their `metadata/measurement_type.csv` rows are **not deleted**: a registry row i
 removed, and they remain the vocabulary of the dataset's own
 `picoplankton_bacteria_measurement` table, which is still served as a compat view carrying the
 source's four column names.
+
+## Three cetacean datasets staged, not released; the registry rows they add do ship
+
+`sio_cetacean-sightings` (visual line-transect sightings and effort, 2004-2022), `sio_cetacean-sonobuoy`
+(hourly acoustic presence, 2004-2012) and `sio_cetacean-edna` (NCOG eDNA screens, 2014-2016) are staged
+from CalCOFI/marmam-app with `in_release: false`: no rows of theirs are in this release, pending their
+licences and citations (CalCOFI/workflows#117). Three things they touch **are** release content:
+
+- **`measurement_type` gains 10 types with no data behind them yet**: `acoustic_presence`, `calf_count`,
+  `call_type`, `edna_presence`, `effort_status`, `group_size`, `group_size_max`, `group_size_min`,
+  `transect_length`. The release publishes the whole registry (`metadata/measurement_type.csv`), not only
+  the types its shards use. `behavior`'s `_source_datasets` also names `sio_cetacean-sightings` now.
+- **The sightings holding stays in the catalog.** `sio_cetacean-sightings` remains a `status: external`
+  holding in `datasets.json` (now titled from the ingest, linked to the marmam-app source, DOI unchanged)
+  until it ships, at which point the holding keys leave its sidecar.
+- **`farallon_bird-mammal`'s description** now says the Scripps Whale Acoustics Lab's independent observers
+  survey cetaceans on the same cruises, so summing the two datasets counts some animals twice.
+
+The release gate `check_taxon_registries()` now skips `taxon_override.csv` rows for held-out datasets
+(`exclude = ds_excluded`, calcofi4db 4.17.2); the 13 rows these three ingests add would otherwise have
+stopped the release.
 
 # v2026.09.11
 
