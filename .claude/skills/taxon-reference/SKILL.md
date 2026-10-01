@@ -230,11 +230,48 @@ an ingest, `R/taxa.R` or a taxon metadata CSV):
   any `taxon_group.csv` `match_value` and the label of any dataset-local key, so
   "diatom, centric" / "other" / "undefined (…)" never name a taxon; the group's own
   name in `taxon_group` is unchanged.
+- **A source name keys its accepted rank**: verbatim name in `species`, `name_query` is the
+  lookup; an unknown species of a named genus keys the ACCEPTED genus; two genera counted
+  together key their lowest common ancestor; a code left at class level is allowlisted
+  one code at a time (section "What a source name keys").
 - Assert coverage **by rank position**, never blanket non-NULL (`family` is NULL
   above family rank; `kingdom` is NULL for `worms:1` Biota).
 - `release_database.qmd`'s `taxon_authority_coverage` chunk: `check_taxon_ids()`
   **fails the release** on a dataset-local key outside its explicit allowlist —
   declare non-taxonomic classes one key at a time, never as a pattern.
+
+## What a source name keys: verbatim name, accepted rank (Ben, 2026-09-28 / 2026-10-01)
+
+Worked example: `calcofi_phytoplankton` (`metadata/calcofi/phytoplankton/taxon_worms.csv`;
+`libs/verify_phyto_aphia.R` re-checks every row against the WoRMS REST API; Q09 asks the
+provider). Until 2026-09-28, 53 named codes keyed only their functional-group class because
+their lookup failed, so "Diatoms, not identified further" absorbed *Pseudo-nitzschia* and
+*Calcidiscus leptoporus*. The rule:
+
+- **`species` is the source's name, verbatim; `name_query` is what is looked up; `aphia_id`
+  is the key.** Fix a clear spelling slip in `name_query` only. Never rewrite `species`
+  (it is what a consumer displays) or the code.
+- **An unknown species of a named genus keys the genus**: "sp. 1", "spp.", "uncertain species",
+  a size class, spores, "complex", "cf." (a comparison, not an assertion), a species the
+  authority does not hold, and species of ONE genus counted together. A known species with a
+  "var." / "f." / "spore" / "minute form" suffix keeps the species key.
+- **The genus keyed is the ACCEPTED one.** Where WoRMS files the source's species under another
+  accepted genus (*Ceratium* -> *Tripos*), the genus codes key that genus, so a hierarchy
+  rollup on it includes them and the species items; `species` still reads "Ceratium spp.".
+- **Species of two genera counted together key their lowest common ancestor**, from the
+  authority's classification (*Dactyliosolen* + *Guinardia* -> Rhizosoleniaceae; *Gyrosigma* +
+  *Pleurosigma* -> Pleurosigmataceae), never a class when a family would do. A named taxon
+  paired with an unidentified one falls to the class by the same rule.
+- **A code left at class level is allowlisted one code at a time with a reason** (the
+  source's own unidentified classes); the ingest `stopifnot()`s on it, so a failed lookup
+  fails the render instead of vanishing into a class.
+- **Consumers must sum.** Several codes now share one `taxon_key` within a sample; counting
+  `obs` rows per taxon double-counts, summing `value` per sample does not.
+- `clean_taxon_name()` (calcofi4db <= 4.17.1) still maps "cf." to the SPECIES query
+  ("Actinocyclus cf curvatulus" -> "Actinocyclus curvatulus"), contrary to the second bullet.
+  It only affects a taxon that arrives with no id (the name fallback in `ensure_taxon_xref()`),
+  and a cache row with an AphiaID never reaches it; a dataset that declares no id must
+  resolve its "cf." rows itself until the package decides (see its issue).
 
 ## Species faces
 
