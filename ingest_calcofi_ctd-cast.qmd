@@ -2784,6 +2784,80 @@ datatable(d_override_report |> select(cruise_key, cast_min, cast_max, cast_dir, 
           caption = "Flag overrides (metadata/calcofi/ctd-cast/flag_overrides.csv) and what each flagged")
 ```
 
+## Withhold Series That Do Not Vary With Depth {#depth-constant}
+
+A value can be physically possible, carry no provider flag and still not be a profile. The
+provider's `EstNO3_CruiseCorr` (type `est_nitrate_cruise_corr`) holds **one value over the whole
+cast** (0-520 m and deeper) on 441 of the 5,066 casts that can be judged, and on every judged cast
+of seven cruises (2304SH, 2504SH, 2301RL, 2307SR, 2105SH, 2411SR, 0810NH), while
+`EstNO3_StaCorr` on the same casts rises from about 1 to 40 µM as nitrate should (census of
+2026-10-01; Rasmus Swalethorp's 2026-09-29 transect-plotter screenshot of line 93.3 showed it as
+vertical stripes). Most of those values are exactly 0 (an unfilled column), the rest a non-zero
+per-cast offset: a constant written where a profile belongs. A declared bound cannot see it (the value is in range) and the provider
+set no flag, so the test is on the **shape**: `calcofi4db::check_depth_constant_series()` finds
+each (cast, derived series) with at least 6 finite values over at least 50 m that do not move
+(range below 1e-9), and this chunk **drops** those values. Dropped, not flagged: a flagged value
+still reaches the table and a consumer that forgets `cc_qual_ok_sql()` would plot it, which is
+how the stripes reached the screenshot. It runs after the provider's flags, the accepted-flag
+ledger and the overrides, and **before** anything is derived from the series (the sensor-pair
+averages below, `ctd_summary`, `ctd_thin`), so a withheld sensor can never enter an average.
+
+Only the derived and estimated series are judged (bottle-corrected salinity and oxygen,
+estimated nitrate and chlorophyll): a raw sensor that holds still is a different failure. A short
+cast is never judged. `libs/census_depth_constant_ctd.R` measures how widespread this is across
+every downcast CSV (`data/qc/ctd_depth_constant_census.csv`); whether `EstNO3_CruiseCorr` is a
+per-cast offset in these files and whether to withhold or recompute it is
+`questions.csv` Q40.
+
+```{r}
+#| label: depth_constant
+
+dc_types <- d_meas_ctd$measurement_type |>
+  str_subset("^est_|_(cruise|sta)_corr$|^salinity_[12]_corr$")
+
+d_const <- calcofi4db::check_depth_constant_series(
+  con, tbl = "ctd_measurement", cast_col = "ctd_cast_uuid", types = dc_types)
+d_const_judged <- attr(d_const, "judged")
+
+if (nrow(d_const) == 0) {
+  cat("no derived series is constant over depth\n")
+} else {
+  dbWriteTable(con, "_depth_constant", d_const |> select(ctd_cast_uuid, measurement_type),
+               overwrite = TRUE)
+  d_const_by_cruise <- dbGetQuery(con, "
+    SELECT c.cruise_key, k.measurement_type,
+           COUNT(DISTINCT c.ctd_cast_uuid) AS n_casts_dropped
+    FROM _depth_constant k JOIN ctd_cast c USING (ctd_cast_uuid)
+    GROUP BY ALL ORDER BY n_casts_dropped DESC, cruise_key, measurement_type") |>
+    left_join(d_const |> group_by(measurement_type) |>
+                summarize(n_values_dropped = sum(n), value_min = min(value), value_max = max(value),
+                          .groups = "drop"), by = "measurement_type")
+  n_dc_rows <- dbGetQuery(con, "
+    SELECT COUNT(*) AS n FROM ctd_measurement m
+    JOIN _depth_constant k USING (ctd_cast_uuid, measurement_type)")$n
+  dbExecute(con, "
+    DELETE FROM ctd_measurement m
+    USING _depth_constant k
+    WHERE m.ctd_cast_uuid = k.ctd_cast_uuid AND m.measurement_type = k.measurement_type")
+  dbExecute(con, "DROP TABLE _depth_constant")
+  stopifnot("depth-constant values were not all removed" =
+    nrow(calcofi4db::check_depth_constant_series(
+      con, tbl = "ctd_measurement", cast_col = "ctd_cast_uuid", types = dc_types)) == 0)
+
+  cat(glue("{nrow(d_const)} (cast, series) pair(s) constant over depth, ",
+           "{format(n_dc_rows, big.mark = ',')} value(s) dropped:"), "\n")
+  for (ty in sort(unique(d_const$measurement_type)))
+    cat(glue("  {ty}: {sum(d_const$measurement_type == ty)} of ",
+             "{d_const_judged[[ty]]} judged"), "\n")
+
+  dir_create(here("data/qc"))
+  write_csv(d_const_by_cruise, here("data/qc/ctd_depth_constant_dropped.csv"), na = "")
+  datatable(d_const_by_cruise, rownames = FALSE, options = list(pageLength = 15, scrollX = TRUE),
+            caption = paste("Derived series withheld because they hold one value at every depth,",
+                            "per cruise and series (data/qc/ctd_depth_constant_dropped.csv)"))
+}
+```
+
 ## Combine the Sensor Pairs by Their Flags
 
 The canonical CTD temperature, salinity and oxygen are the **average of a sensor
@@ -4754,6 +4828,27 @@ say(glue("  with any obs (default tier): {format(f_dir$n_with_obs, big.mark = ',
          "({round(100 * f_dir$n_with_obs / f_dir$n_sample, 1)}%)"))
 say(glue("  no obs (other direction)   : ",
          "{format(f_dir$n_sample - f_dir$n_with_obs, big.mark = ',')}"))
+```
+
+### Series that do not vary with depth
+
+The provider's `EstNO3_CruiseCorr` is one value over the whole cast on 441 casts of 20 cruises
+(every judged cast of seven), a zero fill or an offset where a profile belongs (see [Withhold Series That Do Not Vary With Depth](#depth-constant)).
+The ingest **drops** those values rather than flagging them; this table is what it dropped, per
+cruise and series, written by that chunk. Whether the column is a per-cast offset in these files and
+whether to withhold or recompute it is `questions.csv` Q40.
+
+```{r}
+#| label: findings_depth_constant
+
+path_dc <- here("data/qc/ctd_depth_constant_dropped.csv")
+if (file_exists(path_dc)) {
+  read_csv(path_dc, show_col_types = FALSE, na = "") |>
+    datatable(rownames = FALSE, options = list(pageLength = 10, scrollX = TRUE, dom = "tip"),
+              caption = "Derived series withheld because they hold one value at every depth")
+} else {
+  say("no depth-constant series were dropped (data/qc/ctd_depth_constant_dropped.csv absent)")
+}
 ```
 
 ### Quality codes, as published
