@@ -1,0 +1,31 @@
+tbl_old,tbl_new,fld_old,fld_new,type_old,type_new,fld_description,units,notes
+acoustic-raw,sonobuoy_scan,Season,season,VARCHAR,VARCHAR,Season of the cruise.,,
+acoustic-raw,sonobuoy_scan,Cruise,cruise_label,VARCHAR,VARCHAR,Source cruise label CCYYMM plus a ship/leg suffix (e.g. CC1210NH).,,
+acoustic-raw,sonobuoy_scan,CC Line,line_raw,VARCHAR,DOUBLE,"CalCOFI line as recorded (fractional lines rounded, e.g. 83 for 83.3; Q06).",,line is derived from it
+acoustic-raw,sonobuoy_scan,CC Station,station,VARCHAR,DOUBLE,CalCOFI station of the deployment.,,dictionary field; no SI unit
+acoustic-raw,sonobuoy_scan,SB#,sonobuoy_label,VARCHAR,VARCHAR,Sonobuoy number within the cruise (e.g. SB13).,,
+acoustic-raw,sonobuoy_scan,D/O?,sonobuoy_type,VARCHAR,VARCHAR,DIFAR (directional) or OMNI (omnidirectional) sonobuoy.,,
+acoustic-raw,sonobuoy_scan,Date,date_raw,VARCHAR,VARCHAR,Recording date as recorded (M/D/YY).,,datetime_start_utc is built from Date + Hour (Q04)
+acoustic-raw,sonobuoy_scan,Hour,hour_raw,VARCHAR,VARCHAR,Start of the analysed hour (HH:MM:SS).,,
+acoustic-raw,sonobuoy_scan,Quality,recording_quality,VARCHAR,VARCHAR,"Analyst's recording-quality grade (High / Medium / Poor, with * or ** markers; Q05).",,"published as obs.measurement_qual (code_set cetacean-sonobuoy), whitespace-trimmed and lower-cased"
+acoustic-raw,sonobuoy_scan,Sarah's scale (amt of background),background_level,VARCHAR,VARCHAR,Amount of background noise (bit / lots / tons and ranges).,,not published (Q11)
+acoustic-raw,sonobuoy_scan,Types of Background,background_types,VARCHAR,VARCHAR,Codes for the kinds of background noise present (Q11).,,not published
+acoustic-raw,sonobuoy_scan,Detections?,detections_flag,VARCHAR,VARCHAR,"Yes / No / adhoc only: whether the hour held calls, or was only scanned ad hoc (Q08).",,
+acoustic-raw,sonobuoy_scan,Spp. Detected,species_detected_raw,VARCHAR,VARCHAR,"Species heard, as free text (Blue, Fin, Humpback).",,cross-checked against the call-type flags (Q09)
+acoustic-raw,sonobuoy_scan,Blue B,blue_b,VARCHAR,DOUBLE,Blue whale B call heard in the hour (1) or not (0).,,published as obs_attribute call_type
+acoustic-raw,sonobuoy_scan,Blue D,blue_d,VARCHAR,DOUBLE,Blue whale D call heard (1) or not (0).,,
+acoustic-raw,sonobuoy_scan,Fin 20Hz Singular,fin_20hz_singular,VARCHAR,DOUBLE,"Fin whale 20 Hz pulses, singular (1) or not (0).",,
+acoustic-raw,sonobuoy_scan,Fin 20Hz Song,fin_20hz_song,VARCHAR,DOUBLE,Fin whale 20 Hz song (1) or not (0).,,
+acoustic-raw,sonobuoy_scan,Fin C.C.,fin_cc,VARCHAR,DOUBLE,Fin whale 'C.C.' call (1) or not (0).,,
+acoustic-raw,sonobuoy_scan,Fin H.C.,fin_hc,VARCHAR,DOUBLE,Fin whale 'H.C.' call (1) or not (0).,,
+acoustic-raw,sonobuoy_scan,Humpback Song,humpback_song,VARCHAR,DOUBLE,Humpback whale song (1) or not (0).,,
+acoustic-raw,sonobuoy_scan,Humpback Non-song,humpback_nonsong,VARCHAR,DOUBLE,Humpback whale non-song calls (1) or not (0).,,
+acoustic-raw,sonobuoy_scan,Start/End,start_end_note,VARCHAR,VARCHAR,Note when a recording starts or ends inside the hour.,,
+acoustic-raw,sonobuoy_scan,Hour spans,hour_span,VARCHAR,DOUBLE,Recorded as 'Hour spans' (1-8; Q07).,h,not published
+acoustic-raw,sonobuoy_scan,Comments,comments,VARCHAR,VARCHAR,Analyst comments.,,
+acoustic-raw,sonobuoy_scan,Scan Method,scan_method,VARCHAR,VARCHAR,"How the recording was scanned (wav files, continuous; LTSA).",,
+acoustic-raw,sonobuoy_scan,Time window,time_window,VARCHAR,VARCHAR,Spectrogram window scanned per hour (60s).,,
+acoustic-raw,sonobuoy_scan,Top freq,freq_top,VARCHAR,VARCHAR,"Upper frequency of the spectrogram, as recorded (e.g. 500Hz).",,
+acoustic-raw,sonobuoy_scan,Low Freq,freq_low,VARCHAR,VARCHAR,"Lower frequency of the spectrogram, as recorded.",,
+acoustic-raw,sonobuoy_scan,FFT Length,fft_length,VARCHAR,DOUBLE,FFT length of the spectrogram.,samples,
+acoustic-raw,sonobuoy_scan,Overlap,fft_overlap,VARCHAR,VARCHAR,"FFT overlap, as recorded (e.g. 98%).",,

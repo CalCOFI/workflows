@@ -176,6 +176,27 @@ removed, and they remain the vocabulary of the dataset's own
 `picoplankton_bacteria_measurement` table, which is still served as a compat view carrying the
 source's four column names.
 
+## Three cetacean datasets staged, not released; the registry rows they add do ship
+
+`sio_cetacean-sightings` (visual line-transect sightings and effort, 2004-2022), `sio_cetacean-sonobuoy`
+(hourly acoustic presence, 2004-2012) and `sio_cetacean-edna` (NCOG eDNA screens, 2014-2016) are staged
+from CalCOFI/marmam-app with `in_release: false`: no rows of theirs are in this release, pending their
+licences and citations (CalCOFI/workflows#117). Three things they touch **are** release content:
+
+- **`measurement_type` gains 10 types with no data behind them yet**: `acoustic_presence`, `calf_count`,
+  `call_type`, `edna_presence`, `effort_status`, `group_size`, `group_size_max`, `group_size_min`,
+  `transect_length`. The release publishes the whole registry (`metadata/measurement_type.csv`), not only
+  the types its shards use. `behavior`'s `_source_datasets` also names `sio_cetacean-sightings` now.
+- **The sightings holding stays in the catalog.** `sio_cetacean-sightings` remains a `status: external`
+  holding in `datasets.json` (now titled from the ingest, linked to the marmam-app source, DOI unchanged)
+  until it ships, at which point the holding keys leave its sidecar.
+- **`farallon_bird-mammal`'s description** now says the Scripps Whale Acoustics Lab's independent observers
+  survey cetaceans on the same cruises, so summing the two datasets counts some animals twice.
+
+The release gate `check_taxon_registries()` now skips `taxon_override.csv` rows for held-out datasets
+(`exclude = ds_excluded`, calcofi4db 4.17.2); the 13 rows these three ingests add would otherwise have
+stopped the release.
+
 # v2026.09.11
 
 ## CTD averages rebuilt from their sensors by the provider's flags

@@ -767,7 +767,8 @@ present at once. `check_taxon_registries()` **fails the release** on a
 `taxon_override.csv` or `taxon_group.csv` row naming a `dataset_key` nothing
 supplies — each ingest reads the whole registry while loading only its own
 vocabulary, so a typo there is invisible until now, and a registry row that
-matches nothing is how a missing id hides. And `report_taxon_overrides()` shows,
+matches nothing is how a missing id hides. Rows for a dataset held out with
+`in_release: false` are skipped, since its shard is deliberately absent. And `report_taxon_overrides()` shows,
 per override row, how many vocabulary rows it matched, keyed, and **skipped**:
 since calcofi4db 3.33.0 an override never replaces an id the source supplied
 unless it names the row by the dataset's own code, which is what stopped six
@@ -811,12 +812,19 @@ tx_cover <- check_taxon_ids(con_wdl, allow = TAXON_LOCAL_ALLOW, halt = TRUE)
 # the registries, validated where every dataset IS present (taxon plan D5): a
 # row naming a dataset_key that no shard and no measurement_taxon row supplies
 # fails the release. `tg_rules` was read in `core_tables` for apply_taxon_common().
+# A held-out dataset (`in_release: false`, `ds_excluded` above) keeps its rows
+# for its own ingest; they match nothing here by design, so they are skipped
+# (`exclude =`, calcofi4db >= 4.17.2), while a typo for any other key still fails.
 mt_taxon_all <- readr::read_csv(
   here("metadata/measurement_taxon.csv"),
   col_types = readr::cols(worms_id = "i", itis_id = "i", bin_value = "d", .default = "c"))
 tx_over_all <- readr::read_csv(here("metadata/taxon_override.csv"), show_col_types = FALSE)
+stopifnot(
+  "check_taxon_registries() needs calcofi4db >= 4.17.2 (`exclude =`); pull ../calcofi4db" =
+    "exclude" %in% names(formals(check_taxon_registries)))
 check_taxon_registries(con_wdl, overrides = tx_over_all, group_rules = tg_rules,
-                       measurement_taxon = mt_taxon_all, halt = TRUE)
+                       measurement_taxon = mt_taxon_all, exclude = ds_excluded,
+                       halt = TRUE)
 
 # what each override row did: matched / applied / skipped (the source's own id
 # kept). `source_json_known = FALSE` means the shard predates ds_source_json, so
