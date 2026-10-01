@@ -13,12 +13,22 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 `ingest_cce-lter_iron.qmd` ingests the CCE-LTER EDI package `knb-lter-cce.21.3` (Barbeau,
 doi:10.6073/pasta/63c4e57f87861db3acaf80d1dec103e1), fetched and md5-pinned by
 `libs/download_iron.R` (CalCOFI/workflows#82). With no cast or bottle number in the source, it
-mints its own `sample` arm (170 samples, Nov 2002 – Jul 2004) and publishes 192 `obs` rows in the
-env realm as three new measurement types: `dissolved_iron` and `total_iron` (nmol/L) and
-`chl_response_to_fe` (an iron-addition bioassay response). The source's undocumented `-999`
-sentinel becomes NULL (Q06), and `Datetime PST` is read as a fixed UTC−8 offset pending the
-provider's answer to Q02. The license is the package's own free-text rights statement
-(`custom`), not a CC grant.
+mints its own `sample` arm (170 surface pole samples, Nov 2002 – Jul 2004, keyed
+`cce-lter_iron:bottle:{study_name}-{index_number}` from the source's own unique pair, not row
+position) and publishes 170 `obs` rows in the env realm of one new measurement type,
+`dissolved_iron` (nmol/L; the file header says "nM/L", confirmation pending, Q04).
+
+**Held out, on purpose.** `chl_response_to_fe` (the iron-addition bioassay response) is **not**
+released until the provider answers Q01 (is it a unitless treatment:control ratio, a concentration
+or a code? its EML scale is `nominal`); Q01 stays `open` with priority `blocker`. `total_iron` is
+not registered because the revision has no real value (170 of 170 rows are the `-999` sentinel).
+Neither has a row in `measurement_type`, so neither appears in the measurements catalog.
+
+The source's undocumented `-999` sentinel becomes NULL (Q06), and `Datetime PST` is read as a fixed
+UTC−8 offset pending the provider's answer to Q02. The license is the package's own free-text
+rights statement (`custom`), not a CC grant. Open provider questions: Q01, Q04 (units, detection
+limit, whether the 0.05 nmol/L floor is one), Q07 (operational definition of "dissolved",
+contamination control).
 
 ## CTD: the corrected 2607 file, provider flags on every series, cruise-corrected oxygen
 

@@ -18,22 +18,16 @@
 # republished package fails loudly rather than silently re-shaping the
 # ingest.
 #
-# NOTE (updated 2026-09-19): this URL still could not be exercised from the
-# environment that wrote this file — EDI's PASTA API (pasta.lternet.edu) and
-# portal (portal.edirepository.org) are both unreachable from here
-# (robots.txt on the portal, an org egress policy rejecting the PASTA host).
-# The md5 below was corrected against Betty's own EDI portal download of the
-# real package zip (knb-lter-cce.21.3_1.zip): table_21.csv inside it hashes
-# to ced2a3df91259c11e650d9b5a01629f3, which does NOT match the value this
-# notebook originally pinned (4c538532e291f12e3118457354433a1f, sourced from
-# a DataONE system-metadata lookup while EDI itself was unreachable and never
-# cross-checked against real bytes). The value below is now the one observed
-# directly. It is still possible EDI's zip export re-packages the CSV
-# slightly differently than the bytes `download_edi_entity()` fetches from
-# PASTA's own data-entity URL (e.g. if PASTA regenerates the file on each
-# request) — if the first real run of this notebook hits a fresh md5
-# mismatch, trust the pipeline's own fetch over this pin and update it, don't
-# assume the file changed.
+# md5 pin (checked 2026-10-01): ced2a3df91259c11e650d9b5a01629f3 is the md5 of
+# table_21.csv as shipped in the package zip (knb-lter-cce.21.3.zip; presumably the same
+# bytes PASTA serves at the entity download URL). The value this file first
+# pinned (4c538532e291f12e3118457354433a1f) is NOT an md5: it is the entity id,
+# the last path segment of that download URL in the EML
+# (.../package/data/eml/knb-lter-cce/21/3/4c538532...). PASTA's own endpoints were
+# returning "not authorized" from the macOS box on 2026-10-01 (the whole API, not
+# just this package), so the pin could not be re-checked against a live PASTA
+# fetch; it matches the zip. Note download_edi_entity() skips the md5 check when
+# the cached file exists, so confirm from a clean cache the next time PASTA is up.
 #
 # Sourced + invoked from ingest_cce-lter_iron.qmd (guarded so it only hits EDI
 # when the CSV is missing or overwrite = TRUE).

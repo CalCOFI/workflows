@@ -26,7 +26,7 @@ calcofi:
   # notebook and projected into the shared core tables.
   tables_owned:
     - {table: sample, shared: true, note: "core event dimension (own sample grain, no cast/bottle FK available in the source)"}
-    - {table: obs, shared: true, note: "core observation headline (env realm; dissolved_iron, total_iron, chl_response_to_fe)"}
+    - {table: obs, shared: true, note: "core observation headline (env realm; dissolved_iron only, see Hold-out below)"}
     - {table: measurement_type, shared: true, note: "shared registry across datasets"}
   erd:
     color: "#f0e0c0"
@@ -46,14 +46,37 @@ shape (a CCE-LTER DataZoo/EDI export with no native cast/bottle FK, its own
 
 - **Provider**: `cce-lter` (matches `euphausiids`/`picoplankton-bacteria`/
   `zoodb`/`zooscan`)
-- **Grain**: one row per sample event (surface pole sample or profile bottle);
-  no cast/bottle number in the source, so this dataset mints its **own**
+- **Grain**: one row per sample event; in this revision every row is a surface
+  (0 m) **pole** sample (`Iron Sampling Equipment = p`, 170/170), not a Niskin
+  bottle or a profile. There is no cast/bottle number in the source, so this dataset mints its **own**
   `sample` arm rather than matching into `calcofi_bottle`/`casts` (Pattern A,
   like picoplankton-bacteria — not Pattern B/DIC, which has cast/bottle FKs to
   match against).
-- **Realm**: `env` — this is chemistry (dissolved/total iron) plus a bioassay
-  response metric, not an occurrence of a taxon. `obs.taxon_key` stays NULL
+- **Realm**: `env` — this is chemistry (dissolved iron), not an occurrence of
+  a taxon. `obs.taxon_key` stays NULL
   throughout, unlike picoplankton-bacteria's `bio` realm.
+- **Hold-out (decision B6, Ben Best, 2026-10-01)**: only `dissolved_iron` is
+  emitted. `chl_response_to_fe` is **held out** of `sample`/`obs` until the
+  provider answers Q01 (is it a unitless treatment:control ratio, a
+  concentration or a code? `status = open`, `priority = blocker`): its EML
+  `measurementScale` is `nominal`, so publishing it as a measurement would put
+  an uninterpreted number into `obs_env`. `total_iron` is held out because the
+  revision has **no real value** (170 of 170 rows are the `-999` sentinel), and a
+  measurement type with no data does not belong in the registry or the catalog.
+  Neither type is in `metadata/measurement_type.csv`; both source columns stay
+  in the staging table `iron_sample` (counted in the Pivot chunk) so
+  they can be emitted the day Q01 is answered or a revision populates Total Fe.
+- **Sample key**: `sample_key = cce-lter_iron:bottle:{study_name}-{index_number}`,
+  built from the source's own (`studyName`, `Index Number`) pair, which is
+  asserted unique below — not from row position, so a republished revision that
+  inserts or reorders a row cannot shift a published key. `sample_type = bottle`
+  follows the family's convention for a discrete water sample (a pole sample is
+  surface water taken by hand into a bottle); consumers always filter by
+  `dataset_key`, and the equipment code is kept in `iron_sampling_equipment`.
+- **No cast matching**: pole samples are taken from the ship's side, not from a
+  CTD/bottle cast, so there is no cast to attach to
+  (`match_by_site_datetime()` / `match_nearest_by_depth()` do not apply, unlike
+  `calcofi_dic`). A `parent_sample_key` to the nearest cast could be added later.
 - **Scope decision**: no bounding-box filter applied — source is already
   scoped to CalCOFI/CCE cruises by the provider (same reasoning as
   picoplankton-bacteria).
@@ -62,7 +85,7 @@ shape (a CCE-LTER DataZoo/EDI export with no native cast/bottle FK, its own
 graph LR
   A[EDI knb-lter-cce.21.3<br/>DissolvedIron, 171 rows] --> B[rename + type-cast]
   B --> C[iron_sample<br/>position + depth, one row per sample]
-  B --> D[iron_measurement<br/>long format: dissolved_iron / total_iron / chl_response_to_fe]
+  B --> D[iron_measurement<br/>long format: dissolved_iron only]
   C -.study_name -> cruise_key.-> E[(shared refs)]
   D -.sample_id.-> C
   C --> F[[core: sample]]
@@ -94,16 +117,16 @@ dir_parquet <- here(glue("data/parquet/{dir_label}"))
 dir_stage <- cc_stage_path("parquet", dir_label, create = TRUE)
 db_path <- here(glue("data/wrangling/{dir_label}.duckdb"))
 meas_type_csv <- here("metadata/measurement_type.csv")
-# dissolved_iron / total_iron / chl_response_to_fe were registered directly
-# into the registry during /generate-metadata (metadata/measurement_type.csv),
-# not here at ingest time — this notebook reads and uses them, it does not
-# (re-)register them. See "Check Declared Bounds" for why none of the three
-# carries a valid_max yet.
+# dissolved_iron was registered directly into the registry during
+# /generate-metadata (metadata/measurement_type.csv), not here at ingest time —
+# this notebook reads and uses it, it does not (re-)register it. total_iron and
+# chl_response_to_fe are deliberately NOT registered (held out, see Overview).
 d_meas_type <- read_measurement_type(meas_type_csv)
 stopifnot(
-  "dissolved_iron/total_iron/chl_response_to_fe must be pre-registered" =
-    all(c("dissolved_iron", "total_iron", "chl_response_to_fe") %in%
-          d_meas_type$measurement_type))
+  "dissolved_iron must be pre-registered" =
+    "dissolved_iron" %in% d_meas_type$measurement_type,
+  "held-out types must stay unregistered until Q01 / a populated Total Fe" =
+    !any(c("total_iron", "chl_response_to_fe") %in% d_meas_type$measurement_type))
 
 if (overwrite) {
   if (file_exists(db_path)) file_delete(db_path)
@@ -153,10 +176,12 @@ stopifnot(
 ## Clean, Type-Cast
 
 Canonical names from `metadata/cce-lter/iron/flds_redefine.csv`. `Event
-Number` and `Index Number` are the source's own provenance counters, kept but
-not used as keys (see `flds_redefine.csv` notes). The three measurement
-columns (Dissolved Fe, Total Fe, Chla response to Fe+) are NOT kept as wide
-columns — pivoted to long format below. Real source headers carry unit
+Number` is the source's own provenance counter (unpopulated here), kept but not
+used as a key. `studyName` + `Index Number` is the natural sample key (asserted
+unique below); `sample_id` is only the integer pivot FK between `iron_sample`
+and `iron_measurement`, assigned in that key's order so it is deterministic.
+Only the Dissolved Fe column is pivoted to long format below; Total Fe and
+Chla response to Fe+ are held out of the emitted tables (Overview). Real source headers carry unit
 suffixes the EML's `attributeName` elements omit (`Latitude (º)`,
 `Longitude (º)`, `Depth (m)`, `Dissolved Fe (nM/L)`, `Total Fe (nM/L)`) —
 confirmed against the real file (2026-09-19) and reflected in the column
@@ -219,7 +244,18 @@ d_clean <- d_raw |>
     site_key = if_else(
       is.na(line) | is.na(station), NA_character_,
       sprintf("%05.1f %05.1f", line, station)),
-    sample_id = row_number())
+    # natural, stable sample key (study + the source's per-cruise counter);
+    # '-' not ':' so the key's own colon-delimited id stays one token
+    sample_key_id = paste0(study_name, "-", index_number)) |>
+  arrange(study_name, index_number) |>
+  mutate(sample_id = row_number())
+
+stopifnot(
+  "index_number must parse for every row" = !anyNA(d_clean$index_number),
+  "(study_name, index_number) must be unique: it is the sample key" =
+    !anyDuplicated(d_clean$sample_key_id))
+cat(glue("sample_key_id unique over {nrow(d_clean)} rows ",
+         "({n_distinct(d_clean$study_name)} cruises)"), "\n")
 
 n_all <- nrow(d_clean)
 cat(glue("{format(n_all, big.mark=',')} rows read, no bounding-box filter applied ",
@@ -235,19 +271,21 @@ dbWriteTable(con, "iron_sample", d_clean, overwrite = TRUE)
 
 ## Pivot Measurements to Long Format
 
-`chl_response_to_fe` is pivoted alongside the two concentration columns even
-though its exact interpretation is still `proposed`, not confirmed (Q01) —
-staging it now means the bounds check below surfaces its missing `valid_max`
-as an expected, already-documented finding rather than silently dropping a
-column the dataset is supposed to carry.
+Only `dissolved_iron` is pivoted to `iron_measurement` (the table that is
+projected into `obs`). `chl_response_to_fe` (Q01 open/blocker: units and meaning
+unconfirmed) and `total_iron` (no real values) are **held out**: their
+non-NULL counts are reported below, their columns stay in `iron_sample`
+(a staging table that is not released), and neither is registered in
+`metadata/measurement_type.csv` nor emitted. To release one, answer Q01 /
+find a populated Total Fe, register the type with `register_measurement_types()`
++ `declare_measurement_fields()` (a `category`), add it to `iron_meas_map` and
+revisit its bounds.
 
 ```{r}
 #| label: pivot-long
 iron_meas_map <- tribble(
   ~measurement_type,     ~value_col,
-  "dissolved_iron",       "dissolved_fe_nmol_l",
-  "total_iron",           "total_fe_nmol_l",
-  "chl_response_to_fe",   "chl_response_to_fe")
+  "dissolved_iron",       "dissolved_fe_nmol_l")
 
 sql_parts <- purrr::pmap_chr(iron_meas_map, function(measurement_type, value_col) {
   glue(
@@ -269,11 +307,23 @@ cat(glue("iron_measurement: {format(n_meas, big.mark=',')} rows"), "\n")
 dbGetQuery(con, "SELECT measurement_type, COUNT(*) n FROM iron_measurement GROUP BY 1 ORDER BY 1") |>
   datatable(caption = "Rows per measurement_type")
 
-for (col in c("dissolved_fe_nmol_l", "total_fe_nmol_l", "chl_response_to_fe")) {
-  tryCatch(
-    dbExecute(con, glue('ALTER TABLE iron_sample DROP COLUMN "{col}"')),
-    error = function(e) NULL)
-}
+# held-out columns: report, then keep them in iron_sample only
+n_held <- dbGetQuery(con, "
+  SELECT COUNT(total_fe_nmol_l) AS total_iron_n,
+         COUNT(chl_response_to_fe) AS chl_response_to_fe_n
+  FROM iron_sample")
+cat(glue("held out (not emitted): total_iron {n_held$total_iron_n} real value(s), ",
+         "chl_response_to_fe {n_held$chl_response_to_fe_n} value(s) pending Q01"), "\n")
+stopifnot("total_iron was expected to have no real value in revision 3" =
+            n_held$total_iron_n == 0)
+
+# dissolved iron at/near the minimum: the 0.05 floor may be a detection limit
+# (Q04) — report, do not interpret
+d_fe <- dbGetQuery(con, "SELECT measurement_value v FROM iron_measurement")$v
+cat(glue("dissolved_iron: min {min(d_fe)} nmol/L; n at the minimum = ",
+         "{sum(d_fe == min(d_fe))}, n within 2x of the minimum = ",
+         "{sum(d_fe <= 2 * min(d_fe))} of {length(d_fe)} (Q04: is the floor a ",
+         "detection limit?)"), "\n")
 ```
 
 ## Resolve Ship and Cruise Keys
@@ -286,9 +336,7 @@ The extraction regex below is copied from the picoplankton-bacteria
 notebook's verified pattern (`2004-11-02-C-33RR` -> `33RR`). Confirmed
 2026-09-19 against all 6 distinct `study_name` values in the real file (e.g.
 `2002-11-10-C-32NM`) — the format matches structurally. `derive_cruise_key_on_casts()`
-itself has still never executed in R, so `cruise_key_result$key_stats` and
-the match-rate percentage below remain unverified until this notebook is
-actually run.
+resolves every row by date span (see the rendered `key_stats`).
 
 ```{r}
 #| label: resolve-keys
@@ -364,19 +412,15 @@ build_relationships_json(
 ## Check Declared Bounds
 
 Not optional (RUNBOOK.md §3b) and an explicit completion criterion of issue
-#82. `dissolved_iron` / `total_iron` carry `valid_min = 0` (registered during
-`/generate-metadata`); neither carries a `valid_max` yet — `questions.csv` Q05
-proposes 50 / 100 nmol/L to Kathy, a ceiling revised down from an earlier
-literature-only guess (500 / 2000 nmol/L) once the real file could be
-inspected (2026-09-19): dissolved_iron is populated 170/171 with observed
-range 0.05-8.2 nmol/L, and total_iron has zero real values in this revision
-(170/171 rows are the undocumented `-999` sentinel, Q06) — per the
-measurement-bounds skill the proposed ceiling stays a generous multiple above
-the observed range, not the range itself. `chl_response_to_fe` now carries
-`valid_min = 0` directly (real data: 22/171 populated, range [1.0, 3.4], all
-non-negative) but still no `valid_max` — its exact definition is `proposed`
-not yet confirmed (Q01), so it is expected to report `undeclared` for the
-upper bound below until Q01 is answered.
+#82. The one emitted type, `dissolved_iron`, carries `valid_min = 0`
+(registered during `/generate-metadata`); a one-sided bound counts as declared
+for `check_measurement_bounds()`, so it reports `ok`. Its `valid_max` is **not
+declared**: `questions.csv` Q05 proposes 50 nmol/L to Kathy — a generous
+ceiling (~6x the observed maximum of 8.2 nmol/L), never the observed range
+itself — and it stays `proposed` until she agrees. The held-out types
+(`total_iron`, `chl_response_to_fe`) are not registered, so they have no bound
+to check; a bound for `chl_response_to_fe` is meaningless until Q01 says what
+the number is.
 
 ```{r}
 #| label: bounds-check
@@ -384,19 +428,16 @@ bounds_pre <- check_measurement_bounds(con, "iron_measurement", mt = d_meas_type
 bounds_datatable(bounds_pre)
 
 bounds_pre |> filter(status != "ok") |> select(measurement_type, status, finding) |>
-  datatable(caption = "Bounds findings — dissolved_iron/total_iron: undeclared valid_max, tracked as Q05 (proposed); chl_response_to_fe: valid_min=0 declared, undeclared valid_max, tracked as Q01 (proposed)")
+  datatable(caption = "Bounds findings (empty = every emitted type is ok) — dissolved_iron: valid_min=0 declared, valid_max proposed in Q05 but not declared")
 ```
 
 ```{r}
 #| label: bounds-enforce
-# all three measurement_types now carry a declared valid_min = 0 floor; none
-# has a declared valid_max yet (Q05 for dissolved_iron/total_iron, Q01 for
-# chl_response_to_fe)
+# dissolved_iron carries a declared valid_min = 0 floor; its valid_max awaits Q05
 oob_tally <- drop_out_of_bounds(con, "iron_measurement", mt = d_meas_type)
 cat(glue(
   "out-of-range rows removed: {format(sum(oob_tally$n_bad %||% 0), big.mark=',')} ",
-  "(dissolved_iron/total_iron/chl_response_to_fe < 0 is enforceable today; ",
-  "upper bounds await Q05/Q01)"), "\n")
+  "(dissolved_iron < 0 is enforceable today; the upper bound awaits Q05)"), "\n")
 
 bounds_post <- check_measurement_bounds(
   con, "iron_measurement", mt = d_meas_type, include_undeclared = FALSE)
@@ -416,10 +457,8 @@ if (length(results$errors) > 0)
 if (length(results$warnings) > 0)
   cat("Warnings:\n", paste("-", results$warnings, collapse = "\n"), "\n")
 
-# NULL cruise_key would mean derive_cruise_key_on_casts() couldn't resolve a
-# row even though study_name's format is now confirmed structurally correct
-# (see Resolve Ship and Cruise Keys above) -- not asserted to zero here since
-# the function has never actually executed in R; only reported.
+# cruise_key resolution is reported (and gated at release by
+# check_cruise_key_integrity()); sample_id is the pivot FK, so it is checked here
 n_dup <- dbGetQuery(con,
   "SELECT COUNT(*) FROM (SELECT sample_id, COUNT(*) n FROM iron_sample GROUP BY sample_id HAVING COUNT(*)>1)")[[1]]
 cat(glue("iron_sample sample_id duplicates: {n_dup}"), "\n")
@@ -462,23 +501,27 @@ dbGetQuery(con, "SELECT * FROM iron_measurement LIMIT 200") |>
 Project this dataset into the shared consolidated core model
 (`design_env-bio-consolidation.md`). Realm `env` throughout — no taxon
 involved. This is a self-contained sample arm: the source carries no
-cast/bottle FK to match against (unlike `calcofi_dic`), so every sample mints
-its own `sample` row via `sample_arm_self()`, same as
-picoplankton-bacteria's bottle arm.
+cast/bottle FK to match against (unlike `calcofi_dic`; a pole sample is not
+taken from a cast, so cast matching does not apply), so every sample mints its
+own `sample` row via `sample_arm_self()`, same as picoplankton-bacteria's
+bottle arm. The key id is `iron_sample.sample_key_id` (`study_name`-`index_number`,
+asserted unique above), giving `cce-lter_iron:bottle:{study_name}-{index_number}`.
+Only `iron_measurement` (dissolved iron) is projected; the held-out types never
+reach `obs`.
 
 ```{r}
 #| label: emit_core
 ds_key <- "cce-lter_iron"
 
 append_sample(con, sample_arm_self(
-  ds_key, "iron_sample", "sample_id", "bottle",
+  ds_key, "iron_sample", "sample_key_id", "bottle",
   dt_col = "datetime_start_utc", site_expr = "site_key",
   depth_min = "depth_m", depth_max = "depth_m"))
 
 # env realm: NULL taxon_key throughout — this is chemistry + a bioassay
 # response metric, not an occurrence
 append_obs(con, glue("
-  SELECT 'env', '{ds_key}', {ns_key(ds_key, 'bottle', 's.sample_id')},
+  SELECT 'env', '{ds_key}', {ns_key(ds_key, 'bottle', 's.sample_key_id')},
          s.grid_key, s.cruise_key, s.latitude, s.longitude,
          CAST(s.datetime_start_utc AS TIMESTAMP), s.depth_m, s.depth_m,
          NULL::VARCHAR, NULL::VARCHAR, m.measurement_type, m.measurement_value,
@@ -496,6 +539,13 @@ n_exp <- dbGetQuery(con,
   "SELECT COUNT(*) FROM iron_measurement m JOIN iron_sample s USING (sample_id)")[[1]]
 stopifnot(
   "obs must be one row per measurement" = n_obs == n_exp,
+  "only dissolved_iron may be emitted (Q01 / empty Total Fe hold-out)" =
+    identical(dbGetQuery(con, glue(
+      "SELECT DISTINCT measurement_type FROM obs WHERE dataset_key = '{ds_key}'"
+    ))$measurement_type, "dissolved_iron"),
+  "sample_key must be unique in sample" =
+    dbGetQuery(con, glue("SELECT COUNT(*) - COUNT(DISTINCT sample_key) FROM sample
+                          WHERE dataset_key = '{ds_key}'"))[[1]] == 0,
   "every obs.sample_key must resolve in sample" =
     dbGetQuery(con, "SELECT COUNT(*) FROM obs o LEFT JOIN sample s USING (sample_key)
                      WHERE s.sample_key IS NULL")[[1]] == 0)
@@ -508,7 +558,8 @@ invisible(dbExecute(con, "ALTER TABLE iron_measurement RENAME TO iron_measuremen
 invisible(dbExecute(con, glue(
   "CREATE OR REPLACE VIEW iron_measurement AS
    SELECT o.obs_id AS measurement_id,
-          split_part(o.sample_key, ':', 3) AS sample_id,
+          o.sample_key,
+          substr(o.sample_key, length('{ds_key}:bottle:') + 1) AS sample_key_id,
           o.measurement_type, o.measurement_value, o.measurement_qual
    FROM obs o WHERE o.dataset_key = '{ds_key}'")))
 cat(glue("compat view iron_measurement over obs: ",
@@ -563,11 +614,16 @@ if (Sys.getenv("CALCOFI_SKIP_GCS") == "") {
 
 Follow-up questions for CCE-LTER (Katherine Barbeau), ranked by importance.
 Tracked in `metadata/cce-lter/iron/questions.csv`. Q03 is resolved by direct
-inspection of the real data; Q01, Q02, Q05, Q06 are `proposed` (each carries
-an evidence-backed answer awaiting Kathy's confirmation); Q04 (units /
-detection-limit convention) is still `open` but `priority = high`, not
-`blocker`. No question is currently `open` + `blocker`, so none fails
-`/validate-ingest --strict`'s open-blocker gate as drafted.
+inspection of the real data. **Q01 (`open`, `blocker`) holds
+`chl_response_to_fe` out of the release** until the provider says what the
+number is (Overview, Hold-out). Q04 (units, detection limit, whether the 0.05
+nmol/L floor is a limit; `open`, `high`) is the main science caveat on the
+emitted `dissolved_iron`, published as `nmol/L` on the EML's reading alone.
+Q02, Q05, Q06 are `proposed` (each carries an evidence-backed answer awaiting
+Kathy's confirmation). Total Fe has no real value in this revision (Q06 records
+the `-999` convention); that is why `total_iron` is not registered.
+Because Q01 is `open` + `blocker`, `/validate-ingest --strict` is expected to
+flag it; that is the intended reminder, not a failure of this ingest.
 
 ```{r}
 #| label: provider-questions
