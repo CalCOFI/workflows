@@ -22,8 +22,8 @@ calcofi:
   # sample_measurement + the taxa refs.
   tables_owned:
     - {table: sample, shared: true, note: "core event dimension (transect segment + sighting)"}
-    - {table: obs, shared: true, note: "core occurrence headline (group_size per sighting)"}
-    - {table: obs_attribute, shared: true, note: "group size min/max, calves, behaviour per sighting"}
+    - {table: obs, shared: true, note: "core occurrence headline (group_size per counted sighting)"}
+    - {table: obs_attribute, shared: true, note: "effort status, group size min/max, calves, behaviour per counted sighting"}
     - {table: sample_measurement, shared: true, note: "transect_length per effort segment"}
     - {table: taxon, shared: true, note: "shared taxa reference (cetaceans, worms:)"}
     - {table: dataset_taxon, shared: true, note: "species_code -> taxon_key crosswalk"}
@@ -491,7 +491,7 @@ dbWriteTable(con, "dataset", as.data.frame(d_dataset), overwrite = TRUE)
 # 2026-09-27): read, never re-derived, and asserted complete
 d_meas_type <- read_measurement_type(here("metadata/measurement_type.csv"))
 my_types <- c("group_size", "group_size_min", "group_size_max", "calf_count",
-              "behavior", "transect_length")
+              "behavior", "effort_status", "transect_length")
 stopifnot("every type this ingest emits is registered" =
             all(my_types %in% d_meas_type$measurement_type))
 dbWriteTable(con, "measurement_type", as.data.frame(d_meas_type), overwrite = TRUE)
@@ -529,8 +529,9 @@ What the source becomes, and what it does not:
 |---|---|---|
 | `cetacean_segment` row | `sample` (`transect`) | key `sio_cetacean-sightings:transect:<segment_id>`; midpoint position; start time |
 | `cetacean_segment.segment_length_km` | `sample_measurement` `transect_length` | km |
-| `cetacean_sighting` row | `sample` (`sighting`) | parent = its transect when `segment_id` resolves, else none |
-| `cetacean_sighting.group_size_best` | `obs` `group_size` | `measurement_qual` = `effort_status` (ON/OFF) |
+| `cetacean_sighting` row | `sample` (`sighting`) | every sighting; parent = its transect when `segment_id` resolves, else none |
+| `cetacean_sighting.group_size_best` | `obs` `group_size` | only where Best > 0: a Best of 0 or blank (10 sightings) keeps its `sample` row and publishes no obs or attribute (Q13); `measurement_qual` NULL |
+| `effort_status` | `obs_attribute` `effort_status` | `bin_label` ON / OFF, `bin_value` 1 / 0; none where the flag is blank |
 | `group_size_min` / `_max` | `obs_attribute` `group_size_min` / `_max` | value in `count` |
 | `calf_count` | `obs_attribute` `calf_count`, `life_stage = calf` | plain integers only (Q09) |
 | `behavior_primary` / `_other1` / `_other2` | `obs_attribute` `behavior` | one row per code token, `bin_label` = the code (codebook Q03), `bin_value` = 1 / 2 / 3 for primary / other1 / other2 |
@@ -623,28 +624,43 @@ append_sample_measurement(con, glue("
          segment_length_km, NULL::VARCHAR
   FROM cetacean_segment WHERE segment_length_km IS NOT NULL"))
 
-# obs -- the headline: one row per sighting, the group size (best estimate).
-# One species per sighting (Q05), so the sighting IS the occurrence grain.
+# obs -- the headline: one row per COUNTED sighting, the group size (best
+# estimate). One species per sighting (Q05), so the sighting IS the occurrence
+# grain. A Best of 0 or blank is animals seen but not counted (a blow, a splash):
+# a row here would assert a measured group of 0, which reads as an absence, so
+# those sightings keep their sample row and publish no obs (Q13; Ben, 2026-10-01).
+# measurement_qual stays NULL: the on/off-effort flag is a sampling regime, not a
+# quality flag, and cc_qual_ok_sql() would keep OFF rows anyway (obs_attribute
+# effort_status below).
+counted <- "s.group_size_best > 0"
 append_obs(con, glue("
   SELECT 'bio', '{ds_key}', {si_key('s.sighting_id')},
          s.grid_key, s.cruise_key, s.latitude, s.longitude,
          CAST(s.datetime_start_utc AS TIMESTAMP), 0::DOUBLE, 0::DOUBLE,
          dt.taxon_key, NULL::VARCHAR, 'group_size', s.group_size_best,
-         s.effort_status, NULL::DOUBLE
+         NULL::VARCHAR, NULL::DOUBLE
   FROM cetacean_sighting s
   LEFT JOIN dataset_taxon dt ON dt.dataset_key = '{ds_key}'
-                            AND dt.ds_taxa_code = s.species_code"))
+                            AND dt.ds_taxa_code = s.species_code
+  WHERE {counted}"))
 
-# obs_attribute -- group size range, calves, behaviour. Not a breakdown of the
-# headline (none of these sums to group_size), so there is no sum-parity to
-# assert; each is asserted against its source column instead.
+# obs_attribute -- effort status, group size range, calves, behaviour, each on a
+# counted sighting only (an attribute of an occurrence that is not published
+# would describe nothing). Not a breakdown of the headline (none of these sums
+# to group_size), so there is no sum-parity to assert; each is asserted against
+# its source column instead.
 attr_sel <- function(type, life_stage, bin_value, bin_label, count, where) glue("
   SELECT '{ds_key}', {si_key('s.sighting_id')}, dt.taxon_key, {life_stage}, '{type}',
          {bin_value}, {bin_label}, {count}, NULL::VARCHAR
   FROM cetacean_sighting s
   LEFT JOIN dataset_taxon dt ON dt.dataset_key = '{ds_key}'
                             AND dt.ds_taxa_code = s.species_code
-  WHERE {where}")
+  WHERE {counted} AND {where}")
+# the analyst-adjusted on-effort-and-on-transect flag: line-transect density
+# uses ON only; OFF is a different sampling regime, not bad data
+append_obs_attribute(con, attr_sel("effort_status", "NULL::VARCHAR",
+                                   "CAST(CASE s.effort_status WHEN 'ON' THEN 1 ELSE 0 END AS DOUBLE)",
+                                   "s.effort_status", "NULL::INTEGER", "s.effort_status IS NOT NULL"))
 append_obs_attribute(con, attr_sel("group_size_min", "NULL::VARCHAR", "NULL::DOUBLE", "NULL::VARCHAR",
                                    "CAST(s.group_size_min AS INTEGER)", "s.group_size_min IS NOT NULL"))
 append_obs_attribute(con, attr_sel("group_size_max", "NULL::VARCHAR", "NULL::DOUBLE", "NULL::VARCHAR",
@@ -671,32 +687,50 @@ append_obs_attribute(con, glue("
          CAST(b.slot AS DOUBLE), b.code, NULL::INTEGER, NULL::VARCHAR
   FROM _behavior b JOIN cetacean_sighting s USING (sighting_id)
   LEFT JOIN dataset_taxon dt ON dt.dataset_key = '{ds_key}'
-                            AND dt.ds_taxa_code = s.species_code"))
+                            AND dt.ds_taxa_code = s.species_code
+  WHERE {counted}"))
 dbExecute(con, "DROP TABLE _behavior")
 
 q1 <- function(sql) dbGetQuery(con, sql)[[1]]
+d_counted  <- d_sighting |> filter(group_size_best > 0)
+n_uncounted <- nrow(d_sighting) - nrow(d_counted)
 core <- list(
   sample             = q1("SELECT COUNT(*) FROM sample"),
   sample_transect    = q1("SELECT COUNT(*) FROM sample WHERE sample_type = 'transect'"),
   sample_sighting    = q1("SELECT COUNT(*) FROM sample WHERE sample_type = 'sighting'"),
   sample_measurement = q1("SELECT COUNT(*) FROM sample_measurement"),
+  sighting_uncounted = n_uncounted,
   obs                = q1("SELECT COUNT(*) FROM obs"),
-  obs_attribute      = q1("SELECT COUNT(*) FROM obs_attribute"))
+  obs_attribute      = q1("SELECT COUNT(*) FROM obs_attribute"),
+  effort_on          = q1("SELECT COUNT(*) FROM obs_attribute WHERE measurement_type = 'effort_status' AND bin_label = 'ON'"),
+  effort_off         = q1("SELECT COUNT(*) FROM obs_attribute WHERE measurement_type = 'effort_status' AND bin_label = 'OFF'"))
 cat(glue("core projection -- ", paste(names(core), unlist(core), sep = "=", collapse = " ")), "\n")
 
 stopifnot(
   "one transect sample per segment"  = core$sample_transect == nrow(d_segment),
-  "one sighting sample per sighting" = core$sample_sighting == nrow(d_sighting),
-  "one obs per sighting"             = core$obs == nrow(d_sighting),
+  "one sighting sample per sighting, counted or not" = core$sample_sighting == nrow(d_sighting),
+  "the uncounted sightings are the 8 zeros and 2 blanks of Q13" =
+    n_uncounted == 10L && sum(d_sighting$group_size_best %in% 0) == 8L &&
+    sum(is.na(d_sighting$group_size_best)) == 2L,
+  "one obs per counted sighting"     = core$obs == nrow(d_counted),
+  "no obs has a group size of 0 or NULL (Q13)" =
+    q1("SELECT COUNT(*) FROM obs WHERE measurement_value IS NULL OR measurement_value <= 0") == 0,
   "obs value total = source Best total" =
     isTRUE(all.equal(q1("SELECT SUM(measurement_value) FROM obs"),
                      sum(d_sighting$group_size_best, na.rm = TRUE))),
-  "group_size_min rows = non-NULL Min" =
+  "measurement_qual is not used (effort status is an obs_attribute)" =
+    q1("SELECT COUNT(*) FROM obs WHERE measurement_qual IS NOT NULL") == 0,
+  "effort_status rows = counted sightings with the flag, ON and OFF as in the source" =
+    core$effort_on  == sum(d_counted$effort_status %in% "ON") &&
+    core$effort_off == sum(d_counted$effort_status %in% "OFF"),
+  "group_size_min rows = non-NULL Min on counted sightings" =
     q1("SELECT COUNT(*) FROM obs_attribute WHERE measurement_type = 'group_size_min'") ==
-    sum(!is.na(d_sighting$group_size_min)),
-  "calf_count total = source total" =
+    sum(!is.na(d_counted$group_size_min)),
+  "calf_count total = source total on counted sightings" =
     q1("SELECT COALESCE(SUM(count), 0) FROM obs_attribute WHERE measurement_type = 'calf_count'") ==
-    sum(d_sighting$calf_count, na.rm = TRUE),
+    sum(d_counted$calf_count, na.rm = TRUE),
+  "every obs_attribute row sits on a sighting that has an obs" =
+    q1("SELECT COUNT(*) FROM obs_attribute a WHERE a.sample_key NOT IN (SELECT sample_key FROM obs)") == 0,
   "transect_length total = source total" =
     isTRUE(all.equal(q1("SELECT SUM(measurement_value) FROM sample_measurement"),
                      sum(d_segment$segment_length_km, na.rm = TRUE))),
@@ -711,7 +745,7 @@ stopifnot(
     q1("SELECT COUNT(*) FROM obs o LEFT JOIN taxon t USING (taxon_key)
        WHERE o.taxon_key IS NOT NULL AND t.taxon_key IS NULL") == 0,
   "a NULL obs.taxon_key is an Oth sighting and nothing else" =
-    q1("SELECT COUNT(*) FROM obs WHERE taxon_key IS NULL") == sum(d_sighting$species_code == "Oth"),
+    q1("SELECT COUNT(*) FROM obs WHERE taxon_key IS NULL") == sum(d_counted$species_code == "Oth"),
   "every obs / obs_attribute / sample_measurement type is registered" =
     q1("SELECT COUNT(*) FROM (SELECT measurement_type FROM obs UNION
                              SELECT measurement_type FROM obs_attribute UNION
@@ -742,7 +776,7 @@ nullable <- tribble(
     "positions outside the CalCOFI grid (e.g. the CC1511 transit north of 39 N) and the one nulled position (Q11)",
   "sample", "datetime",          n_ref,
     "'#REF!' sighting times on CC0501 (Q06)",
-  "obs",    "taxon_key",         sum(d_sighting$species_code == "Oth"),
+  "obs",    "taxon_key",         sum(d_counted$species_code == "Oth"),
     "'Oth' (Other) is not a taxon")
 # the counts above that are measured rather than derived from the source must
 # still be explained: every NULL cruise_key belongs to an unresolved label
@@ -779,9 +813,10 @@ stopifnot("every emitted bound is declared and respected" = all(b$status == "ok"
 dbGetQuery(con, "
   SELECT o.taxon_key, t.scientific_name, COUNT(*) AS n_sightings,
          SUM(o.measurement_value) AS n_animals,
-         COUNT(*) FILTER (WHERE o.measurement_qual = 'ON') AS n_on_effort,
+         COUNT(*) FILTER (WHERE a.bin_label = 'ON') AS n_on_effort,
          MIN(year(o.datetime)) AS year_min, MAX(year(o.datetime)) AS year_max
   FROM obs o LEFT JOIN taxon t USING (taxon_key)
+  LEFT JOIN obs_attribute a ON a.sample_key = o.sample_key AND a.measurement_type = 'effort_status'
   GROUP BY ALL ORDER BY n_sightings DESC") |>
   datatable(caption = "obs by taxon", rownames = FALSE)
 ```

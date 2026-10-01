@@ -4,13 +4,30 @@
 # CalCOFI/marmam-app. The holding-only keys (status, priority_caloos, module,
 # next_step) and the structural keys (dataset_name, dataset_name_short,
 # category) left this file then; the structural ones now live in the notebook.
+#
+# Holding keys, restored 2026-10-01 while the ingest is held out of the release
+# (`in_release: false`): without `status`, the dataset drops out of the public
+# catalog (datasets.json holdings[], metadata/holdings.csv) until it ships. The
+# structural values repeat the notebook's exactly, so the merge changes nothing.
+# Delete this block in the change that sets `in_release: true`; a dataset_key
+# is a holding or a released dataset, never both.
+  status: external
+  provider: sio
+  dataset: cetacean-sightings
+  dataset_name: CalCOFI Cetacean Visual Line-Transect Sightings
+  dataset_name_short: "Cetacean sightings"
+  category: Seabirds & Marine Mammals
   visibility: public
   description: >
     Cetacean (whale, dolphin, porpoise) sightings and on-effort visual
     line-transect survey segments from quarterly CalCOFI cruises, 2004-2022
     (effort through 2021). Curated by the Scripps Whale Acoustics Lab
     (Hildebrand / Baumann-Pickering) and staged from the CalCOFI marine mammal
-    Shiny app repository (CalCOFI/marmam-app).
+    Shiny app repository (CalCOFI/marmam-app). The same cruises also carry the
+    Farallon Institute's seabird and marine mammal survey
+    (farallon_bird-mammal), run by an independent observer team: both datasets
+    are kept, so a cetacean group seen by both teams appears once in each, and
+    summing the two counts the same animals twice.
   # source: caloos-sheet row 23, 2026-09-05
   abstract: >
     CalCOFI Underway Marine Mammal Sighting Surveys contains visual sighting
@@ -66,7 +83,7 @@
   # split on its commas into three broken entries; rejoined 2026-09-27)
   keywords:
     - "Marine Turtles, Birds, and Mammals"
-  quality_control_md: 'QC flags present: No. Each sighting carries the analyst-adjusted on-effort/on-transect flag (ON/OFF), staged as obs.measurement_qual.'
+  quality_control_md: 'QC flags present: No. Each counted sighting carries the analyst-adjusted on-effort/on-transect flag as obs_attribute effort_status (ON/OFF); line-transect density uses ON only. A sighting with a Best group size of 0 or blank (animals seen but not counted) keeps its sample row and publishes no obs.'
   maintenance: ongoing
   # source: CalCOFI/marmam-app data/more_info_page.Rmd, 2026-09-27
   funding: "Office of Naval Research, Award N00014-22-1-2719"

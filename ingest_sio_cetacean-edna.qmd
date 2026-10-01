@@ -5,6 +5,7 @@ calcofi:
   workflow_type: ingest
   dependency:
     - ingest_swfsc_ichthyo
+    - ingest_calcofi_bottle
   output: data/parquet/sio_cetacean-edna/manifest.json
   provider: sio
   dataset: cetacean-edna
@@ -20,7 +21,7 @@ calcofi:
     color: "#8a6bb0"
   tables_owned:
     - {table: sample, shared: true, note: "core event dimension (eDNA water sample)"}
-    - {table: obs, shared: true, note: "core occurrence headline (edna_presence per sample x species)"}
+    - {table: obs, shared: true, note: "core occurrence headline (edna_presence per sequenced sample x species)"}
     - {table: taxon, shared: true, note: "shared taxa reference (7 cetaceans, worms:)"}
     - {table: dataset_taxon, shared: true, note: "species_code -> taxon_key crosswalk"}
     - {table: taxon_group, shared: true, note: "calcofi:marine_mammals"}
@@ -49,16 +50,23 @@ The app's `edna-processed.csv` is not read (a re-typed copy). This is **not**
 - **Grain**: one water sample (`sample_label`, the NCOG name
   `YYYYMM_LLL.L_SSS.S_depth`)
 - **Occurrence**: `edna_presence` 1/0 for each of the seven species on every
-  sample; a PCR-negative sample is an absence for all seven (Q04), with
-  `measurement_qual` naming the process so a consumer can drop them
-- **Time**: the table gives none. Each sample takes the time of the CalCOFI
-  station occupation at the same station on that cruise (Q06)
+  **sequenced** sample: 1 = the species' DNA was detected, 0 = it was not
+  detected in a sample that amplified and was sequenced (a non-detection, not a
+  confirmed absence). A PCR-negative sample ("not sequenced PCR negative") did
+  not amplify, so it says nothing about any species: it is kept as a `sample`
+  row with **no** `obs` until the provider answers Q04 (Ben, 2026-10-01)
+- **Time**: the table gives none. NCOG filters its eDNA from the CTD-rosette
+  Niskin bottles, so each sample takes the time and cruise of its
+  `calcofi_bottle` cast: the one cast at the same station on the cruise of the
+  label's month, found with `match_by_site_datetime()`, then the Niskin bottle
+  nearest the sample's depth with `match_nearest_by_depth()` (Q06)
 
 ```{mermaid}
 graph LR
   R[edna.csv<br/>one row per sample, 7 species columns] --> S[edna_sample]
   R --> D[edna_detection<br/>sample x species, 0/1]
   D -.sample_label.-> S
+  B[calcofi_bottle<br/>cast + Niskin bottle] -.site + cruise month, depth.-> S
 ```
 
 ## Setup
@@ -169,9 +177,12 @@ d_sample <- d_dedup |>
     longitude     = num(longitude),
     cruise_label  = cruise,
     # no sampling date in the source: the 15th of the cruise month (CCYYMM) is
-    # the anchor the station-visit match searches around (Q06)
+    # the anchor the bottle-cast match searches around (Q06)
     nominal_date  = make_date(2000L + as.integer(substr(cruise, 3, 4)),
-                              as.integer(substr(cruise, 5, 6)), 15L))
+                              as.integer(substr(cruise, 5, 6)), 15L),
+    # the match key: station + the cruise's designated year-month, which is
+    # how a cruise_key begins (YYYY-MM-NODC)
+    site_ym       = paste(site_key, format(nominal_date, "%Y-%m")))
 xy_name <- cc_calcofi_to_lonlat(d_sample$line, d_sample$station)
 n_ls_fix <- sum(d_sample$line != d_sample$line_src | d_sample$station != d_sample$station_src)
 stopifnot(
@@ -206,65 +217,116 @@ cat(glue("edna_sample: {nrow(d_sample)} samples ",
 
 ## Resolve cruise_key, time + Spatial
 
-`match_by_site_datetime()` finds, for each sample, the `swfsc_ichthyo` station
-occupation at the **same `site_key`** nearest the 15th of the cruise month, within
-25 days — one station is visited once per quarterly cruise, so the window cannot
-reach a neighbouring cruise. The sample takes that occupation's `cruise_key` and
-time. A sample whose station ichthyo did not occupy takes its label's
-`cruise_key` (the majority among its matched siblings) and no time.
+NCOG eDNA is filtered from the CTD-rosette Niskin bottles, so a sample's time
+and cruise are those of its **bottle cast**, not of the net tow at the same
+station. `match_by_site_datetime()` finds, for each sample, the `calcofi_bottle`
+cast at the **same `site_key` on the cruise of the label's month** (key
+`site_ym`; exactly one cast per sample at this commit, asserted) nearest the
+15th of that month, and `match_nearest_by_depth()` then finds the Niskin bottle
+on that cast nearest the sample's depth (within 5 m). The sample takes the
+cast's `cruise_key` and time. Every one of the 133 samples has its cast,
+including the 16 on CC1611, a Sally Ride cruise with no net tows (Q06).
+
+The matched bottle is kept in the source table as evidence (it also confirms the
+515 m and 170 m depths, Q09). It is **not** set as a cross-dataset
+`parent_sample_key`; that is a modelling decision still open.
 
 ```{r}
 #| label: spatial-cruise
 
-load_prior_tables(con, parquet_dir = cc_stage_path("parquet", "swfsc_ichthyo"),
-                  tables = c("grid"), geom_tables = c("grid"), as_view = TRUE)
-add_point_geom(con, "edna_sample", lon_col = "longitude", lat_col = "latitude")
-assign_grid_key(con, "edna_sample")
-
+bottle_parquet <- cc_stage_path("parquet", "calcofi_bottle", "sample.parquet")
 dbExecute(con, glue(
-  "CREATE OR REPLACE TABLE station_visit AS
-   SELECT sample_key, site_key, cruise_key, datetime
-   FROM read_parquet('{cc_stage_path('parquet','swfsc_ichthyo','sample.parquet')}')
-   WHERE site_key IS NOT NULL AND cruise_key IS NOT NULL AND datetime IS NOT NULL"))
+  "CREATE OR REPLACE TABLE bottle_cast AS
+   SELECT sample_key AS cast_sample_key, site_key, cruise_key, datetime,
+          site_key || ' ' || substr(cruise_key, 1, 7) AS site_ym
+   FROM read_parquet('{bottle_parquet}')
+   WHERE sample_type = 'cast' AND site_key IS NOT NULL
+     AND cruise_key IS NOT NULL AND datetime IS NOT NULL"))
+dbExecute(con, glue(
+  "CREATE OR REPLACE TABLE bottle_niskin AS
+   SELECT sample_key AS bottle_sample_key, parent_sample_key AS cast_sample_key,
+          depth_max_m AS depth_m
+   FROM read_parquet('{bottle_parquet}')
+   WHERE sample_type = 'bottle' AND depth_max_m IS NOT NULL
+     AND parent_sample_key IN (
+       SELECT cast_sample_key FROM bottle_cast
+       WHERE site_ym IN (SELECT site_ym FROM edna_sample))"))
 
-visit_match <- match_by_site_datetime(
-  con, "edna_sample", "station_visit",
-  fk_col = "visit_sample_key", ref_pk = "sample_key",
-  key_col = "site_key", datetime_col = "nominal_date", ref_datetime_col = "datetime",
-  window_days = 25)
+# match_by_site_datetime() takes the nearest cast by date and LIMIT 1, so a
+# station occupied twice on one cruise would be a coin toss: assert there is none
+n_multi_cast <- dbGetQuery(con, "
+  SELECT COUNT(*) FROM (
+    SELECT site_ym FROM bottle_cast WHERE site_ym IN (SELECT site_ym FROM edna_sample)
+    GROUP BY 1 HAVING COUNT(*) > 1)")[[1]]
+stopifnot("one bottle cast per station x cruise month among the eDNA samples" = n_multi_cast == 0)
+
+# 45 days either side of the 15th: a cruise can begin late in the month before
+# its designated month (CC1402's cast at 90.0 37.0 is 2014-01-29)
+cast_match <- match_by_site_datetime(
+  con, "edna_sample", "bottle_cast",
+  fk_col = "cast_sample_key", ref_pk = "cast_sample_key",
+  key_col = "site_ym", datetime_col = "nominal_date", ref_datetime_col = "datetime",
+  window_days = 45)
+niskin_match <- match_nearest_by_depth(
+  con, "edna_sample", "bottle_niskin",
+  fk_col = "bottle_sample_key", ref_pk = "bottle_sample_key",
+  parent_fk = "cast_sample_key", axis_col = "depth_m", tolerance = 5)
 
 dbExecute(con, "ALTER TABLE edna_sample ADD COLUMN IF NOT EXISTS cruise_key VARCHAR")
 dbExecute(con, "ALTER TABLE edna_sample ADD COLUMN IF NOT EXISTS datetime_start_utc TIMESTAMP")
 dbExecute(con, "
-  UPDATE edna_sample e SET cruise_key = v.cruise_key, datetime_start_utc = v.datetime
-  FROM station_visit v WHERE v.sample_key = e.visit_sample_key")
-# the label's consensus for the rest: every matched sample of a label must agree
-label_ck <- dbGetQuery(con, "
-  SELECT cruise_label, COUNT(DISTINCT cruise_key) AS n_keys, ANY_VALUE(cruise_key) AS cruise_key
-  FROM edna_sample WHERE cruise_key IS NOT NULL GROUP BY 1")
-stopifnot("a cruise label's matched samples agree on one cruise_key" = all(label_ck$n_keys == 1))
-dbWriteTable(con, "_label_ck", label_ck, overwrite = TRUE)
-dbExecute(con, "
-  UPDATE edna_sample e SET cruise_key = l.cruise_key
-  FROM _label_ck l WHERE e.cruise_key IS NULL AND l.cruise_label = e.cruise_label")
-dbExecute(con, "DROP TABLE _label_ck")
+  UPDATE edna_sample e SET cruise_key = c.cruise_key, datetime_start_utc = c.datetime
+  FROM bottle_cast c WHERE c.cast_sample_key = e.cast_sample_key")
 
-# a label none of whose stations ichthyo occupied (CC1611: a Sally Ride cruise with
-# no tows) takes the cruise the release's CTD casts and bottles place on those
-# dates, from the visual survey's crosswalk (sightings Q14 / Q06 here)
+# the shared crosswalk (owned by ingest_sio_cetacean-sightings.qmd) is re-validated
+# here rather than trusted: each key must be the label's year-month + its ship's
+# NODC code, and where an eDNA label is in it (CC1611), the bottle casts must
+# place the samples on that same cruise
+d_ship  <- dbGetQuery(con, glue(
+  "SELECT ship_key, ship_nodc FROM read_parquet('{cc_stage_path('parquet','swfsc_ichthyo','ship.parquet')}')"))
 d_xwalk <- read_csv(here("metadata/sio/cetacean-sightings/cruise_label_crosswalk.csv"),
-                    col_types = cols(.default = "c"))
-dbWriteTable(con, "_xwalk", d_xwalk |> select(cruise_label, cruise_key), overwrite = TRUE)
-n_xwalk <- dbExecute(con, "
-  UPDATE edna_sample e SET cruise_key = x.cruise_key
-  FROM _xwalk x WHERE e.cruise_key IS NULL AND x.cruise_label = e.cruise_label")
-dbExecute(con, "DROP TABLE _xwalk")
+                    col_types = cols(.default = "c")) |>
+  left_join(d_ship, by = "ship_key") |>
+  mutate(minted = paste0("20", substr(cruise_label, 3, 4), "-", substr(cruise_label, 5, 6), "-", ship_nodc))
+d_label_ck <- dbGetQuery(con, "
+  SELECT cruise_label, COUNT(DISTINCT cruise_key) AS n_keys, ANY_VALUE(cruise_key) AS cruise_key,
+         COUNT(*) AS n_samples
+  FROM edna_sample GROUP BY 1 ORDER BY 1")
+d_xw_edna <- d_label_ck |> inner_join(d_xwalk |> select(cruise_label, xwalk_key = cruise_key), by = "cruise_label")
+stopifnot(
+  "every sample has its bottle cast (a new sample without one must be looked at)" =
+    cast_match$matched == cast_match$total,
+  "every sample has a Niskin bottle within 5 m of its depth on that cast" =
+    niskin_match$matched == nrow(d_sample),
+  "every sample has a cruise_key and a time" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM edna_sample
+                     WHERE cruise_key IS NULL OR datetime_start_utc IS NULL")[[1]] == 0,
+  "a cruise label's samples sit on one cruise_key" = all(d_label_ck$n_keys == 1),
+  "the cruise_key's year-month is the label's" =
+    all(substr(d_label_ck$cruise_key, 1, 7) ==
+          paste0("20", substr(d_label_ck$cruise_label, 3, 4), "-", substr(d_label_ck$cruise_label, 5, 6))),
+  "every crosswalk ship is in the ship reference" = !anyNA(d_xwalk$ship_nodc),
+  "each crosswalk cruise_key is the label's year-month + its ship's NODC code" =
+    all(d_xwalk$minted == d_xwalk$cruise_key),
+  "where the crosswalk names an eDNA label, the bottle casts agree with it" =
+    all(d_xw_edna$cruise_key == d_xw_edna$xwalk_key))
 
-cat(glue("station visit matched for {visit_match$matched}/{visit_match$total} samples ",
-         "({visit_match$pct}%); cruise_key on ",
-         "{dbGetQuery(con, 'SELECT COUNT(cruise_key) FROM edna_sample')[[1]]} samples ",
-         "({n_xwalk} from the crosswalk)"), "\n")
-visit_match$unmatched |> datatable(caption = "Samples with no ichthyo station visit (no time)", rownames = FALSE)
+d_depth_gap <- dbGetQuery(con, "
+  SELECT e.sample_label, e.depth_m, n.depth_m AS bottle_depth_m,
+         ABS(e.depth_m - n.depth_m) AS depth_diff_m
+  FROM edna_sample e JOIN bottle_niskin n USING (bottle_sample_key)
+  WHERE e.depth_m <> n.depth_m ORDER BY depth_diff_m DESC")
+cat(glue("bottle cast matched for {cast_match$matched}/{cast_match$total} samples; ",
+         "Niskin bottle within 5 m for {niskin_match$matched} ",
+         "({nrow(d_depth_gap)} not at the exact depth, max {max(c(0, d_depth_gap$depth_diff_m))} m); ",
+         "{nrow(d_label_ck)} cruise labels, {nrow(d_xw_edna)} of them in the shared crosswalk"), "\n")
+d_label_ck |> datatable(caption = "Cruise label -> cruise_key, from the bottle casts", rownames = FALSE)
+
+# spatial last: nothing above has to UPDATE a table that carries geometry
+load_prior_tables(con, parquet_dir = cc_stage_path("parquet", "swfsc_ichthyo"),
+                  tables = c("grid"), geom_tables = c("grid"), as_view = TRUE)
+add_point_geom(con, "edna_sample", lon_col = "longitude", lat_col = "latitude")
+assign_grid_key(con, "edna_sample")
 ```
 
 ## Load Dataset Metadata + Schema
@@ -310,12 +372,14 @@ questions_datatable(
 
 | source | core | transform |
 |---|---|---|
-| `edna_sample` | `sample` (`water`) | key `sio_cetacean-edna:water:<sample_label>`; depth_min_m = depth_max_m = `depth_m`; time of the matched station visit |
-| `edna_detection.detected` | `obs` `edna_presence` | 1/0 for each of the seven species on every sample; `measurement_qual` = `edna_process` verbatim |
+| `edna_sample` | `sample` (`water`) | every sample, sequenced or not; key `sio_cetacean-edna:water:<sample_label>`; depth_min_m = depth_max_m = `depth_m`; time and cruise of the matched bottle cast |
+| `edna_detection.detected` | `obs` `edna_presence` | 1/0 for each of the seven species on every **sequenced** sample; `measurement_qual` = `edna_process` verbatim (always `sequenced`) |
+| PCR-negative samples | -- | **held** (Q04): a `sample` row, no `obs`; the 0s in the source are not published |
 
 **Not published** (kept in the archived source): `illumina_name`,
 `station_name`, `season`, the app's `detections` / `SpeciesName` / `SubOrder`
-convenience columns.
+convenience columns, the matched bottle (`bottle_sample_key`, evidence only),
+and the species columns of the PCR-negative samples.
 
 ### Taxon vocabulary
 
@@ -363,6 +427,9 @@ append_sample(con, sample_arm_self(
   ds_key, "edna_sample", "sample_label", "water",
   site_expr = "site_key", depth_min = "depth_m", depth_max = "depth_m"))
 
+# a PCR-negative sample did not amplify: its 0s are not non-detections, so it
+# publishes no obs until the provider answers Q04 (Ben, 2026-10-01). Its sample
+# row stays: the water was collected and screened, the result is what is held.
 append_obs(con, glue("
   SELECT 'bio', '{ds_key}', {ns_key(ds_key, 'water', 's.sample_label')},
          s.grid_key, s.cruise_key, s.latitude, s.longitude,
@@ -370,24 +437,31 @@ append_obs(con, glue("
          dt.taxon_key, NULL::VARCHAR, 'edna_presence',
          CAST(d.detected AS DOUBLE), s.edna_process, NULL::DOUBLE
   FROM edna_detection d JOIN edna_sample s USING (sample_label)
-  JOIN dataset_taxon dt ON dt.dataset_key = '{ds_key}' AND dt.ds_taxa_code = d.species_code"))
+  JOIN dataset_taxon dt ON dt.dataset_key = '{ds_key}' AND dt.ds_taxa_code = d.species_code
+  WHERE s.edna_process = 'sequenced'"))
 
 q1 <- function(sql) dbGetQuery(con, sql)[[1]]
+n_seq <- sum(d_sample$edna_process == "sequenced")
+n_pcr_neg_detect <- d_detection |>
+  semi_join(d_sample |> filter(edna_process != "sequenced"), by = "sample_label") |>
+  pull(detected) |> sum()
 core <- list(
-  sample      = q1("SELECT COUNT(*) FROM sample"),
-  obs         = q1("SELECT COUNT(*) FROM obs"),
-  obs_present = q1("SELECT COUNT(*) FROM obs WHERE measurement_value = 1"))
+  sample            = q1("SELECT COUNT(*) FROM sample"),
+  sample_sequenced  = n_seq,
+  sample_held       = nrow(d_sample) - n_seq,
+  obs               = q1("SELECT COUNT(*) FROM obs"),
+  obs_present       = q1("SELECT COUNT(*) FROM obs WHERE measurement_value = 1"))
 cat(glue("core projection -- ", paste(names(core), unlist(core), sep = "=", collapse = " ")), "\n")
 
 stopifnot(
-  "one sample per eDNA sample"            = core$sample == nrow(d_sample),
-  "seven obs per sample"                  = core$obs == 7L * nrow(d_sample),
+  "one sample per eDNA sample, PCR-negative ones included" = core$sample == nrow(d_sample),
+  "seven obs per sequenced sample"        = core$obs == 7L * n_seq,
   "one obs per sample x taxon (Q08)"      =
     q1("SELECT COUNT(*) FROM (SELECT sample_key, taxon_key FROM obs GROUP BY ALL HAVING COUNT(*) > 1)") == 0,
+  "the source has no detection on a PCR-negative sample" = n_pcr_neg_detect == 0,
   "presences = detections in the source"  = core$obs_present == sum(d_detection$detected),
-  "a PCR-negative sample has no presence (Q04)" =
-    q1("SELECT COUNT(*) FROM obs WHERE measurement_value = 1
-        AND measurement_qual <> 'sequenced'") == 0,
+  "a PCR-negative sample publishes no obs (held, Q04)" =
+    q1("SELECT COUNT(*) FROM obs WHERE measurement_qual IS DISTINCT FROM 'sequenced'") == 0,
   "every obs.sample_key resolves in sample" =
     q1("SELECT COUNT(*) FROM obs o LEFT JOIN sample s USING (sample_key) WHERE s.sample_key IS NULL") == 0,
   "every obs.taxon_key resolves in taxon" =
@@ -400,20 +474,20 @@ stopifnot(
 #| label: validate
 
 results <- validate_for_release(con, checks = "all", strict = FALSE)
-n_no_visit <- visit_match$total - visit_match$matched
 nullable <- tribble(
   ~table,   ~column,             ~n,                ~reason,
-  "sample", "parent_sample_key", nrow(d_sample),    "single-level dataset: every sample is a root",
-  "sample", "datetime",          n_no_visit,        "no ichthyo occupation of the station on that cruise (Q06)",
-  "sample", "cruise_key",        q1("SELECT COUNT(*) FROM sample WHERE cruise_key IS NULL"),
-    "a label none of whose samples matched a station visit",
+  "sample", "parent_sample_key", nrow(d_sample),    "single-level dataset: every sample is a root (the matched bottle is not set as a cross-dataset parent)",
   "sample", "grid_key",          q1("SELECT COUNT(*) FROM sample WHERE grid_key IS NULL"),
     "station outside the CalCOFI grid cells")
 stopifnot(
-  "declared datetime NULLs match" =
-    q1("SELECT COUNT(*) FROM sample WHERE datetime IS NULL") == n_no_visit,
+  "no sample lacks a time (every one has its bottle cast)" =
+    q1("SELECT COUNT(*) FROM sample WHERE datetime IS NULL") == 0,
+  "no sample lacks a cruise_key" =
+    q1("SELECT COUNT(*) FROM sample WHERE cruise_key IS NULL") == 0,
   "every sample is a root" =
-    q1("SELECT COUNT(*) FROM sample WHERE parent_sample_key IS NULL") == nrow(d_sample))
+    q1("SELECT COUNT(*) FROM sample WHERE parent_sample_key IS NULL") == nrow(d_sample),
+  "the grid_key NULLs are counted, not assumed (a ratchet: none at this commit)" =
+    nullable$n[nullable$column == "grid_key"] == 0)
 cat("validate_for_release:", ifelse(results$passed, "PASSED", "reported findings -- reconciled against the declared NULLs below"), "\n")
 nullable |> datatable(caption = "Declared NULLs (count and reason)", rownames = FALSE)
 ```
