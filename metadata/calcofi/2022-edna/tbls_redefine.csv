@@ -1,4 +1,5 @@
 tbl_old,tbl_new,tbl_description
-occurrence,edna_sample,"One row per physical water filter (parentEventID grain, 47 rows): position, depth, collection datetime."
-occurrence+dnaderiveddata,edna_assay,"One row per detection (occurrenceID/eventID grain, 201 rows): taxon, sequence-read count, and which of the two molecular assays (D-loop or 12S/MiFish) produced it."
-extendedmeasurementorfact,edna_context,"Co-collected water chemistry (ammonia, nitrate, nitrite, phosphate, silicate, chl_fluor, dissolved oxygen) and genomics QC (DNA concentration, raw/filtered read totals, OTU richness) per parentEventID sample -- 11 measurement types out of ~60 source measurementType values that carry an actual value/unit."
+occurrence,edna_sample,"Working table: one row per physical water filter (parentEventID grain): position, depth, collection datetime, ship, cruise and grid keys. Projected into core `sample` (sample_type filter)."
+occurrence+dnaderiveddata,edna_assay,"Working table: one row per occurrence (one ASV in one sequencing library): taxon, read count and the library's assay (dloop or 12s)."
+occurrence+dnaderiveddata,edna_detection,"Working table: one row per filter x taxon x assay, reads summed over ASVs and PCR replicate libraries. Projected into core `obs` as edna_reads_<assay> and, collapsed over assays, edna_presence."
+extendedmeasurementorfact,edna_context,"Working table: one row per filter x measurement_type: co-collected nutrients, chl_fluor, dissolved oxygen (mg/L), DNA concentration and the per-assay raw and filtered read totals. Projected into core `sample_measurement`. The FAIRe protocol-text measurementTypes and the 'OTUs or ASVs assigned to taxa' values are not published (question Q04)."

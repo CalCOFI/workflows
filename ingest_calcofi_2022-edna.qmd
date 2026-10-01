@@ -4,10 +4,14 @@ calcofi:
   target_name: ingest_calcofi_2022_edna
   workflow_type: ingest
   dependency:
-    - ingest_calcofi_bottle
+    # reads swfsc_ichthyo's staged ship/cruise/grid (load_prior_tables() below)
+    - ingest_swfsc_ichthyo
   output: data/parquet/calcofi_2022-edna/manifest.json
   provider: calcofi
   dataset: 2022-edna
+  # staged, not released, until the provider questions on zero-detection runs
+  # (Q08), read filtering (Q07) and the ASV/replicate summing (Q06) are answered
+  in_release: false
   workflow_url: https://calcofi.io/workflows/ingest_calcofi_2022-edna.html
   questions_file: metadata/calcofi/2022-edna/questions.csv
   dataset_meta:
@@ -22,13 +26,12 @@ calcofi:
   # category with real observations (calpoly_whale-edna and
   # jcvi_ncog-metabarcoding remain holdings, no ingest).
   tables_owned:
-    - {table: sample, shared: true, note: "one row per water-filter sample (parentEventID grain, not eventID -- see Overview)"}
-    - {table: obs, shared: true, note: "species detections; measurement_type = sequence_reads"}
-    - {table: obs_attribute, shared: true, note: "assay dimension (D-loop vs 12S/MiFish) per detection"}
-    - {table: sample_measurement, shared: true, note: "co-collected water chemistry + genomics QC, from extendedmeasurementorfact.txt"}
+    - {table: sample, shared: true, note: "one row per water filter (sample_type filter, parentEventID grain)"}
+    - {table: obs, shared: true, note: "one row per filter x taxon x measurement_type: edna_presence (headline, all assays) + edna_reads_dloop / edna_reads_12s (reads summed over ASVs and PCR replicates)"}
+    - {table: sample_measurement, shared: true, note: "co-collected water chemistry, DNA concentration and the per-assay raw and filtered read totals (the normalisers for edna_reads_*)"}
     - {table: taxon, shared: true}
     - {table: dataset_taxon, shared: true}
-    - {table: measurement_type, shared: true, note: "adds sequence_reads, oxygen_mg_l, dna_concentration, reads_raw_total, reads_filtered_total, otu_richness"}
+    - {table: measurement_type, shared: true, note: "adds edna_reads_dloop, edna_reads_12s, edna_reads_raw_dloop, edna_reads_raw_12s, edna_reads_filtered_dloop, edna_reads_filtered_12s, oxygen_mg_l, dna_concentration; reuses edna_presence (sio_cetacean-edna)"}
   erd:
     color: "#bbe0f0"
 editor_options:
@@ -41,15 +44,25 @@ editor_options:
 [10.15468/n52j6r](https://www.gbif.org/dataset/10524092-539d-4ea4-8539-2e91ad8581a9)
 ("CalCOFI October 2022 Vertebrate eDNA"). Linked to Patin et al. 2026
 (*Methods in Ecology and Evolution*, https://doi.org/10.1111/2041-210x.70370).
-201 occurrence records from 47 water-filter samples collected 2022-10-13 to
-2022-10-18 at CalCOFI/GEMCAP stations, each filter run through up to two
-molecular assays: mitochondrial D-loop (cetacean detections -- *Delphinus*,
-*Megaptera novaeangliae*) and 12S rRNA "MiFish" (fish detections). Source
-`datasetID` is `CalCOFI_Intercal` -- an intercalibration exercise, published
-as a CalCOFI program product (provider `calcofi`, not `sio`: see
-`provider.csv` -- this dataset is branded and identified as CalCOFI's own,
-unlike e.g. `sio_mesopelagic-fish`, which is an SIO lab collection CalCOFI
-merely sampled for).
+Water filters collected 2022-10-13 to 2022-10-18 at CalCOFI/GEMCAP stations on
+the Reuben Lasker, each run through one or both of two molecular assays:
+mitochondrial D-loop (cetaceans -- *Delphinus*, *Megaptera novaeangliae*) and
+12S rRNA "MiFish" (fish). Source `datasetID` is `CalCOFI_Intercal` -- an
+intercalibration exercise, published as a CalCOFI program product (provider
+`calcofi`, not `sio`: see `provider.csv` -- this dataset is branded and
+identified as CalCOFI's own, unlike e.g. `sio_mesopelagic-fish`, which is an
+SIO lab collection CalCOFI merely sampled for).
+
+**What a read count is, and is not.** `organismQuantity` is a number of DNA
+sequence reads -- PCR-amplified, primer- and library-depth-dependent. It is a
+semi-quantitative signal, **not abundance**, and reads from the two assays are
+not comparable. So the headline `obs` row is `edna_presence` (1 = detected; the
+same type `sio_cetacean-edna` uses), and the reads are published per assay
+(`edna_reads_dloop`, `edna_reads_12s`) beside the per-assay filtered-read totals
+in `sample_measurement` (`edna_reads_filtered_*`), which turn them into a
+relative read abundance within an assay. The archive carries positive detections
+only: a filter, or an assay run, with no detection is absent, so a 0 is never
+emitted and absence cannot be inferred (provider question).
 
 **Not a wide CSV.** This ingest reads the DwC-A's three tables directly
 (`occurrence.txt`, `dnaderiveddata.txt`, `extendedmeasurementorfact.txt`,
@@ -63,15 +76,15 @@ folder (GBIF's raw occurrence-download export) is not used here -- the DwC-A
 is the complete, canonical source; the other is a redundant representation
 kept for reference.
 
-**Sample grain is `parentEventID`, not `eventID`.** Every `eventID` under a
-given `parentEventID` shares identical `decimalLatitude`/`decimalLongitude`/
-`minimumDepthInMeters`/`eventDate` (checked against all 201 rows: 0/47 groups
-disagree) -- the `eventID` split is the assay dimension (D-loop vs MiFish), not
-a distinct physical event. Treating `eventID` as the sample grain would
-duplicate every filter's coordinates once per assay it ran (up to 2x) and
-double-count "samples per station" in any consumer query. This mirrors
-`calcofi_bottle`, where one physical bottle (not each `bottle_measurement`
-row) is the sample.
+**Sample grain is `parentEventID` (`sample_type` `filter`), not `eventID`.**
+Every `eventID` under a given `parentEventID` shares identical
+`decimalLatitude`/`decimalLongitude`/`minimumDepthInMeters`/`eventDate`
+(asserted below) -- an `eventID` is one sequencing library: an assay
+(`_DL` D-loop, `_MiFish` 12S) and, for D-loop, a PCR replicate (`-1`, `-2`, `-3`).
+Treating `eventID` as the sample would duplicate every filter's coordinates once
+per library. An `occurrenceID` is one ASV (a distinct sequence) in one library,
+so the same taxon appears many times per filter (dozens of *D. delphis* ASVs in
+one library); `obs` sums them to one row per filter x taxon x assay.
 
 ### Data Flow
 
@@ -179,8 +192,9 @@ No `read_csv_files()` result to hand `check_data_integrity()`, so integrity is
 checked directly against the shape this ingest actually depends on: every
 `occurrenceID` unique, every occurrence joins 1:1 to `dnaderiveddata` (the
 assay source), every `parentEventID` group internally agrees on
-position/time/depth (the sample-grain decision above), and no `occurrenceStatus`
-other than `present` (no absence records to filter).
+position/time/depth (the sample-grain decision above), every read count is a
+positive integer of one quantity type, and no `occurrenceStatus` other than
+`present` (no absence records to filter).
 
 ```{r}
 #| label: check-integrity
@@ -203,11 +217,24 @@ grain_check <- d_occ |>
 stopifnot("every parentEventID must share one position/depth/date across its eventIDs" =
             nrow(grain_check) == 0)
 
+stopifnot("dnaderiveddata must hold one row per occurrenceID" =
+            !anyDuplicated(d_dna$occurrenceID))
+
+# every organismQuantity is a positive whole number of sequence reads -- the
+# aggregation below SUMs them, so a non-numeric or a different quantity type
+# would be silently mixed in
+stopifnot(
+  "organismQuantityType must be 'DNA sequence reads' on every occurrence" =
+    setequal(unique(d_occ$organismQuantityType), "DNA sequence reads"),
+  "organismQuantity must be a positive integer on every occurrence" =
+    all(grepl("^[0-9]+$", d_occ$organismQuantity)) &&
+    all(as.numeric(d_occ$organismQuantity) > 0))
+
 n_parent <- n_distinct(d_occ$parentEventID)
 cat(glue(
-  "integrity OK: {nrow(d_occ)} occurrences / {n_parent} parentEventID samples / ",
-  "{n_distinct(d_occ$eventID)} eventIDs (assay runs); 0 duplicate occurrenceIDs; ",
-  "0 unjoined to dnaderiveddata; 0 grain conflicts"), "\n")
+  "integrity OK: {nrow(d_occ)} occurrences (ASV x library) / {n_parent} parentEventID ",
+  "filters / {n_distinct(d_occ$eventID)} eventIDs (sequencing libraries: assay x PCR ",
+  "replicate); 0 duplicate occurrenceIDs; 0 unjoined to dnaderiveddata; 0 grain conflicts"), "\n")
 ```
 
 ## Build Sample (Filter) Table
@@ -227,10 +254,21 @@ d_sample <- d_occ |>
     depth_max_m = as.numeric(maximumDepthInMeters),
     datetime_start_utc = readr::parse_datetime(eventDate, format = "%Y-%m-%dT%H:%M%z"),
     location_id = locationID,
-    locality = locality)
+    locality = locality,
+    # Q01: every filter is from the Reuben Lasker (ship_key 'RL', NODC 33UD).
+    # Set here, before add_point_geom(): never UPDATE a table holding a geom.
+    ship_key = "RL")
+
+# regression guard (commit 9b1a0d9): as_datetime() once turned every eventDate
+# (an offset timestamp without seconds) into NA while the render stayed green,
+# leaving datetime and cruise_key NULL for every filter
+stopifnot(
+  "every eventDate must parse to a UTC datetime" = !anyNA(d_sample$datetime_start_utc),
+  "one edna_sample row per parentEventID" =
+    nrow(d_sample) == n_parent && !anyDuplicated(d_sample$parent_event_id))
 
 dbWriteTable(con, "edna_sample", as.data.frame(d_sample), overwrite = TRUE)
-cat(glue("edna_sample: {nrow(d_sample)} rows (expect 47)"), "\n")
+cat(glue("edna_sample: {nrow(d_sample)} filters"), "\n")
 ```
 
 ## Standardize Taxonomy
@@ -276,33 +314,79 @@ cat(glue("taxonomy: {n_staged} taxa staged (all WoRMS-resolved), ",
          "taxon {n_taxon}, dataset_taxon {n_ds_taxon}"), "\n")
 ```
 
-## Assay (D-loop vs MiFish) Lookup
+## Assay and Detection Grain
 
-The molecular assay is a property of the *detection*, not the sample (one
-filter carries detections from both assays) -- it comes from
-`dnaderiveddata.target_gene`, joined by `occurrenceID`. Carried as an
-`obs_attribute` row (measurement_type = 'assay', bin_label = the assay name),
-matching how `ingest_farallon_bird-mammal.qmd` records `behavior` -- Q02,
-RESOLVED against the real obs_attribute schema.
+The molecular assay is a property of the sequencing library (`eventID`), not of
+the filter: one filter can carry D-loop and MiFish libraries. It comes from
+`dnaderiveddata.target_gene`, joined by `occurrenceID`, and is checked against
+the library id's own `_DL` / `_MiFish` suffix. The assay goes into the
+`measurement_type` (`edna_reads_dloop`, `edna_reads_12s`) rather than an
+`obs_attribute` row: an attribute row has no key back to its `obs` row, so a
+filter detecting one taxon by both assays could not say which read count was
+which (decision B4, 2026-10-01).
+
+Detections are then aggregated to **one row per filter x taxon x assay**: reads
+summed over the taxon's ASVs and over the filter's PCR replicate libraries for
+that assay. The per-assay filtered-read totals in `sample_measurement` are summed
+over the same libraries, so `edna_reads_* / edna_reads_filtered_*` is the taxon's
+share of the reads the assay produced for that filter.
 
 ```{r}
 #| label: assay-lookup
 
 dbWriteTable(con, "edna_dna", as.data.frame(d_dna), overwrite = TRUE)
 
+# assay code -> the suffix of the measurement types it emits
+assay_map <- tribble(
+  ~target_gene,                    ~assay,  ~library_suffix,
+  "D-loop",                        "dloop", "_DL",
+  "12S rRNA (SSU mitochondria)",   "12s",   "_MiFish")
+dbWriteTable(con, "edna_assay_map", assay_map, overwrite = TRUE)
+
+stopifnot("every dnaderiveddata.target_gene must be a known assay" =
+            all(unique(d_dna$target_gene) %in% assay_map$target_gene))
+
 d_assay <- dbGetQuery(con, "
   SELECT o.occurrenceID, o.parentEventID, o.eventID, o.scientificNameID,
-         o.organismQuantity,
-         CASE d.target_gene
-           WHEN 'D-loop' THEN 'D-loop'
-           WHEN '12S rRNA (SSU mitochondria)' THEN '12S (MiFish)'
-           ELSE d.target_gene
-         END AS assay
-  FROM edna_occurrence o JOIN edna_dna d USING (occurrenceID)")
+         CAST(o.organismQuantity AS BIGINT) AS reads,
+         m.assay, m.library_suffix
+  FROM edna_occurrence o
+  JOIN edna_dna        d USING (occurrenceID)
+  JOIN edna_assay_map  m ON m.target_gene = d.target_gene")
+stopifnot(
+  "every occurrence must resolve an assay" = nrow(d_assay) == nrow(d_occ),
+  "a library's assay must match its eventID suffix (_DL = D-loop, _MiFish = 12S)" =
+    all(str_detect(d_assay$eventID, fixed(d_assay$library_suffix))))
 dbWriteTable(con, "edna_assay", d_assay, overwrite = TRUE)
 
-d_assay |> count(assay) |>
-  datatable(caption = "Detections by assay", rownames = FALSE)
+# filter x taxon x assay: SUM reads over ASVs and PCR replicate libraries
+dbExecute(con, "
+  CREATE OR REPLACE TABLE edna_detection AS
+  SELECT parentEventID, scientificNameID, assay,
+         SUM(reads)               AS reads,
+         COUNT(*)                 AS n_occurrence,
+         COUNT(DISTINCT eventID)  AS n_library
+  FROM edna_assay
+  GROUP BY parentEventID, scientificNameID, assay")
+
+d_det <- dbGetQuery(con, "SELECT * FROM edna_detection")
+stopifnot(
+  "edna_detection must be unique per filter x taxon x assay" =
+    !anyDuplicated(d_det[, c("parentEventID", "scientificNameID", "assay")]),
+  "the aggregation must conserve every read" =
+    sum(d_det$reads) == sum(d_assay$reads),
+  "every aggregated detection must have reads > 0" = all(d_det$reads > 0))
+
+d_assay |>
+  group_by(assay) |>
+  summarize(
+    occurrences = n(), libraries = n_distinct(eventID),
+    filters = n_distinct(parentEventID), taxa = n_distinct(scientificNameID),
+    reads = sum(reads), .groups = "drop") |>
+  left_join(
+    d_det |> count(assay, name = "filter_x_taxon_rows"), by = "assay") |>
+  datatable(caption = "Occurrences (ASV x library) aggregated to filter x taxon x assay",
+            rownames = FALSE)
 ```
 
 ## Add Spatial
@@ -328,111 +412,206 @@ load_prior_tables(
   geom_tables = c("grid"),
   as_view     = TRUE)
 
-add_point_geom(con, "edna_sample", lon_col = "longitude", lat_col = "latitude")
-assign_grid_key(con, "edna_sample") |> datatable(caption = "Grid assignment")
-
-n_sk  <- dbGetQuery(con, "SELECT COUNT(*) FROM edna_sample WHERE grid_key IS NOT NULL")[[1]]
-n_all <- dbGetQuery(con, "SELECT COUNT(*) FROM edna_sample")[[1]]
-cat(glue("grid_key resolved: {n_sk}/{n_all}"), "\n")
-
 # Q01 RESOLVED 2026-09-26: the source carries no ship/cruise id, but the
 # provider metadata (GBIF/IPT page + eml.xml acknowledgements) names the
-# vessel as NOAA Ship Reuben Lasker. Confirmed against calcofi.io/db-query:
-# `ship` has ship_key 'RL' = REUBEN LASKER (ship_nodc '33UD'), and `cruise`
-# has exactly one row overlapping this dataset's 2022-10-13..18 window --
-# cruise_key '2022-10-33UD' (its own '33UD' suffix is that same NODC code).
-# Resolved via the shared helper (cce-lter_euphausiids.qmd precedent), not
-# hand-written SQL (issue #47); ship_key is a constant here since all 47
-# samples come from this one cruise.
-dbExecute(con, "ALTER TABLE edna_sample ADD COLUMN IF NOT EXISTS ship_key VARCHAR")
-dbExecute(con, "UPDATE edna_sample SET ship_key = 'RL'")
+# vessel as NOAA Ship Reuben Lasker: ship_key 'RL' (ship_nodc '33UD'), set in
+# build-sample. Keyed by the shared helper's span containment (cruise-key
+# skill), before add_point_geom() so no UPDATE touches the geom table.
 resolve_cruise_key(con, "edna_sample", datetime_col = "datetime_start_utc",
                    require_in_cruise = TRUE) |>
   datatable(caption = "cruise_key resolution method")
 
-n_ck <- dbGetQuery(con, "SELECT COUNT(*) FROM edna_sample WHERE cruise_key IS NOT NULL")[[1]]
-cat(glue("cruise_key resolved: {n_ck}/{n_all}"), "\n")
+add_point_geom(con, "edna_sample", lon_col = "longitude", lat_col = "latitude")
+assign_grid_key(con, "edna_sample") |> datatable(caption = "Grid assignment")
+
+n_sk  <- dbGetQuery(con, "SELECT COUNT(*) FROM edna_sample WHERE grid_key IS NOT NULL")[[1]]
+n_ck  <- dbGetQuery(con, "SELECT COUNT(*) FROM edna_sample WHERE cruise_key IS NOT NULL")[[1]]
+n_all <- dbGetQuery(con, "SELECT COUNT(*) FROM edna_sample")[[1]]
+stopifnot(
+  "every filter must resolve a cruise_key (one Reuben Lasker cruise, Q01)" = n_ck == n_all,
+  "every filter must resolve a grid_key" = n_sk == n_all)
+cat(glue("grid_key resolved: {n_sk}/{n_all}; cruise_key resolved: {n_ck}/{n_all}"), "\n")
 ```
 
 ## Water Chemistry + Genomics QC (sample_measurement)
 
-`extendedmeasurementorfact.txt` is 12,632 rows, but only 7 fields are real
-per-sample measurements (identical across every occurrence sharing a
-`parentEventID`, confirmed for all 47 groups) plus 4 genomics QC values; the
-other ~50 distinct `measurementType` values are FAIRe-checklist protocol text
-(kit names, SOP links, extraction dates) with no place in a value/unit table.
-Six of the seven measurements reuse existing canonical `measurement_type`
-rows by exact unit match (`ammonia`, `nitrate`, `nitrite`, `phosphate`,
-`silicate`, `chl_fluor`, all confirmed against the live v2026.07.30 release
-schema); dissolved oxygen is reported in mg/L, which no existing oxygen type
-uses, so it gets a new `oxygen_mg_l` type rather than a guessed conversion
-(Q03).
+`extendedmeasurementorfact.txt` repeats every value on every occurrence. Most of
+its distinct `measurementType` values are FAIRe-checklist protocol text (kit
+names, SOP links, extraction dates) with no place in a value/unit table. What is
+kept, at two grains (both asserted below, not assumed):
+
+- **per filter** -- the co-collected nutrients, `chl_fluor`, dissolved oxygen and
+  the extracted-DNA concentration: one value per `parentEventID`. Five reuse
+  canonical types with the same unit (`ammonia`, `nitrate`, `nitrite`,
+  `phosphate`, `silicate`) and `chl_fluor`; oxygen is reported in mg/L, which no
+  existing oxygen type uses, so it is `oxygen_mg_l` rather than a converted value
+  (Q03).
+- **per library** -- the raw and the filtered read totals: one value per
+  `eventID`. Summed over the filter's libraries of each assay into
+  `edna_reads_raw_<assay>` and `edna_reads_filtered_<assay>`; the filtered total
+  is the denominator of `edna_reads_<assay>`.
+
+One library-level value is **not** published, pending the provider (Q04): the
+"Total number of OTUs or ASVs assigned to taxa", which is not an OTU count -- it
+equals the library's summed `organismQuantity` (a read count) in nearly every
+library. The evidence is computed below.
 
 ```{r}
 #| label: emof-context
 
 dbWriteTable(con, "edna_emof", as.data.frame(d_emof), overwrite = TRUE)
 
-emof_type_map <- tribble(
-  ~source_type,                              ~measurement_type,
-  "Concentration of ammonia in the sample",   "ammonia",
-  "Concentration of nitrate in the sample",   "nitrate",
-  "Concentration of nitrite in the sample",   "nitrite",
-  "Concentration of phosphate in the sample", "phosphate",
-  "Concentration of silicate in the sample",  "silicate",
-  "Chlorophyll fluorescence",                 "chl_fluor",
-  "Concentration of dissolved oxygen",        "oxygen_mg_l",
-  "Concentration of total DNA after extraction", "dna_concentration",
-  "The total number of raw sequence reads for each sample.", "reads_raw_total",
-  "The number of filtered sequence reads for each sample, that made it through bioinformatic filtering and used for final/subsequent analyses.", "reads_filtered_total",
-  "Total number of OTUs or ASVs assigned to taxa based on the study-specific thresholds for each sample", "otu_richness")
+src_raw  <- "The total number of raw sequence reads for each sample. Unit = reads"
+src_filt <- paste(
+  "The number of filtered sequence reads for each sample, that made it through",
+  "bioinformatic filtering and used for final/subsequent analyses. Unit = reads")
+src_otu  <- paste(
+  "Total number of OTUs or ASVs assigned to taxa based on the study-specific",
+  "thresholds for each sample")
 
+# source_unit is asserted against measurementUnit, so a mapped type cannot
+# silently change unit under us; level is the grain the value repeats at
+emof_type_map <- tribble(
+  ~source_type,                                  ~source_unit,               ~measurement_type,     ~level,
+  "Concentration of ammonia in the sample",      "umol/L",                   "ammonia",             "filter",
+  "Concentration of nitrate in the sample",      "umol/L",                   "nitrate",             "filter",
+  "Concentration of nitrite in the sample",      "umol/L",                   "nitrite",             "filter",
+  "Concentration of phosphate in the sample",    "umol/L",                   "phosphate",           "filter",
+  "Concentration of silicate in the sample",     "umol/L",                   "silicate",            "filter",
+  "Chlorophyll fluorescence",                    "micrograms per litre",     "chl_fluor",           "filter",
+  "Concentration of dissolved oxygen",           "mg/L",                     "oxygen_mg_l",         "filter",
+  "Concentration of total DNA after extraction", "nanograms per microlitre", "dna_concentration",   "filter",
+  src_raw,                                       "reads",                    "edna_reads_raw",      "library",
+  src_filt,                                      "reads",                    "edna_reads_filtered", "library")
 dbWriteTable(con, "emof_type_map", emof_type_map, overwrite = TRUE)
 
-# dedupe to one value per (parentEventID, measurement_type): every eventID
-# child of a parentEventID carries an identical context value (checked above
-# for ammonia; same join logic covers all seven), so MIN() here is a
-# tie-break over identical values, not an aggregation.
-d_context <- dbGetQuery(con, "
-  SELECT o.parentEventID, m.measurement_type,
-         MIN(TRY_CAST(e.measurementValue AS DOUBLE)) AS measurement_value
+d_emof_m <- dbGetQuery(con, "
+  SELECT a.parentEventID, a.eventID, a.assay,
+         m.measurement_type, m.level, m.source_unit,
+         e.measurementUnit                       AS unit,
+         e.measurementValue                      AS value_raw,
+         TRY_CAST(e.measurementValue AS DOUBLE)  AS value
   FROM edna_emof e
-  JOIN edna_occurrence o USING (occurrenceID)
-  JOIN emof_type_map m ON m.source_type = e.measurementType
-  GROUP BY o.parentEventID, m.measurement_type")
-dbWriteTable(con, "edna_context", d_context, overwrite = TRUE)
+  JOIN edna_assay    a USING (occurrenceID)
+  JOIN emof_type_map m ON m.source_type = e.measurementType")
+
+# the FAIRe checklist's own missing-value terms are the only non-numbers allowed;
+# they are absences of a value, so they emit no row (S1)
+faire_missing <- c("missing", "missing: not provided")
+d_nonnum <- d_emof_m |> filter(is.na(value)) |> distinct(measurement_type, parentEventID, value_raw)
+stopifnot(
+  "every mapped eMoF measurementType must be present in the source" =
+    setequal(unique(d_emof_m$measurement_type), emof_type_map$measurement_type),
+  "every mapped eMoF value must carry its expected measurementUnit" =
+    all(d_emof_m$unit == d_emof_m$source_unit),
+  "a non-numeric eMoF value must be a FAIRe missing-value term" =
+    all(d_nonnum$value_raw %in% faire_missing))
+
+# the grain each value repeats at is asserted, never assumed: a filter value is
+# identical on every occurrence of its parentEventID, a library value on every
+# occurrence of its eventID. This replaces a MIN() that hid any disagreement.
+n_filter_conflict <- d_emof_m |> filter(level == "filter") |>
+  group_by(parentEventID, measurement_type) |>
+  summarize(n = n_distinct(value_raw), .groups = "drop") |> filter(n > 1) |> nrow()
+n_library_conflict <- d_emof_m |> filter(level == "library") |>
+  group_by(eventID, measurement_type) |>
+  summarize(n = n_distinct(value_raw), .groups = "drop") |> filter(n > 1) |> nrow()
+stopifnot(
+  "a per-filter eMoF value must be identical across the filter's occurrences" =
+    n_filter_conflict == 0,
+  "a per-library eMoF value must be identical across the library's occurrences" =
+    n_library_conflict == 0)
+
+d_ctx_filter <- d_emof_m |>
+  filter(level == "filter", !is.na(value)) |>
+  distinct(parentEventID, measurement_type, measurement_value = value)
+
+# per assay: SUM over the filter's libraries of that assay, the same libraries
+# the obs read counts are summed over
+d_ctx_library <- d_emof_m |>
+  filter(level == "library", !is.na(value)) |>
+  distinct(parentEventID, eventID, assay, measurement_type, value) |>
+  group_by(parentEventID, measurement_type = paste0(measurement_type, "_", assay)) |>
+  summarize(measurement_value = sum(value), .groups = "drop")
+
+d_context <- bind_rows(d_ctx_filter, d_ctx_library)
+stopifnot("edna_context must be unique per filter x measurement_type" =
+            !anyDuplicated(d_context[, c("parentEventID", "measurement_type")]))
+dbWriteTable(con, "edna_context", as.data.frame(d_context), overwrite = TRUE)
 
 n_dropped_types <- dbGetQuery(con, "
   SELECT COUNT(DISTINCT measurementType) FROM edna_emof
   WHERE measurementType NOT IN (SELECT source_type FROM emof_type_map)")[[1]]
 cat(glue(
-  "sample_measurement staged: {nrow(d_context)} rows across {nrow(emof_type_map)} types, ",
-  "{n_parent <- n_distinct(d_context$parentEventID)} samples; ",
-  "{n_dropped_types} protocol-text measurementTypes excluded (not measurements)"), "\n")
+  "sample_measurement staged: {nrow(d_context)} rows across ",
+  "{n_distinct(d_context$measurement_type)} types and ",
+  "{n_distinct(d_context$parentEventID)} filters; ",
+  "{nrow(d_nonnum)} FAIRe 'missing' values emit no row ",
+  "({paste(unique(d_nonnum$measurement_type), collapse = ', ')}); ",
+  "{n_dropped_types} other measurementTypes not published"), "\n")
+```
+
+```{r}
+#| label: emof-held-evidence
+
+# raw >= filtered in every library, and the evidence for the value held back (Q04)
+d_lib_qc <- dbGetQuery(con, glue("
+  SELECT a.eventID, a.assay,
+         MAX(CASE WHEN e.measurementType = '{src_raw}'  THEN TRY_CAST(e.measurementValue AS BIGINT) END) AS raw,
+         MAX(CASE WHEN e.measurementType = '{src_filt}' THEN TRY_CAST(e.measurementValue AS BIGINT) END) AS filtered,
+         MAX(CASE WHEN e.measurementType = '{src_otu}'  THEN TRY_CAST(e.measurementValue AS BIGINT) END) AS otu_or_asv
+  FROM edna_emof e JOIN edna_assay a USING (occurrenceID)
+  GROUP BY a.eventID, a.assay")) |>
+  left_join(
+    d_assay |> group_by(eventID) |> summarize(reads_published = sum(reads)),
+    by = "eventID")
+
+n_lib          <- nrow(d_lib_qc)
+n_otu_eq_reads <- sum(d_lib_qc$otu_or_asv == d_lib_qc$reads_published)
+n_otu_ge_reads <- sum(d_lib_qc$otu_or_asv >= d_lib_qc$reads_published)
+stopifnot(
+  "every library must carry a raw and a filtered read total" =
+    !anyNA(d_lib_qc$raw) && !anyNA(d_lib_qc$filtered),
+  "filtered reads can never exceed raw reads" = all(d_lib_qc$filtered <= d_lib_qc$raw),
+  "published reads can never exceed the library's filtered reads" =
+    all(d_lib_qc$reads_published <= d_lib_qc$filtered))
+cat(glue(
+  "raw >= filtered >= published reads in all {n_lib} libraries"), "\n")
+cat(glue(
+  "'OTUs or ASVs assigned to taxa' equals the library's summed organismQuantity in ",
+  "{n_otu_eq_reads} of {n_lib} libraries (>= it in {n_otu_ge_reads}); range ",
+  "{min(d_lib_qc$otu_or_asv)}-{max(d_lib_qc$otu_or_asv)} -- a read count, not ",
+  "richness; not published (Q04)"), "\n")
+
+d_lib_qc |>
+  arrange(assay, eventID) |>
+  datatable(caption = "Per-library read totals (otu_or_asv held back, Q04)",
+            rownames = FALSE)
 ```
 
 ## Declare and Enforce Physical Bounds
 
-Per RUNBOOK.md 3b: every ingest with numeric `sample_measurement` values checks
-them against `metadata/measurement_type.csv`'s declared bounds before leaving
-the notebook (`ingest_calcofi_bottle.qmd`/`ingest_calcofi_mets.qmd` do this on
-their own measurement staging table; this is the same step, run on
-`edna_context`). All 11 types here (6 reused, 5 new) already carry a
-`valid_min = 0`; `oxygen_mg_l` also has `valid_max = 20`. A finding that isn't
-`ok` gets a `proposed` row in `questions.csv`, not a silent drop.
+Every ingest that emits measurements checks them against
+`metadata/measurement_type.csv`'s declared bounds (measurement-bounds skill):
+here on `edna_context` before it becomes `sample_measurement`, and again on the
+emitted `obs` after Emit Core Tables. Every type this dataset emits declares at
+least `valid_min = 0`, so an `undeclared` finding is a hard stop rather than a
+note; an `out_of_range` one is enforced by `drop_out_of_bounds()` and reported.
 
 ```{r}
 #| label: bounds-check
 
 d_bounds <- check_measurement_bounds(con, "edna_context", mt = d_meas_type)
 bounds_datatable(d_bounds)
+stopifnot("every sample_measurement type must declare a bound" =
+            !any(d_bounds$status == "undeclared"))
 ```
 
 ```{r}
 #| label: bounds-enforce
 
 oob_tally <- drop_out_of_bounds(con, "edna_context", mt = d_meas_type)
-cat(glue("out-of-bounds rows dropped from edna_context: {oob_tally}"), "\n")
+cat(glue("out-of-bounds rows dropped from edna_context: {sum(oob_tally$n_bad)}"), "\n")
 ```
 
 ## Schema Documentation
@@ -445,21 +624,28 @@ lightyellow = amended reference tables, white = shared metadata.
 
 edna_rels <- list(
   primary_keys = list(
-    edna_sample = "parent_event_id",
+    edna_sample    = "parent_event_id",
+    edna_assay     = "occurrenceID",
+    edna_detection = c("parentEventID", "scientificNameID", "assay"),
+    edna_context   = c("parentEventID", "measurement_type"),
     measurement_type = "measurement_type"),
   foreign_keys = list(
     list(table = "edna_assay", column = "parentEventID",
+         ref_table = "edna_sample", ref_column = "parent_event_id"),
+    list(table = "edna_detection", column = "parentEventID",
+         ref_table = "edna_sample", ref_column = "parent_event_id"),
+    list(table = "edna_context", column = "parentEventID",
          ref_table = "edna_sample", ref_column = "parent_event_id"),
     list(table = "edna_context", column = "measurement_type",
          ref_table = "measurement_type", ref_column = "measurement_type")))
 
 cc_erd(
   con,
-  tables = c("edna_sample", "edna_assay", "edna_context",
+  tables = c("edna_sample", "edna_assay", "edna_detection", "edna_context",
              "measurement_type", "dataset"),
   rels   = edna_rels,
   colors = list(
-    lightblue   = c("edna_sample", "edna_assay", "edna_context"),
+    lightblue   = c("edna_sample", "edna_assay", "edna_detection", "edna_context"),
     lightyellow = "measurement_type",
     white       = "dataset"))
 ```
@@ -467,98 +653,161 @@ cc_erd(
 ## Emit Core Tables
 
 Projection lives here, in the notebook, per the no-`switch(dataset_key, ...)`
-rule -- no `calcofi4db` change needed for this dataset.
+rule -- no `calcofi4db` change needed for this dataset. `sample_key` is
+`calcofi_2022-edna:filter:<parentEventID>` (`dataset_key:sample_type:id`). There
+is no `obs_attribute`: the assay lives in the measurement type.
 
 ```{r}
 #| label: emit-core
 
 # 1. sample -- one row per physical water filter (parentEventID grain)
 append_sample(con, glue("
-  SELECT {ns_key(ds_key, 'sample', 'parent_event_id')} AS sample_key,
+  SELECT {ns_key(ds_key, 'filter', 'parent_event_id')} AS sample_key,
          'filter' AS sample_type, NULL::VARCHAR AS parent_sample_key,
-         {ns_key(ds_key, 'sample', 'parent_event_id')} AS root_sample_key,
+         {ns_key(ds_key, 'filter', 'parent_event_id')} AS root_sample_key,
          '{ds_key}' AS dataset_key, grid_key, NULL::VARCHAR AS site_key, cruise_key,
          NULL::INTEGER AS order_occ,
          latitude, longitude, datetime_start_utc AS datetime,
          depth_min_m, depth_max_m, NULL::VARCHAR AS tow_type
   FROM edna_sample"))
 
-# 2. obs -- species detections, headline measurement = sequence_reads
-# Positional order confirmed against calcofi_bottle/calcofi_dic/cce-lter_euphausiids
-# (identical arg order in all three): realm, dataset_key, sample_key, grid_key,
+# 2. obs -- bound positionally: realm, dataset_key, sample_key, grid_key,
 # cruise_key, latitude, longitude, datetime, depth_min_m, depth_max_m, taxon_key,
 # life_stage, measurement_type, measurement_value, measurement_qual,
-# measurement_prec. life_stage is NULL for eDNA reads -- there is no life-stage
-# field on a water-filter detection (occurrence.txt has no lifeStage column
-# either); the source's identificationRemarks was a guess with no home in this
-# schema and has been dropped.
+# measurement_prec. life_stage is NULL: a water-filter detection has none.
+#   (a) edna_presence -- the cross-dataset headline, the same type and meaning as
+#       sio_cetacean-edna: 1 = the taxon's DNA was detected (reads > 0 after the
+#       provider's own filtering) by any assay in this filter. Positive
+#       detections only, so never 0 here.
+#   (b) edna_reads_<assay> -- reads summed over ASVs and PCR replicate libraries
+#       (edna_detection), one row per filter x taxon x assay.
+obs_cols <- glue("
+  '{ds_key}', {ns_key(ds_key, 'filter', 'd.parentEventID')},
+  s.grid_key, s.cruise_key, s.latitude, s.longitude, s.datetime_start_utc,
+  s.depth_min_m, s.depth_max_m, dt.taxon_key, NULL::VARCHAR")
+obs_from <- glue("
+  JOIN edna_sample s ON s.parent_event_id = d.parentEventID
+  LEFT JOIN dataset_taxon dt ON dt.dataset_key = '{ds_key}'
+                            AND dt.ds_taxa_code = d.scientificNameID")
+
 append_obs(con, glue("
-  SELECT 'bio', '{ds_key}', {ns_key(ds_key, 'sample', 'a.parentEventID')},
-         s.grid_key, s.cruise_key, s.latitude, s.longitude, s.datetime_start_utc,
-         s.depth_min_m, s.depth_max_m,
-         dt.taxon_key, NULL::VARCHAR,
-         'sequence_reads', CAST(a.organismQuantity AS DOUBLE),
-         NULL::VARCHAR, NULL::DOUBLE
-  FROM edna_assay a
-  JOIN edna_sample s ON s.parent_event_id = a.parentEventID
-  LEFT JOIN dataset_taxon dt ON dt.dataset_key = '{ds_key}'
-                            AND dt.ds_taxa_code = a.scientificNameID"))
+  SELECT 'bio', {obs_cols},
+         'edna_presence', 1::DOUBLE, NULL::VARCHAR, NULL::DOUBLE
+  FROM (SELECT DISTINCT parentEventID, scientificNameID
+        FROM edna_detection WHERE reads > 0) d
+  {obs_from}"))
 
-# 3. obs_attribute -- assay dimension per detection. Positional order confirmed
-# against swfsc_ichthyo/calcofi_phyllosoma/cdfw_dungeness-crab/farallon_bird-mammal:
-# dataset_key, sample_key, taxon_key, life_stage, measurement_type, bin_value,
-# bin_label, count, measurement_qual. The assay label ('D-loop'/'12S (MiFish)')
-# is categorical text, so it belongs in bin_label (position 7) -- confirmed
-# against the real obs_attribute schema at calcofi.io/db-schema. Resolves Q02.
-append_obs_attribute(con, glue("
-  SELECT '{ds_key}', {ns_key(ds_key, 'sample', 'a.parentEventID')},
-         dt.taxon_key, NULL::VARCHAR, 'assay',
-         NULL::DOUBLE, a.assay, NULL::INTEGER, NULL::VARCHAR
-  FROM edna_assay a
-  LEFT JOIN dataset_taxon dt ON dt.dataset_key = '{ds_key}'
-                            AND dt.ds_taxa_code = a.scientificNameID"))
+append_obs(con, glue("
+  SELECT 'bio', {obs_cols},
+         'edna_reads_' || d.assay, CAST(d.reads AS DOUBLE), NULL::VARCHAR, NULL::DOUBLE
+  FROM edna_detection d
+  {obs_from}"))
 
-# 4. sample_measurement -- co-collected water chemistry + genomics QC
+# 3. sample_measurement -- co-collected water chemistry, DNA concentration and
+# the per-assay filtered-read totals; a FAIRe 'missing' emitted no row upstream
 append_sample_measurement(con, glue("
-  SELECT {ns_key(ds_key, 'sample', 'parentEventID')}, '{ds_key}',
+  SELECT {ns_key(ds_key, 'filter', 'parentEventID')}, '{ds_key}',
          measurement_type, measurement_value, NULL::VARCHAR
-  FROM edna_context"))
+  FROM edna_context
+  WHERE measurement_value IS NOT NULL"))
 
 core <- list(
-  sample             = dbGetQuery(con, "SELECT COUNT(*) FROM sample WHERE dataset_key = 'calcofi_2022-edna'")[[1]],
-  obs                = dbGetQuery(con, "SELECT COUNT(*) FROM obs WHERE dataset_key = 'calcofi_2022-edna'")[[1]],
-  obs_attribute      = dbGetQuery(con, "SELECT COUNT(*) FROM obs_attribute WHERE dataset_key = 'calcofi_2022-edna'")[[1]],
-  sample_measurement = dbGetQuery(con, "SELECT COUNT(*) FROM sample_measurement WHERE dataset_key = 'calcofi_2022-edna'")[[1]])
-cat(glue(
-  "core projection -- sample={core$sample} (expect 47) obs={core$obs} (expect 201) ",
-  "obs_attribute={core$obs_attribute} (expect 201) ",
-  "sample_measurement={core$sample_measurement} (expect up to 47*11)"), "\n")
+  sample             = dbGetQuery(con, glue("SELECT COUNT(*) FROM sample WHERE dataset_key = '{ds_key}'"))[[1]],
+  obs                = dbGetQuery(con, glue("SELECT COUNT(*) FROM obs WHERE dataset_key = '{ds_key}'"))[[1]],
+  sample_measurement = dbGetQuery(con, glue("SELECT COUNT(*) FROM sample_measurement WHERE dataset_key = '{ds_key}'"))[[1]])
 
-n_unresolved_taxon <- dbGetQuery(con,
-  "SELECT COUNT(*) FROM obs WHERE dataset_key = 'calcofi_2022-edna' AND taxon_key IS NULL")[[1]]
-stopifnot("every eDNA detection must resolve a taxon_key" = n_unresolved_taxon == 0)
+# the grain contract, asserted -------------------------------------------------
+d_obs_chk <- dbGetQuery(con, glue("
+  SELECT sample_key, taxon_key, measurement_type, measurement_value
+  FROM obs WHERE dataset_key = '{ds_key}'"))
+n_presence <- sum(d_obs_chk$measurement_type == "edna_presence")
+stopifnot(
+  "one sample row per filter" = core$sample == n_parent,
+  "every sample_key must be dataset_key:filter:id" =
+    dbGetQuery(con, glue("
+      SELECT COUNT(*) FROM sample
+      WHERE dataset_key = '{ds_key}'
+        AND (sample_type <> 'filter' OR sample_key NOT LIKE '{ds_key}:filter:%')"))[[1]] == 0,
+  "every eDNA observation must resolve a taxon_key" = !anyNA(d_obs_chk$taxon_key),
+  "obs must be unique per (sample_key, taxon_key, measurement_type)" =
+    !anyDuplicated(d_obs_chk[, c("sample_key", "taxon_key", "measurement_type")]),
+  "one edna_presence row per filter x taxon detected" =
+    n_presence == nrow(distinct(d_det, parentEventID, scientificNameID)),
+  "edna_presence is 1 on every row (positive detections only)" =
+    all(d_obs_chk$measurement_value[d_obs_chk$measurement_type == "edna_presence"] == 1),
+  "one edna_reads_* row per filter x taxon x assay" =
+    sum(startsWith(d_obs_chk$measurement_type, "edna_reads_")) == nrow(d_det),
+  "obs must carry every published read" =
+    sum(d_obs_chk$measurement_value[startsWith(d_obs_chk$measurement_type, "edna_reads_")]) ==
+      sum(d_assay$reads),
+  "no NULL measurement_value in obs" = !anyNA(d_obs_chk$measurement_value),
+  "no NULL measurement_value in sample_measurement" =
+    dbGetQuery(con, glue("
+      SELECT COUNT(*) FROM sample_measurement
+      WHERE dataset_key = '{ds_key}' AND measurement_value IS NULL"))[[1]] == 0)
+
+d_core_types <- dbGetQuery(con, glue("
+  SELECT 'obs' AS tbl, measurement_type, COUNT(*) AS n
+  FROM obs WHERE dataset_key = '{ds_key}' GROUP BY ALL
+  UNION ALL
+  SELECT 'sample_measurement', measurement_type, COUNT(*)
+  FROM sample_measurement WHERE dataset_key = '{ds_key}' GROUP BY ALL
+  ORDER BY 1, 2"))
+d_core_types |> datatable(caption = "Rows per measurement_type emitted", rownames = FALSE)
+
+cat(glue(
+  "core projection -- sample={core$sample} obs={core$obs} ",
+  "({n_presence} edna_presence + {core$obs - n_presence} edna_reads_*) ",
+  "sample_measurement={core$sample_measurement}; no obs_attribute"), "\n")
 ```
 
-## Register New Measurement Types
+```{r}
+#| label: bounds-obs
+
+# S5: bounds on what is actually published, not only on the staging table
+d_bounds_obs <- check_measurement_bounds(con, "obs", mt = d_meas_type, dataset_key = ds_key)
+bounds_datatable(d_bounds_obs)
+stopifnot(
+  "every obs type must declare a bound" = !any(d_bounds_obs$status == "undeclared"),
+  "no obs value may lie outside its declared bound" =
+    !any(d_bounds_obs$status == "out_of_range"))
+```
+
+## Measurement Type Registry
+
+The new types were added to `metadata/measurement_type.csv` once, with
+`register_measurement_types()`, not by this
+notebook: rewriting the shared registry on every render is a side effect on a
+file other ingests edit. The notebook asserts the contract in both directions --
+every type it emits is registered, and every registered type that names this
+dataset in `_source_datasets` has at least one row.
 
 ```{r}
 #| label: measurement-types
 
-new_types <- c("sequence_reads", "oxygen_mg_l", "dna_concentration",
-               "reads_raw_total", "reads_filtered_total", "otu_richness")
-stopifnot("new measurement_type rows must already be in metadata/measurement_type.csv" =
-            all(new_types %in% d_meas_type$measurement_type))
+dbWriteTable(con, "measurement_type", as.data.frame(d_meas_type), overwrite = TRUE)
 
-# extend _source_datasets on the 6 reused canonical types, without duplicating rows
-reused_types <- c("ammonia", "nitrate", "nitrite", "phosphate", "silicate", "chl_fluor")
-d_meas_type <- d_meas_type |>
-  mutate(`_source_datasets` = if_else(
-    measurement_type %in% reused_types &
-      !str_detect(coalesce(`_source_datasets`, ""), ds_key),
-    str_replace(str_squish(paste(coalesce(`_source_datasets`, ""), ds_key, sep = ";")), "^;", ""),
-    `_source_datasets`))
-write_csv(d_meas_type, meas_type_csv, na = "")
-dbWriteTable(con, "measurement_type", d_meas_type, overwrite = TRUE)
+emitted    <- unique(d_core_types$measurement_type)
+registered <- d_meas_type |>
+  filter(map_lgl(str_split(coalesce(`_source_datasets`, ""), ";\\s*"), ~ ds_key %in% .x)) |>
+  pull(measurement_type)
+
+# edna_presence is sio_cetacean-edna's row (PR #117), kept byte-identical so the
+# two PRs merge without a conflict; calcofi_2022-edna joins its
+# _source_datasets once #117 is on main. Drop it from this list then.
+claim_pending <- "edna_presence"
+unregistered <- setdiff(emitted, d_meas_type$measurement_type)
+unclaimed    <- setdiff(emitted, c(registered, claim_pending))
+empty        <- setdiff(registered, emitted)
+stopifnot(
+  "every emitted measurement_type must be in metadata/measurement_type.csv" =
+    length(unregistered) == 0,
+  "every emitted measurement_type must list this dataset in _source_datasets" =
+    length(unclaimed) == 0,
+  "every registered type naming this dataset must have >= 1 row (an empty type would ship)" =
+    length(empty) == 0)
+cat(glue("measurement types: {length(emitted)} emitted, all registered and claimed; ",
+         "0 registered-but-empty"), "\n")
 ```
 
 ## Load Dataset Metadata
@@ -589,11 +838,49 @@ questions_datatable(
 #| label: validate
 
 results <- validate_for_release(con, checks = "all", strict = FALSE)
-cat("Validation:", ifelse(results$passed, "PASSED", "FAILED"), "\n")
-if (length(results$errors) > 0)
-  cat("Errors:\n", paste("-", results$errors, collapse = "\n"), "\n")
+
+# validate_for_release()'s null check treats every *_id/_key column as required,
+# a heuristic rather than this dataset's contract. Every nullable case is
+# declared here with its count and reason (the cdfw_dungeness-crab idiom);
+# anything not on the list, or whose count moved, is a hard failure.
+nullable <- tribble(
+  ~table,   ~column,             ~n,  ~reason,
+  "sample", "parent_sample_key", 47L, "a filter is a root event: no link yet to the bottle/cast it came from (provider question Q05)",
+  "sample", "site_key",          47L, "no station match yet; locationID names the CalCOFI station but is not parsed (Q05)",
+  "taxon",  "itis_id",           12L, "WoRMS links no ITIS TSN for these lineage nodes",
+  "taxon",  "gbif_id",           79L, "nothing asks GBIF -- no GBIF crosswalk in the xref",
+  "taxon",  "ncbi_id",           79L, "never populated by ANY dataset",
+  "taxon",  "inat_id",           79L, "never populated by ANY dataset",
+  "taxon",  "parent_taxon_key",  1L,  "the root of the lineage (Biota) has no parent")
+
+nulls <- results$checks |>
+  filter(check == "nulls", status == "error") |>
+  mutate(column = str_match(message, "column '([^']+)'")[, 2],
+         n      = as.integer(str_match(message, "has (\\d+) NULL")[, 2])) |>
+  select(table, column, n)
+
+reconciled  <- full_join(nulls, nullable |> select(table, column, n_expected = n),
+                         by = c("table", "column"))
+unexplained <- reconciled |> filter(is.na(n_expected))
+moved       <- reconciled |> filter(!is.na(n_expected), !is.na(n), n != n_expected)
+resolved    <- reconciled |> filter(!is.na(n_expected), is.na(n))
+other_fail  <- results$checks |> filter(check != "nulls", status == "error")
+if (nrow(unexplained)) print(unexplained)
+if (nrow(moved))       print(moved)
+if (nrow(other_fail))  print(other_fail)
+stopifnot(
+  "a NULL appeared in a column with no declared reason" = nrow(unexplained) == 0,
+  "a declared NULL count has changed -- the data moved, re-derive the reason" = nrow(moved) == 0,
+  "a validate_for_release() check other than nulls failed" = nrow(other_fail) == 0)
+if (nrow(resolved))
+  cat(glue("{nrow(resolved)} declared nullable case(s) no longer occur -- prune them: ",
+           "{paste(resolved$table, resolved$column, sep = '.', collapse = ', ')}"), "\n")
 if (length(results$warnings) > 0)
   cat("Warnings:\n", paste("-", results$warnings, collapse = "\n"), "\n")
+
+cat(glue("validate_for_release: {ifelse(results$passed, 'PASSED', 'FAILED')} on its null ",
+         "heuristic; {nrow(nulls)} null case(s) reconciled against {nrow(nullable)} declared, ",
+         "0 unexplained, 0 other failures"), "\n")
 ```
 
 ## Data Preview
@@ -659,11 +946,15 @@ build_relationships_json(
 # ingest_calcofi_ctd-cast.qmd exactly -- both pass dir_stage as local_dir and
 # dir_parquet as sidecar_dir here, even though every write above (parquet
 # tables, metadata.json, relationships.json) targets dir_parquet.
+# delete_stale: the 2026-10-01 grain change dropped obs_attribute from this
+# shard, and a stale obs_attribute.parquet must not linger under the prefix
+# (sidecars are protected from the delete by sync_to_gcs() itself)
 sync_to_gcs(
-  local_dir   = dir_stage,
-  sidecar_dir = dir_parquet,
-  gcs_prefix  = glue("ingest/{dir_label}"),
-  bucket      = "calcofi-db")
+  local_dir    = dir_stage,
+  sidecar_dir  = dir_parquet,
+  gcs_prefix   = glue("ingest/{dir_label}"),
+  bucket       = "calcofi-db",
+  delete_stale = TRUE)
 ```
 
 ## Cleanup

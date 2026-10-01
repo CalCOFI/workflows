@@ -8,22 +8,19 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
-## A new dataset: `calcofi_2022-edna`, vertebrate eDNA from the October 2022 cruise
+## Registry: eDNA measurement types for `calcofi_2022-edna` (staged, not released)
 
 `ingest_calcofi_2022-edna.qmd` ingests the GBIF/OBIS Darwin Core Archive "CalCOFI October 2022
-Vertebrate eDNA" (doi:10.15468/n52j6r, CC BY 4.0; Patin et al. 2026). It is the first dataset with
-observations in the **Genomics & eDNA** category. A sample is one water filter (`parentEventID`),
-not one assay run, so 47 filters from 2022-10-13 to 2022-10-18 publish:
-- **`sample`**, keyed to its cruise with `resolve_cruise_key()` and to the grid;
-- **`obs`**: 201 detections as `sequence_reads`, a semi-quantitative read count kept apart from
-  abundance, with the assay (mitochondrial D-loop for cetaceans, 12S "MiFish" for fish) on
-  **`obs_attribute`**;
-- **`sample_measurement`**: the co-collected nutrients, `chl_fluor` and dissolved oxygen, and the
-  genomics QC per filter.
-
-New measurement types: `sequence_reads`, `oxygen_mg_l` (the source's unit; no existing oxygen
-type is in mg/L), `dna_concentration`, `reads_raw_total`, `reads_filtered_total`, `otu_richness`.
-`chl_fluor`, shared with `calcofi_mets`, now declares `valid_min = 0`.
+Vertebrate eDNA" (doi:10.15468/n52j6r, CC BY 4.0; Patin et al. 2026) but is **held out of the
+release** (`in_release: false`) until the provider says whether filters and assay runs with no
+detection were omitted and how reads were filtered. Its headline is `edna_presence` (1 = detected),
+the type `sio_cetacean-edna` registers. What does ship is the shared `measurement_type` registry,
+which gains:
+- `edna_reads_dloop` and `edna_reads_12s` (reads per assay, summed over ASVs and PCR replicates: a
+  semi-quantitative signal, not abundance, never summed across assays);
+- the per-sample normalisers `edna_reads_raw_dloop` / `edna_reads_raw_12s` and
+  `edna_reads_filtered_dloop` / `edna_reads_filtered_12s`, and `oxygen_mg_l`, `dna_concentration`;
+- `chl_fluor`, shared with `calcofi_mets`, now declares `valid_min = 0`.
 
 ## CTD: the corrected 2607 file, provider flags on every series, cruise-corrected oxygen
 
