@@ -26,20 +26,27 @@ and *Ditylum brightwellii* (43). The lookups failed for four reasons:
 - **Accepted species the WoRMS name services never return:** *Calcidiscus leptoporus*
   (worms:235923) and *Rhabdosphaera clavigera* (worms:235972).
 
-**One rule for what the source names.** `species` stays verbatim; `name_query` is what is looked up:
+**One rule for what the source names.** `species` stays verbatim (it is the name a consumer
+displays); `name_query` is what is looked up:
 
 - **Clear spelling slips** are fixed in the query only. The species keys its accepted WoRMS record
   (16 codes).
 - **An unknown species of a named genus keys that genus.** This covers "sp. 1" / "sp. a", "spp.",
   size classes, spores, "complex", "cf." determinations, a species WoRMS does not hold (*Prorocentrum
-  cinctum*), and species of one genus counted together ("Ceratium kofoidii + C. boehmii"). The genus
-  is the one the source names, not WoRMS's current genus ("Ceratium spp.", not *Tripos*) (92 codes).
-- **Older rows are brought into line too.** The rule also applies to the 57 older "cf." and combined
+  cinctum*), and species of one genus counted together ("Ceratium kofoidii + C. boehmii"). A known
+  species with a "var." / "spore" / "minute form" suffix keeps its species key.
+- **The genus keyed is the accepted one.** Where WoRMS files the source's species under another
+  accepted genus, the genus codes key that genus, so a hierarchy rollup agrees with the species
+  items: the six "Ceratium spp." codes key *Tripos* (worms:494057), as the 19 *Ceratium* species
+  already did. `species` still reads "Ceratium spp.".
+- **Older rows are brought into line too.** The rule also applies to the older "cf." and combined
   rows, which keyed a species ("Chaetoceros cf. subtilis" keyed *C. subtilis*; "Actinoptychus
   adriaticus + A. vulgaris" keyed *A. adriaticus*). Those species items now fold into their genus.
-- **Species of two genera counted together key nothing of ours.** "Dactyliosolen phuketensis +
-  Guinardia striata", "Mastogloia woodiana + pennate a" and "indistinguished Gyrosigma spp. +
-  Pleurosigma spp." fall to their class, and `questions.csv` Q09 asks the provider.
+- **Species of two genera counted together key their lowest common ancestor** in WoRMS's
+  classification, not the class: "Dactyliosolen phuketensis + Guinardia striata" keys Rhizosoleniaceae
+  (worms:149068), "indistinguished Gyrosigma spp. + Pleurosigma spp." keys Pleurosigmataceae
+  (worms:149032), and "Mastogloia woodiana + pennate a" keys Bacillariophyceae (worms:148899), the
+  common ancestor of a named *Mastogloia* and an unidentified pennate. `questions.csv` Q09 asks the provider.
 - **Same spelling, wrong author.** Five cached rows keyed a later, unaccepted name spelled like the
   source's, not the accepted species. They now key the accepted record:
   - *Chaetoceros debilis* (codes 367 and 521): Leegaard 1920 (worms:961758) → Cleve 1894 (worms:149219).
@@ -48,16 +55,31 @@ and *Ditylum brightwellii* (43). The lookups failed for four reasons:
   - "*Rhizosolenia hebetata* f. *hebetata*" (390) had keyed *R. hebetata* (Hensen) Margalef, a
     synonym of *R. semispina*, so it merged with f. *semispina* (code 62). It now keys its own form
     (worms:163347).
+- **A dinoflagellate keyed to a diatom.** "Prorocentrum compressum" (code 102) keyed worms:978142,
+  a diatom variety (*Pyxidicula compressa* var. *compressa*), because WoRMS files that name
+  as a synonym of a diatom. It now keys *Prorocentrum* (worms:109566), like the other "Prorocentrum
+  sp." codes. Four cached ranks that said "Species" for varieties and a form were corrected.
 
 **Result.** By the resolution order applied to the committed registries:
 
-- 115 codes change `taxon_key`: 53 leave their class, 57 move from a species to its genus, and 5
-  move to the accepted record of the same name.
-- No other code moves.
-- 19 codes stay at class level: 16 unidentified classes and 3 two-genus entries.
-- Distinct phytoplankton `taxon_key`s go from 300 to 296.
-- The ingest now tables every code left at class level.
-- `obs` rows of the 115 codes change key; the release measures how many.
+- 118 codes change `taxon_key`: 54 leave their class (53 for a genus or species, 1 for a family),
+  56 move from a species to its genus, 1 from a species to a family, 1 from a species to the class,
+  1 from the source's genus to the accepted genus (*Ceratium* → *Tripos*), and 5 move to the
+  accepted record of the same name. No other code moves.
+- 17 codes stay at class level: 16 unidentified classes and the one two-genus entry whose common
+  ancestor is the class. The ingest allowlists them one code at a time and stops if any other
+  code reaches only a class.
+- Distinct phytoplankton `taxon_key`s in the worms authority go from 299 to 296 (plus 10
+  dataset-local keys, unchanged).
+- **`obs` row count is unchanged** (159,804: one row per source measurement). Only `taxon_key`
+  moves, on 48,633 rows (the 118 codes; 5,925 of them with cells counted).
+- **Consumers must sum.** Several codes now share one `taxon_key` within the same sample (30
+  keys do: *Oxytoxum* 10 codes, Bacillariophyceae 9, *Dinophysis* 8, *Nitzschia* 8,
+  *Prorocentrum* 8, *Chaetoceros* 7, *Protoperidinium* 6, *Tripos* 6). A consumer that counts
+  rows per taxon rather than summing `value` per sample double-counts. `obs.obs_id` stays unique,
+  so no gate fails.
+- The release's `dataset_taxon.ds_scientific_name` still holds the WoRMS name, not the source's own
+  spelling; the verbatim name is in the ingest's `taxon_worms.csv` (`species`).
 
 **Two phytoplankton common names.** WoRMS, GBIF, ITIS and NCBI Taxonomy were checked for every
 phytoplankton taxon. Beyond the classes, only two species have an English name, and both are WoRMS's

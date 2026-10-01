@@ -96,8 +96,10 @@ for (nm in names(edi_ents)) {
   if (overwrite_all || !file_exists(f)) download.file(paste0(edi_base, "/", edi_ents[[nm]]), f, quiet = TRUE)
 }
 cat(glue("Downloaded {length(edi_ents)} EDI entities to {dir_dl}"), "\n")
-sync_to_gcs(local_dir = dir_dl, gcs_prefix = glue("archive/{provider}/{dataset}"),
-            bucket = "calcofi-files-public", exclude = c(".DS_Store"))
+if (Sys.getenv("CALCOFI_SKIP_GCS") == "") {
+  sync_to_gcs(local_dir = dir_dl, gcs_prefix = glue("archive/{provider}/{dataset}"),
+              bucket = "calcofi-files-public", exclude = c(".DS_Store"))
+} else cat("CALCOFI_SKIP_GCS set - skipping the upload (local verification run)\n")
 ```
 
 ## Parse + Clean
@@ -232,16 +234,21 @@ cat(glue("phyto_sample {nrow(phyto_sample)} (4 regions x {n_distinct(phyto_sampl
 #| label: taxon-measurement
 
 # WoRMS aphia_ids resolved + cached in metadata/.../taxon_worms.csv (Q05).
-# `species` is the source's name, verbatim; `name_query` is what was looked up,
-# under these rules (2026-09-28):
+# `species` is the source's name, verbatim (and the name a consumer displays);
+# `name_query` is what was looked up; `aphia_id` is the key. Rules (2026-09-28,
+# B7 2026-10-01; libs/verify_phyto_aphia.R re-checks them against WoRMS):
 # - a clear spelling slip is fixed in the query only (Rhisosolenia -> Rhizosolenia,
 #   brightwelli -> brightwellii); the species keys its accepted WoRMS record
 # - an unknown species of a named genus -- "sp. 1", "sp. a", "spp.", "uncertain
 #   species", a size class, spores, a "complex", a "cf." determination, a species
 #   WoRMS does not hold, and species of ONE genus counted together ("A + A. b") --
-#   keys that genus, as the source spells it ("Ceratium spp.", not WoRMS's Tripos)
-# - species of two genera counted together key nothing of ours: they fall to the
-#   functional-group class and are asked of the provider (Q09)
+#   keys that genus. The genus is the ACCEPTED one: where WoRMS files the source's
+#   species under another accepted genus the genus codes key that genus, so a
+#   hierarchy rollup agrees with the species items ("Ceratium spp." keys Tripos,
+#   as the Ceratium species do), while `species` keeps "Ceratium spp."
+# - species of two genera counted together key the lowest common ancestor of the
+#   two genera in WoRMS's classification (Dactyliosolen + Guinardia ->
+#   Rhizosoleniaceae), never a class a family would do instead; Q09 asks the provider
 # Calcidiscus leptoporus (worms:235923) and Rhabdosphaera clavigera (worms:235972)
 # are accepted species the WoRMS name services never return; they are filled from
 # their AphiaID records.
@@ -271,30 +278,57 @@ dbWriteTable(con, "phyto_measurement", phyto_measurement, overwrite = TRUE)
 cat(glue("phyto_taxon {nrow(phyto_taxon)} ({sum(!is.na(phyto_taxon$aphia_id))} WoRMS-matched); ",
          "phyto_measurement {nrow(phyto_measurement)}"), "\n")
 
-# Codes that reach ONLY their functional-group class ----
+# Codes that reach ONLY a class ----
 # A code with no AphiaID in taxon_worms.csv and no ds_taxa_code row in
 # metadata/taxon_override.csv falls through to the six ds_common_name rows there
 # and keys the class (Bacillariophyceae, Dinophyceae, ...). That is right for the
 # source's own unidentified classes ("indistinguished pennate diatoms", "pennate
-# sp. 6") and for species of two genera counted together; it is wrong for a named
-# taxon whose lookup failed. Until 2026-09-28, 53 codes were that -- among them
-# both Pseudo-nitzschia size classes, Calcidiscus leptoporus and Ditylum
-# brightwellii -- so "Diatoms, not identified further" silently absorbed named
-# taxa. This table is the check: every row should be one of those two kinds.
+# sp. 6"); it is wrong for a named taxon whose lookup failed. Until 2026-09-28, 53
+# codes were that -- among them both Pseudo-nitzschia size classes, Calcidiscus
+# leptoporus and Ditylum brightwellii -- so "Diatoms, not identified further"
+# silently absorbed named taxa. A code that keys a class by its AphiaID (rank
+# Class: code 77, whose lowest common ancestor IS the class) is the same finding.
 # `taxa = "other"` rows are excluded: no class row reaches them; they resolve by
 # code override or key dataset-locally (local_allow, below).
 ovr_codes <- read_csv(here("metadata/taxon_override.csv"), show_col_types = FALSE) |>
   filter(dataset_key == "calcofi_phytoplankton", match_column == "ds_taxa_code") |>
   pull(match_value) |> as.character()
 class_only <- phyto_taxon |>
-  filter(is.na(aphia_id), !species_code %in% ovr_codes,
+  filter((is.na(aphia_id) & !species_code %in% ovr_codes) | rank %in% "Class",
          !is.na(species), taxa != "other") |>
   select(species_code, taxa, species)
-cat(glue("{nrow(class_only)} named codes key only their functional-group class ",
-         "(no AphiaID in the cache, no code-keyed override)"), "\n")
-datatable(class_only, caption = paste(
-  "Codes keyed only to their functional-group class.",
-  "Expected: the source's own unidentified classes, and species of two genera counted together."))
+# the allowlist: ONE code at a time, with the reason. Sixteen are the source's own
+# unidentified classes; code 77 counts a named Mastogloia with an unidentified
+# pennate, whose lowest common ancestor is the class. A named taxon that fails its
+# lookup is not on this list, so it fails the render instead of vanishing into a class.
+class_allow <- tibble::tribble(
+  ~species_code, ~why,
+  "603", "source's own unidentified class: indistinguished diatom species",
+  "85",  "source's own unidentified class: pennate sp. 1",
+  "243", "source's own unidentified class: pennate sp. 2",
+  "318", "source's own unidentified class: pennate sp. 3",
+  "401", "source's own unidentified class: pennate sp. 4",
+  "508", "source's own unidentified class: pennate sp. 5",
+  "512", "source's own unidentified class: pennate sp. 6",
+  "608", "source's own unidentified class: indistinguished pennate diatoms",
+  "615", "source's own unidentified class: indistinguished thecate dinoflagellates",
+  "616", "source's own unidentified class: indistinguished athecate dinoflagellates",
+  "224", "source's own unidentified class: coccolithophore sp. 1",
+  "225", "source's own unidentified class: coccolithophore sp. 2",
+  "332", "source's own unidentified class: coccolithophore sp. 3",
+  "222", "source's own unidentified class: coccolithophore sp. 4",
+  "617", "source's own unidentified class: indistinguished coccolithophore spp.",
+  "602", "source's own unidentified class: indistinguished silicoflagellate spp.",
+  "77",  "two-genus entry (Mastogloia woodiana + pennate a): lowest common ancestor is the class (Q09)")
+cat(glue("{nrow(class_only)} codes key only a class; {nrow(class_allow)} allowlisted"), "\n")
+datatable(class_only |> left_join(class_allow, by = "species_code"), caption = paste(
+  "Codes keyed only to a class. Every one must be allowlisted: the source's own",
+  "unidentified classes, and the two-genus entry whose common ancestor is the class."))
+stopifnot(
+  "a named code keys only its class: fix its lookup in taxon_worms.csv, or allowlist it with a reason" =
+    length(setdiff(class_only$species_code, class_allow$species_code)) == 0,
+  "class_allow lists a code that no longer keys only a class: remove it" =
+    length(setdiff(class_allow$species_code, class_only$species_code)) == 0)
 ```
 
 ## Measurement Types + Finalize
@@ -499,7 +533,9 @@ build_metadata_json(con = con, d_tbls_rd = d_tbls_rd, d_flds_rd = d_flds_rd,
   output_dir = dir_parquet, tables = tbls_out,
   set_comments = TRUE, provider = provider, dataset = dataset,
   workflow_url = cc$workflow_url, tables_owned = tables_owned)
-sync_to_gcs(local_dir = dir_stage, sidecar_dir = dir_parquet, gcs_prefix = glue("ingest/{dir_label}"), bucket = "calcofi-db")
+if (Sys.getenv("CALCOFI_SKIP_GCS") == "") {
+  sync_to_gcs(local_dir = dir_stage, sidecar_dir = dir_parquet, gcs_prefix = glue("ingest/{dir_label}"), bucket = "calcofi-db")
+} else cat("CALCOFI_SKIP_GCS set - skipping the upload (local verification run)\n")
 ```
 
 ## Questions for Data Providers
