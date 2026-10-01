@@ -1,0 +1,49 @@
+---
+config:
+  layout: elk
+---
+erDiagram
+    edna_sample {
+        varchar parent_event_id PK
+        double latitude
+        double longitude
+        double depth_min_m
+        double depth_max_m
+        timestamp datetime_start_utc
+        varchar location_id
+        varchar locality
+        varchar ship_key
+        varchar cruise_key
+        varchar cruise_key_method
+        geometry geom
+        varchar grid_key
+    }
+    edna_assay {
+        varchar occurrenceID PK
+        varchar parentEventID FK
+        varchar eventID
+        varchar scientificNameID
+        double reads
+        varchar assay
+        varchar library_suffix
+    }
+    edna_detection {
+        varchar parentEventID PK,FK
+        varchar scientificNameID PK
+        varchar assay PK
+        double reads
+        bigint n_occurrence
+        bigint n_library
+    }
+    edna_context {
+        varchar parentEventID PK,FK
+        varchar measurement_type PK,FK
+        double measurement_value
+    }
+    edna_sample ||--o{ edna_assay : "parentEventID"
+    edna_sample ||--o{ edna_detection : "parentEventID"
+    edna_sample ||--o{ edna_context : "parentEventID"
+    classDef lightblue stroke:#ADD8E6,stroke-width:3px
+    class edna_sample,edna_assay,edna_detection,edna_context lightblue
+    classDef lightyellow stroke:#FFFFE0,stroke-width:3px
+    classDef white stroke:#FFFFFF,stroke-width:3px

@@ -8,6 +8,20 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## Registry: eDNA measurement types for `calcofi_2022-edna` (staged, not released)
+
+`ingest_calcofi_2022-edna.qmd` ingests the GBIF/OBIS Darwin Core Archive "CalCOFI October 2022
+Vertebrate eDNA" (doi:10.15468/n52j6r, CC BY 4.0; Patin et al. 2026) but is **held out of the
+release** (`in_release: false`) until the provider says whether filters and assay runs with no
+detection were omitted and how reads were filtered. Its headline is `edna_presence` (1 = detected),
+shared with `sio_cetacean-edna`. What does ship is the shared `measurement_type` registry,
+which gains:
+- `edna_reads_dloop` and `edna_reads_12s` (reads per assay, summed over ASVs and PCR replicates: a
+  semi-quantitative signal, not abundance, never summed across assays);
+- the per-sample normalisers `edna_reads_raw_dloop` / `edna_reads_raw_12s` and
+  `edna_reads_filtered_dloop` / `edna_reads_filtered_12s`, and `oxygen_mg_l`, `dna_concentration`;
+- `chl_fluor`, shared with `calcofi_mets`, now declares `valid_min = 0`.
+
 ## Phytoplankton: named codes stop falling into "not identified further"; one rule for unknown species
 
 **53 codes with real names keyed only their functional-group class.** The ingest's WoRMS cache
