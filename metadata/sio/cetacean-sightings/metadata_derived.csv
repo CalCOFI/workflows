@@ -1,0 +1,14 @@
+table,column,name_long,units,description_md
+cetacean_segment,cruise_label,Cruise Label,,"Survey label CCYYMM derived from `cruise_label_effort` (CC2004-07 -> CC0407), the form the sightings carry."
+cetacean_segment,datetime_start_utc,Datetime Start UTC,,"Segment start in UTC, from `datetime_start_local` read as America/Los_Angeles clock time (Q04)."
+cetacean_segment,datetime_end_utc,Datetime End UTC,,"Segment end in UTC, from `datetime_end_local` read as America/Los_Angeles clock time (Q04)."
+cetacean_segment,latitude,Latitude,decimal_degrees,"Segment midpoint latitude (mean of start and end), WGS84."
+cetacean_segment,longitude,Longitude,decimal_degrees,"Segment midpoint longitude (mean of start and end), WGS84."
+cetacean_segment,cruise_key,Cruise Key,,"CalCOFI cruise key (YYYY-MM-NODC), carried from the sightings' track match for the same cruise_label."
+cetacean_segment,grid_key,Grid Key,,CalCOFI grid cell of the segment midpoint.
+cetacean_sighting,sighting_id,Sighting ID,,Row number of the sighting in the pinned source file; primary key.
+cetacean_sighting,datetime_start_utc,Datetime UTC,,"Sighting time in UTC, from `datetime_local` read as America/Los_Angeles clock time (Q04); NULL for the 36 '#REF!' rows (Q06)."
+cetacean_sighting,calf_count,Calf Count,count,"Number of calves: `calf_raw` where it is a plain integer, else NULL (Q09)."
+cetacean_sighting,cruise_key,Cruise Key,,"CalCOFI cruise key (YYYY-MM-NODC) from `match_cruise_by_track()`: nearest ichthyo station occupied the same day, majority vote per cruise_label."
+cetacean_sighting,grid_key,Grid Key,,CalCOFI grid cell of the sighting position.
+cetacean_species,scientific_name,Scientific Name,,Scientific name the code is resolved from (authored in species_codes.csv; resolved against WoRMS by ensure_taxon_xref()).
