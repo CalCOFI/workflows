@@ -142,7 +142,7 @@ bullets(c(
   "Last round (9/23): every open PR in the org merged or closed with a review: 12 PRs, 9 repos.",
   "This round: 5 PRs, all Betty's. Three are new ingests, two answer Pooh's phytoplankton review.",
   "Review caught a release-breaker in 3 of the 5 PRs before release; all 5 plus 3 follow-on PRs are merged today.",
-  "Derived hydrographic products are new territory: MLD, spice and sigma-theta are built; Rasmus has sent 7 more."),
+  "Derived products are new territory: sigma-theta, spice, MLD, chlorophyll max and integrated chl are released; Rasmus has sent 7 more."),
   M, TOP_BODY + 1.75, W - 2 * M, 2.6)
 footer("github.com/CalCOFI · gh search prs --owner CalCOFI")
 notes("12 PRs / 9 repos: 9/23 triage Outcome section. 5 datasets: PR bodies of workflows#116, #117 (3 notebooks), #118.",
@@ -155,7 +155,7 @@ headline("Database release", if (STATUS$release_done) "v2026.10.01 is live" else
 bullets(c(
   "CTD: Kelsey's corrected 2607 file, plus four more cruises whose stations ≥ 100 were truncated (2507SR, 2511SR, 2601RL, 2604SH): offshore stations are back.",
   "CTD: the provider's quality flags on every series; Rasmus's sensor-pair rule; the 2607 secondary sensor flagged bad; cruise-corrected oxygen (new).",
-  "New dataset: calcofi_ctd-derived: mixed-layer depth, spiciness, sigma-theta over 9,630 casts.",
+  "New dataset calcofi_ctd-derived: sigma-theta and spiciness profiles; per-cast mixed-layer depth, chlorophyll max and integrated chlorophyll.",
   "Crab: 97 samples without a cruise reduced to 1. Picoplankton moves to Biology with a taxon on every row.",
   "The climatology now reaches the bottom (it stopped at 500 m): deep anomalies become possible.",
   "Measurements catalog 1.1: an anomaly per depth band, flagged values kept out of the advertised range."),
@@ -242,21 +242,23 @@ notes("Sources: the four review reports. Each finding cites file:line there (e.g
 
 # ── 6 · derived products ───────────────────────────────────────────────────────────────────────
 new_slide()
-headline("New territory", "Derived products: from profiles to answers")
-txt("BUILT · in today's release", M, TOP_BODY, 5.8, 0.3, fp_t = fp_eye, pad_b = 0)
-bullets(c("Mixed-layer depth", "Spiciness (California Undercurrent on line 90 at 100–300 m)",
-          "Sigma-theta, from the paired sensors", "Cruise-corrected oxygen"),
-        M, TOP_BODY + 0.35, 5.8, 2.2, fp_t = fp(14.5))
+headline("New territory", "Derived products: the first set is released; Rasmus's definitions are next")
+txt("RELEASED · calcofi_ctd-derived in v2026.10.01", M, TOP_BODY, 5.8, 0.3, fp_t = fp_eye, pad_b = 0)
+bullets(c("Profiles: sigma-theta (sensor pair) and spiciness, ~663,000 values each",
+          "Per cast (~9,000 casts): mixed-layer depth by 3 criteria (σθ +0.03, +0.125 kg/m³; −0.2 °C)",
+          "Per cast: chlorophyll max + its depth (5 m running median); chlorophyll integrated 0–200 m",
+          "Built, not released: relative geostrophic flow (speeds under review)"),
+        M, TOP_BODY + 0.35, 5.8, 2.9, fp_t = fp(13.5))
 txt("NEXT · Rasmus's definitions (9/24)", M + 6.3, TOP_BODY, 5.8, 0.3, fp_t = fp_eye, pad_b = 0)
-bullets(c("MLD at the CalCOFI legacy +0.02 kg/m³ below 10 m",
-          "Depth of the chlorophyll max (3 m running mean); chlorophyll integrated over 0–200 m",
+bullets(c("MLD headline at the CalCOFI legacy +0.02 kg/m³ below 10 m",
+          "Chlorophyll max from a 3 m running mean (now 5 m median)",
           "Nitracline (1 µM); hypoxic boundaries at 2.4 / 1.4 / 0.5 mL/L",
-          "Pycnocline (TEOS-10); buoyancy frequency; relative geostrophic flow",
+          "Pycnocline (TEOS-10); buoyancy frequency; geostrophic flow fixed",
           "Bottle climatologies 1949–2013 and 1993–2013"),
-        M + 6.3, TOP_BODY + 0.35, W - 2 * M - 6.3, 2.8, fp_t = fp(14.5))
+        M + 6.3, TOP_BODY + 0.35, W - 2 * M - 6.3, 2.9, fp_t = fp(13.5))
 rect(M, 5.25, W - 2 * M, 1.2, SAND, geom = "roundRect")
-txt(c("Where they show up: profiles and sections in the transect plotter; surface maps (MLD, DCM, nitracline, hypoxia) in the Explorer.",
-      "Target: in the release before the El Niño cruise leaves on 31 October."),
+txt(c("Not yet visible: the dataset page lists only the two profile variables (per-cast values are in sample_measurement); Explorer surface maps for MLD, DCM, nitracline and hypoxia are explore#13.",
+      "Target: Rasmus's definitions in the release before the El Niño cruise leaves on 31 October."),
     M + 0.2, 5.38, W - 2 * M - 0.4, 1.0, fp_t = fp(14), pad_b = 4)
 footer("calcofi.io/ctd-transects · workflows#98–#103 · explore#13")
 notes("Rasmus, thread 'Next Two Weeks Tasks': 9/22 (spice, geostrophic), 9/24 00:24Z (five answers), 9/24 21:41Z (nitracline, hypoxia, pycnocline, N², isopycnals parked).",

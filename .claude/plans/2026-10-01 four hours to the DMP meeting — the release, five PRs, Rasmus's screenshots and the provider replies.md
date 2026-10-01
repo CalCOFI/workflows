@@ -306,7 +306,7 @@ removed.
 **1 · RELEASED, live in v2026.10.01** (`latest.txt`, promoted 16:22 CEST; tag + GitHub release; DOI pending)
 - CTD: Kelsey's corrected 2607 file, plus the station-truncation repair on 2507SR, 2511SR, 2601RL and 2604SH; provider
   flags on every series; the 2607 sensor-2 flag (Q37); cruise-corrected DO (workflows #104–#106, #112).
-- New dataset `calcofi_ctd-derived`: MLD, spiciness and sigma-theta over 9,630 casts (calcofi4db#11, workflows #107 #110).
+- New dataset `calcofi_ctd-derived` (calcofi4db#11, workflows #107 #110): profile `sigma_theta_ave` + `spiciness0` (obs, ~663 k each); per cast in `sample_measurement` (~9 k casts): MLD by 3 interim criteria (σθ +0.03 / +0.125, −0.2 °C), `chl_max` + depth (5 m running median), `chl_integrated` 0–200 m. **Not released:** `ctd_geostrophic` (372 k rows staged; speeds under review). The dataset page shows only the 2 obs types → CalCOFI.github.io#26. Rasmus's definitions (MLD +0.02, DCM 3 m running mean) are still to do.
 - Dataset metadata: the 16 CalOOS proposals (#96); ZooDB regions Q05 (#97); crab `cruise_key` NULLs cut from 97 to 1
   (#111).
 - `measurements.json` 1.1, with "why it matters" and an anomaly per depth band; the climatology runs to the bottom
